@@ -5,7 +5,7 @@ description = "Project HiveMind: Decentralized MoE Training & Inference via Stea
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    "torch>=2.4.0,<2.7.0",
+    "torch>=2.4.0,<2.15.0",
     "transformers>=4.44.0",
     "peft>=0.12.0",
     "bitsandbytes>=0.43.3",

@@ -1,5 +1,5 @@
 {
- "branch": "worktree-feat-s10-e11-e12-t4",
+ "branch": "fix/paper-v3.8.0-invalid-rows",
  "files": {
   "state/artifacts/experiments/E10b_first_execution_partial.json": "a4a0b5b83e0e36f39074389aa7624a14a4c98083aafa1c51d220ab6279b0ca93",
   "state/artifacts/experiments/E10b_lattice_05b_report.json.partial.json": "8f855b8c4e7ec1e1a361e47807efa8bb036ff4e7a130534664cb35d01aa44c01",
@@ -67,8 +67,8 @@
   "state/memory/project_t4_campaign_2026-10-24.md": "72f2b81377007e7693c09933eec5357be744ae539e26d583d958a82a188b4bf5",
   "state/memory/reference_spot_vm_checkpoint.md": "03783c38db760c7866fad1ef2d7f0345aaffe36d5a72c5e0bad73a5aad936374"
  },
- "head": "86870d7",
+ "head": "b43ae2b",
  "reason": "periodic",
  "skipped_secret_like": [],
- "written_utc": "2026-10-24 14:45:37"
+ "written_utc": "2026-10-24 15:05:39"
 }

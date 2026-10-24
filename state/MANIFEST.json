@@ -58,6 +58,8 @@
   "state/job_tmp/e10b_smoke.json.partial.json": "ca4b1205383e1736f18c8c2dd3be9dd1f2bbb0d1b804d03816306dee06cf8a44",
   "state/job_tmp/granite.py": "ceecb515af56f4bcdf0b6ebccb7484cb0045988c75e08015753f114836fdef48",
   "state/job_tmp/list.py": "70bee15227d1e1379737ab45d15bca14d9eb9d0ac0f19e6a726a0932026b290f",
+  "state/job_tmp/sm_raw.json": "e7e0b6cb469d698e34a018b02f36d632cd52ab7de385681e0f87d830e08ae55b",
+  "state/job_tmp/sm_report.json": "97f3d7b446bca537134ca2c587377f4033bd985b00be2fcde5ffecddbfb563d1",
   "state/job_tmp/smoke_7b.py": "686004402990e7a4a5f685dc9ffa8b4aab03f403b3dcbf77976f949b75881d4c",
   "state/job_tmp/upcycle.py": "18ceaec57bb4a7bc25aa221bb3f2a384b158c49368e2d14f57a1311970e7839c",
   "state/job_tmp/watch_queue.py": "2ba736017a1098f4c9585ba9fe0e13f2d6270f7b6bddc4be8db5b48139b343d8",
@@ -68,5 +70,5 @@
  "head": "86870d7",
  "reason": "periodic",
  "skipped_secret_like": [],
- "written_utc": "2026-10-24 13:25:25"
+ "written_utc": "2026-10-24 13:45:29"
 }

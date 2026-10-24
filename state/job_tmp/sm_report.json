@@ -1,0 +1,278 @@
+{
+  "schema_version": "hivemind-experiment-E13/v1.0",
+  "experiment_id": "E13-swarm-local",
+  "design_sha256": "e674ebb67691d2b1788f23a5bdec2e663ff2f80ca28c799d0bd9bc8626c4c9e2",
+  "models": {
+    "tiny": {
+      "cells": {
+        "S0": {
+          "name": "sync_baseline",
+          "status": "ok",
+          "failed_seeds": [],
+          "seeds": [
+            1
+          ],
+          "final_loss_per_seed": [
+            5.556983709335327
+          ],
+          "initial_loss_per_seed": [
+            5.5579071044921875
+          ],
+          "per_domain_final_mean": {
+            "code": 5.540725231170654,
+            "wiki-fr": 5.5732421875
+          },
+          "wire": {
+            "up_bytes_mean_per_run": 0.0,
+            "down_bytes_mean_per_run": 0.0,
+            "raw_fp32_delta_bytes_total": 0,
+            "ideal_entropy_coded_bytes_total": 0.0,
+            "actual_up_bytes_total": 0,
+            "compression_ratio_actual": null,
+            "compression_ratio_ideal": null,
+            "int16_posts_total": 0,
+            "runs_needing_int16": []
+          },
+          "admitted_fraction_mean": 1.0,
+          "late_discards_total": 0,
+          "hosting_fallback_seeds": [],
+          "round_latency_s": {
+            "p50": 0.25969957599954796,
+            "p95": 0.2835082930014323,
+            "p99": 0.28562462340159983,
+            "n": 2,
+            "note": "descriptive only: one GPU, time-shared"
+          },
+          "mean_measured_rate_bits_per_dim": null
+        },
+        "S2": {
+          "name": "swarm_all_on",
+          "status": "ok",
+          "failed_seeds": [],
+          "seeds": [
+            1
+          ],
+          "final_loss_per_seed": [
+            5.556826829910278
+          ],
+          "initial_loss_per_seed": [
+            5.5579071044921875
+          ],
+          "per_domain_final_mean": {
+            "code": 5.541341304779053,
+            "wiki-fr": 5.572312355041504
+          },
+          "wire": {
+            "up_bytes_mean_per_run": 2777.0,
+            "down_bytes_mean_per_run": 57344.0,
+            "raw_fp32_delta_bytes_total": 28672,
+            "ideal_entropy_coded_bytes_total": 1783.390413210476,
+            "actual_up_bytes_total": 2777,
+            "compression_ratio_actual": 10.324810947065178,
+            "compression_ratio_ideal": 16.077242418492315,
+            "int16_posts_total": 0,
+            "runs_needing_int16": []
+          },
+          "admitted_fraction_mean": 0.5,
+          "late_discards_total": 0,
+          "hosting_fallback_seeds": [],
+          "round_latency_s": {
+            "p50": 1.5316636110001127,
+            "p95": 2.3967688866010572,
+            "p99": 2.4736671333211415,
+            "n": 2,
+            "note": "descriptive only: one GPU, time-shared"
+          },
+          "mean_measured_rate_bits_per_dim": 1.9903910861724063
+        },
+        "S6": {
+          "name": "fair_quorum",
+          "status": "ok",
+          "failed_seeds": [],
+          "seeds": [
+            1
+          ],
+          "final_loss_per_seed": [
+            5.556826829910278
+          ],
+          "initial_loss_per_seed": [
+            5.5579071044921875
+          ],
+          "per_domain_final_mean": {
+            "code": 5.541341304779053,
+            "wiki-fr": 5.572312355041504
+          },
+          "wire": {
+            "up_bytes_mean_per_run": 2777.0,
+            "down_bytes_mean_per_run": 57344.0,
+            "raw_fp32_delta_bytes_total": 28672,
+            "ideal_entropy_coded_bytes_total": 1783.390413210476,
+            "actual_up_bytes_total": 2777,
+            "compression_ratio_actual": 10.324810947065178,
+            "compression_ratio_ideal": 16.077242418492315,
+            "int16_posts_total": 0,
+            "runs_needing_int16": []
+          },
+          "admitted_fraction_mean": 0.5,
+          "late_discards_total": 0,
+          "hosting_fallback_seeds": [],
+          "round_latency_s": {
+            "p50": 2.0641460549995827,
+            "p95": 3.2109261171008256,
+            "p99": 3.312862122620936,
+            "n": 2,
+            "note": "descriptive only: one GPU, time-shared"
+          },
+          "mean_measured_rate_bits_per_dim": 1.9903910861724063,
+          "e14": {
+            "fair": {
+              "max_exclusion": 1,
+              "fair_wait_timeouts_total": 0,
+              "rounds_with_required_workers": 0,
+              "rounds_with_extra_wait": 0,
+              "extra_wait_s_total": 0.0,
+              "extra_wait_s_mean_per_round": 0.0,
+              "forced_admissions_total": 0
+            }
+          }
+        }
+      },
+      "failed_cells": [],
+      "paired_vs_S0": {
+        "S1": {
+          "status": "needs exactly 3 paired seeds (have 0)",
+          "seeds": []
+        },
+        "S2": {
+          "status": "needs exactly 3 paired seeds (have 1)",
+          "seeds": [
+            1
+          ]
+        },
+        "S3": {
+          "status": "needs exactly 3 paired seeds (have 0)",
+          "seeds": []
+        },
+        "S4": {
+          "status": "needs exactly 3 paired seeds (have 0)",
+          "seeds": []
+        },
+        "S5": {
+          "status": "needs exactly 3 paired seeds (have 0)",
+          "seeds": []
+        },
+        "S1t": {
+          "status": "needs exactly 3 paired seeds (have 0)",
+          "seeds": []
+        },
+        "S6": {
+          "status": "needs exactly 3 paired seeds (have 1)",
+          "seeds": [
+            1
+          ]
+        }
+      },
+      "controls": {
+        "s1_equals_s0": {
+          "rows": [],
+          "tolerance": 1e-06,
+          "passed": null
+        },
+        "s0_learns": {
+          "rows": [
+            {
+              "seed": 1,
+              "initial": 5.5579071044921875,
+              "final": 5.556983709335327
+            }
+          ],
+          "passed": true
+        },
+        "raw_wire_bytes_exact": {
+          "passed": null,
+          "note": "codec 'none': every POSTed body is exactly 4 x n_coords bytes"
+        },
+        "codec_rate_on_target": {
+          "passed": true,
+          "tolerance": 0.05
+        },
+        "workers_start_identical": {
+          "passed": true
+        },
+        "no_failed_cells": {
+          "passed": true,
+          "failed": []
+        }
+      },
+      "controls_all_passed": false,
+      "hosting_fallback_cells": [],
+      "e14": {
+        "cells": [
+          "S6"
+        ],
+        "paired_vs_S2": {
+          "S6": {
+            "status": "needs exactly 3 paired seeds with S2 (have 1)",
+            "seeds": [
+              1
+            ]
+          }
+        },
+        "retention_vs_S0": {
+          "S2": {
+            "retention_per_seed": {
+              "1": 1.1698941389104054
+            }
+          },
+          "S6": {
+            "retention_per_seed": {
+              "1": 1.1698941389104054
+            }
+          }
+        },
+        "note": "exploratory (E14); retention = (L_round0 - L_cell) / (L_round0 - L_S0), paired_vs_S2 = S2 minus cell"
+      },
+      "not_included": [
+        "NF4",
+        "Skip-Token",
+        "Skip-Attention",
+        "PA-CGAD",
+        "fixed-point exits"
+      ],
+      "scope": "localhost negative control (E8): single GPU, time-shared; NOT evidence for any WAN / volunteer claim"
+    }
+  },
+  "controls_all_passed": false,
+  "receipt_sha256": "9d11d2cd2d2220979990b95b6c66ef5ade4072cb825397e4949dc71458a7d45c",
+  "smoke": true,
+  "hardware": {
+    "device": "cpu",
+    "gpu": null,
+    "cpu": "x86_64",
+    "torch": "2.7.1+cu118"
+  },
+  "elapsed_seconds": 57.46,
+  "estimate": {
+    "model": "tiny",
+    "note": "no SEC_PER_STEP assumption for this model (smoke / placeholder)",
+    "cells": [
+      "S0",
+      "S2",
+      "S6"
+    ],
+    "seeds": [
+      1
+    ],
+    "cfg": {
+      "rounds": 2,
+      "workers": 2,
+      "inner": 3,
+      "seq_len": 16,
+      "micro_batch": 2,
+      "eval_seqs": 4,
+      "eval_batch": 4,
+      "smoke": true
+    }
+  },
+  "warning": "SMOKE RUN: tiny random model, synthetic tokens; plumbing check only, not evidence"
+}

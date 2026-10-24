@@ -38,3 +38,20 @@ seed 2 S6 fair_quorum    final 2.1754 (init 2.1690) admitted/round [2, 3, 2, 2, 
 [E13 hb] granite1b S7 seed 2 t=60s round 2/6 admitted-so-far [] of effective K 2, alive [0, 1, 2], evals [0] of [0, 3, 6], late 0, carry queue 0
 [E13 hb] granite1b S7 seed 2 t=120s round 3/6 admitted-so-far [0] of effective K 2, alive [0, 2], evals [0] of [0, 3, 6], late 0, carry queue 1
 [E13 hb] granite1b S7 seed 2 t=180s round 4/6 admitted-so-far [0] of effective K 2, alive [0, 1, 2], evals [0] of [0, 3, 6], late 0, carry queue 0
+[E13 hb] granite1b S7 seed 2 t=240s round 5/6 admitted-so-far [] of effective K 2, alive [0, 1, 2], evals [0, 3] of [0, 3, 6], late 0, carry queue 1
+seed 2 S7 deferred_carry final 2.2053 (init 2.1690) admitted/round [2, 2, 2, 2, 2, 2] late 1 up 4268562B 326.15s
+Loading weights:   0%|          | 0/218 [00:00<?, ?it/s]Loading weights:   5%|▌         | 11/218 [00:00<00:02, 96.48it/s]Loading weights:  13%|█▎        | 29/218 [00:00<00:01, 109.85it/s]Loading weights:  22%|██▏       | 47/218 [00:00<00:01, 114.57it/s]Loading weights:  30%|██▉       | 65/218 [00:00<00:01, 123.26it/s]Loading weights:  38%|███▊      | 83/218 [00:00<00:01, 125.19it/s]Loading weights:  46%|████▋     | 101/218 [00:00<00:00, 129.83it/s]Loading weights:  55%|█████▍    | 119/218 [00:00<00:00, 131.65it/s]Loading weights:  63%|██████▎   | 137/218 [00:01<00:00, 130.54it/s]Loading weights:  71%|███████   | 155/218 [00:01<00:00, 131.12it/s]Loading weights:  79%|███████▉  | 173/218 [00:01<00:00, 128.48it/s]Loading weights:  85%|████████▌ | 186/218 [00:01<00:00, 128.13it/s]Loading weights:  96%|█████████▌| 209/218 [00:01<00:00, 143.85it/s]Loading weights: 100%|██████████| 218/218 [00:01<00:00, 135.80it/s]
+seed 3 S0 sync_baseline  final 2.1182 (init 2.1690) admitted/round [3, 3, 3, 3, 3, 3] late 0 up 0B 301.63s
+[E13 hb] granite1b S2 seed 3 t=60s round 2/6 admitted-so-far [] of effective K 2, alive [0, 1, 2], evals [] of [0, 3, 6], late 0
+[E13 hb] granite1b S2 seed 3 t=120s round 3/6 admitted-so-far [] of effective K 2, alive [0, 2], evals [0] of [0, 3, 6], late 2
+[E13 hb] granite1b S2 seed 3 t=180s round 4/6 admitted-so-far [0] of effective K 2, alive [0, 1, 2], evals [0] of [0, 3, 6], late 2
+[E13 hb] granite1b S2 seed 3 t=240s round 5/6 admitted-so-far [1] of effective K 2, alive [0, 1, 2], evals [0, 3] of [0, 3, 6], late 3
+seed 3 S2 swarm_all_on   final 2.1923 (init 2.1690) admitted/round [2, 2, 2, 2, 2, 2] late 5 up 4262558B 325.46s
+[E13 hb] granite1b S6 seed 3 t=60s round 2/6 admitted-so-far [] of effective K 2, alive [0, 1, 2], evals [] of [0, 3, 6], late 0, fair-exclusion counters {0: 0, 1: 0, 2: 1} (max 1)
+[E13 hb] granite1b S6 seed 3 t=120s round 3/6 admitted-so-far [] of effective K 2, alive [0, 2], evals [0] of [0, 3, 6], late 2, fair-exclusion counters {0: 1, 1: 0, 2: 0} (max 1)
+[E13 hb] granite1b S6 seed 3 t=180s round 4/6 admitted-so-far [0] of effective K 2, alive [0, 1, 2], evals [0] of [0, 3, 6], late 2, fair-exclusion counters {0: 0, 1: 0, 2: 0} (max 1)
+[E13 hb] granite1b S6 seed 3 t=240s round 5/6 admitted-so-far [] of effective K 2, alive [0, 1, 2], evals [0, 3] of [0, 3, 6], late 3, fair-exclusion counters {0: 0, 1: 1, 2: 0} (max 1)
+[E13 hb] granite1b S6 seed 3 t=300s round 6/6 admitted-so-far [0, 1] of effective K 2, alive [0, 1, 2], evals [0, 3] of [0, 3, 6], late 4, fair-exclusion counters {0: 0, 1: 0, 2: 1} (max 1)
+seed 3 S6 fair_quorum    final 2.1752 (init 2.1690) admitted/round [2, 2, 2, 2, 2, 3] late 4 up 4262237B 330.82s
+[E13 hb] granite1b S7 seed 3 t=60s round 2/6 admitted-so-far [] of effective K 2, alive [0, 1, 2], evals [] of [0, 3, 6], late 0, carry queue 0
+[E13 hb] granite1b S7 seed 3 t=120s round 3/6 admitted-so-far [] of effective K 2, alive [0, 2], evals [0] of [0, 3, 6], late 0, carry queue 1

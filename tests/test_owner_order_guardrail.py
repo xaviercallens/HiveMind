@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+import subprocess
 
 import pytest
 from hypothesis import given, settings, strategies as st
@@ -274,18 +276,65 @@ def test_community_orchestrator_filters_unauthorized_discussion_orders() -> None
     assert owner_plan["needs_reply"] is True
 
 
-def test_local_git_owner_identity_and_simulator() -> None:
-    repo_root = Path(__file__).resolve().parents[1]
+@pytest.fixture
+def isolated_git_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in tuple(os.environ):
+        if key.startswith("GIT_"):
+            monkeypatch.delenv(key)
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
+
+
+@pytest.mark.parametrize(
+    ("git_email", "expected_owner"),
+    [(AUTHORIZED_OWNER_EMAIL, True), ("contributor@example.org", False)],
+)
+def test_local_git_owner_identity_and_audit(
+    tmp_path: Path, isolated_git_config: None, git_email: str, expected_owner: bool,
+) -> None:
+    repo_root = tmp_path / "identity-repo"
+    repo_root.mkdir()
+
+    def run_git(*args: str) -> None:
+        subprocess.run(
+            ["git", "-c", f"core.hooksPath={os.devnull}", "-c", "core.fsmonitor=false",
+             "-c", "commit.gpgSign=false", "-c", "init.templateDir=", *args],
+            cwd=repo_root, check=True, capture_output=True, text=True,
+        )
+
+    run_git("init", "--quiet")
+    run_git("config", "user.name", "Identity test fixture")
+    run_git("config", "user.email", git_email)
+    run_git("commit", "--quiet", "--allow-empty", "-m", "Identity fixture")
+
     git_id = verify_local_git_owner_identity(repo_root)
     assert git_id["authorized_owner_email"] == "callensxavier@gmail.com"
-    assert git_id["owner_identity_verified"] is True
+    assert git_id["git_config_email"] == git_email
+    assert git_id["head_author_email"] == git_email
+    assert git_id["head_committer_email"] == git_email
+    assert git_id["owner_identity_verified"] is expected_owner
     assert len(git_id["attestation_sha256"]) == 64
 
     audit = run_hourly_quality_and_experiment_audit(repo_root)
     assert audit["owner_order_guardrail_active"] is True
     assert audit["authorized_owner_email"] == "callensxavier@gmail.com"
-    assert audit["local_git_owner_verified"] is True
+    assert audit["local_git_owner_verified"] is expected_owner
 
+
+def test_local_git_owner_identity_without_repository(
+    tmp_path: Path, isolated_git_config: None,
+) -> None:
+    repo_root = tmp_path / "source-export"
+    repo_root.mkdir()
+    git_id = verify_local_git_owner_identity(repo_root)
+    assert git_id["git_config_email"] == ""
+    assert git_id["head_author_email"] == ""
+    assert git_id["owner_identity_verified"] is False
+    assert len(git_id["attestation_sha256"]) == 64
+
+
+def test_owner_order_guardrail_simulator() -> None:
     sim = SwarmGuardrailAttackSimulator()
     sim_report = sim.verify_owner_order_guardrail()
     assert sim_report["only_owner_accepted"] is True

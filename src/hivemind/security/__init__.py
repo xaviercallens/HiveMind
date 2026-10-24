@@ -17,6 +17,9 @@ from importlib import import_module
 from typing import Any
 
 _LAZY_MODULES: dict[str, tuple[str, ...]] = {
+    "hivemind.security._exceptions": (
+        "SwarmSecurityViolationError",
+    ),
     "hivemind.security.federated_learning_hardening": (
         "DPGradientSanitizerConfig",
         "FederatedDeltaAuditReport",
@@ -62,7 +65,6 @@ _LAZY_MODULES: dict[str, tuple[str, ...]] = {
     ),
     "hivemind.security.swarm_runtime_hardening": (
         "SwarmHardeningVerdict",
-        "SwarmSecurityViolationError",
         "SwarmTrainingAndStoreGuard",
         "compute_shannon_entropy",
         "run_swarm_hardening_self_test",

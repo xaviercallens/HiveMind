@@ -41,6 +41,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import torch
 
+from hivemind.security._exceptions import SwarmSecurityViolationError
 from hivemind.security.pr_security_scanner import PRSecurityScanner
 
 # ---------------------------------------------------------------------------
@@ -95,16 +96,6 @@ DATASET_POISON_TRIGGER_REGEX = re.compile(
     r"<script>\s*fetch\("
     r")"
 )
-
-
-class SwarmSecurityViolationError(RuntimeError):
-    """Raised when a GPU training job, LoRA tensor, or CAS data store operation violates swarm security rules."""
-
-    def __init__(self, rule_id: str, category: str, message: str) -> None:
-        super().__init__(f"[{rule_id}:{category}] {message}")
-        self.rule_id = rule_id
-        self.category = category
-        self.message = message
 
 
 @dataclass

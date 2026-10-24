@@ -44,7 +44,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Final, Mapping, Sequence
 
-from hivemind.security.swarm_runtime_hardening import SwarmSecurityViolationError
+from hivemind.security._exceptions import SwarmSecurityViolationError
 
 AUTHORIZED_OWNER_EMAIL: Final[str] = "callensxavier@gmail.com"
 AUTHORIZED_OWNER_LOCAL_PART: Final[str] = "callensxavier"

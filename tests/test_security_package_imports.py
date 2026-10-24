@@ -32,9 +32,41 @@ def test_pr_scanner_imports_without_torch() -> None:
     result = _run(
         "import sys; sys.modules['torch'] = None\n"
         "from hivemind.security.pr_security_scanner import PRSecurityScanner\n"
+        "result = PRSecurityScanner().audit_pull_request(1, 'Update helper', '', 'contributor', "
+        "[{'filename': 'helper.py', 'patch': '+value = 1'}], ['Update helper'], "
+        "author_email='contributor@example.org')\n"
+        "assert result.scanned_files_count == 1\n"
         "assert 'hivemind.security.swarm_runtime_hardening' not in sys.modules"
     )
     assert result.returncode == 0, result.stderr[-2000:]
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "from hivemind.security.owner_order_guardrail import OwnerOrderGuardrail",
+        "from hivemind.security import SwarmSecurityViolationError",
+    ],
+)
+def test_lightweight_security_exports_without_torch(statement: str) -> None:
+    result = _run(
+        "import sys; sys.modules['torch'] = None\n"
+        + statement
+        + "\nassert 'hivemind.security.swarm_runtime_hardening' not in sys.modules"
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+
+
+def test_security_exception_exports_preserve_type_and_fields() -> None:
+    from hivemind.security._exceptions import SwarmSecurityViolationError
+    from hivemind.security.owner_order_guardrail import SwarmSecurityViolationError as owner_error
+    from hivemind.security.swarm_runtime_hardening import SwarmSecurityViolationError as runtime_error
+
+    assert security.SwarmSecurityViolationError is owner_error is runtime_error is SwarmSecurityViolationError
+    error = SwarmSecurityViolationError("TEST-01", "fixture", "example")
+    assert isinstance(error, RuntimeError)
+    assert (error.rule_id, error.category, error.message) == ("TEST-01", "fixture", "example")
+    assert str(error) == "[TEST-01:fixture] example"
 
 
 @pytest.mark.parametrize(

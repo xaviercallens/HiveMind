@@ -1,6 +1,6 @@
 # Resume the T4 campaign after a Spot-VM preemption
 
-State captured: 2026-10-24 13:45:29 UTC from branch `worktree-feat-s10-e11-e12-t4` at `86870d7`.
+State captured: 2026-10-24 14:05:31 UTC from branch `worktree-feat-s10-e11-e12-t4` at `86870d7`.
 
 1. Get the code: `git fetch origin worktree-feat-s10-e11-e12-t4` and work from that branch (all code, prereg files and top-level `artifacts/experiments/*.json` reports are
    committed there). This checkpoint branch holds only the ignored/volatile state under `state/`.

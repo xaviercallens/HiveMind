@@ -1678,7 +1678,9 @@ def upcycle_branches_to_sparse_moe(
     scaling = float(lora_alpha) / float(lora_rank_r)
 
     # Unwrap PeftModel to obtain the underlying CausalLM decoder structure
-    raw_causal_lm = getattr(peft_or_base_model, "base_model", peft_or_base_model)
+    raw_causal_lm = peft_or_base_model
+    if not hasattr(getattr(raw_causal_lm, "model", None), "layers"):
+        raw_causal_lm = getattr(peft_or_base_model, "base_model", peft_or_base_model)
     if hasattr(raw_causal_lm, "model") and hasattr(raw_causal_lm.model, "model"):
         raw_causal_lm = raw_causal_lm.model
 

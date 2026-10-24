@@ -256,7 +256,8 @@ def train_single_domain_lora_adapter(
 
     for k, v in reference_lora_state.items():
         if k not in trained_state:
-            trained_state[k] = v.detach().clone().to(torch.float32) + 0.01
+            # Only matched adapter pairs were optimized; preserve other reference tensors.
+            trained_state[k] = v.detach().clone().to(torch.float32)
 
     raw_delta = compute_pseudo_gradient_delta(init_state, trained_state)
     delta_pkg = compress_lora_delta(

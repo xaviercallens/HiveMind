@@ -46,7 +46,7 @@
   "state/job_logs/E13_qwen0.5b_m2proc_v2.log": "725d7c60c7757e97fab6bec79df488f7bc3d52207a2055ef2188d6e37e5f3ead",
   "state/job_logs/E13c_qwen0.5b_rotstraggle.log": "1eb3e757f3b91bfd9495ee6d636ba3d8b4934758f48f8f93453ca1117e1ced91",
   "state/job_logs/E13d_qwen0.5b_m6.log": "2bb9c391a0d9a1effb86d333c4281581ac093ee9c49b3c3efe47a9c34eedc0a4",
-  "state/job_logs/E14_granite1b.log": "d56f1b1218d41b4d1bc406b0a0d356c160e18df514aac995bd21ca0efc3403cd",
+  "state/job_logs/E14_granite1b.log": "798e613087c9c50b6e8a032dbfd659fb5756c5847dd1fe63980ba12ac036603d",
   "state/job_logs/E14_qwen0.5b.log": "cd0392cd22c3948ae46e955ac05074ad92ed946803c672444d5049f1c7e7cda8",
   "state/job_logs/E15_gwaya_rft.log": "41dd197f601a0f065801e2d5aa02eab57ce44f538d01e79685154c0410e9d7d9",
   "state/job_logs/E16_gwaya_lite_t4.log": "4a40f3cb05ed73c3c308e9c163ac22ad0a3f899bad819a6ab322ce7600b1c150",
@@ -67,5 +67,5 @@
  "head": "05dc42a",
  "reason": "periodic",
  "skipped_secret_like": [],
- "written_utc": "2026-10-24 11:45:10"
+ "written_utc": "2026-10-24 12:05:13"
 }

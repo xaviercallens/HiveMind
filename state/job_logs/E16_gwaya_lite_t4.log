@@ -1,0 +1,39 @@
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[E16] smoke=False tiers=['1.5b', '3b', '7b'] ctx=[4096, 8192] eval=257 design=39a27f7049cb url=http://127.0.0.1:11434
+[E16] idle-GPU control: memory.used=0 MiB, loaded_at_start=[] -> pass
+[E16] stage preflight ...
+[E16] stage probes ...
+[E16 probe] 1.5b num_ctx=4096 ...
+[E16 probe] 1.5b num_ctx=8192 ...
+[E16 probe] 3b num_ctx=4096 ...
+[E16 probe] 3b num_ctx=8192 ...
+[E16 probe] 7b num_ctx=4096 ...
+[E16 probe] 7b num_ctx=8192 ...
+[E16] stage accuracy ...
+[E16 acc] R4096 1.5b: 25/257  22s
+[E16 acc] R4096 1.5b: 50/257  40s
+[E16 acc] R4096 1.5b: 75/257  57s
+[E16 acc] R4096 1.5b: 100/257  77s
+[E16 acc] R4096 1.5b: 125/257  93s
+[E16 acc] R4096 1.5b: 150/257  110s
+[E16 acc] R4096 1.5b: 175/257  129s
+[E16 acc] R4096 1.5b: 200/257  151s
+[E16 acc] R4096 1.5b: 225/257  168s
+[E16 acc] R4096 1.5b: 250/257  186s
+[E16 acc] R4096 1.5b: 257/257  189s
+[E16 acc] L4096 1.5b: 25/257  13s
+[E16 acc] L4096 1.5b: 50/257  30s
+[E16 acc] L4096 1.5b: 75/257  57s
+[E16 acc] L4096 1.5b: 100/257  76s
+[E16 acc] L4096 1.5b: 125/257  100s
+[E16 acc] L4096 1.5b: 150/257  133s
+[E16 acc] L4096 1.5b: 175/257  191s
+[E16 acc] L4096 1.5b: 200/257  219s
+[E16 acc] L4096 1.5b: 225/257  250s
+[E16 acc] L4096 1.5b: 250/257  275s
+[E16 acc] L4096 1.5b: 257/257  280s
+[E16 acc] R4096 3b: 25/257  38s
+[E16 acc] R4096 3b: 50/257  65s
+[E16 acc] R4096 3b: 75/257  111s
+[E16 acc] R4096 3b: 100/257  149s

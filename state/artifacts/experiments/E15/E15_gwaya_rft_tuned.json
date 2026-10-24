@@ -1,0 +1,80 @@
+{
+  "stage": "tuned",
+  "design_hash": "67f22d0074135648635fb86bf39e34983f9ae7ef78760f4e0880a363cb76e04a",
+  "written_utc": "2026-10-24T10:06:43Z",
+  "status": "ok",
+  "meter": {
+    "wall_s": 903.9457496199975,
+    "peak_reserved_gib": 4.36328125,
+    "peak_allocated_gib": 3.7475576400756836,
+    "energy_wh": 16.57395542838037
+  },
+  "merged_matrices": 196,
+  "C2": {
+    "label": "C2",
+    "n": 257,
+    "passes": 171,
+    "pass_at_1": 0.6653696498054474,
+    "wilson95": [
+      0.6056194756001525,
+      0.720248967186123
+    ],
+    "accepted_gwaya": 171,
+    "stub_flagged_among_passing": 0,
+    "unverified_judgements": 0,
+    "generated_tokens": 14391,
+    "gen_gpu_seconds": 198.29279744601106,
+    "correct_per_gpu_minute": 51.74166753481541
+  },
+  "C2h": {
+    "label": "C2h",
+    "n": 164,
+    "passes": 111,
+    "pass_at_1": 0.676829268292683,
+    "wilson95": [
+      0.6019119505159681,
+      0.743652252795454
+    ],
+    "accepted_gwaya": 111,
+    "stub_flagged_among_passing": 0,
+    "unverified_judgements": 0,
+    "generated_tokens": 16014,
+    "gen_gpu_seconds": 186.1069743559934,
+    "correct_per_gpu_minute": 35.78587005159982
+  },
+  "C3": {
+    "label": "C3",
+    "n": 257,
+    "passes": 190,
+    "pass_at_1": 0.7392996108949417,
+    "wilson95": [
+      0.682381834605974,
+      0.7891689708376952
+    ],
+    "accepted_gwaya": 190,
+    "stub_flagged_among_passing": 0,
+    "unverified_judgements": 0,
+    "generated_tokens": 53995,
+    "gen_gpu_seconds": 688.5678877579901,
+    "correct_per_gpu_minute": 16.55610173329306,
+    "verified_rate_visible": 0.8015564202334631,
+    "mean_candidates_tried": 2.1284046692607004,
+    "repair_rounds_histogram": {
+      "0": 204,
+      "1": 2,
+      "2": 0,
+      "3": 51
+    },
+    "winner_source": {
+      "candidate": 204,
+      "fallback_first_greedy": 51,
+      "repair1": 2
+    },
+    "verified_visible_solutions_per_gpu_minute": 17.95029977399142
+  },
+  "gen": {
+    "oom_retries": 0,
+    "failed_batches": 0
+  },
+  "elapsed_s": 907.7115898132324
+}

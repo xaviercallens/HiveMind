@@ -72,3 +72,18 @@
 [E15 train] epoch 3/3 mean target-token CE 0.0612 steps 129/129 skipped 0
 [E15] stage tuned ...
 Loading weights:   0%|          | 0/338 [00:00<?, ?it/s]Loading weights:   0%|          | 1/338 [00:00<02:04,  2.70it/s]Loading weights:  41%|████      | 137/338 [00:00<00:00, 376.08it/s]Loading weights:  63%|██████▎   | 214/338 [00:00<00:00, 362.32it/s]Loading weights:  80%|████████  | 272/338 [00:00<00:00, 304.20it/s]Loading weights:  93%|█████████▎| 316/338 [00:01<00:00, 258.16it/s]Loading weights: 100%|██████████| 338/338 [00:01<00:00, 271.66it/s]
+[E15] stage controls ...
+{
+  "status": "complete",
+  "pass_at_1": {
+    "C0": 0.6575875486381323,
+    "C1": 0.7276264591439688,
+    "C2": 0.6653696498054474,
+    "C3": 0.7392996108949417,
+    "C0h": 0.6707317073170732,
+    "C2h": 0.676829268292683
+  },
+  "controls_all_passed": true,
+  "receipt": "678b5a52b87918c7aab034eb8a701e6ab699d3274c682704b1effb216f6281c9"
+}
+E15 DONE model=coder1.5b stages_ok=6 stages_failed=0 report=artifacts/experiments/E15_gwaya_rft_report.json

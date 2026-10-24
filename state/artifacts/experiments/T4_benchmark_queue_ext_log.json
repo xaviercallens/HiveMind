@@ -121,13 +121,48 @@
     "}",
     "E13 DONE model=qwen0.5b cells_ok=12 cells_failed=0 report=artifacts/experiments/E13_swarm_local_report_m6.json"
    ]
+  },
+  {
+   "name": "E15_gwaya_rft",
+   "argv": [
+    "scripts/run_experiment_E15_gwaya_rft.py",
+    "--resume",
+    "--out",
+    "artifacts/experiments/E15",
+    "--report",
+    "artifacts/experiments/E15_gwaya_rft_report.json",
+    "--scratch",
+    "/mnt/disks/disk-socrateai-local-1/e15_scratch"
+   ],
+   "start_unix": 1792829756.8888268,
+   "status": "ok",
+   "returncode": 0,
+   "seconds": 6663.7,
+   "log_tail": [
+    "[E15] stage controls ...",
+    "{",
+    "  \"status\": \"complete\",",
+    "  \"pass_at_1\": {",
+    "    \"C0\": 0.6575875486381323,",
+    "    \"C1\": 0.7276264591439688,",
+    "    \"C2\": 0.6653696498054474,",
+    "    \"C3\": 0.7392996108949417,",
+    "    \"C0h\": 0.6707317073170732,",
+    "    \"C2h\": 0.676829268292683",
+    "  },",
+    "  \"controls_all_passed\": true,",
+    "  \"receipt\": \"678b5a52b87918c7aab034eb8a701e6ab699d3274c682704b1effb216f6281c9\"",
+    "}",
+    "E15 DONE model=coder1.5b stages_ok=6 stages_failed=0 report=artifacts/experiments/E15_gwaya_rft_report.json"
+   ]
   }
  ],
- "gpu_samples": 171,
- "gpu_util_mean_pct": 82.4,
+ "gpu_samples": 393,
+ "gpu_util_mean_pct": 78.9,
  "gpu_util_by_job": {
   "E13_granite1b_v2": 50.2,
   "E14_qwen0.5b": 88.8,
+  "E15_gwaya_rft": 76.2,
   "E13d_qwen0.5b_m6": 90.5
  },
  "gpu_mem_peak_gib": 6.63,
@@ -432,6 +467,398 @@
    "util_pct": 98,
    "mem_used_gib": 6.4,
    "power_w": 66.6
+  },
+  {
+   "t": 1792829808.6,
+   "job": "E15_gwaya_rft",
+   "util_pct": 59,
+   "mem_used_gib": 4.15,
+   "power_w": 64.8
+  },
+  {
+   "t": 1792829928.6,
+   "job": "E15_gwaya_rft",
+   "util_pct": 48,
+   "mem_used_gib": 4.15,
+   "power_w": 64.2
+  },
+  {
+   "t": 1792830048.6,
+   "job": "E15_gwaya_rft",
+   "util_pct": 98,
+   "mem_used_gib": 4.69,
+   "power_w": 68.1
+  },
+  {
+   "t": 1792830168.7,
+   "job": "E15_gwaya_rft",
+   "util_pct": 97,
+   "mem_used_gib": 4.77,
+   "power_w": 65.8
+  },
+  {
+   "t": 1792830288.7,
+   "job": "E15_gwaya_rft",
+   "util_pct": 98,
+   "mem_used_gib": 4.24,
+   "power_w": 67.5
+  },
+  {
+   "t": 1792830408.7,
+   "job": "E15_gwaya_rft",
+   "util_pct": 68,
+   "mem_used_gib": 4.39,
+   "power_w": 66.0
+  },
+  {
+   "t": 1792830528.7,
+   "job": "E15_gwaya_rft",
+   "util_pct": 83,
+   "mem_used_gib": 4.39,
+   "power_w": 64.1
+  },
+  {
+   "t": 1792830648.7,
+   "job": "E15_gwaya_rft",
+   "util_pct": 91,
+   "mem_used_gib": 4.39,
+   "power_w": 63.5
+  },
+  {
+   "t": 1792830768.8,
+   "job": "E15_gwaya_rft",
+   "util_pct": 66,
+   "mem_used_gib": 4.39,
+   "power_w": 63.7
+  },
+  {
+   "t": 1792830888.8,
+   "job": "E15_gwaya_rft",
+   "util_pct": 0,
+   "mem_used_gib": 4.83,
+   "power_w": 42.6
+  },
+  {
+   "t": 1792831008.8,
+   "job": "E15_gwaya_rft",
+   "util_pct": 98,
+   "mem_used_gib": 4.83,
+   "power_w": 65.7
+  },
+  {
+   "t": 1792831128.8,
+   "job": "E15_gwaya_rft",
+   "util_pct": 95,
+   "mem_used_gib": 4.22,
+   "power_w": 65.5
+  },
+  {
+   "t": 1792831248.9,
+   "job": "E15_gwaya_rft",
+   "util_pct": 68,
+   "mem_used_gib": 4.59,
+   "power_w": 68.7
+  },
+  {
+   "t": 1792831368.9,
+   "job": "E15_gwaya_rft",
+   "util_pct": 76,
+   "mem_used_gib": 5.06,
+   "power_w": 64.8
+  },
+  {
+   "t": 1792831488.9,
+   "job": "E15_gwaya_rft",
+   "util_pct": 71,
+   "mem_used_gib": 5.06,
+   "power_w": 65.5
+  },
+  {
+   "t": 1792831608.9,
+   "job": "E15_gwaya_rft",
+   "util_pct": 78,
+   "mem_used_gib": 5.06,
+   "power_w": 66.2
+  },
+  {
+   "t": 1792831729.0,
+   "job": "E15_gwaya_rft",
+   "util_pct": 82,
+   "mem_used_gib": 5.06,
+   "power_w": 66.8
+  },
+  {
+   "t": 1792831849.0,
+   "job": "E15_gwaya_rft",
+   "util_pct": 98,
+   "mem_used_gib": 5.06,
+   "power_w": 63.7
+  },
+  {
+   "t": 1792831969.0,
+   "job": "E15_gwaya_rft",
+   "util_pct": 80,
+   "mem_used_gib": 5.06,
+   "power_w": 68.0
+  },
+  {
+   "t": 1792832089.0,
+   "job": "E15_gwaya_rft",
+   "util_pct": 97,
+   "mem_used_gib": 5.06,
+   "power_w": 67.6
+  },
+  {
+   "t": 1792832209.1,
+   "job": "E15_gwaya_rft",
+   "util_pct": 75,
+   "mem_used_gib": 5.06,
+   "power_w": 65.2
+  },
+  {
+   "t": 1792832329.1,
+   "job": "E15_gwaya_rft",
+   "util_pct": 52,
+   "mem_used_gib": 5.06,
+   "power_w": 56.6
+  },
+  {
+   "t": 1792832449.2,
+   "job": "E15_gwaya_rft",
+   "util_pct": 66,
+   "mem_used_gib": 5.06,
+   "power_w": 74.9
+  },
+  {
+   "t": 1792832569.2,
+   "job": "E15_gwaya_rft",
+   "util_pct": 26,
+   "mem_used_gib": 5.06,
+   "power_w": 43.0
+  },
+  {
+   "t": 1792832689.2,
+   "job": "E15_gwaya_rft",
+   "util_pct": 98,
+   "mem_used_gib": 5.06,
+   "power_w": 68.5
+  },
+  {
+   "t": 1792832809.3,
+   "job": "E15_gwaya_rft",
+   "util_pct": 67,
+   "mem_used_gib": 5.06,
+   "power_w": 63.6
+  },
+  {
+   "t": 1792832929.3,
+   "job": "E15_gwaya_rft",
+   "util_pct": 65,
+   "mem_used_gib": 5.06,
+   "power_w": 65.0
+  },
+  {
+   "t": 1792833049.3,
+   "job": "E15_gwaya_rft",
+   "util_pct": 0,
+   "mem_used_gib": 5.06,
+   "power_w": 43.3
+  },
+  {
+   "t": 1792833169.3,
+   "job": "E15_gwaya_rft",
+   "util_pct": 55,
+   "mem_used_gib": 5.06,
+   "power_w": 65.4
+  },
+  {
+   "t": 1792833289.3,
+   "job": "E15_gwaya_rft",
+   "util_pct": 65,
+   "mem_used_gib": 5.06,
+   "power_w": 62.6
+  },
+  {
+   "t": 1792833409.4,
+   "job": "E15_gwaya_rft",
+   "util_pct": 55,
+   "mem_used_gib": 5.06,
+   "power_w": 64.2
+  },
+  {
+   "t": 1792833529.4,
+   "job": "E15_gwaya_rft",
+   "util_pct": 56,
+   "mem_used_gib": 5.06,
+   "power_w": 66.8
+  },
+  {
+   "t": 1792833649.4,
+   "job": "E15_gwaya_rft",
+   "util_pct": 77,
+   "mem_used_gib": 5.06,
+   "power_w": 66.4
+  },
+  {
+   "t": 1792833769.5,
+   "job": "E15_gwaya_rft",
+   "util_pct": 80,
+   "mem_used_gib": 5.06,
+   "power_w": 68.3
+  },
+  {
+   "t": 1792833889.5,
+   "job": "E15_gwaya_rft",
+   "util_pct": 63,
+   "mem_used_gib": 5.06,
+   "power_w": 65.7
+  },
+  {
+   "t": 1792834009.5,
+   "job": "E15_gwaya_rft",
+   "util_pct": 57,
+   "mem_used_gib": 5.06,
+   "power_w": 64.2
+  },
+  {
+   "t": 1792834129.5,
+   "job": "E15_gwaya_rft",
+   "util_pct": 98,
+   "mem_used_gib": 5.06,
+   "power_w": 68.8
+  },
+  {
+   "t": 1792834249.6,
+   "job": "E15_gwaya_rft",
+   "util_pct": 64,
+   "mem_used_gib": 5.06,
+   "power_w": 65.0
+  },
+  {
+   "t": 1792834369.6,
+   "job": "E15_gwaya_rft",
+   "util_pct": 73,
+   "mem_used_gib": 5.06,
+   "power_w": 66.7
+  },
+  {
+   "t": 1792834489.6,
+   "job": "E15_gwaya_rft",
+   "util_pct": 79,
+   "mem_used_gib": 5.06,
+   "power_w": 70.9
+  },
+  {
+   "t": 1792834609.6,
+   "job": "E15_gwaya_rft",
+   "util_pct": 69,
+   "mem_used_gib": 5.06,
+   "power_w": 66.1
+  },
+  {
+   "t": 1792834729.7,
+   "job": "E15_gwaya_rft",
+   "util_pct": 86,
+   "mem_used_gib": 5.06,
+   "power_w": 66.4
+  },
+  {
+   "t": 1792834849.7,
+   "job": "E15_gwaya_rft",
+   "util_pct": 68,
+   "mem_used_gib": 5.06,
+   "power_w": 62.2
+  },
+  {
+   "t": 1792834969.7,
+   "job": "E15_gwaya_rft",
+   "util_pct": 57,
+   "mem_used_gib": 5.06,
+   "power_w": 61.6
+  },
+  {
+   "t": 1792835089.7,
+   "job": "E15_gwaya_rft",
+   "util_pct": 64,
+   "mem_used_gib": 5.06,
+   "power_w": 63.7
+  },
+  {
+   "t": 1792835209.8,
+   "job": "E15_gwaya_rft",
+   "util_pct": 100,
+   "mem_used_gib": 4.77,
+   "power_w": 64.5
+  },
+  {
+   "t": 1792835329.8,
+   "job": "E15_gwaya_rft",
+   "util_pct": 99,
+   "mem_used_gib": 4.77,
+   "power_w": 67.4
+  },
+  {
+   "t": 1792835449.8,
+   "job": "E15_gwaya_rft",
+   "util_pct": 91,
+   "mem_used_gib": 4.77,
+   "power_w": 65.1
+  },
+  {
+   "t": 1792835569.8,
+   "job": "E15_gwaya_rft",
+   "util_pct": 59,
+   "mem_used_gib": 4.22,
+   "power_w": 66.5
+  },
+  {
+   "t": 1792835689.9,
+   "job": "E15_gwaya_rft",
+   "util_pct": 47,
+   "mem_used_gib": 4.22,
+   "power_w": 67.2
+  },
+  {
+   "t": 1792835809.9,
+   "job": "E15_gwaya_rft",
+   "util_pct": 81,
+   "mem_used_gib": 4.7,
+   "power_w": 64.9
+  },
+  {
+   "t": 1792835929.9,
+   "job": "E15_gwaya_rft",
+   "util_pct": 67,
+   "mem_used_gib": 4.7,
+   "power_w": 65.2
+  },
+  {
+   "t": 1792836049.9,
+   "job": "E15_gwaya_rft",
+   "util_pct": 62,
+   "mem_used_gib": 4.7,
+   "power_w": 65.7
+  },
+  {
+   "t": 1792836170.0,
+   "job": "E15_gwaya_rft",
+   "util_pct": 87,
+   "mem_used_gib": 4.7,
+   "power_w": 69.0
+  },
+  {
+   "t": 1792836290.0,
+   "job": "E15_gwaya_rft",
+   "util_pct": 97,
+   "mem_used_gib": 4.99,
+   "power_w": 63.9
+  },
+  {
+   "t": 1792836410.0,
+   "job": "E15_gwaya_rft",
+   "util_pct": 0,
+   "mem_used_gib": 4.99,
+   "power_w": 31.0
   }
  ]
 }

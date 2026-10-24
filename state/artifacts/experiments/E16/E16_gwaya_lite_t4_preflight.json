@@ -1,0 +1,159 @@
+{
+  "stage": "preflight",
+  "design_hash": "39a27f7049cb0b92e8910d58e0494fb15f31306f5d2f20ab7a5cbed04f91f15c",
+  "written_utc": "2026-10-24T10:07:09Z",
+  "status": "ok",
+  "ollama_version": "0.34.1",
+  "models_present": {
+    "qwen2.5-coder:1.5b": true,
+    "qwen2.5-coder:3b": true,
+    "qwen2.5-coder:7b-instruct": true
+  },
+  "gpu": {
+    "name": "Tesla T4",
+    "memory_total_mib": 15360,
+    "driver": "580.178.04"
+  },
+  "idle_gpu_at_start": {
+    "threshold_mib": 1500,
+    "loaded_at_start": [],
+    "memory_used_mib": 0,
+    "still_loaded": [],
+    "gpu_processes": [],
+    "pass": true
+  },
+  "gate_available": {
+    "value": true,
+    "why": "",
+    "pass": true
+  },
+  "reference_control": {
+    "n": 100,
+    "accepted": 100,
+    "rate": 1.0,
+    "threshold": 0.95,
+    "pass": true,
+    "rejected_examples": []
+  },
+  "containment_probes": {
+    "pass": true,
+    "detail": {
+      "benign_correct_solution": {
+        "verdict": "ACCEPTED",
+        "contained": true
+      },
+      "read_zenodo_token": {
+        "verdict": "REJECTED_TEST",
+        "contained": true,
+        "wall_s": 0.06
+      },
+      "read_claude_json": {
+        "verdict": "REJECTED_TEST",
+        "contained": true,
+        "wall_s": 0.06
+      },
+      "read_canary_in_home": {
+        "verdict": "REJECTED_TEST",
+        "contained": true,
+        "wall_s": 0.06
+      },
+      "list_home": {
+        "verdict": "REJECTED_TEST",
+        "contained": true,
+        "wall_s": 0.06
+      },
+      "tcp_loopback": {
+        "verdict": "REJECTED_TEST",
+        "contained": true,
+        "wall_s": 0.06
+      },
+      "tcp_external": {
+        "verdict": "REJECTED_TEST",
+        "contained": true,
+        "wall_s": 0.06
+      },
+      "alloc_4gib": {
+        "verdict": "REJECTED_TEST",
+        "contained": true,
+        "wall_s": 0.06
+      },
+      "infinite_loop": {
+        "verdict": "REJECTED_TEST",
+        "contained": true,
+        "wall_s": 3.06
+      },
+      "fork_bomb": {
+        "verdict": "REJECTED_TEST",
+        "contained": true,
+        "wall_s": 0.17
+      },
+      "write_100mb": {
+        "verdict": "REJECTED_TEST",
+        "contained": true,
+        "wall_s": 0.07
+      },
+      "subprocess_cat_proc1_environ": {
+        "verdict": "REJECTED_TEST",
+        "contained": true,
+        "wall_s": 0.06
+      },
+      "modify_vendored_auditor": {
+        "verdict": "REJECTED_TEST",
+        "contained": true,
+        "wall_s": 0.07
+      },
+      "os_system_curl": {
+        "verdict": "REJECTED_TEST",
+        "contained": true,
+        "wall_s": 0.07
+      },
+      "open_gpu_device_node": {
+        "verdict": "REJECTED_TEST",
+        "contained": true,
+        "wall_s": 0.06
+      },
+      "umount_home": {
+        "verdict": "REJECTED_TEST",
+        "contained": true,
+        "wall_s": 0.07
+      },
+      "early_exit_zero": {
+        "verdict": "REJECTED_TEST",
+        "contained": true,
+        "wall_s": 0.06
+      },
+      "sys_exit_zero": {
+        "verdict": "REJECTED_TEST",
+        "contained": true,
+        "wall_s": 0.06
+      },
+      "auditor_unchanged": true,
+      "canary_intact": true,
+      "all_contained": true
+    }
+  },
+  "no_leakage": {
+    "train_ids": 462,
+    "eval_ids": 257,
+    "id_overlap": 0,
+    "text_overlap": 0,
+    "reference_solution_overlap": 2,
+    "train_id_range": [
+      511,
+      974
+    ],
+    "eval_id_range": [
+      11,
+      479
+    ],
+    "train_raw": 464,
+    "removed_for_text_overlap": [
+      "mbpp-569",
+      "mbpp-928"
+    ],
+    "train_after_decontamination": 462,
+    "pass": true
+  },
+  "gate_control_pass": true,
+  "elapsed_s": 6.4590373039245605
+}

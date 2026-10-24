@@ -239,3 +239,58 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     assert redeem_json["points_balance_after"] == 1200
     assert redeem_json["monetary_cost_eur_usd"] == 0.0
     assert "quantize_e8_coset_2bit" in redeem_json["domain_output"]
+
+    # Verify 5-Language Support (English, French, Chinese, Spanish, German)
+    r_i18n_all = client.get("/api/v1/i18n")
+    assert r_i18n_all.status_code == 200
+    i18n_all_json = r_i18n_all.json()
+    assert i18n_all_json["supported_languages"] == ["en", "fr", "zh", "es", "de"]
+    for lang_code in ("en", "fr", "zh", "es", "de"):
+        r_lang = client.get(f"/api/v1/i18n/{lang_code}")
+        assert r_lang.status_code == 200
+        assert r_lang.json()["lang"] == lang_code
+        assert "brand_title" in r_lang.json()["dictionary"]
+        assert "video_title" in r_lang.json()["dictionary"]
+
+        r_red_lang = client.post(
+            "/api/v1/compute-points/redeem",
+            json={
+                "contributor_handle": "@test-gpu-node",
+                "service_id": "astrophysics_exoplanet",
+                "prompt": "Detect Kepler-186f exoplanet transit dip.",
+                "points_balance_before": 1250,
+                "lang": lang_code,
+            },
+        )
+        assert r_red_lang.status_code == 200
+        assert r_red_lang.json()["lang"] == lang_code
+        assert f"[{lang_code.upper()}]" in r_red_lang.json()["domain_output"]
+
+    # Verify 8-Domain Interactive Examples Gallery across all 5 languages
+    for lang_code in ("en", "fr", "zh", "es", "de"):
+        r_ex = client.get(f"/api/v1/examples?lang={lang_code}")
+        assert r_ex.status_code == 200
+        ex_json = r_ex.json()
+        assert ex_json["examples_count"] == 8
+        assert len(ex_json["examples"]) == 8
+        assert ex_json["examples"][0]["localized_title"] != ""
+
+    # Verify SVG Visualizations & Interactive Video Cinema Manifest + DOM Elements
+    r_svg1 = client.get("/api/v1/media/cyber-bee-poster.svg")
+    assert r_svg1.status_code == 200
+    assert "image/svg+xml" in r_svg1.headers["content-type"]
+    assert "cyber-bee-poster-svg" in r_svg1.text
+
+    r_svg2 = client.get("/api/v1/media/exoplanet-seti-visual.svg")
+    assert r_svg2.status_code == 200
+    assert "image/svg+xml" in r_svg2.headers["content-type"]
+    assert "exoplanet-seti-svg" in r_svg2.text
+
+    r_vid = client.get("/api/v1/media/video-manifest")
+    assert r_vid.status_code == 200
+    vid_json = r_vid.json()
+    assert len(vid_json["chapters"]) == 4
+    assert "cyber-bee-video-element" in r_index.text
+    assert "cyber-bee-video-canvas" in r_index.text
+    assert "interactive-examples-grid" in r_index.text
+    assert "lang-switcher-bar" in r_index.text

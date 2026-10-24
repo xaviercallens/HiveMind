@@ -1,6 +1,6 @@
 {
   "verification_title": "HiveMind@home & La Ruche Public GCP Cloud Run & SocrateAI GCS End-to-End Verification",
-  "verified_at_epoch": 1792828935.1192117,
+  "verified_at_epoch": 1792831220.2391508,
   "public_dns_base_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app",
   "canonical_cloud_run_url": "https://hivemind-at-home-ruche-1003063861791.us-central1.run.app",
   "gcp_project_id": "gen-lang-client-0625573011",
@@ -29,7 +29,7 @@
   },
   "dashboard_html_check": {
     "http_status": 200,
-    "html_bytes": 126448,
+    "html_bytes": 200049,
     "passed": true
   },
   "la_ruche_model_retrieval": {
@@ -54,28 +54,28 @@
         "formal_lean4"
       ],
       "logit_l2_norm": 2.000781,
-      "latency_ms": 53.587,
-      "inference_receipt_sha256": "ceb146c8a26843a367ffce033d67312f7eaa61db52bc2f87c807f1436ab60e48"
+      "latency_ms": 30.9,
+      "inference_receipt_sha256": "d016401d865f07cebd2cfda3a178be56869ed132fb1165e8fe9d8e6fc1b54982"
     },
     "openai_chat_completions": {
-      "completion_id": "chatcmpl-ruche-f2e3d8d01dc2",
+      "completion_id": "chatcmpl-ruche-9a0f515ce349",
       "routed_experts": [
         "physics_sim",
         "systems_rust"
       ],
-      "inference_receipt_sha256": "f2e3d8d01dc277431ec7a5595bfdbd4d6aedbb69208d4d8ab5c539a99b65188e"
+      "inference_receipt_sha256": "9a0f515ce349a019ff5c6d32e1c0d9486f9e7830572a35713fc57c69738f1a91"
     }
   },
   "federated_training_checks": {
     "leased_workunit_id": "WU-S10-CODE_PYTHON-0001",
-    "lease_id": "LEASE-06e284ffbe20c717",
+    "lease_id": "LEASE-a48685fcb72de3be",
     "domain_name": "code_python",
     "submission_status": "ADMITTED_TO_LA_RUCHE_QUORUM",
     "outer_delta_frob_norm": 0.07637,
     "svd_spectral_energy_retained": 1.0,
     "perplexity_reduction_pct": 15.89,
     "monetary_payout_eur_usd": 0.0,
-    "receipt_sha256": "c9b5a0d2e4cf22d5248a6c8d1294a2bea9233af630c80854545092190912bf43",
+    "receipt_sha256": "a2442451a4d7e8375b03ccd6a50abf718031f4067a5fe1eedcc66665d38f2a92",
     "ledger_completed_receipts_count": 1
   },
   "compute_points_redemption_check": {
@@ -84,9 +84,23 @@
     "points_spent": 50,
     "points_balance_after": 1200,
     "monetary_cost_eur_usd": 0.0,
-    "redemption_receipt_sha256": "d27d309d0f4640171ca3ed7609e5beb713e4bcb25336abd74c5c81cdda830f9a"
+    "redemption_receipt_sha256": "2a38c2b55b1af73d598ade143d342329009ba7a8de592cee988097d141b53151"
   },
-  "total_verification_duration_ms": 20071.18,
+  "multilingual_i18n_and_media_checks": {
+    "supported_languages_verified": [
+      "en",
+      "fr",
+      "zh",
+      "es",
+      "de"
+    ],
+    "interactive_examples_count": 8,
+    "cyber_bee_poster_svg_bytes": 4730,
+    "exoplanet_seti_svg_bytes": 2373,
+    "video_cinema_chapters_count": 4,
+    "navigation_and_media_dom_ids_verified": true
+  },
+  "total_verification_duration_ms": 25212.63,
   "all_checks_passed": true,
-  "verification_suite_sha256": "8ffb989aa9d7e6d7b446509e92782a18ae0d47e6aa4711b04a6609d7556deacb"
+  "verification_suite_sha256": "53b9992a18cb1740d43f5599b28db4a80eb1ea007beb78705689ba3dc267cde9"
 }

@@ -197,10 +197,48 @@ def run_public_gcp_e2e_verification(
             "service_id": "python_coding_gwaya",
             "prompt": "Write a vectorized E8 lattice quantizer kernel in Python.",
             "points_balance_before": 1250,
+            "lang": "en",
         },
     )
     if redeem_resp.get("status") != "COMPUTE_POINTS_REDEEMED":
         raise RuntimeError(f"Compute points redemption check failed: {redeem_resp}")
+
+    # 8B. 5-Language (EN, FR, ZH, ES, DE), 8 Interactive Examples, Navigation & Video/SVG Media Verification
+    i18n_doc = _http_get_json(f"{base}/api/v1/i18n")
+    supported_langs = list(i18n_doc.get("supported_languages", []))
+    if supported_langs != ["en", "fr", "zh", "es", "de"]:
+        raise RuntimeError(f"Expected 5 core languages ['en','fr','zh','es','de'], got {supported_langs}")
+    for lang_code in supported_langs:
+        lang_single = _http_get_json(f"{base}/api/v1/i18n/{lang_code}")
+        if lang_single.get("lang") != lang_code:
+            raise RuntimeError(f"i18n endpoint mismatch for {lang_code}")
+
+    examples_doc = _http_get_json(f"{base}/api/v1/examples?lang=fr")
+    if int(examples_doc.get("examples_count", 0)) < 8:
+        raise RuntimeError(f"Expected >= 8 interactive examples, got {examples_doc.get('examples_count')}")
+
+    poster_svg_bytes, poster_headers = _http_get_bytes(f"{base}/api/v1/media/cyber-bee-poster.svg")
+    exo_svg_bytes, exo_headers = _http_get_bytes(f"{base}/api/v1/media/exoplanet-seti-visual.svg")
+    video_manifest = _http_get_json(f"{base}/api/v1/media/video-manifest")
+    if (
+        b"cyber-bee-poster-svg" not in poster_svg_bytes
+        or b"exoplanet-seti-svg" not in exo_svg_bytes
+        or len(video_manifest.get("chapters", [])) != 4
+    ):
+        raise RuntimeError("SVG visualizations or 4-chapter video manifest check failed")
+    for screen_id in (
+        "screen-overview",
+        "screen-join-points",
+        "screen-moe-bees",
+        "screen-results-carousel",
+        "screen-tech-leaderboard",
+        "cyber-bee-video-element",
+        "cyber-bee-video-canvas",
+        "interactive-examples-grid",
+        "lang-switcher-bar",
+    ):
+        if screen_id not in html_text:
+            raise RuntimeError(f"HTML portal missing required navigation/media ID: {screen_id}")
 
     # 9. Direct SocrateAI GCP Low-Cost Cloud Storage (gs://socrateai-hivemind-la-ruche-vault) Loader Check
     import torch
@@ -308,6 +346,14 @@ def run_public_gcp_e2e_verification(
             "points_balance_after": redeem_resp["points_balance_after"],
             "monetary_cost_eur_usd": redeem_resp["monetary_cost_eur_usd"],
             "redemption_receipt_sha256": redeem_resp["redemption_receipt_sha256"],
+        },
+        "multilingual_i18n_and_media_checks": {
+            "supported_languages_verified": supported_langs,
+            "interactive_examples_count": int(examples_doc.get("examples_count", 0)),
+            "cyber_bee_poster_svg_bytes": len(poster_svg_bytes),
+            "exoplanet_seti_svg_bytes": len(exo_svg_bytes),
+            "video_cinema_chapters_count": len(video_manifest.get("chapters", [])),
+            "navigation_and_media_dom_ids_verified": True,
         },
         "total_verification_duration_ms": round(total_elapsed_ms, 2),
         "all_checks_passed": True,

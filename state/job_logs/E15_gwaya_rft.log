@@ -64,3 +64,11 @@
 [E15 rft] 440/462 problems  3892s
 [E15 rft] 448/462 problems  3959s
 [E15 rft] 456/462 problems  4011s
+[E15 rft] 462/462 problems  4047s
+[E15] stage train ...
+Loading weights:   0%|          | 0/338 [00:00<?, ?it/s]Loading weights:   0%|          | 1/338 [00:00<01:52,  3.00it/s]Loading weights:  22%|██▏       | 75/338 [00:00<00:01, 144.18it/s]Loading weights:  27%|██▋       | 91/338 [00:00<00:01, 131.05it/s]Loading weights:  48%|████▊     | 161/338 [00:00<00:00, 253.23it/s]Loading weights:  58%|█████▊    | 197/338 [00:00<00:00, 277.85it/s]Loading weights:  69%|██████▉   | 233/338 [00:01<00:00, 295.63it/s]Loading weights:  80%|███████▉  | 269/338 [00:01<00:00, 285.14it/s]Loading weights:  89%|████████▉ | 302/338 [00:01<00:00, 296.33it/s]Loading weights:  99%|█████████▉| 335/338 [00:01<00:00, 263.94it/s]Loading weights: 100%|██████████| 338/338 [00:01<00:00, 228.76it/s]
+[E15 train] epoch 1/3 mean target-token CE 0.1562 steps 43/129 skipped 0
+[E15 train] epoch 2/3 mean target-token CE 0.0960 steps 86/129 skipped 0
+[E15 train] epoch 3/3 mean target-token CE 0.0612 steps 129/129 skipped 0
+[E15] stage tuned ...
+Loading weights:   0%|          | 0/338 [00:00<?, ?it/s]Loading weights:   0%|          | 1/338 [00:00<02:04,  2.70it/s]Loading weights:  41%|████      | 137/338 [00:00<00:00, 376.08it/s]Loading weights:  63%|██████▎   | 214/338 [00:00<00:00, 362.32it/s]Loading weights:  80%|████████  | 272/338 [00:00<00:00, 304.20it/s]Loading weights:  93%|█████████▎| 316/338 [00:01<00:00, 258.16it/s]Loading weights: 100%|██████████| 338/338 [00:01<00:00, 271.66it/s]

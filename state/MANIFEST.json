@@ -4,9 +4,11 @@
   "state/artifacts/experiments/E10b_first_execution_partial.json": "a4a0b5b83e0e36f39074389aa7624a14a4c98083aafa1c51d220ab6279b0ca93",
   "state/artifacts/experiments/E10b_lattice_05b_report.json.partial.json": "8f855b8c4e7ec1e1a361e47807efa8bb036ff4e7a130534664cb35d01aa44c01",
   "state/artifacts/experiments/E15/E15_gwaya_rft_baseline.json": "86d7399bfb2d26f33446f4503f4750967148c29a55f556911c3493585504f7b8",
-  "state/artifacts/experiments/E15/E15_gwaya_rft_journal_eval.jsonl": "66ecdd05ae1152efc8b3c098e053d3b2d158613d75f636c48036f3de2d2cb039",
-  "state/artifacts/experiments/E15/E15_gwaya_rft_journal_rft.jsonl": "fc85b63c71dfa939cc3143d7ada9a53ae1bad60db60a8950b0adf4c32f13b2fc",
+  "state/artifacts/experiments/E15/E15_gwaya_rft_journal_eval.jsonl": "7fbe32efb4df65e2ea9c573ede351d2dec92951f3c992d505f28c5975b96009a",
+  "state/artifacts/experiments/E15/E15_gwaya_rft_journal_rft.jsonl": "597bf51b65ae9cec5ff9334f72d8db4ba1702c42dea2151ff4094b279b1b7914",
   "state/artifacts/experiments/E15/E15_gwaya_rft_loop_base.json": "c92bfa5b190a12be265c8fec65566e9681dc022955e4c699128391a00654b4f1",
+  "state/artifacts/experiments/E15/E15_gwaya_rft_rft.json": "54547ebe586db75d61312d9e64fb2c570eeb3bc25df1ac7d433daca365cfedec",
+  "state/artifacts/experiments/E15/E15_gwaya_rft_train.json": "8f121f5532d9c2a4e92c4736d861ce5717a27620e6913e9f34988a53a3273d98",
   "state/artifacts/experiments/T4_benchmark_queue.json": "5007d0562f82f98888cd435577596a4d7770a2aeb9d277bd300dde871c3c6410",
   "state/artifacts/experiments/T4_benchmark_queue_ext.json": "dbe97f6bb15e88923b833c356e250b470aa793e3cfc9874caad8ea2b34b10bb6",
   "state/artifacts/experiments/T4_benchmark_queue_ext_log.json": "96ed853f8a7eaa240c686a96e4dda3768d19631ef792bd78b6d6b4154afddf4e",
@@ -35,7 +37,7 @@
   "state/job_logs/E13c_qwen0.5b_rotstraggle.log": "1eb3e757f3b91bfd9495ee6d636ba3d8b4934758f48f8f93453ca1117e1ced91",
   "state/job_logs/E13d_qwen0.5b_m6.log": "2bb9c391a0d9a1effb86d333c4281581ac093ee9c49b3c3efe47a9c34eedc0a4",
   "state/job_logs/E14_qwen0.5b.log": "cd0392cd22c3948ae46e955ac05074ad92ed946803c672444d5049f1c7e7cda8",
-  "state/job_logs/E15_gwaya_rft.log": "3397e98d991e7684b36001102c6aa9165e4ee17ca4dc3d0fb7a148bc28685177",
+  "state/job_logs/E15_gwaya_rft.log": "78172b30fa57c4d8f1acc960f4cd7d88fbeac7881a0101f178f83e9e04328563",
   "state/job_tmp/dl.py": "533fa51ead19b3da8b6ceb96189d63020723ed130f51946504823746d10915f8",
   "state/job_tmp/e10b_init_diag.json": "b2b928692f7f32b58fb5ea54d83b2cdfd023c8e878ee09d43d908580eb60fa46",
   "state/job_tmp/e10b_init_diag.py": "e44b76f916d6589faaeb5984e706b291e5de7a01dc78afcdbbfdaa2692b0dbdd",
@@ -53,5 +55,5 @@
  "head": "b9c6268",
  "reason": "periodic",
  "skipped_secret_like": [],
- "written_utc": "2026-10-24 09:44:52"
+ "written_utc": "2026-10-24 10:04:55"
 }

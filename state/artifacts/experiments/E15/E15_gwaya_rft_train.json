@@ -1,0 +1,30 @@
+{
+  "stage": "train",
+  "design_hash": "67f22d0074135648635fb86bf39e34983f9ae7ef78760f4e0880a363cb76e04a",
+  "written_utc": "2026-10-24T09:51:35Z",
+  "status": "ok",
+  "meter": {
+    "wall_s": 368.07592284300335,
+    "peak_reserved_gib": 4.1484375,
+    "peak_allocated_gib": 3.7768287658691406,
+    "energy_wh": 6.717452089405553
+  },
+  "pairs": 673,
+  "dropped_too_long": 0,
+  "wrapped_linears": 196,
+  "lora_params": 18464768,
+  "steps": 129,
+  "steps_per_epoch": 43,
+  "skipped_nonfinite_steps": 0,
+  "epoch_mean_ce": [
+    0.1562330052321253,
+    0.09598466746199383,
+    0.061158111819950546
+  ],
+  "tokens_processed": 300978,
+  "seconds": 367.939107091006,
+  "lora_file": "/mnt/disks/disk-socrateai-local-1/e15_scratch/E15_lora.pt",
+  "lora_sha256": "a56bf67224bcf9b31ea995e8cf07ca35460ffef246265dc29225d8a1bf63480a",
+  "lora_nonzero_B": true,
+  "elapsed_s": 372.6136224269867
+}

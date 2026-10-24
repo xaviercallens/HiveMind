@@ -1,0 +1,22 @@
+{
+  "stage": "rft",
+  "design_hash": "67f22d0074135648635fb86bf39e34983f9ae7ef78760f4e0880a363cb76e04a",
+  "written_utc": "2026-10-24T09:45:23Z",
+  "status": "ok",
+  "meter": {
+    "wall_s": 4046.6777007629935,
+    "peak_reserved_gib": 4.466796875,
+    "peak_allocated_gib": 3.4230213165283203,
+    "energy_wh": 74.80068484989962
+  },
+  "problems": 462,
+  "problems_with_accepted": 359,
+  "mean_yield": 0.5416666666666666,
+  "kept_pairs": 673,
+  "unverified_samples": 0,
+  "tokens": 329948,
+  "gen_gpu_seconds": 3957.4322167379505,
+  "fail_fast_min_problems": 150,
+  "smoke_reference_injected": false,
+  "elapsed_s": 4056.1142041683197
+}

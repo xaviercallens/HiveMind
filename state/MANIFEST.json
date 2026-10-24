@@ -11,8 +11,8 @@
   "state/artifacts/experiments/E15/E15_gwaya_rft_rft.json": "54547ebe586db75d61312d9e64fb2c570eeb3bc25df1ac7d433daca365cfedec",
   "state/artifacts/experiments/E15/E15_gwaya_rft_train.json": "8f121f5532d9c2a4e92c4736d861ce5717a27620e6913e9f34988a53a3273d98",
   "state/artifacts/experiments/E15/E15_gwaya_rft_tuned.json": "7c3ae578cb51f61b999c2a00a0763122214218bd45df862bd2f9b87bab2341f1",
-  "state/artifacts/experiments/E16/E16_gwaya_lite_t4_journal_acc.jsonl": "7c249b3bdb485c163e8a8f44e98075d6e7145cffd945e790a3999b4fa77b9e13",
-  "state/artifacts/experiments/E16/E16_gwaya_lite_t4_journal_det.jsonl": "a67ee830ec0f71eccc43539ec3c41570cd1ab0d9018517b2dc4c287d3f025f14",
+  "state/artifacts/experiments/E16/E16_gwaya_lite_t4_journal_acc.jsonl": "ae1aed920ccc167f073e1a2d844d65241d2a1ad9ff4e67742c74684f4498595b",
+  "state/artifacts/experiments/E16/E16_gwaya_lite_t4_journal_det.jsonl": "dce7f8a19081186d62638be057c15e2e5acf615bc117f4f297a2ff64dfaaa5c4",
   "state/artifacts/experiments/E16/E16_gwaya_lite_t4_journal_probes.jsonl": "d7b482e5c5f280a4063310afee2d3145aaa50ae7e1f210fbad266d19747b95d8",
   "state/artifacts/experiments/E16/E16_gwaya_lite_t4_preflight.json": "27c6212e840538ab87bd193208e96f9906ef140089cafe7eac620e4d2572ecb5",
   "state/artifacts/experiments/E16/E16_gwaya_lite_t4_probes.json": "659da049873b94590ed2e6572270df3e0eef3764cbcd4b065f841378469d7546",
@@ -45,7 +45,7 @@
   "state/job_logs/E13d_qwen0.5b_m6.log": "2bb9c391a0d9a1effb86d333c4281581ac093ee9c49b3c3efe47a9c34eedc0a4",
   "state/job_logs/E14_qwen0.5b.log": "cd0392cd22c3948ae46e955ac05074ad92ed946803c672444d5049f1c7e7cda8",
   "state/job_logs/E15_gwaya_rft.log": "41dd197f601a0f065801e2d5aa02eab57ce44f538d01e79685154c0410e9d7d9",
-  "state/job_logs/E16_gwaya_lite_t4.log": "6e2cb31bc2ccc7419846554ef0989cfecafaef5342a76d8e672d4b9ea95bdc1d",
+  "state/job_logs/E16_gwaya_lite_t4.log": "9f1f4a25943166210ee855a4fcd030dc842794408e9ca7097ec34cdbcc93c20a",
   "state/job_tmp/dl.py": "533fa51ead19b3da8b6ceb96189d63020723ed130f51946504823746d10915f8",
   "state/job_tmp/e10b_init_diag.json": "b2b928692f7f32b58fb5ea54d83b2cdfd023c8e878ee09d43d908580eb60fa46",
   "state/job_tmp/e10b_init_diag.py": "e44b76f916d6589faaeb5984e706b291e5de7a01dc78afcdbbfdaa2692b0dbdd",
@@ -63,5 +63,5 @@
  "head": "dd60b9d",
  "reason": "periodic",
  "skipped_secret_like": [],
- "written_utc": "2026-10-24 10:45:01"
+ "written_utc": "2026-10-24 11:05:04"
 }

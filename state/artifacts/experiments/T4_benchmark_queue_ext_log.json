@@ -187,16 +187,93 @@
     "}",
     "E16 DONE tiers=1.5b,3b,7b stages_ok=5 stages_failed=0 run_valid=True report=artifacts/experiments/E16_gwaya_lite_t4_report.json"
    ]
+  },
+  {
+   "name": "E14_granite1b",
+   "argv": [
+    "scripts/run_experiment_E13_swarm_local.py",
+    "--model",
+    "granite1b",
+    "--experts-impl",
+    "grouped_mm",
+    "--no-grad-ckpt",
+    "--peer-hosting",
+    "thread",
+    "--cells",
+    "S0,S2,S6,S7",
+    "--seeds",
+    "1,2,3",
+    "--out",
+    "artifacts/experiments/E14_raw_granite1b.json",
+    "--report",
+    "artifacts/experiments/E14_report_granite1b.json",
+    "--resume"
+   ],
+   "start_unix": 1792840830.7088397,
+   "status": "exit 1",
+   "returncode": 1,
+   "seconds": 4086.3,
+   "log_tail": [
+    "[E13 hb] granite1b S6 seed 3 t=240s round 5/6 admitted-so-far [] of effective K 2, alive [0, 1, 2], evals [0, 3] of [0, 3, 6], late 3, fair-exclusion counters {0: 0, 1: 1, 2: 0} (max 1)",
+    "[E13 hb] granite1b S6 seed 3 t=300s round 6/6 admitted-so-far [0, 1] of effective K 2, alive [0, 1, 2], evals [0, 3] of [0, 3, 6], late 4, fair-exclusion counters {0: 0, 1: 0, 2: 1} (max 1)",
+    "seed 3 S6 fair_quorum    final 2.1752 (init 2.1690) admitted/round [2, 2, 2, 2, 2, 3] late 4 up 4262237B 330.82s",
+    "[E13 hb] granite1b S7 seed 3 t=60s round 2/6 admitted-so-far [] of effective K 2, alive [0, 1, 2], evals [] of [0, 3, 6], late 0, carry queue 0",
+    "[E13 hb] granite1b S7 seed 3 t=120s round 3/6 admitted-so-far [] of effective K 2, alive [0, 2], evals [0] of [0, 3, 6], late 0, carry queue 1",
+    "[E13 hb] granite1b S7 seed 3 t=180s round 4/6 admitted-so-far [0] of effective K 2, alive [0, 1, 2], evals [0] of [0, 3, 6], late 0, carry queue 0",
+    "[E13 hb] granite1b S7 seed 3 t=240s round 5/6 admitted-so-far [] of effective K 2, alive [0, 1, 2], evals [0, 3] of [0, 3, 6], late 0, carry queue 1",
+    "seed 3 S7 deferred_carry final 2.2149 (init 2.1690) admitted/round [2, 2, 2, 2, 2, 2] late 1 up 4260720B 328.56s",
+    "{",
+    "  \"controls_all_passed\": false,",
+    "  \"runs\": 12,",
+    "  \"elapsed_s\": 4079.0,",
+    "  \"receipt\": \"5f9eac4939b1333c07769030d76aa67025391712e133026caa983dc902213940\"",
+    "}",
+    "E13 DONE model=granite1b cells_ok=12 cells_failed=0 report=artifacts/experiments/E14_report_granite1b.json"
+   ]
+  },
+  {
+   "name": "E11b_qwen0.5b_fineweb-edu_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--dataset",
+    "fineweb-edu"
+   ],
+   "status": "skipped (output exists)"
+  },
+  {
+   "name": "E11b_qwen7b_fineweb-edu_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b",
+    "--dataset",
+    "fineweb-edu"
+   ],
+   "status": "skipped (output exists)"
+  },
+  {
+   "name": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "gemma4-e4b",
+    "--dataset",
+    "fineweb-edu"
+   ],
+   "status": "skipped (output exists)"
   }
  ],
- "gpu_samples": 540,
- "gpu_util_mean_pct": 80.9,
+ "gpu_samples": 676,
+ "gpu_util_mean_pct": 74.5,
  "gpu_util_by_job": {
   "E14_qwen0.5b": 88.8,
   "E16_gwaya_lite_t4": 86.1,
   "E13d_qwen0.5b_m6": 90.5,
   "E13_granite1b_v2": 50.2,
-  "E15_gwaya_rft": 76.2
+  "E15_gwaya_rft": 76.2,
+  "E14_granite1b": 49.2
  },
  "gpu_mem_peak_gib": 6.68,
  "gpu_trace": [
@@ -1144,6 +1221,244 @@
    "util_pct": 99,
    "mem_used_gib": 6.66,
    "power_w": 65.6
+  },
+  {
+   "t": 1792840850.9,
+   "job": "E14_granite1b",
+   "util_pct": 0,
+   "mem_used_gib": 0.44,
+   "power_w": 11.2
+  },
+  {
+   "t": 1792840970.9,
+   "job": "E14_granite1b",
+   "util_pct": 52,
+   "mem_used_gib": 6.36,
+   "power_w": 66.1
+  },
+  {
+   "t": 1792841090.9,
+   "job": "E14_granite1b",
+   "util_pct": 52,
+   "mem_used_gib": 6.36,
+   "power_w": 69.2
+  },
+  {
+   "t": 1792841211.0,
+   "job": "E14_granite1b",
+   "util_pct": 59,
+   "mem_used_gib": 6.39,
+   "power_w": 61.5
+  },
+  {
+   "t": 1792841331.0,
+   "job": "E14_granite1b",
+   "util_pct": 57,
+   "mem_used_gib": 6.39,
+   "power_w": 71.2
+  },
+  {
+   "t": 1792841451.0,
+   "job": "E14_granite1b",
+   "util_pct": 0,
+   "mem_used_gib": 0.75,
+   "power_w": 31.2
+  },
+  {
+   "t": 1792841571.0,
+   "job": "E14_granite1b",
+   "util_pct": 53,
+   "mem_used_gib": 6.63,
+   "power_w": 68.8
+  },
+  {
+   "t": 1792841691.1,
+   "job": "E14_granite1b",
+   "util_pct": 50,
+   "mem_used_gib": 6.63,
+   "power_w": 74.7
+  },
+  {
+   "t": 1792841811.1,
+   "job": "E14_granite1b",
+   "util_pct": 57,
+   "mem_used_gib": 6.63,
+   "power_w": 70.9
+  },
+  {
+   "t": 1792841931.1,
+   "job": "E14_granite1b",
+   "util_pct": 51,
+   "mem_used_gib": 6.63,
+   "power_w": 64.5
+  },
+  {
+   "t": 1792842051.1,
+   "job": "E14_granite1b",
+   "util_pct": 52,
+   "mem_used_gib": 6.63,
+   "power_w": 68.1
+  },
+  {
+   "t": 1792842171.1,
+   "job": "E14_granite1b",
+   "util_pct": 49,
+   "mem_used_gib": 6.63,
+   "power_w": 73.3
+  },
+  {
+   "t": 1792842291.2,
+   "job": "E14_granite1b",
+   "util_pct": 59,
+   "mem_used_gib": 6.63,
+   "power_w": 63.7
+  },
+  {
+   "t": 1792842411.2,
+   "job": "E14_granite1b",
+   "util_pct": 60,
+   "mem_used_gib": 6.38,
+   "power_w": 69.4
+  },
+  {
+   "t": 1792842531.2,
+   "job": "E14_granite1b",
+   "util_pct": 52,
+   "mem_used_gib": 6.39,
+   "power_w": 69.5
+  },
+  {
+   "t": 1792842651.2,
+   "job": "E14_granite1b",
+   "util_pct": 48,
+   "mem_used_gib": 6.39,
+   "power_w": 71.5
+  },
+  {
+   "t": 1792842771.3,
+   "job": "E14_granite1b",
+   "util_pct": 51,
+   "mem_used_gib": 6.63,
+   "power_w": 69.2
+  },
+  {
+   "t": 1792842891.3,
+   "job": "E14_granite1b",
+   "util_pct": 60,
+   "mem_used_gib": 6.63,
+   "power_w": 65.9
+  },
+  {
+   "t": 1792843011.3,
+   "job": "E14_granite1b",
+   "util_pct": 56,
+   "mem_used_gib": 6.5,
+   "power_w": 64.4
+  },
+  {
+   "t": 1792843131.3,
+   "job": "E14_granite1b",
+   "util_pct": 0,
+   "mem_used_gib": 6.63,
+   "power_w": 43.3
+  },
+  {
+   "t": 1792843251.4,
+   "job": "E14_granite1b",
+   "util_pct": 59,
+   "mem_used_gib": 6.63,
+   "power_w": 60.1
+  },
+  {
+   "t": 1792843371.4,
+   "job": "E14_granite1b",
+   "util_pct": 46,
+   "mem_used_gib": 6.63,
+   "power_w": 59.2
+  },
+  {
+   "t": 1792843491.4,
+   "job": "E14_granite1b",
+   "util_pct": 60,
+   "mem_used_gib": 6.63,
+   "power_w": 65.3
+  },
+  {
+   "t": 1792843611.4,
+   "job": "E14_granite1b",
+   "util_pct": 52,
+   "mem_used_gib": 6.63,
+   "power_w": 67.6
+  },
+  {
+   "t": 1792843731.4,
+   "job": "E14_granite1b",
+   "util_pct": 48,
+   "mem_used_gib": 6.39,
+   "power_w": 65.8
+  },
+  {
+   "t": 1792843851.4,
+   "job": "E14_granite1b",
+   "util_pct": 50,
+   "mem_used_gib": 6.39,
+   "power_w": 69.3
+  },
+  {
+   "t": 1792843971.5,
+   "job": "E14_granite1b",
+   "util_pct": 51,
+   "mem_used_gib": 6.63,
+   "power_w": 66.9
+  },
+  {
+   "t": 1792844091.5,
+   "job": "E14_granite1b",
+   "util_pct": 47,
+   "mem_used_gib": 6.63,
+   "power_w": 67.5
+  },
+  {
+   "t": 1792844211.5,
+   "job": "E14_granite1b",
+   "util_pct": 56,
+   "mem_used_gib": 6.63,
+   "power_w": 65.2
+  },
+  {
+   "t": 1792844331.5,
+   "job": "E14_granite1b",
+   "util_pct": 55,
+   "mem_used_gib": 6.63,
+   "power_w": 69.8
+  },
+  {
+   "t": 1792844451.6,
+   "job": "E14_granite1b",
+   "util_pct": 53,
+   "mem_used_gib": 6.63,
+   "power_w": 58.7
+  },
+  {
+   "t": 1792844571.6,
+   "job": "E14_granite1b",
+   "util_pct": 56,
+   "mem_used_gib": 6.63,
+   "power_w": 61.8
+  },
+  {
+   "t": 1792844691.6,
+   "job": "E14_granite1b",
+   "util_pct": 48,
+   "mem_used_gib": 6.63,
+   "power_w": 66.6
+  },
+  {
+   "t": 1792844811.6,
+   "job": "E14_granite1b",
+   "util_pct": 55,
+   "mem_used_gib": 6.63,
+   "power_w": 70.7
   }
  ]
 }

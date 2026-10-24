@@ -21,7 +21,7 @@
   "state/artifacts/experiments/E16/E16_gwaya_lite_t4_unload.json": "d4f70ce6449bd57f291788116e37465ed8ea099341aaca1bc5ee31a96dcf3f47",
   "state/artifacts/experiments/T4_benchmark_queue.json": "5007d0562f82f98888cd435577596a4d7770a2aeb9d277bd300dde871c3c6410",
   "state/artifacts/experiments/T4_benchmark_queue_ext.json": "dbe97f6bb15e88923b833c356e250b470aa793e3cfc9874caad8ea2b34b10bb6",
-  "state/artifacts/experiments/T4_benchmark_queue_ext_log.json": "481aa44987a3cc5df621fe0b4c5179b67ba5ebc513574c7384a67db690035bf8",
+  "state/artifacts/experiments/T4_benchmark_queue_ext_log.json": "677a4d0d4234c676629f296018fff6a3c3084eef98ceca448b8613f615997907",
   "state/artifacts/experiments/T4_benchmark_queue_log.json": "a98d675de63435a8c4ec75d2a5139f1774631747ccc1065c2636b7e627d0b977",
   "state/job_logs/E10b_amended.log": "a10f21ca51463f3648dfc9060de4773dfa009d4af8fc6cfe978273ead9fe9bc8",
   "state/job_logs/E10b_lattice_05b.log": "8a258e3546632ad50713b0702cc54850fa7d61e3b4f762f8879ae52088085a2e",
@@ -33,6 +33,7 @@
   "state/job_logs/E11_qwen7b.log": "c0ddd48ce0c28c5bf53d8f4e32ecc30d52b7cc9ebaab63f8b8814b45c1eebda8",
   "state/job_logs/E11_qwen7b_retry.log": "d19cd975091a93fbde6702159cda827909fcdb48560e6f0886c39cb2c6eebfdf",
   "state/job_logs/E11b_gemma4-e4b_fineweb-edu_w1024.log": "5959d57d688500337b85fbd6b163ab4a09386ff605a445aafac491b1b6a7f474",
+  "state/job_logs/E11b_qwen0.5b_code_w1024.log": "c94b7162c3e3370ab6c94a62370d6e862442f412d51aa5615997faeec3a294fc",
   "state/job_logs/E11b_qwen0.5b_fineweb-edu_w1024.log": "f4cbb496ecf254928a83412b6e7579e0bfcc2197200a1aa675d556beb0820746",
   "state/job_logs/E11b_qwen7b_fineweb-edu_w1024.log": "76ad9bd29edc3d533022a5a23ee2a4c1108c268966fb27df8c1a28d4412027d7",
   "state/job_logs/E12_replay.log": "959f870efa65d83bf043b68c72542c0ebb28db06a9e5d34a9d02172f3d928b1f",
@@ -46,7 +47,7 @@
   "state/job_logs/E13_qwen0.5b_m2proc_v2.log": "725d7c60c7757e97fab6bec79df488f7bc3d52207a2055ef2188d6e37e5f3ead",
   "state/job_logs/E13c_qwen0.5b_rotstraggle.log": "1eb3e757f3b91bfd9495ee6d636ba3d8b4934758f48f8f93453ca1117e1ced91",
   "state/job_logs/E13d_qwen0.5b_m6.log": "2bb9c391a0d9a1effb86d333c4281581ac093ee9c49b3c3efe47a9c34eedc0a4",
-  "state/job_logs/E14_granite1b.log": "e1275ec87db3ccbde59e279a79224098e3777e2763ea82e29df812159e03f67d",
+  "state/job_logs/E14_granite1b.log": "176df353f21193b1a0281005b9bd27473f581280f944ee32fa23fe198c2b1ab1",
   "state/job_logs/E14_qwen0.5b.log": "cd0392cd22c3948ae46e955ac05074ad92ed946803c672444d5049f1c7e7cda8",
   "state/job_logs/E15_gwaya_rft.log": "41dd197f601a0f065801e2d5aa02eab57ce44f538d01e79685154c0410e9d7d9",
   "state/job_logs/E16_gwaya_lite_t4.log": "4a40f3cb05ed73c3c308e9c163ac22ad0a3f899bad819a6ab322ce7600b1c150",
@@ -61,11 +62,11 @@
   "state/job_tmp/upcycle.py": "18ceaec57bb4a7bc25aa221bb3f2a384b158c49368e2d14f57a1311970e7839c",
   "state/job_tmp/watch_queue.py": "2ba736017a1098f4c9585ba9fe0e13f2d6270f7b6bddc4be8db5b48139b343d8",
   "state/memory/MEMORY.md": "77b0911cec1c2e27bc96e7f23ee71a6a09272af1b32e83afae40db192f9d643d",
-  "state/memory/project_t4_campaign_2026-10-24.md": "c4f8cfb94d1d5921a07d1d6767f1ca39b8b1a08ddd347e1d696c9f99c1ae45cd",
+  "state/memory/project_t4_campaign_2026-10-24.md": "f134cfc1d3b4f91570e9746b365cdf8055cc1d5f38099868cebb74d73692087c",
   "state/memory/reference_spot_vm_checkpoint.md": "03783c38db760c7866fad1ef2d7f0345aaffe36d5a72c5e0bad73a5aad936374"
  },
- "head": "efddde4",
- "reason": "periodic",
+ "head": "f624f2e",
+ "reason": "manual",
  "skipped_secret_like": [],
- "written_utc": "2026-10-24 12:25:15"
+ "written_utc": "2026-10-24 12:33:36"
 }

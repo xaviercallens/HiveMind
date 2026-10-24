@@ -78,3 +78,38 @@
 [E16 acc] L4096 7b: 250/257  639s
 [E16 acc] L4096 7b: 257/257  639s
 [E16 acc] R8192 7b: 25/257  107s
+[E16 acc] R8192 7b: 50/257  188s
+[E16 acc] R8192 7b: 75/257  290s
+[E16 acc] R8192 7b: 100/257  402s
+[E16 acc] R8192 7b: 125/257  506s
+[E16 acc] R8192 7b: 150/257  606s
+[E16 acc] R8192 7b: 175/257  716s
+[E16 acc] R8192 7b: 200/257  822s
+[E16 acc] R8192 7b: 225/257  913s
+[E16 acc] R8192 7b: 250/257  1014s
+[E16 acc] R8192 7b: 257/257  1030s
+[E16] unload control: pass=True memory.used=0 MiB (baseline 0)
+{
+  "status": "complete",
+  "pass_at_1": {
+    "1.5b": {
+      "R4096": 0.6459143968871596,
+      "L4096": 0.7315175097276264
+    },
+    "3b": {
+      "R4096": 0.7276264591439688,
+      "L4096": 0.8015564202334631
+    },
+    "7b": {
+      "R4096": 0.8171206225680934,
+      "L4096": 0.8560311284046692,
+      "R8192": 0.8171206225680934
+    }
+  },
+  "hypotheses": {
+    "H16c_headline_7b": "supported"
+  },
+  "run_valid": true,
+  "receipt": "6c9e904bcd9b52bcc4ca0b581ea2c52a328a560c7d7b7eb985cb17f6613a24c1"
+}
+E16 DONE tiers=1.5b,3b,7b stages_ok=5 stages_failed=0 run_valid=True report=artifacts/experiments/E16_gwaya_lite_t4_report.json

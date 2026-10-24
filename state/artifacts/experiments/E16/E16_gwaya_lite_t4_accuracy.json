@@ -1,0 +1,47 @@
+{
+  "stage": "accuracy",
+  "design_hash": "39a27f7049cb0b92e8910d58e0494fb15f31306f5d2f20ab7a5cbed04f91f15c",
+  "written_utc": "2026-10-24T11:20:25Z",
+  "status": "ok",
+  "phases": {
+    "R4096:1.5b": {
+      "n": 257,
+      "newly_run": 257
+    },
+    "L4096:1.5b": {
+      "n": 257,
+      "newly_run": 257
+    },
+    "DET:1.5b": {
+      "problems": 10
+    },
+    "R4096:3b": {
+      "n": 257,
+      "newly_run": 257
+    },
+    "L4096:3b": {
+      "n": 257,
+      "newly_run": 257
+    },
+    "DET:3b": {
+      "problems": 10
+    },
+    "R4096:7b": {
+      "n": 257,
+      "newly_run": 257
+    },
+    "L4096:7b": {
+      "n": 257,
+      "newly_run": 257
+    },
+    "DET:7b": {
+      "problems": 10
+    },
+    "R8192:7b": {
+      "n": 257,
+      "newly_run": 257
+    }
+  },
+  "n_problems": 257,
+  "elapsed_s": 3990.768410682678
+}

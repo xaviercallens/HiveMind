@@ -155,17 +155,50 @@
     "}",
     "E15 DONE model=coder1.5b stages_ok=6 stages_failed=0 report=artifacts/experiments/E15_gwaya_rft_report.json"
    ]
+  },
+  {
+   "name": "E16_gwaya_lite_t4",
+   "argv": [
+    "scripts/run_experiment_E16_gwaya_lite_t4.py",
+    "--resume",
+    "--out",
+    "artifacts/experiments/E16",
+    "--report",
+    "artifacts/experiments/E16_gwaya_lite_t4_report.json"
+   ],
+   "start_unix": 1792836420.6400568,
+   "status": "ok",
+   "returncode": 0,
+   "seconds": 4410.1,
+   "log_tail": [
+    "      \"L4096\": 0.8015564202334631",
+    "    },",
+    "    \"7b\": {",
+    "      \"R4096\": 0.8171206225680934,",
+    "      \"L4096\": 0.8560311284046692,",
+    "      \"R8192\": 0.8171206225680934",
+    "    }",
+    "  },",
+    "  \"hypotheses\": {",
+    "    \"H16c_headline_7b\": \"supported\"",
+    "  },",
+    "  \"run_valid\": true,",
+    "  \"receipt\": \"6c9e904bcd9b52bcc4ca0b581ea2c52a328a560c7d7b7eb985cb17f6613a24c1\"",
+    "}",
+    "E16 DONE tiers=1.5b,3b,7b stages_ok=5 stages_failed=0 run_valid=True report=artifacts/experiments/E16_gwaya_lite_t4_report.json"
+   ]
   }
  ],
- "gpu_samples": 393,
- "gpu_util_mean_pct": 78.9,
+ "gpu_samples": 540,
+ "gpu_util_mean_pct": 80.9,
  "gpu_util_by_job": {
-  "E13_granite1b_v2": 50.2,
   "E14_qwen0.5b": 88.8,
-  "E15_gwaya_rft": 76.2,
-  "E13d_qwen0.5b_m6": 90.5
+  "E16_gwaya_lite_t4": 86.1,
+  "E13d_qwen0.5b_m6": 90.5,
+  "E13_granite1b_v2": 50.2,
+  "E15_gwaya_rft": 76.2
  },
- "gpu_mem_peak_gib": 6.63,
+ "gpu_mem_peak_gib": 6.68,
  "gpu_trace": [
   {
    "t": 1792824647.4,
@@ -859,6 +892,258 @@
    "util_pct": 0,
    "mem_used_gib": 4.99,
    "power_w": 31.0
+  },
+  {
+   "t": 1792836530.0,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 0,
+   "mem_used_gib": 0.54,
+   "power_w": 31.8
+  },
+  {
+   "t": 1792836650.1,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 0,
+   "mem_used_gib": 0.54,
+   "power_w": 31.1
+  },
+  {
+   "t": 1792836770.1,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 98,
+   "mem_used_gib": 5.79,
+   "power_w": 66.8
+  },
+  {
+   "t": 1792836890.1,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 83,
+   "mem_used_gib": 2.04,
+   "power_w": 36.8
+  },
+  {
+   "t": 1792837010.1,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 52,
+   "mem_used_gib": 2.04,
+   "power_w": 78.0
+  },
+  {
+   "t": 1792837130.1,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 91,
+   "mem_used_gib": 2.04,
+   "power_w": 67.7
+  },
+  {
+   "t": 1792837250.2,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 92,
+   "mem_used_gib": 2.04,
+   "power_w": 60.2
+  },
+  {
+   "t": 1792837370.2,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 96,
+   "mem_used_gib": 3.08,
+   "power_w": 66.9
+  },
+  {
+   "t": 1792837490.2,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 94,
+   "mem_used_gib": 3.08,
+   "power_w": 68.1
+  },
+  {
+   "t": 1792837610.2,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 96,
+   "mem_used_gib": 3.08,
+   "power_w": 66.6
+  },
+  {
+   "t": 1792837730.3,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 96,
+   "mem_used_gib": 3.08,
+   "power_w": 67.0
+  },
+  {
+   "t": 1792837850.3,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 92,
+   "mem_used_gib": 3.08,
+   "power_w": 65.6
+  },
+  {
+   "t": 1792837970.3,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 96,
+   "mem_used_gib": 3.08,
+   "power_w": 66.4
+  },
+  {
+   "t": 1792838090.4,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 98,
+   "mem_used_gib": 5.77,
+   "power_w": 67.4
+  },
+  {
+   "t": 1792838210.4,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 98,
+   "mem_used_gib": 5.78,
+   "power_w": 35.8
+  },
+  {
+   "t": 1792838330.4,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 97,
+   "mem_used_gib": 5.78,
+   "power_w": 66.8
+  },
+  {
+   "t": 1792838450.4,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 97,
+   "mem_used_gib": 5.78,
+   "power_w": 69.0
+  },
+  {
+   "t": 1792838570.5,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 97,
+   "mem_used_gib": 5.78,
+   "power_w": 66.9
+  },
+  {
+   "t": 1792838690.5,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 48,
+   "mem_used_gib": 5.78,
+   "power_w": 69.4
+  },
+  {
+   "t": 1792838810.5,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 94,
+   "mem_used_gib": 5.78,
+   "power_w": 39.8
+  },
+  {
+   "t": 1792838930.5,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 97,
+   "mem_used_gib": 5.78,
+   "power_w": 65.4
+  },
+  {
+   "t": 1792839050.6,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 98,
+   "mem_used_gib": 5.78,
+   "power_w": 66.4
+  },
+  {
+   "t": 1792839170.6,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 98,
+   "mem_used_gib": 5.78,
+   "power_w": 66.5
+  },
+  {
+   "t": 1792839290.6,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 98,
+   "mem_used_gib": 5.78,
+   "power_w": 68.0
+  },
+  {
+   "t": 1792839410.6,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 0,
+   "mem_used_gib": 5.78,
+   "power_w": 30.8
+  },
+  {
+   "t": 1792839530.6,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 95,
+   "mem_used_gib": 5.78,
+   "power_w": 66.7
+  },
+  {
+   "t": 1792839650.7,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 97,
+   "mem_used_gib": 5.78,
+   "power_w": 67.0
+  },
+  {
+   "t": 1792839770.7,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 97,
+   "mem_used_gib": 5.78,
+   "power_w": 65.5
+  },
+  {
+   "t": 1792839890.7,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 97,
+   "mem_used_gib": 6.66,
+   "power_w": 66.7
+  },
+  {
+   "t": 1792840010.7,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 66,
+   "mem_used_gib": 6.66,
+   "power_w": 66.8
+  },
+  {
+   "t": 1792840130.8,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 98,
+   "mem_used_gib": 6.66,
+   "power_w": 66.8
+  },
+  {
+   "t": 1792840250.8,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 99,
+   "mem_used_gib": 6.66,
+   "power_w": 67.1
+  },
+  {
+   "t": 1792840370.8,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 98,
+   "mem_used_gib": 6.66,
+   "power_w": 35.1
+  },
+  {
+   "t": 1792840490.8,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 98,
+   "mem_used_gib": 6.66,
+   "power_w": 67.4
+  },
+  {
+   "t": 1792840610.9,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 98,
+   "mem_used_gib": 6.66,
+   "power_w": 68.5
+  },
+  {
+   "t": 1792840730.9,
+   "job": "E16_gwaya_lite_t4",
+   "util_pct": 99,
+   "mem_used_gib": 6.66,
+   "power_w": 65.6
   }
  ]
 }

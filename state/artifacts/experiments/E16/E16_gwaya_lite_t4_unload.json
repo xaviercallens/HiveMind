@@ -1,0 +1,17 @@
+{
+  "stage": "unload",
+  "design_hash": "39a27f7049cb0b92e8910d58e0494fb15f31306f5d2f20ab7a5cbed04f91f15c",
+  "written_utc": "2026-10-24T11:20:25Z",
+  "status": "ok",
+  "tolerance_mib": 300,
+  "baseline_start_mib": 0,
+  "unload_result": {
+    "was_loaded": [],
+    "unloaded": {},
+    "still_loaded": []
+  },
+  "memory_used_mib": 0,
+  "still_loaded": [],
+  "pass": true,
+  "elapsed_s": 0.0
+}

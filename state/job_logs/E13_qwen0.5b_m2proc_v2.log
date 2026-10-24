@@ -1,0 +1,16 @@
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[E13] model qwen0.5b device cuda planned runs 3 (incl. S0b twin) plan: {"model": "qwen0.5b", "cells": ["S0", "S1"], "seeds": [1], "cfg": {"rounds": 6, "workers": 2, "inner": 20, "seq_len": 256, "micro_batch": 4, "eval_seqs": 16, "eval_batch": 4, "smoke": false}, "runs": 2, "inner_steps_per_run": 240, "inner_steps_total": 480, "rounds_per_run": 6, "tokens_per_worker_per_run": 122880, "assumed_sec_per_inner_step": 0.45, "assumed_sec_per_eval": 3.0, "assumed_sec_process_start": 20.0, "breakdown_s": {"inner_steps_s": 216.0, "eval_s": 18.0, "process_start_s": 30.0, "data_prep_once_s": 120.0, "straggler_wait_K_eq_M_s": 0.0, "diagnostic_twin_S0b_s": 127.0}, "total_s": 511.0, "total_hours": 0.14}
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  22%|██▏       | 65/290 [00:00<00:00, 587.75it/s]Loading weights:  43%|████▎     | 125/290 [00:00<00:00, 565.08it/s]Loading weights:  63%|██████▎   | 184/290 [00:00<00:00, 551.25it/s]Loading weights:  88%|████████▊ | 256/290 [00:00<00:00, 613.83it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 608.02it/s]
+seed 1 S0 sync_baseline  final 2.3667 (init 2.3954) admitted/round [2, 2, 2, 2, 2, 2] late 0 up 0B 85.74s
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  18%|█▊        | 53/290 [00:00<00:00, 514.61it/s]Loading weights:  40%|████      | 117/290 [00:00<00:00, 563.53it/s]Loading weights:  62%|██████▏   | 179/290 [00:00<00:00, 576.22it/s]Loading weights:  82%|████████▏ | 237/290 [00:00<00:00, 570.17it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 588.66it/s]
+seed 1 S0b identity noise floor {'available': True, 'max_abs_diff': 0.0, 'bit_identical': True, 'twin_final_loss': 2.3666575253009796, 'note': 'diagnostic only; the identity rule stays S1 vs S0 <= 1e-6'}
+[E13 hb] qwen0.5b S1 seed 1 t=60s round 6/6 admitted-so-far [] of effective K 2, alive [0, 1], evals [0, 3] of [0, 3, 6], late 0
+seed 1 S1 swarm_identity final 2.3667 (init 2.3954) admitted/round [2, 2, 2, 2, 2, 2] late 0 up 25952256B 77.72s
+{
+  "controls_all_passed": false,
+  "runs": 2,
+  "elapsed_s": 227.12,
+  "receipt": "7a39ae2de97ce2da644b3b21dfa60c119f8eedfa0a9fe4d90f65b1e7e7259aab"
+}
+E13 DONE model=qwen0.5b cells_ok=2 cells_failed=0 report=artifacts/experiments/E13_swarm_local_report_m2proc.json

@@ -1,0 +1,60 @@
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[E13] model qwen0.5b device cuda planned runs 13 (incl. S0b twin) plan: {"model": "qwen0.5b", "cells": ["S0", "S1", "S2", "S5"], "seeds": [1, 2, 3], "cfg": {"rounds": 6, "workers": 6, "inner": 20, "seq_len": 256, "micro_batch": 4, "eval_seqs": 16, "eval_batch": 4, "smoke": false}, "runs": 12, "inner_steps_per_run": 720, "inner_steps_total": 8640, "rounds_per_run": 6, "tokens_per_worker_per_run": 122880, "assumed_sec_per_inner_step": 0.45, "assumed_sec_per_eval": 3.0, "assumed_sec_process_start": 20.0, "breakdown_s": {"inner_steps_s": 3888.0, "eval_s": 108.0, "process_start_s": 210.0, "data_prep_once_s": 120.0, "straggler_wait_K_eq_M_s": 972.0, "diagnostic_twin_S0b_s": 343.0}, "total_s": 5641.0, "total_hours": 1.57}
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:30,  9.59it/s]Loading weights:  34%|███▍      | 99/290 [00:00<00:00, 521.40it/s]Loading weights:  53%|█████▎    | 154/290 [00:00<00:00, 499.82it/s]Loading weights:  70%|███████   | 203/290 [00:00<00:00, 478.28it/s]Loading weights:  87%|████████▋ | 251/290 [00:00<00:00, 475.59it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 476.65it/s]
+seed 1 S0 sync_baseline  final 2.6210 (init 2.7418) admitted/round [6, 6, 6, 6, 6, 6] late 0 up 0B 219.12s
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  21%|██        | 61/290 [00:00<00:00, 603.15it/s]Loading weights:  42%|████▏     | 122/290 [00:00<00:00, 566.67it/s]Loading weights:  62%|██████▏   | 179/290 [00:00<00:00, 547.94it/s]Loading weights:  81%|████████  | 235/290 [00:00<00:00, 540.67it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 577.41it/s]
+seed 1 S0b identity noise floor {'available': True, 'max_abs_diff': 0.0, 'bit_identical': True, 'twin_final_loss': 2.62104424337546, 'note': 'diagnostic only; the identity rule stays S1 vs S0 <= 1e-6'}
+[E13] memory preflight: process hosting needs 30.10 GiB (M=6 x (4.57 + 0.45)) > free 13.76 GiB: FALLING BACK to thread hosting (needs 5.07 GiB)
+[E13 hb] qwen0.5b S1 seed 1 t=60s round 2/6 admitted-so-far [1, 2, 3, 4, 5] of effective K 6, alive [0, 1, 2, 3, 4, 5], evals [0] of [0, 3, 6], late 0
+[E13 hb] qwen0.5b S1 seed 1 t=120s round 4/6 admitted-so-far [0, 1, 3, 4, 5] of effective K 6, alive [0, 1, 2, 3, 4, 5], evals [0] of [0, 3, 6], late 0
+[E13 hb] qwen0.5b S1 seed 1 t=180s round 6/6 admitted-so-far [0, 1, 2, 4, 5] of effective K 6, alive [0, 1, 2, 3, 4, 5], evals [0, 3] of [0, 3, 6], late 0
+seed 1 S1 swarm_identity final 2.6210 (init 2.7418) admitted/round [6, 6, 6, 6, 6, 6] late 0 up 77856768B 195.88s
+[E13] memory preflight: process hosting needs 30.10 GiB (M=6 x (4.57 + 0.45)) > free 13.76 GiB: FALLING BACK to thread hosting (needs 5.07 GiB)
+[E13 hb] qwen0.5b S2 seed 1 t=60s round 3/6 admitted-so-far [] of effective K 3, alive [0, 2, 3, 4, 5], evals [0] of [0, 3, 6], late 5
+[E13 hb] qwen0.5b S2 seed 1 t=120s round 5/6 admitted-so-far [] of effective K 3, alive [0, 1, 2, 3, 4, 5], evals [0, 3] of [0, 3, 6], late 10
+seed 1 S2 swarm_all_on   final 2.6967 (init 2.7418) admitted/round [3, 3, 3, 3, 3, 3] late 16 up 6661435B 190.86s
+[E13] memory preflight: process hosting needs 30.10 GiB (M=6 x (4.57 + 0.45)) > free 13.76 GiB: FALLING BACK to thread hosting (needs 5.07 GiB)
+[E13 hb] qwen0.5b S5 seed 1 t=60s round 2/6 admitted-so-far [1, 2, 3, 4, 5] of effective K 6, alive [0, 1, 2, 3, 4, 5], evals [0] of [0, 3, 6], late 0
+[E13 hb] qwen0.5b S5 seed 1 t=120s round 4/6 admitted-so-far [3, 4, 5] of effective K 6, alive [0, 1, 2, 3, 4, 5], evals [0] of [0, 3, 6], late 0
+[E13 hb] qwen0.5b S5 seed 1 t=180s round 6/6 admitted-so-far [0, 1, 2] of effective K 6, alive [0, 1, 2, 3, 4, 5], evals [0, 3] of [0, 3, 6], late 0
+seed 1 S5 no_quorum      final 2.6275 (init 2.7418) admitted/round [6, 6, 5, 6, 6, 6] late 0 up 6867792B 205.01s
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  14%|█▍        | 41/290 [00:00<00:00, 406.56it/s]Loading weights:  39%|███▉      | 113/290 [00:00<00:00, 584.78it/s]Loading weights:  64%|██████▍   | 187/290 [00:00<00:00, 654.86it/s]Loading weights:  91%|█████████ | 263/290 [00:00<00:00, 682.49it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 656.72it/s]
+seed 2 S0 sync_baseline  final 2.6192 (init 2.7418) admitted/round [6, 6, 6, 6, 6, 6] late 0 up 0B 186.33s
+[E13] memory preflight: process hosting needs 30.18 GiB (M=6 x (4.58 + 0.45)) > free 13.76 GiB: FALLING BACK to thread hosting (needs 5.08 GiB)
+[E13 hb] qwen0.5b S1 seed 2 t=60s round 2/6 admitted-so-far [1, 2, 3, 4, 5] of effective K 6, alive [0, 1, 2, 3, 4, 5], evals [0] of [0, 3, 6], late 0
+[E13 hb] qwen0.5b S1 seed 2 t=120s round 4/6 admitted-so-far [0, 1, 3, 4, 5] of effective K 6, alive [0, 1, 2, 3, 4, 5], evals [0] of [0, 3, 6], late 0
+[E13 hb] qwen0.5b S1 seed 2 t=180s round 6/6 admitted-so-far [1, 2, 3, 4, 5] of effective K 6, alive [0, 1, 2, 3, 4, 5], evals [0, 3] of [0, 3, 6], late 0
+seed 2 S1 swarm_identity final 2.6192 (init 2.7418) admitted/round [6, 6, 6, 6, 6, 6] late 0 up 77856768B 195.13s
+[E13] memory preflight: process hosting needs 30.18 GiB (M=6 x (4.58 + 0.45)) > free 13.76 GiB: FALLING BACK to thread hosting (needs 5.08 GiB)
+[E13 hb] qwen0.5b S2 seed 2 t=60s round 3/6 admitted-so-far [] of effective K 3, alive [0, 2, 3, 4, 5], evals [0] of [0, 3, 6], late 5
+[E13 hb] qwen0.5b S2 seed 2 t=120s round 5/6 admitted-so-far [] of effective K 3, alive [0, 1, 2, 3, 4, 5], evals [0] of [0, 3, 6], late 11
+seed 2 S2 swarm_all_on   final 2.6941 (init 2.7418) admitted/round [3, 3, 3, 3, 3, 3] late 17 up 6847687B 189.57s
+[E13] memory preflight: process hosting needs 30.18 GiB (M=6 x (4.58 + 0.45)) > free 13.76 GiB: FALLING BACK to thread hosting (needs 5.08 GiB)
+[E13 hb] qwen0.5b S5 seed 2 t=60s round 2/6 admitted-so-far [1, 2, 3, 4, 5] of effective K 6, alive [0, 1, 2, 3, 4, 5], evals [0] of [0, 3, 6], late 0
+[E13 hb] qwen0.5b S5 seed 2 t=120s round 4/6 admitted-so-far [0, 1, 2, 3, 4] of effective K 6, alive [0, 1, 2, 3, 4, 5], evals [0] of [0, 3, 6], late 0
+[E13 hb] qwen0.5b S5 seed 2 t=180s round 6/6 admitted-so-far [1, 2, 4, 5] of effective K 6, alive [0, 1, 2, 3, 4, 5], evals [0, 3] of [0, 3, 6], late 0
+seed 2 S5 no_quorum      final 2.6231 (init 2.7418) admitted/round [6, 6, 5, 6, 6, 6] late 0 up 6863439B 199.59s
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  24%|██▍       | 69/290 [00:00<00:00, 689.79it/s]Loading weights:  48%|████▊     | 138/290 [00:00<00:00, 661.69it/s]Loading weights:  71%|███████▏  | 207/290 [00:00<00:00, 660.87it/s]Loading weights:  95%|█████████▌| 276/290 [00:00<00:00, 671.68it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 681.39it/s]
+seed 3 S0 sync_baseline  final 2.6216 (init 2.7418) admitted/round [6, 6, 6, 6, 6, 6] late 0 up 0B 185.52s
+[E13] memory preflight: process hosting needs 30.18 GiB (M=6 x (4.58 + 0.45)) > free 13.76 GiB: FALLING BACK to thread hosting (needs 5.08 GiB)
+[E13 hb] qwen0.5b S1 seed 3 t=60s round 2/6 admitted-so-far [1, 2, 3, 4, 5] of effective K 6, alive [0, 1, 2, 3, 4, 5], evals [0] of [0, 3, 6], late 0
+[E13 hb] qwen0.5b S1 seed 3 t=120s round 4/6 admitted-so-far [0, 1, 2, 3, 5] of effective K 6, alive [0, 1, 2, 3, 4, 5], evals [0] of [0, 3, 6], late 0
+[E13 hb] qwen0.5b S1 seed 3 t=180s round 6/6 admitted-so-far [0, 1, 3, 4, 5] of effective K 6, alive [0, 1, 2, 3, 4, 5], evals [0, 3] of [0, 3, 6], late 0
+seed 3 S1 swarm_identity final 2.6216 (init 2.7418) admitted/round [6, 6, 6, 6, 6, 6] late 0 up 77856768B 194.33s
+[E13] memory preflight: process hosting needs 30.18 GiB (M=6 x (4.58 + 0.45)) > free 13.76 GiB: FALLING BACK to thread hosting (needs 5.08 GiB)
+[E13 hb] qwen0.5b S2 seed 3 t=60s round 3/6 admitted-so-far [] of effective K 3, alive [0, 2, 3, 4, 5], evals [0] of [0, 3, 6], late 5
+[E13 hb] qwen0.5b S2 seed 3 t=120s round 5/6 admitted-so-far [] of effective K 3, alive [0, 1, 2, 3, 4, 5], evals [0, 3] of [0, 3, 6], late 11
+seed 3 S2 swarm_all_on   final 2.7287 (init 2.7418) admitted/round [3, 3, 3, 3, 3, 3] late 17 up 6854880B 189.6s
+[E13] memory preflight: process hosting needs 30.18 GiB (M=6 x (4.58 + 0.45)) > free 13.76 GiB: FALLING BACK to thread hosting (needs 5.08 GiB)
+[E13 hb] qwen0.5b S5 seed 3 t=60s round 2/6 admitted-so-far [0, 1, 5] of effective K 6, alive [0, 1, 2, 3, 4, 5], evals [0] of [0, 3, 6], late 0
+[E13 hb] qwen0.5b S5 seed 3 t=120s round 4/6 admitted-so-far [0, 2, 3, 4] of effective K 6, alive [0, 1, 2, 3, 4, 5], evals [0] of [0, 3, 6], late 0
+[E13 hb] qwen0.5b S5 seed 3 t=180s round 6/6 admitted-so-far [1, 2, 3] of effective K 6, alive [0, 1, 2, 3, 4, 5], evals [0, 3] of [0, 3, 6], late 0
+seed 3 S5 no_quorum      final 2.6321 (init 2.7418) admitted/round [6, 6, 5, 6, 6, 6] late 0 up 6862514B 203.3s
+{
+  "controls_all_passed": true,
+  "runs": 12,
+  "elapsed_s": 2541.95,
+  "receipt": "18d8e5da22530302b9b8cbcd2430fa0c69cdefc99e1adcfbb29f7840280b2c97"
+}
+E13 DONE model=qwen0.5b cells_ok=12 cells_failed=0 report=artifacts/experiments/E13_swarm_local_report_m6.json

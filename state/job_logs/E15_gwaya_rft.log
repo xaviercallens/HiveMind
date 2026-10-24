@@ -1,0 +1,32 @@
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[E15] smoke=False device=cuda train=462 eval=257 humaneval=164 design=67f22d007413 vram_total=14.56219482421875
+[E15] stage baseline ...
+Loading weights:   0%|          | 0/338 [00:00<?, ?it/s]Loading weights:   0%|          | 1/338 [00:00<01:05,  5.16it/s]Loading weights:  19%|█▊        | 63/338 [00:00<00:01, 230.33it/s]Loading weights:  27%|██▋       | 90/338 [00:00<00:01, 220.99it/s]Loading weights:  34%|███▍      | 115/338 [00:00<00:01, 209.84it/s]Loading weights:  41%|████      | 138/338 [00:00<00:01, 196.72it/s]Loading weights:  47%|████▋     | 159/338 [00:00<00:00, 185.98it/s]Loading weights:  54%|█████▍    | 184/338 [00:00<00:00, 181.50it/s]Loading weights:  62%|██████▏   | 209/338 [00:01<00:00, 179.75it/s]Loading weights:  69%|██████▊   | 232/338 [00:01<00:00, 171.19it/s]Loading weights:  76%|███████▌  | 257/338 [00:01<00:00, 174.84it/s]Loading weights:  83%|████████▎ | 280/338 [00:01<00:00, 176.40it/s]Loading weights:  90%|████████▉ | 304/338 [00:01<00:00, 191.59it/s]Loading weights:  97%|█████████▋| 328/338 [00:01<00:00, 198.06it/s]Loading weights: 100%|██████████| 338/338 [00:01<00:00, 191.31it/s]
+[E15] stage loop_base ...
+Loading weights:   0%|          | 0/338 [00:00<?, ?it/s]Loading weights:   0%|          | 1/338 [00:00<01:35,  3.55it/s]Loading weights:  22%|██▏       | 75/338 [00:00<00:01, 246.31it/s]Loading weights:  35%|███▍      | 117/338 [00:00<00:00, 227.93it/s]Loading weights:  44%|████▍     | 149/338 [00:00<00:00, 195.19it/s]Loading weights:  54%|█████▍    | 183/338 [00:00<00:00, 224.50it/s]Loading weights:  62%|██████▏   | 211/338 [00:01<00:00, 207.45it/s]Loading weights:  70%|██████▉   | 236/338 [00:01<00:00, 206.82it/s]Loading weights:  77%|███████▋  | 260/338 [00:01<00:00, 192.90it/s]Loading weights:  83%|████████▎ | 281/338 [00:01<00:00, 193.03it/s]Loading weights:  90%|████████▉ | 304/338 [00:01<00:00, 187.19it/s]Loading weights: 100%|█████████▉| 337/338 [00:01<00:00, 222.30it/s]Loading weights: 100%|██████████| 338/338 [00:01<00:00, 201.26it/s]
+[E15] stage rft ...
+Loading weights:   0%|          | 0/338 [00:00<?, ?it/s]Loading weights:   0%|          | 1/338 [00:00<02:34,  2.19it/s]Loading weights:  22%|██▏       | 75/338 [00:00<00:01, 174.50it/s]Loading weights:  34%|███▍      | 116/338 [00:00<00:01, 180.17it/s]Loading weights:  43%|████▎     | 147/338 [00:00<00:00, 203.15it/s]Loading weights:  52%|█████▏    | 177/338 [00:01<00:00, 197.53it/s]Loading weights:  60%|██████    | 203/338 [00:01<00:00, 200.37it/s]Loading weights:  67%|██████▋   | 227/338 [00:01<00:00, 208.78it/s]Loading weights:  74%|███████▍  | 251/338 [00:01<00:00, 149.20it/s]Loading weights:  80%|███████▉  | 270/338 [00:03<00:01, 41.20it/s] Loading weights:  84%|████████▍ | 284/338 [00:03<00:01, 34.22it/s]Loading weights:  87%|████████▋ | 294/338 [00:04<00:01, 27.42it/s]Loading weights:  89%|████████▉ | 302/338 [00:04<00:01, 30.19it/s]Loading weights:  91%|█████████▏| 309/338 [00:05<00:01, 21.76it/s]Loading weights:  93%|█████████▎| 315/338 [00:05<00:01, 21.05it/s]Loading weights:  95%|█████████▍| 320/338 [00:06<00:01, 16.62it/s]Loading weights:  97%|█████████▋| 327/338 [00:06<00:00, 18.69it/s]Loading weights:  98%|█████████▊| 331/338 [00:06<00:00, 16.07it/s]Loading weights: 100%|██████████| 338/338 [00:06<00:00, 48.37it/s]
+[E15 rft] 8/462 problems  91s
+[E15 rft] 16/462 problems  159s
+[E15 rft] 24/462 problems  245s
+[E15 rft] 32/462 problems  312s
+[E15 rft] 40/462 problems  393s
+[E15 rft] 48/462 problems  446s
+[E15 rft] 56/462 problems  493s
+[E15 rft] 64/462 problems  568s
+[E15 rft] 72/462 problems  660s
+[E15 rft] 80/462 problems  733s
+[E15 rft] 88/462 problems  822s
+[E15 rft] 96/462 problems  886s
+[E15 rft] 104/462 problems  933s
+[E15 rft] 112/462 problems  1029s
+[E15 rft] 120/462 problems  1083s
+[E15 rft] 128/462 problems  1137s
+[E15 rft] 136/462 problems  1203s
+[E15 rft] 144/462 problems  1261s
+[E15 rft] 152/462 problems  1351s
+[E15 rft] 160/462 problems  1399s
+[E15 rft] 168/462 problems  1445s
+[E15 rft] 176/462 problems  1494s
+[E15 rft] 184/462 problems  1555s

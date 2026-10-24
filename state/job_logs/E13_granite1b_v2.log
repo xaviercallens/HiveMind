@@ -1,0 +1,24 @@
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[E13] model granite1b device cuda planned runs 3 (incl. S0b twin) plan: {"model": "granite1b", "note": "no SEC_PER_STEP assumption for this model (smoke / placeholder)", "cells": ["S0", "S1", "S2"], "seeds": [1, 2, 3], "cfg": {"rounds": 6, "workers": 3, "inner": 20, "seq_len": 256, "micro_batch": 4, "eval_seqs": 16, "eval_batch": 4, "smoke": false}}
+Loading weights:   0%|          | 0/218 [00:00<?, ?it/s]Loading weights:   9%|▉         | 20/218 [00:00<00:01, 143.72it/s]Loading weights:  17%|█▋        | 38/218 [00:00<00:01, 137.07it/s]Loading weights:  26%|██▌       | 56/218 [00:00<00:01, 134.45it/s]Loading weights:  34%|███▍      | 74/218 [00:00<00:01, 138.58it/s]Loading weights:  42%|████▏     | 92/218 [00:00<00:00, 139.98it/s]Loading weights:  50%|█████     | 110/218 [00:00<00:00, 140.52it/s]Loading weights:  59%|█████▊    | 128/218 [00:00<00:00, 138.65it/s]Loading weights:  67%|██████▋   | 146/218 [00:01<00:00, 141.97it/s]Loading weights:  75%|███████▌  | 164/218 [00:01<00:00, 138.87it/s]Loading weights:  83%|████████▎ | 182/218 [00:01<00:00, 140.36it/s]Loading weights:  92%|█████████▏| 200/218 [00:01<00:00, 137.57it/s]Loading weights: 100%|██████████| 218/218 [00:01<00:00, 147.68it/s]
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/transformers/integrations/moe.py:402: UserWarning: _histc_cuda does not have a deterministic implementation, but you set 'torch.use_deterministic_algorithms(True, warn_only=True)'. You can file an issue at https://github.com/pytorch/pytorch/issues to help us prioritize adding deterministic support for this operation. (Triggered internally at /pytorch/aten/src/ATen/Context.cpp:93.)
+  tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
+seed 3 S0 sync_baseline  final 2.1182 (init 2.1690) admitted/round [3, 3, 3, 3, 3, 3] late 0 up 0B 315.89s
+[E13 hb] granite1b S1 seed 3 t=60s round 2/6 admitted-so-far [] of effective K 3, alive [0, 1, 2], evals [] of [0, 3, 6], late 0
+[E13 hb] granite1b S1 seed 3 t=120s round 3/6 admitted-so-far [2] of effective K 3, alive [0, 1, 2], evals [0] of [0, 3, 6], late 0
+[E13 hb] granite1b S1 seed 3 t=180s round 4/6 admitted-so-far [1, 2] of effective K 3, alive [0, 1, 2], evals [0, 3] of [0, 3, 6], late 0
+[E13 hb] granite1b S1 seed 3 t=240s round 6/6 admitted-so-far [] of effective K 3, alive [0, 1, 2], evals [0, 3] of [0, 3, 6], late 0
+seed 3 S1 swarm_identity final 2.1182 (init 2.1690) admitted/round [3, 3, 3, 3, 3, 3] late 0 up 49545216B 300.66s
+[E13 hb] granite1b S2 seed 3 t=60s round 2/6 admitted-so-far [] of effective K 2, alive [0, 1, 2], evals [] of [0, 3, 6], late 0
+[E13 hb] granite1b S2 seed 3 t=120s round 3/6 admitted-so-far [0] of effective K 2, alive [0, 2], evals [0] of [0, 3, 6], late 2
+[E13 hb] granite1b S2 seed 3 t=180s round 4/6 admitted-so-far [0] of effective K 2, alive [0, 1, 2], evals [0] of [0, 3, 6], late 2
+[E13 hb] granite1b S2 seed 3 t=240s round 5/6 admitted-so-far [1] of effective K 2, alive [0, 1, 2], evals [0, 3] of [0, 3, 6], late 3
+seed 3 S2 swarm_all_on   final 2.2178 (init 2.1690) admitted/round [2, 2, 2, 2, 2, 2] late 5 up 4261665B 318.22s
+{
+  "controls_all_passed": true,
+  "runs": 9,
+  "elapsed_s": 934.82,
+  "receipt": "46737aad48c791fabd60a3c2d7c44aa2f03325fbe60c74f166155f3cd9347ef2"
+}
+E13 DONE model=granite1b cells_ok=9 cells_failed=0 report=artifacts/experiments/E13_swarm_local_report_granite1b.json

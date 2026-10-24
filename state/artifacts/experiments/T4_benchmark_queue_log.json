@@ -1,0 +1,3014 @@
+{
+ "started_unix": 1792788630.1757412,
+ "deadline_unix": 1792824630.1757412,
+ "hours": 10.0,
+ "jobs": [
+  {
+   "name": "E11_qwen0.5b",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b"
+   ],
+   "start_unix": 1792788630.1764047,
+   "status": "exit 1",
+   "returncode": 1,
+   "seconds": 70.3,
+   "log_tail": [
+    "Loading weights: 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 290/290 [00:00<00:00, 642.69it/s]",
+    "[qwen0.5b] loaded in 5.4s; GPU alloc 0.92 GiB",
+    "[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (299078 > 131072). Running this sequence through the model will result in indexing errors",
+    "[qwen0.5b] hook identity {'stock_nll_sum': 2277.9309692382812, 'hooked_nll_sum': 2277.9309692382812, 'bitwise_equal': True, 'passed': True}",
+    "[qwen0.5b] calibrated 19 lattice cells",
+    "Traceback (most recent call last):",
+    "  File \"/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-s10-e11-e12-t4/scripts/run_experiment_E11_kv_lattice.py\", line 756, in <module>",
+    "    raise SystemExit(main())",
+    "  File \"/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-s10-e11-e12-t4/scripts/run_experiment_E11_kv_lattice.py\", line 745, in main",
+    "    raw = run_model(a.model, a.dataset)",
+    "  File \"/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-s10-e11-e12-t4/scripts/run_experiment_E11_kv_lattice.py\", line 465, in run_model",
+    "    head_dims = sorted({int(t.shape[-1]) for t in klt.values()})",
+    "  File \"/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-s10-e11-e12-t4/scripts/run_experiment_E11_kv_lattice.py\", line 465, in <setcomp>",
+    "    head_dims = sorted({int(t.shape[-1]) for t in klt.values()})",
+    "AttributeError: 'dict' object has no attribute 'shape'"
+   ]
+  },
+  {
+   "name": "E11_qwen7b",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b"
+   ],
+   "start_unix": 1792788700.4924972,
+   "status": "exit 1",
+   "returncode": 1,
+   "seconds": 110.4,
+   "log_tail": [
+    "Some parameters are on the meta device because they were offloaded to the cpu.",
+    "[qwen7b] loaded in 17.9s; GPU alloc 13.17 GiB",
+    "[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (299078 > 32768). Running this sequence through the model will result in indexing errors",
+    "[qwen7b] hook identity {'stock_nll_sum': 1984.2227172851562, 'hooked_nll_sum': 1984.2227172851562, 'bitwise_equal': True, 'passed': True}",
+    "[qwen7b] calibrated 19 lattice cells",
+    "Traceback (most recent call last):",
+    "  File \"/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-s10-e11-e12-t4/scripts/run_experiment_E11_kv_lattice.py\", line 756, in <module>",
+    "    raise SystemExit(main())",
+    "  File \"/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-s10-e11-e12-t4/scripts/run_experiment_E11_kv_lattice.py\", line 745, in main",
+    "    raw = run_model(a.model, a.dataset)",
+    "  File \"/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-s10-e11-e12-t4/scripts/run_experiment_E11_kv_lattice.py\", line 465, in run_model",
+    "    head_dims = sorted({int(t.shape[-1]) for t in klt.values()})",
+    "  File \"/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-s10-e11-e12-t4/scripts/run_experiment_E11_kv_lattice.py\", line 465, in <setcomp>",
+    "    head_dims = sorted({int(t.shape[-1]) for t in klt.values()})",
+    "AttributeError: 'dict' object has no attribute 'shape'"
+   ]
+  },
+  {
+   "name": "E11_gemma4-e4b",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "gemma4-e4b"
+   ],
+   "start_unix": 1792788810.8980923,
+   "status": "exit 1",
+   "returncode": 1,
+   "seconds": 316.1,
+   "log_tail": [
+    "Loading weights:  93%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258e| 1938/2076 [00:09<00:00, 779.08it/s]",
+    "Loading weights: 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 2076/2076 [00:09<00:00, 211.91it/s]",
+    "[gemma4-e4b] loaded in 187.1s; GPU alloc 8.65 GiB",
+    "[gemma4-e4b] hook identity {'stock_nll_sum': 1625.8536987304688, 'hooked_nll_sum': 1625.8536987304688, 'bitwise_equal': True, 'passed': True}",
+    "[gemma4-e4b] calibrated 19 lattice cells",
+    "Traceback (most recent call last):",
+    "  File \"/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-s10-e11-e12-t4/scripts/run_experiment_E11_kv_lattice.py\", line 756, in <module>",
+    "    raise SystemExit(main())",
+    "  File \"/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-s10-e11-e12-t4/scripts/run_experiment_E11_kv_lattice.py\", line 745, in main",
+    "    raw = run_model(a.model, a.dataset)",
+    "  File \"/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-s10-e11-e12-t4/scripts/run_experiment_E11_kv_lattice.py\", line 465, in run_model",
+    "    head_dims = sorted({int(t[\"u\"].shape[-1]) for t in klt.values()})",
+    "  File \"/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-s10-e11-e12-t4/scripts/run_experiment_E11_kv_lattice.py\", line 465, in <setcomp>",
+    "    head_dims = sorted({int(t[\"u\"].shape[-1]) for t in klt.values()})",
+    "AttributeError: 'dict' object has no attribute 'shape'"
+   ]
+  },
+  {
+   "name": "E11_qwen0.5b_retry",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b"
+   ],
+   "start_unix": 1792789127.0425029,
+   "status": "ok",
+   "returncode": 0,
+   "seconds": 200.8,
+   "log_tail": [
+    "[qwen0.5b] seed 2 window 85: base NLL 3.2524",
+    "[qwen0.5b] seed 2 window 121: base NLL 2.7835",
+    "[qwen0.5b] seed 2 window 158: base NLL 3.0300",
+    "[qwen0.5b] seed 2 window 194: base NLL 3.3226",
+    "[qwen0.5b] seed 2 window 231: base NLL 3.0729",
+    "[qwen0.5b] seed 2 window 267: base NLL 2.6516",
+    "[qwen0.5b] seed 3 window 24: base NLL 2.6498",
+    "[qwen0.5b] seed 3 window 60: base NLL 2.7262",
+    "[qwen0.5b] seed 3 window 97: base NLL 3.1720",
+    "[qwen0.5b] seed 3 window 133: base NLL 2.8735",
+    "[qwen0.5b] seed 3 window 170: base NLL 2.5075",
+    "[qwen0.5b] seed 3 window 206: base NLL 2.9242",
+    "[qwen0.5b] seed 3 window 243: base NLL 2.3724",
+    "[qwen0.5b] seed 3 window 279: base NLL 3.1017",
+    "[qwen0.5b] wrote E11_raw_qwen0.5b.json in 194.2s, peak 1.295 GiB"
+   ]
+  },
+  {
+   "name": "E11_gemma4-e4b_retry",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "gemma4-e4b"
+   ],
+   "start_unix": 1792789327.8856826,
+   "status": "ok",
+   "returncode": 0,
+   "seconds": 3113.3,
+   "log_tail": [
+    "[gemma4-e4b] seed 2 window 83: base NLL 2.5166",
+    "[gemma4-e4b] seed 2 window 118: base NLL 2.1029",
+    "[gemma4-e4b] seed 2 window 154: base NLL 2.2425",
+    "[gemma4-e4b] seed 2 window 190: base NLL 2.6025",
+    "[gemma4-e4b] seed 2 window 225: base NLL 2.1640",
+    "[gemma4-e4b] seed 2 window 261: base NLL 1.9920",
+    "[gemma4-e4b] seed 3 window 23: base NLL 2.2865",
+    "[gemma4-e4b] seed 3 window 59: base NLL 2.0501",
+    "[gemma4-e4b] seed 3 window 95: base NLL 2.4623",
+    "[gemma4-e4b] seed 3 window 130: base NLL 1.7826",
+    "[gemma4-e4b] seed 3 window 166: base NLL 1.7433",
+    "[gemma4-e4b] seed 3 window 201: base NLL 2.1323",
+    "[gemma4-e4b] seed 3 window 237: base NLL 1.8788",
+    "[gemma4-e4b] seed 3 window 273: base NLL 2.3620",
+    "[gemma4-e4b] wrote E11_raw_gemma4-e4b.json in 3109.6s, peak 9.484 GiB"
+   ]
+  },
+  {
+   "name": "E11_qwen7b_retry",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b"
+   ],
+   "start_unix": 1792792441.1548393,
+   "status": "ok",
+   "returncode": 0,
+   "seconds": 944.2,
+   "log_tail": [
+    "[qwen7b] seed 2 window 85: base NLL 2.8646",
+    "[qwen7b] seed 2 window 121: base NLL 2.3278",
+    "[qwen7b] seed 2 window 158: base NLL 2.5774",
+    "[qwen7b] seed 2 window 194: base NLL 2.9187",
+    "[qwen7b] seed 2 window 231: base NLL 2.6533",
+    "[qwen7b] seed 2 window 267: base NLL 2.2709",
+    "[qwen7b] seed 3 window 24: base NLL 2.3440",
+    "[qwen7b] seed 3 window 60: base NLL 2.3134",
+    "[qwen7b] seed 3 window 97: base NLL 2.8816",
+    "[qwen7b] seed 3 window 133: base NLL 2.5164",
+    "[qwen7b] seed 3 window 170: base NLL 2.1628",
+    "[qwen7b] seed 3 window 206: base NLL 2.3776",
+    "[qwen7b] seed 3 window 243: base NLL 2.0709",
+    "[qwen7b] seed 3 window 279: base NLL 2.6695",
+    "[qwen7b] wrote E11_raw_qwen7b.json in 939.1s, peak 14.228 GiB"
+   ]
+  },
+  {
+   "name": "E11_aggregate",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--aggregate"
+   ],
+   "start_unix": 1792793385.3483076,
+   "status": "exit 1",
+   "returncode": 1,
+   "seconds": 10.1,
+   "log_tail": [
+    "      \"qwen7b\": \"refuted\",",
+    "      \"gemma4-e4b\": \"refuted\"",
+    "    }",
+    "  },",
+    "  \"P11b\": {",
+    "    \"status\": \"refuted (on gemma4-e4b)\",",
+    "    \"per_model\": {",
+    "      \"qwen0.5b\": \"inconclusive\",",
+    "      \"qwen7b\": \"supported\",",
+    "      \"gemma4-e4b\": \"refuted (E8 already beats Z without the transform)\"",
+    "    }",
+    "  },",
+    "  \"controls_all_passed\": false,",
+    "  \"receipt\": \"d47e0956eef3a8314e1a0ab3c64c5d8679ca8a7d28f0af9f088920d19b20ac51\"",
+    "}"
+   ]
+  },
+  {
+   "name": "E12_replay",
+   "argv": [
+    "scripts/run_experiment_E12_replay_divergence.py"
+   ],
+   "start_unix": 1792793395.401688,
+   "status": "exit 1",
+   "returncode": 1,
+   "seconds": 20.1,
+   "log_tail": [
+    "Loading weights:  84%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258d | 243/290 [00:08<00:01, 44.28it/s]",
+    "Loading weights:  87%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258b | 252/290 [00:08<00:00, 46.25it/s]",
+    "Loading weights:  89%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2589 | 259/290 [00:08<00:00, 43.81it/s]",
+    "Loading weights:  92%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258f| 266/290 [00:08<00:00, 46.06it/s]",
+    "Loading weights:  94%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258d| 272/290 [00:08<00:00, 37.23it/s]",
+    "Loading weights:  96%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c| 279/290 [00:09<00:00, 38.35it/s]",
+    "Loading weights: 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 290/290 [00:09<00:00, 31.78it/s]",
+    "Traceback (most recent call last):",
+    "  File \"/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-s10-e11-e12-t4/scripts/run_experiment_E12_replay_divergence.py\", line 236, in <module>",
+    "    raise SystemExit(main())",
+    "  File \"/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-s10-e11-e12-t4/scripts/run_experiment_E12_replay_divergence.py\", line 186, in main",
+    "    t4_a, w_a = run_trajectories(\"cuda\", \"float32\", False, False)",
+    "  File \"/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-s10-e11-e12-t4/scripts/run_experiment_E12_replay_divergence.py\", line 121, in run_trajectories",
+    "    handle = torch.optim.optimizer.register_optimizer_step_post_hook(post_hook)",
+    "AttributeError: module 'torch.optim' has no attribute 'optimizer'. Did you mean: 'Optimizer'?"
+   ]
+  },
+  {
+   "name": "E10b_lattice_05b",
+   "argv": [
+    "scripts/run_experiment_E10b_lattice_05b.py",
+    "--resume"
+   ],
+   "start_unix": 1792793415.496146,
+   "status": "exit -15",
+   "returncode": -15,
+   "seconds": 1431.3,
+   "log_tail": [
+    "/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.",
+    "  import pynvml  # type: ignore[import]",
+    "",
+    "Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]",
+    "Loading weights:  26%|\u2588\u2588\u258c       | 76/290 [00:00<00:00, 716.32it/s]",
+    "Loading weights:  62%|\u2588\u2588\u2588\u2588\u2588\u2588\u258f   | 181/290 [00:00<00:00, 890.18it/s]",
+    "Loading weights:  94%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258d| 274/290 [00:00<00:00, 896.12it/s]",
+    "Loading weights: 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 290/290 [00:00<00:00, 902.79it/s]",
+    "[E10b] device cuda, 540672 LoRA coordinates, plan: {\"runs\": 24, \"arms\": [\"none\", \"sign+EF\", \"Z8@1+EF\", \"E8@1+EF\", \"Z8@2+EF\", \"E8@2+EF\", \"sign\", \"E8@6\"], \"seeds\": [1, 2, 3], \"inner_steps_per_run\": 1920, \"inner_steps_total\": 46080, \"tokens_per_learner_per_run\": 491520, \"lattice_codec_calls\": 720, \"eval_passes\": 120, \"assumed_sec_per_inner_step\": 0.12, \"assumed_sec_per_lattice_codec_call\": 1.5, \"assumed_sec_per_eval\": 1.3, \"breakdown_s\": {\"inner_steps_s\": 5529.6, \"lattice_codec_s\": 1080.0, \"eval_s\": 156.0, \"setup_and_controls_s\": 150.0}, \"total_s\": 6915.6, \"total_hours\": 1.92}",
+    "seed 1 none     final 3.0703 (init 2.9933) relMSE 0.0000 rate 32.000 1384.91s"
+   ]
+  },
+  {
+   "name": "E12_replay_retry",
+   "argv": [
+    "scripts/run_experiment_E12_replay_divergence.py"
+   ],
+   "start_unix": 1792794846.8196867,
+   "status": "ok",
+   "returncode": 0,
+   "seconds": 6593.4,
+   "log_tail": [
+    "  \"analysis\": {",
+    "    \"P12-same\": {",
+    "      \"status\": \"supported\",",
+    "      \"basis\": \"cell B (same T4, separate process) - a proxy for same class, not a second T4\"",
+    "    },",
+    "    \"P12-cross\": {",
+    "      \"status\": \"supported\",",
+    "      \"basis\": \"cell C (T4 vs this host's x86 CPU, float32 both)\"",
+    "    },",
+    "    \"P12-fixed-point\": {",
+    "      \"status\": \"not decided (no fixed-point kernel); fp64 + 2^-20 snapping proxy reported in cell D\"",
+    "    }",
+    "  },",
+    "  \"controls_all_passed\": true",
+    "}"
+   ]
+  },
+  {
+   "name": "E10b_amended",
+   "argv": [
+    "scripts/run_experiment_E10b_lattice_05b.py"
+   ],
+   "start_unix": 1792801440.2799761,
+   "status": "exit 1",
+   "returncode": 1,
+   "seconds": 5528.6,
+   "log_tail": [
+    "seed 2 E8@6     final 2.9455 (init 2.9933) relMSE 0.0003 rate 6.014 368.91s",
+    "seed 3 none     final 2.9467 (init 2.9933) relMSE 0.0000 rate 32.000 365.91s",
+    "seed 3 Z8@1+EF  final 2.9465 (init 2.9933) relMSE 0.5145 rate 0.992 368.18s",
+    "seed 3 E8@1+EF  final 2.9463 (init 2.9933) relMSE 0.4477 rate 1.001 368.76s",
+    "seed 3 sign     final 2.9449 (init 2.9933) relMSE 0.3551 rate 1.000 366.74s",
+    "seed 3 E8@6     final 2.9467 (init 2.9933) relMSE 0.0003 rate 6.014 368.42s",
+    "{",
+    "  \"P10a\": \"supported\",",
+    "  \"P10b\": \"inconclusive (CI includes 0)\",",
+    "  \"P10c\": \"supported\",",
+    "  \"controls_all_passed\": false,",
+    "  \"runs\": 15,",
+    "  \"elapsed_s\": 5524.81,",
+    "  \"receipt\": \"712fb41a75ede9b3762e68840085c8ff02cf03767550557b5a1e8178e043a109\"",
+    "}"
+   ]
+  },
+  {
+   "name": "E11b_qwen0.5b_fineweb-edu_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--dataset",
+    "fineweb-edu"
+   ],
+   "start_unix": 1792806968.9068637,
+   "status": "ok",
+   "returncode": 0,
+   "seconds": 336.4,
+   "log_tail": [
+    "[qwen0.5b] seed 2 window 186: base NLL 3.0907",
+    "[qwen0.5b] seed 2 window 266: base NLL 2.8194",
+    "[qwen0.5b] seed 2 window 346: base NLL 2.5926",
+    "[qwen0.5b] seed 2 window 426: base NLL 2.6653",
+    "[qwen0.5b] seed 2 window 506: base NLL 2.5791",
+    "[qwen0.5b] seed 2 window 586: base NLL 2.9543",
+    "[qwen0.5b] seed 3 window 53: base NLL 2.7159",
+    "[qwen0.5b] seed 3 window 133: base NLL 2.8238",
+    "[qwen0.5b] seed 3 window 213: base NLL 2.3451",
+    "[qwen0.5b] seed 3 window 293: base NLL 3.3736",
+    "[qwen0.5b] seed 3 window 373: base NLL 2.3293",
+    "[qwen0.5b] seed 3 window 453: base NLL 2.4227",
+    "[qwen0.5b] seed 3 window 533: base NLL 2.6347",
+    "[qwen0.5b] seed 3 window 613: base NLL 2.3609",
+    "[qwen0.5b] wrote E11b_raw_qwen0.5b_fineweb-edu_w1024.json in 332.3s, peak 1.295 GiB"
+   ]
+  },
+  {
+   "name": "E11b_qwen7b_fineweb-edu_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b",
+    "--dataset",
+    "fineweb-edu"
+   ],
+   "start_unix": 1792807305.304516,
+   "status": "ok",
+   "returncode": 0,
+   "seconds": 1310.8,
+   "log_tail": [
+    "[qwen7b] seed 2 window 186: base NLL 2.9070",
+    "[qwen7b] seed 2 window 266: base NLL 2.4509",
+    "[qwen7b] seed 2 window 346: base NLL 2.3261",
+    "[qwen7b] seed 2 window 426: base NLL 2.3295",
+    "[qwen7b] seed 2 window 506: base NLL 2.2091",
+    "[qwen7b] seed 2 window 586: base NLL 2.6739",
+    "[qwen7b] seed 3 window 53: base NLL 2.3108",
+    "[qwen7b] seed 3 window 133: base NLL 2.3399",
+    "[qwen7b] seed 3 window 213: base NLL 2.0616",
+    "[qwen7b] seed 3 window 293: base NLL 3.0720",
+    "[qwen7b] seed 3 window 373: base NLL 1.9169",
+    "[qwen7b] seed 3 window 453: base NLL 2.0754",
+    "[qwen7b] seed 3 window 533: base NLL 2.2687",
+    "[qwen7b] seed 3 window 613: base NLL 2.0319",
+    "[qwen7b] wrote E11b_raw_qwen7b_fineweb-edu_w1024.json in 1302.5s, peak 14.228 GiB"
+   ]
+  },
+  {
+   "name": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "gemma4-e4b",
+    "--dataset",
+    "fineweb-edu"
+   ],
+   "start_unix": 1792808616.0755272,
+   "status": "ok",
+   "returncode": 0,
+   "seconds": 4696.9,
+   "log_tail": [
+    "[gemma4-e4b] seed 2 window 185: base NLL 2.6824",
+    "[gemma4-e4b] seed 2 window 265: base NLL 2.3054",
+    "[gemma4-e4b] seed 2 window 345: base NLL 2.1461",
+    "[gemma4-e4b] seed 2 window 424: base NLL 2.5413",
+    "[gemma4-e4b] seed 2 window 504: base NLL 2.3403",
+    "[gemma4-e4b] seed 2 window 583: base NLL 1.9657",
+    "[gemma4-e4b] seed 3 window 53: base NLL 2.1762",
+    "[gemma4-e4b] seed 3 window 132: base NLL 1.8747",
+    "[gemma4-e4b] seed 3 window 212: base NLL 1.9180",
+    "[gemma4-e4b] seed 3 window 291: base NLL 2.8318",
+    "[gemma4-e4b] seed 3 window 371: base NLL 1.7113",
+    "[gemma4-e4b] seed 3 window 451: base NLL 2.1480",
+    "[gemma4-e4b] seed 3 window 530: base NLL 2.3422",
+    "[gemma4-e4b] seed 3 window 610: base NLL 2.2742",
+    "[gemma4-e4b] wrote E11b_raw_gemma4-e4b_fineweb-edu_w1024.json in 4664.6s, peak 9.484 GiB"
+   ]
+  },
+  {
+   "name": "E13_qwen0.5b",
+   "argv": [
+    "scripts/run_experiment_E13_swarm_local.py",
+    "--model",
+    "qwen0.5b",
+    "--seeds",
+    "1,2,3",
+    "--resume"
+   ],
+   "start_unix": 1792813313.0592804,
+   "status": "ok",
+   "returncode": 0,
+   "seconds": 2510.7,
+   "log_tail": [
+    "seed 3 S3 no_codec       final 2.3647 (init 2.3653) admitted/round [2, 2, 2, 2, 2, 2] late 9 up 45416448B 119.39s",
+    "[E13] memory preflight: process hosting needs 20.09 GiB (M=4 x (4.57 + 0.45)) > free 13.76 GiB: FALLING BACK to thread hosting (needs 5.07 GiB)",
+    "[E13 hb] qwen0.5b S4 seed 3 t=60s round 4/6 admitted-so-far [] of effective K 2, alive [0, 1, 2, 3], evals [0] of [0, 3, 6], late 5",
+    "seed 3 S4 no_rda         final 2.3175 (init 2.3653) admitted/round [2, 2, 2, 2, 2, 2] late 9 up 4118879B 122.24s",
+    "[E13] memory preflight: process hosting needs 20.09 GiB (M=4 x (4.57 + 0.45)) > free 13.76 GiB: FALLING BACK to thread hosting (needs 5.07 GiB)",
+    "[E13 hb] qwen0.5b S5 seed 3 t=60s round 3/6 admitted-so-far [0] of effective K 3, alive [0, 2, 3], evals [0] of [0, 3, 6], late 0",
+    "[E13 hb] qwen0.5b S5 seed 3 t=120s round 5/6 admitted-so-far [0, 1, 2] of effective K 4, alive [0, 1, 2, 3], evals [0, 3] of [0, 3, 6], late 0",
+    "seed 3 S5 no_quorum      final 2.2370 (init 2.3653) admitted/round [4, 4, 3, 4, 4, 4] late 0 up 4521236B 163.11s",
+    "{",
+    "  \"controls_all_passed\": true,",
+    "  \"runs\": 18,",
+    "  \"elapsed_s\": 2503.17,",
+    "  \"receipt\": \"813f0fdaa542d7e22656aecafcbdd269010c1021710c29b4524399ed8a712f2e\"",
+    "}",
+    "E13 DONE model=qwen0.5b cells_ok=18 cells_failed=0 report=/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-s10-e11-e12-t4/artifacts/experiments/E13_swarm_local_report.json"
+   ]
+  },
+  {
+   "name": "E13_granite1b",
+   "argv": [
+    "scripts/run_experiment_E13_swarm_local.py",
+    "--model",
+    "granite1b",
+    "--cells",
+    "S0,S1,S2",
+    "--seeds",
+    "1,2,3",
+    "--resume"
+   ],
+   "start_unix": 1792815823.7302926,
+   "status": "exit 3",
+   "returncode": 3,
+   "seconds": 231.0,
+   "log_tail": [
+    "Loading weights:  50%|\u2588\u2588\u2588\u2588\u2588     | 110/218 [00:15<00:13,  7.75it/s]",
+    "Loading weights:  55%|\u2588\u2588\u2588\u2588\u2588\u258d    | 119/218 [00:16<00:11,  8.73it/s]",
+    "Loading weights:  59%|\u2588\u2588\u2588\u2588\u2588\u258a    | 128/218 [00:18<00:11,  7.61it/s]",
+    "Loading weights:  63%|\u2588\u2588\u2588\u2588\u2588\u2588\u258e   | 137/218 [00:19<00:09,  8.21it/s]",
+    "Loading weights:  67%|\u2588\u2588\u2588\u2588\u2588\u2588\u258b   | 146/218 [00:20<00:08,  8.17it/s]",
+    "Loading weights:  71%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588   | 155/218 [00:21<00:07,  8.07it/s]",
+    "Loading weights:  75%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c  | 164/218 [00:22<00:07,  7.53it/s]",
+    "Loading weights:  79%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2589  | 173/218 [00:23<00:04,  9.08it/s]",
+    "Loading weights:  83%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258e | 182/218 [00:24<00:04,  7.59it/s]",
+    "Loading weights:  88%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258a | 191/218 [00:25<00:02,  9.48it/s]",
+    "Loading weights:  92%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258f| 200/218 [00:27<00:02,  7.58it/s]",
+    "Loading weights:  96%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c| 209/218 [00:27<00:00, 10.30it/s]",
+    "Loading weights: 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 218/218 [00:27<00:00,  8.00it/s]",
+    "aborted by registered fail-fast rule: projected 3.09 h > --max-hours 3 (measured 2.686 s per inner step, 10 runs planned, margin 1.15)",
+    "E13 DONE model=granite1b cells_ok=0 cells_failed=0 report=/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-s10-e11-e12-t4/artifacts/experiments/E13_swarm_local_report.json status=aborted"
+   ]
+  },
+  {
+   "name": "E13_granite3b",
+   "argv": [
+    "scripts/run_experiment_E13_swarm_local.py",
+    "--model",
+    "granite3b",
+    "--cells",
+    "S0,S1,S2",
+    "--seeds",
+    "1",
+    "--resume"
+   ],
+   "start_unix": 1792816054.7694411,
+   "status": "ok",
+   "returncode": 0,
+   "seconds": 4760.1,
+   "log_tail": [
+    "[E13 hb] granite3b S2 seed 1 t=660s round 5/6 admitted-so-far [] of effective K 2, alive [0, 1, 2, 3], evals [0] of [0, 3, 6], late 5",
+    "[E13 hb] granite3b S2 seed 1 t=720s round 5/6 admitted-so-far [2] of effective K 2, alive [0, 1, 2, 3], evals [0] of [0, 3, 6], late 5",
+    "[E13 hb] granite3b S2 seed 1 t=780s round 6/6 admitted-so-far [] of effective K 2, alive [0, 1, 2, 3], evals [0, 3] of [0, 3, 6], late 5",
+    "[E13 hb] granite3b S2 seed 1 t=840s round 6/6 admitted-so-far [] of effective K 2, alive [0, 1, 2, 3], evals [0, 3] of [0, 3, 6], late 6",
+    "[E13 hb] granite3b S2 seed 1 t=900s round 6/6 admitted-so-far [2] of effective K 2, alive [0, 1, 2, 3], evals [0, 3] of [0, 3, 6], late 6",
+    "[E13 hb] granite3b S2 seed 1 (evaluation wait) t=60s round 7/6 admitted-so-far [] of effective K 2, alive [0, 1, 2, 3], evals [0, 3] of [0, 3, 6], late 7",
+    "[E13 hb] granite3b S2 seed 1 (evaluation wait) t=120s round 7/6 admitted-so-far [] of effective K 2, alive [0, 1, 2, 3], evals [0, 3] of [0, 3, 6], late 8",
+    "seed 1 S2 swarm_all_on   final 1.8934 (init 1.8216) admitted/round [2, 2, 2, 2, 2, 2] late 8 up 9499080B 1064.44s",
+    "{",
+    "  \"controls_all_passed\": true,",
+    "  \"runs\": 3,",
+    "  \"elapsed_s\": 4755.07,",
+    "  \"receipt\": \"bdb1b9fafe671dc6b3929937d710721ef4d96762512c53d3e95c3821f40b0f0a\"",
+    "}",
+    "E13 DONE model=granite3b cells_ok=3 cells_failed=0 report=/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-s10-e11-e12-t4/artifacts/experiments/E13_swarm_local_report.json"
+   ]
+  },
+  {
+   "name": "E13_granite_step_bench",
+   "argv": [
+    "scripts/bench_granite_step.py"
+   ],
+   "start_unix": 1792820814.8529272,
+   "status": "ok",
+   "returncode": 0,
+   "seconds": 135.6,
+   "log_tail": [
+    "Loading weights:  57%|\u2588\u2588\u2588\u2588\u2588\u258b    | 164/290 [00:02<00:01, 79.45it/s]",
+    "Loading weights:  60%|\u2588\u2588\u2588\u2588\u2588\u2589    | 173/290 [00:02<00:01, 79.16it/s]",
+    "Loading weights:  63%|\u2588\u2588\u2588\u2588\u2588\u2588\u258e   | 182/290 [00:02<00:01, 78.84it/s]",
+    "Loading weights:  66%|\u2588\u2588\u2588\u2588\u2588\u2588\u258c   | 191/290 [00:02<00:01, 79.48it/s]",
+    "Loading weights:  69%|\u2588\u2588\u2588\u2588\u2588\u2588\u2589   | 200/290 [00:02<00:01, 81.68it/s]",
+    "Loading weights:  72%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258f  | 209/290 [00:02<00:01, 80.42it/s]",
+    "Loading weights:  75%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c  | 218/290 [00:02<00:00, 79.73it/s]",
+    "Loading weights:  78%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258a  | 227/290 [00:02<00:00, 81.18it/s]",
+    "Loading weights:  81%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258f | 236/290 [00:02<00:00, 80.87it/s]",
+    "Loading weights:  84%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258d | 245/290 [00:03<00:00, 78.08it/s]",
+    "Loading weights:  88%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258a | 254/290 [00:03<00:00, 80.45it/s]",
+    "Loading weights:  91%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588 | 263/290 [00:03<00:00, 82.71it/s]",
+    "Loading weights:  94%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258d| 272/290 [00:03<00:00, 78.91it/s]",
+    "Loading weights: 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 290/290 [00:03<00:00, 84.21it/s]",
+    "{\"model\": \"granite3b\", \"experts_impl\": \"eager\", \"grad_ckpt\": true, \"sec_per_step_median\": 4.136957054503, \"load_s\": 6.3, \"peak_reserved_gib\": 7.25, \"finite_loss\": true, \"resolved_experts_impl\": \"eager\"}"
+   ]
+  },
+  {
+   "name": "E13_qwen0.5b_m2proc",
+   "argv": [
+    "scripts/run_experiment_E13_swarm_local.py",
+    "--model",
+    "qwen0.5b",
+    "--workers",
+    "2",
+    "--peer-hosting",
+    "process",
+    "--cells",
+    "S0,S1",
+    "--seeds",
+    "1",
+    "--out",
+    "artifacts/experiments/E13_swarm_local_raw_qwen0.5b_m2proc.json",
+    "--report",
+    "artifacts/experiments/E13_swarm_local_report_m2proc.json",
+    "--resume"
+   ],
+   "start_unix": 1792820950.4945776,
+   "status": "exit 3",
+   "returncode": 3,
+   "seconds": 60.3,
+   "log_tail": [
+    "/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.",
+    "  import pynvml  # type: ignore[import]",
+    "[E13] model qwen0.5b device cuda planned runs 3 (incl. S0b twin) plan: {\"model\": \"qwen0.5b\", \"cells\": [\"S0\", \"S1\"], \"seeds\": [1], \"cfg\": {\"rounds\": 6, \"workers\": 2, \"inner\": 20, \"seq_len\": 256, \"micro_batch\": 4, \"eval_seqs\": 16, \"eval_batch\": 4, \"smoke\": false}, \"runs\": 2, \"inner_steps_per_run\": 240, \"inner_steps_total\": 480, \"rounds_per_run\": 6, \"tokens_per_worker_per_run\": 122880, \"assumed_sec_per_inner_step\": 0.45, \"assumed_sec_per_eval\": 3.0, \"assumed_sec_process_start\": 20.0, \"breakdown_s\": {\"inner_steps_s\": 216.0, \"eval_s\": 18.0, \"process_start_s\": 30.0, \"data_prep_once_s\": 120.0, \"straggler_wait_K_eq_M_s\": 0.0, \"diagnostic_twin_S0b_s\": 127.0}, \"total_s\": 511.0, \"total_hours\": 0.14}",
+    "",
+    "Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]",
+    "Loading weights:  18%|\u2588\u258a        | 52/290 [00:00<00:00, 472.46it/s]",
+    "Loading weights:  43%|\u2588\u2588\u2588\u2588\u258e     | 124/290 [00:00<00:00, 610.81it/s]",
+    "Loading weights:  64%|\u2588\u2588\u2588\u2588\u2588\u2588\u258d   | 186/290 [00:00<00:00, 555.73it/s]",
+    "Loading weights:  84%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258d | 245/290 [00:00<00:00, 558.49it/s]",
+    "Loading weights: 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 290/290 [00:00<00:00, 597.21it/s]",
+    "aborted by registered fail-fast rule: S0 mixture held-out loss dropped 0.0253 nats by round 3 (< 0.05): the sequential reference does not learn",
+    "E13 DONE model=qwen0.5b cells_ok=0 cells_failed=0 report=artifacts/experiments/E13_swarm_local_report_m2proc.json status=aborted"
+   ]
+  },
+  {
+   "name": "E13c_qwen0.5b_rotstraggle",
+   "argv": [
+    "scripts/run_experiment_E13_swarm_local.py",
+    "--model",
+    "qwen0.5b",
+    "--cells",
+    "S0,S2",
+    "--seeds",
+    "1,2,3",
+    "--straggle",
+    "3:1:2.0;2:3:2.0;1:5:2.0",
+    "--out",
+    "artifacts/experiments/E13_swarm_local_raw_qwen0.5b_rotstraggle.json",
+    "--report",
+    "artifacts/experiments/E13_swarm_local_report_rotstraggle.json",
+    "--resume"
+   ],
+   "start_unix": 1792821010.780083,
+   "status": "exit 1",
+   "returncode": 1,
+   "seconds": 924.0,
+   "log_tail": [
+    "Loading weights:  27%|\u2588\u2588\u258b       | 77/290 [00:00<00:00, 766.82it/s]",
+    "Loading weights:  53%|\u2588\u2588\u2588\u2588\u2588\u258e    | 154/290 [00:00<00:00, 763.13it/s]",
+    "Loading weights:  83%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258e | 242/290 [00:00<00:00, 811.10it/s]",
+    "Loading weights: 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 290/290 [00:00<00:00, 776.53it/s]",
+    "seed 3 S0 sync_baseline  final 2.2308 (init 2.3653) admitted/round [4, 4, 4, 4, 4, 4] late 0 up 0B 124.69s",
+    "[E13] memory preflight: process hosting needs 20.09 GiB (M=4 x (4.57 + 0.45)) > free 13.76 GiB: FALLING BACK to thread hosting (needs 5.07 GiB)",
+    "[E13 hb] qwen0.5b S2 seed 3 t=60s round 4/6 admitted-so-far [3] of effective K 2, alive [0, 1, 2, 3], evals [0] of [0, 3, 6], late 4",
+    "seed 3 S2 swarm_all_on   final 2.3140 (init 2.3653) admitted/round [2, 2, 2, 2, 2, 2] late 10 up 4315025B 125.21s",
+    "{",
+    "  \"controls_all_passed\": false,",
+    "  \"runs\": 6,",
+    "  \"elapsed_s\": 920.53,",
+    "  \"receipt\": \"c0bf2afa5b29d7fa2239943a5cf2067beb384789d414b5f07d464521e9616c9c\"",
+    "}",
+    "E13 DONE model=qwen0.5b cells_ok=6 cells_failed=0 report=artifacts/experiments/E13_swarm_local_report_rotstraggle.json"
+   ]
+  },
+  {
+   "name": "E13_qwen0.5b_m2proc_v2",
+   "argv": [
+    "scripts/run_experiment_E13_swarm_local.py",
+    "--model",
+    "qwen0.5b",
+    "--workers",
+    "2",
+    "--peer-hosting",
+    "process",
+    "--cells",
+    "S0,S1",
+    "--seeds",
+    "1",
+    "--learning-gate",
+    "0.0",
+    "--out",
+    "artifacts/experiments/E13_swarm_local_raw_qwen0.5b_m2proc.json",
+    "--report",
+    "artifacts/experiments/E13_swarm_local_report_m2proc.json",
+    "--resume"
+   ],
+   "start_unix": 1792821934.820976,
+   "status": "exit 1",
+   "returncode": 1,
+   "seconds": 231.0,
+   "log_tail": [
+    "Loading weights:  18%|\u2588\u258a        | 53/290 [00:00<00:00, 514.61it/s]",
+    "Loading weights:  40%|\u2588\u2588\u2588\u2588      | 117/290 [00:00<00:00, 563.53it/s]",
+    "Loading weights:  62%|\u2588\u2588\u2588\u2588\u2588\u2588\u258f   | 179/290 [00:00<00:00, 576.22it/s]",
+    "Loading weights:  82%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258f | 237/290 [00:00<00:00, 570.17it/s]",
+    "Loading weights: 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 290/290 [00:00<00:00, 588.66it/s]",
+    "seed 1 S0b identity noise floor {'available': True, 'max_abs_diff': 0.0, 'bit_identical': True, 'twin_final_loss': 2.3666575253009796, 'note': 'diagnostic only; the identity rule stays S1 vs S0 <= 1e-6'}",
+    "[E13 hb] qwen0.5b S1 seed 1 t=60s round 6/6 admitted-so-far [] of effective K 2, alive [0, 1], evals [0, 3] of [0, 3, 6], late 0",
+    "seed 1 S1 swarm_identity final 2.3667 (init 2.3954) admitted/round [2, 2, 2, 2, 2, 2] late 0 up 25952256B 77.72s",
+    "{",
+    "  \"controls_all_passed\": false,",
+    "  \"runs\": 2,",
+    "  \"elapsed_s\": 227.12,",
+    "  \"receipt\": \"7a39ae2de97ce2da644b3b21dfa60c119f8eedfa0a9fe4d90f65b1e7e7259aab\"",
+    "}",
+    "E13 DONE model=qwen0.5b cells_ok=2 cells_failed=0 report=artifacts/experiments/E13_swarm_local_report_m2proc.json"
+   ]
+  },
+  {
+   "name": "E13_granite1b_v2",
+   "argv": [
+    "scripts/run_experiment_E13_swarm_local.py",
+    "--model",
+    "granite1b",
+    "--experts-impl",
+    "grouped_mm",
+    "--no-grad-ckpt",
+    "--peer-hosting",
+    "thread",
+    "--cells",
+    "S0,S1,S2",
+    "--seeds",
+    "1,2,3",
+    "--report",
+    "artifacts/experiments/E13_swarm_local_report_granite1b.json",
+    "--resume"
+   ],
+   "start_unix": 1792822165.7870202,
+   "status": "killed at deadline",
+   "returncode": -9,
+   "seconds": 2465.6,
+   "log_tail": [
+    "",
+    "Loading weights:   0%|          | 0/218 [00:00<?, ?it/s]",
+    "Loading weights:   5%|\u258c         | 11/218 [00:00<00:02, 95.05it/s]",
+    "Loading weights:  13%|\u2588\u258e        | 29/218 [00:00<00:01, 123.28it/s]",
+    "Loading weights:  22%|\u2588\u2588\u258f       | 47/218 [00:00<00:01, 130.58it/s]",
+    "Loading weights:  30%|\u2588\u2588\u2589       | 65/218 [00:00<00:01, 136.96it/s]",
+    "Loading weights:  36%|\u2588\u2588\u2588\u258c      | 79/218 [00:00<00:01, 135.50it/s]",
+    "Loading weights:  46%|\u2588\u2588\u2588\u2588\u258b     | 101/218 [00:00<00:00, 140.25it/s]",
+    "Loading weights:  55%|\u2588\u2588\u2588\u2588\u2588\u258d    | 119/218 [00:00<00:00, 139.46it/s]",
+    "Loading weights:  63%|\u2588\u2588\u2588\u2588\u2588\u2588\u258e   | 137/218 [00:00<00:00, 143.32it/s]",
+    "Loading weights:  71%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588   | 155/218 [00:01<00:00, 141.47it/s]",
+    "Loading weights:  79%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2589  | 173/218 [00:01<00:00, 141.29it/s]",
+    "Loading weights:  88%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258a | 191/218 [00:01<00:00, 138.85it/s]",
+    "Loading weights:  96%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u258c| 209/218 [00:01<00:00, 146.67it/s]",
+    "Loading weights: 100%|\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588| 218/218 [00:01<00:00, 145.34it/s]"
+   ]
+  },
+  {
+   "name": "E11b_qwen0.5b_code_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--dataset",
+    "code"
+   ],
+   "status": "not started (deadline reached)"
+  },
+  {
+   "name": "E11b_qwen7b_code_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b",
+    "--dataset",
+    "code"
+   ],
+   "status": "not started (deadline reached)"
+  },
+  {
+   "name": "E11b_gemma4-e4b_code_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "gemma4-e4b",
+    "--dataset",
+    "code"
+   ],
+   "status": "not started (deadline reached)"
+  },
+  {
+   "name": "E11b_qwen0.5b_gsm8k_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--dataset",
+    "gsm8k"
+   ],
+   "status": "not started (deadline reached)"
+  },
+  {
+   "name": "E11b_qwen7b_gsm8k_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b",
+    "--dataset",
+    "gsm8k"
+   ],
+   "status": "not started (deadline reached)"
+  },
+  {
+   "name": "E11b_qwen0.5b_news_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--dataset",
+    "news"
+   ],
+   "status": "not started (deadline reached)"
+  },
+  {
+   "name": "E11b_qwen7b_news_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b",
+    "--dataset",
+    "news"
+   ],
+   "status": "not started (deadline reached)"
+  },
+  {
+   "name": "E11b_qwen0.5b_fiction_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--dataset",
+    "fiction"
+   ],
+   "status": "not started (deadline reached)"
+  },
+  {
+   "name": "E11b_qwen7b_fiction_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b",
+    "--dataset",
+    "fiction"
+   ],
+   "status": "not started (deadline reached)"
+  },
+  {
+   "name": "E11b_qwen0.5b_pubmed_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--dataset",
+    "pubmed"
+   ],
+   "status": "not started (deadline reached)"
+  },
+  {
+   "name": "E11b_qwen7b_pubmed_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b",
+    "--dataset",
+    "pubmed"
+   ],
+   "status": "not started (deadline reached)"
+  },
+  {
+   "name": "E11b_qwen0.5b_wiki-fr_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--dataset",
+    "wiki-fr"
+   ],
+   "status": "not started (deadline reached)"
+  },
+  {
+   "name": "E11b_qwen7b_wiki-fr_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b",
+    "--dataset",
+    "wiki-fr"
+   ],
+   "status": "not started (deadline reached)"
+  },
+  {
+   "name": "E11b_gemma4-e4b_gsm8k_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "gemma4-e4b",
+    "--dataset",
+    "gsm8k"
+   ],
+   "status": "not started (deadline reached)"
+  },
+  {
+   "name": "E11b_qwen0.5b_wikitext2_w4096",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--window",
+    "4096",
+    "--windows-per-seed",
+    "4"
+   ],
+   "status": "not started (deadline reached)"
+  },
+  {
+   "name": "E11b_gemma4-e4b_wikitext2_w4096",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "gemma4-e4b",
+    "--window",
+    "4096",
+    "--windows-per-seed",
+    "4"
+   ],
+   "status": "not started (deadline reached)"
+  },
+  {
+   "name": "E11b_aggregate",
+   "argv": [
+    "scripts/aggregate_E11b_sweep.py"
+   ],
+   "status": "not started (deadline reached)"
+  }
+ ],
+ "gpu_samples": 1200,
+ "gpu_util_mean_pct": 64.3,
+ "gpu_util_by_job": {
+  "E11_gemma4-e4b": 26.8,
+  "E11_qwen0.5b": 26.0,
+  "E13_granite_step_bench": 34.0,
+  "E13c_qwen0.5b_rotstraggle": 89.7,
+  "E11b_qwen7b_fineweb-edu_w1024": 76.6,
+  "E11b_qwen0.5b_fineweb-edu_w1024": 64.5,
+  "E13_qwen0.5b_m2proc_v2": 72.4,
+  "E10b_amended": 98.5,
+  "E11_qwen0.5b_retry": 72.9,
+  "E13_granite1b": 28.4,
+  "E11_gemma4-e4b_retry": 97.7,
+  "E10b_lattice_05b": 99.7,
+  "E12_replay_retry": 10.6,
+  "E13_granite3b": 34.1,
+  "E12_replay": 0.0,
+  "E13_qwen0.5b": 86.1,
+  "E11b_gemma4-e4b_fineweb-edu_w1024": 90.6,
+  "E11_qwen7b_retry": 73.2,
+  "E13_granite1b_v2": 47.6,
+  "E11_qwen7b": 31.3,
+  "E13_qwen0.5b_m2proc": 43.5
+ },
+ "gpu_mem_peak_gib": 14.81,
+ "gpu_trace": [
+  {
+   "t": 1792788631.6,
+   "job": "E11_qwen0.5b",
+   "util_pct": 0,
+   "mem_used_gib": 0.44,
+   "power_w": 27.6
+  },
+  {
+   "t": 1792788751.6,
+   "job": "E11_qwen7b",
+   "util_pct": 43,
+   "mem_used_gib": 13.92,
+   "power_w": 44.9
+  },
+  {
+   "t": 1792788871.7,
+   "job": "E11_gemma4-e4b",
+   "util_pct": 0,
+   "mem_used_gib": 2.15,
+   "power_w": 27.7
+  },
+  {
+   "t": 1792788991.7,
+   "job": "E11_gemma4-e4b",
+   "util_pct": 0,
+   "mem_used_gib": 8.78,
+   "power_w": 27.7
+  },
+  {
+   "t": 1792789111.7,
+   "job": "E11_gemma4-e4b",
+   "util_pct": 62,
+   "mem_used_gib": 9.72,
+   "power_w": 63.9
+  },
+  {
+   "t": 1792789231.7,
+   "job": "E11_qwen0.5b_retry",
+   "util_pct": 98,
+   "mem_used_gib": 2.05,
+   "power_w": 72.3
+  },
+  {
+   "t": 1792789351.7,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 10.35,
+   "power_w": 62.9
+  },
+  {
+   "t": 1792789471.8,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 66.9
+  },
+  {
+   "t": 1792789591.8,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 66.9
+  },
+  {
+   "t": 1792789711.8,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 42.4
+  },
+  {
+   "t": 1792789831.9,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 66.4
+  },
+  {
+   "t": 1792789951.9,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 71.9
+  },
+  {
+   "t": 1792790071.9,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 66.8
+  },
+  {
+   "t": 1792790191.9,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 76.3
+  },
+  {
+   "t": 1792790312.0,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 63.7
+  },
+  {
+   "t": 1792790432.0,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 66.2
+  },
+  {
+   "t": 1792790552.0,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 84,
+   "mem_used_gib": 10.43,
+   "power_w": 38.8
+  },
+  {
+   "t": 1792790672.0,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 69.0
+  },
+  {
+   "t": 1792790792.1,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 78.1
+  },
+  {
+   "t": 1792790912.1,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 96,
+   "mem_used_gib": 10.43,
+   "power_w": 74.0
+  },
+  {
+   "t": 1792791032.1,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 57.3
+  },
+  {
+   "t": 1792791152.1,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 79.6
+  },
+  {
+   "t": 1792791272.2,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 84.3
+  },
+  {
+   "t": 1792791392.2,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 68.7
+  },
+  {
+   "t": 1792791512.2,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 97,
+   "mem_used_gib": 10.43,
+   "power_w": 69.1
+  },
+  {
+   "t": 1792791632.3,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 66.7
+  },
+  {
+   "t": 1792791752.3,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 67.5
+  },
+  {
+   "t": 1792791872.3,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 70.0
+  },
+  {
+   "t": 1792791992.3,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 50.1
+  },
+  {
+   "t": 1792792112.4,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 71.0
+  },
+  {
+   "t": 1792792232.4,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 96,
+   "mem_used_gib": 10.43,
+   "power_w": 71.2
+  },
+  {
+   "t": 1792792352.4,
+   "job": "E11_gemma4-e4b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 66.0
+  },
+  {
+   "t": 1792792472.4,
+   "job": "E11_qwen7b_retry",
+   "util_pct": 0,
+   "mem_used_gib": 13.71,
+   "power_w": 31.0
+  },
+  {
+   "t": 1792792592.5,
+   "job": "E11_qwen7b_retry",
+   "util_pct": 49,
+   "mem_used_gib": 13.94,
+   "power_w": 53.6
+  },
+  {
+   "t": 1792792712.5,
+   "job": "E11_qwen7b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 14.81,
+   "power_w": 64.4
+  },
+  {
+   "t": 1792792832.5,
+   "job": "E11_qwen7b_retry",
+   "util_pct": 70,
+   "mem_used_gib": 14.81,
+   "power_w": 65.8
+  },
+  {
+   "t": 1792792952.6,
+   "job": "E11_qwen7b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 14.81,
+   "power_w": 62.0
+  },
+  {
+   "t": 1792793072.6,
+   "job": "E11_qwen7b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 14.81,
+   "power_w": 67.9
+  },
+  {
+   "t": 1792793192.6,
+   "job": "E11_qwen7b_retry",
+   "util_pct": 100,
+   "mem_used_gib": 14.81,
+   "power_w": 63.4
+  },
+  {
+   "t": 1792793312.6,
+   "job": "E11_qwen7b_retry",
+   "util_pct": 93,
+   "mem_used_gib": 14.81,
+   "power_w": 63.2
+  },
+  {
+   "t": 1792793432.7,
+   "job": "E10b_lattice_05b",
+   "util_pct": 100,
+   "mem_used_gib": 3.84,
+   "power_w": 67.9
+  },
+  {
+   "t": 1792793552.7,
+   "job": "E10b_lattice_05b",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 66.6
+  },
+  {
+   "t": 1792793672.7,
+   "job": "E10b_lattice_05b",
+   "util_pct": 99,
+   "mem_used_gib": 7.2,
+   "power_w": 67.5
+  },
+  {
+   "t": 1792793792.7,
+   "job": "E10b_lattice_05b",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 67.6
+  },
+  {
+   "t": 1792793912.8,
+   "job": "E10b_lattice_05b",
+   "util_pct": 99,
+   "mem_used_gib": 7.2,
+   "power_w": 66.1
+  },
+  {
+   "t": 1792794032.8,
+   "job": "E10b_lattice_05b",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 67.5
+  },
+  {
+   "t": 1792794152.8,
+   "job": "E10b_lattice_05b",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 67.5
+  },
+  {
+   "t": 1792794272.9,
+   "job": "E10b_lattice_05b",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 67.4
+  },
+  {
+   "t": 1792794392.9,
+   "job": "E10b_lattice_05b",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 67.4
+  },
+  {
+   "t": 1792794512.9,
+   "job": "E10b_lattice_05b",
+   "util_pct": 99,
+   "mem_used_gib": 7.2,
+   "power_w": 66.8
+  },
+  {
+   "t": 1792794632.9,
+   "job": "E10b_lattice_05b",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 67.2
+  },
+  {
+   "t": 1792794753.0,
+   "job": "E10b_lattice_05b",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 67.3
+  },
+  {
+   "t": 1792794873.0,
+   "job": "E12_replay_retry",
+   "util_pct": 52,
+   "mem_used_gib": 3.21,
+   "power_w": 96.9
+  },
+  {
+   "t": 1792794993.0,
+   "job": "E12_replay_retry",
+   "util_pct": 47,
+   "mem_used_gib": 3.22,
+   "power_w": 45.2
+  },
+  {
+   "t": 1792795113.0,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 30.8
+  },
+  {
+   "t": 1792795233.1,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 30.7
+  },
+  {
+   "t": 1792795353.1,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 30.5
+  },
+  {
+   "t": 1792795473.1,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 29.6
+  },
+  {
+   "t": 1792795593.1,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 29.0
+  },
+  {
+   "t": 1792795713.1,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.9
+  },
+  {
+   "t": 1792795833.2,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.8
+  },
+  {
+   "t": 1792795953.2,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.7
+  },
+  {
+   "t": 1792796073.2,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.6
+  },
+  {
+   "t": 1792796193.2,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.5
+  },
+  {
+   "t": 1792796313.2,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.7
+  },
+  {
+   "t": 1792796433.2,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.6
+  },
+  {
+   "t": 1792796553.3,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.5
+  },
+  {
+   "t": 1792796673.3,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.6
+  },
+  {
+   "t": 1792796793.3,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.5
+  },
+  {
+   "t": 1792796913.3,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.6
+  },
+  {
+   "t": 1792797033.3,
+   "job": "E12_replay_retry",
+   "util_pct": 100,
+   "mem_used_gib": 5.92,
+   "power_w": 69.6
+  },
+  {
+   "t": 1792797153.4,
+   "job": "E12_replay_retry",
+   "util_pct": 100,
+   "mem_used_gib": 5.81,
+   "power_w": 67.2
+  },
+  {
+   "t": 1792797273.4,
+   "job": "E12_replay_retry",
+   "util_pct": 100,
+   "mem_used_gib": 5.79,
+   "power_w": 68.8
+  },
+  {
+   "t": 1792797393.4,
+   "job": "E12_replay_retry",
+   "util_pct": 100,
+   "mem_used_gib": 5.79,
+   "power_w": 69.1
+  },
+  {
+   "t": 1792797513.4,
+   "job": "E12_replay_retry",
+   "util_pct": 100,
+   "mem_used_gib": 5.79,
+   "power_w": 67.4
+  },
+  {
+   "t": 1792797633.4,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 30.4
+  },
+  {
+   "t": 1792797753.5,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 30.4
+  },
+  {
+   "t": 1792797873.5,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 30.1
+  },
+  {
+   "t": 1792797993.5,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 29.4
+  },
+  {
+   "t": 1792798113.5,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 29.0
+  },
+  {
+   "t": 1792798233.5,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.8
+  },
+  {
+   "t": 1792798353.6,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.7
+  },
+  {
+   "t": 1792798473.6,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.7
+  },
+  {
+   "t": 1792798593.6,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.6
+  },
+  {
+   "t": 1792798713.6,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.5
+  },
+  {
+   "t": 1792798833.6,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.7
+  },
+  {
+   "t": 1792798953.6,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.5
+  },
+  {
+   "t": 1792799073.7,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.7
+  },
+  {
+   "t": 1792799193.7,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.6
+  },
+  {
+   "t": 1792799313.7,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.5
+  },
+  {
+   "t": 1792799433.7,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.7
+  },
+  {
+   "t": 1792799553.7,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.6
+  },
+  {
+   "t": 1792799673.8,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.5
+  },
+  {
+   "t": 1792799793.8,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.6
+  },
+  {
+   "t": 1792799913.8,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.5
+  },
+  {
+   "t": 1792800033.8,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.7
+  },
+  {
+   "t": 1792800153.8,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.6
+  },
+  {
+   "t": 1792800273.9,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.5
+  },
+  {
+   "t": 1792800393.9,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.5
+  },
+  {
+   "t": 1792800513.9,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.6
+  },
+  {
+   "t": 1792800633.9,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.7
+  },
+  {
+   "t": 1792800753.9,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.5
+  },
+  {
+   "t": 1792800874.0,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.5
+  },
+  {
+   "t": 1792800994.0,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.5
+  },
+  {
+   "t": 1792801114.0,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.6
+  },
+  {
+   "t": 1792801234.0,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.6
+  },
+  {
+   "t": 1792801354.0,
+   "job": "E12_replay_retry",
+   "util_pct": 0,
+   "mem_used_gib": 0.74,
+   "power_w": 28.5
+  },
+  {
+   "t": 1792801474.1,
+   "job": "E10b_amended",
+   "util_pct": 99,
+   "mem_used_gib": 7.19,
+   "power_w": 67.3
+  },
+  {
+   "t": 1792801594.1,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 67.7
+  },
+  {
+   "t": 1792801714.1,
+   "job": "E10b_amended",
+   "util_pct": 99,
+   "mem_used_gib": 7.2,
+   "power_w": 65.6
+  },
+  {
+   "t": 1792801834.1,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 66.0
+  },
+  {
+   "t": 1792801954.2,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 65.8
+  },
+  {
+   "t": 1792802074.2,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 68.3
+  },
+  {
+   "t": 1792802194.2,
+   "job": "E10b_amended",
+   "util_pct": 99,
+   "mem_used_gib": 7.2,
+   "power_w": 66.6
+  },
+  {
+   "t": 1792802314.2,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 66.8
+  },
+  {
+   "t": 1792802434.3,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 66.1
+  },
+  {
+   "t": 1792802554.3,
+   "job": "E10b_amended",
+   "util_pct": 99,
+   "mem_used_gib": 7.2,
+   "power_w": 67.0
+  },
+  {
+   "t": 1792802674.3,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 66.1
+  },
+  {
+   "t": 1792802794.3,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 66.8
+  },
+  {
+   "t": 1792802914.4,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 67.2
+  },
+  {
+   "t": 1792803034.4,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 66.6
+  },
+  {
+   "t": 1792803154.4,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 67.1
+  },
+  {
+   "t": 1792803274.4,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 66.6
+  },
+  {
+   "t": 1792803394.5,
+   "job": "E10b_amended",
+   "util_pct": 99,
+   "mem_used_gib": 7.2,
+   "power_w": 67.3
+  },
+  {
+   "t": 1792803514.5,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 66.2
+  },
+  {
+   "t": 1792803634.5,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 67.4
+  },
+  {
+   "t": 1792803754.5,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 67.1
+  },
+  {
+   "t": 1792803874.6,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 67.6
+  },
+  {
+   "t": 1792803994.6,
+   "job": "E10b_amended",
+   "util_pct": 99,
+   "mem_used_gib": 7.2,
+   "power_w": 67.1
+  },
+  {
+   "t": 1792804114.6,
+   "job": "E10b_amended",
+   "util_pct": 99,
+   "mem_used_gib": 7.2,
+   "power_w": 66.4
+  },
+  {
+   "t": 1792804234.6,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 67.7
+  },
+  {
+   "t": 1792804354.7,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 66.2
+  },
+  {
+   "t": 1792804474.7,
+   "job": "E10b_amended",
+   "util_pct": 99,
+   "mem_used_gib": 7.2,
+   "power_w": 66.4
+  },
+  {
+   "t": 1792804594.7,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 68.0
+  },
+  {
+   "t": 1792804714.8,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 67.2
+  },
+  {
+   "t": 1792804834.8,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 66.8
+  },
+  {
+   "t": 1792804954.8,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 65.7
+  },
+  {
+   "t": 1792805074.8,
+   "job": "E10b_amended",
+   "util_pct": 99,
+   "mem_used_gib": 7.2,
+   "power_w": 66.3
+  },
+  {
+   "t": 1792805194.9,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 68.0
+  },
+  {
+   "t": 1792805314.9,
+   "job": "E10b_amended",
+   "util_pct": 99,
+   "mem_used_gib": 7.2,
+   "power_w": 67.7
+  },
+  {
+   "t": 1792805434.9,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 67.5
+  },
+  {
+   "t": 1792805554.9,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 68.0
+  },
+  {
+   "t": 1792805675.0,
+   "job": "E10b_amended",
+   "util_pct": 99,
+   "mem_used_gib": 7.2,
+   "power_w": 66.2
+  },
+  {
+   "t": 1792805795.0,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 66.6
+  },
+  {
+   "t": 1792805915.0,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 67.2
+  },
+  {
+   "t": 1792806035.1,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 67.3
+  },
+  {
+   "t": 1792806155.1,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 65.7
+  },
+  {
+   "t": 1792806275.1,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 68.4
+  },
+  {
+   "t": 1792806395.1,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 66.2
+  },
+  {
+   "t": 1792806515.2,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 65.3
+  },
+  {
+   "t": 1792806635.2,
+   "job": "E10b_amended",
+   "util_pct": 95,
+   "mem_used_gib": 7.2,
+   "power_w": 66.2
+  },
+  {
+   "t": 1792806755.2,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 66.4
+  },
+  {
+   "t": 1792806875.2,
+   "job": "E10b_amended",
+   "util_pct": 100,
+   "mem_used_gib": 7.2,
+   "power_w": 67.0
+  },
+  {
+   "t": 1792806995.3,
+   "job": "E11b_qwen0.5b_fineweb-edu_w1024",
+   "util_pct": 0,
+   "mem_used_gib": 1.47,
+   "power_w": 30.8
+  },
+  {
+   "t": 1792807115.3,
+   "job": "E11b_qwen0.5b_fineweb-edu_w1024",
+   "util_pct": 39,
+   "mem_used_gib": 1.57,
+   "power_w": 44.7
+  },
+  {
+   "t": 1792807235.3,
+   "job": "E11b_qwen0.5b_fineweb-edu_w1024",
+   "util_pct": 99,
+   "mem_used_gib": 2.05,
+   "power_w": 60.9
+  },
+  {
+   "t": 1792807355.3,
+   "job": "E11b_qwen7b_fineweb-edu_w1024",
+   "util_pct": 0,
+   "mem_used_gib": 13.71,
+   "power_w": 30.9
+  },
+  {
+   "t": 1792807475.3,
+   "job": "E11b_qwen7b_fineweb-edu_w1024",
+   "util_pct": 51,
+   "mem_used_gib": 13.94,
+   "power_w": 54.6
+  },
+  {
+   "t": 1792807595.4,
+   "job": "E11b_qwen7b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 14.81,
+   "power_w": 62.9
+  },
+  {
+   "t": 1792807715.4,
+   "job": "E11b_qwen7b_fineweb-edu_w1024",
+   "util_pct": 73,
+   "mem_used_gib": 14.81,
+   "power_w": 64.7
+  },
+  {
+   "t": 1792807835.4,
+   "job": "E11b_qwen7b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 14.81,
+   "power_w": 64.8
+  },
+  {
+   "t": 1792807955.5,
+   "job": "E11b_qwen7b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 14.81,
+   "power_w": 66.5
+  },
+  {
+   "t": 1792808075.5,
+   "job": "E11b_qwen7b_fineweb-edu_w1024",
+   "util_pct": 73,
+   "mem_used_gib": 14.81,
+   "power_w": 67.5
+  },
+  {
+   "t": 1792808195.5,
+   "job": "E11b_qwen7b_fineweb-edu_w1024",
+   "util_pct": 75,
+   "mem_used_gib": 14.81,
+   "power_w": 58.6
+  },
+  {
+   "t": 1792808315.5,
+   "job": "E11b_qwen7b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 14.81,
+   "power_w": 68.4
+  },
+  {
+   "t": 1792808435.6,
+   "job": "E11b_qwen7b_fineweb-edu_w1024",
+   "util_pct": 77,
+   "mem_used_gib": 14.81,
+   "power_w": 39.7
+  },
+  {
+   "t": 1792808555.6,
+   "job": "E11b_qwen7b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 14.81,
+   "power_w": 67.9
+  },
+  {
+   "t": 1792808675.6,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 0,
+   "mem_used_gib": 1.8,
+   "power_w": 30.3
+  },
+  {
+   "t": 1792808795.6,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 0,
+   "mem_used_gib": 6.72,
+   "power_w": 30.5
+  },
+  {
+   "t": 1792808915.7,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 0,
+   "mem_used_gib": 9.21,
+   "power_w": 29.8
+  },
+  {
+   "t": 1792809035.7,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 64,
+   "mem_used_gib": 9.72,
+   "power_w": 64.4
+  },
+  {
+   "t": 1792809155.7,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 56.0
+  },
+  {
+   "t": 1792809275.7,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 68.4
+  },
+  {
+   "t": 1792809395.8,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 69.3
+  },
+  {
+   "t": 1792809517.3,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 0,
+   "mem_used_gib": 10.43,
+   "power_w": 31.1
+  },
+  {
+   "t": 1792809637.6,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 54,
+   "mem_used_gib": 10.43,
+   "power_w": 38.1
+  },
+  {
+   "t": 1792809757.7,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 70.5
+  },
+  {
+   "t": 1792809877.7,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 96,
+   "mem_used_gib": 10.43,
+   "power_w": 66.6
+  },
+  {
+   "t": 1792809997.7,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 65.7
+  },
+  {
+   "t": 1792810117.7,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 67.2
+  },
+  {
+   "t": 1792810237.8,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 54.9
+  },
+  {
+   "t": 1792810357.8,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 67.5
+  },
+  {
+   "t": 1792810477.8,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 73.6
+  },
+  {
+   "t": 1792810597.8,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 98,
+   "mem_used_gib": 10.43,
+   "power_w": 73.2
+  },
+  {
+   "t": 1792810717.9,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 67.0
+  },
+  {
+   "t": 1792810837.9,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 66.6
+  },
+  {
+   "t": 1792810957.9,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 67.1
+  },
+  {
+   "t": 1792811078.0,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 67.8
+  },
+  {
+   "t": 1792811198.0,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 54.7
+  },
+  {
+   "t": 1792811318.0,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 60.2
+  },
+  {
+   "t": 1792811438.1,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 52.1
+  },
+  {
+   "t": 1792811558.1,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 68.5
+  },
+  {
+   "t": 1792811678.1,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 68.7
+  },
+  {
+   "t": 1792811798.2,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 66.8
+  },
+  {
+   "t": 1792811918.2,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 63.7
+  },
+  {
+   "t": 1792812038.2,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 95,
+   "mem_used_gib": 10.43,
+   "power_w": 67.0
+  },
+  {
+   "t": 1792812158.3,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 64.3
+  },
+  {
+   "t": 1792812278.3,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 68.4
+  },
+  {
+   "t": 1792812398.3,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 67.2
+  },
+  {
+   "t": 1792812518.3,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 64.8
+  },
+  {
+   "t": 1792812638.4,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 75.2
+  },
+  {
+   "t": 1792812758.4,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 68.0
+  },
+  {
+   "t": 1792812878.4,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 72.7
+  },
+  {
+   "t": 1792812998.4,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 63.5
+  },
+  {
+   "t": 1792813118.5,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 61.8
+  },
+  {
+   "t": 1792813238.5,
+   "job": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "util_pct": 100,
+   "mem_used_gib": 10.43,
+   "power_w": 64.6
+  },
+  {
+   "t": 1792813358.5,
+   "job": "E13_qwen0.5b",
+   "util_pct": 97,
+   "mem_used_gib": 5.18,
+   "power_w": 64.8
+  },
+  {
+   "t": 1792813478.5,
+   "job": "E13_qwen0.5b",
+   "util_pct": 98,
+   "mem_used_gib": 5.19,
+   "power_w": 65.9
+  },
+  {
+   "t": 1792813598.6,
+   "job": "E13_qwen0.5b",
+   "util_pct": 0,
+   "mem_used_gib": 1.24,
+   "power_w": 31.5
+  },
+  {
+   "t": 1792813718.6,
+   "job": "E13_qwen0.5b",
+   "util_pct": 95,
+   "mem_used_gib": 6.33,
+   "power_w": 67.2
+  },
+  {
+   "t": 1792813838.6,
+   "job": "E13_qwen0.5b",
+   "util_pct": 93,
+   "mem_used_gib": 6.33,
+   "power_w": 71.0
+  },
+  {
+   "t": 1792813958.7,
+   "job": "E13_qwen0.5b",
+   "util_pct": 96,
+   "mem_used_gib": 6.33,
+   "power_w": 59.0
+  },
+  {
+   "t": 1792814078.7,
+   "job": "E13_qwen0.5b",
+   "util_pct": 94,
+   "mem_used_gib": 6.33,
+   "power_w": 67.4
+  },
+  {
+   "t": 1792814198.7,
+   "job": "E13_qwen0.5b",
+   "util_pct": 96,
+   "mem_used_gib": 6.33,
+   "power_w": 67.8
+  },
+  {
+   "t": 1792814318.7,
+   "job": "E13_qwen0.5b",
+   "util_pct": 97,
+   "mem_used_gib": 5.2,
+   "power_w": 67.0
+  },
+  {
+   "t": 1792814438.8,
+   "job": "E13_qwen0.5b",
+   "util_pct": 96,
+   "mem_used_gib": 6.33,
+   "power_w": 67.0
+  },
+  {
+   "t": 1792814558.8,
+   "job": "E13_qwen0.5b",
+   "util_pct": 100,
+   "mem_used_gib": 6.33,
+   "power_w": 60.4
+  },
+  {
+   "t": 1792814678.8,
+   "job": "E13_qwen0.5b",
+   "util_pct": 95,
+   "mem_used_gib": 6.33,
+   "power_w": 66.1
+  },
+  {
+   "t": 1792814798.8,
+   "job": "E13_qwen0.5b",
+   "util_pct": 99,
+   "mem_used_gib": 6.33,
+   "power_w": 66.6
+  },
+  {
+   "t": 1792814918.9,
+   "job": "E13_qwen0.5b",
+   "util_pct": 94,
+   "mem_used_gib": 6.33,
+   "power_w": 69.2
+  },
+  {
+   "t": 1792815038.9,
+   "job": "E13_qwen0.5b",
+   "util_pct": 97,
+   "mem_used_gib": 5.19,
+   "power_w": 68.2
+  },
+  {
+   "t": 1792815159.0,
+   "job": "E13_qwen0.5b",
+   "util_pct": 0,
+   "mem_used_gib": 1.24,
+   "power_w": 32.2
+  },
+  {
+   "t": 1792815279.0,
+   "job": "E13_qwen0.5b",
+   "util_pct": 97,
+   "mem_used_gib": 6.33,
+   "power_w": 64.2
+  },
+  {
+   "t": 1792815399.0,
+   "job": "E13_qwen0.5b",
+   "util_pct": 96,
+   "mem_used_gib": 6.33,
+   "power_w": 66.8
+  },
+  {
+   "t": 1792815519.0,
+   "job": "E13_qwen0.5b",
+   "util_pct": 97,
+   "mem_used_gib": 6.33,
+   "power_w": 65.1
+  },
+  {
+   "t": 1792815639.1,
+   "job": "E13_qwen0.5b",
+   "util_pct": 97,
+   "mem_used_gib": 6.33,
+   "power_w": 68.6
+  },
+  {
+   "t": 1792815759.1,
+   "job": "E13_qwen0.5b",
+   "util_pct": 98,
+   "mem_used_gib": 6.33,
+   "power_w": 63.8
+  },
+  {
+   "t": 1792815879.1,
+   "job": "E13_granite1b",
+   "util_pct": 31,
+   "mem_used_gib": 2.76,
+   "power_w": 30.4
+  },
+  {
+   "t": 1792815999.1,
+   "job": "E13_granite1b",
+   "util_pct": 29,
+   "mem_used_gib": 4.05,
+   "power_w": 32.8
+  },
+  {
+   "t": 1792816119.2,
+   "job": "E13_granite3b",
+   "util_pct": 0,
+   "mem_used_gib": 0.44,
+   "power_w": 9.9
+  },
+  {
+   "t": 1792816239.2,
+   "job": "E13_granite3b",
+   "util_pct": 26,
+   "mem_used_gib": 12.0,
+   "power_w": 51.0
+  },
+  {
+   "t": 1792816359.2,
+   "job": "E13_granite3b",
+   "util_pct": 42,
+   "mem_used_gib": 12.11,
+   "power_w": 70.6
+  },
+  {
+   "t": 1792816479.2,
+   "job": "E13_granite3b",
+   "util_pct": 42,
+   "mem_used_gib": 12.11,
+   "power_w": 70.7
+  },
+  {
+   "t": 1792816599.3,
+   "job": "E13_granite3b",
+   "util_pct": 28,
+   "mem_used_gib": 12.11,
+   "power_w": 61.8
+  },
+  {
+   "t": 1792816719.3,
+   "job": "E13_granite3b",
+   "util_pct": 30,
+   "mem_used_gib": 12.12,
+   "power_w": 55.4
+  },
+  {
+   "t": 1792816839.3,
+   "job": "E13_granite3b",
+   "util_pct": 28,
+   "mem_used_gib": 12.12,
+   "power_w": 55.4
+  },
+  {
+   "t": 1792816959.3,
+   "job": "E13_granite3b",
+   "util_pct": 37,
+   "mem_used_gib": 12.12,
+   "power_w": 54.7
+  },
+  {
+   "t": 1792817079.3,
+   "job": "E13_granite3b",
+   "util_pct": 41,
+   "mem_used_gib": 12.12,
+   "power_w": 63.9
+  },
+  {
+   "t": 1792817199.3,
+   "job": "E13_granite3b",
+   "util_pct": 42,
+   "mem_used_gib": 12.12,
+   "power_w": 67.6
+  },
+  {
+   "t": 1792817319.4,
+   "job": "E13_granite3b",
+   "util_pct": 36,
+   "mem_used_gib": 12.16,
+   "power_w": 43.5
+  },
+  {
+   "t": 1792817439.4,
+   "job": "E13_granite3b",
+   "util_pct": 40,
+   "mem_used_gib": 12.0,
+   "power_w": 62.7
+  },
+  {
+   "t": 1792817559.4,
+   "job": "E13_granite3b",
+   "util_pct": 28,
+   "mem_used_gib": 12.15,
+   "power_w": 56.8
+  },
+  {
+   "t": 1792817679.4,
+   "job": "E13_granite3b",
+   "util_pct": 31,
+   "mem_used_gib": 12.15,
+   "power_w": 45.8
+  },
+  {
+   "t": 1792817799.5,
+   "job": "E13_granite3b",
+   "util_pct": 43,
+   "mem_used_gib": 12.15,
+   "power_w": 62.4
+  },
+  {
+   "t": 1792817919.5,
+   "job": "E13_granite3b",
+   "util_pct": 42,
+   "mem_used_gib": 12.16,
+   "power_w": 58.0
+  },
+  {
+   "t": 1792818039.5,
+   "job": "E13_granite3b",
+   "util_pct": 28,
+   "mem_used_gib": 12.16,
+   "power_w": 52.8
+  },
+  {
+   "t": 1792818159.6,
+   "job": "E13_granite3b",
+   "util_pct": 28,
+   "mem_used_gib": 12.16,
+   "power_w": 57.2
+  },
+  {
+   "t": 1792818279.6,
+   "job": "E13_granite3b",
+   "util_pct": 26,
+   "mem_used_gib": 12.16,
+   "power_w": 59.8
+  },
+  {
+   "t": 1792818399.6,
+   "job": "E13_granite3b",
+   "util_pct": 27,
+   "mem_used_gib": 12.16,
+   "power_w": 54.9
+  },
+  {
+   "t": 1792818519.6,
+   "job": "E13_granite3b",
+   "util_pct": 40,
+   "mem_used_gib": 12.19,
+   "power_w": 60.9
+  },
+  {
+   "t": 1792818639.6,
+   "job": "E13_granite3b",
+   "util_pct": 42,
+   "mem_used_gib": 12.2,
+   "power_w": 61.4
+  },
+  {
+   "t": 1792818759.6,
+   "job": "E13_granite3b",
+   "util_pct": 35,
+   "mem_used_gib": 12.56,
+   "power_w": 50.6
+  },
+  {
+   "t": 1792818879.7,
+   "job": "E13_granite3b",
+   "util_pct": 40,
+   "mem_used_gib": 12.56,
+   "power_w": 49.7
+  },
+  {
+   "t": 1792818999.7,
+   "job": "E13_granite3b",
+   "util_pct": 28,
+   "mem_used_gib": 12.56,
+   "power_w": 56.7
+  },
+  {
+   "t": 1792819119.7,
+   "job": "E13_granite3b",
+   "util_pct": 28,
+   "mem_used_gib": 12.57,
+   "power_w": 59.3
+  },
+  {
+   "t": 1792819239.7,
+   "job": "E13_granite3b",
+   "util_pct": 28,
+   "mem_used_gib": 12.57,
+   "power_w": 57.2
+  },
+  {
+   "t": 1792819359.7,
+   "job": "E13_granite3b",
+   "util_pct": 28,
+   "mem_used_gib": 12.57,
+   "power_w": 56.3
+  },
+  {
+   "t": 1792819479.8,
+   "job": "E13_granite3b",
+   "util_pct": 29,
+   "mem_used_gib": 12.57,
+   "power_w": 51.5
+  },
+  {
+   "t": 1792819599.8,
+   "job": "E13_granite3b",
+   "util_pct": 36,
+   "mem_used_gib": 12.61,
+   "power_w": 56.9
+  },
+  {
+   "t": 1792819719.8,
+   "job": "E13_granite3b",
+   "util_pct": 39,
+   "mem_used_gib": 12.61,
+   "power_w": 42.3
+  },
+  {
+   "t": 1792819839.8,
+   "job": "E13_granite3b",
+   "util_pct": 31,
+   "mem_used_gib": 12.14,
+   "power_w": 63.9
+  },
+  {
+   "t": 1792819959.8,
+   "job": "E13_granite3b",
+   "util_pct": 45,
+   "mem_used_gib": 12.51,
+   "power_w": 47.1
+  },
+  {
+   "t": 1792820079.8,
+   "job": "E13_granite3b",
+   "util_pct": 42,
+   "mem_used_gib": 12.51,
+   "power_w": 52.3
+  },
+  {
+   "t": 1792820199.9,
+   "job": "E13_granite3b",
+   "util_pct": 41,
+   "mem_used_gib": 12.51,
+   "power_w": 60.1
+  },
+  {
+   "t": 1792820319.9,
+   "job": "E13_granite3b",
+   "util_pct": 39,
+   "mem_used_gib": 12.51,
+   "power_w": 53.4
+  },
+  {
+   "t": 1792820439.9,
+   "job": "E13_granite3b",
+   "util_pct": 28,
+   "mem_used_gib": 12.51,
+   "power_w": 53.6
+  },
+  {
+   "t": 1792820559.9,
+   "job": "E13_granite3b",
+   "util_pct": 38,
+   "mem_used_gib": 12.53,
+   "power_w": 57.5
+  },
+  {
+   "t": 1792820679.9,
+   "job": "E13_granite3b",
+   "util_pct": 45,
+   "mem_used_gib": 12.56,
+   "power_w": 44.1
+  },
+  {
+   "t": 1792820800.0,
+   "job": "E13_granite3b",
+   "util_pct": 38,
+   "mem_used_gib": 12.56,
+   "power_w": 41.5
+  },
+  {
+   "t": 1792820920.0,
+   "job": "E13_granite_step_bench",
+   "util_pct": 46,
+   "mem_used_gib": 7.86,
+   "power_w": 51.9
+  },
+  {
+   "t": 1792821040.0,
+   "job": "E13c_qwen0.5b_rotstraggle",
+   "util_pct": 35,
+   "mem_used_gib": 1.52,
+   "power_w": 30.2
+  },
+  {
+   "t": 1792821160.0,
+   "job": "E13c_qwen0.5b_rotstraggle",
+   "util_pct": 97,
+   "mem_used_gib": 5.18,
+   "power_w": 68.2
+  },
+  {
+   "t": 1792821280.1,
+   "job": "E13c_qwen0.5b_rotstraggle",
+   "util_pct": 97,
+   "mem_used_gib": 5.2,
+   "power_w": 69.7
+  },
+  {
+   "t": 1792821400.1,
+   "job": "E13c_qwen0.5b_rotstraggle",
+   "util_pct": 96,
+   "mem_used_gib": 6.33,
+   "power_w": 65.4
+  },
+  {
+   "t": 1792821520.1,
+   "job": "E13c_qwen0.5b_rotstraggle",
+   "util_pct": 98,
+   "mem_used_gib": 5.2,
+   "power_w": 67.8
+  },
+  {
+   "t": 1792821640.2,
+   "job": "E13c_qwen0.5b_rotstraggle",
+   "util_pct": 97,
+   "mem_used_gib": 6.33,
+   "power_w": 65.9
+  },
+  {
+   "t": 1792821760.2,
+   "job": "E13c_qwen0.5b_rotstraggle",
+   "util_pct": 97,
+   "mem_used_gib": 5.2,
+   "power_w": 69.0
+  },
+  {
+   "t": 1792821880.2,
+   "job": "E13c_qwen0.5b_rotstraggle",
+   "util_pct": 95,
+   "mem_used_gib": 6.33,
+   "power_w": 67.3
+  },
+  {
+   "t": 1792822000.3,
+   "job": "E13_qwen0.5b_m2proc_v2",
+   "util_pct": 98,
+   "mem_used_gib": 5.18,
+   "power_w": 69.9
+  },
+  {
+   "t": 1792822120.3,
+   "job": "E13_qwen0.5b_m2proc_v2",
+   "util_pct": 100,
+   "mem_used_gib": 10.63,
+   "power_w": 69.5
+  },
+  {
+   "t": 1792822240.3,
+   "job": "E13_granite1b_v2",
+   "util_pct": 55,
+   "mem_used_gib": 6.36,
+   "power_w": 65.8
+  },
+  {
+   "t": 1792822360.4,
+   "job": "E13_granite1b_v2",
+   "util_pct": 48,
+   "mem_used_gib": 6.36,
+   "power_w": 63.1
+  },
+  {
+   "t": 1792822480.4,
+   "job": "E13_granite1b_v2",
+   "util_pct": 56,
+   "mem_used_gib": 6.36,
+   "power_w": 69.4
+  },
+  {
+   "t": 1792822600.4,
+   "job": "E13_granite1b_v2",
+   "util_pct": 50,
+   "mem_used_gib": 6.38,
+   "power_w": 68.5
+  },
+  {
+   "t": 1792822720.4,
+   "job": "E13_granite1b_v2",
+   "util_pct": 30,
+   "mem_used_gib": 6.39,
+   "power_w": 36.2
+  },
+  {
+   "t": 1792822840.5,
+   "job": "E13_granite1b_v2",
+   "util_pct": 55,
+   "mem_used_gib": 6.39,
+   "power_w": 76.2
+  },
+  {
+   "t": 1792822960.6,
+   "job": "E13_granite1b_v2",
+   "util_pct": 0,
+   "mem_used_gib": 0.76,
+   "power_w": 31.7
+  },
+  {
+   "t": 1792823080.6,
+   "job": "E13_granite1b_v2",
+   "util_pct": 52,
+   "mem_used_gib": 6.63,
+   "power_w": 67.1
+  },
+  {
+   "t": 1792823200.6,
+   "job": "E13_granite1b_v2",
+   "util_pct": 51,
+   "mem_used_gib": 6.63,
+   "power_w": 68.8
+  },
+  {
+   "t": 1792823320.6,
+   "job": "E13_granite1b_v2",
+   "util_pct": 59,
+   "mem_used_gib": 6.63,
+   "power_w": 72.0
+  },
+  {
+   "t": 1792823440.7,
+   "job": "E13_granite1b_v2",
+   "util_pct": 57,
+   "mem_used_gib": 6.63,
+   "power_w": 57.8
+  },
+  {
+   "t": 1792823560.7,
+   "job": "E13_granite1b_v2",
+   "util_pct": 59,
+   "mem_used_gib": 6.63,
+   "power_w": 60.5
+  },
+  {
+   "t": 1792823680.7,
+   "job": "E13_granite1b_v2",
+   "util_pct": 60,
+   "mem_used_gib": 6.39,
+   "power_w": 63.6
+  },
+  {
+   "t": 1792823800.7,
+   "job": "E13_granite1b_v2",
+   "util_pct": 54,
+   "mem_used_gib": 6.39,
+   "power_w": 67.0
+  },
+  {
+   "t": 1792823920.7,
+   "job": "E13_granite1b_v2",
+   "util_pct": 57,
+   "mem_used_gib": 6.63,
+   "power_w": 65.8
+  },
+  {
+   "t": 1792824040.8,
+   "job": "E13_granite1b_v2",
+   "util_pct": 50,
+   "mem_used_gib": 6.63,
+   "power_w": 60.8
+  },
+  {
+   "t": 1792824160.8,
+   "job": "E13_granite1b_v2",
+   "util_pct": 60,
+   "mem_used_gib": 6.63,
+   "power_w": 72.1
+  },
+  {
+   "t": 1792824280.8,
+   "job": "E13_granite1b_v2",
+   "util_pct": 57,
+   "mem_used_gib": 6.63,
+   "power_w": 72.8
+  },
+  {
+   "t": 1792824400.8,
+   "job": "E13_granite1b_v2",
+   "util_pct": 59,
+   "mem_used_gib": 6.63,
+   "power_w": 66.8
+  },
+  {
+   "t": 1792824520.9,
+   "job": "E13_granite1b_v2",
+   "util_pct": 56,
+   "mem_used_gib": 6.38,
+   "power_w": 65.1
+  }
+ ],
+ "finished_unix": 1792824631.4661875,
+ "wall_hours": 10.0
+}

@@ -1,0 +1,377 @@
+{
+ "campaign": "T4 follow-up (extension) after the 10-hour campaign: jobs cut by its deadline + Gemma on the E11b amendment-1 datasets",
+ "jobs": [
+  {
+   "name": "E13_granite1b_v2",
+   "argv": [
+    "scripts/run_experiment_E13_swarm_local.py",
+    "--model",
+    "granite1b",
+    "--experts-impl",
+    "grouped_mm",
+    "--no-grad-ckpt",
+    "--peer-hosting",
+    "thread",
+    "--cells",
+    "S0,S1,S2",
+    "--seeds",
+    "1,2,3",
+    "--report",
+    "artifacts/experiments/E13_swarm_local_report_granite1b.json",
+    "--resume"
+   ],
+   "output": null
+  },
+  {
+   "name": "E14_qwen0.5b",
+   "argv": [
+    "scripts/run_experiment_E13_swarm_local.py",
+    "--model",
+    "qwen0.5b",
+    "--cells",
+    "S0,S2,S6,S7",
+    "--seeds",
+    "1,2,3",
+    "--out",
+    "artifacts/experiments/E14_raw_qwen0.5b.json",
+    "--report",
+    "artifacts/experiments/E14_report_qwen0.5b.json",
+    "--resume"
+   ],
+   "output": null
+  },
+  {
+   "name": "E13d_qwen0.5b_m6",
+   "argv": [
+    "scripts/run_experiment_E13_swarm_local.py",
+    "--model",
+    "qwen0.5b",
+    "--workers",
+    "6",
+    "--cells",
+    "S0,S1,S2,S5",
+    "--seeds",
+    "1,2,3",
+    "--out",
+    "artifacts/experiments/E13_swarm_local_raw_qwen0.5b_m6.json",
+    "--report",
+    "artifacts/experiments/E13_swarm_local_report_m6.json",
+    "--resume"
+   ],
+   "output": null
+  },
+  {
+   "name": "E15_gwaya_rft",
+   "argv": [
+    "scripts/run_experiment_E15_gwaya_rft.py",
+    "--resume",
+    "--out",
+    "artifacts/experiments/E15",
+    "--report",
+    "artifacts/experiments/E15_gwaya_rft_report.json",
+    "--scratch",
+    "/mnt/disks/disk-socrateai-local-1/e15_scratch"
+   ],
+   "output": null
+  },
+  {
+   "name": "E16_gwaya_lite_t4",
+   "argv": [
+    "scripts/run_experiment_E16_gwaya_lite_t4.py",
+    "--resume",
+    "--out",
+    "artifacts/experiments/E16",
+    "--report",
+    "artifacts/experiments/E16_gwaya_lite_t4_report.json"
+   ],
+   "output": null
+  },
+  {
+   "name": "E14_granite1b",
+   "argv": [
+    "scripts/run_experiment_E13_swarm_local.py",
+    "--model",
+    "granite1b",
+    "--experts-impl",
+    "grouped_mm",
+    "--no-grad-ckpt",
+    "--peer-hosting",
+    "thread",
+    "--cells",
+    "S0,S2,S6,S7",
+    "--seeds",
+    "1,2,3",
+    "--out",
+    "artifacts/experiments/E14_raw_granite1b.json",
+    "--report",
+    "artifacts/experiments/E14_report_granite1b.json",
+    "--resume"
+   ],
+   "output": null
+  },
+  {
+   "name": "E11b_qwen0.5b_fineweb-edu_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--dataset",
+    "fineweb-edu"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen0.5b_fineweb-edu_w1024.json"
+  },
+  {
+   "name": "E11b_qwen7b_fineweb-edu_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b",
+    "--dataset",
+    "fineweb-edu"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen7b_fineweb-edu_w1024.json"
+  },
+  {
+   "name": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "gemma4-e4b",
+    "--dataset",
+    "fineweb-edu"
+   ],
+   "output": "artifacts/experiments/E11b_raw_gemma4-e4b_fineweb-edu_w1024.json"
+  },
+  {
+   "name": "E11b_qwen0.5b_code_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--dataset",
+    "code"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen0.5b_code_w1024.json"
+  },
+  {
+   "name": "E11b_qwen7b_code_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b",
+    "--dataset",
+    "code"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen7b_code_w1024.json"
+  },
+  {
+   "name": "E11b_gemma4-e4b_code_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "gemma4-e4b",
+    "--dataset",
+    "code"
+   ],
+   "output": "artifacts/experiments/E11b_raw_gemma4-e4b_code_w1024.json"
+  },
+  {
+   "name": "E11b_qwen0.5b_gsm8k_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--dataset",
+    "gsm8k"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen0.5b_gsm8k_w1024.json"
+  },
+  {
+   "name": "E11b_qwen7b_gsm8k_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b",
+    "--dataset",
+    "gsm8k"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen7b_gsm8k_w1024.json"
+  },
+  {
+   "name": "E11b_qwen0.5b_news_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--dataset",
+    "news"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen0.5b_news_w1024.json"
+  },
+  {
+   "name": "E11b_qwen7b_news_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b",
+    "--dataset",
+    "news"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen7b_news_w1024.json"
+  },
+  {
+   "name": "E11b_qwen0.5b_fiction_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--dataset",
+    "fiction"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen0.5b_fiction_w1024.json"
+  },
+  {
+   "name": "E11b_qwen7b_fiction_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b",
+    "--dataset",
+    "fiction"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen7b_fiction_w1024.json"
+  },
+  {
+   "name": "E11b_qwen0.5b_pubmed_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--dataset",
+    "pubmed"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen0.5b_pubmed_w1024.json"
+  },
+  {
+   "name": "E11b_qwen7b_pubmed_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b",
+    "--dataset",
+    "pubmed"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen7b_pubmed_w1024.json"
+  },
+  {
+   "name": "E11b_qwen0.5b_wiki-fr_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--dataset",
+    "wiki-fr"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen0.5b_wiki-fr_w1024.json"
+  },
+  {
+   "name": "E11b_qwen7b_wiki-fr_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b",
+    "--dataset",
+    "wiki-fr"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen7b_wiki-fr_w1024.json"
+  },
+  {
+   "name": "E11b_gemma4-e4b_gsm8k_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "gemma4-e4b",
+    "--dataset",
+    "gsm8k"
+   ],
+   "output": "artifacts/experiments/E11b_raw_gemma4-e4b_gsm8k_w1024.json"
+  },
+  {
+   "name": "E11b_qwen0.5b_wikitext2_w4096",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--window",
+    "4096",
+    "--windows-per-seed",
+    "4"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen0.5b_wikitext2_w4096.json"
+  },
+  {
+   "name": "E11b_gemma4-e4b_wikitext2_w4096",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "gemma4-e4b",
+    "--window",
+    "4096",
+    "--windows-per-seed",
+    "4"
+   ],
+   "output": "artifacts/experiments/E11b_raw_gemma4-e4b_wikitext2_w4096.json"
+  },
+  {
+   "name": "E11b_gemma4-e4b_news_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "gemma4-e4b",
+    "--dataset",
+    "news"
+   ],
+   "output": "artifacts/experiments/E11b_raw_gemma4-e4b_news_w1024.json"
+  },
+  {
+   "name": "E11b_gemma4-e4b_fiction_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "gemma4-e4b",
+    "--dataset",
+    "fiction"
+   ],
+   "output": "artifacts/experiments/E11b_raw_gemma4-e4b_fiction_w1024.json"
+  },
+  {
+   "name": "E11b_gemma4-e4b_pubmed_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "gemma4-e4b",
+    "--dataset",
+    "pubmed"
+   ],
+   "output": "artifacts/experiments/E11b_raw_gemma4-e4b_pubmed_w1024.json"
+  },
+  {
+   "name": "E11b_gemma4-e4b_wiki-fr_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "gemma4-e4b",
+    "--dataset",
+    "wiki-fr"
+   ],
+   "output": "artifacts/experiments/E11b_raw_gemma4-e4b_wiki-fr_w1024.json"
+  },
+  {
+   "name": "E11b_aggregate_ext",
+   "argv": [
+    "scripts/aggregate_E11b_sweep.py"
+   ],
+   "output": null
+  }
+ ]
+}

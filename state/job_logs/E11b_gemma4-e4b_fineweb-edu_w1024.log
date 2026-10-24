@@ -1,0 +1,31 @@
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+Loading weights:   0%|          | 0/2076 [00:00<?, ?it/s]Loading weights:   2%|▏         | 39/2076 [00:00<00:07, 258.74it/s]Loading weights:   3%|▎         | 65/2076 [00:00<00:11, 181.64it/s]Loading weights:   4%|▍         | 89/2076 [00:00<00:10, 184.29it/s]Loading weights:   6%|▋         | 133/2076 [00:00<00:07, 257.09it/s]Loading weights:   8%|▊         | 161/2076 [00:00<00:09, 207.93it/s]Loading weights:   9%|▉         | 185/2076 [00:01<00:15, 123.13it/s]Loading weights:  10%|█         | 211/2076 [00:01<00:13, 138.04it/s]Loading weights:  11%|█         | 229/2076 [00:01<00:22, 80.89it/s] Loading weights:  12%|█▏        | 243/2076 [00:01<00:21, 86.81it/s]Loading weights:  12%|█▏        | 256/2076 [00:02<00:20, 87.61it/s]Loading weights:  13%|█▎        | 268/2076 [00:02<00:20, 87.34it/s]Loading weights:  13%|█▎        | 279/2076 [00:02<00:24, 72.80it/s]Loading weights:  14%|█▍        | 291/2076 [00:02<00:24, 73.17it/s]Loading weights:  14%|█▍        | 300/2076 [00:02<00:32, 54.79it/s]Loading weights:  15%|█▍        | 309/2076 [00:03<00:48, 36.29it/s]Loading weights:  16%|█▋        | 340/2076 [00:03<00:26, 66.70it/s]Loading weights:  17%|█▋        | 351/2076 [00:03<00:26, 64.16it/s]Loading weights:  18%|█▊        | 371/2076 [00:03<00:20, 81.60it/s]Loading weights:  18%|█▊        | 383/2076 [00:04<00:21, 77.64it/s]Loading weights:  19%|█▉        | 393/2076 [00:04<00:27, 61.11it/s]Loading weights:  19%|█▉        | 401/2076 [00:04<00:31, 53.49it/s]Loading weights:  21%|██        | 427/2076 [00:04<00:21, 76.54it/s]Loading weights:  22%|██▏       | 458/2076 [00:04<00:14, 115.19it/s]Loading weights:  23%|██▎       | 474/2076 [00:05<00:14, 106.86it/s]Loading weights:  24%|██▎       | 488/2076 [00:05<00:15, 101.34it/s]Loading weights:  25%|██▌       | 526/2076 [00:05<00:10, 151.15it/s]Loading weights:  27%|██▋       | 557/2076 [00:05<00:11, 137.57it/s]Loading weights:  28%|██▊       | 585/2076 [00:05<00:09, 163.93it/s]Loading weights:  29%|██▉       | 605/2076 [00:06<00:13, 106.84it/s]Loading weights:  31%|███       | 644/2076 [00:06<00:11, 127.56it/s]Loading weights:  32%|███▏      | 670/2076 [00:06<00:09, 142.83it/s]Loading weights:  33%|███▎      | 688/2076 [00:06<00:16, 84.61it/s] Loading weights:  34%|███▍      | 702/2076 [00:07<00:23, 58.46it/s]Loading weights:  34%|███▍      | 713/2076 [00:07<00:22, 59.99it/s]Loading weights:  35%|███▍      | 723/2076 [00:07<00:23, 58.19it/s]Loading weights:  35%|███▌      | 732/2076 [00:08<00:24, 54.17it/s]Loading weights:  36%|███▌      | 740/2076 [00:08<00:23, 56.59it/s]Loading weights:  37%|███▋      | 773/2076 [00:08<00:12, 101.46it/s]Loading weights:  38%|███▊      | 788/2076 [00:08<00:16, 78.26it/s] Loading weights:  39%|███▊      | 800/2076 [00:08<00:15, 83.12it/s]Loading weights:  39%|███▉      | 812/2076 [00:09<00:25, 49.08it/s]Loading weights:  40%|███▉      | 821/2076 [00:09<00:24, 50.34it/s]Loading weights:  40%|████      | 831/2076 [00:09<00:23, 51.98it/s]Loading weights:  40%|████      | 839/2076 [00:09<00:22, 55.85it/s]Loading weights:  41%|████      | 849/2076 [00:09<00:22, 54.32it/s]Loading weights:  43%|████▎     | 897/2076 [00:10<00:09, 125.11it/s]Loading weights:  46%|████▌     | 950/2076 [00:10<00:05, 200.81it/s]Loading weights:  52%|█████▏    | 1076/2076 [00:10<00:02, 420.76it/s]Loading weights:  54%|█████▍    | 1129/2076 [00:10<00:02, 397.53it/s]Loading weights:  57%|█████▋    | 1181/2076 [00:10<00:02, 405.99it/s]Loading weights:  59%|█████▉    | 1227/2076 [00:10<00:02, 322.03it/s]Loading weights:  61%|██████    | 1266/2076 [00:10<00:02, 313.67it/s]Loading weights:  63%|██████▎   | 1302/2076 [00:11<00:02, 275.99it/s]Loading weights:  64%|██████▍   | 1333/2076 [00:11<00:02, 253.34it/s]Loading weights:  66%|██████▌   | 1365/2076 [00:11<00:02, 261.06it/s]Loading weights:  67%|██████▋   | 1395/2076 [00:11<00:02, 252.84it/s]Loading weights:  72%|███████▏  | 1494/2076 [00:11<00:01, 388.29it/s]Loading weights:  77%|███████▋  | 1592/2076 [00:11<00:00, 520.78it/s]Loading weights:  79%|███████▉  | 1648/2076 [00:11<00:00, 488.01it/s]Loading weights:  82%|████████▏ | 1700/2076 [00:12<00:00, 443.40it/s]Loading weights:  86%|████████▌ | 1789/2076 [00:12<00:00, 494.98it/s]Loading weights:  93%|█████████▎| 1925/2076 [00:12<00:00, 684.64it/s]Loading weights:  99%|█████████▉| 2055/2076 [00:12<00:00, 834.44it/s]Loading weights: 100%|██████████| 2076/2076 [00:12<00:00, 167.68it/s]
+[gemma4-e4b] loaded in 239.3s; GPU alloc 8.65 GiB
+[gemma4-e4b] hook identity {'stock_nll_sum': 2000.1506958007812, 'hooked_nll_sum': 2000.1506958007812, 'bitwise_equal': True, 'passed': True}
+[gemma4-e4b] calibrated 28 lattice cells
+[gemma4-e4b] seed 1 window 0: base NLL 1.9552
+[gemma4-e4b] seed 1 window 79: base NLL 2.3908
+[gemma4-e4b] seed 1 window 159: base NLL 1.5007
+[gemma4-e4b] seed 1 window 238: base NLL 2.5342
+[gemma4-e4b] seed 1 window 318: base NLL 2.0609
+[gemma4-e4b] seed 1 window 398: base NLL 2.0348
+[gemma4-e4b] seed 1 window 477: base NLL 2.2406
+[gemma4-e4b] seed 1 window 557: base NLL 2.4093
+[gemma4-e4b] seed 2 window 26: base NLL 2.1740
+[gemma4-e4b] seed 2 window 106: base NLL 2.2649
+[gemma4-e4b] seed 2 window 185: base NLL 2.6824
+[gemma4-e4b] seed 2 window 265: base NLL 2.3054
+[gemma4-e4b] seed 2 window 345: base NLL 2.1461
+[gemma4-e4b] seed 2 window 424: base NLL 2.5413
+[gemma4-e4b] seed 2 window 504: base NLL 2.3403
+[gemma4-e4b] seed 2 window 583: base NLL 1.9657
+[gemma4-e4b] seed 3 window 53: base NLL 2.1762
+[gemma4-e4b] seed 3 window 132: base NLL 1.8747
+[gemma4-e4b] seed 3 window 212: base NLL 1.9180
+[gemma4-e4b] seed 3 window 291: base NLL 2.8318
+[gemma4-e4b] seed 3 window 371: base NLL 1.7113
+[gemma4-e4b] seed 3 window 451: base NLL 2.1480
+[gemma4-e4b] seed 3 window 530: base NLL 2.3422
+[gemma4-e4b] seed 3 window 610: base NLL 2.2742
+[gemma4-e4b] wrote E11b_raw_gemma4-e4b_fineweb-edu_w1024.json in 4664.6s, peak 9.484 GiB

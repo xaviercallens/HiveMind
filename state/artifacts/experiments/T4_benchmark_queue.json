@@ -1,0 +1,450 @@
+{
+ "campaign": "T4 10-hour benchmark, 2026-10-23",
+ "jobs": [
+  {
+   "name": "E11_qwen0.5b",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b"
+   ],
+   "output": "artifacts/experiments/E11_raw_qwen0.5b.json"
+  },
+  {
+   "name": "E11_gemma4-e4b",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "gemma4-e4b"
+   ],
+   "output": "artifacts/experiments/E11_raw_gemma4-e4b.json"
+  },
+  {
+   "name": "E11_qwen7b",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b"
+   ],
+   "output": "artifacts/experiments/E11_raw_qwen7b.json"
+  },
+  {
+   "name": "E11_qwen0.5b_retry",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b"
+   ],
+   "output": "artifacts/experiments/E11_raw_qwen0.5b.json"
+  },
+  {
+   "name": "E11_gemma4-e4b_retry",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "gemma4-e4b"
+   ],
+   "output": "artifacts/experiments/E11_raw_gemma4-e4b.json"
+  },
+  {
+   "name": "E11_qwen7b_retry",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b"
+   ],
+   "output": "artifacts/experiments/E11_raw_qwen7b.json"
+  },
+  {
+   "name": "E11_aggregate",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--aggregate"
+   ],
+   "output": "artifacts/experiments/E11_kv_lattice_report.json"
+  },
+  {
+   "name": "E12_replay",
+   "argv": [
+    "scripts/run_experiment_E12_replay_divergence.py"
+   ],
+   "output": "artifacts/experiments/E12_replay_divergence_report.json"
+  },
+  {
+   "name": "E10b_lattice_05b",
+   "argv": [
+    "scripts/run_experiment_E10b_lattice_05b.py",
+    "--resume"
+   ],
+   "output": "artifacts/experiments/E10b_lattice_05b_report.json"
+  },
+  {
+   "name": "E12_replay_retry",
+   "argv": [
+    "scripts/run_experiment_E12_replay_divergence.py"
+   ],
+   "output": "artifacts/experiments/E12_replay_divergence_report.json"
+  },
+  {
+   "name": "E10b_amended",
+   "argv": [
+    "scripts/run_experiment_E10b_lattice_05b.py"
+   ],
+   "output": "artifacts/experiments/E10b_lattice_05b_report.json"
+  },
+  {
+   "name": "E11b_qwen0.5b_fineweb-edu_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--dataset",
+    "fineweb-edu"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen0.5b_fineweb-edu_w1024.json"
+  },
+  {
+   "name": "E11b_qwen7b_fineweb-edu_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b",
+    "--dataset",
+    "fineweb-edu"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen7b_fineweb-edu_w1024.json"
+  },
+  {
+   "name": "E11b_gemma4-e4b_fineweb-edu_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "gemma4-e4b",
+    "--dataset",
+    "fineweb-edu"
+   ],
+   "output": "artifacts/experiments/E11b_raw_gemma4-e4b_fineweb-edu_w1024.json"
+  },
+  {
+   "name": "E13_qwen0.5b",
+   "argv": [
+    "scripts/run_experiment_E13_swarm_local.py",
+    "--model",
+    "qwen0.5b",
+    "--seeds",
+    "1,2,3",
+    "--resume"
+   ],
+   "output": null
+  },
+  {
+   "name": "E13_granite1b",
+   "argv": [
+    "scripts/run_experiment_E13_swarm_local.py",
+    "--model",
+    "granite1b",
+    "--cells",
+    "S0,S1,S2",
+    "--seeds",
+    "1,2,3",
+    "--resume"
+   ],
+   "output": null
+  },
+  {
+   "name": "E13_granite3b",
+   "argv": [
+    "scripts/run_experiment_E13_swarm_local.py",
+    "--model",
+    "granite3b",
+    "--cells",
+    "S0,S1,S2",
+    "--seeds",
+    "1",
+    "--resume"
+   ],
+   "output": null
+  },
+  {
+   "name": "E13_granite_step_bench",
+   "argv": [
+    "scripts/bench_granite_step.py"
+   ],
+   "output": "artifacts/experiments/E13_granite_step_bench.json"
+  },
+  {
+   "name": "E13_qwen0.5b_m2proc",
+   "argv": [
+    "scripts/run_experiment_E13_swarm_local.py",
+    "--model",
+    "qwen0.5b",
+    "--workers",
+    "2",
+    "--peer-hosting",
+    "process",
+    "--cells",
+    "S0,S1",
+    "--seeds",
+    "1",
+    "--out",
+    "artifacts/experiments/E13_swarm_local_raw_qwen0.5b_m2proc.json",
+    "--report",
+    "artifacts/experiments/E13_swarm_local_report_m2proc.json",
+    "--resume"
+   ],
+   "output": null
+  },
+  {
+   "name": "E13c_qwen0.5b_rotstraggle",
+   "argv": [
+    "scripts/run_experiment_E13_swarm_local.py",
+    "--model",
+    "qwen0.5b",
+    "--cells",
+    "S0,S2",
+    "--seeds",
+    "1,2,3",
+    "--straggle",
+    "3:1:2.0;2:3:2.0;1:5:2.0",
+    "--out",
+    "artifacts/experiments/E13_swarm_local_raw_qwen0.5b_rotstraggle.json",
+    "--report",
+    "artifacts/experiments/E13_swarm_local_report_rotstraggle.json",
+    "--resume"
+   ],
+   "output": null
+  },
+  {
+   "name": "E13_qwen0.5b_m2proc_v2",
+   "argv": [
+    "scripts/run_experiment_E13_swarm_local.py",
+    "--model",
+    "qwen0.5b",
+    "--workers",
+    "2",
+    "--peer-hosting",
+    "process",
+    "--cells",
+    "S0,S1",
+    "--seeds",
+    "1",
+    "--learning-gate",
+    "0.0",
+    "--out",
+    "artifacts/experiments/E13_swarm_local_raw_qwen0.5b_m2proc.json",
+    "--report",
+    "artifacts/experiments/E13_swarm_local_report_m2proc.json",
+    "--resume"
+   ],
+   "output": null
+  },
+  {
+   "name": "E13_granite1b_v2",
+   "argv": [
+    "scripts/run_experiment_E13_swarm_local.py",
+    "--model",
+    "granite1b",
+    "--experts-impl",
+    "grouped_mm",
+    "--no-grad-ckpt",
+    "--peer-hosting",
+    "thread",
+    "--cells",
+    "S0,S1,S2",
+    "--seeds",
+    "1,2,3",
+    "--report",
+    "artifacts/experiments/E13_swarm_local_report_granite1b.json",
+    "--resume"
+   ],
+   "output": null
+  },
+  {
+   "name": "E11b_qwen0.5b_code_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--dataset",
+    "code"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen0.5b_code_w1024.json"
+  },
+  {
+   "name": "E11b_qwen7b_code_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b",
+    "--dataset",
+    "code"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen7b_code_w1024.json"
+  },
+  {
+   "name": "E11b_gemma4-e4b_code_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "gemma4-e4b",
+    "--dataset",
+    "code"
+   ],
+   "output": "artifacts/experiments/E11b_raw_gemma4-e4b_code_w1024.json"
+  },
+  {
+   "name": "E11b_qwen0.5b_gsm8k_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--dataset",
+    "gsm8k"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen0.5b_gsm8k_w1024.json"
+  },
+  {
+   "name": "E11b_qwen7b_gsm8k_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b",
+    "--dataset",
+    "gsm8k"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen7b_gsm8k_w1024.json"
+  },
+  {
+   "name": "E11b_qwen0.5b_news_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--dataset",
+    "news"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen0.5b_news_w1024.json"
+  },
+  {
+   "name": "E11b_qwen7b_news_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b",
+    "--dataset",
+    "news"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen7b_news_w1024.json"
+  },
+  {
+   "name": "E11b_qwen0.5b_fiction_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--dataset",
+    "fiction"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen0.5b_fiction_w1024.json"
+  },
+  {
+   "name": "E11b_qwen7b_fiction_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b",
+    "--dataset",
+    "fiction"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen7b_fiction_w1024.json"
+  },
+  {
+   "name": "E11b_qwen0.5b_pubmed_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--dataset",
+    "pubmed"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen0.5b_pubmed_w1024.json"
+  },
+  {
+   "name": "E11b_qwen7b_pubmed_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b",
+    "--dataset",
+    "pubmed"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen7b_pubmed_w1024.json"
+  },
+  {
+   "name": "E11b_qwen0.5b_wiki-fr_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--dataset",
+    "wiki-fr"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen0.5b_wiki-fr_w1024.json"
+  },
+  {
+   "name": "E11b_qwen7b_wiki-fr_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen7b",
+    "--dataset",
+    "wiki-fr"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen7b_wiki-fr_w1024.json"
+  },
+  {
+   "name": "E11b_gemma4-e4b_gsm8k_w1024",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "gemma4-e4b",
+    "--dataset",
+    "gsm8k"
+   ],
+   "output": "artifacts/experiments/E11b_raw_gemma4-e4b_gsm8k_w1024.json"
+  },
+  {
+   "name": "E11b_qwen0.5b_wikitext2_w4096",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "qwen0.5b",
+    "--window",
+    "4096",
+    "--windows-per-seed",
+    "4"
+   ],
+   "output": "artifacts/experiments/E11b_raw_qwen0.5b_wikitext2_w4096.json"
+  },
+  {
+   "name": "E11b_gemma4-e4b_wikitext2_w4096",
+   "argv": [
+    "scripts/run_experiment_E11_kv_lattice.py",
+    "--model",
+    "gemma4-e4b",
+    "--window",
+    "4096",
+    "--windows-per-seed",
+    "4"
+   ],
+   "output": "artifacts/experiments/E11b_raw_gemma4-e4b_wikitext2_w4096.json"
+  },
+  {
+   "name": "E11b_aggregate",
+   "argv": [
+    "scripts/aggregate_E11b_sweep.py"
+   ],
+   "output": "artifacts/experiments/E11b_kv_lattice_sweep_report.json"
+  }
+ ]
+}

@@ -1,0 +1,24 @@
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/matplotlib/projections/__init__.py:63: UserWarning: Unable to import Axes3D. This may be due to multiple versions of Matplotlib being installed (e.g. as a system package and as a pip package). As a result, the 3D projection is not available.
+  warnings.warn("Unable to import Axes3D. This may be due to multiple versions of "
+{
+  "P11a": {
+    "status": "refuted (on qwen0.5b, qwen7b, gemma4-e4b)",
+    "per_model": {
+      "qwen0.5b": "refuted",
+      "qwen7b": "refuted",
+      "gemma4-e4b": "refuted"
+    }
+  },
+  "P11b": {
+    "status": "refuted (on gemma4-e4b)",
+    "per_model": {
+      "qwen0.5b": "inconclusive",
+      "qwen7b": "supported",
+      "gemma4-e4b": "refuted (E8 already beats Z without the transform)"
+    }
+  },
+  "controls_all_passed": false,
+  "receipt": "d47e0956eef3a8314e1a0ab3c64c5d8679ca8a7d28f0af9f088920d19b20ac51"
+}

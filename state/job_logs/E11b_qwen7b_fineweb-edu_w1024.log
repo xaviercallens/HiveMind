@@ -1,0 +1,33 @@
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+Loading weights:   0%|          | 0/339 [00:00<?, ?it/s]Loading weights:   0%|          | 1/339 [00:33<3:06:19, 33.07s/it]Loading weights:  15%|█▌        | 52/339 [00:34<02:18,  2.07it/s] Loading weights:  16%|█▌        | 55/339 [00:38<02:33,  1.85it/s]Loading weights:  19%|█▉        | 64/339 [00:39<01:57,  2.34it/s]Loading weights:  23%|██▎       | 78/339 [00:39<01:12,  3.58it/s]Loading weights:  26%|██▌       | 88/339 [00:39<00:53,  4.73it/s]Loading weights:  29%|██▉       | 100/339 [00:39<00:36,  6.55it/s]Loading weights:  34%|███▎      | 114/339 [00:40<00:23,  9.67it/s]Loading weights:  37%|███▋      | 124/339 [00:40<00:17, 12.14it/s]Loading weights:  40%|████      | 136/339 [00:40<00:12, 16.20it/s]Loading weights:  44%|████▎     | 148/339 [00:40<00:09, 20.46it/s]Loading weights:  47%|████▋     | 160/339 [00:40<00:06, 27.17it/s]Loading weights:  51%|█████     | 172/339 [00:41<00:05, 29.08it/s]Loading weights:  55%|█████▍    | 186/339 [00:41<00:03, 39.23it/s]Loading weights:  58%|█████▊    | 196/339 [00:41<00:03, 40.93it/s]Loading weights:  61%|██████▏   | 208/339 [00:41<00:02, 50.16it/s]Loading weights:  64%|██████▍   | 217/339 [00:41<00:02, 56.22it/s]Loading weights:  67%|██████▋   | 226/339 [00:41<00:02, 49.61it/s]Loading weights:  69%|██████▉   | 234/339 [00:42<00:02, 45.64it/s]Loading weights:  72%|███████▏  | 244/339 [00:43<00:04, 23.09it/s]Loading weights:  73%|███████▎  | 249/339 [00:46<00:14,  6.12it/s]Loading weights:  76%|███████▌  | 256/339 [00:47<00:12,  6.83it/s]Loading weights:  80%|███████▉  | 270/339 [00:47<00:06, 11.49it/s]Loading weights:  83%|████████▎ | 280/339 [00:47<00:03, 14.77it/s]Loading weights:  86%|████████▋ | 293/339 [00:47<00:02, 21.38it/s]Loading weights:  90%|████████▉ | 304/339 [00:48<00:01, 23.63it/s]Loading weights:  94%|█████████▍| 318/339 [00:48<00:00, 33.25it/s]Loading weights:  97%|█████████▋| 328/339 [00:48<00:00, 39.16it/s]Loading weights:  99%|█████████▉| 336/339 [00:48<00:00, 43.45it/s]Loading weights: 100%|██████████| 339/339 [00:48<00:00,  6.98it/s]
+Some parameters are on the meta device because they were offloaded to the cpu.
+[qwen7b] loaded in 54.4s; GPU alloc 13.17 GiB
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (655364 > 32768). Running this sequence through the model will result in indexing errors
+[qwen7b] hook identity {'stock_nll_sum': 2009.2051086425781, 'hooked_nll_sum': 2009.2051086425781, 'bitwise_equal': True, 'passed': True}
+[qwen7b] calibrated 28 lattice cells
+[qwen7b] seed 1 window 0: base NLL 1.9640
+[qwen7b] seed 1 window 80: base NLL 2.2578
+[qwen7b] seed 1 window 160: base NLL 1.6176
+[qwen7b] seed 1 window 240: base NLL 2.7295
+[qwen7b] seed 1 window 320: base NLL 2.7383
+[qwen7b] seed 1 window 400: base NLL 2.5664
+[qwen7b] seed 1 window 480: base NLL 2.2957
+[qwen7b] seed 1 window 560: base NLL 2.5762
+[qwen7b] seed 2 window 26: base NLL 2.4402
+[qwen7b] seed 2 window 106: base NLL 2.2220
+[qwen7b] seed 2 window 186: base NLL 2.9070
+[qwen7b] seed 2 window 266: base NLL 2.4509
+[qwen7b] seed 2 window 346: base NLL 2.3261
+[qwen7b] seed 2 window 426: base NLL 2.3295
+[qwen7b] seed 2 window 506: base NLL 2.2091
+[qwen7b] seed 2 window 586: base NLL 2.6739
+[qwen7b] seed 3 window 53: base NLL 2.3108
+[qwen7b] seed 3 window 133: base NLL 2.3399
+[qwen7b] seed 3 window 213: base NLL 2.0616
+[qwen7b] seed 3 window 293: base NLL 3.0720
+[qwen7b] seed 3 window 373: base NLL 1.9169
+[qwen7b] seed 3 window 453: base NLL 2.0754
+[qwen7b] seed 3 window 533: base NLL 2.2687
+[qwen7b] seed 3 window 613: base NLL 2.0319
+[qwen7b] wrote E11b_raw_qwen7b_fineweb-edu_w1024.json in 1302.5s, peak 14.228 GiB

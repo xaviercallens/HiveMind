@@ -1,0 +1,17 @@
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:39,  7.26it/s]Loading weights:  41%|████      | 119/290 [00:00<00:00, 601.10it/s]Loading weights:  67%|██████▋   | 195/290 [00:00<00:00, 661.31it/s]Loading weights:  96%|█████████▌| 279/290 [00:00<00:00, 716.35it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 642.69it/s]
+[qwen0.5b] loaded in 5.4s; GPU alloc 0.92 GiB
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (299078 > 131072). Running this sequence through the model will result in indexing errors
+[qwen0.5b] hook identity {'stock_nll_sum': 2277.9309692382812, 'hooked_nll_sum': 2277.9309692382812, 'bitwise_equal': True, 'passed': True}
+[qwen0.5b] calibrated 19 lattice cells
+Traceback (most recent call last):
+  File "/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-s10-e11-e12-t4/scripts/run_experiment_E11_kv_lattice.py", line 756, in <module>
+    raise SystemExit(main())
+  File "/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-s10-e11-e12-t4/scripts/run_experiment_E11_kv_lattice.py", line 745, in main
+    raw = run_model(a.model, a.dataset)
+  File "/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-s10-e11-e12-t4/scripts/run_experiment_E11_kv_lattice.py", line 465, in run_model
+    head_dims = sorted({int(t.shape[-1]) for t in klt.values()})
+  File "/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-s10-e11-e12-t4/scripts/run_experiment_E11_kv_lattice.py", line 465, in <setcomp>
+    head_dims = sorted({int(t.shape[-1]) for t in klt.values()})
+AttributeError: 'dict' object has no attribute 'shape'

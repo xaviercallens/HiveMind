@@ -1,0 +1,48 @@
+{
+  "stage": "loop_base",
+  "design_hash": "67f22d0074135648635fb86bf39e34983f9ae7ef78760f4e0880a363cb76e04a",
+  "written_utc": "2026-10-24T08:37:47Z",
+  "status": "ok",
+  "meter": {
+    "wall_s": 800.789379048998,
+    "peak_reserved_gib": 4.23828125,
+    "peak_allocated_gib": 3.7095980644226074,
+    "energy_wh": 14.658572808658622
+  },
+  "C1": {
+    "label": "C1",
+    "n": 257,
+    "passes": 187,
+    "pass_at_1": 0.7276264591439688,
+    "wilson95": [
+      0.6701450454269766,
+      0.7784032817023672
+    ],
+    "accepted_gwaya": 187,
+    "stub_flagged_among_passing": 0,
+    "unverified_judgements": 0,
+    "generated_tokens": 74808,
+    "gen_gpu_seconds": 1001.1706473270158,
+    "correct_per_gpu_minute": 11.206880695070131,
+    "verified_rate_visible": 0.7937743190661478,
+    "mean_candidates_tried": 2.151750972762646,
+    "repair_rounds_histogram": {
+      "0": 203,
+      "1": 1,
+      "2": 0,
+      "3": 53
+    },
+    "winner_source": {
+      "candidate": 203,
+      "fallback_first_greedy": 53,
+      "repair1": 1
+    },
+    "verified_visible_solutions_per_gpu_minute": 12.225688030985598
+  },
+  "note": "C1 GPU seconds include the (reused) C0 greedy generation",
+  "gen": {
+    "oom_retries": 0,
+    "failed_batches": 0
+  },
+  "elapsed_s": 804.6837759017944
+}

@@ -1,0 +1,1 @@
+- [T4 campaign 2026-10-24](project_t4_campaign_2026-10-24.md) — overnight E10b/E11/E12/E13 state, remaining plan, gated Zenodo publish

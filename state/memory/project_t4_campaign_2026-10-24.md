@@ -1,0 +1,23 @@
+---
+name: project-t4-campaign-2026-10-24
+description: "State and remaining plan of the overnight T4 campaign (E10b/E11/E12/E13/E14/E15), the Swarm Lab community contribution, paper v3.7.0 and the gated Zenodo publish"
+metadata:
+  node_type: memory
+  type: project
+  originSessionId: 22ff63cf-3b37-455e-984e-5fca864875cb
+  modified: 2026-10-24T08:52:00.113Z
+---
+
+Branch `worktree-feat-s10-e11-e12-t4` (worktree `.claude/worktrees/feat-s10-e11-e12-t4`, pushed to origin, never merge to main). One Tesla T4. The 10-h queue ended (report committed and sent: `docs/benchmarks/T4_10h_campaign_report.md`). The EXTENSION queue is running (`python3 scripts/run_t4_benchmark_queue.py --queue artifacts/experiments/T4_benchmark_queue_ext.json --log ..._ext_log.json`, job file re-read before each job; order: E13d six-domain replication, E15 GWAYA coding assistant, E14 granite1b, then the remaining E11b dataset sweeps).
+
+Decided as pre-registered: E11 (P11a/P11b refuted, KV ring stays FP8), E12 (P12-same/cross supported), E10b (invalid), E13 (qwen0.5b, granite1b, granite3b: P13a supported, P13b refuted, P13c supported; K<M quorum with a persistent straggler on a non-IID domain loses the learning; M=2 real OS processes bit-identical), E13c (rotating straggler 0.40), E14 qwen0.5b (H14a fair quorum SUPPORTED 0.88 retention, H14b deferred carry SUPPORTED 0.53). Pending: E13d, E15 (GWAYA-gated RFT, Qwen2.5-Coder-1.5B, hypotheses H15a-e in `E15_gwaya_rft_prereg.json` + amendment 1), E14 granite1b.
+
+Community contribution (done, committed): Swarm Lab Python (`src/hivemind/lab`, `scripts/swarm_lab.py`, `hivemind swarm-lab`), static site + Quorum Quest game (`docs/site/`, `scripts/build_site_data.py` -> rerun it when E14 granite1b / E15 land), GWAYA vendored in `third_party/gwaya` (pinned commit 9c0001e). No LICENSE file exists in the repo: do not claim a licence. PTS/$HIVE are non-monetary. Steam AppID 3133700 belongs to another product: do not ship a Steam build.
+
+**Why:** the user asked for overnight experiments, a 10-h report, a swarm simulation on several MoE models, Zenodo publication, more HF data, a community python/web/game contribution, and a GWAYA-based < 8 GB coding assistant.
+
+**How to apply (remaining order):** (1) watch the extension queue, commit each result (analyze E15 with its report; E14 granite1b via the report); (2) rerun `python3 scripts/build_site_data.py` and `scripts/write_t4_benchmark_report.py` + `scripts/merge_e13_reports.py` + `scripts/analyze_E13_predictions.py` at the end; (3) add E13/E14/E15/E11b subsections to the paper at `% === MARKER` in `paper/hivemind_foundation_article.tex`, extend PROV checks in `paper/autoevolve_peer_review_pipeline.py`, recompile, lock must pass; (4) ONLY THEN publish with `scripts/publish_hivemind_paper_zenodo.py --new-version-of <record id from paper/ZENODO_DEPOSIT_RECEIPT.json>` after updating `--version` default and the fixed `BUNDLE`, putting the commit SHA in the metadata/receipt, opening a draft PR first; keep G4 wording (no peer review, no score); verify checksums after. Irreversible: last step, only if the lock passes. Do not write `result:` before the campaign ends.
+
+User instruction (2026-10-24): "commit, push, merge and release when experimentation is completed". My operating rules forbid merging or pushing to main in this session: do commit + push the branch + open a PR (gh is authed as xaviercallens) + prepare release notes/CHANGELOG and the exact commands (merge the PR, then `git tag v2.5.0 <merge sha> && git push origin v2.5.0`, which triggers .github/workflows/immutable_release.yml); say plainly that merge and tag are left to the user. Finish line chosen: E15, E16 (GWAYA-Lite T4 measurement for GWAYA PR #21, P1/P2) and E14 granite1b done; then stop the remaining exploratory E11b sweeps (mark 'not run'), rebuild site data/reports, paper v3.7.0 additions, lock, then the gated Zenodo step. GWAYA PR #21 (draft) asks for T4 numbers; do NOT comment on or edit that PR without the user's say-so, give the user the results/text instead.
+
+Caveats to repeat in reports: qwen/granite E13 cells ran thread-hosted (4 OS processes need 20 GiB > 13.8 GiB; only the M=2 run used real processes); E11 Qwen verdicts rest on one rate-matched cell; the E15 sandbox is not GWAYA's Bubblewrap oracle (no seccomp/cgroups); the Swarm Lab toy's defaults were chosen to make the effect visible and its magnitudes differ from E13/E14.

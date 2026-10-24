@@ -1,0 +1,49 @@
+{
+  "stage": "baseline",
+  "design_hash": "67f22d0074135648635fb86bf39e34983f9ae7ef78760f4e0880a363cb76e04a",
+  "written_utc": "2026-10-24T08:24:22Z",
+  "status": "ok",
+  "meter": {
+    "wall_s": 495.4564971639993,
+    "peak_reserved_gib": 4.17578125,
+    "peak_allocated_gib": 3.665313720703125,
+    "energy_wh": 9.09922818869931
+  },
+  "C0": {
+    "label": "C0",
+    "n": 257,
+    "passes": 169,
+    "pass_at_1": 0.6575875486381323,
+    "wilson95": [
+      0.5976347185425646,
+      0.7128987387008274
+    ],
+    "accepted_gwaya": 169,
+    "stub_flagged_among_passing": 0,
+    "unverified_judgements": 0,
+    "generated_tokens": 19285,
+    "gen_gpu_seconds": 228.23774501301492,
+    "correct_per_gpu_minute": 44.42735797018053
+  },
+  "C0h": {
+    "label": "C0h",
+    "n": 164,
+    "passes": 110,
+    "pass_at_1": 0.6707317073170732,
+    "wilson95": [
+      0.5956203559404486,
+      0.7380278403602346
+    ],
+    "accepted_gwaya": 110,
+    "stub_flagged_among_passing": 0,
+    "unverified_judgements": 0,
+    "generated_tokens": 20703,
+    "gen_gpu_seconds": 253.56397227199452,
+    "correct_per_gpu_minute": 26.028934398141832
+  },
+  "gen": {
+    "oom_retries": 0,
+    "failed_batches": 0
+  },
+  "elapsed_s": 502.8699471950531
+}

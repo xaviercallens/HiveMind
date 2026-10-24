@@ -1,0 +1,28 @@
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  38%|███▊      | 109/290 [00:00<00:00, 1064.14it/s]Loading weights:  74%|███████▍  | 216/290 [00:00<00:00, 982.95it/s] Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1003.23it/s]
+[E10b] device cuda, 540672 LoRA coordinates, plan: {"runs": 15, "arms": ["none", "Z8@1+EF", "E8@1+EF", "sign", "E8@6"], "seeds": [1, 2, 3], "inner_steps_per_run": 480, "inner_steps_total": 7200, "tokens_per_learner_per_run": 122880, "lattice_codec_calls": 216, "eval_passes": 45, "assumed_sec_per_inner_step": 0.72, "assumed_sec_per_lattice_codec_call": 1.5, "assumed_sec_per_eval": 7.8, "breakdown_s": {"inner_steps_s": 5184.0, "lattice_codec_s": 324.0, "eval_s": 351.0, "setup_and_controls_s": 150.0}, "total_s": 6009.0, "total_hours": 1.67}
+seed 1 none     final 2.9456 (init 2.9933) relMSE 0.0000 rate 32.000 365.98s
+seed 1 Z8@1+EF  final 2.9458 (init 2.9933) relMSE 0.5158 rate 0.991 368.05s
+seed 1 E8@1+EF  final 2.9458 (init 2.9933) relMSE 0.4480 rate 1.001 368.79s
+seed 1 sign     final 2.9460 (init 2.9933) relMSE 0.3554 rate 1.000 365.73s
+seed 1 E8@6     final 2.9456 (init 2.9933) relMSE 0.0003 rate 6.014 369.07s
+seed 2 none     final 2.9455 (init 2.9933) relMSE 0.0000 rate 32.000 365.76s
+seed 2 Z8@1+EF  final 2.9457 (init 2.9933) relMSE 0.5155 rate 0.991 368.22s
+seed 2 E8@1+EF  final 2.9455 (init 2.9933) relMSE 0.4477 rate 1.000 369.93s
+seed 2 sign     final 2.9469 (init 2.9933) relMSE 0.3555 rate 1.000 365.88s
+seed 2 E8@6     final 2.9455 (init 2.9933) relMSE 0.0003 rate 6.014 368.91s
+seed 3 none     final 2.9467 (init 2.9933) relMSE 0.0000 rate 32.000 365.91s
+seed 3 Z8@1+EF  final 2.9465 (init 2.9933) relMSE 0.5145 rate 0.992 368.18s
+seed 3 E8@1+EF  final 2.9463 (init 2.9933) relMSE 0.4477 rate 1.001 368.76s
+seed 3 sign     final 2.9449 (init 2.9933) relMSE 0.3551 rate 1.000 366.74s
+seed 3 E8@6     final 2.9467 (init 2.9933) relMSE 0.0003 rate 6.014 368.42s
+{
+  "P10a": "supported",
+  "P10b": "inconclusive (CI includes 0)",
+  "P10c": "supported",
+  "controls_all_passed": false,
+  "runs": 15,
+  "elapsed_s": 5524.81,
+  "receipt": "712fb41a75ede9b3762e68840085c8ff02cf03767550557b5a1e8178e043a109"
+}

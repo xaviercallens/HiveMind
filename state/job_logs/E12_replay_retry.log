@@ -1,0 +1,144 @@
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  29%|██▉       | 85/290 [00:00<00:00, 848.94it/s]Loading weights:  59%|█████▉    | 171/290 [00:00<00:00, 852.89it/s]Loading weights:  92%|█████████▏| 268/290 [00:00<00:00, 901.56it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 920.27it/s]
+[cuda float32] rng 101 init 1 done
+[cuda float32] rng 202 init 1 done
+[cuda float32] rng 303 init 1 done
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:40,  7.07it/s]Loading weights:  47%|████▋     | 135/290 [00:00<00:00, 627.48it/s]Loading weights:  74%|███████▍  | 216/290 [00:00<00:00, 694.72it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 632.41it/s]
+[cuda float32] rng 101 init 2 done
+[cuda float32] rng 202 init 2 done
+[cuda float32] rng 303 init 2 done
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:45,  6.41it/s]Loading weights:  67%|██████▋   | 194/290 [00:00<00:00, 917.93it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 833.03it/s]
+[cuda float32] rng 101 init 3 done
+[cuda float32] rng 202 init 3 done
+[cuda float32] rng 303 init 3 done
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:42,  6.77it/s]Loading weights:  39%|███▉      | 114/290 [00:00<00:00, 558.81it/s]Loading weights:  64%|██████▍   | 185/290 [00:00<00:00, 612.11it/s]Loading weights:  92%|█████████▏| 266/290 [00:00<00:00, 683.42it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 610.33it/s]
+[cuda float32] rng 101 init 1 done
+[cuda float32] rng 202 init 1 done
+[cuda float32] rng 303 init 1 done
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  24%|██▍       | 71/290 [00:00<00:00, 670.98it/s]Loading weights:  55%|█████▌    | 160/290 [00:00<00:00, 760.86it/s]Loading weights:  86%|████████▌ | 248/290 [00:00<00:00, 794.35it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 799.00it/s]
+[cuda float32] rng 101 init 2 done
+[cuda float32] rng 202 init 2 done
+[cuda float32] rng 303 init 2 done
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:38,  7.44it/s]Loading weights:  51%|█████     | 148/290 [00:00<00:00, 744.11it/s]Loading weights:  82%|████████▏ | 239/290 [00:00<00:00, 795.76it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 720.85it/s]
+[cuda float32] rng 101 init 3 done
+[cuda float32] rng 202 init 3 done
+[cuda float32] rng 303 init 3 done
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<02:40,  1.80it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 494.38it/s]
+[cuda float32] rng 101 init 1 done
+[cuda float32] rng 202 init 1 done
+[cuda float32] rng 303 init 1 done
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<03:06,  1.55it/s]Loading weights:  72%|███████▏  | 209/290 [00:00<00:00, 376.39it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 318.12it/s]
+[cuda float32] rng 101 init 2 done
+[cuda float32] rng 202 init 2 done
+[cuda float32] rng 303 init 2 done
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<02:44,  1.75it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 496.17it/s]
+[cuda float32] rng 101 init 3 done
+[cuda float32] rng 202 init 3 done
+[cuda float32] rng 303 init 3 done
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<02:24,  2.00it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 564.36it/s]
+[cpu float32] rng 101 init 1 done
+[cpu float32] rng 202 init 1 done
+[cpu float32] rng 303 init 1 done
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<02:57,  1.63it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 460.80it/s]
+[cpu float32] rng 101 init 2 done
+[cpu float32] rng 202 init 2 done
+[cpu float32] rng 303 init 2 done
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<02:16,  2.12it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 538.74it/s]
+[cpu float32] rng 101 init 3 done
+[cpu float32] rng 202 init 3 done
+[cpu float32] rng 303 init 3 done
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:01<04:57,  1.03s/it]Loading weights: 100%|██████████| 290/290 [00:01<00:00, 278.11it/s]
+[cuda float64 snap] rng 101 init 1 done
+[cuda float64 snap] rng 202 init 1 done
+[cuda float64 snap] rng 303 init 1 done
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<04:19,  1.12it/s]Loading weights:  88%|████████▊ | 255/290 [00:00<00:00, 349.70it/s]Loading weights: 100%|██████████| 290/290 [00:01<00:00, 266.41it/s]
+[cuda float64 snap] rng 101 init 2 done
+[cuda float64 snap] rng 202 init 2 done
+[cuda float64 snap] rng 303 init 2 done
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:01<05:52,  1.22s/it]Loading weights: 100%|██████████| 290/290 [00:01<00:00, 235.18it/s]
+[cuda float64 snap] rng 101 init 3 done
+[cuda float64 snap] rng 202 init 3 done
+[cuda float64 snap] rng 303 init 3 done
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<03:46,  1.28it/s]Loading weights:  93%|█████████▎| 269/290 [00:00<00:00, 405.65it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 319.76it/s]
+[cpu float64 snap] rng 101 init 1 done
+[cpu float64 snap] rng 202 init 1 done
+[cpu float64 snap] rng 303 init 1 done
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<04:21,  1.10it/s]Loading weights:  84%|████████▍ | 244/290 [00:01<00:00, 328.00it/s]Loading weights: 100%|██████████| 290/290 [00:01<00:00, 260.25it/s]
+[cpu float64 snap] rng 101 init 2 done
+[cpu float64 snap] rng 202 init 2 done
+[cpu float64 snap] rng 303 init 2 done
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:01<05:22,  1.12s/it]Loading weights: 100%|██████████| 290/290 [00:01<00:00, 256.58it/s]
+[cpu float64 snap] rng 101 init 3 done
+[cpu float64 snap] rng 202 init 3 done
+[cpu float64 snap] rng 303 init 3 done
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<01:51,  2.59it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 686.77it/s]
+[cuda float32 tamper] rng 101 init 1 done
+[cuda float32 tamper] rng 202 init 1 done
+[cuda float32 tamper] rng 303 init 1 done
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<03:02,  1.58it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 448.96it/s]
+[cuda float32 tamper] rng 101 init 2 done
+[cuda float32 tamper] rng 202 init 2 done
+[cuda float32 tamper] rng 303 init 2 done
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<02:09,  2.23it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 625.76it/s]
+[cuda float32 tamper] rng 101 init 3 done
+[cuda float32 tamper] rng 202 init 3 done
+[cuda float32 tamper] rng 303 init 3 done
+{
+  "summary": {
+    "A_same_process_T4": {
+      "max_linf": 0.0,
+      "min_linf": 0.0,
+      "n_above_eps": 0,
+      "n": 9
+    },
+    "B_separate_process_T4": {
+      "max_linf": 0.0,
+      "min_linf": 0.0,
+      "n_above_eps": 0,
+      "n": 9
+    },
+    "C_cross_T4_vs_cpu": {
+      "max_linf": 0.0006259679794311523,
+      "min_linf": 0.0002049621834885329,
+      "n_above_eps": 9,
+      "n": 9
+    },
+    "D_proxy_fp64_snap_T4_vs_cpu": {
+      "max_linf": 0.0006341934204101562,
+      "min_linf": 0.0001983642578125,
+      "n_above_eps": 9,
+      "n": 9
+    },
+    "E_tamper": {
+      "max_linf": 2.960813045501709,
+      "min_linf": 2.6186968088150024,
+      "n_above_eps": 9,
+      "n": 9
+    }
+  },
+  "analysis": {
+    "P12-same": {
+      "status": "supported",
+      "basis": "cell B (same T4, separate process) - a proxy for same class, not a second T4"
+    },
+    "P12-cross": {
+      "status": "supported",
+      "basis": "cell C (T4 vs this host's x86 CPU, float32 both)"
+    },
+    "P12-fixed-point": {
+      "status": "not decided (no fixed-point kernel); fp64 + 2^-20 snapping proxy reported in cell D"
+    }
+  },
+  "controls_all_passed": true
+}

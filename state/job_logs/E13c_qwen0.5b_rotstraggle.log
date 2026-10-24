@@ -1,0 +1,27 @@
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[E13] model qwen0.5b device cuda planned runs 7 (incl. S0b twin) plan: {"model": "qwen0.5b", "cells": ["S0", "S2"], "seeds": [1, 2, 3], "cfg": {"rounds": 6, "workers": 4, "inner": 20, "seq_len": 256, "micro_batch": 4, "eval_seqs": 16, "eval_batch": 4, "smoke": false}, "runs": 6, "inner_steps_per_run": 480, "inner_steps_total": 2880, "rounds_per_run": 6, "tokens_per_worker_per_run": 122880, "assumed_sec_per_inner_step": 0.45, "assumed_sec_per_eval": 3.0, "assumed_sec_process_start": 20.0, "breakdown_s": {"inner_steps_s": 1296.0, "eval_s": 54.0, "process_start_s": 90.0, "data_prep_once_s": 120.0, "straggler_wait_K_eq_M_s": 0.0, "diagnostic_twin_S0b_s": 235.0}, "total_s": 1795.0, "total_hours": 0.5}
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  18%|█▊        | 53/290 [00:00<00:00, 521.79it/s]Loading weights:  38%|███▊      | 111/290 [00:00<00:00, 547.36it/s]Loading weights:  57%|█████▋    | 166/290 [00:00<00:00, 539.46it/s]Loading weights:  76%|███████▌  | 221/290 [00:00<00:00, 541.82it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 575.42it/s]
+seed 1 S0 sync_baseline  final 2.2334 (init 2.3653) admitted/round [4, 4, 4, 4, 4, 4] late 0 up 0B 167.5s
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  18%|█▊        | 51/290 [00:00<00:00, 503.81it/s]Loading weights:  39%|███▊      | 112/290 [00:00<00:00, 532.17it/s]Loading weights:  64%|██████▍   | 185/290 [00:00<00:00, 612.87it/s]Loading weights:  90%|████████▉ | 260/290 [00:00<00:00, 665.45it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 636.07it/s]
+seed 1 S0b identity noise floor {'available': True, 'max_abs_diff': 0.0, 'bit_identical': True, 'twin_final_loss': 2.2333764284849167, 'note': 'diagnostic only; the identity rule stays S1 vs S0 <= 1e-6'}
+[E13] memory preflight: process hosting needs 20.03 GiB (M=4 x (4.56 + 0.45)) > free 13.76 GiB: FALLING BACK to thread hosting (needs 5.06 GiB)
+[E13 hb] qwen0.5b S2 seed 1 t=60s round 4/6 admitted-so-far [0] of effective K 2, alive [0, 1, 2, 3], evals [0] of [0, 3, 6], late 4
+seed 1 S2 swarm_all_on   final 2.2950 (init 2.3653) admitted/round [2, 2, 2, 2, 2, 2] late 10 up 4315885B 126.3s
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  34%|███▍      | 99/290 [00:00<00:00, 936.61it/s]Loading weights:  67%|██████▋   | 193/290 [00:00<00:00, 831.46it/s]Loading weights:  96%|█████████▌| 277/290 [00:00<00:00, 772.27it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 811.24it/s]
+seed 2 S0 sync_baseline  final 2.2312 (init 2.3653) admitted/round [4, 4, 4, 4, 4, 4] late 0 up 0B 125.43s
+[E13] memory preflight: process hosting needs 20.09 GiB (M=4 x (4.57 + 0.45)) > free 13.76 GiB: FALLING BACK to thread hosting (needs 5.07 GiB)
+[E13 hb] qwen0.5b S2 seed 2 t=60s round 4/6 admitted-so-far [0] of effective K 2, alive [0, 1, 2, 3], evals [0] of [0, 3, 6], late 4
+seed 2 S2 swarm_all_on   final 2.3263 (init 2.3653) admitted/round [2, 2, 2, 2, 2, 2] late 10 up 4311730B 125.52s
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  27%|██▋       | 77/290 [00:00<00:00, 766.82it/s]Loading weights:  53%|█████▎    | 154/290 [00:00<00:00, 763.13it/s]Loading weights:  83%|████████▎ | 242/290 [00:00<00:00, 811.10it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 776.53it/s]
+seed 3 S0 sync_baseline  final 2.2308 (init 2.3653) admitted/round [4, 4, 4, 4, 4, 4] late 0 up 0B 124.69s
+[E13] memory preflight: process hosting needs 20.09 GiB (M=4 x (4.57 + 0.45)) > free 13.76 GiB: FALLING BACK to thread hosting (needs 5.07 GiB)
+[E13 hb] qwen0.5b S2 seed 3 t=60s round 4/6 admitted-so-far [3] of effective K 2, alive [0, 1, 2, 3], evals [0] of [0, 3, 6], late 4
+seed 3 S2 swarm_all_on   final 2.3140 (init 2.3653) admitted/round [2, 2, 2, 2, 2, 2] late 10 up 4315025B 125.21s
+{
+  "controls_all_passed": false,
+  "runs": 6,
+  "elapsed_s": 920.53,
+  "receipt": "c0bf2afa5b29d7fa2239943a5cf2067beb384789d414b5f07d464521e9616c9c"
+}
+E13 DONE model=qwen0.5b cells_ok=6 cells_failed=0 report=artifacts/experiments/E13_swarm_local_report_rotstraggle.json

@@ -1,0 +1,31 @@
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+Loading weights:   0%|          | 0/2076 [00:00<?, ?it/s]Loading weights:  17%|█▋        | 351/2076 [00:00<00:00, 3481.07it/s]Loading weights:  34%|███▎      | 700/2076 [00:00<00:00, 3070.79it/s]Loading weights:  49%|████▊     | 1011/2076 [00:00<00:00, 2870.25it/s]Loading weights:  63%|██████▎   | 1304/2076 [00:00<00:00, 2887.17it/s]Loading weights:  80%|████████  | 1664/2076 [00:00<00:00, 3124.33it/s]Loading weights:  95%|█████████▌| 1979/2076 [00:00<00:00, 3075.75it/s]Loading weights: 100%|██████████| 2076/2076 [00:00<00:00, 3055.15it/s]
+[gemma4-e4b] loaded in 12.6s; GPU alloc 8.65 GiB
+[gemma4-e4b] hook identity {'stock_nll_sum': 1625.8536987304688, 'hooked_nll_sum': 1625.8536987304688, 'bitwise_equal': True, 'passed': True}
+[gemma4-e4b] calibrated 19 lattice cells
+[gemma4-e4b] seed 1 window 0: base NLL 1.5893
+[gemma4-e4b] seed 1 window 35: base NLL 2.3555
+[gemma4-e4b] seed 1 window 71: base NLL 1.5356
+[gemma4-e4b] seed 1 window 106: base NLL 1.7668
+[gemma4-e4b] seed 1 window 142: base NLL 2.4018
+[gemma4-e4b] seed 1 window 178: base NLL 2.8651
+[gemma4-e4b] seed 1 window 213: base NLL 2.0954
+[gemma4-e4b] seed 1 window 249: base NLL 2.0637
+[gemma4-e4b] seed 2 window 11: base NLL 1.2238
+[gemma4-e4b] seed 2 window 47: base NLL 1.9934
+[gemma4-e4b] seed 2 window 83: base NLL 2.5166
+[gemma4-e4b] seed 2 window 118: base NLL 2.1029
+[gemma4-e4b] seed 2 window 154: base NLL 2.2425
+[gemma4-e4b] seed 2 window 190: base NLL 2.6025
+[gemma4-e4b] seed 2 window 225: base NLL 2.1640
+[gemma4-e4b] seed 2 window 261: base NLL 1.9920
+[gemma4-e4b] seed 3 window 23: base NLL 2.2865
+[gemma4-e4b] seed 3 window 59: base NLL 2.0501
+[gemma4-e4b] seed 3 window 95: base NLL 2.4623
+[gemma4-e4b] seed 3 window 130: base NLL 1.7826
+[gemma4-e4b] seed 3 window 166: base NLL 1.7433
+[gemma4-e4b] seed 3 window 201: base NLL 2.1323
+[gemma4-e4b] seed 3 window 237: base NLL 1.8788
+[gemma4-e4b] seed 3 window 273: base NLL 2.3620
+[gemma4-e4b] wrote E11_raw_gemma4-e4b.json in 3109.6s, peak 9.484 GiB

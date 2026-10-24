@@ -1,0 +1,32 @@
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:47,  6.15it/s]Loading weights:  50%|████▉     | 144/290 [00:00<00:00, 664.22it/s]Loading weights:  78%|███████▊  | 227/290 [00:00<00:00, 694.89it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 625.65it/s]
+[qwen0.5b] loaded in 5.8s; GPU alloc 0.92 GiB
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (299078 > 131072). Running this sequence through the model will result in indexing errors
+[qwen0.5b] hook identity {'stock_nll_sum': 2277.9309692382812, 'hooked_nll_sum': 2277.9309692382812, 'bitwise_equal': True, 'passed': True}
+[qwen0.5b] calibrated 19 lattice cells
+[qwen0.5b] seed 1 window 0: base NLL 2.2267
+[qwen0.5b] seed 1 window 36: base NLL 2.8047
+[qwen0.5b] seed 1 window 73: base NLL 2.0182
+[qwen0.5b] seed 1 window 109: base NLL 2.3128
+[qwen0.5b] seed 1 window 146: base NLL 3.1703
+[qwen0.5b] seed 1 window 182: base NLL 3.3788
+[qwen0.5b] seed 1 window 219: base NLL 2.7372
+[qwen0.5b] seed 1 window 255: base NLL 2.6993
+[qwen0.5b] seed 2 window 12: base NLL 2.1479
+[qwen0.5b] seed 2 window 48: base NLL 2.8924
+[qwen0.5b] seed 2 window 85: base NLL 3.2524
+[qwen0.5b] seed 2 window 121: base NLL 2.7835
+[qwen0.5b] seed 2 window 158: base NLL 3.0300
+[qwen0.5b] seed 2 window 194: base NLL 3.3226
+[qwen0.5b] seed 2 window 231: base NLL 3.0729
+[qwen0.5b] seed 2 window 267: base NLL 2.6516
+[qwen0.5b] seed 3 window 24: base NLL 2.6498
+[qwen0.5b] seed 3 window 60: base NLL 2.7262
+[qwen0.5b] seed 3 window 97: base NLL 3.1720
+[qwen0.5b] seed 3 window 133: base NLL 2.8735
+[qwen0.5b] seed 3 window 170: base NLL 2.5075
+[qwen0.5b] seed 3 window 206: base NLL 2.9242
+[qwen0.5b] seed 3 window 243: base NLL 2.3724
+[qwen0.5b] seed 3 window 279: base NLL 3.1017
+[qwen0.5b] wrote E11_raw_qwen0.5b.json in 194.2s, peak 1.295 GiB

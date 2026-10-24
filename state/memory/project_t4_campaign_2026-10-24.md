@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 22ff63cf-3b37-455e-984e-5fca864875cb
-  modified: 2026-10-24T08:52:00.113Z
+  modified: 2026-10-24T09:05:00.193Z
 ---
 
 Branch `worktree-feat-s10-e11-e12-t4` (worktree `.claude/worktrees/feat-s10-e11-e12-t4`, pushed to origin, never merge to main). One Tesla T4. The 10-h queue ended (report committed and sent: `docs/benchmarks/T4_10h_campaign_report.md`). The EXTENSION queue is running (`python3 scripts/run_t4_benchmark_queue.py --queue artifacts/experiments/T4_benchmark_queue_ext.json --log ..._ext_log.json`, job file re-read before each job; order: E13d six-domain replication, E15 GWAYA coding assistant, E14 granite1b, then the remaining E11b dataset sweeps).
@@ -17,6 +17,8 @@ Community contribution (done, committed): Swarm Lab Python (`src/hivemind/lab`, 
 **Why:** the user asked for overnight experiments, a 10-h report, a swarm simulation on several MoE models, Zenodo publication, more HF data, a community python/web/game contribution, and a GWAYA-based < 8 GB coding assistant.
 
 **How to apply (remaining order):** (1) watch the extension queue, commit each result (analyze E15 with its report; E14 granite1b via the report); (2) rerun `python3 scripts/build_site_data.py` and `scripts/write_t4_benchmark_report.py` + `scripts/merge_e13_reports.py` + `scripts/analyze_E13_predictions.py` at the end; (3) add E13/E14/E15/E11b subsections to the paper at `% === MARKER` in `paper/hivemind_foundation_article.tex`, extend PROV checks in `paper/autoevolve_peer_review_pipeline.py`, recompile, lock must pass; (4) ONLY THEN publish with `scripts/publish_hivemind_paper_zenodo.py --new-version-of <record id from paper/ZENODO_DEPOSIT_RECEIPT.json>` after updating `--version` default and the fixed `BUNDLE`, putting the commit SHA in the metadata/receipt, opening a draft PR first; keep G4 wording (no peer review, no score); verify checksums after. Irreversible: last step, only if the lock passes. Do not write `result:` before the campaign ends.
+
+Status snapshot 2026-10-24 ~09:05 UTC: E15 (GWAYA-gated RFT, Qwen2.5-Coder-1.5B) running on the GPU: baseline C0 65.8% MBPP-sanitized / 67.1% HumanEval, GWAYA inference loop C1 72.8% (+7.0 points, 4x the tokens); the rejection-sampling and LoRA training stages follow. E16 (GWAYA-Lite P1/P2 for GWAYA draft PR #21: Ollama Q4_K_M 1.5B/3B/7B on this T4) is built, tested and queued right after E15; qwen2.5-coder:3b was pulled into Ollama for it. Then E14 granite1b. Sessions: this machine's T4 = hermes-node1 (a GCP Spot VM, preemptible); the other Claude sessions are Remote Control ones and offline.
 
 User instruction (2026-10-24): "commit, push, merge and release when experimentation is completed". My operating rules forbid merging or pushing to main in this session: do commit + push the branch + open a PR (gh is authed as xaviercallens) + prepare release notes/CHANGELOG and the exact commands (merge the PR, then `git tag v2.5.0 <merge sha> && git push origin v2.5.0`, which triggers .github/workflows/immutable_release.yml); say plainly that merge and tag are left to the user. Finish line chosen: E15, E16 (GWAYA-Lite T4 measurement for GWAYA PR #21, P1/P2) and E14 granite1b done; then stop the remaining exploratory E11b sweeps (mark 'not run'), rebuild site data/reports, paper v3.7.0 additions, lock, then the gated Zenodo step. GWAYA PR #21 (draft) asks for T4 numbers; do NOT comment on or edit that PR without the user's say-so, give the user the results/text instead.
 

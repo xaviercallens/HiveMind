@@ -1,1 +1,2 @@
-- [T4 campaign 2026-10-24](project_t4_campaign_2026-10-24.md) — overnight E10b/E11/E12/E13 state, remaining plan, gated Zenodo publish
+- [T4 campaign 2026-10-24](project_t4_campaign_2026-10-24.md) — overnight E10b-E16 state, remaining plan, gated Zenodo publish, merge/release rules
+- [Spot VM checkpoint](reference_spot_vm_checkpoint.md) — preemption-proof checkpoint branch, watcher and resume steps

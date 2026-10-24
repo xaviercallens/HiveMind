@@ -131,12 +131,7 @@ def _key(parser: argparse.ArgumentParser) -> str:
     return key
 
 
-def cmd_register(client: httpx.Client, args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
-    response = client.post(_gateway(args) + "/v1/hivemind/register", json={"handle": args.handle, "role": args.role})
-    if response.status_code != 200:
-        print(f"registration failed ({response.status_code}): {response.text[:300]}", file=sys.stderr)
-        return 1
-    body = response.json()
+def _save_or_print_key(body: dict[str, Any], args: argparse.Namespace, *, is_google: bool = False) -> int:
     if args.save_key:
         path = Path(args.save_key).expanduser()
         if path.exists():
@@ -147,9 +142,68 @@ def cmd_register(client: httpx.Client, args: argparse.Namespace, parser: argpars
             handle.write(body["api_key"])
         print(f"key saved to {path} (owner-only). Then: export {API_KEY_ENV}=$(cat {path})")
     else:
-        print(f"Your API key (shown once, store it safely):\n  {body['api_key']}\nThen: export {API_KEY_ENV}=<that key>")
+        if is_google:
+            header = "Account created with Google!" if body.get("created") else "Welcome back: previous key rotated."
+            print(f"{header}\nYour API key (shown once, store it safely):\n  {body['api_key']}\nThen: export {API_KEY_ENV}=<that key>")
+        else:
+            print(f"Your API key (shown once, store it safely):\n  {body['api_key']}\nThen: export {API_KEY_ENV}=<that key>")
     print(f"account {body['account_id']} role {body['role']}. New accounts hold 0 HMT: ask the operator for a grant, or earn by sharing a GPU.")
     return 0
+
+
+def cmd_register(client: httpx.Client, args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    response = client.post(_gateway(args) + "/v1/hivemind/register", json={"handle": args.handle, "role": args.role})
+    if response.status_code != 200:
+        print(f"registration failed ({response.status_code}): {response.text[:300]}", file=sys.stderr)
+        return 1
+    return _save_or_print_key(response.json(), args, is_google=False)
+
+
+def cmd_register_google(client: httpx.Client, args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    gateway = _gateway(args)
+    token = args.token or os.environ.get("GOOGLE_ID_TOKEN", "")
+
+    if not token and getattr(args, "gcloud", False):
+        try:
+            import subprocess
+            cmd = ["gcloud", "auth", "print-identity-token", "--include-email"]
+            if getattr(args, "audience", None):
+                cmd.append(f"--audiences={args.audience}")
+            proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            if proc.returncode == 0 and proc.stdout.strip():
+                token = proc.stdout.strip()
+            else:
+                print(f"gcloud identity token failed: {proc.stderr.strip()}", file=sys.stderr)
+        except (FileNotFoundError, OSError):
+            print("gcloud command not found on PATH.", file=sys.stderr)
+
+    if not token and getattr(args, "browser", False):
+        signup_url = f"{gateway}/signup"
+        print(f"Opening browser for Google Sign-in: {signup_url}")
+        try:
+            import webbrowser
+            webbrowser.open(signup_url)
+        except Exception:
+            pass
+        print("Complete Google sign-in in your browser.")
+        print("Paste the API key displayed on the page, or enter your Google ID token:")
+        try:
+            entered = input("API Key or Google ID Token: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nAborted.", file=sys.stderr)
+            return 1
+        if entered.startswith("hm-"):
+            return _save_or_print_key({"account_id": "google-user", "api_key": entered, "role": args.role, "created": False}, args, is_google=True)
+        token = entered
+
+    if not token:
+        parser.error("provide a Google ID token via --token, set GOOGLE_ID_TOKEN, use --gcloud, or use --browser")
+
+    response = client.post(gateway + "/v1/hivemind/register/google", json={"id_token": token, "role": args.role})
+    if response.status_code != 200:
+        print(f"Google sign-in failed ({response.status_code}): {response.text[:300]}", file=sys.stderr)
+        return 1
+    return _save_or_print_key(response.json(), args, is_google=True)
 
 
 def cmd_check(client: httpx.Client, args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
@@ -196,6 +250,25 @@ def build_parser() -> argparse.ArgumentParser:
                      help="prosumer (default) can both use models and share a GPU")
     reg.add_argument("--save-key", metavar="FILE", help="Write the key to FILE (owner-only) instead of printing it")
     reg.set_defaults(func=cmd_register)
+
+    reg_g = sub.add_parser("register-google", help="Sign in with Google (ID token, gcloud, or browser)")
+    reg_g.add_argument("--token", help="Google ID token (or set GOOGLE_ID_TOKEN)")
+    reg_g.add_argument("--gcloud", action="store_true", help="Obtain Google ID token using gcloud CLI")
+    reg_g.add_argument("--audience", help="Optional audience parameter for gcloud identity token")
+    reg_g.add_argument("--browser", action="store_true", help="Open /signup page in your browser")
+    reg_g.add_argument("--role", choices=["consumer", "producer", "prosumer"], default="prosumer",
+                       help="prosumer (default) can both use models and share a GPU")
+    reg_g.add_argument("--save-key", metavar="FILE", help="Write the key to FILE (owner-only) instead of printing it")
+    reg_g.set_defaults(func=cmd_register_google)
+
+    login_g = sub.add_parser("login-google", help="Alias for register-google (returns rotated API key)")
+    login_g.add_argument("--token", help="Google ID token (or set GOOGLE_ID_TOKEN)")
+    login_g.add_argument("--gcloud", action="store_true", help="Obtain Google ID token using gcloud CLI")
+    login_g.add_argument("--audience", help="Optional audience parameter for gcloud identity token")
+    login_g.add_argument("--browser", action="store_true", help="Open /signup page in your browser")
+    login_g.add_argument("--role", choices=["consumer", "producer", "prosumer"], default="prosumer")
+    login_g.add_argument("--save-key", metavar="FILE", help="Write the key to FILE (owner-only) instead of printing it")
+    login_g.set_defaults(func=cmd_register_google)
     chk = sub.add_parser("check", help="Verify your key and show balance, live models and tiers")
     chk.set_defaults(func=cmd_check)
     snip = sub.add_parser("snippet", help="Print settings for an editor or library")

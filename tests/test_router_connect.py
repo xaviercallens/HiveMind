@@ -106,3 +106,40 @@ def test_check_reports_balance_live_models_and_tiers_and_rejects_a_bad_key(
     assert "hivemind/coder" in out and "[live]" in out and "no producer yet" in out and "balance is 0" in out
     monkeypatch.setenv(connect.API_KEY_ENV, "hm-bad")
     assert connect.main(["--gateway", GATEWAY, "check"], transport=transport) == 1
+
+
+def test_register_google_with_token_saves_key_or_prints(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/hivemind/register/google"
+        body = json.loads(request.content)
+        assert body["id_token"] == "valid.google.jwt"
+        return httpx.Response(200, json={"account_id": "google:acc99", "api_key": "hm-gkey-999", "role": body["role"], "created": True})
+
+    transport = httpx.MockTransport(handler)
+    # direct print
+    assert connect.main(["--gateway", GATEWAY, "register-google", "--token", "valid.google.jwt"], transport=transport) == 0
+    out = capsys.readouterr().out
+    assert "Account created with Google!" in out and "hm-gkey-999" in out and "account google:acc99" in out
+
+    # save-key with 0o600 mode
+    target = tmp_path / "gkey"
+    assert connect.main(["--gateway", GATEWAY, "login-google", "--token", "valid.google.jwt", "--save-key", str(target)], transport=transport) == 0
+    assert target.read_text() == "hm-gkey-999" and stat.S_IMODE(os.stat(target).st_mode) == 0o600
+
+
+def test_register_google_handles_errors_and_missing_token(capsys: pytest.CaptureFixture[str]) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"error": {"message": "Google sign-in failed. Sign in again."}})
+
+    transport = httpx.MockTransport(handler)
+    # error from gateway
+    assert connect.main(["--gateway", GATEWAY, "register-google", "--token", "expired.jwt"], transport=transport) == 1
+    err = capsys.readouterr().err
+    assert "Google sign-in failed (401)" in err
+
+    # missing token
+    with pytest.raises(SystemExit):
+        connect.main(["--gateway", GATEWAY, "register-google"])
+

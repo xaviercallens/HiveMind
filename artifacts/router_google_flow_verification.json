@@ -1,0 +1,55 @@
+{
+  "schema_version": "hivemind-openrouter-google-flow/v1.0",
+  "timestamp_utc": "2026-10-24T12:30:25Z",
+  "all_passed": true,
+  "total_checks": 10,
+  "passed_checks": 10,
+  "duration_seconds": 0.376,
+  "checks": [
+    {
+      "name": "signup_page_rendering_and_csp",
+      "passed": true,
+      "status_code": 200
+    },
+    {
+      "name": "valid_google_id_token_registration",
+      "passed": true,
+      "account_id": "20aa8b9b2ec7e1758fecc08e489332fb"
+    },
+    {
+      "name": "auth_with_issued_api_key",
+      "passed": true
+    },
+    {
+      "name": "anti_replay_token_rejection",
+      "passed": true,
+      "status_code": 401
+    },
+    {
+      "name": "relogin_key_rotation_and_revocation",
+      "passed": true
+    },
+    {
+      "name": "negative_control_bad_audience",
+      "passed": true
+    },
+    {
+      "name": "negative_control_expired_token",
+      "passed": true
+    },
+    {
+      "name": "negative_control_unverified_email",
+      "passed": true
+    },
+    {
+      "name": "anti_squatting_reserved_handle_protection",
+      "passed": true
+    },
+    {
+      "name": "cli_connector_register_google",
+      "passed": true,
+      "exit_code": 0
+    }
+  ],
+  "receipt_sha256": "78631759c841adfa1c847af172cc47229e276a0bcf1b2fa0c75bdba926b6baad"
+}

@@ -1,7 +1,7 @@
 {
   "schema_version": "hivemind-gwaya-stub-audit/v1.0",
   "auditor": "gwaya.ast_audit.ZeroStubAudit (GWAYA-GwenLayaOpenModel)",
-  "files_audited": 81,
+  "files_audited": 110,
   "files_failed": [],
   "all_passed": true,
   "results": [
@@ -34,6 +34,15 @@
     },
     {
       "file": "src/hivemind/boinc/coordinator_api.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/boinc/hivemind_at_home_dashboard.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -133,6 +142,15 @@
     },
     {
       "file": "src/hivemind/cli/poc_rtx2070.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/cli/season9_10_gpu_swarm_campaigns.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -294,6 +312,15 @@
       }
     },
     {
+      "file": "src/hivemind/data/dataset_mining_campaign.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "src/hivemind/data/hf_real_trainer.py",
       "passed": true,
       "detail": {
@@ -304,6 +331,24 @@
     },
     {
       "file": "src/hivemind/data/token_training_eval.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/economy/__init__.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/economy/compute_coin.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -357,6 +402,69 @@
       }
     },
     {
+      "file": "src/hivemind/router/__init__.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/router/accounts.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/router/catalog.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/router/gateway.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/router/google_auth.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/router/market.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/router/signup_page.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "src/hivemind/security/__init__.py",
       "passed": true,
       "detail": {
@@ -366,7 +474,25 @@
       }
     },
     {
+      "file": "src/hivemind/security/_exceptions.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "src/hivemind/security/federated_learning_hardening.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/security/firewall_pentest_corpus.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -385,6 +511,15 @@
     },
     {
       "file": "src/hivemind/security/guardrail_attack_simulator.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/security/hivemind_firewall.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -492,6 +627,15 @@
       }
     },
     {
+      "file": "src/hivemind/swarm/la_ruche_vault.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "src/hivemind/swarm/ledger.py",
       "passed": true,
       "detail": {
@@ -582,6 +726,33 @@
       }
     },
     {
+      "file": "scripts/hivemind_connect.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/hivemind_producer_agent.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/hivemind_producer_shield.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "scripts/logged_model_review.py",
       "passed": true,
       "detail": {
@@ -591,7 +762,34 @@
       }
     },
     {
+      "file": "scripts/pr_gatekeeper.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "scripts/publish_hivemind_paper_zenodo.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/router_gamer_e2e.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/router_live_e2e.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -627,6 +825,15 @@
       }
     },
     {
+      "file": "scripts/run_compute_market_sim.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "scripts/run_ef21_error_feedback_benchmark.py",
       "passed": true,
       "detail": {
@@ -637,6 +844,15 @@
     },
     {
       "file": "scripts/run_experiment_E10_lattice.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/run_experiment_E12_replay.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -672,6 +888,24 @@
       }
     },
     {
+      "file": "scripts/run_firewall_pentest_campaign.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/run_hivemind_at_home_and_ruche_campaign.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "scripts/run_multi_moe_hf_campaign.py",
       "passed": true,
       "detail": {
@@ -690,7 +924,34 @@
       }
     },
     {
+      "file": "scripts/run_season9_10_gpu_swarm_campaigns.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "scripts/run_wan_quic_turn_fault_benchmark.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/test_public_gcp_hivemind_client.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/test_router_google_flow.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -735,6 +996,6 @@
       }
     }
   ],
-  "written_utc": "2026-10-23T17:42:18Z",
-  "receipt_sha256": "4025cd2ec998f55a2e2c7d1cbfe84cb8c8f2194c2980ed8a950584d906007f10"
+  "written_utc": "2026-10-24T12:30:37Z",
+  "receipt_sha256": "d34c3fd41829b9fbc26d14fe92e43d37e41693d531e852419fd71c1ff2c8c0d1"
 }

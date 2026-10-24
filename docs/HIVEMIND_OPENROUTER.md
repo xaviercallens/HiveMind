@@ -211,6 +211,25 @@ Google Cloud product. It is off until the operator provides a client id.
 Abuse limits: Google accounts cost a person something to create, tokens are single use and fresh, and sign-ins share the
 registration rate limit. Accounts still start at 0 HMT; a welcome grant is a policy decision (`HM-S13-11`), not automatic.
 
+### Command-Line Sign In with Google (`scripts/hivemind_connect.py`)
+
+You can also complete the Google sign-in flow directly from your terminal:
+
+```bash
+# 1. Open the /signup page in your browser and enter the resulting API key:
+python scripts/hivemind_connect.py register-google --browser
+
+# 2. Or pass a Google ID token directly:
+python scripts/hivemind_connect.py register-google --token <GOOGLE_ID_TOKEN>
+
+# 3. Or obtain one automatically via gcloud (if gcloud CLI is configured):
+python scripts/hivemind_connect.py register-google --gcloud
+
+# 4. Save directly to an owner-only key file:
+python scripts/hivemind_connect.py register-google --token <GOOGLE_ID_TOKEN> --save-key ~/.hivemind_key
+export HIVEMIND_API_KEY=$(cat ~/.hivemind_key)
+```
+
 ## The public deployment
 
 Live since 2026-10-24 on Cloud Run (project `gen-lang-client-0625573011`, `us-central1`, owner-approved public access):

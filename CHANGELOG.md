@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.10.1 — 2026-10-24 — OpenRouter Google Flow: CLI integration, UI showcase & e2e verification
+
+- `scripts/hivemind_connect.py`: added `register-google` and `login-google` subcommands supporting direct Google ID token (`--token`), automatic `gcloud auth print-identity-token --include-email` token generation (`--gcloud`), and browser-directed registration (`--browser`).
+- `src/hivemind/boinc/hivemind_at_home_dashboard.py` & `HiveMindatHome.github.io`: added Screen 02C showcase card for the OpenRouter and Google Sign-in gateway, featuring 5 capability tiers (`coder-lite`, `coder`, `coder-plus`, `moe-general`, `moe-coder`) and direct link to `/signup`, localized across 5 languages (`en`, `fr`, `zh`, `es`, `de`).
+- `scripts/test_router_google_flow.py`: end-to-end verification suite covering `/signup` CSP, RS256 token verification, anti-replay, key rotation, negative controls, anti-squatting handle protection, and CLI connector. 10/10 checks passing with cryptographic receipt SHA-256 `78631759c841adfa1c847af172cc47229e276a0bcf1b2fa0c75bdba926b6baad`.
+- GWAYA zero-stub audit passing 110/110 files.
+
 ## v2.10.0 — 2026-10-24 — Easy registration: Sign in with Google
 
 - `hivemind.router.google_auth`: ID-token verification with the standard library plus `cryptography` only. RS256 is pinned (no `none`, no HS256-with-public-key confusion), keys come only from Google's published set (cached, refetched at most once a minute on an unknown key id), audience must be our client id, issuer Google, token fresh and unexpired, e-mail verified, and each token works once. 33 tests, one negative control per rule; three reintroduced bugs (no audience check, any algorithm, no signature check) each made a test fail.

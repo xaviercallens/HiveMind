@@ -35,7 +35,13 @@ says so and you can register with a handle as below.
 
 ```bash
 pip install httpx
+
+# Option A: Sign in with Google (1-click via browser or gcloud):
+python hivemind_connect.py register-google --browser --save-key ~/.hivemind_key
+
+# Option B: Register with a handle:
 python hivemind_connect.py register --handle your-name --save-key ~/.hivemind_key   # key saved owner-only
+
 export HIVEMIND_API_KEY=$(cat ~/.hivemind_key)
 python hivemind_connect.py check            # balance, which models have a producer right now, the tier list
 python hivemind_connect.py snippet --list   # continue opencode aider cline zed jetbrains python env

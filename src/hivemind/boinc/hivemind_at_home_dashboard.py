@@ -502,6 +502,9 @@ MULTILINGUAL_I18N_DICTIONARY: Dict[str, Dict[str, str]] = {
         "video_ch4": "Ch.4: GWAYA Coding & Gwen Top-2 MoE",
         "s2a_title": "🎮 Screen 02A — Join the Swarm & Gaming Preemption Simulator",
         "s2b_title": "⚡ Screen 02B — Earn & Spend HiveMind Compute Points Studio",
+        "s2c_title": "🌐 Screen 02C — HiveMind OpenRouter & Google Sign-In Gateway",
+        "s2c_badge": "OpenAI-Compatible MoE API & 1-Click Google Sign-In",
+        "btn_signup_google": "🚀 Sign in with Google (/signup)",
         "examples_gallery_title": "🧪 Interactive 8-Domain Examples Gallery (Click Any Example to Run Live)",
         "s3a_title": "🐝 Screen 03A — La Ruche Interactive Honeycomb Vault",
         "s3b_title": "🤖 Screen 03B — Available Pretrained MoE Bees (GWAYA, Gwen MoE, Astrophysics & More)",
@@ -548,6 +551,9 @@ MULTILINGUAL_I18N_DICTIONARY: Dict[str, Dict[str, str]] = {
         "video_ch4": "Ch.4 : Codage GWAYA & Routage Gwen MoE",
         "s2a_title": "🎮 Écran 02A — Rejoindre l'Essaim & Simulateur de Préemption Jeu",
         "s2b_title": "⚡ Écran 02B — Studio Gagner & Dépenser des Points de Calcul HiveMind",
+        "s2c_title": "🌐 Écran 02C — Passerelle HiveMind OpenRouter & Connexion Google",
+        "s2c_badge": "API MoE Compatible OpenAI & Connexion Google en 1 Clic",
+        "btn_signup_google": "🚀 Se connecter avec Google (/signup)",
         "examples_gallery_title": "🧪 Galerie Interactive de 8 Exemples Concrets (Cliquez pour Exécuter en Direct)",
         "s3a_title": "🐝 Écran 03A — La Ruche : Coffre-Fort Honeycomb Interactif",
         "s3b_title": "🤖 Écran 03B — Catalogue des Abeilles MoE Pré-entraînées (GWAYA, Gwen MoE, Astrophysique)",
@@ -594,6 +600,9 @@ MULTILINGUAL_I18N_DICTIONARY: Dict[str, Dict[str, str]] = {
         "video_ch4": "第4章：GWAYA 编程与 Gwen Top-2 路由",
         "s2a_title": "🎮 视图 02A — 加入蜂群与游戏抢占模拟器",
         "s2b_title": "⚡ 视图 02B — 赢取与兑换 HiveMind 算力积分工作台",
+        "s2c_title": "🌐 视图 02C — HiveMind OpenRouter 网关与 Google 快捷登录",
+        "s2c_badge": "兼容 OpenAI 的 MoE 接口 & 一键 Google 登录",
+        "btn_signup_google": "🚀 使用 Google 登录 (/signup)",
         "examples_gallery_title": "🧪 8 大领域交互式示例库 (点击任意示例立即运行)",
         "s3a_title": "🐝 视图 03A — La Ruche 交互式六边形蜂巢模型库",
         "s3b_title": "🤖 视图 03B — 预训练 MoE 专家蜜蜂目录 (GWAYA 编程、Gwen MoE、天体物理等)",
@@ -640,6 +649,9 @@ MULTILINGUAL_I18N_DICTIONARY: Dict[str, Dict[str, str]] = {
         "video_ch4": "Cap.4: Código GWAYA y Enrutador Gwen MoE",
         "s2a_title": "🎮 Pantalla 02A — Únete al Enjambre y Simulador de Preempción en Juegos",
         "s2b_title": "⚡ Pantalla 02B — Estudio para Ganar y Canjear Puntos de Cómputo HiveMind",
+        "s2c_title": "🌐 Pantalla 02C — Pasarela HiveMind OpenRouter e Inicio con Google",
+        "s2c_badge": "API MoE Compatible con OpenAI e Inicio de Sesión Google en 1 Clic",
+        "btn_signup_google": "🚀 Iniciar sesión con Google (/signup)",
         "examples_gallery_title": "🧪 Galería Interactiva de 8 Ejemplos Reales (Haz Clic para Ejecutar en Vivo)",
         "s3a_title": "🐝 Pantalla 03A — La Ruche: Bóveda Panal Interactiva",
         "s3b_title": "🤖 Pantalla 03B — Abejas MoE Preentrenadas Disponibles (GWAYA, Gwen MoE, Astrofísica)",
@@ -686,6 +698,9 @@ MULTILINGUAL_I18N_DICTIONARY: Dict[str, Dict[str, str]] = {
         "video_ch4": "Kap.4: GWAYA-Code & Gwen Top-2 MoE",
         "s2a_title": "🎮 Ansicht 02A — Dem Schwarm Beitreten & Spiel-Unterbrechungs-Simulator",
         "s2b_title": "⚡ Ansicht 02B — HiveMind-Rechenpunkte Sammeln & Einlösen Studio",
+        "s2c_title": "🌐 Ansicht 02C — HiveMind OpenRouter & Google-Anmeldung Gateway",
+        "s2c_badge": "OpenAI-Kompatible MoE-API & 1-Klick Google-Anmeldung",
+        "btn_signup_google": "🚀 Mit Google anmelden (/signup)",
         "examples_gallery_title": "🧪 Interaktive Galerie mit 8 Praxisbeispielen (Klicken zum Live-Ausführen)",
         "s3a_title": "🐝 Ansicht 03A — La Ruche: Interaktiver Waben-Tresor",
         "s3b_title": "🤖 Ansicht 03B — Vortrainierte MoE-Spezialisten-Bienen (GWAYA, Gwen MoE, Astrophysik)",
@@ -2846,6 +2861,53 @@ uv run python scripts/test_public_gcp_hivemind_client.py --url {PUBLIC_GCP_CLOUD
         </div>
         <canvas id="compute-visual-canvas" width="560" height="150" style="width:100%;height:150px;background:#040710;border:1px solid rgba(0,240,255,0.35);border-radius:8px;display:block;margin-bottom:8px;"></canvas>
         <pre id="compute-points-output" class="code-block" style="max-height:190px;overflow-y:auto;color:#38bdf8;">Select a task above to spend your HiveMind Compute Points and run the specialist MoE Bee!</pre>
+      </section>
+
+      <!-- SCREEN 02C: OPENROUTER GATEWAY & GOOGLE SIGN-IN -->
+      <section class="card col-12" style="margin-top:14px;border-color:rgba(0,240,255,0.45);background:linear-gradient(135deg,rgba(10,18,34,0.85) 0%,rgba(6,12,24,0.95) 100%);">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:10px;">
+          <div>
+            <h2 style="margin:0 0 4px;">
+              <span data-i18n="s2c_title">&#x1F310; Screen 02C &mdash; HiveMind OpenRouter &amp; Google Sign-In Gateway</span>
+            </h2>
+            <span class="pill-blue" data-i18n="s2c_badge">OpenAI-Compatible MoE API &amp; 1-Click Google Sign-In</span>
+            <span class="pill-gold">Kelly Producer/Consumer Equilibrium (0.00 EUR/USD)</span>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <a href="https://hivemind-openrouter-1003063861791.us-central1.run.app/signup" target="_blank" rel="noopener" class="btn-action btn-gold btn-chamfer" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;" data-i18n="btn_signup_google">
+              &#x1F680; Sign in with Google (/signup)
+            </a>
+            <a href="https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/hivemind/catalog" target="_blank" rel="noopener" class="btn-action btn-chamfer" style="text-decoration:none;">
+              &#x1F4CB; Public Catalog
+            </a>
+          </div>
+        </div>
+        <p style="font-size:0.84rem;color:#cbd5e1;margin:0 0 12px;line-height:1.5;">
+          Connect your favorite coding editor (<strong>Continue</strong> in VS Code/JetBrains, <strong>OpenCode</strong>, <strong>Cline</strong>, <strong>Aider</strong>, or <strong>Zed</strong>) or Python code directly to the decentralized HiveMind MoE swarm. Use Google Sign-in to get an instant API key without passwords, or register through the CLI.
+        </p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-bottom:12px;">
+          <div style="background:rgba(5,8,17,0.7);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:10px;">
+            <h4 style="margin:0 0 6px;color:#38bdf8;font-size:0.8rem;text-transform:uppercase;">&#x1F4BB; Supported Capability Tiers</h4>
+            <ul style="margin:0;padding-left:18px;font-size:0.78rem;color:#94a3b8;line-height:1.6;">
+              <li><code style="color:#f8fafc;">hivemind/coder-lite</code> (3B) &mdash; 4 GB VRAM (Qwen2.5-Coder:3B)</li>
+              <li><code style="color:#f8fafc;">hivemind/coder</code> (7B) &mdash; 6 GB VRAM (Qwen2.5-Coder:7B)</li>
+              <li><code style="color:#f8fafc;">hivemind/coder-plus</code> (14B) &mdash; 12 GB VRAM (Qwen2.5-Coder:14B)</li>
+              <li><code style="color:#f8fafc;">hivemind/moe-general</code> (20B, 3.6B act.) &mdash; 16 GB VRAM (gpt-oss:20b)</li>
+              <li><code style="color:#f8fafc;">hivemind/moe-coder</code> (30B, 3.3B act.) &mdash; 24 GB VRAM (Qwen3-Coder:30b)</li>
+            </ul>
+          </div>
+          <div style="background:rgba(5,8,17,0.7);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:10px;">
+            <h4 style="margin:0 0 6px;color:#fbbf24;font-size:0.8rem;text-transform:uppercase;">&#x26A1; CLI Connector Commands</h4>
+            <pre class="code-block" style="margin:0;font-size:0.75rem;line-height:1.4;"><span style="color:#64748b;"># 1. Sign in with Google (ID token or opens /signup):</span>
+python scripts/hivemind_connect.py register-google --browser
+
+<span style="color:#64748b;"># 2. Check balance, live models &amp; tiers:</span>
+python scripts/hivemind_connect.py check
+
+<span style="color:#64748b;"># 3. Export snippet for Continue, OpenCode, Cline:</span>
+python scripts/hivemind_connect.py snippet continue --model coder</pre>
+          </div>
+        </div>
       </section>
     </div>
 

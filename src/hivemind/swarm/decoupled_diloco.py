@@ -545,7 +545,11 @@ class ContinuousAsyncLearnerCoordinator:
         outer_lr: float = 0.7,
         grace_window_s: float = 0.0,
     ) -> Tuple[torch.Tensor, Dict[str, object]]:
-        """Close the current round using admitted fresh + carried deferred/eager learner deltas."""
+        """Attempt a quorum merge, retaining pending work until at least K learners arrive.
+
+        Eager stale steps apply independently. While waiting, ``round_closed`` is ``None``
+        and ``quorum_reached`` is false; the current quorum round does not advance.
+        """
         p32 = global_param.detach().to(torch.float32).clone()
 
         # 1. If eager_one_step items are queued, apply them immediately with staleness damping
@@ -583,8 +587,9 @@ class ContinuousAsyncLearnerCoordinator:
             )
             for lid, v in combined.items()
         ]
-        eff_k = min(self.min_quorum_k, max(1, len(arrivals)))
-        selection = select_quorum(arrivals, min_quorum_k=eff_k, grace_window_s=grace_window_s)
+        selection = select_quorum(
+            arrivals, min_quorum_k=self.min_quorum_k, grace_window_s=grace_window_s
+        )
 
         admitted_deltas: List[torch.Tensor] = []
         admitted_weights: List[float] = []
@@ -603,23 +608,28 @@ class ContinuousAsyncLearnerCoordinator:
             )
             p32 = p32 - float(outer_lr) * merged_delta
 
-        # Learners in selection.deferred_learner_ids stay in _deferred_carry (unless mode == "drop")
-        new_carry: Dict[str, Dict[str, object]] = {}
-        for lid in selection.deferred_learner_ids:
-            if self.straggler_mode == "drop":
-                self.dropped_tokens += int(combined[lid]["tokens"])  # type: ignore[arg-type]
-            else:
-                new_carry[lid] = combined[lid]
-        self._deferred_carry = new_carry
-        self._fresh_inbox.clear()
-        self.current_round += 1
+        round_closed: Optional[int] = None
+        if selection.reached:
+            # Only a completed quorum can defer/drop late learners and consume the inbox.
+            new_carry: Dict[str, Dict[str, object]] = {}
+            for lid in selection.deferred_learner_ids:
+                if self.straggler_mode == "drop":
+                    self.dropped_tokens += int(combined[lid]["tokens"])  # type: ignore[arg-type]
+                else:
+                    new_carry[lid] = combined[lid]
+            self._deferred_carry = new_carry
+            self._fresh_inbox.clear()
+            round_closed = self.current_round
+            self.current_round += 1
 
         pending_tokens = sum(int(v["tokens"]) for v in self._deferred_carry.values())  # type: ignore[arg-type]
+        pending_tokens += sum(int(v["tokens"]) for v in self._fresh_inbox.values())  # type: ignore[arg-type]
         conservation = self.total_submitted_tokens == (
             self.merged_tokens + pending_tokens + self.dropped_tokens
         )
         return p32.to(dtype=global_param.dtype, device=global_param.device), {
-            "round_closed": self.current_round - 1,
+            "round_closed": round_closed,
+            "quorum_reached": selection.reached,
             "straggler_mode": self.straggler_mode,
             "admitted_learners": list(selection.admitted_learner_ids),
             "deferred_learners": list(selection.deferred_learner_ids),

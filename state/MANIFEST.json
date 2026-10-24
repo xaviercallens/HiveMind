@@ -66,7 +66,7 @@
   "state/memory/reference_spot_vm_checkpoint.md": "03783c38db760c7866fad1ef2d7f0345aaffe36d5a72c5e0bad73a5aad936374"
  },
  "head": "86870d7",
- "reason": "manual",
+ "reason": "periodic",
  "skipped_secret_like": [],
- "written_utc": "2026-10-24 12:56:24"
+ "written_utc": "2026-10-24 13:05:20"
 }

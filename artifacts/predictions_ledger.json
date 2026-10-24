@@ -1,6 +1,6 @@
 {
   "schema_version": "hivemind-predictions-ledger/v1.1",
-  "updated_utc": "2026-10-24T12:52:13Z",
+  "updated_utc": "2026-10-24T14:51:34Z",
   "predictions": {
     "P1": {
       "rq": "RQ1",
@@ -689,36 +689,46 @@
       "claim": "A2 per RoPE plane lowers KV-cache dNLL vs scalar quantisation at matched measured bits",
       "decided_by": "E11-kv-lattice",
       "status": "refuted",
-      "status_detail": "refuted (on qwen0.5b, qwen7b, gemma4-e4b)",
+      "status_detail": "refuted on qwen0.5b (one rate-matched cell, R = 4; R = 2 and 3 not rate-matched) and gemma4-e4b; qwen7b withdrawn: negative control failed",
       "per_model": {
         "qwen0.5b": "refuted",
-        "qwen7b": "refuted",
+        "qwen7b": "withdrawn (negative control failed)",
         "gemma4-e4b": "refuted"
       },
-      "scale": "real KV tensors of Qwen2.5-0.5B-Instruct, Qwen2.5-Coder-7B-Instruct and Gemma-4-E4B on WikiText-2, 1024-token windows, 3 seeds (E11, amendment 1)",
+      "withdrawn": {
+        "qwen7b": {
+          "reason": "negative control negative_A2at8_equals_fp8 failed: -0.47 +- 0.20 nats (an 8-bit lattice cannot be half a nat better than FP8 unless the FP8 arm is broken on this float16 model)"
+        }
+      },
+      "scale": "real KV tensors of Qwen2.5-0.5B-Instruct and Gemma-4-E4B on WikiText-2, 1024-token windows, 3 seeds (E11, amendment 1); the Qwen2.5-Coder-7B row is INVALID and withdrawn",
       "artifact": "artifacts/experiments/E11_kv_lattice_report.json",
       "receipt_sha256": "d47e0956eef3a8314e1a0ab3c64c5d8679ca8a7d28f0af9f088920d19b20ac51",
       "prereg_sha256": "f79e06aeb2f12e0314a1d381ef87df3f6548dedf4393699854d0a216814b6cb5",
       "controls_all_passed": false,
-      "note": "overall rule: refuted if refuted on any valid model; the A2@8-vs-FP8 negative control failed on both Qwen models by a design error recorded in amendment 1"
+      "note": "receipt controls_all_passed is false; qwen7b (control off by -0.47 nats) is withdrawn; on qwen0.5b the same control reads -0.04 nats, explained in amendment 1 by FP8 e4m3 being coarser than an 8-bit lattice, and that failure is reported; only gemma4-e4b passed every control"
     },
     "P11b": {
       "rq": "RQ10",
       "claim": "E8 lowers KV-cache dNLL vs scalar only after a per-head KLT",
       "decided_by": "E11-kv-lattice",
       "status": "refuted",
-      "status_detail": "refuted (on gemma4-e4b)",
+      "status_detail": "refuted on gemma4-e4b (E8 beats Z without the transform); qwen0.5b inconclusive; qwen7b withdrawn: negative control failed",
       "per_model": {
         "qwen0.5b": "inconclusive",
-        "qwen7b": "supported",
+        "qwen7b": "withdrawn (negative control failed)",
         "gemma4-e4b": "refuted (E8 already beats Z without the transform)"
       },
-      "scale": "real KV tensors of Qwen2.5-0.5B-Instruct, Qwen2.5-Coder-7B-Instruct and Gemma-4-E4B on WikiText-2, 1024-token windows, 3 seeds (E11, amendment 1)",
+      "withdrawn": {
+        "qwen7b": {
+          "reason": "negative control negative_A2at8_equals_fp8 failed: -0.47 +- 0.20 nats (an 8-bit lattice cannot be half a nat better than FP8 unless the FP8 arm is broken on this float16 model)"
+        }
+      },
+      "scale": "real KV tensors of Qwen2.5-0.5B-Instruct and Gemma-4-E4B on WikiText-2, 1024-token windows, 3 seeds (E11, amendment 1); the Qwen2.5-Coder-7B row is INVALID and withdrawn",
       "artifact": "artifacts/experiments/E11_kv_lattice_report.json",
       "receipt_sha256": "d47e0956eef3a8314e1a0ab3c64c5d8679ca8a7d28f0af9f088920d19b20ac51",
       "prereg_sha256": "f79e06aeb2f12e0314a1d381ef87df3f6548dedf4393699854d0a216814b6cb5",
       "controls_all_passed": false,
-      "note": "overall rule: refuted if refuted on any valid model; the A2@8-vs-FP8 negative control failed on both Qwen models by a design error recorded in amendment 1"
+      "note": "receipt controls_all_passed is false; qwen7b (control off by -0.47 nats) is withdrawn; on qwen0.5b the same control reads -0.04 nats, explained in amendment 1 by FP8 e4m3 being coarser than an 8-bit lattice, and that failure is reported; only gemma4-e4b passed every control"
     },
     "P12-same": {
       "rq": "RQ11",
@@ -2139,16 +2149,87 @@
         "bar_tps": 20.0,
         "status": "met"
       }
+    },
+    "P12a": {
+      "rq": "RQ11",
+      "claim": "replaying the same 50-step LoRA segment in a second process on the same host and thread count reproduces the parameters bit for bit",
+      "decided_by": "E12-pilot",
+      "status": "supported",
+      "status_detail": "supported",
+      "scale": "Qwen2.5-0.5B LoRA, one 50-step segment, CPU classes only (E12-pilot)",
+      "artifact": "artifacts/experiments/E12_pilot_report.json",
+      "receipt_sha256": "5e6095c9f7644d3ef1fba0ec5f4ce752f6edfc9a74b35bb173ab63591d6a6de4",
+      "prereg_sha256": "1cc44c9ed62d4a8b242e8342ad7c6922bfe067041eac8399dbac86242e4c6bd4",
+      "controls_all_passed": true,
+      "evidence": {
+        "same_process_repeat_linf": 0.0,
+        "status": "supported"
+      },
+      "note": "CPU pilot; GPU classes remain HM-S10-08"
+    },
+    "P12b": {
+      "rq": "RQ11",
+      "claim": "changing only the CPU thread count gives a non-zero divergence that stays within eps = 1e-4",
+      "decided_by": "E12-pilot",
+      "status": "refuted",
+      "status_detail": "refuted",
+      "scale": "Qwen2.5-0.5B LoRA, one 50-step segment, CPU classes only (E12-pilot)",
+      "artifact": "artifacts/experiments/E12_pilot_report.json",
+      "receipt_sha256": "5e6095c9f7644d3ef1fba0ec5f4ce752f6edfc9a74b35bb173ab63591d6a6de4",
+      "prereg_sha256": "1cc44c9ed62d4a8b242e8342ad7c6922bfe067041eac8399dbac86242e4c6bd4",
+      "controls_all_passed": true,
+      "evidence": {
+        "threads_1": 0.0002622827887535095,
+        "threads_8": 0.00025490671396255493,
+        "status": "refuted"
+      },
+      "note": "CPU pilot; GPU classes remain HM-S10-08"
+    },
+    "P12c": {
+      "rq": "RQ11",
+      "claim": "a different host (CPU, torch build, library versions) diverges by more than the thread-count cells and more than 1e-6; whether it stays within eps decides the matching rule",
+      "decided_by": "E12-pilot",
+      "status": "refuted",
+      "status_detail": "refuted",
+      "scale": "Qwen2.5-0.5B LoRA, one 50-step segment, CPU classes only (E12-pilot)",
+      "artifact": "artifacts/experiments/E12_pilot_report.json",
+      "receipt_sha256": "5e6095c9f7644d3ef1fba0ec5f4ce752f6edfc9a74b35bb173ab63591d6a6de4",
+      "prereg_sha256": "1cc44c9ed62d4a8b242e8342ad7c6922bfe067041eac8399dbac86242e4c6bd4",
+      "controls_all_passed": true,
+      "evidence": {
+        "remote_cpu": 0.00015172502025961876,
+        "exceeds_thread_cells": false,
+        "within_eps": false,
+        "status": "refuted"
+      },
+      "note": "CPU pilot; GPU classes remain HM-S10-08"
+    },
+    "P12d": {
+      "rq": "RQ11",
+      "claim": "bf16 autocast (the consumer-GPU precision class) exceeds eps",
+      "decided_by": "E12-pilot",
+      "status": "supported",
+      "status_detail": "supported",
+      "scale": "Qwen2.5-0.5B LoRA, one 50-step segment, CPU classes only (E12-pilot)",
+      "artifact": "artifacts/experiments/E12_pilot_report.json",
+      "receipt_sha256": "5e6095c9f7644d3ef1fba0ec5f4ce752f6edfc9a74b35bb173ab63591d6a6de4",
+      "prereg_sha256": "1cc44c9ed62d4a8b242e8342ad7c6922bfe067041eac8399dbac86242e4c6bd4",
+      "controls_all_passed": true,
+      "evidence": {
+        "bf16_autocast": 0.0033470490016043186,
+        "status": "supported"
+      },
+      "note": "CPU pilot; GPU classes remain HM-S10-08"
     }
   },
   "status_counts": {
     "untested": 6,
-    "refuted": 6,
+    "refuted": 8,
     "inconclusive": 3,
-    "supported": 11,
+    "supported": 13,
     "mixed": 3,
     "descriptive": 3,
     "adequate": 1
   },
-  "receipt_sha256": "641980771f4a8f6fa80707fd45e7e661de18ed48b52e1d78c17402b576f2f8fb"
+  "receipt_sha256": "9f246ad15090e5d9df4930572fbc6f16c1f814f7128695f21c544a1a6ed0f817"
 }

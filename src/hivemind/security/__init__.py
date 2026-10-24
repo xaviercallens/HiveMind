@@ -17,6 +17,9 @@ from importlib import import_module
 from typing import Any
 
 _LAZY_MODULES: dict[str, tuple[str, ...]] = {
+    "hivemind.security._exceptions": (
+        "SwarmSecurityViolationError",
+    ),
     "hivemind.security.federated_learning_hardening": (
         "DPGradientSanitizerConfig",
         "FederatedDeltaAuditReport",
@@ -29,6 +32,31 @@ _LAZY_MODULES: dict[str, tuple[str, ...]] = {
         "GPUHardwareTelemetry",
         "query_live_gpu_hardware_telemetry",
         "run_gpu_circuit_breaker_self_test",
+    ),
+    "hivemind.security.firewall_pentest_corpus": (
+        "ALL_VECTORS",
+        "Vector",
+    ),
+    "hivemind.security.hivemind_firewall": (
+        "ActionSpec",
+        "DEFAULT_ACTION_POLICY",
+        "DataEnvelope",
+        "DelegationCertificate",
+        "FirewallDecision",
+        "HiveMindFirewall",
+        "IdentityRegistry",
+        "InjectionScan",
+        "InjectionVerdict",
+        "Order",
+        "OrderEvent",
+        "OrderLedger",
+        "OrderState",
+        "Principal",
+        "Role",
+        "SandboxedActionRunner",
+        "quarantine_text",
+        "scan_text_for_injection",
+        "sign_order",
     ),
     "hivemind.security.guardrail_attack_simulator": (
         "SimulatedAttackScenarioResult",
@@ -62,7 +90,6 @@ _LAZY_MODULES: dict[str, tuple[str, ...]] = {
     ),
     "hivemind.security.swarm_runtime_hardening": (
         "SwarmHardeningVerdict",
-        "SwarmSecurityViolationError",
         "SwarmTrainingAndStoreGuard",
         "compute_shannon_entropy",
         "run_swarm_hardening_self_test",

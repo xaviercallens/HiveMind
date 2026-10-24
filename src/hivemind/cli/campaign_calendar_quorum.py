@@ -177,6 +177,57 @@ CAMPAIGN_CALENDAR_EVENTS: tuple[dict[str, Any], ...] = (
     },
 )
 
+SEASON9_10_GPU_QUORUM_EVENTS: tuple[dict[str, Any], ...] = (
+    {
+        "event_id": "EVT-S9-01-DECOUPLED-QUORUM-RDA",
+        "title": "Season 9 GPU Sprint 1: Decoupled Quorum (K < M), Async Stragglers (HM-S9-13) & RDA Cosine (HM-S9-14)",
+        "dtstart_utc": "20261025T170000Z",
+        "dtend_utc": "20261025T183000Z",
+        "human_readable_utc": "Sunday, Oct 25, 2026 · 17:00–18:30 UTC",
+        "timezones": "18:00 CET (Paris) | 13:00 EDT (New York) | 10:00 PDT (SF) | 02:00+1 JST (Tokyo)",
+        "target_quorum_tier": "TIER_1_MIN_BYZANTINE_QUORUM",
+        "target_audience": "Community GPU Contributors (@clark719664, @pedromineo, @radialmonster) + AI Agents",
+        "command": "uv run python scripts/run_season9_10_gpu_swarm_campaigns.py --contributor-handle <handle>",
+        "symbolic_points_pts": "3,500 PTS (Compute Reciprocity Only; 0.00 EUR/USD)",
+    },
+    {
+        "event_id": "EVT-S9-02-SIGMA-MOE-ORTHOINJ",
+        "title": "Season 9 GPU Sprint 2: FoMoE Sigma-MoE + Peri-LN (HM-S9-02) & Looped OrthoInj Terminal-KV (HM-S9-03)",
+        "dtstart_utc": "20261101T180000Z",
+        "dtend_utc": "20261101T193000Z",
+        "human_readable_utc": "Sunday, Nov 1, 2026 · 18:00–19:30 UTC",
+        "timezones": "19:00 CET (Paris) | 13:00 EST (New York) | 10:00 PST (SF) | 03:00+1 JST (Tokyo)",
+        "target_quorum_tier": "TIER_2_FULL_8DOMAIN_MOE_QUORUM",
+        "target_audience": "8 GB Consumer GPU Nodes (RTX 20/30/40/50, RX 6000/7000, Apple M1-M4)",
+        "command": "uv run python scripts/run_season9_10_gpu_swarm_campaigns.py --contributor-handle <handle>",
+        "symbolic_points_pts": "3,500 PTS (Compute Reciprocity Only; 0.00 EUR/USD)",
+    },
+    {
+        "event_id": "EVT-S10-01-E8-A2-LATTICE-KV-SPRINT",
+        "title": "Season 10 GPU Sprint 3: Conway-Sloane E8/A2 Hexagonal Lattice Wire (HM-S10-01) & 5-Codec KV-Cache (HM-S10-05)",
+        "dtstart_utc": "20261108T180000Z",
+        "dtend_utc": "20261108T193000Z",
+        "human_readable_utc": "Sunday, Nov 8, 2026 · 18:00–19:30 UTC",
+        "timezones": "19:00 CET (Paris) | 13:00 EST (New York) | 10:00 PST (SF) | 03:00+1 JST (Tokyo)",
+        "target_quorum_tier": "TIER_2_FULL_8DOMAIN_MOE_QUORUM",
+        "target_audience": "GPU Compression & Inference Ring Contributors + AI Prover Agents",
+        "command": "uv run python scripts/run_season9_10_gpu_swarm_campaigns.py --contributor-handle <handle>",
+        "symbolic_points_pts": "3,500 PTS (Compute Reciprocity Only; 0.00 EUR/USD)",
+    },
+    {
+        "event_id": "EVT-S10-02-CROSS-GPU-SPOTCHECK-GAMEDAY",
+        "title": "Season 10 GPU Sprint 4: Cross-Architecture Two-Statistic Spot-Check & Q16 Digest GameDay (HM-S10-08)",
+        "dtstart_utc": "20261115T180000Z",
+        "dtend_utc": "20261115T200000Z",
+        "human_readable_utc": "Sunday, Nov 15, 2026 · 18:00–20:00 UTC",
+        "timezones": "19:00 CET (Paris) | 13:00 EST (New York) | 10:00 PST (SF) | 03:00+1 JST (Tokyo)",
+        "target_quorum_tier": "TIER_3_GLOBAL_SUPER_RING_RAID",
+        "target_audience": "Multi-Host GPU & TPU Validators (NVIDIA T4/RTX, AMD ROCm, Apple MPS, GCP TPU v5e)",
+        "command": "uv run python scripts/run_season9_10_gpu_swarm_campaigns.py --contributor-handle <handle>",
+        "symbolic_points_pts": "3,500 PTS (Compute Reciprocity Only; 0.00 EUR/USD)",
+    },
+)
+
 
 def evaluate_quorum_readiness(
     human_participants: Sequence[str],
@@ -324,6 +375,7 @@ def build_campaign_quorum_schedule_report(
         "standing_orchestrator_cron": "0 */3 * * * (Every 3 Hours UTC: 00:00, 03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00 UTC)",
         "quorum_tiers": QUORUM_TIERS,
         "scheduled_events": list(CAMPAIGN_CALENDAR_EVENTS),
+        "season9_10_gpu_quorum_events": list(SEASON9_10_GPU_QUORUM_EVENTS),
         "current_baseline_quorum_status": current_quorum,
     }
     report["schedule_sha256"] = hashlib.sha256(

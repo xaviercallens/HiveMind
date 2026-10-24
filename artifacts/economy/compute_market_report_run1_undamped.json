@@ -1,0 +1,53 @@
+{
+  "schema_version": "hivemind-compute-market-sim/v1.0",
+  "run_utc": "2026-10-24T08:30:17Z",
+  "seed": 2026,
+  "prereg_sha256": "d2fe922469dd2d8b08acbff76f3d88b7e9ff068910455afdff019d588c4d788f",
+  "kelly_consumers": {
+    "n": 300,
+    "efficiency_min": 0.7996380923332782,
+    "efficiency_median": 0.869473813560564,
+    "efficiency_mean": 0.8815088419307741,
+    "bound_75_respected": true,
+    "feasible": 300
+  },
+  "tullock_workers": {
+    "n": 300,
+    "epsilon_nash_certified": 300,
+    "mean_inactive_workers": 2.7,
+    "price_over_cheapest_cost_median": 2.64580575129743,
+    "price_over_cheapest_cost_min": 1.5477604969347607
+  },
+  "routing": {
+    "n": 60,
+    "converged": 55,
+    "epsilon_nash_certified": 55,
+    "instances_with_a_capacity_bound_worker": 53,
+    "price_spread_median": 0.15817472344989544,
+    "price_spread_max": 0.8034239552375306,
+    "note": "price spread is zero only when no worker is capacity-bound and every queue has >= 2 unconstrained suppliers; capped workers create rents"
+  },
+  "controls": {
+    "positive_control_poa_worst_case": {
+      "instance": "1 consumer at 1.0 vs 50 at 0.5",
+      "efficiency": 0.752475247517436,
+      "passed": true
+    },
+    "negative_control_symmetry": {
+      "tullock_supplies": [
+        22.222222222222225,
+        22.222222222222225,
+        22.222222222222225
+      ],
+      "kelly_shares": [
+        0.5,
+        0.5
+      ],
+      "passed": true
+    }
+  },
+  "controls_all_passed": true,
+  "valid": true,
+  "elapsed_s": 9.54,
+  "receipt_sha256": "d5ee485fad438ed585936e4b7e405dd97c85273b774936eda98afadd6bd22f58"
+}

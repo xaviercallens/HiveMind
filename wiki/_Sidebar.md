@@ -13,6 +13,7 @@
 - 📅 **[10. 1-Click User Guide & Quorum Calendar](User-Guide-and-Quorum-Calendar)**
 - 📚 **[11. Acknowledgments & Academic Citations](Acknowledgments-and-Academic-Citations)**
 - 🧭 **[12. Developer Swarm Progression Guide](Developer-Swarm-Progression-Guide)**
+- 📡 **[13. HiveMind@home, GCP & La Ruche Vault](HiveMind-at-Home-GCP-Dashboard-and-La-Ruche-Vault)**
 
 ---
 **Community Discussions & Links**

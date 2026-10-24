@@ -35,6 +35,8 @@ if exist ".venv\Scripts\python.exe" (
 
 set PYTHONPATH=src
 %PYTHON_BIN% scripts\run_multi_moe_hf_campaign.py --contributor-handle "%HANDLE%" --tier standard > artifacts\latest_user_campaign_summary.md
+echo. >> artifacts\latest_user_campaign_summary.md
+%PYTHON_BIN% scripts\run_season9_10_gpu_swarm_campaigns.py --contributor-handle "%HANDLE%" >> artifacts\latest_user_campaign_summary.md
 type artifacts\latest_user_campaign_summary.md
 
 if exist "%SystemRoot%\System32\clip.exe" (

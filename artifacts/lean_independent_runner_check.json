@@ -1,36 +1,66 @@
 {
-  "schema_version": "hivemind-lean-independent-runner-check/v1.0",
+  "schema_version": "hivemind-lean-independent-runner-check/v1.1",
   "verifier": "AutoevolveAI anse.formal.lean_runner.LeanKernelVerifier.verify_file (compile in place + one '#print axioms' line required per declared theorem; whitelist propext, Classical.choice, Quot.sound)",
   "file": "lean4/HiveMindSpec.lean",
-  "file_sha256": "afae1dc1408c5f102d55c669a9bb24b19de6cf4c0faf63bb450169b4c735f577",
-  "run_utc": "2026-10-23T17:33:03Z",
-  "theorems": 120,
-  "compiled": 120,
+  "file_sha256": "767775f0cea58adaa0dbc36d6222ac5c4e321817f298a3325636727ab1e652af",
+  "file_commit": "b229af1",
+  "working_tree_identical_to_commit": true,
+  "run_utc": "2026-10-24T06:20:22Z",
+  "theorems": 128,
+  "compiled": 128,
+  "clean": 128,
   "has_sorry": 0,
   "untrusted_axioms": 0,
   "axiom_footprints": {
-    "Quot.sound+propext": 57,
-    "Classical.choice+Quot.sound+propext": 30,
-    "none": 16,
+    "Quot.sound+propext": 58,
+    "Classical.choice+Quot.sound+propext": 35,
+    "none": 18,
     "propext": 17
   },
-  "before_coverage_fix": {
-    "compiled": 107,
-    "unverified_theorems_without_axioms_line": [
-      "nf4_double_quant_compression_bound",
-      "spot_check_rejects_tampered_worker",
-      "router_gate_strictly_higher_precision",
-      "byzantine_slashing_strictly_reduces_positive_stake",
-      "georing_rejects_high_latency_wan_peer",
-      "kademlia_xor_self_zero",
-      "kademlia_xor_comm",
-      "speculative_tree_gamma6_rtt_reduction",
-      "mem_le_sum",
-      "accepted_add_residual_sum",
-      "redistribute_eq",
-      "acceptedPrefix_le",
-      "strikeRegister_gt"
-    ]
+  "season15_theorems_121_128": [
+    "quorum_liveness_under_m_minus_k_stragglers",
+    "data_lease_ttl_exceeds_step_plus_rtt_bound",
+    "data_lease_batch_conservation_no_duplicates",
+    "outer_momentum_restart_zeroes_stale_velocity_energy",
+    "sigma_moe_independent_gates_preserve_resident_expert_score",
+    "ortho_inj_pythagorean_energy_conservation",
+    "factored_gossip_js_gate_skips_blocking_mix2_barrier",
+    "e8_lattice_second_moment_strictly_beats_z8_cubic"
+  ],
+  "scientific_lead_flags": {
+    "sigma_moe_independent_gates_preserve_resident_expert_score": "first conjunct is the tautology gate_e = gate_e; the second is Nat arithmetic on top_k; the statement does not mention a gate function",
+    "factored_gossip_js_gate_skips_blocking_mix2_barrier": "proves 0 < sensitive_bytes * num_workers; the Jensen-Shannon gate hypothesis _h_below is unused, so the theorem does not constrain the gate it is named after",
+    "action": "kept in the count (they compile under the whitelist); strengthening registered as HM-S10-09"
+  },
+  "previous_run": {
+    "run_utc": "2026-10-23T17:33:03Z",
+    "file_sha256": "afae1dc1408c5f102d55c669a9bb24b19de6cf4c0faf63bb450169b4c735f577",
+    "theorems": 120,
+    "compiled": 120,
+    "axiom_footprints": {
+      "Quot.sound+propext": 57,
+      "Classical.choice+Quot.sound+propext": 30,
+      "none": 16,
+      "propext": 17
+    },
+    "before_coverage_fix": {
+      "compiled": 107,
+      "unverified_theorems_without_axioms_line": [
+        "nf4_double_quant_compression_bound",
+        "spot_check_rejects_tampered_worker",
+        "router_gate_strictly_higher_precision",
+        "byzantine_slashing_strictly_reduces_positive_stake",
+        "georing_rejects_high_latency_wan_peer",
+        "kademlia_xor_self_zero",
+        "kademlia_xor_comm",
+        "speculative_tree_gamma6_rtt_reduction",
+        "mem_le_sum",
+        "accepted_add_residual_sum",
+        "redistribute_eq",
+        "acceptedPrefix_le",
+        "strikeRegister_gt"
+      ]
+    }
   },
   "results": [
     {
@@ -1195,6 +1225,85 @@
         "Classical.choice",
         "Quot.sound"
       ],
+      "has_sorry": false,
+      "untrusted": []
+    },
+    {
+      "theorem": "quorum_liveness_under_m_minus_k_stragglers",
+      "compiled": true,
+      "axioms": [
+        "propext",
+        "Classical.choice",
+        "Quot.sound"
+      ],
+      "has_sorry": false,
+      "untrusted": []
+    },
+    {
+      "theorem": "data_lease_ttl_exceeds_step_plus_rtt_bound",
+      "compiled": true,
+      "axioms": [
+        "propext",
+        "Quot.sound"
+      ],
+      "has_sorry": false,
+      "untrusted": []
+    },
+    {
+      "theorem": "data_lease_batch_conservation_no_duplicates",
+      "compiled": true,
+      "axioms": [
+        "propext",
+        "Classical.choice",
+        "Quot.sound"
+      ],
+      "has_sorry": false,
+      "untrusted": []
+    },
+    {
+      "theorem": "outer_momentum_restart_zeroes_stale_velocity_energy",
+      "compiled": true,
+      "axioms": [
+        "propext",
+        "Classical.choice",
+        "Quot.sound"
+      ],
+      "has_sorry": false,
+      "untrusted": []
+    },
+    {
+      "theorem": "sigma_moe_independent_gates_preserve_resident_expert_score",
+      "compiled": true,
+      "axioms": [
+        "propext",
+        "Classical.choice",
+        "Quot.sound"
+      ],
+      "has_sorry": false,
+      "untrusted": []
+    },
+    {
+      "theorem": "ortho_inj_pythagorean_energy_conservation",
+      "compiled": true,
+      "axioms": [
+        "propext",
+        "Classical.choice",
+        "Quot.sound"
+      ],
+      "has_sorry": false,
+      "untrusted": []
+    },
+    {
+      "theorem": "factored_gossip_js_gate_skips_blocking_mix2_barrier",
+      "compiled": true,
+      "axioms": [],
+      "has_sorry": false,
+      "untrusted": []
+    },
+    {
+      "theorem": "e8_lattice_second_moment_strictly_beats_z8_cubic",
+      "compiled": true,
+      "axioms": [],
       "has_sorry": false,
       "untrusted": []
     }

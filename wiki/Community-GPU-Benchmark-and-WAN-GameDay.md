@@ -88,7 +88,37 @@ Post your generated Markdown table and `campaign_sha256` receipt in **[GitHub Di
 
 ---
 
-## 4. Related Wiki Pages & Discussions
+## 4. 🛰️ Season 9 & Season 10 GPU + HiveMind Swarm Contributor Campaigns (`v2.5.0`)
+
+Implemented in [`src/hivemind/cli/season9_10_gpu_swarm_campaigns.py`](https://github.com/xaviercallens/HiveMind/blob/main/src/hivemind/cli/season9_10_gpu_swarm_campaigns.py) and [`scripts/run_season9_10_gpu_swarm_campaigns.py`](https://github.com/xaviercallens/HiveMind/blob/main/scripts/run_season9_10_gpu_swarm_campaigns.py), Season 9 (`Wave 8 — Operation Decoupled-Quorum`) and Season 10 (`Wave 9 — Operation Lattice-Codec`) introduce **4 hardware-verified GPU + HiveMind Swarm campaigns**:
+
+| Campaign ID | Tasks & Research Gates | Subsystems Benchmarked on Contributor GPU / HiveMind Node | Symbolic Compute Credits (`0.00 EUR/USD`) |
+| :--- | :--- | :--- | :---: |
+| **`CAMP-S9-E5-QUORUM-RDA-GPU`** | `HM-S9-01`, `HM-S9-05`, `HM-S9-13`, `HM-S9-14` (`G1`/`G2`) | Decoupled Quorum (`K < M`), Continuous Async Straggler Folding (`drop` vs `deferred_token_weighted` vs `eager_one_step`), Outer-Momentum Restart (`K_restart`), and Pairwise Delta-Cosine Radial-Directional Averaging (`RDA`) | `+3,500 PTS` *(Compute Quota Only)* |
+| **`CAMP-S9-E7-SIGMA-LOOPED-MOE-GPU`** | `HM-S9-02`, `HM-S9-03` (`G1`) | 128-Expert 3-Tier Sparse MoE with FoMoE `sigma_moe` Sigmoid Routing + Peri-LN, measured ghost-expert Skip-Token FLOP accounting (`O_e = 4`), and `LoopedExpertBackbone` (`OrthoInj`, `LearnedDepthPrior`, Terminal-KV Sharing) | `+3,500 PTS` *(Compute Quota Only)* |
+| **`CAMP-S10-E11-LATTICE-KV-WIRE-GPU`** | `HM-S10-01`, `HM-S10-05` (`G1`) | Conway-Sloane `E8` / `Z` / `sign` Lattice Delta Quantizer in `ComputeVisibleSparseLoCoCompressor` + `FP8PagedKVCache` 5-Codec Benchmark (`fp8_e4m3`, `a2_rope_plane`, `e8_lattice`, `scalar_2bit` pos-control, `a2_8bit` neg-control) | `+3,500 PTS` *(Compute Quota Only)* |
+| **`CAMP-S10-E12-HETERO-SPOTCHECK-WAN-GPU`** | `HM-S9-04`, `HM-S9-06`, `HM-S10-08` (`G2`/`G3`) | Execution-class-matched `DeterministicSpotCheckValidator` (two-statistic `linf` + tensor-fraction rule & `Q16` fixed-point SHA-256 digest), Heartbeat CAS Shard Leasing (`committed == granted - reclaimed`), and Factored Gossip `Mix1`/`Mix2` | `+3,500 PTS` *(Compute Quota Only)* |
+
+### Run All 4 Season 9 & 10 GPU Swarm Campaigns (`< 20 Seconds`)
+
+```bash
+PYTHONPATH=src python scripts/run_season9_10_gpu_swarm_campaigns.py \
+  --contributor-handle "@your_github_handle" \
+  --device auto
+```
+
+### Active GPU Contributor Roster & Guild Assignments
+
+| Contributor | Guild | GPU / Accelerator Profile | Primary Assigned Campaigns |
+| :--- | :--- | :--- | :--- |
+| **`@clark719664`** | `GUILD-01-EU-STEM-SENTINELS` | NVIDIA Consumer RTX GPU (`<= 6,656 MiB` WDDM) + Linux CUDA Node | `CAMP-S9-E5-QUORUM-RDA-GPU`, `CAMP-S9-E7-SIGMA-LOOPED-MOE-GPU` |
+| **`@radialmonster`** | `GUILD-02-GLOBAL-ZK-GUARDIANS` | NVIDIA GeForce RTX Consumer GPU + Multi-Thread x86_64 Validator | `CAMP-S10-E11-LATTICE-KV-WIRE-GPU`, `CAMP-S10-E12-HETERO-SPOTCHECK-WAN-GPU` |
+| **`@pedromineo`** | `GUILD-03-BIOMED-OPEN-SCIENCE` | Multi-Vendor GPU (`CUDA` / `ROCm` / `MPS`) & WAN Relay Node | `CAMP-S9-E5-QUORUM-RDA-GPU`, `CAMP-S10-E12-HETERO-SPOTCHECK-WAN-GPU` |
+| **`@xaviercallens`** | `CORE-COORDINATOR-SWARM` | Local Coordinator Host + GCP TPU v5e (`gwenlaya-tpu-1`, `us-west4-a`) | All 4 Season 9 & 10 GPU Swarm Campaigns + Multi-Host WAN Pilot (`E8`) |
+
+---
+
+## 5. Related Wiki Pages & Discussions
 
 - **[Consumer GPU Node Setup & Steam Tool](https://github.com/xaviercallens/HiveMind/wiki/Consumer-GPU-Node-Setup-and-Steam-Tool)**
 - **[Architecture & 5-Layer Stack](https://github.com/xaviercallens/HiveMind/wiki/Architecture-and-5-Layer-Stack)**

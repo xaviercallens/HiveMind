@@ -1,0 +1,219 @@
+{
+  "schema_version": "hivemind-experiment-E12-pilot/v1.0",
+  "experiment_id": "E12-pilot",
+  "prereg_sha256": "1cc44c9ed62d4a8b242e8342ad7c6922bfe067041eac8399dbac86242e4c6bd4",
+  "epsilon": 0.0001,
+  "cells": {
+    "bf16_autocast": {
+      "meta": {
+        "cell": "bf16_autocast",
+        "threads": 4,
+        "dtype": "bf16",
+        "tamper": false,
+        "host": "xavkal-svr2",
+        "machine": "x86_64",
+        "processor": "x86_64",
+        "torch": "2.14.0+cu130",
+        "transformers": "5.17.0",
+        "peft": "0.21.0",
+        "python": "3.12.3",
+        "text_sha256": "3f6c561207cdbdef4aa36bc79e94e37e274317c615c98674e3c490fa885e0b0c",
+        "n_tokens": 8096,
+        "steps": 50,
+        "elapsed_s": 19232.7
+      },
+      "linf_vs_ref": 0.0033470490016043186,
+      "passes_eps": false,
+      "n_params_above_eps": 96,
+      "n_param_tensors": 96,
+      "max_loss_diff": 0.017366409301757812,
+      "first_step_loss_diff_gt_1e-6": 0,
+      "final_loss": 5.233396053314209
+    },
+    "ref": {
+      "meta": {
+        "cell": "ref",
+        "threads": 4,
+        "dtype": "fp32",
+        "tamper": false,
+        "host": "xavkal-svr2",
+        "machine": "x86_64",
+        "processor": "x86_64",
+        "torch": "2.14.0+cu130",
+        "transformers": "5.17.0",
+        "peft": "0.21.0",
+        "python": "3.12.3",
+        "text_sha256": "3f6c561207cdbdef4aa36bc79e94e37e274317c615c98674e3c490fa885e0b0c",
+        "n_tokens": 8096,
+        "steps": 50,
+        "elapsed_s": 161.4
+      },
+      "linf_vs_ref": 0.0,
+      "passes_eps": true,
+      "n_params_above_eps": 0,
+      "n_param_tensors": 96,
+      "max_loss_diff": 0.0,
+      "first_step_loss_diff_gt_1e-6": null,
+      "final_loss": 5.2316718101501465
+    },
+    "remote_cpu": {
+      "meta": {
+        "cell": "remote_cpu",
+        "threads": 4,
+        "dtype": "fp32",
+        "tamper": false,
+        "host": "t1v-n-e61f4763-w-0",
+        "machine": "x86_64",
+        "processor": "x86_64",
+        "torch": "2.14.1+cpu",
+        "transformers": "5.20.2",
+        "peft": "0.21.2",
+        "python": "3.10.12",
+        "text_sha256": "3f6c561207cdbdef4aa36bc79e94e37e274317c615c98674e3c490fa885e0b0c",
+        "n_tokens": 8096,
+        "steps": 50,
+        "elapsed_s": 37.9
+      },
+      "linf_vs_ref": 0.00015172502025961876,
+      "passes_eps": false,
+      "n_params_above_eps": 4,
+      "n_param_tensors": 96,
+      "max_loss_diff": 2.384185791015625e-06,
+      "first_step_loss_diff_gt_1e-6": 2,
+      "final_loss": 5.231673717498779
+    },
+    "same_process_repeat": {
+      "meta": {
+        "cell": "same_process_repeat",
+        "threads": 4,
+        "dtype": "fp32",
+        "tamper": false,
+        "host": "xavkal-svr2",
+        "machine": "x86_64",
+        "processor": "x86_64",
+        "torch": "2.14.0+cu130",
+        "transformers": "5.17.0",
+        "peft": "0.21.0",
+        "python": "3.12.3",
+        "text_sha256": "3f6c561207cdbdef4aa36bc79e94e37e274317c615c98674e3c490fa885e0b0c",
+        "n_tokens": 8096,
+        "steps": 50,
+        "elapsed_s": 755.1
+      },
+      "linf_vs_ref": 0.0,
+      "passes_eps": true,
+      "n_params_above_eps": 0,
+      "n_param_tensors": 96,
+      "max_loss_diff": 0.0,
+      "first_step_loss_diff_gt_1e-6": null,
+      "final_loss": 5.2316718101501465
+    },
+    "tampered": {
+      "meta": {
+        "cell": "tampered",
+        "threads": 4,
+        "dtype": "fp32",
+        "tamper": true,
+        "host": "xavkal-svr2",
+        "machine": "x86_64",
+        "processor": "x86_64",
+        "torch": "2.14.0+cu130",
+        "transformers": "5.17.0",
+        "peft": "0.21.0",
+        "python": "3.12.3",
+        "text_sha256": "3f6c561207cdbdef4aa36bc79e94e37e274317c615c98674e3c490fa885e0b0c",
+        "n_tokens": 8096,
+        "steps": 50,
+        "elapsed_s": 202.1
+      },
+      "linf_vs_ref": 0.0012526223435997963,
+      "passes_eps": false,
+      "n_params_above_eps": 96,
+      "n_param_tensors": 96,
+      "max_loss_diff": 0.02277231216430664,
+      "first_step_loss_diff_gt_1e-6": 26,
+      "final_loss": 5.246334552764893
+    },
+    "threads_1": {
+      "meta": {
+        "cell": "threads_1",
+        "threads": 1,
+        "dtype": "fp32",
+        "tamper": false,
+        "host": "xavkal-svr2",
+        "machine": "x86_64",
+        "processor": "x86_64",
+        "torch": "2.14.0+cu130",
+        "transformers": "5.17.0",
+        "peft": "0.21.0",
+        "python": "3.12.3",
+        "text_sha256": "3f6c561207cdbdef4aa36bc79e94e37e274317c615c98674e3c490fa885e0b0c",
+        "n_tokens": 8096,
+        "steps": 50,
+        "elapsed_s": 548.7
+      },
+      "linf_vs_ref": 0.0002622827887535095,
+      "passes_eps": false,
+      "n_params_above_eps": 5,
+      "n_param_tensors": 96,
+      "max_loss_diff": 4.291534423828125e-06,
+      "first_step_loss_diff_gt_1e-6": 2,
+      "final_loss": 5.231675148010254
+    },
+    "threads_8": {
+      "meta": {
+        "cell": "threads_8",
+        "threads": 8,
+        "dtype": "fp32",
+        "tamper": false,
+        "host": "xavkal-svr2",
+        "machine": "x86_64",
+        "processor": "x86_64",
+        "torch": "2.14.0+cu130",
+        "transformers": "5.17.0",
+        "peft": "0.21.0",
+        "python": "3.12.3",
+        "text_sha256": "3f6c561207cdbdef4aa36bc79e94e37e274317c615c98674e3c490fa885e0b0c",
+        "n_tokens": 8096,
+        "steps": 50,
+        "elapsed_s": 952.9
+      },
+      "linf_vs_ref": 0.00025490671396255493,
+      "passes_eps": false,
+      "n_params_above_eps": 3,
+      "n_param_tensors": 96,
+      "max_loss_diff": 3.337860107421875e-06,
+      "first_step_loss_diff_gt_1e-6": 5,
+      "final_loss": 5.231674671173096
+    }
+  },
+  "analysis": {
+    "P12a": {
+      "same_process_repeat_linf": 0.0,
+      "status": "supported"
+    },
+    "P12b": {
+      "threads_1": 0.0002622827887535095,
+      "threads_8": 0.00025490671396255493,
+      "status": "refuted"
+    },
+    "P12c": {
+      "remote_cpu": 0.00015172502025961876,
+      "exceeds_thread_cells": false,
+      "within_eps": false,
+      "status": "refuted"
+    },
+    "P12d": {
+      "bf16_autocast": 0.0033470490016043186,
+      "status": "supported"
+    }
+  },
+  "controls": {
+    "negative_repeat_exactly_zero": true,
+    "positive_tampered_exceeds_eps": true
+  },
+  "controls_all_passed": true,
+  "scope_note": "CPU classes only (two x86-64 hosts, two torch builds, thread counts, one precision class). No GPU cell: this box's T4 is not reachable from Python and the RTX 2070 is on another machine; GPU-class cells remain HM-S10-08. One segment, one seed per cell (determinism, not statistics, is the question; the tampered and repeat controls carry the inference)",
+  "written_utc": "2026-10-24T01:10:29Z",
+  "receipt_sha256": "5e6095c9f7644d3ef1fba0ec5f4ce752f6edfc9a74b35bb173ab63591d6a6de4"
+}

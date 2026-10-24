@@ -24,6 +24,7 @@ LEDGER_PATH = PROJECT_ROOT / "artifacts" / "predictions_ledger.json"
 E5_TOY = PROJECT_ROOT / "artifacts" / "experiments" / "E5_toy_report.json"
 E5_HET = PROJECT_ROOT / "artifacts" / "experiments" / "E5_het_report.json"
 E10 = PROJECT_ROOT / "artifacts" / "experiments" / "E10_lattice_report.json"
+E12_PILOT = PROJECT_ROOT / "artifacts" / "experiments" / "E12_pilot_report.json"
 
 PREDICTIONS: Dict[str, Dict[str, str]] = {
     "P1": {"rq": "RQ1", "claim": "WAN loss with K<M quorum, grace and RDA <= single-host loss with M(1-churn) workers", "decided_by": "E8"},
@@ -60,6 +61,10 @@ PREDICTIONS: Dict[str, Dict[str, str]] = {
     "P16d": {"rq": "E16", "claim": "the GWAYA loop improves pass@1 by >= +5.0 points with McNemar p < 0.05, per tier", "decided_by": "E16"},
     "P16e": {"rq": "E16 (GWAYA PR #21 P2)", "claim": "precision of VERIFIED verdicts against the hidden tests >= 0.80, per tier", "decided_by": "E16"},
     "P16f": {"rq": "E16", "claim": "decode tok/s of the 7B tier at num_ctx 4096 >= 20 (interactive-use bar, descriptive)", "decided_by": "E16"},
+    "P12a": {"rq": "RQ11", "claim": "replaying the same 50-step LoRA segment in a second process on the same host and thread count reproduces the parameters bit for bit", "decided_by": "E12-pilot"},
+    "P12b": {"rq": "RQ11", "claim": "changing only the CPU thread count gives a non-zero divergence that stays within eps = 1e-4", "decided_by": "E12-pilot"},
+    "P12c": {"rq": "RQ11", "claim": "a different host (CPU, torch build, library versions) diverges by more than the thread-count cells and more than 1e-6; whether it stays within eps decides the matching rule", "decided_by": "E12-pilot"},
+    "P12d": {"rq": "RQ11", "claim": "bf16 autocast (the consumer-GPU precision class) exceeds eps", "decided_by": "E12-pilot"},
 }
 E10B = PROJECT_ROOT / "artifacts" / "experiments" / "E10b_lattice_05b_report.json"
 E11 = PROJECT_ROOT / "artifacts" / "experiments" / "E11_kv_lattice_report.json"
@@ -212,6 +217,7 @@ def main() -> int:
     e5 = json.loads(E5_TOY.read_text(encoding="utf-8")) if E5_TOY.exists() else None
     e5h = json.loads(E5_HET.read_text(encoding="utf-8")) if E5_HET.exists() else None
     e10 = json.loads(E10.read_text(encoding="utf-8")) if E10.exists() else None
+    e12 = json.loads(E12_PILOT.read_text(encoding="utf-8")) if E12_PILOT.exists() else None
     for pid, meta in PREDICTIONS.items():
         entry: Dict[str, Any] = dict(meta)
         if e5 is not None and pid in ("P2", "P3", "P4"):
@@ -227,6 +233,13 @@ def main() -> int:
                     entry["evidence"] = het["evidence"]
                     entry["manipulation_check"] = het["manipulation_check"]
                     entry["note"] = "decided at toy scale (E5-het supersedes E5-toy); the full-scale E5 cell on Qwen2.5-0.5B is still open"
+        elif e12 is not None and pid in ("P12a", "P12b", "P12c", "P12d"):
+            a = e12["analysis"][pid]
+            status = a["status"]
+            entry.update({"status": "untested" if status.startswith("not run") else status.split(" ")[0], "status_detail": status,
+                          "scale": "Qwen2.5-0.5B LoRA, one 50-step segment, CPU classes only (E12-pilot)", "artifact": "artifacts/experiments/E12_pilot_report.json",
+                          "receipt_sha256": e12["receipt_sha256"], "prereg_sha256": e12["prereg_sha256"], "controls_all_passed": e12["controls_all_passed"],
+                          "evidence": a, "note": "CPU pilot; GPU classes remain HM-S10-08"})
         elif e10 is not None and pid.startswith("P10"):
             a = e10["analysis"][pid]
             status = a["status"]
@@ -243,18 +256,30 @@ def main() -> int:
         elif pid.startswith("P11") and E11.exists():
             e11 = json.loads(E11.read_text(encoding="utf-8"))
             a = e11["analysis"][pid]
-            entry.update({"status": _norm(a["status"]), "status_detail": a["status"], "per_model": a["per_model"],
-                          "scale": "real KV tensors of Qwen2.5-0.5B-Instruct, Qwen2.5-Coder-7B-Instruct and Gemma-4-E4B on WikiText-2, 1024-token windows, 3 seeds (E11, amendment 1)",
+            # Review condition (scientific lead, 2026-10-24): the Qwen2.5-Coder-7B row is INVALID (negative control
+            # negative_A2at8_equals_fp8 failed by -0.47 nats on a float16 model, so the FP8 arm is suspect); its verdicts are
+            # withdrawn and never enter the status. The 0.5B P11a verdict rests on ONE rate-matched cell (R = 4).
+            per_model = {m: ("withdrawn (negative control failed)" if m == "qwen7b" else v) for m, v in a["per_model"].items()}
+            kept = {m: v for m, v in per_model.items() if not v.startswith("withdrawn")}
+            if pid == "P11a":
+                detail = ("refuted on qwen0.5b (one rate-matched cell, R = 4; R = 2 and 3 not rate-matched) and gemma4-e4b; "
+                          "qwen7b withdrawn: negative control failed")
+            else:
+                detail = ("refuted on gemma4-e4b (E8 beats Z without the transform); qwen0.5b inconclusive; "
+                          "qwen7b withdrawn: negative control failed")
+            entry.update({"status": _norm(a["status"]), "status_detail": detail, "per_model": per_model,
+                          "withdrawn": {"qwen7b": {"reason": "negative control negative_A2at8_equals_fp8 failed: -0.47 +- 0.20 nats (an 8-bit lattice cannot be half a nat better than FP8 unless the FP8 arm is broken on this float16 model)"}},
+                          "scale": "real KV tensors of Qwen2.5-0.5B-Instruct and Gemma-4-E4B on WikiText-2, 1024-token windows, 3 seeds (E11, amendment 1); the Qwen2.5-Coder-7B row is INVALID and withdrawn",
                           "artifact": "artifacts/experiments/E11_kv_lattice_report.json", "receipt_sha256": e11["receipt_sha256"], "prereg_sha256": e11["prereg_sha256"],
                           "controls_all_passed": e11["controls_all_passed"],
-                          "note": "overall rule: refuted if refuted on any valid model; the A2@8-vs-FP8 negative control failed on both Qwen models by a design error recorded in amendment 1"})
+                          "note": "receipt controls_all_passed is false; qwen7b (control off by -0.47 nats) is withdrawn; on qwen0.5b the same control reads -0.04 nats, explained in amendment 1 by FP8 e4m3 being coarser than an 8-bit lattice, and that failure is reported; only gemma4-e4b passed every control"})
         elif pid.startswith("P12") and E12.exists():
-            e12 = json.loads(E12.read_text(encoding="utf-8"))
-            a = e12["analysis"][pid]
+            e12g = json.loads(E12.read_text(encoding="utf-8"))
+            a = e12g["analysis"][pid]
             entry.update({"status": "untested" if a["status"].startswith("not decided") else _norm(a["status"]), "status_detail": a["status"],
                           "scale": "Qwen2.5-0.5B rank-8 LoRA, 50-step segments, 9 segments per cell; Tesla T4 vs the same T4 (separate process) vs this host's x86 CPU (E12)",
-                          "artifact": "artifacts/experiments/E12_replay_divergence_report.json", "receipt_sha256": e12["receipt_sha256"], "prereg_sha256": e12["prereg_sha256"],
-                          "controls_all_passed": e12["controls_all_passed"], "evidence": e12["summary"], "basis": a.get("basis"),
+                          "artifact": "artifacts/experiments/E12_replay_divergence_report.json", "receipt_sha256": e12g["receipt_sha256"], "prereg_sha256": e12g["prereg_sha256"],
+                          "controls_all_passed": e12g["controls_all_passed"], "evidence": e12g["summary"], "basis": a.get("basis"),
                           "note": "RTX 2070, TPU-VM CPU and a second T4 were not run; the LoRA init is ~18x PEFT's default, which may inflate cross-class magnitudes"})
         elif e5h is not None and pid == "P9":
             entry.update(_status_from_e5_het(e5h, "P9"))

@@ -78,6 +78,33 @@ class BundleSeedManifest:
     seeders: List[str] = field(default_factory=list)
 
 
+def compute_lease_ttl_s(alpha: float, t_step_s: float, rtt_s: float) -> float:
+    """HM-S9-06: Compute heartbeat data-lease TTL `tau_lease = alpha * t_step_s + rtt_s`."""
+    if alpha <= 0.0 or not (alpha < float("inf")):
+        raise ValueError("alpha must be > 0 and finite")
+    if t_step_s <= 0.0 or not (t_step_s < float("inf")):
+        raise ValueError("t_step_s must be > 0 and finite")
+    if rtt_s < 0.0 or not (rtt_s < float("inf")):
+        raise ValueError("rtt_s must be >= 0 and finite")
+    return float(alpha) * float(t_step_s) + float(rtt_s)
+
+
+@dataclass
+class DataShardLease:
+    """HM-S9-06: Heartbeat-backed dataset shard lease preventing duplicate commits or dropped shards."""
+
+    lease_id: str
+    shard_cid: str
+    worker_id: str
+    granted_at_s: float
+    ttl_s: float
+    expires_at_s: float
+    status: str = "active"  # "active" | "committed" | "reclaimed"
+    committed_at_s: Optional[float] = None
+    reclaimed_at_s: Optional[float] = None
+    heartbeat_count: int = 0
+
+
 class ContentAddressedSwarmStore:
     """Local Agent Disk Vault & Kademlia-style Content-Addressed Storage (CAS).
 
@@ -110,6 +137,12 @@ class ContentAddressedSwarmStore:
         self.cid_to_path: Dict[str, Path] = {}
         self.node_id = str(node_id) if node_id else f"cas-peer-{self.root_dir.name}"
         self._guard = security_guard or SwarmTrainingAndStoreGuard()
+        # HM-S9-06: Heartbeat-backed data shard leasing state
+        self._shard_leases: Dict[str, DataShardLease] = {}
+        self._active_shard_lease_by_cid: Dict[str, str] = {}
+        self._committed_shards: Dict[str, str] = {}
+        self._reclaim_queue: List[str] = []
+        self._lease_seq: int = 0
 
     def store_hf_dataset_shard(
         self,
@@ -646,3 +679,138 @@ class ContentAddressedSwarmStore:
             .replace("\\", "_")
             .replace(":", "_")
         )
+
+    # ------------------------------------------------------------------
+    # Season 9 (HM-S9-06): Heartbeat-Backed Data Shard Leasing
+    # ------------------------------------------------------------------
+
+    def grant_shard_lease(
+        self,
+        shard_cid: str,
+        worker_id: str,
+        alpha: float = 2.0,
+        t_step_s: float = 1.0,
+        rtt_s: float = 0.2,
+        now_s: Optional[float] = None,
+    ) -> DataShardLease:
+        """Grant an exclusive heartbeat-backed lease on `shard_cid` with TTL `alpha * t_step_s + rtt_s`."""
+        cid = str(shard_cid)
+        wid = str(worker_id)
+        if not cid or not wid:
+            raise ValueError("shard_cid and worker_id must be non-empty")
+        if cid in self._committed_shards:
+            raise ValueError(f"Shard {cid!r} has already been committed and cannot be re-leased")
+        if cid in self._active_shard_lease_by_cid:
+            active_id = self._active_shard_lease_by_cid[cid]
+            raise ValueError(f"Shard {cid!r} already has an active lease ({active_id!r})")
+
+        now = float(now_s) if now_s is not None else time.time()
+        ttl = compute_lease_ttl_s(alpha=alpha, t_step_s=t_step_s, rtt_s=rtt_s)
+        self._lease_seq += 1
+        lease_id = f"lease-{self._lease_seq:06d}-{hashlib.sha256(f'{cid}:{wid}:{self._lease_seq}'.encode('utf-8')).hexdigest()[:10]}"
+        lease = DataShardLease(
+            lease_id=lease_id,
+            shard_cid=cid,
+            worker_id=wid,
+            granted_at_s=now,
+            ttl_s=ttl,
+            expires_at_s=now + ttl,
+            status="active",
+        )
+        self._shard_leases[lease_id] = lease
+        self._active_shard_lease_by_cid[cid] = lease_id
+        if cid in self._reclaim_queue:
+            self._reclaim_queue.remove(cid)
+        return lease
+
+    def heartbeat_shard_lease(
+        self,
+        lease_id: str,
+        now_s: Optional[float] = None,
+    ) -> DataShardLease:
+        """Refresh an active shard lease by extending `expires_at_s = now + ttl_s`."""
+        if lease_id not in self._shard_leases:
+            raise KeyError(f"Unknown lease_id {lease_id!r}")
+        lease = self._shard_leases[lease_id]
+        if lease.status != "active":
+            raise ValueError(f"Cannot heartbeat lease {lease_id!r} in status {lease.status!r}")
+        now = float(now_s) if now_s is not None else time.time()
+        if now > lease.expires_at_s:
+            raise ValueError(f"Lease {lease_id!r} expired at {lease.expires_at_s:.3f}s (now={now:.3f}s)")
+        lease.expires_at_s = now + lease.ttl_s
+        lease.heartbeat_count += 1
+        return lease
+
+    def commit_shard_lease(
+        self,
+        lease_id: str,
+        worker_id: str,
+        now_s: Optional[float] = None,
+    ) -> DataShardLease:
+        """Commit a leased shard batch, permanently preventing duplicate commits."""
+        if lease_id not in self._shard_leases:
+            raise KeyError(f"Unknown lease_id {lease_id!r}")
+        lease = self._shard_leases[lease_id]
+        if lease.status != "active":
+            raise ValueError(f"Lease {lease_id!r} is not active (status={lease.status!r})")
+        if lease.worker_id != str(worker_id):
+            raise ValueError(
+                f"Worker {worker_id!r} does not own lease {lease_id!r} (owner={lease.worker_id!r})"
+            )
+        now = float(now_s) if now_s is not None else time.time()
+        if now > lease.expires_at_s:
+            raise ValueError(f"Cannot commit expired lease {lease_id!r} (now={now:.3f}s > {lease.expires_at_s:.3f}s)")
+        if lease.shard_cid in self._committed_shards:
+            raise ValueError(f"Shard {lease.shard_cid!r} was already committed")
+
+        lease.status = "committed"
+        lease.committed_at_s = now
+        self._committed_shards[lease.shard_cid] = lease.lease_id
+        self._active_shard_lease_by_cid.pop(lease.shard_cid, None)
+        return lease
+
+    def reclaim_expired_leases(
+        self,
+        now_s: Optional[float] = None,
+    ) -> List[DataShardLease]:
+        """Reclaim all active leases whose `expires_at_s < now` and return them to the reclaim queue."""
+        now = float(now_s) if now_s is not None else time.time()
+        reclaimed: List[DataShardLease] = []
+        for lease in self._shard_leases.values():
+            if lease.status == "active" and now > lease.expires_at_s:
+                lease.status = "reclaimed"
+                lease.reclaimed_at_s = now
+                self._active_shard_lease_by_cid.pop(lease.shard_cid, None)
+                if (
+                    lease.shard_cid not in self._committed_shards
+                    and lease.shard_cid not in self._reclaim_queue
+                ):
+                    self._reclaim_queue.append(lease.shard_cid)
+                reclaimed.append(lease)
+        return reclaimed
+
+    def lease_ledger_summary(self) -> Dict[str, Any]:
+        """Return exact conservation telemetry (`granted == committed + reclaimed + active`, 0 duplicates)."""
+        total_granted = len(self._shard_leases)
+        committed_count = sum(1 for l in self._shard_leases.values() if l.status == "committed")
+        reclaimed_count = sum(1 for l in self._shard_leases.values() if l.status == "reclaimed")
+        active_count = sum(1 for l in self._shard_leases.values() if l.status == "active")
+        unique_committed = len(self._committed_shards)
+        duplicate_commits = committed_count - unique_committed
+        conservation = (
+            total_granted == (committed_count + reclaimed_count + active_count)
+            and committed_count == (total_granted - reclaimed_count - active_count)
+            and duplicate_commits == 0
+        )
+        return {
+            "strategy_id": "HM-S9-06-HEARTBEAT-DATA-SHARD-LEASING",
+            "total_granted": total_granted,
+            "committed_count": committed_count,
+            "reclaimed_count": reclaimed_count,
+            "active_count": active_count,
+            "unique_committed_shards": unique_committed,
+            "duplicate_commits": duplicate_commits,
+            "reclaim_queue_depth": len(self._reclaim_queue),
+            "conservation_holds": bool(conservation),
+        }
+

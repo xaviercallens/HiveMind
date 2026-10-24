@@ -69,6 +69,7 @@ class OuterStepResult:
     extra_gpu_vram_bytes: int = 0
     cgad_telemetry: list[CGADStepTelemetry] = field(default_factory=list, repr=False)
     quorum_telemetry: dict[str, SyncerRoundTelemetry] = field(default_factory=dict, repr=False)
+    momentum_restarted: bool = False
 
 
 def flatten_delta_dict(delta_dict: dict[str, torch.Tensor]) -> torch.Tensor:
@@ -228,12 +229,19 @@ class DiLoCoOuterOptimizer:
         beta1: float = 0.9,
         beta2: float = 0.99,
         weight_decay: float = 0.01,
+        momentum_restart_period: int | None = None,
     ) -> None:
         if outer_optimizer_mode not in self._VALID_OUTER_MODES:
             raise ValueError(
                 f"outer_optimizer_mode must be one of {sorted(self._VALID_OUTER_MODES)}, "
                 f"got {outer_optimizer_mode!r}"
             )
+        if momentum_restart_period is not None and (
+            isinstance(momentum_restart_period, bool)
+            or not isinstance(momentum_restart_period, int)
+            or momentum_restart_period < 1
+        ):
+            raise ValueError("momentum_restart_period must be an integer >= 1 or None")
         eff_betas = cgad_betas if cgad_betas is not None else (beta1, beta2)
         if not (0.0 <= eff_betas[0] < 1.0 and 0.0 <= eff_betas[1] < 1.0):
             raise ValueError("beta1 and beta2 must be in [0, 1)")
@@ -260,6 +268,7 @@ class DiLoCoOuterOptimizer:
         self.cgad_weight_decay = float(eff_wd)
         self.beta1, self.beta2 = self.cgad_betas
         self.weight_decay = self.cgad_weight_decay
+        self.momentum_restart_period = momentum_restart_period
         self.fl_guard = FederatedLearningSecurityGuard()
         # Velocity buffers per expert branch: branch_name -> {param_name: tensor}
         self.velocities: dict[str, dict[str, torch.Tensor]] = {}
@@ -306,6 +315,7 @@ class DiLoCoOuterOptimizer:
         min_quorum_k: int | None = None,
         grace_window_s: float = 0.0,
         quorum_merge_mode: str = "rda",
+        momentum_restart_period: int | None = None,
     ) -> OuterStepResult:
         """Aggregate valid worker deltas then apply the configured outer optimizer.
 
@@ -314,7 +324,22 @@ class DiLoCoOuterOptimizer:
         ``learner_arrivals`` is provided (`HM-S9-01` / `SI-12`), surviving workers
         are filtered by quorum + grace window and merged via `DecoupledDiLoCoQuorumSyncer`
         (`"rda"` Radial-Directional Averaging or `"direct"` weighted mean).
+        When ``momentum_restart_period`` (`K_restart`, `HM-S9-05`) is set, outer
+        velocity / first-moment buffers are reset every `K_restart` outer steps.
         """
+        eff_restart = (
+            momentum_restart_period
+            if momentum_restart_period is not None
+            else self.momentum_restart_period
+        )
+        if eff_restart is not None and (
+            isinstance(eff_restart, bool) or not isinstance(eff_restart, int) or eff_restart < 1
+        ):
+            raise ValueError("momentum_restart_period must be an integer >= 1 or None")
+        should_restart = bool(
+            eff_restart is not None and outer_step > 0 and (outer_step % eff_restart == 0)
+        )
+
         filter_report = filter_byzantine_deltas_multikrum(
             worker_deltas=worker_deltas,
             max_byzantine_f=self.max_byzantine_f,
@@ -393,6 +418,9 @@ class DiLoCoOuterOptimizer:
                 for k, v in theta_prev.items()
             }
             cgad = self._get_cgad_optimizer(branch_name)
+            if should_restart:
+                for buf in cgad.m_buffers.values():
+                    buf.zero_()
             theta_updated, cgad_telemetry = cgad.step_fragments(
                 params=params_cpu,
                 pseudo_gradients=aggregated_deltas,
@@ -416,6 +444,8 @@ class DiLoCoOuterOptimizer:
                 for k, v in theta_prev.items()
             }
             bucket = self._get_cpu_bucket(branch_name, params_cpu)
+            if should_restart:
+                bucket.reset_velocity()
             theta_updated, velocity_updated = bucket.outer_nesterov_step(
                 pseudo_gradients=aggregated_deltas,
                 lr=self.outer_lr_eta,
@@ -429,6 +459,9 @@ class DiLoCoOuterOptimizer:
                     k: torch.zeros_like(v, dtype=torch.float32, device="cpu")
                     for k, v in theta_prev.items()
                 }
+            elif should_restart:
+                for v_buf in self.velocities[branch_name].values():
+                    v_buf.zero_()
 
             vel_branch = self.velocities[branch_name]
             theta_updated = {}
@@ -461,4 +494,5 @@ class DiLoCoOuterOptimizer:
             extra_gpu_vram_bytes=0,
             cgad_telemetry=cgad_telemetry,
             quorum_telemetry=quorum_telemetry,
+            momentum_restarted=should_restart,
         )

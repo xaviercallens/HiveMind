@@ -604,12 +604,18 @@ class ThreeTierHierarchicalMoERouter(nn.Module):
 
 
 class FP8PagedKVCache:
-    """Season 5 (`HM-S5-02`): Block-Scaled FP8 (`float8_e4m3fn`) Paged KV-Cache Manager.
+    """Season 5 (`HM-S5-02`) & Season 10 (`HM-S10-05`): Pluggable Paged KV-Cache Manager.
 
-    Stores attention Key/Value states in fixed-size pages (`page_size_tokens=16`) quantized to
-    8-bit (`float8_e4m3fn` with per-page FP16 absmax scales), achieving `2.0x` KV-cache VRAM
-    compression so a 64-Expert Sparse MoE + active KV pages stay strictly `< 2.2 GB` VRAM.
+    Stores attention Key/Value states in fixed-size pages (`page_size_tokens=16`).
+    Supports five pluggable page codecs (`HM-S10-05` / Experiment E11):
+      - `"fp8_e4m3"`: default block-scaled FP8 (`float8_e4m3fn`) with per-page FP16 absmax scales.
+      - `"a2_rope_plane"`: 2D hexagonal lattice `A2` quantizer across RoPE coordinate planes `(x_{2i}, x_{2i+1})`.
+      - `"e8_lattice"`: 8D Gosset `E8` lattice quantizer with factorised rate accounting.
+      - `"scalar_2bit"`: 2-bit uniform scalar quantizer (E11 positive control: high distortion).
+      - `"a2_8bit"`: high-rate 8-bit `A2` lattice quantizer (E11 negative control: near-lossless).
     """
+
+    VALID_CODECS = ("fp8_e4m3", "a2_rope_plane", "e8_lattice", "scalar_2bit", "a2_8bit")
 
     def __init__(
         self,
@@ -619,15 +625,24 @@ class FP8PagedKVCache:
         page_size_tokens: int = 16,
         max_pages: int = 128,
         device: torch.device | str = "cpu",
+        codec: str = "fp8_e4m3",
+        target_bits_per_dim: float = 4.0,
     ) -> None:
+        if codec not in self.VALID_CODECS:
+            raise ValueError(f"codec must be one of {self.VALID_CODECS}, got {codec!r}")
+        if target_bits_per_dim <= 0.0:
+            raise ValueError("target_bits_per_dim must be > 0")
         self.num_layers = int(num_layers)
         self.num_kv_heads = int(num_kv_heads)
         self.head_dim = int(head_dim)
         self.page_size_tokens = int(page_size_tokens)
         self.max_pages = int(max_pages)
         self.device = torch.device(device)
+        self.codec = codec
+        self.target_bits_per_dim = float(target_bits_per_dim)
         self._pages_k: Dict[Tuple[int, int], Tuple[torch.Tensor, torch.Tensor]] = {}
         self._pages_v: Dict[Tuple[int, int], Tuple[torch.Tensor, torch.Tensor]] = {}
+        self._page_metrics: Dict[Tuple[int, int], Dict[str, float]] = {}
 
     @staticmethod
     def _quantize_page_fp8(tensor: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -649,30 +664,104 @@ class FP8PagedKVCache:
             return (q.to(torch.float32) * scale.to(torch.float32)).to(target_dtype)
         return ((q.to(torch.float32) / 127.0) * 448.0 * scale.to(torch.float32)).to(target_dtype)
 
+    @classmethod
+    def _encode_decode_with_codec(
+        cls,
+        tensor: torch.Tensor,
+        codec: str,
+        target_bits_per_dim: float = 4.0,
+    ) -> Tuple[torch.Tensor, torch.Tensor, float, float]:
+        """Quantize `tensor` under `codec`, returning `(stored_q, scale_t, rate_bits_per_dim, relative_mse)`."""
+        t_fp32 = tensor.detach().to(torch.float32)
+        orig_shape = t_fp32.shape
+        flat = t_fp32.reshape(-1).cpu()
+        vn = float(torch.dot(flat, flat).item())
+
+        if codec == "fp8_e4m3":
+            q, s = cls._quantize_page_fp8(tensor)
+            deq = cls._dequantize_page_fp8(q, s, target_dtype=torch.float32).reshape(-1).cpu()
+            err = float(torch.dot(flat - deq, flat - deq).item()) / vn if vn > 0.0 else 0.0
+            return q, s, 8.0, err
+
+        if codec == "scalar_2bit":
+            # 2-bit uniform scalar quantizer over [-absmax, +absmax] with 4 levels {-1.5, -0.5, +0.5, +1.5} * step
+            absmax = t_fp32.abs().amax(dim=-1, keepdim=True).clamp_min(1e-6)
+            step = (absmax / 1.5).to(torch.float16)
+            idx = torch.round((t_fp32 / step.to(torch.float32)).clamp(-1.5, 1.5) + 1.5).clamp(0.0, 3.0).to(torch.int8)
+            deq_full = ((idx.to(torch.float32) - 1.5) * step.to(torch.float32)).reshape(-1).cpu()
+            err = float(torch.dot(flat - deq_full, flat - deq_full).item()) / vn if vn > 0.0 else 0.0
+            return idx, step, 2.0, err
+
+        from hivemind.compress.lattice_quantizer import (
+            LatticeDeltaQuantizer,
+            calibrate_scale_for_rate,
+        )
+
+        kind = "A2" if codec in ("a2_rope_plane", "a2_8bit") else "E8"
+        block_dim = 2 if kind == "A2" else 8
+        desired_bits = 8.0 if codec == "a2_8bit" else float(target_bits_per_dim)
+        std_val = float(flat.std().item()) if flat.numel() > 1 else 1.0
+        fallback_scale = max(1e-6, std_val / float(2.0 ** max(0.5, desired_bits - 0.5)))
+        try:
+            scale_val, _ = calibrate_scale_for_rate(
+                kind, flat, target_bits_per_dim=desired_bits, block=block_dim
+            )
+        except ValueError:
+            scale_val = fallback_scale
+
+        q_res = LatticeDeltaQuantizer(
+            kind=kind, scale=scale_val, block=block_dim, error_feedback=False
+        ).quantize(flat)
+        deq_tensor = q_res.dequantized.to(device=tensor.device, dtype=torch.float16).reshape(orig_shape)
+        scale_t = torch.tensor([scale_val], dtype=torch.float16, device=tensor.device)
+        return deq_tensor, scale_t, float(q_res.rate_bits_per_dim), float(q_res.relative_mse)
+
     def write_kv_page(
         self, layer_idx: int, page_idx: int, k_tensor: torch.Tensor, v_tensor: torch.Tensor
     ) -> Dict[str, Any]:
-        """Quantize and store a `(K, V)` page in FP8 with per-token FP16 scales."""
+        """Quantize and store a `(K, V)` page using the configured `self.codec`."""
         if len(self._pages_k) >= self.max_pages and (layer_idx, page_idx) not in self._pages_k:
             oldest_key = next(iter(self._pages_k))
             self._pages_k.pop(oldest_key, None)
             self._pages_v.pop(oldest_key, None)
-        qk, sk = self._quantize_page_fp8(k_tensor.to(self.device))
-        qv, sv = self._quantize_page_fp8(v_tensor.to(self.device))
+            self._page_metrics.pop(oldest_key, None)
+
+        k_dev = k_tensor.to(self.device)
+        v_dev = v_tensor.to(self.device)
+        qk, sk, rate_k, mse_k = self._encode_decode_with_codec(
+            k_dev, self.codec, self.target_bits_per_dim
+        )
+        qv, sv, rate_v, mse_v = self._encode_decode_with_codec(
+            v_dev, self.codec, self.target_bits_per_dim
+        )
         self._pages_k[(layer_idx, page_idx)] = (qk, sk)
         self._pages_v[(layer_idx, page_idx)] = (qv, sv)
+        mean_rate = 0.5 * (rate_k + rate_v)
+        mean_mse = 0.5 * (mse_k + mse_v)
+        self._page_metrics[(layer_idx, page_idx)] = {
+            "rate_bits_per_dim": round(mean_rate, 4),
+            "relative_mse": round(mean_mse, 8),
+        }
+
         fp16_bytes = (k_tensor.numel() + v_tensor.numel()) * 2
-        fp8_bytes = (
-            qk.numel() * qk.element_size()
-            + qv.numel() * qv.element_size()
-            + (sk.numel() + sv.numel()) * 2
-        )
+        if self.codec == "fp8_e4m3":
+            paged_bytes = (
+                qk.numel() * qk.element_size()
+                + qv.numel() * qv.element_size()
+                + (sk.numel() + sv.numel()) * 2
+            )
+        else:
+            total_dims = k_tensor.numel() + v_tensor.numel()
+            paged_bytes = max(1, int(round(total_dims * mean_rate / 8.0)) + (sk.numel() + sv.numel()) * 2)
         return {
             "layer_idx": layer_idx,
             "page_idx": page_idx,
+            "codec": self.codec,
             "fp16_equivalent_bytes": fp16_bytes,
-            "fp8_paged_bytes": fp8_bytes,
-            "compression_ratio": round(fp16_bytes / max(1, fp8_bytes), 4),
+            "fp8_paged_bytes": paged_bytes,
+            "measured_rate_bits_per_dim": round(mean_rate, 4),
+            "relative_mse": round(mean_mse, 8),
+            "compression_ratio": round(fp16_bytes / max(1, paged_bytes), 4),
         }
 
     def read_kv_page(
@@ -681,10 +770,48 @@ class FP8PagedKVCache:
         """Dequantize and return a stored `(K, V)` page."""
         qk, sk = self._pages_k[(layer_idx, page_idx)]
         qv, sv = self._pages_v[(layer_idx, page_idx)]
-        return (
-            self._dequantize_page_fp8(qk, sk, target_dtype=target_dtype),
-            self._dequantize_page_fp8(qv, sv, target_dtype=target_dtype),
+        if self.codec == "fp8_e4m3":
+            return (
+                self._dequantize_page_fp8(qk, sk, target_dtype=target_dtype),
+                self._dequantize_page_fp8(qv, sv, target_dtype=target_dtype),
+            )
+        if self.codec == "scalar_2bit":
+            dk = ((qk.to(torch.float32) - 1.5) * sk.to(torch.float32)).to(target_dtype)
+            dv = ((qv.to(torch.float32) - 1.5) * sv.to(torch.float32)).to(target_dtype)
+            return dk, dv
+        return qk.to(target_dtype), qv.to(target_dtype)
+
+    @classmethod
+    def benchmark_kv_page_codecs(
+        cls,
+        k_tensor: torch.Tensor,
+        v_tensor: torch.Tensor,
+        target_bits_per_dim: float = 4.0,
+    ) -> Dict[str, Any]:
+        """Compare all 5 KV-cache page codecs (`HM-S10-05` / E11) with positive/negative controls."""
+        results: Dict[str, Dict[str, float]] = {}
+        for codec in cls.VALID_CODECS:
+            _, _, rk, mk = cls._encode_decode_with_codec(k_tensor, codec, target_bits_per_dim)
+            _, _, rv, mv = cls._encode_decode_with_codec(v_tensor, codec, target_bits_per_dim)
+            results[codec] = {
+                "rate_bits_per_dim": round(0.5 * (rk + rv), 4),
+                "relative_mse": round(0.5 * (mk + mv), 8),
+            }
+        pos_ctrl_passed = (
+            results["scalar_2bit"]["relative_mse"] > results["a2_rope_plane"]["relative_mse"]
+            and results["scalar_2bit"]["relative_mse"] > results["e8_lattice"]["relative_mse"]
         )
+        neg_ctrl_passed = (
+            results["a2_8bit"]["relative_mse"] < results["a2_rope_plane"]["relative_mse"]
+        )
+        return {
+            "strategy_id": "HM-S10-05-LATTICE-KV-CACHE-CODEC-BENCHMARK",
+            "target_bits_per_dim": float(target_bits_per_dim),
+            "codecs": results,
+            "positive_control_scalar_2bit_worse": bool(pos_ctrl_passed),
+            "negative_control_a2_8bit_better": bool(neg_ctrl_passed),
+            "controls_all_passed": bool(pos_ctrl_passed and neg_ctrl_passed),
+        }
 
     def total_kv_cache_bytes(self) -> int:
         total = 0

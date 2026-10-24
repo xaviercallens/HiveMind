@@ -1,18 +1,18 @@
 {
   "manuscript_title": "Project HiveMind: A System Design for Decentralized Sparse Mixture-of-Experts Training with DiLoCo-Style Outer Optimization on 8 GB Consumer GPUs",
-  "version": "3.7.0",
+  "version": "3.8.0",
   "is_peer_review": false,
   "disclosure": "This report is produced by a deterministic script. It is NOT a peer review: no language model and no human referee evaluated the manuscript. Verdicts below mean only that the listed artifact checks passed.",
   "lead_peer_review_model": "none (scripted static audit; no language-model call)",
   "co_auditor_model": "none",
-  "timestamp_utc": "2026-10-24T12:51:08Z",
+  "timestamp_utc": "2026-10-24T14:53:17Z",
   "tex_path": "paper/hivemind_foundation_article.tex",
   "pdf_path": "paper/hivemind_foundation_article.pdf",
   "pdf_exists": true,
   "lean4_verification": {
     "spec_file": "lean4/HiveMindSpec.lean",
-    "spec_sha256": "afae1dc1408c5f102d55c669a9bb24b19de6cf4c0faf63bb450169b4c735f577",
-    "theorem_count": 120,
+    "spec_sha256": "767775f0cea58adaa0dbc36d6222ac5c4e321817f298a3325636727ab1e652af",
+    "theorem_count": 128,
     "theorems": [
       "nf4_double_quant_compression_bound",
       "rtx2070_8gb_vram_envelope_verified",
@@ -133,7 +133,15 @@
       "decoupled_grace_window_strictly_below_slack",
       "decoupled_exhausted_slack_zero_grace",
       "decoupled_token_weight_monotone",
-      "decoupled_quorum_admitted_count_bounds"
+      "decoupled_quorum_admitted_count_bounds",
+      "quorum_liveness_under_m_minus_k_stragglers",
+      "data_lease_ttl_exceeds_step_plus_rtt_bound",
+      "data_lease_batch_conservation_no_duplicates",
+      "outer_momentum_restart_zeroes_stale_velocity_energy",
+      "sigma_moe_independent_gates_preserve_resident_expert_score",
+      "ortho_inj_pythagorean_energy_conservation",
+      "factored_gossip_js_gate_skips_blocking_mix2_barrier",
+      "e8_lattice_second_moment_strictly_beats_z8_cubic"
     ],
     "qualified_theorems": [
       "HiveMindSpec.Pillar1_NF4_DiLoCo.nf4_double_quant_compression_bound",
@@ -255,14 +263,22 @@
       "HiveMindSpec.Season14_DecoupledDiLoCoQuorumAndRDA.decoupled_grace_window_strictly_below_slack",
       "HiveMindSpec.Season14_DecoupledDiLoCoQuorumAndRDA.decoupled_exhausted_slack_zero_grace",
       "HiveMindSpec.Season14_DecoupledDiLoCoQuorumAndRDA.decoupled_token_weight_monotone",
-      "HiveMindSpec.Season14_DecoupledDiLoCoQuorumAndRDA.decoupled_quorum_admitted_count_bounds"
+      "HiveMindSpec.Season14_DecoupledDiLoCoQuorumAndRDA.decoupled_quorum_admitted_count_bounds",
+      "HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.quorum_liveness_under_m_minus_k_stragglers",
+      "HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.data_lease_ttl_exceeds_step_plus_rtt_bound",
+      "HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.data_lease_batch_conservation_no_duplicates",
+      "HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.outer_momentum_restart_zeroes_stale_velocity_energy",
+      "HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.sigma_moe_independent_gates_preserve_resident_expert_score",
+      "HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.ortho_inj_pythagorean_energy_conservation",
+      "HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.factored_gossip_js_gate_skips_blocking_mix2_barrier",
+      "HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.e8_lattice_second_moment_strictly_beats_z8_cubic"
     ],
     "sorry_count": 0,
     "user_axiom_count": 0,
     "compiler_binary": "lean",
     "compiler_executed": true,
     "compiler_return_code": 0,
-    "print_axioms_log": "<stdin>:1850:5: warning: Variable name `h_K` is not explicitly referenced.\n\nHint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:\n  [apply] _h_K\n\nNote: This linter can be disabled with `set_option linter.unusedVariables false`\n'HiveMindSpec.Pillar1_NF4_DiLoCo.rtx2070_8gb_vram_envelope_verified' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Pillar1_NF4_DiLoCo.diloco_topk_fp8_bandwidth_reduction' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Pillar2_Byzantine_Defense.spot_check_10pct_and_20x_boinc_savings' does not depend on any axioms\n'HiveMindSpec.Pillar2_Byzantine_Defense.multikrum_neighborhood_contains_honest_worker' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Pillar3_BTM_Sparse_MoE.top2_sparse_moe_quarter_active_compute' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Pillar4_PoUW_Tokenomics.pouw_reward_pools_conserve_100pct' does not depend on any axioms\n'HiveMindSpec.Pillar4_PoUW_Tokenomics.hive_geometric_halving_respects_21m_cap' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Phase2_SwarmFabric.dma_double_buffer_zero_exposed_stall' depends on axioms: [propext]\n'HiveMindSpec.Phase2_SwarmFabric.l2_state_channel_settlement_conservation' depends on axioms: [propext]\n'HiveMindSpec.Season3_AdvancedProofs.prefix_trie_shared_nodes_reduce_attention_flops' does not depend on any axioms\n'HiveMindSpec.Season3_AdvancedProofs.quic_0rtt_anti_replay_rejects_duplicate_nonce' depends on axioms: [propext]\n'HiveMindSpec.Season3_AdvancedProofs.fused_moe_fp8_vram_fits_16_experts_in_8gb' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season3_AdvancedProofs.nat_hole_punch_direct_p2p_avoids_turn_relay_latency' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.prefix_trie_dedup_node_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.speculative_rejection_sampling_target_invariance' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.prefix_trie_speculative_progress_bounds' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.rfc9001_0rtt_monotonic_nonce_anti_replay' depends on axioms: [propext]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.rfc9001_0rtt_ticket_expiration_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.wan_nat_hole_punch_rtt_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.speculative_run_progress_bounds' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.rfc9001_0rtt_no_nonce_accepted_twice' depends on axioms: [propext]\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.quadratic_voting_cost_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.steamworks_sybil_account_cost_lower_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.continental_super_ring_hop_bound' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.svd_rank_truncation_parameter_savings' does not depend on any axioms\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.opoi_merkle_inclusion_depth_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.opoi_merkle_inclusion_depth_logarithmic' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.ties_sign_consensus_majority_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.guild_synergy_multiplier_reward_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.interactive_bisection_interval_halving_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.interactive_bisection_single_layer_replay_savings' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.hierarchical_64_expert_gating_flop_reduction' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.fp8_paged_kv_cache_vram_fits_in_2200mib' does not depend on any axioms\n'HiveMindSpec.Season5_StrategyAndBisection.fisher_spectral_rank_budget_conservation' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.adaptive_diloco_communication_sla_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackAnd128MoE.ef21_error_feedback_residual_contraction' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackAnd128MoE.hierarchical_128_expert_3tier_gating_savings' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackAnd128MoE.ucb1_bandit_exploration_bonus_monotonicity' depends on axioms: [propext]\n'HiveMindSpec.Season6_ErrorFeedbackAnd128MoE.slashing_insurance_pool_solvency_bound' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season7_FederatedLearningHardening.adaptive_median_norm_clipping_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season7_FederatedLearningHardening.sybil_one_vote_per_steamid_quorum_bound' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season7_FederatedLearningHardening.staleness_window_outer_step_rejection' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season7_FederatedLearningHardening.free_rider_zero_gradient_rejection' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season8_GPUHardwareSafetyCircuitBreaker.gpu_thermal_hysteresis_deadband_prevents_oscillation' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season8_GPUHardwareSafetyCircuitBreaker.wddm_tdr_watchdog_preempts_before_driver_reset' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season8_GPUHardwareSafetyCircuitBreaker.duty_cycle_thermal_throttle_reduces_sustained_power' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season8_GPUHardwareSafetyCircuitBreaker.nan_loss_early_abort_saves_wasted_gpu_steps' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season9_LedgerAndInferenceRingHardening.ledger_positive_inference_fee_prevents_balance_inflation' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season9_LedgerAndInferenceRingHardening.ledger_supply_cap_conservation_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season9_LedgerAndInferenceRingHardening.ring_peer_admission_sla_rejects_high_loss_or_zero_ping' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season9_LedgerAndInferenceRingHardening.speculative_decoding_gamma_bound_limits_forward_width' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.ef_conservation_any_compressor' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.int_mul_self_nonneg' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.energy_nonneg' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.sparsify_residual_energy_le' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.sparsify_energy_split' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.sparsify_strict_contraction' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.ef_conservation_with_carry_map' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.keptCount_le_length' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.threshold_bounds' depends on axioms: [propext, Classical.choice, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.topk_contraction_rate' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_CoreOnlyBounds.ef_residual_stays_bounded_under_decay' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_CoreOnlyBounds.ucb1_well_sampled_suboptimal_arm_is_not_selected' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season6_CoreOnlyBounds.ucb1_sample_threshold_bounds_bonus' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.cgad_cosine_cutoff_zeroes_stale_variance_pollution' depends on axioms: [propext]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.fomoe_partial_replica_reduces_ring_communication_volume' does not depend on any axioms\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.fomoe_skip_token_reduces_local_expert_flops' does not depend on any axioms\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.pulseloco_compute_visible_gate_preserves_forward_rounding' depends on axioms: [propext]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.skip_attention_car_fallback_eliminates_synchronous_pcie_stall' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.isoloco_isotropic_singular_spectrum_unit_condition' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.autoloco_doubled_interval_monotonic_accumulated_lr' does not depend on any axioms\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.heloco_conflicting_component_projection_orthogonality' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.prime_diloco_cpu_flat_bucket_zero_gpu_vram_overhead' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.sparseloco_2bit_lut_wire_payload_bound' does not depend on any axioms\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.looped_moe_recurrent_core_weight_tying_vram_savings' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.terminal_kv_cache_sharing_depth_compression' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.muon_newton_schulz_replica_scaling_throughput_bound' does not depend on any axioms\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.fixed_point_recurrence_per_step_contraction' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.fixed_point_early_exit_saves_flops' does not depend on any axioms\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.terminal_kv_sharing_three_x_decode_cache_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.terminal_kv_sharing_conserves_prefix_memory' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.isosparse_fomoe_ring_communication_bound' does not depend on any axioms\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.fomoe_ghost_expert_count_complement' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.iso_cts_isotropic_spectrum_unit_condition' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.multi_wave_fomoe_local_vram_strictly_below_full_replica' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.fixed_point_zero_residual_stops_recurrence' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.isosparse_fomoe_shared_wave_reuse_reduces_payload' does not depend on any axioms\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.opendiloco_flat_bucket_partition_conserves_numel' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.streaming_diloco_fragment_bandwidth_reduction' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.pacgad_staleness_cutoff_preserves_second_moment' depends on axioms: [propext]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.deepmind_moe_diloco_active_flop_and_comm_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.demo_sparseloco_2bit_package_exceeds_16x_compression' does not depend on any axioms\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.muloco_newton_schulz_condition_contraction' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.ef21_multistep_telescoping_sum_conservation' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.looped_moe_tbptt_gradient_memory_bound' does not depend on any axioms\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.fomoe_ghost_skip_token_zero_remote_rpc' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.tsv_procrustes_subspace_rank_bound' depends on axioms: [propext]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.skip_attention_dma_overlap_zero_stall_budget' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.non_monetary_compute_reciprocity_zero_fiat_invariant' depends on axioms: [propext]\n'HiveMindSpec.Season13_HypothesisNecessityAndInhabitation.ef21_disabled_loses_untransmitted_residual' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season13_HypothesisNecessityAndInhabitation.pacgad_missing_cutoff_inflates_stale_second_moment' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season13_HypothesisNecessityAndInhabitation.multikrum_violated_quorum_loses_honest_majority' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season13_HypothesisNecessityAndInhabitation.inhabited_hivemind_rtx2070_deployment_witness' does not depend on any axioms\n'HiveMindSpec.Season14_DecoupledDiLoCoQuorumAndRDA.decoupled_grace_window_strictly_below_slack' depends on axioms: [propext]\n'HiveMindSpec.Season14_DecoupledDiLoCoQuorumAndRDA.decoupled_exhausted_slack_zero_grace' depends on axioms: [propext]\n'HiveMindSpec.Season14_DecoupledDiLoCoQuorumAndRDA.decoupled_token_weight_monotone' depends on axioms: [propext]\n'HiveMindSpec.Season14_DecoupledDiLoCoQuorumAndRDA.decoupled_quorum_admitted_count_bounds' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Pillar1_NF4_DiLoCo.nf4_double_quant_compression_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Pillar2_Byzantine_Defense.spot_check_rejects_tampered_worker' depends on axioms: [propext]\n'HiveMindSpec.Pillar3_BTM_Sparse_MoE.router_gate_strictly_higher_precision' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Pillar4_PoUW_Tokenomics.byzantine_slashing_strictly_reduces_positive_stake' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Phase2_SwarmFabric.georing_rejects_high_latency_wan_peer' depends on axioms: [propext]\n'HiveMindSpec.Phase2_SwarmFabric.kademlia_xor_self_zero' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Phase2_SwarmFabric.kademlia_xor_comm' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Phase2_SwarmFabric.speculative_tree_gamma6_rtt_reduction' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.mem_le_sum' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.accepted_add_residual_sum' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.redistribute_eq' depends on axioms: [propext, Classical.choice, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.acceptedPrefix_le' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.strikeRegister_gt' depends on axioms: [propext]\n'HiveMindSpec.Pillar1_NF4_DiLoCo.nf4_double_quant_compression_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Pillar1_NF4_DiLoCo.rtx2070_8gb_vram_envelope_verified' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Pillar1_NF4_DiLoCo.diloco_topk_fp8_bandwidth_reduction' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Pillar2_Byzantine_Defense.spot_check_10pct_and_20x_boinc_savings' does not depend on any axioms\n'HiveMindSpec.Pillar2_Byzantine_Defense.spot_check_rejects_tampered_worker' depends on axioms: [propext]\n'HiveMindSpec.Pillar2_Byzantine_Defense.multikrum_neighborhood_contains_honest_worker' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Pillar3_BTM_Sparse_MoE.top2_sparse_moe_quarter_active_compute' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Pillar3_BTM_Sparse_MoE.router_gate_strictly_higher_precision' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Pillar4_PoUW_Tokenomics.pouw_reward_pools_conserve_100pct' does not depend on any axioms\n'HiveMindSpec.Pillar4_PoUW_Tokenomics.hive_geometric_halving_respects_21m_cap' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Pillar4_PoUW_Tokenomics.byzantine_slashing_strictly_reduces_positive_stake' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Phase2_SwarmFabric.georing_rejects_high_latency_wan_peer' depends on axioms: [propext]\n'HiveMindSpec.Phase2_SwarmFabric.kademlia_xor_self_zero' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Phase2_SwarmFabric.kademlia_xor_comm' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Phase2_SwarmFabric.dma_double_buffer_zero_exposed_stall' depends on axioms: [propext]\n'HiveMindSpec.Phase2_SwarmFabric.speculative_tree_gamma6_rtt_reduction' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Phase2_SwarmFabric.l2_state_channel_settlement_conservation' depends on axioms: [propext]\n'HiveMindSpec.Season3_AdvancedProofs.prefix_trie_shared_nodes_reduce_attention_flops' does not depend on any axioms\n'HiveMindSpec.Season3_AdvancedProofs.quic_0rtt_anti_replay_rejects_duplicate_nonce' depends on axioms: [propext]\n'HiveMindSpec.Season3_AdvancedProofs.fused_moe_fp8_vram_fits_16_experts_in_8gb' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season3_AdvancedProofs.nat_hole_punch_direct_p2p_avoids_turn_relay_latency' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.prefix_trie_dedup_node_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.mem_le_sum' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.accepted_add_residual_sum' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.redistribute_eq' depends on axioms: [propext, Classical.choice, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.speculative_rejection_sampling_target_invariance' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.acceptedPrefix_le' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.prefix_trie_speculative_progress_bounds' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.speculative_run_progress_bounds' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.strikeRegister_gt' depends on axioms: [propext]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.rfc9001_0rtt_monotonic_nonce_anti_replay' depends on axioms: [propext]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.rfc9001_0rtt_no_nonce_accepted_twice' depends on axioms: [propext]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.rfc9001_0rtt_ticket_expiration_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.wan_nat_hole_punch_rtt_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.quadratic_voting_cost_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.steamworks_sybil_account_cost_lower_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.continental_super_ring_hop_bound' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.svd_rank_truncation_parameter_savings' does not depend on any axioms\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.opoi_merkle_inclusion_depth_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.opoi_merkle_inclusion_depth_logarithmic' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.ties_sign_consensus_majority_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.guild_synergy_multiplier_reward_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.interactive_bisection_interval_halving_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.interactive_bisection_single_layer_replay_savings' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.hierarchical_64_expert_gating_flop_reduction' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.fp8_paged_kv_cache_vram_fits_in_2200mib' does not depend on any axioms\n'HiveMindSpec.Season5_StrategyAndBisection.fisher_spectral_rank_budget_conservation' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.adaptive_diloco_communication_sla_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackAnd128MoE.ef21_error_feedback_residual_contraction' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackAnd128MoE.hierarchical_128_expert_3tier_gating_savings' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackAnd128MoE.ucb1_bandit_exploration_bonus_monotonicity' depends on axioms: [propext]\n'HiveMindSpec.Season6_ErrorFeedbackAnd128MoE.slashing_insurance_pool_solvency_bound' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season7_FederatedLearningHardening.adaptive_median_norm_clipping_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season7_FederatedLearningHardening.sybil_one_vote_per_steamid_quorum_bound' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season7_FederatedLearningHardening.staleness_window_outer_step_rejection' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season7_FederatedLearningHardening.free_rider_zero_gradient_rejection' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season8_GPUHardwareSafetyCircuitBreaker.gpu_thermal_hysteresis_deadband_prevents_oscillation' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season8_GPUHardwareSafetyCircuitBreaker.wddm_tdr_watchdog_preempts_before_driver_reset' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season8_GPUHardwareSafetyCircuitBreaker.duty_cycle_thermal_throttle_reduces_sustained_power' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season8_GPUHardwareSafetyCircuitBreaker.nan_loss_early_abort_saves_wasted_gpu_steps' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season9_LedgerAndInferenceRingHardening.ledger_positive_inference_fee_prevents_balance_inflation' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season9_LedgerAndInferenceRingHardening.ledger_supply_cap_conservation_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season9_LedgerAndInferenceRingHardening.ring_peer_admission_sla_rejects_high_loss_or_zero_ping' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season9_LedgerAndInferenceRingHardening.speculative_decoding_gamma_bound_limits_forward_width' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.ef_conservation_any_compressor' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.int_mul_self_nonneg' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.energy_nonneg' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.sparsify_residual_energy_le' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.sparsify_energy_split' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.sparsify_strict_contraction' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.ef_conservation_with_carry_map' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.keptCount_le_length' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.threshold_bounds' depends on axioms: [propext, Classical.choice, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.topk_contraction_rate' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_CoreOnlyBounds.ef_residual_stays_bounded_under_decay' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_CoreOnlyBounds.ucb1_well_sampled_suboptimal_arm_is_not_selected' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season6_CoreOnlyBounds.ucb1_sample_threshold_bounds_bonus' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.cgad_cosine_cutoff_zeroes_stale_variance_pollution' depends on axioms: [propext]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.fomoe_partial_replica_reduces_ring_communication_volume' does not depend on any axioms\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.fomoe_skip_token_reduces_local_expert_flops' does not depend on any axioms\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.pulseloco_compute_visible_gate_preserves_forward_rounding' depends on axioms: [propext]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.skip_attention_car_fallback_eliminates_synchronous_pcie_stall' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.isoloco_isotropic_singular_spectrum_unit_condition' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.autoloco_doubled_interval_monotonic_accumulated_lr' does not depend on any axioms\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.heloco_conflicting_component_projection_orthogonality' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.prime_diloco_cpu_flat_bucket_zero_gpu_vram_overhead' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.sparseloco_2bit_lut_wire_payload_bound' does not depend on any axioms\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.looped_moe_recurrent_core_weight_tying_vram_savings' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.terminal_kv_cache_sharing_depth_compression' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.muon_newton_schulz_replica_scaling_throughput_bound' does not depend on any axioms\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.fixed_point_recurrence_per_step_contraction' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.fixed_point_early_exit_saves_flops' does not depend on any axioms\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.terminal_kv_sharing_three_x_decode_cache_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.terminal_kv_sharing_conserves_prefix_memory' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.isosparse_fomoe_ring_communication_bound' does not depend on any axioms\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.fomoe_ghost_expert_count_complement' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.iso_cts_isotropic_spectrum_unit_condition' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.multi_wave_fomoe_local_vram_strictly_below_full_replica' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.fixed_point_zero_residual_stops_recurrence' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.isosparse_fomoe_shared_wave_reuse_reduces_payload' does not depend on any axioms\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.opendiloco_flat_bucket_partition_conserves_numel' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.streaming_diloco_fragment_bandwidth_reduction' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.pacgad_staleness_cutoff_preserves_second_moment' depends on axioms: [propext]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.deepmind_moe_diloco_active_flop_and_comm_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.demo_sparseloco_2bit_package_exceeds_16x_compression' does not depend on any axioms\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.muloco_newton_schulz_condition_contraction' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.ef21_multistep_telescoping_sum_conservation' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.looped_moe_tbptt_gradient_memory_bound' does not depend on any axioms\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.fomoe_ghost_skip_token_zero_remote_rpc' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.tsv_procrustes_subspace_rank_bound' depends on axioms: [propext]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.skip_attention_dma_overlap_zero_stall_budget' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.non_monetary_compute_reciprocity_zero_fiat_invariant' depends on axioms: [propext]\n'HiveMindSpec.Season13_HypothesisNecessityAndInhabitation.ef21_disabled_loses_untransmitted_residual' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season13_HypothesisNecessityAndInhabitation.pacgad_missing_cutoff_inflates_stale_second_moment' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season13_HypothesisNecessityAndInhabitation.multikrum_violated_quorum_loses_honest_majority' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season13_HypothesisNecessityAndInhabitation.inhabited_hivemind_rtx2070_deployment_witness' does not depend on any axioms\n'HiveMindSpec.Season14_DecoupledDiLoCoQuorumAndRDA.decoupled_grace_window_strictly_below_slack' depends on axioms: [propext]\n'HiveMindSpec.Season14_DecoupledDiLoCoQuorumAndRDA.decoupled_exhausted_slack_zero_grace' depends on axioms: [propext]\n'HiveMindSpec.Season14_DecoupledDiLoCoQuorumAndRDA.decoupled_token_weight_monotone' depends on axioms: [propext]\n'HiveMindSpec.Season14_DecoupledDiLoCoQuorumAndRDA.decoupled_quorum_admitted_count_bounds' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]",
+    "print_axioms_log": "<stdin>:1850:5: warning: Variable name `h_K` is not explicitly referenced.\n\nHint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:\n  [apply] _h_K\n\nNote: This linter can be disabled with `set_option linter.unusedVariables false`\n'HiveMindSpec.Pillar1_NF4_DiLoCo.rtx2070_8gb_vram_envelope_verified' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Pillar1_NF4_DiLoCo.diloco_topk_fp8_bandwidth_reduction' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Pillar2_Byzantine_Defense.spot_check_10pct_and_20x_boinc_savings' does not depend on any axioms\n'HiveMindSpec.Pillar2_Byzantine_Defense.multikrum_neighborhood_contains_honest_worker' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Pillar3_BTM_Sparse_MoE.top2_sparse_moe_quarter_active_compute' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Pillar4_PoUW_Tokenomics.pouw_reward_pools_conserve_100pct' does not depend on any axioms\n'HiveMindSpec.Pillar4_PoUW_Tokenomics.hive_geometric_halving_respects_21m_cap' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Phase2_SwarmFabric.dma_double_buffer_zero_exposed_stall' depends on axioms: [propext]\n'HiveMindSpec.Phase2_SwarmFabric.l2_state_channel_settlement_conservation' depends on axioms: [propext]\n'HiveMindSpec.Season3_AdvancedProofs.prefix_trie_shared_nodes_reduce_attention_flops' does not depend on any axioms\n'HiveMindSpec.Season3_AdvancedProofs.quic_0rtt_anti_replay_rejects_duplicate_nonce' depends on axioms: [propext]\n'HiveMindSpec.Season3_AdvancedProofs.fused_moe_fp8_vram_fits_16_experts_in_8gb' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season3_AdvancedProofs.nat_hole_punch_direct_p2p_avoids_turn_relay_latency' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.prefix_trie_dedup_node_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.speculative_rejection_sampling_target_invariance' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.prefix_trie_speculative_progress_bounds' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.rfc9001_0rtt_monotonic_nonce_anti_replay' depends on axioms: [propext]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.rfc9001_0rtt_ticket_expiration_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.wan_nat_hole_punch_rtt_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.speculative_run_progress_bounds' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.rfc9001_0rtt_no_nonce_accepted_twice' depends on axioms: [propext]\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.quadratic_voting_cost_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.steamworks_sybil_account_cost_lower_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.continental_super_ring_hop_bound' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.svd_rank_truncation_parameter_savings' does not depend on any axioms\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.opoi_merkle_inclusion_depth_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.opoi_merkle_inclusion_depth_logarithmic' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.ties_sign_consensus_majority_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.guild_synergy_multiplier_reward_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.interactive_bisection_interval_halving_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.interactive_bisection_single_layer_replay_savings' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.hierarchical_64_expert_gating_flop_reduction' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.fp8_paged_kv_cache_vram_fits_in_2200mib' does not depend on any axioms\n'HiveMindSpec.Season5_StrategyAndBisection.fisher_spectral_rank_budget_conservation' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.adaptive_diloco_communication_sla_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackAnd128MoE.ef21_error_feedback_residual_contraction' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackAnd128MoE.hierarchical_128_expert_3tier_gating_savings' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackAnd128MoE.ucb1_bandit_exploration_bonus_monotonicity' depends on axioms: [propext]\n'HiveMindSpec.Season6_ErrorFeedbackAnd128MoE.slashing_insurance_pool_solvency_bound' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season7_FederatedLearningHardening.adaptive_median_norm_clipping_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season7_FederatedLearningHardening.sybil_one_vote_per_steamid_quorum_bound' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season7_FederatedLearningHardening.staleness_window_outer_step_rejection' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season7_FederatedLearningHardening.free_rider_zero_gradient_rejection' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season8_GPUHardwareSafetyCircuitBreaker.gpu_thermal_hysteresis_deadband_prevents_oscillation' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season8_GPUHardwareSafetyCircuitBreaker.wddm_tdr_watchdog_preempts_before_driver_reset' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season8_GPUHardwareSafetyCircuitBreaker.duty_cycle_thermal_throttle_reduces_sustained_power' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season8_GPUHardwareSafetyCircuitBreaker.nan_loss_early_abort_saves_wasted_gpu_steps' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season9_LedgerAndInferenceRingHardening.ledger_positive_inference_fee_prevents_balance_inflation' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season9_LedgerAndInferenceRingHardening.ledger_supply_cap_conservation_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season9_LedgerAndInferenceRingHardening.ring_peer_admission_sla_rejects_high_loss_or_zero_ping' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season9_LedgerAndInferenceRingHardening.speculative_decoding_gamma_bound_limits_forward_width' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.ef_conservation_any_compressor' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.int_mul_self_nonneg' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.energy_nonneg' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.sparsify_residual_energy_le' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.sparsify_energy_split' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.sparsify_strict_contraction' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.ef_conservation_with_carry_map' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.keptCount_le_length' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.threshold_bounds' depends on axioms: [propext, Classical.choice, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.topk_contraction_rate' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_CoreOnlyBounds.ef_residual_stays_bounded_under_decay' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_CoreOnlyBounds.ucb1_well_sampled_suboptimal_arm_is_not_selected' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season6_CoreOnlyBounds.ucb1_sample_threshold_bounds_bonus' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.cgad_cosine_cutoff_zeroes_stale_variance_pollution' depends on axioms: [propext]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.fomoe_partial_replica_reduces_ring_communication_volume' does not depend on any axioms\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.fomoe_skip_token_reduces_local_expert_flops' does not depend on any axioms\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.pulseloco_compute_visible_gate_preserves_forward_rounding' depends on axioms: [propext]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.skip_attention_car_fallback_eliminates_synchronous_pcie_stall' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.isoloco_isotropic_singular_spectrum_unit_condition' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.autoloco_doubled_interval_monotonic_accumulated_lr' does not depend on any axioms\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.heloco_conflicting_component_projection_orthogonality' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.prime_diloco_cpu_flat_bucket_zero_gpu_vram_overhead' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.sparseloco_2bit_lut_wire_payload_bound' does not depend on any axioms\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.looped_moe_recurrent_core_weight_tying_vram_savings' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.terminal_kv_cache_sharing_depth_compression' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.muon_newton_schulz_replica_scaling_throughput_bound' does not depend on any axioms\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.fixed_point_recurrence_per_step_contraction' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.fixed_point_early_exit_saves_flops' does not depend on any axioms\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.terminal_kv_sharing_three_x_decode_cache_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.terminal_kv_sharing_conserves_prefix_memory' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.isosparse_fomoe_ring_communication_bound' does not depend on any axioms\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.fomoe_ghost_expert_count_complement' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.iso_cts_isotropic_spectrum_unit_condition' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.multi_wave_fomoe_local_vram_strictly_below_full_replica' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.fixed_point_zero_residual_stops_recurrence' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.isosparse_fomoe_shared_wave_reuse_reduces_payload' does not depend on any axioms\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.opendiloco_flat_bucket_partition_conserves_numel' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.streaming_diloco_fragment_bandwidth_reduction' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.pacgad_staleness_cutoff_preserves_second_moment' depends on axioms: [propext]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.deepmind_moe_diloco_active_flop_and_comm_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.demo_sparseloco_2bit_package_exceeds_16x_compression' does not depend on any axioms\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.muloco_newton_schulz_condition_contraction' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.ef21_multistep_telescoping_sum_conservation' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.looped_moe_tbptt_gradient_memory_bound' does not depend on any axioms\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.fomoe_ghost_skip_token_zero_remote_rpc' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.tsv_procrustes_subspace_rank_bound' depends on axioms: [propext]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.skip_attention_dma_overlap_zero_stall_budget' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.non_monetary_compute_reciprocity_zero_fiat_invariant' depends on axioms: [propext]\n'HiveMindSpec.Season13_HypothesisNecessityAndInhabitation.ef21_disabled_loses_untransmitted_residual' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season13_HypothesisNecessityAndInhabitation.pacgad_missing_cutoff_inflates_stale_second_moment' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season13_HypothesisNecessityAndInhabitation.multikrum_violated_quorum_loses_honest_majority' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season13_HypothesisNecessityAndInhabitation.inhabited_hivemind_rtx2070_deployment_witness' does not depend on any axioms\n'HiveMindSpec.Season14_DecoupledDiLoCoQuorumAndRDA.decoupled_grace_window_strictly_below_slack' depends on axioms: [propext]\n'HiveMindSpec.Season14_DecoupledDiLoCoQuorumAndRDA.decoupled_exhausted_slack_zero_grace' depends on axioms: [propext]\n'HiveMindSpec.Season14_DecoupledDiLoCoQuorumAndRDA.decoupled_token_weight_monotone' depends on axioms: [propext]\n'HiveMindSpec.Season14_DecoupledDiLoCoQuorumAndRDA.decoupled_quorum_admitted_count_bounds' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Pillar1_NF4_DiLoCo.nf4_double_quant_compression_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Pillar2_Byzantine_Defense.spot_check_rejects_tampered_worker' depends on axioms: [propext]\n'HiveMindSpec.Pillar3_BTM_Sparse_MoE.router_gate_strictly_higher_precision' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Pillar4_PoUW_Tokenomics.byzantine_slashing_strictly_reduces_positive_stake' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Phase2_SwarmFabric.georing_rejects_high_latency_wan_peer' depends on axioms: [propext]\n'HiveMindSpec.Phase2_SwarmFabric.kademlia_xor_self_zero' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Phase2_SwarmFabric.kademlia_xor_comm' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Phase2_SwarmFabric.speculative_tree_gamma6_rtt_reduction' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.mem_le_sum' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.accepted_add_residual_sum' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.redistribute_eq' depends on axioms: [propext, Classical.choice, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.acceptedPrefix_le' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.strikeRegister_gt' depends on axioms: [propext]\n'HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.quorum_liveness_under_m_minus_k_stragglers' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.data_lease_ttl_exceeds_step_plus_rtt_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.data_lease_batch_conservation_no_duplicates' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.outer_momentum_restart_zeroes_stale_velocity_energy' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.sigma_moe_independent_gates_preserve_resident_expert_score' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.ortho_inj_pythagorean_energy_conservation' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.factored_gossip_js_gate_skips_blocking_mix2_barrier' does not depend on any axioms\n'HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.e8_lattice_second_moment_strictly_beats_z8_cubic' does not depend on any axioms\n'HiveMindSpec.Pillar1_NF4_DiLoCo.nf4_double_quant_compression_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Pillar1_NF4_DiLoCo.rtx2070_8gb_vram_envelope_verified' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Pillar1_NF4_DiLoCo.diloco_topk_fp8_bandwidth_reduction' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Pillar2_Byzantine_Defense.spot_check_10pct_and_20x_boinc_savings' does not depend on any axioms\n'HiveMindSpec.Pillar2_Byzantine_Defense.spot_check_rejects_tampered_worker' depends on axioms: [propext]\n'HiveMindSpec.Pillar2_Byzantine_Defense.multikrum_neighborhood_contains_honest_worker' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Pillar3_BTM_Sparse_MoE.top2_sparse_moe_quarter_active_compute' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Pillar3_BTM_Sparse_MoE.router_gate_strictly_higher_precision' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Pillar4_PoUW_Tokenomics.pouw_reward_pools_conserve_100pct' does not depend on any axioms\n'HiveMindSpec.Pillar4_PoUW_Tokenomics.hive_geometric_halving_respects_21m_cap' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Pillar4_PoUW_Tokenomics.byzantine_slashing_strictly_reduces_positive_stake' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Phase2_SwarmFabric.georing_rejects_high_latency_wan_peer' depends on axioms: [propext]\n'HiveMindSpec.Phase2_SwarmFabric.kademlia_xor_self_zero' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Phase2_SwarmFabric.kademlia_xor_comm' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Phase2_SwarmFabric.dma_double_buffer_zero_exposed_stall' depends on axioms: [propext]\n'HiveMindSpec.Phase2_SwarmFabric.speculative_tree_gamma6_rtt_reduction' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Phase2_SwarmFabric.l2_state_channel_settlement_conservation' depends on axioms: [propext]\n'HiveMindSpec.Season3_AdvancedProofs.prefix_trie_shared_nodes_reduce_attention_flops' does not depend on any axioms\n'HiveMindSpec.Season3_AdvancedProofs.quic_0rtt_anti_replay_rejects_duplicate_nonce' depends on axioms: [propext]\n'HiveMindSpec.Season3_AdvancedProofs.fused_moe_fp8_vram_fits_16_experts_in_8gb' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season3_AdvancedProofs.nat_hole_punch_direct_p2p_avoids_turn_relay_latency' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.prefix_trie_dedup_node_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.mem_le_sum' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.accepted_add_residual_sum' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.redistribute_eq' depends on axioms: [propext, Classical.choice, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.speculative_rejection_sampling_target_invariance' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.acceptedPrefix_le' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.prefix_trie_speculative_progress_bounds' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.speculative_run_progress_bounds' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.strikeRegister_gt' depends on axioms: [propext]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.rfc9001_0rtt_monotonic_nonce_anti_replay' depends on axioms: [propext]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.rfc9001_0rtt_no_nonce_accepted_twice' depends on axioms: [propext]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.rfc9001_0rtt_ticket_expiration_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season3_PrefixTrie_And_0RTT.wan_nat_hole_punch_rtt_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.quadratic_voting_cost_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.steamworks_sybil_account_cost_lower_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.continental_super_ring_hop_bound' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.svd_rank_truncation_parameter_savings' does not depend on any axioms\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.opoi_merkle_inclusion_depth_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season4_DAOGovernance_And_SuperRing.opoi_merkle_inclusion_depth_logarithmic' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.ties_sign_consensus_majority_bound' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.guild_synergy_multiplier_reward_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.interactive_bisection_interval_halving_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.interactive_bisection_single_layer_replay_savings' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.hierarchical_64_expert_gating_flop_reduction' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.fp8_paged_kv_cache_vram_fits_in_2200mib' does not depend on any axioms\n'HiveMindSpec.Season5_StrategyAndBisection.fisher_spectral_rank_budget_conservation' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season5_StrategyAndBisection.adaptive_diloco_communication_sla_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackAnd128MoE.ef21_error_feedback_residual_contraction' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackAnd128MoE.hierarchical_128_expert_3tier_gating_savings' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackAnd128MoE.ucb1_bandit_exploration_bonus_monotonicity' depends on axioms: [propext]\n'HiveMindSpec.Season6_ErrorFeedbackAnd128MoE.slashing_insurance_pool_solvency_bound' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season7_FederatedLearningHardening.adaptive_median_norm_clipping_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season7_FederatedLearningHardening.sybil_one_vote_per_steamid_quorum_bound' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season7_FederatedLearningHardening.staleness_window_outer_step_rejection' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season7_FederatedLearningHardening.free_rider_zero_gradient_rejection' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season8_GPUHardwareSafetyCircuitBreaker.gpu_thermal_hysteresis_deadband_prevents_oscillation' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season8_GPUHardwareSafetyCircuitBreaker.wddm_tdr_watchdog_preempts_before_driver_reset' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season8_GPUHardwareSafetyCircuitBreaker.duty_cycle_thermal_throttle_reduces_sustained_power' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season8_GPUHardwareSafetyCircuitBreaker.nan_loss_early_abort_saves_wasted_gpu_steps' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season9_LedgerAndInferenceRingHardening.ledger_positive_inference_fee_prevents_balance_inflation' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season9_LedgerAndInferenceRingHardening.ledger_supply_cap_conservation_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season9_LedgerAndInferenceRingHardening.ring_peer_admission_sla_rejects_high_loss_or_zero_ping' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season9_LedgerAndInferenceRingHardening.speculative_decoding_gamma_bound_limits_forward_width' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.ef_conservation_any_compressor' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.int_mul_self_nonneg' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.energy_nonneg' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.sparsify_residual_energy_le' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.sparsify_energy_split' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.sparsify_strict_contraction' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.ef_conservation_with_carry_map' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.keptCount_le_length' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.threshold_bounds' depends on axioms: [propext, Classical.choice, Quot.sound]\n'HiveMindSpec.Season6_ErrorFeedbackModel.topk_contraction_rate' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season6_CoreOnlyBounds.ef_residual_stays_bounded_under_decay' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season6_CoreOnlyBounds.ucb1_well_sampled_suboptimal_arm_is_not_selected' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season6_CoreOnlyBounds.ucb1_sample_threshold_bounds_bonus' depends on axioms: [propext, Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.cgad_cosine_cutoff_zeroes_stale_variance_pollution' depends on axioms: [propext]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.fomoe_partial_replica_reduces_ring_communication_volume' does not depend on any axioms\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.fomoe_skip_token_reduces_local_expert_flops' does not depend on any axioms\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.pulseloco_compute_visible_gate_preserves_forward_rounding' depends on axioms: [propext]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.skip_attention_car_fallback_eliminates_synchronous_pcie_stall' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.isoloco_isotropic_singular_spectrum_unit_condition' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.autoloco_doubled_interval_monotonic_accumulated_lr' does not depend on any axioms\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.heloco_conflicting_component_projection_orthogonality' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.prime_diloco_cpu_flat_bucket_zero_gpu_vram_overhead' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.sparseloco_2bit_lut_wire_payload_bound' does not depend on any axioms\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.looped_moe_recurrent_core_weight_tying_vram_savings' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.terminal_kv_cache_sharing_depth_compression' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season10_OuterLoopDiLoCoEcosystem.muon_newton_schulz_replica_scaling_throughput_bound' does not depend on any axioms\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.fixed_point_recurrence_per_step_contraction' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.fixed_point_early_exit_saves_flops' does not depend on any axioms\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.terminal_kv_sharing_three_x_decode_cache_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.terminal_kv_sharing_conserves_prefix_memory' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.isosparse_fomoe_ring_communication_bound' does not depend on any axioms\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.fomoe_ghost_expert_count_complement' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.iso_cts_isotropic_spectrum_unit_condition' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.multi_wave_fomoe_local_vram_strictly_below_full_replica' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.fixed_point_zero_residual_stops_recurrence' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season11_LoopedFixedPointAndIsoSparseFoMoE.isosparse_fomoe_shared_wave_reuse_reduces_payload' does not depend on any axioms\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.opendiloco_flat_bucket_partition_conserves_numel' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.streaming_diloco_fragment_bandwidth_reduction' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.pacgad_staleness_cutoff_preserves_second_moment' depends on axioms: [propext]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.deepmind_moe_diloco_active_flop_and_comm_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.demo_sparseloco_2bit_package_exceeds_16x_compression' does not depend on any axioms\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.muloco_newton_schulz_condition_contraction' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.ef21_multistep_telescoping_sum_conservation' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.looped_moe_tbptt_gradient_memory_bound' does not depend on any axioms\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.fomoe_ghost_skip_token_zero_remote_rpc' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.tsv_procrustes_subspace_rank_bound' depends on axioms: [propext]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.skip_attention_dma_overlap_zero_stall_budget' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season12_OpenDiLoCoAndMissingMoEArchitectureHypotheses.non_monetary_compute_reciprocity_zero_fiat_invariant' depends on axioms: [propext]\n'HiveMindSpec.Season13_HypothesisNecessityAndInhabitation.ef21_disabled_loses_untransmitted_residual' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season13_HypothesisNecessityAndInhabitation.pacgad_missing_cutoff_inflates_stale_second_moment' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season13_HypothesisNecessityAndInhabitation.multikrum_violated_quorum_loses_honest_majority' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season13_HypothesisNecessityAndInhabitation.inhabited_hivemind_rtx2070_deployment_witness' does not depend on any axioms\n'HiveMindSpec.Season14_DecoupledDiLoCoQuorumAndRDA.decoupled_grace_window_strictly_below_slack' depends on axioms: [propext]\n'HiveMindSpec.Season14_DecoupledDiLoCoQuorumAndRDA.decoupled_exhausted_slack_zero_grace' depends on axioms: [propext]\n'HiveMindSpec.Season14_DecoupledDiLoCoQuorumAndRDA.decoupled_token_weight_monotone' depends on axioms: [propext]\n'HiveMindSpec.Season14_DecoupledDiLoCoQuorumAndRDA.decoupled_quorum_admitted_count_bounds' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.quorum_liveness_under_m_minus_k_stragglers' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.data_lease_ttl_exceeds_step_plus_rtt_bound' depends on axioms: [propext,\n Quot.sound]\n'HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.data_lease_batch_conservation_no_duplicates' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.outer_momentum_restart_zeroes_stale_velocity_energy' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.sigma_moe_independent_gates_preserve_resident_expert_score' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.ortho_inj_pythagorean_energy_conservation' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.factored_gossip_js_gate_skips_blocking_mix2_barrier' does not depend on any axioms\n'HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.e8_lattice_second_moment_strictly_beats_z8_cubic' does not depend on any axioms",
     "axioms_by_theorem": {
       "HiveMindSpec.Pillar1_NF4_DiLoCo.rtx2070_8gb_vram_envelope_verified": [
         "Classical.choice",
@@ -708,7 +724,38 @@
       ],
       "HiveMindSpec.Season3_PrefixTrie_And_0RTT.strikeRegister_gt": [
         "propext"
-      ]
+      ],
+      "HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.quorum_liveness_under_m_minus_k_stragglers": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.data_lease_ttl_exceeds_step_plus_rtt_bound": [
+        "Quot.sound",
+        "propext"
+      ],
+      "HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.data_lease_batch_conservation_no_duplicates": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.outer_momentum_restart_zeroes_stale_velocity_energy": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.sigma_moe_independent_gates_preserve_resident_expert_score": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.ortho_inj_pythagorean_energy_conservation": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.factored_gossip_js_gate_skips_blocking_mix2_barrier": [],
+      "HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.e8_lattice_second_moment_strictly_beats_z8_cubic": []
     },
     "missing_axiom_checks": [],
     "unexpected_axioms": [],
@@ -717,8 +764,8 @@
     "tier_a_machine_checked": true
   },
   "manuscript_provenance_audit": {
-    "total_checks": 71,
-    "passed_checks": 71,
+    "total_checks": 74,
+    "passed_checks": 74,
     "failed_check_ids": [],
     "all_passed": true,
     "checks": [
@@ -726,7 +773,7 @@
         "check_id": "PROV-01",
         "metric_name": "Lean 4 total theorem count",
         "expected_tokens": [
-          "120"
+          "128"
         ],
         "source_artifact": "lean4/HiveMindSpec.lean",
         "passed": true
@@ -975,8 +1022,8 @@
         "check_id": "PROV-27",
         "metric_name": "independent Lean kernel gate: theorems verified / declared",
         "expected_tokens": [
-          "120/120",
-          "120 of 120"
+          "128/128",
+          "128 of 128"
         ],
         "source_artifact": "artifacts/lean_independent_runner_check.json",
         "passed": true
@@ -989,6 +1036,36 @@
           "(3 theorems over real inner-product spaces"
         ],
         "source_artifact": "artifacts/lean_rda_multiplier_check.json",
+        "passed": true
+      },
+      {
+        "check_id": "PROV-32",
+        "metric_name": "E12 cross-host CPU replay divergence (L-inf after 50 steps)",
+        "expected_tokens": [
+          "1.5\\cdot 10^{-4}",
+          "1.52\\cdot 10^{-4}"
+        ],
+        "source_artifact": "artifacts/experiments/E12_pilot_report.json",
+        "passed": true
+      },
+      {
+        "check_id": "PROV-33",
+        "metric_name": "E12 largest thread-count replay divergence (L-inf after 50 steps)",
+        "expected_tokens": [
+          "2.6\\cdot 10^{-4}",
+          "2.62\\cdot 10^{-4}"
+        ],
+        "source_artifact": "artifacts/experiments/E12_pilot_report.json",
+        "passed": true
+      },
+      {
+        "check_id": "PROV-34",
+        "metric_name": "E12 bf16-autocast replay divergence against an fp32 reference (L-inf after 50 steps)",
+        "expected_tokens": [
+          "3.3\\cdot 10^{-3}",
+          "3.35\\cdot 10^{-3}"
+        ],
+        "source_artifact": "artifacts/experiments/E12_pilot_report.json",
         "passed": true
       },
       {
@@ -1024,11 +1101,10 @@
         "passed": true
       },
       {
-        "check_id": "PROV-32",
-        "metric_name": "E11 baseline NLL (Qwen-0.5B, Qwen-7B, Gemma-4-E4B)",
+        "check_id": "PROV-35",
+        "metric_name": "E11 baseline NLL (Qwen-0.5B, Gemma-4-E4B; Qwen-7B withdrawn)",
         "expected_tokens": [
           "2.785",
-          "2.396",
           "2.092"
         ],
         "source_artifact": "artifacts/experiments/E11_kv_lattice_report.json",
@@ -1036,14 +1112,12 @@
         "passed": true
       },
       {
-        "check_id": "PROV-33",
-        "metric_name": "E11 FP8 delta-NLL per model",
+        "check_id": "PROV-36",
+        "metric_name": "E11 FP8 delta-NLL per valid model",
         "expected_tokens": [
           "+0.0413",
-          "+0.4725",
           "+0.0017",
           "0.0095",
-          "0.1975",
           "0.0013"
         ],
         "source_artifact": "artifacts/experiments/E11_kv_lattice_report.json",
@@ -1051,11 +1125,10 @@
         "passed": true
       },
       {
-        "check_id": "PROV-34",
-        "metric_name": "E11 INT4 delta-NLL per model",
+        "check_id": "PROV-37",
+        "metric_name": "E11 INT4 delta-NLL per valid model",
         "expected_tokens": [
           "+2.410",
-          "+7.707",
           "+0.026"
         ],
         "source_artifact": "artifacts/experiments/E11_kv_lattice_report.json",
@@ -1063,11 +1136,10 @@
         "passed": true
       },
       {
-        "check_id": "PROV-35",
-        "metric_name": "E11 rate-matched lattice cells out of 18, per model",
+        "check_id": "PROV-38",
+        "metric_name": "E11 rate-matched lattice cells out of 18, per valid model",
         "expected_tokens": [
           "$16/18$",
-          "$5/18$",
           "$9/18$"
         ],
         "source_artifact": "artifacts/experiments/E11_kv_lattice_report.json",
@@ -1075,21 +1147,22 @@
         "passed": true
       },
       {
-        "check_id": "PROV-36",
-        "metric_name": "E11 number of lattice cells outside the matched-rate band, Qwen-7B (out of 18)",
+        "check_id": "PROV-39",
+        "metric_name": "E11 Qwen-7B row invalid: negative control failed, row withdrawn (control value and the withdrawal wording)",
         "expected_tokens": [
-          "$13$ of the 18"
+          "-0.472",
+          "negative control failed",
+          "withdrawn"
         ],
         "source_artifact": "artifacts/experiments/E11_kv_lattice_report.json",
         "match_rule": "all tokens must occur",
         "passed": true
       },
       {
-        "check_id": "PROV-37",
-        "metric_name": "E11 P11a paired differences Z - A2 at matched rate (Qwen-0.5B R=4; Qwen-7B R=4; Gemma R=2,3,4)",
+        "check_id": "PROV-40",
+        "metric_name": "E11 P11a paired differences Z - A2 at matched rate (Qwen-0.5B R=4, the single matched cell; Gemma R=2,3,4; Qwen-7B withdrawn)",
         "expected_tokens": [
           "-0.094",
-          "+0.130",
           "+0.0057",
           "+0.0039",
           "+0.0054"
@@ -1099,11 +1172,11 @@
         "passed": true
       },
       {
-        "check_id": "PROV-38",
-        "metric_name": "E11 P11b cells: Qwen-7B matched KLT R=2 and no-transform R=4, Gemma no-transform R=2",
+        "check_id": "PROV-41",
+        "metric_name": "E11 P11b cells: Qwen-0.5B no-transform R=2 and R=3, Gemma no-transform R=2 (Qwen-7B withdrawn)",
         "expected_tokens": [
-          "+0.285",
-          "+0.613",
+          "+0.372",
+          "-0.538",
           "+0.0271"
         ],
         "source_artifact": "artifacts/experiments/E11_kv_lattice_report.json",
@@ -1111,23 +1184,21 @@
         "passed": true
       },
       {
-        "check_id": "PROV-39",
-        "metric_name": "E11 failed negative control A2@8 minus FP8 (Qwen-0.5B, Qwen-7B) and passing Gemma value",
+        "check_id": "PROV-42",
+        "metric_name": "E11 negative control A2@8 minus FP8 (Qwen-0.5B failed by design error, Gemma passing; Qwen-7B in PROV-39)",
         "expected_tokens": [
           "-0.0375",
-          "-0.0013",
-          "-0.472"
+          "-0.0013"
         ],
         "source_artifact": "artifacts/experiments/E11_kv_lattice_report.json",
         "match_rule": "all tokens must occur",
         "passed": true
       },
       {
-        "check_id": "PROV-40",
-        "metric_name": "E11 positive control INT2 delta-NLL per model",
+        "check_id": "PROV-43",
+        "metric_name": "E11 positive control INT2 delta-NLL per valid model",
         "expected_tokens": [
           "+6.213",
-          "+8.042",
           "+2.690"
         ],
         "source_artifact": "artifacts/experiments/E11_kv_lattice_report.json",
@@ -1135,22 +1206,20 @@
         "passed": true
       },
       {
-        "check_id": "PROV-41",
-        "metric_name": "E11 descriptive frontier vs FP8 at 4 bits (Gemma A2, E8+KLT; Qwen A2, E8+KLT)",
+        "check_id": "PROV-44",
+        "metric_name": "E11 descriptive frontier vs FP8 at 4 bits (Gemma A2, E8+KLT; Qwen-0.5B A2, E8+KLT)",
         "expected_tokens": [
           "+0.0012",
           "+0.0003",
           "+0.360",
-          "+0.275",
-          "+2.262",
-          "+0.434"
+          "+0.275"
         ],
         "source_artifact": "artifacts/experiments/E11_kv_lattice_report.json",
         "match_rule": "all tokens must occur",
         "passed": true
       },
       {
-        "check_id": "PROV-42",
+        "check_id": "PROV-45",
         "metric_name": "E12 cell C (T4 vs x86 CPU) min and max linf after 50 steps",
         "expected_tokens": [
           "2.0\\cdot10^{-4}",
@@ -1161,7 +1230,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-43",
+        "check_id": "PROV-46",
         "metric_name": "E12 cell D (fp64 + 2^-20 snap proxy) min and max linf",
         "expected_tokens": [
           "2.0\\cdot10^{-4}",
@@ -1172,7 +1241,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-44",
+        "check_id": "PROV-47",
         "metric_name": "E12 tamper cell min and max linf",
         "expected_tokens": [
           "$2.6$",
@@ -1183,7 +1252,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-45",
+        "check_id": "PROV-48",
         "metric_name": "E12 segments above eps per cell (A, B, C, D, E) and P12-same/P12-cross statuses",
         "expected_tokens": [
           "$0/9$",
@@ -1200,7 +1269,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-46",
+        "check_id": "PROV-49",
         "metric_name": "E10b relMSE(E8)/relMSE(Z8) at 1 bit/dim on real LoRA deltas: mean, half-width, per seed, Gaussian prediction, E10 toy",
         "expected_tokens": [
           "0.869",
@@ -1215,7 +1284,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-47",
+        "check_id": "PROV-50",
         "metric_name": "E10b invalid by positive control: sign-minus-none per seed (seed 3 negative), mean final loss of the unquantised arm, matched rates",
         "expected_tokens": [
           "$4\\cdot10^{-4}$",
@@ -1231,7 +1300,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-48",
+        "check_id": "PROV-51",
         "metric_name": "E10b first execution: held-out loss 2.993 -> 3.070 and 0.72 s/step vs 0.12 assumed; init std 0.354 vs PEFT 0.0195",
         "expected_tokens": [
           "$2.993$",
@@ -1246,7 +1315,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-49",
+        "check_id": "PROV-52",
         "metric_name": "E13 P13b: retention rho mean +- half-width and per seed (qwen0.5b, granite1b), granite1b upper bound, granite3b n=1; statuses refuted/refuted/descriptive",
         "expected_tokens": [
           "$\\rho = -0.05 \\pm 0.35$ (per seed $-0.15$, $-0.11$, $+0.11$)",
@@ -1260,7 +1329,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-50",
+        "check_id": "PROV-53",
         "metric_name": "E13 all-on swarm above its starting loss in 5 of 6 seed runs (computed from final/initial losses); GSM8K domain 1.60 vs 1.23 (S2 vs S0)",
         "expected_tokens": [
           "in 5 of the 6 seed runs",
@@ -1271,7 +1340,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-51",
+        "check_id": "PROV-54",
         "metric_name": "E13 P13c: upload 9.1% of raw (all models and the six-domain run), ideal 6.2%, bar 30%, 11.0x measured reduction, codec rate 1.99-2.00, no int16",
         "expected_tokens": [
           "are $9.1\\,\\%$ of the raw fp32 deltas",
@@ -1288,7 +1357,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-52",
+        "check_id": "PROV-55",
         "metric_name": "E13 P13a: S1 == S0 with max|diff| 0.0 (tolerance 1e-6) in every model and in the six-domain and M=2 runs; S0 learns 2.365 -> 2.231..2.233",
         "expected_tokens": [
           "from $2.365$ to between $2.231$ and $2.233$",
@@ -1300,7 +1369,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-53",
+        "check_id": "PROV-56",
         "metric_name": "E13 Table tab:e13 rows: S0 gain range, S2-S0 final loss, retention, status, upload ratio for the five runs",
         "expected_tokens": [
           "$0.132$--$0.135$ & $+0.140 \\pm 0.044$ & $-0.05 \\pm 0.35$ & \\textbf{refuted} & $0.091$",
@@ -1314,7 +1383,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-54",
+        "check_id": "PROV-57",
         "metric_name": "E13 P13d table: retention, final-loss minus S0, paired S2 minus cell (computed from per-seed losses), admitted fraction, late discards for S3/S4/S5; S2 admitted 0.50 and 27 late",
         "expected_tokens": [
           "$0.11$ & $+0.118 \\pm 0.034$ & $+0.022 \\pm 0.078$ & $0.50$ & $25$",
@@ -1329,7 +1398,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-55",
+        "check_id": "PROV-58",
         "metric_name": "E13c rotating straggler: retention computed by the registered formula (0.40 +- 0.30; per seed 0.53, 0.29, 0.38); S2-S0 +0.080 +- 0.042 vs +0.140 +- 0.044",
         "expected_tokens": [
           "is $0.40 \\pm 0.30$ (per seed $0.53$, $0.29$, $0.38$)",
@@ -1340,7 +1409,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-56",
+        "check_id": "PROV-59",
         "metric_name": "E13d six domains: P13b inconclusive 0.29 +- 0.39 (per seed, interval), no-quorum retention 0.94 +- 0.07 and +0.007 +- 0.008 from S0; M=6, K=3",
         "expected_tokens": [
           "$\\rho = 0.29 \\pm 0.39$ (per seed $0.37$, $0.39$, $0.11$; interval $[-0.10, +0.68]$",
@@ -1352,7 +1421,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-57",
+        "check_id": "PROV-60",
         "metric_name": "E13 amendments: 20.03 vs 13.76 GiB preflight (receipt + amendment 2), Granite-1B abort 2.686 s/step / 3.09 h (amendment 4), step bench 0.78/1.45/2.54 s and 5.76 GiB, M=2 gate 0.0253 (amendment 5)",
         "expected_tokens": [
           "$20.03$\\,GiB against $13.76$\\,GiB free",
@@ -1367,7 +1436,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-58",
+        "check_id": "PROV-61",
         "metric_name": "E13 MoE routing statistics of the final global model of S0 seed 1: normalised entropy and top-quartile share per domain (Granite-1B and 3B)",
         "expected_tokens": [
           "$0.913$ (code), $0.929$ (French Wikipedia), $0.946$ (PubMed)",
@@ -1380,7 +1449,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-59",
+        "check_id": "PROV-62",
         "metric_name": "E14 Table tab:e14 (both models): retention, final loss minus S0, S2 minus cell, H14a/H14b statuses computed by the registered interval rule, round p50 latency",
         "expected_tokens": [
           "$-0.05 \\pm 0.35$ & $+0.140 \\pm 0.044$ & -- & -- & $16.5$",
@@ -1395,7 +1464,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-60",
+        "check_id": "PROV-63",
         "metric_name": "E14 qwen mechanism counts: S6 latency +27.5% (p50 vs S2), extra wait 79.2 s in 10 of 18 rounds, 13 forced admissions, admitted 0.50 -> 0.68, late discards 27/20/6; S7 18 carried (staleness 1: 16, 2: 2), none stale or unmerged",
         "expected_tokens": [
           "(\\textbf{$+27.5\\,\\%$}",
@@ -1409,7 +1478,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-61",
+        "check_id": "PROV-64",
         "metric_name": "E14 granite caveats: baseline improves 0.051-0.057 nats; S2 re-run -0.37 vs E13 -0.66 (seed 1 identical, seeds 2 and 3 differ); qwen S2 re-run identical to E13 for all three seeds",
         "expected_tokens": [
           "by only $0.051$ to $0.057$ nats per seed",
@@ -1420,7 +1489,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-62",
+        "check_id": "PROV-65",
         "metric_name": "E15 Table tab:e15: passes/n, pass@1 with Wilson 95%, paired contrasts (gained/lost, exact McNemar p), generation GPU seconds for C0, C1, C2, C3 (MBPP) and C0h, C2h (HumanEval)",
         "expected_tokens": [
           "$169/257$ & $65.8$ $[59.8, 71.3]$ & -- & -- & $228.2$",
@@ -1436,7 +1505,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-63",
+        "check_id": "PROV-66",
         "metric_name": "E15 decisions computed by the pre-registered thresholds: H15a inconclusive (+0.8, p=0.85), H15b supported (+7.0, p=4.0e-5), H15d supported (max peak 4.47 GiB), H15c/H15e descriptive; RFT yield 359/462, 673 pairs, 329,948 tokens, 129 steps, CE 0.156/0.096/0.061, 18,464,768 LoRA parameters",
         "expected_tokens": [
           "\\textbf{H15a} (RFT lifts greedy pass@1 by at least $+3.0$ points with $p<0.05$) is \\textbf{inconclusive}: $+0.8$ points, $p=0.85$",
@@ -1453,7 +1522,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-64",
+        "check_id": "PROV-67",
         "metric_name": "E15 selection reading: C1 gains 19 loses 1; repair solved 1 of 54 (53 fell back), 2 of 53 for C3; visible verification rate 79.4% vs 72.8% pass; sampling 3,957 s + training 368 s = 4,325 GPU s; loop 4.4x GPU s and 3.9x tokens; stage wall/peak/energy table",
         "expected_tokens": [
           "repair rounds solved only $1$ of the $54$ problems that entered them ($53$ fell back to the greedy reply; $2$ of $53$ for the tuned model)",
@@ -1473,7 +1542,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-65",
+        "check_id": "PROV-68",
         "metric_name": "E15 controls: 100/100 MBPP references, 164/164 HumanEval canonical, 12/12 planted stubs rejected, containment, leakage; vendored GWAYA commit 9c0001e8307d / sha256 af8f382c5a67 (PROVENANCE.md)",
         "expected_tokens": [
           "$100/100$ MBPP reference solutions",
@@ -1487,7 +1556,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-66",
+        "check_id": "PROV-69",
         "metric_name": "E16 Table tab:e16_vram: measured VRAM, PR estimate, ratio, decode and prompt-eval tok/s for 3 tiers x 2 contexts (all 100% on GPU)",
         "expected_tokens": [
           "1.5B & 4096 & 1651 & 1782 & 0.93 & 130.5 & 2841 \\\\",
@@ -1502,7 +1571,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-67",
+        "check_id": "PROV-70",
         "metric_name": "E16 Table tab:e16_acc: pass@1 raw vs loop, gained/lost, McNemar p, precision of VERIFIED with Wilson 95% per tier; ladder row",
         "expected_tokens": [
           "1.5B & 64.6 ($166$) & 73.2 ($188$) & $+8.6$ & $22/0$ & 4.8e-07 & 92.6 [88.2, 95.5]",
@@ -1515,7 +1584,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-68",
+        "check_id": "PROV-71",
         "metric_name": "E16 registered statuses: H16a supported (5483 / 6387 MiB <= 6656, margin 269), H16b adequate (ratios 0.93-1.21), H16c supported x3, H16d supported/supported/inconclusive (7B +3.9, p=0.002), H16e supported (92.6/92.8/94.8), H16f met at 28.5 tok/s",
         "expected_tokens": [
           "is \\textbf{supported} at 4096 ($5483$\\,MiB) and at 8192 ($6387$\\,MiB, a margin of $269$\\,MiB)",
@@ -1532,7 +1601,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-69",
+        "check_id": "PROV-72",
         "metric_name": "E16 ladder (85.2 vs 85.6, 8/9, p=1.0, 21.0%/12.1% escalated, 1227 s vs 1566 s = 78%), context invariance (210 problems, 0 discordant), winner sources, comparison with E15 C0",
         "expected_tokens": [
           "reaches $85.2\\,\\%$ ($219/257$) against $85.6\\,\\%$ ($220/257$) for the 7B loop alone (paired: $8$ gained, $9$ lost, $p=1.0$)",
@@ -1547,7 +1616,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-70",
+        "check_id": "PROV-73",
         "metric_name": "E16 controls: idle GPU 0 MiB (bar 1500), gate 100/100, 100% GPU offload, unload back to 0 MiB (tolerance 300), clean probes, determinism 10/10 per tier; run valid; Ollama 0.34.1; file sizes 940/1841/4466 MiB vs PR 1070/1840/4466",
         "expected_tokens": [
           "idle GPU at start ($0$\\,MiB used, bar $1500$)",
@@ -1562,7 +1631,7 @@
         "passed": true
       },
       {
-        "check_id": "PROV-71",
+        "check_id": "PROV-74",
         "metric_name": "GWAYA-Lite live check on the deployed service: 3/3 tasks VERIFIED (1.5B, 1.5B, 3B; fizzbuzz 7 candidates and 3 repair rounds), untested request AUDITED, 13 SSE chunks + terminator, foreign Host/Origin 403, 1639 MiB resident after the requests with only the 1.5B model",
         "expected_tokens": [
           "$3/3$ tasks \\texttt{VERIFIED}",
@@ -1602,7 +1671,7 @@
       "co_auditor_model": "none",
       "gate_passed": true,
       "findings_resolved": [
-        "Verified 120/120 machine-checked Lean 4 theorems with 0 sorry and 0 custom axioms.",
+        "Verified 128/128 machine-checked Lean 4 theorems with 0 sorry and 0 custom axioms.",
         "Added Season 14 Decoupled DiLoCo bookkeeping lemmas (Theorems 117-120: grace window strictly below slack, exhausted slack gives zero grace, token-weight monotonicity, quorum admitted-count bounds).",
         "Added Season 13 Hypothesis-Necessity Counterexamples (Theorems 113-115: disabled EF21 residual loss, missing PA-CGAD cutoff variance inflation, violated Multi-Krum quorum) and Nonempty InhabitedRTX2070SwarmPackage witness (Theorem 116)."
       ]
@@ -1625,7 +1694,7 @@
       "co_auditor_model": "none",
       "gate_passed": true,
       "findings_resolved": [
-        "Programmatically verified 71/71 exact numerical metrics between the 4 JSON artifacts and paper/hivemind_foundation_article.tex.",
+        "Programmatically verified 74/74 exact numerical metrics between the 4 JSON artifacts and paper/hivemind_foundation_article.tex.",
         "Eliminated legacy hardcoded v2.9.2 strings in paper/autoevolve_peer_review_pipeline.py."
       ]
     },
@@ -1686,7 +1755,7 @@
       "domain": "Byzantine Fault Tolerance, Cryptographic Verification & Lean 4 Formalization",
       "verdict": "SCRIPTED_CHECKLIST_PASSED",
       "checked_claims": [
-        "All 120 formal lemmas in `lean4/HiveMindSpec.lean` (Seasons 1-14) are machine-checked with 0 `sorry` and 0 user `axiom`, including Hypothesis-Necessity Counterexamples (Theorems 113-115) and the Nonempty witness (Theorem 116).",
+        "All 128 formal lemmas in `lean4/HiveMindSpec.lean` (Seasons 1-14) are machine-checked with 0 `sorry` and 0 user `axiom`, including Hypothesis-Necessity Counterexamples (Theorems 113-115) and the Nonempty witness (Theorem 116).",
         "Section 7.5 provides complete analytical proofs paired with necessity counterexamples for EF21 telescoping conservation, PA-CGAD staleness bias bound sup_{tau>=0} tau*sigma(tau) <= 1/(e*alpha), and Multi-Krum honest quorum.",
         "6-Layer HiveMindHardnessEngine and 25-vector attack simulator block 25/25 Byzantine, Sybil, NaN, and WDDM TDR attack vectors."
       ],
@@ -1714,6 +1783,6 @@
     "lead_referee_model": "none (scripted static audit; no language-model call)",
     "technical_gate_pass_rate": 1.0,
     "decision": "SCRIPTED_GATES_PASSED_NOT_A_PEER_REVIEW",
-    "epistemic_tier": "Tier-A (120 Lean 4 Machine-Checked Lemmas + 10/10 Architecture Checks + 4/4 Multi-Regime Controlled Experiments + RTX 2070 Hardware PoC)"
+    "epistemic_tier": "Tier-A (128 Lean 4 Machine-Checked Lemmas + 10/10 Architecture Checks + 4/4 Multi-Regime Controlled Experiments + RTX 2070 Hardware PoC)"
   }
 }

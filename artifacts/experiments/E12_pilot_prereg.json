@@ -1,0 +1,33 @@
+{
+  "experiment_id": "E12-pilot",
+  "registered_utc": "2026-10-23T21:35:00Z",
+  "registered_before_run": true,
+  "decides": [
+    "RQ11 (spot-check replay across hardware/software classes), CPU-only pilot"
+  ],
+  "origin": "external review of v3.5.0, weakness W1: the Byzantine spot-check accepts a replayed 50-step segment iff ||theta_validator - theta_worker||_inf <= eps = 1e-4 (DeterministicSpotCheckValidator, tolerance_eps=1e-4)",
+  "model_and_segment": "Qwen/Qwen2.5-0.5B (float32 base, frozen) with LoRA r=8, alpha=16 on q_proj and v_proj (peft), AdamW lr 1e-4, batch 1, sequence 64 tokens, s = 50 steps = one micro-checkpoint segment; data = 50 consecutive 64-token windows of docs/RESEARCH_PROGRAM.md (shipped with the script so both hosts see identical token ids); LoRA init seed 2026; every run starts from the same initial LoRA state (saved once as the reference start)",
+  "cells": {
+    "ref": "this workstation, torch 2.14.0+cu130 CPU path, 4 threads, fp32 (the reference replay)",
+    "same_process_repeat": "identical configuration run again on this workstation (negative control: must give exactly 0)",
+    "threads_1": "this workstation, 1 thread, fp32",
+    "threads_8": "this workstation, 8 threads, fp32",
+    "bf16_autocast": "this workstation, 4 threads, forward in bfloat16 autocast (the consumer-GPU precision class), fp32 master LoRA weights",
+    "remote_cpu": "GCP TPU VM gwenlaya-tpu-1 (24-vCPU x86_64, torch 2.14.1+cpu, transformers 5.20.2, peft 0.21.2), 4 threads, fp32: a different CPU, torch build and library versions",
+    "tampered": "this workstation, 4 threads, fp32, with the sign of the LoRA update flipped at step 25 (positive control: must exceed eps)"
+  },
+  "metric": "||theta_cell - theta_ref||_inf over all LoRA parameters after step 50 (the validator's statistic); also the step at which the max-abs difference first exceeds 1e-6, and the per-step training-loss difference",
+  "epsilon": 0.0001,
+  "predictions": {
+    "P12a": "same_process_repeat gives exactly 0.0 (bitwise reproducibility on one host, one thread count); refuted if > 0",
+    "P12b": "changing only the thread count (threads_1, threads_8) gives a non-zero divergence (reduction-order effects) that stays <= 1e-4 after 50 steps; refuted if it exceeds eps (then eps is too tight even within a host) or if it is exactly 0 (then thread count is not a class boundary on CPU)",
+    "P12c": "the cross-host CPU replay (remote_cpu: different CPU, torch build, library versions) diverges by more than the thread-count cells and by more than 1e-6, and the pre-registered question is whether it stays <= eps: if it does, CPU-class matching can be coarse (any x86-64 CPU with the same dtype); if it does not, even same-architecture-class validators must share the torch build",
+    "P12d": "bf16_autocast exceeds eps (precision class matters more than host); refuted if <= eps"
+  },
+  "controls": {
+    "negative": "same_process_repeat == 0.0 exactly",
+    "positive": "tampered > eps in every parameter group touched"
+  },
+  "decision_consequences": "P12b/P12c <= eps: the architecture-matched rule of paper section 4.1 may be relaxed to dtype-matched for CPU workers; P12c > eps: the validator must match torch build and library versions, not only hardware class, and the paper's rule is tightened accordingly; P12d > eps: bf16 workers need their own eps measured on GPUs (HM-S10-08) before any bf16 worker is admitted",
+  "scope": "CPU classes only (two x86-64 hosts, two torch builds, thread counts, one precision class). No GPU cell: this box's T4 is not reachable from Python and the RTX 2070 is on another machine; GPU-class cells remain HM-S10-08. One segment, one seed per cell (determinism, not statistics, is the question; the tampered and repeat controls carry the inference)"
+}

@@ -103,7 +103,16 @@ In addition to repository/PR protection, Project HiveMind enforces runtime secur
 
 ---
 
-## 5. Reporting a Vulnerability
+## 5. Phase S-6 — HiveMindFirewall: command-and-control with a chain of command ([`docs/SECURITY_HARDENING_PHASE.md`](docs/SECURITY_HARDENING_PHASE.md))
+
+Text never carries authority. Every action of the swarm's agents is a signed `Order` from a principal identified by `HMAC-SHA256(domain_secret, identity)` and an Ed25519 key whose delegation certificate chains to the owner; orders are sequenced, nonce-protected and bound to a hash-chained ledger head; any free text (PR body, issue, discussion, model output) is scanned by deterministic rules `PI-01..PI-07` (decoded payloads re-scanned) and quarantined as a data envelope; the decision is a pure state machine (`RECEIVED → IDENTIFIED → SCANNED → AUTHORIZED → SANDBOXED → EXECUTED | DELEGATED`; anything else `REFUSED` or `QUARANTINED`); executed actions use an allow-listed argv under rlimits and run inside bubblewrap or not at all. Rule ids `FW-ID-*`, `FW-COC-*`, `FW-LED-*`, `FW-AUTH-*`, `FW-SBX-*`, `FW-PI-*`.
+
+```bash
+PYTHONPATH=src python -m pytest tests/test_hivemind_firewall.py -q          # 17 tests, two property-based
+PYTHONPATH=src python scripts/run_firewall_pentest_campaign.py              # scripted red team, 59 vectors; writes artifacts/security/firewall_pentest_report.json
+```
+
+## 6. Reporting a Vulnerability
 
 If you discover a security vulnerability, backdoor attempt, or payment-extortion abuse in a Pull Request or dependency:
 1. **Do NOT open a public exploit payload.**

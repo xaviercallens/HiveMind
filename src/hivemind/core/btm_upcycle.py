@@ -594,6 +594,7 @@ class SparseMoEMLPBlock(nn.Module):
         dtype: torch.dtype = torch.float32,
         shared_base_ffn: tuple[nn.Linear, nn.Linear, nn.Linear] | None = None,
         routing_mode: str = "softmax",
+        peri_ln: bool = False,
     ) -> None:
         super().__init__()
         if routing_mode not in ("softmax", "sigma_moe"):
@@ -603,6 +604,9 @@ class SparseMoEMLPBlock(nn.Module):
         self.top_k = min(top_k, self.num_experts)
         self.expert_domains = list(expert_domains)
         self.routing_mode = routing_mode
+        self.peri_ln = bool(peri_ln)
+        self.peri_pre_norm = nn.LayerNorm(hidden_size, elementwise_affine=False)
+        self.peri_post_norm = nn.LayerNorm(hidden_size, elementwise_affine=False)
         if shared_base_ffn is not None:
             self.shared_gate_proj = shared_base_ffn[0]
             self.shared_up_proj = shared_base_ffn[1]
@@ -621,6 +625,12 @@ class SparseMoEMLPBlock(nn.Module):
         self.ghost_skipped_assignments: int = 0
         self.total_routed_assignments: int = 0
         self.last_ghost_assignment_fraction: float = 0.0
+        self.last_pre_peri_rms: float = 0.0
+        self.last_post_peri_rms: float = 0.0
+
+    def set_peri_ln(self, enabled: bool) -> None:
+        """Enable or disable Peri-LayerNorm around the MoE block (`HM-S9-02`)."""
+        self.peri_ln = bool(enabled)
 
     def set_local_expert_subset(self, local_expert_indices: Sequence[int] | None) -> None:
         """Restrict this worker to `M < E` resident experts (`HM-S8-06`).
@@ -647,13 +657,23 @@ class SparseMoEMLPBlock(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         orig_shape = x.shape
         flat_x = x.reshape(-1, self.hidden_size)
+        if self.peri_ln:
+            flat_x = self.peri_pre_norm(flat_x.to(torch.float32)).to(x.dtype)
         num_slots = int(flat_x.shape[0] * self.top_k)
         self.total_routed_assignments += num_slots
 
         if self.routing_mode == "sigma_moe":
             from hivemind.core.fomoe_sigma_routing import sigmoid_independent_topk_routing
 
-            router_logits = self.router.wg(flat_x.to(torch.float32))
+            x_fp32 = flat_x.to(torch.float32)
+            if hasattr(self.router, "wg"):
+                router_logits = self.router.wg(x_fp32)
+            elif hasattr(self.router, "micro_gates"):
+                router_logits = torch.cat([g(x_fp32) for g in self.router.micro_gates], dim=-1)
+            else:
+                router_logits = torch.zeros(
+                    (x_fp32.shape[0], self.num_experts), dtype=torch.float32, device=x_fp32.device
+                )
             if self.local_expert_indices is None:
                 resident_mask = None
                 resident_indices: Sequence[int] = range(self.num_experts)
@@ -711,6 +731,17 @@ class SparseMoEMLPBlock(nn.Module):
             weights = routing_weights[token_indices, slot_indices].unsqueeze(-1).to(expert_out.dtype)
             final_hidden.index_add_(0, token_indices, expert_out * weights)
 
+        with torch.no_grad():
+            self.last_pre_peri_rms = float(
+                final_hidden.detach().to(torch.float32).pow(2).mean().sqrt().item()
+            )
+        if self.peri_ln and bool(final_hidden.abs().max().item() > 0.0):
+            final_hidden = self.peri_post_norm(final_hidden.to(torch.float32)).to(x.dtype)
+        with torch.no_grad():
+            self.last_post_peri_rms = float(
+                final_hidden.detach().to(torch.float32).pow(2).mean().sqrt().item()
+            )
+
         return final_hidden.reshape(orig_shape)
 
 
@@ -761,9 +792,48 @@ class UpcycledSparseMoEModel(nn.Module):
         for blk in self.get_moe_blocks():
             blk.routing_mode = routing_mode
 
+    def set_peri_ln(self, enabled: bool) -> None:
+        """Enable or disable Peri-LayerNorm across all MoE blocks (`HM-S9-02`)."""
+        for blk in self.get_moe_blocks():
+            blk.set_peri_ln(enabled)
+
     def measured_ghost_fraction_per_layer(self) -> list[float]:
         """Return the empirical ghost-assignment fraction observed on each MoE block (`HM-S9-02`)."""
         return [float(blk.last_ghost_assignment_fraction) for blk in self.get_moe_blocks()]
+
+    def skip_token_flops_report(self) -> dict[str, Any]:
+        """HM-S9-02: Report empirical Skip-Token FLOP savings gated on `measured_ghost_fraction_per_layer()`.
+
+        Never claims the theoretical `(E - M) / E` formula without first executing at least one
+        forward pass (`realized_from_forward_pass` must be True).
+        """
+        blocks = self.get_moe_blocks()
+        per_layer_ghost = self.measured_ghost_fraction_per_layer()
+        total_routed = sum(int(blk.total_routed_assignments) for blk in blocks)
+        total_skipped = sum(int(blk.ghost_skipped_assignments) for blk in blocks)
+        realized = total_routed > 0
+        mean_ghost = (
+            sum(per_layer_ghost) / float(len(per_layer_ghost))
+            if (realized and per_layer_ghost)
+            else 0.0
+        )
+        active_flops_multiplier = 1.0 - mean_ghost if realized else 1.0
+        resident_count = (
+            len(self.local_expert_indices) if self.local_expert_indices is not None else self.num_experts
+        )
+        return {
+            "strategy_id": "HM-S9-02-SIGMA-MOE-SKIP-TOKEN-REPORT",
+            "realized_from_forward_pass": realized,
+            "num_experts": self.num_experts,
+            "resident_experts": resident_count,
+            "total_routed_assignments": total_routed,
+            "ghost_skipped_assignments": total_skipped,
+            "measured_ghost_fraction_per_layer": [round(g, 6) for g in per_layer_ghost],
+            "mean_measured_ghost_fraction": round(mean_ghost, 6),
+            "measured_expert_flops_multiplier": round(active_flops_multiplier, 6),
+            "measured_expert_flops_saved_fraction": round(mean_ghost if realized else 0.0, 6),
+            "peri_ln_enabled": bool(blocks and blocks[0].peri_ln),
+        }
 
     @property
     def ghost_skipped_assignments(self) -> int:
@@ -774,6 +844,8 @@ class UpcycledSparseMoEModel(nn.Module):
         for blk in self.get_moe_blocks():
             blk.expert_token_counts.zero_()
             blk.ghost_skipped_assignments = 0
+            blk.total_routed_assignments = 0
+            blk.last_ghost_assignment_fraction = 0.0
 
     def get_expert_utilization(self) -> dict[str, float]:
         counts = torch.zeros(self.num_experts, dtype=torch.float64)
@@ -885,7 +957,113 @@ class UpcycledSparseMoEModel(nn.Module):
         return out
 
 
-LOOPED_INPUT_INJECTION_MODES = ("add", "none")
+LOOPED_INPUT_INJECTION_MODES = ("add", "none", "orthogonal")
+
+
+def orthogonal_input_injection(
+    recurrent_state: torch.Tensor,
+    prelude_state: torch.Tensor,
+    eps: float = 1e-8,
+) -> torch.Tensor:
+    """HM-S9-03: Orthogonal Input Injection (`OrthoInj`, `arXiv:2606.15039`).
+
+    Projects `prelude_state` (`u`) onto the subspace orthogonal to `recurrent_state` (`h_t`)
+    along the hidden dimension (`dim=-1`) before adding:
+      u_perp = u - (<u, h_t> / (||h_t||_2^2 + eps)) * h_t
+      h_next = h_t + u_perp
+    Prevents collinear variance explosion across `T` recurrent passes while preserving
+    exact orthogonality `<u_perp, h_t> = 0` when `||h_t||_2 > 0`.
+    """
+    h = recurrent_state.to(torch.float32)
+    u = prelude_state.to(torch.float32)
+    h_norm_sq = torch.sum(h * h, dim=-1, keepdim=True)
+    dot_uh = torch.sum(u * h, dim=-1, keepdim=True)
+    proj_coeff = torch.where(
+        h_norm_sq > eps,
+        dot_uh / h_norm_sq.clamp_min(eps),
+        torch.zeros_like(h_norm_sq),
+    )
+    u_perp = u - proj_coeff * h
+    return (h + u_perp).to(dtype=recurrent_state.dtype)
+
+
+class LearnedDepthPrior(nn.Module):
+    """HM-S9-03: Learned Categorical Depth Prior with Shannon Entropy & Budget Regularisation (`arXiv:2510.25741`).
+
+    Predicts a per-token categorical probability distribution `q_phi(t | x)` over
+    `loop_steps` (`t in {1..T}`) from the prelude hidden representation and computes:
+      L_depth = budget_coef * max(0, E_q[t] - target_budget)^2 - entropy_coef * H(q_phi)
+    """
+
+    def __init__(
+        self,
+        hidden_size: int,
+        loop_steps: int,
+        entropy_coef: float = 0.01,
+        budget_coef: float = 0.05,
+        target_budget_steps: float | None = None,
+    ) -> None:
+        super().__init__()
+        if hidden_size < 1 or loop_steps < 1:
+            raise ValueError("hidden_size >= 1 and loop_steps >= 1 required")
+        if entropy_coef < 0.0 or budget_coef < 0.0:
+            raise ValueError("entropy_coef and budget_coef must be >= 0")
+        self.hidden_size = int(hidden_size)
+        self.loop_steps = int(loop_steps)
+        self.entropy_coef = float(entropy_coef)
+        self.budget_coef = float(budget_coef)
+        self.target_budget_steps = (
+            float(target_budget_steps)
+            if target_budget_steps is not None
+            else max(1.0, 0.65 * float(loop_steps))
+        )
+        self.gate = nn.Linear(hidden_size, loop_steps, bias=True, dtype=torch.float32)
+        nn.init.zeros_(self.gate.weight)
+        nn.init.zeros_(self.gate.bias)
+
+    def depth_probabilities(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """Return categorical depth probabilities `q(t | x)` of shape `[..., T]`."""
+        logits = self.gate(hidden_states.to(torch.float32))
+        return F.softmax(logits, dim=-1)
+
+    @staticmethod
+    def expected_depth(probs: torch.Tensor) -> torch.Tensor:
+        """Compute expected recurrent depth `E_q[t] = sum_{t=1}^T t * q_t` in `[1, T]`."""
+        t_steps = probs.shape[-1]
+        step_grid = torch.arange(1, t_steps + 1, dtype=probs.dtype, device=probs.device)
+        return torch.sum(probs * step_grid, dim=-1)
+
+    @staticmethod
+    def shannon_entropy(probs: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
+        """Compute per-token Shannon entropy `H(q) = -sum_t q_t ln(q_t)` in `[0, ln(T)]`."""
+        p_clamped = probs.clamp_min(eps)
+        return -torch.sum(probs * torch.log(p_clamped), dim=-1)
+
+    def regularization_loss(
+        self,
+        hidden_states: torch.Tensor,
+        target_budget_steps: float | None = None,
+    ) -> tuple[torch.Tensor, dict[str, float]]:
+        """Evaluate `(loss, telemetry)` for the learned depth prior."""
+        probs = self.depth_probabilities(hidden_states)
+        exp_depth = self.expected_depth(probs)
+        ent = self.shannon_entropy(probs)
+        budget = (
+            float(target_budget_steps)
+            if target_budget_steps is not None
+            else self.target_budget_steps
+        )
+        excess = F.relu(exp_depth.mean() - budget)
+        budget_penalty = self.budget_coef * (excess * excess)
+        entropy_bonus = self.entropy_coef * ent.mean()
+        total_reg = budget_penalty - entropy_bonus
+        return total_reg, {
+            "expected_depth_steps": round(float(exp_depth.detach().mean().item()), 6),
+            "target_budget_steps": round(budget, 6),
+            "shannon_entropy_nats": round(float(ent.detach().mean().item()), 6),
+            "max_possible_entropy_nats": round(math.log(max(1, self.loop_steps)), 6),
+            "depth_regularization_loss": round(float(total_reg.detach().item()), 6),
+        }
 
 
 def _unique_weight_bytes(module: nn.Module) -> int:
@@ -1008,6 +1186,10 @@ class LoopedExpertBackbone(nn.Module):
         router_aux_loss_coef: float | None = None,
         fixed_point_tol: float | None = None,
         truncated_bptt_steps: int | None = None,
+        use_learned_depth_prior: bool = False,
+        depth_entropy_coef: float = 0.01,
+        depth_budget_coef: float = 0.05,
+        target_depth_budget: float | None = None,
     ) -> None:
         super().__init__()
         moe_model = model if isinstance(model, UpcycledSparseMoEModel) else None
@@ -1056,6 +1238,7 @@ class LoopedExpertBackbone(nn.Module):
         self.last_mean_effective_steps: float | None = None
         self.last_early_exit_fraction: float | None = None
         self.last_fixed_point_residual: float | None = None
+        self.last_depth_prior_telemetry: dict[str, float] | None = None
         if router_aux_loss_coef is None:
             router_aux_loss_coef = moe_model.router_aux_loss_coef if moe_model is not None else 0.0
         self.router_aux_loss_coef = router_aux_loss_coef
@@ -1064,6 +1247,17 @@ class LoopedExpertBackbone(nn.Module):
         self.step_adapters = nn.ModuleList(
             LoopStepLoRAAdapter(embed_weight.shape[1], per_step_lora_rank, embed_weight.dtype, embed_weight.device)
             for _ in range(loop_steps if per_step_lora_rank > 0 else 0)
+        )
+        self.depth_prior: LearnedDepthPrior | None = (
+            LearnedDepthPrior(
+                hidden_size=embed_weight.shape[1],
+                loop_steps=loop_steps,
+                entropy_coef=depth_entropy_coef,
+                budget_coef=depth_budget_coef,
+                target_budget_steps=target_depth_budget,
+            ).to(device=embed_weight.device)
+            if use_learned_depth_prior
+            else None
         )
         self.last_aux_loss: torch.Tensor = torch.tensor(0.0)
 
@@ -1182,11 +1376,17 @@ class LoopedExpertBackbone(nn.Module):
 
         logits = self.lm_head(self.norm(hidden_states))
         self.last_aux_loss = torch.stack(aux_losses).mean() if aux_losses else torch.tensor(0.0, device=logits.device)
+        depth_reg_loss = torch.tensor(0.0, device=logits.device)
+        if self.depth_prior is not None:
+            depth_reg_loss, depth_telem = self.depth_prior.regularization_loss(injected)
+            self.last_depth_prior_telemetry = depth_telem
         loss = None
         if labels is not None:
             shift_logits = logits[:, :-1, :].reshape(-1, logits.shape[-1]).float()
             loss = F.cross_entropy(shift_logits, labels[:, 1:].reshape(-1), ignore_index=-100)
             loss = loss + self.router_aux_loss_coef * self.last_aux_loss.to(loss.device)
+            if self.depth_prior is not None:
+                loss = loss + depth_reg_loss.to(loss.device)
         return CausalLMOutputWithPast(loss=loss, logits=logits)
 
     def _run_core(
@@ -1201,6 +1401,8 @@ class LoopedExpertBackbone(nn.Module):
         hidden_states = previous
         if step > 0 and self.input_injection == "add":
             hidden_states = hidden_states + injected
+        elif step > 0 and self.input_injection == "orthogonal":
+            hidden_states = orthogonal_input_injection(hidden_states, injected)
         if self.step_adapters:
             hidden_states = self.step_adapters[step](hidden_states)
         if active is not None:
@@ -1208,6 +1410,56 @@ class LoopedExpertBackbone(nn.Module):
         for layer in self.core:
             hidden_states = self._run_layer(layer, hidden_states, *run_args, aux_losses)
         return hidden_states if active is None else torch.where(active.unsqueeze(-1), hidden_states, previous)
+
+    @torch.no_grad()
+    def evaluate_terminal_kv_sharing(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+    ) -> dict[str, Any]:
+        """HM-S9-03: Evaluate terminal-KV sharing (`Ouro`, `arXiv:2510.25741`) across `loop_steps`.
+
+        Compares the representations and output logits produced by the terminal recurrent
+        pass (`t = T - 1`) against intermediate passes (`t < T - 1`) and quantifies the
+        KV-cache memory reduction ratio `(T - 1) / T` achieved when non-terminal loop KV
+        caches are discarded/shared from the terminal core pass.
+        """
+        hidden_states = self.embed_tokens(input_ids)
+        batch_size, seq_len = input_ids.shape
+        position_ids = torch.arange(seq_len, device=hidden_states.device).unsqueeze(0).expand(batch_size, -1)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids) if self.rotary_emb is not None else None
+        mask = _causal_attention_mask(attention_mask, batch_size, seq_len, hidden_states.dtype, hidden_states.device)
+        run_args = (mask, position_ids, position_embeddings)
+        aux_losses: list[torch.Tensor] = []
+
+        for layer in self.prelude:
+            hidden_states = self._run_layer(layer, hidden_states, *run_args, aux_losses)
+        injected = hidden_states
+
+        pass_states: list[torch.Tensor] = []
+        for step in range(self.loop_steps):
+            hidden_states = self._run_core(step, hidden_states, injected, None, run_args, aux_losses)
+            pass_states.append(hidden_states.detach().to(torch.float32))
+
+        terminal_state = pass_states[-1]
+        penultimate_state = pass_states[-2] if len(pass_states) >= 2 else terminal_state
+        cos_sim = float(
+            F.cosine_similarity(
+                penultimate_state.reshape(-1, penultimate_state.shape[-1]),
+                terminal_state.reshape(-1, terminal_state.shape[-1]),
+                dim=-1,
+            ).mean().item()
+        )
+        kv_saved_fraction = float(max(0, self.loop_steps - 1)) / float(max(1, self.loop_steps))
+        return {
+            "strategy_id": "HM-S9-03-TERMINAL-KV-SHARING",
+            "loop_steps": self.loop_steps,
+            "num_core_layers": len(self.core),
+            "input_injection": self.input_injection,
+            "terminal_vs_penultimate_cosine": round(cos_sim, 6),
+            "core_kv_cache_saved_fraction": round(kv_saved_fraction, 6),
+            "core_kv_cache_multiplier": round(1.0 / float(max(1, self.loop_steps)), 6),
+        }
 
     def report(self) -> LoopedBackboneReport:
         source_depth = len(self.prelude) + len(self.core) + len(self.coda)

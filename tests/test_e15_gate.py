@@ -5,6 +5,7 @@ The containment tests ARE the sandbox verification: they run hostile code, but o
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import os
 from pathlib import Path
@@ -204,7 +205,7 @@ def test_sandbox_environment_is_empty_and_caps_dropped():
     o = g.sandbox_run(prog)
     assert o.ok and o.rc == 0
     lines = o.stdout.strip().splitlines()
-    assert set(eval(lines[0])) <= {"PATH", "LC_CTYPE"}  # LC_CTYPE is added by CPython's C-locale coercion, not inherited
+    assert set(ast.literal_eval(lines[0])) <= {"PATH", "LC_CTYPE"}  # LC_CTYPE is added by CPython's C-locale coercion, not inherited
     assert lines[1] == "['0000000000000000', '1']"
     assert lines[2].startswith("/tmp/w ")
 
@@ -226,5 +227,5 @@ def test_dev_is_minimal_no_gpu_nodes_and_devnull_works():
     o = g.sandbox_run(prog)
     assert o.ok and o.rc == 0, o
     lines = o.stdout.strip().splitlines()
-    assert set(eval(lines[0])) == {"null", "zero", "full", "random", "urandom", "fd", "stdin", "stdout", "stderr"}
+    assert set(ast.literal_eval(lines[0])) == {"null", "zero", "full", "random", "urandom", "fd", "stdin", "stdout", "stderr"}
     assert lines[1] == "8" and lines[2] == "False False" and lines[3] == "0"

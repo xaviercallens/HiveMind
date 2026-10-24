@@ -76,12 +76,12 @@ Explanations of the non-ok rows of the first queue: `E13_granite1b` was aborted 
 
 ## 2. E11 — lattice KV-cache codecs vs FP8 / scalar (RQ10, HM-S10-05)
 
-**Decision (pre-registered, amendment 1):** P11a **refuted (on qwen0.5b, qwen7b, gemma4-e4b)**; P11b **refuted (on gemma4-e4b)**. Controls all passed: False. Receipt `d47e0956eef3a831`.
+**Decision (pre-registered, amendment 1), valid models only:** P11a **refuted on qwen0.5b (one rate-matched cell, R = 4; R = 2 and 3 are not rate-matched) and on gemma4-e4b**; P11b **refuted on gemma4-e4b** (inconclusive on qwen0.5b). **The qwen7b row is INVALID (negative control `negative_A2at8_equals_fp8` failed: -0.4722 ± 0.1975 nats) and its verdicts are withdrawn; no 7B number is quoted.** Controls all passed: False. Receipt `d47e0956eef3a831`.
 
 | model | dtype | peak GiB | baseline NLL | ΔNLL FP8 | ΔNLL INT4 | P11a | P11b | controls |
 | :-- | :-- | --: | --: | --: | --: | :-- | :-- | :-- |
 | qwen0.5b | float16 | 1.295 | 2.785 | +0.0413 ± 0.0095 | +2.410 ± 0.461 | refuted | inconclusive | failed: negative_A2at8_equals_fp8 |
-| qwen7b | float16 | 14.228 | 2.396 | +0.4725 ± 0.1975 | +7.707 ± 0.840 | refuted | supported | failed: negative_A2at8_equals_fp8 |
+| qwen7b | float16 | 14.228 | - | - | - | INVALID, withdrawn | INVALID, withdrawn | failed: negative_A2at8_equals_fp8 |
 | gemma4-e4b | bfloat16 | 9.484 | 2.092 | +0.0017 ± 0.0013 | +0.026 ± 0.008 | refuted | refuted (E8 already beats Z without the transform) | all pass |
 
 Paired differences at matched measured rate (ΔNLL(Z) − ΔNLL(lattice), nats/token, positive = lattice better):
@@ -91,9 +91,6 @@ Paired differences at matched measured rate (ΔNLL(Z) − ΔNLL(lattice), nats/t
 | qwen0.5b | 2 | -2.5171 ± 1.3890 (invalid (rate not matched)) | +0.3725 ± 0.4861 (CI includes 0) | +0.8861 ± 0.4717 (E8 better) |
 | qwen0.5b | 3 | -3.0592 ± 0.1803 (invalid (rate not matched)) | -0.5382 ± 0.0795 (E8 worse) | -1.1913 ± 0.6485 (E8 worse) |
 | qwen0.5b | 4 | -0.0939 ± 0.1785 (CI includes 0) | -0.4394 ± 0.0857 (E8 worse) | +0.0648 ± 0.2290 (CI includes 0) |
-| qwen7b | 2 | +0.5279 ± 0.9803 (invalid (rate not matched)) | -1.6564 ± 2.1149 (invalid (rate not matched)) | +0.2847 ± 0.1609 (E8 better) |
-| qwen7b | 3 | +0.8436 ± 0.4334 (invalid (rate not matched)) | -0.1955 ± 0.5939 (invalid (rate not matched)) | -0.0860 ± 0.2658 (invalid (rate not matched)) |
-| qwen7b | 4 | +0.1301 ± 0.6358 (CI includes 0) | +0.6133 ± 0.7446 (CI includes 0) | -0.1614 ± 0.2405 (invalid (rate not matched)) |
 | gemma4-e4b | 2 | +0.0057 ± 0.0115 (CI includes 0) | +0.0271 ± 0.0058 (E8 better) | +0.0061 ± 0.0114 (invalid (rate not matched)) |
 | gemma4-e4b | 3 | +0.0039 ± 0.0065 (CI includes 0) | +0.0051 ± 0.0068 (CI includes 0) | -0.0008 ± 0.0118 (invalid (rate not matched)) |
 | gemma4-e4b | 4 | +0.0054 ± 0.0091 (CI includes 0) | +0.0028 ± 0.0024 (E8 better) | +0.0015 ± 0.0068 (invalid (rate not matched)) |
@@ -103,7 +100,6 @@ Descriptive only (decides nothing): does a 4-bit codec reach FP8 (paired ΔNLL d
 | model | A₂@4 | E₈@4 + KLT | Z@4 | INT4 |
 | :-- | :-- | :-- | :-- | :-- |
 | qwen0.5b | +0.3602 ± 0.0660 | +0.2751 ± 0.1615 | +0.2662 ± 0.1919 | +2.3686 ± 0.4698 |
-| qwen7b | +2.2622 ± 0.7772 | +0.4337 ± 0.1773 | +2.3923 ± 0.7239 | +7.2341 ± 0.9948 |
 | gemma4-e4b | +0.0012 ± 0.0079 ✓ | +0.0003 ± 0.0030 ✓ | +0.0066 ± 0.0014 | +0.0240 ± 0.0078 |
 
 ## 3. E12 — spot-check replay divergence across hardware (RQ11, HM-S10-08)

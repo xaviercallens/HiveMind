@@ -259,7 +259,7 @@ AUDIT_DISCLOSURE = (
 
 
 # ---------------------------------------------------------------------------------------------
-# v3.7.0 second batch: E13, E14, E15, E16 and the GWAYA-Lite deployment (PROV-49 onward).
+# v3.7.0 second batch: E13, E14, E15, E16 and the GWAYA-Lite deployment (PROV-52 onward).
 # Every token is built from a receipt; a missing receipt appends a failed check (never a silent pass).
 # Values the receipts do not store (E13c retention, E14 and E15 hypothesis statuses) are computed here
 # by the registered rule and the check asserts the status word that the text prints.
@@ -353,7 +353,7 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
     if missing:
         checks.append(
             {
-                "check_id": "PROV-49",
+                "check_id": "PROV-52",
                 "metric_name": "E13-E16 receipts present (a missing receipt fails the lock)",
                 "expected_tokens": sorted(set(missing)),
                 "source_artifact": "artifacts/experiments/",
@@ -373,9 +373,9 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
     def _seeds(d: Dict[str, float]) -> str:
         return ", ".join(f"${v:+.2f}$" if v >= 0 else f"${v:.2f}$" for v in d.values())
 
-    # PROV-49: registered P13b (qwen0.5b, granite1b, granite3b point)
+    # PROV-52: registered P13b (qwen0.5b, granite1b, granite3b point)
     _all(
-        "PROV-49",
+        "PROV-52",
         "E13 P13b: retention rho mean +- half-width and per seed (qwen0.5b, granite1b), granite1b upper bound, granite3b n=1; statuses refuted/refuted/descriptive",
         [
             f"$\\rho = {q_p13b['mean']:.2f} \\pm {q_p13b['half_width']:.2f}$ (per seed {_seeds(q_p13b['per_seed'])})",
@@ -389,7 +389,7 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
         s13,
     )
 
-    # PROV-50: all-on swarm ends above its starting loss in 5 of 6 seed runs; per-domain GSM8K starvation
+    # PROV-53: all-on swarm ends above its starting loss in 5 of 6 seed runs; per-domain GSM8K starvation
     above = sum(
         1
         for c in (cq, cg1)
@@ -399,20 +399,20 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
     gq = cq["cells"]["S2"]["per_domain_final_mean"]["gsm8k"]
     g0 = cq["cells"]["S0"]["per_domain_final_mean"]["gsm8k"]
     _all(
-        "PROV-50",
+        "PROV-53",
         "E13 all-on swarm above its starting loss in 5 of 6 seed runs (computed from final/initial losses); GSM8K domain 1.60 vs 1.23 (S2 vs S0)",
         [f"in {above} of the 6 seed runs", f"its held-out loss ending at ${gq:.2f}$ against ${g0:.2f}$ for S0"],
         "artifacts/experiments/E13_swarm_local_report.json",
     )
 
-    # PROV-51: P13c wire cost
+    # PROV-54: P13c wire cost
     rat = [pm[k]["P13c"]["upload_ratio_actual"] for k in ("qwen0.5b", "granite1b", "granite3b")] + [p6["models"]["qwen0.5b"]["P13c"]["upload_ratio_actual"]]
     ide = [pm[k]["P13c"]["upload_ratio_ideal"] for k in ("qwen0.5b", "granite1b", "granite3b")]
     s2c = [r13["models"][k]["cells"]["S2"] for k in ("qwen0.5b", "granite1b", "granite3b")]
     rates = [c["mean_measured_rate_bits_per_dim"] for c in s2c]
     comp = [c["wire"]["compression_ratio_actual"] for c in s2c]
     _all(
-        "PROV-51",
+        "PROV-54",
         "E13 P13c: upload 9.1% of raw (all models and the six-domain run), ideal 6.2%, bar 30%, 11.0x measured reduction, codec rate 1.99-2.00, no int16",
         [f"are ${100 * rat[0]:.1f}\\,\\%$ of the raw fp32 deltas", f"ideal entropy-coded ratio of ${100 * ide[0]:.1f}\\,\\%$", f"a measured ${comp[0]:.1f}\\times$ reduction"]
         + [f"${r:.3f}$" for r in rat]
@@ -422,12 +422,12 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
         s13,
     )
 
-    # PROV-52: P13a identity and learning control
+    # PROV-55: P13a identity and learning control
     ident = [pm[k]["P13a"] for k in pm] + [p6["models"]["qwen0.5b"]["P13a"]]
     m2c = m2["models"]["qwen0.5b"]["controls"]["s1_equals_s0"]["rows"][0]
     s0f = cq["cells"]["S0"]["final_loss_per_seed"]
     _all(
-        "PROV-52",
+        "PROV-55",
         "E13 P13a: S1 == S0 with max|diff| 0.0 (tolerance 1e-6) in every model and in the six-domain and M=2 runs; S0 learns 2.365 -> 2.231..2.233",
         [f"from ${cq['cells']['S0']['initial_loss_per_seed'][0]:.3f}$ to between ${min(s0f):.3f}$ and ${max(s0f):.3f}$", "$\\max|\\Delta| = 0.0$", "$\\max|\\Delta|=0.0$"]
         + _flag(
@@ -441,7 +441,7 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
         s13 + "; E13_swarm_local_report_m2proc.json; E13_swarm_local_predictions_m6.json",
     )
 
-    # PROV-53: Table tab:e13 rows
+    # PROV-56: Table tab:e13 rows
     def _gain(p: Dict[str, Any]) -> str:
         v = list(p["S0_improvement_per_seed"].values())
         return f"${min(v):.3f}$--${max(v):.3f}$"
@@ -454,7 +454,7 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
     rot_s2s0 = rot["models"]["qwen0.5b"]["paired_vs_S0"]["S2"]
     p6q = p6["models"]["qwen0.5b"]
     _all(
-        "PROV-53",
+        "PROV-56",
         "E13 Table tab:e13 rows: S0 gain range, S2-S0 final loss, retention, status, upload ratio for the five runs",
         [
             f"{_gain(pm['qwen0.5b'])} & {_pm(pv_q['mean'], pv_q['ci95'])} & {_rho(q_p13b['mean'], q_p13b['half_width'])} & \\textbf{{refuted}} & ${rat[0]:.3f}$",
@@ -467,7 +467,7 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
         s13 + "; E13_swarm_local_report_rotstraggle.json; E13_swarm_local_report_m6.json; E13_swarm_local_predictions_m6.json",
     )
 
-    # PROV-54: P13d mechanism table
+    # PROV-57: P13d mechanism table
     d = pm["qwen0.5b"]["P13d"]
     pq = cq["paired_vs_S0"]
     s2f = cq["cells"]["S2"]["final_loss_per_seed"]
@@ -489,7 +489,7 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
             f"${d[key]['mean_retention']:.2f}$ & {_pm(pq[cell]['mean'], pq[cell]['ci95'])} & {_pm(pdm, pdh)} & ${d[key]['admitted_fraction_mean']:.2f}$ & ${d[key]['late_discards_total']}$"
         )
     _all(
-        "PROV-54",
+        "PROV-57",
         "E13 P13d table: retention, final-loss minus S0, paired S2 minus cell (computed from per-seed losses), admitted fraction, late discards for S3/S4/S5; S2 admitted 0.50 and 27 late",
         rows54
         + [f"${pm['qwen0.5b']['P13b']['mean']:.2f}$ & {_pm(pq['S2']['mean'], pq['S2']['ci95'])} & -- & ${cq['cells']['S2']['admitted_fraction_mean']:.2f}$ & ${cq['cells']['S2']['late_discards_total']}$"]
@@ -499,9 +499,9 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
         s13,
     )
 
-    # PROV-55: E13c rotating straggler
+    # PROV-58: E13c rotating straggler
     _all(
-        "PROV-55",
+        "PROV-58",
         "E13c rotating straggler: retention computed by the registered formula (0.40 +- 0.30; per seed 0.53, 0.29, 0.38); S2-S0 +0.080 +- 0.042 vs +0.140 +- 0.044",
         [
             f"is ${rot_m:.2f} \\pm {rot_h:.2f}$ (per seed {', '.join(f'${v:.2f}$' for v in rot_ret)})",
@@ -512,13 +512,13 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
         "artifacts/experiments/E13_swarm_local_report_rotstraggle.json; E13_swarm_local_prereg_amendment_3.json",
     )
 
-    # PROV-56: E13d six domains
+    # PROV-59: E13d six domains
     pr6 = p6q["P13b"]
     s5r = p6q["P13d"]["S5"]
     pv6_s5 = r6["models"]["qwen0.5b"]["paired_vs_S0"]["S5"]
     s5ret = _mean_hw([(a - b) / (a - c) for a, b, c in zip(r6["models"]["qwen0.5b"]["cells"]["S0"]["initial_loss_per_seed"], r6["models"]["qwen0.5b"]["cells"]["S5"]["final_loss_per_seed"], r6["models"]["qwen0.5b"]["cells"]["S0"]["final_loss_per_seed"])])
     _all(
-        "PROV-56",
+        "PROV-59",
         "E13d six domains: P13b inconclusive 0.29 +- 0.39 (per seed, interval), no-quorum retention 0.94 +- 0.07 and +0.007 +- 0.008 from S0; M=6, K=3",
         [
             f"$\\rho = {pr6['mean']:.2f} \\pm {pr6['half_width']:.2f}$ (per seed {', '.join(f'${v:.2f}$' for v in pr6['per_seed'].values())}; interval $[{pr6['interval'][0]:.2f}, {pr6['interval'][1]:+.2f}]$",
@@ -531,7 +531,7 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
         "artifacts/experiments/E13_swarm_local_report_m6.json; E13_swarm_local_predictions_m6.json; E13_swarm_local_prereg_amendment_6.json",
     )
 
-    # PROV-57: amendments 2, 4, 5 numbers and hosting preflight
+    # PROV-60: amendments 2, 4, 5 numbers and hosting preflight
     pf = cq["hosting_fallback_cells"][0]["preflight"]
     need_gib = pf["need_process_bytes"] / 2 ** 30
     free_gib = pf["free_bytes"] / 2 ** 30
@@ -542,7 +542,7 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
     peak_gm = bm[("granite1b", "grouped_mm", False)]["peak_reserved_gib"]
     a4, a5, a2 = am[4]["measured"], am[5]["waiver"], am[2]["observed"]
     _all(
-        "PROV-57",
+        "PROV-60",
         "E13 amendments: 20.03 vs 13.76 GiB preflight (receipt + amendment 2), Granite-1B abort 2.686 s/step / 3.09 h (amendment 4), step bench 0.78/1.45/2.54 s and 5.76 GiB, M=2 gate 0.0253 (amendment 5)",
         [f"${need_gib:.2f}$\\,GiB against ${free_gib:.2f}$\\,GiB free", f"${gm:.2f}$\\,s per step against ${ge:.2f}$\\,s for \\texttt{{eager}} and ${gc:.2f}$\\,s", f"${peak_gm:.2f}$\\,GiB peak", "$2.686$\\,s per inner step", "projected $3.09$\\,h", "$0.0253$ nats"]
         + _flag(f"{need_gib:.2f}" in a2 and f"{free_gib:.2f}" in a2, "amendment 2 states the same GiB values")
@@ -552,7 +552,7 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
         "artifacts/experiments/E13_granite_step_bench.json; E13_swarm_local_prereg_amendment_2/4/5.json; E13_swarm_local_report.json (preflight)",
     )
 
-    # PROV-58: MoE routing (descriptive), final global model of S0 seed 1
+    # PROV-61: MoE routing (descriptive), final global model of S0 seed 1
     def _routing(raw: Dict[str, Any]) -> Dict[str, Any]:
         run0 = raw["runs"][0]
         assert run0["cell"] == "S0" and run0["seed"] == 1
@@ -560,7 +560,7 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
 
     rg1, rg3 = _routing(raw_g1), _routing(raw_g3)
     _all(
-        "PROV-58",
+        "PROV-61",
         "E13 MoE routing statistics of the final global model of S0 seed 1: normalised entropy and top-quartile share per domain (Granite-1B and 3B)",
         [f"${rg1['code']['mean_norm_entropy']:.3f}$ (code), ${rg1['wiki-fr']['mean_norm_entropy']:.3f}$ (French Wikipedia), ${rg1['pubmed']['mean_norm_entropy']:.3f}$ (PubMed)"]
         + [f"${rg1['code']['mean_top25pct_expert_share']:.3f}$, ${rg1['wiki-fr']['mean_top25pct_expert_share']:.3f}$, ${rg1['pubmed']['mean_top25pct_expert_share']:.3f}$"]
@@ -587,7 +587,7 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
         ]
 
     _all(
-        "PROV-59",
+        "PROV-62",
         "E14 Table tab:e14 (both models): retention, final loss minus S0, S2 minus cell, H14a/H14b statuses computed by the registered interval rule, round p50 latency",
         _e14_rows(mq, "qwen") + _e14_rows(mg, "granite")
         + _flag(_status_pos(mq["e14"]["paired_vs_S2"]["S6"]["mean"], mq["e14"]["paired_vs_S2"]["S6"]["ci95"]) == "supported", "H14a qwen supported")
@@ -604,7 +604,7 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
     carry = lq["S7"]["e14"]["carry"]
     lat_up = lq["S6"]["round_latency_s"]["p50"] / lq["S2"]["round_latency_s"]["p50"] - 1
     _all(
-        "PROV-60",
+        "PROV-63",
         "E14 qwen mechanism counts: S6 latency +27.5% (p50 vs S2), extra wait 79.2 s in 10 of 18 rounds, 13 forced admissions, admitted 0.50 -> 0.68, late discards 27/20/6; S7 18 carried (staleness 1: 16, 2: 2), none stale or unmerged",
         [
             f"(\\textbf{{${lat_up * 100:+.1f}\\,\\%$}}",
@@ -624,7 +624,7 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
     s2_g14 = mg["cells"]["S2"]["final_loss_per_seed"]
     g0 = list(pm["granite1b"]["S0_improvement_per_seed"].values())
     _all(
-        "PROV-61",
+        "PROV-64",
         "E14 granite caveats: baseline improves 0.051-0.057 nats; S2 re-run -0.37 vs E13 -0.66 (seed 1 identical, seeds 2 and 3 differ); qwen S2 re-run identical to E13 for all three seeds",
         [f"by only ${min(g0):.3f}$ to ${max(g0):.3f}$ nats per seed", f"retention ${mg['e14']['retention_vs_S0']['S2']['mean']:.2f}$ in this invocation against ${g_p13b['mean']:.2f}$ in E13"]
         + _flag(s2_e14q == s2_e13, "qwen S2 re-run identical to E13")
@@ -653,7 +653,7 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
 
     gps = {k: cond[k]["gen_gpu_seconds"] for k in cond}
     _all(
-        "PROV-62",
+        "PROV-65",
         "E15 Table tab:e15: passes/n, pass@1 with Wilson 95%, paired contrasts (gained/lost, exact McNemar p), generation GPU seconds for C0, C1, C2, C3 (MBPP) and C0h, C2h (HumanEval)",
         [
             f"{_crow('C0')} & -- & -- & ${gps['C0']:.1f}$",
@@ -668,7 +668,7 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
         s15,
     )
 
-    # PROV-63: E15 decisions computed from the registered thresholds
+    # PROV-66: E15 decisions computed from the registered thresholds
     c1c0, c2c0 = pc["C1-C0"], pc["C2-C0"]
     h15a = "supported" if (c2c0["diff"] >= 0.03 and c2c0["mcnemar_p"] < 0.05) else "refuted" if (c2c0["diff"] < 0 and c2c0["mcnemar_p"] < 0.05) else "inconclusive"
     h15b = "supported" if (c1c0["diff"] >= 0.05 and c1c0["mcnemar_p"] < 0.05) else "refuted" if c1c0["diff"] <= 0 else "inconclusive"
@@ -676,7 +676,7 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
     h15d = "supported" if max(peaks) <= 8.0 else "refuted"
     st = e15["stages"]
     _all(
-        "PROV-63",
+        "PROV-66",
         "E15 decisions computed by the pre-registered thresholds: H15a inconclusive (+0.8, p=0.85), H15b supported (+7.0, p=4.0e-5), H15d supported (max peak 4.47 GiB), H15c/H15e descriptive; RFT yield 359/462, 673 pairs, 329,948 tokens, 129 steps, CE 0.156/0.096/0.061, 18,464,768 LoRA parameters",
         [
             f"\\textbf{{H15a}} (RFT lifts greedy pass@1 by at least $+3.0$ points with $p<0.05$) is \\textbf{{{h15a}}}: ${100 * c2c0['diff']:+.1f}$ points, $p={_pval(c2c0['mcnemar_p'])}$",
@@ -694,13 +694,13 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
         s15,
     )
 
-    # PROV-64: honest reading and cost
+    # PROV-67: honest reading and cost
     c1, c3 = cond["C1"], cond["C3"]
     rft_s, tr_s = st["rft"]["gen_gpu_seconds"], st["train"]["seconds"]
     tok_ratio = c1["generated_tokens"] / cond["C0"]["generated_tokens"]
     wh = e15["energy_wh_per_stage"]
     _all(
-        "PROV-64",
+        "PROV-67",
         "E15 selection reading: C1 gains 19 loses 1; repair solved 1 of 54 (53 fell back), 2 of 53 for C3; visible verification rate 79.4% vs 72.8% pass; sampling 3,957 s + training 368 s = 4,325 GPU s; loop 4.4x GPU s and 3.9x tokens; stage wall/peak/energy table",
         [
             f"repair rounds solved only ${c1['winner_source']['repair1']}$ of the ${c1['winner_source']['repair1'] + c1['winner_source']['fallback_first_greedy']}$ problems that entered them (${c1['winner_source']['fallback_first_greedy']}$ fell back to the greedy reply; ${c3['winner_source']['repair1']}$ of ${c3['winner_source']['repair1'] + c3['winner_source']['fallback_first_greedy']}$ for the tuned model)",
@@ -718,11 +718,11 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
         s15,
     )
 
-    # PROV-65: E15 controls and vendoring
+    # PROV-68: E15 controls and vendoring
     ctl = e15["controls"]
     vend = e15["gwaya_vendored"]
     _all(
-        "PROV-65",
+        "PROV-68",
         "E15 controls: 100/100 MBPP references, 164/164 HumanEval canonical, 12/12 planted stubs rejected, containment, leakage; vendored GWAYA commit 9c0001e8307d / sha256 af8f382c5a67 (PROVENANCE.md)",
         [f"${ctl['i_mbpp_reference_accept']['accepted']}/{ctl['i_mbpp_reference_accept']['n']}$ MBPP reference solutions", f"${ctl['i_humaneval_canonical_accept']['accepted']}/{ctl['i_humaneval_canonical_accept']['n']}$ HumanEval canonical solutions", f"${ctl['ii_planted_stubs_rejected']['rejected_as_stub']}/{ctl['ii_planted_stubs_rejected']['n']}$ planted stubs", f"\\texttt{{{vend['commit'][:12]}}}", f"\\texttt{{{vend['ast_audit_sha256'][:12]}\\ldots}}"]
         + _flag(ctl["all_passed"] and ctl["iii_containment_probes"]["all_contained"] and ctl["iv_no_leakage"]["pass"] and e15["controls_all_passed"], "E15 controls pass")
@@ -741,7 +741,7 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
                 f"{lab} & {ctx} & {p['measured_mib']} & {p['estimator_mib']} & {p['ratio_measured_over_estimate']:.2f} & {p['decode_tps_median']:.1f} & {p['prompt_eval_tps_median']:.0f} \\\\"
             )
     _all(
-        "PROV-66",
+        "PROV-69",
         "E16 Table tab:e16_vram: measured VRAM, PR estimate, ratio, decode and prompt-eval tok/s for 3 tiers x 2 contexts (all 100% on GPU)",
         rows16 + _flag(all(p["gpu_pct"] == 100.0 for p in e16["probes"]), "100% on GPU everywhere"),
         s16,
@@ -759,7 +759,7 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
     lad = an["escalation_ladder"]
     acc_rows.append(f"Ladder 1.5B$\\to$3B$\\to$7B & -- & {100 * lad['ladder_pass_at_1']:.1f} (${lad['ladder_passes']}$)")
     _all(
-        "PROV-67",
+        "PROV-70",
         "E16 Table tab:e16_acc: pass@1 raw vs loop, gained/lost, McNemar p, precision of VERIFIED with Wilson 95% per tier; ladder row",
         acc_rows + _flag(all(an["tiers"][t]["paired_L_minus_R"]["a_only"] == 0 for t in an["tiers"]), "no problem lost to the loop"),
         s16,
@@ -771,7 +771,7 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
     d7 = an["tiers"]["7b"]["paired_L_minus_R"]
     pcal7 = [an["tiers"][t]["p2_gate_calibration"] for t in ("1.5b", "3b", "7b")]
     _all(
-        "PROV-68",
+        "PROV-71",
         "E16 registered statuses: H16a supported (5483 / 6387 MiB <= 6656, margin 269), H16b adequate (ratios 0.93-1.21), H16c supported x3, H16d supported/supported/inconclusive (7B +3.9, p=0.002), H16e supported (92.6/92.8/94.8), H16f met at 28.5 tok/s",
         [
             f"is \\textbf{{{h16a4['status']}}} at 4096 (${h16a4['measured_mib']}$\\,MiB) and at 8192 (${h16a8['measured_mib']}$\\,MiB, a margin of ${h16a8['threshold_mib'] - h16a8['measured_mib']}$\\,MiB)",
@@ -795,7 +795,7 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
     pr8 = an["tiers"]["7b"]["paired_R8192_minus_R4096"]
     raw15 = an["tiers"]["1.5b"]["R4096"]["pass_at_1"]
     _all(
-        "PROV-69",
+        "PROV-72",
         "E16 ladder (85.2 vs 85.6, 8/9, p=1.0, 21.0%/12.1% escalated, 1227 s vs 1566 s = 78%), context invariance (210 problems, 0 discordant), winner sources, comparison with E15 C0",
         [
             f"reaches ${100 * lad['ladder_pass_at_1']:.1f}\\,\\%$ (${lad['ladder_passes']}/257$) against ${100 * lad['seven_b_only_pass_at_1']:.1f}\\,\\%$ (${lad['seven_b_only_passes']}/257$) for the 7B loop alone (paired: ${pl['b_only']}$ gained, ${pl['a_only']}$ lost, $p={pl['mcnemar_p']:.1f}$)",
@@ -814,7 +814,7 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
     unl = e16["stages"]["unload"]
     dets = [an["tiers"][t]["determinism"] for t in an["tiers"]]
     _all(
-        "PROV-70",
+        "PROV-73",
         "E16 controls: idle GPU 0 MiB (bar 1500), gate 100/100, 100% GPU offload, unload back to 0 MiB (tolerance 300), clean probes, determinism 10/10 per tier; run valid; Ollama 0.34.1; file sizes 940/1841/4466 MiB vs PR 1070/1840/4466",
         [
             f"idle GPU at start (${ctl16['idle_gpu']['memory_used_mib']}$\\,MiB used, bar ${ctl16['idle_gpu']['threshold_mib']}$)",
@@ -833,7 +833,7 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
 
     ts = live["tasks"]
     _all(
-        "PROV-71",
+        "PROV-74",
         "GWAYA-Lite live check on the deployed service: 3/3 tasks VERIFIED (1.5B, 1.5B, 3B; fizzbuzz 7 candidates and 3 repair rounds), untested request AUDITED, 13 SSE chunks + terminator, foreign Host/Origin 403, 1639 MiB resident after the requests with only the 1.5B model",
         [
             f"${sum(1 for t in ts if t['verdict'] == 'VERIFIED')}/{len(ts)}$ tasks \\texttt{{VERIFIED}}",
@@ -971,6 +971,15 @@ def verify_manuscript_data_consistency(
     lean_rda = exp_v3_data.get("__lean_rda__", {})
     if lean_rda:
         _add_check("PROV-31", "Mathlib RDA proposition theorems verified (lean4/mathlib/RDAMultiplier.lean)", [f"{lean_rda['compiled']} theorems", f"({lean_rda['compiled']} theorems over real inner-product spaces"], "artifacts/lean_rda_multiplier_check.json")
+    e12p = exp_v3_data.get("__e12_pilot__", {})
+    if e12p:
+        e12_remote = float(e12p["cells"]["remote_cpu"]["linf_vs_ref"])
+        e12_thr = max(float(e12p["cells"][c]["linf_vs_ref"]) for c in ("threads_1", "threads_8") if c in e12p["cells"])
+        _add_check("PROV-32", "E12 cross-host CPU replay divergence (L-inf after 50 steps)", [f"{e12_remote * 1e4:.1f}\\cdot 10^{{-4}}", f"{e12_remote * 1e4:.2f}\\cdot 10^{{-4}}"], "artifacts/experiments/E12_pilot_report.json")
+        _add_check("PROV-33", "E12 largest thread-count replay divergence (L-inf after 50 steps)", [f"{e12_thr * 1e4:.1f}\\cdot 10^{{-4}}", f"{e12_thr * 1e4:.2f}\\cdot 10^{{-4}}"], "artifacts/experiments/E12_pilot_report.json")
+        if "bf16_autocast" in e12p["cells"]:
+            e12_bf16 = float(e12p["cells"]["bf16_autocast"]["linf_vs_ref"])
+            _add_check("PROV-34", "E12 bf16-autocast replay divergence against an fp32 reference (L-inf after 50 steps)", [f"{e12_bf16 * 1e3:.1f}\\cdot 10^{{-3}}", f"{e12_bf16 * 1e3:.2f}\\cdot 10^{{-3}}"], "artifacts/experiments/E12_pilot_report.json")
     e10 = exp_v3_data.get("__e10__", {})
     if e10:
         e10_ratio = float(e10["analysis"]["P10a"]["cells"]["R=1.0|EF=off"]["ratio_mean"])
@@ -989,61 +998,62 @@ def verify_manuscript_data_consistency(
     src10b = "artifacts/experiments/E10b_lattice_05b_report.json"
     if e11.get("models"):
         m = e11["models"]
-        order = ["qwen0.5b", "qwen7b", "gemma4-e4b"]
-        _add_check_all("PROV-32", "E11 baseline NLL (Qwen-0.5B, Qwen-7B, Gemma-4-E4B)", [f"{m[k]['baseline_nll']:.3f}" for k in order], src11)
-        _add_check_all("PROV-33", "E11 FP8 delta-NLL per model", [f"{m[k]['cells']['fp8']['dnll_mean']:+.4f}" for k in order] + [f"{m[k]['cells']['fp8']['dnll_ci95']:.4f}" for k in order], src11)
-        _add_check_all("PROV-34", "E11 INT4 delta-NLL per model", [f"{m[k]['cells']['int@4']['dnll_mean']:+.3f}" for k in order], src11)
+        m_all = m
+        order = ["qwen0.5b", "gemma4-e4b"]  # the Qwen2.5-Coder-7B row is INVALID (negative control failed) and withdrawn: no 7B number is a provenance target
+        _add_check_all("PROV-35", "E11 baseline NLL (Qwen-0.5B, Gemma-4-E4B; Qwen-7B withdrawn)", [f"{m[k]['baseline_nll']:.3f}" for k in order], src11)
+        _add_check_all("PROV-36", "E11 FP8 delta-NLL per valid model", [f"{m[k]['cells']['fp8']['dnll_mean']:+.4f}" for k in order] + [f"{m[k]['cells']['fp8']['dnll_ci95']:.4f}" for k in order], src11)
+        _add_check_all("PROV-37", "E11 INT4 delta-NLL per valid model", [f"{m[k]['cells']['int@4']['dnll_mean']:+.3f}" for k in order], src11)
 
         def _matched(k: str) -> int:
             return sum(1 for ck, cv in m[k]["cells"].items() if "rate_matched" in cv and ck != "A2@8|none" and cv["rate_matched"])
 
-        _add_check_all("PROV-35", "E11 rate-matched lattice cells out of 18, per model", [f"${_matched(k)}/18$" for k in order], src11)
-        _add_check_all("PROV-36", "E11 number of lattice cells outside the matched-rate band, Qwen-7B (out of 18)", [f"${18 - _matched('qwen7b')}$ of the 18"], src11)
+        _add_check_all("PROV-38", "E11 rate-matched lattice cells out of 18, per valid model", [f"${_matched(k)}/18$" for k in order], src11)
+        _add_check_all("PROV-39", "E11 Qwen-7B row invalid: negative control failed, row withdrawn (control value and the withdrawal wording)", [f"{m_all['qwen7b']['controls']['negative_A2at8_equals_fp8']['diff_mean']:+.3f}", "negative control failed", "withdrawn"] if (m_all.get("qwen7b", {}).get("controls", {}).get("negative_A2at8_equals_fp8", {}).get("passed") is False) else ["QWEN7B-CONTROL-NOT-FAILED"], src11)
         pa = {k: m[k]["P11a"]["cells"] for k in order}
         _add_check_all(
-            "PROV-37",
-            "E11 P11a paired differences Z - A2 at matched rate (Qwen-0.5B R=4; Qwen-7B R=4; Gemma R=2,3,4)",
-            [f"{pa['qwen0.5b']['R=4']['z_minus_a2_mean']:+.3f}", f"{pa['qwen7b']['R=4']['z_minus_a2_mean']:+.3f}"]
+            "PROV-40",
+            "E11 P11a paired differences Z - A2 at matched rate (Qwen-0.5B R=4, the single matched cell; Gemma R=2,3,4; Qwen-7B withdrawn)",
+            [f"{pa['qwen0.5b']['R=4']['z_minus_a2_mean']:+.3f}"]
             + [f"{pa['gemma4-e4b'][r]['z_minus_a2_mean']:+.4f}" for r in ("R=2", "R=3", "R=4")],
             src11,
         )
-        pb7 = m["qwen7b"]["P11b"]["cells"]
+        pb5 = m["qwen0.5b"]["P11b"]["cells"]
         pbg = m["gemma4-e4b"]["P11b"]["cells"]
         _add_check_all(
-            "PROV-38",
-            "E11 P11b cells: Qwen-7B matched KLT R=2 and no-transform R=4, Gemma no-transform R=2",
-            [f"{pb7['R=2|klt']['z_minus_e8_mean']:+.3f}", f"{pb7['R=4|none']['z_minus_e8_mean']:+.3f}", f"{pbg['R=2|none']['z_minus_e8_mean']:+.4f}"],
+            "PROV-41",
+            "E11 P11b cells: Qwen-0.5B no-transform R=2 and R=3, Gemma no-transform R=2 (Qwen-7B withdrawn)",
+            [f"{pb5['R=2|none']['z_minus_e8_mean']:+.3f}", f"{pb5['R=3|none']['z_minus_e8_mean']:+.3f}", f"{pbg['R=2|none']['z_minus_e8_mean']:+.4f}"],
             src11,
         )
         _add_check_all(
-            "PROV-39",
-            "E11 failed negative control A2@8 minus FP8 (Qwen-0.5B, Qwen-7B) and passing Gemma value",
+            "PROV-42",
+            "E11 negative control A2@8 minus FP8 (Qwen-0.5B failed by design error, Gemma passing; Qwen-7B in PROV-39)",
             [f"{m[k]['controls']['negative_A2at8_equals_fp8']['diff_mean']:+.4f}" for k in ("qwen0.5b", "gemma4-e4b")]
-            + [f"{m['qwen7b']['controls']['negative_A2at8_equals_fp8']['diff_mean']:+.3f}"],
+            ,
             src11,
         )
-        _add_check_all("PROV-40", "E11 positive control INT2 delta-NLL per model", [f"{m[k]['controls']['positive_int2_raises_dnll']['dnll_mean']:+.3f}" for k in order], src11)
+        _add_check_all("PROV-43", "E11 positive control INT2 delta-NLL per valid model", [f"{m[k]['controls']['positive_int2_raises_dnll']['dnll_mean']:+.3f}" for k in order], src11)
         fr = {k: m[k]["descriptive_frontier_vs_fp8"] for k in order}
         _add_check_all(
-            "PROV-41",
-            "E11 descriptive frontier vs FP8 at 4 bits (Gemma A2, E8+KLT; Qwen A2, E8+KLT)",
+            "PROV-44",
+            "E11 descriptive frontier vs FP8 at 4 bits (Gemma A2, E8+KLT; Qwen-0.5B A2, E8+KLT)",
             [f"{fr['gemma4-e4b']['A2@4|none']['minus_fp8_mean']:+.4f}", f"{fr['gemma4-e4b']['E8@4|klt']['minus_fp8_mean']:+.4f}"]
-            + [f"{fr[k][c]['minus_fp8_mean']:+.3f}" for k in ("qwen0.5b", "qwen7b") for c in ("A2@4|none", "E8@4|klt")],
+            + [f"{fr[k][c]['minus_fp8_mean']:+.3f}" for k in ("qwen0.5b",) for c in ("A2@4|none", "E8@4|klt")],
             src11,
         )
     else:
-        checks.append({"check_id": "PROV-32", "metric_name": "E11 report missing", "expected_tokens": [], "source_artifact": src11, "passed": False})
+        checks.append({"check_id": "PROV-35", "metric_name": "E11 report missing", "expected_tokens": [], "source_artifact": src11, "passed": False})
     if e12.get("cells"):
         sm = e12["summary"]
 
         def _e4(x: float) -> str:
             return f"{x * 1e4:.1f}\\cdot10^{{-4}}"
 
-        _add_check_all("PROV-42", "E12 cell C (T4 vs x86 CPU) min and max linf after 50 steps", [_e4(sm["C_cross_T4_vs_cpu"]["min_linf"]), _e4(sm["C_cross_T4_vs_cpu"]["max_linf"])], src12)
-        _add_check_all("PROV-43", "E12 cell D (fp64 + 2^-20 snap proxy) min and max linf", [_e4(sm["D_proxy_fp64_snap_T4_vs_cpu"]["min_linf"]), _e4(sm["D_proxy_fp64_snap_T4_vs_cpu"]["max_linf"])], src12)
-        _add_check_all("PROV-44", "E12 tamper cell min and max linf", [f"${sm['E_tamper']['min_linf']:.1f}$", f"${sm['E_tamper']['max_linf']:.1f}$"], src12)
+        _add_check_all("PROV-45", "E12 cell C (T4 vs x86 CPU) min and max linf after 50 steps", [_e4(sm["C_cross_T4_vs_cpu"]["min_linf"]), _e4(sm["C_cross_T4_vs_cpu"]["max_linf"])], src12)
+        _add_check_all("PROV-46", "E12 cell D (fp64 + 2^-20 snap proxy) min and max linf", [_e4(sm["D_proxy_fp64_snap_T4_vs_cpu"]["min_linf"]), _e4(sm["D_proxy_fp64_snap_T4_vs_cpu"]["max_linf"])], src12)
+        _add_check_all("PROV-47", "E12 tamper cell min and max linf", [f"${sm['E_tamper']['min_linf']:.1f}$", f"${sm['E_tamper']['max_linf']:.1f}$"], src12)
         _add_check_all(
-            "PROV-45",
+            "PROV-48",
             "E12 segments above eps per cell (A, B, C, D, E) and P12-same/P12-cross statuses",
             [f"${sm[c]['n_above_eps']}/{sm[c]['n']}$" for c in ("A_same_process_T4", "B_separate_process_T4", "C_cross_T4_vs_cpu", "D_proxy_fp64_snap_T4_vs_cpu", "E_tamper")]
             + [f"{e12['analysis']['P12-same']['status']}", f"{e12['analysis']['P12-cross']['status']}"]
@@ -1051,11 +1061,11 @@ def verify_manuscript_data_consistency(
             src12,
         )
     else:
-        checks.append({"check_id": "PROV-42", "metric_name": "E12 report missing", "expected_tokens": [], "source_artifact": src12, "passed": False})
+        checks.append({"check_id": "PROV-45", "metric_name": "E12 report missing", "expected_tokens": [], "source_artifact": src12, "passed": False})
     if e10b.get("analysis"):
         p10a = e10b["analysis"]["P10a"]["cells"]["R=1.0|EF=on"]
         _add_check_all(
-            "PROV-46",
+            "PROV-49",
             "E10b relMSE(E8)/relMSE(Z8) at 1 bit/dim on real LoRA deltas: mean, half-width, per seed, Gaussian prediction, E10 toy",
             [f"{p10a['ratio_mean']:.3f}", f"{p10a['ci95']:.3f}"] + [f"{x:.4f}" for x in p10a["per_seed"][:1] + p10a["per_seed"][2:]]
             + [f"{p10a['gaussian_prediction']:.2f}", f"{p10a['e10_toy_ratio_R1']:.2f}"],
@@ -1067,7 +1077,7 @@ def verify_manuscript_data_consistency(
         finals = [r["final"] for r in ctr["none_arm_learns"]["rows"]]
         mr = ctr["negative_matched_rate"]["R=1.0"]
         _add_check_all(
-            "PROV-47",
+            "PROV-50",
             "E10b invalid by positive control: sign-minus-none per seed (seed 3 negative), mean final loss of the unquantised arm, matched rates",
             [f"${diffs[0] * 1e4:.0f}\\cdot10^{{-4}}$", f"${diffs[1] * 1e3:.1f}\\cdot10^{{-3}}$",
              "it ended below the unquantised arm" if diffs[2] < 0 else "SEED3-NOT-BELOW",
@@ -1080,7 +1090,7 @@ def verify_manuscript_data_consistency(
         am = exp_v3_data.get("__e10b_amend2__", {}).get("first_execution", {}).get("measured", {})
         am_diag = exp_v3_data.get("__e10b_amend2__", {}).get("diagnostic", {}).get("results", [])
         _add_check_all(
-            "PROV-48",
+            "PROV-51",
             "E10b first execution: held-out loss 2.993 -> 3.070 and 0.72 s/step vs 0.12 assumed; init std 0.354 vs PEFT 0.0195",
             [f"${fe.get('initial_loss', 0):.3f}$", f"${fe.get('final_loss', 0):.3f}$", f"${am.get('sec_per_inner_step', 0):.2f}$\\,s",
              f"${am.get('registered_assumption_sec_per_inner_step', 0):.2f}$\\,s"]
@@ -1088,9 +1098,9 @@ def verify_manuscript_data_consistency(
             "artifacts/experiments/E10b_first_execution_partial.json; artifacts/experiments/E10b_lattice_05b_prereg_amendment_2.json",
         )
     else:
-        checks.append({"check_id": "PROV-46", "metric_name": "E10b report missing", "expected_tokens": [], "source_artifact": src10b, "passed": False})
+        checks.append({"check_id": "PROV-49", "metric_name": "E10b report missing", "expected_tokens": [], "source_artifact": src10b, "passed": False})
 
-    # ---- v3.7.0 second batch: E13, E14, E15, E16 and the GWAYA-Lite deployment (PROV-49 onward) ----
+    # ---- v3.7.0 second batch: E13, E14, E15, E16 and the GWAYA-Lite deployment (PROV-52 onward) ----
     _provenance_e13_e16(tex_text, checks)
 
     failed = [c["check_id"] for c in checks if not c["passed"]]
@@ -1209,6 +1219,8 @@ def run_autoevolve_peer_review() -> Dict[str, Any]:
         _p = PROJECT_ROOT / "artifacts" / "experiments" / _fname
         exp_v3_data[_key] = json.loads(_p.read_text(encoding="utf-8")) if _p.exists() else {}
     lean_ind_path = PROJECT_ROOT / "artifacts" / "lean_independent_runner_check.json"
+    e12_report_path = PROJECT_ROOT / "artifacts" / "experiments" / "E12_pilot_report.json"
+    exp_v3_data["__e12_pilot__"] = json.loads(e12_report_path.read_text(encoding="utf-8")) if e12_report_path.exists() else {}
     lean_rda_path = PROJECT_ROOT / "artifacts" / "lean_rda_multiplier_check.json"
     exp_v3_data["__lean_rda__"] = json.loads(lean_rda_path.read_text(encoding="utf-8")) if lean_rda_path.exists() else {}
     exp_v3_data["__lean_independent__"] = json.loads(lean_ind_path.read_text(encoding="utf-8")) if lean_ind_path.exists() else {}
@@ -1341,7 +1353,7 @@ def run_autoevolve_peer_review() -> Dict[str, Any]:
 
     peer_review_report = {
         "manuscript_title": "Project HiveMind: A System Design for Decentralized Sparse Mixture-of-Experts Training with DiLoCo-Style Outer Optimization on 8 GB Consumer GPUs",
-        "version": "3.7.0",
+        "version": "3.8.0",
         "is_peer_review": False,
         "disclosure": AUDIT_DISCLOSURE,
         "lead_peer_review_model": LEAD_PEER_REVIEW_MODEL,
@@ -1381,7 +1393,7 @@ def run_autoevolve_peer_review() -> Dict[str, Any]:
 
     autoevolve_manifest = {
         "pipeline_name": "Project HiveMind x AutoevolveAI Cross-Session Research Pipeline",
-        "version": "3.7.0",
+        "version": "3.8.0",
         "lead_peer_review_model": LEAD_PEER_REVIEW_MODEL,
         "workspace_root": ".",
         "artifacts_and_entrypoints": {

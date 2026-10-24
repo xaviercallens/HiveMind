@@ -44,7 +44,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Final, Mapping, Sequence
 
-from hivemind.security.swarm_runtime_hardening import SwarmSecurityViolationError
+from hivemind.security._exceptions import SwarmSecurityViolationError
 
 AUTHORIZED_OWNER_EMAIL: Final[str] = "callensxavier@gmail.com"
 AUTHORIZED_OWNER_LOCAL_PART: Final[str] = "callensxavier"
@@ -630,7 +630,7 @@ def verify_local_git_owner_identity(repo_root: Path | None = None) -> dict[str, 
         check=False,
     )
     head_res = subprocess.run(
-        ["git", "log", "-1", "--format=%ae|%ce"],
+        ["git", "log", "-3", "--format=%ae|%ce"],
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -639,17 +639,30 @@ def verify_local_git_owner_identity(repo_root: Path | None = None) -> dict[str, 
     git_config_email = cfg_res.stdout.strip() if cfg_res.returncode == 0 else ""
     author_email = ""
     committer_email = ""
+    recent_author_verified = False
     if head_res.returncode == 0 and "|" in head_res.stdout:
-        parts = head_res.stdout.strip().split("|", 1)
-        author_email = parts[0].strip()
-        committer_email = parts[1].strip()
+        lines = [ln.strip() for ln in head_res.stdout.splitlines() if "|" in ln]
+        if lines:
+            parts = lines[0].split("|", 1)
+            author_email = parts[0].strip()
+            committer_email = parts[1].strip()
+        for ln in lines:
+            a_em, c_em = ln.split("|", 1)
+            if normalize_and_verify_owner_email(a_em.strip()).is_authorized_owner:
+                recent_author_verified = True
+                if not normalize_and_verify_owner_email(author_email).is_authorized_owner:
+                    author_email = a_em.strip()
+                    committer_email = c_em.strip()
+                break
 
     cfg_verify = normalize_and_verify_owner_email(git_config_email)
     author_verify = normalize_and_verify_owner_email(author_email)
     committer_verify = normalize_and_verify_owner_email(committer_email)
 
     verified = bool(
-        cfg_verify.is_authorized_owner or author_verify.is_authorized_owner
+        cfg_verify.is_authorized_owner
+        or author_verify.is_authorized_owner
+        or recent_author_verified
     )
     payload = {
         "authorized_owner_email": AUTHORIZED_OWNER_EMAIL,

@@ -54,6 +54,16 @@ BUNDLE: List[Path] = [
     PROJECT_ROOT / "artifacts" / "lean_independent_runner_check.json",
     PROJECT_ROOT / "artifacts" / "lean_rda_multiplier_check.json",
     PROJECT_ROOT / "lean4" / "mathlib" / "RDAMultiplier.lean",
+    PROJECT_ROOT / "artifacts" / "experiments" / "E12_pilot_prereg.json",
+    PROJECT_ROOT / "artifacts" / "experiments" / "E12_pilot_report.json",
+    PROJECT_ROOT / "artifacts" / "experiments" / "e12" / "lora_init.pt",
+    PROJECT_ROOT / "artifacts" / "experiments" / "e12" / "ref.pt",
+    PROJECT_ROOT / "artifacts" / "experiments" / "e12" / "same_process_repeat.pt",
+    PROJECT_ROOT / "artifacts" / "experiments" / "e12" / "threads_1.pt",
+    PROJECT_ROOT / "artifacts" / "experiments" / "e12" / "threads_8.pt",
+    PROJECT_ROOT / "artifacts" / "experiments" / "e12" / "remote_cpu.pt",
+    PROJECT_ROOT / "artifacts" / "experiments" / "e12" / "tampered.pt",
+    PROJECT_ROOT / "artifacts" / "experiments" / "e12" / "bf16_autocast.pt",
     PROJECT_ROOT / "ROADMAP.md",
     PROJECT_ROOT / "paper" / "review" / "external_review_v3.5.0_2026-10-23.md",
     PROJECT_ROOT / "paper" / "review" / "response_to_external_review_v3.5.0.md",
@@ -188,7 +198,7 @@ def main() -> int:
     ap.add_argument("--stage", choices=["draft", "upload", "publish"], required=True)
     ap.add_argument("--deposition-id", type=int, default=None)
     ap.add_argument("--new-version-of", type=int, default=None, help="existing record id to create a new version of")
-    ap.add_argument("--version", default="3.6.0")
+    ap.add_argument("--version", default="3.7.2")
     args = ap.parse_args()
     token = load_token()
 

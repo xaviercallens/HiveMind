@@ -33,12 +33,33 @@ LATTICE_QUANTIZER_REFERENCES: Dict[str, str] = {
     "signsgd": "Bernstein, Wang, Azizzadenesheli & Anandkumar, signSGD, arXiv:1802.04434, ICML 2018",
 }
 
-NSM_REFERENCE: Dict[str, float] = {"Z": 1.0 / 12.0, "E8": 929.0 / 12960.0}
+NSM_REFERENCE: Dict[str, float] = {
+    "Z": 1.0 / 12.0,
+    "A2": 5.0 / (36.0 * math.sqrt(3.0)),
+    "E8": 929.0 / 12960.0,
+}
+
+_SQRT3 = math.sqrt(3.0)
 
 
 def nearest_zn(x: np.ndarray) -> np.ndarray:
     """Nearest point of ℤⁿ (round half to even)."""
     return np.rint(np.asarray(x, dtype=float))
+
+
+def nearest_a2(x: np.ndarray) -> np.ndarray:
+    """Nearest point of the 2D hexagonal lattice A₂ = (ℤ × √3·ℤ) ∪ ((ℤ + ½) × √3·(ℤ + ½)); rows of ``x`` must have 2 columns."""
+    x = np.atleast_2d(np.asarray(x, dtype=float))
+    if x.shape[1] != 2:
+        raise ValueError("A2 lives in dimension 2")
+    c0 = np.column_stack([np.rint(x[:, 0]), _SQRT3 * np.rint(x[:, 1] / _SQRT3)])
+    c1 = np.column_stack(
+        [
+            np.rint(x[:, 0] - 0.5) + 0.5,
+            _SQRT3 * (np.rint(x[:, 1] / _SQRT3 - 0.5) + 0.5),
+        ]
+    )
+    return _closer(c0, c1, x)
 
 
 def nearest_dn(x: np.ndarray) -> np.ndarray:
@@ -71,14 +92,25 @@ def nearest_e8(x: np.ndarray) -> np.ndarray:
     return _closer(nearest_dn(x), nearest_dn(x - 0.5) + 0.5, x)
 
 
-DECODERS = {"Z": nearest_zn, "E8": nearest_e8}
+DECODERS = {"Z": nearest_zn, "A2": nearest_a2, "E8": nearest_e8}
+LATTICE_DIM = {"Z": 8, "A2": 2, "E8": 8}
 
 
 def is_lattice_point(kind: str, c: np.ndarray, tol: float = 1e-9) -> np.ndarray:
-    """Membership test (per row): ℤⁿ integer; E₈ integer with even sum or all-half-integer with even sum of doubles/2."""
+    """Membership test (per row): ℤⁿ integer; A₂ rectangular cosets; E₈ integer or half-integer with even sum."""
     c = np.atleast_2d(np.asarray(c, dtype=float))
     if kind == "Z":
         return np.all(np.abs(c - np.rint(c)) < tol, axis=1)
+    if kind == "A2":
+        if c.shape[1] != 2:
+            raise ValueError("A2 lives in dimension 2")
+        y0 = c[:, 0]
+        y1 = c[:, 1] / _SQRT3
+        coset0 = (np.abs(y0 - np.rint(y0)) < tol) & (np.abs(y1 - np.rint(y1)) < tol)
+        coset1 = (np.abs(y0 - 0.5 - np.rint(y0 - 0.5)) < tol) & (
+            np.abs(y1 - 0.5 - np.rint(y1 - 0.5)) < tol
+        )
+        return coset0 | coset1
     if kind == "E8":
         integral = np.all(np.abs(c - np.rint(c)) < tol, axis=1)
         half = np.all(np.abs(c - 0.5 - np.rint(c - 0.5)) < tol, axis=1)
@@ -102,11 +134,21 @@ def _cond_entropy_bits(x: np.ndarray, *cond: np.ndarray) -> float:
 
 
 def factorised_rate_bits_per_dim(kind: str, codewords: np.ndarray) -> float:
-    """Achievable bits per dimension of unscaled codewords (rows): ℤⁿ Σ H(xᵢ); E₈ H(coset)+Σ H(zᵢ|coset)+H(z₈|coset,parity)."""
+    """Achievable bits per dimension of unscaled codewords (rows): ℤⁿ Σ H(xᵢ); A₂ H(coset)+H(z₀|coset)+H(z₁|coset); E₈ H(coset)+Σ H(zᵢ|coset)+H(z₈|coset,parity)."""
     c = np.atleast_2d(np.asarray(codewords, dtype=float))
     n = c.shape[1]
     if kind == "Z":
         return sum(_entropy_bits([np.rint(c[:, i])]) for i in range(n)) / n
+    if kind == "A2":
+        coset = (np.abs(c[:, 0] - np.rint(c[:, 0])) > 1e-9).astype(np.int64)
+        z0 = np.rint(c[:, 0] - 0.5 * coset).astype(np.int64)
+        z1 = np.rint(c[:, 1] / _SQRT3 - 0.5 * coset).astype(np.int64)
+        bits = (
+            _entropy_bits([coset])
+            + _cond_entropy_bits(z0, coset)
+            + _cond_entropy_bits(z1, coset)
+        )
+        return bits / 2.0
     if kind == "E8":
         coset = (np.abs(c[:, 0] - np.rint(c[:, 0])) > 1e-9).astype(np.int64)  # 1 = half-integer coset
         z = np.rint(c - 0.5 * coset[:, None]).astype(np.int64)
@@ -128,14 +170,15 @@ class QuantizedDelta:
 
 
 class LatticeDeltaQuantizer:
-    """Quantise a flat delta blockwise on ``scale · L`` (L ∈ {ℤ⁸, E₈}); optional EF21 error feedback."""
+    """Quantise a flat delta blockwise on ``scale · L`` (L ∈ {ℤ⁸, A₂, E₈}); optional EF21 error feedback."""
 
-    def __init__(self, kind: str, scale: float, block: int = 8, error_feedback: bool = False) -> None:
+    def __init__(self, kind: str, scale: float, block: Optional[int] = None, error_feedback: bool = False) -> None:
         if kind not in DECODERS:
             raise KeyError(kind)
         if scale <= 0.0 or not math.isfinite(scale):
             raise ValueError("scale must be positive and finite")
-        self.kind, self.scale, self.block, self.error_feedback = kind, float(scale), int(block), bool(error_feedback)
+        eff_block = int(block) if block is not None else LATTICE_DIM[kind]
+        self.kind, self.scale, self.block, self.error_feedback = kind, float(scale), eff_block, bool(error_feedback)
         self._carry: Optional[torch.Tensor] = None
 
     def quantize(self, vec: torch.Tensor) -> QuantizedDelta:
@@ -176,12 +219,13 @@ class SignDeltaQuantizer:
         return QuantizedDelta(deq, 1.0, rel, residual)
 
 
-def calibrate_scale_for_rate(kind: str, sample: torch.Tensor, target_bits_per_dim: float, block: int = 8, tol: float = 0.02, iters: int = 60) -> Tuple[float, float]:
+def calibrate_scale_for_rate(kind: str, sample: torch.Tensor, target_bits_per_dim: float, block: Optional[int] = None, tol: float = 0.02, iters: int = 60) -> Tuple[float, float]:
     """Bisection on log-scale so that the measured factorised rate of ``sample`` hits ``target`` (rate falls as scale grows)."""
+    eff_block = int(block) if block is not None else LATTICE_DIM.get(kind, 8)
     v = sample.detach().to(torch.float32).reshape(-1)
     n = v.numel()
-    pad = (-n) % block
-    x = (torch.cat([v, torch.zeros(pad)]) if pad else v).numpy().astype(float).reshape(-1, block)
+    pad = (-n) % eff_block
+    x = (torch.cat([v, torch.zeros(pad)]) if pad else v).numpy().astype(float).reshape(-1, eff_block)
     sd = float(np.std(x)) or 1.0
 
     def rate_at(s: float) -> float:
@@ -205,9 +249,15 @@ def calibrate_scale_for_rate(kind: str, sample: torch.Tensor, target_bits_per_di
 
 
 def _lattice_points_in_ball(kind: str, radius: float) -> np.ndarray:
-    """All points of ℤ⁸ / E₈ with norm ≤ radius (exhaustive; for the brute-force check)."""
+    """All points of ℤ⁸ / A₂ / E₈ with norm ≤ radius (exhaustive; for the brute-force check)."""
     r = int(math.ceil(radius))
     grid = np.arange(-r, r + 1, dtype=float)
+    if kind == "A2":
+        mesh = np.stack(np.meshgrid(grid, grid, indexing="ij"), axis=-1).reshape(-1, 2)
+        c0 = np.column_stack([mesh[:, 0], _SQRT3 * mesh[:, 1]])
+        c1 = np.column_stack([mesh[:, 0] + 0.5, _SQRT3 * (mesh[:, 1] + 0.5)])
+        both = np.concatenate([c0, c1], axis=0)
+        return both[np.einsum("ij,ij->i", both, both) <= radius * radius + 1e-9]
     mesh = np.stack(np.meshgrid(*([grid] * 8), indexing="ij"), axis=-1).reshape(-1, 8)
     pts = mesh[np.einsum("ij,ij->i", mesh, mesh) <= radius * radius + 1e-9]
     if kind == "Z":
@@ -222,10 +272,11 @@ def brute_force_decoder_check(kind: str, n_queries: int, seed: int, radius: floa
     """Two-sided check (lesson recorded in OptimalEnergyAI h0.md): the decoder output must be a lattice point AND
     its distance must equal the exhaustive minimum over all lattice points in a ball that contains the answer.
 
-    Queries are uniform in the cube [-1/2, 1/2]^8 (norm <= sqrt 2); the covering radius of both lattices is
+    Queries are uniform in the cube [-1/2, 1/2]^d; the covering radius of all supported lattices is
     <= sqrt 2, so every nearest point has norm <= 2 sqrt 2 < 3 and the ball of radius 3 contains the answer."""
     rng = np.random.default_rng(seed)
-    q = rng.uniform(-0.5, 0.5, size=(n_queries, 8))
+    dim = LATTICE_DIM.get(kind, 8)
+    q = rng.uniform(-0.5, 0.5, size=(n_queries, dim))
     pts = _lattice_points_in_ball(kind, radius)
     c = DECODERS[kind](q)
     member = is_lattice_point(kind, c)

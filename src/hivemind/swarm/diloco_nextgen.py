@@ -62,6 +62,13 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import torch
 
+from hivemind.compress.lattice_quantizer import (
+    LatticeDeltaQuantizer,
+    QuantizedDelta,
+    SignDeltaQuantizer,
+    calibrate_scale_for_rate,
+)
+
 
 LEVERAGED_GITHUB_REPOSITORIES: Tuple[Dict[str, str], ...] = (
     {
@@ -163,6 +170,7 @@ class CosineGatedAdamDecayOuterOptimizer:
         betas: Tuple[float, float] = (0.9, 0.95),
         eps: float = 1e-8,
         weight_decay: float = 0.0,
+        momentum_restart_period: Optional[int] = None,
     ) -> None:
         if lr <= 0.0:
             raise ValueError("lr must be > 0")
@@ -172,6 +180,8 @@ class CosineGatedAdamDecayOuterOptimizer:
             raise ValueError("tau_cut must be > 0")
         if weight_decay < 0.0:
             raise ValueError("weight_decay must be >= 0")
+        if momentum_restart_period is not None and int(momentum_restart_period) < 1:
+            raise ValueError("momentum_restart_period must be >= 1 when specified")
         b1, b2 = float(betas[0]), float(betas[1])
         if not (0.0 <= b1 < 1.0 and 0.0 <= b2 < 1.0):
             raise ValueError("betas must be in [0, 1)")
@@ -184,10 +194,23 @@ class CosineGatedAdamDecayOuterOptimizer:
         self.beta2 = b2
         self.eps = float(eps)
         self.weight_decay = float(weight_decay)
+        self.momentum_restart_period: Optional[int] = (
+            int(momentum_restart_period) if momentum_restart_period is not None else None
+        )
+        self.outer_round_count: int = 0
         self.step_count: Dict[str, int] = {}
         self.m_buffers: Dict[str, torch.Tensor] = {}
         self.v_buffers: Dict[str, torch.Tensor] = {}
         self.fragment_ages: Dict[str, int] = {}
+
+    @torch.no_grad()
+    def reset_first_moment_buffers(self) -> int:
+        """HM-S9-05: Periodically flush first-moment (`m_f`) buffers while preserving `v_f`."""
+        count = 0
+        for buf in self.m_buffers.values():
+            buf.zero_()
+            count += 1
+        return count
 
     def compute_gate(self, effective_tau: float) -> Tuple[float, float]:
         """Return `(gamma(tau), sigma(tau))` for effective staleness `effective_tau >= 0`."""
@@ -211,6 +234,13 @@ class CosineGatedAdamDecayOuterOptimizer:
         synced_fragments: Optional[Sequence[str]] = None,
     ) -> Tuple[Dict[str, torch.Tensor], List[CGADStepTelemetry]]:
         """Apply one PA-CGAD outer step across synced parameter fragments."""
+        if (
+            self.momentum_restart_period is not None
+            and self.outer_round_count > 0
+            and (self.outer_round_count % self.momentum_restart_period == 0)
+        ):
+            self.reset_first_moment_buffers()
+        self.outer_round_count += 1
         active_set = set(synced_fragments) if synced_fragments is not None else set(pseudo_gradients.keys())
         updated_params: Dict[str, torch.Tensor] = {}
         telemetries: List[CGADStepTelemetry] = []
@@ -612,31 +642,165 @@ class ComputeVisibleSparseLoCoCompressor:
         n_bins: int = 4,
         range_in_sigmas: float = 4.0,
         bf16_ulp_gate: float = 2.0 ** -8,
-        value_codec: str = "lut",
+        codec: str = "centroid_2bit",
+        target_bits_per_dim: float = 2.0,
         lattice_scale: Optional[float] = None,
+        error_feedback: bool = False,
+        adapt_scale_per_round: bool = True,
+        value_codec: str = "lut",
         lattice_rate_bits: float = 2.0,
     ) -> None:
         if not (0.0 < topk_ratio <= 1.0):
             raise ValueError("topk_ratio must be in (0, 1]")
         if n_bins < 2 or n_bins > 256:
             raise ValueError("n_bins must be in [2, 256]")
+        valid_codecs = ("centroid_2bit", "E8", "Z", "sign")
+        if codec not in valid_codecs:
+            raise ValueError(f"codec must be one of {valid_codecs}, got {codec!r}")
+        if target_bits_per_dim <= 0.0 or not math.isfinite(target_bits_per_dim):
+            raise ValueError("target_bits_per_dim must be positive and finite")
+        if lattice_scale is not None and (lattice_scale <= 0.0 or not math.isfinite(lattice_scale)):
+            raise ValueError("lattice_scale must be positive and finite when specified")
         if value_codec not in ("lut", "Z", "E8"):
             raise ValueError("value_codec must be 'lut' (default), 'Z' or 'E8'")  # E10b: lattice option, HM-S10-01
         self.value_codec = value_codec
-        self.lattice_scale = None if lattice_scale is None else float(lattice_scale)
         self.lattice_rate_bits = float(lattice_rate_bits)
         self.topk_ratio = float(topk_ratio)
         self.n_bins = int(n_bins)
         self.range_in_sigmas = float(range_in_sigmas)
         self.bf16_ulp_gate = float(bf16_ulp_gate)
+        self.codec = str(codec)
+        self.target_bits_per_dim = float(target_bits_per_dim)
+        self.lattice_scale = float(lattice_scale) if lattice_scale is not None else None
+        self.error_feedback = bool(error_feedback)
+        self.adapt_scale_per_round = bool(adapt_scale_per_round)
+        self._lattice_quantizers: Dict[str, LatticeDeltaQuantizer] = {}
+        self._sign_quantizers: Dict[str, SignDeltaQuantizer] = {}
+        self.fragment_rate_history: Dict[str, List[Dict[str, float]]] = {}
+
+    def _resolve_round_scale(self, kind: str, flat_vec: torch.Tensor) -> float:
+        """Determine the per-round lattice scale factor, calibrating to `target_bits_per_dim` when enabled."""
+        if self.lattice_scale is not None and not self.adapt_scale_per_round:
+            return self.lattice_scale
+        std = float(flat_vec.std().item()) if flat_vec.numel() > 1 else float(flat_vec.abs().mean().item())
+        fallback_scale = max(1e-6, (std if std > 1e-9 else 1.0) / max(0.5, self.target_bits_per_dim))
+        if not self.adapt_scale_per_round or std <= 1e-9:
+            return self.lattice_scale if self.lattice_scale is not None else fallback_scale
+        try:
+            scale, _ = calibrate_scale_for_rate(
+                kind=kind,
+                sample=flat_vec,
+                target_bits_per_dim=self.target_bits_per_dim,
+            )
+            return max(1e-8, float(scale))
+        except ValueError:
+            return self.lattice_scale if self.lattice_scale is not None else fallback_scale
+
+    @torch.no_grad()
+    def compress_with_lattice_codec(
+        self,
+        delta: torch.Tensor,
+        reference_param: Optional[torch.Tensor] = None,
+        codec: Optional[str] = None,
+        fragment_name: str = "default",
+    ) -> Tuple[torch.Tensor, Dict[str, Any]]:
+        """HM-S10-01: Compress `delta` using a selectable lattice (`E8`, `Z`) or `sign` codec with
+        PULSE compute-visible gating, per-round scale adaptation, EF21 error feedback, and
+        measured factorised rate logging per fragment.
+        """
+        active_codec = str(codec or self.codec)
+        if active_codec == "centroid_2bit":
+            return self.compress_and_reconstruct(
+                delta, reference_param=reference_param, _force_centroid=True
+            )
+        if active_codec not in ("E8", "Z", "sign"):
+            raise ValueError(f"Unsupported lattice codec {active_codec!r}")
+
+        d_fp32 = delta.detach().to(torch.float32).cpu()
+        flat = d_fp32.reshape(-1)
+        numel = flat.numel()
+
+        if reference_param is not None:
+            ref_abs = (
+                reference_param.detach().to(torch.float32).cpu().reshape(-1).abs().clamp_min(1e-4)
+            )
+            visible_mask = flat.abs() >= (ref_abs * self.bf16_ulp_gate)
+            gated_flat = torch.where(visible_mask, flat, torch.zeros_like(flat))
+            invisible_fraction = 1.0 - float(visible_mask.to(torch.float32).mean().item())
+        else:
+            gated_flat = flat
+            invisible_fraction = 0.0
+
+        q_key = f"{active_codec}::{fragment_name}"
+        if active_codec == "sign":
+            sq = self._sign_quantizers.get(q_key)
+            if sq is None:
+                sq = SignDeltaQuantizer(error_feedback=self.error_feedback)
+                self._sign_quantizers[q_key] = sq
+            q_out: QuantizedDelta = sq.quantize(gated_flat)
+            adapted_scale = float(gated_flat.abs().mean().item())
+        else:
+            adapted_scale = self._resolve_round_scale(active_codec, gated_flat)
+            lq = self._lattice_quantizers.get(q_key)
+            if lq is None:
+                lq = LatticeDeltaQuantizer(
+                    kind=active_codec,
+                    scale=adapted_scale,
+                    block=8,
+                    error_feedback=self.error_feedback,
+                )
+                self._lattice_quantizers[q_key] = lq
+            else:
+                lq.scale = adapted_scale
+            q_out = lq.quantize(gated_flat)
+
+        reconstructed = q_out.dequantized.reshape(delta.shape).to(
+            device=delta.device, dtype=delta.dtype
+        )
+        measured_rate = float(q_out.rate_bits_per_dim)
+        rel_mse = float(q_out.relative_mse)
+        wire_bytes = max(8, int(math.ceil(numel * max(0.125, measured_rate) / 8.0)) + 8)
+        raw_bf16_bytes = numel * 2
+
+        entry = {
+            "rate_bits_per_dim": round(measured_rate, 6),
+            "relative_mse": round(rel_mse, 6),
+            "scale": round(adapted_scale, 8),
+        }
+        self.fragment_rate_history.setdefault(fragment_name, []).append(entry)
+
+        return reconstructed, {
+            "strategy_id": f"SI-09B-HM-S10-01-LATTICE-{active_codec.upper()}",
+            "codec": active_codec,
+            "fragment_name": fragment_name,
+            "numel": numel,
+            "measured_rate_bits_per_dim": round(measured_rate, 6),
+            "relative_mse": round(rel_mse, 6),
+            "adapted_scale": round(adapted_scale, 8),
+            "error_feedback": self.error_feedback,
+            "compute_invisible_fraction": round(invisible_fraction, 6),
+            "raw_bf16_bytes": raw_bf16_bytes,
+            "compressed_wire_bytes": wire_bytes,
+            "wire_compression_ratio_x": round(raw_bf16_bytes / max(1, wire_bytes), 2),
+        }
 
     @torch.no_grad()
     def compress_and_reconstruct(
         self,
         delta: torch.Tensor,
         reference_param: Optional[torch.Tensor] = None,
+        *,
+        _force_centroid: bool = False,
+        fragment_name: str = "default",
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
-        """Compress `delta` via PULSE compute-visible gate + 2-bit centroid Top-k and reconstruct."""
+        """Compress `delta` via PULSE compute-visible gate + configured codec (`centroid_2bit`, `E8`, `Z`, `sign`)."""
+        if not _force_centroid and self.codec in ("E8", "Z", "sign"):
+            return self.compress_with_lattice_codec(
+                delta,
+                reference_param=reference_param,
+                codec=self.codec,
+                fragment_name=fragment_name,
+            )
         d_fp32 = delta.detach().to(torch.float32).cpu()
         flat = d_fp32.reshape(-1)
         numel = flat.numel()
@@ -896,9 +1060,18 @@ class CPUOffloadedFlatBucketOuterState:
 
         self.flat_master_cpu = torch.empty(total_numel, dtype=torch.float32, device="cpu")
         self.flat_velocity_cpu: Optional[torch.Tensor] = torch.zeros_like(self.flat_master_cpu)
+        self.outer_step_count: int = 0
         for k in self.keys:
             lo, hi = self.offsets[k]
             self.flat_master_cpu[lo:hi].copy_(params[k].detach().to(torch.float32).cpu().reshape(-1))
+
+    @torch.no_grad()
+    def reset_velocity(self) -> None:
+        """HM-S9-05: Zero the contiguous outer velocity buffer in-place (`K_restart`)."""
+        if self.flat_velocity_cpu is None or self.flat_velocity_cpu.numel() != self.flat_master_cpu.numel():
+            self.flat_velocity_cpu = torch.zeros_like(self.flat_master_cpu)
+        else:
+            self.flat_velocity_cpu.zero_()
 
     @torch.no_grad()
     def outer_nesterov_step(
@@ -907,12 +1080,15 @@ class CPUOffloadedFlatBucketOuterState:
         lr: float = 0.7,
         momentum: float = 0.9,
         theta_prev: Optional[Dict[str, torch.Tensor]] = None,
+        momentum_restart_period: Optional[int] = None,
     ) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
         """Apply one Nesterov outer step entirely inside the contiguous CPU flat buffers."""
         if lr <= 0.0 or not math.isfinite(lr):
             raise ValueError("lr must be > 0")
         if not (0.0 <= momentum < 1.0) or not math.isfinite(momentum):
             raise ValueError("momentum must be in [0, 1)")
+        if momentum_restart_period is not None and int(momentum_restart_period) < 1:
+            raise ValueError("momentum_restart_period must be >= 1 when specified")
 
         if theta_prev is not None:
             missing = set(self.keys) - set(theta_prev)
@@ -939,6 +1115,13 @@ class CPUOffloadedFlatBucketOuterState:
         elif self.flat_velocity_cpu.numel() != self.flat_master_cpu.numel():
             raise RuntimeError("flat velocity buffer shape drifted from the master parameter buffer")
 
+        if (
+            momentum_restart_period is not None
+            and self.outer_step_count > 0
+            and (self.outer_step_count % int(momentum_restart_period) == 0)
+        ):
+            self.reset_velocity()
+
         if theta_prev is not None:
             for k in self.keys:
                 lo, hi = self.offsets[k]
@@ -960,6 +1143,7 @@ class CPUOffloadedFlatBucketOuterState:
             ).clone()
             velocity[k] = v.view(self.shapes[k]).clone()
 
+        self.outer_step_count += 1
         return updated_params, velocity
 
     @torch.no_grad()
@@ -1219,4 +1403,174 @@ class MuonNewtonSchulzLoRAPreconditioner:
             "condition_number_after": round(cond_after, 4),
             "newton_schulz_steps": float(self.steps),
         }
+
+
+class FactoredGossipMix1Mix2Coordinator:
+    """HM-S9-04: Factored Gossip (`Mix1` parameter mix + `Mix2` outer-gradient mix, `arXiv:2606.03329`).
+
+    Decouples swarm synchronization into two orthogonal tracks:
+    1. `Mix1` (Non-Blocking Pairwise Parameter Gossip): Backbone parameters are mixed
+       asynchronously with a peer cohort via convex combination `(1 - alpha_mix1) * w_local + alpha_mix1 * w_peer`
+       without global barrier stalls.
+    2. `Mix2` (Selective Blocking Outer-Gradient All-Reduce): Sensitive structural blocks
+       (`router`, `gate`, `lm_head`, `output_head`, `embed`) undergo exact blocking outer
+       pseudo-gradient synchronization ONLY when inter-worker router distribution disagreement
+       exceeds a Jensen–Shannon divergence threshold `D_JS >= js_threshold` (paired with `HM-S8-05`).
+       When `D_JS < js_threshold`, sensitive blocks fall back to non-blocking `Mix1` gossip,
+       eliminating the global barrier on well-aligned rounds.
+    """
+
+    DEFAULT_SENSITIVE_PATTERNS: Tuple[str, ...] = (
+        "router",
+        "gate",
+        "lm_head",
+        "output_head",
+        "embed",
+    )
+
+    def __init__(
+        self,
+        alpha_mix1: float = 0.5,
+        js_threshold: float = 0.05,
+        outer_lr_mix2: float = 0.7,
+        outer_momentum_mix2: float = 0.9,
+        sensitive_patterns: Optional[Sequence[str]] = None,
+    ) -> None:
+        if not (0.0 < alpha_mix1 <= 1.0) or not math.isfinite(alpha_mix1):
+            raise ValueError("alpha_mix1 must be in (0, 1]")
+        if js_threshold < 0.0 or not math.isfinite(js_threshold):
+            raise ValueError("js_threshold must be >= 0 and finite")
+        if outer_lr_mix2 <= 0.0 or not math.isfinite(outer_lr_mix2):
+            raise ValueError("outer_lr_mix2 must be > 0 and finite")
+        if not (0.0 <= outer_momentum_mix2 < 1.0) or not math.isfinite(outer_momentum_mix2):
+            raise ValueError("outer_momentum_mix2 must be in [0, 1)")
+        self.alpha_mix1 = float(alpha_mix1)
+        self.js_threshold = float(js_threshold)
+        self.outer_lr_mix2 = float(outer_lr_mix2)
+        self.outer_momentum_mix2 = float(outer_momentum_mix2)
+        self.sensitive_patterns: Tuple[str, ...] = tuple(
+            sensitive_patterns if sensitive_patterns is not None else self.DEFAULT_SENSITIVE_PATTERNS
+        )
+        self.mix2_velocity: Dict[str, torch.Tensor] = {}
+        self.round_index: int = 0
+
+    def is_sensitive_fragment(self, fragment_name: str) -> bool:
+        """Return True if `fragment_name` matches a `Mix2` sensitive block pattern."""
+        lowered = fragment_name.lower()
+        return any(pat.lower() in lowered for pat in self.sensitive_patterns)
+
+    @staticmethod
+    @torch.no_grad()
+    def jensen_shannon_router_disagreement(
+        worker_router_distributions: Sequence[torch.Tensor],
+        inputs_are_logits: bool = False,
+        eps: float = 1e-12,
+    ) -> float:
+        """Compute multi-distribution Jensen–Shannon divergence `D_JS(P_1, ..., P_M)` in nats.
+
+        Satisfies `0 <= D_JS <= ln(K)` and `D_JS == 0` iff all worker distributions are identical.
+        """
+        if len(worker_router_distributions) < 2:
+            return 0.0
+        probs_list: List[torch.Tensor] = []
+        for dist in worker_router_distributions:
+            t = dist.detach().to(torch.float64).cpu()
+            if inputs_are_logits:
+                p = torch.softmax(t, dim=-1)
+            else:
+                p_clamped = t.clamp_min(0.0)
+                denom = p_clamped.sum(dim=-1, keepdim=True).clamp_min(eps)
+                p = p_clamped / denom
+            probs_list.append(p)
+
+        stacked = torch.stack(probs_list, dim=0)  # (M, ..., K)
+        mean_p = stacked.mean(dim=0).clamp_min(eps)
+        kl_terms = stacked * (torch.log(stacked.clamp_min(eps)) - torch.log(mean_p.unsqueeze(0)))
+        js_per_token = kl_terms.sum(dim=-1).mean(dim=0)
+        js_val = float(js_per_token.mean().item())
+        return max(0.0, js_val)
+
+    @torch.no_grad()
+    def step_factored_gossip(
+        self,
+        master_params: Dict[str, torch.Tensor],
+        worker_param_states: Sequence[Dict[str, torch.Tensor]],
+        worker_router_distributions: Optional[Sequence[torch.Tensor]] = None,
+        inputs_are_logits: bool = False,
+        force_mix2: bool = False,
+    ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
+        """Execute one factored `Mix1` + conditional `Mix2` synchronization round."""
+        if not master_params:
+            raise ValueError("master_params must not be empty")
+        if not worker_param_states:
+            raise ValueError("worker_param_states must be non-empty")
+
+        js_div = (
+            self.jensen_shannon_router_disagreement(
+                worker_router_distributions, inputs_are_logits=inputs_are_logits
+            )
+            if worker_router_distributions is not None
+            else 0.0
+        )
+        trigger_mix2 = bool(force_mix2 or (js_div >= self.js_threshold))
+
+        updated_params: Dict[str, torch.Tensor] = {}
+        mix1_fragments: List[str] = []
+        mix2_fragments: List[str] = []
+        mix1_bytes = 0
+        mix2_blocking_bytes = 0
+        saved_blocking_bytes = 0
+
+        for name, master_t in master_params.items():
+            m_fp32 = master_t.detach().to(torch.float32).cpu()
+            worker_tensors = [
+                ws[name].detach().to(torch.float32).cpu()
+                for ws in worker_param_states
+                if name in ws
+            ]
+            if not worker_tensors:
+                updated_params[name] = master_t.clone()
+                continue
+
+            frag_bytes = int(master_t.numel() * 2)  # BF16 wire footprint per fragment
+            sensitive = self.is_sensitive_fragment(name)
+
+            if sensitive and trigger_mix2:
+                # Mix2: Blocking all-reduce of outer pseudo-gradients (master - worker_m) + Nesterov step
+                pseudo_grads = [m_fp32 - wt for wt in worker_tensors]
+                avg_grad = torch.stack(pseudo_grads, dim=0).mean(dim=0)
+                v = self.mix2_velocity.get(name)
+                if v is None or v.shape != avg_grad.shape:
+                    v = torch.zeros_like(avg_grad)
+                v = self.outer_momentum_mix2 * v + avg_grad
+                self.mix2_velocity[name] = v
+                nesterov_step = self.outer_momentum_mix2 * v + avg_grad
+                new_t = m_fp32 - self.outer_lr_mix2 * nesterov_step
+                updated_params[name] = new_t.to(device=master_t.device, dtype=master_t.dtype)
+                mix2_fragments.append(name)
+                mix2_blocking_bytes += frag_bytes * len(worker_tensors)
+            else:
+                # Mix1: Non-blocking pairwise/cohort parameter gossip
+                peer_avg = torch.stack(worker_tensors, dim=0).mean(dim=0)
+                new_t = (1.0 - self.alpha_mix1) * m_fp32 + self.alpha_mix1 * peer_avg
+                updated_params[name] = new_t.to(device=master_t.device, dtype=master_t.dtype)
+                mix1_fragments.append(name)
+                mix1_bytes += frag_bytes
+                if sensitive and not trigger_mix2:
+                    saved_blocking_bytes += frag_bytes * len(worker_tensors)
+
+        self.round_index += 1
+        return updated_params, {
+            "strategy_id": "HM-S9-04-FACTORED-GOSSIP-MIX1-MIX2",
+            "round_index": self.round_index,
+            "jensen_shannon_disagreement": round(js_div, 8),
+            "js_threshold": self.js_threshold,
+            "mix2_triggered": trigger_mix2,
+            "mix1_fragment_count": len(mix1_fragments),
+            "mix2_fragment_count": len(mix2_fragments),
+            "mix1_nonblocking_wire_bytes": mix1_bytes,
+            "mix2_blocking_wire_bytes": mix2_blocking_bytes,
+            "saved_blocking_wire_bytes": saved_blocking_bytes,
+        }
+
 

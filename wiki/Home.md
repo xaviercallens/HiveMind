@@ -1,6 +1,6 @@
-# 🧠⚡ Project HiveMind Wiki — Comprehensive Documentation for Human Developers & AI Agents (`v1.8.0`)
+# 🧠⚡ Project HiveMind Wiki — Comprehensive Documentation for Human Developers & AI Agents (`v2.5.0`)
 
-Welcome to the official **Project HiveMind** Wiki! This knowledgebase is synchronized between the [`wiki/`](https://github.com/xaviercallens/HiveMind/tree/main/wiki) directory in the main repository and the live **[GitHub Wiki (`github.com/xaviercallens/HiveMind/wiki`)](https://github.com/xaviercallens/HiveMind/wiki)**, and is actively referenced by our **3-Hour Autonomous PR & Discussion Orchestrator** across **[GitHub Discussions](https://github.com/xaviercallens/HiveMind/discussions)**.
+Welcome to the official **Project HiveMind** Wiki! This knowledgebase is synchronized between the [`wiki/`](https://github.com/xaviercallens/HiveMind/tree/main/wiki) directory in the main repository and the live **[GitHub Wiki (`github.com/xaviercallens/HiveMind/wiki`)](https://github.com/xaviercallens/HiveMind/wiki)**, and is actively referenced by our **1-Hour Autonomous PR & Discussion Orchestrator** across **[GitHub Discussions](https://github.com/xaviercallens/HiveMind/discussions)**.
 
 > **⚖️ Binding Non-Monetary Charter — No Payment Involved; Computing Processing Benefits Only via "Points" ([`LEGAL_DISCLAIMER_AND_COMPUTE_RECIPROCITY.md`](https://github.com/xaviercallens/HiveMind/blob/main/LEGAL_DISCLAIMER_AND_COMPUTE_RECIPROCITY.md)):**
 > **Project HiveMind is a 100% voluntary, non-commercial, open-source scientific research project. There is NO money, fiat currency, cryptocurrency, wage, or financial payment of any kind (`0.00 EUR / 0.00 USD`) involved now or ever.**
@@ -39,12 +39,16 @@ Welcome to the official **Project HiveMind** Wiki! This knowledgebase is synchro
 8. **[🤖 8. AI Agent & Human Contributor Playbook (3-Hour Orchestrator, MCP & Security Gates)](AI-Agent-and-Human-Contributor-Playbook)**
    - Step-by-Step Workflow for Human Developers & Autonomous AI Agents (`Antigravity`, `Claude Code`, `Cursor`, `Codex`)
    - 5-Layer Anti-"Code Boubou" `PRSecurityScanner` (`PAY-01..03`, `CB-01..04`, `SEC-01..05`), `AntiStubGuard`, and 3-Hour Autonomous PR Review & Discussion Orchestrator (`0 */3 * * *`)
-9. **[🔬 9. Opt-In Community GPU Benchmark & Multi-Host WAN GameDay Guide](Community-GPU-Benchmark-and-WAN-GameDay)**
-   - How to run `scripts/run_community_gpu_benchmark.py` and `scripts/run_multi_moe_hf_campaign.py` (`Operation Polyglot-Singularity-128`, `< 1.5 GB` peak VRAM) on NVIDIA CUDA, AMD ROCm, Apple Silicon MPS, or CPU
-   - How to verify and share signed `receipt_sha256` / `campaign_sha256` receipts in [Discussion #84](https://github.com/xaviercallens/HiveMind/discussions/84) and [Discussion #86](https://github.com/xaviercallens/HiveMind/discussions/86)
+9. **[🔬 9. Opt-In Community GPU Benchmark, Season 9/10 GPU Swarm Campaigns & Multi-Host WAN GameDay Guide](Community-GPU-Benchmark-and-WAN-GameDay)**
+   - How to run `scripts/run_community_gpu_benchmark.py`, `scripts/run_multi_moe_hf_campaign.py` (`Operation Polyglot-Singularity-128`), and **`scripts/run_season9_10_gpu_swarm_campaigns.py` (`CAMP-S9/S10 1..4`)** on NVIDIA CUDA, AMD ROCm, Apple Silicon MPS, or CPU
+   - How to verify and share signed `receipt_sha256`, `campaign_sha256`, and `campaign_suite_sha256` receipts in [Discussion #84](https://github.com/xaviercallens/HiveMind/discussions/84) and [Discussion #86](https://github.com/xaviercallens/HiveMind/discussions/86)
 10. **[📅 10. Non-Technical 1-Click User Guide & Synchronized Quorum Calendar](User-Guide-and-Quorum-Calendar)**
    - 60-Second 1-Click Launcher (`scripts/Join_HiveMind_Campaign_Windows.bat` & `scripts/join_hivemind_campaign.sh`) for gamers and citizen scientists with zero coding skills
-   - 4-Week Synchronized Campaign Calendar (`EVT-S7-01`..`EVT-S7-05` + downloadable `.ics` calendar) & Byzantine Quorum Tiers (`Tier 1 >= 5 nodes`, `Tier 2 >= 8 nodes`, `Tier 3 >= 16 nodes`)
+   - Synchronized Campaign Calendar (`EVT-S7-01`..`EVT-S7-05` + **`EVT-S9-01`, `EVT-S9-02`, `EVT-S10-01`, `EVT-S10-02`** + downloadable `.ics` calendar) & Byzantine Quorum Tiers (`Tier 1 >= 5 nodes`, `Tier 2 >= 8 nodes`, `Tier 3 >= 16 nodes`)
+11. **[📡 11. HiveMind@home, GCP Cloud Command Deck & 🐝 La Ruche Community MoE Model Vault (`v2.6.0`)](HiveMind-at-Home-GCP-Dashboard-and-La-Ruche-Vault)**
+   - Distributed Scientific Dataset Mining Campaign (`CAMP-S10-RUCHE-DATASET-MINING` / `src/hivemind/data/dataset_mining_campaign.py`) with Heartbeat-Backed CAS Shard Leasing (`HM-S9-06`)
+   - **`La Ruche` ("The Beehive")** Community MoE Model Vault (`src/hivemind/swarm/la_ruche_vault.py`): 8 Hexagonal Honeycomb Cells (`Alvéoles`), QLoRA holdout perplexity gatekeeper, and 1-line community MoE loader (`load_community_moe_from_ruche`)
+   - **`HiveMind@home`** SETI-Style 60 FPS Spectrum Analyzer, GCP Cloud TPU (`gwenlaya-tpu-1`) + Local CUDA GPU Command Deck (`src/hivemind/boinc/hivemind_at_home_dashboard.py`)
 
 ---
 

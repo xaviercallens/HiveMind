@@ -1,29 +1,29 @@
 {
   "stage": "published",
-  "deposition_id": 23602528,
-  "prereserved_doi": "10.5281/zenodo.23602528",
+  "deposition_id": 23607597,
+  "prereserved_doi": "10.5281/zenodo.23607597",
   "state": "done",
-  "html": "https://zenodo.org/record/23602528",
+  "html": "https://zenodo.org/record/23607597",
   "files": [
     {
       "filename": "hivemind_foundation_article.pdf",
-      "md5": "b634517455800e7d756521e1c8bec4ef",
-      "status": "uploaded"
+      "md5": "84453d3f336ca1fecc512e592faa1b31",
+      "status": "already_present"
     },
     {
       "filename": "hivemind_foundation_article.tex",
-      "md5": "0e02bb998e3baeed39bad75cff9fdd4d",
-      "status": "uploaded"
+      "md5": "84e2fbc03b3c2be517f01ceed4b5c18a",
+      "status": "already_present"
     },
     {
       "filename": "PEER_REVIEW_REPORT.json",
-      "md5": "7dcbeebf9dbc281127b832b4fbda8942",
-      "status": "uploaded"
+      "md5": "bca8ab32918f676415e661e4cbc25f9b",
+      "status": "already_present"
     },
     {
       "filename": "RESEARCH_PROGRAM.md",
-      "md5": "522b7c14e59a3a40a52ba23ba07b0e23",
-      "status": "uploaded"
+      "md5": "9b557b28fd7fca0bf2d4e44c89dd93c0",
+      "status": "already_present"
     },
     {
       "filename": "MOE_DILOCO_REVIEW_2026-10-23.md",
@@ -32,7 +32,7 @@
     },
     {
       "filename": "HiveMindSpec.lean",
-      "md5": "0194bbf2ceb8d9c34ff8e7e0e97970c4",
+      "md5": "59e17dfc55d0101ed88dbf5c0c801db3",
       "status": "already_present"
     },
     {
@@ -78,42 +78,92 @@
     {
       "filename": "E10_lattice_prereg.json",
       "md5": "eb712ef77a1032850552c77363a62121",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E10_lattice_report.json",
       "md5": "47060fa583ffd428b3ab35a4ee6c4688",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "lean_independent_runner_check.json",
       "md5": "393f9d4ba3ac504fcdda123ff01720ab",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "lean_rda_multiplier_check.json",
       "md5": "e90b1d2471c842f7d9644d8fa68f87c5",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "RDAMultiplier.lean",
       "md5": "9af1a58c3b0710a46e05d657aa41d5f3",
+      "status": "already_present"
+    },
+    {
+      "filename": "E12_pilot_prereg.json",
+      "md5": "d13fa9cb9a1320948cd7f8259db93ae7",
+      "status": "already_present"
+    },
+    {
+      "filename": "E12_pilot_report.json",
+      "md5": "bfecb9c88be6d4b0d0c1e54909422102",
+      "status": "already_present"
+    },
+    {
+      "filename": "lora_init.pt",
+      "md5": "04c5022688345ab698486f65427bdb43",
+      "status": "already_present"
+    },
+    {
+      "filename": "ref.pt",
+      "md5": "c138febbf12c699d14bbe9f111f57bde",
+      "status": "already_present"
+    },
+    {
+      "filename": "same_process_repeat.pt",
+      "md5": "38e0e9a3288dc04e774b6b0389866806",
+      "status": "already_present"
+    },
+    {
+      "filename": "threads_1.pt",
+      "md5": "f521f10448cefc2323d4382f02c21dc0",
+      "status": "already_present"
+    },
+    {
+      "filename": "threads_8.pt",
+      "md5": "506c0bfe50422af806543eae65685e41",
+      "status": "already_present"
+    },
+    {
+      "filename": "remote_cpu.pt",
+      "md5": "8cc88c6232f9fcf2208ddff19b4dd35a",
+      "status": "already_present"
+    },
+    {
+      "filename": "tampered.pt",
+      "md5": "174eb93be0285c4bfca2ea808df09410",
+      "status": "already_present"
+    },
+    {
+      "filename": "bf16_autocast.pt",
+      "md5": "5bf4de09d97837f11e2e38fbecd68e30",
       "status": "uploaded"
     },
     {
       "filename": "ROADMAP.md",
-      "md5": "7dff994aa2381b768e99854f8114ca21",
-      "status": "uploaded"
+      "md5": "e1fc663aad0417e819e2cc1f7c4a68e2",
+      "status": "already_present"
     },
     {
       "filename": "external_review_v3.5.0_2026-10-23.md",
       "md5": "33a3f7501a180296d7a53692f1635a90",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "response_to_external_review_v3.5.0.md",
       "md5": "d8f663b3975bc149c1a6a832a3a82fe1",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E8_pilot_report.json",
@@ -122,7 +172,7 @@
     },
     {
       "filename": "predictions_ledger.json",
-      "md5": "94b7b0cf646cbeead95926794f32a349",
+      "md5": "a3d5f4b10702046a685960c6da226b3f",
       "status": "already_present"
     },
     {
@@ -132,18 +182,18 @@
     },
     {
       "filename": "CITATION.cff",
-      "md5": "c180d6238a3c394e233a411d97dfcc89",
-      "status": "uploaded"
+      "md5": "d30a57ba8f4ababec4077572fc125595",
+      "status": "already_present"
     }
   ],
-  "written_utc": "2026-10-23T18:45:12Z",
+  "written_utc": "2026-10-24T01:19:00Z",
   "local_sha256": {
-    "hivemind_foundation_article.pdf": "9603697823de2ceb4c7f68618786e09a5d570fa15c0c4650789f4e46867b5203",
-    "hivemind_foundation_article.tex": "9cb7d7e959424babd61f9d6deaa47aa03d500f9fc0a49109af8c9c3bad445eb8",
-    "PEER_REVIEW_REPORT.json": "234e651a74cfc4ffbb8bfe2978616d80a310d6162c250866a6ff010b5195b100",
-    "RESEARCH_PROGRAM.md": "3f6c561207cdbdef4aa36bc79e94e37e274317c615c98674e3c490fa885e0b0c",
+    "hivemind_foundation_article.pdf": "2af7fb7e941ac7ae816ab80bc58a3341085910496241e86a93007be29fc19150",
+    "hivemind_foundation_article.tex": "b79531d7c220c49d9eee657d26985415647ba3d3c24ffd5392be3f640f36f46c",
+    "PEER_REVIEW_REPORT.json": "1a2f59682e87540c7dac1811832c56fa138dbbff7e8d0e2440aaae29e05bfb1e",
+    "RESEARCH_PROGRAM.md": "15e174f4763427638d91d4f9fa27200bbc78f30a4db633e8ac41e477e55c2312",
     "MOE_DILOCO_REVIEW_2026-10-23.md": "71e29178c486fda014d3385dd5ca70019c153a84d4f03ad14f4dd77939bd77a5",
-    "HiveMindSpec.lean": "afae1dc1408c5f102d55c669a9bb24b19de6cf4c0faf63bb450169b4c735f577",
+    "HiveMindSpec.lean": "767775f0cea58adaa0dbc36d6222ac5c4e321817f298a3325636727ab1e652af",
     "architecture_hypothesis_verification_report.json": "d8e98442efd8c7892c014b67e240e6dd729af1499479243477da7b98e8b92379",
     "paper_v3_experiments_report.json": "580bf389f626cf8d4900170dc5dfe86c60d421a78ca80104e85dea13e969ab89",
     "decoupled_diloco_quorum_check.json": "1474ca96987cf6d13c135ebb8e634bc490e5f04744d8509d9e7ca4792c1447e7",
@@ -157,47 +207,75 @@
     "lean_independent_runner_check.json": "6274993dc5a3920db931970dcede9e865d0abe3ebca362275683a4099644b852",
     "lean_rda_multiplier_check.json": "413c71cd5e90deddd5ef270c5e44ab51dfa4845205a3602ffce386d973686023",
     "RDAMultiplier.lean": "e1d241cf884de0273e458f6fd8b0ab2043da0c534894c493eed328025dd9dffd",
-    "ROADMAP.md": "0cec36c46fccc0ffbed1fe9934b7081a1a49d007423c211fdb322b6d7b66e49e",
+    "E12_pilot_prereg.json": "1cc44c9ed62d4a8b242e8342ad7c6922bfe067041eac8399dbac86242e4c6bd4",
+    "E12_pilot_report.json": "a582a6a2f434d255e4a1308afe5e9f3a0b4e57700129b63703534de227f7334a",
+    "lora_init.pt": "0907ca7a666a19da0142eeacf2d3f86459d4d167abf923dfecab2e40b433323d",
+    "ref.pt": "0ef436c51552780bed17d15788f0bfcc69aec3a9580fb77831d407c9c73e5a2f",
+    "same_process_repeat.pt": "01bd85750f9992d5c23c1ef31c224044d34502a298c35762b6294f9a682266df",
+    "threads_1.pt": "77d075fe657c24f79d46c04252e11f67d9cb1878f48d750ec02c5a5878e23422",
+    "threads_8.pt": "af8a78cfbd5100f6c460adc3e41e7e9c95b9b21906d5b28354fa65712685a073",
+    "remote_cpu.pt": "8bac8a143bf47e3ac649c520b309e7c3e82e274ac2b5edcbf2af151e78cc8787",
+    "tampered.pt": "2e5d55023cc598ecfb090b96bef3d22bc5ad3cb36bd1f7b2fca5c26b7fbef69c",
+    "bf16_autocast.pt": "e810276f6520f61e82fc807c0463981fcf9dd1daab305b64b4460b479fe60aaa",
+    "ROADMAP.md": "08962410243d4df031e1d0e1f73ba0d8f81859df8fc2bbb5060e9b5096940c1e",
     "external_review_v3.5.0_2026-10-23.md": "73b14a8e320174d1e638eb95525b6b2ac49121b6033c0c3234bc84fe92b3cb8d",
     "response_to_external_review_v3.5.0.md": "a2ae2e1dc1dd7f7a67ae2b02da37579fefd5ba75784f6838e67574bf576715f8",
     "E8_pilot_report.json": "f31cb7bd0ebb4d1ca19f6df03f786791e09db7c78cc62e55fd3d4f700e472397",
-    "predictions_ledger.json": "5daeb10096fe28e576a0e638d926e501b25bf34c9d6062d1ff16265f73f8bd25",
+    "predictions_ledger.json": "7ba9a7c37823651cf2add67095f8d70fbe0c4d247106b53afb889c0f8486b6d2",
     "gwaya_stub_audit.json": "27a7a91ed8c49a227b1e627a82d493f1b26ff7f0bcc9b369d9c9397a2f46d6ce",
-    "CITATION.cff": "09ee4947455d793f9f2b3900f52de1c115b2049cd0c774bdb09ec4a4dfdcd948"
+    "CITATION.cff": "f1eb1c0098624d5349e13161f2272083f89d75538597558a013bbd80bac855ff"
   },
-  "record_id": 23602528,
-  "doi": "10.5281/zenodo.23602528",
-  "doi_url": "https://doi.org/10.5281/zenodo.23602528",
+  "record_id": 23607597,
+  "doi": "10.5281/zenodo.23607597",
+  "doi_url": "https://doi.org/10.5281/zenodo.23607597",
   "conceptdoi": "10.5281/zenodo.23597697",
   "submitted": true,
   "remote_md5": {
-    "decoupled_diloco_quorum_check.json": "f8ccefeea9f63959fc89f8928fcde5b7",
-    "E5_toy_report.json": "ee8712ada2668f817cd08f14f29ad0ef",
     "MOE_DILOCO_REVIEW_2026-10-23.md": "a75c5061339db9c853f1424a55abe608",
+    "predictions_ledger.json": "a3d5f4b10702046a685960c6da226b3f",
+    "ROADMAP.md": "e1fc663aad0417e819e2cc1f7c4a68e2",
+    "hivemind_foundation_article.pdf": "84453d3f336ca1fecc512e592faa1b31",
+    "decoupled_diloco_quorum_check.json": "f8ccefeea9f63959fc89f8928fcde5b7",
+    "HiveMindSpec.lean": "59e17dfc55d0101ed88dbf5c0c801db3",
+    "E5_toy_report.json": "ee8712ada2668f817cd08f14f29ad0ef",
     "E5_toy_prereg.json": "60aac0165ef684299971b9da89fdba98",
     "architecture_hypothesis_verification_report.json": "29b579242b6054aacd582e515ce69594",
     "paper_v3_experiments_report.json": "880d5276bf87ddfa1e62e4c713c52333",
     "gwaya_stub_audit.json": "b407edb2f5bf20499067b9a9a64aef49",
-    "HiveMindSpec.lean": "0194bbf2ceb8d9c34ff8e7e0e97970c4",
     "E5_het_report.json": "416502040865c58cc382b51f74d4d83f",
     "E5_het_calibration.json": "0628539e3ffd18424e67a939274d4009",
     "E8_pilot_report.json": "dc5ec843a262f2b210fafeacb7f1373d",
     "E5_het_prereg.json": "ebda99de822594573e8329b48aec3ee3",
-    "predictions_ledger.json": "94b7b0cf646cbeead95926794f32a349",
     "external_review_v3.5.0_2026-10-23.md": "33a3f7501a180296d7a53692f1635a90",
     "RDAMultiplier.lean": "9af1a58c3b0710a46e05d657aa41d5f3",
     "E10_lattice_prereg.json": "eb712ef77a1032850552c77363a62121",
-    "hivemind_foundation_article.pdf": "b634517455800e7d756521e1c8bec4ef",
-    "hivemind_foundation_article.tex": "0e02bb998e3baeed39bad75cff9fdd4d",
-    "RESEARCH_PROGRAM.md": "522b7c14e59a3a40a52ba23ba07b0e23",
-    "PEER_REVIEW_REPORT.json": "7dcbeebf9dbc281127b832b4fbda8942",
     "E10_lattice_report.json": "47060fa583ffd428b3ab35a4ee6c4688",
     "lean_independent_runner_check.json": "393f9d4ba3ac504fcdda123ff01720ab",
     "lean_rda_multiplier_check.json": "e90b1d2471c842f7d9644d8fa68f87c5",
-    "ROADMAP.md": "7dff994aa2381b768e99854f8114ca21",
     "response_to_external_review_v3.5.0.md": "d8f663b3975bc149c1a6a832a3a82fe1",
-    "CITATION.cff": "c180d6238a3c394e233a411d97dfcc89"
+    "lora_init.pt": "04c5022688345ab698486f65427bdb43",
+    "E12_pilot_prereg.json": "d13fa9cb9a1320948cd7f8259db93ae7",
+    "CITATION.cff": "d30a57ba8f4ababec4077572fc125595",
+    "ref.pt": "c138febbf12c699d14bbe9f111f57bde",
+    "same_process_repeat.pt": "38e0e9a3288dc04e774b6b0389866806",
+    "threads_1.pt": "f521f10448cefc2323d4382f02c21dc0",
+    "threads_8.pt": "506c0bfe50422af806543eae65685e41",
+    "remote_cpu.pt": "8cc88c6232f9fcf2208ddff19b4dd35a",
+    "tampered.pt": "174eb93be0285c4bfca2ea808df09410",
+    "hivemind_foundation_article.tex": "84e2fbc03b3c2be517f01ceed4b5c18a",
+    "PEER_REVIEW_REPORT.json": "bca8ab32918f676415e661e4cbc25f9b",
+    "RESEARCH_PROGRAM.md": "9b557b28fd7fca0bf2d4e44c89dd93c0",
+    "E12_pilot_report.json": "bfecb9c88be6d4b0d0c1e54909422102",
+    "bf16_autocast.pt": "5bf4de09d97837f11e2e38fbecd68e30"
   },
   "checksum_mismatches": [],
-  "verified": true
+  "verified": true,
+  "verification_note": "Published 2026-10-24 as 10.5281/zenodo.23607597 (version 3.7.1, 36 files), new version of 10.5281/zenodo.23604695. Every uploaded file matches the local working tree (checksum_mismatches empty). One known difference from the release commit 0eef334, as in v3.7.0: HiveMindSpec.lean was uploaded from the working tree (md5 59e17dfc55d0101ed88dbf5c0c801db3), which still carries eight uncommitted Season 15 theorems (121-128) written by another agent in the same checkout; the committed file (md5 0194bbf2ceb8d9c34ff8e7e0e97970c4) has the 120 theorems the paper describes and the independent-gate receipt covers. The eight theorems enter the record only through a gated PR and the next paper version. All other files match the release commit. New in this version: bf16_autocast.pt (the P12d raw replay state) and PROV-34.",
+  "known_mismatch": {
+    "file": "HiveMindSpec.lean",
+    "uploaded_md5": "59e17dfc55d0101ed88dbf5c0c801db3",
+    "committed_md5": "0194bbf2ceb8d9c34ff8e7e0e97970c4",
+    "committed_ref": "0eef334",
+    "difference": "8 uncommitted theorems (121-128) in the working tree; committed file has 120"
+  }
 }

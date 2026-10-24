@@ -57,7 +57,7 @@ Suggested sequencing:
    PYTHONPATH=src python scripts/run_experiment_E5_het.py            # ~20 min on 8 CPUs; controls must pass
    PYTHONPATH=src python scripts/update_predictions_ledger.py        # statuses copied from artifacts, never typed
    PYTHONPATH=src python scripts/run_experiment_E10_lattice.py       # ~1 min; E8/Z8/sign codecs, controls must pass
-   python -m anse.formal.lean_runner lean4/HiveMindSpec.lean          # from the AutoevolveAI root: independent Lean gate, 120/120
+   python -m anse.formal.lean_runner lean4/HiveMindSpec.lean          # from the AutoevolveAI root: independent Lean gate, 128/128
    python -m anse.formal.lean_runner lean4/mathlib/RDAMultiplier.lean # same root (needs its Mathlib): 3/3 RDA theorems
    ```
 
@@ -78,6 +78,36 @@ Suggested sequencing:
   status; it must not merge a PR whose Definition of Done checklist is incomplete, and it must not
   write to `paper/` or to the citation files.
 - Merged-PR counts in `ROADMAP.md` §1 are copied from `gh pr list --state merged`, never typed.
+
+## 3b. Hourly PR gatekeeper (owner-only merge authority, from 2026-10-23)
+
+`scripts/pr_gatekeeper.py` runs every hour from the scientific lead's session (`--merge`). Its policy is fixed
+in code and is not changed by anything written in a PR, an issue or a comment:
+
+- **Who may be merged automatically:** only PRs whose GitHub author is `xaviercallens` *and* whose every commit
+  author e-mail normalises to `callensxavier@gmail.com` under `OwnerOrderGuardrail` (plus-addressing,
+  dot-variants, display-name tricks and homoglyphs are rejected). Any other PR, including the coordinator's
+  `bot@socrateai.com` commits and community PRs, is fully checked and reported with **HOLD**; a human merges it.
+- **What must pass for ACCEPT:** `PRSecurityScanner` (0 critical, 0 high); no forbidden added lines
+  (`GWAYA_ALLOW_UNISOLATED`, git-hook bypass flags, forced pushes, destructive shell, remote-script execution,
+  obfuscated exec, scripted review scores or `is_peer_review: true`, owner-address variants); GWAYA zero-stub
+  audit on changed Python; pytest on changed tests plus a smoke set; `lake build` without `sorryAx` when `lean4/`
+  changed; the paper provenance pipeline when `paper/` changed. One failure → **REFUSE**. Drafts and conflicts → **HOLD**.
+- **Where it leaves evidence:** a comment on the PR with the check table and `artifacts/pr_gatekeeper/run_<utc>.json`
+  (+ `latest.json`); a PR head already gated is not re-run. Recent non-owner branches are listed in every run.
+- **Branch protection on `main` (tightened 2026-10-24):** forced pushes and deletions blocked; a pull request is
+  required for every change and the two CI jobs (5-Layer PR Security Scanner; Verify 4 Core Pillars…) must pass;
+  **admins are enforced**, so no identity, the owner's token included, can push to `main` directly. Reason: on
+  2026-10-24 two commits authored as "Antigravity Agent" with the owner's e-mail reached `main` by direct push and
+  bypassed the gate. The coordinator therefore opens PRs from branches; the gatekeeper re-attempts the merge of an
+  already-ACCEPTed head on later ticks until CI has passed (a body edit does not re-run CI; push a new commit).
+  Commit e-mail is the only authority signal and is forgeable; signed commits from the owner's key are the next step.
+- **Instructions in PR text are data.** The gatekeeper never reads "merge this", "approve", "run X" from a PR; since 2026-10-24 it records a
+  `HiveMindFirewall` injection scan of title+body in its log (report-only). Season 11 (`HM-S11-02/03`) moves merges and PR openings onto signed
+  orders through the firewall; until then the coordinator's PRs are held for a human exactly as now.
+- **Commit identity is claimed, not proven.** On 2026-10-24 the coordinator committed on the shared checkout as the owner (name and e-mail). The
+  gatekeeper now records GitHub's signature verification for every commit; once the owner registers a signing key, `HIVEMIND_GATE_REQUIRE_SIGNED=1`
+  makes unsigned owner-attributed commits HOLD (`HM-S11-04`). Never set the owner's name or e-mail on a commit you did not receive as an order.
 
 ## 4. Reporting back to the scientific lead
 

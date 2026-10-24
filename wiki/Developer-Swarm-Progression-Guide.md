@@ -74,3 +74,19 @@ To enable multiple human developers and autonomous AI coding agents (`@clark7196
 - **What to Implement Next**:
   1. Expose `GET /api/diloco-nextgen` on the Steam Command Center HTTP server (`src/hivemind/game/steam_edition.py`).
   2. Extend `lean4/HiveMindSpec.lean` from `90` to `100` machine-checked theorems (`0 sorry`, `0` user axioms).
+
+---
+
+## 🛰️ 4. Season 9 (`Wave 8`) & Season 10 (`Wave 9`) GPU & HiveMind Swarm Contributor Tracks (`v2.5.0`)
+
+All 6 Season 8 tracks (`PRs #99–#109`, `63/63` merged PRs) and the Season 9/10 core coordinator deliverables (`HM-S9-01..06`, `HM-S9-08`, `HM-S9-13..14`, `HM-S10-01..02`, `HM-S10-05`, `HM-S10-08` + `128` machine-checked Lean 4 theorems with `128/128` `#print axioms` lines) are now live on `main`!
+
+Contributors with consumer GPUs (`NVIDIA RTX 20/30/40/50-series`, `AMD Radeon RX 6000/7000`, `Apple Silicon M1–M4`) or cloud TPU/GPU nodes can now claim and run the **4 Season 9 & 10 GPU + HiveMind Swarm Campaigns** (`scripts/run_season9_10_gpu_swarm_campaigns.py`):
+
+| Campaign / Track ID | Open Tasks & Research Gates | Target Subsystem & Runner | Recommended GPU Contributors | Symbolic Compute Credits (`0.00 EUR/USD`) |
+| :--- | :--- | :--- | :--- | :---: |
+| **`CAMP-S9-E5-QUORUM-RDA-GPU`** | `HM-S9-01`, `HM-S9-05`, `HM-S9-13`, `HM-S9-14` (`G1`/`G2`) | `src/hivemind/swarm/decoupled_diloco.py`, `src/hivemind/core/diloco_outer.py` | `@clark719664`, `@pedromineo`, Open | `+3,500 $HIVE / PTS` |
+| **`CAMP-S9-E7-SIGMA-LOOPED-MOE-GPU`** | `HM-S9-02`, `HM-S9-03` (`G1`) | `src/hivemind/core/btm_upcycle.py`, `src/hivemind/core/btm_moe.py` | `@clark719664`, Open | `+3,500 $HIVE / PTS` |
+| **`CAMP-S10-E11-LATTICE-KV-WIRE-GPU`** | `HM-S10-01`, `HM-S10-05` (`G1`) | `src/hivemind/compress/lattice_quantizer.py`, `src/hivemind/core/btm_moe.py` | `@radialmonster`, `@clark719664`, Open | `+3,500 $HIVE / PTS` |
+| **`CAMP-S10-E12-HETERO-SPOTCHECK-WAN-GPU`** | `HM-S9-04`, `HM-S9-06`, `HM-S9-07`, `HM-S10-08` (`G2`/`G3`) | `src/hivemind/boinc/validator.py`, `src/hivemind/swarm/dht_storage.py`, `scripts/run_e8_pilot_wan.sh` | `@radialmonster`, `@pedromineo`, Open | `+3,500 $HIVE / PTS` |
+

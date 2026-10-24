@@ -1,6 +1,6 @@
 {
   "pipeline_name": "Project HiveMind x AutoevolveAI Cross-Session Research Pipeline",
-  "version": "3.7.0",
+  "version": "3.8.0",
   "lead_peer_review_model": "none (scripted static audit; no language-model call)",
   "workspace_root": ".",
   "artifacts_and_entrypoints": {

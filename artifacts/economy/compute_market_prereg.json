@@ -1,0 +1,25 @@
+{
+  "schema_version": "hivemind-compute-market-prereg/v1.0",
+  "task": "HM-S12-01: deterministic simulation of the HiveMind compute market (Kelly consumers, Tullock workers, multi-queue routing)",
+  "registered_utc": "2026-10-24T08:30:17Z",
+  "registered_before_first_run": true,
+  "hypotheses": {
+    "H-M1": "every Kelly equilibrium over random linear valuations (2-12 consumers, values log-uniform in [0.1, 100]) has efficiency >= 0.75 (Johari-Tsitsiklis bound) and feasible shares (sum 1, all >= 0)",
+    "H-M2": "every closed-form Tullock equilibrium (2-8 workers, costs log-uniform in [0.1, 10], pool log-uniform in [1, 1000]) passes the epsilon-Nash grid certificate at eps = 1e-6 of the pool; the equilibrium price per cobblestone exceeds the cheapest cost (rents exist)",
+    "H-M3": "best-response routing over 2-6 workers and 1-4 queues converges in <= 500 rounds and is epsilon-Nash (1e-6) in >= 95% of instances; when no worker is capacity-bound the queue prices equalise"
+  },
+  "controls": {
+    "positive": "1 consumer of value 1 vs 50 of value 1/2 must give efficiency in [0.75, 0.77] (the bound is approached: the metric measures the game)",
+    "negative": "three symmetric workers split a pool exactly evenly; two equal consumers split capacity 1/2-1/2"
+  },
+  "decision_rule": "simulation valid iff both controls pass; the market design is 'proposed' (not 'adopted') until the live-ledger integration HM-S12-02 reproduces H-M1/H-M2 on real receipts",
+  "seed": 2026,
+  "n_instances_per_block": 300,
+  "routing_instances": 60,
+  "not_measured": [
+    "strategic misreporting of FLOPs (handled by verified_credit, not by the market)",
+    "collusion between workers",
+    "dynamic entry/exit over epochs",
+    "real energy prices"
+  ]
+}

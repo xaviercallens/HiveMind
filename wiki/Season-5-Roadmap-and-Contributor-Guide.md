@@ -70,3 +70,27 @@ Season 8 leverages **8 cloned open-source GitHub repositories** (`one-covenant/S
 | **`HM-S8-09`** | `feat/s8-muon-newton-schulz-inner-lora` | `MuLoCo` (Thérien et al., `arXiv:2505.23725`) + Belilovsky, Horoi, Oyallon & Thérien (`arXiv:2610.19064`) | Integrate `MuonNewtonSchulzLoRAPreconditioner` (`SI-11`) into local QLoRA inner loop | `3,000 PTS / $HIVE` |
 | **`HM-S8-10`** | `formal/s8-isoloco-dct-newton-schulz-lean4` | `lean4/HiveMindSpec.lean` (`Theorems 83–90`) | Extend `Season10_OuterLoopDiLoCoEcosystem` in Lean 4 from `82` to `90` machine-checked theorems (`0 sorry`) | `3,500 PTS / $HIVE` |
 
+---
+
+## 🛰️ 5. Season 9 (`Wave 8 — Operation Decoupled-Quorum`) & Season 10 (`Wave 9 — Operation Lattice-Codec`) Tasks & GPU Campaigns (`v2.5.0`)
+
+With all `63/63` Pull Requests merged across Waves 1–7 and `128` machine-checked Lean 4 theorems (`0 sorry`, `128/128` `#print axioms` lines) verified in `lean4/HiveMindSpec.lean`, Season 9 and Season 10 focus on **Decoupled Quorum (`K < M`)**, **Continuous Async Straggler Folding (`HM-S9-13`)**, **Pairwise Delta-Cosine Radial-Directional Averaging (`HM-S9-14`)**, **FoMoE $\sigma$-MoE + Peri-LN (`HM-S9-02`)**, **Looped Orthogonal Input Injection & Terminal-KV Sharing (`HM-S9-03`)**, **Conway-Sloane $E_8$ / $A_2$ Hexagonal Lattice Wire & Paged KV-Cache Codecs (`HM-S10-01`, `HM-S10-05`)**, and **Execution-Class Two-Statistic Spot-Check & `Q16` Fixed-Point Digests (`HM-S10-08`)**:
+
+| Task ID | Branch Prefix | Target Subsystem | Deliverable & GPU Campaign Verification | Reciprocal Compute Points (`0.00 EUR/USD`) |
+| :--- | :--- | :--- | :--- | :---: |
+| **`HM-S9-01`** | `feat/s9-decoupled-syncer-campaign-wiring` | `src/hivemind/cli/multi_moe_hf_campaign.py` | Wire `DecoupledDiLoCoQuorumSyncer` (`SI-12`) & `AdaptiveGraceWindowController` into `DiLoCoOuterOptimizer` & Stage 7 (`CAMP-S9-E5-QUORUM-RDA-GPU`) | `3,500 PTS / $HIVE` |
+| **`HM-S9-02`** | `feat/s9-sigma-moe-peri-ln-block` | `src/hivemind/core/btm_upcycle.py` | FoMoE `sigma_moe` sigmoid independent Top-$k$ routing + Peri-LN & measured ghost-expert Skip-Token FLOP report (`CAMP-S9-E7-SIGMA-LOOPED-MOE-GPU`) | `3,500 PTS / $HIVE` |
+| **`HM-S9-03`** | `feat/s9-looped-learned-depth-prior-orthoinj` | `src/hivemind/core/btm_upcycle.py` | `LoopedExpertBackbone` with `orthogonal_input_injection`, `LearnedDepthPrior`, and `evaluate_terminal_kv_sharing` (`CAMP-S9-E7-SIGMA-LOOPED-MOE-GPU`) | `3,500 PTS / $HIVE` |
+| **`HM-S9-04`** | `feat/s9-factored-gossip-mix1-mix2` | `src/hivemind/swarm/diloco_nextgen.py` | `FactoredGossipMix1Mix2Coordinator` (`Mix1` non-blocking backbone + `Mix2` JS-disagreement-gated sensitive blocks) (`CAMP-S10-E12-HETERO-SPOTCHECK-WAN-GPU`) | `3,000 PTS / $HIVE` |
+| **`HM-S9-05`** | `feat/s9-outer-momentum-restart` | `src/hivemind/core/diloco_outer.py` | Periodic outer-momentum restarting (`K_restart`) across Nesterov, CPU Flat-Bucket & PA-CGAD (`CAMP-S9-E5-QUORUM-RDA-GPU`) | `2,500 PTS / $HIVE` |
+| **`HM-S9-06`** | `feat/s9-darl-data-leasing` | `src/hivemind/swarm/dht_storage.py` | Heartbeat-backed CAS data shard leases (`TTL = alpha * t_step + RTT`, `committed == granted - reclaimed`) (`CAMP-S10-E12-HETERO-SPOTCHECK-WAN-GPU`) | `3,000 PTS / $HIVE` |
+| **`HM-S9-07`** | `feat/s9-multi-host-wan-gameday-real` | `scripts/run_e8_pilot_wan.sh` | 3–8 real machines over residential WAN (`K < M` quorum, RDA on, p50/p95/p99 outer-round latency) | `3,500 PTS / $HIVE` |
+| **`HM-S9-08`** | `formal/s9-rda-norm-and-quorum-liveness` | `lean4/HiveMindSpec.lean` | Season 15 Lean 4 Formal Proofs (`Theorems 121–128`, `128/128` `#print axioms`, `0 sorry`) | `3,000 PTS / $HIVE` |
+| **`HM-S9-13`** | `feat/s9-continuous-async-learner-quorum` | `src/hivemind/swarm/decoupled_diloco.py` | `ContinuousAsyncLearnerCoordinator` (`drop` vs `deferred_token_weighted` vs `eager_one_step` with `0` dropped tokens) | `3,500 PTS / $HIVE` |
+| **`HM-S9-14`** | `feat/s9-campaign-rda-delta-cosine-diagnostic` | `src/hivemind/swarm/decoupled_diloco.py` | `analyze_campaign_rda_and_delta_cosine` (pairwise delta cosine $\bar{c}$, empirical vs theoretical $r_t$) | `3,000 PTS / $HIVE` |
+| **`HM-S10-01`** | `feat/s10-e8-lattice-wire-codec` | `src/hivemind/swarm/diloco_nextgen.py` | Conway-Sloane `E8`/`Z`/`sign` `LatticeDeltaQuantizer` wired into `ComputeVisibleSparseLoCoCompressor` (`CAMP-S10-E11-LATTICE-KV-WIRE-GPU`) | `3,500 PTS / $HIVE` |
+| **`HM-S10-02`** | `feat/s10-orchestrator-lean-axioms-gate` | `src/hivemind/cli/community_orchestrator.py` | One-`#print-axioms`-per-theorem Lean 4 gate & Scientific-Lead protected file guard | `3,000 PTS / $HIVE` |
+| **`HM-S10-05`** | `feat/s10-a2-hexagonal-kv-cache-codecs` | `src/hivemind/compress/lattice_quantizer.py`, `src/hivemind/core/btm_moe.py` | Conway-Sloane 2D hexagonal `A2` decoder & 5 pluggable codecs in `FP8PagedKVCache` (`CAMP-S10-E11-LATTICE-KV-WIRE-GPU`) | `3,500 PTS / $HIVE` |
+| **`HM-S10-08`** | `feat/s10-execution-class-two-stat-spot-check` | `src/hivemind/boinc/validator.py` | Execution-class validator assignment, two-statistic replay rule (`linf` + tensor fraction) & `Q16` fixed-point digest (`CAMP-S10-E12-HETERO-SPOTCHECK-WAN-GPU`) | `3,500 PTS / $HIVE` |
+
+

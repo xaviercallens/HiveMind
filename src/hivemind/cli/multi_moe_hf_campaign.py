@@ -169,14 +169,21 @@ def run_multi_moe_hf_campaign(
     live_hf_stream: bool = False,
     seed: int = 42,
     output_path: Path | None = DEFAULT_CAMPAIGN_REPORT_PATH,
+    min_quorum_k: int | None = None,
+    grace_margin_gamma: float = 0.5,
+    quorum_merge_mode: str = "rda",
 ) -> dict[str, Any]:
-    """Execute the 6-Stage Large-Scale Multi-MoE & Hugging Face Dataset GPU Validation Campaign."""
+    """Execute the Large-Scale Multi-MoE & Hugging Face Dataset GPU Validation Campaign."""
     if not contributor_handle or not contributor_handle.strip():
         raise ValueError("contributor_handle must be non-empty")
     if steps_per_domain < 2:
         raise ValueError("steps_per_domain must be >= 2")
     if not (2 <= domain_limit <= 8):
         raise ValueError("domain_limit must be between 2 and 8")
+    if not (0.0 <= grace_margin_gamma < 1.0):
+        raise ValueError("grace_margin_gamma must be in [0, 1)")
+    if quorum_merge_mode not in ("rda", "direct"):
+        raise ValueError("quorum_merge_mode must be 'rda' or 'direct'")
 
     t_campaign_start = time.perf_counter()
     torch.manual_seed(seed)
@@ -204,6 +211,9 @@ def run_multi_moe_hf_campaign(
     )
 
     total_tokens_processed = 0
+    domain_tokens_by_name: dict[str, int] = {}
+    domain_elapsed_by_name: dict[str, float] = {}
+    cas_lease_summary: dict[str, Any] = {}
 
     with tempfile.TemporaryDirectory() as tmp_cas_dir:
         cas_store = ContentAddressedSwarmStore(Path(tmp_cas_dir) / "cas")
@@ -213,6 +223,16 @@ def run_multi_moe_hf_campaign(
             t_dom = time.perf_counter()
             train_texts = [row["text"] for row in dom_spec["train"]]
             holdout_texts = [row["text"] for row in dom_spec["holdout"]]
+
+            worker_node_id = f"node-{dom_idx:02d}-{contributor_handle.strip()}"
+            shard_lease = cas_store.grant_shard_lease(
+                shard_cid=f"shard://{dom_name}/0",
+                worker_id=worker_node_id,
+                alpha=2.0,
+                t_step_s=1.0,
+                rtt_s=0.2,
+                now_s=float(dom_idx),
+            )
 
             live_streamed_count = 0
             if live_hf_stream:
@@ -237,6 +257,7 @@ def run_multi_moe_hf_campaign(
                 weight_decay=0.0,
             )
             model.train()
+            dom_tokens = 0
             for _ in range(steps_per_domain):
                 optimizer.zero_grad(set_to_none=True)
                 out = model(
@@ -248,6 +269,7 @@ def run_multi_moe_hf_campaign(
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 optimizer.step()
                 total_tokens_processed += int(token_count)
+                dom_tokens += int(token_count)
 
             if train_device.type == "cuda":
                 torch.cuda.synchronize(train_device)
@@ -255,6 +277,13 @@ def run_multi_moe_hf_campaign(
             post_holdout = evaluate_next_token_nll(model, holdout_batch)
             post_train_eval = evaluate_next_token_nll(model, train_batch)
             dom_elapsed_sec = max(1e-6, time.perf_counter() - t_dom)
+            domain_tokens_by_name[dom_name] = dom_tokens
+            domain_elapsed_by_name[dom_name] = dom_elapsed_sec
+
+            cas_store.heartbeat_shard_lease(shard_lease.lease_id, now_s=float(dom_idx) + 0.5)
+            cas_store.commit_shard_lease(
+                shard_lease.lease_id, worker_id=worker_node_id, now_s=float(dom_idx) + 0.8
+            )
 
             # Extract trained LoRA state and compute pseudo-gradient delta
             trained_state = _extract_lora_tensors_cpu(model)
@@ -350,6 +379,7 @@ def run_multi_moe_hf_campaign(
                     "elapsed_ms": round(dom_elapsed_sec * 1000.0, 2),
                 }
             )
+        cas_lease_summary = cas_store.lease_ledger_summary()
 
     # Stage 4: Byzantine Poisoning Defense & Reputation-Weighted TIES Merge on Real Tokens
     primary_domain_name, primary_spec = all_domain_items[0]
@@ -621,6 +651,218 @@ def run_multi_moe_hf_campaign(
     looped_logits_finite = bool(torch.isfinite(looped_out.logits).all().item())
     stage6_ms = round((time.perf_counter() - t_stage6) * 1000.0, 2)
 
+    # Stage 7: Season 9 & Season 10 ("Operation Decoupled-Quorum-Lattice")
+    t_stage7 = time.perf_counter()
+    from hivemind.boinc.validator import (
+        DeterministicSpotCheckValidator,
+        ExecutionClassProfile,
+        verify_fixed_point_q16_digest,
+    )
+    from hivemind.core.btm_moe import FP8PagedKVCache
+    from hivemind.core.diloco_outer import DiLoCoOuterOptimizer
+    from hivemind.swarm.decoupled_diloco import (
+        AdaptiveGraceWindowController,
+        ContinuousAsyncLearnerCoordinator,
+        DecoupledDiLoCoQuorumSyncer,
+        LearnerArrival,
+        analyze_campaign_rda_and_delta_cosine,
+    )
+    from hivemind.swarm.diloco_nextgen import (
+        ComputeVisibleSparseLoCoCompressor,
+        FactoredGossipMix1Mix2Coordinator,
+    )
+
+    num_learners_m = len(trained_branch_states)
+    eff_quorum_k = (
+        max(1, min(num_learners_m, int(min_quorum_k)))
+        if min_quorum_k is not None
+        else max(1, (3 * num_learners_m + 3) // 4)
+    )
+    grace_ctrl = AdaptiveGraceWindowController(
+        overlap_steps_tau=2,
+        safety_margin_gamma=grace_margin_gamma,
+        ema_beta=0.9,
+        sync_duration_s=0.01,
+    )
+    for dom_name in trained_branch_states:
+        grace_ctrl.observe_step_duration(domain_elapsed_by_name.get(dom_name, 0.05))
+    grace_ctrl.observe_quorum_duration(0.02)
+
+    quorum_syncer = DecoupledDiLoCoQuorumSyncer(
+        num_learners_m=num_learners_m,
+        min_quorum_k=eff_quorum_k,
+        merge_mode=quorum_merge_mode,
+        grace_controller=grace_ctrl,
+    )
+    arrivals_list = [
+        LearnerArrival(
+            learner_id=dom_name,
+            arrival_time_s=round(0.005 * idx, 6),
+            steps_since_sync=steps_per_domain,
+            tokens_since_sync=max(1, domain_tokens_by_name.get(dom_name, sequence_length)),
+        )
+        for idx, dom_name in enumerate(trained_branch_states)
+    ]
+    learner_first_frag = {
+        dom_name: state[first_key] for dom_name, state in trained_branch_states.items()
+    }
+    quorum_delta, quorum_selection, quorum_telemetry = quorum_syncer.merge_fragment(
+        fragment_name=first_key,
+        global_prev=base_lora_state[first_key],
+        learner_fragments=learner_first_frag,
+        arrivals=arrivals_list,
+    )
+
+    # HM-S9-01 + HM-S9-05: DiLoCoOuterOptimizer with LearnerArrival quorum + K_restart
+    outer_opt_s9 = DiLoCoOuterOptimizer(
+        outer_lr_eta=0.7,
+        outer_momentum_mu=0.9,
+        outer_optimizer_mode="nesterov",
+        momentum_restart_period=2,
+    )
+    worker_deltas_s9 = {
+        a.learner_id: {
+            k: base_lora_state[k] - trained_branch_states[a.learner_id][k]
+            for k in base_lora_state
+        }
+        for a in arrivals_list
+    }
+    outer_res_1 = outer_opt_s9.step(
+        branch_name="shared_backbone",
+        outer_step=1,
+        theta_prev=base_lora_state,
+        worker_deltas=worker_deltas_s9,
+        learner_arrivals=arrivals_list,
+        min_quorum_k=eff_quorum_k,
+        grace_window_s=grace_ctrl.grace_window_seconds(),
+        quorum_merge_mode=quorum_merge_mode,
+    )
+    outer_res_2 = outer_opt_s9.step(
+        branch_name="shared_backbone",
+        outer_step=2,
+        theta_prev=outer_res_1.theta_updated,
+        worker_deltas=worker_deltas_s9,
+        learner_arrivals=arrivals_list,
+        min_quorum_k=eff_quorum_k,
+        grace_window_s=grace_ctrl.grace_window_seconds(),
+        quorum_merge_mode=quorum_merge_mode,
+    )
+
+    # HM-S9-02: Sigma-MoE + Peri-LN + Skip-Token FLOP report gated on measured ghost fraction
+    moe_model.set_local_expert_subset(list(range(max(1, moe_model.num_experts // 2))))
+    moe_model.set_routing_mode("sigma_moe")
+    moe_model.set_peri_ln(True)
+    moe_model.reset_routing_telemetry()
+    _ = moe_model(input_ids=torch.tensor([[1, 2, 3, 4]]))
+    skip_token_report = moe_model.skip_token_flops_report()
+    moe_model.set_local_expert_subset(None)
+    moe_model.set_routing_mode("softmax")
+
+    # HM-S9-03: Orthogonal input injection (`OrthoInj`), learned depth prior, and terminal-KV sharing
+    looped_ortho = LoopedExpertBackbone(
+        moe_model,
+        num_prelude_layers=0,
+        num_coda_layers=0,
+        loop_steps=2,
+        per_step_lora_rank=2,
+        input_injection="orthogonal",
+        use_learned_depth_prior=True,
+    )
+    ortho_ids = torch.tensor([[1, 2, 3, 4]])
+    looped_ortho_out = looped_ortho(input_ids=ortho_ids, labels=ortho_ids)
+    terminal_kv_report = looped_ortho.evaluate_terminal_kv_sharing(input_ids=ortho_ids)
+
+    # HM-S9-04: Factored Gossip (Mix1 non-blocking backbone + Mix2 JS-disagreement-gated sensitive sync)
+    gossip_coord = FactoredGossipMix1Mix2Coordinator(alpha_mix1=0.5, js_threshold=0.02)
+    router_dists = [
+        torch.softmax(torch.randn((4, num_learners_m), generator=gen_svd), dim=-1)
+        for _ in range(num_learners_m)
+    ]
+    _, gossip_report = gossip_coord.step_factored_gossip(
+        master_params=base_lora_state,
+        worker_param_states=branch_states_list,
+        worker_router_distributions=router_dists,
+    )
+
+    # HM-S10-01: E8 Lattice Delta Quantizer wired into ComputeVisibleSparseLoCoCompressor
+    e8_compressor = ComputeVisibleSparseLoCoCompressor(
+        codec="E8",
+        target_bits_per_dim=2.0,
+        error_feedback=True,
+        adapt_scale_per_round=True,
+    )
+    _, e8_stats = e8_compressor.compress_with_lattice_codec(
+        first_pgrad,
+        reference_param=base_lora_state[first_key],
+        codec="E8",
+        fragment_name=first_key,
+    )
+
+    # HM-S9-13: Continuous Async Learner Coordinator (deferred token-weighted vs eager vs drop)
+    async_coord = ContinuousAsyncLearnerCoordinator(
+        num_learners_m=num_learners_m,
+        min_quorum_k=eff_quorum_k,
+        straggler_mode="deferred_token_weighted",
+        merge_mode=quorum_merge_mode,
+    )
+    for idx, dom_name in enumerate(trained_branch_states):
+        async_coord.submit_learner_delta(
+            learner_id=dom_name,
+            origin_round=0,
+            delta=base_lora_state[first_key] - trained_branch_states[dom_name][first_key],
+            tokens_since_sync=max(1, domain_tokens_by_name.get(dom_name, sequence_length)),
+            steps_since_sync=steps_per_domain,
+            arrival_time_s=0.005 * idx,
+        )
+    _, async_round_report = async_coord.close_quorum_round(
+        global_param=base_lora_state[first_key],
+        outer_lr=0.7,
+        grace_window_s=grace_ctrl.grace_window_seconds(),
+    )
+
+    # HM-S9-14: E5-het Pairwise Delta Cosine & RDA Multiplier Analysis on Campaign Deltas
+    rda_cosine_analysis = analyze_campaign_rda_and_delta_cosine(
+        base_lora_state=base_lora_state,
+        branch_lora_states=trained_branch_states,
+    )
+
+    # HM-S10-05: Pluggable Lattice KV-Cache Page Codecs (FP8 vs A2-RoPE-plane vs E8 vs controls)
+    kv_sample_k = torch.randn((2, 4, 16, 16), generator=gen_svd)
+    kv_sample_v = torch.randn((2, 4, 16, 16), generator=gen_svd)
+    kv_codec_bench = FP8PagedKVCache.benchmark_kv_page_codecs(
+        kv_sample_k, kv_sample_v, target_bits_per_dim=4.0
+    )
+
+    # HM-S10-08: Execution-Class-Matched Spot-Check Validator & Fixed-Point Q16 Digest
+    spot_validator = DeterministicSpotCheckValidator(tolerance_eps=1e-4)
+    worker_cls_fp32 = ExecutionClassProfile(
+        accelerator_class=hw["backend"],
+        dtype="fp32",
+        thread_count=4,
+    )
+    validator_cls_bf16 = ExecutionClassProfile(
+        accelerator_class=hw["backend"],
+        dtype="bf16",
+        thread_count=4,
+    )
+    assigned_val = spot_validator.assign_matching_validator(
+        worker_cls_fp32, [validator_cls_bf16, worker_cls_fp32]
+    )
+    same_class_spot = spot_validator.evaluate_two_statistic_replay(
+        primary_trained_state,
+        primary_trained_state,
+        worker_class=worker_cls_fp32,
+        validator_class=worker_cls_fp32,
+    )
+    cross_dtype_spot = spot_validator.evaluate_two_statistic_replay(
+        primary_trained_state,
+        primary_trained_state,
+        worker_class=worker_cls_fp32,
+        validator_class=validator_cls_bf16,
+    )
+    q16_check = verify_fixed_point_q16_digest(primary_trained_state, primary_trained_state)
+    stage7_ms = round((time.perf_counter() - t_stage7) * 1000.0, 2)
+
 
     peak_vram_mib = (
         round(torch.cuda.max_memory_allocated(train_device) / (1024 * 1024), 3)
@@ -664,6 +906,19 @@ def run_multi_moe_hf_campaign(
         and math.isclose(float(iso_cts_report["mean_condition_number_after"]), 1.0, rel_tol=1e-4)
         and pulse_2bit_stats["conservation_error_l2"] <= 1e-4
         and looped_logits_finite
+        and quorum_selection.reached is True
+        and quorum_delta is not None
+        and outer_res_2.momentum_restarted is True
+        and skip_token_report["realized_from_forward_pass"] is True
+        and bool(torch.isfinite(looped_ortho_out.loss).item())
+        and cas_lease_summary.get("conservation_holds") is True
+        and e8_stats["measured_rate_bits_per_dim"] > 0.0
+        and async_round_report["token_conservation_holds"] is True
+        and kv_codec_bench["controls_all_passed"] is True
+        and assigned_val == worker_cls_fp32
+        and same_class_spot.passed is True
+        and cross_dtype_spot.passed is False
+        and q16_check["passed"] is True
     )
 
     symbolic_points_awarded = 1500 if hw["is_gpu"] else 750
@@ -740,6 +995,32 @@ def run_multi_moe_hf_campaign(
             "hm_s7_01_looped_moe_backbone_logits_finite": looped_logits_finite,
             "leveraged_github_repos_count": len(LEVERAGED_GITHUB_REPOSITORIES),
             "stage6_elapsed_ms": stage6_ms,
+        },
+        "stage7_season9_10_quorum_and_lattice": {
+            "hm_s9_01_quorum_reached": quorum_selection.reached,
+            "hm_s9_01_min_quorum_k": eff_quorum_k,
+            "hm_s9_01_num_admitted": quorum_telemetry.num_admitted,
+            "hm_s9_01_quorum_merge_mode": quorum_merge_mode,
+            "hm_s9_01_merged_delta_norm": round(quorum_telemetry.merged_delta_norm, 6),
+            "hm_s9_01_direct_average_norm": round(quorum_telemetry.direct_average_norm, 6),
+            "hm_s9_02_skip_token_report": skip_token_report,
+            "hm_s9_03_ortho_depth_prior_telemetry": looped_ortho.last_depth_prior_telemetry,
+            "hm_s9_03_terminal_kv_sharing": terminal_kv_report,
+            "hm_s9_04_factored_gossip": gossip_report,
+            "hm_s9_05_momentum_restarted_on_step2": outer_res_2.momentum_restarted,
+            "hm_s9_06_cas_lease_ledger": cas_lease_summary,
+            "hm_s9_13_continuous_async_learner": async_round_report,
+            "hm_s9_14_campaign_rda_and_delta_cosine": rda_cosine_analysis,
+            "hm_s10_01_e8_lattice_rate_bits_per_dim": e8_stats["measured_rate_bits_per_dim"],
+            "hm_s10_01_e8_lattice_relative_mse": e8_stats["relative_mse"],
+            "hm_s10_05_kv_cache_codec_benchmark": kv_codec_bench,
+            "hm_s10_08_execution_class_spot_check": {
+                "assigned_validator_class": assigned_val.class_key() if assigned_val else None,
+                "same_class_passed": same_class_spot.passed,
+                "cross_dtype_rejected": not cross_dtype_spot.passed,
+                "fixed_point_q16_exact": q16_check["exact_digest_match"],
+            },
+            "stage7_elapsed_ms": stage7_ms,
         },
     }
 
@@ -830,6 +1111,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=DEFAULT_CAMPAIGN_REPORT_PATH,
         help="Path to write the JSON campaign receipt",
     )
+    parser.add_argument(
+        "--min-quorum-k",
+        type=int,
+        default=None,
+        help="Minimum quorum K for Decoupled DiLoCo syncer (HM-S9-01)",
+    )
+    parser.add_argument(
+        "--grace-margin-gamma",
+        type=float,
+        default=0.5,
+        help="Safety margin gamma in [0, 1) for adaptive grace window (HM-S9-01)",
+    )
+    parser.add_argument(
+        "--quorum-merge-mode",
+        choices=("rda", "direct"),
+        default="rda",
+        help="Quorum outer merge mode: 'rda' (Radial-Directional Averaging) or 'direct' (HM-S9-01)",
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     tier_steps = {"quick": 4, "standard": 12, "deep": 24}[args.tier]
@@ -842,6 +1141,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         domain_limit=args.domain_limit,
         live_hf_stream=args.live_hf_stream,
         output_path=args.output,
+        min_quorum_k=args.min_quorum_k,
+        grace_margin_gamma=args.grace_margin_gamma,
+        quorum_merge_mode=args.quorum_merge_mode,
     )
     print(format_campaign_markdown_summary(report))
     return 0 if report["all_checks_passed"] else 1

@@ -11,7 +11,7 @@ repository-code: "https://github.com/xaviercallens/HiveMind"
 url: "https://github.com/xaviercallens/HiveMind"
 license: MIT
 version: 2.3.1
-doi: 10.5281/zenodo.23602528
+doi: 10.5281/zenodo.23607597
 date-released: "2026-10-23"
 keywords:
   - decentralized-training

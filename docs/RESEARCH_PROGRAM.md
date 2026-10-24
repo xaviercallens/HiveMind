@@ -228,7 +228,7 @@ exists, its receipt matches, and the scientific lead has recorded the prediction
 
 - **E5-het** (`artifacts/experiments/E5_het_report.json`, 2,652 runs incl. the pre-registered grid extension, 3 seeds, all controls passed, `ρ = 0` reproduces E5-toy to 1e-9): the heterogeneity knob works (delta cosine 0.909 → 0.079; `||RDA||/||direct||` 1.04 → 2.25 at M = 8, and the common-norm formula of the paper's Proposition predicts 1.80 / 2.27 from the cosines, within 1 %). On the original LR grid every best LR was censored at the top (the toy trains far below its optimal step); the pre-registered extension (amendment 2) found the optimum at the divergence edge: direct best at η = 6.79 for both M, RDA best at 4.8 for both M. **P2 refuted by the rule** (direct's best LR does not grow with M; the arg-mins are not separated by their intervals, so the rule needs an interval-separation clause at 0.5B), **P9 refuted at M = 8** (best-LR ratio √2 vs predicted 2.25), supported at M = 4; **P3 inconclusive** (+0.003 ± 0.012); **P4 refuted at every ρ** (−0.0025 ± 0.0023 at ρ = 4). P3/P4 were measured on the original grid, i.e. at LRs far below the optimum: low power.
 - **E10-lattice** (`artifacts/experiments/E10_lattice_report.json`, 36 runs, 46 s; `E10_lattice_first_execution_lr2.4.json` kept as sensitivity): **P10a supported** (E₈/ℤ⁸ relative-MSE ratio 0.79 ± 0.02 at the matched ≈1.7-bit rate; Gaussian value 0.86), **P10b inconclusive** (−0.003 ± 0.019 with EF), **P10c supported** (−0.012 ± 0.077). The 2-bit cells are invalid (rates 3.10 vs 3.36 unmatched) and all realised rates drift above target because the scale was calibrated once on a round-0 delta: per-round scale adaptation is a prerequisite of `HM-S10-01`.
-- **Independent Lean gate** (`artifacts/lean_independent_runner_check.json`): AutoevolveAI's `anse.formal.lean_runner` found 13 theorems with no `#print axioms` line; added; now 120/120, 0 sorry, 0 untrusted axioms. The theorem count was right, the axiom coverage was not.
+- **Independent Lean gate** (`artifacts/lean_independent_runner_check.json`): AutoevolveAI's `anse.formal.lean_runner` found 13 theorems with no `#print axioms` line; added; now 120/120, 0 sorry, 0 untrusted axioms. The theorem count was right, the axiom coverage was not. Re-run 2026-10-24 on the 128-theorem file that reached `main` by direct push: 128/128, 0 sorry, 0 untrusted; Theorems 125 and 127 flagged (tautological conjunct; unused gate hypothesis) → `HM-S10-09`.
 - **Decision consequences applied**: PA-CGAD stays off by default under quorum (P4); RDA stays "norm bookkeeping" in the paper's claims (P2/P9 at toy scale); the E5 rule for 0.5B gains an interval-separation clause and an LR sweep up to divergence for both merges; the E₈ codec is a selectable option, not the default, until E10b at 0.5B (`HM-S10-01`).
 - **Leveraged from the owner's other projects** (ROADMAP §3.8): OptimalEnergyAI decoders and rate accounting (E10), AutoevolveAI Lean runner (PROV-27) and APIExtractor (HM-S9-09), GWAYA zero-stub audit (78 files clean), runux signSGD as the 1-bit arm's motivation (re-implemented, licence), xavuntu `tpu_trainer.py` as the TPU-learner candidate (HM-S10-03), Xbrain/brain Rust learner feasibility (HM-S10-04).
 - Ledger: `artifacts/predictions_ledger.json` now carries E5-toy and E5-het decisions per prediction plus P9 and P10a–c.
@@ -245,6 +245,47 @@ exists, its receipt matches, and the scientific lead has recorded the prediction
 - Paper v3.5.1 (Directions subsection, 5 self-citations verified against the Zenodo API) republished on Zenodo.
 - **External review of v3.5.0 received** (provenance unstated; recorded verbatim in `paper/review/external_review_v3.5.0_2026-10-23.md` with a point-by-point response). Accepted: hardware-heterogeneity caveat on the ε-spot-check (new RQ11/E12, `HM-S10-08`), compounding-approximations threat (E8 all-on vs each-off cells), PoC-scale caveat, architecture figure, Skip-Token dropout note, PA-CGAD-under-quorum note. Declined: moving the scripted-review correction out of the manuscript. Four reported typos were PDF-text-extraction artefacts (source and PDF text checked). Paper v3.6.0.
 
+### 2026-10-23 (late) — E12 pilot run (CPU classes), gatekeeper in place
+
+- **E12-pilot** (`artifacts/experiments/E12_pilot_report.json`; prereg before any run): same host + same thread
+  count reproduces the 50-step LoRA segment bit for bit (P12a supported); **thread count alone** (1 or 8 instead
+  of 4) diverges to 2.6e-4 / 2.5e-4 > ε = 1e-4 (P12b **refuted**); the TPU-VM CPU host (other CPU, torch build,
+  library versions, same 4 threads) diverges to 1.5e-4, above ε but *less* than the thread cells (P12c refuted
+  as stated: reduction order, not the host, dominates); tampered control 1.25e-3 with 96/96 tensors above ε vs
+  3–5/96 for honest divergence. Decision applied: the
+  spot-check rule is re-specified as execution-class matched (accelerator class, build, dtype, thread count /
+  deterministic-kernel flags) with a per-class ε and a tensor-count term; GPU classes remain `HM-S10-08`.
+- **Merge authority**: `scripts/pr_gatekeeper.py` runs hourly (owner-only automatic merges, PR text is data);
+  branch protection on `main` blocks forced pushes and deletions and requires the two CI jobs.
+
+### 2026-10-24 — E12 pilot complete: bf16 cell (P12d)
+
+- **P12d supported**: the bf16-autocast cell (same host, build and 4 threads; fp32 master adapter weights) replayed
+  against the fp32 reference diverges from step 0 to **3.3e-3** with 96/96 tensors above ε and a max loss difference
+  of 1.7e-2 — 13× the honest fp32 divergence and **2.7× the tampered control** (1.25e-3). Both statistics of the
+  re-specified rule (ℓ∞ and tensor count) saturate, so an fp32 validator cannot tell an honest bf16 worker from a
+  tamperer at any ε: dtype is a class boundary; bf16 workers get a bf16 validator and their own ε measured on GPU
+  (`HM-S10-08`, pre-registered consequence). The cell took 19,233 s on CPU (single-threaded bf16 path) vs 3–16 min
+  for fp32 cells; the GPU bf16 class is the one that matters and is not measured here. Paper v3.7.1, PROV-34.
+
+### 2026-10-24 (morning) — Lean gate at 128; T4 branch reviewed before its PR; `main` locked to PRs
+
+- **Independent Lean gate re-run** on the 128-theorem file that reached `main` by direct push: 128/128, 0 sorry, 0 untrusted
+  axioms (`artifacts/lean_independent_runner_check.json`, schema v1.1 keeps the 23 Oct run as `previous_run`). Theorems 125
+  and 127 compile but do not constrain the σ-MoE gate / factored-gossip barrier they are named after → `HM-S10-09`.
+- **T4 branch review** (`docs/review/t4_branch_review_2026-10-24.md`): E10b INVALID (positive control failed, seed 3);
+  E11 Qwen-7B row invalid (negative control failed, −0.47 ± 0.20 nats); E12-GPU (same-T4 exact, every class crossing
+  > ε, fp64+snap proxy does not help) and E13 (P13b refuted: the all-on swarm keeps −0.05 ± 0.35 of the single-learner
+  gain; the K<M quorum with a persistent straggler is the mechanism, no-quorum retention 0.94) are sound and will be
+  the headline of v3.8.0 (the branch has since been merged with `main` and the manuscript re-based as v3.8.0).
+- **Governance**: `main` requires a PR and enforces admins after two coordinator commits with the owner's e-mail
+  bypassed the gate; gatekeeper retries merges of ACCEPTed heads (PR #125).
+- **Hardening (owner's brief)**: `HiveMindFirewall` delivered with a 59-vector scripted red team (first run 47/49, two defects
+  fixed, second 49/49, 0 false positives); Season 11 tasks in ROADMAP §3.9; design `docs/SECURITY_HARDENING_PHASE.md`.
+- **Compute economy (owner's brief)**: BOINC-credit coin and Nash-equilibrium market proposed (`docs/COMPUTE_COIN_AND_MARKET.md`);
+  pre-registered simulation: Kelly efficiency ≥ 0.80, 300/300 Tullock certified, routing 55/60 undamped → 60/60 damped (run 1 kept).
+  Proposed, not adopted (`HM-S12-02`); Season 12 in ROADMAP §3.10.
+
 ### 2026-10-24 — 10-hour T4 campaign: E11, E12, E10b decided as registered; E11b exploratory sweep
 
 Report: `docs/benchmarks/T4_10h_campaign_report.md` (generated from the receipts by `scripts/write_t4_benchmark_report.py`).
@@ -252,15 +293,16 @@ Ledger: `artifacts/predictions_ledger.json` (P11a, P11b, P12-* added; E10b attac
 
 - **E11 (RQ10)** on real KV tensors of Qwen2.5-0.5B-Instruct (fp16), Qwen2.5-Coder-7B-Instruct (fp16, embeddings on
   CPU) and Gemma-4-E4B (bf16, per-layer embeddings on CPU), WikiText-2, 1024-token windows, 3 seeds:
-  **P11a 'refuted' on all three models under the registered rule** (no detectable gain of A₂ per RoPE plane over
-  entropy-coded scalar at any rate-matched R) — Gemma has 3 matched rates, both Qwen models only R = 4 (Qwen-7B: 5/18
-  lattice cells matched), so the Qwen verdicts are weak and 3 seeds give low power; **P11b refuted** on Gemma (E₈
-  already beats ℤ without the KLT; inconclusive on 0.5B; 'supported' on 7B by one matched KLT cell and one matched
-  no-transform cell). Consequence: the KV ring stays on FP8 (`HM-S10-05` keeps the pluggable codec,
-  adopts none). Amendment 1 (per-layer calibration rate) was made after the first 0.5B execution and before any 7B /
-  Gemma result; the A₂@8-vs-FP8 negative control fails on both Qwen models because e4m3 keeps 3 mantissa bits (a
-  design error, kept as registered). Many 7B cells missed the matched-rate band; Qwen-7B is extremely KV-sensitive
-  (FP8 ΔNLL +0.47 nats).
+  **the Qwen2.5-Coder-7B row is INVALID** (the negative control `negative_A2at8_equals_fp8` failed at -0.47 +- 0.20
+  nats: an 8-bit lattice cannot be half a nat better than FP8 unless the FP8 arm is broken on this float16 model), so
+  its verdicts (P11a refuted, P11b 'supported on one matched cell') are WITHDRAWN and no 7B number is to be quoted
+  until the FP8 arm has been investigated (scientific lead's review). **P11a refuted on Qwen2.5-0.5B on one
+  rate-matched cell (R = 4; R = 2 and 3 are not rate-matched)** and on Gemma (3 matched rates; all intervals include
+  0); 3 seeds give low power. **P11b refuted** on Gemma (E₈ already beats ℤ without the KLT) and inconclusive on 0.5B.
+  Consequence: the KV ring stays on FP8 (`HM-S10-05` keeps the pluggable codec, adopts none). Amendment 1 (per-layer
+  calibration rate) was made after the first 0.5B execution and before any 7B / Gemma result; on 0.5B the
+  A₂@8-vs-FP8 negative control reads -0.04 nats (e4m3 keeps 3 mantissa bits, so FP8 is coarser than an 8-bit lattice;
+  a design error, kept as registered and reported), so only Gemma passed every control.
 - **E12 (RQ11)**: **P12-same supported** (same T4, separate process: ‖Δθ‖∞ = 0.0 in 9/9), **P12-cross supported** (T4 vs
   x86 CPU, fp32: 2.0e-4–6.3e-4 > ε in 9/9), controls pass. The fp64 + 2⁻²⁰ snapping proxy does not reduce the
   cross-device divergence, which sits near the inner lr from step 10 on — consistent with Adam's sign-like early steps
@@ -286,7 +328,7 @@ Statuses of E14 / E15 are computed from the receipted reports by the registered 
 
 - **E13 (registered, earlier on 2026-10-24; first logged here)**, localhost swarm over real HTTP on one T4, no WAN claim: P13a **supported** (S1 equals S0 bit-identically on Qwen2.5-0.5B, Granite-3.1-1B, Granite-3B; also with two real OS processes at M = 2), P13c **supported** (upload 0.09 of raw fp32 on all three models), P13b **refuted** on Qwen2.5-0.5B (retention -0.051 +- 0.350 against the 0.5 bar) and on Granite-1B (-0.658 +- 0.665); Granite-3B has one seed (descriptive, -0.698). Each-off cells (Qwen): without the quorum (K = M) retention is 0.942, without the codec 0.114, without RDA 0.264. E13c (rotating straggler, exploratory): retention +0.402 +- 0.304, so starvation of the persistent-straggler domain explains part of the loss and K < M itself the rest.
 - **E13d (six non-IID domains, six workers, exploratory replication, amendment 6)**: P13a **supported**, P13c **supported**, P13b **inconclusive** (retention +0.290 +- 0.391, interval [-0.100, +0.681] includes the 0.5 bar); K = M keeps 0.942. The registered refutation at M = 4 is therefore not replicated as a refutation, and not confirmed either; three seeds, thread-hosted peers.
-- **E14 (fair quorum S6 and deferred carry S7 against the plain K < M swarm S2; exploratory, 3 seeds, two hypotheses per model, no correction)**: dense Qwen2.5-0.5B: **H14a supported** (S2 - S6 = +0.124 +- 0.055 nats; retention 0.879 +- 0.079 against -0.051 +- 0.350 for S2; round latency 1.28x S2) and **H14b supported** (S2 - S7 = +0.077 +- 0.066; retention 0.528 +- 0.184). Granite-3.1-1B-A400M MoE: **H14a inconclusive** (+0.016 +- 0.026; retention -0.080), **H14b inconclusive** (-0.016 +- 0.034; retention S7 -0.665, S2 -0.371). The dense-model support does not transfer clearly to the MoE at this size. Decision consequence (as registered): S6/S7 are candidate admission policies for the multi-host gameday (`HM-S9-07`) and stay opt-in (`HM-S10-09`), to be confirmed with more seeds, on MoE and on the WAN; the constants (MAX_EXCLUSION 1, MAX_STALENESS 2) were not tuned.
+- **E14 (fair quorum S6 and deferred carry S7 against the plain K < M swarm S2; exploratory, 3 seeds, two hypotheses per model, no correction)**: dense Qwen2.5-0.5B: **H14a supported** (S2 - S6 = +0.124 +- 0.055 nats; retention 0.879 +- 0.079 against -0.051 +- 0.350 for S2; round latency 1.28x S2) and **H14b supported** (S2 - S7 = +0.077 +- 0.066; retention 0.528 +- 0.184). Granite-3.1-1B-A400M MoE: **H14a inconclusive** (+0.016 +- 0.026; retention -0.080), **H14b inconclusive** (-0.016 +- 0.034; retention S7 -0.665, S2 -0.371). The dense-model support does not transfer clearly to the MoE at this size. Decision consequence (as registered): S6/S7 are candidate admission policies for the multi-host gameday (`HM-S9-07`) and stay opt-in (`HM-S10-13`), to be confirmed with more seeds, on MoE and on the WAN; the constants (MAX_EXCLUSION 1, MAX_STALENESS 2) were not tuned.
 - **E15 (GWAYA-gated RFT of Qwen2.5-Coder-1.5B-Instruct, 7.5 GiB cap on the T4; MBPP-sanitized n = 257, HumanEval n = 164)**: **H15b supported** (the GWAYA inference loop C1 - C0 = +7.0 points, 19 problems gained and 1 lost, McNemar p = 4.0e-05); **H15a inconclusive** (RFT-tuned greedy C2 - C0 = +0.8 points, p = 0.85: no detected gain from the fine-tuning; HumanEval C2h - C0h = +0.6 points, p = 1.0, descriptive); **H15d supported** (peak reserved 4.47 GiB at most); stacking C3 - C1 = +1.2 points (p = 0.66), C3 - C0 = +8.2 points (descriptive). RFT yield: 359 of 462 train problems gave at least one accepted sample, 673 kept pairs. One training seed, one model size; the loop costs about 4.4x the GPU seconds of greedy decoding. Decision consequence (as registered): the inference-time gate alone is the efficient path; training needs more verified data before it is worth recommending.
 - **E16 (GWAYA draft PR #21 P1/P2 measured on the T4, Qwen2.5-Coder 1.5B/3B/7B Q4_K_M via Ollama, MBPP n = 257)**: H16a **supported** (7B: 5483 MiB at num_ctx 4096 and 6387 MiB at 8192, both under 6656 MiB), H16b **adequate** (all measured/estimated VRAM ratios in 0.93-1.21), H16c **supported** on all tiers (the loop never lowers pass@1), H16d **supported** for 1.5B (+8.6 points) and 3B (+7.4) but **inconclusive** for 7B (+3.9 points, p = 0.002, below the +5.0 bar), H16e **supported** (precision of VERIFIED 92.6 % / 92.8 % / 94.8 %, so 5-7 % of VERIFIED solutions still fail the hidden tests), H16f met (7B decode 28.5 tok/s). Descriptive: the 1.5B -> 3B -> 7B ladder reaches 85.2 % against 85.6 % for the 7B loop alone at 78 % of its model time. Run valid (idle GPU, gate, unload).
 - **GWAYA-Lite deployment**: `scripts/gwaya_lite.py` (CLI + localhost OpenAI-compatible gateway, loopback only) runs on the T4 at port 8099; the live check (`artifacts/gwaya_lite_live_check.json`) shows 3 of 3 small tasks VERIFIED (the ladder escalated to 3B for fizzbuzz), a request without tests answered AUDITED, SSE streaming, foreign Host / Origin rejected with 403, 1639 MiB of GPU memory in use afterwards (qwen2.5-coder:1.5b resident, 1514 MiB). Three small tasks are a smoke check, not a benchmark; the editor-integration examples are untested in real editors.

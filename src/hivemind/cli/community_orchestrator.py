@@ -377,7 +377,95 @@ SEASON7_TASK_CATALOG: dict[str, dict[str, str]] = {
         "verify": "uv run python paper/autoevolve_peer_review_pipeline.py",
         "points": "2,000 PTS / $HIVE (Reciprocal Compute Benefits Only)",
     },
+    "HM-S10-01": {
+        "branch": "feat/s10-e8-lattice-wire-codec",
+        "target": "src/hivemind/swarm/diloco_nextgen.py & src/hivemind/compress/lattice_quantizer.py",
+        "title": "Wire Conway-Sloane E8/Z8/Sign LatticeDeltaQuantizer into ComputeVisibleSparseLoCoCompressor with Per-Round Scale Adaptation",
+        "verify": "uv run pytest tests/test_lattice_quantizer.py tests/test_season9_10_coordinator_deliverables.py -v",
+        "points": "3,500 PTS / $HIVE (Reciprocal Compute Benefits Only)",
+    },
+    "HM-S10-02": {
+        "branch": "feat/s10-orchestrator-lean-axioms-gate",
+        "target": "src/hivemind/cli/community_orchestrator.py",
+        "title": "Enforce One-#print-axioms-Per-Theorem Lean 4 Gate & Scientific-Lead File Guard in community_orchestrator.py",
+        "verify": "uv run pytest tests/test_community_orchestrator.py tests/test_season9_10_coordinator_deliverables.py -v",
+        "points": "3,000 PTS / $HIVE (Reciprocal Compute Benefits Only)",
+    },
+    "HM-S9-13": {
+        "branch": "feat/s9-continuous-async-learner-quorum",
+        "target": "src/hivemind/swarm/decoupled_diloco.py",
+        "title": "Continuous Asynchronous Learner Coordinator (deferred_token_weighted & eager_one_step straggler folding, E12 P5b)",
+        "verify": "uv run pytest tests/test_season9_10_coordinator_deliverables.py -v",
+        "points": "3,500 PTS / $HIVE (Reciprocal Compute Benefits Only)",
+    },
+    "HM-S9-14": {
+        "branch": "feat/s9-campaign-rda-delta-cosine-diagnostic",
+        "target": "src/hivemind/swarm/decoupled_diloco.py & src/hivemind/cli/multi_moe_hf_campaign.py",
+        "title": "Campaign RDA vs Direct Pairwise Delta-Cosine Diagnostic & Theoretical Common-Norm Ratio Verification (E12 P5a)",
+        "verify": "uv run pytest tests/test_season9_10_coordinator_deliverables.py -v",
+        "points": "3,000 PTS / $HIVE (Reciprocal Compute Benefits Only)",
+    },
+    "HM-S10-05": {
+        "branch": "feat/s10-a2-hexagonal-kv-cache-codecs",
+        "target": "src/hivemind/compress/lattice_quantizer.py & src/hivemind/core/btm_moe.py",
+        "title": "Conway-Sloane 2D Hexagonal A2 Lattice Decoder & Pluggable KV-Cache Page Codecs (a2_rope_plane, e8_lattice, fp8_e4m3)",
+        "verify": "uv run pytest tests/test_season9_10_coordinator_deliverables.py -v",
+        "points": "3,500 PTS / $HIVE (Reciprocal Compute Benefits Only)",
+    },
+    "HM-S10-08": {
+        "branch": "feat/s10-execution-class-two-stat-spot-check",
+        "target": "src/hivemind/boinc/validator.py",
+        "title": "Execution-Class-Matched Validator Assignment, Two-Statistic Spot-Check Rule & Fixed-Point Q16 Digest Prototype (E12 P12)",
+        "verify": "uv run pytest tests/test_season9_10_coordinator_deliverables.py -v",
+        "points": "3,500 PTS / $HIVE (Reciprocal Compute Benefits Only)",
+    },
 }
+
+SCIENTIFIC_LEAD_PROTECTED_PATHS: tuple[str, ...] = (
+    "paper/",
+    "citation.cff",
+    "docs/acknowledgments_and_citations.md",
+    "wiki/",
+)
+
+
+def touches_scientific_lead_protected_files(
+    changed_files: list[dict[str, Any]],
+) -> list[str]:
+    """Return any changed file paths owned by the Scientific Lead (`paper/`, citations, `wiki/`)."""
+    protected: list[str] = []
+    for item in changed_files:
+        raw_path = str(item.get("filename") or item.get("path") or "").strip()
+        norm = raw_path.replace("\\", "/").lstrip("./").lower()
+        if any(norm == p.rstrip("/") or norm.startswith(p) for p in SCIENTIFIC_LEAD_PROTECTED_PATHS):
+            protected.append(raw_path)
+    return protected
+
+
+def verify_lean_print_axioms_coverage(lean_source: str) -> dict[str, Any]:
+    """HM-S10-02: Verify that every `theorem` declaration in `lean_source` has a `#print axioms` line."""
+    no_block = re.sub(r"/-.*?-/", "", lean_source, flags=re.DOTALL)
+    clean_src = re.sub(r"--[^\n]*", "", no_block)
+    declared = re.findall(
+        r"^[ \t]*(?:@\[[^\]\n]*\][ \t]*)*(?:(?:private|protected|noncomputable|unsafe)[ \t]+)*theorem[ \t]+([^\s:({\[]+)",
+        clean_src,
+        flags=re.MULTILINE,
+    )
+    printed = re.findall(
+        r"^[ \t]*#print[ \t]+axioms[ \t]+([^\s\n]+)",
+        clean_src,
+        flags=re.MULTILINE,
+    )
+    unprinted: list[str] = []
+    for thm in declared:
+        if not any(p == thm or p.endswith("." + thm) for p in printed):
+            unprinted.append(thm)
+    return {
+        "declared_theorems": len(declared),
+        "print_axioms_lines": len(printed),
+        "unprinted_theorems": unprinted,
+        "all_theorems_have_print_axioms": len(declared) > 0 and len(unprinted) == 0,
+    }
 
 
 def evaluate_pull_request_for_merge(
@@ -405,6 +493,7 @@ def evaluate_pull_request_for_merge(
         author_email=str(author_email) if author_email is not None else None,
     )
 
+    protected_files = touches_scientific_lead_protected_files(changed_files)
     can_merge = bool(
         not is_draft
         and mergeable == "MERGEABLE"
@@ -412,8 +501,14 @@ def evaluate_pull_request_for_merge(
         and not sec_report.blocked_merge
         and sec_report.risk_score == 0
         and len(changed_files) > 0
+        and len(protected_files) == 0
     )
-    verdict = "APPROVE_AND_MERGE" if can_merge else "HOLD_FOR_REVISION"
+    if protected_files:
+        verdict = "HOLD_FOR_SCIENTIFIC_LEAD_REVIEW"
+    elif can_merge:
+        verdict = "APPROVE_AND_MERGE"
+    else:
+        verdict = "HOLD_FOR_REVISION"
     wiki_refs = recommend_wiki_references(f"{title}\n{body}", max_pages=3)
     wiki_links_md = _format_wiki_links_markdown(wiki_refs)
 
@@ -437,6 +532,7 @@ def evaluate_pull_request_for_merge(
         "author": author,
         "verdict": verdict,
         "can_merge": can_merge,
+        "scientific_lead_protected_files": protected_files,
         "security_passed": sec_report.passed,
         "risk_score": sec_report.risk_score,
         "functional_lines_added": sec_report.functional_lines_added,
@@ -697,9 +793,16 @@ def run_hourly_quality_and_experiment_audit(repo_root: Path | None = None) -> di
 
     lean_theorems = 0
     lean_sorry = 0
+    lean_print_axioms_lines = 0
+    lean_unprinted_theorems: list[str] = []
+    lean_axioms_complete = False
     if lean_path.exists():
         lean_src = lean_path.read_text(encoding="utf-8")
-        lean_theorems = len(re.findall(r"^\s*theorem\s+\w+", lean_src, flags=re.MULTILINE))
+        ax_cov = verify_lean_print_axioms_coverage(lean_src)
+        lean_theorems = int(ax_cov["declared_theorems"])
+        lean_print_axioms_lines = int(ax_cov["print_axioms_lines"])
+        lean_unprinted_theorems = list(ax_cov["unprinted_theorems"])
+        lean_axioms_complete = bool(ax_cov["all_theorems_have_print_axioms"])
         lean_no_comments = re.sub(r"/-.*?-/", "", lean_src, flags=re.DOTALL)
         lean_no_comments = re.sub(r"--.*$", "", lean_no_comments, flags=re.MULTILINE)
         lean_sorry = len(re.findall(r"\bsorry\b", lean_no_comments))
@@ -713,16 +816,16 @@ def run_hourly_quality_and_experiment_audit(repo_root: Path | None = None) -> di
             hyp_passed = int(hyp_data.get("passed_hypotheses", hyp_data.get("passed_count", 0)))
             hyp_total = int(hyp_data.get("total_hypotheses", 0))
             hyp_sha = str(hyp_data.get("receipt_sha256", hyp_data.get("report_sha256", "")))
-        except Exception:
-            pass
+        except (OSError, ValueError, TypeError):
+            hyp_passed = 0
 
     h11_passed = False
     if h11_path.exists():
         try:
             h11_data = json.loads(h11_path.read_text(encoding="utf-8"))
             h11_passed = bool(h11_data.get("all_passed", False))
-        except Exception:
-            pass
+        except (OSError, ValueError, TypeError):
+            h11_passed = False
 
     exp_sha = ""
     exp_suites_present = 0
@@ -731,8 +834,8 @@ def run_hourly_quality_and_experiment_audit(repo_root: Path | None = None) -> di
             exp_data = json.loads(exp_path.read_text(encoding="utf-8"))
             exp_sha = str(exp_data.get("receipt_sha256", exp_data.get("report_sha256", "")))
             exp_suites_present = sum(1 for k in exp_data if k.startswith("experiment_e"))
-        except Exception:
-            pass
+        except (OSError, ValueError, TypeError):
+            exp_suites_present = 0
 
     technical_gate_pass_rate = 0.0
     peer_provenance_passed = 0
@@ -746,8 +849,8 @@ def run_hourly_quality_and_experiment_audit(repo_root: Path | None = None) -> di
             )
             peer_provenance_passed = len(re.findall(r'"check_id":\s*"PROV-\d+"', peer_src))
             peer_sha = hashlib.sha256(peer_src.encode("utf-8")).hexdigest()
-        except Exception:
-            pass
+        except (OSError, ValueError, TypeError):
+            technical_gate_pass_rate = 0.0
 
     owner_identity = verify_local_git_owner_identity(root)
     guard_self_check = OwnerOrderGuardrail(strict_orders_only=True)
@@ -762,6 +865,7 @@ def run_hourly_quality_and_experiment_audit(repo_root: Path | None = None) -> di
     all_healthy = bool(
         lean_theorems >= 120
         and lean_sorry == 0
+        and lean_axioms_complete
         and hyp_passed == 10
         and h11_passed
         and exp_suites_present == 4
@@ -775,6 +879,9 @@ def run_hourly_quality_and_experiment_audit(repo_root: Path | None = None) -> di
         "authorized_owner_email": AUTHORIZED_OWNER_EMAIL,
         "local_git_owner_verified": owner_identity["owner_identity_verified"],
         "lean4_theorems_verified": lean_theorems,
+        "lean4_print_axioms_lines": lean_print_axioms_lines,
+        "lean4_unprinted_theorems": lean_unprinted_theorems,
+        "lean4_all_theorems_have_print_axioms": lean_axioms_complete,
         "lean4_sorry_count": lean_sorry,
         "hypotheses_passed": f"{hyp_passed}/{hyp_total}",
         "decoupled_diloco_h11_passed": h11_passed,
@@ -784,7 +891,9 @@ def run_hourly_quality_and_experiment_audit(repo_root: Path | None = None) -> di
         "paper_technical_gate_pass_rate": technical_gate_pass_rate,
         "paper_provenance_checks_passed": peer_provenance_passed,
         "peer_review_report_sha256": peer_sha,
-        "open_season9_tasks_count": sum(1 for k in SEASON7_TASK_CATALOG if k.startswith("HM-S9-")),
+        "open_season9_tasks_count": sum(1 for k in SEASON7_TASK_CATALOG if k.startswith("HM-S9-0")),
+        "open_season9_extended_tasks_count": sum(1 for k in SEASON7_TASK_CATALOG if k.startswith("HM-S9-")),
+        "open_season10_tasks_count": sum(1 for k in SEASON7_TASK_CATALOG if k.startswith("HM-S10-")),
     }
 
 

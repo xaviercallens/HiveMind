@@ -407,3 +407,297 @@ class DecoupledDiLoCoQuorumSyncer:
             mean_learner_delta_norm=mean_delta_norm,
         )
         return merged.to(dtype=global_prev.dtype, device=global_prev.device), selection, telemetry
+
+
+class ContinuousAsyncLearnerCoordinator:
+    """Season 9 (`HM-S9-13`): Continuous Learner Loop with Eager vs Deferred-Token-Weighted Straggler Rules.
+
+    Fixes the round-synchronous E8 pilot defect where a slow WAN learner that missed the quorum
+    window had its work discarded (`"drop"`). Supports three straggler policies:
+      - `"drop"`: round-synchronous baseline (discards late arrivals from earlier rounds).
+      - `"deferred_token_weighted"`: Decoupled DiLoCo Algorithm 1 (`arXiv:2604.21428`) — late learners
+        carry their accumulated delta and token count into the next quorum merge with token weight
+        `w_m = tokens_since_sync`.
+      - `"eager_one_step"`: Eager 1-outer-step stale update (Kale et al., `arXiv:2502.12996`) — late
+        arrivals apply an immediate staleness-damped outer step (`staleness_decay ** lag`).
+    """
+
+    STRAGGLER_MODES = ("drop", "deferred_token_weighted", "eager_one_step")
+
+    def __init__(
+        self,
+        num_learners_m: int,
+        min_quorum_k: int,
+        straggler_mode: str = "deferred_token_weighted",
+        merge_mode: str = "rda",
+        staleness_decay: float = 0.85,
+    ) -> None:
+        if num_learners_m < 1:
+            raise ValueError("num_learners_m must be >= 1")
+        if not (1 <= min_quorum_k <= num_learners_m):
+            raise ValueError("min_quorum_k must satisfy 1 <= K <= M")
+        if straggler_mode not in self.STRAGGLER_MODES:
+            raise ValueError(f"straggler_mode must be one of {self.STRAGGLER_MODES}")
+        if merge_mode not in DecoupledDiLoCoQuorumSyncer.MERGE_MODES:
+            raise ValueError(f"merge_mode must be one of {DecoupledDiLoCoQuorumSyncer.MERGE_MODES}")
+        if not (0.0 < staleness_decay <= 1.0):
+            raise ValueError("staleness_decay must be in (0, 1]")
+
+        self.num_learners_m = int(num_learners_m)
+        self.min_quorum_k = int(min_quorum_k)
+        self.straggler_mode = straggler_mode
+        self.merge_mode = merge_mode
+        self.staleness_decay = float(staleness_decay)
+
+        self.current_round: int = 0
+        self._fresh_inbox: Dict[str, Dict[str, object]] = {}
+        self._deferred_carry: Dict[str, Dict[str, object]] = {}
+        self._eager_queue: List[Dict[str, object]] = []
+
+        self.total_submitted_tokens: int = 0
+        self.merged_tokens: int = 0
+        self.dropped_tokens: int = 0
+        self.eager_applied_steps: int = 0
+
+    def submit_learner_delta(
+        self,
+        learner_id: str,
+        origin_round: int,
+        delta: torch.Tensor,
+        tokens_since_sync: int,
+        steps_since_sync: int,
+        arrival_time_s: float = 0.0,
+    ) -> Dict[str, object]:
+        """Submit a learner's outer delta `Delta_m = Theta_origin - theta_m`."""
+        if tokens_since_sync < 0 or steps_since_sync < 0:
+            raise ValueError("tokens_since_sync and steps_since_sync must be >= 0")
+        lid = str(learner_id)
+        d32 = delta.detach().to(torch.float32).clone()
+        self.total_submitted_tokens += int(tokens_since_sync)
+
+        if int(origin_round) == self.current_round:
+            if lid in self._deferred_carry:
+                carry = self._deferred_carry.pop(lid)
+                d32 = d32 + carry["delta"]  # type: ignore[operator]
+                tokens_since_sync += int(carry["tokens"])  # type: ignore[arg-type]
+                steps_since_sync += int(carry["steps"])  # type: ignore[arg-type]
+            self._fresh_inbox[lid] = {
+                "delta": d32,
+                "tokens": int(tokens_since_sync),
+                "steps": int(steps_since_sync),
+                "arrival_time_s": float(arrival_time_s),
+                "origin_round": int(origin_round),
+            }
+            return {"accepted": True, "disposition": "fresh_inbox", "round": self.current_round}
+
+        # Straggler arrival from an earlier round (origin_round < self.current_round)
+        lag = max(1, self.current_round - int(origin_round))
+        if self.straggler_mode == "drop":
+            self.dropped_tokens += int(tokens_since_sync)
+            return {
+                "accepted": False,
+                "disposition": "dropped_stale",
+                "lag_rounds": lag,
+                "round": self.current_round,
+            }
+
+        if self.straggler_mode == "deferred_token_weighted":
+            prev = self._deferred_carry.get(lid)
+            if prev is not None:
+                d32 = prev["delta"] + d32  # type: ignore[operator]
+                tokens_since_sync += int(prev["tokens"])  # type: ignore[arg-type]
+                steps_since_sync += int(prev["steps"])  # type: ignore[arg-type]
+            self._deferred_carry[lid] = {
+                "delta": d32,
+                "tokens": int(tokens_since_sync),
+                "steps": int(steps_since_sync),
+                "arrival_time_s": float(arrival_time_s),
+                "origin_round": int(origin_round),
+            }
+            return {
+                "accepted": True,
+                "disposition": "deferred_carry_with_token_weight",
+                "lag_rounds": lag,
+                "round": self.current_round,
+            }
+
+        # straggler_mode == "eager_one_step"
+        self._eager_queue.append(
+            {
+                "learner_id": lid,
+                "delta": d32,
+                "tokens": int(tokens_since_sync),
+                "steps": int(steps_since_sync),
+                "lag_rounds": lag,
+            }
+        )
+        return {
+            "accepted": True,
+            "disposition": "eager_one_step_queued",
+            "lag_rounds": lag,
+            "round": self.current_round,
+        }
+
+    @torch.no_grad()
+    def close_quorum_round(
+        self,
+        global_param: torch.Tensor,
+        outer_lr: float = 0.7,
+        grace_window_s: float = 0.0,
+    ) -> Tuple[torch.Tensor, Dict[str, object]]:
+        """Close the current round using admitted fresh + carried deferred/eager learner deltas."""
+        p32 = global_param.detach().to(torch.float32).clone()
+
+        # 1. If eager_one_step items are queued, apply them immediately with staleness damping
+        eager_ids: List[str] = []
+        for item in self._eager_queue:
+            lag = int(item["lag_rounds"])  # type: ignore[arg-type]
+            damp = self.staleness_decay ** lag
+            d_vec = item["delta"]  # type: ignore[assignment]
+            p32 = p32 - float(outer_lr) * damp * d_vec  # type: ignore[operator]
+            self.merged_tokens += int(item["tokens"])  # type: ignore[arg-type]
+            self.eager_applied_steps += 1
+            eager_ids.append(str(item["learner_id"]))
+        self._eager_queue.clear()
+
+        # 2. Combine fresh inbox + deferred carry learners for the quorum selection
+        combined: Dict[str, Dict[str, object]] = dict(self._deferred_carry)
+        for lid, entry in self._fresh_inbox.items():
+            if lid in combined:
+                prev = combined[lid]
+                combined[lid] = {
+                    "delta": prev["delta"] + entry["delta"],  # type: ignore[operator]
+                    "tokens": int(prev["tokens"]) + int(entry["tokens"]),  # type: ignore[arg-type]
+                    "steps": int(prev["steps"]) + int(entry["steps"]),  # type: ignore[arg-type]
+                    "arrival_time_s": float(entry["arrival_time_s"]),  # type: ignore[arg-type]
+                }
+            else:
+                combined[lid] = entry
+
+        arrivals = [
+            LearnerArrival(
+                learner_id=lid,
+                arrival_time_s=float(v["arrival_time_s"]),  # type: ignore[arg-type]
+                steps_since_sync=int(v["steps"]),  # type: ignore[arg-type]
+                tokens_since_sync=int(v["tokens"]),  # type: ignore[arg-type]
+            )
+            for lid, v in combined.items()
+        ]
+        eff_k = min(self.min_quorum_k, max(1, len(arrivals)))
+        selection = select_quorum(arrivals, min_quorum_k=eff_k, grace_window_s=grace_window_s)
+
+        admitted_deltas: List[torch.Tensor] = []
+        admitted_weights: List[float] = []
+        for lid in selection.admitted_learner_ids:
+            v = combined[lid]
+            admitted_deltas.append(v["delta"])  # type: ignore[arg-type]
+            w_m = token_weighted_quality_weight(int(v["tokens"]), int(v["steps"]))  # type: ignore[arg-type]
+            admitted_weights.append(w_m)
+            self.merged_tokens += int(v["tokens"])  # type: ignore[arg-type]
+
+        if admitted_deltas:
+            merged_delta = (
+                radial_directional_average(admitted_deltas, admitted_weights)
+                if self.merge_mode == "rda"
+                else direct_weighted_average(admitted_deltas, admitted_weights)
+            )
+            p32 = p32 - float(outer_lr) * merged_delta
+
+        # Learners in selection.deferred_learner_ids stay in _deferred_carry (unless mode == "drop")
+        new_carry: Dict[str, Dict[str, object]] = {}
+        for lid in selection.deferred_learner_ids:
+            if self.straggler_mode == "drop":
+                self.dropped_tokens += int(combined[lid]["tokens"])  # type: ignore[arg-type]
+            else:
+                new_carry[lid] = combined[lid]
+        self._deferred_carry = new_carry
+        self._fresh_inbox.clear()
+        self.current_round += 1
+
+        pending_tokens = sum(int(v["tokens"]) for v in self._deferred_carry.values())  # type: ignore[arg-type]
+        conservation = self.total_submitted_tokens == (
+            self.merged_tokens + pending_tokens + self.dropped_tokens
+        )
+        return p32.to(dtype=global_param.dtype, device=global_param.device), {
+            "round_closed": self.current_round - 1,
+            "straggler_mode": self.straggler_mode,
+            "admitted_learners": list(selection.admitted_learner_ids),
+            "deferred_learners": list(selection.deferred_learner_ids),
+            "eager_applied_learners": eager_ids,
+            "total_submitted_tokens": self.total_submitted_tokens,
+            "merged_tokens": self.merged_tokens,
+            "pending_tokens": pending_tokens,
+            "dropped_tokens": self.dropped_tokens,
+            "token_conservation_holds": bool(conservation),
+        }
+
+
+@torch.no_grad()
+def analyze_campaign_rda_and_delta_cosine(
+    base_lora_state: Dict[str, torch.Tensor],
+    branch_lora_states: Dict[str, Dict[str, torch.Tensor]],
+    weights: Optional[Sequence[float]] = None,
+    low_cosine_threshold: float = 0.30,
+) -> Dict[str, object]:
+    """Season 9 (`HM-S9-14`): E5-het Pairwise Delta Cosine & RDA Multiplier Analysis on Campaign Deltas.
+
+    Computes for M domain learners:
+      1. Flat outer pseudo-gradient `Delta_m = Theta_base - Theta_m` per domain.
+      2. Pairwise cosine similarity `cos(Delta_i, Delta_j)` across all `M * (M - 1) / 2` pairs.
+      3. Empirical RDA-to-direct norm multiplier `r_t = ||Delta_RDA||_2 / ||Delta_direct||_2`.
+      4. Theoretical common-norm formula prediction from the Proposition in `RDAMultiplier.lean`:
+         `r_theory(c_bar, M) = 1 / sqrt(1/M + ((M - 1)/M) * c_bar)`.
+      5. Whether the campaign sits in the pre-registered P2 low-cosine regime (`mean_cosine <= 0.30`).
+    """
+    domain_names = list(branch_lora_states.keys())
+    m = len(domain_names)
+    if m < 2:
+        raise ValueError("at least 2 learner branches are required for pairwise cosine analysis")
+
+    keys = sorted(base_lora_state.keys())
+    flat_deltas: List[torch.Tensor] = []
+    for dom in domain_names:
+        b_state = branch_lora_states[dom]
+        parts = [
+            (base_lora_state[k].detach().to(torch.float32).cpu() - b_state[k].detach().to(torch.float32).cpu()).reshape(-1)
+            for k in keys
+        ]
+        flat_deltas.append(torch.cat(parts, dim=0))
+
+    stacked = torch.stack(flat_deltas, dim=0)  # [M, D]
+    norms = stacked.norm(dim=1).clamp_min(1e-12)
+    units = stacked / norms.unsqueeze(1)
+    cos_mat = (units @ units.t()).clamp(-1.0, 1.0)
+
+    pairwise_cosines: List[float] = []
+    for i in range(m):
+        for j in range(i + 1, m):
+            pairwise_cosines.append(float(cos_mat[i, j].item()))
+
+    mean_cos = sum(pairwise_cosines) / len(pairwise_cosines)
+    min_cos = min(pairwise_cosines)
+    max_cos = max(pairwise_cosines)
+
+    rda_vec = radial_directional_average(flat_deltas, weights=weights)
+    direct_vec = direct_weighted_average(flat_deltas, weights=weights)
+    rda_norm = float(rda_vec.norm().item())
+    direct_norm = float(direct_vec.norm().item())
+    rt_empirical = rda_norm / max(1e-12, direct_norm)
+
+    denom_sq = max(1e-9, (1.0 / float(m)) + ((float(m - 1) / float(m)) * mean_cos))
+    rt_theoretical = 1.0 / math.sqrt(denom_sq)
+
+    return {
+        "strategy_id": "HM-S9-14-CAMPAIGN-DELTA-COSINE-RDA-ANALYSIS",
+        "num_learners_m": m,
+        "num_pairs": len(pairwise_cosines),
+        "mean_pairwise_delta_cosine": round(mean_cos, 6),
+        "min_pairwise_delta_cosine": round(min_cos, 6),
+        "max_pairwise_delta_cosine": round(max_cos, 6),
+        "rda_merged_norm": round(rda_norm, 6),
+        "direct_merged_norm": round(direct_norm, 6),
+        "rda_to_direct_norm_ratio_rt": round(rt_empirical, 6),
+        "theoretical_common_norm_ratio": round(rt_theoretical, 6),
+        "low_cosine_threshold": float(low_cosine_threshold),
+        "low_cosine_regime_active": bool(mean_cos <= low_cosine_threshold),
+    }

@@ -719,7 +719,8 @@ def plot(per_model: Dict[str, Any]) -> None:
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    done = [k for k, v in per_model.items() if "cells" in v]
+    # Qwen2.5-Coder-7B is INVALID (negative control failed, scientific lead review 2026-10-24): not plotted
+    done = [k for k, v in per_model.items() if "cells" in v and k != "qwen7b"]
     if not done:
         return
     FIG_DIR.mkdir(parents=True, exist_ok=True)

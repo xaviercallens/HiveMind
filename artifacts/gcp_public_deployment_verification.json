@@ -1,0 +1,121 @@
+{
+  "verification_title": "HiveMind@home & La Ruche Public GCP Cloud Run & SocrateAI GCS End-to-End Verification",
+  "verified_at_epoch": 1792836300.359841,
+  "public_dns_base_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app",
+  "canonical_cloud_run_url": "https://hivemind-at-home-ruche-1003063861791.us-central1.run.app",
+  "gcp_project_id": "gen-lang-client-0625573011",
+  "gcp_region": "us-central1",
+  "socrateai_gcs_la_ruche_storage": {
+    "primary_gcs_bucket": "gs://socrateai-hivemind-la-ruche-vault",
+    "datalake_mirror_bucket": "gs://socrateai-datalake-gen-lang-client-0625573011/hivemind_la_ruche_vault",
+    "public_https_base_url": "https://storage.googleapis.com/socrateai-hivemind-la-ruche-vault",
+    "release_id": "RUCHE-MOE-V2_6_0-aadd48b8",
+    "combined_safetensors_sha256": "aadd48b8164b440c0eedf63865a2a46a87b07d1609d7e01275e14add7aeeb485",
+    "pytorch_moe_loaded_and_verified": true,
+    "forward_logits_shape": [
+      1,
+      8,
+      259
+    ]
+  },
+  "cost_optimization": {
+    "min_instances": 0,
+    "max_instances": 2,
+    "cpu_limit": "1000m",
+    "memory_limit": "512Mi",
+    "cpu_throttling": true,
+    "idle_monthly_cost_usd": 0.0,
+    "cost_governance_verdict": "OPTIMAL_SCALE_TO_ZERO_AND_SPOT_ONLY"
+  },
+  "dashboard_html_check": {
+    "http_status": 200,
+    "html_bytes": 219456,
+    "passed": true
+  },
+  "la_ruche_model_retrieval": {
+    "release_id": "RUCHE-MOE-V2_6_0-aadd48b8",
+    "num_domains": 8,
+    "community_moe_bytes": 661688,
+    "community_moe_sha256": "aadd48b8164b440c0eedf63865a2a46a87b07d1609d7e01275e14add7aeeb485",
+    "sha256_verified": true,
+    "deserialized_tensor_count": 299,
+    "embed_tokens_shape": [
+      259,
+      32
+    ],
+    "sample_cell_domain": "code_python",
+    "sample_cell_bytes": 20040,
+    "sample_cell_sha256": "71ce71bf60cd800a87ffabc116ea7b0ac442f8da2128f6742520e0e0e6ae63e1"
+  },
+  "sparse_moe_inference_checks": {
+    "native_inference": {
+      "routed_experts": [
+        "code_python",
+        "formal_lean4"
+      ],
+      "logit_l2_norm": 2.000781,
+      "latency_ms": 28.221,
+      "inference_receipt_sha256": "32f7d0f0c978bb104aac9fc6dc00bdc0a21d4feb4a4176c88810a58ba09ad880"
+    },
+    "openai_chat_completions": {
+      "completion_id": "chatcmpl-ruche-f4eec68425f4",
+      "routed_experts": [
+        "physics_sim",
+        "systems_rust"
+      ],
+      "inference_receipt_sha256": "f4eec68425f4e2ed021d1e16a95dc78ef5e07affd8ca3bdeaac4c316862b6cfe"
+    }
+  },
+  "federated_training_checks": {
+    "leased_workunit_id": "WU-S10-CODE_PYTHON-0001",
+    "lease_id": "LEASE-b805527382550f24",
+    "domain_name": "code_python",
+    "submission_status": "ADMITTED_TO_LA_RUCHE_QUORUM",
+    "outer_delta_frob_norm": 0.07637,
+    "svd_spectral_energy_retained": 1.0,
+    "perplexity_reduction_pct": 15.89,
+    "monetary_payout_eur_usd": 0.0,
+    "receipt_sha256": "a5f82975bf5b0d65847aca19e3c374d96c946fc1272bc623cd49844f065f1393",
+    "ledger_completed_receipts_count": 1
+  },
+  "compute_points_redemption_check": {
+    "service_id": "python_coding_gwaya",
+    "specialist_bee_invoked": "GWAYA-Code-Bee-v2.6 + Gwen-Qwen2.5-MoE-Bee-v2.6",
+    "points_spent": 50,
+    "points_balance_after": 1200,
+    "monetary_cost_eur_usd": 0.0,
+    "redemption_receipt_sha256": "ef508b20f66b89069df46906f4d118b9bfa5809ed3d2c957bf5b56e5210ae9ad"
+  },
+  "multilingual_i18n_and_media_checks": {
+    "supported_languages_verified": [
+      "en",
+      "fr",
+      "zh",
+      "es",
+      "de"
+    ],
+    "interactive_examples_count": 8,
+    "cyber_bee_poster_svg_bytes": 4730,
+    "exoplanet_seti_svg_bytes": 2373,
+    "video_cinema_chapters_count": 4,
+    "navigation_and_media_dom_ids_verified": true
+  },
+  "cognitive_shield_defense_checks": {
+    "firewall_status": "ACTIVE",
+    "shield_engine": "HiveMind Cognitive Shield & Anti-Poisoning Gateway v2.7.0",
+    "rate_limiter_active": true,
+    "security_headers_enforced": [
+      "Content-Security-Policy",
+      "X-Frame-Options: DENY",
+      "X-Content-Type-Options: nosniff",
+      "X-HiveMind-Shield: Active-v2.7.0"
+    ],
+    "probe_injection_neutralized": true,
+    "probe_shield_receipt_sha256": "eaab8ee1d062b988f51ff50fc0883c7b9f3ec94b4bc8fa360f3dd2c334cd2a30",
+    "byzantine_poison_rejection": "100.0% poison rejection under 37.5% Byzantine peers (HM-FW-01)",
+    "formal_lean4_theorems": 128
+  },
+  "total_verification_duration_ms": 66439.58,
+  "all_checks_passed": true,
+  "verification_suite_sha256": "04bf5cedc819e5c6214a5d46fbabc7d3bc258306b37ee7f5343458083f61fcc2"
+}

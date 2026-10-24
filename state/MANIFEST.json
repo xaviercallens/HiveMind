@@ -49,8 +49,8 @@
   "state/memory/MEMORY.md": "45462a998a2074f500f8fd45dd8b952f672a83a27fb2567ec82fc045759119a6",
   "state/memory/project_t4_campaign_2026-10-24.md": "292b41da472f47fc35c0fda43259a96494ee33bb4595089d99ddafa8c9070375"
  },
- "head": "f39b6e2",
- "reason": "manual",
+ "head": "b9c6268",
+ "reason": "periodic",
  "skipped_secret_like": [],
- "written_utc": "2026-10-24 09:04:27"
+ "written_utc": "2026-10-24 09:04:47"
 }

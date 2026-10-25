@@ -1,5 +1,5 @@
 {
- "branch": "fix/paper-v3.8.0-invalid-rows",
+ "branch": "chore/zenodo-v3.8.0-deposit",
  "files": {
   "state/artifacts/experiments/E10b_first_execution_partial.json": "a4a0b5b83e0e36f39074389aa7624a14a4c98083aafa1c51d220ab6279b0ca93",
   "state/artifacts/experiments/E10b_lattice_05b_report.json.partial.json": "8f855b8c4e7ec1e1a361e47807efa8bb036ff4e7a130534664cb35d01aa44c01",
@@ -60,6 +60,8 @@
   "state/job_tmp/e10b_smoke.json.partial.json": "ca4b1205383e1736f18c8c2dd3be9dd1f2bbb0d1b804d03816306dee06cf8a44",
   "state/job_tmp/granite.py": "ceecb515af56f4bcdf0b6ebccb7484cb0045988c75e08015753f114836fdef48",
   "state/job_tmp/list.py": "70bee15227d1e1379737ab45d15bca14d9eb9d0ac0f19e6a726a0932026b290f",
+  "state/job_tmp/patch_changelog.py": "8457a3e81b396a6c41961c3b63919c0236bd599820f81d839c510b6c3fd13f90",
+  "state/job_tmp/patch_receipt.py": "7b00b553e51583506edf70d625d54c5237142a25e0381a1db099ea414460fd8c",
   "state/job_tmp/patch_zenodo.py": "8a43333e18038c2f1b46baf0f4035c035f23af568565c669388b084814e5eed2",
   "state/job_tmp/patch_zenodo2.py": "797bd5a9538cce0d63bc80354f7300abd7f7d31789111cf854a99c93fe28a61b",
   "state/job_tmp/patch_zenodo3.py": "acd9b5ed2db7d5bc579a570af6269c64c051a22a9fd8e507e5b89c5be4d7f521",
@@ -71,12 +73,12 @@
   "state/job_tmp/upcycle.py": "18ceaec57bb4a7bc25aa221bb3f2a384b158c49368e2d14f57a1311970e7839c",
   "state/job_tmp/watch_queue.py": "2ba736017a1098f4c9585ba9fe0e13f2d6270f7b6bddc4be8db5b48139b343d8",
   "state/memory/MEMORY.md": "567fe240dcdaec7ff8c79afd5da80a94e4c5bb379f1b9459530a0653e972ce11",
-  "state/memory/project_boinc_core_node.md": "b682fac8096115d32192466b68ccc3e4b7913e86a81771b30d73e2a6cd81e82d",
-  "state/memory/project_t4_campaign_2026-10-24.md": "069200f774fc6b5e77631ab4ab8126097a60e50a9f793db504e478aedb7802f1",
+  "state/memory/project_boinc_core_node.md": "1fb0cfef27ec77df5a721c52d7fd20dbf84a137e2f7af9850e25212a051db16d",
+  "state/memory/project_t4_campaign_2026-10-24.md": "1e0e7bde3e21e523adeee36272a3d3523382da9bc1c74977962255078298fe55",
   "state/memory/reference_spot_vm_checkpoint.md": "03783c38db760c7866fad1ef2d7f0345aaffe36d5a72c5e0bad73a5aad936374"
  },
- "head": "0f62654",
+ "head": "50ca854",
  "reason": "periodic",
  "skipped_secret_like": [],
- "written_utc": "2026-10-25 20:31:03"
+ "written_utc": "2026-10-25 20:51:06"
 }

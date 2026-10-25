@@ -1,2 +1,3 @@
 - [T4 campaign 2026-10-24](project_t4_campaign_2026-10-24.md) — overnight E10b-E16 state, remaining plan, gated Zenodo publish, merge/release rules
 - [Spot VM checkpoint](reference_spot_vm_checkpoint.md) — preemption-proof checkpoint branch, watcher and resume steps
+- [BOINC core node + real server](project_boinc_core_node.md) — PRs #178/#181, data-disk locations, what is running, open owner decisions (public T4 exposure, credit mismatch)

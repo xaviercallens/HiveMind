@@ -286,6 +286,10 @@ What the first night measured (7B QLoRA adapters, one T4, exact paired McNemar a
 | `HM-S14-08` | no adapter passed the update gate for serving | run the verified update gate on the stars adapter and decide whether the router offers it as an expert tier | G-R2 |
 | `HM-S14-09` | the dashboard link and repo server code lag the deployed overlay | reconcile `deploy/gcp_cloud_run` with the live image (release id and report files) before the next redeploy | G-R1 |
 
+## 👑 3.13 Season 15 (`Wave 14` — "Operation ALIXQueenBee") — a queen that splits work and learns from the dance (owner's brief, 2026-10-25)
+
+Proposal of record: [`docs/ALIX_QUEENBEE_PROPOSAL.md`](docs/ALIX_QUEENBEE_PROPOSAL.md). A planner (the Queen) splits a request into verified sub-tasks and routes them to federated experts; verified outcomes are shared as compact, signed "dance records" (task cluster, cost, success rate with an interval) so routers recruit toward evidence; developers' corrections train a local adapter or bandit and reach the shared pool only through a gate that can reject them. Proposal only: no component is built and no number is measured. Four preregistered experiments (routing, decomposition, local learning, robustness) are listed in the document.
+
 ## 🎮 4. Opt-In Community GPU Testing Program (If Interested & Possible)
 
 If you have a consumer GPU (**NVIDIA GeForce RTX 20/30/40/50-series 6 GB–24 GB**, **AMD Radeon RX 6000/7000 via ROCm**, or **Apple Silicon M1/M2/M3/M4 via MPS**) and are interested in testing how your hardware performs on the HiveMind Sparse MoE + `EF21-DiLoCo` + `ZK-OPoI v4` stack, we provide a safe, opt-in, `< 1.5 GB` peak-VRAM benchmark suite:

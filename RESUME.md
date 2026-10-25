@@ -1,6 +1,6 @@
 # Resume the T4 campaign after a Spot-VM preemption
 
-State captured: 2026-10-25 03:07:16 UTC from branch `fix/paper-v3.8.0-invalid-rows` at `b43ae2b`.
+State captured: 2026-10-25 03:27:19 UTC from branch `fix/paper-v3.8.0-invalid-rows` at `b43ae2b`.
 
 1. Get the code: `git fetch origin fix/paper-v3.8.0-invalid-rows` and work from that branch (all code, prereg files and top-level `artifacts/experiments/*.json` reports are
    committed there). This checkpoint branch holds only the ignored/volatile state under `state/`.

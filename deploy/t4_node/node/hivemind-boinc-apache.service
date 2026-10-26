@@ -1,0 +1,14 @@
+# Private Apache + mod_php for the BOINC project web/scheduler/upload CGI. Listens on 127.0.0.1:8081 only.
+[Unit]
+Description=HiveMind BOINC server: private Apache (127.0.0.1:8081)
+After=hivemind-boinc-db.service
+Requires=hivemind-boinc-db.service
+
+[Service]
+User=callensxavier_gmail_com
+ExecStart=/usr/sbin/apache2 -f /mnt/disks/disk-socrateai-local-1/boinc/stack/apache.conf -DFOREGROUND
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

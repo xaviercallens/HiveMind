@@ -1,0 +1,121 @@
+{
+  "PASS": true,
+  "a2_scheduler_coprocs": "<coprocs>\n<coproc_cuda>\n   <count>1</count>\n   <name>Tesla T4</name>\n   <available_ram>4162846720.000000</available_ram>\n   <have_cuda>1</have_cuda>\n   <have_opencl>1</have_opencl>\n   <req_secs>1.000000</req_secs>\n   <req_instances>0.000000</req_instances>\n   <estimated_delay>0.000000</estimated_delay>\n   <peak_flops>8140800000000.000000</peak_flops>\n   <cudaVersion>13000</cudaVersion>\n   <drvVersion>58099</drvVersion>\n   <totalGlobalMem>4294967295.000000</totalGlobalMem>\n   <sharedMemPerBlock>49152.000000</sharedMemPerBlock>\n   <regsPerBlock>65536</regsPerBlock>\n   <warpSize>32</warpSize>\n   ",
+  "client_messages": "1_0_0\n84: 25-Oct-2026 09:05:40 (low) [HiveMind local test project] Finished upload of hm_good_001_0_0\n85: 25-Oct-2026 09:05:40 (low) [HiveMind local test project] [task] result state=FILES_UPLOADED for hm_good_001_0 from CS::update_results\n86: 25-Oct-2026 09:05:42 (low) [HiveMind local test project] Sending scheduler request: To report completed tasks.\n87: 25-Oct-2026 09:05:42 (low) [HiveMind local test project] Reporting 1 completed tasks\n88: 25-Oct-2026 09:05:42 (low) [HiveMind local test project] Requesting new tasks for NVIDIA GPU\n89: 25-Oct-2026 09:05:44 (low) [HiveMind local test project] Scheduler request completed: got 0 new tasks\n90: 25-Oct-2026 09:05:44 (low) [HiveMind local test project] Project requested delay of 10 seconds\n91: 25-Oct-2026 09:05:44 (low) [HiveMind local test project] Generated new computer cross-project ID: 6e11829c5d8614c28f4df7338341acde\n92: 25-Oct-2026 09:05:54 (low) [HiveMind local test project] Sending scheduler request: To fetch work.\n93: 25-Oct-2026 09:05:54 (low) [HiveMind local test project] Requesting new tasks for NVIDIA GPU\n94: 25-Oct-2026 09:05:56 (low) [HiveMind local test project] Scheduler request completed: got 0 new tasks\n95: 25-Oct-2026 09:05:56 (low) [HiveMind local test project] Project requested delay of 10 seconds\n96: 25-Oct-2026 09:05:56 (low) [HiveMind local test project] Generated new computer cross-project ID: 6e11829c5d8614c28f4df7338341acde\n97: 25-Oct-2026 09:06:08 (low) [HiveMind local test project] [task] Process for hm_fault_001_0 exited, status 0, task state 1\n98: 25-Oct-2026 09:06:08 (low) [HiveMind local test project] [task] process exited with status 0\n99: 25-Oct-2026 09:06:08 (low) [HiveMind local test project] [task] task_state=EXITED for hm_fault_001_0 from handle_exited_app\n100: 25-Oct-2026 09:06:08 (low) [HiveMind local test project] Computation for task hm_fault_001_0 finished\n101: 25-Oct-2026 09:06:08 (low) [HiveMind local test project] [task] result state=FILES_UPLOADING for hm_fault_001_0 from CS::app_finished\n102: 25-Oct-2026 09:06:10 (low) [HiveMind local test project] Started upload of hm_fault_001_0_0\n103: 25-Oct-2026 09:06:14 (low) [HiveMind local test project] Finished upload of hm_fault_001_0_0\n104: 25-Oct-2026 09:06:14 (low) [HiveMind local test project] [task] result state=FILES_UPLOADED for hm_fault_001_0 from CS::update_results\n105: 25-Oct-2026 09:06:16 (low) [HiveMind local test project] Sending scheduler request: To report completed tasks.\n106: 25-Oct-2026 09:06:16 (low) [HiveMind local test project] Reporting 1 completed tasks\n107: 25-Oct-2026 09:06:16 (low) [HiveMind local test project] Requesting new tasks for NVIDIA GPU\n108: 25-Oct-2026 09:06:18 (low) [HiveMind local test project] Scheduler request completed: got 0 new tasks\n109: 25-Oct-2026 09:06:18 (low) [HiveMind local test project] Project requested delay of 10 seconds\n110: 25-Oct-2026 09:06:18 (low) [HiveMind local test project] Generated new computer cross-project ID: 6e11829c5d8614c28f4df7338341acde\n",
+  "client_rpc_up": true,
+  "client_startup_log": [
+    "25-Oct-2026 09:04:41 [---] Starting BOINC client version 7.18.1 for x86_64-pc-linux-gnu",
+    "25-Oct-2026 09:04:44 [---] CUDA: NVIDIA GPU 0: Tesla T4 (driver version 580.99, CUDA version 13.0, compute capability 7.5, 4096MB, 3970MB available, 8141 GFLOPS peak)",
+    "25-Oct-2026 09:04:44 [---] OpenCL: NVIDIA GPU 0: Tesla T4 (driver version 580.178.04, device version OpenCL 3.0 CUDA, 14912MB, 3970MB available, 8141 GFLOPS peak)",
+    "25-Oct-2026 09:04:44 [---] [coproc] NVIDIA library reports 1 GPU",
+    "25-Oct-2026 09:04:44 [http://127.0.0.1:45625/hivemind/] Found app_info.xml; using anonymous platform",
+    "25-Oct-2026 09:04:50 [http://127.0.0.1:45625/hivemind/] Requesting new tasks for CPU and NVIDIA GPU",
+    "25-Oct-2026 09:04:56 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0",
+    "25-Oct-2026 09:04:56 [HiveMind local test project] Starting task hm_good_001_0",
+    "25-Oct-2026 09:04:56 [HiveMind local test project] [cpu_sched] Starting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0",
+    "25-Oct-2026 09:05:02 [HiveMind local test project] Requesting new tasks for NVIDIA GPU",
+    "25-Oct-2026 09:05:08 [HiveMind local test project] [coproc] NVIDIA instance 0; 1.000000 pending for hm_good_001_0",
+    "25-Oct-2026 09:05:08 [HiveMind local test project] [coproc] NVIDIA instance 0: confirming 1.000000 instance for hm_good_001_0",
+    "25-Oct-2026 09:05:14 [HiveMind local test project] Requesting new tasks for NVIDIA GPU",
+    "25-Oct-2026 09:05:34 [HiveMind local test project] Computation for task hm_good_001_0 finished",
+    "25-Oct-2026 09:05:34 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_fault_001_0",
+    "25-Oct-2026 09:05:34 [HiveMind local test project] Starting task hm_fault_001_0",
+    "25-Oct-2026 09:05:34 [HiveMind local test project] [cpu_sched] Starting task hm_fault_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0",
+    "25-Oct-2026 09:05:40 [HiveMind local test project] Finished upload of hm_good_001_0_0",
+    "25-Oct-2026 09:05:42 [HiveMind local test project] Requesting new tasks for NVIDIA GPU",
+    "25-Oct-2026 09:05:54 [HiveMind local test project] Requesting new tasks for NVIDIA GPU",
+    "25-Oct-2026 09:06:08 [HiveMind local test project] Computation for task hm_fault_001_0 finished",
+    "25-Oct-2026 09:06:14 [HiveMind local test project] Finished upload of hm_fault_001_0_0",
+    "25-Oct-2026 09:06:16 [HiveMind local test project] Requesting new tasks for NVIDIA GPU"
+  ],
+  "criteria": {
+    "A1": true,
+    "A2": true,
+    "A3": true,
+    "A4": true,
+    "A5": true,
+    "A6": true,
+    "A7": true,
+    "A8": true
+  },
+  "gpu_busy_after": [],
+  "gpu_busy_before": [],
+  "preempt": {
+    "digest_equals_uninterrupted_reference": true,
+    "finished": true,
+    "resumed_from_step": 700,
+    "verdict": {
+      "cross_class_max_ulp": 1.0,
+      "grant": {
+        "capped_by": "verified",
+        "cobblestones": 2.883584,
+        "node_id": "host1",
+        "reason": "verified",
+        "workunit_id": "hm_preempt_001"
+      },
+      "host": "host1",
+      "reason": "verified",
+      "same_class_exact": true,
+      "valid": true,
+      "wu_id": "hm_preempt_001"
+    }
+  },
+  "preempt_app_survivors": [],
+  "preempt_checkpoint_seen": true,
+  "preempt_client_restarted": true,
+  "server_url": "http://127.0.0.1:45625/hivemind/",
+  "stage1_all_finished": true,
+  "stray_boinc_processes": [],
+  "uploaded_results": {
+    "hm_fault_001": {
+      "device_name": "Tesla T4",
+      "final_digest": "c670d933fb6de1a99b09912e47a9d307ee8bd51c73731786ef04643094aedce3",
+      "final_loss": 1.956378852321916e-13,
+      "flops_claimed": 166094438400.0,
+      "initial_loss": 1.038300633430481,
+      "inject_fault": 0.01,
+      "wall_seconds": 16.91672134399414
+    },
+    "hm_good_001": {
+      "device_name": "Tesla T4",
+      "final_digest": "d4b3e6703d5956adc915d8a5e90b6f4ffc5db158336e3b057e3dce8df00e5ea8",
+      "final_loss": 2.014406707846056e-13,
+      "flops_claimed": 166094438400.0,
+      "initial_loss": 0.9053665995597839,
+      "inject_fault": 0.0,
+      "wall_seconds": 17.13872981071472
+    }
+  },
+  "verdicts": {
+    "hm_fault_001": {
+      "cross_class_max_ulp": 656.0,
+      "grant": {
+        "capped_by": "rejected",
+        "cobblestones": 0.0,
+        "node_id": "host1",
+        "reason": "spot-check failed or delta not admitted by Multi-Krum",
+        "workunit_id": "hm_fault_001"
+      },
+      "host": "host1",
+      "reason": "cross-class replay on cpu differs by 656 Q16 units (> 1)",
+      "same_class_exact": null,
+      "valid": false,
+      "wu_id": "hm_fault_001"
+    },
+    "hm_good_001": {
+      "cross_class_max_ulp": 1.0,
+      "grant": {
+        "capped_by": "verified",
+        "cobblestones": 0.38447786666666667,
+        "node_id": "host1",
+        "reason": "verified",
+        "workunit_id": "hm_good_001"
+      },
+      "host": "host1",
+      "reason": "verified",
+      "same_class_exact": true,
+      "valid": true,
+      "wu_id": "hm_good_001"
+    }
+  }
+}

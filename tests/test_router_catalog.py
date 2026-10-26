@@ -11,8 +11,17 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from hivemind.router.accounts import RouterStore
-from hivemind.router.catalog import TIERS, ModelTier, catalog_payload, recommend_tier, tier_by_id, tiers_for_vram
-from hivemind.router.gateway import _MODEL_ID_RE
+from hivemind.router.catalog import (
+    PREWIRED_PARTNER_MODELS,
+    TIERS,
+    ModelTier,
+    catalog_payload,
+    normalize_model_alias,
+    recommend_tier,
+    tier_by_id,
+    tiers_for_vram,
+)
+from hivemind.router.gateway import _MODEL_ID_RE, create_router_app
 
 
 def test_every_tier_id_is_routable_and_unique_and_ordered_by_memory() -> None:
@@ -88,3 +97,50 @@ def test_a_database_created_before_the_endpoint_token_is_upgraded_in_place(tmp_p
     store.upsert_producer(account_id, "https://new.example.com", [{"id": "coder", "local_name": "q"}], 0.4, 10, "gpu", now_utc=111.0, endpoint_token="t" * 20)
     assert {r.account_id: r.endpoint_token for r in store.active_producers("coder", now_utc=112.0)}[account_id] == "t" * 20
     assert "t" * 20 not in repr(store.active_producers("coder", now_utc=112.0)[0])  # a record never prints its token
+
+
+def test_crowdgpt_crowd_v1_partner_model_is_prewired_and_routable(tmp_path: Path) -> None:
+    from fastapi.testclient import TestClient
+
+    assert len(PREWIRED_PARTNER_MODELS) >= 1
+    crowd = next(m for m in PREWIRED_PARTNER_MODELS if m.tier_id == "crowd-v1")
+    assert crowd.hf_repo == "Vxtzq/Crowd-v1"
+    assert crowd.github_repo == "Vxtzq/CrowdGPT"
+    assert crowd.public_id == "hivemind/crowd-v1"
+    assert crowd.partner_id == "crowdgpt/crowd-v1"
+
+    for alias in ("crowd-v1", "hivemind/crowd-v1", "crowdgpt/crowd-v1", "Vxtzq/Crowd-v1", "vxtzq/crowd-v1"):
+        assert normalize_model_alias(alias) == "crowd-v1"
+        tier = tier_by_id(alias)
+        assert tier is not None and tier.tier_id == "crowd-v1" and tier.public_id == "hivemind/crowd-v1"
+
+    store = RouterStore(tmp_path / "router.db", b"k" * 32)
+    app = create_router_app(store, allow_private_producers=True)
+    client = TestClient(app)
+
+    cat = client.get("/v1/hivemind/catalog").json()
+    assert any(m["hf_repo"] == "Vxtzq/Crowd-v1" for m in cat["prewired_partner_models"])
+
+    partners = client.get("/v1/hivemind/partner-models").json()
+    assert partners["object"] == "hivemind.partner_models"
+    crowd_entry = next(m for m in partners["models"] if m["tier_id"] == "crowd-v1")
+    assert crowd_entry["live_on_swarm"] is False
+
+    prod_id, api_key = store.register("crowdgpt-node", "producer")
+    store.upsert_producer(
+        prod_id,
+        "https://crowdgpt.net",
+        [{"id": "crowd-v1", "local_name": "Vxtzq/Crowd-v1"}],
+        0.15,
+        50.0,
+        "gpu",
+    )
+    partners_live = client.get("/v1/hivemind/partner-models").json()
+    crowd_live = next(m for m in partners_live["models"] if m["tier_id"] == "crowd-v1")
+    assert crowd_live["live_on_swarm"] is True
+    assert "hivemind/crowd-v1" in [m["id"] for m in client.get("/v1/models").json()["data"]]
+    for alias in ("hivemind/crowd-v1", "crowdgpt/crowd-v1", "Vxtzq/Crowd-v1"):
+        mkt = client.get("/v1/hivemind/market", params={"model": alias}, headers={"Authorization": f"Bearer {api_key}"})
+        assert mkt.status_code == 200
+        assert mkt.json()["model"] == "hivemind/crowd-v1"
+

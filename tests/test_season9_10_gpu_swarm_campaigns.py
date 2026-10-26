@@ -59,6 +59,6 @@ def test_season9_10_gpu_swarm_campaigns_end_to_end(tmp_path: Path) -> None:
     assert "CAMP-S9-E7-SIGMA-LOOPED-MOE-GPU" in md
     assert "CAMP-S10-E11-LATTICE-KV-WIRE-GPU" in md
     assert "CAMP-S10-E12-HETERO-SPOTCHECK-WAN-GPU" in md
-    assert "0.00 EUR / 0.00 USD" in md
+    assert "HiveMind Reflexion Points (HMT)" in md
     assert len(GPU_CONTRIBUTOR_ROSTER) >= 4
     assert len(SEASON9_10_GPU_CAMPAIGN_CATALOG) == 4

@@ -188,6 +188,14 @@ A producer runs any OpenAI-compatible server. This example uses Ollama with `qwe
    `--interval-s` seconds (default 60). Heartbeats are how the gateway knows you are live, and live
    producers are the only ones it routes to.
 
+**Several GPUs or servers on one account.** Run one agent per server, each with its own `--endpoint`, on the same
+key. The gateway keeps one advertisement per `(account, endpoint)`, so a heartbeat refreshes only its own endpoint
+and never evicts the others (at most 8 per account; the heartbeat reply reports `endpoints`). In the market the
+account is still one producer: capacities add up and the cost is the capacity-weighted mean. Requests are spread
+over the account's live endpoints in proportion to capacity, an endpoint that fails is skipped for another of the
+same account, and an endpoint that stops heartbeating drops out on its own after the TTL. All earnings go to the
+account. Different endpoints may serve different models (e.g. a coder on one GPU, a LoRA expert on another).
+
 Choose `--cost-per-1k` honestly. If it is above the market price, no requests reach you. If it is below
 your real cost, you lose money on every token you serve.
 

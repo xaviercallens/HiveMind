@@ -1,0 +1,17 @@
+# INSTALLED on 2026-10-25 at the owner's request: a producer shield for the owner's prosumer account. nginx routes /u/ to it.
+# /etc/hivemind/t4-user.env (root:root 0600) defines HIVEMIND_API_KEY and HIVEMIND_ENDPOINT_TOKEN (the secret the gateway presents).
+[Unit]
+Description=HiveMind T4: producer shield for the owner's account (loopback :8790)
+After=ollama.service
+Requires=ollama.service
+
+[Service]
+User=callensxavier_gmail_com
+WorkingDirectory=/home/callensxavier_gmail_com/hivemind-producer
+EnvironmentFile=/etc/hivemind/t4-user.env
+ExecStart=/usr/bin/python3 hivemind_producer_shield.py --upstream http://127.0.0.1:11434 --host 127.0.0.1 --port 8790 --max-concurrent 2 --allow-model qwen2.5-coder:7b-instruct --route hivemind-bee-stars=http://127.0.0.1:8294
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

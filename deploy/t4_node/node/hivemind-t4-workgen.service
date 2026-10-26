@@ -1,0 +1,16 @@
+# Keeps one chained QLoRA workunit queued (each starts from the latest validated adapter).
+[Unit]
+Description=HiveMind T4 QLoRA work generator
+After=hivemind-boinc-daemons.service
+Requires=hivemind-boinc-db.service
+
+[Service]
+User=callensxavier_gmail_com
+Environment=HF_HUB_OFFLINE=1
+Environment=PYTHONPATH=/opt/hivemind/t4/src
+ExecStart=/mnt/disks/disk-socrateai-local-1/boinc/venv/bin/python -W ignore /opt/hivemind/t4/scripts/t4_workgen.py
+Restart=always
+RestartSec=20
+
+[Install]
+WantedBy=multi-user.target

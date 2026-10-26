@@ -27,7 +27,7 @@ import os
 import itertools
 import sys
 import time
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -54,14 +54,21 @@ def create_shield_app(
     max_body_bytes: int = DEFAULT_MAX_BODY_BYTES,
     allowed_models: Sequence[str] = (),
     transport: httpx.AsyncBaseTransport | None = None,
+    routes: Mapping[str, str] | None = None,
 ) -> FastAPI:
-    """Build the proxy app. ``transport`` lets tests stand in for the model server."""
+    """Build the proxy app. ``transport`` lets tests stand in for the model server.
+
+    ``routes`` maps a model name to the base URL of the server that runs it, for a producer account that advertises models from two servers behind ONE
+    endpoint (the gateway keeps one endpoint per account). Models not listed go to ``upstream``; routed models are allowed implicitly and are listed in
+    ``/v1/models`` only while their server answers.
+    """
     if len(token) < MIN_TOKEN_CHARS:
         raise ValueError(f"the endpoint token must be at least {MIN_TOKEN_CHARS} characters")
     if max_concurrent < 1 or max_body_bytes < 1:
         raise ValueError("max_concurrent and max_body_bytes must be >= 1")
     base = upstream.rstrip("/")
-    allowed = frozenset(allowed_models)
+    route_base = {m: u.rstrip("/") for m, u in (routes or {}).items()}
+    allowed = frozenset(allowed_models) | (frozenset(route_base) if allowed_models else frozenset())
     expected = f"Bearer {token}".encode()
     inflight: dict[int, float] = {}  # request number -> monotonic start; entries expire so a lost disconnect cannot jam the shield
     numbers = itertools.count()
@@ -85,7 +92,14 @@ def create_shield_app(
         try:
             upstream_response = await client.get(base + "/v1/models")
             if upstream_response.status_code == 200:
-                return JSONResponse(upstream_response.json())
+                listing = upstream_response.json()
+                for routed, target in route_base.items():
+                    try:
+                        if (await client.get(target + "/v1/models", timeout=3.0)).status_code == 200:
+                            listing.setdefault("data", []).append({"id": routed, "object": "model", "owned_by": "local"})
+                    except httpx.HTTPError:
+                        pass  # that server is down: do not advertise its model
+                return JSONResponse(listing)
             # Older Ollama releases have no /v1/models; present their own model list in the OpenAI shape.
             tags = await client.get(base + "/api/tags")
         except (httpx.HTTPError, ValueError):
@@ -130,7 +144,7 @@ def create_shield_app(
         inflight[number] = now
         try:
             upstream_request = client.build_request(
-                "POST", base + "/v1/chat/completions", content=raw, headers={"Content-Type": "application/json"}
+                "POST", route_base.get(body.get("model"), base) + "/v1/chat/completions", content=raw, headers={"Content-Type": "application/json"}
             )
             upstream_response = await client.send(upstream_request, stream=True)
         except httpx.HTTPError:
@@ -160,14 +174,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--max-body-bytes", type=int, default=DEFAULT_MAX_BODY_BYTES)
     parser.add_argument("--allow-model", action="append", default=[], metavar="NAME",
                         help="Only run this local model name (repeat). Recommended: it keeps your GPU for the model you advertise.")
+    parser.add_argument("--route", action="append", default=[], metavar="MODEL=URL",
+                        help="Send this model to another local server (repeat), e.g. hivemind-bee-stars=http://127.0.0.1:8294. Implies --allow-model for it.")
     args = parser.parse_args(argv)
+    routes: dict[str, str] = {}
+    for item in args.route:
+        model, sep, url = item.partition("=")
+        if not sep or not model.strip() or not url.startswith(("http://127.0.0.1", "http://localhost")):
+            parser.error(f"--route expects MODEL=http://127.0.0.1:PORT, got {item!r}")
+        routes[model.strip()] = url.strip()
     token = os.environ.get(ENDPOINT_TOKEN_ENV, "")
     if len(token) < MIN_TOKEN_CHARS:
         parser.error(f"set {ENDPOINT_TOKEN_ENV} to a random secret of at least {MIN_TOKEN_CHARS} characters")
     import uvicorn  # imported late so the module can be imported (and tested) without a server
 
     app = create_shield_app(args.upstream, token, max_concurrent=args.max_concurrent,
-                            max_body_bytes=args.max_body_bytes, allowed_models=args.allow_model)
+                            max_body_bytes=args.max_body_bytes, allowed_models=args.allow_model, routes=routes)
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
     return 0
 

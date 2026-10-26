@@ -23,7 +23,7 @@ SERVING_EXPERT_SPECS: Dict[str, Dict[str, Any]] = {
     PYTHON_CODE_GWAYA: {
         "kind": "serving_verified",
         "keywords": [
-            "def ", "import ", "python", "pytest", "unittest", "traceback", "assert ", "lambda", "class ", "numpy",
+            "def ", "import ", "python", "pytest", "unittest", "traceback", "assert ", "lambda", "numpy",
             "pandas", "list comprehension", "decorator", "generator", "dataclass", "pip ", ".py", "typing",
         ],
         "description": "Python function-level generation and repair gated by AST stub audit and sandboxed tests (GWAYA-Lite).",

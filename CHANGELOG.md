@@ -1,5 +1,11 @@
 # Changelog
 
+## Zenodo deposit of manuscript v3.8.0 — 2026-10-25
+
+- Published as 10.5281/zenodo.23649757 (new version of 10.5281/zenodo.23607597, concept DOI 10.5281/zenodo.23597697; 99 files; checksums verified against the local tree and, for the eight carried-over E12 replay tensors, against the v3.7.1 receipt). Not peer reviewed; the record bundles the E10b-E16 preregistrations, amendments, raw data and reports, the GWAYA-Lite live check and the T4 campaign report.
+- `scripts/publish_hivemind_paper_zenodo.py`: default version 3.8.0, extended bundle, an honest description (128 theorems, invalid rows named), carried-over file verification, and a filter that keeps run logs containing the machine username out of the public record. `paper/zenodo_carried_over_v3.7.1.json` lists the carried-over md5 values.
+- Known differences from main (also in `paper/ZENODO_DEPOSIT_RECEIPT.json`): the Lean file in the record is the 128-theorem version the paper describes (main has since added 13 theorems); the T4 queue run log is not in the record.
+
 ## Unreleased — 2026-10-24 — paper v3.8.0 corrections and T4 replication kit (no version tag)
 
 - Manuscript v3.8.0 (not deposited; the deposited record stays v3.7.1, 10.5281/zenodo.23607597): withdraws the INVALID E11 Qwen2.5-Coder-7B row (negative control failed by -0.47 nats), states P11a on Qwen2.5-0.5B as refuted on one rate-matched cell, adds a labelled-untested likely-cause note to E10b, and adds provenance checks PROV-72 and PROV-73; fig. 8 is regenerated without the 7B panel; the ledger gains a `withdrawn` block for P11a/P11b.

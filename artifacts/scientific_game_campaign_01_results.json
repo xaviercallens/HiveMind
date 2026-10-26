@@ -1,0 +1,316 @@
+{
+  "campaign_id": "CAMPAIGN-01-DYSON-EXOPLANET-ODYSSEY",
+  "server_url": "http://127.0.0.1:8790/scientific-game",
+  "rtx2070_and_la_ruche_sync": {
+    "rtx2070_hardware": {
+      "profile_name": "rtx2070_7b_worker",
+      "gpu_target_model": "NVIDIA GeForce RTX 2070 (Turing TU106, 8192 MB GDDR6)",
+      "detected_runtime_device": "cpu",
+      "detected_device_name": "NVIDIA GeForce RTX 2070 (8 GB VRAM Target Profile / Local Tensor Host)",
+      "cuda_available": false,
+      "vram_ceiling_mb": 8192.0,
+      "vram_allocated_or_budget_mb": 6645.8,
+      "wddm_game_headroom_mb": 1546.2,
+      "within_8gb_golden_invariant": true,
+      "vram_budget_gb": {
+        "frozen_base_nf4_gb": 3.85,
+        "lora_trainable_r64_gb": 0.32,
+        "paged_adamw_8bit_gb": 0.32,
+        "total_peak_vram_gb": 6.49
+      },
+      "tensor_kernel_latency_ms": 36.646,
+      "tensor_kernel_throughput_gflops": 3.09,
+      "tensor_verification_norm": 7502.8408
+    },
+    "la_ruche_cloud": {
+      "url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app",
+      "connected": true,
+      "gamer_handle": "cybervalkyrie-fr-5ecb",
+      "account_id": "ac50df15c6589f99c5150e81c47e5e9e",
+      "models_available": [
+        "hivemind/auto",
+        "hivemind/bee-stars",
+        "hivemind/coder",
+        "hivemind/coder-lite"
+      ],
+      "rtx2070_producer_heartbeat": {
+        "account_id": "ac50df15c6589f99c5150e81c47e5e9e",
+        "status": "live",
+        "models": [
+          "bee-stars",
+          "coder"
+        ],
+        "ttl_s": 120.0
+      },
+      "hmt_ledger": {
+        "account_id": "ac50df15c6589f99c5150e81c47e5e9e",
+        "balance": 99.73600000000012,
+        "earned_total": 100.0,
+        "producer_earned": 0.0,
+        "grants_received": 100.0,
+        "spent_total": 0.26399999999987994,
+        "escrow_locked": 0.0,
+        "active_holds_count": 0,
+        "chain_verified": true,
+        "ledger_entries": [
+          {
+            "seq": 10953,
+            "delta": -0.13899999999993679,
+            "kind": "debit",
+            "ref": "req:req-02714b5ef3064798819962c2bf32c945",
+            "prev_hash": "9e38920a8ac6d6c9",
+            "entry_hash": "6fe5dc36469deda6",
+            "utc": 1793015789.9366727
+          },
+          {
+            "seq": 10952,
+            "delta": 0.25499999999988404,
+            "kind": "hold_release",
+            "ref": "req:req-02714b5ef3064798819962c2bf32c945",
+            "prev_hash": "00d4f5be56884c61",
+            "entry_hash": "9e38920a8ac6d6c9",
+            "utc": 1793015789.9366727
+          },
+          {
+            "seq": 10949,
+            "delta": -0.25499999999988404,
+            "kind": "hold",
+            "ref": "req:req-02714b5ef3064798819962c2bf32c945",
+            "prev_hash": "4789d85d1b1491bd",
+            "entry_hash": "387aec4b85116d88",
+            "utc": 1793015787.3164637
+          },
+          {
+            "seq": 10945,
+            "delta": -0.12499999999994316,
+            "kind": "debit",
+            "ref": "req:req-d9f34c6f86374d1daa883e205a5cff0a",
+            "prev_hash": "0b84dcbce723b8c8",
+            "entry_hash": "68131ce9da69e435",
+            "utc": 1793015761.3550763
+          },
+          {
+            "seq": 10944,
+            "delta": 0.25499999999988404,
+            "kind": "hold_release",
+            "ref": "req:req-d9f34c6f86374d1daa883e205a5cff0a",
+            "prev_hash": "42563b79e1b84261",
+            "entry_hash": "0b84dcbce723b8c8",
+            "utc": 1793015761.3550763
+          },
+          {
+            "seq": 10941,
+            "delta": -0.25499999999988404,
+            "kind": "hold",
+            "ref": "req:req-d9f34c6f86374d1daa883e205a5cff0a",
+            "prev_hash": "d7b849d13017bb1b",
+            "entry_hash": "a641bcc09e6da0b7",
+            "utc": 1793015758.5605462
+          },
+          {
+            "seq": 10868,
+            "delta": 100.0,
+            "kind": "grant",
+            "ref": "welcome-grant",
+            "prev_hash": "9fc3d5c0b9293619",
+            "entry_hash": "19b6bb8265bd8334",
+            "utc": 1793015626.7844331
+          }
+        ],
+        "handle": "cybervalkyrie-fr-5ecb",
+        "role": "prosumer",
+        "max_price_per_1k": 2.0
+      },
+      "error": null
+    },
+    "local_gpu_swarm_tunnel": {
+      "url": "http://127.0.0.1:11435",
+      "online": true,
+      "models_available": [
+        "gpt-oss:20b",
+        "qwen2.5-coder:3b",
+        "deepseek-r1:14b",
+        "qwen2.5-coder:1.5b",
+        "qwen3-embedding:0.6b",
+        "qwen3:8b",
+        "mistral:7b-instruct",
+        "hf.co/mradermacher/Goedel-Prover-V2-8B-GGUF:Q6_K"
+      ]
+    },
+    "non_monetary_charter": "Strictly Non-Monetary Compute Reciprocity (0.00 EUR / 0.00 USD): All Scientific Odyssey Points (PTS) and HiveMind Reflexion Points (HMT) are educational and reciprocal GPU compute accounting units with zero cash value."
+  },
+  "mission_01_off_resonance_7_50d": {
+    "verified": false,
+    "pts": 0,
+    "bls_snr": 6.48,
+    "verlet_drift": 1.326e-05,
+    "bee_energy": 52.871542
+  },
+  "mission_01_locked_resonance_11_23d": {
+    "verified": true,
+    "pts": 1200,
+    "bls_snr": 30.03,
+    "verlet_drift": 1.326e-05,
+    "euler_drift": 0.00296405,
+    "drift_reduction_factor": 223.54,
+    "bee_energy": 2.871542
+  },
+  "mission_02_e8_multikrum_f2": {
+    "verified": true,
+    "pts": 1350,
+    "sqnr_db": 27.39,
+    "cosine_sim": 0.999549,
+    "rejected_workers": [
+      "byzantine-poisoner-02",
+      "byzantine-poisoner-01"
+    ],
+    "bee_energy": 2.421151
+  },
+  "mission_02_e8_multikrum_f3": {
+    "verified": true,
+    "pts": 1350,
+    "sqnr_db": 27.39,
+    "cosine_sim": 0.999549,
+    "rejected_workers": [
+      "byzantine-poisoner-02",
+      "byzantine-poisoner-03",
+      "byzantine-poisoner-01"
+    ],
+    "bee_energy": 2.421151
+  },
+  "mission_03_anse_energy_reactor": {
+    "verified": true,
+    "pts": 1500,
+    "selected_candidate": "attempt-3-symplectic-verlet",
+    "delta_energy_dpo": 26.664708,
+    "autopoietic_promoted": true,
+    "bee_energy": 2.928658
+  },
+  "total_campaign_pts_earned": 4050,
+  "steam_wddm_preemption": {
+    "steam_app_id": 3133700,
+    "gamer_tag": "Xavier_RTX2070_FR",
+    "game_exe": "HiveMind_Unity_SolarSystem.exe",
+    "foreground_active": true,
+    "background_worker_paused": true,
+    "preemption_eviction_ms": 14.24,
+    "preemption_within_1500ms_sla": true
+  },
+  "la_ruche_copilot_live": {
+    "prompt": "Give a 2-sentence explanation of why Velocity Verlet preserves symplectic phase-space volume better than Forward Euler for TIC 4206066.",
+    "model_requested": "hivemind/bee-stars",
+    "provider_used": "la_ruche_cloud",
+    "reply": "Velocity Verlet preserves symplectic phase-space volume better than Forward Euler for TIC 4206066 because it uses a symplectic integrator, which conserves the Hamiltonian structure of the system more accurately over time steps. This leads to more stable and physically meaningful long-term simulations compared to the non-symplectic Forward Euler method.",
+    "latency_ms": 3320.0,
+    "charged_hmt": 0.13899999999993679,
+    "hmt_ledger_after": {
+      "account_id": "ac50df15c6589f99c5150e81c47e5e9e",
+      "balance": 99.59700000000018,
+      "earned_total": 100.0,
+      "producer_earned": 0.0,
+      "grants_received": 100.0,
+      "spent_total": 0.4029999999998167,
+      "escrow_locked": 0.0,
+      "active_holds_count": 0,
+      "chain_verified": true,
+      "ledger_entries": [
+        {
+          "seq": 10961,
+          "delta": -0.13899999999993679,
+          "kind": "debit",
+          "ref": "req:req-ec711392f2af4fcbbae2cb1698fba13b",
+          "prev_hash": "38485eb8f0344a97",
+          "entry_hash": "99e53a4e65604e68",
+          "utc": 1793015856.06344
+        },
+        {
+          "seq": 10960,
+          "delta": 0.25499999999988404,
+          "kind": "hold_release",
+          "ref": "req:req-ec711392f2af4fcbbae2cb1698fba13b",
+          "prev_hash": "40c03d237d0c12d9",
+          "entry_hash": "38485eb8f0344a97",
+          "utc": 1793015856.06344
+        },
+        {
+          "seq": 10957,
+          "delta": -0.25499999999988404,
+          "kind": "hold",
+          "ref": "req:req-ec711392f2af4fcbbae2cb1698fba13b",
+          "prev_hash": "5b0c0dac199f8a46",
+          "entry_hash": "d19c9ae3b64cb537",
+          "utc": 1793015853.362344
+        },
+        {
+          "seq": 10953,
+          "delta": -0.13899999999993679,
+          "kind": "debit",
+          "ref": "req:req-02714b5ef3064798819962c2bf32c945",
+          "prev_hash": "9e38920a8ac6d6c9",
+          "entry_hash": "6fe5dc36469deda6",
+          "utc": 1793015789.9366727
+        },
+        {
+          "seq": 10952,
+          "delta": 0.25499999999988404,
+          "kind": "hold_release",
+          "ref": "req:req-02714b5ef3064798819962c2bf32c945",
+          "prev_hash": "00d4f5be56884c61",
+          "entry_hash": "9e38920a8ac6d6c9",
+          "utc": 1793015789.9366727
+        },
+        {
+          "seq": 10949,
+          "delta": -0.25499999999988404,
+          "kind": "hold",
+          "ref": "req:req-02714b5ef3064798819962c2bf32c945",
+          "prev_hash": "4789d85d1b1491bd",
+          "entry_hash": "387aec4b85116d88",
+          "utc": 1793015787.3164637
+        },
+        {
+          "seq": 10945,
+          "delta": -0.12499999999994316,
+          "kind": "debit",
+          "ref": "req:req-d9f34c6f86374d1daa883e205a5cff0a",
+          "prev_hash": "0b84dcbce723b8c8",
+          "entry_hash": "68131ce9da69e435",
+          "utc": 1793015761.3550763
+        },
+        {
+          "seq": 10944,
+          "delta": 0.25499999999988404,
+          "kind": "hold_release",
+          "ref": "req:req-d9f34c6f86374d1daa883e205a5cff0a",
+          "prev_hash": "42563b79e1b84261",
+          "entry_hash": "0b84dcbce723b8c8",
+          "utc": 1793015761.3550763
+        },
+        {
+          "seq": 10941,
+          "delta": -0.25499999999988404,
+          "kind": "hold",
+          "ref": "req:req-d9f34c6f86374d1daa883e205a5cff0a",
+          "prev_hash": "d7b849d13017bb1b",
+          "entry_hash": "a641bcc09e6da0b7",
+          "utc": 1793015758.5605462
+        },
+        {
+          "seq": 10868,
+          "delta": 100.0,
+          "kind": "grant",
+          "ref": "welcome-grant",
+          "prev_hash": "9fc3d5c0b9293619",
+          "entry_hash": "19b6bb8265bd8334",
+          "utc": 1793015626.7844331
+        }
+      ],
+      "handle": "cybervalkyrie-fr-5ecb",
+      "role": "prosumer",
+      "max_price_per_1k": 2.0
+    },
+    "bee_energy_total": 17.667604,
+    "bee_energy_receipt_sha256": "4a88fcf36e201d33b4208cd18059996826ca19bf6c28cc121c190c9a64fa80c4",
+    "non_monetary_charter": "Strictly Non-Monetary Compute Reciprocity (0.00 EUR / 0.00 USD): All Scientific Odyssey Points (PTS) and HiveMind Reflexion Points (HMT) are educational and reciprocal GPU compute accounting units with zero cash value."
+  }
+}

@@ -10,6 +10,7 @@ from hivemind.cli.campaign_calendar_quorum import (
     evaluate_quorum_readiness,
     generate_campaign_ics_calendar,
 )
+from hivemind.router.points_wording import currency_leftovers
 
 
 def test_evaluate_quorum_readiness_tiers() -> None:
@@ -78,5 +79,6 @@ def test_generate_campaign_ics_and_report(tmp_path: Path) -> None:
     )
     assert report_file.exists()
     assert len(report["schedule_sha256"]) == 64
-    assert "0.00 EUR / 0.00 USD" in report["non_monetary_charter"]
+    assert "NO FINANCIAL PAYMENT" in report["non_monetary_charter"]
+    assert currency_leftovers(report["non_monetary_charter"]) == []
     assert len(report["scheduled_events"]) == 5

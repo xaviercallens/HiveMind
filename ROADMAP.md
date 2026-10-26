@@ -1,4 +1,4 @@
-# 🗺️ Project HiveMind — Master Roadmap, 1-Hour Orchestrator, Experimental Suite & Season 9 (`Wave 8 — Operation Decoupled-Quorum`) Tasks (`v2.5.0` / Paper `v3.7.0`)
+# 🗺️ Project HiveMind — Master Roadmap (Seasons 1–18; active: S16 live operations, S17 CrowdSwarm, S18 Energy-Bees)
 
 <div align="center">
 <img src="docs/assets/hivemind_strategy_improvement_engine.svg" alt="Project HiveMind v2.0.0 — 63/63 Merged PRs, 120 Lean 4 Theorems, E1-E4 + H1-H11 Checks & Season 9 Roadmap" width="100%"/>
@@ -270,25 +270,111 @@ Evidence: 144 router tests (Hypothesis properties on the certificate, ledger con
 
 ## 🐝 3.12 Season 14 (`Wave 13` — "Operation Night-Hive") — Bee MoE experts with QLoRA on larger bases (from the 2026-10-24/25 night run)
 
+Work breakdown, dependencies and gate definitions: [`docs/IMPLEMENTATION_PLAN_S14_S15.md`](docs/IMPLEMENTATION_PLAN_S14_S15.md); contributor tasks link to their issues below.
+
 Plan of record: [`docs/NIGHT_MOE_2_PLAN.md`](docs/NIGHT_MOE_2_PLAN.md) (draft, to be preregistered); results of the first run: [`docs/NIGHT_MOE_RESULTS.md`](docs/NIGHT_MOE_RESULTS.md), served at `/night-moe` on the HiveMind@home service.
 
 What the first night measured (7B QLoRA adapters, one T4, exact paired McNemar against the base on identical items): stars **VALID** (0.489 to 0.893, shuffled control below base); exoplanet **VOID** under the registered rule (the shuffled control also gained, p=0.0237) although the adapter beats its control 309 to 17; maths **NO_GAIN** (0.785 to 0.715, and on the 173 items both parsed 130 vs 157 correct, so the loss is real); cyber **NO_GAIN** (0.660 vs 0.650, p=0.383). Seven training stages hit their time cap; three interference stages timed out.
 
 | Task | Problem | Deliverable | Gate |
 | :-- | :-- | :-- | :-- |
-| `HM-S14-01` | the VOID rule and the controls mislead (control keeps the label prior; maths control cannot score above zero) | adapter-vs-control paired test as the primary decision, cross-domain adapter control for generative tasks, preregistered | G-R1 |
-| `HM-S14-02` | gold-text fine-tuning hurt maths | train on rejection-sampled, verified self-solutions (E15 recipe) | G-R1 |
-| `HM-S14-03` | "MoE" was a set of adapters | build and test the routed system: router accuracy, then end-to-end accuracy and interference with the gate in place | G-R1 |
-| `HM-S14-04` | interference was sampled at n=100 and 3 cells timed out | full-pack interference grid, one preregistered Bonferroni family, caps from measured time | G-R1 |
+| `HM-S14-01` ([#165](https://github.com/xaviercallens/HiveMind/issues/165)) | the VOID rule and the controls mislead (control keeps the label prior; maths control cannot score above zero) | adapter-vs-control paired test as the primary decision, cross-domain adapter control for generative tasks, preregistered | G-R1 |
+| `HM-S14-02` ([#166](https://github.com/xaviercallens/HiveMind/issues/166)) | gold-text fine-tuning hurt maths | train on rejection-sampled, verified self-solutions (E15 recipe) | G-R1 |
+| `HM-S14-03` ([#167](https://github.com/xaviercallens/HiveMind/issues/167)) | "MoE" was a set of adapters | build and test the routed system: router accuracy, then end-to-end accuracy and interference with the gate in place | G-R1 |
+| `HM-S14-04` ([#168](https://github.com/xaviercallens/HiveMind/issues/168)) | interference was sampled at n=100 and 3 cells timed out | full-pack interference grid, one preregistered Bonferroni family, caps from measured time | G-R1 |
 | `HM-S14-05` | 7B on a T4 is the only size tried | Qwen2.5-Coder-14B QLoRA on one L4 (no quota change); 1-step smoke tests for gpt-oss-20B and Qwen3-Coder-30B-A3B; A100 quota request is the owner's decision | owner |
-| `HM-S14-06` | VM data disk is 99.7% full (1.6 GB free) | a data disk sized for the run before any training starts | owner |
-| `HM-S14-07` | unverified generated text gave a null | verified targets only for the cyber expert, or drop it; add a code expert with executable tests | G-R1 |
-| `HM-S14-08` | no adapter passed the update gate for serving | run the verified update gate on the stars adapter and decide whether the router offers it as an expert tier | G-R2 |
+| `HM-S14-06` | VM data disk is 99.7% full (1.6 GB free) | a data disk sized for the run before any training starts; **done 2026-10-25:** grown online to 2000 GB (1.5T free) | owner |
+| `HM-S14-07` ([#169](https://github.com/xaviercallens/HiveMind/issues/169)) | unverified generated text gave a null | verified targets only for the cyber expert, or drop it; add a code expert with executable tests | G-R1 |
+| `HM-S14-08` ([#170](https://github.com/xaviercallens/HiveMind/issues/170)) | no adapter passed the update gate for serving | run the verified update gate on the stars adapter and decide whether the router offers it as an expert tier | G-R2 |
 | `HM-S14-09` | the dashboard link and repo server code lag the deployed overlay | reconcile `deploy/gcp_cloud_run` with the live image (release id and report files) before the next redeploy | G-R1 |
 
-## 👑 3.13 Season 15 (`Wave 14` — "Operation ALIXQueenBee") — a queen that splits work and learns from the dance (owner's brief, 2026-10-25)
+## 👑 3.13 Season 15 (`Wave 14` — "Operation QueenBee") — verified-feedback routing and knowledge sharing (owner's brief, 2026-10-25)
 
-Proposal of record: [`docs/ALIX_QUEENBEE_PROPOSAL.md`](docs/ALIX_QUEENBEE_PROPOSAL.md). A planner (the Queen) splits a request into verified sub-tasks and routes them to federated experts; verified outcomes are shared as compact, signed "dance records" (task cluster, cost, success rate with an interval) so routers recruit toward evidence; developers' corrections train a local adapter or bandit and reach the shared pool only through a gate that can reject them. Proposal only: no component is built and no number is measured. Four preregistered experiments (routing, decomposition, local learning, robustness) are listed in the document.
+Work breakdown, dependencies and gate definitions: [`docs/IMPLEMENTATION_PLAN_S14_S15.md`](docs/IMPLEMENTATION_PLAN_S14_S15.md); contributor tasks link to their issues below.
+
+Proposal: [`docs/QUEENBEE_PROPOSAL.md`](docs/QUEENBEE_PROPOSAL.md). Experiments: [`docs/QUEENBEE_EXPERIMENTS.md`](docs/QUEENBEE_EXPERIMENTS.md). Literature: [`docs/QUEENBEE_LITERATURE_REVIEW.md`](docs/QUEENBEE_LITERATURE_REVIEW.md). Lean: `HiveMindSpec.ALIX_QueenBee`, Theorems 129-139.
+
+Delivered: package `hivemind.queenbee` with a strategy manager (bandit by default; verified preference pairs; opt-in clipped and noised sharing through Multi-Krum plus quorum), signed dance records, and knowledge points paid as a lump sum that leaves the market equilibrium unchanged. In simulation QB1c (valid after two invalid runs that their own controls caught), the bandit beats uniform and the static route in 20/20 seeds, honest dances cut early regret from 22.9 to 9.7, and a scout cross-check cuts sybil damage from 41.3 to 3.6. The value cap did **not** work as a defence.
+
+| Task | Problem | Deliverable | Gate |
+| :-- | :-- | :-- | :-- |
+| `HM-S15-01` ([#171](https://github.com/xaviercallens/HiveMind/issues/171)) | the value cap cuts honest signal and does not bound influence by evidence | per-signer pseudo-trial budget, Lean theorem, preregistered re-test with the cap really removed | G-R1 |
+| `HM-S15-02` ([#172](https://github.com/xaviercallens/HiveMind/issues/172)) | the scout check trusts scouts | two independent scouts per cell, rotation, one-corrupt-scout adversary | G-R1 |
+| `HM-S15-03` ([#173](https://github.com/xaviercallens/HiveMind/issues/173)) | the bandit is only simulated | route among served experts on tasks with executable tests; measure the routing plateau first | G-R1 |
+| `HM-S15-04` ([#174](https://github.com/xaviercallens/HiveMind/issues/174)) | the Queen does not decompose tasks | subtask split with per-subtask verifiers, against planner-as-router baselines | G-R1 |
+| `HM-S15-05` ([#175](https://github.com/xaviercallens/HiveMind/issues/175)) | strategy b has no users | consenting developers' verified corrections, local adapter, verified update gate | G-R2 |
+| `HM-S15-06` ([#176](https://github.com/xaviercallens/HiveMind/issues/176)) | averaging LoRA factors is inexact and no privacy budget is accounted | product-space or exact aggregation, privacy accountant, Multi-Krum attack test, two hosts | G-R2 |
+| `HM-S15-07` | knowledge points are not live | admission service behind the firewall, public dataset with licences, settlement via the epoch ledger; bonus share set by the owner | owner |
+
+## 🛫 3.14 Season 16 (`Wave 15` — "Operation First-Flight") — live operations after the first real users (2026-10-25)
+
+Work breakdown, order and gates: [`docs/IMPLEMENTATION_PLAN_S16.md`](docs/IMPLEMENTATION_PLAN_S16.md). Record of the first real-life test: [`docs/LIVE_USER_TESTS.md`](docs/LIVE_USER_TESTS.md), `artifacts/live_tests/FIRST_REAL_USER_TEST_20261025.json`.
+
+Delivered on 2026-10-25:
+- **Served:** the three public services serve real inference from the T4 producers (Bee stars expert, 7B and 3B coders) under one ledger.
+- **New users:** a new account's first request is served at the default price (fixed: idle high bidders had refused it with 402).
+- **Wording:** pages show HiveMind Reflexion Points only.
+- **Monitoring:** a monitor probes every service and tier every 30 minutes with checkers that must reject a known-wrong answer first.
+
+What the first day exposed:
+- deploys from an uncommitted tree undid live fixes twice;
+- a few active high bidders still price new users out at idle capacity;
+- the first real answer was served correctly but was wrong code.
+
+| Task | Problem | Deliverable | Gate |
+| :-- | :-- | :-- | :-- |
+| `HM-S16-01` ([#188](https://github.com/xaviercallens/HiveMind/issues/188)) | deploys from an uncommitted tree dropped live fixes | build from a tagged main commit, canary, switch by revision name; retire the overlays | G-L1 |
+| `HM-S16-02` ([#189](https://github.com/xaviercallens/HiveMind/issues/189)) | nothing stops a broken image from taking traffic | checked-probe contract on the canary gates every switch | G-L1 |
+| `HM-S16-03` ([#190](https://github.com/xaviercallens/HiveMind/issues/190)) | 4 active bidders at max 10 set 7.5 HMT/1k at idle capacity | posted price below capacity, Kelly under congestion, certificates and a Lean theorem for the switch | G-L2 |
+| `HM-S16-04` ([#191](https://github.com/xaviercallens/HiveMind/issues/191)) | probes check liveness, the first real answer was wrong | held-out coding prompts with hidden tests in a sandbox, pass@1 per tier, route `auto` by verified score | G-L2 |
+| `HM-S16-05` ([#192](https://github.com/xaviercallens/HiveMind/issues/192)) | remote control is stored, not enforced | agents obey pause and VRAM cap; integration test | G-L2 |
+| `HM-S16-06` ([#193](https://github.com/xaviercallens/HiveMind/issues/193)) | cold reload gave a 504 | loaded-model heartbeats, routing to resident models, explicit `model_loading` | G-L2 |
+| `HM-S16-07` ([#194](https://github.com/xaviercallens/HiveMind/issues/194)) | test accounts moved the price and the user counts | `test`/`probe` flag excluded from bids and metrics, starter-grant cap per IP | G-L1 |
+| `HM-S16-08` ([#195](https://github.com/xaviercallens/HiveMind/issues/195)) | regressions are seen only by whoever reads the monitor | status page and alerting from the monitor log | G-L1 |
+| `HM-S16-09` ([#196](https://github.com/xaviercallens/HiveMind/issues/196)) | template completions and browser-side credits remain in the dashboard source | remove both, restore `/night-moe`, tests | G-L1 |
+| `HM-S16-10` ([#197](https://github.com/xaviercallens/HiveMind/issues/197)) | a second revision on the same replica is a second ledger writer | startup lock with a GCS generation precondition | G-L1 |
+
+## 🤝 3.15 Season 17 (`Wave 16` — "Operation CrowdSwarm") — Joint Federation Plan with `CrowdGPT` (`Vxtzq/CrowdGPT` & `Vxtzq/Crowd-v1`) and `r/artificielle` Contributors (2026-10-26)
+
+Proposal of record: [`docs/CROWDSWARM_JOINT_WORK_PROPOSAL.md`](docs/CROWDSWARM_JOINT_WORK_PROPOSAL.md), tracked in Issue [#204](https://github.com/xaviercallens/HiveMind/issues/204), emerging from the `r/artificielle` Suite #2 community discussion (`1xf6p1d`). Bridges two complementary visions raised by community contributors:
+1. **Shared Generalist Trunk (`u/Vxtzq1`, creator of [`Vxtzq/CrowdGPT`](https://github.com/Vxtzq/CrowdGPT) and [`Vxtzq/Crowd-v1`](https://huggingface.co/Vxtzq/Crowd-v1)):** Concentrating volunteer GPU hours on a 1B dense foundation trunk (`7B` tokens trained across `Ultra-FineWeb-L3` & `fineweb`, Qwen3 tokenizer, 1-hour offline training on 1 MB `uint16` `.bin` shards, `82,800+` HuggingFace downloads, MIT license).
+2. **Low-Latency Multi-Model & Specialist Routing (`u/Brilliant_Pie_1924`):** Avoiding inter-layer WAN latency during inference by keeping full models/MoEs resident on single consumer GPUs (`158 ms` warm TTFT on Tesla T4, `355 ms` / `72 tok/s` on local RTX 2070) while routing dynamically across domain specialists (`Qwen2.5-Coder-7B`, `hive-bee-stars-3b`, `Vxtzq/Crowd-v1`, and 18 MB Night-Hive QLoRA grafts).
+
+| Task ID | Branch Prefix | Target Subsystem / Partner Repo | Joint Community Work Package (`CrowdGPT × La Ruche / HiveMind@Home`) | Status / Gate |
+| :--- | :--- | :--- | :--- | :---: |
+| **`HM-S17-CW-01`** ([#204](https://github.com/xaviercallens/HiveMind/issues/204)) | `feat/s17-prewire-crowd-v1-router` | `src/hivemind/router/catalog.py`, `gateway.py`, `portal_page.py` | **WP-J1 — Pre-Wire & Live Onboarding of `Vxtzq/Crowd-v1` (`hivemind/crowd-v1` / `crowdgpt/crowd-v1`) on La Ruche & HiveMind OpenRouter**: Register `Vxtzq/Crowd-v1` (1B, 4 GB min VRAM tier) in `/v1/hivemind/catalog`, `/v1/hivemind/partner-models`, and `/v1/chat/completions` with alias normalization (`hivemind/crowd-v1`, `crowdgpt/crowd-v1`, `Vxtzq/Crowd-v1`) and Playground selector support. | **Merged** ([#205](https://github.com/xaviercallens/HiveMind/pull/205)); live once a producer serves it |
+| **`HM-S17-CW-02`** ([#204](https://github.com/xaviercallens/HiveMind/issues/204)) | `feat/s17-crowdgpt-multikrum-ratchet` | `src/hivemind/core/byzantine.py` $\leftrightarrow$ `Vxtzq/CrowdGPT` | **WP-J2 — Byzantine-Robust Coordinator Upgrade for `Vxtzq`'s 100-Contributor Server**: Package `Multi-Krum`, `Coordinate-Wise Trimmed Mean`, Held-Out Validation Loss Ratchet, and strict `safetensors`-only delta verification for 1-hour offline `uint16` `.bin` shard training rounds. | **PRs open:** [#207](https://github.com/xaviercallens/HiveMind/pull/207) (`crowdgpt_bridge.py`, 3 tests) and upstream [Vxtzq/CrowdGPT#22](https://github.com/Vxtzq/CrowdGPT/pull/22) / [#21](https://github.com/Vxtzq/CrowdGPT/issues/21), awaiting the partner; not yet run on a real Crowd-v1 delta (`G3`) |
+| **`HM-S17-CW-03`** ([#204](https://github.com/xaviercallens/HiveMind/issues/204)) | `feat/s17-unified-rocm-directml-installer` | `scripts/hivemind_producer_shield.py` $\leftrightarrow$ `Vxtzq/CrowdGPT` (`install.sh` / `install.bat`) | **WP-J3 — Unified Multi-Vendor Installer (`CUDA` / `ROCm` / `DirectML` / `MPS` / `XPU`)**: Combine `Vxtzq`, `MatrixMagician`, and `blaich499`'s cross-platform AMD ROCm (Fedora/Linux/Windows) and DirectML installer detection with HiveMind's zero-trust producer shield and `<1.0s` game preemption governor. | Open for Joint PR (`G2`) |
+| **`HM-S17-CW-04`** ([#204](https://github.com/xaviercallens/HiveMind/issues/204)) | `feat/s17-tronc-commun-greffons-qlora` | `src/hivemind/boinc/` & `scripts/run_hivemind_at_home_and_ruche_campaign.py` | **WP-J4 — "Le Tronc Commun + Les Greffons" Joint Federated Experiment (`Suite #3`)**: Train 18 MB rank-16 QLoRA domain adapters (`french`, `code`, `math/Lean 4`, `astrophysics`) grafted onto the `Vxtzq/Crowd-v1` 1B generalist trunk during the `22:00–07:00 CET` European night window and benchmark non-LLM epistemological routing (`u/Brilliant_Pie_1924` track). | Planned (`G1`/`G2`) |
+
+## 🧬 3.16 Season 18 (`Wave 17` — "Operation Energy-Bees") — a measured energy function and a self-evolution gate for the Bees, ported from `AutoevolveAI` (proposed 2026-10-26, reviewed the same day)
+
+Proposal of record: [`docs/AUTOPOIETIC_ENERGY_BEES_PROPOSAL.md`](docs/AUTOPOIETIC_ENERGY_BEES_PROPOSAL.md) · Epic: [#208](https://github.com/xaviercallens/HiveMind/issues/208) · Contributor guide: [wiki › Season 18 Energy-Bees](https://github.com/xaviercallens/HiveMind/wiki/Season-18-Energy-Bees).
+
+**Why.** Two things measured on 2026-10-25/26: (1) the BOINC chain's held-out loss (`2.2705 -> 2.1380`, `-5.8 %`) **plateaued** and its head was chosen best-of-97 on the same tiny sets it is reported on (`scripts/t4_training_report.py`); (2) held-out loss is not answer quality: the first real coding answer was served fast and was wrong (`HM-S16-04`), and adapters trained on terse gold text interfered (`NIGHT-MOE-1`).
+
+**What is imported from [`AutoevolveAI`](https://github.com/xaviercallens/AutoevolveAI), and what is not** (its own gates, `docs/EVOLUTION_LAB.md`): hidden-test graded energy (Phase 1: the self-graded loop claimed 11/20, hidden tests verified 7); the promotion gate with equivalence check, A/A noise margin and rollback (Phase 3, 5/5 gates, on toy components); best-so-far and short error prompts for small models (Phase 4 `D1`/`D3`/`D6`); the Lean cost decomposition (one Mathlib import is the whole cost, so only a warm process helps). **Not imported**, because its gates failed there: a learned energy predictor that skips execution (Phase 2: 40.0 % vs 44.3 % random on candidate choice), full-solution lesson memory and verbose adaptive retry on ≤ 3B models (Phase 1 UC2/UC4), new GP crossover operators (8 operators, same cliff).
+
+**Review of the first draft (2026-10-26), all fixed in this section and in `src/hivemind/verification/bee_energy.py`:**
+
+| # | Finding | Fix |
+| :-- | :-- | :-- |
+| R1 | Four of five tasks duplicated open issues: hidden-test sandbox = `HM-S16-04` [#191](https://github.com/xaviercallens/HiveMind/issues/191), verified self-solutions = `HM-S14-02` [#166](https://github.com/xaviercallens/HiveMind/issues/166), promotion gate = `HM-S14-01`/`HM-S14-08` [#165](https://github.com/xaviercallens/HiveMind/issues/165)/[#170](https://github.com/xaviercallens/HiveMind/issues/170), energy bandit = `HM-S15-03` [#173](https://github.com/xaviercallens/HiveMind/issues/173). | S18 now builds the **shared pieces** (energy function, gate, plateau rule, warm verifier) and each task names the existing issue it unblocks. No parallel implementation. |
+| R2 | The energy ranked a **correct 6 s answer (E = 60.5) below a half-wrong 5 ms answer (E = 50.1)**: linear latency/memory terms could outweigh failed tests, the exact fast-but-wrong failure Phase 3 exists to reject. | Cost is squashed and bounded below the weight of one failed test; regression test `test_correctness_dominates_cost_regression_from_review`. Same probe now: 20.4 vs 51.7. |
+| R3 | The draft gate said the plateau rule "triggers at round ~32". Replayed on the real ledger (97 six-domain rounds, `hmq_00002..00098`) it first triggers at **round 47 (`hmq_00048`)**; at round 40 the 10-round gain is still 0.0096. Its thresholds were also chosen after seeing that chain. | Gate restated with the measured number, labelled descriptive; validation must use a new chain. |
+| R4 | The promotion gate mixed a fixed `noise_margin = 0.5` with an unspecified McNemar step. | Noise margin is now **required** and comes from measured A/A runs (`calibrate_noise_margin`, ≥ 3 runs); exact McNemar on discordant pairs is the primary rule (same as `HM-S14-01`), ΔE the secondary one. |
+| R5 | Acceptance numbers were written by the engineering coordinator, which §0 does not allow (metrics and acceptance belong to the scientific lead). | Every gate below is a **draft** until pre-registered by the scientific lead in `artifacts/experiments/`. |
+| R6 | `laya_system_one` (10/10 on 10 hand-picked cases) was proposed as a pre-ranker. | Dropped from S18: Phase 2 showed a probe must first beat a linear baseline on our own traces. |
+
+| Task | Unblocks | Deliverable | Draft gate (pre-registration pending) | Who |
+| :-- | :-- | :-- | :-- | :-- |
+| **`HM-S18-AE-01`** energy function ([#209](https://github.com/xaviercallens/HiveMind/issues/209)) | [#191](https://github.com/xaviercallens/HiveMind/issues/191) | `bee_energy.py` (in [#207](https://github.com/xaviercallens/HiveMind/pull/207)): fail-closed `1e6` on crash/stub/`sorry`, hidden-test fail ratio first, bounded cost second; `D1` short error prompt, `D3` best-so-far. Wire it into the sandbox runner of #191. | 0 false "verified" on 20 seeded wrong replies; correct answers never ranked below wrong ones (property test over random cost values). | agent builds, human reviews |
+| **`HM-S18-AE-02`** two-split ratchet + plateau rule ([#210](https://github.com/xaviercallens/HiveMind/issues/210)) | BOINC chain, `scripts/t4_training_report.py` | Split A (per-round ratchet) and a **disjoint** Split B (reported number), ≥ 64 sequences per domain; plateau rule triggers a curriculum or LR change. | Split-B gain reported next to Split-A gain on a **new** chain; plateau rule fixed before that chain starts (on the old chain it fires at round 47, descriptive). | agent builds, scientific lead pre-registers |
+| **`HM-S18-AE-03`** energy-gap pairs ([#211](https://github.com/xaviercallens/HiveMind/issues/211)) | [#166](https://github.com/xaviercallens/HiveMind/issues/166) | `D6`: keep `(prompt, chosen, rejected)` only when the chosen answer passes all hidden tests and ΔE ≥ 10; opt-in users only, test/probe accounts excluded (`HM-S16-07`). | Adapter vs base: exact McNemar p < 0.05 on its own pack, shuffled control not significant, no Bonferroni-significant harm elsewhere. | agent builds, owner approves data use |
+| **`HM-S18-AE-04`** promotion gate ([#212](https://github.com/xaviercallens/HiveMind/issues/212)) | [#165](https://github.com/xaviercallens/HiveMind/issues/165), [#170](https://github.com/xaviercallens/HiveMind/issues/170) | `evaluate_child_bee_promotion` (0 parent regressions, control clean, McNemar, ΔE below the A/A margin) + versioned registry with SHA-256 lineage and rollback in La Ruche. | Mirrors Phase 3: 5/5 fast-but-wrong children rejected, 0/15 A/A promotions, rollback restores the parent in a test. | agent builds, human reviews |
+| **`HM-S18-AE-05`** warm verifier ([#213](https://github.com/xaviercallens/HiveMind/issues/213)) | [#173](https://github.com/xaviercallens/HiveMind/issues/173) | One persistent verifier process (Python sandbox pool, Lean REPL) instead of one process per candidate; its measured energies are the bandit's reward. | Per-candidate verification time vs cold start, n ≥ 20 each, same host, medians and spreads reported (no target ratio set in advance). | agent builds |
+
+Order: AE-01 → AE-04 → AE-03; AE-02 and AE-05 are independent. Nothing here is served to users until #191 measures it.
 
 ## 🎮 4. Opt-In Community GPU Testing Program (If Interested & Possible)
 

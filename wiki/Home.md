@@ -6,6 +6,10 @@ Welcome to the official **Project HiveMind** Wiki! This knowledgebase is synchro
 > **Project HiveMind is a 100% voluntary, non-commercial, open-source scientific research project. There is NO money, fiat currency, cryptocurrency, wage, or financial payment of any kind (`0.00 EUR / 0.00 USD`) involved now or ever.**
 > All references to **"Points" (`PTS`)**, **`$HIVE`**, **"Bounties"**, or **"PoUW Credits"** are **strictly non-monetary, symbolic compute-reciprocity accounting units** (like SETI@home or BOINC credits). They confer **exclusively computing processing benefits**—priority Sparse MoE inference tokens, speculative decoding throughput, and distributed QLoRA fine-tuning quota—**when the live production HiveMind Swarm is deployed, available, and actively used by a large community**.
 
+
+> [!NOTE]
+> **Start here (2026-10-26).** Current rules for humans and agents: **[Human and Agent Workflow](Human-and-Agent-Workflow)**. Open season: **[Season 18 — Energy-Bees](Season-18-Energy-Bees)** (tasks #209–#213, epic #208). Live operations: Season 16 issues #188–#197. Joint work with CrowdGPT: #204. Some older pages below describe earlier versions.
+
 ---
 
 ## 🧭 Wiki Sitemap & Comprehensive Guides (`10` Pages)

@@ -8,7 +8,7 @@ and published as a ready-to-use community model bundle (`safetensors` + Hugging 
 Model Card + 1-line Python loader).
 
 Charter Invariant:
-    Strictly non-monetary open-source scientific project (`0.00 EUR / 0.00 USD`). All
+    Strictly non-monetary open-source scientific project (`HiveMind Reflexion Points (HMT)`). All
     compute reciprocity credits (`PTS` / `$HIVE`) are non-financial accounting units for
     reciprocal swarm inference priority.
 """
@@ -170,7 +170,7 @@ class RucheCommunityMoERelease:
     cells: List[RucheHoneycombCell]
     created_at_epoch: float
     charter_notice: str = (
-        "Strictly non-monetary open-source project (0.00 EUR / 0.00 USD). "
+        "Strictly non-monetary open-source project. "
         "All experts and MoE weights are openly shared under reciprocal community compute."
     )
 

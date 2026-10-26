@@ -50,4 +50,4 @@ def test_run_multi_moe_hf_campaign_proves_holdout_convergence_and_byzantine_ties
     md = format_campaign_markdown_summary(report)
     assert "Operation Polyglot-Singularity-128" in md
     assert report["campaign_sha256"] in md
-    assert "0.00 EUR / 0.00 USD" in md
+    assert "HiveMind Reflexion Points (HMT)" in md

@@ -1,0 +1,17 @@
+# TEMPLATE mirroring the process running on 2026-10-25 (nginx routes / to 127.0.0.1:8788; upstream = Ollama 11434). NOT installed.
+# /etc/hivemind/t4-coder.env (root:root 0600) must define HIVEMIND_ENDPOINT_TOKEN.
+[Unit]
+Description=HiveMind T4 live: producer shield for the coder tiers (loopback :8788)
+After=ollama.service
+Requires=ollama.service
+
+[Service]
+User=callensxavier_gmail_com
+WorkingDirectory=/home/callensxavier_gmail_com/hivemind-producer
+EnvironmentFile=/etc/hivemind/t4-coder.env
+ExecStart=/usr/bin/python3 hivemind_producer_shield.py --port 8788 --max-concurrent 3 --allow-model qwen2.5-coder:7b-instruct --allow-model qwen2.5-coder:3b
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

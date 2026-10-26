@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import re
 import sys
 import time
@@ -72,6 +73,7 @@ def main() -> int:
     ap.add_argument("--baseline", default="")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--model", default="base")
+    ap.add_argument("--api-key-env", default="", help="name of an environment variable holding a bearer key (e.g. for the HiveMind router)")
     args = ap.parse_args()
     rows = [json.loads(line) for line in (Path(args.pack) / "eval.jsonl").read_text().split("\n") if line.strip()]
     if args.limit:
@@ -80,7 +82,8 @@ def main() -> int:
     out.mkdir(parents=True, exist_ok=True)
     journal = out / f"{args.tag}_journal.jsonl"
     done = {json.loads(line)["key"]: json.loads(line) for line in journal.read_text().splitlines()} if journal.exists() else {}
-    client = httpx.Client()
+    headers = {"Authorization": f"Bearer {os.environ[args.api_key_env]}"} if args.api_key_env else {}
+    client = httpx.Client(headers=headers)
     t0 = time.time()
     for r in rows:
         if r["key"] in done:

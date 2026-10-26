@@ -5,7 +5,7 @@ technical developers, and autonomous AI agents into synchronized time windows so
 decentralized HiveMind Swarm reaches mathematical Byzantine Quorum (`n >= 2f + 3`) and
 full 8-Domain / 4-Super-Cluster MoE coverage during Operation Polyglot-Singularity-128.
 
-IMPORTANT NON-MONETARY CHARTER (0.00 EUR / 0.00 USD):
+IMPORTANT NON-MONETARY CHARTER:
 No financial payment, fiat currency, cryptocurrency, or wage is ever promised or paid.
 Symbolic 'points' (`PTS` / `$HIVE`) confer exclusively reciprocal computing processing
 benefits (shared Sparse MoE inference tokens and fine-tuning priority) when the live
@@ -29,7 +29,7 @@ DEFAULT_QUORUM_REPORT_PATH = (
 )
 
 NON_MONETARY_COMPUTE_RECIPROCITY_NOTICE = (
-    "NO FINANCIAL PAYMENT (0.00 EUR / 0.00 USD): Project HiveMind is a voluntary, "
+    "NO FINANCIAL PAYMENT: Project HiveMind is a voluntary, "
     "non-commercial open-source research project. No money, fiat currency, cryptocurrency, "
     "or wage is ever promised or paid. Accumulated 'points' (PTS and $HIVE PoUW accounting "
     "units) confer exclusively reciprocal computing processing benefits (shared Sparse MoE "
@@ -93,7 +93,7 @@ CAMPAIGN_CALENDAR_EVENTS: tuple[dict[str, Any], ...] = (
             "Astrophysics_JWST_Spectroscopy",
         ),
         "discussion_url": "https://github.com/xaviercallens/HiveMind/discussions/86",
-        "symbolic_points_pts": "750 - 1,500 PTS (Compute Reciprocity Only; 0.00 EUR/USD)",
+        "symbolic_points_pts": "750 - 1,500 PTS (Compute Reciprocity Only; HiveMind Reflexion Points (HMT))",
     },
     {
         "event_id": "EVT-S7-02-APAC-EU-QUORUM-SYNC",
@@ -115,7 +115,7 @@ CAMPAIGN_CALENDAR_EVENTS: tuple[dict[str, Any], ...] = (
             "Astrophysics_JWST_Spectroscopy",
         ),
         "discussion_url": "https://github.com/xaviercallens/HiveMind/discussions/86",
-        "symbolic_points_pts": "1,500 PTS (Compute Reciprocity Only; 0.00 EUR/USD)",
+        "symbolic_points_pts": "1,500 PTS (Compute Reciprocity Only; HiveMind Reflexion Points (HMT))",
     },
     {
         "event_id": "EVT-S7-03-BYZANTINE-TIES-SHIELD",
@@ -133,7 +133,7 @@ CAMPAIGN_CALENDAR_EVENTS: tuple[dict[str, Any], ...] = (
             "Lean4_Formal_Mathematics",
         ),
         "discussion_url": "https://github.com/xaviercallens/HiveMind/discussions/86",
-        "symbolic_points_pts": "1,500 - 2,500 PTS (Compute Reciprocity Only; 0.00 EUR/USD)",
+        "symbolic_points_pts": "1,500 - 2,500 PTS (Compute Reciprocity Only; HiveMind Reflexion Points (HMT))",
     },
     {
         "event_id": "EVT-S7-04-128MOE-UPCYCLE-RAID",
@@ -151,7 +151,7 @@ CAMPAIGN_CALENDAR_EVENTS: tuple[dict[str, Any], ...] = (
             "Astrophysics_JWST_Spectroscopy",
         ),
         "discussion_url": "https://github.com/xaviercallens/HiveMind/discussions/86",
-        "symbolic_points_pts": "3,000 PTS (Compute Reciprocity Only; 0.00 EUR/USD)",
+        "symbolic_points_pts": "3,000 PTS (Compute Reciprocity Only; HiveMind Reflexion Points (HMT))",
     },
     {
         "event_id": "EVT-S7-05-GLOBAL-WAN-GAMEDAY",
@@ -173,7 +173,7 @@ CAMPAIGN_CALENDAR_EVENTS: tuple[dict[str, Any], ...] = (
             "Astrophysics_JWST_Spectroscopy",
         ),
         "discussion_url": "https://github.com/xaviercallens/HiveMind/discussions/86",
-        "symbolic_points_pts": "3,500 PTS (Compute Reciprocity Only; 0.00 EUR/USD)",
+        "symbolic_points_pts": "3,500 PTS (Compute Reciprocity Only; HiveMind Reflexion Points (HMT))",
     },
 )
 
@@ -188,7 +188,7 @@ SEASON9_10_GPU_QUORUM_EVENTS: tuple[dict[str, Any], ...] = (
         "target_quorum_tier": "TIER_1_MIN_BYZANTINE_QUORUM",
         "target_audience": "Community GPU Contributors (@clark719664, @pedromineo, @radialmonster) + AI Agents",
         "command": "uv run python scripts/run_season9_10_gpu_swarm_campaigns.py --contributor-handle <handle>",
-        "symbolic_points_pts": "3,500 PTS (Compute Reciprocity Only; 0.00 EUR/USD)",
+        "symbolic_points_pts": "3,500 PTS (Compute Reciprocity Only; HiveMind Reflexion Points (HMT))",
     },
     {
         "event_id": "EVT-S9-02-SIGMA-MOE-ORTHOINJ",
@@ -200,7 +200,7 @@ SEASON9_10_GPU_QUORUM_EVENTS: tuple[dict[str, Any], ...] = (
         "target_quorum_tier": "TIER_2_FULL_8DOMAIN_MOE_QUORUM",
         "target_audience": "8 GB Consumer GPU Nodes (RTX 20/30/40/50, RX 6000/7000, Apple M1-M4)",
         "command": "uv run python scripts/run_season9_10_gpu_swarm_campaigns.py --contributor-handle <handle>",
-        "symbolic_points_pts": "3,500 PTS (Compute Reciprocity Only; 0.00 EUR/USD)",
+        "symbolic_points_pts": "3,500 PTS (Compute Reciprocity Only; HiveMind Reflexion Points (HMT))",
     },
     {
         "event_id": "EVT-S10-01-E8-A2-LATTICE-KV-SPRINT",
@@ -212,7 +212,7 @@ SEASON9_10_GPU_QUORUM_EVENTS: tuple[dict[str, Any], ...] = (
         "target_quorum_tier": "TIER_2_FULL_8DOMAIN_MOE_QUORUM",
         "target_audience": "GPU Compression & Inference Ring Contributors + AI Prover Agents",
         "command": "uv run python scripts/run_season9_10_gpu_swarm_campaigns.py --contributor-handle <handle>",
-        "symbolic_points_pts": "3,500 PTS (Compute Reciprocity Only; 0.00 EUR/USD)",
+        "symbolic_points_pts": "3,500 PTS (Compute Reciprocity Only; HiveMind Reflexion Points (HMT))",
     },
     {
         "event_id": "EVT-S10-02-CROSS-GPU-SPOTCHECK-GAMEDAY",
@@ -224,7 +224,7 @@ SEASON9_10_GPU_QUORUM_EVENTS: tuple[dict[str, Any], ...] = (
         "target_quorum_tier": "TIER_3_GLOBAL_SUPER_RING_RAID",
         "target_audience": "Multi-Host GPU & TPU Validators (NVIDIA T4/RTX, AMD ROCm, Apple MPS, GCP TPU v5e)",
         "command": "uv run python scripts/run_season9_10_gpu_swarm_campaigns.py --contributor-handle <handle>",
-        "symbolic_points_pts": "3,500 PTS (Compute Reciprocity Only; 0.00 EUR/USD)",
+        "symbolic_points_pts": "3,500 PTS (Compute Reciprocity Only; HiveMind Reflexion Points (HMT))",
     },
 )
 
@@ -299,7 +299,7 @@ def generate_campaign_ics_calendar(output_path: Path | None = DEFAULT_ICS_PATH) 
             f"Audience: {evt['target_audience']}\\n"
             f"1-Click Command: uv run python scripts/run_multi_moe_hf_campaign.py --contributor-handle <handle> --tier standard\\n"
             f"Discussion Hub: {evt['discussion_url']}\\n"
-            f"NON-MONETARY CHARTER (0.00 EUR / 0.00 USD): Points ({evt['symbolic_points_pts']}) confer only reciprocal computing processing benefits when the live production HiveMind Swarm is deployed."
+            f"NON-MONETARY CHARTER: Points ({evt['symbolic_points_pts']}) confer only reciprocal computing processing benefits when the live production HiveMind Swarm is deployed."
         )
         lines.extend(
             [
@@ -326,7 +326,7 @@ def generate_campaign_ics_calendar(output_path: Path | None = DEFAULT_ICS_PATH) 
             "DTEND:20261022T122000Z",
             "RRULE:FREQ=HOURLY;INTERVAL=3;COUNT=240",
             "SUMMARY:[HiveMind 3h Sync] Autonomous PR Review, Merge & Discussion Quorum Pulse",
-            "DESCRIPTION:Automated 3-hour PR review, merge, and GitHub Discussion receipt verification window (0 */3 * * * UTC). No financial payment (0.00 EUR / 0.00 USD).",
+            "DESCRIPTION:Automated 3-hour PR review, merge, and GitHub Discussion receipt verification window (0 */3 * * * UTC). No financial payment.",
             "URL:https://github.com/xaviercallens/HiveMind/discussions/86",
             "STATUS:CONFIRMED",
             "END:VEVENT",

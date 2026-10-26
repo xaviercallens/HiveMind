@@ -1,0 +1,196 @@
+{
+  "PASS": false,
+  "client_rpc_up": true,
+  "criteria": {
+    "B1": true,
+    "B2": true,
+    "B3": true,
+    "B4": true,
+    "B5": true,
+    "B6": true,
+    "B7": false,
+    "B8": false
+  },
+  "endpoint": {
+    "batch_token_ids": [
+      30,
+      322,
+      6498,
+      438,
+      32235,
+      1991,
+      8019,
+      8351,
+      44,
+      322,
+      1932,
+      2350,
+      438,
+      18392,
+      436,
+      322,
+      6735,
+      432,
+      322,
+      4181,
+      1182,
+      2568,
+      30,
+      322
+    ],
+    "bound": "127.0.0.1",
+    "endpoint_token_ids": [
+      30,
+      322,
+      6498,
+      438,
+      32235,
+      1991,
+      8019,
+      8351,
+      44,
+      322,
+      1932,
+      2350,
+      438,
+      18392,
+      436,
+      322
+    ],
+    "port": 39391,
+    "ss_lines": [
+      "LISTEN 0      5          127.0.0.1:39391      0.0.0.0:*          "
+    ],
+    "text": ", the team is divided into three groups: the first group is responsible for the"
+  },
+  "good_meta": {
+    "device_name": "Tesla T4",
+    "eval_loss_after": 2.166604995727539,
+    "eval_loss_before": 2.2796466946601868,
+    "peak_vram_mib": 3409,
+    "state_sha256": [
+      "a777d45b85f6b54422d488e18e605b072bd6d29436f9284e0145785b4753000c",
+      "95550b8b68b51dfcc0ae157e9b39d730f7e0aa9b76a5d227296e4ee2a79e1e6f",
+      "516ca73694b3fbff1428fd82c342cd8fc1a3b6b8aa889f77d279e8fd12a0b22d",
+      "274c08cd7790a26b8c0431c773c64197e60a05b62072dc3f4d1c04ba40e68cfd",
+      "c315d2e63586010efc9f274ce6ebe0bb80ea4645a88b4e0eb2155627c0d10857"
+    ],
+    "trainable_params": 1376256,
+    "wall_seconds": 93.31680297851562
+  },
+  "gpu_busy_after": [
+    "742539, ~/gwaya-lite/llama.cpp/build/bin/llama-server, 4838 MiB"
+  ],
+  "gpu_busy_before": [
+    "742539, ~/gwaya-lite/llama.cpp/build/bin/llama-server, 102 MiB"
+  ],
+  "pre_app_survivors": [],
+  "pre_ckpt_seen": true,
+  "pre_client_restarted": true,
+  "pre_meta": {
+    "resumed_from_segment": 1,
+    "state_sha_equal_to_uninterrupted": true
+  },
+  "stage_a_finished": true,
+  "stage_infer_finished": true,
+  "stage_pre_finished": true,
+  "stray_boinc": [],
+  "uploaded_sizes_bytes": {
+    "hm_moe_good_001": [
+      938,
+      27872263
+    ]
+  },
+  "verdicts": {
+    "hm_moe_good_001": {
+      "cross_class_max_ulp": null,
+      "detail": {
+        "eval_loss_after": 2.166604995727539,
+        "eval_loss_before": 2.2796466946601868,
+        "max_abs_divergence": 0.0,
+        "of_segments": 4,
+        "overhead_pct": 25.0,
+        "replayed_segment": 2,
+        "tolerance_eps": 0.0001
+      },
+      "grant": {
+        "capped_by": "verified",
+        "cobblestones": 56.888888888888886,
+        "node_id": "host1",
+        "reason": "verified",
+        "workunit_id": "hm_moe_good_001"
+      },
+      "host": "host1",
+      "reason": "verified segment 2/4: max_diff=0.00e+00",
+      "same_class_exact": true,
+      "valid": true,
+      "wu_id": "hm_moe_good_001"
+    },
+    "hm_moe_infer_001": {
+      "cross_class_max_ulp": null,
+      "detail": {
+        "n_prompts": 2
+      },
+      "grant": {
+        "capped_by": "verified",
+        "cobblestones": 0.08888888888888889,
+        "node_id": "host1",
+        "reason": "verified",
+        "workunit_id": "hm_moe_infer_001"
+      },
+      "host": "host1",
+      "reason": "verified: identical greedy token ids",
+      "same_class_exact": true,
+      "valid": true,
+      "wu_id": "hm_moe_infer_001"
+    },
+    "hm_moe_lazy_001": {
+      "cross_class_max_ulp": null,
+      "detail": {
+        "eval_loss_after": 2.2796466946601868,
+        "eval_loss_before": 2.2796466946601868,
+        "max_abs_divergence": 0.0020095081999897957,
+        "of_segments": 4,
+        "overhead_pct": 25.0,
+        "replayed_segment": 1,
+        "tolerance_eps": 0.0001
+      },
+      "grant": {
+        "capped_by": "rejected",
+        "cobblestones": 0.0,
+        "node_id": "host1",
+        "reason": "spot-check failed or delta not admitted by Multi-Krum",
+        "workunit_id": "hm_moe_lazy_001"
+      },
+      "host": "host1",
+      "reason": "REJECTED segment 1: divergence 2.010e-03 exceeds eps=1e-04",
+      "same_class_exact": null,
+      "valid": false,
+      "wu_id": "hm_moe_lazy_001"
+    },
+    "hm_moe_pre_001": {
+      "cross_class_max_ulp": null,
+      "detail": {
+        "eval_loss_after": 2.166604995727539,
+        "eval_loss_before": 2.2796466946601868,
+        "max_abs_divergence": 0.0,
+        "of_segments": 4,
+        "overhead_pct": 25.0,
+        "replayed_segment": 2,
+        "tolerance_eps": 0.0001
+      },
+      "grant": {
+        "capped_by": "verified",
+        "cobblestones": 56.888888888888886,
+        "node_id": "host1",
+        "reason": "verified",
+        "workunit_id": "hm_moe_pre_001"
+      },
+      "host": "host1",
+      "reason": "verified segment 2/4: max_diff=0.00e+00",
+      "same_class_exact": true,
+      "valid": true,
+      "wu_id": "hm_moe_pre_001"
+    }
+  }
+}

@@ -468,10 +468,18 @@ class ContinuousAsyncLearnerCoordinator:
         steps_since_sync: int,
         arrival_time_s: float = 0.0,
     ) -> Dict[str, object]:
-        """Submit a learner's outer delta `Delta_m = Theta_origin - theta_m`."""
+        """Submit a learner's outer delta `Delta_m = Theta_origin - theta_m`.
+
+        Future rounds and a second pending fresh update from the same learner
+        are rejected before changing queued work or token accounting.
+        """
         if tokens_since_sync < 0 or steps_since_sync < 0:
             raise ValueError("tokens_since_sync and steps_since_sync must be >= 0")
         lid = str(learner_id)
+        if int(origin_round) > self.current_round:
+            raise ValueError("origin_round must not be in the future")
+        if int(origin_round) == self.current_round and lid in self._fresh_inbox:
+            raise ValueError("learner already has a pending update for the current round")
         d32 = delta.detach().to(torch.float32).clone()
         self.total_submitted_tokens += int(tokens_since_sync)
 

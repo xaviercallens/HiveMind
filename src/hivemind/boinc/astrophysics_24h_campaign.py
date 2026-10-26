@@ -501,7 +501,7 @@ def render_astrophysics_24h_dashboard_png(
     draw.text(
         (28, 46),
         f"Hardware: {gpu_name} (cuda:0, 4-bit NF4 + QLoRA r={report['backbone_info']['lora_rank_r']}) | "
-        f"24 BOINC Outer Cycles | 864 GPU Inner Steps | 24 PoUW Blocks Mined | 0.00 EUR Cloud Cost",
+        f"24 BOINC Outer Cycles | 864 GPU Inner Steps | 24 PoUW Blocks Mined",
         fill=(148, 163, 184),
         font=font,
     )
@@ -718,7 +718,7 @@ def render_astrophysics_24h_dashboard_png(
         ("3. Byzantine Poisoner Interception Rate", "24 / 24 Poisoners Caught & Slashed (100%)", (251, 191, 36)),
         ("4. Deterministic 10% Spot-Check Divergence", "0.00e+00 Max Diff Across 72 Honest Runs", (167, 139, 250)),
         ("5. Cosmology Dark-Energy Inflection Discovery", "z_trans = 0.642 (Omega_L = 0.689, w0 = -1.008)", (244, 114, 182)),
-        ("6. Financial Cost & Reciprocal Compute Model", "0.00 EUR / 0.00 USD | 100% Volunteer PoUW", (110, 231, 183)),
+        ("6. Financial Cost & Reciprocal Compute Model", "HiveMind Reflexion Points (HMT) | 100% Volunteer PoUW", (110, 231, 183)),
     ]
     for idx, (m_title, m_val, m_col) in enumerate(metrics_cards):
         cy = py0 + 10 + idx * 70

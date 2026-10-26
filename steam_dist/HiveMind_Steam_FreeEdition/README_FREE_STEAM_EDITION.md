@@ -3,7 +3,7 @@
 **Steam AppID (Local Config):** `3133700` (`steam_appid.txt`)  
 **Steam DepotID (Local Config):** `3133701`  
 **Distribution & Steam Status:** Local Python RTX Tool & Hack-Miner prototype; requires the repository and its `.venv` dependencies. The default test App ID `3133700` belongs to [Fantasy Grounds - Raiders of the Ghost Zone](https://store.steampowered.com/app/3133700/) on the public Steam Store, not HiveMind; see [Steam integration status](../../docs/STEAM_STATUS.md).  
-**Current #1 Apex Miner (Local Report):** **`CyberValkyrie_FR` (`66,879 PTS`)**  
+**Current #1 Apex Miner (Local Report):** **`CyberValkyrie_FR` (`73,047 PTS`)**  
 **Active Sparse MoE Fusion:** **`6-Expert Top-2 Sparse MoE` (`E=2 -> E=6` Hot-Plug + 2-Slot Pinned RAM DMA)**
 
 ---

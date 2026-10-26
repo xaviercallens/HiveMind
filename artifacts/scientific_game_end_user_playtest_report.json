@@ -1,0 +1,280 @@
+{
+  "cohort_id": "COHORT-S19-MULTIPLAYER-ODYSSEY-5P",
+  "total_players": 5,
+  "honest_players_verified": 4,
+  "sybil_attackers_blocked": 1,
+  "total_cohort_scientific_pts": 13650,
+  "non_monetary_charter": "Strictly Non-Monetary Compute Reciprocity (0.00 EUR / 0.00 USD): All Scientific Odyssey Points (PTS) and HiveMind Reflexion Points (HMT) are educational and reciprocal GPU compute accounting units with zero cash value.",
+  "leaderboard": [
+    {
+      "gamer_tag": "Xavier_RTX2070_FR",
+      "hardware_rig": "NVIDIA GeForce RTX 2070 (8 GB GDDR6, Linux/WDDM)",
+      "missions_completed": 3,
+      "total_scientific_pts": 4050,
+      "best_bee_energy": 2.421151,
+      "steam_sybil_verified": true,
+      "leaderboard_hmac": "steam_lb_hmac_00",
+      "rank": 1
+    },
+    {
+      "gamer_tag": "MatrixMagician_ROCm_Fedora",
+      "hardware_rig": "AMD Radeon RX 7900 XT (ROCm 6.2, Fedora 41)",
+      "missions_completed": 3,
+      "total_scientific_pts": 4050,
+      "best_bee_energy": 2.421151,
+      "steam_sybil_verified": true,
+      "leaderboard_hmac": "steam_lb_hmac_28",
+      "rank": 2
+    },
+    {
+      "gamer_tag": "Vxtzq_CrowdGPT_Trunk",
+      "hardware_rig": "DiLoCo 1B Coordinator + RTX 3080 (10 GB)",
+      "missions_completed": 2,
+      "total_scientific_pts": 2850,
+      "best_bee_energy": 2.421151,
+      "steam_sybil_verified": true,
+      "leaderboard_hmac": "steam_lb_hmac_6a",
+      "rank": 3
+    },
+    {
+      "gamer_tag": "Blaich499_DirectML_Win11",
+      "hardware_rig": "AMD Radeon RX 6700 XT (DirectML, Windows 11)",
+      "missions_completed": 2,
+      "total_scientific_pts": 2700,
+      "best_bee_energy": 2.871542,
+      "steam_sybil_verified": true,
+      "leaderboard_hmac": "steam_lb_hmac_9b",
+      "rank": 4
+    },
+    {
+      "gamer_tag": "SybilBot_ZeroSpend_VAC",
+      "hardware_rig": "Headless Bot Farm ($0.00 Spend / VAC Flagged)",
+      "missions_completed": 0,
+      "total_scientific_pts": 0,
+      "best_bee_energy": 2.871542,
+      "steam_sybil_verified": false,
+      "leaderboard_hmac": "steam_lb_hmac_86",
+      "rank": 5
+    }
+  ],
+  "player_sessions": [
+    {
+      "gamer_tag": "Xavier_RTX2070_FR",
+      "steam_id64": "76561198000000001",
+      "hardware_rig": "NVIDIA GeForce RTX 2070 (8 GB GDDR6, Linux/WDDM)",
+      "foreground_game": "HiveMind_Unity_SolarSystem.exe",
+      "steam_sybil_verified": true,
+      "steam_sybil_message": "Verified Non-Limited Steam Account.",
+      "period_sweep_trace": [
+        {
+          "trial_period_days": 6.8,
+          "bls_transit_snr": 1.98,
+          "transit_locked": false
+        },
+        {
+          "trial_period_days": 9.4,
+          "bls_transit_snr": 0.16,
+          "transit_locked": false
+        },
+        {
+          "trial_period_days": 11.15,
+          "bls_transit_snr": 19.11,
+          "transit_locked": true
+        },
+        {
+          "trial_period_days": 11.23,
+          "bls_transit_snr": 30.03,
+          "transit_locked": true
+        }
+      ],
+      "missions_played": [
+        {
+          "mission_id": "MISSION-SCI-01-SYMPLECTIC-EXOPLANET",
+          "verified": true,
+          "steam_sybil_verified": true,
+          "pts_awarded": 1200,
+          "bee_energy_total": 2.871542,
+          "receipt_sha256": "d42ce9fb51df752bfdcbdca5f75ca6f4247e5629b50d87fbffed73296a84ddf9"
+        },
+        {
+          "mission_id": "MISSION-SCI-02-E8-LATTICE-QUORUM",
+          "verified": true,
+          "steam_sybil_verified": true,
+          "pts_awarded": 1350,
+          "bee_energy_total": 2.421151,
+          "receipt_sha256": "dcc0259f1c2dc8763f29e4c3bbab232f60f207e064ae989f0865670c8c9cae41"
+        },
+        {
+          "mission_id": "MISSION-SCI-03-ANSE-ENERGY-REACTOR",
+          "verified": true,
+          "steam_sybil_verified": true,
+          "pts_awarded": 1500,
+          "bee_energy_total": 2.928658,
+          "receipt_sha256": "6f33cd7e24097d10baddad546f1c05b6d48f0bf64e1f78b7e8976205bc20e5bb"
+        }
+      ],
+      "total_scientific_pts": 4050,
+      "best_bee_energy": 2.421151,
+      "leaderboard_hmac": "steam_lb_hmac_00b2a140b305604dc880d8565f20"
+    },
+    {
+      "gamer_tag": "MatrixMagician_ROCm_Fedora",
+      "steam_id64": "76561198000000002",
+      "hardware_rig": "AMD Radeon RX 7900 XT (ROCm 6.2, Fedora 41)",
+      "foreground_game": "KerbalSpaceProgram2.x86_64",
+      "steam_sybil_verified": true,
+      "steam_sybil_message": "Verified Non-Limited Steam Account.",
+      "period_sweep_trace": [
+        {
+          "trial_period_days": 8.1,
+          "bls_transit_snr": 0.0,
+          "transit_locked": false
+        },
+        {
+          "trial_period_days": 11.23,
+          "bls_transit_snr": 30.03,
+          "transit_locked": true
+        }
+      ],
+      "missions_played": [
+        {
+          "mission_id": "MISSION-SCI-01-SYMPLECTIC-EXOPLANET",
+          "verified": true,
+          "steam_sybil_verified": true,
+          "pts_awarded": 1200,
+          "bee_energy_total": 2.871542,
+          "receipt_sha256": "d42ce9fb51df752bfdcbdca5f75ca6f4247e5629b50d87fbffed73296a84ddf9"
+        },
+        {
+          "mission_id": "MISSION-SCI-02-E8-LATTICE-QUORUM",
+          "verified": true,
+          "steam_sybil_verified": true,
+          "pts_awarded": 1350,
+          "bee_energy_total": 2.421151,
+          "receipt_sha256": "dcc0259f1c2dc8763f29e4c3bbab232f60f207e064ae989f0865670c8c9cae41"
+        },
+        {
+          "mission_id": "MISSION-SCI-03-ANSE-ENERGY-REACTOR",
+          "verified": true,
+          "steam_sybil_verified": true,
+          "pts_awarded": 1500,
+          "bee_energy_total": 2.928658,
+          "receipt_sha256": "6f33cd7e24097d10baddad546f1c05b6d48f0bf64e1f78b7e8976205bc20e5bb"
+        }
+      ],
+      "total_scientific_pts": 4050,
+      "best_bee_energy": 2.421151,
+      "leaderboard_hmac": "steam_lb_hmac_28cc03ab163e200172d9ae1aac24"
+    },
+    {
+      "gamer_tag": "Vxtzq_CrowdGPT_Trunk",
+      "steam_id64": "76561198000000004",
+      "hardware_rig": "DiLoCo 1B Coordinator + RTX 3080 (10 GB)",
+      "foreground_game": "HiveMind_Unity_SolarSystem.exe",
+      "steam_sybil_verified": true,
+      "steam_sybil_message": "Verified Non-Limited Steam Account.",
+      "period_sweep_trace": [
+        {
+          "trial_period_days": 11.23,
+          "bls_transit_snr": 30.03,
+          "transit_locked": true
+        }
+      ],
+      "missions_played": [
+        {
+          "mission_id": "MISSION-SCI-02-E8-LATTICE-QUORUM",
+          "verified": true,
+          "steam_sybil_verified": true,
+          "pts_awarded": 1350,
+          "bee_energy_total": 2.421151,
+          "receipt_sha256": "dcc0259f1c2dc8763f29e4c3bbab232f60f207e064ae989f0865670c8c9cae41"
+        },
+        {
+          "mission_id": "MISSION-SCI-03-ANSE-ENERGY-REACTOR",
+          "verified": true,
+          "steam_sybil_verified": true,
+          "pts_awarded": 1500,
+          "bee_energy_total": 2.928658,
+          "receipt_sha256": "6f33cd7e24097d10baddad546f1c05b6d48f0bf64e1f78b7e8976205bc20e5bb"
+        }
+      ],
+      "total_scientific_pts": 2850,
+      "best_bee_energy": 2.421151,
+      "leaderboard_hmac": "steam_lb_hmac_6a6e4430e3bfa3c26ecc20f6353d"
+    },
+    {
+      "gamer_tag": "Blaich499_DirectML_Win11",
+      "steam_id64": "76561198000000003",
+      "hardware_rig": "AMD Radeon RX 6700 XT (DirectML, Windows 11)",
+      "foreground_game": "Starfield_DirectX12.exe",
+      "steam_sybil_verified": true,
+      "steam_sybil_message": "Verified Non-Limited Steam Account.",
+      "period_sweep_trace": [
+        {
+          "trial_period_days": 14.5,
+          "bls_transit_snr": 1.33,
+          "transit_locked": false
+        },
+        {
+          "trial_period_days": 11.23,
+          "bls_transit_snr": 30.03,
+          "transit_locked": true
+        }
+      ],
+      "missions_played": [
+        {
+          "mission_id": "MISSION-SCI-01-SYMPLECTIC-EXOPLANET",
+          "verified": true,
+          "steam_sybil_verified": true,
+          "pts_awarded": 1200,
+          "bee_energy_total": 2.871542,
+          "receipt_sha256": "d42ce9fb51df752bfdcbdca5f75ca6f4247e5629b50d87fbffed73296a84ddf9"
+        },
+        {
+          "mission_id": "MISSION-SCI-03-ANSE-ENERGY-REACTOR",
+          "verified": true,
+          "steam_sybil_verified": true,
+          "pts_awarded": 1500,
+          "bee_energy_total": 2.928658,
+          "receipt_sha256": "6f33cd7e24097d10baddad546f1c05b6d48f0bf64e1f78b7e8976205bc20e5bb"
+        }
+      ],
+      "total_scientific_pts": 2700,
+      "best_bee_energy": 2.871542,
+      "leaderboard_hmac": "steam_lb_hmac_9b9cc0de3394935da0a34ace1240"
+    },
+    {
+      "gamer_tag": "SybilBot_ZeroSpend_VAC",
+      "steam_id64": "76561198099999999",
+      "hardware_rig": "Headless Bot Farm ($0.00 Spend / VAC Flagged)",
+      "foreground_game": "None",
+      "steam_sybil_verified": false,
+      "steam_sybil_message": "Steam account has an active VAC/Game ban.",
+      "period_sweep_trace": [
+        {
+          "trial_period_days": 11.23,
+          "bls_transit_snr": 30.03,
+          "transit_locked": true
+        }
+      ],
+      "missions_played": [
+        {
+          "mission_id": "MISSION-SCI-01-SYMPLECTIC-EXOPLANET",
+          "verified": true,
+          "steam_sybil_verified": false,
+          "pts_awarded": 0,
+          "bee_energy_total": 2.871542,
+          "receipt_sha256": "d42ce9fb51df752bfdcbdca5f75ca6f4247e5629b50d87fbffed73296a84ddf9"
+        }
+      ],
+      "total_scientific_pts": 0,
+      "best_bee_energy": 2.871542,
+      "leaderboard_hmac": "steam_lb_hmac_86723450438a9d0ede3894bdbbd4"
+    }
+  ],
+  "chrome_frontend_dom_verification": {
+    "js_exceptions_count": 0,
+    "pts_badge_after_click": "13,650 COHORT PTS",
+    "mission_terminal_leaderboard_text": "[5-PLAYER COHORT PLAYTEST VERIFIED // COHORT-S19-MULTIPLAYER-ODYSSEY-5P]\n  Honest Verified: 4 | Sybil Attackers Blocked: 1 | Total Cohort Score: 13650 PTS\n[LIVE MULTIPLAYER ODYSSEY LEADERBOARD (0.00 EUR / 0.00 USD)]\n  #1 Xavier_RTX2070_FR            | 4050 PTS | E_Bee=2.421151 | SybilOK=true | NVIDIA GeForce RTX 2070 (8 GB GDDR6, Linux/WDDM)\n  #2 MatrixMagician_ROCm_Fedora   | 4050 PTS | E_Bee=2.421151 | SybilOK=true | AMD Radeon RX 7900 XT (ROCm 6.2, Fedora 41)\n  #3 Vxtzq_CrowdGPT_Trunk         | 2850 PTS | E_Bee=2.421151 | SybilOK=true | DiLoCo 1B Coordinator + RTX 3080 (10 GB)\n  #4 Blaich499_DirectML_Win11     | 2700 PTS | E_Bee=2.871542 | SybilOK=true | AMD Radeon RX 6700 XT (DirectML, Windows 11)\n  #5 SybilBot_ZeroSpend_VAC       |    0 PTS | E_Bee=2.871542 | SybilOK=false | Headless Bot Farm ($0.00 Spend / VAC Flagged)"
+  }
+}

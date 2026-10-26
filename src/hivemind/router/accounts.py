@@ -24,7 +24,7 @@ import threading
 import time
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
@@ -53,7 +53,8 @@ CREATE TABLE IF NOT EXISTS accounts(
     role TEXT NOT NULL CHECK (role IN ('consumer','producer','prosumer','admin')),
     key_hash TEXT NOT NULL UNIQUE,
     created_utc REAL NOT NULL,
-    max_price_per_1k REAL NOT NULL
+    max_price_per_1k REAL NOT NULL,
+    is_test INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS ledger(
     seq INTEGER PRIMARY KEY,
@@ -75,6 +76,17 @@ CREATE TABLE IF NOT EXISTS producers(
     last_heartbeat_utc REAL NOT NULL,
     execution_class TEXT NOT NULL,
     endpoint_token TEXT
+);
+CREATE TABLE IF NOT EXISTS producer_endpoints(
+    account_id TEXT NOT NULL,
+    endpoint_url TEXT NOT NULL,
+    models_json TEXT NOT NULL,
+    cost_per_1k REAL NOT NULL,
+    capacity_1k REAL NOT NULL,
+    last_heartbeat_utc REAL NOT NULL,
+    execution_class TEXT NOT NULL,
+    endpoint_token TEXT,
+    PRIMARY KEY(account_id, endpoint_url)
 );
 CREATE TABLE IF NOT EXISTS usage(
     request_id TEXT PRIMARY KEY,
@@ -111,6 +123,14 @@ class DuplicateRequest(ValueError):
     """Raised when a ``request_id`` has already been settled."""
 
 
+class TooManyEndpoints(ValueError):
+    """Raised by :meth:`RouterStore.upsert_producer` when an account already advertises ``MAX_ENDPOINTS_PER_ACCOUNT`` endpoints."""
+
+
+MAX_ENDPOINTS_PER_ACCOUNT = 8  # one account may run several GPUs / servers; bounded so a heartbeat flood cannot grow the table without limit
+STALE_ENDPOINT_PURGE_S = 86_400.0  # an endpoint silent for a day is forgotten (it left the pool long ago) and frees its slot
+
+
 # Handles of the form ``<provider>.<keyed hash>`` belong to identity-provider sign-ins; nobody can register one by hand,
 # so a Google account cannot be squatted by typing its handle into the open registration form.
 IDENTITY_PROVIDERS: tuple[str, ...] = ("google",)  # always reserved; a store can enable more with ``allow_identity_provider``
@@ -144,6 +164,7 @@ class Account:
     role: str
     created_utc: float
     max_price_per_1k: float
+    is_test: bool = False
 
 
 @dataclass(frozen=True)
@@ -156,10 +177,17 @@ class ProducerRecord:
     last_heartbeat_utc: float
     execution_class: str
     endpoint_token: str | None = None  # secret the gateway presents to the producer's own server; never serialised
+    # When an account advertises several live endpoints for a model, the record is the ACCOUNT's offer (capacity summed, cost the capacity-weighted mean,
+    # the market sees one producer) and ``endpoints`` holds one single-endpoint record per server for dispatch. Empty for a one-endpoint account.
+    endpoints: tuple[ProducerRecord, ...] = field(default=(), compare=False)
 
     def __repr__(self) -> str:
         return (f"ProducerRecord(account_id={self.account_id!r}, endpoint_url={self.endpoint_url!r}, models={self.models!r}, "
                 f"cost_per_1k={self.cost_per_1k!r}, capacity_1k={self.capacity_1k!r}, execution_class={self.execution_class!r})")
+
+    def per_endpoint(self) -> tuple[ProducerRecord, ...]:
+        """The servers to try for this account: itself when it has one, otherwise one record per endpoint."""
+        return self.endpoints or (self,)
 
     def local_name(self, model_id: str) -> str | None:
         """Return the producer's local name for ``model_id`` or ``None`` if it does not serve it."""
@@ -222,9 +250,19 @@ class RouterStore:
             columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(producers)")}
             if "endpoint_token" not in columns:
                 self._conn.execute("ALTER TABLE producers ADD COLUMN endpoint_token TEXT")
+            # Databases created before the test/probe flag existed gain it in place; every existing account stays a real one.
+            account_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(accounts)")}
+            if "is_test" not in account_columns:
+                self._conn.execute("ALTER TABLE accounts ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0")
+            # One account may advertise several endpoints (several GPUs / servers): rows of the old one-per-account table move across once.
+            self._conn.execute(
+                "INSERT OR IGNORE INTO producer_endpoints(account_id, endpoint_url, models_json, cost_per_1k, capacity_1k, last_heartbeat_utc, "
+                "execution_class, endpoint_token) SELECT account_id, rtrim(endpoint_url, '/'), models_json, cost_per_1k, capacity_1k, last_heartbeat_utc, "
+                "execution_class, endpoint_token FROM producers"
+            )
             for sys_id in _ESCROW_ACCOUNTS:
                 self._conn.execute(
-                    "INSERT OR IGNORE INTO accounts VALUES (?,?,?,?,?,?)",
+                    "INSERT OR IGNORE INTO accounts(account_id, handle, role, key_hash, created_utc, max_price_per_1k) VALUES (?,?,?,?,?,?)",
                     (sys_id, sys_id, "admin", f"!{sys_id}", time.time(), 0.0),
                 )
 
@@ -275,6 +313,7 @@ class RouterStore:
             role=str(row["role"]),
             created_utc=float(row["created_utc"]),
             max_price_per_1k=float(row["max_price_per_1k"]),
+            is_test=bool(row["is_test"]),
         )
 
     # ------------------------------------------------------------------ accounts
@@ -282,14 +321,18 @@ class RouterStore:
         """Deterministic account id for a handle (after identity normalisation)."""
         return self._hmac_hex(normalise_identity(handle))[:32]
 
-    def register(self, handle: str, role: str) -> tuple[str, str]:
-        """Create an account; returns ``(account_id, api_key)``. The key is shown once and never stored."""
+    def register(self, handle: str, role: str, *, is_test: bool = False) -> tuple[str, str]:
+        """Create an account; returns ``(account_id, api_key)``. The key is shown once and never stored.
+
+        ``is_test`` marks a test or probe account: it never bids in the market and is counted apart from real users.
+        The store does not authorise that choice; the gateway lets only an admin key ask for it.
+        """
         if role not in ROLES:
             raise ValueError(f"role must be one of {ROLES}")
         normalised = normalise_identity(handle)
         if normalised.startswith(tuple(f"{provider}." for provider in sorted(self._identity_providers))):
             raise ReservedHandle(f"handle prefix is reserved: {normalised}")
-        return self._create_account(normalised, role)
+        return self._create_account(normalised, role, is_test)
 
     def allow_identity_provider(self, name: str) -> None:
         """Enable sign-in through another OpenID Connect provider and reserve its handle prefix (``<name>.``) at once.
@@ -327,12 +370,12 @@ class RouterStore:
                 conn.execute("UPDATE accounts SET key_hash=? WHERE account_id=?", (self._hmac_hex(new_key), account_id))
                 return account_id, new_key, False
             conn.execute(
-                "INSERT INTO accounts VALUES (?,?,?,?,?,?)",
+                "INSERT INTO accounts(account_id, handle, role, key_hash, created_utc, max_price_per_1k) VALUES (?,?,?,?,?,?)",
                 (account_id, handle, role, self._hmac_hex(new_key), time.time(), DEFAULT_MAX_PRICE_PER_1K),
             )
         return account_id, new_key, True
 
-    def _create_account(self, normalised: str, role: str) -> tuple[str, str]:
+    def _create_account(self, normalised: str, role: str, is_test: bool = False) -> tuple[str, str]:
         account_id = self._hmac_hex(normalised)[:32]
         api_key = "hm-" + secrets.token_urlsafe(32)
         with self._tx() as conn:
@@ -342,8 +385,8 @@ class RouterStore:
             if exists is not None:
                 raise HandleTaken(f"handle already registered: {normalised}")
             conn.execute(
-                "INSERT INTO accounts VALUES (?,?,?,?,?,?)",
-                (account_id, normalised, role, self._hmac_hex(api_key), time.time(), DEFAULT_MAX_PRICE_PER_1K),
+                "INSERT INTO accounts(account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test) VALUES (?,?,?,?,?,?,?)",
+                (account_id, normalised, role, self._hmac_hex(api_key), time.time(), DEFAULT_MAX_PRICE_PER_1K, int(is_test)),
             )
         return account_id, api_key
 
@@ -364,32 +407,43 @@ class RouterStore:
         return None if row is None else self._row_account(row)
 
     def consumer_max_prices(self) -> dict[str, float]:
-        """Declared max price of every non-system account that may consume (everything but pure producers)."""
+        """Declared max price of every non-system, non-test account that may consume (everything but pure producers)."""
         with self._lock:
             rows = self._conn.execute(
                 "SELECT account_id, max_price_per_1k FROM accounts WHERE role != 'producer' AND account_id NOT LIKE 'sys:%' "
-                "ORDER BY account_id"
+                "AND is_test = 0 ORDER BY account_id"
             ).fetchall()
         return {str(r["account_id"]): float(r["max_price_per_1k"]) for r in rows}
 
-    def funded_consumer_bids(self, expected_tokens: int) -> dict[str, float]:
+    def funded_consumer_bids(self, expected_tokens: int, active_since: float | None = None) -> dict[str, float]:
         """Effective bids of accounts that can actually pay: ``min(max_price, balance * 1000 / expected_tokens)``.
 
         Accounts with a non-positive balance are omitted, so anonymous zero-balance sybils cannot move the price,
         and a funded account cannot bid above what its balance could pay for one ``expected_tokens`` request.
+        With ``active_since`` set, only accounts with a usage row or a hold at or after that time bid: every sign-up
+        is funded by the starter grant, so without it idle accounts that once raised their max price keep the
+        clearing price above a new account's default max price and its first request is refused.
+        Test and probe accounts (see :meth:`set_test_flag`) never bid, whatever their balance, price or activity.
         """
         tokens = max(1, int(expected_tokens))
         with self._lock:
+            active: set[str] | None = None
+            if active_since is not None:
+                since = _finite(active_since, "active_since")
+                active = {str(r[0]) for r in self._conn.execute(
+                    "SELECT consumer_id FROM usage WHERE utc >= ? UNION SELECT account_id FROM holds WHERE utc >= ?",
+                    (since, since),
+                ).fetchall()}
             rows = self._conn.execute(
                 "SELECT a.account_id AS account_id, a.max_price_per_1k AS price, COALESCE(SUM(l.delta), 0.0) AS bal "
                 "FROM accounts a LEFT JOIN ledger l ON l.account_id = a.account_id "
-                "WHERE a.role != 'producer' AND a.account_id NOT LIKE 'sys:%' "
+                "WHERE a.role != 'producer' AND a.account_id NOT LIKE 'sys:%' AND a.is_test = 0 "
                 "GROUP BY a.account_id ORDER BY a.account_id"
             ).fetchall()
         bids: dict[str, float] = {}
         for row in rows:
             balance = float(row["bal"])
-            if balance > 0.0:
+            if balance > 0.0 and (active is None or str(row["account_id"]) in active):
                 bids[str(row["account_id"])] = min(float(row["price"]), balance * 1000.0 / tokens)
         return bids
 
@@ -401,6 +455,32 @@ class RouterStore:
             cur = conn.execute("UPDATE accounts SET max_price_per_1k=? WHERE account_id=?", (price, account_id))
             if cur.rowcount != 1:
                 raise UnknownAccount(account_id)
+
+    def set_test_flag(self, account_id: str, is_test: bool) -> None:
+        """Mark (or unmark) an account as a test/probe account. Raises :class:`UnknownAccount` for an unknown id."""
+        with self._tx() as conn:
+            cur = conn.execute("UPDATE accounts SET is_test=? WHERE account_id=? AND account_id NOT LIKE 'sys:%'", (int(is_test), account_id))
+            if cur.rowcount != 1:
+                raise UnknownAccount(account_id)
+
+    def user_counts(self, since: float) -> dict[str, dict[str, int]]:
+        """Real and test accounts counted apart: ``total``, ``created`` and ``active`` (a usage row or a hold) at or after ``since``.
+
+        System accounts are not users and are never counted.
+        """
+        cutoff = _finite(since, "since")
+        counts = {"real": {"total": 0, "created": 0, "active": 0}, "test": {"total": 0, "created": 0, "active": 0}}
+        with self._lock:
+            active = {str(r[0]) for r in self._conn.execute(
+                "SELECT consumer_id FROM usage WHERE utc >= ? UNION SELECT account_id FROM holds WHERE utc >= ?", (cutoff, cutoff),
+            ).fetchall()}
+            rows = self._conn.execute("SELECT account_id, is_test, created_utc FROM accounts WHERE account_id NOT LIKE 'sys:%'").fetchall()
+        for row in rows:
+            bucket = counts["test" if row["is_test"] else "real"]
+            bucket["total"] += 1
+            bucket["created"] += float(row["created_utc"]) >= cutoff
+            bucket["active"] += str(row["account_id"]) in active
+        return counts
 
     # ------------------------------------------------------------------ ledger
     def balance(self, account_id: str) -> float:
@@ -599,8 +679,12 @@ class RouterStore:
         execution_class: str = "unknown",
         now_utc: float | None = None,
         endpoint_token: str | None = None,
-    ) -> None:
-        """Insert or refresh a producer's advertisement; doubles as the heartbeat.
+    ) -> int:
+        """Insert or refresh ONE endpoint of a producer account; doubles as the heartbeat. Returns how many endpoints the account now advertises.
+
+        An account may advertise several endpoints (several GPUs or servers, each with its own models, cost and capacity): endpoints are keyed
+        by ``(account, endpoint_url)``, so a heartbeat refreshes only its own endpoint and never evicts the others. At most
+        ``MAX_ENDPOINTS_PER_ACCOUNT`` per account (``TooManyEndpoints``); endpoints silent for a day are forgotten first.
 
         ``endpoint_token`` is the bearer secret the gateway presents to the producer's own server so that only the
         gateway can use it; a heartbeat without one clears any earlier token.
@@ -617,27 +701,37 @@ class RouterStore:
                 raise UnknownAccount(account_id)
             if str(row["role"]) not in PRODUCER_ROLES:
                 raise ValueError("account role cannot produce")
+            url = endpoint_url.rstrip("/")
+            conn.execute("DELETE FROM producer_endpoints WHERE account_id=? AND last_heartbeat_utc < ?", (account_id, stamp - STALE_ENDPOINT_PURGE_S))
+            known = {str(r["endpoint_url"]) for r in conn.execute("SELECT endpoint_url FROM producer_endpoints WHERE account_id=?", (account_id,))}
+            if url not in known and len(known) >= MAX_ENDPOINTS_PER_ACCOUNT:
+                raise TooManyEndpoints(f"an account may advertise at most {MAX_ENDPOINTS_PER_ACCOUNT} endpoints")
             conn.execute(
-                "INSERT INTO producers(account_id, endpoint_url, models_json, cost_per_1k, capacity_1k, last_heartbeat_utc, "
-                "execution_class, endpoint_token) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(account_id) DO UPDATE SET "
-                "endpoint_url=excluded.endpoint_url, models_json=excluded.models_json, cost_per_1k=excluded.cost_per_1k, "
+                "INSERT INTO producer_endpoints(account_id, endpoint_url, models_json, cost_per_1k, capacity_1k, last_heartbeat_utc, "
+                "execution_class, endpoint_token) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(account_id, endpoint_url) DO UPDATE SET "
+                "models_json=excluded.models_json, cost_per_1k=excluded.cost_per_1k, "
                 "capacity_1k=excluded.capacity_1k, last_heartbeat_utc=excluded.last_heartbeat_utc, "
                 "execution_class=excluded.execution_class, endpoint_token=excluded.endpoint_token",
-                (account_id, endpoint_url, json.dumps(pairs, sort_keys=True), cost, capacity, stamp, execution_class, endpoint_token),
+                (account_id, url, json.dumps(pairs, sort_keys=True), cost, capacity, stamp, execution_class, endpoint_token),
             )
+            return len(known | {url})
 
     def active_producers(self, model_id: str, now_utc: float, ttl_s: float = 120) -> list[ProducerRecord]:
-        """Producers serving ``model_id`` whose last heartbeat is within ``ttl_s`` seconds of ``now_utc``."""
+        """One record per producer ACCOUNT serving ``model_id`` with at least one endpoint whose heartbeat is within ``ttl_s`` seconds of ``now_utc``.
+
+        An account with several live endpoints for the model is one market participant: its record carries the summed capacity and the
+        capacity-weighted mean cost, and ``endpoints`` lists the single-endpoint records the gateway dispatches to.
+        """
         with self._lock:
             rows = self._conn.execute(
-                "SELECT * FROM producers WHERE last_heartbeat_utc >= ? ORDER BY account_id", (now_utc - ttl_s,)
+                "SELECT * FROM producer_endpoints WHERE last_heartbeat_utc >= ? ORDER BY account_id, endpoint_url", (now_utc - ttl_s,)
             ).fetchall()
-        out: list[ProducerRecord] = []
+        by_account: dict[str, list[ProducerRecord]] = {}
         for row in rows:
             models = tuple((str(m["id"]), str(m["local_name"])) for m in json.loads(str(row["models_json"])))
             if all(public != model_id for public, _ in models):
                 continue
-            out.append(
+            by_account.setdefault(str(row["account_id"]), []).append(
                 ProducerRecord(
                     account_id=str(row["account_id"]),
                     endpoint_url=str(row["endpoint_url"]),
@@ -649,13 +743,36 @@ class RouterStore:
                     endpoint_token=None if row["endpoint_token"] is None else str(row["endpoint_token"]),
                 )
             )
+        out: list[ProducerRecord] = []
+        for account_id in sorted(by_account):
+            servers = by_account[account_id]
+            if len(servers) == 1:
+                out.append(servers[0])
+                continue
+            capacity = math.fsum(s.capacity_1k for s in servers)
+            cost = math.fsum(s.cost_per_1k * s.capacity_1k for s in servers) / capacity if capacity > 0.0 else min(s.cost_per_1k for s in servers)
+            classes = {s.execution_class for s in servers}
+            first = servers[0]
+            out.append(
+                ProducerRecord(
+                    account_id=account_id,
+                    endpoint_url=first.endpoint_url,
+                    models=first.models,
+                    cost_per_1k=cost,
+                    capacity_1k=capacity,
+                    last_heartbeat_utc=max(s.last_heartbeat_utc for s in servers),
+                    execution_class=first.execution_class if len(classes) == 1 else "mixed",
+                    endpoint_token=first.endpoint_token,
+                    endpoints=tuple(servers),
+                )
+            )
         return out
 
     def live_models(self, now_utc: float, ttl_s: float = 120) -> list[str]:
         """Sorted public model ids served by at least one producer whose heartbeat is within ``ttl_s`` seconds."""
         with self._lock:
             rows = self._conn.execute(
-                "SELECT models_json FROM producers WHERE last_heartbeat_utc >= ?", (now_utc - ttl_s,)
+                "SELECT models_json FROM producer_endpoints WHERE last_heartbeat_utc >= ?", (now_utc - ttl_s,)
             ).fetchall()
         found: set[str] = set()
         for row in rows:

@@ -22,7 +22,7 @@ RX 6000/7000, Apple Silicon MPS) as well as cloud TPU/CPU fallback nodes:
    heartbeat-backed CAS shard leasing (`committed == granted - reclaimed`), and Factored Gossip
    `Mix1`/`Mix2` with Jensen-Shannon router disagreement gating.
 
-IMPORTANT NON-MONETARY CHARTER (0.00 EUR / 0.00 USD):
+IMPORTANT NON-MONETARY CHARTER:
 Project HiveMind is a 100% voluntary, non-commercial open-source research project.
 No financial payment, money, fiat currency, cryptocurrency, or wage is ever promised or paid.
 All symbolic 'points' (`PTS` / `$HIVE`) confer exclusively reciprocal computing processing
@@ -84,7 +84,7 @@ DEFAULT_S9_10_CAMPAIGN_REPORT_PATH = (
 )
 
 NON_MONETARY_COMPUTE_RECIPROCITY_NOTICE = (
-    "NO FINANCIAL PAYMENT (0.00 EUR / 0.00 USD): Project HiveMind is a voluntary, "
+    "NO FINANCIAL PAYMENT: Project HiveMind is a voluntary, "
     "non-commercial open-source research project. No money, fiat currency, cryptocurrency, "
     "or wage is ever promised or paid. Accumulated 'points' (PTS and $HIVE PoUW accounting "
     "units) confer exclusively reciprocal computing processing benefits (shared Sparse MoE "
@@ -667,7 +667,7 @@ def format_season9_10_gpu_campaigns_markdown(report: dict[str, Any]) -> str:
         f"- **Accelerator / Device:** `{hw['device_name']}` (`{hw['backend']}`) | **Peak VRAM:** `{hw['peak_allocated_vram_mib']} MiB` (`<= {hw['wddm_usable_budget_mib']} MiB` 8 GB WDDM budget)",
         f"- **All 4 Campaigns Passed:** **`{report['all_campaigns_passed']}`** (`elapsed={report['elapsed_total_ms']} ms`)",
         f"- **Suite SHA-256 (`campaign_suite_sha256`):** `{report['campaign_suite_sha256']}`",
-        f"- **Symbolic Compute-Reciprocity Points:** **`+{pts} PTS`** (`0.00 EUR / 0.00 USD` — non-monetary compute quota only)",
+        f"- **Symbolic Compute-Reciprocity Points:** **`+{pts} PTS`** (`HiveMind Reflexion Points (HMT)` — non-monetary compute quota only)",
         "",
         "| Campaign ID | Focus & HiveMind Subsystems | Key Measured Telemetry | Status |",
         "| :--- | :--- | :--- | :---: |",

@@ -73,3 +73,15 @@ def test_portal_snippets_cover_the_documented_editors_and_keep_the_output_limit(
     assert "roles: [chat, edit, apply]" in html and '"title": "HiveMind Coder (7B)"' not in html
     # only tiers that can be served today are shown as ready snippets
     assert "hivemind/coder-plus" not in html.split("// Model ID:", 1)[1].split("\n", 1)[0]
+
+
+def test_portal_page_renders_overnight_boinc_qlora_telemetry_and_caveats() -> None:
+    html = render_portal_page(None, "nonce-night")
+    assert 'id="night-telemetry"' in html
+    assert "100 Assimilated WUs (98 hmq_*)" in html
+    assert "5,632.11 Cobblestones" in html
+    assert "2.2705 &rarr; 2.1380 (-5.8%)" in html
+    assert "hmq_00092" in html
+    assert "Plateau after ~30 rounds" in html
+    assert "scripts/t4_training_report.py" in html
+

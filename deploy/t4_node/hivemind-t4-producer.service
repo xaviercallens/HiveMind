@@ -1,0 +1,15 @@
+# TEMPLATE - review before installing. Heartbeats this node to the gateway: only enable after you chose a public https endpoint.
+[Unit]
+Description=HiveMind T4 node: producer heartbeat
+After=hivemind-t4-shield.service
+Requires=hivemind-t4-shield.service
+
+[Service]
+User=CHANGE_ME
+WorkingDirectory=/path/to/HiveMind
+EnvironmentFile=/etc/hivemind/t4-node.env
+ExecStart=/usr/bin/python3 scripts/hivemind_producer_agent.py --gateway ${HIVEMIND_GATEWAY} --endpoint ${HIVEMIND_ENDPOINT} --preset moe-general --execution-class t4
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

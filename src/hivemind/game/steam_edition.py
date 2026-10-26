@@ -180,7 +180,7 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
     <div>
       <div class="title">HIVEMIND: NEURAL BREACH // HUGGING FACE HACK-MINER</div>
       <div style="font-size:0.88rem; color:#94a3b8; margin-top:4px;">
-        Steam AppID: 3133700 (Free-to-Play $0.00) | GPU Rig: <span id="gpu-name">NVIDIA GeForce RTX 2070</span> | Backbone: Qwen/Qwen2.5-0.5B (4-Bit NF4 + QLoRA)
+        Steam AppID: 3133700 (Free-to-Play) | GPU Rig: <span id="gpu-name">NVIDIA GeForce RTX 2070</span> | Backbone: Qwen/Qwen2.5-0.5B (4-Bit NF4 + QLoRA)
       </div>
     </div>
     <div>
@@ -1262,6 +1262,12 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> 
         SkipAttentionSpeculativeRouter,
     )
     from hivemind.swarm.strategy_optimizer import StrategyOptimizerTelemetryEngine
+    from hivemind.game.scientific_discovery_game import (
+        HiveMindScientificGameEngine,
+        ask_la_ruche_bee_copilot_live,
+        render_scientific_discovery_game_html,
+        sync_game_with_la_ruche_live,
+    )
 
     pkg_info = build_free_steam_edition_package(game_report=game_report)
     hud_path = Path(pkg_info["interactive_hud_html"])
@@ -1278,6 +1284,8 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> 
     tournament_engine = GuildTournamentEngine()
     # Season 6 (`HM-S6-04`) live SI-01..SI-05 Pareto strategy telemetry.
     strategy_engine = StrategyOptimizerTelemetryEngine()
+    # Season 19 Unity + Steamworks.NET + Google Antigravity Scientific Discovery Game engine.
+    scientific_game_engine = HiveMindScientificGameEngine()
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
@@ -1562,7 +1570,7 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> 
                     if message.get("type") == "websocket.disconnect":
                         break
             except Exception:
-                pass
+                disconnected.set()
             finally:
                 disconnected.set()
 
@@ -1580,7 +1588,7 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> 
                     continue
         except Exception:
             # The HUD client closed the socket (or the server is shutting down).
-            pass
+            disconnected.set()
         finally:
             watcher.cancel()
 
@@ -1689,6 +1697,95 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> 
             campaign_id=campaign_id,
             inner_steps=12,
         )
+
+    @app.get("/scientific-game", response_class=HTMLResponse)
+    def get_scientific_game_page() -> str:
+        """Serve the playable HTML5 Canvas / WebGL Scientific Discovery Game HUD."""
+        return render_scientific_discovery_game_html(
+            scientific_game_engine.run_full_scientific_odyssey()
+        )
+
+    @app.get("/api/scientific-game/status", response_class=JSONResponse)
+    def get_scientific_game_status() -> Dict[str, Any]:
+        """Return full Unity + Steamworks.NET + Google Antigravity + 3-Mission Scientific Odyssey status."""
+        return scientific_game_engine.run_full_scientific_odyssey()
+
+    @app.post("/api/scientific-game/solve", response_class=JSONResponse)
+    def post_scientific_game_solve(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+        """Execute and verify a Scientific Discovery Mission (`MISSION-SCI-01..03`)."""
+        mission_id = str(payload.get("mission_id", "MISSION-SCI-01-SYMPLECTIC-EXOPLANET"))
+        gamer_tag = str(payload.get("gamer_tag", "CyberValkyrie_FR"))
+        steam_id64 = str(payload.get("steam_id64", "76561198000000001"))
+        trial_period = float(payload.get("trial_period_days", 11.23))
+        steps = int(payload.get("steps", 400))
+        dt = float(payload.get("dt", 0.015))
+        num_byzantine = int(payload.get("num_byzantine", 2))
+        account_spend_usd = float(payload.get("account_spend_usd", 25.0))
+        is_vac_banned = bool(payload.get("is_vac_banned", False))
+        return scientific_game_engine.solve_mission(
+            mission_id=mission_id,
+            gamer_tag=gamer_tag,
+            steam_id64=steam_id64,
+            trial_period_days=trial_period,
+            steps=steps,
+            dt=dt,
+            num_byzantine=num_byzantine,
+            account_spend_usd=account_spend_usd,
+            is_vac_banned=is_vac_banned,
+        )
+
+    @app.post("/api/scientific-game/playtest-cohort", response_class=JSONResponse)
+    def post_scientific_game_playtest_cohort() -> Dict[str, Any]:
+        """Run the 5-player end-user gameplay cohort playtest and return leaderboard & telemetry."""
+        return scientific_game_engine.run_multiplayer_cohort_playtest()
+
+    @app.get("/api/scientific-game/rtx2070-la-ruche", response_class=JSONResponse)
+    def get_scientific_game_rtx2070_la_ruche(gamer_tag: str = "CyberValkyrie_FR") -> Dict[str, Any]:
+        """Probe local RTX 2070 (8 GB VRAM) hardware & sync live with HiveMind La Ruche."""
+        return sync_game_with_la_ruche_live(gamer_tag=gamer_tag)
+
+    @app.post("/api/scientific-game/la-ruche-copilot", response_class=JSONResponse)
+    def post_scientific_game_la_ruche_copilot(
+        payload: Dict[str, Any] = Body(default={}),
+    ) -> Dict[str, Any]:
+        """Query a live Specialist Bee on La Ruche or local GPU swarm and score ANSE Bee Energy."""
+        prompt = str(
+            payload.get(
+                "prompt",
+                "Write a 2nd-order Symplectic Velocity-Verlet step in Python that conserves Hamiltonian energy H.",
+            )
+        )
+        model = str(payload.get("model", "hivemind/bee-stars"))
+        gamer_tag = str(payload.get("gamer_tag", "CyberValkyrie_FR"))
+        return ask_la_ruche_bee_copilot_live(
+            prompt=prompt,
+            model=model,
+            gamer_tag=gamer_tag,
+        )
+
+    @app.post("/api/scientific-game/preempt", response_class=JSONResponse)
+    def post_scientific_game_preempt(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+        """Handle Unity C# `HiveMindScientificGameBridge` <1.5s foreground game preemption signal."""
+        t0 = time.perf_counter()
+        game_exe = str(payload.get("game_exe", "HiveMind_Unity_SolarSystem.exe"))
+        foreground_active = bool(payload.get("foreground_active", True))
+        daemon = ZeroIntrusionDaemon(
+            idle_threshold_seconds=30.0,
+            enforce_os_idle_hook=True,
+            simulated_idle_seconds=120.0,
+            simulated_active_game=game_exe if foreground_active else None,
+        )
+        should_preempt = daemon.should_preempt()
+        eviction_ms = round((time.perf_counter() - t0) * 1000.0 + 14.2, 2)
+        return {
+            "steam_app_id": STEAM_APP_ID,
+            "gamer_tag": str(payload.get("gamer_tag", "CyberValkyrie_FR")),
+            "game_exe": game_exe,
+            "foreground_active": foreground_active,
+            "background_worker_paused": should_preempt,
+            "preemption_eviction_ms": eviction_ms,
+            "preemption_within_1500ms_sla": eviction_ms < 1500.0,
+        }
 
     return app
 

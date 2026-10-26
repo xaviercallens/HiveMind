@@ -141,7 +141,7 @@ def stage(stage_dir: Path, include_adapter: bool = False) -> Path:
         f"`{subprocess.run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], cwd=ROOT, capture_output=True, text=True).stdout.strip()}` at "
         f"`{subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=ROOT, capture_output=True, text=True).stdout.strip()}`.\n\n"
         "Experiments E10b, E11, E12, E13 (+c/d), E14, E15 (GWAYA-gated coding assistant) and E16 (GWAYA-Lite on a T4), all pre-registered; refuted and invalid outcomes are reported "
-        "as such. No peer review of record exists. PTS / $HIVE carry no cash value (0.00 EUR/USD). See `benchmarks/T4_10h_campaign_report.md`, `reports/` (receipts), "
+        "as such. No peer review of record exists. PTS / $HIVE carry no cash value. See `benchmarks/T4_10h_campaign_report.md`, `reports/` (receipts), "
         "`GWAYA_PR21_P1_RESULTS.md`, `docs/`. `MANIFEST.json` lists the sha256 of every file.\n", encoding="utf-8")
     files: Dict[str, str] = {str(f.relative_to(out)): sha256(f) for f in sorted(out.rglob("*")) if f.is_file() and f.name != "MANIFEST.json"}
     (out / "MANIFEST.json").write_text(json.dumps({"package": PKG, "files": files, "skipped_secret_like_or_denied": skipped, "username_scrubbed_in": sorted(set(SCRUBBED))}, indent=1, sort_keys=True), encoding="utf-8")

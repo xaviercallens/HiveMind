@@ -1,0 +1,21 @@
+{
+ "experiment": "QB1c (simulation): QueenBee routing, common cluster sequence",
+ "registered_utc": "2026-10-25T08:19:30Z",
+ "status": "registered AFTER QB1 and QB1b were seen; both are INVALID and kept in QB1_QB1b_bandit_routing_report_INVALID.json. QB1 failed its positive control by outcome noise (oracle beaten on realised success in 15/20 seeds). QB1b's wiring control failed because every arm drew its own cluster sequence, so even expected success differed by which clusters an arm happened to get. QB1c draws the cluster sequence once per seed from a stream shared by all arms (common random numbers); the choice and outcome streams stay per arm. Controls, hypotheses and thresholds are QB1b's, unchanged.",
+ "design": "as QB1 (4 clusters, 5 experts, 2000 rounds, 20 seeds, base seed 2026, same arms), plus the arm near_oracle_90 (best expert with probability 0.9, else uniform) used only by the positive control, plus the arms added40_nocheck / added40_scoutcheck (40% sybil records ADDED to the honest scout records, cap disabled, with and without the scout cross-check of dance.recruitment_weights(scout_bounds=...)). Cluster sequence per seed: random.Random(seed * 7 + 3), identical for every arm.",
+ "primary_metric": "last_half_expected: mean over rounds 1001-2000 of p(chosen expert) in the true table. It has no outcome noise, so it measures the routing decision only.",
+ "controls": {
+  "positive_wiring": "the oracle's last_half_expected >= every arm's in every seed (true by construction; a failure means the metric is wired wrongly)",
+  "positive_discriminating": "near_oracle_90 is strictly below the oracle and strictly above uniform on last_half_expected in every seed; if not, the metric cannot separate routers known to differ",
+  "negative": "flat world (every expert 0.55): cold Thompson's REALISED last-half success lies inside uniform's 95% interval over seeds and its regret is 0; a bandit that wins here means the harness leaks the answer"
+ },
+ "hypotheses": {
+  "H1": "cold Thompson beats uniform and the static keyword router on last_half_expected in at least 18 of 20 seeds each",
+  "H2": "warm start from honest dances lowers early_regret (rounds 1-200) vs cold Thompson in at least 16 of 20 seeds",
+  "H3": "with cap 0.5, replacing 40% of the records by sybils leaves mean last_half_expected within 0.03 of the honest warm start, AND the uncapped arm's gap is larger than the capped arm's",
+  "H4": "with sybils added on top of honest scouts and no cap, the scout cross-check lowers early_regret vs no check in at least 16 of 20 seeds"
+ },
+ "decision_rule": "the three controls decide validity; each hypothesis is reported supported or not",
+ "not_claimed": "nothing about real models, developers or latency; one adversary model only; the scout cross-check assumes scouts are honest, which is exactly what a sybil would attack next",
+ "registration_time_note": "corrected on 2026-10-25T08:22Z from a hand-typed 2026-10-25T12:05:00Z, which was later than the run; 2026-10-25T08:19:30Z is when the file was first written (session transcript). Nothing else in this file changed after the run."
+}

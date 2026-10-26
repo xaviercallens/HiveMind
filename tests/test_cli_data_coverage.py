@@ -516,7 +516,7 @@ def test_campaign_markdown_formats_both_receipt_schemas_without_mutation(new_key
     assert "**`-32.02%`** | `0.000001`" in output
     assert "`fixture/questions`" in output
     assert "a" * 64 in output
-    assert "0.00 EUR / 0.00 USD" in output
+    assert "HiveMind Reflexion Points (HMT)" in output
     assert report == before
 
 

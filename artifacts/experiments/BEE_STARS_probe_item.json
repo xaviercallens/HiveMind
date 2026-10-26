@@ -1,0 +1,16 @@
+{
+ "source": "NIGHT-MOE-1 stars eval pack (held out of training), first item; reply of the deployed adapter in the night run",
+ "key": "star-L 98-59",
+ "gold_label": "M",
+ "expected_reply": "Class: M",
+ "messages": [
+  {
+   "role": "system",
+   "content": "You classify stars. Reply with exactly 'Class: X' where X is one of O, B, A, F, G, K, M."
+  },
+  {
+   "role": "user",
+   "content": "Star:\n- effective temperature (K): 3412\n- log g: 4.94\n- radius (solar): 0.314\n- mass (solar): 0.312\n- metallicity [Fe/H]: -0.5\n- B magnitude: 13.2\n- V magnitude: 11.7\nSpectral class?"
+  }
+ ]
+}

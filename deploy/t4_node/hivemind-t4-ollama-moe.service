@@ -1,0 +1,17 @@
+# TEMPLATE - review before installing. Private Ollama for gpt-oss:20b on one Tesla T4 (12.3 GiB: stop BOINC GPU work first).
+[Unit]
+Description=HiveMind T4 node: private Ollama (gpt-oss:20b, MoE)
+After=network.target
+
+[Service]
+User=CHANGE_ME
+Environment=OLLAMA_HOST=127.0.0.1:11436
+Environment=OLLAMA_FLASH_ATTENTION=1
+Environment=OLLAMA_KV_CACHE_TYPE=q8_0
+Environment=OLLAMA_NUM_PARALLEL=1
+Environment=OLLAMA_KEEP_ALIVE=30m
+ExecStart=/usr/local/bin/ollama serve
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

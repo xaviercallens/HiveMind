@@ -1,0 +1,253 @@
+25-Oct-2026 10:55:29 [---] Starting BOINC client version 7.18.1 for x86_64-pc-linux-gnu
+25-Oct-2026 10:55:29 [---] This a development version of BOINC and may not function properly
+25-Oct-2026 10:55:29 [---] log flags: file_xfer, sched_ops, task, coproc_debug, cpu_sched, task_debug
+25-Oct-2026 10:55:29 [---] Libraries: libcurl/7.81.0 OpenSSL/3.0.2 zlib/1.2.11 brotli/1.0.9 zstd/1.4.8 libidn2/2.3.2 libpsl/0.21.0 (+libidn2/2.3.2) libssh/0.9.6/openssl/zlib nghttp2/1.43.0 librtmp/2.3 OpenLDAP/2.5.20
+25-Oct-2026 10:55:29 [---] Data directory: /mnt/disks/disk-socrateai-local-1/boinc/prod2/client
+25-Oct-2026 10:55:29 [---] [coproc] launching child process at /mnt/disks/disk-socrateai-local-1/boinc/root/usr/bin/boinc
+25-Oct-2026 10:55:29 [---] [coproc] with data directory /mnt/disks/disk-socrateai-local-1/boinc/prod2/client
+25-Oct-2026 10:55:30 [---] CUDA: NVIDIA GPU 0: Tesla T4 (driver version 580.99, CUDA version 13.0, compute capability 7.5, 4096MB, 3970MB available, 8141 GFLOPS peak)
+25-Oct-2026 10:55:30 [---] OpenCL: NVIDIA GPU 0: Tesla T4 (driver version 580.178.04, device version OpenCL 3.0 CUDA, 14912MB, 3970MB available, 8141 GFLOPS peak)
+25-Oct-2026 10:55:30 [---] [coproc] NVIDIA library reports 1 GPU
+25-Oct-2026 10:55:30 [---] [coproc] ATI: libaticalrt.so: cannot open shared object file: No such file or directory
+25-Oct-2026 10:55:30 [---] Creating new client state file
+25-Oct-2026 10:55:30 [---] libc:  version 2.35
+25-Oct-2026 10:55:30 [---] Host name: socreateai-agora-hermes-node1
+25-Oct-2026 10:55:30 [---] Processor: 8 GenuineIntel Intel(R) Xeon(R) CPU @ 2.20GHz [Family 6 Model 79 Stepping 0]
+25-Oct-2026 10:55:30 [---] Processor features: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology nonstop_tsc cpuid tsc_known_freq pni pclmulqdq ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch pti ssbd ibrs ibpb stibp fsgsbase tsc_adjust bmi1 hle avx2 smep bmi2 erms invpcid rtm rdseed adx smap xsaveopt arat md_clear arch_capabilities
+25-Oct-2026 10:55:30 [---] OS: Linux Ubuntu: Ubuntu 22.04.5 LTS [6.8.0-1070-gcp|libc 2.35]
+25-Oct-2026 10:55:30 [---] Memory: 29.37 GB physical, 4.00 GB virtual
+25-Oct-2026 10:55:30 [---] Disk: 1.92 TB total, 1.42 TB free
+25-Oct-2026 10:55:30 [---] Local time is UTC +0 hours
+25-Oct-2026 10:55:30 [---] Config: allow multiple clients
+25-Oct-2026 10:55:30 [---] Config: report completed tasks immediately
+25-Oct-2026 10:55:30 [---] Config: use all coprocessors
+25-Oct-2026 10:55:30 [---] No general preferences found - using defaults
+25-Oct-2026 10:55:30 [---] Reading preferences override file
+25-Oct-2026 10:55:30 [---] Preferences:
+25-Oct-2026 10:55:30 [---]    max memory usage when active: 15038.50 MB
+25-Oct-2026 10:55:30 [---]    max memory usage when idle: 27069.31 MB
+25-Oct-2026 10:55:30 [---]    max disk usage: 1450.71 GB
+25-Oct-2026 10:55:30 [---]    max CPUs used: 4
+25-Oct-2026 10:55:30 [---]    (to change preferences, visit a project web site or select Preferences in the Manager)
+25-Oct-2026 10:55:30 [---] Setting up project and slot directories
+dir_open: Could not open directory 'slots' from '/mnt/disks/disk-socrateai-local-1/boinc/prod2/client'.
+25-Oct-2026 10:55:30 [---] Checking active tasks
+25-Oct-2026 10:55:30 [http://127.0.0.1:8081/hmproj/] URL http://127.0.0.1:8081/hmproj/; Computer ID not assigned yet; resource share 100
+25-Oct-2026 10:55:30 [---] Setting up GUI RPC socket
+25-Oct-2026 10:55:30 [---] Checking presence of 0 project files
+25-Oct-2026 10:55:30 Initialization completed
+25-Oct-2026 10:55:30 [http://127.0.0.1:8081/hmproj/] Fetching scheduler list
+25-Oct-2026 10:55:31 [http://127.0.0.1:8081/hmproj/] Master file download succeeded
+25-Oct-2026 10:55:36 [http://127.0.0.1:8081/hmproj/] Sending scheduler request: Project initialization.
+25-Oct-2026 10:55:36 [http://127.0.0.1:8081/hmproj/] Requesting new tasks for CPU and NVIDIA GPU
+25-Oct-2026 10:55:38 [http://127.0.0.1:8081/hmproj/] Scheduler request failed: Couldn't resolve host name
+25-Oct-2026 10:55:38 [http://127.0.0.1:8081/hmproj/] Sending scheduler request: Project initialization.
+25-Oct-2026 10:55:38 [http://127.0.0.1:8081/hmproj/] Requesting new tasks for CPU and NVIDIA GPU
+25-Oct-2026 10:55:40 [HiveMind local BOINC server] Scheduler request completed: got 1 new tasks
+25-Oct-2026 10:55:40 [HiveMind local BOINC server] Project requested delay of 7 seconds
+25-Oct-2026 10:55:40 [HiveMind local BOINC server] [task] result state=NEW for hmp_good_001_0 from handle_scheduler_reply
+25-Oct-2026 10:55:41 [HiveMind local BOINC server] [task] result state=FILES_DOWNLOADING for hmp_good_001_0 from CS::update_results
+25-Oct-2026 10:55:42 [HiveMind local BOINC server] Started download of hivemind_qlora_moe_100_x86_64-pc-linux-gnu
+25-Oct-2026 10:55:42 [HiveMind local BOINC server] Started download of hmp_good_001_in_json
+25-Oct-2026 10:55:44 [HiveMind local BOINC server] Finished download of hivemind_qlora_moe_100_x86_64-pc-linux-gnu
+25-Oct-2026 10:55:44 [HiveMind local BOINC server] Finished download of hmp_good_001_in_json
+25-Oct-2026 10:55:44 [HiveMind local BOINC server] [task] result state=FILES_DOWNLOADED for hmp_good_001_0 from CS::update_results
+25-Oct-2026 10:55:44 [HiveMind local BOINC server] [coproc] Assigning NVIDIA instance 0 to hmp_good_001_0
+25-Oct-2026 10:55:44 [HiveMind local BOINC server] [task] ACTIVE_TASK::start(): forked process: pid 798594
+25-Oct-2026 10:55:44 [HiveMind local BOINC server] [task] task_state=EXECUTING for hmp_good_001_0 from start
+25-Oct-2026 10:55:44 [HiveMind local BOINC server] Starting task hmp_good_001_0
+25-Oct-2026 10:55:44 [HiveMind local BOINC server] [cpu_sched] Starting task hmp_good_001_0 using hivemind_qlora_moe version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 10:55:59 [---] Project communication failed: attempting access to reference site
+25-Oct-2026 10:56:01 [---] Internet access OK - project servers may be temporarily down.
+25-Oct-2026 10:56:44 [HiveMind local BOINC server] [coproc] NVIDIA instance 0; 1.000000 pending for hmp_good_001_0
+25-Oct-2026 10:56:44 [HiveMind local BOINC server] [coproc] NVIDIA instance 0: confirming 1.000000 instance for hmp_good_001_0
+25-Oct-2026 10:57:40 [HiveMind local BOINC server] [coproc] NVIDIA instance 0; 1.000000 pending for hmp_good_001_0
+25-Oct-2026 10:57:40 [HiveMind local BOINC server] [coproc] NVIDIA instance 0: confirming 1.000000 instance for hmp_good_001_0
+25-Oct-2026 10:58:07 [HiveMind local BOINC server] [task] Process for hmp_good_001_0 exited, status 0, task state 1
+25-Oct-2026 10:58:07 [HiveMind local BOINC server] [task] process exited with status 0
+25-Oct-2026 10:58:07 [HiveMind local BOINC server] [task] task_state=EXITED for hmp_good_001_0 from handle_exited_app
+25-Oct-2026 10:58:07 [HiveMind local BOINC server] Computation for task hmp_good_001_0 finished
+25-Oct-2026 10:58:07 [HiveMind local BOINC server] [task] result state=FILES_UPLOADING for hmp_good_001_0 from CS::app_finished
+25-Oct-2026 10:58:09 [HiveMind local BOINC server] Started upload of hmp_good_001_0_r546187683_0
+25-Oct-2026 10:58:09 [HiveMind local BOINC server] Started upload of hmp_good_001_0_r546187683_1
+25-Oct-2026 10:58:11 [HiveMind local BOINC server] Finished upload of hmp_good_001_0_r546187683_0
+25-Oct-2026 10:58:11 [HiveMind local BOINC server] Sending scheduler request: To fetch work.
+25-Oct-2026 10:58:11 [HiveMind local BOINC server] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 10:58:13 [---] Project communication failed: attempting access to reference site
+25-Oct-2026 10:58:13 [HiveMind local BOINC server] Finished upload of hmp_good_001_0_r546187683_1
+25-Oct-2026 10:58:13 [HiveMind local BOINC server] [task] result state=FILES_UPLOADED for hmp_good_001_0 from CS::update_results
+25-Oct-2026 10:58:13 [HiveMind local BOINC server] Scheduler request failed: Couldn't resolve host name
+25-Oct-2026 10:58:13 [HiveMind local BOINC server] Sending scheduler request: To fetch work.
+25-Oct-2026 10:58:13 [HiveMind local BOINC server] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 10:58:15 [---] Internet access OK - project servers may be temporarily down.
+25-Oct-2026 10:58:15 [HiveMind local BOINC server] Scheduler request completed: got 1 new tasks
+25-Oct-2026 10:58:15 [HiveMind local BOINC server] Project requested delay of 7 seconds
+25-Oct-2026 10:58:15 [HiveMind local BOINC server] [task] result state=NEW for hmp_lazy_001_0 from handle_scheduler_reply
+25-Oct-2026 10:58:16 [HiveMind local BOINC server] [task] result state=FILES_DOWNLOADING for hmp_lazy_001_0 from CS::update_results
+25-Oct-2026 10:58:17 [HiveMind local BOINC server] Started download of hmp_lazy_001_in_json
+25-Oct-2026 10:58:19 [HiveMind local BOINC server] Finished download of hmp_lazy_001_in_json
+25-Oct-2026 10:58:19 [HiveMind local BOINC server] [task] result state=FILES_DOWNLOADED for hmp_lazy_001_0 from CS::update_results
+25-Oct-2026 10:58:19 [HiveMind local BOINC server] [coproc] Assigning NVIDIA instance 0 to hmp_lazy_001_0
+25-Oct-2026 10:58:19 [HiveMind local BOINC server] [task] ACTIVE_TASK::start(): forked process: pid 800014
+25-Oct-2026 10:58:19 [HiveMind local BOINC server] [task] task_state=EXECUTING for hmp_lazy_001_0 from start
+25-Oct-2026 10:58:19 [HiveMind local BOINC server] Starting task hmp_lazy_001_0
+25-Oct-2026 10:58:19 [HiveMind local BOINC server] [cpu_sched] Starting task hmp_lazy_001_0 using hivemind_qlora_moe version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 10:58:25 [HiveMind local BOINC server] Sending scheduler request: To report completed tasks.
+25-Oct-2026 10:58:25 [HiveMind local BOINC server] Reporting 1 completed tasks
+25-Oct-2026 10:58:25 [HiveMind local BOINC server] Not requesting tasks: don't need (CPU: ; NVIDIA GPU: job cache full)
+25-Oct-2026 10:58:27 [---] Project communication failed: attempting access to reference site
+25-Oct-2026 10:58:27 [HiveMind local BOINC server] Scheduler request failed: Couldn't resolve host name
+25-Oct-2026 10:58:27 [HiveMind local BOINC server] Sending scheduler request: To report completed tasks.
+25-Oct-2026 10:58:27 [HiveMind local BOINC server] Reporting 1 completed tasks
+25-Oct-2026 10:58:27 [HiveMind local BOINC server] Not requesting tasks: don't need (CPU: ; NVIDIA GPU: job cache full)
+25-Oct-2026 10:58:29 [---] Internet access OK - project servers may be temporarily down.
+25-Oct-2026 10:58:29 [HiveMind local BOINC server] Scheduler request completed
+25-Oct-2026 10:58:29 [HiveMind local BOINC server] Project requested delay of 7 seconds
+25-Oct-2026 10:58:46 [HiveMind local BOINC server] [task] Process for hmp_lazy_001_0 exited, status 0, task state 1
+25-Oct-2026 10:58:46 [HiveMind local BOINC server] [task] process exited with status 0
+25-Oct-2026 10:58:46 [HiveMind local BOINC server] [task] task_state=EXITED for hmp_lazy_001_0 from handle_exited_app
+25-Oct-2026 10:58:46 [HiveMind local BOINC server] Computation for task hmp_lazy_001_0 finished
+25-Oct-2026 10:58:46 [HiveMind local BOINC server] [task] result state=FILES_UPLOADING for hmp_lazy_001_0 from CS::app_finished
+25-Oct-2026 10:58:48 [HiveMind local BOINC server] Started upload of hmp_lazy_001_0_r1337627767_0
+25-Oct-2026 10:58:48 [HiveMind local BOINC server] Started upload of hmp_lazy_001_0_r1337627767_1
+25-Oct-2026 10:58:49 [HiveMind local BOINC server] Sending scheduler request: To fetch work.
+25-Oct-2026 10:58:49 [HiveMind local BOINC server] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 10:58:50 [---] Project communication failed: attempting access to reference site
+25-Oct-2026 10:58:50 [HiveMind local BOINC server] Finished upload of hmp_lazy_001_0_r1337627767_0
+25-Oct-2026 10:58:50 [HiveMind local BOINC server] Scheduler request failed: Couldn't resolve host name
+25-Oct-2026 10:58:50 [HiveMind local BOINC server] Sending scheduler request: To fetch work.
+25-Oct-2026 10:58:50 [HiveMind local BOINC server] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 10:58:52 [---] Internet access OK - project servers may be temporarily down.
+25-Oct-2026 10:58:52 [HiveMind local BOINC server] Finished upload of hmp_lazy_001_0_r1337627767_1
+25-Oct-2026 10:58:52 [HiveMind local BOINC server] [task] result state=FILES_UPLOADED for hmp_lazy_001_0 from CS::update_results
+25-Oct-2026 10:58:52 [HiveMind local BOINC server] Scheduler request completed: got 0 new tasks
+25-Oct-2026 10:58:52 [HiveMind local BOINC server] Project has no tasks available
+25-Oct-2026 10:58:52 [HiveMind local BOINC server] Project requested delay of 7 seconds
+25-Oct-2026 10:59:03 [HiveMind local BOINC server] Sending scheduler request: To report completed tasks.
+25-Oct-2026 10:59:03 [HiveMind local BOINC server] Reporting 1 completed tasks
+25-Oct-2026 10:59:03 [HiveMind local BOINC server] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 10:59:05 [---] Project communication failed: attempting access to reference site
+25-Oct-2026 10:59:05 [HiveMind local BOINC server] Scheduler request failed: Couldn't resolve host name
+25-Oct-2026 10:59:05 [HiveMind local BOINC server] Sending scheduler request: To report completed tasks.
+25-Oct-2026 10:59:05 [HiveMind local BOINC server] Reporting 1 completed tasks
+25-Oct-2026 10:59:05 [HiveMind local BOINC server] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 10:59:07 [---] Internet access OK - project servers may be temporarily down.
+25-Oct-2026 10:59:07 [HiveMind local BOINC server] Scheduler request completed: got 0 new tasks
+25-Oct-2026 10:59:07 [HiveMind local BOINC server] Project has no tasks available
+25-Oct-2026 10:59:07 [HiveMind local BOINC server] Project requested delay of 7 seconds
+25-Oct-2026 10:59:57 [HiveMind local BOINC server] update requested by user
+25-Oct-2026 10:59:57 [HiveMind local BOINC server] Sending scheduler request: Requested by user.
+25-Oct-2026 10:59:57 [HiveMind local BOINC server] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 10:59:59 [---] Project communication failed: attempting access to reference site
+25-Oct-2026 10:59:59 [HiveMind local BOINC server] Scheduler request failed: Couldn't resolve host name
+25-Oct-2026 10:59:59 [HiveMind local BOINC server] Sending scheduler request: Requested by user.
+25-Oct-2026 10:59:59 [HiveMind local BOINC server] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 11:00:01 [---] Internet access OK - project servers may be temporarily down.
+25-Oct-2026 11:00:01 [HiveMind local BOINC server] Scheduler request completed: got 1 new tasks
+25-Oct-2026 11:00:01 [HiveMind local BOINC server] Project requested delay of 7 seconds
+25-Oct-2026 11:00:01 [HiveMind local BOINC server] [task] result state=NEW for hmp_lazy_001_1 from handle_scheduler_reply
+25-Oct-2026 11:00:02 [HiveMind local BOINC server] [task] result state=FILES_DOWNLOADING for hmp_lazy_001_1 from CS::update_results
+25-Oct-2026 11:00:03 [HiveMind local BOINC server] Started download of hmp_lazy_001_in_json
+25-Oct-2026 11:00:05 [HiveMind local BOINC server] Finished download of hmp_lazy_001_in_json
+25-Oct-2026 11:00:05 [HiveMind local BOINC server] [task] result state=FILES_DOWNLOADED for hmp_lazy_001_1 from CS::update_results
+25-Oct-2026 11:00:05 [HiveMind local BOINC server] [coproc] Assigning NVIDIA instance 0 to hmp_lazy_001_1
+25-Oct-2026 11:00:05 [HiveMind local BOINC server] [task] ACTIVE_TASK::start(): forked process: pid 800692
+25-Oct-2026 11:00:05 [HiveMind local BOINC server] [task] task_state=EXECUTING for hmp_lazy_001_1 from start
+25-Oct-2026 11:00:05 [HiveMind local BOINC server] Starting task hmp_lazy_001_1
+25-Oct-2026 11:00:05 [HiveMind local BOINC server] [cpu_sched] Starting task hmp_lazy_001_1 using hivemind_qlora_moe version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 11:00:26 [HiveMind local BOINC server] [task] Process for hmp_lazy_001_1 exited, status 0, task state 1
+25-Oct-2026 11:00:26 [HiveMind local BOINC server] [task] process exited with status 0
+25-Oct-2026 11:00:26 [HiveMind local BOINC server] [task] task_state=EXITED for hmp_lazy_001_1 from handle_exited_app
+25-Oct-2026 11:00:26 [HiveMind local BOINC server] Computation for task hmp_lazy_001_1 finished
+25-Oct-2026 11:00:26 [HiveMind local BOINC server] [task] result state=FILES_UPLOADING for hmp_lazy_001_1 from CS::app_finished
+25-Oct-2026 11:00:26 [HiveMind local BOINC server] Sending scheduler request: To fetch work.
+25-Oct-2026 11:00:26 [HiveMind local BOINC server] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 11:00:28 [---] Project communication failed: attempting access to reference site
+25-Oct-2026 11:00:28 [HiveMind local BOINC server] Started upload of hmp_lazy_001_1_r1698659709_0
+25-Oct-2026 11:00:28 [HiveMind local BOINC server] Started upload of hmp_lazy_001_1_r1698659709_1
+25-Oct-2026 11:00:28 [HiveMind local BOINC server] Scheduler request failed: Couldn't resolve host name
+25-Oct-2026 11:00:28 [HiveMind local BOINC server] Sending scheduler request: To fetch work.
+25-Oct-2026 11:00:28 [HiveMind local BOINC server] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 11:00:30 [---] Internet access OK - project servers may be temporarily down.
+25-Oct-2026 11:00:30 [HiveMind local BOINC server] Finished upload of hmp_lazy_001_1_r1698659709_0
+25-Oct-2026 11:00:30 [HiveMind local BOINC server] Scheduler request completed: got 1 new tasks
+25-Oct-2026 11:00:30 [HiveMind local BOINC server] Project requested delay of 7 seconds
+25-Oct-2026 11:00:30 [HiveMind local BOINC server] [task] result state=NEW for hmp_infer_001_0 from handle_scheduler_reply
+25-Oct-2026 11:00:31 [HiveMind local BOINC server] [task] result state=FILES_DOWNLOADING for hmp_infer_001_0 from CS::update_results
+25-Oct-2026 11:00:32 [HiveMind local BOINC server] Finished upload of hmp_lazy_001_1_r1698659709_1
+25-Oct-2026 11:00:32 [HiveMind local BOINC server] Started download of hivemind_moe_infer_100_x86_64-pc-linux-gnu
+25-Oct-2026 11:00:32 [HiveMind local BOINC server] Started download of hmp_infer_001_in_json
+25-Oct-2026 11:00:32 [HiveMind local BOINC server] [task] result state=FILES_UPLOADED for hmp_lazy_001_1 from CS::update_results
+25-Oct-2026 11:00:34 [HiveMind local BOINC server] Finished download of hivemind_moe_infer_100_x86_64-pc-linux-gnu
+25-Oct-2026 11:00:34 [HiveMind local BOINC server] Finished download of hmp_infer_001_in_json
+25-Oct-2026 11:00:34 [HiveMind local BOINC server] Started download of hmp_infer_001_adapter_pt
+25-Oct-2026 11:00:36 [HiveMind local BOINC server] Finished download of hmp_infer_001_adapter_pt
+25-Oct-2026 11:00:36 [HiveMind local BOINC server] [task] result state=FILES_DOWNLOADED for hmp_infer_001_0 from CS::update_results
+25-Oct-2026 11:00:36 [HiveMind local BOINC server] [coproc] Assigning NVIDIA instance 0 to hmp_infer_001_0
+25-Oct-2026 11:00:36 [HiveMind local BOINC server] [task] ACTIVE_TASK::start(): forked process: pid 800824
+25-Oct-2026 11:00:36 [HiveMind local BOINC server] [task] task_state=EXECUTING for hmp_infer_001_0 from start
+25-Oct-2026 11:00:36 [HiveMind local BOINC server] Starting task hmp_infer_001_0
+25-Oct-2026 11:00:36 [HiveMind local BOINC server] [cpu_sched] Starting task hmp_infer_001_0 using hivemind_moe_infer version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 11:00:40 [HiveMind local BOINC server] Sending scheduler request: To report completed tasks.
+25-Oct-2026 11:00:40 [HiveMind local BOINC server] Reporting 1 completed tasks
+25-Oct-2026 11:00:40 [HiveMind local BOINC server] Not requesting tasks: don't need (CPU: ; NVIDIA GPU: job cache full)
+25-Oct-2026 11:00:42 [---] Project communication failed: attempting access to reference site
+25-Oct-2026 11:00:42 [HiveMind local BOINC server] Scheduler request failed: Couldn't resolve host name
+25-Oct-2026 11:00:42 [HiveMind local BOINC server] Sending scheduler request: To report completed tasks.
+25-Oct-2026 11:00:42 [HiveMind local BOINC server] Reporting 1 completed tasks
+25-Oct-2026 11:00:42 [HiveMind local BOINC server] Not requesting tasks: don't need (CPU: ; NVIDIA GPU: job cache full)
+25-Oct-2026 11:00:44 [---] Internet access OK - project servers may be temporarily down.
+25-Oct-2026 11:00:44 [HiveMind local BOINC server] Scheduler request completed
+25-Oct-2026 11:00:44 [HiveMind local BOINC server] Project requested delay of 7 seconds
+25-Oct-2026 11:01:07 [HiveMind local BOINC server] [task] Process for hmp_infer_001_0 exited, status 0, task state 1
+25-Oct-2026 11:01:07 [HiveMind local BOINC server] [task] process exited with status 0
+25-Oct-2026 11:01:07 [HiveMind local BOINC server] [task] task_state=EXITED for hmp_infer_001_0 from handle_exited_app
+25-Oct-2026 11:01:07 [HiveMind local BOINC server] Computation for task hmp_infer_001_0 finished
+25-Oct-2026 11:01:07 [HiveMind local BOINC server] [task] result state=FILES_UPLOADING for hmp_infer_001_0 from CS::app_finished
+25-Oct-2026 11:01:09 [HiveMind local BOINC server] Started upload of hmp_infer_001_0_r1396523133_0
+25-Oct-2026 11:01:10 [HiveMind local BOINC server] Sending scheduler request: To fetch work.
+25-Oct-2026 11:01:10 [HiveMind local BOINC server] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 11:01:11 [---] Project communication failed: attempting access to reference site
+25-Oct-2026 11:01:11 [HiveMind local BOINC server] Finished upload of hmp_infer_001_0_r1396523133_0
+25-Oct-2026 11:01:11 [HiveMind local BOINC server] [task] result state=FILES_UPLOADED for hmp_infer_001_0 from CS::update_results
+25-Oct-2026 11:01:11 [HiveMind local BOINC server] Scheduler request failed: Couldn't resolve host name
+25-Oct-2026 11:01:11 [HiveMind local BOINC server] Sending scheduler request: To fetch work.
+25-Oct-2026 11:01:11 [HiveMind local BOINC server] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 11:01:13 [---] Internet access OK - project servers may be temporarily down.
+25-Oct-2026 11:01:13 [HiveMind local BOINC server] Scheduler request completed: got 0 new tasks
+25-Oct-2026 11:01:13 [HiveMind local BOINC server] Project has no tasks available
+25-Oct-2026 11:01:13 [HiveMind local BOINC server] Project requested delay of 7 seconds
+25-Oct-2026 11:01:23 [HiveMind local BOINC server] Sending scheduler request: To report completed tasks.
+25-Oct-2026 11:01:23 [HiveMind local BOINC server] Reporting 1 completed tasks
+25-Oct-2026 11:01:23 [HiveMind local BOINC server] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 11:01:25 [---] Project communication failed: attempting access to reference site
+25-Oct-2026 11:01:25 [HiveMind local BOINC server] Scheduler request failed: Couldn't resolve host name
+25-Oct-2026 11:01:25 [HiveMind local BOINC server] Sending scheduler request: To report completed tasks.
+25-Oct-2026 11:01:25 [HiveMind local BOINC server] Reporting 1 completed tasks
+25-Oct-2026 11:01:25 [HiveMind local BOINC server] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 11:01:27 [---] Internet access OK - project servers may be temporarily down.
+25-Oct-2026 11:01:27 [HiveMind local BOINC server] Scheduler request completed: got 1 new tasks
+25-Oct-2026 11:01:27 [HiveMind local BOINC server] Project requested delay of 7 seconds
+25-Oct-2026 11:01:27 [HiveMind local BOINC server] [task] result state=NEW for hmp_lazy_001_2 from handle_scheduler_reply
+25-Oct-2026 11:01:28 [HiveMind local BOINC server] [task] result state=FILES_DOWNLOADING for hmp_lazy_001_2 from CS::update_results
+25-Oct-2026 11:01:29 [HiveMind local BOINC server] Started download of hmp_lazy_001_in_json
+25-Oct-2026 11:01:31 [HiveMind local BOINC server] Finished download of hmp_lazy_001_in_json
+25-Oct-2026 11:01:31 [HiveMind local BOINC server] [task] result state=FILES_DOWNLOADED for hmp_lazy_001_2 from CS::update_results
+25-Oct-2026 11:01:31 [HiveMind local BOINC server] [coproc] Assigning NVIDIA instance 0 to hmp_lazy_001_2
+25-Oct-2026 11:01:31 [HiveMind local BOINC server] [task] ACTIVE_TASK::start(): forked process: pid 801200
+25-Oct-2026 11:01:31 [HiveMind local BOINC server] [task] task_state=EXECUTING for hmp_lazy_001_2 from start
+25-Oct-2026 11:01:31 [HiveMind local BOINC server] Starting task hmp_lazy_001_2
+25-Oct-2026 11:01:31 [HiveMind local BOINC server] [cpu_sched] Starting task hmp_lazy_001_2 using hivemind_qlora_moe version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 11:01:57 [HiveMind local BOINC server] [task] Process for hmp_lazy_001_2 exited, status 256, task state 1
+25-Oct-2026 11:01:57 [HiveMind local BOINC server] [task] process exited with status 1
+25-Oct-2026 11:01:57 [HiveMind local BOINC server] [task] task_state=EXITED for hmp_lazy_001_2 from handle_exited_app
+25-Oct-2026 11:01:57 [HiveMind local BOINC server] [task] result state=COMPUTE_ERROR for hmp_lazy_001_2 from CS::report_result_error
+mv: cannot stat 'slots/0/out.json': No such file or directory
+mv: cannot stat 'slots/0/out.pt': No such file or directory
+25-Oct-2026 11:01:57 [HiveMind local BOINC server] Computation for task hmp_lazy_001_2 finished
+25-Oct-2026 11:01:57 [HiveMind local BOINC server] Output file hmp_lazy_001_2_r99012710_0 for task hmp_lazy_001_2 absent
+25-Oct-2026 11:01:57 [HiveMind local BOINC server] Output file hmp_lazy_001_2_r99012710_1 for task hmp_lazy_001_2 absent
+25-Oct-2026 11:01:57 [HiveMind local BOINC server] [task] result state=COMPUTE_ERROR for hmp_lazy_001_2 from CS::app_finished
+25-Oct-2026 11:02:13 [---] Exiting
+25-Oct-2026 11:02:13 [---] [task_debug] requesting tasks to exit
+25-Oct-2026 11:02:13 [---] [task_debug] all tasks exited

@@ -1,0 +1,22 @@
+# TEMPLATE based on the process running on 2026-10-25. NOT installed.
+# It advertises only the 7B "coder" tier, on purpose (owner's decision, 2026-10-25 "Go for 1"): with Ollama MAX_LOADED_MODELS=1 and ~5 GiB
+# free beside the Bee expert, alternating 7B/3B traffic swaps models on every request (a coder-lite request makes the next coder request ~40x slower).
+# The shield still allows the 3B, so adding the tier back is a one-line change here. On 2026-10-25 this unit was started with
+# `systemctl start --ignore-dependencies` (the hand-started shield on :8788 still owned the port). NOTE: another process, started by someone
+# else for the SAME account, also advertises coder + coder-lite and overrides this (see ./README.md); the owner said to resolve that later.
+# /etc/hivemind/t4-coder.env (root:root 0600) must define HIVEMIND_API_KEY (the coder-tiers producer key).
+[Unit]
+Description=HiveMind T4 live: producer heartbeat for the coder tiers
+After=hivemind-live-shield-coder.service network-online.target
+Requires=hivemind-live-shield-coder.service
+
+[Service]
+User=callensxavier_gmail_com
+WorkingDirectory=/home/callensxavier_gmail_com/hivemind-producer
+EnvironmentFile=/etc/hivemind/t4-coder.env
+ExecStart=/usr/bin/python3 hivemind_producer_agent.py --gateway https://hivemind-openrouter-1003063861791.us-central1.run.app --endpoint https://34-48-48-154.sslip.io --model coder=qwen2.5-coder:7b-instruct --cost-per-1k 0.4 --capacity-1k 60 --execution-class t4
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,73 @@
+{
+ "experiment": "BEE-STARS serving check: does the served stars expert reproduce its NIGHT-MOE-1 evaluation?",
+ "run_utc": "2026-10-25",
+ "model": {
+  "base": "qwen2.5-coder:7b-instruct GGUF (Ollama blob sha256-60e05f21...)",
+  "adapter": "NIGHT-MOE-1 stars LoRA, adapters/stars.gguf, 161,508,032 bytes, CRC32C 6BiKmw== (restored from gs://socrateai-hivemind-vm-archive)",
+  "engine": "llama.cpp llama-server --lora, -c 4096 -np 1 -ngl 99, Tesla T4",
+  "public_id": "hivemind/bee-stars"
+ },
+ "pack": "stars eval pack (night_pack_build.py), n=317",
+ "evaluator": "scripts/night_eval.py (temperature 0, seed 7, cache_prompt false)",
+ "night": {
+  "tag": "stars_stars",
+  "pack": "stars",
+  "n": 317,
+  "correct": 283,
+  "accuracy": 0.8927,
+  "wilson95": [
+   0.8539,
+   0.9222
+  ],
+  "unparsable": 0,
+  "wall_s": 115,
+  "vs_baseline": {
+   "only_this_right": 148,
+   "only_baseline_right": 20,
+   "mcnemar_exact_p": 0.0
+  }
+ },
+ "served_direct": {
+  "tag": "serve_stars",
+  "pack": "stars",
+  "n": 317,
+  "correct": 283,
+  "accuracy": 0.8927,
+  "wilson95": [
+   0.8539,
+   0.9222
+  ],
+  "unparsable": 0,
+  "wall_s": 138
+ },
+ "served_through_router": {
+  "tag": "router_stars",
+  "pack": "stars",
+  "n": 317,
+  "correct": 282,
+  "accuracy": 0.8896,
+  "wilson95": [
+   0.8503,
+   0.9195
+  ],
+  "unparsable": 0,
+  "wall_s": 129
+ },
+ "item_agreement": {
+  "direct_vs_night_identical_replies": 317,
+  "router_vs_night_identical_replies": 316,
+  "router_differing_items": [
+   {
+    "key": "star-TIC 257060897",
+    "night": "Class: F",
+    "router": "Class: G"
+   }
+  ],
+  "negative_control_night_vs_shuffled_control_identical_replies": 104
+ },
+ "notes": [
+  "The negative control shows the agreement check can fail: the shuffled-label control adapter matches the night replies on only 104 of 317 items.",
+  "Through the router one item differs (F -> G). The gateway forwards 'seed' but not llama.cpp's 'cache_prompt', so prompt caching is on; this is the likely cause and has not been tested.",
+  "One expert, not a routed mixture; the regression gate on other packs (HM-S14-08) has not been run, so this is served as an experimental tier."
+ ]
+}

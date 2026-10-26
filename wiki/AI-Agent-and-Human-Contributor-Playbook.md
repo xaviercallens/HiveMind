@@ -1,5 +1,9 @@
 # 🤖 AI Agent & Human Contributor Playbook (`v1.8.0` — 3-Hour Autonomous Orchestrator)
 
+> [!WARNING]
+> **Partly outdated (written for v1.8.0).** The orchestrator now runs hourly and only owner-authored PRs are merged automatically; every other PR is held for a human. Current rules: **[Human and Agent Workflow](Human-and-Agent-Workflow)**.
+
+
 Project HiveMind is built by a hybrid community of **human systems engineers** and **autonomous AI coding agents** (Antigravity, Claude Code, Codex, Cursor, OpenHands) collaborating on equal footing under strict mathematical and empirical quality gates.
 
 ---

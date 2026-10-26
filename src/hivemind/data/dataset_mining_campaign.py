@@ -9,7 +9,7 @@ compresses outer deltas with Conway-Sloane $E_8$ / $A_2$ lattice quantizers (`HM
 to assemble the community-shared Branch-Train-Mix (BTM) Sparse MoE model.
 
 Charter Invariant:
-    Strictly non-monetary open-source project (`0.00 EUR / 0.00 USD`). "Dataset Mining"
+    Strictly non-monetary open-source project (`HiveMind Reflexion Points (HMT)`). "Dataset Mining"
     refers exclusively to scientific corpus curation, deduplication, entropy filtering,
     and QLoRA expert training for reciprocal community compute.
 """
@@ -137,7 +137,7 @@ SCIENTIFIC_MINING_DOMAIN_CORPORA: Dict[str, Dict[str, Any]] = {
         ],
         "holdout": [
             "The HiveMind@home dashboard visualizes live GPU and GCP TPU telemetry, lattice quantization SQNR spectra, dataset mining leases, and La Ruche Honeycomb cells.",
-            "Under the Non-Monetary Compute-Reciprocity Charter, all model weights and dataset shards are shared openly at 0.00 EUR / 0.00 USD.",
+            "Under the Non-Monetary Compute-Reciprocity Charter, all model weights and dataset shards are shared openly at HiveMind Reflexion Points (HMT).",
         ],
     },
     "formal_lean4": {

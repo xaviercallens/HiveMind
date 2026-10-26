@@ -12,6 +12,7 @@ from hivemind.cli.community_orchestrator import (
     recommend_wiki_references,
     run_hourly_quality_and_experiment_audit,
 )
+from hivemind.router.points_wording import currency_leftovers
 
 
 def test_evaluate_pull_request_approves_clean_pr_and_blocks_extortion() -> None:
@@ -35,7 +36,8 @@ def test_evaluate_pull_request_approves_clean_pr_and_blocks_extortion() -> None:
     assert res_ok["can_merge"] is True
     assert res_ok["verdict"] == "APPROVE_AND_MERGE"
     assert res_ok["risk_score"] == 0
-    assert "0.00 EUR / 0.00 USD" in res_ok["review_markdown"]
+    assert "HiveMind Reflexion Points (HMT)" in res_ok["review_markdown"]
+    assert currency_leftovers(res_ok["review_markdown"]) == []
     assert ORCHESTRATOR_PR_MARKER in res_ok["review_markdown"]
 
     # Assembled at runtime: the repository audit scans test files as text and would block on
@@ -87,7 +89,8 @@ def test_compose_discussion_reply_handles_seeded_receipt_claim_and_idempotency()
     assert r_gpu["needs_reply"] is True
     assert r_gpu["reply_category"] == "gpu_benchmark_receipt_validation"
     assert "2f8ae97fd69be25f4c6036aa4cd2153a2affec9e8df435e38158b69028aed8f9" in r_gpu["reply_markdown"]
-    assert "0.00 EUR / 0.00 USD" in r_gpu["reply_markdown"]
+    assert "NO FINANCIAL PAYMENT" in r_gpu["reply_markdown"]
+    assert currency_leftovers(r_gpu["reply_markdown"]) == []
 
     # 3. Contributor claims HM-S7-01
     claim_disc = {

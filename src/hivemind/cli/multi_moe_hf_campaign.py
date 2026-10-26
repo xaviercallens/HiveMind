@@ -24,7 +24,7 @@ verifies 0-step Content-Addressed Swarm Store (`CAS`) peer transfer, proves Byza
 of `reputation_weighted_ties_merge_lora` (`SI-04`) against a `-8.0x` sign-flipping poisoner on
 held-out tokens, and upcycles all 8 domain branches into the 128-Expert 3-Tier Hierarchical MoE.
 
-IMPORTANT NON-MONETARY CHARTER (0.00 EUR / 0.00 USD):
+IMPORTANT NON-MONETARY CHARTER:
 No financial payment, fiat currency, or cryptocurrency is ever offered or paid. Symbolic
 compute-reciprocity points (`PTS` / `$HIVE`) confer exclusively reciprocal computing processing
 benefits when the live production HiveMind Swarm is deployed, available, and used by a large
@@ -1051,7 +1051,7 @@ def format_campaign_markdown_summary(report: dict[str, Any]) -> str:
         f"- **Byzantine Defense (`SI-04` TIES vs. `-12x` Poisoner):** Naive Holdout NLL=`{s4['naive_poisoned_holdout_nll_nats']}` (`PPL={s4['naive_poisoned_perplexity']}`) -> **Filtered TIES Holdout NLL=`{s4['ties_filtered_holdout_nll_nats']}` (`PPL={s4['ties_filtered_perplexity']}`)**",
         f"- **128-Expert 3-Tier MoE & `ZK-OPoI v4`:** `128` experts (`{s5['gating_Compute_reduction_factor']}x` gating reduction) | `prefetch_calls={s5['speculative_token_tree_prefetch_calls']}` | `zk_batch_passed={s5['zk_opoi_v4_batch_passed']}`",
         f"- **Campaign SHA-256 (`campaign_sha256`):** `{report['campaign_sha256']}`",
-        f"- **Symbolic Compute-Reciprocity Points:** **`+{pts['symbolic_points_preview_pts']} PTS`** (`0.00 EUR / 0.00 USD` — non-monetary compute quota only)",
+        f"- **Symbolic Compute-Reciprocity Points:** **`+{pts['symbolic_points_preview_pts']} PTS`** (`HiveMind Reflexion Points (HMT)` — non-monetary compute quota only)",
         "",
         "| Super-Cluster | Domain Specialist | Hugging Face Dataset | Holdout NLL (`Pre -> Post`) | Holdout Perplexity (`Pre -> Post`) | Relative Gain | 0-Step CAS Drift |",
         "| :--- | :--- | :--- | :---: | :---: | :---: | :---: |",

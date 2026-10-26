@@ -924,7 +924,7 @@ class ArchitectureHypothesisVerifier:
         report = {
             **payload_core,
             "elapsed_seconds": elapsed_sec,
-            "non_monetary_charter": "0.00 EUR / 0.00 USD — reciprocal compute processing benefits only",
+            "non_monetary_charter": "HiveMind Reflexion Points (HMT) — reciprocal compute processing benefits only",
             "receipt_sha256": receipt_sha256,
         }
         if output_path is not None:

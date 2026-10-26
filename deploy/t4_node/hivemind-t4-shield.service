@@ -1,0 +1,15 @@
+# TEMPLATE - review before installing. Authenticating proxy; listens on loopback only. A tunnel in front of it is a separate owner decision.
+[Unit]
+Description=HiveMind T4 node: producer shield (loopback)
+After=hivemind-t4-ollama-moe.service
+Requires=hivemind-t4-ollama-moe.service
+
+[Service]
+User=CHANGE_ME
+WorkingDirectory=/path/to/HiveMind
+EnvironmentFile=/etc/hivemind/t4-node.env
+ExecStart=/usr/bin/python3 scripts/hivemind_producer_shield.py --upstream http://127.0.0.1:11436 --host 127.0.0.1 --port 8787 --max-concurrent 2 --allow-model gpt-oss:20b
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

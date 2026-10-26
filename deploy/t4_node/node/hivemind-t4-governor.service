@@ -1,0 +1,18 @@
+# Idle-time governor: inference has priority; QLoRA training runs only in quiet periods and yields within seconds.
+[Unit]
+Description=HiveMind T4 governor (train when idle, yield to inference)
+After=hivemind-boinc-client.service nginx.service
+
+[Service]
+User=callensxavier_gmail_com
+# Serving-first policy (owner): training needs 30 min without a request inside the night window (22:00-07:00 Europe/Paris) or 2 h otherwise, and
+# >= 4300 MiB of free VRAM. History on 2026-10-25: a 5 s / 5 s / 3800 EXPERIMENT was set by someone else at 20:05Z, the owner told the author to keep it at 20:49Z,
+# and a teammate session relayed at ~20:55Z that the owner then confirmed "30 min night, 2 h day"; the author restored these values on that relayed word, as the
+# conservative direction, and asked the owner to confirm in the author's own session. To run the experiment again: --idle-start-s 5 --day-idle-s 5 --min-free-mib 3800.
+# Measured cost of the experiment (2 real yields): 0.77 s and 7.1 s; one user request waited 7.2 s. See ../live/README.md.
+ExecStart=/usr/bin/python3 /opt/hivemind/t4/scripts/t4_governor.py --idle-start-s 1800 --day-idle-s 7200 --min-free-mib 4300 --night-tz Europe/Paris --night-start-h 22 --night-end-h 7
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

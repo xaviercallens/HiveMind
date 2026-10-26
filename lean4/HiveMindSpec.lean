@@ -1974,6 +1974,164 @@ theorem e8_lattice_second_moment_strictly_beats_z8_cubic :
 
 end Season15_QuorumLivenessAndDataLeasing
 
+-- =====================================================================================================
+-- QUEENBEE (algorithm name ALIX): DANCE RECORDS, RECRUITMENT WEIGHTS, VERIFIED-ONLY LEARNING AND THE
+-- LUMP-SUM KNOWLEDGE BONUS. CORE LEAN ONLY (Nat/Int, no Mathlib). Code: `hivemind.queenbee`.
+-- =====================================================================================================
+namespace ALIX_QueenBee
+
+/-- A dance record as the aggregator sees it: `n` verified trials, `s` successes, and `expired` set once the
+    record's epoch is older than the fading horizon. Scores are integer-scaled by `scale` (the code uses 10^6). -/
+structure DanceRecord where
+  n : Nat
+  s : Nat
+  expired : Bool
+
+/-- Pessimistic success score with `b` pseudo-failures: `s * scale / (n + b)`. With `b = 0` it is the raw rate;
+    with `b > 0` a record with few trials is pulled toward zero, which is the role the code gives to the lower
+    end of Wilson's interval. -/
+def pessimisticScore (scale b : Nat) (r : DanceRecord) : Nat := r.s * scale / (r.n + b)
+
+/-- Recruitment weight of one record: zero once it has faded, otherwise its score capped per identity. -/
+def recruitWeight (scale b cap : Nat) (r : DanceRecord) : Nat :=
+  if r.expired then 0 else min cap (pessimisticScore scale b r)
+
+/-- Total weight a set of records (for example all records signed by one identity) carries. -/
+def totalWeight (scale b cap : Nat) : List DanceRecord → Nat
+  | [] => 0
+  | r :: rs => recruitWeight scale b cap r + totalWeight scale b cap rs
+
+/-- Theorem 129 (Faded Dances Recruit Nobody): an expired record has recruitment weight zero, so an expert
+    that stops producing verified outcomes stops being recruited (stigmergic fading). -/
+theorem faded_record_recruits_nobody (scale b cap : Nat) (r : DanceRecord) (h : r.expired = true) :
+    recruitWeight scale b cap r = 0 := by
+  simp [recruitWeight, h]
+
+/-- Theorem 130 (Per-Record Influence Cap): no single record carries more than `cap`. -/
+theorem recruit_weight_le_cap (scale b cap : Nat) (r : DanceRecord) : recruitWeight scale b cap r ≤ cap := by
+  unfold recruitWeight
+  split
+  · exact Nat.zero_le _
+  · exact Nat.min_le_left _ _
+
+/-- Theorem 131 (Sybil Influence Bound): `k` records, however inflated their counts, carry at most `k * cap`
+    of recruitment weight, so buying influence costs identities, not numbers. -/
+theorem sybil_influence_le_count_times_cap (scale b cap : Nat) (rs : List DanceRecord) :
+    totalWeight scale b cap rs ≤ rs.length * cap := by
+  induction rs with
+  | nil => simp [totalWeight]
+  | cons r rs ih =>
+    simp only [totalWeight, List.length_cons, Nat.add_mul, Nat.one_mul]
+    have hr := recruit_weight_le_cap scale b cap r
+    omega
+
+/-- Theorem 132 (Score Monotone in Successes): with the same trial count, more successes never lower the score. -/
+theorem score_monotone_in_successes (scale b : Nat) (r r' : DanceRecord) (hn : r'.n = r.n) (hs : r.s ≤ r'.s) :
+    pessimisticScore scale b r ≤ pessimisticScore scale b r' := by
+  unfold pessimisticScore
+  rw [hn]
+  exact Nat.div_le_div_right (Nat.mul_le_mul_right scale hs)
+
+/-- Theorem 133 (Score Antitone in Trials): with the same successes, more trials never raise the score, so a
+    dancer cannot gain by padding `n`. -/
+theorem score_antitone_in_trials (scale b : Nat) (r r' : DanceRecord) (hs : r'.s = r.s) (hn : r.n ≤ r'.n)
+    (hpos : 0 < r.n + b) :
+    pessimisticScore scale b r' ≤ pessimisticScore scale b r := by
+  unfold pessimisticScore
+  rw [hs]
+  exact Nat.div_le_div_left (Nat.add_le_add_right hn b) hpos
+
+/-- The bandit's observation step: the success count moves only on a verified success. -/
+def observe (s : Nat) (verified success : Bool) : Nat := if verified && success then s + 1 else s
+
+/-- Fold `observe` over a list of `(verified, success)` outcomes. -/
+def observeAll (s : Nat) : List (Bool × Bool) → Nat
+  | [] => s
+  | (v, ok) :: rest => observeAll (observe s v ok) rest
+
+/-- Theorem 134 (Unverified Outcomes Never Move the Count): a stream of outcomes without a verifier leaves the
+    learned success count where it was, so unverified praise cannot teach the router anything. -/
+theorem unverified_outcomes_never_move_the_count (s : Nat) (outs : List (Bool × Bool))
+    (h : ∀ o ∈ outs, o.1 = false) : observeAll s outs = s := by
+  induction outs generalizing s with
+  | nil => rfl
+  | cons o rest ih =>
+    cases o with
+    | mk v ok =>
+      have hv : v = false := h (v, ok) (List.mem_cons.mpr (Or.inl rfl))
+      have hrest : ∀ o' ∈ rest, o'.1 = false := fun o' hm => h o' (List.mem_cons.mpr (Or.inr hm))
+      subst hv
+      simp only [observeAll, observe, Bool.false_and, Bool.false_eq_true, ite_false]
+      exact ih s hrest
+
+/-- Training-mix admissibility (repository rule): unverified rows are at most 30% of the mix. -/
+def mixAdmissible (u v : Nat) : Prop := 10 * u ≤ 3 * (u + v)
+
+/-- Theorem 135 (Verified Rows Never Break the Dilution Cap): adding verified rows keeps an admissible mix
+    admissible. -/
+theorem verified_rows_keep_mix_admissible (u v k : Nat) (h : mixAdmissible u v) : mixAdmissible u (v + k) := by
+  unfold mixAdmissible at *
+  omega
+
+/-- Theorem 136 (Dilution Cap as a Ratio): an admissible mix has at least `7/3` verified rows per unverified one. -/
+theorem dilution_cap_ratio (u v : Nat) (h : mixAdmissible u v) : 7 * u ≤ 3 * v := by
+  unfold mixAdmissible at h
+  omega
+
+/-- Theorem 137 (Lump-Sum Bonus Preserves Best Responses): adding the same bonus `c` to every action's payoff
+    changes no pairwise comparison, so a knowledge bonus paid as a lump sum leaves each player's best response
+    where it was. -/
+theorem lump_sum_bonus_preserves_best_response {α : Type} (f : α → Int) (c : Int) (x y : α) :
+    f y ≤ f x ↔ f y + c ≤ f x + c := by
+  constructor <;> intro h <;> omega
+
+/-- Theorem 138 (Lump-Sum Bonus Preserves Nash): an action that is a best response before the bonus is a best
+    response after it, and conversely; the Kelly price and the supply decisions of `hivemind.router.market`
+    are therefore unchanged by the knowledge bonus. -/
+theorem lump_sum_bonus_preserves_nash {α : Type} (f : α → Int) (c : Int) (x : α) :
+    (∀ y, f y ≤ f x) ↔ (∀ y, f y + c ≤ f x + c) := by
+  constructor
+  · intro h y
+    have := h y
+    omega
+  · intro h y
+    have := h y
+    omega
+
+/-- Sum of knowledge weights. -/
+def weightSum : List Nat → Nat
+  | [] => 0
+  | w :: ws => w + weightSum ws
+
+/-- Floor-division payouts `pool * w / W` summed over the contributors. -/
+def payoutSum (pool W : Nat) : List Nat → Nat
+  | [] => 0
+  | w :: ws => pool * w / W + payoutSum pool W ws
+
+theorem add_div_le_div_add (a b c : Nat) (hc : 0 < c) : a / c + b / c ≤ (a + b) / c := by
+  rw [Nat.le_div_iff_mul_le hc, Nat.add_mul]
+  exact Nat.add_le_add (Nat.div_mul_le_self a c) (Nat.div_mul_le_self b c)
+
+theorem payouts_le_pool_times_weights_over_W (pool W : Nat) (hW : 0 < W) (ws : List Nat) :
+    payoutSum pool W ws ≤ pool * weightSum ws / W := by
+  induction ws with
+  | nil => simp [payoutSum, weightSum]
+  | cons w ws ih =>
+    simp only [payoutSum, weightSum, Nat.mul_add]
+    calc pool * w / W + payoutSum pool W ws
+        ≤ pool * w / W + pool * weightSum ws / W := Nat.add_le_add_left ih _
+      _ ≤ (pool * w + pool * weightSum ws) / W := add_div_le_div_add _ _ _ hW
+
+/-- Theorem 139 (Knowledge Bonus Payouts Never Exceed the Pool): proportional floor-division payouts over
+    weights that sum to `W` total at most `pool`, so the bonus cannot mint points. -/
+theorem knowledge_bonus_payouts_never_exceed_pool (pool W : Nat) (hW : 0 < W) (ws : List Nat)
+    (hsum : weightSum ws = W) : payoutSum pool W ws ≤ pool := by
+  have h := payouts_le_pool_times_weights_over_W pool W hW ws
+  rw [hsum, Nat.mul_div_cancel _ hW] at h
+  exact h
+
+end ALIX_QueenBee
+
 end HiveMindSpec
 
 -- Verify that all theorems depend on zero user axioms (`#print axioms` check)
@@ -2109,3 +2267,16 @@ end HiveMindSpec
 #print axioms HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.ortho_inj_pythagorean_energy_conservation
 #print axioms HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.factored_gossip_js_gate_skips_blocking_mix2_barrier
 #print axioms HiveMindSpec.Season15_QuorumLivenessAndDataLeasing.e8_lattice_second_moment_strictly_beats_z8_cubic
+#print axioms HiveMindSpec.ALIX_QueenBee.faded_record_recruits_nobody
+#print axioms HiveMindSpec.ALIX_QueenBee.recruit_weight_le_cap
+#print axioms HiveMindSpec.ALIX_QueenBee.sybil_influence_le_count_times_cap
+#print axioms HiveMindSpec.ALIX_QueenBee.score_monotone_in_successes
+#print axioms HiveMindSpec.ALIX_QueenBee.score_antitone_in_trials
+#print axioms HiveMindSpec.ALIX_QueenBee.unverified_outcomes_never_move_the_count
+#print axioms HiveMindSpec.ALIX_QueenBee.verified_rows_keep_mix_admissible
+#print axioms HiveMindSpec.ALIX_QueenBee.dilution_cap_ratio
+#print axioms HiveMindSpec.ALIX_QueenBee.lump_sum_bonus_preserves_best_response
+#print axioms HiveMindSpec.ALIX_QueenBee.lump_sum_bonus_preserves_nash
+#print axioms HiveMindSpec.ALIX_QueenBee.knowledge_bonus_payouts_never_exceed_pool
+#print axioms HiveMindSpec.ALIX_QueenBee.add_div_le_div_add
+#print axioms HiveMindSpec.ALIX_QueenBee.payouts_le_pool_times_weights_over_W

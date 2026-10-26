@@ -1,0 +1,16 @@
+{
+  "bound": "127.0.0.1",
+  "rows": [
+    {
+      "prompt": "The Mixture of Experts model",
+      "n_tokens": 24,
+      "identical_to_batch": true
+    },
+    {
+      "prompt": "Volunteer computing with BOINC means",
+      "n_tokens": 24,
+      "identical_to_batch": true
+    }
+  ],
+  "B7": true
+}

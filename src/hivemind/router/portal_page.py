@@ -418,7 +418,8 @@ const PROMPTS = {
   python: "Write a high-performance Python decorator with LRU caching, thread safety, and execution duration metrics in microseconds.",
   pytorch: "Write a PyTorch autograd Function that computes the exact Voronoi cell projections on a Conway-Sloane A2 hexagonal lattice.",
   astro: "Simulate transit timing variations (TTV) of an exoplanetary system under 3-body gravitational resonance.",
-  reciprocity: "Explain how HiveMind's 0.00 EUR non-monetary compute reciprocity model works for gamers and AI developers."
+  reciprocity: "Explain how HiveMind's non-monetary compute reciprocity model works for gamers and AI developers.",
+  crowdgpt: "Explain how a 1B generalist dense trunk (CrowdGPT Vxtzq/Crowd-v1 trained on 7B FineWeb tokens) and 18 MB domain QLoRA adapters can share a Hub-and-Spoke DiLoCo + Multi-Krum volunteer GPU swarm."
 };
 
 document.querySelectorAll('.prompt-pill').forEach(btn => {
@@ -664,7 +665,21 @@ export OPENAI_API_KEY=YOUR_HIVEMIND_API_KEY
   curl: `curl -X POST "${window.location.origin}/v1/chat/completions" \\
   -H "Authorization: Bearer YOUR_HIVEMIND_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{"model": "hivemind/coder", "messages": [{"role": "user", "content": "Hello!"}]}'`
+  -d '{"model": "hivemind/coder", "messages": [{"role": "user", "content": "Hello!"}]}'`,
+  antigravity: `# Google Antigravity SDK (pip install google-antigravity) + Unity/Steam Scientific Game Co-Pilot
+import asyncio
+from google.antigravity import Agent, LocalOpenAIAgentConfig
+
+async def main():
+    config = LocalOpenAIAgentConfig(
+        model="hivemind/bee-stars",
+        base_url="${window.location.origin}/v1",
+    ).lightweight()
+    async with Agent(config=config) as agent:
+        reply = await agent.chat("Optimize our Symplectic Velocity-Verlet N-Body orbital step for KEPLER-HM-442b.")
+        print(await reply.text())
+
+asyncio.run(main())`
 };
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -736,6 +751,7 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
       </div>
       <nav>
         <a href="#playground" class="nav-link active">Playground</a>
+        <a href="#night-telemetry" class="nav-link">Night Progress</a>
         <a href="#tiers" class="nav-link">Model Tiers</a>
         <a href="#integrations" class="nav-link">Editor Config</a>
         <a href="#producers" class="nav-link">Share GPU</a>
@@ -747,7 +763,7 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
       <h2>Community AI Inference.<br><span style="color:var(--cyan);">Zero Cost. Powered by Consumer GPUs.</span></h2>
       <p>
         HiveMind OpenRouter gives developers an OpenAI-compatible API powered by a global swarm of idle gamer GPUs.
-        Operates strictly under the <strong>0.00 EUR / 0.00 USD Non-Monetary Compute Reciprocity Charter</strong>:
+        Operates strictly under the <strong>HiveMind Reflexion Points (HMT) Non-Monetary Compute Reciprocity Charter</strong>:
         share compute when your GPU is idle, earn HMT points, and spend them in your editor.
       </p>
       <div class="cta-group">
@@ -778,6 +794,7 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
         <select id="modelSelect">
           <option value="hivemind/auto">hivemind/auto (Smart Market Liquidity Routing)</option>
           <option value="hivemind/coder">hivemind/coder (7B &bull; Everyday Python &amp; Game Code)</option>
+          <option value="hivemind/crowd-v1">hivemind/crowd-v1 (1B &bull; CrowdGPT Vxtzq/Crowd-v1 Generalist Trunk &bull; Pre-Wired Partner)</option>
           <option value="hivemind/coder-lite">hivemind/coder-lite (3B &bull; Ultra-Fast Edits)</option>
           <option value="hivemind/coder-plus">hivemind/coder-plus (14B &bull; Multi-File &amp; Tests)</option>
           <option value="hivemind/moe-general">hivemind/moe-general (20B MoE &bull; Reasoning)</option>
@@ -829,10 +846,62 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
           <div class="stat-item">First Byte: <span id="statLatency">0 ms</span></div>
           <div class="stat-item">Generation Speed: <span id="statSpeed">0 tok/s</span></div>
           <div class="stat-item">Tokens: <span id="statTokens">0</span></div>
-          <div class="stat-item">Reciprocity: <span>0.00 EUR</span></div>
+          <div class="stat-item">Reciprocity: <span>HiveMind Reflexion Points (HMT)</span></div>
         </div>
       </section>
     </div>
+
+    <!-- Real-Life Night Progress & BOINC QLoRA Telemetry (25-26 Oct 2026) -->
+    <section id="night-telemetry" class="card" style="margin-bottom:3rem;border-color:rgba(52,211,153,0.35);">
+      <div class="card-header">
+        <div class="card-title" style="color:var(--green);">&#x1F319; European Night Real-Life Telemetry &amp; BOINC QLoRA-MoE Progress (25&ndash;26 Oct 2026)</div>
+        <span class="pill" style="border-color:var(--green);color:var(--green);">15/15 Live Probes PASS &bull; 0 HTTP 402/5xx</span>
+      </div>
+      <p style="color:var(--text-dim);font-size:0.88rem;margin-bottom:1rem;line-height:1.5;">
+        Measured production telemetry from the European Night window (<code>2026-10-25 20:00Z &rarr; 2026-10-26 08:00Z</code>) across our three Cloud Run gateways, dual-GPU inference fleet (<strong>NVIDIA Tesla T4 16 GB + NVIDIA GeForce RTX 2070 8 GB</strong>), and the BOINC 7.24 chained QLoRA-MoE coordinator (<code>scripts/t4_training_report.py</code>).
+      </p>
+      <div class="tiers-grid" style="margin-bottom:1.25rem;">
+        <div class="tier-card">
+          <div>
+            <div class="tier-badge">DUAL-GPU INFERENCE FLEET</div>
+            <div class="tier-name">Tesla T4 (16 GB) + RTX 2070 (8 GB)</div>
+            <div class="tier-vram">4 Active Producers &bull; 7 Live Models</div>
+            <div class="tier-desc">Serving <code>hivemind/coder</code>, <code>coder-lite</code>, <code>bee-stars</code>, <code>coder-plus</code>, <code>moe-general</code>, <code>moe-coder</code>, and <code>auto</code> (with <code>hivemind/crowd-v1</code> pre-wired).</div>
+          </div>
+          <div><span class="tier-tag">100% Uptime Overnight</span></div>
+        </div>
+        <div class="tier-card">
+          <div>
+            <div class="tier-badge">OVERNIGHT GATEWAY TRAFFIC</div>
+            <div class="tier-name">4,474 HTTP Reqs &bull; 133 Completions</div>
+            <div class="tier-vram">Router p50: 198.1 ms &bull; p95: 799.6 ms</div>
+            <div class="tier-desc">83 chat completions on <code>router</code>, 25 on <code>ruche</code> (p50 293.9 ms), 25 on <code>tribute</code> (p50 265.1 ms), and 81,424 cumulative nginx requests on the T4 node.</div>
+          </div>
+          <div><span class="tier-tag">0 HTTP 402 &bull; 0 HTTP 5xx</span></div>
+        </div>
+        <div class="tier-card">
+          <div>
+            <div class="tier-badge">BOINC CHAINED QLORA-MOE</div>
+            <div class="tier-name">100 Assimilated WUs (98 hmq_*)</div>
+            <div class="tier-vram">5,632.11 Cobblestones &bull; 0.0 Replay Drift</div>
+            <div class="tier-desc">85 of 98 rounds completed inside 22:00&ndash;07:00 CET (mean 105 s/round, 3,409 MiB peak VRAM). Strict loss ratchet accepted 20 improvements and held 78 rounds at head <code>hmq_00092</code>.</div>
+          </div>
+          <div><span class="tier-tag">Head: hmq_00092 (SHA e91e0ec3)</span></div>
+        </div>
+        <div class="tier-card">
+          <div>
+            <div class="tier-badge">6-DOMAIN HELD-OUT NLL</div>
+            <div class="tier-name">2.2705 &rarr; 2.1380 (-5.8%)</div>
+            <div class="tier-vram">Math -15.1% &bull; Biomed -11.7% &bull; Gen -8.8%</div>
+            <div class="tier-desc"><code>math</code>: 1.6440 &rarr; 1.3949 | <code>biomed</code>: 2.5017 &rarr; 2.2089 | <code>general</code>: 2.3230 &rarr; 2.1177 | <code>french</code>: 2.3789 &rarr; 2.3475 (-1.3%) | <code>news</code>: 2.1422 &rarr; 2.1246 (-0.8%) | <code>edu_web</code>: 2.6332 &rarr; 2.6342 (~0%).</div>
+          </div>
+          <div><span class="tier-tag">Plateau after ~30 rounds</span></div>
+        </div>
+      </div>
+      <div style="font-size:0.78rem;color:var(--text-dim);font-family:var(--font-mono);border-top:1px solid var(--border);padding-top:0.75rem;line-height:1.5;">
+        <strong>Scientific &amp; Methodological Caveats (<code>scripts/t4_training_report.py</code>):</strong> Baseline (<code>2.2705</code>) is the state before <code>hmq_00002</code> (first 6-domain round; <code>hmq_00001</code> trained on <code>general</code> only). Loss plateaued after ~30 rounds (std over last 20 rounds = <code>0.0055</code>; target-domain delta in rounds 69&ndash;98 = <code>+0.0006</code>). Held-out sets are fixed (8 sequences &times; 128 tokens/domain), head <code>hmq_00092</code> is best-of-97 on those sets, and the BOINC <code>granite-3.1-1b-a400m-base</code> LoRA chain is an offline training track not yet served by <code>/v1/chat/completions</code>. Governor recorded 130 total yields (latest mid-BOINC-task kill-on-yield: <code>1,135 ms</code> and <code>1,133 ms</code>).
+      </div>
+    </section>
 
     <!-- Capability Tiers Grid -->
     <section id="tiers" style="margin-bottom:3rem;">
@@ -865,6 +934,7 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
         <button type="button" class="tab-btn" data-tab="aider">Aider Terminal</button>
         <button type="button" class="tab-btn" data-tab="env">Env variables</button>
         <button type="button" class="tab-btn" data-tab="curl">cURL</button>
+        <button type="button" class="tab-btn" data-tab="antigravity">Google Antigravity SDK</button>
       </div>
 
       <pre id="snippetCode" class="code-box"></pre>
@@ -902,7 +972,7 @@ python scripts/hivemind_producer_agent.py --gateway https://hivemind-openrouter-
 
     <footer>
       <div>
-        <strong>HiveMind OpenRouter</strong> &bull; Non-monetary compute reciprocity (0.00 EUR / USD).
+        <strong>HiveMind OpenRouter</strong> &bull; Non-monetary compute reciprocity.
       </div>
       <div class="footer-links">
         <a href="https://github.com/xaviercallens/HiveMind" target="_blank" rel="noopener">GitHub</a>

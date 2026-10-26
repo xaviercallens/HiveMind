@@ -15,6 +15,9 @@ Configuration (environment):
                                     "Sign in with Google" registration at /signup. Unset = disabled.
     HIVEMIND_OIDC_PROVIDERS         Optional JSON list of extra OpenID Connect providers (name, issuer, jwks_url, client_id) for
                                     the general sign-in at /v1/hivemind/register/oidc/<name>; see docs/HIVEMIND_OPENROUTER.md.
+    HIVEMIND_BID_WINDOW_S           seconds of recent activity (a request or a hold) that make a funded account a bidder in
+                                    the price; default 900. 0 counts every funded account, which lets idle accounts that
+                                    raised their max price refuse new users' first requests (402).
     HIVEMIND_OPEN_REGISTRATION      "0" closes handle-only registration so that Google sign-in is the only way in.
                                     Default "1". Closing it without a Google client id is refused at start-up.
 """
@@ -53,8 +56,12 @@ def build_app(env: Mapping[str, str]) -> FastAPI:
     open_registration = env.get("HIVEMIND_OPEN_REGISTRATION", "1").strip() != "0"
     if not open_registration and google_client_id is None and not oidc_verifiers:
         raise RuntimeError("HIVEMIND_OPEN_REGISTRATION=0 needs HIVEMIND_GOOGLE_CLIENT_ID or HIVEMIND_OIDC_PROVIDERS: nobody could register otherwise")
+    bid_window_s = float(env.get("HIVEMIND_BID_WINDOW_S", "900") or "900")
+    if not bid_window_s >= 0.0:
+        raise RuntimeError("HIVEMIND_BID_WINDOW_S must be >= 0")
     return create_router_app(store, admin_key_hash=admin_key_hash, trusted_proxy_hops=hops,
-                             google_client_id=google_client_id, oidc_verifiers=oidc_verifiers, open_registration=open_registration)
+                             google_client_id=google_client_id, oidc_verifiers=oidc_verifiers, open_registration=open_registration,
+                             bid_activity_window_s=bid_window_s)
 
 
 app: FastAPI = build_app(os.environ)

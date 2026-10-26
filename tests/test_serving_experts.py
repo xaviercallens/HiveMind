@@ -74,3 +74,8 @@ def test_loader_builds_the_expert_with_seven_b_only_by_default() -> None:
     assert isinstance(expert, gwaya_expert.GwayaCodeExpert)
     assert expert.small is None and expert.small_first is False
     assert expert.large.name == "qwen2.5-coder:7b" and expert.large.url.endswith("/v1")
+
+
+def test_python_keywords_do_not_route_a_school_class() -> None:
+    # "class " fired on 38 of 1319 GSM8K word problems ("a class of 20 students"); a real class statement also carries def/import.
+    assert "class " not in SERVING_EXPERT_SPECS[PYTHON_CODE_GWAYA]["keywords"]

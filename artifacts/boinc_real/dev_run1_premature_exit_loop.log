@@ -1,0 +1,423 @@
+25-Oct-2026 08:36:00 [---] Starting BOINC client version 7.18.1 for x86_64-pc-linux-gnu
+25-Oct-2026 08:36:00 [---] This a development version of BOINC and may not function properly
+25-Oct-2026 08:36:00 [---] log flags: file_xfer, sched_ops, task, coproc_debug, cpu_sched, task_debug
+25-Oct-2026 08:36:00 [---] Libraries: libcurl/7.81.0 OpenSSL/3.0.2 zlib/1.2.11 brotli/1.0.9 zstd/1.4.8 libidn2/2.3.2 libpsl/0.21.0 (+libidn2/2.3.2) libssh/0.9.6/openssl/zlib nghttp2/1.43.0 librtmp/2.3 OpenLDAP/2.5.20
+25-Oct-2026 08:36:00 [---] Data directory: /mnt/disks/disk-socrateai-local-1/boinc/run1/client
+25-Oct-2026 08:36:00 [---] [coproc] launching child process at /mnt/disks/disk-socrateai-local-1/boinc/root/usr/bin/boinc
+25-Oct-2026 08:36:00 [---] [coproc] with data directory /mnt/disks/disk-socrateai-local-1/boinc/run1/client
+25-Oct-2026 08:36:03 [---] CUDA: NVIDIA GPU 0: Tesla T4 (driver version 580.99, CUDA version 13.0, compute capability 7.5, 4096MB, 3970MB available, 8141 GFLOPS peak)
+25-Oct-2026 08:36:03 [---] OpenCL: NVIDIA GPU 0: Tesla T4 (driver version 580.178.04, device version OpenCL 3.0 CUDA, 14912MB, 3970MB available, 8141 GFLOPS peak)
+25-Oct-2026 08:36:03 [---] [coproc] NVIDIA library reports 1 GPU
+25-Oct-2026 08:36:03 [---] [coproc] ATI: libaticalrt.so: cannot open shared object file: No such file or directory
+25-Oct-2026 08:36:03 [http://127.0.0.1:45683/hivemind/] Found app_info.xml; using anonymous platform
+25-Oct-2026 08:36:03 [---] Creating new client state file
+25-Oct-2026 08:36:03 [---] libc:  version 2.35
+25-Oct-2026 08:36:03 [---] Host name: socreateai-agora-hermes-node1
+25-Oct-2026 08:36:03 [---] Processor: 8 GenuineIntel Intel(R) Xeon(R) CPU @ 2.20GHz [Family 6 Model 79 Stepping 0]
+25-Oct-2026 08:36:03 [---] Processor features: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology nonstop_tsc cpuid tsc_known_freq pni pclmulqdq ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch pti ssbd ibrs ibpb stibp fsgsbase tsc_adjust bmi1 hle avx2 smep bmi2 erms invpcid rtm rdseed adx smap xsaveopt arat md_clear arch_capabilities
+25-Oct-2026 08:36:03 [---] OS: Linux Ubuntu: Ubuntu 22.04.5 LTS [6.8.0-1070-gcp|libc 2.35]
+25-Oct-2026 08:36:03 [---] Memory: 29.37 GB physical, 4.00 GB virtual
+25-Oct-2026 08:36:03 [---] Disk: 491.08 GB total, 1.39 GB free
+25-Oct-2026 08:36:03 [---] Local time is UTC +0 hours
+25-Oct-2026 08:36:03 [---] Config: allow multiple clients
+25-Oct-2026 08:36:03 [---] Config: report completed tasks immediately
+25-Oct-2026 08:36:03 [---] Config: use all coprocessors
+25-Oct-2026 08:36:06 [---] No general preferences found - using defaults
+25-Oct-2026 08:36:06 [---] Reading preferences override file
+25-Oct-2026 08:36:06 [---] Preferences:
+25-Oct-2026 08:36:06 [---]    max memory usage when active: 15038.50 MB
+25-Oct-2026 08:36:06 [---]    max memory usage when idle: 27069.31 MB
+25-Oct-2026 08:36:06 [---]    max disk usage: 1.29 GB
+25-Oct-2026 08:36:06 [---]    max CPUs used: 4
+25-Oct-2026 08:36:06 [---]    (to change preferences, visit a project web site or select Preferences in the Manager)
+25-Oct-2026 08:36:06 [---] Setting up project and slot directories
+dir_open: Could not open directory 'slots' from '/mnt/disks/disk-socrateai-local-1/boinc/run1/client'.
+25-Oct-2026 08:36:06 [---] Checking active tasks
+25-Oct-2026 08:36:06 [http://127.0.0.1:45683/hivemind/] URL http://127.0.0.1:45683/hivemind/; Computer ID not assigned yet; resource share 100
+25-Oct-2026 08:36:06 [---] Setting up GUI RPC socket
+25-Oct-2026 08:36:06 [---] Checking presence of 1 project files
+25-Oct-2026 08:36:06 Initialization completed
+25-Oct-2026 08:36:06 [http://127.0.0.1:45683/hivemind/] Fetching scheduler list
+25-Oct-2026 08:36:09 [http://127.0.0.1:45683/hivemind/] Master file download succeeded
+25-Oct-2026 08:36:14 [http://127.0.0.1:45683/hivemind/] Sending scheduler request: Project initialization.
+25-Oct-2026 08:36:14 [http://127.0.0.1:45683/hivemind/] Requesting new tasks for CPU and NVIDIA GPU
+25-Oct-2026 08:36:17 [HiveMind local test project] Scheduler request completed: got 1 new tasks
+25-Oct-2026 08:36:17 [HiveMind local test project] Project requested delay of 10 seconds
+25-Oct-2026 08:36:17 [HiveMind local test project] [task] result state=NEW for hm_good_001_0 from handle_scheduler_reply
+25-Oct-2026 08:36:19 [HiveMind local test project] [task] result state=FILES_DOWNLOADING for hm_good_001_0 from CS::update_results
+25-Oct-2026 08:36:20 [HiveMind local test project] Started download of hm_good_001_in
+25-Oct-2026 08:36:22 [HiveMind local test project] Finished download of hm_good_001_in
+25-Oct-2026 08:36:22 [HiveMind local test project] [task] result state=FILES_DOWNLOADED for hm_good_001_0 from CS::update_results
+25-Oct-2026 08:36:22 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:36:22 [HiveMind local test project] Elapsed time limit 4.152361 < 120.000000; setting to 43200.000000
+25-Oct-2026 08:36:22 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 704420
+25-Oct-2026 08:36:22 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:36:22 [HiveMind local test project] Starting task hm_good_001_0
+25-Oct-2026 08:36:22 [HiveMind local test project] [cpu_sched] Starting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:36:29 [HiveMind local test project] Sending scheduler request: To fetch work.
+25-Oct-2026 08:36:29 [HiveMind local test project] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 08:36:34 [HiveMind local test project] Scheduler request completed: got 1 new tasks
+25-Oct-2026 08:36:34 [HiveMind local test project] Project requested delay of 10 seconds
+25-Oct-2026 08:36:34 [HiveMind local test project] [task] result state=NEW for hm_fault_001_0 from handle_scheduler_reply
+25-Oct-2026 08:36:34 [HiveMind local test project] Generated new computer cross-project ID: 36329556032397ecf3289b40744b2e02
+25-Oct-2026 08:36:37 [HiveMind local test project] [task] result state=FILES_DOWNLOADING for hm_fault_001_0 from CS::update_results
+25-Oct-2026 08:36:38 [HiveMind local test project] Started download of hm_fault_001_in
+25-Oct-2026 08:36:40 [HiveMind local test project] Finished download of hm_fault_001_in
+25-Oct-2026 08:36:40 [HiveMind local test project] [task] result state=FILES_DOWNLOADED for hm_fault_001_0 from CS::update_results
+25-Oct-2026 08:36:40 [HiveMind local test project] [coproc] NVIDIA instance 0; 1.000000 pending for hm_good_001_0
+25-Oct-2026 08:36:40 [HiveMind local test project] [coproc] NVIDIA instance 0: confirming 1.000000 instance for hm_good_001_0
+25-Oct-2026 08:36:46 [HiveMind local test project] Sending scheduler request: To fetch work.
+25-Oct-2026 08:36:46 [HiveMind local test project] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 08:36:48 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:36:48 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:36:48 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:36:48 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:36:48 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:36:48 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:36:48 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 704711
+25-Oct-2026 08:36:48 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:36:48 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:36:49 [HiveMind local test project] Scheduler request completed: got 0 new tasks
+25-Oct-2026 08:36:49 [HiveMind local test project] Project requested delay of 10 seconds
+25-Oct-2026 08:36:49 [HiveMind local test project] Generated new computer cross-project ID: 36329556032397ecf3289b40744b2e02
+25-Oct-2026 08:37:16 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:37:16 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:37:16 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:37:16 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:37:16 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:37:16 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:37:16 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 704968
+25-Oct-2026 08:37:16 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:37:16 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:37:41 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:37:41 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:37:41 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:37:41 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:37:41 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:37:41 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:37:41 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 705200
+25-Oct-2026 08:37:41 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:37:41 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:38:08 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:38:09 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:38:09 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:38:09 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:38:09 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:38:09 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:38:09 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 705350
+25-Oct-2026 08:38:09 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:38:09 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:38:35 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:38:35 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:38:35 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:38:35 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:38:35 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:38:35 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:38:35 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 705543
+25-Oct-2026 08:38:35 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:38:35 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:39:03 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:39:03 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:39:03 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:39:03 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:39:03 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:39:03 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:39:03 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 705752
+25-Oct-2026 08:39:03 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:39:03 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:39:31 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:39:31 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:39:31 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:39:31 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:39:31 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:39:31 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:39:31 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 705900
+25-Oct-2026 08:39:31 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:39:31 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:39:59 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:39:59 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:39:59 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:39:59 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:39:59 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:39:59 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:39:59 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 706085
+25-Oct-2026 08:39:59 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:39:59 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:40:26 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:40:26 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:40:26 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:40:26 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:40:26 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:40:26 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:40:26 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 706225
+25-Oct-2026 08:40:26 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:40:26 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:40:57 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:40:57 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:40:57 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:40:57 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:40:57 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:40:57 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:40:57 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 706386
+25-Oct-2026 08:40:57 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:40:57 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:41:25 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:41:25 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:41:25 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:41:25 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:41:25 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:41:25 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:41:25 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 706596
+25-Oct-2026 08:41:25 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:41:25 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:41:53 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:41:53 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:41:53 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:41:53 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:41:53 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:41:53 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:41:53 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 706726
+25-Oct-2026 08:41:53 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:41:53 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:42:15 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:42:15 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:42:15 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:42:15 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:42:15 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:42:15 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:42:15 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 706959
+25-Oct-2026 08:42:15 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:42:15 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:42:32 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:42:32 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:42:32 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:42:32 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:42:32 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:42:32 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:42:32 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 707022
+25-Oct-2026 08:42:32 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:42:32 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:42:49 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:43:02 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:43:02 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:43:02 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:43:02 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:43:02 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:43:03 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 707143
+25-Oct-2026 08:43:03 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:43:03 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:43:15 [HiveMind local test project] [coproc] NVIDIA instance 0; 1.000000 pending for hm_good_001_0
+25-Oct-2026 08:43:15 [HiveMind local test project] [coproc] NVIDIA instance 0: confirming 1.000000 instance for hm_good_001_0
+25-Oct-2026 08:43:20 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:43:20 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:43:20 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:43:20 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:43:20 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:43:20 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:43:20 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 707308
+25-Oct-2026 08:43:20 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:43:20 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:43:38 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:43:38 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:43:38 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:43:38 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:43:38 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:43:38 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:43:38 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 707448
+25-Oct-2026 08:43:38 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:43:38 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:43:55 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:43:55 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:43:55 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:43:55 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:43:55 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:43:55 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:43:56 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 707522
+25-Oct-2026 08:43:56 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:43:56 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:44:13 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:44:13 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:44:13 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:44:13 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:44:13 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:44:13 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:44:13 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 707631
+25-Oct-2026 08:44:13 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:44:13 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:44:36 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:44:36 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:44:36 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:44:36 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:44:36 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:44:36 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:44:36 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 707822
+25-Oct-2026 08:44:36 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:44:36 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:45:03 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:45:03 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:45:03 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:45:03 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:45:03 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:45:03 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:45:03 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 707961
+25-Oct-2026 08:45:03 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:45:03 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:45:21 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:45:21 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:45:21 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:45:21 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:45:21 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:45:21 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:45:21 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 708064
+25-Oct-2026 08:45:21 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:45:21 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:45:38 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:45:38 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:45:38 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:45:38 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:45:38 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:45:38 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:45:38 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 708209
+25-Oct-2026 08:45:38 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:45:38 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:45:56 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:45:56 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:45:56 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:45:56 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:45:56 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:45:56 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:45:56 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 708312
+25-Oct-2026 08:45:56 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:45:56 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:46:14 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:46:14 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:46:14 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:46:14 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:46:14 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:46:14 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:46:14 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 708415
+25-Oct-2026 08:46:14 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:46:14 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:46:32 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:46:32 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:46:32 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:46:32 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:46:32 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:46:32 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:46:32 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 708476
+25-Oct-2026 08:46:32 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:46:32 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:46:36 [HiveMind local test project] Sending scheduler request: To fetch work.
+25-Oct-2026 08:46:36 [HiveMind local test project] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 08:46:38 [HiveMind local test project] Scheduler request completed: got 0 new tasks
+25-Oct-2026 08:46:38 [HiveMind local test project] Project requested delay of 10 seconds
+25-Oct-2026 08:46:38 [HiveMind local test project] Generated new computer cross-project ID: 36329556032397ecf3289b40744b2e02
+25-Oct-2026 08:46:50 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:46:50 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:46:50 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:46:50 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:46:50 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:46:50 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:46:50 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 708644
+25-Oct-2026 08:46:50 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:46:50 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:47:08 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:47:08 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:47:08 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:47:08 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:47:08 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:47:08 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:47:08 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 708746
+25-Oct-2026 08:47:08 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:47:08 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:47:12 [HiveMind local test project] [coproc] NVIDIA instance 0; 1.000000 pending for hm_good_001_0
+25-Oct-2026 08:47:12 [HiveMind local test project] [coproc] NVIDIA instance 0: confirming 1.000000 instance for hm_good_001_0
+25-Oct-2026 08:47:14 [HiveMind local test project] [coproc] NVIDIA instance 0; 1.000000 pending for hm_good_001_0
+25-Oct-2026 08:47:14 [HiveMind local test project] [coproc] NVIDIA instance 0: confirming 1.000000 instance for hm_good_001_0
+25-Oct-2026 08:47:26 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:47:26 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:47:26 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:47:26 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:47:26 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:47:26 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:47:26 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 708848
+25-Oct-2026 08:47:26 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:47:26 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:47:48 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:47:48 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:47:48 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:47:48 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:47:48 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:47:48 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:47:48 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 709226
+25-Oct-2026 08:47:48 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:47:48 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:48:17 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:48:17 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:48:17 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:48:17 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:48:17 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:48:17 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:48:17 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 709517
+25-Oct-2026 08:48:17 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:48:17 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:48:42 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:48:42 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:48:42 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:48:42 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:48:42 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:48:42 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:48:42 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 709849
+25-Oct-2026 08:48:42 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:48:42 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:49:07 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:49:07 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:49:07 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:49:07 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:49:07 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:49:07 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:49:07 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 710021
+25-Oct-2026 08:49:07 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:49:07 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:49:31 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:49:31 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:49:31 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:49:31 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:49:31 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:49:31 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:49:31 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 710172
+25-Oct-2026 08:49:31 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:49:31 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:49:59 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:49:59 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:49:59 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:49:59 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:49:59 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:49:59 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:49:59 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 710338
+25-Oct-2026 08:49:59 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:49:59 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:50:32 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:50:32 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:50:32 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:50:32 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:50:32 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:50:32 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:50:32 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 711102
+25-Oct-2026 08:50:32 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:50:32 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:51:03 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 08:51:03 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 08:51:03 [HiveMind local test project] Task hm_good_001_0 exited with zero status but no 'finished' file
+25-Oct-2026 08:51:03 [HiveMind local test project] If this happens repeatedly you may need to reset the project.
+25-Oct-2026 08:51:03 [HiveMind local test project] [task] task_state=UNINITIALIZED for hm_good_001_0 from handle_premature_exit
+25-Oct-2026 08:51:03 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 08:51:03 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 711312
+25-Oct-2026 08:51:03 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 08:51:03 [HiveMind local test project] [cpu_sched] Restarting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 08:51:10 [---] Exiting
+25-Oct-2026 08:51:10 [---] [task_debug] requesting tasks to exit
+25-Oct-2026 08:51:10 [HiveMind local test project] [task] task_state=QUIT_PENDING for hm_good_001_0 from request_exit()
+25-Oct-2026 08:51:10 [---] request_exit(): PID 711312 has 0 descendants
+25-Oct-2026 08:51:34 [HiveMind local test project] [task] task_state=EXITED for hm_good_001_0 from has_task_exited
+25-Oct-2026 08:51:34 [---] [task_debug] all tasks exited

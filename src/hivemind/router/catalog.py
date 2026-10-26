@@ -56,6 +56,8 @@ class ModelTier:
 
 # Ordered by min_vram_gb ascending; ``recommend_tier`` relies on that order (checked by __post_init__ of the tuple below).
 TIERS: tuple[ModelTier, ...] = (
+    ModelTier("crowd-v1", "CrowdGPT Crowd-v1 (1B Generalist Trunk)", "hf.co/Vxtzq/Crowd-v1", 1.1, 4.0, False, None, 0.15, 50.0,
+              "1B citizen generalist trunk trained on 7B FineWeb tokens (CrowdGPT x La Ruche joint federation)"),
     ModelTier("coder-lite", "Coder Lite (3B)", "qwen2.5-coder:3b", 1.9, 4.0, False, None, 0.2, 40.0,
               "quick edits, explanations and small scripts on entry-level cards"),
     ModelTier("coder", "Coder (7B)", "qwen2.5-coder:7b", 4.7, 6.0, False, None, 0.4, 60.0,
@@ -71,9 +73,69 @@ TIERS: tuple[ModelTier, ...] = (
 )
 
 
+@dataclass(frozen=True)
+class PrewiredPartnerModel:
+    """Metadata for a federated community partner model pre-wired into the HiveMind OpenRouter and La Ruche."""
+
+    tier_id: str
+    public_id: str
+    partner_id: str
+    hf_repo: str
+    github_repo: str
+    website: str
+    title: str
+    parameters_b: float
+    tokens_trained_b: float
+    tokenizer: str
+    shard_format: str
+    license: str
+    status: str
+    aliases: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        out = asdict(self)
+        out["aliases"] = list(self.aliases)
+        return out
+
+
+PREWIRED_PARTNER_MODELS: tuple[PrewiredPartnerModel, ...] = (
+    PrewiredPartnerModel(
+        tier_id="crowd-v1",
+        public_id="hivemind/crowd-v1",
+        partner_id="crowdgpt/crowd-v1",
+        hf_repo="Vxtzq/Crowd-v1",
+        github_repo="Vxtzq/CrowdGPT",
+        website="https://crowdgpt.net",
+        title="CrowdGPT Crowd-v1 (1B Citizen Generalist Trunk)",
+        parameters_b=1.0,
+        tokens_trained_b=7.0,
+        tokenizer="Qwen3",
+        shard_format="uint16_1mb_bin",
+        license="MIT",
+        status="PREWIRED_READY",
+        aliases=("hivemind/crowd-v1", "crowdgpt/crowd-v1", "Vxtzq/Crowd-v1", "vxtzq/crowd-v1", "crowd-v1"),
+    ),
+)
+
+_ALIAS_TO_TIER_ID: dict[str, str] = {
+    alias.lower(): partner.tier_id
+    for partner in PREWIRED_PARTNER_MODELS
+    for alias in partner.aliases
+}
+
+
+def normalize_model_alias(model_id: str) -> str:
+    """Normalize a public or partner alias (e.g. ``crowdgpt/crowd-v1`` or ``Vxtzq/Crowd-v1``) to its bare tier id."""
+    cleaned = model_id.strip()
+    mapped = _ALIAS_TO_TIER_ID.get(cleaned.lower())
+    if mapped is not None:
+        return mapped
+    return cleaned.removeprefix("hivemind/")
+
+
 def tier_by_id(tier_id: str) -> ModelTier | None:
-    """Look a tier up by its bare id (``coder``) or its public id (``hivemind/coder``)."""
-    bare = tier_id.removeprefix("hivemind/")
+    """Look a tier up by its bare id (``coder``), its public id (``hivemind/coder``), or a partner alias."""
+    bare = normalize_model_alias(tier_id)
     return next((tier for tier in TIERS if tier.tier_id == bare), None)
 
 
@@ -96,6 +158,7 @@ def catalog_payload() -> dict[str, Any]:
         "object": "hivemind.catalog",
         "note": "Tags are recommendations; verify them with your server. HMT are points with no cash value.",
         "tiers": [tier.to_dict() for tier in TIERS],
+        "prewired_partner_models": [partner.to_dict() for partner in PREWIRED_PARTNER_MODELS],
     }
 
 

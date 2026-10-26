@@ -1,0 +1,17 @@
+# INSTALLED on 2026-10-25 at the owner's request: heartbeats the owner's prosumer account as a producer of the 7B coder tier.
+# It shares the Ollama and the GPU with the two older producers, so it splits their traffic; it does not add GPU capacity.
+[Unit]
+Description=HiveMind T4: producer heartbeat for the owner's account
+After=hivemind-live-shield-user.service network-online.target
+Requires=hivemind-live-shield-user.service
+
+[Service]
+User=callensxavier_gmail_com
+WorkingDirectory=/home/callensxavier_gmail_com/hivemind-producer
+EnvironmentFile=/etc/hivemind/t4-user.env
+ExecStart=/usr/bin/python3 hivemind_producer_agent.py --gateway https://hivemind-openrouter-1003063861791.us-central1.run.app --endpoint https://34-48-48-154.sslip.io/u --model coder=qwen2.5-coder:7b-instruct --model bee-stars=hivemind-bee-stars --cost-per-1k 0.4 --capacity-1k 40 --execution-class t4
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -6,7 +6,7 @@ or CPU fallback) against the Season 6/7 Sparse MoE, EF21-DiLoCo, and ZK-OPoI v4
 stack within strict VRAM safety envelopes (< 1.5 GB peak VRAM).
 
 IMPORTANT NON-MONETARY NOTICE:
-No money, fiat currency, cryptocurrency, or financial payment (0.00 EUR / 0.00 USD)
+No money, fiat currency, cryptocurrency, or financial payment
 is or will ever be involved or paid. All "points" (PTS and $HIVE PoUW accounting
 units) recorded in benchmark receipts represent strictly non-monetary reciprocal
 computing processing benefits (priority Sparse MoE inference tokens, speculative
@@ -55,7 +55,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_RECEIPT_PATH = REPO_ROOT / "artifacts" / "community_gpu_benchmark_receipt.json"
 
 NON_MONETARY_COMPUTE_RECIPROCITY_NOTICE = (
-    "NO FINANCIAL PAYMENT (0.00 EUR / 0.00 USD): Project HiveMind is a voluntary, "
+    "NO FINANCIAL PAYMENT: Project HiveMind is a voluntary, "
     "non-commercial open-source research project. No money, fiat currency, cryptocurrency, "
     "or wage is ever promised or paid. Accumulated 'points' (PTS and $HIVE PoUW accounting "
     "units) confer exclusively reciprocal computing processing benefits (shared Sparse MoE "
@@ -406,7 +406,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Run the opt-in Project HiveMind Community GPU Benchmark & Hardware Verification Suite. "
-            "Note: No financial payment (0.00 EUR/USD) is ever involved; points represent reciprocal "
+            "Note: No financial payment is ever involved; points represent reciprocal "
             "computing processing benefits when the live production swarm is deployed."
         )
     )

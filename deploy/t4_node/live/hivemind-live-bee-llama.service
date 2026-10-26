@@ -1,0 +1,13 @@
+# TEMPLATE mirroring the process running on 2026-10-25 (llama.cpp serving the Bee "stars" expert). NOT installed.
+[Unit]
+Description=HiveMind T4 live: Bee stars expert (llama.cpp, 1 slot)
+After=network.target
+
+[Service]
+User=callensxavier_gmail_com
+ExecStart=/home/callensxavier_gmail_com/gwaya-lite/llama.cpp/build/bin/llama-server -m /mnt/disks/disk-socrateai-local-1/leanmaster/ollama/blobs/sha256-60e05f2100071479f596b964f89f510f057ce397ea22f2833a0cfe029bfc2463 --lora /mnt/disks/disk-socrateai-local-1/hivemind-train/adapters/stars.gguf --alias hivemind-bee-stars -c 4096 -ngl 99 -np 1 --host 127.0.0.1 --port 8294
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

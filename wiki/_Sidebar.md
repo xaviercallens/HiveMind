@@ -1,4 +1,4 @@
-### 🧠⚡ HiveMind Wiki (`v1.9.1`)
+### 🧠⚡ HiveMind Wiki
 
 - 🏠 **[Home](Home)**
 - 🏛️ **[1. Architecture & 5-Layer Stack](Architecture-and-5-Layer-Stack)**
@@ -15,9 +15,12 @@
 - 🧭 **[12. Developer Swarm Progression Guide](Developer-Swarm-Progression-Guide)**
 - 📡 **[13. HiveMind@home, GCP & La Ruche Vault](HiveMind-at-Home-GCP-Dashboard-and-La-Ruche-Vault)**
 - 🔌 **[14. Connect your IDE to the OpenRouter](Connect-Your-IDE-to-the-HiveMind-OpenRouter)**
+- 🤝 **[15. Human and Agent Workflow (current rules)](Human-and-Agent-Workflow)**
+- 🧬 **[16. Season 18 — Energy-Bees](Season-18-Energy-Bees)**
 
 ---
 **Community Discussions & Links**
+- [🧬 #208 Season 18 epic](https://github.com/xaviercallens/HiveMind/issues/208)
 - [📢 #83 Season 7 & 8 Master Hub](https://github.com/xaviercallens/HiveMind/discussions/83)
 - [🎮 #84 GPU Benchmark Board](https://github.com/xaviercallens/HiveMind/discussions/84)
 - [🤖 #85 Agent & Human Coord Hub](https://github.com/xaviercallens/HiveMind/discussions/85)

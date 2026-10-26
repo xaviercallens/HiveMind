@@ -1,0 +1,19 @@
+# The stock BOINC client that runs the QLoRA MoE workunits on the T4. It starts with GPU work OFF; the governor turns it on
+# only while no inference request is in flight.
+[Unit]
+Description=HiveMind BOINC client (GPU work gated by the governor)
+After=hivemind-boinc-daemons.service
+Wants=hivemind-boinc-daemons.service
+
+[Service]
+User=callensxavier_gmail_com
+Environment=LD_LIBRARY_PATH=/mnt/disks/disk-socrateai-local-1/boinc/root/usr/lib/x86_64-linux-gnu
+ExecStart=/mnt/disks/disk-socrateai-local-1/boinc/root/usr/bin/boinc --dir /mnt/disks/disk-socrateai-local-1/boinc/node/client --gui_rpc_port 31420 --allow_multiple_clients
+ExecStartPost=/opt/hivemind/t4/bin/boinc_gpu_never.sh
+Restart=on-failure
+RestartSec=10
+KillMode=control-group
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target

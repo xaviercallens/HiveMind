@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>HiveMind@home // LA RUCHE - Distributed GPU Supercomputing</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&amp;family=Space+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "outline-variant": "#4f4633",
+            "tertiary-fixed-dim": "#ffb95f",
+            "error": "#ffb4ab",
+            "on-surface-variant": "#d3c5ac",
+            "on-error": "#690005",
+            "tertiary-container": "#ffbb65",
+            "on-primary-fixed-variant": "#5c4300",
+            "primary-fixed-dim": "#f9bd22",
+            "tertiary-fixed": "#ffddb8",
+            "error-container": "#93000a",
+            "on-error-container": "#ffdad6",
+            "surface": "#0e1324",
+            "on-tertiary-container": "#764a00",
+            "on-surface": "#dde1fa",
+            "surface-dim": "#0e1324",
+            "surface-container-lowest": "#080d1e",
+            "primary-fixed": "#ffdf9f",
+            "inverse-on-surface": "#2b3042",
+            "primary": "#ffe1a7",
+            "on-secondary-container": "#00686f",
+            "on-primary-fixed": "#261a00",
+            "surface-bright": "#34384b",
+            "surface-container-highest": "#2f3447",
+            "surface-container-high": "#24293b",
+            "secondary-fixed-dim": "#00dbe9",
+            "on-tertiary-fixed": "#2a1700",
+            "surface-tint": "#f9bd22",
+            "on-background": "#dde1fa",
+            "inverse-primary": "#795900",
+            "on-secondary-fixed-variant": "#004f54",
+            "on-secondary-fixed": "#002022",
+            "secondary": "#d3fbff",
+            "inverse-surface": "#dde1fa",
+            "surface-container-low": "#161b2c",
+            "on-secondary": "#00363a",
+            "tertiary": "#ffdfbc",
+            "primary-container": "#fbbf24",
+            "surface-container": "#1a1f31",
+            "on-tertiary-fixed-variant": "#653e00",
+            "secondary-container": "#00eefc",
+            "on-primary-container": "#6c4f00",
+            "outline": "#9c8f79",
+            "background": "#0e1324",
+            "secondary-fixed": "#7df4ff",
+            "surface-variant": "#2f3447",
+            "on-primary": "#402d00",
+            "on-tertiary": "#472a00"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "margin-mobile": "1rem",
+            "space-lg": "1.5rem",
+            "space-xs": "0.25rem",
+            "space-xl": "2.5rem",
+            "margin": "2rem",
+            "space-sm": "0.5rem",
+            "gutter-mobile": "1rem",
+            "space-md": "1rem",
+            "gutter": "1.5rem"
+          },
+          "fontFamily": {
+            "headline-lg-mobile": ["Space Grotesk"],
+            "label-sm": ["JetBrains Mono"],
+            "headline-xl": ["Space Grotesk"],
+            "headline-md": ["Space Grotesk"],
+            "label-md": ["JetBrains Mono"],
+            "body-lg": ["Space Grotesk"],
+            "body-md": ["Space Grotesk"],
+            "label-lg": ["JetBrains Mono"],
+            "headline-lg": ["Space Grotesk"],
+            "headline-sm": ["Space Grotesk"],
+            "headline-xl-mobile": ["Space Grotesk"],
+            "body-sm": ["Space Grotesk"]
+          },
+          "fontSize": {
+            "headline-lg-mobile": ["26px", { "lineHeight": "34px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+            "label-sm": ["10px", { "lineHeight": "14px", "letterSpacing": "0.08em", "fontWeight": "500" }],
+            "headline-xl": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.03em", "fontWeight": "700" }],
+            "headline-md": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+            "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500" }],
+            "body-lg": ["16px", { "lineHeight": "26px", "fontWeight": "400" }],
+            "body-md": ["14px", { "lineHeight": "22px", "fontWeight": "400" }],
+            "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "0.04em", "fontWeight": "600" }],
+            "headline-lg": ["36px", { "lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+            "headline-sm": ["20px", { "lineHeight": "28px", "letterSpacing": "0em", "fontWeight": "500" }],
+            "headline-xl-mobile": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+            "body-sm": ["12px", { "lineHeight": "18px", "fontWeight": "400" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    /* Hexagonal Canvas Matrix Background */
+    .cyber-hex-bg {
+      background-color: #040711;
+      background-image: 
+        radial-gradient(circle at 50% 15%, rgba(0, 238, 252, 0.08) 0%, transparent 45%),
+        radial-gradient(circle at 85% 60%, rgba(251, 191, 36, 0.06) 0%, transparent 40%),
+        linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 240, 255, 0.03) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 32px 32px, 32px 32px;
+    }
+
+    .clip-hex-corner {
+      clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+    }
+
+    .clip-hud-pill {
+      clip-path: polygon(8px 0%, calc(100% - 8px) 0%, 100% 50%, calc(100% - 8px) 100%, 8px 100%, 0% 50%);
+    }
+
+    /* Glow pulse animations */
+    @keyframes amber-glow {
+      0%, 100% { box-shadow: 0 0 15px rgba(251, 191, 36, 0.25), inset 0 0 8px rgba(251, 191, 36, 0.15); }
+      50% { box-shadow: 0 0 28px rgba(251, 191, 36, 0.5), inset 0 0 16px rgba(251, 191, 36, 0.3); }
+    }
+    .pulse-amber {
+      animation: amber-glow 3s infinite ease-in-out;
+    }
+
+    @keyframes scanline {
+      0% { transform: translateY(-100%); }
+      100% { transform: translateY(1000%); }
+    }
+    .scanline-effect {
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 10px;
+      background: linear-gradient(to bottom, transparent, rgba(0, 238, 252, 0.2), transparent);
+      animation: scanline 8s linear infinite;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body class="cyber-hex-bg text-on-surface antialiased min-h-screen selection:bg-secondary-container selection:text-on-secondary-container">
+<!-- ================= TOP APP BAR / SHARED COMPONENT ================= -->
+<header class="w-full px-space-lg py-space-sm flex justify-between items-center sticky top-0 z-50 bg-surface-container-lowest/80 dark:bg-surface-container-lowest/80 backdrop-blur-md border-b border-secondary-container/20 dark:border-secondary-container/20 shadow-[0_4px_24px_rgba(0,238,252,0.08)]">
+<!-- Brand Logo Group -->
+<div class="flex items-center gap-4">
+<div class="relative flex items-center justify-center p-1 bg-surface-container-low border border-secondary-container/40 rounded-lg shadow-[0_0_12px_rgba(0,238,252,0.25)]">
+<img alt="HiveMind &amp; La Ruche Cyber Bee Logo" class="w-8 h-8 object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1W_8ryfg9u1QNOI4qkcLLy8PzXtizoCrd2BHbCznpYR4U-GAQAqg9d8jaDEPBJ8wQJ2gZuEN_w7Oo8uX12Spe8cI6jgDYg-jRUtQCgbfTPXtHJ64ln7sC7CjApeoK5sdv44eKoofJW9MTSMF6DoJKoUv89LN289XlhZyFDMbf7NMuAtf9kt5c2IMf4We_-jURlg9d2gCjTNB70eILlK0wS-wZcsn4a3aJuaFF3KIQaboAMq6UfdDZ_JCY8"/>
+<div class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-primary-container animate-ping"></div>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm tracking-wider uppercase text-primary dark:text-primary flex items-center gap-2">
+          HiveMind@home // LA RUCHE
+        </span>
+<div class="flex items-center gap-2 font-label-sm text-label-sm text-on-surface-variant">
+<span class="inline-block w-1.5 h-1.5 rounded-full bg-secondary-container"></span>
+<span>DISTRIBUTED LATTICE PROTOCOL v8.4.2</span>
+</div>
+</div>
+</div>
+<!-- Navigation Links Cluster (Web View) -->
+<nav class="hidden lg:flex items-center space-x-6">
+<a class="text-primary font-bold border-b-2 border-primary-container pb-1 text-label-md font-label-md tracking-wider uppercase hover:text-secondary-fixed hover:border-secondary-fixed/50 transition-colors duration-150 active:scale-95 transition-transform duration-100" href="#">
+        Cluster Telemetry
+      </a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors pb-1 text-label-md font-label-md tracking-wider uppercase hover:text-secondary-fixed hover:border-secondary-fixed/50 transition-colors duration-150 active:scale-95 transition-transform duration-100" href="#">
+        E8 Lattice Hub
+      </a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors pb-1 text-label-md font-label-md tracking-wider uppercase hover:text-secondary-fixed hover:border-secondary-fixed/50 transition-colors duration-150 active:scale-95 transition-transform duration-100" href="#">
+        Sparse MoE
+      </a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors pb-1 text-label-md font-label-md tracking-wider uppercase hover:text-secondary-fixed hover:border-secondary-fixed/50 transition-colors duration-150 active:scale-95 transition-transform duration-100" href="#">
+        Points Studio
+      </a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors pb-1 text-label-md font-label-md tracking-wider uppercase hover:text-secondary-fixed hover:border-secondary-fixed/50 transition-colors duration-150 active:scale-95 transition-transform duration-100" href="#">
+        Terminal Log
+      </a>
+</nav>
+<!-- Language Selector & Trailing Actions -->
+<div class="flex items-center gap-3">
+<!-- 5-Language Switcher Pills -->
+<div class="hidden md:flex items-center bg-surface-container-low border border-secondary-container/20 rounded-lg p-0.5" id="lang-switcher">
+<button class="px-2 py-1 text-label-sm font-label-sm bg-primary-container text-on-primary font-bold rounded-lg transition-colors shadow-[0_0_8px_rgba(251,191,36,0.4)]">EN</button>
+<button class="px-2 py-1 text-label-sm font-label-sm text-on-surface-variant hover:text-on-surface transition-colors">FR</button>
+<button class="px-2 py-1 text-label-sm font-label-sm text-on-surface-variant hover:text-on-surface transition-colors">ZH</button>
+<button class="px-2 py-1 text-label-sm font-label-sm text-on-surface-variant hover:text-on-surface transition-colors">ES</button>
+<button class="px-2 py-1 text-label-sm font-label-sm text-on-surface-variant hover:text-on-surface transition-colors">DE</button>
+</div>
+<!-- Compute Points Badge -->
+<div class="flex items-center gap-1.5 px-3 py-1.5 bg-surface-container-low border border-primary-container/40 rounded-lg pulse-amber cursor-pointer hover:border-primary-container transition-all">
+<span class="material-symbols-outlined text-primary-container text-[16px]" style="font-variation-settings: 'FILL' 1;">toll</span>
+<span class="font-label-md text-label-md font-bold text-primary-container tracking-wider">4,820 CP</span>
+</div>
+<!-- System Quick Utility Icons -->
+<div class="hidden sm:flex items-center gap-1">
+<button class="p-1.5 text-on-surface-variant hover:text-secondary-container transition-colors" title="Translate">
+<span class="material-symbols-outlined text-[18px]">translate</span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:text-secondary-container transition-colors" title="Terminal Interface">
+<span class="material-symbols-outlined text-[18px]">terminal</span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:text-secondary-container transition-colors relative" title="Notifications">
+<span class="material-symbols-outlined text-[18px]">notifications</span>
+<span class="absolute top-1 right-1 w-1.5 h-1.5 bg-primary-container rounded-full"></span>
+</button>
+</div>
+<!-- Connect Node CTA Button -->
+<button class="flex items-center gap-2 px-4 py-2 bg-primary-container text-on-primary font-label-md text-label-md font-bold rounded-lg border border-primary-fixed hover:bg-primary hover:shadow-[0_0_20px_rgba(251,191,36,0.6)] active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[16px]">hub</span>
+<span>Connect Node</span>
+</button>
+<!-- Node Key Avatar -->
+<div class="w-8 h-8 rounded-lg bg-surface-container-high border border-secondary-container/30 flex items-center justify-center text-secondary-container font-label-sm font-bold shadow-[0_0_8px_rgba(0,238,252,0.2)]">
+        0x8F
+      </div>
+</div>
+</header>
+<!-- ================= SUB-HEADER TELEMETRY STRIP ================= -->
+<section class="border-b border-secondary-container/10 bg-surface-container-lowest/60 backdrop-blur-sm px-space-lg py-2">
+<div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4 font-label-sm text-label-sm">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-secondary-container shadow-[0_0_6px_#00eefc]"></span>
+<span class="text-on-surface-variant">ACTIVE WORKERS:</span>
+<span class="text-secondary font-bold">14,291 NODES</span>
+</div>
+<div class="hidden sm:flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary-container shadow-[0_0_6px_#fbbf24]"></span>
+<span class="text-on-surface-variant">SWARM CAPACITY:</span>
+<span class="text-primary font-bold">382.4 PFLOPS (FP16)</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_#34d399]"></span>
+<span class="text-on-surface-variant">CONSENSUS INTEGRITY:</span>
+<span class="text-emerald-300 font-bold">99.8% NOMINAL</span>
+</div>
+</div>
+<div class="flex items-center gap-4 text-on-surface-variant">
+<span>EPOCH: <strong class="text-on-surface font-mono">#90,442</strong></span>
+<span>PEAK SHARD BANDWIDTH: <strong class="text-secondary font-mono">1.84 GB/s</strong></span>
+</div>
+</div>
+</section>
+<!-- ================= MAIN DASHBOARD CONTAINER ================= -->
+<main class="max-w-7xl mx-auto px-4 md:px-space-lg py-space-md space-y-6">
+<!-- HERO SIMULATION & DISPATCH HUD -->
+<div class="relative bg-surface-container-lowest/90 border border-secondary-container/30 rounded-xl p-4 md:p-6 backdrop-blur-xl shadow-[0_0_35px_rgba(0,238,252,0.06)] overflow-hidden">
+<div class="scanline-effect"></div>
+<!-- Top Meta Bar inside Canvas -->
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 pb-4 border-b border-surface-container-high">
+<div class="flex items-center gap-3">
+<div class="px-2.5 py-1 bg-surface-container-low border border-secondary-container/40 rounded clip-hex-corner text-secondary font-label-sm text-label-sm font-bold flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+            E8 GOSSET LATTICE SIMULATION
+          </div>
+<span class="text-on-surface-variant font-label-sm text-label-sm hidden sm:inline">
+            // TOPOLOGICAL VECTOR ROUTING TO 14.2k HYPERNODES
+          </span>
+</div>
+<!-- Live Badges -->
+<div class="flex flex-wrap items-center gap-2">
+<span class="px-2.5 py-1 rounded bg-surface-container-low border border-primary-container/30 text-primary-container font-label-sm text-label-sm">
+            GPU Worker Stream: <strong class="text-primary font-bold">1.84 GB/s</strong>
+</span>
+<span class="px-2.5 py-1 rounded bg-surface-container-low border border-secondary-container/30 text-secondary-container font-label-sm text-label-sm">
+            Sparse MoE Dispatcher: <strong class="text-secondary font-bold">8 Domains Synced</strong>
+</span>
+</div>
+</div>
+<!-- Animated Graphic Canvas Container -->
+<div class="my-4 relative">
+<!-- STITCH_SVG_START:ANIMATION_1 class="w-full h-80 rounded-xl overflow-hidden shadow-[0_0_50px_rgba(251,191,36,0.15)] border border-amber-400/30" --><div class="w-full h-80 rounded-xl overflow-hidden shadow-[0_0_50px_rgba(251,191,36,0.15)] border border-amber-400/30" id="animated-svg-ANIMATION_1" style="display:block;"><svg height="100%" viewbox="0 0 1200 600" width="100%" xmlns="http://www.w3.org/2000/svg"><defs><radialgradient cx="50%" cy="50%" id="bgGlow" r="50%"><stop offset="0%" stop-color="#0d1b3e" stop-opacity="0.8"></stop><stop offset="60%" stop-color="#050a18" stop-opacity="0.95"></stop><stop offset="100%" stop-color="#02040a" stop-opacity="1"></stop></radialgradient><lineargradient id="goldBeam" x1="0%" x2="100%" y1="0%" y2="0%"><stop offset="0%" stop-color="#fbbf24" stop-opacity="0"></stop><stop offset="50%" stop-color="#fef08a" stop-opacity="0.9"></stop><stop offset="100%" stop-color="#00f0ff" stop-opacity="0"></stop></lineargradient><lineargradient id="hexGrad" x1="0%" x2="100%" y1="0%" y2="100%"><stop offset="0%" stop-color="#1e293b" stop-opacity="0.8"></stop><stop offset="100%" stop-color="#0f172a" stop-opacity="0.4"></stop></lineargradient><filter height="140%" id="laserGlow" width="140%" x="-20%" y="-20%"><fegaussianblur result="blur" stddeviation="4"></fegaussianblur><fecomposite in="SourceGraphic" in2="blur" operator="over"></fecomposite></filter><style>@keyframes pulseGold { 0%, 100% { stroke-opacity: 0.3; fill-opacity: 0.15; transform: scale(1); } 50% { stroke-opacity: 0.9; fill-opacity: 0.45; transform: scale(1.02); } } @keyframes beamPulse { 0% { stroke-dashoffset: 1000; opacity: 0.2; } 50% { opacity: 0.9; } 100% { stroke-dashoffset: 0; opacity: 0.3; } } @keyframes beeFlight1 { 0% { transform: translate(140px, 120px) rotate(-15deg); } 30% { transform: translate(320px, 220px) rotate(20deg); } 70% { transform: translate(600px, 180px) rotate(-5deg); } 100% { transform: translate(140px, 120px) rotate(-15deg); } } @keyframes beeFlight2 { 0% { transform: translate(1050px, 420px) rotate(190deg); } 40% { transform: translate(750px, 310px) rotate(160deg); } 80% { transform: translate(450px, 360px) rotate(210deg); } 100% { transform: translate(1050px, 420px) rotate(190deg); } } @keyframes beeFlight3 { 0% { transform: translate(880px, 110px) rotate(140deg); } 50% { transform: translate(600px, 300px) rotate(90deg); } 100% { transform: translate(880px, 110px) rotate(140deg); } } .cell-active-1 { animation: pulseGold 3s ease-in-out infinite; transform-origin: 600px 300px; } .cell-active-2 { animation: pulseGold 3.8s ease-in-out infinite 0.7s; transform-origin: 520px 250px; } .cell-active-3 { animation: pulseGold 4.2s ease-in-out infinite 1.4s; transform-origin: 680px 250px; } .cell-active-4 { animation: pulseGold 3.5s ease-in-out infinite 2.1s; transform-origin: 600px 400px; } .beam-stream { stroke-dasharray: 20 15; animation: beamPulse 12s linear infinite; } .bee-1 { animation: beeFlight1 9s ease-in-out infinite; } .bee-2 { animation: beeFlight2 12s ease-in-out infinite; } .bee-3 { animation: beeFlight3 8s ease-in-out infinite; }</style></defs><rect fill="url(#bgGlow)" height="600" width="1200"></rect><g opacity="0.4" stroke="#1e293b" stroke-width="0.7"><path d="M0 100 L1200 100 M0 200 L1200 200 M0 300 L1200 300 M0 400 L1200 400 M0 500 L1200 500"></path><path d="M150 0 L150 600 M300 0 L300 600 M450 0 L450 600 M600 0 L600 600 M750 0 L750 600 M900 0 L900 600 M1050 0 L1050 600"></path></g><g id="e8-lattice" opacity="0.35" stroke="#00f0ff" stroke-width="1"><line class="beam-stream" stroke="#fbbf24" stroke-width="1.5" x1="600" x2="450" y1="300" y2="170"></line><line class="beam-stream" stroke="#00f0ff" stroke-width="1.5" x1="600" x2="750" y1="300" y2="170"></line><line class="beam-stream" stroke="#fbbf24" stroke-width="1.5" x1="600" x2="820" y1="300" y2="300"></line><line class="beam-stream" stroke="#00f0ff" stroke-width="1.5" x1="600" x2="750" y1="300" y2="430"></line><line class="beam-stream" stroke="#fbbf24" stroke-width="1.5" x1="600" x2="450" y1="300" y2="430"></line><line class="beam-stream" stroke="#00f0ff" stroke-width="1.5" x1="600" x2="380" y1="300" y2="300"></line><line stroke="#fbbf24" stroke-dasharray="4 6" stroke-width="0.8" x1="450" x2="750" y1="170" y2="170"></line><line stroke="#00f0ff" stroke-dasharray="4 6" stroke-width="0.8" x1="750" x2="820" y1="170" y2="300"></line><line stroke="#fbbf24" stroke-dasharray="4 6" stroke-width="0.8" x1="820" x2="750" y1="300" y2="430"></line><line stroke="#00f0ff" stroke-dasharray="4 6" stroke-width="0.8" x1="750" x2="450" y1="430" y2="430"></line><line stroke="#fbbf24" stroke-dasharray="4 6" stroke-width="0.8" x1="450" x2="380" y1="430" y2="300"></line><line stroke="#00f0ff" stroke-dasharray="4 6" stroke-width="0.8" x1="380" x2="450" y1="300" y2="170"></line></g><g id="honeycomb-cluster"><polygon class="cell-active-1" fill="#fbbf24" filter="url(#laserGlow)" points="600,240 652,270 652,330 600,360 548,330 548,270" stroke="#fef08a" stroke-width="2.5"></polygon><polygon class="cell-active-2" fill="#00f0ff" filter="url(#laserGlow)" points="520,195 572,225 572,285 520,315 468,285 468,225" stroke="#67e8f9" stroke-width="2"></polygon><polygon class="cell-active-3" fill="#f59e0b" filter="url(#laserGlow)" points="680,195 732,225 732,285 680,315 628,285 628,225" stroke="#fde047" stroke-width="2"></polygon><polygon class="cell-active-4" fill="#06b6d4" filter="url(#laserGlow)" points="600,345 652,375 652,435 600,465 548,435 548,375" stroke="#22d3ee" stroke-width="2"></polygon><polygon fill="url(#hexGrad)" opacity="0.7" points="440,240 492,270 492,330 440,360 388,330 388,270" stroke="#38bdf8" stroke-width="1.2"></polygon><polygon fill="url(#hexGrad)" opacity="0.7" points="760,240 812,270 812,330 760,360 708,330 708,270" stroke="#fbbf24" stroke-width="1.2"></polygon><polygon fill="url(#hexGrad)" opacity="0.7" points="520,390 572,420 572,480 520,510 468,480 468,420" stroke="#00f0ff" stroke-width="1.2"></polygon><polygon fill="url(#hexGrad)" opacity="0.7" points="680,390 732,420 732,480 680,510 628,480 628,420" stroke="#f59e0b" stroke-width="1.2"></polygon><polygon fill="url(#hexGrad)" opacity="0.6" points="600,90 652,120 652,180 600,210 548,180 548,120" stroke="#00f0ff" stroke-width="1.2"></polygon></g><g fill="#fef08a" font-family="monospace" font-size="10" font-weight="bold" text-anchor="middle"><text x="600" y="304">EXPERT #0 (CORE)</text><text fill="#00f0ff" x="520" y="259">EXPERT #1 (VISION)</text><text x="680" y="259">EXPERT #2 (CODE)</text><text fill="#a5f3fc" x="600" y="409">EXPERT #3 (MATH)</text><text fill="#94a3b8" x="440" y="304">EXPERT #4 (REASON)</text><text fill="#94a3b8" x="760" y="304">EXPERT #5 (AUDIO)</text><text fill="#94a3b8" x="520" y="454">EXPERT #6 (PHYSICS)</text><text fill="#94a3b8" x="680" y="454">EXPERT #7 (BIO)</text></g><g class="bee-1"><circle cx="0" cy="0" fill="#fbbf24" filter="url(#laserGlow)" opacity="0.3" r="14"></circle><ellipse cx="0" cy="0" fill="#fbbf24" rx="9" ry="14"></ellipse><ellipse cx="0" cy="-3" fill="#040711" rx="7" ry="3"></ellipse><ellipse cx="0" cy="4" fill="#040711" rx="7" ry="3"></ellipse><ellipse cx="-9" cy="-4" fill="#00f0ff" opacity="0.8" rx="10" ry="5"></ellipse><ellipse cx="9" cy="-4" fill="#00f0ff" opacity="0.8" rx="10" ry="5"></ellipse><circle cx="0" cy="-15" fill="#fef08a" r="3.5"></circle><circle cx="0" cy="16" fill="#f59e0b" r="1.5"></circle><line opacity="0.7" stroke="#fbbf24" stroke-dasharray="3 3" stroke-width="1.5" x1="0" x2="-20" y1="14" y2="40"></line></g><g class="bee-2"><circle cx="0" cy="0" fill="#00f0ff" filter="url(#laserGlow)" opacity="0.3" r="14"></circle><ellipse cx="0" cy="0" fill="#00f0ff" rx="9" ry="14"></ellipse><ellipse cx="0" cy="-3" fill="#040711" rx="7" ry="3"></ellipse><ellipse cx="0" cy="4" fill="#040711" rx="7" ry="3"></ellipse><ellipse cx="-9" cy="-4" fill="#fef08a" opacity="0.8" rx="10" ry="5"></ellipse><ellipse cx="9" cy="-4" fill="#fef08a" opacity="0.8" rx="10" ry="5"></ellipse><circle cx="0" cy="-15" fill="#a5f3fc" r="3.5"></circle><circle cx="0" cy="16" fill="#00f0ff" r="1.5"></circle><line opacity="0.7" stroke="#00f0ff" stroke-dasharray="3 3" stroke-width="1.5" x1="0" x2="30" y1="14" y2="45"></line></g><g class="bee-3"><circle cx="0" cy="0" fill="#f59e0b" filter="url(#laserGlow)" opacity="0.3" r="14"></circle><ellipse cx="0" cy="0" fill="#f59e0b" rx="9" ry="14"></ellipse><ellipse cx="0" cy="-3" fill="#040711" rx="7" ry="3"></ellipse><ellipse cx="0" cy="4" fill="#040711" rx="7" ry="3"></ellipse><ellipse cx="-9" cy="-4" fill="#67e8f9" opacity="0.8" rx="10" ry="5"></ellipse><ellipse cx="9" cy="-4" fill="#67e8f9" opacity="0.8" rx="10" ry="5"></ellipse><circle cx="0" cy="-15" fill="#fde047" r="3.5"></circle></g></svg></div><!-- STITCH_SVG_END:ANIMATION_1 -->
+<!-- Target HUD Floating Indicators -->
+<div class="absolute top-4 left-4 pointer-events-none hidden md:block space-y-1">
+<div class="bg-surface-container-lowest/80 border border-secondary-container/40 p-2 rounded backdrop-blur font-label-sm text-label-sm text-secondary">
+<div>NODE_CLUSTER: <span class="text-on-surface">LA_RUCHE_PARIS_09</span></div>
+<div>SHARD_QUORUM: <span class="text-primary-container">64/64 VALID</span></div>
+</div>
+</div>
+<div class="absolute bottom-4 right-4 pointer-events-none hidden md:block">
+<div class="bg-surface-container-lowest/80 border border-primary-container/40 p-2 rounded backdrop-blur font-label-sm text-label-sm text-primary">
+<div>ROUTING_METRIC: <span class="text-on-surface">E8 LIE ALGEBRA ROOT 240</span></div>
+<div>LATENCY_BUDGET: <span class="text-emerald-400">&lt; 18.4ms</span></div>
+</div>
+</div>
+</div>
+<!-- Visualizer Control Toolbar -->
+<div class="flex flex-col sm:flex-row items-center justify-between gap-4 pt-3 border-t border-surface-container-high font-label-sm text-label-sm">
+<div class="flex flex-wrap items-center gap-4">
+<!-- Speed Control -->
+<div class="flex items-center gap-2">
+<span class="text-on-surface-variant uppercase tracking-wider">Speed:</span>
+<div class="inline-flex rounded-lg bg-surface-container-low border border-outline-variant/30 p-0.5">
+<button class="px-2.5 py-1 text-on-surface-variant hover:text-on-surface rounded">0.5x</button>
+<button class="px-2.5 py-1 bg-surface-container-high text-secondary-container border border-secondary-container/40 font-bold rounded">1x</button>
+<button class="px-2.5 py-1 text-on-surface-variant hover:text-on-surface rounded">2x</button>
+<button class="px-2.5 py-1 text-primary-container hover:text-primary font-bold rounded">Realtime</button>
+</div>
+</div>
+<!-- View Mode -->
+<div class="flex items-center gap-2">
+<span class="text-on-surface-variant uppercase tracking-wider">Topology:</span>
+<div class="inline-flex rounded-lg bg-surface-container-low border border-outline-variant/30 p-0.5">
+<button class="px-2.5 py-1 bg-primary-container/20 text-primary-container border border-primary-container/40 rounded font-bold">E8 Lattice</button>
+<button class="px-2.5 py-1 text-on-surface-variant hover:text-on-surface rounded">Hex Routing</button>
+<button class="px-2.5 py-1 text-on-surface-variant hover:text-on-surface rounded">GPU Density</button>
+</div>
+</div>
+</div>
+<!-- Launch Visualizer Button -->
+<button class="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-surface-container-low border border-secondary-container/40 text-secondary-container hover:bg-secondary-container/10 hover:shadow-[0_0_16px_rgba(0,238,252,0.3)] transition-all active:scale-95">
+<span class="material-symbols-outlined text-[16px]">open_in_full</span>
+<span class="font-bold">Launch Swarm Visualizer</span>
+</button>
+</div>
+</div>
+<!-- ================= 4 INTERACTIVE GLASSMORPHIC FEATURE CARDS (BENTO) ================= -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<!-- CARD 1: IDLE GPUS ALLOCATION -->
+<div class="relative bg-surface-container-lowest/80 border border-secondary-container/20 hover:border-secondary-container/50 rounded-xl p-6 backdrop-blur-md transition-all group flex flex-col justify-between">
+<div class="flex items-start justify-between mb-4">
+<div class="space-y-1">
+<span class="text-primary-container font-label-md text-label-md tracking-wider font-bold">01 // HARVEST CORE</span>
+<h3 class="text-headline-md font-headline-md text-on-surface">Idle GPUs Allocation</h3>
+</div>
+<div class="w-10 h-10 rounded-lg bg-surface-container-low border border-secondary-container/30 flex items-center justify-center text-secondary-container shadow-[0_0_12px_rgba(0,238,252,0.2)]">
+<span class="material-symbols-outlined text-[20px]">memory</span>
+</div>
+</div>
+<p class="text-body-md font-body-md text-on-surface-variant mb-4">
+          Automatically harnesses spare VRAM &amp; compute capacity when your host system is idle. Nodes yield compute fractions instantaneously to swarm training tasks.
+        </p>
+<!-- Metrics & Fleet Matrix -->
+<div class="space-y-3 bg-surface-container-low/70 border border-secondary-container/10 p-4 rounded-lg">
+<div class="flex justify-between items-center font-label-sm text-label-sm">
+<span class="text-on-surface-variant">FLEET IDLE UTILIZATION</span>
+<span class="text-secondary font-bold">84.2% ACTIVE</span>
+</div>
+<!-- Progress Bar in Plasma Cyan -->
+<div class="w-full bg-surface-container-high h-2 rounded-full overflow-hidden p-0.5 border border-secondary-container/20">
+<div class="bg-secondary-container h-full rounded-full shadow-[0_0_10px_#00eefc]" style="width: 84.2%;"></div>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant font-label-sm text-label-sm pt-1">
+<span>HARDWARE MATRIX:</span>
+<span class="text-primary font-mono">RTX 4090 / 5090 / H100 Fleet</span>
+</div>
+</div>
+<!-- Interactive Sensitivity Slider -->
+<div class="mt-4 pt-4 border-t border-surface-container-high flex flex-col gap-2">
+<div class="flex justify-between items-center font-label-sm text-label-sm">
+<span class="text-on-surface-variant">IDLE SENSITIVITY THRESHOLD:</span>
+<span class="text-primary-container font-bold" id="sensitivity-val">2.5 min</span>
+</div>
+<input class="w-full accent-primary-container cursor-pointer bg-surface-container-high rounded h-1.5" max="10" min="1" oninput="document.getElementById('sensitivity-val').innerText = this.value + ' min'" step="0.5" type="range" value="2.5"/>
+</div>
+</div>
+<!-- CARD 2: <1.5s GAME PREEMPTION -->
+<div class="relative bg-surface-container-lowest/80 border border-secondary-container/20 hover:border-secondary-container/50 rounded-xl p-6 backdrop-blur-md transition-all group flex flex-col justify-between">
+<div class="flex items-start justify-between mb-4">
+<div class="space-y-1">
+<span class="text-secondary-container font-label-md text-label-md tracking-wider font-bold">02 // LATENCY ZERO</span>
+<h3 class="text-headline-md font-headline-md text-on-surface">&lt;1.5s Game Preemption</h3>
+</div>
+<div class="w-10 h-10 rounded-lg bg-surface-container-low border border-primary-container/30 flex items-center justify-center text-primary-container shadow-[0_0_12px_rgba(251,191,36,0.2)]">
+<span class="material-symbols-outlined text-[20px]">sports_esports</span>
+</div>
+</div>
+<p class="text-body-md font-body-md text-on-surface-variant mb-4">
+          Zero-lag instant release. When you launch a game, Steam or CAD suite, node compute yields instantaneously within &lt;1.24s with zero frame drops or crash risk.
+        </p>
+<!-- Live Latency Gauge & Metrics -->
+<div class="grid grid-cols-2 gap-3 bg-surface-container-low/70 border border-secondary-container/10 p-4 rounded-lg">
+<div class="space-y-1">
+<div class="text-on-surface-variant font-label-sm text-label-sm">AVG PREEMPTION</div>
+<div class="text-headline-md font-headline-md text-primary-container font-mono">1.18s</div>
+<div class="text-emerald-400 font-label-sm text-label-sm flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">bolt</span> -22% vs limit
+            </div>
+</div>
+<div class="space-y-1 border-l border-surface-container-high pl-4">
+<div class="text-on-surface-variant font-label-sm text-label-sm">BUFFER FLUSH</div>
+<div class="text-headline-md font-headline-md text-secondary font-mono">42ms</div>
+<div class="text-secondary-container font-label-sm text-label-sm">Instant VRAM Purge</div>
+</div>
+</div>
+<!-- Mode Badge Status -->
+<div class="mt-4 pt-4 border-t border-surface-container-high flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant">AUTO-DETECTOR STATUS:</span>
+<span class="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 rounded font-label-sm text-label-sm font-bold shadow-[0_0_10px_rgba(52,211,153,0.2)]">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+            Instant Game Mode Ready
+          </span>
+</div>
+</div>
+<!-- CARD 3: 8-DOMAIN HONEYCOMB (LA RUCHE SPARSE MOE) -->
+<div class="relative bg-surface-container-lowest/80 border border-secondary-container/20 hover:border-secondary-container/50 rounded-xl p-6 backdrop-blur-md transition-all group flex flex-col justify-between">
+<div class="flex items-start justify-between mb-4">
+<div class="space-y-1">
+<span class="text-primary-container font-label-md text-label-md tracking-wider font-bold">03 // DISTRIBUTED ARCHITECTURE</span>
+<h3 class="text-headline-md font-headline-md text-on-surface">8-Domain Honeycomb (MoE)</h3>
+</div>
+<div class="w-10 h-10 rounded-lg bg-surface-container-low border border-secondary-container/30 flex items-center justify-center text-secondary-container shadow-[0_0_12px_rgba(0,238,252,0.2)]">
+<span class="material-symbols-outlined text-[20px]">hive</span>
+</div>
+</div>
+<p class="text-body-md font-body-md text-on-surface-variant mb-3">
+          Ultra-efficient distributed mixture-of-experts model sharded across consumer nodes. Requests route dynamically to specialized domain experts.
+        </p>
+<!-- 8 MoE Domains Hexagonal Chips Grid -->
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-2 my-2">
+<!-- 1. Code -->
+<div class="p-2 rounded bg-surface-container-low border border-secondary-container/30 hover:border-secondary-container transition-all">
+<div class="flex justify-between items-center font-label-sm text-label-sm mb-1">
+<span class="text-on-surface font-bold">Code</span>
+<span class="text-secondary font-mono">92%</span>
+</div>
+<div class="w-full bg-surface-container-high h-1 rounded-full overflow-hidden">
+<div class="bg-secondary-container h-full" style="width: 92%;"></div>
+</div>
+</div>
+<!-- 2. Vision -->
+<div class="p-2 rounded bg-surface-container-low border border-primary-container/30 hover:border-primary-container transition-all">
+<div class="flex justify-between items-center font-label-sm text-label-sm mb-1">
+<span class="text-on-surface font-bold">Vision</span>
+<span class="text-primary-container font-mono">78%</span>
+</div>
+<div class="w-full bg-surface-container-high h-1 rounded-full overflow-hidden">
+<div class="bg-primary-container h-full" style="width: 78%;"></div>
+</div>
+</div>
+<!-- 3. Math -->
+<div class="p-2 rounded bg-surface-container-low border border-secondary-container/30 hover:border-secondary-container transition-all">
+<div class="flex justify-between items-center font-label-sm text-label-sm mb-1">
+<span class="text-on-surface font-bold">Math</span>
+<span class="text-secondary font-mono">65%</span>
+</div>
+<div class="w-full bg-surface-container-high h-1 rounded-full overflow-hidden">
+<div class="bg-secondary-container h-full" style="width: 65%;"></div>
+</div>
+</div>
+<!-- 4. Reasoning -->
+<div class="p-2 rounded bg-surface-container-low border border-primary-container/30 hover:border-primary-container transition-all">
+<div class="flex justify-between items-center font-label-sm text-label-sm mb-1">
+<span class="text-on-surface font-bold">Reasoning</span>
+<span class="text-primary-container font-mono">88%</span>
+</div>
+<div class="w-full bg-surface-container-high h-1 rounded-full overflow-hidden">
+<div class="bg-primary-container h-full" style="width: 88%;"></div>
+</div>
+</div>
+<!-- 5. Audio -->
+<div class="p-2 rounded bg-surface-container-low border border-secondary-container/30 hover:border-secondary-container transition-all">
+<div class="flex justify-between items-center font-label-sm text-label-sm mb-1">
+<span class="text-on-surface font-bold">Audio</span>
+<span class="text-secondary font-mono">45%</span>
+</div>
+<div class="w-full bg-surface-container-high h-1 rounded-full overflow-hidden">
+<div class="bg-secondary-container h-full" style="width: 45%;"></div>
+</div>
+</div>
+<!-- 6. Physics -->
+<div class="p-2 rounded bg-surface-container-low border border-primary-container/30 hover:border-primary-container transition-all">
+<div class="flex justify-between items-center font-label-sm text-label-sm mb-1">
+<span class="text-on-surface font-bold">Physics</span>
+<span class="text-primary-container font-mono">54%</span>
+</div>
+<div class="w-full bg-surface-container-high h-1 rounded-full overflow-hidden">
+<div class="bg-primary-container h-full" style="width: 54%;"></div>
+</div>
+</div>
+<!-- 7. Biology -->
+<div class="p-2 rounded bg-surface-container-low border border-secondary-container/30 hover:border-secondary-container transition-all">
+<div class="flex justify-between items-center font-label-sm text-label-sm mb-1">
+<span class="text-on-surface font-bold">Biology</span>
+<span class="text-secondary font-mono">71%</span>
+</div>
+<div class="w-full bg-surface-container-high h-1 rounded-full overflow-hidden">
+<div class="bg-secondary-container h-full" style="width: 71%;"></div>
+</div>
+</div>
+<!-- 8. Multi-Modal Core -->
+<div class="p-2 rounded bg-surface-container-low border border-primary-container/40 hover:border-primary-container transition-all shadow-[0_0_8px_rgba(251,191,36,0.15)]">
+<div class="flex justify-between items-center font-label-sm text-label-sm mb-1">
+<span class="text-primary font-bold">MM Core</span>
+<span class="text-primary-container font-mono">96%</span>
+</div>
+<div class="w-full bg-surface-container-high h-1 rounded-full overflow-hidden">
+<div class="bg-primary-container h-full" style="width: 96%;"></div>
+</div>
+</div>
+</div>
+<div class="mt-2 pt-3 border-t border-surface-container-high flex justify-between items-center font-label-sm text-label-sm">
+<span class="text-on-surface-variant">LATTICE TOPOLOGY:</span>
+<span class="text-secondary-container font-mono">Gosset E8 Invariant / 240-polytope</span>
+</div>
+</div>
+<!-- CARD 4: COMPUTE POINTS STUDIO -->
+<div class="relative bg-surface-container-lowest/80 border border-secondary-container/20 hover:border-secondary-container/50 rounded-xl p-6 backdrop-blur-md transition-all group flex flex-col justify-between">
+<div class="flex items-start justify-between mb-4">
+<div class="space-y-1">
+<span class="text-primary-container font-label-md text-label-md tracking-wider font-bold">04 // INCENTIVE LEDGER</span>
+<h3 class="text-headline-md font-headline-md text-on-surface">Compute Points Studio</h3>
+</div>
+<div class="w-10 h-10 rounded-lg bg-surface-container-low border border-primary-container/30 flex items-center justify-center text-primary-container shadow-[0_0_12px_rgba(251,191,36,0.2)]">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">monetization_on</span>
+</div>
+</div>
+<p class="text-body-md font-body-md text-on-surface-variant mb-3">
+          Real-time reward engine. Convert continuous compute contribution into transferable GPU credits, AI model access tokens, or direct cashout.
+        </p>
+<!-- Earning Rates & Tier -->
+<div class="space-y-2 bg-surface-container-low/70 border border-primary-container/20 p-4 rounded-lg">
+<div class="flex justify-between items-center">
+<span class="font-label-sm text-label-sm text-on-surface-variant">NODE VELOCITY:</span>
+<span class="font-label-md text-label-md font-bold text-primary-container font-mono">+142 CP / hr (Peak Mode)</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-label-sm text-label-sm text-on-surface-variant">OPERATOR TIER:</span>
+<span class="inline-flex items-center gap-1 font-label-sm text-label-sm text-primary font-bold">
+<span class="material-symbols-outlined text-[14px]">stars</span>
+              Queen Bee Elite (Multiplier 1.35x)
+            </span>
+</div>
+</div>
+<!-- Redeem Catalogs Pills -->
+<div class="mt-4 pt-3 border-t border-surface-container-high space-y-2">
+<div class="font-label-sm text-label-sm text-on-surface-variant">REDEEM AVAILABLE WITH 4,820 CP:</div>
+<div class="flex flex-wrap gap-2 font-label-sm text-label-sm">
+<span class="px-2.5 py-1 bg-surface-container-high border border-outline-variant/30 text-on-surface rounded hover:border-secondary-container cursor-pointer transition-colors">
+              Claude API Credits ($45)
+            </span>
+<span class="px-2.5 py-1 bg-surface-container-high border border-outline-variant/30 text-on-surface rounded hover:border-primary-container cursor-pointer transition-colors">
+              RTX 5090 Drop Lottery Entry
+            </span>
+<span class="px-2.5 py-1 bg-surface-container-high border border-outline-variant/30 text-on-surface rounded hover:border-secondary-container cursor-pointer transition-colors">
+              Cloud GPU Instance Pass
+            </span>
+</div>
+</div>
+</div>
+</div>
+<!-- ================= TERMINAL & REAL-TIME SWARM TELEMETRY DOCK ================= -->
+<div class="bg-surface-container-lowest/90 border border-secondary-container/20 rounded-xl p-4 md:p-6 backdrop-blur-xl shadow-[0_0_30px_rgba(0,0,0,0.6)]">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-surface-container-high gap-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary-container text-[18px]">terminal</span>
+<h4 class="font-headline-sm text-headline-sm text-on-surface">Live Swarm Execution Console</h4>
+</div>
+<div class="flex items-center gap-3 font-label-sm text-label-sm">
+<span class="flex items-center gap-1.5 text-emerald-400">
+<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            STREAM CONNECTED
+          </span>
+<button class="px-2.5 py-1 rounded bg-surface-container-low border border-outline-variant/30 text-on-surface-variant hover:text-on-surface text-label-sm font-label-sm" onclick="clearConsole()">
+            Clear Feed
+          </button>
+</div>
+</div>
+<!-- Monospace Log Stream -->
+<div class="mt-4 bg-surface-dim border border-secondary-container/10 rounded-lg p-4 font-label-sm text-label-sm overflow-x-auto h-48 space-y-1.5 scrollbar-thin scrollbar-thumb-surface-container-high" id="console-stream">
+<div class="text-on-surface-variant flex gap-3">
+<span class="text-outline">18:42:01.092</span>
+<span class="text-secondary-container">[E8-LATTICE-SYNC]</span>
+<span>Root lattice topology re-aligned. Coset weight matrix updated with 14,291 worker peers.</span>
+</div>
+<div class="text-on-surface-variant flex gap-3">
+<span class="text-outline">18:42:01.214</span>
+<span class="text-primary-container">[PROOF-OF-COMPUTE-ACCEPTED]</span>
+<span>Node 0x8F209A validated batch #891,012. Shard delta hash confirmed: 0x93ef...4412. +14.2 CP awarded.</span>
+</div>
+<div class="text-on-surface-variant flex gap-3">
+<span class="text-outline">18:42:01.350</span>
+<span class="text-secondary-fixed">[DISPATCH-MOE-EXPERT-4]</span>
+<span>Routing domain [Reasoning/Formal Logic] chunk to French cluster swarm node group #12.</span>
+</div>
+<div class="text-on-surface-variant flex gap-3">
+<span class="text-outline">18:42:01.890</span>
+<span class="text-emerald-400">[PREEMPT-CHECK]</span>
+<span>Host input sensor: Apex Legends execution signaled. Yielding GPU cores in 1.14s. Frame drop threshold: 0.00%.</span>
+</div>
+<div class="text-on-surface-variant flex gap-3">
+<span class="text-outline">18:42:02.040</span>
+<span class="text-secondary-container">[BUFFER-FLUSH]</span>
+<span>Swarm gradient checkpoint offloaded to NVMe tier 1. System state: PURE GAMING MODE.</span>
+</div>
+<div class="text-on-surface-variant flex gap-3">
+<span class="text-outline">18:42:02.411</span>
+<span class="text-primary-container">[POINTS-STUDIO]</span>
+<span>Global hourly emission epoch compiled: 1,420,800 CP minted across 8 swarm sub-hives.</span>
+</div>
+</div>
+<!-- Quick Stats Footer Dock -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-surface-container-high font-label-sm text-label-sm">
+<div class="space-y-0.5">
+<span class="text-on-surface-variant">CONSENSUS STATE:</span>
+<div class="text-secondary font-bold font-mono">BFT-E8 LATTICE v2</div>
+</div>
+<div class="space-y-0.5">
+<span class="text-on-surface-variant">CLUSTER HASH RATE:</span>
+<div class="text-primary-container font-bold font-mono">1.948 TH/s SHA-3</div>
+</div>
+<div class="space-y-0.5">
+<span class="text-on-surface-variant">CRYPTOGRAPHIC VERIFICATION:</span>
+<div class="text-emerald-400 font-bold font-mono">100% ZERO-KNOWLEDGE</div>
+</div>
+<div class="space-y-0.5">
+<span class="text-on-surface-variant">AVERAGE LATENCY SPREAD:</span>
+<div class="text-secondary-container font-bold font-mono">14.8ms EU / 24.1ms NA</div>
+</div>
+</div>
+</div>
+</main>
+<!-- ================= PERSISTENT FOOTER ================= -->
+<footer class="border-t border-secondary-container/10 bg-surface-container-lowest/80 mt-12 py-6 px-space-lg">
+<div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 font-body-sm text-body-sm text-on-surface-variant">
+<div class="flex items-center gap-3">
+<img alt="HiveMind &amp; La Ruche Cyber Bee Logo" class="w-6 h-6 object-contain opacity-70" src="https://lh3.googleusercontent.com/aida/AEtjO1W_8ryfg9u1QNOI4qkcLLy8PzXtizoCrd2BHbCznpYR4U-GAQAqg9d8jaDEPBJ8wQJ2gZuEN_w7Oo8uX12Spe8cI6jgDYg-jRUtQCgbfTPXtHJ64ln7sC7CjApeoK5sdv44eKoofJW9MTSMF6DoJKoUv89LN289XlhZyFDMbf7NMuAtf9kt5c2IMf4We_-jURlg9d2gCjTNB70eILlK0wS-wZcsn4a3aJuaFF3KIQaboAMq6UfdDZ_JCY8"/>
+<span>© 2025 HiveMind@home // LA RUCHE. Open Collaborative AI Infrastructure.</span>
+</div>
+<div class="flex items-center gap-6 font-label-sm text-label-sm">
+<a class="hover:text-secondary transition-colors" href="#">Privacy Shield</a>
+<a class="hover:text-secondary transition-colors" href="#">E8 Whitepaper</a>
+<a class="hover:text-secondary transition-colors" href="#">GitHub Repository</a>
+<a class="hover:text-secondary transition-colors" href="#">Node Daemon v8.4.2</a>
+</div>
+</div>
+</footer>
+<!-- Inline Micro-interactions for Console stream simulation -->
+<script>
+    function clearConsole() {
+      const consoleBox = document.getElementById('console-stream');
+      consoleBox.innerHTML = '<div class="text-on-surface-variant text-label-sm font-label-sm flex gap-3"><span class="text-outline">Live stream cleared. Listening for incoming Gosset E8 telemetry packets...</span></div>';
+    }
+
+    // Interactive Language Pill Switcher
+    const langButtons = document.querySelectorAll('#lang-switcher button');
+    langButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        langButtons.forEach(b => {
+          b.className = 'px-2 py-1 text-label-sm font-label-sm text-on-surface-variant hover:text-on-surface transition-colors';
+        });
+        btn.className = 'px-2 py-1 text-label-sm font-label-sm bg-primary-container text-on-primary font-bold rounded-lg transition-colors shadow-[0_0_8px_rgba(251,191,36,0.4)]';
+      });
+    });
+  </script>
+</body></html>

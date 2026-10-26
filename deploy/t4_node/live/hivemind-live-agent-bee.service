@@ -1,0 +1,17 @@
+# TEMPLATE mirroring the process running on 2026-10-25. NOT installed.
+# /etc/hivemind/t4-bee.env (root:root 0600) must define HIVEMIND_API_KEY (the "bee" producer key).
+[Unit]
+Description=HiveMind T4 live: producer heartbeat for the Bee expert
+After=hivemind-live-shield-bee.service network-online.target
+Requires=hivemind-live-shield-bee.service
+
+[Service]
+User=callensxavier_gmail_com
+WorkingDirectory=/home/callensxavier_gmail_com/bee-stars
+EnvironmentFile=/etc/hivemind/t4-bee.env
+ExecStart=/usr/bin/python3 /home/callensxavier_gmail_com/hivemind-producer/hivemind_producer_agent.py --gateway https://hivemind-openrouter-1003063861791.us-central1.run.app --endpoint https://34-48-48-154.sslip.io/bee --model bee-stars=hivemind-bee-stars --cost-per-1k 0.4 --capacity-1k 30 --execution-class t4
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

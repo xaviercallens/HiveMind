@@ -301,6 +301,30 @@ def test_402_when_the_price_exceeds_the_consumer_max_price(world: World) -> None
     assert response.json()["error"]["code"] == "price_above_max_price"
 
 
+@pytest.mark.parametrize("window_s, expected_status", [(0.0, 402), (900.0, 200)])
+def test_idle_high_bidders_price_out_a_new_user_only_without_the_activity_window(window_s: float, expected_status: int) -> None:
+    """Three funded accounts that raised their max price and then went idle; a new user at the default max price asks."""
+    world = _build_world(bid_activity_window_s=window_s)
+    world.producer("prod-a.test", {"qwen": "q"})
+    for _ in range(3):
+        _, whale_key = world.consumer(100.0)
+        raised = world.app_client.post("/v1/hivemind/consumer/max-price", headers={"Authorization": f"Bearer {whale_key}"},
+                                       json={"max_price_per_1k": 10.0})
+        assert raised.status_code == 200
+    world.clock.now += 3600.0
+    world.producer("prod-a.test", {"qwen": "q"})  # fresh heartbeat after the idle hour
+    newbie_id, newbie_key = world.consumer(100.0)
+
+    response = world.chat(newbie_key)
+
+    assert response.status_code == expected_status, response.text
+    if expected_status == 402:
+        assert response.json()["error"]["code"] == "price_above_max_price"
+        assert world.store.balance(newbie_id) == pytest.approx(100.0)
+    else:
+        assert 0.0 < 100.0 - world.store.balance(newbie_id) < 100.0
+
+
 def test_502_without_charge_when_every_producer_is_down(world: World) -> None:
     consumer_id, key = world.consumer(10.0)
     producer_id, _, _ = world.producer("prod-a.test", {"qwen": "q"}, agent=FakeProducer(explode=True))
@@ -327,6 +351,79 @@ def test_failover_to_the_second_producer(world: World) -> None:
     assert world.store.balance(good_id) > 0.0
     assert world.store.balance(bad_id) == 0.0
     assert len(good.calls) == 1
+
+
+def _two_endpoint_account(world: World, *, capacity: float = 100.0, agents: tuple[FakeProducer, FakeProducer] | None = None) -> tuple[str, str, FakeProducer, FakeProducer]:
+    account_id, key = world.register("producer")
+    a, b = agents if agents is not None else (FakeProducer(), FakeProducer())
+    world.producers["gpu-a.test"], world.producers["gpu-b.test"] = a, b
+    assert world.beat(key, "gpu-a.test", {"qwen": "q"}, COST, capacity).json()["endpoints"] == 1
+    assert world.beat(key, "gpu-b.test", {"qwen": "q"}, COST, capacity).json()["endpoints"] == 2  # a second heartbeat adds an endpoint, it does not replace the first
+    return account_id, key, a, b
+
+
+def test_one_account_with_two_endpoints_is_one_market_participant_with_summed_capacity(world: World) -> None:
+    account_id, _, _, _ = _two_endpoint_account(world, capacity=40.0)
+    live = world.store.active_producers("qwen", world.clock())
+    assert [r.account_id for r in live] == [account_id]  # the market sees one producer
+    assert live[0].capacity_1k == pytest.approx(80.0) and live[0].cost_per_1k == pytest.approx(COST)
+    assert sorted(e.endpoint_url for e in live[0].endpoints) == ["https://gpu-a.test", "https://gpu-b.test"]
+    assert world.store.live_models(world.clock()) == ["qwen"]
+
+
+def test_requests_spread_over_an_accounts_endpoints_and_credit_the_one_account(world: World) -> None:
+    consumer_id, key = world.consumer(10.0)
+    account_id, _, a, b = _two_endpoint_account(world)
+    for _ in range(6):
+        assert world.chat(key).status_code == 200
+    assert len(a.calls) == 3 and len(b.calls) == 3  # equal capacity: even split
+    assert world.store.balance(account_id) > 0.0 and world.store.total_balances() == pytest.approx(world.store.total_minted(), abs=1e-9)
+
+
+def test_a_failing_endpoint_falls_back_to_the_accounts_other_endpoint(world: World) -> None:
+    _, key = world.consumer(10.0)
+    account_id, _, bad, good = _two_endpoint_account(world, agents=(FakeProducer(status=500), FakeProducer()))
+    for _ in range(4):
+        response = world.chat(key)
+        assert response.status_code == 200, response.text
+        assert response.json()["hivemind"]["producer_id"] == account_id
+    assert len(good.calls) == 4  # every request was served by the healthy GPU, whichever was tried first
+    assert world.store.balance(account_id) > 0.0
+
+
+def test_endpoints_expire_individually_and_the_account_stays_live_on_the_rest(world: World) -> None:
+    account_id, key, _, _ = _two_endpoint_account(world)
+    world.clock.now += 100.0
+    assert world.beat(key, "gpu-b.test", {"qwen": "q"}, COST, 100.0).status_code == 200  # only B keeps beating
+    world.clock.now += 60.0  # A is now 160 s silent (> 120 s TTL), B is 60 s
+    live = world.store.active_producers("qwen", world.clock())
+    assert [r.endpoint_url for r in live] == ["https://gpu-b.test"] and live[0].endpoints == ()
+
+
+def test_endpoint_cap_per_account_is_enforced_but_existing_endpoints_keep_beating(world: World) -> None:
+    from hivemind.router.accounts import MAX_ENDPOINTS_PER_ACCOUNT
+
+    _, key = world.register("producer")
+    for i in range(MAX_ENDPOINTS_PER_ACCOUNT):
+        assert world.beat(key, f"gpu-{i}.test", {"qwen": "q"}, COST, 10.0).status_code == 200
+    refused = world.beat(key, "one-too-many.test", {"qwen": "q"}, COST, 10.0)
+    assert refused.status_code == 400 and refused.json()["error"]["code"] == "too_many_endpoints"
+    assert world.beat(key, "gpu-0.test", {"qwen": "q"}, COST, 10.0).json()["endpoints"] == MAX_ENDPOINTS_PER_ACCOUNT
+
+
+def test_producers_of_the_old_one_row_table_are_migrated_on_open(tmp_path: Any) -> None:
+    import sqlite3
+
+    path = tmp_path / "router.db"
+    store = RouterStore(path, SECRET)
+    store.close()
+    legacy = sqlite3.connect(path)
+    legacy.execute("INSERT INTO producers VALUES ('acc1','https://old.example/','[{\"id\": \"qwen\", \"local_name\": \"q\"}]',0.4,50.0,1000.0,'gpu',NULL)")
+    legacy.commit()
+    legacy.close()
+    reopened = RouterStore(path, SECRET)
+    live = reopened.active_producers("qwen", 1010.0)
+    assert [(r.account_id, r.endpoint_url, r.capacity_1k) for r in live] == [("acc1", "https://old.example", 50.0)]  # trailing slash normalised, so the next heartbeat refreshes the same row
 
 
 def test_unknown_model_bad_body_and_auth_errors(world: World) -> None:
@@ -1179,3 +1276,141 @@ def test_no_endpoint_token_means_no_authorization_header_and_short_tokens_are_re
     assert "authorization" not in fake.calls[0].headers
     assert _beat_with_token(world, key, "gpu.test", "short").status_code in (400, 422)
     assert _beat_with_token(world, key, "gpu.test", "has space " + "y" * 20).status_code in (400, 422)
+
+
+# ---------------------------------------------------------------------------------------------------------
+# test / probe accounts: never bid, counted apart from real users
+# ---------------------------------------------------------------------------------------------------------
+
+ADMIN_HEADERS = {"X-Admin-Key": ADMIN_KEY}
+
+
+def _flagged_consumer(world: World, handle: str, funds: float = 100.0) -> tuple[str, str]:
+    reply = world.app_client.post("/v1/hivemind/register", headers=ADMIN_HEADERS, json={"handle": handle, "role": "consumer", "test": True})
+    assert reply.status_code == 200, reply.text
+    body = reply.json()
+    world.store.grant(body["account_id"], funds, "test")
+    return body["account_id"], body["api_key"]
+
+
+def _price_a_new_user_sees(whales: str | None) -> tuple[int, float | None]:
+    """Chat status and price of a brand-new user once three max-price-100 whales ('test', 'real' or none) exist."""
+    world = _build_world()
+    world.producer("prod-a.test", {"qwen": "q"})
+    for _ in range(2):
+        world.consumer(100.0)
+    for i in range(3 if whales else 0):
+        key = _flagged_consumer(world, f"probe{i}")[1] if whales == "test" else world.consumer(100.0)[1]
+        raised = world.app_client.post("/v1/hivemind/consumer/max-price", headers=_auth(key), json={"max_price_per_1k": 100.0})
+        assert raised.status_code == 200
+    response = world.chat(world.consumer(100.0)[1])
+    return response.status_code, (response.json()["hivemind"]["price_per_1k"] if response.status_code == 200 else None)
+
+
+def test_a_flagged_account_at_max_100_does_not_change_the_price_a_new_user_sees() -> None:
+    baseline_status, baseline_price = _price_a_new_user_sees(None)
+    flagged_status, flagged_price = _price_a_new_user_sees("test")
+    real_status, real_price = _price_a_new_user_sees("real")
+
+    assert baseline_status == 200 and baseline_price is not None
+    assert flagged_status == 200 and flagged_price == pytest.approx(baseline_price)
+    # negative control: the same three whales without the flag do move what the new user sees
+    assert real_status == 402 or (real_price is not None and real_price != pytest.approx(baseline_price))
+
+
+def test_a_flagged_account_can_still_make_requests_but_never_bids(world: World) -> None:
+    world.producer("prod-a.test", {"qwen": "q"})
+    real_id, _ = world.consumer(100.0)
+    probe_id, probe_key = _flagged_consumer(world, "probe-asker")
+    world.app_client.post("/v1/hivemind/consumer/max-price", headers=_auth(probe_key), json={"max_price_per_1k": 100.0})
+
+    response = world.chat(probe_key)
+
+    assert response.status_code == 200, response.text
+    assert world.store.balance(probe_id) < 100.0  # it was served and charged like anyone else
+    assert set(world.store.funded_consumer_bids(DEFAULT_MAX_TOKENS)) == {real_id}
+    market = world.app_client.get("/v1/hivemind/market?model=hivemind/qwen", headers=_auth(probe_key)).json()
+    assert market["equilibrium"]["num_consumers"] == 1
+
+
+def test_registering_a_test_account_needs_the_admin_key(world: World) -> None:
+    body = {"handle": "sneaky", "role": "consumer", "test": True}
+
+    anonymous = world.app_client.post("/v1/hivemind/register", json=body)
+    wrong = world.app_client.post("/v1/hivemind/register", headers={"X-Admin-Key": "nope"}, json=body)
+    allowed = world.app_client.post("/v1/hivemind/register", headers=ADMIN_HEADERS, json={**body, "handle": "probe-ok"})
+    plain = world.app_client.post("/v1/hivemind/register", json={"handle": "sneaky", "role": "consumer"})  # nothing was created above
+
+    assert anonymous.status_code == 403 and anonymous.json()["error"]["code"] == "admin_forbidden"
+    assert wrong.status_code == 403 and wrong.json()["error"]["code"] == "admin_forbidden"
+    assert allowed.status_code == 200 and allowed.json()["test"] is True
+    assert plain.status_code == 200 and "test" not in plain.json()
+    me_probe = world.app_client.get("/v1/hivemind/me", headers=_auth(allowed.json()["api_key"])).json()
+    me_plain = world.app_client.get("/v1/hivemind/me", headers=_auth(plain.json()["api_key"])).json()
+    assert me_probe["test"] is True and me_plain["test"] is False
+
+
+def test_the_test_flag_endpoint_flags_and_unflags_an_existing_account(world: World) -> None:
+    world.producer("prod-a.test", {"qwen": "q"})
+    real_id, real_key = world.consumer(100.0)
+    whale_id, whale_key = world.consumer(100.0)
+    world.app_client.post("/v1/hivemind/consumer/max-price", headers=_auth(whale_key), json={"max_price_per_1k": 100.0})
+    handle = world.app_client.get("/v1/hivemind/me", headers=_auth(whale_key)).json()["handle"]
+    url = "/v1/hivemind/admin/test-flag"
+    market = "/v1/hivemind/market?model=hivemind/qwen"
+    assert world.app_client.get(market, headers=_auth(real_key)).json()["equilibrium"]["num_consumers"] == 2
+
+    denied = world.app_client.post(url, json={"account_id": whale_id, "test": True})
+    flagged = world.app_client.post(url, headers=ADMIN_HEADERS, json={"handle": handle, "test": True})
+
+    assert denied.status_code == 403
+    assert flagged.status_code == 200 and flagged.json() == {"account_id": whale_id, "test": True}
+    assert set(world.store.funded_consumer_bids(DEFAULT_MAX_TOKENS)) == {real_id}
+    assert world.app_client.get(market, headers=_auth(real_key)).json()["equilibrium"]["num_consumers"] == 1  # cached market was dropped
+
+    unflagged = world.app_client.post(url, headers=ADMIN_HEADERS, json={"account_id": whale_id, "test": False})
+
+    assert unflagged.status_code == 200 and unflagged.json()["test"] is False
+    assert set(world.store.funded_consumer_bids(DEFAULT_MAX_TOKENS)) == {real_id, whale_id}
+    assert world.app_client.get(market, headers=_auth(real_key)).json()["equilibrium"]["num_consumers"] == 2
+
+
+def test_the_test_flag_endpoint_rejects_unknown_and_missing_targets(world: World) -> None:
+    url = "/v1/hivemind/admin/test-flag"
+
+    unknown = world.app_client.post(url, headers=ADMIN_HEADERS, json={"account_id": "f" * 32, "test": True})
+    neither = world.app_client.post(url, headers=ADMIN_HEADERS, json={"test": True})
+    bad_handle = world.app_client.post(url, headers=ADMIN_HEADERS, json={"handle": "no spaces allowed", "test": True})
+
+    assert unknown.status_code == 404 and unknown.json()["error"]["code"] == "account_not_found"
+    assert neither.status_code == 400 and neither.json()["error"]["code"] == "invalid_request"
+    assert bad_handle.status_code == 400 and bad_handle.json()["error"]["code"] == "invalid_handle"
+
+
+def test_the_users_report_counts_real_and_test_accounts_apart(world: World) -> None:
+    world.producer("prod-a.test", {"qwen": "q"})
+    _, real_key = world.consumer(100.0)
+    world.consumer(100.0)
+    _, probe_key = _flagged_consumer(world, "probe-a")
+    _flagged_consumer(world, "probe-b")
+    assert world.chat(real_key).status_code == 200
+    assert world.chat(probe_key).status_code == 200
+    world.clock.now += 5.0
+
+    denied = world.app_client.get("/v1/hivemind/admin/users")
+    report = world.app_client.get("/v1/hivemind/admin/users?window_s=3600", headers=ADMIN_HEADERS)
+
+    assert denied.status_code == 403
+    assert report.status_code == 200
+    body = report.json()
+    assert body["window_s"] == 3600.0
+    assert body["real"]["total"] == 3 and body["real"]["active"] == 1  # two consumers and the producer; one of them chatted
+    assert body["test"]["total"] == 2 and body["test"]["active"] == 1
+    assert world.app_client.get("/v1/hivemind/admin/users?window_s=0", headers=ADMIN_HEADERS).json()["real"]["active"] == 0
+
+
+@pytest.mark.parametrize("window", ["-1", "nan", "inf"])
+def test_the_users_report_rejects_a_bad_window(world: World, window: str) -> None:
+    reply = world.app_client.get(f"/v1/hivemind/admin/users?window_s={window}", headers=ADMIN_HEADERS)
+
+    assert reply.status_code == 400 and reply.json()["error"]["code"] == "invalid_request"

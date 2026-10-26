@@ -1,0 +1,14 @@
+{
+  "note": "Files carried over unchanged from Zenodo record 10.5281/zenodo.23607597 (v3.7.1) into v3.8.0; they are not in every checkout (git-ignored raw replay tensors). Their md5 values are those the v3.7.1 receipt recorded after publication. The v3.8.0 publish stage verifies the new record against these.",
+  "source_record": "10.5281/zenodo.23607597",
+  "md5": {
+    "lora_init.pt": "04c5022688345ab698486f65427bdb43",
+    "ref.pt": "c138febbf12c699d14bbe9f111f57bde",
+    "same_process_repeat.pt": "38e0e9a3288dc04e774b6b0389866806",
+    "threads_1.pt": "f521f10448cefc2323d4382f02c21dc0",
+    "threads_8.pt": "506c0bfe50422af806543eae65685e41",
+    "remote_cpu.pt": "8cc88c6232f9fcf2208ddff19b4dd35a",
+    "tampered.pt": "174eb93be0285c4bfca2ea808df09410",
+    "bf16_autocast.pt": "5bf4de09d97837f11e2e38fbecd68e30"
+  }
+}

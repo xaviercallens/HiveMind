@@ -49,10 +49,11 @@ from hivemind.router.accounts import (
     ProducerRecord,
     ReservedHandle,
     RouterStore,
+    TooManyEndpoints,
     TooManyHolds,
     UnknownAccount,
 )
-from hivemind.router.catalog import catalog_payload
+from hivemind.router.catalog import PREWIRED_PARTNER_MODELS, catalog_payload, normalize_model_alias
 from hivemind.router.google_auth import GoogleAuthError, GoogleIdTokenVerifier
 from hivemind.router.oidc_auth import OidcAuthError, OidcIdTokenVerifier
 from hivemind.router.portal_page import portal_content_security_policy, render_portal_page
@@ -434,6 +435,7 @@ class RegisterRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     handle: str = Field(min_length=1, max_length=128)
     role: Literal["consumer", "producer", "prosumer"]
+    test: bool = False  # test/probe account: needs the admin key, never bids in the market, counted apart from real users
 
 
 class GoogleRegisterRequest(BaseModel):
@@ -473,6 +475,13 @@ class GrantRequest(BaseModel):
     ref: str = Field(default="admin-grant", min_length=1, max_length=256)
 
 
+class AccountFlagRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    account_id: str | None = Field(default=None, max_length=128)
+    handle: str | None = Field(default=None, max_length=128)
+    test: bool
+
+
 @dataclass(frozen=True)
 class _Plan:
     """Everything the router decided about one chat request before contacting a producer."""
@@ -491,7 +500,7 @@ def _public_model(model_id: str) -> str:
 
 
 def _strip_prefix(model: str) -> str:
-    return model.removeprefix(MODEL_PREFIX)
+    return normalize_model_alias(model.removeprefix(MODEL_PREFIX))
 
 
 def _sse(payload: Mapping[str, Any]) -> bytes:
@@ -566,6 +575,7 @@ def create_router_app(
     google_verifier: GoogleIdTokenVerifier | None = None,
     oidc_verifiers: Mapping[str, OidcIdTokenVerifier] | None = None,
     open_registration: bool = True,
+    bid_activity_window_s: float = 0.0,
 ) -> FastAPI:
     """Build the gateway app. ``resolver`` (host -> IP strings) is injectable for tests of the SSRF guard.
 
@@ -612,6 +622,20 @@ def create_router_app(
             raise RouterError(401, "Invalid or missing API key. Send 'Authorization: Bearer hm-...'.", "authentication_error", "invalid_api_key")
         return account
 
+    def require_admin(request: Request) -> None:
+        supplied = request.headers.get("x-admin-key", "")
+        if admin_key_hash is None or not supplied or not hmac.compare_digest(store.key_digest(supplied), admin_key_hash):
+            raise RouterError(403, "Admin key required.", "permission_error", "admin_forbidden")
+
+    def account_target(account_id: str | None, handle: str | None) -> str:
+        try:
+            target = account_id or (store.account_id_for(handle) if handle else None)
+        except SwarmSecurityViolationError:
+            raise RouterError(400, "Invalid handle.", "invalid_request_error", "invalid_handle") from None
+        if target is None:
+            raise RouterError(400, "Give 'account_id' or 'handle'.", "invalid_request_error", "invalid_request")
+        return target
+
     def clamped(record: ProducerRecord) -> float:
         return min(record.capacity_1k, capacity_clamp)
 
@@ -620,8 +644,9 @@ def create_router_app(
 
     def bids_for(extra: Account | None) -> list[ConsumerBid]:
         """Bids of funded accounts only, each capped by what its balance can pay for one default-sized request."""
-        prices = store.funded_consumer_bids(DEFAULT_MAX_TOKENS)
-        if extra is not None and extra.role != "producer" and extra.account_id not in prices:
+        active_since = clock() - bid_activity_window_s if bid_activity_window_s > 0.0 else None
+        prices = store.funded_consumer_bids(DEFAULT_MAX_TOKENS, active_since=active_since)
+        if extra is not None and extra.role != "producer" and not extra.is_test and extra.account_id not in prices:
             balance = store.balance(extra.account_id)
             if balance > 0.0:
                 prices[extra.account_id] = min(extra.max_price_per_1k, balance * 1000.0 / DEFAULT_MAX_TOKENS)
@@ -706,12 +731,21 @@ def create_router_app(
         by_id = {r.account_id: r for r in records}
         weights = {a: clamped(by_id[a]) for a in eq.active_producers if a in by_id}
         order = rotation.order(model_id, weights)
+        candidates: list[ProducerRecord] = []
+        for a in order:
+            servers = by_id[a].per_endpoint()
+            if len(servers) > 1:  # one account, several servers: spread load over them by capacity, keep the rest as fallbacks
+                by_url = {s.endpoint_url: s for s in servers}
+                shares = {u: min(s.capacity_1k, capacity_clamp) for u, s in by_url.items()}
+                candidates.extend(by_url[u] for u in rotation.order(f"{model_id}|{a}", shares))
+            else:
+                candidates.append(servers[0])
         return _Plan(
             request_id=request_id,
             model_id=model_id,
             price_per_1k=eq.price_per_1k,
             mechanism=eq.mechanism,
-            candidates=tuple(by_id[a] for a in order),
+            candidates=tuple(candidates),
             prompt_bytes=prompt_bytes,
             max_tokens=max_tokens,
         )
@@ -908,6 +942,18 @@ def create_router_app(
         """Public list of capability tiers (which model fits which GPU); static data, no account needed."""
         return catalog_payload()
 
+    @app.get("/v1/hivemind/partner-models")
+    def partner_models() -> dict[str, Any]:
+        """Pre-wired federated partner models (e.g. CrowdGPT Vxtzq/Crowd-v1) ready for producer & Playground routing."""
+        now = clock()
+        live_set = set(store.live_models(now, PRODUCER_TTL_S))
+        items = []
+        for partner in PREWIRED_PARTNER_MODELS:
+            entry = partner.to_dict()
+            entry["live_on_swarm"] = partner.tier_id in live_set
+            items.append(entry)
+        return {"object": "hivemind.partner_models", "models": items}
+
     @app.get("/v1/models")
     def list_models() -> dict[str, Any]:
         created = int(clock())
@@ -1006,18 +1052,23 @@ def create_router_app(
                             headers={"Cache-Control": "no-store"})
 
     @app.post("/v1/hivemind/register")
-    def register(request: Request, payload: RegisterRequest) -> dict[str, str]:
+    def register(request: Request, payload: RegisterRequest) -> dict[str, Any]:
         if not open_registration:
             raise RouterError(403, "Handle registration is closed. Sign in at /signup or see /v1/hivemind/signin/providers.", "permission_error", "registration_closed")
+        if payload.test:
+            require_admin(request)  # refused, never silently ignored: a caller that asked for a test account must learn it did not get one
         if not register_limiter.allow(client_key(request), clock()):
             raise RouterError(429, "Too many registrations; try again in a minute.", "rate_limit_error", "rate_limited")
         try:
-            account_id, api_key = store.register(payload.handle, payload.role)
+            account_id, api_key = store.register(payload.handle, payload.role, is_test=payload.test)
         except HandleTaken:
             raise RouterError(409, "That handle is already registered.", "invalid_request_error", "handle_taken") from None
         except (SwarmSecurityViolationError, ReservedHandle):
             raise RouterError(400, "Handle rejected: use 1-64 ASCII letters, digits and . _ @ + - characters, not starting with a sign-in provider prefix such as 'google.'.", "invalid_request_error", "invalid_handle") from None
-        return {"account_id": account_id, "api_key": api_key, "role": payload.role}
+        reply: dict[str, Any] = {"account_id": account_id, "api_key": api_key, "role": payload.role}
+        if payload.test:
+            reply["test"] = True
+        return reply
 
     @app.get("/v1/hivemind/me")
     def me(request: Request) -> dict[str, Any]:
@@ -1028,6 +1079,7 @@ def create_router_app(
             "role": account.role,
             "balance": store.balance(account.account_id),
             "max_price_per_1k": account.max_price_per_1k,
+            "test": account.is_test,
             "recent_usage": store.recent_usage(account.account_id, 20),
         }
 
@@ -1051,11 +1103,14 @@ def create_router_app(
             if not _MODEL_ID_RE.match(public) or public == AUTO_MODEL:
                 raise RouterError(400, f"Invalid model id: {entry.id!r}", "invalid_request_error", "invalid_model_id")
             models.append({"id": public, "local_name": entry.local_name})
-        store.upsert_producer(
-            account.account_id, payload.endpoint_url, models, payload.cost_per_1k, payload.capacity_1k, payload.execution_class,
-            now_utc=clock(), endpoint_token=payload.endpoint_token,
-        )
-        return {"account_id": account.account_id, "status": "live", "models": [m["id"] for m in models], "ttl_s": PRODUCER_TTL_S}
+        try:
+            endpoints = store.upsert_producer(
+                account.account_id, payload.endpoint_url, models, payload.cost_per_1k, payload.capacity_1k, payload.execution_class,
+                now_utc=clock(), endpoint_token=payload.endpoint_token,
+            )
+        except TooManyEndpoints as exc:
+            raise RouterError(400, str(exc), "invalid_request_error", "too_many_endpoints") from None
+        return {"account_id": account.account_id, "status": "live", "models": [m["id"] for m in models], "ttl_s": PRODUCER_TTL_S, "endpoints": endpoints}
 
     @app.get("/v1/hivemind/market")
     def market(request: Request, model: str = AUTO_MODEL) -> dict[str, Any]:
@@ -1085,19 +1140,33 @@ def create_router_app(
 
     @app.post("/v1/hivemind/admin/grant")
     def admin_grant(request: Request, payload: GrantRequest) -> dict[str, Any]:
-        supplied = request.headers.get("x-admin-key", "")
-        if admin_key_hash is None or not supplied or not hmac.compare_digest(store.key_digest(supplied), admin_key_hash):
-            raise RouterError(403, "Admin key required.", "permission_error", "admin_forbidden")
-        try:
-            target = payload.account_id or (store.account_id_for(payload.handle) if payload.handle else None)
-        except SwarmSecurityViolationError:
-            raise RouterError(400, "Invalid handle.", "invalid_request_error", "invalid_handle") from None
-        if target is None:
-            raise RouterError(400, "Give 'account_id' or 'handle'.", "invalid_request_error", "invalid_request")
+        require_admin(request)
+        target = account_target(payload.account_id, payload.handle)
         try:
             store.grant(target, payload.amount, payload.ref)
         except UnknownAccount:
             raise RouterError(404, "Unknown account.", "invalid_request_error", "account_not_found") from None
         return {"account_id": target, "granted": payload.amount, "balance": store.balance(target)}
+
+    @app.post("/v1/hivemind/admin/test-flag")
+    def admin_test_flag(request: Request, payload: AccountFlagRequest) -> dict[str, Any]:
+        """Mark an existing account as a test/probe account (or restore it to a real one): it stops (or starts) bidding."""
+        require_admin(request)
+        target = account_target(payload.account_id, payload.handle)
+        try:
+            store.set_test_flag(target, payload.test)
+        except UnknownAccount:
+            raise RouterError(404, "Unknown account.", "invalid_request_error", "account_not_found") from None
+        with market_lock:
+            market_cache.clear()  # the published market was computed with the old bid set
+        return {"account_id": target, "test": payload.test}
+
+    @app.get("/v1/hivemind/admin/users")
+    def admin_users(request: Request, window_s: float = 3600.0) -> dict[str, Any]:
+        """Real and test accounts counted apart: ``total``, ``created`` and ``active`` within the last ``window_s`` seconds."""
+        require_admin(request)
+        if not math.isfinite(window_s) or window_s < 0.0:
+            raise RouterError(400, "window_s must be a finite number of seconds, zero or more.", "invalid_request_error", "invalid_request")
+        return {"window_s": window_s, **store.user_counts(clock() - window_s)}
 
     return app

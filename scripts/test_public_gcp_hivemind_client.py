@@ -10,7 +10,7 @@ and verifies that external end-users can:
    `POST /v1/chat/completions`) across specialized scientific prompts,
 4. Participate in Federated AI Training (`POST /api/v1/federated/workunit/request` and
    `POST /api/v1/federated/workunit/submit`) with two-statistic spot-check verification and
-   non-monetary compute-reciprocity receipts (`0.00 EUR / 0.00 USD`).
+   non-monetary compute-reciprocity receipts (`HiveMind Reflexion Points (HMT)`).
 """
 
 from __future__ import annotations

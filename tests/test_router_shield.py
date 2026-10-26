@@ -128,3 +128,25 @@ def test_models_falls_back_to_the_native_tag_list_for_older_ollama_and_hides_eve
     assert "size" not in json.dumps(listed)  # only names leave the machine
     client2, _ = _app(lambda r: httpx.Response(500, json={}))
     assert client2.get("/v1/models", headers=AUTH).status_code == 502
+
+
+def test_routes_send_a_model_to_its_own_server_list_it_only_while_up_and_allow_it_implicitly() -> None:
+    hosts: list[str] = []
+    bee_up = {"v": True}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        hosts.append(request.url.host)
+        if request.url.host == "bee.local" and not bee_up["v"]:
+            raise httpx.ConnectError("down")
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={"object": "list", "data": [{"id": "coder"}]})
+        return _stream(200, json.dumps({"choices": [{"message": {"content": "ok"}}]}).encode())
+
+    c, _ = _app(handler, allowed_models=["coder"], routes={"bee-stars": "http://bee.local:8294/"})
+    assert [m["id"] for m in c.get("/v1/models", headers=AUTH).json()["data"]] == ["coder", "bee-stars"]
+    assert c.post("/v1/chat/completions", headers=AUTH, json={**CHAT, "model": "bee-stars"}).status_code == 200  # allowed without --allow-model
+    assert c.post("/v1/chat/completions", headers=AUTH, json={**CHAT, "model": "coder"}).status_code == 200
+    assert hosts[-2:] == ["bee.local", "upstream.local"]  # each model reached ITS server
+    assert c.post("/v1/chat/completions", headers=AUTH, json={**CHAT, "model": "other"}).status_code == 403
+    bee_up["v"] = False
+    assert [m["id"] for m in c.get("/v1/models", headers=AUTH).json()["data"]] == ["coder"]  # a down server's model is not advertised

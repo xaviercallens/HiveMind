@@ -1,0 +1,17 @@
+# TEMPLATE mirroring the process running on 2026-10-25 (nginx routes /bee/ to 127.0.0.1:8789). NOT installed.
+# /etc/hivemind/t4-bee.env (root:root 0600) must define HIVEMIND_ENDPOINT_TOKEN (the secret the gateway presents).
+[Unit]
+Description=HiveMind T4 live: producer shield for the Bee expert (loopback :8789)
+After=hivemind-live-bee-llama.service
+Requires=hivemind-live-bee-llama.service
+
+[Service]
+User=callensxavier_gmail_com
+WorkingDirectory=/home/callensxavier_gmail_com/bee-stars
+EnvironmentFile=/etc/hivemind/t4-bee.env
+ExecStart=/usr/bin/python3 /home/callensxavier_gmail_com/hivemind-producer/hivemind_producer_shield.py --upstream http://127.0.0.1:8294 --host 127.0.0.1 --port 8789 --max-concurrent 3 --allow-model hivemind-bee-stars
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

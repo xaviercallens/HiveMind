@@ -4,12 +4,15 @@
 
 <br/>
 
-[![Release](https://img.shields.io/badge/Release-v2.0.0%20(Season%208%20Delivered%20%26%2063%2F63%20PRs)-00f0ff?style=for-the-badge)](https://github.com/xaviercallens/HiveMind/releases)
+[![Release](https://img.shields.io/badge/Release-v3.8.0%20(Season%2016%20Live%20Ops%20%26%20201%2B%20PRs)-00f0ff?style=for-the-badge)](https://github.com/xaviercallens/HiveMind/releases)
+[![Live OpenRouter](https://img.shields.io/badge/Live_OpenRouter_Gateway-7_Models_Online-10b981?style=for-the-badge&logo=googlecloud)](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app)
+[![Live La Ruche](https://img.shields.io/badge/La_Ruche_Portal-Live_on_Cloud_Run-f59e0b?style=for-the-badge&logo=googlecloud)](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app)
+[![HiveMind@home Web](https://img.shields.io/badge/HiveMind%40home_Site-Live_5--Language_Portal-a855f7?style=for-the-badge&logo=github)](https://xaviercallens.github.io/HiveMindatHome.github.io/)
 [![Test Suite](https://img.shields.io/badge/Tests-Full%20suite%20in%20CI%20(coverage%20gate%2095%25)-brightgreen?style=for-the-badge)](.github/workflows/ci_swarm_tests.yml)
 [![Lean 4 Verified](https://img.shields.io/badge/Lean%204-Machine--checked%20theorems%20(0%20sorry%2C%200%20user%20axioms)-005cc5?style=for-the-badge)](lean4/HiveMindSpec.lean)
-[![Foundation Paper](https://img.shields.io/badge/Foundation%20Paper-v3.7.2%20LaTeX%20%26%20PDF%20(self--assessed%2C%20scripted%20audit%2C%20not%20peer%20reviewed)-b31b1b?style=for-the-badge)](paper/hivemind_foundation_article.pdf)
-[![Zenodo DOI](https://img.shields.io/badge/Zenodo%20DOI-10.5281%2Fzenodo.23607597-1682d4?style=for-the-badge)](https://doi.org/10.5281/zenodo.23607597)
-[![Hardware Verified](https://img.shields.io/badge/Verified%20GPU-NVIDIA%20RTX%202070%20%2B%20ROCm%2FMPS-76b900?style=for-the-badge)](artifacts/rtx_intense_stress_and_steam_deploy_report.json)
+[![Foundation Paper](https://img.shields.io/badge/Foundation%20Paper-v3.8.0%20LaTeX%20%26%20PDF%20(self--assessed%2C%20scripted%20audit%2C%20not%20peer%20reviewed)-b31b1b?style=for-the-badge)](paper/hivemind_foundation_article.pdf)
+[![Zenodo DOI](https://img.shields.io/badge/Zenodo%20DOI-10.5281%2Fzenodo.23649757-1682d4?style=for-the-badge)](https://doi.org/10.5281/zenodo.23649757)
+[![Hardware Verified](https://img.shields.io/badge/Verified%20Dual--GPU-Tesla%20T4%20(16GB%20MoE)%20%2B%20RTX%202070%20(8GB%20Inference)-76b900?style=for-the-badge)](artifacts/rtx_intense_stress_and_steam_deploy_report.json)
 [![Community PRs](https://img.shields.io/badge/Community%20PRs-63%2F63%20Merged%20(Waves%201--7%20%7C%201h%20Orchestrator)-a855f7?style=for-the-badge)](docs/CONTRIBUTOR_TASKS_AND_BOUNTIES.md)
 [![Project Wiki](https://img.shields.io/badge/Project%20Wiki-13%20Pages%20Live-f59e0b?style=for-the-badge)](https://github.com/xaviercallens/HiveMind/wiki)
 [![Strategy Engine](https://img.shields.io/badge/Strategy%20Engine-Pareto%20SI--01..11%20%2B%20H1..H10%20%2B%20E1..E4-ffd21e?style=for-the-badge)](docs/DILOCO_ARXIV_LITERATURE_AND_IMPROVEMENTS.md)
@@ -44,6 +47,7 @@ Instead of requiring datacenter InfiniBand, each node trains specialized **4-bit
 > **Steam Integration & Local Prototype Status ([`docs/STEAM_STATUS.md`](docs/STEAM_STATUS.md)):** The `HiveMind: Neural Breach` Free Steam RTX Tool & Hack-Miner package in [`steam_dist/HiveMind_Steam_FreeEdition/`](steam_dist/HiveMind_Steam_FreeEdition/) runs locally from this repository using your `.venv` Python environment, dynamic `steam_api64.dll` probing with headless HMAC fallback, and local JSON/VDF manifests. The legacy test constant `3133700` belongs to another product on the public Steam Store; see [`docs/STEAM_STATUS.md`](docs/STEAM_STATUS.md) (contributed in `PR #11` by `@radialmonster`).
 
 ### 🧭 Quick Navigation
+- ⚡ [**0A. Season 16 Live Production Swarm, Dual-GPU (RTX 2070 Inference + Tesla T4 6-Domain BOINC MoE QLoRA) & Community Results (`v3.8.0`)**](#-0a-season-16-live-production-swarm-dual-gpu-rtx-2070-inference--tesla-t4-6-domain-boinc-moe-qlora--community-results-v380)
 - 🌌 [**0. 24-Cycle Full-Day RTX 2070 Astrophysics & Cosmology BOINC Discovery Showcase**](#-0-24-cycle-full-day-rtx-2070-astrophysics--cosmology-boinc-discovery-showcase)
 - 🏛️ [**1. System Architecture & 5-Layer Visual Stack**](#-1-system-architecture--5-layer-visual-stack)
 - 🔥 [**2. Intense RTX 2070 (8 GB VRAM) Stress Test & PoC Benchmarks**](#-2-intense-rtx-2070-8-gb-vram-stress-test--poc-benchmarks)
@@ -51,6 +55,65 @@ Instead of requiring datacenter InfiniBand, each node trains specialized **4-bit
 - 🔌 [**4. Connect & Integrate: Node Setup, OpenAI SSE Proxy & Cursor/Continue.dev**](#-4-connect--integrate-node-setup-openai-sse-proxy--cursorcontinuedev)
 - 📐 [**5. Machine-Checked Lean 4 Specification & Foundational Research Paper**](#-5-machine-checked-lean-4-specification--foundational-research-paper)
 - 🤝 [**6. Large-Scale Parallel Collaboration, Protected GitHub & Immutable Releases**](#-6-large-scale-parallel-collaboration-protected-github--immutable-releases)
+
+---
+
+## ⚡ 0A. Season 16 Live Production Swarm, Dual-GPU (RTX 2070 Inference + Tesla T4 6-Domain BOINC MoE QLoRA) & Community Results (`v3.8.0`)
+
+Project HiveMind is live in continuous production across **Google Cloud Run**, a **Real BOINC 7.18.1 / 7.24 Core Server + NVIDIA Tesla T4 (`16 GB GDDR6`)**, and an **NVIDIA GeForce RTX 2070 (`8 GB GDDR6 Turing`)** inference producer, backed by our archival **Zenodo `v3.8.0` Deposit ([`10.5281/zenodo.23649757`](https://doi.org/10.5281/zenodo.23649757), 99 checksum-verified files)**.
+
+### 🌐 Live Community Portals, OpenAI-Compatible Gateways & Status Endpoints
+
+| Portal / Service | Live URL | Key Capabilities & Endpoints |
+| :--- | :--- | :--- |
+| **⚡ HiveMind OpenRouter Gateway** | **[`https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app)** | OpenAI-compatible `POST /v1/chat/completions`, [`/signup`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/signup) (`+100.0 HMT` starter grant), [`/v1/models`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/v1/models) (**7 live models**), [`/v1/hivemind/t4/status`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/v1/hivemind/t4/status) |
+| **🍯 La Ruche Honeycomb MoE Portal** | **[`https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app`](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app)** | Interactive 8-Alvéole Sparse MoE Vault, [`/night-moe`](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/night-moe) McNemar benchmark report, and live T4/RTX 2070 GPU telemetry banner |
+| **🛰️ HiveMind@home Tribute Node** | **[`https://hivemind-at-home-cfhmhmvv5a-uc.a.run.app`](https://hivemind-at-home-cfhmhmvv5a-uc.a.run.app)** | Tribute to `SETI@home`, `Folding@home`, and `BOINC` with live Spectrum & $E_8$ Lattice Waterfall |
+| **🐝 HiveMind@home 5-Language Web Site** | **[`https://xaviercallens.github.io/HiveMindatHome.github.io/`](https://xaviercallens.github.io/HiveMindatHome.github.io/)** | 5-Screen Interactive Cyber-Bee Portal in `EN • FR • 中文 • ES • DE` ([`xaviercallens/HiveMindatHome.github.io`](https://github.com/xaviercallens/HiveMindatHome.github.io)) |
+| **📚 Zenodo `v3.8.0` Deposit** | **[`https://doi.org/10.5281/zenodo.23649757`](https://doi.org/10.5281/zenodo.23649757)** | 33-page Foundational Paper `v3.8.0` + 99 verified empirical telemetry & Lean 4 artifacts (`PR #200`) |
+
+### 🖥️ Dual-GPU Division of Labor: RTX 2070 Live Inference + Tesla T4 Chained 6-Domain MoE QLoRA
+
+To guarantee low-latency interactive responses for community users while continuously improving our **Sparse Mixture-of-Experts (MoE)** adapters across multiple scientific and multilingual datasets, the live network operates a dual-GPU architecture:
+
+1. **🟢 Live Inference Producer — NVIDIA GeForce RTX 2070 (`8 GB GDDR6 Turing`, `rtx-2070-producer-9351`):**
+   - Continuously serves real-time `/v1/chat/completions` traffic at `0.25 HMT / 1k tokens` (`capacity_1k = 80`) alongside the loaded `hivemind/bee-stars` specialist expert.
+   - **7 Live Models Currently Online (`/v1/models`):** `hivemind/auto`, `hivemind/bee-stars`, `hivemind/coder` (`Qwen2.5-Coder-7B-Instruct`), `hivemind/coder-lite` (`Qwen2.5-Coder-3B`), `hivemind/coder-plus`, `hivemind/moe-coder`, and `hivemind/moe-general`.
+2. **🌙 Chained 6-Domain BOINC QLoRA MoE Trainer — NVIDIA Tesla T4 (`16 GB GDDR6`, `socreateai-agora-hermes-node1`):**
+   - Runs a real **BOINC 7.18.1 / 7.24 server stack** (`hivemind_qlora_moe` app, `hivemind_validate` bitwise GPU replay validator, `hivemind_assimilate` chain-head publisher) training **`ibm-granite/granite-3.1-1b-a400m-base`** (`1.3B` Sparse MoE, `400M` active parameters per token, 4-bit NF4 double-quantized attention + fp32 LoRA $r=8, lpha=16$, `1,376,256` trainable parameters).
+   - **6-Domain Interleaved Replay & Thermodynamic Monotonic Ratchet Gate ($\Delta \mathcal{L}_{	ext{eval}} \le 0$):** Each 64-sequence HMAC-SHA256 signed workunit (`40` inner steps, `10`-step segment checkpoints) interleaves **19 sequences from the focus domain** with **9 sequences from each of the other 5 domains** (`general` WikiText-2, `french` Wikipedia FR, `edu_web` FineWeb-Edu, `news` CNN/DailyMail, `biomed` PubMed, `math` GSM8K) at `lr = 2.5e-5..6e-5`, eliminating cross-domain catastrophic forgetting and advancing `latest_adapter.pt` only when the 6-domain mean held-out loss improves.
+   - **Instant `< 1.0s` Inference Preemption (`t4_governor.py`):** Polls `nginx` `stub_status` every `1.0s` and yields the T4 within `< 1.0s` (`last_yield_ms = 58 ms`) whenever burst inference arrives.
+
+### 📈 Measured 6-Domain BOINC MoE QLoRA Ratchet Progression on Tesla T4 (`hmq_00001`–`hmq_00016`)
+
+Every assimilated workunit below passed deterministic same-class GPU replay verification (`same_class_exact = true`, `max_abs_divergence = 0.0`, `56.89` verified BOINC Cobblestones per workunit, `512.01+` total Cobblestones):
+
+| Workunit ID | Focus Domain & Corpus | Chained | 6-Domain Mean Eval Loss | Net $\Delta$ vs. 6-Domain Base (`2.2705`) | Per-Domain Held-Out Loss Highlights (`eval_by_domain_after`) | Ratchet Status |
+| :--- | :--- | :---: | :---: | :---: | :--- | :---: |
+| **Base Model** | `ibm-granite/granite-3.1-1b-a400m-base` | — | `2.2705` | `0.0000` | `general: 2.2796`, `biomed: 2.5017`, `math: 1.6440`, `news: 2.2988` | Baseline |
+| **`hmq_00001`** | `general` (`Salesforce/wikitext-2-raw-v1`) | Seed | `2.0992` *(1-dom)* | `-0.1805` *(general)* | **`general`: `2.2796` $
+ightarrow$ `2.0992` (`-0.1805`)** | Seed Head |
+| **`hmq_00004`** | `news` (`abisee/cnn_dailymail`) | `True` | `2.5860` | — | **`news`: `2.2988` $
+ightarrow$ `2.1973` (`-0.1015`)** | Domain Sweep |
+| **`hmq_00005`** | `biomed` (`ccdv/pubmed-summarization`) | `True` | `2.8422` | — | **`biomed`: `2.8506` $
+ightarrow$ `2.3242` (`-0.5264`, beating `2.5017` base)** | Domain Sweep |
+| **`hmq_00006`** | `math` (`openai/gsm8k`) | `True` | `2.4582` | — | **`math`: `2.5048` $
+ightarrow$ `1.4915` (`-1.0133`, beating `1.6440` base)** | Domain Sweep |
+| **`hmq_00007`** | `general` + 6-Domain Replay (Shard 1) | `True` | **`2.2288`** | **`-0.0417`** | **All 6 domains dropped simultaneously:** `biomed: 2.3018`, `general: 2.1886`, `math: 1.4550`, `news: 2.2061` | **ACCEPTED** |
+| **`hmq_00012`** | `math` + 6-Domain Replay (Shard 1) | `True` | **`2.2196`** | **`-0.0509`** | **`math`: `1.4308` (`-0.2132` vs base)**, `biomed: 2.2836`, `general: 2.1801`, `news: 2.1901` | **ACCEPTED** |
+| **`hmq_00013`** | `general` + 6-Domain Replay (Shard 2) | `True` | **`2.2012`** | **`-0.0693`** | `general: 2.1608`, `french: 2.4982`, `edu_web: 2.6538`, `biomed: 2.2726`, `news: 2.1822` | **ACCEPTED** |
+| **`hmq_00014`** | `french` + 6-Domain Replay (Shard 2) | `True` | **`2.1972`** | **`-0.0733`** | **`biomed: 2.2606`, `edu_web: 2.6416`, `french: 2.4754`, `general: 2.1522`, `math: 1.4630`, `news: 2.1902`** | **ACCEPTED (Active Head)** |
+| **`hmq_00016`** | `news` + 6-Domain Replay (Shard 2) | `True` | `2.2122` | `-0.0583` | **`news` lowered further to `2.1720` (`-0.1268` vs base)**; ratchet kept `hmq_00014` (`2.1972`) as head | Guarded |
+
+### 🌟 `NIGHT-MOE-1` Specialist Expert Validation (`hivemind/bee-stars`) & Live Community Telemetry
+
+- **Validated Astrophysics Specialist (`hivemind/bee-stars`, [`docs/LIVE_USER_TESTS.md`](docs/LIVE_USER_TESTS.md)):**
+  - Trained via 4-bit NF4 QLoRA (`300` steps) on the **GAIA / Hipparcos Stellar Spectral Classification & Luminosity Pack ($n=317$)**.
+  - Hold-out accuracy rose from **`0.489` (base) $
+ightarrow$ `0.893` (adapter, `+40.4%`, exact paired McNemar $p < 10^{-4}$)**, beating the shuffled-label control (`0.432`) on `193` items vs. `7`. Now served live 24/7 as `hivemind/bee-stars`.
+- **Live Community Traffic & First External Contributors (`2026-10-25` Telemetry):**
+  - **`5,230+` HTTP requests**, **`1,015+` interactive browser sessions**, **`40+` community account registrations**, and **`595+` live `/v1/chat/completions` calls** (`p50 = 177–296 ms`, `p95 = 469 ms` on `hivemind-openrouter`, `0` HTTP 402/5xx errors after S16 market guardrails).
+  - **Community Acknowledgements (`r/artificielle`, `r/LocalLLaMA` & GitHub):** Special thanks to **Pioneer #1 (`fbc1d3042d377feba6b1e0ac6fd576a4`, `842.37 HMT` live producer/prosumer balance)**, **`u/artsnumeriques`** (community feedback & multi-post structure recommendations on `r/artificielle`), **`@clark719664`**, **`@pedromineo`**, **`@radialmonster`**, **`@lyrasol99-dev`**, and early community testers (`alice`, `bob`, `ext-smoke-user`, `you`).
 
 ---
 
@@ -439,7 +502,7 @@ uv pip install -e ".[dev]"
 
 ## 📐 5. Machine-Checked Lean 4 Specification & Foundational Research Paper
 
-All core mathematical invariants of Project HiveMind are machine-checked in **Lean 4** ([`lean4/HiveMindSpec.lean`](lean4/HiveMindSpec.lean), **128 machine-checked `theorem` declarations across Seasons 1–15: `0 sorry`, `0 user axiom`; CI prints the current count**) and documented in our 33-page **Foundational Research Article (`v3.7.2`)** ([`paper/hivemind_foundation_article.pdf`](paper/hivemind_foundation_article.pdf) | [`paper/hivemind_foundation_article.tex`](paper/hivemind_foundation_article.tex), audited by [`paper/autoevolve_peer_review_pipeline.py`](paper/autoevolve_peer_review_pipeline.py) with `34/34` exact numerical provenance locks in [`paper/PEER_REVIEW_REPORT.json`](paper/PEER_REVIEW_REPORT.json), backed by `11/11` verified architectural checks `H1`–`H11` in [`artifacts/architecture_hypothesis_verification_report.json`](artifacts/architecture_hypothesis_verification_report.json) & [`artifacts/decoupled_diloco_quorum_check.json`](artifacts/decoupled_diloco_quorum_check.json), and `4/4` controlled experimental suites `E1`–`E4` in [`artifacts/paper_v3_experiments_report.json`](artifacts/paper_v3_experiments_report.json), three pre-registered three-seed experiments `E5-toy`, `E5-het`, `E10-lattice` and the two-host `E8` pilot in [`artifacts/experiments/`](artifacts/experiments/), and an independent Lean kernel gate [`artifacts/lean_independent_runner_check.json`](artifacts/lean_independent_runner_check.json) (`128/128`)):
+All core mathematical invariants of Project HiveMind are machine-checked in **Lean 4** ([`lean4/HiveMindSpec.lean`](lean4/HiveMindSpec.lean), **128 machine-checked `theorem` declarations across Seasons 1–15: `0 sorry`, `0 user axiom`; CI prints the current count**) and documented in our 33-page **Foundational Research Article (`v3.8.0`, Zenodo DOI `10.5281/zenodo.23649757`)** ([`paper/hivemind_foundation_article.pdf`](paper/hivemind_foundation_article.pdf) | [`paper/hivemind_foundation_article.tex`](paper/hivemind_foundation_article.tex), audited by [`paper/autoevolve_peer_review_pipeline.py`](paper/autoevolve_peer_review_pipeline.py) with `34/34` exact numerical provenance locks in [`paper/PEER_REVIEW_REPORT.json`](paper/PEER_REVIEW_REPORT.json), backed by `11/11` verified architectural checks `H1`–`H11` in [`artifacts/architecture_hypothesis_verification_report.json`](artifacts/architecture_hypothesis_verification_report.json) & [`artifacts/decoupled_diloco_quorum_check.json`](artifacts/decoupled_diloco_quorum_check.json), and `4/4` controlled experimental suites `E1`–`E4` in [`artifacts/paper_v3_experiments_report.json`](artifacts/paper_v3_experiments_report.json), three pre-registered three-seed experiments `E5-toy`, `E5-het`, `E10-lattice` and the two-host `E8` pilot in [`artifacts/experiments/`](artifacts/experiments/), and an independent Lean kernel gate [`artifacts/lean_independent_runner_check.json`](artifacts/lean_independent_runner_check.json) (`128/128`)):
 
 | Formal Namespace | Machine-Checked Lean 4 Theorems | Proved Guarantee |
 | :--- | :--- | :--- |

@@ -1,0 +1,17 @@
+# Private MariaDB for the local BOINC server. Socket only (--skip-networking): no TCP listener at all.
+[Unit]
+Description=HiveMind BOINC server: private MariaDB (socket only)
+After=local-fs.target
+RequiresMountsFor=/mnt/disks/disk-socrateai-local-1
+
+[Service]
+User=callensxavier_gmail_com
+# /run is tmpfs: recreate the socket directory on every boot (+ = run as root)
+ExecStartPre=+/usr/bin/install -d -o callensxavier_gmail_com -g callensxavier_gmail_com /run/mysqld
+ExecStart=/usr/sbin/mariadbd --no-defaults --basedir=/usr --datadir=/mnt/disks/disk-socrateai-local-1/boinc/stack/mysql/data --socket=/run/mysqld/mysqld.sock --pid-file=/mnt/disks/disk-socrateai-local-1/boinc/stack/run/mariadb.pid --skip-networking --log-error=/mnt/disks/disk-socrateai-local-1/boinc/stack/log/mariadb.err
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+# Telemetry + watchdog (root, so it can restart the units it manages and record the Spot preemption notice).
+[Unit]
+Description=HiveMind T4 monitor (telemetry + watchdog)
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/hivemind/t4/scripts/t4_monitor.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,50 @@
+{
+  "browser": "Google Chrome Headless (CDP WebSocket E2E)",
+  "url": "http://127.0.0.1:8790/scientific-game",
+  "js_exceptions_count": 0,
+  "step1_initial_render": {
+    "title": "HiveMind: Dyson & Exoplanet Odyssey \u2014 Stitch Steam UI & Unity Scientific Game HUD",
+    "nonBlackCanvasPixels": 24583,
+    "svgWidth": 640.5,
+    "svgHeight": 245,
+    "ptsBadge": "4,050 SCIENTIFIC PTS",
+    "kpiDrift": "1.33e-5",
+    "kpiSnr": "30.03 \u03c3",
+    "kpiSqnr": "24.1 dB",
+    "kpiKrum": "2/2 Poisoners Cut",
+    "missionTermHead": "[VERIFIED: true] Mission 1: Symplectic Exoplanet Transit & Orbital Resonance\n[SPECIALIST BEE] hivemind/bee-stars | [ANSE",
+    "stackTermHead": "[RTX 2070 (8 GB VRAM) HARDWARE & TENSOR BENCHMARK]\n  Profile: rtx2070_7b_worker | Target: NVIDIA GeForce RTX 2070 (Turing TU106, 8192 MB GDD"
+  },
+  "step2_off_resonance_slider_7_50d": {
+    "periodLabel": "7.5 d",
+    "kpiSnr": "6.48 \u03c3",
+    "termHead": "[VERIFIED: false] Mission 1: Symplectic Exoplanet Transit & Orbital Resonance\n[SPECIALIST BEE] hivemind/bee-stars | [ANSE ENERGY E_Bee] 52.8"
+  },
+  "step3_locked_resonance_slider_11_23d": {
+    "periodLabel": "11.23 d",
+    "kpiSnr": "30.03 \u03c3",
+    "kpiDrift": "1.33e-5",
+    "termHead": "[VERIFIED: true] Mission 1: Symplectic Exoplanet Transit & Orbital Resonance\n[SPECIALIST BEE] hivemind/bee-stars | [ANSE ENERGY E_Bee] 2.871"
+  },
+  "step4_byzantine_slider_f3_mission2": {
+    "byzLabel": "3",
+    "kpiSqnr": "27.39 dB",
+    "kpiKrum": "3/undefined Poisoners Cut",
+    "termHead": "[VERIFIED: true] Mission 2: 8D Gosset E8 Lattice Quantum Router & Multi-Krum Shield\n[SPECIALIST BEE] hivemind/crowd-v1 | [ANSE ENERGY E_Bee] 2.421151 (SHA256: d"
+  },
+  "step5_anse_reactor_mission3": {
+    "termHead": "[VERIFIED: true] Mission 3: Autopoietic ANSE Energy-Bee Reactor & <1.5s Steam Preemption\n[SPECIALIST BEE] hivemind/coder | [ANSE ENERGY E_Bee] 2.928658 (SHA256: 6f33cd7e24097d10)\n["
+  },
+  "step6_steam_wddm_preemption": {
+    "preemptBadge": "14.24 ms (<1500 ms SLA)",
+    "termHead": "[WDDM PREEMPTION VERIFIED]\n{\n  \"steam_app_id\": 3133700,\n  \"gamer_tag\": \"CyberValkyrie_FR\",\n  \"game_exe\": \"HiveMind_Unity_SolarSystem.exe\",\n  \"foreground_active\""
+  },
+  "step7_rtx2070_la_ruche_live_sync": {
+    "stackTermHead": "[LIVE RTX 2070 + LA RUCHE SYNC VERIFIED]\n{\n  \"rtx2070_hardware\": {\n    \"profile_name\": \"rtx2070_7b_worker\",\n    \"gpu_target_model\": \"NVIDIA GeForce RTX 2070 (Turing TU106, 8192 MB GDDR6)\",\n    \"detected_runtime_device\": "
+  },
+  "step8_la_ruche_copilot_live_query": {
+    "stackTerm": "[LA RUCHE SPECIALIST BEE RESPONSE // la_ruche_cloud]\n  Latency: 2112.84 ms | ANSE E_Bee: 17.404412 (SHA256: 5bf1aca23ae2b78e)\n  HMT Charged: 0.0729999999999668 HMT | Chain Verified: true\n\nGosset E8 quantization resists Byzantine drift because it employs a structured, high-dimensional lattice that inherently provides ro"
+  },
+  "screenshot_path": "docs/assets/scientific_game_frontend_e2e_verified.png",
+  "screenshot_bytes": 327653
+}

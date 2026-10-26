@@ -1,0 +1,63 @@
+{
+ "gate": "AutoevolveAI anse.formal.lean_runner (independent of lake build), rerun 2026-10-25 after adding #print axioms for the two helper lemmas",
+ "gate_exit_code": 0,
+ "lake_build": "Build completed successfully; all 13 QueenBee #print axioms lines report subsets of {propext, Quot.sound}",
+ "queenbee_namespace": "HiveMindSpec.ALIX_QueenBee",
+ "queenbee_theorems": {
+  "add_div_le_div_add": [
+   "propext"
+  ],
+  "dilution_cap_ratio": [
+   "propext",
+   "Quot.sound"
+  ],
+  "faded_record_recruits_nobody": [
+   "propext"
+  ],
+  "knowledge_bonus_payouts_never_exceed_pool": [
+   "propext",
+   "Quot.sound"
+  ],
+  "lump_sum_bonus_preserves_best_response": [
+   "propext",
+   "Quot.sound"
+  ],
+  "lump_sum_bonus_preserves_nash": [
+   "propext",
+   "Quot.sound"
+  ],
+  "payouts_le_pool_times_weights_over_W": [
+   "propext",
+   "Quot.sound"
+  ],
+  "recruit_weight_le_cap": [
+   "propext"
+  ],
+  "score_antitone_in_trials": [
+   "propext"
+  ],
+  "score_monotone_in_successes": [
+   "propext"
+  ],
+  "sybil_influence_le_count_times_cap": [
+   "propext",
+   "Quot.sound"
+  ],
+  "unverified_outcomes_never_move_the_count": [
+   "propext"
+  ],
+  "verified_rows_keep_mix_admissible": [
+   "propext",
+   "Quot.sound"
+  ]
+ },
+ "spec_file": "lean4/HiveMindSpec.lean",
+ "spec_sha256": "185d91d804cbeb699a8e0688195defcac93268f12cf4334f1231c369c0b3d1d4",
+ "theorems_failing_whitelist": [],
+ "theorems_in_file": 141,
+ "whitelist": [
+  "Classical.choice",
+  "Quot.sound",
+  "propext"
+ ]
+}

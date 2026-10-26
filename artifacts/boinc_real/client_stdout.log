@@ -1,0 +1,210 @@
+25-Oct-2026 09:04:41 [---] Starting BOINC client version 7.18.1 for x86_64-pc-linux-gnu
+25-Oct-2026 09:04:41 [---] This a development version of BOINC and may not function properly
+25-Oct-2026 09:04:41 [---] log flags: file_xfer, sched_ops, task, coproc_debug, cpu_sched, task_debug
+25-Oct-2026 09:04:41 [---] Libraries: libcurl/7.81.0 OpenSSL/3.0.2 zlib/1.2.11 brotli/1.0.9 zstd/1.4.8 libidn2/2.3.2 libpsl/0.21.0 (+libidn2/2.3.2) libssh/0.9.6/openssl/zlib nghttp2/1.43.0 librtmp/2.3 OpenLDAP/2.5.20
+25-Oct-2026 09:04:41 [---] Data directory: /mnt/disks/disk-socrateai-local-1/boinc/run3/client
+25-Oct-2026 09:04:41 [---] [coproc] launching child process at /mnt/disks/disk-socrateai-local-1/boinc/root/usr/bin/boinc
+25-Oct-2026 09:04:41 [---] [coproc] with data directory /mnt/disks/disk-socrateai-local-1/boinc/run3/client
+25-Oct-2026 09:04:44 [---] CUDA: NVIDIA GPU 0: Tesla T4 (driver version 580.99, CUDA version 13.0, compute capability 7.5, 4096MB, 3970MB available, 8141 GFLOPS peak)
+25-Oct-2026 09:04:44 [---] OpenCL: NVIDIA GPU 0: Tesla T4 (driver version 580.178.04, device version OpenCL 3.0 CUDA, 14912MB, 3970MB available, 8141 GFLOPS peak)
+25-Oct-2026 09:04:44 [---] [coproc] NVIDIA library reports 1 GPU
+25-Oct-2026 09:04:44 [---] [coproc] ATI: libaticalrt.so: cannot open shared object file: No such file or directory
+25-Oct-2026 09:04:44 [http://127.0.0.1:45625/hivemind/] Found app_info.xml; using anonymous platform
+25-Oct-2026 09:04:44 [---] Creating new client state file
+25-Oct-2026 09:04:44 [---] libc:  version 2.35
+25-Oct-2026 09:04:44 [---] Host name: socreateai-agora-hermes-node1
+25-Oct-2026 09:04:44 [---] Processor: 8 GenuineIntel Intel(R) Xeon(R) CPU @ 2.20GHz [Family 6 Model 79 Stepping 0]
+25-Oct-2026 09:04:44 [---] Processor features: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology nonstop_tsc cpuid tsc_known_freq pni pclmulqdq ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch pti ssbd ibrs ibpb stibp fsgsbase tsc_adjust bmi1 hle avx2 smep bmi2 erms invpcid rtm rdseed adx smap xsaveopt arat md_clear arch_capabilities
+25-Oct-2026 09:04:44 [---] OS: Linux Ubuntu: Ubuntu 22.04.5 LTS [6.8.0-1070-gcp|libc 2.35]
+25-Oct-2026 09:04:44 [---] Memory: 29.37 GB physical, 4.00 GB virtual
+25-Oct-2026 09:04:44 [---] Disk: 1.92 TB total, 1.44 TB free
+25-Oct-2026 09:04:44 [---] Local time is UTC +0 hours
+25-Oct-2026 09:04:44 [---] Config: allow multiple clients
+25-Oct-2026 09:04:44 [---] Config: report completed tasks immediately
+25-Oct-2026 09:04:44 [---] Config: use all coprocessors
+25-Oct-2026 09:04:44 [---] No general preferences found - using defaults
+25-Oct-2026 09:04:44 [---] Reading preferences override file
+25-Oct-2026 09:04:44 [---] Preferences:
+25-Oct-2026 09:04:44 [---]    max memory usage when active: 15038.50 MB
+25-Oct-2026 09:04:44 [---]    max memory usage when idle: 27069.31 MB
+25-Oct-2026 09:04:44 [---]    max disk usage: 1472.81 GB
+25-Oct-2026 09:04:44 [---]    max CPUs used: 4
+25-Oct-2026 09:04:44 [---]    (to change preferences, visit a project web site or select Preferences in the Manager)
+25-Oct-2026 09:04:44 [---] Setting up project and slot directories
+dir_open: Could not open directory 'slots' from '/mnt/disks/disk-socrateai-local-1/boinc/run3/client'.
+25-Oct-2026 09:04:44 [---] Checking active tasks
+25-Oct-2026 09:04:44 [http://127.0.0.1:45625/hivemind/] URL http://127.0.0.1:45625/hivemind/; Computer ID not assigned yet; resource share 100
+25-Oct-2026 09:04:44 [---] Setting up GUI RPC socket
+25-Oct-2026 09:04:44 [---] Checking presence of 1 project files
+25-Oct-2026 09:04:44 Initialization completed
+25-Oct-2026 09:04:44 [http://127.0.0.1:45625/hivemind/] Fetching scheduler list
+25-Oct-2026 09:04:45 [http://127.0.0.1:45625/hivemind/] Master file download succeeded
+25-Oct-2026 09:04:50 [http://127.0.0.1:45625/hivemind/] Sending scheduler request: Project initialization.
+25-Oct-2026 09:04:50 [http://127.0.0.1:45625/hivemind/] Requesting new tasks for CPU and NVIDIA GPU
+25-Oct-2026 09:04:52 [HiveMind local test project] Scheduler request completed: got 1 new tasks
+25-Oct-2026 09:04:52 [HiveMind local test project] Project requested delay of 10 seconds
+25-Oct-2026 09:04:52 [HiveMind local test project] [task] result state=NEW for hm_good_001_0 from handle_scheduler_reply
+25-Oct-2026 09:04:53 [HiveMind local test project] [task] result state=FILES_DOWNLOADING for hm_good_001_0 from CS::update_results
+25-Oct-2026 09:04:54 [HiveMind local test project] Started download of hm_good_001_in
+25-Oct-2026 09:04:56 [HiveMind local test project] Finished download of hm_good_001_in
+25-Oct-2026 09:04:56 [HiveMind local test project] [task] result state=FILES_DOWNLOADED for hm_good_001_0 from CS::update_results
+25-Oct-2026 09:04:56 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_good_001_0
+25-Oct-2026 09:04:56 [HiveMind local test project] Elapsed time limit 4.152361 < 120.000000; setting to 43200.000000
+25-Oct-2026 09:04:56 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 718115
+25-Oct-2026 09:04:56 [HiveMind local test project] [task] task_state=EXECUTING for hm_good_001_0 from start
+25-Oct-2026 09:04:56 [HiveMind local test project] Starting task hm_good_001_0
+25-Oct-2026 09:04:56 [HiveMind local test project] [cpu_sched] Starting task hm_good_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 09:05:02 [HiveMind local test project] Sending scheduler request: To fetch work.
+25-Oct-2026 09:05:02 [HiveMind local test project] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 09:05:04 [HiveMind local test project] Scheduler request completed: got 1 new tasks
+25-Oct-2026 09:05:04 [HiveMind local test project] Project requested delay of 10 seconds
+25-Oct-2026 09:05:04 [HiveMind local test project] [task] result state=NEW for hm_fault_001_0 from handle_scheduler_reply
+25-Oct-2026 09:05:04 [HiveMind local test project] Generated new computer cross-project ID: 6e11829c5d8614c28f4df7338341acde
+25-Oct-2026 09:05:05 [HiveMind local test project] [task] result state=FILES_DOWNLOADING for hm_fault_001_0 from CS::update_results
+25-Oct-2026 09:05:06 [HiveMind local test project] Started download of hm_fault_001_in
+25-Oct-2026 09:05:08 [HiveMind local test project] Finished download of hm_fault_001_in
+25-Oct-2026 09:05:08 [HiveMind local test project] [task] result state=FILES_DOWNLOADED for hm_fault_001_0 from CS::update_results
+25-Oct-2026 09:05:08 [HiveMind local test project] [coproc] NVIDIA instance 0; 1.000000 pending for hm_good_001_0
+25-Oct-2026 09:05:08 [HiveMind local test project] [coproc] NVIDIA instance 0: confirming 1.000000 instance for hm_good_001_0
+25-Oct-2026 09:05:14 [HiveMind local test project] Sending scheduler request: To fetch work.
+25-Oct-2026 09:05:14 [HiveMind local test project] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 09:05:16 [HiveMind local test project] Scheduler request completed: got 0 new tasks
+25-Oct-2026 09:05:16 [HiveMind local test project] Project requested delay of 10 seconds
+25-Oct-2026 09:05:16 [HiveMind local test project] Generated new computer cross-project ID: 6e11829c5d8614c28f4df7338341acde
+25-Oct-2026 09:05:34 [HiveMind local test project] [task] Process for hm_good_001_0 exited, status 0, task state 1
+25-Oct-2026 09:05:34 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 09:05:34 [HiveMind local test project] [task] task_state=EXITED for hm_good_001_0 from handle_exited_app
+25-Oct-2026 09:05:34 [HiveMind local test project] Computation for task hm_good_001_0 finished
+25-Oct-2026 09:05:34 [HiveMind local test project] [task] result state=FILES_UPLOADING for hm_good_001_0 from CS::app_finished
+25-Oct-2026 09:05:34 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_fault_001_0
+25-Oct-2026 09:05:34 [HiveMind local test project] Elapsed time limit 4.152361 < 120.000000; setting to 43200.000000
+25-Oct-2026 09:05:34 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 718325
+25-Oct-2026 09:05:34 [HiveMind local test project] [task] task_state=EXECUTING for hm_fault_001_0 from start
+25-Oct-2026 09:05:34 [HiveMind local test project] Starting task hm_fault_001_0
+25-Oct-2026 09:05:34 [HiveMind local test project] [cpu_sched] Starting task hm_fault_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 09:05:36 [HiveMind local test project] Started upload of hm_good_001_0_0
+25-Oct-2026 09:05:40 [HiveMind local test project] Finished upload of hm_good_001_0_0
+25-Oct-2026 09:05:40 [HiveMind local test project] [task] result state=FILES_UPLOADED for hm_good_001_0 from CS::update_results
+25-Oct-2026 09:05:42 [HiveMind local test project] Sending scheduler request: To report completed tasks.
+25-Oct-2026 09:05:42 [HiveMind local test project] Reporting 1 completed tasks
+25-Oct-2026 09:05:42 [HiveMind local test project] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 09:05:44 [HiveMind local test project] Scheduler request completed: got 0 new tasks
+25-Oct-2026 09:05:44 [HiveMind local test project] Project requested delay of 10 seconds
+25-Oct-2026 09:05:44 [HiveMind local test project] Generated new computer cross-project ID: 6e11829c5d8614c28f4df7338341acde
+25-Oct-2026 09:05:54 [HiveMind local test project] Sending scheduler request: To fetch work.
+25-Oct-2026 09:05:54 [HiveMind local test project] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 09:05:56 [HiveMind local test project] Scheduler request completed: got 0 new tasks
+25-Oct-2026 09:05:56 [HiveMind local test project] Project requested delay of 10 seconds
+25-Oct-2026 09:05:56 [HiveMind local test project] Generated new computer cross-project ID: 6e11829c5d8614c28f4df7338341acde
+25-Oct-2026 09:06:08 [HiveMind local test project] [task] Process for hm_fault_001_0 exited, status 0, task state 1
+25-Oct-2026 09:06:08 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 09:06:08 [HiveMind local test project] [task] task_state=EXITED for hm_fault_001_0 from handle_exited_app
+25-Oct-2026 09:06:08 [HiveMind local test project] Computation for task hm_fault_001_0 finished
+25-Oct-2026 09:06:08 [HiveMind local test project] [task] result state=FILES_UPLOADING for hm_fault_001_0 from CS::app_finished
+25-Oct-2026 09:06:10 [HiveMind local test project] Started upload of hm_fault_001_0_0
+25-Oct-2026 09:06:14 [HiveMind local test project] Finished upload of hm_fault_001_0_0
+25-Oct-2026 09:06:14 [HiveMind local test project] [task] result state=FILES_UPLOADED for hm_fault_001_0 from CS::update_results
+25-Oct-2026 09:06:16 [HiveMind local test project] Sending scheduler request: To report completed tasks.
+25-Oct-2026 09:06:16 [HiveMind local test project] Reporting 1 completed tasks
+25-Oct-2026 09:06:16 [HiveMind local test project] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 09:06:18 [HiveMind local test project] Scheduler request completed: got 0 new tasks
+25-Oct-2026 09:06:18 [HiveMind local test project] Project requested delay of 10 seconds
+25-Oct-2026 09:06:18 [HiveMind local test project] Generated new computer cross-project ID: 6e11829c5d8614c28f4df7338341acde
+25-Oct-2026 09:06:28 [HiveMind local test project] Sending scheduler request: To fetch work.
+25-Oct-2026 09:06:28 [HiveMind local test project] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 09:06:30 [HiveMind local test project] Scheduler request completed: got 0 new tasks
+25-Oct-2026 09:06:30 [HiveMind local test project] Project requested delay of 10 seconds
+25-Oct-2026 09:06:30 [HiveMind local test project] Generated new computer cross-project ID: 6e11829c5d8614c28f4df7338341acde
+25-Oct-2026 09:07:12 [HiveMind local test project] update requested by user
+25-Oct-2026 09:07:16 [HiveMind local test project] Sending scheduler request: Requested by user.
+25-Oct-2026 09:07:16 [HiveMind local test project] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 09:07:18 [HiveMind local test project] Scheduler request completed: got 1 new tasks
+25-Oct-2026 09:07:18 [HiveMind local test project] Project requested delay of 10 seconds
+25-Oct-2026 09:07:18 [HiveMind local test project] [task] result state=NEW for hm_preempt_001_0 from handle_scheduler_reply
+25-Oct-2026 09:07:18 [HiveMind local test project] Generated new computer cross-project ID: 6e11829c5d8614c28f4df7338341acde
+25-Oct-2026 09:07:19 [HiveMind local test project] [task] result state=FILES_DOWNLOADING for hm_preempt_001_0 from CS::update_results
+25-Oct-2026 09:07:20 [HiveMind local test project] Started download of hm_preempt_001_in
+25-Oct-2026 09:07:22 [HiveMind local test project] Finished download of hm_preempt_001_in
+25-Oct-2026 09:07:22 [HiveMind local test project] [task] result state=FILES_DOWNLOADED for hm_preempt_001_0 from CS::update_results
+25-Oct-2026 09:07:22 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_preempt_001_0
+25-Oct-2026 09:07:22 [HiveMind local test project] Elapsed time limit 31.142707 < 120.000000; setting to 43200.000000
+25-Oct-2026 09:07:22 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 718898
+25-Oct-2026 09:07:22 [HiveMind local test project] [task] task_state=EXECUTING for hm_preempt_001_0 from start
+25-Oct-2026 09:07:22 [HiveMind local test project] Starting task hm_preempt_001_0
+25-Oct-2026 09:07:22 [HiveMind local test project] [cpu_sched] Starting task hm_preempt_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 09:07:28 [HiveMind local test project] Sending scheduler request: To fetch work.
+25-Oct-2026 09:07:28 [HiveMind local test project] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 09:07:30 [HiveMind local test project] Scheduler request completed: got 0 new tasks
+25-Oct-2026 09:07:30 [HiveMind local test project] Project requested delay of 10 seconds
+25-Oct-2026 09:07:30 [HiveMind local test project] Generated new computer cross-project ID: 6e11829c5d8614c28f4df7338341acde
+25-Oct-2026 09:08:21 [---] Starting BOINC client version 7.18.1 for x86_64-pc-linux-gnu
+25-Oct-2026 09:08:21 [---] This a development version of BOINC and may not function properly
+25-Oct-2026 09:08:21 [---] log flags: file_xfer, sched_ops, task, coproc_debug, cpu_sched, task_debug
+25-Oct-2026 09:08:21 [---] Libraries: libcurl/7.81.0 OpenSSL/3.0.2 zlib/1.2.11 brotli/1.0.9 zstd/1.4.8 libidn2/2.3.2 libpsl/0.21.0 (+libidn2/2.3.2) libssh/0.9.6/openssl/zlib nghttp2/1.43.0 librtmp/2.3 OpenLDAP/2.5.20
+25-Oct-2026 09:08:21 [---] Data directory: /mnt/disks/disk-socrateai-local-1/boinc/run3/client
+25-Oct-2026 09:08:21 [---] [coproc] launching child process at /mnt/disks/disk-socrateai-local-1/boinc/root/usr/bin/boinc
+25-Oct-2026 09:08:21 [---] [coproc] with data directory /mnt/disks/disk-socrateai-local-1/boinc/run3/client
+25-Oct-2026 09:08:21 [---] CUDA: NVIDIA GPU 0: Tesla T4 (driver version 580.99, CUDA version 13.0, compute capability 7.5, 4096MB, 3970MB available, 8141 GFLOPS peak)
+25-Oct-2026 09:08:21 [---] OpenCL: NVIDIA GPU 0: Tesla T4 (driver version 580.178.04, device version OpenCL 3.0 CUDA, 14912MB, 3970MB available, 8141 GFLOPS peak)
+25-Oct-2026 09:08:21 [---] [coproc] NVIDIA library reports 1 GPU
+25-Oct-2026 09:08:21 [---] [coproc] ATI: libaticalrt.so: cannot open shared object file: No such file or directory
+25-Oct-2026 09:08:21 [http://127.0.0.1:45625/hivemind/] Found app_info.xml; using anonymous platform
+25-Oct-2026 09:08:21 [---] libc:  version 2.35
+25-Oct-2026 09:08:21 [---] Host name: socreateai-agora-hermes-node1
+25-Oct-2026 09:08:21 [---] Processor: 8 GenuineIntel Intel(R) Xeon(R) CPU @ 2.20GHz [Family 6 Model 79 Stepping 0]
+25-Oct-2026 09:08:21 [---] Processor features: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology nonstop_tsc cpuid tsc_known_freq pni pclmulqdq ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch pti ssbd ibrs ibpb stibp fsgsbase tsc_adjust bmi1 hle avx2 smep bmi2 erms invpcid rtm rdseed adx smap xsaveopt arat md_clear arch_capabilities
+25-Oct-2026 09:08:21 [---] OS: Linux Ubuntu: Ubuntu 22.04.5 LTS [6.8.0-1070-gcp|libc 2.35]
+25-Oct-2026 09:08:21 [---] Memory: 29.37 GB physical, 4.00 GB virtual
+25-Oct-2026 09:08:21 [---] Disk: 1.92 TB total, 1.42 TB free
+25-Oct-2026 09:08:21 [---] Local time is UTC +0 hours
+25-Oct-2026 09:08:21 [---] Config: allow multiple clients
+25-Oct-2026 09:08:21 [---] Config: report completed tasks immediately
+25-Oct-2026 09:08:21 [---] Config: use all coprocessors
+25-Oct-2026 09:08:22 [---] No general preferences found - using defaults
+25-Oct-2026 09:08:22 [---] Reading preferences override file
+25-Oct-2026 09:08:22 [---] Preferences:
+25-Oct-2026 09:08:22 [---]    max memory usage when active: 15038.50 MB
+25-Oct-2026 09:08:22 [---]    max memory usage when idle: 27069.31 MB
+25-Oct-2026 09:08:22 [---]    max disk usage: 1458.50 GB
+25-Oct-2026 09:08:22 [---]    max CPUs used: 4
+25-Oct-2026 09:08:22 [---]    (to change preferences, visit a project web site or select Preferences in the Manager)
+25-Oct-2026 09:08:22 [---] Setting up project and slot directories
+25-Oct-2026 09:08:22 [---] Checking active tasks
+25-Oct-2026 09:08:22 [HiveMind local test project] Elapsed time limit 31.142707 < 120.000000; setting to 43200.000000
+25-Oct-2026 09:08:22 [HiveMind local test project] URL http://127.0.0.1:45625/hivemind/; Computer ID 1; resource share 100
+25-Oct-2026 09:08:22 [---] Setting up GUI RPC socket
+25-Oct-2026 09:08:22 [---] Checking presence of 3 project files
+25-Oct-2026 09:08:22 Initialization completed
+25-Oct-2026 09:08:22 [HiveMind local test project] [coproc] Assigning NVIDIA instance 0 to hm_preempt_001_0
+25-Oct-2026 09:08:22 [HiveMind local test project] [task] ACTIVE_TASK::start(): forked process: pid 719770
+25-Oct-2026 09:08:22 [HiveMind local test project] [task] task_state=EXECUTING for hm_preempt_001_0 from start
+25-Oct-2026 09:08:22 [HiveMind local test project] [cpu_sched] Restarting task hm_preempt_001_0 using hivemind_inner_loop version 100 (cuda_hivemind) in slot 0
+25-Oct-2026 09:08:22 [HiveMind local test project] Sending scheduler request: To fetch work.
+25-Oct-2026 09:08:22 [HiveMind local test project] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 09:08:23 [HiveMind local test project] Scheduler request completed: got 0 new tasks
+25-Oct-2026 09:08:23 [HiveMind local test project] Project requested delay of 10 seconds
+25-Oct-2026 09:08:23 [HiveMind local test project] Generated new computer cross-project ID: 6e11829c5d8614c28f4df7338341acde
+25-Oct-2026 09:09:22 [HiveMind local test project] [coproc] NVIDIA instance 0; 1.000000 pending for hm_preempt_001_0
+25-Oct-2026 09:09:22 [HiveMind local test project] [coproc] NVIDIA instance 0: confirming 1.000000 instance for hm_preempt_001_0
+25-Oct-2026 09:09:29 [HiveMind local test project] [task] Process for hm_preempt_001_0 exited, status 0, task state 1
+25-Oct-2026 09:09:29 [HiveMind local test project] [task] process exited with status 0
+25-Oct-2026 09:09:29 [HiveMind local test project] [task] task_state=EXITED for hm_preempt_001_0 from handle_exited_app
+25-Oct-2026 09:09:29 [HiveMind local test project] Computation for task hm_preempt_001_0 finished
+25-Oct-2026 09:09:29 [HiveMind local test project] [task] result state=FILES_UPLOADING for hm_preempt_001_0 from CS::app_finished
+25-Oct-2026 09:09:31 [HiveMind local test project] Started upload of hm_preempt_001_0_0
+25-Oct-2026 09:09:35 [HiveMind local test project] Finished upload of hm_preempt_001_0_0
+25-Oct-2026 09:09:35 [HiveMind local test project] [task] result state=FILES_UPLOADED for hm_preempt_001_0 from CS::update_results
+25-Oct-2026 09:09:39 [HiveMind local test project] Sending scheduler request: To report completed tasks.
+25-Oct-2026 09:09:39 [HiveMind local test project] Reporting 1 completed tasks
+25-Oct-2026 09:09:39 [HiveMind local test project] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 09:09:41 [HiveMind local test project] Scheduler request completed: got 0 new tasks
+25-Oct-2026 09:09:41 [HiveMind local test project] Project requested delay of 10 seconds
+25-Oct-2026 09:09:41 [HiveMind local test project] Generated new computer cross-project ID: 6e11829c5d8614c28f4df7338341acde
+25-Oct-2026 09:09:51 [HiveMind local test project] Sending scheduler request: To fetch work.
+25-Oct-2026 09:09:51 [HiveMind local test project] Requesting new tasks for NVIDIA GPU
+25-Oct-2026 09:09:53 [HiveMind local test project] Scheduler request completed: got 0 new tasks
+25-Oct-2026 09:09:53 [HiveMind local test project] Project requested delay of 10 seconds
+25-Oct-2026 09:09:53 [HiveMind local test project] Generated new computer cross-project ID: 6e11829c5d8614c28f4df7338341acde
+25-Oct-2026 09:11:38 [---] Exiting
+25-Oct-2026 09:11:38 [---] [task_debug] requesting tasks to exit
+25-Oct-2026 09:11:38 [---] [task_debug] all tasks exited

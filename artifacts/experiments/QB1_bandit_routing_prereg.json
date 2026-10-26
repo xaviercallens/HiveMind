@@ -1,0 +1,33 @@
+{
+ "experiment": "QB1-QB4 (simulation): QueenBee routing strategies on synthetic experts",
+ "registered_utc": "2026-10-25T08:10:56Z",
+ "status": "preregistered before the first run; the report records this file's sha256",
+ "what_is_simulated": "K experts with fixed, seeded success probabilities per task cluster; a verifier that reports the Bernoulli outcome; no language model is called. The experiment validates the mechanism (learning from verified outcomes, warm start, caps against dishonest dancers), not the quality of any real expert.",
+ "design": {
+  "clusters": 4,
+  "experts": 5,
+  "rounds": 2000,
+  "seeds": 20,
+  "success_probabilities": "per (cluster, expert) drawn Uniform(0.2, 0.9) per seed; the same table is used by every strategy in a seed",
+  "static_router": "models the keyword route measured by GWAYA on BigCodeBench (35% coverage): with probability 0.35 it names the best expert, otherwise a uniformly random one",
+  "warm_start": "honest scouts report one dance record per (cluster, expert) with n=50 verified trials drawn from the true probability; records are signed and aggregated with cap_per_record=0.5 and pseudo_trials=20",
+  "dishonest_dancers": "a fraction d of the records (d in {0.0, 0.2, 0.4}) is replaced by records from 'sybil' signers claiming n=200 successes=200 for the worst expert of each cluster; they are signed and valid, so only the cap limits them",
+  "metrics": [
+   "last_half_success: fraction of verified successes over rounds 1001-2000",
+   "regret: sum over rounds of (p_best - p_chosen) in the true table",
+   "early_regret: the same over rounds 1-200"
+  ]
+ },
+ "hypotheses": {
+  "H1": "Thompson (cold) beats uniform random and the static router on last_half_success in at least 18 of 20 seeds each (paired by seed).",
+  "H2": "Warm start from honest dances lowers early_regret relative to cold Thompson in at least 16 of 20 seeds.",
+  "H3": "With cap 0.5, 40% dishonest dancers leave warm-start last_half_success within 0.03 (mean over seeds) of the honest warm start; without the cap (cap=1e9, exploratory arm) the gap is larger."
+ },
+ "controls": {
+  "positive": "the oracle (always the best expert) has last_half_success >= every other strategy in every seed; if it does not, the metric is wrong and the run is invalid",
+  "negative": "a shuffled world where every expert has the same probability (0.55) per cluster: cold Thompson's last_half_success must lie within the 95% interval of uniform random over seeds, and its regret is zero by construction; if the bandit 'wins' here the harness leaks the answer"
+ },
+ "decision_rule": "H1, H2 and H3 are each reported as supported or not; the controls decide validity, not success",
+ "not_claimed": "nothing about real models, real developers or real latency; the dishonest-dancer model is one adversary, not the worst case",
+ "registration_time_note": "corrected on 2026-10-25T08:22Z from a hand-typed 2026-10-25T08:30:00Z, which was later than the run; 2026-10-25T08:10:56Z is when the file was first written (session transcript). Nothing else in this file changed after the run."
+}

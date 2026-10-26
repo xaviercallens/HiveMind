@@ -5,7 +5,7 @@ Provides:
    - Season 9 & 10 GPU + HiveMind Swarm Campaigns (`CAMP-S9/S10 1..4`)
    - The 8-Domain Scientific Dataset Mining Campaign (`CAMP-S10-RUCHE-DATASET-MINING`)
    - **La Ruche** (`LaRucheModelVault`) Honeycomb Cells (`Alveoles`) & merged Community BTM MoE model
-   - GCP Cloud Run Scale-to-Zero Public Gateway (`hivemind-at-home-ruche`, `us-central1`, `$0.00/mo` idle)
+   - GCP Cloud Run Scale-to-Zero Public Gateway (`hivemind-at-home-ruche`, `us-central1`, scales to zero when idle)
    - GCP Cloud TPU (`gwenlaya-tpu-1`, `us-west4-a`, `v5litepod-1`) & Local CUDA GPU nodes
    - 128/128 zero-`sorry` Lean 4 formal proof inventory
 2. `render_hivemind_at_home_html(state)`: Renders a self-contained, zero-CDN HTML5/Canvas/SVG
@@ -363,7 +363,7 @@ DOMAIN_SYNTHESIS_TEMPLATES: Dict[str, str] = {
     ),
     "general_chat": (
         "Synthesized multi-domain response via La Ruche Community BTM Sparse MoE "
-        "(8 Honeycomb Alveoles, Top-2 active Sigma-MoE Peri-LN routing, 0.00 EUR/USD charter)."
+        "(8 Honeycomb Alveoles, Top-2 active Sigma-MoE Peri-LN routing, Reflexion Points charter)."
     ),
     "formal_lean4": (
         "Confirmed 128/128 machine-checked Lean 4 theorems with 0 sorry and 0 custom axioms "
@@ -475,7 +475,7 @@ MULTILINGUAL_I18N_DICTIONARY: Dict[str, Dict[str, str]] = {
         "lang_code": "en",
         "lang_label": "English",
         "brand_title": "🐝 HIVEMIND@HOME • CYBER-BEE SWARM & LA RUCHE MOE VAULT",
-        "charter_sub": "Strictly Non-Monetary Compute-Reciprocity Charter (0.00 EUR / 0.00 USD) • Share Idle GPU -> Earn Points -> Use Open MoE Bees",
+        "charter_sub": "Strictly Non-Monetary Compute-Reciprocity Charter • Share Idle GPU -> Earn Points -> Use Open MoE Bees",
         "nav_all": "🌐 ALL SCREENS (FULL PORTAL)",
         "nav_s1": "01 // 🐝 BEE & HIVE CONCEPT",
         "nav_s2": "02 // 🎮 JOIN & COMPUTE POINTS",
@@ -496,14 +496,14 @@ MULTILINGUAL_I18N_DICTIONARY: Dict[str, Dict[str, str]] = {
         "step3_desc": "Each Bee trains a tiny QLoRA adapter compressed 30.89x via 8D Gosset Lattice geometry and seals it into a hexagonal cell (Alvéole) inside La Ruche on SocrateAI GCP Cloud Storage.",
         "step4_tag": "4. EARN & SPEND COMPUTE POINTS",
         "step4_title": "Use the Hive for Your Own Projects",
-        "step4_desc": "Every workunit awards HiveMind Compute Points (0.00 EUR / 0.00 USD). Spend your points anytime on Python coding (GWAYA), Astrophysics, Visual Generation, or download the open MoE models!",
+        "step4_desc": "Every workunit awards HiveMind Reflexion Points. Spend your points anytime on Python coding (GWAYA), Astrophysics, Visual Generation, or download the open MoE models!",
         "video_section_title": "🎬 Interactive Cyber-Bee & Exoplanet Cinema (Live 30 FPS HTML5 Video + SVG Visuals)",
         "video_ch1": "Ch.1: Idle GPU & <1.5s Game Preemption",
         "video_ch2": "Ch.2: E8 Nectar → La Ruche Honeycomb",
         "video_ch3": "Ch.3: Exoplanet Transit & SETI 1420 MHz",
         "video_ch4": "Ch.4: GWAYA Coding & Gwen Top-2 MoE",
         "s2a_title": "🎮 Screen 02A — Join the Swarm & Gaming Preemption Simulator",
-        "s2b_title": "⚡ Screen 02B — Earn & Spend HiveMind Compute Points Studio",
+        "s2b_title": "⚡ Screen 02B — Earn & Spend HiveMind Reflexion Points Studio",
         "s2c_title": "🌐 Screen 02C — HiveMind OpenRouter & Google Sign-In Gateway",
         "s2c_badge": "OpenAI-Compatible MoE API & 1-Click Google Sign-In",
         "btn_signup_google": "🚀 Sign in with Google (/signup)",
@@ -532,7 +532,7 @@ MULTILINGUAL_I18N_DICTIONARY: Dict[str, Dict[str, str]] = {
         "lang_code": "fr",
         "lang_label": "Français",
         "brand_title": "🐝 HIVEMIND@HOME • ESSAIM CYBER-ABEILLE & LA RUCHE MOE",
-        "charter_sub": "Charte de Réciprocité de Calcul Non-Monétaire (0,00 EUR / 0,00 USD) • Partagez votre GPU inactif -> Gagnez des Points -> Utilisez les Abeilles MoE",
+        "charter_sub": "Charte de Réciprocité de Calcul Non-Monétaire • Partagez votre GPU inactif -> Gagnez des Points -> Utilisez les Abeilles MoE",
         "nav_all": "🌐 TOUS LES ÉCRANS (PORTAIL COMPLET)",
         "nav_s1": "01 // 🐝 CONCEPT ABEILLE & RUCHE",
         "nav_s2": "02 // 🎮 REJOINDRE & POINTS DE CALCUL",
@@ -553,7 +553,7 @@ MULTILINGUAL_I18N_DICTIONARY: Dict[str, Dict[str, str]] = {
         "step3_desc": "Chaque abeille entraîne un adaptateur QLoRA compressé 30,89x via le réseau E8 de Gosset et le scelle dans une alvéole hexagonale de La Ruche sur Google Cloud Storage.",
         "step4_tag": "4. GAGNEZ & UTILISEZ VOS POINTS",
         "step4_title": "Mobilisez La Ruche pour Vos Propres Besoins",
-        "step4_desc": "Chaque unité validée rapporte +250 Points HiveMind (0,00 EUR / 0,00 USD). Utilisez vos points pour le codage Python (GWAYA), l'astrophysique, la génération d'images ou téléchargez les modèles MoE !",
+        "step4_desc": "Chaque unité validée rapporte +250 Points de Réflexion HiveMind. Utilisez vos points pour le codage Python (GWAYA), l'astrophysique, la génération d'images ou téléchargez les modèles MoE !",
         "video_section_title": "🎬 Cinéma Interactif Cyber-Abeille & Exoplanètes (Vidéo HTML5 30 FPS + Visuels SVG)",
         "video_ch1": "Ch.1 : GPU Inactif & Préemption Jeu <1,5s",
         "video_ch2": "Ch.2 : Nectar E8 → Alvéoles de La Ruche",
@@ -589,10 +589,10 @@ MULTILINGUAL_I18N_DICTIONARY: Dict[str, Dict[str, str]] = {
         "lang_code": "zh",
         "lang_label": "中文",
         "brand_title": "🐝 HIVEMIND@HOME • 赛博蜜蜂群与 LA RUCHE 混合专家模型库",
-        "charter_sub": "严格非货币算力互惠宪章 (0.00 EUR / 0.00 USD) • 闲置显卡共享 -> 赢取算力积分 -> 免费调用开源 MoE 专家蜜蜂",
+        "charter_sub": "严格非货币算力互惠宪章 • 闲置显卡共享 -> 赢取反思积分 -> 免费调用开源 MoE 专家蜜蜂",
         "nav_all": "🌐 全部视图 (完整门户)",
         "nav_s1": "01 // 🐝 蜜蜂与蜂巢概念",
-        "nav_s2": "02 // 🎮 加入蜂群与算力积分",
+        "nav_s2": "02 // 🎮 加入蜂群与反思积分",
         "nav_s3": "03 // 🤖 MOE 专家蜜蜂 (GWAYA, GWEN & 天体物理)",
         "nav_s4": "04 // 🏆 社区成果轮播",
         "nav_s5": "05 // 📡 技术架构与排行榜",
@@ -608,22 +608,22 @@ MULTILINGUAL_I18N_DICTIONARY: Dict[str, Dict[str, str]] = {
         "step3_tag": "3. 采集花蜜 → 存入 LA RUCHE 蜂巢",
         "step3_title": "8 个六边形专家蜂房 (稀疏 MoE)",
         "step3_desc": "每只工蜂训练轻量级 QLoRA 适配器，经 8 维 Gosset E8 格量化压缩 30.89 倍后存入 SocrateAI GCP 云存储的六边形蜂房。",
-        "step4_tag": "4. 赢取并消费算力积分",
+        "step4_tag": "4. 赢取并消费反思积分",
         "step4_title": "将蜂巢智慧用于您自己的项目",
-        "step4_desc": "每个验证任务奖励 +250 算力积分 (0.00 EUR/USD)。随时使用积分调用 Python 编程 (GWAYA)、系外行星检测、图像生成或下载开源 MoE 模型！",
+        "step4_desc": "每个验证任务奖励 +250 反思积分。随时使用积分调用 Python 编程 (GWAYA)、系外行星检测、图像生成或下载开源 MoE 模型！",
         "video_section_title": "🎬 赛博蜜蜂与系外行星互动影院 (实时 30 FPS HTML5 视频 + SVG 可视化)",
         "video_ch1": "第1章：闲置 GPU 与 <1.5秒 游戏抢占",
         "video_ch2": "第2章：E8 花蜜 → La Ruche 六边形蜂巢",
         "video_ch3": "第3章：系外行星凌日与 SETI 1420 MHz",
         "video_ch4": "第4章：GWAYA 编程与 Gwen Top-2 路由",
         "s2a_title": "🎮 视图 02A — 加入蜂群与游戏抢占模拟器",
-        "s2b_title": "⚡ 视图 02B — 赢取与兑换 HiveMind 算力积分工作台",
+        "s2b_title": "⚡ 视图 02B — 赢取与兑换 HiveMind 反思积分工作台",
         "s2c_title": "🌐 视图 02C — HiveMind OpenRouter 网关与 Google 快捷登录",
         "s2c_badge": "兼容 OpenAI 的 MoE 接口 & 一键 Google 登录",
         "btn_signup_google": "🚀 使用 Google 登录 (/signup)",
         "btn_openrouter_portal": "⚡ 启动 OpenRouter 在线试炼场与门户 (/)",
         "btn_test_completion": "⚡ 在线测试实时查询",
-        "s2c_calc_title": "🎮 玩家与 GPU 共享者算力积分计算器",
+        "s2c_calc_title": "🎮 玩家与 GPU 共享者反思积分计算器",
         "s2c_calc_gpu": "选择 GPU 显卡型号：",
         "s2c_calc_hours": "每日闲置时长（挂机/离线/睡眠）：",
         "s2c_calc_points": "预计每月赚取积分 (HMT)：",
@@ -646,7 +646,7 @@ MULTILINGUAL_I18N_DICTIONARY: Dict[str, Dict[str, str]] = {
         "lang_code": "es",
         "lang_label": "Español",
         "brand_title": "🐝 HIVEMIND@HOME • ENJAMBRE CYBER-BEE Y BÓVEDA MOE LA RUCHE",
-        "charter_sub": "Carta de Reciprocidad de Cómputo No Monetaria (0.00 EUR / 0.00 USD) • Comparte tu GPU inactiva -> Gana Puntos -> Usa las Abejas MoE",
+        "charter_sub": "Carta de Reciprocidad de Cómputo No Monetaria • Comparte tu GPU inactiva -> Gana Puntos -> Usa las Abejas MoE",
         "nav_all": "🌐 TODAS LAS PANTALLAS (PORTAL COMPLETO)",
         "nav_s1": "01 // 🐝 CONCEPTO ABEJA Y COLMENA",
         "nav_s2": "02 // 🎮 UNIRSE Y PUNTOS DE CÓMPUTO",
@@ -667,7 +667,7 @@ MULTILINGUAL_I18N_DICTIONARY: Dict[str, Dict[str, str]] = {
         "step3_desc": "Cada abeja entrena un adaptador QLoRA comprimido 30.89x mediante la red E8 de Gosset y lo sella en una celda hexagonal (Alvéole) en SocrateAI GCP Cloud Storage.",
         "step4_tag": "4. GANA Y USA PUNTOS DE CÓMPUTO",
         "step4_title": "Usa la Colmena para Tus Propios Proyectos",
-        "step4_desc": "Cada unidad verificada otorga +250 Puntos HiveMind (0.00 EUR / 0.00 USD). ¡Canjéalos en programación Python (GWAYA), astrofísica, generación visual o descarga los modelos MoE!",
+        "step4_desc": "Cada unidad verificada otorga +250 Puntos de Reflexión HiveMind. ¡Canjéalos en programación Python (GWAYA), astrofísica, generación visual o descarga los modelos MoE!",
         "video_section_title": "🎬 Cine Interactivo Cyber-Bee y Exoplanetas (Video HTML5 30 FPS + Visuales SVG)",
         "video_ch1": "Cap.1: GPU Inactiva y Preempción <1.5s",
         "video_ch2": "Cap.2: Néctar E8 → Panal La Ruche",
@@ -703,7 +703,7 @@ MULTILINGUAL_I18N_DICTIONARY: Dict[str, Dict[str, str]] = {
         "lang_code": "de",
         "lang_label": "Deutsch",
         "brand_title": "🐝 HIVEMIND@HOME • CYBER-BIENENSCHWARM & LA RUCHE MOE-TRESOR",
-        "charter_sub": "Nicht-monetäre Rechenleistungs-Gegenseitigkeitscharta (0,00 EUR / 0,00 USD) • Ungenutzte GPU teilen -> Punkte sammeln -> Offene MoE-Bienen nutzen",
+        "charter_sub": "Nicht-monetäre Rechenleistungs-Gegenseitigkeitscharta • Ungenutzte GPU teilen -> Punkte sammeln -> Offene MoE-Bienen nutzen",
         "nav_all": "🌐 ALLE ANSICHTEN (VOLLES PORTAL)",
         "nav_s1": "01 // 🐝 BIENEN- & SCHWARMKONZEPT",
         "nav_s2": "02 // 🎮 BEITRETEN & RECHENPUNKTE",
@@ -724,7 +724,7 @@ MULTILINGUAL_I18N_DICTIONARY: Dict[str, Dict[str, str]] = {
         "step3_desc": "Jede Biene trainiert einen QLoRA-Adapter, komprimiert ihn 30,89-fach mittels 8D-Gosset-E8-Gitter und versiegelt ihn in einer Wabe (Alvéole) auf SocrateAI GCP Cloud Storage.",
         "step4_tag": "4. RECHENPUNKTE SAMMELN & EINLÖSEN",
         "step4_title": "Nutze den Bienenstock für Eigene Projekte",
-        "step4_desc": "Jede validierte Arbeitseinheit bringt +250 HiveMind-Punkte (0,00 EUR / 0,00 USD). Löse sie für Python-Code (GWAYA), Exoplaneten-Analyse, Bildsynthese ein oder lade die MoE-Modelle herunter!",
+        "step4_desc": "Jede validierte Arbeitseinheit bringt +250 HiveMind-Reflexionspunkte. Löse sie für Python-Code (GWAYA), Exoplaneten-Analyse, Bildsynthese ein oder lade die MoE-Modelle herunter!",
         "video_section_title": "🎬 Interaktives Cyber-Bienen- & Exoplaneten-Kino (Live 30 FPS HTML5-Video + SVG-Grafiken)",
         "video_ch1": "Kap.1: Leerlauf-GPU & <1,5s Spiel-Schutz",
         "video_ch2": "Kap.2: E8-Nektar → La Ruche Waben",
@@ -1378,7 +1378,7 @@ def build_hivemind_at_home_state(
                 {"label": "Specialist Honeycomb Bees", "value": "8 Domains (Top-2 Active)"},
                 {"label": "Mean Holdout PPL", "value": "248.46 -> 135.00 (-45.67%)"},
                 {"label": "SVD Spectral Energy", "value": "99.4% Retained (Rank-4)"},
-                {"label": "SocrateAI GCS Vault", "value": "$0.00/mo Free Tier"},
+                {"label": "SocrateAI GCS Vault", "value": "Free Tier"},
             ],
             "accent_color": "#f59e0b",
         },
@@ -1556,8 +1556,8 @@ def build_hivemind_at_home_state(
         "github_pages_site_url": GITHUB_PAGES_SITE_URL,
         "github_pages_repo_url": GITHUB_PAGES_REPO_URL,
         "charter": (
-            "Strictly Non-Monetary Compute-Reciprocity Charter (0.00 EUR / 0.00 USD). "
-            "Share idle GPU when not gaming -> Earn HiveMind Compute Points -> Spend them on Coding, Astrophysics, Visuals & Open MoE Models."
+            "Strictly Non-Monetary Compute-Reciprocity Charter. "
+            "Share idle GPU when not gaming -> Earn HiveMind Reflexion Points -> Spend them on Coding, Astrophysics, Visuals & Open MoE Models."
         ),
         "formal_verification": {
             "lean4_theorems_verified": 128,
@@ -1856,7 +1856,7 @@ def run_la_ruche_moe_inference(
         "top_sampled_token_ids": top_vocab_ids,
         "generated_text": generated_text,
         "latency_ms": round(elapsed_ms, 3),
-        "charter": "0.00 EUR / 0.00 USD Non-Monetary Community Compute Reciprocity",
+        "charter": "HiveMind Reflexion Points (HMT) Non-Monetary Community Compute Reciprocity",
     }
     result_payload["inference_receipt_sha256"] = hashlib.sha256(
         json.dumps(result_payload, sort_keys=True).encode("utf-8")
@@ -1868,7 +1868,7 @@ def redeem_compute_points_for_task(
     req: ComputePointsRedeemRequest,
     vault_dir: Path | str = Path("artifacts/la_ruche_vault"),
 ) -> Dict[str, Any]:
-    """Redeem non-monetary HiveMind Compute Points to run a specialized MoE Bee task."""
+    """Redeem non-monetary HiveMind Reflexion Points to run a specialized MoE Bee task."""
     cost_map = {
         "python_coding_gwaya": 50,
         "astrophysics_exoplanet": 50,
@@ -1879,7 +1879,7 @@ def redeem_compute_points_for_task(
     if req.points_balance_before < cost_pts:
         raise HTTPException(
             status_code=422,
-            detail=f"Insufficient HiveMind Compute Points ({req.points_balance_before} < {cost_pts}). Share an idle GPU workunit to earn +250 points!",
+            detail=f"Insufficient HiveMind Reflexion Points ({req.points_balance_before} < {cost_pts}). Share an idle GPU workunit to earn +250 points!",
         )
 
     inf = run_la_ruche_moe_inference(
@@ -1941,11 +1941,11 @@ def redeem_compute_points_for_task(
 
     lang_code = req.lang if req.lang in SUPPORTED_LANGUAGES else "en"
     lang_headers = {
-        "en": "[EN] Specialist Bee Task Executed via La Ruche Top-2 Sparse MoE (0.00 EUR / 0.00 USD):",
-        "fr": "[FR] Tâche Abeille Spécialiste Exécutée via La Ruche MoE Éparse Top-2 (0.00 EUR / 0.00 USD) :",
-        "zh": "[ZH] 已通过 La Ruche Top-2 稀疏 MoE 专家蜜蜂执行任务 (0.00 EUR / 0.00 USD)：",
-        "es": "[ES] Tarea de Abeja Especialista Ejecutada vía La Ruche MoE Disperso Top-2 (0.00 EUR / 0.00 USD):",
-        "de": "[DE] Spezialisten-Bienen-Aufgabe über La Ruche Top-2 Sparse-MoE ausgeführt (0.00 EUR / 0.00 USD):",
+        "en": "[EN] Specialist Bee Task Executed via La Ruche Top-2 Sparse MoE:",
+        "fr": "[FR] Tâche Abeille Spécialiste Exécutée via La Ruche MoE Éparse Top-2 :",
+        "zh": "[ZH] 已通过 La Ruche Top-2 稀疏 MoE 专家蜜蜂执行任务：",
+        "es": "[ES] Tarea de Abeja Especialista Ejecutada vía La Ruche MoE Disperso Top-2:",
+        "de": "[DE] Spezialisten-Bienen-Aufgabe über La Ruche Top-2 Sparse-MoE ausgeführt:",
     }
     points_after = req.points_balance_before - cost_pts
     payload = {
@@ -1967,7 +1967,7 @@ def redeem_compute_points_for_task(
             "latency_ms": inf["latency_ms"],
             "inference_receipt_sha256": inf["inference_receipt_sha256"],
         },
-        "charter": "0.00 EUR / 0.00 USD Non-Monetary Compute Reciprocity",
+        "charter": "HiveMind Reflexion Points (HMT) Non-Monetary Compute Reciprocity",
     }
     payload["redemption_receipt_sha256"] = hashlib.sha256(
         json.dumps(payload, sort_keys=True).encode("utf-8")
@@ -2032,7 +2032,7 @@ def render_hivemind_at_home_html(
             f"<td><code>{row.get('hardware')}</code></td>"
             f"<td>{row.get('alveoles_trained')}</td>"
             f"<td><strong>{row.get('workunits_completed')}</strong> WUs ({row.get('idle_gpu_hours_shared')} hrs)</td>"
-            f"<td><strong style='color:#34d399;font-size:0.95rem;'>{row.get('compute_points_earned'):,} pts</strong><br/><span style='font-size:0.68rem;color:#94a3b8;'>0.00 EUR / 0.00 USD</span></td>"
+            f"<td><strong style='color:#34d399;font-size:0.95rem;'>{row.get('compute_points_earned'):,} pts</strong><br/><span style='font-size:0.68rem;color:#94a3b8;'>HiveMind Reflexion Points (HMT)</span></td>"
             f"</tr>"
         )
     lb_rows_html = "\n".join(lb_rows)
@@ -2134,7 +2134,7 @@ def render_hivemind_at_home_html(
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>HiveMind@home &bull; Cyber-Bee &amp; La Ruche Community Supercomputer</title>
-  <meta name="description" content="HiveMind@home & La Ruche: Share your idle consumer GPU when not gaming, earn HiveMind Compute Points, and harness open-source Sparse MoE models (GWAYA Python Coding, Gwen MoE, Astrophysics Exoplanet & SETI Detection)." />
+  <meta name="description" content="HiveMind@home & La Ruche: Share your idle consumer GPU when not gaming, earn HiveMind Reflexion Points, and harness open-source Sparse MoE models (GWAYA Python Coding, Gwen MoE, Astrophysics Exoplanet & SETI Detection)." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -2676,8 +2676,8 @@ def render_hivemind_at_home_html(
           <button type="button" class="lang-btn" data-lang="es">&#x1F1EA;&#x1F1F8; ES</button>
           <button type="button" class="lang-btn" data-lang="de">&#x1F1E9;&#x1F1EA; DE</button>
         </div>
-        <span class="pill-gold"><span data-i18n="points_balance_label">Compute Points Balance</span>: <strong id="header-points-balance">1,250 pts</strong> (0.00 EUR/USD)</span>
-        <span class="pill">GCP Cloud Run: {cloud_run.get('service_name', 'hivemind-at-home-ruche')} ($0/mo Idle)</span>
+        <span class="pill-gold"><span data-i18n="points_balance_label">Compute Points Balance</span>: <strong id="header-points-balance">1,250 pts</strong></span>
+        <span class="pill">GCP Cloud Run: {cloud_run.get('service_name', 'hivemind-at-home-ruche')} (scales to zero when idle)</span>
         <span class="pill">TPU: {tpu.get('node_id')} ({tpu.get('zone')})</span>
         <span class="pill-green">Lean 4: {formal.get('lean4_theorems_verified')}/128 Theorems (0 sorry)</span>
       </div>
@@ -2714,7 +2714,7 @@ def render_hivemind_at_home_html(
     </div>
     <div class="shield-item">
       <span style="color:#94a3b8;">RECIPROCITY:</span>
-      <strong style="color:#fbbf24;">0.00 EUR / 0.00 USD</strong>
+      <strong style="color:#fbbf24;">HiveMind Reflexion Points (HMT)</strong>
     </div>
     <button id="open-defense-modal-btn" type="button" class="btn-action btn-gold btn-chamfer" data-i18n="btn_inspect_shield" style="padding:4px 12px;font-size:0.72rem;">
       &#x1F6E1;&#xFE0F; Inspect Defense Shield
@@ -2760,7 +2760,7 @@ def render_hivemind_at_home_html(
             <span class="story-num" data-i18n="step4_num">4. EARN &amp; SPEND COMPUTE POINTS</span>
             <div style="font-weight:800;color:#38bdf8;font-size:0.9rem;" data-i18n="step4_head">Use the Hive for Your Own Projects</div>
             <p style="font-size:0.78rem;color:#cbd5e1;margin:6px 0 0;" data-i18n="step4_body">
-              Every workunit awards HiveMind Compute Points (0.00 EUR / 0.00 USD). Spend your points anytime on Python coding (GWAYA), Astrophysics, Visual Generation, or download the open MoE models!
+              Every workunit awards HiveMind Reflexion Points. Spend your points anytime on Python coding (GWAYA), Astrophysics, Visual Generation, or download the open MoE models!
             </p>
           </div>
         </div>
@@ -2876,7 +2876,7 @@ def render_hivemind_at_home_html(
         <div id="preemption-telemetry-box" class="alveole-detail" style="border-color:#10b981;">
           <div><strong style="color:#34d399;">STATUS: WORKER BEE FORAGING (IDLE PC)</strong> &bull; Game Process: <code>None</code></div>
           <div style="margin-top:4px;color:#e2e8f0;">Swarm VRAM Budget: <strong>1,840 MiB / 6,656 MiB Ceiling</strong> (Hard-capped below 8 GB) &bull; GPU Temp: <strong>58&deg;C</strong></div>
-          <div style="margin-top:4px;color:#fbbf24;">Earning Rate: <strong>+250 HiveMind Compute Points / Verified Workunit</strong> (0.00 EUR / 0.00 USD)</div>
+          <div style="margin-top:4px;color:#fbbf24;">Earning Rate: <strong>+250 HiveMind Reflexion Points / Verified Workunit</strong></div>
         </div>
 
         <h3 style="font-size:0.86rem;color:#fbbf24;margin:14px 0 6px;text-transform:uppercase;">Join HiveMind@home in 3 Commands (Linux / Windows WSL2 / macOS)</h3>
@@ -2887,7 +2887,7 @@ uv run python scripts/test_public_gcp_hivemind_client.py --url {PUBLIC_GCP_CLOUD
 
       <section class="card card-amber col-6">
         <h2>
-          <span data-i18n="s2b_title">&#x26A1; Screen 02B &mdash; Earn &amp; Spend HiveMind Compute Points Studio</span>
+          <span data-i18n="s2b_title">&#x26A1; Screen 02B &mdash; Earn &amp; Spend HiveMind Reflexion Points Studio</span>
           <span class="pill-gold">Wallet: <strong id="studio-points-wallet">1,250</strong> Compute Points</span>
         </h2>
         <p style="font-size:0.82rem;color:#cbd5e1;margin:0 0 10px;">
@@ -2902,7 +2902,7 @@ uv run python scripts/test_public_gcp_hivemind_client.py --url {PUBLIC_GCP_CLOUD
           <button type="button" class="btn-action btn-gold redeem-service-btn" data-service="lean4_formal_proof" data-cost="50">&#x1F4D0; Lean 4 Proof (-50 pts)</button>
         </div>
         <canvas id="compute-visual-canvas" width="560" height="150" style="width:100%;height:150px;background:#040710;border:1px solid rgba(0,240,255,0.35);border-radius:8px;display:block;margin-bottom:8px;"></canvas>
-        <pre id="compute-points-output" class="code-block" style="max-height:190px;overflow-y:auto;color:#38bdf8;">Select a task above to spend your HiveMind Compute Points and run the specialist MoE Bee!</pre>
+        <pre id="compute-points-output" class="code-block" style="max-height:190px;overflow-y:auto;color:#38bdf8;">Select a task above to spend your HiveMind Reflexion Points and run the specialist MoE Bee!</pre>
       </section>
 
       <!-- SCREEN 02C: OPENROUTER GATEWAY & GOOGLE SIGN-IN -->
@@ -2913,7 +2913,7 @@ uv run python scripts/test_public_gcp_hivemind_client.py --url {PUBLIC_GCP_CLOUD
               <span data-i18n="s2c_title">&#x1F310; Screen 02C &mdash; HiveMind OpenRouter &amp; Google Sign-In Gateway</span>
             </h2>
             <span class="pill-blue" data-i18n="s2c_badge">OpenAI-Compatible MoE API &amp; 1-Click Google Sign-In</span>
-            <span class="pill-gold">Kelly Producer/Consumer Equilibrium (0.00 EUR/USD)</span>
+            <span class="pill-gold">Kelly Producer/Consumer Equilibrium</span>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <a href="https://hivemind-openrouter-1003063861791.us-central1.run.app/" target="_blank" rel="noopener" class="btn-action btn-gold btn-chamfer" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;" data-i18n="btn_openrouter_portal">
@@ -2937,6 +2937,7 @@ uv run python scripts/test_public_gcp_hivemind_client.py --url {PUBLIC_GCP_CLOUD
           <div style="background:rgba(5,8,17,0.7);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:10px;">
             <h4 style="margin:0 0 6px;color:#38bdf8;font-size:0.8rem;text-transform:uppercase;">&#x1F4BB; Supported Capability Tiers</h4>
             <ul style="margin:0;padding-left:18px;font-size:0.78rem;color:#94a3b8;line-height:1.6;">
+              <li><code style="color:#f8fafc;">hivemind/crowd-v1</code> (1B) &mdash; 4 GB VRAM (Vxtzq/Crowd-v1 Generalist Trunk)</li>
               <li><code style="color:#f8fafc;">hivemind/coder-lite</code> (3B) &mdash; 4 GB VRAM (Qwen2.5-Coder:3B)</li>
               <li><code style="color:#f8fafc;">hivemind/coder</code> (7B) &mdash; 6 GB VRAM (Qwen2.5-Coder:7B)</li>
               <li><code style="color:#f8fafc;">hivemind/coder-plus</code> (14B) &mdash; 12 GB VRAM (Qwen2.5-Coder:14B)</li>
@@ -3001,6 +3002,7 @@ python scripts/hivemind_connect.py snippet continue --model coder</pre>
               <div style="display:flex;gap:8px;margin-bottom:6px;">
                 <select id="quick-router-tier" style="flex:1;background:#0d1326;border:1px solid #1e293b;border-radius:4px;color:#e2e8f0;padding:4px 6px;font-size:0.75rem;">
                   <option value="hivemind/coder">hivemind/coder (7B &bull; Fast Code)</option>
+                  <option value="hivemind/crowd-v1">hivemind/crowd-v1 (1B &bull; CrowdGPT Trunk)</option>
                   <option value="hivemind/coder-lite">hivemind/coder-lite (3B &bull; Lightweight)</option>
                   <option value="hivemind/coder-plus">hivemind/coder-plus (14B &bull; Deep Refactor)</option>
                   <option value="hivemind/moe-coder">hivemind/moe-coder (30B &bull; Frontier)</option>
@@ -3012,6 +3014,31 @@ python scripts/hivemind_connect.py snippet continue --model coder</pre>
               <textarea id="quick-prompt-input" rows="3" style="width:100%;background:#0d1326;border:1px solid #1e293b;border-radius:4px;color:#e2e8f0;padding:6px;font-family:monospace;font-size:0.75rem;resize:vertical;">Write a Python async queue worker with backoff retry and zero-allocation buffer.</textarea>
             </div>
             <div style="background:#040711;border:1px solid #1e293b;border-radius:4px;padding:6px 8px;font-family:monospace;font-size:0.72rem;color:#38bdf8;min-height:90px;max-height:120px;overflow-y:auto;white-space:pre-wrap;" id="quick-router-output">Click 'Test Live Query' to benchmark OpenRouter gateway inference across the community swarm...</div>
+          </div>
+        </div>
+
+        <!-- OVERNIGHT REAL-LIFE GO-LIVE & BOINC QLORA-MOE TELEMETRY (25-26 OCT 2026) -->
+        <div style="background:rgba(5,8,17,0.78);border:1px solid rgba(16,185,129,0.4);border-radius:6px;padding:12px;margin-top:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
+            <h4 style="margin:0;color:#34d399;font-size:0.85rem;text-transform:uppercase;">&#x1F319; European Night Real-Life Telemetry &amp; BOINC QLoRA-MoE Progress (25&ndash;26 Oct 2026)</h4>
+            <span class="pill-green" style="font-size:0.72rem;">15/15 Live Probes PASS &bull; 100 BOINC WUs &bull; 0 HTTP 402/5xx</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;font-size:0.76rem;color:#cbd5e1;margin-bottom:8px;">
+            <div style="background:rgba(15,23,42,0.7);border:1px solid rgba(56,189,248,0.25);border-radius:5px;padding:8px;">
+              <strong style="color:#38bdf8;">Dual-GPU Fleet &amp; Overnight Traffic</strong><br/>
+              <strong>Tesla T4 (16 GB) + RTX 2070 (8 GB)</strong> (4 active producers, 7 live models + <code>hivemind/crowd-v1</code> pre-wired). Overnight (20:00Z&ndash;08:00Z): <strong>4,474 HTTP reqs</strong>, <strong>133 chat completions</strong> (router p50 <code>198.1 ms</code>, p95 <code>799.6 ms</code>), <strong>0 HTTP 402</strong>, <strong>0 HTTP 5xx</strong>.
+            </div>
+            <div style="background:rgba(15,23,42,0.7);border:1px solid rgba(251,191,36,0.25);border-radius:5px;padding:8px;">
+              <strong style="color:#fbbf24;">BOINC Chained QLoRA-MoE (98 hmq_* Rounds)</strong><br/>
+              <strong>100 assimilated workunits</strong> (<code>5,632.11</code> verified Cobblestones, <code>0.0</code> replay drift, <code>3,409 MiB</code> peak VRAM, mean <code>105 s/round</code>). Strict loss ratchet accepted <strong>20 improvements</strong> and held <strong>78 rounds</strong> at head <code>hmq_00092</code> (SHA <code>e91e0ec3</code>).
+            </div>
+            <div style="background:rgba(15,23,42,0.7);border:1px solid rgba(52,211,153,0.25);border-radius:5px;padding:8px;">
+              <strong style="color:#34d399;">6-Domain Held-Out NLL: 2.2705 &rarr; 2.1380 (-5.8%)</strong><br/>
+              <code>math</code>: 1.6440 &rarr; <strong>1.3949 (-15.1%)</strong> | <code>biomed</code>: 2.5017 &rarr; <strong>2.2089 (-11.7%)</strong> | <code>general</code>: 2.3230 &rarr; <strong>2.1177 (-8.8%)</strong> | <code>french</code>: -1.3% | <code>news</code>: -0.8% | <code>edu_web</code>: ~0.0%.
+            </div>
+          </div>
+          <div style="font-size:0.71rem;color:#94a3b8;font-family:monospace;line-height:1.45;">
+            <strong>Caveats (<code>scripts/t4_training_report.py</code>):</strong> Baseline (<code>2.2705</code>) is before <code>hmq_00002</code> (first 6-domain round). Loss plateaued after ~30 rounds (last-20 std <code>0.0055</code>; rounds 69&ndash;98 target delta <code>+0.0006</code>). Fixed held-out sets (8 &times; 128 tokens/domain); head <code>hmq_00092</code> is best-of-97 on those sets; BOINC <code>granite-3.1-1b-a400m-base</code> LoRA is evaluated offline (not yet served by <code>/v1/chat/completions</code>). Governor recorded 130 yields (latest mid-BOINC-task kill-on-yield: <code>1,135 ms</code> &amp; <code>1,133 ms</code>).
           </div>
         </div>
       </section>
@@ -3039,7 +3066,7 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
       <section class="card col-7">
         <h2>
           <span data-i18n="s3b_title">&#x1F916; Screen 03B &mdash; Available Pretrained MoE Bees (GWAYA, Gwen MoE, Astrophysics &amp; More)</span>
-          <span style="font-size:0.74rem;color:#34d399;">Hosted on SocrateAI GCP Low-Cost Storage ($0.00/mo)</span>
+          <span style="font-size:0.74rem;color:#34d399;">Hosted on SocrateAI GCP Low-Cost Storage</span>
         </h2>
         <div class="bee-grid">
           {bee_cards_html}
@@ -3115,12 +3142,12 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
           <div class="kpi-box">
             <div class="kpi-label">Public Cloud Run DNS</div>
             <div class="kpi-val">min=0 / max=2</div>
-            <div class="kpi-sub">$0.00/mo Idle &bull; 512Mi RAM &bull; HTTPS</div>
+            <div class="kpi-sub">Scales to zero when idle &bull; 512Mi RAM &bull; HTTPS</div>
           </div>
           <div class="kpi-box">
             <div class="kpi-label">SocrateAI GCS Vault</div>
             <div class="kpi-val">La Ruche MoE</div>
-            <div class="kpi-sub">gs://socrateai-hivemind-la-ruche-vault ($0/mo)</div>
+            <div class="kpi-sub">gs://socrateai-hivemind-la-ruche-vault</div>
           </div>
           <div class="kpi-box">
             <div class="kpi-label">GCP Cloud TPU VM</div>
@@ -3187,7 +3214,7 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
       <section class="card card-amber col-12">
         <h2>
           <span data-i18n="s5b_title">&#x1F451; Screen 05B &mdash; Cyber-Bee GPU Contributor Leaderboard &amp; Compute Reciprocity Hall of Fame</span>
-          <span style="font-size:0.75rem;color:#fbbf24;">Strictly Non-Monetary Reciprocity (0.00 EUR / 0.00 USD)</span>
+          <span style="font-size:0.75rem;color:#fbbf24;">Strictly Non-Monetary Reciprocity</span>
         </h2>
         <table>
           <thead>
@@ -3198,7 +3225,7 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
               <th>Consumer / Cloud GPU Hardware</th>
               <th>La Ruche Alv&eacute;oles Trained</th>
               <th>Workunits &amp; Idle Hours</th>
-              <th>HiveMind Compute Points</th>
+              <th>HiveMind Reflexion Points</th>
             </tr>
           </thead>
           <tbody>
@@ -3308,7 +3335,7 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
   </div>
 
   <footer>
-    <div><strong>HiveMind@home &amp; La Ruche Community Sparse MoE Supercomputer</strong> &bull; Open-Source under Apache-2.0 &bull; Non-Monetary Compute Reciprocity Charter (<code>0.00 EUR / 0.00 USD</code>)</div>
+    <div><strong>HiveMind@home &amp; La Ruche Community Sparse MoE Supercomputer</strong> &bull; Open-Source under Apache-2.0 &bull; Non-Monetary Compute Reciprocity Charter</div>
     <div style="margin-top:6px;">
       GitHub Code: <a href="https://github.com/xaviercallens/HiveMind" target="_blank" rel="noopener" style="color:#fbbf24;">github.com/xaviercallens/HiveMind</a> &bull;
       Community Site: <a href="{GITHUB_PAGES_REPO_URL}" target="_blank" rel="noopener" style="color:#38bdf8;">github.com/xaviercallens/HiveMindatHome.github.io</a> &bull;
@@ -3616,7 +3643,7 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
           vidCtx.fillText(domNames[d], dx, H - 35);
         }}
         vidCtx.fillStyle = '#fbbf24';
-        vidCtx.fillText('Mean Holdout PPL: 248.46 -> 135.00 (-45.67%) | Hosted on SocrateAI GCS ($0.00/mo)', 22, H - 14);
+        vidCtx.fillText('Mean Holdout PPL: 248.46 -> 135.00 (-45.67%) | Hosted on SocrateAI GCS', 22, H - 14);
       }}
       requestAnimationFrame(drawVideoCinemaFrame);
     }}
@@ -3775,7 +3802,7 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
         preemptBox.innerHTML =
           '<div><strong style="color:#34d399;">&#x1F41D; STATUS: WORKER BEE FORAGING (IDLE PC)</strong> &bull; Game Process: <code>None</code></div>' +
           '<div style="margin-top:4px;color:#e2e8f0;">Swarm VRAM Budget: <strong>1,840 MiB / 6,656 MiB Ceiling</strong> (Hard-capped below 8 GB) &bull; GPU Temp: <strong>58&deg;C</strong></div>' +
-          '<div style="margin-top:4px;color:#fbbf24;">Earning Rate: <strong>+250 HiveMind Compute Points / Verified Workunit</strong> (0.00 EUR / 0.00 USD)</div>';
+          '<div style="margin-top:4px;color:#fbbf24;">Earning Rate: <strong>+250 HiveMind Reflexion Points / Verified Workunit</strong></div>';
       }});
       simGamingBtn.addEventListener('click', function() {{
         gpuBadge.textContent = 'GAMING MODE (SWARM PAUSED IN 0.42s)';
@@ -3880,7 +3907,7 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
         }})
         .catch(function() {{
           updatePointsDisplay(computePointsBalance + 250);
-          ptsOutput.textContent = '✅ Offline Simulation Mode: +250 HiveMind Compute Points added! Balance: ' + computePointsBalance + ' pts (0.00 EUR / 0.00 USD)';
+          ptsOutput.textContent = '✅ Offline Simulation Mode: +250 HiveMind Reflexion Points added! Balance: ' + computePointsBalance + ' pts';
         }});
       }});
     }}
@@ -3890,7 +3917,7 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
         var serviceId = btn.getAttribute('data-service');
         var cost = parseInt(btn.getAttribute('data-cost') || '50', 10);
         renderProceduralVisual(serviceId);
-        ptsOutput.textContent = 'Redeeming ' + cost + ' HiveMind Compute Points for ' + serviceId + ' (' + currentLang.toUpperCase() + ')...';
+        ptsOutput.textContent = 'Redeeming ' + cost + ' HiveMind Reflexion Points for ' + serviceId + ' (' + currentLang.toUpperCase() + ')...';
         fetch(API_PREFIX + '/api/v1/compute-points/redeem', {{
           method: 'POST',
           headers: {{ 'Content-Type': 'application/json' }},
@@ -3975,7 +4002,7 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
             var dt = Math.round(performance.now() - t0);
             if (gatewayPingBadge) gatewayPingBadge.textContent = '● PING: ' + dt + ' ms';
             quickRouterOutput.textContent =
-              '[OpenRouter ' + tier + ' • PING: ' + dt + ' ms • 0.00 EUR]\\n' +
+              '[OpenRouter ' + tier + ' • PING: ' + dt + ' ms • HiveMind Reflexion Points (HMT)]\\n' +
               'Generating code for: \"' + promptText.slice(0, 45) + '...\"\\n\\n' +
               'import asyncio\\n' +
               'from collections import deque\\n\\n' +
@@ -4390,7 +4417,7 @@ def create_hivemind_at_home_app(
                     "custom_axioms_count": state["formal_verification"].get("custom_axioms_count", 0),
                     "status": "MATHEMATICALLY_SOUND",
                 },
-                "charter": "0.00 EUR / 0.00 USD Non-Monetary Compute Reciprocity",
+                "charter": "HiveMind Reflexion Points (HMT) Non-Monetary Compute Reciprocity",
             }
         )
 
@@ -4445,7 +4472,7 @@ def create_hivemind_at_home_app(
                 "la_ruche_release_id": state["la_ruche_vault"]["release_id"],
                 "num_domains": state["la_ruche_vault"]["num_domains"],
                 "cost_mode": "scale_to_zero_min0_max2",
-                "charter": "0.00 EUR / 0.00 USD",
+                "charter": "HiveMind Reflexion Points (HMT)",
             }
         )
 
@@ -4658,7 +4685,7 @@ def create_hivemind_at_home_app(
             "base_cell_download_endpoint": f"/api/la-ruche/download/cell/{dom}",
             "sample_training_texts": shard_samples,
             "assigned_at_epoch": time.time(),
-            "charter": "0.00 EUR / 0.00 USD Non-Monetary Compute Reciprocity",
+            "charter": "HiveMind Reflexion Points (HMT) Non-Monetary Compute Reciprocity",
         }
         federated_state["active_leases"][lease_id] = workunit_payload
         return JSONResponse(content=workunit_payload)
@@ -4728,7 +4755,7 @@ def create_hivemind_at_home_app(
             "reciprocity_points_awarded": 250,
             "monetary_payout_eur_usd": 0.0,
             "submitted_at_epoch": time.time(),
-            "charter": "0.00 EUR / 0.00 USD Non-Monetary Compute Reciprocity",
+            "charter": "HiveMind Reflexion Points (HMT) Non-Monetary Compute Reciprocity",
         }
         receipt["receipt_sha256"] = hashlib.sha256(
             json.dumps(receipt, sort_keys=True).encode("utf-8")
@@ -4745,7 +4772,7 @@ def create_hivemind_at_home_app(
                 "active_leases_count": len(federated_state["active_leases"]),
                 "completed_receipts_count": len(federated_state["completed_receipts"]),
                 "completed_receipts": federated_state["completed_receipts"],
-                "charter": "0.00 EUR / 0.00 USD Non-Monetary Compute Reciprocity",
+                "charter": "HiveMind Reflexion Points (HMT) Non-Monetary Compute Reciprocity",
             }
         )
 

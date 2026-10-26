@@ -10,7 +10,7 @@ Scans open Pull Requests, Roadmap progress, Experimental receipts, and GitHub Di
    (`HM-S7-01..10`, `HM-S8-01..10`, `HM-S9-01..08`) branch claims.
 3. Audits hourly quality, Lean 4 formal proofs (`116` machine-checked theorems),
    architecture hypothesis verification (`H1`–`H10`), and experimental provenance (`E1`–`E4`).
-4. Enforces the Non-Monetary Reciprocal Compute-Points Charter (`0.00 EUR / USD`;
+4. Enforces the Non-Monetary Reciprocal Compute-Points Charter (`HiveMind Reflexion Points (HMT)`;
    accumulated `PTS` / `$HIVE` points provide only computing processing benefits
    when the live production HiveMind Swarm is deployed, available, and used by a
    large community).
@@ -40,7 +40,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_ORCHESTRATOR_REPORT = REPO_ROOT / "artifacts" / "community_orchestrator_cycle_report.json"
 
 NON_MONETARY_COMPUTE_RECIPROCITY_NOTICE = (
-    "NO FINANCIAL PAYMENT (0.00 EUR / 0.00 USD): Project HiveMind is a voluntary, "
+    "NO FINANCIAL PAYMENT: Project HiveMind is a voluntary, "
     "non-commercial open-source research project. No money, fiat currency, cryptocurrency, "
     "or wage is ever promised or paid. Accumulated 'points' (PTS and $HIVE PoUW accounting "
     "units) confer exclusively reciprocal computing processing benefits (shared Sparse MoE "
@@ -520,7 +520,7 @@ def evaluate_pull_request_for_merge(
         f"`findings={len(sec_report.findings)}`\n"
         f"- **Draft / Mergeable State:** `isDraft={is_draft}` | `mergeable={mergeable}`\n"
         f"- **📚 Project HiveMind Wiki References:**\n{wiki_links_md}\n"
-        f"- **Non-Monetary Charter:** `0.00 EUR / 0.00 USD` (Symbolic compute-reciprocity points `PTS` / `$HIVE` "
+        f"- **Non-Monetary Charter:** `HiveMind Reflexion Points (HMT)` (Symbolic compute-reciprocity points `PTS` / `$HIVE` "
         f"confer exclusively computing processing benefits when the live production HiveMind Swarm is deployed "
         f"and used by a large community).\n\n"
         f"{ORCHESTRATOR_PR_MARKER}"

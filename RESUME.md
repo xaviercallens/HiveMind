@@ -1,6 +1,6 @@
 # Resume the T4 campaign after a Spot-VM preemption
 
-State captured: 2026-10-26 01:11:42 UTC from branch `chore/zenodo-v3.8.0-deposit` at `50ca854`.
+State captured: 2026-10-26 01:31:49 UTC from branch `chore/zenodo-v3.8.0-deposit` at `50ca854`.
 
 1. Get the code: `git fetch origin chore/zenodo-v3.8.0-deposit` and work from that branch (all code, prereg files and top-level `artifacts/experiments/*.json` reports are
    committed there). This checkpoint branch holds only the ignored/volatile state under `state/`.

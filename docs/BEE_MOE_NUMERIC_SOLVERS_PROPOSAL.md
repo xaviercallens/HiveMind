@@ -1,6 +1,6 @@
 # Bee MoE with numeric solver experts: a three-wave proposal
 
-Status: **proposal for the owner's decision**, 2026-10-27. Nothing in this document is built. Effort figures are estimates, not measurements. Every capability is labelled *verified here*, *planned*, or *owner decision*. IDs such as `W1-1` are proposal-local; roadmap rows are added only after the owner picks a season number.
+Status: **Wave 1 APPROVED by the owner on 2026-10-27; implementation in progress (tracking epic: issue #273). Waves 2 and 3 remain proposals.** The pieces are being built as separate pull requests; this document is the plan. Effort figures are estimates, not measurements. Every capability is labelled *verified here*, *planned*, or *owner decision*. IDs such as `W1-1` are proposal-local; roadmap rows are added only after the owner picks a season number.
 
 ## 1. The idea in one paragraph
 
@@ -53,7 +53,7 @@ Because the specification is data, **no user-supplied code ever runs**. This is 
 | W1-3 | Independent verifier (Python, stdlib only). Four checks: error against the reference, invariant drift, agreement when the tolerance is tightened by a fixed factor (two runs), and hash consistency. Verdicts reuse the GWAYA vocabulary: VERIFIED, AUDITED (no reference, checks only), FAILED, UNVERIFIED (could not run, fail closed). | Clean set: 0 false rejections. |
 | W1-4 | Sandbox extension: run a **binary** under the E15 limits (CPU time, address space, process count, file size, no network, read-only inputs). | Tests show the limits trigger; the existing E15 tests still pass. The known caveats (no seccomp, shared kernel, no cgroup memory limit) stay documented. |
 | W1-5 | `solver_bee` service: loopback only, OpenAI-compatible `/v1/chat/completions` where the user message carries a fenced spec block; reply carries the result and the certificate; behind the producer shield. | 20 scripted requests answered correctly; malformed specs rejected with a clear error; no spec can execute code. |
-| W1-6 | Pre-registered experiment **S-1: reproducibility.** (a) same binary, same host: bitwise identical; (b) same binary, different CPU class: report the largest relative difference over all problems. The thresholds are registered before the first run. | (a) must hold. For (b) the **measured value is the deliverable**, whichever way it falls. Part (b) needs at least one more CPU class; this machine has one. Issue #251 is the open help-wanted call, but it asks for different GPUs and runtimes, not CPU classes; a CPU-class request would need to be added there. |
+| W1-6 | Pre-registered experiment **S-1: reproducibility.** (a) same binary, same host: bitwise identical; (b) same binary, different CPU class: report the largest relative difference over all problems. The thresholds are registered before the first run. | (a) must hold. For (b) the **measured value is the deliverable**, whichever way it falls. Part (b) needs at least one more CPU class; this machine has one. Part (b) needs another CPU class; the epic issue #273 asks for volunteers (issue #251 asks for different GPUs and runtimes). |
 | W1-7 | Pre-registered experiment **S-2: does the verifier catch wrong answers?** Inject five fault types (wrong matrix entry, perturbed trajectory, loosened tolerance, NaN, truncated output) into the clean set. | 100 percent of injected faults flagged; 0 of the clean results rejected. Positive and negative controls follow the E-series method. |
 | W1-8 | Bee scoring: log each verdict and compute the Wilson lower bound per bee with the existing module. | A short report on the 12-problem set. |
 | W1-9 | Documentation and quickstart for newcomers: what a Solver Bee is, how to run it, how to add a problem. | A newcomer can reproduce W1-2 and W1-3 from the README. |
@@ -83,6 +83,20 @@ About 4 to 6 weeks part-time for one engineer; agent-assisted with review, perha
 | Verifier and solver share a bug | The reference solutions come from an independent high-precision computation, and S-2 injects faults |
 | "VERIFIED" read as "correct" | Keep the E16 caveat in every output: VERIFIED means the stated checks passed |
 
+### 4.7 Stage 2 of Wave 1 (after the three base pull requests): the first easy scientific bee
+
+All items are **planned**.
+
+- (a) Integration of the real solver, verifier and library end to end.
+- (b) Science-friendly families for students and citizen scientists: nonlinear pendulum, projectile with quadratic drag, Kepler two-body, SIR and SEIR epidemics (both can be expressed in the `mass_action` kind), logistic growth, RLC circuit (`linear` kind).
+- (c) An MCP server exposing `solve`, `list_problems` and `verify`, so any MCP client can call the Solver Bee. The client's own language model formulates the spec; the tool validates it and certifies the answer.
+- (d) A Science Bee conversational layer: a natural-language question becomes a validated spec through a small model with strict schema validation and a bounded retry loop, then solver, verifier, and a plain-language answer with units, the checks that passed and what they do not prove.
+- (e) Pre-registered experiment **S-3: formulation accuracy** on at least 40 held-out questions written by the project (answers known): exact match of the parsed spec and numerical agreement with the reference, against a template baseline, paired exact test. CPU first, then the resident coder model on the T4 only inside the night window at low request rate.
+- (f) S-1 run on this machine's CPU; the cross-CPU part needs a second CPU class (the epic issue #273 asks for volunteers).
+- (g) A newcomer quickstart and a short guide for students.
+
+The model's role is only to propose a specification. The trust in an answer comes from the solver and the verifier. Whether the chosen physical model is valid for the real situation is **not checked**.
+
 ## 5. Wave 2 (planned; depends on the Wave 1 results)
 
 - **BOINC CPU sweep app.** New CPU plan class, a validator branch for solver results, class-aware tolerances taken from S-1 (the validator forbids cross-class replay today), quorum of two for sweeps. Parameter sweeps (a Van der Pol mu grid, reaction-rate scans) are embarrassingly parallel and are the realistic route to volunteer-scale computation.
@@ -100,16 +114,17 @@ About 4 to 6 weeks part-time for one engineer; agent-assisted with review, perha
 - **Formal link.** A Lean statement of the verifier's soundness, building on the existing Lean work.
 - **GPU numerics** for dense linear algebra.
 
-## 7. Decisions for the owner
+## 7. Decisions (answered 2026-10-27)
 
-1. Approve Wave 1 as scoped, or narrow it (for example, the lattice-decoder slice alone is dependency-free and could start immediately).
-2. Rusty-SUNDIALS: confirm it is yours to license, and check the NOTICE for retained LLNL terms before anything is vendored.
-3. Missing licence files (Genetic project, LeanMaster) matter only for later waves; list them so they are not forgotten.
-4. A CPU tier in the router catalog: acceptable in principle?
-5. Whether Solver Bee answers should be priced in HMT, or free during the pilot.
-6. The stretch goal needs a GPU slot; the T4 serves users, so this is your call.
+1. Wave 1 is approved.
+2. rusty-SUNDIALS is confirmed as the solver (same GitHub owner). It stays a pinned external dependency and is never vendored.
+3. A CPU tier is allowed in the router catalog in addition to the GPU tiers; work moves to the GPU where that makes sense.
+4. Solver Bee answers are priced in HMT but free for the coming month, until 2026-11-27 (points are non-monetary accounting units).
+5. GPU time for the natural-language step is limited to the Paris night window (22:00 to 07:00, Europe/Paris) and goes through the existing serving path, because the live node serves users first and its governor policy is fixed.
 
-## 8. Proposed issue titles (created only after approval)
+## 8. Proposed issue titles
+
+Created as the epic issue #273 with a checklist instead of one issue per title.
 
 1. `hivemind-solver`: pinned Rust CLI around rusty-SUNDIALS (JSON in, certificate out)
 2. Problem library with independent references and invariants (12 IVPs)

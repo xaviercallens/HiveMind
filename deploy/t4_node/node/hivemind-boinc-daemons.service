@@ -8,9 +8,14 @@ Requires=hivemind-boinc-db.service hivemind-boinc-apache.service
 Type=oneshot
 RemainAfterExit=yes
 User=callensxavier_gmail_com
+ExecStartPre=/opt/hivemind/t4/bin/boinc_ensure_daemons.sh --wait-db 240
 ExecStart=/opt/hivemind/t4/bin/boinc_project_env.sh bin/start
+# bin/start returns before the daemons are up and cannot tell that the feeder/transitioner exited: check, and start again if needed
+ExecStartPost=/opt/hivemind/t4/bin/boinc_ensure_daemons.sh --verify
 ExecStop=/opt/hivemind/t4/bin/boinc_project_env.sh bin/stop
-TimeoutStartSec=180
+TimeoutStartSec=900
+Restart=on-failure
+RestartSec=30
 TimeoutStopSec=120
 
 [Install]

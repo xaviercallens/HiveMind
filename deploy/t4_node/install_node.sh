@@ -52,6 +52,10 @@ for u in "$REPO"/deploy/t4_node/node/*.service; do
   committed "deploy/t4_node/node/$(basename "$u")" > "/etc/systemd/system/$(basename "$u")"
   chmod 0644 "/etc/systemd/system/$(basename "$u")"
 done
+for t in "$REPO"/deploy/t4_node/node/*.timer; do
+  committed "deploy/t4_node/node/$(basename "$t")" > "/etc/systemd/system/$(basename "$t")"
+  chmod 0644 "/etc/systemd/system/$(basename "$t")"
+done
 # the older bee/coder producers' units (mirroring the running processes); installed and enabled so a reboot brings them back
 for u in hivemind-live-bee-llama hivemind-live-shield-bee hivemind-live-agent-bee hivemind-live-shield-coder hivemind-live-agent-coder; do
   committed "deploy/t4_node/live/$u.service" > "/etc/systemd/system/$u.service"
@@ -87,5 +91,6 @@ for u in hivemind-boinc-db hivemind-boinc-apache hivemind-boinc-daemons hivemind
          hivemind-live-bee-llama hivemind-live-shield-bee hivemind-live-agent-bee hivemind-live-shield-coder hivemind-live-agent-coder; do
   systemctl enable "$u.service" >/dev/null 2>&1 && echo "enabled $u" || echo "FAILED to enable $u"
 done
+systemctl enable hivemind-boinc-watchdog.timer >/dev/null 2>&1 && echo "enabled hivemind-boinc-watchdog.timer" || echo "FAILED to enable hivemind-boinc-watchdog.timer"
 lock
 echo "installed to $OPT from committed content (control-plane files immutable); nothing was started"

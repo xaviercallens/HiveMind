@@ -40,3 +40,9 @@ def flops_estimate(profile: str) -> float:
     """Scaled from the project's reference estimate by tokens per round, so a bigger round is not under-budgeted."""
     p = PROFILES[profile]
     return FLOPS_REFERENCE * (p["inner_steps"] * p["micro_batch"] * p["seq_len"]) / TOKENS_PER_ROUND_REFERENCE
+
+
+def profiles_for_gpu(total_mib: int) -> list[str]:
+    """Profiles a GPU with this much memory may run, biggest first (empty when it is below even the standard floor)."""
+    ranked = sorted(PROFILES, key=lambda n: -PROFILES[n]["min_gpu_ram_mb"])
+    return [n for n in ranked if total_mib >= PROFILES[n]["min_gpu_ram_mb"]]

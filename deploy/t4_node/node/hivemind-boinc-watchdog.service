@@ -1,0 +1,10 @@
+# Restarts BOINC server daemons that died while the daemons unit still reports "active (exited)" (it is a oneshot). Run by the timer.
+[Unit]
+Description=HiveMind BOINC server: restart daemons that died (feeder, transitioner, validators)
+After=hivemind-boinc-daemons.service
+
+[Service]
+Type=oneshot
+User=callensxavier_gmail_com
+ExecStart=/opt/hivemind/t4/bin/boinc_ensure_daemons.sh --watchdog
+TimeoutStartSec=300

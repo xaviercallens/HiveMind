@@ -11,6 +11,10 @@ ExecStartPre=+/usr/bin/install -d -o callensxavier_gmail_com -g callensxavier_gm
 ExecStart=/usr/sbin/mariadbd --no-defaults --basedir=/usr --datadir=/mnt/disks/disk-socrateai-local-1/boinc/stack/mysql/data --socket=/run/mysqld/mysqld.sock --pid-file=/mnt/disks/disk-socrateai-local-1/boinc/stack/run/mariadb.pid --skip-networking --log-error=/mnt/disks/disk-socrateai-local-1/boinc/stack/log/mariadb.err
 Restart=on-failure
 RestartSec=5
+TimeoutStartSec=300
+# the unit counts as started only once the socket answers: crash recovery after a preemption takes seconds, and units ordered After= this one
+# (apache, the daemons) used to start into a database that was not ready yet
+ExecStartPost=/opt/hivemind/t4/bin/boinc_ensure_daemons.sh --wait-db 240
 TimeoutStopSec=90
 
 [Install]

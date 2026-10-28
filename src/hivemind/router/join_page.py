@@ -110,12 +110,11 @@ SECTIONS: Sequence[tuple[str, Pair, Sequence[tuple[str, Any]]]] = (
                   "Dans un éditeur (VS Code, Continue, …), suivez le [guide de connexion]({REPO}/blob/main/docs/HIVEMIND_CONNECT_IDE.md).")),
     )),
     ("share", ("2. Share your GPU to answer questions", "2. Partager votre GPU pour répondre aux questions"), (
-        ("p", ("Your machine runs a model, the gateway sends it questions, and you earn points for the tokens you serve. Plan on a terminal and about an "
-               "hour the first time.",
+        ("p", ("Your machine runs a model, the gateway sends it questions, and you earn points for the tokens you serve. You will use a terminal.",
                "Votre ordinateur fait tourner un modèle, la passerelle lui envoie des questions, et vous gagnez des points pour les jetons (tokens) servis. "
-               "Prévoyez un terminal et environ une heure la première fois.")),
+               "Vous utiliserez un terminal.")),
         ("ol", [
-            ("Get the code (Python 3.10 or newer):", "Obtenez le code (Python 3.10 ou plus récent) :"),
+            ("Get the code (Python 3.11 or 3.12):", "Obtenez le code (Python 3.11 ou 3.12) :"),
         ]),
         ("code", "git clone {REPO}.git && cd HiveMind\npip install httpx fastapi uvicorn"),
         ("ol", [

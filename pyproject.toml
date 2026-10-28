@@ -31,6 +31,9 @@ dependencies = [
 astro = [
     "pillow>=10.0.0",
 ]
+kafka = [
+    "confluent-kafka>=2.3.0",
+]
 dev = [
     "pillow>=10.0.0",
     "hypothesis>=6.100.0",

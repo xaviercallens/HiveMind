@@ -1,0 +1,23 @@
+# One node of the self-run HiveMind Kafka cluster (KRaft combined node: broker + controller), bound to its PRIVATE overlay address.
+# Install on each of the three hosts after docs/AMCP_KAFKA_CLUSTER.md section 4. Adjust the three paths for the host.
+# Restart=always on purpose: a node that exits for any reason must come back, because the cluster only works with a majority of nodes up.
+[Unit]
+Description=HiveMind AMCP Kafka quorum node (KRaft, overlay address only)
+After=network-online.target wg-quick@wg-hivemind.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kafka
+Environment=JAVA_HOME=/usr/lib/jvm/default-java
+Environment="KAFKA_HEAP_OPTS=-Xms256m -Xmx512m"
+Environment=LOG_DIR=/var/log/hivemind-kafka
+ExecStart=/opt/kafka/bin/kafka-server-start.sh /etc/hivemind-kafka/server.properties
+Restart=always
+RestartSec=15
+SuccessExitStatus=143
+TimeoutStopSec=60
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

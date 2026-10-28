@@ -1222,6 +1222,7 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.85rem;">
         <button id="steamRegisterLoginBtn" type="button" class="btn btn-primary">&#x1F3AE; Register &amp; Login Free Steam Game Account</button>
         <button id="steamContributeBtn" type="button" class="btn btn-amber">&#x26A1; Contribute Idle-GPU BOINC Workunit (RTX CUDA PTX)</button>
+        <a href="/webgpu" class="btn btn-outline" style="border-color:var(--purple);color:var(--purple);">&#x1F30C; Launch Zero-Install WebGPU Galaxy (/webgpu)</a>
         <a href="/join#play" class="btn btn-outline">&#x1F4D6; Steam &amp; BOINC Setup Guide (/join#play)</a>
       </div>
       <div id="steamPortalStatus" style="font-size:0.78rem;font-family:var(--font-mono);color:var(--green);background:#040711;border:1px solid var(--border);border-radius:0.375rem;padding:0.65rem;">

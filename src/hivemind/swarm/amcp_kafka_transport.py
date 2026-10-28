@@ -71,6 +71,9 @@ SENDER_KINDS: frozenset[str] = frozenset({"human_researcher", "gpu_producer", "a
 AVAILABILITY_SLOTS: tuple[str, ...] = ("eu_evening_cet", "us_evening_est", "apac_evening_jst", "24x7_autonomous")
 _KID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 _SIG_RE = re.compile(r"^[0-9a-f]{64}$")
+# ``sign_envelope`` rounds ``hmexpiry`` to 6 decimals; at epoch ~1.8e9 that can push a max-lifetime event a few
+# hundred nanoseconds past ``MAX_EVENT_TTL_S``. One millisecond of slack keeps such events valid.
+_EXPIRY_ROUNDING_TOLERANCE_S = 1e-3
 
 RejectReason = Literal[
     "oversize",
@@ -580,7 +583,8 @@ class TopicSchema:
 _TRADE_FIELDS: dict[str, FieldRule] = {
     "order_id": FieldRule("str", max_len=64),
     "capacity_1k": FieldRule("number", gt=0.0, le=100_000.0),
-    "price_per_1k": FieldRule("number", gt=0.0),
+    # Upper bound mirrors hivemind.router.gateway.MAX_PRICE_CEILING (not imported: it would pull in FastAPI).
+    "price_per_1k": FieldRule("number", gt=0.0, le=1_000.0),
 }
 
 TOPIC_SCHEMAS: dict[str, TopicSchema] = {
@@ -767,7 +771,7 @@ class EnvelopeVerifier:
         expiry = envelope.get("hmexpiry")
         if isinstance(expiry, bool) or not isinstance(expiry, (int, float)) or not math.isfinite(expiry):
             raise EnvelopeRejected("unsigned", "hmexpiry missing or not a finite number")
-        if expiry - event.utc > self.max_ttl_s:
+        if expiry - event.utc > self.max_ttl_s + _EXPIRY_ROUNDING_TOLERANCE_S:
             raise EnvelopeRejected("ttl_too_long", f"lifetime {expiry - event.utc:.0f}s > {self.max_ttl_s:.0f}s")
         now = self._clock()
         if event.utc > now + self.max_skew_s:
@@ -1046,10 +1050,12 @@ class AMCPConsumer:
         self.stats.polled += len(records)
         held: set[tuple[str, int]] = set()
         for record in records:
-            if self._stop.is_set():
-                self._rewind(record, held)
-                break
             if (record.topic, record.partition) in held:
+                continue
+            if self._stop.is_set():
+                # Rewind every partition at its first unprocessed record, not only the current one: the fetch
+                # position of the other partitions already moved past the rest of the batch.
+                self._rewind(record, held)
                 continue
             self._process(record, held)
         return len(records)

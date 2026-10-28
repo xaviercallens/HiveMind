@@ -1,0 +1,239 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
+"""The public bilingual join page: same content in both languages, no currency, no script, and every command on it matches the real scripts."""
+
+from __future__ import annotations
+
+import html
+import re
+from html.parser import HTMLParser
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from hivemind.router import RouterStore, create_router_app
+from hivemind.router.catalog import TIERS, catalog_payload
+from hivemind.router.join_page import (
+    DEFAULT_API_URL,
+    REPO_URL,
+    _safe_href,
+    join_content_security_policy,
+    pick_language,
+    render_join_page,
+)
+from hivemind.router.points_wording import currency_leftovers
+
+ROOT = Path(__file__).resolve().parents[1]
+NONCE = "abcdefgh12345678"
+TIER_ROWS = [{"title": t.title, "tier_id": t.tier_id, "min_vram_gb": t.min_vram_gb, "weights_gb": t.weights_gb} for t in TIERS]
+
+
+def page(lang: str, tiers=TIER_ROWS) -> str:  # noqa: ANN001
+    return render_join_page(lang, NONCE, tiers=tiers)
+
+
+class Outline(HTMLParser):
+    """Collects what the structure-parity and safety checks need; also checks that every tag is closed."""
+
+    VOID = {"meta", "link", "br", "img", "hr", "input"}
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.stack: list[str] = []
+        self.ids: list[str] = []
+        self.hrefs: list[str] = []
+        self.tags: list[str] = []
+        self.pre: list[str] = []
+        self.text: list[str] = []
+        self.problems: list[str] = []
+        self._in_pre = False
+
+    def handle_starttag(self, tag, attrs):  # noqa: ANN001
+        self.tags.append(tag)
+        a = dict(attrs)
+        if "id" in a:
+            self.ids.append(a["id"])
+        if tag in ("a", "link") and "href" in a:
+            self.hrefs.append(a["href"])
+        if "src" in a:
+            self.problems.append(f"<{tag} src={a['src']}>")
+        if tag == "pre":
+            self._in_pre = True
+            self.pre.append("")
+        if tag not in self.VOID:
+            self.stack.append(tag)
+
+    def handle_endtag(self, tag):  # noqa: ANN001
+        if tag == "pre":
+            self._in_pre = False
+        if tag in self.VOID:
+            return
+        if not self.stack or self.stack[-1] != tag:
+            self.problems.append(f"unbalanced </{tag}>")
+        else:
+            self.stack.pop()
+
+    def handle_data(self, data):  # noqa: ANN001
+        self.text.append(data)
+        if self._in_pre:
+            self.pre[-1] += data
+
+
+def outline(lang: str) -> Outline:
+    parser = Outline()
+    parser.feed(page(lang))
+    parser.close()
+    return parser
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------------------------
+# both languages are the same page
+# ---------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+def test_english_and_french_have_the_same_structure_the_same_commands_and_the_same_links() -> None:
+    en, fr = outline("en"), outline("fr")
+    assert en.problems == [] and fr.problems == [] and en.stack == [] and fr.stack == []  # well-formed, nothing loads from elsewhere
+    assert en.ids == fr.ids and [t for t in en.tags] == [t for t in fr.tags]
+    assert en.pre == fr.pre  # the commands are language-neutral
+    assert [h for h in en.hrefs if not h.startswith("/join")] == [h for h in fr.hrefs if not h.startswith("/join")]
+    assert len(en.pre) >= 5 and len(en.ids) >= 6
+
+
+def test_the_languages_really_differ_and_declare_themselves() -> None:
+    en, fr = page("en"), page("fr")
+    assert '<html lang="en">' in en and '<html lang="fr">' in fr
+    assert "Join HiveMind La Ruche" in en and "Rejoindre HiveMind La Ruche" in fr
+    assert "Participer" not in en and "Disponible maintenant" in fr and "Available now" in en
+    assert 'hreflang="fr"' in en and 'hreflang="en"' in fr and 'href="/join?lang=fr"' in en
+
+
+def test_every_section_link_points_at_a_section_that_exists() -> None:
+    for lang in ("en", "fr"):
+        o = outline(lang)
+        anchors = [h[1:] for h in o.hrefs if h.startswith("#")]
+        assert anchors and all(a in o.ids for a in anchors)
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------------------------
+# wording, safety
+# ---------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("lang", ["en", "fr"])
+def test_no_euro_or_dollar_amount_appears_and_the_points_are_named_the_official_way(lang: str) -> None:
+    text = html.unescape(re.sub(r"<[^>]+>", " ", page(lang)))
+    assert currency_leftovers(text) == []
+    assert ("HiveMind Reflexion Points (HMT)" if lang == "en" else "Points de Réflexion HiveMind (HMT)") in text
+
+
+@pytest.mark.parametrize("lang", ["en", "fr"])
+def test_no_script_no_external_resource_and_only_trusted_links(lang: str) -> None:
+    body = page(lang)
+    assert "<script" not in body and "javascript:" not in body.lower() and "onerror" not in body.lower()
+    allowed = (REPO_URL, "https://ollama.com", "/", "#")
+    for href in outline(lang).hrefs:
+        assert href.startswith(allowed) or href == "/join?lang=en" or href == "/join?lang=fr", href
+    csp = join_content_security_policy(NONCE)
+    assert f"style-src 'nonce-{NONCE}'" in csp and "script-src" not in csp and "default-src 'none'" in csp
+    assert f'<style nonce="{NONCE}">' in body
+
+
+def test_catalog_text_is_escaped_and_bad_inputs_are_refused() -> None:
+    evil = [{"title": "<script>alert(1)</script>", "tier_id": "x\"><b>", "min_vram_gb": 4, "weights_gb": 1.5}]
+    out = page("en", evil)
+    assert "<script>alert" not in out and "&lt;script&gt;" in out and '"><b>' not in out
+    for bad in (dict(lang="de"), dict(lang="en", nonce="short"), dict(lang="en", api_url="http://x.example"), dict(lang="en", repo_url="javascript:alert(1)"),
+                dict(lang="en", path="/a b")):
+        kwargs = {"nonce": NONCE, **bad}
+        with pytest.raises(ValueError):
+            render_join_page(kwargs.pop("lang"), kwargs.pop("nonce"), **kwargs)
+    assert not _safe_href("javascript:alert(1)") and not _safe_href("//evil.example") and _safe_href("/signup") and _safe_href("#use")
+
+
+def test_without_a_catalog_the_page_still_renders_and_points_at_the_live_list() -> None:
+    assert "/v1/hivemind/catalog" in page("en", None) and "<table" not in page("en", None)
+
+
+def test_the_model_table_is_the_catalog_with_french_decimal_commas() -> None:
+    fr, en = page("fr"), page("en")
+    assert all(f"<code>{t.tier_id}</code>" in en for t in TIERS)
+    assert "<td class=\"n\">4,5</td>" in fr and "<td class=\"n\">4.5</td>" in en  # gemma-core needs 4.5 GB
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------------------------
+# the instructions are true: every command and flag exists in the code the page tells people to run
+# ---------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+def test_every_script_and_flag_the_page_tells_people_to_use_exists() -> None:
+    commands = "\n".join(outline("en").pre).replace("\\\n", " ")
+    scripts = set(re.findall(r"scripts/([a-z_]+\.py)", commands))
+    assert scripts == {"hivemind_producer_agent.py", "hivemind_producer_shield.py", "hivemind_volunteer_preflight.py"}
+    for name in scripts:
+        source = (ROOT / "scripts" / name).read_text(encoding="utf-8")
+        for line in (l for l in commands.splitlines() if f"scripts/{name}" in l):
+            for flag in re.findall(r"(--[a-z][a-z-]+)", line):
+                assert f'"{flag}"' in source, f"{name} has no {flag}"
+
+
+def test_the_preset_and_model_tag_in_the_examples_are_a_real_tier_that_fits_a_small_card() -> None:
+    commands = "\n".join(outline("en").pre)
+    preset = re.search(r"--preset (\S+)", commands).group(1)  # type: ignore[union-attr]
+    tier = next(t for t in TIERS if t.tier_id == preset)
+    assert tier.ollama_tag in commands and f"ollama pull {tier.ollama_tag}" in commands and tier.min_vram_gb <= 4.5
+
+
+def test_the_boinc_numbers_match_the_project_configuration() -> None:
+    from hivemind.boinc.real_client.moe_profiles import PROFILES, STANDARD
+
+    assert PROFILES[STANDARD]["min_gpu_ram_mb"] == 3500  # "at least 3.5 GB of video memory"
+    assert "x86_64-pc-linux-gnu" in (ROOT / "src/hivemind/boinc/real_client/server_stack.py").read_text(encoding="utf-8")  # "Linux on an x86-64 processor"
+    assert "22" in (ROOT / "scripts/hivemind_volunteer_preflight.py").read_text(encoding="utf-8")  # the night window the page names
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------------------------
+# language negotiation and the gateway routes
+# ---------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("query,header,default,expected", [
+    ("fr", "en", "en", "fr"), ("en", "fr", "fr", "en"), ("de", "fr-CA", "en", "fr"), (None, "fr-CA,fr;q=0.9,en;q=0.8", "en", "fr"),
+    (None, "en-US,en;q=0.9,fr;q=0.95", "en", "en"), (None, "en;q=0.5,fr;q=0.95", "en", "fr"), (None, "en-US,fr;q=0.2", "fr", "en"), (None, "de,es", "en", "en"), (None, "fr;q=0", "en", "en"),
+    (None, None, "fr", "fr"), (None, "fr;q=abc, en", "en", "en"),
+])
+def test_language_negotiation(query, header, default, expected) -> None:  # noqa: ANN001
+    assert pick_language(query, header, default) == expected
+
+
+@pytest.fixture()
+def client() -> TestClient:
+    return TestClient(create_router_app(RouterStore(":memory:", b"g" * 32)))
+
+
+def test_gateway_serves_the_page_in_the_visitors_language_with_strict_headers(client: TestClient) -> None:
+    en = client.get("/join", headers={"Accept-Language": "en-US,en;q=0.9"})
+    fr = client.get("/join", headers={"Accept-Language": "fr-CA,fr;q=0.9"})
+    assert en.status_code == fr.status_code == 200 and en.headers["content-language"] == "en" and fr.headers["content-language"] == "fr"
+    assert "Rejoindre" in fr.text and "Join HiveMind La Ruche" in en.text and en.headers["vary"] == "Accept-Language"
+    nonce = re.search(r"style-src 'nonce-([^']+)'", en.headers["content-security-policy"]).group(1)  # type: ignore[union-attr]
+    assert f'<style nonce="{nonce}">' in en.text and en.headers["x-content-type-options"] == "nosniff"
+    assert "<td class=\"n\">24</td>" in en.text and "moe-coder" in en.text  # the live catalog's biggest tier, from catalog_payload()
+    assert {t["tier_id"] for t in catalog_payload()["tiers"]} <= set(re.findall(r"<code>([a-z0-9._-]+)</code>", en.text))
+
+
+def test_rejoindre_defaults_to_french_but_the_query_string_wins_and_head_works(client: TestClient) -> None:
+    assert "Rejoindre" in client.get("/rejoindre").text
+    assert "Join HiveMind La Ruche" in client.get("/rejoindre?lang=en").text
+    assert "Join HiveMind La Ruche" in client.get("/rejoindre", headers={"Accept-Language": "en"}).text
+    assert client.head("/join").status_code == 200
+    assert 'href="/rejoindre?lang=en"' in client.get("/rejoindre").text  # the switch stays on the French path
+
+
+def test_the_signup_page_links_to_the_join_page(client: TestClient) -> None:
+    text = client.get("/signup").text
+    assert 'href="/join"' in text and 'href="/rejoindre"' in text
+
+
+def test_default_api_url_is_a_valid_https_origin() -> None:
+    assert DEFAULT_API_URL.startswith("https://") and "/" not in DEFAULT_API_URL.removeprefix("https://")

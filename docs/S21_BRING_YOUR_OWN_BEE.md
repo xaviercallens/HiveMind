@@ -112,7 +112,7 @@ manifest whose `revision` is unpinned or whose fields are malformed is never sen
 
    | base (Hub id) | catalog tier |
    |---|---|
-   | `Qwen/Qwen2.5-Coder-3B-Instruct` | `coder-lite` |
+   | `Qwen/Qwen2.5-Coder-3B-Instruct` | `coder-lite` (Hub card licence is `other` (Qwen research licence) as of 2026-10-28, so adapters are rejected with `BASE_LICENSE_NOT_ALLOWED`) |
    | `Qwen/Qwen2.5-Coder-7B-Instruct` | `coder` |
    | `Qwen/Qwen2.5-Coder-14B-Instruct` | `coder-plus` |
    | `Qwen/Qwen3-8B` | `qwen35-core` |
@@ -137,8 +137,10 @@ manifest whose `revision` is unpinned or whose fields are malformed is never sen
 10. **Description** (`DESCRIPTION_INJECTION`). The description goes through `hivemind_firewall.scan_text_for_injection`.
     Text that the scan rates INJECTION (directive phrases, chat-role markers, authority claims, ...) rejects the bee.
 11. **Endpoint** (`ENDPOINT_URL_INVALID`). The URL must be `https`, carry no credentials, and not point at `localhost`,
-    `*.internal` or `*.local`, or at a literal non-global IP address such as `169.254.169.254`. DNS rebinding is outside
-    what a static check can stop. The prober must therefore run from a network that has no internal access.
+    `*.internal` or `*.local` (a trailing dot does not help), or at a literal non-global IP address such as
+    `169.254.169.254`. Legacy numeric host forms that the resolver accepts (`2130706433`, `127.1`, `0x7f000001`) are
+    rejected outright. The prober does not follow redirects: a 3xx answer counts as a probe failure. DNS rebinding is
+    outside what a static check can stop. The prober must therefore run from a network that has no internal access.
 
 What static validation does **not** do: it downloads no weights (only JSON configs), so a `.safetensors` file is trusted
 to be safetensors only by its name. The isolated stage has to load files with safetensors or llama.cpp loaders only, and
@@ -156,7 +158,8 @@ decides the verdict:
 | `serving_endpoint`: no prober configured | BLOCKED |
 | no held-out pack, or a pack whose id is not `eval_pack` | BLOCKED |
 | the pack's own controls fail (`HELDOUT_CONTROL_FAILED`) | BLOCKED |
-| endpoint error or timeout on any item (`ENDPOINT_PROBE_FAILED`) | REJECT |
+| endpoint error, timeout, redirect or non-text answer on any item (`ENDPOINT_PROBE_FAILED`) | REJECT |
+| the isolated executor raises, or returns the wrong number of answers or non-text answers (`EXECUTOR_FAILED`) | BLOCKED |
 | pass rate below `min_pass_rate` (default 0.6) | REJECT (`EVAL_BELOW_THRESHOLD`) |
 | otherwise | ACCEPT, and the registry stage becomes `shadow` |
 

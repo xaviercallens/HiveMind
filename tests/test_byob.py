@@ -502,10 +502,19 @@ def test_manifest_from_dict_rejects_unknown_fields_and_bad_types() -> None:
         BeeManifest.from_dict({**good, "vram_tier_gb": True})
     with pytest.raises(ValueError, match="license"):
         BeeManifest.from_dict({**good, "license": None})
+    with pytest.raises(ValueError, match="routing_keywords"):
+        BeeManifest.from_dict({**good, "routing_keywords": "c++"})  # a bare string would split into characters
+    with pytest.raises(ValueError, match="signature"):
+        BeeManifest.from_dict({**good, "signature": 123})
+    with pytest.raises(ValueError, match="description"):
+        BeeManifest.from_dict({**good, "description": ["x"]})
 
 
 @pytest.mark.parametrize("url", ["http://bee.example.org", "https://localhost:8000", "https://10.0.0.7", "https://169.254.169.254",
-                                 "https://[::1]", "https://user:pw@bee.example.org", "https://svc.internal", "ftp://x.org", "https://"])
+                                 "https://[::1]", "https://user:pw@bee.example.org", "https://svc.internal", "ftp://x.org", "https://",
+    # forms the resolver maps to loopback although ipaddress refuses to parse them, and trailing-dot local names
+    "https://2130706433", "https://127.1", "https://0x7f000001", "https://0177.0.0.1", "https://localhost.",
+    "https://svc.internal."])
 def test_endpoint_url_rejections(url: str) -> None:
     reasons = check_endpoint_url(url)
     assert len(reasons) == 1
@@ -629,10 +638,58 @@ def test_https_chat_prober_posts_openai_format(monkeypatch: pytest.MonkeyPatch) 
         sent.append((request.full_url, json.loads(request.data), timeout))
         return _Resp(json.dumps({"choices": [{"message": {"content": "final"}}]}).encode())
 
-    monkeypatch.setattr(byob.urllib.request, "urlopen", fake_urlopen)
+    class _Opener:
+        def open(self, request: Any, timeout: float) -> _Resp:
+            return fake_urlopen(request, timeout)
+
+    monkeypatch.setattr(byob, "_PROBE_OPENER", _Opener())
     assert byob.https_chat_prober("https://bee.example.org/", "bee-x", "q?", 3.0) == "final"
     assert sent[0][0] == "https://bee.example.org/v1/chat/completions"
     assert sent[0][1]["messages"] == [{"role": "user", "content": "q?"}] and sent[0][2] == 3.0
+
+
+def test_probe_opener_refuses_redirects_from_a_contributor_endpoint() -> None:
+    import http.server
+    import threading
+
+    class Redirect(http.server.BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802 - http.server naming
+            self.send_response(302)
+            self.send_header("Location", "http://169.254.169.254/latest/meta-data/")
+            self.end_headers()
+
+        def log_message(self, *args: Any) -> None:
+            return None
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Redirect)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        request = urllib.request.Request(f"http://127.0.0.1:{server.server_port}/v1/chat/completions", data=b"{}", method="POST")
+        with pytest.raises(urllib.error.HTTPError) as caught:
+            byob._PROBE_OPENER.open(request, timeout=5.0)
+        assert caught.value.code == 302
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_executor_failure_or_malformed_answers_block_instead_of_crashing() -> None:
+    m = _manifest()
+    static = _accepted_static(m)
+
+    def boom(*_: Any) -> list[str]:
+        raise RuntimeError("CUDA error: out of memory")
+
+    crashed = evaluate(m, static, pack=_pack(), executor=IsolatedExecutor("bwrap-gpu", True, boom))
+    assert crashed.verdict is Verdict.BLOCKED and _codes(crashed) == {ReasonCode.EXECUTOR_FAILED.value}
+    short = evaluate(m, static, pack=_pack(), executor=IsolatedExecutor("bwrap-gpu", True, lambda *_: ["rvalue"]))
+    assert short.verdict is Verdict.BLOCKED and short.pass_rate is None
+    typed = evaluate(m, static, pack=_pack(), executor=IsolatedExecutor("bwrap-gpu", True, lambda *_: ["rvalue", None]))
+    assert _codes(typed) == {ReasonCode.EXECUTOR_FAILED.value}
+    m_ep, static_ep = _endpoint_manifest()
+    nontext = evaluate(m_ep, static_ep, pack=_pack(), prober=lambda *_: {"content": "final"})  # type: ignore[arg-type,return-value]
+    assert nontext.verdict is Verdict.REJECT and _codes(nontext) == {ReasonCode.ENDPOINT_PROBE_FAILED.value}
 
 
 def test_heldout_pack_loads_from_json(tmp_path: Path) -> None:

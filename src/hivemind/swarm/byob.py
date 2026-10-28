@@ -45,6 +45,7 @@ import hmac
 import ipaddress
 import json
 import re
+import socket
 import time
 import urllib.error
 import urllib.parse
@@ -156,6 +157,7 @@ class ReasonCode(str, Enum):
     HUB_UNREACHABLE = "HUB_UNREACHABLE"
     NO_ISOLATED_EXECUTOR = "NO_ISOLATED_EXECUTOR"
     EXECUTOR_NOT_ISOLATED = "EXECUTOR_NOT_ISOLATED"
+    EXECUTOR_FAILED = "EXECUTOR_FAILED"
     NO_HELDOUT_PACK = "NO_HELDOUT_PACK"
     HELDOUT_PACK_MISMATCH = "HELDOUT_PACK_MISMATCH"
     HELDOUT_CONTROL_FAILED = "HELDOUT_CONTROL_FAILED"
@@ -238,12 +240,18 @@ class BeeManifest:
         if unknown:
             raise ValueError(f"{ReasonCode.MANIFEST_UNKNOWN_FIELD.value}: {unknown}")
         kw = dict(data)
-        kw["routing_keywords"] = tuple(kw.get("routing_keywords", ()))
+        keywords = kw.get("routing_keywords", ())
+        if not isinstance(keywords, (list, tuple)):
+            raise ValueError(f"{ReasonCode.MANIFEST_FIELD_INVALID.value}: routing_keywords must be a list of strings")
+        kw["routing_keywords"] = tuple(keywords)
         vram = kw.get("vram_tier_gb")
         if isinstance(vram, bool) or not isinstance(vram, int):
             raise ValueError(f"{ReasonCode.MANIFEST_FIELD_INVALID.value}: vram_tier_gb must be an integer, got {vram!r}")
         for name in ("bee_name", "contributor_id", "hf_repo_id", "revision", "kind", "base_model", "license", "domain", "eval_pack"):
             if not isinstance(kw.get(name), str):
+                raise ValueError(f"{ReasonCode.MANIFEST_FIELD_INVALID.value}: {name} must be a string")
+        for name in ("schema", "description", "endpoint_url", "subfolder", "primary_file", "signature"):
+            if name in kw and not isinstance(kw[name], str):
                 raise ValueError(f"{ReasonCode.MANIFEST_FIELD_INVALID.value}: {name} must be a string")
         return cls(**kw)
 
@@ -296,7 +304,7 @@ def _bad(field_name: str, value: Any, rule: str) -> Reason:
 def check_endpoint_url(url: str) -> list[Reason]:
     """https only, no credentials, no localhost and no literal private, loopback, link-local or reserved address."""
     parsed = urllib.parse.urlsplit(url)
-    host = parsed.hostname or ""
+    host = (parsed.hostname or "").rstrip(".")  # "localhost." and "svc.internal." resolve like their dotless forms
     if parsed.scheme != "https" or not host:
         return [Reason(ReasonCode.ENDPOINT_URL_INVALID, f"{url!r}: must be an https URL with a host")]
     if parsed.username or parsed.password:
@@ -306,7 +314,11 @@ def check_endpoint_url(url: str) -> list[Reason]:
     try:
         address = ipaddress.ip_address(host)
     except ValueError:
-        return []
+        try:
+            socket.inet_aton(host)  # legacy numeric forms the resolver accepts: "2130706433", "127.1", "0x7f.0.0.1"
+        except OSError:
+            return []
+        return [Reason(ReasonCode.ENDPOINT_URL_INVALID, f"host {host!r} is a non-canonical numeric address")]
     if not address.is_global:
         return [Reason(ReasonCode.ENDPOINT_URL_INVALID, f"address {host} is not globally routable")]
     return []
@@ -858,12 +870,23 @@ class IsolatedExecutor:
 EndpointProber = Callable[[str, str, str, float], str]
 
 
+class _RefuseRedirects(urllib.request.HTTPRedirectHandler):
+    """A contributor endpoint may not redirect the prober: a 3xx to ``http://169.254.169.254/`` would skip every URL check."""
+
+    def redirect_request(self, req: urllib.request.Request, fp: Any, code: int, msg: str, headers: Any,
+                         newurl: str) -> urllib.request.Request | None:
+        return None  # urllib then raises HTTPError for the 3xx, which the evaluation stage turns into ENDPOINT_PROBE_FAILED
+
+
+_PROBE_OPENER: Final[urllib.request.OpenerDirector] = urllib.request.build_opener(_RefuseRedirects)
+
+
 def https_chat_prober(url: str, model: str, prompt: str, timeout_s: float) -> str:
     """POST one OpenAI-format chat request to ``{url}/v1/chat/completions`` and return the first message content."""
     body = json.dumps({"model": model, "messages": [{"role": "user", "content": prompt}], "temperature": 0}).encode()
     request = urllib.request.Request(url.rstrip("/") + "/v1/chat/completions", data=body, method="POST",
                                      headers={"Content-Type": "application/json", "User-Agent": "hivemind-byob/1"})
-    with urllib.request.urlopen(request, timeout=timeout_s) as response:  # noqa: S310 - https enforced by check_endpoint_url
+    with _PROBE_OPENER.open(request, timeout=timeout_s) as response:  # https enforced by check_endpoint_url, no redirects
         data = json.loads(response.read(1_000_000))
     return str(data["choices"][0]["message"]["content"])
 
@@ -924,13 +947,26 @@ def evaluate(manifest: BeeManifest, static: StaticReport, *, pack: HeldOutPack |
         answers: list[str] = []
         for prompt in prompts:
             try:
-                answers.append(prober(manifest.endpoint_url, manifest.bee_name, prompt, timeout_s))
+                answer = prober(manifest.endpoint_url, manifest.bee_name, prompt, timeout_s)
             except Exception as exc:  # any transport, timeout or decoding failure of a contributor endpoint
                 report.verdict = Verdict.REJECT
                 report.reasons.append(Reason(ReasonCode.ENDPOINT_PROBE_FAILED, f"{type(exc).__name__}: {str(exc)[:120]}"))
                 return report
+            if not isinstance(answer, str):
+                report.verdict = Verdict.REJECT
+                report.reasons.append(Reason(ReasonCode.ENDPOINT_PROBE_FAILED, f"answer is {type(answer).__name__}, not text"))
+                return report
+            answers.append(answer)
     elif executor is not None:
-        answers = executor.answer_pack(manifest, static.weight_files, prompts)
+        try:
+            answers = list(executor.answer_pack(manifest, static.weight_files, prompts))
+        except Exception as exc:  # the hive's own sandbox failed: nothing was measured, so BLOCKED, not REJECT
+            report.reasons.append(Reason(ReasonCode.EXECUTOR_FAILED, f"{type(exc).__name__}: {str(exc)[:120]}"))
+            return report
+        if len(answers) != len(prompts) or not all(isinstance(a, str) for a in answers):
+            report.reasons.append(Reason(ReasonCode.EXECUTOR_FAILED,
+                                         f"executor returned {len(answers)} answers for {len(prompts)} prompts or non-text answers"))
+            return report
     report.pass_rate = pack.score(answers)
     if report.pass_rate >= min_pass_rate:
         report.verdict = Verdict.ACCEPT

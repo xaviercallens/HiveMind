@@ -81,7 +81,7 @@ fails, the record is rewound and retried. Rejected records never reach a handler
 | `hivemind.amcp.campaigns.v1` | closed: `campaign.poll_registered` | `pledged_vram_gb` 0–1024, `availability_slot` in the four slots, `comment` ≤ 256; `subject_id` must be a known campaign |
 | `hivemind.amcp.human_agent.v1` | open: any `io.hivemind.amcp.*` | payload must be a JSON object |
 | `hivemind.amcp.bee_coord.v1` | closed: `bee.handoff_request`, `bee.handoff_certified` | the fields `coordinate_inter_bee_inference` emits; `verdict` ∈ {PASS, FAIL} |
-| `hivemind.amcp.bee_trading.v1` | closed: `trade.offer`, `trade.bid` | `order_id`, `side` matching the type, `capacity_1k` in (0, 100000], `price_per_1k` > 0 (same bounds as the gateway's `BeeTradeOrderRequest`) |
+| `hivemind.amcp.bee_trading.v1` | closed: `trade.offer`, `trade.bid` | `order_id`, `side` matching the type, `capacity_1k` in (0, 100000], `price_per_1k` in (0, 1000] (same bounds as the gateway's `BeeTradeOrderRequest`) |
 
 All topics also require the exact AMCP event field set, string length bounds, a finite `utc`, and
 `sender_kind` from the four participant kinds. `AMCPPublisher` validates before it signs, so an invalid
@@ -105,7 +105,7 @@ event never leaves the producer.
 * **Backpressure.** Each iteration fetches at most `max_batch` records and fetches nothing new until they are
   handled or rewound. The backlog stays in the broker, not in process memory.
 * **Stop.** `stop()` sets a flag. `run()` exits after the current record, and records already fetched but
-  not yet handled are rewound.
+  not yet handled are rewound on every partition of the batch, so a resumed consumer gets them again.
 
 ## Verification run for this PR
 

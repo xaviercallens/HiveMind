@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from hivemind.router.catalog import TIERS
 from hivemind.router.google_auth import CLIENT_ID_RE
+from hivemind.router.life_as_a_bee import render_life_as_a_bee_section
 
 
 def portal_content_security_policy(nonce: str) -> str:
@@ -747,11 +748,61 @@ if ($('campaignPollBtn')) {
     }
   });
 }
+
+// Life as a Bee category filter buttons
+document.querySelectorAll('.bee-filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const filter = btn.getAttribute('data-bee-filter');
+    document.querySelectorAll('.bee-filter-btn').forEach(b => {
+      b.style.color = '';
+      b.style.borderColor = '';
+    });
+    btn.style.color = 'var(--cyan)';
+    btn.style.borderColor = 'var(--cyan)';
+    document.querySelectorAll('.bee-scenario-card').forEach(card => {
+      const cat = card.getAttribute('data-bee-category');
+      if (filter === 'all' || cat === filter || (filter === 'dense_coding' && cat === 'smart_router')) {
+        card.style.display = 'flex';
+      } else {
+        card.style.display = 'none';
+      }
+    });
+  });
+});
+
+// Load Bee Scenario directly into the Playground
+document.querySelectorAll('.load-bee-scenario-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const model = btn.getAttribute('data-bee-model');
+    const prompt = btn.getAttribute('data-bee-prompt');
+    const temp = btn.getAttribute('data-bee-temp');
+    const tokens = btn.getAttribute('data-bee-tokens');
+    if (model && $('modelSelect')) {
+      $('modelSelect').value = model;
+    }
+    if (prompt && $('promptInput')) {
+      $('promptInput').value = prompt;
+    }
+    if (temp && $('temperature') && $('tempVal')) {
+      $('temperature').value = temp;
+      $('tempVal').textContent = temp;
+    }
+    if (tokens && $('maxTokens') && $('maxTokensVal')) {
+      $('maxTokens').value = tokens;
+      $('maxTokensVal').textContent = tokens;
+    }
+    const pg = $('playground');
+    if (pg && pg.scrollIntoView) {
+      pg.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+});
 """
 
 
 def render_portal_page(client_id: str | None, nonce: str) -> str:
     """Render the full OpenRouter Portal and Playground HTML page."""
+    life_as_a_bee_html = render_life_as_a_bee_section()
     tier_cards = []
     for tier in TIERS:
         tier_cards.append(f"""
@@ -795,6 +846,7 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
       </div>
       <nav>
         <a href="#playground" class="nav-link active">Playground</a>
+        <a href="#life-as-a-bee" class="nav-link">&#x1F41D; Life as a Bee</a>
         <a href="#campaigns" class="nav-link">Joint Campaigns</a>
         <a href="#night-telemetry" class="nav-link">Night Progress</a>
         <a href="#tiers" class="nav-link">Model Tiers</a>
@@ -813,6 +865,7 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
       </p>
       <div class="cta-group">
         <a href="#playground" class="btn btn-primary">&#x26A1; Try In-Browser Playground</a>
+        <a href="#life-as-a-bee" class="btn btn-outline" style="border-color:var(--amber);color:var(--amber);">&#x1F41D; Life as a Bee (15 Scenarios)</a>
         {signup_cta}
         <a href="https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/" target="_blank" rel="noopener" class="btn btn-outline">&#x1F36F; HiveMind@home Portal</a>
       </div>
@@ -839,13 +892,19 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
         <select id="modelSelect">
           <option value="hivemind/auto">hivemind/auto (Smart Intent &amp; Market Liquidity Routing)</option>
           <option value="hivemind/coder">hivemind/coder (7B &bull; Everyday Python &amp; Game Code)</option>
+          <option value="hivemind/qwen35-core">hivemind/qwen35-core (8B &bull; Qwen 3.5 Hybrid Reasoning &amp; Polyglot Core)</option>
+          <option value="hivemind/gemma-core">hivemind/gemma-core (4B &bull; Google Gemma 3 Multilingual &amp; Multimodal Core)</option>
+          <option value="hivemind/mistral-core">hivemind/mistral-core (7B &bull; Mistral v0.3 European Bilingual FR/EN Core)</option>
+          <option value="hivemind/moe-qwen35-bee">hivemind/moe-qwen35-bee (20B MoE / 3.0B Active &bull; Polyglot-Singularity MoE Bee)</option>
+          <option value="hivemind/bee-ruche-moe">hivemind/bee-ruche-moe (20B MoE / 2.4B Active &bull; La Ruche 8-Expert Sparse MoE Bee)</option>
           <option value="hivemind/bee-rusty-sundials">hivemind/bee-rusty-sundials (7B &bull; Rusty-SUNDIALS Numeric ODE/PDE Rescue)</option>
-          <option value="hivemind/bee-stars">hivemind/bee-stars (4B &bull; Astrophysics &amp; Symplectic N-Body)</option>
+          <option value="hivemind/bee-stars">hivemind/bee-stars (7B &bull; Astrophysics &amp; Symplectic N-Body QLoRA Bee)</option>
+          <option value="hivemind/bee-lean-prover">hivemind/bee-lean-prover (8B &bull; Goedel-Prover-V2 &amp; DeepSeek-Prover-V2 Lean 4 Bee)</option>
           <option value="hivemind/crowd-v1">hivemind/crowd-v1 (1B &bull; CrowdGPT Vxtzq/Crowd-v1 Generalist Trunk &bull; Pre-Wired Partner)</option>
           <option value="hivemind/coder-lite">hivemind/coder-lite (3B &bull; Ultra-Fast Edits)</option>
-          <option value="hivemind/coder-plus">hivemind/coder-plus (14B &bull; Multi-File &amp; Tests)</option>
-          <option value="hivemind/moe-general">hivemind/moe-general (20B MoE &bull; Reasoning)</option>
-          <option value="hivemind/moe-coder">hivemind/moe-coder (30B MoE &bull; Frontier Coding)</option>
+          <option value="hivemind/coder-plus">hivemind/coder-plus (14B &bull; Multi-File &amp; DeepSeek-R1 Reasoning)</option>
+          <option value="hivemind/moe-general">hivemind/moe-general (20B MoE / 3.6B Active &bull; General Reasoning)</option>
+          <option value="hivemind/moe-coder">hivemind/moe-coder (30B MoE / 3.3B Active &bull; Frontier Coding)</option>
         </select>
 
         <label>Quick Prompt Presets</label>
@@ -899,6 +958,8 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
         </div>
       </section>
     </div>
+
+    {life_as_a_bee_html}
 
     <!-- Joint Subject-by-Subject Improvement Campaigns, Community Poll & AMCP/Kafka Bus -->
     <section id="campaigns" class="card" style="margin-bottom:3rem;border-color:rgba(0,238,252,0.35);">
@@ -998,7 +1059,7 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
     <!-- Capability Tiers Grid -->
     <section id="tiers" style="margin-bottom:3rem;">
       <h3 style="font-size:1.3rem;font-weight:700;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.5rem;">
-        <span>&#x1F4D1; 5 Community Capability Tiers &amp; GPU Sizing</span>
+        <span>&#x1F4D1; 5 Community Capability Tiers &amp; GPU Sizing (14 Live Models &amp; MoE Bees)</span>
       </h3>
       <p style="color:var(--text-dim);font-size:0.9rem;margin-bottom:1.25rem;">
         Capability tiers pool model demand and producer supply into deep, liquid markets.

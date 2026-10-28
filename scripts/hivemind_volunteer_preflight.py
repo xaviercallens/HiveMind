@@ -51,7 +51,20 @@ NIGHT = ("Europe/Paris", 22, 7)
 MIB_TO_MB = 1.048576
 # (tier_id, min_vram_gb) in the order of src/hivemind/router/catalog.py TIERS
 TIERS: tuple[tuple[str, float], ...] = (
-    ("crowd-v1", 4.0), ("coder-lite", 4.0), ("bee-rusty-sundials", 6.0), ("coder", 6.0), ("coder-plus", 12.0), ("moe-general", 15.0), ("moe-coder", 24.0),
+    ("crowd-v1", 4.0),
+    ("coder-lite", 4.0),
+    ("gemma-core", 4.5),
+    ("bee-stars", 5.5),
+    ("mistral-core", 6.0),
+    ("qwen35-core", 6.0),
+    ("bee-rusty-sundials", 6.0),
+    ("coder", 6.0),
+    ("bee-lean-prover", 8.5),
+    ("bee-ruche-moe", 10.0),
+    ("coder-plus", 12.0),
+    ("moe-qwen35-bee", 15.0),
+    ("moe-general", 15.0),
+    ("moe-coder", 24.0),
 )
 DATA_DIR_CANDIDATES = (
     "/var/lib/boinc-client", "/var/lib/boinc", "/Library/Application Support/BOINC Data",

@@ -16,6 +16,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CLA_SIGNATURES_PATH = REPO_ROOT / ".github" / "cla-signatures.json"
 REQUIRED_PHRASE = "I have read the CLA Document and I hereby sign the CLA"
+ACCEPTED_PHRASES = (
+    REQUIRED_PHRASE.lower(),
+    "i have read and agree to the project hive mind contributor license agreement (cla.md v1.0)".lower(),
+)
 
 
 def verify_cla_signature(
@@ -27,6 +31,7 @@ def verify_cla_signature(
     """Return (signed, reason) for a PR author."""
     ledger = json.loads(signatures_path.read_text(encoding="utf-8"))
     phrase = ledger.get("required_phrase", REQUIRED_PHRASE).strip().lower()
+    accepted = {phrase, *ACCEPTED_PHRASES}
     signed_users = {u["github_login"].lower() for u in ledger.get("signed_contributors", [])}
     exempt_bots = {b.lower() for b in ledger.get("exempt_bots", [])}
     author_lower = author.strip().lower()
@@ -35,18 +40,19 @@ def verify_cla_signature(
         return True, f"@{author} is registered in .github/cla-signatures.json"
     if author_lower in exempt_bots:
         return True, f"@{author} is an exempt automated bot"
-    if phrase in (pr_body or "").lower():
+    body_lower = (pr_body or "").lower()
+    if any(p in body_lower for p in accepted):
         return True, f"@{author} signed the CLA in the PR body"
 
     for c in comments or []:
         c_user = (c.get("user") or "").strip().lower()
         c_body = (c.get("body") or "").lower()
-        if c_user == author_lower and phrase in c_body:
+        if c_user == author_lower and any(p in c_body for p in accepted):
             return True, f"@{author} signed the CLA via PR comment"
 
     return (
         False,
-        f"@{author} has not signed .github/CLA.md. Comment `{REQUIRED_PHRASE}` on the PR to sign.",
+        f"@{author} has not signed CLA.md (.github/CLA.md). Comment `{REQUIRED_PHRASE}` on the PR to sign.",
     )
 
 

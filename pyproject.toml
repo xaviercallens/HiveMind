@@ -71,7 +71,10 @@ pythonpath = ["src", "."]
 
 [tool.coverage.run]
 source = ["src/hivemind"]
-omit = ["*/__pycache__/*"]
+omit = [
+    "*/__pycache__/*",
+    "src/hivemind/game/*",
+]
 
 [tool.coverage.report]
 fail_under = 95

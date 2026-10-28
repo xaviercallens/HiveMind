@@ -43,7 +43,10 @@ import hmac
 import json
 import os
 import re
-import resource
+try:
+    import resource
+except ImportError:
+    resource = None  # type: ignore[assignment]
 import shutil
 import stat
 import subprocess

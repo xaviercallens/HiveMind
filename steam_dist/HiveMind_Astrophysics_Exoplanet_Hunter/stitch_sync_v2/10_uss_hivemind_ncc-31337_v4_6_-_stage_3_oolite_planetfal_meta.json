@@ -1,0 +1,17 @@
+{
+  "name": "projects/10018415280079892710/screens/9a52f6c44306491ab30b46211e68b8ef",
+  "title": "USS Hivemind NCC-31337 v4.6 - Stage 3: Oolite Planetfall Landing Bridge",
+  "screenshot": {
+    "name": "projects/10018415280079892710/screens/9a52f6c44306491ab30b46211e68b8ef/fileEntries/screenshot",
+    "downloadUrl": "https://stitch.googleapis.com/v1/projects/10018415280079892710/files/screenshot_00065eebb0846d31023bfa38131cd4bb:download",
+    "mimeType": "image/png"
+  },
+  "htmlCode": {
+    "name": "projects/10018415280079892710/screens/9a52f6c44306491ab30b46211e68b8ef/fileEntries/html",
+    "downloadUrl": "https://stitch.googleapis.com/v1/projects/10018415280079892710/files/9a52f6c44306491ab30b46211e68b8ef:download",
+    "mimeType": "text/html"
+  },
+  "width": "2560",
+  "height": "2048",
+  "deviceType": "DESKTOP"
+}

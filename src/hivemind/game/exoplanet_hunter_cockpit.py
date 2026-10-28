@@ -89,8 +89,8 @@ def _get_asset_data_uri(filename: str, mime: str = "image/jpeg") -> str:
     return ""
 
 
-def render_exoplanet_hunter_cockpit_html(service: AstroBeeMoEGPUService) -> str:
-    """Render the v4.0 Star Trek Curved Bridge Console HTML with 5-Language Voice, SFX & Subtitles."""
+def render_exoplanet_hunter_cockpit_html(service: AstroBeeMoEGPUService, classic_v40: bool = False) -> str:
+    """Render the USS HiveMind NCC-31337 v4.6 Complete Tactical Command Bridge & Oolite Planetfall Suite from Stitch MCP."""
     initial_target = service.catalog[5] if len(service.catalog) > 5 else service.catalog[0]
     initial_lc = synthesize_transit_light_curve_and_bls(
         period_days=initial_target["period_days"],
@@ -121,6 +121,11 @@ def render_exoplanet_hunter_cockpit_html(service: AstroBeeMoEGPUService) -> str:
         "jwst_coro_uri": jwst_coro_uri,
     }
     state_json = json.dumps(embedded_state).replace("</", "<\\/")
+
+    if not classic_v40:
+        from hivemind.game.stitch_v46_cockpit_template import build_stitch_v46_cockpit_html
+
+        return build_stitch_v46_cockpit_html(state_json)
 
     return f"""<!DOCTYPE html>
 <html lang="fr">
@@ -2855,7 +2860,11 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> HTMLResponse:
-        return HTMLResponse(content=render_exoplanet_hunter_cockpit_html(service))
+        return HTMLResponse(content=render_exoplanet_hunter_cockpit_html(service, classic_v40=False))
+
+    @app.get("/classic", response_class=HTMLResponse)
+    def classic_index() -> HTMLResponse:
+        return HTMLResponse(content=render_exoplanet_hunter_cockpit_html(service, classic_v40=True))
 
     @app.get("/monitor", response_class=HTMLResponse)
     def monitor_page() -> HTMLResponse:
@@ -2877,8 +2886,11 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
     @app.get("/api/astro/stitch_project", response_class=JSONResponse)
     def api_stitch_project() -> JSONResponse:
         stitch_dir = PROJECT_ROOT / "steam_dist" / "HiveMind_Astrophysics_Exoplanet_Hunter" / "stitch_sync"
+        stitch_v2_dir = PROJECT_ROOT / "steam_dist" / "HiveMind_Astrophysics_Exoplanet_Hunter" / "stitch_sync_v2"
         ds_file = stitch_dir / "design_system_parsed.json"
         design_system = json.loads(ds_file.read_text(encoding="utf-8")) if ds_file.exists() else {}
+        v2_manifest_file = stitch_v2_dir / "stitch_v2_manifest.json"
+        v2_manifest = json.loads(v2_manifest_file.read_text(encoding="utf-8")) if v2_manifest_file.exists() else []
         return JSONResponse(
             content={
                 "project_id": "10018415280079892710",
@@ -2886,7 +2898,10 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                 "mcp_server": "https://stitch.googleapis.com/mcp",
                 "design_system_name": "Tactical Bridge Aerospace HUD",
                 "design_system_asset": "assets/aafadad166914609a3214aedc00439f3",
+                "total_screens": 12,
                 "screens": {
+                    "v46_complete": "/stitch/v46-complete",
+                    "v46_oolite": "/stitch/v46-oolite",
                     "bridge": "/stitch/bridge",
                     "stage1": "/stitch/stage1",
                     "stage2": "/stitch/stage2",
@@ -2894,26 +2909,76 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                     "stage4": "/stitch/stage4",
                     "architecture": "/stitch/architecture",
                 },
+                "photorealistic_assets": {
+                    "milky_way_galaxy": "/stitch-assets/stitch_v2_07_photorealistic_milky_way_barred_spiral_galaxy_vi.png",
+                    "k2_18b_descent_cockpit": "/stitch-assets/stitch_v2_08_photorealistic_descent_cockpit_view_of_spaceship.png",
+                    "k2_18b_hycean_world": "/stitch-assets/stitch_v2_09_photorealistic_exoplanet_k2-18_b_hycean_world_vi.png",
+                    "lhs_1140b_super_earth": "/stitch-assets/stitch_v2_05_photorealistic_exoplanet_lhs_1140_b_super-earth.png",
+                },
+                "v2_manifest": v2_manifest,
                 "design_system": design_system,
             }
         )
 
+    @app.get("/stitch-assets/{asset_name}")
+    def serve_stitch_asset(asset_name: str) -> Response:
+        safe_name = asset_name.replace("..", "").replace("/", "").replace("\\", "")
+        candidates = [
+            PROJECT_ROOT / "steam_dist" / "HiveMind_Astrophysics_Exoplanet_Hunter" / "steam_assets" / safe_name,
+            PROJECT_ROOT / "steam_dist" / "HiveMind_Astrophysics_Exoplanet_Hunter" / "stitch_sync_v2" / safe_name,
+            PROJECT_ROOT / "steam_dist" / "HiveMind_Astrophysics_Exoplanet_Hunter" / "stitch_sync" / safe_name,
+        ]
+        for cand in candidates:
+            if cand.exists() and cand.is_file():
+                data_bytes = cand.read_bytes()
+                media_type = "image/png" if data_bytes[:4] == b"\x89PNG" else "image/jpeg"
+                return Response(
+                    content=data_bytes,
+                    media_type=media_type,
+                    headers={"Cache-Control": "public, max-age=86400"},
+                )
+        return JSONResponse(status_code=404, content={"error": f"Stitch asset {safe_name} not found"})
+
     @app.get("/stitch/{screen_slug}", response_class=HTMLResponse)
     def serve_stitch_screen(screen_slug: str) -> HTMLResponse:
+        stitch_v2_dir = PROJECT_ROOT / "steam_dist" / "HiveMind_Astrophysics_Exoplanet_Hunter" / "stitch_sync_v2"
         stitch_dir = PROJECT_ROOT / "steam_dist" / "HiveMind_Astrophysics_Exoplanet_Hunter" / "stitch_sync"
-        slug_map = {
-            "bridge": "01_uss_hivemind_ncc-31337_-_desktop_galactic_tactical_bridge.html",
-            "stage1": "06_uss_hivemind_-_stage_1_galaxie.html",
+        v2_slug_map = {
+            "v46-complete": "02_uss_hivemind_ncc-31337_v4_6_-_complete_tactical.html",
+            "bridge": "02_uss_hivemind_ncc-31337_v4_6_-_complete_tactical.html",
+            "v46-oolite": "10_uss_hivemind_ncc-31337_v4_6_-_stage_3_oolite_pl.html",
+            "stage1": "11_uss_hivemind_-_stage_1_galaxie.html",
             "stage2": "00_uss_hivemind_-_stage_2_orbit_bee.html",
-            "stage3": "03_uss_hivemind_-_stage_3_oolite_land.html",
-            "stage4": "04_uss_hivemind_-_stage_4_jwst_lois.html",
-            "architecture": "05_uss_hivemind_-_fat_client_unity_unreal_vs_web_architecture_plan.html",
+            "stage3": "10_uss_hivemind_ncc-31337_v4_6_-_stage_3_oolite_pl.html",
+            "stage3-classic": "06_uss_hivemind_-_stage_3_oolite_land.html",
+            "stage4": "01_uss_hivemind_-_stage_4_jwst_lois.html",
+            "architecture": "04_uss_hivemind_-_fat_client_unity_unreal_vs_web_arch.html",
         }
-        fname = slug_map.get(screen_slug.lower(), slug_map["stage3"])
-        fpath = stitch_dir / fname
+        slug_key = screen_slug.lower()
+        fname = v2_slug_map.get(slug_key, v2_slug_map["v46-complete"])
+        fpath = stitch_v2_dir / fname
+        if not fpath.exists():
+            fpath = stitch_dir / fname
         if fpath.exists():
             raw = fpath.read_text(encoding="utf-8", errors="replace")
-            if screen_slug.lower() == "architecture":
+            # Rewrite expiring lh3.googleusercontent.com/aida URLs to local /stitch-assets/ PNGs
+            raw = raw.replace(
+                "https://lh3.googleusercontent.com/aida/AEtjO1U4mX6MHmzCWb6Ji929sOUG-USs47juoBasP5sritS01ottiMtE3aqddCMG8RT497EthQpVXNST1pKWmnOI3mfAKXYBaJcfNpIlUFVEcD02gSGzrBpNjVdHOdw3rJK8pxodUYJFfTn1cHrFKvybypcl-EMgp0qSg3v-WBpgROH-yZs4Xy4lbh4OESAaw9NA20ZR1cNei2CYckpJYtbjmE2htnUink50wSQ3KmoVbjSdFQ",
+                "/stitch-assets/stitch_v2_07_photorealistic_milky_way_barred_spiral_galaxy_vi.png",
+            )
+            raw = raw.replace(
+                "https://lh3.googleusercontent.com/aida/AEtjO1XmPdII46aWb143uksF1mDs20yLB9Y5RfzTTbfsG993PvkzsVqvu00dZsE43JMFjksD1U6ngie02guqVR-xdUE0f6ZxlMSj9ruEUJXm_VKE57_9rt1m63RUYvMjP_F95N3oVvgG3QaZLwzVzwmPHFmfjcBQBJMHp9ccJBcn13zP0wWgXuBDSpITIphZNwWCfhCogc93eZ9yeMH3YZYwJrLwkqJ1Io7iQEE3Diy5xg8Z",
+                "/stitch-assets/stitch_v2_09_photorealistic_exoplanet_k2-18_b_hycean_world_vi.png",
+            )
+            raw = raw.replace(
+                "https://lh3.googleusercontent.com/aida/AEtjO1V13Wv6d-01hDJo83nHWi7FklguAoqj8VJgG65hB2uevqP5pDXjJToMsy7-CIoGzk195mIJXfCVOUqD4LpYEabBZC-kZ9gW4tLSEKlC7dNZILyHtreu4Kdgfgwtjfu3XYAPj791aqkdYjMKlQLbdH26tJNXiNpoHzh6g5mElOA8Jv3Q4toZ38hCjK5t-tYLHddaUfxW0wUj7mgHSWCd8Pj14cgqKen9Vn-k5FxlT7Wd",
+                "/stitch-assets/stitch_v2_05_photorealistic_exoplanet_lhs_1140_b_super-earth.png",
+            )
+            raw = raw.replace(
+                "https://lh3.googleusercontent.com/aida-public/AB6AXuChalitz6rWZe3ltUcPx8rSkF3Iman86Rh2HAdVj9NyZVYEuJeNp5xsR6DmX-gY0x2loGFP8bGoSUBXNRKI3qvENsdY-QJSjMVdHrfehDK8AcmM9y4MTimbVPV0IcZdp2LksNaZXLkaikjhOa9M34Fr7AQJaZNOR-bRZHhfjIQ2Jk9-cVhhtpAdV7Jehr0kA7B79X5W0jfqOi-F5yI3VrNN2u2E9llsMOU4xAFqfXEm",
+                "/stitch-assets/stitch_v2_08_photorealistic_descent_cockpit_view_of_spaceship.png",
+            )
+            if slug_key == "architecture":
                 return HTMLResponse(
                     content=f"<!DOCTYPE html><html><head><meta charset='utf-8'><title>USS HiveMind Architecture Plan</title>"
                     f"<style>body{{background:#070e1a;color:#dce2f3;font-family:'JetBrains Mono',monospace;padding:32px;line-height:1.6;max-width:1100px;margin:auto;}}pre{{white-space:pre-wrap;}}</style>"

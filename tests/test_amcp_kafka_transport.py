@@ -22,6 +22,7 @@ from hivemind.swarm.amcp_kafka_campaign_bus import KAFKA_TOPICS, InMemoryKafkaBr
 from hivemind.swarm.amcp_kafka_transport import (
     DLQ_TOPIC,
     MAX_ENVELOPE_BYTES,
+    TOPIC_SCHEMAS,
     AMCPConsumer,
     AMCPPublisher,
     EnvelopeRejected,
@@ -326,6 +327,7 @@ def test_schema_accepts_existing_gateway_event_shapes() -> None:
         (lambda d: d["payload"].update(capacity_1k=True), "finite number"),
         (lambda d: d["payload"].update(capacity_1k=1e9), "<= 100000"),
         (lambda d: d["payload"].pop("price_per_1k"), "missing"),
+        (lambda d: d["payload"].update(price_per_1k=1_000.5), "<= 1000"),
         (lambda d: d["payload"].update(order_id=7), "must be a string"),
         (lambda d: d["payload"].update(order_id="x" * 65), "longer than"),
         (lambda d: d.update(event_type="io.hivemind.amcp.trade.swap"), "not allowed"),
@@ -1042,3 +1044,58 @@ def test_attempt_counter_memory_is_bounded() -> None:
         con._bump_attempts(("t", 0, i))
     assert len(con._attempts) == 10_000
     assert ("t", 0, 0) not in con._attempts and con._bump_attempts(("t", 0, 10_004)) == 2
+
+
+def test_stop_rewinds_every_partition_so_no_fetched_record_is_lost() -> None:
+    t, pub, con = make_pair(max_batch=50)
+    seen: list[str] = []
+
+    def stop_after_first(ev: VerifiedEvent) -> None:
+        seen.append(ev.event.event_id)
+        con.stop()
+
+    con.register("io.hivemind.amcp.trade.offer", stop_after_first)
+    sent = []
+    for i in range(8):
+        ev = trade_event(bee=f"hivemind/bee{i}", order_id=f"o{i}")
+        pub.publish(ev)
+        sent.append(ev.event_id)
+    partitions = {t.partition_for(f"hivemind/bee{i}".encode()) for i in range(8)}
+    assert len(partitions) > 1  # the case under test needs records on several partitions
+    con.run(max_batches=5)
+    assert len(seen) == 1 and con.stats.rewinds == len(partitions)
+    resumed = AMCPConsumer(t, EnvelopeVerifier(keyring(), clock=clock), clock=clock)
+    resumed.register("io.hivemind.amcp.trade.offer", lambda ev: seen.append(ev.event.event_id))
+    resumed.run(max_batches=5)
+    assert sorted(seen) == sorted(sent)
+
+
+def test_event_signed_with_the_maximum_lifetime_verifies() -> None:
+    # hmexpiry is rounded to 6 decimals; at these epochs that can exceed utc + MAX_EVENT_TTL_S by < 1 us.
+    rejected = []
+    for i in range(200):
+        utc = NOW + i * 0.1234567891  # sub-microsecond fractions, as time.time() produces
+        env = sign_envelope(chat_event(utc=utc), keyring(), ttl_s=3600.0)
+        try:
+            _verify(env, KAFKA_TOPICS["human_agent"], now=utc)
+        except EnvelopeRejected as exc:
+            rejected.append(exc.reason)
+    assert rejected == []
+    # negative control: one second over the cap is still refused
+    env = sign_envelope(chat_event(), keyring(), ttl_s=300.0)
+    env["hmexpiry"] = NOW + 3601.0
+    env.pop("hmsig")
+    env["hmsig"] = keyring().sign(canonical_json(env))
+    with pytest.raises(EnvelopeRejected) as exc:
+        _verify(env, KAFKA_TOPICS["human_agent"])
+    assert exc.value.reason == "ttl_too_long"
+
+
+def test_trade_price_cap_matches_the_gateway_ceiling() -> None:
+    from hivemind.router.gateway import MAX_PRICE_CEILING
+
+    rule = TOPIC_SCHEMAS[KAFKA_TOPICS["bee_trading"]].payloads["io.hivemind.amcp.trade.offer"]["price_per_1k"]
+    assert rule.le == MAX_PRICE_CEILING
+    rule.check("price_per_1k", MAX_PRICE_CEILING)
+    with pytest.raises(SchemaError):
+        rule.check("price_per_1k", MAX_PRICE_CEILING * 1.001)

@@ -24,12 +24,15 @@ sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(HIVEMIND_DIR / "src"))
 
 from hivemind.core.auto_improvement import (
+    ALL_BASE_MODELS,
     ALL_DOMAINS,
     DEFAULT_BASE_MODEL,
     DEFAULT_BASE_WU_REWARD_HMT,
     DEFAULT_GATE_PASS_BONUS_HMT,
     DEFAULT_TFLOPS_STEP_RATE_HMT,
     HF_EXPERT_CATALOG,
+    LARGE_VRAM_BASE_MODELS,
+    NOCTURNAL_20_MOE_TARGETS,
     SUPPORTED_BASE_MODELS,
     NocturnalAutoImprovementScheduler,
     PointsRetrofitManager,
@@ -57,9 +60,21 @@ def main() -> int:
         help=f"Target base model ('all' or one of {list(SUPPORTED_BASE_MODELS.keys())}).",
     )
     parser.add_argument(
-        "--experts",
+        "--tier",
         default="all",
-        help="Target expert domains ('all', '16', '5', or comma-separated list of domains).",
+        choices=["all", "standard", "large"],
+        help="Target compute tier ('all', 'standard' <= 8GB, or 'large' >= 12GB for high-VRAM base models).",
+    )
+    parser.add_argument(
+        "--target-count",
+        type=int,
+        default=20,
+        help="Target number of nocturnal MoE experts to execute (default: 20).",
+    )
+    parser.add_argument(
+        "--experts",
+        default="20",
+        help="Target expert domains ('all', '20', '16', '5', or comma-separated list of domains).",
     )
     parser.add_argument(
         "--cluster",
@@ -125,6 +140,16 @@ def main() -> int:
             "last_heartbeat_utc": time.time(),
         },
         {
+            "account_id": "621817e923e4a2e584fdf5a71dfa2995",
+            "handle": "t4-big-gpu-moe-20261028",
+            "endpoint_url": "http://127.0.0.1:8297",
+            "execution_class": "tesla-t4-16gb-moe",
+            "vram_gb": 16.0,
+            "cost_per_1k": 0.32,
+            "capacity_1k": 100.0,
+            "last_heartbeat_utc": time.time(),
+        },
+        {
             "account_id": "fbc1d3042d377feba6b1e0ac6fd576a4",
             "handle": "pioneer.node1",
             "endpoint_url": "http://127.0.0.1:8296",
@@ -160,7 +185,17 @@ def main() -> int:
         print(f"    - {ep['account_id'][:12]}... ({ep['execution_class']}, {ep['vram_gb']} GB VRAM)")
 
     # Resolve target base models
-    if args.base_model.strip().lower() == "all":
+    if args.tier == "large":
+        base_models = [
+            "Qwen/Qwen2.5-Coder-14B-Instruct",
+            "deepseek-ai/DeepSeek-Coder-V2-Lite-Base",
+            "mistralai/Mistral-Nemo-Base-2407",
+            "Qwen/Qwen2.5-32B-Instruct",
+            "Qwen/Qwen3.5-9B-Base",
+            "google/gemma-2-9b-it",
+        ]
+        tier_label = "Large VRAM Base Models (12GB - 32GB High Training Capacity)"
+    elif args.base_model.strip().lower() == "all":
         base_models = [
             "Qwen/Qwen2.5-Coder-7B-Instruct",
             "google/gemma-2-9b-it",
@@ -169,10 +204,12 @@ def main() -> int:
             "google/gemma-3-1b-it",
             "Qwen/Qwen2.5-7B-Instruct",
         ]
+        tier_label = "Standard Base Models (NF4 4-bit < 8 GB VRAM)"
     else:
         base_models = [scheduler._canonical_base_model(args.base_model)]
+        tier_label = f"Custom Base Model: {base_models[0]}"
 
-    print(f"\n[*] Target Base Models (NF4 4-bit < 8 GB VRAM):")
+    print(f"\n[*] Target Base Models ({tier_label}):")
     for m in base_models:
         print(f"    - {m}")
 
@@ -186,6 +223,8 @@ def main() -> int:
         }
         target_cluster = cluster_map[args.cluster]
         target_domains = [d for d, meta in HF_EXPERT_CATALOG.items() if meta["cluster"] == target_cluster]
+    elif args.experts.strip().lower() in ("20", "twenty"):
+        target_domains = list(NOCTURNAL_20_MOE_TARGETS)
     elif args.experts.strip().lower() in ("all", "24", "16"):
         target_domains = list(ALL_DOMAINS)
     elif args.experts.strip().lower() == "5":
@@ -196,6 +235,9 @@ def main() -> int:
             for d in args.experts.split(",")
             if d.strip()
         ]
+
+    if args.target_count and len(target_domains) > args.target_count:
+        target_domains = target_domains[:args.target_count]
 
     print(f"\n[*] Target Expert Domains ({len(target_domains)} Experts across Hugging Face Datasets):")
     for d in target_domains:
@@ -212,11 +254,8 @@ def main() -> int:
 
     wu_counter = 0
     for domain in target_domains:
-        # Round-robin assign base model and producer
+        # Round-robin assign base model and producer matching required VRAM
         base_model = base_models[wu_counter % len(base_models)]
-        assigned_producer = eligible[wu_counter % len(eligible)]
-        wu_counter += 1
-
         wu = scheduler.create_domain_workunit(
             domain=domain,
             num_samples=args.samples_per_domain,
@@ -225,6 +264,13 @@ def main() -> int:
             base_model_id=base_model,
         )
         workunits.append(wu)
+
+        # Match producer by required VRAM
+        suitable_producers = [ep for ep in eligible if ep["vram_gb"] >= wu.min_vram_gb]
+        if not suitable_producers:
+            suitable_producers = eligible
+        assigned_producer = suitable_producers[wu_counter % len(suitable_producers)]
+        wu_counter += 1
 
         print(f"\n[+] Workunit '{wu.wu_id}':")
         print(f"    Domain: {wu.domain} | HF Dataset: {wu.hf_dataset}")
@@ -274,7 +320,10 @@ def main() -> int:
         "retrofit_report": report.to_dict(),
     }
     REPORT_PATH.write_text(json.dumps(output_payload, indent=2), encoding="utf-8")
+    large_campaign_path = ARTIFACTS_DIR / "nocturnal_large_moe_20_campaign_report.json"
+    large_campaign_path.write_text(json.dumps(output_payload, indent=2), encoding="utf-8")
     print(f"\n[✓] Full telemetry report saved to: {REPORT_PATH}")
+    print(f"[✓] Nocturnal 20-MoE campaign report saved to: {large_campaign_path}")
 
     store.close()
     return 0

@@ -20,6 +20,7 @@ Key architectural guarantees:
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import secrets
 import time
@@ -467,7 +468,7 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
           <div class="kv-row"><span>Rayon / Masse / Teq</span><span id="t-phys">2.61 R⊕ • 8.63 M⊕ • 265 K</span></div>
           <div style="margin-top:8px;">
             <label>Shader WGSL @compute Actif (BLS Transit + Kepler) :</label>
-            <div class="wgsl-box" id="wgsl-code-preview">{WGSL_BLS_COMPUTE_SHADER_SOURCE}</div>
+            <div class="wgsl-box" id="wgsl-code-preview">{html.escape(WGSL_BLS_COMPUTE_SHADER_SOURCE)}</div>
           </div>
         </section>
       </div>
@@ -601,7 +602,7 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
       const valAdapter = document.getElementById("val-adapter");
       if (typeof navigator !== "undefined" && "gpu" in navigator) {{
         try {{
-          const adapter = await navigator.gpu.requestAdapter({{ powerPreference: "high-performance" }});
+          const adapter = (await navigator.gpu.requestAdapter()) || (await navigator.gpu.requestAdapter({{ powerPreference: "high-performance" }}));
           if (adapter) {{
             gpuDevice = await adapter.requestDevice();
             webgpuHardwareSupported = true;

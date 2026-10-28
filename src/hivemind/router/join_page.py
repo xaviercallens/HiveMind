@@ -16,6 +16,7 @@ from __future__ import annotations
 import html
 import re
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 REPO_URL = "https://github.com/xaviercallens/HiveMind"
@@ -86,19 +87,74 @@ PATHS: Sequence[tuple[str, Pair, str, Pair, Pair]] = (
       "Donnez du temps de GPU seulement quand vous ne jouez pas. La pause automatique n'est pas encore publiée; cette page montre comment le faire à la main dès aujourd'hui.")),
 )
 
-# Blocks per section: ("p", pair) | ("ol", [pair, ...]) | ("ul", [pair, ...]) | ("code", text) | ("note", pair) | ("tiers", None)
+@dataclass(frozen=True)
+class Flags:
+    """What this gateway offers right now, so the page never describes a sign-up route that is not there."""
+
+    google: bool = False  # "Sign in with Google" (or another provider) is enabled
+    handles: bool = True  # registering with a handle through the API is open
+
+
+_HANDLE_RULE: Pair = (
+    "The handle is public (it can appear in lists and on the message bus), so pick a pseudonym: 1 to 64 ASCII letters, digits and . _ @ + -",
+    "Le pseudonyme est public (il peut apparaître dans des listes et sur le bus de messages) : choisissez-en un, de 1 à 64 lettres ASCII, chiffres ou . _ @ + -",
+)
+_CLOSED: Pair = (
+    "Registration is closed on this gateway for now. Ask for an account in a [GitHub issue]({REPO}/issues).",
+    "L'inscription est fermée sur cette passerelle pour l'instant. Demandez un compte dans un [billet GitHub]({REPO}/issues).",
+)
+_GOOGLE: Pair = (
+    "You can also sign in with Google on the [sign-up page](/signup); we then keep only an anonymous hash of your Google id, not your e-mail address.",
+    "Vous pouvez aussi vous connecter avec Google sur la [page d'inscription](/signup); nous ne gardons alors qu'une empreinte anonyme de votre identifiant "
+    "Google, pas votre courriel.",
+)
+
+
+def _account_items(flags: Flags, role: str, intro: Pair) -> list[Pair]:
+    if not flags.handles and not flags.google:
+        return [_CLOSED]
+    items: list[Pair] = []
+    if flags.handles:
+        items.append((f"{intro[0]} {_HANDLE_RULE[0]}.", f"{intro[1]} {_HANDLE_RULE[1]}."))
+    if flags.google:
+        items.append(_GOOGLE)
+    return items
+
+
+def _use_account(flags: Flags) -> list[Pair]:
+    return _account_items(flags, "consumer", ("Create your account with a handle of your choice.", "Créez votre compte avec un pseudonyme de votre choix."))
+
+
+def _use_register_cmd(flags: Flags) -> str:
+    return 'curl -s {API}/v1/hivemind/register -H "Content-Type: application/json" -d \'{"handle":"your-handle","role":"consumer"}\'' if flags.handles else ""
+
+
+def _producer_account(flags: Flags) -> list[Pair]:
+    if not flags.handles and not flags.google:
+        return [_CLOSED]
+    items: list[Pair] = []
+    if flags.handles:
+        items.append(("Create a producer account the same way, with `\"role\":\"producer\"` (or `\"prosumer\"` if you also want to use models), and keep the key.",
+                      "Créez un compte producteur de la même façon, avec `\"role\":\"producer\"` (ou `\"prosumer\"` si vous voulez aussi utiliser les modèles), "
+                      "et gardez la clé."))
+    if flags.google:
+        items.append(("On the [sign-up page](/signup) with Google, choose “Share my GPU” or “Both”.",
+                      "Sur la [page d'inscription](/signup) avec Google, choisissez « Share my GPU » ou « Both »."))
+    return items
+
+
+# Blocks per section: ("p", pair) | ("ol", [pair, ...] or flags -> [pair, ...]) | ("ul", [pair, ...]) | ("code", text or flags -> text) | ("note", pair) | ("tiers", None)
 SECTIONS: Sequence[tuple[str, Pair, Sequence[tuple[str, Any]]]] = (
     ("use", ("1. Use the models", "1. Utiliser les modèles"), (
+        ("ol", _use_account),
+        ("code", _use_register_cmd),
         ("ol", [
-            ("Open the [sign-up page](/signup) and sign in with Google. Choose “Use models in my editor” (or “Both”). We keep only an anonymous hash of "
-             "your Google account id, not your e-mail address.",
-             "Ouvrez la [page d'inscription](/signup) et connectez-vous avec Google. Choisissez « Use models in my editor » (utiliser les modèles dans mon "
-             "éditeur) ou « Both » (les deux). Nous ne gardons qu'une empreinte anonyme de votre identifiant Google, pas votre courriel."),
-            ("Copy the API key. It is shown once; signing in again replaces it.",
-             "Copiez la clé d'API. Elle n'est affichée qu'une fois; se reconnecter la remplace."),
-            ("A new account holds 0 points. Points come from sharing a GPU (path 2) or from a grant by the operator: if you only want to try, ask for one "
-             "in a [GitHub issue]({REPO}/issues).",
-             "Un nouveau compte a 0 point. Les points viennent du partage d'un GPU (voie 2) ou d'un don de l'opérateur : si vous voulez seulement "
+            ("The reply holds your API key (`api_key`). It is shown once and cannot be recovered: store it somewhere safe. If you lose it, register a new handle.",
+             "La réponse contient votre clé d'API (`api_key`). Elle n'est affichée qu'une fois et ne peut pas être récupérée : gardez-la en lieu sûr. "
+             "Si vous la perdez, inscrivez un nouveau pseudonyme."),
+            ("A new account holds 0 points unless the operator grants some. Points come from sharing a GPU (path 2) or from a grant: if you only want to try, "
+             "ask for one in a [GitHub issue]({REPO}/issues).",
+             "Un nouveau compte a 0 point, sauf don de l'opérateur. Les points viennent du partage d'un GPU (voie 2) ou d'un don : si vous voulez seulement "
              "essayer, demandez-en un dans un [billet GitHub]({REPO}/issues)."),
             ("Test your key:", "Testez votre clé :"),
         ]),
@@ -128,9 +184,8 @@ SECTIONS: Sequence[tuple[str, Pair, Sequence[tuple[str, Any]]]] = (
              "Installez [Ollama](https://ollama.com), puis téléchargez le modèle suggéré, par exemple :"),
         ]),
         ("code", "ollama pull qwen2.5-coder:3b"),
+        ("ol", _producer_account),
         ("ol", [
-            ("Create a producer account on the [sign-up page](/signup) (choose “Share my GPU” or “Both”) and keep the key.",
-             "Créez un compte producteur sur la [page d'inscription](/signup) (choisissez « Share my GPU » ou « Both ») et gardez la clé."),
             ("Your machine must be reachable over https at a public address: the gateway refuses plain http and private addresses. At home that means a "
              "tunnel or a reverse proxy in front of the producer shield, a small program that exposes only the two routes the gateway needs and demands "
              "its token. Check with `curl https://YOUR_ENDPOINT/v1/models`.",
@@ -186,7 +241,7 @@ SECTIONS: Sequence[tuple[str, Pair, Sequence[tuple[str, Any]]]] = (
         ]),
         ("code", "ollama stop qwen2.5-coder:3b"),
         ("ol", [
-            ("After you play: start the agent again (step 6 of path 2).", "Après avoir joué : redémarrez l'agent (étape 6 de la voie 2)."),
+            ("After you play: start the agent again, with the same command as in path 2.", "Après avoir joué : redémarrez l'agent, avec la même commande qu'à la voie 2."),
         ]),
     )),
     ("know", ("Good to know", "Bon à savoir"), (
@@ -224,7 +279,7 @@ LABELS: Mapping[str, Pair] = {
                    "Les noms viennent du catalogue du projet. La mémoire minimale est celle de la plus petite carte que nous recommandons, cache de contexte compris."),
     "footer": ("HiveMind La Ruche · open source (AGPL-3.0) · points have no cash value",
                "HiveMind La Ruche · logiciel libre (AGPL-3.0) · les points n'ont aucune valeur monétaire"),
-    "status": ("Status", "État"),
+    "status_prefix": ("Status: ", "État : "),  # read by screen readers before the badge; French puts a space before the colon
 }
 
 _CSS = """
@@ -293,6 +348,8 @@ def _tiers_html(tiers: Sequence[Mapping[str, Any]] | None, lang: str, subs: Mapp
 
 
 def _block(kind: str, payload: Any, lang: str, subs: Mapping[str, str], tiers: Sequence[Mapping[str, Any]] | None, steps_done: int = 0) -> str:
+    if kind == "code" and not payload:
+        return ""  # a flag-dependent command that does not apply on this gateway
     if kind == "p":
         return f"<p>{_inline(_t(payload, lang), subs)}</p>"
     if kind == "note":
@@ -311,8 +368,13 @@ def _block(kind: str, payload: Any, lang: str, subs: Mapping[str, str], tiers: S
 
 
 def render_join_page(lang: str, nonce: str, *, tiers: Sequence[Mapping[str, Any]] | None = None, api_url: str = DEFAULT_API_URL,
-                     repo_url: str = REPO_URL, path: str = "/join") -> str:
-    """The complete page. ``tiers`` is the ``tiers`` list of ``/v1/hivemind/catalog`` (``None``: link to the live list instead)."""
+                     repo_url: str = REPO_URL, path: str = "/join", google_enabled: bool = False, handle_registration: bool = True) -> str:
+    """The complete page. ``tiers`` is the ``tiers`` list of ``/v1/hivemind/catalog`` (``None``: link to the live list instead).
+
+    ``google_enabled`` and ``handle_registration`` say how an account can be created on THIS gateway (``/v1/hivemind/signin/providers`` reports both); the
+    account steps describe only what is available, and say so when registration is closed.
+    """
+    flags = Flags(google=google_enabled, handles=handle_registration)
     if lang not in LANGS:
         raise ValueError("lang must be 'en' or 'fr'")
     if not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", nonce):
@@ -323,13 +385,15 @@ def render_join_page(lang: str, nonce: str, *, tiers: Sequence[Mapping[str, Any]
     other = "fr" if lang == "en" else "en"
     esc = html.escape
     cards = "".join(
-        f'<li class="card"><h3>{esc(_t(title, lang))}</h3><span class="badge {cls}"><span class="visually">{esc(_t(LABELS["status"], lang))}: </span>'
+        f'<li class="card"><h3>{esc(_t(title, lang))}</h3><span class="badge {cls}"><span class="visually">{esc(_t(LABELS["status_prefix"], lang))}</span>'
         f'{esc(_t(status, lang))}</span><p>{esc(_t(summary, lang))}</p><a class="more" href="#{anchor}">→ {esc(_t(title, lang))}</a></li>'
         for anchor, title, cls, status, summary in PATHS
     )
     def section(sid: str, title: Pair, blocks: Sequence[tuple[str, Any]]) -> str:
         done, out = 0, []
         for kind, payload in blocks:
+            if callable(payload):
+                payload = payload(flags)
             out.append(_block(kind, payload, lang, subs, tiers, done))
             if kind == "ol":
                 done += len(payload)

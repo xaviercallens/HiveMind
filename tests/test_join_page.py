@@ -237,3 +237,78 @@ def test_the_signup_page_links_to_the_join_page(client: TestClient) -> None:
 
 def test_default_api_url_is_a_valid_https_origin() -> None:
     assert DEFAULT_API_URL.startswith("https://") and "/" not in DEFAULT_API_URL.removeprefix("https://")
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------------------------
+# the account steps describe only the sign-up routes this gateway really has (the live gateway has handle registration and NO Google sign-in)
+# ---------------------------------------------------------------------------------------------------------------------------------------------------
+
+REGISTER_CMD = re.compile(r"-d '(\{[^']+\})'")
+
+
+def flagged(lang: str, google: bool, handles: bool) -> str:
+    return render_join_page(lang, NONCE, tiers=TIER_ROWS, google_enabled=google, handle_registration=handles)
+
+
+@pytest.mark.parametrize("lang", ["en", "fr"])
+def test_default_describes_handle_registration_and_does_not_promise_google(lang: str) -> None:
+    text = page(lang)
+    assert "/v1/hivemind/register" in text and not re.search(r"(?i)(sign in|connect\w+|connexion) (with|avec) Google", text)  # the live gateway has no Google sign-in
+    assert "your-handle" in text and "api_key" in text
+
+
+def test_every_combination_is_well_formed_and_the_two_languages_stay_in_step() -> None:
+    for google in (False, True):
+        for handles in (False, True):
+            en, fr = Outline(), Outline()
+            en.feed(flagged("en", google, handles))
+            fr.feed(flagged("fr", google, handles))
+            assert en.problems == fr.problems == [] and en.stack == fr.stack == []
+            assert en.ids == fr.ids and en.tags == fr.tags and en.pre == fr.pre, (google, handles)
+
+
+def test_google_only_closed_and_both_each_say_the_right_thing() -> None:
+    google_only = flagged("en", True, False)
+    assert "/v1/hivemind/register" not in google_only and "sign in with Google" in google_only and "closed" not in google_only
+    closed = flagged("en", False, False)
+    assert "Registration is closed" in closed and "/v1/hivemind/register" not in closed and "sign in with Google" not in closed
+    both = flagged("en", True, True)
+    assert "Registration is closed" not in both and "/v1/hivemind/register" in both and "sign in with Google" in both
+    assert "L'inscription est fermée" in html.unescape(flagged("fr", False, False))
+
+
+def test_the_registration_example_is_a_request_the_real_endpoint_accepts() -> None:
+    from hivemind.router.gateway import RegisterRequest
+
+    body = REGISTER_CMD.search("\n".join(outline("en").pre))
+    assert body is not None
+    request = RegisterRequest.model_validate_json(body.group(1))  # extra fields are forbidden by the model, so a typo would fail here
+    assert request.role == "consumer" and request.kind is None and request.test is False
+    for role in ("producer", "prosumer"):  # the roles the producer step names: both must be roles the endpoint accepts
+        RegisterRequest.model_validate({"handle": "x", "role": role})
+        assert f'"{role}"' in html.unescape(page("en"))
+
+
+def test_the_handle_rule_on_the_page_matches_the_stores_rule() -> None:
+    store = RouterStore(":memory:", b"s" * 32)
+    store.register("Good_handle.1@x+y-z", "consumer")  # the characters the page lists
+    with pytest.raises(Exception):  # noqa: B017, PT011 - the store raises its own security/reserved errors
+        store.register("bad handle\n", "consumer")
+    assert "ASCII letters, digits and . _ @ + -" in page("en") and "64" in page("en")
+
+
+def test_no_step_numbers_are_hard_coded_because_the_account_step_can_have_one_or_two_items() -> None:
+    for lang in ("en", "fr"):
+        assert not re.search(r"(?i)\b(step|étape) \d", page(lang))
+
+
+def test_the_french_status_label_has_the_space_before_the_colon() -> None:
+    assert "État : " in page("fr") and "Status: " in page("en")
+
+
+def test_the_gateway_page_reflects_its_own_configuration() -> None:
+    open_no_google = TestClient(create_router_app(RouterStore(":memory:", b"g" * 32))).get("/join").text
+    assert "/v1/hivemind/register" in open_no_google and "sign in with Google" not in open_no_google
+    google_only = TestClient(create_router_app(RouterStore(":memory:", b"g" * 32), open_registration=False,
+                                               google_client_id="123456789-abc.apps.googleusercontent.com")).get("/join").text
+    assert "/v1/hivemind/register" not in google_only and "sign in with Google" in google_only

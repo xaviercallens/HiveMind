@@ -118,14 +118,16 @@ def test_forged_signature_goes_to_dlq_never_to_handler() -> None:
     env = sign_envelope(trade_event(), keyring())
     env["data"]["payload"]["price_per_1k"] = 0.0001  # tamper after signing
     topic = KAFKA_TOPICS["bee_trading"]
-    ack = t.publish(topic, b"hivemind/coder", canonical_json(env))
+    forged = canonical_json(env)
+    ack = t.publish(topic, b"hivemind/coder", forged)
     con.run_once()
     assert got == []
     assert dlq_reasons(t) == ["bad_signature"]
     # the forged record is committed (dead-lettered), so it is not redelivered forever
     assert t.committed_offset(topic, ack["partition"]) == ack["offset"] + 1
     dl = json.loads(t.records(DLQ_TOPIC)[0].value)
-    assert json.loads(base64.b64decode(dl["value_b64"]))["data"]["payload"]["price_per_1k"] == 0.0001
+    assert dl["value_b64"] == base64.b64encode(forged).decode("ascii")  # raw forged bytes kept for forensics
+    assert dl["key_b64"] == base64.b64encode(b"hivemind/coder").decode("ascii")
 
 
 def test_signature_from_key_not_in_keyring_is_rejected() -> None:

@@ -488,6 +488,13 @@ def validate_residency_plan(
     overlap = set(seen) & set(plan.cold)
     if overlap:
         violations.append(f"adapters both hot and cold: {sorted(overlap)}")
+    # ``plan.hot`` is what a router consumes as its resident set, so it must agree with the placements exactly.
+    for aid, nid in sorted(plan.hot.items()):
+        if seen.get(aid) != nid:
+            violations.append(f"hot says {aid!r} is on {nid!r} but placements put it on {seen.get(aid)!r}")
+    for aid, nid in sorted(seen.items()):
+        if aid not in plan.hot:
+            violations.append(f"adapter {aid!r} placed on {nid!r} but missing from hot")
     return violations
 
 

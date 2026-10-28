@@ -333,6 +333,19 @@ def test_validator_catches_every_kind_of_bad_plan() -> None:
     assert validate_residency_plan(good, nodes, adapters) == []
 
 
+def test_validator_rejects_hot_map_that_disagrees_with_placements() -> None:
+    nodes = [ServingNode("n", 1000, BASE, 800, 4), ServingNode("m", 1000, BASE, 800, 4)]
+    adapters = {"a": AdapterFootprint(50, BASE), "b": AdapterFootprint(50, BASE)}
+    good = plan_adapter_residency(nodes, adapters, {"a": 2.0, "b": 1.0})
+    assert validate_residency_plan(good, nodes, adapters) == []  # positive control
+    ghost_hot = ResidencyPlan({"n": ("a",), "m": ()}, {"a": "n", "b": "m"}, {}, {}, {}, {}, 0.0, 0.0, "hand-made")
+    wrong_node = ResidencyPlan({"n": ("a",), "m": ()}, {"a": "m"}, {"b": "zero_demand"}, {}, {}, {}, 0.0, 0.0, "hand-made")
+    unlisted = ResidencyPlan({"n": ("a", "b"), "m": ()}, {"a": "n"}, {}, {}, {}, {}, 0.0, 0.0, "hand-made")
+    assert any("hot says 'b' is on 'm'" in v for v in validate_residency_plan(ghost_hot, nodes, adapters))
+    assert any("hot says 'a' is on 'm'" in v for v in validate_residency_plan(wrong_node, nodes, adapters))
+    assert any("'b' placed on 'n' but missing from hot" in v for v in validate_residency_plan(unlisted, nodes, adapters))
+
+
 node_st = st.builds(
     ServingNode,
     node_id=st.sampled_from([f"n{i}" for i in range(6)]),

@@ -77,7 +77,7 @@ def signup_redirect() -> RedirectResponse:
 async def join_page(request: Request) -> HTMLResponse:
     """Public bilingual (FR/EN) 'how to join' page. The model table comes from the router's public catalog; if the router is down the page still renders."""
     french_path = request.url.path == "/rejoindre"
-    lang = pick_language(request.query_params.get("lang"), request.headers.get("accept-language"), default="fr" if french_path else "en")
+    lang = pick_language(request.query_params.get("lang"), request.headers.get("accept-language"), default="fr")
     try:
         tiers = (await _client.get(f"{ROUTER}/v1/hivemind/catalog", timeout=4.0)).json()["tiers"]
     except (httpx.HTTPError, ValueError, KeyError):

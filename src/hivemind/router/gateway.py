@@ -87,6 +87,8 @@ WARMUP_MIN_INTERVAL_S = 30.0
 DEFAULT_MAX_TOKENS = 1024
 REGISTER_LIMIT = 10
 REGISTER_WINDOW_S = 60.0
+AMCP_PUBLISH_LIMIT = 30  # bus events per account per window: the bus is for coordination, not bulk traffic
+AMCP_PUBLISH_WINDOW_S = 60.0
 MAX_BODY_BYTES = 4_000_000
 MAX_PRICE_CEILING = 1_000.0
 MAX_PRODUCER_RESPONSE_BYTES = 8_000_000
@@ -711,6 +713,7 @@ def create_router_app(
     resolver: Resolver | None = None,
     trusted_proxy_hops: int = 0,
     max_producer_capacity_1k: float = MAX_PRODUCER_CAPACITY_1K,
+    amcp_bus: Callable[[Any], Mapping[str, Any]] | None = None,
     google_client_id: str | None = None,
     google_verifier: GoogleIdTokenVerifier | None = None,
     oidc_verifiers: Mapping[str, OidcIdTokenVerifier] | None = None,
@@ -748,6 +751,7 @@ def create_router_app(
     app = FastAPI(title="HiveMind OpenRouter", version="1.0.0")
     rotation = WeightedRoundRobin()
     register_limiter = SlidingWindowLimiter(REGISTER_LIMIT, REGISTER_WINDOW_S)
+    amcp_publish_limiter = SlidingWindowLimiter(AMCP_PUBLISH_LIMIT, AMCP_PUBLISH_WINDOW_S)
     market_cache: dict[tuple[str, int], dict[str, Any]] = {}
     market_lock = threading.Lock()
     capacity_clamp = float(max_producer_capacity_1k)
@@ -1696,9 +1700,19 @@ def create_router_app(
     @app.post("/v1/hivemind/amcp/publish")
     def publish_amcp_event(request: Request, payload: AMCPPublishRequest) -> dict[str, Any]:
         """Publish a cross-human, cross-agent, or inter-bee AMCP v1.5 + CloudEvents message onto a Kafka topic."""
+        from hivemind.swarm.amcp_collab import CollabError, check_publish
         from hivemind.swarm.amcp_kafka_campaign_bus import build_amcp_kafka_event
+        from hivemind.swarm.amcp_kafka_transport import SchemaError, validate_event_dict
 
         account = authenticate(request)
+        # The caller does not get to claim who they are: the account's ROLE decides which participant kinds and topics it may use, so a consumer cannot
+        # publish as a bee on the coordination or trading topics, and only a human can record a decision.
+        try:
+            check_publish(account.role, payload.sender_kind, payload.topic_key, payload.event_type, payload.payload, via_gateway=True)
+        except CollabError as exc:
+            raise RouterError(403, str(exc), "permission_error", exc.code) from None
+        if not amcp_publish_limiter.allow(account.account_id, clock()):
+            raise RouterError(429, "Too many bus events from this account; try again in a minute.", "rate_limit_error", "rate_limited")
         ev = build_amcp_kafka_event(
             topic_key=payload.topic_key,
             event_type=payload.event_type,
@@ -1710,6 +1724,10 @@ def create_router_app(
             payload=payload.payload,
             now_utc=clock(),
         )
+        try:  # the topic schemas are closed for three of the four topics: refuse here what Kafka would dead-letter
+            validate_event_dict(ev.to_dict(), ev.topic)
+        except SchemaError as exc:
+            raise RouterError(400, f"Event refused by the topic schema: {exc}", "invalid_request_error", "schema_invalid") from None
         store.record_amcp_kafka_event(
             event_id=ev.event_id,
             topic=ev.topic,
@@ -1722,7 +1740,14 @@ def create_router_app(
             payload=ev.payload,
             now_utc=ev.utc,
         )
-        return {"object": "hivemind.amcp_event", **ev.to_dict()}
+        bus: Mapping[str, Any] = {"status": "not_configured"}
+        if amcp_bus is not None:  # Kafka is the bus, the store is the public feed's source of truth: a broker outage must not lose or fail the event
+            try:
+                bus = {"status": "published", **amcp_bus(ev)}
+            except Exception:  # noqa: BLE001 - any broker/serialisation failure is reported, not raised
+                LOGGER.warning("AMCP event %s stored but not published to Kafka", ev.event_id, exc_info=True)
+                bus = {"status": "unavailable"}
+        return {"object": "hivemind.amcp_event", **ev.to_dict(), "bus": dict(bus)}
 
     @app.get("/v1/hivemind/amcp/events")
     def list_amcp_events(topic: str | None = None, limit: int = 50) -> dict[str, Any]:

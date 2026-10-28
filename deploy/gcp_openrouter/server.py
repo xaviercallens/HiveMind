@@ -24,6 +24,7 @@ Configuration (environment):
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Mapping
 from pathlib import Path
@@ -59,9 +60,15 @@ def build_app(env: Mapping[str, str]) -> FastAPI:
     bid_window_s = float(env.get("HIVEMIND_BID_WINDOW_S", "900") or "900")
     if not bid_window_s >= 0.0:
         raise RuntimeError("HIVEMIND_BID_WINDOW_S must be >= 0")
+    # Optional Kafka bus for AMCP events: only when HIVEMIND_KAFKA_BOOTSTRAP and HIVEMIND_AMCP_HMAC_KEYS are both set. Otherwise events are stored
+    # for the public feed as before and every publish response says bus.status = "not_configured".
+    from hivemind.swarm.amcp_collab import bus_from_env
+
+    amcp_bus, bus_reason = bus_from_env(env)
+    logging.getLogger("hivemind.router.server").info("AMCP Kafka bus: %s", "enabled" if amcp_bus else f"off ({bus_reason})")
     return create_router_app(store, admin_key_hash=admin_key_hash, trusted_proxy_hops=hops,
                              google_client_id=google_client_id, oidc_verifiers=oidc_verifiers, open_registration=open_registration,
-                             bid_activity_window_s=bid_window_s)
+                             bid_activity_window_s=bid_window_s, amcp_bus=amcp_bus)
 
 
 app: FastAPI = build_app(os.environ)

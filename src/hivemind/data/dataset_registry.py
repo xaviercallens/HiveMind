@@ -401,6 +401,17 @@ def normalize_entity_key(value: Any, style: str) -> str | None:
     return v
 
 
+_KOI_KEY = re.compile(r"K(\d{5})\.\d{2}")
+
+
+def entity_aliases(key: str) -> set[str]:
+    """The ids an entity key matches on. A KOI also matches every other KOI of the same host star (``K05218.01`` and
+    ``K05218.02`` share star features): the night exoplanet pack splits whole stars between train and eval, so a sibling
+    KOI of an eval item is contamination too."""
+    mm = _KOI_KEY.fullmatch(key)
+    return {key, f"koi-host-K{mm.group(1)}"} if mm else {key}
+
+
 def map_row(spec: SourceSpec, row: Mapping[str, Any], system_prompt: str, index: int) -> dict[str, Any] | None:
     """Map one raw row to ``{key, messages, completion}`` (the night-pack train format), or None if filtered by design.
 
@@ -430,6 +441,7 @@ def validate_slice(spec: SourceSpec, rows: Sequence[Mapping[str, Any]], system_p
                    max_unmappable_fraction: float = 0.10) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Map a streamed slice; PASSED iff at least one row maps and at most ``max_unmappable_fraction`` of unfiltered rows fail."""
     mapped: list[dict[str, Any]] = []
+    positions: list[int] = []
     filtered = 0
     errors: dict[str, int] = {}
     for i, r in enumerate(rows):
@@ -443,11 +455,23 @@ def validate_slice(spec: SourceSpec, rows: Sequence[Mapping[str, Any]], system_p
             filtered += 1
         else:
             mapped.append(out)
+            positions.append(i)
+    # A key column that is not an id (e.g. a task-type field) gives many rows one key. Those rows get their position in
+    # the split appended, so keys stay unique and sampling stays independent of read order; the count is reported.
+    key_count: dict[str, int] = {}
+    for r in mapped:
+        key_count[r["key"]] = key_count.get(r["key"], 0) + 1
+    rekeyed = 0
+    for r, i in zip(mapped, positions):
+        if key_count[r["key"]] > 1:
+            r["key"] = f"{r['key']}#{i}"
+            rekeyed += 1
     considered = len(rows) - filtered
     bad = sum(errors.values())
     ok = bool(mapped) and bad <= max_unmappable_fraction * considered
     report = {"status": PASSED if ok else FAILED, "rows_read": len(rows), "rows_mapped": len(mapped),
               "rows_filtered_by_design": filtered, "rows_unmappable": bad,
+              "rows_rekeyed_duplicate_key": rekeyed,
               "unmappable_reasons": dict(sorted(errors.items(), key=lambda kv: -kv[1])[:5])}
     if not ok:
         report["reason"] = "no row mapped" if not mapped else f"{bad}/{considered} unfiltered rows unmappable"
@@ -496,7 +520,7 @@ class EvalIndex:
             self.exact.add(hashlib.sha256(" ".join(toks).encode()).hexdigest())
             for h in ngram_hashes(toks, self.n):
                 self.ngram_df[h] = self.ngram_df.get(h, 0) + 1
-        self.keys.update(k for k in keys if k)
+        self.keys.update(a for k in keys if k for a in entity_aliases(k))
         self.sources[name] = self.sources.get(name, 0) + count
 
     def add_eval_pack(self, pack_dir: Path) -> None:
@@ -527,7 +551,7 @@ def decontaminate(rows: Sequence[dict[str, Any]], index: EvalIndex,
         user = _user_text(r)
         toks_user = normalize_tokens(user)
         toks_all = normalize_tokens(user + "\n" + str(r.get("completion", "")))
-        if r.get("entity_key") and r["entity_key"] in index.keys:
+        if r.get("entity_key") and entity_aliases(r["entity_key"]) & index.keys:
             counts["eval_entity_key"] += 1
         elif hashlib.sha256(" ".join(toks_user).encode()).hexdigest() in index.exact:
             counts["eval_exact"] += 1
@@ -616,9 +640,11 @@ def plan_mixture(available: Mapping[str, tuple[str, bool, int]], cfg: MixtureCon
 
 
 def sample_rows(rows: Sequence[dict[str, Any]], k: int, seed: int, source: str) -> list[dict[str, Any]]:
-    """Deterministic, order-independent sample: rank by sha256(seed:source:key) and keep the first ``k``."""
-    def rank(r: dict[str, Any]) -> str:
-        return hashlib.sha256(f"{seed}:{source}:{r['key']}".encode()).hexdigest()
+    """Deterministic, order-independent sample: rank by sha256(seed:source:key) and keep the first ``k``.
+
+    Ties (two rows with one key) are broken by the row's canonical JSON, so the result never depends on input order."""
+    def rank(r: dict[str, Any]) -> tuple[str, str]:
+        return hashlib.sha256(f"{seed}:{source}:{r['key']}".encode()).hexdigest(), json.dumps(r, sort_keys=True)
 
     return sorted(rows, key=rank)[:max(0, k)]
 

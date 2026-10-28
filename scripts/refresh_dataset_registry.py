@@ -87,6 +87,15 @@ def build_index(doc: dict[str, Any], eval_packs: Path | None, fetch: Callable[[s
     return index, notes
 
 
+def eval_index_gaps(notes: list[dict[str, Any]], eval_packs_given: bool) -> list[str]:
+    """What the decontamination index is missing: no night packs, or a reference eval set that was not fully read.
+
+    Decontamination against a partial index under-removes silently, so the gaps are written next to the counts."""
+    gaps = [] if eval_packs_given and any("eval_pack" in n for n in notes) else ["no night-pack eval.jsonl was indexed (--eval-packs)"]
+    gaps += [f"reference {n['reference']} is {n['status']}: {n['reason']}" for n in notes if "reference" in n and n["status"] != PASSED]
+    return gaps
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--candidates", default=str(REPO / "configs" / "datasets_s21_candidates.json"))
@@ -150,12 +159,17 @@ def main() -> int:
         mix, manifest = build_mixture(rows_by_source, {k: by_label[k].verified_signal for k in rows_by_source},
                                       {k: by_label[k].domain for k in rows_by_source}, mcfg, index, shards)
         manifest["eval_index_inputs"] = notes
+        gaps = eval_index_gaps(notes, bool(args.eval_packs))
+        manifest["eval_index_gaps"] = gaps
+        for g in gaps:
+            print(f"WARNING: decontamination index incomplete: {g}", file=sys.stderr)
         (work / "slice_mixture.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in mix), encoding="utf-8")
         (work / "slice_manifest.json").write_text(json.dumps(manifest, indent=1), encoding="utf-8")
         result["slice_validation"] = {
             "note": "decontamination and mixture run on the streamed slices only (a pipeline check, not the training mixture)",
             "eval_index": manifest["decontamination"] | {"inputs": notes}, "plan": manifest["plan"],
-            "mixture_rows": manifest["rows"], "mixture_sha256": manifest["mixture_sha256"]}
+            "mixture_rows": manifest["rows"], "mixture_sha256": manifest["mixture_sha256"],
+            "eval_index_complete": not gaps, "eval_index_gaps": gaps}
         print(json.dumps({"decontamination": manifest["decontamination"]["per_source"], "plan_domains": manifest["plan"]["domains"],
                           "unverified_fraction": manifest["plan"]["unverified_fraction"]}, indent=1))
     Path(args.out).write_text(json.dumps(result, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")

@@ -497,3 +497,42 @@ def test_retrying_fetch_does_not_retry_client_errors_and_gives_up_after_retries(
     with pytest.raises(urllib.error.URLError):
         dr.retrying_fetch(fetch, retries=1, base_delay_s=0.0, sleep=sleeps.append)("u")
     assert len(calls) == 2
+
+
+# ---------------------------------------------------------------- review fixes
+def test_sibling_koi_of_an_eval_star_is_removed_but_other_stars_are_kept() -> None:
+    idx = dr.EvalIndex()
+    idx.add("exoplanet", ["eval prompt"], ["K00752.01", "star-HD 1"])
+    rows = [row("a", key="sib", entity_key="K00752.02"), row("b", key="other", entity_key="K00753.01"),
+            row("c", key="host", entity_key="star-HD 1"), row("d", key="host2", entity_key="star-HD 10")]
+    kept, counts = dr.decontaminate(rows, idx)
+    assert [r["key"] for r in kept] == ["other", "host2"]
+    assert counts["eval_entity_key"] == 2
+    assert dr.entity_aliases("K00752.02") == {"K00752.02", "koi-host-K00752"} and dr.entity_aliases("star-X") == {"star-X"}
+
+
+def test_validate_slice_rekeys_rows_whose_key_column_is_not_an_id() -> None:
+    s = spec({**FIELDS, "key_field": "kind"})
+    rows = [{"kind": "summary", "q": f"q{i}", "a": f"a{i}"} for i in range(3)] + [{"kind": "facts", "q": "q9", "a": "a9"}]
+    rep, mapped = dr.validate_slice(s, rows, SYS)
+    assert [r["key"] for r in mapped] == ["org/ds:summary#0", "org/ds:summary#1", "org/ds:summary#2", "org/ds:facts"]
+    assert rep["rows_rekeyed_duplicate_key"] == 3 and rep["status"] == dr.PASSED
+
+
+def test_sample_rows_breaks_key_ties_independently_of_order() -> None:
+    rows = [{"key": "same", "completion": f"c{i}"} for i in range(20)]
+    a = dr.sample_rows(rows, 5, 7, "s")
+    assert a == dr.sample_rows(list(reversed(rows)), 5, 7, "s")
+    assert len({r["completion"] for r in a}) == 5
+
+
+def test_refresh_script_reports_decontamination_gaps() -> None:
+    import importlib.util
+    sp = importlib.util.spec_from_file_location("refresh_dataset_registry", REPO / "scripts" / "refresh_dataset_registry.py")
+    assert sp is not None and sp.loader is not None
+    mod = importlib.util.module_from_spec(sp)
+    sp.loader.exec_module(mod)
+    full = [{"eval_pack": "maths"}, {"reference": "r@c/test", "status": dr.PASSED, "reason": ""}]
+    assert mod.eval_index_gaps(full, True) == []
+    gaps = mod.eval_index_gaps([{"reference": "r@c/test", "status": dr.BLOCKED, "reason": "404"}], False)
+    assert len(gaps) == 2 and "--eval-packs" in gaps[0] and "BLOCKED: 404" in gaps[1]

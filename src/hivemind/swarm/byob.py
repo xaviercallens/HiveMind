@@ -874,8 +874,9 @@ class _RefuseRedirects(urllib.request.HTTPRedirectHandler):
     """A contributor endpoint may not redirect the prober: a 3xx to ``http://169.254.169.254/`` would skip every URL check."""
 
     def redirect_request(self, req: urllib.request.Request, fp: Any, code: int, msg: str, headers: Any,
-                         newurl: str) -> urllib.request.Request | None:
-        return None  # urllib then raises HTTPError for the 3xx, which the evaluation stage turns into ENDPOINT_PROBE_FAILED
+                         newurl: str) -> urllib.request.Request:
+        # refuse explicitly (what urllib does when this returns None); the evaluation stage turns it into ENDPOINT_PROBE_FAILED
+        raise urllib.error.HTTPError(req.full_url, code, f"redirect refused: {msg}", headers, fp)
 
 
 _PROBE_OPENER: Final[urllib.request.OpenerDirector] = urllib.request.build_opener(_RefuseRedirects)

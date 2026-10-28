@@ -15,6 +15,21 @@ Steam App ID `3133700`, used as a local configuration/test constant in this repo
 
 See the [Steam bridge](../src/hivemind/client/steamworks.py), [package builder](../src/hivemind/game/steam_edition.py), [RTX stress & tool deployer](../src/hivemind/game/rtx_steam_tool_deployer.py), and [swarm demo](../src/hivemind/cli/demo_hf_domain_swarm.py).
 
+## Identity and the Sybil gate: what is and is not enforced
+
+**Simulated, local only.** `SteamworksSDKBridge` tickets and receipts are HMACs the bridge signs for itself. The `account_spend_usd` inside a ticket is whatever its issuer wrote, so a ticket is **not** evidence about a real Steam account. Until 2026-10 the HMAC secret was a constant published in this repository, so anyone could forge a ticket; the default is now a random per-process secret (set `HIVEMIND_STEAMWORKS_SECRET`, 32+ bytes of hex, to share one between processes you control). In-process demos behave as before.
+
+**Real, when you serve the coordinator for others.** `hivemind serve-coordinator --public-url https://your.host` turns on *Sign in with Steam* (`src/hivemind/client/steam_identity.py`):
+
+1. A node opens `/identity/steam/login`, signs in at Steam, and Steam sends the browser to `/identity/steam/callback`.
+2. The coordinator hands the signed assertion back to Steam (`openid.mode=check_authentication`) and accepts it only if Steam confirms it, it names this coordinator's return URL, and its nonce is fresh and unused. That proves control of one SteamID64. No Steam Web API key and no Steam App ID are needed.
+3. The *Limited account* and *VAC ban* flags are read from Steam's community profile XML (`isLimitedAccount`, `vacBanned`), not from the caller. Limited and banned accounts get no token.
+4. The node receives a one-hour token and sends it as `Authorization: Bearer` on `POST /workunit/request`, which must name the same SteamID64. `/reputation` lists hashed labels instead of SteamIDs and worker names. The coordinator's `/v1/chat/completions` also needs a valid token (any signed-in node). That endpoint is a **simulation** (the answer comes from the Hack-Miner game probe; experts, routing weights and vouchers are illustrative), not model inference: real routed inference is the gateway in `hivemind.router`.
+
+Without `--public-url`, `serve-coordinator` binds loopback only and trusts the `steam_id64` in the request (development and simulations; a warning is logged). A non-loopback `--host` is refused unless you pass `--public-url` or, for a throwaway network, `--insecure-dev-identities`.
+
+Limits to know about: the "Limited" flag is Steam's own definition (spent less than USD 5) and is read from a public community page, which Steam can change or rate-limit; a verified account is a *cost* to create many identities, not a guarantee against a determined attacker; tokens live in memory with a per-process secret unless `HIVEMIND_IDENTITY_SECRET` is set. This path is covered by `tests/test_steam_identity.py` against a fake Steam; it has **not** been run against Steam's production OpenID endpoint from a public URL, which needs a deployed coordinator.
+
 ## Trying the Local RTX Tool & Hack-Miner Prototype
 
 Follow the [development setup](../CONTRIBUTING.md#3-local-development-setup-8-gb-gpu-or-cpu), then run from the repository root:

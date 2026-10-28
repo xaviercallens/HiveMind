@@ -1,0 +1,29 @@
+# HiveMind AMCP development broker: one Apache Kafka 3.8 node in KRaft mode, loopback only (127.0.0.1:9092, controller 9093), no authentication.
+# It runs from the mesh tooling directory the bee-mesh quickstart created (JDK 21 + Kafka under /mnt/disks/disk-socrateai-local-1/amcp) with the SAME config
+# file, so this unit and a hand-started broker are interchangeable: the KRaft data directory is locked, so a second instance refuses to start instead of
+# corrupting anything. After a Spot preemption or a reboot this unit brings the bus back; topics and messages survive on the persistent disk.
+#
+# Install (enable only: it does not touch a broker that is already running):
+#   sudo cp deploy/amcp/hivemind-amcp-kafka.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable hivemind-amcp-kafka.service
+# To let systemd own the running broker: stop the hand-started one, then `sudo systemctl start hivemind-amcp-kafka.service`.
+# This is a DEVELOPMENT bus for one machine. It is not the production bus: see docs/AMCP_COLLABORATION.md ("Production path").
+[Unit]
+Description=HiveMind AMCP dev broker (Kafka 3.8 KRaft, loopback only)
+After=network.target local-fs.target
+RequiresMountsFor=/mnt/disks/disk-socrateai-local-1
+
+[Service]
+Type=simple
+User=callensxavier_gmail_com
+Environment=JAVA_HOME=/mnt/disks/disk-socrateai-local-1/amcp/tools/jdk21
+Environment="KAFKA_HEAP_OPTS=-Xms256m -Xmx512m"
+Environment=LOG_DIR=/mnt/disks/disk-socrateai-local-1/amcp/kafka-logs
+ExecStart=/mnt/disks/disk-socrateai-local-1/amcp/tools/kafka/bin/kafka-server-start.sh /mnt/disks/disk-socrateai-local-1/amcp/kafka-kraft.properties
+Restart=on-failure
+RestartSec=15
+SuccessExitStatus=143
+TimeoutStopSec=60
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

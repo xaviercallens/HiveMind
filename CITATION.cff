@@ -22,6 +22,17 @@ keywords:
   - byzantine-resilience
   - lean4-verification
 references:
+  - type: software
+    title: "rusty-SUNDIALS: Formally Verified Scientific Machine Learning Engine for Exascale Physics and Planetary Carbon Capture"
+    authors:
+      - family-names: Callens
+        given-names: Xavier
+    year: 2026
+    version: "9.0.1"
+    url: "https://github.com/xaviercallens/rusty-SUNDIALS"
+    institution:
+      name: "SocrateAI Lab | SymbioticFactory Research"
+    notes: "Citation text required by the NOTICE of rusty-SUNDIALS (stated licence there: Apache-2.0 AND CC-BY-4.0; its LICENSE file says BSD-3-Clause, see THIRD_PARTY_NOTICES.md). Used by the Solver Bee as a git dependency pinned to commit 4e3e32de9ff188bace35c9e80e433b4e795a9d76."
   - type: article
     title: "Towards Crowdsourced Training of Large Neural Networks using Decentralized Mixture-of-Experts"
     authors:

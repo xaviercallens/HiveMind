@@ -1,0 +1,106 @@
+rusty-SUNDIALS — NOTICE
+=======================
+
+Copyright (c) 2026 Xavier Callens
+SocrateAI Lab | SymbioticFactory Research | OpenCyclo Project
+Cagnes-sur-Mer, France
+https://github.com/xaviercallens/rusty-SUNDIALS
+
+This NOTICE file is required to be included in all distributions,
+derivative works, and publications that use this software or its results,
+as mandated by the Apache License 2.0 (Section 4) under which the code
+is distributed.
+
+-------------------------------------------------------------------------------
+PRIMARY AUTHOR & INNOVATOR
+-------------------------------------------------------------------------------
+
+  Xavier Callens
+  Lead Principal Investigator
+  SocrateAI Lab | SymbioticFactory Research
+  Contact: callensxavier@gmail.com
+  ORCID: (pending registration)
+
+-------------------------------------------------------------------------------
+MANDATORY CITATION
+-------------------------------------------------------------------------------
+
+All academic papers, technical reports, presentations, datasets, software
+products, or any other output that uses or references this software, its
+scientific results, formal proofs, or methodologies MUST include the
+following citation:
+
+  Callens, X. (2026). rusty-SUNDIALS: Formally Verified Scientific Machine
+  Learning Engine for Exascale Physics and Planetary Carbon Capture.
+  SocrateAI Lab | SymbioticFactory Research.
+  https://github.com/xaviercallens/rusty-SUNDIALS
+  Version: 9.0.1 | License: Apache-2.0 AND CC-BY-4.0
+
+BibTeX:
+
+  @software{callens2026rustysundials,
+    author       = {Callens, Xavier},
+    title        = {{rusty-SUNDIALS}: Formally Verified Scientific Machine
+                    Learning Engine for Exascale Physics and
+                    Planetary Carbon Capture},
+    year         = {2026},
+    version      = {9.0.1},
+    institution  = {SocrateAI Lab, SymbioticFactory Research},
+    url          = {https://github.com/xaviercallens/rusty-SUNDIALS},
+    license      = {Apache-2.0 AND CC-BY-4.0},
+    note         = {Lean 4 formally verified. GCP Cloud Run serverless.}
+  }
+
+-------------------------------------------------------------------------------
+ORIGINAL INNOVATIONS (Attribution Required)
+-------------------------------------------------------------------------------
+
+The following innovations are the exclusive intellectual contributions of
+Xavier Callens. Any adaptation, reference, or derivative MUST attribute
+these specifically:
+
+  [1] FLAGNO — Field-Aligned Graph Network Optimization for O(1) anisotropic
+      XMHD preconditioning (CERT-FUS-FLAGNO-002)
+
+  [2] Neuro-Symbolic SUNDIALS Bridge — Rust/ML/Lean 4 integration framework
+
+  [3] QTT XMHD Integration — 6D gyrokinetic phase-space folding
+
+  [4] Asynchronous LSS Adjoints — Chaos-decoupled fusion plasma control
+
+  [5] PSC Protocol Stack (K–O) — Planetary carbon capture cyber-physical system
+      projecting 72,000 t CO₂/km²/yr (CERT-LEAN4-PHGAT-882A)
+
+  [6] SOP Reproducibility Platform — GCP serverless peer-review framework
+
+  [7] Kalundborg 2.0 EIP Optimizer — Planetary eco-industrial topology
+
+-------------------------------------------------------------------------------
+UPSTREAM DEPENDENCIES
+-------------------------------------------------------------------------------
+
+This software is built upon:
+
+  SUNDIALS (Suite of Nonlinear and Differential/Algebraic Equation Solvers)
+  Copyright (c) 2002-2026 Lawrence Livermore National Security, LLC
+  License: BSD-3-Clause
+  https://github.com/LLNL/sundials
+
+  Rust Standard Library & Cargo Ecosystem
+  Copyright (c) The Rust Project Developers
+  License: Apache-2.0 / MIT
+
+  Lean 4 / Mathlib
+  Copyright (c) Lean FRO, LLC and Contributors
+  License: Apache-2.0
+  https://github.com/leanprover/lean4
+
+  React / Vite Frontend
+  Copyright (c) Meta Platforms, Inc. and Contributors
+  License: MIT
+
+-------------------------------------------------------------------------------
+
+This NOTICE must be preserved in all copies and redistributions.
+Failure to include this NOTICE constitutes a violation of the Apache 2.0
+License terms under which this software is distributed.

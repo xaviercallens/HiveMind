@@ -26,6 +26,8 @@ Licence of this crate: AGPL-3.0 (Project HiveMind).
 Citation requested by the rusty-SUNDIALS NOTICE:
 Callens, X. (2026). rusty-SUNDIALS: Formally Verified Scientific Machine Learning Engine for Exascale Physics and
 Planetary Carbon Capture. SocrateAI Lab | SymbioticFactory Research. https://github.com/xaviercallens/rusty-SUNDIALS
+Version: 9.0.1 | License: Apache-2.0 AND CC-BY-4.0
 
-The dependency's LICENSE and NOTICE are not copied into this repository; they are in the pinned git revision
-(`crates/` and the repository root) and cargo caches them under `~/.cargo/git/checkouts`.
+The dependency's NOTICE and LICENSE, and LLNL's SUNDIALS licence, are kept verbatim in `third_party/rusty-sundials/` (see its
+`PROVENANCE.md`) and must accompany any redistributed binary. The source itself is not copied. What the notice requires, the
+owner's recorded permission and the open licence question are in `THIRD_PARTY_NOTICES.md` at the repository root.

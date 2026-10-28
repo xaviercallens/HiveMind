@@ -1,0 +1,506 @@
+{
+ "schema": "hivemind.base_model_catalog/v1",
+ "generated_by": "scripts/refresh_base_model_catalog.py",
+ "retrieved_at": "2026-10-28T07:49:30Z",
+ "incumbent": "Qwen/Qwen2.5-Coder-7B-Instruct",
+ "models": [
+  {
+   "model_id": "Qwen/Qwen2.5-Coder-7B-Instruct",
+   "role": "incumbent",
+   "exists": true,
+   "http_status": 200,
+   "retrieved_at": "2026-10-28T07:49:30Z",
+   "revision_sha": "c03e6d358207e414f1eca0bb1891e29f1db0e242",
+   "last_modified": "2025-01-12T02:03:41.000Z",
+   "license": "apache-2.0",
+   "gated": false,
+   "pipeline_tag": "text-generation",
+   "library_name": "transformers",
+   "api_parameters_total": 7615616512,
+   "api_parameters_by_dtype": {
+    "BF16": 7615616512
+   },
+   "safetensors_total_bytes": 15231271864,
+   "safetensors_files": [
+    {
+     "name": "model-00001-of-00004.safetensors",
+     "bytes": 4877660776,
+     "lfs_sha256": "0b6f069918b07c064cbba8ae4f00f529aa9bbf84b7cdfcb7fc2694a40f6aa8ef"
+    },
+    {
+     "name": "model-00002-of-00004.safetensors",
+     "bytes": 4932751008,
+     "lfs_sha256": "c3d46733e7aa054ea7b063fbccd0a5a08446e7bd1814bef26936c5aa1331da62"
+    },
+    {
+     "name": "model-00003-of-00004.safetensors",
+     "bytes": 4330865200,
+     "lfs_sha256": "9fe45dacee087385b3d2d6dd27a7413a8a56d95f145772facc148fa86fc73446"
+    },
+    {
+     "name": "model-00004-of-00004.safetensors",
+     "bytes": 1089994880,
+     "lfs_sha256": "5aa6e5cbe642377fd441fb4e60e83cca96b2bcd9820e245b9ea06d94653f17f2"
+    }
+   ],
+   "architecture": {
+    "model_type": "qwen2",
+    "architectures": [
+     "Qwen2ForCausalLM"
+    ],
+    "hidden_size": 3584,
+    "num_hidden_layers": 28,
+    "intermediate_size": 18944,
+    "vocab_size": 152064,
+    "num_attention_heads": 28,
+    "num_key_value_heads": 4,
+    "head_dim": 128,
+    "tie_word_embeddings": false,
+    "n_full_attention_layers": 28,
+    "n_linear_attention_layers": 0,
+    "linear_num_key_heads": 0,
+    "linear_num_value_heads": 0,
+    "linear_key_head_dim": 0,
+    "linear_value_head_dim": 0,
+    "linear_conv_kernel_dim": 0,
+    "has_vision_config": false,
+    "max_position_embeddings": 32768
+   },
+   "header": {
+    "params_total": 7615616512,
+    "params_text_linear": 6525288448,
+    "params_embedding": 1089994752,
+    "params_text_other": 333312,
+    "params_vision": 0,
+    "params_mtp": 0,
+    "lora_in_plus_out_all_linear": 2523136,
+    "lora_in_plus_out_mlp": 1892352,
+    "max_linear_elements": 67895296,
+    "n_tensors": 339
+   },
+   "sources": {
+    "api": "https://huggingface.co/api/models/Qwen/Qwen2.5-Coder-7B-Instruct?blobs=true",
+    "config": "https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct/resolve/c03e6d358207e414f1eca0bb1891e29f1db0e242/config.json",
+    "headers": "HTTP range requests on each safetensors file at the revision"
+   }
+  },
+  {
+   "model_id": "Qwen/Qwen3.5-0.8B",
+   "role": "candidate",
+   "exists": true,
+   "http_status": 200,
+   "retrieved_at": "2026-10-28T07:49:30Z",
+   "revision_sha": "2fc06364715b967f1860aea9cf38778875588b17",
+   "last_modified": "2026-03-02T11:26:58.000Z",
+   "license": "apache-2.0",
+   "gated": false,
+   "pipeline_tag": "image-text-to-text",
+   "library_name": "transformers",
+   "api_parameters_total": 873438784,
+   "api_parameters_by_dtype": {
+    "F32": 2592,
+    "BF16": 873436192
+   },
+   "safetensors_total_bytes": 1746942600,
+   "safetensors_files": [
+    {
+     "name": "model.safetensors-00001-of-00001.safetensors",
+     "bytes": 1746942600,
+     "lfs_sha256": "04b1c301231dd422b8860db31311ab2721511346a32cb1e079c4c4e5f1fe4696"
+    }
+   ],
+   "architecture": {
+    "model_type": "qwen3_5_text",
+    "architectures": [
+     "Qwen3_5ForConditionalGeneration"
+    ],
+    "hidden_size": 1024,
+    "num_hidden_layers": 24,
+    "intermediate_size": 3584,
+    "vocab_size": 248320,
+    "num_attention_heads": 8,
+    "num_key_value_heads": 2,
+    "head_dim": 256,
+    "tie_word_embeddings": true,
+    "n_full_attention_layers": 6,
+    "n_linear_attention_layers": 18,
+    "linear_num_key_heads": 16,
+    "linear_num_value_heads": 16,
+    "linear_key_head_dim": 128,
+    "linear_value_head_dim": 128,
+    "linear_conv_kernel_dim": 4,
+    "has_vision_config": true,
+    "max_position_embeddings": 262144
+   },
+   "header": {
+    "params_total": 873438784,
+    "params_text_linear": 497614848,
+    "params_embedding": 254279680,
+    "params_text_other": 498496,
+    "params_vision": 100592896,
+    "params_mtp": 20452864,
+    "lora_in_plus_out_all_linear": 676416,
+    "lora_in_plus_out_mlp": 331776,
+    "max_linear_elements": 6291456,
+    "n_tensors": 488
+   },
+   "sources": {
+    "api": "https://huggingface.co/api/models/Qwen/Qwen3.5-0.8B?blobs=true",
+    "config": "https://huggingface.co/Qwen/Qwen3.5-0.8B/resolve/2fc06364715b967f1860aea9cf38778875588b17/config.json",
+    "headers": "HTTP range requests on each safetensors file at the revision"
+   }
+  },
+  {
+   "model_id": "Qwen/Qwen3.5-4B",
+   "role": "candidate",
+   "exists": true,
+   "http_status": 200,
+   "retrieved_at": "2026-10-28T07:49:30Z",
+   "revision_sha": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+   "last_modified": "2026-03-02T00:52:52.000Z",
+   "license": "apache-2.0",
+   "gated": false,
+   "pipeline_tag": "image-text-to-text",
+   "library_name": "transformers",
+   "api_parameters_total": 4659865088,
+   "api_parameters_by_dtype": {
+    "BF16": 4659861248,
+    "F32": 3840
+   },
+   "safetensors_total_bytes": 9319828096,
+   "safetensors_files": [
+    {
+     "name": "model.safetensors-00001-of-00002.safetensors",
+     "bytes": 5329398688,
+     "lfs_sha256": "26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61"
+    },
+    {
+     "name": "model.safetensors-00002-of-00002.safetensors",
+     "bytes": 3990429408,
+     "lfs_sha256": "cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188"
+    }
+   ],
+   "architecture": {
+    "model_type": "qwen3_5_text",
+    "architectures": [
+     "Qwen3_5ForConditionalGeneration"
+    ],
+    "hidden_size": 2560,
+    "num_hidden_layers": 32,
+    "intermediate_size": 9216,
+    "vocab_size": 248320,
+    "num_attention_heads": 16,
+    "num_key_value_heads": 4,
+    "head_dim": 256,
+    "tie_word_embeddings": true,
+    "n_full_attention_layers": 8,
+    "n_linear_attention_layers": 24,
+    "linear_num_key_heads": 16,
+    "linear_num_value_heads": 32,
+    "linear_key_head_dim": 128,
+    "linear_value_head_dim": 128,
+    "linear_conv_kernel_dim": 4,
+    "has_vision_config": true,
+    "max_position_embeddings": 262144
+   },
+   "header": {
+    "params_total": 4659865088,
+    "params_text_linear": 3569090560,
+    "params_embedding": 635699200,
+    "params_text_other": 961536,
+    "params_vision": 333514240,
+    "params_mtp": 120599552,
+    "lora_in_plus_out_all_linear": 2029056,
+    "lora_in_plus_out_mlp": 1130496,
+    "max_linear_elements": 23592960,
+    "n_tensors": 738
+   },
+   "sources": {
+    "api": "https://huggingface.co/api/models/Qwen/Qwen3.5-4B?blobs=true",
+    "config": "https://huggingface.co/Qwen/Qwen3.5-4B/resolve/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a/config.json",
+    "headers": "HTTP range requests on each safetensors file at the revision"
+   }
+  },
+  {
+   "model_id": "Qwen/Qwen3.5-9B",
+   "role": "candidate",
+   "exists": true,
+   "http_status": 200,
+   "retrieved_at": "2026-10-28T07:49:30Z",
+   "revision_sha": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+   "last_modified": "2026-03-02T00:51:43.000Z",
+   "license": "apache-2.0",
+   "gated": false,
+   "pipeline_tag": "image-text-to-text",
+   "library_name": "transformers",
+   "api_parameters_total": 9653104368,
+   "api_parameters_by_dtype": {
+    "BF16": 9653100528,
+    "F32": 3840
+   },
+   "safetensors_total_bytes": 19306310880,
+   "safetensors_files": [
+    {
+     "name": "model.safetensors-00001-of-00004.safetensors",
+     "bytes": 5276436216,
+     "lfs_sha256": "db6f444b43d318c92f360a13a25561a6a65b10c0631b8ed305a426dbaa6c380e"
+    },
+    {
+     "name": "model.safetensors-00002-of-00004.safetensors",
+     "bytes": 5335161512,
+     "lfs_sha256": "31c7d7e2dd5d207840b31cc59083c8f4c4718959149e0358c0364052bb9a0330"
+    },
+    {
+     "name": "model.safetensors-00003-of-00004.safetensors",
+     "bytes": 5368717440,
+     "lfs_sha256": "7ec36ba3a4176a44c3c0876ad80c56a2f70c84bf008d82e9501df642f17dadec"
+    },
+    {
+     "name": "model.safetensors-00004-of-00004.safetensors",
+     "bytes": 3325995712,
+     "lfs_sha256": "b62b0c4cd7e44edee103ee8f4fe225f246d5e768e07bfd5f25b63a8aa1fdd0c6"
+    }
+   ],
+   "architecture": {
+    "model_type": "qwen3_5_text",
+    "architectures": [
+     "Qwen3_5ForConditionalGeneration"
+    ],
+    "hidden_size": 4096,
+    "num_hidden_layers": 32,
+    "intermediate_size": 12288,
+    "vocab_size": 248320,
+    "num_attention_heads": 16,
+    "num_key_value_heads": 4,
+    "head_dim": 256,
+    "tie_word_embeddings": false,
+    "n_full_attention_layers": 8,
+    "n_linear_attention_layers": 24,
+    "linear_num_key_heads": 16,
+    "linear_num_value_heads": 32,
+    "linear_key_head_dim": 128,
+    "linear_value_head_dim": 128,
+    "linear_conv_kernel_dim": 4,
+    "has_vision_config": true,
+    "max_position_embeddings": 262144
+   },
+   "header": {
+    "params_total": 9653104368,
+    "params_text_linear": 6918504448,
+    "params_embedding": 2034237440,
+    "params_text_other": 1061376,
+    "params_vision": 456010480,
+    "params_mtp": 243290624,
+    "lora_in_plus_out_all_linear": 2704896,
+    "lora_in_plus_out_mlp": 1572864,
+    "max_linear_elements": 50331648,
+    "n_tensors": 775
+   },
+   "sources": {
+    "api": "https://huggingface.co/api/models/Qwen/Qwen3.5-9B?blobs=true",
+    "config": "https://huggingface.co/Qwen/Qwen3.5-9B/resolve/c202236235762e1c871ad0ccb60c8ee5ba337b9a/config.json",
+    "headers": "HTTP range requests on each safetensors file at the revision"
+   }
+  },
+  {
+   "model_id": "Qwen/Qwen2.5-Coder-14B-Instruct",
+   "role": "reference",
+   "exists": true,
+   "http_status": 200,
+   "retrieved_at": "2026-10-28T07:49:30Z",
+   "revision_sha": "aedcc2d42b622764e023cf882b6652e646b95671",
+   "last_modified": "2025-01-12T02:02:59.000Z",
+   "license": "apache-2.0",
+   "gated": false,
+   "pipeline_tag": "text-generation",
+   "library_name": "transformers",
+   "api_parameters_total": 14770033664,
+   "api_parameters_by_dtype": {
+    "BF16": 14770033664
+   },
+   "safetensors_total_bytes": 29540133960,
+   "safetensors_files": [
+    {
+     "name": "model-00001-of-00006.safetensors",
+     "bytes": 4986211280,
+     "lfs_sha256": "b14a60aa35c07e58da61cbe6c8b2819e60a043dd98001f14736045c6062e79a0"
+    },
+    {
+     "name": "model-00002-of-00006.safetensors",
+     "bytes": 4954847344,
+     "lfs_sha256": "03b8de22c48a523646ac0a38aa36471529e22cdd1238ce43b44bf5014d64098a"
+    },
+    {
+     "name": "model-00003-of-00006.safetensors",
+     "bytes": 4954847392,
+     "lfs_sha256": "97587f9d511af15bce6295a15b10c43f504b16fcddf22db9c87356df17ffff3f"
+    },
+    {
+     "name": "model-00004-of-00006.safetensors",
+     "bytes": 4954847392,
+     "lfs_sha256": "ed34a72606341f8774d21661ad8ec9e59deffad8c63ceebd2f6db86f163bee7d"
+    },
+    {
+     "name": "model-00005-of-00006.safetensors",
+     "bytes": 4954847392,
+     "lfs_sha256": "657a6388cfe547498159dfb6507b9c1ead09a6fbab154c22942bbf963aef4208"
+    },
+    {
+     "name": "model-00006-of-00006.safetensors",
+     "bytes": 4734533160,
+     "lfs_sha256": "3dbbc07addfc989662fd6bf88798970b278c98630f88eed5d23256fc99365dae"
+    }
+   ],
+   "architecture": {
+    "model_type": "qwen2",
+    "architectures": [
+     "Qwen2ForCausalLM"
+    ],
+    "hidden_size": 5120,
+    "num_hidden_layers": 48,
+    "intermediate_size": 13824,
+    "vocab_size": 152064,
+    "num_attention_heads": 40,
+    "num_key_value_heads": 8,
+    "head_dim": 128,
+    "tie_word_embeddings": false,
+    "n_full_attention_layers": 48,
+    "n_linear_attention_layers": 0,
+    "linear_num_key_heads": 0,
+    "linear_num_value_heads": 0,
+    "linear_key_head_dim": 0,
+    "linear_value_head_dim": 0,
+    "linear_conv_kernel_dim": 0,
+    "has_vision_config": false,
+    "max_position_embeddings": 32768
+   },
+   "header": {
+    "params_total": 14770033664,
+    "params_text_linear": 13212057600,
+    "params_embedding": 1557135360,
+    "params_text_other": 840704,
+    "params_vision": 0,
+    "params_mtp": 0,
+    "lora_in_plus_out_all_linear": 4300800,
+    "lora_in_plus_out_mlp": 2727936,
+    "max_linear_elements": 70778880,
+    "n_tensors": 579
+   },
+   "sources": {
+    "api": "https://huggingface.co/api/models/Qwen/Qwen2.5-Coder-14B-Instruct?blobs=true",
+    "config": "https://huggingface.co/Qwen/Qwen2.5-Coder-14B-Instruct/resolve/aedcc2d42b622764e023cf882b6652e646b95671/config.json",
+    "headers": "HTTP range requests on each safetensors file at the revision"
+   }
+  },
+  {
+   "model_id": "Qwen/Qwen3.5-9B-Base",
+   "role": "s19_referenced",
+   "exists": true,
+   "http_status": 200,
+   "retrieved_at": "2026-10-28T07:49:30Z",
+   "revision_sha": "68c46c4b3498877f3ef123c856ecfde50c39f404",
+   "last_modified": "2026-04-23T12:04:39.000Z",
+   "license": "apache-2.0",
+   "gated": false,
+   "pipeline_tag": "image-text-to-text",
+   "library_name": "transformers",
+   "api_parameters_total": 9653104368,
+   "api_parameters_by_dtype": {
+    "BF16": 9653100528,
+    "F32": 3840
+   },
+   "safetensors_total_bytes": 19306310872,
+   "safetensors_files": [
+    {
+     "name": "model.safetensors-00001-of-00004.safetensors",
+     "bytes": 5276436216,
+     "lfs_sha256": "862bf7bba8a50145d19d0ae463931fae515284024736592a73a336bc4dfa54ee"
+    },
+    {
+     "name": "model.safetensors-00002-of-00004.safetensors",
+     "bytes": 5335161576,
+     "lfs_sha256": "bace8e115e11ca93c22f0352a60d2fb0c76ac6d7d1c2993c143b7ad2b6c8868c"
+    },
+    {
+     "name": "model.safetensors-00003-of-00004.safetensors",
+     "bytes": 5368717376,
+     "lfs_sha256": "63a021ac0011cbfc66166e77103327a8b45dee95832e36551f6b4c3337448959"
+    },
+    {
+     "name": "model.safetensors-00004-of-00004.safetensors",
+     "bytes": 3325995704,
+     "lfs_sha256": "1a643bbed669266917b5058b5d3f660c03233599249ff7d8fd083decfe662ae0"
+    }
+   ],
+   "architecture": {
+    "model_type": "qwen3_5_text",
+    "architectures": [
+     "Qwen3_5ForConditionalGeneration"
+    ],
+    "hidden_size": 4096,
+    "num_hidden_layers": 32,
+    "intermediate_size": 12288,
+    "vocab_size": 248320,
+    "num_attention_heads": 16,
+    "num_key_value_heads": 4,
+    "head_dim": 256,
+    "tie_word_embeddings": false,
+    "n_full_attention_layers": 8,
+    "n_linear_attention_layers": 24,
+    "linear_num_key_heads": 16,
+    "linear_num_value_heads": 32,
+    "linear_key_head_dim": 128,
+    "linear_value_head_dim": 128,
+    "linear_conv_kernel_dim": 4,
+    "has_vision_config": true,
+    "max_position_embeddings": 262144
+   },
+   "header": {
+    "params_total": 9653104368,
+    "params_text_linear": 6918504448,
+    "params_embedding": 2034237440,
+    "params_text_other": 1061376,
+    "params_vision": 456010480,
+    "params_mtp": 243290624,
+    "lora_in_plus_out_all_linear": 2704896,
+    "lora_in_plus_out_mlp": 1572864,
+    "max_linear_elements": 50331648,
+    "n_tensors": 775
+   },
+   "sources": {
+    "api": "https://huggingface.co/api/models/Qwen/Qwen3.5-9B-Base?blobs=true",
+    "config": "https://huggingface.co/Qwen/Qwen3.5-9B-Base/resolve/68c46c4b3498877f3ef123c856ecfde50c39f404/config.json",
+    "headers": "HTTP range requests on each safetensors file at the revision"
+   }
+  }
+ ],
+ "not_found": [
+  {
+   "model_id": "Qwen/Qwen3.5-Coder-3B",
+   "role": "s19_referenced",
+   "exists": false,
+   "http_status": 401,
+   "retrieved_at": "2026-10-28T07:49:30Z",
+   "source": "https://huggingface.co/api/models/Qwen/Qwen3.5-Coder-3B?blobs=true",
+   "note": "the Hub did not serve this id (it answers 401 for ids that do not exist or are private/gated)"
+  },
+  {
+   "model_id": "Qwen/Qwen3.5-Coder-14B-Instruct",
+   "role": "s19_referenced",
+   "exists": false,
+   "http_status": 401,
+   "retrieved_at": "2026-10-28T07:49:30Z",
+   "source": "https://huggingface.co/api/models/Qwen/Qwen3.5-Coder-14B-Instruct?blobs=true",
+   "note": "the Hub did not serve this id (it answers 401 for ids that do not exist or are private/gated)"
+  },
+  {
+   "model_id": "Qwen/Qwen3.5-Coder-30B-A3B-MoE",
+   "role": "s19_referenced",
+   "exists": false,
+   "http_status": 401,
+   "retrieved_at": "2026-10-28T07:49:30Z",
+   "source": "https://huggingface.co/api/models/Qwen/Qwen3.5-Coder-30B-A3B-MoE?blobs=true",
+   "note": "the Hub did not serve this id (it answers 401 for ids that do not exist or are private/gated)"
+  }
+ ]
+}

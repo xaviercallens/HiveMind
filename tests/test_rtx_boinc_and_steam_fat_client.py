@@ -297,16 +297,47 @@ def test_stitch_v46_cockpit_and_photorealistic_assets_from_project_1001841528007
     app = create_exoplanet_hunter_fastapi_app()
     client = TestClient(app)
 
-    # 1. Main cockpit `/` renders USS HIVEMIND NCC-31337 v4.6 Complete Tactical Bridge & Stage 3 Oolite Planetfall Bridge
+    # 1. Main cockpit `/` renders USS HIVEMIND NCC-31337 v4.6 across all 5 Stitch stages (Screens 00..11)
     resp = client.get("/")
     assert resp.status_code == 200
     html = resp.text
     assert "USS HIVEMIND NCC-31337 v4.6" in html
+    # Stage 1 (Screens 02, 03, 07, 11): All 10 Star Systems + Sub-Spatial Astrometric HUD
+    assert "[STAGE 1: GALAXIE ENGAGÉ]" in html
     assert "SPECTRO-SCAN TACTIQUE" in html
+    for planet_key in (
+        "trappist1e",
+        "k218b",
+        "kepler11f",
+        "hd80606b",
+        "toi700d",
+        "lhs1140b",
+        "wasp39b",
+        "kepler186f",
+        "koi14",
+        "koibin",
+    ):
+        assert f'data-planet="{planet_key}"' in html
+    # Stage 2 (Screen 00): Ion Propulsion Telemetry, Orbital Eccentricity Decay (e), Lagrange Ring L1-L5, Target Dossier, Fleet Rendezvous
+    assert "ION PROPULSION TELEMETRY" in html
+    assert "ORBITAL ECCENTRICITY DECAY (e)" in html
+    assert "VIEWPORT // ASTROMETRIC-02" in html
+    assert "ORBITAL DOCK // FLEET RENDEZVOUS" in html
+    # Stage 3 (Screens 10 & 06): Cobra MK-III MFD, Retro-Propulsion Slider, [SYS.SPEC.01] Atmo & Litho, Radar Contacts
     assert "COBRA MK-III // HONOUR OF HIVEMIND" in html
     assert "ÉQUIPEMENTS PRIMEABLES" in html
+    assert "RETRO-PROPULSION OUTPUT:" in html
+    assert "[SYS.SPEC.01] ATMO &amp; LITHO" in html
     assert "RADAR CIBLES &amp; CONTACTS" in html
-    assert "JWST NIRSPEC PRISM" in html
+    # Stage 4 (Screen 01): Beryllium 6.5M NIRSpec•MIRI, 6 Molecular Band Cards, NASA TAP ADQL Sync, Thermal Gradient Model (T_eq)
+    assert "BERYLLIUM 6.5M NIRSpec•MIRI" in html
+    assert "[NIRSPEC_SPECTRUM_WATERFALL]" in html
+    assert "[NASA_TAP_ADQL_SYNC]" in html
+    assert "THERMAL GRADIENT MODEL (T_eq)" in html
+    # Stage 5 (Screen 04): Dual-Engine Architecture (Steam Fat Client RTX 2070 BOINC vs. Zero-Install WebGPU)
+    assert "OPTION A: NATIVE FAT CLIENT (STEAM AppID 3133700)" in html
+    assert "OPTION B: ZERO-INSTALL WEBGPU GALAXY" in html
+    # Bottom Dual Oscilloscopes & 5-Language Switcher
     assert "CONSOLE SYSTÉMIQUE UCSC // VITESSE RADIALE DOPPLER" in html
     assert "PHOTOMÉTRIE DE TRANSIT KEPLER/TESS" in html
     for lang in ("fr", "es", "de", "en", "zh"):

@@ -214,6 +214,12 @@ class SteamIdentityGate:
             raise IdentityError("this Steam account is Limited (it has spent less than the USD 5 minimum)")
         return steam_id64, self.tokens.issue(steam_id64)
 
+    def identify(self, token: str | None) -> str:
+        """The SteamID64 a valid token belongs to (for endpoints that need a signed-in node but do not name one)."""
+        if not token:
+            raise IdentityError("an identity token is required: sign in with Steam first")
+        return self.tokens.verify(token)
+
     def authorize(self, token: str | None, claimed_steam_id64: str) -> str:
         if not token:
             raise IdentityError("an identity token is required: sign in with Steam first")

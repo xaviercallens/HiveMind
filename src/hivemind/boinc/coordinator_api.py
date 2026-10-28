@@ -347,15 +347,23 @@ def create_coordinator_fastapi_app(coordinator: BOINCCoordinatorService, identit
             "registered_steam_nodes": len(coordinator.reputation_ledger),
         }
 
+    def require_identity(request: Request, claimed_steam_id64: str | None = None) -> None:
+        """No-op in development mode; with a gate, the request must carry a valid identity token (for ``claimed_steam_id64`` if one is named)."""
+        if identity is None:
+            return
+        header = request.headers.get("authorization", "")
+        token = header[7:].strip() if header.lower().startswith("bearer ") else None
+        try:
+            if claimed_steam_id64 is None:
+                identity.identify(token)
+            else:
+                identity.authorize(token, claimed_steam_id64)
+        except IdentityError as exc:
+            raise HTTPException(status_code=401 if not token else 403, detail=str(exc)) from exc
+
     @app.post("/workunit/request")
     def request_workunit(req: WorkunitRequestPayload, request: Request) -> dict[str, Any]:
-        if identity is not None:
-            header = request.headers.get("authorization", "")
-            token = header[7:].strip() if header.lower().startswith("bearer ") else None
-            try:
-                identity.authorize(token, req.steam_id64)
-            except IdentityError as exc:
-                raise HTTPException(status_code=401 if not token else 403, detail=str(exc)) from exc
+        require_identity(request, req.steam_id64)
         try:
             wu, _ = coordinator.assign_workunit(
                 worker_id=req.worker_id,
@@ -382,8 +390,13 @@ def create_coordinator_fastapi_app(coordinator: BOINCCoordinatorService, identit
         }
 
     @app.post("/v1/chat/completions", response_model=None)
-    def openai_chat_completions_gateway(payload: dict[str, Any]) -> Any:
-        """M4 OpenAI-compatible `/v1/chat/completions` proxy with SSE streaming (`HM-M4-01`), OPoI 5% audit & L2 $HIVE voucher."""
+    def openai_chat_completions_gateway(payload: dict[str, Any], request: Request) -> Any:
+        """M4 OpenAI-compatible `/v1/chat/completions` proxy with SSE streaming (`HM-M4-01`), OPoI 5% audit & L2 $HIVE voucher.
+
+        NOTE: this is a SIMULATION. The completion comes from the Hack-Miner game probe, and the experts, routing weights and vouchers are illustrative
+        (fixed provider names); it is not model inference. Real routed inference is the OpenRouter-style gateway in ``hivemind.router``.
+        """
+        require_identity(request)
         import json
         import re
         import time

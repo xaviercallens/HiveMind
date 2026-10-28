@@ -24,7 +24,7 @@ See the [Steam bridge](../src/hivemind/client/steamworks.py), [package builder](
 1. A node opens `/identity/steam/login`, signs in at Steam, and Steam sends the browser to `/identity/steam/callback`.
 2. The coordinator hands the signed assertion back to Steam (`openid.mode=check_authentication`) and accepts it only if Steam confirms it, it names this coordinator's return URL, and its nonce is fresh and unused. That proves control of one SteamID64. No Steam Web API key and no Steam App ID are needed.
 3. The *Limited account* and *VAC ban* flags are read from Steam's community profile XML (`isLimitedAccount`, `vacBanned`), not from the caller. Limited and banned accounts get no token.
-4. The node receives a one-hour token and sends it as `Authorization: Bearer` on `POST /workunit/request`, which must name the same SteamID64. `/reputation` lists hashed labels instead of SteamIDs and worker names.
+4. The node receives a one-hour token and sends it as `Authorization: Bearer` on `POST /workunit/request`, which must name the same SteamID64. `/reputation` lists hashed labels instead of SteamIDs and worker names. The coordinator's `/v1/chat/completions` also needs a valid token (any signed-in node). That endpoint is a **simulation** (the answer comes from the Hack-Miner game probe; experts, routing weights and vouchers are illustrative), not model inference: real routed inference is the gateway in `hivemind.router`.
 
 Without `--public-url`, `serve-coordinator` binds loopback only and trusts the `steam_id64` in the request (development and simulations; a warning is logged). A non-loopback `--host` is refused unless you pass `--public-url` or, for a throwaway network, `--insecure-dev-identities`.
 

@@ -279,6 +279,33 @@ def test_a_limited_account_cannot_sign_in_so_it_never_gets_a_workunit() -> None:
     assert response.status_code == 403 and "Limited" in response.json()["detail"]
 
 
+CHAT = {"messages": [{"role": "user", "content": "hello swarm, please answer"}]}
+
+
+def test_the_simulated_chat_endpoint_needs_a_signed_in_node_when_gated_and_never_runs_the_probe_without_one(monkeypatch) -> None:  # noqa: ANN001
+    probe = Mock(side_effect=AssertionError("an unauthenticated request reached the probe"))
+    monkeypatch.setattr("hivemind.game.hf_hack_miner.execute_interactive_bounty_probe", probe)
+    g = gate()
+    client = TestClient(create_coordinator_fastapi_app(service(), identity=g))
+    assert client.post("/v1/chat/completions", json=CHAT).status_code == 401
+    assert client.post("/v1/chat/completions", json=CHAT, headers={"Authorization": "Bearer nonsense"}).status_code == 403
+    expired = IdentityTokens(secret=b"z" * 32, clock=lambda: NOW).issue(SID)  # signed with another secret
+    assert client.post("/v1/chat/completions", json=CHAT, headers={"Authorization": f"Bearer {expired}"}).status_code == 403
+    probe.assert_not_called()
+
+    probe2 = Mock(return_value={"generated_solution": "ok", "top2_active_experts": ["a", "b"], "expert_routing_weights": [0.6, 0.4]})
+    monkeypatch.setattr("hivemind.game.hf_hack_miner.execute_interactive_bounty_probe", probe2)
+    response = client.post("/v1/chat/completions", json=CHAT, headers={"Authorization": f"Bearer {g.tokens.issue(SID)}"})
+    assert response.status_code == 200 and response.json()["choices"][0]["message"]["content"] == "ok"
+    probe2.assert_called_once()
+
+
+def test_the_simulated_chat_endpoint_stays_open_in_development_mode(monkeypatch) -> None:  # noqa: ANN001
+    probe = Mock(return_value={"generated_solution": "ok", "top2_active_experts": ["a", "b"], "expert_routing_weights": [0.6, 0.4]})
+    monkeypatch.setattr("hivemind.game.hf_hack_miner.execute_interactive_bounty_probe", probe)
+    assert TestClient(create_coordinator_fastapi_app(service())).post("/v1/chat/completions", json=CHAT).status_code == 200
+
+
 def test_the_public_reputation_listing_does_not_expose_steam_ids_or_worker_names_when_gated() -> None:
     client = TestClient(create_coordinator_fastapi_app(service(), identity=gate()))
     text = client.get("/reputation").text

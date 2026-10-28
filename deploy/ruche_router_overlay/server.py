@@ -82,9 +82,16 @@ async def join_page(request: Request) -> HTMLResponse:
         tiers = (await _client.get(f"{ROUTER}/v1/hivemind/catalog", timeout=4.0)).json()["tiers"]
     except (httpx.HTTPError, ValueError, KeyError):
         tiers = None
+    google, handles = False, True  # what the router offers for creating an account; if it cannot be asked, assume handle registration only
+    try:
+        providers = (await _client.get(f"{ROUTER}/v1/hivemind/signin/providers", timeout=4.0)).json()
+        google = any(p.get("name") == "google" for p in providers.get("providers", []))
+        handles = bool(providers.get("handle_registration", True))
+    except (httpx.HTTPError, ValueError, AttributeError):
+        pass
     nonce = secrets.token_urlsafe(18)
     return HTMLResponse(
-        render_join_page(lang, nonce, tiers=tiers, api_url=ROUTER, path="/rejoindre" if french_path else "/join"),
+        render_join_page(lang, nonce, tiers=tiers, api_url=ROUTER, path="/rejoindre" if french_path else "/join", google_enabled=google, handle_registration=handles),
         headers={"Content-Security-Policy": join_content_security_policy(nonce), "Cache-Control": "no-store", "Vary": "Accept-Language",
                  "Content-Language": lang, "X-Content-Type-Options": "nosniff", "Referrer-Policy": "strict-origin-when-cross-origin"},
     )

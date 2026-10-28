@@ -1374,7 +1374,8 @@ def create_router_app(
         french_path = request.url.path == "/rejoindre"
         lang = pick_language(request.query_params.get("lang"), request.headers.get("accept-language"), default="fr" if french_path else "en")
         nonce = secrets.token_urlsafe(18)
-        page = render_join_page(lang, nonce, tiers=catalog_payload()["tiers"], path="/rejoindre" if french_path else "/join")
+        page = render_join_page(lang, nonce, tiers=catalog_payload()["tiers"], path="/rejoindre" if french_path else "/join",
+                                google_enabled=google is not None, handle_registration=open_registration)  # describe only the sign-up routes this gateway really has
         return HTMLResponse(page, headers={
             "Content-Security-Policy": join_content_security_policy(nonce), "Cache-Control": "no-store", "Vary": "Accept-Language",
             "Content-Language": lang, "X-Content-Type-Options": "nosniff", "Referrer-Policy": "strict-origin-when-cross-origin",

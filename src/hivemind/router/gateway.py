@@ -1215,6 +1215,7 @@ def create_router_app(
 
     @app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/playground", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/life-as-a-bee", methods=["GET", "HEAD"], response_class=HTMLResponse)
     def portal() -> HTMLResponse:
         nonce = secrets.token_urlsafe(18)
         page = render_portal_page(google.client_id if google else None, nonce)
@@ -1227,6 +1228,13 @@ def create_router_app(
                 "Referrer-Policy": "strict-origin-when-cross-origin",
             },
         )
+
+    @app.get("/v1/hivemind/life-as-a-bee")
+    def life_as_a_bee() -> dict[str, Any]:
+        """Public 'Life as a Bee' dashboard payload: 24h bee lifecycle, 15 real end-user benchmark scenarios, and per-bee usage guide."""
+        from hivemind.router.life_as_a_bee import life_as_a_bee_payload
+
+        return life_as_a_bee_payload()
 
     @app.get("/v1/hivemind/catalog")
     def catalog() -> dict[str, Any]:

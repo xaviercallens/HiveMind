@@ -171,6 +171,7 @@ def test_validate_catalog_rejects_each_defect() -> None:
     c = copy.deepcopy(good); c["models"][0]["license"] = None; cases.append(("license", c))
     c = copy.deepcopy(good); c["models"][0]["header"] = {}; cases.append(("header summary", c))
     c = copy.deepcopy(good); c["models"][0]["retrieved_at"] = ""; cases.append(("retrieval date", c))
+    c = copy.deepcopy(good); c["models"][0]["api_parameters_total"] = None; cases.append(("no Hub safetensors total", c))
     for needle, bad in cases:
         problems = bmc.validate_catalog(bad)
         assert any(needle in p for p in problems), (needle, problems)

@@ -248,7 +248,10 @@ def validate_catalog(catalog: Mapping[str, Any]) -> list[str]:
         api_total = m.get("api_parameters_total")
         if not head.get("params_total"):
             problems.append(f"{mid}: no safetensors header summary")
-        elif api_total is not None and int(api_total) != int(head["params_total"]):
+        elif api_total is None:
+            # Without the Hub's own count the header cross-check cannot run; a skipped check must not pass silently.
+            problems.append(f"{mid}: no Hub safetensors total to cross-check the header parameter total against")
+        elif int(api_total) != int(head["params_total"]):
             problems.append(f"{mid}: header parameter total {head['params_total']} != Hub safetensors total {api_total}")
         if not m.get("license"):
             problems.append(f"{mid}: license missing")

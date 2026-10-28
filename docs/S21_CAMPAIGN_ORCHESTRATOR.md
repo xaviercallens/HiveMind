@@ -17,6 +17,11 @@ The six campaigns are the existing `JOINT_SUBJECT_CAMPAIGNS` (`amcp_kafka_campai
 | `issued_at_utc`, `nonce` | freshness and replay protection |
 | `signature` | HMAC-SHA256 (hex) over the canonical JSON of every other field (sorted keys, no spaces) |
 
+**Keys.** The orchestrator takes either one shared secret or a mapping `participant_id -> secret`. With one shared secret,
+anyone holding it can sign for any `participant_id` (including a `leave` for someone else), so that mode is only for a trusted
+gateway that has already authenticated the participant. With per-participant keys a participant can sign only its own requests,
+and a `participant_id` with no key on file is rejected as `invalid signature`.
+
 `CampaignOrchestrator.handle()` checks, in this order, and stops at the first failure:
 field validity, `|now - issued_at_utc| <= 900 s`, signature, nonce, campaign exists, campaign open now
 (`dtstart - join_lead_s <= now < dtend`; `join_lead_s` is 0 by default), the participant's quota of concurrent campaigns (2),
@@ -65,7 +70,8 @@ breaks it). Rows above the cap are dropped and the count is reported. Domains ar
 **Controls.** Every job has a shuffled-label control (same rows, recipe and seed; labels permuted). NIGHT-MOE-1 showed that for a
 generative task this control cannot fail (a shuffled numeric answer is never right), so a `generative` domain also gets a
 cross-domain control (same recipe on another qualifying domain's rows), marked as the primary comparison; a generative domain with
-no other qualifying domain is refused. Each job then has an `eval_heldout` stage (base, adapter and every control, exact paired
+no other qualifying domain is refused. The donor may be a domain that qualifies but is `DEFERRED` by `max_jobs` tonight: it needs
+verified rows, not a job. Each job then has an `eval_heldout` stage (base, adapter and every control, exact paired
 McNemar, alpha 0.05, unparsable counts reported) and a `promotion_gate` with `auto_promote: false` that lists what must hold before
 promotion: adapter beats the primary control, adapter beats base on items both parsed, the verified update gate on the other packs,
 and a decontamination report.
@@ -82,13 +88,14 @@ BOINC `BOINCWorkunit` specs are **not** emitted: a workunit needs the SHA-256 an
 at planning time. The plan names the app and prefix so the work generator can create the workunits once the shard is built.
 
 **BLOCKED.** The plan is `BLOCKED`, with no jobs and every reason listed, when any of these holds: the HOLD file exists; the
-governor state file is missing, unparsable, has no `state` or `t`, is older than 900 s, or says `held`; no domain qualifies; no
+governor state file is missing, unparsable, has no `state` or `t`, is older than 900 s, is stamped more than 60 s in the future
+(it would otherwise never go stale), or says `held`; no domain qualifies; no
 selected domain could be assigned to a producer. The CLI also blocks when the campaign state or the ledger cannot be read. Exit
 status 0 = PLANNED, 2 = BLOCKED. `--dry-run` is required and is the only mode.
 
 ## 3. Measured
 
-- `tests/test_campaign_orchestrator.py`: 48 tests pass locally (see the PR for the command and output).
+- `tests/test_campaign_orchestrator.py`: 51 tests pass locally (see the PR for the command and output).
 - The CLI on this workstation, 2026-10-28, with no state, ledger or governor file present: exit 2, `BLOCKED` with four reasons
   (campaign state, ledger, governor state not readable; no domain qualifies); night window 2026-10-28T21:00Z to
   2026-10-29T06:00Z, 9.0 h. This is the expected result off the producer host, not a plan.

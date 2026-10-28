@@ -71,6 +71,10 @@ MAX_UNVERIFIED_NUM, MAX_UNVERIFIED_DEN = 3, 10
 # What the orchestrator needs from a bus: one callable that delivers an event and returns broker metadata
 # (topic, partition, offset). ``InMemoryKafkaBridge().publish`` today; the S21 Kafka transport's publish later.
 PublishFn = Callable[[AMCPKafkaEvent], Mapping[str, Any]]
+# Signing keys: one shared secret (every key holder can sign for any participant_id: only for a trusted gateway that has already
+# authenticated the participant), or a mapping participant_id -> that participant's own secret (a participant can then sign
+# only its own joins and leaves; a participant without a key is rejected).
+SecretSource = bytes | Mapping[str, bytes]
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -182,16 +186,17 @@ class CampaignOrchestrator:
     def __init__(
         self,
         state_path: Path | str,
-        secret: bytes,
+        secret: SecretSource,
         publish: PublishFn,
         *,
         campaigns: Sequence[SubjectCampaign] = JOINT_SUBJECT_CAMPAIGNS,
         policy: CampaignPolicy | None = None,
     ) -> None:
-        if len(secret) < MIN_SECRET_BYTES:
+        keys = [secret] if isinstance(secret, bytes) else list(secret.values())
+        if not keys or any(not isinstance(k, bytes) or len(k) < MIN_SECRET_BYTES for k in keys):
             raise ValueError(f"HMAC secret must be at least {MIN_SECRET_BYTES} bytes")
         self.state_path = Path(state_path)
-        self._secret = secret
+        self._secret: bytes | dict[str, bytes] = secret if isinstance(secret, bytes) else dict(secret)
         self.publish = publish
         self.campaigns: dict[str, SubjectCampaign] = {c.subject_id: c for c in campaigns}
         self.policy = policy or CampaignPolicy()
@@ -283,7 +288,10 @@ class CampaignOrchestrator:
             return "nonce must be 8-64 characters of [A-Za-z0-9_-]"
         if abs(now_utc - r.issued_at_utc) > self.policy.request_max_skew_s:
             return f"request issued {now_utc - r.issued_at_utc:.0f} s from now; allowed skew is {self.policy.request_max_skew_s:.0f} s"
-        if not verify_campaign_request_signature(r, self._secret):
+        key = self._secret if isinstance(self._secret, bytes) else self._secret.get(r.participant_id)
+        if key is None:
+            return "invalid signature"  # no key on file for this participant: same answer as a bad signature
+        if not verify_campaign_request_signature(r, key):
             return "invalid signature"
         if r.campaign_id not in self.campaigns:
             return f"unknown campaign {r.campaign_id!r}"
@@ -486,6 +494,7 @@ class DreamPolicy:
     control_cap_h: float = 0.25
     eval_cap_h: float = 0.75
     governor_max_age_s: float = 900.0
+    governor_max_future_s: float = 60.0  # a snapshot stamped later than this ahead of now would never go stale
     eligible_availability: frozenset[str] = frozenset({"eu_evening_cet", "24x7_autonomous"})
     tz: str = NIGHT_TZ
     start_h: int = NIGHT_START_H
@@ -501,7 +510,9 @@ def check_hold_file(hold_file: Path | None) -> str:
     return ""
 
 
-def check_governor_state(path: Path | None, now_utc: float, max_age_s: float) -> tuple[str, dict[str, Any]]:
+def check_governor_state(
+    path: Path | None, now_utc: float, max_age_s: float, max_future_s: float = 60.0
+) -> tuple[str, dict[str, Any]]:
     """Return (blocking reason or "", what was read). Fail-closed: anything unreadable blocks."""
     if path is None:
         return "no producer governor state path given", {}
@@ -518,6 +529,8 @@ def check_governor_state(path: Path | None, now_utc: float, max_age_s: float) ->
     seen = {"state": snap["state"], "age_s": round(age, 1)}
     if age > max_age_s:
         return f"producer governor state is {age:.0f} s old (max {max_age_s:.0f} s)", seen
+    if -age > max_future_s:
+        return f"producer governor state is stamped {-age:.0f} s in the future (max {max_future_s:.0f} s): clock or file is wrong", seen
     if snap["state"] == "held":
         return "producer governor is held by the operator", seen
     return "", seen
@@ -529,13 +542,18 @@ def _seed(night_date: str, domain: str, salt: str) -> int:
 
 def _select_domains(
     ledger: Sequence[DomainEvidence], policy: DreamPolicy
-) -> tuple[list[dict[str, Any]], list[DomainEvidence]]:
+) -> tuple[list[dict[str, Any]], list[DomainEvidence], list[str]]:
+    """Return (report rows, domains picked tonight, every qualifying domain in rank order).
+
+    The third list is the donor pool for cross-domain controls: a donor needs qualifying verified rows, not a job tonight, so a
+    domain DEFERRED by ``max_jobs`` is still a valid donor."""
     considered: list[dict[str, Any]] = []
     picked: list[DomainEvidence] = []
     qualified_names = {
         e.domain for e in ledger if e.new_verified >= policy.min_new_verified and e.heldout_eval_items >= policy.min_heldout_eval_items
     }
-    for e in sorted(ledger, key=lambda x: (-x.new_verified, x.domain)):
+    ranked = sorted(ledger, key=lambda x: (-x.new_verified, x.domain))
+    for e in ranked:
         cap = max_unverified_rows(e.new_verified)
         used_u = min(e.unverified, cap)
         row: dict[str, Any] = {
@@ -561,7 +579,7 @@ def _select_domains(
             row |= {"decision": "SELECTED", "reason": "qualifies"}
             picked.append(e)
         considered.append(row)
-    return considered, picked
+    return considered, picked, [e.domain for e in ranked if e.domain in qualified_names]
 
 
 def _producers(members: Iterable[Mapping[str, Any]], policy: DreamPolicy, campaigns: Mapping[str, SubjectCampaign]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -612,21 +630,22 @@ def plan_dream_phase(
     usable_h = (window.end_utc.timestamp() - usable_from) / 3600.0
     blocked = list(extra_blocked_reasons)
     hold_reason = check_hold_file(hold_file)
-    gov_reason, gov_seen = check_governor_state(governor_state_path, now_utc, pol.governor_max_age_s)
+    gov_reason, gov_seen = check_governor_state(governor_state_path, now_utc, pol.governor_max_age_s, pol.governor_max_future_s)
     blocked += [r for r in (hold_reason, gov_reason) if r]
 
-    considered, picked = _select_domains(ledger, pol)
+    considered, picked, qualified = _select_domains(ledger, pol)
     if not picked:
         blocked.append(f"no domain qualifies (min {pol.min_new_verified} new verified episodes, {pol.min_heldout_eval_items} held-out items)")
     camp_map = {c.subject_id: c for c in campaigns}
     producer_report, producers = _producers(members, pol, camp_map)
 
     night_date = window.start.date().isoformat()
-    qualified = [e.domain for e in picked]
     jobs: list[dict[str, Any]] = []
     unassigned: list[dict[str, Any]] = []
     for e in picked:
         donor = next((d for d in qualified if d != e.domain), None) if e.task_kind == "generative" else None
+        if e.task_kind == "generative" and donor is None:  # pragma: no cover - _select_domains refuses this; never plan a gate that cannot fail
+            raise RuntimeError(f"generative domain {e.domain} selected without a cross-domain control donor")
         n_controls = 2 if donor else 1
         budget = pol.job_budget_h(n_controls)
         candidates = [p for p in producers if usable_h - p["used_h"] >= budget]

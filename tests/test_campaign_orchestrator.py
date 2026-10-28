@@ -546,3 +546,44 @@ def test_atomic_write_keeps_old_file_on_failure(tmp_path: Path) -> None:
         atomic_write_json(target, {"v": object()})
     assert json.loads(target.read_text()) == {"v": 1}
     assert [p.name for p in tmp_path.iterdir()] == ["x.json"]
+
+
+# ------------------------------------------------------------------------------------------------- review regressions
+
+
+def test_generative_job_keeps_cross_domain_control_when_donor_is_deferred(tmp_path: Path) -> None:
+    # max_jobs=1 picks only the generative domain; the donor (stars) is DEFERRED but its verified rows still exist.
+    # Before the fix the job fell back to the shuffled-label control, which cannot fail on a generative task.
+    gen = DomainEvidence("maths", verified_accept=1000, verified_reject=0, unverified=0, heldout_eval_items=500, task_kind="generative")
+    p = plan(tmp_path, members=[member("t4-paris", 15360)], ledger=[gen, LEDGER[1]], policy=DreamPolicy(max_jobs=1))
+    assert [d["decision"] for d in p["domains_considered"]] == ["SELECTED", "DEFERRED"]
+    (maths,) = p["jobs"]
+    stages = {s["stage"]: s for s in maths["stages"]}
+    assert stages["control_cross_domain"]["donor_domain"] == "stars" and stages["control_cross_domain"]["can_fail"] is True
+    assert "control_cross_domain" in stages["promotion_gate"]["requires"][0]
+    assert "control_shuffled_label" not in stages["promotion_gate"]["requires"][0]
+
+
+def test_governor_snapshot_from_the_future_blocks(tmp_path: Path) -> None:
+    g = write_governor(tmp_path / "gov.json", t=NOW + 3600)
+    reason, seen = check_governor_state(g, NOW, 900)
+    assert "in the future" in reason and seen["age_s"] == -3600.0
+    write_governor(g, t=NOW + 30)  # small clock skew is tolerated
+    assert check_governor_state(g, NOW, 900)[0] == ""
+
+
+def test_per_participant_keys_stop_impersonation(tmp_path: Path) -> None:
+    alice_key, bob_key = b"alice-key-0123456789abcdef", b"bob-key-0123456789abcdef00"
+    bridge = InMemoryKafkaBridge()
+    o = CampaignOrchestrator(tmp_path / "state.json", {"alice": alice_key, "bob": bob_key}, bridge.publish)
+    assert o.handle(req("alice", nonce="nonce-0001", secret=alice_key), NOW).decision == "ADMITTED"
+    # bob holds a valid key, but not alice's: he can neither make her leave nor join under her name elsewhere
+    spoof = o.handle(req("alice", action="leave", nonce="nonce-0002", secret=bob_key), NOW)
+    assert spoof.decision == "REJECTED" and spoof.reason == "invalid signature"
+    unknown = o.handle(req("carol", nonce="nonce-0003", secret=alice_key), NOW)
+    assert unknown.decision == "REJECTED" and unknown.reason == "invalid signature"
+    assert [m["participant_id"] for m in o.active_members(NOW)] == ["alice"]
+    with pytest.raises(ValueError, match="at least 16 bytes"):
+        CampaignOrchestrator(tmp_path / "s2.json", {"alice": b"short"}, bridge.publish)
+    with pytest.raises(ValueError, match="at least 16 bytes"):
+        CampaignOrchestrator(tmp_path / "s3.json", {}, bridge.publish)

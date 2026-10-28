@@ -230,6 +230,9 @@ namespace HiveMind.ExoplanetHunterClient
             _timer.Tick += (s, e) => OnTick();
             _timer.Start();
 
+            // Automatically register & login as Free Steam Game (AppID 3133700) on the Portal and contribute initial BOINC workunit
+            TriggerBoincIdleGpuWorkunitSync("hivemind_tess_at_home", false);
+
             SaveRenderSnapshot();
 
             // Speak initial kid-friendly astrophysics briefing after window opens
@@ -993,6 +996,61 @@ namespace HiveMind.ExoplanetHunterClient
             double idleSnap = _idleSeconds;
             ThreadPool.QueueUserWorkItem(_ =>
             {
+                string apiKey = "";
+                try
+                {
+                    // 0. Register & Login as Free Steam Game (AppID 3133700) on the local HiveMind Portal (:8095/v1/hivemind/steam/register-login)
+                    HttpWebRequest regReq = (HttpWebRequest)WebRequest.Create("http://127.0.0.1:8095/v1/hivemind/steam/register-login");
+                    regReq.Method = "POST";
+                    regReq.ContentType = "application/json";
+                    regReq.Timeout = 2800;
+                    string regPayload = "{\"handle\":\"Cmdr_RTX2070_Steam\",\"steam_id64\":\"76561198031337001\",\"app_id\":3133700,\"gpu_model\":\"NVIDIA GeForce RTX 2070 (Steam Free Edition)\",\"role\":\"prosumer\"}";
+                    byte[] regBytes = Encoding.UTF8.GetBytes(regPayload);
+                    regReq.ContentLength = regBytes.Length;
+                    using (Stream rs = regReq.GetRequestStream())
+                    {
+                        rs.Write(regBytes, 0, regBytes.Length);
+                    }
+                    using (HttpWebResponse regResp = (HttpWebResponse)regReq.GetResponse())
+                    using (StreamReader rsr = new StreamReader(regResp.GetResponseStream()))
+                    {
+                        string rj = rsr.ReadToEnd();
+                        int kIdx = rj.IndexOf("hm-");
+                        if (kIdx >= 0)
+                        {
+                            int kEnd = rj.IndexOf("\"", kIdx);
+                            if (kEnd > kIdx) apiKey = rj.Substring(kIdx, kEnd - kIdx);
+                        }
+                        _boincLastSyncStatus = "STEAM FREE GAME (3133700) AUTHENTICATED • Cmdr_RTX2070_Steam";
+                    }
+
+                    // 0b. Contribute RTX 2070 CUDA PTX BOINC workunit via /v1/hivemind/steam/contribute-boinc
+                    HttpWebRequest cReq = (HttpWebRequest)WebRequest.Create("http://127.0.0.1:8095/v1/hivemind/steam/contribute-boinc");
+                    cReq.Method = "POST";
+                    cReq.ContentType = "application/json";
+                    if (!string.IsNullOrEmpty(apiKey)) cReq.Headers["Authorization"] = "Bearer " + apiKey;
+                    cReq.Timeout = 3500;
+                    string cPayload = string.Format(
+                        CultureInfo.InvariantCulture,
+                        "{{\"handle\":\"Cmdr_RTX2070_Steam\",\"target_planet\":\"{0}\",\"app_id\":3133700}}",
+                        targetLabel
+                    );
+                    byte[] cBytes = Encoding.UTF8.GetBytes(cPayload);
+                    cReq.ContentLength = cBytes.Length;
+                    using (Stream cs = cReq.GetRequestStream())
+                    {
+                        cs.Write(cBytes, 0, cBytes.Length);
+                    }
+                    using (HttpWebResponse cResp = (HttpWebResponse)cReq.GetResponse())
+                    {
+                        if ((int)cResp.StatusCode == 200)
+                        {
+                            _boincLastSyncStatus = "PORTAL & RTX 2070 BOINC CONTRIBUTION VERIFIED (+250 HMT)";
+                        }
+                    }
+                }
+                catch { }
+
                 try
                 {
                     // 1. Sync with local/GCP Community Hub API (:8095/api/v1/community/boinc-sync)

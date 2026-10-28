@@ -29,7 +29,10 @@ wait_db() {
     sleep "$STEP"; waited=$((waited + STEP))
   done
 }
-missing() { local p; for p in "${REQUIRED[@]}"; do pgrep -f -- "$p" >/dev/null || echo "$p"; done; }
+# HM_PROC_TAG (tests only; unset in production): also require this string later on the command line, so fake daemons are
+# matched and a host's real daemons are not
+PROC_TAG="${HM_PROC_TAG:-}"
+missing() { local p; for p in "${REQUIRED[@]}"; do pgrep -f -- "$p${PROC_TAG:+.* $PROC_TAG}" >/dev/null || echo "$p"; done; }
 
 ensure() {
   local tries=$1 attempt miss

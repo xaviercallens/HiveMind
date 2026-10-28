@@ -1,5 +1,8 @@
 """The BOINC daemon supervisor: run the real script against a fake database and fake daemons.
 
+Every fake daemon carries a per-test tag that the script is told to require (HM_PROC_TAG), so the tests also pass on the T4 itself,
+where the real daemons are running.
+
 Real incident behind it: after a Spot preemption `bin/start` ran before the database socket answered, the feeder and transitioner exited, and
 nothing started them again, so no work was served. These tests cover: all running, restart of a dead daemon, a database that comes up late,
 a database that never comes up (daemons must NOT be started into it), a daemon that never starts, and the watchdog's guard for a stopped unit.
@@ -65,7 +68,7 @@ class Box:
         s = socket.socket(socket.AF_UNIX)
         s.bind(str(sock))
         env = dict(os.environ, HM_DB_SOCK=str(sock), HM_MARIADB_ADMIN=str(admin), HM_ENV_SCRIPT=str(env_sh), HM_STEP_S="1", HM_DB_WAIT_S="3",
-                   HM_SETTLE_S="0", HM_MAX_TRIES="3", **(extra or {}))
+                   HM_SETTLE_S="0", HM_MAX_TRIES="3", HM_PROC_TAG=self.tag, **(extra or {}))
         try:
             return subprocess.run(["bash", str(SCRIPT), *args], env=env, capture_output=True, text=True, timeout=timeout)
         finally:
@@ -166,3 +169,13 @@ def test_unit_files_wire_the_checks_in() -> None:
     assert "OnUnitActiveSec=2min" in (node / "hivemind-boinc-watchdog.timer").read_text()
     inst = (ROOT / "deploy" / "t4_node" / "install_node.sh").read_text()
     assert "node/*.timer" in inst and "hivemind-boinc-watchdog.timer" in inst
+
+
+def test_untagged_processes_do_not_satisfy_the_check(box: Box) -> None:
+    """Hermeticity: daemons with the right name but without this test's tag (as on a host running the real ones) are not counted."""
+    for d in DAEMONS:
+        p = subprocess.Popen(["bash", "-c", f'exec -a "{d} other-{box.tag[:8]}" sleep 60'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        box.pids.append(p.pid)
+    r = box.run("--verify", admin=box.admin(0), env_sh=box.env_script(()))
+    assert r.returncode == 1 and box.n_starts() == 3
+    assert "^feeder" in r.stdout and "still not running after 3 attempts" in r.stdout

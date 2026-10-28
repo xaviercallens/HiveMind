@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "stitch": {
+      "serverUrl": "https://stitch.googleapis.com/mcp",
+      "command": "npx",
+      "args": ["-y", "@_davideast/stitch-mcp@latest", "proxy"],
+      "headers": {
+        "X-Goog-Api-Key": "${STITCH_API_KEY}"
+      },
+      "env": {
+        "STITCH_API_KEY": "${STITCH_API_KEY}",
+        "STITCH_PROJECT_ID": "10018415280079892710"
+      },
+      "timeoutSeconds": 300
+    },
+    "exoplanet-science": {
+      "command": "python",
+      "args": ["./mcp-servers/exoplanet_mcp.py"],
+      "timeoutSeconds": 120
+    }
+  }
+}

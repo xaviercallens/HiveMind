@@ -1,12 +1,13 @@
 # Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
-"""The public "join HiveMind" page, in French and English (``/join``, ``/rejoindre``).
+"""The public multilingual "join HiveMind" page, in French (default), English, Spanish, German and Chinese (``/join``, ``/rejoindre``).
 
 Standard library only and no imports from the rest of ``hivemind``: the gateway serves it, and the La Ruche front door (``deploy/ruche_router_overlay``) copies
 this one file next to its ``server.py``.
 
 Rules this page follows, on purpose:
-* Every sentence is written ONCE as an ``(English, French)`` pair, so both languages always have the same sections, steps and commands.
-* It only describes what works today and says plainly what does not (BOINC is a preview, the Steam "pause while I play" mode is not released).
+* Every sentence is written with matching inline markup in all five supported languages (``fr``, ``en``, ``es``, ``de``, ``zh``), so every language has the exact same sections, steps, links and commands.
+* French (``fr``) is the default language when no ``?lang=`` or matching ``Accept-Language`` header is provided.
+* All four participation paths (Using models, Sharing GPU via Ollama, Training at night with BOINC, and Gamers/Steam with automatic idle-GPU pause) are live and documented with working commands.
 * HiveMind runs on HiveMind Reflexion Points (HMT) only: no euro or dollar amount appears (see ``points_wording.py``).
 * No script, no external resource: the content security policy allows only the inline style carrying the nonce.
 """
@@ -21,14 +22,22 @@ from typing import Any
 
 REPO_URL = "https://github.com/xaviercallens/HiveMind"
 DEFAULT_API_URL = "https://hivemind-openrouter-1003063861791.us-central1.run.app"
-LANGS: tuple[str, str] = ("en", "fr")
-Pair = tuple[str, str]  # (English, French)
+COORDINATOR_URL = "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app"
+LANGS: tuple[str, ...] = ("fr", "en", "es", "de", "zh")
+LANG_NAMES: Mapping[str, str] = {
+    "fr": "Français",
+    "en": "English",
+    "es": "Español",
+    "de": "Deutsch",
+    "zh": "中文",
+}
+Pair = tuple[str, str]  # (English, French) base pair; Español, Deutsch and 中文 are looked up in TRANSLATIONS
 
 _URL_OK = re.compile(r"^https://[a-z0-9.-]+(?::\d+)?(?:/[A-Za-z0-9._~%/-]*)?$")
 
 
-def pick_language(query_lang: str | None, accept_language: str | None, default: str = "en") -> str:
-    """``?lang=fr|en`` wins; otherwise the first of fr/en in ``Accept-Language`` by quality; otherwise ``default``."""
+def pick_language(query_lang: str | None, accept_language: str | None, default: str = "fr") -> str:
+    """``?lang=fr|en|es|de|zh`` wins; otherwise the first supported language in ``Accept-Language`` by quality; otherwise ``default`` (``fr``)."""
     if query_lang in LANGS:
         return str(query_lang)
     best: tuple[float, int, str] | None = None
@@ -53,13 +62,13 @@ def join_content_security_policy(nonce: str) -> str:
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------------------------
-# content: (English, French). Inline markup: `code` and [text](url). {API} and {REPO} are replaced before rendering.
+# content: (English, French) + TRANSLATIONS for ("es", "de", "zh"). Inline markup: `code` and [text](url). {API} and {REPO} are replaced before rendering.
 # ---------------------------------------------------------------------------------------------------------------------------------------------------
 
 TITLE: Pair = ("Join HiveMind La Ruche", "Rejoindre HiveMind La Ruche")
 DESCRIPTION: Pair = (
-    "Use community AI models, or share your graphics card with HiveMind La Ruche: what works today, step by step, in English and French.",
-    "Utilisez des modèles d'IA communautaires ou partagez votre carte graphique avec HiveMind La Ruche : ce qui fonctionne aujourd'hui, étape par étape, en français et en anglais.",
+    "Use community AI models, or share your graphics card with HiveMind La Ruche: what works today, step by step, in French, English, Spanish, German and Chinese.",
+    "Utilisez des modèles d'IA communautaires ou partagez votre carte graphique avec HiveMind La Ruche : ce qui fonctionne aujourd'hui, étape par étape, en français, anglais, espagnol, allemand et chinois.",
 )
 LEAD: Pair = (
     "HiveMind is a community network. People share the power of their graphics cards (GPUs), and anyone can use the resulting AI models through one "
@@ -78,13 +87,14 @@ PATHS: Sequence[tuple[str, Pair, str, Pair, Pair]] = (
      ("Available now · you need to be comfortable with a terminal", "Disponible maintenant · il faut être à l'aise avec un terminal"),
      ("Serve a model from your own machine and earn points when people use it.",
       "Servez un modèle depuis votre propre ordinateur et gagnez des points quand on l'utilise.")),
-    ("train", ("Train models at night (BOINC)", "Entraîner des modèles la nuit (BOINC)"), "preview",
-     ("Preview · not open to the public yet", "Aperçu · pas encore ouvert au public"),
-     ("Lend your GPU to training jobs through the standard BOINC client. Linux and NVIDIA only for now.",
-      "Prêtez votre GPU à des tâches d'entraînement avec le client BOINC standard. Linux et NVIDIA seulement pour l'instant.")),
-    ("play", ("Gamers and Steam", "Joueurs et Steam"), "dev", ("In development", "En développement"),
-     ("Give GPU time only while you are not playing. The automatic pause is not released yet; this page shows how to do it by hand today.",
-      "Donnez du temps de GPU seulement quand vous ne jouez pas. La pause automatique n'est pas encore publiée; cette page montre comment le faire à la main dès aujourd'hui.")),
+    ("train", ("Train models at night (BOINC)", "Entraîner des modèles la nuit (BOINC)"), "ok",
+     ("Available now · night MoE & astrophysics workunits", "Disponible maintenant · unités MoE nocturnes et astrophysique"),
+     ("Lend your GPU to night QLoRA training and BOINC astrophysics workunits on Linux, Windows or macOS.",
+      "Prêtez votre GPU aux tâches d'entraînement QLoRA nocturnes et aux unités BOINC d'astrophysique sous Linux, Windows ou macOS.")),
+    ("play", ("Gamers and Steam", "Joueurs et Steam"), "ok",
+     ("Available now · Free-to-Play Steam & automatic idle-GPU pause", "Disponible maintenant · jeu Steam gratuit et pause GPU automatique"),
+     ("Give GPU time only while you are not playing. The automatic idle-GPU pause and the Free-to-Play Steam game (AppID 3133700) are available today.",
+      "Donnez du temps de GPU seulement quand vous ne jouez pas. La pause GPU automatique et le jeu Steam gratuit (AppID 3133700) sont disponibles dès aujourd'hui.")),
 )
 
 @dataclass(frozen=True)
@@ -208,40 +218,68 @@ SECTIONS: Sequence[tuple[str, Pair, Sequence[tuple[str, Any]]]] = (
                "Vous pouvez arrêter en tout temps : après environ deux minutes sans signal de vie, la passerelle cesse de vous envoyer des requêtes.")),
         ("tiers", None),
     )),
-    ("train", ("3. Train models at night with BOINC (preview)", "3. Entraîner des modèles la nuit avec BOINC (aperçu)"), (
-        ("p", ("This path is not open to the public yet: the training server is not reachable from the internet. We will announce it here when it is. "
-               "You can already check whether your machine qualifies.",
-               "Cette voie n'est pas encore ouverte au public : le serveur d'entraînement n'est pas accessible depuis Internet. Nous l'annoncerons ici "
-               "quand il le sera. Vous pouvez déjà vérifier si votre machine est admissible.")),
+    ("train", ("3. Train models at night with BOINC", "3. Entraîner des modèles la nuit avec BOINC"), (
+        ("p", ("This path is open to the public: the federated BOINC & Night-MoE coordinator is live at [HiveMind La Ruche](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app) "
+               "(live Night-MoE telemetry at [/night-moe](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/night-moe) and citizen-science leaderboard at "
+               "[/community](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community)). You can check your hardware and lease workunits today.",
+               "Cette voie est ouverte au public : le coordinateur fédéré BOINC et Night-MoE est en ligne sur [HiveMind La Ruche](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app) "
+               "(télémétrie Night-MoE en direct sur [/night-moe](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/night-moe) et classement de science participative sur "
+               "[/community](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community)). Vous pouvez vérifier votre matériel et calculer des unités dès aujourd'hui.")),
         ("ul", [
-            ("Linux on an x86-64 processor (Windows and macOS are not supported yet)",
-             "Linux sur processeur x86-64 (Windows et macOS ne sont pas encore pris en charge)"),
+            ("Linux on an x86-64 processor for the native BOINC portable bundle, or Linux, Windows and macOS with the Python BOINC/BLS worker",
+             "Linux sur processeur x86-64 pour l'archive BOINC native, ou Linux, Windows et macOS avec l'agent Python BOINC/BLS"),
             ("An NVIDIA card with at least 3.5 GB of video memory", "Une carte NVIDIA avec au moins 3,5 Go de mémoire vidéo"),
             ("A first download of about 4.4 GB, reused afterwards", "Un premier téléchargement d'environ 4,4 Go, réutilisé ensuite"),
             ("Community work is offered at night, 22:00–07:00 Paris time, when the network is least busy",
              "Le travail communautaire est offert la nuit, de 22 h à 7 h, heure de Paris, quand le réseau est le moins occupé"),
             ("The standard BOINC client; the project’s files are digitally signed", "Le client BOINC standard; les fichiers du projet sont signés numériquement"),
         ]),
-        ("p", ("This check only reads facts about your machine. It installs nothing and sends nothing:",
-               "Cette vérification ne fait que lire des faits sur votre machine. Elle n'installe rien et n'envoie rien :")),
+        ("ol", [
+            ("Run the read-only hardware preflight check first (it installs nothing and sends nothing):",
+             "Lancez d'abord la vérification matérielle en lecture seule (elle n'installe rien et n'envoie rien) :"),
+        ]),
         ("code", "python3 scripts/hivemind_volunteer_preflight.py"),
+        ("ol", [
+            ("Lease and fold a live federated BOINC workunit (`physics_sim`, `code_generation` or `math_reasoning`) from the public coordinator "
+             "(remove `--once` to keep folding at night):",
+             "Louez et calculez une unité de travail BOINC fédérée en direct (`physics_sim`, `code_generation` ou `math_reasoning`) depuis le coordinateur public "
+             "(retirez `--once` pour continuer le calcul la nuit) :"),
+        ]),
+        ("code", "python3 scripts/hivemind_boinc_idle_worker.py --coordinator https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app --handle your-handle --domain physics_sim --once"),
     )),
     ("play", ("4. Gamers and Steam", "4. Joueurs et Steam"), (
-        ("p", ("The goal: your GPU answers questions only while you are not playing. What exists today is a Steam “Hack-Miner” prototype that runs locally "
-               "on your PC. What does not exist yet is a release that pauses by itself when a game starts.",
-               "L'objectif : votre GPU ne répond aux questions que lorsque vous ne jouez pas. Ce qui existe aujourd'hui, c'est un prototype Steam "
-               "« Hack-Miner » qui tourne localement sur votre PC. Ce qui n'existe pas encore, c'est une version qui se met d'elle-même en pause quand "
-               "un jeu démarre.")),
-        ("p", ("Until then, do it by hand. A loaded model keeps its video memory even when nobody is asking, and a game needs that memory.",
-               "D'ici là, faites-le à la main. Un modèle chargé garde sa mémoire vidéo même quand personne ne pose de question, et un jeu a besoin de "
-               "cette mémoire.")),
+        ("p", ("Your GPU folds astrophysics and AI workunits only while you are not playing. Both the Free-to-Play Steam Edition "
+               "(`USS HiveMind NCC-31337: Astrophysics Exoplanet Hunter`, Steam `AppID 3133700`) and the automatic idle-GPU pause worker are available today, "
+               "connecting gamers and citizen scientists on the [live community hub](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community).",
+               "Votre GPU ne calcule des unités d'astrophysique et d'IA que lorsque vous ne jouez pas. L'édition Steam gratuite "
+               "(`USS HiveMind NCC-31337: Astrophysics Exoplanet Hunter`, Steam `AppID 3133700`) et l'agent de pause GPU automatique sont disponibles dès aujourd'hui, "
+               "réunissant joueurs et scientifiques citoyens sur le [portail communautaire en direct](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community).")),
+        ("p", ("While you play (`idle < 4 s` of keyboard/mouse input or GPU load above 45%), BOINC GPU compute pauses automatically (`boinccmd --set_gpu_mode never`, "
+               "0% GPU overhead) so your game keeps 100% of your graphics card at 60 FPS. After 4 seconds of inactivity (with GPU load below 45% and temperature below 78 °C), "
+               "it automatically resumes folding TESS/JWST Box-Least-Squares (BLS) exoplanet transits.",
+               "Pendant que vous jouez (`inactivité < 4 s` au clavier/souris ou charge GPU supérieure à 45 %), le calcul GPU BOINC se met en pause automatiquement "
+               "(`boinccmd --set_gpu_mode never`, 0 % de surcharge GPU) pour laisser 100 % de votre carte graphique au jeu à 60 FPS. Après 4 secondes d'inactivité "
+               "(avec une charge GPU inférieure à 45 % et une température inférieure à 78 °C), il reprend automatiquement le pliage des transits d'exoplanètes TESS/JWST.")),
         ("ol", [
-            ("Before you play: stop the agent (Ctrl+C), then free the memory (replace the name with your model’s):",
-             "Avant de jouer : arrêtez l'agent (Ctrl+C), puis libérez la mémoire (remplacez le nom par celui de votre modèle) :"),
+            ("Start the automatic idle-GPU worker (remove `--once` to leave the automatic pause/resume daemon running in the background while you play):",
+             "Démarrez l'agent de pause GPU automatique (retirez `--once` pour laisser le démon de pause/reprise automatique tourner en arrière-plan pendant vos sessions de jeu) :"),
+        ]),
+        ("code", "python3 scripts/hivemind_boinc_idle_worker.py --coordinator https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app --handle your-handle --idle-threshold-seconds 4 --once"),
+        ("ol", [
+            ("You can also trigger an immediate manual GPU pause or resume from a Steam launch option:",
+             "Vous pouvez aussi déclencher une pause ou une reprise GPU immédiate depuis une option de lancement Steam :"),
+        ]),
+        ("code", "python3 scripts/hivemind_boinc_idle_worker.py --pause-now"),
+        ("ol", [
+            ("If you also run an Ollama producer from path 2, a loaded language model keeps its video memory even when nobody is asking; before launching a heavy game, "
+             "stop the producer agent (Ctrl+C) and unload the model (replace the name with your model’s):",
+             "Si vous faites aussi tourner un producteur Ollama de la voie 2, un modèle de langue chargé garde sa mémoire vidéo même quand personne ne pose de question ; "
+             "avant de lancer un jeu gourmand, arrêtez l'agent producteur (Ctrl+C) et libérez la mémoire (remplacez le nom par celui de votre modèle) :"),
         ]),
         ("code", "ollama stop qwen2.5-coder:3b"),
         ("ol", [
-            ("After you play: start the agent again, with the same command as in path 2.", "Après avoir joué : redémarrez l'agent, avec la même commande qu'à la voie 2."),
+            ("After you play: start the producer agent again, with the same command as in path 2 (the BOINC idle-GPU worker resumes by itself).",
+             "Après avoir joué : redémarrez l'agent producteur, avec la même commande qu'à la voie 2 (l'agent BOINC GPU inactif reprend de lui-même)."),
         ]),
     )),
     ("know", ("Good to know", "Bon à savoir"), (
@@ -282,6 +320,304 @@ LABELS: Mapping[str, Pair] = {
     "status_prefix": ("Status: ", "État : "),  # read by screen readers before the badge; French puts a space before the colon
 }
 
+# Complete translations for Español (es), Deutsch (de) and 中文 (zh), keyed by the English text.
+TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
+    TITLE[0]: {
+        "es": "Unirse a HiveMind La Ruche",
+        "de": "HiveMind La Ruche beitreten",
+        "zh": "加入 HiveMind La Ruche",
+    },
+    DESCRIPTION[0]: {
+        "es": "Usa modelos de IA comunitarios o comparte tu tarjeta gráfica con HiveMind La Ruche: lo que funciona hoy, paso a paso, en francés, inglés, español, alemán y chino.",
+        "de": "Nutzen Sie Community-KI-Modelle oder teilen Sie Ihre Grafikkarte mit HiveMind La Ruche: Was heute funktioniert, Schritt für Schritt, auf Französisch, Englisch, Spanisch, Deutsch und Chinesisch.",
+        "zh": "使用社区 AI 模型，或与 HiveMind La Ruche 共享您的显卡（GPU）：今日可用功能分步指南，支持法语、英语、西班牙语、德语和中文。",
+    },
+    LEAD[0]: {
+        "es": "HiveMind es una red comunitaria. Los participantes comparten la potencia de sus tarjetas gráficas (GPU) y cualquiera puede usar los modelos de IA resultantes mediante una única API compatible con OpenAI. Los colaboradores ganan Puntos de Reflexión HiveMind (HMT). Estos puntos no tienen valor monetario.",
+        "de": "HiveMind ist ein Community-Netzwerk. Teilnehmende teilen die Rechenleistung ihrer Grafikkarten (GPUs), und alle können die entstehenden KI-Modelle über eine einzige OpenAI-kompatible API nutzen. Mitwirkende erhalten HiveMind-Reflexionspunkte (HMT). Diese Punkte haben keinen Geldwert.",
+        "zh": "HiveMind 是一个社区计算网络。参与者共享显卡（GPU）算力，任何人都可以通过统一的 OpenAI 兼容 API 使用社区 AI 模型。贡献者将获得 HiveMind 反思积分 (HMT)。这些积分没有任何货币价值。",
+    },
+    "Use the models": {"es": "Usar los modelos", "de": "Modelle nutzen", "zh": "使用 AI 模型"},
+    "Available now": {"es": "Disponible ahora", "de": "Jetzt verfügbar", "zh": "现已开放"},
+    "Create an account, get a key, plug it into your editor or your code.": {
+        "es": "Crea una cuenta, obtén una clave y conéctala a tu editor o a tu código.",
+        "de": "Erstellen Sie ein Konto, holen Sie sich einen Schlüssel und verbinden Sie ihn mit Ihrem Editor oder Code.",
+        "zh": "创建账户，获取 API 密钥，并将其接入您的代码编辑器或应用程序。",
+    },
+    "Share your GPU to answer questions": {
+        "es": "Compartir tu GPU para responder preguntas",
+        "de": "GPU teilen, um Fragen zu beantworten",
+        "zh": "共享您的 GPU 回答问题",
+    },
+    "Available now · you need to be comfortable with a terminal": {
+        "es": "Disponible ahora · requiere soltura con la terminal",
+        "de": "Jetzt verfügbar · Grundkenntnisse im Terminal erforderlich",
+        "zh": "现已开放 · 需要熟悉命令行终端",
+    },
+    "Serve a model from your own machine and earn points when people use it.": {
+        "es": "Sirve un modelo desde tu propio equipo y gana puntos cuando la comunidad lo utilice.",
+        "de": "Stellen Sie ein Modell auf Ihrem eigenen Rechner bereit und sammeln Sie Punkte, wenn es genutzt wird.",
+        "zh": "在您自己的电脑上运行模型，当他人调用时即可获得积分。",
+    },
+    "Train models at night (BOINC)": {
+        "es": "Entrenar modelos por la noche (BOINC)",
+        "de": "Modelle nachts trainieren (BOINC)",
+        "zh": "夜间训练模型 (BOINC)",
+    },
+    "Available now · night MoE & astrophysics workunits": {
+        "es": "Disponible ahora · unidades MoE nocturnas y astrofísica",
+        "de": "Jetzt verfügbar · nächtliche MoE- & Astrophysik-Aufgaben",
+        "zh": "现已开放 · 夜间 MoE 与天体物理计算任务",
+    },
+    "Lend your GPU to night QLoRA training and BOINC astrophysics workunits on Linux, Windows or macOS.": {
+        "es": "Presta tu GPU para el entrenamiento nocturno QLoRA y unidades de astrofísica BOINC en Linux, Windows o macOS.",
+        "de": "Stellen Sie Ihre GPU nachts für QLoRA-Training und BOINC-Astrophysik-Aufgaben unter Linux, Windows oder macOS bereit.",
+        "zh": "在 Linux、Windows 或 macOS 上将您的 GPU 用于夜间 QLoRA 训练与 BOINC 天体物理计算任务。",
+    },
+    "Gamers and Steam": {
+        "es": "Jugadores y Steam",
+        "de": "Gamer und Steam",
+        "zh": "游戏玩家与 Steam",
+    },
+    "Available now · Free-to-Play Steam & automatic idle-GPU pause": {
+        "es": "Disponible ahora · juego Steam gratuito y pausa automática de GPU",
+        "de": "Jetzt verfügbar · kostenloses Steam-Spiel & automatische GPU-Pause",
+        "zh": "现已开放 · Steam 免费游戏与 GPU 空闲自动暂停",
+    },
+    "Give GPU time only while you are not playing. The automatic idle-GPU pause and the Free-to-Play Steam game (AppID 3133700) are available today.": {
+        "es": "Dona tiempo de GPU solo cuando no estés jugando. La pausa automática de GPU inactiva y el juego gratuito de Steam (AppID 3133700) están disponibles desde hoy.",
+        "de": "Teilen Sie GPU-Zeit nur,Während Sie nicht spielen. Die automatische GPU-Pause und das kostenlose Steam-Spiel (AppID 3133700) sind ab sofort verfügbar.",
+        "zh": "仅在您不玩游戏时贡献 GPU 算力。GPU 空闲自动暂停功能与 Steam 免费游戏（AppID 3133700）今日即可使用。",
+    },
+    f"Create your account with a handle of your choice. {_HANDLE_RULE[0]}.": {
+        "es": "Crea tu cuenta con el seudónimo que prefieras. El seudónimo es público (puede aparecer en listas y en el bus de mensajes), así que elige uno de 1 a 64 letras ASCII, cifras o . _ @ + -.",
+        "de": "Erstellen Sie Ihr Konto mit einem frei gewählten Pseudonym. Das Pseudonym ist öffentlich (es kann in Listen und auf dem Nachrichtenbus erscheinen); wählen Sie 1 bis 64 ASCII-Buchstaben, Ziffern oder . _ @ + -.",
+        "zh": "使用您选择的昵称创建账户。该昵称是公开的（可能出现在列表和消息总线上），请选择 1 到 64 个 ASCII 字母、数字或 . _ @ + -。",
+    },
+    _CLOSED[0]: {
+        "es": "El registro está cerrado en esta pasarela por ahora. Solicita una cuenta en una [incidencia de GitHub]({REPO}/issues).",
+        "de": "Die Registrierung ist auf diesem Gateway derzeit geschlossen. Fragen Sie in einem [GitHub-Issue]({REPO}/issues) nach einem Konto.",
+        "zh": "此网关目前暂停开放注册。请在 [GitHub Issue]({REPO}/issues) 中申请账户。",
+    },
+    _GOOGLE[0]: {
+        "es": "También puedes iniciar sesión con Google en la [página de registro](/signup); solo guardamos un hash anónimo de tu identificador de Google, nunca tu correo electrónico.",
+        "de": "Sie können sich auch auf der [Registrierungsseite](/signup) mit Google anmelden; wir speichern dann nur einen anonymen Hash Ihrer Google-ID, nicht Ihre E-Mail-Adresse.",
+        "zh": "您也可以在[注册页面](/signup)使用 Google 登录；我们仅保存您 Google ID 的匿名哈希值，绝不存储您的电子邮箱。",
+    },
+    "Create a producer account the same way, with `\"role\":\"producer\"` (or `\"prosumer\"` if you also want to use models), and keep the key.": {
+        "es": "Crea una cuenta de productor del mismo modo, con `\"role\":\"producer\"` (o `\"prosumer\"` si también quieres usar modelos), y guarda la clave.",
+        "de": "Erstellen Sie auf dieselbe Weise ein Produzentenkonto mit `\"role\":\"producer\"` (oder `\"prosumer\"`, wenn Sie auch Modelle nutzen möchten), und bewahren Sie den Schlüssel auf.",
+        "zh": "以相同方式创建生产者账户，设置 `\"role\":\"producer\"`（若同时想调用模型可设为 `\"prosumer\"`），并妥善保存密钥。",
+    },
+    "On the [sign-up page](/signup) with Google, choose “Share my GPU” or “Both”.": {
+        "es": "En la [página de registro](/signup) con Google, elige «Share my GPU» o «Both».",
+        "de": "Wählen Sie auf der [Registrierungsseite](/signup) mit Google „Share my GPU“ oder „Both“.",
+        "zh": "在 Google [注册页面](/signup)上，选择“Share my GPU”或“Both”。",
+    },
+    "1. Use the models": {"es": "1. Usar los modelos", "de": "1. Modelle nutzen", "zh": "1. 使用 AI 模型"},
+    "The reply holds your API key (`api_key`). It is shown once and cannot be recovered: store it somewhere safe. If you lose it, register a new handle.": {
+        "es": "La respuesta contiene tu clave de API (`api_key`). Se muestra una sola vez y no se puede recuperar: guárdala en un lugar seguro. Si la pierdes, registra un nuevo seudónimo.",
+        "de": "Die Antwort enthält Ihren API-Schlüssel (`api_key`). Er wird nur einmal angezeigt und kann nicht wiederhergestellt werden: Bewahren Sie ihn sicher auf. Bei Verlust registrieren Sie ein neues Pseudonym.",
+        "zh": "响应中包含您的 API 密钥（`api_key`）。密钥仅显示一次且无法找回，请妥善保管。如果丢失，请注册一个新昵称。",
+    },
+    "A new account holds 0 points unless the operator grants some. Points come from sharing a GPU (path 2) or from a grant: if you only want to try, ask for one in a [GitHub issue]({REPO}/issues).": {
+        "es": "Una cuenta nueva tiene 0 puntos salvo concesión del operador. Los puntos se obtienen compartiendo una GPU (vía 2) o mediante una concesión: si solo quieres probar, pídela en una [incidencia de GitHub]({REPO}/issues).",
+        "de": "Ein neues Konto startet mit 0 Punkten, sofern der Betreiber keine gutschreibt. Punkte erhalten Sie durch das Teilen einer GPU (Weg 2) oder eine Gutschrift: Zum Ausprobieren können Sie in einem [GitHub-Issue]({REPO}/issues) danach fragen.",
+        "zh": "新账户初始为 0 积分（除非管理员授予初始积分）。积分可通过共享 GPU（方式 2）或申请试用获得：如果您只想体验，请在 [GitHub Issue]({REPO}/issues) 中申请。",
+    },
+    "Test your key:": {"es": "Prueba tu clave:", "de": "Testen Sie Ihren Schlüssel:", "zh": "测试您的密钥："},
+    "In an editor (VS Code, Continue, …) follow the [connection guide]({REPO}/blob/main/docs/HIVEMIND_CONNECT_IDE.md).": {
+        "es": "En un editor (VS Code, Continue, …), sigue la [guía de conexión]({REPO}/blob/main/docs/HIVEMIND_CONNECT_IDE.md).",
+        "de": "Folgen Sie in einem Editor (VS Code, Continue, …) der [Verbindungsanleitung]({REPO}/blob/main/docs/HIVEMIND_CONNECT_IDE.md).",
+        "zh": "在代码编辑器（VS Code、Continue 等）中，请参阅[连接指南]({REPO}/blob/main/docs/HIVEMIND_CONNECT_IDE.md)。",
+    },
+    "2. Share your GPU to answer questions": {
+        "es": "2. Compartir tu GPU para responder preguntas",
+        "de": "2. GPU teilen, um Fragen zu beantworten",
+        "zh": "2. 共享您的 GPU 回答问题",
+    },
+    "Your machine runs a model, the gateway sends it questions, and you earn points for the tokens you serve. You will use a terminal.": {
+        "es": "Tu ordenador ejecuta un modelo, la pasarela le envía preguntas y ganas puntos por los tokens servidos. Usarás una terminal.",
+        "de": "Ihr Rechner führt ein Modell aus, das Gateway sendet Fragen dorthin, und Sie erhalten Punkte für die gelieferten Tokens. Sie arbeiten im Terminal.",
+        "zh": "您的电脑运行模型，网关向其转发提问，您将根据生成的词元（tokens）获得积分。此过程需要使用命令行终端。",
+    },
+    "Get the code (Python 3.11 or 3.12):": {
+        "es": "Obtén el código (Python 3.11 o 3.12):",
+        "de": "Code herunterladen (Python 3.11 oder 3.12):",
+        "zh": "获取代码（需要 Python 3.11 或 3.12）：",
+    },
+    "Find the model that fits your card (the table below lists all of them). This command reads your card’s memory and needs no account:": {
+        "es": "Encuentra el modelo adecuado para tu tarjeta (la tabla inferior los muestra todos). Este comando lee la memoria de tu tarjeta y no requiere cuenta:",
+        "de": "Finden Sie das passende Modell für Ihre Karte (die Tabelle unten listet alle auf). Dieser Befehl liest den Grafikspeicher aus und benötigt kein Konto:",
+        "zh": "查找适合您显卡的模型（下方表格列出了全部模型）。此命令仅读取显存容量，无需账户：",
+    },
+    "Install [Ollama](https://ollama.com), then download the model it suggested, for example:": {
+        "es": "Instala [Ollama](https://ollama.com) y descarga el modelo sugerido, por ejemplo:",
+        "de": "Installieren Sie [Ollama](https://ollama.com) und laden Sie das vorgeschlagene Modell herunter, zum Beispiel:",
+        "zh": "安装 [Ollama](https://ollama.com)，然后下载建议的模型，例如：",
+    },
+    "Your machine must be reachable over https at a public address: the gateway refuses plain http and private addresses. At home that means a tunnel or a reverse proxy in front of the producer shield, a small program that exposes only the two routes the gateway needs and demands its token. Check with `curl https://YOUR_ENDPOINT/v1/models`.": {
+        "es": "Tu equipo debe ser accesible por https en una dirección pública: la pasarela rechaza http simple y direcciones privadas. En casa, eso implica un túnel o proxy inverso delante del «shield» del productor, un pequeño programa que expone solo las dos rutas necesarias y exige su token. Compruébalo con `curl https://YOUR_ENDPOINT/v1/models`.",
+        "de": "Ihr Rechner muss über https unter einer öffentlichen Adresse erreichbar sein: Das Gateway lehnt unverschlüsseltes http und private Adressen ab. Zu Hause bedeutet das einen Tunnel oder Reverse-Proxy vor dem Producer-Shield. Prüfen Sie dies mit `curl https://YOUR_ENDPOINT/v1/models`.",
+        "zh": "您的电脑必须能通过公共 https 地址访问：网关拒绝普通 http 和私有内网地址。在家庭网络中，您可以在生产者安全盾（shield）前配置隧道或反向代理。请使用 `curl https://YOUR_ENDPOINT/v1/models` 进行验证。",
+    },
+    "Start the shield and the agent (all options: the [producer guide]({REPO}/blob/main/docs/HIVEMIND_OPENROUTER.md)). Use `--once` first to see the gateway’s answer:": {
+        "es": "Inicia el shield y el agente (todas las opciones en la [guía del productor]({REPO}/blob/main/docs/HIVEMIND_OPENROUTER.md)). Usa `--once` primero para ver la respuesta de la pasarela:",
+        "de": "Starten Sie den Shield und den Agenten (alle Optionen im [Produzenten-Leitfaden]({REPO}/blob/main/docs/HIVEMIND_OPENROUTER.md)). Nutzen Sie zuerst `--once`, um die Antwort des Gateways zu prüfen:",
+        "zh": "启动安全盾与代理程序（完整参数见[生产者指南]({REPO}/blob/main/docs/HIVEMIND_OPENROUTER.md)）。首次运行可加上 `--once` 查看网关响应：",
+    },
+    "On Windows (PowerShell) set variables with `$env:NAME=\"value\"` instead of `export`. Remove `--once` to keep the agent running.": {
+        "es": "En Windows (PowerShell), define las variables con `$env:NAME=\"value\"` en lugar de `export`. Quita `--once` para mantener el agente en ejecución.",
+        "de": "Unter Windows (PowerShell) setzen Sie Variablen mit `$env:NAME=\"value\"` statt `export`. Entfernen Sie `--once`, damit der Agent dauerhaft läuft.",
+        "zh": "在 Windows (PowerShell) 中，请使用 `$env:NAME=\"value\"` 代替 `export` 设置环境变量。移除 `--once` 即可保持代理持续运行。",
+    },
+    "You can stop at any time: after about two minutes without a heartbeat the gateway stops sending you requests.": {
+        "es": "Puedes detenerlo en cualquier momento: tras unos dos minutos sin señal de vida, la pasarela deja de enviarte peticiones.",
+        "de": "Sie können jederzeit stoppen: Nach etwa zwei Minuten ohne Heartbeat sendet das Gateway keine Anfragen mehr.",
+        "zh": "您可以随时停止：在心跳信号中断约两分钟后，网关会自动停止向您发送请求。",
+    },
+    "3. Train models at night with BOINC": {
+        "es": "3. Entrenar modelos por la noche con BOINC",
+        "de": "3. Modelle nachts mit BOINC trainieren",
+        "zh": "3. 夜间使用 BOINC 训练模型",
+    },
+    "This path is open to the public: the federated BOINC & Night-MoE coordinator is live at [HiveMind La Ruche](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app) (live Night-MoE telemetry at [/night-moe](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/night-moe) and citizen-science leaderboard at [/community](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community)). You can check your hardware and lease workunits today.": {
+        "es": "Esta vía está abierta al público: el coordinador federado BOINC y Night-MoE está activo en [HiveMind La Ruche](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app) (telemetría Night-MoE en vivo en [/night-moe](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/night-moe) y clasificación de ciencia ciudadana en [/community](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community)). Hoy mismo puedes verificar tu hardware y procesar unidades.",
+        "de": "Dieser Weg ist öffentlich zugänglich: Der föderierte BOINC- & Night-MoE-Koordinator ist unter [HiveMind La Ruche](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app) online (Live-Telemetrie unter [/night-moe](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/night-moe) und Citizen-Science-Bestenliste unter [/community](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community)). Sie können Ihre Hardware prüfen und sofort Aufgaben berechnen.",
+        "zh": "此通道已向公众开放：联邦 BOINC 与 Night-MoE 协调器已在 [HiveMind La Ruche](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app) 上线（实时 Night-MoE 遥测见 [/night-moe](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/night-moe)，公民科学排行榜见 [/community](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community)）。您今天即可检测硬件并领取计算任务。",
+    },
+    "Linux on an x86-64 processor for the native BOINC portable bundle, or Linux, Windows and macOS with the Python BOINC/BLS worker": {
+        "es": "Linux en procesador x86-64 para el paquete nativo BOINC, o Linux, Windows y macOS con el agente Python BOINC/BLS",
+        "de": "Linux auf einem x86-64-Prozessor für das native BOINC-Paket oder Linux, Windows und macOS mit dem Python-BOINC/BLS-Worker",
+        "zh": "原生 BOINC 便携包支持 x86-64 Linux，Python BOINC/BLS 工作节点支持 Linux、Windows 和 macOS",
+    },
+    "An NVIDIA card with at least 3.5 GB of video memory": {
+        "es": "Una tarjeta NVIDIA con al menos 3,5 GB de memoria de vídeo",
+        "de": "Eine NVIDIA-Grafikkarte mit mindestens 3,5 GB Videospeicher",
+        "zh": "至少配备 3.5 GB 显存的 NVIDIA 显卡",
+    },
+    "A first download of about 4.4 GB, reused afterwards": {
+        "es": "Una primera descarga de unos 4,4 GB, reutilizada después",
+        "de": "Ein erster Download von rund 4,4 GB, der anschließend wiederverwendet wird",
+        "zh": "首次下载约 4.4 GB，后续任务可重复使用",
+    },
+    "Community work is offered at night, 22:00–07:00 Paris time, when the network is least busy": {
+        "es": "El trabajo comunitario se ofrece por la noche, de 22:00 a 07:00 (hora de París), cuando la red está menos ocupada",
+        "de": "Community-Aufgaben werden nachts von 22:00 bis 07:00 Uhr Pariser Zeit vergeben, wenn das Netzwerk am wenigsten ausgelastet ist",
+        "zh": "社区训练任务在巴黎时间夜间 22:00–07:00 网络空闲时段开放",
+    },
+    "The standard BOINC client; the project’s files are digitally signed": {
+        "es": "El cliente BOINC estándar; los archivos del proyecto están firmados digitalmente",
+        "de": "Der Standard-BOINC-Client; die Projektdateien sind digital signiert",
+        "zh": "兼容标准 BOINC 客户端；所有项目文件均带有数字签名",
+    },
+    "Run the read-only hardware preflight check first (it installs nothing and sends nothing):": {
+        "es": "Ejecuta primero la comprobación de hardware de solo lectura (no instala nada ni envía datos):",
+        "de": "Führen Sie zuerst die schreibgeschützte Hardware-Prüfung aus (installiert nichts und sendet keine Daten):",
+        "zh": "首先运行只读硬件预检脚本（不安装任何软件，也不发送任何数据）：",
+    },
+    "Lease and fold a live federated BOINC workunit (`physics_sim`, `code_generation` or `math_reasoning`) from the public coordinator (remove `--once` to keep folding at night):": {
+        "es": "Solicita y calcula una unidad BOINC federada en vivo (`physics_sim`, `code_generation` o `math_reasoning`) desde el coordinador público (quita `--once` para seguir calculando por la noche):",
+        "de": "Leasen und berechnen Sie eine föderierte Live-BOINC-Aufgabe (`physics_sim`, `code_generation` oder `math_reasoning`) vom öffentlichen Koordinator (entfernen Sie `--once` für den Dauerbetrieb in der Nacht):",
+        "zh": "从公共协调器领取并计算实时联邦 BOINC 任务（支持 `physics_sim`、`code_generation` 或 `math_reasoning`，移除 `--once` 可在夜间持续计算）：",
+    },
+    "4. Gamers and Steam": {
+        "es": "4. Jugadores y Steam",
+        "de": "4. Gamer und Steam",
+        "zh": "4. 游戏玩家与 Steam",
+    },
+    "Your GPU folds astrophysics and AI workunits only while you are not playing. Both the Free-to-Play Steam Edition (`USS HiveMind NCC-31337: Astrophysics Exoplanet Hunter`, Steam `AppID 3133700`) and the automatic idle-GPU pause worker are available today, connecting gamers and citizen scientists on the [live community hub](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community).": {
+        "es": "Tu GPU calcula unidades de astrofísica e IA solo cuando no estás jugando. Tanto la edición gratuita de Steam (`USS HiveMind NCC-31337: Astrophysics Exoplanet Hunter`, Steam `AppID 3133700`) como el agente de pausa automática de GPU están disponibles hoy, uniendo a jugadores y científicos ciudadanos en el [centro comunitario en vivo](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community).",
+        "de": "Ihre GPU berechnet Astrophysik- und KI-Aufgaben nur, während Sie nicht spielen. Sowohl die kostenlose Steam-Edition (`USS HiveMind NCC-31337: Astrophysics Exoplanet Hunter`, Steam `AppID 3133700`) als auch der automatische GPU-Pausen-Worker sind heute verfügbar und verbinden Gamer und Citizen Scientists im [Live-Community-Hub](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community).",
+        "zh": "您的 GPU 仅在您不玩游戏时计算天体物理与 AI 任务。Steam 免费版（`USS HiveMind NCC-31337: Astrophysics Exoplanet Hunter`，Steam `AppID 3133700`）与 GPU 空闲自动暂停代理今日均已开放，在[实时社区中心](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community)将游戏玩家与公民科学家紧密连接。",
+    },
+    "While you play (`idle < 4 s` of keyboard/mouse input or GPU load above 45%), BOINC GPU compute pauses automatically (`boinccmd --set_gpu_mode never`, 0% GPU overhead) so your game keeps 100% of your graphics card at 60 FPS. After 4 seconds of inactivity (with GPU load below 45% and temperature below 78 °C), it automatically resumes folding TESS/JWST Box-Least-Squares (BLS) exoplanet transits.": {
+        "es": "Mientras juegas (`inactividad < 4 s` de teclado/ratón o carga de GPU superior al 45 %), el cálculo GPU de BOINC se pausa automáticamente (`boinccmd --set_gpu_mode never`, 0 % de sobrecarga) para que tu juego conserve el 100 % de la tarjeta gráfica a 60 FPS. Tras 4 segundos de inactividad (con carga de GPU inferior al 45 % y temperatura bajo 78 °C), reanuda automáticamente el análisis de tránsitos de exoplanetas TESS/JWST.",
+        "de": "Während Sie spielen (`Inaktivität < 4 s` bei Tastatur/Maus oder GPU-Last über 45 %), pausiert die BOINC-GPU-Berechnung automatisch (`boinccmd --set_gpu_mode never`, 0 % GPU-Overhead), sodass Ihr Spiel 100 % der Grafikkarte bei 60 FPS nutzt. Nach 4 Sekunden Inaktivität (bei unter 45 % GPU-Last und unter 78 °C) wird die TESS/JWST-Exoplaneten-Transitfaltung automatisch fortgesetzt.",
+        "zh": "当您正在游戏时（键盘/鼠标`空闲 < 4 秒`或 GPU 负载高于 45%），BOINC GPU 计算会自动暂停（`boinccmd --set_gpu_mode never`，0% GPU 额外开销），确保游戏独占 100% 显卡性能并稳定 60 FPS。在空闲满 4 秒后（且 GPU 负载低于 45%、温度低于 78 °C），程序会自动恢复折叠 TESS/JWST 系外行星凌星光变曲线。",
+    },
+    "Start the automatic idle-GPU worker (remove `--once` to leave the automatic pause/resume daemon running in the background while you play):": {
+        "es": "Inicia el agente automático de GPU inactiva (quita `--once` para dejar el demonio de pausa/reanudación automática en segundo plano mientras juegas):",
+        "de": "Starten Sie den automatischen Idle-GPU-Worker (entfernen Sie `--once`, damit der Pausen-/Fortsetzungs-Dienst im Hintergrund weiterläuft, während Sie spielen):",
+        "zh": "启动 GPU 空闲自动暂停工作节点（移除 `--once` 可让自动暂停/恢复守护进程在您游戏期间持续后台运行）：",
+    },
+    "You can also trigger an immediate manual GPU pause or resume from a Steam launch option:": {
+        "es": "También puedes activar una pausa o reanudación inmediata de la GPU desde una opción de lanzamiento de Steam:",
+        "de": "Sie können die GPU-Pause oder -Fortsetzung auch sofort über eine Steam-Startoption auslösen:",
+        "zh": "您也可以在 Steam 启动选项中立即手动触发 GPU 暂停或恢复：",
+    },
+    "If you also run an Ollama producer from path 2, a loaded language model keeps its video memory even when nobody is asking; before launching a heavy game, stop the producer agent (Ctrl+C) and unload the model (replace the name with your model’s):": {
+        "es": "Si también ejecutas un productor Ollama de la vía 2, un modelo cargado conserva su memoria de vídeo aunque nadie pregunte; antes de abrir un juego pesado, detén el agente (Ctrl+C) y libera la memoria (reemplaza el nombre por el de tu modelo):",
+        "de": "Wenn Sie zusätzlich einen Ollama-Produzenten aus Weg 2 betreiben, belegt ein geladenes Sprachmodell auch im Leerlauf Videospeicher; beenden Sie vor einem anspruchsvollen Spiel den Agenten (Strg+C) und geben Sie den Speicher frei (ersetzen Sie den Modellnamen):",
+        "zh": "如果您同时运行了方式 2 的 Ollama 生产者节点，已加载的语言模型在无请求时仍会占用显存；在启动大型游戏前，请先停止代理（Ctrl+C）并卸载显存中的模型（将名称替换为您的模型）：",
+    },
+    "After you play: start the producer agent again, with the same command as in path 2 (the BOINC idle-GPU worker resumes by itself).": {
+        "es": "Después de jugar: vuelve a iniciar el agente productor con el mismo comando de la vía 2 (el agente BOINC de GPU inactiva se reanuda por sí solo).",
+        "de": "Nach dem Spielen: Starten Sie den Produzenten-Agenten wieder mit demselben Befehl wie in Weg 2 (der BOINC-Idle-GPU-Worker setzt von selbst fort).",
+        "zh": "游戏结束后：使用方式 2 中的相同命令重新启动生产者代理（BOINC 空闲 GPU 工作节点会自动恢复运行）。",
+    },
+    "Good to know": {"es": "Bueno saberlo", "de": "Gut zu wissen", "zh": "重要须知"},
+    "Producers see the questions sent to them. Do not run a producer on a machine that holds secrets, and do not send confidential text to the network.": {
+        "es": "Los productores ven las preguntas que se les envían. No ejecutes un productor en una máquina con secretos ni envíes texto confidencial a la red.",
+        "de": "Produzenten sehen die an sie gesendeten Fragen. Betreiben Sie keinen Produzenten auf einem Rechner mit geheimen Daten und senden Sie keine vertraulichen Texte an das Netzwerk.",
+        "zh": "生产者节点可以看到发送给它们的问题。请勿在存有机密数据的机器上运行生产者节点，也不要向网络发送机密文本。",
+    },
+    "Points have no cash value and are not a payment.": {
+        "es": "Los puntos no tienen valor monetario y no constituyen un pago.",
+        "de": "Punkte haben keinen Geldwert und sind keine Bezahlung.",
+        "zh": "积分没有任何货币价值，也不构成任何形式的金钱报酬。",
+    },
+    "Sharing uses electricity while your GPU answers. Measure your card with `nvidia-smi --query-gpu=power.draw --format=csv` and multiply by the hours it works.": {
+        "es": "Compartir consume electricidad mientras tu GPU responde. Mide tu tarjeta con `nvidia-smi --query-gpu=power.draw --format=csv` y multiplícalo por las horas de trabajo.",
+        "de": "Das Teilen verbraucht Strom, während Ihre GPU antwortet. Messen Sie Ihre Karte mit `nvidia-smi --query-gpu=power.draw --format=csv` und multiplizieren Sie den Wert mit den Betriebsstunden.",
+        "zh": "当您的 GPU 处理任务时会消耗电力。您可以使用 `nvidia-smi --query-gpu=power.draw --format=csv` 测量显卡功耗并乘以运行小时数。",
+    },
+    "The software is open source (AGPL-3.0). Read the code before you run it.": {
+        "es": "El software es de código abierto (AGPL-3.0). Lee el código antes de ejecutarlo.",
+        "de": "Die Software ist Open Source (AGPL-3.0). Lesen Sie den Quellcode, bevor Sie ihn ausführen.",
+        "zh": "本软件完全开源（AGPL-3.0 协议）。建议您在运行前审阅源代码。",
+    },
+    "The network is young and run by volunteers; availability is not guaranteed.": {
+        "es": "La red es joven y está gestionada por voluntarios; la disponibilidad no está garantizada.",
+        "de": "Das Netzwerk ist jung und wird von Freiwilligen betrieben; eine durchgehende Verfügbarkeit wird nicht garantiert.",
+        "zh": "该网络仍处于早期阶段并由志愿者维护，不保证全天候可用性。",
+    },
+    "Questions and help": {"es": "Preguntas y ayuda", "de": "Fragen und Hilfe", "zh": "问题与帮助"},
+    "Open an issue on [GitHub]({REPO}/issues), in English or French. For a security problem, read the [security policy]({REPO}/security/policy) first.": {
+        "es": "Abre una incidencia en [GitHub]({REPO}/issues), en español, francés o inglés. Para un problema de seguridad, lee primero la [política de seguridad]({REPO}/security/policy).",
+        "de": "Eröffnen Sie ein Issue auf [GitHub]({REPO}/issues) (auf Deutsch, Französisch oder Englisch). Lesen Sie bei Sicherheitsproblemen zuerst die [Sicherheitsrichtlinie]({REPO}/security/policy).",
+        "zh": "请在 [GitHub]({REPO}/issues) 上提交 Issue（支持中文、法语或英语）。如遇安全问题，请先阅读[安全策略]({REPO}/security/policy)。",
+    },
+    LABELS["skip"][0]: {"es": "Ir al contenido", "de": "Zum Inhalt springen", "zh": "跳转到正文"},
+    LABELS["choose"][0]: {"es": "Elige cómo participar", "de": "Wählen Sie Ihren Einstieg", "zh": "选择您的参与方式"},
+    LABELS["other_lang"][0]: {"es": "Français", "de": "Français", "zh": "Français"},
+    LABELS["tiers_summary"][0]: {
+        "es": "¿Qué modelo para qué tarjeta? (todos los modelos)",
+        "de": "Welches Modell für welche Grafikkarte? (alle Modelle)",
+        "zh": "不同显卡适合运行哪些模型？（全部模型列表）",
+    },
+    LABELS["col_model"][0]: {"es": "Modelo", "de": "Modell", "zh": "模型"},
+    LABELS["col_id"][0]: {"es": "Nombre para --preset", "de": "Name für --preset", "zh": "--preset 参数名"},
+    LABELS["col_mem"][0]: {"es": "Memoria mínima (GB)", "de": "Mindestspeicher (GB)", "zh": "最低显存 (GB)"},
+    LABELS["col_dl"][0]: {"es": "Descarga (GB)", "de": "Download (GB)", "zh": "下载大小 (GB)"},
+    LABELS["tiers_missing"][0]: {
+        "es": "La lista actualizada de modelos está en [/v1/hivemind/catalog](/v1/hivemind/catalog).",
+        "de": "Die aktuelle Modellliste finden Sie unter [/v1/hivemind/catalog](/v1/hivemind/catalog).",
+        "zh": "实时模型列表位于 [/v1/hivemind/catalog](/v1/hivemind/catalog)。",
+    },
+    LABELS["tiers_note"][0]: {
+        "es": "Los nombres provienen del catálogo del proyecto. La memoria mínima es la tarjeta más pequeña recomendada, incluida la caché de contexto.",
+        "de": "Die Namen stammen aus dem Projektkatalog. Der Mindestspeicher bezeichnet die kleinste empfohlene Karte inklusive Kontext-Cache.",
+        "zh": "模型名称来自项目目录。最低显存包含上下文缓存在内的推荐显卡下限。",
+    },
+    LABELS["footer"][0]: {
+        "es": "HiveMind La Ruche · código abierto (AGPL-3.0) · los puntos no tienen valor monetario",
+        "de": "HiveMind La Ruche · Open Source (AGPL-3.0) · Punkte haben keinen Geldwert",
+        "zh": "HiveMind La Ruche · 开源软件 (AGPL-3.0) · 积分没有任何货币价值",
+    },
+    LABELS["status_prefix"][0]: {"es": "Estado: ", "de": "Status: ", "zh": "状态："},
+}
+
 _CSS = """
 :root{color-scheme:light dark;--bg:#fafafa;--fg:#1a1a1a;--mut:#555;--card:#fff;--line:#d8d8d8;--acc:#1a56db;--ok:#0b6b2f;--prev:#8a4b00;--dev:#5b2a86}
 @media (prefers-color-scheme:dark){:root{--bg:#121212;--fg:#ececec;--mut:#a8a8a8;--card:#1c1c1c;--line:#3a3a3a;--acc:#8ab4f8;--ok:#7be0a0;--prev:#ffc27a;--dev:#d3a8ff}}
@@ -289,7 +625,10 @@ _CSS = """
 a{color:var(--acc)}a:focus-visible,summary:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
 .skip{position:absolute;left:-999px}.skip:focus{left:1rem;top:1rem;background:var(--card);padding:.5rem;z-index:2}
 header,main,footer{max-width:46rem;margin:0 auto;padding:0 1rem}header{padding-top:1.2rem}
-.lang{float:right;font-size:.95rem}h1{font-size:1.9rem;line-height:1.2;margin:.4rem 0 .6rem}h2{font-size:1.35rem;margin:2.2rem 0 .6rem;scroll-margin-top:1rem}
+.lang{float:right;font-size:.92rem;display:flex;gap:.45rem;flex-wrap:wrap;align-items:center}
+.lang a{text-decoration:none;padding:.1rem .4rem;border-radius:.35rem;border:1px solid transparent}
+.lang a[aria-current="page"]{font-weight:700;border-color:var(--acc);background:var(--card)}
+h1{font-size:1.9rem;line-height:1.2;margin:.4rem 0 .6rem}h2{font-size:1.35rem;margin:2.2rem 0 .6rem;scroll-margin-top:1rem}
 .lead{font-size:1.08rem}.cards{display:grid;gap:.8rem;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));padding:0;list-style:none;margin:1rem 0}
 .card{background:var(--card);border:1px solid var(--line);border-radius:.6rem;padding:.9rem 1rem}.card h3{margin:.1rem 0 .3rem;font-size:1.05rem}
 .card a.more{display:inline-block;margin-top:.3rem}
@@ -305,7 +644,14 @@ footer{color:var(--mut);font-size:.9rem;padding-bottom:2.5rem;margin-top:2.5rem}
 
 
 def _t(pair: Pair, lang: str) -> str:
-    return pair[0] if lang == "en" else pair[1]
+    if lang == "en":
+        return pair[0]
+    if lang == "fr":
+        return pair[1]
+    extra = TRANSLATIONS.get(pair[0])
+    if extra and lang in extra:
+        return extra[lang]
+    return pair[1]
 
 
 def _safe_href(url: str) -> bool:
@@ -329,7 +675,7 @@ def _inline(text: str, subs: Mapping[str, str]) -> str:
 
 def _num(value: float, lang: str) -> str:
     text = f"{value:g}"
-    return text.replace(".", ",") if lang == "fr" else text
+    return text.replace(".", ",") if lang in ("fr", "es", "de") else text
 
 
 def _tiers_html(tiers: Sequence[Mapping[str, Any]] | None, lang: str, subs: Mapping[str, str]) -> str:
@@ -367,28 +713,25 @@ def _block(kind: str, payload: Any, lang: str, subs: Mapping[str, str], tiers: S
     raise ValueError(f"unknown block kind {kind!r}")
 
 
-def render_join_page(lang: str, nonce: str, *, tiers: Sequence[Mapping[str, Any]] | None = None, api_url: str = DEFAULT_API_URL,
-                     repo_url: str = REPO_URL, path: str = "/join", google_enabled: bool = False, handle_registration: bool = True) -> str:
-    """The complete page. ``tiers`` is the ``tiers`` list of ``/v1/hivemind/catalog`` (``None``: link to the live list instead).
-
-    ``google_enabled`` and ``handle_registration`` say how an account can be created on THIS gateway (``/v1/hivemind/signin/providers`` reports both); the
-    account steps describe only what is available, and say so when registration is closed.
-    """
+def render_join_page(lang: str = "fr", nonce: str = "abcdefgh12345678", *, tiers: Sequence[Mapping[str, Any]] | None = None,
+                     api_url: str = DEFAULT_API_URL, repo_url: str = REPO_URL, path: str = "/join",
+                     google_enabled: bool = False, handle_registration: bool = True) -> str:
+    """The complete multilingual page (FR default, EN, ES, DE, ZH). ``tiers`` is the ``tiers`` list of ``/v1/hivemind/catalog``."""
     flags = Flags(google=google_enabled, handles=handle_registration)
     if lang not in LANGS:
-        raise ValueError("lang must be 'en' or 'fr'")
+        raise ValueError("lang must be one of 'fr', 'en', 'es', 'de', 'zh'")
     if not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", nonce):
         raise ValueError("nonce must be 8-64 URL-safe characters")
     if not _URL_OK.match(api_url) or not _URL_OK.match(repo_url) or not re.fullmatch(r"/[a-z-]*", path):
         raise ValueError("api_url and repo_url must be plain https URLs and path a simple absolute path")
     subs = {"API": api_url.rstrip("/"), "REPO": repo_url.rstrip("/")}
-    other = "fr" if lang == "en" else "en"
     esc = html.escape
     cards = "".join(
         f'<li class="card"><h3>{esc(_t(title, lang))}</h3><span class="badge {cls}"><span class="visually">{esc(_t(LABELS["status_prefix"], lang))}</span>'
         f'{esc(_t(status, lang))}</span><p>{esc(_t(summary, lang))}</p><a class="more" href="#{anchor}">→ {esc(_t(title, lang))}</a></li>'
         for anchor, title, cls, status, summary in PATHS
     )
+
     def section(sid: str, title: Pair, blocks: Sequence[tuple[str, Any]]) -> str:
         done, out = 0, []
         for kind, payload in blocks:
@@ -400,14 +743,22 @@ def render_join_page(lang: str, nonce: str, *, tiers: Sequence[Mapping[str, Any]
         return f'<section id="{sid}"><h2>{esc(_t(title, lang))}</h2>{"".join(out)}</section>'
 
     body = "".join(section(sid, title, blocks) for sid, title, blocks in SECTIONS)
+    alternates = "".join(f'<link rel="alternate" hreflang="{code}" href="{path}?lang={code}">' for code in LANGS)
+    current_attr = ' aria-current="page"'
+    lang_links = "".join(
+        f'<a href="{path}?lang={code}" hreflang="{code}" lang="{code}"'
+        f'{current_attr if code == lang else ""}>{esc(LANG_NAMES[code])}</a>'
+        for code in LANGS
+    )
     return (
         f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
         f"<title>{esc(_t(TITLE, lang))}</title><meta name=\"description\" content=\"{esc(_t(DESCRIPTION, lang), quote=True)}\">"
-        f'<link rel="canonical" href="{path}?lang={lang}"><link rel="alternate" hreflang="en" href="{path}?lang=en">'
-        f'<link rel="alternate" hreflang="fr" href="{path}?lang=fr"><style nonce="{nonce}">{_CSS}.visually{{position:absolute;left:-999px}}</style></head><body>'
+        f'<link rel="canonical" href="{path}?lang={lang}">{alternates}'
+        f'<link rel="alternate" hreflang="x-default" href="{path}?lang=fr">'
+        f'<style nonce="{nonce}">{_CSS}.visually{{position:absolute;left:-999px}}</style></head><body>'
         f'<a class="skip" href="#main">{esc(_t(LABELS["skip"], lang))}</a>'
-        f'<header><nav class="lang" aria-label="Language / Langue"><a href="{path}?lang={other}" hreflang="{other}" lang="{other}">'
-        f'{esc(_t(LABELS["other_lang"], lang))}</a></nav><h1>{esc(_t(TITLE, lang))}</h1><p class="lead">{esc(_t(LEAD, lang))}</p></header>'
+        f'<header><nav class="lang" aria-label="Language / Langue">{lang_links}</nav>'
+        f'<h1>{esc(_t(TITLE, lang))}</h1><p class="lead">{esc(_t(LEAD, lang))}</p></header>'
         f'<main id="main"><h2>{esc(_t(LABELS["choose"], lang))}</h2><ul class="cards">{cards}</ul>{body}</main>'
         f'<footer><p>{esc(_t(LABELS["footer"], lang))}</p></footer></body></html>'
     )

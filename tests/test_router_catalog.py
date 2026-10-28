@@ -34,18 +34,53 @@ def test_every_tier_id_is_routable_and_unique_and_ordered_by_memory() -> None:
 
 def test_moe_tiers_exist_and_declare_their_active_parameters() -> None:
     moe = [tier for tier in TIERS if tier.moe]
-    assert {tier.tier_id for tier in moe} == {"moe-general", "moe-coder"}
+    assert {tier.tier_id for tier in moe} == {"bee-ruche-moe", "moe-qwen35-bee", "moe-general", "moe-coder"}
     assert all(tier.active_params_b is not None and tier.active_params_b < 10 for tier in moe)
     assert all(tier.active_params_b is None for tier in TIERS if not tier.moe)
 
 
 @pytest.mark.parametrize(
     ("vram", "expected"),
-    [(3.9, None), (4.0, "coder-lite"), (6.0, "coder"), (8.0, "coder"), (12.0, "coder-plus"), (14.9, "coder-plus"), (15.0, "moe-general"), (15.36, "moe-general"), (16.0, "moe-general"), (24.0, "moe-coder"), (80.0, "moe-coder")],
+    [
+        (3.9, None),
+        (4.0, "coder-lite"),
+        (4.5, "gemma-core"),
+        (5.5, "bee-stars"),
+        (6.0, "coder"),
+        (8.0, "coder"),
+        (8.5, "bee-lean-prover"),
+        (10.0, "bee-ruche-moe"),
+        (12.0, "coder-plus"),
+        (14.9, "coder-plus"),
+        (15.0, "moe-general"),
+        (15.36, "moe-general"),
+        (16.0, "moe-general"),
+        (24.0, "moe-coder"),
+        (80.0, "moe-coder"),
+    ],
 )
 def test_recommend_tier_picks_the_biggest_tier_that_fits(vram: float, expected: str | None) -> None:
     tier = recommend_tier(vram)
     assert (tier.tier_id if tier else None) == expected
+
+
+def test_core_models_and_moe_bees_aliases_are_normalized() -> None:
+    for alias, expected in (
+        ("hivemind/gemma", "gemma-core"),
+        ("google/gemma-3-4b", "gemma-core"),
+        ("gemma3:4b", "gemma-core"),
+        ("hivemind/qwen3.5", "qwen35-core"),
+        ("qwen/qwen3.5-8b", "qwen35-core"),
+        ("qwen3:8b", "qwen35-core"),
+        ("hivemind/mistral", "mistral-core"),
+        ("mistral:7b-instruct", "mistral-core"),
+        ("hivemind/bee-lean", "bee-lean-prover"),
+        ("hivemind/la-ruche-moe", "bee-ruche-moe"),
+        ("hivemind/moe-bee", "moe-qwen35-bee"),
+    ):
+        assert normalize_model_alias(alias) == expected
+        tier = tier_by_id(alias)
+        assert tier is not None and tier.tier_id == expected
 
 
 @given(st.floats(min_value=0.0, max_value=200.0), st.floats(min_value=0.0, max_value=200.0))

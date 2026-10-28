@@ -60,8 +60,20 @@ def test_ready_machine_rtx3060() -> None:
     assert pf.verdict_of(cs) == "ready"
     g = by_id(cs, "gpu")
     assert g.status == "ok"
-    assert g.data["tiers_servable_total"] == ["crowd-v1", "coder-lite", "bee-rusty-sundials", "coder", "coder-plus"]
-    assert g.data["tiers_too_big"] == ["moe-general", "moe-coder"]
+    assert g.data["tiers_servable_total"] == [
+        "crowd-v1",
+        "coder-lite",
+        "gemma-core",
+        "bee-stars",
+        "mistral-core",
+        "qwen35-core",
+        "bee-rusty-sundials",
+        "coder",
+        "bee-lean-prover",
+        "bee-ruche-moe",
+        "coder-plus",
+    ]
+    assert g.data["tiers_too_big"] == ["moe-qwen35-bee", "moe-general", "moe-coder"]
 
 
 def test_four_gb_card_trains_but_only_small_tiers() -> None:

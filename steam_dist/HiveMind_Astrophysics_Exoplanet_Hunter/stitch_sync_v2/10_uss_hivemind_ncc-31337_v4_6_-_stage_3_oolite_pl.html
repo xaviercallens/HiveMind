@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+
+<html class="dark h-full bg-[#050911] text-slate-100 antialiased select-none" lang="fr"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>USS HIVEMIND NCC-31337 — Stage 3: Oolite Planetfall</title>
+<!-- Tailwind CSS CDN with forms and container queries -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts: Space Grotesk & JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700;800&amp;family=Space+Grotesk:wght@400;600;700&amp;display=swap" rel="stylesheet"/>
+<script data-purpose="tailwind-config">
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            mono: ['"JetBrains Mono"', 'monospace'],
+            display: ['"Space Grotesk"', 'sans-serif'],
+          },
+          colors: {
+            lcars: {
+              cyan: '#00f0ff',
+              emerald: '#00ff88',
+              amber: '#ffb800',
+              alert: '#ff2a2a',
+              violet: '#b84dff',
+              bg: '#070e1a',
+              panel: 'rgba(10, 20, 34, 0.88)'
+            }
+          },
+          boxShadow: {
+            'glow-cyan': '0 0 15px rgba(0, 240, 255, 0.45)',
+            'glow-amber': '0 0 15px rgba(255, 184, 0, 0.5)',
+            'glow-red': '0 0 18px rgba(255, 42, 42, 0.65)',
+            'inner-hud': 'inset 0 0 20px rgba(0, 240, 255, 0.15)'
+          }
+        }
+      }
+    };
+  </script>
+<style data-purpose="hud-scanlines-and-glow">
+    /* Subtle CRT / HUD scanline overlay */
+    .scanlines {
+      background: linear-gradient(
+        to bottom,
+        rgba(255,255,255,0),
+        rgba(255,255,255,0) 50%,
+        rgba(0, 0, 0, 0.35) 50%,
+        rgba(0, 0, 0, 0.35)
+      );
+      background-size: 100% 4px;
+      pointer-events: none;
+    }
+
+    .hud-border {
+      border: 1px solid rgba(0, 240, 255, 0.35);
+      background: rgba(7, 14, 26, 0.82);
+      backdrop-filter: blur(8px);
+    }
+
+    .hud-border-amber {
+      border: 1px solid rgba(255, 184, 0, 0.4);
+      background: rgba(20, 16, 8, 0.85);
+      backdrop-filter: blur(8px);
+    }
+
+    /* Pulsing animations */
+    @keyframes pulse-fast {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.65; transform: scale(0.98); }
+    }
+    .animate-retro-pulse {
+      animation: pulse-fast 1.2s infinite ease-in-out;
+    }
+    
+    @keyframes radar-sweep {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .radar-sweep {
+      animation: radar-sweep 4s linear infinite;
+    }
+
+    /* Custom scrollbars */
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(4, 9, 18, 0.7);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #00f0ff;
+      border-radius: 2px;
+    }
+  </style>
+</head>
+<body class="h-full w-full flex flex-col font-mono text-xs overflow-x-hidden bg-[#040810] text-[#a7d3ec]">
+<!-- BEGIN: TopLcarsCommandBanner -->
+<header class="border-b border-lcars-cyan/40 bg-[#070e1a] text-slate-200 px-3 py-1.5 flex flex-col gap-1.5 z-40 shadow-lg" data-purpose="top-command-header">
+<!-- Row 1: System Title and Window Controls -->
+<div class="flex items-center justify-between border-b border-lcars-cyan/20 pb-1">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 bg-lcars-cyan rounded-sm shadow-glow-cyan"></div>
+<span class="font-display font-bold tracking-wider text-sm text-lcars-cyan uppercase">
+          USS HIVEMIND NCC-31337 v4.6
+        </span>
+<span class="text-slate-400 text-[11px] hidden sm:inline">— Console Star Trek &amp; Atterrissage Planétaire Oolite Planetfall OXP</span>
+</div>
+<!-- Language + Voice Synthesis Bar -->
+<div class="flex items-center gap-1.5">
+<div class="flex rounded border border-lcars-cyan/30 p-0.5 bg-black/40 text-[10px]">
+<button class="px-2 py-0.5 bg-lcars-cyan text-black font-bold rounded">FR</button>
+<button class="px-2 py-0.5 hover:text-white transition">ES</button>
+<button class="px-2 py-0.5 hover:text-white transition">DE</button>
+<button class="px-2 py-0.5 hover:text-white transition">EN</button>
+<button class="px-2 py-0.5 hover:text-white transition">ZH</button>
+</div>
+<button class="px-2.5 py-0.5 bg-amber-500/20 border border-amber-400 text-amber-300 font-bold rounded flex items-center gap-1 shadow-glow-amber text-[10px]">
+<span class="inline-block w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+<span>VOIX</span>
+</button>
+</div>
+</div>
+<!-- Row 2: Telemetry Strip + Navigation Tabs -->
+<div class="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+<!-- Live Telemetry Coordinates -->
+<div class="flex items-center flex-wrap gap-3 text-cyan-200/90 font-mono">
+<div>RA: <span class="text-lcars-cyan font-semibold">55.10</span></div>
+<div class="text-slate-600">|</div>
+<div>DEC: <span class="text-lcars-cyan font-semibold">100.0</span></div>
+<div class="text-slate-600">|</div>
+<div>EPOCH: <span class="text-emerald-400 font-semibold">238.92</span></div>
+<div class="text-slate-600">|</div>
+<div>FLUX: <span class="text-emerald-400 font-semibold">15.28</span></div>
+<div class="text-slate-600">|</div>
+<div class="flex items-center gap-1">
+<span class="text-slate-400">BUFFER:</span>
+<div class="flex gap-0.5">
+<span class="w-1.5 h-3 bg-emerald-400 inline-block"></span>
+<span class="w-1.5 h-3 bg-emerald-400 inline-block"></span>
+<span class="w-1.5 h-3 bg-emerald-400 inline-block"></span>
+<span class="w-1.5 h-3 bg-emerald-400 inline-block"></span>
+<span class="w-1.5 h-3 bg-emerald-400/50 inline-block"></span>
+<span class="w-1.5 h-3 bg-emerald-400/20 inline-block"></span>
+</div>
+</div>
+<div class="text-slate-600">|</div>
+<div>FREQ: <span class="text-amber-300">1420.405 MHz</span></div>
+<div class="text-slate-600">|</div>
+<div>SYNC: <span class="text-lcars-cyan">55222 / 3208</span></div>
+</div>
+<!-- Stage Switcher Tabs -->
+<nav class="flex items-center gap-1 font-display font-semibold text-[11px]" data-purpose="stage-navigation">
+<button class="px-2.5 py-1 border border-slate-700 bg-slate-900/80 text-slate-400 hover:text-white rounded">
+          1. GALAXIE
+        </button>
+<button class="px-2.5 py-1 border border-slate-700 bg-slate-900/80 text-slate-400 hover:text-white rounded">
+          2. ORBIT BEE
+        </button>
+<button class="px-3 py-1 bg-lcars-cyan text-black font-bold rounded shadow-glow-cyan flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-black"></span>
+          3. OOLITE LAND [ACTIF]
+        </button>
+<button class="px-2.5 py-1 border border-slate-700 bg-slate-900/80 text-slate-400 hover:text-white rounded flex items-center gap-1">
+          4. JWST/LOIS &gt;&gt;&gt;&gt;
+        </button>
+</nav>
+</div>
+</header>
+<!-- END: TopLcarsCommandBanner -->
+<!-- BEGIN: MissionStageActionBanner -->
+<section class="bg-gradient-to-r from-amber-950/70 via-cyan-950/80 to-amber-950/70 border-b border-amber-400/40 px-3 py-1.5 text-xs z-30 shadow" data-purpose="mission-flight-stage-instructions">
+<div class="flex flex-wrap items-center justify-between gap-2">
+<div class="flex items-center gap-2 font-display tracking-wider text-amber-300">
+<span class="bg-amber-400 text-black px-1.5 py-0.5 font-bold rounded-sm text-[10px]">GUIDAGE VOL</span>
+<span class="font-bold">ÉTAPE 3 // ATTERRISSAGE OOLITE PLANETFALL :</span>
+<span class="text-slate-100 font-mono text-[11px]">[Z / HAUT] RÉTRO-FUSÉES (&lt;95 m/s) • [Q/D] ALIGNER • [C] CLEARANCE • [G] TRAIN</span>
+</div>
+<div class="flex items-center gap-3 font-mono text-[11px]">
+<span class="text-slate-300">RÉTRO: <strong class="text-amber-400">42%</strong></span>
+<span class="text-slate-300">DESCENTE: <strong class="text-emerald-400">-84.2 m/s</strong> <span class="text-emerald-300 text-[10px]">[OK]</span></span>
+<span class="text-slate-300">ALT SOL: <strong class="text-lcars-cyan">1,840 m AGL</strong></span>
+<span class="text-slate-300">PAD: <strong class="text-lcars-cyan">CHASMA-ALPHA [LOCK]</strong></span>
+</div>
+</div>
+</section>
+<!-- END: MissionStageActionBanner -->
+<!-- BEGIN: CockpitViewportAndTacticalMFD -->
+<main class="relative flex-1 min-h-[580px] w-full overflow-hidden flex flex-col justify-between">
+<!-- Photorealistic Descent View Backdrop -->
+<div class="absolute inset-0 z-0">
+<img alt="Descent cockpit view of spaceship landing on exoplanet K2-18 b" class="w-full h-full object-cover object-center filter brightness-[0.95] contrast-[1.05]" src="https://lh3.googleusercontent.com/aida-public/AB6AXuChalitz6rWZe3ltUcPx8rSkF3Iman86Rh2HAdVj9NyZVYEuJeNp5xsR6DmX-gY0x2loGFP8bGoSUBXNRKI3qvENsdY-QJSjMVdHrfehDK8AcmM9y4MTimbVPV0IcZdp2LksNaZXLkaikjhOa9M34Fr7AQJaZNOR-bRZHhfjIQ2Jk9-cVhhtpAdV7Jehr0kA7B79X5W0jfqOi-F5yI3VrNN2u2E9llsMOU4xAFqfXEm"/>
+<!-- Dynamic Plasma Horizon & Cockpit atmospheric gradients -->
+<div class="absolute inset-0 bg-gradient-to-t from-[#040810] via-transparent to-[#050c18]/80 mix-blend-multiply"></div>
+<div class="scanlines absolute inset-0 opacity-40"></div>
+</div>
+<!-- HUD Overlay Content Grid -->
+<div class="relative z-10 w-full h-full p-2.5 grid grid-cols-12 gap-2.5 items-stretch pointer-events-none">
+<!-- LEFT COLUMN: Ship Telemetry, Primeable Systems, Market Cargo (MFD 1) -->
+<section class="col-span-12 lg:col-span-3 flex flex-col gap-2 pointer-events-auto" data-purpose="left-mfd-panel">
+<!-- Ship Specification Block -->
+<div class="hud-border rounded p-2.5 flex flex-col gap-1.5 text-[11px] shadow-lg">
+<div class="flex items-center justify-between border-b border-lcars-cyan/30 pb-1">
+<span class="text-lcars-cyan font-bold tracking-wider font-display">COBRA MK-III // HONOUR OF HIVEMIND</span>
+<span class="text-emerald-400 font-bold bg-emerald-950/80 px-1 py-0.5 rounded text-[9px] border border-emerald-400/40">OPÉRATIONNEL</span>
+</div>
+<div class="grid grid-cols-2 gap-x-2 gap-y-0.5 text-slate-300">
+<div>État Service: <span class="text-emerald-300 font-bold">98%</span></div>
+<div>Masse: <span class="text-cyan-200">214.7 t</span></div>
+<div>Valeur Revente: <span class="text-amber-300 font-mono">176,229 Cr</span></div>
+<div>Solde: <span class="text-amber-400 font-bold">14,399.5 Cr</span></div>
+<div>Statut Légal: <span class="text-emerald-400 font-bold">Clean [0]</span></div>
+<div>Rang Combat: <span class="text-cyan-300">Astro-Hunter (19)</span></div>
+<div>Rép. Colis: <span class="text-cyan-300 font-bold">0.70</span></div>
+<div>Gravité: <span class="text-amber-300">1.27 g (12.5 m/s²)</span></div>
+</div>
+<div class="text-[10px] text-slate-400 pt-1 border-t border-slate-700/50 flex justify-between">
+<span>Carburant: 6.9 LY</span>
+<span>Vent Solaire: 0.000 LY</span>
+</div>
+</div>
+<!-- Primeable Equipments & MFD Selector -->
+<div class="hud-border rounded p-2.5 flex flex-col gap-1.5 flex-1 shadow-lg overflow-hidden">
+<div class="flex items-center justify-between border-b border-lcars-cyan/30 pb-1">
+<span class="text-lcars-cyan font-bold font-display text-[11px]">ÉQUIPEMENTS PRIMEABLES</span>
+<span class="text-xs text-amber-300 font-bold">4 / 18</span>
+</div>
+<ul class="text-[11px] space-y-1 overflow-y-auto pr-1">
+<li class="flex items-center gap-1.5 text-slate-400 hover:text-white">
+<span class="text-slate-600">•</span> LMSS Activator (Surface Scan)
+            </li>
+<li class="flex items-center gap-1.5 text-lcars-cyan font-bold bg-lcars-cyan/10 px-1 py-0.5 rounded border border-lcars-cyan/30">
+<span class="text-lcars-cyan">▶▶</span> Target Banking / Atmo Stabiliser
+            </li>
+<li class="flex items-center gap-1.5 text-slate-300">
+<span class="text-slate-500">•</span> Market Inquirer MFD (K2-18 b)
+            </li>
+<li class="flex items-center gap-1.5 text-slate-300">
+<span class="text-slate-500">•</span> Ship Identifier &amp; IFF Transponder
+            </li>
+<li class="flex items-center gap-1.5 text-slate-300">
+<span class="text-slate-500">•</span> CommsLog MFD (Canal Local)
+            </li>
+<li class="flex items-center gap-1.5 text-slate-400">
+<span class="text-slate-600">•</span> Adv. Nav Computer (Planetfall OXP)
+            </li>
+<li class="flex items-center gap-1.5 text-slate-400">
+<span class="text-slate-600">•</span> Telescope (JWST Coronagraph)
+            </li>
+</ul>
+<!-- Market / Cargo Overview inside MFD -->
+<div class="mt-2 pt-2 border-t border-lcars-cyan/20">
+<div class="text-[10px] text-amber-400 font-bold flex justify-between mb-1">
+<span>MANIFESTE CARGAISON PLANÉTAIRE</span>
+<span>33t / 33t [PLEIN]</span>
+</div>
+<div class="grid grid-cols-2 gap-1 text-[10px] text-slate-300 bg-black/40 p-1.5 rounded border border-slate-800">
+<div>25g Quirium: <span class="text-emerald-300">42.6 Cr</span></div>
+<div>25g Gem-Stones: <span class="text-emerald-300">21.9 Cr</span></div>
+<div>128kg Platinum: <span class="text-emerald-300">71.4 Cr</span></div>
+<div>46kg Gold: <span class="text-emerald-300">40.4 Cr</span></div>
+<div>33t Computers: <span class="text-emerald-300">73.5 Cr</span></div>
+<div>Food Rations: <span class="text-emerald-300">14.1 Cr</span></div>
+</div>
+</div>
+</div>
+</section>
+<!-- CENTER HUD: Flight Crosshair, Descent Reticle, Vector Ladder, Warning System -->
+<section class="col-span-12 lg:col-span-6 flex flex-col justify-between items-center py-2 pointer-events-none relative" data-purpose="center-hud-tactical">
+<!-- Danger / Altitude Warning Sign -->
+<div class="pointer-events-auto flex flex-col items-center animate-bounce">
+<div class="border-2 border-red-500/80 bg-red-950/80 px-4 py-1.5 rounded-sm shadow-glow-red flex items-center gap-2">
+<svg class="w-5 h-5 text-red-400 animate-pulse" fill="currentColor" viewbox="0 0 20 20">
+<path clip-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" fill-rule="evenodd"></path>
+</svg>
+<div class="text-center leading-tight">
+<div class="font-display font-black tracking-widest text-red-400 text-xs sm:text-sm">DANGER ! ALTITUDE TOO LOW</div>
+<div class="text-[9px] text-red-200">SEUIL CRITIQUE D'IMPACT PLANÉTAIRE &lt; 2000m</div>
+</div>
+</div>
+</div>
+<!-- Central Flight Crosshair & Horizon Pitch Ladder -->
+<div class="relative w-72 h-72 sm:w-80 sm:h-80 flex items-center justify-center pointer-events-none">
+<!-- Outer Circular Reticle Ring -->
+<div class="absolute inset-0 rounded-full border border-lcars-cyan/30 border-dashed animate-[spin_60s_linear_infinite]"></div>
+<div class="absolute inset-4 rounded-full border border-emerald-400/20"></div>
+<!-- Vertical Pitch Ladder & Angle Markings -->
+<div class="absolute inset-0 flex flex-col justify-between items-center py-6 text-[9px] text-lcars-cyan font-mono opacity-80">
+<div class="flex items-center gap-3"><span>-- +10° --</span><div class="w-8 h-[1px] bg-lcars-cyan"></div><span>-- +10° --</span></div>
+<div class="flex items-center gap-4"><span>-- +05° --</span><div class="w-12 h-[1px] bg-emerald-400"></div><span>-- +05° --</span></div>
+<!-- Horizon Bar (0°) -->
+<div class="w-full flex items-center justify-center gap-2">
+<div class="w-16 h-[2px] bg-lcars-cyan shadow-glow-cyan"></div>
+<div class="w-4 h-4 border-2 border-lcars-cyan rotate-45 flex items-center justify-center">
+<div class="w-1 h-1 bg-amber-400 rounded-full"></div>
+</div>
+<div class="w-16 h-[2px] bg-lcars-cyan shadow-glow-cyan"></div>
+</div>
+<div class="flex items-center gap-4"><span>-- -05° --</span><div class="w-12 h-[1px] bg-emerald-400"></div><span>-- -05° --</span></div>
+<div class="flex items-center gap-3"><span>-- -10° --</span><div class="w-8 h-[1px] bg-lcars-cyan"></div><span>-- -10° --</span></div>
+</div>
+<!-- Reticle Dynamic Flight Target Diamond -->
+<div class="absolute w-20 h-20 border border-emerald-400/70 rotate-45 flex items-center justify-center">
+<div class="w-2 h-2 bg-amber-400 rounded-full shadow-glow-amber animate-ping"></div>
+</div>
+<!-- Vertical Descent Rate Tape (Right side of reticle) -->
+<div class="absolute -right-6 top-1/2 -translate-y-1/2 flex flex-col gap-1 items-end text-[9px] text-amber-300">
+<span class="bg-amber-400 text-black px-1 font-bold">-84 m/s</span>
+<div class="flex flex-col gap-0.5 items-end">
+<span class="w-4 h-1 bg-amber-400"></span>
+<span class="w-3 h-1 bg-amber-400"></span>
+<span class="w-5 h-1 bg-emerald-400"></span>
+<span class="w-2 h-1 bg-emerald-400"></span>
+<span class="w-2 h-1 bg-slate-500"></span>
+</div>
+</div>
+<!-- Radar Alt Tape (Left side) -->
+<div class="absolute -left-8 top-1/2 -translate-y-1/2 flex flex-col gap-1 text-[9px] text-lcars-cyan">
+<span class="bg-lcars-cyan text-black px-1 font-bold">1840 m</span>
+<div class="flex flex-col gap-0.5">
+<span class="w-5 h-1 bg-lcars-cyan"></span>
+<span class="w-3 h-1 bg-lcars-cyan"></span>
+<span class="w-4 h-1 bg-lcars-cyan"></span>
+<span class="w-2 h-1 bg-slate-500"></span>
+</div>
+</div>
+<!-- Weapons Offline Notice -->
+<div class="absolute bottom-1 text-[10px] text-red-400 tracking-wider font-semibold">
+            WEAPONS SYSTEMS OFFLINE (ATMOSPHERIC MODE)
+          </div>
+</div>
+<!-- Center Bottom: Interactive Landing Action Buttons & Comms Box -->
+<div class="pointer-events-auto w-full max-w-lg flex flex-col gap-1.5 mt-2">
+<!-- Keybind Action Toggles (C / G / Z) -->
+<div class="grid grid-cols-3 gap-2">
+<!-- Clearance Granted Button -->
+<button class="px-2 py-1.5 rounded bg-emerald-950/80 border border-emerald-400/80 text-emerald-300 flex items-center justify-center gap-1.5 hover:bg-emerald-900/80 shadow-md">
+<span class="font-bold text-emerald-400">✓</span>
+<span class="text-[11px] font-display font-semibold">[C] CLEARANCE</span>
+</button>
+<!-- Landing Gear Deployed Button -->
+<button class="px-2 py-1.5 rounded bg-cyan-950/80 border border-lcars-cyan/80 text-cyan-200 flex items-center justify-center gap-1.5 hover:bg-cyan-900/80 shadow-md">
+<span class="font-bold text-lcars-cyan">✓</span>
+<span class="text-[11px] font-display font-semibold">[G] TRAIN SORTI</span>
+</button>
+<!-- Pulsing Retro Thruster Activation Button -->
+<button class="animate-retro-pulse px-2 py-1.5 rounded bg-amber-600/90 hover:bg-amber-500 border border-amber-300 text-black font-extrabold flex items-center justify-center gap-1.5 shadow-glow-amber">
+<span class="text-[11px] font-display uppercase tracking-tight">[Z/UP] RÉTROS ACTIFS</span>
+</button>
+</div>
+<!-- Comms Log Box -->
+<div class="hud-border rounded p-2 text-[10px] text-slate-300 leading-tight">
+<div class="flex items-center justify-between text-amber-300 font-bold border-b border-slate-700/60 pb-0.5 mb-1">
+<span>CANAL CONTRÔLE PLANÉTAIRE [K2-18 b]</span>
+<span class="text-lcars-cyan font-mono">124.85 MHz</span>
+</div>
+<p class="text-emerald-200">
+<strong class="text-lcars-cyan">[Tour Chasma] :</strong> Autorisation d'atterrissage confirmée pour pad K2-18 b Alpha. Maintenir vitesse &lt; 95 m/s et T° verrière &lt; 180°C lors de l'arrondi final. Alignement balise nominal.
+            </p>
+</div>
+</div>
+</section>
+<!-- RIGHT COLUMN: Radar Scanner, Entity Memory, Sector Planetaries (MFD 2) -->
+<section class="col-span-12 lg:col-span-3 flex flex-col gap-2 pointer-events-auto" data-purpose="right-mfd-panel">
+<!-- Target Memory Interface & Nearby Signals -->
+<div class="hud-border rounded p-2.5 flex flex-col gap-1.5 text-[11px] shadow-lg">
+<div class="flex items-center justify-between border-b border-lcars-cyan/30 pb-1">
+<span class="text-lcars-cyan font-bold font-display">RADAR CIBLES &amp; CONTACTS</span>
+<span class="text-[10px] text-slate-400">PORTÉE: 100 km</span>
+</div>
+<!-- Entity distance table -->
+<div class="space-y-1 text-[10px] overflow-y-auto max-h-36 pr-1 font-mono">
+<div class="flex justify-between items-center text-red-400">
+<span>3.096 km</span>
+<span>Python: Spark of Decency</span>
+<span class="px-1 bg-red-950 border border-red-500 text-[8px]">[HOSTILE]</span>
+</div>
+<div class="flex justify-between items-center text-cyan-200">
+<span>41.94 km</span>
+<span>Gecko: Orbital Buckler</span>
+<span class="text-emerald-400">[NEUTRE]</span>
+</div>
+<div class="flex justify-between items-center text-slate-300">
+<span>53.36 km</span>
+<span>Nav Beacon 123°</span>
+<span class="text-amber-400">[BALISE]</span>
+</div>
+<div class="flex justify-between items-center text-emerald-300">
+<span>61.65 km</span>
+<span>TransHab Station K2</span>
+<span class="text-emerald-400">[STATION]</span>
+</div>
+<div class="flex justify-between items-center text-slate-400">
+<span>359.4 km</span>
+<span>Mono (Lune K2-18)</span>
+<span>[LUNE]</span>
+</div>
+<div class="flex justify-between items-center text-slate-400">
+<span>828.6 km</span>
+<span>Witchpoint Beacon 110°</span>
+<span>[SAUT]</span>
+</div>
+</div>
+</div>
+<!-- Planetary Bodies in System -->
+<div class="hud-border rounded p-2.5 flex flex-col gap-1.5 flex-1 shadow-lg">
+<div class="flex items-center justify-between border-b border-lcars-cyan/30 pb-1">
+<span class="text-lcars-cyan font-bold font-display text-[11px]">CORPS DU SYSTÈME K2-18</span>
+<span class="text-amber-300 text-[10px]">SPECTRE: M2.5V</span>
+</div>
+<div class="space-y-1.5 text-[10px] text-slate-300 pt-1">
+<div class="p-1.5 rounded bg-lcars-cyan/15 border border-lcars-cyan flex justify-between items-center">
+<div>
+<div class="font-bold text-lcars-cyan">1.00 UA • K2-18 b [MAIN TARGET]</div>
+<div class="text-[9px] text-slate-300">Monde Hycéan • Océan Global • Bio: CH4/DMS</div>
+</div>
+<span class="bg-lcars-cyan text-black px-1.5 py-0.5 rounded font-bold text-[9px]">LOCK</span>
+</div>
+<div class="p-1 rounded bg-black/40 border border-slate-800 flex justify-between items-center">
+<div>
+<div class="text-slate-200">0.63 UA • Miniterra</div>
+<div class="text-[9px] text-slate-500">Planète tellurique dense, désertique</div>
+</div>
+<span class="text-slate-500 text-[9px]">ORBITE INT.</span>
+</div>
+<div class="p-1 rounded bg-black/40 border border-slate-800 flex justify-between items-center">
+<div>
+<div class="text-slate-200">2.35 UA • Subterra Outer</div>
+<div class="text-[9px] text-slate-500">Monde glacé &amp; ceintures cométaires</div>
+</div>
+<span class="text-slate-500 text-[9px]">ORBITE EXT.</span>
+</div>
+<div class="p-1 rounded bg-black/40 border border-slate-800 flex justify-between items-center">
+<div>
+<div class="text-slate-200">4.31 UA • Géante Gazeuse (K2-18 c)</div>
+<div class="text-[9px] text-slate-500">Sous-Neptune massive, magnétosphère haute</div>
+</div>
+<span class="text-slate-500 text-[9px]">PÉRIPHÉRIE</span>
+</div>
+</div>
+<!-- Short Range Snapshot Tip -->
+<div class="mt-auto p-1.5 rounded bg-amber-950/40 border border-amber-500/40 text-[9px] text-amber-200">
+<span class="font-bold text-amber-400">ASTUCE VOL PLANÉTAIRE :</span> Les vents verticaux au-dessus des crêtes peuvent générer jusqu'à 30 m/s de dérive. Compensez avec [Q/D] pour maintenir l'alignement sur le pad.
+          </div>
+</div>
+</section>
+</div>
+</main>
+<!-- END: CockpitViewportAndTacticalMFD -->
+<!-- BEGIN: BottomTacticalGaugesAndExoplanetDock -->
+<footer class="border-t border-lcars-cyan/40 bg-[#070e1a] text-slate-200 p-2 z-40 flex flex-col gap-2" data-purpose="bottom-tactical-dashboard">
+<!-- Top Row: Classic Oolite/Elite Dials & Wireframes -->
+<div class="grid grid-cols-12 gap-2 items-center">
+<!-- Travel Info & 3D Vector Compass (Left) -->
+<div class="col-span-12 md:col-span-3 hud-border rounded p-2 flex items-center justify-between">
+<div>
+<div class="text-[10px] text-slate-400 uppercase tracking-widest">.: INFOS VOYAGE :.</div>
+<div class="text-xs text-lcars-cyan font-bold">Cible: K2-18 b</div>
+<div class="text-[10px] text-slate-400 mt-1">Dist: <span class="text-emerald-400 font-bold">1,840 m</span></div>
+<div class="text-[9px] text-slate-500 font-mono">1:50:13 — 2084139</div>
+</div>
+<!-- SVG 3D Wireframe Planetary Compass Globe -->
+<div class="w-16 h-16 relative flex items-center justify-center">
+<svg class="w-full h-full text-lcars-cyan" viewbox="0 0 100 100">
+<circle cx="50" cy="50" fill="none" r="45" stroke="currentColor" stroke-dasharray="2 2" stroke-width="1.5"></circle>
+<ellipse cx="50" cy="50" fill="none" rx="45" ry="18" stroke="currentColor" stroke-width="1.2"></ellipse>
+<ellipse cx="50" cy="50" fill="none" rx="18" ry="45" stroke="currentColor" stroke-width="1.2"></ellipse>
+<line stroke="currentColor" stroke-width="1.5" x1="50" x2="50" y1="5" y2="95"></line>
+<line stroke="currentColor" stroke-width="1.5" x1="5" x2="95" y1="50" y2="50"></line>
+<!-- Beacon Marker -->
+<circle class="animate-ping" cx="62" cy="38" fill="#ffb800" r="4"></circle>
+<circle cx="62" cy="38" fill="#ffb800" r="3"></circle>
+</svg>
+</div>
+</div>
+<!-- Center Digital Circular Gauges (Speed, Fuel, Altitude, Cargo, Temp, Shields) -->
+<div class="col-span-12 md:col-span-6 hud-border rounded p-2 flex flex-wrap items-center justify-around gap-2 bg-black/60">
+<!-- Speed Gauge -->
+<div class="flex flex-col items-center">
+<div class="w-11 h-11 rounded-full border-2 border-emerald-400 flex flex-col items-center justify-center bg-black/70 shadow-glow-cyan">
+<span class="text-xs font-bold text-emerald-300">82</span>
+</div>
+<span class="text-[9px] text-slate-400 mt-0.5">VITESSE</span>
+</div>
+<!-- Fuel Gauge -->
+<div class="flex flex-col items-center">
+<div class="w-11 h-11 rounded-full border-2 border-amber-400 flex flex-col items-center justify-center bg-black/70 shadow-glow-amber">
+<span class="text-[10px] font-bold text-amber-300">6.9<span class="text-[8px]">+3</span></span>
+</div>
+<span class="text-[9px] text-slate-400 mt-0.5">FUEL</span>
+</div>
+<!-- Altitude Gauge -->
+<div class="flex flex-col items-center">
+<div class="w-11 h-11 rounded-full border-2 border-lcars-cyan flex flex-col items-center justify-center bg-black/70">
+<span class="text-xs font-bold text-lcars-cyan">1.8k</span>
+</div>
+<span class="text-[9px] text-slate-400 mt-0.5">ALT (m)</span>
+</div>
+<!-- Cargo Gauge -->
+<div class="flex flex-col items-center">
+<div class="w-11 h-11 rounded-full border-2 border-slate-400 flex flex-col items-center justify-center bg-black/70">
+<span class="text-[10px] font-bold text-slate-200">33/33</span>
+</div>
+<span class="text-[9px] text-slate-400 mt-0.5">CARGO</span>
+</div>
+<!-- Cabin Temp Gauge -->
+<div class="flex flex-col items-center">
+<div class="w-11 h-11 rounded-full border-2 border-cyan-400 flex flex-col items-center justify-center bg-black/70">
+<span class="text-xs font-bold text-cyan-200">23°C</span>
+</div>
+<span class="text-[9px] text-slate-400 mt-0.5">T.CABINE</span>
+</div>
+<!-- Energy Bank Gauge -->
+<div class="flex flex-col items-center">
+<div class="w-11 h-11 rounded-full border-2 border-emerald-400 flex flex-col items-center justify-center bg-black/70">
+<span class="text-xs font-bold text-emerald-300">256</span>
+</div>
+<span class="text-[9px] text-slate-400 mt-0.5">ÉNERGIE</span>
+</div>
+<!-- Forward Shield Gauge -->
+<div class="flex flex-col items-center">
+<div class="w-11 h-11 rounded-full border-2 border-amber-500 flex flex-col items-center justify-center bg-black/70">
+<span class="text-xs font-bold text-amber-400">4%</span>
+</div>
+<span class="text-[9px] text-slate-400 mt-0.5">BOUCL.AV</span>
+</div>
+<!-- Hull Armour Gauge -->
+<div class="flex flex-col items-center">
+<div class="w-11 h-11 rounded-full border-2 border-emerald-500 flex flex-col items-center justify-center bg-black/70">
+<span class="text-xs font-bold text-emerald-400">100%</span>
+</div>
+<span class="text-[9px] text-slate-400 mt-0.5">BLINDAGE</span>
+</div>
+</div>
+<!-- Ship Info & 3D Cobra Wireframe (Right) -->
+<div class="col-span-12 md:col-span-3 hud-border rounded p-2 flex items-center justify-between">
+<!-- Cobra Wireframe Vector Graphic -->
+<div class="w-16 h-16 relative flex items-center justify-center">
+<svg class="w-full h-full text-emerald-400" viewbox="0 0 100 100">
+<!-- Cobra MK III stylized wireframe profile -->
+<polygon fill="none" points="50,15 90,80 70,85 50,75 30,85 10,80" stroke="currentColor" stroke-width="1.8"></polygon>
+<line stroke="currentColor" stroke-width="1.2" x1="50" x2="50" y1="15" y2="75"></line>
+<line stroke="currentColor" stroke-width="1.2" x1="50" x2="90" y1="40" y2="80"></line>
+<line stroke="currentColor" stroke-width="1.2" x1="50" x2="10" y1="40" y2="80"></line>
+<line stroke="currentColor" stroke-width="1" x1="30" x2="50" y1="85" y2="40"></line>
+<line stroke="currentColor" stroke-width="1" x1="70" x2="50" y1="85" y2="40"></line>
+</svg>
+</div>
+<div class="text-right">
+<div class="text-[10px] text-slate-400 uppercase tracking-widest">.: VAISSEAU :.</div>
+<div class="text-xs text-emerald-300 font-bold">Cobra MK-III</div>
+<div class="text-[10px] text-emerald-400 mt-1">Systèmes nominaux</div>
+<div class="text-[9px] text-slate-500">Bouclier atmo actif</div>
+</div>
+</div>
+</div>
+<!-- Bottom Row: Astrobiological Exoplanet Dock (10 Slots) -->
+<div class="hud-border rounded p-2 bg-[#040812]" data-purpose="exoplanet-selection-dock">
+<div class="flex items-center justify-between mb-1.5 pb-1 border-b border-lcars-cyan/20">
+<div class="flex items-center gap-1.5 text-xs font-display font-bold text-amber-300">
+<span class="w-2 h-2 bg-amber-400 inline-block"></span>
+<span>COLLECTION ASTROBIOLOGIQUE &amp; EXOPLANÈTES APPROUVÉES PAR LE JOUEUR (CLIQUEZ POUR NAVIGUER) :</span>
+</div>
+<span class="text-[10px] text-slate-400">10 MONDES CARTOGRAPHIÉS</span>
+</div>
+<!-- 10-Item Horizontal Card Grid -->
+<div class="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-1.5 text-center">
+<!-- Slot 1: TRAPPIST-1e -->
+<button class="p-1.5 rounded bg-black/40 border border-slate-700 hover:border-lcars-cyan transition flex flex-col items-center group">
+<div class="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-900 to-emerald-400 border border-emerald-300 flex items-center justify-center relative shadow-sm">
+<div class="absolute -inset-1 rounded-full border border-emerald-400/30 scale-75"></div>
+</div>
+<span class="text-[10px] font-bold text-slate-200 mt-1 truncate w-full">TRAPPIST-1e</span>
+<span class="text-[8px] text-emerald-400">ZONE VIE</span>
+</button>
+<!-- Slot 2: K2-18 b (ACTIVE TARGET) -->
+<button class="p-1.5 rounded bg-lcars-cyan/20 border-2 border-lcars-cyan shadow-glow-cyan flex flex-col items-center relative transform scale-[1.03]">
+<div class="absolute -top-1.5 -right-1 bg-amber-400 text-black text-[8px] font-extrabold px-1 rounded-sm">CIBLE</div>
+<div class="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-700 via-cyan-400 to-indigo-900 border-2 border-white flex items-center justify-center relative shadow-glow-cyan">
+<div class="absolute -inset-1.5 rounded-full border border-lcars-cyan animate-ping opacity-40"></div>
+</div>
+<span class="text-[10px] font-bold text-lcars-cyan mt-1 truncate w-full">✓ K2-18 b</span>
+<span class="text-[8px] text-amber-300 font-bold">HYCÉAN</span>
+</button>
+<!-- Slot 3: Kepler-11 f -->
+<button class="p-1.5 rounded bg-black/40 border border-slate-700 hover:border-lcars-cyan transition flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-900 to-violet-400 border border-purple-400 flex items-center justify-center relative"></div>
+<span class="text-[10px] font-bold text-slate-200 mt-1 truncate w-full">Kepler-11 f</span>
+<span class="text-[8px] text-purple-300">GAZEUSE</span>
+</button>
+<!-- Slot 4: HD 80606 b -->
+<button class="p-1.5 rounded bg-black/40 border border-slate-700 hover:border-lcars-cyan transition flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-900 to-yellow-600 border border-yellow-400 flex items-center justify-center relative"></div>
+<span class="text-[10px] font-bold text-slate-200 mt-1 truncate w-full">HD 80606 b</span>
+<span class="text-[8px] text-yellow-300">EXCENTRIQUE</span>
+</button>
+<!-- Slot 5: TOI-700 d -->
+<button class="p-1.5 rounded bg-black/40 border border-slate-700 hover:border-lcars-cyan transition flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-gradient-to-tr from-teal-900 to-cyan-400 border border-cyan-400 flex items-center justify-center relative"></div>
+<span class="text-[10px] font-bold text-slate-200 mt-1 truncate w-full">TOI-700 d</span>
+<span class="text-[8px] text-cyan-300">TERRE-SIM</span>
+</button>
+<!-- Slot 6: LHS 1140 b -->
+<button class="p-1.5 rounded bg-black/40 border border-slate-700 hover:border-lcars-cyan transition flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-950 to-blue-400 border border-sky-400 flex items-center justify-center relative"></div>
+<span class="text-[10px] font-bold text-slate-200 mt-1 truncate w-full">LHS 1140 b</span>
+<span class="text-[8px] text-sky-300">SUPER-TERRE</span>
+</button>
+<!-- Slot 7: WASP-39 b -->
+<button class="p-1.5 rounded bg-black/40 border border-slate-700 hover:border-lcars-cyan transition flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-gradient-to-tr from-orange-950 to-amber-500 border border-amber-400 flex items-center justify-center relative"></div>
+<span class="text-[10px] font-bold text-slate-200 mt-1 truncate w-full">WASP-39 b</span>
+<span class="text-[8px] text-amber-300">ATM. CO2</span>
+</button>
+<!-- Slot 8: Kepler-186 f -->
+<button class="p-1.5 rounded bg-black/40 border border-slate-700 hover:border-lcars-cyan transition flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-gradient-to-tr from-fuchsia-950 to-pink-500 border border-pink-400 flex items-center justify-center relative"></div>
+<span class="text-[10px] font-bold text-slate-200 mt-1 truncate w-full">Kepler-186 f</span>
+<span class="text-[8px] text-pink-300">ZONE HAB.</span>
+</button>
+<!-- Slot 9: KOI-Cand 14 -->
+<button class="p-1.5 rounded bg-black/40 border border-slate-700 hover:border-lcars-cyan transition flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-950 to-green-500 border border-green-400 flex items-center justify-center relative"></div>
+<span class="text-[10px] font-bold text-slate-200 mt-1 truncate w-full">KOI-Cand 14</span>
+<span class="text-[8px] text-green-300">CANDIDAT</span>
+</button>
+<!-- Slot 10: KOI-Bin #02 -->
+<button class="p-1.5 rounded bg-black/40 border border-slate-700 hover:border-lcars-cyan transition flex flex-col items-center">
+<div class="w-8 h-8 rounded-full bg-gradient-to-tr from-rose-950 to-red-500 border border-rose-400 flex items-center justify-center relative"></div>
+<span class="text-[10px] font-bold text-slate-200 mt-1 truncate w-full">KOI-Bin #02</span>
+<span class="text-[8px] text-red-300">BINAIRE</span>
+</button>
+</div>
+</div>
+</footer>
+<!-- END: BottomTacticalGaugesAndExoplanetDock -->
+</body></html>

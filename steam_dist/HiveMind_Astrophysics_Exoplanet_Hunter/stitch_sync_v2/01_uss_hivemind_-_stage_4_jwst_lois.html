@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_tab" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100vw;margin:0;padding:0;background-color:#0c141f;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-background": "#dbe3f3", "secondary-container": "#34ff8d", "primary-fixed": "#7df4ff", "on-primary": "#00363a", "outline": "#849495", "tertiary": "#fff4e8", "background": "#0c141f", "surface": "#0c141f", "on-secondary": "#003919", "on-primary-container": "#006970", "primary": "#dbfcff", "surface-variant": "#2e3542", "tertiary-container": "#ffd386", "surface-container": "#18202c", "on-secondary-fixed-variant": "#005228", "on-error-container": "#ffdad6", "inverse-surface": "#dbe3f3", "error": "#ffb4ab", "primary-fixed-dim": "#00dbe9", "primary-container": "#00f0ff", "surface-bright": "#323a46", "secondary-fixed": "#60ff99", "surface-container-highest": "#2e3542", "on-tertiary-fixed": "#271900", "on-surface-variant": "#b9cacb", "surface-container-high": "#232a37", "secondary": "#f5fff3", "surface-container-lowest": "#070e1a", "on-primary-fixed": "#002022", "on-primary-fixed-variant": "#004f54", "surface-dim": "#0c141f", "on-error": "#690005", "tertiary-fixed": "#ffdea8", "on-tertiary-fixed-variant": "#5e4200", "on-surface": "#dbe3f3", "on-secondary-container": "#007239", "error-container": "#93000a", "on-tertiary-container": "#7d5800", "on-tertiary": "#412d00", "inverse-on-surface": "#29313d", "surface-container-low": "#141c28", "surface-tint": "#00dbe9", "outline-variant": "#3b494b", "inverse-primary": "#006970", "on-secondary-fixed": "#00210c", "secondary-fixed-dim": "#00e479", "tertiary-fixed-dim": "#ffba20" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-md": "0.5rem", "space-sm": "0.25rem", "gutter": "0.5rem", "space-lg": "1rem", "margin-mobile": "0.5rem", "space-xl": "1.5rem", "margin": "1rem", "space-xs": "0.125rem", "gutter-mobile": "0.25rem" }, "fontFamily": { "headline-lg": ["Space Grotesk"], "headline-lg-mobile": ["Space Grotesk"], "label-lg": ["JetBrains Mono"], "body-md": ["JetBrains Mono"], "headline-xl-mobile": ["Space Grotesk"], "headline-sm": ["Space Grotesk"], "label-sm": ["JetBrains Mono"], "body-lg": ["JetBrains Mono"], "headline-md": ["Space Grotesk"], "headline-xl": ["Space Grotesk"], "label-md": ["JetBrains Mono"], "body-sm": ["JetBrains Mono"] }, "fontSize": { "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "0.08em", "fontWeight": "600" }], "headline-lg-mobile": ["22px", { "lineHeight": "28px", "letterSpacing": "0.06em", "fontWeight": "600" }], "label-lg": ["12px", { "lineHeight": "16px", "letterSpacing": "0.15em", "fontWeight": "700" }], "body-md": ["13px", { "lineHeight": "18px", "letterSpacing": "0.01em", "fontWeight": "400" }], "headline-xl-mobile": ["28px", { "lineHeight": "34px", "letterSpacing": "0.1em", "fontWeight": "700" }], "headline-sm": ["16px", { "lineHeight": "22px", "letterSpacing": "0.04em", "fontWeight": "500" }], "label-sm": ["9px", { "lineHeight": "12px", "letterSpacing": "0.1em", "fontWeight": "500" }], "body-lg": ["15px", { "lineHeight": "22px", "letterSpacing": "0.02em", "fontWeight": "400" }], "headline-md": ["20px", { "lineHeight": "26px", "letterSpacing": "0.05em", "fontWeight": "600" }], "headline-xl": ["40px", { "lineHeight": "48px", "letterSpacing": "0.12em", "fontWeight": "700" }], "label-md": ["10px", { "lineHeight": "14px", "letterSpacing": "0.12em", "fontWeight": "600" }], "body-sm": ["11px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "400" }] } } } }</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface text-on-surface font-body-md text-body-md flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.4)] pt-safe"><div class="h-28 px-margin-mobile flex flex-col justify-between py-space-xs"><div class="flex items-center justify-between gap-space-sm"><div class="flex items-center gap-space-sm min-w-0"><div class="w-7 h-7 bg-primary-container/20 flex items-center justify-center text-primary-container"><span class="material-symbols-outlined text-[18px]">rocket_launch</span></div><div class="flex flex-col min-w-0"><div class="flex items-center gap-space-xs"><span class="font-label-md text-label-md text-primary font-bold truncate">HIVEMIND</span><span class="font-label-sm text-label-sm text-primary-fixed-dim">NCC-31337</span></div><span class="font-label-sm text-label-sm text-on-surface-variant truncate">v4.6 // Tactical Hud</span></div></div><div class="flex items-center gap-space-xs"><div class="bg-surface-container-high px-space-xs py-0.5 flex items-center gap-space-xs"><span class="w-1.5 h-1.5 rounded-full bg-secondary-container animate-pulse"></span><span class="font-label-sm text-label-sm text-secondary-fixed">55.10|238.92</span></div><div class="flex items-center bg-surface-container-low px-space-xs py-0.5"><button class="font-label-sm text-label-sm text-primary-container px-0.5">EN</button><span class="font-label-sm text-label-sm text-outline">/</span><button class="font-label-sm text-label-sm text-on-surface-variant px-0.5">FR</button><span class="font-label-sm text-label-sm text-outline">/</span><button class="font-label-sm text-label-sm text-on-surface-variant px-0.5">ZH</button></div><button aria-label="Voice HUD Status" class="min-h-[44px] min-w-[44px] flex items-center justify-center bg-surface-container-high text-primary-container"><span class="font-label-sm text-label-sm font-bold">VOIX</span></button><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida/AEtjO1VncIjkS3k_yS6pvWMKgJhQRARxt-oaBJoEGzfJXw8hgtT1Iny6S2eITsP3rdpb15yrU68LyrmEisht0DPZQJyrP4p9rfXz7hvuhMQL_qcvKBZaHGAufvQDF4Y1BjEJijpwNAfP9nAUXSCQ9gGnY-mcOQ1joChsyfsC7Nrc0jk-brOjfroI07jgbH8lsdgkswBUQ3Z50RAEa3YMc3CnTnxsEPXDUkyqr_feLT59dklI"/></div></div><div class="flex items-center justify-between gap-space-xs overflow-x-auto no-scrollbar py-space-xs" role="tablist"><button class="flex-1 min-h-[44px] px-space-xs flex items-center justify-center bg-primary-container/20 text-primary-container font-label-md text-label-md tracking-wider uppercase truncate"><span class="text-primary-fixed-dim mr-1">1.</span>GALAXIE</button><button class="flex-1 min-h-[44px] px-space-xs flex items-center justify-center bg-surface-container-low text-on-surface-variant font-label-md text-label-md tracking-wider uppercase truncate"><span class="text-outline mr-1">2.</span>ORBIT BEE</button><button class="flex-1 min-h-[44px] px-space-xs flex items-center justify-center bg-surface-container-low text-on-surface-variant font-label-md text-label-md tracking-wider uppercase truncate"><span class="text-outline mr-1">3.</span>OOLITE LAND</button><button class="flex-1 min-h-[44px] px-space-xs flex items-center justify-center bg-surface-container-low text-on-surface-variant font-label-md text-label-md tracking-wider uppercase truncate"><span class="text-outline mr-1">4.</span>JWST/LOIS</button></div></div></header><main class="flex flex-col relative w-full pt-28 pb-20 bg-surface flex-1"><div class="flex flex-col w-full px-margin-mobile py-space-sm gap-space-md">
+<!-- STAGE 4 ACTIVE INDICATOR BANNER: JWST/LOIS NIRSPEC SUITE -->
+<div class="relative w-full bg-surface-container-high rounded p-space-sm overflow-hidden shadow-lg">
+<div class="absolute -right-4 -bottom-6 w-28 h-28 opacity-10 pointer-events-none text-tertiary-container">
+<!-- Golden Hexagonal Segment Honeycomb Motif -->
+<svg class="w-full h-full fill-current" viewbox="0 0 100 100">
+<polygon fill="none" points="50,5 89,27.5 89,72.5 50,95 11,72.5 11,27.5" stroke="currentColor" stroke-width="4"></polygon>
+<polygon fill="currentColor" points="50,22 75,36 75,64 50,78 25,64 25,36"></polygon>
+</svg>
+</div>
+<div class="flex items-center justify-between gap-space-sm relative z-10">
+<div class="flex items-center gap-space-sm min-w-0">
+<div class="w-9 h-9 bg-tertiary-container/20 rounded flex items-center justify-center text-tertiary-container shrink-0">
+<span class="material-symbols-outlined text-[22px]">flare</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="font-label-md text-label-md text-tertiary-fixed font-bold tracking-widest uppercase">[STAGE.04]</span>
+<span class="font-label-sm text-label-sm text-secondary-fixed bg-secondary-container/20 px-1 rounded-sm">L2_LAGRANGE_LOCK</span>
+</div>
+<span class="font-headline-sm text-headline-sm text-primary truncate tracking-tight">JWST / LOIS SPECTROSCOPY ARRAY</span>
+</div>
+</div>
+<div class="flex flex-col items-end shrink-0">
+<span class="font-label-sm text-label-sm text-tertiary-fixed-dim">BERYLLIUM 6.5M</span>
+<span class="font-label-sm text-label-sm text-primary-container font-mono">NIRSpec•MIRI</span>
+</div>
+</div>
+<!-- Telemetry status hairline metric bar -->
+<div class="mt-space-sm pt-space-xs grid grid-cols-4 gap-space-xs text-center bg-surface-container-lowest/60 rounded p-space-xs">
+<div>
+<div class="font-label-sm text-label-sm text-outline">CRYOMR_TEMP</div>
+<div class="font-label-md text-label-md text-primary-fixed">6.42 K</div>
+</div>
+<div>
+<div class="font-label-sm text-label-sm text-outline">RESOLVING R</div>
+<div class="font-label-md text-label-md text-primary-fixed">2,700</div>
+</div>
+<div>
+<div class="font-label-sm text-label-sm text-outline">FILTER_MODE</div>
+<div class="font-label-md text-label-md text-secondary-fixed">F290LP/G395H</div>
+</div>
+<div>
+<div class="font-label-sm text-label-sm text-outline">LOIS_LINK</div>
+<div class="font-label-md text-label-md text-tertiary-fixed">99.88%</div>
+</div>
+</div>
+</div>
+<!-- CENTRAL DEEP SPECTROSCOPIC VIEWPORT & WATERFALL (NIRSPEC/MIRI 1.0 - 28.0 µm) -->
+<div class="w-full bg-surface-container rounded p-space-sm shadow-md flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="w-2 h-2 rounded-full bg-primary-container animate-ping"></span>
+<span class="font-label-md text-label-md text-primary tracking-wider uppercase">[NIRSPEC_SPECTRUM_WATERFALL]</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<button class="px-space-xs py-0.5 rounded text-label-sm font-label-sm bg-primary-container text-on-primary-container font-bold transition-all" id="targetBtn-trappist">TRAPPIST-1 e</button>
+<button class="px-space-xs py-0.5 rounded text-label-sm font-label-sm bg-surface-container-high text-on-surface-variant transition-all" id="targetBtn-lhs">LHS 1140 b</button>
+</div>
+</div>
+<!-- Active Planet Target Observation Card -->
+<div class="flex items-center justify-between bg-surface-container-lowest p-space-xs rounded">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded bg-surface-container-high overflow-hidden shrink-0 flex items-center justify-center">
+<img class="w-full h-full object-cover" data-alt="High fidelity space telescope optical transit observation of terrestrial exoplanet TRAPPIST-1 e with atmospheric illuminated limb rim glow in deep black void" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA8q2U2uzbfJav7E62JTmmwhzUy7-RKYCwVjMxhEJmTF9O8bDqNe3O8bC6karXA7UUoluTLGckPPB9gb5HXTmCXDtLf-0wNu8PJYBGBCDmiWZMwgUdZvEtbgFWNXj03-ZKXJed68kDH1eN1rsmp7FNlQCf9LW7wQb3V9Mqmn9IOcZvwt1m0qSS6YNNy9ungcg_rsiCEmh71sLKCpPbr9At_Qlbk-rPXm265MZNPT6ai"/>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-primary" id="targetName">TRAPPIST-1 e</span>
+<span class="font-label-sm text-label-sm text-outline">SPEC_CLASS: M-DWARF TERRESTRIAL // D=39.46 ly</span>
+</div>
+</div>
+<div class="text-right">
+<span class="font-label-sm text-label-sm text-secondary-fixed bg-secondary-container/20 px-1 py-0.5 rounded font-mono">HABITABLE ZONE</span>
+<div class="font-label-sm text-label-sm text-tertiary-fixed mt-0.5">ESI: 0.95</div>
+</div>
+</div>
+<!-- Spectrogram SVG Canvas (1.0µm to 28.0µm Multi-band Waterfall) -->
+<div class="relative w-full bg-surface-container-lowest rounded p-space-xs overflow-hidden">
+<!-- Band wavelength grid markers -->
+<div class="flex justify-between items-center text-outline font-label-sm text-label-sm px-1 mb-1">
+<span>1.0µm [NIRSpec]</span>
+<span>4.5µm</span>
+<span>10.0µm [MIRI]</span>
+<span>18.5µm</span>
+<span>28.0µm</span>
+</div>
+<div class="relative w-full h-36">
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 360 140">
+<defs>
+<lineargradient id="specGradTrappist" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" stop-color="#00f0ff" stop-opacity="0.35"></stop>
+<stop offset="100%" stop-color="#00f0ff" stop-opacity="0.0"></stop>
+</lineargradient>
+<lineargradient id="waterfallRays" x1="0%" x2="100%" y1="0%" y2="0%">
+<stop offset="0%" stop-color="#00dbe9" stop-opacity="0.2"></stop>
+<stop offset="35%" stop-color="#ffd386" stop-opacity="0.4"></stop>
+<stop offset="70%" stop-color="#34ff8d" stop-opacity="0.25"></stop>
+<stop offset="100%" stop-color="#00f0ff" stop-opacity="0.1"></stop>
+</lineargradient>
+</defs>
+<!-- Spectral graticule backdrop lines -->
+<line stroke="#2e3542" stroke-dasharray="2 3" stroke-width="0.75" x1="0" x2="360" y1="35" y2="35"></line>
+<line stroke="#2e3542" stroke-dasharray="2 3" stroke-width="0.75" x1="0" x2="360" y1="70" y2="70"></line>
+<line stroke="#2e3542" stroke-dasharray="2 3" stroke-width="0.75" x1="0" x2="360" y1="105" y2="105"></line>
+<line stroke="#2e3542" stroke-width="0.5" x1="60" x2="60" y1="0" y2="140"></line>
+<line stroke="#2e3542" stroke-width="0.5" x1="120" x2="120" y1="0" y2="140"></line>
+<line stroke="#2e3542" stroke-width="0.5" x1="180" x2="180" y1="0" y2="140"></line>
+<line stroke="#2e3542" stroke-width="0.5" x1="240" x2="240" y1="0" y2="140"></line>
+<line stroke="#2e3542" stroke-width="0.5" x1="300" x2="300" y1="0" y2="140"></line>
+<!-- Spectral transmission flux curve with absorption troughs -->
+<path d="M 0,95 Q 25,92 45,70 T 75,40 T 100,85 T 130,30 T 160,78 T 190,45 T 225,92 T 260,35 T 295,80 T 330,55 L 360,72 L 360,140 L 0,140 Z" fill="url(#specGradTrappist)"></path>
+<path d="M 0,95 Q 25,92 45,70 T 75,40 T 100,85 T 130,30 T 160,78 T 190,45 T 225,92 T 260,35 T 295,80 T 330,55 L 360,72" fill="none" id="spectralCurve" stroke="#00f0ff" stroke-width="1.8"></path>
+<!-- Absorption markers & vertical callouts -->
+<!-- H2O marker at ~1.4µm (x=45) -->
+<circle cx="45" cy="70" fill="#34ff8d" r="3"></circle>
+<!-- CH4 marker at ~2.3µm (x=75) -->
+<circle cx="75" cy="40" fill="#ffd386" r="3"></circle>
+<!-- CO2 marker at ~4.3µm (x=130) -->
+<circle cx="130" cy="30" fill="#7df4ff" r="3.5"></circle>
+<!-- CO marker at ~4.7µm (x=160) -->
+<circle cx="160" cy="78" fill="#ffd386" r="2.5"></circle>
+<!-- O3 marker at ~9.6µm (x=260) -->
+<circle cx="260" cy="35" fill="#60ff99" r="4"></circle>
+<!-- NH3 marker at ~10.5µm (x=295) -->
+<circle cx="295" cy="80" fill="#34ff8d" r="2.5"></circle>
+<!-- Crosshair scan sweep bar (visual dynamic) -->
+<line opacity="0.8" stroke="#60ff99" stroke-dasharray="3 2" stroke-width="1" x1="260" x2="260" y1="0" y2="140"></line>
+</svg>
+<!-- Dynamic reticle overlay label -->
+<div class="absolute top-2 left-2 bg-surface-container-high/90 px-1.5 py-0.5 rounded text-[9px] font-mono text-secondary-fixed flex items-center gap-1 shadow">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary-fixed animate-pulse"></span>
+<span>PEAK DETECT: OZONE (O3) @ 9.6µm [4.8σ]</span>
+</div>
+</div>
+<!-- Molecular absorption flags -->
+<div class="grid grid-cols-6 gap-space-xs mt-space-xs pt-space-xs text-center">
+<div class="bg-surface-container-high p-space-xs rounded">
+<span class="font-label-sm text-label-sm text-secondary-fixed font-bold block">H2O</span>
+<span class="font-label-sm text-[8px] text-outline">1.4 µm</span>
+<span class="font-label-sm text-label-sm text-primary block mt-0.5">88%</span>
+</div>
+<div class="bg-surface-container-high p-space-xs rounded">
+<span class="font-label-sm text-label-sm text-tertiary-fixed font-bold block">CH4</span>
+<span class="font-label-sm text-[8px] text-outline">2.3 µm</span>
+<span class="font-label-sm text-label-sm text-primary block mt-0.5">62%</span>
+</div>
+<div class="bg-surface-container-high p-space-xs rounded ring-1 ring-primary-container/40">
+<span class="font-label-sm text-label-sm text-primary-fixed-dim font-bold block">CO2</span>
+<span class="font-label-sm text-[8px] text-outline">4.3 µm</span>
+<span class="font-label-sm text-label-sm text-secondary-fixed block mt-0.5">99%</span>
+</div>
+<div class="bg-surface-container-high p-space-xs rounded">
+<span class="font-label-sm text-label-sm text-outline font-bold block">CO</span>
+<span class="font-label-sm text-[8px] text-outline">4.7 µm</span>
+<span class="font-label-sm text-label-sm text-primary block mt-0.5">14%</span>
+</div>
+<div class="bg-surface-container-high p-space-xs rounded">
+<span class="font-label-sm text-label-sm text-tertiary-container font-bold block">NH3</span>
+<span class="font-label-sm text-[8px] text-outline">10.5 µm</span>
+<span class="font-label-sm text-label-sm text-primary block mt-0.5">41%</span>
+</div>
+<div class="bg-surface-container-high p-space-xs rounded bg-secondary-container/10">
+<span class="font-label-sm text-label-sm text-secondary-container font-bold block">O3 ★</span>
+<span class="font-label-sm text-[8px] text-outline">9.6 µm</span>
+<span class="font-label-sm text-label-sm text-secondary-fixed block mt-0.5 font-bold">78%</span>
+</div>
+</div>
+</div>
+</div>
+<!-- NASA EXOPLANET ARCHIVE TAP PIPELINE & ADQL TELEMETRY -->
+<div class="w-full bg-surface-container rounded p-space-sm shadow-md flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px] text-primary-fixed-dim">sync_alt</span>
+<span class="font-label-md text-label-md text-primary font-bold tracking-wider uppercase">[NASA_TAP_ADQL_SYNC]</span>
+</div>
+<div class="flex items-center gap-1 font-label-sm text-label-sm text-secondary-fixed">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary-fixed animate-ping"></span>
+<span>LATENCY: 42ms // OK</span>
+</div>
+</div>
+<!-- ADQL Query string box -->
+<div class="bg-surface-container-lowest p-space-xs rounded font-mono text-[10px] text-on-surface-variant flex items-center justify-between">
+<div class="truncate">
+<span class="text-tertiary-fixed">SELECT</span> pl_name, pl_masse, pl_eqt, pl_insol <span class="text-tertiary-fixed">FROM</span> pscomppars <span class="text-tertiary-fixed">WHERE</span> st_spectype LIKE 'M%'
+      </div>
+<span class="text-primary-fixed-dim text-label-sm shrink-0 ml-2">TAP_SYNC_200</span>
+</div>
+<!-- Doppler K, Orbit Eccentricity, Transit Depth Cards -->
+<div class="grid grid-cols-3 gap-space-xs">
+<div class="bg-surface-container-high p-space-xs rounded text-center">
+<span class="font-label-sm text-label-sm text-outline block">DOPPLER VEL (K)</span>
+<span class="font-headline-sm text-headline-sm text-primary font-bold">4.9</span>
+<span class="font-label-sm text-[9px] text-on-surface-variant block">m/s ±0.3</span>
+</div>
+<div class="bg-surface-container-high p-space-xs rounded text-center">
+<span class="font-label-sm text-label-sm text-outline block">ECCENTRICITY (e)</span>
+<span class="font-headline-sm text-headline-sm text-primary font-bold">0.04</span>
+<span class="font-label-sm text-[9px] text-secondary-fixed block">NEAR-CIRCULAR</span>
+</div>
+<div class="bg-surface-container-high p-space-xs rounded text-center">
+<span class="font-label-sm text-label-sm text-outline block">TRANSIT DEPTH</span>
+<span class="font-headline-sm text-headline-sm text-primary font-bold">4850</span>
+<span class="font-label-sm text-[9px] text-tertiary-fixed block">ppm (ΔF/F)</span>
+</div>
+</div>
+<!-- Temperature Gradient Model with Habitable Equilibrium Band -->
+<div class="bg-surface-container-lowest p-space-sm rounded flex flex-col gap-space-xs">
+<div class="flex items-center justify-between text-label-sm font-label-sm">
+<span class="text-on-surface">THERMAL GRADIENT MODEL (T_eq)</span>
+<span class="text-secondary-fixed font-bold font-mono">230 K (-43.15°C)</span>
+</div>
+<!-- Linear Range Bar with Thermal Target Reticle -->
+<div class="relative w-full h-4 bg-surface-container-high rounded overflow-hidden flex items-center">
+<!-- Cold deep zone -->
+<div class="h-full w-1/4 bg-primary-fixed-dim/20"></div>
+<!-- Habitable Equilibrium Band (180K - 275K) -->
+<div class="h-full w-2/5 bg-secondary-container/30 relative flex items-center justify-center">
+<span class="text-[8px] font-mono text-secondary-fixed font-bold tracking-widest opacity-80 uppercase">HAB_ZONE_BAND</span>
+</div>
+<!-- High greenhouse zone -->
+<div class="h-full w-1/3 bg-error-container/30"></div>
+<!-- Target Marker Pin -->
+<div class="absolute left-[42%] top-0 bottom-0 w-1 bg-secondary-fixed shadow-[0_0_8px_#34ff8d]"></div>
+</div>
+<div class="flex justify-between items-center text-[9px] font-mono text-outline">
+<span>100 K [CRYOGENIC]</span>
+<span class="text-secondary-fixed font-bold">▲ 230 K TARGET LOCK</span>
+<span>400 K [SUPERHEATED]</span>
+</div>
+</div>
+</div>
+<!-- 10-SLOT ASTROBIOLOGICAL COLLECTION INVENTORY GRID -->
+<div class="w-full bg-surface-container rounded p-space-sm shadow-md flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px] text-tertiary-container">biotech</span>
+<span class="font-label-md text-label-md text-primary font-bold tracking-wider uppercase">[ASTROBIO_CATALOG_10]</span>
+</div>
+<span class="font-label-sm text-label-sm text-tertiary-fixed bg-tertiary-container/20 px-1 py-0.5 rounded">10 VERIFIED ENTRIES</span>
+</div>
+<!-- 10 Exoplanet Slots Grid -->
+<div class="grid grid-cols-1 gap-space-xs" id="inventoryContainer">
+<!-- Slot 01: TRAPPIST-1 e -->
+<div class="bg-surface-container-lowest p-space-xs rounded flex items-center justify-between hover:bg-surface-container-high transition-colors cursor-pointer" onclick="selectSlot('TRAPPIST-1 e', 0.95, '4.9 m/s', '4850 ppm', '230 K')">
+<div class="flex items-center gap-space-xs min-w-0">
+<span class="font-label-sm text-label-sm text-primary-fixed-dim font-mono">01.</span>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-[13px] text-primary font-bold truncate">TRAPPIST-1 e</span>
+<span class="font-label-sm text-[9px] text-outline truncate">M4.0V // 0.69 R⊕ // MIRI SPECTRA+</span>
+</div>
+</div>
+<div class="flex items-center gap-space-sm shrink-0">
+<div class="text-right">
+<span class="font-label-sm text-[9px] text-secondary-fixed block font-mono">BIO: 94.2%</span>
+<span class="font-label-sm text-[8px] text-outline">H2O/CO2/O3</span>
+</div>
+<span class="w-2 h-2 rounded-full bg-secondary-fixed"></span>
+</div>
+</div>
+<!-- Slot 02: LHS 1140 b -->
+<div class="bg-surface-container-lowest p-space-xs rounded flex items-center justify-between hover:bg-surface-container-high transition-colors cursor-pointer" onclick="selectSlot('LHS 1140 b', 0.88, '5.3 m/s', '3900 ppm', '235 K')">
+<div class="flex items-center gap-space-xs min-w-0">
+<span class="font-label-sm text-label-sm text-primary-fixed-dim font-mono">02.</span>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-[13px] text-primary font-bold truncate">LHS 1140 b</span>
+<span class="font-label-sm text-[9px] text-outline truncate">M4.5V // 1.73 R⊕ // OCEAN WORLD?</span>
+</div>
+</div>
+<div class="flex items-center gap-space-sm shrink-0">
+<div class="text-right">
+<span class="font-label-sm text-[9px] text-secondary-fixed block font-mono">BIO: 89.0%</span>
+<span class="font-label-sm text-[8px] text-outline">N2/H2O/CH4</span>
+</div>
+<span class="w-2 h-2 rounded-full bg-secondary-fixed"></span>
+</div>
+</div>
+<!-- Slot 03: K2-18 b -->
+<div class="bg-surface-container-lowest p-space-xs rounded flex items-center justify-between hover:bg-surface-container-high transition-colors cursor-pointer" onclick="selectSlot('K2-18 b', 0.73, '6.2 m/s', '2920 ppm', '255 K')">
+<div class="flex items-center gap-space-xs min-w-0">
+<span class="font-label-sm text-label-sm text-primary-fixed-dim font-mono">03.</span>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-[13px] text-primary font-bold truncate">K2-18 b</span>
+<span class="font-label-sm text-[9px] text-outline truncate">M2.8V // HYCEAN ATMOSPHERE CAND.</span>
+</div>
+</div>
+<div class="flex items-center gap-space-sm shrink-0">
+<div class="text-right">
+<span class="font-label-sm text-[9px] text-tertiary-fixed block font-mono">BIO: 76.5%</span>
+<span class="font-label-sm text-[8px] text-outline">CH4/CO2/DMS?</span>
+</div>
+<span class="w-2 h-2 rounded-full bg-tertiary-fixed"></span>
+</div>
+</div>
+<!-- Slot 04: Proxima Centauri b -->
+<div class="bg-surface-container-lowest p-space-xs rounded flex items-center justify-between hover:bg-surface-container-high transition-colors cursor-pointer" onclick="selectSlot('Proxima b', 0.87, '1.4 m/s', 'NON-TR', '234 K')">
+<div class="flex items-center gap-space-xs min-w-0">
+<span class="font-label-sm text-label-sm text-primary-fixed-dim font-mono">04.</span>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-[13px] text-primary font-bold truncate">Proxima b</span>
+<span class="font-label-sm text-[9px] text-outline truncate">M5.5V // 4.24 ly // RV TRANSIT LOCK</span>
+</div>
+</div>
+<div class="flex items-center gap-space-sm shrink-0">
+<div class="text-right">
+<span class="font-label-sm text-[9px] text-tertiary-fixed block font-mono">BIO: 68.2%</span>
+<span class="font-label-sm text-[8px] text-outline">FLARE EROSION?</span>
+</div>
+<span class="w-2 h-2 rounded-full bg-tertiary-fixed"></span>
+</div>
+</div>
+<!-- Slot 05: TOI-700 d -->
+<div class="bg-surface-container-lowest p-space-xs rounded flex items-center justify-between hover:bg-surface-container-high transition-colors cursor-pointer" onclick="selectSlot('TOI-700 d', 0.93, '0.8 m/s', '1050 ppm', '269 K')">
+<div class="flex items-center gap-space-xs min-w-0">
+<span class="font-label-sm text-label-sm text-primary-fixed-dim font-mono">05.</span>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-[13px] text-primary font-bold truncate">TOI-700 d</span>
+<span class="font-label-sm text-[9px] text-outline truncate">M2.0V // 1.14 R⊕ // CO2 RICH CANOPY</span>
+</div>
+</div>
+<div class="flex items-center gap-space-sm shrink-0">
+<div class="text-right">
+<span class="font-label-sm text-[9px] text-secondary-fixed block font-mono">BIO: 83.1%</span>
+<span class="font-label-sm text-[8px] text-outline">CO2/H2O/N2</span>
+</div>
+<span class="w-2 h-2 rounded-full bg-secondary-fixed"></span>
+</div>
+</div>
+<!-- Slot 06: Kepler-1649 c -->
+<div class="bg-surface-container-lowest p-space-xs rounded flex items-center justify-between hover:bg-surface-container-high transition-colors cursor-pointer" onclick="selectSlot('Kepler-1649 c', 0.92, '2.1 m/s', '780 ppm', '234 K')">
+<div class="flex items-center gap-space-xs min-w-0">
+<span class="font-label-sm text-label-sm text-primary-fixed-dim font-mono">06.</span>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-[13px] text-primary font-bold truncate">Kepler-1649 c</span>
+<span class="font-label-sm text-[9px] text-outline truncate">M5.0V // 1.06 R⊕ // ANALOG EARTH</span>
+</div>
+</div>
+<div class="flex items-center gap-space-sm shrink-0">
+<div class="text-right">
+<span class="font-label-sm text-[9px] text-secondary-fixed block font-mono">BIO: 81.7%</span>
+<span class="font-label-sm text-[8px] text-outline">EST_HAB_INDEX</span>
+</div>
+<span class="w-2 h-2 rounded-full bg-secondary-fixed"></span>
+</div>
+</div>
+<!-- Slot 07: Wolf 1069 b -->
+<div class="bg-surface-container-lowest p-space-xs rounded flex items-center justify-between hover:bg-surface-container-high transition-colors cursor-pointer" onclick="selectSlot('Wolf 1069 b', 0.86, '1.6 m/s', 'NON-TR', '250 K')">
+<div class="flex items-center gap-space-xs min-w-0">
+<span class="font-label-sm text-label-sm text-primary-fixed-dim font-mono">07.</span>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-[13px] text-primary font-bold truncate">Wolf 1069 b</span>
+<span class="font-label-sm text-[9px] text-outline truncate">M5.0V // TIDAL LOCK // MAGNETIC DYN</span>
+</div>
+</div>
+<div class="flex items-center gap-space-sm shrink-0">
+<div class="text-right">
+<span class="font-label-sm text-[9px] text-tertiary-fixed block font-mono">BIO: 71.0%</span>
+<span class="font-label-sm text-[8px] text-outline">STABLE CO2</span>
+</div>
+<span class="w-2 h-2 rounded-full bg-tertiary-fixed"></span>
+</div>
+</div>
+<!-- Slot 08: GJ 1002 b -->
+<div class="bg-surface-container-lowest p-space-xs rounded flex items-center justify-between hover:bg-surface-container-high transition-colors cursor-pointer" onclick="selectSlot('GJ 1002 b', 0.85, '1.3 m/s', 'NON-TR', '231 K')">
+<div class="flex items-center gap-space-xs min-w-0">
+<span class="font-label-sm text-label-sm text-primary-fixed-dim font-mono">08.</span>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-[13px] text-primary font-bold truncate">GJ 1002 b</span>
+<span class="font-label-sm text-[9px] text-outline truncate">M5.5V // 15.8 ly // HIGH QUIET STAR</span>
+</div>
+</div>
+<div class="flex items-center gap-space-sm shrink-0">
+<div class="text-right">
+<span class="font-label-sm text-[9px] text-secondary-fixed block font-mono">BIO: 77.4%</span>
+<span class="font-label-sm text-[8px] text-outline">O2/H2O SYNC</span>
+</div>
+<span class="w-2 h-2 rounded-full bg-secondary-fixed"></span>
+</div>
+</div>
+<!-- Slot 09: Ross 128 b -->
+<div class="bg-surface-container-lowest p-space-xs rounded flex items-center justify-between hover:bg-surface-container-high transition-colors cursor-pointer" onclick="selectSlot('Ross 128 b', 0.86, '1.4 m/s', 'NON-TR', '280 K')">
+<div class="flex items-center gap-space-xs min-w-0">
+<span class="font-label-sm text-label-sm text-primary-fixed-dim font-mono">09.</span>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-[13px] text-primary font-bold truncate">Ross 128 b</span>
+<span class="font-label-sm text-[9px] text-outline truncate">M4.0V // 11.0 ly // INACTIVE PARENT</span>
+</div>
+</div>
+<div class="flex items-center gap-space-sm shrink-0">
+<div class="text-right">
+<span class="font-label-sm text-[9px] text-tertiary-fixed block font-mono">BIO: 69.8%</span>
+<span class="font-label-sm text-[8px] text-outline">MODERATE FLUX</span>
+</div>
+<span class="w-2 h-2 rounded-full bg-tertiary-fixed"></span>
+</div>
+</div>
+<!-- Slot 10: Teegarden's Star b -->
+<div class="bg-surface-container-lowest p-space-xs rounded flex items-center justify-between hover:bg-surface-container-high transition-colors cursor-pointer" onclick="selectSlot('Teegarden b', 0.95, '2.0 m/s', 'NON-TR', '264 K')">
+<div class="flex items-center gap-space-xs min-w-0">
+<span class="font-label-sm text-label-sm text-primary-fixed-dim font-mono">10.</span>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-[13px] text-primary font-bold truncate">Teegarden b</span>
+<span class="font-label-sm text-[9px] text-outline truncate">M7.0V // 12.5 ly // ESI RECORD 0.95</span>
+</div>
+</div>
+<div class="flex items-center gap-space-sm shrink-0">
+<div class="text-right">
+<span class="font-label-sm text-[9px] text-secondary-fixed block font-mono">BIO: 92.4%</span>
+<span class="font-label-sm text-[8px] text-outline">LIQUID WATER</span>
+</div>
+<span class="w-2 h-2 rounded-full bg-secondary-fixed"></span>
+</div>
+</div>
+</div>
+</div>
+<!-- LCARS FOOTER DIAGNOSTIC METRIC ACTION -->
+<div class="w-full bg-surface-container-high rounded p-space-sm flex items-center justify-between text-label-sm font-label-sm">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[18px] text-secondary-fixed">satellite_alt</span>
+<span class="text-on-surface">ARRAY ORIENTATION: RA 23h 06m / DEC -05° 02'</span>
+</div>
+<button class="px-space-sm py-1 bg-primary-container text-on-primary-container font-bold rounded uppercase tracking-wider active:scale-95 transition-transform" onclick="triggerSpectraSweep()">
+      REFRESH NIRSPEC
+    </button>
+</div>
+</div>
+<script>
+  function selectSlot(name, esi, doppler, transit, teq) {
+    const targetTitle = document.getElementById('targetName');
+    if (targetTitle) {
+      targetTitle.textContent = name;
+    }
+  }
+
+  const trappistBtn = document.getElementById('targetBtn-trappist');
+  const lhsBtn = document.getElementById('targetBtn-lhs');
+  const curve = document.getElementById('spectralCurve');
+
+  if (trappistBtn && lhsBtn) {
+    trappistBtn.addEventListener('click', () => {
+      trappistBtn.className = 'px-space-xs py-0.5 rounded text-label-sm font-label-sm bg-primary-container text-on-primary-container font-bold transition-all';
+      lhsBtn.className = 'px-space-xs py-0.5 rounded text-label-sm font-label-sm bg-surface-container-high text-on-surface-variant transition-all';
+      document.getElementById('targetName').textContent = 'TRAPPIST-1 e';
+      if (curve) {
+        curve.setAttribute('d', 'M 0,95 Q 25,92 45,70 T 75,40 T 100,85 T 130,30 T 160,78 T 190,45 T 225,92 T 260,35 T 295,80 T 330,55 L 360,72');
+      }
+    });
+
+    lhsBtn.addEventListener('click', () => {
+      lhsBtn.className = 'px-space-xs py-0.5 rounded text-label-sm font-label-sm bg-primary-container text-on-primary-container font-bold transition-all';
+      trappistBtn.className = 'px-space-xs py-0.5 rounded text-label-sm font-label-sm bg-surface-container-high text-on-surface-variant transition-all';
+      document.getElementById('targetName').textContent = 'LHS 1140 b';
+      if (curve) {
+        curve.setAttribute('d', 'M 0,80 Q 30,65 50,85 T 80,50 T 115,70 T 145,45 T 175,90 T 210,60 T 240,40 T 275,55 T 310,75 L 360,60');
+      }
+    });
+  }
+
+  function triggerSpectraSweep() {
+    const sweepBtn = event.currentTarget;
+    sweepBtn.textContent = 'SWEEPING...';
+    setTimeout(() => {
+      sweepBtn.textContent = 'REFRESH NIRSPEC';
+    }, 800);
+  }
+</script></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface/90 backdrop-blur-xl shadow-[0_-1px_8px_rgba(0,0,0,0.5)]" data-active-classes="text-primary-container bg-primary-container/15"><div class="flex justify-around items-center h-20 px-gutter-mobile"><a aria-current="page" class="flex flex-col items-center justify-center min-w-[44px] min-h-[44px] px-space-sm transition-colors text-primary-container bg-primary-container/15" data-path="tactical-hud" href="#"><span class="material-symbols-outlined text-[20px]">radar</span><span class="font-label-sm text-label-sm uppercase tracking-wider mt-0.5">Tactical</span></a><a class="flex flex-col items-center justify-center min-w-[44px] min-h-[44px] px-space-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="systems-status" href="#"><span class="material-symbols-outlined text-[20px]">memory</span><span class="font-label-sm text-label-sm uppercase tracking-wider mt-0.5">Systems</span></a><div class="flex flex-col items-center justify-center"><button aria-label="Alert Condition Status" class="w-11 h-11 bg-surface-container-high flex flex-col items-center justify-center text-secondary-fixed"><span class="material-symbols-outlined text-[20px]">shield</span><span class="font-label-sm text-[8px] leading-tight">DEFCON</span></button></div><a class="flex flex-col items-center justify-center min-w-[44px] min-h-[44px] px-space-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="comms-audio" href="#"><span class="material-symbols-outlined text-[20px]">record_voice_over</span><span class="font-label-sm text-label-sm uppercase tracking-wider mt-0.5">Comms</span></a><a class="flex flex-col items-center justify-center min-w-[44px] min-h-[44px] px-space-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="astrometrics" href="#"><span class="material-symbols-outlined text-[20px]">explore</span><span class="font-label-sm text-label-sm uppercase tracking-wider mt-0.5">Astro</span></a></div></nav></body></html>

@@ -289,3 +289,46 @@ def test_webgpu_zero_install_requires_login_and_credits_wgsl_compute(tmp_path: P
     assert payload["receipt_sha256"].startswith("489f9ffd9ac611fb")
 
 
+def test_stitch_v46_cockpit_and_photorealistic_assets_from_project_10018415280079892710() -> None:
+    """Verify the upgraded game at `/` uses the latest Stitch v2 screens and local photorealistic assets."""
+    from starlette.testclient import TestClient
+    from hivemind.game.exoplanet_hunter_cockpit import create_exoplanet_hunter_fastapi_app
+
+    app = create_exoplanet_hunter_fastapi_app()
+    client = TestClient(app)
+
+    # 1. Main cockpit `/` renders USS HIVEMIND NCC-31337 v4.6 Complete Tactical Bridge & Stage 3 Oolite Planetfall Bridge
+    resp = client.get("/")
+    assert resp.status_code == 200
+    html = resp.text
+    assert "USS HIVEMIND NCC-31337 v4.6" in html
+    assert "SPECTRO-SCAN TACTIQUE" in html
+    assert "COBRA MK-III // HONOUR OF HIVEMIND" in html
+    assert "ÉQUIPEMENTS PRIMEABLES" in html
+    assert "RADAR CIBLES &amp; CONTACTS" in html
+    assert "JWST NIRSPEC PRISM" in html
+    assert "CONSOLE SYSTÉMIQUE UCSC // VITESSE RADIALE DOPPLER" in html
+    assert "PHOTOMÉTRIE DE TRANSIT KEPLER/TESS" in html
+    for lang in ("fr", "es", "de", "en", "zh"):
+        assert f'id="lang-{lang}"' in html
+
+    # 2. Local photorealistic Stitch v2 PNG assets serve 200 OK with PNG magic header
+    for asset in (
+        "stitch_v2_07_photorealistic_milky_way_barred_spiral_galaxy_vi.png",
+        "stitch_v2_08_photorealistic_descent_cockpit_view_of_spaceship.png",
+        "stitch_v2_09_photorealistic_exoplanet_k2-18_b_hycean_world_vi.png",
+        "stitch_v2_05_photorealistic_exoplanet_lhs_1140_b_super-earth.png",
+    ):
+        assert f"/stitch-assets/{asset}" in html
+        img_resp = client.get(f"/stitch-assets/{asset}")
+        assert img_resp.status_code == 200
+        assert len(img_resp.content) > 500_000
+        assert img_resp.content[:3] in (b"\x89PN", b"\xff\xd8\xff")
+
+    # 3. Stitch project metadata endpoint reports project 10018415280079892710 and 12 screens
+    meta = client.get("/api/astro/stitch_project").json()
+    assert meta["project_id"] == "10018415280079892710"
+    assert meta["total_screens"] == 12
+
+
+

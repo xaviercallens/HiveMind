@@ -1,0 +1,17 @@
+{
+  "name": "projects/10018415280079892710/screens/028822a60cff4dc482de879d7cd10360",
+  "title": "USS Hivemind NCC-31337 v4.6 - Complete Tactical Command Bridge & Game Suite",
+  "screenshot": {
+    "name": "projects/10018415280079892710/screens/028822a60cff4dc482de879d7cd10360/fileEntries/screenshot",
+    "downloadUrl": "https://stitch.googleapis.com/v1/projects/10018415280079892710/files/screenshot_00065eeb785d6407023bea34070182ff:download",
+    "mimeType": "image/png"
+  },
+  "htmlCode": {
+    "name": "projects/10018415280079892710/screens/028822a60cff4dc482de879d7cd10360/fileEntries/html",
+    "downloadUrl": "https://stitch.googleapis.com/v1/projects/10018415280079892710/files/028822a60cff4dc482de879d7cd10360:download",
+    "mimeType": "text/html"
+  },
+  "width": "2560",
+  "height": "2082",
+  "deviceType": "DESKTOP"
+}

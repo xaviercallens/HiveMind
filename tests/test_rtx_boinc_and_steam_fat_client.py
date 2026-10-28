@@ -124,3 +124,70 @@ def test_steam_fat_client_exe_self_test_renders_all_five_stages(tmp_path: Path) 
     assert len(report["stages"]) == 5
     stage_names = [s["stage_name"] for s in report["stages"]]
     assert stage_names == ["1.GALAXIE", "2.ORBIT_BEE", "3.OOLITE_LAND", "4.JWST_LOIS", "5.BOINC_GCP"]
+
+
+def test_portal_free_steam_game_registration_login_and_boinc_contribution(tmp_path: Path) -> None:
+    from starlette.testclient import TestClient
+    from hivemind.router.accounts import RouterStore
+    from hivemind.router.gateway import create_router_app
+
+    store = RouterStore(tmp_path / "router.db", b"s" * 32)
+    app = create_router_app(store)
+    client = TestClient(app)
+
+    # 1. Verify Portal page includes the Free Steam Game (#steam-free-game) registration section
+    portal_html = client.get("/").text
+    assert 'id="steam-free-game"' in portal_html
+    assert "AppID 3133700" in portal_html
+    assert "FreeOnDemand" in portal_html
+
+    # 2. Verify /v1/hivemind/steam/status
+    st = client.get("/v1/hivemind/steam/status").json()
+    assert st["app_id"] == 3133700
+    assert st["portal_registration_status"] == "REGISTERED_AND_LIVE"
+
+    # 3. Simulate first-time Registration of Free Steam Game player
+    reg = client.post(
+        "/v1/hivemind/steam/register-login",
+        json={
+            "handle": "Cmdr_RTX2070_Test",
+            "steam_id64": "76561198031337001",
+            "app_id": 3133700,
+            "gpu_model": "NVIDIA GeForce RTX 2070",
+            "role": "prosumer",
+        },
+    ).json()
+    assert reg["ok"] is True
+    assert reg["created"] is True
+    assert reg["api_key"].startswith("hm-")
+    assert reg["steam_session_ticket"].startswith("STEAM-3133700-")
+    initial_bal = float(reg["balance_hmt"])
+
+    # 4. Simulate returning Login with the same handle
+    login = client.post(
+        "/v1/hivemind/steam/register-login",
+        json={
+            "handle": "Cmdr_RTX2070_Test",
+            "steam_id64": "76561198031337001",
+            "app_id": 3133700,
+        },
+    ).json()
+    assert login["ok"] is True
+    assert login["created"] is False
+    assert login["account_id"] == reg["account_id"]
+
+    # 5. Contribute a real CUDA PTX BOINC workunit and verify HMT points are credited
+    contrib = client.post(
+        "/v1/hivemind/steam/contribute-boinc",
+        headers={"Authorization": f"Bearer {login['api_key']}"},
+        json={"handle": "Cmdr_RTX2070_Test", "target_planet": "K2-18 b", "app_id": 3133700},
+    ).json()
+    assert contrib["ok"] is True
+    assert contrib["hmt_awarded"] == 250.0
+    assert contrib["cobblestones_awarded"] == 45.0
+    assert abs(float(contrib["balance_hmt"]) - (initial_bal + 250.0)) < 1e-6
+
+    # 6. Verify /v1/hivemind/me reflects the updated balance
+    me = client.get("/v1/hivemind/me", headers={"Authorization": f"Bearer {login['api_key']}"}).json()
+    assert abs(float(me["balance"]) - (initial_bal + 250.0)) < 1e-6
+

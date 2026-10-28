@@ -4,7 +4,7 @@ Scope: the bee mesh (`mesh/`) that runs HiveMind inference as many small workers
 OpenAI-compatible gateway, on the AMCP agent framework over Kafka. Decision of record: option B in
 [`community/BEE_AGENT_MESH_DESIGN.md`](community/BEE_AGENT_MESH_DESIGN.md) (owner, 2026-10-27). Protocol:
 [`mesh/WIRE_PROTOCOL.md`](../mesh/WIRE_PROTOCOL.md). Newcomer guide: [`community/BEE_MESH_QUICKSTART.md`](community/BEE_MESH_QUICKSTART.md).
-Proposed roadmap ids: `MESH-01` to `MESH-09` (not yet in ROADMAP.md: the owner chooses the season number; the existing seasons, including 11 and 19, already hold other work. Season 11 holds the
+Roadmap ids: `HM-S1-01` to `HM-S1-09`, section 3.18 of [`../ROADMAP.md`](../ROADMAP.md) (the mesh line numbers its own seasons from 1, at the owner's instruction of 2026-10-28; the ids are unrelated to `HM-S10` to `HM-S19`).
 Hardened-Hive IDs).
 
 **Status legend.** *Done in this branch* = code and a recorded run exist in the working tree. *Planned* = no code.
@@ -20,14 +20,14 @@ machine until P5 is done and tested over a network.
 
 | Phase | Name | Status | Roadmap |
 |---|---|---|---|
-| P0 | AMCP Kafka repair | Fix written on a branch of the AMCP clone; upstream merge not confirmed | `MESH-01` |
-| P1 | Wire protocol v1 and mesh v0.1 | Done in this branch (`mesh/`, untracked at the time of writing) | `MESH-02` to `MESH-05` |
-| P2 | 1000-bee control-plane test on one VM | Measured, pre-registered (MESH-SCALE-1): PASS at N=1000 on A1 to A4; owner decisions on VM and window still open | `MESH-06` |
-| P3 | Security on the bus | Planned | `MESH-07` |
-| P4 | Bridge to the OpenRouter gateway | Planned | `MESH-08` |
-| P5 | Multi-broker, multi-region Kafka | Planned | `MESH-09` |
-| P6 | Lightweight Rust bee | Planned | `MESH-09` |
-| P7 | GPU bees with the GWAYA verification gate | Planned (not in the roadmap rows yet) | to add |
+| P0 | AMCP Kafka repair | Proposed upstream, not merged: agentmeshcommunicationprotocol/amcpcore.github.io#1 (hardened; 9 + 23 tests) | `HM-S1-01` |
+| P1 | Wire protocol v1 and mesh v0.1 | Done (`mesh/`, merged in #279) | `HM-S1-02` to `HM-S1-05` |
+| P2 | 1000-bee control-plane test on one VM | Measured, pre-registered (MESH-SCALE-1): PASS at N=1000 on A1 to A4; owner decisions on VM and window still open | `HM-S1-06` |
+| P3 | Security on the bus | Planned | `HM-S1-07` |
+| P4 | Bridge to the OpenRouter gateway | Planned | `HM-S1-08` |
+| P5 | Multi-broker, multi-region Kafka | Planned | `HM-S1-09` |
+| P6 | Lightweight Rust bee | Planned | `HM-S1-09` |
+| P7 | GPU bees with the GWAYA verification gate | Planned (not in the roadmap rows yet: to add once its owner decisions are made) | to add |
 
 ---
 

@@ -342,6 +342,18 @@ def test_bridges_in_one_process_still_interoperate_and_an_operator_secret_is_hon
 # ---------------------------------------------------------------------------------------------------------------------------------------------------
 
 
+def test_serve_hack_hud_refuses_a_non_loopback_bind_unless_the_operator_says_so(capsys, monkeypatch) -> None:  # noqa: ANN001
+    from hivemind.cli import main as cli_main
+
+    run = Mock()
+    monkeypatch.setattr("uvicorn.run", run)
+    assert cli_main.main(["serve-hack-hud", "--host", "0.0.0.0", "--port", "18091"]) == 2
+    assert "--allow-network" in capsys.readouterr().err
+    run.assert_not_called()
+    assert cli_main.main(["serve-hack-hud", "--host", "0.0.0.0", "--port", "18091", "--allow-network"]) == 0
+    run.assert_called_once()
+
+
 def test_serve_coordinator_refuses_a_public_bind_without_identity_verification(capsys, monkeypatch) -> None:  # noqa: ANN001
     from hivemind.cli import main as cli_main
 

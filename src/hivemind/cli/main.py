@@ -286,6 +286,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_hud.add_argument("--host", default="127.0.0.1")
     p_hud.add_argument("--port", type=int, default=8090)
+    p_hud.add_argument("--allow-network", action="store_true", help="listen on a non-loopback --host (the HUD has no login and can start GPU work: trusted LAN only)")
 
     p_probe = sub.add_parser(
         "hack-probe",
@@ -443,8 +444,15 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     if args.command == "serve-hack-hud":
+        import sys
+
         import uvicorn
         from hivemind.game.steam_edition import create_hack_miner_fastapi_app
+
+        if args.host not in ("127.0.0.1", "localhost", "::1") and not args.allow_network:
+            # The HUD is a single-player UI with no login whose POST routes run GPU diagnostics, LoRA forging and Hugging Face downloads.
+            print(f"refusing to listen on {args.host}: the HUD has no login. Use --allow-network only on a network you trust.", file=sys.stderr)
+            return 2
 
         app = create_hack_miner_fastapi_app()
         uvicorn.run(app, host=args.host, port=args.port)

@@ -17,6 +17,7 @@ import runpy
 import secrets
 import time
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, Response
@@ -32,8 +33,8 @@ NEVER_REWRITTEN: tuple[str, ...] = ("/v1/chat/", "/v1/completions")
 _funded_consumer_bids = RouterStore.funded_consumer_bids
 
 
-def active_funded_consumer_bids(self: RouterStore, expected_tokens: int) -> dict[str, float]:
-    bids = _funded_consumer_bids(self, expected_tokens)
+def active_funded_consumer_bids(self: RouterStore, expected_tokens: int, *args: Any, **kwargs: Any) -> dict[str, float]:
+    bids = _funded_consumer_bids(self, expected_tokens, *args, **kwargs)
     if BID_WINDOW_S <= 0:
         return bids
     since = time.time() - BID_WINDOW_S

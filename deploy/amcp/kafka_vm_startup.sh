@@ -11,7 +11,8 @@ set -euo pipefail
 md() { curl -fsS -H 'Metadata-Flavor: Google' "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$1" 2>/dev/null || true; }
 KAFKA_VERSION=3.8.0
 
-if ! command -v wg >/dev/null || ! [ -d /usr/lib/jvm/default-java ]; then
+JAVA_HOME_DIR=/usr/lib/jvm/java-17-openjdk-amd64   # Debian 12 amd64; there is no default-java link with only the headless JRE (found on the first real boot)
+if ! command -v wg >/dev/null || ! [ -x "${JAVA_HOME_DIR}/bin/java" ]; then
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -qq && apt-get install -y -qq wireguard-tools openjdk-17-jre-headless curl ca-certificates
 fi
@@ -82,7 +83,7 @@ md hm-server-properties > /etc/hivemind-kafka/server.properties
 md hm-kafka-unit > /etc/systemd/system/hivemind-kafka-node.service
 install -d -o kafka -g kafka /var/lib/hivemind-kafka /var/log/hivemind-kafka
 if [ ! -f /var/lib/hivemind-kafka/meta.properties ]; then
-  sudo -u kafka env JAVA_HOME=/usr/lib/jvm/default-java /opt/kafka/bin/kafka-storage.sh format -t "$(md hm-cluster-id)" -c /etc/hivemind-kafka/server.properties --ignore-formatted
+  sudo -u kafka env JAVA_HOME="${JAVA_HOME_DIR}" /opt/kafka/bin/kafka-storage.sh format -t "$(md hm-cluster-id)" -c /etc/hivemind-kafka/server.properties --ignore-formatted
 fi
 systemctl daemon-reload
 systemctl enable --now hm-wg-sync.timer

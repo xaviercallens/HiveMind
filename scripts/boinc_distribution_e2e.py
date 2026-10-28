@@ -120,6 +120,7 @@ def run(a, st, report, note) -> int:  # noqa: ANN001
     pdir = a.work / "client" / "projects" / project_dir_name(st.master_url)
     t0, done = time.time(), False
     seen: set[str] = set()
+    versions_run: set[str] = set()  # app version numbers of the tasks this client actually held: the test proves the PORTABLE package only if it is the new one
     try:
         sys.path.insert(0, str(ROOT / "scripts"))
         from t4_governor import descendants, terminate_tree  # noqa: E402 - the governor's own yield helpers
@@ -141,6 +142,7 @@ def run(a, st, report, note) -> int:  # noqa: ANN001
             for n in sorted(files - seen):
                 note(f"project dir now has {n}")
             seen |= files
+            versions_run |= set(re.findall(r"app version num: (\d+)", client.cmd("--get_tasks")))
             hid = st.sql(f"use {st.dbname}; select id from host where userid={uid} order by id desc limit 1;").strip().splitlines()
             if hid and hid[-1].isdigit():
                 rows = st.sql(f"use {st.dbname}; select name,server_state,outcome,validate_state,exit_status,round(elapsed_time) from result where hostid={hid[-1]} order by id desc limit 3;").strip()
@@ -156,7 +158,8 @@ def run(a, st, report, note) -> int:  # noqa: ANN001
         if p.is_file() and not p.is_symlink():
             report["files"][p.name] = {"bytes": p.stat().st_size, "md5_matches_server": (dl / p.name).exists() and md5(p) == md5(dl / p.name)}
     report["unpacked"] = sorted(x.name for x in (pdir / "hivemind_env").glob("*")) if (pdir / "hivemind_env").exists() else []
-    report["validated"] = bool(re.search(r"\t5\t\d\t1\t", report.get("results", "")))
+    report["app_versions_run"] = sorted(versions_run)
+    report["validated"] = bool(re.search(r"\t5\t\d\t1\t", report.get("results", ""))) and report["app_versions_run"] == [str(a.version)]
     out = ROOT / "artifacts" / "boinc_distribution"
     out.mkdir(parents=True, exist_ok=True)
     (out / "report.json").write_text(json.dumps(report, indent=2))

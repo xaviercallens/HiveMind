@@ -191,3 +191,101 @@ def test_portal_free_steam_game_registration_login_and_boinc_contribution(tmp_pa
     me = client.get("/v1/hivemind/me", headers={"Authorization": f"Bearer {login['api_key']}"}).json()
     assert abs(float(me["balance"]) - (initial_bal + 250.0)) < 1e-6
 
+
+def test_webgpu_zero_install_requires_login_and_credits_wgsl_compute(tmp_path: Path, monkeypatch):
+    """Verify /webgpu zero-install page, mandatory registration/login gate (401), and WGSL @compute contribution."""
+    from starlette.testclient import TestClient
+    from hivemind.router.accounts import RouterStore
+    from hivemind.router.gateway import create_router_app
+    from hivemind.game import webgpu_galaxy_cockpit
+
+    monkeypatch.setattr(
+        webgpu_galaxy_cockpit,
+        "execute_server_webgpu_verification_and_sync",
+        lambda **kwargs: {
+            "ok": True,
+            "receipt_sha256": "489f9ffd9ac611fb3133700000000000489f9ffd9ac611fb3133700000000000",
+            "target_planet": kwargs.get("target_planet", "K2-18 b"),
+            "n_points_folded": kwargs.get("n_points_folded", 16384),
+            "workgroups_dispatched": 256,
+            "recovered_transit_depth_ppm": 2789.0,
+            "wgsl_entrypoint": "bls_fold_main",
+            "gcp_sync": {"ok": True, "http_status": 200},
+        },
+    )
+
+    store = RouterStore(tmp_path / "webgpu_router.db", b"w" * 32)
+    app = create_router_app(store)
+    client = TestClient(app)
+
+    # 1. Verify /webgpu page renders with WGSL @compute shader, 5 languages, and mandatory login gate
+    resp = client.get("/webgpu")
+    assert resp.status_code == 200
+    html = resp.text
+    assert "@compute @workgroup_size(64)" in html
+    assert "fn bls_fold_main" in html
+    assert "navigator.gpu" in html
+    assert "GALAXIE WEBGPU" in html
+    for lang in ("fr", "en", "es", "de", "zh"):
+        assert f'id="lang-{lang}"' in html
+
+    # 2. Verify /v1/hivemind/webgpu/status reports mandatory registration & login
+    st = client.get("/v1/hivemind/webgpu/status").json()
+    assert st["zero_install"] is True
+    assert st["registration_and_login_required"] is True
+    assert st["workgroup_size"] == 64
+
+    # 3. Verify unauthenticated POST /v1/hivemind/webgpu/contribute is rejected with HTTP 401
+    unauth = client.post(
+        "/v1/hivemind/webgpu/contribute",
+        json={"target_planet": "K2-18 b", "n_points_folded": 16384},
+    )
+    assert unauth.status_code == 401
+
+    # 4. Register a new WebGPU user
+    reg = client.post(
+        "/v1/hivemind/webgpu/register-login",
+        json={
+            "handle": "Cmdr_WebGPU_ZeroInstall",
+            "gpu_adapter": "NVIDIA GeForce RTX 2070 (WebGPU / Dawn D3D12)",
+        },
+    ).json()
+    assert reg["ok"] is True
+    assert reg["created"] is True
+    assert reg["webgpu_session_ticket"].startswith("WEBGPU-")
+    assert reg["api_key"].startswith("hm-")
+    start_bal = float(reg["balance_hmt"])
+
+    # 5. Returning login with the same handle reuses the account
+    login = client.post(
+        "/v1/hivemind/webgpu/register-login",
+        json={
+            "handle": "Cmdr_WebGPU_ZeroInstall",
+            "gpu_adapter": "NVIDIA GeForce RTX 2070 (WebGPU / Dawn D3D12)",
+        },
+    ).json()
+    assert login["ok"] is True
+    assert login["created"] is False
+    assert login["account_id"] == reg["account_id"]
+
+    # 6. Contribute a WebGPU WGSL @compute workunit using Bearer token
+    contrib = client.post(
+        "/v1/hivemind/webgpu/contribute",
+        headers={"Authorization": f"Bearer {login['api_key']}"},
+        json={
+            "target_planet": "K2-18 b",
+            "n_points_folded": 16384,
+            "recovered_transit_depth_ppm": 2789.0,
+            "kernel_exec_ms": 1.84,
+            "gpu_adapter": "NVIDIA GeForce RTX 2070 (WebGPU)",
+        },
+    )
+    assert contrib.status_code == 200
+    payload = contrib.json()
+    assert payload["ok"] is True
+    assert payload["hmt_awarded"] == 250.0
+    assert payload["cobblestones_awarded"] == 45.0
+    assert abs(float(payload["balance_hmt"]) - (start_bal + 250.0)) < 1e-6
+    assert payload["receipt_sha256"].startswith("489f9ffd9ac611fb")
+
+

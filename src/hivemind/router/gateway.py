@@ -2043,4 +2043,139 @@ def create_router_app(
             "receipt_sha256": receipt_sha256,
         }
 
+    @app.api_route("/webgpu", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def webgpu_galaxy_page(request: Request) -> HTMLResponse:
+        """Zero-install WebGPU 3D Galaxy & WGSL @compute Citizen-Science Cockpit."""
+        from hivemind.game.webgpu_galaxy_cockpit import render_webgpu_galaxy_html
+
+        lang = pick_language(request.query_params.get("lang"), request.headers.get("accept-language"), default="fr")
+        return HTMLResponse(
+            render_webgpu_galaxy_html(default_lang=lang),
+            headers={
+                "Cache-Control": "no-store",
+                "Vary": "Accept-Language",
+                "Content-Language": lang,
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    @app.get("/v1/hivemind/webgpu/status")
+    def webgpu_status() -> dict[str, Any]:
+        """Public metadata for the Zero-Install WebGPU Galaxy & WGSL @compute Edition."""
+        from hivemind.game.webgpu_galaxy_cockpit import WGSL_BLS_COMPUTE_SHADER_SOURCE
+
+        return {
+            "object": "hivemind.webgpu_edition",
+            "title": "USS Hivemind NCC-31337 — Zero-Install WebGPU Galaxy & WGSL @compute Edition",
+            "zero_install": True,
+            "registration_and_login_required": True,
+            "wgsl_entrypoint": "bls_fold_main",
+            "workgroup_size": 64,
+            "wgsl_shader": WGSL_BLS_COMPUTE_SHADER_SOURCE,
+            "inspirations": [
+                "https://developer.chrome.com/blog/webgpu-io2023?hl=fr",
+                "https://dgreenheck.github.io/webgpu-galaxy/",
+                "https://galaxium.app/",
+                "https://www.nicheloom.com/launches/9556/",
+            ],
+            "endpoints": {
+                "ui": "/webgpu",
+                "register_login": "/v1/hivemind/webgpu/register-login",
+                "contribute": "/v1/hivemind/webgpu/contribute",
+                "status": "/v1/hivemind/webgpu/status",
+            },
+        }
+
+    @app.post("/v1/hivemind/webgpu/register-login")
+    async def webgpu_register_or_login(request: Request) -> JSONResponse:
+        """Register or sign in a Zero-Install WebGPU contributor and return a Bearer hm-... API key."""
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+        except ValueError:
+            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+        handle = str(body.get("handle") or "Cmdr_WebGPU_RTX2070").strip()[:64]
+        gpu_adapter = str(body.get("gpu_adapter") or "WebGPU Hardware Adapter (WGSL @compute)").strip()[:96]
+        role = str(body.get("role") or "prosumer").strip()
+        if role not in ("consumer", "producer", "prosumer"):
+            role = "prosumer"
+        created = False
+        try:
+            account_id, api_key = store.register(handle, role)
+            created = True
+            steam_key_cache[account_id] = api_key
+            starter_grant(request, account_id)
+        except HandleTaken:
+            account_id = store.account_id_for(handle)
+            api_key = steam_key_cache.get(account_id, "")
+            if not api_key:
+                api_key = "hm-" + secrets.token_urlsafe(32)
+                with store._tx() as conn:
+                    conn.execute(
+                        "UPDATE accounts SET key_hash=? WHERE account_id=?",
+                        (store._hmac_hex(api_key), account_id),
+                    )
+                steam_key_cache[account_id] = api_key
+        except (SwarmSecurityViolationError, ReservedHandle):
+            raise RouterError(400, "Invalid handle format.", "invalid_request_error", "invalid_handle") from None
+
+        ticket_hash = hashlib.sha256(f"webgpu:{account_id}:{gpu_adapter}".encode("utf-8")).hexdigest()[:16].upper()
+        return JSONResponse(
+            {
+                "object": "hivemind.webgpu_session",
+                "ok": True,
+                "created": created,
+                "account_id": account_id,
+                "handle": handle,
+                "role": role,
+                "gpu_adapter": gpu_adapter,
+                "api_key": api_key,
+                "webgpu_session_ticket": f"WEBGPU-{ticket_hash}",
+                "balance_hmt": store.balance(account_id),
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/v1/hivemind/webgpu/contribute")
+    async def webgpu_contribute(request: Request) -> dict[str, Any]:
+        """Record a verified browser WebGPU WGSL @compute workunit. Strictly requires registration & login (Bearer hm-...)."""
+        from hivemind.game.webgpu_galaxy_cockpit import execute_server_webgpu_verification_and_sync
+
+        account = authenticate(request)
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+        except ValueError:
+            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+        target_planet = str(body.get("target_planet") or "K2-18 b").strip()[:64]
+        gpu_adapter = str(body.get("gpu_adapter") or "WebGPU Hardware Adapter (WGSL @compute)").strip()[:96]
+        backend = str(body.get("backend") or "webgpu_wgsl_compute_shader").strip()[:64]
+        n_points = int(body.get("n_points_folded") or 16384)
+        kernel_ms = float(body.get("kernel_exec_ms") or 0.42)
+        depth_ppm = float(body.get("recovered_transit_depth_ppm") or 2789.0)
+
+        verified = execute_server_webgpu_verification_and_sync(
+            handle=account.handle,
+            target_planet=target_planet,
+            gpu_adapter=gpu_adapter,
+            backend=backend,
+            n_points_folded=n_points,
+            kernel_exec_ms=kernel_ms,
+            recovered_transit_depth_ppm=depth_ppm,
+        )
+        hmt_awarded = 250.0
+        cobblestones_awarded = 45.0
+        store.grant(account.account_id, hmt_awarded, f"webgpu:wgsl:{verified['receipt_sha256'][:16]}")
+        return {
+            "object": "hivemind.webgpu_contribution",
+            "ok": True,
+            "account_id": account.account_id,
+            "handle": account.handle,
+            "target_planet": target_planet,
+            **verified,
+            "hmt_awarded": hmt_awarded,
+            "cobblestones_awarded": cobblestones_awarded,
+            "balance_hmt": store.balance(account.account_id),
+        }
+
     return app

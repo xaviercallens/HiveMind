@@ -10,7 +10,7 @@ in unlicensed data, eval contamination, or a flood of unverified LLM-generated t
 | `configs/datasets_s21_candidates.json` | Hand-curated input: dataset ids, where to read them, how to map them, and the curator's verified-signal judgement. No licence, size or revision is typed here |
 | `configs/datasets_s21.json` | Generated output of the script below (licence, revision sha, sizes, retrieval time, slice checks, decontamination counts). Do not edit by hand |
 | `scripts/refresh_dataset_registry.py` | Queries the Hub API, streams a slice of each accepted source, runs decontamination and the mixture planner on the slices |
-| `tests/test_dataset_registry.py` | 76 tests (Hypothesis for the pure functions); every check has a negative control |
+| `tests/test_dataset_registry.py` | 80 tests (Hypothesis for the pure functions); every check has a negative control |
 
 ## Design
 1. **Licence gate.** `https://huggingface.co/api/datasets/<id>` gives `cardData.license`, `sha`, `lastModified`, `usedStorage`,
@@ -27,10 +27,13 @@ in unlicensed data, eval contamination, or a flood of unverified LLM-generated t
 3. **Decontamination** (`EvalIndex`, `decontaminate`). Held-out items come from the night packs' `eval.jsonl` (user turns and
    keys, as written by `scripts/night_pack_build.py`) plus reference eval sets listed in the candidates file (HumanEval, MBPP test,
    ARC-Challenge test). Text is NFKC-normalised, case-folded and split into alphanumeric tokens. A training row is removed, first
-   hit wins, when (a) its entity key (KOI name normalised to `K#####.##`, or `star-<hostname>`) is an eval key, (b) its prompt
+   hit wins, when (a) its entity key (KOI name normalised to `K#####.##`, or `star-<hostname>`) is an eval key, or the KOI
+   shares its host star with an eval KOI (`K00752.02` vs eval `K00752.01`: the night pack splits whole stars), (b) its prompt
    hash equals an eval prompt hash, (c) it shares any word 13-gram with an eval item, or (d) its prompt+completion hash equals a
    row already kept (verified sources are processed first, so a cross-source duplicate survives in its verified copy).
    13-grams present in more than 10 eval items are treated as shared scaffolding and ignored; the count is reported.
+   A key column that is not unique within a slice (nuhmanpk's `prompt_id` is a task type: 255 rows, 6 values) gets the row's
+   split position appended (`rows_rekeyed_duplicate_key`), so keys stay unique and sampling stays order-independent.
 4. **Mixture** (`plan_mixture`, `build_mixture`). Per domain: target = weight share x total; each source capped at
    `per_source_cap` x target; verified rows first, then unverified rows up to `floor(cap/(1-cap) x verified)` with
    `unverified_cap = 0.30`. A domain with no verified rows gets none and is `BLOCKED`; a domain that cannot reach its target is
@@ -41,7 +44,9 @@ in unlicensed data, eval contamination, or a flood of unverified LLM-generated t
 Command: `python scripts/night_pack_build.py --out $S/night_packs` (all six packs BUILT: maths 200, exoplanet 600, stars 317,
 cyber 500, physics_transfer 488, astro_transfer 152 eval rows), then
 `python scripts/refresh_dataset_registry.py --work $S/s21_work2 --eval-packs $S/night_packs` with `$S` a scratch directory
-outside the repo. Hub metadata retrieved 2026-10-28 (UTC timestamps per entry in `configs/datasets_s21.json`).
+outside the repo. After review fixes it was re-run (`--work $S/s21_work3`, same cached `/rows` pages, Hub metadata re-queried,
+generated_utc 2026-10-28T08:20:58Z): licences, revision shas, slice counts, decontamination counts, plan and mixture sha256
+unchanged; `eval_index_complete` is true. Hub metadata retrieved 2026-10-28 (UTC timestamps per entry in `configs/datasets_s21.json`).
 
 Result: 24 candidates, 18 ACCEPTED, 6 REJECTED, 17 slices PASSED, 1 slice BLOCKED.
 
@@ -72,8 +77,8 @@ Result: 24 candidates, 18 ACCEPTED, 6 REJECTED, 17 slices PASSED, 1 slice BLOCKE
 | cyber | Trendyol/Trendyol-Cybersecurity-Instruction-Tuning-Dataset | apache-2.0 | ACCEPTED | 53201 | 300 / 114 / 186 / 0 | 0 / 0 / 0 / 0 |
 | cyber | Vanessasml/cybersecurity_32k_instruction_input_output | none | REJECTED: no licence in the card | - | - | - |
 
-Eval index: 4076 eval items hashed (six night packs + HumanEval 164 + MBPP test 500 + ARC-Challenge test 1172), 2257 entity
-keys, 0 n-grams ignored as scaffolding. Mixture planner on the slices (600-row target, weights 0.30/0.20/0.15/0.10/0.10/0.15):
+Eval index: 4076 eval items hashed (six night packs + HumanEval 164 + MBPP test 500 + ARC-Challenge test 1172), 2830 entity
+ids (2257 eval keys plus 573 KOI host-star aliases; the host rule removed no further slice row), 0 n-grams ignored as scaffolding. Mixture planner on the slices (600-row target, weights 0.30/0.20/0.15/0.10/0.10/0.15):
 457 rows, unverified fraction 0.081. python_coding, physics and exoplanet BUILT with verified rows only; maths SHORT (60
 verified + 25 unverified of 120: the verified OpenMathInstruct-2 slice had 105 rows, capped at 60); stars SHORT (30 + 12 of 60);
 **cyber BLOCKED**: all three accepted cyber sources are LLM-generated, so the 30% cap admits none of their rows.

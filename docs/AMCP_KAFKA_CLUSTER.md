@@ -1,6 +1,6 @@
-# A self-run Kafka cluster with a quorum of three (RTX 2070, T4, one small GCP VM)
+# A self-run Kafka cluster: three voters (Spot VMs) plus the T4 and the RTX 2070 as brokers
 
-Companion to [`AMCP_COLLABORATION.md`](AMCP_COLLABORATION.md). Status 2026-10-28: **designed and proven on one machine; not yet deployed on the real hosts.**
+Companion to [`AMCP_COLLABORATION.md`](AMCP_COLLABORATION.md). Status 2026-10-28: **proven on one machine (3-node and 5-node); cloud deployment in progress, see section 9.**
 
 ## 1. What is proven, and what is not
 
@@ -15,25 +15,28 @@ Companion to [`AMCP_COLLABORATION.md`](AMCP_COLLABORATION.md). Status 2026-10-28
 | The same on the real hosts, over a network, with the RTX 2070 | **not done** | the hosts were not touched; sections 3 to 5 are the procedure |
 | Reachable from the production gateway on Cloud Run | **not solved** | see section 6 |
 
-## 2. Topology and what it actually tolerates
+## 2. Topology (updated 2026-10-28: three Spot VMs vote, the T4 and the RTX 2070 are broker-only additions)
 
-Three voters; a majority is two; **one node may be down.**
+Why not five voters: Kafka 3.8 fixes the voter list at format time. A voter that is not there yet (the RTX 2070, unreachable from here) still counts toward the majority, so five listed voters would need 3 of the 4 reachable
+machines up, which is *worse* than 2 of 3 (at 90% uptime per node: about 0.95 versus 0.97). Broker-only nodes can be added at any time and carry data, so they add resilience for the data without weakening the vote.
 
-| Node id | Host | Address on the private overlay | Character |
+| Node id | Host | Role | Overlay address |
 |---|---|---|---|
-| 1 | small GCP VM (suggested `e2-small`, not Spot, same region as the T4: `us-east4`) | `10.77.0.1` (also the WireGuard hub) | the steady anchor |
-| 2 | RTX 2070 machine at home | `10.77.0.2` | behind a home connection; uptime unknown |
-| 3 | the T4 VM (`socreateai-agora-hermes-node1`, Spot, automatic restart off) | `10.77.0.3` | can vanish at any time |
+| 1, 2, 3 | three small Spot VMs, one per zone `us-east4-a/b/c`, stop-on-preemption so disks and keys survive | **voter** (broker + controller) | `10.77.0.1-3` |
+| 4 | the T4 VM (Spot) | broker only | `10.77.0.4` |
+| 5 | RTX 2070 machine at home | broker only | `10.77.0.5` |
 
-| Nodes up | Cluster |
-|---|---|
-| 3 | healthy |
-| any 2 | healthy (proven) |
-| 1 | **down for writes** (proven: refused after the timeout). Treat it as down. |
+Two separate limits, both measured by `scripts/amcp_kafka_quorum_proof.py` on five local nodes (topics replication 5, min in-sync 3):
 
-**Honest consequence of this choice.** Until the RTX 2070 joins, the quorum is the small VM plus the Spot T4: if the T4 is preempted the bus is down until it returns. With all three, the bus is down only when two are
-out at once, for example a preempted T4 and a home machine that is off. If that is not acceptable, replace the T4 by a **second small non-Spot VM** (a small monthly cost that I did not price: check the console), and keep the T4 and
-the RTX 2070 for what they are good at.
+| | Tolerates | Evidence |
+|---|---|---|
+| Controller vote (3 voters) | **1** voter down | with voter 3 and broker 5 down, 10 of 10 writes acknowledged |
+| Data replicas (5 replicas, min in-sync 3) | **2** replicas down | same run; with a third replica down the write was **refused** (30 s timeout, 0 acknowledged); back up: 10 of 10 |
+| Controller vote lost (only voter 1 left, 3 replicas up) | none: writes refused here | observed; also a broker cannot *start* while the vote is lost (timeout when restarting node 5) |
+| After everything returned | 40 acknowledged, 40 read back, none lost, none duplicated, order kept | |
+
+So the honest claim is: **any two machines may fail as long as at least two of the three voters stay up; losing two voters stops the bus.** Topics at replication 3 / min in-sync 2 (the default of the three-node
+proof) tolerate only one replica down, whatever the node count, so provision at `--replication 5 --min-isr 3` to get the two-failure behaviour for data.
 
 ## 3. Network: a private overlay, nothing public
 

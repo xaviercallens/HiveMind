@@ -839,13 +839,19 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
         <select id="modelSelect">
           <option value="hivemind/auto">hivemind/auto (Smart Intent &amp; Market Liquidity Routing)</option>
           <option value="hivemind/coder">hivemind/coder (7B &bull; Everyday Python &amp; Game Code)</option>
+          <option value="hivemind/qwen35-core">hivemind/qwen35-core (8B &bull; Qwen 3.5 Hybrid Reasoning &amp; Polyglot Core)</option>
+          <option value="hivemind/gemma-core">hivemind/gemma-core (4B &bull; Google Gemma 3 Multilingual &amp; Multimodal Core)</option>
+          <option value="hivemind/mistral-core">hivemind/mistral-core (7B &bull; Mistral v0.3 European Bilingual FR/EN Core)</option>
+          <option value="hivemind/moe-qwen35-bee">hivemind/moe-qwen35-bee (20B MoE / 3.0B Active &bull; Polyglot-Singularity MoE Bee)</option>
+          <option value="hivemind/bee-ruche-moe">hivemind/bee-ruche-moe (20B MoE / 2.4B Active &bull; La Ruche 8-Expert Sparse MoE Bee)</option>
           <option value="hivemind/bee-rusty-sundials">hivemind/bee-rusty-sundials (7B &bull; Rusty-SUNDIALS Numeric ODE/PDE Rescue)</option>
-          <option value="hivemind/bee-stars">hivemind/bee-stars (4B &bull; Astrophysics &amp; Symplectic N-Body)</option>
+          <option value="hivemind/bee-stars">hivemind/bee-stars (7B &bull; Astrophysics &amp; Symplectic N-Body QLoRA Bee)</option>
+          <option value="hivemind/bee-lean-prover">hivemind/bee-lean-prover (8B &bull; Goedel-Prover-V2 &amp; DeepSeek-Prover-V2 Lean 4 Bee)</option>
           <option value="hivemind/crowd-v1">hivemind/crowd-v1 (1B &bull; CrowdGPT Vxtzq/Crowd-v1 Generalist Trunk &bull; Pre-Wired Partner)</option>
           <option value="hivemind/coder-lite">hivemind/coder-lite (3B &bull; Ultra-Fast Edits)</option>
-          <option value="hivemind/coder-plus">hivemind/coder-plus (14B &bull; Multi-File &amp; Tests)</option>
-          <option value="hivemind/moe-general">hivemind/moe-general (20B MoE &bull; Reasoning)</option>
-          <option value="hivemind/moe-coder">hivemind/moe-coder (30B MoE &bull; Frontier Coding)</option>
+          <option value="hivemind/coder-plus">hivemind/coder-plus (14B &bull; Multi-File &amp; DeepSeek-R1 Reasoning)</option>
+          <option value="hivemind/moe-general">hivemind/moe-general (20B MoE / 3.6B Active &bull; General Reasoning)</option>
+          <option value="hivemind/moe-coder">hivemind/moe-coder (30B MoE / 3.3B Active &bull; Frontier Coding)</option>
         </select>
 
         <label>Quick Prompt Presets</label>

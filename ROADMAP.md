@@ -441,6 +441,26 @@ Owner's brief (2026-10-28): improve the HiveMind core with AMCP Kafka integratio
 
 The first real dream-phase night additionally needs a real episode ledger, a calibrated VRAM measurement on the target card, and the owner's decision on stopping T4 serving at night.
 
+## 🧠 3.19 Season 22 (`Wave 20` — "Operation Light-Memory") — retrieval for the Bees with a low-storage vector index (**proposal**, 2026-10-28)
+
+**Status: proposed. Nothing is implemented, no dependency is added and nothing has been measured on HiveMind hardware.** Evidence, caveats and task specifications: [`docs/S22_LIGHT_MEMORY.md`](docs/S22_LIGHT_MEMORY.md).
+
+**Why now.** The roadmap has no retrieval layer: the Bees answer from weights and the prompt. LEANN (*Wang, Li, Liu, Wu et al.*, UC Berkeley / CUHK / AWS / UC Davis, [`arXiv:2506.08276`](https://arxiv.org/abs/2506.08276v2), MLSys 2026, MIT-licensed code) reports a vector index for resource-limited devices that **stores the pruned graph and a compressed table and recomputes embeddings only for the most promising candidates at query time**. On a 76 GB text corpus the paper reports a **4 GB** index against **188 GB** for HNSW at the same downstream accuracy (25.5%), about **10% end-to-end latency overhead** with answer generation included, and up to **50x** smaller indexes overall. Those numbers come from an RTX 4090 workstation and a large server.
+
+**What is not known, and is the point of the season.** There is no build time, no insert latency and no CPU-only or small-GPU figure in the sources. Standalone search is slower than HNSW (2.48 s against 0.05 s on NQ), roughly three quarters of the latency is the embedding model running at query time, and on a producer or a gamer's PC that is the same GPU that serves chat or runs a game. The storage saving may therefore be paid for in the resource HiveMind has least of. We have not read the MarktechPost write-up of the paper (the site refused the fetch); every figure here is from the paper and its README.
+
+| Task | Problem | Deliverable | Gate |
+| :-- | :-- | :-- | :-- |
+| `HM-S22-01` | every published figure is from a 4090 or a server | pre-registered benchmark of LEANN against exact search and HNSW on T4, RTX 2070 and CPU-only: size, build time, recall@3, latency p50/p95, recompute share, GPU memory | scientific lead pre-registers; a refuted prediction is reported as refuted |
+| `HM-S22-02` | recompute competes with inference and games for one GPU | retrieval that runs on CPU or only when the governor allows the GPU; measured effect on chat latency and idle-yield time | no regression of the governor's yield time |
+| `HM-S22-03` | no way to ship or verify a retrieval corpus | signed, content-hashed Bee knowledge packs through the standard download channel, with the S21 dataset licence gate | a tampered pack is rejected; licence gate passes |
+| `HM-S22-04` | the value of retrieval for our Bees is unknown | A/B on a Bee domain: no retrieval versus LEANN versus exact retrieval, at least 3 seeds | adopt only if the lift interval excludes zero at equal latency; otherwise the season stops after `-01` |
+| `HM-S22-05` | contributors and coding agents cannot search the project semantically | local reproducible index of docs and issues with an editor/MCP entry; retrieved text stays untrusted data | secret scan clean |
+| `HM-S22-06` | an index is derived from the content and may leak it | threat model; test that shipped packs contain no user data | owner review |
+| `HM-S22-07` | two repositories claim to be upstream; the paper is marked "under review" | pin a commit and licence; optional extra only | owner decision |
+
+**Decisions for the owner:** whether retrieval is wanted before the current season's work lands (`-01` is cheap and decides the rest); which repository to track; the first Bee corpus; whether query-time recompute may ever use a gamer's or producer's GPU.
+
 ## 🎮 4. Opt-In Community GPU Testing Program (If Interested & Possible)
 
 If you have a consumer GPU (**NVIDIA GeForce RTX 20/30/40/50-series 6 GB–24 GB**, **AMD Radeon RX 6000/7000 via ROCm**, or **Apple Silicon M1/M2/M3/M4 via MPS**) and are interested in testing how your hardware performs on the HiveMind Sparse MoE + `EF21-DiLoCo` + `ZK-OPoI v4` stack, we provide a safe, opt-in, `< 1.5 GB` peak-VRAM benchmark suite:

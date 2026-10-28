@@ -259,10 +259,13 @@ class KafkaSettings:
     sasl_username: str | None = None
     sasl_password: str | None = field(default=None, repr=False)
     ssl_ca_location: str | None = None
+    auto_offset_reset: str = "earliest"  # where a consumer group with no committed offset starts; "latest" = listen from now
 
     def __post_init__(self) -> None:
         if not self.bootstrap.strip():
             raise KafkaConfigError("HIVEMIND_KAFKA_BOOTSTRAP is empty")
+        if self.auto_offset_reset not in ("earliest", "latest"):
+            raise KafkaConfigError(f"auto_offset_reset must be 'earliest' or 'latest', not {self.auto_offset_reset!r}")
         if self.security_protocol not in _SECURITY_PROTOCOLS:
             raise KafkaConfigError(f"unsupported security protocol {self.security_protocol!r}")
         uses_sasl = self.security_protocol.startswith("SASL_")
@@ -295,6 +298,7 @@ class KafkaSettings:
             sasl_username=username,
             sasl_password=src.get("HIVEMIND_KAFKA_SASL_PASSWORD") or None,
             ssl_ca_location=src.get("HIVEMIND_KAFKA_SSL_CA_LOCATION") or None,
+            auto_offset_reset=(src.get("HIVEMIND_KAFKA_AUTO_OFFSET_RESET") or "earliest").lower(),
         )
 
     def _common_config(self) -> dict[str, Any]:
@@ -331,7 +335,7 @@ class KafkaSettings:
                 "group.id": self.group_id,
                 "enable.auto.commit": False,
                 "enable.auto.offset.store": False,
-                "auto.offset.reset": "earliest",
+                "auto.offset.reset": self.auto_offset_reset,
                 "isolation.level": "read_committed",
             }
         )

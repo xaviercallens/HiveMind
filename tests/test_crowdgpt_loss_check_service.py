@@ -89,6 +89,47 @@ def test_forged_and_misdirected_receipts_never_count(tmp_path: Path, data) -> No
     assert c.handle_post_receipt(r.to_json())[1]["decision"]["accepted"]
 
 
+def test_authenticate_before_loader_and_no_nan_in_json(tmp_path: Path, data) -> None:
+    from fastapi.responses import JSONResponse
+
+    base, cand, held = data
+    load_calls = [0]
+
+    def counting_loader(job: LossCheckJob):
+        load_calls[0] += 1
+        return base, cand, held
+
+    c = coordinator(tmp_path, data, loader=counting_loader)
+    job = open_job(c, data)
+    honest = evaluate(job, data)
+
+    # 1. Forged signature and unknown evaluator are rejected BEFORE touching the loader
+    forged = lc._replace(honest, signature_hex="0" * 64)
+    st_forged, out_forged = c.handle_post_receipt(forged.to_json())
+    assert st_forged == 200 and out_forged["recorded"] is False
+    assert out_forged["verdict"]["reason"] == "REJECTED_BAD_SIGNATURE"
+    assert load_calls[0] == 0
+
+    unknown_eval = lc._replace(honest, evaluator_id="unknown-node").signed(b"wrong-key")
+    st_unk, out_unk = c.handle_post_receipt(unknown_eval.to_json())
+    assert st_unk == 200 and out_unk["recorded"] is False
+    assert out_unk["verdict"]["reason"] == "REJECTED_UNKNOWN_EVALUATOR"
+    assert load_calls[0] == 0
+
+    # 2. Signed receipt with wrong weights goes through verify_receipt and returns null (None) instead of NaN
+    wrong_weights = lc._replace(honest, base_sha256="f" * 64).signed(KEYS["t4"])
+    st_wrong, out_wrong = c.handle_post_receipt(wrong_weights.to_json())
+    assert st_wrong == 200 and out_wrong["recorded"] is False
+    assert out_wrong["verdict"]["reason"] == "REJECTED_WRONG_WEIGHTS"
+    assert out_wrong["verdict"]["loss_before"] is None
+    assert out_wrong["verdict"]["loss_after"] is None
+    assert out_wrong["verdict"]["delta_loss"] is None
+    assert load_calls[0] == 1
+    # Strict JSON encoding and Starlette/FastAPI JSONResponse must succeed without ValueError
+    assert json.dumps(out_wrong, allow_nan=False)
+    assert JSONResponse(out_wrong, status_code=st_wrong).status_code == 200
+
+
 def test_two_evaluators_required_must_agree(tmp_path: Path, data) -> None:
     c = coordinator(tmp_path, data, required_receipts=2)
     job = open_job(c, data)

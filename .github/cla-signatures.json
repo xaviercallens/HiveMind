@@ -1,6 +1,6 @@
 {
   "schema": "hivemind.cla_signatures.v1",
-  "cla_document": ".github/CLA.md",
+  "cla_document": "CLA.md",
   "required_phrase": "I have read the CLA Document and I hereby sign the CLA",
   "signed_contributors": [
     {

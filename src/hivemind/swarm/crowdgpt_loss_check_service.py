@@ -16,6 +16,7 @@ State is one JSON file (atomic rename), so a restart keeps open jobs and decisio
 from __future__ import annotations
 
 import json
+import math
 import os
 import secrets
 import tempfile
@@ -65,6 +66,11 @@ class _State:
     jobs: dict[str, dict] = field(default_factory=dict)
     receipts: dict[str, list[dict]] = field(default_factory=dict)  # job_id -> verified receipts (wire form + verdict)
     decisions: dict[str, dict] = field(default_factory=dict)
+
+
+def _finite_or_none(x: float) -> float | None:
+    """Early rejections carry NaN losses, which strict JSON encoders (e.g. FastAPI's JSONResponse) refuse."""
+    return x if isinstance(x, (int, float)) and math.isfinite(x) else None
 
 
 # (base, candidate, heldout) for a job; the backend has these in memory or on disk, since it built the candidate itself
@@ -129,12 +135,13 @@ class LossCheckCoordinator:
         if evaluator_id not in self.keys:
             return None
         now = self.clock()
-        for jid, d in sorted(self.state.jobs.items(), key=lambda kv: kv[1]["created_at"]):
-            if jid in self.state.decisions or d["expires_at"] < now:
-                continue
-            if any(r["receipt"]["evaluator_id"] == evaluator_id for r in self.state.receipts.get(jid, [])):
-                continue
-            return LossCheckJob.from_wire(d)
+        with self._lock:  # submit() and open_job() mutate these dicts from other threads
+            for jid, d in sorted(self.state.jobs.items(), key=lambda kv: kv[1]["created_at"]):
+                if jid in self.state.decisions or d["expires_at"] < now:
+                    continue
+                if any(r["receipt"]["evaluator_id"] == evaluator_id for r in self.state.receipts.get(jid, [])):
+                    continue
+                return LossCheckJob.from_wire(d)
         return None
 
     def submit(self, receipt_json: str) -> tuple[int, dict]:
@@ -143,6 +150,12 @@ class LossCheckCoordinator:
             r = lc.LossCheckReceipt.from_json(receipt_json)
         except (ValueError, TypeError, KeyError) as e:
             return 400, {"error": f"malformed receipt: {e}"}
+        # Authenticate before anything that costs memory or CPU: the evaluator id is not secret and
+        # GET /job hands out the job parameters, so an unsigned receipt must not reach the loader.
+        key = self.keys.get(r.evaluator_id)
+        if key is None or not r.verify_signature(key):
+            reason = "REJECTED_UNKNOWN_EVALUATOR" if key is None else "REJECTED_BAD_SIGNATURE"
+            return 200, {"recorded": False, "verdict": {"accepted": False, "reason": reason}}
         with self._lock:
             jd = self.state.jobs.get(r.round_id)
             if jd is None:
@@ -161,8 +174,8 @@ class LossCheckCoordinator:
                                   expected_candidate_sha256=job.candidate_sha256, heldout=held,
                                   recompute=lc.cpu_recompute_fn(self.model_factory, base, cand, held, job.window), k=self.k, tol=self.tol,
                                   max_regression_tolerance=self.max_regression, min_windows=self.min_windows)
-            verdict = {"accepted": v.accepted, "reason": v.reason, "loss_before": v.loss_before, "loss_after": v.loss_after,
-                       "delta_loss": v.delta_loss, "checked": list(v.checked)}
+            verdict = {"accepted": v.accepted, "reason": v.reason, "loss_before": _finite_or_none(v.loss_before),
+                       "loss_after": _finite_or_none(v.loss_after), "delta_loss": _finite_or_none(v.delta_loss), "checked": list(v.checked)}
             if v.reason.startswith("REJECTED"):
                 # a receipt that fails verification never counts; a held candidate (honest numbers, loss went up) does count
                 return 200, {"recorded": False, "verdict": verdict}

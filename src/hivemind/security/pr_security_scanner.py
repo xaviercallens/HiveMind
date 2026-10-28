@@ -233,6 +233,9 @@ FORBIDDEN_FILE_EXTENSIONS: set[str] = {
 
 # 7. Protected Governance & CI Files requiring Repository Owner approval
 PROTECTED_GOVERNANCE_PATHS: set[str] = {
+    "CLA.md",
+    ".github/CLA.md",
+    ".github/cla-signatures.json",
     "LEGAL_DISCLAIMER_AND_COMPUTE_RECIPROCITY.md",
     "SECURITY.md",
     "GOVERNANCE.md",
@@ -771,6 +774,9 @@ class PRSecurityScanner:
                 "tests/test_pr_security_scanner.py",
                 "tests/test_owner_order_guardrail.py",
                 "tests/test_swarm_runtime_hardening.py",
+                "tests/test_agpl3_ip_protection.py",
+                "CLA.md",
+                ".github/CLA.md",
                 "SECURITY.md",
                 "LEGAL_DISCLAIMER_AND_COMPUTE_RECIPROCITY.md",
             }

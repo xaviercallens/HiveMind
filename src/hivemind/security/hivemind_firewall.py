@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """HiveMindFirewall: command-and-control with a chain of command, a deterministic state machine,
 prompt-injection quarantine and a fail-closed sandbox (`hivemind.security.hivemind_firewall`).
 

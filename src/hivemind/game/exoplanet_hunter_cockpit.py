@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Star Trek Curved Bridge Console & 5-Language Space Game (`exoplanet_hunter_cockpit.py` v4.0).
 
 Upgraded v4.0 Main UI & Astrophysical Simulator inspired by:

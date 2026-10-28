@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Fat Steam Local Client Builder & AAA Full-Canvas Star Trek Bridge Renderer (v4.5 Edition).
 
 Builds a standalone professional Steam game package containing:

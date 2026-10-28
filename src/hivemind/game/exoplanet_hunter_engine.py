@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """HiveMind: Chasseur d'Exoplanètes // Astro-Bee MoE 3D Discovery Game Engine.
 
 Combines:

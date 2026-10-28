@@ -142,10 +142,28 @@ def cmd_benchmark_vram(profile_name: str) -> int:
     return 0
 
 
-def cmd_serve_coordinator(host: str, port: int) -> int:
-    """Start the FastAPI Modified BOINC Coordinator server."""
+def cmd_serve_coordinator(host: str, port: int, public_url: str | None = None, insecure_dev_identities: bool = False) -> int:
+    """Start the FastAPI Modified BOINC Coordinator server.
+
+    Reachable by others (``host`` not loopback) means nodes must prove their SteamID64 by signing in with Steam, which needs ``--public-url`` (the https URL
+    Steam sends the browser back to). Without it a non-loopback bind is refused: the request body's ``steam_id64`` would otherwise be taken on trust.
+    """
+    import sys
+
     import uvicorn
     from hivemind.boinc.coordinator_api import BOINCCoordinatorService, create_coordinator_fastapi_app
+    from hivemind.client.steam_identity import SteamIdentityGate
+
+    identity = None
+    if public_url:
+        identity = SteamIdentityGate(return_to=public_url.rstrip("/") + "/identity/steam/callback")
+    elif host not in ("127.0.0.1", "localhost", "::1") and not insecure_dev_identities:
+        print(
+            f"refusing to listen on {host}: nodes' SteamID64 would be unverified. Give --public-url https://... to require Sign in with Steam, "
+            "or --insecure-dev-identities if this really is a throwaway test network.",
+            file=sys.stderr,
+        )
+        return 2
 
     cfg = HiveMindConfig.from_yaml()
     base_model, base_sha, _ = build_local_qwen2_backbone(
@@ -167,7 +185,7 @@ def cmd_serve_coordinator(host: str, port: int) -> int:
         base_model_sha256=base_sha,
         vocab_size=2048,
     )
-    app = create_coordinator_fastapi_app(coord)
+    app = create_coordinator_fastapi_app(coord, identity=identity)
     uvicorn.run(app, host=host, port=port)
     return 0
 
@@ -193,6 +211,8 @@ def main(argv: list[str] | None = None) -> int:
     p_serve = sub.add_parser("serve-coordinator", help="Launch Modified BOINC Coordinator FastAPI Server")
     p_serve.add_argument("--host", default="127.0.0.1")
     p_serve.add_argument("--port", type=int, default=8080)
+    p_serve.add_argument("--public-url", default=None, help="https URL of this coordinator; turns on Sign in with Steam (required for non-loopback --host)")
+    p_serve.add_argument("--insecure-dev-identities", action="store_true", help="allow a non-loopback --host without identity verification (throwaway networks only)")
 
     p_poc = sub.add_parser("run-poc", help="Run real Hugging Face Qwen2.5-0.5B PoC on local RTX 2070")
     p_poc.add_argument("--model-id", default="Qwen/Qwen2.5-0.5B", help="Hugging Face model ID")
@@ -368,7 +388,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "benchmark-vram":
         return cmd_benchmark_vram(profile_name=args.profile)
     if args.command == "serve-coordinator":
-        return cmd_serve_coordinator(host=args.host, port=args.port)
+        return cmd_serve_coordinator(host=args.host, port=args.port, public_url=args.public_url, insecure_dev_identities=args.insecure_dev_identities)
     if args.command == "run-poc":
         from hivemind.cli.poc_rtx2070 import run_huggingface_rtx2070_poc
 

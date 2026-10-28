@@ -11,6 +11,8 @@ Provides:
 
 from __future__ import annotations
 
+import hashlib
+import logging
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -18,8 +20,11 @@ from typing import Any
 
 import torch
 import torch.nn as nn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
+
+from hivemind.client.steam_identity import IdentityError, SteamIdentityGate
 
 from hivemind.boinc.validator import DeterministicSpotCheckValidator, SpotCheckVerdict
 from hivemind.boinc.workunit import (
@@ -288,13 +293,41 @@ class BOINCCoordinatorService:
         return res
 
 
-def create_coordinator_fastapi_app(coordinator: BOINCCoordinatorService) -> FastAPI:
-    """Create the FastAPI application exposing the Modified BOINC Server endpoints."""
+LOGGER = logging.getLogger(__name__)
+
+
+def _anonymous_id(steam_id64: str) -> str:
+    """Stable, non-reversible label for a node in public listings (the raw SteamID64 stays inside the coordinator)."""
+    return hashlib.sha256(b"hivemind-node:" + steam_id64.encode()).hexdigest()[:16]
+
+
+def create_coordinator_fastapi_app(coordinator: BOINCCoordinatorService, identity: SteamIdentityGate | None = None) -> FastAPI:
+    """Create the FastAPI application exposing the Modified BOINC Server endpoints.
+
+    ``identity=None`` is development/simulation mode: ``steam_id64`` in the request body is taken on trust (tests, demos and local runs use synthetic ids).
+    With a :class:`SteamIdentityGate` the app is meant to be reachable by others: a node must sign in with Steam (``/identity/steam/login``), and
+    ``/workunit/request`` then requires the resulting token for the SAME SteamID64; Limited and VAC-banned accounts never get a token.
+    """
     app = FastAPI(
         title="Project HiveMind — Modified BOINC Coordinator API",
         version="0.1.0",
         description="Workunit scheduling, signed Parquet sharding, Multi-Krum aggregation, and SteamID64 reputation.",
     )
+    if identity is None:
+        LOGGER.warning("coordinator started WITHOUT Steam identity verification: steam_id64 in requests is trusted (development mode only)")
+    else:
+
+        @app.get("/identity/steam/login")
+        def steam_login() -> RedirectResponse:
+            return RedirectResponse(identity.login_redirect(), status_code=302)
+
+        @app.get("/identity/steam/callback")
+        def steam_callback(request: Request) -> dict[str, Any]:
+            try:
+                steam_id64, token = identity.complete_login(dict(request.query_params))
+            except IdentityError as exc:
+                raise HTTPException(status_code=403, detail=str(exc)) from exc
+            return {"steam_id64": steam_id64, "identity_token": token, "expires_in_s": identity.tokens.ttl_s}
 
     @app.get("/status")
     def get_status() -> dict[str, Any]:
@@ -315,7 +348,14 @@ def create_coordinator_fastapi_app(coordinator: BOINCCoordinatorService) -> Fast
         }
 
     @app.post("/workunit/request")
-    def request_workunit(req: WorkunitRequestPayload) -> dict[str, Any]:
+    def request_workunit(req: WorkunitRequestPayload, request: Request) -> dict[str, Any]:
+        if identity is not None:
+            header = request.headers.get("authorization", "")
+            token = header[7:].strip() if header.lower().startswith("bearer ") else None
+            try:
+                identity.authorize(token, req.steam_id64)
+            except IdentityError as exc:
+                raise HTTPException(status_code=401 if not token else 403, detail=str(exc)) from exc
         try:
             wu, _ = coordinator.assign_workunit(
                 worker_id=req.worker_id,
@@ -329,8 +369,8 @@ def create_coordinator_fastapi_app(coordinator: BOINCCoordinatorService) -> Fast
     @app.get("/reputation")
     def get_reputation_ledger() -> dict[str, Any]:
         return {
-            sid: {
-                "worker_id": r.worker_id,
+            (sid if identity is None else _anonymous_id(sid)): {
+                "worker_id": r.worker_id if identity is None else _anonymous_id(r.worker_id),
                 "validated_workunits": r.validated_workunits,
                 "rejected_workunits": r.rejected_workunits,
                 "contributed_tflops": r.contributed_tflops,

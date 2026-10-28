@@ -14,7 +14,10 @@ from __future__ import annotations
 import ctypes
 import hashlib
 import hmac
+import os
 import platform
+import re
+import secrets
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,11 +25,24 @@ from typing import Any
 
 STEAMWORKS_APP_ID = 3133700  # Project HiveMind: Neural Breach Free Steam Edition AppID
 MIN_STEAM_SPEND_USD = 5.0
+_PROCESS_SECRET = secrets.token_bytes(32)
+
+
+def _default_signing_secret() -> bytes:
+    """``HIVEMIND_STEAMWORKS_SECRET`` (hex, at least 32 bytes) if set, else a random secret shared by every bridge in this process.
+
+    In-process simulations keep working (a ticket issued by one bridge verifies on another in the same process); tickets can no longer be forged by anyone
+    who has read the source, and they do not verify across processes unless the operator configures the same secret on both sides.
+    """
+    raw = os.environ.get("HIVEMIND_STEAMWORKS_SECRET", "")
+    if re.fullmatch(r"[0-9a-fA-F]{64,}", raw):
+        return bytes.fromhex(raw)
+    return _PROCESS_SECRET
 
 
 @dataclass
 class SteamAuthSessionTicket:
-    """Represents a signed ISteamUser::GetAuthSessionTicket token."""
+    """A SIMULATED ISteamUser::GetAuthSessionTicket token. ``account_spend_usd`` is whatever the issuer wrote: it is not evidence about a real Steam account."""
 
     steam_id64: str
     app_id: int
@@ -117,10 +133,12 @@ class SteamworksSDKBridge:
 
     def __init__(
         self,
-        signing_secret: bytes = b"HiveMind-Steamworks-Auth-Key",
+        signing_secret: bytes | None = None,
         sdk_search_dir: Path | None = None,
     ) -> None:
-        self.signing_secret = signing_secret
+        # The receipts and tickets here are a LOCAL SIMULATION (no Steam call is made when the native SDK is absent), not proof of identity: real identity
+        # comes from hivemind.client.steam_identity. The old default secret was a constant published in this repository, so anyone could forge them.
+        self.signing_secret = signing_secret if signing_secret is not None else _default_signing_secret()
         self.leaderboard: dict[str, SteamUserTelemetry] = {}
         self.sybil_rejection_log: list[dict[str, str]] = []
         self.rich_presence_store: dict[str, SteamRichPresenceState] = {}

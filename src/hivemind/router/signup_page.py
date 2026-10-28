@@ -82,13 +82,15 @@ def render_signup_page(client_id: str | None, nonce: str) -> str:
             f'<title>Join HiveMind</title><style nonce="{nonce}">{_CSS}</style></head><body><main>')
     if client_id is None:
         return head + ('<h1>Join HiveMind</h1><div class="card"><p>Sign in with Google is not enabled on this gateway yet.</p>'
+                       '<p><a href="/join">How to join</a> · <a href="/rejoindre">Comment participer</a></p>'
                        '<p class="mut">You can still register with a handle through the API. See the getting-started guide.</p></div></main></body></html>')
     if not CLIENT_ID_RE.match(client_id):
         raise ValueError("invalid Google client id")
     script = _JS.replace("%CLIENT_ID%", '"' + client_id + '"')  # the id matches [0-9a-z.-]+, so it cannot break out of the string
     return head + f"""
 <h1>Join HiveMind</h1>
-<p>Use open coding models from your editor, or share your GPU and earn points. HiveMind points have no cash value.</p>
+<p>Use open coding models from your editor, or share your GPU and earn points. HiveMind points have no cash value.
+<a href="/join">How to join</a> · <a href="/rejoindre">Comment participer</a></p>
 <section id="signin" class="card">
   <fieldset><legend>What do you want to do?</legend>
     <label><input type="radio" name="role" value="prosumer" checked> Both: use models and share my GPU</label>

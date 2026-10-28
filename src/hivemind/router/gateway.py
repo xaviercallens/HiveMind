@@ -57,6 +57,7 @@ from hivemind.router.accounts import (
 )
 from hivemind.router.catalog import PREWIRED_PARTNER_MODELS, catalog_payload, normalize_model_alias
 from hivemind.router.google_auth import GoogleAuthError, GoogleIdTokenVerifier
+from hivemind.router.join_page import join_content_security_policy, pick_language, render_join_page
 from hivemind.router.oidc_auth import OidcAuthError, OidcIdTokenVerifier
 from hivemind.router.portal_page import portal_content_security_policy, render_portal_page
 from hivemind.router.signup_page import content_security_policy, render_signup_page
@@ -1365,6 +1366,19 @@ def create_router_app(
         page = render_signup_page(google.client_id if google else None, nonce)
         return HTMLResponse(page, headers={"Content-Security-Policy": content_security_policy(nonce), "Cache-Control": "no-store",
                                            "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})
+
+    @app.api_route("/join", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/rejoindre", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def join_page(request: Request) -> HTMLResponse:
+        """Public, bilingual (FR/EN) 'how to join' page: no account, no script, no personal data."""
+        french_path = request.url.path == "/rejoindre"
+        lang = pick_language(request.query_params.get("lang"), request.headers.get("accept-language"), default="fr" if french_path else "en")
+        nonce = secrets.token_urlsafe(18)
+        page = render_join_page(lang, nonce, tiers=catalog_payload()["tiers"], path="/rejoindre" if french_path else "/join")
+        return HTMLResponse(page, headers={
+            "Content-Security-Policy": join_content_security_policy(nonce), "Cache-Control": "no-store", "Vary": "Accept-Language",
+            "Content-Language": lang, "X-Content-Type-Options": "nosniff", "Referrer-Policy": "strict-origin-when-cross-origin",
+        })
 
     @app.post("/v1/hivemind/register/google")
     def register_google(request: Request, payload: GoogleRegisterRequest) -> JSONResponse:

@@ -198,7 +198,7 @@ on Cloud Run). The mesh is a separate experiment. Bridging the two is planned as
 **Why Kafka?** It is the transport that AMCP's broker uses. It gives topics with fan-out and queues with competing
 consumers, which is what the mesh needs. A single broker is enough for the current scope.
 
-**How many bees can it run?** The pre-registered test (MESH-SCALE-1, roadmap item `MESH-06`) ran 100, 300 and 1000 simulated
+**How many bees can it run?** The pre-registered test (MESH-SCALE-1, roadmap item `HM-S1-06`) ran 100, 300 and 1000 simulated
 bees on one VM with one Kafka broker. At 1000 bees, all four acceptance criteria passed: all bees live within 60 s, no lost
 or duplicated task at 200 tasks/s, every task on a killed bee answered after reassignment, and no OutOfMemoryError. The
 figures and the N=100 and N=300 rows are in [`docs/benchmarks/BEE_MESH_SCALE_report.md`](../benchmarks/BEE_MESH_SCALE_report.md).

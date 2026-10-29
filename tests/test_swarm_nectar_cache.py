@@ -7,6 +7,8 @@ import pytest
 from hivemind.swarm.swarm_nectar_cache import (
     MICRO_ROYALTY_HMT,
     TOPIC_FOOD_SOURCES,
+    InMemoryClusterNectarHub,
+    MultiNodeNectarSyncBackend,
     SwarmNectarCache,
     canonical_query_hash,
 )
@@ -129,3 +131,31 @@ def test_nectar_cache_cross_process_file_persistence_and_sla(tmp_path):
     assert hit.access_count == 1
     assert hit.hmt_royalties_earned == MICRO_ROYALTY_HMT
     assert cache_reader.reload_from_disk() == 1
+
+
+def test_multi_node_nectar_sync_backend_under_50ms_and_royalties():
+    """Verify #319 Task 2 MultiNodeNectarSyncBackend shares nectar across independent nodes in < 50 ms."""
+    shared_hub = InMemoryClusterNectarHub()
+    node_a_cache = SwarmNectarCache(sync_backend=MultiNodeNectarSyncBackend(shared_hub))
+    node_b_cache = SwarmNectarCache(sync_backend=MultiNodeNectarSyncBackend(shared_hub))
+
+    node_a_cache.put(
+        tool_name="web_search",
+        query="arXiv:2604.21428 LayerStoRm Two-Zone PCIe",
+        content={"arxiv_id": "2604.21428", "vram_ceiling_gb": 8.0},
+        discovered_by_bee="hivemind/bee-scout-eu-01",
+        nectar_richness=0.95,
+    )
+
+    hit_b = node_b_cache.get(
+        "web_search",
+        "arxiv:2604.21428 layerstorm two-zone pcie",
+        requesting_bee="hivemind/bee-employed-us-02",
+    )
+    assert hit_b is not None
+    assert hit_b.content["arxiv_id"] == "2604.21428"
+    assert hit_b.access_count == 1
+    assert hit_b.hmt_royalties_earned == MICRO_ROYALTY_HMT
+    stats_b = node_b_cache.stats()
+    assert stats_b["sync_backend_enabled"] is True
+    assert stats_b["last_lookup_latency_ms"] < 50.0

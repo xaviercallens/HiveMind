@@ -109,6 +109,70 @@ class FileNectarPersistence:
         return loaded
 
 
+class InMemoryClusterNectarHub:
+    """Redis/Memcached-compatible in-memory multi-node KV bus for `< 50 ms` cross-bee sync (`#319` Task 2)."""
+
+    def __init__(self) -> None:
+        self._kv: dict[str, tuple[str, float]] = {}
+
+    def get(self, key: str) -> str | None:
+        item = self._kv.get(key)
+        if item is None:
+            return None
+        payload, expires_at = item
+        if time.time() > expires_at:
+            self._kv.pop(key, None)
+            return None
+        return payload
+
+    def setex(self, key: str, ttl_seconds: int | float, value: str) -> None:
+        self._kv[key] = (str(value), time.time() + float(ttl_seconds))
+
+    def delete(self, key: str) -> None:
+        self._kv.pop(key, None)
+
+
+class MultiNodeNectarSyncBackend:
+    """Distributed KV connector (Redis / Memcached / Cluster Hub) for `SwarmNectarCache` (`HM-S23` / `#319` Task 2)."""
+
+    def __init__(
+        self,
+        kv_client: Any | None = None,
+        *,
+        namespace: str = "hivemind:nectar:v1",
+    ) -> None:
+        self.kv_client = kv_client if kv_client is not None else InMemoryClusterNectarHub()
+        self.namespace = namespace.strip(":")
+
+    def _key(self, query_hash: str) -> str:
+        return f"{self.namespace}:{query_hash}"
+
+    def put_entry(self, entry: NectarEntry) -> None:
+        remaining_ttl = max(1.0, entry.ttl_s - (time.time() - entry.created_utc))
+        payload = json.dumps(entry.to_dict(), ensure_ascii=False, sort_keys=True)
+        key = self._key(entry.query_hash)
+        if hasattr(self.kv_client, "setex"):
+            self.kv_client.setex(key, remaining_ttl, payload)
+        else:
+            self.kv_client.set(key, payload)
+
+    def get_entry(self, query_hash: str) -> NectarEntry | None:
+        raw = self.kv_client.get(self._key(query_hash))
+        if raw is None:
+            return None
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8")
+        entry = NectarEntry.from_dict(json.loads(raw))
+        if entry.is_expired:
+            self.delete_entry(query_hash)
+            return None
+        return entry
+
+    def delete_entry(self, query_hash: str) -> None:
+        if hasattr(self.kv_client, "delete"):
+            self.kv_client.delete(self._key(query_hash))
+
+
 class SwarmNectarCache:
     """Decentralized Nectar Cache for MoE Agent Mesh over Kafka AMCP."""
 
@@ -116,13 +180,16 @@ class SwarmNectarCache:
         self,
         default_ttl_s: float = DEFAULT_NECTAR_TTL_S,
         persistence_path: str | Path | None = None,
+        sync_backend: MultiNodeNectarSyncBackend | None = None,
     ) -> None:
         self.default_ttl_s = default_ttl_s
         self._persistence = FileNectarPersistence(persistence_path) if persistence_path is not None else None
+        self._sync_backend = sync_backend
         self._cache: dict[str, NectarEntry] = self._persistence.load() if self._persistence is not None else {}
         self._total_queries: int = 0
         self._cache_hits: int = 0
         self._tokens_saved_estimate: int = 0
+        self._last_lookup_latency_ms: float = 0.0
 
     def reload_from_disk(self) -> int:
         """Reload unexpired entries from the persistence backend if configured."""
@@ -160,6 +227,8 @@ class SwarmNectarCache:
             ttl_s=ttl_s if ttl_s is not None else self.default_ttl_s,
         )
         self._cache[q_hash] = entry
+        if self._sync_backend is not None:
+            self._sync_backend.put_entry(entry)
         self.flush_to_disk()
         return entry
 
@@ -170,26 +239,39 @@ class SwarmNectarCache:
         requesting_bee: str = "anonymous",
     ) -> NectarEntry | None:
         """Retrieve cached nectar entry if present and unexpired."""
+        t0 = time.perf_counter()
         self._total_queries += 1
         q_hash = canonical_query_hash(tool_name, query)
         entry = self._cache.get(q_hash)
+        if entry is None and self._sync_backend is not None:
+            remote_entry = self._sync_backend.get_entry(q_hash)
+            if remote_entry is not None:
+                self._cache[q_hash] = remote_entry
+                entry = remote_entry
         if entry is None and self._persistence is not None:
             self.reload_from_disk()
             entry = self._cache.get(q_hash)
 
         if entry is None:
+            self._last_lookup_latency_ms = round((time.perf_counter() - t0) * 1000.0, 4)
             return None
 
         if entry.is_expired:
             del self._cache[q_hash]
+            if self._sync_backend is not None:
+                self._sync_backend.delete_entry(q_hash)
             self.flush_to_disk()
+            self._last_lookup_latency_ms = round((time.perf_counter() - t0) * 1000.0, 4)
             return None
 
         # Cache Hit!
         self._cache_hits += 1
         self._tokens_saved_estimate += 450  # Average tokens per tool generation avoided
         entry.record_access()
+        if self._sync_backend is not None:
+            self._sync_backend.put_entry(entry)
         self.flush_to_disk()
+        self._last_lookup_latency_ms = round((time.perf_counter() - t0) * 1000.0, 4)
         return entry
 
     def build_kafka_food_source_event(self, entry: NectarEntry) -> dict[str, Any]:
@@ -220,4 +302,6 @@ class SwarmNectarCache:
             "hit_rate_pct": hit_rate,
             "tokens_saved_estimate": self._tokens_saved_estimate,
             "total_hmt_royalties_distributed": total_royalties,
+            "last_lookup_latency_ms": self._last_lookup_latency_ms,
+            "sync_backend_enabled": self._sync_backend is not None,
         }

@@ -11,6 +11,7 @@ from hivemind.swarm.abc_moe_agent_mesh import (
     QuorumConsensusVerdict,
     WaggleDanceMessage,
     WaggleDanceScrutinyProtocol,
+    parse_scientific_scout_record,
 )
 from hivemind.swarm.swarm_nectar_cache import SwarmNectarCache
 
@@ -147,13 +148,26 @@ def test_hm_s22_2_domain_parsers_and_s23_s25_nectar_prewarm_integration():
     assert pubmed_res[0]["domain_parser"] == "pubmed"
     assert chembl_res[0]["domain_parser"] == "chembl"
 
+    parsed_arxiv = parse_scientific_scout_record(arxiv_res[0])
+    parsed_pubmed = parse_scientific_scout_record(pubmed_res[0])
+    parsed_chembl = parse_scientific_scout_record(chembl_res[0])
+    assert parsed_arxiv["arxiv_id"] == "2604.21428"
+    assert parsed_arxiv["vram_ceiling_gb"] == 8.0
+    assert parsed_pubmed["pmid"] == "39104821"
+    assert parsed_pubmed["ic50_nm"] == 1.8
+    assert parsed_chembl["chembl_id"] == "CHEMBL5291840"
+    assert parsed_chembl["pchembl_value"] == 8.74
+    assert parsed_chembl["canonical_smiles"].startswith("CC1=C")
+
     orch = AgentMeshOrchestrator(lead_bee_id="hivemind/qwen35-4b", nectar_cache=cache)
     res1 = orch.execute_mesh_workflow(
         task_id="task-chembl-01",
         user_query="ChEMBL SMILES ligand stability",
-        target_schema={"stability": "str"},
+        target_schema={"chembl_id": "str", "pchembl_value": "float", "stability": "str"},
     )
     assert len(res1["layer_1_consensus"]["quorum_verdict"]["prewarm_experts"]) == 8
+    assert res1["layer_2_abc_execution"]["solution"]["data"]["chembl_id"] == "CHEMBL5291840"
+    assert res1["layer_2_abc_execution"]["solution"]["data"]["pchembl_value"] == 8.74
     assert cache.stats()["active_entries"] == 1
 
     # Second workflow on identical query hits the SwarmNectarCache during Scout exploration

@@ -74,12 +74,22 @@ BUNDLE: List[Path] = [
     PROJECT_ROOT / "artifacts" / "nocturnal_20_moe_stress_test_report.json",
     PROJECT_ROOT / "artifacts" / "nocturnal_large_moe_20_campaign_report.json",
     PROJECT_ROOT / "docs" / "ROADMAP_AMCP_AGENT_MESH_KAFKA_EVOLUTION.md",
+    PROJECT_ROOT / "docs" / "VISION_AND_NEXTGEN_SWARM_ROADMAP.md",
+    PROJECT_ROOT / "artifacts" / "nocturnal_reddit_vision_moe_report.json",
+    PROJECT_ROOT / "artifacts" / "exoplanet_astro_vmoe_poc_report.json",
+    PROJECT_ROOT / "artifacts" / "massive_swarm_image_moe_report.json",
 ]
-# v3.8.0: every receipt behind E10b, E11, E11b, E12 (T4), E13, E14, E15 and E16 (preregistrations, amendments, raw and reports); partial files excluded
+# v3.8.0: every receipt behind E10b, E11, E11b, E12 (T4), E13, E14, E15 and E16 (preregistrations, amendments, raw and reports); partial files and superseded E11b/7B raw dumps excluded to respect Zenodo's 100-file-per-record cap
 _T4_PREFIXES = ("E10b_", "E11_", "E11b_", "E12_replay_", "E13_", "E14_", "E15_", "E16_")
+_SUPERSEDED_RAW = {
+    "E11_raw_qwen7b.json",
+    "E11b_raw_gemma4-e4b_fineweb-edu_w1024.json",
+    "E11b_raw_qwen0.5b_fineweb-edu_w1024.json",
+    "E11b_raw_qwen7b_fineweb-edu_w1024.json",
+}
 BUNDLE += sorted(
     p for p in (PROJECT_ROOT / "artifacts" / "experiments").glob("*.json")
-    if p.name.startswith(_T4_PREFIXES) and not p.name.endswith(".partial.json") and p not in BUNDLE
+    if p.name.startswith(_T4_PREFIXES) and not p.name.endswith(".partial.json") and p.name not in _SUPERSEDED_RAW and p not in BUNDLE
     and "callensxavier_gmail_com" not in p.read_text(encoding="utf-8", errors="ignore")  # run logs carrying the machine username stay out of the public record
 )
 CARRIED_PATH = PROJECT_ROOT / "paper" / "zenodo_carried_over_v3.7.1.json"
@@ -136,17 +146,19 @@ def metadata(version: str, doi_note: str) -> Dict[str, Any]:
         "Mixture-of-Experts training with DiLoCo-style outer optimization on 8 GB consumer GPUs, integrating "
         "Decoupled DiLoCo quorum aggregation (Google DeepMind), PA-CGAD staleness gating, FoMoE partial expert "
         "replication, DeMo/SparseLoCo 2-bit compression, MuLoCo inner preconditioning, a looped MoE backbone, "
-        "the biomimetic <b>Bi-Layer Honeybee Agent Mesh (AMCP-Kafka & ABC MoE)</b>, and 141 Lean 4 theorems compiling without sorry.</p>"
-        "<p><b>Version 4.0.0 Highlights:</b><br/>"
-        "1. <i>Bi-Layer Honeybee Agent Mesh:</i> Layer 1 Nesting Scrutiny & Waggle Dance Quorum Sensing on Kafka (CloudEvents 1.0, duration tau_0 * Q, MCL recruitment, partition lease lock) "
-        "and Layer 2 Artificial Bee Colony (ABC) MoE Loop (Employed exploitation, Observer fitness critique with finite abandonment limit L_limit=2, Scout tool calls for Z3/SciPy/Lean 4/Web Search) "
-        "plus the P2P Swarm Nectar Cache (SHA-256 deduplication, 0.005 HMT royalties; 60% reduction in duplicate queries).<br/>"
-        "2. <i>20 Sectoral Hugging Face MoE Adapters:</i> +277.06 TFLOPs of attested compute across 4 hardware tiers (RTX 3090, T4, RTX 4070, RTX 2070), expanding the active fleet to 35 models total "
-        "across 4 Macro-Cluster Super-MoEs with +33.1% mean accuracy gain and 0 VRAM breaches.<br/>"
-        "3. <i>Dynamic Diurnal Engine & Long-Tail Intent Scanner:</i> Timezone-aware scheduling prioritizing rare domain requests via S_d = (1/sqrt(N_d+1)) * Complexity_d * RecencyBonus_d.<br/>"
-        "4. <i>Bring Your Own Bee (BYOB):</i> Formal 4-stage attestation lifecycle illustrated with 3 live exemplars (bee-quantum-simd, bee-reverse-cve, bee-genomics-crispr).<br/>"
-        "5. <i>Live 47-Node WAN Swarm:</i> 5,632.11 BOINC Cobblestones (2.433 PFLOPs), 4,525.0 TFLOPs-h cumulative, 1,427 OpenRouter completions (196.8 ms p50), and 0.0% execution-class-matched false rejection rate.</p>"
-        "<p>The JSON artifacts in this bundle are the sole source of every number in the PDF (provenance lock PROV-01..PROV-82 in paper/autoevolve_peer_review_pipeline.py). Source commit: "
+        "the biomimetic <b>Bi-Layer Honeybee Agent Mesh (AMCP-Kafka &amp; ABC MoE)</b>, multi-division <b>Vision-MoE (V-MoE)</b>, "
+        "the <b>18-Month Research Roadmap for Overcoming Scale and Security Bottlenecks in Decentralized MoE Architectures</b>, "
+        "and 141 Lean 4 theorems compiling without sorry.</p>"
+        "<p><b>Version 4.1.0 Highlights (Multi-Division Vision-MoE &amp; 18-Month ZK-SNARK / Geo-Mesh Research Roadmap):</b><br/>"
+        "1. <i>18-Month, 4-Phase Decentralization Research Roadmap (Seasons 29&ndash;32):</i> Structured methodology to eliminate datacenter dependency across 1,000+ untrusted domestic nodes by fusing "
+        "(i) <b>Top-K (1%) 4-bit/2-bit Quantized Split Learning</b> (&divide;100 bandwidth reduction with EF21 error feedback for 70B&ndash;405B pipeline models across 8&ndash;16 GB nodes), "
+        "(ii) <b>Cryptographic Verifiable Computation via zk-SNARKs</b> (succinct &le;32 KB proofs of honest backpropagation verified in O(1) / &lt;10 ms CPU time, replacing O(N^2 d) Multi-Krum distance matrices and anchoring Proof-of-Useful-Compute tokenomics), and "
+        "(iii) <b>Geo-Cryptographic P2P DHT Mesh Routing</b> (mapping MoE Bees by RTT and reputation into <b>15&ndash;20 node localized sub-swarms</b> with fuzzy consensus, Multi-Bee Debate, and Sovereign Edge Queen Bees).<br/>"
+        "2. <i>Sub-1.5 GB 'La Ruche' Vision-MoE &amp; Culturally-Grounded Reddit-Vision VLM MoE:</i> 972.0&ndash;1,490.0 MiB background VRAM across 4 visual backbones (SigLIP-Base, ViT-Base, DINOv2-B/14, DINOv2-L/14 in 4-bit NF4 with local Muon Newton-Schulz-5 + 8-bit AdamW) and 99.92% BTM Top-2 MoE loss reduction.<br/>"
+        "3. <i>Exoplanet &amp; Astrophysics Vision-MoE PoC (&lt;1.5 GB VRAM):</i> Transforms 1D Kepler/TESS/JWST/DECaLS signals into 2D Morlet CWT scalograms and trains 4 specialized experts within 910.0&ndash;1,410.0 MiB VRAM under Focal Loss (gamma=2.0), achieving 99.95% mean focal loss reduction and 99.97% V-MoE gain.<br/>"
+        "4. <i>Massive 7-Division, 15-Dataset, 42.87M-Sample Swarm Image-MoE Orchestrator:</i> Shards 42,870,000 visual/scientific samples into 8,574 streaming shards across 104 Bees (64 Tier-1 &lt;1.5 GB, 28 Tier-2 8 GB, 12 Tier-3 12&ndash;24 GB), achieving 99.84% upcycled FoMoE Top-2 focal loss gain.<br/>"
+        "5. <i>Version 4.0.0 &amp; 3.9.0 Foundations Retained:</i> Bi-Layer Honeybee Agent Mesh (AMCP-Kafka Quorum Sensing + ABC MoE Loop + Swarm Nectar Cache), 20 nocturnal MoE adapters (+277.06 TFLOPs, 35 models total), and Live 47-Node WAN Swarm validation (5,632.11 Cobblestones / 2.433 PFLOPs, 0.0% execution-class-matched false rejection rate).</p>"
+        "<p>The JSON artifacts in this bundle are the sole source of every number in the PDF (provenance lock PROV-01..PROV-85 in paper/autoevolve_peer_review_pipeline.py). Source commit: "
         + SOURCE_COMMIT + " of the HiveMind repository on GitHub (xaviercallens/HiveMind).</p>"
         f"<p>{doi_note}</p>"
     )
@@ -159,14 +171,15 @@ def metadata(version: str, doi_note: str) -> Dict[str, Any]:
             "creators": [{"name": "Callens, Xavier", "affiliation": "Project HiveMind / AutoevolveAI"}],
             "keywords": [
                 "decentralized training", "DiLoCo", "Decoupled DiLoCo", "mixture-of-experts", "FoMoE",
-                "consumer GPU", "Byzantine fault tolerance", "Lean 4", "agent mesh", "honeybee swarm", "ABC algorithm", "Kafka AMCP",
+                "consumer GPU", "Byzantine fault tolerance", "Lean 4", "agent mesh", "honeybee swarm",
+                "ABC algorithm", "Kafka AMCP", "Vision-MoE", "Split Learning", "zk-SNARK", "Geo-Cryptographic Mesh Routing",
             ],
             "license": "cc-by-4.0",
             "related_identifiers": [
                 {"identifier": "https://github.com/xaviercallens/HiveMind", "relation": "isSupplementTo", "scheme": "url"},
             ],
             "version": version,
-            "notes": "Preprint v4.0.0. Live 47-node WAN swarm and 20-adapter nocturnal MoE campaign telemetry. See Section 10 and Section 11 of the PDF.",
+            "notes": "Preprint v4.1.0. Adds Section 12: Multi-Division Vision-MoE (<1.5 GB La Ruche V-MoE, Exoplanet CWT/Focal-Loss PoC, 42.87M-sample 104-Bee Swarm Orchestrator) and the 18-Month, 4-Phase Research Roadmap (Top-1% Quantized Split Learning, zk-SNARK Verifiable Computation, and Geo-Cryptographic Mesh Routing).",
         }
     }
 
@@ -220,7 +233,7 @@ def main() -> int:
     ap.add_argument("--stage", choices=["draft", "upload", "publish"], required=True)
     ap.add_argument("--deposition-id", type=int, default=None)
     ap.add_argument("--new-version-of", type=int, default=None, help="existing record id to create a new version of")
-    ap.add_argument("--version", default="4.0.0")
+    ap.add_argument("--version", default="4.1.0")
     args = ap.parse_args()
     token = load_token()
 

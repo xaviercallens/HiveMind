@@ -1,23 +1,23 @@
 {
   "stage": "published",
-  "deposition_id": 23756909,
-  "prereserved_doi": "10.5281/zenodo.23756909",
+  "deposition_id": 23776302,
+  "prereserved_doi": "10.5281/zenodo.23776302",
   "state": "done",
-  "html": "https://zenodo.org/record/23756909",
+  "html": "https://zenodo.org/record/23776302",
   "files": [
     {
       "filename": "hivemind_foundation_article.pdf",
-      "md5": "cbfc305ed2b80d28cefd3bc2f460e60c",
+      "md5": "d81a32c03fcdfed113e765b6f91eb1c0",
       "status": "already_present"
     },
     {
       "filename": "hivemind_foundation_article.tex",
-      "md5": "0316b466f045eb842bc39068e2f495e1",
+      "md5": "5d7d0b52a5aabdfd201b30ae7c35b970",
       "status": "already_present"
     },
     {
       "filename": "PEER_REVIEW_REPORT.json",
-      "md5": "7f79822f07e36a72f9db68370fa85d07",
+      "md5": "e355fbd5d438ca24dd4e3745f528d94e",
       "status": "already_present"
     },
     {
@@ -32,7 +32,7 @@
     },
     {
       "filename": "HiveMindSpec.lean",
-      "md5": "751908ee484a937e11e496166a7018a3",
+      "md5": "029f70686ea163e409f9a3795c7813cb",
       "status": "already_present"
     },
     {
@@ -112,7 +112,7 @@
     },
     {
       "filename": "ROADMAP.md",
-      "md5": "5de50cedcda20d9f95a9f8ebcf67d6b3",
+      "md5": "15bf9e29a71c075b2d39dae925054805",
       "status": "already_present"
     },
     {
@@ -183,16 +183,36 @@
     {
       "filename": "nocturnal_20_moe_stress_test_report.json",
       "md5": "6bc15d8ba8753c4af3510c9626f1449f",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "nocturnal_large_moe_20_campaign_report.json",
       "md5": "96497fb61443f62dae2667a2e6d06ac9",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "ROADMAP_AMCP_AGENT_MESH_KAFKA_EVOLUTION.md",
-      "md5": "fc04ca05a380e34eac779a886cfa37d2",
+      "md5": "017bf23fda8e702e689b0f3c5f2f06d9",
+      "status": "already_present"
+    },
+    {
+      "filename": "VISION_AND_NEXTGEN_SWARM_ROADMAP.md",
+      "md5": "49041b552896cf402b0c9f063ad5d79d",
+      "status": "uploaded"
+    },
+    {
+      "filename": "nocturnal_reddit_vision_moe_report.json",
+      "md5": "072ec679048d3cbcc2417fe2c68cf90a",
+      "status": "uploaded"
+    },
+    {
+      "filename": "exoplanet_astro_vmoe_poc_report.json",
+      "md5": "2b8e57cf6d8abd40e76a889b7930e52d",
+      "status": "uploaded"
+    },
+    {
+      "filename": "massive_swarm_image_moe_report.json",
+      "md5": "a6cc76e5a81be82f6f1129ae6c783b83",
       "status": "uploaded"
     },
     {
@@ -251,11 +271,6 @@
       "status": "already_present"
     },
     {
-      "filename": "E11_raw_qwen7b.json",
-      "md5": "a08da8dbcd3ad0e854522f6bb887d821",
-      "status": "already_present"
-    },
-    {
       "filename": "E11b_kv_lattice_sweep_prereg.json",
       "md5": "32950b86ad42e9c24a10ef01d5f7cf38",
       "status": "already_present"
@@ -263,21 +278,6 @@
     {
       "filename": "E11b_kv_lattice_sweep_prereg_amendment_1.json",
       "md5": "7c1cbf410a33afa9e700a6a31a841990",
-      "status": "already_present"
-    },
-    {
-      "filename": "E11b_raw_gemma4-e4b_fineweb-edu_w1024.json",
-      "md5": "f09708778d97b5625de427ed1d0381c9",
-      "status": "already_present"
-    },
-    {
-      "filename": "E11b_raw_qwen0.5b_fineweb-edu_w1024.json",
-      "md5": "57b97e84f11c8595d5a5a84242a10bbf",
-      "status": "already_present"
-    },
-    {
-      "filename": "E11b_raw_qwen7b_fineweb-edu_w1024.json",
-      "md5": "82bcb66f087a27a1d2b0d622ee12d61c",
       "status": "already_present"
     },
     {
@@ -466,14 +466,14 @@
       "status": "already_present"
     }
   ],
-  "written_utc": "2026-10-29T07:00:57Z",
+  "written_utc": "2026-10-29T19:00:51Z",
   "local_sha256": {
-    "hivemind_foundation_article.pdf": "ff312c8066d4b9735e04270ee5b6d06ed3d74443d73edadd783c49073eaa53bd",
-    "hivemind_foundation_article.tex": "d8f34529032a4ea7109adbabaabd93ef65ae66e4153867ae170033bc6298dcd9",
-    "PEER_REVIEW_REPORT.json": "2c4a6cf97b0f4b9c0ee82583a22c3246b0549c694dbc3b457b50b192cf839bcf",
+    "hivemind_foundation_article.pdf": "4f2d4169d8f46ffe1d0ac369149bf07e5b2cbb263d924800f813272e1ff4d3c6",
+    "hivemind_foundation_article.tex": "475cc2af36a1e9d9957f3d012a3a839cde0004859bec155ea32d4db7af64f86b",
+    "PEER_REVIEW_REPORT.json": "02592f34341cced08525eb383113acc5bd3d7704c3e6236ba3bf84d10f6473ae",
     "RESEARCH_PROGRAM.md": "8f32c90c94dd53ee776c5c601506a04af35edbb024ed56382ec8057f02570f59",
     "MOE_DILOCO_REVIEW_2026-10-23.md": "71e29178c486fda014d3385dd5ca70019c153a84d4f03ad14f4dd77939bd77a5",
-    "HiveMindSpec.lean": "185d91d804cbeb699a8e0688195defcac93268f12cf4334f1231c369c0b3d1d4",
+    "HiveMindSpec.lean": "f20414aa6727dc25c7880e38a3b29985b2b5d851f80414a781708628952b0863",
     "architecture_hypothesis_verification_report.json": "d8e98442efd8c7892c014b67e240e6dd729af1499479243477da7b98e8b92379",
     "paper_v3_experiments_report.json": "580bf389f626cf8d4900170dc5dfe86c60d421a78ca80104e85dea13e969ab89",
     "decoupled_diloco_quorum_check.json": "1474ca96987cf6d13c135ebb8e634bc490e5f04744d8509d9e7ca4792c1447e7",
@@ -489,7 +489,7 @@
     "RDAMultiplier.lean": "e1d241cf884de0273e458f6fd8b0ab2043da0c534894c493eed328025dd9dffd",
     "E12_pilot_prereg.json": "1cc44c9ed62d4a8b242e8342ad7c6922bfe067041eac8399dbac86242e4c6bd4",
     "E12_pilot_report.json": "a582a6a2f434d255e4a1308afe5e9f3a0b4e57700129b63703534de227f7334a",
-    "ROADMAP.md": "ec7b8464fd4b15d8beb80570e506efa2d40404fababf641e8b6c5a6c227af079",
+    "ROADMAP.md": "5511b22eddfb06df8aa98db769fd12679039e4616d60f81ed42f004e12a56a52",
     "external_review_v3.5.0_2026-10-23.md": "73b14a8e320174d1e638eb95525b6b2ac49121b6033c0c3234bc84fe92b3cb8d",
     "response_to_external_review_v3.5.0.md": "a2ae2e1dc1dd7f7a67ae2b02da37579fefd5ba75784f6838e67574bf576715f8",
     "E8_pilot_report.json": "f31cb7bd0ebb4d1ca19f6df03f786791e09db7c78cc62e55fd3d4f700e472397",
@@ -505,7 +505,11 @@
     "live_wan_swarm_production_report.json": "459cc20cb53bfeede89bc8349ce93513c84c2287089024b52dd8a9245ab1e9d2",
     "nocturnal_20_moe_stress_test_report.json": "9d4e58e12aa64a4712bd25c1aed6a876e02fa96043750e408e516c8e6f13ef2e",
     "nocturnal_large_moe_20_campaign_report.json": "09dfe58ffb30aad320619c44295416253bafedd89a2dc5f2961f1c5ed57ce93f",
-    "ROADMAP_AMCP_AGENT_MESH_KAFKA_EVOLUTION.md": "cbea495b7b13e3adc1743372b38ae4e102352f85cd3d7a25097645d3060989a7",
+    "ROADMAP_AMCP_AGENT_MESH_KAFKA_EVOLUTION.md": "3a8319d3601cfd4ebf34b80d8102d6361b4f5e794bac6084055c1928f16dc1da",
+    "VISION_AND_NEXTGEN_SWARM_ROADMAP.md": "25336300c08b2c7c33bd7c49dffb54909520dd7b59d6e6a12229df2e814e16e9",
+    "nocturnal_reddit_vision_moe_report.json": "25a9311adde0a9ae929ceab9d1598f814612fd0acf3d033465323001f0e9f225",
+    "exoplanet_astro_vmoe_poc_report.json": "af3fbe1aca9f8165999d1adc5b490ef9fdf1a3c5478a965e6858746020ebf5d0",
+    "massive_swarm_image_moe_report.json": "6cae13051a99f4dd96eef6974dd0644e76a2a3d8426d93fad9ca2fd9b19a640e",
     "E10b_first_execution_partial.json": "a4a0b5b83e0e36f39074389aa7624a14a4c98083aafa1c51d220ab6279b0ca93",
     "E10b_lattice_05b_prereg.json": "e5102af8457409f28fe6578c73fee3d8fb95e386418081fcbab20aa747869d67",
     "E10b_lattice_05b_prereg_amendment_2.json": "73fa0da0291a710a4d085c7adb7768627d562f0b367592fc6afbc2f2ecf61485",
@@ -517,12 +521,8 @@
     "E11_kv_lattice_report.json": "be45db7d9106a7fa5e4592d8ee7c191fa389fe773c98d1b18d3b8ec17c1be0e5",
     "E11_raw_gemma4-e4b.json": "b3a46483e24e5c3a83c365ebcc8b7ebc498741f687a71c37cff6a2d9963c1fd4",
     "E11_raw_qwen0.5b.json": "23a54aebd9b2ea3cc2ffb3117f7170fb564171f024561a863031f413a306a02c",
-    "E11_raw_qwen7b.json": "0686f9895160ae719282c4442d445e94d9e7e1152b88f41ddd74ccd611768cb8",
     "E11b_kv_lattice_sweep_prereg.json": "5c68ffed8f880ddbb5a859e0dbab53935f6b5a9b51abe8e81fd052d45b1069ad",
     "E11b_kv_lattice_sweep_prereg_amendment_1.json": "cadbff2579910b5573432234dd9e4b5ca11fe921cd4225da8e10d7d8d209fa3a",
-    "E11b_raw_gemma4-e4b_fineweb-edu_w1024.json": "38cbe40e588822f4d6352b5912c10f4aa1c49ba92992698663331be4252eadc6",
-    "E11b_raw_qwen0.5b_fineweb-edu_w1024.json": "417c48f6913fc1a0667b9e628a67bab6826a3c801b792f30fc8050072ee26500",
-    "E11b_raw_qwen7b_fineweb-edu_w1024.json": "a449504bafd8c1500946ef057678cbc7e52a122e49d984742eed8b79f77fd448",
     "E12_replay_divergence_prereg.json": "9d039cca758d2a48491765046c4cfc3f666824b9f4edadd848b60bffc5247bd5",
     "E12_replay_divergence_report.json": "d3c112bf71a3591230e9e1800aa12b2557efc28ee0fe32548481d87caa2c993a",
     "E13_granite_step_bench.json": "9a9219e20e60e0ad3c6277f17633da30f11b7b67effe3d8f4f0699929f398d07",
@@ -561,17 +561,14 @@
     "E16_gwaya_lite_t4_prereg.json": "2f032305ecb734d1659ea7bd872d3c4c403e6838bd2eebad79fdd76ed00cd5d5",
     "E16_gwaya_lite_t4_report.json": "4cdce7c8877091050723b95d4a8ae22e563f428004e7141e6e1bfbc069504b57"
   },
-  "record_id": 23756909,
-  "doi": "10.5281/zenodo.23756909",
-  "doi_url": "https://doi.org/10.5281/zenodo.23756909",
+  "record_id": 23776302,
+  "doi": "10.5281/zenodo.23776302",
+  "doi_url": "https://doi.org/10.5281/zenodo.23776302",
   "conceptdoi": "10.5281/zenodo.23597697",
   "submitted": true,
   "remote_md5": {
+    "HiveMindSpec.lean": "029f70686ea163e409f9a3795c7813cb",
     "CITATION.cff": "10ace2f18ec9a5c3e83583687ef64e70",
-    "PEER_REVIEW_REPORT.json": "7f79822f07e36a72f9db68370fa85d07",
-    "hivemind_foundation_article.tex": "0316b466f045eb842bc39068e2f495e1",
-    "hivemind_foundation_article.pdf": "cbfc305ed2b80d28cefd3bc2f460e60c",
-    "E11b_raw_gemma4-e4b_fineweb-edu_w1024.json": "f09708778d97b5625de427ed1d0381c9",
     "E15_hypotheses.json": "a5968df0640c7270a11ebc22e6a85563",
     "E11b_kv_lattice_sweep_prereg_amendment_1.json": "7c1cbf410a33afa9e700a6a31a841990",
     "E11_kv_lattice_report.json": "f1594749ea23c42f515eedc189344704",
@@ -579,11 +576,9 @@
     "RESEARCH_PROGRAM.md": "4eb8837e597ccfe337e51cc50cbd9650",
     "predictions_ledger.json": "6cd791a69e2f7c9ca88a873823401621",
     "E15_gwaya_rft_prereg.json": "e08b0ed2e833ded1d67557e83694dad6",
-    "ROADMAP.md": "5de50cedcda20d9f95a9f8ebcf67d6b3",
-    "ROADMAP_AMCP_AGENT_MESH_KAFKA_EVOLUTION.md": "fc04ca05a380e34eac779a886cfa37d2",
+    "ROADMAP.md": "15bf9e29a71c075b2d39dae925054805",
     "nocturnal_20_moe_stress_test_report.json": "6bc15d8ba8753c4af3510c9626f1449f",
     "live_wan_swarm_production_report.json": "bf337b516c634f5f8562b8251588ea1c",
-    "HiveMindSpec.lean": "751908ee484a937e11e496166a7018a3",
     "E14_raw_qwen0.5b.json": "0b1b41307880f507e87e509949936cad",
     "E12_replay_divergence_prereg.json": "7843d434ce7776d20789f3270e1bcc6e",
     "E10b_lattice_05b_prereg_amendment_2.json": "861027eb265cd8bf923c27598561517c",
@@ -606,9 +601,7 @@
     "E13_swarm_local_predictions.json": "b7f423824e374d8243220a0f6b3cc644",
     "E13_swarm_local_report_m6.json": "b2ea6bcede4bf4435c061bb9ca327799",
     "E13_swarm_local_report_rotstraggle.json": "15547e3c89580c9e75377eb51366336b",
-    "E11b_raw_qwen7b_fineweb-edu_w1024.json": "82bcb66f087a27a1d2b0d622ee12d61c",
     "E13_swarm_local_prereg_amendment_3.json": "46956eeea9a43db154782e6c6e866202",
-    "E11b_raw_qwen0.5b_fineweb-edu_w1024.json": "57b97e84f11c8595d5a5a84242a10bbf",
     "GWAYA_T4_DEPLOYMENT.md": "3fddac9b3064543738a24565ca1b88b3",
     "MOE_DILOCO_REVIEW_2026-10-23.md": "a75c5061339db9c853f1424a55abe608",
     "decoupled_diloco_quorum_check.json": "f8ccefeea9f63959fc89f8928fcde5b7",
@@ -616,7 +609,6 @@
     "E5_toy_prereg.json": "60aac0165ef684299971b9da89fdba98",
     "architecture_hypothesis_verification_report.json": "29b579242b6054aacd582e515ce69594",
     "paper_v3_experiments_report.json": "880d5276bf87ddfa1e62e4c713c52333",
-    "E11_raw_qwen7b.json": "a08da8dbcd3ad0e854522f6bb887d821",
     "E14_swarm_fairness_prereg.json": "51c798f30cd6cea2d60eda256336f3c7",
     "E13_swarm_local_raw_granite3b.json": "e0afd55642ae893a6313195530b8ee32",
     "E14_raw_granite1b.json": "1bc0c8b29f2843a81c3ea7f922225df6",
@@ -666,7 +658,15 @@
     "E13_swarm_local_raw_qwen0.5b_m6.json": "2e822a5e14e698a2a476815eb2fde84c",
     "E13_swarm_local_report_granite3b.json": "ac4a0a8d99d488642469735d45160539",
     "gwaya_stub_audit.json": "a0b886d357633cba2103b9c005a8df1f",
-    "nocturnal_large_moe_20_campaign_report.json": "96497fb61443f62dae2667a2e6d06ac9"
+    "nocturnal_large_moe_20_campaign_report.json": "96497fb61443f62dae2667a2e6d06ac9",
+    "ROADMAP_AMCP_AGENT_MESH_KAFKA_EVOLUTION.md": "017bf23fda8e702e689b0f3c5f2f06d9",
+    "hivemind_foundation_article.pdf": "d81a32c03fcdfed113e765b6f91eb1c0",
+    "nocturnal_reddit_vision_moe_report.json": "072ec679048d3cbcc2417fe2c68cf90a",
+    "hivemind_foundation_article.tex": "5d7d0b52a5aabdfd201b30ae7c35b970",
+    "PEER_REVIEW_REPORT.json": "e355fbd5d438ca24dd4e3745f528d94e",
+    "VISION_AND_NEXTGEN_SWARM_ROADMAP.md": "49041b552896cf402b0c9f063ad5d79d",
+    "exoplanet_astro_vmoe_poc_report.json": "2b8e57cf6d8abd40e76a889b7930e52d",
+    "massive_swarm_image_moe_report.json": "a6cc76e5a81be82f6f1129ae6c783b83"
   },
   "checksum_mismatches": [],
   "verified": true

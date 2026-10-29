@@ -1,4 +1,4 @@
-# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the Apache-2.0 License.
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Unit and pre-registered control tests for Season 25 LayerStoRm x HiveMind PCIe Bridge (HM-S25-01..05)."""
 
 from __future__ import annotations

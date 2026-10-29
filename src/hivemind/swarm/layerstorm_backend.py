@@ -1,4 +1,4 @@
-# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the Apache-2.0 License.
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Season 25 (HM-S25-01..05): LayerStoRm x HiveMind PCIe Expert Streaming & Two-Zone VRAM Cache Bridge.
 
 Integrates the core architectural primitives of LayerStoRm (kkontosis/LayerStoRm) with

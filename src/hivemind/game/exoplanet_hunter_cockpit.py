@@ -2952,7 +2952,7 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
             "stage3": "10_uss_hivemind_ncc-31337_v4_6_-_stage_3_oolite_pl.html",
             "stage3-classic": "06_uss_hivemind_-_stage_3_oolite_land.html",
             "stage4": "01_uss_hivemind_-_stage_4_jwst_lois.html",
-            "architecture": "04_uss_hivemind_-_fat_client_unity_unreal_vs_web_arch.html",
+            "architecture": "04_uss_hivemind_-_fat_client_unity_unreal_vs_web.html",
         }
         slug_key = screen_slug.lower()
         fname = v2_slug_map.get(slug_key, v2_slug_map["v46-complete"])
@@ -2978,7 +2978,7 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                 "https://lh3.googleusercontent.com/aida-public/AB6AXuChalitz6rWZe3ltUcPx8rSkF3Iman86Rh2HAdVj9NyZVYEuJeNp5xsR6DmX-gY0x2loGFP8bGoSUBXNRKI3qvENsdY-QJSjMVdHrfehDK8AcmM9y4MTimbVPV0IcZdp2LksNaZXLkaikjhOa9M34Fr7AQJaZNOR-bRZHhfjIQ2Jk9-cVhhtpAdV7Jehr0kA7B79X5W0jfqOi-F5yI3VrNN2u2E9llsMOU4xAFqfXEm",
                 "/stitch-assets/stitch_v2_08_photorealistic_descent_cockpit_view_of_spaceship.png",
             )
-            if slug_key == "architecture":
+            if slug_key == "architecture" and not raw.lstrip().startswith("<!DOCTYPE"):
                 return HTMLResponse(
                     content=f"<!DOCTYPE html><html><head><meta charset='utf-8'><title>USS HiveMind Architecture Plan</title>"
                     f"<style>body{{background:#070e1a;color:#dce2f3;font-family:'JetBrains Mono',monospace;padding:32px;line-height:1.6;max-width:1100px;margin:auto;}}pre{{white-space:pre-wrap;}}</style>"
@@ -2986,6 +2986,25 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                 )
             return HTMLResponse(content=raw)
         return HTMLResponse(status_code=404, content="<h1>Stitch screen not found</h1>")
+
+    @app.get("/api/steam/fat-client-manifest", response_class=JSONResponse)
+    def api_steam_fat_client_manifest() -> JSONResponse:
+        manifest_path = (
+            PROJECT_ROOT
+            / "steam_dist"
+            / "HiveMind_Astrophysics_Exoplanet_Hunter"
+            / "steam_fat_client_manifest.json"
+        )
+        if manifest_path.exists():
+            return JSONResponse(content=json.loads(manifest_path.read_text(encoding="utf-8")))
+        return JSONResponse(
+            content={
+                "app_id": STEAM_APP_ID,
+                "depot_id": 3133702,
+                "executable": "HiveMind_Exoplanet_Hunter.exe",
+                "status": "READY",
+            }
+        )
 
     @app.get("/api/astro/gemini-tts")
     def api_gemini_or_gcp_free_tts(

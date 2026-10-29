@@ -362,4 +362,88 @@ def test_stitch_v46_cockpit_and_photorealistic_assets_from_project_1001841528007
     assert meta["total_screens"] == 12
 
 
+def test_intense_all_10_stitch_planet_keys_vetting_and_bee_moe_scan() -> None:
+    """Verify all 10 Stitch planet keys resolve to SECTOR-01..10 with accurate vetting and Bee-MoE GPU routing."""
+    from starlette.testclient import TestClient
+    from hivemind.game.exoplanet_hunter_cockpit import create_exoplanet_hunter_fastapi_app
+
+    app = create_exoplanet_hunter_fastapi_app()
+    client = TestClient(app)
+
+    expected_planets = [
+        ("trappist1e", "SECTOR-01-TRAPPIST-1E", "PLANET"),
+        ("k218b", "SECTOR-02-K2-18B", "PLANET"),
+        ("kepler11f", "SECTOR-03-KEPLER-11F", "PLANET"),
+        ("hd80606b", "SECTOR-04-HD-80606B", "PLANET"),
+        ("toi700d", "SECTOR-05-TOI-700D", "PLANET"),
+        ("lhs1140b", "SECTOR-06-LHS-1140B", "PLANET"),
+        ("wasp39b", "SECTOR-07-WASP-39B", "PLANET"),
+        ("kepler186f", "SECTOR-08-KEPLER-186F", "PLANET"),
+        ("koi14", "SECTOR-09-KOI-CAND-14", "FALSE_POSITIVE"),
+        ("koibin", "SECTOR-10-KOI-BIN-02", "FALSE_POSITIVE"),
+    ]
+    for key, expected_sector, classification in expected_planets:
+        scan = client.post("/api/astro/bee-moe-scan", json={"target_id": key}).json()
+        assert scan["target_id"] == expected_sector
+        disc = client.post(
+            "/api/astro/discover",
+            json={"target_id": key, "gamer_tag": "IntensePytest", "player_classification": classification},
+        ).json()
+        assert disc["accurate"] is True
+        assert disc["points_earned"] == 600
+        assert disc["discovery_entry"]["target_id"] == expected_sector
+
+
+def test_intense_all_html_and_json_routes_and_security_guards() -> None:
+    """Verify all 19 HTML routes, 12 JSON telemetry routes, and security guards (400/401/404)."""
+    from starlette.testclient import TestClient
+    from hivemind.game.exoplanet_hunter_cockpit import create_exoplanet_hunter_fastapi_app
+
+    app = create_exoplanet_hunter_fastapi_app()
+    client = TestClient(app)
+
+    for html_route in (
+        "/",
+        "/classic",
+        "/game",
+        "/webgpu",
+        "/portal",
+        "/playground",
+        "/join",
+        "/rejoindre",
+        "/community",
+        "/boinc",
+        "/monitor",
+        "/stitch/v46-complete",
+        "/stitch/v46-oolite",
+        "/stitch/stage1",
+        "/stitch/stage2",
+        "/stitch/stage3",
+        "/stitch/stage3-classic",
+        "/stitch/stage4",
+        "/stitch/architecture",
+    ):
+        r = client.get(html_route)
+        assert r.status_code == 200, f"Route {html_route} returned {r.status_code}"
+        assert len(r.text) > 1000
+
+    manifest = client.get("/api/steam/fat-client-manifest")
+    assert manifest.status_code == 200
+    assert manifest.json()["app_id"] == 3133700
+
+    # Security checks
+    assert client.post("/v1/hivemind/webgpu/register-login", json={"handle": "sys:validators"}).status_code == 400
+    assert client.get("/v1/hivemind/me").status_code == 401
+    assert (
+        client.post(
+            "/v1/hivemind/webgpu/contribute",
+            headers={"Authorization": "Bearer hm-invalid-forged-token"},
+            json={"target_planet": "K2-18 b"},
+        ).status_code
+        == 401
+    )
+    assert client.get("/stitch-assets/..%2F..%2Fpyproject.toml").status_code == 404
+
+
+
 

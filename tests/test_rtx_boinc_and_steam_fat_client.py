@@ -445,5 +445,45 @@ def test_intense_all_html_and_json_routes_and_security_guards() -> None:
     assert client.get("/stitch-assets/..%2F..%2Fpyproject.toml").status_code == 404
 
 
+def test_fat_client_one_time_chapter1_voice_and_planet_analysis_and_life() -> None:
+    """Verify the native C# Fat Client and Stitch Web Cockpit speak Chapter 1 explanation only once and provide concise planet analysis + how life could live when moving between planets."""
+    from pathlib import Path
+    from hivemind.config import PROJECT_ROOT
+    from hivemind.game.fat_steam_astro_builder import NATIVE_CSHARP_FAT_CLIENT_SOURCE
+    from starlette.testclient import TestClient
+    from hivemind.game.exoplanet_hunter_cockpit import create_exoplanet_hunter_fastapi_app
+
+    # 1. Verify C# Fat Client tracks _chapterIntroSpoken and calls SpeakPlanetAnalysisOnly() in SelectTarget
+    assert "private bool[] _chapterIntroSpoken = new bool[5];" in NATIVE_CSHARP_FAT_CLIENT_SOURCE
+    assert "private void SpeakPlanetAnalysisOnly()" in NATIVE_CSHARP_FAT_CLIENT_SOURCE
+    assert "private string GetOneTimeChapterExplanation(int stage)" in NATIVE_CSHARP_FAT_CLIENT_SOURCE
+    assert "_chapterIntroSpoken[0] = true; // Never restart Chapter 1 voice when moving between planets" in NATIVE_CSHARP_FAT_CLIENT_SOURCE
+    assert "SpeakPlanetAnalysisOnly();" in NATIVE_CSHARP_FAT_CLIENT_SOURCE
+
+    # 2. Verify all 10 targets have concise AnalysisEn, LifeEn, AnalysisFr, LifeFr
+    assert NATIVE_CSHARP_FAT_CLIENT_SOURCE.count("AnalysisEn =") == 10
+    assert NATIVE_CSHARP_FAT_CLIENT_SOURCE.count("LifeEn =") == 10
+    assert NATIVE_CSHARP_FAT_CLIENT_SOURCE.count("AnalysisFr =") == 10
+    assert NATIVE_CSHARP_FAT_CLIENT_SOURCE.count("LifeFr =") == 10
+    assert "How life could live:" in NATIVE_CSHARP_FAT_CLIENT_SOURCE
+    assert "Vie possible :" in NATIVE_CSHARP_FAT_CLIENT_SOURCE
+
+    # 3. Verify compiled HiveMind_Exoplanet_Hunter.cs and HiveMind_Exoplanet_Hunter.exe are up to date on disk
+    cs_file = PROJECT_ROOT / "steam_dist" / "HiveMind_Astrophysics_Exoplanet_Hunter" / "HiveMind_Exoplanet_Hunter.cs"
+    exe_file = PROJECT_ROOT / "steam_dist" / "HiveMind_Astrophysics_Exoplanet_Hunter" / "HiveMind_Exoplanet_Hunter.exe"
+    assert cs_file.exists()
+    assert exe_file.exists()
+    assert "SpeakPlanetAnalysisOnly();" in cs_file.read_text(encoding="utf-8")
+
+    # 4. Verify Web Cockpit `/` also tracks chapter1IntroDone and PLANET_ANALYSIS_AND_LIFE
+    app = create_exoplanet_hunter_fastapi_app()
+    client = TestClient(app)
+    html = client.get("/").text
+    assert "let chapter1IntroDone = false;" in html
+    assert "PLANET_ANALYSIS_AND_LIFE" in html
+    assert "Vie possible :" in html
+
+
+
 
 

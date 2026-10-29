@@ -1279,7 +1279,76 @@ def create_router_app(
         """Public mathematical, social, and economic readiness model for the International English Launch (HM-S19-INTL)."""
         from hivemind.economy.international_launch_model import evaluate_international_launch_readiness
 
-        return evaluate_international_launch_readiness()
+        payload = evaluate_international_launch_readiness()
+        payload["live_store_scale_status"] = store.producer_fleet_scale_status(clock(), PRODUCER_TTL_S, target_producers=100)
+        return payload
+
+    @app.get("/v1/hivemind/producers/scale-100-status")
+    def producers_scale_100_status() -> dict[str, Any]:
+        """Live 100-Producer International Launch scaling gate, regional shards, hardware tiers, and AMCP mesh status."""
+        from hivemind.economy.international_launch_model import build_100_producer_international_fleet_plan
+        from hivemind.swarm.amcp_eda_traffic_sustainer import plan_100_producer_mesh_scaling
+
+        live_status = store.producer_fleet_scale_status(clock(), PRODUCER_TTL_S, target_producers=100)
+        return {
+            "object": "hivemind.producer_scale_100_status",
+            "live_store_scale_status": live_status,
+            "hundred_producer_fleet_plan": build_100_producer_international_fleet_plan(active_producers=100),
+            "amcp_mesh_scaling": plan_100_producer_mesh_scaling(active_producers=100),
+        }
+
+    @app.post("/v1/hivemind/producers/scale-100-simulate")
+    async def producers_scale_100_simulate(request: Request) -> dict[str, Any]:
+        """Simulate the 100-producer geo-sharded topology and P2C residency-aware dispatcher under custom traffic."""
+        from hivemind.economy.international_launch_model import build_100_producer_international_fleet_plan
+        from hivemind.swarm.amcp_eda_traffic_sustainer import (
+            plan_100_producer_mesh_scaling,
+            select_100_node_optimal_producer,
+        )
+
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+        except (ValueError, RecursionError):
+            raise RouterError(400, "invalid request: body must be a JSON object", "invalid_request_error", "invalid_request") from None
+        if not isinstance(body, dict):
+            raise RouterError(400, "invalid request: body must be a JSON object", "invalid_request_error", "invalid_request")
+
+        active_producers = max(4, min(int(body.get("active_producers", 100)), 1000))
+        standby_prosumers = max(0, min(int(body.get("standby_prosumers", 160)), 5000))
+        arrival_rate = max(0.1, min(float(body.get("arrival_rate_req_per_s", 24.0)), 500.0))
+        client_region = str(body.get("client_region", "eu-west"))[:32]
+        model_id = str(body.get("model_id", "hivemind/qwen3.5-coder-14b"))[:128]
+
+        fleet_plan = build_100_producer_international_fleet_plan(
+            active_producers=active_producers,
+            standby_prosumers=standby_prosumers,
+            arrival_rate_req_per_s=arrival_rate,
+        )
+        regions = ("eu-west", "us-east", "us-west", "ap-northeast")
+        synthetic_candidates = [
+            {
+                "account_id": f"producer-{i:03d}",
+                "endpoint_id": f"ep-{i % 2}",
+                "region": regions[i % len(regions)],
+                "loaded": (i % 3 == 0),
+                "inflight": i % 5,
+                "capacity_1k": 20 + (i % 4) * 10,
+                "models": [model_id],
+            }
+            for i in range(active_producers)
+        ]
+        dispatch_sample = select_100_node_optimal_producer(
+            synthetic_candidates,
+            model_id=model_id,
+            client_region=client_region,
+        )
+        return {
+            "object": "hivemind.producer_scale_100_simulation",
+            "fleet_plan": fleet_plan,
+            "amcp_mesh_scaling": plan_100_producer_mesh_scaling(active_producers=active_producers),
+            "p2c_dispatch_sample": dispatch_sample,
+        }
 
     @app.get("/v1/hivemind/bees/rusty-sundials")
     def get_rusty_sundials_bee() -> dict[str, Any]:

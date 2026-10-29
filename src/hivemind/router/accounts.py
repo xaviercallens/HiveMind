@@ -1404,4 +1404,67 @@ class RouterStore:
             ).fetchall()
         return [{k: row[k] for k in row.keys()} for row in rows]
 
+    def producer_fleet_scale_status(
+        self,
+        now_utc: float | None = None,
+        ttl_s: float = 120.0,
+        target_producers: int = 100,
+    ) -> dict[str, Any]:
+        """Aggregate live producer accounts, endpoints, execution classes, and residency progress toward the 100-node gate."""
+        now = time.time() if now_utc is None else float(now_utc)
+        target = max(1, int(target_producers))
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT account_id, endpoint_url, models_json, capacity_1k, execution_class, residency_json "
+                "FROM producer_endpoints WHERE last_heartbeat_utc >= ? "
+                "AND account_id NOT IN (SELECT account_id FROM producer_control WHERE paused=1)",
+                (now - float(ttl_s),),
+            ).fetchall()
+            paused_row = self._conn.execute(
+                "SELECT COUNT(*) AS n FROM producer_control WHERE paused=1"
+            ).fetchone()
+        paused_count = int(paused_row["n"]) if paused_row is not None else 0
+        accounts: set[str] = set()
+        exec_classes: dict[str, int] = {}
+        live_models: set[str] = set()
+        warm_models: set[str] = set()
+        residency_endpoints = 0
+        total_capacity_1k = 0.0
+
+        for row in rows:
+            accounts.add(str(row["account_id"]))
+            ec = str(row["execution_class"] or "ollama")
+            exec_classes[ec] = exec_classes.get(ec, 0) + 1
+            total_capacity_1k += float(row["capacity_1k"] or 0.0)
+            try:
+                for m in json.loads(str(row["models_json"])):
+                    if isinstance(m, Mapping) and "id" in m:
+                        live_models.add(str(m["id"]))
+            except ValueError:
+                pass
+            residency = _load_residency(row["residency_json"])
+            if residency is not None:
+                residency_endpoints += 1
+                rmodels = residency.get("models")
+                if isinstance(rmodels, Mapping):
+                    for mid, entry in rmodels.items():
+                        if isinstance(entry, Mapping) and entry.get("loaded") is True:
+                            warm_models.add(str(mid))
+
+        live_acc_count = len(accounts)
+        return {
+            "target_producers": target,
+            "live_producer_accounts": live_acc_count,
+            "live_endpoints": len(rows),
+            "paused_producer_accounts": paused_count,
+            "scale_readiness_pct": round(min(100.0, (100.0 * live_acc_count) / target), 2),
+            "target_reached": live_acc_count >= target,
+            "total_capacity_1k": round(total_capacity_1k, 2),
+            "execution_class_breakdown": exec_classes,
+            "residency_reporting_endpoints": residency_endpoints,
+            "warm_loaded_models_count": len(warm_models),
+            "live_models_count": len(live_models),
+        }
+
+
 

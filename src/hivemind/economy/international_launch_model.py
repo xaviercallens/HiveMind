@@ -340,19 +340,19 @@ def evaluate_international_launch_readiness(
         ),
         asdict(
             simulate_international_launch_wave(
-                wave_name="Stage 3: Broad International Viral Wave (Hacker News Show HN, X/Twitter, Dev.to)",
+                wave_name="Stage 3: Broad International Viral Wave (Hacker News Show HN, X/Twitter, Dev.to — 100 Producer Scale)",
                 new_visitors=25000,
                 signup_rate=0.14,
                 direct_producer_fraction_alpha_p=0.025,
                 consumer_to_prosumer_conversion_kappa=0.075,
                 baseline=SwarmLiveBaseline(
                     total_accounts=1487,
-                    producers=85,
-                    prosumers=156,
-                    consumers=1243,
+                    producers=100,
+                    prosumers=160,
+                    consumers=1224,
                     admins=3,
-                    peak_tflops_fp16=4950.0,
-                    daytime_aggregate_tok_per_s=5800.0,
+                    peak_tflops_fp16=6480.0,
+                    daytime_aggregate_tok_per_s=6400.0,
                 ),
             )
         ),
@@ -381,10 +381,10 @@ def evaluate_international_launch_readiness(
         },
         {
             "stage": "Stage 3 (Next Weekend — Fri Nov 6 - Sun Nov 8, 2026)",
-            "name": "Broad International Consumer + Prosumer Mix Launch (Show HN: HiveMind@Home & Global OpenRouter)",
+            "name": "Broad International Consumer + Prosumer Mix Launch at 100-Producer Global Scale (Show HN: HiveMind@Home)",
             "target_channels": "Hacker News (Show HN), X/Twitter, Dev.to, LinkedIn Engineering",
-            "entry_gate": "Stage 2 exit gate met (>= 5,000 tok/s daytime capacity, >= 4.5 PFLOPS nocturnal capacity)",
-            "exit_gate": "Self-sustaining global swarm (rho <= 0.78, supply ratio >= 12%, zero unbacked HMT inflation)",
+            "entry_gate": "Stage 2 exit gate met (>= 100 active daytime producer nodes across 4 regions, >= 6,400 tok/s daytime capacity)",
+            "exit_gate": "Self-sustaining 100-producer global swarm (rho <= 0.78, supply ratio >= 12%, zero unbacked HMT inflation)",
         },
     ]
     from hivemind.swarm.amcp_eda_traffic_sustainer import build_sunday_producer_first_international_plan
@@ -401,4 +401,192 @@ def evaluate_international_launch_readiness(
         "wave_simulations": waves,
         "four_stage_rollout_plan": rollout_stages,
         "amcp_eda_sunday_launch_plan": build_sunday_producer_first_international_plan(),
+        "hundred_producer_scale_plan": build_100_producer_international_fleet_plan(),
     }
+
+
+@dataclass(frozen=True)
+class RegionalProducerShard:
+    """Geo-affinity regional shard within the 100-producer international launch topology."""
+
+    region_id: str
+    display_name: str
+    active_producers: int
+    standby_prosumers: int
+    daytime_aggregate_tok_per_s: float
+    median_intra_region_rtt_ms: float
+    erlang_c_utilization_rho: float
+    p95_total_latency_s: float
+
+
+@dataclass(frozen=True)
+class ProducerHardwareTierAllocation:
+    """Hardware tier composition across the 100-producer fleet respecting consumer VRAM guards."""
+
+    tier_id: str
+    display_name: str
+    node_count: int
+    vram_ceiling_mib: int
+    free_vram_guard_mib: int
+    avg_tok_per_s_per_node: float
+    primary_models: tuple[str, ...]
+    supported_runtimes: tuple[str, ...]
+
+
+def build_100_producer_international_fleet_plan(
+    active_producers: int = 100,
+    standby_prosumers: int = 160,
+    arrival_rate_req_per_s: float = 24.0,
+    mean_tokens_per_request: float = 168.3,
+) -> dict[str, Any]:
+    """Build the 100-Producer International Launch Fleet Scaling & Multi-Region Topology Plan (Issues #247, #251).
+
+    Invariants enforced:
+    1. Regional partition across 4 continental shards sums exactly to `active_producers`
+       (42 EU-West + 28 US-East + 16 US-West + 14 AP-Northeast = 100 at target scale).
+    2. Hardware tier partition sums exactly to `active_producers`
+       (55 `std_8gb` + 30 `big_12gb` + 15 `xl_16gb_plus` = 100 at target scale):
+       - `std_8gb` strictly respects the `<= 6,656 MiB` WDDM ceiling (`< 500 ms` gamer preemption SLA).
+       - `big_12gb` (including GCP Tesla T4 15,360 MiB) strictly preserves `>= 4,300 MiB` free VRAM.
+    3. Two-Lane Priority QoS reserves `70%` fast-lane capacity for active Prosumers/Producers and
+       `30%` fair-queue capacity for pure Consumers, with zero fiat currency (`0.00 EUR / 0.00 USD`).
+    """
+    c = max(4, int(active_producers))
+    prosumers = max(0, int(standby_prosumers))
+
+    # Proportional regional shard allocation that preserves exact 42/28/16/14 split at c = 100
+    eu_w = max(1, round(c * 0.42))
+    us_e = max(1, round(c * 0.28))
+    us_w = max(1, round(c * 0.16))
+    ap_ne = max(1, c - (eu_w + us_e + us_w))
+    if eu_w + us_e + us_w + ap_ne != c:
+        eu_w += c - (eu_w + us_e + us_w + ap_ne)
+
+    # Hardware tier partition that preserves exact 55/30/15 split at c = 100
+    t_std8 = max(1, round(c * 0.55))
+    t_big12 = max(1, round(c * 0.30))
+    t_xl16 = max(1, c - (t_std8 + t_big12))
+    if t_std8 + t_big12 + t_xl16 != c:
+        t_std8 += c - (t_std8 + t_big12 + t_xl16)
+
+    hardware_tiers = [
+        ProducerHardwareTierAllocation(
+            tier_id="std_8gb",
+            display_name="Consumer 8 GB GPU (RTX 2070 / 3060 8G / 4060 — WDDM <= 6,656 MiB)",
+            node_count=t_std8,
+            vram_ceiling_mib=6656,
+            free_vram_guard_mib=1536,
+            avg_tok_per_s_per_node=48.0,
+            primary_models=(
+                "hivemind/qwen3.5-4b-instruct",
+                "hivemind/qwen3.5-9b-fast",
+                "hivemind/bee-scientific-ode",
+                "hivemind/bee-rusty-sundials",
+            ),
+            supported_runtimes=("ollama", "llamacpp", "hivemind-solver"),
+        ),
+        ProducerHardwareTierAllocation(
+            tier_id="big_12gb",
+            display_name="Mid-Range 12-16 GB GPU (RTX 3060 12G / 4070 / GCP Tesla T4 >= 4,300 MiB Free Guard)",
+            node_count=t_big12,
+            vram_ceiling_mib=11060,
+            free_vram_guard_mib=4300,
+            avg_tok_per_s_per_node=72.0,
+            primary_models=(
+                "hivemind/qwen3.5-14b-instruct",
+                "hivemind/qwen3.5-coder-14b",
+                "hivemind/bee-SymbolicMath-Lean4",
+                "hivemind/bee-ClimateFluid-PDE",
+            ),
+            supported_runtimes=("vllm", "ollama", "llamacpp", "hivemind-solver"),
+        ),
+        ProducerHardwareTierAllocation(
+            tier_id="xl_16gb_plus",
+            display_name="Enthusiast & Prosumer 24 GB+ GPU (RTX 3090 / 4090 / L4 / A5000)",
+            node_count=t_xl16,
+            vram_ceiling_mib=22528,
+            free_vram_guard_mib=2048,
+            avg_tok_per_s_per_node=106.6667,
+            primary_models=(
+                "hivemind/qwen3.5-30b-a3b-moe",
+                "hivemind/deepseek-r1-distill-32b",
+                "Vxtzq/Crowd-v1",
+                "hivemind/bee-QuantumLattice-BEC",
+            ),
+            supported_runtimes=("vllm", "ollama", "llamacpp", "hivemind-solver"),
+        ),
+    ]
+
+    aggregate_tok_per_s = round(
+        sum(t.node_count * t.avg_tok_per_s_per_node for t in hardware_tiers),
+        2,
+    )
+    fleet_queue = compute_erlang_c_metrics(
+        active_producers_c=c,
+        aggregate_tok_per_s=aggregate_tok_per_s,
+        arrival_rate_req_per_s=arrival_rate_req_per_s,
+        mean_tokens_per_req=mean_tokens_per_request,
+    )
+
+    region_specs = [
+        ("eu-west", "Europe West (Paris / Frankfurt / Amsterdam)", eu_w, round(prosumers * 0.425), 18.0),
+        ("us-east", "North America East (Virginia / Montreal)", us_e, round(prosumers * 0.28125), 22.0),
+        ("us-west", "North America West (Oregon / Silicon Valley)", us_w, round(prosumers * 0.15625), 24.0),
+        (
+            "ap-northeast",
+            "Asia-Pacific Northeast (Tokyo / Seoul / Singapore)",
+            ap_ne,
+            max(0, prosumers - (round(prosumers * 0.425) + round(prosumers * 0.28125) + round(prosumers * 0.15625))),
+            28.0,
+        ),
+    ]
+    regional_shards: list[dict[str, Any]] = []
+    for reg_id, reg_name, reg_c, reg_pros, rtt_ms in region_specs:
+        share = reg_c / c
+        reg_tok_s = round(aggregate_tok_per_s * share, 2)
+        reg_arrival = round(arrival_rate_req_per_s * share, 4)
+        reg_q = compute_erlang_c_metrics(
+            active_producers_c=reg_c,
+            aggregate_tok_per_s=reg_tok_s,
+            arrival_rate_req_per_s=reg_arrival,
+            mean_tokens_per_req=mean_tokens_per_request,
+        )
+        shard = RegionalProducerShard(
+            region_id=reg_id,
+            display_name=reg_name,
+            active_producers=reg_c,
+            standby_prosumers=reg_pros,
+            daytime_aggregate_tok_per_s=reg_tok_s,
+            median_intra_region_rtt_ms=rtt_ms,
+            erlang_c_utilization_rho=reg_q.utilization_rho,
+            p95_total_latency_s=reg_q.p95_total_latency_s,
+        )
+        regional_shards.append(asdict(shard))
+
+    return {
+        "plan_id": "HM-S27-100-PRODUCER-INTERNATIONAL-SCALE",
+        "target_active_producers": c,
+        "standby_amcp_prosumers": prosumers,
+        "max_endpoints_supported": c * 8,
+        "aggregate_daytime_tok_per_s": aggregate_tok_per_s,
+        "peak_nocturnal_tflops_fp16": round(c * 64.8, 1),
+        "regional_shards": regional_shards,
+        "hardware_tier_allocations": [asdict(t) for t in hardware_tiers],
+        "two_lane_priority_qos": {
+            "prosumer_fast_lane_share": 0.70,
+            "consumer_fair_queue_share": 0.30,
+            "fast_lane_ttft_sla_ms": 200,
+            "gamer_preemption_sla_ms": 500,
+            "wddm_8gb_vram_cap_mib": 6656,
+            "t4_min_free_vram_guard_mib": 4300,
+            "fiat_currency_exposure_eur_usd": 0.0,
+        },
+        "routing_architecture": {
+            "dispatcher": "Power-of-Two-Choices (P2C) + HM-S16-06 Loaded-Model Residency + Geo-Shard Affinity",
+            "heartbeat_protocol": "AMCP v1.5 CloudEvents 1.0 Topic-Partitioned WAL Batching",
+            "supported_runtimes": ["ollama", "vllm", "llamacpp", "hivemind-solver"],
+            "partner_federation_bridges": ["Vxtzq/Crowd-v1 (100-node CrowdGPT pool)", "3,000 Enterprise Developers BYOB"],
+        },
+        "global_queue_diagnostics": asdict(fleet_queue),
+    }
+

@@ -1306,6 +1306,80 @@ def verify_manuscript_data_consistency(
         for cid in ("PROV-81", "PROV-82"):
             checks.append({"check_id": cid, "metric_name": "nocturnal_20_moe_stress_test_report.json missing", "expected_tokens": [], "source_artifact": src_noct, "passed": False})
 
+    # v4.1.0 Sub-1.5 GB "La Ruche" Vision-MoE, Exoplanet Astrophysics PoC, 7-Division 42.87M-Sample Swarm & 18-Month ZK/Mesh Roadmap (PROV-83..PROV-85)
+    rv_path = PROJECT_ROOT / "artifacts" / "nocturnal_reddit_vision_moe_report.json"
+    src_rv = "artifacts/nocturnal_reddit_vision_moe_report.json"
+    if rv_path.exists():
+        rv = json.loads(rv_path.read_text(encoding="utf-8"))
+        lr = rv.get("la_ruche_1500mb_vmoe_summary", {})
+        toks83 = [
+            f"{rv['stage2_mean_loss_reduction_pct']:.1f}",
+            _n(int(rv["stage2_max_consumer_vram_mib"])) + ".0",
+            f"{rv['stage3_mean_compression_ratio']:.2f}",
+            f"{rv['stage5_moe_vs_baseline_gain_pct']:.2f}",
+            _n(int(lr["max_worker_vram_mib"])) + ".0",
+            f"{lr['btm_merged_attn_qkv_norm']:.5f}",
+            "972.0",
+        ]
+        checks.append({
+            "check_id": "PROV-83",
+            "metric_name": "v4.1.0 Reddit-Vision VLM MoE & La Ruche sub-1.5 GB V-MoE (94.6% loss reduction, 6,380.0 MiB consumer VRAM, 8.53x compression, 99.92% MoE gain, 972.0-1,490.0 MiB La Ruche VRAM, 1.61191 merged QKV norm)",
+            "expected_tokens": toks83,
+            "source_artifact": src_rv,
+            "passed": all(t in tex_text for t in toks83),
+        })
+    else:
+        checks.append({"check_id": "PROV-83", "metric_name": "nocturnal_reddit_vision_moe_report.json missing", "expected_tokens": [], "source_artifact": src_rv, "passed": False})
+
+    exo_path = PROJECT_ROOT / "artifacts" / "exoplanet_astro_vmoe_poc_report.json"
+    src_exo = "artifacts/exoplanet_astro_vmoe_poc_report.json"
+    if exo_path.exists():
+        exo = json.loads(exo_path.read_text(encoding="utf-8"))
+        toks84 = [
+            f"{exo['stage1_min_vram_mib']:.1f}",
+            _n(int(exo["stage1_max_vram_mib"])) + ".0",
+            f"{exo['stage2_focal_loss_gamma']:.1f}",
+            f"{exo['stage2_mean_focal_loss_reduction_pct']:.2f}",
+            f"{exo['stage4_single_baseline_focal_loss']:.4f}",
+            f"{exo['stage4_upcycled_vmoe_focal_loss']:.5f}",
+            f"{exo['stage4_vmoe_gain_pct']:.2f}",
+        ]
+        checks.append({
+            "check_id": "PROV-84",
+            "metric_name": "v4.1.0 Exoplanet & Astrophysics Vision-MoE PoC (910.0-1,410.0 MiB VRAM, Focal Loss gamma=2.0, 99.95% mean focal loss reduction, 3.0207 -> 0.00078 = 99.97% V-MoE gain)",
+            "expected_tokens": toks84,
+            "source_artifact": src_exo,
+            "passed": all(t in tex_text for t in toks84),
+        })
+    else:
+        checks.append({"check_id": "PROV-84", "metric_name": "exoplanet_astro_vmoe_poc_report.json missing", "expected_tokens": [], "source_artifact": src_exo, "passed": False})
+
+    ms_path = PROJECT_ROOT / "artifacts" / "massive_swarm_image_moe_report.json"
+    src_ms = "artifacts/massive_swarm_image_moe_report.json"
+    if ms_path.exists():
+        ms = json.loads(ms_path.read_text(encoding="utf-8"))
+        toks85 = [
+            str(ms["total_divisions"]),
+            str(ms["total_hf_datasets"]),
+            _n(int(ms["total_dataset_samples"])),
+            _n(int(ms["total_streaming_shards"])),
+            str(ms["total_swarm_bees"]),
+            f"{ms['stage2_mean_focal_loss_reduction_pct']:.2f}",
+            f"{ms['stage4_moe_vs_baseline_gain_pct']:.2f}",
+            "zk-SNARK",
+            "Multi-Krum",
+            "15--20",
+        ]
+        checks.append({
+            "check_id": "PROV-85",
+            "metric_name": "v4.1.0 Massive 7-Division 15-Dataset 42,870,000-Sample (8,574-Shard) 104-Bee Swarm Orchestrator (99.75% inner reduction, 99.84% MoE gain) & 18-Month ZK-SNARK / Geo-Mesh Roadmap",
+            "expected_tokens": toks85,
+            "source_artifact": src_ms,
+            "passed": all(t in tex_text for t in toks85),
+        })
+    else:
+        checks.append({"check_id": "PROV-85", "metric_name": "massive_swarm_image_moe_report.json missing", "expected_tokens": [], "source_artifact": src_ms, "passed": False})
+
     failed = [c["check_id"] for c in checks if not c["passed"]]
     return {
         "total_checks": len(checks),
@@ -1556,7 +1630,7 @@ def run_autoevolve_peer_review() -> Dict[str, Any]:
 
     peer_review_report = {
         "manuscript_title": "Project HiveMind: A System Design for Decentralized Sparse Mixture-of-Experts Training with DiLoCo-Style Outer Optimization on 8 GB Consumer GPUs",
-        "version": "4.0.0",
+        "version": "4.1.0",
         "is_peer_review": False,
         "disclosure": AUDIT_DISCLOSURE,
         "lead_peer_review_model": LEAD_PEER_REVIEW_MODEL,
@@ -1596,7 +1670,7 @@ def run_autoevolve_peer_review() -> Dict[str, Any]:
 
     autoevolve_manifest = {
         "pipeline_name": "Project HiveMind x AutoevolveAI Cross-Session Research Pipeline",
-        "version": "4.0.0",
+        "version": "4.1.0",
         "lead_peer_review_model": LEAD_PEER_REVIEW_MODEL,
         "workspace_root": ".",
         "artifacts_and_entrypoints": {

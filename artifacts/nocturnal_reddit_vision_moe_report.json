@@ -1,7 +1,7 @@
 {
   "campaign_id": "NIGHT-REDDIT-VISION-MOE-V1",
   "title": "Reddit-Vision HiveMind: Culturally-Grounded VLM & Decentralized Vision-Language MoE",
-  "timestamp_utc": "2026-10-29T17:37:01Z",
+  "timestamp_utc": "2026-10-29T18:00:39Z",
   "inner_diloco_steps": 500,
   "lora_rank": 16,
   "lora_alpha": 32.0,
@@ -230,5 +230,115 @@
     }
   ],
   "overall_gate_passed": true,
-  "report_sha256": "7f73837d3c55b697b30f2ef3ca5396fbeec943970b04f7100ad01c45272a1846"
+  "report_sha256": "3f6635847fe50191c22322423930b1f22025d3cc2bb20a3f96ed7e6fbfd7ecfe",
+  "la_ruche_1500mb_vmoe_summary": {
+    "architecture": "La Ruche V-MoE (< 1.5 GB VRAM, BTM + DiLoCo-QLoRA + Muon + DCT DeMo + ZK-OPoI + FoMoE Top-2)",
+    "max_worker_vram_mib": 1490.0,
+    "strictly_under_1500mb_vram": true,
+    "btm_merged_attention_layers": 2,
+    "btm_merged_attn_qkv_norm": 1.61191,
+    "fomoe_router_type": "Patch-Level Top-2 Softmax (FoMoE)",
+    "fomoe_patch_routing_accuracy": 1.0,
+    "all_zk_opoi_receipts_verified": true,
+    "specializations": [
+      {
+        "specialization_id": "art_aesthetics",
+        "title_fr": "Art, Esth\u00e9tique & Rendu Num\u00e9rique",
+        "backbone_model_id": "google/siglip-base-patch16-224",
+        "params_m": 203.0,
+        "peak_vram_mib": 1390.0,
+        "within_1500mb_envelope": true,
+        "compression_ratio": 8.533,
+        "sqnr_db": 12.143,
+        "zk_opoi_verified": true
+      },
+      {
+        "specialization_id": "scientific_diagrams",
+        "title_fr": "Diagrammes Scientifiques & Sch\u00e9mas Techniques",
+        "backbone_model_id": "google/vit-base-patch16-224",
+        "params_m": 86.0,
+        "peak_vram_mib": 972.0,
+        "within_1500mb_envelope": true,
+        "compression_ratio": 8.533,
+        "sqnr_db": 12.133,
+        "zk_opoi_verified": true
+      },
+      {
+        "specialization_id": "semantic_segmentation",
+        "title_fr": "Segmentation S\u00e9mantique & D\u00e9coupage Dense par Patch",
+        "backbone_model_id": "facebook/dinov2-base",
+        "params_m": 86.6,
+        "peak_vram_mib": 1180.0,
+        "within_1500mb_envelope": true,
+        "compression_ratio": 8.533,
+        "sqnr_db": 12.138,
+        "zk_opoi_verified": true
+      },
+      {
+        "specialization_id": "object_detection",
+        "title_fr": "D\u00e9tection d'Objets & Ancrage Spatial Multi-\u00c9chelle",
+        "backbone_model_id": "facebook/dinov2-large",
+        "params_m": 304.0,
+        "peak_vram_mib": 1490.0,
+        "within_1500mb_envelope": true,
+        "compression_ratio": 8.533,
+        "sqnr_db": 11.986,
+        "zk_opoi_verified": true
+      }
+    ],
+    "zk_opoi_receipts": [
+      {
+        "bee_id": "bee_vmoe_art_aesthetics",
+        "specialization_id": "art_aesthetics",
+        "inner_steps": 500,
+        "optimizer_name": "Muon-NewtonSchulz5 + 8-bit AdamW",
+        "seed_commitment": "6515b7a824b77e75bbed93555adb60f3ce10e5dc12a4122c35d5c1cb036ae544",
+        "initial_weight_sha256": "4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe",
+        "final_delta_sha256": "9300ca860dd5e91dd18647247c6a177455811bc5e80d7c52261acc1971b6a595",
+        "dct_packet_sha256": "2aaabec607e9da7b6338cf374ce9ff832e3db0a3c14fee2e11ee98455397b99c",
+        "proof_commitment_hash": "1a81faca191a23be43ac9f380b00587cffa685da2ffc5db1ad974d6363dd7650",
+        "verified": true,
+        "verified_on_coordinator": true
+      },
+      {
+        "bee_id": "bee_vmoe_scientific_diagrams",
+        "specialization_id": "scientific_diagrams",
+        "inner_steps": 500,
+        "optimizer_name": "Muon-NewtonSchulz5 + 8-bit AdamW",
+        "seed_commitment": "4233101b760219b7a33c09aae65c5f3480e65741bb1c09e00eeaf206f2ff8142",
+        "initial_weight_sha256": "4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe",
+        "final_delta_sha256": "ccaaa528b31cc6b24deda7613630ec8a536408cda083232131d5dd370fa85760",
+        "dct_packet_sha256": "a0dff422db576078951dc8751ea6871611c33f66a6e1bb9b1c6c303dd2849122",
+        "proof_commitment_hash": "45a6333ab56c14840841a6ccd2ff1112474c33062f1db0ce3ee296b543552a30",
+        "verified": true,
+        "verified_on_coordinator": true
+      },
+      {
+        "bee_id": "bee_vmoe_semantic_segmentation",
+        "specialization_id": "semantic_segmentation",
+        "inner_steps": 500,
+        "optimizer_name": "Muon-NewtonSchulz5 + 8-bit AdamW",
+        "seed_commitment": "12ab42893c5040be0535f2f59a227d6eed5449225a66ae6a19ef8d8230d4aab4",
+        "initial_weight_sha256": "4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe",
+        "final_delta_sha256": "dda1fbb0ec616b83192945ccf8f538c091e30dcfb8c49676097bde341a5cb35b",
+        "dct_packet_sha256": "7f9b496bd520b261a63a13caf3e1d61257493b3f52373414999d35a4f10384b7",
+        "proof_commitment_hash": "9d49041ee3e3f892b3219d24e845e9aa510cbee1c9a5c8b33428a71a19cf69f2",
+        "verified": true,
+        "verified_on_coordinator": true
+      },
+      {
+        "bee_id": "bee_vmoe_object_detection",
+        "specialization_id": "object_detection",
+        "inner_steps": 500,
+        "optimizer_name": "Muon-NewtonSchulz5 + 8-bit AdamW",
+        "seed_commitment": "b67a776edfa6d5f58824099ecb312909827f12ca948471667364e7d844d984ab",
+        "initial_weight_sha256": "4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe",
+        "final_delta_sha256": "16226ac71534b3ab8a76fbf3da14df1377ee464d6c194d73b39ba66094fefd5e",
+        "dct_packet_sha256": "abcdae850afcb3d9244608fe1f3cc707a5241796b11def1dfaefc6f42a943418",
+        "proof_commitment_hash": "5a2a2f54baeab2d58fd04dc01f9e9f8ff0e0b445068d16e17430c3d3e947ab1a",
+        "verified": true,
+        "verified_on_coordinator": true
+      }
+    ]
+  }
 }

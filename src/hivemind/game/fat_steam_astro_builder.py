@@ -97,6 +97,19 @@ namespace HiveMind.ExoplanetHunterClient
         public string LifeFr;
         public string KidLessonEn;
         public string KidLessonFr;
+        // Progressive Difficulty & Real Astrophysical Hazard Parameters
+        public int DifficultyTier;
+        public int AsteroidBeltCount;
+        public double SurfaceGravityG;
+        public double EscapeVelKms;
+        public double ScaleHeightKm;
+        public double SurfacePressureBar;
+        public double WindShearMaxMs;
+        public bool IsNewMysteryPlanet;
+        public string AsteroidPhysicsEn;
+        public string AsteroidPhysicsFr;
+        public string AtmoLandingEn;
+        public string AtmoLandingFr;
     }
 
     public class ProbeProjectile
@@ -157,6 +170,7 @@ namespace HiveMind.ExoplanetHunterClient
         public static extern int mciSendString(string command, StringBuilder buffer, int bufferSize, IntPtr hwndCallback);
 
         private List<ExoTarget> _targets = new List<ExoTarget>();
+        private List<ExoTarget> _unseenPlanetPool = new List<ExoTarget>();
         private ExoTarget _current;
         private string _lang = "en"; // Default to English ("en") with GCP Gemini / Neural Voice! Supports "en", "fr", "es", "de", "zh"
         private bool _voiceAndSoundOn = true;
@@ -172,6 +186,12 @@ namespace HiveMind.ExoplanetHunterClient
         private bool[] _chapterIntroSpoken = new bool[5];
         private DateTime _chapterIntroEndUtc = DateTime.MinValue;
         private int _planetSwitchCount = 0;
+        private int _planetsExploredCount = 0;
+        private int _difficultyLevel = 1;
+        private double _asteroidHitCooldown = 0.0;
+        private double _surpriseEventTimer = 5.5;
+        private string _surpriseEventBanner = "";
+        private string _atmoLayerName = "THERMOSPHERE (IONOSPHERIC ENTRY)";
         private List<ScorePopup> _popups = new List<ScorePopup>();
         private List<HudStarBonus> _bonusStars = new List<HudStarBonus>();
         private SpeechSynthesizer _speechSynth = null;
@@ -273,8 +293,10 @@ namespace HiveMind.ExoplanetHunterClient
 
             Load3DAssets();
             InitTargets();
+            InitUnseenPlanetPool();
+            SelectNewUnseenPlanetForNewGame(false);
             InitBonusStars();
-            // Select K2-18 b (index 1) or LHS 1140 b (index 5) by default
+            // Select K2-18 b (index 1) by default; slot 8 is our brand-new unseen NASA mystery planet for this session!
             SelectTarget(1, true, false);
 
             this.KeyDown += OnKeyDownHandler;
@@ -334,23 +356,29 @@ namespace HiveMind.ExoplanetHunterClient
 
         private void ResetOolitePlanetfallState()
         {
+            double gVal = (_current != null && _current.SurfaceGravityG > 0.05) ? _current.SurfaceGravityG : 1.27;
+            double wMax = (_current != null && _current.WindShearMaxMs > 1.0) ? _current.WindShearMaxMs : 28.0;
             _landerAltKm = 3.000;
-            _landerSpeedMs = 96.0;
-            _landerCabinTempC = 96.0;
+            // Higher gravity & higher difficulty increase initial atmospheric entry speed & thermal shock!
+            _landerSpeedMs = Math.Min(148.0, 82.0 + gVal * 8.5 + _difficultyLevel * 3.2);
+            _landerCabinTempC = Math.Min(165.0, 78.0 + gVal * 7.0 + _difficultyLevel * 3.5);
             _landerFwdShield = 100.0;
             _landerAftShield = 100.0;
             _landerArmour = 100.0;
             _landerEnergy = 256.0;
-            _landerOffsetX = 12.0f;
+            _landerOffsetX = (float)(((_planetsExploredCount % 2 == 0) ? 1.0 : -1.0) * (10.0 + _difficultyLevel * 2.5));
             _landerPitchDeg = -10.0f;
-            _landerWindShearMs = 8.4;
+            _landerWindShearMs = Math.Round(Math.Min(wMax, 8.4 + _difficultyLevel * 4.5 + wMax * 0.22), 1);
+            _atmoLayerName = (_lang == "fr") ? "COUCHES 1/4 : THERMOSPHÈRE (PLASMA IONOSPHÉRIQUE)" : "LAYER 1/4: THERMOSPHERE (IONOSPHERIC PLASMA)";
             _landingClearanceGranted = true;
             _landingGearDown = true;
             _stage2TradeTabExpanded = false;
             InitBonusStars();
             _landingStatusMsg = (_lang == "fr")
-                ? "TUNNEL 3D VERROUILLÉ — SUIVEZ LE TUNNEL VERT VERS LA CIBLE OU APPUYEZ SUR [ESPACE / ENTRÉE] (+1000 PTS) !"
-                : "3D GLIDE-SLOPE LOCKED — FOLLOW GREEN TUNNEL TO TARGET PAD OR PRESS [SPACE / ENTER] (+1,000 PTS)!";
+                ? string.Format(CultureInfo.InvariantCulture, "NIV.{0} // g={1:F2}g | H={2:F1}km | CISAILLEMENT={3:F1}m/s — [ESPACE] FREINER | [ENTRÉE] ATTERRIR",
+                    _difficultyLevel, gVal, (_current != null ? _current.ScaleHeightKm : 18.5), _landerWindShearMs)
+                : string.Format(CultureInfo.InvariantCulture, "DIFF LVL {0} // g={1:F2}g | H={2:F1}km | WIND={3:F1}m/s — [SPACE] RETRO-BRAKE | [ENTER] LAND",
+                    _difficultyLevel, gVal, (_current != null ? _current.ScaleHeightKm : 18.5), _landerWindShearMs);
         }
 
         private void SaveRenderSnapshot()
@@ -479,11 +507,16 @@ namespace HiveMind.ExoplanetHunterClient
                 PeriodDays = 6.10, SemiMajorAxisAu = 0.029, Eccentricity = 0.005, RadialVelocityKms = 2.48,
                 DepthPpm = 5180, RadiusRearth = 0.92, MassMearth = 0.692, BulkDensityGcm3 = 4.90,
                 TeqK = 251, InsolationEarth = 0.66, InHz = true,
+                DifficultyTier = 2, AsteroidBeltCount = 8, SurfaceGravityG = 0.82, EscapeVelKms = 9.71, ScaleHeightKm = 9.2, SurfacePressureBar = 1.15, WindShearMaxMs = 42.0,
                 PrimaryColor = Color.FromArgb(16, 185, 129), PedestalColor = Color.FromArgb(52, 211, 153), ApprovedByGamer = true, LandedMedal = true,
                 AnalysisEn = "TRAPPIST-1e analysis: rocky world, 0.92 Earth radii, 251 K, 6.1-day orbit, 5,180 ppm transit.",
                 LifeEn = "How life could live: tidally locked twilight oceans could support red-light photosynthetic algae and marine bacteria.",
+                AsteroidPhysicsEn = "Orbital Physics: 7-planet Laplace resonance chain (8:5, 5:3, 3:2) triggers frequent cometary ejecta and M8V coronal mass ejections (CMEs).",
+                AtmoLandingEn = "Landing Physics: g = 0.82 g (v_esc = 9.7 km/s), scale height H = 9.2 km, with 42 m/s day-to-night terminator wind shear.",
                 AnalysisFr = "Analyse TRAPPIST-1e : monde rocheux, 0,92 rayon terrestre, 251 K, orbite 6,1 jours, transit 5 180 ppm.",
                 LifeFr = "Vie possible : ses océans crépusculaires abriteraient des algues photosynthétiques sous lumière rouge.",
+                AsteroidPhysicsFr = "Physique orbitale : chaîne de résonance de Laplace à 7 planètes (8:5, 3:2) concentrant les comètes et éruptions CME M8V.",
+                AtmoLandingFr = "Physique d'atterrissage : g = 0,82 g (v_lib = 9,7 km/s), hauteur d'échelle H = 9,2 km, cisaillement de 42 m/s au terminateur.",
                 KidLessonEn = "TRAPPIST-1e analysis: rocky world, 0.92 Earth radii, 251 K, 6.1-day orbit, 5,180 ppm transit. How life could live: tidally locked twilight oceans could support red-light photosynthetic algae and marine bacteria.",
                 KidLessonFr = "Analyse TRAPPIST-1e : monde rocheux, 0,92 rayon terrestre, 251 K, orbite 6,1 jours, transit 5 180 ppm. Vie possible : ses océans crépusculaires abriteraient des algues photosynthétiques sous lumière rouge."
             });
@@ -493,11 +526,16 @@ namespace HiveMind.ExoplanetHunterClient
                 PeriodDays = 32.94, SemiMajorAxisAu = 0.143, Eccentricity = 0.09, RadialVelocityKms = 3.55,
                 DepthPpm = 2920, RadiusRearth = 2.61, MassMearth = 8.63, BulkDensityGcm3 = 2.67,
                 TeqK = 265, InsolationEarth = 0.94, InHz = true,
+                DifficultyTier = 1, AsteroidBeltCount = 7, SurfaceGravityG = 1.27, EscapeVelKms = 20.34, ScaleHeightKm = 82.5, SurfacePressureBar = 12.4, WindShearMaxMs = 58.0,
                 PrimaryColor = Color.FromArgb(14, 165, 233), PedestalColor = Color.FromArgb(56, 189, 248), ApprovedByGamer = true, LandedMedal = true,
                 AnalysisEn = "K2-18 b analysis: Hycean world, 8.6 Earth masses, 265 K, JWST methane and CO2 atmosphere.",
                 LifeEn = "How life could live: phytoplankton and deep-sea organisms could thrive in its warm global ocean.",
+                AsteroidPhysicsEn = "Orbital Physics: Eccentricity e = 0.09 induces L4/L5 Trojan ice-bolide swarms and inner resonance perturbation from K2-18 c.",
+                AtmoLandingEn = "Landing Physics: Hycean H2-rich sky (mu = 2.3 g/mol) gives huge scale height H = 82.5 km, g = 1.27 g, and 58 m/s cyclonic ocean gusts.",
                 AnalysisFr = "Analyse K2-18 b : monde hycéen, 8,6 masses terrestres, 265 K, méthane et CO2 détectés par JWST.",
                 LifeFr = "Vie possible : du phytoplancton et des organismes marins prospéreraient dans son océan global chaud.",
+                AsteroidPhysicsFr = "Physique orbitale : excentricité e = 0,09 générant des essaims de bolides glacés aux points de Lagrange L4/L5.",
+                AtmoLandingFr = "Physique d'atterrissage : atmosphère hycéenne riche en H2 (H = 82,5 km), gravité g = 1,27 g et rafales cycloniques à 58 m/s.",
                 KidLessonEn = "K2-18 b analysis: Hycean world, 8.6 Earth masses, 265 K, JWST methane and CO2 atmosphere. How life could live: phytoplankton and deep-sea organisms could thrive in its warm global ocean.",
                 KidLessonFr = "Analyse K2-18 b : monde hycéen, 8,6 masses terrestres, 265 K, méthane et CO2 détectés par JWST. Vie possible : du phytoplancton et des organismes marins prospéreraient dans son océan global chaud."
             });
@@ -507,11 +545,16 @@ namespace HiveMind.ExoplanetHunterClient
                 PeriodDays = 46.69, SemiMajorAxisAu = 0.250, Eccentricity = 0.013, RadialVelocityKms = 0.43,
                 DepthPpm = 550, RadiusRearth = 2.49, MassMearth = 2.00, BulkDensityGcm3 = 0.71,
                 TeqK = 544, InsolationEarth = 17.4, InHz = false,
+                DifficultyTier = 4, AsteroidBeltCount = 11, SurfaceGravityG = 0.32, EscapeVelKms = 10.02, ScaleHeightKm = 540.0, SurfacePressureBar = 85.0, WindShearMaxMs = 115.0,
                 PrimaryColor = Color.FromArgb(139, 92, 246), PedestalColor = Color.FromArgb(167, 139, 250), ApprovedByGamer = true, LandedMedal = false,
                 AnalysisEn = "Kepler-11 f analysis: low-density Mini-Neptune, 0.71 g/cm³, 2.49 Earth radii, 544 K hydrogen envelope.",
                 LifeEn = "How life could live: no solid ground exists, so only high-altitude floating cloud microbes could survive.",
+                AsteroidPhysicsEn = "Orbital Physics: Ultra-compact 6-planet system inside 0.46 AU creates dense secular resonance debris rings (v_orb = 58.4 km/s).",
+                AtmoLandingEn = "Landing Physics: Puffy H/He envelope (rho = 0.71 g/cm³, g = 0.32 g) produces a 540 km scale height and 115 m/s convective downdrafts.",
                 AnalysisFr = "Analyse Kepler-11 f : Mini-Neptune gazeuse, densité 0,71 g/cm³, 2,49 rayons terrestres, 544 K.",
                 LifeFr = "Vie possible : sans surface solide, seuls des microbes flottant dans les nuages tempérés survivraient.",
+                AsteroidPhysicsFr = "Physique orbitale : système ultra-compact à 6 planètes sous 0,46 UA créant d'intenses anneaux de débris en résonance.",
+                AtmoLandingFr = "Physique d'atterrissage : enveloppe H/He gonflée (g = 0,32 g, H = 540 km) avec courants descendants convectifs à 115 m/s.",
                 KidLessonEn = "Kepler-11 f analysis: low-density Mini-Neptune, 0.71 g/cm³, 2.49 Earth radii, 544 K hydrogen envelope. How life could live: no solid ground exists, so only high-altitude floating cloud microbes could survive.",
                 KidLessonFr = "Analyse Kepler-11 f : Mini-Neptune gazeuse, densité 0,71 g/cm³, 2,49 rayons terrestres, 544 K. Vie possible : sans surface solide, seuls des microbes flottant dans les nuages tempérés survivraient."
             });
@@ -521,11 +564,16 @@ namespace HiveMind.ExoplanetHunterClient
                 PeriodDays = 111.44, SemiMajorAxisAu = 0.456, Eccentricity = 0.933, RadialVelocityKms = 476.1,
                 DepthPpm = 11200, RadiusRearth = 11.99, MassMearth = 1392.0, BulkDensityGcm3 = 4.43,
                 TeqK = 405, InsolationEarth = 5.05, InHz = false,
+                DifficultyTier = 9, AsteroidBeltCount = 18, SurfaceGravityG = 9.68, EscapeVelKms = 120.5, ScaleHeightKm = 18.0, SurfacePressureBar = 420.0, WindShearMaxMs = 285.0,
                 PrimaryColor = Color.FromArgb(234, 88, 12), PedestalColor = Color.FromArgb(251, 146, 60), ApprovedByGamer = true, LandedMedal = false,
                 AnalysisEn = "HD 80606 b analysis: eccentric giant, 93% eccentricity, 476 m/s Doppler wobble, 1,200 K periastron storms.",
                 LifeEn = "How life could live: extreme heat blocks surface life; only subsurface microbes inside an icy exomoon could survive.",
+                AsteroidPhysicsEn = "Orbital Physics: Extreme e = 0.933 swings from 0.88 AU to 0.03 AU! Periastron tidal shock shatters asteroids across the Roche limit.",
+                AtmoLandingEn = "Landing Physics: Crushing g = 9.68 g (v_esc = 120.5 km/s) and 828x insolation spike drive 285 m/s supersonic shockwave gales!",
                 AnalysisFr = "Analyse HD 80606 b : géante excentrique à 93 %, Doppler 476 m/s, tempêtes à 1 200 K.",
                 LifeFr = "Vie possible : chaleur mortelle en surface ; seuls des microbes sous la glace d'une exolune survivraient.",
+                AsteroidPhysicsFr = "Physique orbitale : excentricité extrême e = 0,933 (0,88 à 0,03 UA) brisant les comètes par cisaillement de marée de Roche.",
+                AtmoLandingFr = "Physique d'atterrissage : gravité écrasante g = 9,68 g (v_lib = 120,5 km/s) et tempêtes supersoniques à 285 m/s au périastre !",
                 KidLessonEn = "HD 80606 b analysis: eccentric giant, 93% eccentricity, 476 m/s Doppler wobble, 1,200 K periastron storms. How life could live: extreme heat blocks surface life; only subsurface microbes inside an icy exomoon could survive.",
                 KidLessonFr = "Analyse HD 80606 b : géante excentrique à 93 %, Doppler 476 m/s, tempêtes à 1 200 K. Vie possible : chaleur mortelle en surface ; seuls des microbes sous la glace d'une exolune survivraient."
             });
@@ -535,11 +583,16 @@ namespace HiveMind.ExoplanetHunterClient
                 PeriodDays = 37.42, SemiMajorAxisAu = 0.163, Eccentricity = 0.042, RadialVelocityKms = 0.78,
                 DepthPpm = 665, RadiusRearth = 1.14, MassMearth = 1.72, BulkDensityGcm3 = 6.32,
                 TeqK = 269, InsolationEarth = 0.86, InHz = true,
+                DifficultyTier = 3, AsteroidBeltCount = 9, SurfaceGravityG = 1.32, EscapeVelKms = 13.74, ScaleHeightKm = 6.8, SurfacePressureBar = 1.85, WindShearMaxMs = 54.0,
                 PrimaryColor = Color.FromArgb(20, 184, 166), PedestalColor = Color.FromArgb(45, 212, 191), ApprovedByGamer = true, LandedMedal = false,
                 AnalysisEn = "TOI-700 d analysis: TESS rocky world, 1.14 Earth radii, 269 K, 37.4-day habitable orbit.",
                 LifeEn = "How life could live: mild coastal seas along the terminator zone could sustain multicellular aquatic life.",
+                AsteroidPhysicsEn = "Orbital Physics: Outer Kirkwood 4:3 resonance with TOI-700 e scatters rocky planetesimals across the 0.163 AU habitable corridor.",
+                AtmoLandingEn = "Landing Physics: Dense iron-core world (rho = 6.32 g/cm³, g = 1.32 g) with compact H = 6.8 km N2/CO2 troposphere and 54 m/s coastal shear.",
                 AnalysisFr = "Analyse TOI-700 d : monde rocheux TESS, 1,14 rayon terrestre, 269 K, orbite habitable de 37,4 jours.",
                 LifeFr = "Vie possible : des mers tempérées le long du terminateur soutiendraient une vie aquatique complexe.",
+                AsteroidPhysicsFr = "Physique orbitale : résonance 4:3 avec TOI-700 e déviant des planétésimaux rocheux sur l'orbite de 0,163 UA.",
+                AtmoLandingFr = "Physique d'atterrissage : noyau ferreux dense (g = 1,32 g), troposphère N2/CO2 compacte (H = 6,8 km) et vents côtiers de 54 m/s.",
                 KidLessonEn = "TOI-700 d analysis: TESS rocky world, 1.14 Earth radii, 269 K, 37.4-day habitable orbit. How life could live: mild coastal seas along the terminator zone could sustain multicellular aquatic life.",
                 KidLessonFr = "Analyse TOI-700 d : monde rocheux TESS, 1,14 rayon terrestre, 269 K, orbite habitable de 37,4 jours. Vie possible : des mers tempérées le long du terminateur soutiendraient une vie aquatique complexe."
             });
@@ -549,11 +602,16 @@ namespace HiveMind.ExoplanetHunterClient
                 PeriodDays = 24.74, SemiMajorAxisAu = 0.095, Eccentricity = 0.043, RadialVelocityKms = 4.90,
                 DepthPpm = 5340, RadiusRearth = 1.73, MassMearth = 5.60, BulkDensityGcm3 = 5.95,
                 TeqK = 226, InsolationEarth = 0.43, InHz = true,
+                DifficultyTier = 5, AsteroidBeltCount = 12, SurfaceGravityG = 1.87, EscapeVelKms = 20.11, ScaleHeightKm = 4.3, SurfacePressureBar = 4.20, WindShearMaxMs = 88.0,
                 PrimaryColor = Color.FromArgb(6, 182, 212), PedestalColor = Color.FromArgb(34, 211, 238), ApprovedByGamer = true, LandedMedal = true,
                 AnalysisEn = "LHS 1140 b analysis: dense Super-Earth, 5.6 Earth masses, 5,340 ppm transit, 226 K nitrogen sky.",
                 LifeEn = "How life could live: a sunlit open-ocean bullseye and hydrothermal vents could sustain rich marine ecosystems.",
+                AsteroidPhysicsEn = "Orbital Physics: High escape velocity (20.1 km/s) and Hill sphere (R_H = 0.0024 AU) focus incoming icy exocomets to hyper-velocities.",
+                AtmoLandingEn = "Landing Physics: Heavy Super-Earth gravity g = 1.87 g compresses its secondary N2 atmosphere (H = 4.3 km, 4.2 bar) with 88 m/s polar downdrafts!",
                 AnalysisFr = "Analyse LHS 1140 b : Super-Terre dense, 5,6 masses terrestres, transit 5 340 ppm, 226 K.",
                 LifeFr = "Vie possible : un océan circulaire côté jour et des sources hydrothermales nourriraient la vie marine.",
+                AsteroidPhysicsFr = "Physique orbitale : forte vitesse de libération (20,1 km/s) accélérant les exocomètes glacées dans la sphère de Hill.",
+                AtmoLandingFr = "Physique d'atterrissage : forte gravité g = 1,87 g comprimant l'atmosphère N2 (H = 4,3 km, 4,2 bar) avec courants polaires à 88 m/s !",
                 KidLessonEn = "LHS 1140 b analysis: dense Super-Earth, 5.6 Earth masses, 5,340 ppm transit, 226 K nitrogen sky. How life could live: a sunlit open-ocean bullseye and hydrothermal vents could sustain rich marine ecosystems.",
                 KidLessonFr = "Analyse LHS 1140 b : Super-Terre dense, 5,6 masses terrestres, transit 5 340 ppm, 226 K. Vie possible : un océan circulaire côté jour et des sources hydrothermales nourriraient la vie marine."
             });
@@ -563,11 +621,16 @@ namespace HiveMind.ExoplanetHunterClient
                 PeriodDays = 4.06, SemiMajorAxisAu = 0.049, Eccentricity = 0.00, RadialVelocityKms = 38.0,
                 DepthPpm = 21200, RadiusRearth = 14.23, MassMearth = 88.9, BulkDensityGcm3 = 0.17,
                 TeqK = 1166, InsolationEarth = 420.0, InHz = false,
+                DifficultyTier = 7, AsteroidBeltCount = 15, SurfaceGravityG = 0.44, EscapeVelKms = 27.95, ScaleHeightKm = 980.0, SurfacePressureBar = 65.0, WindShearMaxMs = 195.0,
                 PrimaryColor = Color.FromArgb(202, 138, 4), PedestalColor = Color.FromArgb(250, 204, 21), ApprovedByGamer = true, LandedMedal = false,
                 AnalysisEn = "WASP-39 b analysis: puffy hot Saturn, 14.2 Earth radii, 1,166 K, JWST SO2 and CO2 clouds.",
                 LifeEn = "How life could live: 1,166 K heat and corrosive sulfur clouds break organic bonds; life cannot survive.",
+                AsteroidPhysicsEn = "Orbital Physics: Close-in 0.049 AU orbit (v_orb = 135 km/s) experiences intense UV photo-evaporation and refractory dust infall.",
+                AtmoLandingEn = "Landing Physics: Extreme scale height H = 980 km at 1,166 K with photochemical SO2 aerosols and 195 m/s equatorial super-rotation jets!",
                 AnalysisFr = "Analyse WASP-39 b : Saturne chaude gonflée, 14,2 rayons terrestres, 1 166 K, nuages de SO2 et CO2.",
                 LifeFr = "Vie possible : à 1 166 K, la chaleur brise les molécules organiques ; aucune vie ne peut survivre.",
+                AsteroidPhysicsFr = "Physique orbitale : orbite proche à 0,049 UA (v_orb = 135 km/s) soumise à la photo-évaporation UV et aux poussières réfractaires.",
+                AtmoLandingFr = "Physique d'atterrissage : hauteur d'échelle géante H = 980 km à 1 166 K, nuages photochimiques de SO2 et jets équatoriaux à 195 m/s !",
                 KidLessonEn = "WASP-39 b analysis: puffy hot Saturn, 14.2 Earth radii, 1,166 K, JWST SO2 and CO2 clouds. How life could live: 1,166 K heat and corrosive sulfur clouds break organic bonds; life cannot survive.",
                 KidLessonFr = "Analyse WASP-39 b : Saturne chaude gonflée, 14,2 rayons terrestres, 1 166 K, nuages de SO2 et CO2. Vie possible : à 1 166 K, la chaleur brise les molécules organiques ; aucune vie ne peut survivre."
             });
@@ -577,11 +640,16 @@ namespace HiveMind.ExoplanetHunterClient
                 PeriodDays = 129.94, SemiMajorAxisAu = 0.432, Eccentricity = 0.04, RadialVelocityKms = 0.29,
                 DepthPpm = 512, RadiusRearth = 1.17, MassMearth = 1.44, BulkDensityGcm3 = 4.96,
                 TeqK = 188, InsolationEarth = 0.32, InHz = true,
+                DifficultyTier = 6, AsteroidBeltCount = 13, SurfaceGravityG = 1.05, EscapeVelKms = 12.41, ScaleHeightKm = 5.4, SurfacePressureBar = 3.10, WindShearMaxMs = 96.0,
                 PrimaryColor = Color.FromArgb(192, 38, 211), PedestalColor = Color.FromArgb(232, 121, 249), ApprovedByGamer = true, LandedMedal = false,
                 AnalysisEn = "Kepler-186f analysis: cool rocky planet, 1.17 Earth radii, 188 K, 130-day outer habitable orbit.",
                 LifeEn = "How life could live: dark infrared-absorbing plants and sub-glacial microbes could thrive near volcanic vents.",
+                AsteroidPhysicsEn = "Orbital Physics: Outer habitable edge (0.432 AU) borders the system's frost line (T < 170 K), producing dense Kuiper-belt ice-asteroid swarms.",
+                AtmoLandingEn = "Landing Physics: Cold 188 K dense CO2/N2 atmosphere (H = 5.4 km, g = 1.05 g) triggers sudden CO2 dry-ice snow squalls and 96 m/s blizzards.",
                 AnalysisFr = "Analyse Kepler-186f : planète rocheuse froide, 1,17 rayon terrestre, 188 K, orbite habitable de 130 jours.",
                 LifeFr = "Vie possible : des plantes sombres captant l'infrarouge et des microbes survivraient près des volcans.",
+                AsteroidPhysicsFr = "Physique orbitale : bord externe habitable (0,432 UA) proche de la ligne des glaces, riche en astéroïdes glacés.",
+                AtmoLandingFr = "Physique d'atterrissage : atmosphère froide à 188 K (H = 5,4 km, g = 1,05 g) avec blizzards de glace carbonique CO2 à 96 m/s.",
                 KidLessonEn = "Kepler-186f analysis: cool rocky planet, 1.17 Earth radii, 188 K, 130-day outer habitable orbit. How life could live: dark infrared-absorbing plants and sub-glacial microbes could thrive near volcanic vents.",
                 KidLessonFr = "Analyse Kepler-186f : planète rocheuse froide, 1,17 rayon terrestre, 188 K, orbite habitable de 130 jours. Vie possible : des plantes sombres captant l'infrarouge et des microbes survivraient près des volcans."
             });
@@ -591,11 +659,16 @@ namespace HiveMind.ExoplanetHunterClient
                 PeriodDays = 18.42, SemiMajorAxisAu = 0.138, Eccentricity = 0.01, RadialVelocityKms = 0.04,
                 DepthPpm = 420, RadiusRearth = 1.42, MassMearth = 0.05, BulkDensityGcm3 = 0.10,
                 TeqK = 258, InsolationEarth = 0.88, InHz = true,
+                DifficultyTier = 6, AsteroidBeltCount = 14, SurfaceGravityG = 0.65, EscapeVelKms = 8.40, ScaleHeightKm = 14.0, SurfacePressureBar = 0.85, WindShearMaxMs = 74.0,
                 PrimaryColor = Color.FromArgb(22, 163, 74), PedestalColor = Color.FromArgb(74, 222, 128), ApprovedByGamer = true, LandedMedal = false,
                 AnalysisEn = "KOI-Cand 14 analysis: unconfirmed candidate, 420 ppm dip, flat 0.04 m/s Doppler wobble, 258 K.",
                 LifeEn = "How life could live: if verified as an icy water world, sub-surface oceans could shelter anaerobic bacteria.",
+                AsteroidPhysicsEn = "Orbital Physics: Unresolved planetary-mass debris disk causes transit timing variations (TTVs) and dense micrometeoroid hazards.",
+                AtmoLandingEn = "Landing Physics: Low surface gravity (0.65 g) and sublimating H2O/CH4 ice plumes generate unpredictable 74 m/s cryo-geyser updrafts.",
                 AnalysisFr = "Analyse KOI-Cand 14 : candidat à confirmer, transit 420 ppm, Doppler plat 0,04 m/s, 258 K.",
                 LifeFr = "Vie possible : s'il est confirmé comme monde glacé, un océan souterrain abriterait des bactéries.",
+                AsteroidPhysicsFr = "Physique orbitale : disque de débris causant des variations de transit (TTV) et des essaims de micrométéoroïdes.",
+                AtmoLandingFr = "Physique d'atterrissage : faible gravité (0,65 g) et panaches de cryo-geysers H2O/CH4 créant des turbulences à 74 m/s.",
                 KidLessonEn = "KOI-Cand 14 analysis: unconfirmed candidate, 420 ppm dip, flat 0.04 m/s Doppler wobble, 258 K. How life could live: if verified as an icy water world, sub-surface oceans could shelter anaerobic bacteria.",
                 KidLessonFr = "Analyse KOI-Cand 14 : candidat à confirmer, transit 420 ppm, Doppler plat 0,04 m/s, 258 K. Vie possible : s'il est confirmé comme monde glacé, un océan souterrain abriterait des bactéries."
             });
@@ -605,14 +678,222 @@ namespace HiveMind.ExoplanetHunterClient
                 PeriodDays = 1.84, SemiMajorAxisAu = 0.031, Eccentricity = 0.08, RadialVelocityKms = 1420.0,
                 DepthPpm = 58400, RadiusRearth = 31.40, MassMearth = 31150.0, BulkDensityGcm3 = 5.55,
                 TeqK = 1480, InsolationEarth = 890.0, InHz = false,
+                DifficultyTier = 10, AsteroidBeltCount = 20, SurfaceGravityG = 31.59, EscapeVelKms = 352.4, ScaleHeightKm = 145.0, SurfacePressureBar = 1000.0, WindShearMaxMs = 340.0,
                 PrimaryColor = Color.FromArgb(225, 29, 72), PedestalColor = Color.FromArgb(244, 63, 94), ApprovedByGamer = true, LandedMedal = false,
                 AnalysisEn = "KOI-Bin #02 analysis: false positive eclipsing binary, V-shaped 58,400 ppm dip, 1,420 m/s wobble.",
                 LifeEn = "How life could live: no solid planet exists here—only two scorching stars where biology cannot survive.",
+                AsteroidPhysicsEn = "Orbital Physics: Contact binary Roche-lobe overflow (L1 mass transfer stream) ejects relativistic plasma and molten slag bolides!",
+                AtmoLandingEn = "Landing Physics: Stellar photosphere (g = 31.6 g, v_esc = 352 km/s, T = 1,480 K)—no solid surface exists; abort to JWST Lab to REJECT!",
                 AnalysisFr = "Analyse KOI-Bin #02 : faux positif binaire à éclipses, transit en V 58 400 ppm, Doppler 1 420 m/s.",
                 LifeFr = "Vie possible : aucune planète solide ici, seulement deux étoiles brûlantes stériles.",
+                AsteroidPhysicsFr = "Physique orbitale : débordement du lobe de Roche binaire au point L1 projetant du plasma et des bolides en fusion !",
+                AtmoLandingFr = "Physique d'atterrissage : photosphère stellaire (g = 31,6 g, 1 480 K) sans surface solide ; passez au Labo JWST pour REJETER !",
                 KidLessonEn = "KOI-Bin #02 analysis: false positive eclipsing binary, V-shaped 58,400 ppm dip, 1,420 m/s wobble. How life could live: no solid planet exists here—only two scorching stars where biology cannot survive.",
                 KidLessonFr = "Analyse KOI-Bin #02 : faux positif binaire à éclipses, transit en V 58 400 ppm, Doppler 1 420 m/s. Vie possible : aucune planète solide ici, seulement deux étoiles brûlantes stériles."
             });
+        }
+
+        /// <summary>
+        /// Initializes a pool of 8 real peer-reviewed NASA Exoplanet Archive worlds that were NOT in the original 10-planet list.
+        /// Each new game automatically selects an unseen planet from this pool (persisted in seen_mystery_planets.txt)
+        /// so every session introduces a fresh scientific discovery with real asteroid, atmospheric, and landing physics!
+        /// </summary>
+        private void InitUnseenPlanetPool()
+        {
+            _unseenPlanetPool.Clear();
+            _unseenPlanetPool.Add(new ExoTarget {
+                Index = 8, Id = "NASA-NEW-PROXIMA-CEN-B", ShortLabel = "Proxima Cen b", HostStar = "Proxima Centauri (M5.5V)",
+                Disposition = "CONFIRMED", GalaxyXNorm = 0.330f, GalaxyYNorm = 0.805f,
+                PeriodDays = 11.186, SemiMajorAxisAu = 0.0485, Eccentricity = 0.02, RadialVelocityKms = 1.38,
+                DepthPpm = 4850, RadiusRearth = 1.03, MassMearth = 1.07, BulkDensityGcm3 = 5.30,
+                TeqK = 234, InsolationEarth = 0.65, InHz = true, IsNewMysteryPlanet = true,
+                DifficultyTier = 6, AsteroidBeltCount = 14, SurfaceGravityG = 1.01, EscapeVelKms = 11.40, ScaleHeightKm = 7.8, SurfacePressureBar = 1.40, WindShearMaxMs = 78.0,
+                PrimaryColor = Color.FromArgb(16, 185, 129), PedestalColor = Color.FromArgb(52, 255, 141), ApprovedByGamer = true, LandedMedal = false,
+                AnalysisEn = "NEW NASA PLANET — Proxima Cen b (4.24 ly): rocky habitable-zone world, 1.07 M⊕, 1.03 R⊕, 234 K, P=11.19 d, K=1.38 m/s (HARPS/ESPRESSO).",
+                LifeEn = "How life could live: bio-fluorescent marine organisms and sub-surface extremophiles could shield against M5.5V XUV superflares.",
+                AsteroidPhysicsEn = "Real Astrophysics: ALMA detected a cold Kuiper-like dust & exocomet belt (1-4 AU) + Proxima 10^33.5 erg superflare CME shockwaves!",
+                AtmoLandingEn = "Landing Physics: g = 1.01 g (v_esc = 11.4 km/s), H = 7.8 km, with ionospheric superflare drag and 78 m/s terminator katabatic gales.",
+                AnalysisFr = "NOUVELLE PLANÈTE NASA — Proxima Cen b (4,24 al) : monde rocheux habitable, 1,07 M⊕, 1,03 R⊕, 234 K, P=11,19 j, K=1,38 m/s.",
+                LifeFr = "Vie possible : des organismes marins bio-fluorescents survivraient sous l'eau face aux super-éruptions UV de Proxima.",
+                AsteroidPhysicsFr = "Astrophysique réelle : ceinture d'exocomètes détectée par ALMA (1-4 UA) et ondes de choc CME de super-éruptions M5.5V !",
+                AtmoLandingFr = "Physique d'atterrissage : g = 1,01 g (v_lib = 11,4 km/s), H = 7,8 km, traînée ionosphérique et vents catabatiques de 78 m/s."
+            });
+            _unseenPlanetPool.Add(new ExoTarget {
+                Index = 8, Id = "NASA-NEW-55-CANCRI-E", ShortLabel = "55 Cancri e", HostStar = "55 Cancri A (G8V)",
+                Disposition = "CONFIRMED", GalaxyXNorm = 0.330f, GalaxyYNorm = 0.805f,
+                PeriodDays = 0.7365, SemiMajorAxisAu = 0.0154, Eccentricity = 0.03, RadialVelocityKms = 6.02,
+                DepthPpm = 380, RadiusRearth = 1.875, MassMearth = 7.99, BulkDensityGcm3 = 6.66,
+                TeqK = 1958, InsolationEarth = 2400.0, InHz = false, IsNewMysteryPlanet = true,
+                DifficultyTier = 8, AsteroidBeltCount = 17, SurfaceGravityG = 2.27, EscapeVelKms = 23.10, ScaleHeightKm = 42.0, SurfacePressureBar = 18.5, WindShearMaxMs = 220.0,
+                PrimaryColor = Color.FromArgb(249, 115, 22), PedestalColor = Color.FromArgb(251, 146, 60), ApprovedByGamer = true, LandedMedal = false,
+                AnalysisEn = "NEW NASA PLANET — 55 Cancri e (Janssen): ultra-hot Super-Earth, 7.99 M⊕, 1.88 R⊕, 1,958 K magma ocean, JWST CO/CO2 atmosphere (2024).",
+                LifeEn = "How life could live: 1,958 K molten silicate surface prevents carbon biology; only silicon-carbide prebiotic chemistry can exist.",
+                AsteroidPhysicsEn = "Real Astrophysics: Orbiting at 0.0154 AU (P = 17.7 h, v_orb = 230 km/s) inside refractory corundum/silicate meteoroid evaporation streams!",
+                AtmoLandingEn = "Landing Physics: Heavy g = 2.27 g (v_esc = 23.1 km/s), JWST outgassed CO/CO2 sky (H = 42 km) and 220 m/s silicate-rain thermal storms!",
+                AnalysisFr = "NOUVELLE PLANÈTE NASA — 55 Cancri e : Super-Terre de lave à 1 958 K, 7,99 M⊕, 1,88 R⊕, atmosphère CO/CO2 détectée par JWST.",
+                LifeFr = "Vie possible : océan de magma à 1 958 K stérile pour la biologie carbonée ; chimie prébiotique de silicates uniquement.",
+                AsteroidPhysicsFr = "Astrophysique réelle : orbite ultra-proche à 0,0154 UA (P = 17,7 h, v_orb = 230 km/s) dans un flux de météoroïdes de silicates en fusion !",
+                AtmoLandingFr = "Physique d'atterrissage : forte gravité g = 2,27 g (v_lib = 23,1 km/s), ciel CO/CO2 (H = 42 km) et tempêtes de vapeur minérale à 220 m/s !"
+            });
+            _unseenPlanetPool.Add(new ExoTarget {
+                Index = 8, Id = "NASA-NEW-GJ-1214B", ShortLabel = "GJ 1214 b", HostStar = "GJ 1214 (M4.5V)",
+                Disposition = "CONFIRMED", GalaxyXNorm = 0.330f, GalaxyYNorm = 0.805f,
+                PeriodDays = 1.5804, SemiMajorAxisAu = 0.0149, Eccentricity = 0.06, RadialVelocityKms = 12.30,
+                DepthPpm = 13500, RadiusRearth = 2.742, MassMearth = 8.17, BulkDensityGcm3 = 2.20,
+                TeqK = 596, InsolationEarth = 22.1, InHz = false, IsNewMysteryPlanet = true,
+                DifficultyTier = 7, AsteroidBeltCount = 15, SurfaceGravityG = 1.09, EscapeVelKms = 19.30, ScaleHeightKm = 38.5, SurfacePressureBar = 65.0, WindShearMaxMs = 165.0,
+                PrimaryColor = Color.FromArgb(56, 189, 248), PedestalColor = Color.FromArgb(125, 211, 252), ApprovedByGamer = true, LandedMedal = false,
+                AnalysisEn = "NEW NASA PLANET — GJ 1214 b (Enaiposha): archetype steam world, 8.17 M⊕, 2.74 R⊕, 596 K, JWST MIRI high-albedo haze & H2O/CH4 sky.",
+                LifeEn = "How life could live: supercritical steam ocean at depth is too hot, but high-altitude temperate cloud droplets could host extremophiles.",
+                AsteroidPhysicsEn = "Real Astrophysics: High-metallicity (Z > 100x solar) chondritic planetesimal torus and eccentric tidal stream at a = 0.0149 AU.",
+                AtmoLandingEn = "Landing Physics: Reflective KCl/ZnS salt clouds (albedo 0.51), H = 38.5 km steam envelope, g = 1.09 g, and 165 m/s zonal jet shear!",
+                AnalysisFr = "NOUVELLE PLANÈTE NASA — GJ 1214 b : monde-vapeur archétype, 8,17 M⊕, 2,74 R⊕, 596 K, brumes réfléchissantes mesurées par JWST MIRI.",
+                LifeFr = "Vie possible : océan supercritique profond trop chaud, mais les gouttelettes des hauts nuages tempérés abriteraient des microbes.",
+                AsteroidPhysicsFr = "Astrophysique réelle : tore de planétésimaux chondritiques à haute métallicité (Z > 100x solaire) à 0,0149 UA.",
+                AtmoLandingFr = "Physique d'atterrissage : nuages de sels KCl/ZnS (albédo 0,51), enveloppe de vapeur H = 38,5 km, g = 1,09 g et jets à 165 m/s !"
+            });
+            _unseenPlanetPool.Add(new ExoTarget {
+                Index = 8, Id = "NASA-NEW-LP-890-9C", ShortLabel = "LP 890-9 c", HostStar = "SPECULOOS-2 (M6V)",
+                Disposition = "CONFIRMED", GalaxyXNorm = 0.330f, GalaxyYNorm = 0.805f,
+                PeriodDays = 8.457, SemiMajorAxisAu = 0.0398, Eccentricity = 0.02, RadialVelocityKms = 1.95,
+                DepthPpm = 7280, RadiusRearth = 1.367, MassMearth = 2.53, BulkDensityGcm3 = 5.46,
+                TeqK = 272, InsolationEarth = 0.91, InHz = true, IsNewMysteryPlanet = true,
+                DifficultyTier = 6, AsteroidBeltCount = 13, SurfaceGravityG = 1.35, EscapeVelKms = 15.20, ScaleHeightKm = 14.2, SurfacePressureBar = 3.80, WindShearMaxMs = 118.0,
+                PrimaryColor = Color.FromArgb(45, 212, 191), PedestalColor = Color.FromArgb(94, 234, 212), ApprovedByGamer = true, LandedMedal = false,
+                AnalysisEn = "NEW NASA PLANET — LP 890-9 c (SPECULOOS-2 c): temperate Super-Earth, 1.37 R⊕, 2.53 M⊕, 272 K, 7,280 ppm transit at inner HZ boundary.",
+                LifeEn = "How life could live: warm global oceans and geothermal shelves could support dense thermophilic microbial mats and marine life.",
+                AsteroidPhysicsEn = "Real Astrophysics: Near 2:1 mean-motion resonance with inner LP 890-9 b drives periodic exocomet scattering across 0.04 AU.",
+                AtmoLandingEn = "Landing Physics: Super-Earth gravity g = 1.35 g (v_esc = 15.2 km/s), moist steam troposphere (H = 14.2 km) with 118 m/s convective microbursts!",
+                AnalysisFr = "NOUVELLE PLANÈTE NASA — LP 890-9 c (SPECULOOS-2 c) : Super-Terre habitable, 1,37 R⊕, 2,53 M⊕, 272 K, transit de 7 280 ppm.",
+                LifeFr = "Vie possible : océans chauds au bord interne de la zone habitable propices aux tapis microbiens thermophiles.",
+                AsteroidPhysicsFr = "Astrophysique réelle : résonance orbitale proche de 2:1 avec LP 890-9 b déviant des exocomètes à 0,04 UA.",
+                AtmoLandingFr = "Physique d'atterrissage : gravité g = 1,35 g (v_lib = 15,2 km/s), troposphère humide (H = 14,2 km) et microrafales convectives à 118 m/s !"
+            });
+            _unseenPlanetPool.Add(new ExoTarget {
+                Index = 8, Id = "NASA-NEW-HD-189733B", ShortLabel = "HD 189733 b", HostStar = "HD 189733 A (K2V)",
+                Disposition = "CONFIRMED", GalaxyXNorm = 0.330f, GalaxyYNorm = 0.805f,
+                PeriodDays = 2.2186, SemiMajorAxisAu = 0.0314, Eccentricity = 0.004, RadialVelocityKms = 200.6,
+                DepthPpm = 24100, RadiusRearth = 12.71, MassMearth = 369.6, BulkDensityGcm3 = 0.98,
+                TeqK = 1201, InsolationEarth = 346.0, InHz = false, IsNewMysteryPlanet = true,
+                DifficultyTier = 9, AsteroidBeltCount = 19, SurfaceGravityG = 2.29, EscapeVelKms = 60.30, ScaleHeightKm = 210.0, SurfacePressureBar = 250.0, WindShearMaxMs = 295.0,
+                PrimaryColor = Color.FromArgb(37, 99, 235), PedestalColor = Color.FromArgb(96, 165, 250), ApprovedByGamer = true, LandedMedal = false,
+                AnalysisEn = "NEW NASA PLANET — HD 189733 b: cobalt-blue Hot Jupiter, 12.7 R⊕, 370 M⊕, 1,201 K, JWST H2S/CO2/H2O & molten silicate glass rain!",
+                LifeEn = "How life could live: 1,201 K heat and sideways molten-glass rain destroy cells; only captured outer exomoons could shelter life.",
+                AsteroidPhysicsEn = "Real Astrophysics: Lyman-alpha evaporating hydrogen torus (10^9 g/s mass loss) + K2V stellar wind shockwave and Trojan debris!",
+                AtmoLandingEn = "Landing Physics: HARPS measured 2,400 m/s (8,700 km/h) supersonic winds & MgSiO3 molten-glass rain under g = 2.29 g (H = 210 km)!",
+                AnalysisFr = "NOUVELLE PLANÈTE NASA — HD 189733 b : Jupiter chaud bleu cobalt, 12,7 R⊕, 370 M⊕, 1 201 K, pluie de verre en fusion et H2S détecté par JWST !",
+                LifeFr = "Vie possible : pluie de verre fondu à 1 201 K mortelle ; seules des exolunes glacées externes abriteraient la vie.",
+                AsteroidPhysicsFr = "Astrophysique réelle : tore d'hydrogène en évaporation Lyman-alpha (10^9 g/s) et débris troyens sous vent stellaire K2V !",
+                AtmoLandingFr = "Physique d'atterrissage : vents supersoniques mesurés par HARPS (8 700 km/h) et pluie de silicate MgSiO3 sous g = 2,29 g !"
+            });
+            _unseenPlanetPool.Add(new ExoTarget {
+                Index = 8, Id = "NASA-NEW-WOLF-1069B", ShortLabel = "Wolf 1069 b", HostStar = "Wolf 1069 (M5V)",
+                Disposition = "CONFIRMED", GalaxyXNorm = 0.330f, GalaxyYNorm = 0.805f,
+                PeriodDays = 15.564, SemiMajorAxisAu = 0.0672, Eccentricity = 0.01, RadialVelocityKms = 1.07,
+                DepthPpm = 3920, RadiusRearth = 1.08, MassMearth = 1.26, BulkDensityGcm3 = 5.52,
+                TeqK = 250, InsolationEarth = 0.65, InHz = true, IsNewMysteryPlanet = true,
+                DifficultyTier = 5, AsteroidBeltCount = 12, SurfaceGravityG = 1.08, EscapeVelKms = 12.10, ScaleHeightKm = 8.1, SurfacePressureBar = 1.65, WindShearMaxMs = 82.0,
+                PrimaryColor = Color.FromArgb(16, 185, 129), PedestalColor = Color.FromArgb(110, 231, 183), ApprovedByGamer = true, LandedMedal = false,
+                AnalysisEn = "NEW NASA PLANET — Wolf 1069 b (CARMENES 2023): Earth-mass habitable world, 1.26 M⊕, 1.08 R⊕, 250 K, 15.6-day orbit around quiet M5V star.",
+                LifeEn = "How life could live: a core-driven magnetosphere protects a dayside liquid ocean where chemosynthetic and red-light life could flourish.",
+                AsteroidPhysicsEn = "Real Astrophysics: Absence of close-in gas giants preserved an outer icy planetesimal belt that delivers volatile-rich comets.",
+                AtmoLandingEn = "Landing Physics: Earth-like g = 1.08 g (v_esc = 12.1 km/s) and N2/CO2 sky (H = 8.1 km) with 82 m/s katabatic glacier-to-ocean gusts.",
+                AnalysisFr = "NOUVELLE PLANÈTE NASA — Wolf 1069 b (CARMENES 2023) : planète terrestre habitable, 1,26 M⊕, 1,08 R⊕, 250 K, orbite de 15,6 jours.",
+                LifeFr = "Vie possible : sa magnétosphère protège un océan liquide côté jour propice aux écosystèmes marins et chimiosynthétiques.",
+                AsteroidPhysicsFr = "Astrophysique réelle : ceinture externe de planétésimaux glacés intacte livrant des comètes riches en eau.",
+                AtmoLandingFr = "Physique d'atterrissage : gravité terrestre g = 1,08 g (v_lib = 12,1 km/s), ciel N2/CO2 (H = 8,1 km) et vents catabatiques glaciaires à 82 m/s."
+            });
+            _unseenPlanetPool.Add(new ExoTarget {
+                Index = 8, Id = "NASA-NEW-TOI-1452B", ShortLabel = "TOI-1452 b", HostStar = "TOI-1452 (M4V Binary)",
+                Disposition = "CONFIRMED", GalaxyXNorm = 0.330f, GalaxyYNorm = 0.805f,
+                PeriodDays = 11.062, SemiMajorAxisAu = 0.061, Eccentricity = 0.01, RadialVelocityKms = 3.48,
+                DepthPpm = 2710, RadiusRearth = 1.672, MassMearth = 4.82, BulkDensityGcm3 = 5.60,
+                TeqK = 326, InsolationEarth = 1.80, InHz = true, IsNewMysteryPlanet = true,
+                DifficultyTier = 7, AsteroidBeltCount = 15, SurfaceGravityG = 1.72, EscapeVelKms = 19.01, ScaleHeightKm = 16.4, SurfacePressureBar = 6.50, WindShearMaxMs = 132.0,
+                PrimaryColor = Color.FromArgb(6, 182, 212), PedestalColor = Color.FromArgb(103, 232, 249), ApprovedByGamer = true, LandedMedal = false,
+                AnalysisEn = "NEW NASA PLANET — TOI-1452 b: deep-ocean Super-Earth (~30% water mass fraction), 4.82 M⊕, 1.67 R⊕, 326 K in M-dwarf binary system.",
+                LifeEn = "How life could live: a hundreds-of-kilometers-deep global ocean heated from below could teem with hydrothermal vent ecosystems.",
+                AsteroidPhysicsEn = "Real Astrophysics: Companion star TOI-1452 B (97 AU) induces Kozai-Lidov oscillations, Perturbing outer Oort-cloud comets inward!",
+                AtmoLandingEn = "Landing Physics: Strong g = 1.72 g (v_esc = 19.0 km/s), thick 6.5-bar H2O steam deck (H = 16.4 km), and 132 m/s tropical super-cyclones!",
+                AnalysisFr = "NOUVELLE PLANÈTE NASA — TOI-1452 b : Super-Terre océanique (~30 % d'eau en masse), 4,82 M⊕, 1,67 R⊕, 326 K en système binaire.",
+                LifeFr = "Vie possible : un océan global profond de plusieurs centaines de kilomètres abriterait une riche vie hydrothermale.",
+                AsteroidPhysicsFr = "Astrophysique réelle : l'étoile compagne TOI-1452 B (97 UA) induit des cycles de Kozai-Lidov précipitant des comètes glacées !",
+                AtmoLandingFr = "Physique d'atterrissage : forte gravité g = 1,72 g (v_lib = 19,0 km/s), couche de vapeur de 6,5 bar (H = 16,4 km) et cyclones à 132 m/s !"
+            });
+            _unseenPlanetPool.Add(new ExoTarget {
+                Index = 8, Id = "NASA-NEW-ROSS-128B", ShortLabel = "Ross 128 b", HostStar = "Ross 128 (M4V)",
+                Disposition = "CONFIRMED", GalaxyXNorm = 0.330f, GalaxyYNorm = 0.805f,
+                PeriodDays = 9.866, SemiMajorAxisAu = 0.0496, Eccentricity = 0.036, RadialVelocityKms = 1.39,
+                DepthPpm = 3150, RadiusRearth = 1.11, MassMearth = 1.40, BulkDensityGcm3 = 5.61,
+                TeqK = 301, InsolationEarth = 1.38, InHz = true, IsNewMysteryPlanet = true,
+                DifficultyTier = 5, AsteroidBeltCount = 12, SurfaceGravityG = 1.14, EscapeVelKms = 12.60, ScaleHeightKm = 9.4, SurfacePressureBar = 2.10, WindShearMaxMs = 86.0,
+                PrimaryColor = Color.FromArgb(52, 211, 153), PedestalColor = Color.FromArgb(167, 243, 208), ApprovedByGamer = true, LandedMedal = false,
+                AnalysisEn = "NEW NASA PLANET — Ross 128 b (11.0 ly): quiet-star temperate exoplanet, 1.40 M⊕, 1.11 R⊕, 301 K, P=9.87 d, K=1.39 m/s (HARPS).",
+                LifeEn = "How life could live: cloud cover reflecting starlight keeps surface oceans liquid for photosynthetic and complex marine biosphere.",
+                AsteroidPhysicsEn = "Real Astrophysics: Slight eccentricity e = 0.036 at a = 0.0496 AU (v_orb = 54.2 km/s) sweeps inner silicate asteroid belt fragments.",
+                AtmoLandingEn = "Landing Physics: g = 1.14 g (v_esc = 12.6 km/s), dense 2.1-bar N2/H2O cloud deck (H = 9.4 km), and 86 m/s substellar Hadley-cell shear.",
+                AnalysisFr = "NOUVELLE PLANÈTE NASA — Ross 128 b (11,0 al) : exoplanète tempérée, 1,40 M⊕, 1,11 R⊕, 301 K, P=9,87 j, K=1,39 m/s (HARPS).",
+                LifeFr = "Vie possible : l'albédo des nuages maintient des océans liquides tempérés propices à une biosphère marine complexe.",
+                AsteroidPhysicsFr = "Astrophysique réelle : excentricité e = 0,036 à 0,0496 UA (v_orb = 54,2 km/s) balayant une ceinture interne d'astéroïdes silicatés.",
+                AtmoLandingFr = "Physique d'atterrissage : g = 1,14 g (v_lib = 12,6 km/s), couverture nuageuse de 2,1 bar (H = 9,4 km) et cellules de Hadley à 86 m/s."
+            });
+        }
+
+        /// <summary>
+        /// Selects a brand-new real NASA exoplanet from _unseenPlanetPool that was not in the original list
+        /// (tracking seen IDs across games in steam_assets/seen_mystery_planets.txt) and injects it into Sector 09 (Index 8).
+        /// </summary>
+        private void SelectNewUnseenPlanetForNewGame(bool announceVoice)
+        {
+            if (_unseenPlanetPool == null || _unseenPlanetPool.Count == 0 || _targets.Count < 9) return;
+            try
+            {
+                string assetsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "steam_assets");
+                if (!Directory.Exists(assetsDir)) Directory.CreateDirectory(assetsDir);
+                string seenFile = Path.Combine(assetsDir, "seen_mystery_planets.txt");
+                List<string> seenIds = new List<string>();
+                if (File.Exists(seenFile))
+                {
+                    foreach (string ln in File.ReadAllLines(seenFile))
+                    {
+                        string trimmed = ln.Trim();
+                        if (!string.IsNullOrEmpty(trimmed) && !seenIds.Contains(trimmed))
+                            seenIds.Add(trimmed);
+                    }
+                }
+
+                // If all unseen planets have been visited across games, reset history so cycling continues seamlessly
+                if (seenIds.Count >= _unseenPlanetPool.Count)
+                {
+                    seenIds.Clear();
+                }
+
+                ExoTarget chosen = _unseenPlanetPool[0];
+                foreach (ExoTarget cand in _unseenPlanetPool)
+                {
+                    if (!seenIds.Contains(cand.Id))
+                    {
+                        chosen = cand;
+                        break;
+                    }
+                }
+
+                seenIds.Add(chosen.Id);
+                try { File.WriteAllLines(seenFile, seenIds.ToArray()); } catch { }
+
+                chosen.Index = 8;
+                chosen.KidLessonEn = chosen.AnalysisEn + " " + chosen.LifeEn;
+                chosen.KidLessonFr = chosen.AnalysisFr + " " + chosen.LifeFr;
+                _targets[8] = chosen;
+
+                if (announceVoice)
+                {
+                    _planetsExploredCount++;
+                    SelectTarget(8, false, true);
+                    AddPointsWithPopup(400, "🎲 NEW NASA PLANET: " + chosen.ShortLabel.ToUpperInvariant(), _galaxyRect.X + chosen.GalaxyXNorm * _galaxyRect.Width, _galaxyRect.Y + chosen.GalaxyYNorm * _galaxyRect.Height, Color.FromArgb(52, 255, 141));
+                }
+            }
+            catch { }
         }
 
         public static double SolveKeplerEquation(double M, double e)
@@ -1035,7 +1316,13 @@ namespace HiveMind.ExoplanetHunterClient
         private string GetCurrentPlanetKidLesson()
         {
             if (_current == null) return "";
-            if (_lang == "fr") return _current.AnalysisFr + " " + _current.LifeFr;
+            if (_lang == "fr")
+            {
+                string extraFr = (_gameStage == 1 && !string.IsNullOrEmpty(_current.AsteroidPhysicsFr))
+                    ? (" " + _current.AsteroidPhysicsFr)
+                    : ((_gameStage == 2 && !string.IsNullOrEmpty(_current.AtmoLandingFr)) ? (" " + _current.AtmoLandingFr) : "");
+                return _current.AnalysisFr + " " + _current.LifeFr + extraFr;
+            }
             if (_lang == "es")
             {
                 string lifeEs = (_current.Disposition == "FALSE POSITIVE")
@@ -1043,8 +1330,8 @@ namespace HiveMind.ExoplanetHunterClient
                     : (_current.InHz
                         ? "Vida: océanos templados y fuentes hidrotermales podrían sostener microbios y vida marina."
                         : "Vida: calor extremo en superficie; solo microbios en nubes altas o lunas heladas sobrevivirían.");
-                return string.Format(CultureInfo.InvariantCulture, "Análisis de {0}: radio {1:F2} R⊕, masa {2:F2} M⊕, {3:F0} K, tránsito {4:F0} ppm, Doppler {5:F2} m/s. {6}",
-                    _current.ShortLabel, _current.RadiusRearth, _current.MassMearth, _current.TeqK, _current.DepthPpm, _current.RadialVelocityKms, lifeEs);
+                return string.Format(CultureInfo.InvariantCulture, "Análisis de {0} (Nivel {1}, g={2:F2}g, H={3:F1}km): radio {4:F2} R⊕, masa {5:F2} M⊕, {6:F0} K, tránsito {7:F0} ppm, Doppler {8:F2} m/s. {9}",
+                    _current.ShortLabel, _difficultyLevel, _current.SurfaceGravityG, _current.ScaleHeightKm, _current.RadiusRearth, _current.MassMearth, _current.TeqK, _current.DepthPpm, _current.RadialVelocityKms, lifeEs);
             }
             if (_lang == "de")
             {
@@ -1053,8 +1340,8 @@ namespace HiveMind.ExoplanetHunterClient
                     : (_current.InHz
                         ? "Leben: flüssige Ozeane und Hydrothermalquellen könnten Mikroben und Meeresleben ermöglichen."
                         : "Leben: extreme Hitze am Boden; nur Mikroben in hohen Wolken oder Eismonden überlebensfähig.");
-                return string.Format(CultureInfo.InvariantCulture, "Analyse {0}: Radius {1:F2} R⊕, Masse {2:F2} M⊕, {3:F0} K, Transit {4:F0} ppm, Doppler {5:F2} m/s. {6}",
-                    _current.ShortLabel, _current.RadiusRearth, _current.MassMearth, _current.TeqK, _current.DepthPpm, _current.RadialVelocityKms, lifeDe);
+                return string.Format(CultureInfo.InvariantCulture, "Analyse {0} (Stufe {1}, g={2:F2}g, H={3:F1}km): Radius {4:F2} R⊕, Masse {5:F2} M⊕, {6:F0} K, Transit {7:F0} ppm, Doppler {8:F2} m/s. {9}",
+                    _current.ShortLabel, _difficultyLevel, _current.SurfaceGravityG, _current.ScaleHeightKm, _current.RadiusRearth, _current.MassMearth, _current.TeqK, _current.DepthPpm, _current.RadialVelocityKms, lifeDe);
             }
             if (_lang == "zh")
             {
@@ -1063,10 +1350,13 @@ namespace HiveMind.ExoplanetHunterClient
                     : (_current.InHz
                         ? "生命评估：处于宜居带，液态海洋与海底热泉可孕育光合藻类及海洋微生物。"
                         : "生命评估：表面高温严酷，仅高层温带云层或冰卫星地下海洋可能存在极端微生物。");
-                return string.Format(CultureInfo.InvariantCulture, "{0} 行星分析：半径 {1:F2} 地球，质量 {2:F2} 地球，温度 {3:F0} K，凌星 {4:F0} ppm，多普勒 {5:F2} m/s。{6}",
-                    _current.ShortLabel, _current.RadiusRearth, _current.MassMearth, _current.TeqK, _current.DepthPpm, _current.RadialVelocityKms, lifeZh);
+                return string.Format(CultureInfo.InvariantCulture, "{0} 行星分析（难度 {1}，重力 {2:F2}g，标高 {3:F1}km）：半径 {4:F2} 地球，质量 {5:F2} 地球，温度 {6:F0} K，凌星 {7:F0} ppm，多普勒 {8:F2} m/s。{9}",
+                    _current.ShortLabel, _difficultyLevel, _current.SurfaceGravityG, _current.ScaleHeightKm, _current.RadiusRearth, _current.MassMearth, _current.TeqK, _current.DepthPpm, _current.RadialVelocityKms, lifeZh);
             }
-            return _current.AnalysisEn + " " + _current.LifeEn;
+            string extraEn = (_gameStage == 1 && !string.IsNullOrEmpty(_current.AsteroidPhysicsEn))
+                ? (" " + _current.AsteroidPhysicsEn)
+                : ((_gameStage == 2 && !string.IsNullOrEmpty(_current.AtmoLandingEn)) ? (" " + _current.AtmoLandingEn) : "");
+            return _current.AnalysisEn + " " + _current.LifeEn + extraEn;
         }
 
         private string GetOneTimeChapterExplanation(int stage)
@@ -1248,17 +1538,90 @@ namespace HiveMind.ExoplanetHunterClient
                 _shipXNorm = Math.Max(0.08f, _current.GalaxyXNorm - 0.08f);
                 _shipYNorm = Math.Max(0.10f, _current.GalaxyYNorm - 0.06f);
             }
-            _captureProgress = 0.0;
-            ResetOolitePlanetfallState();
             if (playSound)
             {
                 _planetSwitchCount++;
+                _planetsExploredCount++;
+            }
+            // Progressive difficulty increases with each planet explored AND respects intrinsic target DifficultyTier!
+            _difficultyLevel = Math.Min(10, Math.Max(Math.Max(1, _current.DifficultyTier), 1 + _planetsExploredCount));
+            _captureProgress = 0.0;
+            _surpriseEventTimer = Math.Max(3.2, 6.8 - _difficultyLevel * 0.35);
+            _surpriseEventBanner = (_lang == "fr") ? _current.AsteroidPhysicsFr : _current.AsteroidPhysicsEn;
+            ResetOolitePlanetfallState();
+            if (playSound)
+            {
                 _chapterIntroSpoken[0] = true; // Never restart Chapter 1 voice when moving between planets
                 PlaySynthesizedSciFiWav(880.0, 1320.0, 95);
-                AddPointsWithPopup(50, "STAR SCAN", _galaxyRect.X + _current.GalaxyXNorm * _galaxyRect.Width, _galaxyRect.Y + _current.GalaxyYNorm * _galaxyRect.Height, Color.FromArgb(56, 189, 248));
+                AddPointsWithPopup(50, string.Format("STAR SCAN (DIFF LVL {0})", _difficultyLevel), _galaxyRect.X + _current.GalaxyXNorm * _galaxyRect.Width, _galaxyRect.Y + _current.GalaxyYNorm * _galaxyRect.Height, Color.FromArgb(56, 189, 248));
                 SpeakPlanetAnalysisOnly();
             }
             this.Invalidate();
+        }
+
+        private void TriggerSurpriseAstrophysicalEvent()
+        {
+            if (_current == null) return;
+            int evtKind = (int)(Math.Abs((long)(_simTime * 100.0) + _planetsExploredCount * 7) % 4);
+            if (_gameStage == 1)
+            {
+                // Stage 1 (Orbit Bee): Surprise Keplerian Asteroid / CME / Periastron Tidal Events explained with real astrophysics data
+                if (evtKind == 0)
+                {
+                    _surpriseEventBanner = (_lang == "fr")
+                        ? string.Format(CultureInfo.InvariantCulture, "⚡ SURPRISE CME M-DWARF // Éruption XUV (10^33 erg) sur {0} ! Pression dynamique P_ram = ρ v² pousse la sonde !", _current.HostStar)
+                        : string.Format(CultureInfo.InvariantCulture, "⚡ SURPRISE CME SUPERFLARE // {0} XUV shockwave (10^33 erg)! Solar wind ram pressure P = ρ·v² perturbs probe orbit!", _current.HostStar);
+                    _beeVx -= 2.2f + _difficultyLevel * 0.25f;
+                }
+                else if (evtKind == 1)
+                {
+                    _surpriseEventBanner = (_lang == "fr")
+                        ? string.Format(CultureInfo.InvariantCulture, "☄ ESSAIM DE KIRKWOOD 3:1 // Résonance orbitale (a={0:F3} UA, e={1:F2}) : bolides hyper-véloces ({2:F1} km/s) !", _current.SemiMajorAxisAu, _current.Eccentricity, _current.EscapeVelKms * 1.4)
+                        : string.Format(CultureInfo.InvariantCulture, "☄ KIRKWOOD 3:1 BOLIDE SWARM // Mean-motion resonance (a={0:F3} AU, e={1:F2}) injects {2:F1} km/s exocomets!", _current.SemiMajorAxisAu, _current.Eccentricity, _current.EscapeVelKms * 1.4);
+                    _beeVy += ((_planetsExploredCount % 2 == 0) ? 2.4f : -2.4f);
+                }
+                else if (evtKind == 2)
+                {
+                    _surpriseEventBanner = (_lang == "fr")
+                        ? string.Format(CultureInfo.InvariantCulture, "🌀 CISAILLEMENT DE MARÉE // Gravité g={0:F2}g (v_lib={1:F1} km/s) : gradient de Roche dF/dr = 2GM/r³ dévie la trajectoire !", _current.SurfaceGravityG, _current.EscapeVelKms)
+                        : string.Format(CultureInfo.InvariantCulture, "🌀 PERIASTRON TIDAL SHEAR // Gravity g={0:F2}g (v_esc={1:F1} km/s): Roche gradient dF/dr = 2GM/r³ pulls probe!", _current.SurfaceGravityG, _current.EscapeVelKms);
+                }
+                else
+                {
+                    _surpriseEventBanner = (_lang == "fr") ? _current.AsteroidPhysicsFr : _current.AsteroidPhysicsEn;
+                }
+                AddPointsWithPopup(75, "☄ ASTRO SURPRISE LVL " + _difficultyLevel, _beeX, _beeY - 18f, Color.FromArgb(251, 146, 60));
+                PlaySynthesizedSciFiWav(360.0, 920.0, 125);
+            }
+            else if (_gameStage == 2)
+            {
+                // Stage 2 (Oolite Planetfall): Surprise Atmospheric Microbursts, Coriolis Jet Shear & Baroclinic Waves
+                double gVal = Math.Max(0.25, _current.SurfaceGravityG);
+                double hVal = Math.Max(2.0, _current.ScaleHeightKm);
+                if (evtKind == 0)
+                {
+                    double gust = Math.Round(_current.WindShearMaxMs * (0.45 + _difficultyLevel * 0.06), 1);
+                    _landerWindShearMs = gust;
+                    _landerOffsetX += (float)(((_simTime * 10.0) % 2.0 > 1.0 ? 1.0 : -1.0) * (14.0 + _difficultyLevel * 2.2));
+                    _surpriseEventBanner = (_lang == "fr")
+                        ? string.Format(CultureInfo.InvariantCulture, "🌪 RAFALE JET-STREAM // Cisaillement {0:F1} m/s (H={1:F1} km, P={2:F1} bar) ! Corrigez avec [GAUCHE/DROITE] ou [ESPACE] !", gust, hVal, _current.SurfacePressureBar)
+                        : string.Format(CultureInfo.InvariantCulture, "🌪 SUPERSONIC JET GUST // Wind shear {0:F1} m/s (Scale Height H={1:F1} km, P={2:F1} bar)! Steer or press [SPACE]!", gust, hVal, _current.SurfacePressureBar);
+                }
+                else if (evtKind == 1)
+                {
+                    _landerSpeedMs = Math.Min(155.0, _landerSpeedMs + 12.0 + gVal * 3.5);
+                    _landerCabinTempC = Math.Min(180.0, _landerCabinTempC + 10.0);
+                    _surpriseEventBanner = (_lang == "fr")
+                        ? string.Format(CultureInfo.InvariantCulture, "⬇ MICRORAFALE CONVECTIVE // Puits gravitationnel g={0:F2}g ({1:F1} m/s²) accélère la chute ! [ESPACE/HAUT] Rétro-fusées !", gVal, gVal * 9.81)
+                        : string.Format(CultureInfo.InvariantCulture, "⬇ CONVECTIVE MICROBURST // Gravity well g={0:F2}g ({1:F1} m/s²) accelerates descent! Fire [SPACE/UP] Retro-Thrusters!", gVal, gVal * 9.81);
+                }
+                else
+                {
+                    _surpriseEventBanner = (_lang == "fr") ? _current.AtmoLandingFr : _current.AtmoLandingEn;
+                }
+                AddPointsWithPopup(85, "🌪 ATMO TURBULENCE LVL " + _difficultyLevel, _galaxyRect.X + _galaxyRect.Width * 0.5f, _galaxyRect.Y + 200f, Color.FromArgb(250, 204, 21));
+                PlaySynthesizedSciFiWav(310.0, 780.0, 130);
+            }
         }
 
         private void LaunchSatellites()
@@ -1296,8 +1659,8 @@ namespace HiveMind.ExoplanetHunterClient
                 _gameStage = 3;
                 _showNarrativeCard = true;
                 SpeakWithSubtitles(_lang == "fr"
-                    ? "Attention Explorateur ! KOI-Bin #02 n'a pas de surface solide : ce sont deux étoiles binaires brûlantes qui s'éclipsent ! Passons au labo JWST pour rejeter ce faux positif et gagner 800 points !"
-                    : "Careful, Young Explorer! KOI-Bin #02 has no solid ground to land on—it is actually two hot binary stars eclipsing each other! Let's go to the JWST Lab and click REJECT to win 800 Detective Points!");
+                    ? "Attention Explorateur ! KOI-Bin #02 n'a pas de surface solide : ce sont deux étoiles binaires brûlantes (g = 31,6 g, 1 480 K) ! Passons au labo JWST pour rejeter ce faux positif et gagner 800 points !"
+                    : "Careful, Explorer! KOI-Bin #02 has no solid ground—it is two scorching eclipsing binary stars (g = 31.6 g, 1,480 K)! Let's go to the JWST Lab and click REJECT to win 800 Detective Points!");
                 return;
             }
 
@@ -1315,8 +1678,11 @@ namespace HiveMind.ExoplanetHunterClient
                 _current.LandedMedal = true;
                 _medalsCount++;
             }
+            // Escalate progressive difficulty after each successful planetary landing!
+            _planetsExploredCount++;
+            _difficultyLevel = Math.Min(10, Math.Max(_difficultyLevel + 1, 1 + _planetsExploredCount));
             _streakCount = Math.Min(5, _streakCount + 1);
-            AddPointsWithPopup(1000, "🥇 PLANETFALL TOUCHDOWN!", _galaxyRect.X + _galaxyRect.Width * 0.5f, _galaxyRect.Y + 210f, Color.FromArgb(250, 204, 21));
+            AddPointsWithPopup(1000 + _difficultyLevel * 100, string.Format("🥇 TOUCHDOWN! (NEXT DIFF LVL {0})", _difficultyLevel), _galaxyRect.X + _galaxyRect.Width * 0.5f, _galaxyRect.Y + 210f, Color.FromArgb(250, 204, 21));
             PlaySynthesizedSciFiWav(523.25, 1318.5, 340);
             _gameStage = 3;
             _showNarrativeCard = true;
@@ -1342,8 +1708,8 @@ namespace HiveMind.ExoplanetHunterClient
             _gameStage = 0;
             _showNarrativeCard = true;
             SpeakWithSubtitles(_lang == "fr"
-                ? (ok ? "Bravo Cadet ! Ton analyse astrophysique est exacte ! Tu gagnes des points de maîtrise et un nouveau badge dans ta collection !" : "Bien essayé Cadet ! Regarde bien les courbes Doppler et Transit pour la prochaine planète.")
-                : (ok ? "Awesome job, Space Cadet! Your astrophysics analysis is 100 percent correct! You earned Master Points and unlocked this world in your collection!" : "Good try, Space Cadet! Remember: a real planet needs both a flat U-shaped transit shadow and a Doppler gravity wobble!"));
+                ? (ok ? "Bravo Cadet ! Ton analyse astrophysique est exacte ! La difficulté augmente au Niveau " + _difficultyLevel + " pour la prochaine planète !" : "Bien essayé Cadet ! Regarde bien les courbes Doppler et Transit pour la prochaine planète.")
+                : (ok ? "Awesome job, Space Cadet! Your astrophysics analysis is 100 percent correct! Difficulty rises to Level " + _difficultyLevel + " for your next world!" : "Good try, Space Cadet! Remember: a real planet needs both a flat U-shaped transit shadow and a Doppler gravity wobble!"));
         }
 
         private void PollGamepad()
@@ -1394,23 +1760,24 @@ namespace HiveMind.ExoplanetHunterClient
             }
             else if (_gameStage == 1)
             {
-                // Stage 1: Responsive & Kid-Friendly Thruster Steering
-                _beeVx = Math.Max(-8.5f, Math.Min(8.5f, _beeVx + dx * 1.15f));
-                _beeVy = Math.Max(-8.5f, Math.Min(8.5f, _beeVy + dy * 1.15f));
+                // Stage 1: Responsive Thruster Steering against Keplerian asteroid belts
+                _beeVx = Math.Max(-9.5f, Math.Min(9.5f, _beeVx + dx * 1.25f));
+                _beeVy = Math.Max(-9.5f, Math.Min(9.5f, _beeVy + dy * 1.25f));
             }
             else if (_gameStage == 2)
             {
-                // Stage 2 (Easy Oolite Planetfall): Steer left/right to collect stars or align with Green Landing Pad
-                _landerOffsetX = Math.Max(-140f, Math.Min(140f, _landerOffsetX + dx * 3.8f));
-                if (dy < -0.1f) // [UP / Z / W] slows descent
+                // Stage 2 (Oolite Planetfall): Steer left/right against atmospheric wind shear & fire retro-thrusters [UP/Z/W]
+                _landerOffsetX = Math.Max(-150f, Math.Min(150f, _landerOffsetX + dx * 4.2f));
+                if (dy < -0.1f) // [UP / Z / W] fires retro-thrusters to counter high planetary gravity g!
                 {
-                    _landerSpeedMs = Math.Max(32.0, _landerSpeedMs - 2.2);
+                    _landerSpeedMs = Math.Max(32.0, _landerSpeedMs - 2.8);
+                    _landerCabinTempC = Math.Max(38.0, _landerCabinTempC - 1.2);
                     _landerPitchDeg = -8.0f;
                 }
-                else if (dy > 0.1f) // [DOWN / S] descends faster (still safe!)
+                else if (dy > 0.1f) // [DOWN / S] nose-down dive
                 {
-                    _landerSpeedMs = Math.Min(92.0, _landerSpeedMs + 1.8);
-                    _landerPitchDeg = -16.0f;
+                    _landerSpeedMs = Math.Min(145.0, _landerSpeedMs + 2.2);
+                    _landerPitchDeg = -18.0f;
                 }
             }
         }
@@ -1420,6 +1787,18 @@ namespace HiveMind.ExoplanetHunterClient
             _simTime += 0.016;
             _idleSeconds += 0.016;
             if (_hazardHitFlash > 0) _hazardHitFlash = Math.Max(0.0, _hazardHitFlash - 0.04);
+            if (_asteroidHitCooldown > 0) _asteroidHitCooldown = Math.Max(0.0, _asteroidHitCooldown - 0.016);
+
+            // Periodic Surprise Astrophysical Events in Stage 1 (Orbit Bee) and Stage 2 (Oolite Landing)
+            if (_gameStage == 1 || _gameStage == 2)
+            {
+                _surpriseEventTimer -= 0.016;
+                if (_surpriseEventTimer <= 0.0)
+                {
+                    _surpriseEventTimer = Math.Max(3.4, 7.5 - _difficultyLevel * 0.38);
+                    TriggerSurpriseAstrophysicalEvent();
+                }
+            }
 
             // Animate floating +POINTS popups
             for (int i = _popups.Count - 1; i >= 0; i--)
@@ -1440,8 +1819,6 @@ namespace HiveMind.ExoplanetHunterClient
             }
 
             // Steam Free-to-Play Idle-GPU BOINC Citizen-Science Scheduler:
-            // Whenever the GPU is not used by active player maneuvers (_idleSeconds >= 4.0) or _boincForceAlwaysOn is enabled,
-            // advance astrophysics BOINC workunits (Einstein@Home, HiveMind-TESS@Home, MilkyWay@Home, JWST-LOIS@Home)
             if ((_boincAutoIdleMode && _idleSeconds >= 4.0) || _boincForceAlwaysOn)
             {
                 for (int i = 0; i < _boincProjProgress.Length; i++)
@@ -1474,17 +1851,52 @@ namespace HiveMind.ExoplanetHunterClient
                     _beeVx = 2.0f;
                     _beeVy = 0.0f;
                     _captureProgress = 15.0;
+                    _surpriseEventBanner = (_lang == "fr") ? _current.AsteroidPhysicsFr : _current.AsteroidPhysicsEn;
                     SpeakStepNarrativeAndAstrophysics();
                 }
             }
             else if (_gameStage == 1)
             {
-                // Gentle helpful attraction toward the planet's green Lagrange circle so kids can easily succeed!
+                // Stage 1 (Orbit Bee): Progressive Difficulty — Auto-attraction weakens as _difficultyLevel rises,
+                // while Keplerian asteroid count, speed, and momentum knockback increase!
                 float toPx = _planetScreenX - _beeX;
                 float toPy = _planetScreenY - _beeY;
                 float distToP = (float)Math.Max(10.0, Math.Sqrt(toPx * toPx + toPy * toPy));
-                _beeVx += (toPx / distToP) * 0.22f;
-                _beeVy += (toPy / distToP) * 0.22f;
+                float pullStrength = Math.Max(0.05f, 0.24f - _difficultyLevel * 0.018f);
+                _beeVx += (toPx / distToP) * pullStrength;
+                _beeVy += (toPy / distToP) * pullStrength;
+
+                // Real Collision Detection with Multi-Belt Keplerian Asteroids & Eccentric Rogue Bolides!
+                int totalAsteroids = Math.Min(24, Math.Max(6, _current.AsteroidBeltCount + _planetsExploredCount * 2));
+                double speedMult = 1.0 + _difficultyLevel * 0.14 + Math.Min(0.8, _current.Eccentricity);
+                for (int h = 0; h < totalAsteroids; h++)
+                {
+                    int ringIdx = h % 3; // 0 = inner prograde Roche ring, 1 = middle retrograde Kirkwood belt, 2 = eccentric rogue bolide
+                    double dir = (ringIdx == 1) ? 1.0 : -1.0;
+                    double hAng = dir * _simTime * (1.85 + ringIdx * 0.55) * speedMult + h * (2.0 * Math.PI / Math.Max(1, totalAsteroids));
+                    float hRad = 54f + ringIdx * 28f + (ringIdx == 2 ? (float)(Math.Sin(_simTime * 3.2 + h) * 22.0) : 0f);
+                    float hx = _planetScreenX + (float)Math.Cos(hAng) * hRad;
+                    float hy = _planetScreenY + (float)Math.Sin(hAng) * hRad;
+
+                    float dxH = _beeX - hx;
+                    float dyH = _beeY - hy;
+                    float distH = (float)Math.Sqrt(dxH * dxH + dyH * dyH);
+                    if (distH < 18.0f && _asteroidHitCooldown <= 0.0)
+                    {
+                        _hazardHitFlash = 1.0;
+                        _asteroidHitCooldown = 0.85;
+                        float nx = dxH / Math.Max(1f, distH);
+                        float ny = dyH / Math.Max(1f, distH);
+                        float knockback = 4.2f + _difficultyLevel * 0.45f;
+                        _beeVx = nx * knockback;
+                        _beeVy = ny * knockback;
+                        _captureProgress = Math.Max(0.0, _captureProgress - (6.0 + _difficultyLevel * 1.1));
+                        _surpriseEventBanner = (_lang == "fr") ? _current.AsteroidPhysicsFr : _current.AsteroidPhysicsEn;
+                        PlaySynthesizedSciFiWav(180.0, 95.0, 160);
+                        AddPointsWithPopup(25, string.Format("☄ BOLIDE IMPACT! Δv KNOCKBACK (v_esc={0:F1}km/s)", _current.EscapeVelKms), _beeX, _beeY - 14f, Color.FromArgb(248, 113, 113));
+                        break;
+                    }
+                }
 
                 _beeX = Math.Max(_galaxyRect.X + 36f, Math.Min(_galaxyRect.Right - 36f, _beeX + _beeVx));
                 _beeY = Math.Max(_galaxyRect.Y + 36f, Math.Min(_galaxyRect.Bottom - 36f, _beeY + _beeVy));
@@ -1507,14 +1919,16 @@ namespace HiveMind.ExoplanetHunterClient
                     }
                 }
 
-                // Lagrange Synchronization Gate around planet (generous 105px radius & fast fill)
-                if (distToP < 105.0)
+                // Lagrange Synchronization Gate around planet (tightens slightly with difficulty level)
+                float syncRadius = Math.Max(78.0f, 108.0f - _difficultyLevel * 2.5f);
+                double fillRate = Math.Max(0.75, 1.48 - _difficultyLevel * 0.06);
+                if (distToP < syncRadius)
                 {
-                    _captureProgress = Math.Min(100.0, _captureProgress + 1.45);
+                    _captureProgress = Math.Min(100.0, _captureProgress + fillRate);
                     if (_captureProgress >= 100.0)
                     {
                         PlaySynthesizedSciFiWav(660.0, 1320.0, 220);
-                        AddPointsWithPopup(500, "🛰️ ORBIT SYNCED!", _planetScreenX, _planetScreenY, Color.FromArgb(52, 211, 153));
+                        AddPointsWithPopup(500 + _difficultyLevel * 50, "🛰️ ORBIT SYNCED!", _planetScreenX, _planetScreenY, Color.FromArgb(52, 211, 153));
                         ResetOolitePlanetfallState();
                         _gameStage = 2;
                         _showNarrativeCard = true;
@@ -1524,13 +1938,59 @@ namespace HiveMind.ExoplanetHunterClient
             }
             else if (_gameStage == 2)
             {
-                // Stage 2: Easy, Auto-Stabilized Oolite Planetfall Descent!
-                // Speed naturally stays around 55-68 m/s (well below the 120 m/s limit!)
-                double targetSafeSpeed = _kSpace ? 42.0 : 62.0;
-                _landerSpeedMs += (targetSafeSpeed - _landerSpeedMs) * 0.035;
-                // Auto-center gently toward the green landing pad (0.0 m offset) so the player never crashes!
-                _landerOffsetX *= 0.985f;
-                _landerCabinTempC = Math.Round(18.0 + (_landerSpeedMs * 0.82), 1);
+                // Stage 2: Complex Multi-Layer Atmospheric Descent with Real Planetary Gravity g = M/R^2,
+                // Scale Height H = kT/(mu*mH*g), and Active Lateral Crosswind Shear!
+                double gVal = Math.Max(0.25, _current.SurfaceGravityG);
+                double hVal = Math.Max(2.0, _current.ScaleHeightKm);
+                double wMax = Math.Max(15.0, _current.WindShearMaxMs);
+
+                // Determine current atmospheric layer (Thermosphere -> Stratosphere -> Troposphere -> Boundary Layer)
+                double windPushFactor = 0.0;
+                if (_landerAltKm > 2.2)
+                {
+                    _atmoLayerName = (_lang == "fr")
+                        ? string.Format(CultureInfo.InvariantCulture, "1/4 THERMOSPHÈRE // Choc ionosphérique T_eq={0:F0}K | v_lib={1:F1}km/s", _current.TeqK, _current.EscapeVelKms)
+                        : string.Format(CultureInfo.InvariantCulture, "1/4 THERMOSPHERE // Ionospheric shock T_eq={0:F0}K | v_esc={1:F1}km/s", _current.TeqK, _current.EscapeVelKms);
+                    windPushFactor = 0.25;
+                }
+                else if (_landerAltKm > 1.4)
+                {
+                    _atmoLayerName = (_lang == "fr")
+                        ? string.Format(CultureInfo.InvariantCulture, "2/4 STRATOSPHÈRE // Jet-Stream Corioli {0:F0} m/s | H={1:F1} km", wMax, hVal)
+                        : string.Format(CultureInfo.InvariantCulture, "2/4 STRATOSPHERE // Supersonic Jet Stream {0:F0} m/s | H={1:F1} km", wMax, hVal);
+                    windPushFactor = 0.65;
+                }
+                else if (_landerAltKm > 0.6)
+                {
+                    _atmoLayerName = (_lang == "fr")
+                        ? string.Format(CultureInfo.InvariantCulture, "3/4 TROPOSPHÈRE // Convection P={0:F1} bar | Gravité g={1:F2}g", _current.SurfacePressureBar, gVal)
+                        : string.Format(CultureInfo.InvariantCulture, "3/4 TROPOSPHERE // Convective Clouds P={0:F1} bar | Gravity g={1:F2}g", _current.SurfacePressureBar, gVal);
+                    windPushFactor = 0.85;
+                }
+                else
+                {
+                    _atmoLayerName = (_lang == "fr")
+                        ? string.Format(CultureInfo.InvariantCulture, "4/4 COUCHE LIMITE // Cisaillement de surface | Alignez < {0:F0}m !", Math.Max(26.0, 44.0 - _difficultyLevel * 1.6))
+                        : string.Format(CultureInfo.InvariantCulture, "4/4 BOUNDARY LAYER // Surface crosswind shear | Align < {0:F0}m!", Math.Max(26.0, 44.0 - _difficultyLevel * 1.6));
+                    windPushFactor = 0.55;
+                }
+
+                // Target terminal descent speed increases with real surface gravity g and difficulty unless braking [SPACE]!
+                double naturalGravitySpeed = Math.Min(138.0, 56.0 + gVal * 11.5 + _difficultyLevel * 3.8);
+                double targetSpeed = _kSpace ? 40.0 : naturalGravitySpeed;
+                _landerSpeedMs += (targetSpeed - _landerSpeedMs) * 0.038;
+
+                // Active lateral crosswind drift pushes _landerOffsetX (stronger at higher difficulty & higher WindShearMaxMs)
+                double liveWindWave = Math.Sin(_simTime * 1.9 + _current.Index) * (wMax * 0.012 * windPushFactor * (0.4 + _difficultyLevel * 0.08));
+                _landerWindShearMs = Math.Round(Math.Abs(wMax * windPushFactor * (0.55 + 0.35 * Math.Sin(_simTime * 1.4))), 1);
+                float autoStabilizerDecay = Math.Max(0.955f, 0.988f - _difficultyLevel * 0.003f);
+                _landerOffsetX = Math.Max(-145f, Math.Min(145f, (_landerOffsetX + (float)liveWindWave) * autoStabilizerDecay));
+
+                _landerCabinTempC = Math.Round(22.0 + (_landerSpeedMs * 0.86) + (_current.TeqK > 600 ? 28.0 : 0.0), 1);
+                if (_landerSpeedMs > 98.0)
+                {
+                    _landerFwdShield = Math.Max(42.0, _landerFwdShield - 0.08 * (_difficultyLevel * 0.3));
+                }
                 _landerEnergy = Math.Min(256.0, _landerEnergy + 0.20);
 
                 // Collect Golden Bonus Stars during planetary descent as altitude crosses 2.2 km, 1.4 km, 0.7 km
@@ -1550,7 +2010,25 @@ namespace HiveMind.ExoplanetHunterClient
 
                 if (_landerAltKm <= 0.05)
                 {
-                    CompletePlanetLandingSuccess();
+                    // At difficulty >= 4, check if touchdown speed or lateral crosswind offset exceeded safe limits;
+                    // if so, trigger an exciting Retro-Booster Go-Around to 0.90 km with real astrophysics explanation!
+                    double maxSafeSpeed = Math.Max(82.0, 112.0 - _difficultyLevel * 2.5);
+                    float maxSafeOffset = Math.Max(26.0f, 48.0f - _difficultyLevel * 1.8f);
+                    if (_difficultyLevel >= 4 && (_landerSpeedMs > maxSafeSpeed || Math.Abs(_landerOffsetX) > maxSafeOffset))
+                    {
+                        _landerAltKm = 0.85;
+                        _landerSpeedMs = 64.0;
+                        _landerOffsetX *= 0.45f;
+                        _surpriseEventBanner = (_lang == "fr")
+                            ? string.Format(CultureInfo.InvariantCulture, "⚠ REMISE DES GAZ HAUTE-G (g={0:F2}g) ! Vitesse ou dérive trop élevée — Appuyez sur [ESPACE] pour freiner !", gVal)
+                            : string.Format(CultureInfo.InvariantCulture, "⚠ HIGH-G / WIND-SHEAR GO-AROUND (g={0:F2}g)! Touchdown too fast/off-pad — Press [SPACE] to Retro-Brake!", gVal);
+                        PlaySynthesizedSciFiWav(240.0, 520.0, 180);
+                        AddPointsWithPopup(50, "🔥 RETRO GO-AROUND! PRESS [SPACE]", _galaxyRect.X + _galaxyRect.Width * 0.5f, _galaxyRect.Y + 240f, Color.FromArgb(251, 146, 60));
+                    }
+                    else
+                    {
+                        CompletePlanetLandingSuccess();
+                    }
                 }
             }
 
@@ -1617,6 +2095,7 @@ namespace HiveMind.ExoplanetHunterClient
                 this.Invalidate();
             }
             if (e.KeyCode == Keys.R && _gameStage == 3) ApproveOrReject(false);
+            if (e.KeyCode == Keys.M) { SelectNewUnseenPlanetForNewGame(true); _gameStage = 0; this.Invalidate(); }
             if (e.KeyCode == Keys.D1) { _gameStage = 0; _showNarrativeCard = true; SpeakStepNarrativeAndAstrophysics(); }
             if (e.KeyCode == Keys.D2) { _gameStage = 1; _showNarrativeCard = true; SpeakStepNarrativeAndAstrophysics(); }
             if (e.KeyCode == Keys.D3 || e.KeyCode == Keys.P) { ResetOolitePlanetfallState(); _gameStage = 2; _showNarrativeCard = true; SpeakStepNarrativeAndAstrophysics(); }

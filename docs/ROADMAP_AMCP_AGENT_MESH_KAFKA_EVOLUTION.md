@@ -38,6 +38,7 @@ flowchart LR
     S22 --> S23[S23: Distributed ABC MoE Mesh<br>Employed / Observer / Scout]
     S23 --> S24[S24: Swarm Nectar Cache<br>Cross-Bee Food Sources]
     S24 --> S25[S25: Lean 4 Quorum Proofs<br>Formal Convergence Invariants]
+    S25 --> S26[S26: LayerStoRm x HiveMind<br>PCIe Expert Streaming & Two-Zone VRAM]
 ```
 
 ### 🔹 Milestone 1 (S22.1) : Moteur de Quorum Sensing & Danse Frétillante Kafka
@@ -72,17 +73,28 @@ flowchart LR
   3. Intégration dans le compilateur CI `lake build`.
 - **Métrique Gate :** `lake build` passe avec 0 `sorry` et 0 avertissement.
 
+### 🔹 Milestone 5 (S25) : Collaboration LayerStoRm × HiveMind — Streaming PCIe d'Experts MoE & Cache VRAM Bi-Zone
+- **Objectif :** Intégrer les mécanismes de streaming PCIe DMA et de placement NUMA en RAM hôte de **LayerStoRm** ([`kkontosis/LayerStoRm`](https://github.com/kkontosis/LayerStoRm)) comme backend d'exécution haut de gamme dans l'écosystème HiveMind, permettant d'héberger des modèles MoE géants (DeepSeek-V2/V3, GLM-4-MoE, Qwen3-MoE-30B+) sur des machines grand public sans dépasser l'enveloppe VRAM.
+- **Livrables techniques clés (`HM-S25-01` à `HM-S25-05`) :**
+  1. **Streaming PCIe DMA NUMA-Aware (`HM-S25-01`) :** Garder l'intégralité des poids d'experts routés en RAM hôte épinglée (pinned NUMA RAM 64–128 Go) et ne transférer sur le bus PCIe 4.0/5.0 que les $k$ experts activés par token.
+  2. **Cache VRAM Bi-Zone couplé au Quorum Waggle Dance (`HM-S25-02`) :** Maintenir en VRAM les couches d'attention denses, le KV cache et un cache d'experts à deux zones (Zone A : experts chauds épinglés ; Zone B : anneau dynamique LRU pré-chargé dès l'élection du quorum Kafka `hivemind.mesh.waggle_dance.v1`).
+  3. **Ordonnanceur DMA Waterline & FoMoE Skip-Attention (`HM-S25-03`) :** Recouvrir les transferts PCIe H2D de la couche $L+1$ avec le calcul d'attention de la couche $L$ grâce au pré-routage spéculatif FoMoE ($85,8\%$ de précision pré-attention).
+  4. **Compression KV Hybride (`HiSparse` + `SnapMLA` + `E8 Lattice`, `HM-S25-04`) :** Fusionner le délestage KV épars de LayerStoRm avec le quantificateur sur réseau $E_8$ de HiveMind pour supporter des contextes de 32k–128k tokens sous le plafond de $6\,656\text{ MiB}$.
+  5. **Adaptateur Producteur BYOB `layerstorm-frontier-moe` (`HM-S25-05`) :** Connecteur dans `hivemind_producer_agent.py` avec préemption gamer `< 0,5\text{ s}$ (libération immédiate des files DMA épinglées au lancement d'un jeu Steam/Blender) et rémunération en points de réflexion HMT.
+- **Métrique Gate (Campagne pré-enregistrée `E19`) :** Débit de génération $> 18\text{ tok/s}$ sur modèles MoE $>30\text{B}$ avec 0 dépassement du plafond VRAM configuré et réduction de $60\%$ de la bande passante PCIe consommée sur les préfixes récurrents grâce au *Swarm Nectar Cache* (S23) placé en amont.
+
 ---
 
 ## 3. Matrice de Responsabilités et Déploiement
 
 | Rôle / Entité | Responsabilité Clé dans la Feuille de Route |
 | :--- | :--- |
-| **Routeur HiveMind OpenRouter** | Ingestion des tâches sur `hivemind.mesh.task.inbox.v1` et retour client sur `hivemind.mesh.result.v1`. |
+| **Routeur HiveMind OpenRouter** | Ingestion des tâches sur `hivemind.mesh.task.inbox.v1`, filtrage amont via *Swarm Nectar Cache*, et retour client sur `hivemind.mesh.result.v1`. |
 | **Nœuds Consommateurs / Gamers (8 Go)** | Exécution des abeilles employées et observatrices en arrière-plan avec préemption instantanée (<1,5 s). |
 | **Nœuds Edge / Laptops (CPU / 4-8 Go)** | Exécution des modèles légers (`qwen35-4b`, `phi4-mini`) en mode éclaireuse et extraction sémantique. |
+| **Nœuds Prosumers Multi-GPU / LayerStoRm (16-24 Go VRAM + 64 Go+ RAM)** | Exécution des modèles MoE de frontière via streaming PCIe DMA (`HM-S25`) en tant que *Macro-Cluster Super-Bees*. |
 | **Brokers Kafka / AMCP v1.5** | Acheminement ordonné, persistance rejouable, filtrage anti-rejeu et files DLQ. |
-| **Lean 4 Prover** | Certification mathématique formelle des invariants du protocole. |
+| **Lean 4 Prover** | Certification mathématique formelle des invariants du protocole et du budget mémoire Bi-Zone. |
 
 ---
 
@@ -90,5 +102,18 @@ flowchart LR
 
 Le prototype fonctionnel complet a été implémenté et validé :
 - Moteur bi-couche : [`src/hivemind/swarm/abc_moe_agent_mesh.py`](file:///home/xavkal/xdev/AutoevolveAI/sub_projects/hivemind/HiveMind/src/hivemind/swarm/abc_moe_agent_mesh.py)
-- Suite de tests : [`tests/test_abc_moe_agent_mesh.py`](file:///home/xavkal/xdev/AutoevolveAI/sub_projects/hivemind/HiveMind/tests/test_abc_moe_agent_mesh.py) (4/4 tests passés)
+- Cache P2P de Nectar : [`src/hivemind/swarm/swarm_nectar_cache.py`](file:///home/xavkal/xdev/AutoevolveAI/sub_projects/hivemind/HiveMind/src/hivemind/swarm/swarm_nectar_cache.py)
+- Suite de tests : [`tests/test_abc_moe_agent_mesh.py`](file:///home/xavkal/xdev/AutoevolveAI/sub_projects/hivemind/HiveMind/tests/test_abc_moe_agent_mesh.py) & [`tests/test_swarm_nectar_cache.py`](file:///home/xavkal/xdev/AutoevolveAI/sub_projects/hivemind/HiveMind/tests/test_swarm_nectar_cache.py)
 - Documentation d'architecture : [`honeybee_mesh_kafka_abc_architecture.md`](file:///home/xavkal/.gemini/antigravity-cli/brain/3cbf7fb8-27af-4c04-b750-146f1c80a9c2/honeybee_mesh_kafka_abc_architecture.md)
+- Plan détaillé de collaboration S25 : [`docs/S25_LAYERSTORM_COLLABORATION_PLAN.md`](file:///home/xavkal/xdev/AutoevolveAI/sub_projects/hivemind/HiveMind/docs/S25_LAYERSTORM_COLLABORATION_PLAN.md)
+
+---
+
+## 5. Plan de Collaboration LayerStoRm × HiveMind (Jours 1–3 à Semaines 1–4)
+
+| Horizon Temporel | Phase | Actions Concrètes & Livrables Conjoints | Critère de Succès (Gate) |
+| :--- | :--- | :--- | :--- |
+| **Jours 1 à 3** | **Phase 1 : Prise de contact, Alignement d'Interface & Pré-enregistrement `E19`** | • Prise de contact avec `@kkontosis` sur `r/LocalLLaMA` et GitHub.<br>• Définition du contrat d'interface JSON/HTTP entre `hivemind_producer_agent.py` et le serveur local LayerStoRm.<br>• Rédaction du protocole expérimental pré-enregistré **`E19`** (`artifacts/experiments/E19_layerstorm_pcie_nectar_prereg.json`). | Schéma d'API validé et pré-enregistrement `E19` commité avec contrôles négatifs. |
+| **Semaine 1** | **Phase 2 : Connecteur Producteur `LayerStoRmBackend` & Onboarding BYOB (`HM-S25-01`, `HM-S25-05`)** | • Implémentation de `src/hivemind/swarm/layerstorm_backend.py` (sonde de télémétrie VRAM + RAM hôte NUMA, arrêt DMA `< 0,5 s` sur signal de préemption jeu).<br>• Ouverture du tier `hivemind/frontier-moe-layerstorm` sur la Gateway OpenRouter. | Tests unitaires et d'intégration passés ; préemption vérifiée `< 500 ms`. |
+| **Semaine 2** | **Phase 3 : Couplage Waggle Dance + Cache VRAM Bi-Zone & Swarm Nectar Cache (`HM-S25-02`, `HM-S25-03`)** | • Pré-chargement (prefetch PCIe) des experts de la Zone B dès la notification de quorum Kafka `hivemind.mesh.waggle_dance.v1` avant l'arrivée du premier token.<br>• Couplage du *Swarm Nectar Cache* (S23) en amont de LayerStoRm pour court-circuiter les préfixes de prompts connus. | Réduction mesurée $\ge 50\%$ des transferts PCIe redondants sur les requêtes multi-tours. |
+| **Semaines 3 & 4** | **Phase 4 : Campagne Expérimentale `E19`, Preuve Lean 4 & Publication Conjointe (`HM-S25-04`)** | • Exécution de la campagne `E19` sur configurations grand public (RTX 3090/4070/5070 Ti + 64 Go RAM).<br>• Preuve formelle Lean 4 (`theorem layerstorm_two_zone_vram_ceiling` dans `formal/ANSE/HiveMindSpec.lean`).<br>• Publication conjointe dans le Foundation Paper `v4.1.0` sur Zenodo avec co-crédit complet. | `lake build` à 0 `sorry`, rapport `E19` signé SHA-256 et publié. |

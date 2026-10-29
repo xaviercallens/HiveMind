@@ -1,5 +1,5 @@
 {
- "gate": "AutoevolveAI anse.formal.lean_runner (independent of lake build), rerun 2026-10-29 after adding Season 28 Theorems 156-158",
+ "gate": "AutoevolveAI anse.formal.lean_runner (independent of lake build), rerun 2026-10-29 after adding Season 29 Theorems 159-161",
  "gate_exit_code": 0,
  "lake_build": "Build completed successfully; all 13 QueenBee #print axioms lines report subsets of {propext, Quot.sound}",
  "queenbee_namespace": "HiveMindSpec.ALIX_QueenBee",
@@ -52,9 +52,9 @@
   ]
  },
  "spec_file": "lean4/HiveMindSpec.lean",
- "spec_sha256": "f20414aa6727dc25c7880e38a3b29985b2b5d851f80414a781708628952b0863",
+ "spec_sha256": "87b5bb169249aa0d69d0cb0fef3dd162bb7bd2b1bc22790c9782cfffa131d28f",
  "theorems_failing_whitelist": [],
- "theorems_in_file": 158,
+ "theorems_in_file": 161,
  "whitelist": [
   "Classical.choice",
   "Quot.sound",

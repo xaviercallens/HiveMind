@@ -1,0 +1,69 @@
+{
+  "updated_at_utc": "2026-10-29T19:18:27Z",
+  "enrollments": [
+    {
+      "status": "ENROLLED_INTERNATIONAL_LAUNCH",
+      "enrollment_id": "ENROLL-EE75C42A4F8B",
+      "handle": "@xaviercallens",
+      "participant_type": "human",
+      "assigned_region": {
+        "region_id": "eu-west",
+        "title": "Europe West & Central (Paris / Amsterdam / Frankfurt)",
+        "super_peer_endpoint": "wss://eu-west.ruche.socrate-ai-lab.com/quic",
+        "subswarm_size_target": 18
+      },
+      "challenge_id": "CHALLENGE-1-MASSIVE-IMAGE-VMOE-104BEES",
+      "precision_cohort": {
+        "cohort_key": "nvidia:sm75_pre_ampere:fp32:adamw_8bit",
+        "enforced_dtype": "fp32",
+        "is_pre_ampere_fp32": true,
+        "optimizer_family": "adamw_8bit"
+      },
+      "adaptive_multisplit_plan": {
+        "selected_cut_index": 1,
+        "selected_cut_name": "patch_stem_int4_bottleneck",
+        "client_prelude_vram_mib": 680.0,
+        "within_1500mb_background_ceiling": true,
+        "activation_wire_kb": 48.0,
+        "estimated_split_step_ms": 86.2,
+        "unsplit_monolithic_step_ms": 1193.27,
+        "step_latency_reduction_pct": 92.78,
+        "uplink_mbps": 120.0,
+        "rtt_ms": 18.0
+      },
+      "preferred_language": "fr"
+    },
+    {
+      "status": "ENROLLED_INTERNATIONAL_LAUNCH",
+      "enrollment_id": "ENROLL-5F45C4A4F9F8",
+      "handle": "agent://hivemind/queenbee-coordinator-v29",
+      "participant_type": "agent",
+      "assigned_region": {
+        "region_id": "us-east",
+        "title": "North America East (Virginia / New York / Montreal)",
+        "super_peer_endpoint": "wss://us-east.ruche.socrate-ai-lab.com/quic",
+        "subswarm_size_target": 18
+      },
+      "challenge_id": "CHALLENGE-3-ABC-SCIENTIFIC-NECTAR-MESH",
+      "precision_cohort": {
+        "cohort_key": "nvidia:sm80_plus_ampere:bf16:adamw_8bit",
+        "enforced_dtype": "bf16",
+        "is_pre_ampere_fp32": false,
+        "optimizer_family": "adamw_8bit"
+      },
+      "adaptive_multisplit_plan": {
+        "selected_cut_index": 2,
+        "selected_cut_name": "early_vit_stage2_token_merger",
+        "client_prelude_vram_mib": 1120.0,
+        "within_1500mb_background_ceiling": true,
+        "activation_wire_kb": 96.0,
+        "estimated_split_step_ms": 74.54,
+        "unsplit_monolithic_step_ms": 351.14,
+        "step_latency_reduction_pct": 78.77,
+        "uplink_mbps": 500.0,
+        "rtt_ms": 12.0
+      },
+      "preferred_language": "en"
+    }
+  ]
+}

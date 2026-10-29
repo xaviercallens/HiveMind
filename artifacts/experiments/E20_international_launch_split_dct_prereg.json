@@ -1,0 +1,30 @@
+{
+  "experiment_id": "E20-international-launch-split-dct",
+  "registered_utc": "2026-10-29T19:02:00Z",
+  "registered_before_run": true,
+  "title": "Season 29 (HM-S29-01 / HM-S29-02 / HM-S31-02): International Weekend Launch Scalability — Adaptive Multi-Split ML (<1.5 GB Prelude <-> Edge Core), Top-1% DCT + EF21 (100x Compression), 6-Region Super-Peer Coalescing, and Nocturnal Image-MoE Evolution Monitor",
+  "origin": "Implements the Season 29-31 scalability roadmap (docs/VISION_AND_NEXTGEN_SWARM_ROADMAP.md) for the Oct 30 - Nov 1, 2026 International Swarm Launch across 6 global regions (EU-West, US-East, US-West, APAC-East, LATAM-South, MENA-Africa) and 3 Nocturnal Image-MoE engines (Reddit-Vision VLM, Exoplanet-Astro <1.5GB V-MoE, and 7-Division 42.87M-Sample 104-Bee Massive Image-MoE).",
+  "what_is_measured": {
+    "models": "La Ruche 7-Division Image-MoE (104 Bees, SigLIP-So400M / DINOv2-ViT-B14 / MobileViT-v2 / Qwen2.5-VL-3B&7B / Janus-Pro-1B&7B) across <1.5 GB Background Tier, 8 GB Consumer Gamer Tier, and 16-24 GB Prosumer/Spot Tier",
+    "conditions": {
+      "C0_centralized_full_sync": "Baseline unsplit branch synchronization with direct leaf-to-coordinator HTTP posts and uncoalesced per-workunit SQLite writes",
+      "C1_adaptive_multisplit_top1pct_dct": "HM-S29-01 Adaptive Multi-Split ML (dynamic cut-layer selection from uplink bandwidth 10 Mbps - 1 Gbps and RTT 15-220 ms keeping client VRAM < 1536 MiB) + HM-S29-02 Top-1% 2-bit/4-bit 2D-DCT with EF21 host-RAM error feedback (>= 100x wire compression)",
+      "C2_full_international_superpeer_geo_mesh": "C1 + 6-Region Super-Peer Hierarchy (branching factor B=32, 15-20 node localized fuzzy sub-swarm consensus HM-S31-02) + Single-Writer Litestream SQLite micro-batch write coalescer"
+    },
+    "resource_probes": "Per-step WAN transfer time (ms) at 20 Mbps / 60 ms RTT, wire compression ratio (FP32 bytes / compressed packet bytes), EF21 residual conservation error (L2), central coordinator HTTP request rate at N=10,000 nodes, SQLite write transaction reduction (%), HMT token conservation error, and local NVIDIA Tesla T4 free VRAM headroom (MiB >= 4300 MiB)"
+  },
+  "hypotheses": {
+    "P20a": "Adaptive Multi-Split ML WAN Step Acceleration (HM-S29-01): Under a constrained residential WAN link (20 Mbps uplink, 60 ms RTT), dynamic cut-layer selection in C1 reduces per-step synchronization latency by >= 45.0% compared to C0 while keeping client Prelude VRAM strictly <= 1536 MiB -> supported; < 20.0% or VRAM > 1536 MiB -> refuted",
+    "P20b": "Top-1% 2D-DCT + EF21 100x Bandwidth Compression (HM-S29-02): Extracting Top-1% DCT coefficients with 2-bit quantization and EF21 error feedback achieves >= 100.0x wire compression ratio with zero information loss in the conserved residual (||g - (chat + r_next)||_2 < 1e-6) -> supported; < 80.0x or residual drift >= 1e-4 -> refuted",
+    "P20c": "International Super-Peer Fanout & SQLite Write Coalescing Scalability: At N=10,000 international nodes across 6 regions, C2 reduces central coordinator ingress by >= 30.0x (via B=32 Super-Peers and 15-20 node localized sub-swarms) and reduces single-writer SQLite IOPS by >= 85.0% with exact HMT conservation -> supported; ingress reduction < 10x or HMT drift != 0 -> refuted",
+    "P20d": "Nocturnal Image-MoE Multi-Generation Evolution Ratchet & Tesla T4 Guard: Across consecutive nocturnal evolutionary generations of the 3 Image-MoE engines, the Pareto ratchet guarantees non-increasing validation loss (loss_{t+1} <= loss_t) while maintaining >= 4300 MiB free VRAM on the local Tesla T4 -> supported; loss regression or free VRAM < 4300 MiB -> refuted"
+  },
+  "controls": {
+    "negative_control_uncompensated_top1pct_drop": "Dropping 99% of DCT coefficients without EF21 error-feedback buffer must exhibit >= 10x higher cumulative reconstruction error over 10 outer steps than EF21-compensated Top-1% DCT",
+    "negative_control_vram_ceiling_breach": "Requesting a split-layer cut that places > 1536 MiB on a background tier-1 client must automatically shift the cut index leftward to a shallower Prelude layer",
+    "vram_headroom_floor_mib": 4300.0,
+    "run_is_valid_iff": "negative_control_uncompensated_top1pct_drop, negative_control_vram_ceiling_breach, and vram_headroom_floor_mib all pass"
+  },
+  "scope": "Pre-registered prior to implementing src/hivemind/swarm/international_launch_scaler.py and running the Nocturnal Image-MoE Evolution Monitor.",
+  "non_monetary": "Settled exclusively in non-monetary HiveMind Reflexion Points (HMT); financial_payment_usd_eur: 0.0"
+}

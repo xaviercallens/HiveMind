@@ -91,6 +91,10 @@ namespace HiveMind.ExoplanetHunterClient
         public Color PedestalColor;
         public bool ApprovedByGamer;
         public bool LandedMedal;
+        public string AnalysisEn;
+        public string AnalysisFr;
+        public string LifeEn;
+        public string LifeFr;
         public string KidLessonEn;
         public string KidLessonFr;
     }
@@ -165,6 +169,9 @@ namespace HiveMind.ExoplanetHunterClient
         private int _streakCount = 2;
         private int _medalsCount = 3;
         private bool _showNarrativeCard = true;
+        private bool[] _chapterIntroSpoken = new bool[5];
+        private DateTime _chapterIntroEndUtc = DateTime.MinValue;
+        private int _planetSwitchCount = 0;
         private List<ScorePopup> _popups = new List<ScorePopup>();
         private List<HudStarBonus> _bonusStars = new List<HudStarBonus>();
         private SpeechSynthesizer _speechSynth = null;
@@ -473,8 +480,12 @@ namespace HiveMind.ExoplanetHunterClient
                 DepthPpm = 5180, RadiusRearth = 0.92, MassMearth = 0.692, BulkDensityGcm3 = 4.90,
                 TeqK = 251, InsolationEarth = 0.66, InHz = true,
                 PrimaryColor = Color.FromArgb(16, 185, 129), PedestalColor = Color.FromArgb(52, 211, 153), ApprovedByGamer = true, LandedMedal = true,
-                KidLessonEn = "Young Explorer, welcome to TRAPPIST-1e! It is a rocky Earth-sized planet orbiting an ultra-cool red dwarf star just 40 light-years away. Because its star is only the size of Jupiter, a whole year here lasts just 6 Earth days, and it sits right in the Habitable Zone where liquid water can flow!",
-                KidLessonFr = "Jeune explorateur, bienvenue sur TRAPPIST-1e ! C'est une planète rocheuse de la taille de la Terre située à 40 années-lumière. Son étoile est si petite qu'une année entière n'y dure que 6 jours terrestres, en pleine zone habitable où l'eau liquide peut exister !"
+                AnalysisEn = "TRAPPIST-1e analysis: rocky world, 0.92 Earth radii, 251 K, 6.1-day orbit, 5,180 ppm transit.",
+                LifeEn = "How life could live: tidally locked twilight oceans could support red-light photosynthetic algae and marine bacteria.",
+                AnalysisFr = "Analyse TRAPPIST-1e : monde rocheux, 0,92 rayon terrestre, 251 K, orbite 6,1 jours, transit 5 180 ppm.",
+                LifeFr = "Vie possible : ses océans crépusculaires abriteraient des algues photosynthétiques sous lumière rouge.",
+                KidLessonEn = "TRAPPIST-1e analysis: rocky world, 0.92 Earth radii, 251 K, 6.1-day orbit, 5,180 ppm transit. How life could live: tidally locked twilight oceans could support red-light photosynthetic algae and marine bacteria.",
+                KidLessonFr = "Analyse TRAPPIST-1e : monde rocheux, 0,92 rayon terrestre, 251 K, orbite 6,1 jours, transit 5 180 ppm. Vie possible : ses océans crépusculaires abriteraient des algues photosynthétiques sous lumière rouge."
             });
             _targets.Add(new ExoTarget {
                 Index = 1, Id = "SECTOR-02-K2-18B", ShortLabel = "K2-18 b", HostStar = "K2-18 (M2.5V)",
@@ -483,8 +494,12 @@ namespace HiveMind.ExoplanetHunterClient
                 DepthPpm = 2920, RadiusRearth = 2.61, MassMearth = 8.63, BulkDensityGcm3 = 2.67,
                 TeqK = 265, InsolationEarth = 0.94, InHz = true,
                 PrimaryColor = Color.FromArgb(14, 165, 233), PedestalColor = Color.FromArgb(56, 189, 248), ApprovedByGamer = true, LandedMedal = true,
-                KidLessonEn = "Space Cadet, this is K2-18 b, a famous Hycean Ocean World 124 light-years from Earth! It weighs 8.6 times more than Earth. The James Webb Space Telescope looked through its clouds and found methane and carbon dioxide, clues of a giant warm ocean underneath!",
-                KidLessonFr = "Cadet de l'espace, voici K2-18 b, un monde océanique Hycéen situé à 124 années-lumière ! Il pèse 8,6 fois la masse de la Terre, et le télescope James Webb a découvert du méthane et du gaz carbonique dans son atmosphère au-dessus d'un océan géant !"
+                AnalysisEn = "K2-18 b analysis: Hycean world, 8.6 Earth masses, 265 K, JWST methane and CO2 atmosphere.",
+                LifeEn = "How life could live: phytoplankton and deep-sea organisms could thrive in its warm global ocean.",
+                AnalysisFr = "Analyse K2-18 b : monde hycéen, 8,6 masses terrestres, 265 K, méthane et CO2 détectés par JWST.",
+                LifeFr = "Vie possible : du phytoplancton et des organismes marins prospéreraient dans son océan global chaud.",
+                KidLessonEn = "K2-18 b analysis: Hycean world, 8.6 Earth masses, 265 K, JWST methane and CO2 atmosphere. How life could live: phytoplankton and deep-sea organisms could thrive in its warm global ocean.",
+                KidLessonFr = "Analyse K2-18 b : monde hycéen, 8,6 masses terrestres, 265 K, méthane et CO2 détectés par JWST. Vie possible : du phytoplancton et des organismes marins prospéreraient dans son océan global chaud."
             });
             _targets.Add(new ExoTarget {
                 Index = 2, Id = "SECTOR-03-KEPLER-11F", ShortLabel = "Kepler-11 f", HostStar = "Kepler-11 (G6V)",
@@ -493,8 +508,12 @@ namespace HiveMind.ExoplanetHunterClient
                 DepthPpm = 550, RadiusRearth = 2.49, MassMearth = 2.00, BulkDensityGcm3 = 0.71,
                 TeqK = 544, InsolationEarth = 17.4, InHz = false,
                 PrimaryColor = Color.FromArgb(139, 92, 246), PedestalColor = Color.FromArgb(167, 139, 250), ApprovedByGamer = true, LandedMedal = false,
-                KidLessonEn = "Look at Kepler-11 f! It belongs to a tightly packed family of six planets orbiting a sun-like star. Its density is only 0.71 grams per cubic centimeter, which means it is a puffy Mini-Neptune wrapped in a thick blanket of hydrogen and helium gas!",
-                KidLessonFr = "Regarde Kepler-11 f ! Elle fait partie d'une famille compacte de six planètes. Sa densité n'est que de 0,71 gramme par centimètre cube : c'est une Mini-Neptune très légère enveloppée d'hydrogène et d'hélium !"
+                AnalysisEn = "Kepler-11 f analysis: low-density Mini-Neptune, 0.71 g/cm³, 2.49 Earth radii, 544 K hydrogen envelope.",
+                LifeEn = "How life could live: no solid ground exists, so only high-altitude floating cloud microbes could survive.",
+                AnalysisFr = "Analyse Kepler-11 f : Mini-Neptune gazeuse, densité 0,71 g/cm³, 2,49 rayons terrestres, 544 K.",
+                LifeFr = "Vie possible : sans surface solide, seuls des microbes flottant dans les nuages tempérés survivraient.",
+                KidLessonEn = "Kepler-11 f analysis: low-density Mini-Neptune, 0.71 g/cm³, 2.49 Earth radii, 544 K hydrogen envelope. How life could live: no solid ground exists, so only high-altitude floating cloud microbes could survive.",
+                KidLessonFr = "Analyse Kepler-11 f : Mini-Neptune gazeuse, densité 0,71 g/cm³, 2,49 rayons terrestres, 544 K. Vie possible : sans surface solide, seuls des microbes flottant dans les nuages tempérés survivraient."
             });
             _targets.Add(new ExoTarget {
                 Index = 3, Id = "SECTOR-04-HD-80606B", ShortLabel = "HD 80606 b", HostStar = "HD 80606 (G5V)",
@@ -503,8 +522,12 @@ namespace HiveMind.ExoplanetHunterClient
                 DepthPpm = 11200, RadiusRearth = 11.99, MassMearth = 1392.0, BulkDensityGcm3 = 4.43,
                 TeqK = 405, InsolationEarth = 5.05, InHz = false,
                 PrimaryColor = Color.FromArgb(234, 88, 12), PedestalColor = Color.FromArgb(251, 146, 60), ApprovedByGamer = true, LandedMedal = false,
-                KidLessonEn = "Hold on tight! HD 80606 b has a wild, stretched-out comet orbit with 93 percent eccentricity! Watch the green Doppler graph below: when this giant planet whips close to its star, gravity makes the star wobble at 476 meters per second and heats the sky to 1,200 degrees!",
-                KidLessonFr = "Accroche-toi bien ! HD 80606 b possède une orbite allongée comme une comète avec une excentricité de 93 % ! Lorsqu'elle frôle son étoile, la vitesse Doppler bondit à 476 mètres par seconde dans une tempête géante !"
+                AnalysisEn = "HD 80606 b analysis: eccentric giant, 93% eccentricity, 476 m/s Doppler wobble, 1,200 K periastron storms.",
+                LifeEn = "How life could live: extreme heat blocks surface life; only subsurface microbes inside an icy exomoon could survive.",
+                AnalysisFr = "Analyse HD 80606 b : géante excentrique à 93 %, Doppler 476 m/s, tempêtes à 1 200 K.",
+                LifeFr = "Vie possible : chaleur mortelle en surface ; seuls des microbes sous la glace d'une exolune survivraient.",
+                KidLessonEn = "HD 80606 b analysis: eccentric giant, 93% eccentricity, 476 m/s Doppler wobble, 1,200 K periastron storms. How life could live: extreme heat blocks surface life; only subsurface microbes inside an icy exomoon could survive.",
+                KidLessonFr = "Analyse HD 80606 b : géante excentrique à 93 %, Doppler 476 m/s, tempêtes à 1 200 K. Vie possible : chaleur mortelle en surface ; seuls des microbes sous la glace d'une exolune survivraient."
             });
             _targets.Add(new ExoTarget {
                 Index = 4, Id = "SECTOR-05-TOI-700D", ShortLabel = "TOI-700 d", HostStar = "TOI-700 (M2V)",
@@ -513,8 +536,12 @@ namespace HiveMind.ExoplanetHunterClient
                 DepthPpm = 665, RadiusRearth = 1.14, MassMearth = 1.72, BulkDensityGcm3 = 6.32,
                 TeqK = 269, InsolationEarth = 0.86, InHz = true,
                 PrimaryColor = Color.FromArgb(20, 184, 166), PedestalColor = Color.FromArgb(45, 212, 191), ApprovedByGamer = true, LandedMedal = false,
-                KidLessonEn = "Awesome find! TOI-700 d was the very first Earth-sized habitable-zone planet discovered by NASA's TESS space telescope! It is only 14 percent wider than Earth and receives 86 percent of the sunlight Earth gets.",
-                KidLessonFr = "Superbe découverte ! TOI-700 d est la toute première planète de la taille de la Terre en zone habitable découverte par le télescope spatial TESS de la NASA !"
+                AnalysisEn = "TOI-700 d analysis: TESS rocky world, 1.14 Earth radii, 269 K, 37.4-day habitable orbit.",
+                LifeEn = "How life could live: mild coastal seas along the terminator zone could sustain multicellular aquatic life.",
+                AnalysisFr = "Analyse TOI-700 d : monde rocheux TESS, 1,14 rayon terrestre, 269 K, orbite habitable de 37,4 jours.",
+                LifeFr = "Vie possible : des mers tempérées le long du terminateur soutiendraient une vie aquatique complexe.",
+                KidLessonEn = "TOI-700 d analysis: TESS rocky world, 1.14 Earth radii, 269 K, 37.4-day habitable orbit. How life could live: mild coastal seas along the terminator zone could sustain multicellular aquatic life.",
+                KidLessonFr = "Analyse TOI-700 d : monde rocheux TESS, 1,14 rayon terrestre, 269 K, orbite habitable de 37,4 jours. Vie possible : des mers tempérées le long du terminateur soutiendraient une vie aquatique complexe."
             });
             _targets.Add(new ExoTarget {
                 Index = 5, Id = "SECTOR-06-LHS-1140B", ShortLabel = "LHS 1140 b", HostStar = "LHS 1140 (M4.5V)",
@@ -523,8 +550,12 @@ namespace HiveMind.ExoplanetHunterClient
                 DepthPpm = 5340, RadiusRearth = 1.73, MassMearth = 5.60, BulkDensityGcm3 = 5.95,
                 TeqK = 226, InsolationEarth = 0.43, InHz = true,
                 PrimaryColor = Color.FromArgb(6, 182, 212), PedestalColor = Color.FromArgb(34, 211, 238), ApprovedByGamer = true, LandedMedal = true,
-                KidLessonEn = "Welcome to LHS 1140 b! Look at the two graphs below: its shadow blocks 5,340 parts per million of starlight, telling us it is 1.73 times wider than Earth. And its 4.9 meters per second Doppler wobble proves it is a rocky Super-Earth with liquid water potential!",
-                KidLessonFr = "Bienvenue sur LHS 1140 b ! Son ombre bloque 5 340 parties par million de lumière, et son oscillation Doppler de 4,9 mètres par seconde prouve que c'est une Super-Terre rocheuse et océanique en zone habitable !"
+                AnalysisEn = "LHS 1140 b analysis: dense Super-Earth, 5.6 Earth masses, 5,340 ppm transit, 226 K nitrogen sky.",
+                LifeEn = "How life could live: a sunlit open-ocean bullseye and hydrothermal vents could sustain rich marine ecosystems.",
+                AnalysisFr = "Analyse LHS 1140 b : Super-Terre dense, 5,6 masses terrestres, transit 5 340 ppm, 226 K.",
+                LifeFr = "Vie possible : un océan circulaire côté jour et des sources hydrothermales nourriraient la vie marine.",
+                KidLessonEn = "LHS 1140 b analysis: dense Super-Earth, 5.6 Earth masses, 5,340 ppm transit, 226 K nitrogen sky. How life could live: a sunlit open-ocean bullseye and hydrothermal vents could sustain rich marine ecosystems.",
+                KidLessonFr = "Analyse LHS 1140 b : Super-Terre dense, 5,6 masses terrestres, transit 5 340 ppm, 226 K. Vie possible : un océan circulaire côté jour et des sources hydrothermales nourriraient la vie marine."
             });
             _targets.Add(new ExoTarget {
                 Index = 6, Id = "SECTOR-07-WASP-39B", ShortLabel = "WASP-39 b", HostStar = "WASP-39 (G8V)",
@@ -533,8 +564,12 @@ namespace HiveMind.ExoplanetHunterClient
                 DepthPpm = 21200, RadiusRearth = 14.23, MassMearth = 88.9, BulkDensityGcm3 = 0.17,
                 TeqK = 1166, InsolationEarth = 420.0, InHz = false,
                 PrimaryColor = Color.FromArgb(202, 138, 4), PedestalColor = Color.FromArgb(250, 204, 21), ApprovedByGamer = true, LandedMedal = false,
-                KidLessonEn = "Check out WASP-39 b! It is a giant puffy planet 14 times wider than Earth, making a huge 21,200 parts per million shadow dip! Its density is only 0.17, lighter than cork! The James Webb Telescope made the first-ever detection of carbon dioxide and sulfur dioxide here!",
-                KidLessonFr = "Voici WASP-39 b ! C'est une géante gazeuse si légère qu'elle flotterait sur l'eau ! Le télescope James Webb y a détecté pour la première fois du dioxyde de carbone et du dioxyde de soufre !"
+                AnalysisEn = "WASP-39 b analysis: puffy hot Saturn, 14.2 Earth radii, 1,166 K, JWST SO2 and CO2 clouds.",
+                LifeEn = "How life could live: 1,166 K heat and corrosive sulfur clouds break organic bonds; life cannot survive.",
+                AnalysisFr = "Analyse WASP-39 b : Saturne chaude gonflée, 14,2 rayons terrestres, 1 166 K, nuages de SO2 et CO2.",
+                LifeFr = "Vie possible : à 1 166 K, la chaleur brise les molécules organiques ; aucune vie ne peut survivre.",
+                KidLessonEn = "WASP-39 b analysis: puffy hot Saturn, 14.2 Earth radii, 1,166 K, JWST SO2 and CO2 clouds. How life could live: 1,166 K heat and corrosive sulfur clouds break organic bonds; life cannot survive.",
+                KidLessonFr = "Analyse WASP-39 b : Saturne chaude gonflée, 14,2 rayons terrestres, 1 166 K, nuages de SO2 et CO2. Vie possible : à 1 166 K, la chaleur brise les molécules organiques ; aucune vie ne peut survivre."
             });
             _targets.Add(new ExoTarget {
                 Index = 7, Id = "SECTOR-08-KEPLER-186F", ShortLabel = "Kepler-186f", HostStar = "Kepler-186 (M1V)",
@@ -543,8 +578,12 @@ namespace HiveMind.ExoplanetHunterClient
                 DepthPpm = 512, RadiusRearth = 1.17, MassMearth = 1.44, BulkDensityGcm3 = 4.96,
                 TeqK = 188, InsolationEarth = 0.32, InHz = true,
                 PrimaryColor = Color.FromArgb(192, 38, 211), PedestalColor = Color.FromArgb(232, 121, 249), ApprovedByGamer = true, LandedMedal = false,
-                KidLessonEn = "You found Kepler-186f, the first Earth-sized planet ever discovered in the habitable zone of another star! Under its red-orange sky, plants might use red light for photosynthesis!",
-                KidLessonFr = "Tu as trouvé Kepler-186f, la première planète de la taille de la Terre découverte dans la zone habitable d'une autre étoile !"
+                AnalysisEn = "Kepler-186f analysis: cool rocky planet, 1.17 Earth radii, 188 K, 130-day outer habitable orbit.",
+                LifeEn = "How life could live: dark infrared-absorbing plants and sub-glacial microbes could thrive near volcanic vents.",
+                AnalysisFr = "Analyse Kepler-186f : planète rocheuse froide, 1,17 rayon terrestre, 188 K, orbite habitable de 130 jours.",
+                LifeFr = "Vie possible : des plantes sombres captant l'infrarouge et des microbes survivraient près des volcans.",
+                KidLessonEn = "Kepler-186f analysis: cool rocky planet, 1.17 Earth radii, 188 K, 130-day outer habitable orbit. How life could live: dark infrared-absorbing plants and sub-glacial microbes could thrive near volcanic vents.",
+                KidLessonFr = "Analyse Kepler-186f : planète rocheuse froide, 1,17 rayon terrestre, 188 K, orbite habitable de 130 jours. Vie possible : des plantes sombres captant l'infrarouge et des microbes survivraient près des volcans."
             });
             _targets.Add(new ExoTarget {
                 Index = 8, Id = "SECTOR-09-KOI-CAND-14", ShortLabel = "KOI-Cand 14", HostStar = "KIC 11804465",
@@ -553,8 +592,12 @@ namespace HiveMind.ExoplanetHunterClient
                 DepthPpm = 420, RadiusRearth = 1.42, MassMearth = 0.05, BulkDensityGcm3 = 0.10,
                 TeqK = 258, InsolationEarth = 0.88, InHz = true,
                 PrimaryColor = Color.FromArgb(22, 163, 74), PedestalColor = Color.FromArgb(74, 222, 128), ApprovedByGamer = true, LandedMedal = false,
-                KidLessonEn = "Detective Alert on KOI-Candidate 14! We see a small shadow dip on the right graph, but look at the left Doppler graph: the line is completely flat (K = 0.04 meters per second)! Without a gravity tug, this could be a background star blend!",
-                KidLessonFr = "Alerte Détective sur KOI-Cand 14 ! On voit une baisse de lumière à droite, mais la courbe Doppler à gauche est presque plate (K = 0,04 m/s) ! Il faut vérifier s'il s'agit d'un bruit de fond !"
+                AnalysisEn = "KOI-Cand 14 analysis: unconfirmed candidate, 420 ppm dip, flat 0.04 m/s Doppler wobble, 258 K.",
+                LifeEn = "How life could live: if verified as an icy water world, sub-surface oceans could shelter anaerobic bacteria.",
+                AnalysisFr = "Analyse KOI-Cand 14 : candidat à confirmer, transit 420 ppm, Doppler plat 0,04 m/s, 258 K.",
+                LifeFr = "Vie possible : s'il est confirmé comme monde glacé, un océan souterrain abriterait des bactéries.",
+                KidLessonEn = "KOI-Cand 14 analysis: unconfirmed candidate, 420 ppm dip, flat 0.04 m/s Doppler wobble, 258 K. How life could live: if verified as an icy water world, sub-surface oceans could shelter anaerobic bacteria.",
+                KidLessonFr = "Analyse KOI-Cand 14 : candidat à confirmer, transit 420 ppm, Doppler plat 0,04 m/s, 258 K. Vie possible : s'il est confirmé comme monde glacé, un océan souterrain abriterait des bactéries."
             });
             _targets.Add(new ExoTarget {
                 Index = 9, Id = "SECTOR-10-KOI-BIN-02", ShortLabel = "KOI-Bin #02", HostStar = "KIC 9832227 (Binary)",
@@ -563,8 +606,12 @@ namespace HiveMind.ExoplanetHunterClient
                 DepthPpm = 58400, RadiusRearth = 31.40, MassMearth = 31150.0, BulkDensityGcm3 = 5.55,
                 TeqK = 1480, InsolationEarth = 890.0, InHz = false,
                 PrimaryColor = Color.FromArgb(225, 29, 72), PedestalColor = Color.FromArgb(244, 63, 94), ApprovedByGamer = true, LandedMedal = false,
-                KidLessonEn = "Watch out, Space Detective! KOI-Bin #02 is a False Positive Impostor! Look at the sharp V-shaped transit dip on the right and the massive 1,420 meters per second wobble on the left. That's not a planet—it's two hot stars eclipsing each other! Reject it in Step 4 to win 800 bonus points!",
-                KidLessonFr = "Attention, Détective de l'Espace ! KOI-Bin #02 est un faux positif imposteur ! Son transit pointu en V et son oscillation géante de 1 420 m/s prouvent que ce sont deux étoiles binaires qui s'éclipsent ! Rejette-le à l'étape 4 pour gagner 800 points !"
+                AnalysisEn = "KOI-Bin #02 analysis: false positive eclipsing binary, V-shaped 58,400 ppm dip, 1,420 m/s wobble.",
+                LifeEn = "How life could live: no solid planet exists here—only two scorching stars where biology cannot survive.",
+                AnalysisFr = "Analyse KOI-Bin #02 : faux positif binaire à éclipses, transit en V 58 400 ppm, Doppler 1 420 m/s.",
+                LifeFr = "Vie possible : aucune planète solide ici, seulement deux étoiles brûlantes stériles.",
+                KidLessonEn = "KOI-Bin #02 analysis: false positive eclipsing binary, V-shaped 58,400 ppm dip, 1,420 m/s wobble. How life could live: no solid planet exists here—only two scorching stars where biology cannot survive.",
+                KidLessonFr = "Analyse KOI-Bin #02 : faux positif binaire à éclipses, transit en V 58 400 ppm, Doppler 1 420 m/s. Vie possible : aucune planète solide ici, seulement deux étoiles brûlantes stériles."
             });
         }
 
@@ -988,41 +1035,127 @@ namespace HiveMind.ExoplanetHunterClient
         private string GetCurrentPlanetKidLesson()
         {
             if (_current == null) return "";
-            if (_lang == "fr") return _current.KidLessonFr;
-            return _current.KidLessonEn;
+            if (_lang == "fr") return _current.AnalysisFr + " " + _current.LifeFr;
+            if (_lang == "es")
+            {
+                string lifeEs = (_current.Disposition == "FALSE POSITIVE")
+                    ? "Vida: estrella binaria ardiente, sin superficie sólida para la vida."
+                    : (_current.InHz
+                        ? "Vida: océanos templados y fuentes hidrotermales podrían sostener microbios y vida marina."
+                        : "Vida: calor extremo en superficie; solo microbios en nubes altas o lunas heladas sobrevivirían.");
+                return string.Format(CultureInfo.InvariantCulture, "Análisis de {0}: radio {1:F2} R⊕, masa {2:F2} M⊕, {3:F0} K, tránsito {4:F0} ppm, Doppler {5:F2} m/s. {6}",
+                    _current.ShortLabel, _current.RadiusRearth, _current.MassMearth, _current.TeqK, _current.DepthPpm, _current.RadialVelocityKms, lifeEs);
+            }
+            if (_lang == "de")
+            {
+                string lifeDe = (_current.Disposition == "FALSE POSITIVE")
+                    ? "Leben: heißer Doppelstern ohne festen Planeten; kein Leben möglich."
+                    : (_current.InHz
+                        ? "Leben: flüssige Ozeane und Hydrothermalquellen könnten Mikroben und Meeresleben ermöglichen."
+                        : "Leben: extreme Hitze am Boden; nur Mikroben in hohen Wolken oder Eismonden überlebensfähig.");
+                return string.Format(CultureInfo.InvariantCulture, "Analyse {0}: Radius {1:F2} R⊕, Masse {2:F2} M⊕, {3:F0} K, Transit {4:F0} ppm, Doppler {5:F2} m/s. {6}",
+                    _current.ShortLabel, _current.RadiusRearth, _current.MassMearth, _current.TeqK, _current.DepthPpm, _current.RadialVelocityKms, lifeDe);
+            }
+            if (_lang == "zh")
+            {
+                string lifeZh = (_current.Disposition == "FALSE POSITIVE")
+                    ? "生命评估：炽热食双星假阳性，无固态表面，生命无法存活。"
+                    : (_current.InHz
+                        ? "生命评估：处于宜居带，液态海洋与海底热泉可孕育光合藻类及海洋微生物。"
+                        : "生命评估：表面高温严酷，仅高层温带云层或冰卫星地下海洋可能存在极端微生物。");
+                return string.Format(CultureInfo.InvariantCulture, "{0} 行星分析：半径 {1:F2} 地球，质量 {2:F2} 地球，温度 {3:F0} K，凌星 {4:F0} ppm，多普勒 {5:F2} m/s。{6}",
+                    _current.ShortLabel, _current.RadiusRearth, _current.MassMearth, _current.TeqK, _current.DepthPpm, _current.RadialVelocityKms, lifeZh);
+            }
+            return _current.AnalysisEn + " " + _current.LifeEn;
+        }
+
+        private string GetOneTimeChapterExplanation(int stage)
+        {
+            if (_lang == "fr")
+            {
+                if (stage == 0) return "Chapitre 1 : Passerelle. Survolez les étoiles ou appuyez sur ESPACE pour lancer les sondes.";
+                if (stage == 1) return "Chapitre 2 : Orbite. Guidez la sonde dans l'anneau vert de Lagrange.";
+                if (stage == 2) return "Chapitre 3 : Atterrissage. Suivez le tunnel vert ; ESPACE freine, ENTRÉE atterrit.";
+                if (stage == 4) return "Chapitre 5 : Centre BOINC GPU. Le GPU inactif plie les courbes TESS et JWST.";
+                return "Chapitre 4 : Labo JWST. Vérifiez transit et Doppler, puis Approuvez ou Rejetez.";
+            }
+            if (_lang == "es")
+            {
+                if (stage == 0) return "Capítulo 1: Puente. Vuele entre estrellas o pulse ESPACIO para lanzar sondas.";
+                if (stage == 1) return "Capítulo 2: Órbita. Guíe la sonda al anillo verde de Lagrange.";
+                if (stage == 2) return "Capítulo 3: Aterrizaje. Siga el túnel verde; ESPACIO frena, ENTER aterriza.";
+                if (stage == 4) return "Capítulo 5: Centro BOINC GPU. La GPU inactiva pliega curvas TESS y JWST.";
+                return "Capítulo 4: Labo JWST. Verifique tránsito y Doppler, luego Apruebe o Rechace.";
+            }
+            if (_lang == "de")
+            {
+                if (stage == 0) return "Kapitel 1: Brücke. Fliegen Sie zu Sternen oder drücken Sie LEERTASTE für Sonden.";
+                if (stage == 1) return "Kapitel 2: Orbit. Steuern Sie die Sonde in den grünen Lagrange-Ring.";
+                if (stage == 2) return "Kapitel 3: Landung. Grünem Tunnel folgen; LEERTASTE bremst, ENTER landet.";
+                if (stage == 4) return "Kapitel 5: BOINC GPU-Zentrum. Inaktive GPU faltet TESS- und JWST-Lichtkurven.";
+                return "Kapitel 4: JWST-Labor. Transit und Doppler prüfen, dann Bestätigen oder Ablehnen.";
+            }
+            if (_lang == "zh")
+            {
+                if (stage == 0) return "第一章：舰桥。在恒星间航行或按空格键发射探测器。";
+                if (stage == 1) return "第二章：轨道。引导探测器进入绿色拉格朗日环。";
+                if (stage == 2) return "第三章：着陆。沿绿色通道下降，空格减速，回车自动着陆。";
+                if (stage == 4) return "第五章：BOINC 算力中心。闲置 GPU 自动折叠系外行星光变曲线。";
+                return "第四章：韦伯实验室。核对凌星与多普勒曲线，点击批准或排除。";
+            }
+            if (stage == 0) return "Chapter 1: Bridge. Fly between stars or press SPACE to launch probes.";
+            if (stage == 1) return "Chapter 2: Orbit. Guide your probe into the green Lagrange ring.";
+            if (stage == 2) return "Chapter 3: Landing. Follow the green tunnel; SPACE brakes, ENTER auto-lands.";
+            if (stage == 4) return "Chapter 5: BOINC GPU Hub. Idle GPU folds TESS and JWST light curves automatically.";
+            return "Chapter 4: JWST Lab. Verify transit and Doppler curves, then Approve or Reject.";
+        }
+
+        private void SpeakPlanetAnalysisOnly()
+        {
+            if (_current == null) return;
+            string planetMsg = GetCurrentPlanetKidLesson();
+            _subtitleText = planetMsg;
+            this.Invalidate();
+
+            // If the one-time Chapter 1 intro explanation is still speaking during its first ~3 seconds,
+            // do not interrupt or restart it—queue the planet analysis immediately after it finishes!
+            double remainMs = (_chapterIntroEndUtc - DateTime.UtcNow).TotalMilliseconds;
+            if (remainMs > 80.0)
+            {
+                int targetSnap = _current.Index;
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    Thread.Sleep((int)Math.Min(3200.0, remainMs + 60.0));
+                    if (_current != null && _current.Index == targetSnap)
+                    {
+                        SpeakWithSubtitles(GetCurrentPlanetKidLesson());
+                    }
+                });
+                return;
+            }
+
+            SpeakWithSubtitles(planetMsg);
         }
 
         private void SpeakStepNarrativeAndAstrophysics()
         {
             if (_current == null) return;
-            string msg;
-            if (_lang == "fr")
+            int stg = Math.Max(0, Math.Min(4, _gameStage));
+
+            // Ensure each Chapter explanation is spoken ONLY ONE TIME per session!
+            if (!_chapterIntroSpoken[stg])
             {
-                if (_gameStage == 0)
-                    msg = string.Format(CultureInfo.InvariantCulture, "Chapitre 1 : Passerelle de l'USS HiveMind. {0} Appuie sur ESPACE pour lancer tes satellites robots et gagner 300 points !", _current.KidLessonFr);
-                else if (_gameStage == 1)
-                    msg = string.Format(CultureInfo.InvariantCulture, "Chapitre 2 : Approche orbitale autour de {0}. Guide ton robot doré dans le cercle vert de Lagrange tout en ramassant les étoiles d'or ! Astuce science : l'ombre de transit est de {1:F0} parties par million, ce qui révèle un rayon de {2:F2} fois la Terre !", _current.ShortLabel, _current.DepthPpm, _current.RadiusRearth);
-                else if (_gameStage == 2)
-                    msg = string.Format(CultureInfo.InvariantCulture, "Chapitre 3 : Atterrissage planétaire facile sur {0} ! Regarde le cadre vert au centre : ton robot descend doucement vers la piste d'atterrissage verte. Appuie sur ESPACE pour freiner et gagner 100 points, ou appuie sur ENTRÉE pour un atterrissage automatique à 1000 points !", _current.ShortLabel);
-                else if (_gameStage == 4)
-                    msg = string.Format(CultureInfo.InvariantCulture, "Chapitre 5 : Centre Communautaire BOINC et Google Cloud. Quand ta carte graphique n'est pas utilisée pendant 4 secondes, le vaisseau calcule automatiquement les courbes de transit TESS et James Webb pour aider les astrophysiciens et les joueurs Steam !", _current.ShortLabel);
-                else
-                    msg = string.Format(CultureInfo.InvariantCulture, "Chapitre 4 : Laboratoire astrophysique James Webb pour {0}. Sa vitesse radiale Doppler est de {1:F2} mètres par seconde et sa densité est de {2:F2} grammes par centimètre cube. Clique sur Approuver ou Rejeter pour gagner 800 points !", _current.ShortLabel, _current.RadialVelocityKms, _current.BulkDensityGcm3);
+                _chapterIntroSpoken[stg] = true;
+                _chapterIntroEndUtc = DateTime.UtcNow.AddSeconds(3.0);
+                string intro = GetOneTimeChapterExplanation(stg);
+                string msg = (stg == 4) ? intro : (intro + " " + GetCurrentPlanetKidLesson());
+                SpeakWithSubtitles(msg);
             }
             else
             {
-                if (_gameStage == 0)
-                    msg = string.Format(CultureInfo.InvariantCulture, "Chapter 1: USS HiveMind Starfleet Bridge. {0} Press the SPACE bar to launch your Bee-MoE robot satellites and win 300 points!", _current.KidLessonEn);
-                else if (_gameStage == 1)
-                    msg = string.Format(CultureInfo.InvariantCulture, "Chapter 2: Orbital Robot Synchronisation at {0}. Steer your golden robot into the green circle around the planet to win 500 points! Kid Science Fact: its transit shadow blocks {1:F0} parts per million of starlight, proving the planet is {2:F2} times the width of Earth!", _current.ShortLabel, _current.DepthPpm, _current.RadiusRearth);
-                else if (_gameStage == 2)
-                    msg = string.Format(CultureInfo.InvariantCulture, "Chapter 3: Easy Planetary Landing on {0}! Look inside the center green box: your robot is gliding down toward the glowing green landing pad. Press SPACE to brake for 100 bonus points, or press ENTER to Auto-Land right now and win 1,000 points and a Gold Medal!", _current.ShortLabel);
-                else if (_gameStage == 4)
-                    msg = string.Format(CultureInfo.InvariantCulture, "Chapter 5: Steam Free-to-Play BOINC Idle-GPU Citizen Science and GCP Community Hub! Whenever your GPU is idle for 4 seconds, your starship automatically folds TESS and James Webb exoplanet light curves and syncs discoveries with gamers and astrophysicists on Google Cloud Run!", _current.ShortLabel);
-                else
-                    msg = string.Format(CultureInfo.InvariantCulture, "Chapter 4: James Webb Space Telescope Science Lab for {0}. Its gravity makes its star wobble at {1:F2} meters per second, giving a density of {2:F2} grams per cubic centimeter. Click Approve if it is a real planet, or Reject if it is an impostor star, to win 800 points!", _current.ShortLabel, _current.RadialVelocityKms, _current.BulkDensityGcm3);
+                // After the one-time chapter explanation, speak ONLY the planet analysis, specific planet info & how life could live!
+                SpeakPlanetAnalysisOnly();
             }
-            SpeakWithSubtitles(msg);
         }
 
         private void TriggerBoincIdleGpuWorkunitSync(string projectId, bool showPopup)
@@ -1116,13 +1249,14 @@ namespace HiveMind.ExoplanetHunterClient
                 _shipYNorm = Math.Max(0.10f, _current.GalaxyYNorm - 0.06f);
             }
             _captureProgress = 0.0;
-            _showNarrativeCard = true;
             ResetOolitePlanetfallState();
             if (playSound)
             {
+                _planetSwitchCount++;
+                _chapterIntroSpoken[0] = true; // Never restart Chapter 1 voice when moving between planets
                 PlaySynthesizedSciFiWav(880.0, 1320.0, 95);
                 AddPointsWithPopup(50, "STAR SCAN", _galaxyRect.X + _current.GalaxyXNorm * _galaxyRect.Width, _galaxyRect.Y + _current.GalaxyYNorm * _galaxyRect.Height, Color.FromArgb(56, 189, 248));
-                SpeakStepNarrativeAndAstrophysics();
+                SpeakPlanetAnalysisOnly();
             }
             this.Invalidate();
         }
@@ -2266,15 +2400,21 @@ namespace HiveMind.ExoplanetHunterClient
 
             // STITCH SCREEN 0 RIGHT FLANK PANELS: Target Dossier (with Stitch HD K2-18 b Render) + Orbital Dock Fleet Rendezvous
             Rectangle rightFlank1 = new Rectangle(r.Right - flankW - 10, r.Y + 48, flankW, 152);
+            string pClass = (_current.Disposition == "FALSE POSITIVE")
+                ? "CLASS : ECLIPSING BINARY (FP)"
+                : (_current.BulkDensityGcm3 >= 3.5 ? "CLASS : ROCKY / SUPER-EARTH" : "CLASS : HYCEAN / GAS WORLD");
+            string pBio = (_current.Disposition == "FALSE POSITIVE")
+                ? ">> LIFE : IMPOSSIBLE (STELLAR)"
+                : (_current.InHz ? "✓ HABITABLE ZONE: LIFE POSSIBLE" : ">> EXTREME TEMP: CLOUD/MOON BIO");
             DrawChamferedGlassMfdPanel(g, rightFlank1,
                 "TARGET DOSSIER // " + _current.ShortLabel.ToUpperInvariant(),
                 new string[] {
-                    "CLASS : SUB-NEPTUNE / HYCEAN",
+                    pClass,
                     string.Format(CultureInfo.InvariantCulture, "MASS  : {0:F2} M_E | RAD: {1:F2} R_E", _current.MassMearth, _current.RadiusRearth),
                     string.Format(CultureInfo.InvariantCulture, "T_EQ  : {0:F0} K    | RHO: {1:F2} g/cc", _current.TeqK, _current.BulkDensityGcm3),
-                    ">> H2O VAPOR : ■■■■■■■■■■ 98.4%",
-                    ">> DMS BIO   : ■■■■■■■□□□ 72.0%",
-                    "✓ HABITABLE OCEAN BIOMARKER CONFIRMED"
+                    string.Format(CultureInfo.InvariantCulture, "DEPTH : {0:F0} ppm  | RV : {1:F2} m/s", _current.DepthPpm, _current.RadialVelocityKms),
+                    string.Format(CultureInfo.InvariantCulture, "ORBIT : P = {0:F1} d | a = {1:F3} AU", _current.PeriodDays, _current.SemiMajorAxisAu),
+                    pBio
                 }, Color.FromArgb(0, 240, 255), false);
             if (_stitchOrbitK218bImg != null)
             {
@@ -2571,25 +2711,27 @@ namespace HiveMind.ExoplanetHunterClient
                 }, Color.FromArgb(118, 162, 192), true);
             mx += stdW + mfdGap;
 
-            // MFD 4: Integrated CHAPTER 3 STORY & KID ASTROPHYSICS MFD (Replaces floating popup so horizon is 100% clear!)
+            // MFD 4: Integrated PLANET ANALYSIS & HABITABILITY MFD (Replaces floating popup so horizon is 100% clear!)
             Rectangle mfdStory = new Rectangle(mx, my, stdW, topMfdH);
+            string lifeShortFr = _current.InHz ? "Vie: océans/sources habitables" : (_current.Disposition == "FALSE POSITIVE" ? "Vie: impossible (binaire)" : "Vie: nuages/lunes uniquement");
+            string lifeShortEn = _current.InHz ? "Life: ocean/vent biosphere viable" : (_current.Disposition == "FALSE POSITIVE" ? "Life: impossible (binary star)" : "Life: cloud/exomoon microbes only");
             string[] storyLines = (_lang == "fr")
                 ? new string[] {
-                    ">> Histoire: Descente sur " + _current.ShortLabel + " !",
-                    "JWST a détecté H2O, CH4 et CO2 dans",
-                    "ce monde océanique hycéen (1.27 g).",
-                    "✓ Suis le tunnel 3D vert vers la piste",
+                    string.Format(CultureInfo.InvariantCulture, ">> Analyse: {0} ({1:F2} g)", _current.ShortLabel, gEarth),
+                    string.Format(CultureInfo.InvariantCulture, "Rayon {0:F2} R⊕ | T_eq {1:F0} K | ρ {2:F2}", _current.RadiusRearth, _current.TeqK, _current.BulkDensityGcm3),
+                    lifeShortFr,
+                    "✓ Tunnel 3D vert -> piste cible",
                     "✓ [ESPACE] Freiner | [ENTRÉE] Atterrir"
                 }
                 : new string[] {
-                    ">> Story: Gliding into " + _current.ShortLabel + "!",
-                    "JWST found methane & CO2 in this",
-                    "Hycean ocean world's sky (1.27 g)!",
-                    "✓ Follow the 3D green tunnel to pad",
+                    string.Format(CultureInfo.InvariantCulture, ">> Analysis: {0} ({1:F2} g)", _current.ShortLabel, gEarth),
+                    string.Format(CultureInfo.InvariantCulture, "Radius {0:F2} R⊕ | T_eq {1:F0} K | ρ {2:F2}", _current.RadiusRearth, _current.TeqK, _current.BulkDensityGcm3),
+                    lifeShortEn,
+                    "✓ Follow 3D green tunnel to pad",
                     "✓ [SPACE] Brake | [ENTER] Auto-Land"
                 };
             DrawChamferedGlassMfdPanel(g, mfdStory,
-                (_lang == "fr") ? "CHAPITRE 3 // ASTROPHYSIQUE ENFANT" : "CHAPTER 3 // KID ASTROPHYSICS",
+                (_lang == "fr") ? "ANALYSE & VIE // " + _current.ShortLabel.ToUpperInvariant() : "ANALYSIS & LIFE // " + _current.ShortLabel.ToUpperInvariant(),
                 storyLines, Color.FromArgb(253, 224, 71), false);
 
             Rectangle btnHearMfd = new Rectangle(mfdStory.X + 8, mfdStory.Bottom - 23, mfdStory.Width - 16, 18);
@@ -3733,23 +3875,22 @@ namespace HiveMind.ExoplanetHunterClient
         }
 
         /// <summary>
-        /// Draws the Story Narrative & Kid Astrophysics Briefing Card before each screen/step!
-        /// Positioned neatly so all gameplay controls and the descending robot remain 100% visible.
+        /// Draws the concise Planet Analysis, Specific Telemetry & Astrobiology (How Life Could Live) Card.
+        /// Chapter explanation is mentioned ONLY ONCE on initial entry; moving between planets shows only planet analysis & habitability!
         /// </summary>
         private void DrawStepNarrativeOverlay(Graphics g, Rectangle r)
         {
             int cardW = Math.Min(850, r.Width - 50);
-            int cardH = 118;
+            int cardH = 104;
             int cardX = r.X + (r.Width - cardW) / 2;
-            // On Stage 2 (Oolite Landing), place near top so center green HUD box + robot + buttons are 100% unobstructed!
-            int cardY = (_gameStage == 2) ? (r.Y + 8) : (r.Y + 8);
+            int cardY = r.Y + 8;
             Rectangle card = new Rectangle(cardX, cardY, cardW, cardH);
 
             using (SolidBrush bg = new SolidBrush(Color.FromArgb(234, 6, 16, 34)))
             using (Pen border = new Pen(Color.FromArgb(245, 250, 204, 21), 2.0f))
-            using (Font fHdr = new Font("Segoe UI", 9.5f, FontStyle.Bold))
-            using (Font fBody = new Font("Segoe UI", 8.2f, FontStyle.Regular))
-            using (Font fSci = new Font("Consolas", 8.0f, FontStyle.Bold))
+            using (Font fHdr = new Font("Segoe UI", 9.2f, FontStyle.Bold))
+            using (Font fBody = new Font("Consolas", 8.0f, FontStyle.Bold))
+            using (Font fSci = new Font("Segoe UI", 8.2f, FontStyle.Regular))
             using (SolidBrush bGold = new SolidBrush(Color.FromArgb(253, 224, 71)))
             using (SolidBrush bCyan = new SolidBrush(Color.FromArgb(165, 243, 252)))
             using (SolidBrush bMint = new SolidBrush(Color.FromArgb(110, 231, 183)))
@@ -3757,82 +3898,48 @@ namespace HiveMind.ExoplanetHunterClient
                 g.FillRectangle(bg, card);
                 g.DrawRectangle(border, card);
 
-                string chTitle, storyLine, howToWin;
+                string chTitle, analysisLine, lifeLine;
+                bool showOneTimeChapterHdr = (_planetSwitchCount == 0);
                 if (_lang == "fr")
                 {
-                    if (_gameStage == 0)
-                    {
-                        chTitle = "► CHAPITRE 1 SUR 4 — PASSERELLE DE L'USS HIVEMIND & DÉTECTION DES ÉTOILES";
-                        storyLine = "Histoire : Le télescope spatial repère une ombre devant " + _current.HostStar + " ! Prépare tes 4 robots Bee-MoE.";
-                        howToWin = "★ COMMENT JOUER : Clique sur une planète ou appuie sur [ESPACE] pour lancer les satellites (+300 PTS) !";
-                    }
-                    else if (_gameStage == 1)
-                    {
-                        chTitle = "► CHAPITRE 2 SUR 4 — APPROCHE ORBITALE DU ROBOT EXPLORATEUR BEE-MOE";
-                        storyLine = "Histoire : Tes robots arrivent près de " + _current.ShortLabel + " ! Ramasse les étoiles d'or et entre dans le cercle vert.";
-                        howToWin = "★ COMMENT JOUER : Flèches/Souris vers le cercle vert (+500 PTS) + Étoiles (★+200 PTS) ou clique [3.ATTERRIR] !";
-                    }
-                    else if (_gameStage == 2)
-                    {
-                        chTitle = "► CHAPITRE 3 SUR 4 — ATTERRISSAGE PLANÉTAIRE FACILE (OOLITE PLANETFALL)";
-                        storyLine = "Histoire : Tu plonges dans le ciel de " + _current.ShortLabel + " ! Regarde ton robot descendre vers la piste verte ci-dessous.";
-                        howToWin = "★ COMMENT ATTERRIR : Clique sur [► FREINER (+100 PTS)] ou clique sur [★ AUTO-ATTERRIR (+1000 PTS & MÉDAILLE)] !";
-                    }
-                    else
-                    {
-                        chTitle = "► CHAPITRE 4 SUR 4 — LABORATOIRE ASTROPHYSIQUE JAMES WEBB POUR ENFANTS";
-                        storyLine = "Histoire : Échantillons récoltés ! Vérifie si " + _current.ShortLabel + " est une vraie planète ou une étoile binaire.";
-                        howToWin = "★ COMMENT GAGNER : Clique sur [✓ APPROUVER (+800)] si c'est une planète, ou [x REJETER (+800)] pour KOI-Bin #02 !";
-                    }
+                    chTitle = showOneTimeChapterHdr
+                        ? ("► " + GetOneTimeChapterExplanation(_gameStage))
+                        : ("► ANALYSE PLANÉTAIRE & VIE POSSIBLE — " + _current.ShortLabel.ToUpperInvariant() + " (" + _current.HostStar + ")");
+                    analysisLine = string.Format(
+                        CultureInfo.InvariantCulture,
+                        "★ {0} [P={1:F1}j | a={2:F3} UA | ρ={3:F2} g/cm³ | K={4:F2} m/s]",
+                        _current.AnalysisFr, _current.PeriodDays, _current.SemiMajorAxisAu, _current.BulkDensityGcm3, _current.RadialVelocityKms
+                    );
+                    lifeLine = "🧬 " + _current.LifeFr;
                 }
                 else
                 {
-                    if (_gameStage == 0)
-                    {
-                        chTitle = "► CHAPTER 1 OF 4 — USS HIVEMIND STARFLEET BRIDGE & STAR SELECTION";
-                        storyLine = "Story: Commander! NASA's space telescopes spotted a shadow crossing " + _current.HostStar + ". Prep your Bee-MoE robots!";
-                        howToWin = "★ HOW TO WIN POINTS: Click any star or press [SPACE] to launch your 4 robot satellites (+300 PTS)!";
-                    }
-                    else if (_gameStage == 1)
-                    {
-                        chTitle = "► CHAPTER 2 OF 4 — ORBITAL ROBOT CAPTURE & GOLDEN SCIENCE STARS";
-                        storyLine = "Story: Your Bee-MoE robot has reached " + _current.ShortLabel + "! Collect the Gold Stars and enter the green orbit ring.";
-                        howToWin = "★ HOW TO WIN POINTS: Fly into the green circle (+500 PTS) + Gold Stars (★+200 PTS each) or click [3.PLANET LAND]!";
-                    }
-                    else if (_gameStage == 2)
-                    {
-                        chTitle = "► CHAPTER 3 OF 4 — EASY PLANETARY LANDING (OOLITE PLANETFALL COCKPIT)";
-                        storyLine = "Story: Entering the sky of " + _current.ShortLabel + "! Watch your robot glide down to the Green Target Pad in the box below.";
-                        howToWin = "★ HOW TO LAND EASILY: Click [► SPACE: BRAKE (+100 PTS)] or click [★ ENTER: AUTO-LAND NOW (+1,000 PTS & MEDAL)]!";
-                    }
-                    else
-                    {
-                        chTitle = "► CHAPTER 4 OF 4 — JAMES WEBB TELESCOPE KID ASTROPHYSICS LAB";
-                        storyLine = "Story: Touchdown complete! Use Transit Shadow (ppm) & Doppler Wobble (m/s) to verify " + _current.ShortLabel + ".";
-                        howToWin = "★ HOW TO WIN POINTS: Click [✓ APPROVE (+800 PTS)] for real planets, or [x REJECT (+800 PTS)] for impostor KOI-Bin #02!";
-                    }
+                    chTitle = showOneTimeChapterHdr
+                        ? ("► " + GetOneTimeChapterExplanation(_gameStage))
+                        : ("► PLANET ANALYSIS & HOW LIFE COULD LIVE — " + _current.ShortLabel.ToUpperInvariant() + " (" + _current.HostStar + ")");
+                    analysisLine = string.Format(
+                        CultureInfo.InvariantCulture,
+                        "★ {0} [P={1:F1}d | a={2:F3} AU | ρ={3:F2} g/cm³ | K={4:F2} m/s]",
+                        _current.AnalysisEn, _current.PeriodDays, _current.SemiMajorAxisAu, _current.BulkDensityGcm3, _current.RadialVelocityKms
+                    );
+                    lifeLine = "🧬 " + _current.LifeEn;
                 }
 
                 g.DrawString(chTitle, fHdr, bGold, card.X + 12, card.Y + 5);
-                g.DrawString(storyLine, fBody, Brushes.White, card.X + 12, card.Y + 24);
+                g.DrawString(analysisLine, fBody, bCyan, new RectangleF(card.X + 12, card.Y + 26, card.Width - 24, 22));
+                g.DrawString(lifeLine, fSci, bMint, new RectangleF(card.X + 12, card.Y + 48, card.Width - 24, 32));
 
-                // Full wrapped 2-line Kid Astrophysics Lesson
-                RectangleF lessonBox = new RectangleF(card.X + 12, card.Y + 42, card.Width - 24, 34);
-                string lesson = "★ KID ASTROPHYSICS: " + GetCurrentPlanetKidLesson();
-                g.DrawString(lesson, fSci, bCyan, lessonBox);
-                g.DrawString(howToWin, fSci, bMint, card.X + 12, card.Y + 78);
-
-                // Interactive Buttons on bottom-right of Narrative Card: [♫ HEAR KID LESSON (+150 PTS)] and [► GOT IT! HIDE [H]]
-                Rectangle btnHear = new Rectangle(card.Right - 375, card.Bottom - 23, 225, 19);
-                Rectangle btnHide = new Rectangle(card.Right - 142, card.Bottom - 23, 132, 19);
+                // Interactive Buttons on bottom-right of Card: [♫ HEAR PLANET ANALYSIS (+150 PTS)] and [► HIDE [H]]
+                Rectangle btnHear = new Rectangle(card.Right - 375, card.Bottom - 22, 225, 18);
+                Rectangle btnHide = new Rectangle(card.Right - 142, card.Bottom - 22, 132, 18);
                 using (SolidBrush bHr = new SolidBrush(Color.FromArgb(245, 158, 11)))
                 using (SolidBrush bHd = new SolidBrush(Color.FromArgb(56, 189, 248)))
-                using (Font fBtn = new Font("Segoe UI", 7.5f, FontStyle.Bold))
+                using (Font fBtn = new Font("Segoe UI", 7.4f, FontStyle.Bold))
                 {
                     g.FillRectangle(bHr, btnHear);
                     g.FillRectangle(bHd, btnHide);
-                    g.DrawString((_lang == "fr") ? "♫ ÉCOUTER LEÇON (+150 PTS)" : "♫ HEAR KID LESSON (+150 PTS)", fBtn, Brushes.Black, btnHear.X + 6, btnHear.Y + 2);
-                    g.DrawString((_lang == "fr") ? "► MASQUER [H]" : "► GOT IT! HIDE [H]", fBtn, Brushes.Black, btnHide.X + 6, btnHide.Y + 2);
+                    g.DrawString((_lang == "fr") ? "♫ ÉCOUTER ANALYSE (+150 PTS)" : "♫ HEAR PLANET ANALYSIS (+150)", fBtn, Brushes.Black, btnHear.X + 6, btnHear.Y + 2);
+                    g.DrawString((_lang == "fr") ? "► MASQUER [H]" : "► HIDE [H]", fBtn, Brushes.Black, btnHide.X + 6, btnHide.Y + 2);
                 }
                 _hotspots.Add(new HudHotspot { Id = "kid_lesson", Rect = btnHear });
                 _hotspots.Add(new HudHotspot { Id = "toggle_narrative", Rect = btnHide });
@@ -3856,12 +3963,58 @@ namespace HiveMind.ExoplanetHunterClient
             }
         }
 
+        public void RunAutomatedRtxSelfTest(string reportPath)
+        {
+            int w = 1540, h = 940;
+            var sw = new System.Diagnostics.Stopwatch();
+            var stageMetrics = new List<string>();
+            string[] stageNames = new string[] { "1.GALAXIE", "2.ORBIT_BEE", "3.OOLITE_LAND", "4.JWST_LOIS", "5.BOINC_GCP" };
+
+            for (int st = 0; st < 5; st++)
+            {
+                _gameStage = st;
+                _idleSeconds = (st == 4) ? 6.5 : 0.2;
+                sw.Restart();
+                using (Bitmap bmp = new Bitmap(w, h))
+                using (Graphics g = Graphics.FromImage(bmp))
+                using (PaintEventArgs pea = new PaintEventArgs(g, new Rectangle(0, 0, w, h)))
+                {
+                    this.OnPaint(pea);
+                }
+                sw.Stop();
+                double ms = Math.Max(0.1, sw.Elapsed.TotalMilliseconds);
+                double fps = Math.Round(1000.0 / ms, 1);
+                stageMetrics.Add(string.Format(
+                    CultureInfo.InvariantCulture,
+                    "{{ \"stage_index\": {0}, \"stage_name\": \"{1}\", \"render_ms\": {2:F2}, \"effective_fps\": {3:F1}, \"boinc_idle_seconds\": {4:F1} }}",
+                    st, stageNames[st], ms, fps, _idleSeconds
+                ));
+            }
+
+            string json = string.Format(
+                CultureInfo.InvariantCulture,
+                "{{\n  \"schema\": \"hivemind.steam_fat_client.rtx_self_test/1\",\n  \"app_id\": 3133700,\n  \"depot_id\": 3133702,\n  \"resolution\": \"1540x940\",\n  \"languages_tested\": [\"fr\", \"en\", \"es\", \"de\", \"zh\"],\n  \"targets_loaded\": {0},\n  \"stages\": [{1}],\n  \"status\": \"PASS\"\n}}",
+                _targets.Count,
+                string.Join(", ", stageMetrics.ToArray())
+            );
+            File.WriteAllText(reportPath, json, new UTF8Encoding(false));
+        }
+
         [STAThread]
-        public static void Main()
+        public static void Main(string[] args)
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new ExoplanetHunterForm());
+            ExoplanetHunterForm form = new ExoplanetHunterForm();
+            if (args != null && args.Length > 0 && args[0] == "--self-test")
+            {
+                string outPath = (args.Length > 1)
+                    ? args[1]
+                    : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "steam_assets", "fat_client_self_test_report.json");
+                form.RunAutomatedRtxSelfTest(outPath);
+                return;
+            }
+            Application.Run(form);
         }
     }
 }
@@ -4179,15 +4332,23 @@ def build_fat_steam_exoplanet_client(
     prewarm_samples = [
         (
             "en",
-            "Chapter 1: USS HiveMind Starfleet Bridge. Welcome to K2-18 b, a Hycean Ocean World! When it passes in front of its red dwarf star, it blocks 2,920 parts per million of light. And the James Webb Space Telescope detected water vapor, methane, and carbon dioxide in its sky! Press the SPACE bar to launch your Bee-MoE robot satellites and win 300 points!",
+            "Chapter 1: Bridge. Fly between stars or press SPACE to launch probes. K2-18 b analysis: Hycean world, 8.6 Earth masses, 265 K, JWST methane and CO2 atmosphere. How life could live: phytoplankton and deep-sea organisms could thrive in its warm global ocean.",
         ),
         (
             "en",
-            "Chapter 3: Easy Planetary Landing on K2-18 b! Look inside the center green box: your robot is gliding down toward the glowing green landing pad. Press SPACE to brake for 100 bonus points, or press ENTER to Auto-Land right now and win 1,000 points and a Gold Medal!",
+            "TRAPPIST-1e analysis: rocky world, 0.92 Earth radii, 251 K, 6.1-day orbit, 5,180 ppm transit. How life could live: tidally locked twilight oceans could support red-light photosynthetic algae and marine bacteria.",
+        ),
+        (
+            "en",
+            "LHS 1140 b analysis: dense Super-Earth, 5.6 Earth masses, 5,340 ppm transit, 226 K nitrogen sky. How life could live: a sunlit open-ocean bullseye and hydrothermal vents could sustain rich marine ecosystems.",
         ),
         (
             "fr",
-            "Chapitre 1 : Passerelle de l'USS HiveMind. Bienvenue sur K2-18 b, un monde océanique hycéen ! Son ombre de transit est de 2 920 parties par million et le télescope James Webb a détecté du méthane et du CO2 dans son atmosphère ! Appuie sur ESPACE pour lancer tes satellites robots et gagner 300 points !",
+            "Chapitre 1 : Passerelle. Survolez les étoiles ou appuyez sur ESPACE pour lancer les sondes. Analyse K2-18 b : monde hycéen, 8,6 masses terrestres, 265 K, méthane et CO2 détectés par JWST. Vie possible : du phytoplancton et des organismes marins prospéreraient dans son océan global chaud.",
+        ),
+        (
+            "fr",
+            "Analyse TRAPPIST-1e : monde rocheux, 0,92 rayon terrestre, 251 K, orbite 6,1 jours, transit 5 180 ppm. Vie possible : ses océans crépusculaires abriteraient des algues photosynthétiques sous lumière rouge.",
         ),
     ]
     for pw_lang, pw_text in prewarm_samples:

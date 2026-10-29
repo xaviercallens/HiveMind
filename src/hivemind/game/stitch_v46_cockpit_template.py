@@ -1025,11 +1025,37 @@ def build_stitch_v46_cockpit_html(state_json: str) -> str:
   }};
 
   // Synchronize all Stitch Screen panels (Stage 1 Sub-Spatial HUD, Stage 2 Dossier, Stage 3 Oolite Gauges, Stage 4 Beryllium KPIs) on selectPlanet
+  let chapter1IntroDone = false;
+  const PLANET_ANALYSIS_AND_LIFE = {{
+    trappist1e: "Analyse TRAPPIST-1e : monde rocheux (0.92 R⊕, 251 K, orbite 6.1 j, transit 4890 ppm). Vie possible : océans crépusculaires propices aux algues photosynthétiques sous lumière rouge.",
+    k218b: "Analyse K2-18 b : monde océanique hycéen (2.61 R⊕, 279 K, CH₄ + CO₂ détectés par JWST). Vie possible : phytoplancton et organismes marins dans son océan global chaud.",
+    kepler11f: "Analyse Kepler-11 f : Mini-Neptune gazeuse (2.49 R⊕, 0.71 g/cm³, 544 K). Vie possible : sans surface solide, seuls des microbes flottant dans les nuages tempérés survivraient.",
+    hd80606b: "Analyse HD 80606 b : géante excentrique (e = 0.93, Doppler 476 m/s, tempêtes à 1200 K). Vie possible : chaleur extrême en surface ; seuls des microbes sous la glace d'une exolune survivraient.",
+    toi700d: "Analyse TOI-700 d : planète rocheuse habitable TESS (1.14 R⊕, 269 K, orbite 37.4 j). Vie possible : mers tempérées le long du terminateur soutenant une vie aquatique complexe.",
+    lhs1140b: "Analyse LHS 1140 b : Super-Terre dense (1.43 R⊕, 5.6 g/cm³, transit 5340 ppm, 235 K). Vie possible : océan circulaire côté jour et sources hydrothermales nourrissant la vie marine.",
+    wasp39b: "Analyse WASP-39 b : Saturne chaude gonflée (14.2 R⊕, 1166 K, nuages SO₂ et CO₂). Vie possible : à 1166 K, la chaleur brise les molécules organiques ; vie impossible.",
+    kepler186f: "Analyse Kepler-186f : monde rocheux froid (1.17 R⊕, 188 K, orbite habitable 130 j). Vie possible : plantes sombres captant l'infrarouge et bactéries géothermiques près des volcans.",
+    koi14: "Analyse KOI-Cand 14 : candidat à confirmer (transit 420 ppm, Doppler plat 0.04 m/s, 258 K). Vie possible : s'il est confirmé comme monde glacé, un océan souterrain abriterait des bactéries.",
+    koibin: "Analyse KOI-Bin #02 : faux positif binaire à éclipses (transit en V 58400 ppm, Doppler 1420 m/s). Vie possible : aucune planète solide ici, seulement deux étoiles brûlantes stériles."
+  }};
+
   const _origSelectPlanet = selectPlanet;
   selectPlanet = function(planetKey) {{
     _origSelectPlanet(planetKey);
     const data = PLANET_DATA[planetKey];
     if (!data) return;
+
+    // After initial Chapter 1 explanation, display & speak ONLY planet analysis, specific planet info & how life could live
+    const vtEl = document.getElementById('voice-transcript');
+    const analysisTxt = PLANET_ANALYSIS_AND_LIFE[planetKey] || data.transcript;
+    if (vtEl) {{
+      if (!chapter1IntroDone) {{
+        chapter1IntroDone = true;
+        vtEl.innerHTML = `« <strong>Chapitre 1 : Passerelle.</strong> Ciblez une étoile ou appuyez sur [ESPACE]. ${{analysisTxt}} »`;
+      }} else {{
+        vtEl.innerHTML = `« <strong>${{data.name}}</strong> — ${{analysisTxt}} »`;
+      }}
+    }}
 
     // Move USS Hivemind ship marker toward target star on Stage 1 Galaxy Map
     const shipMarker = document.getElementById('hivemind-marker');

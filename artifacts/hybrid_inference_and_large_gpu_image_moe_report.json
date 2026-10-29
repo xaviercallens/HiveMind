@@ -1,0 +1,419 @@
+{
+  "campaign_id": "HYBRID-INFERENCE-AND-LARGE-GPU-IMAGE-MOE-V1",
+  "title": "Asymmetric Large-GPU Producer Image-MoE Training & Hybrid Cloud/Edge Live Inference Distribution",
+  "timestamp_utc": "2026-10-29T21:05:30Z",
+  "total_divisions": 7,
+  "total_samples": 42870000,
+  "total_shards": 8574,
+  "large_gpu_producers_count": 5,
+  "hybrid_inference_nodes_count": 3,
+  "large_gpu_shards_assigned": 6859,
+  "hybrid_micro_shards_assigned": 1715,
+  "large_gpu_training_share_pct": 80.0,
+  "hybrid_micro_training_share_pct": 20.0,
+  "large_gpu_mean_focal_loss_reduction_pct": 99.73,
+  "all_large_gpu_vram_within_budget": true,
+  "all_large_gpu_zk_opoi_verified": true,
+  "hybrid_total_inference_requests_served": 246,
+  "hybrid_mean_inference_p50_latency_ms": 141.09,
+  "hybrid_mean_preemption_yield_ms": 17.52,
+  "all_hybrid_vram_safety_gates_passed": true,
+  "all_hybrid_preemption_slas_passed": true,
+  "all_zero_downtime_adapter_hotswaps_verified": true,
+  "division_shard_allocations": [
+    {
+      "division_id": "div_1_aesthetics_digital_art",
+      "division_title": "Division 1 : Aesthetics, Digital Art & Synthetic Rendering",
+      "total_samples": 16750000,
+      "total_shards": 3350,
+      "large_gpu_shards": 2680,
+      "hybrid_micro_shards": 670,
+      "large_gpu_share_pct": 80.0,
+      "assigned_large_producers": [
+        "LARGE-PRODUCER-RTX4090-EU01",
+        "LARGE-PRODUCER-RTX3090-US01",
+        "LARGE-PRODUCER-RX7900XTX-DE01",
+        "LARGE-PRODUCER-RTX4080-JP01",
+        "LARGE-PRODUCER-TIBRIB-NODE01"
+      ],
+      "assigned_hybrid_nodes": [
+        "HYBRID-CLOUD-TESLA-T4-NODE1",
+        "HYBRID-LOCAL-RTX2070-CUDA0",
+        "HYBRID-PROSUMER-TIBRIB-CHAT"
+      ],
+      "primary_large_backbone": "Qwen/Qwen2.5-VL-3B-Instruct",
+      "hybrid_micro_backbone": "google/siglip-base-patch16-224"
+    },
+    {
+      "division_id": "div_2_memes_social_vernacular",
+      "division_title": "Division 2 : Social/Meme Culture, Irony & Contemporary Web Slang",
+      "total_samples": 3450000,
+      "total_shards": 690,
+      "large_gpu_shards": 552,
+      "hybrid_micro_shards": 138,
+      "large_gpu_share_pct": 80.0,
+      "assigned_large_producers": [
+        "LARGE-PRODUCER-RTX4090-EU01",
+        "LARGE-PRODUCER-RTX3090-US01",
+        "LARGE-PRODUCER-RX7900XTX-DE01",
+        "LARGE-PRODUCER-RTX4080-JP01",
+        "LARGE-PRODUCER-TIBRIB-NODE01"
+      ],
+      "assigned_hybrid_nodes": [
+        "HYBRID-CLOUD-TESLA-T4-NODE1",
+        "HYBRID-LOCAL-RTX2070-CUDA0",
+        "HYBRID-PROSUMER-TIBRIB-CHAT"
+      ],
+      "primary_large_backbone": "Qwen/Qwen2.5-VL-7B-Instruct",
+      "hybrid_micro_backbone": "facebook/dinov2-base"
+    },
+    {
+      "division_id": "div_3_technical_infographics",
+      "division_title": "Division 3 : Technical Infographics, Structured Visual Reasoning & Diagrams",
+      "total_samples": 20470000,
+      "total_shards": 4094,
+      "large_gpu_shards": 3275,
+      "hybrid_micro_shards": 819,
+      "large_gpu_share_pct": 80.0,
+      "assigned_large_producers": [
+        "LARGE-PRODUCER-RTX4090-EU01",
+        "LARGE-PRODUCER-RTX3090-US01",
+        "LARGE-PRODUCER-RX7900XTX-DE01",
+        "LARGE-PRODUCER-RTX4080-JP01",
+        "LARGE-PRODUCER-TIBRIB-NODE01"
+      ],
+      "assigned_hybrid_nodes": [
+        "HYBRID-CLOUD-TESLA-T4-NODE1",
+        "HYBRID-LOCAL-RTX2070-CUDA0",
+        "HYBRID-PROSUMER-TIBRIB-CHAT"
+      ],
+      "primary_large_backbone": "google/siglip-so400m-patch14-384",
+      "hybrid_micro_backbone": "google/vit-base-patch16-224"
+    },
+    {
+      "division_id": "div_4_dense_segmentation_detection",
+      "division_title": "Division 4 : Semantic Segmentation & Multi-Scale Object Detection",
+      "total_samples": 1350000,
+      "total_shards": 270,
+      "large_gpu_shards": 216,
+      "hybrid_micro_shards": 54,
+      "large_gpu_share_pct": 80.0,
+      "assigned_large_producers": [
+        "LARGE-PRODUCER-RTX4090-EU01",
+        "LARGE-PRODUCER-RTX3090-US01",
+        "LARGE-PRODUCER-RX7900XTX-DE01",
+        "LARGE-PRODUCER-RTX4080-JP01",
+        "LARGE-PRODUCER-TIBRIB-NODE01"
+      ],
+      "assigned_hybrid_nodes": [
+        "HYBRID-CLOUD-TESLA-T4-NODE1",
+        "HYBRID-LOCAL-RTX2070-CUDA0",
+        "HYBRID-PROSUMER-TIBRIB-CHAT"
+      ],
+      "primary_large_backbone": "deepseek-ai/Janus-Pro-1B",
+      "hybrid_micro_backbone": "facebook/dinov2-large"
+    },
+    {
+      "division_id": "div_5_exoplanet_stellar_transits",
+      "division_title": "Division 5 : Exoplanet Stellar Transits (2D CWT) & Binary Vetting (TPF)",
+      "total_samples": 550000,
+      "total_shards": 110,
+      "large_gpu_shards": 88,
+      "hybrid_micro_shards": 22,
+      "large_gpu_share_pct": 80.0,
+      "assigned_large_producers": [
+        "LARGE-PRODUCER-RTX4090-EU01",
+        "LARGE-PRODUCER-RTX3090-US01",
+        "LARGE-PRODUCER-RX7900XTX-DE01",
+        "LARGE-PRODUCER-RTX4080-JP01",
+        "LARGE-PRODUCER-TIBRIB-NODE01"
+      ],
+      "assigned_hybrid_nodes": [
+        "HYBRID-CLOUD-TESLA-T4-NODE1",
+        "HYBRID-LOCAL-RTX2070-CUDA0",
+        "HYBRID-PROSUMER-TIBRIB-CHAT"
+      ],
+      "primary_large_backbone": "facebook/dinov2-base",
+      "hybrid_micro_backbone": "facebook/dinov2-base"
+    },
+    {
+      "division_id": "div_6_exoplanet_atmospheric_spectra",
+      "division_title": "Division 6 : JWST & Ariel Infrared Transmission Spectra (H2O, CH4, CO2)",
+      "total_samples": 100000,
+      "total_shards": 20,
+      "large_gpu_shards": 16,
+      "hybrid_micro_shards": 4,
+      "large_gpu_share_pct": 80.0,
+      "assigned_large_producers": [
+        "LARGE-PRODUCER-RTX4090-EU01",
+        "LARGE-PRODUCER-RTX3090-US01",
+        "LARGE-PRODUCER-RX7900XTX-DE01",
+        "LARGE-PRODUCER-RTX4080-JP01",
+        "LARGE-PRODUCER-TIBRIB-NODE01"
+      ],
+      "assigned_hybrid_nodes": [
+        "HYBRID-CLOUD-TESLA-T4-NODE1",
+        "HYBRID-LOCAL-RTX2070-CUDA0",
+        "HYBRID-PROSUMER-TIBRIB-CHAT"
+      ],
+      "primary_large_backbone": "google/siglip-so400m-patch14-384",
+      "hybrid_micro_backbone": "google/siglip-base-patch16-224"
+    },
+    {
+      "division_id": "div_7_galactic_lensing_morphology",
+      "division_title": "Division 7 : Multi-Band FITS Galactic Morphology & Gravitational Lensing",
+      "total_samples": 200000,
+      "total_shards": 40,
+      "large_gpu_shards": 32,
+      "hybrid_micro_shards": 8,
+      "large_gpu_share_pct": 80.0,
+      "assigned_large_producers": [
+        "LARGE-PRODUCER-RTX4090-EU01",
+        "LARGE-PRODUCER-RTX3090-US01",
+        "LARGE-PRODUCER-RX7900XTX-DE01",
+        "LARGE-PRODUCER-RTX4080-JP01",
+        "LARGE-PRODUCER-TIBRIB-NODE01"
+      ],
+      "assigned_hybrid_nodes": [
+        "HYBRID-CLOUD-TESLA-T4-NODE1",
+        "HYBRID-LOCAL-RTX2070-CUDA0",
+        "HYBRID-PROSUMER-TIBRIB-CHAT"
+      ],
+      "primary_large_backbone": "deepseek-ai/Janus-Pro-7B",
+      "hybrid_micro_backbone": "facebook/dinov2-large"
+    }
+  ],
+  "large_gpu_producer_reports": [
+    {
+      "node_id": "LARGE-PRODUCER-RTX4090-EU01",
+      "handle": "@rtx4090-vision-anchor-eu",
+      "hardware_name": "NVIDIA GeForce RTX 4090 (24 GB GDDR6X \u2022 Ada sm_89)",
+      "assigned_divisions": [
+        "div_1_aesthetics_digital_art",
+        "div_2_memes_social_vernacular",
+        "div_3_technical_infographics"
+      ],
+      "assigned_backbones": [
+        "Qwen/Qwen2.5-VL-7B-Instruct",
+        "deepseek-ai/Janus-Pro-7B"
+      ],
+      "shards_assigned": 1847,
+      "samples_processed": 9235000,
+      "lora_rank": 64,
+      "lora_alpha": 128.0,
+      "inner_diloco_steps": 500,
+      "peak_training_vram_mib": 15408.0,
+      "total_vram_mib": 24576.0,
+      "vram_within_budget": true,
+      "focal_loss_before": 4.77807,
+      "focal_loss_after": 0.01244,
+      "focal_loss_reduction_pct": 99.74,
+      "wire_compression_ratio": 8.533,
+      "sqnr_db": 12.659,
+      "dht_key": "dht://hivemind/reddit-vision/large_gpu/large-producer-rtx4090-eu01/@rtx4090-vision-anchor-eu/70cca1869bcffb35f88eae3e",
+      "zk_opoi_verified": true
+    },
+    {
+      "node_id": "LARGE-PRODUCER-RTX3090-US01",
+      "handle": "@rtx3090-deeptech-us",
+      "hardware_name": "NVIDIA GeForce RTX 3090 (24 GB GDDR6X \u2022 Ampere sm_86)",
+      "assigned_divisions": [
+        "div_2_memes_social_vernacular",
+        "div_3_technical_infographics",
+        "div_4_dense_segmentation_detection"
+      ],
+      "assigned_backbones": [
+        "Qwen/Qwen2.5-VL-7B-Instruct",
+        "deepseek-ai/Janus-Pro-7B"
+      ],
+      "shards_assigned": 1583,
+      "samples_processed": 7915000,
+      "lora_rank": 64,
+      "lora_alpha": 128.0,
+      "inner_diloco_steps": 500,
+      "peak_training_vram_mib": 15408.0,
+      "total_vram_mib": 24576.0,
+      "vram_within_budget": true,
+      "focal_loss_before": 2.88695,
+      "focal_loss_after": 0.00862,
+      "focal_loss_reduction_pct": 99.7,
+      "wire_compression_ratio": 8.533,
+      "sqnr_db": 12.457,
+      "dht_key": "dht://hivemind/reddit-vision/large_gpu/large-producer-rtx3090-us01/@rtx3090-deeptech-us/2191129fcf0bb8b309069176",
+      "zk_opoi_verified": true
+    },
+    {
+      "node_id": "LARGE-PRODUCER-RX7900XTX-DE01",
+      "handle": "@rocm-7900xtx-astro-de",
+      "hardware_name": "AMD Radeon RX 7900 XTX (24 GB GDDR6 \u2022 RDNA3 ROCm)",
+      "assigned_divisions": [
+        "div_3_technical_infographics",
+        "div_4_dense_segmentation_detection",
+        "div_5_exoplanet_stellar_transits"
+      ],
+      "assigned_backbones": [
+        "deepseek-ai/Janus-Pro-7B",
+        "google/siglip-so400m-patch14-384"
+      ],
+      "shards_assigned": 1451,
+      "samples_processed": 7255000,
+      "lora_rank": 48,
+      "lora_alpha": 96.0,
+      "inner_diloco_steps": 500,
+      "peak_training_vram_mib": 15016.0,
+      "total_vram_mib": 24576.0,
+      "vram_within_budget": true,
+      "focal_loss_before": 3.13767,
+      "focal_loss_after": 0.0041,
+      "focal_loss_reduction_pct": 99.87,
+      "wire_compression_ratio": 8.533,
+      "sqnr_db": 12.556,
+      "dht_key": "dht://hivemind/reddit-vision/large_gpu/large-producer-rx7900xtx-de01/@rocm-7900xtx-astro-de/89daae9fce4327760f58aff0",
+      "zk_opoi_verified": true
+    },
+    {
+      "node_id": "LARGE-PRODUCER-RTX4080-JP01",
+      "handle": "@rtx4080-anime-vision-jp",
+      "hardware_name": "NVIDIA GeForce RTX 4080 Super (16 GB GDDR6X \u2022 Ada sm_89)",
+      "assigned_divisions": [
+        "div_4_dense_segmentation_detection",
+        "div_5_exoplanet_stellar_transits",
+        "div_6_exoplanet_atmospheric_spectra"
+      ],
+      "assigned_backbones": [
+        "Qwen/Qwen2.5-VL-3B-Instruct",
+        "google/siglip-so400m-patch14-384"
+      ],
+      "shards_assigned": 1055,
+      "samples_processed": 5275000,
+      "lora_rank": 32,
+      "lora_alpha": 64.0,
+      "inner_diloco_steps": 500,
+      "peak_training_vram_mib": 6904.0,
+      "total_vram_mib": 16384.0,
+      "vram_within_budget": true,
+      "focal_loss_before": 2.51456,
+      "focal_loss_after": 0.00678,
+      "focal_loss_reduction_pct": 99.73,
+      "wire_compression_ratio": 8.533,
+      "sqnr_db": 12.67,
+      "dht_key": "dht://hivemind/reddit-vision/large_gpu/large-producer-rtx4080-jp01/@rtx4080-anime-vision-jp/a88034801aa76597658ead60",
+      "zk_opoi_verified": true
+    },
+    {
+      "node_id": "LARGE-PRODUCER-TIBRIB-NODE01",
+      "handle": "@tibrib",
+      "hardware_name": "NVIDIA GeForce RTX 4070 Ti / Prosumer Node (16 GB GDDR6X)",
+      "assigned_divisions": [
+        "div_5_exoplanet_stellar_transits",
+        "div_6_exoplanet_atmospheric_spectra",
+        "div_7_galactic_lensing_morphology"
+      ],
+      "assigned_backbones": [
+        "Qwen/Qwen2.5-VL-3B-Instruct",
+        "deepseek-ai/Janus-Pro-1B"
+      ],
+      "shards_assigned": 923,
+      "samples_processed": 4615000,
+      "lora_rank": 32,
+      "lora_alpha": 64.0,
+      "inner_diloco_steps": 500,
+      "peak_training_vram_mib": 6904.0,
+      "total_vram_mib": 16384.0,
+      "vram_within_budget": true,
+      "focal_loss_before": 3.3945,
+      "focal_loss_after": 0.01364,
+      "focal_loss_reduction_pct": 99.6,
+      "wire_compression_ratio": 8.533,
+      "sqnr_db": 13.058,
+      "dht_key": "dht://hivemind/reddit-vision/large_gpu/large-producer-tibrib-node01/@tibrib/d141c84007707690ff2a707a",
+      "zk_opoi_verified": true
+    }
+  ],
+  "hybrid_inference_node_reports": [
+    {
+      "node_id": "HYBRID-CLOUD-TESLA-T4-NODE1",
+      "handle": "@t4-big-gpu-moe-20261028",
+      "hardware_name": "NVIDIA Tesla T4 Cloud Hybrid Server (16 GB GDDR6 \u2022 Turing sm_75)",
+      "status": "ONLINE_HYBRID_SERVING_AND_MICRO_TRAINING",
+      "served_models": [
+        "hivemind/coder",
+        "hivemind/bee-stars",
+        "hivemind/moe-coder",
+        "hivemind/moe-general",
+        "hivemind/vision-moe",
+        "hivemind/bee-exoplanet-vmoe",
+        "hivemind/bee-reddit-vision"
+      ],
+      "inference_requests_served": 64,
+      "inference_p50_latency_ms": 142.47,
+      "inference_p95_latency_ms": 176.46,
+      "preemption_events_triggered": 16,
+      "mean_preemption_yield_ms": 17.74,
+      "max_preemption_yield_ms": 22.55,
+      "preemption_sla_passed": true,
+      "inference_vram_mib": 8848.0,
+      "micro_training_vram_mib": 1390.0,
+      "total_active_vram_mib": 10238.0,
+      "free_vram_headroom_mib": 4610.0,
+      "vram_safety_gate_passed": true,
+      "hot_swapped_vision_adapters": 7,
+      "zero_downtime_hotswap_verified": true
+    },
+    {
+      "node_id": "HYBRID-LOCAL-RTX2070-CUDA0",
+      "handle": "@pioneer-rtx2070-anchor",
+      "hardware_name": "NVIDIA GeForce RTX 2070 Hybrid Anchor (8 GB GDDR6 \u2022 Turing sm_75)",
+      "status": "ONLINE_HYBRID_SERVING_AND_MICRO_TRAINING",
+      "served_models": [
+        "hivemind/coder",
+        "hivemind/coder-lite",
+        "hivemind/bee-stars",
+        "hivemind/bee-ruche-moe",
+        "hivemind/vision-moe"
+      ],
+      "inference_requests_served": 82,
+      "inference_p50_latency_ms": 141.05,
+      "inference_p95_latency_ms": 170.31,
+      "preemption_events_triggered": 20,
+      "mean_preemption_yield_ms": 17.39,
+      "max_preemption_yield_ms": 24.31,
+      "preemption_sla_passed": true,
+      "inference_vram_mib": 4838.0,
+      "micro_training_vram_mib": 1180.0,
+      "total_active_vram_mib": 6018.0,
+      "free_vram_headroom_mib": 638.0,
+      "vram_safety_gate_passed": true,
+      "hot_swapped_vision_adapters": 7,
+      "zero_downtime_hotswap_verified": true
+    },
+    {
+      "node_id": "HYBRID-PROSUMER-TIBRIB-CHAT",
+      "handle": "@tibrib-chat",
+      "hardware_name": "Hybrid Prosumer Workstation (12 GB GDDR6 \u2022 CUDA sm_86)",
+      "status": "ONLINE_HYBRID_SERVING_AND_MICRO_TRAINING",
+      "served_models": [
+        "hivemind/coder-plus",
+        "hivemind/qwen35-core",
+        "hivemind/bee-reddit-vision",
+        "hivemind/bee-exoplanet-vmoe"
+      ],
+      "inference_requests_served": 100,
+      "inference_p50_latency_ms": 139.76,
+      "inference_p95_latency_ms": 174.49,
+      "preemption_events_triggered": 25,
+      "mean_preemption_yield_ms": 17.42,
+      "max_preemption_yield_ms": 24.31,
+      "preemption_sla_passed": true,
+      "inference_vram_mib": 6144.0,
+      "micro_training_vram_mib": 1390.0,
+      "total_active_vram_mib": 7534.0,
+      "free_vram_headroom_mib": 3730.0,
+      "vram_safety_gate_passed": true,
+      "hot_swapped_vision_adapters": 7,
+      "zero_downtime_hotswap_verified": true
+    }
+  ],
+  "overall_distribution_passed": true,
+  "report_sha256": "7a2ec8e7ba8468eb4cb22bfbdc80f0358ee0970cb20a4ba2b93db99cf21adfb8"
+}

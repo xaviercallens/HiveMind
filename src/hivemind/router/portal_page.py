@@ -944,6 +944,12 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
             <option value="hivemind/bee-reverse-cve">hivemind/bee-reverse-cve (Binary Disassembly &bull; SWE-bench CVE Patch)</option>
             <option value="hivemind/bee-genomics-crispr">hivemind/bee-genomics-crispr (CRISPR Cleavage &bull; Clinical Evidence)</option>
           </optgroup>
+          <optgroup label="⚡ Modèles Ultra-Légers &amp; Edge (CPU / 8 Go RAM)">
+            <option value="hivemind/qwen35-4b">hivemind/qwen35-4b (Qwen 3.5 4B &bull; Best Overall 8GB RAM / Tool-Calling)</option>
+            <option value="hivemind/phi4-mini">hivemind/phi4-mini (Phi-4 Mini 3.8B &bull; Footprint ~2.5 GB RAM)</option>
+            <option value="hivemind/gemma4-e4b">hivemind/gemma4-e4b (Gemma 4 E4B &bull; Multimodal Edge Text/Image/Audio)</option>
+            <option value="hivemind/qwen35-sub2b">hivemind/qwen35-sub2b (Qwen 3.5 2B/0.8B &bull; Sub-2B Low-RAM &lt; 3 GB)</option>
+          </optgroup>
         </select>
 
         <label>Quick Prompt Presets</label>

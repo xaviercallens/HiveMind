@@ -50,7 +50,11 @@ from hivemind.swarm.nat_traversal import (
     udp_hole_punch,
     udp_socket,
 )
-from hivemind.swarm.quic_link import LinkRun, run_local_link
+try:
+    from hivemind.swarm.quic_link import LinkRun, run_local_link
+except ImportError:
+    LinkRun = Any  # type: ignore[misc,assignment]
+    run_local_link = None  # type: ignore[assignment]
 
 if TYPE_CHECKING:
     from hivemind.swarm.quic_link import LinkEndpoint, RemoteHiddenStateLink

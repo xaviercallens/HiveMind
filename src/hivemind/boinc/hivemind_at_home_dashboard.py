@@ -1649,6 +1649,7 @@ class WafScanRequest(BaseModel):
 def get_or_create_steam_free_edition_zip() -> bytes:
     """Retrieve or build the portable zip archive of HiveMind Free Steam Edition."""
     import io
+    import os
     import zipfile
 
     repo_root = Path(__file__).resolve().parents[3]

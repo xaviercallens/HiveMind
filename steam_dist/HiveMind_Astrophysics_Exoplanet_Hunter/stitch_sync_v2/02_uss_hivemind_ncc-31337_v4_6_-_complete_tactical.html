@@ -1,0 +1,1373 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-[#070e1a] text-[#dbe3f3] select-none antialiased" lang="fr"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>USS HIVEMIND NCC-31337 v4.6 — Console Tactique Astrométrique</title>
+<!-- Tailwind CSS v3 with forms and container queries -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts: Space Grotesk & JetBrains Mono & Orbitron -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;family=Orbitron:wght@600;700;900&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          surface: '#0c141f',
+          surfaceLowest: '#070e1a',
+          surfaceContainer: '#141c28',
+          tacticalCyan: '#00f0ff',
+          tacticalGreen: '#00ff88',
+          tacticalAmber: '#ffb800',
+          tacticalRed: '#ff2a2a',
+          deepSpace: '#050b14'
+        },
+        fontFamily: {
+          display: ['Orbitron', 'sans-serif'],
+          heading: ['Space Grotesk', 'sans-serif'],
+          mono: ['JetBrains Mono', 'monospace']
+        },
+        boxShadow: {
+          cyanGlow: '0 0 16px rgba(0, 240, 255, 0.45)',
+          amberGlow: '0 0 18px rgba(255, 184, 0, 0.5)',
+          greenGlow: '0 0 16px rgba(0, 255, 136, 0.45)',
+          redGlow: '0 0 18px rgba(255, 42, 42, 0.5)'
+        }
+      }
+    }
+  }
+</script>
+<style>
+  body {
+    font-family: 'JetBrains Mono', monospace;
+    background: radial-gradient(circle at 50% 15%, #0d1b2e 0%, #050b14 100%);
+    overflow-x: hidden;
+  }
+  .scanlines {
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.35) 50%),
+                linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 240, 255, 0.02));
+    background-size: 100% 4px, 6px 100%;
+    pointer-events: none;
+  }
+  .hud-border {
+    border: 1px solid rgba(0, 240, 255, 0.32);
+    box-shadow: inset 0 0 20px rgba(0, 240, 255, 0.06), 0 0 12px rgba(0, 240, 255, 0.12);
+  }
+  .hud-border-amber {
+    border: 1.5px solid #ffb800;
+    box-shadow: inset 0 0 18px rgba(255, 184, 0, 0.22), 0 0 16px rgba(255, 184, 0, 0.4);
+  }
+  .hud-border-green {
+    border: 1.5px solid #00ff88;
+    box-shadow: inset 0 0 18px rgba(0, 255, 136, 0.2), 0 0 14px rgba(0, 255, 136, 0.35);
+  }
+  .glass-panel {
+    background: rgba(8, 18, 32, 0.92);
+    backdrop-filter: blur(12px);
+  }
+  .holo-orbit {
+    border: 1px dashed rgba(0, 240, 255, 0.45);
+    border-radius: 50%;
+    transform: rotateX(68deg);
+  }
+  .planet-trappist {
+    background: radial-gradient(circle at 35% 35%, #5eead4, #0f766e 65%, #042f2c);
+    box-shadow: 0 0 14px rgba(45, 212, 191, 0.7), inset -2px -2px 6px rgba(0,0,0,0.85);
+  }
+  .planet-kepler11 {
+    background: radial-gradient(circle at 35% 35%, #c084fc, #7e22ce 65%, #3b0764);
+    box-shadow: 0 0 14px rgba(192, 132, 252, 0.7), inset -2px -2px 6px rgba(0,0,0,0.85);
+  }
+  .planet-hd80606 {
+    background: radial-gradient(circle at 35% 35%, #fdba74, #c2410c 65%, #431407);
+    box-shadow: 0 0 14px rgba(249, 115, 22, 0.7), inset -2px -2px 6px rgba(0,0,0,0.85);
+  }
+  .planet-toi700 {
+    background: radial-gradient(circle at 35% 35%, #2dd4bf, #0e7490 65%, #164e63);
+    box-shadow: 0 0 14px rgba(45, 212, 191, 0.65), inset -2px -2px 6px rgba(0,0,0,0.85);
+  }
+  .planet-wasp39 {
+    background: radial-gradient(circle at 35% 35%, #fde047, #d97706 65%, #451a03);
+    box-shadow: 0 0 14px rgba(234, 179, 8, 0.7), inset -2px -2px 6px rgba(0,0,0,0.85);
+  }
+  .planet-kepler186 {
+    background: radial-gradient(circle at 35% 35%, #f472b6, #be185d 65%, #500724);
+    box-shadow: 0 0 14px rgba(244, 114, 182, 0.7), inset -2px -2px 6px rgba(0,0,0,0.85);
+  }
+  .planet-koi14 {
+    background: radial-gradient(circle at 35% 35%, #4ade80, #15803d 65%, #052e16);
+    box-shadow: 0 0 14px rgba(74, 222, 128, 0.7), inset -2px -2px 6px rgba(0,0,0,0.85);
+  }
+  .planet-koibin {
+    background: radial-gradient(circle at 35% 35%, #f87171, #b91c1c 65%, #450a0a);
+    box-shadow: 0 0 14px rgba(239, 68, 68, 0.7), inset -2px -2px 6px rgba(0,0,0,0.85);
+  }
+  @keyframes radarSweep {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  .radar-sweep {
+    animation: radarSweep 10s linear infinite;
+    transform-origin: center center;
+  }
+  .active-card {
+    border-color: #ffb800 !important;
+    background: rgba(16, 44, 70, 0.95) !important;
+    box-shadow: 0 0 16px rgba(255, 184, 0, 0.55) !important;
+  }
+</style>
+</head>
+<body class="relative min-h-screen p-2 md:p-3 flex flex-col justify-between text-[#c4e3ff] selection:bg-cyan-500 selection:text-black">
+<!-- Scanlines CRT simulation overlay -->
+<div class="fixed inset-0 scanlines z-50 pointer-events-none opacity-20"></div>
+<!-- Top Main Tactical Frame -->
+<div class="relative z-10 flex flex-col h-full w-full space-y-2 max-w-[1920px] mx-auto hud-border p-2.5 glass-panel rounded">
+<!-- COMMAND HEADER -->
+<header class="flex flex-col gap-1 border-b border-cyan-800/60 pb-2">
+<div class="flex flex-wrap items-center justify-between text-xs tracking-wider border-b border-cyan-900/40 pb-1.5 gap-2">
+<div class="flex items-center space-x-2.5 text-tacticalCyan font-semibold font-heading">
+<span class="inline-block w-2.5 h-2.5 rounded-full bg-tacticalCyan animate-ping"></span>
+<span class="font-display tracking-widest text-[13px] text-white">USS HIVEMIND NCC-31337 v4.6</span>
+<span class="text-cyan-400 font-mono text-[11px]">— CONSOLE TACTIQUE ASTROMÉTRIQUE &amp; ATTERRISSAGE OOLITE</span>
+<span class="text-slate-400 text-[10px] hidden xl:inline font-mono border-l border-cyan-800 pl-2">SECTEUR ORION-CYGNUS</span>
+</div>
+<div class="flex items-center space-x-3 text-[11px] font-mono">
+<span class="bg-cyan-950/80 border border-tacticalCyan/50 px-2 py-0.5 text-tacticalCyan shadow-cyanGlow font-bold">STATUS: NOMINAL</span>
+<span class="text-slate-400">BUFFER: <strong class="text-tacticalGreen" id="buffer-val">100%</strong></span>
+<span class="text-slate-400">TICK: <strong class="text-tacticalCyan" id="tick-counter">4219.04</strong></span>
+<span class="text-slate-400 hidden sm:inline">WARP MATRIX: <strong class="text-tacticalAmber">ALIGNED</strong></span>
+</div>
+</div>
+<!-- LCARS Function Ribbon & Game Stage Buttons -->
+<nav aria-label="Tactical Navigation" class="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+<div class="flex items-center space-x-1.5 text-xs font-mono overflow-x-auto py-0.5">
+<div class="flex items-center bg-cyan-950/60 px-2 py-1 border border-cyan-800/80 text-cyan-300">
+<span class="text-[9px] text-slate-400 mr-1.5">RA</span><span id="nav-ra">55.10°</span>
+</div>
+<div class="flex items-center bg-cyan-950/60 px-2 py-1 border border-cyan-800/80 text-cyan-300">
+<span class="text-[9px] text-slate-400 mr-1.5">DEC</span><span id="nav-dec">+100.0</span>
+</div>
+<div class="flex items-center bg-cyan-950/60 px-2 py-1 border border-cyan-800/80 text-cyan-300">
+<span class="text-[9px] text-slate-400 mr-1.5">EPOCH</span>238.92
+        </div>
+<div class="flex items-center bg-cyan-950/60 px-2 py-1 border border-cyan-800/80 text-cyan-300">
+<span class="text-[9px] text-slate-400 mr-1.5">FLUX</span><span id="nav-flux">15.28</span>
+</div>
+<div class="flex items-center bg-cyan-950/80 border border-cyan-600 px-2.5 py-1 space-x-1.5">
+<span class="text-[10px] text-tacticalCyan font-bold tracking-widest font-heading">SYNAPSE</span>
+<div class="flex space-x-0.5" id="synapse-meter">
+<span class="w-1.5 h-3 bg-tacticalCyan animate-pulse"></span>
+<span class="w-1.5 h-3 bg-tacticalCyan"></span>
+<span class="w-1.5 h-3 bg-tacticalCyan"></span>
+<span class="w-1.5 h-3 bg-tacticalCyan/50"></span>
+<span class="w-1.5 h-3 bg-tacticalCyan/20"></span>
+</div>
+</div>
+<span class="text-cyan-300 bg-cyan-950/60 px-2 py-1 border border-cyan-800/80">FREQ: 1420.405 MHz</span>
+<span class="text-cyan-300 bg-cyan-950/60 px-2 py-1 border border-cyan-800/80">32208 // MOE-01</span>
+</div>
+<!-- Stage Switcher Ribbon -->
+<div class="flex items-center space-x-2">
+<!-- Audio Synth Button -->
+<button aria-label="Toggle Comms Voice" class="bg-amber-500 hover:bg-amber-400 active:scale-95 text-black font-bold px-2.5 py-1 text-xs flex items-center space-x-1.5 shadow-amberGlow transition rounded cursor-pointer" id="voice-btn">
+<span class="material-symbols-outlined text-[15px]">volume_up</span>
+<span class="font-heading tracking-wider">VOIX</span>
+<span class="text-[9px] bg-black/40 text-amber-200 px-1 py-0.2 rounded font-mono" id="voice-status">ACTIF</span>
+</button>
+<!-- Fully functional 4 stages tabs -->
+<div class="flex items-center space-x-1 ml-1 font-heading text-xs" id="stage-tabs">
+<button class="stage-btn bg-tacticalCyan text-black font-bold px-3 py-1 border border-cyan-200 shadow-cyanGlow rounded flex items-center space-x-1 cursor-pointer transition active:scale-95" data-stage="1">
+<span class="w-1.5 h-1.5 rounded-full bg-black animate-ping"></span>
+<span>1. GALAXIE</span>
+<span class="text-[9px] opacity-70 bg-black/20 px-1 rounded font-mono">[1]</span>
+</button>
+<button class="stage-btn bg-cyan-950/70 hover:bg-cyan-900/80 text-cyan-300 px-2.5 py-1 border border-cyan-800 rounded transition cursor-pointer flex items-center space-x-1" data-stage="2">
+<span>2. ORBIT BEE</span>
+<span class="text-[9px] text-cyan-400/60 font-mono">[2]</span>
+</button>
+<button class="stage-btn bg-cyan-950/70 hover:bg-cyan-900/80 text-cyan-300 px-2.5 py-1 border border-cyan-800 rounded transition cursor-pointer flex items-center space-x-1" data-stage="3">
+<span>3. OOLITE LAND</span>
+<span class="text-[9px] text-cyan-400/60 font-mono">[3]</span>
+</button>
+<button class="stage-btn bg-cyan-950/70 hover:bg-cyan-900/80 text-cyan-300 px-2.5 py-1 border border-cyan-800 rounded transition cursor-pointer flex items-center space-x-1" data-stage="4">
+<span>4. JWST/LOIS</span>
+<span class="text-[9px] text-cyan-400/60 font-mono">[4]</span>
+</button>
+<div class="text-tacticalAmber tracking-tighter text-sm font-bold pl-1 animate-pulse hidden lg:block">&gt;&gt;&gt;&gt;&gt;</div>
+</div>
+</div>
+</nav>
+</header>
+<!-- MISSION PROGRESSION STATUS RIBBON -->
+<div class="bg-gradient-to-r from-amber-950/60 via-cyan-950/40 to-[#07162c] border border-tacticalAmber/70 px-3 py-1.5 rounded flex items-center justify-between text-xs text-tacticalAmber shadow-inner" data-purpose="mission-progression">
+<div class="flex items-center space-x-2.5">
+<span class="inline-block w-2.5 h-2.5 bg-tacticalAmber rounded-full animate-pulse"></span>
+<span class="font-bold tracking-wide font-heading text-[12px]" id="instruction-text">
+        ÉTAPE 1 // PILOTEZ L'USS HIVEMIND (ZQSD / FLÈCHES / CLIC) VERS UNE ÉTOILE PUIS [ESPACE / CLIC] POUR DÉPLOYER LE SWARM
+      </span>
+</div>
+<div class="hidden md:flex items-center space-x-3 text-[11px] font-mono">
+<span class="text-amber-200">PROGRESSION: <strong class="text-tacticalGreen font-bold" id="mission-progress-label">STAGE 1/4 LOCK</strong></span>
+<span class="text-amber-200">VECTEUR: <strong class="text-tacticalCyan font-bold" id="vector-dest">LHS 1140 b</strong></span>
+<span class="text-amber-200">CIBLE: <strong class="text-tacticalGreen font-bold bg-emerald-950/80 px-1.5 py-0.5 border border-tacticalGreen/50 rounded" id="target-badge">LHS 1140 b [SUPER-TERRE]</strong></span>
+</div>
+</div>
+<!-- CENTRAL VIEWPORT (MULTI-STAGE GAME ENGINE) -->
+<section aria-label="Tactical Viewport" class="relative w-full h-[400px] xl:h-[440px] rounded border border-cyan-600/50 overflow-hidden bg-black shadow-2xl">
+<!-- STAGE 1 VIEW: ASTROMETRIC GALAXY STELLAR MAP -->
+<div class="absolute inset-0 transition-opacity duration-300" id="viewport-stage-1">
+<!-- Background Galaxy Image DATA:IMAGE:IMAGE_4 -->
+<img alt="Galaxie Spirale Voie Lactée" class="absolute inset-0 w-full h-full object-cover object-center opacity-75 select-none pointer-events-none transform scale-105 filter brightness-105 contrast-125" src="https://lh3.googleusercontent.com/aida/AEtjO1U4mX6MHmzCWb6Ji929sOUG-USs47juoBasP5sritS01ottiMtE3aqddCMG8RT497EthQpVXNST1pKWmnOI3mfAKXYBaJcfNpIlUFVEcD02gSGzrBpNjVdHOdw3rJK8pxodUYJFfTn1cHrFKvybypcl-EMgp0qSg3v-WBpgROH-yZs4Xy4lbh4OESAaw9NA20ZR1cNei2CYckpJYtbjmE2htnUink50wSQ3KmoVbjSdFQ"/>
+<!-- Interstellar deep-space mask -->
+<div class="absolute inset-0 bg-gradient-to-t from-[#040a16] via-transparent to-[#040a16]/90 pointer-events-none"></div>
+<div class="absolute inset-0 bg-radial from-transparent via-[#030918]/30 to-[#020611]/90 pointer-events-none"></div>
+<!-- Glowing coordinate grid -->
+<div class="absolute inset-0 opacity-20 pointer-events-none" style="background-image: linear-gradient(rgba(0,240,255,0.25) 1px, transparent 1px), linear-gradient(90deg, rgba(0,240,255,0.25) 1px, transparent 1px); background-size: 60px 60px;"></div>
+<!-- Radar sweep circle -->
+<div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-25">
+<div class="w-[600px] h-[600px] rounded-full border border-cyan-500/40 relative radar-sweep">
+<div class="absolute top-1/2 left-1/2 w-1/2 h-0.5 bg-gradient-to-r from-tacticalCyan to-transparent origin-left"></div>
+</div>
+</div>
+<!-- Astrometric SVG Sensor Beam Layer -->
+<svg class="absolute inset-0 w-full h-full pointer-events-none z-10" id="astrometric-svg">
+<defs>
+<radialgradient cx="0%" cy="50%" id="sensorConeGrad" r="100%">
+<stop offset="0%" stop-color="rgba(0, 240, 255, 0.45)"></stop>
+<stop offset="40%" stop-color="rgba(0, 255, 136, 0.25)"></stop>
+<stop offset="100%" stop-color="rgba(0, 255, 136, 0)"></stop>
+</radialgradient>
+</defs>
+<polygon fill="url(#sensorConeGrad)" id="svg-sensor-cone" points="265,115 410,120 480,195 265,115"></polygon>
+<line id="svg-lock-line" stroke="#00ff88" stroke-dasharray="4,3" stroke-width="2" x1="265" x2="445" y1="115" y2="155"></line>
+<!-- Constellation guide lines -->
+<line stroke="rgba(0,240,255,0.3)" stroke-dasharray="2,4" stroke-width="1" x1="135" x2="265" y1="95" y2="115"></line>
+<line stroke="rgba(0,240,255,0.4)" stroke-width="1" x1="265" x2="350" y1="115" y2="80"></line>
+<line stroke="rgba(0,240,255,0.25)" stroke-dasharray="3,3" stroke-width="1" x1="350" x2="550" y1="80" y2="95"></line>
+<line stroke="rgba(0,240,255,0.3)" stroke-dasharray="2,2" stroke-width="1" x1="445" x2="710" y1="155" y2="105"></line>
+<line stroke="rgba(0,240,255,0.3)" stroke-dasharray="3,3" stroke-width="1" x1="200" x2="445" y1="280" y2="155"></line>
+</svg>
+<!-- Planetary Nodes Overlay -->
+<div class="absolute inset-0 z-20 pointer-events-auto" id="viewport-nodes">
+<!-- SYSTEM 1: TRAPPIST-1e -->
+<div class="planet-node absolute top-[68px] left-[105px] flex flex-col items-center group cursor-pointer transition hover:scale-110" data-planet="trappist1e">
+<div class="relative w-14 h-14 flex items-center justify-center">
+<div class="node-ring absolute w-12 h-12 rounded-full border border-cyan-500/40 animate-ping opacity-25"></div>
+<div class="absolute w-14 h-14 rounded-full border border-dashed border-cyan-400/40"></div>
+<div class="w-7 h-7 rounded-full planet-trappist shadow-lg"></div>
+<div class="absolute top-0 right-1 bg-cyan-900 border border-tacticalGreen rounded-full px-1 text-[8px] text-tacticalGreen font-bold font-mono">HAB</div>
+</div>
+<span class="node-label text-[11px] text-cyan-200 bg-black/85 px-1.5 py-0.5 border border-cyan-900/80 mt-1 font-mono rounded">TRAPPIST-1e</span>
+</div>
+<!-- SHIP MARKER: USS HIVEMIND NCC-31337 -->
+<div class="absolute top-[96px] left-[225px] flex items-center space-x-1.5 z-30 pointer-events-none transition-all duration-300" id="hivemind-marker">
+<div class="relative flex items-center justify-center">
+<div class="w-9 h-9 rounded-full border-2 border-amber-400 animate-spin border-t-transparent shadow-amberGlow"></div>
+<div class="absolute w-4 h-4 bg-amber-400 rounded-sm transform rotate-45 shadow-amberGlow"></div>
+</div>
+<div class="text-[11px] font-bold text-tacticalAmber bg-black/90 px-2 py-0.5 border border-amber-500/80 shadow-amberGlow font-mono rounded">
+            ■ USS_HIVEMIND
+          </div>
+</div>
+<!-- SYSTEM 2: K2-18 b with Asset DATA:IMAGE:IMAGE_5 -->
+<div class="planet-node absolute top-[52px] left-[320px] flex flex-col items-center cursor-pointer group transition hover:scale-110" data-planet="k218b">
+<div class="relative w-16 h-16 flex items-center justify-center">
+<div class="node-ring absolute w-14 h-14 rounded-full border border-dashed border-cyan-400/50 animate-pulse"></div>
+<img alt="K2-18 b Hycean World" class="w-8 h-8 rounded-full object-cover border border-cyan-400 shadow-[0_0_14px_rgba(0,240,255,0.7)] group-hover:scale-110 transition duration-300" src="https://lh3.googleusercontent.com/aida/AEtjO1XmPdII46aWb143uksF1mDs20yLB9Y5RfzTTbfsG993PvkzsVqvu00dZsE43JMFjksD1U6ngie02guqVR-xdUE0f6ZxlMSj9ruEUJXm_VKE57_9rt1m63RUYvMjP_F95N3oVvgG3QaZLwzVzwmPHFmfjcBQBJMHp9ccJBcn13zP0wWgXuBDSpITIphZNwWCfhCogc93eZ9yeMH3YZYwJrLwkqJ1Io7iQEE3Diy5xg8Z"/>
+<div class="absolute top-0 right-0 bg-cyan-950 border border-tacticalCyan rounded-full px-1 text-[8px] text-tacticalCyan font-bold font-mono">HYCEAN</div>
+</div>
+<span class="node-label text-[11px] text-cyan-200 bg-black/85 px-1.5 py-0.5 border border-cyan-800 mt-1 font-mono rounded">K2-18 b</span>
+</div>
+<!-- SYSTEM 3: Kepler-11 f -->
+<div class="planet-node absolute top-[68px] left-[520px] flex flex-col items-center cursor-pointer transition hover:scale-110" data-planet="kepler11f">
+<div class="relative w-14 h-14 flex items-center justify-center">
+<div class="absolute w-14 h-14 rounded-full border border-dashed border-purple-500/40"></div>
+<div class="w-7 h-7 rounded-full planet-kepler11"></div>
+<div class="absolute top-0 right-1 bg-purple-950 border border-slate-400 rounded-full px-1 text-[8px] text-slate-300">GAS</div>
+</div>
+<span class="node-label text-[11px] text-cyan-200 bg-black/85 px-1.5 py-0.5 border border-cyan-900/60 mt-0.5 font-mono rounded">Kepler-11 f</span>
+</div>
+<!-- SYSTEM 4: HD 80606 b -->
+<div class="planet-node absolute top-[75px] right-[180px] flex flex-col items-center cursor-pointer transition hover:scale-110" data-planet="hd80606b">
+<div class="relative w-14 h-14 flex items-center justify-center">
+<div class="absolute w-14 h-14 rounded-full border border-dashed border-orange-500/40"></div>
+<div class="w-7 h-7 rounded-full planet-hd80606"></div>
+<div class="absolute top-0 right-1 bg-orange-950 border border-tacticalAmber rounded-full px-1 text-[8px] text-tacticalAmber">ECC</div>
+</div>
+<span class="node-label text-[11px] text-cyan-200 bg-black/85 px-1.5 py-0.5 border border-cyan-900/60 mt-0.5 font-mono rounded">HD 80606 b</span>
+</div>
+<!-- SYSTEM 5: TOI-700 d -->
+<div class="planet-node absolute bottom-[105px] left-[170px] flex flex-col items-center cursor-pointer transition hover:scale-110" data-planet="toi700d">
+<div class="relative w-14 h-14 flex items-center justify-center">
+<div class="absolute w-14 h-14 rounded-full border border-dashed border-teal-500/40"></div>
+<div class="w-7 h-7 rounded-full planet-toi700"></div>
+<div class="absolute top-0 right-1 bg-cyan-950 border border-tacticalGreen rounded-full px-1 text-[8px] text-tacticalGreen">TER</div>
+</div>
+<span class="node-label text-[11px] text-cyan-200 bg-black/85 px-1.5 py-0.5 border border-cyan-900/60 mt-0.5 font-mono rounded">TOI-700 d</span>
+</div>
+<!-- SYSTEM 6: LHS 1140 b with Asset DATA:IMAGE:IMAGE_6 -->
+<div class="planet-node absolute top-[115px] left-[405px] flex flex-col items-center cursor-pointer z-30 group" data-planet="lhs1140b">
+<div class="relative w-24 h-24 flex items-center justify-center">
+<div class="ring-target absolute inset-0 rounded-full border-2 border-dashed border-tacticalAmber animate-spin" style="animation-duration: 9s;"></div>
+<div class="ring-target-ping absolute inset-2 rounded-full border border-tacticalAmber/60 animate-ping opacity-45"></div>
+<div class="absolute inset-0 rounded-full border border-cyan-400/30"></div>
+<img alt="LHS 1140 b Super-Earth" class="w-12 h-12 rounded-full object-cover ring-2 ring-tacticalAmber shadow-amberGlow group-hover:scale-110 transition duration-300" src="https://lh3.googleusercontent.com/aida/AEtjO1V13Wv6d-01hDJo83nHWi7FklguAoqj8VJgG65hB2uevqP5pDXjJToMsy7-CIoGzk195mIJXfCVOUqD4LpYEabBZC-kZ9gW4tLSEKlC7dNZILyHtreu4Kdgfgwtjfu3XYAPj791aqkdYjMKlQLbdH26tJNXiNpoHzh6g5mElOA8Jv3Q4toZ38hCjK5t-tYLHddaUfxW0wUj7mgHSWCd8Pj14cgqKen9Vn-k5FxlT7Wd"/>
+<div class="lock-tag absolute -top-1 -right-1 bg-amber-950 border border-tacticalAmber rounded px-1.5 py-0.5 text-[9px] text-tacticalAmber font-bold shadow-amberGlow font-mono animate-bounce">
+              LOCK 48.8 ly
+            </div>
+</div>
+<div class="node-label text-xs font-bold text-tacticalAmber bg-black/90 px-2.5 py-0.5 border border-tacticalAmber shadow-amberGlow font-mono rounded flex items-center space-x-1 mt-0.5">
+<span class="w-1.5 h-1.5 bg-tacticalAmber rounded-full"></span>
+<span>LHS 1140 b [HABITABLE]</span>
+</div>
+</div>
+<!-- SYSTEM 7: WASP-39 b -->
+<div class="planet-node absolute bottom-[115px] right-[290px] flex flex-col items-center cursor-pointer transition hover:scale-110" data-planet="wasp39b">
+<div class="relative w-14 h-14 flex items-center justify-center">
+<div class="absolute w-14 h-14 rounded-full border border-dashed border-yellow-500/40"></div>
+<div class="w-7 h-7 rounded-full planet-wasp39"></div>
+<div class="absolute top-0 right-1 bg-yellow-950 border border-tacticalAmber rounded-full px-1 text-[8px] text-tacticalAmber">CO₂</div>
+</div>
+<span class="node-label text-[11px] text-cyan-200 bg-black/85 px-1.5 py-0.5 border border-cyan-900/60 mt-0.5 font-mono rounded">WASP-39 b</span>
+</div>
+<!-- SYSTEM 8: Kepler-186 f -->
+<div class="planet-node absolute bottom-[110px] right-[145px] flex flex-col items-center cursor-pointer transition hover:scale-110" data-planet="kepler186f">
+<div class="relative w-14 h-14 flex items-center justify-center">
+<div class="absolute w-14 h-14 rounded-full border border-dashed border-pink-500/40"></div>
+<div class="w-7 h-7 rounded-full planet-kepler186"></div>
+<div class="absolute top-0 right-1 bg-pink-950 border border-tacticalGreen rounded-full px-1 text-[8px] text-tacticalGreen">HAB</div>
+</div>
+<span class="node-label text-[11px] text-cyan-200 bg-black/85 px-1.5 py-0.5 border border-cyan-900/60 mt-0.5 font-mono rounded">Kepler-186 f</span>
+</div>
+</div>
+<!-- Quick Action Inspector Drawer on Map -->
+<div class="absolute top-3 right-3 w-80 glass-panel border border-cyan-400/60 rounded p-2.5 shadow-2xl backdrop-blur-md hidden md:flex flex-col space-y-2 z-30">
+<div class="flex items-center justify-between border-b border-cyan-900 pb-1.5">
+<div class="flex items-center space-x-1.5">
+<span class="w-2 h-2 rounded-full bg-tacticalGreen animate-ping"></span>
+<span class="font-display text-xs text-white tracking-wider">SPECTRO-SCAN TACTIQUE</span>
+</div>
+<span class="text-[10px] bg-emerald-950 border border-tacticalGreen/60 text-tacticalGreen px-1.5 py-0.2 rounded font-mono font-bold" id="drawer-hab-badge">HABITABILITÉ: 89%</span>
+</div>
+<div class="flex items-center space-x-3">
+<div class="w-14 h-14 rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden border-2 border-tacticalAmber shadow-amberGlow bg-black/50" id="drawer-planet-avatar">
+<img alt="Planet Preview" class="w-full h-full object-cover" id="drawer-planet-img" src="https://lh3.googleusercontent.com/aida/AEtjO1V13Wv6d-01hDJo83nHWi7FklguAoqj8VJgG65hB2uevqP5pDXjJToMsy7-CIoGzk195mIJXfCVOUqD4LpYEabBZC-kZ9gW4tLSEKlC7dNZILyHtreu4Kdgfgwtjfu3XYAPj791aqkdYjMKlQLbdH26tJNXiNpoHzh6g5mElOA8Jv3Q4toZ38hCjK5t-tYLHddaUfxW0wUj7mgHSWCd8Pj14cgqKen9Vn-k5FxlT7Wd"/>
+<div class="w-full h-full hidden" id="drawer-planet-sphere"></div>
+</div>
+<div class="text-[11px] font-mono leading-tight space-y-0.5">
+<div class="text-white font-bold" id="drawer-title">LHS 1140 b (Super-Terre)</div>
+<div class="text-slate-400">Distance: <span class="text-tacticalCyan font-semibold" id="drawer-dist">48.8 al (14.99 pc)</span></div>
+<div class="text-slate-400">Atmosphère: <span class="text-emerald-400 font-semibold" id="drawer-atm">N₂ - H₂O - CO₂</span></div>
+<div class="text-slate-400">Temp. surface: <span class="text-tacticalAmber font-semibold" id="drawer-temp">~235 K (-38°C)</span></div>
+</div>
+</div>
+<div class="grid grid-cols-3 gap-1.5 pt-1 font-mono text-[9px]">
+<button class="bg-cyan-950 hover:bg-cyan-800 active:scale-95 text-cyan-200 border border-cyan-500/80 p-1.5 rounded font-bold text-center transition cursor-pointer" id="btn-engage-warp">
+            PROP. WARP
+          </button>
+<button class="bg-emerald-950 hover:bg-emerald-800 active:scale-95 text-tacticalGreen border border-emerald-500/80 p-1.5 rounded font-bold text-center transition cursor-pointer" id="btn-probe-lois">
+            SONDE BEE
+          </button>
+<button class="bg-amber-950 hover:bg-amber-800 active:scale-95 text-tacticalAmber border border-amber-500/80 p-1.5 rounded font-bold text-center transition cursor-pointer" id="btn-nirspec">
+            NIRSPEC JWST
+          </button>
+</div>
+<div class="hidden text-[10px] font-mono text-center py-0.5 rounded bg-cyan-900/60 border border-cyan-500 text-tacticalCyan animate-pulse" id="drawer-toast">
+          CMD EXÉCUTÉE
+        </div>
+</div>
+</div>
+<!-- STAGE 2 VIEW: ORBIT BEE SWARM & LAGRANGE RING VIEW -->
+<div class="absolute inset-0 bg-[#040c1b] hidden transition-opacity duration-300 p-4" id="viewport-stage-2">
+<div class="w-full h-full relative border border-cyan-500/30 rounded overflow-hidden flex flex-col justify-between p-3">
+<!-- Background Orbital Grid -->
+<div class="absolute inset-0 opacity-15" style="background-image: radial-gradient(circle, #00f0ff 1px, transparent 1px); background-size: 30px 30px;"></div>
+<!-- Central Star & Orbit Simulation -->
+<div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+<!-- Star -->
+<div class="w-16 h-16 rounded-full bg-gradient-to-r from-amber-400 to-red-500 shadow-[0_0_35px_rgba(255,184,0,0.8)] animate-pulse"></div>
+<!-- Orbit Ring 1 -->
+<div class="absolute w-[360px] h-[360px] rounded-full border border-dashed border-cyan-500/40 animate-spin" style="animation-duration: 40s;">
+<!-- Lagrange L1 -->
+<div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-cyan-950 border border-tacticalCyan px-1.5 py-0.5 text-[9px] text-tacticalCyan font-mono rounded">L1 ANCHOR</div>
+<!-- Swarm Satellite 1 -->
+<div class="absolute bottom-6 left-12 w-3 h-3 bg-tacticalGreen rounded-full shadow-greenGlow animate-ping"></div>
+<!-- Swarm Satellite 2 -->
+<div class="absolute top-12 right-16 w-2.5 h-2.5 bg-tacticalCyan rounded-full shadow-cyanGlow"></div>
+</div>
+<!-- Orbit Ring 2 -->
+<div class="absolute w-[520px] h-[520px] rounded-full border border-cyan-600/25">
+<div class="absolute top-1/2 right-0 translate-x-1/2 -translate-y-1/2 bg-amber-950 border border-tacticalAmber px-1.5 py-0.5 text-[9px] text-tacticalAmber font-mono rounded">L4 TROJAN</div>
+</div>
+</div>
+<!-- Interactive Telemetry HUD Controls -->
+<div class="relative z-10 flex justify-between items-start">
+<div class="bg-black/80 border border-cyan-500/60 p-2.5 rounded font-mono text-xs space-y-1">
+<div class="text-tacticalCyan font-bold">RESONANCE RING SWARM BEE-MoE</div>
+<div class="text-slate-300">SAT-NODES ACTIFS: <strong class="text-tacticalGreen" id="sat-count">128 / 128</strong></div>
+<div class="text-slate-300">SYNCHRONISATION: <strong class="text-tacticalCyan">99.98%</strong></div>
+<div class="text-slate-300">ORBITE: <strong class="text-amber-300" id="current-stage2-planet">LHS 1140 b (a = 0.0936 AU)</strong></div>
+</div>
+<div class="flex flex-col gap-2">
+<button class="bg-emerald-950 hover:bg-emerald-800 border border-emerald-400 text-tacticalGreen font-bold px-3 py-1.5 text-xs rounded shadow-greenGlow transition cursor-pointer active:scale-95" id="btn-deploy-probe">
+              + ÉJECTER SONDE MOE
+            </button>
+<button class="bg-cyan-950 hover:bg-cyan-800 border border-cyan-400 text-cyan-200 font-bold px-3 py-1.5 text-xs rounded transition cursor-pointer active:scale-95" id="btn-sync-phase">
+              SYNCHRO PHASE L1-L2
+            </button>
+</div>
+</div>
+<div class="relative z-10 flex justify-between items-end bg-black/70 border border-cyan-900 p-2 rounded text-[11px] font-mono">
+<div>POUSSÉE PROPULSION IONIQUE: <span class="text-tacticalGreen font-bold" id="ion-thrust">340 mN</span> (STABLE)</div>
+<div class="text-tacticalAmber">TÉLÉMÉTRIE SWARM: PACKETS REÇUS 4.2 MB/s</div>
+</div>
+</div>
+</div>
+<!-- STAGE 3 VIEW: OOLITE PLANETFALL DESCENT COCKPIT HUD -->
+<div class="absolute inset-0 bg-[#020813] hidden transition-opacity duration-300" id="viewport-stage-3">
+<!-- Cockpit HUD Layers -->
+<div class="w-full h-full relative flex flex-col justify-between p-3 select-none">
+<!-- Cockpit Background Planet Horizon Asset DATA:IMAGE:IMAGE_6 -->
+<img alt="Atmospheric Horizon" class="absolute inset-0 w-full h-full object-cover opacity-45 pointer-events-none transform scale-110" id="oolite-bg-img" src="https://lh3.googleusercontent.com/aida/AEtjO1V13Wv6d-01hDJo83nHWi7FklguAoqj8VJgG65hB2uevqP5pDXjJToMsy7-CIoGzk195mIJXfCVOUqD4LpYEabBZC-kZ9gW4tLSEKlC7dNZILyHtreu4Kdgfgwtjfu3XYAPj791aqkdYjMKlQLbdH26tJNXiNpoHzh6g5mElOA8Jv3Q4toZ38hCjK5t-tYLHddaUfxW0wUj7mgHSWCd8Pj14cgqKen9Vn-k5FxlT7Wd"/>
+<div class="absolute inset-0 bg-gradient-to-t from-[#020712] via-transparent to-[#020712]/80 pointer-events-none"></div>
+<!-- Synthetic Aperture Radar (SAR) Wireframe Grid -->
+<div class="absolute inset-x-8 bottom-0 h-44 border-t border-cyan-500/30 opacity-40 pointer-events-none" style="background-image: linear-gradient(0deg, rgba(0,240,255,0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(0,240,255,0.2) 1px, transparent 1px); background-size: 32px 18px; transform: perspective(300px) rotateX(45deg);"></div>
+<!-- Artificial Horizon Pitch / Roll Ladder -->
+<div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+<div class="relative w-64 h-48 flex flex-col items-center justify-center">
+<!-- Reticle Crosshair -->
+<div class="w-12 h-12 border border-tacticalCyan/50 rounded-full flex items-center justify-center">
+<div class="w-2 h-2 bg-tacticalCyan rounded-full"></div>
+</div>
+<!-- Horizon Bar Lines -->
+<div class="w-48 h-0.5 bg-tacticalCyan/80 my-1"></div>
+<div class="w-28 h-0.5 bg-tacticalCyan/50 my-1"></div>
+<div class="w-16 h-0.5 bg-tacticalCyan/30 my-1"></div>
+<!-- Alert Badge -->
+<div class="text-[11px] font-bold text-tacticalAmber bg-black/80 px-2 py-0.5 border border-tacticalAmber mt-2 animate-pulse" id="terrain-alert">
+              ALTITUDE RADAR: SCAN EN COURS
+            </div>
+</div>
+</div>
+<!-- Left Tape: Airspeed & Throttle -->
+<div class="relative z-10 flex justify-between items-start text-xs font-mono">
+<div class="bg-black/85 border border-cyan-500/70 p-2 rounded space-y-1">
+<div class="text-tacticalCyan font-bold">OOLITE DESCENT TELEMETRY</div>
+<div class="text-slate-300">VITESSE: <strong class="text-tacticalGreen" id="speed-tape">84.2 m/s</strong></div>
+<div class="text-slate-300">DESCENTE: <strong class="text-amber-300" id="vs-tape">-12.4 m/s</strong></div>
+<div class="text-slate-300">PITCH: <strong class="text-tacticalCyan">-4.2°</strong> | ROLL: <strong class="text-tacticalCyan">+0.8°</strong></div>
+<div class="text-slate-300">CORRIDOR: <strong class="text-emerald-400">NOMINAL</strong></div>
+</div>
+<!-- Right Tape: Altitude Tape AGL -->
+<div class="bg-black/85 border border-tacticalAmber/80 p-2 rounded text-right space-y-1">
+<div class="text-tacticalAmber font-bold">RADAR ALTIMÈTRE AGL</div>
+<div class="text-xl font-bold text-tacticalCyan" id="altitude-tape">3,420 m</div>
+<div class="text-slate-400 text-[10px]">CIBLE SOL: <span class="text-white" id="landing-zone-name">CHASMA AUSTRALIS</span></div>
+<div class="text-[10px] text-tacticalGreen">TRAIN D'ATTERRISSAGE: ARMÉ</div>
+</div>
+</div>
+<!-- Bottom Retro-thruster Controls -->
+<div class="relative z-10 flex flex-wrap justify-between items-end bg-black/80 border border-cyan-800 p-2.5 rounded gap-2">
+<div class="flex items-center space-x-3">
+<button class="bg-red-950 hover:bg-red-800 text-tacticalRed border border-red-500 px-3 py-1.5 rounded font-bold font-mono text-xs transition cursor-pointer active:scale-95 shadow-redGlow" id="btn-retro-burn">
+              [Z / HAUT] POUSSÉE RÉTRO-FUSÉE
+            </button>
+<button class="bg-cyan-950 hover:bg-cyan-800 text-tacticalCyan border border-cyan-600 px-2.5 py-1.5 rounded font-mono text-xs transition cursor-pointer" id="btn-gear-toggle">
+              TRAIN D'ATTERRISSAGE [G]
+            </button>
+</div>
+<div class="text-[11px] font-mono text-amber-200">
+            PRESSEZ <kbd class="bg-black border border-amber-400 px-1 py-0.5 rounded text-tacticalAmber font-bold">[Z]</kbd> OU CLIQUEZ POUR FREINER LA RENTRÉE SOUS 95 m/s
+          </div>
+</div>
+</div>
+</div>
+<!-- STAGE 4 VIEW: JWST NIRSPEC SPECTROSCOPY & TAP ADQL QUERY -->
+<div class="absolute inset-0 bg-[#030914] hidden transition-opacity duration-300 p-3" id="viewport-stage-4">
+<div class="w-full h-full relative border border-cyan-500/40 rounded p-3 flex flex-col justify-between font-mono">
+<!-- Header Lab Info -->
+<div class="flex justify-between items-center border-b border-cyan-900 pb-2">
+<div class="flex items-center space-x-2">
+<span class="w-2.5 h-2.5 bg-tacticalAmber rounded-full animate-ping"></span>
+<span class="font-display text-xs text-white">JWST NIRSPEC PRISM // PROFIL SPECTROPHOTOMÉTRIQUE DE TRANSMISSION</span>
+</div>
+<span class="text-xs text-tacticalGreen border border-emerald-500 px-2 py-0.5 rounded bg-emerald-950/60 font-bold" id="bio-confidence-badge">
+            BIOSIGNATURE INDICE: 94.2%
+          </span>
+</div>
+<!-- Interactive Spectral Transmission Plot with Molecular Absorption Bands -->
+<div class="relative h-44 w-full bg-[#020712] border border-cyan-950 rounded my-2 flex items-center justify-center overflow-hidden">
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 700 160">
+<!-- Grid -->
+<line stroke="rgba(0,240,255,0.15)" stroke-width="1" x1="0" x2="700" y1="40" y2="40"></line>
+<line stroke="rgba(0,240,255,0.15)" stroke-width="1" x1="0" x2="700" y1="80" y2="80"></line>
+<line stroke="rgba(0,240,255,0.15)" stroke-width="1" x1="0" x2="700" y1="120" y2="120"></line>
+<!-- Spectrum Wave with Absorption peaks for H2O, CH4, CO2, DMS -->
+<path d="M 0,90 Q 50,60 100,100 T 180,45 T 260,115 T 340,35 T 420,125 T 500,55 T 580,105 T 700,75" fill="none" filter="drop-shadow(0px 0px 4px #00f0ff)" id="svg-spec-curve" stroke="#00f0ff" stroke-width="2.5"></path>
+<!-- Molecular Marker Peaks -->
+<circle cx="180" cy="45" fill="#00ff88" r="4" stroke="#fff" stroke-width="1.2"></circle>
+<text fill="#00ff88" font-size="10" x="165" y="32">H₂O (1.4 µm)</text>
+<circle cx="340" cy="35" fill="#ffb800" r="4" stroke="#fff" stroke-width="1.2"></circle>
+<text fill="#ffb800" font-size="10" x="325" y="22">CH₄ (2.3 µm)</text>
+<circle cx="500" cy="55" fill="#00f0ff" r="4" stroke="#fff" stroke-width="1.2"></circle>
+<text fill="#00f0ff" font-size="10" x="485" y="42">CO₂ (4.3 µm)</text>
+</svg>
+<div class="absolute bottom-2 left-3 text-[10px] text-slate-400">LONGUEUR D'ONDE λ (0.6 — 5.3 µm)</div>
+<div class="absolute top-2 right-3 text-[10px] text-emerald-400 bg-black/80 px-2 py-0.5 border border-emerald-800 rounded" id="dms-detection-tag">
+            CANDIDAT DMS / BIOSIGNATURE POTENTIELLE IDENTIFIÉE
+          </div>
+</div>
+<!-- TAP ADQL Interactive Query Terminal -->
+<div class="bg-black/90 border border-cyan-800/80 p-2 rounded flex flex-col md:flex-row items-center justify-between gap-2 text-xs">
+<div class="flex items-center space-x-2 text-cyan-300 w-full md:w-auto">
+<span class="text-tacticalAmber font-bold">ADQL&gt;</span>
+<span class="text-slate-300 truncate" id="query-preview">SELECT pl_name, pl_rade, pl_masse, st_teff FROM ps WHERE pl_name = 'LHS 1140 b';</span>
+</div>
+<div class="flex space-x-2">
+<button class="bg-cyan-950 hover:bg-cyan-800 border border-cyan-500 text-tacticalCyan px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer" id="btn-run-adql">
+              EXÉCUTER ADQL
+            </button>
+<button class="bg-emerald-950 hover:bg-emerald-800 border border-emerald-500 text-tacticalGreen px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer" id="btn-verify-kepler">
+              LOI DE KEPLER T²/a³
+            </button>
+</div>
+</div>
+</div>
+</div>
+<!-- TACTICAL VOICE COMMS OVERLAY BOX -->
+<div class="absolute bottom-2 left-2 right-2 z-30 bg-[#031022]/95 border border-tacticalAmber/90 p-2 px-3 text-xs text-amber-200 flex items-center justify-between rounded shadow-2xl backdrop-blur-md" data-purpose="subspace-comms-transcript">
+<div class="flex items-center space-x-2.5">
+<span class="bg-amber-950/80 border border-amber-500 px-1.5 py-0.5 text-[10px] text-tacticalAmber font-bold font-mono">□□ [FR-VOIX]</span>
+<span class="font-mono" id="voice-transcript">« Commandant, l'USS HiveMind cible <strong class="text-white" id="transcript-target">LHS 1140 b</strong>. Profondeur de transit : <strong class="text-tacticalCyan" id="transcript-depth">5340 ppm</strong>, vitesse radiale Doppler <strong class="text-tacticalGreen" id="transcript-rv">K = 4.9 m/s</strong>. Appuyez sur <strong class="text-tacticalAmber">[ESPACE]</strong> pour lancer le swarm Bee-MoE ! »</span>
+</div>
+<div class="hidden lg:flex items-center space-x-3 text-[11px] font-mono text-slate-400">
+<span class="flex items-center space-x-1">
+<span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+<span class="text-emerald-400 font-semibold">CARRIER LOCK</span>
+</span>
+<span>SUBCARRIER 1420.405 MHz</span>
+</div>
+</div>
+</section>
+<!-- DUAL SCIENTIFIC TELEMETRY OSCILLOSCOPES -->
+<section aria-label="Scientific Telemetry Consoles" class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+<!-- Panel Left: UCSC Doppler Radial Velocity Oscilloscope -->
+<article class="hud-border glass-panel p-2.5 rounded flex flex-col justify-between" data-purpose="doppler-spectrometry">
+<header class="flex items-center justify-between border-b border-cyan-900 pb-1 text-tacticalCyan font-semibold">
+<div class="flex items-center space-x-2">
+<span class="w-2 h-2 bg-tacticalCyan shadow-cyanGlow"></span>
+<span class="font-heading tracking-wide">CONSOLE SYSTÉMIQUE UCSC // VITESSE RADIALE DOPPLER</span>
+</div>
+<span class="text-[10px] text-slate-400 font-mono" id="rv-instrument-header">HARPS / HIRES (K = 4.9 m/s, e = 0.04)</span>
+</header>
+<div class="relative h-28 my-1.5 w-full bg-[#020914] border border-cyan-900/60 rounded overflow-hidden flex items-center justify-center">
+<svg class="absolute inset-0 w-full h-full stroke-cyan-950/70" height="100%" width="100%">
+<defs>
+<pattern height="20" id="gridPattern" patternunits="userSpaceOnUse" width="30">
+<path d="M 30 0 L 0 0 0 20" fill="none" stroke="rgba(0, 240, 255, 0.12)" stroke-width="0.8"></path>
+</pattern>
+</defs>
+<rect fill="url(#gridPattern)" height="100%" width="100%"></rect>
+<line stroke="rgba(0, 240, 255, 0.4)" stroke-dasharray="2,3" stroke-width="1" x1="0" x2="100%" y1="50%" y2="50%"></line>
+</svg>
+<svg class="w-full h-full absolute inset-0" preserveaspectratio="none" viewbox="0 0 500 120">
+<defs>
+<lineargradient id="sineGrad" x1="0%" x2="100%" y1="0%" y2="0%">
+<stop offset="0%" stop-color="#00f0ff"></stop>
+<stop offset="50%" stop-color="#00ff88"></stop>
+<stop offset="100%" stop-color="#00f0ff"></stop>
+</lineargradient>
+</defs>
+<path d="M 0,25 C 90,-5 160,115 250,115 C 340,115 410,15 500,25" fill="none" filter="drop-shadow(0px 0px 4px #00ff88)" id="svg-rv-path" stroke="url(#sineGrad)" stroke-linecap="round" stroke-width="3"></path>
+<circle cx="120" cy="55" fill="#00f0ff" id="rv-dot-1" r="4" stroke="#fff" stroke-width="1.2"></circle>
+<circle cx="250" cy="115" fill="#ffb800" id="rv-dot-2" r="4" stroke="#fff" stroke-width="1.2"></circle>
+<circle cx="380" cy="55" fill="#00f0ff" id="rv-dot-3" r="4" stroke="#fff" stroke-width="1.2"></circle>
+</svg>
+<div class="absolute top-2 left-3 text-[10px] text-tacticalGreen bg-black/80 px-1.5 py-0.5 border border-emerald-900 font-mono rounded" id="rv-delta-badge">
+          Δv = +4.92 m/s [SEUIL CONFIRMÉ]
+        </div>
+<div class="absolute bottom-2 right-3 text-[10px] text-cyan-300 bg-black/80 px-1.5 py-0.5 border border-cyan-900 font-mono rounded" id="rv-period-badge">
+          P = 24.737 j (ORBITE SYNCHRONE)
+        </div>
+</div>
+<footer class="flex items-center justify-between text-[11px] text-slate-400 pt-0.5 font-mono">
+<span>ORBITE SYNCHRONISÉE : <strong class="text-tacticalGreen font-bold" id="rv-orbit-stat">VERROUILLÉE (e = 0.04)</strong></span>
+<span>BRUIT BLANC RMS: <strong class="text-cyan-300">0.32 m/s</strong></span>
+</footer>
+</article>
+<!-- Panel Right: Photometric Transit Depth Light Curve (Kepler/TESS) -->
+<article class="hud-border glass-panel p-2.5 rounded flex flex-col justify-between" data-purpose="photometry-transit">
+<header class="flex items-center justify-between border-b border-cyan-900 pb-1 text-tacticalCyan font-semibold">
+<div class="flex items-center space-x-2">
+<span class="w-2 h-2 bg-tacticalCyan shadow-cyanGlow"></span>
+<span class="font-heading tracking-wide">PHOTOMÉTRIE DE TRANSIT KEPLER/TESS</span>
+</div>
+<span class="text-[10px] text-slate-400 font-mono">COURBE DE LUMIÈRE (FLUX NORMALISÉ 1.0)</span>
+</header>
+<div class="relative h-28 my-1.5 w-full bg-[#020914] border border-cyan-900/60 rounded overflow-hidden flex items-center justify-center">
+<svg class="absolute inset-0 w-full h-full stroke-cyan-950/70" height="100%" width="100%">
+<rect fill="url(#gridPattern)" height="100%" width="100%"></rect>
+</svg>
+<svg class="w-full h-full absolute inset-0" preserveaspectratio="none" viewbox="0 0 500 120">
+<defs>
+<lineargradient id="transitGrad" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" stop-color="#00f0ff" stop-opacity="0.3"></stop>
+<stop offset="100%" stop-color="#00f0ff" stop-opacity="0.0"></stop>
+</lineargradient>
+</defs>
+<polygon fill="url(#transitGrad)" id="svg-transit-poly" points="0,22 270,22 290,98 360,98 380,22 500,22 500,120 0,120"></polygon>
+<path d="M 0,22 L 270,22 L 290,98 L 360,98 L 380,22 L 500,22" fill="none" filter="drop-shadow(0px 0px 5px #00f0ff)" id="svg-transit-path" stroke="#00f0ff" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"></path>
+<line id="svg-depth-line" stroke="rgba(255, 184, 0, 0.7)" stroke-dasharray="2,2" stroke-width="1.2" x1="270" x2="380" y1="98" y2="98"></line>
+</svg>
+<div class="absolute top-2 right-4 text-[10px] text-cyan-300 bg-black/80 px-1.5 py-0.5 border border-cyan-900 font-mono rounded" id="transit-duration-badge">
+          DURÉE DE TRANSIT: 2.14 h
+        </div>
+<div class="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-[10px] text-tacticalAmber bg-black/90 px-2 py-0.5 border border-amber-900/80 font-bold font-mono rounded shadow-amberGlow" id="transit-depth-badge">
+          DEPTH: 5340 ppm (Rp/R★ = 0.052)
+        </div>
+</div>
+<footer class="flex items-center justify-between text-[11px] text-slate-400 pt-0.5 font-mono">
+<span>RAYON ESTIMÉ: <strong class="text-tacticalCyan" id="transit-radius-stat">1.43 R⊕ (ATMOSPHÈRE DÉTECTÉE)</strong></span>
+<span>DENSITÉ: <strong class="text-tacticalGreen font-bold" id="transit-density-stat">5.6 g/cm³ (SUPER-TERRE ROCHEUSE)</strong></span>
+</footer>
+</article>
+</section>
+<!-- BOTTOM ASTROBIOLOGICAL CATALOG DOCK (10 SYSTEMS) -->
+<section aria-label="Collection Astrobiologique" class="border border-tacticalAmber/50 bg-[#030914]/90 p-2.5 rounded flex flex-col space-y-2" data-purpose="planet-collection-dock">
+<header class="flex items-center justify-between text-xs text-tacticalAmber font-bold border-b border-amber-950/80 pb-1.5">
+<div class="flex items-center space-x-2">
+<span class="w-2 h-2 bg-tacticalAmber"></span>
+<span class="tracking-wide font-heading">COLLECTION ASTROBIOLOGIQUE &amp; EXOPLANÈTES APPROUVÉES (CLIQUEZ POUR INSPECTION IMMÉDIATE) :</span>
+</div>
+<div class="text-[10px] text-amber-400 font-mono font-normal">
+        ÉCHANTILLONS SYNTHÉTISÉS: <strong class="text-tacticalGreen font-bold">10/10</strong> [ACCÈS TOTAL ACCORDÉ]
+      </div>
+</header>
+<div class="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2" id="bottom-planet-rack">
+<!-- 1: TRAPPIST-1e -->
+<button class="planet-card bg-[#041224] border border-cyan-900/80 hover:border-cyan-400 transition p-2 rounded flex flex-col items-center group cursor-pointer active:scale-95" data-planet="trappist1e">
+<div class="w-9 h-9 rounded-full planet-trappist mb-1 transition-transform group-hover:scale-110 shadow-lg"></div>
+<div class="w-10 h-2 holo-orbit mb-1"></div>
+<span class="text-[10px] text-slate-200 font-mono tracking-tight flex items-center space-x-1">
+<span class="text-tacticalGreen font-bold">✓</span>
+<span class="truncate">TRAPPIST-1e</span>
+</span>
+<span class="card-badge text-[8px] text-emerald-400 font-mono mt-0.5 bg-emerald-950/80 px-1 border border-emerald-800 rounded">HABITABLE</span>
+</button>
+<!-- 2: K2-18 b with Asset DATA:IMAGE:IMAGE_5 -->
+<button class="planet-card bg-[#041224] border border-cyan-900/80 hover:border-tacticalCyan hover:shadow-cyanGlow transition p-2 rounded flex flex-col items-center group cursor-pointer active:scale-95" data-planet="k218b">
+<img alt="K2-18 b Hycean World" class="w-9 h-9 rounded-full object-cover mb-1 transition-transform group-hover:scale-110 shadow-cyanGlow border border-cyan-400" src="https://lh3.googleusercontent.com/aida/AEtjO1XmPdII46aWb143uksF1mDs20yLB9Y5RfzTTbfsG993PvkzsVqvu00dZsE43JMFjksD1U6ngie02guqVR-xdUE0f6ZxlMSj9ruEUJXm_VKE57_9rt1m63RUYvMjP_F95N3oVvgG3QaZLwzVzwmPHFmfjcBQBJMHp9ccJBcn13zP0wWgXuBDSpITIphZNwWCfhCogc93eZ9yeMH3YZYwJrLwkqJ1Io7iQEE3Diy5xg8Z"/>
+<div class="w-10 h-2 holo-orbit mb-1 border-tacticalCyan"></div>
+<span class="text-[10px] text-slate-200 font-mono tracking-tight flex items-center space-x-1">
+<span class="text-tacticalGreen font-bold">✓</span>
+<span class="truncate">K2-18 b</span>
+</span>
+<span class="card-badge text-[8px] text-cyan-400 font-mono mt-0.5 bg-cyan-950/80 px-1 border border-cyan-800 rounded">HYCÉAN</span>
+</button>
+<!-- 3: Kepler-11 f -->
+<button class="planet-card bg-[#041224] border border-cyan-900/80 hover:border-cyan-400 transition p-2 rounded flex flex-col items-center group cursor-pointer active:scale-95" data-planet="kepler11f">
+<div class="w-9 h-9 rounded-full planet-kepler11 mb-1 transition-transform group-hover:scale-110 shadow-lg"></div>
+<div class="w-10 h-2 holo-orbit mb-1"></div>
+<span class="text-[10px] text-slate-200 font-mono tracking-tight flex items-center space-x-1">
+<span class="text-tacticalGreen font-bold">✓</span>
+<span class="truncate">Kepler-11 f</span>
+</span>
+<span class="card-badge text-[8px] text-slate-400 font-mono mt-0.5 bg-slate-900 px-1 rounded">GAZEUX</span>
+</button>
+<!-- 4: HD 80606 b -->
+<button class="planet-card bg-[#041224] border border-cyan-900/80 hover:border-cyan-400 transition p-2 rounded flex flex-col items-center group cursor-pointer active:scale-95" data-planet="hd80606b">
+<div class="w-9 h-9 rounded-full planet-hd80606 mb-1 transition-transform group-hover:scale-110 shadow-lg"></div>
+<div class="w-10 h-2 holo-orbit mb-1"></div>
+<span class="text-[10px] text-slate-200 font-mono tracking-tight flex items-center space-x-1">
+<span class="text-tacticalGreen font-bold">✓</span>
+<span class="truncate">HD 80606 b</span>
+</span>
+<span class="card-badge text-[8px] text-orange-400 font-mono mt-0.5 bg-orange-950/80 px-1 border border-orange-800 rounded">ECCENTRIQUE</span>
+</button>
+<!-- 5: TOI-700 d -->
+<button class="planet-card bg-[#041224] border border-cyan-900/80 hover:border-cyan-400 transition p-2 rounded flex flex-col items-center group cursor-pointer active:scale-95" data-planet="toi700d">
+<div class="w-9 h-9 rounded-full planet-toi700 mb-1 transition-transform group-hover:scale-110 shadow-lg"></div>
+<div class="w-10 h-2 holo-orbit mb-1"></div>
+<span class="text-[10px] text-slate-200 font-mono tracking-tight flex items-center space-x-1">
+<span class="text-tacticalGreen font-bold">✓</span>
+<span class="truncate">TOI-700 d</span>
+</span>
+<span class="card-badge text-[8px] text-emerald-400 font-mono mt-0.5 bg-emerald-950/80 px-1 border border-emerald-800 rounded">TERRESTRE</span>
+</button>
+<!-- 6: LHS 1140 b with Asset DATA:IMAGE:IMAGE_6 (Active Primary) -->
+<button class="planet-card active-card bg-[#0c263c] hud-border-amber transition p-2 rounded flex flex-col items-center group ring-2 ring-tacticalAmber shadow-amberGlow relative cursor-pointer active:scale-95" data-planet="lhs1140b">
+<div class="target-tag absolute -top-1.5 bg-amber-500 text-black font-bold text-[8px] px-1.5 rounded-full font-mono">CIBLE</div>
+<img alt="LHS 1140 b Primary Target" class="w-10 h-10 rounded-full object-cover mb-1 scale-105 shadow-amberGlow border border-amber-400" src="https://lh3.googleusercontent.com/aida/AEtjO1V13Wv6d-01hDJo83nHWi7FklguAoqj8VJgG65hB2uevqP5pDXjJToMsy7-CIoGzk195mIJXfCVOUqD4LpYEabBZC-kZ9gW4tLSEKlC7dNZILyHtreu4Kdgfgwtjfu3XYAPj791aqkdYjMKlQLbdH26tJNXiNpoHzh6g5mElOA8Jv3Q4toZ38hCjK5t-tYLHddaUfxW0wUj7mgHSWCd8Pj14cgqKen9Vn-k5FxlT7Wd"/>
+<div class="w-11 h-2 holo-orbit mb-1 border-tacticalAmber"></div>
+<span class="text-[10px] text-tacticalAmber font-bold font-mono tracking-tight flex items-center space-x-1">
+<span>✓</span>
+<span class="truncate">LHS 1140 b</span>
+</span>
+<span class="card-badge text-[8px] text-tacticalGreen font-bold font-mono mt-0.5 bg-emerald-950 px-1 border border-emerald-500 rounded">SUPER-TERRE</span>
+</button>
+<!-- 7: WASP-39 b -->
+<button class="planet-card bg-[#041224] border border-cyan-900/80 hover:border-cyan-400 transition p-2 rounded flex flex-col items-center group cursor-pointer active:scale-95" data-planet="wasp39b">
+<div class="w-9 h-9 rounded-full planet-wasp39 mb-1 transition-transform group-hover:scale-110 shadow-lg"></div>
+<div class="w-10 h-2 holo-orbit mb-1"></div>
+<span class="text-[10px] text-slate-200 font-mono tracking-tight flex items-center space-x-1">
+<span class="text-tacticalGreen font-bold">✓</span>
+<span class="truncate">WASP-39 b</span>
+</span>
+<span class="card-badge text-[8px] text-yellow-400 font-mono mt-0.5 bg-yellow-950/80 px-1 border border-yellow-800 rounded">CO₂ DÉTECTÉ</span>
+</button>
+<!-- 8: Kepler-186 f -->
+<button class="planet-card bg-[#041224] border border-cyan-900/80 hover:border-cyan-400 transition p-2 rounded flex flex-col items-center group cursor-pointer active:scale-95" data-planet="kepler186f">
+<div class="w-9 h-9 rounded-full planet-kepler186 mb-1 transition-transform group-hover:scale-110 shadow-lg"></div>
+<div class="w-10 h-2 holo-orbit mb-1"></div>
+<span class="text-[10px] text-slate-200 font-mono tracking-tight flex items-center space-x-1">
+<span class="text-tacticalGreen font-bold">✓</span>
+<span class="truncate">Kepler-186 f</span>
+</span>
+<span class="card-badge text-[8px] text-emerald-400 font-mono mt-0.5 bg-emerald-950/80 px-1 border border-emerald-800 rounded">ZONE VIE</span>
+</button>
+<!-- 9: KOI-Cand 14 -->
+<button class="planet-card bg-[#041224] border border-cyan-900/80 hover:border-cyan-400 transition p-2 rounded flex flex-col items-center group cursor-pointer active:scale-95" data-planet="koi14">
+<div class="w-9 h-9 rounded-full planet-koi14 mb-1 transition-transform group-hover:scale-110 shadow-lg"></div>
+<div class="w-10 h-2 holo-orbit mb-1"></div>
+<span class="text-[10px] text-slate-200 font-mono tracking-tight flex items-center space-x-1">
+<span class="text-tacticalGreen font-bold">✓</span>
+<span class="truncate">KOI-Cand 14</span>
+</span>
+<span class="card-badge text-[8px] text-slate-400 font-mono mt-0.5 bg-slate-900 px-1 rounded">CANDIDAT</span>
+</button>
+<!-- 10: KOI-Bin #02 -->
+<button class="planet-card bg-[#041224] border border-cyan-900/80 hover:border-cyan-400 transition p-2 rounded flex flex-col items-center group cursor-pointer active:scale-95" data-planet="koibin">
+<div class="w-9 h-9 rounded-full planet-koibin mb-1 transition-transform group-hover:scale-110 shadow-lg"></div>
+<div class="w-10 h-2 holo-orbit mb-1"></div>
+<span class="text-[10px] text-slate-200 font-mono tracking-tight flex items-center space-x-1">
+<span class="text-tacticalGreen font-bold">✓</span>
+<span class="truncate">KOI-Bin #02</span>
+</span>
+<span class="card-badge text-[8px] text-rose-400 font-mono mt-0.5 bg-rose-950/80 px-1 border border-rose-800 rounded">BINAIRE</span>
+</button>
+</div>
+</section>
+</div>
+<!-- INTERACTIVE GAME LOOP SCRIPT -->
+<script>
+  // Complete Exoplanet Database with cross-stage coherent data
+  const PLANET_DATA = {
+    lhs1140b: {
+      name: "LHS 1140 b",
+      type: "Super-Terre",
+      dist: "48.8 al (14.99 pc)",
+      atm: "N₂ - H₂O - CO₂",
+      temp: "~235 K (-38°C)",
+      hab: "89%",
+      habColor: "text-tacticalGreen",
+      habBg: "bg-emerald-950",
+      habBorder: "border-tacticalGreen/60",
+      ra: "55.10°",
+      dec: "+100.0",
+      flux: "15.28",
+      landingZone: "CHASMA AUSTRALIS",
+      altitudeInit: 3420,
+      rvInstrument: "HARPS / HIRES (K = 4.9 m/s, e = 0.04)",
+      rvDelta: "Δv = +4.92 m/s [SEUIL CONFIRMÉ]",
+      rvPeriod: "P = 24.737 j (ORBITE SYNCHRONE)",
+      rvOrbit: "VERROUILLÉE (e = 0.04)",
+      rvPath: "M 0,25 C 90,-5 160,115 250,115 C 340,115 410,15 500,25",
+      transitPoly: "0,22 270,22 290,98 360,98 380,22 500,22 500,120 0,120",
+      transitPath: "M 0,22 L 270,22 L 290,98 L 360,98 L 380,22 L 500,22",
+      transitDepth: "DEPTH: 5340 ppm (Rp/R★ = 0.052)",
+      transitDuration: "DURÉE DE TRANSIT: 2.14 h",
+      transitRadius: "1.43 R⊕ (ATMOSPHÈRE DÉTECTÉE)",
+      transitDensity: "5.6 g/cm³ (SUPER-TERRE ROCHEUSE)",
+      img: "https://lh3.googleusercontent.com/aida/AEtjO1V13Wv6d-01hDJo83nHWi7FklguAoqj8VJgG65hB2uevqP5pDXjJToMsy7-CIoGzk195mIJXfCVOUqD4LpYEabBZC-kZ9gW4tLSEKlC7dNZILyHtreu4Kdgfgwtjfu3XYAPj791aqkdYjMKlQLbdH26tJNXiNpoHzh6g5mElOA8Jv3Q4toZ38hCjK5t-tYLHddaUfxW0wUj7mgHSWCd8Pj14cgqKen9Vn-k5FxlT7Wd",
+      nodeX: 405,
+      nodeY: 115,
+      transcript: "« Commandant, l'USS HiveMind cible <strong>LHS 1140 b</strong>. Profondeur de transit : <strong class=\"text-tacticalCyan\">5340 ppm</strong>, vitesse radiale Doppler <strong class=\"text-tacticalGreen\">K = 4.9 m/s</strong>. Appuyez sur <strong class=\"text-tacticalAmber\">[ESPACE]</strong> pour lancer le swarm Bee-MoE ! »"
+    },
+    k218b: {
+      name: "K2-18 b",
+      type: "Monde Hycéan",
+      dist: "124.0 al (38.0 pc)",
+      atm: "CH₄ - CO₂ - DMS (Candidat)",
+      temp: "~279 K (+6°C)",
+      hab: "82%",
+      habColor: "text-tacticalCyan",
+      habBg: "bg-cyan-950",
+      habBorder: "border-tacticalCyan/60",
+      ra: "172.56°",
+      dec: "+07.58",
+      flux: "18.91",
+      landingZone: "MER DE THALASSA",
+      altitudeInit: 4150,
+      rvInstrument: "HARPS-N / TNG (K = 3.2 m/s, e = 0.09)",
+      rvDelta: "Δv = +3.18 m/s [SUB-NEPTUNE/HYCEAN]",
+      rvPeriod: "P = 32.94 j (SEUIL HABITABLE)",
+      rvOrbit: "STABLE (e = 0.09)",
+      rvPath: "M 0,35 C 100,0 150,118 250,118 C 350,118 400,0 500,35",
+      transitPoly: "0,20 230,20 250,105 350,105 370,20 500,20 500,120 0,120",
+      transitPath: "M 0,20 L 230,20 L 250,105 L 350,105 L 370,20 L 500,20",
+      transitDepth: "DEPTH: 8640 ppm (Rp/R★ = 0.093)",
+      transitDuration: "DURÉE DE TRANSIT: 2.71 h",
+      transitRadius: "2.61 R⊕ (MANTEAU D'EAU SUPERCRITIQUE)",
+      transitDensity: "2.4 g/cm³ (OCÉAN GLOBAL HYCÉAN)",
+      img: "https://lh3.googleusercontent.com/aida/AEtjO1XmPdII46aWb143uksF1mDs20yLB9Y5RfzTTbfsG993PvkzsVqvu00dZsE43JMFjksD1U6ngie02guqVR-xdUE0f6ZxlMSj9ruEUJXm_VKE57_9rt1m63RUYvMjP_F95N3oVvgG3QaZLwzVzwmPHFmfjcBQBJMHp9ccJBcn13zP0wWgXuBDSpITIphZNwWCfhCogc93eZ9yeMH3YZYwJrLwkqJ1Io7iQEE3Diy5xg8Z",
+      nodeX: 320,
+      nodeY: 52,
+      transcript: "« Cap sur <strong>K2-18 b</strong>. Monde Hycéan avec détection potentielle de diméthyle sulfure (DMS) par JWST NIRSpec. Bouclier hydrodynamique recommandé. »"
+    },
+    trappist1e: {
+      name: "TRAPPIST-1e",
+      type: "Monde Océanique",
+      dist: "39.5 al (12.1 pc)",
+      atm: "H₂O - O₂ (traces) - N₂",
+      temp: "~251 K (-22°C)",
+      hab: "95%",
+      habColor: "text-tacticalGreen",
+      habBg: "bg-emerald-950",
+      habBorder: "border-tacticalGreen/60",
+      ra: "346.62°",
+      dec: "-05.04",
+      flux: "12.04",
+      landingZone: "PLATEAU DE LAPLACE",
+      altitudeInit: 2800,
+      rvInstrument: "ESPRESSO / VLT (K = 1.6 m/s, e = 0.005)",
+      rvDelta: "Δv = +1.62 m/s [HABITABILITÉ ULTRA]",
+      rvPeriod: "P = 6.099 j (RÉSONANCE 3:2)",
+      rvOrbit: "CIRCULAIRE (e = 0.005)",
+      rvPath: "M 0,60 C 80,10 170,110 250,60 C 330,10 420,110 500,60",
+      transitPoly: "0,25 240,25 260,85 340,85 360,25 500,25 500,120 0,120",
+      transitPath: "M 0,25 L 240,25 L 260,85 L 340,85 L 360,25 L 500,25",
+      transitDepth: "DEPTH: 4890 ppm (Rp/R★ = 0.070)",
+      transitDuration: "DURÉE DE TRANSIT: 0.94 h",
+      transitRadius: "0.92 R⊕ (TERRE JUMELLE)",
+      transitDensity: "5.1 g/cm³ (NOYAU MÉTALLIQUE DENSE)",
+      sphereClass: "planet-trappist",
+      nodeX: 105,
+      nodeY: 68,
+      transcript: "« Cible <strong>TRAPPIST-1e</strong>. Système planétaire compact en résonance laplacienne. Paramètres d'habitabilité optimaux pour le déploiement du réseau. »"
+    },
+    kepler11f: {
+      name: "Kepler-11 f",
+      type: "Mini-Neptune Gazeux",
+      dist: "2107 al (646 pc)",
+      atm: "H₂ - He gazeux épais",
+      temp: "~544 K (+271°C)",
+      hab: "14%",
+      habColor: "text-slate-400",
+      habBg: "bg-slate-900",
+      habBorder: "border-slate-700",
+      ra: "297.10°",
+      dec: "+41.91",
+      flux: "24.12",
+      landingZone: "STRATOSPHÈRE ÉPÉENNE",
+      altitudeInit: 8000,
+      rvInstrument: "KECK / HIRES (K = 1.4 m/s, e = 0.01)",
+      rvDelta: "Δv = +1.40 m/s [ENVELOPPE VOLATILE]",
+      rvPeriod: "P = 46.68 j (MULTI-SYSTÈME)",
+      rvOrbit: "COPLANAIRE (e = 0.01)",
+      rvPath: "M 0,45 C 110,15 160,95 250,95 C 340,95 390,15 500,45",
+      transitPoly: "0,20 250,20 265,75 335,75 350,20 500,20 500,120 0,120",
+      transitPath: "M 0,20 L 250,20 L 265,75 L 335,75 L 350,20 L 500,20",
+      transitDepth: "DEPTH: 3200 ppm (Rp/R★ = 0.056)",
+      transitDuration: "DURÉE DE TRANSIT: 4.10 h",
+      transitRadius: "2.61 R⊕ (FAIBLE DENSITÉ)",
+      transitDensity: "0.7 g/cm³ (ENVELOPPE VOLATILE)",
+      sphereClass: "planet-kepler11",
+      nodeX: 520,
+      nodeY: 68,
+      transcript: "« Cible <strong>Kepler-11 f</strong> : enveloppe gazeuse diffuse, pas de sol ferme détecté. Analyse coronographique active. »"
+    },
+    hd80606b: {
+      name: "HD 80606 b",
+      type: "Jupiter Chaud Excentrique",
+      dist: "190 al (58.4 pc)",
+      atm: "Na - K - Brumes silicates",
+      temp: "~1500 K (+1227°C)",
+      hab: "02%",
+      habColor: "text-tacticalRed",
+      habBg: "bg-red-950",
+      habBorder: "border-tacticalRed/60",
+      ra: "140.65°",
+      dec: "+50.60",
+      flux: "38.50",
+      landingZone: "PÉRIÉLIE SUPRASONIQUE",
+      altitudeInit: 9500,
+      rvInstrument: "ELODIE / SOPHIE (K = 411 m/s, e = 0.933)",
+      rvDelta: "Δv = +411.2 m/s [CHOC PÉRIÉLIE]",
+      rvPeriod: "P = 111.4 j (ORBITE COMÉTAIRE)",
+      rvOrbit: "ULTRA-EXCENTRIQUE (e = 0.933)",
+      rvPath: "M 0,90 C 220,90 240,-10 250,118 C 260,-10 280,90 500,90",
+      transitPoly: "0,15 260,15 270,110 330,110 340,15 500,15 500,120 0,120",
+      transitPath: "M 0,15 L 260,15 L 270,110 L 330,110 L 340,15 L 500,15",
+      transitDepth: "DEPTH: 10400 ppm (Rp/R★ = 0.102)",
+      transitDuration: "DURÉE DE TRANSIT: 11.6 h",
+      transitRadius: "1.03 RJup (EXPANSION THERMIQUE)",
+      transitDensity: "4.8 g/cm³ (GAZEUSE SURCHAUFFÉE)",
+      sphereClass: "planet-hd80606",
+      nodeX: 740,
+      nodeY: 75,
+      transcript: "« Alerte thermique sur <strong>HD 80606 b</strong> : excentricité record e = 0.933 ! Boucliers warp déflecteurs requis. »"
+    },
+    toi700d: {
+      name: "TOI-700 d",
+      type: "Tellurique Tempérée",
+      dist: "101.4 al (31.1 pc)",
+      atm: "CO₂ prédominant - H₂O",
+      temp: "~269 K (-4°C)",
+      hab: "88%",
+      habColor: "text-tacticalGreen",
+      habBg: "bg-emerald-950",
+      habBorder: "border-tacticalGreen/60",
+      ra: "97.43°",
+      dec: "-65.67",
+      flux: "13.80",
+      landingZone: "VALLIS AURORAE",
+      altitudeInit: 3100,
+      rvInstrument: "CHIRON / ESPRESSO (K = 0.8 m/s, e = 0.03)",
+      rvDelta: "Δv = +0.86 m/s [SEUIL CONFIRMÉ]",
+      rvPeriod: "P = 37.42 j (ZONE HABITABLE)",
+      rvOrbit: "STABLE (e = 0.03)",
+      rvPath: "M 0,40 C 90,5 170,100 250,100 C 330,100 410,5 500,40",
+      transitPoly: "0,25 240,25 255,80 345,80 360,25 500,25 500,120 0,120",
+      transitPath: "M 0,25 L 240,25 L 255,80 L 345,80 L 360,25 L 500,25",
+      transitDepth: "DEPTH: 1800 ppm (Rp/R★ = 0.042)",
+      transitDuration: "DURÉE DE TRANSIT: 3.25 h",
+      transitRadius: "1.14 R⊕ (MONDE TELLURIQUE)",
+      transitDensity: "5.4 g/cm³ (ANALOGUE TERRESTRE)",
+      sphereClass: "planet-toi700",
+      nodeX: 170,
+      nodeY: 280,
+      transcript: "« <strong>TOI-700 d</strong> verrouillée. Étoile M-naine très stable sans éruptions solaires violentes. Site d'exploration prioritaire. »"
+    },
+    wasp39b: {
+      name: "WASP-39 b",
+      type: "Saturne Chaud Gonflé",
+      dist: "700 al (215 pc)",
+      atm: "CO₂ - SO₂ - H₂O - CO",
+      temp: "~1173 K (+900°C)",
+      hab: "08%",
+      habColor: "text-tacticalAmber",
+      habBg: "bg-amber-950",
+      habBorder: "border-tacticalAmber/60",
+      ra: "217.15°",
+      dec: "-03.44",
+      flux: "29.70",
+      landingZone: "COUDE PHOTOCHIMIQUE",
+      altitudeInit: 7200,
+      rvInstrument: "CORALIE / HARPS (K = 38.0 m/s, e = 0.0)",
+      rvDelta: "Δv = +38.2 m/s [TRANSMISSION JWST]",
+      rvPeriod: "P = 4.055 j (ORBITE SERRÉE)",
+      rvOrbit: "CIRCULARISÉE (e = 0.00)",
+      rvPath: "M 0,20 C 80,-10 160,115 250,115 C 340,115 420,-10 500,20",
+      transitPoly: "0,20 220,20 235,108 365,108 380,20 500,20 500,120 0,120",
+      transitPath: "M 0,20 L 220,20 L 235,108 L 365,108 L 380,20 L 500,20",
+      transitDepth: "DEPTH: 18500 ppm (Rp/R★ = 0.136)",
+      transitDuration: "DURÉE DE TRANSIT: 2.80 h",
+      transitRadius: "1.27 RJup (RAYON SUPER-GONFLÉ)",
+      transitDensity: "0.28 g/cm³ (GAZEUX TRÈS PEU DENSE)",
+      sphereClass: "planet-wasp39",
+      nodeX: 680,
+      nodeY: 270,
+      transcript: "« Analyse spectrophotométrique de <strong>WASP-39 b</strong> : signature nette de dioxyde de soufre (SO₂) photochimique ! »"
+    },
+    kepler186f: {
+      name: "Kepler-186 f",
+      type: "Terre Tempérée",
+      dist: "582 al (178 pc)",
+      atm: "N₂ - CO₂ possible",
+      temp: "~200 K (-73°C)",
+      hab: "86%",
+      habColor: "text-tacticalGreen",
+      habBg: "bg-emerald-950",
+      habBorder: "border-tacticalGreen/60",
+      ra: "298.65°",
+      dec: "+44.02",
+      flux: "11.15",
+      landingZone: "PLAINE DE GLACE BORÉALE",
+      altitudeInit: 2950,
+      rvInstrument: "KECK / GEMINI N (K = 0.6 m/s, e = 0.04)",
+      rvDelta: "Δv = +0.64 m/s [SIGNAL VALIDÉ]",
+      rvPeriod: "P = 129.9 j (ZONE DE VIE EXTERNE)",
+      rvOrbit: "STABLE (e = 0.04)",
+      rvPath: "M 0,55 C 90,25 170,85 250,85 C 330,85 410,25 500,55",
+      transitPoly: "0,24 245,24 260,78 340,78 355,24 500,24 500,120 0,120",
+      transitPath: "M 0,24 L 245,24 L 260,78 L 340,78 L 355,24 L 500,24",
+      transitDepth: "DEPTH: 1320 ppm (Rp/R★ = 0.036)",
+      transitDuration: "DURÉE DE TRANSIT: 5.30 h",
+      transitRadius: "1.17 R⊕ (COMPOSITION SILICATÉE)",
+      transitDensity: "5.3 g/cm³ (TERRE JUMELLE FROIDE)",
+      sphereClass: "planet-kepler186",
+      nodeX: 820,
+      nodeY: 275,
+      transcript: "« Cap sur <strong>Kepler-186 f</strong>. Première exoplanète de taille terrestre confirmée dans la zone habitable de son étoile hôte. »"
+    },
+    koi14: {
+      name: "KOI-Cand 14",
+      type: "Candidat Rocheux",
+      dist: "1420 al (435 pc)",
+      atm: "Sous-analyse",
+      temp: "~288 K (+15°C)",
+      hab: "74%",
+      habColor: "text-tacticalCyan",
+      habBg: "bg-cyan-950",
+      habBorder: "border-tacticalCyan/60",
+      ra: "291.33°",
+      dec: "+48.21",
+      flux: "14.30",
+      landingZone: "PLATEAU KEPLER-14",
+      altitudeInit: 3300,
+      rvInstrument: "HIRES / SOPHIE (K = 1.1 m/s, e = 0.08)",
+      rvDelta: "Δv = +1.12 m/s [SIGNAL VALIDÉ]",
+      rvPeriod: "P = 18.22 j (BIAIS-0)",
+      rvOrbit: "STABLE (e = 0.08)",
+      rvPath: "M 0,50 C 90,15 170,90 250,90 C 330,90 410,15 500,50",
+      transitPoly: "0,24 240,24 255,82 345,82 360,24 500,24 500,120 0,120",
+      transitPath: "M 0,24 L 240,24 L 255,82 L 345,82 L 360,24 L 500,24",
+      transitDepth: "DEPTH: 2900 ppm (Rp/R★ = 0.054)",
+      transitDuration: "DURÉE DE TRANSIT: 2.40 h",
+      transitRadius: "1.32 R⊕ (CANDIDAT SUPER-TERRE)",
+      transitDensity: "4.9 g/cm³ (ANALOGUE ROCHEUX)",
+      sphereClass: "planet-koi14",
+      nodeX: 315,
+      nodeY: 340,
+      transcript: "« Suivi spectrophotométrique sur <strong>KOI-Cand 14</strong>. Courbe de lumière sans éclipse secondaire apparente. »"
+    },
+    koibin: {
+      name: "KOI-Bin #02",
+      type: "Circumbinaire",
+      dist: "890 al (273 pc)",
+      atm: "Mélange ionisé",
+      temp: "~380 K (+107°C)",
+      hab: "31%",
+      habColor: "text-rose-400",
+      habBg: "bg-rose-950",
+      habBorder: "border-rose-800",
+      ra: "289.44°",
+      dec: "+42.50",
+      flux: "21.60",
+      landingZone: "POINT NEUTRE GRAVITATIONNEL",
+      altitudeInit: 4900,
+      rvInstrument: "TRES / KECK (K = 12.4 m/s, e = 0.16)",
+      rvDelta: "Δv = +12.4 m/s [DOUBLE RAIE]",
+      rvPeriod: "P = 78.4 j (ORBITE TATOOINE)",
+      rvOrbit: "CIRCUMBINAIRE (e = 0.16)",
+      rvPath: "M 0,30 C 80,0 130,110 220,110 C 310,110 380,10 500,30",
+      transitPoly: "0,22 230,22 250,92 350,92 370,22 500,22 500,120 0,120",
+      transitPath: "M 0,22 L 230,22 L 250,92 L 350,92 L 370,22 L 500,22",
+      transitDepth: "DEPTH: 7100 ppm (Rp/R★ = 0.084)",
+      transitDuration: "DURÉE DE TRANSIT: 4.80 h",
+      transitRadius: "3.10 R⊕ (GÉANTE GLACÉE / DOUBLE ÉTOILE)",
+      transitDensity: "1.9 g/cm³ (CONFIGURATION BIAXIALE)",
+      sphereClass: "planet-koibin",
+      nodeX: 740,
+      nodeY: 340,
+      transcript: "« Système circumbinaire <strong>KOI-Bin #02</strong> en configuration Tatooine. Calcul trigonométrique des éclipses croisées enclenché. »"
+    }
+  };
+
+  let currentPlanetKey = 'lhs1140b';
+  let currentStage = 1;
+  let isVoiceActive = true;
+  let ooliteAltitude = 3420;
+  let ooliteSpeed = 84.2;
+  let swarmSatCount = 128;
+
+  // MISSION STAGE SWITCHER & PERSISTENCE
+  const stageButtons = document.querySelectorAll('.stage-btn');
+  const stagePanels = {
+    1: document.getElementById('viewport-stage-1'),
+    2: document.getElementById('viewport-stage-2'),
+    3: document.getElementById('viewport-stage-3'),
+    4: document.getElementById('viewport-stage-4')
+  };
+
+  const stageDescriptions = {
+    1: "ÉTAPE 1 // PILOTEZ L'USS HIVEMIND (ZQSD / FLÈCHES / CLIC) VERS UNE ÉTOILE PUIS [ESPACE / CLIC] POUR DÉPLOYER LE SWARM",
+    2: "ÉTAPE 2 // DÉPLOIEMENT DU SWARM BEE EN COURS // SYNCHRONISATION LAGRANGE L1-L5 & ÉJECTION DE 128 MICROSATELLITES",
+    3: "ÉTAPE 3 // ATTERRISSAGE OOLITE PLANETFALL // CONTRÔLE DES RÉTRO-FUSÉES [Z/HAUT] POUR FREINER SOUS 95 m/s",
+    4: "ÉTAPE 4 // SPECTROGRAMME NIRSPEC JWST // VÉRIFICATION DE LA 3ÈME LOI DE KEPLER (T²/a³ = k) & DÉTECTION BIOSIGNATURE"
+  };
+
+  const stageProgressLabels = {
+    1: "STAGE 1/4 [LOCK STELLAIRE]",
+    2: "STAGE 2/4 [SWARM BEE SYNCHRO]",
+    3: "STAGE 3/4 [OOLITE PLANETFALL]",
+    4: "STAGE 4/4 [NIRSPEC ATMOSPHERE CONFIRMED]"
+  };
+
+  function switchStage(stageNum) {
+    currentStage = parseInt(stageNum);
+    
+    // Update Stage Buttons Style
+    stageButtons.forEach(btn => {
+      const s = parseInt(btn.getAttribute('data-stage'));
+      if (s === currentStage) {
+        btn.className = 'stage-btn bg-tacticalCyan text-black font-bold px-3 py-1 border border-cyan-200 shadow-cyanGlow rounded flex items-center space-x-1 cursor-pointer transition active:scale-95';
+      } else {
+        btn.className = 'stage-btn bg-cyan-950/70 hover:bg-cyan-900/80 text-cyan-300 px-2.5 py-1 border border-cyan-800 rounded transition cursor-pointer flex items-center space-x-1';
+      }
+    });
+
+    // Toggle central viewport display
+    for (let i = 1; i <= 4; i++) {
+      if (i === currentStage) {
+        stagePanels[i].classList.remove('hidden');
+      } else {
+        stagePanels[i].classList.add('hidden');
+      }
+    }
+
+    // Update Ribbon labels
+    document.getElementById('instruction-text').textContent = stageDescriptions[currentStage];
+    document.getElementById('mission-progress-label').textContent = stageProgressLabels[currentStage];
+
+    // Refresh context for stages 2, 3, 4
+    if (currentStage === 2) {
+      document.getElementById('current-stage2-planet').textContent = `${PLANET_DATA[currentPlanetKey].name} (${PLANET_DATA[currentPlanetKey].type})`;
+    } else if (currentStage === 3) {
+      document.getElementById('landing-zone-name').textContent = PLANET_DATA[currentPlanetKey].landingZone;
+      const bgImg = document.getElementById('oolite-bg-img');
+      if (PLANET_DATA[currentPlanetKey].img) {
+        bgImg.src = PLANET_DATA[currentPlanetKey].img;
+      }
+    } else if (currentStage === 4) {
+      document.getElementById('query-preview').textContent = `SELECT pl_name, pl_rade, pl_masse, st_teff FROM ps WHERE pl_name = '${PLANET_DATA[currentPlanetKey].name}';`;
+    }
+  }
+
+  stageButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      switchStage(btn.getAttribute('data-stage'));
+    });
+  });
+
+  // TARGET LOCKING FUNCTION
+  function selectPlanet(planetKey) {
+    const data = PLANET_DATA[planetKey];
+    if (!data) return;
+    currentPlanetKey = planetKey;
+
+    // 1. Navigation ribbon
+    document.getElementById('nav-ra').textContent = data.ra;
+    document.getElementById('nav-dec').textContent = data.dec;
+    document.getElementById('nav-flux').textContent = data.flux;
+    document.getElementById('vector-dest').textContent = data.name;
+    document.getElementById('target-badge').textContent = `${data.name} [${data.type.toUpperCase()}]`;
+
+    // 2. Central Map Vector & Inspector Drawer
+    document.getElementById('drawer-title').textContent = `${data.name} (${data.type})`;
+    document.getElementById('drawer-dist').textContent = data.dist;
+    document.getElementById('drawer-atm').textContent = data.atm;
+    document.getElementById('drawer-temp').textContent = data.temp;
+
+    const habBadge = document.getElementById('drawer-hab-badge');
+    habBadge.textContent = `HABITABILITÉ: ${data.hab}`;
+    habBadge.className = `text-[10px] ${data.habBg} border ${data.habBorder} ${data.habColor} px-1.5 py-0.2 rounded font-mono font-bold`;
+
+    const imgEl = document.getElementById('drawer-planet-img');
+    const sphereEl = document.getElementById('drawer-planet-sphere');
+    if (data.img) {
+      imgEl.src = data.img;
+      imgEl.classList.remove('hidden');
+      sphereEl.classList.add('hidden');
+    } else if (data.sphereClass) {
+      imgEl.classList.add('hidden');
+      sphereEl.className = `w-full h-full rounded-full ${data.sphereClass}`;
+      sphereEl.classList.remove('hidden');
+    }
+
+    // 3. Central Map SVG Vector Line and Cone
+    const targetX = data.nodeX + 35;
+    const targetY = data.nodeY + 35;
+    const cone = document.getElementById('svg-sensor-cone');
+    const lockLine = document.getElementById('svg-lock-line');
+    cone.setAttribute('points', `265,115 ${targetX - 25},${targetY - 15} ${targetX + 35},${targetY + 45} 265,115`);
+    lockLine.setAttribute('x1', '265');
+    lockLine.setAttribute('y1', '115');
+    lockLine.setAttribute('x2', targetX);
+    lockLine.setAttribute('y2', targetY);
+
+    // 4. Update RV Oscilloscope & Kepler Transit Curve
+    document.getElementById('rv-instrument-header').textContent = data.rvInstrument;
+    document.getElementById('rv-delta-badge').textContent = data.rvDelta;
+    document.getElementById('rv-period-badge').textContent = data.rvPeriod;
+    document.getElementById('rv-orbit-stat').textContent = data.rvOrbit;
+    document.getElementById('svg-rv-path').setAttribute('d', data.rvPath);
+
+    document.getElementById('svg-transit-poly').setAttribute('points', data.transitPoly);
+    document.getElementById('svg-transit-path').setAttribute('d', data.transitPath);
+    document.getElementById('transit-duration-badge').textContent = data.transitDuration;
+    document.getElementById('transit-depth-badge').textContent = data.transitDepth;
+    document.getElementById('transit-radius-stat').textContent = data.transitRadius;
+    document.getElementById('transit-density-stat').textContent = data.transitDensity;
+
+    // 5. Update Comms Transcript
+    document.getElementById('voice-transcript').innerHTML = data.transcript;
+
+    // 6. Update Bottom Rack Active Styling
+    document.querySelectorAll('.planet-card').forEach(card => {
+      const pKey = card.getAttribute('data-planet');
+      const tag = card.querySelector('.target-tag');
+      if (pKey === planetKey) {
+        card.classList.add('active-card', 'ring-2', 'ring-tacticalAmber');
+        card.classList.remove('bg-[#041224]', 'border-cyan-900/80');
+        if (!tag) {
+          const newTag = document.createElement('div');
+          newTag.className = 'target-tag absolute -top-1.5 bg-amber-500 text-black font-bold text-[8px] px-1.5 rounded-full font-mono';
+          newTag.textContent = 'CIBLE';
+          card.appendChild(newTag);
+        }
+      } else {
+        card.classList.remove('active-card', 'ring-2', 'ring-tacticalAmber');
+        card.classList.add('bg-[#041224]', 'border-cyan-900/80');
+        if (tag) tag.remove();
+      }
+    });
+
+    // 7. Reset Oolite altitude for current planet
+    ooliteAltitude = data.altitudeInit || 3420;
+    document.getElementById('altitude-tape').textContent = `${ooliteAltitude.toLocaleString()} m`;
+    document.getElementById('landing-zone-name').textContent = data.landingZone;
+    document.getElementById('current-stage2-planet').textContent = `${data.name} (${data.type})`;
+    document.getElementById('query-preview').textContent = `SELECT pl_name, pl_rade, pl_masse, st_teff FROM ps WHERE pl_name = '${data.name}';`;
+  }
+
+  // Click handlers on bottom cards
+  document.querySelectorAll('.planet-card').forEach(card => {
+    card.addEventListener('click', () => {
+      selectPlanet(card.getAttribute('data-planet'));
+    });
+  });
+
+  // Click handlers on Viewport planet nodes
+  document.querySelectorAll('.planet-node').forEach(node => {
+    node.addEventListener('click', () => {
+      selectPlanet(node.getAttribute('data-planet'));
+    });
+  });
+
+  // Toast notifier
+  const toast = document.getElementById('drawer-toast');
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.remove('hidden');
+    setTimeout(() => toast.classList.add('hidden'), 2500);
+  }
+
+  // Quick Action Buttons
+  document.getElementById('btn-engage-warp').addEventListener('click', () => {
+    showToast('WARP 4.8 c ENGAGÉ SUR ' + PLANET_DATA[currentPlanetKey].name.toUpperCase());
+  });
+  document.getElementById('btn-probe-lois').addEventListener('click', () => {
+    switchStage(2);
+  });
+  document.getElementById('btn-nirspec').addEventListener('click', () => {
+    switchStage(4);
+  });
+
+  // STAGE 2: SWARM BEE CONTROLS
+  document.getElementById('btn-deploy-probe').addEventListener('click', () => {
+    swarmSatCount += 4;
+    document.getElementById('sat-count').textContent = `${swarmSatCount} / ${swarmSatCount}`;
+    showToast(`+4 PROBES MOE DÉPLOYÉES SUR ${PLANET_DATA[currentPlanetKey].name}`);
+  });
+
+  document.getElementById('btn-sync-phase').addEventListener('click', () => {
+    showToast('PHASAGE L1-L2 ACQUIS À 100%');
+  });
+
+  // STAGE 3: OOLITE PLANETFALL RETRO-THRUST BURNING
+  function fireRetroBurn() {
+    ooliteSpeed = Math.max(12.0, ooliteSpeed - 14.5);
+    ooliteAltitude = Math.max(40, ooliteAltitude - 120);
+    document.getElementById('speed-tape').textContent = `${ooliteSpeed.toFixed(1)} m/s`;
+    document.getElementById('altitude-tape').textContent = `${Math.round(ooliteAltitude).toLocaleString()} m`;
+    
+    const terrainAlert = document.getElementById('terrain-alert');
+    if (ooliteSpeed <= 95.0) {
+      terrainAlert.textContent = 'APPROCHE STABILISÉE (< 95 m/s) // TOUCHDOWN AUTORISÉ';
+      terrainAlert.className = 'text-[11px] font-bold text-tacticalGreen bg-black/80 px-2 py-0.5 border border-tacticalGreen mt-2';
+    } else {
+      terrainAlert.textContent = 'ALERTE: VITESSE > 95 m/s // BRÛLEZ LES RÉTRO-FUSÉES';
+      terrainAlert.className = 'text-[11px] font-bold text-tacticalRed bg-black/80 px-2 py-0.5 border border-tacticalRed mt-2 animate-pulse';
+    }
+  }
+
+  document.getElementById('btn-retro-burn').addEventListener('click', fireRetroBurn);
+
+  document.getElementById('btn-gear-toggle').addEventListener('click', () => {
+    showToast('TRAIN D\'ATTERRISSAGE DÉPLOYÉ & VERROUILLÉ');
+  });
+
+  // STAGE 4: ADQL / KEPLER CHECK
+  document.getElementById('btn-run-adql').addEventListener('click', () => {
+    showToast('TAP NASA ADQL: ENREGISTREMENT SPECTRAL RETROUVÉ');
+  });
+  document.getElementById('btn-verify-kepler').addEventListener('click', () => {
+    showToast('3ÈME LOI DE KEPLER CONFIRMÉE: T²/a³ = 1.0000 ± 0.0002');
+  });
+
+  // VOICE SYNTHESIS BUTTON TOGGLE
+  const voiceBtn = document.getElementById('voice-btn');
+  const voiceStatus = document.getElementById('voice-status');
+  voiceBtn.addEventListener('click', () => {
+    isVoiceActive = !isVoiceActive;
+    if (isVoiceActive) {
+      voiceStatus.textContent = 'ACTIF';
+      voiceStatus.className = 'text-[9px] bg-black/40 text-amber-200 px-1 py-0.2 rounded font-mono';
+      voiceBtn.classList.remove('opacity-50');
+    } else {
+      voiceStatus.textContent = 'MUET';
+      voiceStatus.className = 'text-[9px] bg-red-950 text-tacticalRed px-1 py-0.2 rounded font-mono';
+      voiceBtn.classList.add('opacity-50');
+    }
+  });
+
+  // KEYBOARD NAVIGATION
+  const planetKeysList = Object.keys(PLANET_DATA);
+  window.addEventListener('keydown', (e) => {
+    // 1-4 Switch Stages
+    if (['1', '2', '3', '4'].includes(e.key)) {
+      switchStage(e.key);
+    }
+    // SPACE = Deploy / Lock
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (currentStage === 3) {
+        fireRetroBurn();
+      } else {
+        switchStage(2);
+      }
+    }
+    // Z or ArrowUp in Stage 3 = Retro burn
+    if (e.key === 'z' || e.key === 'Z' || e.key === 'ArrowUp') {
+      if (currentStage === 3) {
+        e.preventDefault();
+        fireRetroBurn();
+      }
+    }
+    // Navigation between planets
+    if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') {
+      let idx = planetKeysList.indexOf(currentPlanetKey);
+      idx = (idx + 1) % planetKeysList.length;
+      selectPlanet(planetKeysList[idx]);
+    }
+    if (e.key === 'q' || e.key === 'Q' || e.key === 'ArrowLeft') {
+      let idx = planetKeysList.indexOf(currentPlanetKey);
+      idx = (idx - 1 + planetKeysList.length) % planetKeysList.length;
+      selectPlanet(planetKeysList[idx]);
+    }
+  });
+
+  // SIMULATED TICK OSCILLATION
+  let tick = 4219.04;
+  setInterval(() => {
+    tick += 0.08;
+    const tickEl = document.getElementById('tick-counter');
+    if (tickEl) tickEl.textContent = tick.toFixed(2);
+  }, 1000);
+</script>
+</body></html>

@@ -1,0 +1,17 @@
+{
+  "name": "projects/10018415280079892710/screens/435726215de741b7bb20b0fd8d2bc566",
+  "title": "USS Hivemind - Stage 4: JWST / LOIS",
+  "screenshot": {
+    "name": "projects/10018415280079892710/screens/435726215de741b7bb20b0fd8d2bc566/fileEntries/screenshot",
+    "downloadUrl": "https://stitch.googleapis.com/v1/projects/10018415280079892710/files/screenshot_00065ee22b963dd1023bd20c302f0a1b:download",
+    "mimeType": "image/png"
+  },
+  "htmlCode": {
+    "name": "projects/10018415280079892710/screens/435726215de741b7bb20b0fd8d2bc566/fileEntries/html",
+    "downloadUrl": "https://stitch.googleapis.com/v1/projects/10018415280079892710/files/435726215de741b7bb20b0fd8d2bc566:download",
+    "mimeType": "text/html"
+  },
+  "width": "780",
+  "height": "2562",
+  "deviceType": "MOBILE"
+}

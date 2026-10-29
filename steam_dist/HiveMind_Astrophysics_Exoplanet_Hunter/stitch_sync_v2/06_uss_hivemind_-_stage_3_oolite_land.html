@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><meta content="mobile_tab" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100vw;margin:0;padding:0;background-color:#0c141f;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-background": "#dbe3f3", "secondary-container": "#34ff8d", "primary-fixed": "#7df4ff", "on-primary": "#00363a", "outline": "#849495", "tertiary": "#fff4e8", "background": "#0c141f", "surface": "#0c141f", "on-secondary": "#003919", "on-primary-container": "#006970", "primary": "#dbfcff", "surface-variant": "#2e3542", "tertiary-container": "#ffd386", "surface-container": "#18202c", "on-secondary-fixed-variant": "#005228", "on-error-container": "#ffdad6", "inverse-surface": "#dbe3f3", "error": "#ffb4ab", "primary-fixed-dim": "#00dbe9", "primary-container": "#00f0ff", "surface-bright": "#323a46", "secondary-fixed": "#60ff99", "surface-container-highest": "#2e3542", "on-tertiary-fixed": "#271900", "on-surface-variant": "#b9cacb", "surface-container-high": "#232a37", "secondary": "#f5fff3", "surface-container-lowest": "#070e1a", "on-primary-fixed": "#002022", "on-primary-fixed-variant": "#004f54", "surface-dim": "#0c141f", "on-error": "#690005", "tertiary-fixed": "#ffdea8", "on-tertiary-fixed-variant": "#5e4200", "on-surface": "#dbe3f3", "on-secondary-container": "#007239", "error-container": "#93000a", "on-tertiary-container": "#7d5800", "on-tertiary": "#412d00", "inverse-on-surface": "#29313d", "surface-container-low": "#141c28", "surface-tint": "#00dbe9", "outline-variant": "#3b494b", "inverse-primary": "#006970", "on-secondary-fixed": "#00210c", "secondary-fixed-dim": "#00e479", "tertiary-fixed-dim": "#ffba20" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-md": "0.5rem", "space-sm": "0.25rem", "gutter": "0.5rem", "space-lg": "1rem", "margin-mobile": "0.5rem", "space-xl": "1.5rem", "margin": "1rem", "space-xs": "0.125rem", "gutter-mobile": "0.25rem" }, "fontFamily": { "headline-lg": ["Space Grotesk"], "headline-lg-mobile": ["Space Grotesk"], "label-lg": ["JetBrains Mono"], "body-md": ["JetBrains Mono"], "headline-xl-mobile": ["Space Grotesk"], "headline-sm": ["Space Grotesk"], "label-sm": ["JetBrains Mono"], "body-lg": ["JetBrains Mono"], "headline-md": ["Space Grotesk"], "headline-xl": ["Space Grotesk"], "label-md": ["JetBrains Mono"], "body-sm": ["JetBrains Mono"] }, "fontSize": { "headline-lg": ["28px", { "lineHeight": "36px", "letterSpacing": "0.08em", "fontWeight": "600" }], "headline-lg-mobile": ["22px", { "lineHeight": "28px", "letterSpacing": "0.06em", "fontWeight": "600" }], "label-lg": ["12px", { "lineHeight": "16px", "letterSpacing": "0.15em", "fontWeight": "700" }], "body-md": ["13px", { "lineHeight": "18px", "letterSpacing": "0.01em", "fontWeight": "400" }], "headline-xl-mobile": ["28px", { "lineHeight": "34px", "letterSpacing": "0.1em", "fontWeight": "700" }], "headline-sm": ["16px", { "lineHeight": "22px", "letterSpacing": "0.04em", "fontWeight": "500" }], "label-sm": ["9px", { "lineHeight": "12px", "letterSpacing": "0.1em", "fontWeight": "500" }], "body-lg": ["15px", { "lineHeight": "22px", "letterSpacing": "0.02em", "fontWeight": "400" }], "headline-md": ["20px", { "lineHeight": "26px", "letterSpacing": "0.05em", "fontWeight": "600" }], "headline-xl": ["40px", { "lineHeight": "48px", "letterSpacing": "0.12em", "fontWeight": "700" }], "label-md": ["10px", { "lineHeight": "14px", "letterSpacing": "0.12em", "fontWeight": "600" }], "body-sm": ["11px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "400" }] } } } }</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface text-on-surface font-body-md text-body-md flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.4)] pt-safe"><div class="h-28 px-margin-mobile flex flex-col justify-between py-space-xs"><div class="flex items-center justify-between gap-space-sm"><div class="flex items-center gap-space-sm min-w-0"><div class="w-7 h-7 bg-primary-container/20 flex items-center justify-center text-primary-container"><span class="material-symbols-outlined text-[18px]">rocket_launch</span></div><div class="flex flex-col min-w-0"><div class="flex items-center gap-space-xs"><span class="font-label-md text-label-md text-primary font-bold truncate">HIVEMIND</span><span class="font-label-sm text-label-sm text-primary-fixed-dim">NCC-31337</span></div><span class="font-label-sm text-label-sm text-on-surface-variant truncate">v4.6 // Tactical Hud</span></div></div><div class="flex items-center gap-space-xs"><div class="bg-surface-container-high px-space-xs py-0.5 flex items-center gap-space-xs"><span class="w-1.5 h-1.5 rounded-full bg-secondary-container animate-pulse"></span><span class="font-label-sm text-label-sm text-secondary-fixed">55.10|238.92</span></div><div class="flex items-center bg-surface-container-low px-space-xs py-0.5"><button class="font-label-sm text-label-sm text-primary-container px-0.5">EN</button><span class="font-label-sm text-label-sm text-outline">/</span><button class="font-label-sm text-label-sm text-on-surface-variant px-0.5">FR</button><span class="font-label-sm text-label-sm text-outline">/</span><button class="font-label-sm text-label-sm text-on-surface-variant px-0.5">ZH</button></div><button aria-label="Voice HUD Status" class="min-h-[44px] min-w-[44px] flex items-center justify-center bg-surface-container-high text-primary-container"><span class="font-label-sm text-label-sm font-bold">VOIX</span></button><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida/AEtjO1VncIjkS3k_yS6pvWMKgJhQRARxt-oaBJoEGzfJXw8hgtT1Iny6S2eITsP3rdpb15yrU68LyrmEisht0DPZQJyrP4p9rfXz7hvuhMQL_qcvKBZaHGAufvQDF4Y1BjEJijpwNAfP9nAUXSCQ9gGnY-mcOQ1joChsyfsC7Nrc0jk-brOjfroI07jgbH8lsdgkswBUQ3Z50RAEa3YMc3CnTnxsEPXDUkyqr_feLT59dklI"/></div></div><div class="flex items-center justify-between gap-space-xs overflow-x-auto no-scrollbar py-space-xs" role="tablist"><button class="flex-1 min-h-[44px] px-space-xs flex items-center justify-center bg-primary-container/20 text-primary-container font-label-md text-label-md tracking-wider uppercase truncate"><span class="text-primary-fixed-dim mr-1">1.</span>GALAXIE</button><button class="flex-1 min-h-[44px] px-space-xs flex items-center justify-center bg-surface-container-low text-on-surface-variant font-label-md text-label-md tracking-wider uppercase truncate"><span class="text-outline mr-1">2.</span>ORBIT BEE</button><button class="flex-1 min-h-[44px] px-space-xs flex items-center justify-center bg-surface-container-low text-on-surface-variant font-label-md text-label-md tracking-wider uppercase truncate"><span class="text-outline mr-1">3.</span>OOLITE LAND</button><button class="flex-1 min-h-[44px] px-space-xs flex items-center justify-center bg-surface-container-low text-on-surface-variant font-label-md text-label-md tracking-wider uppercase truncate"><span class="text-outline mr-1">4.</span>JWST/LOIS</button></div></div></header><main class="flex flex-col relative w-full pt-28 pb-20 bg-surface flex-1"><div class="flex flex-col w-full px-margin-mobile space-y-space-sm pb-space-xl">
+<!-- STAGE ACTIVE INDICATOR / TELEMETRY STATUS BANNER -->
+<div class="w-full bg-surface-container-high p-space-sm shadow-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center space-x-space-sm">
+<span class="inline-flex items-center justify-center w-5 h-5 bg-error-container text-error text-label-sm font-label-sm font-bold">3</span>
+<div class="flex flex-col">
+<div class="flex items-center space-x-space-xs">
+<span class="font-headline-sm text-headline-sm text-primary font-bold tracking-wider">STAGE 3: OOLITE LAND</span>
+<span class="w-2 h-2 rounded-full bg-secondary-container animate-ping"></span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-widest">Planetary Vector Lock // Chasma Australis</span>
+</div>
+</div>
+<div class="flex items-center space-x-space-xs text-right">
+<div class="bg-surface-container-lowest px-space-xs py-0.5">
+<span class="font-label-sm text-label-sm text-secondary-fixed font-bold">[RADAR-SAR: ACTIVE]</span>
+</div>
+<div class="bg-surface-container-lowest px-space-xs py-0.5">
+<span class="font-label-sm text-label-sm text-tertiary-fixed font-bold">G-LOAD 1.84</span>
+</div>
+</div>
+</div>
+</div>
+<!-- ABLATIVE ENTRY WARNING NOTICE (High-Visibility HUD Alert) -->
+<div class="w-full bg-error-container p-space-sm shadow-md">
+<div class="flex items-center justify-between text-on-error-container">
+<div class="flex items-center space-x-space-xs">
+<span class="material-symbols-outlined text-[18px] text-error animate-pulse">warning</span>
+<span class="font-label-md text-label-md font-bold tracking-wider uppercase">Atmospheric Ingress // Ablative Shield: 820°C</span>
+</div>
+<div class="flex items-center space-x-space-xs">
+<span class="font-label-sm text-label-sm bg-surface-container-lowest text-secondary-fixed px-space-xs py-0.5 uppercase tracking-widest">Retro Engaged</span>
+</div>
+</div>
+</div>
+<!-- CENTRAL SYNTHETIC APERTURE RADAR (SAR) DESCENT VIEWPORT -->
+<div class="relative w-full bg-surface-container-lowest overflow-hidden shadow-xl">
+<!-- Visual Descent Canvas / Terrain Contour Background -->
+<div class="relative w-full h-72 overflow-hidden bg-surface-container-lowest">
+<img class="w-full h-full object-cover opacity-60" data-alt="High contrast military cockpit radar display showing synthetic aperture radar wireframe terrain elevation contours of alien canyon Chasma Australis in neon cyan and emerald green lines over a pitch black deep space planetary surface with landing target reticles and numeric telemetry." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCcRpovP96y_vdicvyjTbkSc4Z42bB4s0efspZmaWYiO0Kg0fGfeCHg-L2grpkXn9Zu_i3IZT11UuK-82PJhorZA3-YNBt-eoetv0ekMn3NcdZz_fdlFMGdPZgNBbRaf3fltJ9_f9PmAjv0WRKRFdQ4ljSTAyLRLg3tiz0yr2zPE9zT_V_p541J2iMKlA9jAslWbU_1j6WbnAMRoIOHm75IjqkIQgG8m7nz_9HUJZJw"/>
+<!-- Dark Sci-Fi Gradient Scrim -->
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-lowest via-transparent to-surface-container-lowest/80 pointer-events-none"></div>
+<!-- HUD Reticle & Artificial Horizon Overlay -->
+<div class="absolute inset-0 p-space-sm flex flex-col justify-between pointer-events-none">
+<!-- Top HUD Metrology -->
+<div class="flex justify-between items-start">
+<div class="bg-surface-container/80 backdrop-blur-sm p-space-xs space-y-0.5">
+<div class="font-label-sm text-label-sm text-primary-fixed-dim">PITCH: +04.2°</div>
+<div class="font-label-sm text-label-sm text-primary-fixed-dim">ROLL: -00.8°</div>
+<div class="font-label-sm text-label-sm text-primary-fixed-dim">YAW: 114.6°</div>
+</div>
+<div class="bg-surface-container/80 backdrop-blur-sm p-space-xs text-right space-y-0.5">
+<div class="font-label-sm text-label-sm text-secondary-fixed">BEACON: [OOL-L03]</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant">BEARING: 042° TRUE</div>
+<div class="font-label-sm text-label-sm text-primary">TERRAIN: RUGGED</div>
+</div>
+</div>
+<!-- Center Crosshair & Attitude Horizon Indicator -->
+<div class="relative w-full flex items-center justify-center my-auto">
+<!-- Horizon Line Left -->
+<div class="w-20 h-0.5 bg-primary-container/80"></div>
+<!-- Center Bore Sight Reticle -->
+<div class="w-12 h-12 flex items-center justify-center relative mx-2">
+<svg class="w-full h-full text-primary-container" viewbox="0 0 48 48">
+<circle cx="24" cy="24" fill="none" r="18" stroke="currentColor" stroke-dasharray="4 2" stroke-width="1.5"></circle>
+<circle cx="24" cy="24" fill="currentColor" r="3"></circle>
+<path d="M 24 2 L 24 8 M 24 40 L 24 46 M 2 24 L 8 24 M 40 24 L 46 24" stroke="currentColor" stroke-width="1.5"></path>
+</svg>
+<span class="absolute -top-3 font-label-sm text-[8px] text-secondary-fixed font-bold tracking-widest">TGT LOCK</span>
+</div>
+<!-- Horizon Line Right -->
+<div class="w-20 h-0.5 bg-primary-container/80"></div>
+</div>
+<!-- Bottom Dynamic Alt & Speed Tape inside Viewport -->
+<div class="flex justify-between items-end">
+<div class="bg-surface-container/90 backdrop-blur-sm p-space-xs">
+<div class="font-label-sm text-label-sm text-on-surface-variant uppercase">ALTITUDE (AGL)</div>
+<div class="font-headline-lg-mobile text-headline-lg-mobile text-primary-container font-bold tracking-wider" id="altReadout">4,280<span class="text-label-sm text-primary-fixed ml-1">M</span></div>
+</div>
+<div class="bg-surface-container/90 backdrop-blur-sm p-space-xs text-right">
+<div class="font-label-sm text-label-sm text-on-surface-variant uppercase">VERT DESCENT</div>
+<div class="font-headline-lg-mobile text-headline-lg-mobile text-error font-bold tracking-wider" id="descentRate">-32.4<span class="text-label-sm text-on-error-container ml-1">M/S</span></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Atmospheric Density Gradient Indicator Bar -->
+<div class="w-full bg-surface-container-high px-space-sm py-space-xs">
+<div class="flex justify-between text-label-sm font-label-sm text-on-surface-variant mb-1">
+<span>ATMOSPHERE PROFILE // EXOS 0.12 BAR</span>
+<span class="text-primary-container font-bold">ENTRY CORRIDOR OPTIMAL (88.4%)</span>
+</div>
+<div class="w-full bg-surface-container-lowest h-2 flex space-x-0.5">
+<div class="h-full w-1/6 bg-secondary-container"></div>
+<div class="h-full w-1/6 bg-secondary-container"></div>
+<div class="h-full w-1/6 bg-secondary-container"></div>
+<div class="h-full w-1/6 bg-primary-container"></div>
+<div class="h-full w-1/6 bg-primary-fixed-dim"></div>
+<div class="h-full w-1/6 bg-surface-container-highest"></div>
+</div>
+</div>
+</div>
+<!-- MULTI-FUNCTION INSTRUMENT TILES (Spectrometry & Geothermal) -->
+<div class="grid grid-cols-2 gap-space-xs w-full">
+<!-- Spectrometer Tile -->
+<div class="bg-surface-container p-space-sm shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between mb-space-xs">
+<span class="font-label-md text-label-md text-primary font-bold uppercase tracking-wider">[SYS.SPEC.01]</span>
+<span class="material-symbols-outlined text-[16px] text-primary-container">science</span>
+</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant uppercase mb-1">Atmospheric Spectro</div>
+<div class="space-y-1">
+<div class="flex justify-between text-body-sm font-body-sm">
+<span class="text-on-surface-variant">N₂ NITROGEN</span>
+<span class="text-primary font-bold">74.2%</span>
+</div>
+<div class="w-full bg-surface-container-lowest h-1">
+<div class="bg-primary-container h-full" style="width: 74.2%;"></div>
+</div>
+<div class="flex justify-between text-body-sm font-body-sm">
+<span class="text-on-surface-variant">O₂ OXYGEN</span>
+<span class="text-secondary-fixed font-bold">18.1%</span>
+</div>
+<div class="w-full bg-surface-container-lowest h-1">
+<div class="bg-secondary-container h-full" style="width: 18.1%;"></div>
+</div>
+<div class="flex justify-between text-body-sm font-body-sm">
+<span class="text-on-surface-variant">CO₂ DIOXIDE</span>
+<span class="text-tertiary-fixed font-bold">2.1%</span>
+</div>
+<div class="w-full bg-surface-container-lowest h-1">
+<div class="bg-tertiary-container h-full" style="width: 14%;"></div>
+</div>
+<div class="flex justify-between text-label-sm font-label-sm text-on-surface-variant pt-1">
+<span>NOBLE TRACES</span>
+<span class="text-primary-fixed-dim">05.6% Ar/Kr</span>
+</div>
+</div>
+</div>
+<!-- Seismic & Lithosphere Probe Tile -->
+<div class="bg-surface-container p-space-sm shadow-sm flex flex-col justify-between">
+<div class="flex items-center justify-between mb-space-xs">
+<span class="font-label-md text-label-md text-primary font-bold uppercase tracking-wider">[SYS.LITHO.03]</span>
+<span class="material-symbols-outlined text-[16px] text-secondary-fixed">radar</span>
+</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant uppercase mb-1">Seismic &amp; Sub-Basalt</div>
+<div class="space-y-1.5">
+<div class="flex justify-between items-baseline">
+<span class="font-label-sm text-label-sm text-on-surface-variant">SURFACE HARDNESS</span>
+<span class="font-headline-sm text-headline-sm text-secondary-fixed font-bold">9.4 <span class="text-label-sm font-normal text-on-surface">MOHS</span></span>
+</div>
+<div class="bg-surface-container-low p-space-xs space-y-0.5">
+<div class="flex justify-between text-label-sm font-label-sm">
+<span class="text-on-surface-variant">GEOTHERM</span>
+<span class="text-primary-fixed-dim">+42.8°C</span>
+</div>
+<div class="flex justify-between text-label-sm font-label-sm">
+<span class="text-on-surface-variant">TECTONICS</span>
+<span class="text-secondary-fixed">0.12 RMS (CALM)</span>
+</div>
+</div>
+<!-- Micro Sparkline SVG -->
+<div class="pt-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant block mb-0.5">SUB-CRUSTAL ECHO</span>
+<svg class="w-full h-6 text-primary-container" preserveaspectratio="none" viewbox="0 0 100 24">
+<path d="M 0 18 L 15 17 L 25 14 L 35 19 L 45 6 L 55 22 L 65 11 L 75 16 L 85 10 L 100 12" fill="none" stroke="currentColor" stroke-width="1.5"></path>
+</svg>
+</div>
+</div>
+</div>
+</div>
+<!-- COMM-LINK COMMAND TRANSCEIVER CONSOLE -->
+<div class="w-full bg-surface-container-high p-space-sm shadow-md">
+<div class="flex items-center justify-between mb-space-xs">
+<div class="flex items-center space-x-space-xs">
+<span class="w-2 h-2 rounded-full bg-primary-container animate-pulse"></span>
+<span class="font-label-md text-label-md text-primary font-bold uppercase tracking-wider">COMMS // BRIDGE-VOIX LINK</span>
+</div>
+<span class="font-label-sm text-label-sm text-primary-fixed-dim uppercase">FREQ: 1420.405 MHz</span>
+</div>
+<div class="bg-surface-container-lowest p-space-sm">
+<p class="font-body-md text-body-md text-primary font-medium tracking-wide">
+        « Commandant, vecteur d'atterrissage verrouillé. Déploiement des trains hydro-magnétiques validé sur la plaine Oolite. »
+      </p>
+<div class="flex items-center justify-between mt-space-xs pt-space-xs">
+<span class="font-label-sm text-label-sm text-on-surface-variant font-bold">TACTICAL COPILOT // AI-CORE SYNAPSE</span>
+<span class="font-label-sm text-label-sm text-secondary-fixed">AUDIO SYNTH OK</span>
+</div>
+</div>
+</div>
+<!-- TOUCH INTERACTION DECK: ABORT / OVERRIDE / BEACON LOCK -->
+<div class="w-full bg-surface-container p-space-sm space-y-space-sm shadow-lg">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md text-on-surface font-bold uppercase tracking-wider">FLIGHT CONTROL OVERRIDES</span>
+<span class="font-label-sm text-label-sm text-tertiary-fixed font-bold">AUTONOMOUS LVL 4</span>
+</div>
+<!-- Retro-Thrust Dynamic Slider Control -->
+<div class="w-full bg-surface-container-low p-space-sm">
+<div class="flex justify-between items-center mb-1.5">
+<span class="font-label-sm text-label-sm text-on-surface-variant font-bold uppercase">Retro-Propulsion Output</span>
+<span class="font-label-md text-label-md text-primary-container font-bold" id="thrustPct">84% FULL</span>
+</div>
+<input class="w-full accent-primary-container bg-surface-container-highest h-2 cursor-pointer appearance-none" id="thrustSlider" max="100" min="20" type="range" value="84"/>
+<div class="flex justify-between text-label-sm font-label-sm text-outline mt-1 font-bold">
+<span>MIN (20%)</span>
+<span>HOVER (65%)</span>
+<span>MAX REVERSE (100%)</span>
+</div>
+</div>
+<!-- Tactical Dual Actions Grid -->
+<div class="grid grid-cols-2 gap-space-sm w-full">
+<!-- Landing Beacon Lock Toggle -->
+<button class="min-h-[44px] flex items-center justify-center p-space-sm bg-primary-container text-on-primary font-label-md text-label-md font-bold uppercase tracking-wider transition-none" id="beaconBtn">
+<span class="material-symbols-outlined text-[18px] mr-1">pin_drop</span>
+<span id="beaconStatus">BEACON LOCKED</span>
+</button>
+<!-- Emergency Touch Landing Abort Button -->
+<button class="min-h-[44px] flex items-center justify-center p-space-sm bg-error-container text-on-error-container font-label-md text-label-md font-bold uppercase tracking-wider transition-none" id="abortBtn">
+<span class="material-symbols-outlined text-[18px] mr-1 text-error">eject</span>
+<span>ABORT TOUCH</span>
+</button>
+</div>
+</div>
+<!-- AUXILIARY DATA LOG STRIP -->
+<div class="w-full flex items-center justify-between bg-surface-container-lowest px-space-sm py-space-xs text-label-sm font-label-sm text-on-surface-variant">
+<span>ORBITAL EPHEMERIS: CHASMA-AUSTRALIS-09</span>
+<span class="text-secondary-fixed">COCKPIT PRESS: 101.3 kPa</span>
+</div>
+</div>
+<script>
+  // Simple micro-interaction for Cockpit HUD Controls
+  const thrustSlider = document.getElementById('thrustSlider');
+  const thrustPct = document.getElementById('thrustPct');
+  const descentRate = document.getElementById('descentRate');
+  const altReadout = document.getElementById('altReadout');
+
+  let baseAlt = 4280;
+
+  if (thrustSlider && thrustPct) {
+    thrustSlider.addEventListener('input', (e) => {
+      const val = e.target.value;
+      thrustPct.textContent = val + '% FULL';
+      const calcRate = -((100 - val) * 0.5 + 10).toFixed(1);
+      if (descentRate) descentRate.innerHTML = `${calcRate}<span class="text-label-sm text-on-error-container ml-1">M/S</span>`;
+    });
+  }
+
+  // Altitude descent simulation loop
+  setInterval(() => {
+    if (baseAlt > 40) {
+      baseAlt -= 4;
+      if (altReadout) {
+        altReadout.innerHTML = `${baseAlt.toLocaleString()}<span class="text-label-sm text-primary-fixed ml-1">M</span>`;
+      }
+    }
+  }, 1200);
+
+  // Beacon lock toggle
+  const beaconBtn = document.getElementById('beaconBtn');
+  const beaconStatus = document.getElementById('beaconStatus');
+  let locked = true;
+
+  if (beaconBtn && beaconStatus) {
+    beaconBtn.addEventListener('click', () => {
+      locked = !locked;
+      if (locked) {
+        beaconBtn.className = "min-h-[44px] flex items-center justify-center p-space-sm bg-primary-container text-on-primary font-label-md text-label-md font-bold uppercase tracking-wider transition-none";
+        beaconStatus.textContent = "BEACON LOCKED";
+      } else {
+        beaconBtn.className = "min-h-[44px] flex items-center justify-center p-space-sm bg-surface-container-high text-on-surface-variant font-label-md text-label-md font-bold uppercase tracking-wider transition-none";
+        beaconStatus.textContent = "SCAN BEACONS";
+      }
+    });
+  }
+
+  // Abort confirmation toggle
+  const abortBtn = document.getElementById('abortBtn');
+  if (abortBtn) {
+    abortBtn.addEventListener('click', () => {
+      const confirmed = confirm("CONFIRM DESCENT ABORT: Fire ascent thrusters and re-enter high orbit?");
+      if (confirmed) {
+        alert("DESCENT ABORTED. ASCENT VECTORS FIRED. STAGE 3 HOLD.");
+      }
+    });
+  }
+</script></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface/90 backdrop-blur-xl shadow-[0_-1px_8px_rgba(0,0,0,0.5)]" data-active-classes="text-primary-container bg-primary-container/15"><div class="flex justify-around items-center h-20 px-gutter-mobile"><a aria-current="page" class="flex flex-col items-center justify-center min-w-[44px] min-h-[44px] px-space-sm transition-colors text-primary-container bg-primary-container/15" data-path="tactical-hud" href="#"><span class="material-symbols-outlined text-[20px]">radar</span><span class="font-label-sm text-label-sm uppercase tracking-wider mt-0.5">Tactical</span></a><a class="flex flex-col items-center justify-center min-w-[44px] min-h-[44px] px-space-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="systems-status" href="#"><span class="material-symbols-outlined text-[20px]">memory</span><span class="font-label-sm text-label-sm uppercase tracking-wider mt-0.5">Systems</span></a><div class="flex flex-col items-center justify-center"><button aria-label="Alert Condition Status" class="w-11 h-11 bg-surface-container-high flex flex-col items-center justify-center text-secondary-fixed"><span class="material-symbols-outlined text-[20px]">shield</span><span class="font-label-sm text-[8px] leading-tight">DEFCON</span></button></div><a class="flex flex-col items-center justify-center min-w-[44px] min-h-[44px] px-space-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="comms-audio" href="#"><span class="material-symbols-outlined text-[20px]">record_voice_over</span><span class="font-label-sm text-label-sm uppercase tracking-wider mt-0.5">Comms</span></a><a class="flex flex-col items-center justify-center min-w-[44px] min-h-[44px] px-space-sm text-on-surface-variant hover:text-on-surface transition-colors" data-path="astrometrics" href="#"><span class="material-symbols-outlined text-[20px]">explore</span><span class="font-label-sm text-label-sm uppercase tracking-wider mt-0.5">Astro</span></a></div></nav></body></html>

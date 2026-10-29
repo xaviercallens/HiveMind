@@ -1708,6 +1708,32 @@ class AstroBeeMoEGPUService:
             "points_awarded": points_awarded,
         }
 
+    def resolve_target(self, target_id: str) -> Dict[str, Any]:
+        """Resolve a catalog target by target_id, Stitch v4.6 planet key, or planet name."""
+        key = str(target_id or "").strip()
+        stitch_key_map = {
+            "trappist1e": "SECTOR-01-TRAPPIST-1E",
+            "k218b": "SECTOR-02-K2-18B",
+            "kepler11f": "SECTOR-03-KEPLER-11F",
+            "hd80606b": "SECTOR-04-HD-80606B",
+            "toi700d": "SECTOR-05-TOI-700D",
+            "lhs1140b": "SECTOR-06-LHS-1140B",
+            "wasp39b": "SECTOR-07-WASP-39B",
+            "kepler186f": "SECTOR-08-KEPLER-186F",
+            "koi14": "SECTOR-09-KOI-CAND-14",
+            "koibin": "SECTOR-10-KOI-BIN-02",
+            "hip65426b": "SECTOR-11-HIP-65426B",
+        }
+        mapped_id = stitch_key_map.get(key.lower(), key)
+        for t in self.catalog:
+            if (
+                t["target_id"].lower() == mapped_id.lower()
+                or t["name"].lower() == key.lower()
+                or t.get("short_label", "").lower() == key.lower()
+            ):
+                return t
+        return self.catalog[0]
+
     def record_planet_discovery(
         self,
         target_id: str,
@@ -1716,7 +1742,7 @@ class AstroBeeMoEGPUService:
         notes: str = "",
     ) -> Dict[str, Any]:
         """Log a player's confirmed exoplanet discovery or false-positive bust into the Galactic Passport."""
-        target = next((t for t in self.catalog if t["target_id"] == target_id), self.catalog[0])
+        target = self.resolve_target(target_id)
         true_disp = target["disposition"]
         vetting_type = str(target.get("vetting_anomaly_type", "NONE")).upper()
         is_correct = (
@@ -1988,10 +2014,7 @@ class HiveMindMultiProducerInferencePool:
 
         # If target_id is provided, also run the Astrophysics Bee-MoE planet analysis on cuda:0
         if target_id:
-            target = next(
-                (t for t in self.gpu_service.catalog if t["target_id"] == target_id),
-                self.gpu_service.catalog[0],
-            )
+            target = self.gpu_service.resolve_target(target_id)
             astro_res = self.gpu_service.run_bee_moe_planet_analysis(
                 target=target,
                 gamer_tag="MultiProducerRouter",

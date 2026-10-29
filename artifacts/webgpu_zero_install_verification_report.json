@@ -1,0 +1,32 @@
+{
+  "ok": true,
+  "webgpu_url": "http://127.0.0.1:8095/webgpu",
+  "inspirations": [
+    "https://developer.chrome.com/blog/webgpu-io2023?hl=fr",
+    "https://www.nicheloom.com/launches/9556/",
+    "https://galaxium.app/",
+    "https://dgreenheck.github.io/webgpu-galaxy/"
+  ],
+  "mandatory_auth_gate": {
+    "unauthenticated_http_status": 401,
+    "unauthenticated_response": {
+      "error": {
+        "message": "Registration and login required: provide Authorization: Bearer hm-..."
+      }
+    },
+    "button_disabled_before_login": true,
+    "auth_badge_before_login": "🔒 Non connecté (Inscription / Connexion requise)",
+    "button_disabled_after_login": false,
+    "auth_badge_after_login": "🟢 Connecté : Cmdr_WebGPU_RTX2070 (WebGPU @compute Actif)"
+  },
+  "live_webgpu_session": {
+    "callsign": "Cmdr_WebGPU_RTX2070",
+    "steam_app_id": 3133700,
+    "adapter_badge": "⚡ WebGPU WGSL Sim / WebGL2 Fallback",
+    "auth_status_box": "✅ AUTHENTIFIÉ [NOUVELLE INSCRIPTION] • Commandant : Cmdr_WebGPU_RTX2070 • Ticket : WEBGPU-574C6D2F821EA137 • Solde initial : 2400 HMT",
+    "balance_after_login": "2400 HMT • 0.0 Cobblestones",
+    "balance_after_2_workunits": "2900 HMT • 90.0 Cobblestones",
+    "compute_status_box": "⚡ WORKUNIT WEBGPU VALIDÉE (webgpu_wgsl_compat_pipeline) • Cible : LHS 1140 b • Profondeur BLS : 5385 ppm en 1.9 ms • +250 HMT & +45 Cobblestones • Nouveau solde : 2900 HMT • SHA256 : 489f9ffd9ac611fb...",
+    "screenshot": "C:\\Users\\Utilisateur\\.gemini\\antigravity\\brain\\a94c4d75-7c83-4b16-ad01-3012204f57ac\\live_webgpu_galaxy_registered_and_contributing.png"
+  }
+}

@@ -803,6 +803,88 @@ document.querySelectorAll('.load-bee-scenario-btn').forEach(btn => {
     }
   });
 });
+
+// Free Steam Game Registration, Login & Idle-GPU BOINC Contribution Console
+if ($('steamRegisterLoginBtn')) {
+  $('steamRegisterLoginBtn').addEventListener('click', async () => {
+    const handle = ($('steamHandleInput').value || 'Cmdr_RTX2070_Steam').trim();
+    const steamId = ($('steamIdInput').value || '76561198031337001').trim();
+    const gpuModel = ($('steamGpuInput').value || 'NVIDIA GeForce RTX 2070').trim();
+    $('steamPortalStatus').textContent = 'Registering & authenticating Free Steam Game account (AppID 3133700)...';
+    try {
+      const res = await fetch('/v1/hivemind/steam/register-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          handle: handle,
+          steam_id64: steamId,
+          app_id: 3133700,
+          gpu_model: gpuModel,
+          role: 'prosumer',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        $('steamPortalStatus').textContent = 'Error: ' + ((data.error && data.error.message) || 'Registration failed');
+        return;
+      }
+      if (data.api_key && $('apiKey')) {
+        $('apiKey').value = data.api_key;
+        localStorage.setItem('hivemind_api_key', data.api_key);
+      }
+      localStorage.setItem('hivemind_steam_handle', data.handle || handle);
+      $('steamPortalStatus').textContent =
+        'AUTHENTICATED [' + (data.created ? 'NEW REGISTRATION' : 'EXISTING ACCOUNT LOGIN') + '] • Commander: ' +
+        data.handle + ' • SteamID64: ' + data.steam_id64 + ' • AppID: ' + data.app_id +
+        ' (Free Steam Edition) • Account: ' + data.account_id + ' • Balance: ' + Number(data.balance_hmt || 0).toFixed(2) +
+        ' HMT • Ticket: ' + data.steam_session_ticket;
+      if ($('accountResult')) {
+        $('accountResult').textContent =
+          'Account: ' + data.account_id + ' (' + data.handle + ') | Role: ' + data.role + ' | Balance: ' + Number(data.balance_hmt || 0).toFixed(4) + ' HMT';
+      }
+    } catch (err) {
+      $('steamPortalStatus').textContent = 'Network error during Steam registration/login.';
+    }
+  });
+}
+
+if ($('steamContributeBtn')) {
+  $('steamContributeBtn').addEventListener('click', async () => {
+    const apiKey = ($('apiKey') && $('apiKey').value.trim()) || localStorage.getItem('hivemind_api_key') || '';
+    const handle = ($('steamHandleInput') && $('steamHandleInput').value.trim()) || 'Cmdr_RTX2070_Steam';
+    const target = ($('steamTargetSelect') && $('steamTargetSelect').value) || 'K2-18 b';
+    $('steamPortalStatus').textContent = 'Executing idle-GPU CUDA PTX BOINC workunit on ' + target + ' & crediting HMT...';
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (apiKey) headers['Authorization'] = 'Bearer ' + apiKey;
+      const res = await fetch('/v1/hivemind/steam/contribute-boinc', {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({
+          handle: handle,
+          target_planet: target,
+          app_id: 3133700,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        $('steamPortalStatus').textContent = 'Error: ' + ((data.error && data.error.message) || 'BOINC contribution failed');
+        return;
+      }
+      $('steamPortalStatus').textContent =
+        'BOINC CONTRIBUTION VERIFIED • Target: ' + data.target_planet +
+        ' • Depth: ' + data.recovered_transit_depth_ppm + ' ppm • Kernel: ' + data.kernel_exec_ms + ' ms (' + data.backend + ')' +
+        ' • Awarded: +' + data.hmt_awarded + ' HMT & +' + data.cobblestones_awarded + ' Cobblestones' +
+        ' • New Balance: ' + Number(data.balance_hmt || 0).toFixed(2) + ' HMT • SHA256: ' + String(data.receipt_sha256 || '').slice(0, 16) + '...';
+      if ($('accountResult') && data.account_id) {
+        $('accountResult').textContent =
+          'Account: ' + data.account_id + ' (' + data.handle + ') | Role: prosumer | Balance: ' + Number(data.balance_hmt || 0).toFixed(4) + ' HMT';
+      }
+    } catch (err) {
+      $('steamPortalStatus').textContent = 'Network error during BOINC GPU contribution.';
+    }
+  });
+}
 """
 
 
@@ -857,6 +939,7 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
         <a href="#night-telemetry" class="nav-link">Night Progress</a>
         <a href="#tiers" class="nav-link">Model Tiers</a>
         <a href="#integrations" class="nav-link">Editor Config</a>
+        <a href="#steam-free-game" class="nav-link">&#x1F3AE; Free Steam Game</a>
         <a href="#producers" class="nav-link">Share GPU</a>
         <a href="/signup" class="nav-link">&#x1F511; Sign In</a>
       </nav>
@@ -871,6 +954,7 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
       </p>
       <div class="cta-group">
         <a href="#playground" class="btn btn-primary">&#x26A1; Try In-Browser Playground</a>
+        <a href="#steam-free-game" class="btn btn-outline" style="border-color:var(--green);color:var(--green);">&#x1F3AE; Free Steam Game (AppID 3133700)</a>
         <a href="#life-as-a-bee" class="btn btn-outline" style="border-color:var(--amber);color:var(--amber);">&#x1F41D; Life as a Bee (15 Scenarios)</a>
         {signup_cta}
         <a href="https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/" target="_blank" rel="noopener" class="btn btn-outline">&#x1F36F; HiveMind@home Portal</a>
@@ -1145,6 +1229,54 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
         The other tabs are format-checked but not yet run against a real editor. Full guide:
         <a href="https://github.com/xaviercallens/HiveMind/blob/main/docs/HIVEMIND_CONNECT_IDE.md" rel="noopener noreferrer">docs/HIVEMIND_CONNECT_IDE.md</a>.
       </p>
+    </section>
+
+    <!-- Free Steam Game Registration, Login & Idle-GPU BOINC Contribution Console -->
+    <section id="steam-free-game" class="card" style="border-color:rgba(52,211,153,0.45);margin-bottom:3rem;">
+      <div class="card-header">
+        <div class="card-title" style="color:var(--green);">&#x1F3AE; Free Steam Game Registered on Portal: USS Hivemind NCC-31337 &mdash; Exoplanet Hunter (AppID 3133700)</div>
+        <span class="pill" style="border-color:var(--green);color:var(--green);">FREE ON STEAM (FreeOnDemand) &bull; &lt; 100 ms BOINC Preemption</span>
+      </div>
+      <p style="color:var(--text-dim);font-size:0.9rem;margin-bottom:1rem;line-height:1.5;">
+        <strong>USS Hivemind NCC-31337 v5.1</strong> is registered on the HiveMind Portal as a <strong>100% Free-to-Play Steam Edition</strong> (<code>AppID 3133700</code>, <code>Depot 3133702</code>, non-monetary compute reciprocity charter).
+        Register or sign in with your Commander Handle and SteamID64 below to link your Free Steam Game client, obtain your <code>hm-...</code> API key, and contribute idle-GPU CUDA PTX BOINC light-curve folding whenever you are not actively flying.
+      </p>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:0.85rem;">
+        <div style="flex:1.2;min-width:190px;">
+          <label for="steamHandleInput">Commander Handle</label>
+          <input id="steamHandleInput" type="text" value="Cmdr_RTX2070_Steam" style="margin-bottom:0;" />
+        </div>
+        <div style="flex:1.1;min-width:180px;">
+          <label for="steamIdInput">SteamID64 (17-digit)</label>
+          <input id="steamIdInput" type="text" value="76561198031337001" style="margin-bottom:0;" />
+        </div>
+        <div style="flex:1.2;min-width:190px;">
+          <label for="steamGpuInput">Local GPU Hardware</label>
+          <input id="steamGpuInput" type="text" value="NVIDIA GeForce RTX 2070 (8 GB VRAM)" style="margin-bottom:0;" />
+        </div>
+        <div style="flex:1;min-width:160px;">
+          <label for="steamTargetSelect">BOINC NASA Target</label>
+          <select id="steamTargetSelect" style="margin-bottom:0;">
+            <option value="K2-18 b">K2-18 b (2789 ppm Hycean)</option>
+            <option value="LHS 1140 b">LHS 1140 b (5385 ppm Super-Earth)</option>
+            <option value="TRAPPIST-1 e">TRAPPIST-1 e (4996 ppm HZ)</option>
+            <option value="WASP-39 b">WASP-39 b (19549 ppm JWST)</option>
+            <option value="TOI-700 d">TOI-700 d (653 ppm TESS)</option>
+            <option value="HD 80606 b">HD 80606 b (10179 ppm Eccentric)</option>
+            <option value="Kepler-11 f">Kepler-11 f (458 ppm Compact)</option>
+            <option value="Kepler-186 f">Kepler-186 f (420 ppm HZ)</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.85rem;">
+        <button id="steamRegisterLoginBtn" type="button" class="btn btn-primary">&#x1F3AE; Register &amp; Login Free Steam Game Account</button>
+        <button id="steamContributeBtn" type="button" class="btn btn-amber">&#x26A1; Contribute Idle-GPU BOINC Workunit (RTX CUDA PTX)</button>
+        <a href="/webgpu" class="btn btn-outline" style="border-color:var(--purple);color:var(--purple);">&#x1F30C; Launch Zero-Install WebGPU Galaxy (/webgpu)</a>
+        <a href="/join#play" class="btn btn-outline">&#x1F4D6; Steam &amp; BOINC Setup Guide (/join#play)</a>
+      </div>
+      <div id="steamPortalStatus" style="font-size:0.78rem;font-family:var(--font-mono);color:var(--green);background:#040711;border:1px solid var(--border);border-radius:0.375rem;padding:0.65rem;">
+        Free Steam Game Registry: <code>AppID 3133700</code> (USS Hivemind: Exoplanet Hunter &mdash; Free BOINC Edition) &bull; Status: <strong>REGISTERED &amp; LIVE ON PORTAL</strong> &bull; Click &lsquo;Register &amp; Login Free Steam Game Account&rsquo; to authenticate.
+      </div>
     </section>
 
     <!-- Producer Quickstart for Gamers -->

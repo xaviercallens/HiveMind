@@ -1,0 +1,77 @@
+# USS Hivemind NCC-31337 v4.6 — Dual Engine & Architecture Plan: Fat Client (Unity / Unreal Engine 5) vs. Web Client (WebGL / React / Three.js)
+
+---
+
+## 1. Executive Summary & Dual-Platform Architecture
+
+The **USS Hivemind NCC-31337 v4.6** astrophysics tactical bridge is structured to support both:
+1. **Fat Client (High-Fidelity Native)**: Built with **Unreal Engine 5 (UE5)** or **Unity 6**, targeting maximum visual realism (volumetric nebulae, Raytraced/Lumen stellar illumination, Nanite planetary meshes, physics-accurate Keplerian N-body orbit simulators, and 120+ FPS VR/Cockpit hardware).
+2. **Web Tactical Console**: Built with **React 19 + Three.js / WebGPU + Tailwind CSS / Glassmorphism**, providing zero-install browser access, instant streaming, and real-time synchronization with the NASA Exoplanet TAP API.
+
+```
+                              ┌──────────────────────────────────────────────┐
+                              │     SHARED ASTROPHYSICS & GAMEPLAY CORE     │
+                              │  NASA TAP ADQL / Exoplanet DB / Kepler Math   │
+                              └──────────────────────┬───────────────────────┘
+                                                     │ Model Context Protocol (MCP)
+                     ┌───────────────────────────────┴───────────────────────────────┐
+                     ▼                                                               ▼
+  ┌─────────────────────────────────────┐                         ┌─────────────────────────────────────┐
+  │   FAT CLIENT (Unity 6 / UE5)        │                         │      WEB CONSOLE (WebGPU/React)     │
+  ├─────────────────────────────────────┤                         ├─────────────────────────────────────┤
+  │ • Renderer: Lumen / Nanite / HDRP   │                         │ • Renderer: Three.js / WebGPU       │
+  │ • UI: Unreal CommonUI / Slate / UMG │                         │ • UI: React + Tailwind + Lucide    │
+  │ • Shaders: HLSL Compute Volumetrics │                         │ • Shaders: GLSL / WGSL Raymarching  │
+  │ • Audio: MetaSounds / Wwise Spatial │                         │ • Audio: Web Audio API Spatializer  │
+  │ • Input: HOTAS / Flight Sticks / VR │                         │ • Input: Gamepad API, Keyboard/Mouse│
+  └─────────────────────────────────────┘                         └─────────────────────────────────────┘
+```
+
+---
+
+## 2. Fat Client Implementation (Unreal Engine 5 & Unity 6)
+
+### A. Unreal Engine 5 Blueprint & C++ Architecture
+- **Rendering & VFX**:
+  - **Lumen Dynamic GI & Nanite**: Real-time celestial light bouncing off ship hulls and exoplanet atmospheres with Mie/Rayleigh atmospheric scattering shaders.
+  - **Niagara VFX Particles**: 100,000+ interactive stellar particles representing the galactic core and asteroid belts in Stage 1 & 2.
+  - **Virtual Texturing**: 8K/16K procedural displacement maps for Stage 3 (*Oolite Land* Chasma Australis landing canyons).
+- **Tactical UI Layer (Diegetic & Orthographic)**:
+  - **CommonUI & Slate/UMG**: 3D diegetic holographic panels projected inside the physical ship cockpit cockpit frame with 1px chromatic aberration and bloom.
+  - **Slate Oscilloscope RenderTarget**: Real-time dynamic spline rendering for the UCSC Doppler RV curve ($K$) and Kepler light curve ($ppm$).
+- **Physics & Orbit Math**:
+  - Double-precision coordinate system (`FVector` / `LWC` Large World Coordinates) avoiding float jitter across 100 light-year coordinates.
+
+### B. Unity 6 High-Definition Render Pipeline (HDRP) Alternative
+- **VFX Graph**: GPU-driven orbital vector paths and Lagrange points (L1–L5).
+- **UI Toolkit & Shader Graph**: Vector-based HUD UI with responsive 4K/UW 21:9 support and custom signed-distance field (SDF) glowing lines.
+- **DOTS / Burst Compiler**: High-performance N-body gravity calculations executing at >240 FPS on multi-core systems.
+
+---
+
+## 3. Web Client Implementation (WebGPU / Three.js / React)
+
+- **Engine**: **Three.js** with WebGPU fallback to WebGL 2.0.
+- **Simulation Viewport**: Post-processing bloom, tone-mapping (`ACESFilmicToneMapping`), and instanced meshes for planetary bodies and orbital trails.
+- **Decoupled DOM/HUD**: High-performance SVG-based Doppler waveform graphs and Kepler transit curves powered by canvas spline smoothing.
+- **Telemetry Sync**: WebSockets or SSE connected to the local/remote Python FastMCP server (`exoplanet-mcp`) querying NASA TAP ADQL live.
+
+---
+
+## 4. Feature Parity Matrix
+
+| Feature | Fat Client (UE5 / Unity) | Web Console (WebGPU / React) |
+| :--- | :--- | :--- |
+| **Viewport Visuals** | Volumetric photorealism, raytracing, 8K terrain | Clean stylized glassmorphic 3D, WebGL/WebGPU |
+| **Cockpit Immersion** | Full 6-DOF 3D cockpit interior, HOTAS, VR headset | Head-up display (HUD), keyboard, mouse & gamepad |
+| **Physics Simulation** | RK4 N-body integration, realistic atmospheric drag | Keplerian analytical orbits, SAR radar heightmap |
+| **Data Synchronization** | C++ REST / WebSockets / Native gRPC | HTTP Fetch / Server-Sent Events / MCP Bridge |
+| **Deployment** | Steam / Epic Games / Native Executable (Windows/Linux) | Zero-install web URL, instant cross-platform |
+| **Target Frame Rate** | 90–144 FPS @ 4K / VR 90 FPS | 60 FPS @ 1080p/1440p WebGPU |
+
+---
+
+## 5. Development Roadmap: Next Steps
+1. **Phase 1 (Visual DNA)**: Establish the Stitch 16:9 widescreen bridge baseline (delivered on Canvas).
+2. **Phase 2 (Antigravity Code Generation)**: Export the UI component library into React/Tailwind for the web client, and generate Unreal Slate/UMG styles or Unity UI Toolkit assets.
+3. **Phase 3 (Shared Telemetry API)**: Standardize exoplanet catalog JSON schemas between the Python MCP server and both game engines.

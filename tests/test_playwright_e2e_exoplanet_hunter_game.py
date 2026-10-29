@@ -263,3 +263,68 @@ def test_playwright_e2e_keyboard_only_and_false_positive_and_i18n(
         assert page_errors == [], f"Unexpected browser JS errors: {page_errors}"
         browser.close()
 
+
+def test_playwright_e2e_webgpu_stitch_4_stage_gameplay_and_wgsl_compute(
+    live_game_server_url: str,
+) -> None:
+    """Verify the upgraded /webgpu interface with Stitch v2 dossier, 4-stage playable cinematic, NASA Mystery Planet, and WGSL @compute."""
+    page_errors: list[str] = []
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(viewport={"width": 1600, "height": 1000})
+        page = context.new_page()
+        page.on("pageerror", lambda err: page_errors.append(str(err)))
+
+        page.goto(f"{live_game_server_url}/webgpu", wait_until="domcontentloaded")
+        page.wait_for_selector("#webgpu-cinematic-bar", state="visible")
+
+        # 1. Verify Stitch v2 photorealistic preview & dual SVG oscilloscopes
+        img_src = page.locator("#stitch-planet-preview-img").get_attribute("src") or ""
+        assert "/stitch-assets/stitch_v2_" in img_src
+        assert "Astrophysique" in page.locator("#webgpu-astro-explain").inner_text()
+        assert "Exobiologie" in page.locator("#webgpu-life-analysis").inner_text()
+
+        # 2. Register & login on /webgpu and run a WGSL @compute workunit (+250 HMT)
+        page.fill("#commanderHandle", "Cmdr_Playwright_WebGPU")
+        page.click("#btnRegisterLogin")
+        page.wait_for_function(
+            "() => !document.getElementById('btnContributeWebGPU').disabled",
+            timeout=5000,
+        )
+        page.click("#btnContributeWebGPU")
+        page.wait_for_function(
+            "() => document.getElementById('computeStatusBox').textContent.includes('WORKUNIT WEBGPU VALIDÉE')",
+            timeout=5000,
+        )
+
+        # 3. Roll a New Unseen NASA Mystery Planet ([M] / #btn-webgpu-mystery-planet)
+        page.click("#btn-webgpu-mystery-planet")
+        assert "Proxima Cen b" in page.locator("#t-name").inner_text()
+        assert "DIFFICULTÉ NIV. 2/10" in page.locator("#webgpu-difficulty-badge").inner_text()
+
+        # 4. Play through all 4 Stages via primary CTA & keyboard shortcuts
+        # Stage 1 -> Stage 2 (Orbit Bee-MoE)
+        page.click("#btn-webgpu-stage-cta")
+        assert "active" in (page.locator("#webgpu-stage-2").get_attribute("class") or "")
+
+        # Stage 2 -> Stage 3 (Oolite Atmospheric Descent)
+        page.keyboard.press("Space")
+        page.keyboard.press("Space")
+        assert "active" in (page.locator("#webgpu-stage-3").get_attribute("class") or "")
+        stage3_img = page.locator("#stitch-planet-preview-img").get_attribute("src") or ""
+        assert "08_photorealistic_descent_cockpit_view_of_spaceship.png" in stage3_img
+
+        # Stage 3 -> Stage 4 (JWST Analysis & Vote)
+        page.keyboard.press("Enter")
+        assert "active" in (page.locator("#webgpu-stage-4").get_attribute("class") or "")
+
+        # Approve Proxima Cen b in Stage 4 -> awards +800 HMT, gold medal on #planet-dock, and Difficulty Niv. 3/10
+        page.click("#btn-webgpu-approve")
+        assert "DIFFICULTÉ NIV. 3/10" in page.locator("#webgpu-difficulty-badge").inner_text()
+        assert "🏅" in page.locator("#planet-dock").inner_text()
+
+        assert page_errors == [], f"Unexpected browser JS errors on /webgpu: {page_errors}"
+        browser.close()
+
+

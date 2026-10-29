@@ -474,20 +474,27 @@ namespace HiveMind.ExoplanetHunterClient
         {
             try
             {
-                string assetsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "steam_assets");
-                string galPath = Path.Combine(assetsDir, "spiral_galaxy_v4_hd.png");
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string assetsDir = Path.Combine(baseDir, "steam_assets");
+                string stitchV2Dir = Path.Combine(baseDir, "stitch_sync_v2");
+
+                string stitchGalPath = Path.Combine(stitchV2Dir, "07_photorealistic_milky_way_barred_spiral_galaxy_vi.png");
+                string galPath = File.Exists(stitchGalPath) ? stitchGalPath : Path.Combine(assetsDir, "spiral_galaxy_v4_hd.png");
                 if (File.Exists(galPath)) _galaxyBackdrop = Image.FromFile(galPath);
 
-                string oolPath = Path.Combine(assetsDir, "oolite_planetfall_horizon.png");
+                string stitchOolPath = Path.Combine(stitchV2Dir, "08_photorealistic_descent_cockpit_view_of_spaceship.png");
+                string oolPath = File.Exists(stitchOolPath) ? stitchOolPath : Path.Combine(assetsDir, "oolite_planetfall_horizon.png");
                 if (File.Exists(oolPath)) _ooliteHorizonBackdrop = Image.FromFile(oolPath);
 
-                string stOrbitPath = Path.Combine(assetsDir, "stitch_hd_00_uss_hivemind_-__0.jpg");
+                string stitchK218Path = Path.Combine(stitchV2Dir, "09_photorealistic_exoplanet_k2-18_b_hycean_world_vi.png");
+                string stOrbitPath = File.Exists(stitchK218Path) ? stitchK218Path : Path.Combine(assetsDir, "stitch_hd_00_uss_hivemind_-__0.jpg");
                 if (File.Exists(stOrbitPath)) _stitchOrbitK218bImg = Image.FromFile(stOrbitPath);
 
                 string stSarPath = Path.Combine(assetsDir, "stitch_hd_03_uss_hivemind_-__0.jpg");
                 if (File.Exists(stSarPath)) _stitchSarTerrainImg = Image.FromFile(stSarPath);
 
-                string stTrapPath = Path.Combine(assetsDir, "stitch_hd_04_uss_hivemind_-__0.jpg");
+                string stitchLhsPath = Path.Combine(stitchV2Dir, "05_photorealistic_exoplanet_lhs_1140_b_super-earth.png");
+                string stTrapPath = File.Exists(stitchLhsPath) ? stitchLhsPath : Path.Combine(assetsDir, "stitch_hd_04_uss_hivemind_-__0.jpg");
                 if (File.Exists(stTrapPath)) _stitchTrappistImg = Image.FromFile(stTrapPath);
 
                 for (int i = 0; i < 10; i++)
@@ -2181,6 +2188,23 @@ namespace HiveMind.ExoplanetHunterClient
                     if (h.Id == "stg:2") { ResetOolitePlanetfallState(); _gameStage = 2; _showNarrativeCard = true; SpeakStepNarrativeAndAstrophysics(); return; }
                     if (h.Id == "stg:3") { _gameStage = 3; _showNarrativeCard = true; SpeakStepNarrativeAndAstrophysics(); return; }
                     if (h.Id == "stg:4") { _gameStage = 4; _showNarrativeCard = false; _idleSeconds = 4.8; SpeakStepNarrativeAndAstrophysics(); return; }
+                    if (h.Id == "new_mystery_planet")
+                    {
+                        SelectNewUnseenPlanetForNewGame(true);
+                        _gameStage = 0;
+                        AddPointsWithPopup(150, "🎲 NEW NASA PLANET!", e.X, e.Y, Color.FromArgb(250, 204, 21));
+                        this.Invalidate();
+                        return;
+                    }
+                    if (h.Id == "primary_stage_action")
+                    {
+                        if (_gameStage == 0 && _warpTimer <= 0) LaunchSatellites();
+                        else if (_gameStage == 1) { ResetOolitePlanetfallState(); _gameStage = 2; _showNarrativeCard = true; SpeakStepNarrativeAndAstrophysics(); }
+                        else if (_gameStage == 2) CompletePlanetLandingSuccess();
+                        else if (_gameStage == 3) ApproveOrReject(true);
+                        else if (_gameStage == 4) TriggerBoincIdleGpuWorkunitSync("hivemind_tess_at_home", true);
+                        return;
+                    }
                     if (h.Id == "boinc_crunch_now")
                     {
                         _idleSeconds = 5.2;
@@ -2539,11 +2563,29 @@ namespace HiveMind.ExoplanetHunterClient
                 g.FillRectangle(bg, r);
                 g.DrawRectangle(border, r);
             }
-            using (Font fBanner = new Font("Consolas", 9.2f, FontStyle.Bold))
+            using (Font fBanner = new Font("Consolas", 8.8f, FontStyle.Bold))
             using (SolidBrush bGold = new SolidBrush(Color.FromArgb(253, 224, 71)))
             {
-                g.DrawString(GetStageBannerText(), fBanner, bGold, r.X + 10, r.Y + 6);
+                g.DrawString(GetStageBannerText(), fBanner, bGold, r.X + 8, r.Y + 6);
             }
+
+            // Interactive Stitch HUD Pills on right of banner: [🎲 NASA [M]] and [🚀 ACTION [SPACE]]
+            Rectangle btnNasa = new Rectangle(r.Right - 242, r.Y + 3, 108, r.Height - 6);
+            Rectangle btnAct = new Rectangle(r.Right - 130, r.Y + 3, 124, r.Height - 6);
+            using (SolidBrush bNasa = new SolidBrush(Color.FromArgb(225, 245, 158, 11)))
+            using (SolidBrush bAct = new SolidBrush(Color.FromArgb(225, 16, 185, 129)))
+            using (Font fBtn = new Font("Consolas", 7.2f, FontStyle.Bold))
+            {
+                g.FillRectangle(bNasa, btnNasa);
+                g.DrawRectangle(Pens.White, btnNasa);
+                g.DrawString(_lang == "fr" ? "🎲 NASA [M]" : "🎲 NEW NASA [M]", fBtn, Brushes.Black, btnNasa.X + 5, btnNasa.Y + 4);
+
+                g.FillRectangle(bAct, btnAct);
+                g.DrawRectangle(Pens.White, btnAct);
+                g.DrawString(_lang == "fr" ? "🚀 ACTION [ESP]" : "🚀 ACTION [SPACE]", fBtn, Brushes.Black, btnAct.X + 5, btnAct.Y + 4);
+            }
+            _hotspots.Add(new HudHotspot { Id = "new_mystery_planet", Rect = btnNasa });
+            _hotspots.Add(new HudHotspot { Id = "primary_stage_action", Rect = btnAct });
         }
 
         private void Draw3DPlanetWithFallback(Graphics g, int idx, float cx, float cy, float radius)

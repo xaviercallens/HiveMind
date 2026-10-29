@@ -423,7 +423,13 @@ const PROMPTS = {
   sundials: "Rescue a stiff Navier-Stokes / Gross-Pitaevskii ODE-PDE system in Rust using Rusty-SUNDIALS CVODE BDF with adaptive step control.",
   francais: "Bonjour ! Explique comment fonctionne La Ruche HiveMind@home pour partager son GPU citoyen et utiliser l'API dans VS Code.",
   reciprocity: "Explain how HiveMind's non-monetary compute reciprocity model works for gamers and AI developers.",
-  crowdgpt: "Explain how a 1B generalist dense trunk (CrowdGPT Vxtzq/Crowd-v1 trained on 7B FineWeb tokens) and 18 MB domain QLoRA adapters can share a Hub-and-Spoke DiLoCo + Multi-Krum volunteer GPU swarm."
+  crowdgpt: "Explain how a 1B generalist dense trunk (CrowdGPT Vxtzq/Crowd-v1 trained on 7B FineWeb tokens) and 18 MB domain QLoRA adapters can share a Hub-and-Spoke DiLoCo + Multi-Krum volunteer GPU swarm.",
+  lean4: "Formalize in machine-checked Lean 4 with zero sorry the theorem that a discrete sequence of energies strictly bounded below by 0 and satisfying E_{t+1} <= E_t - delta (delta > 0) must terminate in finite steps.",
+  rustdma: "Implement a cache-line aligned (#[repr(align(64))]) lock-free SPSC ring buffer in Rust with AtomicUsize acquire/release semantics and zero heap allocations on enqueue/dequeue.",
+  cvepatch: "Analyze this asynchronous token-bucket rate limiter race condition where concurrent requests bypass limits (CVE pattern), and provide the atomic CAS remediation diff.",
+  jwst: "In 2 sentences, explain how transmission spectroscopy at 1.4 µm (H2O) and 4.3 µm (CO2) from JWST NIRSpec constrains exoplanetary atmospheric metallicity [M/H] and C/O ratio.",
+  crispr: "Evaluate guide RNA on-target efficiency and CFD off-target cleavage risk for CRISPR Cas9 targeting human HBB exon 1, citing PubMed clinical trial benchmarks.",
+  triton: "Write an autotuned Triton kernel for fused Scaled Dot-Product Attention with online softmax normalization (FlashAttention-2 style) on FP16 tensors."
 };
 
 document.querySelectorAll('.prompt-pill').forEach(btn => {
@@ -905,16 +911,53 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
           <option value="hivemind/coder-plus">hivemind/coder-plus (14B &bull; Multi-File &amp; DeepSeek-R1 Reasoning)</option>
           <option value="hivemind/moe-general">hivemind/moe-general (20B MoE / 3.6B Active &bull; General Reasoning)</option>
           <option value="hivemind/moe-coder">hivemind/moe-coder (30B MoE / 3.3B Active &bull; Frontier Coding)</option>
+          <optgroup label="👑 Super-MoE &amp; Macro-Clusters (20B / Top-2)">
+            <option value="hivemind/moe-systems-formal">hivemind/moe-systems-formal (Cluster 00 &bull; Systèmes, Kernels &amp; Lean 4)</option>
+            <option value="hivemind/moe-cyber-crypto">hivemind/moe-cyber-crypto (Cluster 01 &bull; Cybersécurité, CVE &amp; Circuits ZK)</option>
+            <option value="hivemind/moe-frontier-science">hivemind/moe-frontier-science (Cluster 02 &bull; Astrophysique, JWST &amp; Réseau Quantique)</option>
+            <option value="hivemind/moe-reasoning-bio">hivemind/moe-reasoning-bio (Cluster 03 &bull; Olympiades Math, Génomique CRISPR &amp; Essais Cliniques)</option>
+          </optgroup>
+          <optgroup label="🔬 Adaptateurs MoE Hugging Face (+277 TFLOPs)">
+            <option value="hivemind/moe-maths-formal">hivemind/moe-maths-formal (Lean 4 Machine-Checked &bull; proofnet)</option>
+            <option value="hivemind/moe-rust-kernel">hivemind/moe-rust-kernel (Rust DMA Kernel &bull; the-stack-v2)</option>
+            <option value="hivemind/moe-python-perf">hivemind/moe-python-perf (Python SIMD Kernel &bull; CodeAlpaca)</option>
+            <option value="hivemind/moe-feedback-debug">hivemind/moe-feedback-debug (Multi-Turn Debug &bull; CodeFeedback)</option>
+            <option value="hivemind/moe-dist-p2p">hivemind/moe-dist-p2p (Consensus P2P &bull; santacoder)</option>
+            <option value="hivemind/moe-cuda-opt">hivemind/moe-cuda-opt (Triton / Tensor Core &bull; LLM_Compression)</option>
+            <option value="hivemind/moe-cyber-cti">hivemind/moe-cyber-cti (Threat Intel CTI-Bench &bull; cti-bench)</option>
+            <option value="hivemind/moe-cyber-cve">hivemind/moe-cyber-cve (SWE-Bench CVE Remediation &bull; SWE-bench)</option>
+            <option value="hivemind/moe-smart-contracts">hivemind/moe-smart-contracts (Solidity ZK Escrow &bull; DISL-Solidity)</option>
+            <option value="hivemind/moe-crypto-zkp">hivemind/moe-crypto-zkp (ZK Circuits SNARK/STARK &bull; zk-bench)</option>
+            <option value="hivemind/moe-reverse-eng">hivemind/moe-reverse-eng (Malware Triage &bull; malware-prompts)</option>
+            <option value="hivemind/moe-astro-transits">hivemind/moe-astro-transits (Kepler Exoplanet Transits &bull; exoplanets)</option>
+            <option value="hivemind/moe-astro-spectra">hivemind/moe-astro-spectra (Gaia DR3 Stellar Spectra &bull; sdss_dr12)</option>
+            <option value="hivemind/moe-astro-atmosphere">hivemind/moe-astro-atmosphere (JWST Atmosphere Biosignatures &bull; jwst)</option>
+            <option value="hivemind/moe-quantum-lattice">hivemind/moe-quantum-lattice (Quantum Lattice QCD &bull; multimodal_universe)</option>
+            <option value="hivemind/moe-chem-docking">hivemind/moe-chem-docking (Molecular Docking &bull; zinc250k)</option>
+            <option value="hivemind/moe-climate-earth">hivemind/moe-climate-earth (Earth Observation &bull; hls-foundation)</option>
+            <option value="hivemind/moe-maths-olympiad">hivemind/moe-maths-olympiad (Olympiad Math GSM8K &bull; gsm8k)</option>
+            <option value="hivemind/moe-bio-genomics">hivemind/moe-bio-genomics (CRISPR PubMedQA &bull; PubMedQA)</option>
+            <option value="hivemind/moe-bio-clinical">hivemind/moe-bio-clinical (Clinical Trial Evidence &bull; guidance-biomedical)</option>
+          </optgroup>
+          <optgroup label="🐝 Exemplaires Bring Your Own Bee (BYOB)">
+            <option value="hivemind/bee-quantum-simd">hivemind/bee-quantum-simd (Quantum SIMD &bull; AVX-512 Contractions)</option>
+            <option value="hivemind/bee-reverse-cve">hivemind/bee-reverse-cve (Binary Disassembly &bull; SWE-bench CVE Patch)</option>
+            <option value="hivemind/bee-genomics-crispr">hivemind/bee-genomics-crispr (CRISPR Cleavage &bull; Clinical Evidence)</option>
+          </optgroup>
         </select>
 
         <label>Quick Prompt Presets</label>
         <div class="pill-row">
-          <button type="button" class="pill prompt-pill" data-prompt="python">Python LRU Decorator</button>
-          <button type="button" class="pill prompt-pill" data-prompt="sundials">Rusty-SUNDIALS ODE</button>
-          <button type="button" class="pill prompt-pill" data-prompt="astro">Exoplanet Resonance</button>
+          <button type="button" class="pill prompt-pill" data-prompt="python">Python LRU</button>
+          <button type="button" class="pill prompt-pill" data-prompt="lean4">Lean 4 ProofNet</button>
+          <button type="button" class="pill prompt-pill" data-prompt="rustdma">Rust DMA Buffer</button>
+          <button type="button" class="pill prompt-pill" data-prompt="cvepatch">SWE-Bench CVE</button>
+          <button type="button" class="pill prompt-pill" data-prompt="jwst">JWST Atmosphere</button>
+          <button type="button" class="pill prompt-pill" data-prompt="crispr">CRISPR PubMedQA</button>
+          <button type="button" class="pill prompt-pill" data-prompt="triton">Triton FlashAttn</button>
+          <button type="button" class="pill prompt-pill" data-prompt="sundials">Rusty-SUNDIALS</button>
+          <button type="button" class="pill prompt-pill" data-prompt="astro">Exoplanet TTV</button>
           <button type="button" class="pill prompt-pill" data-prompt="francais">Citoyen IA (FR)</button>
-          <button type="button" class="pill prompt-pill" data-prompt="pytorch">PyTorch A2 Lattice</button>
-          <button type="button" class="pill prompt-pill" data-prompt="reciprocity">Reciprocity Charter</button>
         </div>
 
         <label for="promptInput">Prompt Message</label>

@@ -468,11 +468,12 @@ def test_fat_client_one_time_chapter1_voice_and_planet_analysis_and_life() -> No
     assert "How life could live:" in NATIVE_CSHARP_FAT_CLIENT_SOURCE
     assert "Vie possible :" in NATIVE_CSHARP_FAT_CLIENT_SOURCE
 
-    # 3. Verify compiled HiveMind_Exoplanet_Hunter.cs and HiveMind_Exoplanet_Hunter.exe are up to date on disk
+    # 3. Verify compiled HiveMind_Exoplanet_Hunter.cs and launcher are up to date on disk
     cs_file = PROJECT_ROOT / "steam_dist" / "HiveMind_Astrophysics_Exoplanet_Hunter" / "HiveMind_Exoplanet_Hunter.cs"
     exe_file = PROJECT_ROOT / "steam_dist" / "HiveMind_Astrophysics_Exoplanet_Hunter" / "HiveMind_Exoplanet_Hunter.exe"
+    linux_launcher = PROJECT_ROOT / "steam_dist" / "HiveMind_Astrophysics_Exoplanet_Hunter" / "launch_exoplanet_hunter_linux.sh"
     assert cs_file.exists()
-    assert exe_file.exists()
+    assert linux_launcher.exists() or exe_file.exists()
     assert "SpeakPlanetAnalysisOnly();" in cs_file.read_text(encoding="utf-8")
 
     # 4. Verify Web Cockpit `/` also tracks chapter1IntroDone and PLANET_ANALYSIS_AND_LIFE

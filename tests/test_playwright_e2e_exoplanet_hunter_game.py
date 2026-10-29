@@ -10,7 +10,9 @@ from typing import Generator
 
 import pytest
 import uvicorn
-from playwright.sync_api import sync_playwright
+
+playwright_sync = pytest.importorskip("playwright.sync_api")
+sync_playwright = playwright_sync.sync_playwright
 
 from hivemind.game.exoplanet_hunter_cockpit import create_exoplanet_hunter_fastapi_app
 

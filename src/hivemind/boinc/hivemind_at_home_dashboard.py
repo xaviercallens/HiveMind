@@ -7255,6 +7255,103 @@ def create_hivemind_at_home_app(
         report = run_nocturnal_reddit_vision_moe_campaign(inner_steps=max(5, min(steps, 500)))
         return JSONResponse(content=report.to_dict())
 
+    @app.get("/api/v1/night-moe/reddit-vision/evolution", response_class=JSONResponse)
+    def api_night_moe_reddit_vision_evolution() -> JSONResponse:
+        repo_root = Path(__file__).resolve().parents[3]
+        report_path = repo_root / "artifacts" / "nocturnal_image_moe_evolution_monitor.json"
+        if report_path.exists():
+            try:
+                return JSONResponse(content=json.loads(report_path.read_text(encoding="utf-8")))
+            except Exception:
+                pass
+        from hivemind.swarm.international_launch_scaler import monitor_nocturnal_image_moe_evolution
+
+        report = monitor_nocturnal_image_moe_evolution(
+            generations=1,
+            base_inner_steps=20,
+            repo_root=repo_root,
+            save_artifacts=False,
+        )
+        return JSONResponse(content=report)
+
+    @app.post("/api/v1/night-moe/reddit-vision/evolve", response_class=JSONResponse)
+    def api_night_moe_reddit_vision_evolve(payload: Optional[Dict[str, Any]] = None) -> JSONResponse:
+        from hivemind.swarm.international_launch_scaler import monitor_nocturnal_image_moe_evolution
+
+        body = payload or {}
+        generations = max(1, min(int(body.get("generations", 2)), 5))
+        base_steps = max(10, min(int(body.get("base_inner_steps", 25)), 500))
+        repo_root = Path(__file__).resolve().parents[3]
+        report = monitor_nocturnal_image_moe_evolution(
+            generations=generations,
+            base_inner_steps=base_steps,
+            repo_root=repo_root,
+            save_artifacts=bool(body.get("save_artifacts", True)),
+        )
+        return JSONResponse(content=report)
+
+    @app.get("/api/v1/launch/calendar", response_class=JSONResponse)
+    @app.get("/.well-known/hivemind-launch-calendar.json", response_class=JSONResponse)
+    def api_international_launch_calendar() -> JSONResponse:
+        from hivemind.swarm.international_launch_scaler import build_international_launch_calendar
+
+        return JSONResponse(content=build_international_launch_calendar())
+
+    @app.post("/api/v1/launch/enroll", response_class=JSONResponse)
+    def api_international_launch_enroll(payload: Optional[Dict[str, Any]] = None) -> JSONResponse:
+        from hivemind.swarm.international_launch_scaler import enroll_launch_participant
+
+        body = payload or {}
+        cc_raw = body.get("compute_capability", [7, 5])
+        if isinstance(cc_raw, (list, tuple)) and len(cc_raw) >= 2:
+            cc = (int(cc_raw[0]), int(cc_raw[1]))
+        else:
+            cc = (7, 5)
+        result = enroll_launch_participant(
+            handle=str(body.get("handle") or body.get("participant_id") or "@CommunityContributor"),
+            participant_type=str(body.get("participant_type") or "human"),
+            region_id=str(body.get("region_id") or "eu-west"),
+            challenge_id=str(
+                body.get("challenge_id")
+                or body.get("track_id")
+                or "CHALLENGE-1-MASSIVE-IMAGE-VMOE-104BEES"
+            ),
+            gpu_vendor=str(body.get("gpu_vendor") or "nvidia"),
+            compute_capability=cc,
+            vram_mib=float(body.get("vram_mib", body.get("vram_budget_mb", 8192.0))),
+            uplink_mbps=float(body.get("uplink_mbps", 50.0)),
+            rtt_ms=float(body.get("rtt_ms", 35.0)),
+            preferred_lang=str(body.get("preferred_lang") or body.get("locale") or "en"),
+        )
+        return JSONResponse(content=result)
+
+    @app.post("/api/v1/launch/scalability-plan", response_class=JSONResponse)
+    def api_international_launch_scalability_plan(payload: Optional[Dict[str, Any]] = None) -> JSONResponse:
+        from dataclasses import asdict
+        from hivemind.swarm.international_launch_scaler import (
+            compute_hierarchical_fanout_plan,
+            select_adaptive_multisplit_cut,
+        )
+
+        body = payload or {}
+        cut_plan = select_adaptive_multisplit_cut(
+            uplink_mbps=float(body.get("uplink_mbps", 25.0)),
+            rtt_ms=float(body.get("rtt_ms", 42.0)),
+            client_vram_limit_mib=float(body.get("client_vram_limit_mib", body.get("client_free_vram_mb", 1536.0))),
+        )
+        fanout_plan = compute_hierarchical_fanout_plan(
+            total_leaf_nodes=int(body.get("total_leaf_nodes", body.get("total_active_nodes", 10_000))),
+            branching_factor=int(body.get("branching_factor", body.get("super_peer_branching", 32))),
+            subswarm_size=int(body.get("subswarm_size", body.get("sub_swarm_size", 18))),
+        )
+        return JSONResponse(
+            content={
+                "status": "OK",
+                "adaptive_multisplit_cut": asdict(cut_plan),
+                "hierarchical_fanout_plan": asdict(fanout_plan),
+            }
+        )
+
     @app.get("/api/v1/hardware/rtx2070/shield", response_class=JSONResponse)
     def api_hardware_rtx2070_shield() -> JSONResponse:
         return JSONResponse(content={

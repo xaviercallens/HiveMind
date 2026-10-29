@@ -1,0 +1,373 @@
+{
+  "experiment_id": "E20",
+  "roadmap_refs": [
+    "HM-S29-01",
+    "HM-S29-02",
+    "HM-S31-02"
+  ],
+  "status": "VERIFIED_PASS",
+  "executed_at_utc": "2026-10-29T19:17:41Z",
+  "elapsed_seconds": 0.132,
+  "predictions_check": {
+    "P20a_all_prelude_vram_le_1536mb": true,
+    "P20b_compression_ratio_ge_100x": true,
+    "P20b_ef21_conservation_drift_le_1e_5": true,
+    "P20c_coordinator_reduction_ge_25x": true,
+    "P20c_sqlite_hmt_exact_conservation": true
+  },
+  "adaptive_multisplit_profiles": [
+    {
+      "selected_cut_index": 1,
+      "selected_cut_name": "patch_stem_int4_bottleneck",
+      "client_prelude_vram_mib": 680.0,
+      "within_1500mb_background_ceiling": true,
+      "activation_wire_kb": 48.0,
+      "estimated_split_step_ms": 190.0,
+      "unsplit_monolithic_step_ms": 11123.67,
+      "step_latency_reduction_pct": 98.29,
+      "uplink_mbps": 12.0,
+      "rtt_ms": 68.0,
+      "device": "GTX 1650 Mobile (4GB)"
+    },
+    {
+      "selected_cut_index": 1,
+      "selected_cut_name": "patch_stem_int4_bottleneck",
+      "client_prelude_vram_mib": 680.0,
+      "within_1500mb_background_ceiling": true,
+      "activation_wire_kb": 48.0,
+      "estimated_split_step_ms": 138.86,
+      "unsplit_monolithic_step_ms": 5397.88,
+      "step_latency_reduction_pct": 97.43,
+      "uplink_mbps": 25.0,
+      "rtt_ms": 45.0,
+      "device": "Steam Deck OLED / iGPU"
+    },
+    {
+      "selected_cut_index": 1,
+      "selected_cut_name": "patch_stem_int4_bottleneck",
+      "client_prelude_vram_mib": 680.0,
+      "within_1500mb_background_ceiling": true,
+      "activation_wire_kb": 48.0,
+      "estimated_split_step_ms": 93.52,
+      "unsplit_monolithic_step_ms": 1651.02,
+      "step_latency_reduction_pct": 94.34,
+      "uplink_mbps": 85.0,
+      "rtt_ms": 22.0,
+      "device": "RTX 2070 (8GB Inference Shielded)"
+    },
+    {
+      "selected_cut_index": 1,
+      "selected_cut_name": "patch_stem_int4_bottleneck",
+      "client_prelude_vram_mib": 680.0,
+      "within_1500mb_background_ceiling": true,
+      "activation_wire_kb": 48.0,
+      "estimated_split_step_ms": 114.68,
+      "unsplit_monolithic_step_ms": 2754.44,
+      "step_latency_reduction_pct": 95.84,
+      "uplink_mbps": 50.0,
+      "rtt_ms": 34.0,
+      "device": "Apple M2 MacBook Air (Unified)"
+    }
+  ],
+  "top1pct_dct_ef21_steps": [
+    {
+      "outer_step": 1,
+      "original_shape": [
+        256,
+        256
+      ],
+      "total_elements": 65536,
+      "retained_k": 655,
+      "top_k_fraction": 0.009995,
+      "uncompressed_fp32_bytes": 262144,
+      "compressed_wire_bytes": 1163,
+      "compression_ratio": 225.4,
+      "residual_conservation_l2_error": 6.853649289286641e-16,
+      "max_ef21_conservation_drift": 3e-08,
+      "wire_vs_direct_drift": 3e-08,
+      "packet_sha256": "70c90eccdde4767d9b131ed74a87247eb912b205a9afbaca3a05bb9e15c1176d"
+    },
+    {
+      "outer_step": 2,
+      "original_shape": [
+        256,
+        256
+      ],
+      "total_elements": 65536,
+      "retained_k": 655,
+      "top_k_fraction": 0.009995,
+      "uncompressed_fp32_bytes": 262144,
+      "compressed_wire_bytes": 1163,
+      "compression_ratio": 225.4,
+      "residual_conservation_l2_error": 1.056068504944847e-15,
+      "max_ef21_conservation_drift": 6e-08,
+      "wire_vs_direct_drift": 3e-08,
+      "packet_sha256": "48f38a2e02aa41739ae6723d769a6041fce0ffa0ae72c8b799982da58120f41f"
+    },
+    {
+      "outer_step": 3,
+      "original_shape": [
+        256,
+        256
+      ],
+      "total_elements": 65536,
+      "retained_k": 655,
+      "top_k_fraction": 0.009995,
+      "uncompressed_fp32_bytes": 262144,
+      "compressed_wire_bytes": 1163,
+      "compression_ratio": 225.4,
+      "residual_conservation_l2_error": 1.2847185282454881e-15,
+      "max_ef21_conservation_drift": 6e-08,
+      "wire_vs_direct_drift": 3e-08,
+      "packet_sha256": "43981ebcf250d2f3fafd96976f408a4f4aab5509182774ca64ad09c4df4675c5"
+    },
+    {
+      "outer_step": 4,
+      "original_shape": [
+        256,
+        256
+      ],
+      "total_elements": 65536,
+      "retained_k": 655,
+      "top_k_fraction": 0.009995,
+      "uncompressed_fp32_bytes": 262144,
+      "compressed_wire_bytes": 1163,
+      "compression_ratio": 225.4,
+      "residual_conservation_l2_error": 1.1975471207770095e-15,
+      "max_ef21_conservation_drift": 1.19e-07,
+      "wire_vs_direct_drift": 3e-08,
+      "packet_sha256": "fd0c2f1375fefd2bc656877e8079c32742da1d476170e87f7c76f1a7da9f7709"
+    },
+    {
+      "outer_step": 5,
+      "original_shape": [
+        256,
+        256
+      ],
+      "total_elements": 65536,
+      "retained_k": 655,
+      "top_k_fraction": 0.009995,
+      "uncompressed_fp32_bytes": 262144,
+      "compressed_wire_bytes": 1163,
+      "compression_ratio": 225.4,
+      "residual_conservation_l2_error": 1.515375161631451e-15,
+      "max_ef21_conservation_drift": 1.19e-07,
+      "wire_vs_direct_drift": 3e-08,
+      "packet_sha256": "f55dc7308585b197491c0b11674a338b28c8ff8872dd6325eb390d78cf3ef1a7"
+    }
+  ],
+  "hierarchical_fanout_10k": {
+    "total_leaf_nodes": 10000,
+    "regions_active": 6,
+    "branching_factor": 32,
+    "target_subswarm_size": 18,
+    "total_super_peers": 318,
+    "total_localized_subswarms": 558,
+    "coordinator_direct_ingress_requests": 318,
+    "unhierarchical_ingress_requests": 10000,
+    "ingress_reduction_factor": 31.45,
+    "within_openrouter_concurrency_cap": true,
+    "regional_breakdown": [
+      {
+        "region_id": "eu-west",
+        "title": "Europe West & Central (Paris / Amsterdam / Frankfurt)",
+        "leaf_nodes": 1667,
+        "super_peers": 53,
+        "localized_subswarms_15_20": 93,
+        "subswarm_target_size": 18,
+        "super_peer_endpoint": "wss://eu-west.ruche.socrate-ai-lab.com/quic",
+        "languages": [
+          "en",
+          "fr",
+          "de",
+          "es",
+          "it"
+        ]
+      },
+      {
+        "region_id": "us-east",
+        "title": "North America East (Virginia / New York / Montreal)",
+        "leaf_nodes": 1667,
+        "super_peers": 53,
+        "localized_subswarms_15_20": 93,
+        "subswarm_target_size": 18,
+        "super_peer_endpoint": "wss://us-east.ruche.socrate-ai-lab.com/quic",
+        "languages": [
+          "en",
+          "es",
+          "fr"
+        ]
+      },
+      {
+        "region_id": "us-west",
+        "title": "North America West (Silicon Valley / Oregon / Vancouver)",
+        "leaf_nodes": 1667,
+        "super_peers": 53,
+        "localized_subswarms_15_20": 93,
+        "subswarm_target_size": 18,
+        "super_peer_endpoint": "wss://us-west.ruche.socrate-ai-lab.com/quic",
+        "languages": [
+          "en",
+          "es",
+          "zh"
+        ]
+      },
+      {
+        "region_id": "apac-east",
+        "title": "Asia-Pacific (Tokyo / Seoul / Singapore / Sydney)",
+        "leaf_nodes": 1667,
+        "super_peers": 53,
+        "localized_subswarms_15_20": 93,
+        "subswarm_target_size": 18,
+        "super_peer_endpoint": "wss://apac-east.ruche.socrate-ai-lab.com/quic",
+        "languages": [
+          "en",
+          "ja",
+          "zh",
+          "ko"
+        ]
+      },
+      {
+        "region_id": "latam-south",
+        "title": "Latin America (Sao Paulo / Buenos Aires / Santiago / Mexico City)",
+        "leaf_nodes": 1666,
+        "super_peers": 53,
+        "localized_subswarms_15_20": 93,
+        "subswarm_target_size": 18,
+        "super_peer_endpoint": "wss://latam-south.ruche.socrate-ai-lab.com/quic",
+        "languages": [
+          "pt",
+          "es",
+          "en"
+        ]
+      },
+      {
+        "region_id": "mena-africa",
+        "title": "MENA & Africa (Casablanca / Dubai / Nairobi / Johannesburg)",
+        "leaf_nodes": 1666,
+        "super_peers": 53,
+        "localized_subswarms_15_20": 93,
+        "subswarm_target_size": 18,
+        "super_peer_endpoint": "wss://mena-africa.ruche.socrate-ai-lab.com/quic",
+        "languages": [
+          "en",
+          "ar",
+          "fr",
+          "sw"
+        ]
+      }
+    ]
+  },
+  "hierarchical_fanout_25k": {
+    "total_leaf_nodes": 25000,
+    "regions_active": 6,
+    "branching_factor": 32,
+    "target_subswarm_size": 20,
+    "total_super_peers": 786,
+    "total_localized_subswarms": 1254,
+    "coordinator_direct_ingress_requests": 786,
+    "unhierarchical_ingress_requests": 25000,
+    "ingress_reduction_factor": 31.81,
+    "within_openrouter_concurrency_cap": false,
+    "regional_breakdown": [
+      {
+        "region_id": "eu-west",
+        "title": "Europe West & Central (Paris / Amsterdam / Frankfurt)",
+        "leaf_nodes": 4167,
+        "super_peers": 131,
+        "localized_subswarms_15_20": 209,
+        "subswarm_target_size": 20,
+        "super_peer_endpoint": "wss://eu-west.ruche.socrate-ai-lab.com/quic",
+        "languages": [
+          "en",
+          "fr",
+          "de",
+          "es",
+          "it"
+        ]
+      },
+      {
+        "region_id": "us-east",
+        "title": "North America East (Virginia / New York / Montreal)",
+        "leaf_nodes": 4167,
+        "super_peers": 131,
+        "localized_subswarms_15_20": 209,
+        "subswarm_target_size": 20,
+        "super_peer_endpoint": "wss://us-east.ruche.socrate-ai-lab.com/quic",
+        "languages": [
+          "en",
+          "es",
+          "fr"
+        ]
+      },
+      {
+        "region_id": "us-west",
+        "title": "North America West (Silicon Valley / Oregon / Vancouver)",
+        "leaf_nodes": 4167,
+        "super_peers": 131,
+        "localized_subswarms_15_20": 209,
+        "subswarm_target_size": 20,
+        "super_peer_endpoint": "wss://us-west.ruche.socrate-ai-lab.com/quic",
+        "languages": [
+          "en",
+          "es",
+          "zh"
+        ]
+      },
+      {
+        "region_id": "apac-east",
+        "title": "Asia-Pacific (Tokyo / Seoul / Singapore / Sydney)",
+        "leaf_nodes": 4167,
+        "super_peers": 131,
+        "localized_subswarms_15_20": 209,
+        "subswarm_target_size": 20,
+        "super_peer_endpoint": "wss://apac-east.ruche.socrate-ai-lab.com/quic",
+        "languages": [
+          "en",
+          "ja",
+          "zh",
+          "ko"
+        ]
+      },
+      {
+        "region_id": "latam-south",
+        "title": "Latin America (Sao Paulo / Buenos Aires / Santiago / Mexico City)",
+        "leaf_nodes": 4166,
+        "super_peers": 131,
+        "localized_subswarms_15_20": 209,
+        "subswarm_target_size": 20,
+        "super_peer_endpoint": "wss://latam-south.ruche.socrate-ai-lab.com/quic",
+        "languages": [
+          "pt",
+          "es",
+          "en"
+        ]
+      },
+      {
+        "region_id": "mena-africa",
+        "title": "MENA & Africa (Casablanca / Dubai / Nairobi / Johannesburg)",
+        "leaf_nodes": 4166,
+        "super_peers": 131,
+        "localized_subswarms_15_20": 209,
+        "subswarm_target_size": 20,
+        "super_peer_endpoint": "wss://mena-africa.ruche.socrate-ai-lab.com/quic",
+        "languages": [
+          "en",
+          "ar",
+          "fr",
+          "sw"
+        ]
+      }
+    ]
+  },
+  "sqlite_settlement_coalescer": {
+    "raw_event_count": 640,
+    "coalesced_row_count": 240,
+    "write_iops_reduction_pct": 62.5,
+    "total_hmt_before": 2554,
+    "total_hmt_after": 2554,
+    "hmt_conservation_exact": true,
+    "batch_merkle_root_sha256": "d7f22a4e97709eb6c3233011ee00285dea6d4a130385f243ed12b92093be6b26"
+  },
+  "report_sha256": "c0d32b3b15751cc5ea395f8321f87f8cf02ad42663e013d2c939204dff9679b2"
+}

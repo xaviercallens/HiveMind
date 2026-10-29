@@ -1,0 +1,139 @@
+{
+  "monitor_id": "NOCTURNAL-IMAGE-MOE-EVOLUTION-2026-10-29",
+  "timestamp_utc": "2026-10-29T19:18:27Z",
+  "status": "ACTIVE_EVOLVING_GREEN",
+  "generations_executed": 3,
+  "pareto_ratchet_monotone_verified": true,
+  "tesla_t4_vram_guard_all_passed": true,
+  "best_ratcheted_losses": {
+    "reddit_vision_vlm_moe_loss": 0.00122,
+    "exoplanet_astro_vmoe_focal_loss": 0.0,
+    "massive_7div_104bee_focal_loss": 0.0
+  },
+  "generation_logs": [
+    {
+      "generation": 1,
+      "inner_diloco_steps": 400,
+      "lora_alpha": 32.0,
+      "focal_gamma": 2.0,
+      "reddit_vision_vlm_moe": {
+        "candidate_moe_loss": 0.00213,
+        "ratcheted_moe_loss": 0.00213,
+        "mean_loss_reduction_pct": 94.6,
+        "routing_accuracy": 1.0,
+        "pareto_admitted": true,
+        "gate_passed": true
+      },
+      "exoplanet_astro_vmoe_1500mb": {
+        "candidate_focal_loss": 1e-05,
+        "ratcheted_focal_loss": 1e-05,
+        "mean_focal_loss_reduction_pct": 99.9,
+        "routing_accuracy": 1.0,
+        "max_vram_mib": 1410.0,
+        "pareto_admitted": true,
+        "gate_passed": true
+      },
+      "massive_7div_104bee_image_moe": {
+        "candidate_focal_loss": 0.0,
+        "ratcheted_focal_loss": 0.0,
+        "mean_focal_loss_reduction_pct": 99.69,
+        "routing_accuracy": 1.0,
+        "total_samples": 42870000,
+        "total_bees": 104,
+        "pareto_admitted": true,
+        "gate_passed": true
+      },
+      "tesla_t4_vram_guard": {
+        "gpu_name": "Tesla T4",
+        "total_vram_mib": 15360.0,
+        "used_vram_mib": 4839.0,
+        "free_vram_mib": 10073.0,
+        "min_required_free_vram_mib": 4300.0,
+        "vram_headroom_guard_passed": true
+      }
+    },
+    {
+      "generation": 2,
+      "inner_diloco_steps": 450,
+      "lora_alpha": 36.0,
+      "focal_gamma": 2.15,
+      "reddit_vision_vlm_moe": {
+        "candidate_moe_loss": 0.00242,
+        "ratcheted_moe_loss": 0.00213,
+        "mean_loss_reduction_pct": 94.35,
+        "routing_accuracy": 1.0,
+        "pareto_admitted": false,
+        "gate_passed": true
+      },
+      "exoplanet_astro_vmoe_1500mb": {
+        "candidate_focal_loss": 0.02294,
+        "ratcheted_focal_loss": 1e-05,
+        "mean_focal_loss_reduction_pct": 99.97,
+        "routing_accuracy": 1.0,
+        "max_vram_mib": 1410.0,
+        "pareto_admitted": false,
+        "gate_passed": true
+      },
+      "massive_7div_104bee_image_moe": {
+        "candidate_focal_loss": 0.00152,
+        "ratcheted_focal_loss": 0.0,
+        "mean_focal_loss_reduction_pct": 99.76,
+        "routing_accuracy": 1.0,
+        "total_samples": 42870000,
+        "total_bees": 104,
+        "pareto_admitted": false,
+        "gate_passed": true
+      },
+      "tesla_t4_vram_guard": {
+        "gpu_name": "Tesla T4",
+        "total_vram_mib": 15360.0,
+        "used_vram_mib": 4839.0,
+        "free_vram_mib": 10073.0,
+        "min_required_free_vram_mib": 4300.0,
+        "vram_headroom_guard_passed": true
+      }
+    },
+    {
+      "generation": 3,
+      "inner_diloco_steps": 500,
+      "lora_alpha": 40.0,
+      "focal_gamma": 2.3,
+      "reddit_vision_vlm_moe": {
+        "candidate_moe_loss": 0.00122,
+        "ratcheted_moe_loss": 0.00122,
+        "mean_loss_reduction_pct": 94.17,
+        "routing_accuracy": 1.0,
+        "pareto_admitted": true,
+        "gate_passed": true
+      },
+      "exoplanet_astro_vmoe_1500mb": {
+        "candidate_focal_loss": 0.0,
+        "ratcheted_focal_loss": 0.0,
+        "mean_focal_loss_reduction_pct": 99.97,
+        "routing_accuracy": 1.0,
+        "max_vram_mib": 1410.0,
+        "pareto_admitted": true,
+        "gate_passed": true
+      },
+      "massive_7div_104bee_image_moe": {
+        "candidate_focal_loss": 6e-05,
+        "ratcheted_focal_loss": 0.0,
+        "mean_focal_loss_reduction_pct": 99.72,
+        "routing_accuracy": 1.0,
+        "total_samples": 42870000,
+        "total_bees": 104,
+        "pareto_admitted": false,
+        "gate_passed": true
+      },
+      "tesla_t4_vram_guard": {
+        "gpu_name": "Tesla T4",
+        "total_vram_mib": 15360.0,
+        "used_vram_mib": 4839.0,
+        "free_vram_mib": 10073.0,
+        "min_required_free_vram_mib": 4300.0,
+        "vram_headroom_guard_passed": true
+      }
+    }
+  ],
+  "monitor_sha256": "f8b4bc7027027921346f7402d30f1666b11e8ba16c3b718d0dee90c4ac041377"
+}

@@ -1,0 +1,264 @@
+{
+  "schema_version": "hivemind.international_launch.v2.15",
+  "event_id": "HIVEMIND-INTL-LAUNCH-WEEKEND-2026-10-30",
+  "title": "HiveMind / La Ruche — International Weekend Launch & Global Image-MoE Grand Challenge",
+  "window_utc": {
+    "start_utc": "2026-10-29T18:00:00Z",
+    "end_utc": "2026-11-01T23:59:59Z"
+  },
+  "non_monetary_charter": {
+    "financial_value_usd_eur": 0.0,
+    "utility_unit": "HMT (Non-Monetary Proof-of-Useful-Compute Reflexion Points)",
+    "disclaimer_path": "LEGAL_DISCLAIMER_AND_COMPUTE_RECIPROCITY.md"
+  },
+  "multilingual_human_announcements": {
+    "en": "Welcome to the HiveMind ('La Ruche') International Launch Weekend (Oct 30 - Nov 1, 2026)! Join with any GPU (>= 1.5 GB VRAM background mode or 8 GB Gamer mode) or deploy an autonomous Scout/Employed/Onlooker agent across our 6 global Super-Peer regions.",
+    "fr": "Bienvenue au week-end de lancement international de HiveMind (« La Ruche », 30 oct. – 1er nov. 2026) ! Participez avec votre PC/GPU (< 1,5 Go VRAM en tâche de fond ou 8 Go en mode Gamer) ou connectez votre agent autonome aux 4 Grands Défis de l'Essaim.",
+    "es": "¡Bienvenidos al Fin de Semana de Lanzamiento Internacional de HiveMind ('La Ruche', 30 oct - 1 nov 2026)! Conecta tu GPU doméstica (< 1.5 GB VRAM) o tu agente autónomo a los 4 Desafíos Globales.",
+    "zh": "欢迎参加 HiveMind（“蜂巢” La Ruche）国际发布周末（2026年10月30日–11月1日）！支持 <1.5 GB 显存轻量后台模式、8 GB 游戏防抢占模式以及 A2A/MCP 自主智能体接入。",
+    "pt": "Bem-vindos ao Fim de Semana de Lançamento Internacional do HiveMind ('La Ruche', 30 out - 1 nov 2026)! Contribua com GPUs Pascal/Turing (FP32) ou Ampere/Ada (BF16) e ganhe créditos utilitários HMT.",
+    "ja": "HiveMind（La Ruche）国際ローンチ・ウィークエンド（2026年10月30日〜11月1日）へようこそ！1.5GB未満のバックグラウンドVRAMモードまたは自律型AIエージェントで世界の4大チャレンジに参加しましょう。"
+  },
+  "schedule_phases": [
+    {
+      "phase_id": "PHASE-0-THU-OCT29-NOCTURNAL-VMOE",
+      "date_utc": "2026-10-29T18:00:00Z/2026-10-30T07:00:00Z",
+      "title": "Tonight's Nocturnal Image-MoE Evolution & Baseline Lock",
+      "status": "ACTIVE_MONITORED",
+      "audience": [
+        "humans",
+        "agents",
+        "coordinators"
+      ],
+      "summary": "Live multi-generation evolution of the 3 Image-MoE engines: (1) Reddit-Vision Culturally-Grounded VLM MoE, (2) <1.5GB Exoplanet & Astrophysics V-MoE PoC, and (3) La Ruche 7-Division 42.87M-Sample 104-Bee Massive Image-MoE Swarm.",
+      "verification_artifacts": [
+        "artifacts/nocturnal_reddit_vision_moe_report.json",
+        "artifacts/exoplanet_astro_vmoe_poc_report.json",
+        "artifacts/massive_swarm_image_moe_report.json",
+        "artifacts/nocturnal_image_moe_evolution_monitor.json"
+      ]
+    },
+    {
+      "phase_id": "PHASE-1-FRI-OCT30-GLOBAL-EDGE-WARMUP",
+      "date_utc": "2026-10-30T07:00:00Z/2026-10-30T23:59:59Z",
+      "title": "6-Region Super-Peer Onboarding, Adaptive Multi-Split ML & Cohort Calibration",
+      "status": "SCHEDULED",
+      "audience": [
+        "humans",
+        "agents"
+      ],
+      "summary": "International node registration across EU-West, US-East, US-West, APAC-East, LATAM-South, and MENA-Africa. Automatic GPU cohort isolation (pre-Ampere FP32 vs Ampere+ BF16) and Adaptive Multi-Split ML (<1.5 GB Prelude <-> Edge Core) link calibration."
+    },
+    {
+      "phase_id": "PHASE-2-SAT-OCT31-GRAND-CHALLENGE-ARENA",
+      "date_utc": "2026-10-31T00:00:00Z/2026-10-31T23:59:59Z",
+      "title": "International Swarm Grand Challenge Day (4 Parallel Human & Agent Tracks)",
+      "status": "SCHEDULED",
+      "audience": [
+        "humans",
+        "agents"
+      ],
+      "summary": "24-hour Follow-the-Sun global sprint across 104 Image-MoE Bees, Exoplanet Citizen Science Light-Curve Hunting, 3-Role ABC-MoE Scientific Discovery, and Lean 4 Formal Proof synthesis."
+    },
+    {
+      "phase_id": "PHASE-3-SUN-NOV01-UPCYCLING-AND-SETTLEMENT",
+      "date_utc": "2026-11-01T00:00:00Z/2026-11-01T23:59:59Z",
+      "title": "Global BTM Top-2 FoMoE Upcycling, Nectar Cache Release & Coalesced HMT Settlement",
+      "status": "SCHEDULED",
+      "audience": [
+        "humans",
+        "agents",
+        "coordinators"
+      ],
+      "summary": "Byzantine Multi-Krum + ZK-OPoI verification of weekend deltas, upcycling into the global La Ruche v2.15 V-MoE checkpoint, and Merkle-signed coalesced HMT credit distribution."
+    }
+  ],
+  "grand_challenges": [
+    {
+      "challenge_id": "CHALLENGE-1-MASSIVE-IMAGE-VMOE-104BEES",
+      "title": "Track 1: 7-Division 42.87M-Sample Image-MoE & Cultural VLM Evolution",
+      "target_participants": [
+        "human_gpu_workers",
+        "autonomous_training_agents"
+      ],
+      "vram_tiers_supported": [
+        "< 1.5 GB Background Prelude",
+        "<= 6.5 GB (8GB Gamer)",
+        "12-24 GB Prosumer"
+      ],
+      "reward_pool_hmt": 50000,
+      "per_verified_workunit_hmt": 150,
+      "cli_entrypoint": "uv run python scripts/run_massive_image_moe_swarm.py --inner-steps 500",
+      "gate_criteria": "Client VRAM <= 1,536 MiB (Tier 1) or <= 6,656 MiB (Tier 2), Top-1% DCT compression >= 100x or 2-bit DCT SQNR >= 12.0 dB, and 100% ZK-OPoI receipt verification."
+    },
+    {
+      "challenge_id": "CHALLENGE-2-EXOPLANET-CITIZEN-ASTRO-VMOE",
+      "title": "Track 2: <1.5 GB Exoplanet Transit Hunter & Citizen Ambiguous Curve Vote",
+      "target_participants": [
+        "human_citizen_scientists",
+        "human_gpu_workers",
+        "astrophysics_agents"
+      ],
+      "vram_tiers_supported": [
+        "< 1.5 GB Background Mode (910 - 1,410 MiB)"
+      ],
+      "reward_pool_hmt": 30000,
+      "per_verified_workunit_hmt": 120,
+      "cli_entrypoint": "uv run python scripts/run_exoplanet_astro_vmoe_poc.py --inner-steps 500",
+      "gate_criteria": "Train CWT scalogram + phase-folded light-curve experts under Focal Loss (gamma=2.0) and classify high-entropy Earth-twin red-dwarf / solar transits vs eclipsing binaries."
+    },
+    {
+      "challenge_id": "CHALLENGE-3-ABC-SCIENTIFIC-NECTAR-MESH",
+      "title": "Track 3: 3-Role Autonomous Agent Scientific Discovery & Nectar Sync Sprint",
+      "target_participants": [
+        "autonomous_agents_a2a_mcp"
+      ],
+      "vram_tiers_supported": [
+        "CPU / Edge Agent",
+        "< 1.5 GB Scout/Employed Bee"
+      ],
+      "reward_pool_hmt": 25000,
+      "per_verified_workunit_hmt": 100,
+      "discovery_royalty_hmt_per_hit": 0.005,
+      "cli_entrypoint": "uv run pytest tests/test_abc_moe_agent_mesh.py tests/test_swarm_nectar_cache.py",
+      "gate_criteria": "Extract structured ArXiv/PubMed/ChEMBL leads via parse_scientific_scout_record and deduplicate across regional Super-Peers in < 50 ms via MultiNodeNectarSyncBackend."
+    },
+    {
+      "challenge_id": "CHALLENGE-4-CROWDSWARM-RESILIENCE-AND-LEAN4",
+      "title": "Track 4: Zero-Collapse Federated DiLoCo (FP32/BF16 Cohorts) & Lean 4 Formal Proofs",
+      "target_participants": [
+        "human_contributors",
+        "formal_prover_agents"
+      ],
+      "vram_tiers_supported": [
+        "Pre-Ampere Pascal/Turing FP32",
+        "Ampere/Ada/Hopper BF16",
+        "CPU Lean 4"
+      ],
+      "reward_pool_hmt": 25000,
+      "per_verified_workunit_hmt": 200,
+      "cli_entrypoint": "cd lean4 && lake env lean HiveMindSpec.lean",
+      "gate_criteria": "Zero weight-halving RMS collapses (ratio in [0.80, 1.25]), strict FP32/BF16 cohort isolation, and 0-sorry machine-checked Lean 4 theorems."
+    }
+  ],
+  "agent_a2a_mcp_protocol": {
+    "discovery_endpoints": {
+      "calendar_json": "/api/v1/launch/calendar",
+      "well_known_manifest": "/.well-known/hivemind-launch-calendar.json",
+      "enroll_post": "/api/v1/launch/enroll",
+      "nocturnal_vmoe_monitor": "/api/v1/night-moe/reddit-vision/evolution"
+    },
+    "agent_roles_accepted": [
+      "scout_bee_harvester",
+      "employed_bee_qlora_trainer",
+      "onlooker_bee_validator",
+      "lean4_formal_prover_agent"
+    ],
+    "required_headers": {
+      "X-HiveMind-Agent-Protocol": "AMCP/1.5-S29",
+      "X-HiveMind-Non-Monetary-Ack": "0.00-USD-EUR"
+    }
+  },
+  "scalability_topology": {
+    "total_leaf_nodes": 10000,
+    "regions_active": 6,
+    "branching_factor": 32,
+    "target_subswarm_size": 18,
+    "total_super_peers": 318,
+    "total_localized_subswarms": 558,
+    "coordinator_direct_ingress_requests": 318,
+    "unhierarchical_ingress_requests": 10000,
+    "ingress_reduction_factor": 31.45,
+    "within_openrouter_concurrency_cap": true,
+    "regional_breakdown": [
+      {
+        "region_id": "eu-west",
+        "title": "Europe West & Central (Paris / Amsterdam / Frankfurt)",
+        "leaf_nodes": 1667,
+        "super_peers": 53,
+        "localized_subswarms_15_20": 93,
+        "subswarm_target_size": 18,
+        "super_peer_endpoint": "wss://eu-west.ruche.socrate-ai-lab.com/quic",
+        "languages": [
+          "en",
+          "fr",
+          "de",
+          "es",
+          "it"
+        ]
+      },
+      {
+        "region_id": "us-east",
+        "title": "North America East (Virginia / New York / Montreal)",
+        "leaf_nodes": 1667,
+        "super_peers": 53,
+        "localized_subswarms_15_20": 93,
+        "subswarm_target_size": 18,
+        "super_peer_endpoint": "wss://us-east.ruche.socrate-ai-lab.com/quic",
+        "languages": [
+          "en",
+          "es",
+          "fr"
+        ]
+      },
+      {
+        "region_id": "us-west",
+        "title": "North America West (Silicon Valley / Oregon / Vancouver)",
+        "leaf_nodes": 1667,
+        "super_peers": 53,
+        "localized_subswarms_15_20": 93,
+        "subswarm_target_size": 18,
+        "super_peer_endpoint": "wss://us-west.ruche.socrate-ai-lab.com/quic",
+        "languages": [
+          "en",
+          "es",
+          "zh"
+        ]
+      },
+      {
+        "region_id": "apac-east",
+        "title": "Asia-Pacific (Tokyo / Seoul / Singapore / Sydney)",
+        "leaf_nodes": 1667,
+        "super_peers": 53,
+        "localized_subswarms_15_20": 93,
+        "subswarm_target_size": 18,
+        "super_peer_endpoint": "wss://apac-east.ruche.socrate-ai-lab.com/quic",
+        "languages": [
+          "en",
+          "ja",
+          "zh",
+          "ko"
+        ]
+      },
+      {
+        "region_id": "latam-south",
+        "title": "Latin America (Sao Paulo / Buenos Aires / Santiago / Mexico City)",
+        "leaf_nodes": 1666,
+        "super_peers": 53,
+        "localized_subswarms_15_20": 93,
+        "subswarm_target_size": 18,
+        "super_peer_endpoint": "wss://latam-south.ruche.socrate-ai-lab.com/quic",
+        "languages": [
+          "pt",
+          "es",
+          "en"
+        ]
+      },
+      {
+        "region_id": "mena-africa",
+        "title": "MENA & Africa (Casablanca / Dubai / Nairobi / Johannesburg)",
+        "leaf_nodes": 1666,
+        "super_peers": 53,
+        "localized_subswarms_15_20": 93,
+        "subswarm_target_size": 18,
+        "super_peer_endpoint": "wss://mena-africa.ruche.socrate-ai-lab.com/quic",
+        "languages": [
+          "en",
+          "ar",
+          "fr",
+          "sw"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,201 @@
+{
+  "poc_id": "LA-RUCHE-EXOPLANET-ASTRO-VMOE-POC-V1",
+  "title": "PoC HiveMind DiLoCo-QLoRA : Astronomie, Chasse aux Exoplan\u00e8tes & Vision-MoE (< 1,5 Go VRAM)",
+  "timestamp_utc": "2026-10-29T19:18:20Z",
+  "stage1_backbone_frozen": true,
+  "stage1_min_vram_mib": 910.0,
+  "stage1_max_vram_mib": 1410.0,
+  "stage1_strictly_under_1500mb_vram": true,
+  "stage2_inner_diloco_steps": 500,
+  "stage2_focal_loss_gamma": 2.3,
+  "stage2_mean_focal_loss_reduction_pct": 99.97,
+  "stage3_outer_optimizer": "Nesterov Momentum (mu=0.90) + Multi-Krum + 2-bit SparseLoCo/DeMo DCT + ZK-OPoI",
+  "stage3_all_byzantine_rejected": true,
+  "stage3_all_zk_opoi_verified": true,
+  "stage4_router_type": "Linear Top-2 Softmax with Load-Balancing Auxiliary Loss (alpha=0.01)",
+  "stage4_routing_accuracy": 1.0,
+  "stage4_single_baseline_focal_loss": 2.22659,
+  "stage4_upcycled_vmoe_focal_loss": 0.0,
+  "stage4_vmoe_gain_pct": 100.0,
+  "stage4_load_balance_loss_weighted": 0.010008,
+  "interactive_simulator_scenarios": {
+    "earth_around_sun_1Rearth_1Rsun": {
+      "planet_radius_earth": 1.0,
+      "star_radius_solar": 1.0,
+      "instrumental_noise_ppm": 100.0,
+      "transit_depth_ppm": 84.0,
+      "single_transit_snr": 0.84,
+      "submerged_in_instrumental_noise": true,
+      "cwt_scalogram_shape": [
+        16,
+        32
+      ],
+      "cwt_peak_energy": 419.98,
+      "flux_min_ppm": -274.43,
+      "router_probabilities": {
+        "expert_1_stellar_transits": 0.2986,
+        "expert_2_false_positives_eb": 0.2675,
+        "expert_3_atmospheric_spectra": 0.2212,
+        "expert_4_galactic_lensing": 0.2126
+      },
+      "top1_expert": "expert_1_stellar_transits",
+      "top2_expert": "expert_2_false_positives_eb",
+      "top1_probability": 0.2986,
+      "router_entropy_nats": 1.3766,
+      "normalized_entropy": 0.993,
+      "citizen_science_review_triggered": true
+    },
+    "earth_around_red_dwarf_1Rearth_02Rsun": {
+      "planet_radius_earth": 1.0,
+      "star_radius_solar": 0.2,
+      "instrumental_noise_ppm": 100.0,
+      "transit_depth_ppm": 2100.0,
+      "single_transit_snr": 21.0,
+      "submerged_in_instrumental_noise": false,
+      "cwt_scalogram_shape": [
+        16,
+        32
+      ],
+      "cwt_peak_energy": 2906.68,
+      "flux_min_ppm": -1948.99,
+      "router_probabilities": {
+        "expert_1_stellar_transits": 0.9738,
+        "expert_2_false_positives_eb": 0.0154,
+        "expert_3_atmospheric_spectra": 0.0059,
+        "expert_4_galactic_lensing": 0.0049
+      },
+      "top1_expert": "expert_1_stellar_transits",
+      "top2_expert": "expert_2_false_positives_eb",
+      "top1_probability": 0.9738,
+      "router_entropy_nats": 0.1463,
+      "normalized_entropy": 0.1055,
+      "citizen_science_review_triggered": false
+    },
+    "eclipsing_binary_false_positive": {
+      "planet_radius_earth": 2.5,
+      "star_radius_solar": 1.0,
+      "instrumental_noise_ppm": 100.0,
+      "transit_depth_ppm": 525.0,
+      "single_transit_snr": 5.25,
+      "submerged_in_instrumental_noise": false,
+      "cwt_scalogram_shape": [
+        16,
+        32
+      ],
+      "cwt_peak_energy": 705.13,
+      "flux_min_ppm": -601.28,
+      "router_probabilities": {
+        "expert_1_stellar_transits": 0.056,
+        "expert_2_false_positives_eb": 0.9212,
+        "expert_3_atmospheric_spectra": 0.0125,
+        "expert_4_galactic_lensing": 0.0102
+      },
+      "top1_expert": "expert_2_false_positives_eb",
+      "top2_expert": "expert_1_stellar_transits",
+      "top1_probability": 0.9212,
+      "router_entropy_nats": 0.3387,
+      "normalized_entropy": 0.2443,
+      "citizen_science_review_triggered": false
+    }
+  },
+  "branch_reports": [
+    {
+      "branch_id": "expert_1_stellar_transits",
+      "branch_name_fr": "Expert 1 : Transits Stellaires",
+      "backbone_model_id": "facebook/dinov2-base",
+      "patch_resolution": "224x224",
+      "hf_datasets": [
+        "nasa-exoplanet-archive",
+        "kepler-lightcurves",
+        "TESS-sector-shards"
+      ],
+      "peak_vram_mib": 940.0,
+      "within_1500mb_vram": true,
+      "inner_diloco_steps": 500,
+      "focal_loss_gamma": 2.3,
+      "focal_loss_before": 3.49999,
+      "focal_loss_after": 0.00143,
+      "focal_loss_reduction_pct": 99.96,
+      "citizen_ambiguous_curves_count": 11,
+      "entropy_before_nats": 2.4143,
+      "entropy_after_nats": 0.5889,
+      "compression_ratio": 8.533,
+      "sqnr_db": 12.654,
+      "multi_krum_byzantine_rejected": true,
+      "zk_opoi_verified": true
+    },
+    {
+      "branch_id": "expert_2_false_positives_eb",
+      "branch_name_fr": "Expert 2 : Faux Positifs & Binaires",
+      "backbone_model_id": "google/vit-base-patch16-224",
+      "patch_resolution": "224x224",
+      "hf_datasets": [
+        "astronomy-ml/tess-exoplanet-candidates"
+      ],
+      "peak_vram_mib": 910.0,
+      "within_1500mb_vram": true,
+      "inner_diloco_steps": 500,
+      "focal_loss_gamma": 2.3,
+      "focal_loss_before": 1.73351,
+      "focal_loss_after": 0.00067,
+      "focal_loss_reduction_pct": 99.96,
+      "citizen_ambiguous_curves_count": 11,
+      "entropy_before_nats": 2.3708,
+      "entropy_after_nats": 0.5573,
+      "compression_ratio": 8.533,
+      "sqnr_db": 12.699,
+      "multi_krum_byzantine_rejected": true,
+      "zk_opoi_verified": true
+    },
+    {
+      "branch_id": "expert_3_atmospheric_spectra",
+      "branch_name_fr": "Expert 3 : Spectres Atmosph\u00e9riques",
+      "backbone_model_id": "google/siglip-so400m-patch14-384",
+      "patch_resolution": "384x384",
+      "hf_datasets": [
+        "ariel-data-challenge",
+        "jwst-exoplanet-spectra"
+      ],
+      "peak_vram_mib": 1360.0,
+      "within_1500mb_vram": true,
+      "inner_diloco_steps": 500,
+      "focal_loss_gamma": 2.3,
+      "focal_loss_before": 1.95531,
+      "focal_loss_after": 0.00038,
+      "focal_loss_reduction_pct": 99.98,
+      "citizen_ambiguous_curves_count": 11,
+      "entropy_before_nats": 2.4062,
+      "entropy_after_nats": 0.517,
+      "compression_ratio": 8.533,
+      "sqnr_db": 12.89,
+      "multi_krum_byzantine_rejected": true,
+      "zk_opoi_verified": true
+    },
+    {
+      "branch_id": "expert_4_galactic_lensing",
+      "branch_name_fr": "Expert 4 : Morphologie Galactique & Lentilles",
+      "backbone_model_id": "facebook/dinov2-large",
+      "patch_resolution": "224x224",
+      "hf_datasets": [
+        "MultimodalUniverse/MultimodalUniverse",
+        "galaxy10_decals"
+      ],
+      "peak_vram_mib": 1410.0,
+      "within_1500mb_vram": true,
+      "inner_diloco_steps": 500,
+      "focal_loss_gamma": 2.3,
+      "focal_loss_before": 1.55338,
+      "focal_loss_after": 0.00032,
+      "focal_loss_reduction_pct": 99.98,
+      "citizen_ambiguous_curves_count": 11,
+      "entropy_before_nats": 2.3638,
+      "entropy_after_nats": 0.4927,
+      "compression_ratio": 8.533,
+      "sqnr_db": 12.427,
+      "multi_krum_byzantine_rejected": true,
+      "zk_opoi_verified": true
+    }
+  ],
+  "overall_poc_passed": true,
+  "report_sha256": "15967661203e4db97cebeb2be9b3932fa9a82c241f9fc2c4298221d2779fc1e1"
+}

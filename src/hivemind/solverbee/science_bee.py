@@ -365,6 +365,26 @@ def spec_sha256(spec: Dict[str, Any]) -> str:
     return hashlib.sha256(canonical_bytes(spec)).hexdigest()
 
 
+def is_slot_proposal(obj: Any) -> bool:
+    """True when the model proposed a `hivemind-solver-slots/1` slot object rather than a raw spec."""
+    return isinstance(obj, dict) and (
+        obj.get("schema") == fam.SLOT_SCHEMA
+        or ("slot_family" in obj and "problem" not in obj)
+    )
+
+
+def compile_or_validate_proposal(obj: Any) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
+    """Validate a raw `hivemind-solver-spec/1` or compile+validate a `hivemind-solver-slots/1` proposal."""
+    if is_slot_proposal(obj):
+        try:
+            compiled, trace = fam.compile_slot_spec(obj, return_trace=True)
+        except fam.FamilyError as exc:
+            raise SpecInvalid(str(exc)[:200]) from None
+        return validate_spec(compiled), trace
+    return validate_spec(obj), None
+
+
+
 # ======================================================================== prompts
 SYSTEM_PROMPT_HEAD = """You turn a science question (English or French) into ONE data-only specification for a numeric ODE solver.
 You only PROPOSE the specification; a solver and an independent verifier decide whether the numbers hold. You never compute the answer yourself.
@@ -440,9 +460,10 @@ def formulate(messages: List[Dict[str, str]], backend: Backend, *, max_retries: 
                 reason = why[:300] if isinstance(why, str) else "no reason given"
                 errors.append("model declined: " + reason)
                 return _fail(errors, raws, attempt, reason)
-            spec = with_house_tolerances(validate_spec(obj))
-            return {"ok": True, "spec": spec, "spec_bytes": canonical_bytes(spec), "attempts": attempt, "retries": attempt - 1, "errors": errors,
-                    "raw_outputs": raws, "reason": ""}
+            validated, slot_trace = compile_or_validate_proposal(obj)
+            spec = with_house_tolerances(validated)
+            return {"ok": True, "spec": spec, "spec_bytes": canonical_bytes(spec), "slot_trace": slot_trace, "attempts": attempt,
+                    "retries": attempt - 1, "errors": errors, "raw_outputs": raws, "reason": ""}
         except SpecInvalid as exc:
             msg = str(exc)[:300]
             errors.append(msg)
@@ -452,7 +473,8 @@ def formulate(messages: List[Dict[str, str]], backend: Backend, *, max_retries: 
 
 
 def _fail(errors: List[str], raws: List[str], attempts: int, reason: str) -> Dict[str, Any]:
-    return {"ok": False, "spec": None, "spec_bytes": None, "attempts": attempts, "retries": max(0, attempts - 1), "errors": errors, "raw_outputs": raws, "reason": reason}
+    return {"ok": False, "spec": None, "spec_bytes": None, "slot_trace": None, "attempts": attempts, "retries": max(0, attempts - 1),
+            "errors": errors, "raw_outputs": raws, "reason": reason}
 
 
 # ======================================================================== pipeline (sandbox -> solver -> verifier)
@@ -602,6 +624,39 @@ def _state_names(spec: Dict[str, Any]) -> List[str]:
     return [f"x{i + 1}" for i in range(len(spec["y0"]))]
 
 
+def echo_interpreted_problem(
+    spec: Dict[str, Any],
+    *,
+    language: str = "en",
+    slot_trace: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Echo the interpreted problem back to the user for confirmation before relying on numbers."""
+    lang = "fr" if language == "fr" else "en"
+    names = _state_names(spec)
+    setup_lines = _describe_setup(spec, lang)
+    conversions = list((slot_trace or {}).get("conversions", []))
+    derived = list((slot_trace or {}).get("derived_parameters", []))
+    prompt = (
+        "Veuillez confirmer que ce problème interprété (équations, conversions d'unités, état initial et instants de sortie) correspond bien à votre situation réelle."
+        if lang == "fr"
+        else "Please confirm that this interpreted problem (equations, unit conversions, initial state, and output times) matches your intended setup."
+    )
+    return {
+        "schema": "hivemind-problem-echo/1",
+        "id": str(spec.get("id", "science-bee")),
+        "language": lang,
+        "setup_lines": setup_lines,
+        "state_variables": names,
+        "initial_state": {nm: float(v) for nm, v in zip(names, spec["y0"])},
+        "t0": float(spec.get("t0", 0.0)),
+        "t_out": [float(t) for t in spec["t_out"]],
+        "conversions_applied": conversions,
+        "derived_parameters": derived,
+        "confirmation_prompt": prompt,
+        "limits_notice": LIMITS_SENTENCE_FR if lang == "fr" else LIMITS_SENTENCE,
+    }
+
+
 _CHECK_WORDS = {
     "shape": ("the result has the right shape", "le résultat a la bonne forme"),
     "hashes": ("the input and result fingerprints match", "les empreintes de l'entrée et du résultat concordent"),
@@ -702,12 +757,14 @@ class ScienceBee:
         msgs = build_followup_messages(question, self.last_spec, self.last_question) if is_follow else build_first_messages(question)
         f = formulate(msgs, self.backend, max_retries=self.max_retries)
         lang = language or detect_language(question)
-        ans: Dict[str, Any] = {"question": question, "language": lang, "follow_up": is_follow, "formulated": f["ok"], "spec": f["spec"], "attempts": f["attempts"],
+        ans: Dict[str, Any] = {"question": question, "language": lang, "follow_up": is_follow, "formulated": f["ok"], "spec": f["spec"],
+                               "slot_trace": f.get("slot_trace"), "interpreted_problem_echo": None, "attempts": f["attempts"],
                                "retries": f["retries"], "errors": f["errors"], "raw_outputs": f["raw_outputs"], "failure_reason": f["reason"], "report": None,
                                "verdict": None, "spec_sha256": None}
         if f["ok"]:
             self.last_spec, self.last_question = f["spec"], question
             ans["spec_sha256"] = hashlib.sha256(f["spec_bytes"]).hexdigest()
+            ans["interpreted_problem_echo"] = echo_interpreted_problem(f["spec"], language=lang, slot_trace=f.get("slot_trace"))
             ans["report"] = self.pipeline.run(f["spec_bytes"])
             ans["verdict"] = ans["report"].get("verdict")
         ans["text"] = explain(question, f["spec"], ans["report"], language=lang, failure_reason=f["reason"])
@@ -875,3 +932,339 @@ class BaselineBackend(Backend):
         m = re.search(r"<<<\n(.*?)\n>>>", text, re.DOTALL)
         spec = baseline_formulate(m.group(1) if m else text)
         return json.dumps(spec) if spec is not None else json.dumps({"cannot_formulate": "no template matched"})
+
+
+# ======================================================================== named-slot formulator (pre-converting unit & derived-parameter slots)
+def _find_with_unit(text: str, synonyms: Sequence[str], unit_re: str) -> Optional[float]:
+    for syn in synonyms:
+        m = re.search(r"(?<![\w])(?:" + syn + r")" + _SEP + "(" + _NUM + r")\s*(?:" + unit_re + r")(?![\w])", text, re.IGNORECASE)
+        if m:
+            return float(m.group(1))
+    return None
+
+
+def _find_before_unit(text: str, unit_re: str, noun_re: Optional[str] = None) -> Optional[float]:
+    tail = (r"\s+(?:" + noun_re + r")") if noun_re else ""
+    m = re.search(r"(" + _NUM + r")\s*(?:" + unit_re + r")(?![\w])" + tail, text, re.IGNORECASE)
+    return float(m.group(1)) if m else None
+
+
+_SLOT_TIME_MARK = re.compile(
+    r"(?:\bt\s*=|\bat times?\b|\bat\b|\bafter\b|\bà\b|\baux instants\b|\baux jours?\b|\bon days?\b|\bapr[eè]s\b|\btimes?\b)",
+    re.IGNORECASE,
+)
+
+
+def _slot_times(text: str) -> Optional[List[float]]:
+    m_grid = re.search(
+        r"(?:over|simulate|pendant|sur)\s+(" + _NUM + r")\s*(?:seconds?|days?|minutes?|s|d|min)\b.*?\((\d+)\s*points?\)",
+        text,
+        re.IGNORECASE,
+    )
+    if m_grid:
+        t_end = float(m_grid.group(1))
+        n_pts = int(m_grid.group(2))
+        if t_end > 0 and n_pts >= 2:
+            return [round(i * t_end / (n_pts - 1), 12) for i in range(1, n_pts)]
+    sentences = re.split(r"(?<=[.?!])\s+", text.strip())
+    for s in reversed(sentences):
+        marks = list(_SLOT_TIME_MARK.finditer(s))
+        if marks:
+            tail = s[marks[-1].end():]
+            nums = [float(x) for x in re.findall(_NUM, tail)]
+            if nums:
+                return nums
+    return None
+
+
+def slot_formulate(question: str) -> Optional[Dict[str, Any]]:
+    """Extract a `hivemind-solver-slots/1` slot dictionary (including unit conversions & derived parameters) and validate it via `compile_slot_spec`."""
+    q = _fr_decimals(question)
+    ts = _increasing(_slot_times(q))
+    if ts is None:
+        return None
+    low = q.lower()
+    sentences = re.split(r"(?<=[.?!])\s+", q.strip())
+    last_sent = sentences[-1] if sentences else q
+    time_in_ms = bool(re.search(r"\b(?:ms|milliseconds?|millisecondes?)\b", last_sent, re.IGNORECASE))
+    t_key = "t_out_ms" if time_in_ms else "t_out"
+
+    slot_obj: Optional[Dict[str, Any]] = None
+    try:
+        if re.search(r"\bseir\b|s\s*,\s*e\s*,\s*i\s*,\s*r\b|incubation", low):
+            beta = _find(q, ["beta", "β", "transmission rate", "taux de transmission"])
+            r0_repro = _find(q, ["R0", "R_0", "basic reproduction number", "taux de reproduction"])
+            sig = _find(q, ["sigma", "σ"])
+            inc_p = _find(q, ["incubation period", "incubation", "période d'incubation", "periode d'incubation"])
+            gam = _find(q, ["gamma", "γ", "recovery rate", "taux de guérison"])
+            inf_p = _find(q, ["average infectious period", "infectious period", "infectious for", "période infectieuse", "periode infectieuse"])
+            e0_pct = _find_with_unit(q, ["e0", "e_0", "exposed", "exposés", "exposes"], r"%|percent|pourcent")
+            i0_pct = _find_with_unit(q, ["i0", "i_0", "infectious", "infected", "infectés", "infectes"], r"%|percent|pourcent")
+            e0 = _find(q, ["e0", "e_0"]) if e0_pct is None else None
+            i0 = _find(q, ["i0", "i_0"]) if i0_pct is None else None
+            if e0_pct is None and e0 is None:
+                m_exp = re.search(r"(" + _NUM + r")\s*%\s*(?:are\s+|sont\s+)?(?:exposed|expos[eé]s?)", q, re.IGNORECASE)
+                if m_exp:
+                    e0_pct = float(m_exp.group(1))
+            if i0_pct is None and i0 is None:
+                m_inf = re.search(r"(" + _NUM + r")\s*%\s*(?:are\s+|sont\s+)?(?:infectious|infected|infect[eé]s?)", q, re.IGNORECASE)
+                if m_inf:
+                    i0_pct = float(m_inf.group(1))
+            s0 = _find(q, ["s0", "s_0"])
+            slots_d: Dict[str, Any] = {t_key: ts}
+            if beta is not None:
+                slots_d["beta"] = beta
+            elif r0_repro is not None:
+                slots_d["R0"] = r0_repro
+            if sig is not None:
+                slots_d["sigma"] = sig
+            elif inc_p is not None:
+                slots_d["incubation_period"] = inc_p
+            if gam is not None:
+                slots_d["gamma"] = gam
+            elif inf_p is not None:
+                slots_d["infectious_period"] = inf_p
+            if e0_pct is not None:
+                slots_d["e0_percent"] = e0_pct
+            elif e0 is not None:
+                slots_d["e0"] = e0
+            if i0_pct is not None:
+                slots_d["i0_percent"] = i0_pct
+            elif i0 is not None:
+                slots_d["i0"] = i0
+            if s0 is not None:
+                slots_d["s0"] = s0
+            slot_obj = {"schema": fam.SLOT_SCHEMA, "slot_family": "seir", "slots": slots_d}
+
+        elif re.search(r"\bsir\b|s\s*,\s*i\s*,\s*r\b", low):
+            beta = _find(q, ["beta", "β", "transmission rate", "taux de transmission"])
+            r0_repro = _find(q, ["R0", "R_0", "basic reproduction number", "taux de reproduction"])
+            gam = _find(q, ["gamma", "γ", "recovery rate", "taux de guérison"])
+            inf_p = _find(q, ["average infectious period", "infectious period", "infectious for", "période infectieuse", "periode infectieuse"])
+            i0_pct = _find_with_unit(q, ["i0", "i_0", "infectious", "infected", "infectés", "infectes"], r"%|percent|pourcent")
+            i0 = _find(q, ["i0", "i_0"]) if i0_pct is None else None
+            if i0_pct is None and i0 is None:
+                m_inf = re.search(
+                    r"(" + _NUM + r")\s*%\s*(?:de\s+la\s+population\s+)?(?:are\s+|est\s+|sont\s+|initially\s+)?(?:infectious|infected|infect[eé]e?s?)",
+                    q,
+                    re.IGNORECASE,
+                )
+                if m_inf:
+                    i0_pct = float(m_inf.group(1))
+            s0 = _find(q, ["s0", "s_0"])
+            slots_d = {t_key: ts}
+            if beta is not None:
+                slots_d["beta"] = beta
+            elif r0_repro is not None:
+                slots_d["R0"] = r0_repro
+            if gam is not None:
+                slots_d["gamma"] = gam
+            elif inf_p is not None:
+                slots_d["infectious_period"] = inf_p
+            if i0_pct is not None:
+                slots_d["i0_percent"] = i0_pct
+            elif i0 is not None:
+                slots_d["i0"] = i0
+            if s0 is not None:
+                slots_d["s0"] = s0
+            slot_obj = {"schema": fam.SLOT_SCHEMA, "slot_family": "sir", "slots": slots_d}
+
+        elif re.search(r"\brlc\b|circuit", low):
+            r = _find(q, ["R", "resistance", "résistance"]) or _find_before_unit(q, r"ohms?|Ω")
+            l_mh = _find_with_unit(q, ["L", "inductance"], r"mH") or _find_before_unit(q, r"mH")
+            l_ = None if l_mh is not None else (_find(q, ["L", "inductance"]) or _find_before_unit(q, r"H", r"inductor|inductance"))
+            c_mf = _find_with_unit(q, ["C", "capacitance", "capacité"], r"mF") or _find_before_unit(q, r"mF")
+            c_uf = _find_with_unit(q, ["C", "capacitance", "capacité"], r"uF|µF") or _find_before_unit(q, r"uF|µF")
+            c = None if (c_mf is not None or c_uf is not None) else (_find(q, ["C", "capacitance", "capacité"]) or _find_before_unit(q, r"F", r"capacitor|condensateur"))
+            v = _find(q, ["V", "voltage", "tension"]) or _find_before_unit(q, r"V|volts?")
+            q0 = _find(q, ["q0", "q_0"])
+            i0 = _find(q, ["i0", "i_0"])
+            if r is None:
+                return None
+            slots_d = {"R": r, "V": 0.0 if v is None else v, "q0": 0.0 if q0 is None else q0, "i0": 0.0 if i0 is None else i0, t_key: ts}
+            if l_mh is not None:
+                slots_d["L_mH"] = l_mh
+            elif l_ is not None:
+                slots_d["L"] = l_
+            if c_mf is not None:
+                slots_d["C_mF"] = c_mf
+            elif c_uf is not None:
+                slots_d["C_uF"] = c_uf
+            elif c is not None:
+                slots_d["C"] = c
+            slot_obj = {"schema": fam.SLOT_SCHEMA, "slot_family": "series_rlc", "slots": slots_d}
+
+        elif re.search(r"spring|ressort", low):
+            m_g = _find_with_unit(q, ["m", "mass", "masse"], r"g|grams?|grammes?") or _find_before_unit(q, r"g|grams?|grammes?", r"mass|masse|block|bloc")
+            m = None if m_g is not None else (_find(q, ["m", "mass", "masse"]) or _find_before_unit(q, r"kg", r"mass|masse|block|bloc"))
+            c = _find(q, ["c", "damping coefficient", "coefficient d'amortissement", "damping", "amortissement"])
+            k = _find(q, ["k", "spring constant", "raideur", "stiffness"]) or _find_before_unit(q, r"N/m")
+            f = _find(q, ["F", "constant force", "force"]) or _find_before_unit(q, r"N", r"force")
+            x0_cm = (
+                _find_with_unit(q, ["x0", "x_0", "displacement", "déplacement", "pulled", "tiré", "tire", "stretched", "écarte", "ecarte", "écarté", "ecarte"], r"cm|centimet(?:er|re)s?")
+                or _find_before_unit(q, r"cm|centimet(?:er|re)s?")
+            )
+            x0 = None if x0_cm is not None else _find(q, ["x0", "x_0", "x", "displacement", "déplacement", "pulled", "stretched"])
+            v0 = _find(q, ["v0", "v_0", "velocity", "vitesse"])
+            if k is None or (m is None and m_g is None):
+                return None
+            slots_d = {"k": k, "F": 0.0 if f is None else f, "v0": 0.0 if v0 is None else v0, t_key: ts}
+            if m_g is not None:
+                slots_d["m_g"] = m_g
+            else:
+                slots_d["m"] = m
+            m_damp = re.search(
+                r"damper\s+(?:exerts|produces|gives|resists\s+with)\s+(" + _NUM + r")\s*N\s+(?:at|when\s+[\w\s]+moves\s+at)\s+(" + _NUM + r")\s*m/s",
+                q,
+                re.IGNORECASE,
+            )
+            if m_damp:
+                slots_d["damper_force"] = float(m_damp.group(1))
+                slots_d["damper_speed"] = float(m_damp.group(2))
+            elif c is not None:
+                slots_d["c"] = c
+            if x0_cm is not None:
+                slots_d["x0_cm"] = x0_cm
+            elif x0 is not None:
+                slots_d["x0"] = x0
+            else:
+                slots_d["x0"] = 0.0
+            slot_obj = {"schema": fam.SLOT_SCHEMA, "slot_family": "spring_mass_damper", "slots": slots_d}
+
+        elif re.search(r"pendul", low):
+            g_over_l = _find(q, ["g_over_l", r"g\s*/\s*l"])
+            length_m = _find_with_unit(q, ["length", "longueur", "L", "l"], r"m|met(?:er|re)s?|mètres?")
+            length_cm = _find_with_unit(q, ["length", "longueur", "L", "l"], r"cm|centimet(?:er|re)s?")
+            g_val = _find(q, ["g", "gravity", "gravité"])
+            d = _find(q, ["damping", "friction", "amortissement", "frottement", "gamma"])
+            th_deg = (
+                _find_with_unit(q, ["theta0", "theta_0", "θ0", "initial angle", "angle initial", "angle", "at"], r"deg|degrees?|degrés?|°")
+                or _find_before_unit(q, r"deg|degrees?|degrés?|°")
+            )
+            th = None if th_deg is not None else _find(q, ["theta0", "theta_0", "θ0", "initial angle", "angle initial", "angle"])
+            om = _find(q, ["omega0", "omega_0", "ω0", "angular velocity", "vitesse angulaire"])
+            if th is None and th_deg is None:
+                return None
+            slots_d = {"omega0": 0.0 if om is None else om, "damping": 0.0 if d is None else d, t_key: ts}
+            if g_over_l is not None:
+                slots_d["g_over_l"] = g_over_l
+            else:
+                if length_m is not None:
+                    slots_d["length_m"] = length_m
+                elif length_cm is not None:
+                    slots_d["length_cm"] = length_cm
+                if g_val is not None:
+                    slots_d["g"] = g_val
+            if th_deg is not None:
+                slots_d["theta0_deg"] = th_deg
+            else:
+                slots_d["theta0"] = th
+            slot_obj = {"schema": fam.SLOT_SCHEMA, "slot_family": "pendulum", "slots": slots_d}
+
+        elif re.search(r"projectile|ball\b|balle|cannonball|obus", low):
+            g_val = _find(q, ["g", "gravity", "gravité"])
+            k = _find(q, ["drag coefficient", "quadratic drag coefficient", "traînée quadratique de coefficient", "trainee quadratique de coefficient", "coefficient", "drag", "k", "traînée", "trainee"])
+            x0 = _find(q, ["x0", "x_0"])
+            y0 = _find(q, ["y0", "y_0", "height", "hauteur"])
+            vx = _find(q, ["vx0", "vx_0", "vx"])
+            vy = _find(q, ["vy0", "vy_0", "vy"])
+            speed_kmh = (
+                _find_with_unit(q, ["speed", "vitesse", "v0", "launched at", "thrown at", "horizontally at", "lancée à", "lancee a", "lancée", "lancee"], r"km/h|kph")
+                or _find_before_unit(q, r"km/h|kph")
+            )
+            speed = None if speed_kmh is not None else (
+                _find(q, ["speed", "vitesse", "v0", "launched at", "thrown at"])
+                or _find_before_unit(q, r"m/s")
+            )
+            slots_d = {"x0": 0.0 if x0 is None else x0, "y0": 0.0 if y0 is None else y0,
+                       "g": 9.81 if g_val is None else g_val, "k": 0.0 if k is None else k, t_key: ts}
+            if vx is not None and vy is not None:
+                slots_d["vx0"], slots_d["vy0"] = vx, vy
+            else:
+                if speed_kmh is not None:
+                    slots_d["speed_kmh"] = speed_kmh
+                elif speed is not None:
+                    slots_d["speed"] = speed
+                else:
+                    return None
+                m_slope = re.search(r"(?:rising|rises)\s+(" + _NUM + r")\s+\w+\s+for\s+every\s+(" + _NUM + r")", q, re.IGNORECASE)
+                if m_slope:
+                    slots_d["slope_rise"] = float(m_slope.group(1))
+                    slots_d["slope_run"] = float(m_slope.group(2))
+                else:
+                    deg = _find_with_unit(q, ["angle", "at"], r"deg|degrees?|degrés?|°") or _find_before_unit(q, r"deg|degrees?|degrés?|°")
+                    if deg is not None:
+                        slots_d["angle_deg"] = deg
+            slot_obj = {"schema": fam.SLOT_SCHEMA, "slot_family": "projectile_drag", "slots": slots_d}
+
+        elif re.search(r"kepler|orbit|orbite|planet|planète|two-body", low):
+            mu = _find(q, ["mu", "μ"])
+            r0 = _find(q, ["r0", "r_0", "radius", "rayon"])
+            x0, y0, vx, vy = (_find(q, ["x0", "x_0"]), _find(q, ["y0", "y_0"]), _find(q, ["vx0", "vx_0", "vx"]), _find(q, ["vy0", "vy_0", "vy"]))
+            slots_d = {"mu": 1.0 if mu is None else mu, t_key: ts}
+            if re.search(r"circular|circulaire", low) and r0 is not None:
+                slots_d["circular_radius"] = r0
+            elif None not in (x0, y0, vx, vy):
+                slots_d.update({"x0": x0, "y0": y0, "vx0": vx, "vy0": vy})
+            else:
+                return None
+            slot_obj = {"schema": fam.SLOT_SCHEMA, "slot_family": "kepler", "slots": slots_d}
+
+        elif re.search(r"logisti", low):
+            m_pct_min = re.search(r"(" + _NUM + r")\s*%\s*per\s*minute", q, re.IGNORECASE)
+            r = _find(q, ["r", "growth rate", "taux de croissance"])
+            kk = _find(q, ["K", "carrying capacity", "capacité"])
+            n0 = _find(q, ["n0", "n_0", "p0", "initial population", "population initiale", "culture", "population"])
+            if n0 is None:
+                return None
+            slots_d = {"K": 1.0 if kk is None else kk, "n0": n0, t_key: ts}
+            if m_pct_min:
+                slots_d["r_percent_per_min"] = float(m_pct_min.group(1))
+            elif r is not None:
+                slots_d["r"] = r
+            slot_obj = {"schema": fam.SLOT_SCHEMA, "slot_family": "logistic", "slots": slots_d}
+
+        elif re.search(r"decay|chain|chaîne|chaine|stiff|raide|désintégration|desintegration|turns\s+into", low):
+            ks = [_find(q, [f"k{i}", f"k_{i}"]) for i in (1, 2, 3)]
+            rates = [k for k in ks if k is not None]
+            a0 = _find(q, ["a0", "a_0", "initial amount", "quantité initiale", "quantite initiale", "start with"])
+            if a0 is None:
+                m_a0 = re.search(r"start(?:ing)?\s+(?:with|from)\s+(" + _NUM + r")\s*(?:units?|mols?|moles?)?\s+(?:of\s+)?A\b", q, re.IGNORECASE)
+                if m_a0:
+                    a0 = float(m_a0.group(1))
+            if len(rates) >= 1 and a0 is not None and ks[: len(rates)] == rates:
+                per_min = bool(re.search(r"per\s+minute|par\s+minute|/min", low))
+                slots_d = {"a0": a0, ("rates_per_min" if per_min else "rates"): rates, t_key: ts}
+                slot_obj = {"schema": fam.SLOT_SCHEMA, "slot_family": "decay_chain", "slots": slots_d}
+            elif a0 is not None:
+                # Check for "turns into ... at X per minute" or "time constant of X ms / s"
+                m_per_min = re.findall(r"turns\s+into\s+[B-Z]\s+at\s+(" + _NUM + r")\s*per\s*minute", q, re.IGNORECASE)
+                m_tau = re.findall(r"time\s+constant\s+of\s+(" + _NUM + r")\s*(ms|s|seconds?|milliseconds?)\b", q, re.IGNORECASE)
+                if m_per_min:
+                    slots_d = {"a0": a0, "rates_per_min": [float(v) for v in m_per_min], t_key: ts}
+                    slot_obj = {"schema": fam.SLOT_SCHEMA, "slot_family": "decay_chain", "slots": slots_d}
+                elif m_tau:
+                    taus_s = [float(v) / 1000.0 if u.lower().startswith("m") else float(v) for v, u in m_tau]
+                    slots_d = {"a0": a0, "time_constants_s": taus_s, t_key: ts}
+                    slot_obj = {"schema": fam.SLOT_SCHEMA, "slot_family": "decay_chain", "slots": slots_d}
+
+        if slot_obj is None:
+            return None
+        # Ensure it compiles and validates cleanly before returning the slot proposal
+        compile_or_validate_proposal(slot_obj)
+        return slot_obj
+    except (fam.FamilyError, SpecInvalid, ValueError, TypeError):
+        return None
+
+
+class SlotBackend(Backend):
+    """Named-slot backend that emits `hivemind-solver-slots/1` proposals with unit and derived-parameter slots."""
+
+    name = "slot"
+
+    def complete(self, messages: List[Dict[str, str]]) -> str:
+        text = messages[-1]["content"]
+        m = re.search(r"<<<\n(.*?)\n>>>", text, re.DOTALL)
+        slot_obj = slot_formulate(m.group(1) if m else text)
+        return json.dumps(slot_obj) if slot_obj is not None else json.dumps({"cannot_formulate": "missing or ambiguous parameters for slot schema"})
+

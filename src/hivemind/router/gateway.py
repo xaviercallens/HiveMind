@@ -1279,7 +1279,76 @@ def create_router_app(
         """Public mathematical, social, and economic readiness model for the International English Launch (HM-S19-INTL)."""
         from hivemind.economy.international_launch_model import evaluate_international_launch_readiness
 
-        return evaluate_international_launch_readiness()
+        payload = evaluate_international_launch_readiness()
+        payload["live_store_scale_status"] = store.producer_fleet_scale_status(clock(), PRODUCER_TTL_S, target_producers=100)
+        return payload
+
+    @app.get("/v1/hivemind/producers/scale-100-status")
+    def producers_scale_100_status() -> dict[str, Any]:
+        """Live 100-Producer International Launch scaling gate, regional shards, hardware tiers, and AMCP mesh status."""
+        from hivemind.economy.international_launch_model import build_100_producer_international_fleet_plan
+        from hivemind.swarm.amcp_eda_traffic_sustainer import plan_100_producer_mesh_scaling
+
+        live_status = store.producer_fleet_scale_status(clock(), PRODUCER_TTL_S, target_producers=100)
+        return {
+            "object": "hivemind.producer_scale_100_status",
+            "live_store_scale_status": live_status,
+            "hundred_producer_fleet_plan": build_100_producer_international_fleet_plan(active_producers=100),
+            "amcp_mesh_scaling": plan_100_producer_mesh_scaling(active_producers=100),
+        }
+
+    @app.post("/v1/hivemind/producers/scale-100-simulate")
+    async def producers_scale_100_simulate(request: Request) -> dict[str, Any]:
+        """Simulate the 100-producer geo-sharded topology and P2C residency-aware dispatcher under custom traffic."""
+        from hivemind.economy.international_launch_model import build_100_producer_international_fleet_plan
+        from hivemind.swarm.amcp_eda_traffic_sustainer import (
+            plan_100_producer_mesh_scaling,
+            select_100_node_optimal_producer,
+        )
+
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+        except (ValueError, RecursionError):
+            raise RouterError(400, "invalid request: body must be a JSON object", "invalid_request_error", "invalid_request") from None
+        if not isinstance(body, dict):
+            raise RouterError(400, "invalid request: body must be a JSON object", "invalid_request_error", "invalid_request")
+
+        active_producers = max(4, min(int(body.get("active_producers", 100)), 1000))
+        standby_prosumers = max(0, min(int(body.get("standby_prosumers", 160)), 5000))
+        arrival_rate = max(0.1, min(float(body.get("arrival_rate_req_per_s", 24.0)), 500.0))
+        client_region = str(body.get("client_region", "eu-west"))[:32]
+        model_id = str(body.get("model_id", "hivemind/qwen3.5-coder-14b"))[:128]
+
+        fleet_plan = build_100_producer_international_fleet_plan(
+            active_producers=active_producers,
+            standby_prosumers=standby_prosumers,
+            arrival_rate_req_per_s=arrival_rate,
+        )
+        regions = ("eu-west", "us-east", "us-west", "ap-northeast")
+        synthetic_candidates = [
+            {
+                "account_id": f"producer-{i:03d}",
+                "endpoint_id": f"ep-{i % 2}",
+                "region": regions[i % len(regions)],
+                "loaded": (i % 3 == 0),
+                "inflight": i % 5,
+                "capacity_1k": 20 + (i % 4) * 10,
+                "models": [model_id],
+            }
+            for i in range(active_producers)
+        ]
+        dispatch_sample = select_100_node_optimal_producer(
+            synthetic_candidates,
+            model_id=model_id,
+            client_region=client_region,
+        )
+        return {
+            "object": "hivemind.producer_scale_100_simulation",
+            "fleet_plan": fleet_plan,
+            "amcp_mesh_scaling": plan_100_producer_mesh_scaling(active_producers=active_producers),
+            "p2c_dispatch_sample": dispatch_sample,
+        }
 
     @app.get("/v1/hivemind/bees/rusty-sundials")
     def get_rusty_sundials_bee() -> dict[str, Any]:
@@ -2299,6 +2368,69 @@ def create_router_app(
             "credit": verdict.credit,
             "pflops_seconds": verdict.pflops_seconds,
             **sweep_bundle,
+        }
+
+    @app.post("/v1/hivemind/bees/science-bee/slot-compile")
+    async def science_bee_slot_compile_endpoint(request: Request) -> dict[str, Any]:
+        """Compile a `hivemind-solver-slots/1` named-slot dictionary into a validated `hivemind-solver-spec/1` with echo confirmation."""
+        from hivemind.solverbee import families as fam
+        from hivemind.solverbee import science_bee as sb
+
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+        except ValueError:
+            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+
+        try:
+            spec, trace = fam.compile_slot_spec(body, return_trace=True)
+            validated = sb.with_house_tolerances(sb.validate_spec(spec))
+            echo = sb.echo_interpreted_problem(validated, language=str(body.get("language", "en")), slot_trace=trace)
+        except (fam.FamilyError, sb.SpecInvalid) as exc:
+            raise RouterError(400, str(exc), "invalid_request_error", "invalid_slot_spec") from None
+
+        return {
+            "object": "hivemind.bee.science_bee.slot_compilation",
+            "spec": validated,
+            "slot_trace": trace,
+            "interpreted_problem_echo": echo,
+        }
+
+    @app.post("/v1/hivemind/bees/science-bee/ask")
+    async def science_bee_ask_endpoint(request: Request) -> dict[str, Any]:
+        """Ask the Next-Gen MoE Science Bee (`hivemind/moe-science-bee-v2`) a plain-language science question."""
+        from hivemind.swarm.rusty_sundials_scientific_bee import NextGenMoEScienceBee
+
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+        except ValueError:
+            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+
+        question = str(body.get("question") or body.get("prompt") or "").strip()
+        if not question:
+            raise RouterError(400, "question is required", "invalid_request_error", "missing_question")
+
+        bee = NextGenMoEScienceBee()
+        ans = bee.ask(question, language=body.get("language"))
+        return {
+            "object": "hivemind.bee.science_bee.answer",
+            **ans,
+        }
+
+    @app.get("/v1/hivemind/bees/owner-fleet-status")
+    async def owner_fleet_status_endpoint(foreground_gaming: bool = False) -> dict[str, Any]:
+        """Return Owner Lead-by-Example RTX 2070 + GCP Tesla T4 co-serving & nocturnal SVD distillation status (#272)."""
+        from hivemind.swarm.rusty_sundials_scientific_bee import OwnerFleetCoServingOrchestrator
+
+        orch = OwnerFleetCoServingOrchestrator()
+        status = orch.fleet_status(foreground_gaming=foreground_gaming)
+        distill = orch.distill_teacher_to_rtx2070_student()
+        s1b = orch.verify_s1b_cross_cpu_reproducibility()
+        return {
+            **status,
+            "latest_nocturnal_distillation": distill,
+            "s1b_cross_cpu_reproducibility": s1b,
         }
 
     return app

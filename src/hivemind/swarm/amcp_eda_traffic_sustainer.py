@@ -273,6 +273,14 @@ def build_sunday_producer_first_international_plan() -> dict[str, Any]:
                 peak_arrival_req_per_s=24.0,
             )
         ),
+        asdict(
+            sustainer.plan_elastic_bee_mobility(
+                wave_name="Global Scale Gate: 100 Resident Producer Nodes + 160 Standby AMCP Prosumers (EU/US/APAC)",
+                base_resident_producers_c0=100,
+                standby_prosumer_pool=160,
+                peak_arrival_req_per_s=28.5,
+            )
+        ),
     ]
 
     schedule = [
@@ -320,9 +328,9 @@ def build_sunday_producer_first_international_plan() -> dict[str, Any]:
             "actions": [
                 "Launch 'Show HN: HiveMind@Home — A Citizen BOINC + OpenRouter Swarm where your idle night GPU pays for your daytime coding AI'.",
                 "EDA CloudEvents broker buffers 24 req/s bursts; Congestion Kelly Surge pricing (omega(rho)) boosts daytime producer HMT rewards by 2.8x to pull all 160 standby prosumer GPUs online.",
-                "Sunday Night Nov 8 — Global 200+ GPU Nocturnal MoE Consolidation (> 11 PFLOPS).",
+                "Sunday Night Nov 8 — Global 100-Producer Daytime / 200+ GPU Nocturnal MoE Consolidation (> 11 PFLOPS).",
             ],
-            "target_gate": "Sustain 24.0 req/s peak (25,000+ visitors) at elastic_rho <= 0.45, 0% cold-start 504s (PR #249), self-sustaining supply ratio >= 12.5%.",
+            "target_gate": "Sustain 24.0-28.5 req/s peak (25,000+ visitors) across 100 active producer nodes at elastic_rho <= 0.45, 0% cold-start 504s (PR #249), self-sustaining supply ratio >= 12.5%.",
         },
     ]
 
@@ -332,7 +340,138 @@ def build_sunday_producer_first_international_plan() -> dict[str, Any]:
         "leveraged_prs": list(LEVERAGED_AMCP_AND_HIVEMIND_PRS),
         "elastic_eda_wave_simulations": wave_results,
         "sunday_to_next_week_schedule": schedule,
+        "hundred_producer_mesh_scaling": plan_100_producer_mesh_scaling(active_producers=100),
     }
     digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
     payload["plan_sha256"] = digest
     return payload
+
+
+def select_100_node_optimal_producer(
+    candidates: list[dict[str, Any]],
+    model_id: str,
+    client_region: str = "eu-west",
+    seed: int = 42,
+) -> dict[str, Any]:
+    """Power-of-Two-Choices (P2C) + HM-S16-06 Residency-Aware + Geo-Affinity Producer Dispatcher (#249, #251).
+
+    Given up to 100 active producer accounts (up to 800 endpoints at `MAX_ENDPOINTS_PER_ACCOUNT = 8`):
+    1. Filters out paused nodes (`paused == True`) or zero-capacity endpoints (`capacity_1k <= 0`).
+    2. Partition candidates by HM-S16-06 loaded-model residency tier:
+       - Tier 0 (`loaded is True`): model confirmed warm in VRAM (`GET /api/ps`) -> zero cold-start latency.
+       - Tier 1 (`loaded is None`): legacy/unprobed endpoint -> fallback candidate.
+       - Tier 2 (`loaded is False`): model currently cold on disk -> avoided if Tier 0/1 exist, triggers background warm-up.
+    3. Within the best non-empty residency tier, evaluates candidates using deterministic Power-of-Two-Choices (P2C)
+       augmented by regional affinity (`region == client_region`) and normalized inflight queue load:
+       `score = (inflight + 1.0) / max(1.0, capacity_1k) + (0.0 if same_region else 0.15) + rtt_ms / 1000.0`.
+    """
+    eligible: list[dict[str, Any]] = []
+    for idx, cand in enumerate(candidates):
+        if bool(cand.get("paused", False)):
+            continue
+        cap = int(cand.get("capacity_1k", 10))
+        if cap <= 0:
+            continue
+        models = cand.get("models")
+        if isinstance(models, (list, tuple, set)) and model_id and model_id not in models:
+            continue
+        residency_map = cand.get("residency")
+        if isinstance(residency_map, dict) and model_id in residency_map:
+            loaded_val = residency_map[model_id]
+        else:
+            loaded_val = cand.get("loaded")
+        if loaded_val is True:
+            res_tier = 0
+        elif loaded_val is None:
+            res_tier = 1
+        else:
+            res_tier = 2
+
+        reg = str(cand.get("region", "eu-west"))
+        same_region = reg == client_region
+        inflight = max(0, int(cand.get("inflight", 0)))
+        rtt_ms = float(cand.get("rtt_ms", 20.0 if same_region else 85.0))
+        load_score = (inflight + 1.0) / max(1.0, float(cap)) + (0.0 if same_region else 0.15) + (rtt_ms / 1000.0)
+        eligible.append(
+            {
+                "index": idx,
+                "account_id": str(cand.get("account_id", f"producer-{idx}")),
+                "endpoint_id": str(cand.get("endpoint_id", "default")),
+                "region": reg,
+                "same_region": same_region,
+                "residency_tier": res_tier,
+                "loaded": loaded_val,
+                "inflight": inflight,
+                "capacity_1k": cap,
+                "rtt_ms": round(rtt_ms, 2),
+                "load_score": round(load_score, 6),
+            }
+        )
+
+    if not eligible:
+        raise ValueError(f"no eligible producer endpoints available for model={model_id!r}")
+
+    best_tier = min(c["residency_tier"] for c in eligible)
+    tier_pool = [c for c in eligible if c["residency_tier"] == best_tier]
+
+    # Prefer same-region pool within the best residency tier when available, else full tier pool
+    regional_tier_pool = [c for c in tier_pool if c["same_region"]]
+    active_pool = regional_tier_pool if regional_tier_pool else tier_pool
+
+    if len(active_pool) == 1:
+        chosen = active_pool[0]
+        p2c_pair = [chosen["account_id"]]
+    else:
+        # Deterministic P2C tournament across the top-ranked candidates + pseudo-random probe
+        sorted_pool = sorted(active_pool, key=lambda item: (item["load_score"], item["account_id"], item["endpoint_id"]))
+        probe_idx = ( abs(int(seed)) % (len(sorted_pool) - 1) ) + 1
+        choice_a = sorted_pool[0]
+        choice_b = sorted_pool[probe_idx]
+        chosen = choice_a if choice_a["load_score"] <= choice_b["load_score"] else choice_b
+        p2c_pair = [choice_a["account_id"], choice_b["account_id"]]
+
+    return {
+        "selected_producer": chosen,
+        "model_id": model_id,
+        "client_region": client_region,
+        "best_residency_tier": best_tier,
+        "total_eligible_candidates": len(eligible),
+        "tier_pool_size": len(tier_pool),
+        "p2c_pair_evaluated": p2c_pair,
+        "warmup_recommended": best_tier == 2,
+    }
+
+
+def plan_100_producer_mesh_scaling(
+    active_producers: int = 100,
+    endpoints_per_producer: int = 2,
+    heartbeat_interval_s: float = 30.0,
+) -> dict[str, Any]:
+    """Compute AMCP v1.5 topic-partitioned heartbeat & P2C dispatch scaling metrics for 100 producer nodes."""
+    c = max(1, int(active_producers))
+    ep_per_prod = max(1, min(8, int(endpoints_per_producer)))
+    total_endpoints = c * ep_per_prod
+    interval_s = max(5.0, float(heartbeat_interval_s))
+
+    unbatched_wal_writes_per_s = round(total_endpoints / interval_s, 4)
+    regional_partitions = 4  # eu-west, us-east, us-west, ap-northeast
+    batched_wal_commits_per_s = round(regional_partitions / interval_s, 4)
+    sqlite_lock_reduction_factor = round(total_endpoints / regional_partitions, 2)
+
+    return {
+        "active_producers": c,
+        "endpoints_per_producer": ep_per_prod,
+        "total_live_endpoints": total_endpoints,
+        "max_supported_endpoints": c * 8,
+        "amcp_topic_partitions": [
+            "io.hivemind.amcp.heartbeat.eu-west",
+            "io.hivemind.amcp.heartbeat.us-east",
+            "io.hivemind.amcp.heartbeat.us-west",
+            "io.hivemind.amcp.heartbeat.ap-northeast",
+        ],
+        "unbatched_wal_writes_per_s": unbatched_wal_writes_per_s,
+        "batched_wal_commits_per_s": batched_wal_commits_per_s,
+        "sqlite_lock_reduction_factor": sqlite_lock_reduction_factor,
+        "p2c_routing_complexity": "O(1) per request after residency tier partitioning",
+    }
+

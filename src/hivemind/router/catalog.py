@@ -1076,6 +1076,27 @@ PREWIRED_PARTNER_MODELS: tuple[PrewiredPartnerModel, ...] = (
             "moe-glm45-air-science",
         ),
     ),
+    PrewiredPartnerModel(
+        tier_id="bee-rusty-sundials",
+        public_id="hivemind/moe-science-bee-v2",
+        partner_id="hivemind/science-bee-slots-and-accuracy",
+        hf_repo="xaviercallens/hivemind-moe-science-bee-v2",
+        github_repo="xaviercallens/HiveMind",
+        website="https://github.com/xaviercallens/HiveMind/issues/273",
+        title="Next-Gen MoE Science Bee v2: Named-Slot Unit Compiler, Echo Confirmation, Richardson Accuracy & RTX2070+T4 Co-Serving",
+        parameters_b=7.6,
+        tokens_trained_b=18.0,
+        tokenizer="Qwen2.5-Coder",
+        shard_format="gguf_q4_k_m_plus_hivemind_solver_slots",
+        license="AGPL-3.0 / Apache-2.0",
+        status="LIVE_ON_SMALL_GPU",
+        aliases=(
+            "hivemind/moe-science-bee-v2",
+            "hivemind/science-bee-v2",
+            "hivemind/science-bee",
+            "moe-science-bee-v2",
+        ),
+    ),
 )
 
 

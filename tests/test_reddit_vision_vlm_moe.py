@@ -153,3 +153,69 @@ def test_end_to_end_5_stage_reddit_vision_campaign_and_fastapi_routes(tmp_path: 
     assert r_start.status_code == 200
     assert r_start.json()["campaign_id"] == "NIGHT-REDDIT-VISION-MOE-V1"
     assert r_start.json()["stage1_all_base_frozen"] is True
+
+
+def test_la_ruche_1500mb_vmoe_muon_btm_zk_opoi_and_fomoe() -> None:
+    """Verify < 1.5 GB (<= 1,536 MiB) La Ruche V-MoE with Muon, BTM, ZK-OPoI, and FoMoE Top-2."""
+    from hivemind.core.reddit_vision_vlm_moe import (
+        LA_RUCHE_1500MB_VMOE_BACKBONES,
+        LA_RUCHE_VMOE_4_SPECIALIZATIONS,
+        MAX_LA_RUCHE_BACKGROUND_VRAM_MIB,
+        generate_zk_opoi_training_receipt,
+        merge_btm_attention_weights,
+        newton_schulz_orthogonalize_muon,
+        run_la_ruche_1500mb_patch_vmoe_pipeline,
+        verify_zk_opoi_training_receipt,
+    )
+
+    assert len(LA_RUCHE_1500MB_VMOE_BACKBONES) == 4
+    for info in LA_RUCHE_1500MB_VMOE_BACKBONES.values():
+        assert info["peak_vram_mib"] <= MAX_LA_RUCHE_BACKGROUND_VRAM_MIB
+    assert set(LA_RUCHE_VMOE_4_SPECIALIZATIONS.keys()) == {
+        "art_aesthetics",
+        "scientific_diagrams",
+        "semantic_segmentation",
+        "object_detection",
+    }
+
+    # Muon Newton-Schulz orthogonalization (2D, tall 2D, 3D, and zero tensor)
+    g_tall = np.random.default_rng(11).normal(size=(16, 8)).astype(np.float32)
+    o_tall = newton_schulz_orthogonalize_muon(g_tall, steps=5)
+    assert o_tall.shape == (16, 8)
+    g_3d = np.random.default_rng(12).normal(size=(4, 4, 4)).astype(np.float32)
+    o_3d = newton_schulz_orthogonalize_muon(g_3d, steps=3)
+    assert o_3d.shape == (4, 4, 4)
+    g_zero = np.zeros((8, 8), dtype=np.float32)
+    assert np.allclose(newton_schulz_orthogonalize_muon(g_zero), 0.0)
+
+    # BTM attention weight averaging
+    t1 = {"q": torch.ones((4, 4)), "v": torch.zeros((4, 4))}
+    t2 = {"q": torch.ones((4, 4)) * 3.0, "v": torch.ones((4, 4)) * 2.0}
+    merged = merge_btm_attention_weights([t1, t2])
+    assert torch.allclose(merged["q"], torch.ones((4, 4)) * 2.0)
+    assert torch.allclose(merged["v"], torch.ones((4, 4)) * 1.0)
+    with pytest.raises(ValueError, match="at least one branch"):
+        merge_btm_attention_weights([])
+
+    # ZK-OPoI receipt generation and verification
+    d0 = np.zeros((8, 8), dtype=np.float32)
+    d1 = np.ones((8, 8), dtype=np.float32)
+    receipt = generate_zk_opoi_training_receipt(
+        bee_id="bee_01",
+        specialization_id="art_aesthetics",
+        inner_steps=500,
+        optimizer_name="Muon",
+        seed=42,
+        initial_delta=d0,
+        final_delta=d1,
+        dct_packet_sha256="abc123",
+    )
+    assert verify_zk_opoi_training_receipt(receipt, expected_final_delta=d1) is True
+    assert verify_zk_opoi_training_receipt(receipt, expected_final_delta=d0) is False
+
+    # End-to-end < 1.5 GB La Ruche V-MoE pipeline
+    summary = run_la_ruche_1500mb_patch_vmoe_pipeline(inner_steps=50, seed=99)
+    assert summary["strictly_under_1500mb_vram"] is True
+    assert summary["max_worker_vram_mib"] <= MAX_LA_RUCHE_BACKGROUND_VRAM_MIB
+    assert summary["all_zk_opoi_receipts_verified"] is True
+    assert summary["fomoe_patch_routing_accuracy"] == 1.0

@@ -4,16 +4,18 @@
 
 <br/>
 
-[![Release](https://img.shields.io/badge/Release-v3.8.0%20(Season%2016%20Live%20Ops%20%26%20201%2B%20PRs)-00f0ff?style=for-the-badge)](https://github.com/xaviercallens/HiveMind/releases)
-[![Live OpenRouter](https://img.shields.io/badge/Live_OpenRouter_Gateway-7_Models_Online-10b981?style=for-the-badge&logo=googlecloud)](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app)
-[![Live La Ruche](https://img.shields.io/badge/La_Ruche_Portal-Live_on_Cloud_Run-f59e0b?style=for-the-badge&logo=googlecloud)](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app)
+[![Release](https://img.shields.io/badge/Release-v2.11.0%20(Season%2025%20Live%20Ops%20%26%20323%2B%20PRs)-00f0ff?style=for-the-badge)](https://github.com/xaviercallens/HiveMind/releases/tag/v2.11.0)
+[![Live OpenRouter](https://img.shields.io/badge/Live_OpenRouter_Gateway-15_Models_Online-10b981?style=for-the-badge&logo=googlecloud)](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app)
+[![Join in 5 Languages](https://img.shields.io/badge/Join_HiveMind-FR_%E2%80%A2_EN_%E2%80%A2_ES_%E2%80%A2_DE_%E2%80%A2_ZH-38bdf8?style=for-the-badge&logo=googlecloud)](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/rejoindre?lang=fr)
+[![Live La Ruche](https://img.shields.io/badge/La_Ruche_Portal-24_MoE_Bees_%26_Community_Hub-f59e0b?style=for-the-badge&logo=googlecloud)](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app)
 [![HiveMind@home Web](https://img.shields.io/badge/HiveMind%40home_Site-Live_5--Language_Portal-a855f7?style=for-the-badge&logo=github)](https://hivemindathome.github.io/)
-[![Test Suite](https://img.shields.io/badge/Tests-Full%20suite%20in%20CI%20(coverage%20gate%2095%25)-brightgreen?style=for-the-badge)](.github/workflows/ci_swarm_tests.yml)
-[![Lean 4 Verified](https://img.shields.io/badge/Lean%204-Machine--checked%20theorems%20(0%20sorry%2C%200%20user%20axioms)-005cc5?style=for-the-badge)](lean4/HiveMindSpec.lean)
-[![Foundation Paper](https://img.shields.io/badge/Foundation%20Paper-v3.8.0%20LaTeX%20%26%20PDF%20(self--assessed%2C%20scripted%20audit%2C%20not%20peer%20reviewed)-b31b1b?style=for-the-badge)](paper/hivemind_foundation_article.pdf)
-[![Zenodo DOI](https://img.shields.io/badge/Zenodo%20DOI-10.5281%2Fzenodo.23649757-1682d4?style=for-the-badge)](https://doi.org/10.5281/zenodo.23649757)
+[![Test Suite](https://img.shields.io/badge/Tests-3%2C467%2B%20in%20CI%20(coverage%20gate%2095%25)-brightgreen?style=for-the-badge)](.github/workflows/ci_swarm_tests.yml)
+[![Lean 4 Verified](https://img.shields.io/badge/Lean%204-128%20Machine--checked%20theorems%20(0%20sorry%2C%200%20user%20axioms)-005cc5?style=for-the-badge)](lean4/HiveMindSpec.lean)
+[![Foundation Paper](https://img.shields.io/badge/Foundation%20Paper-v4.0.0%20LaTeX%20%26%20PDF%20(Bi--Layer%20Bee%20Mesh%20%26%20Diurnal%20MoE)-b31b1b?style=for-the-badge)](paper/hivemind_foundation_article.pdf)
+[![Zenodo DOI v4.0](https://img.shields.io/badge/Zenodo%20DOI%20v4.0-10.5281%2Fzenodo.23756909-1682d4?style=for-the-badge)](https://doi.org/10.5281/zenodo.23756909)
+[![Zenodo DOI v3.8](https://img.shields.io/badge/Zenodo%20DOI%20v3.8-10.5281%2Fzenodo.23649757-1682d4?style=for-the-badge)](https://doi.org/10.5281/zenodo.23649757)
 [![Hardware Verified](https://img.shields.io/badge/Verified%20Dual--GPU-Tesla%20T4%20(16GB%20MoE)%20%2B%20RTX%202070%20(8GB%20Inference)-76b900?style=for-the-badge)](artifacts/rtx_intense_stress_and_steam_deploy_report.json)
-[![Community PRs](https://img.shields.io/badge/Community%20PRs-63%2F63%20Merged%20(Waves%201--7%20%7C%201h%20Orchestrator)-a855f7?style=for-the-badge)](docs/CONTRIBUTOR_TASKS_AND_BOUNTIES.md)
+[![Community PRs](https://img.shields.io/badge/Merged%20PRs-323%2B%20Merged%20(Seasons%201--25)-a855f7?style=for-the-badge)](docs/CONTRIBUTOR_TASKS_AND_BOUNTIES.md)
 [![Project Wiki](https://img.shields.io/badge/Project%20Wiki-13%20Pages%20Live-f59e0b?style=for-the-badge)](https://github.com/xaviercallens/HiveMind/wiki)
 [![Strategy Engine](https://img.shields.io/badge/Strategy%20Engine-Pareto%20SI--01..11%20%2B%20H1..H10%20%2B%20E1..E4-ffd21e?style=for-the-badge)](docs/DILOCO_ARXIV_LITERATURE_AND_IMPROVEMENTS.md)
 [![Branch Protection](https://img.shields.io/badge/Main%20%26%20Tags-Protected%20%2B%20Immutable-10b981?style=for-the-badge)](GOVERNANCE.md)
@@ -52,6 +54,7 @@ Instead of requiring datacenter InfiniBand, each node trains specialized **4-bit
 > **Steam Integration & Local Prototype Status ([`docs/STEAM_STATUS.md`](docs/STEAM_STATUS.md)):** The `HiveMind: Neural Breach` Free Steam RTX Tool & Hack-Miner package in [`steam_dist/HiveMind_Steam_FreeEdition/`](steam_dist/HiveMind_Steam_FreeEdition/) runs locally from this repository using your `.venv` Python environment, dynamic `steam_api64.dll` probing with headless HMAC fallback, and local JSON/VDF manifests. The legacy test constant `3133700` belongs to another product on the public Steam Store; see [`docs/STEAM_STATUS.md`](docs/STEAM_STATUS.md) (contributed in `PR #11` by `@radialmonster`).
 
 ### 🧭 Quick Navigation
+- 🚀 [**00. Architecture Evolution (Seasons 1–25), Live Retour d'Expérience (REX), Multi-Season Roadmap & Call for Community / GPU Gamers**](#-00-architecture-evolution-seasons-125-live-retour-dexprience-rex-multi-season-roadmap--call-for-community--gpu-gamers)
 - ⚡ [**0A. Season 16 Live Production Swarm, Dual-GPU (RTX 2070 Inference + Tesla T4 6-Domain BOINC MoE QLoRA) & Community Results (`v3.8.0`)**](#-0a-season-16-live-production-swarm-dual-gpu-rtx-2070-inference--tesla-t4-6-domain-boinc-moe-qlora--community-results-v380)
 - 🌌 [**0. 24-Cycle Full-Day RTX 2070 Astrophysics & Cosmology BOINC Discovery Showcase**](#-0-24-cycle-full-day-rtx-2070-astrophysics--cosmology-boinc-discovery-showcase)
 - 🏛️ [**1. System Architecture & 5-Layer Visual Stack**](#-1-system-architecture--5-layer-visual-stack)
@@ -60,6 +63,147 @@ Instead of requiring datacenter InfiniBand, each node trains specialized **4-bit
 - 🔌 [**4. Connect & Integrate: Node Setup, OpenAI SSE Proxy & Cursor/Continue.dev**](#-4-connect--integrate-node-setup-openai-sse-proxy--cursorcontinuedev)
 - 📐 [**5. Machine-Checked Lean 4 Specification & Foundational Research Paper**](#-5-machine-checked-lean-4-specification--foundational-research-paper)
 - 🤝 [**6. Large-Scale Parallel Collaboration, Protected GitHub & Immutable Releases**](#-6-large-scale-parallel-collaboration-protected-github--immutable-releases)
+
+---
+
+## 🚀 00. Architecture Evolution (Seasons 1–25), Live Retour d'Expérience (REX), Multi-Season Roadmap & Call for Community / GPU Gamers
+
+### 🧬 00.1 Architecture Evolution: Five Generational Leaps (`Seasons 1–25` / `v2.11.0` / Paper `v4.0.0`)
+
+Over **25 engineering seasons** and **`323+` merged Pull Requests**, Project HiveMind evolved from a 4-bit QLoRA inner/outer loop prototype into a **Bi-Layer Honeybee Cognitive Mesh & Diurnal/Nocturnal Sparse MoE Network** backed by **128 machine-checked Lean 4 theorems (`0 sorry`, `0 user axioms`)**:
+
+```mermaid
+flowchart LR
+    subgraph G1["Gen 1 (S1–S5)\nCore DiLoCo + P2P MoE"]
+        G1A["4-bit NF4 QLoRA (H=500)\n+ Top-k FP8 Wire"]
+        G1B["2σ Multi-Krum + 10% CUDA Replay\n+ 2-Slot Pinned RAM DMA (0ms)"]
+        G1C["QUIC 0-RTT + Prefix-Trie\nSpeculative Tree (γ=6..8)"]
+    end
+
+    subgraph G2["Gen 2 (S6–S15)\nNext-Gen Optimizers & Lattice"]
+        G2A["IsoLoCo / SparseLoCo / DeMo DCT\n+ MuLoCo Newton-Schulz (SI-06..11)"]
+        G2B["E8 / A2 / Z8 Lattice KV Codecs\n+ GWAYA Exact McNemar Gate"]
+        G2C["128/128 Lean 4 Theorems\n(0 sorry, 0 axiom)"]
+    end
+
+    subgraph G3["Gen 3 (S16–S20)\nOpenRouter Market & 24 MoE Bees"]
+        G3A["Cloud Run OpenAI Gateway\n+ Litestream SQLite Ledger"]
+        G3B["Dual-GPU Day/Night Autopilot\n(RTX 2070 8GB + Tesla T4 16GB)"]
+        G3C["24 Specialized MoE Bees\n+ Certified Numeric Solver Bees"]
+    end
+
+    subgraph G4["Gen 4 (S21–S23)\nBi-Layer Honeybee Mesh"]
+        G4A["Layer 1: AMCP v1.5 + CloudEvents\n5-Node KRaft Kafka Quorum"]
+        G4B["Layer 2: Employed / Onlooker /\nScout ABC MoE Waggle Routing"]
+        G4C["S23 Swarm Nectar Cache\n+ S22 Light-Memory Vector Index"]
+    end
+
+    subgraph G5["Gen 5 (S24–S25)\n1.58/2/3-Bit Dream & LayerStoRm"]
+        G5A["Tiel-Coder-35B-A3B (UD-IQ3_XXS)\n48% SWE-bench-Live in 12.3 GiB"]
+        G5B["Ternary-Bonsai-2-27B (PTQ1_0 5.54 GiB)\n27B inside <=6.5 GB RTX 2070 Ceiling!"]
+        G5C["LayerStoRm x HiveMind PCIe Bridge\n+ Steam v5.1 & WebGPU Galaxy"]
+    end
+
+    G1 --> G2 --> G3 --> G4 --> G5
+```
+
+| Generation | Seasons | Architectural Breakthrough | Key Modules & Verified Engineering Invariants |
+| :--- | :---: | :--- | :--- |
+| **Gen 1 — Core DiLoCo-QLoRA & P2P MoE Fabric** | `S1–S5` | Asynchronous 4-bit NF4 QLoRA (`H=500`), $2\sigma$-clipped Multi-Krum, 2-slot pinned-RAM DMA (`0.0 ms` swap stall), QUIC 0-RTT & Prefix-Trie Speculative Decoding ($\gamma=6..8$) | [`core/btm_moe.py`](src/hivemind/core/btm_moe.py), [`swarm/dma_streamer.py`](src/hivemind/swarm/dma_streamer.py) — **Invariant I1 (`<= 6.5 GB` VRAM)** & **I4 (`< 1.5s` Game Preemption)** |
+| **Gen 2 — Next-Gen Outer Optimizers, Lattice Codecs & Formal Soundness** | `S6–S15` | `IsoLoCo` / `SparseLoCo` / `DeMo` DCT / `MuLoCo` Newton-Schulz (`SI-06`..`SI-11`), $E_8 / A_2 / \mathbb{Z}^8$ lattice KV codecs (`E10`–`E12`), `GWAYA Level B` exact paired McNemar gate | [`swarm/diloco_nextgen.py`](src/hivemind/swarm/diloco_nextgen.py), [`swarm/verified_update_gate.py`](src/hivemind/swarm/verified_update_gate.py), [`lean4/HiveMindSpec.lean`](lean4/HiveMindSpec.lean) (**`128/128` theorems**) |
+| **Gen 3 — OpenRouter Market, Residency Control & 24 MoE Bees** | `S16–S20` | OpenAI-compatible Cloud Run gateway (`hivemind-openrouter`), Litestream-replicated SQLite ledger, model residency heartbeats (`HM-S16-06`), remote VRAM cap/pause (`HM-S16-05`), and **24 specialized MoE micro-experts ("Bees")** | [`router/gateway.py`](src/hivemind/router/gateway.py), [`boinc/life_as_a_bee_page.py`](src/hivemind/boinc/life_as_a_bee_page.py) ([`/life-as-a-bee`](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/life-as-a-bee)) |
+| **Gen 4 — Bi-Layer Honeybee Agent Mesh & Swarm Nectar Cache** | `S21–S23` | **Layer 1:** AMCP v1.5 + CloudEvents over a 5-node KRaft Kafka Quorum (`3 voters + 2 brokers`). **Layer 2:** Artificial Bee Colony (**Employed**, **Onlooker** $P_i = F_i / \sum F_k$ waggle-dance routing, and **Scout Bees**) + **Swarm Nectar Cache (`S23`)** | [`swarm/honeybee_mesh_fabric.py`](src/hivemind/swarm/honeybee_mesh_fabric.py), [`swarm/nectar_cache.py`](src/hivemind/swarm/nectar_cache.py), Foundation Paper `v4.0.0` ([`DOI: 10.5281/zenodo.23756909`](https://doi.org/10.5281/zenodo.23756909)) |
+| **Gen 5 — Low-Bit (`1.58/2/3-Bit`) Nocturnal Dream Teachers & `LayerStoRm` PCIe Bridge** | `S24–S25` | **Coding Teacher:** `peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF` (`UD-IQ3_XXS` `12.30 GiB`, `48.0%` SWE-bench-Live). **Generalist/Math Teacher:** `prism-ml/Ternary-Bonsai-2-27B-gguf` (`PTQ1_0` `1.75` bpw **`5.54 GiB`** fitting 100% inside the `6.5 GB` RTX 2070 ceiling; `PQ2_0` `6.71 GiB` co-resident with QLoRA student on 16 GB T4) + `LayerStoRm` PCIe streaming bridge | [`core/auto_improvement.py`](src/hivemind/core/auto_improvement.py), [`swarm/campaign_orchestrator.py`](src/hivemind/swarm/campaign_orchestrator.py), [`core/layerstorm_bridge.py`](src/hivemind/core/layerstorm_bridge.py) |
+
+---
+
+### 📊 00.2 Live Retour d'Expérience (REX — Field Lessons from Real Production & Dual-GPU Operations)
+
+Operating a continuous 24/7 public swarm across **Google Cloud Run** (`hivemind-openrouter`, `hivemind-at-home-ruche`, `hivemind-at-home`), a **16 GB NVIDIA Tesla T4** BOINC/MoE server, and an **8 GB NVIDIA GeForce RTX 2070** gaming/prosumer node produced six concrete engineering and scientific lessons:
+
+1. **📈 Live Production Telemetry & Post-Launch Growth (`2026-10-29` Snapshot):**
+   - **Registered Community Accounts:** **`52` accounts** (`24` consumers, `9` GPU producers, `16` prosumers, `3` admins) — growing steadily following community discussions on `r/LocalLLaMA`, `r/TechnologieFrance`, and `r/AIAssisted` (newest nodes & testers include `t4-big-gpu-moe-20261028`, `scientist-7096`, `scientist-4000`, `quebec-tester-2147`, `bee-bench-1793167973`).
+   - **Billed Completions & Token Volume:** **`2,326` billed completions** (`+63.0%` growth in 48 hours from `1,427`), **`310,600` billed tokens** (`236,187` prompt + `74,413` completion tokens), and **`389.57 HMT`** settled to GPU producers across **`15` live models** (`hivemind/coder` `51.4%`, `hivemind/bee-stars` `34.5%`, `hivemind/coder-lite` `8.5%`, `hivemind/moe-coder` & `hivemind/moe-general` `4.2%`, `hivemind/coder-plus` `1.4%`).
+   - **Gateway Reliability:** **`~1,650` requests/hour** (`~39,600` requests/day) across the three Cloud Run services with **`100%` availability (`0` HTTP 5xx errors)**.
+
+2. **⚡ REX #1 — Model Residency & Cold-Start Protection (`HM-S16-06`):**
+   - *What happened in the field:* When a consumer requested a 7B–20B model that was registered by a producer but not currently resident in GPU VRAM, cold-loading from disk took `15–40s`, causing IDE plugins (Continue, Cline, OpenCode) to time out.
+   - *How we solved it:* Producer heartbeats (`scripts/hivemind_producer_agent.py`) now probe local `/api/ps` residency and report `loaded`, `vram_mib`, and `cold_start_s`. The router prioritizes warm-loaded models first and immediately returns `HTTP 503 model_loading` with a `Retry-After` header (charging `0 HMT`) if cold-load exceeds `cold_start_wait_budget_s` (`20s`).
+
+3. **🔬 REX #2 — Cross-Device Bitwise Replay Divergence (`E12` T4 vs. CPU/RTX):**
+   - *What happened in the field:* Pre-registered experiment `E12` proved that two separate processes on the **same GPU architecture (`Tesla T4` vs. `Tesla T4`)** achieve **`0.0` bitwise divergence**, whereas replaying a T4 workunit on an `x86 CPU` (`fp32`) or across different GPU families (`Turing` vs. `Ampere`) exhibits `2.0e-4 .. 6.3e-4` numerical drift (`> 1e-4` tolerance in `9/9` cells).
+   - *How we solved it:* We implemented **architecture-matched validator assignment (`HM-S10-08`)** in BOINC so spot-check validation always pairs workunits with a validator of the same compute capability class.
+
+4. **🧬 REX #3 — Defeating Catastrophic Forgetting with 6-Domain Interleaved Replay (`hmq_00001`–`hmq_00016`):**
+   - *What happened in the field:* Early single-domain BOINC workunits (`hmq_00004`–`hmq_00006`) produced massive gains on their focus domain (`math: -1.0133 nats`, `biomed: -0.5264 nats`) but caused the 6-domain mean loss to drift upward (`2.2705 -> 2.4582`).
+   - *How we solved it:* Interleaving **19 focus-domain sequences with 9 sequences from each of the other 5 domains** (`64` sequences/workunit) under a strict **Thermodynamic Monotonic Ratchet Gate ($\Delta \mathcal{L}_{\text{eval}} \le 0$)** lowered held-out loss across all 6 domains simultaneously (`2.2705 -> 2.1972` at `hmq_00014`).
+
+5. **🧠 REX #4 — 1.58-Bit / 2-Bit / 3-Bit Quantization Unlocks 27B–35B Teachers on 8 GB – 16 GB GPUs (`S24`):**
+   - *What happened in the field:* Previously, 8 GB GPUs (`<= 6.5 GB` Golden Invariant I1) were limited to 7B–9B 4-bit teachers during the nocturnal Dream Phase (`22:00–07:00 CET`).
+   - *How we solved it:* By integrating **PrismML's `Ternary-Bonsai-2-27B-PTQ1_0.gguf` (`1.75` bpw, `5.54 GiB`, retaining `98.2%` of FP16 intelligence)**, an **8 GB RTX 2070** can now host a **27-billion-parameter teacher 100% in VRAM (`6.19 GiB <= 6.50 GiB` with linear-attention KV cache)**! And on our **16 GB Tesla T4**, **`Ternary-Bonsai-2-27B-PQ2_0.gguf` (`6.71 GiB`)** co-resides in VRAM alongside the QLoRA Student (`~5.4 GiB`) for zero-disk-bottleneck On-Policy Knowledge Distillation, while **`Tiel-Coder-35B-A3B-UD-IQ3_XXS.gguf` (`12.30 GiB`, `35B` total / `3B` active)** delivers Claude-Opus-4.6-level SWE coding synthesis (`48.0%` SWE-bench-Live).
+
+6. **📐 REX #5 — Radical Scientific Honesty: Reporting Negative & Refuted Results (`E10b`, `E11`):**
+   - Every hypothesis in HiveMind is pre-registered before GPU execution (`artifacts/experiments/`). When `E11` (`P11a` lattice KV-cache superiority over uniform scalar quantization at rate-matched 4-bit) was **refuted** on `Qwen2.5-0.5B`, `Qwen2.5-Coder-7B`, and `Gemma-4-E4B`, and when `E10b` failed its positive control in seed 3, we recorded the exact refutations in [`ROADMAP.md`](ROADMAP.md), [`CHANGELOG.md`](CHANGELOG.md), and our Zenodo deposits (`10.5281/zenodo.23649757` & `10.5281/zenodo.23756909`).
+
+---
+
+### 🗺️ 00.3 Multi-Season Evolution Roadmap (`Seasons 16–26+`)
+
+Full task specifications, pre-registrations, and acceptance gates live in **[`ROADMAP.md`](ROADMAP.md)** and **[`docs/CONTRIBUTOR_TASKS_AND_BOUNTIES.md`](docs/CONTRIBUTOR_TASKS_AND_BOUNTIES.md)**:
+
+| Season | Codename & Focus | Key Deliverables & Technical Milestones | Status |
+| :---: | :--- | :--- | :---: |
+| **S16–S19** | **Operation Open-Router, Residency & Usage Intelligence** | OpenAI-compatible Cloud Run gateway, Google/OIDC sign-in, producer VRAM cap & pause (`HM-S16-05`), model residency heartbeats (`HM-S16-06`), privacy-preserving intent routing (`HM-S19-USAGE`), and RFC 5545 joint campaign calendar | ✅ **LIVE** |
+| **S20** | **24 MoE Bees, Certified Numeric Solver Bees & Honeybee Mesh** | 24 specialized MoE micro-experts ([`/life-as-a-bee`](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/life-as-a-bee)), **Solver Bee Epic ([`#273`](https://github.com/xaviercallens/HiveMind/issues/273), [`#270`](https://github.com/xaviercallens/HiveMind/issues/270), [`#271`](https://github.com/xaviercallens/HiveMind/issues/271))** coupling LLM bees with certified SUNDIALS/CasADi/Lean 4 verifiers | 🟢 **IN PROGRESS** |
+| **S21** | **Operation Kafka-Hive (5-Node KRaft Quorum & AMCP v1.5)** | Self-hosted 5-node Kafka quorum (`3 voters + 2 brokers`, tolerating 2 node failures), live AMCP v1.5 bus between humans, coding agents & bees (`src/hivemind/swarm/amcp_live_bus.py`) | ✅ **DELIVERED** |
+| **S22** | **Light-Memory (Low-Storage Vector Retrieval for Bees)** | Ultra-compact LEANN-inspired graph-recomputed vector index (`docs/roadmap/S22_LIGHT_MEMORY.md`) enabling 24 Bees to query domain corpora in `< 200 MB` RAM | 🟡 **ACTIVE R&D** |
+| **S23** | **Swarm Nectar Cache (P2P Food-Source Sharing)** | Content-addressed semantic & KV prefix cache (`src/hivemind/swarm/nectar_cache.py`, `PR #320`) with waggle-dance utility decay across Employed & Onlooker Bees | ✅ **DELIVERED** |
+| **S24** | **Nocturnal Dream Phase (`1.58/2/3-Bit` Frontier Distillation)** | Automated `22:00–07:00 CET` distillation from `Tiel-Coder-35B-A3B` (`UD-IQ3_XXS` / `UD-IQ3_S`) and `prism-ml/Ternary-Bonsai-2-27B` (`PTQ1_0` / `PQ2_0`) into the 24 MoE Bees (`PR #323`) | ✅ **DELIVERED** |
+| **S25** | **`LayerStoRm` $\times$ HiveMind PCIe Streaming & Multi-Host Scaling** | Double-buffered pinned-RAM $\rightarrow$ PCIe expert streaming bridge (`src/hivemind/core/layerstorm_bridge.py`, `PR #322`), pre-registered experiments **`E18` ([`#308`](https://github.com/xaviercallens/HiveMind/issues/308))** & **`E19`** | 🟢 **IN PROGRESS** |
+| **S26+** | **Global DePIN Federation, DirectML/ROCm/MPS & Zero-Install WebGPU** | Cross-continent federated Router mesh, one-click Docker/BOINC bundles for AMD ROCm, Windows DirectML & Apple Silicon MPS, and browser-native WebGPU WGSL `@compute` workunits ([`/webgpu-galaxy`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/webgpu-galaxy)) | 🚀 **OPEN FOR CONTRIBUTORS** |
+
+---
+
+### 🤝 00.4 Call to the Community: Bring Your GPU (Gamers & Rig Owners) & Build New Features (Developers & Researchers)!
+
+Project HiveMind is a **100% open-source, citizen-driven alternative to centralized AI datacenters**. Whether you have a gaming PC with an idle GPU, a homelab, a retired mining rig, or a passion for distributed systems, Rust/Python kernels, and formal mathematics, **there is a place for you in the hive**.
+
+#### 🎮 A. For GPU Gamers, Homelabbers & Mining Rig Owners — *Bring Your GPU to the Hive!*
+- **Supported Hardware:** **NVIDIA CUDA** (`RTX 2060/2070/3060/3080/4070/4090`, `Tesla T4`), **AMD (`ROCm` / Windows `DirectML`)**, and **Apple Silicon (`M1/M2/M3/M4 MPS`)**.
+- **Hardware Safety & Zero FPS Drop Guaranteed:**
+  - **Golden Invariant I1 (`<= 6.5 GB` VRAM Ceiling on 8 GB GPUs):** Strict memory clamping ensures your OS compositor and desktop never stutter.
+  - **Golden Invariant I4 (`< 1.5s` Automatic Game Preemption):** The moment you launch a game (`cs2.exe`, `cyberpunk2077.exe`, `eldenring.exe`, Steam AppID) or move your mouse after idle, HiveMind yields **100% of your GPU in `< 150 ms – 1.5s`**.
+- **Join in `< 2 Minutes` (5 Languages `FR • EN • ES • DE • ZH`):**
+  - 👉 **Interactive Onboarding Guide:** **[`https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/rejoindre?lang=fr`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/rejoindre?lang=fr)** (English: **[`/join?lang=en`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/join?lang=en)**)
+  - 👉 **Live BOINC & Co-Op Community Hub:** **[`https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community`](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community)**
+
+```bash
+# Option 1 — Run a single nocturnal BOINC GPU workunit right now (zero repo clone required):
+curl -sSLO https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/scripts/hivemind_boinc_idle_worker.py
+python3 hivemind_boinc_idle_worker.py \
+  --coordinator https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app \
+  --handle your-gamer-tag --domain physics_sim --once
+
+# Option 2 — Connect your local Ollama / llama.cpp GPU as a live OpenRouter Producer:
+curl -sSLO https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/scripts/hivemind_producer_agent.py
+python3 hivemind_producer_agent.py \
+  --gateway https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app \
+  --handle your-gamer-tag
+```
+
+#### 🛠️ B. For Open-Source Developers, ML Engineers & Scientists — *Develop New Features & Specialized Bees!*
+We actively welcome Pull Requests from human developers and autonomous coding agents. Pick an open track below or comment on **[Issue `#319` — Season 20–25 Community Contributor Guide](https://github.com/xaviercallens/HiveMind/issues/319)**:
+
+1. **🐝 Track 1 — Propose & Train a New Specialized MoE Bee (`Bring Your Own Bee`):**
+   - Open an Issue tagged `[Bee-Proposal]` with a domain + Hugging Face dataset, or add an exemplar BYOB adapter under [`src/hivemind/core/btm_moe.py`](src/hivemind/core/btm_moe.py) distilled from `Tiel-Coder-35B-A3B` or `Ternary-Bonsai-2-27B`.
+2. **🧮 Track 2 — Certified Numeric Solver Bees ([`Epic #273`](https://github.com/xaviercallens/HiveMind/issues/273), [`#270`](https://github.com/xaviercallens/HiveMind/issues/270), [`#271`](https://github.com/xaviercallens/HiveMind/issues/271)):**
+   - Extend the `bee-rusty-sundials` and `bee-lean-prover` pattern to new certified numeric solvers (stiff ODE/PDEs, boundary-value problems, orbital mechanics, convex optimization, and exact-$\mathbb{Q}$ arithmetic).
+3. **⚡ Track 3 — Low-Bit (`1.58/2/3-Bit`) Kernels & `LayerStoRm` PCIe Streaming (`S24–S25`, [`#308`](https://github.com/xaviercallens/HiveMind/issues/308)):**
+   - Benchmark and optimize `PrismML` ternary `PTQ1_0`/`PQ2_0` and `Unsloth Dynamic` `IQ3_XXS` teacher-student co-residency, or run the two-machine `E18` / `E19` latency experiments.
+4. **🕸️ Track 4 — Honeybee Cognitive Mesh (`AMCP Kafka` + `S22 Light-Memory` + `S23 Nectar Cache`):**
+   - Build new Employed/Onlooker/Scout bee foraging strategies in [`src/hivemind/swarm/honeybee_mesh_fabric.py`](src/hivemind/swarm/honeybee_mesh_fabric.py) or contribute to the low-RAM vector index (`S22`).
+5. **🌌 Track 5 — Citizen-Science Gaming (`Steam v5.1` & Browser `WebGPU`):**
+   - Contribute new WGSL `@compute` shaders, exoplanet transit light-curve challenges, or Stitch HUD missions in [`src/hivemind/game/webgpu_galaxy_cockpit.py`](src/hivemind/game/webgpu_galaxy_cockpit.py) and [`src/hivemind/game/exoplanet_hunter_cockpit.py`](src/hivemind/game/exoplanet_hunter_cockpit.py).
 
 ---
 

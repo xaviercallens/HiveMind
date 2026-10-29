@@ -387,3 +387,303 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     assert client.get("/join?lang=en").status_code == 200
     assert client.get("/scripts/hivemind_boinc_idle_worker.py").status_code == 200
     assert client.get("/scripts/unknown_script.py").status_code == 404
+
+    # 1. HTML routes (v2, legacy, aliases, cockpit, webgpu)
+    for route in (
+        "/?view=legacy",
+        "/v2",
+        "/v2/auth",
+        "/v2/openrouter-moe",
+        "/v2/byob",
+        "/v2/mesh",
+        "/v2/mobile",
+        "/v2/telemetry",
+        "/v2/admin",
+        "/admin",
+        "/v2/steam",
+        "/v2/galaxy",
+        "/v2/ide",
+        "/home",
+        "/auth",
+        "/openrouter-moe",
+        "/byob",
+        "/mesh",
+        "/mobile",
+        "/telemetry",
+        "/v1",
+        "/cockpit-v46",
+        "/game",
+        "/exoplanet-hunter",
+        "/webgpu?lang=fr",
+        "/webgpu?lang=invalid",
+    ):
+        assert client.get(route).status_code == 200
+
+    # 2. Auth endpoints (guest, upgrade-guest, register, login, sso, link-provider, rotate-key, magic-link, session, migration)
+    r_guest = client.post("/api/v1/auth/guest")
+    assert r_guest.status_code == 200
+    guest_token = r_guest.json()["token"]
+
+    r_up = client.post(
+        "/api/v1/auth/upgrade-guest",
+        headers={"Authorization": f"Bearer {guest_token}"},
+        json={"handle": "upgraded-user-01", "email": "up@hivemind.ai", "provider": "google"},
+    )
+    assert r_up.status_code == 200
+
+    assert (
+        client.post(
+            "/api/v1/auth/register",
+            json={"handle": "reg-user-01", "email": "reg01@hivemind.ai"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/api/v1/auth/register",
+            json={"handle": "reg-user-01", "email": "reg01@hivemind.ai"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/api/v1/auth/register",
+            json={"handle": "reg-user-01", "email": "reg01@hivemind.ai", "strict_new": True},
+        ).status_code
+        == 409
+    )
+
+    assert client.post("/api/v1/auth/login", json={"handle_or_email": "reg-user-01"}).status_code == 200
+    assert client.post("/api/v1/auth/login", json={"handle_or_email": "login-created-01"}).status_code == 200
+    assert (
+        client.post(
+            "/api/v1/auth/login",
+            json={"handle_or_email": "missing-strict-user", "strict_existing": True},
+        ).status_code
+        == 404
+    )
+
+    assert (
+        client.post("/api/v1/auth/sso/google", json={"handle_hint": "sso-user-01"}).status_code
+        == 200
+    )
+    assert client.post("/api/v1/auth/sso/google", json={"handle_hint": "sso-user-01"}).status_code == 200
+    assert client.post("/api/v1/auth/sso/unsupported_idp", json={"handle_hint": "sso-user-01"}).status_code == 400
+
+    assert (
+        client.post("/api/v1/auth/link-provider", json={"handle": "sso-user-01", "provider": "github"}).status_code
+        == 200
+    )
+    assert client.post("/api/v1/auth/rotate-key", headers={"Authorization": f"Bearer {r_up.json()['token']}"}).status_code == 200
+    assert client.post("/api/v1/auth/magic-link", json={"email": "magic@hivemind.ai"}).status_code == 200
+    assert client.post("/api/v1/auth/magic-link", json={"email": "magic@hivemind.ai"}).status_code == 200
+    assert client.get("/api/v1/auth/users").status_code == 200
+    assert client.get("/api/v1/auth/session", headers={"Authorization": f"Bearer {r_up.json()['token']}"}).status_code == 200
+    assert client.get("/api/v1/auth/session").status_code == 200
+    assert client.post("/api/v1/auth/logout").status_code == 200
+
+    assert client.get("/api/v1/auth/migration/status").status_code == 200
+    assert client.post("/api/v1/auth/v1-migrate", json={"handle_or_email": "callensxavier@gmail.com"}).status_code == 200
+    assert client.post("/api/v1/auth/v1-migrate", json={"handle_or_email": "migrated-v1-custom"}).status_code == 200
+
+    # 3. AMCP Mesh & OpenRouter Models
+    assert client.get("/api/v1/amcp/mesh/nodes").status_code == 200
+    assert client.get("/api/v1/amcp/mesh/messages").status_code == 200
+    for recipient, content in (
+        ("@AstroBee", "analyze transit"),
+        ("@Lean4Bee", "prove theorem"),
+        ("@CodeBee", "optimize kernel"),
+        ("@QueenBee", "status"),
+    ):
+        assert (
+            client.post(
+                "/api/v1/amcp/mesh/send",
+                json={"sender_id": "sso-user-01", "recipient": recipient, "content": content},
+            ).status_code
+            == 200
+        )
+    for tool_name in ("query_exoplanet_catalog", "verify_lean4_theorem", "mesh_status", "custom_tool"):
+        assert (
+            client.post("/api/v1/amcp/tool/call", json={"tool_name": tool_name, "arguments": {}}).status_code == 200
+        )
+    assert client.get("/api/v1/amcp/protocol/spec").status_code == 200
+    assert client.get("/api/v1/openrouter/models").status_code == 200
+
+    # 4. Night-MoE, Hardware Shield & Admin endpoints
+    assert client.get("/api/v1/night-moe/status").status_code == 200
+    assert client.post("/api/v1/night-moe/start", json={}).status_code == 200
+    assert client.get("/api/v1/hardware/rtx2070/shield").status_code == 200
+    assert client.post("/api/v1/hardware/rtx2070/shield/lock").status_code == 200
+    assert client.get("/api/v1/admin/dashboard").status_code == 200
+    assert client.get("/api/v1/admin/masterminders").status_code == 200
+    assert (
+        client.post(
+            "/api/v1/admin/campaigns/create",
+            json={"name": "Test Campaign", "domain": "code_python"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/api/v1/admin/moe/train-expert",
+            json={"domain_name": "physics_sim", "hardware_override": "cuda:0 RTX 2070"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/api/v1/admin/moe/train-expert",
+            json={"domain_name": "physics_sim", "hardware_override": "cloud-a10g"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/api/v1/admin/moe/models/select",
+            json={"model_id": "hivemind/moe-queenbee-256b"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/api/v1/son/feedback",
+            json={"gamer_tag": "sso-user-01", "overall_rating": 5, "review_text": "Great cockpit!"},
+        ).status_code
+        == 200
+    )
+
+    # 5. Steam, FinOps, Deployment Review, Galaxy, Security, IDE & Astro routes
+    assert client.get("/api/v1/steam/info").status_code == 200
+    assert client.get("/api/v1/steam/daemon/status").status_code == 200
+    for act in ("pause_for_game", "resume", "toggle"):
+        assert (
+            client.post(
+                "/api/v1/steam/daemon/toggle", json={"action": act, "game": "Cyberpunk 2077"}
+            ).status_code
+            == 200
+        )
+    assert (
+        client.post(
+            "/api/v1/steam/daemon/config",
+            json={
+                "idle_threshold_percent": 15.0,
+                "gaming_preemption_threshold_percent": 70.0,
+                "max_temp_c": 65.0,
+            },
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/api/v1/steam/claim-points",
+            json={"contributor_handle": "sso-user-01", "amount": 250},
+        ).status_code
+        == 200
+    )
+    assert client.get("/api/v1/steam/achievements").status_code == 200
+    assert client.get("/api/v1/steam/download/free-edition.zip").status_code == 200
+
+    assert client.get("/api/v1/finops/status").status_code == 200
+    for action in ("scale_to_zero", "wake_up", "simulate_idle", "enforce_policy"):
+        assert (
+            client.post(
+                "/api/v1/finops/scale-to-zero",
+                json={"action": action, "max_instances": 2, "idle_timeout_seconds": 300},
+            ).status_code
+            == 200
+        )
+    assert client.post("/api/v1/finops/simulate-idle").status_code == 200
+
+    assert client.get("/api/v1/admin/deployment-review/status").status_code == 200
+    for action in ("request_review", "approve", "reset"):
+        assert (
+            client.post(
+                "/api/v1/admin/deployment-review/request",
+                json={"action": action, "reviewer": "@Vxtzq", "comment": "Reviewed"},
+            ).status_code
+            == 200
+        )
+
+    assert client.get("/api/v1/galaxy/config").status_code == 200
+    assert (
+        client.post(
+            "/api/v1/galaxy/explore",
+            json={
+                "sector_id": "trappist1e",
+                "star_count": 500000,
+                "rotation_speed": 0.15,
+                "spiral_tightness": 1.8,
+                "arm_count": 4,
+                "arm_width": 2.0,
+                "randomness": 1.5,
+                "galaxy_radius": 12.0,
+                "galaxy_thickness": 2.5,
+                "mouse_force": 5.0,
+                "mouse_radius": 8.0,
+                "dense_star_color": "#00f0ff",
+                "sparse_star_color": "#fbbf24",
+                "cloud_count": 4000,
+                "cloud_tint_color": "#fecdd3",
+                "bloom_strength": 0.3,
+                "contributor_handle": "sso-user-01",
+            },
+        ).status_code
+        == 200
+    )
+
+    assert client.get("/api/v1/security/status").status_code == 200
+    assert client.post("/api/v1/security/waf/scan", json={"payload": "normal query"}).status_code == 200
+    assert client.post("/api/v1/security/waf/scan", json={"payload": "<script>alert(1)</script> UNION SELECT"}).status_code == 200
+    assert client.get("/api/steam/fat-client-manifest").status_code == 200
+
+    assert client.get("/api/v1/ide/status").status_code == 200
+    for tab in ("bee_moe_router.py", "bls_fold_galaxy.wgsl", "stitch_v2_ui_component.html", "custom.txt"):
+        assert client.post("/api/v1/ide/execute", json={"file_tab": tab}).status_code == 200
+    assert client.post("/api/v1/ide/self-test").status_code == 200
+
+    assert (
+        client.post(
+            "/v1/hivemind/steam/register-login",
+            json={"handle": "steam-pilot-01", "gpu_model": "NVIDIA RTX 4080"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/v1/hivemind/steam/contribute-boinc",
+            json={"handle": "steam-pilot-01", "target_planet": "K2-18 b"},
+        ).status_code
+        == 200
+    )
+
+    assert client.get("/api/astro/nasa-tap-sync").status_code == 200
+    assert (
+        client.post(
+            "/api/astro/discover",
+            json={"target_id": "k218b", "player_classification": "PLANET"},
+        ).status_code
+        == 200
+    )
+    assert client.post("/api/astro/bee-moe-scan", json={"target_id": "lhs1140b"}).status_code == 200
+    assert client.get("/stitch-assets/nonexistent.png").status_code == 404
+    assert client.get("/download/steam-fat-client", follow_redirects=False).status_code in (200, 302, 307)
+    assert client.get("/download/steam-package-zip", follow_redirects=False).status_code in (200, 302, 307)
+    assert client.get("/api/v1/steam/download/free-edition.zip").status_code == 200
+    assert client.get("/cockpit-v46").status_code == 200
+    assert client.get("/night-moe").status_code == 200
+    assert client.get("/api/v1/night-moe").status_code in (200, 404)
+    assert client.get("/api/v1/i18n/unsupported_lang").status_code == 404
+    assert client.post("/api/v1/auth/v1-migrate", json={"v1_token": r_up.json()["token"]}).status_code == 200
+    assert client.post("/api/v1/steam/daemon/toggle", json={"action": "pause"}).status_code == 200
+    assert client.post("/api/v1/steam/daemon/toggle", json={"action": "resume"}).status_code == 200
+    assert client.post("/api/v1/steam/daemon/toggle", json={}).status_code == 200
+    assert client.post("/api/v1/steam/daemon/toggle", json={}).status_code == 200
+    for svc in ("image_spectrogram_synthesis", "lean4_formal_proof"):
+        assert (
+            client.post(
+                "/api/v1/compute-points/redeem",
+                json={"contributor_handle": "@sso-user-01", "service_id": svc, "prompt": "test", "points_balance_before": 500},
+            ).status_code
+            == 200
+        )
+

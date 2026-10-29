@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Cloud Run entrypoint: HiveMind@home dashboard, with sign-up and the OpenAI-compatible API served by the real router.
 
 The dashboard image carries its own `/v1/*`, `/signup`, `/login` and `/openrouter` routes, whose completions come from a
@@ -257,6 +258,10 @@ def community_hub_page() -> HTMLResponse:
         "th{background:#1e293b}code,pre{background:#1e293b;padding:0.15rem 0.35rem;border-radius:0.3rem;font-family:ui-monospace,monospace}"
         "pre{padding:0.8rem;overflow-x:auto}.nav{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}</style></head><body>"
         "<nav class='nav'><a href='/rejoindre?lang=fr'>← Rejoindre HiveMind (FR/EN/ES/DE/ZH)</a>"
+        "<a href='/game'>🎮 Jouer dans le Navigateur (Cockpit 4 Étapes)</a>"
+        "<a href='/webgpu'>🌌 Jouer en WebGPU (@compute)</a>"
+        "<a href='/download/steam-fat-client'>⬇ Télécharger Client Windows .EXE (v2.12.0)</a>"
+        "<a href='/download/steam-package-zip'>📦 Archive Steam Win64 .ZIP</a>"
         "<a href='/night-moe'>Résultats Night-MoE</a>"
         "<a href='/life-as-a-bee'>Vie d'une Abeille (24 MoE)</a>"
         "<a href='/api/v1/community/hub'>JSON API (/api/v1/community/hub)</a></nav>"
@@ -374,6 +379,36 @@ def download_onboarding_script(script_name: str) -> Response:
                 headers={"Content-Disposition": f'inline; filename="{script_name}"'},
             )
     return JSONResponse(status_code=404, content={"detail": "Script file not present on server"})
+
+
+
+
+@app.get("/game")
+@app.get("/exoplanet-hunter")
+@app.get("/cockpit-v46")
+def redirect_or_serve_playable_game() -> Response:
+    return RedirectResponse("https://xaviercallens.github.io/HiveMindatHome.github.io/game.html", status_code=307)
+
+
+@app.get("/webgpu")
+def redirect_or_serve_webgpu_game() -> Response:
+    return RedirectResponse("https://xaviercallens.github.io/HiveMindatHome.github.io/webgpu.html", status_code=307)
+
+
+@app.get("/download/steam-fat-client")
+def redirect_download_steam_exe() -> RedirectResponse:
+    return RedirectResponse(
+        "https://github.com/xaviercallens/HiveMind/releases/download/v2.12.0/HiveMind_Exoplanet_Hunter.exe",
+        status_code=307,
+    )
+
+
+@app.get("/download/steam-package-zip")
+def redirect_download_steam_zip() -> RedirectResponse:
+    return RedirectResponse(
+        "https://github.com/xaviercallens/HiveMind/releases/download/v2.12.0/HiveMind_Astrophysics_Exoplanet_Hunter_v2.11.0_Steam_Win64.zip",
+        status_code=307,
+    )
 
 
 if __name__ == "__main__":

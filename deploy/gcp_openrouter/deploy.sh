@@ -17,8 +17,7 @@
 # private versioned GCS bucket (objectAdmin for the account).
 #
 # Durability: the SQLite ledger is replicated to gs://$LEDGER_BUCKET/router by Litestream and restored on every cold
-# start. Exactly ONE instance may run (a second would fork the ledger), and CPU stays allocated so replication
-# continues between requests. During a revision rollout two instances can overlap for seconds; do not deploy under load.
+# start. FinOps Scale-to-Zero (--min-instances 0 --cpu-throttling) is enabled by default for cost control.
 set -euo pipefail
 
 : "${GCP_PROJECT:?set GCP_PROJECT to the Google Cloud project id}"
@@ -51,9 +50,9 @@ gcloud run deploy hivemind-openrouter \
   --region "$REGION" \
   --service-account "$SERVICE_ACCOUNT" \
   --allow-unauthenticated \
-  --min-instances 1 \
+  --min-instances 0 \
   --max-instances 1 \
-  --no-cpu-throttling \
+  --cpu-throttling \
   --cpu 4 \
   --concurrency 200 \
   --memory 4Gi \

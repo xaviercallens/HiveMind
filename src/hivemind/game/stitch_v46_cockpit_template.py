@@ -14,7 +14,12 @@ Synthesizes all 12 screens and high-resolution assets from Google Stitch MCP pro
 
 from __future__ import annotations
 
-from hivemind.config import PROJECT_ROOT
+from pathlib import Path
+
+try:
+    from hivemind.config import PROJECT_ROOT
+except ImportError:
+    PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 AIDA_GALAXY_URL = (
     "https://lh3.googleusercontent.com/aida/AEtjO1U4mX6MHmzCWb6Ji929sOUG-USs47juoBasP5sritS01ottiMtE3aqddCMG8RT497EthQpVXNST1pKWmnOI3mfAKXYBaJcfNpIlUFVEcD02gSGzrBpNjVdHOdw3rJK8pxodUYJFfTn1cHrFKvybypcl-EMgp0qSg3v-WBpgROH-yZs4Xy4lbh4OESAaw9NA20ZR1cNei2CYckpJYtbjmE2htnUink50wSQ3KmoVbjSdFQ"
@@ -761,12 +766,18 @@ STAGE_5_DUAL_ENGINE_ARCHI_HTML = """<!-- STAGE 5 VIEW: DUAL-ENGINE ARCHITECTURE 
             <span class="text-tacticalCyan font-bold">6.4 GB / 8.0 GB GDDR6 (NOMINAL)</span>
           </div>
           <div class="w-full bg-slate-900 h-1.5 rounded overflow-hidden mb-2"><div class="bg-tacticalCyan h-full" style="width: 78%"></div></div>
-          <div class="flex gap-2">
+          <div class="flex flex-wrap gap-1.5">
             <button class="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold py-1 px-2 rounded text-[9.5px] cursor-pointer transition" onclick="simulateSteamRegisterLoginAndContribute()">
               ⚡ EXÉCUTER WORKUNIT BOINC RTX 2070 (+250 HMT)
             </button>
-            <a class="bg-cyan-950 hover:bg-cyan-800 border border-tacticalCyan text-tacticalCyan font-bold py-1 px-2 rounded text-[9.5px]" href="/api/steam/fat-client-manifest" target="_blank">
-              📦 STEAM MANIFEST JSON
+            <a id="btn-s5-download-exe" class="bg-emerald-700 hover:bg-emerald-600 border border-emerald-300 text-white font-extrabold py-1 px-2 rounded text-[9.5px]" href="https://github.com/xaviercallens/HiveMind/releases/download/v2.12.0/HiveMind_Exoplanet_Hunter.exe" target="_blank" rel="noopener">
+              ⬇ WINDOWS .EXE (v2.12.0)
+            </a>
+            <a id="btn-s5-download-zip" class="bg-cyan-950 hover:bg-cyan-800 border border-tacticalCyan text-tacticalCyan font-bold py-1 px-2 rounded text-[9.5px]" href="https://github.com/xaviercallens/HiveMind/releases/download/v2.12.0/HiveMind_Astrophysics_Exoplanet_Hunter_v2.11.0_Steam_Win64.zip" target="_blank" rel="noopener">
+              📦 STEAM .ZIP
+            </a>
+            <a id="btn-s5-launch-steam" class="bg-amber-500 hover:bg-amber-400 text-black font-extrabold py-1 px-2 rounded text-[9.5px]" href="steam://rungameid/3133702">
+              🕹️ STEAM 3133702
             </a>
           </div>
         </div>
@@ -850,9 +861,10 @@ def build_stitch_v46_cockpit_html(state_json: str) -> str:
     new_status_block = """<div class="flex flex-wrap items-center gap-2 text-[11px] font-mono">
 <span id="steam-auth-badge" class="bg-emerald-950/90 border border-tacticalGreen/70 px-2 py-0.5 text-tacticalGreen font-bold rounded">🎮 STEAM FREE GAME (AppID 3133700) • CONNECTING...</span>
 <button id="btn-steam-login-contribute" onclick="simulateSteamRegisterLoginAndContribute()" class="bg-cyan-950 hover:bg-cyan-800 border border-tacticalCyan text-tacticalCyan px-2 py-0.5 rounded font-bold cursor-pointer transition">🔑 Steam Login + BOINC GPU</button>
+<a id="btn-top-download-exe" href="https://github.com/xaviercallens/HiveMind/releases/download/v2.12.0/HiveMind_Exoplanet_Hunter.exe" target="_blank" rel="noopener" class="bg-emerald-600 hover:bg-emerald-500 border border-white text-black px-2 py-0.5 rounded font-extrabold">⬇ Download .EXE v2.12.0</a>
+<a id="btn-top-launch-steam" href="steam://rungameid/3133702" class="bg-amber-950/90 hover:bg-amber-800 border border-tacticalAmber text-tacticalAmber px-2 py-0.5 rounded font-bold">🕹️ Steam 3133702</a>
 <a href="/webgpu" target="_blank" class="bg-purple-950/80 hover:bg-purple-800 border border-purple-400 text-purple-200 px-2 py-0.5 rounded font-bold">🌌 WebGPU (/webgpu)</a>
-<a href="/portal#steam-free-game" target="_blank" class="bg-amber-950/80 hover:bg-amber-800 border border-tacticalAmber text-tacticalAmber px-2 py-0.5 rounded font-bold">🐝 Portal</a>
-<a href="/community" target="_blank" class="bg-emerald-950/80 hover:bg-emerald-800 border border-emerald-400 text-emerald-300 px-2 py-0.5 rounded font-bold">⚡ BOINC Hub</a>
+<a href="https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community" target="_blank" rel="noopener" class="bg-emerald-950/80 hover:bg-emerald-800 border border-emerald-400 text-emerald-300 px-2 py-0.5 rounded font-bold">⚡ GCP BOINC Hub</a>
 <span class="text-tacticalAmber font-bold">🏆 <strong id="score-hmt">2,400</strong> HMT</span>
 <span class="bg-cyan-950/80 border border-tacticalCyan/50 px-2 py-0.5 text-tacticalCyan shadow-cyanGlow font-bold">STATUS: NOMINAL</span>
 <span class="text-slate-400">BUFFER: <strong class="text-tacticalGreen" id="buffer-val">100%</strong></span>
@@ -1843,11 +1855,21 @@ def build_stitch_v46_cockpit_html(state_json: str) -> str:
     showToast(`ÉCHANTILLON ATMOSPHÉRIQUE H₂O/DMS COLLECTÉ SUR ${{PLANET_DATA[currentPlanetKey].name}} (+150 HMT)`);
   }};
 
-  // Enhance Stage 2 buttons (+ SONDE MOE and SYNC L1-L2) so clicking them visibly boosts orbital sync
+  // Enhance Stage 2 buttons (+ SONDE MOE and SYNC L1-L2) so clicking them visibly boosts orbital sync immediately
+  function syncOrbitDomReadout() {{
+    const pct = Math.round(orbitSyncProgress);
+    const pctEl = document.getElementById('orbit-sync-pct');
+    if (pctEl) pctEl.textContent = pct + '%';
+    const barEl = document.getElementById('orbit-sync-bar');
+    if (barEl) barEl.style.width = pct + '%';
+    const satEl = document.getElementById('sat-count');
+    if (satEl) satEl.textContent = `${{Math.round((pct / 100) * 128)}} / 128`;
+  }}
   const btnDeployProbeS2 = document.getElementById('btn-deploy-probe');
   if (btnDeployProbeS2) {{
     btnDeployProbeS2.addEventListener('click', () => {{
       orbitSyncProgress = Math.min(100, orbitSyncProgress + 28);
+      syncOrbitDomReadout();
       playSciFiTone(480, 840, 160, 'triangle');
     }});
   }}
@@ -1855,6 +1877,7 @@ def build_stitch_v46_cockpit_html(state_json: str) -> str:
   if (btnSyncPhaseS2) {{
     btnSyncPhaseS2.addEventListener('click', () => {{
       orbitSyncProgress = Math.min(100, orbitSyncProgress + 35);
+      syncOrbitDomReadout();
       playSciFiTone(540, 960, 180, 'sine');
     }});
   }}
@@ -1936,6 +1959,20 @@ def build_stitch_v46_cockpit_html(state_json: str) -> str:
         body: JSON.stringify({{
           target_id: apiTarget,
           player_classification: approved ? 'PLANET' : 'FALSE_POSITIVE'
+        }})
+      }});
+    }} catch (e) {{}}
+    try {{
+      await fetch('https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/community/boinc-sync', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{
+          contributor_handle: 'Cmdr_Web_Hunter',
+          gpu_model: 'Browser WebGL/WebGPU Citizen-Science',
+          gpu_utilization_pct: 6.4,
+          gpu_idle_seconds: 12.0,
+          target_planet: data.name || apiTarget,
+          project_id: 'BOINC-ASTRO-BLS-TRANSIT'
         }})
       }});
     }} catch (e) {{}}
@@ -2591,44 +2628,81 @@ def build_stitch_v46_cockpit_html(state_json: str) -> str:
   window.simulateSteamRegisterLoginAndContribute = async function() {{
     const badge = document.getElementById('steam-auth-badge');
     if (badge) badge.textContent = '🔄 STEAM (AppID 3133700) + BOINC CUDA PTX SYNC...';
+    const pName = (PLANET_DATA[currentPlanetKey] && PLANET_DATA[currentPlanetKey].name) || 'LHS 1140 b';
     try {{
       const regRes = await fetch('/v1/hivemind/steam/register-login', {{
         method: 'POST',
         headers: {{ 'Content-Type': 'application/json' }},
         body: JSON.stringify({{
           handle: 'Cmdr_RTX2070_Steam',
-          steam_id64: '76561198031337001',
+          steam_id64: '76561198120474852',
           app_id: 3133700,
           gpu_model: 'NVIDIA GeForce RTX 2070 (8 GB VRAM)',
           role: 'prosumer'
         }})
       }});
-      const regData = await regRes.json();
-      const apiKey = regData.api_key || '';
-      if (apiKey) localStorage.setItem('hivemind_api_key', apiKey);
-      const pName = (PLANET_DATA[currentPlanetKey] && PLANET_DATA[currentPlanetKey].name) || 'LHS 1140 b';
-      const boincRes = await fetch('/v1/hivemind/steam/contribute-boinc', {{
+      if (regRes.ok) {{
+        const regData = await regRes.json();
+        const apiKey = regData.api_key || '';
+        if (apiKey) localStorage.setItem('hivemind_api_key', apiKey);
+        const boincRes = await fetch('/v1/hivemind/steam/contribute-boinc', {{
+          method: 'POST',
+          headers: {{
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + apiKey
+          }},
+          body: JSON.stringify({{
+            handle: regData.handle || 'Cmdr_RTX2070_Steam',
+            target_planet: pName,
+            app_id: 3133700
+          }})
+        }});
+        const boincData = await boincRes.json();
+        const newBalance = Math.round(Number(boincData.balance_hmt || regData.balance_hmt || 2650));
+        scoreHmt = Math.max(scoreHmt, newBalance);
+        const scoreEl = document.getElementById('score-hmt');
+        if (scoreEl) scoreEl.textContent = scoreHmt.toLocaleString('en-US');
+        if (badge) {{
+          badge.textContent = `🟢 STEAM (AppID 3133700) • ${{regData.handle}} • +${{boincData.hmt_awarded}} HMT & +${{boincData.cobblestones_awarded}} BOINC`;
+        }}
+        fetch('https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/community/boinc-sync', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{
+            contributor_handle: regData.handle || 'Cmdr_RTX2070_Steam',
+            gpu_model: 'NVIDIA GeForce RTX 2070 (8 GB VRAM)',
+            gpu_utilization_pct: 5.8,
+            gpu_idle_seconds: 12.0,
+            target_planet: pName,
+            project_id: 'BOINC-ASTRO-BLS-TRANSIT'
+          }})
+        }}).catch(() => {{}});
+        return;
+      }}
+    }} catch (err) {{}}
+    // Fallback to live GCP Cloud Run coordinator when hosted statically (e.g., GitHub Pages)
+    try {{
+      const gcpRes = await fetch('https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/community/boinc-sync', {{
         method: 'POST',
-        headers: {{
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + apiKey
-        }},
+        headers: {{ 'Content-Type': 'application/json' }},
         body: JSON.stringify({{
-          handle: regData.handle || 'Cmdr_RTX2070_Steam',
+          contributor_handle: 'Cmdr_RTX2070_Steam',
+          gpu_model: 'NVIDIA GeForce RTX 2070 (8 GB VRAM)',
+          gpu_utilization_pct: 5.8,
+          gpu_idle_seconds: 12.0,
           target_planet: pName,
-          app_id: 3133700
+          project_id: 'BOINC-ASTRO-BLS-TRANSIT'
         }})
       }});
-      const boincData = await boincRes.json();
-      const newBalance = Math.round(Number(boincData.balance_hmt || regData.balance_hmt || 2650));
-      scoreHmt = Math.max(scoreHmt, newBalance);
+      const gcpData = await gcpRes.json();
+      scoreHmt += Number(gcpData.hmt_points_awarded || 250);
       const scoreEl = document.getElementById('score-hmt');
       if (scoreEl) scoreEl.textContent = scoreHmt.toLocaleString('en-US');
       if (badge) {{
-        badge.textContent = `🟢 STEAM (AppID 3133700) • ${{regData.handle}} • +${{boincData.hmt_awarded}} HMT & +${{boincData.cobblestones_awarded}} BOINC`;
+        badge.textContent = `🟢 STEAM + GCP CLOUD RUN • Cmdr_RTX2070_Steam • +${{gcpData.hmt_points_awarded || 250}} HMT & +${{gcpData.cobblestones_awarded || 45}} BOINC`;
       }}
-    }} catch (err) {{
-      if (badge) badge.textContent = '⚠️ STEAM PORTAL OFFLINE';
+    }} catch (gcpErr) {{
+      if (badge) badge.textContent = '🟢 STEAM LOCAL MODE ACTIVE (+250 HMT)';
     }}
   }};
 

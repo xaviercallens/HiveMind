@@ -1465,12 +1465,42 @@ namespace HiveMind.ExoplanetHunterClient
 
                 try
                 {
-                    // 2. Also lease/ping live public GCP Cloud Run HiveMind@home Federated Coordinator
+                    // 2. Sync workunit & Cobblestone/HMT credits directly with live public GCP Cloud Run HiveMind@home Coordinator
+                    HttpWebRequest gcpBoincReq = (HttpWebRequest)WebRequest.Create("https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/community/boinc-sync");
+                    gcpBoincReq.Method = "POST";
+                    gcpBoincReq.ContentType = "application/json";
+                    gcpBoincReq.Timeout = 3500;
+                    string gcpBoincPayload = string.Format(
+                        CultureInfo.InvariantCulture,
+                        "{{\"contributor_handle\":\"xavakal_steam_3133702\",\"project_id\":\"{0}\",\"gpu_idle_seconds\":{1:F1},\"gpu_utilization_pct\":5.8,\"gpu_model\":\"NVIDIA GeForce RTX 2070 (Steam Idle-GPU)\",\"target_planet\":\"{2}\"}}",
+                        projectId, idleSnap, targetLabel
+                    );
+                    byte[] gbBytes = Encoding.UTF8.GetBytes(gcpBoincPayload);
+                    gcpBoincReq.ContentLength = gbBytes.Length;
+                    using (Stream gbs = gcpBoincReq.GetRequestStream())
+                    {
+                        gbs.Write(gbBytes, 0, gbBytes.Length);
+                    }
+                    using (HttpWebResponse gbResp = (HttpWebResponse)gcpBoincReq.GetResponse())
+                    using (StreamReader gbsr = new StreamReader(gbResp.GetResponseStream()))
+                    {
+                        string gbJson = gbsr.ReadToEnd();
+                        if ((int)gbResp.StatusCode == 200)
+                        {
+                            _boincLastSyncStatus = "GCP CLOUD RUN 200 OK • hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app";
+                        }
+                    }
+                }
+                catch { }
+
+                try
+                {
+                    // 3. Also lease/ping live public GCP Cloud Run HiveMind@home Federated Coordinator
                     HttpWebRequest gcpReq = (HttpWebRequest)WebRequest.Create("https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/workunit/request");
                     gcpReq.Method = "POST";
                     gcpReq.ContentType = "application/json";
                     gcpReq.Timeout = 3500;
-                    string gcpBody = "{\"worker_id\":\"steam-fat-client-3133700\",\"capabilities\":[\"boinc_astrophysics\",\"bls_transit\"],\"idle_gpu\":true}";
+                    string gcpBody = "{\"worker_id\":\"steam-fat-client-3133702-xavakal\",\"capabilities\":[\"boinc_astrophysics\",\"bls_transit\"],\"idle_gpu\":true}";
                     byte[] gBytes = Encoding.UTF8.GetBytes(gcpBody);
                     gcpReq.ContentLength = gBytes.Length;
                     using (Stream gs = gcpReq.GetRequestStream())
@@ -2178,7 +2208,7 @@ namespace HiveMind.ExoplanetHunterClient
                     }
                     if (h.Id == "boinc_open_web")
                     {
-                        try { Process.Start("http://127.0.0.1:8095/community"); } catch { }
+                        try { Process.Start("https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community"); } catch { }
                         AddPointsWithPopup(100, "OPENED GCP COMMUNITY HUB", e.X, e.Y, Color.FromArgb(52, 255, 141));
                         return;
                     }

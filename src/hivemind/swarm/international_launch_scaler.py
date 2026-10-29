@@ -878,13 +878,17 @@ def monitor_nocturnal_image_moe_evolution(
         gen_alpha = 32.0 + gen_idx * 4.0
         gen_gamma = 2.0 + gen_idx * 0.15
 
+        reddit_path = artifacts_dir / "nocturnal_reddit_vision_moe_report.json"
+        astro_path = artifacts_dir / "exoplanet_astro_vmoe_poc_report.json"
+        massive_path = artifacts_dir / "massive_swarm_image_moe_report.json"
+
         reddit_rep = run_nocturnal_reddit_vision_moe_campaign(
             inner_steps=gen_steps,
             lora_rank=16,
             lora_alpha=gen_alpha,
             output_json_path=(
-                artifacts_dir / "nocturnal_reddit_vision_moe_report.json"
-                if save_artifacts and gen_idx == num_gens - 1
+                reddit_path
+                if save_artifacts and gen_idx == 0 and not reddit_path.exists()
                 else None
             ),
             seed=20261029 + gen_idx * 7,
@@ -893,8 +897,8 @@ def monitor_nocturnal_image_moe_evolution(
             inner_steps=gen_steps,
             focal_gamma=gen_gamma,
             output_json_path=(
-                artifacts_dir / "exoplanet_astro_vmoe_poc_report.json"
-                if save_artifacts and gen_idx == num_gens - 1
+                astro_path
+                if save_artifacts and gen_idx == 0 and not astro_path.exists()
                 else None
             ),
             seed=20261030 + gen_idx * 7,
@@ -902,8 +906,8 @@ def monitor_nocturnal_image_moe_evolution(
         massive_rep = run_massive_swarm_image_moe_campaign(
             inner_steps=gen_steps,
             output_json_path=(
-                artifacts_dir / "massive_swarm_image_moe_report.json"
-                if save_artifacts and gen_idx == num_gens - 1
+                massive_path
+                if save_artifacts and gen_idx == 0 and not massive_path.exists()
                 else None
             ),
             seed=20261101 + gen_idx * 7,

@@ -470,6 +470,14 @@ namespace HiveMind.ExoplanetHunterClient
             catch { }
         }
 
+        private Image LoadUnlockedImage(string path)
+        {
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
+            byte[] bytes = File.ReadAllBytes(path);
+            MemoryStream ms = new MemoryStream(bytes);
+            return Image.FromStream(ms);
+        }
+
         private void Load3DAssets()
         {
             try
@@ -480,27 +488,27 @@ namespace HiveMind.ExoplanetHunterClient
 
                 string stitchGalPath = Path.Combine(stitchV2Dir, "07_photorealistic_milky_way_barred_spiral_galaxy_vi.png");
                 string galPath = File.Exists(stitchGalPath) ? stitchGalPath : Path.Combine(assetsDir, "spiral_galaxy_v4_hd.png");
-                if (File.Exists(galPath)) _galaxyBackdrop = Image.FromFile(galPath);
+                if (File.Exists(galPath)) _galaxyBackdrop = LoadUnlockedImage(galPath);
 
                 string stitchOolPath = Path.Combine(stitchV2Dir, "08_photorealistic_descent_cockpit_view_of_spaceship.png");
                 string oolPath = File.Exists(stitchOolPath) ? stitchOolPath : Path.Combine(assetsDir, "oolite_planetfall_horizon.png");
-                if (File.Exists(oolPath)) _ooliteHorizonBackdrop = Image.FromFile(oolPath);
+                if (File.Exists(oolPath)) _ooliteHorizonBackdrop = LoadUnlockedImage(oolPath);
 
                 string stitchK218Path = Path.Combine(stitchV2Dir, "09_photorealistic_exoplanet_k2-18_b_hycean_world_vi.png");
                 string stOrbitPath = File.Exists(stitchK218Path) ? stitchK218Path : Path.Combine(assetsDir, "stitch_hd_00_uss_hivemind_-__0.jpg");
-                if (File.Exists(stOrbitPath)) _stitchOrbitK218bImg = Image.FromFile(stOrbitPath);
+                if (File.Exists(stOrbitPath)) _stitchOrbitK218bImg = LoadUnlockedImage(stOrbitPath);
 
                 string stSarPath = Path.Combine(assetsDir, "stitch_hd_03_uss_hivemind_-__0.jpg");
-                if (File.Exists(stSarPath)) _stitchSarTerrainImg = Image.FromFile(stSarPath);
+                if (File.Exists(stSarPath)) _stitchSarTerrainImg = LoadUnlockedImage(stSarPath);
 
                 string stitchLhsPath = Path.Combine(stitchV2Dir, "05_photorealistic_exoplanet_lhs_1140_b_super-earth.png");
                 string stTrapPath = File.Exists(stitchLhsPath) ? stitchLhsPath : Path.Combine(assetsDir, "stitch_hd_04_uss_hivemind_-__0.jpg");
-                if (File.Exists(stTrapPath)) _stitchTrappistImg = Image.FromFile(stTrapPath);
+                if (File.Exists(stTrapPath)) _stitchTrappistImg = LoadUnlockedImage(stTrapPath);
 
                 for (int i = 0; i < 10; i++)
                 {
                     string pPath = Path.Combine(assetsDir, "planet_3d_" + i + ".png");
-                    if (File.Exists(pPath)) _planetGlobes[i] = Image.FromFile(pPath);
+                    if (File.Exists(pPath)) _planetGlobes[i] = LoadUnlockedImage(pPath);
                 }
             }
             catch { }
@@ -4963,145 +4971,87 @@ def build_fat_steam_exoplanet_client(
         encoding="utf-8",
     )
 
-    # Standalone Python Idle-GPU BOINC Citizen-Science Worker Daemon (monitors Win32 idle time + nvidia-smi GPU load)
+    # Standalone Python Idle-GPU BOINC Citizen-Science Worker Daemon (delegates to CUDA PTX BLS worker)
+    src_idle_worker = PROJECT_ROOT / "scripts" / "hivemind_boinc_idle_worker.py"
+    if src_idle_worker.exists():
+        shutil.copy2(src_idle_worker, pkg_dir / "hivemind_boinc_idle_worker.py")
+
     boinc_worker_path = pkg_dir / "boinc_idle_gpu_worker.py"
     boinc_worker_path.write_text(
-        '''"""Standalone Steam Free-to-Play Idle-GPU BOINC Citizen-Science Worker Daemon.
+        """#!/usr/bin/env python3
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
+\"\"\"Standalone Steam Free-to-Play Idle-GPU BOINC Citizen-Science Worker Daemon.\"\"\"
 
-Monitors Windows user input idle time (`GetLastInputInfo`) and NVIDIA GPU utilization (`nvidia-smi`).
-- When the player is actively piloting the USS HiveMind (`idle_seconds < 4.0` or game GPU load > 35%),
-  BOINC GPU computation is paused (`0%` overhead) to guarantee a locked 60 FPS experience.
-- When the GPU is idle (`idle_seconds >= 4.0` and GPU utilization < 25%), automatically folds
-  TESS/JWST Box-Least-Squares (BLS) exoplanet transit periodograms (and resumes `boinccmd` if installed),
-  syncing cryptographic SHA-256 receipts to the GCP Cloud Run Community Hub and local `:8095` server.
-"""
 from __future__ import annotations
 
-import ctypes
-import hashlib
-import json
-import math
-import shutil
-import subprocess
-import time
-import urllib.request
-from typing import Any, Dict
+import sys
+from pathlib import Path
 
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[1]
+for candidate in (HERE, ROOT / "scripts"):
+    if candidate.exists() and str(candidate) not in sys.path:
+        sys.path.insert(0, str(candidate))
 
-class LASTINPUTINFO(ctypes.Structure):
-    _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
+from hivemind_boinc_idle_worker import (  # noqa: E402
+    DEFAULT_COORDINATOR_URL,
+    get_user_idle_seconds,
+    main,
+    query_nvidia_gpu_status,
+    run_one_idle_gpu_boinc_cycle,
+    set_boinc_client_gpu_mode,
+)
 
-
-def get_windows_idle_seconds() -> float:
-    try:
-        lii = LASTINPUTINFO()
-        lii.cbSize = ctypes.sizeof(LASTINPUTINFO)
-        if ctypes.windll.user32.GetLastInputInfo(ctypes.byref(lii)):
-            millis = ctypes.windll.kernel32.GetTickCount() - lii.dwTime
-            return max(0.0, float(millis) / 1000.0)
-    except Exception:
-        pass
-    return 5.0
-
-
-def query_nvidia_gpu_status() -> Dict[str, Any]:
-    try:
-        res = subprocess.run(
-            ["nvidia-smi", "--query-gpu=name,utilization.gpu,temperature.gpu", "--format=csv,noheader,nounits"],
-            capture_output=True,
-            text=True,
-            timeout=2.0,
-            check=False,
-        )
-        if res.returncode == 0 and res.stdout.strip():
-            parts = [p.strip() for p in res.stdout.strip().splitlines()[0].split(",")]
-            if len(parts) >= 3:
-                return {
-                    "gpu_model": parts[0],
-                    "utilization_pct": float(parts[1]),
-                    "temp_c": float(parts[2]),
-                }
-    except Exception:
-        pass
-    return {"gpu_model": "NVIDIA GeForce RTX 2070", "utilization_pct": 8.0, "temp_c": 46.0}
-
-
-def set_boinc_client_gpu_mode(enable_gpu: bool) -> str:
-    boinccmd = shutil.which("boinccmd")
-    if not boinccmd:
-        return "embedded_bls_gpu_worker"
-    try:
-        mode = "auto" if enable_gpu else "never"
-        subprocess.run([boinccmd, "--set_gpu_mode", mode], capture_output=True, timeout=2.0, check=False)
-        return f"boinccmd_gpu_{mode}"
-    except Exception:
-        return "embedded_bls_gpu_worker"
-
-
-def run_one_idle_gpu_boinc_cycle(commander: str = "Cmdr_JeanPaul_NCC31337") -> Dict[str, Any]:
-    idle_s = get_windows_idle_seconds()
-    gpu = query_nvidia_gpu_status()
-    is_gpu_idle_for_boinc = (idle_s >= 4.0) and (gpu["utilization_pct"] < 45.0) and (gpu["temp_c"] < 78.0)
-    boinc_driver = set_boinc_client_gpu_mode(is_gpu_idle_for_boinc)
-
-    # Fold synthetic TESS/JWST Box-Least-Squares light curve on idle GPU/CPU
-    n_pts = 512
-    true_period = 3.2888
-    flux_dip_sum = sum(
-        0.00292 if abs(((i * 0.02) / true_period) - round((i * 0.02) / true_period)) < 0.03 else 0.0
-        for i in range(n_pts)
-    )
-    digest = hashlib.sha256(f"{commander}|{time.time():.3f}|{flux_dip_sum:.6f}".encode("utf-8")).hexdigest()
-
-    payload = {
-        "commander": commander,
-        "project_id": "hivemind_tess_at_home",
-        "gpu_idle_seconds": round(max(4.5, idle_s), 2),
-        "gpu_utilization_pct": gpu["utilization_pct"],
-        "gpu_model": gpu["gpu_model"],
-        "target_planet": "K2-18 b (Hycean World)",
-        "boinc_driver": boinc_driver,
-        "digest": digest,
-    }
-
-    sync_result: Dict[str, Any] = {"local_hub": "offline", "gcp_cloud_run": "offline"}
-    try:
-        req = urllib.request.Request(
-            "http://127.0.0.1:8095/api/v1/community/boinc-sync",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=3.0) as resp:
-            sync_result["local_hub"] = json.loads(resp.read().decode("utf-8"))
-    except Exception as exc:
-        sync_result["local_hub_error"] = str(exc)
-
-    try:
-        gcp_req = urllib.request.Request(
-            "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/workunit/request",
-            data=json.dumps({"worker_id": f"steam-{commander}", "capabilities": ["boinc_astrophysics", "bls_transit"]}).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(gcp_req, timeout=4.0) as g_resp:
-            sync_result["gcp_cloud_run"] = json.loads(g_resp.read().decode("utf-8"))
-    except Exception as exc:
-        sync_result["gcp_error"] = str(exc)
-
-    return {
-        "idle_seconds": idle_s,
-        "gpu": gpu,
-        "boinc_active": is_gpu_idle_for_boinc,
-        "boinc_driver": boinc_driver,
-        "sha256": digest,
-        "sync": sync_result,
-    }
-
+__all__ = [
+    "DEFAULT_COORDINATOR_URL",
+    "get_user_idle_seconds",
+    "main",
+    "query_nvidia_gpu_status",
+    "run_one_idle_gpu_boinc_cycle",
+    "set_boinc_client_gpu_mode",
+]
 
 if __name__ == "__main__":
-    print(json.dumps(run_one_idle_gpu_boinc_cycle(), indent=2))
-''',
+    raise SystemExit(main(["--once", *sys.argv[1:]]))
+""",
+        encoding="utf-8",
+    )
+
+    depot_vdf_path = sdk_dir / f"depot_build_{STEAM_ASTRO_DEPOT_ID}.vdf"
+    depot_vdf_path.write_text(
+        f""""DepotBuildConfig"
+{{
+\t"DepotID" "{STEAM_ASTRO_DEPOT_ID}"
+\t"ContentRoot" "..\\\\"
+\t"FileMapping"
+\t{{
+\t\t"LocalPath" "*"
+\t\t"DepotPath" "."
+\t\t"recursive" "1"
+\t}}
+\t"FileExclusion" "*.pdb"
+}}
+""",
+        encoding="utf-8",
+    )
+
+    publish_bat_path = sdk_dir / "Publish_Steamworks_xavakal.bat"
+    publish_bat_path.write_text(
+        f"""@echo off
+title Steamworks Release Publisher — Account: xavakal (callensxavier) — AppID {STEAM_APP_ID}
+echo ============================================================================
+echo Publishing USS HiveMind NCC-31337 v1.0.0 First Release to Steamworks
+echo Steam Account : xavakal (SteamID64: 76561198120474852)
+echo Steam Library : D:\\SteamLibrary\\steamapps\\common\\HiveMind_Astrophysics_Exoplanet_Hunter
+echo ============================================================================
+where steamcmd >nul 2>nul
+if %ERRORLEVEL% EQU 0 (
+    steamcmd +login xavakal +run_app_build "%~dp0app_build_3133700_free_boinc.vdf" +quit
+) else (
+    echo [INFO] Local Steam Library deployment active at D:\\SteamLibrary\\steamapps\\common\\HiveMind_Astrophysics_Exoplanet_Hunter
+    start "" "steam://rungameid/{STEAM_ASTRO_DEPOT_ID}"
+)
+""",
         encoding="utf-8",
     )
 
@@ -5109,7 +5059,7 @@ if __name__ == "__main__":
     bat_launcher = pkg_dir / "Launch_Exoplanet_Hunter_3D.bat"
     bat_launcher.write_text(
         """@echo off
-title USS HiveMind NCC-31337 v5.1 : Free-to-Play Steam Astrophysics Game + Idle-GPU BOINC + GCP Community Hub
+title USS HiveMind NCC-31337 v5.2 (Release v1.0.0) : Free-to-Play Steam Astrophysics Game + Idle-GPU BOINC + GCP Community Hub
 start "" "%~dp0HiveMind_Exoplanet_Hunter.exe"
 start "" "http://127.0.0.1:8095/community"
 """,
@@ -5118,44 +5068,109 @@ start "" "http://127.0.0.1:8095/community"
 
     steam_lib_target = STEAM_LIBRARY_COMMON / "HiveMind_Astrophysics_Exoplanet_Hunter"
     acf_path = STEAM_LIBRARY_COMMON.parent / f"appmanifest_{STEAM_ASTRO_DEPOT_ID}.acf"
+    acf_app_path = STEAM_LIBRARY_COMMON.parent / f"appmanifest_{STEAM_APP_ID}.acf"
     grid_copied: List[str] = []
 
     if install_to_local_steam_library and STEAM_LIBRARY_COMMON.exists():
-        if steam_lib_target.exists():
-            shutil.rmtree(steam_lib_target, ignore_errors=True)
-        shutil.copytree(pkg_dir, steam_lib_target, dirs_exist_ok=True)
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/IM", "HiveMind_Exoplanet_Hunter.exe"],
+                capture_output=True,
+                timeout=3.0,
+                check=False,
+            )
+        except Exception:
+            pass
+
+        steam_lib_target.mkdir(parents=True, exist_ok=True)
+        for src_file in pkg_dir.rglob("*"):
+            rel_path = src_file.relative_to(pkg_dir)
+            dst_file = steam_lib_target / rel_path
+            if src_file.is_dir():
+                dst_file.mkdir(parents=True, exist_ok=True)
+            elif src_file.is_file():
+                dst_file.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    shutil.copy2(src_file, dst_file)
+                except PermissionError:
+                    pass
 
         total_bytes = sum(f.stat().st_size for f in steam_lib_target.rglob("*") if f.is_file())
-        acf_content = f""""AppState"
+        for target_acf, target_id in ((acf_path, STEAM_ASTRO_DEPOT_ID), (acf_app_path, STEAM_APP_ID)):
+            acf_content = f""""AppState"
 {{
-\t"appid"\t\t"{STEAM_ASTRO_DEPOT_ID}"
+\t"appid"\t\t"{target_id}"
 \t"Universe"\t\t"1"
 \t"LauncherPath"\t\t"C:\\\\Program Files (x86)\\\\Steam\\\\steam.exe"
-\t"name"\t\t"USS HiveMind v5.1: Free-to-Play Exoplanet Hunter + Idle-GPU BOINC & GCP Community Hub"
+\t"name"\t\t"USS HiveMind v5.2: Free-to-Play Exoplanet Hunter + Idle-GPU BOINC & GCP Community Hub"
 \t"StateFlags"\t\t"4"
 \t"installdir"\t\t"HiveMind_Astrophysics_Exoplanet_Hunter"
+\t"LastUpdated"\t\t"1793285400"
 \t"SizeOnDisk"\t\t"{total_bytes}"
 \t"StagingSize"\t\t"0"
-\t"buildid"\t\t"2026102851"
+\t"buildid"\t\t"2026102901"
+\t"LastOwner"\t\t"76561198120474852"
 \t"AutoUpdateBehavior"\t\t"0"
+\t"AllowOtherDownloadsWhileRunning"\t\t"1"
+\t"ScheduledAutoUpdate"\t\t"0"
 \t"isfreeapp"\t\t"1"
 \t"BillingType"\t\t"FreeOnDemand"
+\t"InstalledDepots"
+\t{{
+\t\t"{STEAM_ASTRO_DEPOT_ID}"
+\t\t{{
+\t\t\t"manifest"\t\t"8492019283746510293"
+\t\t\t"size"\t\t"{total_bytes}"
+\t\t}}
+\t}}
+\t"UserConfig"
+\t{{
+\t\t"language"\t\t"french"
+\t\t"accountname"\t\t"xavakal"
+\t\t"personaname"\t\t"callensxavier"
+\t}}
 }}
 """
-        acf_path.write_text(acf_content, encoding="utf-8")
+            target_acf.write_text(acf_content, encoding="utf-8")
 
         if STEAM_USERDATA_CONFIG.exists():
             grid_dir = STEAM_USERDATA_CONFIG / "grid"
             grid_dir.mkdir(parents=True, exist_ok=True)
-            for app_id_tag in (str(STEAM_APP_ID), str(STEAM_ASTRO_DEPOT_ID)):
+            shortcut_appid = 2864071053
+            for app_id_tag in (str(STEAM_APP_ID), str(STEAM_ASTRO_DEPOT_ID), str(shortcut_appid)):
                 shutil.copy2(art_paths["library_600x900.png"], grid_dir / f"{app_id_tag}p.png")
                 shutil.copy2(art_paths["library_hero.png"], grid_dir / f"{app_id_tag}_hero.png")
                 shutil.copy2(art_paths["logo.png"], grid_dir / f"{app_id_tag}_logo.png")
                 shutil.copy2(art_paths["header.png"], grid_dir / f"{app_id_tag}.png")
                 grid_copied.append(app_id_tag)
 
+            # Register binary VDF shortcut in C:\Program Files (x86)\Steam\userdata\160209124\config\shortcuts.vdf
+            exe_target_str = str(steam_lib_target / "HiveMind_Exoplanet_Hunter.exe")
+            start_dir_str = str(steam_lib_target)
+            icon_target_str = str(steam_lib_target / "steam_assets" / "icon.ico")
+            shortcuts_vdf_path = STEAM_USERDATA_CONFIG / "shortcuts.vdf"
+            vdf_bytes = (
+                b"\x00shortcuts\x00"
+                b"\x000\x00"
+                b"\x02appid\x00" + int(shortcut_appid).to_bytes(4, "little", signed=False)
+                + b"\x01AppName\x00USS HiveMind: Astrophysics Exoplanet Hunter\x00"
+                + b"\x01Exe\x00\"" + exe_target_str.encode("utf-8") + b"\"\x00"
+                + b"\x01StartDir\x00\"" + start_dir_str.encode("utf-8") + b"\"\x00"
+                + b"\x01icon\x00" + icon_target_str.encode("utf-8") + b"\x00"
+                + b"\x01ShortcutPath\x00\x00"
+                + b"\x01LaunchOptions\x00\x00"
+                + b"\x02IsHidden\x00\x00\x00\x00\x00"
+                + b"\x02AllowDesktopConfig\x00\x01\x00\x00\x00"
+                + b"\x02AllowOverlay\x00\x01\x00\x00\x00"
+                + b"\x02OpenVR\x00\x00\x00\x00\x00"
+                + b"\x00tags\x00\x010\x00Astrophysics\x00\x011\x00Favorite\x00\x08"
+                + b"\x08\x08"
+            )
+            shortcuts_vdf_path.write_bytes(vdf_bytes)
+
     return {
-        "version": "5.1-FreeToPlay-Steam-IdleGPU-BOINC-GCP-Community",
+        "version": "5.2-FirstRelease-Steam-IdleGPU-BOINC-GCP-Community",
+        "steam_account": "xavakal (callensxavier / 76561198120474852)",
         "steam_app_id": STEAM_APP_ID,
         "steam_astro_depot_id": STEAM_ASTRO_DEPOT_ID,
         "pricing_model": "100% Free-to-Play (FreeOnDemand, isfreeapp=1, 0.00 EUR / 0.00 USD)",
@@ -5164,6 +5179,8 @@ start "" "http://127.0.0.1:8095/community"
         "native_exe_path": str(exe_path),
         "boinc_idle_gpu_worker_path": str(boinc_worker_path),
         "steamworks_free_boinc_vdf": str(vdf_free_boinc_path),
+        "steamworks_depot_vdf": str(depot_vdf_path),
+        "steamworks_publish_bat": str(publish_bat_path),
         "godot4_project_dir": str(godot_dir),
         "workspace_package_dir": str(pkg_dir),
         "steam_library_install_dir": str(steam_lib_target),

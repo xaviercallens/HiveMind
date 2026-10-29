@@ -420,6 +420,14 @@ namespace HiveMind.ExoplanetHunterClient
             catch { }
         }
 
+        private Image LoadUnlockedImage(string path)
+        {
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
+            byte[] bytes = File.ReadAllBytes(path);
+            MemoryStream ms = new MemoryStream(bytes);
+            return Image.FromStream(ms);
+        }
+
         private void Load3DAssets()
         {
             try
@@ -430,27 +438,27 @@ namespace HiveMind.ExoplanetHunterClient
 
                 string stitchGalPath = Path.Combine(stitchV2Dir, "07_photorealistic_milky_way_barred_spiral_galaxy_vi.png");
                 string galPath = File.Exists(stitchGalPath) ? stitchGalPath : Path.Combine(assetsDir, "spiral_galaxy_v4_hd.png");
-                if (File.Exists(galPath)) _galaxyBackdrop = Image.FromFile(galPath);
+                if (File.Exists(galPath)) _galaxyBackdrop = LoadUnlockedImage(galPath);
 
                 string stitchOolPath = Path.Combine(stitchV2Dir, "08_photorealistic_descent_cockpit_view_of_spaceship.png");
                 string oolPath = File.Exists(stitchOolPath) ? stitchOolPath : Path.Combine(assetsDir, "oolite_planetfall_horizon.png");
-                if (File.Exists(oolPath)) _ooliteHorizonBackdrop = Image.FromFile(oolPath);
+                if (File.Exists(oolPath)) _ooliteHorizonBackdrop = LoadUnlockedImage(oolPath);
 
                 string stitchK218Path = Path.Combine(stitchV2Dir, "09_photorealistic_exoplanet_k2-18_b_hycean_world_vi.png");
                 string stOrbitPath = File.Exists(stitchK218Path) ? stitchK218Path : Path.Combine(assetsDir, "stitch_hd_00_uss_hivemind_-__0.jpg");
-                if (File.Exists(stOrbitPath)) _stitchOrbitK218bImg = Image.FromFile(stOrbitPath);
+                if (File.Exists(stOrbitPath)) _stitchOrbitK218bImg = LoadUnlockedImage(stOrbitPath);
 
                 string stSarPath = Path.Combine(assetsDir, "stitch_hd_03_uss_hivemind_-__0.jpg");
-                if (File.Exists(stSarPath)) _stitchSarTerrainImg = Image.FromFile(stSarPath);
+                if (File.Exists(stSarPath)) _stitchSarTerrainImg = LoadUnlockedImage(stSarPath);
 
                 string stitchLhsPath = Path.Combine(stitchV2Dir, "05_photorealistic_exoplanet_lhs_1140_b_super-earth.png");
                 string stTrapPath = File.Exists(stitchLhsPath) ? stitchLhsPath : Path.Combine(assetsDir, "stitch_hd_04_uss_hivemind_-__0.jpg");
-                if (File.Exists(stTrapPath)) _stitchTrappistImg = Image.FromFile(stTrapPath);
+                if (File.Exists(stTrapPath)) _stitchTrappistImg = LoadUnlockedImage(stTrapPath);
 
                 for (int i = 0; i < 10; i++)
                 {
                     string pPath = Path.Combine(assetsDir, "planet_3d_" + i + ".png");
-                    if (File.Exists(pPath)) _planetGlobes[i] = Image.FromFile(pPath);
+                    if (File.Exists(pPath)) _planetGlobes[i] = LoadUnlockedImage(pPath);
                 }
             }
             catch { }

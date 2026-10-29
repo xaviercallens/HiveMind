@@ -153,6 +153,176 @@ LARGE_VRAM_BASE_MODELS: dict[str, dict[str, Any]] = {
     },
 }
 
+# Sub-4-Bit (1.58-bit / 2-bit / 3-bit) Frontier Models for the Nocturnal "Dream Phase"
+# Used as frozen Dream Teachers (synthetic trajectory generation, counterfactual critique, and
+# on-policy knowledge distillation) within strict consumer & cloud VRAM budgets (Golden Invariant I1).
+LOW_BIT_DREAM_TEACHER_MODELS: dict[str, dict[str, Any]] = {
+    "tiel-coder-35b-a3b-iq3-xxs": {
+        "model_id": "peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF",
+        "gguf_file": "Tiel-Coder-35B-A3B-UD-IQ3_XXS.gguf",
+        "mtp_companion_repo": "peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP",
+        "base_model": "ornith-ai/Ornith-1.5-35B-A3B",
+        "params_b": 35.0,
+        "active_params_b": 3.0,
+        "moe": True,
+        "quant_scheme": "Unsloth-Dynamic-IQ3_XXS + 49M-char code imatrix (3.06 bpw)",
+        "weights_gib": 12.30,
+        "min_vram_full_offload_gb": 15.0,
+        "min_vram_moe_split_gb": 6.0,
+        "wddm_8gb_moe_split_vram_gb": 5.6,
+        "runtime": "llama.cpp (-ngl 99 --jinja; or --n-cpu-moe on 8GB VRAM + 16GB RAM)",
+        "recommended_sampling": {"temperature": 0.6, "top_p": 0.95, "top_k": 20},
+        "target_roles": ("coding", "cyber", "formal_lean4", "systems"),
+        "license": "MIT",
+        "description": (
+            "35B-A3B Sparse MoE agentic coder (3B active/token) solving 12/25 on SWE-bench-Live "
+            "(level with Opus 4.6 medium) and 67.2 on Claw-Eval; fits 16 GB Tesla T4 in 3-bit UD-IQ3_XXS "
+            "or 8 GB RTX 2070 (<6.5 GB I1 ceiling) via MoE expert CPU/RAM split."
+        ),
+    },
+    "tiel-coder-35b-a3b-iq3-s": {
+        "model_id": "peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF",
+        "gguf_file": "Tiel-Coder-35B-A3B-UD-IQ3_S.gguf",
+        "mtp_companion_repo": "peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP",
+        "base_model": "ornith-ai/Ornith-1.5-35B-A3B",
+        "params_b": 35.0,
+        "active_params_b": 3.0,
+        "moe": True,
+        "quant_scheme": "Unsloth-Dynamic-IQ3_S + 49M-char code imatrix (3.18 bpw)",
+        "weights_gib": 12.74,
+        "min_vram_full_offload_gb": 16.0,
+        "min_vram_moe_split_gb": 6.0,
+        "wddm_8gb_moe_split_vram_gb": 5.8,
+        "runtime": "llama.cpp (-ngl 99 --jinja)",
+        "recommended_sampling": {"temperature": 0.6, "top_p": 0.95, "top_k": 20},
+        "target_roles": ("coding", "cyber", "formal_lean4", "systems"),
+        "license": "MIT",
+        "description": (
+            "Higher-precision 3-bit UD-IQ3_S build of Tiel-Coder-35B-A3B (12.74 GiB) for 16 GB+ GPUs."
+        ),
+    },
+    "ternary-bonsai-2-27b-ptq1": {
+        "model_id": "prism-ml/Ternary-Bonsai-2-27B-gguf",
+        "gguf_file": "Ternary-Bonsai-2-27B-PTQ1_0.gguf",
+        "mlx_companion_repo": "prism-ml/Ternary-Bonsai-2-27B-mlx-2bit",
+        "base_model": "Qwen/Qwen3.8-27B",
+        "params_b": 27.36,
+        "active_params_b": 27.36,
+        "moe": False,
+        "quant_scheme": "Hadamard-Rotated Ternary g128 PTQ1_0 (1.75 bits/weight dense trits)",
+        "weights_gib": 5.54,
+        "min_vram_full_offload_gb": 6.5,
+        "wddm_8gb_safe_vram_gb": 6.20,
+        "runtime": "PrismML-Eng/llama.cpp (custom Hadamard ternary CUDA/Metal kernels)",
+        "recommended_sampling": {"temperature": 1.0, "top_p": 0.95, "top_k": 20, "min_p": 0.05},
+        "target_roles": ("generalist", "science", "math", "astrophysics", "multilingual"),
+        "license": "Apache-2.0",
+        "description": (
+            "27.36B hybrid-attention generalist & deep reasoning model compressed 9.0x to 5.54 GiB "
+            "via blockwise Hadamard ternary quantization, retaining 98.2% of FP16 intelligence "
+            "(84.78 avg across 14 thinking benchmarks) and fitting inside an 8 GB RTX 2070 (<=6.5 GB I1 ceiling)."
+        ),
+    },
+    "ternary-bonsai-2-27b-pq2": {
+        "model_id": "prism-ml/Ternary-Bonsai-2-27B-gguf",
+        "gguf_file": "Ternary-Bonsai-2-27B-PQ2_0.gguf",
+        "mlx_companion_repo": "prism-ml/Ternary-Bonsai-2-27B-mlx-2bit",
+        "base_model": "Qwen/Qwen3.8-27B",
+        "params_b": 27.36,
+        "active_params_b": 27.36,
+        "moe": False,
+        "quant_scheme": "Hadamard-Rotated Ternary g128 PQ2_0 (2.13 bits/weight 2-bit slots)",
+        "weights_gib": 6.71,
+        "min_vram_full_offload_gb": 8.5,
+        "wddm_8gb_safe_vram_gb": 6.71,
+        "runtime": "PrismML-Eng/llama.cpp (CUDA/Metal) or PrismML-Eng/mlx (Apple Silicon)",
+        "recommended_sampling": {"temperature": 1.0, "top_p": 0.95, "top_k": 20, "min_p": 0.05},
+        "target_roles": ("generalist", "science", "math", "astrophysics", "multilingual"),
+        "license": "Apache-2.0",
+        "description": (
+            "Fast-unpacking 2-bit slot PQ2_0 build of Ternary-Bonsai-2-27B (6.71 GiB); on a 16 GB Tesla T4 "
+            "it leaves >8 GiB free VRAM so the 27B teacher and a QLoRA student can co-reside in VRAM."
+        ),
+    },
+    "ternary-bonsai-2-9b-pq2": {
+        "model_id": "prism-ml/Ternary-Bonsai-2-9B-gguf",
+        "gguf_file": "Ternary-Bonsai-2-9B-PQ2_0.gguf",
+        "draft_companion_file": "Ternary-Bonsai-2-9B-DFlash2-Q8_0.gguf",
+        "base_model": "Qwen/Qwen3.5-9B",
+        "params_b": 9.0,
+        "active_params_b": 9.0,
+        "moe": False,
+        "quant_scheme": "Hadamard-Rotated Ternary g128 PQ2_0 (2.25 GiB) + DFlash2 speculative drafter",
+        "weights_gib": 2.25,
+        "min_vram_full_offload_gb": 4.0,
+        "wddm_8gb_safe_vram_gb": 3.80,
+        "runtime": "PrismML-Eng/llama.cpp (CUDA/Metal/CPU)",
+        "recommended_sampling": {"temperature": 0.7, "top_p": 0.80, "top_k": 20, "presence_penalty": 1.5},
+        "target_roles": ("generalist", "edge", "vision", "fast_synthesis"),
+        "license": "Apache-2.0",
+        "description": (
+            "9B hybrid-attention VLM in 2.25 GiB ternary PQ2_0 weights with 262K context and optional DFlash2 drafter."
+        ),
+    },
+    "bonsai-27b-1bit-q1": {
+        "model_id": "prism-ml/Bonsai-27B-gguf",
+        "gguf_file": "Bonsai-27B-Q1_0.gguf",
+        "unpacked_safetensors_repo": "prism-ml/Bonsai-27B-unpacked",
+        "base_model": "Qwen/Qwen3.6-27B",
+        "params_b": 27.0,
+        "active_params_b": 27.0,
+        "moe": False,
+        "quant_scheme": "1-Bit Binary Transformer Q1_0 (14.2x compression)",
+        "weights_gib": 3.54,
+        "min_vram_full_offload_gb": 4.5,
+        "wddm_8gb_safe_vram_gb": 4.20,
+        "runtime": "PrismML-Eng/llama.cpp (CUDA/Metal)",
+        "recommended_sampling": {"temperature": 1.0, "top_p": 0.95, "top_k": 20, "min_p": 0.05},
+        "target_roles": ("generalist", "co_resident_distillation"),
+        "license": "Apache-2.0",
+        "description": (
+            "1-bit 27B reasoning model in 3.54 GiB (~90% FP16 intelligence retained), enabling simultaneous "
+            "in-VRAM teacher-student distillation on 10 GB - 12 GB GPUs."
+        ),
+    },
+}
+
+
+def select_dream_phase_teacher_for_vram(
+    vram_gb: float,
+    domain_or_cluster: str = "generalist",
+    system_ram_gb: float = 16.0,
+) -> dict[str, Any]:
+    """Select the optimal 1.58-bit / 2-bit / 3-bit Dream Phase teacher for a producer's VRAM and domain.
+
+    Enforces Golden Invariant I1 (<= 6.5 GB resident VRAM on 8 GB consumer GPUs).
+    """
+    dom = domain_or_cluster.strip().lower()
+    is_code_or_formal = any(
+        k in dom for k in ("code", "coding", "swe", "rust", "python", "cyber", "formal", "lean", "systems", "cluster_00", "cluster_01")
+    )
+    if is_code_or_formal:
+        if vram_gb >= 15.0:
+            choice = dict(LOW_BIT_DREAM_TEACHER_MODELS["tiel-coder-35b-a3b-iq3-xxs"])
+            choice["execution_mode"] = "full_gpu_offload_16gb"
+            return choice
+        if vram_gb >= 6.0 and system_ram_gb >= 16.0:
+            choice = dict(LOW_BIT_DREAM_TEACHER_MODELS["tiel-coder-35b-a3b-iq3-xxs"])
+            choice["execution_mode"] = "moe_expert_cpu_ram_split_8gb_wddm_safe"
+            return choice
+    # Generalist, scientific, math, astrophysics, or fallback when RAM is constrained
+    if vram_gb >= 12.0:
+        choice = dict(LOW_BIT_DREAM_TEACHER_MODELS["ternary-bonsai-2-27b-pq2"])
+        choice["execution_mode"] = "full_gpu_offload_with_co_resident_student_headroom"
+        return choice
+    if vram_gb >= 6.5:
+        choice = dict(LOW_BIT_DREAM_TEACHER_MODELS["ternary-bonsai-2-27b-ptq1"])
+        choice["execution_mode"] = "full_gpu_offload_8gb_wddm_safe"
+        return choice
+    choice = dict(LOW_BIT_DREAM_TEACHER_MODELS["ternary-bonsai-2-9b-pq2"])
+    choice["execution_mode"] = "compact_edge_gpu_offload"
+    return choice
+
 ALL_BASE_MODELS: dict[str, dict[str, Any]] = {
     **SUPPORTED_BASE_MODELS,
     **LARGE_VRAM_BASE_MODELS,

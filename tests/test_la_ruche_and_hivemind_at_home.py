@@ -363,3 +363,27 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     assert "cyber-scanlines" in r_index.text
     assert "COGNITIVE SHIELD: ARMED" in r_index.text
     assert "btn-chamfer" in r_index.text
+
+    # Verify /community, /boinc, /api/v1/community/*, /rejoindre, /join, and /scripts/*
+    assert client.get("/community").status_code == 200
+    assert client.get("/boinc").status_code == 200
+    assert client.get("/api/v1/community/hub").status_code == 200
+    r_bsync = client.post(
+        "/api/v1/community/boinc-sync",
+        json={"handle": "pioneer-prosumer-01", "target_planet": "K2-18 b", "idle_seconds": 8.0},
+    )
+    assert r_bsync.status_code == 200 and r_bsync.json()["ok"] is True
+    r_bsync_new = client.post(
+        "/api/v1/community/boinc-sync",
+        json={"handle": "new-gamer-fr", "target_planet": "LHS 1140 b", "idle_seconds": 12.0},
+    )
+    assert r_bsync_new.status_code == 200 and r_bsync_new.json()["ok"] is True
+    r_note = client.post(
+        "/api/v1/community/post-note",
+        json={"handle": "new-gamer-fr", "target": "K2-18 b", "note": "Transit verified"},
+    )
+    assert r_note.status_code == 200 and r_note.json()["ok"] is True
+    assert client.get("/rejoindre?lang=fr").status_code == 200
+    assert client.get("/join?lang=en").status_code == 200
+    assert client.get("/scripts/hivemind_boinc_idle_worker.py").status_code == 200
+    assert client.get("/scripts/unknown_script.py").status_code == 404

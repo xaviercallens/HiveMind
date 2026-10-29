@@ -682,6 +682,71 @@ def plan_dream_phase(
     return plan
 
 
+def select_dream_teacher_for_job(domain: str, vram_mib: int) -> dict[str, Any]:
+    """Select the low-bit (1.58-bit / 2-bit / 3-bit) Dream Phase teacher for a job's domain and producer VRAM."""
+    dom = domain.strip().lower()
+    is_code = any(k in dom for k in ("code", "coding", "swe", "rust", "python", "cyber", "formal", "lean", "sys"))
+    if is_code and vram_mib >= 14500:
+        return {
+            "teacher_id": "tiel-coder-35b-a3b-iq3-xxs",
+            "hf_repo": "peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF",
+            "gguf_file": "Tiel-Coder-35B-A3B-UD-IQ3_XXS.gguf",
+            "quant_bits": 3.06,
+            "weights_gib": 12.30,
+            "params_b": 35.0,
+            "active_params_b": 3.0,
+            "moe": True,
+            "execution_mode": "full_gpu_offload_16gb",
+        }
+    if is_code and vram_mib >= 6000:
+        return {
+            "teacher_id": "tiel-coder-35b-a3b-iq3-xxs",
+            "hf_repo": "peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF",
+            "gguf_file": "Tiel-Coder-35B-A3B-UD-IQ3_XXS.gguf",
+            "quant_bits": 3.06,
+            "weights_gib": 12.30,
+            "params_b": 35.0,
+            "active_params_b": 3.0,
+            "moe": True,
+            "execution_mode": "moe_expert_cpu_ram_split_wddm_safe",
+        }
+    if vram_mib >= 12000:
+        return {
+            "teacher_id": "ternary-bonsai-2-27b-pq2",
+            "hf_repo": "prism-ml/Ternary-Bonsai-2-27B-gguf",
+            "gguf_file": "Ternary-Bonsai-2-27B-PQ2_0.gguf",
+            "quant_bits": 2.13,
+            "weights_gib": 6.71,
+            "params_b": 27.36,
+            "active_params_b": 27.36,
+            "moe": False,
+            "execution_mode": "full_gpu_offload_co_resident_student",
+        }
+    if vram_mib >= 6500:
+        return {
+            "teacher_id": "ternary-bonsai-2-27b-ptq1",
+            "hf_repo": "prism-ml/Ternary-Bonsai-2-27B-gguf",
+            "gguf_file": "Ternary-Bonsai-2-27B-PTQ1_0.gguf",
+            "quant_bits": 1.75,
+            "weights_gib": 5.54,
+            "params_b": 27.36,
+            "active_params_b": 27.36,
+            "moe": False,
+            "execution_mode": "full_gpu_offload_8gb_wddm_safe",
+        }
+    return {
+        "teacher_id": "ternary-bonsai-2-9b-pq2",
+        "hf_repo": "prism-ml/Ternary-Bonsai-2-9B-gguf",
+        "gguf_file": "Ternary-Bonsai-2-9B-PQ2_0.gguf",
+        "quant_bits": 2.13,
+        "weights_gib": 2.25,
+        "params_b": 9.0,
+        "active_params_b": 9.0,
+        "moe": False,
+        "execution_mode": "compact_edge_gpu_offload",
+    }
+
+
 def _job(
     e: DomainEvidence,
     p: Mapping[str, Any],
@@ -748,6 +813,7 @@ def _job(
         "workunit_prefix": prof["prefix"],
         "min_gpu_ram_mb": prof["min_gpu_ram_mb"],
         "lora_rank": prof["rank"],
+        "dream_teacher": select_dream_teacher_for_job(e.domain, int(p["vram_mib"])),
         "training_mix": {
             "verified": e.new_verified,
             "unverified": row["unverified_included"],

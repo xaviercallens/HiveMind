@@ -587,3 +587,52 @@ def test_per_participant_keys_stop_impersonation(tmp_path: Path) -> None:
         CampaignOrchestrator(tmp_path / "s2.json", {"alice": b"short"}, bridge.publish)
     with pytest.raises(ValueError, match="at least 16 bytes"):
         CampaignOrchestrator(tmp_path / "s3.json", {}, bridge.publish)
+
+
+def test_dream_phase_lowbit_teachers_selection(tmp_path: Path) -> None:
+    from hivemind.core.auto_improvement import (
+        LOW_BIT_DREAM_TEACHER_MODELS,
+        select_dream_phase_teacher_for_vram,
+    )
+    from hivemind.swarm.campaign_orchestrator import select_dream_teacher_for_job
+
+    assert "tiel-coder-35b-a3b-iq3-xxs" in LOW_BIT_DREAM_TEACHER_MODELS
+    assert "ternary-bonsai-2-27b-ptq1" in LOW_BIT_DREAM_TEACHER_MODELS
+    assert "ternary-bonsai-2-27b-pq2" in LOW_BIT_DREAM_TEACHER_MODELS
+    assert "ternary-bonsai-2-9b-pq2" in LOW_BIT_DREAM_TEACHER_MODELS
+    assert "bonsai-27b-1bit-q1" in LOW_BIT_DREAM_TEACHER_MODELS
+
+    # 1. Dream Phase job teacher selection across VRAM tiers & domains
+    t_code_16g = select_dream_teacher_for_job("coding_python", 15360)
+    assert t_code_16g["hf_repo"] == "peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF"
+    assert t_code_16g["execution_mode"] == "full_gpu_offload_16gb"
+
+    t_code_8g = select_dream_teacher_for_job("coding_python", 8192)
+    assert t_code_8g["hf_repo"] == "peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF"
+    assert t_code_8g["execution_mode"] == "moe_expert_cpu_ram_split_wddm_safe"
+
+    t_gen_16g = select_dream_teacher_for_job("stars", 15360)
+    assert t_gen_16g["hf_repo"] == "prism-ml/Ternary-Bonsai-2-27B-gguf"
+    assert t_gen_16g["gguf_file"] == "Ternary-Bonsai-2-27B-PQ2_0.gguf"
+
+    t_gen_8g = select_dream_teacher_for_job("stars", 8192)
+    assert t_gen_8g["hf_repo"] == "prism-ml/Ternary-Bonsai-2-27B-gguf"
+    assert t_gen_8g["gguf_file"] == "Ternary-Bonsai-2-27B-PTQ1_0.gguf"
+    assert t_gen_8g["weights_gib"] <= 6.5
+
+    t_gen_4g = select_dream_teacher_for_job("stars", 4096)
+    assert t_gen_4g["hf_repo"] == "prism-ml/Ternary-Bonsai-2-9B-gguf"
+
+    # 2. Auto-improvement VRAM teacher selector
+    assert select_dream_phase_teacher_for_vram(16.0, "coding")["model_id"] == "peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF"
+    assert select_dream_phase_teacher_for_vram(8.0, "coding", system_ram_gb=16.0)["execution_mode"] == "moe_expert_cpu_ram_split_8gb_wddm_safe"
+    assert select_dream_phase_teacher_for_vram(16.0, "astrophysics")["gguf_file"] == "Ternary-Bonsai-2-27B-PQ2_0.gguf"
+    assert select_dream_phase_teacher_for_vram(8.0, "astrophysics")["gguf_file"] == "Ternary-Bonsai-2-27B-PTQ1_0.gguf"
+    assert select_dream_phase_teacher_for_vram(5.0, "generalist")["model_id"] == "prism-ml/Ternary-Bonsai-2-9B-gguf"
+
+    # 3. Verify plan_dream_phase attaches dream_teacher to planned jobs
+    p = plan(tmp_path)
+    by_dom = {j["domain"]: j["dream_teacher"] for j in p["jobs"]}
+    assert by_dom["coding_python"]["hf_repo"] == "peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF"
+    assert by_dom["stars"]["hf_repo"] == "prism-ml/Ternary-Bonsai-2-27B-gguf"
+

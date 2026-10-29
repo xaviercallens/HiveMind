@@ -51,11 +51,12 @@ gcloud run deploy hivemind-openrouter \
   --region "$REGION" \
   --service-account "$SERVICE_ACCOUNT" \
   --allow-unauthenticated \
-  --min-instances 0 \
+  --min-instances 1 \
   --max-instances 1 \
   --no-cpu-throttling \
-  --concurrency 40 \
-  --memory 512Mi \
+  --cpu 4 \
+  --concurrency 200 \
+  --memory 4Gi \
   --timeout 600 \
   --set-env-vars "${ENV_VARS}" \
   --set-secrets "HIVEMIND_ROUTER_SECRET=${SECRET_NAME}:latest"

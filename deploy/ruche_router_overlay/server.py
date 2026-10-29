@@ -72,6 +72,16 @@ def signup_redirect() -> RedirectResponse:
     return RedirectResponse(f"{ROUTER}/signup", status_code=307)
 
 
+@app.api_route("/life-as-a-bee", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def life_as_a_bee_proxy() -> Response:
+    try:
+        resp = await _client.get(f"{ROUTER}/life-as-a-bee", timeout=10.0)
+        out_headers = {k: v for k, v in resp.headers.items() if k.lower() not in HOP_BY_HOP}
+        return Response(content=resp.content, status_code=resp.status_code, headers=out_headers)
+    except httpx.HTTPError:
+        return RedirectResponse(f"{ROUTER}/life-as-a-bee", status_code=307)
+
+
 @app.api_route("/join", methods=["GET", "HEAD"], response_class=HTMLResponse)
 @app.api_route("/rejoindre", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def join_page(request: Request) -> HTMLResponse:

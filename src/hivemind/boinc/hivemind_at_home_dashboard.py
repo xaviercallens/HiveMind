@@ -52,7 +52,17 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from hivemind.boinc.night_moe_page import DEFAULT_RESULTS_PATH, load_night_moe, render_night_moe_html
-from hivemind.boinc.stitch_portal import I18N_DICTIONARY, render_stitch_enhanced_portal
+try:
+    from hivemind.boinc.stitch_portal import I18N_DICTIONARY, render_stitch_enhanced_portal
+except ImportError:
+    I18N_DICTIONARY: Dict[str, Dict[str, str]] = {}
+
+    def render_stitch_enhanced_portal(
+        state: Dict[str, Any],
+        api_base_url: str = "",
+        default_screen: str = "home",
+    ) -> str:
+        return render_hivemind_at_home_html(state, api_base_url=api_base_url)
 
 HANDLE_REGEX = re.compile(r"^[a-zA-Z0-9_@.\-]{2,64}$")
 DANGEROUS_INJECTION_PATTERNS = [

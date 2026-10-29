@@ -916,10 +916,16 @@ def build_stitch_v46_cockpit_html(state_json: str) -> str:
       <button id="btn-new-mystery-planet" onclick="selectRandomNasaMysteryPlanet(true)" class="bg-purple-900 hover:bg-purple-700 border border-purple-300 text-purple-100 px-2 py-0.5 rounded font-bold cursor-pointer transition active:scale-95">
         🎲 NOUVELLE PLANÈTE NASA [M]
       </button>
+      <button id="btn-prev-planet" onclick="cyclePlanetSelection(-1)" class="bg-slate-900 hover:bg-slate-700 border border-cyan-600 text-cyan-200 px-1.5 py-0.5 rounded font-bold cursor-pointer transition" title="Planète précédente">◀</button>
+      <button id="btn-next-planet" onclick="cyclePlanetSelection(1)" class="bg-slate-900 hover:bg-slate-700 border border-cyan-600 text-cyan-200 px-1.5 py-0.5 rounded font-bold cursor-pointer transition" title="Planète suivante [N / Tab]">▶</button>
       <button id="btn-open-controls-modal" onclick="toggleControlsModal()" class="bg-cyan-900 hover:bg-cyan-700 border border-tacticalCyan text-white px-2 py-0.5 rounded font-bold cursor-pointer transition">
         🎮 AIDE COMMANDES [H]
       </button>
     </div>
+  </div>
+  <!-- Global Toast Notification Banner visible across ALL 5 Stages -->
+  <div id="global-game-toast" class="hidden mb-1.5 bg-amber-500/95 text-black font-extrabold px-3 py-1 rounded border border-white shadow-lg text-[10.5px] tracking-wide text-center transition-all">
+    SYSTÈME PRÊT
   </div>
   <!-- Clear, Always-Visible Description of All Controls: Keyboard, Mouse, and Gamepad -->
   <div class="grid grid-cols-1 md:grid-cols-3 gap-2 text-[9.5px] leading-snug">
@@ -1935,9 +1941,38 @@ def build_stitch_v46_cockpit_html(state_json: str) -> str:
     }} catch (e) {{}}
   }};
 
+  // Global Toast & Optional Voice Notification (visible across ALL 5 Stages)
+  let _globalToastTimer = null;
+  showToast = function(msg) {{
+    const drawerToast = document.getElementById('drawer-toast');
+    if (drawerToast) {{
+      drawerToast.textContent = msg;
+      drawerToast.classList.remove('hidden');
+    }}
+    const globalToast = document.getElementById('global-game-toast');
+    if (globalToast) {{
+      globalToast.textContent = msg;
+      globalToast.classList.remove('hidden');
+    }}
+    if (_globalToastTimer) clearTimeout(_globalToastTimer);
+    _globalToastTimer = setTimeout(() => {{
+      if (drawerToast) drawerToast.classList.add('hidden');
+      if (globalToast) globalToast.classList.add('hidden');
+    }}, 3200);
+  }};
+
+  const planetOrder = Object.keys(PLANET_DATA);
+  window.cyclePlanetSelection = function(dir) {{
+    const allKeys = Object.keys(PLANET_DATA);
+    let idx = allKeys.indexOf(currentPlanetKey);
+    idx = (idx + (dir || 1) + allKeys.length) % allKeys.length;
+    selectPlanet(allKeys[idx]);
+  }};
+
   window.advanceToNextPlanetFromStage4 = function() {{
-    const idx = planetOrder.indexOf(currentPlanetKey);
-    const nextKey = planetOrder[(idx + 1) % planetOrder.length];
+    const allKeys = Object.keys(PLANET_DATA);
+    const idx = allKeys.indexOf(currentPlanetKey);
+    const nextKey = allKeys[(idx + 1) % allKeys.length];
     selectPlanet(nextKey);
     switchStage(1);
     showToast(`🌌 NOUVEAU CAP : ${{PLANET_DATA[nextKey].name}} (DIFFICULTÉ NIV. ${{difficultyLevel}}/10) !`);
@@ -1951,13 +1986,25 @@ def build_stitch_v46_cockpit_html(state_json: str) -> str:
     keysHeld[k] = true;
     keysHeld[e.code] = true;
 
-    if (e.key === '5') {{ switchStage(5); return; }}
+    if (['1', '2', '3', '4', '5'].includes(e.key)) {{
+      switchStage(parseInt(e.key, 10));
+      return;
+    }}
     if (k === 'h') {{ toggleControlsModal(); return; }}
     if (k === 'm') {{ selectRandomNasaMysteryPlanet(true); return; }}
+    if (k === 'n' || e.key === 'Tab') {{
+      e.preventDefault();
+      cyclePlanetSelection(e.shiftKey ? -1 : 1);
+      return;
+    }}
     if (e.key === 'Escape') {{
       const m = document.getElementById('controls-modal');
       if (m && !m.classList.contains('hidden')) m.classList.add('hidden');
       return;
+    }}
+    if ((k === 'z' || k === 'w' || e.key === 'ArrowUp') && currentStage === 3) {{
+      e.preventDefault();
+      fireRetroBurn();
     }}
 
     // Stage-specific action shortcuts
@@ -2120,7 +2167,7 @@ def build_stitch_v46_cockpit_html(state_json: str) -> str:
     }}
 
     if (lbPressed || rbPressed) {{
-      const allKeys = planetOrder.concat(['mystery_nasa']);
+      const allKeys = Object.keys(PLANET_DATA);
       let idx = allKeys.indexOf(currentPlanetKey);
       idx = (idx + (rbPressed ? 1 : -1) + allKeys.length) % allKeys.length;
       selectPlanet(allKeys[idx]);
@@ -2595,6 +2642,19 @@ def build_stitch_v46_cockpit_html(state_json: str) -> str:
   requestAnimationFrame(masterGameLoop);
   simulateSteamRegisterLoginAndContribute();
 """
+    # Remove legacy conflicting keyboard navigation & quick-action listeners from base Stitch HTML
+    import re
+    raw = re.sub(
+        r"// Quick Action Buttons\s*document\.getElementById\('btn-engage-warp'\)[\s\S]*?document\.getElementById\('btn-nirspec'\)\.addEventListener\('click',\s*\(\)\s*=>\s*\{\s*switchStage\(4\);\s*\}\);",
+        "// Quick Action Buttons handled by unified 4-stage cinematic engine",
+        raw,
+    )
+    raw = re.sub(
+        r"// KEYBOARD NAVIGATION\s*const planetKeysList = Object\.keys\(PLANET_DATA\);\s*window\.addEventListener\('keydown',[\s\S]*?\}\);\s*// SIMULATED TICK OSCILLATION",
+        "const planetKeysList = Object.keys(PLANET_DATA);\n  // SIMULATED TICK OSCILLATION",
+        raw,
+    )
+
     last_script_idx = raw.rfind("</script>")
     if last_script_idx != -1:
         raw = raw[:last_script_idx] + extra_js + "\n</script>" + raw[last_script_idx + len("</script>") :]

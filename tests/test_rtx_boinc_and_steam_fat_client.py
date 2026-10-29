@@ -74,6 +74,17 @@ def test_active_gameplay_preempts_boinc_gpu_with_zero_cuda_allocation(monkeypatc
 
 def test_idle_gpu_automatically_resumes_cuda_ptx_boinc_folding(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(worker, "get_user_idle_seconds", lambda: 8.5)
+    monkeypatch.setattr(
+        worker,
+        "query_nvidia_gpu_status",
+        lambda: {
+            "gpu_model": "NVIDIA GeForce RTX 2070",
+            "utilization_pct": 12.0,
+            "used_mib": 1400.0,
+            "total_mib": 8192.0,
+            "temp_c": 52.0,
+        },
+    )
     rep = worker.run_one_idle_gpu_boinc_cycle(
         commander="Cmdr_Gamer_Idle_BOINC",
         idle_threshold_seconds=4.0,

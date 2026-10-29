@@ -483,7 +483,8 @@ def test_fat_client_one_time_chapter1_voice_and_planet_analysis_and_life() -> No
     cs_file = PROJECT_ROOT / "steam_dist" / "HiveMind_Astrophysics_Exoplanet_Hunter" / "HiveMind_Exoplanet_Hunter.cs"
     exe_file = PROJECT_ROOT / "steam_dist" / "HiveMind_Astrophysics_Exoplanet_Hunter" / "HiveMind_Exoplanet_Hunter.exe"
     assert cs_file.exists()
-    assert exe_file.exists()
+    if sys.platform == "win32":
+        assert exe_file.exists()
     assert "SpeakPlanetAnalysisOnly();" in cs_file.read_text(encoding="utf-8")
 
     # 4. Verify Web Cockpit `/` also tracks chapter1IntroDone and PLANET_ANALYSIS_AND_LIFE

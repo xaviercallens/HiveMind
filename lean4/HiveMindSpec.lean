@@ -2190,6 +2190,58 @@ theorem e18_cosine_damped_outer_momentum_bounds_iid_amplification (muBase scale 
 
 end Season24_25_HoneybeeQuorumAndLayerStoRmVRAM
 
+/-!
+## Season 25 Wave 2: Solver-Taught Surrogate Soundness, S-1 Cross-CPU Quorum-of-2 & Producer-Quorum MoE Scaling (`HM-S20-W2-1`, `HM-S20-W2-2`)
+-/
+namespace Season25_Wave2ScientificMoEAndProducerQuorum
+
+/-- Gated drift returned by `SolverTaughtSurrogateExpert.predict_and_verify` (`HM-S20-W2-1` / Issue #270 §5.2):
+    accepts `surrDrift` if and only if `surrDrift ≤ tol`, otherwise falls back to deterministic `teacherDrift`. -/
+def verifySurrogateOrFallback (surrDrift teacherDrift tol : Nat) : Nat :=
+  if surrDrift ≤ tol then surrDrift else teacherDrift
+
+/-- Theorem 145 (Fail-Closed Solver-Taught Surrogate Verifier Soundness — HM-S20-W2-1 / HM-S20-W2-2):
+    For any neural surrogate drift `surrDrift`, provided the deterministic rusty-SUNDIALS teacher satisfies
+    `teacherDrift ≤ tol`, the fail-closed verifier gate `verifySurrogateOrFallback` always returns a trajectory
+    whose invariant drift is bounded by `tol`. -/
+theorem solver_surrogate_verifier_soundness (surrDrift teacherDrift tol : Nat)
+    (h_teacher : teacherDrift ≤ tol) :
+    verifySurrogateOrFallback surrDrift teacherDrift tol ≤ tol := by
+  unfold verifySurrogateOrFallback
+  split
+  · assumption
+  · exact h_teacher
+
+/-- Max concurrent MoE experts unlocked as connected producer count `p` crosses quorum thresholds
+    (`0 -> 1`, `1 -> 4`, `2..3 -> 8`, `4..7 -> 12`, `≥ 8 -> 20`). -/
+def moeConcurrentCap (p : Nat) : Nat :=
+  if 8 ≤ p then 20
+  else if 4 ≤ p then 12
+  else if 2 ≤ p then 8
+  else if 1 ≤ p then 4
+  else 1
+
+/-- Theorem 146 (Producer-Quorum MoE Activation Monotonicity — HM-S20-W2-2):
+    As more producers connect to serve traffic (`p1 ≤ p2`), unlocked concurrent MoE expert capacity
+    `moeConcurrentCap` increases monotonically (`moeConcurrentCap p1 ≤ moeConcurrentCap p2`), and reaching
+    Wave 2 Scientific MoE quorum (`p ≥ 2`) guarantees at least 8 concurrent experts. -/
+theorem producer_quorum_moe_activation_monotone (p1 p2 : Nat) (hp : p1 ≤ p2) :
+    moeConcurrentCap p1 ≤ moeConcurrentCap p2 ∧ (2 ≤ p2 → 8 ≤ moeConcurrentCap p2) := by
+  unfold moeConcurrentCap
+  split <;> (try split) <;> (try split) <;> (try split) <;> (try split) <;> (try split) <;> (try split) <;> (try split) <;> omega
+
+/-- Theorem 147 (S-1 Cross-CPU Quorum-of-2 Trajectory Triangle Bound — HM-S20-W2-1 / Issue #270 §5.1):
+    If two heterogeneous CPU BOINC replicas `repA` and `repB` each deviate from the canonical reference
+    trajectory `ref` by at most `tol` (`|repA - ref| ≤ tol` and `|repB - ref| ≤ tol`), then their mutual
+    cross-CPU discrepancy `|repA - repB|` is bounded by `2 * tol`. -/
+theorem s1_cross_cpu_quorum2_agreement_triangle_bound (repA repB ref tol : Int)
+    (hA_lo : ref - tol ≤ repA) (hA_hi : repA ≤ ref + tol)
+    (hB_lo : ref - tol ≤ repB) (hB_hi : repB ≤ ref + tol) :
+    repA - repB ≤ 2 * tol ∧ repB - repA ≤ 2 * tol := by
+  omega
+
+end Season25_Wave2ScientificMoEAndProducerQuorum
+
 end HiveMindSpec
 
 -- Verify that all theorems depend on zero user axioms (`#print axioms` check)
@@ -2343,3 +2395,6 @@ end HiveMindSpec
 #print axioms HiveMindSpec.Season24_25_HoneybeeQuorumAndLayerStoRmVRAM.swarm_nectar_cache_dedup_saves_pcie_bytes
 #print axioms HiveMindSpec.Season24_25_HoneybeeQuorumAndLayerStoRmVRAM.layerstorm_two_zone_vram_ceiling
 #print axioms HiveMindSpec.Season24_25_HoneybeeQuorumAndLayerStoRmVRAM.e18_cosine_damped_outer_momentum_bounds_iid_amplification
+#print axioms HiveMindSpec.Season25_Wave2ScientificMoEAndProducerQuorum.solver_surrogate_verifier_soundness
+#print axioms HiveMindSpec.Season25_Wave2ScientificMoEAndProducerQuorum.producer_quorum_moe_activation_monotone
+#print axioms HiveMindSpec.Season25_Wave2ScientificMoEAndProducerQuorum.s1_cross_cpu_quorum2_agreement_triangle_bound

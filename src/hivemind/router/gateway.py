@@ -2178,4 +2178,127 @@ def create_router_app(
             "balance_hmt": store.balance(account.account_id),
         }
 
+    @app.get("/v1/hivemind/moe/quorum-status")
+    def moe_quorum_status() -> dict[str, Any]:
+        """Return live producer-quorum MoE activation status and unlocked Wave 2 Scientific MoE tiers."""
+        from hivemind.router.catalog import CPU_HYBRID_SOLVER_CATALOG, resolve_producer_quorum_moe_state
+
+        now = clock()
+        live_models = store.live_models(now, PRODUCER_TTL_S)
+        distinct_producers: dict[str, ProducerRecord] = {}
+        for m in live_models:
+            for rec in store.active_producers(m, now, PRODUCER_TTL_S):
+                distinct_producers[rec.account_id] = rec
+
+        # Estimate aggregate VRAM across connected producers (default 8 GB per active GPU node)
+        total_vram_gb = float(len(distinct_producers) * 8.0)
+        state = resolve_producer_quorum_moe_state(
+            connected_producers=len(distinct_producers),
+            total_vram_gb=total_vram_gb,
+            live_models=tuple(f"hivemind/{m}" for m in live_models),
+        )
+        return {
+            "object": "hivemind.moe.quorum_status",
+            **state,
+            "cpu_hybrid_solver_tiers": [t.to_dict() for t in CPU_HYBRID_SOLVER_CATALOG],
+        }
+
+    @app.post("/v1/hivemind/bees/rusty-sundials/surrogate")
+    async def rusty_sundials_surrogate_endpoint(request: Request) -> dict[str, Any]:
+        """Run Wave 2 Solver-Taught Neural Surrogate with fail-closed rusty-SUNDIALS teacher verification."""
+        from hivemind.swarm.rusty_sundials_scientific_bee import SolverTaughtSurrogateExpert
+
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+        except ValueError:
+            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+
+        prompt = str(body.get("prompt") or "Integrate stiff Robertson chemical kinetics ODE with mass conservation")
+        domain = body.get("domain")
+        if domain is not None:
+            domain = str(domain)
+        steps = max(4, min(int(body.get("steps") or 32), 256))
+        dt = max(1e-5, min(float(body.get("dt") or 0.01), 0.25))
+        injected_noise = max(0.0, min(float(body.get("injected_perturbation") or 0.0), 10.0))
+
+        surrogate = SolverTaughtSurrogateExpert()
+        verdict = surrogate.predict_and_verify(
+            prompt,
+            domain=domain,
+            steps=steps,
+            dt=dt,
+            force_surrogate_perturbation=injected_noise,
+        )
+        return {
+            **verdict,
+            "object": "hivemind.bee.rusty_sundials.surrogate_verification",
+            "surrogate_accepted": verdict["surrogate_verified"],
+        }
+
+    @app.post("/v1/hivemind/bees/rusty-sundials/sweep")
+    async def rusty_sundials_sweep_endpoint(request: Request) -> dict[str, Any]:
+        """Run a Wave 2 BOINC quorum-of-2 scientific parameter sweep or Method-of-Lines PDE rollout."""
+        from hivemind.boinc.real_client.boinc_server_scripts import validate_solver_sweep
+        from hivemind.swarm.rusty_sundials_scientific_bee import (
+            run_wave2_parameter_sweep_quorum,
+            solve_wave2_method_of_lines_pde,
+        )
+
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+        except ValueError:
+            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+
+        pde_family = body.get("pde_family")
+        if pde_family:
+            grid_points = max(8, min(int(body.get("grid_points") or 32), 128))
+            steps = max(4, min(int(body.get("steps") or 24), 256))
+            dt = max(1e-5, min(float(body.get("dt") or 0.005), 0.1))
+            param = float(body.get("param") or 0.05)
+            pde_res = solve_wave2_method_of_lines_pde(
+                str(pde_family),
+                grid_points=grid_points,
+                steps=steps,
+                dt=dt,
+                param=param,
+            )
+            return {
+                "object": "hivemind.bee.rusty_sundials.mol_pde",
+                "succeeded": float(pde_res["invariant_drift"]) < 1e-2,
+                **pde_res,
+            }
+
+        family = str(body.get("family") or body.get("domain") or "van_der_pol")
+        raw_grid = body.get("parameter_grid")
+        if isinstance(raw_grid, list) and raw_grid:
+            param_grid = [float(x) for x in raw_grid[:16]]
+        else:
+            param_grid = [0.2, 0.4, 0.6, 0.8]
+        steps = max(4, min(int(body.get("steps") or 24), 128))
+        dt = max(1e-5, min(float(body.get("dt") or 0.01), 0.1))
+
+        sweep_bundle = run_wave2_parameter_sweep_quorum(
+            family=family,
+            parameter_grid=param_grid,
+            steps=steps,
+            dt=dt,
+        )
+        verdict = validate_solver_sweep(
+            sweep_bundle["spec"],
+            sweep_bundle["replica_a"],
+            host=str(sweep_bundle["replica_a"].get("host", "cpu-host-a")),
+            peer_meta=sweep_bundle["replica_b"],
+        )
+        return {
+            "object": "hivemind.bee.rusty_sundials.parameter_sweep",
+            "family": family,
+            "quorum_verified": verdict.valid,
+            "validator_reason": verdict.reason,
+            "credit": verdict.credit,
+            "pflops_seconds": verdict.pflops_seconds,
+            **sweep_bundle,
+        }
+
     return app

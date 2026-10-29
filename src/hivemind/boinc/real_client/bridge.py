@@ -41,6 +41,14 @@ class Verdict:
     grant: dict[str, Any]
     detail: dict[str, Any] = field(default_factory=dict)
 
+    @property
+    def credit(self) -> float:
+        return float(self.grant.get("cobblestones", 0.0))
+
+    @property
+    def pflops_seconds(self) -> float:
+        return float(self.grant.get("cobblestones", 0.0)) * 432.0e-6
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 

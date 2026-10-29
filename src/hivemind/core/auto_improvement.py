@@ -107,6 +107,13 @@ SUPPORTED_BASE_MODELS: dict[str, dict[str, Any]] = {
         "architecture": "qwen2",
         "description": "Dense general-purpose instruction model with strong mathematics and logical reasoning.",
     },
+    "deepseek-prover-v2-7b": {
+        "model_id": "deepseek-ai/DeepSeek-Prover-V2-7B",
+        "params_b": 7.0,
+        "vram_nf4_gb": 4.5,
+        "architecture": "deepseek2",
+        "description": "Lean 4 formal theorem proving and scientific invariant verification model for <= 8 GB VRAM.",
+    },
 }
 
 # Large VRAM Base Models adapted to >= 12 GB, 16 GB, 24 GB and 32 GB GPUs for nocturnal specialization
@@ -150,6 +157,26 @@ LARGE_VRAM_BASE_MODELS: dict[str, dict[str, Any]] = {
         "min_train_vram_gb": 24.0,
         "architecture": "qwen2",
         "description": "32.5B high-parameter frontier model, requiring large 24 GB+ VRAM cards (RTX 3090/4090, A100) for QLoRA training.",
+    },
+    "qwen-3-coder-30b-a3b": {
+        "model_id": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+        "params_b": 30.5,
+        "active_params_b": 3.3,
+        "moe": True,
+        "vram_nf4_gb": 16.5,
+        "min_train_vram_gb": 16.0,
+        "architecture": "qwen3_moe",
+        "description": "30.5B Sparse MoE agentic coding and scientific systems model (3.3B active per token).",
+    },
+    "glm-4.5-air-moe": {
+        "model_id": "zai-org/GLM-4.5-Air",
+        "params_b": 106.0,
+        "active_params_b": 12.0,
+        "moe": True,
+        "vram_nf4_gb": 22.0,
+        "min_train_vram_gb": 24.0,
+        "architecture": "glm4_moe",
+        "description": "106B total / 12B active Hybrid Scientific Reasoning & Tool-Synthesis MoE for multi-node or 24 GB+ producers.",
     },
 }
 

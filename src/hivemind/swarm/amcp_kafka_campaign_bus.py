@@ -326,7 +326,10 @@ def coordinate_inter_bee_inference(
     invariants deterministically, and returns a joint co-inference plan + CloudEvents trace.
     """
     from hivemind.router.usage_capture import classify_prompt_intent_and_language
-    from hivemind.swarm.rusty_sundials_scientific_bee import rescue_numeric_calculation
+    from hivemind.swarm.rusty_sundials_scientific_bee import (
+        SolverTaughtSurrogateExpert,
+        rescue_numeric_calculation,
+    )
 
     intent = classify_prompt_intent_and_language([{"role": "user", "content": prompt}])
     specialist_bee = intent.preferred_tier or "bee-rusty-sundials"
@@ -357,10 +360,18 @@ def coordinate_inter_bee_inference(
             "task_domain": intent.task_domain,
             "language": intent.language,
             "delegated_action": "numeric_invariant_rescue_and_co_inference",
+            "capabilities": ["solver", "wave2_surrogate", "mol_pde"],
         },
     )
 
     rescue_cert = rescue_numeric_calculation(prompt, None, max(4, min(steps, 128)), dt)
+    surrogate = SolverTaughtSurrogateExpert()
+    surrogate_verdict = surrogate.predict_and_verify(
+        prompt,
+        domain=rescue_cert.domain,
+        steps=max(4, min(steps, 128)),
+        dt=dt,
+    )
     verdict = "PASS" if rescue_cert.rescued_succeeded else "FAIL"
     reply_event = build_amcp_kafka_event(
         topic_key="bee_coord",
@@ -377,6 +388,10 @@ def coordinate_inter_bee_inference(
             "relative_invariant_drift": rescue_cert.rescued_invariant_drift,
             "improvement_factor": rescue_cert.improvement_factor,
             "verdict": verdict,
+            "capabilities": ["solver", "wave2_surrogate", "mol_pde"],
+            "surrogate_accepted": surrogate_verdict["surrogate_verified"],
+            "surrogate_served_by": surrogate_verdict["served_by"],
+            "wilson_lower_bound_95": surrogate_verdict["wilson_lower_bound"],
         },
     )
 
@@ -388,6 +403,7 @@ def coordinate_inter_bee_inference(
         "specialist_bee": specialist_bee,
         "task_domain": intent.task_domain,
         "language": intent.language,
+        "capabilities": ["solver", "wave2_surrogate", "mol_pde"],
         "numeric_certificate": {
             "domain": rescue_cert.domain,
             "recommended_solver": rescue_cert.rescued_scheme_name,
@@ -395,6 +411,14 @@ def coordinate_inter_bee_inference(
             "relative_invariant_drift": rescue_cert.rescued_invariant_drift,
             "improvement_factor": rescue_cert.improvement_factor,
             "verdict": verdict,
+            "surrogate_verification": {
+                "surrogate_accepted": surrogate_verdict["surrogate_verified"],
+                "served_by": surrogate_verdict["served_by"],
+                "surrogate_invariant_drift": surrogate_verdict["surrogate_invariant_drift"],
+                "returned_invariant_drift": surrogate_verdict["final_verified_invariant_drift"],
+                "invariant_drift_tolerance": surrogate_verdict["max_surrogate_drift_tol"],
+                "wilson_lower_bound_95": surrogate_verdict["wilson_lower_bound"],
+            },
         },
         "amcp_kafka_events": [handoff_event.to_dict(), reply_event.to_dict()],
     }

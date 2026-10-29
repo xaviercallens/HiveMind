@@ -1,11 +1,11 @@
 {
   "manuscript_title": "Project HiveMind: A System Design for Decentralized Sparse Mixture-of-Experts Training with DiLoCo-Style Outer Optimization on 8 GB Consumer GPUs",
-  "version": "3.9.0",
+  "version": "4.0.0",
   "is_peer_review": false,
   "disclosure": "This report is produced by a deterministic script. It is NOT a peer review: no language model and no human referee evaluated the manuscript. Verdicts below mean only that the listed artifact checks passed.",
   "lead_peer_review_model": "none (scripted static audit; no language-model call)",
   "co_auditor_model": "none",
-  "timestamp_utc": "2026-10-27T07:04:59Z",
+  "timestamp_utc": "2026-10-29T07:01:29Z",
   "tex_path": "paper/hivemind_foundation_article.tex",
   "pdf_path": "paper/hivemind_foundation_article.pdf",
   "pdf_exists": true,
@@ -836,8 +836,8 @@
     "tier_a_machine_checked": true
   },
   "manuscript_provenance_audit": {
-    "total_checks": 79,
-    "passed_checks": 79,
+    "total_checks": 81,
+    "passed_checks": 81,
     "failed_check_ids": [],
     "all_passed": true,
     "checks": [
@@ -1809,17 +1809,46 @@
         ],
         "source_artifact": "artifacts/live_wan_swarm_production_report.json",
         "passed": true
+      },
+      {
+        "check_id": "PROV-81",
+        "metric_name": "v4.0.0 20 nocturnal MoE adapters (+277.06 TFLOPs, 35 models total, 60 executions, 0.28 ms p50 latency)",
+        "expected_tokens": [
+          "20",
+          "60",
+          "0.28",
+          "277.06",
+          "35 models"
+        ],
+        "source_artifact": "artifacts/nocturnal_20_moe_stress_test_report.json",
+        "passed": true
+      },
+      {
+        "check_id": "PROV-82",
+        "metric_name": "v4.0.0 4 Macro-Cluster Super-MoEs, 3 BYOB exemplars, and Swarm Nectar Cache 0.005 HMT royalties",
+        "expected_tokens": [
+          "super-moe-systems-deeptech",
+          "super-moe-cyber-defense",
+          "super-moe-stem-scholar",
+          "super-moe-life-sciences",
+          "bee-quantum-simd",
+          "bee-reverse-cve",
+          "bee-genomics-crispr",
+          "0.005"
+        ],
+        "source_artifact": "artifacts/nocturnal_20_moe_stress_test_report.json",
+        "passed": true
       }
     ]
   },
   "latex_typography_and_figures_audit": {
     "figures_verified": 7,
     "missing_figures": [],
-    "bibliography_entries": 47,
+    "bibliography_entries": 51,
     "uncited_bibitems": [],
     "undefined_citations": [],
-    "formal_theorem_blocks": 3,
-    "formal_proof_blocks": 4,
+    "formal_theorem_blocks": 4,
+    "formal_proof_blocks": 5,
     "hypothesis_necessity_counterexamples": 5,
     "has_4_definitions_contract_table": true,
     "has_epistemic_stratification_matrix": true,
@@ -1858,7 +1887,7 @@
       "co_auditor_model": "none",
       "gate_passed": true,
       "findings_resolved": [
-        "Programmatically verified 79/79 exact numerical metrics between the 4 JSON artifacts and paper/hivemind_foundation_article.tex.",
+        "Programmatically verified 81/81 exact numerical metrics between the 4 JSON artifacts and paper/hivemind_foundation_article.tex.",
         "Eliminated legacy hardcoded v2.9.2 strings in paper/autoevolve_peer_review_pipeline.py."
       ]
     },
@@ -1880,7 +1909,7 @@
       "co_auditor_model": "none",
       "gate_passed": true,
       "findings_resolved": [
-        "Verified 7/4 vector PDF/PNG figure pairs and 47/47 cited bibliography entries (0 uncited, 0 undefined).",
+        "Verified 7/4 vector PDF/PNG figure pairs and 51/51 cited bibliography entries (0 uncited, 0 undefined).",
         "Eliminated Overfull \\hbox (80.7pt) and fancyhdr headheight warnings via \\path{} line breaking and 21pt header height (0 Overfull \\hbox > 5pt)."
       ]
     }

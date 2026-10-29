@@ -12,6 +12,7 @@ from hivemind.swarm.abc_moe_agent_mesh import (
     WaggleDanceMessage,
     WaggleDanceScrutinyProtocol,
 )
+from hivemind.swarm.swarm_nectar_cache import SwarmNectarCache
 
 
 def test_waggle_dance_message_duration_and_signature():
@@ -132,3 +133,35 @@ def test_agent_mesh_orchestrator_end_to_end_convergence():
     assert execution["food_sources_count"] >= 2  # Discovered at least one fresh web food source
     assert execution["solution"] is not None
     assert "battery_formulation" in execution["solution"]["data"]
+
+
+def test_hm_s22_2_domain_parsers_and_s23_s25_nectar_prewarm_integration():
+    """Verify HM-S22.2 scientific domain parsers (arXiv, PubMed, ChEMBL), HM-S23 Nectar Cache hit, and HM-S25 prewarm_experts."""
+    cache = SwarmNectarCache()
+    agent = ABCMoEAgent(agent_id="hivemind/qwen35-4b", nectar_cache=cache)
+
+    arxiv_res = agent._default_mock_web_search("arXiv Decoupled DiLoCo MoE")
+    pubmed_res = agent._default_mock_web_search("PubMed clinical kinase protein")
+    chembl_res = agent._default_mock_web_search("ChEMBL SMILES ligand IC50")
+    assert arxiv_res[0]["domain_parser"] == "arxiv"
+    assert pubmed_res[0]["domain_parser"] == "pubmed"
+    assert chembl_res[0]["domain_parser"] == "chembl"
+
+    orch = AgentMeshOrchestrator(lead_bee_id="hivemind/qwen35-4b", nectar_cache=cache)
+    res1 = orch.execute_mesh_workflow(
+        task_id="task-chembl-01",
+        user_query="ChEMBL SMILES ligand stability",
+        target_schema={"stability": "str"},
+    )
+    assert len(res1["layer_1_consensus"]["quorum_verdict"]["prewarm_experts"]) == 8
+    assert cache.stats()["active_entries"] == 1
+
+    # Second workflow on identical query hits the SwarmNectarCache during Scout exploration
+    res2 = orch.execute_mesh_workflow(
+        task_id="task-chembl-02",
+        user_query="ChEMBL SMILES ligand stability",
+        target_schema={"stability": "str"},
+    )
+    events = res2["layer_2_abc_execution"]["event_log"]
+    assert any(e.get("event_type") == "io.hivemind.mesh.nectar_cache_hit" for e in events)
+    assert cache.stats()["cache_hits"] >= 1

@@ -52,9 +52,9 @@
   ]
  },
  "spec_file": "lean4/HiveMindSpec.lean",
- "spec_sha256": "185d91d804cbeb699a8e0688195defcac93268f12cf4334f1231c369c0b3d1d4",
+ "spec_sha256": "52fb04d415e1eb60f6a4db8d9d2d49f303f8edd148f0501566da200931c401cf",
  "theorems_failing_whitelist": [],
- "theorems_in_file": 141,
+ "theorems_in_file": 146,
  "whitelist": [
   "Classical.choice",
   "Quot.sound",

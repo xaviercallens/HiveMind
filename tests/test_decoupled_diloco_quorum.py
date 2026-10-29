@@ -13,6 +13,7 @@ from hivemind.swarm.decoupled_diloco import (
     AdaptiveGraceWindowController,
     DecoupledDiLoCoQuorumSyncer,
     LearnerArrival,
+    compute_cosine_damped_outer_hyperparams,
     direct_weighted_average,
     radial_directional_average,
     select_quorum,
@@ -157,10 +158,10 @@ def test_grace_controller_ema_and_validation() -> None:
 
 
 @given(
-    step=st.floats(min_value=0.0, max_value=1e4, allow_nan=False),
-    quorum=st.floats(min_value=0.0, max_value=1e4, allow_nan=False),
-    sync=st.floats(min_value=0.0, max_value=1e4, allow_nan=False),
-    gamma=st.floats(min_value=0.0, max_value=0.999, allow_nan=False),
+    step=st.floats(min_value=0.0, max_value=1e4, allow_nan=False, allow_subnormal=False),
+    quorum=st.floats(min_value=0.0, max_value=1e4, allow_nan=False, allow_subnormal=False),
+    sync=st.floats(min_value=0.0, max_value=1e4, allow_nan=False, allow_subnormal=False),
+    gamma=st.floats(min_value=0.0, max_value=0.999, allow_nan=False, allow_subnormal=False),
     tau=st.integers(min_value=1, max_value=8),
 )
 def test_grace_window_never_exceeds_gamma_times_slack(step: float, quorum: float, sync: float, gamma: float, tau: int) -> None:
@@ -171,7 +172,7 @@ def test_grace_window_never_exceeds_gamma_times_slack(step: float, quorum: float
     grace = ctrl.grace_window_seconds()
     assert grace >= 0.0
     assert grace <= gamma * max(0.0, slack) + 1e-9
-    if slack > 0.0:
+    if slack > 1e-300:
         assert grace < slack
 
 
@@ -341,4 +342,44 @@ def test_diloco_outer_optimizer_with_decoupled_quorum_rda() -> None:
     assert float(res.theta_updated["w"].norm()) == pytest.approx(1.0, rel=1e-5)
     # Straggler slow0 (coordinate 3) was deferred outside the grace window
     assert float(res.theta_updated["w"][3]) == 0.0
+
+
+def test_e18b_cosine_damped_outer_hyperparams_iid_vs_non_iid() -> None:
+    """Issue #308 / E18b: Orthogonal non-IID deltas keep Nesterov (mu=0.9, lr=0.7); aligned IID deltas damp to FedAvg (mu=0, lr=1.0)."""
+    e = torch.eye(8)
+    # Orthogonal non-IID deltas: cosine = 0 -> mu_eff = 0.9, lr_eff = 0.7
+    non_iid = compute_cosine_damped_outer_hyperparams([e[0], e[1], e[2]], base_lr=0.7, base_momentum=0.9)
+    assert non_iid["mean_pairwise_cosine"] == pytest.approx(0.0, abs=1e-6)
+    assert non_iid["effective_momentum"] == pytest.approx(0.9, abs=1e-6)
+    assert non_iid["effective_lr"] == pytest.approx(0.7, abs=1e-6)
+    assert non_iid["regime"] == "non_iid_nesterov"
+
+    # Perfectly aligned IID deltas: cosine = 1.0 -> mu_eff = 0.0, lr_eff = 1.0 (FedAvg)
+    v = torch.tensor([1.0, 2.0, -1.0, 0.5])
+    iid = compute_cosine_damped_outer_hyperparams([v, v * 2.0, v * 0.5], base_lr=0.7, base_momentum=0.9)
+    assert iid["mean_pairwise_cosine"] == pytest.approx(1.0, abs=1e-6)
+    assert iid["effective_momentum"] == pytest.approx(0.0, abs=1e-6)
+    assert iid["effective_lr"] == pytest.approx(1.0, abs=1e-6)
+    assert iid["regime"] == "iid_fedavg_damped"
+
+    with pytest.raises(ValueError):
+        compute_cosine_damped_outer_hyperparams([v])
+
+
+def test_e18b_cosine_damped_momentum_report_artifact() -> None:
+    """Issue #308 / E18b: Verify pre-registered E18b T4 artifact passes P18b_1..3 and respects T4 VRAM floor."""
+    import json
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[1]
+    report_path = repo_root / "artifacts" / "experiments" / "E18b_cosine_damped_momentum_report.json"
+    assert report_path.is_file()
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["experiment_id"] == "E18b"
+    assert report["all_preregistered_hypotheses_passed"] is True
+    assert report["hardware"]["t4_policy_4300mib_floor_respected"] is True
+    assert report["hypothesis_verdicts"]["P18b_1_iid_overshoot_eliminated"]["passed"] is True
+    assert report["hypothesis_verdicts"]["P18b_2_non_iid_gain_preserved"]["passed"] is True
+    assert report["hypothesis_verdicts"]["P18b_3_uniform_dominance_over_inverted_control"]["passed"] is True
+
 

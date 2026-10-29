@@ -84,5 +84,21 @@ Following HiveMind's epistemic discipline (Section 9 & 11 of the Foundation Pape
 
 ### 📅 Phase 4: Weeks 3–4 — Joint `E19` Benchmark Campaign, Lean 4 Proof & Paper `v4.1.0` (`HM-S25-04`)
 1. Execute pre-registered experiment `E19` across community producer rigs; record raw telemetry in `artifacts/experiments/E19_layerstorm_pcie_nectar_report.json`.
-2. Prove `theorem layerstorm_two_zone_vram_ceiling` in `formal/ANSE/HiveMindSpec.lean` certifying that $\text{VRAM}_{\text{dense}} + \text{VRAM}_{\text{ZoneA}} + \text{VRAM}_{\text{ZoneB}} + \text{VRAM}_{\text{KV}} \le \text{VRAM}_{\text{cap}}$.
+2. Prove `theorem layerstorm_two_zone_vram_ceiling` in `lean4/HiveMindSpec.lean` certifying that $\text{VRAM}_{\text{dense}} + \text{VRAM}_{\text{ZoneA}} + \text{VRAM}_{\text{ZoneB}} + \text{VRAM}_{\text{KV}} \le \text{VRAM}_{\text{cap}}$.
 3. Publish the joint findings and co-credit `@kkontosis` / `LayerStoRm` in the HiveMind Foundation Paper `v4.1.0` on Zenodo.
+
+---
+
+## 5. Executed Experiment `E19` Results on NVIDIA Tesla T4 (`2026-10-29`)
+
+Executed via `scripts/run_experiment_E19_t4_pcie_nectar.py` (`artifacts/experiments/E19_layerstorm_pcie_nectar_report.json`) on the NVIDIA Tesla T4 GPU (`9,900.69 MiB` free VRAM post-run, strictly respecting the `4,300 MiB` T4 protection floor):
+
+| Hypothesis / Gate | Metric | Measured Result | Threshold / Control | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **`P19a`** (`HM-S23` / `HM-S25-02`) | Upstream `SwarmNectarCache` PCIe H2D byte reduction (`C2` vs. `C0`) | **`98.33%`** (`32.0 MiB` vs. `1,920.0 MiB`) | $\ge 50.0\%$ | **PASS** |
+| **`P19b`** (`HM-S25-02`) | Waggle-Warm Zone A TTFT reduction (`C1` vs. `C0`) | **`66.09%`** (`2.1191 ms` vs. `6.2498 ms`) | $\ge 20.0\%$ (`0` hits on random pre-warm control) | **PASS** |
+| **`P19c`** (`HM-S25-05`) | Gamer preemption CUDA DMA drain & VRAM release latency | **`0.0864 ms`** | $< 500.0\text{ ms}$ | **PASS** |
+| **`P19d`** (`HM-S25-01` / `HM-S25-04`) | Two-Zone VRAM ceiling on 8 GB WDDM profile | **`5,984.0 MiB`** (`672.0 MiB` headroom) | $\le 6,656.0\text{ MiB}$ (`7,520 MiB` overflow fails closed) | **PASS** |
+| **`P19e`** (`HM-S25-03`) | `FoMoESkipAttentionLookaheadRouter` + `CAR` PCIe stall ratio | **`3.13%`** | $< 15.0\%$ (vs. `46.91%` reactive baseline) | **PASS** |
+| **`P19f`** (`HM-S25-04`) | `HybridHiSparseE8KVCache` attention reconstruction relative $L_2$ delta | **`0.0104`** (`cos_sim = 0.99995`) | $< 0.05$ (vs. `1.8808` random-eviction control) | **PASS** |
+

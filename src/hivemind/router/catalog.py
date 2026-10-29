@@ -888,6 +888,28 @@ PREWIRED_PARTNER_MODELS: tuple[PrewiredPartnerModel, ...] = (
             "qwen-0.8b",
         ),
     ),
+    PrewiredPartnerModel(
+        tier_id="moe-general",
+        public_id="hivemind/layerstorm-frontier-moe",
+        partner_id="layerstorm/qwen3-30b-a3b-pcie",
+        hf_repo="Qwen/Qwen3-30B-A3B-Instruct-2507",
+        github_repo="Paradox-Lab-504/LayerStoRm",
+        website="https://arxiv.org/abs/2604.04192",
+        title="LayerStoRm x HiveMind Waggle-Warm Two-Zone PCIe MoE (Qwen3-30B-A3B on 8 GB VRAM + Host RAM)",
+        parameters_b=30.0,
+        tokens_trained_b=36000.0,
+        tokenizer="Qwen3",
+        shard_format="safetensors_pcie_two_zone_q4",
+        license="Apache-2.0",
+        status="PREWIRED_READY",
+        aliases=(
+            "hivemind/layerstorm-frontier-moe",
+            "layerstorm-frontier-moe",
+            "layerstorm-moe",
+            "hivemind/moe-layerstorm",
+            "layerstorm/qwen3-30b-a3b-pcie",
+        ),
+    ),
 )
 
 _ALIAS_TO_TIER_ID: dict[str, str] = {

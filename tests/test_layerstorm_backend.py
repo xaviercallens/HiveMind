@@ -7,10 +7,14 @@ import pytest
 
 from hivemind.swarm.layerstorm_backend import (
     DEFAULT_DOMAIN_HOT_EXPERTS,
+    FoMoESkipAttentionLookaheadRouter,
+    HybridHiSparseE8KVCache,
     LayerStoRmSwarmBridge,
     PCIeWaterlineStreamScheduler,
+    RealCUDAPCIeExpertStreamer,
     TwoZoneVRAMBudget,
     TwoZoneVRAMCache,
+    build_layerstorm_byob_preset,
 )
 from hivemind.swarm.swarm_nectar_cache import SwarmNectarCache
 
@@ -147,3 +151,165 @@ def test_p19c_gamer_preemption_circuit_breaker_under_500ms() -> None:
         token_expert_traces=[(16, 17)],
     )
     assert resumed["status"] == "layerstorm_pcie_streamed"
+
+
+def test_real_cuda_pcie_expert_streamer_and_preemption() -> None:
+    """Verify RealCUDAPCIeExpertStreamer (HM-S25-01 / E19) on GPU or CPU fallback."""
+    import torch
+
+    streamer = RealCUDAPCIeExpertStreamer(
+        num_total_experts=16,
+        zone_a_slots=4,
+        zone_b_slots=4,
+        expert_rows=128,
+        expert_cols=256,
+    )
+    warmed = streamer.prewarm_zone_a("systems_deeptech")
+    assert warmed == [0, 1, 2, 3]
+    x = torch.randn((16, 128), dtype=streamer.dtype, device=streamer.device)
+    step = streamer.forward_step(x, [0, 1, 8, 9], overlap_dma_with_attention=True)
+    # 0 and 1 hit Zone A; 8 and 9 stream into Zone B
+    assert streamer.zone_a_hits == 2
+    assert streamer.pcie_misses == 2
+    assert step["streamed_experts"] == (8, 9)
+    assert step["pcie_h2d_mib"] > 0.0
+
+    # Second step hitting 8 and 9 hits Zone B with 0 PCIe traffic
+    step2 = streamer.forward_step(x, [0, 1, 8, 9], overlap_dma_with_attention=False)
+    assert step2["pcie_h2d_mib"] == 0.0
+    assert streamer.zone_b_hits == 2
+
+    receipt = streamer.preempt_and_release_vram()
+    assert receipt["sla_met_under_500ms"] is True
+    assert receipt["zone_a_remaining"] == 0
+    assert receipt["zone_b_remaining"] == 0
+
+
+def test_hm_s25_03_fomoe_skip_attention_lookahead_and_car_fallback() -> None:
+    """Verify HM-S25-03: FoMoE Skip-Attention lookahead + CAR keeps PCIe stall ratio < 15%."""
+    import torch
+
+    router = FoMoESkipAttentionLookaheadRouter(
+        hidden_dim=64,
+        num_experts=32,
+        top_k=4,
+        car_margin_threshold=0.45,
+        seed=42,
+    )
+    gen = torch.Generator(device="cpu").manual_seed(101)
+    hiddens = [torch.randn((8, 64), generator=gen) for _ in range(8)]
+    # Small post-attention residual perturbations so CAR fallback can substitute resident experts
+    perturbations = [0.08 * torch.randn((32,), generator=gen) for _ in range(8)]
+
+    # Reactive baseline (no lookahead, no CAR fallback, no waterline overlap)
+    reactive_cache = TwoZoneVRAMCache(_make_8gb_budget())
+    reactive_cache.prewarm_zone_a_from_waggle("systems_deeptech")
+    reactive_sched = PCIeWaterlineStreamScheduler(
+        reactive_cache, pcie_bandwidth_gbps=24.0, layer_attention_ms=14.0
+    )
+    reactive_res = router.run_waterline_schedule(
+        reactive_sched,
+        hiddens,
+        residual_perturbations=perturbations,
+        use_skip_attention_lookahead=False,
+        use_car_fallback=False,
+    )
+
+    # FoMoE Skip-Attention Lookahead + CAR fallback + Waterline overlap
+    fomoe_cache = TwoZoneVRAMCache(_make_8gb_budget())
+    fomoe_cache.prewarm_zone_a_from_waggle("systems_deeptech")
+    fomoe_sched = PCIeWaterlineStreamScheduler(
+        fomoe_cache, pcie_bandwidth_gbps=24.0, layer_attention_ms=14.0
+    )
+    fomoe_res = router.run_waterline_schedule(
+        fomoe_sched,
+        hiddens,
+        residual_perturbations=perturbations,
+        use_skip_attention_lookahead=True,
+        use_car_fallback=True,
+    )
+
+    assert fomoe_res["stall_gate_under_15pct"] is True
+    assert fomoe_res["pcie_stall_ratio_pct"] < 15.0
+    assert reactive_res["pcie_stall_ratio_pct"] > 35.0
+    assert fomoe_res["lookahead_recall"] >= 0.70
+
+
+def test_hm_s25_04_hybrid_hisparse_e8_kv_cache_and_random_control() -> None:
+    """Verify HM-S25-04: Hybrid HiSparse + Gosset E8 KV Cache < 0.05 delta vs random control."""
+    import torch
+
+    kv = HybridHiSparseE8KVCache(
+        sink_tokens=16,
+        sliding_window_tokens=64,
+        heavy_hitter_tokens=48,
+        e8_scale=0.02,
+    )
+    est_32k = kv.estimate_vram_kv_mib(32768)
+    est_128k = kv.estimate_vram_kv_mib(131072)
+    assert est_32k["hisparse_e8_vram_mib"] < 1024.0
+    assert est_128k["hisparse_e8_vram_mib"] < 1024.0
+    assert est_32k["vram_compression_ratio"] > 50.0
+
+    # Construct a realistic long-context attention distribution (sink + heavy hitters + local window)
+    gen = torch.Generator(device="cpu").manual_seed(77)
+    seq_len, dim = 512, 32
+    q_dir = torch.randn((1, dim), generator=gen)
+    q_dir = q_dir / q_dir.norm()
+    q = q_dir * 8.0
+
+    # Background cold tokens have orthogonal/negative alignment; sink, heavy-hitters, and window align with q
+    k = torch.randn((seq_len, dim), generator=gen) * 0.20 - 2.0 * q_dir
+    v = torch.randn((seq_len, dim), generator=gen) * 0.15
+    hot_positions = list(range(0, 12)) + [80, 140, 210, 290, 350] + list(range(seq_len - 48, seq_len))
+    for pos in hot_positions:
+        k[pos] = q_dir * 3.5 + 0.05 * torch.randn((dim,), generator=gen)
+        v[pos] = torch.randn((dim,), generator=gen) * 1.2
+
+    fidelity = kv.evaluate_attention_fidelity(q, k, v, random_control=False)
+    ctrl_fidelity = kv.evaluate_attention_fidelity(q, k, v, random_control=True)
+
+    assert fidelity["passed_delta_under_0_05"] is True
+    assert fidelity["relative_l2_delta"] < 0.05
+    assert fidelity["retained_attention_mass"] > 0.95
+    assert ctrl_fidelity["relative_l2_delta"] > fidelity["relative_l2_delta"] * 3.0
+
+
+def test_hm_s25_05_byob_layerstorm_preset_and_catalog_alias() -> None:
+    """Verify HM-S25-05: build_layerstorm_byob_preset and router catalog alias normalization."""
+    from hivemind.router.catalog import normalize_model_alias, tier_by_id
+
+    preset_8gb = build_layerstorm_byob_preset(vram_gb=8.0, domain="cyber_defense", context_length=32768)
+    assert preset_8gb["preset_id"] == "layerstorm-frontier-moe"
+    assert preset_8gb["vram_budget"]["total_vram_mib"] <= 6656.0
+    assert preset_8gb["gamer_preemption_sla_ms"] == 500.0
+
+    assert normalize_model_alias("layerstorm-frontier-moe") == "moe-general"
+    assert normalize_model_alias("hivemind/layerstorm-frontier-moe") == "moe-general"
+    tier = tier_by_id("layerstorm-frontier-moe")
+    assert tier is not None and tier.tier_id == "moe-general"
+
+
+def test_e19_layerstorm_pcie_nectar_report_artifact() -> None:
+    """Verify HM-S25-01..05 / E19 T4 report artifact passes all P19a..P19f hypotheses."""
+    import json
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[1]
+    report_path = repo_root / "artifacts" / "experiments" / "E19_layerstorm_pcie_nectar_report.json"
+    assert report_path.is_file()
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["experiment_id"] == "E19"
+    assert report["all_preregistered_hypotheses_passed"] is True
+    assert report["hardware"]["t4_policy_4300mib_floor_respected"] is True
+    for hyp_key in (
+        "P19a_nectar_cache_pcie_relief_ge_50pct",
+        "P19b_waggle_warm_zone_a_ttft_reduction_ge_20pct",
+        "P19c_gamer_preemption_yield_under_500ms",
+        "P19d_two_zone_vram_ceiling_under_6656mib",
+        "P19e_fomoe_waterline_stall_ratio_under_15pct",
+        "P19f_hisparse_e8_kv_32k_delta_under_0_05",
+    ):
+        assert report["hypothesis_verdicts"][hyp_key]["passed"] is True
+
+

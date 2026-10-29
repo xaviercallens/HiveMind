@@ -101,3 +101,31 @@ def test_kafka_food_source_event_builder():
     assert ev["event_type"] == "io.hivemind.mesh.food_source_updated"
     assert ev["nectar_id"] == entry.nectar_id
     assert ev["discovered_by_bee"] == "hivemind/qwen35-4b"
+
+
+def test_nectar_cache_cross_process_file_persistence_and_sla(tmp_path):
+    """Verify HM-S23 FileNectarPersistence across two SwarmNectarCache instances in < 50 ms."""
+    store_file = tmp_path / "nectar_shared.json"
+    cache_writer = SwarmNectarCache(persistence_path=store_file)
+    cache_writer.put(
+        tool_name="web_search",
+        query={"domain": "chembl", "target": "CHEMBL5291840"},
+        content={"smiles": "CC1=C...", "pChEMBL": 8.74},
+        discovered_by_bee="hivemind/bee-chem-01",
+        nectar_richness=0.96,
+    )
+
+    cache_reader = SwarmNectarCache(persistence_path=store_file)
+    t0 = time.perf_counter()
+    hit = cache_reader.get(
+        "web_search",
+        {"domain": "chembl", "target": "CHEMBL5291840"},
+        requesting_bee="hivemind/bee-chem-02",
+    )
+    elapsed_ms = (time.perf_counter() - t0) * 1000.0
+    assert hit is not None
+    assert elapsed_ms < 50.0
+    assert hit.content["pChEMBL"] == 8.74
+    assert hit.access_count == 1
+    assert hit.hmt_royalties_earned == MICRO_ROYALTY_HMT
+    assert cache_reader.reload_from_disk() == 1

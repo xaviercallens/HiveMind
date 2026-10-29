@@ -200,3 +200,59 @@ def test_season19_swarm_plan_endpoint_for_bees_and_miners(tmp_path: Path) -> Non
     assert plan["target_cluster_shares"]["coding"] > 0.55
 
 
+def test_wave2_scientific_moe_models_and_producer_quorum_activation(tmp_path: Path) -> None:
+    from fastapi.testclient import TestClient
+    from hivemind.router.catalog import (
+        CPU_HYBRID_SOLVER_CATALOG,
+        normalize_model_alias,
+        resolve_producer_quorum_moe_state,
+    )
+
+    # Verify new Wave 2 Scientific MoE and frontier MoE aliases resolve to valid tiers
+    assert normalize_model_alias("hivemind/moe-scientific-wave2") == "bee-rusty-sundials"
+    assert normalize_model_alias("hivemind/moe-surrogate-sundials") == "bee-rusty-sundials"
+    assert normalize_model_alias("hivemind/moe-pde-fluid-quantum") == "moe-qwen35-bee"
+    assert normalize_model_alias("hivemind/moe-cosmology-dualscale") == "bee-stars"
+    assert normalize_model_alias("hivemind/moe-genetics-hopfield") == "bee-rusty-sundials"
+    assert normalize_model_alias("hivemind/moe-deepseek-prover-v2") == "bee-lean-prover"
+    assert normalize_model_alias("hivemind/moe-qwen3-coder-next") == "moe-coder"
+    assert normalize_model_alias("hivemind/moe-glm45-air-science") == "moe-general"
+
+    assert len(CPU_HYBRID_SOLVER_CATALOG) == 3
+    assert CPU_HYBRID_SOLVER_CATALOG[0].min_vram_gb == 0.0
+    assert CPU_HYBRID_SOLVER_CATALOG[1].min_quorum == 2
+
+    store = RouterStore(tmp_path / "router_quorum.db", b"k" * 32)
+    app = create_router_app(store, allow_private_producers=True)
+    client = TestClient(app)
+
+    cat = client.get("/v1/hivemind/catalog").json()
+    assert len(cat["cpu_hybrid_solver_tiers"]) == 3
+    assert len(cat["wave2_scientific_moe_quorum_stages"]) == 5
+
+    # Register 2 live producers and verify /v1/hivemind/moe/quorum-status activates Wave 2 Scientific MoE
+    for idx in range(2):
+        pid, _ = store.register(f"wave2-prod-{idx}", "producer")
+        store.upsert_producer(
+            pid,
+            f"https://prod-{idx}.hivemind.net",
+            [{"id": "bee-rusty-sundials", "local_name": "rusty-sundials-7b"}],
+            0.35,
+            40.0,
+            "gpu",
+        )
+
+    quorum = client.get("/v1/hivemind/moe/quorum-status").json()
+    assert quorum["connected_producers"] == 2
+    assert quorum["wave2_scientific_moe_active"] is True
+    assert quorum["quorum_sweep_enabled"] is True
+    assert quorum["boinc_min_quorum"] == 2
+    assert "hivemind/moe-scientific-wave2" in quorum["unlocked_moe_models"]
+
+    # Check 8-producer full swarm stage
+    full_state = resolve_producer_quorum_moe_state(8, total_vram_gb=64.0)
+    assert full_state["stage_id"] == "stage_4_full_swarm_20_expert_super_moe"
+    assert full_state["max_concurrent_experts"] == 20
+
+
+

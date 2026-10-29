@@ -24,6 +24,7 @@ from typing import Any
 
 PLATFORM = "x86_64-pc-linux-gnu"
 PLAN_CLASS = "cuda_hivemind"
+CPU_SOLVER_PLAN_CLASS = "cpu_hivemind_solver"
 from hivemind.boinc.real_client.moe_profiles import PROFILES  # noqa: E402  (plan classes of the training profiles)
 APACHE_MODULES = {
     "mpm_prefork_module": "mod_mpm_prefork.so", "authz_core_module": "mod_authz_core.so", "authz_host_module": "mod_authz_host.so",
@@ -135,7 +136,8 @@ class Stack:
         (self.root / "html" / "user" / "schedulers.txt").write_text(f"<scheduler>{self.url}/{self.name}_cgi/cgi</scheduler>\n")
 
     def write_plan_class_spec(self) -> None:
-        """One plan class per training profile; the big one has a higher ``min_gpu_ram_mb`` so the scheduler never offers its app to a small GPU."""
+        """One plan class per training profile; the big one has a higher ``min_gpu_ram_mb`` so the scheduler never offers its app to a small GPU.
+        Also registers ``cpu_hivemind_solver`` (Wave 2 Issue #270) as a CPU-only plan class without NVIDIA/CUDA coprocessor requirements."""
         classes = {PLAN_CLASS: 3500, **{p["plan_class"]: p["min_gpu_ram_mb"] for p in PROFILES.values()}}
         body = "".join(
             f" <plan_class>\n  <name>{name}</name>\n  <gpu_type>nvidia</gpu_type>\n  <cuda/>\n"
@@ -143,31 +145,70 @@ class Stack:
             "  <gpu_peak_flops_scale>0.1</gpu_peak_flops_scale>\n </plan_class>\n"
             for name, mb in classes.items()
         )
-        (self.root / "plan_class_spec.xml").write_text("<plan_classes>\n" + body + "</plan_classes>\n")
+        cpu_body = (
+            f" <plan_class>\n  <name>{CPU_SOLVER_PLAN_CLASS}</name>\n"
+            "  <cpu_frac>1.0</cpu_frac>\n  <avg_ncpus>1</avg_ncpus>\n </plan_class>\n"
+        )
+        (self.root / "plan_class_spec.xml").write_text("<plan_classes>\n" + body + cpu_body + "</plan_classes>\n")
 
     # ------------------------------------------------------------------ apps, templates, work
     def install_app(self, app: str, launcher_body: str, n_inputs: int, outputs: list[str], max_nbytes: int, version: int = 100,
-                    plan_class: str = PLAN_CLASS, gpu_ram_mb: int = 3500) -> None:
+                    plan_class: str = PLAN_CLASS, gpu_ram_mb: int = 3500, *, cpu_only: bool = False,
+                    min_quorum: int = 1, target_nresults: int | None = None) -> None:
+        is_cpu = cpu_only or plan_class == CPU_SOLVER_PLAN_CLASS
+        quorum = max(1, int(min_quorum))
+        target_res = max(quorum, int(target_nresults if target_nresults is not None else quorum))
+        max_err = max(2, target_res)
+        max_tot = max(3, target_res + 2)
         vdir = self.root / "apps" / app / str(version) / f"{PLATFORM}__{plan_class}"
         vdir.mkdir(parents=True, exist_ok=True)
         exe = vdir / f"{app}_{version}_{PLATFORM}"
         exe.write_text(launcher_body)
         exe.chmod(0o755)
-        (vdir / "version.xml").write_text(
-            f"<version>\n <file>\n  <physical_name>{exe.name}</physical_name>\n  <main_program/>\n </file>\n"
-            f" <plan_class>{plan_class}</plan_class>\n <avg_ncpus>1</avg_ncpus>\n <flops>4e12</flops>\n"
-            f" <coproc>\n  <type>NVIDIA</type>\n  <count>1</count>\n </coproc>\n <gpu_ram>{gpu_ram_mb * 1_000_000}</gpu_ram>\n</version>\n"
-        )
+        if is_cpu:
+            (vdir / "version.xml").write_text(
+                f"<version>\n <file>\n  <physical_name>{exe.name}</physical_name>\n  <main_program/>\n </file>\n"
+                f" <plan_class>{plan_class}</plan_class>\n <avg_ncpus>1</avg_ncpus>\n <flops>1.28e11</flops>\n</version>\n"
+            )
+        else:
+            (vdir / "version.xml").write_text(
+                f"<version>\n <file>\n  <physical_name>{exe.name}</physical_name>\n  <main_program/>\n </file>\n"
+                f" <plan_class>{plan_class}</plan_class>\n <avg_ncpus>1</avg_ncpus>\n <flops>4e12</flops>\n"
+                f" <coproc>\n  <type>NVIDIA</type>\n  <count>1</count>\n </coproc>\n <gpu_ram>{gpu_ram_mb * 1_000_000}</gpu_ram>\n</version>\n"
+            )
         tdir = self.root / "templates"
         tdir.mkdir(exist_ok=True)
         ins = "".join(f"<file_info><number>{i}</number></file_info>\n" for i in range(n_inputs))
         refs = "".join(f"<file_ref><file_number>{i}</file_number><open_name>{n}</open_name></file_ref>\n" for i, n in enumerate(["in.json", "adapter.pt"][:n_inputs]))
         (tdir / f"{app}_in").write_text(ins + "<workunit>\n" + refs + "<rsc_memory_bound>4e9</rsc_memory_bound>\n<rsc_disk_bound>2e9</rsc_disk_bound>\n"
-                                        "<delay_bound>86400</delay_bound>\n<min_quorum>1</min_quorum>\n<target_nresults>1</target_nresults>\n"
-                                        "<max_error_results>2</max_error_results>\n<max_total_results>3</max_total_results>\n<max_success_results>1</max_success_results>\n</workunit>\n")
+                                        f"<delay_bound>86400</delay_bound>\n<min_quorum>{quorum}</min_quorum>\n<target_nresults>{target_res}</target_nresults>\n"
+                                        f"<max_error_results>{max_err}</max_error_results>\n<max_total_results>{max_tot}</max_total_results>\n<max_success_results>{target_res}</max_success_results>\n</workunit>\n")
         outs = "".join(f"<file_info><name><OUTFILE_{i}/></name><generated_locally/><upload_when_present/><max_nbytes>{max_nbytes}</max_nbytes><url><UPLOAD_URL/></url></file_info>\n" for i in range(len(outputs)))
         orefs = "".join(f"<file_ref><file_name><OUTFILE_{i}/></file_name><open_name>{n}</open_name><copy_file/></file_ref>\n" for i, n in enumerate(outputs))
         (tdir / f"{app}_out").write_text(outs + "<result>\n" + orefs + "</result>\n")
+
+    def install_cpu_sweep_app(
+        self,
+        launcher_body: str,
+        *,
+        app: str = "hivemind_solver_sweep",
+        version: int = 100,
+        min_quorum: int = 2,
+        max_nbytes: int = 16_000_000,
+    ) -> None:
+        """Install the Wave 2 CPU-only parameter sweep app (``hivemind_solver_sweep``, quorum of 2)."""
+        self.install_app(
+            app=app,
+            launcher_body=launcher_body,
+            n_inputs=1,
+            outputs=["out.json"],
+            max_nbytes=max_nbytes,
+            version=version,
+            plan_class=CPU_SOLVER_PLAN_CLASS,
+            cpu_only=True,
+            min_quorum=min_quorum,
+            target_nresults=min_quorum,
+        )
 
     def project_env(self) -> dict[str, str]:
         return dict(os.environ, PYTHONPATH=f"{self.src}/py:{self.root}/py" + os.pathsep + os.environ.get("PYTHONPATH", ""), PATH=f"{self.base}/shims:{self.root}/bin:" + os.environ["PATH"])

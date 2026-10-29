@@ -49,6 +49,7 @@ from hivemind.core.auto_improvement import (
     resolve_domain_canonical,
 )
 from hivemind.router.accounts import ProducerRecord, RouterStore
+from hivemind.router.catalog import resolve_producer_quorum_moe_state
 
 
 class DiurnalOperationalMode(str, Enum):
@@ -365,3 +366,49 @@ class DiurnalMoETrainingScheduler:
             workunits.append(workunit)
 
         return workunits
+
+    def plan_producer_quorum_moe_serving(
+        self,
+        active_records: Sequence[ProducerRecord],
+        now_utc: float | None = None,
+        system_load_ratio: float = 0.45,
+    ) -> dict[str, Any]:
+        """Compute live MoE & Wave 2 Scientific MoE serving readiness as producers connect.
+
+        Inspects connected producer records and registered diurnal hardware profiles to determine:
+        1. Which Wave 2 Scientific MoE stage is unlocked (`stage_0_standby` .. `stage_4_full_swarm_20_expert_super_moe`).
+        2. Whether BOINC `min_quorum=2` cross-CPU scientific parameter sweeps are active (`>= 2` producers).
+        3. Whether Method-of-Lines PDE MoE and 3x Cluster Super-MoEs are active (`>= 4` producers).
+        4. Per-producer operational mode breakdown (daytime inference, surplus harvesting, nocturnal training).
+        """
+        ts = float(now_utc) if now_utc is not None else time.time()
+        total_vram_gb = 0.0
+        live_models_set: set[str] = set()
+        mode_counts: dict[str, int] = {m.value: 0 for m in DiurnalOperationalMode}
+        surplus_count = max(0, len(active_records) - 2) if system_load_ratio < 0.60 else 0
+
+        for record in active_records:
+            profile = self._producers.get(record.account_id)
+            vram = profile.vram_gb if profile is not None else 8.0
+            total_vram_gb += vram
+            for public_id, _local_name in record.models:
+                live_models_set.add(f"hivemind/{public_id.removeprefix('hivemind/')}")
+            if profile is not None:
+                mode = profile.resolve_mode(
+                    now_utc=ts,
+                    system_load_ratio=system_load_ratio,
+                    surplus_producers_count=surplus_count,
+                )
+            else:
+                mode = DiurnalOperationalMode.DAYTIME_INFERENCE_PRIMARY
+            mode_counts[mode.value] = mode_counts.get(mode.value, 0) + 1
+
+        quorum_state = resolve_producer_quorum_moe_state(
+            connected_producers=len(active_records),
+            total_vram_gb=total_vram_gb,
+            live_models=sorted(live_models_set),
+        )
+        quorum_state["operational_mode_breakdown"] = mode_counts
+        quorum_state["system_load_ratio"] = round(float(system_load_ratio), 3)
+        quorum_state["evaluated_at_utc"] = round(ts, 3)
+        return quorum_state

@@ -7,9 +7,11 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
-if str(ROOT / "scripts") not in sys.path:
-    sys.path.insert(0, str(ROOT / "scripts"))
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[1]
+for candidate in (HERE, ROOT / "scripts"):
+    if candidate.exists() and str(candidate) not in sys.path:
+        sys.path.insert(0, str(candidate))
 
 from hivemind_boinc_idle_worker import (  # noqa: E402
     DEFAULT_COORDINATOR_URL,

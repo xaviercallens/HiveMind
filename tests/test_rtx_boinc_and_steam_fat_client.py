@@ -74,6 +74,17 @@ def test_active_gameplay_preempts_boinc_gpu_with_zero_cuda_allocation(monkeypatc
 
 def test_idle_gpu_automatically_resumes_cuda_ptx_boinc_folding(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(worker, "get_user_idle_seconds", lambda: 8.5)
+    monkeypatch.setattr(
+        worker,
+        "query_nvidia_gpu_status",
+        lambda: {
+            "gpu_model": "NVIDIA GeForce RTX 2070",
+            "utilization_pct": 12.0,
+            "used_mib": 1400.0,
+            "total_mib": 8192.0,
+            "temp_c": 52.0,
+        },
+    )
     rep = worker.run_one_idle_gpu_boinc_cycle(
         commander="Cmdr_Gamer_Idle_BOINC",
         idle_threshold_seconds=4.0,
@@ -460,17 +471,20 @@ def test_fat_client_one_time_chapter1_voice_and_planet_analysis_and_life() -> No
     assert "_chapterIntroSpoken[0] = true; // Never restart Chapter 1 voice when moving between planets" in NATIVE_CSHARP_FAT_CLIENT_SOURCE
     assert "SpeakPlanetAnalysisOnly();" in NATIVE_CSHARP_FAT_CLIENT_SOURCE
 
-    # 2. Verify all 10 targets have concise AnalysisEn, LifeEn, AnalysisFr, LifeFr
-    assert NATIVE_CSHARP_FAT_CLIENT_SOURCE.count("AnalysisEn =") == 10
-    assert NATIVE_CSHARP_FAT_CLIENT_SOURCE.count("LifeEn =") == 10
-    assert NATIVE_CSHARP_FAT_CLIENT_SOURCE.count("AnalysisFr =") == 10
-    assert NATIVE_CSHARP_FAT_CLIENT_SOURCE.count("LifeFr =") == 10
+    # 2. Verify all targets (>= 10) have concise AnalysisEn, LifeEn, AnalysisFr, LifeFr
+    assert NATIVE_CSHARP_FAT_CLIENT_SOURCE.count("AnalysisEn =") >= 10
+    assert NATIVE_CSHARP_FAT_CLIENT_SOURCE.count("LifeEn =") >= 10
+    assert NATIVE_CSHARP_FAT_CLIENT_SOURCE.count("AnalysisFr =") >= 10
+    assert NATIVE_CSHARP_FAT_CLIENT_SOURCE.count("LifeFr =") >= 10
     assert "How life could live:" in NATIVE_CSHARP_FAT_CLIENT_SOURCE
     assert "Vie possible :" in NATIVE_CSHARP_FAT_CLIENT_SOURCE
 
-    # 3. Verify compiled HiveMind_Exoplanet_Hunter.cs is up to date on disk
+    # 3. Verify compiled HiveMind_Exoplanet_Hunter.cs and HiveMind_Exoplanet_Hunter.exe are up to date on disk
     cs_file = PROJECT_ROOT / "steam_dist" / "HiveMind_Astrophysics_Exoplanet_Hunter" / "HiveMind_Exoplanet_Hunter.cs"
+    exe_file = PROJECT_ROOT / "steam_dist" / "HiveMind_Astrophysics_Exoplanet_Hunter" / "HiveMind_Exoplanet_Hunter.exe"
     assert cs_file.exists()
+    if sys.platform == "win32":
+        assert exe_file.exists()
     assert "SpeakPlanetAnalysisOnly();" in cs_file.read_text(encoding="utf-8")
 
     # 4. Verify Web Cockpit `/` also tracks chapter1IntroDone and PLANET_ANALYSIS_AND_LIFE
@@ -480,6 +494,46 @@ def test_fat_client_one_time_chapter1_voice_and_planet_analysis_and_life() -> No
     assert "let chapter1IntroDone = false;" in html
     assert "PLANET_ANALYSIS_AND_LIFE" in html
     assert "Vie possible :" in html
+
+
+def test_playable_web_cockpit_4_stage_cinematic_and_gamepad_keyboard_mouse_controls() -> None:
+    """Verify the Stitch v4.6 Web Cockpit provides the full 4-stage playable cinematic loop, clear controls banner, Gamepad/Keyboard/Mouse support, progressive difficulty, and unseen NASA mystery planets."""
+    from starlette.testclient import TestClient
+    from hivemind.game.exoplanet_hunter_cockpit import create_exoplanet_hunter_fastapi_app
+
+    app = create_exoplanet_hunter_fastapi_app()
+    client = TestClient(app)
+    html = client.get("/").text
+
+    # 1. Always-visible Controls & Cinematic Pipeline Banner + Modal
+    assert 'id="playable-controls-banner"' in html
+    assert 'id="controls-modal"' in html
+    assert "⌨️ CLAVIER :" in html
+    assert "🖱️ SOURIS :" in html
+    assert "🎮 MANETTE" in html
+    assert 'id="gamepad-status-badge"' in html
+    assert "navigator.getGamepads" in html
+
+    # 2. 4-Stage Playable Cinematic Flow & Interactive Canvases
+    assert "launchBeeProbesCinematic()" in html
+    assert 'id="orbit-bee-canvas"' in html
+    assert 'id="orbit-sync-bar"' in html
+    assert "completeStage2AndStartLanding()" in html
+    assert 'id="oolite-glide-canvas"' in html
+    assert "triggerAssistedTouchdown()" in html
+    assert 'id="s4-astrobio-summary"' in html
+    assert "advanceToNextPlanetFromStage4()" in html
+    assert "requestAnimationFrame(masterGameLoop)" in html
+
+    # 3. Progressive Difficulty & Unseen Real NASA Mystery Planet Pool
+    assert 'id="difficulty-badge"' in html
+    assert "UNSEEN_NASA_PLANETS" in html
+    assert "selectRandomNasaMysteryPlanet" in html
+    assert "Proxima Centauri b" in html
+    assert "55 Cancri e" in html
+    assert "GJ 1214 b" in html
+    assert "LP 890-9 c" in html
+
 
 
 

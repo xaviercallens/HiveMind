@@ -5,7 +5,7 @@
   "disclosure": "This report is produced by a deterministic script. It is NOT a peer review: no language model and no human referee evaluated the manuscript. Verdicts below mean only that the listed artifact checks passed.",
   "lead_peer_review_model": "none (scripted static audit; no language-model call)",
   "co_auditor_model": "none",
-  "timestamp_utc": "2026-10-29T06:53:32Z",
+  "timestamp_utc": "2026-10-29T07:01:29Z",
   "tex_path": "paper/hivemind_foundation_article.tex",
   "pdf_path": "paper/hivemind_foundation_article.pdf",
   "pdf_exists": true,

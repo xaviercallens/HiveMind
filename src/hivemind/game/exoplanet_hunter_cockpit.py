@@ -3839,4 +3839,35 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
             }
         )
 
+
+    @app.get("/download/steam-fat-client")
+    def download_local_or_release_steam_exe() -> Response:
+        from fastapi.responses import RedirectResponse
+
+        exe_p = (
+            PROJECT_ROOT
+            / "steam_dist"
+            / "HiveMind_Astrophysics_Exoplanet_Hunter"
+            / "HiveMind_Exoplanet_Hunter.exe"
+        )
+        if exe_p.exists():
+            return Response(
+                content=exe_p.read_bytes(),
+                media_type="application/vnd.microsoft.portable-executable",
+                headers={"Content-Disposition": 'attachment; filename="HiveMind_Exoplanet_Hunter.exe"'},
+            )
+        return RedirectResponse(
+            url="https://github.com/xaviercallens/HiveMind/releases/download/v2.12.0/HiveMind_Exoplanet_Hunter.exe",
+            status_code=307,
+        )
+
+    @app.get("/download/steam-package-zip")
+    def download_local_or_release_steam_zip() -> Response:
+        from fastapi.responses import RedirectResponse
+
+        return RedirectResponse(
+            url="https://github.com/xaviercallens/HiveMind/releases/download/v2.12.0/HiveMind_Astrophysics_Exoplanet_Hunter_v2.11.0_Steam_Win64.zip",
+            status_code=307,
+        )
+
     return app

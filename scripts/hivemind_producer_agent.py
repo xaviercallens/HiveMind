@@ -367,7 +367,10 @@ def main(
             except (httpx.HTTPError, ValueError) as exc:
                 print(f"could not read the catalog: {type(exc).__name__}: {exc}", file=sys.stderr)
                 return 1
-            tier = next((t for t in tiers if t.get("tier_id") == args.preset.removeprefix("hivemind/")), None)
+            preset_key = args.preset.removeprefix("hivemind/")
+            if preset_key in ("layerstorm-frontier-moe", "layerstorm-moe", "moe-layerstorm"):
+                preset_key = "moe-general"
+            tier = next((t for t in tiers if t.get("tier_id") == preset_key), None)
             if tier is None:
                 parser.error(f"unknown preset {args.preset!r}; choose one of: {', '.join(str(t.get('tier_id')) for t in tiers)}")
             models.append({"id": str(tier["tier_id"]), "local_name": args.local_name or str(tier["ollama_tag"])})

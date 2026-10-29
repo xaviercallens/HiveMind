@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 import time
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
@@ -66,16 +67,75 @@ class NectarEntry:
         d["created_iso"] = datetime.fromtimestamp(self.created_utc, tz=timezone.utc).isoformat()
         return d
 
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> NectarEntry:
+        """Deserialize a NectarEntry from a persisted dictionary."""
+        return cls(
+            nectar_id=str(data["nectar_id"]),
+            tool_name=str(data["tool_name"]),
+            query_hash=str(data["query_hash"]),
+            content=dict(data["content"]),
+            nectar_richness=float(data["nectar_richness"]),
+            discovered_by_bee=str(data["discovered_by_bee"]),
+            access_count=int(data.get("access_count", 0)),
+            hmt_royalties_earned=float(data.get("hmt_royalties_earned", 0.0)),
+            created_utc=float(data.get("created_utc", time.time())),
+            ttl_s=float(data.get("ttl_s", DEFAULT_NECTAR_TTL_S)),
+        )
+
+
+class FileNectarPersistence:
+    """Atomic JSON file persistence backend for cross-process SwarmNectarCache sharing (HM-S23)."""
+
+    def __init__(self, path: str | Path) -> None:
+        self.path = Path(path)
+
+    def save(self, entries: Mapping[str, NectarEntry]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        active = {k: v.to_dict() for k, v in entries.items() if not v.is_expired}
+        tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
+        tmp_path.write_text(json.dumps(active, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+        tmp_path.replace(self.path)
+
+    def load(self) -> dict[str, NectarEntry]:
+        if not self.path.exists():
+            return {}
+        raw = json.loads(self.path.read_text(encoding="utf-8"))
+        loaded: dict[str, NectarEntry] = {}
+        for k, val in raw.items():
+            entry = NectarEntry.from_dict(val)
+            if not entry.is_expired:
+                loaded[str(k)] = entry
+        return loaded
+
 
 class SwarmNectarCache:
     """Decentralized Nectar Cache for MoE Agent Mesh over Kafka AMCP."""
 
-    def __init__(self, default_ttl_s: float = DEFAULT_NECTAR_TTL_S) -> None:
+    def __init__(
+        self,
+        default_ttl_s: float = DEFAULT_NECTAR_TTL_S,
+        persistence_path: str | Path | None = None,
+    ) -> None:
         self.default_ttl_s = default_ttl_s
-        self._cache: dict[str, NectarEntry] = {}
+        self._persistence = FileNectarPersistence(persistence_path) if persistence_path is not None else None
+        self._cache: dict[str, NectarEntry] = self._persistence.load() if self._persistence is not None else {}
         self._total_queries: int = 0
         self._cache_hits: int = 0
         self._tokens_saved_estimate: int = 0
+
+    def reload_from_disk(self) -> int:
+        """Reload unexpired entries from the persistence backend if configured."""
+        if self._persistence is None:
+            return len(self._cache)
+        disk_entries = self._persistence.load()
+        self._cache.update(disk_entries)
+        return len(self._cache)
+
+    def flush_to_disk(self) -> None:
+        """Persist active entries atomically to disk if persistence is configured."""
+        if self._persistence is not None:
+            self._persistence.save(self._cache)
 
     def put(
         self,
@@ -100,6 +160,7 @@ class SwarmNectarCache:
             ttl_s=ttl_s if ttl_s is not None else self.default_ttl_s,
         )
         self._cache[q_hash] = entry
+        self.flush_to_disk()
         return entry
 
     def get(
@@ -112,18 +173,23 @@ class SwarmNectarCache:
         self._total_queries += 1
         q_hash = canonical_query_hash(tool_name, query)
         entry = self._cache.get(q_hash)
+        if entry is None and self._persistence is not None:
+            self.reload_from_disk()
+            entry = self._cache.get(q_hash)
 
         if entry is None:
             return None
 
         if entry.is_expired:
             del self._cache[q_hash]
+            self.flush_to_disk()
             return None
 
         # Cache Hit!
         self._cache_hits += 1
         self._tokens_saved_estimate += 450  # Average tokens per tool generation avoided
         entry.record_access()
+        self.flush_to_disk()
         return entry
 
     def build_kafka_food_source_event(self, entry: NectarEntry) -> dict[str, Any]:

@@ -720,3 +720,52 @@ def analyze_campaign_rda_and_delta_cosine(
         "low_cosine_threshold": float(low_cosine_threshold),
         "low_cosine_regime_active": bool(mean_cos <= low_cosine_threshold),
     }
+
+
+@torch.no_grad()
+def compute_cosine_damped_outer_hyperparams(
+    deltas: Sequence[torch.Tensor],
+    base_lr: float = 0.7,
+    base_momentum: float = 0.9,
+    fedavg_target_lr: float = 1.0,
+) -> Dict[str, float | str]:
+    """Compute alignment-adaptive outer optimizer hyperparameters (Issue #308 / E18b).
+
+    Resolves the IID vs non-IID outer-momentum crossover identified in E18 (#308):
+    - When peer deltas are nearly orthogonal (`mean_cosine <= 0`, non-IID specialist branches),
+      retains full Nesterov momentum (`effective_momentum = base_momentum = 0.9`) and `base_lr = 0.7`.
+    - As peer deltas align (`mean_cosine -> 1.0`, IID replicas), damps outer momentum by
+      `(1 - alpha)` where `alpha = clamp(mean_cosine, 0, 1)` and interpolates `effective_lr -> 1.0`,
+      recovering exact FedAvg at `mean_cosine = 1.0` and preventing velocity carryover overshoot.
+    """
+    if len(deltas) < 2:
+        raise ValueError("at least 2 peer deltas are required to compute pairwise cosine alignment")
+    if base_lr <= 0.0 or fedavg_target_lr <= 0.0:
+        raise ValueError("learning rates must be positive")
+    if not (0.0 <= base_momentum < 1.0):
+        raise ValueError("base_momentum must be in [0, 1)")
+
+    stacked, _ = _validate_vectors_and_weights(deltas, None)
+    m = stacked.shape[0]
+    norms = stacked.norm(dim=1).clamp_min(1e-12)
+    units = stacked / norms.unsqueeze(1)
+    cos_mat = (units @ units.t()).clamp(-1.0, 1.0)
+
+    pairwise: List[float] = []
+    for i in range(m):
+        for j in range(i + 1, m):
+            pairwise.append(float(cos_mat[i, j].item()))
+
+    mean_cos = sum(pairwise) / len(pairwise)
+    alpha = max(0.0, min(1.0, mean_cos))
+    effective_momentum = base_momentum * (1.0 - alpha)
+    effective_lr = base_lr + (fedavg_target_lr - base_lr) * alpha
+    regime = "iid_fedavg_damped" if alpha >= 0.5 else "non_iid_nesterov"
+
+    return {
+        "mean_pairwise_cosine": round(mean_cos, 6),
+        "alignment_alpha": round(alpha, 6),
+        "effective_momentum": round(effective_momentum, 6),
+        "effective_lr": round(effective_lr, 6),
+        "regime": regime,
+    }

@@ -40,6 +40,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from hivemind.swarm.swarm_nectar_cache import SwarmNectarCache
+
 # ==============================================================================
 # Layer 1: Kafka & AMCP Topology Constants
 # ==============================================================================
@@ -114,6 +116,10 @@ class QuorumConsensusVerdict(BaseModel):
     assigned_bees: list[str]
     confidence_aggregate: float
     locked_tools: list[str]
+    prewarm_experts: list[int] = Field(
+        default_factory=list,
+        description="LayerStoRm Zone A hot expert IDs pre-warmed on quorum lock (HM-S25-02)",
+    )
     locked_utc: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat(timespec="milliseconds")
     )
@@ -245,6 +251,8 @@ class WaggleDanceScrutinyProtocol:
 
         if len(recruits) >= dance.quorum_threshold:
             dance.quorum_status = "QUORUM_REACHED"
+            domain_seed = int(hashlib.sha256(dance.task_domain.encode("utf-8")).hexdigest()[:8], 16)
+            prewarm = [((domain_seed + i) % 64) for i in range(8)]
             verdict = QuorumConsensusVerdict(
                 task_id=dance.task_id,
                 elected_consumer_group=f"cg-hivemind-{dance.task_domain}-{dance.task_id[:8]}",
@@ -252,6 +260,7 @@ class WaggleDanceScrutinyProtocol:
                 assigned_bees=recruits,
                 confidence_aggregate=round(dance.confidence_score, 4),
                 locked_tools=dance.required_tools,
+                prewarm_experts=prewarm,
                 status="LOCKED",
             )
         else:
@@ -275,14 +284,16 @@ class ABCMoEAgent:
         abandonment_limit: int = 2,
         quality_threshold: float = 0.75,
         web_search_fn: Callable[[str], list[dict[str, str]]] | None = None,
+        nectar_cache: SwarmNectarCache | None = None,
     ) -> None:
         self.agent_id = agent_id
         self.abandonment_limit = abandonment_limit
         self.quality_threshold = quality_threshold
         self.web_search_fn = web_search_fn or self._default_mock_web_search
+        self.nectar_cache = nectar_cache
 
     def _default_mock_web_search(self, query: str) -> list[dict[str, str]]:
-        """Fallback deterministic research snippets when real search is omitted."""
+        """Fallback deterministic research snippets across scientific domains (HM-S22.2: arXiv, PubMed, ChEMBL, Battery)."""
         terms = query.lower()
         if "battery" in terms or "batterie" in terms:
             return [
@@ -290,18 +301,48 @@ class ABCMoEAgent:
                     "title": "Solid-State Li-S Battery Formulations (2026)",
                     "snippet": "Solid-state lithium-sulfur with sulfide electrolytes (Li6PS5Cl) exhibit 450 Wh/kg and stable cycling under 3.5 MPa pressure.",
                     "source": "https://doi.org/10.1038/s41560-026-00123-x",
+                    "domain_parser": "materials_science",
                 },
                 {
                     "title": "Silicon-Graphene Anode Chemistry & Binder Stabilities",
                     "snippet": "Polyacrylic acid (PAA) crosslinked with carboxymethyl cellulose prevents 300% volume expansion cracking during delithiation.",
                     "source": "https://doi.org/10.1016/j.ensm.2026.04.015",
+                    "domain_parser": "materials_science",
                 },
+            ]
+        if any(k in terms for k in ("arxiv", "diloco", "moe", "transformer", "pcie", "layerstorm")):
+            return [
+                {
+                    "title": "arXiv Preprint: Decentralized MoE & Low-Communication Outer Optimization",
+                    "snippet": "arXiv structured abstract: Minimum-quorum Radial-Directional Averaging (RDA) and Two-Zone PCIe expert streaming preserve convergence and VRAM ceiling under 8 GB.",
+                    "source": "https://arxiv.org/abs/2604.21428",
+                    "domain_parser": "arxiv",
+                }
+            ]
+        if any(k in terms for k in ("pubmed", "clinical", "protein", "mrna", " oncology", "biomed")):
+            return [
+                {
+                    "title": "PubMed Indexed Study: Allosteric Kinase Inhibition & Binding Kinetics",
+                    "snippet": "PubMed MEDLINE record: Selective covalent inhibition achieves IC50 = 1.8 nM with 94% target occupancy in vivo and validated safety margin.",
+                    "source": "https://pubmed.ncbi.nlm.nih.gov/39104821/",
+                    "domain_parser": "pubmed",
+                }
+            ]
+        if any(k in terms for k in ("chembl", "smiles", "ligand", "ic50", "docking", "molecule")):
+            return [
+                {
+                    "title": "ChEMBL Bioactivity Assay Record CHEMBL5291840",
+                    "snippet": "ChEMBL assay summary: Canonical SMILES CC1=C(C=C(C=C1)NC(=O)C2=CC=C(C=C2)CN3CCN(CC3)C)NC4=NC=CC(=N4)C5=CN=CC=C5 with pChEMBL = 8.74 and high metabolic stability.",
+                    "source": "https://www.ebi.ac.uk/chembl/compound_report_card/CHEMBL5291840/",
+                    "domain_parser": "chembl",
+                }
             ]
         return [
             {
                 "title": f"Recent Empirical Findings on {query[:30]}",
                 "snippet": f"Validated experimental parameters and schema requirements for {query[:40]}.",
                 "source": "https://arxiv.org/abs/2609.35958",
+                "domain_parser": "general_scientific",
             }
         ]
 
@@ -386,19 +427,44 @@ class ABCMoEAgent:
 
     # --- ABC Step 3: Scout Bee Phase (External Tool Exploration) ---
     def scout_explore_step(self, state: ABCState) -> ABCState:
-        """Invokes external tools (Web Search / API / Solvers) to discover fresh high-nectar source."""
+        """Invokes external tools (Web Search / API / Solvers) or SwarmNectarCache to discover high-nectar source."""
         query = state.user_query
-        web_snippets = self.web_search_fn(query)
+        cache_hit_entry = None
+        if self.nectar_cache is not None:
+            cache_hit_entry = self.nectar_cache.get(
+                "web_search",
+                query,
+                requesting_bee=self.agent_id,
+            )
+
+        if cache_hit_entry is not None:
+            web_snippets = list(cache_hit_entry.content.get("snippets", []))
+            nectar_richness = cache_hit_entry.nectar_richness
+            discovered_by = cache_hit_entry.discovered_by_bee
+            event_type = "io.hivemind.mesh.nectar_cache_hit"
+        else:
+            web_snippets = self.web_search_fn(query)
+            nectar_richness = 0.92
+            discovered_by = self.agent_id
+            event_type = "io.hivemind.mesh.new_food_source_discovered"
+            if self.nectar_cache is not None:
+                self.nectar_cache.put(
+                    tool_name="web_search",
+                    query=query,
+                    content={"query": query, "snippets": web_snippets},
+                    discovered_by_bee=self.agent_id,
+                    nectar_richness=nectar_richness,
+                )
 
         new_source_id = f"source-web-{uuid.uuid4().hex[:8]}"
         fresh_source = FoodSource(
             source_id=new_source_id,
             source_type="web_search_snippets",
-            nectar_richness=0.92,  # Fresh web snippets provide high potential nectar
+            nectar_richness=nectar_richness,  # Fresh web snippets provide high potential nectar
             content={"query": query, "snippets": web_snippets},
             exhausted=False,
             trial_count=0,
-            discovered_by=self.agent_id,
+            discovered_by=discovered_by,
         )
 
         state.food_sources.append(fresh_source)
@@ -408,10 +474,11 @@ class ABCMoEAgent:
         state.kafka_event_log.append(
             {
                 "topic": MESH_TOPICS["food_sources"],
-                "event_type": "io.hivemind.mesh.new_food_source_discovered",
+                "event_type": event_type,
                 "source_id": new_source_id,
                 "tool_used": "web_search",
                 "snippets_count": len(web_snippets),
+                "from_nectar_cache": cache_hit_entry is not None,
             }
         )
         return state
@@ -452,6 +519,7 @@ class AgentMeshOrchestrator:
         self,
         lead_bee_id: str = "hivemind/qwen35-4b",
         available_peers: list[dict[str, Any]] | None = None,
+        nectar_cache: SwarmNectarCache | None = None,
     ) -> None:
         self.lead_bee_id = lead_bee_id
         self.protocol = WaggleDanceScrutinyProtocol(tau_0_ms=1000)
@@ -460,7 +528,8 @@ class AgentMeshOrchestrator:
             {"bee_id": "hivemind/gemma4-e4b", "affinity": 0.90},
             {"bee_id": "hivemind/qwen35-sub2b", "affinity": 0.70},
         ]
-        self.abc_agent = ABCMoEAgent(agent_id=lead_bee_id)
+        self.nectar_cache = nectar_cache
+        self.abc_agent = ABCMoEAgent(agent_id=lead_bee_id, nectar_cache=nectar_cache)
 
     def execute_mesh_workflow(
         self,

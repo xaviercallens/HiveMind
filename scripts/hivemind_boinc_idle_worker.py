@@ -319,18 +319,19 @@ def run_one_idle_gpu_boinc_cycle(
         "digest": digest,
     }
 
-    sync_result: Dict[str, Any] = {"local_hub": "offline", "gcp_cloud_run": "offline"}
+    sync_result: Dict[str, Any] = {"community_hub": "offline", "gcp_cloud_run": "offline"}
+    hub_base = coordinator_url.rstrip("/")
     try:
         req = urllib.request.Request(
-            "http://127.0.0.1:8095/api/v1/community/boinc-sync",
+            f"{hub_base}/api/v1/community/boinc-sync",
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=2.5) as resp:
-            sync_result["local_hub"] = json.loads(resp.read().decode("utf-8"))
+        with urllib.request.urlopen(req, timeout=4.0) as resp:
+            sync_result["community_hub"] = json.loads(resp.read().decode("utf-8"))
     except Exception as exc:
-        sync_result["local_hub_error"] = str(exc)
+        sync_result["community_hub_error"] = str(exc)
 
     try:
         lease_body = {

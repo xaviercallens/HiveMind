@@ -887,10 +887,14 @@ def build_stitch_v46_cockpit_html(state_json: str) -> str:
 </button>"""
     raw = raw.replace(old_stage4_btn, new_stage4_and_5_btns)
 
-    # 4. Expand Central Viewport height slightly so all 5 Stitch stages render without clipping
+    # 4. Expand Central Viewport height slightly so all 5 Stitch stages render without clipping, and unhide HD 80606 b from behind the right-hand drawer
     raw = raw.replace(
         'class="relative w-full h-[400px] xl:h-[440px] rounded border border-cyan-600/50 overflow-hidden bg-black shadow-2xl"',
         'class="relative w-full h-[470px] xl:h-[490px] rounded border border-cyan-600/50 overflow-hidden bg-black shadow-2xl"',
+    )
+    raw = raw.replace(
+        'class="planet-node absolute top-[75px] right-[180px] flex flex-col items-center cursor-pointer transition hover:scale-110" data-planet="hd80606b"',
+        'class="planet-node absolute top-[62px] right-[365px] flex flex-col items-center cursor-pointer transition hover:scale-110" data-planet="hd80606b"',
     )
 
     # 5. Add System 9 (KOI-Cand 14), System 10 (KOI-Bin #02), and Top-Left Sub-Spatial Scan Box to Stage 1 (`#viewport-nodes`)

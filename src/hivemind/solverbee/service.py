@@ -40,7 +40,18 @@ ID_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 VERDICTS = ("VERIFIED", "AUDITED", "FAILED", "UNVERIFIED")
 MODEL_ID = "hivemind-solver-bee"
 CAVEAT = ("VERIFIED means the listed checks passed. In the E16 measurement 5-7% of VERIFIED code answers still failed hidden tests; it never means 'correct'.")
-FAMILIES = ("robertson", "van_der_pol", "brusselator", "lotka_volterra", "harmonic", "stiff_chain")
+FAMILIES = (
+    "robertson",
+    "van_der_pol",
+    "brusselator",
+    "lotka_volterra",
+    "harmonic",
+    "stiff_chain",
+    "pendulum",
+    "projectile_drag",
+    "kepler",
+    "logistic",
+)
 TOP_KEYS = {"schema", "id", "problem", "y0", "t0", "t_out", "rtol", "atol", "method", "max_steps"}
 SPEC_BLOCK_RE = re.compile(r"^```ode-spec[ \t]*\r?\n(.*?)^```[ \t]*\r?$", re.MULTILINE | re.DOTALL)
 SPEC_OPEN_RE = re.compile(r"^```ode-spec\b", re.MULTILINE)

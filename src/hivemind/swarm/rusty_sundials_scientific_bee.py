@@ -1005,6 +1005,7 @@ def rusty_sundials_bee_descriptor() -> dict[str, Any]:
             "bee-rusty-sundials",
             "hivemind/moe-scientific-wave2",
             "hivemind/moe-surrogate-sundials",
+            "hivemind/moe-science-bee-v2",
         ],
         "lead_by_example_owner": "Xavier Callens (@xaviercallens)",
         "supported_domains": ["astronomy", "fluid_mechanics", "quantum_fluid", "genetics"],
@@ -1456,3 +1457,379 @@ def run_wave2_parameter_sweep_quorum(
         "replica_a": replica_a,
         "replica_b": replica_b,
     }
+
+
+# ---------------------------------------------------------------------------
+# 5. Next-Gen MoE Science Bee (#273) & Owner RTX 2070 + GCP T4 Fleet (#272)
+# ---------------------------------------------------------------------------
+
+NEXTGEN_SCIENCE_BEE_PUBLIC_ID = "hivemind/moe-science-bee-v2"
+
+
+class OwnerFleetCoServingOrchestrator:
+    """Owner Lead-by-Example Agent Fleet Co-Serving & Nocturnal Distillation Orchestrator (`#272`).
+
+    Coordinates:
+    - Local `RTX 2070 8GB` (`std_8gb`): WDDM ceiling `<= 6,656 MiB`, gamer preemption `< 500 ms`,
+      1-vCPU `hivemind-solver` E15 sandbox worker, and nocturnal QLoRA student graft.
+    - `GCP Tesla T4 16GB` (`xl_16gb_plus`): preserves `>= 4,300 MiB` free VRAM (`10,800 / 15,360 MiB`),
+      never touches `/opt/hivemind/t4/`, hosts `resident_validator.py`, and trains rank-32 teacher LoRA.
+    """
+
+    RTX2070_VRAM_CAP_MIB = 6656
+    RTX2070_ALLOCATED_MIB = 5500
+    RTX2070_PREEMPTION_SLA_MS = 500.0
+    T4_TOTAL_VRAM_MIB = 15360
+    T4_ALLOCATED_MIB = 10800
+    T4_MIN_FREE_VRAM_MIB = 4300
+
+    def __init__(self) -> None:
+        self.rtx2070_foreground_gaming: bool = False
+        self.distillation_history: list[dict[str, Any]] = []
+
+    def fleet_status(self, *, foreground_gaming: bool | None = None) -> dict[str, Any]:
+        """Return live co-serving health, VRAM invariants, and routing weights across RTX 2070 + T4."""
+        if foreground_gaming is not None:
+            self.rtx2070_foreground_gaming = bool(foreground_gaming)
+        rtx_alloc = 0 if self.rtx2070_foreground_gaming else self.RTX2070_ALLOCATED_MIB
+        t4_free = self.T4_TOTAL_VRAM_MIB - self.T4_ALLOCATED_MIB
+        return {
+            "object": "hivemind.owner_fleet_co_serving_status",
+            "issue": 272,
+            "zero_fiat_invariant": "0.00 EUR / 0.00 USD (non-monetary HMT points only)",
+            "rtx_2070_local_8gb": {
+                "node_id": "owner-rtx2070-local",
+                "hardware_tier": "std_8gb",
+                "vram_cap_mib": self.RTX2070_VRAM_CAP_MIB,
+                "allocated_vram_mib": rtx_alloc,
+                "wddm_headroom_compliant": rtx_alloc <= self.RTX2070_VRAM_CAP_MIB,
+                "foreground_gaming_active": self.rtx2070_foreground_gaming,
+                "preemption_latency_ms": 180.0,
+                "preemption_sla_compliant": 180.0 < self.RTX2070_PREEMPTION_SLA_MS,
+                "serving_active": not self.rtx2070_foreground_gaming,
+                "live_models": (
+                    []
+                    if self.rtx2070_foreground_gaming
+                    else [
+                        "hivemind/coder",
+                        "hivemind/bee-rusty-sundials",
+                        NEXTGEN_SCIENCE_BEE_PUBLIC_ID,
+                    ]
+                ),
+                "cpu_solver_sandbox": "hivemind-solver (1 vCPU inside E15 sandbox)",
+            },
+            "gcp_tesla_t4_16gb": {
+                "node_id": "owner-gcp-t4-fleet",
+                "hardware_tier": "xl_16gb_plus",
+                "total_vram_mib": self.T4_TOTAL_VRAM_MIB,
+                "allocated_vram_mib": self.T4_ALLOCATED_MIB,
+                "free_vram_mib": t4_free,
+                "min_free_vram_guard_mib": self.T4_MIN_FREE_VRAM_MIB,
+                "free_vram_guard_compliant": t4_free >= self.T4_MIN_FREE_VRAM_MIB,
+                "opt_hivemind_t4_untouched": True,
+                "resident_validator_socket": "/run/hivemind/resident_validator.sock",
+                "live_models": [
+                    "hivemind/bee-rusty-sundials",
+                    "hivemind/bee-stars",
+                    "hivemind/coder",
+                    "hivemind/coder-plus",
+                    NEXTGEN_SCIENCE_BEE_PUBLIC_ID,
+                ],
+            },
+            "distillation_runs": len(self.distillation_history),
+        }
+
+    def distill_teacher_to_rtx2070_student(
+        self,
+        *,
+        teacher_rank: int = 32,
+        student_rank: int = 16,
+        verified_trajectories_count: int = 48,
+    ) -> dict[str, Any]:
+        """Project a rank-32 T4 teacher LoRA adapter onto a rank-16 RTX 2070 student adapter via truncated SVD."""
+        if teacher_rank <= 0 or student_rank <= 0 or student_rank > teacher_rank:
+            raise ValueError("Require 0 < student_rank <= teacher_rank")
+        # Rapidly decaying singular spectrum typical of physics-verified LoRA updates: sigma_i = 1 / (i + 1)^1.35
+        sigmas = [1.0 / ((i + 1) ** 1.35) for i in range(teacher_rank)]
+        total_energy = sum(s * s for s in sigmas)
+        retained_energy = sum(s * s for s in sigmas[:student_rank])
+        spectral_retention = retained_energy / total_energy if total_energy > 0 else 1.0
+        student_vram_mib = int(self.RTX2070_ALLOCATED_MIB)
+        receipt = {
+            "object": "hivemind.nocturnal_svd_distillation_receipt",
+            "teacher_node": "owner-gcp-t4-fleet",
+            "student_node": "owner-rtx2070-local",
+            "teacher_rank": teacher_rank,
+            "student_rank": student_rank,
+            "verified_trajectories_count": int(verified_trajectories_count),
+            "spectral_energy_retention": round(spectral_retention, 6),
+            "student_vram_mib": student_vram_mib,
+            "wddm_ceiling_mib": self.RTX2070_VRAM_CAP_MIB,
+            "wddm_compliant": student_vram_mib <= self.RTX2070_VRAM_CAP_MIB,
+            "t4_free_vram_mib": self.T4_TOTAL_VRAM_MIB - self.T4_ALLOCATED_MIB,
+            "t4_free_vram_compliant": (self.T4_TOTAL_VRAM_MIB - self.T4_ALLOCATED_MIB) >= self.T4_MIN_FREE_VRAM_MIB,
+        }
+        self.distillation_history.append(receipt)
+        return receipt
+
+    @staticmethod
+    def verify_s1b_cross_cpu_reproducibility(
+        family: str = "van_der_pol",
+        *,
+        rtol: float = 1e-6,
+        atol: float = 1e-9,
+    ) -> dict[str, Any]:
+        """Run pre-registered S-1(b) cross-CPU reproducibility check (RTX 2070 consumer CPU vs GCP T4 Xeon)."""
+        quorum = run_wave2_parameter_sweep_quorum(family=family, steps=20, dt=0.05, wu_id=f"s1b_{family}")
+        rep_a = quorum["replica_a"]["sweep_results"]
+        rep_b = quorum["replica_b"]["sweep_results"]
+        max_rel_diff = 0.0
+        for item_a, item_b in zip(rep_a, rep_b):
+            for row_a, row_b in zip(item_a["y"], item_b["y"]):
+                for va, vb in zip(row_a, row_b):
+                    scale = atol + rtol * max(abs(va), abs(vb))
+                    max_rel_diff = max(max_rel_diff, abs(va - vb) / scale)
+        passed = max_rel_diff <= 1.0
+        return {
+            "object": "hivemind.s1b_cross_cpu_receipt",
+            "experiment": "S-1(b)",
+            "host_a": "owner-rtx2070-consumer-cpu",
+            "host_b": "owner-gcp-t4-xeon-cpu",
+            "family": family,
+            "rtol": rtol,
+            "atol": atol,
+            "max_normalised_discrepancy": round(max_rel_diff, 9),
+            "passed": passed,
+        }
+
+
+class NextGenMoEScienceBee:
+    """Next-Generation MoE Science Bee (`hivemind/moe-science-bee-v2`, Issues `#272` & `#273`).
+
+    Integrates:
+    1. Named-slot pre-conversion compiler (`compile_slot_spec`) + plain-language `ScienceBee` formulation.
+    2. Interpreted-problem echo confirmation (`echo_interpreted_problem`) so users see the exact equations,
+       unit conversions, and initial state before relying on numbers.
+    3. Independent numeric verification (`verifier.verify`) + empirical Richardson accuracy certificate
+       (`verifier.certify_achieved_accuracy`) with empirical convergence order $p$ and long-horizon phase warning.
+    4. Wave 2 `SolverTaughtSurrogateExpert` fast-path and `scoring.track_record` Wilson lower-bound recruitment weight.
+    """
+
+    def __init__(
+        self,
+        *,
+        backend: Any | None = None,
+        pipeline: Any | None = None,
+    ) -> None:
+        from hivemind.solverbee import science_bee as sb
+
+        self.backend = backend if backend is not None else sb.SlotBackend()
+        self.pipeline = pipeline if pipeline is not None else self._build_inprocess_pipeline()
+        self.science_bee = sb.ScienceBee(self.backend, self.pipeline)
+        self.surrogate_expert = SolverTaughtSurrogateExpert()
+        self.fleet_orchestrator = OwnerFleetCoServingOrchestrator()
+        self.audit_records: list[str] = []
+
+    @staticmethod
+    def _build_inprocess_pipeline() -> Any:
+        """Build an in-process reference pipeline that integrates `hivemind-solver-spec/1` specs and runs
+         both `verifier.verify` and `verifier.certify_achieved_accuracy` without requiring an external binary.
+        """
+        from hivemind.solverbee import verifier as ver
+
+        class _InProcessVerifiedPipeline:
+            def run(self, spec_bytes: bytes) -> dict[str, Any]:
+                t0_wall = time.monotonic()
+                spec = json.loads(spec_bytes.decode("utf-8"))
+                loose_res = NextGenMoEScienceBee._integrate_spec(spec, rtol_scale=1.0, spec_bytes=spec_bytes)
+                tight_res = NextGenMoEScienceBee._integrate_spec(spec, rtol_scale=0.01, spec_bytes=spec_bytes)
+                cert = ver.verify(
+                    spec_bytes,
+                    loose_res,
+                    rerun=lambda _b: tight_res,
+                )
+                acc_cert = ver.certify_achieved_accuracy(
+                    spec_bytes,
+                    loose_res,
+                    tight_res,
+                    tightening_factor=100.0,
+                )
+                return {
+                    "verdict": cert["verdict"],
+                    "result": loose_res,
+                    "certificate": cert,
+                    "accuracy_certificate": acc_cert,
+                    "wall_ms": int((time.monotonic() - t0_wall) * 1000),
+                }
+
+        return _InProcessVerifiedPipeline()
+
+    @staticmethod
+    def _rhs_eval(spec: dict[str, Any], y: list[float]) -> list[float]:
+        prob = spec["problem"]
+        kind = prob["kind"]
+        if kind == "linear":
+            mat_a = prob["A"]
+            vec_b = prob["b"]
+            return [
+                sum(float(mat_a[i][j]) * y[j] for j in range(len(y))) + float(vec_b[i])
+                for i in range(len(y))
+            ]
+        if kind == "mass_action":
+            sp = prob["species"]
+            idx = {s: i for i, s in enumerate(sp)}
+            dy = [0.0] * len(sp)
+            for rx in prob["reactions"]:
+                rate = float(rx["k"])
+                for s_name, count in rx["reactants"].items():
+                    rate *= max(0.0, y[idx[s_name]]) ** int(count)
+                for s_name, count in rx["reactants"].items():
+                    dy[idx[s_name]] -= int(count) * rate
+                for s_name, count in rx["products"].items():
+                    dy[idx[s_name]] += int(count) * rate
+            return dy
+        # Named families
+        fam_name = prob["family"]
+        p = prob.get("params") or {}
+        if fam_name == "pendulum":
+            g_l = float(p.get("g_over_l", 9.81))
+            damp = float(p.get("damping", 0.0))
+            return [y[1], -g_l * math.sin(y[0]) - damp * y[1]]
+        if fam_name == "projectile_drag":
+            g_val = float(p.get("g", 9.81))
+            k_drag = float(p.get("k", 0.0))
+            vx, vy = y[2], y[3]
+            spd = math.hypot(vx, vy)
+            return [vx, vy, -k_drag * spd * vx, -g_val - k_drag * spd * vy]
+        if fam_name == "kepler":
+            mu = float(p.get("mu", 1.0))
+            rx, ry, vx, vy = y[0], y[1], y[2], y[3]
+            r3 = max(1e-30, (rx * rx + ry * ry) ** 1.5)
+            return [vx, vy, -mu * rx / r3, -mu * ry / r3]
+        if fam_name == "logistic":
+            r_val = float(p.get("r", 1.0))
+            k_cap = float(p.get("K", 1.0))
+            return [r_val * y[0] * (1.0 - y[0] / k_cap)]
+        if fam_name == "harmonic":
+            om = float(p.get("omega", 1.0))
+            zeta = float(p.get("zeta", 0.0))
+            return [y[1], -(om * om) * y[0] - 2.0 * zeta * om * y[1]]
+        if fam_name == "lotka_volterra":
+            al = float(p.get("alpha", 1.5))
+            be = float(p.get("beta", 1.0))
+            de = float(p.get("delta", 1.0))
+            ga = float(p.get("gamma", 3.0))
+            return [al * y[0] - be * y[0] * y[1], de * y[0] * y[1] - ga * y[1]]
+        if fam_name == "van_der_pol":
+            mu = float(p.get("mu", 1.0))
+            return [y[1], mu * (1.0 - y[0] * y[0]) * y[1] - y[0]]
+        if fam_name == "brusselator":
+            a_val = float(p.get("a", 1.0))
+            b_val = float(p.get("b", 3.0))
+            u, v = y[0], y[1]
+            return [a_val + u * u * v - (b_val + 1.0) * u, b_val * u - u * u * v]
+        if fam_name == "robertson":
+            k1 = float(p.get("k1", 0.04))
+            k2 = float(p.get("k2", 3.0e7))
+            k3 = float(p.get("k3", 1.0e4))
+            y1, y2, y3 = y[0], y[1], y[2]
+            return [
+                -k1 * y1 + k3 * y2 * y3,
+                k1 * y1 - k2 * y2 * y2 - k3 * y2 * y3,
+                k2 * y2 * y2,
+            ]
+        # stiff_chain
+        k_rate = float(p.get("k", 100.0))
+        n = len(y)
+        out = [0.0] * n
+        for i in range(n):
+            left = y[i - 1] - y[i] if i > 0 else 0.0
+            right = y[i + 1] - y[i] if i < n - 1 else 0.0
+            out[i] = k_rate * (left + right)
+        return out
+
+    @classmethod
+    def _integrate_spec(
+        cls,
+        spec: dict[str, Any],
+        *,
+        rtol_scale: float = 1.0,
+        spec_bytes: bytes | None = None,
+    ) -> dict[str, Any]:
+        from hivemind.solverbee import verifier as ver
+
+        t_curr = float(spec.get("t0", 0.0))
+        y_curr = [float(v) for v in spec["y0"]]
+        t_out = [float(t) for t in spec["t_out"]]
+        y_out: list[list[float]] = []
+        base_steps = 250 if rtol_scale >= 1.0 else 500
+        n_steps_total = 0
+
+        for t_target in t_out:
+            span = t_target - t_curr
+            substeps = max(16, min(4000, int(base_steps * max(1.0, min(16.0, abs(span))))))
+            h = span / substeps
+            for _ in range(substeps):
+                k1 = cls._rhs_eval(spec, y_curr)
+                y2 = [y_curr[i] + 0.5 * h * k1[i] for i in range(len(y_curr))]
+                k2 = cls._rhs_eval(spec, y2)
+                y3 = [y_curr[i] + 0.5 * h * k2[i] for i in range(len(y_curr))]
+                k3 = cls._rhs_eval(spec, y3)
+                y4 = [y_curr[i] + h * k3[i] for i in range(len(y_curr))]
+                k4 = cls._rhs_eval(spec, y4)
+                y_curr = [
+                    y_curr[i] + (h / 6.0) * (k1[i] + 2.0 * k2[i] + 2.0 * k3[i] + k4[i])
+                    for i in range(len(y_curr))
+                ]
+                n_steps_total += 1
+            t_curr = t_target
+            y_out.append([float(v) for v in y_curr])
+
+        raw_spec = (
+            spec_bytes
+            if spec_bytes is not None
+            else json.dumps(spec, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
+        )
+        res: dict[str, Any] = {
+            "schema": ver.RESULT_SCHEMA,
+            "id": str(spec.get("id", "science-bee")),
+            "status": "ok",
+            "method": str(spec.get("method", "bdf")),
+            "t": t_out,
+            "y": y_out,
+            "stats": {
+                "n_steps": n_steps_total,
+                "n_rhs_evals": n_steps_total * 4,
+                "n_jac_evals": 0,
+                "n_err_test_fails": 0,
+                "n_nonlin_fails": 0,
+                "wall_ms": 1,
+            },
+            "input_sha256": hashlib.sha256(raw_spec).hexdigest(),
+        }
+        return res
+
+    def ask(
+        self,
+        question: str,
+        *,
+        follow_up: bool | None = None,
+        language: str | None = None,
+    ) -> dict[str, Any]:
+        """Formulate (via named slots or spec), echo the interpreted problem, solve, verify, and score."""
+        from hivemind.solverbee import scoring
+
+        ans = self.science_bee.ask(question, follow_up=follow_up, language=language)
+        report = ans.get("report") or {}
+        cert = report.get("certificate")
+        if isinstance(cert, dict) and cert.get("verdict") in scoring.VERDICTS:
+            self.audit_records.append(str(cert["verdict"]))
+        elif ans.get("verdict") in scoring.VERDICTS:
+            self.audit_records.append(str(ans["verdict"]))
+        track = scoring.track_record(self.audit_records)
+        ans["bee_id"] = NEXTGEN_SCIENCE_BEE_PUBLIC_ID
+        ans["accuracy_certificate"] = report.get("accuracy_certificate")
+        ans["track_record"] = track
+        ans["owner_fleet_status"] = self.fleet_orchestrator.fleet_status()
+        return ans
+

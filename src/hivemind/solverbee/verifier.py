@@ -281,6 +281,39 @@ def _inv_quadratic_form(inv, spec, x):
 
 
 def _inv_energy(inv, spec, x):
+    if "model" in inv:
+        model = inv.get("model")
+        inv_params = inv.get("params")
+        if inv_params is None:
+            inv_params = {}
+        if not isinstance(inv_params, dict):
+            raise _CheckError(f"invariant {inv.get('name')!r}: params must be an object")
+        spec_params = (spec.get("problem") or {}).get("params") or {}
+        if model == "pendulum":
+            if len(x) != 2:
+                raise _CheckError("pendulum energy needs 2 state components [theta, omega]")
+            g_over_l = inv_params.get("g_over_l", inv.get("g_over_l", spec_params.get("g_over_l")))
+            if not _finite(g_over_l):
+                raise _CheckError("pendulum energy needs finite g_over_l")
+            return 0.5 * x[1] * x[1] + float(g_over_l) * (1.0 - math.cos(x[0]))
+        if model == "kepler":
+            if len(x) != 4:
+                raise _CheckError("kepler energy needs 4 state components [x, y, vx, vy]")
+            mu = inv_params.get("mu", inv.get("mu", spec_params.get("mu")))
+            if not _finite(mu) or float(mu) <= 0:
+                raise _CheckError("kepler energy needs positive finite mu")
+            r = math.hypot(x[0], x[1])
+            if r <= 0:
+                raise _CheckError("kepler energy needs positive radius r > 0")
+            return 0.5 * (x[2] * x[2] + x[3] * x[3]) - float(mu) / r
+        if model == "projectile":
+            if len(x) != 4:
+                raise _CheckError("projectile energy needs 4 state components [x, y, vx, vy]")
+            g = inv_params.get("g", inv.get("g", spec_params.get("g")))
+            if not _finite(g):
+                raise _CheckError("projectile energy needs finite g")
+            return 0.5 * (x[2] * x[2] + x[3] * x[3]) + float(g) * x[1]
+        raise _CheckError(f"unknown energy model {model!r}")
     return 0.5 * _quad(_mat(inv, len(x)), x)
 
 
@@ -335,7 +368,7 @@ def _check_invariants(spec: dict, result: dict, problem: dict | None) -> dict:
         if not _finite(tol) or tol < 0:
             raise _CheckError(f"invariant {inv.get('name')!r}: tol must be a non-negative number")
         value = inv.get("value")
-        if value is None and kind == "lv_first_integral":
+        if value is None and kind in ("lv_first_integral", "energy"):
             value = fn(inv, spec, [float(v) for v in spec["y0"]])
         if not _finite(value):
             raise _CheckError(f"invariant {inv.get('name')!r}: value must be a finite number")
@@ -445,5 +478,93 @@ def verify(spec_bytes: bytes, result: dict, *, problem: dict | None = None,
         "binary_sha256": binary_sha256,
         "solver_rev": rev if isinstance(rev, str) else None,
         "verifier_version": VERIFIER_VERSION,
+        "caveat": CAVEAT,
+    }
+
+
+def certify_achieved_accuracy(
+    spec_bytes: bytes,
+    loose_result: dict,
+    tight_result: dict,
+    *,
+    problem: dict | None = None,
+    tightening_factor: float = 100.0,
+) -> dict:
+    """Return a Richardson empirical accuracy certificate (hivemind-accuracy-cert/1).
+
+    In Issue #273, long-horizon orbits (e.g. kepler_eccentric_long over 100 orbits)
+    accumulate global phase error at local rtol=1e-8 even though first integrals
+    (energy, angular momentum) are conserved and tightening tolerances by 100x cuts
+    global error 30x-70x (empirical order p in [0.73, 0.93]). This function reports
+    the achieved global accuracy without altering or loosening the contract rules
+    in verify() / decide().
+    """
+    spec = _parse_spec(spec_bytes)
+    n = _dimension(spec)
+    rtol, atols = _tolerances(spec, n)
+    _validate_trajectory(loose_result, spec, "loose result")
+    _validate_trajectory(tight_result, spec, "tight result")
+    if tightening_factor <= 1.0 or not _finite(tightening_factor):
+        raise ValueError("tightening_factor must be a finite number > 1")
+
+    max_abs_diff = 0.0
+    max_rel_ratio = 0.0
+    for r_loose, r_tight in zip(loose_result["y"], tight_result["y"]):
+        for j, (yl, yt) in enumerate(zip(r_loose, r_tight)):
+            diff = abs(float(yl) - float(yt))
+            if diff > max_abs_diff:
+                max_abs_diff = diff
+            scale = TIGHTENING_FACTOR * (rtol * abs(float(yt)) + atols[j])
+            ratio = diff / scale if scale > 0 else (0.0 if diff == 0.0 else math.inf)
+            if ratio > max_rel_ratio:
+                max_rel_ratio = ratio
+
+    ref_err_loose = None
+    ref_err_tight = None
+    empirical_order_p = None
+    ref = (problem or {}).get("reference")
+    if isinstance(ref, dict) and isinstance(ref.get("y"), list) and isinstance(ref.get("t"), list):
+        ref_l = 0.0
+        ref_t = 0.0
+        matched_any = False
+        for tr, ref_row in zip(ref["t"], ref["y"]):
+            for i, tv in enumerate(spec["t_out"]):
+                if abs(float(tr) - float(tv)) <= _T_MATCH_RTOL * max(1.0, abs(float(tv))):
+                    matched_any = True
+                    yl_row = loose_result["y"][i]
+                    yt_row = tight_result["y"][i]
+                    for yl, yt, yr in zip(yl_row, yt_row, ref_row):
+                        ref_l = max(ref_l, abs(float(yl) - float(yr)))
+                        ref_t = max(ref_t, abs(float(yt) - float(yr)))
+                    break
+        if matched_any:
+            ref_err_loose = ref_l
+            ref_err_tight = ref_t
+            if ref_l > 0.0 and ref_t > 0.0:
+                empirical_order_p = math.log(ref_l / ref_t) / math.log(tightening_factor)
+
+    inv_loose = _safe("invariants", lambda: _check_invariants(spec, loose_result, problem))
+    inv_tight = _safe("invariants", lambda: _check_invariants(spec, tight_result, problem))
+    t0 = float(spec.get("t0", 0.0))
+    t_span = float(spec["t_out"][-1]) - t0 if spec.get("t_out") else 0.0
+    invariants_conserved = inv_loose["status"] == "pass" and inv_tight["status"] == "pass"
+    long_horizon_phase_warning = bool(
+        t_span >= 100.0 and max_rel_ratio > 1.0 and (invariants_conserved or inv_loose["status"] == "skip")
+    )
+
+    return {
+        "schema": "hivemind-accuracy-cert/1",
+        "id": spec.get("id"),
+        "tightening_factor": float(tightening_factor),
+        "achieved_abs_accuracy": max_abs_diff,
+        "achieved_rel_ratio": max_rel_ratio,
+        "reference_max_abs_err_loose": ref_err_loose,
+        "reference_max_abs_err_tight": ref_err_tight,
+        "empirical_order_p": empirical_order_p,
+        "invariant_drift_ratio_loose": inv_loose.get("value"),
+        "invariant_drift_ratio_tight": inv_tight.get("value"),
+        "invariants_conserved": invariants_conserved,
+        "t_span": t_span,
+        "long_horizon_phase_warning": long_horizon_phase_warning,
         "caveat": CAVEAT,
     }

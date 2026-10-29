@@ -2301,4 +2301,67 @@ def create_router_app(
             **sweep_bundle,
         }
 
+    @app.post("/v1/hivemind/bees/science-bee/slot-compile")
+    async def science_bee_slot_compile_endpoint(request: Request) -> dict[str, Any]:
+        """Compile a `hivemind-solver-slots/1` named-slot dictionary into a validated `hivemind-solver-spec/1` with echo confirmation."""
+        from hivemind.solverbee import families as fam
+        from hivemind.solverbee import science_bee as sb
+
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+        except ValueError:
+            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+
+        try:
+            spec, trace = fam.compile_slot_spec(body, return_trace=True)
+            validated = sb.with_house_tolerances(sb.validate_spec(spec))
+            echo = sb.echo_interpreted_problem(validated, language=str(body.get("language", "en")), slot_trace=trace)
+        except (fam.FamilyError, sb.SpecInvalid) as exc:
+            raise RouterError(400, str(exc), "invalid_request_error", "invalid_slot_spec") from None
+
+        return {
+            "object": "hivemind.bee.science_bee.slot_compilation",
+            "spec": validated,
+            "slot_trace": trace,
+            "interpreted_problem_echo": echo,
+        }
+
+    @app.post("/v1/hivemind/bees/science-bee/ask")
+    async def science_bee_ask_endpoint(request: Request) -> dict[str, Any]:
+        """Ask the Next-Gen MoE Science Bee (`hivemind/moe-science-bee-v2`) a plain-language science question."""
+        from hivemind.swarm.rusty_sundials_scientific_bee import NextGenMoEScienceBee
+
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+        except ValueError:
+            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+
+        question = str(body.get("question") or body.get("prompt") or "").strip()
+        if not question:
+            raise RouterError(400, "question is required", "invalid_request_error", "missing_question")
+
+        bee = NextGenMoEScienceBee()
+        ans = bee.ask(question, language=body.get("language"))
+        return {
+            "object": "hivemind.bee.science_bee.answer",
+            **ans,
+        }
+
+    @app.get("/v1/hivemind/bees/owner-fleet-status")
+    async def owner_fleet_status_endpoint(foreground_gaming: bool = False) -> dict[str, Any]:
+        """Return Owner Lead-by-Example RTX 2070 + GCP Tesla T4 co-serving & nocturnal SVD distillation status (#272)."""
+        from hivemind.swarm.rusty_sundials_scientific_bee import OwnerFleetCoServingOrchestrator
+
+        orch = OwnerFleetCoServingOrchestrator()
+        status = orch.fleet_status(foreground_gaming=foreground_gaming)
+        distill = orch.distill_teacher_to_rtx2070_student()
+        s1b = orch.verify_s1b_cross_cpu_reproducibility()
+        return {
+            **status,
+            "latest_nocturnal_distillation": distill,
+            "s1b_cross_cpu_reproducibility": s1b,
+        }
+
     return app

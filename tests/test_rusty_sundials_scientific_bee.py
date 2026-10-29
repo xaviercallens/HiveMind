@@ -14,7 +14,10 @@ from hivemind.router.gateway import create_router_app
 from hivemind.swarm.rusty_sundials_scientific_bee import (
     BEE_RUSTY_SUNDIALS_ID,
     BEE_RUSTY_SUNDIALS_PUBLIC_ID,
+    NEXTGEN_SCIENCE_BEE_PUBLIC_ID,
     BeeRetentionStore,
+    NextGenMoEScienceBee,
+    OwnerFleetCoServingOrchestrator,
     SolverTaughtSurrogateExpert,
     analyze_physical_mathematical_problem,
     build_rusty_sundials_rescue_dataset,
@@ -279,3 +282,221 @@ def test_wave2_gateway_surrogate_sweep_and_producer_quorum_scaling(tmp_path: Pat
     )
     assert pde_resp.status_code == 200
     assert pde_resp.json()["succeeded"] is True
+
+
+def test_nextgen_service_10_families_heldout_energy_and_accuracy_certificate() -> None:
+    import hashlib
+    import math
+    from hivemind.solverbee.families import (
+        kepler_spec,
+        logistic_spec,
+        pendulum_spec,
+        projectile_drag_spec,
+    )
+    from hivemind.solverbee.service import FAMILIES, validate_spec_bytes
+    from hivemind.solverbee.verifier import canonical_json as canonical_spec_bytes, certify_achieved_accuracy, verify
+
+    assert len(FAMILIES) == 10
+    for builder_spec in (
+        pendulum_spec(0.5, 0.0, [1.0, 2.0]),
+        projectile_drag_spec(0.0, 0.0, 10.0, 10.0, [0.5, 1.0]),
+        kepler_spec(1.0, 0.0, 0.0, 1.0, [1.0, 2.0]),
+        logistic_spec(10.0, [1.0, 2.0], r=0.5, K=100.0),
+    ):
+        validated = validate_spec_bytes(canonical_spec_bytes(builder_spec))
+        assert validated["problem"]["family"] in FAMILIES
+
+    # Held-out model="pendulum" energy invariant + auto value at y0
+    pend_spec = pendulum_spec(
+        0.4,
+        0.0,
+        [1.0],
+        g_over_l=9.81,
+        damping=0.0,
+    )
+    pend_bytes = canonical_spec_bytes(pend_spec)
+    # Exact energy conserving final state: theta=0.0, omega=sqrt(2*9.81*(1 - cos(0.4)))
+    omega_exact = math.sqrt(2.0 * 9.81 * (1.0 - math.cos(0.4)))
+    res_good = {
+        "schema": "hivemind-solver-result/1",
+        "id": pend_spec["id"],
+        "status": "ok",
+        "method": "bdf",
+        "t": [1.0],
+        "y": [[0.0, omega_exact]],
+        "stats": {"n_steps": 50, "n_rhs_evals": 200},
+        "input_sha256": hashlib.sha256(pend_bytes).hexdigest(),
+    }
+    pend_problem = {
+        "schema": "hivemind-solver-problem/1",
+        "spec": pend_spec,
+        "reference": {"t": [1.0], "y": [[0.0, omega_exact]]},
+        "invariants": [{"name": "energy", "kind": "energy", "model": "pendulum", "tol": 1e-4}],
+    }
+    cert_pend = verify(pend_bytes, res_good, problem=pend_problem, rerun=lambda _b: res_good)
+    assert cert_pend["verdict"] == "VERIFIED", cert_pend
+    inv_chk = next(c for c in cert_pend["checks"] if c["name"] == "invariants")
+    assert inv_chk["status"] == "pass"
+
+    # Richardson empirical accuracy certificate + long-horizon phase warning
+    long_spec = kepler_spec(
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        [200.0],
+        mu=1.0,
+        rtol=1e-6,
+        atol=1e-9,
+    )
+    long_bytes = canonical_spec_bytes(long_spec)
+    sha = hashlib.sha256(long_bytes).hexdigest()
+    # Loose trajectory has O(1) phase shift vs tight trajectory while conserving energy
+    loose_res = {
+        "schema": "hivemind-solver-result/1",
+        "id": long_spec["id"],
+        "status": "ok",
+        "method": "bdf",
+        "t": [200.0],
+        "y": [[0.6, 0.8, -0.8, 0.6]],
+        "stats": {"n_steps": 1000, "n_rhs_evals": 4000},
+        "input_sha256": sha,
+    }
+    tight_res = {
+        "schema": "hivemind-solver-result/1",
+        "id": long_spec["id"],
+        "status": "ok",
+        "method": "bdf",
+        "t": [200.0],
+        "y": [[0.8, 0.6, -0.6, 0.8]],
+        "stats": {"n_steps": 5000, "n_rhs_evals": 20000},
+        "input_sha256": sha,
+    }
+    long_problem = {
+        "schema": "hivemind-solver-problem/1",
+        "spec": long_spec,
+        "reference": {"t": [200.0], "y": [[0.8005, 0.5993, -0.5993, 0.8005]]},
+        "invariants": [{"name": "energy", "kind": "energy", "model": "kepler", "tol": 1e-3}],
+    }
+    cert = certify_achieved_accuracy(long_bytes, loose_res, tight_res, problem=long_problem)
+    assert cert["schema"] == "hivemind-accuracy-cert/1"
+    assert cert["invariants_conserved"] is True
+    assert cert["long_horizon_phase_warning"] is True
+    assert cert["achieved_rel_ratio"] > 1.0
+    assert cert["empirical_order_p"] is not None and cert["empirical_order_p"] > 0.5
+
+
+def test_nextgen_slot_compiler_and_tier_c_questions_match_ground_truth() -> None:
+    import json
+    from hivemind.solverbee.science_bee import (
+        SlotBackend,
+        compile_or_validate_proposal,
+        echo_interpreted_problem,
+        slot_formulate,
+        specs_match,
+    )
+
+    s3_path = Path(__file__).resolve().parent.parent / "artifacts" / "experiments" / "S3_questions.json"
+    s3_data = json.loads(s3_path.read_text(encoding="utf-8"))
+    tier_c = [q for q in s3_data["questions"] if q["tier"] == "C"]
+    assert len(tier_c) == 12
+
+    backend = SlotBackend()
+    for q in tier_c:
+        raw_reply = backend.complete([{"role": "user", "content": q["text"]}])
+        proposal = json.loads(raw_reply)
+        assert proposal.get("abstain") is not True, f"SlotBackend unexpectedly abstained on {q['id']}"
+        slot_obj = slot_formulate(q["text"])
+        assert slot_obj is not None, f"slot_formulate returned None on {q['id']}"
+        spec, slot_trace = compile_or_validate_proposal(slot_obj)
+        assert slot_trace is not None
+        echo = echo_interpreted_problem(spec, language=q.get("lang", "en"), slot_trace=slot_trace)
+        assert echo["schema"] == "hivemind-problem-echo/1"
+        assert specs_match(spec, q["expected_spec"]), (
+            f"Tier C question {q['id']} spec mismatch:\ngot={spec}\nwant={q['expected_spec']}"
+        )
+
+    # Under-specified questions must still be cleanly declined by slot_formulate
+    assert slot_formulate("Simulate a pendulum.") is None
+    assert slot_formulate("Modélisez une épidémie SIR.") is None
+
+
+def test_nextgen_moe_science_bee_and_owner_fleet_gateway(tmp_path: Path) -> None:
+    assert normalize_model_alias(NEXTGEN_SCIENCE_BEE_PUBLIC_ID) == "bee-rusty-sundials"
+
+    bee = NextGenMoEScienceBee()
+    ans = bee.ask(
+        "A simple pendulum of length 2.5 m is released from rest at 30 degrees (g = 9.81 m/s^2, no damping). "
+        "Track theta and omega over 5 seconds (6 points)."
+    )
+    assert ans["formulated"] is True
+    assert ans["verdict"] in ("AUDITED", "VERIFIED")
+    assert ans["spec"]["problem"]["family"] == "pendulum"
+    assert ans["slot_trace"] is not None
+    assert ans["interpreted_problem_echo"]["schema"] == "hivemind-problem-echo/1"
+    assert ans["accuracy_certificate"]["schema"] == "hivemind-accuracy-cert/1"
+    assert ans["track_record"]["n"] >= 1
+
+    # Owner RTX 2070 + T4 fleet status & S-1b cross-CPU reproducibility
+    fleet = bee.fleet_orchestrator.fleet_status()
+    assert fleet["gcp_tesla_t4_16gb"]["free_vram_guard_compliant"] is True
+    assert fleet["gcp_tesla_t4_16gb"]["opt_hivemind_t4_untouched"] is True
+    assert fleet["rtx_2070_local_8gb"]["wddm_headroom_compliant"] is True
+    distill = bee.fleet_orchestrator.distill_teacher_to_rtx2070_student(
+        teacher_rank=32,
+        student_rank=16,
+    )
+    assert distill["wddm_compliant"] is True
+    assert distill["t4_free_vram_compliant"] is True
+    assert distill["spectral_energy_retention"] > 0.90
+    s1b = bee.fleet_orchestrator.verify_s1b_cross_cpu_reproducibility(family="van_der_pol")
+    assert s1b["passed"] is True
+
+    # Test FastAPI gateway endpoints
+    store = RouterStore(tmp_path / "router_nextgen.db", b"n" * 32)
+    app = create_router_app(store, allow_private_producers=True)
+    client = TestClient(app)
+
+    compile_resp = client.post(
+        "/v1/hivemind/bees/science-bee/slot-compile",
+        json={
+            "schema": "hivemind-solver-slots/1",
+            "slot_family": "pendulum",
+            "slots": {
+                "length_m": 2.5,
+                "theta0_deg": 30.0,
+                "omega0": 0.0,
+                "t_out": [1.0, 2.0, 3.0, 4.0, 5.0],
+            },
+        },
+    )
+    assert compile_resp.status_code == 200
+    compile_json = compile_resp.json()
+    assert compile_json["spec"]["problem"]["family"] == "pendulum"
+    assert len(compile_json["slot_trace"]["conversions"]) >= 1
+    assert len(compile_json["slot_trace"]["derived_parameters"]) >= 1
+    assert compile_json["interpreted_problem_echo"]["schema"] == "hivemind-problem-echo/1"
+
+    ask_resp = client.post(
+        "/v1/hivemind/bees/science-bee/ask",
+        json={
+            "question": (
+                "An SEIR epidemic has R0 = 3.0, incubation period 5 days, and average infectious period 10 days. "
+                "Start with 0.1% exposed, 0.1% infectious, 99.8% susceptible, 0% recovered. "
+                "Report at t = [30, 60, 90, 120] days."
+            )
+        },
+    )
+    assert ask_resp.status_code == 200
+    ask_json = ask_resp.json()
+    assert ask_json["formulated"] is True
+    assert ask_json["spec"]["problem"]["kind"] == "mass_action"
+    assert ask_json["accuracy_certificate"]["schema"] == "hivemind-accuracy-cert/1"
+
+    fleet_resp = client.get("/v1/hivemind/bees/owner-fleet-status")
+    assert fleet_resp.status_code == 200
+    fleet_json = fleet_resp.json()
+    assert fleet_json["gcp_tesla_t4_16gb"]["free_vram_guard_compliant"] is True
+    assert fleet_json["latest_nocturnal_distillation"]["wddm_compliant"] is True
+    assert fleet_json["s1b_cross_cpu_reproducibility"]["passed"] is True
+

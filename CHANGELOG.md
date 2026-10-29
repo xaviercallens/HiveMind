@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.14.0 — 2026-10-29 — Season 28 CrowdSwarm v2 Resilience (`HM-S17-CW-02/03`), Scout Scientific Parsers (`#319`), Multi-Node Nectar Sync & 158 Lean 4 Theorems
+
+- **CrowdSwarm v2 Resilience (`src/hivemind/swarm/crowdgpt_bridge.py`, `#204`):**
+  - Added `check_weight_rms_collapse_guard` to prevent the Step-282 zero-participant weight-halving failure (`0.5 * old_weights`, `rms 0.0387 -> 0.0195`) diagnosed by `@jpmlima` in `Vxtzq/CrowdGPT#48`.
+  - Added `classify_gpu_precision_cohort` enforcing `fp32` on pre-Ampere NVIDIA GPUs (`compute_capability < (8, 0)`, e.g. Pascal `sm_61`, Turing RTX 2070 / Tesla T4 `sm_75`) and isolating `bf16` vs `fp32` cohorts (`Vxtzq/CrowdGPT#44`, `#51`).
+  - Added `resolve_forming_pool_starvation` (falling back from stalled `1/3` or `2/3` pools to solo Multi-Krum + Held-Out Loss-Ratchet verification after timeout) and `evaluate_client_resilience_policy` (OOM-at-`batch_size=1` abort circuit breaker `#52` and HTTP `502/503` backoff `#50`).
+- **Scout Bee Scientific Domain Parsers & Multi-Node Nectar Sync (`#319` Tasks 1 & 2):**
+  - Added `parse_scientific_scout_record` in `src/hivemind/swarm/abc_moe_agent_mesh.py` for structured `arXiv`, `PubMed`, `ChEMBL`, and `materials_science` extraction (`arxiv_id`, `pmid`, `ic50_nm`, `chembl_id`, `pchembl_value`, `canonical_smiles`, `doi`).
+  - Added `MultiNodeNectarSyncBackend` and `InMemoryClusterNectarHub` in `src/hivemind/swarm/swarm_nectar_cache.py` for `< 50 ms` cross-node SHA-256 deduplication and HMT discovery royalty propagation.
+- **Formal Verification & Roadmap Sync (`lean4/HiveMindSpec.lean`, `ROADMAP.md`, `#292`):**
+  - Proved Theorems 156–158 (`crowdgpt_rms_halving_rejected`, `pre_ampere_fp32_cohort_isolation`, `forming_pool_timeout_liveness` — **158 machine-checked Lean 4 theorems, 0 sorry**) and integrated the Bee-Mesh Season 1 (`HM-S1-01..09`) and Seasons 26–28 tables into `ROADMAP.md`.
+
 ## v2.11.0 — 2026-10-29 — Bi-Layer Honeybee Mesh, 24 MoE Bees, Low-Bit (1.58/2/3-Bit) Dream Teachers, RTX 2070 BOINC + Steam v5.1 Fat Client & 5-Language `/rejoindre` Onboarding
 
 - **Low-Bit (1.58-Bit / 2-Bit / 3-Bit) Nocturnal Dream Phase Teachers (`#323`):**

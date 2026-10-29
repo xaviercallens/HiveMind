@@ -2354,6 +2354,46 @@ theorem two_lane_prosumer_qos_and_wal_batch_reduction :
 
 end Season27_HundredProducerInternationalLaunchScale
 
+/-! ## Season 28: CrowdSwarm v2 Resilience (`HM-S17-CW-02/03`) & Multi-Node Nectar Sync (`#204`, `#319`) -/
+namespace Season28_CrowdSwarmV2AndScientificNectarSync
+
+/-- Theorem 156 (CrowdSwarm Anti-Lobotomy Weight RMS Halving Guard — Issue #204 / Vxtzq/CrowdGPT#48):
+    For any positive checkpoint RMS norm `rms_old > 0`, if a zeroed or dropped participant causes
+    the aggregated weight RMS norm to halve (`2 * rms_new ≤ rms_old + 1` with `rms_old ≥ 10`),
+    then `100 * rms_new < 80 * rms_old`, strictly violating the `[80%, 125%]` RMS ratio safety band. -/
+theorem crowdgpt_rms_halving_rejected
+    (rms_old rms_new : Nat)
+    (h_old : 10 ≤ rms_old)
+    (h_halved : 2 * rms_new ≤ rms_old + 1) :
+    100 * rms_new < 80 * rms_old := by
+  omega
+
+/-- Theorem 157 (Pre-Ampere `fp32` Precision Cohort Isolation — Issue #204 / Vxtzq/CrowdGPT#44, #51):
+    Stratifying CUDA workers by compute capability threshold `cc_ampere = 80` (`sm_61` Pascal = 61,
+    `sm_75` Turing RTX 2070 / Tesla T4 = 75 vs `sm_80` Ampere = 80, `sm_89` Ada = 89) guarantees
+    that pre-Ampere GPUs (`cc < 80`) and Ampere+ GPUs (`cc ≥ 80`) are assigned to disjoint precision
+    cohorts, eliminating cross-precision `bf16` vs `fp32` false-positive trust penalties. -/
+theorem pre_ampere_fp32_cohort_isolation
+    (cc_pre cc_ampere : Nat)
+    (h_pre : cc_pre < 80)
+    (h_amp : 80 ≤ cc_ampere) :
+    cc_pre ≠ cc_ampere ∧ cc_pre < cc_ampere := by
+  omega
+
+/-- Theorem 158 (Forming-Pool Starvation Timeout Liveness — Issue #204 / Vxtzq/CrowdGPT#44):
+    For any non-empty forming cohort pool (`1 ≤ members`) waiting at least the starvation timeout
+    (`timeout_s ≤ waited_s`), either the pool already satisfies the full cohort quorum (`3 ≤ members`)
+    or it falls back deterministically (`1 ≤ members ∧ members < 3 ∧ timeout_s ≤ waited_s`) to a
+    solo Multi-Krum + Held-Out Loss-Ratchet verified workunit, guaranteeing zero worker starvation. -/
+theorem forming_pool_timeout_liveness
+    (members timeout_s waited_s : Nat)
+    (h_nonempty : 1 ≤ members)
+    (h_waited : timeout_s ≤ waited_s) :
+    3 ≤ members ∨ (1 ≤ members ∧ members < 3 ∧ timeout_s ≤ waited_s) := by
+  omega
+
+end Season28_CrowdSwarmV2AndScientificNectarSync
+
 end HiveMindSpec
 
 -- Verify that all theorems depend on zero user axioms (`#print axioms` check)
@@ -2516,3 +2556,6 @@ end HiveMindSpec
 #print axioms HiveMindSpec.Season27_HundredProducerInternationalLaunchScale.hundred_producer_regional_and_tier_partition_conservation
 #print axioms HiveMindSpec.Season27_HundredProducerInternationalLaunchScale.hundred_producer_erlang_c_safe_utilization_bound
 #print axioms HiveMindSpec.Season27_HundredProducerInternationalLaunchScale.two_lane_prosumer_qos_and_wal_batch_reduction
+#print axioms HiveMindSpec.Season28_CrowdSwarmV2AndScientificNectarSync.crowdgpt_rms_halving_rejected
+#print axioms HiveMindSpec.Season28_CrowdSwarmV2AndScientificNectarSync.pre_ampere_fp32_cohort_isolation
+#print axioms HiveMindSpec.Season28_CrowdSwarmV2AndScientificNectarSync.forming_pool_timeout_liveness

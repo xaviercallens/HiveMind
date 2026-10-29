@@ -320,3 +320,256 @@ class LossRatchetGate:
             checkpoint_sha256=digest,
             reason=reason,
         )
+
+
+@dataclass(frozen=True)
+class WeightRmsGuardDecision:
+    """Audit decision for the CrowdSwarm v2 Anti-Lobotomy Weight RMS Collapse Guard (`HM-S17-CW-02`).
+
+    Prevents the Step-282 weight-halving failure mode diagnosed by `@jpmlima` in `Vxtzq/CrowdGPT#48`,
+    where averaging a zeroed participant tensor scaled trunk weights by 0.5x (`rms 0.0387 -> 0.0195`)
+    and reset held-out loss to ~12.6.
+    """
+
+    accepted: bool
+    rms_old: float
+    rms_new: float
+    rms_ratio: float
+    halving_residual_rms: float
+    reason: str
+
+
+def check_weight_rms_collapse_guard(
+    old_weights: torch.Tensor | Mapping[str, torch.Tensor],
+    new_weights: torch.Tensor | Mapping[str, torch.Tensor],
+    *,
+    min_rms_ratio: float = 0.80,
+    max_rms_ratio: float = 1.25,
+    halving_residual_tol: float = 1e-3,
+) -> WeightRmsGuardDecision:
+    """Reject aggregated checkpoints whose global RMS norm collapses, explodes, or halves (`0.5 * old`)."""
+    flat_old = _flatten_delta(old_weights)
+    flat_new = _flatten_delta(new_weights)
+    if flat_old.numel() == 0 or flat_old.numel() != flat_new.numel():
+        raise ValueError("old_weights and new_weights must be non-empty and have identical element counts.")
+
+    if not (bool(torch.isfinite(flat_old).all()) and bool(torch.isfinite(flat_new).all())):
+        return WeightRmsGuardDecision(
+            accepted=False,
+            rms_old=float("nan"),
+            rms_new=float("nan"),
+            rms_ratio=float("nan"),
+            halving_residual_rms=float("nan"),
+            reason="REJECTED_NON_FINITE_WEIGHTS",
+        )
+
+    old_f64 = flat_old.to(torch.float64)
+    new_f64 = flat_new.to(torch.float64)
+    rms_old = float(torch.sqrt(torch.mean(old_f64 * old_f64)).item())
+    rms_new = float(torch.sqrt(torch.mean(new_f64 * new_f64)).item())
+    if rms_old <= 1e-12:
+        raise ValueError("old_weights RMS norm must be strictly positive.")
+
+    rms_ratio = rms_new / rms_old
+    diff_half = new_f64 - 0.5 * old_f64
+    halving_residual_rms = float(torch.sqrt(torch.mean(diff_half * diff_half)).item())
+
+    if halving_residual_rms <= halving_residual_tol and rms_ratio < min_rms_ratio:
+        return WeightRmsGuardDecision(
+            accepted=False,
+            rms_old=rms_old,
+            rms_new=rms_new,
+            rms_ratio=rms_ratio,
+            halving_residual_rms=halving_residual_rms,
+            reason=(
+                f"REJECTED_ZERO_PARTICIPANT_WEIGHT_HALVING "
+                f"(rms_ratio={rms_ratio:.4f}, halving_residual_rms={halving_residual_rms:.6f})"
+            ),
+        )
+    if rms_ratio < min_rms_ratio:
+        return WeightRmsGuardDecision(
+            accepted=False,
+            rms_old=rms_old,
+            rms_new=rms_new,
+            rms_ratio=rms_ratio,
+            halving_residual_rms=halving_residual_rms,
+            reason=f"REJECTED_RMS_COLLAPSE (rms_ratio={rms_ratio:.4f} < min={min_rms_ratio:.4f})",
+        )
+    if rms_ratio > max_rms_ratio:
+        return WeightRmsGuardDecision(
+            accepted=False,
+            rms_old=rms_old,
+            rms_new=rms_new,
+            rms_ratio=rms_ratio,
+            halving_residual_rms=halving_residual_rms,
+            reason=f"REJECTED_RMS_EXPLOSION (rms_ratio={rms_ratio:.4f} > max={max_rms_ratio:.4f})",
+        )
+
+    return WeightRmsGuardDecision(
+        accepted=True,
+        rms_old=rms_old,
+        rms_new=rms_new,
+        rms_ratio=rms_ratio,
+        halving_residual_rms=halving_residual_rms,
+        reason=f"ACCEPTED_RMS_HEALTHY (rms_ratio={rms_ratio:.4f} in [{min_rms_ratio:.2f}, {max_rms_ratio:.2f}])",
+    )
+
+
+@dataclass(frozen=True)
+class GpuPrecisionCohort:
+    """Hardware-stratified precision & optimizer cohort assignment (`Vxtzq/CrowdGPT#44`, `#51`, HiveMind `E12`)."""
+
+    vendor: str
+    compute_capability: tuple[int, int]
+    effective_dtype: str
+    optimizer_family: str
+    pre_ampere_fp32_enforced: bool
+    cohort_key: str
+
+
+def classify_gpu_precision_cohort(
+    vendor: str,
+    compute_capability: tuple[int, int] = (0, 0),
+    *,
+    requested_dtype: str = "auto",
+    optimizer_family: str = "adamw_8bit",
+) -> GpuPrecisionCohort:
+    """Assign a volunteer GPU to a homogeneous numerical cohort and enforce `fp32` on pre-Ampere CUDA (`sm < 80`)."""
+    norm_vendor = vendor.strip().lower()
+    major, minor = int(compute_capability[0]), int(compute_capability[1])
+    req = requested_dtype.strip().lower()
+    opt = optimizer_family.strip().lower() or "adamw"
+
+    pre_ampere_enforced = False
+    if norm_vendor in ("nvidia", "cuda"):
+        norm_vendor = "nvidia"
+        if major < 8:
+            effective_dtype = "fp32"
+            pre_ampere_enforced = req in ("auto", "bf16", "bfloat16")
+            arch_tier = f"sm{major}{minor}_pre_ampere"
+        else:
+            effective_dtype = "fp32" if req in ("fp32", "float32") else "bf16"
+            arch_tier = "sm80_plus_ampere"
+    elif norm_vendor in ("amd", "rocm", "hip"):
+        norm_vendor = "amd_rocm"
+        effective_dtype = "bf16" if req in ("bf16", "bfloat16") else "fp32"
+        arch_tier = "rocm"
+    elif norm_vendor in ("apple", "mps", "metal"):
+        norm_vendor = "apple_mps"
+        effective_dtype = "fp32"
+        arch_tier = "mps"
+    else:
+        norm_vendor = norm_vendor or "directml"
+        effective_dtype = "fp32"
+        arch_tier = "generic"
+
+    cohort_key = f"{norm_vendor}:{arch_tier}:{effective_dtype}:{opt}"
+    return GpuPrecisionCohort(
+        vendor=norm_vendor,
+        compute_capability=(major, minor),
+        effective_dtype=effective_dtype,
+        optimizer_family=opt,
+        pre_ampere_fp32_enforced=pre_ampere_enforced,
+        cohort_key=cohort_key,
+    )
+
+
+@dataclass(frozen=True)
+class PoolDispatchDecision:
+    """Routing decision for a CrowdSwarm cohort pool (`Vxtzq/CrowdGPT#44` forming-pool starvation fix)."""
+
+    mode: str
+    cohort_key: str
+    active_members: int
+    target_pool_size: int
+    requires_multi_krum: bool
+    requires_loss_ratchet: bool
+
+
+def resolve_forming_pool_starvation(
+    *,
+    current_members: int,
+    target_pool_size: int = 3,
+    waited_seconds: float,
+    forming_timeout_s: float = 180.0,
+    cohort_key: str = "nvidia:sm75_pre_ampere:fp32:adamw",
+) -> PoolDispatchDecision:
+    """Prevent `1/3` or `2/3` forming pools from starving minority `fp32` / ROCm cohorts after timeout."""
+    if current_members <= 0:
+        return PoolDispatchDecision(
+            mode="IDLE_EMPTY_POOL",
+            cohort_key=cohort_key,
+            active_members=0,
+            target_pool_size=target_pool_size,
+            requires_multi_krum=False,
+            requires_loss_ratchet=False,
+        )
+    if current_members >= target_pool_size:
+        return PoolDispatchDecision(
+            mode="COHORT_QUORUM_READY",
+            cohort_key=cohort_key,
+            active_members=current_members,
+            target_pool_size=target_pool_size,
+            requires_multi_krum=True,
+            requires_loss_ratchet=True,
+        )
+    if waited_seconds >= forming_timeout_s:
+        return PoolDispatchDecision(
+            mode="SOLO_LOSS_RATCHET_FALLBACK",
+            cohort_key=cohort_key,
+            active_members=current_members,
+            target_pool_size=target_pool_size,
+            requires_multi_krum=True,
+            requires_loss_ratchet=True,
+        )
+    return PoolDispatchDecision(
+        mode="FORMING_WAIT",
+        cohort_key=cohort_key,
+        active_members=current_members,
+        target_pool_size=target_pool_size,
+        requires_multi_krum=True,
+        requires_loss_ratchet=True,
+    )
+
+
+def evaluate_client_resilience_policy(
+    *,
+    batch_size: int,
+     encountered_oom: bool = False,
+    http_status: int | None = None,
+    retry_attempt: int = 0,
+    base_backoff_s: float = 2.0,
+    max_backoff_s: float = 60.0,
+) -> dict[str, Any]:
+    """Client circuit-breaker for OOM at `batch_size=1` (`#52`) and HTTP 502/503 retry backoff (`#50`)."""
+    if encountered_oom:
+        if batch_size <= 1:
+            return {
+                "action": "ABORT_INSUFFICIENT_VRAM",
+                "next_batch_size": 1,
+                "redownload_checkpoint": False,
+                "backoff_s": 0.0,
+            }
+        return {
+            "action": "HALVE_BATCH_SIZE_AND_RETRY_LOCAL",
+            "next_batch_size": max(1, batch_size // 2),
+            "redownload_checkpoint": False,
+            "backoff_s": 0.0,
+        }
+
+    if http_status in (502, 503, 504, 429):
+        exp_delay = min(max_backoff_s, base_backoff_s * (2 ** max(0, retry_attempt)))
+        jitter = 0.125 * exp_delay
+        return {
+            "action": "RETRY_FETCH_TASK_WITH_BACKOFF",
+            "next_batch_size": batch_size,
+            "redownload_checkpoint": False,
+            "backoff_s": round(exp_delay + jitter, 3),
+        }
+
+    return {
+        "action": "CONTINUE_NORMAL",
+        "next_batch_size": batch_size,
+        "redownload_checkpoint": False,
+        "backoff_s": 0.0,
+    }

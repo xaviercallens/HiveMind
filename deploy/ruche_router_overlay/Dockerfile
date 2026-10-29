@@ -3,4 +3,5 @@ COPY night_moe_page.py /app/src/hivemind/boinc/night_moe_page.py
 COPY artifacts/experiments/ /app/artifacts/experiments/
 # join_page.py: copy src/hivemind/router/join_page.py into this directory before building (same convention as night_moe_page.py)
 COPY join_page.py /app/join_page.py
+COPY scripts/ /app/scripts/
 COPY server.py /app/server.py

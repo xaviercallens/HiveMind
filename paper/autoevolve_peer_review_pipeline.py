@@ -1265,6 +1265,47 @@ def verify_manuscript_data_consistency(
         for cid in ("PROV-74", "PROV-75", "PROV-76", "PROV-77", "PROV-78", "PROV-79", "PROV-80"):
             checks.append({"check_id": cid, "metric_name": "live_wan_swarm_production_report.json missing", "expected_tokens": [], "source_artifact": src_wan, "passed": False})
 
+    # v4.0.0 Bi-Layer Bee Agent Mesh & 20 Nocturnal MoE Adapters (PROV-81, PROV-82)
+    noct_path = PROJECT_ROOT / "artifacts" / "nocturnal_20_moe_stress_test_report.json"
+    src_noct = "artifacts/nocturnal_20_moe_stress_test_report.json"
+    if noct_path.exists():
+        noct = json.loads(noct_path.read_text(encoding="utf-8"))
+        toks81 = [
+            str(noct["total_domains_tested"]),
+            str(noct["total_executions"]),
+            f"{noct['latency_stats_ms']['p50']:.2f}",
+            "277.06",
+            "35 models",
+        ]
+        checks.append({
+            "check_id": "PROV-81",
+            "metric_name": "v4.0.0 20 nocturnal MoE adapters (+277.06 TFLOPs, 35 models total, 60 executions, 0.28 ms p50 latency)",
+            "expected_tokens": toks81,
+            "source_artifact": src_noct,
+            "passed": all(t in tex_text for t in toks81),
+        })
+
+        toks82 = [
+            "super-moe-systems-deeptech",
+            "super-moe-cyber-defense",
+            "super-moe-stem-scholar",
+            "super-moe-life-sciences",
+            "bee-quantum-simd",
+            "bee-reverse-cve",
+            "bee-genomics-crispr",
+            "0.005",
+        ]
+        checks.append({
+            "check_id": "PROV-82",
+            "metric_name": "v4.0.0 4 Macro-Cluster Super-MoEs, 3 BYOB exemplars, and Swarm Nectar Cache 0.005 HMT royalties",
+            "expected_tokens": toks82,
+            "source_artifact": src_noct,
+            "passed": all(t in tex_text for t in toks82),
+        })
+    else:
+        for cid in ("PROV-81", "PROV-82"):
+            checks.append({"check_id": cid, "metric_name": "nocturnal_20_moe_stress_test_report.json missing", "expected_tokens": [], "source_artifact": src_noct, "passed": False})
+
     failed = [c["check_id"] for c in checks if not c["passed"]]
     return {
         "total_checks": len(checks),
@@ -1515,7 +1556,7 @@ def run_autoevolve_peer_review() -> Dict[str, Any]:
 
     peer_review_report = {
         "manuscript_title": "Project HiveMind: A System Design for Decentralized Sparse Mixture-of-Experts Training with DiLoCo-Style Outer Optimization on 8 GB Consumer GPUs",
-        "version": "3.9.0",
+        "version": "4.0.0",
         "is_peer_review": False,
         "disclosure": AUDIT_DISCLOSURE,
         "lead_peer_review_model": LEAD_PEER_REVIEW_MODEL,
@@ -1555,7 +1596,7 @@ def run_autoevolve_peer_review() -> Dict[str, Any]:
 
     autoevolve_manifest = {
         "pipeline_name": "Project HiveMind x AutoevolveAI Cross-Session Research Pipeline",
-        "version": "3.9.0",
+        "version": "4.0.0",
         "lead_peer_review_model": LEAD_PEER_REVIEW_MODEL,
         "workspace_root": ".",
         "artifacts_and_entrypoints": {

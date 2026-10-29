@@ -1,29 +1,29 @@
 {
   "stage": "published",
-  "deposition_id": 23649757,
-  "prereserved_doi": "10.5281/zenodo.23649757",
+  "deposition_id": 23756909,
+  "prereserved_doi": "10.5281/zenodo.23756909",
   "state": "done",
-  "html": "https://zenodo.org/record/23649757",
+  "html": "https://zenodo.org/record/23756909",
   "files": [
     {
       "filename": "hivemind_foundation_article.pdf",
-      "md5": "3f3d24f13102d44b262fb25d77197769",
-      "status": "uploaded"
+      "md5": "cbfc305ed2b80d28cefd3bc2f460e60c",
+      "status": "already_present"
     },
     {
       "filename": "hivemind_foundation_article.tex",
-      "md5": "ca62b0202c6ca1f3bcb80d174f0a9cef",
-      "status": "uploaded"
+      "md5": "0316b466f045eb842bc39068e2f495e1",
+      "status": "already_present"
     },
     {
       "filename": "PEER_REVIEW_REPORT.json",
-      "md5": "07be1638f94d4b1c572ba82effff231c",
-      "status": "uploaded"
+      "md5": "7f79822f07e36a72f9db68370fa85d07",
+      "status": "already_present"
     },
     {
       "filename": "RESEARCH_PROGRAM.md",
       "md5": "4eb8837e597ccfe337e51cc50cbd9650",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "MOE_DILOCO_REVIEW_2026-10-23.md",
@@ -32,7 +32,7 @@
     },
     {
       "filename": "HiveMindSpec.lean",
-      "md5": "59e17dfc55d0101ed88dbf5c0c801db3",
+      "md5": "751908ee484a937e11e496166a7018a3",
       "status": "already_present"
     },
     {
@@ -88,7 +88,7 @@
     {
       "filename": "lean_independent_runner_check.json",
       "md5": "8c95a61bb071efaf72f082defd93e692",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "lean_rda_multiplier_check.json",
@@ -112,8 +112,8 @@
     },
     {
       "filename": "ROADMAP.md",
-      "md5": "8e9c687af66c355f84614c6f95b1b379",
-      "status": "uploaded"
+      "md5": "5de50cedcda20d9f95a9f8ebcf67d6b3",
+      "status": "already_present"
     },
     {
       "filename": "external_review_v3.5.0_2026-10-23.md",
@@ -133,342 +133,347 @@
     {
       "filename": "predictions_ledger.json",
       "md5": "6cd791a69e2f7c9ca88a873823401621",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "gwaya_stub_audit.json",
-      "md5": "7d7bf5cbc259c1cb6386b8b98e9f9048",
-      "status": "uploaded"
+      "md5": "a0b886d357633cba2103b9c005a8df1f",
+      "status": "already_present"
     },
     {
       "filename": "CITATION.cff",
-      "md5": "493377b142a9694586b46742d8aa581e",
-      "status": "uploaded"
+      "md5": "10ace2f18ec9a5c3e83583687ef64e70",
+      "status": "already_present"
     },
     {
       "filename": "gwaya_lite_live_check.json",
       "md5": "80985f1a46528cecf6f935e0f7f83e20",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "T4_10h_campaign_report.md",
       "md5": "ea139593e0cd6d5a40bae84ea93e3e23",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "t4_branch_review_2026-10-24.md",
       "md5": "5c7fdc13fe41bc6b11135c91a214cc4e",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "GWAYA_T4_DEPLOYMENT.md",
       "md5": "3fddac9b3064543738a24565ca1b88b3",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "GWAYA_LITE_ASSISTANT.md",
       "md5": "9691ddfbbb2afc71780719bb90a1ab09",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "T4_REPLICATION_KIT.md",
       "md5": "d3f8e00272b090ed19e8703bb5f31769",
+      "status": "already_present"
+    },
+    {
+      "filename": "live_wan_swarm_production_report.json",
+      "md5": "bf337b516c634f5f8562b8251588ea1c",
+      "status": "already_present"
+    },
+    {
+      "filename": "nocturnal_20_moe_stress_test_report.json",
+      "md5": "6bc15d8ba8753c4af3510c9626f1449f",
+      "status": "uploaded"
+    },
+    {
+      "filename": "nocturnal_large_moe_20_campaign_report.json",
+      "md5": "96497fb61443f62dae2667a2e6d06ac9",
+      "status": "uploaded"
+    },
+    {
+      "filename": "ROADMAP_AMCP_AGENT_MESH_KAFKA_EVOLUTION.md",
+      "md5": "fc04ca05a380e34eac779a886cfa37d2",
       "status": "uploaded"
     },
     {
       "filename": "E10b_first_execution_partial.json",
       "md5": "494af75b2de9ec4f43493932381958db",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E10b_lattice_05b_prereg.json",
       "md5": "a32240b2ac9570582bebb10940335ec4",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E10b_lattice_05b_prereg_amendment_2.json",
       "md5": "861027eb265cd8bf923c27598561517c",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E10b_lattice_05b_report.json",
       "md5": "b925e61ec8444b8b1dde5e64671112be",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E11_first_execution_qwen0.5b.json",
       "md5": "de6d96cda05c08cfa194955c661811c7",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E11_kv_lattice_prereg.json",
       "md5": "4984877349b0234c3b4c0709b20351f4",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E11_kv_lattice_prereg_amendment_1.json",
       "md5": "e2af4fa7070fb5821a5ff84ab26d40b0",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E11_kv_lattice_prereg_erratum_1.json",
       "md5": "774c4e0332c3475bc410df44a1673fe8",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E11_kv_lattice_report.json",
       "md5": "f1594749ea23c42f515eedc189344704",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E11_raw_gemma4-e4b.json",
       "md5": "fc1a0be63cb32c289090bba4c982d6ef",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E11_raw_qwen0.5b.json",
       "md5": "71615d509b2588492682eea75dd01ea2",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E11_raw_qwen7b.json",
       "md5": "a08da8dbcd3ad0e854522f6bb887d821",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E11b_kv_lattice_sweep_prereg.json",
       "md5": "32950b86ad42e9c24a10ef01d5f7cf38",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E11b_kv_lattice_sweep_prereg_amendment_1.json",
       "md5": "7c1cbf410a33afa9e700a6a31a841990",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E11b_raw_gemma4-e4b_fineweb-edu_w1024.json",
       "md5": "f09708778d97b5625de427ed1d0381c9",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E11b_raw_qwen0.5b_fineweb-edu_w1024.json",
       "md5": "57b97e84f11c8595d5a5a84242a10bbf",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E11b_raw_qwen7b_fineweb-edu_w1024.json",
       "md5": "82bcb66f087a27a1d2b0d622ee12d61c",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E12_replay_divergence_prereg.json",
       "md5": "7843d434ce7776d20789f3270e1bcc6e",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E12_replay_divergence_report.json",
       "md5": "39d4a74c9aa168f939b177f15ade4fa6",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_granite_step_bench.json",
       "md5": "0e6a6ab7b165e52301fc5dbc5ea2765f",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_swarm_local_predictions.json",
       "md5": "b7f423824e374d8243220a0f6b3cc644",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_swarm_local_predictions_m6.json",
       "md5": "3239d8772310667269ac05ab632661f0",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_swarm_local_prereg.json",
       "md5": "d6e4baba9353fad9ee0ba345cfe8dd8c",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_swarm_local_prereg_amendment_1.json",
       "md5": "354e1d927f03788d72d36f45a2504832",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_swarm_local_prereg_amendment_2.json",
       "md5": "963a9a8e10f386e023bfb73095c277cb",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_swarm_local_prereg_amendment_3.json",
       "md5": "46956eeea9a43db154782e6c6e866202",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_swarm_local_prereg_amendment_4.json",
       "md5": "a23ce97a8957f662109538c1c0cff8bb",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_swarm_local_prereg_amendment_5.json",
       "md5": "e16007fb3901da91229815b2137e7b4f",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_swarm_local_prereg_amendment_6.json",
       "md5": "6d226749643caec19aabafef119a584c",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_swarm_local_raw_granite1b.json",
       "md5": "50e3b1277cfd03127aca6611d24cdbe2",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_swarm_local_raw_granite3b.json",
       "md5": "e0afd55642ae893a6313195530b8ee32",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_swarm_local_raw_qwen0.5b.json",
       "md5": "743883d7b0e37098cc9a22486f8642c5",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_swarm_local_raw_qwen0.5b_m2proc.json",
       "md5": "3ec50cb993cfa7dd5d7030fb2eb39660",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_swarm_local_raw_qwen0.5b_m6.json",
       "md5": "2e822a5e14e698a2a476815eb2fde84c",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_swarm_local_raw_qwen0.5b_rotstraggle.json",
       "md5": "66a1a273dd2951d24b63b6faadaac720",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_swarm_local_report.json",
       "md5": "f1822cc1fe7a93c8251f695015496408",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_swarm_local_report_granite1b.json",
       "md5": "d550e2c761602836280091bc44d275dc",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_swarm_local_report_granite3b.json",
       "md5": "ac4a0a8d99d488642469735d45160539",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_swarm_local_report_m2proc.json",
       "md5": "915e4d4e98770dc2c8cd4e44ce2239c7",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_swarm_local_report_m6.json",
       "md5": "b2ea6bcede4bf4435c061bb9ca327799",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_swarm_local_report_qwen0.5b.json",
       "md5": "a46b143fb88e89420073e17bb1183dca",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E13_swarm_local_report_rotstraggle.json",
       "md5": "15547e3c89580c9e75377eb51366336b",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E14_hypotheses.json",
       "md5": "b4020556b8d037790e23b4209506f51a",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E14_raw_granite1b.json",
       "md5": "1bc0c8b29f2843a81c3ea7f922225df6",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E14_raw_qwen0.5b.json",
       "md5": "0b1b41307880f507e87e509949936cad",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E14_report_granite1b.json",
       "md5": "9b88d4d5193761830a8faf452f9f223d",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E14_report_qwen0.5b.json",
       "md5": "3a1399970f487b9bb6f2f1dd64108d9e",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E14_swarm_fairness_prereg.json",
       "md5": "51c798f30cd6cea2d60eda256336f3c7",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E15_gwaya_rft_prereg.json",
       "md5": "e08b0ed2e833ded1d67557e83694dad6",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E15_gwaya_rft_prereg_amendment_1.json",
       "md5": "0f95e10a8426817374299216f2f8dfd8",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E15_gwaya_rft_report.json",
       "md5": "68823d09df364e2bae9103b4c8732c90",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E15_hypotheses.json",
       "md5": "a5968df0640c7270a11ebc22e6a85563",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E16_gwaya_lite_t4_prereg.json",
       "md5": "aaff03643dccbab39adda7b4f3dea6ed",
-      "status": "uploaded"
+      "status": "already_present"
     },
     {
       "filename": "E16_gwaya_lite_t4_report.json",
       "md5": "6d7704f37ccb4efcf345540bbe73c354",
-      "status": "uploaded"
-    },
-    {
-      "filename": "T4_benchmark_queue.json",
-      "md5": "b863f1cff74641d0f5cb586d0cce0dd7",
-      "status": "uploaded"
-    },
-    {
-      "filename": "T4_benchmark_queue_ext.json",
-      "md5": "c51b213e3bd128c9db595ca6af6637e4",
-      "status": "uploaded"
-    },
-    {
-      "filename": "T4_benchmark_queue_ext_log.json",
-      "md5": "97d4426c959e9dd59503fe2b85efecfb",
-      "status": "uploaded"
+      "status": "already_present"
     }
   ],
-  "written_utc": "2026-10-25T20:30:35Z",
+  "written_utc": "2026-10-29T07:00:57Z",
   "local_sha256": {
-    "hivemind_foundation_article.pdf": "efed74e6fc4d199dd5c41b0ad14013dded65fc22eea5a679fa30c6b35bd931d9",
-    "hivemind_foundation_article.tex": "2edb538a920172aa6b2ae3aad8be76e316d0a4b565183077cd64729ddb7cef5f",
-    "PEER_REVIEW_REPORT.json": "a0ce0fd9ce31559ff3ab812e0f1f21951b6a9bef32db7512c677c93fa7882290",
+    "hivemind_foundation_article.pdf": "ff312c8066d4b9735e04270ee5b6d06ed3d74443d73edadd783c49073eaa53bd",
+    "hivemind_foundation_article.tex": "d8f34529032a4ea7109adbabaabd93ef65ae66e4153867ae170033bc6298dcd9",
+    "PEER_REVIEW_REPORT.json": "2c4a6cf97b0f4b9c0ee82583a22c3246b0549c694dbc3b457b50b192cf839bcf",
     "RESEARCH_PROGRAM.md": "8f32c90c94dd53ee776c5c601506a04af35edbb024ed56382ec8057f02570f59",
     "MOE_DILOCO_REVIEW_2026-10-23.md": "71e29178c486fda014d3385dd5ca70019c153a84d4f03ad14f4dd77939bd77a5",
-    "HiveMindSpec.lean": "767775f0cea58adaa0dbc36d6222ac5c4e321817f298a3325636727ab1e652af",
+    "HiveMindSpec.lean": "185d91d804cbeb699a8e0688195defcac93268f12cf4334f1231c369c0b3d1d4",
     "architecture_hypothesis_verification_report.json": "d8e98442efd8c7892c014b67e240e6dd729af1499479243477da7b98e8b92379",
     "paper_v3_experiments_report.json": "580bf389f626cf8d4900170dc5dfe86c60d421a78ca80104e85dea13e969ab89",
     "decoupled_diloco_quorum_check.json": "1474ca96987cf6d13c135ebb8e634bc490e5f04744d8509d9e7ca4792c1447e7",
@@ -484,19 +489,23 @@
     "RDAMultiplier.lean": "e1d241cf884de0273e458f6fd8b0ab2043da0c534894c493eed328025dd9dffd",
     "E12_pilot_prereg.json": "1cc44c9ed62d4a8b242e8342ad7c6922bfe067041eac8399dbac86242e4c6bd4",
     "E12_pilot_report.json": "a582a6a2f434d255e4a1308afe5e9f3a0b4e57700129b63703534de227f7334a",
-    "ROADMAP.md": "d1c84e8befe64adb64e8e20bc2aea736538be4bf21a768df5e1547b84bbc8a47",
+    "ROADMAP.md": "ec7b8464fd4b15d8beb80570e506efa2d40404fababf641e8b6c5a6c227af079",
     "external_review_v3.5.0_2026-10-23.md": "73b14a8e320174d1e638eb95525b6b2ac49121b6033c0c3234bc84fe92b3cb8d",
     "response_to_external_review_v3.5.0.md": "a2ae2e1dc1dd7f7a67ae2b02da37579fefd5ba75784f6838e67574bf576715f8",
     "E8_pilot_report.json": "f31cb7bd0ebb4d1ca19f6df03f786791e09db7c78cc62e55fd3d4f700e472397",
     "predictions_ledger.json": "7a4514984806d6874fa775b4647312384a53442134c79e5f616896a1458e03cd",
-    "gwaya_stub_audit.json": "8755f5af1639f04a2f9e230548e13538c18cc7cd7a7d9e55d15dad2368c54958",
-    "CITATION.cff": "00854ed600760f2dccdf17b8784f60c9be2bdbf55dce17833622cd7de9b072db",
+    "gwaya_stub_audit.json": "b529fb22d9f8c59471fda1a30e9c1f420b2e18b9650f70fcc34ffbe74bd6e2b9",
+    "CITATION.cff": "347468993fbb8a16d94a013b8565010ea7b1796fd24796a8dad80ceacdb3423c",
     "gwaya_lite_live_check.json": "c6884e7686eea5990c011cbcbf552db79baf8961b4d81fce0f53d345fbb61390",
     "T4_10h_campaign_report.md": "b4f143aff63558019a309ee0a29810ec048e001f800c2328bb0c088343d1d5bc",
     "t4_branch_review_2026-10-24.md": "1262672ebe5c054ada5a38337f44fa255b9ddaf450aac57eb820a231cedf0c53",
     "GWAYA_T4_DEPLOYMENT.md": "85d8ad6c4a6c55ffa58d68279df5079827d286de67f73482c37d7321b5b06670",
     "GWAYA_LITE_ASSISTANT.md": "122a93ae32e6b80fe2a1fcfcdb08e80d8d506d64e27fa1e258a14762925b9fad",
     "T4_REPLICATION_KIT.md": "093ec5a0b301a4c804d7768c389401a6b363d054b73f0a679a4cabc7f6d8f4aa",
+    "live_wan_swarm_production_report.json": "459cc20cb53bfeede89bc8349ce93513c84c2287089024b52dd8a9245ab1e9d2",
+    "nocturnal_20_moe_stress_test_report.json": "9d4e58e12aa64a4712bd25c1aed6a876e02fa96043750e408e516c8e6f13ef2e",
+    "nocturnal_large_moe_20_campaign_report.json": "09dfe58ffb30aad320619c44295416253bafedd89a2dc5f2961f1c5ed57ce93f",
+    "ROADMAP_AMCP_AGENT_MESH_KAFKA_EVOLUTION.md": "cbea495b7b13e3adc1743372b38ae4e102352f85cd3d7a25097645d3060989a7",
     "E10b_first_execution_partial.json": "a4a0b5b83e0e36f39074389aa7624a14a4c98083aafa1c51d220ab6279b0ca93",
     "E10b_lattice_05b_prereg.json": "e5102af8457409f28fe6578c73fee3d8fb95e386418081fcbab20aa747869d67",
     "E10b_lattice_05b_prereg_amendment_2.json": "73fa0da0291a710a4d085c7adb7768627d562f0b367592fc6afbc2f2ecf61485",
@@ -550,17 +559,18 @@
     "E15_gwaya_rft_report.json": "b44ef54c9d36b28d477d332a9170395c4bbf711b6c10fe2ca9dc1e43dda745b6",
     "E15_hypotheses.json": "a46220fa3813dca6b69df95427d341aa0dff548a5e9721ae30fe06668240c848",
     "E16_gwaya_lite_t4_prereg.json": "2f032305ecb734d1659ea7bd872d3c4c403e6838bd2eebad79fdd76ed00cd5d5",
-    "E16_gwaya_lite_t4_report.json": "4cdce7c8877091050723b95d4a8ae22e563f428004e7141e6e1bfbc069504b57",
-    "T4_benchmark_queue.json": "5007d0562f82f98888cd435577596a4d7770a2aeb9d277bd300dde871c3c6410",
-    "T4_benchmark_queue_ext.json": "dbe97f6bb15e88923b833c356e250b470aa793e3cfc9874caad8ea2b34b10bb6",
-    "T4_benchmark_queue_ext_log.json": "677a4d0d4234c676629f296018fff6a3c3084eef98ceca448b8613f615997907"
+    "E16_gwaya_lite_t4_report.json": "4cdce7c8877091050723b95d4a8ae22e563f428004e7141e6e1bfbc069504b57"
   },
-  "record_id": 23649757,
-  "doi": "10.5281/zenodo.23649757",
-  "doi_url": "https://doi.org/10.5281/zenodo.23649757",
+  "record_id": 23756909,
+  "doi": "10.5281/zenodo.23756909",
+  "doi_url": "https://doi.org/10.5281/zenodo.23756909",
   "conceptdoi": "10.5281/zenodo.23597697",
   "submitted": true,
   "remote_md5": {
+    "CITATION.cff": "10ace2f18ec9a5c3e83583687ef64e70",
+    "PEER_REVIEW_REPORT.json": "7f79822f07e36a72f9db68370fa85d07",
+    "hivemind_foundation_article.tex": "0316b466f045eb842bc39068e2f495e1",
+    "hivemind_foundation_article.pdf": "cbfc305ed2b80d28cefd3bc2f460e60c",
     "E11b_raw_gemma4-e4b_fineweb-edu_w1024.json": "f09708778d97b5625de427ed1d0381c9",
     "E15_hypotheses.json": "a5968df0640c7270a11ebc22e6a85563",
     "E11b_kv_lattice_sweep_prereg_amendment_1.json": "7c1cbf410a33afa9e700a6a31a841990",
@@ -569,17 +579,20 @@
     "RESEARCH_PROGRAM.md": "4eb8837e597ccfe337e51cc50cbd9650",
     "predictions_ledger.json": "6cd791a69e2f7c9ca88a873823401621",
     "E15_gwaya_rft_prereg.json": "e08b0ed2e833ded1d67557e83694dad6",
+    "ROADMAP.md": "5de50cedcda20d9f95a9f8ebcf67d6b3",
+    "ROADMAP_AMCP_AGENT_MESH_KAFKA_EVOLUTION.md": "fc04ca05a380e34eac779a886cfa37d2",
+    "nocturnal_20_moe_stress_test_report.json": "6bc15d8ba8753c4af3510c9626f1449f",
+    "live_wan_swarm_production_report.json": "bf337b516c634f5f8562b8251588ea1c",
+    "HiveMindSpec.lean": "751908ee484a937e11e496166a7018a3",
     "E14_raw_qwen0.5b.json": "0b1b41307880f507e87e509949936cad",
     "E12_replay_divergence_prereg.json": "7843d434ce7776d20789f3270e1bcc6e",
     "E10b_lattice_05b_prereg_amendment_2.json": "861027eb265cd8bf923c27598561517c",
     "E13_swarm_local_raw_qwen0.5b.json": "743883d7b0e37098cc9a22486f8642c5",
-    "T4_benchmark_queue_ext.json": "c51b213e3bd128c9db595ca6af6637e4",
     "E13_swarm_local_raw_granite1b.json": "50e3b1277cfd03127aca6611d24cdbe2",
     "E11_raw_qwen0.5b.json": "71615d509b2588492682eea75dd01ea2",
     "E11_kv_lattice_prereg_erratum_1.json": "774c4e0332c3475bc410df44a1673fe8",
     "E13_swarm_local_prereg_amendment_6.json": "6d226749643caec19aabafef119a584c",
     "lean_independent_runner_check.json": "8c95a61bb071efaf72f082defd93e692",
-    "T4_benchmark_queue_ext_log.json": "97d4426c959e9dd59503fe2b85efecfb",
     "E13_swarm_local_raw_qwen0.5b_rotstraggle.json": "66a1a273dd2951d24b63b6faadaac720",
     "E13_swarm_local_report_granite1b.json": "d550e2c761602836280091bc44d275dc",
     "E13_swarm_local_prereg.json": "d6e4baba9353fad9ee0ba345cfe8dd8c",
@@ -592,7 +605,6 @@
     "E11_first_execution_qwen0.5b.json": "de6d96cda05c08cfa194955c661811c7",
     "E13_swarm_local_predictions.json": "b7f423824e374d8243220a0f6b3cc644",
     "E13_swarm_local_report_m6.json": "b2ea6bcede4bf4435c061bb9ca327799",
-    "gwaya_stub_audit.json": "7d7bf5cbc259c1cb6386b8b98e9f9048",
     "E13_swarm_local_report_rotstraggle.json": "15547e3c89580c9e75377eb51366336b",
     "E11b_raw_qwen7b_fineweb-edu_w1024.json": "82bcb66f087a27a1d2b0d622ee12d61c",
     "E13_swarm_local_prereg_amendment_3.json": "46956eeea9a43db154782e6c6e866202",
@@ -600,7 +612,6 @@
     "GWAYA_T4_DEPLOYMENT.md": "3fddac9b3064543738a24565ca1b88b3",
     "MOE_DILOCO_REVIEW_2026-10-23.md": "a75c5061339db9c853f1424a55abe608",
     "decoupled_diloco_quorum_check.json": "f8ccefeea9f63959fc89f8928fcde5b7",
-    "HiveMindSpec.lean": "59e17dfc55d0101ed88dbf5c0c801db3",
     "E5_toy_report.json": "ee8712ada2668f817cd08f14f29ad0ef",
     "E5_toy_prereg.json": "60aac0165ef684299971b9da89fdba98",
     "architecture_hypothesis_verification_report.json": "29b579242b6054aacd582e515ce69594",
@@ -608,17 +619,15 @@
     "E11_raw_qwen7b.json": "a08da8dbcd3ad0e854522f6bb887d821",
     "E14_swarm_fairness_prereg.json": "51c798f30cd6cea2d60eda256336f3c7",
     "E13_swarm_local_raw_granite3b.json": "e0afd55642ae893a6313195530b8ee32",
-    "hivemind_foundation_article.tex": "ca62b0202c6ca1f3bcb80d174f0a9cef",
-    "ROADMAP.md": "8e9c687af66c355f84614c6f95b1b379",
     "E14_raw_granite1b.json": "1bc0c8b29f2843a81c3ea7f922225df6",
     "E14_hypotheses.json": "b4020556b8d037790e23b4209506f51a",
+    "E5_het_prereg.json": "ebda99de822594573e8329b48aec3ee3",
     "E16_gwaya_lite_t4_report.json": "6d7704f37ccb4efcf345540bbe73c354",
     "E13_swarm_local_prereg_amendment_1.json": "354e1d927f03788d72d36f45a2504832",
     "E5_het_report.json": "416502040865c58cc382b51f74d4d83f",
     "E5_het_calibration.json": "0628539e3ffd18424e67a939274d4009",
     "E8_pilot_report.json": "dc5ec843a262f2b210fafeacb7f1373d",
     "E13_swarm_local_predictions_m6.json": "3239d8772310667269ac05ab632661f0",
-    "E5_het_prereg.json": "ebda99de822594573e8329b48aec3ee3",
     "external_review_v3.5.0_2026-10-23.md": "33a3f7501a180296d7a53692f1635a90",
     "RDAMultiplier.lean": "9af1a58c3b0710a46e05d657aa41d5f3",
     "E10_lattice_prereg.json": "eb712ef77a1032850552c77363a62121",
@@ -640,13 +649,10 @@
     "E16_gwaya_lite_t4_prereg.json": "aaff03643dccbab39adda7b4f3dea6ed",
     "gwaya_lite_live_check.json": "80985f1a46528cecf6f935e0f7f83e20",
     "E13_swarm_local_raw_qwen0.5b_m2proc.json": "3ec50cb993cfa7dd5d7030fb2eb39660",
-    "hivemind_foundation_article.pdf": "3f3d24f13102d44b262fb25d77197769",
     "GWAYA_LITE_ASSISTANT.md": "9691ddfbbb2afc71780719bb90a1ab09",
     "E15_gwaya_rft_report.json": "68823d09df364e2bae9103b4c8732c90",
-    "PEER_REVIEW_REPORT.json": "07be1638f94d4b1c572ba82effff231c",
     "E13_swarm_local_prereg_amendment_2.json": "963a9a8e10f386e023bfb73095c277cb",
     "E13_swarm_local_report_m2proc.json": "915e4d4e98770dc2c8cd4e44ce2239c7",
-    "CITATION.cff": "493377b142a9694586b46742d8aa581e",
     "T4_10h_campaign_report.md": "ea139593e0cd6d5a40bae84ea93e3e23",
     "E12_replay_divergence_report.json": "39d4a74c9aa168f939b177f15ade4fa6",
     "E13_swarm_local_prereg_amendment_5.json": "e16007fb3901da91229815b2137e7b4f",
@@ -659,9 +665,9 @@
     "E11b_kv_lattice_sweep_prereg.json": "32950b86ad42e9c24a10ef01d5f7cf38",
     "E13_swarm_local_raw_qwen0.5b_m6.json": "2e822a5e14e698a2a476815eb2fde84c",
     "E13_swarm_local_report_granite3b.json": "ac4a0a8d99d488642469735d45160539",
-    "T4_benchmark_queue.json": "b863f1cff74641d0f5cb586d0cce0dd7"
+    "gwaya_stub_audit.json": "a0b886d357633cba2103b9c005a8df1f",
+    "nocturnal_large_moe_20_campaign_report.json": "96497fb61443f62dae2667a2e6d06ac9"
   },
   "checksum_mismatches": [],
-  "verified": true,
-  "verification_note": "Published 2026-10-25 as 10.5281/zenodo.23649757 (version 3.8.0, 99 files), new version of 10.5281/zenodo.23607597. Every uploaded file matches the local tree (checksum_mismatches empty) and the eight raw E12 replay tensors (e12/*.pt) were carried over unchanged from v3.7.1 and verified against the md5 values in paper/zenodo_carried_over_v3.7.1.json. Source: main at fefa68eb582b (PR #150 merged) plus the DOI footer and the deposit script. Known differences from main: (1) lean4/HiveMindSpec.lean in the record is the 128-theorem version (md5 59e17dfc55d0101ed88dbf5c0c801db3, identical to the v3.7.1 file) that the paper and the independent compile receipt describe; main has since added 13 theorems (commit cffc194, QueenBee), not covered by this record; paper/PEER_REVIEW_REPORT.json was generated against the 128-theorem file. (2) The run logs T4_benchmark_queue_log.json and the E10b/E11/E11b partial files are not in the record (the log carries the machine username). (3) The E11 Qwen2.5-Coder-7B row is withdrawn in the paper (negative control failed); its raw receipt is in the record."
+  "verified": true
 }

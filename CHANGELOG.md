@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.11.0 — 2026-10-29 — Bi-Layer Honeybee Mesh, 24 MoE Bees, Low-Bit (1.58/2/3-Bit) Dream Teachers, RTX 2070 BOINC + Steam v5.1 Fat Client & 5-Language `/rejoindre` Onboarding
+
+- **Low-Bit (1.58-Bit / 2-Bit / 3-Bit) Nocturnal Dream Phase Teachers (`#323`):**
+  - Integrated `peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF` (`UD-IQ3_XXS` `12.30 GiB`, `UD-IQ3_S` `12.74 GiB`, `48.0%` SWE-bench-Live) and `prism-ml/Ternary-Bonsai-2-27B-gguf` (`PTQ1_0` `1.75` bpw `5.54 GiB` fitting 100% inside the `6.5 GB` RTX 2070 Golden Invariant I1; `PQ2_0` `2.13` bpw `6.71 GiB` enabling simultaneous 27B Teacher + QLoRA Student co-residency on a 16 GB Tesla T4), `Ternary-Bonsai-2-9B-gguf` (`2.25 GiB`), and `Bonsai-27B-gguf` (`3.54 GiB` 1-bit) into `src/hivemind/core/auto_improvement.py` (`LOW_BIT_DREAM_TEACHER_MODELS`, `select_dream_phase_teacher_for_vram`) and `src/hivemind/swarm/campaign_orchestrator.py` (`select_dream_teacher_for_job`).
+- **Live 5-Language Onboarding (`/rejoindre` & `/join`) & BOINC Community Hub (`/community`, `#314`, `#323`):**
+  - Full 5-language onboarding guide (`FR`, `EN`, `ES`, `DE`, `ZH`) across `hivemind-openrouter` and `hivemind-at-home-ruche`.
+  - Mounted `/community`, `/boinc`, `/api/v1/community/hub`, `POST /api/v1/community/boinc-sync`, `POST /api/v1/community/post-note`, and direct `/scripts/{script_name}` downloads on `hivemind-at-home-ruche`.
+- **Two-Layer Honeybee Agent Mesh (AMCP Kafka + ABC MoE) & Swarm Nectar Cache (`#318`, `#320`, `#321`, `#322`):**
+  - Layer 1 AMCP v1.5 + CloudEvents / Kafka Quorum Bus (`src/hivemind/swarm/honeybee_mesh_fabric.py`, `src/hivemind/swarm/nectar_cache.py`) and Layer 2 Artificial Bee Colony (Employed / Onlooker / Scout Bees) across 24 specialized MoE micro-experts (`/life-as-a-bee`).
+  - Season 25 LayerStoRm x HiveMind PCIe expert streaming bridge (`src/hivemind/core/layerstorm_bridge.py`) and Foundation Paper v4.0.0 (`DOI: 10.5281/zenodo.23756909`).
+- **RTX 2070 CUDA PTX BLS Worker, Free Steam Fat Client v5.1 (AppID `3133700`) & Stitch MCP v4.6 Cockpit (`#314`):**
+  - Real `cupy.RawKernel` CUDA PTX Box-Least-Squares (BLS) transit periodogram worker (`scripts/hivemind_boinc_idle_worker.py`) enforcing the `<= 6.5 GB` VRAM ceiling (`I1`) and `< 1.5s` game preemption (`I4`).
+  - Zero-install WebGPU Spiral Galaxy & WGSL `@compute` citizen science cockpit (`/webgpu-galaxy`) and Stitch v4.6 12-screen Tactical Bridge (`src/hivemind/game/exoplanet_hunter_cockpit.py`, `tests/test_game_and_agent_coverage_gate.py`).
+
 ## Unreleased
 
 - docs(roadmap): Season 21 "Operation Kafka-Hive" section in `ROADMAP.md` (§3.18, tasks `HM-S21-01`..`HM-S21-06`): AMCP Kafka transport ([#296](https://github.com/xaviercallens/HiveMind/pull/296)), expert registry and residency planner ([#299](https://github.com/xaviercallens/HiveMind/pull/299)), campaign joins and night dream-phase planner ([#298](https://github.com/xaviercallens/HiveMind/pull/298), open), base-model catalog and promotion gate ([#295](https://github.com/xaviercallens/HiveMind/pull/295), [#302](https://github.com/xaviercallens/HiveMind/pull/302)), dataset registry ([#297](https://github.com/xaviercallens/HiveMind/pull/297)) and bring-your-own-bee ([#300](https://github.com/xaviercallens/HiveMind/pull/300), open), each with its gate, what is not yet done, and the wiring order (BYOB -> registry; orchestrator -> Kafka transport; dream phase -> datasets + base models + registry). Docs only. No training was run and no broker or service was deployed by these PRs; the Qwen 3.5 night training on the T4 still awaits the owner's approval to stop serving at night.

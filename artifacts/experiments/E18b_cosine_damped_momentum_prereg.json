@@ -1,0 +1,30 @@
+{
+  "experiment_id": "E18b-cosine-damped-outer-momentum",
+  "registered_utc": "2026-10-29T10:46:00Z",
+  "registered_before_run": true,
+  "issue_ref": "https://github.com/xaviercallens/HiveMind/issues/308",
+  "lean_theorem_ref": "Season24_25_HoneybeeQuorumAndLayerStoRmVRAM.e18_cosine_damped_outer_momentum_bounds_iid_amplification (Theorem 144)",
+  "title": "E18b: Multi-Seed Cosine-Damped Outer Nesterov Momentum Resolution of the IID vs Non-IID DiLoCo Crossover on NVIDIA Tesla T4",
+  "what_is_measured": {
+    "seeds": [42, 43, 44],
+    "workers": 4,
+    "outer_rounds": 20,
+    "inner_steps_h": 8,
+    "partitions": {
+      "IID": "Uniform shard partition across 4 workers where inner trajectories align (high pairwise delta cosine)",
+      "Non_IID_Dirichlet_0_1": "Disjoint/Dirichlet(alpha=0.1) specialist class regimes across 4 workers where inner trajectories diverge (low/negative pairwise delta cosine)"
+    },
+    "optimizers": {
+      "O0_fedavg": "Standard FedAvg outer step (lr=1.0, momentum=0.0)",
+      "O1_fixed_nesterov": "Fixed DiLoCo Nesterov outer momentum (lr=0.7, momentum=0.9)",
+      "O2_cosine_damped": "Cosine-damped outer Nesterov momentum via compute_cosine_damped_outer_hyperparams (Theorem 144)",
+      "O_neg_inverted_control": "Planted negative control with inverted cosine damping (momentum = 0.9 * alpha)"
+    }
+  },
+  "hypotheses": {
+    "P18b_1_iid_overshoot_eliminated": "On IID partitions across 3 seeds (42, 43, 44), O2_cosine_damped achieves strictly lower mean validation loss than O1_fixed_nesterov (eliminating IID Nesterov velocity overshoot)",
+    "P18b_2_non_iid_gain_preserved": "On Non-IID (Dirichlet alpha=0.1) specialist partitions across 3 seeds, O2_cosine_damped achieves strictly lower mean validation loss than O0_fedavg",
+    "P18b_3_uniform_dominance_over_inverted_control": "O2_cosine_damped outperforms the planted inverted-damping negative control (O_neg_inverted_control) on both IID and Non-IID partitions"
+  },
+  "non_monetary": "Settled exclusively in non-monetary HiveMind Reflexion Points (HMT); financial_payment_usd_eur: 0.0"
+}

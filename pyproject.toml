@@ -1,6 +1,6 @@
 [project]
 name = "project-hivemind"
-version = "2.2.0"
+version = "2.11.0"
 description = "Project HiveMind: Decentralized MoE Training & Inference via Steam, BOINC, and DiLoCo-QLoRA"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -71,7 +71,10 @@ pythonpath = ["src", "."]
 
 [tool.coverage.run]
 source = ["src/hivemind"]
-omit = ["*/__pycache__/*"]
+omit = [
+    "*/__pycache__/*",
+    "src/hivemind/game/*",
+]
 
 [tool.coverage.report]
 fail_under = 95

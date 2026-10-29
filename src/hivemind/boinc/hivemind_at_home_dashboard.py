@@ -7229,6 +7229,32 @@ def create_hivemind_at_home_app(
             "message": "Night MoE training job dispatched across Tesla T4 & Cloud TPU v5e pods. Local RTX 2070 isolated exclusively for inference."
         })
 
+    @app.get("/api/v1/night-moe/reddit-vision/status", response_class=JSONResponse)
+    def api_night_moe_reddit_vision_status() -> JSONResponse:
+        from hivemind.core.reddit_vision_vlm_moe import (
+            REDDIT_VISION_BASE_MODELS,
+            REDDIT_VISION_EXPERT_CLUSTERS,
+        )
+
+        return JSONResponse(
+            content={
+                "status": "REDDIT_VISION_VLM_READY",
+                "campaign_id": "NIGHT-REDDIT-VISION-MOE-V1",
+                "title": "Reddit-Vision HiveMind (Culturally-Grounded VLM & Decentralized Vision-Language MoE)",
+                "architecture": "Branch-Train-Mix (BTM) + DiLoCo-QLoRA (Rank=16, Alpha=32, 4-bit NF4 + 8-bit AdamW) + 2-bit SparseLoCo-DCT DHT + Multi-Krum + Top-2 Softmax Router",
+                "base_models": REDDIT_VISION_BASE_MODELS,
+                "expert_clusters": REDDIT_VISION_EXPERT_CLUSTERS,
+            }
+        )
+
+    @app.post("/api/v1/night-moe/reddit-vision/start", response_class=JSONResponse)
+    def api_night_moe_reddit_vision_start(payload: Optional[Dict[str, Any]] = None) -> JSONResponse:
+        from hivemind.core.reddit_vision_vlm_moe import run_nocturnal_reddit_vision_moe_campaign
+
+        steps = int((payload or {}).get("inner_steps", 25))
+        report = run_nocturnal_reddit_vision_moe_campaign(inner_steps=max(5, min(steps, 500)))
+        return JSONResponse(content=report.to_dict())
+
     @app.get("/api/v1/hardware/rtx2070/shield", response_class=JSONResponse)
     def api_hardware_rtx2070_shield() -> JSONResponse:
         return JSONResponse(content={

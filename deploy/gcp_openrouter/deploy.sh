@@ -43,6 +43,9 @@ ENV_VARS="HIVEMIND_ROUTER_DB=/data/router.db,HIVEMIND_ROUTER_REPLICA_URL=gcs://$
 [ -n "${HIVEMIND_GOOGLE_CLIENT_ID:-}" ] && ENV_VARS="${ENV_VARS},HIVEMIND_GOOGLE_CLIENT_ID=${HIVEMIND_GOOGLE_CLIENT_ID}"
 [ -n "${HIVEMIND_OPEN_REGISTRATION:-}" ] && ENV_VARS="${ENV_VARS},HIVEMIND_OPEN_REGISTRATION=${HIVEMIND_OPEN_REGISTRATION}"
 
+CPU="${CPU:-1}"
+MEMORY="${MEMORY:-1Gi}"
+
 cd "$stage"
 gcloud run deploy hivemind-openrouter \
   --project "$GCP_PROJECT" \
@@ -53,9 +56,10 @@ gcloud run deploy hivemind-openrouter \
   --min-instances 0 \
   --max-instances 1 \
   --cpu-throttling \
-  --cpu 4 \
+  --cpu-boost \
+  --cpu "$CPU" \
   --concurrency 200 \
-  --memory 4Gi \
+  --memory "$MEMORY" \
   --timeout 600 \
   --set-env-vars "${ENV_VARS}" \
   --set-secrets "HIVEMIND_ROUTER_SECRET=${SECRET_NAME}:latest"

@@ -2164,14 +2164,39 @@ def create_router_app(
             "receipt_sha256": receipt_sha256,
         }
 
-    @app.api_route("/webgpu", methods=["GET", "HEAD"], response_class=HTMLResponse)
-    def webgpu_galaxy_page(request: Request) -> HTMLResponse:
-        """Zero-install WebGPU 3D Galaxy & WGSL @compute Citizen-Science Cockpit."""
-        from hivemind.game.webgpu_galaxy_cockpit import render_webgpu_galaxy_html
+    def _load_webgpu_cockpit_module() -> Any:
+        try:
+            from hivemind.game import webgpu_galaxy_cockpit as mod
 
+            return mod
+        except Exception:
+            import importlib.util
+            from pathlib import Path as _Path
+
+            cand = _Path(__file__).resolve().parents[1] / "game" / "webgpu_galaxy_cockpit.py"
+            spec = importlib.util.spec_from_file_location("hivemind_webgpu_galaxy_cockpit", cand)
+            if spec and spec.loader and cand.exists():
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)  # type: ignore[union-attr]
+                return mod
+            raise
+
+    @app.api_route("/webgpu", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def webgpu_galaxy_page(request: Request) -> Response:
+        """Zero-install WebGPU 3D Galaxy & WGSL @compute Citizen-Science Cockpit."""
         lang = pick_language(request.query_params.get("lang"), request.headers.get("accept-language"), default="fr")
+        try:
+            mod = _load_webgpu_cockpit_module()
+            html_body = mod.render_webgpu_galaxy_html(default_lang=lang)
+        except Exception:
+            from fastapi.responses import RedirectResponse
+
+            return RedirectResponse(
+                f"https://xaviercallens.github.io/HiveMindatHome.github.io/webgpu.html?lang={lang}",
+                status_code=307,
+            )
         return HTMLResponse(
-            render_webgpu_galaxy_html(default_lang=lang),
+            html_body,
             headers={
                 "Cache-Control": "no-store",
                 "Vary": "Accept-Language",
@@ -2183,7 +2208,8 @@ def create_router_app(
     @app.get("/v1/hivemind/webgpu/status")
     def webgpu_status() -> dict[str, Any]:
         """Public metadata for the Zero-Install WebGPU Galaxy & WGSL @compute Edition."""
-        from hivemind.game.webgpu_galaxy_cockpit import WGSL_BLS_COMPUTE_SHADER_SOURCE
+        mod = _load_webgpu_cockpit_module()
+        WGSL_BLS_COMPUTE_SHADER_SOURCE = mod.WGSL_BLS_COMPUTE_SHADER_SOURCE
 
         return {
             "object": "hivemind.webgpu_edition",
@@ -2260,7 +2286,8 @@ def create_router_app(
     @app.post("/v1/hivemind/webgpu/contribute")
     async def webgpu_contribute(request: Request) -> dict[str, Any]:
         """Record a verified browser WebGPU WGSL @compute workunit. Strictly requires registration & login (Bearer hm-...)."""
-        from hivemind.game.webgpu_galaxy_cockpit import execute_server_webgpu_verification_and_sync
+        mod = _load_webgpu_cockpit_module()
+        execute_server_webgpu_verification_and_sync = mod.execute_server_webgpu_verification_and_sync
 
         account = authenticate(request)
         raw = await request.body()

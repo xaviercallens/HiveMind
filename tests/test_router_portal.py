@@ -196,6 +196,8 @@ def test_router_overlay_multilingual_routes(tmp_path: pytest.TempPathFactory, mo
         ("/inscription", "fr"),
         ("/join?lang=de", "de"),
         ("/rejoindre", "fr"),
+        ("/webgpu", "fr"),
+        ("/webgpu?lang=en", "en"),
     ):
         r = client.get(path)
         assert r.status_code == 200, path
@@ -205,6 +207,31 @@ def test_router_overlay_multilingual_routes(tmp_path: pytest.TempPathFactory, mo
     r_i18n = client.get("/v1/hivemind/i18n?lang=fr")
     assert r_i18n.status_code == 200
     assert "fr" in r_i18n.json()["portal"]
+
+
+def test_webgpu_route_works_without_torch_installed(tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+    import sys
+
+    for mod_name in list(sys.modules):
+        if mod_name == "hivemind.game" or mod_name.startswith("hivemind.game."):
+            monkeypatch.delitem(sys.modules, mod_name, raising=False)
+    monkeypatch.setitem(sys.modules, "torch", None)
+    monkeypatch.setitem(sys.modules, "transformers", None)
+    monkeypatch.setitem(sys.modules, "rich", None)
+
+    store = RouterStore(tmp_path / "router.db", b"x" * 32)
+    app = create_router_app(store)
+    client = TestClient(app)
+
+    r = client.get("/webgpu?lang=en")
+    assert r.status_code == 200
+    assert '<html lang="en">' in r.text
+    assert "bls_fold_main" in r.text
+
+    r_status = client.get("/v1/hivemind/webgpu/status")
+    assert r_status.status_code == 200
+    assert r_status.json()["wgsl_entrypoint"] == "bls_fold_main"
+
 
 
 

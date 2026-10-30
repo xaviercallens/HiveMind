@@ -39,7 +39,7 @@ from hivemind.router.signup_page import SIGNUP_I18N, content_security_policy, re
 
 BID_WINDOW_S: float = float(os.environ.get("HIVEMIND_BID_WINDOW_S", "900") or "900")
 REWRITTEN_TYPES: tuple[str, ...] = ("text/html", "application/json", "application/javascript", "text/javascript")
-NEVER_REWRITTEN: tuple[str, ...] = ("/v1/chat/", "/v1/completions", "/gallery/")
+NEVER_REWRITTEN: tuple[str, ...] = ("/v1/chat/", "/v1/completions", "/gallery/", "/webgpu")
 GALLERY_DIR: Path = Path(os.environ.get("HIVEMIND_GALLERY_DIR", "/app/public/gallery"))
 _REPLACED_PATHS: set[str] = {
     "/",
@@ -54,6 +54,7 @@ _REPLACED_PATHS: set[str] = {
     "/inscription",
     "/join",
     "/rejoindre",
+    "/webgpu",
     "/v1/hivemind/i18n",
 }
 _funded_consumer_bids = RouterStore.funded_consumer_bids
@@ -171,6 +172,42 @@ def join_page_overlay(request: Request) -> HTMLResponse:
             "Content-Language": lang,
             "X-Content-Type-Options": "nosniff",
             "Referrer-Policy": "strict-origin-when-cross-origin",
+        },
+    )
+
+
+@app.api_route("/webgpu", methods=["GET", "HEAD"], response_class=HTMLResponse)
+def webgpu_galaxy_overlay(request: Request) -> Response:
+    lang = pick_language(request.query_params.get("lang"), request.headers.get("accept-language"), default="fr")
+    try:
+        from hivemind.game.webgpu_galaxy_cockpit import render_webgpu_galaxy_html
+
+        html_body = render_webgpu_galaxy_html(default_lang=lang)
+    except Exception:
+        import importlib.util
+
+        cand = Path("/app/src/hivemind/game/webgpu_galaxy_cockpit.py")
+        if not cand.exists():
+            cand = Path(__file__).resolve().parents[2] / "src" / "hivemind" / "game" / "webgpu_galaxy_cockpit.py"
+        spec = importlib.util.spec_from_file_location("hivemind_webgpu_galaxy_cockpit", cand)
+        if spec and spec.loader and cand.exists():
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)  # type: ignore[union-attr]
+            html_body = mod.render_webgpu_galaxy_html(default_lang=lang)
+        else:
+            from fastapi.responses import RedirectResponse
+
+            return RedirectResponse(
+                f"https://xaviercallens.github.io/HiveMindatHome.github.io/webgpu.html?lang={lang}",
+                status_code=307,
+            )
+    return HTMLResponse(
+        html_body,
+        headers={
+            "Cache-Control": "no-store",
+            "Vary": "Accept-Language",
+            "Content-Language": lang,
+            "X-Content-Type-Options": "nosniff",
         },
     )
 

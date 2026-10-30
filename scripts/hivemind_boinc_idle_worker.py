@@ -309,7 +309,8 @@ def run_one_idle_gpu_boinc_cycle(
 
     payload = {
         "commander": commander,
-        "project_id": "hivemind_tess_at_home",
+        "contributor_handle": commander,
+        "project_id": "BOINC-ASTRO-BLS-TRANSIT",
         "gpu_idle_seconds": round(max(idle_threshold_seconds + 0.5, idle_s) if is_gpu_idle_for_boinc else idle_s, 2),
         "gpu_utilization_pct": gpu["utilization_pct"],
         "gpu_model": gpu["gpu_model"],
@@ -319,7 +320,7 @@ def run_one_idle_gpu_boinc_cycle(
         "digest": digest,
     }
 
-    sync_result: Dict[str, Any] = {"local_hub": "offline", "gcp_cloud_run": "offline"}
+    sync_result: Dict[str, Any] = {"local_hub": "offline", "gcp_cloud_run": "offline", "gcp_boinc_sync": "offline"}
     try:
         req = urllib.request.Request(
             "http://127.0.0.1:8095/api/v1/community/boinc-sync",
@@ -331,6 +332,18 @@ def run_one_idle_gpu_boinc_cycle(
             sync_result["local_hub"] = json.loads(resp.read().decode("utf-8"))
     except Exception as exc:
         sync_result["local_hub_error"] = str(exc)
+
+    try:
+        boinc_sync_req = urllib.request.Request(
+            f"{coordinator_url.rstrip('/')}/api/v1/community/boinc-sync",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(boinc_sync_req, timeout=4.0) as b_resp:
+            sync_result["gcp_boinc_sync"] = json.loads(b_resp.read().decode("utf-8"))
+    except Exception as exc:
+        sync_result["gcp_boinc_sync_error"] = str(exc)
 
     try:
         lease_body = {

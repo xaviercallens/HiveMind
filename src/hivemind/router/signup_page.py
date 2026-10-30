@@ -76,42 +76,139 @@ $('copy').addEventListener('click', async () => {
 """
 
 
-def render_signup_page(client_id: str | None, nonce: str) -> str:
+SIGNUP_I18N: dict[str, dict[str, str]] = {
+    "en": {
+        "title": "Join HiveMind",
+        "lead": "Use open coding models from your editor, or share your GPU and earn points. HiveMind points have no cash value.",
+        "disabled_notice": "Sign in with Google is not enabled on this gateway yet.",
+        "disabled_hint": "You can still register with a handle through the API. See the getting-started guide.",
+        "legend": "What do you want to do?",
+        "role_prosumer": "Both: use models and share my GPU",
+        "role_consumer": "Use models in my editor",
+        "role_producer": "Share my GPU",
+        "privacy": "We keep only an anonymous hash of your Google account id. Your e-mail address is not stored.",
+        "key_label": "Your API key (shown once; signing in again replaces it):",
+        "copy_btn": "Copy key",
+        "next_label": "Next, in a terminal:",
+        "zero_points": "New accounts hold 0 points. Share a GPU to earn some, or ask the operator for a grant.",
+        "portal_link": "← Back to OpenRouter Playground",
+    },
+    "fr": {
+        "title": "Rejoindre HiveMind",
+        "lead": "Utilisez des modèles de code ouverts depuis votre éditeur, ou partagez votre GPU et gagnez des Points de Réflexion HiveMind (HMT). Les points n'ont aucune valeur monétaire.",
+        "disabled_notice": "La connexion avec Google n'est pas encore activée sur cette passerelle (Sign in with Google is not enabled on this gateway yet).",
+        "disabled_hint": "Vous pouvez toujours vous inscrire avec un pseudonyme via l'API. Consultez le guide de démarrage.",
+        "legend": "Que souhaitez-vous faire ?",
+        "role_prosumer": "Les deux : utiliser les modèles et partager mon GPU",
+        "role_consumer": "Utiliser les modèles dans mon éditeur",
+        "role_producer": "Partager mon GPU",
+        "privacy": "Nous ne conservons qu'un hachage anonyme de votre identifiant Google. Votre adresse e-mail n'est jamais stockée.",
+        "key_label": "Votre clé API (affichée une seule fois ; une reconnexion la remplace) :",
+        "copy_btn": "Copier la clé",
+        "next_label": "Ensuite, dans un terminal :",
+        "zero_points": "Les nouveaux comptes ont 0 point. Partagez un GPU pour en gagner ou demandez un don de démarrage.",
+        "portal_link": "← Retour au Playground OpenRouter",
+    },
+    "es": {
+        "title": "Unirse a HiveMind",
+        "lead": "Usa modelos abiertos de programación desde tu editor o comparte tu GPU y gana Puntos de Reflexión HiveMind (HMT). Los puntos no tienen valor monetario.",
+        "disabled_notice": "El inicio de sesión con Google aún no está habilitado en esta pasarela (Sign in with Google is not enabled on this gateway yet).",
+        "disabled_hint": "Aún puedes registrarte con un seudónimo mediante la API. Consulta la guía de inicio.",
+        "legend": "¿Qué quieres hacer?",
+        "role_prosumer": "Ambos: usar modelos y compartir mi GPU",
+        "role_consumer": "Usar modelos en mi editor",
+        "role_producer": "Compartir mi GPU",
+        "privacy": "Solo guardamos un hash anónimo de tu ID de Google. Tu correo electrónico no se almacena.",
+        "key_label": "Tu clave API (se muestra una sola vez; volver a iniciar sesión la reemplaza):",
+        "copy_btn": "Copiar clave",
+        "next_label": "A continuación, en una terminal:",
+        "zero_points": "Las cuentas nuevas tienen 0 puntos. Comparte una GPU para ganar puntos o solicita una concesión inicial.",
+        "portal_link": "← Volver al Playground OpenRouter",
+    },
+    "de": {
+        "title": "HiveMind beitreten",
+        "lead": "Nutzen Sie offene Coding-Modelle in Ihrem Editor oder teilen Sie Ihre GPU und sammeln Sie HiveMind-Reflexionspunkte (HMT). Punkte haben keinen Geldwert.",
+        "disabled_notice": "Die Anmeldung mit Google ist auf diesem Gateway noch nicht aktiviert (Sign in with Google is not enabled on this gateway yet).",
+        "disabled_hint": "Sie können sich weiterhin mit einem Pseudonym über die API registrieren. Siehe Schnellstart-Anleitung.",
+        "legend": "Was möchten Sie tun?",
+        "role_prosumer": "Beides: Modelle nutzen und meine GPU teilen",
+        "role_consumer": "Modelle in meinem Editor nutzen",
+        "role_producer": "Meine GPU teilen",
+        "privacy": "Wir speichern nur einen anonymen Hash Ihrer Google-ID. Ihre E-Mail-Adresse wird nicht gespeichert.",
+        "key_label": "Ihr API-Schlüssel (wird nur einmal angezeigt; erneutes Anmelden ersetzt ihn):",
+        "copy_btn": "Schlüssel kopieren",
+        "next_label": "Als Nächstes im Terminal:",
+        "zero_points": "Neue Konten starten mit 0 Punkten. Teilen Sie eine GPU oder fragen Sie nach einem Startguthaben.",
+        "portal_link": "← Zurück zum OpenRouter Playground",
+    },
+    "zh": {
+        "title": "加入 HiveMind",
+        "lead": "在代码编辑器中使用开源编程模型，或共享您的 GPU 赚取 HiveMind 反思积分 (HMT)。积分没有任何货币价值。",
+        "disabled_notice": "此网关尚未启用 Google 登录 (Sign in with Google is not enabled on this gateway yet)。",
+        "disabled_hint": "您仍然可以通过 API 使用昵称注册账户，请参阅入门指南。",
+        "legend": "您希望如何参与？",
+        "role_prosumer": "两者兼顾：使用模型并共享我的 GPU",
+        "role_consumer": "在编辑器中使用 AI 模型",
+        "role_producer": "共享我的 GPU 算力",
+        "privacy": "我们仅保存您 Google 账户 ID 的匿名哈希值，绝不存储您的电子邮箱地址。",
+        "key_label": "您的 API 密钥（仅显示一次，重新登录将生成新密钥）：",
+        "copy_btn": "复制密钥",
+        "next_label": "接下来，在终端中运行：",
+        "zero_points": "新账户初始为 0 积分。共享 GPU 即可赚取积分，或向管理员申请初始试用积分。",
+        "portal_link": "← 返回 OpenRouter 演练场",
+    },
+}
+
+
+def render_signup_page(client_id: str | None, nonce: str, *, lang: str = "en") -> str:
     """HTML for ``/signup``; ``client_id`` ``None`` renders the "not enabled" notice with no script at all."""
-    head = (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-            f'<title>Join HiveMind</title><style nonce="{nonce}">{_CSS}</style></head><body><main>')
+    active_lang = lang if lang in SIGNUP_I18N else "en"
+    t = SIGNUP_I18N[active_lang]
+    lang_nav = (
+        '<nav aria-label="Language" style="margin-bottom:0.8rem;font-size:0.9rem;">'
+        '<a href="/signup?lang=en">🇬🇧 EN</a> · '
+        '<a href="/signup?lang=fr">🇫🇷 FR</a> · '
+        '<a href="/signup?lang=es">🇪🇸 ES</a> · '
+        '<a href="/signup?lang=de">🇩🇪 DE</a> · '
+        '<a href="/signup?lang=zh">🇨🇳 中文</a> · '
+        f'<a href="/?lang={active_lang}">{t["portal_link"]}</a>'
+        '</nav>'
+    )
+    head = (f'<!doctype html><html lang="{active_lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+            f'<title>{t["title"]}</title><style nonce="{nonce}">{_CSS}</style></head><body><main>{lang_nav}')
     if client_id is None:
-        return head + ('<h1>Join HiveMind</h1><div class="card"><p>Sign in with Google is not enabled on this gateway yet.</p>'
-                       '<p><a href="/join">How to join</a> · <a href="/rejoindre">Comment participer</a></p>'
-                       '<p class="mut">You can still register with a handle through the API. See the getting-started guide.</p></div></main></body></html>')
+        return head + (f'<h1>{t["title"]}</h1><div class="card"><p>{t["disabled_notice"]}</p>'
+                       '<p><a href="/join">How to join</a> · <a href="/rejoindre">Comment participer</a> · '
+                       '<a href="/join?lang=es">Español</a> · <a href="/join?lang=de">Deutsch</a> · <a href="/join?lang=zh">中文</a></p>'
+                       f'<p class="mut">{t["disabled_hint"]}</p></div></main></body></html>')
     if not CLIENT_ID_RE.match(client_id):
         raise ValueError("invalid Google client id")
     script = _JS.replace("%CLIENT_ID%", '"' + client_id + '"')  # the id matches [0-9a-z.-]+, so it cannot break out of the string
     return head + f"""
-<h1>Join HiveMind</h1>
-<p>Use open coding models from your editor, or share your GPU and earn points. HiveMind points have no cash value.
-<a href="/join">How to join</a> · <a href="/rejoindre">Comment participer</a></p>
+<h1>{t["title"]}</h1>
+<p>{t["lead"]}
+<a href="/join">How to join</a> · <a href="/rejoindre">Comment participer</a> · <a href="/join?lang=es">Español</a> · <a href="/join?lang=de">Deutsch</a> · <a href="/join?lang=zh">中文</a></p>
 <section id="signin" class="card">
-  <fieldset><legend>What do you want to do?</legend>
-    <label><input type="radio" name="role" value="prosumer" checked> Both: use models and share my GPU</label>
-    <label><input type="radio" name="role" value="consumer"> Use models in my editor</label>
-    <label><input type="radio" name="role" value="producer"> Share my GPU</label>
+  <fieldset><legend>{t["legend"]}</legend>
+    <label><input type="radio" name="role" value="prosumer" checked> {t["role_prosumer"]}</label>
+    <label><input type="radio" name="role" value="consumer"> {t["role_consumer"]}</label>
+    <label><input type="radio" name="role" value="producer"> {t["role_producer"]}</label>
   </fieldset>
   <div id="gbtn"></div>
   <noscript><p>This page needs JavaScript to show the Google button.</p></noscript>
-  <p class="mut">We keep only an anonymous hash of your Google account id. Your e-mail address is not stored.</p>
+  <p class="mut">{t["privacy"]}</p>
 </section>
 <section id="result" class="card" hidden>
   <p id="kind"></p>
-  <p>Your API key (shown once; signing in again replaces it):</p>
+  <p>{t["key_label"]}</p>
   <pre><code id="key"></code></pre>
-  <p><button id="copy" type="button">Copy key</button></p>
+  <p><button id="copy" type="button">{t["copy_btn"]}</button></p>
   <p class="mut">Account <code id="acct"></code>, role <code id="role"></code>.</p>
-  <p>Next, in a terminal:</p>
+  <p>{t["next_label"]}</p>
   <pre><code>export HIVEMIND_API_KEY=&lt;the key above&gt;
 python hivemind_connect.py check
 python hivemind_connect.py snippet continue --model coder</code></pre>
-  <p class="mut">New accounts hold 0 points. Share a GPU to earn some, or ask the operator for a grant.</p>
+  <p class="mut">{t["zero_points"]}</p>
 </section>
 <p id="status" class="mut" role="status"></p>
 <script nonce="{nonce}">{script}</script>

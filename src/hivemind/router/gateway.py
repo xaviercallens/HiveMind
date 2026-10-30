@@ -1221,18 +1221,66 @@ def create_router_app(
     @app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/playground", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/life-as-a-bee", methods=["GET", "HEAD"], response_class=HTMLResponse)
-    def portal() -> HTMLResponse:
+    @app.api_route("/fr", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/aire-de-jeu", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/es", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/de", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/zh", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def portal(request: Request) -> HTMLResponse:
+        path_defaults = {
+            "/fr": "fr",
+            "/aire-de-jeu": "fr",
+            "/es": "es",
+            "/de": "de",
+            "/zh": "zh",
+        }
+        default_lang = path_defaults.get(request.url.path, "en")
+        lang = pick_language(request.query_params.get("lang"), request.headers.get("accept-language"), default=default_lang)
         nonce = secrets.token_urlsafe(18)
-        page = render_portal_page(google.client_id if google else None, nonce)
+        page = render_portal_page(google.client_id if google else None, nonce, lang=lang)
         return HTMLResponse(
             page,
             headers={
                 "Content-Security-Policy": portal_content_security_policy(nonce),
                 "Cache-Control": "public, max-age=60",
+                "Vary": "Accept-Language",
+                "Content-Language": lang,
                 "X-Content-Type-Options": "nosniff",
                 "Referrer-Policy": "strict-origin-when-cross-origin",
             },
         )
+
+    @app.get("/v1/hivemind/i18n")
+    def portal_i18n_catalog(lang: str | None = None) -> dict[str, Any]:
+        """Public multilingual dictionary for the OpenRouter portal, playground, signup, and join pages (EN, FR, ES, DE, ZH)."""
+        from hivemind.router.portal_page import PORTAL_I18N, PORTAL_LANG_META, PORTAL_LANGS
+        from hivemind.router.signup_page import SIGNUP_I18N
+
+        selected = lang if lang in PORTAL_LANGS else None
+        return {
+            "object": "hivemind.i18n_catalog",
+            "supported_languages": list(PORTAL_LANGS),
+            "language_metadata": PORTAL_LANG_META,
+            "official_points_names": {
+                "en": "HiveMind Reflexion Points (HMT)",
+                "fr": "Points de Réflexion HiveMind (HMT)",
+                "es": "Puntos de Reflexión HiveMind (HMT)",
+                "de": "HiveMind-Reflexionspunkte (HMT)",
+                "zh": "HiveMind 反思积分 (HMT)",
+            },
+            "routes": {
+                "en": "/?lang=en",
+                "fr": "/fr",
+                "es": "/es",
+                "de": "/de",
+                "zh": "/zh",
+                "join": "/join",
+                "rejoindre": "/rejoindre",
+                "signup": "/signup",
+            },
+            "portal": {selected: PORTAL_I18N[selected]} if selected else PORTAL_I18N,
+            "signup": {selected: SIGNUP_I18N[selected]} if selected else SIGNUP_I18N,
+        }
 
     @app.get("/v1/hivemind/life-as-a-bee")
     def life_as_a_bee() -> dict[str, Any]:
@@ -1434,10 +1482,14 @@ def create_router_app(
     google = google_verifier or (GoogleIdTokenVerifier(google_client_id, clock=clock) if google_client_id else None)
 
     @app.api_route("/signup", methods=["GET", "HEAD"], response_class=HTMLResponse)
-    def signup() -> HTMLResponse:
+    @app.api_route("/inscription", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def signup(request: Request) -> HTMLResponse:
+        default_lang = "fr" if request.url.path == "/inscription" else "en"
+        lang = pick_language(request.query_params.get("lang"), request.headers.get("accept-language"), default=default_lang)
         nonce = secrets.token_urlsafe(18)
-        page = render_signup_page(google.client_id if google else None, nonce)
+        page = render_signup_page(google.client_id if google else None, nonce, lang=lang)
         return HTMLResponse(page, headers={"Content-Security-Policy": content_security_policy(nonce), "Cache-Control": "no-store",
+                                           "Vary": "Accept-Language", "Content-Language": lang,
                                            "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})
 
     @app.api_route("/join", methods=["GET", "HEAD"], response_class=HTMLResponse)

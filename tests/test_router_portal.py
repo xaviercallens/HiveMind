@@ -233,5 +233,22 @@ def test_webgpu_route_works_without_torch_installed(tmp_path: pytest.TempPathFac
     assert r_status.json()["wgsl_entrypoint"] == "bls_fold_main"
 
 
+def test_portal_page_includes_seti_at_home_citizen_ai_manifesto_and_onboarding_links() -> None:
+    from hivemind.router.points_wording import currency_leftovers
+
+    html = render_portal_page(client_id="", nonce="nonce-1", lang="fr")
+    assert 'id="seti-manifesto"' in html
+    assert "Pour une IA citoyenne et décentralisée en souvenir de SETI@Home" in html
+    assert "https://www.reddit.com/r/artificielle/comments/1xctxbf/" in html
+    assert "https://www.reddit.com/r/artificielle/comments/1x6vijg/comment/phgj7z2/" in html
+    assert "https://www.reddit.com/r/developpeurs/comments/1xhit4c/comment/19rtqukepw39f/" in html
+    assert "https://xaviercallens.github.io/HiveMindatHome.github.io/webgpu.html" in html
+    assert "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/" in html
+    assert "/join#train" in html
+    assert "https://github.com/xaviercallens/HiveMind" in html
+    assert currency_leftovers(html) == []
+
+
+
 
 

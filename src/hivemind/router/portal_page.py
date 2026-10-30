@@ -1495,11 +1495,72 @@ def render_portal_page(client_id: str | None, nonce: str, *, lang: str = "en") -
       </p>
       <div class="cta-group">
         <a href="#playground" class="btn btn-primary" data-i18n="cta_playground">{html.escape(t["cta_playground"])}</a>
+        <a href="https://xaviercallens.github.io/HiveMindatHome.github.io/webgpu.html" target="_blank" rel="noopener" class="btn btn-outline" style="border-color:var(--purple);color:var(--purple);">🌐 WebGPU 3D Galaxy (Zero-Install Game)</a>
         <a href="#steam-free-game" class="btn btn-outline" style="border-color:var(--green);color:var(--green);" data-i18n="cta_steam">{html.escape(t["cta_steam"])}</a>
         <a href="#life-as-a-bee" class="btn btn-outline" style="border-color:var(--amber);color:var(--amber);" data-i18n="cta_bee">{html.escape(t["cta_bee"])}</a>
         {signup_cta}
-        <a href="{join_href}" class="btn btn-outline" data-i18n="cta_join">{html.escape(t["cta_join"])}</a>
+        <a href="{join_href}#train" class="btn btn-outline" data-i18n="cta_join">{html.escape(t["cta_join"])}</a>
         <a href="https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/" target="_blank" rel="noopener" class="btn btn-outline" data-i18n="cta_ruche">{html.escape(t["cta_ruche"])}</a>
+      </div>
+    </section>
+
+    <!-- SETI@Home Citizen & Decentralized AI Manifesto + Easy Onboarding for Everyone -->
+    <section id="seti-manifesto" class="card" style="margin-bottom:2.25rem;border-color:rgba(56,189,248,0.42);">
+      <div class="card-header">
+        <div class="card-title" style="color:var(--cyan);">🛰️ Pour une IA citoyenne et décentralisée en souvenir de SETI@Home &bull; Easy to Join for Everyone</div>
+        <span class="pill" style="border-color:var(--cyan);color:var(--cyan);">SETI@Home &times; Petals &times; DiLoCo &bull; RTX 2070 (8 Go) Verified</span>
+      </div>
+      <p style="color:var(--text-dim);font-size:0.9rem;line-height:1.58;margin-bottom:0.85rem;">
+        <em>&laquo; Puisque les IA actuelles ont appris gr&acirc;ce aux textes produits par tout le monde sur Internet, pourquoi les mod&egrave;les les plus puissants appartiennent-ils tous &agrave; une poign&eacute;e de g&eacute;ants ? Pourquoi n&rsquo;existe-t-il pas une IA d&eacute;centralis&eacute;e et citoyenne, sur le mod&egrave;le de Wikip&eacute;dia, Linux ou SETI@home / Folding@home ? &raquo;</em>
+        &mdash; N&eacute; des &eacute;changes communautaires sur
+        <a href="https://www.reddit.com/r/artificielle/comments/1xctxbf/pour_une_ai_citoyenne_et_d%C3%A9centralis%C3%A9e_en/" target="_blank" rel="noopener" style="color:var(--cyan);">r/artificielle (Manifeste)</a>,
+        <a href="https://www.reddit.com/r/artificielle/comments/1x6vijg/comment/phgj7z2/" target="_blank" rel="noopener" style="color:var(--cyan);">la question d&rsquo;origine</a> et
+        <a href="https://www.reddit.com/r/developpeurs/comments/1xhit4c/comment/19rtqukepw39f/" target="_blank" rel="noopener" style="color:var(--cyan);">r/developpeurs</a>,
+        <strong>Project HiveMind</strong> l&egrave;ve les deux murs physiques des PC domestiques (<strong>mur de la VRAM 8&ndash;12 Go</strong> et <strong>mur de la latence fibre 20&ndash;50 ms</strong>) gr&acirc;ce &agrave; <strong>3 perc&eacute;es scientifiques</strong> :
+        <strong>(A) Decoupled DiLoCo</strong> (&icirc;lots asynchrones divisant par ~500 la bande passante sans bloquer si un PC s&rsquo;&eacute;teint ou lance un jeu),
+        <strong>(B) Branch-Train-Mix &amp; Sparse MoE</strong> (socle 4-bit NF4 de <code>176 Mo</code> + petits experts LoRA de <code>15 Mo</code> fusionn&eacute;s en <code>96 experts FFN</code> tenant dans <code>1,5 Go de VRAM</code> sur une <strong>RTX 2070 de 8 Go</strong>), et
+        <strong>(C) Empreintes SHA-256 + Spot-Check (~10 %) + Multi-Krum</strong>.
+      </p>
+      <div class="tiers-grid" style="margin-bottom:0.85rem;">
+        <div class="tier-card">
+          <div>
+            <div class="tier-badge">1. SANS INSTALLATION (NAVIGATEUR)</div>
+            <div class="tier-name">Jeu Scientifique WebGPU 3D</div>
+            <div class="tier-vram">6 000+ Exoplan&egrave;tes NASA/JWST &bull; WGSL @compute</div>
+            <div class="tier-desc">Explorez la galaxie 3D et contribuez au pliage de transits exoplan&eacute;taires directement dans votre navigateur, sans rien installer.</div>
+          </div>
+          <div style="margin-top:0.65rem;"><a href="https://xaviercallens.github.io/HiveMindatHome.github.io/webgpu.html" target="_blank" rel="noopener" class="btn btn-outline" style="padding:0.3rem 0.65rem;font-size:0.76rem;border-color:var(--purple);color:var(--purple);">🌐 Jouer sans installation (webgpu.html)</a></div>
+        </div>
+        <div class="tier-card">
+          <div>
+            <div class="tier-badge">2. TESTER L&rsquo;IA CITOYENNE</div>
+            <div class="tier-name">OpenRouter &amp; Aire de Jeu (5 Langues)</div>
+            <div class="tier-vram">Cl&eacute; API Gratuite (Bearer hm-...)</div>
+            <div class="tier-desc">Interrogez les 15 mod&egrave;les MoE et 24 Abeilles sp&eacute;cialis&eacute;es (Code, Maths, Sciences, Fran&ccedil;ais) via l&rsquo;interface web ou Cursor / Continue.dev.</div>
+          </div>
+          <div style="margin-top:0.65rem;"><a href="{signup_href}" class="btn btn-primary" style="padding:0.3rem 0.65rem;font-size:0.76rem;">💬 Obtenir une cl&eacute; &amp; Tester</a></div>
+        </div>
+        <div class="tier-card">
+          <div>
+            <div class="tier-badge">3. PR&Ecirc;TER SON GPU LA NUIT (BOINC / RTX)</div>
+            <div class="tier-name">Z&eacute;ro Intrusion (&lt; 1,5 s) &bull; 8&ndash;12 Go VRAM</div>
+            <div class="tier-vram">RTX 2060 / 2070 / 3060 / 4070 &bull; R&eacute;ciprocit&eacute; HMT</div>
+            <div class="tier-desc">Entra&icirc;nez un module expert QLoRA quand votre PC dort ; lib&eacute;ration instantan&eacute;e de 100 % du GPU d&egrave;s que vous bougez la souris ou jouez.</div>
+          </div>
+          <div style="margin-top:0.65rem;"><a href="{join_href}#train" class="btn btn-outline" style="padding:0.3rem 0.65rem;font-size:0.76rem;border-color:var(--green);color:var(--green);">🐝 Rejoindre l&rsquo;Essaim (/join#train)</a></div>
+        </div>
+        <div class="tier-card">
+          <div>
+            <div class="tier-badge">4. LA RUCHE &Agrave; DONN&Eacute;ES &amp; GITHUB</div>
+            <div class="tier-name">Wikip&eacute;dia des Datasets &amp; Open-Source</div>
+            <div class="tier-vram">Pas besoin de gros GPU pour contribuer</div>
+            <div class="tier-desc">Citoyens, chercheurs, juristes, m&eacute;decins et d&eacute;veloppeurs PyTorch/P2P v&eacute;rifient les datasets ouverts et am&eacute;liorent le code.</div>
+          </div>
+          <div style="margin-top:0.65rem;display:flex;gap:0.4rem;flex-wrap:wrap;">
+            <a href="https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/" target="_blank" rel="noopener" class="btn btn-outline" style="padding:0.3rem 0.6rem;font-size:0.75rem;">🏛️ La Ruche</a>
+            <a href="https://github.com/xaviercallens/HiveMind" target="_blank" rel="noopener" class="btn btn-outline" style="padding:0.3rem 0.6rem;font-size:0.75rem;">💻 GitHub</a>
+          </div>
+        </div>
       </div>
     </section>
 

@@ -197,14 +197,10 @@ def _build_scenario_svg_assets() -> Dict[str, str]:
     return {
         "IMG-SCEN-01": _wrap_real_photo_svg(
             "IMG-SCEN-01",
-            "DIV-1 • SAGRADA FAMÍLIA — RAYONS VOLUMÉTRIQUES",
+            "DIV-1 • CATHÉDRALE SOLARPUNK (GHIBLI / MOEBIUS)",
             "#34d399",
-            "Wikimedia CC-BY-SA-4.0 (Sagrada Família 2024) | Rule-of-Thirds: 0.98 | Kelvin: 5400K",
-            """<line x1="0" y1="120" x2="640" y2="120" stroke="#00eefc" stroke-opacity="0.45" stroke-dasharray="6,6"/>
-  <line x1="0" y1="240" x2="640" y2="240" stroke="#00eefc" stroke-opacity="0.45" stroke-dasharray="6,6"/>
-  <line x1="213" y1="0" x2="213" y2="330" stroke="#00eefc" stroke-opacity="0.45" stroke-dasharray="6,6"/>
-  <line x1="426" y1="0" x2="426" y2="330" stroke="#00eefc" stroke-opacity="0.45" stroke-dasharray="6,6"/>
-  <circle cx="290" cy="118" r="26" fill="none" stroke="#fde047" stroke-width="2.2"/>""",
+            "Rendu Solarpunk Ghibli/Moebius + Sagrada Família | Rule-of-Thirds: 0.98 | Kelvin: 5400K",
+            """<circle cx="392" cy="112" r="54" fill="none" stroke="#fde047" stroke-width="2" stroke-dasharray="6,4"/>""",
         ),
         "IMG-SCEN-02": _wrap_real_photo_svg(
             "IMG-SCEN-02",
@@ -216,38 +212,30 @@ def _build_scenario_svg_assets() -> Dict[str, str]:
         ),
         "IMG-SCEN-03": _wrap_real_photo_svg(
             "IMG-SCEN-03",
-            "DIV-2 • GEFORCE RTX DOMESTIQUE vs MONOLITHE 70B",
+            "DIV-2 • MÈME GPU 8 Go LA RUCHE vs MONOLITHE 70B",
             "#c084fc",
-            "Wikimedia CC-BY-SA-4.0 (GeForce RTX Ventus) | La Ruche <1.5 GB Micro-Bee: 1,180 MiB + 60 FPS",
-            """<rect x="14" y="268" width="290" height="50" rx="6" fill="#450a0a" fill-opacity="0.88" stroke="#f87171" stroke-width="1.8"/>
-  <text x="24" y="288" fill="#fca5a5" font-family="monospace" font-size="11" font-weight="bold">70B DENSE: 48 GB CUDA OOM</text>
-  <text x="24" y="306" fill="#f8fafc" font-family="monospace" font-size="10">Monolithic Bottleneck Blocked</text>
-  <rect x="336" y="268" width="290" height="50" rx="6" fill="#064e3b" fill-opacity="0.88" stroke="#34d399" stroke-width="1.8"/>
-  <text x="346" y="288" fill="#6ee7b7" font-family="monospace" font-size="11" font-weight="bold">LA RUCHE BEE: 1,180 MiB (&lt;1.5 GB)</text>
-  <text x="346" y="306" fill="#fde047" font-family="monospace" font-size="10">Top-2 Sparse MoE + Gaming 60 FPS</text>""",
+            "La Ruche <1.5 GB Micro-Bee (1,180 MiB + 60 FPS) vs 70B Dense Monolith (48 GB CUDA OOM)",
+            "",
         ),
         "IMG-SCEN-04": _wrap_real_photo_svg(
             "IMG-SCEN-04",
-            "DIV-2 • DATACENTER CERN vs ESSAIM CITOYEN P2P",
+            "DIV-2 • MONOPOLE DATACENTER vs ESSAIM CITOYEN P2P",
             "#c084fc",
-            "Wikimedia CC-BY-SA-3.0 (CERN Computer Center) | Essaim P2P 15-20 Abeilles | CC-BY-4.0",
-            """<rect x="395" y="45" width="230" height="72" rx="6" fill="#0f172a" fill-opacity="0.86" stroke="#00eefc" stroke-width="1.8"/>
-  <text x="407" y="66" fill="#00eefc" font-family="monospace" font-size="11" font-weight="bold">P2P MESH SUB-SWARM</text>
-  <text x="407" y="85" fill="#34d399" font-family="monospace" font-size="10">• 225.4x Top-1% 2D-DCT</text>
-  <text x="407" y="103" fill="#fde047" font-family="monospace" font-size="10">• O(1) zk-SNARK &lt; 10 ms</text>""",
+            "Satire Visuelle : Cloud Monopolistique vs Essaim P2P Citoyen (15-20 Abeilles MoE) | CC-BY-4.0",
+            "",
         ),
         "IMG-SCEN-05": _wrap_real_photo_svg(
             "IMG-SCEN-05",
-            "DIV-3 • DIAGRAMME DE FEYNMAN &amp; SCHÉMA MATH OCR",
+            "DIV-3 • PIPELINE DILOCO + 2D-DCT + PLONKY2 ZK-SNARK",
             "#00eefc",
-            "Wikimedia Public Domain (Standard Model Feynman Vertices) + Zenodo 10.5281/zenodo.23776302",
+            "Blueprint HiveMind E20 | Top-1% 2D-DCT (225.4x) + Preuve O(1) PlonKy2 < 10 ms | Zenodo 10.5281/zenodo.23776302",
             "",
         ),
         "IMG-SCEN-06": _wrap_real_photo_svg(
             "IMG-SCEN-06",
-            "DIV-3 • DIAGRAMME HERTZSPRUNG-RUSSELL ESO &amp; CHARTQA",
+            "DIV-3 • FRONT DE PARETO LATENCE vs 2D-DCT (225.4x)",
             "#fbbf24",
-            "European Southern Observatory (ESO CC-BY-4.0) | Extraction Multi-Axes ChartQA: 100%",
+            "Campagne E20 : Latence WAN 184.2s → 0.82s | Compression 225.4x | Extraction ChartQA: 100%",
             "",
         ),
         "IMG-SCEN-07": _wrap_real_photo_svg(
@@ -281,9 +269,9 @@ def _build_scenario_svg_assets() -> Dict[str, str]:
         ),
         "IMG-SCEN-10": _wrap_real_photo_svg(
             "IMG-SCEN-10",
-            "DIV-5 • NASA TESS (FR) — PÉRIODES &amp; RAYONS PLANÉTAIRES",
+            "DIV-5 • MATRICE CCD TESS TPF (11×11) &amp; VETTING",
             "#34d399",
-            "NASA Goddard Space Flight Center Public Domain (TESS Super-Terres &amp; Sous-Neptunes)",
+            "NASA TESS Sector 14 (TIC 261136679) | Masque 4×4 | Δr = 0.018 px | P(Planète) = 99.1%",
             "",
         ),
         "IMG-SCEN-11": _wrap_real_photo_svg(

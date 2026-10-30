@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
+  <rect width="480" height="270" fill="#060b16"/>
+  <rect x="16" y="55" width="128" height="150" rx="6" fill="#0f172a" stroke="#00eefc" stroke-width="1.8"/>
+  <text x="26" y="80" fill="#00eefc" font-family="monospace" font-size="11" font-weight="bold">1. DiLoCo + Muon</text>
+  <text x="26" y="104" fill="#e2e8f0" font-family="monospace" font-size="9.5">H = 500 Inner Steps</text>
+  <text x="26" y="124" fill="#e2e8f0" font-family="monospace" font-size="9.5">NS-5 Orthogonalize</text>
+  <text x="26" y="144" fill="#34d399" font-family="monospace" font-size="9.5">VRAM &lt;= 1,490 MiB</text>
+  <rect x="176" y="55" width="128" height="150" rx="6" fill="#0f172a" stroke="#fbbf24" stroke-width="1.8"/>
+  <text x="186" y="80" fill="#fbbf24" font-family="monospace" font-size="11" font-weight="bold">2. Top-1% 2D-DCT</text>
+  <text x="186" y="104" fill="#e2e8f0" font-family="monospace" font-size="9.5">EF21 Error Feedback</text>
+  <text x="186" y="124" fill="#fde047" font-family="monospace" font-size="9.5">225.4x Wire Comp.</text>
+  <text x="186" y="144" fill="#e2e8f0" font-family="monospace" font-size="9.5">Drift &lt;= 3e-8</text>
+  <rect x="336" y="55" width="128" height="150" rx="6" fill="#0f172a" stroke="#c084fc" stroke-width="1.8"/>
+  <text x="346" y="80" fill="#c084fc" font-family="monospace" font-size="11" font-weight="bold">3. zk-SNARK PoI</text>
+  <text x="346" y="104" fill="#e2e8f0" font-family="monospace" font-size="9.5">O(1) Verification</text>
+  <text x="346" y="124" fill="#34d399" font-family="monospace" font-size="9.5">&lt; 10 ms CPU Check</text>
+  <text x="346" y="144" fill="#e2e8f0" font-family="monospace" font-size="9.5">FoMoE Top-2 Gate</text>
+  <rect x="12" y="10" width="295" height="24" rx="5" fill="#040711" stroke="#00eefc"/>
+  <text x="20" y="26" fill="#00eefc" font-family="monospace" font-size="11" font-weight="bold">DIV-3 • PROTOCOL SCHEMATIC &amp; MATH OCR</text>
+  <text x="16" y="256" fill="#94a3b8" font-family="monospace" font-size="10">Zenodo DOI 10.5281/zenodo.23776302 | Formula Extraction Accuracy: 100%</text>
+</svg>

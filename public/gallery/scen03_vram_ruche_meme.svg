@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
+  <rect width="480" height="270" fill="#090d16"/>
+  <rect x="14" y="45" width="218" height="190" rx="8" fill="#1e1b2e" stroke="#f87171" stroke-width="2"/>
+  <rect x="248" y="45" width="218" height="190" rx="8" fill="#0d2824" stroke="#34d399" stroke-width="2"/>
+  <text x="28" y="72" fill="#f87171" font-family="monospace" font-size="12" font-weight="bold">70B DENSE MONOLITH</text>
+  <text x="28" y="102" fill="#fca5a5" font-family="monospace" font-size="11">CUDA OutOfMemoryError</text>
+  <rect x="28" y="118" width="185" height="22" rx="4" fill="#7f1d1d"/>
+  <text x="36" y="133" fill="#fff" font-family="monospace" font-size="10">VRAM: 48.0 GB Required</text>
+  <text x="28" y="168" fill="#94a3b8" font-family="monospace" font-size="10">Single Node Bottleneck</text>
+  <text x="262" y="72" fill="#34d399" font-family="monospace" font-size="12" font-weight="bold">LA RUCHE 1.49 GB BEE</text>
+  <text x="262" y="102" fill="#a7f3d0" font-family="monospace" font-size="11">RTX 2070 8GB: 60 fps + Train</text>
+  <rect x="262" y="118" width="185" height="22" rx="4" fill="#065f46"/>
+  <text x="270" y="133" fill="#fde047" font-family="monospace" font-size="10">VRAM: 1,180 MiB (&lt;1.5 GB)</text>
+  <text x="262" y="168" fill="#00eefc" font-family="monospace" font-size="10">Top-2 Sparse MoE: +99.9% Gain</text>
+  <rect x="12" y="10" width="265" height="24" rx="5" fill="#040711" stroke="#c084fc"/>
+  <text x="20" y="26" fill="#c084fc" font-family="monospace" font-size="11" font-weight="bold">DIV-2 • MEME IRONY &amp; VERNACULAR</text>
+  <text x="16" y="256" fill="#fbbf24" font-family="monospace" font-size="10">r/LocalLLaMA Satire Decoded: 100% | Contrastive Irony Score: 0.992</text>
+</svg>

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
+  <rect width="480" height="270" fill="#050814"/>
+  <path d="M25,85 L155,85 C180,85 190,142 240,142 C290,142 300,85 325,85 L455,85" fill="none" stroke="#00eefc" stroke-width="3"/>
+  <line x1="25" y1="85" x2="455" y2="85" stroke="#475569" stroke-dasharray="4,4"/>
+  <ellipse cx="240" cy="195" rx="78" ry="26" fill="#c084fc" fill-opacity="0.35" stroke="#fde047" stroke-width="2"/>
+  <ellipse cx="240" cy="195" rx="38" ry="12" fill="#fde047" fill-opacity="0.75"/>
+  <text x="285" y="134" fill="#00eefc" font-family="monospace" font-size="10">ΔF/F = -720 ppm (Rp=1.12 R⊕)</text>
+  <text x="145" y="236" fill="#fde047" font-family="monospace" font-size="10">2D Morlet CWT Scalogram Ridge (Period = 12.99 d)</text>
+  <rect x="12" y="10" width="320" height="24" rx="5" fill="#040711" stroke="#00eefc"/>
+  <text x="20" y="26" fill="#00eefc" font-family="monospace" font-size="11" font-weight="bold">DIV-5 • NASA KEPLER/TESS TRANSIT + 2D CWT</text>
+  <text x="16" y="258" fill="#34d399" font-family="monospace" font-size="10">hivemind/bee-exoplanet-vmoe | VRAM: 1,180 MiB (&lt;1.5 GB) | SNR: 18.4σ</text>
+</svg>

@@ -1688,7 +1688,7 @@ def render_life_as_a_bee_section() -> str:
             {html.escape(g_scen.title_fr)}
           </div>
           <div style="font-family:var(--font-mono);font-size:0.7rem;color:var(--text-dim);margin-bottom:0.25rem;">
-            Source publique: {html.escape(g_scen.public_source_label)} &bull; Backbone: <code>{html.escape(g_scen.backbone_tag)}</code>
+            Source publique: <a href="{html.escape(g_scen.source_url)}" target="_blank" rel="noopener" style="color:var(--cyan);text-decoration:underline;">&#x1F517; {html.escape(g_scen.public_source_label)}</a> &bull; Backbone: <code>{html.escape(g_scen.backbone_tag)}</code>
           </div>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.35rem;background:var(--bg-input);padding:0.42rem;border-radius:0.35rem;font-family:var(--font-mono);font-size:0.71rem;margin-bottom:0.3rem;">
             <div><span style="color:var(--text-dim);">Débit:</span><br><strong style="color:var(--green);">{g_scen.tokens_per_sec:.1f} tok/s</strong></div>

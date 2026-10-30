@@ -17,10 +17,11 @@ import runpy
 import secrets
 import time
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from hivemind.router.accounts import RouterStore
 from hivemind.router.catalog import catalog_payload
@@ -29,7 +30,8 @@ from hivemind.router.points_wording import to_points_wording
 
 BID_WINDOW_S: float = float(os.environ.get("HIVEMIND_BID_WINDOW_S", "900") or "900")
 REWRITTEN_TYPES: tuple[str, ...] = ("text/html", "application/json", "application/javascript", "text/javascript")
-NEVER_REWRITTEN: tuple[str, ...] = ("/v1/chat/", "/v1/completions")
+NEVER_REWRITTEN: tuple[str, ...] = ("/v1/chat/", "/v1/completions", "/gallery/")
+GALLERY_DIR: Path = Path(os.environ.get("HIVEMIND_GALLERY_DIR", "/app/public/gallery"))
 _funded_consumer_bids = RouterStore.funded_consumer_bids
 
 
@@ -79,6 +81,17 @@ def join_page_overlay(request: Request) -> HTMLResponse:
             "Referrer-Policy": "strict-origin-when-cross-origin",
         },
     )
+
+
+@app.api_route("/gallery/{filename}", methods=["GET", "HEAD"])
+def gallery_asset_overlay(filename: str) -> FileResponse:
+    if "/" in filename or ".." in filename or not filename.endswith((".jpg", ".svg")):
+        raise HTTPException(status_code=404, detail="Not found")
+    target = (GALLERY_DIR / filename).resolve()
+    if not target.is_file() or GALLERY_DIR.resolve() not in target.parents:
+        raise HTTPException(status_code=404, detail="Not found")
+    media_type = "image/jpeg" if filename.endswith(".jpg") else "image/svg+xml"
+    return FileResponse(target, media_type=media_type, headers={"Cache-Control": "public, max-age=3600"})
 
 
 @app.middleware("http")

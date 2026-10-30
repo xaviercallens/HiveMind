@@ -32,12 +32,16 @@ def test_build_public_image_moe_gallery_scenarios(tmp_path: Path) -> None:
         assert scen.warm_latency_ms > 0
         assert scen.tokens_per_sec > 0
         assert scen.grounding_confidence >= 0.96
+        assert scen.source_url.startswith("https://")
+        assert scen.jpg_filename.endswith(".jpg")
         assert scen.svg_data_uri().startswith("data:image/svg+xml;base64,")
         d = scen.to_dict()
         assert d["svg_data_uri"].startswith("data:image/svg+xml;base64,")
         svg_file = gallery_dir / scen.svg_filename
         assert svg_file.exists()
-        assert "<svg" in svg_file.read_text(encoding="utf-8")
+        svg_text = svg_file.read_text(encoding="utf-8")
+        assert "<svg" in svg_text
+        assert "data:image/jpeg;base64," in svg_text
 
 
 def test_run_intensive_image_moe_inference_stress_campaign_and_validation(tmp_path: Path) -> None:

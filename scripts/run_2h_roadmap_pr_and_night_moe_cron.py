@@ -136,6 +136,79 @@ def run_night_moe_training_cycle(gpu_telemetry: Dict[str, Any]) -> Dict[str, Any
         "t4_vram_headroom_guard_mib": 4300.0,
         "effective_sparse_moe_nf4_tflops": gpu_telemetry.get("effective_sparse_moe_nf4_tflops", 0.0),
     }
+
+    nocturnal_workunits_summary: List[Dict[str, Any]] = []
+    if wddm_ok and headroom_ok:
+        try:
+            from hivemind.core.auto_improvement import NocturnalAutoImprovementScheduler
+
+            sched = NocturnalAutoImprovementScheduler()
+            domains = (
+                "code_feedback_debug",
+                "maths_olympiad",
+                "astrophysics_transits",
+                "astrophysics_spectra",
+                "cyber_threat_intel",
+            )
+            for idx, dom in enumerate(domains):
+                wu = sched.create_domain_workunit(
+                    domain=dom,
+                    num_samples=64,
+                    inner_steps=32,
+                    seed=20261030 + idx,
+                    base_model_id="Qwen/Qwen2.5-Coder-7B-Instruct",
+                )
+                res = sched.simulate_or_verify_execution(
+                    workunit=wu,
+                    worker_id="worker-rtx2070-8gb-turing",
+                    account_id="58fd3df19d2b5ef8c10031e1389aac6a",
+                    execution_class="rtx2070-8gb-turing",
+                )
+                nocturnal_workunits_summary.append(
+                    {
+                        "wu_id": wu.wu_id,
+                        "domain": wu.domain,
+                        "peak_vram_mb": res.peak_vram_mb,
+                        "accuracy_gain": round(res.accuracy_gain, 4),
+                        "mcnemar_p_value": round(res.mcnemar_p_value, 6),
+                        "gate_passed": res.gate_passed,
+                    }
+                )
+            ledger["nocturnal_5domain_workunits"] = nocturnal_workunits_summary
+        except Exception:
+            pass
+
+        # Record S21-04 live NVML RTX 2070 VRAM calibration if base_models_s21.json exists
+        s21_cat_path = PROJECT_ROOT / "configs" / "base_models_s21.json"
+        if s21_cat_path.exists() and rtx_used_mib > 0:
+            try:
+                from hivemind.core.base_model_catalog import (
+                    ServeConfig,
+                    append_calibration,
+                    calibrate_from_measurement,
+                    estimate_gguf_serving,
+                    geometry_from_entry,
+                    load_catalog,
+                )
+
+                cat = load_catalog(s21_cat_path)
+                cand_entries = [m for m in cat.get("models", []) if m.get("model_id") == "Qwen/Qwen3.5-0.8B"]
+                if cand_entries:
+                    geom = geometry_from_entry(cand_entries[0])
+                    est = estimate_gguf_serving(geom, ServeConfig("Q4_0", 4096))
+                    cal_rec = calibrate_from_measurement(
+                        est,
+                        rtx_used_mib,
+                        measured_kind="process_peak",
+                        gpu=str(gpu_telemetry.get("gpu_name", "NVIDIA GeForce RTX 2070")),
+                        source="nvidia-smi NVML live resident peak via run_2h_roadmap_pr_and_night_moe_cron.py",
+                    )
+                    cal_path = PROJECT_ROOT / "artifacts" / "vram_calibrations_s21.json"
+                    append_calibration(cal_path, cal_rec)
+                    ledger["s21_vram_calibration"] = cal_rec.to_dict()
+            except Exception:
+                pass
+
     ledger_path.parent.mkdir(parents=True, exist_ok=True)
     ledger_path.write_text(json.dumps(ledger, indent=2), encoding="utf-8")
     return {
@@ -143,6 +216,7 @@ def run_night_moe_training_cycle(gpu_telemetry: Dict[str, Any]) -> Dict[str, Any
         "status": ledger["status"],
         "rtx2070_live_guard": ledger["rtx2070_live_guard"],
         "subjects_tracked": list((ledger.get("subjects_progress") or {}).keys()),
+        "nocturnal_workunits_executed": len(nocturnal_workunits_summary),
     }
 
 

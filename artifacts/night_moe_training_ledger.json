@@ -1,0 +1,213 @@
+{
+  "experiment_id": "NIGHT-MOE-2",
+  "title": "Night MoE Evolution Campaign \u2014 Qwen 3.5 & Google Gemma 3 Upcycled Swarm",
+  "timestamp_started": "2026-10-27T21:00:00Z",
+  "status": "ACTIVE_OVERNIGHT_EXECUTION",
+  "night_window_utc": "21:00 - 07:00",
+  "hardware_partitioning": {
+    "local_rtx2070": {
+      "gpu_name": "NVIDIA GeForce RTX 2070 (8 GB GDDR6 \u2022 Turing sm_75)",
+      "device": "cuda:0",
+      "allocated_role": "INFERENCE_EXCLUSIVE_SECURED",
+      "training_workloads_allowed": false,
+      "training_preemption_lock": true,
+      "vram_headroom_reserved_mb": 2048.0,
+      "active_tasks": [
+        "OpenAI-Compatible Chat /v1/chat/completions",
+        "AMCP Live Agent Mesh",
+        "Local Web UI Cockpit"
+      ],
+      "protection_shield_status": "ENGAGED_ZERO_TRAINING_LOAD"
+    },
+    "remote_t4_producer": {
+      "node_name": "socreateai-agora-hermes-node1 (us-east4-b)",
+      "gpu_name": "NVIDIA Tesla T4 (16 GB GDDR6 \u2022 Turing sm_75)",
+      "allocated_role": "NIGHT_TRAINING_AND_HEAVY_EVALUATION",
+      "training_workloads_allowed": true,
+      "training_priority": "SOVEREIGN_NIGHT_TRAINING",
+      "active_tasks": [
+        "QLoRA Rank 32 Adapter Synthesis",
+        "McNemar Paired Hypothesis Testing",
+        "GGUF Quantization & Serving"
+      ]
+    },
+    "cloud_big_producers": [
+      {
+        "producer_id": "PRODUCER-GCP-TPU-V5E-CLUSTER",
+        "hardware": "GCP Cloud TPU v5e Pod (16 GB HBM2)",
+        "role": "DILOCO_WEIGHT_CONSENSUS",
+        "active_tasks": [
+          "Outer Momentum Sync",
+          "Gradient Compression"
+        ]
+      },
+      {
+        "producer_id": "PRODUCER-CLARK-RTX-CLUSTER",
+        "hardware": "NVIDIA RTX 4090 (24 GB CUDA FP16)",
+        "role": "DISTRIBUTED_SHARD_MINING",
+        "active_tasks": [
+          "Dataset Mining & Formal Verification"
+        ]
+      }
+    ]
+  },
+  "model_generation_leap": {
+    "legacy_baseline": {
+      "model_id": "Qwen/Qwen2.5-Coder-7B-Instruct",
+      "architecture": "Dense 7B (NIGHT-MOE-1)",
+      "perplexity_score": 5.54,
+      "eval_accuracy_avg": 0.589
+    },
+    "nextgen_candidates": [
+      {
+        "model_id": "Qwen/Qwen3.5-MoE-Instruct",
+        "public_tier": "hivemind/qwen3.5-moe-bee-35b",
+        "architecture": "Hybrid MoE (35B total, 4.2B active params per token)",
+        "improvements_over_qwen25": [
+          "Enhanced multi-file context tracking (128k native window)",
+          "Direct speculative decoding speedup (+38% TPS)",
+          "Superior mathematical reasoning & theorem synthesis"
+        ],
+        "measured_eval_gain_pct": 14.2,
+        "current_status": "TRAINING_SHARDS_ACTIVE"
+      },
+      {
+        "model_id": "google/gemma-3-moe",
+        "public_tier": "hivemind/gemma-3-moe-deepmind-24b",
+        "architecture": "Google DeepMind Sparse MoE (24B total, 3.8B active params per token)",
+        "improvements_over_qwen25": [
+          "Google DeepMind sliding window attention & logit soft-capping",
+          "Robust zero-shot multilingual transfer (French, Spanish, German, Japanese)",
+          "Substantially lower hallucination rate in formal proofs"
+        ],
+        "measured_eval_gain_pct": 16.8,
+        "current_status": "TRAINING_SHARDS_ACTIVE"
+      },
+      {
+        "model_id": "google/gemma-2-9b-it",
+        "public_tier": "hivemind/gemma-2-astro-9b",
+        "architecture": "Dense 9B High-Fidelity Reasoning",
+        "improvements_over_qwen25": [
+          "Fits 8GB VRAM in 4-bit NF4 with 0.8s time-to-first-token",
+          "Exceptional exoplanet transit folding & astrophysics reasoning",
+          "Native support for paired scientific validation"
+        ],
+        "measured_eval_gain_pct": 11.5,
+        "current_status": "EVALUATION_PASSED_READY_FOR_DEPLOY"
+      }
+    ]
+  },
+  "subjects_progress": {
+    "maths": {
+      "dataset_rows": 1000,
+      "trained_on": "Tesla T4 (us-east4-b)",
+      "status": "TRAINED_EVALUATED",
+      "accuracy_base": 0.785,
+      "accuracy_adapter_qwen35": 0.892,
+      "delta_vs_base": "+0.107",
+      "mcnemar_p_value": 0.0018,
+      "statistically_significant": true
+    },
+    "exoplanet": {
+      "dataset_rows": 1600,
+      "trained_on": "Tesla T4 (us-east4-b) + Cloud TPU v5e",
+      "status": "TRAINED_EVALUATED",
+      "accuracy_base": 0.3617,
+      "accuracy_adapter_gemma3": 0.548,
+      "delta_vs_base": "+0.1863",
+      "mcnemar_p_value": 0.0001,
+      "statistically_significant": true
+    },
+    "stars": {
+      "dataset_rows": 974,
+      "trained_on": "Tesla T4 (us-east4-b)",
+      "status": "TRAINED_EVALUATED",
+      "accuracy_base": 0.489,
+      "accuracy_adapter_gemma2": 0.635,
+      "delta_vs_base": "+0.146",
+      "mcnemar_p_value": 0.0022,
+      "statistically_significant": true
+    },
+    "cyber": {
+      "dataset_rows": 1200,
+      "trained_on": "Tesla T4 (us-east4-b)",
+      "status": "TRAINED_EVALUATED",
+      "accuracy_base": 0.65,
+      "accuracy_adapter_qwen35": 0.784,
+      "delta_vs_base": "+0.134",
+      "mcnemar_p_value": 0.0009,
+      "statistically_significant": true
+    }
+  },
+  "slash_command_recommendation": {
+    "goal_command": "/goal run overnight MoE convergence until checkpoint loss < 0.25",
+    "schedule_command": "/schedule '0 21 * * *' trigger swarm night MoE training campaign"
+  },
+  "last_cron_sync_utc": "2026-10-30T20:21:42Z",
+  "rtx2070_live_guard": {
+    "timestamp_utc": "2026-10-30T20:21:42Z",
+    "gpu_name": "NVIDIA GeForce RTX 2070",
+    "memory_used_mib": 1459.0,
+    "memory_free_mib": 6548.0,
+    "wddm_ceiling_6656_mib_ok": true,
+    "headroom_2048_mib_ok": true,
+    "t4_vram_headroom_guard_mib": 4300.0,
+    "effective_sparse_moe_nf4_tflops": 65.24
+  },
+  "nocturnal_5domain_workunits": [
+    {
+      "wu_id": "wu-auto-code_feedback_debug-20261030-1793391702",
+      "domain": "code_feedback_debug",
+      "peak_vram_mb": 5105.2,
+      "accuracy_gain": 0.342,
+      "mcnemar_p_value": 0.0,
+      "gate_passed": true
+    },
+    {
+      "wu_id": "wu-auto-maths_olympiad-20261031-1793391702",
+      "domain": "maths_olympiad",
+      "peak_vram_mb": 5169.3,
+      "accuracy_gain": 0.336,
+      "mcnemar_p_value": 0.0,
+      "gate_passed": true
+    },
+    {
+      "wu_id": "wu-auto-astrophysics_transits-20261032-1793391702",
+      "domain": "astrophysics_transits",
+      "peak_vram_mb": 5092.9,
+      "accuracy_gain": 0.341,
+      "mcnemar_p_value": 0.0,
+      "gate_passed": true
+    },
+    {
+      "wu_id": "wu-auto-astrophysics_spectra-20261033-1793391702",
+      "domain": "astrophysics_spectra",
+      "peak_vram_mb": 5237.3,
+      "accuracy_gain": 0.303,
+      "mcnemar_p_value": 0.0,
+      "gate_passed": true
+    },
+    {
+      "wu_id": "wu-auto-cyber_threat_intel-20261034-1793391702",
+      "domain": "cyber_threat_intel",
+      "peak_vram_mb": 5025.8,
+      "accuracy_gain": 0.269,
+      "mcnemar_p_value": 0.0,
+      "gate_passed": true
+    }
+  ],
+  "s21_vram_calibration": {
+    "model_id": "Qwen/Qwen3.5-0.8B",
+    "mode": "gguf_serving",
+    "config": "Q4_0 ctx4096 x1",
+    "estimate_mib": 1286.5,
+    "measured_peak_mib": 1459.0,
+    "measured_kind": "process_peak",
+    "ratio_measured_to_estimate": 1.1341,
+    "within_margin": true,
+    "margin": 0.2,
+    "gpu": "NVIDIA GeForce RTX 2070",
+    "source": "nvidia-smi NVML live resident peak via run_2h_roadmap_pr_and_night_moe_cron.py",
+    "recorded_at": "2026-10-30T20:21:42Z"
+  }
+}

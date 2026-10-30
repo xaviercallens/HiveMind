@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Run Nocturnal MoE Auto-Improvement & Proof-of-Useful-Work (PoUW) Points Retrofit.
 
 Orchestrates multi-expert, multi-base-model (Gemma 2, Gemma 3, Qwen 2.5, Qwen 3.5) continuous
@@ -162,7 +162,7 @@ def main() -> int:
         {
             "account_id": "58fd3df19d2b5ef8c10031e1389aac6a",
             "handle": "producer.rtx2070",
-            "endpoint_url": "http://127.0.0.1:8294",
+            "endpoint_url": "http://127.0.0.1:8095",
             "execution_class": "rtx2070-8gb-turing",
             "vram_gb": 8.0,
             "cost_per_1k": 0.4,

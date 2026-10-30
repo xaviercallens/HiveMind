@@ -1,20 +1,20 @@
 {
   "schema_version": "rtx2070_3h_monitor.v1",
   "cadence_cron": "0 */3 * * *",
-  "timestamp_utc": "2026-10-30T18:25:26Z",
+  "timestamp_utc": "2026-10-30T20:21:32Z",
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-10-30T18:25:26Z",
+    "timestamp_utc": "2026-10-30T20:21:32Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": false,
     "device": "nvml:cuda:0 (torch+cpu host)",
     "compute_capability": "7.5",
     "temperature_c": 27.0,
-    "gpu_utilization_pct": 8.0,
-    "power_draw_w": 9.72,
+    "gpu_utilization_pct": 5.0,
+    "power_draw_w": 10.81,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1472.0,
-    "memory_free_mib": 6535.0,
+    "memory_used_mib": 1459.0,
+    "memory_free_mib": 6548.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
@@ -23,11 +23,11 @@
     "graphics_clock_mhz": 405.0,
     "max_graphics_clock_mhz": 2145.0,
     "memory_clock_mhz": 405.0,
-    "host_tensor_gflops": 109.62,
+    "host_tensor_gflops": 107.91,
     "measured_fp32_tflops": 9.88,
     "measured_fp16_tensor_tflops": 39.54,
     "effective_sparse_moe_nf4_tflops": 65.24,
-    "microbench_elapsed_ms": 150.53
+    "microbench_elapsed_ms": 152.75
   },
   "community_gpu_benchmark_summary": {
     "receipt_sha256": "e944272a1802d8053a28c26a59e7e121671eec23e2c3fcb22f2fb45c3b197580",
@@ -35,7 +35,7 @@
     "peak_allocated_mb": 0.0
   },
   "pr_integration_summary": {
-    "checked_utc": "2026-10-30T18:25:30Z",
+    "checked_utc": "2026-10-30T20:21:36Z",
     "open_prs_count": 5,
     "evaluated": [
       {
@@ -44,7 +44,7 @@
         "author": "xaviercallens",
         "head_ref": "feat/openrouter-5lang-i18n",
         "base_ref": "main",
-        "head_sha": "5c6486d9cd",
+        "head_sha": "63cf02e41a",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -117,5 +117,5 @@
       141
     ]
   },
-  "ledger_sha256": "be3a2f3ca55342d9e8ef8eff9ee4ea914d01fb29d1069d869a57fdc3fd8d3e72"
+  "ledger_sha256": "70f66f9fe9d0a7aadc367be115f0589ea3928b229b7955336e7f37640a8e66d3"
 }

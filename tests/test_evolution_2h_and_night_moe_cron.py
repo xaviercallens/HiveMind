@@ -63,3 +63,4 @@ def test_run_night_moe_training_cycle_enforces_vram_guards(tmp_path: Path, monke
     assert summary["status"] == "ACTIVE_OVERNIGHT_EXECUTION"
     assert summary["rtx2070_live_guard"]["wddm_ceiling_6656_mib_ok"] is True
     assert summary["rtx2070_live_guard"]["headroom_2048_mib_ok"] is True
+    assert summary["nocturnal_workunits_executed"] == 5

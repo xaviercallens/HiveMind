@@ -1,7 +1,7 @@
 {
   "schema_version": "hivemind.evolution_2h_and_night_moe_cron.v1",
-  "timestamp_utc": "2026-10-30T18:25:26Z",
-  "mode": "2h-evolution",
+  "timestamp_utc": "2026-10-30T20:21:32Z",
+  "mode": "both",
   "schedules": {
     "roadmap_pr_evolution_cron": "0 */2 * * *",
     "night_moe_training_cron": "0 22 * * *"
@@ -15,18 +15,18 @@
     "total_requests_served": 21
   },
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-10-30T18:25:26Z",
+    "timestamp_utc": "2026-10-30T20:21:32Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": false,
     "device": "nvml:cuda:0 (torch+cpu host)",
     "compute_capability": "7.5",
     "temperature_c": 27.0,
-    "gpu_utilization_pct": 8.0,
-    "power_draw_w": 9.72,
+    "gpu_utilization_pct": 5.0,
+    "power_draw_w": 10.81,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1472.0,
-    "memory_free_mib": 6535.0,
+    "memory_used_mib": 1459.0,
+    "memory_free_mib": 6548.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
@@ -35,11 +35,11 @@
     "graphics_clock_mhz": 405.0,
     "max_graphics_clock_mhz": 2145.0,
     "memory_clock_mhz": 405.0,
-    "host_tensor_gflops": 109.62,
+    "host_tensor_gflops": 107.91,
     "measured_fp32_tflops": 9.88,
     "measured_fp16_tensor_tflops": 39.54,
     "effective_sparse_moe_nf4_tflops": 65.24,
-    "microbench_elapsed_ms": 150.53
+    "microbench_elapsed_ms": 152.75
   },
   "roadmap_summary": {
     "exists": true,
@@ -102,6 +102,26 @@
       141
     ]
   },
-  "night_moe_summary": {},
-  "receipt_sha256": "9e88edf49375e764e64b2b44e0a21764bbb05a72f16bf26117c9084aaae1dda5"
+  "night_moe_summary": {
+    "timestamp_utc": "2026-10-30T20:21:42Z",
+    "status": "ACTIVE_OVERNIGHT_EXECUTION",
+    "rtx2070_live_guard": {
+      "timestamp_utc": "2026-10-30T20:21:42Z",
+      "gpu_name": "NVIDIA GeForce RTX 2070",
+      "memory_used_mib": 1459.0,
+      "memory_free_mib": 6548.0,
+      "wddm_ceiling_6656_mib_ok": true,
+      "headroom_2048_mib_ok": true,
+      "t4_vram_headroom_guard_mib": 4300.0,
+      "effective_sparse_moe_nf4_tflops": 65.24
+    },
+    "subjects_tracked": [
+      "maths",
+      "exoplanet",
+      "stars",
+      "cyber"
+    ],
+    "nocturnal_workunits_executed": 5
+  },
+  "receipt_sha256": "2c935803c9da6fb7f43ddb4497cfcac566ce7157eddd46ae8924f48e9a8ccf99"
 }

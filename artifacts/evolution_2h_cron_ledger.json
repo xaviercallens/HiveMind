@@ -1,7 +1,7 @@
 {
   "schema_version": "hivemind.evolution_2h_and_night_moe_cron.v1",
-  "timestamp_utc": "2026-10-30T21:00:39Z",
-  "mode": "night-moe",
+  "timestamp_utc": "2026-10-30T22:20:42Z",
+  "mode": "both",
   "schedules": {
     "roadmap_pr_evolution_cron": "0 */2 * * *",
     "night_moe_training_cron": "0 22 * * *"
@@ -15,35 +15,35 @@
     "total_requests_served": 21
   },
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-10-30T21:00:39Z",
+    "timestamp_utc": "2026-10-30T22:20:42Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": false,
     "device": "nvml:cuda:0 (torch+cpu host)",
     "compute_capability": "7.5",
     "temperature_c": 26.0,
-    "gpu_utilization_pct": 5.0,
-    "power_draw_w": 8.95,
+    "gpu_utilization_pct": 13.0,
+    "power_draw_w": 8.9,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1460.0,
-    "memory_free_mib": 6547.0,
+    "memory_used_mib": 1464.0,
+    "memory_free_mib": 6543.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
     "wddm_envelope_compliant": true,
     "headroom_guard_compliant": true,
-    "graphics_clock_mhz": 405.0,
+    "graphics_clock_mhz": 300.0,
     "max_graphics_clock_mhz": 2145.0,
     "memory_clock_mhz": 405.0,
-    "host_tensor_gflops": 108.46,
+    "host_tensor_gflops": 106.16,
     "measured_fp32_tflops": 9.88,
     "measured_fp16_tensor_tflops": 39.54,
     "effective_sparse_moe_nf4_tflops": 65.24,
-    "microbench_elapsed_ms": 152.34
+    "microbench_elapsed_ms": 155.66
   },
   "roadmap_summary": {
     "exists": true,
-    "roadmap_sha256": "03f8b56154936bca3740ee9d445d49bda7f7ffbb8fe8a1ca1c80a71124fa8da9",
+    "roadmap_sha256": "0f40e1cd7f61f82eacf56cca767a5238268319410f6aa770685568980fd19eb6",
     "seasons_detected": [
       1,
       2,
@@ -80,7 +80,7 @@
       33
     ],
     "max_season": 33,
-    "total_task_ids": 201,
+    "total_task_ids": 203,
     "sample_next_candidates": [
       "Proposal of record: [`docs/COMPUTE_COIN_AND_MARKET.md`](docs/COMPUTE_COIN_AND_MARKET.md); code `hivemind.economy.compute_coin` (pure, torch-free); 12 tests (5 property-based); simulation `scripts/run_compute_market_sim.py`, pre-registered ([`artifacts/economy/compute_market_prereg.json`](artifacts/economy/compute_market_prereg.json)), report [`compute_market_report.json`](artifacts/economy/compute_market_report.json). **Status: proposed, not adopted** \u2014 the ledger keeps its block-reward rule until `HM-S12-02` and an owner order.",
       "| `HM-S13-04` | HMT cannot yet be earned except by serving | owner-signed grant policy through the firewall (`HM-S11-02`) instead of a bearer admin key | G-R1 |",
@@ -93,18 +93,23 @@
     ]
   },
   "pr_integration_summary": {
-    "open_prs_count": 0,
+    "open_prs_count": 5,
     "merged_prs": [],
-    "held_prs": []
+    "held_prs": [
+      219,
+      218,
+      163,
+      141
+    ]
   },
   "night_moe_summary": {
-    "timestamp_utc": "2026-10-30T21:00:42Z",
+    "timestamp_utc": "2026-10-30T22:20:52Z",
     "status": "ACTIVE_OVERNIGHT_EXECUTION",
     "rtx2070_live_guard": {
-      "timestamp_utc": "2026-10-30T21:00:42Z",
+      "timestamp_utc": "2026-10-30T22:20:52Z",
       "gpu_name": "NVIDIA GeForce RTX 2070",
-      "memory_used_mib": 1460.0,
-      "memory_free_mib": 6547.0,
+      "memory_used_mib": 1464.0,
+      "memory_free_mib": 6543.0,
       "wddm_ceiling_6656_mib_ok": true,
       "headroom_2048_mib_ok": true,
       "t4_vram_headroom_guard_mib": 4300.0,
@@ -118,5 +123,5 @@
     ],
     "nocturnal_workunits_executed": 5
   },
-  "receipt_sha256": "85d383df085289fc772ca6c62d5a5c7d5445000e45e4e9ceca1003298da8bcf5"
+  "receipt_sha256": "c0f839b60c31878c8e9f3539b34b39f0758d2fc7c789607e8e4d6a3519849040"
 }

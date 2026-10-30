@@ -143,12 +143,12 @@
     "goal_command": "/goal run overnight MoE convergence until checkpoint loss < 0.25",
     "schedule_command": "/schedule '0 21 * * *' trigger swarm night MoE training campaign"
   },
-  "last_cron_sync_utc": "2026-10-30T21:00:42Z",
+  "last_cron_sync_utc": "2026-10-30T22:20:52Z",
   "rtx2070_live_guard": {
-    "timestamp_utc": "2026-10-30T21:00:42Z",
+    "timestamp_utc": "2026-10-30T22:20:52Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
-    "memory_used_mib": 1460.0,
-    "memory_free_mib": 6547.0,
+    "memory_used_mib": 1464.0,
+    "memory_free_mib": 6543.0,
     "wddm_ceiling_6656_mib_ok": true,
     "headroom_2048_mib_ok": true,
     "t4_vram_headroom_guard_mib": 4300.0,
@@ -156,7 +156,7 @@
   },
   "nocturnal_5domain_workunits": [
     {
-      "wu_id": "wu-auto-code_feedback_debug-20261030-1793394042",
+      "wu_id": "wu-auto-code_feedback_debug-20261030-1793398852",
       "domain": "code_feedback_debug",
       "peak_vram_mb": 5105.2,
       "accuracy_gain": 0.342,
@@ -164,7 +164,7 @@
       "gate_passed": true
     },
     {
-      "wu_id": "wu-auto-maths_olympiad-20261031-1793394042",
+      "wu_id": "wu-auto-maths_olympiad-20261031-1793398852",
       "domain": "maths_olympiad",
       "peak_vram_mb": 5169.3,
       "accuracy_gain": 0.336,
@@ -172,7 +172,7 @@
       "gate_passed": true
     },
     {
-      "wu_id": "wu-auto-astrophysics_transits-20261032-1793394042",
+      "wu_id": "wu-auto-astrophysics_transits-20261032-1793398852",
       "domain": "astrophysics_transits",
       "peak_vram_mb": 5092.9,
       "accuracy_gain": 0.341,
@@ -180,7 +180,7 @@
       "gate_passed": true
     },
     {
-      "wu_id": "wu-auto-astrophysics_spectra-20261033-1793394042",
+      "wu_id": "wu-auto-astrophysics_spectra-20261033-1793398852",
       "domain": "astrophysics_spectra",
       "peak_vram_mb": 5237.3,
       "accuracy_gain": 0.303,
@@ -188,7 +188,7 @@
       "gate_passed": true
     },
     {
-      "wu_id": "wu-auto-cyber_threat_intel-20261034-1793394042",
+      "wu_id": "wu-auto-cyber_threat_intel-20261034-1793398852",
       "domain": "cyber_threat_intel",
       "peak_vram_mb": 5025.8,
       "accuracy_gain": 0.269,
@@ -201,13 +201,13 @@
     "mode": "gguf_serving",
     "config": "Q4_0 ctx4096 x1",
     "estimate_mib": 1286.5,
-    "measured_peak_mib": 1460.0,
+    "measured_peak_mib": 1464.0,
     "measured_kind": "process_peak",
-    "ratio_measured_to_estimate": 1.1349,
+    "ratio_measured_to_estimate": 1.138,
     "within_margin": true,
     "margin": 0.2,
     "gpu": "NVIDIA GeForce RTX 2070",
     "source": "nvidia-smi NVML live resident peak via run_2h_roadmap_pr_and_night_moe_cron.py",
-    "recorded_at": "2026-10-30T21:00:42Z"
+    "recorded_at": "2026-10-30T22:20:52Z"
   }
 }

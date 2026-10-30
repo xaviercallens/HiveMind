@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
+  <rect width="480" height="270" fill="#060913"/>
+  <path d="M35,175 Q75,165 105,115 Q125,165 160,155 Q195,95 225,150 Q275,62 305,148 Q355,102 395,142 L445,152" fill="none" stroke="#fbbf24" stroke-width="3"/>
+  <line x1="105" y1="60" x2="105" y2="210" stroke="#38bdf8" stroke-dasharray="3,3"/>
+  <text x="82" y="54" fill="#38bdf8" font-family="monospace" font-size="10">H2O (1.4μm)</text>
+  <line x1="195" y1="60" x2="195" y2="210" stroke="#34d399" stroke-dasharray="3,3"/>
+  <text x="172" y="54" fill="#34d399" font-family="monospace" font-size="10">CH4 (2.3μm)</text>
+  <line x1="275" y1="50" x2="275" y2="210" stroke="#f43f5e" stroke-dasharray="3,3"/>
+  <text x="252" y="46" fill="#f43f5e" font-family="monospace" font-size="10" font-weight="bold">CO2 (4.3μm)</text>
+  <line x1="365" y1="60" x2="365" y2="210" stroke="#c084fc" stroke-dasharray="3,3"/>
+  <text x="345" y="54" fill="#c084fc" font-family="monospace" font-size="10">SO2 (4.0μm)</text>
+  <rect x="12" y="10" width="335" height="24" rx="5" fill="#040711" stroke="#fbbf24"/>
+  <text x="20" y="26" fill="#fbbf24" font-family="monospace" font-size="11" font-weight="bold">DIV-6 • JWST NIRSPEC ATMOSPHERIC SPECTRUM</text>
+  <text x="16" y="256" fill="#fde047" font-family="monospace" font-size="10">WASP-39b / K2-18b Transmission (0.6-5.3μm) | CO2 26σ Detection</text>
+</svg>

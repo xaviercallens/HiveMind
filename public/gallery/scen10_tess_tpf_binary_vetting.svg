@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
+  <rect width="480" height="270" fill="#070a14"/>
+  <g stroke="#1e293b" stroke-width="1.5">
+    <rect x="45" y="55" width="150" height="150" fill="#0f172a"/>
+    <rect x="82" y="92" width="75" height="75" fill="#1e3a8a" stroke="#00eefc" stroke-width="2"/>
+    <rect x="105" y="115" width="30" height="30" fill="#fde047"/>
+  </g>
+  <circle cx="120" cy="130" r="4" fill="#f43f5e"/>
+  <text x="48" y="224" fill="#00eefc" font-family="monospace" font-size="10">Centroid Δr = 0.012 px (&lt;0.1 px)</text>
+  <path d="M245,95 L290,95 L305,145 L320,95 L375,95 L390,145 L405,95 L445,95" fill="none" stroke="#34d399" stroke-width="2.5"/>
+  <text x="250" y="78" fill="#34d399" font-family="monospace" font-size="10.5" font-weight="bold">Odd vs. Even Transit Depth Match</text>
+  <text x="250" y="175" fill="#a7f3d0" font-family="monospace" font-size="10">Δ(Odd-Even) = 0.08σ -&gt; TRUE PLANET</text>
+  <text x="250" y="195" fill="#f87171" font-family="monospace" font-size="10">Eclipsing Binary Prob: 0.002</text>
+  <rect x="12" y="10" width="320" height="24" rx="5" fill="#040711" stroke="#34d399"/>
+  <text x="20" y="26" fill="#34d399" font-family="monospace" font-size="11" font-weight="bold">DIV-5 • TESS TPF CENTROID &amp; BINARY VETTING</text>
+  <text x="16" y="256" fill="#e2e8f0" font-family="monospace" font-size="10">NASA TESS SPOC Target Pixel File | False-Positive Rejection: 99.8%</text>
+</svg>

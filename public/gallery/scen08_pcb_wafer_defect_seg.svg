@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
+  <rect width="480" height="270" fill="#061f18"/>
+  <g stroke="#10b981" stroke-width="2.2" fill="none">
+    <polyline points="30,75 160,75 195,110 340,110"/>
+    <polyline points="30,135 140,135 175,170 430,170"/>
+    <polyline points="80,210 260,210 295,140 440,140"/>
+  </g>
+  <circle cx="195" cy="110" r="22" fill="#f43f5e" fill-opacity="0.28" stroke="#f43f5e" stroke-width="2.2"/>
+  <text x="224" y="106" fill="#f43f5e" font-family="monospace" font-size="10" font-weight="bold">MICRO-SHORT (p=0.996)</text>
+  <rect x="278" y="124" width="36" height="32" fill="#fbbf24" fill-opacity="0.25" stroke="#fbbf24" stroke-width="2"/>
+  <text x="320" y="136" fill="#fbbf24" font-family="monospace" font-size="10">PAD-BRIDGE (0.984)</text>
+  <rect x="12" y="10" width="290" height="24" rx="5" fill="#040711" stroke="#10b981"/>
+  <text x="20" y="26" fill="#10b981" font-family="monospace" font-size="11" font-weight="bold">DIV-4 • WAFER &amp; PCB DEFECT INSPECTION</text>
+  <text x="16" y="256" fill="#e2e8f0" font-family="monospace" font-size="10">Sub-Micron Trace Segmentation | False Escape Rate: &lt; 0.02%</text>
+</svg>

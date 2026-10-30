@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
+  <rect width="480" height="270" fill="#04060e"/>
+  <circle cx="240" cy="138" r="64" fill="none" stroke="#38bdf8" stroke-width="7" stroke-opacity="0.72" stroke-dasharray="85,18,95,22"/>
+  <circle cx="240" cy="138" r="64" fill="none" stroke="#c084fc" stroke-width="3" stroke-opacity="0.9"/>
+  <circle cx="240" cy="138" r="18" fill="#fde047" fill-opacity="0.92"/>
+  <circle cx="288" cy="96" r="6" fill="#f43f5e" stroke="#fff" stroke-width="1.5"/>
+  <text x="302" y="99" fill="#f43f5e" font-family="monospace" font-size="10">Subhalo M=10^8.4 M☉</text>
+  <text x="42" y="92" fill="#38bdf8" font-family="monospace" font-size="10">θ_E = 1.48 arcsec</text>
+  <text x="42" y="112" fill="#c084fc" font-family="monospace" font-size="10">z_lens = 0.42 | z_src = 2.18</text>
+  <rect x="12" y="10" width="335" height="24" rx="5" fill="#040711" stroke="#c084fc"/>
+  <text x="20" y="26" fill="#c084fc" font-family="monospace" font-size="11" font-weight="bold">DIV-7 • EUCLID/JWST EINSTEIN RING LENSING</text>
+  <text x="16" y="256" fill="#e2e8f0" font-family="monospace" font-size="10">Multi-Band FITS (g,r,z) Arcsinh Stretch | SIE + Shear κ(θ) Fit: 99.6%</text>
+</svg>

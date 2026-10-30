@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
+  <rect width="480" height="270" fill="#080c17"/>
+  <rect x="22" y="65" width="150" height="155" rx="6" fill="#1f2937" stroke="#f97316" stroke-width="2"/>
+  <text x="36" y="92" fill="#f97316" font-family="monospace" font-size="11" font-weight="bold">CENTRALIZED DC</text>
+  <text x="36" y="116" fill="#cbd5e1" font-family="monospace" font-size="10">• 500 MW Grid Load</text>
+  <text x="36" y="136" fill="#cbd5e1" font-family="monospace" font-size="10">• O(N²d) Multi-Krum</text>
+  <text x="36" y="156" fill="#cbd5e1" font-family="monospace" font-size="10">• Closed Weights</text>
+  <path d="M185,140 L235,140" stroke="#00eefc" stroke-width="3" marker-end="url(#arrow)"/>
+  <circle cx="345" cy="142" r="78" fill="#0f172a" stroke="#00eefc" stroke-width="2" stroke-dasharray="5,3"/>
+  <circle cx="345" cy="88" r="14" fill="#1e293b" stroke="#34d399" stroke-width="2"/>
+  <circle cx="295" cy="168" r="14" fill="#1e293b" stroke="#34d399" stroke-width="2"/>
+  <circle cx="395" cy="168" r="14" fill="#1e293b" stroke="#34d399" stroke-width="2"/>
+  <line x1="345" y1="102" x2="305" y2="156" stroke="#fde047" stroke-width="1.6"/>
+  <line x1="345" y1="102" x2="385" y2="156" stroke="#fde047" stroke-width="1.6"/>
+  <line x1="309" y1="168" x2="381" y2="168" stroke="#fde047" stroke-width="1.6"/>
+  <rect x="12" y="10" width="285" height="24" rx="5" fill="#040711" stroke="#c084fc"/>
+  <text x="20" y="26" fill="#c084fc" font-family="monospace" font-size="11" font-weight="bold">DIV-2 • CITIZEN SWARM CULTURAL POSTER</text>
+  <text x="16" y="256" fill="#34d399" font-family="monospace" font-size="10">P2P Mesh Sub-Swarm (15-20 Bees) | Open-Source CC-BY-4.0 Grounding</text>
+</svg>

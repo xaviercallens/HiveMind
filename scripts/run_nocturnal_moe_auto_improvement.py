@@ -46,6 +46,8 @@ REPORT_PATH = ARTIFACTS_DIR / "nocturnal_moe_auto_improvement_report.json"
 
 
 def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(
         description="Nocturnal MoE Auto-Improvement & PoUW Points Retrofit Runner."
     )

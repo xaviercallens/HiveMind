@@ -1,8 +1,8 @@
 {
   "benchmark_suite": "Project HiveMind Community GPU & Swarm Verification Suite (Season 7 / Wave 6)",
   "contributor_handle": "xaviercallens",
-  "timestamp_utc": 1792653335.603,
-  "elapsed_total_ms": 2594.552,
+  "timestamp_utc": 1793377344.867,
+  "elapsed_total_ms": 368.882,
   "overall_passed": true,
   "non_monetary_charter": {
     "financial_payment_usd_eur": 0.0,
@@ -10,22 +10,26 @@
     "reward_nature": "non_monetary_compute_reciprocity_points_only",
     "redemption_condition": "Points (PTS / $HIVE) grant exclusively computing processing benefits (shared Sparse MoE inference and training quota) when the live production HiveMind Swarm is deployed, available, and used by a large community.",
     "symbolic_points_preview_pts": 250,
-    "legal_notice": "NO FINANCIAL PAYMENT (0.00 EUR / 0.00 USD): Project HiveMind is a voluntary, non-commercial open-source research project. No money, fiat currency, cryptocurrency, or wage is ever promised or paid. Accumulated 'points' (PTS and $HIVE PoUW accounting units) confer exclusively reciprocal computing processing benefits (shared Sparse MoE inference and training quota) when the live production HiveMind Swarm is deployed, available, and used by a large community."
+    "legal_notice": "NO FINANCIAL PAYMENT: Project HiveMind is a voluntary, non-commercial open-source research project. No money, fiat currency, cryptocurrency, or wage is ever promised or paid. Accumulated 'points' (PTS and $HIVE PoUW accounting units) confer exclusively reciprocal computing processing benefits (shared Sparse MoE inference and training quota) when the live production HiveMind Swarm is deployed, available, and used by a large community."
   },
   "stage1_accelerator": {
     "device": "cpu",
     "backend": "cpu_fallback",
-    "device_name": "CPU (x86_64)",
+    "device_name": "CPU (Intel64 Family 6 Model 165 Stepping 3, GenuineIntel)",
     "compute_capability": "cpu_fp32",
     "total_vram_mib": 0.0,
     "wddm_usable_budget_mib": 6656.0,
     "cuda_or_hip_version": "none",
     "is_gpu": false,
+    "nvml_detected_gpu": "NVIDIA GeForce RTX 2070",
+    "nvml_total_vram_mib": 8192.0,
+    "nvml_compute_capability": "7.5",
+    "nvml_driver_version": "591.86",
     "peak_allocated_vram_mib": 0.0,
     "within_8gb_wddm_envelope": true
   },
   "stage2_real_token_and_ef21": {
-    "elapsed_ms": 1876.156,
+    "elapsed_ms": 216.277,
     "baseline_holdout_nll": 5.576401,
     "trained_holdout_nll": 4.888508,
     "recipient_holdout_nll": 4.888508,
@@ -33,21 +37,38 @@
     "ef21_conservation_error_l2": 0.0
   },
   "stage3_three_tier_128_moe_and_prefetch": {
-    "elapsed_ms": 37.405,
+    "elapsed_ms": 3.27,
     "num_experts": 128,
     "gating_inner_products_per_token": 16,
     "gating_reduction_factor": 8.0,
-    "routing_throughput_tokens_per_sec": 3422.0,
+    "routing_throughput_tokens_per_sec": 39143.73,
     "prefetch_calls": 2,
     "prefetch_hit_rate": 1.0
   },
   "stage4_zk_opoi_v4_and_insurance": {
-    "elapsed_ms": 45.844,
+    "elapsed_ms": 18.014,
     "merkle_root": "64faa780153bb75f58004f8787f99b39ff86f8cb5f8266c0434d8f2c2ad7dadb",
     "leaf_count": 24,
     "challenges_verified": 4,
     "batch_passed": true,
-    "insurance_pool_reserve_hive": 200.0
+    "insurance_pool_reserve_hive": 200.0,
+    "fault_drill": {
+      "forged_leaf": [
+        2,
+        1
+      ],
+      "faults_found": [
+        [
+          2,
+          1
+        ]
+      ],
+      "indemnified_hive": 20.0,
+      "paid_from_peer_stake": 20.0,
+      "settlement_ms": 0.0064,
+      "supply_conserved": true,
+      "passed": true
+    }
   },
-  "receipt_sha256": "2f8ae97fd69be25f4c6036aa4cd2153a2affec9e8df435e38158b69028aed8f9"
+  "receipt_sha256": "e944272a1802d8053a28c26a59e7e121671eec23e2c3fcb22f2fb45c3b197580"
 }

@@ -1,0 +1,121 @@
+{
+  "schema_version": "rtx2070_3h_monitor.v1",
+  "cadence_cron": "0 */3 * * *",
+  "timestamp_utc": "2026-10-30T16:19:56Z",
+  "rtx2070_telemetry": {
+    "timestamp_utc": "2026-10-30T16:19:56Z",
+    "gpu_name": "NVIDIA GeForce RTX 2070",
+    "driver_version": "591.86",
+    "cuda_available": false,
+    "device": "nvml:cuda:0 (torch+cpu host)",
+    "compute_capability": "7.5",
+    "temperature_c": 27.0,
+    "gpu_utilization_pct": 18.0,
+    "power_draw_w": 9.34,
+    "power_limit_w": 175.0,
+    "memory_used_mib": 1567.0,
+    "memory_free_mib": 6440.0,
+    "memory_total_mib": 8192.0,
+    "wddm_ceiling_mib": 6656.0,
+    "vram_headroom_guard_mib": 2048.0,
+    "wddm_envelope_compliant": true,
+    "headroom_guard_compliant": true,
+    "graphics_clock_mhz": 1410.0,
+    "max_graphics_clock_mhz": 2145.0,
+    "memory_clock_mhz": 6801.0,
+    "host_tensor_gflops": 106.22,
+    "measured_fp32_tflops": 9.88,
+    "measured_fp16_tensor_tflops": 39.54,
+    "effective_sparse_moe_nf4_tflops": 65.24,
+    "microbench_elapsed_ms": 156.72
+  },
+  "community_gpu_benchmark_summary": {
+    "receipt_sha256": "3d2660010e23bfd7f12375ef23f353dc8bd66a516e0e38a6c44f58b25e8ba3bd",
+    "all_stages_passed": true,
+    "peak_allocated_mb": 0.0
+  },
+  "pr_integration_summary": {
+    "checked_utc": "2026-10-30T16:19:59Z",
+    "open_prs_count": 5,
+    "evaluated": [
+      {
+        "pr": 344,
+        "title": "feat(router,webgpu,s26): fix /webgpu 500 without torch, 5-lang OpenRouter i18n & TensorSharp (@zhongkaifu) Co-Lab Bridge",
+        "author": "xaviercallens",
+        "head_ref": "feat/openrouter-5lang-i18n",
+        "base_ref": "main",
+        "head_sha": "5643ab33c0",
+        "owner_authored": true,
+        "security_passed": true,
+        "injection_clean": true,
+        "decision": "ACCEPT",
+        "merged": false,
+        "merge_message": ""
+      },
+      {
+        "pr": 219,
+        "title": "chore(deps): bump actions/upload-artifact from 4 to 7",
+        "author": "dependabot[bot]",
+        "head_ref": "dependabot/github_actions/actions/upload-artifact-7",
+        "base_ref": "main",
+        "head_sha": "f98c09721c",
+        "owner_authored": false,
+        "security_passed": false,
+        "injection_clean": true,
+        "decision": "HOLD (non-owner author 'dependabot[bot]'; checked, held for manual review)",
+        "merged": false,
+        "merge_message": ""
+      },
+      {
+        "pr": 218,
+        "title": "chore(deps): bump actions/setup-python from 5 to 7",
+        "author": "dependabot[bot]",
+        "head_ref": "dependabot/github_actions/actions/setup-python-7",
+        "base_ref": "main",
+        "head_sha": "6c83028aef",
+        "owner_authored": false,
+        "security_passed": false,
+        "injection_clean": true,
+        "decision": "HOLD (non-owner author 'dependabot[bot]'; checked, held for manual review)",
+        "merged": false,
+        "merge_message": ""
+      },
+      {
+        "pr": 163,
+        "title": "Propose ALIXQueenBee: a planner queen, dance records and local learning from developer feedback",
+        "author": "xaviercallens",
+        "head_ref": "plan/alix-queenbee",
+        "base_ref": "main",
+        "head_sha": "109752cc9d",
+        "owner_authored": true,
+        "security_passed": true,
+        "injection_clean": true,
+        "decision": "HOLD (draft)",
+        "merged": false,
+        "merge_message": ""
+      },
+      {
+        "pr": 141,
+        "title": "chore(deps): bump setuptools from 84.0.0 to 84.1.0",
+        "author": "dependabot[bot]",
+        "head_ref": "dependabot/uv/setuptools-84.1.0",
+        "base_ref": "main",
+        "head_sha": "605be78b15",
+        "owner_authored": false,
+        "security_passed": false,
+        "injection_clean": true,
+        "decision": "HOLD (non-owner author 'dependabot[bot]'; checked, held for manual review)",
+        "merged": false,
+        "merge_message": ""
+      }
+    ],
+    "merged_prs": [],
+    "held_prs": [
+      219,
+      218,
+      163,
+      141
+    ]
+  },
+  "ledger_sha256": "3dc390508d5d0a0e4b65deac7472ced1927cfc6e886a3a554ee6f08b4adb489e"
+}

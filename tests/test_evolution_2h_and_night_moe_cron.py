@@ -16,7 +16,30 @@ def test_scan_roadmap_status_detects_season_33() -> None:
     res = scan_roadmap_status()
     assert res["exists"] is True
     assert res["max_season"] >= 33
+    assert 25 in res["seasons_detected"]
+    assert 33 in res["seasons_detected"]
     assert res["total_task_ids"] >= 190
+
+
+def test_local_cockpit_5lang_portal_and_evolution_cron_endpoint() -> None:
+    from fastapi.testclient import TestClient
+    from hivemind.game.exoplanet_hunter_cockpit import create_exoplanet_hunter_fastapi_app
+
+    client = TestClient(create_exoplanet_hunter_fastapi_app())
+    for route, expected_lang in (("/portal?lang=es", "es"), ("/de", "de"), ("/zh", "zh"), ("/inscription", "fr")):
+        resp = client.get(route)
+        assert resp.status_code == 200
+        assert resp.headers.get("content-language") == expected_lang
+
+    i18n_resp = client.get("/v1/hivemind/i18n?lang=de")
+    assert i18n_resp.status_code == 200
+    assert i18n_resp.json()["negotiated_language"] == "de"
+
+    cron_resp = client.get("/api/v1/monitor/evolution-cron")
+    assert cron_resp.status_code == 200
+    cron_body = cron_resp.json()
+    assert cron_body["object"] == "hivemind.evolution_cron_telemetry"
+    assert cron_body["schedules"]["roadmap_pr_evolution_2h"] == "0 */2 * * *"
 
 
 def test_probe_local_8095_producer_server_returns_dict() -> None:

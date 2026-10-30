@@ -3494,29 +3494,138 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
             return JSONResponse(content=json.loads(mcp_cat_path.read_text(encoding="utf-8")))
         return JSONResponse(content={"schema": "hivemind.exoplanet_mcp.catalog/1", "targets": []})
 
-    # Mount the OpenRouter Portal (/portal, /playground) & Free Steam Game Registration/Login/Contribution API
+    # Mount the OpenRouter Portal (/portal, /playground, /fr, /es, /de, /zh, /signup, /inscription, /v1/hivemind/i18n)
+    # & Free Steam Game Registration/Login/Contribution API + Live Evolution Cron Telemetry
     import secrets as _secrets
     from hivemind.router.accounts import HandleTaken, ReservedHandle, RouterStore
-    from hivemind.router.portal_page import portal_content_security_policy, render_portal_page
+    from hivemind.router.join_page import pick_language
+    from hivemind.router.portal_page import (
+        PORTAL_LANG_META,
+        PORTAL_LANGS,
+        portal_content_security_policy,
+        render_portal_page,
+    )
+    from hivemind.router.signup_page import content_security_policy as signup_content_security_policy, render_signup_page
     from hivemind.security.hivemind_firewall import SwarmSecurityViolationError
 
     ARTIFACTS_ROOT.mkdir(parents=True, exist_ok=True)
     _portal_store = RouterStore(ARTIFACTS_ROOT / "local_portal_router.db", b"hivemind-local-steam-portal-secret-32b")
     _steam_key_cache: Dict[str, str] = {}
 
-    @app.api_route("/portal", methods=["GET", "HEAD"], response_class=HTMLResponse)
-    @app.api_route("/playground", methods=["GET", "HEAD"], response_class=HTMLResponse)
-    def get_portal_page() -> HTMLResponse:
+    def _serve_local_portal_html(request: Request, forced_lang: str | None = None) -> HTMLResponse:
+        lang = forced_lang or pick_language(
+            request.query_params.get("lang"),
+            request.headers.get("accept-language"),
+            default="en",
+        )
         nonce = _secrets.token_urlsafe(18)
-        html = render_portal_page(None, nonce)
+        html = render_portal_page(None, nonce, lang=lang)
         return HTMLResponse(
             content=html,
             headers={
                 "Content-Security-Policy": portal_content_security_policy(nonce),
                 "Cache-Control": "no-store",
+                "Vary": "Accept-Language",
+                "Content-Language": lang,
                 "X-Content-Type-Options": "nosniff",
                 "Referrer-Policy": "no-referrer",
             },
+        )
+
+    @app.api_route("/portal", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/playground", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def get_portal_page(request: Request) -> HTMLResponse:
+        return _serve_local_portal_html(request)
+
+    @app.api_route("/fr", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/aire-de-jeu", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def get_portal_page_fr(request: Request) -> HTMLResponse:
+        return _serve_local_portal_html(request, forced_lang="fr")
+
+    @app.api_route("/es", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def get_portal_page_es(request: Request) -> HTMLResponse:
+        return _serve_local_portal_html(request, forced_lang="es")
+
+    @app.api_route("/de", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def get_portal_page_de(request: Request) -> HTMLResponse:
+        return _serve_local_portal_html(request, forced_lang="de")
+
+    @app.api_route("/zh", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def get_portal_page_zh(request: Request) -> HTMLResponse:
+        return _serve_local_portal_html(request, forced_lang="zh")
+
+    @app.api_route("/signup", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/inscription", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def get_local_signup_page(request: Request) -> HTMLResponse:
+        default_lang = "fr" if request.url.path == "/inscription" else "en"
+        lang = pick_language(
+            request.query_params.get("lang"),
+            request.headers.get("accept-language"),
+            default=default_lang,
+        )
+        nonce = _secrets.token_urlsafe(18)
+        return HTMLResponse(
+            content=render_signup_page(None, nonce, lang=lang),
+            headers={
+                "Content-Security-Policy": signup_content_security_policy(nonce),
+                "Cache-Control": "no-store",
+                "Vary": "Accept-Language",
+                "Content-Language": lang,
+                "X-Content-Type-Options": "nosniff",
+                "Referrer-Policy": "no-referrer",
+            },
+        )
+
+    @app.get("/v1/hivemind/i18n", response_class=JSONResponse)
+    def get_local_i18n_catalog(request: Request) -> JSONResponse:
+        negotiated = pick_language(
+            request.query_params.get("lang"),
+            request.headers.get("accept-language"),
+            default="en",
+        )
+        return JSONResponse(
+            content={
+                "object": "hivemind.i18n",
+                "default_language": "en",
+                "negotiated_language": negotiated,
+                "supported_languages": [
+                    {
+                        "code": code,
+                        "label": PORTAL_LANG_META[code]["name"],
+                        "portal_path": "/" if code == "en" else f"/{code}",
+                        "portal_query": f"/portal?lang={code}",
+                        "signup_query": f"/signup?lang={code}",
+                        "join_query": f"/join?lang={code}",
+                        "webgpu_query": f"/webgpu?lang={code}",
+                    }
+                    for code in PORTAL_LANGS
+                ],
+            }
+        )
+
+    @app.get("/api/v1/monitor/evolution-cron", response_class=JSONResponse)
+    def get_evolution_cron_status() -> JSONResponse:
+        def _read_json_safe(path_obj: Any) -> Dict[str, Any]:
+            if path_obj.exists():
+                try:
+                    return json.loads(path_obj.read_text(encoding="utf-8"))
+                except Exception:
+                    return {}
+            return {}
+
+        return JSONResponse(
+            content={
+                "object": "hivemind.evolution_cron_telemetry",
+                "schedules": {
+                    "roadmap_pr_evolution_2h": "0 */2 * * *",
+                    "rtx2070_monitor_3h": "0 */3 * * *",
+                    "night_moe_training_daily": "0 22 * * *",
+                },
+                "evolution_2h_cron_ledger": _read_json_safe(ARTIFACTS_ROOT / "evolution_2h_cron_ledger.json"),
+                "rtx2070_3h_monitor_ledger": _read_json_safe(ARTIFACTS_ROOT / "rtx2070_3h_monitor_ledger.json"),
+                "night_moe_training_ledger": _read_json_safe(ARTIFACTS_ROOT / "night_moe_training_ledger.json"),
+                "community_gpu_benchmark_receipt": _read_json_safe(ARTIFACTS_ROOT / "community_gpu_benchmark_receipt.json"),
+            }
         )
 
     @app.get("/v1/hivemind/steam/status", response_class=JSONResponse)

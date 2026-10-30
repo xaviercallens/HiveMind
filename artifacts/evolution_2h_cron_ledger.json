@@ -1,6 +1,6 @@
 {
   "schema_version": "hivemind.evolution_2h_and_night_moe_cron.v1",
-  "timestamp_utc": "2026-10-30T16:19:56Z",
+  "timestamp_utc": "2026-10-30T18:25:26Z",
   "mode": "2h-evolution",
   "schedules": {
     "roadmap_pr_evolution_cron": "0 */2 * * *",
@@ -15,31 +15,31 @@
     "total_requests_served": 21
   },
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-10-30T16:19:56Z",
+    "timestamp_utc": "2026-10-30T18:25:26Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": false,
     "device": "nvml:cuda:0 (torch+cpu host)",
     "compute_capability": "7.5",
     "temperature_c": 27.0,
-    "gpu_utilization_pct": 18.0,
-    "power_draw_w": 9.34,
+    "gpu_utilization_pct": 8.0,
+    "power_draw_w": 9.72,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1567.0,
-    "memory_free_mib": 6440.0,
+    "memory_used_mib": 1472.0,
+    "memory_free_mib": 6535.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
     "wddm_envelope_compliant": true,
     "headroom_guard_compliant": true,
-    "graphics_clock_mhz": 1410.0,
+    "graphics_clock_mhz": 405.0,
     "max_graphics_clock_mhz": 2145.0,
-    "memory_clock_mhz": 6801.0,
-    "host_tensor_gflops": 106.22,
+    "memory_clock_mhz": 405.0,
+    "host_tensor_gflops": 109.62,
     "measured_fp32_tflops": 9.88,
     "measured_fp16_tensor_tflops": 39.54,
     "effective_sparse_moe_nf4_tflops": 65.24,
-    "microbench_elapsed_ms": 156.72
+    "microbench_elapsed_ms": 150.53
   },
   "roadmap_summary": {
     "exists": true,
@@ -67,6 +67,16 @@
       20,
       21,
       22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
       33
     ],
     "max_season": 33,
@@ -93,5 +103,5 @@
     ]
   },
   "night_moe_summary": {},
-  "receipt_sha256": "2f835c3112efe440455e124c8b699c8dc56306c6f066b6d6201996f322f5429d"
+  "receipt_sha256": "9e88edf49375e764e64b2b44e0a21764bbb05a72f16bf26117c9084aaae1dda5"
 }

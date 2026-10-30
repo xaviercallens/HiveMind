@@ -50,12 +50,28 @@ def probe_local_8095_producer_server() -> Dict[str, Any]:
         req = urllib.request.Request("http://127.0.0.1:8095/api/v1/producers/status", method="GET")
         with urllib.request.urlopen(req, timeout=4.0) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            return {
+            out: Dict[str, Any] = {
                 "online": resp.status == 200,
                 "pool_status": data.get("pool_status", "UNKNOWN"),
                 "online_producer_ids": data.get("online_producer_ids", []),
                 "total_requests_served": data.get("total_requests_served", 0),
             }
+        try:
+            hub_req = urllib.request.Request("http://127.0.0.1:8095/api/v1/community/hub", method="GET")
+            with urllib.request.urlopen(hub_req, timeout=3.0) as hub_resp:
+                hub_data = json.loads(hub_resp.read().decode("utf-8"))
+                for member in hub_data.get("community_members", []):
+                    if str(member.get("handle", "")).lower() == "xaviercallens-rtx2070":
+                        out["boinc_rtx2070_worker"] = {
+                            "handle": member.get("handle"),
+                            "boinc_workunits_completed": member.get("boinc_workunits_completed", 0),
+                            "boinc_cobblestones": member.get("boinc_cobblestones", 0.0),
+                            "hmt_compute_points": member.get("hmt_compute_points", 0),
+                        }
+                        break
+        except (urllib.error.URLError, OSError, ValueError):
+            pass
+        return out
     except (urllib.error.URLError, OSError, ValueError) as exc:
         return {
             "online": False,
@@ -74,6 +90,7 @@ def scan_roadmap_status(roadmap_path: Optional[Path] = None) -> Dict[str, Any]:
     task_ids = sorted(set(re.findall(r"\bHM-S\d+[A-Z0-9._-]*\b", text)))
     seasons = sorted(
         {int(m) for m in re.findall(r"\bSeason\s+(\d+)\b", text) if m.isdigit()}
+        | {int(m) for m in re.findall(r"\bHM-S(\d+)[A-Z0-9._-]*\b", text) if m.isdigit()}
     )
     planned_lines = [
         line.strip()

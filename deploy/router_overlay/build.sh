@@ -4,7 +4,9 @@ set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 stage=$(mktemp -d)
 cp "$here/Dockerfile" "$here/server.py" "$stage/"
-cp "$here/../../src/hivemind/router/points_wording.py" "$stage/"
-cp "$here/../../src/hivemind/router/join_page.py" "$stage/"
+mkdir -p "$stage/hivemind" "$stage/gallery"
+cp -r "$here/../../src/hivemind/"* "$stage/hivemind/"
+cp "$here/../../public/gallery/"*.jpg "$here/../../public/gallery/"*.svg "$stage/gallery/"
+find "$stage/hivemind" -name __pycache__ -type d -prune -exec rm -rf {} +
 gcloud builds submit --region us-central1 --tag "us-central1-docker.pkg.dev/gen-lang-client-0625573011/cloud-run-source-deploy/hivemind-openrouter:$1" "$stage"
 rm -r "$stage"

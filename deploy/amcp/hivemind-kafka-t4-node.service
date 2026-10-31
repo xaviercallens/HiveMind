@@ -1,0 +1,23 @@
+# Kafka broker-only node 4 on the T4 VM (observer of the three-voter quorum), bound to its overlay address 10.77.0.4 only.
+# The loopback dev broker (hivemind-amcp-kafka.service, 127.0.0.1:9092) is a different cluster and keeps running separately.
+# Config and data live on the data disk so they survive; the config is produced by scripts/amcp_kafka_cluster.py gen (see docs/AMCP_KAFKA_CLUSTER.md).
+[Unit]
+Description=HiveMind AMCP Kafka quorum, broker-only node 4 (T4, overlay address only)
+After=network-online.target wg-quick@wg-hivemind.service
+Wants=network-online.target wg-quick@wg-hivemind.service
+
+[Service]
+Type=simple
+User=callensxavier_gmail_com
+Environment=JAVA_HOME=/mnt/disks/disk-socrateai-local-1/amcp/tools/jdk21
+Environment="KAFKA_HEAP_OPTS=-Xms128m -Xmx384m"
+Environment=LOG_DIR=/mnt/disks/disk-socrateai-local-1/amcp/kafka-node4-logs
+ExecStart=/mnt/disks/disk-socrateai-local-1/amcp/tools/kafka/bin/kafka-server-start.sh /mnt/disks/disk-socrateai-local-1/amcp/kafka-node4.properties
+Restart=always
+RestartSec=20
+SuccessExitStatus=143
+TimeoutStopSec=60
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

@@ -99,10 +99,41 @@ The last option is the one this runbook assumes until you choose.
 * Data lives on each host's disk. A Spot VM keeps its disk; the process comes back through systemd when the VM returns.
 * Rollback: stop and disable the unit, remove `/etc/hivemind-kafka` and the data directory, `systemctl disable --now wg-quick@wg-hivemind` on the T4, delete the VM and the UDP 51820 firewall rule.
 
-## 8. Decisions needed before this goes on the real hosts
+## 8. Deployed state (2026-10-31)
 
-1. Create the small GCP VM and the one firewall rule (UDP 51820 only)? Billable, in the production project.
-2. Install WireGuard on the T4 production VM (a new network interface, nothing else changes)?
-3. Access to the RTX 2070 machine (no route to it exists from here).
-4. Keep the Spot T4 as the third voter, or add a second small non-Spot VM?
-5. How the gateway reaches the cluster (section 6), or leave it off for now.
+| | State |
+|---|---|
+| Voters 1, 2, 3 | **running**: Spot `e2-small` VMs `hm-kafka-1/2/3` (us-east4-a/b/c, VPC 10.150.0.11-13, project `gen-lang-client-0625573011`), Debian 12, no service account, Kafka 3.8.0 checksum-verified, heap from the unit |
+| Node 4 (T4) | **running** as broker-only (observer), unit `hivemind-kafka-t4-node`, data on the data disk, bound to `10.77.0.4`. The dev broker on `127.0.0.1:9092` is untouched and separate |
+| Node 5 (RTX 2070) | **not joined**: no route to that machine from here; `deploy/amcp/join_rtx2070.sh` is the procedure (section 9) |
+| Overlay | WireGuard `10.77.0.0/24`, full mesh between nodes 1-4 over VPC addresses; UDP 51820 is the only port opened (rule `hm-kafka-wireguard`, tag `hm-kafka`); no Kafka port is open anywhere |
+| Keepalive | Cloud Scheduler `hm-kafka-{1,2,3}-keepalive`, every 5 minutes, calls `instances.start` (a no-op on a running VM) with the project's default compute service account, like the existing `hm-t4-keepalive` |
+| Topics | provisioned with replication 3 / min in-sync 2 (replication 5 needs five brokers; raise it with a partition reassignment once node 5 joins) |
+
+**Measured on the real hosts** (`scripts/amcp_kafka_real_proof.py`, publishing over the overlay, stopping the real VMs with gcloud): all voters up 10/10 acknowledged; one voter VM stopped 10/10 acknowledged;
+two stopped: write refused, 0 acknowledged; both restarted: acknowledged again after **43.5 s**; 21 acknowledged, 21 read back, none lost, none duplicated, in order. After a later full outage the three VMs
+came back, re-elected a leader on their own, and all four nodes reported lag 0.
+
+**Things the first real deployment taught** (all fixed in the scripts):
+* A Spot VM was preempted **17 minutes** after its first boot and again 10 minutes after restart; by the next check all three were stopped. Spot with no keepalive means the bus is simply down for long periods: the keepalive is required, not optional, and even with it a preempted VM is down until the next 5-minute tick plus boot time.
+* Debian 12 with only the headless JRE has no `/usr/lib/jvm/default-java`: the first boot failed with exit status 127. The path is `/usr/lib/jvm/java-17-openjdk-amd64`.
+* `archive.apache.org` served the 120 MB tarball at about 260 KB/s (roughly 8 minutes per VM boot that has to fetch it). A mirror or a pre-baked image would shorten recovery of a rebuilt VM.
+* Without SSH, the startup script publishes a status line (`hivemind/status`) and the last Kafka log lines (`hivemind/kafka-log`) as **guest attributes**: read them with `gcloud compute instances get-guest-attributes NAME --zone ZONE`. No keys are in them.
+* The T4's tunnel and node 4 were first started by hand; the unit file and `systemctl enable hivemind-kafka-t4-node wg-quick@wg-hivemind` make them survive a reboot (the enable step must be run by a person with sudo).
+
+Security notes for this deployment: the VMs sit in the default VPC, where `default-allow-internal` (10.128.0.0/9) and several rules open to `0.0.0.0/0` without target tags (including SSH) apply to every VM in the project, these two as well.
+Kafka itself listens only on overlay addresses, so none of that reaches it, but the VMs' SSH exposure is the project's existing posture, not something this change tightened.
+
+## 9. Joining the RTX 2070 (node 5)
+
+1. On the 2070 machine: `bash deploy/amcp/join_rtx2070.sh key` installs WireGuard and a JDK and prints this machine's **public** key.
+2. Cloud side (a person with project access): add the T4 to the firewall rule's tag so the 2070 can reach it directly (`gcloud compute instances add-tags socreateai-agora-hermes-node1 --zone us-east4-b --tags hm-kafka`: opens UDP 51820 only). Add the 2070's key as peer 5 (`5 <public key>` with no endpoint) to `hm-wg-peers` on the three VMs, and as a `[Peer]` with `AllowedIPs = 10.77.0.5/32` on the T4.
+   Generate node 5's config with `python scripts/amcp_kafka_cluster.py gen --node 1=10.77.0.1 --node 2=10.77.0.2 --node 3=10.77.0.3 --broker 4=10.77.0.4 --broker 5=10.77.0.5 --out ./cluster`.
+3. On the 2070: `HUB_KEY_1=.. HUB_KEY_2=.. HUB_KEY_3=.. HUB_KEY_4=.. bash deploy/amcp/join_rtx2070.sh up <VM1 IP> <VM2 IP> <VM3 IP> <T4 IP> lLTifvfsQmypwcwcQutGrA ./cluster/node5.properties` (the VMs' external addresses are the reserved `hm-kafka-1/2/3`; their public keys are in guest attribute `hivemind/wg-pubkey`), then start the broker it prints.
+4. Check: `kafka-metadata-quorum.sh --bootstrap-server 10.77.0.1:9092 describe --replication` lists node 5 as an Observer with lag 0. Then, optionally, raise the AMCP topics to replication 5 / min in-sync 3 with `kafka-reassign-partitions.sh` (the five-node proof in section 2 used those settings).
+
+## 10. Still open
+
+1. Reaching the cluster from the production gateway on Cloud Run (section 6): not built. The gateway's bus stays off.
+2. Owner decisions: keep Spot for all three voters (cheap, but the bus is down during preemption gaps), or make one voter a non-Spot VM.
+3. `systemctl enable` for the T4 units (above), and the RTX 2070 join.

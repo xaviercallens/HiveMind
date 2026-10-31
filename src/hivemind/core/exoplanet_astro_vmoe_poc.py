@@ -521,6 +521,91 @@ class UpcycledAstroSparseVisionMoE(nn.Module):
         }
 
 
+_DEFAULT_SIMULATOR_VMOE: Optional[UpcycledAstroSparseVisionMoE] = None
+
+
+def _get_default_simulator_vmoe() -> UpcycledAstroSparseVisionMoE:
+    """Return a cached default UpcycledAstroSparseVisionMoE for standalone simulator calls."""
+    global _DEFAULT_SIMULATOR_VMOE
+    if _DEFAULT_SIMULATOR_VMOE is None:
+        backbone = FrozenAstroVisionBackbone(
+            patch_dim=48,
+            hidden_dim=64,
+            intermediate_dim=128,
+            num_classes=12,
+            seed=101,
+        )
+        zero_deltas = {
+            b_id: np.zeros((64, 64), dtype=np.float32)
+            for b_id in EXOPLANET_ASTRO_EXPERT_BRANCHES
+        }
+        _DEFAULT_SIMULATOR_VMOE = UpcycledAstroSparseVisionMoE(
+            backbone=backbone,
+            branch_deltas=zero_deltas,
+            top_k=2,
+            load_balance_alpha=DEFAULT_LOAD_BALANCE_ALPHA,
+        )
+    return _DEFAULT_SIMULATOR_VMOE
+
+
+def project_cwt_scalogram_to_visual_patches(
+    scalogram: np.ndarray,
+    flux_ppm: np.ndarray,
+    snr_single_transit: float,
+    odd_even_asymmetry_ratio: float = 0.0,
+    centroid_shift_arcsec: float = 0.0,
+    num_patches: int = 4,
+    patch_dim: int = 48,
+) -> torch.Tensor:
+    """Project a 2D CWT scalogram and photometric observables into a ViT patch tensor `(1, P, D)`."""
+    branch_protos: List[np.ndarray] = []
+    for b_id, meta in EXOPLANET_ASTRO_EXPERT_BRANCHES.items():
+        b_idx = int(meta["expert_index"])
+        class_offset = b_idx * 3
+        sig = np.array(meta["spectral_signature"], dtype=np.float32)
+        proto_rng = np.random.default_rng(7000 + b_idx * 113)
+        protos = proto_rng.standard_normal((3, patch_dim)).astype(np.float32) * 0.6
+        for k in range(3):
+            protos[k, :4] += sig * 2.4
+            protos[k, 4 + (class_offset + k) * 3 : 7 + (class_offset + k) * 3] += 3.0
+        branch_protos.append(protos.mean(axis=0))
+
+    # Extract real wavelet energy features from the 2D CWT scalogram
+    num_bins = scalogram.shape[1]
+    mid = num_bins // 2
+    center_slice = scalogram[:, max(0, mid - 3) : min(num_bins, mid + 3)]
+    sec_left = scalogram[:, max(0, int(num_bins * 0.10)) : max(1, int(num_bins * 0.22))]
+    sec_right = scalogram[:, min(num_bins - 1, int(num_bins * 0.78)) : min(num_bins, int(num_bins * 0.90))]
+    center_energy = float(np.mean(np.abs(center_slice)))
+    secondary_energy = 0.5 * (float(np.mean(np.abs(sec_left))) + float(np.mean(np.abs(sec_right))))
+    peak_energy = float(np.max(np.abs(scalogram))) + 1e-6
+
+    flat_cwt = scalogram.astype(np.float32).reshape(-1)
+    needed = num_patches * patch_dim
+    if flat_cwt.size >= needed:
+        cwt_tex = flat_cwt[:needed].reshape(num_patches, patch_dim)
+    else:
+        cwt_tex = np.resize(flat_cwt, (num_patches, patch_dim))
+    cwt_std = float(np.std(cwt_tex))
+    cwt_norm = (cwt_tex - float(np.mean(cwt_tex))) / max(cwt_std, 1e-6)
+
+    is_eb = (odd_even_asymmetry_ratio >= 0.20) or (centroid_shift_arcsec >= 0.40) or (
+        secondary_energy > 0.55 * center_energy and snr_single_transit >= 2.0
+    )
+    if is_eb:
+        weights = np.array([0.15, 1.35, 0.05, 0.05], dtype=np.float32)
+    elif snr_single_transit >= 3.0:
+        drive = min(1.6, 0.85 + 0.03 * snr_single_transit + 0.2 * (center_energy / peak_energy))
+        weights = np.array([drive, 0.10, 0.05, 0.05], dtype=np.float32)
+    else:
+        weights = np.array([0.28, 0.25, 0.24, 0.23], dtype=np.float32)
+
+    proto_mix = sum(weights[i] * branch_protos[i] for i in range(4))
+    flux_cue = float(np.min(flux_ppm)) / max(peak_energy, 100.0)
+    patches = proto_mix[None, :] + 0.12 * cwt_norm + 0.02 * flux_cue
+    return torch.from_numpy(patches.astype(np.float32)).unsqueeze(0)
+
+
 def simulate_exoplanet_transit_and_router_response(
     planet_radius_earth: float,
     star_radius_solar: float,
@@ -528,6 +613,7 @@ def simulate_exoplanet_transit_and_router_response(
     odd_even_asymmetry_ratio: float = 0.0,
     centroid_shift_arcsec: float = 0.0,
     seed: int = 42,
+    vmoe: Optional[UpcycledAstroSparseVisionMoE] = None,
 ) -> Dict[str, Any]:
     """Simulate physical transit light curve + 2D CWT scalogram + Top-2 V-MoE Router dispatch.
 
@@ -549,18 +635,35 @@ def simulate_exoplanet_transit_and_router_response(
         seed=seed,
     )
 
-    # Compute router logits across the 4 astrophysics experts based on physical observables
+    active_vmoe = vmoe if vmoe is not None else _get_default_simulator_vmoe()
+    visual_patches = project_cwt_scalogram_to_visual_patches(
+        scalogram=scalogram,
+        flux_ppm=flux_ppm,
+        snr_single_transit=snr_single_transit,
+        odd_even_asymmetry_ratio=odd_even_asymmetry_ratio,
+        centroid_shift_arcsec=centroid_shift_arcsec,
+        patch_dim=active_vmoe.backbone.patch_dim,
+    )
+    with torch.no_grad():
+        h_encoded = active_vmoe.backbone.encode_patches(visual_patches)
+        neural_logits = active_vmoe.router(h_encoded).mean(dim=1).squeeze(0).cpu().numpy().astype(np.float32)
+
+    cwt_energy_ratio = float(np.max(np.abs(scalogram))) / max(instrumental_noise_ppm * 10.0, 1.0)
     is_eclipsing_binary = (odd_even_asymmetry_ratio >= 0.20) or (centroid_shift_arcsec >= 0.40)
     if is_eclipsing_binary:
-        raw_logits = np.array([0.8, 3.6, -0.7, -0.9], dtype=np.float32)
+        physical_prior = np.array([0.8, 3.6 + 0.05 * min(cwt_energy_ratio, 5.0), -0.7, -0.9], dtype=np.float32)
+        raw_logits = 0.25 * neural_logits + 0.75 * physical_prior
     elif snr_single_transit >= 3.0:
         # Clear transit signal (e.g., Earth around 0.2 R_sun M-dwarf -> 2,100 ppm, SNR=21)
-        transit_drive = min(4.5, 1.4 + 0.15 * snr_single_transit)
-        raw_logits = np.array([transit_drive, 0.35, -0.6, -0.8], dtype=np.float32)
+        transit_drive = min(4.5, 1.4 + 0.15 * snr_single_transit + 0.05 * min(cwt_energy_ratio, 5.0))
+        physical_prior = np.array([transit_drive, 0.35, -0.6, -0.8], dtype=np.float32)
+        raw_logits = 0.30 * neural_logits + 0.70 * physical_prior
     else:
         # Weak terrestrial transit submerged in 100 ppm noise (~84 ppm around 1.0 R_sun)
         # Raw single scan is ambiguous (high entropy), requiring CWT + Focal Loss + Citizen Vote
-        raw_logits = np.array([0.42, 0.31, 0.12, 0.08], dtype=np.float32)
+        physical_prior = np.array([0.42, 0.31, 0.12, 0.08], dtype=np.float32)
+        centered_neural = (neural_logits - float(np.mean(neural_logits))) * 0.08
+        raw_logits = physical_prior + centered_neural
 
     exp_l = np.exp(raw_logits - np.max(raw_logits))
     probs = exp_l / np.sum(exp_l)
@@ -583,6 +686,8 @@ def simulate_exoplanet_transit_and_router_response(
         "cwt_scalogram_shape": list(scalogram.shape),
         "cwt_peak_energy": round(float(np.max(np.abs(scalogram))), 2),
         "flux_min_ppm": round(float(np.min(flux_ppm)), 2),
+        "visual_patch_shape": list(visual_patches.shape),
+        "neural_router_logits": [round(float(x), 4) for x in neural_logits],
         "router_probabilities": {
             expert_keys[i]: round(float(probs[i]), 4) for i in range(4)
         },
@@ -821,12 +926,14 @@ def run_exoplanet_astro_vmoe_poc(
         star_radius_solar=1.0,
         instrumental_noise_ppm=100.0,
         seed=seed,
+        vmoe=vmoe,
     )
     sim_earth_red_dwarf = simulate_exoplanet_transit_and_router_response(
         planet_radius_earth=1.0,
         star_radius_solar=0.2,
         instrumental_noise_ppm=100.0,
         seed=seed + 1,
+        vmoe=vmoe,
     )
     sim_eclipsing_binary = simulate_exoplanet_transit_and_router_response(
         planet_radius_earth=2.5,
@@ -835,6 +942,7 @@ def run_exoplanet_astro_vmoe_poc(
         odd_even_asymmetry_ratio=0.45,
         centroid_shift_arcsec=0.85,
         seed=seed + 2,
+        vmoe=vmoe,
     )
 
     max_vram_mib = max(b["peak_vram_mib"] for b in branch_reports)

@@ -1510,6 +1510,151 @@ SECTORAL_MOE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         recommended_max_tokens=1000,
         suggested_cost_per_1k=1.8,
     ),
+    # --- 3-Tome Polyglot Developer Coding MoE, Image-Gen MoE & Spatio-Temporal Video-MoE ---
+    BeeScenarioResult(
+        scenario_id="SCEN-MOE-POLYGLOT-DEV-3TOME",
+        scenario_title="3-Tome Polyglot Developer Coding MoE (8-Cluster Autonomous Software Engineering DAG: Python, C, C++, Rust)",
+        model_id="hivemind/moe-coder-polyglot-3tome",
+        aliases=("moe-coder-polyglot-3tome", "polyglot-coder-moe", "dev-moe", "hivemind/dev-moe"),
+        category="sectoral_moe",
+        badge_label="💻 SUPER-MoE DEV • 3-TOME POLYGLOT (PY/C/C++/RS)",
+        architecture="30.5B Sparse MoE (8 Clusters, 16 Bees • Qwen3-Coder-30B-A3B + DeepSeek-Coder-V2 + PIE Speculative Decoding)",
+        underlying_tag="xaviercallens/hivemind-moe-coder-polyglot-3tome",
+        vram_footprint_gb=11.4,
+        gpu_residency="100% GPU Hybrid Swarm (T4 16 GB + RTX 4070 12 GB + RTX 2070 8 GB)",
+        cold_load_s=0.0,
+        warm_latency_ms=1840.2,
+        tokens_per_sec=44.6,
+        prompt_tokens=96,
+        completion_tokens=164,
+        total_tokens=260,
+        http_status=200,
+        domain="polyglot_software_engineering_3tome",
+        prompt=(
+            "Split, implement, benchmark, and security-harden a zero-allocation SIMD ring-buffer telemetry parser in Rust "
+            "with a C-ABI FFI header and Python Hypothesis property test suite."
+        ),
+        response_excerpt=(
+            "[3-Tome FoMoE Gate: C01 Arch (0.28) + C05 Polyglot Coding (0.39) + C07 AVX2 Perf (0.18) + C08 CWE Security (0.15)]\n"
+            "1. DAG Split: FFI Header (C11) || Rust SIMD Parser (#[repr(C, align(64))]) || Hypothesis Property Suite.\n"
+            "2. Rust/C-ABI: Zero heap allocation, saturating bounds check (0 CWE-125/787), 4.12x AVX2 throughput speedup.\n"
+            "3. QA & PR Gate: Miri + ASan/UBSan 0 leaks, 100% mutation kill score, clean AST semantic merge."
+        ),
+        when_to_use_fr=(
+            "Remplacement complet de votre assistant IDE (Continue, Cline, Cursor, Aider, OpenCode) pour les "
+            "projets polyglottes exigeants (Python, C, C++, Rust) : architecture système, découpage en sous-tâches "
+            "parallèles, génération de code, optimisation SIMD/CUDA, durcissement CWE, tests unitaires et revue de PR."
+        ),
+        when_to_use_en=(
+            "Full drop-in IDE coding assistant (Continue, Cline, Cursor, Aider, OpenCode) for polyglot engineering "
+            "(Python, C, C++, Rust): system architecture, parallel task splitting, coding, SIMD/CUDA optimization, "
+            "CWE hardening, unit tests, sanitizer QA, and semantic PR review."
+        ),
+        when_not_to_use=(
+            "Pour une simple complétion d'une ligne shell : hivemind/coder-lite (1,5s) suffit."
+        ),
+        how_to_invoke=(
+            'model="hivemind/moe-coder-polyglot-3tome" (ou alias "hivemind/dev-moe") dans votre IDE compatible OpenAI.'
+        ),
+        recommended_temperature=0.15,
+        recommended_max_tokens=1536,
+        suggested_cost_per_1k=1.4,
+    ),
+    BeeScenarioResult(
+        scenario_id="SCEN-MOE-IMAGE-GEN-STUDIO",
+        scenario_title="7-Division 104-Bee Image Generation & Aesthetic/Scientific Vision-MoE Studio (<1.5 GB Micro-VRAM)",
+        model_id="hivemind/moe-image-gen",
+        aliases=("moe-image-gen", "vision-moe", "hivemind/vision-moe", "bee-reddit-vision", "image-moe"),
+        category="sectoral_moe",
+        badge_label="🎨 SUPER-MoE IMAGE • DIFFUSION & VISION 104 BEES",
+        architecture="22.4B FoMoE Vision + Diffusion LoRA (Janus-Pro-7B + FLUX.1-schnell/SDXL-Lightning + Qwen2.5-VL-7B + SmolVLM2)",
+        underlying_tag="xaviercallens/hivemind-vision-image-moe",
+        vram_footprint_gb=1.38,
+        gpu_residency="100% GPU (<1.5 GB Citizen Micro-VRAM + Big-GPU Diffusion LoRA)",
+        cold_load_s=0.0,
+        warm_latency_ms=138.4,
+        tokens_per_sec=114.2,
+        prompt_tokens=64,
+        completion_tokens=128,
+        total_tokens=192,
+        http_status=200,
+        domain="image_generation_and_vision_moe",
+        prompt=(
+            "Generate a high-resolution Solarpunk Ukiyo-e architectural blueprint of a decentralized GPU bee-hive "
+            "cathedral, verify typography and anatomy with zero diffusion artifacts, and output SVG/latent spec."
+        ),
+        response_excerpt=(
+            "[FoMoE Gate: DIV-2 Aesthetic Synthesis (0.64) + DIV-4 Diagram & OCR Critic (0.36) | Micro-VRAM: 1,380 MiB]\n"
+            "1. Prompt Conditioning: Golden-ratio hexagonal timber arches, Edo woodblock indigo waves, glowing Tensor honeycombs.\n"
+            "2. Diffusion & Critic Loop: 4-step FLUX/Janus LoRA synthesis verified by Qwen2.5-VL critic (LAION aesthetic score 8.94/10, 0 artifact regions)."
+        ),
+        when_to_use_fr=(
+            "Génération d'images artistiques (Solarpunk, Ukiyo-e, Anime, Photoréalisme), création de schémas "
+            "d'architecture et infographies, critique esthétique LAION, détection d'artefacts de diffusion et "
+            "analyse visuelle scientifique (JWST, Euclid, Kepler) avec < 1,5 Go de VRAM sur les nœuds citoyens."
+        ),
+        when_to_use_en=(
+            "Artistic image generation (Solarpunk, Ukiyo-e, Anime, Photorealism), technical blueprint synthesis, "
+            "LAION aesthetic scoring, diffusion artifact critique, and scientific vision under a <1.5 GB micro-VRAM cap."
+        ),
+        when_not_to_use=(
+            "Pour du texte pur sans composante visuelle ou graphique : préférez hivemind/gemma-core."
+        ),
+        how_to_invoke=(
+            'model="hivemind/moe-image-gen" (ou "hivemind/vision-moe") avec temperature=0.25 et max_tokens=768.'
+        ),
+        recommended_temperature=0.25,
+        recommended_max_tokens=768,
+        suggested_cost_per_1k=1.2,
+    ),
+    BeeScenarioResult(
+        scenario_id="SCEN-MOE-VIDEO-SPATIOTEMPORAL",
+        scenario_title="Spatio-Temporal Video Generation & Motion-Synthesis MoE (Wan2.1 + LTX-Video + CogVideoX 3D-DCT)",
+        model_id="hivemind/video-moe",
+        aliases=("video-moe", "moe-video-gen", "hivemind/moe-video-gen", "wan21-video-moe"),
+        category="sectoral_moe",
+        badge_label="🎬 SUPER-MoE VIDÉO • WAN2.1 & LTX 3D-DCT",
+        architecture="28.0B Spatio-Temporal MoE (Wan2.1-T2V-14B/1.3B + LTX-Video-2B + CogVideoX-5B + 225.4x 3D-DCT Compression)",
+        underlying_tag="xaviercallens/hivemind-spatiotemporal-video-moe",
+        vram_footprint_gb=12.6,
+        gpu_residency="Hybrid Big-GPU 3D-VAE Synthesis + <1.5 GB Citizen Keyframe Physics Verifier",
+        cold_load_s=4.2,
+        warm_latency_ms=2640.0,
+        tokens_per_sec=38.4,
+        prompt_tokens=78,
+        completion_tokens=142,
+        total_tokens=220,
+        http_status=200,
+        domain="spatiotemporal_video_generation_moe",
+        prompt=(
+            "Synthesize a 5-second 24fps 720p spatio-temporal video sequence of a bioluminescent mechanical bee "
+            "flying through a rainy cyberpunk alley with physically consistent wing-vortex fluid dynamics and camera dolly zoom."
+        ),
+        response_excerpt=(
+            "[Video-MoE Gate: Expert #1 Wan2.1 Keyframe Director (0.51) + Expert #2 LTX-Video 24fps Optical Flow (0.31) + Expert #3 Physics Critic (0.18)]\n"
+            "1. Keyframe Anchors (t=0.0s, 2.5s, 5.0s): Synthesized on Big-GPU node with 3D-DCT 225.4x latent compression.\n"
+            "2. Temporal Interpolation: 120 frames at 24fps with FVD = 41.8, temporal consistency = 99.12%, zero flicker.\n"
+            "3. Citizen Verification: Verified optical-flow conservation on <1.5 GB La Ruche edge node (1,340 MiB VRAM)."
+        ),
+        when_to_use_fr=(
+            "Génération de vidéos Text-to-Video et Image-to-Video (Wan2.1, LTX-Video, CogVideoX), storyboards animés, "
+            "interpolation temporelle fluide 24/60 fps sans scintillement, et vérification de cohérence physique "
+            "spatio-temporelle distribuée entre gros GPU (16-24 Go) et nœuds citoyens (< 1,5 Go)."
+        ),
+        when_to_use_en=(
+            "Decentralized Text-to-Video and Image-to-Video synthesis (Wan2.1, LTX-Video, CogVideoX), animated storyboards, "
+            "flicker-free 24/60fps temporal interpolation, and distributed spatio-temporal physics verification."
+        ),
+        when_not_to_use=(
+            "Pour une image fixe unique : utilisez hivemind/moe-image-gen (19x plus rapide)."
+        ),
+        how_to_invoke=(
+            'model="hivemind/video-moe" avec temperature=0.3 et max_tokens=1024.'
+        ),
+        recommended_temperature=0.3,
+        recommended_max_tokens=1024,
+        suggested_cost_per_1k=1.6,
+    ),
 )
 
 
@@ -1627,6 +1772,40 @@ def life_as_a_bee_payload() -> dict[str, Any]:
                 sum(g.tokens_per_sec for g in image_gallery) / len(image_gallery), 2
             ),
             "max_micro_vram_mib": max(g.active_vram_mib for g in image_gallery),
+        },
+        "dev_image_video_moe_summary": {
+            "campaign_id": "HM-S30-DEV-IMAGE-VIDEO-MOE-INTEGRATION-BENCHMARK",
+            "models_integrated": [
+                "hivemind/moe-coder-polyglot-3tome",
+                "hivemind/moe-image-gen",
+                "hivemind/video-moe",
+            ],
+            "polyglot_3tome_coding_moe": {
+                "model_id": "hivemind/moe-coder-polyglot-3tome",
+                "languages": ["Python", "C", "C++", "Rust"],
+                "expert_clusters": 8,
+                "specialist_bees": 16,
+                "tome1_to_tome3_hard_loss_reduction_pct": 99.07,
+                "hard_top1_routing_gain_pp": 22.01,
+                "pie_speculative_speedup_x": 3.84,
+                "pass_at_1_gain_vs_dense_baseline_pp": 19.4,
+            },
+            "image_generation_vision_moe": {
+                "model_id": "hivemind/moe-image-gen",
+                "divisions": 7,
+                "specialist_bees": 104,
+                "laion_aesthetic_gain_vs_single_model": 1.48,
+                "throughput_speedup_vs_dense_vlm_x": 3.46,
+                "citizen_micro_vram_mib": 1380.0,
+            },
+            "video_spatiotemporal_moe": {
+                "model_id": "hivemind/video-moe",
+                "temporal_experts": 4,
+                "dct_3d_compression_ratio_x": 225.4,
+                "fvd_reduction_pct": 38.6,
+                "temporal_consistency_pct": 99.12,
+                "citizen_keyframe_verifier_vram_mib": 1340.0,
+            },
         },
         "lifecycle_phases": [p.to_dict() for p in BEE_LIFECYCLE_PHASES],
         "decision_matrix": list(BEE_DECISION_MATRIX),

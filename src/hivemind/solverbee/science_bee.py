@@ -418,20 +418,43 @@ unit you chose. Derived parameters (for example g_over_l = g / length, or (2*pi/
 Always list ALL requested output times in t_out, in increasing order.
 """
 
+SLOT_SYSTEM_PROMPT_TAIL = """
+S-3b SLOT-FILLING SCHEMA (PREFERRED FOR SMALL MODELS <= 4B):
+Instead of computing unit conversions, algebraic ratios, or A/b matrices yourself, you may propose a `hivemind-solver-slots/1` object and let deterministic code compile the solver spec:
+{"schema":"hivemind-solver-slots/1","id":"<optional id>","slot_family":"<slot_family>","slots":{<named parameters and t_out / t_out_ms / t_out_min / t_out_h / t_out_days>}}
+Allowed slot_family values:
+ - sir (R0 or beta, infectious_period or gamma, i0 or i0_percent, s0)
+ - seir (R0 or beta, incubation_period or sigma, infectious_period or gamma, e0/e0_percent, i0/i0_percent)
+ - series_rlc (R, L or L_mH, C or C_mF or C_uF, V, q0, i0)
+ - spring_mass_damper (m or m_g, k, c or damper_force+damper_speed, F, x0 or x0_cm, v0)
+ - pendulum (theta0 or theta0_deg, omega0, g_over_l or length_m/length_cm/period_s/period_ms, damping)
+ - projectile_drag (x0, y0, vx0+vy0 or speed/speed_kmh + angle_deg or slope_rise+slope_run, g, k)
+ - kepler (mu, circular_radius or x0+y0+vx0+vy0)
+ - logistic (r or r_percent_per_min, K, n0)
+ - decay_chain (a0, rates or rates_per_min or time_constants_s)
+ - yukawa_crystal / qf_yukawa (kappa, damping, x0, v0)
+ - gpe_vortex / qf_pgpe (g_int, omega_trap, zeta, x0, v0)
+ - art_exo_genetics / chromatin_remodeling (k_pol, k_exo, k_ext, T0, M0, P0)
+ - bao_cosmology / k3_quintessence (hubble, m_eff, phi0, dphi0, source)
+"""
 
-def build_system_prompt() -> str:
+
+def build_system_prompt(*, prefer_slots: bool = False) -> str:
     """The allowed grammar and families, generated from families.py."""
-    return SYSTEM_PROMPT_HEAD + fam.catalogue_text() + "\n" + SYSTEM_PROMPT_TAIL.format(presets=fam.presets_text())
+    base = SYSTEM_PROMPT_HEAD + fam.catalogue_text() + "\n" + SYSTEM_PROMPT_TAIL.format(presets=fam.presets_text())
+    if prefer_slots:
+        return base + SLOT_SYSTEM_PROMPT_TAIL
+    return base
 
 
-def build_first_messages(question: str) -> List[Dict[str, str]]:
-    return [{"role": "system", "content": build_system_prompt()},
+def build_first_messages(question: str, *, prefer_slots: bool = False) -> List[Dict[str, str]]:
+    return [{"role": "system", "content": build_system_prompt(prefer_slots=prefer_slots)},
             {"role": "user", "content": "Question (between the markers):\n<<<\n" + question.strip() + "\n>>>\nReply with ONE JSON object."}]
 
 
-def build_followup_messages(question: str, previous_spec: Dict[str, Any], previous_question: Optional[str]) -> List[Dict[str, str]]:
+def build_followup_messages(question: str, previous_spec: Dict[str, Any], previous_question: Optional[str], *, prefer_slots: bool = False) -> List[Dict[str, str]]:
     prev_q = (previous_question or "").strip()
-    return [{"role": "system", "content": build_system_prompt()},
+    return [{"role": "system", "content": build_system_prompt(prefer_slots=prefer_slots)},
             {"role": "user", "content": ("The previous question was:\n<<<\n" + prev_q + "\n>>>\nIts VALIDATED specification was:\n" + json.dumps(previous_spec, separators=(",", ":"), ensure_ascii=False)
                                          + "\n\nThe user now asks a follow-up (between the markers):\n<<<\n" + question.strip() + "\n>>>\n"
                                          "Return the FULL new specification (not a patch): copy the previous one and change only what the follow-up changes. Reply with ONE JSON object.")}]
@@ -740,8 +763,9 @@ _FOLLOWUP_RE = re.compile(r"^\s*(and if|and with|and what if|what if|what about|
 class ScienceBee:
     """One conversation: remembers the last VALIDATED spec so that a follow-up modifies it through the same validation loop."""
 
-    def __init__(self, backend: Backend, pipeline: Any, *, max_retries: int = MAX_RETRIES) -> None:
+    def __init__(self, backend: Backend, pipeline: Any, *, max_retries: int = MAX_RETRIES, prefer_slots: bool = False) -> None:
         self.backend, self.pipeline, self.max_retries = backend, pipeline, int(max_retries)
+        self.prefer_slots = bool(prefer_slots)
         self.last_spec: Optional[Dict[str, Any]] = None
         self.last_question: Optional[str] = None
 
@@ -754,7 +778,11 @@ class ScienceBee:
         if not isinstance(question, str) or not question.strip() or len(question) > 4000:
             raise ValueError("question must be a non-empty string of at most 4000 characters")
         is_follow = (bool(_FOLLOWUP_RE.match(question)) if follow_up is None else bool(follow_up)) and self.last_spec is not None
-        msgs = build_followup_messages(question, self.last_spec, self.last_question) if is_follow else build_first_messages(question)
+        msgs = (
+            build_followup_messages(question, self.last_spec, self.last_question, prefer_slots=self.prefer_slots)
+            if is_follow
+            else build_first_messages(question, prefer_slots=self.prefer_slots)
+        )
         f = formulate(msgs, self.backend, max_retries=self.max_retries)
         lang = language or detect_language(question)
         ans: Dict[str, Any] = {"question": question, "language": lang, "follow_up": is_follow, "formulated": f["ok"], "spec": f["spec"],
@@ -1135,6 +1163,8 @@ def slot_formulate(question: str) -> Optional[Dict[str, Any]]:
             g_over_l = _find(q, ["g_over_l", r"g\s*/\s*l"])
             length_m = _find_with_unit(q, ["length", "longueur", "L", "l"], r"m|met(?:er|re)s?|mètres?")
             length_cm = _find_with_unit(q, ["length", "longueur", "L", "l"], r"cm|centimet(?:er|re)s?")
+            period_ms = _find_with_unit(q, ["period", "small-angle period", "période", "periode", "T"], r"ms|milliseconds?|millisecondes?")
+            period_s = None if period_ms is not None else _find_with_unit(q, ["period", "small-angle period", "période", "periode", "T"], r"s|sec|seconds?|secondes?")
             g_val = _find(q, ["g", "gravity", "gravité"])
             d = _find(q, ["damping", "friction", "amortissement", "frottement", "gamma"])
             th_deg = (
@@ -1148,6 +1178,10 @@ def slot_formulate(question: str) -> Optional[Dict[str, Any]]:
             slots_d = {"omega0": 0.0 if om is None else om, "damping": 0.0 if d is None else d, t_key: ts}
             if g_over_l is not None:
                 slots_d["g_over_l"] = g_over_l
+            elif period_ms is not None:
+                slots_d["period_ms"] = period_ms
+            elif period_s is not None:
+                slots_d["period_s"] = period_s
             else:
                 if length_m is not None:
                     slots_d["length_m"] = length_m
@@ -1247,6 +1281,53 @@ def slot_formulate(question: str) -> Optional[Dict[str, Any]]:
                     taus_s = [float(v) / 1000.0 if u.lower().startswith("m") else float(v) for v, u in m_tau]
                     slots_d = {"a0": a0, "time_constants_s": taus_s, t_key: ts}
                     slot_obj = {"schema": fam.SLOT_SCHEMA, "slot_family": "decay_chain", "slots": slots_d}
+
+        elif re.search(r"yukawa|qf_yukawa", low):
+            kappa = _find(q, ["kappa", "κ", "screening"])
+            damping = _find(q, ["damping", "gamma", "γ"])
+            x0 = _find(q, ["x0", "x_0", "r0", "r_0"])
+            v0 = _find(q, ["v0", "v_0", "vr0", "v_r0"])
+            slots_d = {t_key: ts}
+            for k_name, v_val in (("kappa", kappa), ("damping", damping), ("x0", x0), ("v0", v0)):
+                if v_val is not None:
+                    slots_d[k_name] = v_val
+            slot_obj = {"schema": fam.SLOT_SCHEMA, "slot_family": "yukawa_crystal", "slots": slots_d}
+
+        elif re.search(r"gross-pitaevskii|\bgpe\b|bogoliubov|condensate|qf_pgpe", low):
+            omega_trap = _find(q, ["omega_trap", "omega", "ω", "trap frequency"])
+            g_int = _find(q, ["g_int", "interaction", "g"])
+            zeta = _find(q, ["zeta", "damping", "gamma_diss", "gamma", "γ"])
+            x0 = _find(q, ["x0", "x_0", "psi_re0"])
+            v0 = _find(q, ["v0", "v_0", "psi_im0"])
+            slots_d = {t_key: ts}
+            for k_name, v_val in (("omega_trap", omega_trap), ("g_int", g_int), ("zeta", zeta), ("x0", x0), ("v0", v0)):
+                if v_val is not None:
+                    slots_d[k_name] = v_val
+            slot_obj = {"schema": fam.SLOT_SCHEMA, "slot_family": "gpe_vortex", "slots": slots_d}
+
+        elif re.search(r"art-exo|art_exo|proofreading|exonuclease|chromatin_remodeling", low):
+            k_pol = _find(q, ["k_pol", "kpol", "polymerization rate"])
+            k_exo = _find(q, ["k_exo", "kexo", "exonuclease rate", "proofreading rate"])
+            k_ext = _find(q, ["k_ext", "kext", "k_lig", "extension rate"])
+            t0_c = _find(q, ["T0", "t0_conc", "c0", "c_0"])
+            m0_c = _find(q, ["M0", "m0_conc", "m0", "m_0"])
+            p0_c = _find(q, ["P0", "p0_conc", "p0", "p_0"])
+            slots_d = {t_key: ts}
+            for k_name, v_val in (("k_pol", k_pol), ("k_exo", k_exo), ("k_ext", k_ext), ("T0", t0_c), ("M0", m0_c), ("P0", p0_c)):
+                if v_val is not None:
+                    slots_d[k_name] = v_val
+            slot_obj = {"schema": fam.SLOT_SCHEMA, "slot_family": "art_exo_genetics", "slots": slots_d}
+
+        elif re.search(r"quintessence|klein-gordon|bao_cosmology|k3_quintessence", low):
+            m_eff = _find(q, ["m_eff", "m_phi", "mphi", "mass", "scalar mass"])
+            hubble = _find(q, ["hubble", "h_hub", "H"])
+            phi0 = _find(q, ["phi0", "phi_0", "φ0"])
+            dphi0 = _find(q, ["dphi0", "dphi_0"])
+            slots_d = {t_key: ts}
+            for k_name, v_val in (("m_eff", m_eff), ("hubble", hubble), ("phi0", phi0), ("dphi0", dphi0)):
+                if v_val is not None:
+                    slots_d[k_name] = v_val
+            slot_obj = {"schema": fam.SLOT_SCHEMA, "slot_family": "bao_cosmology", "slots": slots_d}
 
         if slot_obj is None:
             return None

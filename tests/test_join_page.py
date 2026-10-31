@@ -214,6 +214,7 @@ def test_every_script_and_flag_the_page_tells_people_to_use_exists() -> None:
     assert scripts == {
         "hivemind_boinc_idle_worker.py",
         "hivemind_producer_agent.py",
+        "hivemind_producer_autostart.py",
         "hivemind_producer_shield.py",
         "hivemind_volunteer_config.py",
         "hivemind_volunteer_preflight.py",

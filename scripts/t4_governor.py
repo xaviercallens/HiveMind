@@ -44,6 +44,26 @@ def gpu_state() -> dict:
     return {"used_mib": int(q[0]), "total_mib": int(q[1]), "temp_c": int(q[2]), "util_pct": int(q[3]), "procs": procs}
 
 
+SCHEMA = 2  # governor.jsonl event schema: 2 adds `schema` to every event and `other_procs` to a yield (fields are only ever added)
+
+
+def other_gpu_procs(procs: list[tuple[str, ...]], mine: set[str], limit: int = 6) -> list[dict]:
+    """The GPU processes that are not the BOINC task, as seen when the governor decided someone else was busy (telemetry only).
+
+    Without this a yield with trigger "gpu" says only that something used >= 10 % of the card; it cannot say whether that was a user's Ollama
+    client, the validator's replay or a research job. The command line is cut to 80 characters."""
+    out = []
+    for p in procs:
+        if p[0] in mine:
+            continue
+        try:
+            cmd = Path(f"/proc/{p[0]}/cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")[:80]
+        except OSError:
+            cmd = ""
+        out.append({"pid": p[0], "name": p[1] if len(p) > 1 else "", "mib": p[2] if len(p) > 2 else "", "cmd": cmd})
+    return out[:limit]
+
+
 def boinc_gpu_pids(procs: list[tuple[str, ...]]) -> list[str]:
     """GPU processes that belong to the BOINC QLoRA app (python from the project venv running moe_app)."""
     out = []
@@ -193,6 +213,7 @@ def main() -> int:
 
     def log(ev: dict) -> None:
         ev["t"] = round(time.time(), 2)
+        ev["schema"] = SCHEMA
         with open(a.telemetry, "a") as f:
             f.write(json.dumps(ev) + "\n")
 
@@ -213,8 +234,10 @@ def main() -> int:
             in_flight, http_ok = 0, False
             st = {"error": str(exc)[:80]}
         # two independent "someone is asking" signals: nginx in-flight (router traffic) and GPU activity by anything but BOINC
+        g_seen = None
         try:
-            other_busy, other_util = other_gpu_busy(gpu_state())
+            g_seen = gpu_state()
+            other_busy, other_util = other_gpu_busy(g_seen)
         except Exception:
             other_busy, other_util = False, 0
         busy = in_flight >= 1 or other_busy
@@ -258,8 +281,10 @@ def main() -> int:
             last_yield_ms = freed_ms
             state = "yielded"
             # gpu_freed_ms is a real measurement only when a BOINC GPU task was running (had_boinc_gpu_task); otherwise there was nothing to free
+            others = other_gpu_procs(g_seen["procs"], set(boinc_gpu_pids(g_seen["procs"]))) if (g_seen and trigger == "gpu") else []
             log({"event": "yield", "trigger": trigger, "in_flight": in_flight, "other_gpu_util": other_util, "set_never_ok": ok,
-                 "had_boinc_gpu_task": had_task, "ended_by_governor": ended_by_governor, "gpu_freed_ms": freed_ms, "yields": yields})
+                 "had_boinc_gpu_task": had_task, "ended_by_governor": ended_by_governor, "gpu_freed_ms": freed_ms, "yields": yields,
+                 "other_procs": others})
         elif not busy and state in ("init", "yielded") and (t0 - last_busy) >= (a.idle_start_s if in_night(t0, a.night_tz, a.night_start_h, a.night_end_h) else a.day_idle_s):
             g = gpu_state()
             mine = sum(int(p[2]) for p in g["procs"] if p[0] in boinc_gpu_pids(g["procs"]))

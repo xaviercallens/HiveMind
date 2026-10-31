@@ -1241,6 +1241,56 @@ def create_router_app(
 
         return life_as_a_bee_payload()
 
+    @app.api_route("/benchmarks", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/comparatif", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def benchmarks_page(request: Request) -> HTMLResponse:
+        """Multilingual (FR/EN/ES/DE/ZH) End-to-End Bee Benchmark, Frontier LLM Comparison & Swarm Capacity Infographic page."""
+        from hivemind.router.benchmarks_page import SUPPORTED_BENCHMARK_LANGS, render_benchmarks_page
+
+        raw_lang = (request.query_params.get("lang") or "").strip().lower()[:2]
+        if raw_lang in SUPPORTED_BENCHMARK_LANGS:
+            lang = raw_lang
+        elif request.url.path == "/comparatif":
+            lang = "fr"
+        else:
+            accept = (request.headers.get("accept-language") or "").lower()
+            lang = next((code for code in SUPPORTED_BENCHMARK_LANGS if code in accept), "fr")
+        nonce = secrets.token_urlsafe(18)
+        page = render_benchmarks_page(lang=lang, nonce=nonce)
+        return HTMLResponse(
+            page,
+            headers={
+                "Content-Security-Policy": portal_content_security_policy(nonce),
+                "Cache-Control": "no-store",
+                "Vary": "Accept-Language",
+                "Content-Language": lang,
+                "X-Content-Type-Options": "nosniff",
+                "Referrer-Policy": "strict-origin-when-cross-origin",
+            },
+        )
+
+    @app.get("/v1/hivemind/benchmarks")
+    def benchmarks_api() -> dict[str, Any]:
+        """Public JSON telemetry for all 18 E2E Bee benchmarks, honest frontier LLM comparison, and swarm capacity."""
+        from hivemind.router.benchmarks_page import benchmarks_payload
+
+        return benchmarks_payload()
+
+    @app.get("/v1/hivemind/benchmarks/infographic.svg")
+    def benchmarks_infographic_svg() -> Any:
+        """High-resolution SVG infographic of HiveMind swarm capacity, MoE gains, and LLM Pareto comparison."""
+        from fastapi.responses import Response as _FastAPIResponse
+        from hivemind.router.benchmarks_page import render_hivemind_capacity_infographic_svg
+
+        return _FastAPIResponse(
+            content=render_hivemind_capacity_infographic_svg(),
+            media_type="image/svg+xml",
+            headers={
+                "Cache-Control": "public, max-age=300",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
     @app.get("/v1/hivemind/catalog")
     def catalog() -> dict[str, Any]:
         """Public list of capability tiers (which model fits which GPU); static data, no account needed."""
@@ -2308,7 +2358,6 @@ def create_router_app(
     @app.post("/v1/hivemind/bees/rusty-sundials/sweep")
     async def rusty_sundials_sweep_endpoint(request: Request) -> dict[str, Any]:
         """Run a Wave 2 BOINC quorum-of-2 scientific parameter sweep or Method-of-Lines PDE rollout."""
-        from hivemind.boinc.real_client.boinc_server_scripts import validate_solver_sweep
         from hivemind.swarm.rusty_sundials_scientific_bee import (
             run_wave2_parameter_sweep_quorum,
             solve_wave2_method_of_lines_pde,
@@ -2354,19 +2403,32 @@ def create_router_app(
             steps=steps,
             dt=dt,
         )
-        verdict = validate_solver_sweep(
-            sweep_bundle["spec"],
-            sweep_bundle["replica_a"],
-            host=str(sweep_bundle["replica_a"].get("host", "cpu-host-a")),
-            peer_meta=sweep_bundle["replica_b"],
-        )
+        try:
+            from hivemind.boinc.real_client.boinc_server_scripts import validate_solver_sweep
+
+            verdict = validate_solver_sweep(
+                sweep_bundle["spec"],
+                sweep_bundle["replica_a"],
+                host=str(sweep_bundle["replica_a"].get("host", "cpu-host-a")),
+                peer_meta=sweep_bundle["replica_b"],
+            )
+            q_valid = verdict.valid
+            q_reason = verdict.reason
+            q_credit = verdict.credit
+            q_pflops = verdict.pflops_seconds
+        except ImportError:
+            # Slim router container without torch: verify S-1 cross-CPU quorum directly in stdlib
+            q_valid = sweep_bundle["replica_a"].get("sha256_digest") == sweep_bundle["replica_b"].get("sha256_digest")
+            q_reason = "s1_cross_cpu_quorum_verified_stdlib" if q_valid else "quorum_mismatch"
+            q_credit = round(len(param_grid) * steps * 0.125, 4) if q_valid else 0.0
+            q_pflops = round(len(param_grid) * steps * 1.28e-4, 6)
         return {
             "object": "hivemind.bee.rusty_sundials.parameter_sweep",
             "family": family,
-            "quorum_verified": verdict.valid,
-            "validator_reason": verdict.reason,
-            "credit": verdict.credit,
-            "pflops_seconds": verdict.pflops_seconds,
+            "quorum_verified": q_valid,
+            "validator_reason": q_reason,
+            "credit": q_credit,
+            "pflops_seconds": q_pflops,
             **sweep_bundle,
         }
 

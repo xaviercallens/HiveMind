@@ -804,6 +804,31 @@ document.querySelectorAll('.load-bee-scenario-btn').forEach(btn => {
   });
 });
 
+// Pre-fill Playground when arriving from /benchmarks?model=...&prompt=...
+(function() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const qModel = params.get('model');
+    const qPrompt = params.get('prompt');
+    const qTemp = params.get('temp');
+    const qTokens = params.get('tokens');
+    if (qModel && $('modelSelect')) {
+      $('modelSelect').value = qModel;
+    }
+    if (qPrompt && $('promptInput')) {
+      $('promptInput').value = qPrompt;
+    }
+    if (qTemp && $('temperature') && $('tempVal')) {
+      $('temperature').value = qTemp;
+      $('tempVal').textContent = qTemp;
+    }
+    if (qTokens && $('maxTokens') && $('maxTokensVal')) {
+      $('maxTokens').value = qTokens;
+      $('maxTokensVal').textContent = qTokens;
+    }
+  } catch (e) {}
+})();
+
 // Free Steam Game Registration, Login & Idle-GPU BOINC Contribution Console
 if ($('steamRegisterLoginBtn')) {
   $('steamRegisterLoginBtn').addEventListener('click', async () => {
@@ -934,6 +959,7 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
       </div>
       <nav>
         <a href="#playground" class="nav-link active">Playground</a>
+        <a href="/benchmarks" class="nav-link" style="color:var(--amber);font-weight:700;">&#x1F4CA; Benchmarks &amp; LLM Comparison</a>
         <a href="#life-as-a-bee" class="nav-link">&#x1F41D; Life as a Bee</a>
         <a href="#campaigns" class="nav-link">Joint Campaigns</a>
         <a href="#night-telemetry" class="nav-link">Night Progress</a>
@@ -954,6 +980,7 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
       </p>
       <div class="cta-group">
         <a href="#playground" class="btn btn-primary">&#x26A1; Try In-Browser Playground</a>
+        <a href="/benchmarks" class="btn btn-outline" style="border-color:var(--purple);color:var(--purple);">&#x1F4CA; All-Bees Benchmarks &amp; LLM Comparison (5 Langs)</a>
         <a href="#steam-free-game" class="btn btn-outline" style="border-color:var(--green);color:var(--green);">&#x1F3AE; Free Steam Game (AppID 3133700)</a>
         <a href="#life-as-a-bee" class="btn btn-outline" style="border-color:var(--amber);color:var(--amber);">&#x1F41D; Life as a Bee (15 Scenarios)</a>
         {signup_cta}
@@ -996,6 +1023,9 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
           <option value="hivemind/moe-general">hivemind/moe-general (20B MoE / 3.6B Active &bull; General Reasoning)</option>
           <option value="hivemind/moe-coder">hivemind/moe-coder (30B MoE / 3.3B Active &bull; Frontier Coding)</option>
           <optgroup label="👑 Super-MoE &amp; Macro-Clusters (20B / Top-2)">
+            <option value="hivemind/moe-coder-polyglot-3tome">hivemind/moe-coder-polyglot-3tome (30.5B 3-Tome Polyglot Dev MoE &bull; PY/C/C++/RS &bull; 16 Bees)</option>
+            <option value="hivemind/moe-image-gen">hivemind/moe-image-gen (22.4B Image-Gen &amp; Vision-MoE Studio &bull; 104 Bees &bull; &lt;1.5 GB)</option>
+            <option value="hivemind/video-moe">hivemind/video-moe (28B Spatio-Temporal Video-MoE &bull; Wan2.1/LTX 24fps 3D-DCT)</option>
             <option value="hivemind/moe-systems-formal">hivemind/moe-systems-formal (Cluster 00 &bull; Systèmes, Kernels &amp; Lean 4)</option>
             <option value="hivemind/moe-cyber-crypto">hivemind/moe-cyber-crypto (Cluster 01 &bull; Cybersécurité, CVE &amp; Circuits ZK)</option>
             <option value="hivemind/moe-frontier-science">hivemind/moe-frontier-science (Cluster 02 &bull; Astrophysique, JWST &amp; Réseau Quantique)</option>

@@ -37,7 +37,7 @@ _LATEST_T4_SNAPSHOT: dict[str, Any] = {
         "power_w": 30.2,
         "resident_processes": [
             {
-                "name": "llama-server (hivemind/bee-stars • Qwen2.5-1.5B + NIGHT-MOE-1 Stars LoRA)",
+                "name": "llama-server (hivemind/bee-stars • Qwen2.5-Coder-7B-Instruct + NIGHT-MOE-1 Stars LoRA)",
                 "mib": 4838,
             },
             {

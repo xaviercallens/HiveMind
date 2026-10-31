@@ -33,7 +33,7 @@ import os
 import subprocess
 import sys
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -90,6 +90,62 @@ def probe_residency(
         mib = int(size) // (1024 * 1024) if isinstance(size, (int, float)) and not isinstance(size, bool) and size >= 0 else 0
         resident[name] = mib
     return resident
+
+
+def probe_model_sizes_mib(
+    local_endpoint: str, *, transport: httpx.BaseTransport | None = None, timeout_s: float = RESIDENCY_TIMEOUT_S
+) -> dict[str, int] | None:
+    """Return ``{model_name: disk_weight_mib}`` from Ollama ``GET /api/tags``, or ``None`` if unavailable."""
+    try:
+        with httpx.Client(timeout=timeout_s, transport=transport, follow_redirects=False) as client:
+            response = client.get(local_endpoint.rstrip("/") + "/api/tags")
+            response.raise_for_status()
+            listed = response.json().get("models")
+    except (httpx.HTTPError, ValueError, AttributeError):
+        return None
+    if not isinstance(listed, list):
+        return None
+    sizes: dict[str, int] = {}
+    for item in listed:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name") or item.get("model")
+        size = item.get("size")
+        if not isinstance(name, str) or not name:
+            continue
+        if isinstance(size, (int, float)) and not isinstance(size, bool) and size >= 0:
+            sizes[name] = int(size) // (1024 * 1024)
+    return sizes
+
+
+def filter_models_by_vram_budget(
+    models: Sequence[dict[str, str]],
+    model_sizes_mib: Mapping[str, int] | None,
+    *,
+    gpu_vram_mib: int | None,
+    pinned_vram_mib: int = 0,
+    min_free_vram_mib: int = 0,
+) -> tuple[list[dict[str, str]], list[str]]:
+    """Filter out models whose on-disk weight size exceeds the safe VRAM budget after pinned daemons and free headroom.
+
+    Returns ``(kept_models, dropped_descriptions)``. If ``model_sizes_mib`` or ``gpu_vram_mib`` is ``None``, all models
+    are kept unchanged.
+    """
+    if model_sizes_mib is None or gpu_vram_mib is None or gpu_vram_mib <= 0:
+        return [dict(m) for m in models], []
+    budget_mib = max(0, int(gpu_vram_mib) - max(0, int(pinned_vram_mib)) - max(0, int(min_free_vram_mib)))
+    kept: list[dict[str, str]] = []
+    dropped: list[str] = []
+    for entry in models:
+        local = entry["local_name"]
+        size_mib = model_sizes_mib.get(local)
+        if size_mib is None:
+            size_mib = model_sizes_mib.get(f"{local}:latest")
+        if size_mib is not None and size_mib > budget_mib:
+            dropped.append(f"{entry['id']}={local} ({size_mib} MiB > {budget_mib} MiB budget)")
+            continue
+        kept.append(dict(entry))
+    return kept, dropped
 
 
 def apply_residency(
@@ -307,6 +363,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--local-endpoint", default=DEFAULT_LOCAL_ENDPOINT, help=f"Local Ollama base URL for the read-only GET /api/ps residency probe (default {DEFAULT_LOCAL_ENDPOINT})")
     parser.add_argument("--cold-start-s", type=float, default=DEFAULT_COLD_START_S, help=f"Your estimate of the seconds needed to load a model that is not resident (default {DEFAULT_COLD_START_S:g}, max 600)")
     parser.add_argument("--gpu-vram-mib", type=int, help="Card memory in MiB to report with residency (default: read from nvidia-smi when possible)")
+    parser.add_argument("--pinned-vram-mib", type=int, default=0, help="VRAM in MiB reserved by pinned daemons such as llama-server (default 0)")
+    parser.add_argument("--min-free-vram-mib", type=int, default=0, help="Minimum free VRAM headroom in MiB to preserve when filtering models (e.g. 4300 on Tesla T4)")
     parser.add_argument("--control-state-file", metavar="PATH", help="Where to publish the remote pause/VRAM-cap state (owner-only file, mode 0600) for the producer shield's --control-state-file; omit to not write it")
     parser.add_argument("--skip-preflight", action="store_true", help="Do not check that your endpoint lists the model before the first heartbeat")
     return parser
@@ -408,6 +466,26 @@ def main(
             if gpu_mib is None:
                 detected = detect_vram_gb(runner)
                 gpu_mib = int(detected * 1024) if detected is not None else None
+            if (args.min_free_vram_mib > 0 or args.pinned_vram_mib > 0) and gpu_mib is not None:
+                sizes_mib = probe_model_sizes_mib(args.local_endpoint, transport=residency_transport)
+                kept_models, dropped_models = filter_models_by_vram_budget(
+                    models,
+                    sizes_mib,
+                    gpu_vram_mib=gpu_mib,
+                    pinned_vram_mib=args.pinned_vram_mib,
+                    min_free_vram_mib=args.min_free_vram_mib,
+                )
+                if dropped_models:
+                    print(
+                        f"vram guard: dropping models exceeding {gpu_mib} MiB (pinned={args.pinned_vram_mib} MiB, "
+                        f"min_free={args.min_free_vram_mib} MiB): {', '.join(dropped_models)}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                if not kept_models:
+                    print("vram guard: no advertised models fit within the safe VRAM budget; refusing to start.", file=sys.stderr)
+                    return 1
+                models = kept_models
 
         def make_payload() -> dict[str, Any]:
             built = build_heartbeat_payload(

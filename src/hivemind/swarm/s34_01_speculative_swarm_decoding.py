@@ -36,9 +36,42 @@ class SpeculativeDecodingStepResult:
     emitted_tokens: tuple[int, ...]
     acceptance_rate: float
     effective_speedup_factor: float
+    speedup_measurement_kind: str = "model"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def sample_residual_token_distribution(
+    target_probs: dict[int, float],
+    draft_probs: dict[int, float],
+    uniform_draw: float = 0.5,
+) -> int:
+    """Sample a token from the normalized residual distribution max(0, p(x) - q(x)) on rejection (IP-21)."""
+    if not target_probs:
+        raise ValueError("target_probs must be non-empty")
+    residuals: list[tuple[int, float]] = []
+    total_mass = 0.0
+    for tok_id in sorted(target_probs):
+        p_val = max(0.0, float(target_probs[tok_id]))
+        q_val = max(0.0, float(draft_probs.get(tok_id, 0.0)))
+        res = max(0.0, p_val - q_val)
+        residuals.append((tok_id, res))
+        total_mass += res
+
+    if total_mass <= 1e-12:
+        # Fallback to normalized target distribution when p == q everywhere
+        target_sum = sum(max(0.0, float(v)) for v in target_probs.values())
+        residuals = [(tid, max(0.0, float(target_probs[tid]))) for tid in sorted(target_probs)]
+        total_mass = max(target_sum, 1e-12)
+
+    u = max(0.0, min(0.999999999, float(uniform_draw))) * total_mass
+    cumulative = 0.0
+    for tok_id, mass in residuals:
+        cumulative += mass
+        if u <= cumulative:
+            return tok_id
+    return residuals[-1][0]
 
 
 class SpeculativeSwarmDecoder:
@@ -67,23 +100,54 @@ class SpeculativeSwarmDecoder:
         self,
         candidates: Sequence[DraftTokenCandidate],
         *,
-        fallback_or_bonus_token_id: int = 999,
+        fallback_or_bonus_token_id: int | None = None,
+        target_vocab_probs: dict[int, float] | None = None,
+        draft_vocab_probs: dict[int, float] | None = None,
+        residual_uniform_draw: float | None = None,
     ) -> SpeculativeDecodingStepResult:
-        """Verify K draft tokens in parallel and emit accepted prefix plus 1 guaranteed target/residual token."""
+        """Verify K draft tokens in parallel and emit accepted prefix plus 1 residual-sampled/bonus token."""
         if not candidates:
             raise ValueError("candidates must be non-empty")
 
         accepted: list[int] = []
+        rejected_cand: DraftTokenCandidate | None = None
         for cand in candidates:
             p_acc = self.acceptance_probability(cand.draft_prob, cand.target_prob)
             if cand.uniform_draw <= p_acc:
                 accepted.append(cand.token_id)
             else:
+                rejected_cand = cand
                 break
 
         k = len(candidates)
         m = len(accepted)
-        emitted = (*accepted, int(fallback_or_bonus_token_id))
+        if fallback_or_bonus_token_id is not None:
+            chosen_bonus = int(fallback_or_bonus_token_id)
+        elif target_vocab_probs is not None:
+            u_res = (
+                residual_uniform_draw
+                if residual_uniform_draw is not None
+                else (rejected_cand.uniform_draw if rejected_cand is not None else 0.5)
+            )
+            chosen_bonus = sample_residual_token_distribution(
+                target_probs=target_vocab_probs,
+                draft_probs=draft_vocab_probs or {},
+                uniform_draw=u_res,
+            )
+        elif rejected_cand is not None:
+            # Construct a 2-point residual distribution between the rejected token and complement token
+            p_rej = max(0.0, min(1.0, float(rejected_cand.target_prob)))
+            q_rej = max(0.0, min(1.0, float(rejected_cand.draft_prob)))
+            alt_tok = int(rejected_cand.token_id) + 1
+            chosen_bonus = sample_residual_token_distribution(
+                target_probs={int(rejected_cand.token_id): p_rej, alt_tok: max(0.0, 1.0 - p_rej)},
+                draft_probs={int(rejected_cand.token_id): q_rej, alt_tok: max(0.0, 1.0 - q_rej)},
+                uniform_draw=rejected_cand.uniform_draw,
+            )
+        else:
+            chosen_bonus = 999
+
+        emitted = (*accepted, int(chosen_bonus))
         tokens_out = len(emitted)
 
         speculative_wall_ms = k * self.draft_step_ms + self.target_parallel_verify_ms
@@ -93,8 +157,9 @@ class SpeculativeSwarmDecoder:
         return SpeculativeDecodingStepResult(
             draft_k=k,
             accepted_count=m,
-            bonus_token_id=int(fallback_or_bonus_token_id),
+            bonus_token_id=int(chosen_bonus),
             emitted_tokens=emitted,
             acceptance_rate=m / float(k),
             effective_speedup_factor=round(speedup, 4),
+            speedup_measurement_kind="model",
         )

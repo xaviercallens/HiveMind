@@ -13,7 +13,7 @@ from hivemind.economy.international_launch_model import (
     compute_erlang_c_metrics,
     compute_progressive_starter_grant,
     evaluate_international_launch_readiness,
-    simulate_international_launch_wave,
+    project_international_launch_wave,
 )
 from hivemind.router.accounts import RouterStore
 from hivemind.router.gateway import create_router_app
@@ -53,7 +53,7 @@ def test_congestion_pricing_boosts_producer_rewards_during_peak_demand() -> None
 
 def test_staged_international_wave_simulations_prove_controls_prevent_collapse() -> None:
     # Stage 2 (r/LocalLLaMA, 8,000 visitors) after Stage 1 producer seed (37 producers, 2,150 tok/s)
-    proj = simulate_international_launch_wave(
+    proj = project_international_launch_wave(
         wave_name="r/LocalLLaMA Technical Wave",
         new_visitors=8000,
         signup_rate=0.15,

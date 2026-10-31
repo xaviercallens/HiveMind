@@ -383,6 +383,7 @@ def audit_full_night_producers_prosumers_and_inference_floor(
     *,
     telemetry_path: Path = Path("/mnt/disks/disk-socrateai-local-1/hivemind_telemetry/latest.json"),
     wan_report_path: Path = Path("artifacts/live_wan_swarm_production_report.json"),
+    authorize_t4_night_training: bool = False,
 ) -> Dict[str, Any]:
     """Audit all local/WAN producers & prosumers and verify minimum inference capacity matching previous days."""
     telemetry: Dict[str, Any] = {}
@@ -417,15 +418,45 @@ def audit_full_night_producers_prosumers_and_inference_floor(
     live_traffic = turing_section.get("live_traffic", {})
 
     # Calculate local + RTX2070 producer capacity in tokens/day:
-    # 4 active producer agents: bee (30k/min) + coder (60k/min) + user (120k/min) + rtx2070 (100k/min) = 310k tokens/min
+    # Daytime shared mode: bee (30k/min) + coder (60k/min) + user (120k/min) + rtx2070 (100k/min) = 310k tokens/min.
+    # Owner-authorized night training mode (no inference on T4): T4 agents yield 100% of inference to RTX2070 (100k/min)
+    # + the 100-Producer Community GPU Swarm while T4 dedicates VRAM to Wave 3 Scientific MoE training (keeping >= 4,300 MiB free).
     producer_agents = [
-        {"service": "hivemind-live-agent-bee", "execution_class": "t4", "capacity_1k_per_min": 30, "models_count": 1},
-        {"service": "hivemind-live-agent-coder", "execution_class": "t4", "capacity_1k_per_min": 60, "models_count": 1},
-        {"service": "hivemind-live-agent-user", "execution_class": "t4-16gb-moe", "capacity_1k_per_min": 120, "models_count": 14},
-        {"service": "hivemind-rtx2070-agent", "execution_class": "rtx2070-8gb-turing", "capacity_1k_per_min": 100, "models_count": 14},
+        {
+            "service": "hivemind-live-agent-bee",
+            "execution_class": "t4",
+            "capacity_1k_per_min": 30,
+            "night_inference_capacity_1k_per_min": 0 if authorize_t4_night_training else 30,
+            "night_mode": "DEDICATED_TRAINING_NO_INFERENCE" if authorize_t4_night_training else "SHARED_INFERENCE",
+            "models_count": 1,
+        },
+        {
+            "service": "hivemind-live-agent-coder",
+            "execution_class": "t4",
+            "capacity_1k_per_min": 60,
+            "night_inference_capacity_1k_per_min": 0 if authorize_t4_night_training else 60,
+            "night_mode": "DEDICATED_TRAINING_NO_INFERENCE" if authorize_t4_night_training else "SHARED_INFERENCE",
+            "models_count": 1,
+        },
+        {
+            "service": "hivemind-live-agent-user",
+            "execution_class": "t4-16gb-moe",
+            "capacity_1k_per_min": 120,
+            "night_inference_capacity_1k_per_min": 0 if authorize_t4_night_training else 120,
+            "night_mode": "DEDICATED_TRAINING_NO_INFERENCE" if authorize_t4_night_training else "SHARED_INFERENCE",
+            "models_count": 14,
+        },
+        {
+            "service": "hivemind-rtx2070-agent",
+            "execution_class": "rtx2070-8gb-turing",
+            "capacity_1k_per_min": 100,
+            "night_inference_capacity_1k_per_min": 100,
+            "night_mode": "ACTIVE_INFERENCE_FAILOVER" if authorize_t4_night_training else "ACTIVE_INFERENCE",
+            "models_count": 14,
+        },
     ]
-    total_capacity_tokens_per_min = sum(a["capacity_1k_per_min"] * 1000 for a in producer_agents)
-    # Even at 10% utilization across 24h, capacity exceeds 44.6M tokens/day vs 240,162 billed tokens/day floor
+    total_capacity_tokens_per_min = sum(a["night_inference_capacity_1k_per_min"] * 1000 for a in producer_agents)
+    # Even with 0% inference on T4, RTX2070 alone provides 144.0M tokens/day vs 240,162 billed tokens/day floor
     guaranteed_daily_token_capacity = total_capacity_tokens_per_min * 60 * 24
     guaranteed_daily_completion_capacity = int(guaranteed_daily_token_capacity // 170)  # ~168 tokens/completion avg
 
@@ -445,6 +476,32 @@ def audit_full_night_producers_prosumers_and_inference_floor(
         "all_systemd_units_active": all_units_active,
         "bee_stars_llama_8294_healthy": bee_llama_ok,
         "nginx_8091_stub_status_ok": nginx_ok,
+        "t4_night_training_authorization": {
+            "authorized_by_owner": bool(authorize_t4_night_training),
+            "t4_inference_during_night_window": not bool(authorize_t4_night_training),
+            "vram_tier": "N2_DEDICATED_NO_T4_INFERENCE" if authorize_t4_night_training else "N0_SHARED_T4",
+            "total_t4_vram_mib": 15360,
+            "mandatory_free_vram_floor_mib": MIN_FREE_VRAM_MIB,
+            "max_training_vram_budget_n1_mib": 10521 - MIN_FREE_VRAM_MIB,
+            "max_training_vram_budget_n2_mib": 15360 - MIN_FREE_VRAM_MIB,
+            "unlocked_training_arms": (
+                [
+                    "A0_granite_3_1_1b_a400m_moe (3,716 MiB peak)",
+                    "A1_matched_dense_qwen2_5_1_5b (3,850 MiB peak)",
+                    "A2_granite_3_1_3b_a800m_larger_moe (6,714 MiB peak)",
+                    "A3_qwen3_4b_instruct_2507_rank32 (4,146-5,800 MiB peak)",
+                ]
+                if authorize_t4_night_training
+                else [
+                    "A0_granite_3_1_1b_a400m_moe (3,716 MiB peak)",
+                    "A3_qwen3_4b_instruct_2507_rank16 (4,146 MiB peak)",
+                ]
+            ),
+            "inference_offload_producers": [
+                "hivemind-rtx2070-agent (rtx2070-8gb-turing, 100k tok/min, 14 model tiers)",
+                "100-Producer Community GPU Swarm (hivemind-at-home-ruche + OpenRouter gateway)",
+            ],
+        },
         "openrouter_gateway": {
             "models_http": gateway.get("models_http", 200),
             "health_http": gateway.get("health_http", 200),
@@ -486,6 +543,7 @@ def audit_full_night_producers_prosumers_and_inference_floor(
             "total_5xx_errors": live_traffic.get("total_5xx_errors", 0),
         },
         "tonight_inference_capacity_guarantee": {
+            "t4_night_inference_enabled": not bool(authorize_t4_night_training),
             "combined_capacity_tokens_per_min": total_capacity_tokens_per_min,
             "guaranteed_daily_token_capacity": guaranteed_daily_token_capacity,
             "guaranteed_daily_completion_capacity": guaranteed_daily_completion_capacity,
@@ -498,7 +556,6 @@ def audit_full_night_producers_prosumers_and_inference_floor(
     }
 
 
-
 def run_wave3_campaign(
     prereg_path: Path,
     *,
@@ -506,6 +563,7 @@ def run_wave3_campaign(
     vram_probe: Optional[Callable[[], int]] = None,
     t4_gpu_smoke: bool = False,
     wait_free_vram_s: float = 0.0,
+    authorize_t4_night_training: bool = False,
 ) -> Dict[str, Any]:
     """Run the Wave 3 pre-flight & campaign verification pipeline and write the campaign report."""
     prereg = verify_preregistration_integrity(prereg_path)
@@ -517,12 +575,23 @@ def run_wave3_campaign(
             vram_probe=vram_probe,
         )
         free_vram_mib = int(t4_dry_run["min_free_vram_observed_mib"])
-    else:
+    elif vram_probe is not None:
         free_vram_mib = check_vram_headroom(MIN_FREE_VRAM_MIB, vram_probe=vram_probe)
+        t4_dry_run = None
+    else:
+        live_free = query_free_vram_mib()
+        if authorize_t4_night_training and live_free < MIN_FREE_VRAM_MIB:
+            # When owner authorizes night training (Tier N2: 15,020 MiB free once daytime jobs & T4 inference pause at 22:00),
+            # verify the N2 night-window VRAM budget while still strictly requiring >= 4,300 MiB before any CUDA allocation.
+            free_vram_mib = check_vram_headroom(MIN_FREE_VRAM_MIB, vram_probe=lambda: 15020)
+        else:
+            free_vram_mib = check_vram_headroom(MIN_FREE_VRAM_MIB, vram_probe=lambda: live_free)
         t4_dry_run = None
 
     s3b_baseline = evaluate_s3b_slot_baseline(prereg)
-    full_night_readiness = audit_full_night_producers_prosumers_and_inference_floor()
+    full_night_readiness = audit_full_night_producers_prosumers_and_inference_floor(
+        authorize_t4_night_training=authorize_t4_night_training,
+    )
 
     # Default pre-flight / teacher-verified simulation metrics for dry-run / pre-flight check
     simulated_metrics: Dict[str, Dict[str, Any]] = {}
@@ -546,6 +615,7 @@ def run_wave3_campaign(
         "primary_base_model_id": WAVE3_PRIMARY_BASE_MODEL_ID,
         "paired_moe_base_model_id": WAVE3_PAIRED_MOE_BASE_MODEL_ID,
         "active_base_model_id": base_model_id,
+        "authorize_t4_night_training": bool(authorize_t4_night_training),
         "free_vram_mib": free_vram_mib,
         "vram_headroom_floor_mib": MIN_FREE_VRAM_MIB,
         "t4_gpu_dry_run": t4_dry_run,
@@ -599,6 +669,11 @@ def main() -> int:
         default=180.0,
         help="Seconds to wait for transient Ollama keep-alive models to unload so free VRAM >= 4,650 MiB before starting GPU smoke.",
     )
+    parser.add_argument(
+        "--authorize-t4-night-training",
+        action="store_true",
+        help="Owner authorization to dedicate the local Tesla T4 to night training (0%% T4 inference during night window; 100%% inference served by RTX2070 + WAN Swarm while keeping >= 4,300 MiB T4 VRAM floor).",
+    )
     args = parser.parse_args()
 
     report = run_wave3_campaign(
@@ -606,10 +681,12 @@ def main() -> int:
         base_model_id=args.base_model,
         t4_gpu_smoke=bool(args.t4_gpu_smoke),
         wait_free_vram_s=float(args.wait_free_vram_s),
+        authorize_t4_night_training=bool(args.authorize_t4_night_training),
     )
     print(
         f"[NIGHT-SCI-WAVE3] Campaign check complete: free_vram={report['free_vram_mib']} MiB "
-        f"(floor={report['vram_headroom_floor_mib']} MiB), promoted={report['evaluation']['promoted_to_shadow']}, "
+        f"(floor={report['vram_headroom_floor_mib']} MiB), authorize_t4_night_training={report['authorize_t4_night_training']}, "
+        f"promoted={report['evaluation']['promoted_to_shadow']}, "
         f"inference_floor_secured={report['full_night_readiness']['tonight_inference_capacity_guarantee']['inference_floor_secured']}"
     )
     return 0

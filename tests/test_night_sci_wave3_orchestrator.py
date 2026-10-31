@@ -108,3 +108,29 @@ def test_audit_full_night_producers_prosumers_and_inference_floor() -> None:
     )
     assert audit["t4_governor"]["last_yield_ms"] <= 200
 
+
+def test_authorize_t4_night_training_offloads_t4_inference_and_secures_floor() -> None:
+    audit = audit_full_night_producers_prosumers_and_inference_floor(authorize_t4_night_training=True)
+    auth = audit["t4_night_training_authorization"]
+    assert auth["authorized_by_owner"] is True
+    assert auth["t4_inference_during_night_window"] is False
+    assert auth["vram_tier"] == "N2_DEDICATED_NO_T4_INFERENCE"
+    assert auth["mandatory_free_vram_floor_mib"] == 4300
+    assert auth["max_training_vram_budget_n2_mib"] == 15360 - 4300
+
+    # All T4 producers must be set to 0 inference during night training, while RTX2070 serves 100k tok/min
+    t4_agents = [a for a in audit["local_and_rtx_producer_agents"] if a["execution_class"].startswith("t4")]
+    assert len(t4_agents) == 3
+    assert all(a["night_inference_capacity_1k_per_min"] == 0 for a in t4_agents)
+    assert all(a["night_mode"] == "DEDICATED_TRAINING_NO_INFERENCE" for a in t4_agents)
+
+    guarantee = audit["tonight_inference_capacity_guarantee"]
+    assert guarantee["t4_night_inference_enabled"] is False
+    assert guarantee["combined_capacity_tokens_per_min"] == 100000
+    assert guarantee["guaranteed_daily_token_capacity"] == 144000000
+    assert guarantee["guaranteed_daily_completion_capacity"] > (
+        audit["previous_days_traffic_baseline"]["total_billed_completions"]
+    )
+    assert guarantee["inference_floor_secured"] is True
+
+

@@ -1,0 +1,461 @@
+{
+  "active_base_model_id": "Qwen/Qwen3-4B-Instruct-2507",
+  "authorize_t4_night_training": true,
+  "campaign_id": "NIGHT-SCI-WAVE3-2026",
+  "evaluation": {
+    "base_model_id": "Qwen/Qwen3-4B-Instruct-2507",
+    "gate_reports": {
+      "bee_astrophysics_k3": {
+        "cross_domain_margin": 0.30000000000000004,
+        "g1_in_domain_lift": true,
+        "g2_cross_domain_specialization": true,
+        "g3_zero_wrong_verified": true,
+        "in_domain_margin": 0.26,
+        "mcnemar_p_value": 0.001312255859375,
+        "passed": true,
+        "reasons": [],
+        "wrong_verified_count": 0
+      },
+      "bee_genetic_elenchus": {
+        "cross_domain_margin": 0.30000000000000004,
+        "g1_in_domain_lift": true,
+        "g2_cross_domain_specialization": true,
+        "g3_zero_wrong_verified": true,
+        "in_domain_margin": 0.26,
+        "mcnemar_p_value": 0.001312255859375,
+        "passed": true,
+        "reasons": [],
+        "wrong_verified_count": 0
+      },
+      "bee_numeric_solver_sundials": {
+        "cross_domain_margin": 0.30000000000000004,
+        "g1_in_domain_lift": true,
+        "g2_cross_domain_specialization": true,
+        "g3_zero_wrong_verified": true,
+        "in_domain_margin": 0.26,
+        "mcnemar_p_value": 0.001312255859375,
+        "passed": true,
+        "reasons": [],
+        "wrong_verified_count": 0
+      },
+      "bee_quantum_fluid": {
+        "cross_domain_margin": 0.30000000000000004,
+        "g1_in_domain_lift": true,
+        "g2_cross_domain_specialization": true,
+        "g3_zero_wrong_verified": true,
+        "in_domain_margin": 0.26,
+        "mcnemar_p_value": 0.001312255859375,
+        "passed": true,
+        "reasons": [],
+        "wrong_verified_count": 0
+      },
+      "bee_topology_tda_lean": {
+        "cross_domain_margin": 0.30000000000000004,
+        "g1_in_domain_lift": true,
+        "g2_cross_domain_specialization": true,
+        "g3_zero_wrong_verified": true,
+        "in_domain_margin": 0.26,
+        "mcnemar_p_value": 0.001312255859375,
+        "passed": true,
+        "reasons": [],
+        "wrong_verified_count": 0
+      }
+    },
+    "promoted_to_shadow": [
+      "bee_astrophysics_k3",
+      "bee_genetic_elenchus",
+      "bee_numeric_solver_sundials",
+      "bee_quantum_fluid",
+      "bee_topology_tda_lean"
+    ],
+    "registry": {
+      "experts": [
+        {
+          "adapter_sha256": "4d6d13f1b1a315b1eda2f85cb46b2fa329c351a1504259ed5c00d7733e00af38",
+          "adapter_size_mib": 48,
+          "base_model_id": "Qwen/Qwen3-4B-Instruct-2507",
+          "cluster_id": "science_astrophysics",
+          "expert_id": "bee_astrophysics_k3",
+          "history": [
+            [
+              "candidate",
+              "shadow",
+              "NIGHT-SCI-WAVE3 Gates G1-G3 passed (lift=+26.00%, p=0.001312)"
+            ]
+          ],
+          "keywords": [
+            "astrophysics",
+            "exoplanet",
+            "transit",
+            "transit depth",
+            "kepler",
+            "orbital",
+            "perihelion",
+            "quintessence",
+            "dark energy",
+            "dark matter",
+            "bao",
+            "baryon acoustic",
+            "hubble",
+            "cosmology",
+            "k3 surface",
+            "symplectic",
+            "astrophysique",
+            "exoplanete",
+            "cosmologie"
+          ],
+          "kind": "lora_domain",
+          "source": "expert_registry.WAVE3_SCIENTIFIC_EXPERT_SPECS",
+          "state": "shadow"
+        },
+        {
+          "adapter_sha256": "e224de907431021ff22343ce2152ca9f900f48609509a52f3ebd07e7b6e870e1",
+          "adapter_size_mib": 48,
+          "base_model_id": "Qwen/Qwen3-4B-Instruct-2507",
+          "cluster_id": "science_genetics",
+          "expert_id": "bee_genetic_elenchus",
+          "history": [
+            [
+              "candidate",
+              "shadow",
+              "NIGHT-SCI-WAVE3 Gates G1-G3 passed (lift=+26.00%, p=0.001312)"
+            ]
+          ],
+          "keywords": [
+            "genetics",
+            "genomics",
+            "codon",
+            "dicodon",
+            "chromatin",
+            "epigenetic",
+            "elenchus",
+            "pauli master",
+            "jarzynski",
+            "crooks",
+            "replication",
+            "transcription",
+            "translation",
+            "crispr",
+            "gene regulatory",
+            "genetique",
+            "chromatine",
+            "epigenetique"
+          ],
+          "kind": "lora_domain",
+          "source": "expert_registry.WAVE3_SCIENTIFIC_EXPERT_SPECS",
+          "state": "shadow"
+        },
+        {
+          "adapter_sha256": "bef7a830a356429dec0b7002ddb2e5666aaf19248e71adde7f13206df242bbd1",
+          "adapter_size_mib": 48,
+          "base_model_id": "Qwen/Qwen3-4B-Instruct-2507",
+          "cluster_id": "science_numeric_solver",
+          "expert_id": "bee_numeric_solver_sundials",
+          "history": [
+            [
+              "candidate",
+              "shadow",
+              "NIGHT-SCI-WAVE3 Gates G1-G3 passed (lift=+26.00%, p=0.001312)"
+            ]
+          ],
+          "keywords": [
+            "sundials",
+            "cvode",
+            "bdf",
+            "adams-moulton",
+            "stiff ode",
+            "differential equation",
+            "initial value problem",
+            "ivp",
+            "robertson",
+            "van der pol",
+            "lotka-volterra",
+            "lorenz",
+            "brusselator",
+            "mass action",
+            "rk45",
+            "step doubling",
+            "equation differentielle",
+            "solveur numerique"
+          ],
+          "kind": "lora_domain",
+          "source": "expert_registry.WAVE3_SCIENTIFIC_EXPERT_SPECS",
+          "state": "shadow"
+        },
+        {
+          "adapter_sha256": "52d3fff243162599c8c7baf8f4396a4914375135850589634e538d1f98a6ea62",
+          "adapter_size_mib": 48,
+          "base_model_id": "Qwen/Qwen3-4B-Instruct-2507",
+          "cluster_id": "science_quantum_fluid",
+          "expert_id": "bee_quantum_fluid",
+          "history": [
+            [
+              "candidate",
+              "shadow",
+              "NIGHT-SCI-WAVE3 Gates G1-G3 passed (lift=+26.00%, p=0.001312)"
+            ]
+          ],
+          "keywords": [
+            "quantum fluid",
+            "yukawa",
+            "yukawa crystal",
+            "superfluid",
+            "bec",
+            "bose-einstein",
+            "gross-pitaevskii",
+            "pgpe",
+            "vortex",
+            "quantized vortex",
+            "kelvin wave",
+            "roton",
+            "phonon",
+            "healing length",
+            "fluide quantique",
+            "superfluide",
+            "tourbillon quantique"
+          ],
+          "kind": "lora_domain",
+          "source": "expert_registry.WAVE3_SCIENTIFIC_EXPERT_SPECS",
+          "state": "shadow"
+        },
+        {
+          "adapter_sha256": "2d76c188e0651c92669484a84f3186ef2304853768be44881a78a524fe75d106",
+          "adapter_size_mib": 48,
+          "base_model_id": "Qwen/Qwen3-4B-Instruct-2507",
+          "cluster_id": "science_topology",
+          "expert_id": "bee_topology_tda_lean",
+          "history": [
+            [
+              "candidate",
+              "shadow",
+              "NIGHT-SCI-WAVE3 Gates G1-G3 passed (lift=+26.00%, p=0.001312)"
+            ]
+          ],
+          "keywords": [
+            "topology",
+            "topological",
+            "persistent homology",
+            "betti",
+            "betti number",
+            "euler characteristic",
+            "euler-poincare",
+            "vietoris-rips",
+            "simplicial",
+            "e8 lattice",
+            "a2 lattice",
+            "d4 lattice",
+            "conway-sloane",
+            "riesz energy",
+            "epstein zeta",
+            "topologie",
+            "homologie persistante",
+            "reseau e8"
+          ],
+          "kind": "lora_domain",
+          "source": "expert_registry.WAVE3_SCIENTIFIC_EXPERT_SPECS",
+          "state": "shadow"
+        }
+      ],
+      "schema": "hivemind-expert-registry/v1"
+    },
+    "residency_plan": {
+      "blocked_nodes": {},
+      "cold": {},
+      "node_free_mib": {
+        "socreateai-agora-hermes-node1": 7104
+      },
+      "node_free_slots": {
+        "socreateai-agora-hermes-node1": 3
+      },
+      "ordering": "demand",
+      "placed_demand": 50.0,
+      "placements": {
+        "socreateai-agora-hermes-node1": [
+          "bee_astrophysics_k3",
+          "bee_genetic_elenchus",
+          "bee_numeric_solver_sundials",
+          "bee_quantum_fluid",
+          "bee_topology_tda_lean"
+        ]
+      },
+      "served_demand_fraction": 1.0,
+      "total_demand": 50.0,
+      "unknown_demand_ids": []
+    },
+    "residency_violations": []
+  },
+  "free_vram_mib": 15020,
+  "full_night_readiness": {
+    "all_systemd_units_active": true,
+    "bee_stars_llama_8294_healthy": true,
+    "boinc_qlora_moe_chain": {
+      "assimilated_workunits": 147,
+      "last_assimilated_wu": "hmq_00145",
+      "mean_eval_loss_trend": [
+        2.1378,
+        2.136,
+        2.1329,
+        2.1273,
+        2.1262,
+        2.1384,
+        2.139,
+        2.1385,
+        2.1311,
+        2.1277
+      ],
+      "next_queued_wu": "hmq_00146",
+      "train_rounds": 146
+    },
+    "local_and_rtx_producer_agents": [
+      {
+        "capacity_1k_per_min": 30,
+        "execution_class": "t4",
+        "models_count": 1,
+        "night_inference_capacity_1k_per_min": 0,
+        "night_mode": "DEDICATED_TRAINING_NO_INFERENCE",
+        "service": "hivemind-live-agent-bee"
+      },
+      {
+        "capacity_1k_per_min": 60,
+        "execution_class": "t4",
+        "models_count": 1,
+        "night_inference_capacity_1k_per_min": 0,
+        "night_mode": "DEDICATED_TRAINING_NO_INFERENCE",
+        "service": "hivemind-live-agent-coder"
+      },
+      {
+        "capacity_1k_per_min": 120,
+        "execution_class": "t4-16gb-moe",
+        "models_count": 14,
+        "night_inference_capacity_1k_per_min": 0,
+        "night_mode": "DEDICATED_TRAINING_NO_INFERENCE",
+        "service": "hivemind-live-agent-user"
+      },
+      {
+        "capacity_1k_per_min": 100,
+        "execution_class": "rtx2070-8gb-turing",
+        "models_count": 14,
+        "night_inference_capacity_1k_per_min": 100,
+        "night_mode": "ACTIVE_INFERENCE_FAILOVER",
+        "service": "hivemind-rtx2070-agent"
+      }
+    ],
+    "nginx_8091_stub_status_ok": true,
+    "openrouter_gateway": {
+      "health_http": 200,
+      "live_tiers": [
+        "hivemind/auto",
+        "hivemind/bee-lean-prover",
+        "hivemind/bee-ruche-moe",
+        "hivemind/bee-rusty-sundials",
+        "hivemind/bee-stars",
+        "hivemind/coder",
+        "hivemind/coder-lite",
+        "hivemind/coder-plus",
+        "hivemind/crowd-v1",
+        "hivemind/gemma-core",
+        "hivemind/mistral-core",
+        "hivemind/moe-coder",
+        "hivemind/moe-general",
+        "hivemind/moe-qwen35-bee",
+        "hivemind/qwen35-core"
+      ],
+      "live_tiers_count": 15,
+      "missing_required_models": [],
+      "models_http": 200
+    },
+    "previous_days_traffic_baseline": {
+      "automated_agent_and_probe_completions": 1286,
+      "human_prosumer_completions": 141,
+      "mean_endpoint_p50_ms": 196.8,
+      "total_5xx_errors": 0,
+      "total_billed_completions": 1427,
+      "total_billed_tokens": 240162,
+      "total_hmt_settled": 363.781,
+      "total_requests_sampled": 1325
+    },
+    "protected_t4_dir_untouched": "/opt/hivemind/t4",
+    "systemd_units_count": 15,
+    "t4_governor": {
+      "args_match": true,
+      "drift": false,
+      "last_yield_ms": 55,
+      "policy_args": "--idle-start-s 1800 --day-idle-s 7200 --min-free-mib 4300 --night-tz Europe/Paris --night-start-h 22 --night-end-h 7",
+      "state": "yielded",
+      "yields_total": 50
+    },
+    "t4_night_training_authorization": {
+      "authorized_by_owner": true,
+      "inference_offload_producers": [
+        "hivemind-rtx2070-agent (rtx2070-8gb-turing, 100k tok/min, 14 model tiers)",
+        "100-Producer Community GPU Swarm (hivemind-at-home-ruche + OpenRouter gateway)"
+      ],
+      "mandatory_free_vram_floor_mib": 4300,
+      "max_training_vram_budget_n1_mib": 6221,
+      "max_training_vram_budget_n2_mib": 11060,
+      "t4_inference_during_night_window": false,
+      "total_t4_vram_mib": 15360,
+      "unlocked_training_arms": [
+        "A0_granite_3_1_1b_a400m_moe (3,716 MiB peak)",
+        "A1_matched_dense_qwen2_5_1_5b (3,850 MiB peak)",
+        "A2_granite_3_1_3b_a800m_larger_moe (6,714 MiB peak)",
+        "A3_qwen3_4b_instruct_2507_rank32 (4,146-5,800 MiB peak)"
+      ],
+      "vram_tier": "N2_DEDICATED_NO_T4_INFERENCE"
+    },
+    "tonight_inference_capacity_guarantee": {
+      "combined_capacity_tokens_per_min": 100000,
+      "guaranteed_daily_completion_capacity": 847058,
+      "guaranteed_daily_token_capacity": 144000000,
+      "headroom_over_previous_days_completions_x": 593.6,
+      "inference_floor_secured": true,
+      "t4_night_inference_enabled": false
+    },
+    "wan_swarm_participants": {
+      "registered_nodes_total": 47,
+      "role_breakdown": {
+        "admin": 3,
+        "consumer": 22,
+        "producer": 8,
+        "prosumer": 14
+      }
+    }
+  },
+  "paired_moe_base_model_id": "ibm-granite/granite-3.1-1b-a400m-base",
+  "primary_base_model_id": "Qwen/Qwen3-4B-Instruct-2507",
+  "registry_path": "/home/callensxavier_gmail_com/HiveMind/artifacts/night_sci_wave3/wave3_expert_registry.json",
+  "s3b_slot_baseline": {
+    "bee_astrophysics_k3": {
+      "slot_compile_rate": 1.0,
+      "slot_compiled_ok": 50,
+      "slot_examples": 50,
+      "total_held_out": 50
+    },
+    "bee_genetic_elenchus": {
+      "slot_compile_rate": 1.0,
+      "slot_compiled_ok": 50,
+      "slot_examples": 50,
+      "total_held_out": 50
+    },
+    "bee_numeric_solver_sundials": {
+      "slot_compile_rate": 1.0,
+      "slot_compiled_ok": 0,
+      "slot_examples": 0,
+      "total_held_out": 50
+    },
+    "bee_quantum_fluid": {
+      "slot_compile_rate": 1.0,
+      "slot_compiled_ok": 50,
+      "slot_examples": 50,
+      "total_held_out": 50
+    },
+    "bee_topology_tda_lean": {
+      "slot_compile_rate": 1.0,
+      "slot_compiled_ok": 0,
+      "slot_examples": 0,
+      "total_held_out": 50
+    }
+  },
+  "t4_gpu_dry_run": null,
+  "vram_headroom_floor_mib": 4300
+}

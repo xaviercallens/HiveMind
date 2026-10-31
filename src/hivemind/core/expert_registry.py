@@ -65,6 +65,187 @@ LORA_DOMAIN, SERVING, BYOB = "lora_domain", "serving", "byob"
 EXPERT_KINDS: frozenset[str] = frozenset({LORA_DOMAIN, SERVING, BYOB})
 ADAPTER_KINDS: frozenset[str] = frozenset({LORA_DOMAIN, BYOB})
 
+WAVE3_PRIMARY_BASE_MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
+WAVE3_PAIRED_MOE_BASE_MODEL_ID = "ibm-granite/granite-3.1-1b-a400m-base"
+WAVE3_SUPPORTED_BASE_MODELS: Tuple[str, ...] = (
+    WAVE3_PRIMARY_BASE_MODEL_ID,
+    WAVE3_PAIRED_MOE_BASE_MODEL_ID,
+)
+
+WAVE3_SCIENTIFIC_EXPERT_SPECS: Dict[str, Dict[str, Any]] = {
+    "bee_quantum_fluid": {
+        "cluster_id": "science_quantum_fluid",
+        "adapter_size_mib": 48,
+        "verifier": "verify_quantum_fluid_relaxation",
+        "supported_base_models": WAVE3_SUPPORTED_BASE_MODELS,
+        "keywords": (
+            "quantum fluid",
+            "yukawa",
+            "yukawa crystal",
+            "superfluid",
+            "bec",
+            "bose-einstein",
+            "gross-pitaevskii",
+            "pgpe",
+            "vortex",
+            "quantized vortex",
+            "kelvin wave",
+            "roton",
+            "phonon",
+            "healing length",
+            "fluide quantique",
+            "superfluide",
+            "tourbillon quantique",
+        ),
+    },
+    "bee_astrophysics_k3": {
+        "cluster_id": "science_astrophysics",
+        "adapter_size_mib": 48,
+        "verifier": "verify_astrophysics_transit_and_orbit",
+        "supported_base_models": WAVE3_SUPPORTED_BASE_MODELS,
+        "keywords": (
+            "astrophysics",
+            "exoplanet",
+            "transit",
+            "transit depth",
+            "kepler",
+            "orbital",
+            "perihelion",
+            "quintessence",
+            "dark energy",
+            "dark matter",
+            "bao",
+            "baryon acoustic",
+            "hubble",
+            "cosmology",
+            "k3 surface",
+            "symplectic",
+            "astrophysique",
+            "exoplanete",
+            "cosmologie",
+        ),
+    },
+    "bee_genetic_elenchus": {
+        "cluster_id": "science_genetics",
+        "adapter_size_mib": 48,
+        "verifier": "verify_genetic_elenchus_thermodynamics",
+        "supported_base_models": WAVE3_SUPPORTED_BASE_MODELS,
+        "keywords": (
+            "genetics",
+            "genomics",
+            "codon",
+            "dicodon",
+            "chromatin",
+            "epigenetic",
+            "elenchus",
+            "pauli master",
+            "jarzynski",
+            "crooks",
+            "replication",
+            "transcription",
+            "translation",
+            "Crispr",
+            "gene regulatory",
+            "genetique",
+            "chromatine",
+            "epigenetique",
+        ),
+    },
+    "bee_topology_tda_lean": {
+        "cluster_id": "science_topology",
+        "adapter_size_mib": 48,
+        "verifier": "verify_topology_tda_and_lattice",
+        "supported_base_models": WAVE3_SUPPORTED_BASE_MODELS,
+        "keywords": (
+            "topology",
+            "topological",
+            "persistent homology",
+            "betti",
+            "betti number",
+            "euler characteristic",
+            "euler-poincare",
+            "vietoris-rips",
+            "simplicial",
+            "e8 lattice",
+            "a2 lattice",
+            "d4 lattice",
+            "conway-sloane",
+            "riesz energy",
+            "epstein zeta",
+            "topologie",
+            "homologie persistante",
+            "reseau e8",
+        ),
+    },
+    "bee_numeric_solver_sundials": {
+        "cluster_id": "science_numeric_solver",
+        "adapter_size_mib": 48,
+        "verifier": "verify_numeric_solver_trajectory",
+        "supported_base_models": WAVE3_SUPPORTED_BASE_MODELS,
+        "keywords": (
+            "sundials",
+            "cvode",
+            "bdf",
+            "adams-moulton",
+            "stiff ode",
+            "differential equation",
+            "initial value problem",
+            "ivp",
+            "robertson",
+            "van der pol",
+            "lotka-volterra",
+            "lorenz",
+            "brusselator",
+            "mass action",
+            "rk45",
+            "step doubling",
+            "equation differentielle",
+            "solveur numerique",
+        ),
+    },
+}
+
+
+def evaluate_wave3_promotion_gates(
+    in_domain_acc: float,
+    base_acc: float,
+    cross_domain_acc: float,
+    mcnemar_p_value: float,
+    wrong_verified_count: int,
+    *,
+    min_lift: float = 0.10,
+    max_p_value: float = 0.01,
+) -> Dict[str, Any]:
+    """Evaluate Wave 3 Scientific MoE Bee promotion Gates G1-G3 (`candidate -> shadow`)."""
+    in_margin = float(in_domain_acc) - float(base_acc)
+    cross_margin = float(in_domain_acc) - float(cross_domain_acc)
+    p_val = float(mcnemar_p_value)
+    wrong_ver = int(wrong_verified_count)
+
+    g1 = in_margin >= float(min_lift) - 1e-12 and p_val < float(max_p_value)
+    g2 = cross_margin >= float(min_lift) - 1e-12 and p_val < float(max_p_value)
+    g3 = wrong_ver == 0
+
+    reasons: List[str] = []
+    if not g1:
+        reasons.append(f"G1 failed: in_domain_margin={in_margin:.4f} (need >= {min_lift:.2f}) or p={p_val:.4g} (need < {max_p_value})")
+    if not g2:
+        reasons.append(f"G2 failed: cross_domain_margin={cross_margin:.4f} (need >= {min_lift:.2f}) or p={p_val:.4g} (need < {max_p_value})")
+    if not g3:
+        reasons.append(f"G3 failed: wrong_verified_count={wrong_ver} (must be 0)")
+
+    return {
+        "passed": bool(g1 and g2 and g3),
+        "g1_in_domain_lift": bool(g1),
+        "g2_cross_domain_specialization": bool(g2),
+        "g3_zero_wrong_verified": bool(g3),
+        "in_domain_margin": in_margin,
+        "cross_domain_margin": cross_margin,
+        "mcnemar_p_value": p_val,
+        "wrong_verified_count": wrong_ver,
+        "reasons": reasons,
+    }
+
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _SIMPLE_WORD_RE = re.compile(r"^[a-z0-9_]+$")
 _TOKEN_RE = re.compile(r"[a-z0-9_]+")
@@ -300,6 +481,44 @@ class ExpertRegistry:
                                        source="serving_experts.SERVING_EXPERT_SPECS"))
             added.append(name)
         return added
+
+    def import_wave3_scientific_experts(
+        self,
+        base_model_id: str = WAVE3_PRIMARY_BASE_MODEL_ID,
+        adapter_hashes: Optional[Mapping[str, str]] = None,
+        *,
+        promote_to_shadow: bool = False,
+        promotion_reason: str = "Wave 3 pre-registered Gates G1-G3 passed",
+    ) -> List[str]:
+        """Register the 5 Wave 3 Scientific MoE Bees (`WAVE3_SCIENTIFIC_EXPERT_SPECS`) as `lora_domain` experts."""
+        if base_model_id not in WAVE3_SUPPORTED_BASE_MODELS:
+            raise ValueError(
+                f"base_model_id {base_model_id!r} not in WAVE3_SUPPORTED_BASE_MODELS {WAVE3_SUPPORTED_BASE_MODELS}"
+            )
+        added: List[str] = []
+        hashes = dict(adapter_hashes or {})
+        for name, spec in sorted(WAVE3_SCIENTIFIC_EXPERT_SPECS.items()):
+            if name in self._experts:
+                continue
+            sha = hashes.get(name) or hashlib.sha256(f"wave3:{base_model_id}:{name}".encode("utf-8")).hexdigest()
+            self.register(
+                ExpertRecord(
+                    expert_id=name,
+                    kind=LORA_DOMAIN,
+                    cluster_id=str(spec["cluster_id"]),
+                    base_model_id=base_model_id,
+                    adapter_sha256=sha,
+                    adapter_size_mib=int(spec["adapter_size_mib"]),
+                    keywords=tuple(spec["keywords"]),
+                    source="expert_registry.WAVE3_SCIENTIFIC_EXPERT_SPECS",
+                )
+            )
+            if promote_to_shadow:
+                self.transition(name, SHADOW, promotion_reason)
+            added.append(name)
+        return added
+
+    register_wave3_scientific_experts = import_wave3_scientific_experts
 
 
 # ---------------------------------------------------------------------------

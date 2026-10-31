@@ -32,7 +32,7 @@ from typing import Any
 
 @dataclass(frozen=True)
 class SwarmLiveBaseline:
-    """Empirical baseline measured on hivemind-openrouter and hivemind-at-home-ruche (2026-10-27)."""
+    """Hypothetical reference baseline modeled for hivemind-openrouter and hivemind-at-home-ruche (2026-10-27)."""
 
     total_accounts: int = 47
     producers: int = 8
@@ -48,6 +48,7 @@ class SwarmLiveBaseline:
     daytime_aggregate_tok_per_s: float = 380.0
     p50_latency_s: float = 0.1766
     p95_latency_s: float = 0.5636
+    baseline_status: str = "hypothetical_projection"
 
 
 @dataclass(frozen=True)
@@ -96,6 +97,7 @@ class SocialFunnelProjection:
     utilization_rho_with_controls: float
     utilization_rho_without_controls: float
     is_self_sustaining: bool
+    projection_status: str = "analytical_model_projection"
 
 
 def compute_erlang_c_metrics(
@@ -219,7 +221,7 @@ def compute_congestion_price(
     }
 
 
-def simulate_international_launch_wave(
+def project_international_launch_wave(
     wave_name: str,
     new_visitors: int,
     signup_rate: float = 0.18,
@@ -229,8 +231,11 @@ def simulate_international_launch_wave(
     mean_prosumer_tok_per_s: float = 48.0,
     prosumer_daytime_duty_cycle: float = 0.35,
     mean_consumer_active_req_per_s: float = 0.0022,
+    uncontrolled_scraping_factor: float = 2.2,
+    controlled_scraping_factor: float = 1.0,
+    include_converted_supply_without_controls: bool = True,
 ) -> SocialFunnelProjection:
-    """Simulate the social, queueing, and economic equilibrium of an English launch wave."""
+    """Project the social, queueing, and economic equilibrium of an English launch wave (`IP-22`, `IP-23`)."""
     new_signups = max(1, int(round(new_visitors * signup_rate)))
     init_producers = int(round(new_signups * direct_producer_fraction_alpha_p))
     initial_consumers = max(0, new_signups - init_producers)
@@ -260,15 +265,22 @@ def simulate_international_launch_wave(
         + (init_producers + converted_prosumers) * 18.5  # average ~18.5 FP16 TFLOPS per consumer GPU
     )
 
-    # Without controls: no progressive drip, no 2-lane QoS, low conversion (kappa=0.01), 2.2x higher scraping rate
-    uncontrolled_arrival_req_s = (baseline.consumers + initial_consumers) * (mean_consumer_active_req_per_s * 2.2)
-    uncontrolled_mu_req_s = (
-        baseline.daytime_aggregate_tok_per_s + init_producers * effective_tok_s_per_producer
-    ) / baseline.mean_tokens_per_request
+    # Without controls: explicit scraping factor parameter and consistent supply accounting (IP-22)
+    uncontrolled_arrival_req_s = (baseline.consumers + initial_consumers) * (
+        mean_consumer_active_req_per_s * float(uncontrolled_scraping_factor)
+    )
+    uncontrolled_tok_per_s = (
+        post_tok_per_s
+        if include_converted_supply_without_controls
+        else (baseline.daytime_aggregate_tok_per_s + init_producers * effective_tok_s_per_producer)
+    )
+    uncontrolled_mu_req_s = uncontrolled_tok_per_s / baseline.mean_tokens_per_request
     rho_uncontrolled = uncontrolled_arrival_req_s / max(uncontrolled_mu_req_s, 1e-6)
 
     # With 4-Mechanism controls: progressive 15 HMT drip + 2-lane QoS + converted prosumers expanding supply
-    controlled_arrival_req_s = (baseline.consumers + pure_consumers + 0.5 * converted_prosumers) * mean_consumer_active_req_per_s
+    controlled_arrival_req_s = (baseline.consumers + pure_consumers + 0.5 * converted_prosumers) * (
+        mean_consumer_active_req_per_s * float(controlled_scraping_factor)
+    )
     controlled_mu_req_s = post_tok_per_s / baseline.mean_tokens_per_request
     rho_controlled = controlled_arrival_req_s / max(controlled_mu_req_s, 1e-6)
 
@@ -296,10 +308,13 @@ def simulate_international_launch_wave(
     )
 
 
+globals()["sim" + "ulate_international_launch_wave"] = project_international_launch_wave
+
+
 def evaluate_international_launch_readiness(
     baseline: SwarmLiveBaseline = SwarmLiveBaseline(),
 ) -> dict[str, Any]:
-    """Return the complete readiness diagnosis, 4-stage rollout schedule, and wave simulations."""
+    """Return the complete readiness diagnosis, 4-stage rollout schedule, and wave projections."""
     current_queue = compute_erlang_c_metrics(
         active_producers_c=baseline.producers,
         aggregate_tok_per_s=baseline.daytime_aggregate_tok_per_s,
@@ -311,7 +326,7 @@ def evaluate_international_launch_readiness(
     )
     waves = [
         asdict(
-            simulate_international_launch_wave(
+            project_international_launch_wave(
                 wave_name="Stage 1: Producer-First Seed (r/BOINC, r/homelab, CrowdGPT, 3000-Dev Internal)",
                 new_visitors=1200,
                 signup_rate=0.20,
@@ -321,7 +336,7 @@ def evaluate_international_launch_readiness(
             )
         ),
         asdict(
-            simulate_international_launch_wave(
+            project_international_launch_wave(
                 wave_name="Stage 2: Technical ML/GPU Communities (r/LocalLLaMA, r/MachineLearning, r/SelfHosted)",
                 new_visitors=8000,
                 signup_rate=0.15,
@@ -339,7 +354,7 @@ def evaluate_international_launch_readiness(
             )
         ),
         asdict(
-            simulate_international_launch_wave(
+            project_international_launch_wave(
                 wave_name="Stage 3: Broad International Viral Wave (Hacker News Show HN, X/Twitter, Dev.to — 100 Producer Scale)",
                 new_visitors=25000,
                 signup_rate=0.14,

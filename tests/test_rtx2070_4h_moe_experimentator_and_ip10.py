@@ -182,6 +182,43 @@ def test_ip19_forged_receipt_with_poisoned_weights_and_zero_steps_is_rejected() 
     assert verdict.valid is False
 
 
+def test_ip22_ip23_launch_model_equal_assumptions_and_ip48_lane_emden_rk4() -> None:
+    """IP-22, IP-23, IP-48: Equal scraping factors & kappa=0 give equal rho; Lane-Emden matches reference to 1e-6 and rejects wrong poly_n."""
+    import pytest
+
+    from hivemind.economy.international_launch_model import (
+        project_international_launch_wave,
+        simulate_international_launch_wave,
+    )
+    from hivemind.swarm.rusty_sundials_scientific_bee import solve_wave2_method_of_lines_pde
+
+    proj = project_international_launch_wave(
+        wave_name="Equal Assumptions Check",
+        new_visitors=1500,
+        consumer_to_prosumer_conversion_kappa=0.0,
+        uncontrolled_scraping_factor=1.0,
+        controlled_scraping_factor=1.0,
+    )
+    assert proj.utilization_rho_without_controls == pytest.approx(proj.utilization_rho_with_controls)
+    assert simulate_international_launch_wave is project_international_launch_wave
+
+    for poly_n in (0.0, 1.0, 1.5, 3.0):
+        res = solve_wave2_method_of_lines_pde("lane_emden_stellar", grid_points=32, param=poly_n)
+        assert res["crate"] == "python_rk4_lane_emden_integrator"
+        assert float(res["invariant_drift"]) < 1e-6
+        assert res["invariants_verified"]["independent_integrator_match"] is True
+
+    # Negative control: wrong reference_poly_n must fail independent_integrator_match
+    wrong = solve_wave2_method_of_lines_pde(
+        "lane_emden_stellar",
+        grid_points=32,
+        param=1.5,
+        reference_poly_n=3.0,
+    )
+    assert float(wrong["invariant_drift"]) > 1e-3
+    assert wrong["invariants_verified"]["independent_integrator_match"] is False
+
+
 def test_run_4h_rtx2070_moe_experimentator_end_to_end(tmp_path: Path) -> None:
     """Verify the full 4-Stage RTX 2070 MoE Bee Experimentator produces a passing signed ledger."""
     out_file = tmp_path / "rtx2070_4h_moe_experimentator_ledger.json"
@@ -191,4 +228,6 @@ def test_run_4h_rtx2070_moe_experimentator_end_to_end(tmp_path: Path) -> None:
     assert rep["stage1_dry_run"]["dry_run_passed"] is True
     assert rep["stage2_small_qlora_training"]["all_domains_ratchet_passed"] is True
     assert rep["stage3_moe_scale_and_inference"]["all_wave3_routes_matched"] is True
+    assert rep["stage4_roadmap_pr_ip11"]["ip22_equal_rho_passed"] is True
+    assert rep["stage4_roadmap_pr_ip11"]["ip48_passed"] is True
     assert len(rep["receipt_sha256"]) == 64

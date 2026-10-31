@@ -220,32 +220,46 @@ SECTIONS: Sequence[tuple[str, Pair, Sequence[tuple[str, Any]]]] = (
     )),
     ("train", ("3. Train models at night with BOINC", "3. Entraîner des modèles la nuit avec BOINC"), (
         ("p", ("This path is open to the public: the federated BOINC & Night-MoE coordinator is live at [HiveMind La Ruche](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app) "
-               "(live Night-MoE telemetry at [/night-moe](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/night-moe) and citizen-science leaderboard at "
-               "[/community](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community)). You can check your hardware and lease workunits today.",
+               "(live Night-MoE telemetry at [/night-moe](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/night-moe), BOINC coordinator status at "
+               "[/boinc/status](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/boinc/status) and citizen-science leaderboard at "
+               "[/community](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community)). You can check your hardware, run a local dry-run (`--dry-run`), and lease workunits today.",
                "Cette voie est ouverte au public : le coordinateur fédéré BOINC et Night-MoE est en ligne sur [HiveMind La Ruche](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app) "
-               "(télémétrie Night-MoE en direct sur [/night-moe](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/night-moe) et classement de science participative sur "
-               "[/community](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community)). Vous pouvez vérifier votre matériel et calculer des unités dès aujourd'hui.")),
+               "(télémétrie Night-MoE en direct sur [/night-moe](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/night-moe), état du coordinateur BOINC sur "
+               "[/boinc/status](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/boinc/status) et classement de science participative sur "
+               "[/community](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community)). Vous pouvez vérifier votre matériel, lancer un test à blanc (`--dry-run`) et calculer des unités dès aujourd'hui.")),
         ("ul", [
             ("Linux on an x86-64 processor for the native BOINC portable bundle, or Linux, Windows and macOS with the Python BOINC/BLS worker",
              "Linux sur processeur x86-64 pour l'archive BOINC native, ou Linux, Windows et macOS avec l'agent Python BOINC/BLS"),
-            ("An NVIDIA card with at least 3.5 GB of video memory", "Une carte NVIDIA avec au moins 3,5 Go de mémoire vidéo"),
+            ("An NVIDIA card with at least 3.5 GB of video memory (`cuda_hivemind`; 12 GB+ for `cuda_hivemind_big`), or a 4+ thread CPU with 8 GB RAM for CPU/BLS transit sweeps (`cpu_hivemind_solver`)",
+             "Une carte NVIDIA avec au moins 3,5 Go de mémoire vidéo (`cuda_hivemind` ; 12 Go+ pour `cuda_hivemind_big`), ou un processeur 4+ fils avec 8 Go de RAM pour les balayages CPU/BLS (`cpu_hivemind_solver`)"),
             ("A first download of about 4.4 GB, reused afterwards", "Un premier téléchargement d'environ 4,4 Go, réutilisé ensuite"),
             ("Community work is offered at night, 22:00–07:00 Paris time, when the network is least busy",
              "Le travail communautaire est offert la nuit, de 22 h à 7 h, heure de Paris, quand le réseau est le moins occupé"),
             ("The standard BOINC client; the project’s files are digitally signed", "Le client BOINC standard; les fichiers du projet sont signés numériquement"),
         ]),
         ("ol", [
-            ("Run the read-only hardware preflight check first (it installs nothing and sends nothing):",
-             "Lancez d'abord la vérification matérielle en lecture seule (elle n'installe rien et n'envoie rien) :"),
+            ("Run the read-only hardware and coordinator network preflight check first (it installs nothing; add `--allow-cpu-solver` on a machine without an NVIDIA driver):",
+             "Lancez d'abord la vérification matérielle et réseau en lecture seule (elle n'installe rien ; ajoutez `--allow-cpu-solver` sur une machine sans pilote NVIDIA) :"),
         ]),
-        ("code", "python3 scripts/hivemind_volunteer_preflight.py"),
+        ("code", "python3 scripts/hivemind_volunteer_preflight.py --project-url https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app"),
         ("ol", [
-            ("Lease and fold a live federated BOINC workunit (`physics_sim`, `code_generation` or `math_reasoning`) from the public coordinator "
+            ("Run a complete local dry-run test (`--dry-run`) to verify 16,384-point TESS/JWST light-curve folding, rank-4 QLoRA outer-delta SVD verification, and coordinator reachability:",
+             "Exécutez un test à blanc complet sur votre machine (`--dry-run`) pour vérifier le pliage de courbe de lumière TESS/JWST (16 384 points), la validation SVD QLoRA de rang 4 et la connexion au coordinateur :"),
+        ]),
+        ("code", "python3 scripts/hivemind_boinc_idle_worker.py --coordinator https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app --handle your-handle --domain physics_sim --dry-run"),
+        ("ol", [
+            ("Lease, fold and submit a live federated BOINC workunit (`physics_sim`, `code_generation` or `math_reasoning`) from the public coordinator "
              "(remove `--once` to keep folding at night):",
-             "Louez et calculez une unité de travail BOINC fédérée en direct (`physics_sim`, `code_generation` ou `math_reasoning`) depuis le coordinateur public "
+             "Louez, calculez et soumettez une unité de travail BOINC fédérée en direct (`physics_sim`, `code_generation` ou `math_reasoning`) auprès du coordinateur public "
              "(retirez `--once` pour continuer le calcul la nuit) :"),
         ]),
         ("code", "python3 scripts/hivemind_boinc_idle_worker.py --coordinator https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app --handle your-handle --domain physics_sim --once"),
+        ("ol", [
+            ("Or attach a standard BOINC client (`boinccmd`) directly to the public project URL and inspect verified receipts on [/api/v1/federated/ledger](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/ledger):",
+             "Ou attachez directement un client BOINC standard (`boinccmd`) à l'URL publique du projet et consultez les reçus vérifiés sur [/api/v1/federated/ledger](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/ledger) :"),
+        ]),
+        ("code", "boinccmd --get_project_config https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app\n"
+                 "boinccmd --project_attach https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app YOUR_ACCOUNT_KEY"),
     )),
     ("play", ("4. Gamers and Steam", "4. Joueurs et Steam"), (
         ("p", ("Your GPU folds astrophysics and AI workunits only while you are not playing. Both the Free-to-Play Steam Edition "
@@ -481,20 +495,20 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "de": "3. Modelle nachts mit BOINC trainieren",
         "zh": "3. 夜间使用 BOINC 训练模型",
     },
-    "This path is open to the public: the federated BOINC & Night-MoE coordinator is live at [HiveMind La Ruche](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app) (live Night-MoE telemetry at [/night-moe](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/night-moe) and citizen-science leaderboard at [/community](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community)). You can check your hardware and lease workunits today.": {
-        "es": "Esta vía está abierta al público: el coordinador federado BOINC y Night-MoE está activo en [HiveMind La Ruche](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app) (telemetría Night-MoE en vivo en [/night-moe](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/night-moe) y clasificación de ciencia ciudadana en [/community](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community)). Hoy mismo puedes verificar tu hardware y procesar unidades.",
-        "de": "Dieser Weg ist öffentlich zugänglich: Der föderierte BOINC- & Night-MoE-Koordinator ist unter [HiveMind La Ruche](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app) online (Live-Telemetrie unter [/night-moe](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/night-moe) und Citizen-Science-Bestenliste unter [/community](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community)). Sie können Ihre Hardware prüfen und sofort Aufgaben berechnen.",
-        "zh": "此通道已向公众开放：联邦 BOINC 与 Night-MoE 协调器已在 [HiveMind La Ruche](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app) 上线（实时 Night-MoE 遥测见 [/night-moe](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/night-moe)，公民科学排行榜见 [/community](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community)）。您今天即可检测硬件并领取计算任务。",
+    "This path is open to the public: the federated BOINC & Night-MoE coordinator is live at [HiveMind La Ruche](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app) (live Night-MoE telemetry at [/night-moe](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/night-moe), BOINC coordinator status at [/boinc/status](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/boinc/status) and citizen-science leaderboard at [/community](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community)). You can check your hardware, run a local dry-run (`--dry-run`), and lease workunits today.": {
+        "es": "Esta vía está abierta al público: el coordinador federado BOINC y Night-MoE está activo en [HiveMind La Ruche](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app) (telemetría Night-MoE en vivo en [/night-moe](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/night-moe), estado del coordinador BOINC en [/boinc/status](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/boinc/status) y clasificación de ciencia ciudadana en [/community](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community)). Hoy mismo puedes verificar tu hardware, ejecutar una prueba local (`--dry-run`) y procesar unidades.",
+        "de": "Dieser Weg ist öffentlich zugänglich: Der föderierte BOINC- & Night-MoE-Koordinator ist unter [HiveMind La Ruche](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app) online (Live-Telemetrie unter [/night-moe](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/night-moe), BOINC-Koordinatorstatus unter [/boinc/status](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/boinc/status) und Citizen-Science-Bestenliste unter [/community](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community)). Sie können Ihre Hardware prüfen, einen lokalen Testlauf (`--dry-run`) starten und sofort Aufgaben berechnen.",
+        "zh": "此通道已向公众开放：联邦 BOINC 与 Night-MoE 协调器已在 [HiveMind La Ruche](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app) 上线（实时 Night-MoE 遥测见 [/night-moe](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/night-moe)，BOINC 协调器状态见 [/boinc/status](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/boinc/status)，公民科学排行榜见 [/community](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community)）。您今天即可检测硬件、运行本地演练（`--dry-run`）并领取计算任务。",
     },
     "Linux on an x86-64 processor for the native BOINC portable bundle, or Linux, Windows and macOS with the Python BOINC/BLS worker": {
         "es": "Linux en procesador x86-64 para el paquete nativo BOINC, o Linux, Windows y macOS con el agente Python BOINC/BLS",
         "de": "Linux auf einem x86-64-Prozessor für das native BOINC-Paket oder Linux, Windows und macOS mit dem Python-BOINC/BLS-Worker",
         "zh": "原生 BOINC 便携包支持 x86-64 Linux，Python BOINC/BLS 工作节点支持 Linux、Windows 和 macOS",
     },
-    "An NVIDIA card with at least 3.5 GB of video memory": {
-        "es": "Una tarjeta NVIDIA con al menos 3,5 GB de memoria de vídeo",
-        "de": "Eine NVIDIA-Grafikkarte mit mindestens 3,5 GB Videospeicher",
-        "zh": "至少配备 3.5 GB 显存的 NVIDIA 显卡",
+    "An NVIDIA card with at least 3.5 GB of video memory (`cuda_hivemind`; 12 GB+ for `cuda_hivemind_big`), or a 4+ thread CPU with 8 GB RAM for CPU/BLS transit sweeps (`cpu_hivemind_solver`)": {
+        "es": "Una tarjeta NVIDIA con al menos 3,5 GB de memoria de vídeo (`cuda_hivemind`; 12 GB+ para `cuda_hivemind_big`), o una CPU de 4+ hilos con 8 GB de RAM para barridos CPU/BLS (`cpu_hivemind_solver`)",
+        "de": "Eine NVIDIA-Grafikkarte mit mindestens 3,5 GB Videospeicher (`cuda_hivemind`; 12 GB+ für `cuda_hivemind_big`) oder eine CPU mit 4+ Threads und 8 GB RAM für CPU/BLS-Transitsuchen (`cpu_hivemind_solver`)",
+        "zh": "至少配备 3.5 GB 显存的 NVIDIA 显卡（`cuda_hivemind`；12 GB 以上支持 `cuda_hivemind_big`），或配备 4 线程以上 CPU 与 8 GB 内存以运行 CPU/BLS 凌星扫描（`cpu_hivemind_solver`）",
     },
     "A first download of about 4.4 GB, reused afterwards": {
         "es": "Una primera descarga de unos 4,4 GB, reutilizada después",
@@ -511,15 +525,25 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "de": "Der Standard-BOINC-Client; die Projektdateien sind digital signiert",
         "zh": "兼容标准 BOINC 客户端；所有项目文件均带有数字签名",
     },
-    "Run the read-only hardware preflight check first (it installs nothing and sends nothing):": {
-        "es": "Ejecuta primero la comprobación de hardware de solo lectura (no instala nada ni envía datos):",
-        "de": "Führen Sie zuerst die schreibgeschützte Hardware-Prüfung aus (installiert nichts und sendet keine Daten):",
-        "zh": "首先运行只读硬件预检脚本（不安装任何软件，也不发送任何数据）：",
+    "Run the read-only hardware and coordinator network preflight check first (it installs nothing; add `--allow-cpu-solver` on a machine without an NVIDIA driver):": {
+        "es": "Ejecuta primero la comprobación de hardware y red de solo lectura (no instala nada; añade `--allow-cpu-solver` en un equipo sin controlador NVIDIA):",
+        "de": "Führen Sie zuerst die schreibgeschützte Hardware- und Netzwerkprüfung aus (installiert nichts; fügen Sie `--allow-cpu-solver` auf einem Rechner ohne NVIDIA-Treiber hinzu):",
+        "zh": "首先运行只读硬件与协调器网络预检脚本（不安装任何软件；若未安装 NVIDIA 驱动可加上 `--allow-cpu-solver`）：",
     },
-    "Lease and fold a live federated BOINC workunit (`physics_sim`, `code_generation` or `math_reasoning`) from the public coordinator (remove `--once` to keep folding at night):": {
-        "es": "Solicita y calcula una unidad BOINC federada en vivo (`physics_sim`, `code_generation` o `math_reasoning`) desde el coordinador público (quita `--once` para seguir calculando por la noche):",
-        "de": "Leasen und berechnen Sie eine föderierte Live-BOINC-Aufgabe (`physics_sim`, `code_generation` oder `math_reasoning`) vom öffentlichen Koordinator (entfernen Sie `--once` für den Dauerbetrieb in der Nacht):",
-        "zh": "从公共协调器领取并计算实时联邦 BOINC 任务（支持 `physics_sim`、`code_generation` 或 `math_reasoning`，移除 `--once` 可在夜间持续计算）：",
+    "Run a complete local dry-run test (`--dry-run`) to verify 16,384-point TESS/JWST light-curve folding, rank-4 QLoRA outer-delta SVD verification, and coordinator reachability:": {
+        "es": "Ejecuta una prueba local completa (`--dry-run`) para verificar el plegado de curvas de luz TESS/JWST de 16 384 puntos, la validación SVD QLoRA de rango 4 y la conexión con el coordinador:",
+        "de": "Führen Sie einen vollständigen lokalen Testlauf (`--dry-run`) aus, um die 16.384-Punkte-TESS/JWST-Lichtkurvenfaltung, die Rang-4-QLoRA-SVD-Prüfung und die Erreichbarkeit des Koordinators zu bestätigen:",
+        "zh": "运行完整的本地演练测试（`--dry-run`），验证 16,384 点 TESS/JWST 光变曲线折叠、4 秩 QLoRA 外层增量 SVD 校验以及协调器连通性：",
+    },
+    "Lease, fold and submit a live federated BOINC workunit (`physics_sim`, `code_generation` or `math_reasoning`) from the public coordinator (remove `--once` to keep folding at night):": {
+        "es": "Solicita, calcula y envía una unidad BOINC federada en vivo (`physics_sim`, `code_generation` o `math_reasoning`) al coordinador público (quita `--once` para seguir calculando por la noche):",
+        "de": "Leasen, berechnen und senden Sie eine föderierte Live-BOINC-Aufgabe (`physics_sim`, `code_generation` oder `math_reasoning`) an den öffentlichen Koordinator (entfernen Sie `--once` für den Dauerbetrieb in der Nacht):",
+        "zh": "从公共协调器领取、计算并提交实时联邦 BOINC 任务（支持 `physics_sim`、`code_generation` 或 `math_reasoning`，移除 `--once` 可在夜间持续计算）：",
+    },
+    "Or attach a standard BOINC client (`boinccmd`) directly to the public project URL and inspect verified receipts on [/api/v1/federated/ledger](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/ledger):": {
+        "es": "O conecta directamente un cliente BOINC estándar (`boinccmd`) a la URL pública del proyecto y consulta los recibos verificados en [/api/v1/federated/ledger](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/ledger):",
+        "de": "Oder verbinden Sie einen Standard-BOINC-Client (`boinccmd`) direkt mit der öffentlichen Projekt-URL und prüfen Sie verifizierte Quittungen unter [/api/v1/federated/ledger](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/ledger):",
+        "zh": "或者使用标准 BOINC 客户端（`boinccmd`）直接挂载公共项目 URL，并在 [/api/v1/federated/ledger](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/ledger) 查看经验证的计算回执：",
     },
     "4. Gamers and Steam": {
         "es": "4. Jugadores y Steam",

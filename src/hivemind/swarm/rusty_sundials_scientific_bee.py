@@ -1184,6 +1184,64 @@ class SolverTaughtSurrogateExpert:
         }
 
 
+def _integrate_lane_emden_rk4(poly_n: float, xi_grid: list[float], substeps: int = 16) -> list[tuple[float, float]]:
+    """Integrate radial Lane-Emden ODE d2theta/dxi2 + (2/xi)*dtheta/dxi + max(0, theta)^n = 0 via RK4."""
+
+    def rhs(xi_val: float, theta_val: float, dtheta_val: float) -> tuple[float, float]:
+        pos_theta = max(0.0, theta_val)
+        source = 1.0 if abs(poly_n) < 1e-12 else (pos_theta**poly_n if pos_theta > 0.0 else 0.0)
+        if xi_val < 1e-8:
+            # Desingularized limit at xi -> 0+: 3 * theta''(0) + theta(0)^n = 0
+            ddtheta = -source / 3.0
+        else:
+            ddtheta = -(2.0 / xi_val) * dtheta_val - source
+        return dtheta_val, ddtheta
+
+    out: list[tuple[float, float]] = [(1.0, 0.0)]
+    theta_cur = 1.0
+    dtheta_cur = 0.0
+    xi_cur = 0.0
+    for xi_target in xi_grid[1:]:
+        h = (xi_target - xi_cur) / max(1, substeps)
+        for _ in range(max(1, substeps)):
+            k1_t, k1_d = rhs(xi_cur, theta_cur, dtheta_cur)
+            k2_t, k2_d = rhs(xi_cur + 0.5 * h, theta_cur + 0.5 * h * k1_t, dtheta_cur + 0.5 * h * k1_d)
+            k3_t, k3_d = rhs(xi_cur + 0.5 * h, theta_cur + 0.5 * h * k2_t, dtheta_cur + 0.5 * h * k2_d)
+            k4_t, k4_d = rhs(xi_cur + h, theta_cur + h * k3_t, dtheta_cur + h * k3_d)
+            theta_cur += (h / 6.0) * (k1_t + 2.0 * k2_t + 2.0 * k3_t + k4_t)
+            dtheta_cur += (h / 6.0) * (k1_d + 2.0 * k2_d + 2.0 * k3_d + k4_d)
+            xi_cur += h
+        out.append((theta_cur, dtheta_cur))
+    return out
+
+
+def _integrate_lane_emden_reference(poly_n: float, xi_grid: list[float]) -> list[tuple[float, float]]:
+    """Independent reference integrator (scipy.integrate.solve_ivp DOP853 or 64-substep Midpoint/RK4) for IP-48."""
+    try:
+        from scipy.integrate import solve_ivp  # type: ignore[import-untyped]
+
+        def ode_rhs(xi_val: float, y: list[float]) -> list[float]:
+            pos_t = max(0.0, float(y[0]))
+            src = 1.0 if abs(poly_n) < 1e-12 else (pos_t**poly_n if pos_t > 0.0 else 0.0)
+            dd = -src / 3.0 if xi_val < 1e-8 else -(2.0 / xi_val) * float(y[1]) - src
+            return [float(y[1]), dd]
+
+        sol = solve_ivp(
+            ode_rhs,
+            t_span=(0.0, xi_grid[-1]),
+            y0=[1.0, 0.0],
+            t_eval=xi_grid,
+            method="DOP853",
+            rtol=1e-11,
+            atol=1e-13,
+        )
+        if sol.success:
+            return [(float(sol.y[0][i]), float(sol.y[1][i])) for i in range(len(xi_grid))]
+    except Exception:
+        _ = None
+    return _integrate_lane_emden_rk4(poly_n, xi_grid, substeps=64)
+
+
 def solve_wave2_method_of_lines_pde(
     pde_family: str = "viscous_burgers_imex",
     *,
@@ -1191,6 +1249,7 @@ def solve_wave2_method_of_lines_pde(
     steps: int = 50,
     dt: float = 0.005,
     param: float | None = None,
+    reference_poly_n: float | None = None,
 ) -> dict[str, Any]:
     """Execute a Wave 2/3 Method-of-Lines (MoL) semi-discretized PDE simulation (`HM-S20-W2-2` / Issue #271).
 
@@ -1206,36 +1265,36 @@ def solve_wave2_method_of_lines_pde(
 
     if pde_family == "lane_emden_stellar":
         poly_n = 1.0 if param is None else max(0.0, min(float(param), 4.5))
-        # Desingularized Taylor startup at xi -> 0+ followed by 4th-order symplectic/RK4 radial march
+        ref_n = poly_n if reference_poly_n is None else max(0.0, min(float(reference_poly_n), 4.5))
         xi_max = math.pi
         d_xi = xi_max / n_pts
+        xi_grid = [i * d_xi for i in range(n_pts + 1)]
+        rk4_traj = _integrate_lane_emden_rk4(poly_n, xi_grid, substeps=16)
+        ref_traj = _integrate_lane_emden_reference(ref_n, xi_grid)
         profile: list[list[float]] = []
         max_res = 0.0
-        for i in range(n_pts + 1):
-            xi = max(1e-6, i * d_xi)
-            if abs(poly_n - 1.0) < 1e-9:
-                theta = math.sin(xi) / xi
-                dtheta = (xi * math.cos(xi) - math.sin(xi)) / (xi * xi)
-                res = 0.0
-            else:
-                theta = max(0.0, 1.0 - (xi * xi) / 6.0 + (poly_n * (xi**4)) / 120.0)
-                dtheta = -xi / 3.0 + (poly_n * (xi**3)) / 30.0
-                res = abs(theta - max(0.0, 1.0 - (xi * xi) / 6.0)) * 1e-9
+        for i, xi in enumerate(xi_grid):
+            theta, dtheta = rk4_traj[i]
+            ref_theta, ref_dtheta = ref_traj[i]
+            res = max(abs(theta - ref_theta), abs(dtheta - ref_dtheta))
             max_res = max(max_res, res)
-            profile.append([round(xi, 8), round(theta, 10), round(dtheta, 10)])
+            profile.append([round(max(1e-6, xi), 8), round(theta, 10), round(dtheta, 10)])
         return {
             "pde_family": "lane_emden_stellar",
             "domain": "astronomy",
-            "crate": "DualScaleSimulator + rusty-sundials::arkode",
+            "crate": "python_rk4_lane_emden_integrator",
             "grid_points": n_pts,
             "polytropic_index_n": poly_n,
+            "reference_polytropic_index_n": ref_n,
             "invariant_drift": max_res,
             "invariants_verified": {
                 "origin_desingularized_theta0": 1.0,
                 "origin_zero_slope_dtheta0": 0.0,
-                "hydrostatic_positivity": True,
+                "hydrostatic_positivity": all(t >= -1e-9 for t, _ in rk4_traj),
+                "independent_integrator_match": max_res < 1e-6,
             },
             "state_snapshots": profile[:8],
+            "full_profile": profile,
         }
 
     if pde_family == "pgpe_vortex_lattice":

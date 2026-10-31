@@ -99,6 +99,13 @@ def test_no_gpu_fails_and_says_cpu_only_unsupported() -> None:
     assert pf.verdict_of(cs) == "not_ready"
 
 
+def test_allow_cpu_solver_succeeds_for_cpu_hivemind_solver() -> None:
+    cs = run(runner=no_smi, allow_cpu_solver=True)
+    g = by_id(cs, "gpu")
+    assert g.status == "ok" and g.data["plan_class"] == "cpu_hivemind_solver"
+    assert pf.verdict_of(cs) == "ready"
+
+
 @pytest.mark.parametrize("bad", ["garbage", "a, b, c, d, e", "x, 100, 5000, 1, 1", "only,two"])
 def test_malformed_output_warns_not_crashes(bad: str) -> None:
     assert by_id(run(runner=smi(bad)), "gpu").status == "warn"
@@ -273,4 +280,10 @@ def test_ssrf_guard_matches_gateway() -> None:
 def test_first_download_figures() -> None:
     assert pf.FIRST_DOWNLOAD_GB == 4.4 and (pf.RUNTIME_GB, pf.MODEL_GB) == (1.76, 2.67)
     assert pf.PLAN_CLASS_MIN_MB == 3500
-    assert "<gpu_ram>3500000000</gpu_ram>" in (ROOT / "scripts" / "boinc_publish_app_version.py").read_text()
+    spec = importlib.util.spec_from_file_location("boinc_publish_app_version", ROOT / "scripts" / "boinc_publish_app_version.py")
+    assert spec is not None and spec.loader is not None
+    pub_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pub_mod)
+    xml_out = pub_mod.render_version_xml("launcher.sh", ("a.tar.xz",), "cuda_hivemind", gpu_ram_mb=pf.PLAN_CLASS_MIN_MB)
+    assert "<gpu_ram>3500000000</gpu_ram>" in xml_out
+    assert "<gpu_ram>12000000000</gpu_ram>" in pub_mod.render_version_xml("launcher.sh", ("a.tar.xz",), "cuda_hivemind_big", gpu_ram_mb=12000)

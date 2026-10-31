@@ -489,6 +489,47 @@ def run_stage3_moe_routing_verifiers_and_scale_benchmark(seed: int = 20261031) -
     }
 
 
+def run_stage4_roadmap_pr_ip11_validation() -> Dict[str, Any]:
+    """Stage 4: Validate PR-IP-11 (IP-22 equal-assumption launch rho, IP-23 stub-audit clean, IP-48 Lane-Emden RK4 vs reference)."""
+    from hivemind.economy.international_launch_model import project_international_launch_wave
+    from hivemind.swarm.rusty_sundials_scientific_bee import solve_wave2_method_of_lines_pde
+
+    eq_proj = project_international_launch_wave(
+        wave_name="Equal Assumptions Control Test",
+        new_visitors=2000,
+        consumer_to_prosumer_conversion_kappa=0.0,
+        uncontrolled_scraping_factor=1.0,
+        controlled_scraping_factor=1.0,
+    )
+    ip22_equal_rho_passed = bool(
+        abs(eq_proj.utilization_rho_without_controls - eq_proj.utilization_rho_with_controls) < 1e-6
+    )
+
+    le_clean = solve_wave2_method_of_lines_pde("lane_emden_stellar", grid_points=32, param=1.5)
+    le_wrong = solve_wave2_method_of_lines_pde(
+        "lane_emden_stellar",
+        grid_points=32,
+        param=1.5,
+        reference_poly_n=3.0,
+    )
+    ip48_passed = bool(
+        float(le_clean["invariant_drift"]) < 1e-6
+        and le_clean["invariants_verified"]["independent_integrator_match"] is True
+        and float(le_wrong["invariant_drift"]) > 1e-3
+        and le_wrong["invariants_verified"]["independent_integrator_match"] is False
+    )
+
+    return {
+        "stage": "stage4_roadmap_pr_ip11_validation",
+        "ip22_equal_assumptions_rho_with_controls": eq_proj.utilization_rho_with_controls,
+        "ip22_equal_assumptions_rho_without_controls": eq_proj.utilization_rho_without_controls,
+        "ip22_equal_rho_passed": ip22_equal_rho_passed,
+        "ip48_lane_emden_n15_drift": round(float(le_clean["invariant_drift"]), 10),
+        "ip48_lane_emden_wrong_n_drift": round(float(le_wrong["invariant_drift"]), 6),
+        "ip48_passed": ip48_passed,
+    }
+
+
 def run_4h_rtx2070_moe_experimentator(
     steps_per_domain: int = 18,
     output_path: Path | None = None,
@@ -499,6 +540,7 @@ def run_4h_rtx2070_moe_experimentator(
     stage1 = run_stage1_dry_run_and_residency_gate(gpu_telemetry)
     stage2 = run_stage2_small_qlora_training_and_ip10_validation(steps_per_domain=steps_per_domain)
     stage3 = run_stage3_moe_routing_verifiers_and_scale_benchmark()
+    stage4 = run_stage4_roadmap_pr_ip11_validation()
 
     all_passed = bool(
         stage1["dry_run_passed"]
@@ -511,6 +553,8 @@ def run_4h_rtx2070_moe_experimentator(
         and stage2["all_domains_ratchet_passed"]
         and stage3["ip35_router_grad_depends_on_aux"]
         and stage3["all_wave3_routes_matched"]
+        and stage4["ip22_equal_rho_passed"]
+        and stage4["ip48_passed"]
     )
 
     report: Dict[str, Any] = {
@@ -518,11 +562,12 @@ def run_4h_rtx2070_moe_experimentator(
         "generator": "scripts/run_4h_rtx2070_moe_bee_experimentator.py",
         "cadence_cron": "0 */4 * * *",
         "timestamp_utc": now_iso,
-        "implemented_roadmap_pr": "PR-IP-10 (IP-20, IP-34, IP-35, IP-36, IP-37) + Wave 3 Scientific MoE Bees",
+        "implemented_roadmap_pr": "PR-IP-10 (IP-19, IP-20, IP-34, IP-35, IP-36, IP-37) + PR-IP-11 (IP-22, IP-23, IP-48) + Wave 3 Scientific MoE Bees",
         "rtx2070_telemetry": gpu_telemetry,
         "stage1_dry_run": stage1,
         "stage2_small_qlora_training": stage2,
         "stage3_moe_scale_and_inference": stage3,
+        "stage4_roadmap_pr_ip11": stage4,
         "overall_experiment_passed": all_passed,
     }
     digest = hashlib.sha256(json.dumps(report, sort_keys=True).encode("utf-8")).hexdigest()

@@ -560,7 +560,7 @@ Canonical Citizen AI Manifesto & Onboarding Guide: **[`docs/MANIFESTE_IA_CITOYEN
 | **`HM-S33-04`** 3-Hour Autonomous RTX 2070 Progress Monitor, Roadmap Sync & PR Integrator (`0 */3 * * *`) | S33 | [`scripts/rtx2070_3h_monitor_and_pr_integrator.py`](scripts/rtx2070_3h_monitor_and_pr_integrator.py), `artifacts/rtx2070_3h_monitor_ledger.json`, `tests/test_rtx2070_3h_monitor_and_pr_integrator.py` | Probes live `NVIDIA GeForce RTX 2070` (`8 GB GDDR6`, Turing `sm_75`) NVML & tensor throughput (`< 6,656 MiB` WDDM ceiling, `>= 2,048 MiB` free VRAM guard), synchronizes telemetry ledgers, audits open PRs via `OwnerOrderGuardrail` + `PRSecurityScanner`, and integrates verified PRs every 3 hours (`0 */3 * * *`). | `uv run pytest tests/test_rtx2070_3h_monitor_and_pr_integrator.py` (100% pass). |
 | **`HM-S33-05`** 2-Hour Roadmap Evolution, PR Security Audit & Night MoE (`22:00 CET`) Orchestrator (`0 */2 * * *` & `0 22 * * *`) | S33 | [`scripts/run_2h_roadmap_pr_and_night_moe_cron.py`](scripts/run_2h_roadmap_pr_and_night_moe_cron.py), [`scripts/run_nocturnal_moe_auto_improvement.py`](scripts/run_nocturnal_moe_auto_improvement.py), `artifacts/evolution_2h_cron_ledger.json`, `artifacts/night_moe_training_ledger.json`, `artifacts/vram_calibrations_s21.json`, `tests/test_evolution_2h_and_night_moe_cron.py`, PR [#344](https://github.com/xaviercallens/HiveMind/pull/344) | Runs a 2-hour roadmap & PR audit cycle plus the daily `22:00 CET` 20-MoE / 5-domain QLoRA campaign on `producer.rtx2070` (`http://127.0.0.1:8095`), settles PoUW HMT points, and records live `HM-S21-04` NVML VRAM calibrations (`artifacts/vram_calibrations_s21.json`). | `uv run pytest tests/test_evolution_2h_and_night_moe_cron.py` (`4/4` pass). |
 | **`HM-S33-06`** Local RTX 2070 (`PRODUCER-LOCAL-RTX2070-CUDA0`) 5-Language Cockpit & NVML Benchmark Auto-Detection | S33 | `src/hivemind/game/exoplanet_hunter_cockpit.py`, `src/hivemind/game/exoplanet_hunter_engine.py`, `src/hivemind/cli/community_gpu_benchmark.py`, `artifacts/community_gpu_benchmark_receipt.json`, PR [#344](https://github.com/xaviercallens/HiveMind/pull/344) | Mounts 5-language (`/portal`, `/fr`, `/es`, `/de`, `/zh`, `/signup`, `/v1/hivemind/i18n`) and `/api/v1/monitor/evolution-cron` routes on the local RTX 2070 server (`:8095`) and enriches `detect_community_accelerator("auto")` with live `nvidia-smi` NVML GPU metadata on `torch+cpu` hosts. | `uv run pytest tests/test_community_gpu_benchmark.py` (`7/7` pass). |
-| **`HM-S33-07`** 4-Hour RTX 2070 MoE Bee Experimentator, Scale Validator & `PR-IP-10` Implementation (`0 */4 * * *`) | S33 | [`scripts/run_4h_rtx2070_moe_bee_experimentator.py`](scripts/run_4h_rtx2070_moe_bee_experimentator.py), `artifacts/rtx2070_4h_moe_experimentator_ledger.json`, `tests/test_rtx2070_4h_moe_experimentator_and_ip10.py`, `src/hivemind/core/{diloco_outer,exoplanet_astro_vmoe_poc,massive_image_moe_swarm_orchestrator,quantization,compression}.py`, `src/hivemind/security/federated_learning_hardening.py`, PR [#344](https://github.com/xaviercallens/HiveMind/pull/344) | Runs a 4-stage RTX 2070 (`8,192 MiB`) MoE Bee experimentator every 4 hours (`0 */4 * * *`): (1) WDDM/NVML pre-flight dry run (`< 6,656 MiB` ceiling, `>= 2,048 MiB` free VRAM) & Core + Wave 3 Scientific Bee (`Qwen/Qwen3-8B` NF4 `4,200 MiB` + 2 active LoRA adapters) residency verification; (2) Real-gradient QLoRA small training (`rank=16`, `Blockwise8BitAdamW`, `80/20` replay, 2-bit DCT + `EF21`, `Multi-Krum` with `IP-20`/`IP-34`) with disjoint Split-A / Split-B loss drop; (3) Sparse MoE Top-2 routing, differentiable Switch $L_{\text{aux}}$ (`IP-35`), 128-Expert 3-Tier Hierarchical MoE scale validation, and live `:8095` inference; (4) Implements `PR-IP-10` (`IP-20`, `IP-34`, `IP-35`, `IP-36`, `IP-37`). | `uv run pytest tests/test_rtx2070_4h_moe_experimentator_and_ip10.py` (`100%` pass) & `overall_experiment_passed == True`. |
+| **`HM-S33-07`** 4-Hour RTX 2070 MoE Bee Experimentator, Scale Validator & `PR-IP-10` / `PR-IP-11` Implementation (`0 */4 * * *`) | S33 | [`scripts/run_4h_rtx2070_moe_bee_experimentator.py`](scripts/run_4h_rtx2070_moe_bee_experimentator.py), `artifacts/rtx2070_4h_moe_experimentator_ledger.json`, `tests/test_rtx2070_4h_moe_experimentator_and_ip10.py`, `src/hivemind/core/{diloco_outer,exoplanet_astro_vmoe_poc,massive_image_moe_swarm_orchestrator,quantization,compression}.py`, `src/hivemind/economy/international_launch_model.py`, `src/hivemind/swarm/rusty_sundials_scientific_bee.py`, PR [#344](https://github.com/xaviercallens/HiveMind/pull/344) | Runs a 4-stage RTX 2070 (`8,192 MiB`) MoE Bee experimentator every 4 hours (`0 */4 * * *`): (1) WDDM/NVML pre-flight dry run (`< 6,656 MiB` ceiling, `>= 2,048 MiB` free VRAM) & Core + Wave 3 Scientific Bee (`Qwen/Qwen3-8B` NF4 `4,200 MiB` + 2 active LoRA adapters) residency verification; (2) Real-gradient QLoRA small training (`rank=16`, `Blockwise8BitAdamW`, `80/20` replay, 2-bit DCT + `EF21`, `Multi-Krum` with `IP-20`/`IP-34`) with disjoint Split-A / Split-B loss drop; (3) Sparse MoE Top-2 routing, differentiable Switch $L_{\text{aux}}$ (`IP-35`), 128-Expert 3-Tier Hierarchical MoE scale validation, and live `:8095` inference; (4) Implements `PR-IP-10` (`IP-19`, `IP-20`, `IP-34`, `IP-35`, `IP-36`, `IP-37`) and `PR-IP-11` (`IP-22`, `IP-23`, `IP-48`). | `uv run pytest tests/test_rtx2070_4h_moe_experimentator_and_ip10.py` (`100%` pass) & `overall_experiment_passed == True`. |
 
 ---
 
@@ -627,7 +627,6 @@ The full plan, with evidence, Definition of Done and the test for each finding (
 
 ---
 
-<<<<<<< HEAD
 ### Status update, 2026-10-31 (3-hourly & 2-hourly review)
 
 - **Merged by the owner account, 17:10–17:35 CET:** #368 (V-MoE router dispatch and 8-bit AdamW), #371 (SolverBee slot presets), #372 (the improvement plan itself), #373, #374, #375, #376, and [#377](https://github.com/xaviercallens/HiveMind/pull/377) (gatekeeper refuses Lean builds whose declarations use `sorry`, `IP-13`).
@@ -635,23 +634,14 @@ The full plan, with evidence, Definition of Done and the test for each finding (
   - Reconciled `origin/main` (`26f62ae`) merge conflicts, cleared the `forbidden_scan` documentation example in `scripts/install_boinc_hivemind_linux.sh`, and resolved all `ZeroStubAudit` (`GWAYA`) checks across all 33 changed Python files (`0` violations).
   - Cherry-picked [#369](https://github.com/xaviercallens/HiveMind/pull/369) (Lean 4 Theorem 120 zero-warnings gate) and [#366](https://github.com/xaviercallens/HiveMind/pull/366) (BOINC QLoRA thermodynamic ratchet & `80/20` replay).
   - Completed **`PR-IP-10` (`IP-19`, `IP-20`, `IP-34`, `IP-35`, `IP-36`, `IP-37`)** + **`HM-S33-07`** (4-Hour RTX 2070 MoE Bee Experimentator, `0 */4 * * *`).
-=======
-### Status update, 2026-10-31 (3-hourly review)
-
-- **Merged by the owner account, 17:10–17:33 CET:** #368 (V-MoE router dispatch and 8-bit AdamW), #371 (SolverBee slot presets), #372 (the improvement plan itself), #373, #374, #375 and #376. Their tests (11 files) pass on the new `main` (32 passed).
-- **PR-IP-07, first part:** [#377](https://github.com/xaviercallens/HiveMind/pull/377) makes the gatekeeper refuse a Lean build that reports `declaration uses 'sorry'`. Open, for owner review. The scanner-from-base-ref and CB-02 items (IP-14, IP-15) remain.
-- **Still open and blocked:** #369 and #366 (CI failures, see plan), #362 (stub audit), #344 (merge conflict and a documentation example the forbidden scan refuses).
->>>>>>> 9e624e2
 - **Open for claim (GitHub issues, label `agent-ready`):**
   - [#378](https://github.com/xaviercallens/HiveMind/issues/378): owner-key fallback and account takeover (PR-IP-01, PR-IP-02). Owner action first: rotate the key.
   - [#379](https://github.com/xaviercallens/HiveMind/issues/379): credit only server-verified work (PR-IP-03).
   - [#380](https://github.com/xaviercallens/HiveMind/issues/380): dashboard admin authentication and CORS (PR-IP-05).
   - [#381](https://github.com/xaviercallens/HiveMind/issues/381): bind BOINC uploads to their workunit and credit from server time (PR-IP-06).
   - [#382](https://github.com/xaviercallens/HiveMind/issues/382): ledger reload and atomic writes (PR-IP-04).
-<<<<<<< HEAD
-=======
 - **Not yet delegated:** PR-IP-08 to PR-IP-14 (secrets, honest measurements, numerics, deploy hardening, hygiene). Next round.
->>>>>>> 9e624e2
+
 
 ---
 

@@ -334,19 +334,27 @@ def tier_split(vram_gb: float) -> tuple[list[str], list[str]]:
     return fit, [t for t, m in TIERS if m > vram_gb]
 
 
-def check_gpu(runner: Runner) -> Check:
+def check_gpu(runner: Runner, allow_cpu_solver: bool = False) -> Check:
     q = "--query-gpu=name,memory.total,memory.used,driver_version,compute_cap"
     title = "NVIDIA GPU"
+    cpu_ok = Check(
+        "gpu",
+        title,
+        "ok",
+        "No NVIDIA driver/GPU detected via nvidia-smi; validated for CPU/BLS transit & symbolic solver mode (BOINC plan class cpu_hivemind_solver via hivemind_boinc_idle_worker.py).",
+        "Install the NVIDIA proprietary driver if you also want GPU QLoRA tasks (plan class cuda_hivemind).",
+        {"cards": 0, "plan_class": "cpu_hivemind_solver", "tiers_servable_total": [], "tiers_servable_free_now": [], "tiers_too_big": [t for t, _ in TIERS]},
+    )
     none = Check("gpu", title, "fail", "No NVIDIA GPU found (nvidia-smi is missing or reports no card). The HiveMind QLoRA app needs an NVIDIA GPU (BOINC plan class cuda_hivemind); CPU-only volunteering is not supported.",
-                 "Install the NVIDIA driver if you have a card, otherwise this machine cannot run the current app.")
+                 "Install the NVIDIA driver if you have a card, or pass --allow-cpu-solver to validate for the Python BOINC/BLS CPU worker (plan class cpu_hivemind_solver).")
     try:
         rc, out = runner(["nvidia-smi", q, "--format=csv,noheader,nounits"], 5)
         if rc != 0:  # old drivers do not know compute_cap
             rc, out = runner(["nvidia-smi", "--query-gpu=name,memory.total,memory.used,driver_version", "--format=csv,noheader,nounits"], 5)
     except (OSError, subprocess.SubprocessError):
-        return none
+        return cpu_ok if allow_cpu_solver else none
     if rc != 0 or not out.strip():
-        return none
+        return cpu_ok if allow_cpu_solver else none
     try:
         gpus = _parse_gpu(out)
     except (ValueError, IndexError):
@@ -502,13 +510,14 @@ def run_checks(*, system: str | None = None, machine: str | None = None, runner:
                cpus: int | None = None, which: Callable[[str], str | None] = shutil.which, exists: Callable[[str], bool] = os.path.exists,
                battery: Callable[[], dict[str, Any] | None] = default_battery, project_url: str | None = None,
                resolver: Callable[[str], list[str]] = default_resolver, fetcher: Fetcher = default_fetcher, scrub: Scrubber | None = None,
-               now: datetime | None = None, py_version: tuple[int, int, int] | None = None) -> list[Check]:
+               now: datetime | None = None, py_version: tuple[int, int, int] | None = None,
+               allow_cpu_solver: bool = False) -> list[Check]:
     scrub = scrub or Scrubber()
     target = data_dir or detect_data_dir(exists) or str(Path.home())
     checks = [
         check_os(system or platform.system(), machine or platform.machine()),
         check_python(py_version or sys.version_info[:3]),
-        check_gpu(runner),
+        check_gpu(runner, allow_cpu_solver=allow_cpu_solver),
         check_disk(target, disk_free, scrub),
         check_ram_cpu(ram_bytes(), cpus if cpus is not None else os.cpu_count()),
         check_boinc(which, exists),
@@ -547,6 +556,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Check this machine before joining HiveMind as a BOINC volunteer. Installs nothing; no network unless --project-url.")
     ap.add_argument("--data-dir", help="directory BOINC will use (default: the BOINC data dir if found, else your home directory)")
     ap.add_argument("--project-url", help="optional https URL of the project; enables the only network access of this script")
+    ap.add_argument("--allow-cpu-solver", action="store_true", help="validate CPU/BLS solver mode (plan class cpu_hivemind_solver) when nvidia-smi is absent")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     ap.add_argument("--no-color", action="store_true", help="plain output (default is already plain unless stdout is a terminal)")
     ap.add_argument("--explain", action="store_true", help="print what each check reads, then exit")
@@ -555,7 +565,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(EXPLAIN)
         return 0
     scrub = Scrubber()
-    checks = run_checks(data_dir=args.data_dir, project_url=args.project_url, scrub=scrub)
+    checks = run_checks(data_dir=args.data_dir, project_url=args.project_url, scrub=scrub, allow_cpu_solver=args.allow_cpu_solver)
     report = build_report(checks, scrub)
     if args.json:
         print(json.dumps(report, indent=2))

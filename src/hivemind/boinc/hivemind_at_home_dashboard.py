@@ -9342,6 +9342,20 @@ def create_hivemind_at_home_app(
                 "federated_workunit_submit_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/workunit/submit",
                 "federated_ledger_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/ledger",
                 "night_window": "22:00-07:00 Europe/Paris (24/7 on-demand workunits active)",
+                "night_training_roles": {
+                    "end_users": {
+                        "who": "Volunteers, developers, students, and gamers on Linux, Windows, or macOS",
+                        "schedule": "Overnight (22:00-07:00 Europe/Paris) or automatic idle-GPU pause (< 4s input inactivity)",
+                        "workload": "Lease BOINC workunits (physics_sim, code_generation, math_reasoning), fold 16,384-point TESS/JWST light curves, and compute rank-4 QLoRA inner-loop updates",
+                        "reward": "+250 HMT Reflexion Points and +45.0 Cobblestones per verified workunit to spend the next day on all 15+ OpenRouter models",
+                    },
+                    "hivemind_nodes": {
+                        "who": "Dedicated GPU Producer Nodes, HiveMiners, and Owner Fleet (NVIDIA RTX 2070 8GB + GCP Tesla T4 16GB)",
+                        "daytime_schedule": "07:00-22:00 Europe/Paris: Serve low-latency OpenRouter chat/code/science inference",
+                        "night_schedule": "22:00-07:00 Europe/Paris: Nocturnal DiLoCo outer-step aggregation, Multi-Krum Byzantine filtering, SVD spectral ratchet (>=95% energy), and Teacher-to-Student distillation",
+                        "telemetry_url": "https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/hivemind/bees/owner-fleet-status",
+                    },
+                },
                 "plan_classes": {
                     "cuda_hivemind": {
                         "min_vram_mb": 3500,
@@ -9379,6 +9393,22 @@ def create_hivemind_at_home_app(
                     "3_single_workunit": "python3 scripts/hivemind_boinc_idle_worker.py --coordinator https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app --handle your-handle --domain physics_sim --once",
                     "4_native_boinc_attach": "boinccmd --project_attach https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app YOUR_ACCOUNT_KEY",
                 },
+            }
+        )
+
+    @app.get("/v1/hivemind/bees/owner-fleet-status", response_class=JSONResponse)
+    def ruche_owner_fleet_status(foreground_gaming: bool = False) -> JSONResponse:
+        from hivemind.swarm.rusty_sundials_scientific_bee import OwnerFleetCoServingOrchestrator
+
+        orch = OwnerFleetCoServingOrchestrator()
+        status = orch.fleet_status(foreground_gaming=foreground_gaming)
+        distill = orch.distill_teacher_to_rtx2070_student()
+        s1b = orch.verify_s1b_cross_cpu_reproducibility()
+        return JSONResponse(
+            content={
+                **status,
+                "latest_nocturnal_distillation": distill,
+                "s1b_cross_cpu_reproducibility": s1b,
             }
         )
 

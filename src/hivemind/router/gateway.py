@@ -2875,6 +2875,10 @@ def create_router_app(
             "federated_workunit_submit_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/workunit/submit",
             "federated_ledger_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/ledger",
             "night_window": "22:00-07:00 Europe/Paris (24/7 on-demand workunits active)",
+            "night_training_roles": {
+                "end_users": "Overnight (22:00-07:00 CET) or idle-GPU BOINC folding & rank-4 QLoRA inner-loop updates (+250 HMT & +45 Cobblestones/WU)",
+                "hivemind_nodes": "Daytime (07:00-22:00 CET) OpenRouter inference -> Nighttime (22:00-07:00 CET) DiLoCo outer-step aggregation, Multi-Krum & SVD Teacher-to-Student distillation (/v1/hivemind/bees/owner-fleet-status)",
+            },
             "plan_classes": ["cuda_hivemind", "cuda_hivemind_big", "cpu_hivemind_solver"],
             "rewards_per_verified_workunit": {
                 "hmt_reflexion_points": 250,

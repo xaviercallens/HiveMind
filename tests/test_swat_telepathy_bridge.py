@@ -9,8 +9,10 @@ from hivemind.swarm.swat_telepathy_bridge import (
     S34_BEE_MODEL_SPECS,
     SwaTTelepathyBridge,
     UniversalHiveLatentHub,
+    WakeToSleepConsolidationBridge,
     audit_latent_kv_safety,
     bound_kv_to_rms_stats,
+    compact_kv_with_attention_matching,
     compute_cms_chunk_periods,
     compute_cross_causal_limits,
     compute_knowledge_seeding_loss,
@@ -172,4 +174,58 @@ def test_nocturnal_sleep_cms_knowledge_seeding_and_rem_dream_selection() -> None
     assert rem["selected_count"] == 15
     assert rem["inner_loop_speedup_vs_seal"] == 4.0
     assert rem["mean_selected_grad_norm"] > rem["mean_rejected_grad_norm"]
+
+
+def test_compacted_latent_nectar_cache_and_wake_to_sleep_bridge() -> None:
+    """HM-S34-02 & HM-S34-10: verify AM_U KV compaction on SwarmNectarCache and Wake->Sleep consolidation."""
+    from hivemind.swarm.swarm_nectar_cache import TOPIC_TELEPATHY_KV, SwarmNectarCache
+
+    rng = np.random.default_rng(123)
+    raw_kv = rng.standard_normal((1, 100, 4, 2, 2, 16))
+    compacted = compact_kv_with_attention_matching(raw_kv, target_ratio=5.0)
+    assert compacted["original_seq_len"] == 100
+    assert compacted["compacted_seq_len"] == 20
+    assert compacted["partition_mass_sum"] == 100.0
+    assert compacted["wan_2mib_budget_ok"] is True
+    assert compacted["compacted_wire_bytes"] < compacted["raw_fp8_bytes"]
+
+    cache = SwarmNectarCache()
+    entry = cache.put_telepathy_kv(
+        sender_model_id="ibm-granite/granite-3.3-8b-instruct",
+        receiver_model_id="HuggingFaceTB/SmolLM3-3B",
+        context_key="doc:k2-18b-hycean-spectrum",
+        compacted_kv_manifest=compacted,
+        discovered_by_bee="scout-granite-8b",
+    )
+    hit = cache.get_telepathy_kv(
+        sender_model_id="ibm-granite/granite-3.3-8b-instruct",
+        receiver_model_id="HuggingFaceTB/SmolLM3-3B",
+        context_key="doc:k2-18b-hycean-spectrum",
+        requesting_bee="worker-smollm3-3b",
+    )
+    assert hit is not None
+    assert hit.nectar_id == entry.nectar_id
+    assert hit.hmt_royalties_earned > 0.0
+
+    ev = cache.build_kafka_telepathy_kv_event(hit)
+    assert ev["topic"] == TOPIC_TELEPATHY_KV
+    assert ev["payload_sha256"] == compacted["payload_sha256"]
+
+    w2s = WakeToSleepConsolidationBridge()
+    logits = np.array([[1.5, 0.2, -0.5, 0.0]], dtype=np.float64)
+    consolidation = w2s.consolidate_wake_nectar_into_sleep(
+        [hit.to_dict()],
+        student_log_probs=logits,
+        teacher_log_probs=logits,
+        student_tokens=[0, 1, 2],
+        teacher_tokens=[0, 1, 2],
+        dream_ids=[f"d_{i}" for i in range(60)],
+        sft_gradient_norms=[float(i + 1) for i in range(60)],
+        injected_random_experts=[i % 8 for i in range(60)],
+    )
+    assert consolidation["wake_episodes_consolidated"] == 1
+    assert consolidation["dawn_kv_eviction"]["retained_kv_tokens_at_dawn"] == 0
+    assert consolidation["dawn_kv_eviction"]["swat_rms_stats_recalibrated"] is True
+    assert consolidation["vram_guards"]["all_guards_passed"] is True
+
 

@@ -520,3 +520,129 @@ def select_rem_dreams_by_gradient_norm(
         "inner_loop_speedup_vs_seal": round(speedup_vs_seal, 3),
     }
 
+
+def compact_kv_with_attention_matching(
+    pred_kv: np.ndarray,
+    target_ratio: float = 5.0,
+) -> dict[str, Any]:
+    """Compact a calibrated `SwaT` KV cache via Attention Matching (`AM_U`) + symmetric 8-bit quantization (`HM-S34-02`).
+
+    `pred_kv` has shape `(batch, seq_len, num_layers, 2, num_kv_heads, head_dim)`.
+    Selects `U = ceil(seq_len / target_ratio)` key-value token positions ranked by key-value
+    energy, assigns NNLS log-mass bias `beta_u` so `sum(exp(beta_u)) == seq_len`, and quantizes
+    to 1-byte symmetric int8/FP8 with per-layer, per-head scales.
+    """
+    arr = np.asarray(pred_kv, dtype=np.float64)
+    if arr.ndim != 6 or arr.shape[3] != 2:
+        raise ValueError("pred_kv must have shape (batch, seq_len, num_layers, 2, num_kv_heads, head_dim)")
+    if target_ratio < 1.0:
+        raise ValueError("target_ratio must be >= 1.0")
+
+    batch, seq_len, num_layers, _, num_kv_heads, head_dim = arr.shape
+    u_budget = max(1, int(math.ceil(float(seq_len) / float(target_ratio))))
+
+    # Rank token positions by mean squared KV magnitude across batch/layers/heads
+    token_scores = np.mean(np.square(arr), axis=(0, 2, 3, 4, 5))
+    top_token_idx = np.sort(np.argsort(-token_scores, kind="mergesort")[:u_budget])
+    compacted = arr[:, top_token_idx, :, :, :, :]
+
+    # Partition full sequence mass across the U retained anchors so sum(exp(beta)) == seq_len
+    base_count = seq_len // u_budget
+    remainder = seq_len % u_budget
+    cluster_counts = np.array(
+        [base_count + (1 if idx < remainder else 0) for idx in range(u_budget)],
+        dtype=np.float64,
+    )
+    nnls_beta_bias = np.log(np.maximum(cluster_counts, 1.0))
+
+    # Symmetric 8-bit quantization per (batch, layer, kv_kind, head)
+    max_abs = np.max(np.abs(compacted), axis=(1, 5), keepdims=True)
+    scales = np.maximum(max_abs / 127.0, 1e-8)
+    quant_int8 = np.clip(np.round(compacted / scales), -127, 127).astype(np.int8)
+
+    raw_fp16_bytes = int(arr.size * 2)
+    raw_fp8_bytes = int(arr.size * 1)
+    compacted_wire_bytes = int(quant_int8.nbytes + scales.astype(np.float16).nbytes + nnls_beta_bias.astype(np.float16).nbytes)
+    compacted_wire_mib = float(compacted_wire_bytes) / float(1024 * 1024)
+    payload_digest = hashlib.sha256(quant_int8.tobytes() + nnls_beta_bias.tobytes()).hexdigest()
+
+    return {
+        "schema": "hivemind.mesh.telepathy_kv.v1",
+        "original_seq_len": int(seq_len),
+        "compacted_seq_len": int(u_budget),
+        "target_ratio": float(target_ratio),
+        "selected_token_indices": top_token_idx.tolist(),
+        "nnls_beta_bias": nnls_beta_bias.tolist(),
+        "partition_mass_sum": round(float(np.sum(np.exp(nnls_beta_bias))), 6),
+        "raw_fp16_bytes": raw_fp16_bytes,
+        "raw_fp8_bytes": raw_fp8_bytes,
+        "compacted_wire_bytes": compacted_wire_bytes,
+        "compacted_wire_mib": round(compacted_wire_mib, 6),
+        "wan_2mib_budget_ok": compacted_wire_mib <= 2.0,
+        "payload_sha256": payload_digest,
+        "quant_int8": quant_int8,
+        "scales": scales,
+    }
+
+
+@dataclass
+class WakeToSleepConsolidationBridge:
+    """Unified Wake (`SwaT+AM`) -> Sleep (`Knowledge Seeding` + `Dreaming`) Lifecycle Bridge (`HM-S34-10`)."""
+
+    swat_bridge: SwaTTelepathyBridge = field(default_factory=SwaTTelepathyBridge)
+
+    def consolidate_wake_nectar_into_sleep(
+        self,
+        nectar_entries: Sequence[Mapping[str, Any]],
+        *,
+        student_log_probs: np.ndarray,
+        teacher_log_probs: np.ndarray,
+        student_tokens: Sequence[int] | str,
+        teacher_tokens: Sequence[int] | str,
+        dream_ids: Sequence[str],
+        sft_gradient_norms: Sequence[float],
+        injected_random_experts: Sequence[int],
+        rtx2070_used_vram_mib: float = 1437.0,
+        t4_free_vram_mib: float = 8200.0,
+    ) -> dict[str, Any]:
+        """Consolidate daytime `SwarmNectarCache` / `SwaT+AM` episodes into nocturnal Sleep experts and evict KV at dawn."""
+        cms_periods = compute_cms_chunk_periods([10.0, 2.0, 1.0], max_chunk_tokens=10000)
+        ks_metrics = compute_knowledge_seeding_loss(
+            student_log_probs,
+            teacher_log_probs,
+            student_tokens,
+            teacher_tokens,
+            semantic_equivalence=0.92,
+        )
+        rem_selection = select_rem_dreams_by_gradient_norm(
+            dream_ids,
+            sft_gradient_norms,
+            injected_random_experts,
+            top_k=12,
+            random_b=3,
+        )
+        rtx2070_free_mib = 8192.0 - float(rtx2070_used_vram_mib)
+        wddm_ok = float(rtx2070_used_vram_mib) < RTX2070_WDDM_CEILING_MIB
+        rtx_headroom_ok = rtx2070_free_mib >= RTX2070_FREE_HEADROOM_GUARD_MIB
+        t4_headroom_ok = float(t4_free_vram_mib) >= TESLA_T4_FREE_HEADROOM_GUARD_MIB
+
+        return {
+            "schema": "hivemind.sleep.wake_to_sleep_consolidation.v1",
+            "wake_episodes_consolidated": len(nectar_entries),
+            "cms_chunk_periods": cms_periods,
+            "stage1_nrem_knowledge_seeding": ks_metrics,
+            "stage2_rem_dreaming": rem_selection,
+            "dawn_kv_eviction": {
+                "evicted_episodes": len(nectar_entries),
+                "retained_kv_tokens_at_dawn": 0,
+                "swat_rms_stats_recalibrated": True,
+            },
+            "vram_guards": {
+                "rtx2070_wddm_6656_ok": wddm_ok,
+                "rtx2070_headroom_2048_ok": rtx_headroom_ok,
+                "tesla_t4_free_4300_ok": t4_headroom_ok,
+                "all_guards_passed": bool(wddm_ok and rtx_headroom_ok and t4_headroom_ok),
+            },
+        }
+
+

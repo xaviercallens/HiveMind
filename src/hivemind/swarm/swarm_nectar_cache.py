@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 TOPIC_FOOD_SOURCES = "hivemind.mesh.food_sources.v1"
+TOPIC_TELEPATHY_KV = "hivemind.mesh.telepathy_kv.v1"
 DEFAULT_NECTAR_TTL_S = 86400.0  # 24 hours
 MICRO_ROYALTY_HMT = 0.005  # 0.005 HMT awarded to discoverer per peer hit
 
@@ -285,6 +286,79 @@ class SwarmNectarCache:
             "discovered_by_bee": entry.discovered_by_bee,
             "nectar_richness": entry.nectar_richness,
             "access_count": entry.access_count,
+            "hmt_royalties": entry.hmt_royalties_earned,
+            "created_utc": entry.created_utc,
+        }
+
+    def put_telepathy_kv(
+        self,
+        *,
+        sender_model_id: str,
+        receiver_model_id: str,
+        context_key: str,
+        compacted_kv_manifest: Mapping[str, Any],
+        discovered_by_bee: str,
+        nectar_richness: float = 0.95,
+        ttl_s: float | None = None,
+    ) -> NectarEntry:
+        """Store a content-addressed `SwaT + AM_U` compacted KV state (`HM-S34-02`) in `SwarmNectarCache`."""
+        query_spec = {
+            "sender_model_id": sender_model_id,
+            "receiver_model_id": receiver_model_id,
+            "context_key": context_key,
+        }
+        payload = {
+            "schema": TOPIC_TELEPATHY_KV,
+            "sender_model_id": sender_model_id,
+            "receiver_model_id": receiver_model_id,
+            "context_key": context_key,
+            "payload_sha256": str(compacted_kv_manifest.get("payload_sha256", "")),
+            "original_seq_len": int(compacted_kv_manifest.get("original_seq_len", 0)),
+            "compacted_seq_len": int(compacted_kv_manifest.get("compacted_seq_len", 0)),
+            "target_ratio": float(compacted_kv_manifest.get("target_ratio", 1.0)),
+            "compacted_wire_bytes": int(compacted_kv_manifest.get("compacted_wire_bytes", 0)),
+            "compacted_wire_mib": float(compacted_kv_manifest.get("compacted_wire_mib", 0.0)),
+            "wan_2mib_budget_ok": bool(compacted_kv_manifest.get("wan_2mib_budget_ok", True)),
+            "nnls_beta_bias": list(compacted_kv_manifest.get("nnls_beta_bias", [])),
+        }
+        return self.put(
+            tool_name="swat_telepathy_kv",
+            query=query_spec,
+            content=payload,
+            discovered_by_bee=discovered_by_bee,
+            nectar_richness=nectar_richness,
+            ttl_s=ttl_s,
+        )
+
+    def get_telepathy_kv(
+        self,
+        *,
+        sender_model_id: str,
+        receiver_model_id: str,
+        context_key: str,
+        requesting_bee: str = "anonymous",
+    ) -> NectarEntry | None:
+        """Retrieve a cached `SwaT + AM_U` compacted KV state (`HM-S34-02`) and award PoUW HMT royalties."""
+        query_spec = {
+            "sender_model_id": sender_model_id,
+            "receiver_model_id": receiver_model_id,
+            "context_key": context_key,
+        }
+        return self.get("swat_telepathy_kv", query_spec, requesting_bee=requesting_bee)
+
+    def build_kafka_telepathy_kv_event(self, entry: NectarEntry) -> dict[str, Any]:
+        """Construct canonical CloudEvent dict for publishing compacted KV states on `hivemind.mesh.telepathy_kv.v1`."""
+        return {
+            "topic": TOPIC_TELEPATHY_KV,
+            "event_type": "io.hivemind.mesh.telepathy_kv_published",
+            "nectar_id": entry.nectar_id,
+            "query_hash": entry.query_hash,
+            "discovered_by_bee": entry.discovered_by_bee,
+            "payload_sha256": entry.content.get("payload_sha256", ""),
+            "sender_model_id": entry.content.get("sender_model_id", ""),
+            "receiver_model_id": entry.content.get("receiver_model_id", ""),
+            "compacted_seq_len": entry.content.get("compacted_seq_len", 0),
+            "compacted_wire_mib": entry.content.get("compacted_wire_mib", 0.0),
             "hmt_royalties": entry.hmt_royalties_earned,
             "created_utc": entry.created_utc,
         }

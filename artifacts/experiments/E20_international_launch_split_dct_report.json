@@ -6,8 +6,8 @@
     "HM-S31-02"
   ],
   "status": "VERIFIED_PASS",
-  "executed_at_utc": "2026-10-29T19:17:41Z",
-  "elapsed_seconds": 0.132,
+  "executed_at_utc": "2026-10-30T08:41:40Z",
+  "elapsed_seconds": 0.497,
   "predictions_check": {
     "P20a_all_prelude_vram_le_1536mb": true,
     "P20b_compression_ratio_ge_100x": true,
@@ -369,5 +369,5 @@
     "hmt_conservation_exact": true,
     "batch_merkle_root_sha256": "d7f22a4e97709eb6c3233011ee00285dea6d4a130385f243ed12b92093be6b26"
   },
-  "report_sha256": "c0d32b3b15751cc5ea395f8321f87f8cf02ad42663e013d2c939204dff9679b2"
+  "report_sha256": "d62849ca61c2dc06550807c0509af8456a129553eeaef8690d6019e770120762"
 }

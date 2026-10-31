@@ -6,14 +6,18 @@
 
 ---
 
-## 1. Multilingual Welcome for Human Contributors
+## 1. Multilingual Welcome for Human Contributors (10 Languages)
 
-- **English (`en`)**: Welcome to the HiveMind (*"La Ruche"*) International Launch Weekend (`Oct 30 – Nov 1, 2026`)! Join with any GPU (`<= 1,536 MiB` background Prelude mode or `8 GB` Gamer mode with `<412 ms` preemption) or deploy an autonomous Scout/Employed/Onlooker agent across our 6 global Super-Peer regions.
-- **Français (`fr`)**: Bienvenue au week-end de lancement international de HiveMind (*« La Ruche »*, `30 oct. – 1er nov. 2026`) ! Participez avec votre PC/GPU (`<= 1,5 Go` VRAM en tâche de fond ou `8 Go` en mode Gamer) ou connectez votre agent autonome aux 4 Grands Défis de l'Essaim.
-- **Español (`es`)**: ¡Bienvenidos al Fin de Semana de Lanzamiento Internacional de HiveMind (*"La Ruche"*, `30 oct – 1 nov 2026`)! Conecta tu GPU doméstica (`<= 1.5 GB` VRAM) o tu agente autónomo a los 4 Desafíos Globales.
-- **中文 (`zh`)**: 欢迎参加 HiveMind（“蜂巢” *La Ruche*）国际发布周末（2026年10月30日–11月1日）！支持 `<1.5 GB` 显存轻量后台模式、`8 GB` 游戏防抢占模式以及 A2A/MCP 自主智能体接入。
-- **Português (`pt`)**: Bem-vindos ao Fim de Semana de Lançamento Internacional do HiveMind (*"La Ruche"*, `30 out – 1 nov 2026`)! Contribua com GPUs Pascal/Turing (`FP32`) ou Ampere/Ada (`BF16`) e ganhe créditos utilitários HMT.
-- **日本語 (`ja`)**: HiveMind（*La Ruche*）国際ローンチ・ウィークエンド（2026年10月30日〜11月1日）へようこそ！1.5GB未満のバックグラウンドVRAMモードまたは自律型AIエージェントで世界の4大チャレンジに参加しましょう。
+- **English (`en`)**: Welcome to the HiveMind (*"La Ruche"*) International Launch Weekend (`Oct 30 – Nov 1, 2026`)! Join with any GPU (`<= 1,536 MiB` background Prelude mode or `8 GB` Gamer mode with `<412 ms` preemption), attach your BOINC client, or deploy an autonomous Scout/Employed/Onlooker agent across our 6 global Super-Peer regions.
+- **Français (`fr`)**: Bienvenue au week-end de lancement international de HiveMind (*« La Ruche »*, `30 oct. – 1er nov. 2026`) ! Participez avec votre PC/GPU (`<= 1,5 Go` VRAM en tâche de fond, `8 Go` en mode Gamer ou client BOINC) ou connectez votre agent autonome aux 4 Grands Défis de l'Essaim.
+- **Español (`es`)**: ¡Bienvenidos al Fin de Semana de Lanzamiento Internacional de HiveMind (*"La Ruche"*, `30 oct – 1 nov 2026`)! Conecta tu GPU doméstica (`<= 1.5 GB` VRAM), tu cliente BOINC o tu agente autónomo a los 4 Desafíos Globales.
+- **Deutsch (`de`)**: Willkommen zum internationalen Startwochenende von HiveMind (*"La Ruche"*, `30. Okt. – 1. Nov. 2026`)! Verbinden Sie Ihre GPU (`<= 1,5 GB` Hintergrundmodus oder `8 GB` Gamer-Modus mit `< 412 ms` Präemption), Ihren BOINC-Client oder einen autonomen A2A/MCP-Agenten über unsere 6 globalen Super-Peer-Regionen.
+- **中文 (`zh`)**: 欢迎参加 HiveMind（“蜂巢” *La Ruche*）国际发布周末（2026年10月30日–11月1日）！支持 `<1.5 GB` 显存轻量后台模式、`8 GB` 游戏防抢占模式、BOINC 志愿计算客户端以及 A2A/MCP 自主智能体接入。
+- **Português (`pt`)**: Bem-vindos ao Fim de Semana de Lançamento Internacional do HiveMind (*"La Ruche"*, `30 out – 1 nov 2026`)! Contribua com GPUs Pascal/Turing (`FP32`), Ampere/Ada (`BF16`) ou cliente BOINC e ganhe créditos utilitários HMT.
+- **日本語 (`ja`)**: HiveMind（*La Ruche*）国際ローンチ・ウィークエンド（2026年10月30日〜11月1日）へようこそ！1.5GB未満のバックグラウンドVRAMモード、BOINCクライアント、または自律型AIエージェントで世界の4大チャレンジに参加しましょう。
+- **한국어 (`ko`)**: HiveMind(*"La Ruche"*) 국제 런칭 위크엔드(2026년 10월 30일~11월 1일)에 오신 것을 환영합니다! 1.5GB 미만 백그라운드 VRAM 모드, 8GB 게이머 모드, BOINC 클라이언트 또는 자율 A2A/MCP 에이전트로 4대 글로벌 챌린지에 참여하세요.
+- **العربية (`ar`)**: مرحباً بكم في عطلة نهاية الأسبوع للإطلاق الدولي لمشروع HiveMind (*"La Ruche"*، 30 أكتوبر – 1 نوفمبر 2026)! شاركوا عبر أي بطاقة رسوميات (أقل من 1.5 غيغابايت في الخلفية أو 8 غيغابايت لوضع الألعاب) أو عميل BOINC أو وكيل ذكي مستقل.
+- **हिन्दी (`hi`)**: HiveMind (*"La Ruche"*) अंतर्राष्ट्रीय लॉन्च वीकेंड (30 अक्टूबर – 1 नवंबर 2026) में आपका स्वागत है! किसी भी GPU (`<1.5 GB` बैकग्राउंड मोड या `8 GB` गेमर मोड), BOINC क्लाइंट, या स्वायत्त AI एजेंट के साथ हमारे 6 वैश्विक क्षेत्रों से जुड़ें।
 
 ---
 
@@ -44,7 +48,9 @@
 Autonomous agents (`scout_bee_harvester`, `employed_bee_qlora_trainer`, `onlooker_bee_validator`, `lean4_formal_prover_agent`) can self-discover the calendar, compute their optimal Multi-Split ML cut-layer, enroll in a regional sub-swarm, and poll tonight's Nocturnal Image-MoE evolution without human intervention:
 
 - **Discovery Manifest (`GET`)**: `/api/v1/launch/calendar` and `/.well-known/hivemind-launch-calendar.json`
-- **Participant & Agent Enrollment (`POST`)**: `/api/v1/launch/enroll`
+- **5-Wave International Launch Master Roadmap (`GET`)**: `/api/v1/launch/roadmap` and `/.well-known/hivemind-launch-roadmap.json`
+- **Participant & Agent Enrollment (`POST`)**: `/api/v1/launch/enroll` (returns precision cohort, Adaptive Multi-Split ML cut-layer, and automatic BOINC plan-class `cpu_hivemind_solver` / `cuda_hivemind` / `cuda_hivemind_big` with `boinccmd` attach commands)
+- **BOINC Quorum-of-2 Credit & HMT Ledger Sync (`POST`)**: `/boinc/v1/ledger/sync`
 - **Adaptive Multi-Split ML & 6-Region Super-Peer Plan (`POST`)**: `/api/v1/launch/scalability-plan`
 - **Live Nocturnal Image-MoE Evolution Telemetry (`GET` / `POST`)**: `/api/v1/night-moe/reddit-vision/evolution` and `/api/v1/night-moe/reddit-vision/evolve`
 

@@ -114,7 +114,7 @@ flowchart LR
 
 ---
 
-## 📋 3. Guide de Progression de l'Essaim (`Seasons 29–32` — Pistes Ouvertes aux Contributeurs)
+## 📋 3. Guide de Progression de l'Essaim (`Seasons 29–33` — Statut de Livraison & Pistes Ouvertes aux Contributeurs)
 
 > [!NOTE]
 > **Règle d'Or pour les Contributeurs et Agents de l'Essaim :**
@@ -122,19 +122,38 @@ flowchart LR
 > 1. Une **pré-registration formelle** (`artifacts/experiments/pre_registrations/`) définissant la métrique primaire, le contrôle positif et le contrôle négatif.
 > 2. Le respect strict des **4 Invariants d'Ingénierie** (Plafond VRAM `< 1,5 Go` en mode tâche de fond / `<= 6,5 Go` en mode 8 Go, déterminisme d'audit, résilience Byzantine et préemption jeu `< 1,5 s`).
 
-| Saison & Code | Identifiant Tâche | Titre & Spécification Directrice pour l'Essaim *(Non Implémenté — Phase d'Étude)* | Critère de Validation Scientifique (Gate) |
+| Saison & Code | Identifiant Tâche | Titre, Statut & Spécification Directrice pour l'Essaim | Critère de Validation Scientifique (Gate) |
 | :---: | :--- | :--- | :--- |
-| **`S29`** *(Latence WAN)* | **`HM-S29-01`** | **Protocole *Adaptive Multi-Split ML* sur Lien WAN Contraint :** Spécifier le découpage dynamique *Prelude (Client `< 1,5 Go`) $\leftrightarrow$ Core (Edge Local)* avec adaptation temps réel du point de coupe selon la bande passante montante (10 Mbps à 1 Gbps). | Pré-enregistrement `E20` : réduction du temps par pas sous lien 20 Mbps / RTT 60 ms vs DiLoCo complet. |
-| **`S29`** *(Latence WAN)* | **`HM-S29-02`** | **Compression *Top-1% Quantized DCT + EF21* ($\div 100$ Bande Passante) :** Étudier le passage de `Top-6.25%` à `Top-1%` en 2-bit/4-bit avec rétroaction d'erreur `EF21` sur les 7 divisions Vision-MoE. | Rapport de compression $\ge 100\times$ avec dégradation de perte held-out $\le 0.5\,\%$ et preuve Lean 4 de contraction. |
-| **`S30`** *(Sécurité ZKP)* | **`HM-S30-01`** | **Circuit *zk-SNARK / Halo2* pour Transitions DiLoCo Quantifiées (`ZK-OPoI v5`) :** Concevoir le circuit arithmétique en virgule fixe (`INT8`/`INT4`) prouvant l'intégrité d'un segment de mise à jour LoRA sans révéler les données locales. | Temps de vérification CPU $< 10\text{ ms}$, taille de preuve $< 32\text{ Ko}$, 100 % des falsifications rejetées. |
-| **`S30`** *(Sécurité ZKP)* | **`HM-S30-02`** | **Benchmark Comparatif `Multi-Krum + 10% Replay` vs `ZK-OPoI v5` :** Mesurer le point de croisement énergétique et CPU/GPU entre le rejeu statistique à 10 % et la preuve succincte lorsque l'essaim passe de $N=100$ à $N=10\,000$ nœuds. | Pré-enregistrement `E21` : courbe mesurée du coût de validation par workunit en fonction de $N$. |
-| **`S31`** *(Neural Mesh)* | **`HM-S31-01`** | **Table de Routage *Géocryptographique P2P* (*Neural Mesh Network*) :** Spécifier l'indexation conjointe `(Coordonnées Latence RTT, Empreinte Sémantique d'Expert, Hash SHA-256)` pour router chaque requête vers l'expert valide le plus proche. | Réduction mesurée du RTT p95 de routage $\ge 40\,\%$ sur topologie multi-régions simulée/WAN. |
-| **`S31`** *(Neural Mesh)* | **`HM-S31-02`** | **Consensus Flou Localisé par Sous-Essaims (`15–20` Nœuds) :** Formaliser en Lean 4 et simuler l'accord local par grappes de 15 à 20 nœuds voisins pour valider les réponses multi-experts sans broadcast global. | Théorème Lean 4 (`0 sorry`) bornant la probabilité de collusion sous tirage géocryptographique + Complexité $\mathcal{O}(\log N)$. |
-| **`S32`** *(Lifelong & Éco)* | **`HM-S32-01`** | **Apprentissage Continu Sans Oubli (*Lifelong Decentralized Ratchet*) & Place de Marché Ouverte d'Experts :** Spécifier le protocole d'ingestion continue de nouveaux shards scientifiques (arXiv, Zenodo, JWST) avec tampon d'ancrage anti-oubli et publication automatique sur le registre ouvert d'experts. | Zéro régression sur les 6 domaines historiques ($\Delta \mathcal{L}_{\text{guard}} \le 0$) lors de l'ajout continu de nouveaux domaines. |
+| **`S29`** *(Latence WAN)* | **`HM-S29-01`** | **Protocole *Adaptive Multi-Split ML* sur Lien WAN Contraint (`LIVRÉ — VÉRIFIÉ E20`) :** Découpage dynamique *Prelude (Client `<= 1,5 Go`) $\leftrightarrow$ Core (Edge Local)* (`select_adaptive_multisplit_cut`) avec adaptation temps réel du point de coupe selon la bande passante montante (10 Mbps à 1 Gbps) et le RTT. | **Vérifié (`E20`)** : `88–99 %` de réduction du temps par pas WAN, `100 %` des profils `<= 1,536 MiB` VRAM (`artifacts/experiments/E20_international_launch_split_dct_report.json`). |
+| **`S29`** *(Latence WAN)* | **`HM-S29-02`** | **Compression *Top-1% Quantized DCT + EF21* ($\div 100$ Bande Passante) (`LIVRÉ — VÉRIFIÉ E20`) :** Passage de `Top-6.25%` à `Top-1%` en 2-bit avec rétroaction d'erreur `EF21` (`compress_top1pct_dct_ef21`) en RAM hôte (`0 MiB` VRAM). | **Vérifié (`E20`)** : Rapport de compression **`225.4x`** ($\ge 100\times$) avec dérive de conservation `EF21` $\le 3\times 10^{-8}$. |
+| **`S29`** *(Grille BOINC)* | **`HM-S29-03`** | **Intégration Client/Serveur BOINC Multi-Plan-Class & Pont Comptable HMT (`LIVRÉ`) :** Support de 3 classes de plans (`cpu_hivemind_solver`, `cuda_hivemind`, `cuda_hivemind_big`), validation Quorum-de-2, commandes `boinccmd`, et synchronisation MariaDB `reconcile_boinc_credits` $\leftrightarrow$ `/boinc/v1/ledger/sync`. | **Vérifié** : `117` tests unitaires et d'intégration BOINC passés (`tests/test_boinc_node_layer.py`, `tests/test_boinc_publish_app_version.py`). |
+| **`S30`** *(Sécurité ZKP)* | **`HM-S30-01`** | **Circuit *zk-SNARK / Halo2* pour Transitions DiLoCo Quantifiées (`ZK-OPoI v5`) *(En Étude)* :** Concevoir le circuit arithmétique en virgule fixe (`INT8`/`INT4`) prouvant l'intégrité d'un segment de mise à jour LoRA sans révéler les données locales. | Temps de vérification CPU $< 10\text{ ms}$, taille de preuve $< 32\text{ Ko}$, 100 % des falsifications rejetées. |
+| **`S30`** *(Sécurité ZKP)* | **`HM-S30-02`** | **Benchmark Comparatif `Multi-Krum + 10% Replay` vs `ZK-OPoI v5` *(En Étude)* :** Mesurer le point de croisement énergétique et CPU/GPU entre le rejeu statistique à 10 % et la preuve succincte lorsque l'essaim passe de $N=100$ à $N=10\,000$ nœuds. | Pré-enregistrement `E21` : courbe mesurée du coût de validation par workunit en fonction de $N$. |
+| **`S31`** *(Neural Mesh)* | **`HM-S31-01`** | **Table de Routage *Géocryptographique P2P* (*Neural Mesh Network*) *(En Étude)* :** Spécifier l'indexation conjointe `(Coordonnées Latence RTT, Empreinte Sémantique d'Expert, Hash SHA-256)` pour router chaque requête vers l'expert valide le plus proche. | Réduction mesurée du RTT p95 de routage $\ge 40\,\%$ sur topologie multi-régions simulée/WAN. |
+| **`S31`** *(Neural Mesh)* | **`HM-S31-02`** | **Consensus Flou Localisé par Sous-Essaims (`15–20` Nœuds) & Fanout 6 Régions (`LIVRÉ — VÉRIFIÉ E20`) :** Formalisation Lean 4 (`Théorèmes 159–161`) et regroupement de `10 000` nœuds feuilles en `558` sous-essaims de `18` nœuds et `318` Super-Peers (`31.45x` de réduction d'ingress central). | **Vérifié (`E20` + `161` théorèmes Lean 4 `0 sorry`)** + coalescence SQLite `250 ms` (`90 %` de réduction IOPS). |
+| **`S32`** *(Lifelong & Éco)* | **`HM-S32-01`** | **Apprentissage Continu Sans Oubli (*Lifelong Decentralized Ratchet*) & Place de Marché Ouverte d'Experts *(En Étude)* :** Spécifier le protocole d'ingestion continue de nouveaux shards scientifiques (arXiv, Zenodo, JWST) avec tampon d'ancrage anti-oubli et publication automatique sur le registre ouvert d'experts. | Zéro régression sur les 6 domaines historiques ($\Delta \mathcal{L}_{\text{guard}} \le 0$) lors de l'ajout continu de nouveaux domaines. |
+| **`S33`** *(Essaim 100k)* | **`HM-S33-01`** | **Fédération Mondiale Universités, BOINC & Science Citoyenne (`10 000 -> 100 000` Nœuds) *(Feuille de Route)* :** Passage à l'échelle vers `3 128` Super-Peers et `5 002` sous-essaims localisés sur 6 régions souveraines et 10 langues (`85+ PFLOPS`). | Concurrence coordinateur central $\le 80$, conformité `GDPR`/`CCPA`/`APPI`/`LGPD`/`POPIA` et charte `0.00 EUR / 0.00 USD`. |
 
 ---
 
-## 📚 4. Références Fondatrices Guidant les Saisons 29 à 32
+## 🌐 4. Feuille de Route Opérationnelle du Lancement International en 5 Vagues (`Waves 0–4`), Grille BOINC & Souveraineté Multi-Régions
+
+Le manifeste lisible par machine est exposé sur `GET /api/v1/launch/roadmap` et `GET /.well-known/hivemind-launch-roadmap.json` (généré par [`build_international_launch_roadmap()`](../src/hivemind/swarm/international_launch_scaler.py) dans [`artifacts/international_launch_roadmap.json`](../artifacts/international_launch_roadmap.json)) :
+
+1. **5 Vagues d'Expansion Internationale (`Oct 29, 2026` $\to$ `S33 / 2027`) :**
+   * **`WAVE-0` (`29–31 oct. 2026`, `150` nœuds, `0.65 PFLOPS`) :** Verrouillage des 3 moteurs Nocturnal Image-MoE, validation `E20` et mise en service des 3 classes de plans BOINC (`VERIFIED_READY`).
+   * **`WAVE-1` (`Dimanche 1er nov. 2026`, `1 200` nœuds, `1.80 PFLOPS`) :** Lancement *Producer-First* (`80 %` producteurs/prosumers sur `r/BOINC`, `r/homelab`, `r/gpumining`, pont CrowdGPT `100` nœuds `@Vxtzq`) pour constituer un matelas d'offre GPU avant l'arrivée des consommateurs.
+   * **`WAVE-2` (`Lun. 2 – Jeu. 5 nov. 2026`, `4 500` nœuds, `4.63 PFLOPS`) :** Vague constructeurs & prosumers (`r/LocalLLaMA`, `r/MachineLearning`, `r/SelfHosted`) soutenue par la mobilité forte `AMCP v1.5` (`replicate()`, `federateWith()`) et le streaming PCIe `LayerStoRm`.
+   * **`WAVE-3` (`Ven. 6 – Dim. 8 nov. 2026`, `10 000` nœuds, `11.31 PFLOPS`) :** Ouverture mondiale grand public en **10 langues** (`en`, `fr`, `es`, `de`, `zh`, `pt`, `ja`, `ko`, `ar`, `hi`), `Show HN`, science citoyenne exoplanètes et coalescence SQLite `250 ms`.
+   * **`WAVE-4` (`S30–S33`, `100 000` nœuds, `85.0 PFLOPS`) :** Preuves `ZK-OPoI v5` (`zk-SNARKs`), routage géocryptographique P2P, *Lifelong Ratchet* et fédération académique internationale.
+
+2. **Matrice de Conformité Réglementaire & Souveraineté des Données (6 Régions) :**
+   * **Zéro transfert de données personnelles (`GDPR`, `CCPA/CPRA`, `APPI`, `LGPD`, `POPIA`) :** Les données brutes restent strictement locales ; seuls les deltas quantifiés `Top-1% DCT` et les reçus Merkle `SHA-256` traversent le WAN.
+   * **Exemption Non-Monétaire (`MiCA` / `SEC`, `0.00 EUR / 0.00 USD`) :** Les crédits `HMT` et les *Cobblestones* BOINC sont exclusivement des unités de réciprocité de calcul scientifique (modèle SETI@home / BOINC).
+
+---
+
+## 📚 5. Références Fondatrices Guidant les Saisons 29 à 33
 
 1. **Multi-Split ML, DHT & Entraînement Collaboratif sur Internet :**
    * Max Ryabinin & Anton Gusev, *Towards Crowdsourced Training of Large Neural Networks using Decentralized Mixture-of-Experts* (`Hivemind`, NeurIPS 2020, [`arXiv:2002.04013`](https://arxiv.org/abs/2002.04013)).

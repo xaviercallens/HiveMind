@@ -14,8 +14,10 @@ from hivemind.swarm.international_launch_scaler import (
     CLIENT_PRELUDE_MAX_VRAM_MIB,
     GLOBAL_LAUNCH_REGIONS,
     OPENROUTER_MAX_CONCURRENCY,
+    SUPPORTED_LAUNCH_LANGUAGES,
     TESLA_T4_MIN_FREE_VRAM_MIB,
     build_international_launch_calendar,
+    build_international_launch_roadmap,
     coalesce_ledger_settlement_batch,
     compress_top1pct_dct_ef21,
     compute_hierarchical_fanout_plan,
@@ -25,6 +27,7 @@ from hivemind.swarm.international_launch_scaler import (
     query_local_tesla_t4_vram_guard,
     route_follow_the_sun_workload,
     select_adaptive_multisplit_cut,
+    select_boinc_plan_class_for_participant,
 )
 
 
@@ -130,13 +133,29 @@ def test_follow_the_sun_and_international_launch_calendar_human_and_agent() -> N
     cal = build_international_launch_calendar()
     assert cal["event_id"] == "HIVEMIND-INTL-LAUNCH-WEEKEND-2026-10-30"
     assert cal["non_monetary_charter"]["financial_value_usd_eur"] == 0.0
-    for lang in ("en", "fr", "es", "zh", "pt", "ja"):
+    assert len(SUPPORTED_LAUNCH_LANGUAGES) == 10
+    for lang in SUPPORTED_LAUNCH_LANGUAGES:
         assert lang in cal["multilingual_human_announcements"]
+    assert len(cal["boinc_global_plan_classes"]) == 3
     assert len(cal["schedule_phases"]) == 4
     assert len(cal["grand_challenges"]) == 4
     assert "/.well-known/hivemind-launch-calendar.json" in (
         cal["agent_a2a_mcp_protocol"]["discovery_endpoints"]["well_known_manifest"]
     )
+    assert "/api/v1/launch/roadmap" in (
+        cal["agent_a2a_mcp_protocol"]["discovery_endpoints"]["roadmap_json"]
+    )
+
+    # Verify BOINC plan-class mapping across CPU, 8GB Consumer GPU, and 24GB Big GPU
+    cpu_boinc = select_boinc_plan_class_for_participant(gpu_vendor="cpu", vram_mib=0.0)
+    assert cpu_boinc["recommended_plan_class"] == "cpu_hivemind_solver"
+    assert cpu_boinc["quorum_replication"]["min_quorum"] == 2
+
+    mid_boinc = select_boinc_plan_class_for_participant(gpu_vendor="nvidia", vram_mib=8192.0)
+    assert mid_boinc["recommended_plan_class"] == "cuda_hivemind"
+
+    big_boinc = select_boinc_plan_class_for_participant(gpu_vendor="nvidia", vram_mib=24576.0)
+    assert big_boinc["recommended_plan_class"] == "cuda_hivemind_big"
 
     # Enroll a Turing (sm_75 -> pre-Ampere FP32) human gamer and an Ada (sm_89 -> BF16) autonomous agent
     human_rec = enroll_launch_participant(
@@ -145,12 +164,14 @@ def test_follow_the_sun_and_international_launch_calendar_human_and_agent() -> N
         region_id="eu-west",
         compute_capability=(7, 5),
         vram_mib=8192.0,
-        preferred_lang="fr",
+        preferred_lang="de",
     )
     assert human_rec["participant_type"] == "human"
+    assert human_rec["preferred_language"] == "de"
     assert human_rec["precision_cohort"]["is_pre_ampere_fp32"] is True
     assert human_rec["precision_cohort"]["enforced_dtype"] == "fp32"
     assert human_rec["adaptive_multisplit_plan"]["within_1500mb_background_ceiling"] is True
+    assert human_rec["boinc_integration_plan"]["recommended_plan_class"] == "cuda_hivemind"
 
     agent_rec = enroll_launch_participant(
         handle="agent://ruche/scout-bee-01",
@@ -158,11 +179,38 @@ def test_follow_the_sun_and_international_launch_calendar_human_and_agent() -> N
         region_id="apac-east",
         compute_capability=(8, 9),
         vram_mib=1536.0,
-        preferred_lang="ja",
+        preferred_lang="ko",
     )
     assert agent_rec["participant_type"] == "agent"
+    assert agent_rec["preferred_language"] == "ko"
     assert agent_rec["precision_cohort"]["is_pre_ampere_fp32"] is False
     assert agent_rec["precision_cohort"]["enforced_dtype"] == "bf16"
+
+
+def test_five_wave_international_launch_roadmap_and_compliance_matrix() -> None:
+    """Verify the 5-Wave International Launch Master Roadmap (S29-S33) and 6-region privacy/non-monetary compliance."""
+    roadmap = build_international_launch_roadmap()
+    assert roadmap["roadmap_id"] == "HIVEMIND-INTL-MASTER-ROADMAP-S29-S33"
+    assert roadmap["non_monetary_charter"]["financial_value_usd_eur"] == 0.0
+    assert len(roadmap["supported_languages"]) == 10
+    assert len(roadmap["waves"]) == 5
+    assert [w["wave_id"] for w in roadmap["waves"]] == [
+        "WAVE-0-PRELAUNCH-ENGINEERING-AND-NOCTURNAL-LOCK",
+        "WAVE-1-SUNDAY-PRODUCER-FIRST-IGNITION",
+        "WAVE-2-PROSUMER-AND-DEVELOPER-MIX-EXPANSION",
+        "WAVE-3-GLOBAL-MULTILINGUAL-CONSUMER-AND-CITIZEN-SCIENCE",
+        "WAVE-4-NEXTGEN-ZK-GEOMESH-AND-PUBLIC-AI-COMMONS",
+    ]
+    assert all(w["go_no_go_gate"]["gate_passed"] is True for w in roadmap["waves"])
+    assert roadmap["boinc_and_amcp_convergence"]["plan_classes"] == [
+        "cpu_hivemind_solver",
+        "cuda_hivemind",
+        "cuda_hivemind_big",
+    ]
+    assert len(roadmap["regional_sovereignty_and_compliance"]) == 6
+    assert all(r["financial_value_eur_usd"] == 0.0 for r in roadmap["regional_sovereignty_and_compliance"])
+    assert roadmap["scalability_milestones"]["wave3_10k_leaf_plan"]["total_leaf_nodes"] == 10_000
+    assert roadmap["scalability_milestones"]["wave4_100k_leaf_plan"]["total_leaf_nodes"] == 100_000
 
 
 def test_nocturnal_image_moe_evolution_monitor_and_dashboard_routes(tmp_path: Path) -> None:
@@ -192,6 +240,15 @@ def test_nocturnal_image_moe_evolution_monitor_and_dashboard_routes(tmp_path: Pa
     r_wk = client.get("/.well-known/hivemind-launch-calendar.json")
     assert r_wk.status_code == 200
     assert len(r_wk.json()["grand_challenges"]) == 4
+
+    r_rm = client.get("/api/v1/launch/roadmap")
+    assert r_rm.status_code == 200
+    assert r_rm.json()["roadmap_id"] == "HIVEMIND-INTL-MASTER-ROADMAP-S29-S33"
+    assert len(r_rm.json()["waves"]) == 5
+
+    r_wk_rm = client.get("/.well-known/hivemind-launch-roadmap.json")
+    assert r_wk_rm.status_code == 200
+    assert len(r_wk_rm.json()["supported_languages"]) == 10
 
     r_enr = client.post(
         "/api/v1/launch/enroll",

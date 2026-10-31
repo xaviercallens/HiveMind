@@ -48,6 +48,12 @@ REPLACED_PATHS = {
     "/rejoindre",
     "/community",
     "/boinc",
+    "/benchmarks",
+    "/comparatif",
+    "/life-as-a-bee",
+    "/night-moe",
+    "/api/v1/night-moe",
+    "/scripts/{script_name}",
     "/api/v1/community/hub",
     "/api/v1/community/boinc-sync",
 }
@@ -464,38 +470,6 @@ def download_onboarding_script(script_name: str) -> Response:
                 headers={"Content-Disposition": f'inline; filename="{script_name}"'},
             )
     return JSONResponse(status_code=404, content={"detail": "Script file not present on server"})
-
-
-
-
-@app.get("/game")
-@app.get("/game.html")
-@app.get("/exoplanet-hunter")
-@app.get("/cockpit-v46")
-def redirect_or_serve_playable_game() -> Response:
-    return RedirectResponse("https://xaviercallens.github.io/HiveMindatHome.github.io/game.html", status_code=307)
-
-
-@app.get("/webgpu")
-@app.get("/webgpu.html")
-def redirect_or_serve_webgpu_game() -> Response:
-    return RedirectResponse(f"{ROUTER}/webgpu", status_code=307)
-
-
-@app.get("/download/steam-fat-client")
-def redirect_download_steam_exe() -> RedirectResponse:
-    return RedirectResponse(
-        "https://github.com/xaviercallens/HiveMind/releases/download/v2.12.0/HiveMind_Exoplanet_Hunter.exe",
-        status_code=307,
-    )
-
-
-@app.get("/download/steam-package-zip")
-def redirect_download_steam_zip() -> RedirectResponse:
-    return RedirectResponse(
-        "https://github.com/xaviercallens/HiveMind/releases/download/v2.12.0/HiveMind_Astrophysics_Exoplanet_Hunter_v2.11.0_Steam_Win64.zip",
-        status_code=307,
-    )
 
 
 if __name__ == "__main__":

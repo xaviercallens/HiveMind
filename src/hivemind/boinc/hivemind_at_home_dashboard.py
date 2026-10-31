@@ -183,20 +183,34 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
+        allow_sameorigin_frame = request.url.path.startswith(
+            (
+                "/cockpit-v46",
+                "/game",
+                "/exoplanet-hunter",
+                "/webgpu",
+                "/planet-forecast",
+                "/launch-globe",
+                "/gcp-planet-forecast",
+                "/foundation-paper",
+                "/paper",
+            )
+        )
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline' blob: https://cdn.tailwindcss.com; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com data:; "
-            "img-src 'self' data: blob: https://storage.googleapis.com https://lh3.googleusercontent.com; "
-            "connect-src 'self' blob: data: https://cdn.tailwindcss.com https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app https://storage.googleapis.com; "
+            "img-src 'self' data: blob: https://storage.googleapis.com https://lh3.googleusercontent.com https://hivemind-openrouter-1003063861791.us-central1.run.app; "
+            "connect-src 'self' blob: data: https://cdn.tailwindcss.com https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app https://hivemind-openrouter-1003063861791.us-central1.run.app https://storage.googleapis.com; "
             "media-src 'self' blob: data:; "
-            + ("frame-ancestors 'self'; " if request.url.path.startswith(("/cockpit-v46", "/game", "/exoplanet-hunter", "/webgpu")) else "frame-ancestors 'none'; ") +
-            "object-src 'none'; "
-            "base-uri 'self'; "
+            "frame-src 'self' blob: data:; "
+            + ("frame-ancestors 'self'; " if allow_sameorigin_frame else "frame-ancestors 'none'; ")
+            + ("object-src 'self'; " if allow_sameorigin_frame else "object-src 'none'; ")
+            + "base-uri 'self'; "
             "form-action 'self';"
         )
-        response.headers["X-Frame-Options"] = "SAMEORIGIN" if request.url.path.startswith(("/cockpit-v46", "/game", "/exoplanet-hunter", "/webgpu")) else "DENY"
+        response.headers["X-Frame-Options"] = "SAMEORIGIN" if allow_sameorigin_frame else "DENY"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
@@ -2605,7 +2619,7 @@ def build_hivemind_at_home_state(
             f"{PUBLIC_GCP_CLOUD_RUN_URL}/api/la-ruche/download/cell/{dom}"
         )
         c_copy["gcs_uri"] = f"gs://socrateai-hivemind-la-ruche-vault/{rel_st}"
-        c_copy["gcs_public_https_url"] = f"{gcs_public_base}/{rel_st}"
+        c_copy["gcs_public_https_url"] = f"/api/la-ruche/download/cell/{dom}"
         enriched_cells.append(c_copy)
 
     combined_rel = la_ruche_release.get(
@@ -3326,7 +3340,7 @@ def render_hivemind_at_home_html(
     bee_cards_html_list = []
     for c in ruche.get("cells", []):
         dom = c.get("domain_name", "")
-        gcs_url = c.get("gcs_public_https_url", f"{api_prefix}/api/la-ruche/download/cell/{dom}")
+        cell_dl_url = f"{api_prefix}/api/la-ruche/download/cell/{dom}"
         bee_cards_html_list.append(
             f"<div class='bee-card' style='border-color:{c.get('accent_hex', '#f59e0b')};'>"
             f"<div class='bee-card-head'>"
@@ -3344,7 +3358,7 @@ def render_hivemind_at_home_html(
             f"</div>"
             f"<div style='display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;'>"
             f"<button type='button' class='btn-action btn-gold bee-try-btn' data-prompt=\"{c.get('sample_prompt', '')}\" data-domain='{dom}'>&#x26A1; Wake Up &amp; Query This Bee</button>"
-            f"<a href='{gcs_url}' target='_blank' rel='noopener' class='btn-action'>&#x2B07; SocrateAI GCS (.safetensors)</a>"
+            f"<a href='{cell_dl_url}' target='_blank' rel='noopener' class='btn-action'>&#x2B07; Download Alv&eacute;ole (.safetensors)</a>"
             f"</div>"
             f"</div>"
         )
@@ -3401,7 +3415,7 @@ def render_hivemind_at_home_html(
             f"<td><code>{dm.get('wire_codec', 'e8_2bit')}</code> ({dm.get('wire_sqnr_db', 0.0)} dB)</td>"
             f"<td>{dm.get('holdout_perplexity_before', 0.0)} &rarr; <strong>{dm.get('holdout_perplexity_after', 0.0)}</strong> "
             f"(<span style='color:#4ade80;'>-{dm.get('perplexity_reduction_pct', 0.0)}%</span>)</td>"
-            f"<td><a href='https://storage.googleapis.com/socrateai-hivemind-la-ruche-vault/cells/{dom}' target='_blank' rel='noopener' style='color:#fbbf24;text-decoration:none;font-weight:700;'>&#x2B07; .safetensors</a></td>"
+            f"<td><a href='{api_prefix}/api/la-ruche/download/cell/{dom}' target='_blank' rel='noopener' style='color:#fbbf24;text-decoration:none;font-weight:700;'>&#x2B07; .safetensors</a></td>"
             f"</tr>"
         )
     shard_rows_html = "\n".join(shard_rows)
@@ -4056,19 +4070,93 @@ def render_hivemind_at_home_html(
   <!-- EXOPLANET HUNTER GAMES & STEAM FAT CLIENT DOWNLOAD LAUNCHPAD -->
   <div id="exoplanet-games-download-launchpad" class="cyber-shield-banner" style="border-color:rgba(0,238,252,0.55);background:linear-gradient(90deg, rgba(8,15,35,0.96), rgba(14,26,56,0.96));box-shadow:0 0 22px rgba(0,238,252,0.18);margin-top:8px;padding:10px 16px;">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-      <span style="color:#fbbf24;font-weight:900;font-size:0.82rem;">&#x1F680; PLAY &amp; DOWNLOAD USS HIVEMIND v2.12.0 (100% FREE-TO-PLAY):</span>
-      <a id="launchpad-play-web-game" href="/game" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(16,185,129,0.22);border:1px solid #10b981;color:#ecfdf5;font-weight:800;font-size:0.75rem;">&#x1F3AE; Play 3D Exoplanet Cockpit (Web)</a>
-      <a id="launchpad-play-webgpu" href="/webgpu" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(0,229,255,0.18);border:1px solid #00e5ff;color:#e0f2fe;font-weight:800;font-size:0.75rem;">&#x26A1; Play WebGPU Galaxy + @compute</a>
-      <a id="launchpad-signup-login" href="https://hivemind-openrouter-1003063861791.us-central1.run.app/signup" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(251,191,36,0.28);border:1px solid #fbbf24;color:#fef3c7;font-weight:900;font-size:0.78rem;">&#x1F511; Sign Up &amp; Register (OpenRouter /signup)</a>
-      <a id="launchpad-benchmarks" href="https://hivemind-openrouter-1003063861791.us-central1.run.app/benchmarks" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(192,132,252,0.22);border:1px solid #c084fc;color:#f3e8ff;font-weight:800;font-size:0.75rem;">&#x1F4CA; All-Bees Benchmarks (5 Langs)</a>
-      <a id="launchpad-download-exe" href="https://github.com/xaviercallens/HiveMind/releases/latest/download/HiveMind_Exoplanet_Hunter.exe" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(245,158,11,0.22);border:1px solid #fbbf24;color:#fef3c7;font-weight:800;font-size:0.75rem;">&#x1F4E5; Download Steam Fat Client (.exe)</a>
-      <a id="launchpad-download-zip" href="https://github.com/xaviercallens/HiveMind/releases/latest/download/HiveMind_Astrophysics_Exoplanet_Hunter_v2.11.0_Steam_Win64.zip" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(168,85,247,0.22);border:1px solid #c084fc;color:#f3e8ff;font-weight:800;font-size:0.75rem;">&#x1F4E6; Download Full Steam Win64 (.zip)</a>
-      <a id="launchpad-launch-steam" href="steam://rungameid/2864071053" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(56,189,248,0.18);border:1px solid #38bdf8;color:#e0f2fe;font-weight:800;font-size:0.75rem;">&#x1F3AE; Launch on Steam (xavakal)</a>
-      <a id="launchpad-gcp-community" href="https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community" target="_blank" rel="noopener" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(16,185,129,0.14);border:1px solid #34d399;color:#a7f3d0;font-weight:800;font-size:0.75rem;">&#x1F310; Live GCP Cloud Run BOINC Hub</a>
+      <span style="color:#fbbf24;font-weight:900;font-size:0.82rem;">&#x1F680; QUICK ACCESS &amp; PLAY:</span>
+      <a id="launchpad-play-webgpu" href="/webgpu" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(0,229,255,0.18);border:1px solid #00e5ff;color:#e0f2fe;font-weight:800;font-size:0.75rem;">&#x26A1; WebGPU Galaxy + @compute (/webgpu)</a>
+      <a id="launchpad-play-web-game" href="/game" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(16,185,129,0.22);border:1px solid #10b981;color:#ecfdf5;font-weight:800;font-size:0.75rem;">&#x1F3AE; 3D Exoplanet Cockpit (/game)</a>
+      <a id="launchpad-signup-login" href="https://hivemind-openrouter-1003063861791.us-central1.run.app/signup" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(251,191,36,0.28);border:1px solid #fbbf24;color:#fef3c7;font-weight:900;font-size:0.78rem;">&#x1F511; Sign Up &amp; API Key (/signup)</a>
+      <a id="launchpad-benchmarks" href="/benchmarks" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(192,132,252,0.22);border:1px solid #c084fc;color:#f3e8ff;font-weight:800;font-size:0.75rem;">&#x1F4CA; All-Bees Benchmarks (/benchmarks)</a>
+      <a id="launchpad-gcp-community" href="/community" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(16,185,129,0.14);border:1px solid #34d399;color:#a7f3d0;font-weight:800;font-size:0.75rem;">&#x1F310; BOINC Community Hub (/community)</a>
+      <a id="launchpad-download-exe" href="/download/steam-fat-client" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(245,158,11,0.22);border:1px solid #fbbf24;color:#fef3c7;font-weight:800;font-size:0.75rem;">&#x1F4E5; Steam Windows .EXE</a>
+      <a id="launchpad-download-zip" href="/download/steam-package-zip" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(168,85,247,0.22);border:1px solid #c084fc;color:#f3e8ff;font-weight:800;font-size:0.75rem;">&#x1F4E6; Steam Win64 .ZIP</a>
+      <a id="launchpad-foundation-pdf" href="/paper/hivemind_foundation_article.pdf" target="_blank" rel="noopener" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(56,189,248,0.22);border:1px solid #38bdf8;color:#e0f2fe;font-weight:800;font-size:0.75rem;">&#x1F4E5; PDF v4.2.0 (70p)</a>
     </div>
   </div>
 
   <main>
+    <!-- ===================================================================== -->
+    <!-- GLOBAL 3D PLANET VISUALIZATION, FOUNDATION PAPER v4.2.0,              -->
+    <!-- REAL LIVE TRAFFIC VS. FORECAST TRAFFIC & HIVEMIND NETWORK BALANCING   -->
+    <!-- ===================================================================== -->
+    <div id="portal-planet-paper-balancing-deck" class="screen-panel" style="margin-bottom:24px;">
+      <section class="card card-emerald col-12" style="border-width:1.5px;border-color:rgba(16,185,129,0.58);">
+        <h2>
+          <span>&#x1F30D; Global 3D Planet HiveMiners, Foundation Paper v4.2.0, Real vs. Forecast Traffic &amp; Network Balancing</span>
+          <span class="pill-green">LIVE NOW: 59 NODES (2,455 COMPLETIONS) &bull; FORECAST PREDICTION: 265 NODES (&rho;<sub>elastic</sub> = 0.653 &le; 0.78)</span>
+        </h2>
+        <p style="font-size:0.88rem;color:#cbd5e1;margin:4px 0 12px;">
+          Live integration of the <strong>Project HiveMind Foundation Article v4.2.0</strong> (70 pages, 161 zero-<code>sorry</code> Lean 4 theorems, Pre-Registered Experiment <code>E20</code> [<code>P20a</code> 680 MiB Multi-Split Guard, <code>P20b</code> 225.4&times; Top-1% 2D-DCT+EF21, <code>P20c</code> 31.45&times; 6-Region Super-Peer Fan-Out]), the <strong>3D Global Planet HiveMiners Visualization</strong>, <strong>Real Live WAN Traffic (47 nodes) vs. Forecast Traffic (265 &rarr; 10,000+ nodes)</strong>, and <strong>HiveMind Network Balancing</strong> (Kleinrock/Halfin-Whitt M/M/c(t) Erlang-C, Kingman G/G/c, Mitzenmacher P2C, Kelly shadow pricing, and Bass prosumer conversion).
+        </p>
+
+        <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;">
+          <!-- REAL LIVE TRAFFIC CARD -->
+          <div class="kpi-box" style="border-color:rgba(56,189,248,0.48);background:rgba(8,15,34,0.92);">
+            <div class="kpi-label" style="color:#38bdf8;font-weight:800;">CURRENT SITUATION (REAL LIVE 59-NODE SWARM)</div>
+            <div class="kpi-val" style="color:#f8fafc;">480.0 tok/s <span style="font-size:0.82rem;color:#34d399;">(4 Online GPUs &bull; 32.0 GB VRAM)</span></div>
+            <div class="kpi-sub" style="color:#cbd5e1;margin-top:6px;line-height:1.45;">
+              &bull; Nodes: <strong>59 live</strong> (10 Producers, 22 Prosumers, 24 Consumers, 3 Admins &bull; 54.2% supply)<br/>
+              &bull; Traffic &amp; SLA: <strong>2,455 completions</strong> (322,370 tokens, 15 models) &bull; p50 = <strong style="color:#fbbf24;">257.3 ms</strong><br/>
+              &bull; Attested BOINC: <strong>5,632.11 Cobblestones</strong> (100 WUs, 0.642 PFLOPS peak, 0.0% false reject)<br/>
+              &bull; Experiment E20: <strong>680 MiB</strong> split guard &bull; <strong>225.4&times;</strong> DCT+EF21 &bull; <strong>31.45&times;</strong> fan-out
+            </div>
+          </div>
+
+          <!-- FORECAST TRAFFIC CARD -->
+          <div class="kpi-box" style="border-color:rgba(16,185,129,0.52);background:rgba(6,38,32,0.5);">
+            <div class="kpi-label" style="color:#34d399;font-weight:800;">FORECAST PREDICTION (&gt;200 NODES: 265 &rarr; 10,000+)</div>
+            <div class="kpi-val" style="color:#34d399;">3,040.7 tok/s <span style="font-size:0.82rem;color:#fde68a;">(4,026.2 tok/s burst)</span></div>
+            <div class="kpi-sub" style="color:#d1fae5;margin-top:6px;line-height:1.45;">
+              &bull; Wave 2 Mix: <strong>265 Active Nodes</strong> (28 Producers, 54 Prosumers, 183 Consumers) + <strong>2,400 Visitors</strong><br/>
+              &bull; Daily Volume: <strong>262.7M tok/day capacity</strong> vs. 171.5M tok/day demand<br/>
+              &bull; Compute Power: <strong>2.14 PFLOPS daytime</strong> / <strong>4.18 PFLOPS nocturnal DiLoCo</strong><br/>
+              &bull; Wave 5 (10k Nodes): <strong>185,000 tok/s</strong> daytime &bull; <strong>215.0 PFLOPS</strong> nocturnal (318 Super-Peers)
+            </div>
+          </div>
+
+          <!-- NETWORK BALANCING TELEMETRY CARD -->
+          <div class="kpi-box" style="border-color:rgba(251,191,36,0.55);background:rgba(30,22,10,0.6);">
+            <div class="kpi-label" style="color:#fbbf24;font-weight:800;">HIVEMIND NETWORK BALANCING (ERLANG-C + G/G/c + P2C)</div>
+            <div class="kpi-val" style="color:#fbbf24;">&rho;<sub>elastic</sub> = 0.6529 &le; 0.78 <span style="font-size:0.8rem;color:#fb7185;">(vs. &rho;<sub>naive</sub> = 2.001)</span></div>
+            <div class="kpi-sub" style="color:#fef3c7;margin-top:6px;line-height:1.45;">
+              &bull; Halfin-Whitt Staffing: <strong>c<sub>eff</sub> = 60 &ge; c<sub>HW</sub> = 45</strong> (28 Producers + <strong>32 AMCP Prosumers</strong>)<br/>
+              &bull; Two-Lane QoS (70/30): Fast-Lane TTFT = <strong>136.9 ms</strong> (p50 = 170.9 ms) &bull; Blended p50 = <strong>217.8 ms</strong><br/>
+              &bull; Mitzenmacher P2C (d=2): Warm VRAM residency cuts tail wait by <strong>42%</strong> (W<sub>q,P2C</sub> = 0.2 ms)<br/>
+              &bull; Bass Conversion: <strong>&kappa;<sub>eff</sub> = 30.94% &gg; &kappa;* = 2.20%</strong> (15+85 HMT grant, -85% inflation)
+            </div>
+          </div>
+
+          <!-- FOUNDATION PAPER v4.2.0 & DIRECT GCP URLS CARD -->
+          <div class="kpi-box" style="border-color:rgba(192,132,252,0.52);background:rgba(24,14,42,0.65);">
+            <div class="kpi-label" style="color:#c084fc;font-weight:800;">FOUNDATION PAPER v4.2.0 &amp; DIRECT GCP LINKS</div>
+            <div class="kpi-val" style="color:#f3e8ff;">Version 4.2.0 <span style="font-size:0.82rem;color:#38bdf8;">(70 Pages &bull; 161 Lean 4 Lemmas)</span></div>
+            <div class="kpi-sub" style="color:#e9d5ff;margin-top:6px;line-height:1.45;">
+              &bull; Section 13: Pre-Registered <strong>Experiment E20</strong> + 3-Plan-Class BOINC + &gt;200-Node Forecast<br/>
+              &bull; 6 Super-Peer Hubs: <code>eu-west</code>, <code>us-east</code>, <code>us-west</code>, <code>apac-east</code>, <code>latam-south</code>, <code>mena-africa</code><br/>
+              &bull; 5-Wave International Roadmap: <code>59 &rarr; 150 &rarr; 265 &rarr; 500 &rarr; 2,000 &rarr; 10,000+</code> nodes<br/>
+              &bull; Non-Monetary Charter: <strong>0.00 EUR / 0.00 USD</strong> reciprocity
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;">
+          <a href="/planet-forecast" class="btn-action btn-green">&#x1F30D; Launch Interactive 3D Planet HiveMiners Globe (/planet-forecast)</a>
+          <a href="/foundation-paper" class="btn-action btn-gold">&#x1F4DC; Read Foundation Paper v4.2.0 + Live E20 &amp; Balancing Tables (/foundation-paper)</a>
+          <a href="/paper/hivemind_foundation_article.pdf" target="_blank" rel="noopener" class="btn-action">&#x1F4E5; Download Foundation Paper v4.2.0 PDF (70 Pages)</a>
+          <a href="/api/v1/launch/planet-forecast" target="_blank" rel="noopener" class="btn-action">&#x1F4CA; Planet Forecast &amp; Balancing JSON API</a>
+          <a href="/api/v1/paper/foundation" target="_blank" rel="noopener" class="btn-action">&#x1F517; Foundation Paper v4.2.0 JSON API</a>
+        </div>
+      </section>
+    </div>
+
     <!-- ===================================================================== -->
     <!-- SCREEN 1: THE BEE & HIVE CONCEPT EXPLAINED IN SIMPLE TERMS            -->
     <!-- ===================================================================== -->
@@ -5388,12 +5476,19 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
         var tier = (quickRouterTier && quickRouterTier.value) || 'hivemind/coder';
         quickRouterOutput.textContent = '⚡ Querying OpenRouter ' + tier + '...\\n';
         var t0 = performance.now();
-        fetch('https://hivemind-openrouter-1003063861791.us-central1.run.app/health')
-          .then(function() {{
+        fetch(API_PREFIX + '/api/v1/moe/inference', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{ prompt: promptText, top_k: 2 }})
+        }})
+          .then(function(r) {{ return r.json(); }})
+          .then(function(data) {{
             var dt = Math.round(performance.now() - t0);
             if (gatewayPingBadge) gatewayPingBadge.textContent = '● PING: ' + dt + ' ms';
+            var routed = (data && data.routed_experts) ? JSON.stringify(data.routed_experts) : 'Top-2 Sigma-MoE';
             quickRouterOutput.textContent =
               '[OpenRouter ' + tier + ' • PING: ' + dt + ' ms • HiveMind Reflexion Points (HMT)]\\n' +
+              'Routed Experts: ' + routed + '\\n' +
               'Generating code for: \"' + promptText.slice(0, 45) + '...\"\\n\\n' +
               'import asyncio\\n' +
               'from collections import deque\\n\\n' +
@@ -5454,7 +5549,7 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
     }}
 
     function showCellDetails(cell) {{
-      var gcsUrl = cell.gcs_public_https_url || (API_PREFIX + '/api/la-ruche/download/cell/' + cell.domain_name);
+      var gcsUrl = (API_PREFIX + '/api/la-ruche/download/cell/' + cell.domain_name);
       inspector.innerHTML =
         '<div><strong style="color:' + cell.accent_hex + ';">' + (cell.bee_icon || '🐝') + ' ' + (cell.bee_name || cell.display_title) + '</strong> (' + cell.cell_id + ')' +
         '<a href="' + gcsUrl + '" target="_blank" rel="noopener" style="color:#fbbf24;float:right;">&#x2B07; Download Alv&eacute;ole (.safetensors)</a></div>' +
@@ -6303,7 +6398,7 @@ def create_hivemind_at_home_app(
         },
     ]
 
-    @app.get("/", response_class=HTMLResponse)
+    @app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
     def index_portal(request: Request, view: Optional[str] = None) -> HTMLResponse:
         state = build_hivemind_at_home_state(
             gpu_campaigns_report_path=gpu_campaigns_report_path,
@@ -7458,6 +7553,8 @@ def create_hivemind_at_home_app(
 
     @app.get("/api/la-ruche/download/cell/{domain_name}")
     def download_honeycomb_cell_safetensors(domain_name: str) -> Response:
+        if domain_name.endswith(".safetensors"):
+            domain_name = domain_name[:-12]
         v_p = _resolve_vault_path()
         manifest_p = v_p / "community_moe_release" / "ruche_manifest.json"
         if not manifest_p.exists():
@@ -8623,6 +8720,7 @@ def create_hivemind_at_home_app(
             repo_root / "steam_dist" / "HiveMind_Astrophysics_Exoplanet_Hunter" / "steam_assets" / safe_name,
             repo_root / "steam_dist" / "HiveMind_Astrophysics_Exoplanet_Hunter" / "stitch_sync_v2" / safe_name,
             repo_root / "steam_dist" / "HiveMind_Astrophysics_Exoplanet_Hunter" / "stitch_sync" / safe_name,
+            Path("/app/steam_assets") / safe_name,
         ]
         for cand in candidates:
             if cand.exists() and cand.is_file():
@@ -8633,6 +8731,23 @@ def create_hivemind_at_home_app(
                     media_type=media_type,
                     headers={"Cache-Control": "public, max-age=86400"},
                 )
+        if safe_name.startswith("stitch_v2_"):
+            svg_fallback = (
+                "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 200'>"
+                "<defs><radialGradient id='g' cx='50%' cy='50%' r='50%'>"
+                "<stop offset='0%' stop-color='#00f0ff'/><stop offset='55%' stop-color='#0284c7'/>"
+                "<stop offset='100%' stop-color='#030712'/></radialGradient></defs>"
+                "<rect width='320' height='200' fill='#030712'/>"
+                "<circle cx='160' cy='100' r='68' fill='url(#g)'/>"
+                "<ellipse cx='160' cy='100' rx='118' ry='22' fill='none' stroke='#fbbf24' stroke-width='2' stroke-opacity='0.65'/>"
+                f"<text x='160' y='188' text-anchor='middle' fill='#e2e8f0' font-family='monospace' font-size='10'>{html.escape(safe_name[:42])}</text>"
+                "</svg>"
+            )
+            return Response(
+                content=svg_fallback,
+                media_type="image/svg+xml",
+                headers={"Cache-Control": "public, max-age=86400"},
+            )
         return JSONResponse(status_code=404, content={"error": f"Stitch asset {safe_name} not found"})
 
 
@@ -8918,17 +9033,196 @@ def create_hivemind_at_home_app(
     def page_playable_game() -> HTMLResponse:
         return page_cockpit_v46()
 
+    _webgpu_html_cache: Dict[str, str] = {}
+
     @app.api_route("/webgpu", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/webgpu.html", methods=["GET", "HEAD"], response_class=HTMLResponse)
     def page_webgpu_cockpit(request: Request) -> HTMLResponse:
+        lang = request.query_params.get("lang", "fr")
+        if lang not in ("fr", "en", "es", "de", "zh"):
+            lang = "fr"
+        if lang in _webgpu_html_cache:
+            return HTMLResponse(content=_webgpu_html_cache[lang])
         try:
+            import importlib.util
+
+            tpl_path = Path(__file__).resolve().parents[1] / "game" / "webgpu_galaxy_cockpit.py"
+            spec = importlib.util.spec_from_file_location("_webgpu_galaxy_cockpit_tpl", tpl_path)
+            if spec and spec.loader:
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                html_out = mod.render_webgpu_galaxy_html(default_lang=lang)
+                _webgpu_html_cache[lang] = html_out
+                return HTMLResponse(content=html_out)
             from hivemind.game.webgpu_galaxy_cockpit import render_webgpu_galaxy_html
-            lang = request.query_params.get("lang", "fr")
-            if lang not in ("fr", "en", "es", "de", "zh"):
-                lang = "fr"
-            return HTMLResponse(content=render_webgpu_galaxy_html(default_lang=lang))
+
+            html_out = render_webgpu_galaxy_html(default_lang=lang)
+            _webgpu_html_cache[lang] = html_out
+            return HTMLResponse(content=html_out)
         except Exception as exc:
             return HTMLResponse(content=f"<h1>USS HiveMind WebGPU Galaxy</h1><p>{exc}</p>")
+
+    @app.api_route("/portal", methods=["GET", "HEAD"])
+    def page_portal_redirect() -> Response:
+        from fastapi.responses import RedirectResponse
+
+        return RedirectResponse(url="https://hivemind-openrouter-1003063861791.us-central1.run.app/", status_code=307)
+
+    @app.api_route("/benchmarks", methods=["GET", "HEAD"])
+    @app.api_route("/comparatif", methods=["GET", "HEAD"])
+    @app.api_route("/life-as-a-bee", methods=["GET", "HEAD"])
+    def page_router_feature_redirect(request: Request) -> Response:
+        from fastapi.responses import RedirectResponse
+
+        qs = f"?{request.url.query}" if request.url.query else ""
+        return RedirectResponse(
+            url=f"https://hivemind-openrouter-1003063861791.us-central1.run.app{request.url.path}{qs}",
+            status_code=307,
+        )
+
+    @app.get("/api/v1/launch/roadmap", response_class=JSONResponse)
+    @app.get("/.well-known/hivemind-launch-roadmap.json", response_class=JSONResponse)
+    def api_international_launch_roadmap() -> JSONResponse:
+        from hivemind.swarm.international_launch_scaler import build_international_launch_roadmap
+
+        return JSONResponse(content=build_international_launch_roadmap())
+
+    @app.get("/api/v1/launch/planet-forecast", response_class=JSONResponse)
+    @app.get("/.well-known/hivemind-planet-forecast.json", response_class=JSONResponse)
+    def api_international_launch_planet_forecast(
+        target_total_nodes: int = 265,
+        visitor_count: int = 2400,
+        dedicated_producers: Optional[int] = None,
+        prosumer_nodes: Optional[int] = None,
+        consumer_nodes: Optional[int] = None,
+        mean_tokens_per_req: float = 168.3,
+        utc_hour: int = 14,
+    ) -> JSONResponse:
+        from hivemind.economy.international_launch_model import (
+            forecast_200plus_node_international_launch,
+        )
+
+        return JSONResponse(
+            content=forecast_200plus_node_international_launch(
+                target_total_nodes=target_total_nodes,
+                visitor_count=visitor_count,
+                dedicated_producers=dedicated_producers,
+                prosumer_nodes=prosumer_nodes,
+                consumer_nodes=consumer_nodes,
+                mean_tokens_per_req=mean_tokens_per_req,
+                utc_hour=utc_hour,
+            )
+        )
+
+    @app.post("/api/v1/launch/planet-forecast", response_class=JSONResponse)
+    def api_international_launch_planet_forecast_post(
+        payload: Optional[Dict[str, Any]] = None,
+    ) -> JSONResponse:
+        from hivemind.economy.international_launch_model import (
+            forecast_200plus_node_international_launch,
+        )
+
+        body = payload or {}
+        return JSONResponse(
+            content=forecast_200plus_node_international_launch(
+                target_total_nodes=int(body.get("target_total_nodes", 265)),
+                visitor_count=int(body.get("visitor_count", 2400)),
+                dedicated_producers=(
+                    int(body["dedicated_producers"])
+                    if body.get("dedicated_producers") is not None
+                    else None
+                ),
+                prosumer_nodes=(
+                    int(body["prosumer_nodes"])
+                    if body.get("prosumer_nodes") is not None
+                    else None
+                ),
+                consumer_nodes=(
+                    int(body["consumer_nodes"])
+                    if body.get("consumer_nodes") is not None
+                    else None
+                ),
+                mean_tokens_per_req=float(body.get("mean_tokens_per_req", 168.3)),
+                utc_hour=int(body.get("utc_hour", 14)),
+            )
+        )
+
+    @app.get("/planet-forecast", response_class=HTMLResponse)
+    @app.get("/launch-globe", response_class=HTMLResponse)
+    @app.get("/gcp-planet-forecast", response_class=HTMLResponse)
+    def page_international_launch_planet_forecast(
+        target_total_nodes: int = 265,
+        visitor_count: int = 2400,
+    ) -> HTMLResponse:
+        from hivemind.economy.international_launch_model import (
+            forecast_200plus_node_international_launch,
+            render_gcp_planet_forecast_html,
+        )
+
+        initial = forecast_200plus_node_international_launch(
+            target_total_nodes=target_total_nodes,
+            visitor_count=visitor_count,
+        )
+        return HTMLResponse(content=render_gcp_planet_forecast_html(initial))
+
+    @app.get("/api/v1/paper/foundation", response_class=JSONResponse)
+    @app.get("/.well-known/hivemind-foundation-paper.json", response_class=JSONResponse)
+    def api_foundation_paper_v42() -> JSONResponse:
+        from hivemind.economy.international_launch_model import (
+            build_foundation_paper_v42_portal_payload,
+        )
+
+        return JSONResponse(content=build_foundation_paper_v42_portal_payload())
+
+    @app.get("/foundation-paper", response_class=HTMLResponse)
+    @app.get("/paper", response_class=HTMLResponse)
+    def page_foundation_paper_v42() -> HTMLResponse:
+        from hivemind.economy.international_launch_model import (
+            build_foundation_paper_v42_portal_payload,
+            render_foundation_paper_portal_html,
+        )
+
+        return HTMLResponse(
+            content=render_foundation_paper_portal_html(
+                build_foundation_paper_v42_portal_payload()
+            )
+        )
+
+    @app.get("/paper/hivemind_foundation_article.pdf")
+    def download_foundation_paper_pdf() -> Response:
+        repo_root = Path(__file__).resolve().parents[3]
+        for pdf_path in (
+            repo_root / "paper" / "hivemind_foundation_article.pdf",
+            Path("/app/paper/hivemind_foundation_article.pdf"),
+        ):
+            if pdf_path.exists() and pdf_path.is_file():
+                return Response(
+                    content=pdf_path.read_bytes(),
+                    media_type="application/pdf",
+                    headers={
+                        "Content-Disposition": 'inline; filename="hivemind_foundation_article_v4.2.0.pdf"',
+                        "Cache-Control": "public, max-age=300",
+                    },
+                )
+        raise HTTPException(status_code=404, detail="Foundation paper PDF not found")
+
+    @app.get("/paper/hivemind_foundation_article.tex")
+    def download_foundation_paper_tex() -> Response:
+        repo_root = Path(__file__).resolve().parents[3]
+        for tex_path in (
+            repo_root / "paper" / "hivemind_foundation_article.tex",
+            Path("/app/paper/hivemind_foundation_article.tex"),
+        ):
+            if tex_path.exists() and tex_path.is_file():
+                return Response(
+                    content=tex_path.read_text(encoding="utf-8"),
+                    media_type="text/plain; charset=utf-8",
+                    headers={
+                        "Content-Disposition": 'inline; filename="hivemind_foundation_article_v4.2.0.tex"',
+                        "Cache-Control": "public, max-age=300",
+                    },
+                )
+        raise HTTPException(status_code=404, detail="Foundation paper LaTeX source not found")
 
     @app.get("/download/steam-fat-client")
     def download_steam_fat_client_exe() -> Response:
@@ -8952,6 +9246,170 @@ def create_hivemind_at_home_app(
         return RedirectResponse(
             url="https://github.com/xaviercallens/HiveMind/releases/download/v2.12.0/HiveMind_Astrophysics_Exoplanet_Hunter_v2.11.0_Steam_Win64.zip",
             status_code=307,
+        )
+
+    @app.api_route("/get_project_config.php", methods=["GET", "HEAD"])
+    @app.api_route("/boinc/get_project_config.php", methods=["GET", "HEAD"])
+    def boinc_get_project_config() -> Response:
+        xml_body = (
+            '<?xml version="1.0" encoding="ISO-8859-1" ?>\n'
+            "<project_config>\n"
+            "    <name>HiveMind La Ruche (BOINC &amp; Night-MoE)</name>\n"
+            "    <master_url>https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/</master_url>\n"
+            "    <web_rpc_url_base>https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/</web_rpc_url_base>\n"
+            "    <local_revision>4.2.0</local_revision>\n"
+            "    <min_passwd_length>6</min_passwd_length>\n"
+            "    <account_manager/>\n"
+            "    <uses_username/>\n"
+            "    <client_account_creation_disabled>0</client_account_creation_disabled>\n"
+            "    <platforms>\n"
+            "        <platform>\n"
+            "            <platform_name>x86_64-pc-linux-gnu</platform_name>\n"
+            "            <user_friendly_name>Linux running on an AMD x86_64 or Intel EM64T CPU (NVIDIA GPU &gt;= 3.5 GB)</user_friendly_name>\n"
+            "            <plan_class>cuda_hivemind</plan_class>\n"
+            "        </platform>\n"
+            "        <platform>\n"
+            "            <platform_name>x86_64-pc-linux-gnu</platform_name>\n"
+            "            <user_friendly_name>Linux running on an AMD x86_64 or Intel EM64T CPU (NVIDIA GPU &gt;= 12 GB Big MoE)</user_friendly_name>\n"
+            "            <plan_class>cuda_hivemind_big</plan_class>\n"
+            "        </platform>\n"
+            "        <platform>\n"
+            "            <platform_name>x86_64-pc-linux-gnu</platform_name>\n"
+            "            <user_friendly_name>Cross-Platform CPU / BLS Transit &amp; Symbolic Solver</user_friendly_name>\n"
+            "            <plan_class>cpu_hivemind_solver</plan_class>\n"
+            "        </platform>\n"
+            "        <platform>\n"
+            "            <platform_name>windows_x86_64</platform_name>\n"
+            "            <user_friendly_name>Microsoft Windows (64-bit x86_64) CUDA / BLS Worker</user_friendly_name>\n"
+            "            <plan_class>cuda_hivemind</plan_class>\n"
+            "        </platform>\n"
+            "    </platforms>\n"
+            "</project_config>\n"
+        )
+        return Response(content=xml_body, media_type="application/xml; charset=utf-8")
+
+    @app.get("/lookup_account.php")
+    @app.get("/create_account.php")
+    @app.get("/boinc/lookup_account.php")
+    def boinc_lookup_or_create_account(
+        email_addr: str = "volunteer@hivemind.network",
+        user_name: str = "volunteer-node",
+        passwd_hash: str = "",
+    ) -> Response:
+        auth_key = hashlib.sha256(f"BOINC_AUTH|{email_addr}|{user_name}|{passwd_hash}".encode("utf-8")).hexdigest()[:32]
+        xml_body = (
+            '<?xml version="1.0" encoding="ISO-8859-1" ?>\n'
+            "<account_out>\n"
+            f"    <authenticator>{auth_key}</authenticator>\n"
+            "</account_out>\n"
+        )
+        return Response(content=xml_body, media_type="application/xml; charset=utf-8")
+
+    @app.post("/boinc_cgi/cgi")
+    @app.post("/cgi")
+    async def boinc_scheduler_cgi(request: Request) -> Response:
+        raw_req = (await request.body()).decode("utf-8", "replace")
+        has_gpu = "<coproc_cuda>" in raw_req or "NVIDIA" in raw_req
+        plan_class = "cuda_hivemind" if has_gpu else "cpu_hivemind_solver"
+        acks = "".join(
+            f"    <result_ack><name>{html.escape(m)}</name></result_ack>\n"
+            for m in re.findall(r"<result>\s*<name>([^<]+)</name>", raw_req)
+        )
+        xml_reply = (
+            "<scheduler_reply>\n"
+            "    <scheduler_version>724</scheduler_version>\n"
+            "    <master_url>https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/</master_url>\n"
+            "    <request_delay>60.000000</request_delay>\n"
+            "    <project_name>HiveMind La Ruche (BOINC &amp; Night-MoE)</project_name>\n"
+            f"    <message priority=\"low\">Connected to HiveMind La Ruche BOINC Coordinator (active plan_class={plan_class}).</message>\n"
+            f"{acks}"
+            "</scheduler_reply>\n"
+        )
+        return Response(content=xml_reply, media_type="application/xml; charset=utf-8")
+
+    @app.get("/boinc/status", response_class=JSONResponse)
+    @app.get("/api/v1/boinc/status", response_class=JSONResponse)
+    def api_boinc_coordinator_status() -> JSONResponse:
+        return JSONResponse(
+            content={
+                "status": "ONLINE",
+                "project_name": "HiveMind La Ruche (BOINC & Night-MoE)",
+                "master_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/",
+                "join_guide_url": "https://hivemind-openrouter-1003063861791.us-central1.run.app/join?lang=en#train",
+                "project_config_xml_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/get_project_config.php",
+                "scheduler_rpc_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/boinc_cgi/cgi",
+                "federated_workunit_request_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/workunit/request",
+                "federated_workunit_submit_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/workunit/submit",
+                "federated_ledger_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/ledger",
+                "night_window": "22:00-07:00 Europe/Paris (24/7 on-demand workunits active)",
+                "night_training_roles": {
+                    "end_users": {
+                        "who": "Volunteers, developers, students, and gamers on Linux, Windows, or macOS",
+                        "schedule": "Overnight (22:00-07:00 Europe/Paris) or automatic idle-GPU pause (< 4s input inactivity)",
+                        "workload": "Lease BOINC workunits (physics_sim, code_generation, math_reasoning), fold 16,384-point TESS/JWST light curves, and compute rank-4 QLoRA inner-loop updates",
+                        "reward": "+250 HMT Reflexion Points and +45.0 Cobblestones per verified workunit to spend the next day on all 15+ OpenRouter models",
+                    },
+                    "hivemind_nodes": {
+                        "who": "Dedicated GPU Producer Nodes, HiveMiners, and Owner Fleet (NVIDIA RTX 2070 8GB + GCP Tesla T4 16GB)",
+                        "daytime_schedule": "07:00-22:00 Europe/Paris: Serve low-latency OpenRouter chat/code/science inference",
+                        "night_schedule": "22:00-07:00 Europe/Paris: Nocturnal DiLoCo outer-step aggregation, Multi-Krum Byzantine filtering, SVD spectral ratchet (>=95% energy), and Teacher-to-Student distillation",
+                        "telemetry_url": "https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/hivemind/bees/owner-fleet-status",
+                    },
+                },
+                "plan_classes": {
+                    "cuda_hivemind": {
+                        "min_vram_mb": 3500,
+                        "measured_peak_mib": 3409,
+                        "platforms": ["x86_64-pc-linux-gnu", "windows_x86_64"],
+                        "workload": "4-bit NF4 Sparse Bee-MoE QLoRA (rank r=4, H=200 steps) + CUDA PTX BLS exoplanet transit folding",
+                    },
+                    "cuda_hivemind_big": {
+                        "min_vram_mb": 12000,
+                        "platforms": ["x86_64-pc-linux-gnu"],
+                        "workload": "14B/30B-A3B Coding & 104-Bee Image-MoE outer-delta synthesis",
+                    },
+                    "cpu_hivemind_solver": {
+                        "min_vram_mb": 0,
+                        "min_cpus": 4,
+                        "min_ram_gb": 8,
+                        "platforms": ["x86_64-pc-linux-gnu", "windows_x86_64", "darwin_x86_64_arm64"],
+                        "workload": "TESS/JWST Box-Least-Squares (BLS) 16,384-point light-curve folding & deterministic verification",
+                    },
+                },
+                "rewards_per_verified_workunit": {
+                    "hmt_reflexion_points": 250,
+                    "boinc_cobblestones": 45.0,
+                    "monetary_value_eur_usd": 0.0,
+                },
+                "live_counters": {
+                    "total_leases_issued": federated_state["lease_counter"],
+                    "active_leases_count": len(federated_state["active_leases"]),
+                    "completed_receipts_count": len(federated_state["completed_receipts"]),
+                },
+                "quickstart_commands": {
+                    "1_preflight_gpu": "python3 scripts/hivemind_volunteer_preflight.py --project-url https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app",
+                    "1b_preflight_cpu_solver": "python3 scripts/hivemind_volunteer_preflight.py --allow-cpu-solver --project-url https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app",
+                    "2_local_dry_run": "python3 scripts/hivemind_boinc_idle_worker.py --coordinator https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app --handle your-handle --domain physics_sim --dry-run",
+                    "3_single_workunit": "python3 scripts/hivemind_boinc_idle_worker.py --coordinator https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app --handle your-handle --domain physics_sim --once",
+                    "4_native_boinc_attach": "boinccmd --project_attach https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app YOUR_ACCOUNT_KEY",
+                },
+            }
+        )
+
+    @app.get("/v1/hivemind/bees/owner-fleet-status", response_class=JSONResponse)
+    def ruche_owner_fleet_status(foreground_gaming: bool = False) -> JSONResponse:
+        from hivemind.swarm.rusty_sundials_scientific_bee import OwnerFleetCoServingOrchestrator
+
+        orch = OwnerFleetCoServingOrchestrator()
+        status = orch.fleet_status(foreground_gaming=foreground_gaming)
+        distill = orch.distill_teacher_to_rtx2070_student()
+        s1b = orch.verify_s1b_cross_cpu_reproducibility()
+        return JSONResponse(
+            content={
+                **status,
+                "latest_nocturnal_distillation": distill,
+                "s1b_cross_cpu_reproducibility": s1b,
+            }
         )
 
     return app

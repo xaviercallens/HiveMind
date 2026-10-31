@@ -1,20 +1,20 @@
 {
   "schema_version": "rtx2070_3h_monitor.v1",
   "cadence_cron": "0 */3 * * *",
-  "timestamp_utc": "2026-10-31T10:19:36Z",
+  "timestamp_utc": "2026-10-31T16:19:35Z",
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-10-31T10:19:36Z",
+    "timestamp_utc": "2026-10-31T16:19:35Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": false,
     "device": "nvml:cuda:0 (torch+cpu host)",
     "compute_capability": "7.5",
     "temperature_c": 26.0,
-    "gpu_utilization_pct": 10.0,
-    "power_draw_w": 9.1,
+    "gpu_utilization_pct": 7.0,
+    "power_draw_w": 9.55,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1437.0,
-    "memory_free_mib": 6570.0,
+    "memory_used_mib": 1465.0,
+    "memory_free_mib": 6542.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
@@ -23,11 +23,11 @@
     "graphics_clock_mhz": 300.0,
     "max_graphics_clock_mhz": 2145.0,
     "memory_clock_mhz": 405.0,
-    "host_tensor_gflops": 106.42,
+    "host_tensor_gflops": 106.63,
     "measured_fp32_tflops": 9.88,
     "measured_fp16_tensor_tflops": 39.54,
     "effective_sparse_moe_nf4_tflops": 65.24,
-    "microbench_elapsed_ms": 156.02
+    "microbench_elapsed_ms": 158.04
   },
   "community_gpu_benchmark_summary": {
     "receipt_sha256": "e944272a1802d8053a28c26a59e7e121671eec23e2c3fcb22f2fb45c3b197580",
@@ -35,30 +35,16 @@
     "peak_allocated_mb": 0.0
   },
   "pr_integration_summary": {
-    "checked_utc": "2026-10-31T10:19:39Z",
-    "open_prs_count": 10,
+    "checked_utc": "2026-10-31T16:19:43Z",
+    "open_prs_count": 8,
     "evaluated": [
       {
-        "pr": 351,
-        "title": "feat(HM-S31-01/02): Geocryptographic P2P Neural Mesh, 15\u201320 Node Fuzzy Consensus & PR-First OpenRouter Orchestrator",
+        "pr": 369,
+        "title": "chore(lean4): resolve unused hypothesis warning in Theorem 120 and silence pynvml FutureWarning",
         "author": "xaviercallens",
-        "head_ref": "feat/hm-s31-01-02-geomesh-fuzzy-consensus-and-orchestrator",
+        "head_ref": "chore/lean4-zero-warning-and-pynvml-cleanup",
         "base_ref": "main",
-        "head_sha": "c6efea540d",
-        "owner_authored": true,
-        "security_passed": false,
-        "injection_clean": true,
-        "decision": "REFUSE (security critical=1, high=0)",
-        "merged": false,
-        "merge_message": ""
-      },
-      {
-        "pr": 350,
-        "title": "feat(HM-S30-02): Empirical Scaling Benchmark Multi-Krum + 10% Replay vs ZK-OPoI v5 (Experiment E21)",
-        "author": "xaviercallens",
-        "head_ref": "feat/hm-s30-02-krum-vs-zkopoi-v5-benchmark",
-        "base_ref": "main",
-        "head_sha": "7aada41259",
+        "head_sha": "ac5e900374",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -67,12 +53,12 @@
         "merge_message": ""
       },
       {
-        "pr": 349,
-        "title": "feat(HM-S30-01): ZK-OPoI v5 Fixed-Point INT8/INT4 Verifiable DiLoCo Transition Circuit",
+        "pr": 366,
+        "title": "fix(boinc): port thermodynamic ratchet, mixed-domain 80/20 replay, and cosine LR to BOINC QLoRA MoE",
         "author": "xaviercallens",
-        "head_ref": "feat/hm-s30-01-zk-opoi-v5-circuit",
+        "head_ref": "fix/boinc-qlora-ratchet-and-mixed-domain-moe",
         "base_ref": "main",
-        "head_sha": "f1d5d21c6e",
+        "head_sha": "aef1ae0a9e",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -81,26 +67,12 @@
         "merge_message": ""
       },
       {
-        "pr": 348,
-        "title": "feat(HM-S29-02): Extreme Top-1% Quantized DCT + EF21 100x WAN Pseudo-Gradient Compressor",
+        "pr": 362,
+        "title": "feat(s29): modularize international launch forecast views & Foundation Paper v4.2.0",
         "author": "xaviercallens",
-        "head_ref": "feat/hm-s29-02-top1pct-dct-ef21-compressor",
+        "head_ref": "feat/s29-modular-launch-forecast-and-views",
         "base_ref": "main",
-        "head_sha": "8fce2645d9",
-        "owner_authored": true,
-        "security_passed": true,
-        "injection_clean": true,
-        "decision": "ACCEPT",
-        "merged": false,
-        "merge_message": ""
-      },
-      {
-        "pr": 347,
-        "title": "feat(HM-S29-01,auth): Adaptive Multi-Split ML over Constrained WAN + /signup & /login Credential Auth",
-        "author": "xaviercallens",
-        "head_ref": "feat/hm-s29-01-adaptive-multisplit-and-signup-auth",
-        "base_ref": "main",
-        "head_sha": "aab6ce35e7",
+        "head_sha": "df5d0103a7",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -114,7 +86,7 @@
         "author": "xaviercallens",
         "head_ref": "feat/openrouter-5lang-i18n",
         "base_ref": "main",
-        "head_sha": "a0a0884c21",
+        "head_sha": "8e9cb8cc43",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -181,12 +153,11 @@
     ],
     "merged_prs": [],
     "held_prs": [
-      351,
       219,
       218,
       163,
       141
     ]
   },
-  "ledger_sha256": "2c82833db650ad04890dee61ac91c69681add42be5164c751f16ce0652443260"
+  "ledger_sha256": "76124cbd60a7d2f64888d78cb5fc59bfe993148478c0b7b694bf36a1ef40c4d7"
 }

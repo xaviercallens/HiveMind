@@ -74,3 +74,20 @@ def test_publish_stops_before_touching_the_project_when_the_beta_would_mask_the_
         pub.publish(st, tmp_path, 102, "cuda_hivemind", beta=True)  # type: ignore[arg-type]
     assert list(tmp_path.iterdir()) == []  # no apps/ tree, no plan_class_spec.xml, nothing registered
     assert len(st.sql_calls) == 1 and st.sql_calls[0].lstrip().startswith("use hmproj; select")  # it only looked
+
+
+def test_plan_classes_and_gpu_ram_for_big_moe_app() -> None:
+    assert pub.plan_classes_for_app("hivemind_qlora_moe") == ("cuda_hivemind", "cuda_hivemind_beta")
+    assert pub.plan_classes_for_app("hivemind_qlora_moe_big") == ("cuda_hivemind_big", "cuda_hivemind_big_beta")
+    assert pub.gpu_ram_mb_for_app("hivemind_qlora_moe") == 3500
+    assert pub.gpu_ram_mb_for_app("hivemind_qlora_moe_big") == 10000
+    big_xml = pub.render_version_xml("big_102", ["runtime.tar.xz"], "cuda_hivemind_big_beta", gpu_ram_mb=10000)
+    assert "<plan_class>cuda_hivemind_big_beta</plan_class>" in big_xml
+    assert "<gpu_ram>10000000000</gpu_ram>" in big_xml
+
+    spec_with_big = SPEC.replace(
+        "</plan_classes>",
+        " <plan_class>\n  <name>cuda_hivemind_big</name>\n  <min_gpu_ram_mb>10000</min_gpu_ram_mb>\n  <gpu_peak_flops_scale>0.1</gpu_peak_flops_scale>\n </plan_class>\n</plan_classes>",
+    )
+    out = pub.plan_class_spec_with_beta(spec_with_big, stable_class="cuda_hivemind_big")
+    assert "<name>cuda_hivemind_big_beta</name>" in out

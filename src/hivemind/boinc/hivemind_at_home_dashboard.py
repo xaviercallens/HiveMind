@@ -4005,6 +4005,7 @@ def render_hivemind_at_home_html(
           <button type="button" class="lang-btn" data-lang="es">&#x1F1EA;&#x1F1F8; ES</button>
           <button type="button" class="lang-btn" data-lang="de">&#x1F1E9;&#x1F1EA; DE</button>
         </div>
+        <a id="header-signup-register-btn" href="https://hivemind-openrouter-1003063861791.us-central1.run.app/signup" style="text-decoration:none;padding:5px 14px;border-radius:999px;background:linear-gradient(90deg,#f59e0b,#fbbf24);color:#090e1f;font-weight:900;font-size:0.78rem;box-shadow:0 0 14px rgba(251,191,36,0.45);">&#x1F511; Sign Up / Register &amp; Login</a>
         <span class="pill-gold"><span data-i18n="points_balance_label">Compute Points Balance</span>: <strong id="header-points-balance">1,250 pts</strong></span>
         <span class="pill">GCP Cloud Run: {cloud_run.get('service_name', 'hivemind-at-home-ruche')} (scales to zero when idle)</span>
         <span class="pill">TPU: {tpu.get('node_id')} ({tpu.get('zone')})</span>
@@ -4019,6 +4020,7 @@ def render_hivemind_at_home_html(
       <button type="button" class="nav-tab screen-nav-btn" data-screen="screen-results-carousel" data-i18n="nav_s4">04 // &#x1F3C6; COMMUNITY RESULTS CAROUSEL</button>
       <button type="button" class="nav-tab screen-nav-btn" data-screen="screen-tech-leaderboard" data-i18n="nav_s5">05 // &#x1F4E1; TECH &amp; LEADERBOARD</button>
       <button type="button" class="nav-tab screen-nav-btn" data-screen="screen-son-feedback" data-i18n="nav_s6">06 // &#x1F3AE; AVIS DU JOUEUR</button>
+      <a id="nav-signup-register-link" href="https://hivemind-openrouter-1003063861791.us-central1.run.app/signup" class="nav-tab" style="text-decoration:none;background:rgba(251,191,36,0.22);border:1px solid #fbbf24;color:#fef3c7;font-weight:900;">&#x1F511; SIGN UP / REGISTER (OPENROUTER)</a>
     </nav>
   </header>
 
@@ -4055,8 +4057,10 @@ def render_hivemind_at_home_html(
   <div id="exoplanet-games-download-launchpad" class="cyber-shield-banner" style="border-color:rgba(0,238,252,0.55);background:linear-gradient(90deg, rgba(8,15,35,0.96), rgba(14,26,56,0.96));box-shadow:0 0 22px rgba(0,238,252,0.18);margin-top:8px;padding:10px 16px;">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <span style="color:#fbbf24;font-weight:900;font-size:0.82rem;">&#x1F680; PLAY &amp; DOWNLOAD USS HIVEMIND v2.12.0 (100% FREE-TO-PLAY):</span>
-      <a id="launchpad-play-web-game" href="game.html" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(16,185,129,0.22);border:1px solid #10b981;color:#ecfdf5;font-weight:800;font-size:0.75rem;">&#x1F3AE; Play 3D Exoplanet Cockpit (Web)</a>
-      <a id="launchpad-play-webgpu" href="webgpu.html" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(0,229,255,0.18);border:1px solid #00e5ff;color:#e0f2fe;font-weight:800;font-size:0.75rem;">&#x26A1; Play WebGPU Galaxy + @compute</a>
+      <a id="launchpad-play-web-game" href="/game" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(16,185,129,0.22);border:1px solid #10b981;color:#ecfdf5;font-weight:800;font-size:0.75rem;">&#x1F3AE; Play 3D Exoplanet Cockpit (Web)</a>
+      <a id="launchpad-play-webgpu" href="/webgpu" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(0,229,255,0.18);border:1px solid #00e5ff;color:#e0f2fe;font-weight:800;font-size:0.75rem;">&#x26A1; Play WebGPU Galaxy + @compute</a>
+      <a id="launchpad-signup-login" href="https://hivemind-openrouter-1003063861791.us-central1.run.app/signup" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(251,191,36,0.28);border:1px solid #fbbf24;color:#fef3c7;font-weight:900;font-size:0.78rem;">&#x1F511; Sign Up &amp; Register (OpenRouter /signup)</a>
+      <a id="launchpad-benchmarks" href="https://hivemind-openrouter-1003063861791.us-central1.run.app/benchmarks" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(192,132,252,0.22);border:1px solid #c084fc;color:#f3e8ff;font-weight:800;font-size:0.75rem;">&#x1F4CA; All-Bees Benchmarks (5 Langs)</a>
       <a id="launchpad-download-exe" href="https://github.com/xaviercallens/HiveMind/releases/latest/download/HiveMind_Exoplanet_Hunter.exe" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(245,158,11,0.22);border:1px solid #fbbf24;color:#fef3c7;font-weight:800;font-size:0.75rem;">&#x1F4E5; Download Steam Fat Client (.exe)</a>
       <a id="launchpad-download-zip" href="https://github.com/xaviercallens/HiveMind/releases/latest/download/HiveMind_Astrophysics_Exoplanet_Hunter_v2.11.0_Steam_Win64.zip" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(168,85,247,0.22);border:1px solid #c084fc;color:#f3e8ff;font-weight:800;font-size:0.75rem;">&#x1F4E6; Download Full Steam Win64 (.zip)</a>
       <a id="launchpad-launch-steam" href="steam://rungameid/2864071053" style="text-decoration:none;padding:6px 12px;border-radius:6px;background:rgba(56,189,248,0.18);border:1px solid #38bdf8;color:#e0f2fe;font-weight:800;font-size:0.75rem;">&#x1F3AE; Launch on Steam (xavakal)</a>
@@ -8909,11 +8913,13 @@ def create_hivemind_at_home_app(
 
 
     @app.get("/game", response_class=HTMLResponse)
+    @app.get("/game.html", response_class=HTMLResponse)
     @app.get("/exoplanet-hunter", response_class=HTMLResponse)
     def page_playable_game() -> HTMLResponse:
         return page_cockpit_v46()
 
     @app.api_route("/webgpu", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/webgpu.html", methods=["GET", "HEAD"], response_class=HTMLResponse)
     def page_webgpu_cockpit(request: Request) -> HTMLResponse:
         try:
             from hivemind.game.webgpu_galaxy_cockpit import render_webgpu_galaxy_html

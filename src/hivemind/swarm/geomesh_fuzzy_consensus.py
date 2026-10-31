@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """HM-S31-01 & HM-S31-02: Geocryptographic P2P Neural Mesh & 15–20 Node Fuzzy Sub-Swarm Consensus.
 
 Implements:

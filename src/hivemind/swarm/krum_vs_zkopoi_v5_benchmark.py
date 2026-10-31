@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """HM-S30-02: Empirical Scaling Benchmark — Multi-Krum + 10% Replay vs ZK-OPoI v5 (Experiment E21).
 
 Implements the pre-registered falsifiable scaling benchmark across N in {32, 128, 512, 2048}

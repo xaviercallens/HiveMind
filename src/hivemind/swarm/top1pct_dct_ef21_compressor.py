@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """HM-S29-02: Extreme Top-1% Quantized DCT + EF21 100x WAN Compressor.
 
 Implements the extreme frequency-domain outer-delta compressor specified in

@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """PR-First OpenRouter Architect, Coder, Unit-Tester & Merger Orchestrator.
 
 Coordinates end-to-end PR-first software engineering across the HiveMind OpenRouter gateway:

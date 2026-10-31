@@ -1621,7 +1621,8 @@ def render_benchmarks_page(lang: str = "fr", nonce: str = "hivemind-bench") -> s
 
       <div class="cta-group">
         <a href="/#playground" class="btn btn-primary">{html.escape(copy["cta_playground"])}</a>
-        <a href="/life-as-a-bee" class="btn btn-amber">{html.escape(copy["cta_life_bee"])}</a>
+        <a href="/signup" class="btn btn-amber">&#x1F511; Login / Register (/signup)</a>
+        <a href="/life-as-a-bee" class="btn btn-outline">{html.escape(copy["cta_life_bee"])}</a>
         <a href="/rejoindre" class="btn btn-outline">{html.escape(copy["cta_join"])}</a>
         <a href="/v1/hivemind/benchmarks" class="btn btn-outline" style="border-color:var(--green);color:var(--green);">{html.escape(copy["cta_json"])}</a>
         <a href="/v1/hivemind/benchmarks/infographic.svg" target="_blank" rel="noopener" class="btn btn-outline" style="border-color:var(--purple);color:var(--purple);">&#x1F5BC;&#xFE0F; SVG Infographic</a>

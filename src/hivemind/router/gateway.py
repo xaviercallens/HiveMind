@@ -1225,6 +1225,7 @@ def create_router_app(
         return {"status": "ok"}
 
     @app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/portal", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/playground", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/life-as-a-bee", methods=["GET", "HEAD"], response_class=HTMLResponse)
     def portal() -> HTMLResponse:
@@ -2321,6 +2322,9 @@ def create_router_app(
         }
 
     @app.api_route("/webgpu", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/webgpu.html", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/game", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/game.html", methods=["GET", "HEAD"], response_class=HTMLResponse)
     def webgpu_galaxy_page(request: Request) -> HTMLResponse:
         """Zero-install WebGPU 3D Galaxy & WGSL @compute Citizen-Science Cockpit."""
         from hivemind.game.webgpu_galaxy_cockpit import render_webgpu_galaxy_html

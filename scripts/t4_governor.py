@@ -81,6 +81,23 @@ def boinc_gpu_pids(procs: list[tuple[str, ...]]) -> list[str]:
     return out
 
 
+def boinc_pipeline_gpu_pids(procs: list[tuple[str, ...]]) -> list[str]:
+    """GPU processes of the BOINC project's own server scripts (the validator's replay of a finished round), part of the training pipeline.
+
+    Observed live on 2026-10-31: 36 s after a training task ended, ``python -W ignore -m hivemind.boinc.real_client.boinc_server_scripts`` used the GPU for
+    ~20 s; the governor counted it as another user (trigger "gpu"), yielded and restarted the 30-minute quiet period, so every round of training locked out the next
+    one (175 of 183 bursts ended with no training task). It is never ended by the governor (only ``moe_app`` is) and it waits for an idle gateway itself."""
+    out = []
+    for pid, *_ in procs:
+        try:
+            cmd = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode()
+        except OSError:
+            continue
+        if "real_client.boinc_server_scripts" in cmd:
+            out.append(pid)
+    return out
+
+
 def descendants(pid: int) -> list[int]:
     """All child/grandchild processes of ``pid`` (from /proc), the same set the BOINC client enumerates."""
     kids: dict[int, list[int]] = {}
@@ -147,7 +164,7 @@ def other_gpu_busy(g: dict, threshold_pct: int = 10) -> tuple[bool, int]:
     llama-server clients) and requests shorter than the in-flight poll interval.
 
     No BOINC task running: whole-GPU utilisation >= threshold. BOINC task running: the highest SM% among the other processes."""
-    mine = set(boinc_gpu_pids(g["procs"]))
+    mine = set(boinc_gpu_pids(g["procs"])) | set(boinc_pipeline_gpu_pids(g["procs"]))
     if not mine:
         return g["util_pct"] >= threshold_pct, g["util_pct"]
     try:
@@ -285,7 +302,8 @@ def main() -> int:
             last_yield_ms = freed_ms
             state = "yielded"
             # gpu_freed_ms is a real measurement only when a BOINC GPU task was running (had_boinc_gpu_task); otherwise there was nothing to free
-            others = other_gpu_procs(g_seen["procs"], set(boinc_gpu_pids(g_seen["procs"]))) if (g_seen and trigger == "gpu") else []
+            others = (other_gpu_procs(g_seen["procs"], set(boinc_gpu_pids(g_seen["procs"])) | set(boinc_pipeline_gpu_pids(g_seen["procs"])))
+                      if (g_seen and trigger == "gpu") else [])
             log({"event": "yield", "trigger": trigger, "in_flight": in_flight, "other_gpu_util": other_util, "set_never_ok": ok,
                  "had_boinc_gpu_task": had_task, "ended_by_governor": ended_by_governor, "gpu_freed_ms": freed_ms, "yields": yields,
                  "other_procs": others})

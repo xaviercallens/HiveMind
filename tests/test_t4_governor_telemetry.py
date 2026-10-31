@@ -37,6 +37,35 @@ def test_yield_grace_default_meets_the_roadmap_latency_target_and_is_not_a_polic
     assert "default=YIELD_GRACE_S" in src  # the unit file passes no --yield-grace-s, and the owner's policy arguments are untouched
 
 
+def test_the_validator_replay_is_part_of_the_pipeline_and_not_a_foreign_gpu_user(monkeypatch) -> None:
+    """Regression for the self-inflicted lockout seen on 2026-10-31: after a training task ended, the project's own validator used the GPU and the
+    governor read that as another user, yielded and waited another 30 minutes."""
+    from types import SimpleNamespace
+
+    import t4_governor as tg
+
+    pmon = ("# gpu   pid  type    sm   mem\n    0   111     C    30     5   python\n    0   222     C     -     -   llama-server\n")
+    monkeypatch.setattr(tg, "boinc_gpu_pids", lambda procs: [])  # the training task has finished
+    monkeypatch.setattr(tg, "boinc_pipeline_gpu_pids", lambda procs: ["111"])  # the validator replay is running
+    monkeypatch.setattr(tg.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout=pmon))
+    g = {"procs": [("111", "python", "2500"), ("222", "llama-server", "4818")], "util_pct": 30}
+    assert tg.other_gpu_busy(g) == (False, 0)  # before the fix: (True, 30) from the whole-GPU utilisation
+    # a real foreign user alongside the validator still counts
+    pmon2 = pmon + "    0   333     C    40     9   llama-server\n"
+    monkeypatch.setattr(tg.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout=pmon2))
+    assert tg.other_gpu_busy(g) == (True, 40)
+    # no pipeline process at all: the old rule (whole-GPU utilisation) is unchanged
+    monkeypatch.setattr(tg, "boinc_pipeline_gpu_pids", lambda procs: [])
+    assert tg.other_gpu_busy({"procs": [], "util_pct": 30}) == (True, 30)
+
+
+def test_pipeline_pid_detection_reads_the_command_line() -> None:
+    import t4_governor as tg
+
+    assert tg.boinc_pipeline_gpu_pids([(str(os.getpid()), "python", "1")]) == []  # this test process is not a BOINC server script
+    assert tg.boinc_pipeline_gpu_pids([("999999", "ghost", "1")]) == []  # vanished process: skipped, not an error
+
+
 def _jl(tmp_path: Path, events: list[dict]) -> Path:
     p = tmp_path / "governor.jsonl"
     p.write_text("\n".join(json.dumps(e) for e in events) + "\nnot json\n")  # a corrupt line must be skipped

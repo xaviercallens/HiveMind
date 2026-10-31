@@ -487,7 +487,7 @@ class UpcycledAstroSparseVisionMoE(nn.Module):
                     )
                     h_mean = self.backbone.encode_patches(patches).mean(dim=(0, 1))
                     h_unit = h_mean / torch.clamp(torch.norm(h_mean), min=1e-6)
-                    self.router.weight[idx].copy_(h_unit * 4.5)
+                    self.router.weight[idx].copy_(h_unit * 0.5)
 
     def forward(self, visual_patches: torch.Tensor) -> Dict[str, Any]:
         h = self.backbone.encode_patches(visual_patches)
@@ -506,10 +506,13 @@ class UpcycledAstroSparseVisionMoE(nn.Module):
         pooled = self.backbone.post_norm((h + base_ffn + moe_delta).mean(dim=1))
         logits = self.backbone.classifier(pooled)
 
-        # Load-balancing auxiliary loss L_aux (alpha = 0.01)
+        # Switch Transformer Load-balancing auxiliary loss L_aux = N * sum_i (f_i * P_i) (IP-35)
         mean_prob = router_probs.mean(dim=(0, 1))
-        l_aux_raw = float((self.num_experts * torch.sum(mean_prob * mean_prob)).item())
-        l_aux_weighted = self.load_balance_alpha * l_aux_raw
+        top1_dispatch = F.one_hot(topk_indices[:, :, 0], num_classes=self.num_experts).to(router_probs.dtype)
+        f_i = top1_dispatch.mean(dim=(0, 1)).detach()
+        l_aux_raw_tensor = self.num_experts * torch.sum(f_i * mean_prob)
+        l_aux_weighted_tensor = self.load_balance_alpha * l_aux_raw_tensor
+        l_aux_raw = float(l_aux_raw_tensor.detach().item())
 
         return {
             "logits": logits,
@@ -517,7 +520,7 @@ class UpcycledAstroSparseVisionMoE(nn.Module):
             "topk_indices": topk_indices,
             "topk_weights": topk_weights,
             "load_balance_loss_raw": round(l_aux_raw, 5),
-            "load_balance_loss_weighted": round(l_aux_weighted, 6),
+            "load_balance_loss_weighted": l_aux_weighted_tensor,
         }
 
 
@@ -907,18 +910,38 @@ def run_exoplanet_astro_vmoe_poc(
     for p in backbone.classifier.parameters():
         p.requires_grad = False
 
+    # Evaluate on a disjoint held-out shard (different seed from calibration eval_x, IP-36)
+    heldout_patches_list: List[torch.Tensor] = []
+    heldout_labels_list: List[torch.Tensor] = []
+    heldout_expected_branch_idx: List[int] = []
+    for b_id, meta in EXOPLANET_ASTRO_EXPERT_BRANCHES.items():
+        b_idx = int(meta["expert_index"])
+        hp_t, hy_t = build_astrophysics_visual_shard(
+            branch_id=b_id,
+            num_samples=20,
+            patch_dim=backbone.patch_dim,
+            seed=19200 + b_idx,
+        )
+        heldout_patches_list.append(hp_t)
+        heldout_labels_list.append(hy_t)
+        heldout_expected_branch_idx.extend([b_idx] * hp_t.shape[0])
+
+    heldout_x = torch.cat(heldout_patches_list, dim=0)
+    heldout_y = torch.cat(heldout_labels_list, dim=0)
+
     with torch.no_grad():
-        final_out = vmoe(eval_x)
+        final_out = vmoe(heldout_x)
         vmoe_focal_loss = float(
-            asymmetric_focal_loss(final_out["logits"], eval_y, gamma=focal_gamma).item()
+            asymmetric_focal_loss(final_out["logits"], heldout_y, gamma=focal_gamma).item()
         )
         top2_indices = final_out["topk_indices"][:, 0, :].cpu().numpy()
         hits = sum(
             1
-            for i, exp_b in enumerate(expected_branch_idx)
+            for i, exp_b in enumerate(heldout_expected_branch_idx)
             if exp_b in top2_indices[i]
         )
-        routing_acc = float(hits) / float(len(expected_branch_idx))
+        routing_acc = float(hits) / float(len(heldout_expected_branch_idx))
+        l_aux_w_val = round(float(final_out["load_balance_loss_weighted"].detach().item()), 6)
 
     # Stage 5: Run Physical Transit & Router Simulator across the 3 canonical astronomical scenarios
     sim_earth_sun = simulate_exoplanet_transit_and_router_response(
@@ -970,7 +993,7 @@ def run_exoplanet_astro_vmoe_poc(
         "stage4_single_baseline_focal_loss": round(single_baseline_focal_loss, 5),
         "stage4_upcycled_vmoe_focal_loss": round(vmoe_focal_loss, 5),
         "stage4_vmoe_gain_pct": round(moe_gain_pct, 2),
-        "stage4_load_balance_loss_weighted": final_out["load_balance_loss_weighted"],
+        "stage4_load_balance_loss_weighted": l_aux_w_val,
         "interactive_simulator_scenarios": {
             "earth_around_sun_1Rearth_1Rsun": sim_earth_sun,
             "earth_around_red_dwarf_1Rearth_02Rsun": sim_earth_red_dwarf,

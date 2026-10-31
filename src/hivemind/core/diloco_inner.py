@@ -91,17 +91,18 @@ def quantize_tensor_blockwise_8bit(
     if pad > 0:
         flat = torch.nn.functional.pad(flat, (0, pad))
     blocks = flat.reshape(-1, block_size)
-    absmax = torch.clamp(blocks.abs().amax(dim=1), min=1e-12)
     if signed:
+        absmax = torch.clamp(blocks.abs().amax(dim=1), min=1e-12)
         q = torch.clamp(torch.round((blocks / absmax[:, None]) * 127.0), -127.0, 127.0).to(
             torch.int8
         )
     else:
-        q = torch.clamp(
-            torch.round((torch.clamp(blocks, min=0.0) / absmax[:, None]) * 255.0),
-            0.0,
-            255.0,
-        ).to(torch.uint8)
+        pos_blocks = torch.clamp(blocks, min=0.0)
+        sqrt_blocks = torch.sqrt(pos_blocks)
+        absmax = torch.clamp(sqrt_blocks.amax(dim=1), min=1e-12)
+        raw_q = torch.round((sqrt_blocks / absmax[:, None]) * 255.0)
+        raw_q = torch.where(pos_blocks > 0.0, torch.clamp(raw_q, min=1.0), raw_q)
+        q = torch.clamp(raw_q, 0.0, 255.0).to(torch.uint8)
     return q, absmax, orig_shape
 
 
@@ -113,8 +114,10 @@ def dequantize_tensor_blockwise_8bit(
     dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
     """Dequantize blockwise 8-bit tensor back to `orig_shape`."""
-    scale = 127.0 if signed else 255.0
-    deq_blocks = (q.to(torch.float32) / scale) * absmax[:, None]
+    if signed:
+        deq_blocks = (q.to(torch.float32) / 127.0) * absmax[:, None]
+    else:
+        deq_blocks = ((q.to(torch.float32) / 255.0) * absmax[:, None]).square()
     numel = 1
     for d in orig_shape:
         numel *= d

@@ -2667,4 +2667,23 @@ def create_router_app(
             "transfer_sha256": plan["transfer_sha256"],
         }
 
+    @app.get("/api/v1/monitor/rtx2070-moe-experimentator")
+    @app.get("/v1/hivemind/bees/rtx2070-moe-experimentator")
+    async def rtx2070_4h_moe_experimentator_endpoint() -> dict[str, Any]:
+        """Return the 4-Hour RTX 2070 MoE Bee Experimentator & PR-IP-10 validation ledger."""
+        from pathlib import Path
+
+        exp_path = Path(__file__).resolve().parents[3] / "artifacts" / "rtx2070_4h_moe_experimentator_ledger.json"
+        exp_data: dict[str, Any] = {}
+        if exp_path.exists():
+            try:
+                exp_data = json.loads(exp_path.read_text(encoding="utf-8"))
+            except Exception:
+                exp_data = {}
+        return {
+            "object": "hivemind.rtx2070_4h_moe_experimentator",
+            "cadence_cron": "0 */4 * * *",
+            "ledger": exp_data,
+        }
+
     return app

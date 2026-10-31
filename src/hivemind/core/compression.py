@@ -280,8 +280,8 @@ def _quantize_2bit_centroids(
         )
 
     scale = float(range_in_sigmas * std / n_bins)
-    offset = n_bins // 2
-    codes = ((centered / scale) + offset).round().clamp(0, n_bins - 1).to(torch.uint8)
+    center_offset = 0.5 * float(n_bins - 1)
+    codes = ((centered / scale) + center_offset).round().clamp(0, n_bins - 1).to(torch.uint8)
 
     lookup = torch.empty(n_bins, dtype=torch.float32)
     for bin_index in range(n_bins):
@@ -289,8 +289,8 @@ def _quantize_2bit_centroids(
         if bool(in_bin.any().item()):
             lookup[bin_index] = centered[in_bin].mean()
         else:
-            # Preserve the bin centre for empty bins instead of collapsing it to zero.
-            lookup[bin_index] = float(bin_index - offset) * scale
+            # Preserve the symmetric bin centre for empty bins instead of collapsing it to zero (IP-37).
+            lookup[bin_index] = (float(bin_index) - center_offset) * scale
     lookup = lookup.clamp(-65504.0, 65504.0).to(torch.float16)
     return codes, lookup, shift, scale
 
@@ -340,7 +340,7 @@ def compress_tensor_dct_sparse_2bit(
         scale=scale,
         n_coefficients=k,
         chunk_size=int(chunk_size),
-        index_width=_index_width(int(tensor.numel())),
+        index_width=_index_width(total),
         dct_energy_retained_fraction=round(retained, 6),
     )
 

@@ -290,7 +290,8 @@ class ShareAggregation:
 
 
 def aggregate_shared_updates(deltas: Mapping[str, Mapping[str, Any]], arrival_times: Mapping[str, float], *,
-                             min_quorum_k: int, grace_window_s: float, max_byzantine_f: int) -> ShareAggregation:
+                             min_quorum_k: int, grace_window_s: float, max_byzantine_f: int,
+                             reference_keys_and_shapes: Mapping[str, Any] | None = None) -> ShareAggregation:
     """Admit contributors with the DiLoCo quorum rule, filter the admitted deltas with Multi-Krum, average the survivors."""
     import torch
 
@@ -304,7 +305,14 @@ def aggregate_shared_updates(deltas: Mapping[str, Mapping[str, Any]], arrival_ti
     if not sel.reached:
         return ShareAggregation(False, (), tuple(sel.deferred_learner_ids), (), ())
     admitted = {w: {k: torch.as_tensor(t) for k, t in deltas[w].items()} for w in sel.admitted_learner_ids}
-    report = filter_byzantine_deltas_multikrum(admitted, max_byzantine_f=max_byzantine_f)
+    ref_schema = (
+        {str(k): torch.Size(v) for k, v in reference_keys_and_shapes.items()}
+        if reference_keys_and_shapes is not None
+        else None
+    )
+    report = filter_byzantine_deltas_multikrum(
+        admitted, max_byzantine_f=max_byzantine_f, reference_keys_and_shapes=ref_schema
+    )
     accepted = tuple(report.accepted_workers)
     agg: dict[str, Any] | None = None
     if accepted:

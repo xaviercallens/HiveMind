@@ -52,6 +52,7 @@ class ByzantineFilterReport:
     median_cosine: float
     cosine_threshold_lower: float
     quarantined_pre_krum: dict[str, str] = field(default_factory=dict)
+    krum_guarantee: bool = False
 
 
 @dataclass
@@ -86,6 +87,7 @@ def filter_byzantine_deltas_multikrum(
     worker_deltas: dict[str, dict[str, torch.Tensor]],
     max_byzantine_f: int = 1,
     cosine_sigma: float = 2.0,
+    reference_keys_and_shapes: dict[str, torch.Size] | None = None,
 ) -> ByzantineFilterReport:
     """Filter worker pseudo-gradients using Pre-Krum Sanitization, Multi-Krum, and a 2-sigma pairwise cosine filter."""
     all_worker_ids = list(worker_deltas.keys())
@@ -94,7 +96,9 @@ def filter_byzantine_deltas_multikrum(
         raise ValueError("Cannot run Multi-Krum on empty worker_deltas.")
 
     fl_guard = FederatedLearningSecurityGuard()
-    clean_deltas, quarantined = fl_guard.sanitize_worker_deltas_pre_krum(worker_deltas)
+    clean_deltas, quarantined = fl_guard.sanitize_worker_deltas_pre_krum(
+        worker_deltas, reference_keys_and_shapes=reference_keys_and_shapes
+    )
     worker_ids = list(clean_deltas.keys())
     K = len(worker_ids)
 
@@ -114,10 +118,12 @@ def filter_byzantine_deltas_multikrum(
             median_cosine=1.0,
             cosine_threshold_lower=0.0,
             quarantined_pre_krum=quarantined,
+            krum_guarantee=False,
         )
 
-    # Clamp f so K - f - 2 >= 1
-    f = min(max_byzantine_f, max(0, K - 3))
+    # Multi-Krum theoretical guarantee requires K >= 2*f + 3 (IP-34)
+    f = min(max_byzantine_f, max(0, (K - 3) // 2))
+    krum_guarantee = bool(max_byzantine_f > 0 and K >= 2 * max_byzantine_f + 3)
     num_neighbors = max(1, K - f - 2)
 
     # Accumulate exact [K, K] inner-product Gram matrix parameter-by-parameter (<1 MB peak RAM)
@@ -164,9 +170,10 @@ def filter_byzantine_deltas_multikrum(
     # Reject anything falling outside cosine_sigma below the median (or negative alignment)
     cos_lower_bound = max(-0.05, median_cos - cosine_sigma * max(std_cos, 0.05))
 
-    # Multi-Krum selects the top (K - f) workers with smallest Krum distance score
+    # Multi-Krum selects the top (K - f_post_quarantine) workers with smallest Krum distance score
+    f_post_quarantine = max(0, f - len(quarantined))
     sorted_by_krum = sorted(worker_ids, key=lambda w: krum_scores[w])
-    krum_survivors = set(sorted_by_krum[: max(1, K - f)])
+    krum_survivors = set(sorted_by_krum[: max(1, K - f_post_quarantine)])
 
     accepted: list[str] = []
     rejected: list[str] = list(quarantined.keys())
@@ -192,6 +199,7 @@ def filter_byzantine_deltas_multikrum(
         median_cosine=round(median_cos, 6),
         cosine_threshold_lower=round(cos_lower_bound, 6),
         quarantined_pre_krum=quarantined,
+        krum_guarantee=krum_guarantee,
     )
 
 
@@ -341,10 +349,12 @@ class DiLoCoOuterOptimizer:
             eff_restart is not None and outer_step > 0 and (outer_step % eff_restart == 0)
         )
 
+        expected_schema = {k: v.shape for k, v in theta_prev.items() if isinstance(v, torch.Tensor)}
         filter_report = filter_byzantine_deltas_multikrum(
             worker_deltas=worker_deltas,
             max_byzantine_f=self.max_byzantine_f,
             cosine_sigma=self.cosine_sigma,
+            reference_keys_and_shapes=expected_schema or None,
         )
         valid_ids = filter_report.accepted_workers
         surviving_deltas = {wid: worker_deltas[wid] for wid in valid_ids}

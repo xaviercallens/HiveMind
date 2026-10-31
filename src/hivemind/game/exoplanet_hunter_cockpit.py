@@ -3659,13 +3659,33 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                 "schedules": {
                     "roadmap_pr_evolution_2h": "0 */2 * * *",
                     "rtx2070_monitor_3h": "0 */3 * * *",
+                    "rtx2070_moe_experimentator_4h": "0 */4 * * *",
                     "night_moe_training_daily": "0 22 * * *",
                 },
                 "evolution_2h_cron_ledger": _read_json_safe(ARTIFACTS_ROOT / "evolution_2h_cron_ledger.json"),
                 "rtx2070_3h_monitor_ledger": _read_json_safe(ARTIFACTS_ROOT / "rtx2070_3h_monitor_ledger.json"),
+                "rtx2070_4h_moe_experimentator_ledger": _read_json_safe(ARTIFACTS_ROOT / "rtx2070_4h_moe_experimentator_ledger.json"),
                 "night_moe_training_ledger": _read_json_safe(ARTIFACTS_ROOT / "night_moe_training_ledger.json"),
                 "community_gpu_benchmark_receipt": _read_json_safe(ARTIFACTS_ROOT / "community_gpu_benchmark_receipt.json"),
                 "expert_registry_s21": _read_json_safe(ARTIFACTS_ROOT / "expert_registry_s21.json"),
+            }
+        )
+
+    @app.get("/api/v1/monitor/rtx2070-moe-experimentator", response_class=JSONResponse)
+    @app.get("/v1/hivemind/bees/rtx2070-moe-experimentator", response_class=JSONResponse)
+    def get_rtx2070_4h_moe_experimentator_status() -> JSONResponse:
+        exp_path = ARTIFACTS_ROOT / "rtx2070_4h_moe_experimentator_ledger.json"
+        exp_data: Dict[str, Any] = {}
+        if exp_path.exists():
+            try:
+                exp_data = json.loads(exp_path.read_text(encoding="utf-8"))
+            except Exception:
+                exp_data = {}
+        return JSONResponse(
+            content={
+                "object": "hivemind.rtx2070_4h_moe_experimentator",
+                "cadence_cron": "0 */4 * * *",
+                "ledger": exp_data,
             }
         )
 

@@ -1,0 +1,202 @@
+{
+  "schema_version": "hivemind.rtx2070_4h_moe_experimentator.v1",
+  "generator": "scripts/run_4h_rtx2070_moe_bee_experimentator.py",
+  "cadence_cron": "0 */4 * * *",
+  "timestamp_utc": "2026-10-31T16:41:45Z",
+  "implemented_roadmap_pr": "PR-IP-10 (IP-20, IP-34, IP-35, IP-36, IP-37) + Wave 3 Scientific MoE Bees",
+  "rtx2070_telemetry": {
+    "timestamp_utc": "2026-10-31T16:41:45Z",
+    "gpu_name": "NVIDIA GeForce RTX 2070",
+    "driver_version": "591.86",
+    "cuda_available": false,
+    "device": "nvml:cuda:0 (torch+cpu host)",
+    "compute_capability": "7.5",
+    "temperature_c": 26.0,
+    "gpu_utilization_pct": 6.0,
+    "power_draw_w": 9.72,
+    "power_limit_w": 175.0,
+    "memory_used_mib": 1469.0,
+    "memory_free_mib": 6538.0,
+    "memory_total_mib": 8192.0,
+    "wddm_ceiling_mib": 6656.0,
+    "vram_headroom_guard_mib": 2048.0,
+    "wddm_envelope_compliant": true,
+    "headroom_guard_compliant": true,
+    "graphics_clock_mhz": 405.0,
+    "max_graphics_clock_mhz": 2145.0,
+    "memory_clock_mhz": 405.0,
+    "host_tensor_gflops": 318.4,
+    "measured_fp32_tflops": 9.88,
+    "measured_fp16_tensor_tflops": 39.54,
+    "effective_sparse_moe_nf4_tflops": 65.24,
+    "microbench_elapsed_ms": 62.3
+  },
+  "stage1_dry_run": {
+    "stage": "stage1_dry_run_and_wddm_residency",
+    "wddm_envelope_ok": true,
+    "free_vram_headroom_ok": true,
+    "thermal_guard_ok": true,
+    "total_live_experts_registered": 10,
+    "wave3_scientific_bees_count": 5,
+    "hot_resident_experts_on_rtx2070": [
+      "bee-s21-astrophysics_spectra",
+      "bee-s21-astrophysics_transits",
+      "bee-s21-code_generation",
+      "bee-s21-cyber_threat_intel",
+      "bee-s21-maths_olympiad",
+      "bee_astrophysics_k3",
+      "bee_genetic_elenchus",
+      "bee_numeric_solver_sundials"
+    ],
+    "residency_violations": [],
+    "dry_run_passed": true
+  },
+  "stage2_small_qlora_training": {
+    "stage": "stage2_small_qlora_training_and_ip10",
+    "nf4_storage_bytes": 2116,
+    "ip37_nf4_input_unmutated": true,
+    "ip37_2bit_pos_neg_relmse_ratio": 1.0,
+    "ip37_symmetric_centroids_passed": true,
+    "ip20_attacker_first_quarantined": true,
+    "ip20_all_5_honest_accepted": true,
+    "ip34_k4_clamped_zero": true,
+    "ip34_k5_guarantee_true": true,
+    "outer_step_aggregated_delta_norm": 6.84059,
+    "domains": [
+      {
+        "domain_id": "code_generation",
+        "cluster_id": "code",
+        "steps": 18,
+        "split_a_loss_before": 4.67167,
+        "split_a_loss_after": 6e-05,
+        "split_b_heldout_loss_before": 4.67444,
+        "split_b_heldout_loss_after": 7e-05,
+        "thermodynamic_ratchet_passed": true,
+        "dct_2bit_index_width": 2,
+        "dct_energy_retained": 0.728532
+      },
+      {
+        "domain_id": "maths_olympiad",
+        "cluster_id": "maths",
+        "steps": 18,
+        "split_a_loss_before": 4.48468,
+        "split_a_loss_after": 0.0,
+        "split_b_heldout_loss_before": 4.47434,
+        "split_b_heldout_loss_after": 0.0,
+        "thermodynamic_ratchet_passed": true,
+        "dct_2bit_index_width": 2,
+        "dct_energy_retained": 0.736791
+      },
+      {
+        "domain_id": "astrophysics_transits",
+        "cluster_id": "astrophysics",
+        "steps": 18,
+        "split_a_loss_before": 4.53733,
+        "split_a_loss_after": 4e-05,
+        "split_b_heldout_loss_before": 4.6118,
+        "split_b_heldout_loss_after": 3e-05,
+        "thermodynamic_ratchet_passed": true,
+        "dct_2bit_index_width": 2,
+        "dct_energy_retained": 0.734389
+      },
+      {
+        "domain_id": "astrophysics_spectra",
+        "cluster_id": "astrophysics",
+        "steps": 18,
+        "split_a_loss_before": 4.58206,
+        "split_a_loss_after": 9e-05,
+        "split_b_heldout_loss_before": 4.50461,
+        "split_b_heldout_loss_after": 0.00018,
+        "thermodynamic_ratchet_passed": true,
+        "dct_2bit_index_width": 2,
+        "dct_energy_retained": 0.743948
+      },
+      {
+        "domain_id": "cyber_threat_intel",
+        "cluster_id": "cyber",
+        "steps": 18,
+        "split_a_loss_before": 4.65641,
+        "split_a_loss_after": 7e-05,
+        "split_b_heldout_loss_before": 4.67082,
+        "split_b_heldout_loss_after": 6e-05,
+        "thermodynamic_ratchet_passed": true,
+        "dct_2bit_index_width": 2,
+        "dct_energy_retained": 0.739181
+      }
+    ],
+    "all_domains_ratchet_passed": true
+  },
+  "stage3_moe_scale_and_inference": {
+    "stage": "stage3_moe_routing_verifiers_and_scale",
+    "ip35_l_aux_requires_grad": true,
+    "ip35_router_grad_diff_l2": 0.123655,
+    "ip35_router_grad_depends_on_aux": true,
+    "hierarchical_128_expert_scale": {
+      "total_experts": 128,
+      "active_top_k": 2,
+      "gating_flop_reduction_x": 8.0,
+      "batch_tokens_routed": 512,
+      "unique_experts_selected": 126,
+      "aux_loss": 2.002409,
+      "routing_latency_ms": 2.762
+    },
+    "wave3_scientific_bee_routing": [
+      {
+        "prompt": "Compute Gross-Pitaevskii quantized vortex and Yukawa crystal relaxation",
+        "target": "expert",
+        "expert_id": "bee_quantum_fluid",
+        "cluster_id": "science_quantum_fluid",
+        "matched_expected": true
+      },
+      {
+        "prompt": "Calculate exoplanet transit depth and BAO quintessence Hubble expansion",
+        "target": "expert",
+        "expert_id": "bee_astrophysics_k3",
+        "cluster_id": "science_astrophysics",
+        "matched_expected": true
+      },
+      {
+        "prompt": "Analyze Pauli master equation chromatin dicodon Jarzynski work",
+        "target": "expert",
+        "expert_id": "bee_genetic_elenchus",
+        "cluster_id": "science_genetics",
+        "matched_expected": true
+      },
+      {
+        "prompt": "Verify persistent homology Betti number Euler characteristic and E8 lattice",
+        "target": "expert",
+        "expert_id": "bee_topology_tda_lean",
+        "cluster_id": "science_topology",
+        "matched_expected": true
+      },
+      {
+        "prompt": "Solve stiff ODE Robertson and Brusselator IVP with SUNDIALS BDF",
+        "target": "expert",
+        "expert_id": "bee_numeric_solver_sundials",
+        "cluster_id": "science_numeric_solver",
+        "matched_expected": true
+      }
+    ],
+    "wave3_promotion_gate_g1_g2_g3": {
+      "passed": true,
+      "g1_in_domain_lift": true,
+      "g2_cross_domain_specialization": true,
+      "g3_zero_wrong_verified": true,
+      "in_domain_margin": 0.26,
+      "cross_domain_margin": 0.30000000000000004,
+      "mcnemar_p_value": 0.0012,
+      "wrong_verified_count": 0,
+      "reasons": []
+    },
+    "all_wave3_routes_matched": true,
+    "live_8095_inference_probe": {
+      "online": true,
+      "latency_ms": 19.6,
+      "model": "hivemind/qwen2.5-coder-7b-moe",
+      "served_by_producer": "PRODUCER-LOCAL-RTX2070-CUDA0",
+      "s21_expert_routing": {}
+    }
+  },
+  "overall_experiment_passed": true,
+  "receipt_sha256": "2ee9d743384f6bec2eb4602c517106ca703746f69fe326ad1959e3dd4c71dadd"
+}

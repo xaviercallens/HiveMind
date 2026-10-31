@@ -1,6 +1,6 @@
 {
   "schema_version": "hivemind.evolution_2h_and_night_moe_cron.v1",
-  "timestamp_utc": "2026-10-31T06:21:22Z",
+  "timestamp_utc": "2026-10-31T08:19:35Z",
   "mode": "2h-evolution",
   "schedules": {
     "roadmap_pr_evolution_cron": "0 */2 * * *",
@@ -15,35 +15,35 @@
     "total_requests_served": 21
   },
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-10-31T06:21:22Z",
+    "timestamp_utc": "2026-10-31T08:19:35Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": false,
     "device": "nvml:cuda:0 (torch+cpu host)",
     "compute_capability": "7.5",
     "temperature_c": 26.0,
-    "gpu_utilization_pct": 13.0,
-    "power_draw_w": 30.08,
+    "gpu_utilization_pct": 8.0,
+    "power_draw_w": 9.45,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1410.0,
-    "memory_free_mib": 6597.0,
+    "memory_used_mib": 1437.0,
+    "memory_free_mib": 6570.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
     "wddm_envelope_compliant": true,
     "headroom_guard_compliant": true,
-    "graphics_clock_mhz": 1410.0,
+    "graphics_clock_mhz": 300.0,
     "max_graphics_clock_mhz": 2145.0,
-    "memory_clock_mhz": 7000.0,
-    "host_tensor_gflops": 108.04,
+    "memory_clock_mhz": 405.0,
+    "host_tensor_gflops": 107.9,
     "measured_fp32_tflops": 9.88,
     "measured_fp16_tensor_tflops": 39.54,
     "effective_sparse_moe_nf4_tflops": 65.24,
-    "microbench_elapsed_ms": 152.51
+    "microbench_elapsed_ms": 153.43
   },
   "roadmap_summary": {
     "exists": true,
-    "roadmap_sha256": "dd3ab80c49b4e31f6780368349652e511adb7b8d2a7b6891bda9b78898aed552",
+    "roadmap_sha256": "0f61160f19d0f343d22dbbe716aaa82e203bcc3ad391492484b33a4cb48981d1",
     "seasons_detected": [
       1,
       2,
@@ -77,10 +77,11 @@
       30,
       31,
       32,
-      33
+      33,
+      34
     ],
-    "max_season": 33,
-    "total_task_ids": 203,
+    "max_season": 34,
+    "total_task_ids": 211,
     "sample_next_candidates": [
       "Proposal of record: [`docs/COMPUTE_COIN_AND_MARKET.md`](docs/COMPUTE_COIN_AND_MARKET.md); code `hivemind.economy.compute_coin` (pure, torch-free); 12 tests (5 property-based); simulation `scripts/run_compute_market_sim.py`, pre-registered ([`artifacts/economy/compute_market_prereg.json`](artifacts/economy/compute_market_prereg.json)), report [`compute_market_report.json`](artifacts/economy/compute_market_report.json). **Status: proposed, not adopted** \u2014 the ledger keeps its block-reward rule until `HM-S12-02` and an owner order.",
       "| `HM-S13-04` | HMT cannot yet be earned except by serving | owner-signed grant policy through the firewall (`HM-S11-02`) instead of a bearer admin key | G-R1 |",
@@ -93,7 +94,7 @@
     ]
   },
   "pr_integration_summary": {
-    "open_prs_count": 5,
+    "open_prs_count": 6,
     "merged_prs": [],
     "held_prs": [
       219,
@@ -103,5 +104,5 @@
     ]
   },
   "night_moe_summary": {},
-  "receipt_sha256": "7f9c2e74e15484b65ecad61b04affabfe7c1b8f2c6e4627e595d9e6e192772fb"
+  "receipt_sha256": "06c939ac92bd4d0f52efc00863e74799fb967360a1b4c70fa46c69bc1e5a32c3"
 }

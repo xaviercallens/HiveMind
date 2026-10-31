@@ -1,33 +1,33 @@
 {
   "schema_version": "rtx2070_3h_monitor.v1",
   "cadence_cron": "0 */3 * * *",
-  "timestamp_utc": "2026-10-31T06:21:22Z",
+  "timestamp_utc": "2026-10-31T08:19:35Z",
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-10-31T06:21:22Z",
+    "timestamp_utc": "2026-10-31T08:19:35Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": false,
     "device": "nvml:cuda:0 (torch+cpu host)",
     "compute_capability": "7.5",
     "temperature_c": 26.0,
-    "gpu_utilization_pct": 13.0,
-    "power_draw_w": 30.08,
+    "gpu_utilization_pct": 8.0,
+    "power_draw_w": 9.45,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1410.0,
-    "memory_free_mib": 6597.0,
+    "memory_used_mib": 1437.0,
+    "memory_free_mib": 6570.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
     "wddm_envelope_compliant": true,
     "headroom_guard_compliant": true,
-    "graphics_clock_mhz": 1410.0,
+    "graphics_clock_mhz": 300.0,
     "max_graphics_clock_mhz": 2145.0,
-    "memory_clock_mhz": 7000.0,
-    "host_tensor_gflops": 108.04,
+    "memory_clock_mhz": 405.0,
+    "host_tensor_gflops": 107.9,
     "measured_fp32_tflops": 9.88,
     "measured_fp16_tensor_tflops": 39.54,
     "effective_sparse_moe_nf4_tflops": 65.24,
-    "microbench_elapsed_ms": 152.51
+    "microbench_elapsed_ms": 153.43
   },
   "community_gpu_benchmark_summary": {
     "receipt_sha256": "e944272a1802d8053a28c26a59e7e121671eec23e2c3fcb22f2fb45c3b197580",
@@ -35,16 +35,30 @@
     "peak_allocated_mb": 0.0
   },
   "pr_integration_summary": {
-    "checked_utc": "2026-10-31T06:21:25Z",
-    "open_prs_count": 5,
+    "checked_utc": "2026-10-31T08:19:39Z",
+    "open_prs_count": 6,
     "evaluated": [
+      {
+        "pr": 345,
+        "title": "feat(router,moe): integrate 3-Tome Polyglot Coding MoE, Image-MoE & Video-MoE + fix /webgpu slim import",
+        "author": "xaviercallens",
+        "head_ref": "feat/s30-dev-image-video-moe-and-webgpu-fix",
+        "base_ref": "main",
+        "head_sha": "ae4bdbd002",
+        "owner_authored": true,
+        "security_passed": true,
+        "injection_clean": true,
+        "decision": "ACCEPT",
+        "merged": false,
+        "merge_message": ""
+      },
       {
         "pr": 344,
         "title": "feat(router,webgpu,s26): fix /webgpu 500 without torch, 5-lang OpenRouter i18n & TensorSharp (@zhongkaifu) Co-Lab Bridge",
         "author": "xaviercallens",
         "head_ref": "feat/openrouter-5lang-i18n",
         "base_ref": "main",
-        "head_sha": "ada43b3d21",
+        "head_sha": "0daf6f2e28",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -117,5 +131,5 @@
       141
     ]
   },
-  "ledger_sha256": "1f0e7137fafc96f1ae188bd203f59c5494c10d618fb5e7cc8dab85ef6f77499d"
+  "ledger_sha256": "8b80c6d35ed0943e87f016301b029b33dd0dd39e5a296208392f4e612f692fb9"
 }

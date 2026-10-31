@@ -1,42 +1,42 @@
 {
   "monitor_id": "NOCTURNAL-IMAGE-MOE-EVOLUTION-2026-10-29",
-  "timestamp_utc": "2026-10-31T07:16:52Z",
+  "timestamp_utc": "2026-10-30T08:41:48Z",
   "status": "ACTIVE_EVOLVING_GREEN",
-  "generations_executed": 3,
+  "generations_executed": 2,
   "pareto_ratchet_monotone_verified": true,
   "tesla_t4_vram_guard_all_passed": true,
   "best_ratcheted_losses": {
-    "reddit_vision_vlm_moe_loss": 0.00122,
+    "reddit_vision_vlm_moe_loss": 0.0003,
     "exoplanet_astro_vmoe_focal_loss": 0.0,
-    "massive_7div_104bee_focal_loss": 0.0
+    "massive_7div_104bee_focal_loss": 0.00227
   },
   "generation_logs": [
     {
       "generation": 1,
-      "inner_diloco_steps": 400,
+      "inner_diloco_steps": 25,
       "lora_alpha": 32.0,
       "focal_gamma": 2.0,
       "reddit_vision_vlm_moe": {
-        "candidate_moe_loss": 0.00213,
-        "ratcheted_moe_loss": 0.00213,
-        "mean_loss_reduction_pct": 94.6,
+        "candidate_moe_loss": 0.0003,
+        "ratcheted_moe_loss": 0.0003,
+        "mean_loss_reduction_pct": 94.42,
         "routing_accuracy": 1.0,
         "pareto_admitted": true,
         "gate_passed": true
       },
       "exoplanet_astro_vmoe_1500mb": {
-        "candidate_focal_loss": 1e-05,
-        "ratcheted_focal_loss": 1e-05,
-        "mean_focal_loss_reduction_pct": 99.9,
+        "candidate_focal_loss": 0.0,
+        "ratcheted_focal_loss": 0.0,
+        "mean_focal_loss_reduction_pct": 99.84,
         "routing_accuracy": 1.0,
         "max_vram_mib": 1410.0,
         "pareto_admitted": true,
         "gate_passed": true
       },
       "massive_7div_104bee_image_moe": {
-        "candidate_focal_loss": 0.0,
-        "ratcheted_focal_loss": 0.0,
-        "mean_focal_loss_reduction_pct": 99.69,
+        "candidate_focal_loss": 0.00227,
+        "ratcheted_focal_loss": 0.00227,
+        "mean_focal_loss_reduction_pct": 99.65,
         "routing_accuracy": 1.0,
         "total_samples": 42870000,
         "total_bees": 104,
@@ -44,40 +44,40 @@
         "gate_passed": true
       },
       "tesla_t4_vram_guard": {
-        "gpu_name": "NVIDIA Tesla T4 (Simulated/CPU Fallback)",
+        "gpu_name": "Tesla T4",
         "total_vram_mib": 15360.0,
         "used_vram_mib": 4839.0,
-        "free_vram_mib": 10521.0,
+        "free_vram_mib": 10073.0,
         "min_required_free_vram_mib": 4300.0,
         "vram_headroom_guard_passed": true
       }
     },
     {
       "generation": 2,
-      "inner_diloco_steps": 450,
+      "inner_diloco_steps": 75,
       "lora_alpha": 36.0,
       "focal_gamma": 2.15,
       "reddit_vision_vlm_moe": {
-        "candidate_moe_loss": 0.00242,
-        "ratcheted_moe_loss": 0.00213,
-        "mean_loss_reduction_pct": 94.35,
+        "candidate_moe_loss": 0.00273,
+        "ratcheted_moe_loss": 0.0003,
+        "mean_loss_reduction_pct": 94.34,
         "routing_accuracy": 1.0,
         "pareto_admitted": false,
         "gate_passed": true
       },
       "exoplanet_astro_vmoe_1500mb": {
-        "candidate_focal_loss": 0.02294,
-        "ratcheted_focal_loss": 1e-05,
-        "mean_focal_loss_reduction_pct": 99.97,
+        "candidate_focal_loss": 0.01061,
+        "ratcheted_focal_loss": 0.0,
+        "mean_focal_loss_reduction_pct": 99.95,
         "routing_accuracy": 1.0,
         "max_vram_mib": 1410.0,
         "pareto_admitted": false,
         "gate_passed": true
       },
       "massive_7div_104bee_image_moe": {
-        "candidate_focal_loss": 0.00152,
-        "ratcheted_focal_loss": 0.0,
-        "mean_focal_loss_reduction_pct": 99.76,
+        "candidate_focal_loss": 0.02383,
+        "ratcheted_focal_loss": 0.00227,
+        "mean_focal_loss_reduction_pct": 99.75,
         "routing_accuracy": 1.0,
         "total_samples": 42870000,
         "total_bees": 104,
@@ -85,55 +85,14 @@
         "gate_passed": true
       },
       "tesla_t4_vram_guard": {
-        "gpu_name": "NVIDIA Tesla T4 (Simulated/CPU Fallback)",
+        "gpu_name": "Tesla T4",
         "total_vram_mib": 15360.0,
         "used_vram_mib": 4839.0,
-        "free_vram_mib": 10521.0,
-        "min_required_free_vram_mib": 4300.0,
-        "vram_headroom_guard_passed": true
-      }
-    },
-    {
-      "generation": 3,
-      "inner_diloco_steps": 500,
-      "lora_alpha": 40.0,
-      "focal_gamma": 2.3,
-      "reddit_vision_vlm_moe": {
-        "candidate_moe_loss": 0.00122,
-        "ratcheted_moe_loss": 0.00122,
-        "mean_loss_reduction_pct": 94.17,
-        "routing_accuracy": 1.0,
-        "pareto_admitted": true,
-        "gate_passed": true
-      },
-      "exoplanet_astro_vmoe_1500mb": {
-        "candidate_focal_loss": 0.0,
-        "ratcheted_focal_loss": 0.0,
-        "mean_focal_loss_reduction_pct": 99.97,
-        "routing_accuracy": 1.0,
-        "max_vram_mib": 1410.0,
-        "pareto_admitted": true,
-        "gate_passed": true
-      },
-      "massive_7div_104bee_image_moe": {
-        "candidate_focal_loss": 6e-05,
-        "ratcheted_focal_loss": 0.0,
-        "mean_focal_loss_reduction_pct": 99.72,
-        "routing_accuracy": 1.0,
-        "total_samples": 42870000,
-        "total_bees": 104,
-        "pareto_admitted": false,
-        "gate_passed": true
-      },
-      "tesla_t4_vram_guard": {
-        "gpu_name": "NVIDIA Tesla T4 (Simulated/CPU Fallback)",
-        "total_vram_mib": 15360.0,
-        "used_vram_mib": 4839.0,
-        "free_vram_mib": 10521.0,
+        "free_vram_mib": 10073.0,
         "min_required_free_vram_mib": 4300.0,
         "vram_headroom_guard_passed": true
       }
     }
   ],
-  "monitor_sha256": "ed44d78affff5e48d3b7735e442f56f4ff9354fac557c9b9c890c15b6f667237"
+  "monitor_sha256": "d44265e8788fff04eea21fd9ecdb43800863b23469c53886b90632dad36415ab"
 }

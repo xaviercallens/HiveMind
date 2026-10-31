@@ -9,10 +9,14 @@ from fastapi.testclient import TestClient
 from hivemind.economy.international_launch_model import (
     SwarmLiveBaseline,
     build_100_producer_international_fleet_plan,
+    build_foundation_paper_v42_portal_payload,
     compute_congestion_price,
     compute_erlang_c_metrics,
     compute_progressive_starter_grant,
     evaluate_international_launch_readiness,
+    forecast_200plus_node_international_launch,
+    render_foundation_paper_portal_html,
+    render_gcp_planet_forecast_html,
     simulate_international_launch_wave,
 )
 from hivemind.router.accounts import RouterStore
@@ -194,4 +198,169 @@ def test_router_store_and_gateway_100_producer_registration_and_simulation(tmp_p
     assert selected["region"] == "us-east"
     assert selected["residency_tier"] == 0
     assert selected["loaded"] is True
+
+
+def test_forecast_200plus_node_international_launch_consumer_heavy_stability() -> None:
+    report = forecast_200plus_node_international_launch(
+        target_total_nodes=265,
+        visitor_count=2400,
+    )
+    assert report["model_id"] == "HM-S33-200PLUS-NODE-INTERNATIONAL-LAUNCH-FORECAST"
+    assert report["ready_for_200plus_international_launch"] is True
+    assert report["charter_compliance"]["fiat_currency_exposure_eur_usd"] == 0.0
+
+    swarm = report["forecast_200plus_swarm"]
+    assert swarm["total_active_nodes"] >= 200
+    assert swarm["visitor_funnel_count"] == 2400
+    assert swarm["consumer_nodes"] > swarm["prosumer_nodes"] > swarm["dedicated_producers"]
+    assert (
+        swarm["dedicated_producers"] + swarm["prosumer_nodes"] + swarm["consumer_nodes"]
+        == swarm["total_active_nodes"]
+    )
+    assert swarm["effective_inference_servers_c"] >= swarm["halfin_whitt_min_servers_c"]
+
+    tp = report["throughput_and_compute_power"]
+    assert tp["effective_daytime_tok_per_s"] > 3000.0
+    assert tp["elastic_burst_max_tok_per_s"] > tp["effective_daytime_tok_per_s"]
+    assert tp["nocturnal_diloco_pflops_fp16"] > 3.0
+
+    bal = report["balancing_and_latency_sla"]
+    assert bal["uncontrolled_naive_routing"]["utilization_rho"] > 0.85
+    assert bal["hivemind_balanced_routing"]["is_stable"] is True
+    assert bal["hivemind_balanced_routing"]["utilization_rho"] <= 0.78
+    assert bal["hivemind_balanced_routing"]["fast_lane_prosumer_ttft_ms"] <= 200.0
+    assert bal["hivemind_balanced_routing"]["blended_p50_response_ms"] <= 300.0
+
+    globe = report["hiveminers_on_globe"]
+    assert globe["total_plotted_nodes"] >= 200
+    assert globe["current_pioneer_nodes_count"] == 47
+    assert len(globe["super_peer_hubs"]) == 6
+    assert len(globe["arcs"]) >= 10
+    assert len(report["literature_review_models"]) == 6
+
+
+def test_gcp_planet_forecast_html_and_dashboard_routes() -> None:
+    from hivemind.boinc.hivemind_at_home_dashboard import create_hivemind_at_home_app
+
+    html = render_gcp_planet_forecast_html()
+    assert "hivemind-planet-canvas" in html
+    assert "Kleinrock" in html
+    assert "Mitzenmacher" in html
+    assert "0.00 EUR / 0.00 USD" in html
+
+    app = create_hivemind_at_home_app()
+    client = TestClient(app)
+
+    api_resp = client.get("/api/v1/launch/planet-forecast?target_total_nodes=280&visitor_count=3200")
+    assert api_resp.status_code == 200
+    payload = api_resp.json()
+    assert payload["forecast_200plus_swarm"]["total_active_nodes"] >= 280
+    assert payload["forecast_200plus_swarm"]["visitor_funnel_count"] == 3200
+    assert payload["ready_for_200plus_international_launch"] is True
+
+    post_resp = client.post(
+        "/api/v1/launch/planet-forecast",
+        json={
+            "target_total_nodes": 310,
+            "visitor_count": 4000,
+            "dedicated_producers": 34,
+            "prosumer_nodes": 66,
+            "consumer_nodes": 210,
+            "utc_hour": 18,
+        },
+    )
+    assert post_resp.status_code == 200
+    post_data = post_resp.json()
+    assert post_data["forecast_200plus_swarm"]["total_active_nodes"] == 310
+    assert post_data["ready_for_200plus_international_launch"] is True
+
+    page_resp = client.get("/planet-forecast")
+    assert page_resp.status_code == 200
+    assert "hivemind-planet-canvas" in page_resp.text
+    assert "Interactive 3D Planet HiveMiners Globe" in page_resp.text
+
+
+def test_foundation_paper_v42_and_portal_integration() -> None:
+    from hivemind.boinc.hivemind_at_home_dashboard import create_hivemind_at_home_app
+
+    paper_payload = build_foundation_paper_v42_portal_payload()
+    assert paper_payload["paper_version"] == "4.2.0"
+    assert paper_payload["page_count"] >= 69
+    assert paper_payload["charter_fiat_exposure_eur_usd"] == 0.0
+    assert (
+        paper_payload["live_experimentation_v42"]["experiment_e20_international_launch"][
+            "P20a_adaptive_multisplit_guard"
+        ]["client_prelude_vram_mib"]
+        <= 1536.0
+    )
+    assert (
+        paper_payload["live_experimentation_v42"]["experiment_e20_international_launch"][
+            "P20b_top1pct_2d_dct_ef21"
+        ]["compression_ratio"]
+        == 225.4
+    )
+    assert len(paper_payload["five_wave_international_roadmap"]) == 6
+
+    paper_html = render_foundation_paper_portal_html()
+    assert "Foundation Article" in paper_html
+    assert "v4.2.0" in paper_html
+    assert "/paper/hivemind_foundation_article.pdf" in paper_html
+    assert "/planet-forecast" in paper_html
+
+    app = create_hivemind_at_home_app()
+    client = TestClient(app)
+
+    # 1. Verify main HiveMind Portal (/) includes the Foundation Paper, 3D Globe, Real vs. Forecast Traffic & Network Balancing deck
+    portal_resp = client.get("/")
+    assert portal_resp.status_code == 200
+    assert "portal-planet-paper-balancing-deck" in portal_resp.text
+    assert "/foundation-paper" in portal_resp.text
+    assert "/planet-forecast" in portal_resp.text
+    assert "/paper/hivemind_foundation_article.pdf" in portal_resp.text
+    assert "Real Live WAN Traffic (47 nodes) vs. Forecast Traffic" in portal_resp.text
+    assert "HiveMind Network Balancing" in portal_resp.text
+
+    # 2. Verify JSON API for Foundation Paper v4.2.0
+    api_paper = client.get("/api/v1/paper/foundation")
+    assert api_paper.status_code == 200
+    api_data = api_paper.json()
+    assert api_data["paper_version"] == "4.2.0"
+    assert (
+        api_data["real_vs_forecast_traffic_and_balancing"]["hivemind_balanced_265_node_forecast"][
+            "status"
+        ]
+        == "BALANCED_QED_GREEN"
+    )
+
+    # 3. Verify HTML reader routes (/foundation-paper and /paper)
+    reader_resp = client.get("/foundation-paper")
+    assert reader_resp.status_code == 200
+    assert "v4.2.0" in reader_resp.text
+    assert "E20" in reader_resp.text
+
+    alias_resp = client.get("/paper")
+    assert alias_resp.status_code == 200
+    assert "v4.2.0" in alias_resp.text
+
+    # 4. Verify PDF and LaTeX source serving routes
+    pdf_resp = client.get("/paper/hivemind_foundation_article.pdf")
+    assert pdf_resp.status_code == 200
+    assert pdf_resp.headers["content-type"].startswith("application/pdf")
+    assert pdf_resp.content.startswith(b"%PDF-")
+
+    tex_resp = client.get("/paper/hivemind_foundation_article.tex")
+    assert tex_resp.status_code == 200
+    assert "Version 4.2.0" in tex_resp.text
+    assert "tab:five_wave_international_roadmap" in tex_resp.text
+
+
+def test_international_launch_views_modular_separation() -> None:
+    from hivemind.economy import international_launch_model, international_launch_views
+
+    html_planet = international_launch_views.render_gcp_planet_forecast_html()
+    html_paper = international_launch_views.render_foundation_paper_portal_html()
+    assert "hivemind-planet-canvas" in html_planet
+    assert "Foundation Article" in html_paper
+    assert html_planet == international_launch_model.render_gcp_planet_forecast_html()
+    assert html_paper == international_launch_model.render_foundation_paper_portal_html()
 

@@ -33,8 +33,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "src"))
 
+from hivemind.economy.international_launch_model import (
+    forecast_200plus_node_international_launch,
+    render_gcp_planet_forecast_html,
+)
 from hivemind.swarm.international_launch_scaler import (
     build_international_launch_calendar,
+    build_international_launch_roadmap,
     coalesce_ledger_settlement_batch,
     compress_top1pct_dct_ef21,
     compute_hierarchical_fanout_plan,
@@ -229,10 +234,14 @@ def main() -> int:
         f"(floor >= {last_vram['min_required_free_vram_mib']} MiB)"
     )
 
-    # 3. Build International Launch Weekend Calendar & Seed Initial Human + Agent Enrollments
+    # 3. Build International Launch Weekend Calendar, 5-Wave Master Roadmap & Seed Human + Agent Enrollments
     cal_path = REPO_ROOT / "artifacts" / "international_weekend_launch_calendar.json"
     calendar = build_international_launch_calendar()
     cal_path.write_text(json.dumps(calendar, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    roadmap_path = REPO_ROOT / "artifacts" / "international_launch_roadmap.json"
+    roadmap = build_international_launch_roadmap()
+    roadmap_path.write_text(json.dumps(roadmap, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     human_enrollment = enroll_launch_participant(
         handle="@xaviercallens",
@@ -272,7 +281,23 @@ def main() -> int:
         encoding="utf-8",
     )
     print(f"[3/3] International Weekend Launch Calendar saved -> {cal_path}")
+    print(f"      • 5-Wave International Launch Master Roadmap saved -> {roadmap_path}")
+    print(
+        f"      • Supported Languages ({len(roadmap['supported_languages'])}): "
+        f"{', '.join(roadmap['supported_languages'])} | "
+        f"BOINC Plan Classes: {', '.join(roadmap['boinc_and_amcp_convergence']['plan_classes'])}"
+    )
     print(f"      • Seeded Human & Agent enrollments -> {enroll_path}")
+
+    # 4. Generate >200-Node International Launch Planet Forecast JSON & Standalone GCP HTML Page
+    planet_forecast = forecast_200plus_node_international_launch()
+    planet_json_path = REPO_ROOT / "artifacts" / "international_launch_200plus_planet_forecast.json"
+    planet_json_path.write_text(json.dumps(planet_forecast, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    planet_html_path = REPO_ROOT / "artifacts" / "gcp_hivemind_planet_forecast.html"
+    planet_html_path.write_text(render_gcp_planet_forecast_html(planet_forecast), encoding="utf-8")
+    print(f"[4/4] >200-Node Planet Forecast & GCP 3D Globe Web Page saved -> {planet_html_path}")
+    print(f"      • Verdict: {planet_forecast['verdict_summary']}")
     print("=" * 88)
     return 0
 

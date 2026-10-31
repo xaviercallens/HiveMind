@@ -39,3 +39,11 @@ models_cache/
 *.exe
 steam_dist/steamcmd/
 steam_dist/*.zip
+
+# LaTeX build byproducts & local agent worktrees
+paper/*.aux
+paper/*.out
+paper/*.toc
+paper/*.log
+.claude/
+

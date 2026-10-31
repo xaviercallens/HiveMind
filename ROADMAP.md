@@ -574,6 +574,21 @@ The full plan, with evidence, Definition of Done and the test for each finding (
 
 ---
 
+### Status update, 2026-10-31 (3-hourly review)
+
+- **Merged by the owner account, 17:10–17:33 CET:** #368 (V-MoE router dispatch and 8-bit AdamW), #371 (SolverBee slot presets), #372 (the improvement plan itself), #373, #374, #375 and #376. Their tests (11 files) pass on the new `main` (32 passed).
+- **PR-IP-07, first part:** [#377](https://github.com/xaviercallens/HiveMind/pull/377) makes the gatekeeper refuse a Lean build that reports `declaration uses 'sorry'`. Open, for owner review. The scanner-from-base-ref and CB-02 items (IP-14, IP-15) remain.
+- **Still open and blocked:** #369 and #366 (CI failures, see plan), #362 (stub audit), #344 (merge conflict and a documentation example the forbidden scan refuses).
+- **Open for claim (GitHub issues, label `agent-ready`):**
+  - [#378](https://github.com/xaviercallens/HiveMind/issues/378): owner-key fallback and account takeover (PR-IP-01, PR-IP-02). Owner action first: rotate the key.
+  - [#379](https://github.com/xaviercallens/HiveMind/issues/379): credit only server-verified work (PR-IP-03).
+  - [#380](https://github.com/xaviercallens/HiveMind/issues/380): dashboard admin authentication and CORS (PR-IP-05).
+  - [#381](https://github.com/xaviercallens/HiveMind/issues/381): bind BOINC uploads to their workunit and credit from server time (PR-IP-06).
+  - [#382](https://github.com/xaviercallens/HiveMind/issues/382): ledger reload and atomic writes (PR-IP-04).
+- **Not yet delegated:** PR-IP-08 to PR-IP-14 (secrets, honest measurements, numerics, deploy hardening, hygiene). Next round.
+
+---
+
 ## 🎮 4. Opt-In Community GPU Testing Program (If Interested & Possible)
 
 If you have a consumer GPU (**NVIDIA GeForce RTX 20/30/40/50-series 6 GB–24 GB**, **AMD Radeon RX 6000/7000 via ROCm**, or **Apple Silicon M1/M2/M3/M4 via MPS**) and are interested in testing how your hardware performs on the HiveMind Sparse MoE + `EF21-DiLoCo` + `ZK-OPoI v4` stack, we provide a safe, opt-in, `< 1.5 GB` peak-VRAM benchmark suite:

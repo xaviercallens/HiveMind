@@ -82,3 +82,36 @@ Things the author should reconcile before the next release; each is from the LaT
 4. **Lemma count.** 120, 141 and 155 appear in different places.
 5. **E8 is a toy-model, CPU-only, two-host pilot**, and the paper says so. It should not be cited as GPU or LoRA evidence.
 6. **Production credit.** The BOINC/idle-worker path submits a hash-derived placeholder "QLoRA delta" to the production coordinator (see `docs/BOINC_STEAM_VOLUNTEER_AUDIT.md`); numbers derived from credited workunits (Cobblestones, "attested compute") inherit that caveat until the credit path is gated.
+
+## 8. RTX 2070 Host (`XAVGAMSRV`) Readiness, Public Keys & Measured Local Controls (2026-11-01)
+
+The RTX 2070 host (`XAVGAMSRV`, Windows 11, Python 3.11.9, PyTorch 2.7.0+cpu in the pilot environment, NVIDIA GeForce RTX 2070 8 GB SM 7.5) has merged this PR (`474e56c`), verified `tests/test_e8_pilot_network_safety.py` (`7 passed`), generated its federation public keys (private keys kept outside the repository in local restricted storage), and executed the required single-host baselines and loopback negative controls.
+
+### 8.1 Public Keys for `XAVGAMSRV` (RTX 2070 Host)
+
+* **WireGuard Public Key (`10.77.0.5/32`)**:
+  ```text
+  WOsqyc4wXDumYjyWDgIz+rVBabIccgk3+RDVoxxxRFk=
+  ```
+  On the T4 (`socreateai-agora-hermes-node1`):
+  ```bash
+  sudo wg set wg-hivemind peer WOsqyc4wXDumYjyWDgIz+rVBabIccgk3+RDVoxxxRFk= allowed-ips 10.77.0.5/32
+  ```
+* **User-Space SSH Tunnel Public Key (Zero-UAC / Zero-Firewall-Change Option for Windows 11 `XAVGAMSRV`)**:
+  Because `XAVGAMSRV` runs in a non-elevated Windows 11 user session (creating a kernel `wintun` interface requires interactive Windows UAC elevation) and TCP `34.48.48.154:22` is already reachable from `XAVGAMSRV` (`Test-NetConnection 34.48.48.154 -Port 22 == True`), the T4 session can also authorize this dedicated Ed25519 public key in `~/.ssh/authorized_keys` on `socreateai-agora-hermes-node1`:
+  ```text
+  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHR6g/jG45IOKFDWyC7hw1ETcY6uAddg5vCpec0SqKcI rtx2070-XAVGAMSRV-e8
+  ```
+  The background auto-learner daemon running on `XAVGAMSRV` polls both `http://10.77.0.4:8765` (WireGuard overlay) and an automatic SSH tunnel to `34.48.48.154:22` (`-L 18765:127.0.0.1:8765` and `-L 18766:10.77.0.4:8765`), and immediately launches `learner --learner-id 1 --host-label rtx2070-XAVGAMSRV` with `HM_INNER_STEPS=400` as soon as the T4 syncer opens a round.
+
+### 8.2 Measured Single-Host Baselines & Loopback Negative Controls on `XAVGAMSRV` (`HM_INNER_STEPS=400`, `K=2`, `--grace off`, `--merge rda`, 12 rounds)
+
+Raw JSON artifacts are committed under `artifacts/experiments/e8_real/baseline_seed{1,2,3}_rda.json` and `artifacts/experiments/e8_real/loopback_seed{1,2,3}_rda.json`:
+
+| Seed | `baseline` final loss | `baseline` receipt SHA-256 | `loopback` (`127.0.0.1`) final loss | Paired diff (`loopback - baseline`) | `loopback` round latency `p50` / `p95` | `loopback` HTTP RTT `p50` (`L0` / `L1`) | `loopback` receipt SHA-256 |
+|---:|---:|---|---:|---:|---|---|---|
+| `1` | `2.33977365` | `1386cf1892acfee2...` | `2.33977365` | `+0.00000000` | `0.806 s` / `2.471 s` | `2.30 ms` / `2.32 ms` | `786fead3c769f681...` |
+| `2` | `2.28465152` | `b9e774196bf53c29...` | `2.28465152` | `+0.00000000` | `0.806 s` / `2.596 s` | `2.29 ms` / `2.31 ms` | `7bc9bc2345a9209e...` |
+| `3` | `2.75701427` | `850356727cb66860...` | `2.75701427` | `+0.00000000` | `0.806 s` / `2.605 s` | `2.37 ms` / `2.36 ms` | `a525582f7ef46144...` |
+
+* **Paired final-loss difference (`loopback - baseline`, $n=3$)**: `0.00000000 +/- 0.00000000` (exact match across all 3 seeds, confirming the required negative control before the two-host WAN run).

@@ -99,6 +99,13 @@ def test_no_gpu_fails_and_says_cpu_only_unsupported() -> None:
     assert pf.verdict_of(cs) == "not_ready"
 
 
+def test_allow_cpu_solver_succeeds_for_cpu_hivemind_solver() -> None:
+    cs = run(runner=no_smi, allow_cpu_solver=True)
+    g = by_id(cs, "gpu")
+    assert g.status == "ok" and g.data["plan_class"] == "cpu_hivemind_solver"
+    assert pf.verdict_of(cs) == "ready"
+
+
 @pytest.mark.parametrize("bad", ["garbage", "a, b, c, d, e", "x, 100, 5000, 1, 1", "only,two"])
 def test_malformed_output_warns_not_crashes(bad: str) -> None:
     assert by_id(run(runner=smi(bad)), "gpu").status == "warn"

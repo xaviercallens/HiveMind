@@ -2819,4 +2819,67 @@ def create_router_app(
             "s1b_cross_cpu_reproducibility": s1b,
         }
 
+    @app.api_route("/get_project_config.php", methods=["GET", "HEAD"])
+    @app.api_route("/boinc/get_project_config.php", methods=["GET", "HEAD"])
+    def router_boinc_get_project_config() -> Any:
+        from fastapi.responses import Response
+
+        xml_body = (
+            '<?xml version="1.0" encoding="ISO-8859-1" ?>\n'
+            "<project_config>\n"
+            "    <name>HiveMind La Ruche (BOINC &amp; Night-MoE)</name>\n"
+            "    <master_url>https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/</master_url>\n"
+            "    <web_rpc_url_base>https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/</web_rpc_url_base>\n"
+            "    <local_revision>4.2.0</local_revision>\n"
+            "    <min_passwd_length>6</min_passwd_length>\n"
+            "    <account_manager/>\n"
+            "    <uses_username/>\n"
+            "    <client_account_creation_disabled>0</client_account_creation_disabled>\n"
+            "    <platforms>\n"
+            "        <platform>\n"
+            "            <platform_name>x86_64-pc-linux-gnu</platform_name>\n"
+            "            <user_friendly_name>Linux running on an AMD x86_64 or Intel EM64T CPU (NVIDIA GPU &gt;= 3.5 GB)</user_friendly_name>\n"
+            "            <plan_class>cuda_hivemind</plan_class>\n"
+            "        </platform>\n"
+            "        <platform>\n"
+            "            <platform_name>x86_64-pc-linux-gnu</platform_name>\n"
+            "            <user_friendly_name>Linux running on an AMD x86_64 or Intel EM64T CPU (NVIDIA GPU &gt;= 12 GB Big MoE)</user_friendly_name>\n"
+            "            <plan_class>cuda_hivemind_big</plan_class>\n"
+            "        </platform>\n"
+            "        <platform>\n"
+            "            <platform_name>x86_64-pc-linux-gnu</platform_name>\n"
+            "            <user_friendly_name>Cross-Platform CPU / BLS Transit &amp; Symbolic Solver</user_friendly_name>\n"
+            "            <plan_class>cpu_hivemind_solver</plan_class>\n"
+            "        </platform>\n"
+            "        <platform>\n"
+            "            <platform_name>windows_x86_64</platform_name>\n"
+            "            <user_friendly_name>Microsoft Windows (64-bit x86_64) CUDA / BLS Worker</user_friendly_name>\n"
+            "            <plan_class>cuda_hivemind</plan_class>\n"
+            "        </platform>\n"
+            "    </platforms>\n"
+            "</project_config>\n"
+        )
+        return Response(content=xml_body, media_type="application/xml; charset=utf-8")
+
+    @app.get("/boinc/status")
+    @app.get("/v1/hivemind/boinc/status")
+    def router_boinc_status() -> dict[str, Any]:
+        return {
+            "status": "ONLINE",
+            "project_name": "HiveMind La Ruche (BOINC & Night-MoE)",
+            "master_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/",
+            "join_guide_url": "https://hivemind-openrouter-1003063861791.us-central1.run.app/join?lang=en#train",
+            "project_config_xml_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/get_project_config.php",
+            "scheduler_rpc_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/boinc_cgi/cgi",
+            "federated_workunit_request_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/workunit/request",
+            "federated_workunit_submit_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/workunit/submit",
+            "federated_ledger_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/ledger",
+            "night_window": "22:00-07:00 Europe/Paris (24/7 on-demand workunits active)",
+            "plan_classes": ["cuda_hivemind", "cuda_hivemind_big", "cpu_hivemind_solver"],
+            "rewards_per_verified_workunit": {
+                "hmt_reflexion_points": 250,
+                "boinc_cobblestones": 45.0,
+            },
+        }
+
     return app

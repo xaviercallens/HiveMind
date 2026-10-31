@@ -378,3 +378,14 @@ def test_the_gateway_page_reflects_its_own_configuration() -> None:
     google_only = TestClient(create_router_app(RouterStore(":memory:", b"g" * 32), open_registration=False,
                                                google_client_id="123456789-abc.apps.googleusercontent.com")).get("/join?lang=en").text
     assert "/v1/hivemind/register" not in google_only and "sign in with Google" in google_only
+
+
+def test_boinc_train_section_documents_plan_classes_dry_run_and_status_endpoints(client: TestClient) -> None:
+    en = client.get("/join?lang=en").text
+    assert "cuda_hivemind" in en and "cuda_hivemind_big" in en and "cpu_hivemind_solver" in en
+    assert "--dry-run" in en and "--allow-cpu-solver" in en and "boinccmd --project_attach" in en
+    assert "/boinc/status" in en and "/api/v1/federated/ledger" in en
+    cfg = client.get("/get_project_config.php")
+    assert cfg.status_code == 200 and "<project_config>" in cfg.text and "cuda_hivemind" in cfg.text
+    st = client.get("/boinc/status")
+    assert st.status_code == 200 and st.json()["status"] == "ONLINE"

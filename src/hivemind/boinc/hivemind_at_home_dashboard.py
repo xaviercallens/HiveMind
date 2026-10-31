@@ -6398,7 +6398,7 @@ def create_hivemind_at_home_app(
         },
     ]
 
-    @app.get("/", response_class=HTMLResponse)
+    @app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
     def index_portal(request: Request, view: Optional[str] = None) -> HTMLResponse:
         state = build_hivemind_at_home_state(
             gpu_campaigns_report_path=gpu_campaigns_report_path,
@@ -9246,6 +9246,140 @@ def create_hivemind_at_home_app(
         return RedirectResponse(
             url="https://github.com/xaviercallens/HiveMind/releases/download/v2.12.0/HiveMind_Astrophysics_Exoplanet_Hunter_v2.11.0_Steam_Win64.zip",
             status_code=307,
+        )
+
+    @app.api_route("/get_project_config.php", methods=["GET", "HEAD"])
+    @app.api_route("/boinc/get_project_config.php", methods=["GET", "HEAD"])
+    def boinc_get_project_config() -> Response:
+        xml_body = (
+            '<?xml version="1.0" encoding="ISO-8859-1" ?>\n'
+            "<project_config>\n"
+            "    <name>HiveMind La Ruche (BOINC &amp; Night-MoE)</name>\n"
+            "    <master_url>https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/</master_url>\n"
+            "    <web_rpc_url_base>https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/</web_rpc_url_base>\n"
+            "    <local_revision>4.2.0</local_revision>\n"
+            "    <min_passwd_length>6</min_passwd_length>\n"
+            "    <account_manager/>\n"
+            "    <uses_username/>\n"
+            "    <client_account_creation_disabled>0</client_account_creation_disabled>\n"
+            "    <platforms>\n"
+            "        <platform>\n"
+            "            <platform_name>x86_64-pc-linux-gnu</platform_name>\n"
+            "            <user_friendly_name>Linux running on an AMD x86_64 or Intel EM64T CPU (NVIDIA GPU &gt;= 3.5 GB)</user_friendly_name>\n"
+            "            <plan_class>cuda_hivemind</plan_class>\n"
+            "        </platform>\n"
+            "        <platform>\n"
+            "            <platform_name>x86_64-pc-linux-gnu</platform_name>\n"
+            "            <user_friendly_name>Linux running on an AMD x86_64 or Intel EM64T CPU (NVIDIA GPU &gt;= 12 GB Big MoE)</user_friendly_name>\n"
+            "            <plan_class>cuda_hivemind_big</plan_class>\n"
+            "        </platform>\n"
+            "        <platform>\n"
+            "            <platform_name>x86_64-pc-linux-gnu</platform_name>\n"
+            "            <user_friendly_name>Cross-Platform CPU / BLS Transit &amp; Symbolic Solver</user_friendly_name>\n"
+            "            <plan_class>cpu_hivemind_solver</plan_class>\n"
+            "        </platform>\n"
+            "        <platform>\n"
+            "            <platform_name>windows_x86_64</platform_name>\n"
+            "            <user_friendly_name>Microsoft Windows (64-bit x86_64) CUDA / BLS Worker</user_friendly_name>\n"
+            "            <plan_class>cuda_hivemind</plan_class>\n"
+            "        </platform>\n"
+            "    </platforms>\n"
+            "</project_config>\n"
+        )
+        return Response(content=xml_body, media_type="application/xml; charset=utf-8")
+
+    @app.get("/lookup_account.php")
+    @app.get("/create_account.php")
+    @app.get("/boinc/lookup_account.php")
+    def boinc_lookup_or_create_account(
+        email_addr: str = "volunteer@hivemind.network",
+        user_name: str = "volunteer-node",
+        passwd_hash: str = "",
+    ) -> Response:
+        auth_key = hashlib.sha256(f"BOINC_AUTH|{email_addr}|{user_name}|{passwd_hash}".encode("utf-8")).hexdigest()[:32]
+        xml_body = (
+            '<?xml version="1.0" encoding="ISO-8859-1" ?>\n'
+            "<account_out>\n"
+            f"    <authenticator>{auth_key}</authenticator>\n"
+            "</account_out>\n"
+        )
+        return Response(content=xml_body, media_type="application/xml; charset=utf-8")
+
+    @app.post("/boinc_cgi/cgi")
+    @app.post("/cgi")
+    async def boinc_scheduler_cgi(request: Request) -> Response:
+        raw_req = (await request.body()).decode("utf-8", "replace")
+        has_gpu = "<coproc_cuda>" in raw_req or "NVIDIA" in raw_req
+        plan_class = "cuda_hivemind" if has_gpu else "cpu_hivemind_solver"
+        acks = "".join(
+            f"    <result_ack><name>{html.escape(m)}</name></result_ack>\n"
+            for m in re.findall(r"<result>\s*<name>([^<]+)</name>", raw_req)
+        )
+        xml_reply = (
+            "<scheduler_reply>\n"
+            "    <scheduler_version>724</scheduler_version>\n"
+            "    <master_url>https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/</master_url>\n"
+            "    <request_delay>60.000000</request_delay>\n"
+            "    <project_name>HiveMind La Ruche (BOINC &amp; Night-MoE)</project_name>\n"
+            f"    <message priority=\"low\">Connected to HiveMind La Ruche BOINC Coordinator (active plan_class={plan_class}).</message>\n"
+            f"{acks}"
+            "</scheduler_reply>\n"
+        )
+        return Response(content=xml_reply, media_type="application/xml; charset=utf-8")
+
+    @app.get("/boinc/status", response_class=JSONResponse)
+    @app.get("/api/v1/boinc/status", response_class=JSONResponse)
+    def api_boinc_coordinator_status() -> JSONResponse:
+        return JSONResponse(
+            content={
+                "status": "ONLINE",
+                "project_name": "HiveMind La Ruche (BOINC & Night-MoE)",
+                "master_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/",
+                "join_guide_url": "https://hivemind-openrouter-1003063861791.us-central1.run.app/join?lang=en#train",
+                "project_config_xml_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/get_project_config.php",
+                "scheduler_rpc_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/boinc_cgi/cgi",
+                "federated_workunit_request_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/workunit/request",
+                "federated_workunit_submit_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/workunit/submit",
+                "federated_ledger_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/ledger",
+                "night_window": "22:00-07:00 Europe/Paris (24/7 on-demand workunits active)",
+                "plan_classes": {
+                    "cuda_hivemind": {
+                        "min_vram_mb": 3500,
+                        "measured_peak_mib": 3409,
+                        "platforms": ["x86_64-pc-linux-gnu", "windows_x86_64"],
+                        "workload": "4-bit NF4 Sparse Bee-MoE QLoRA (rank r=4, H=200 steps) + CUDA PTX BLS exoplanet transit folding",
+                    },
+                    "cuda_hivemind_big": {
+                        "min_vram_mb": 12000,
+                        "platforms": ["x86_64-pc-linux-gnu"],
+                        "workload": "14B/30B-A3B Coding & 104-Bee Image-MoE outer-delta synthesis",
+                    },
+                    "cpu_hivemind_solver": {
+                        "min_vram_mb": 0,
+                        "min_cpus": 4,
+                        "min_ram_gb": 8,
+                        "platforms": ["x86_64-pc-linux-gnu", "windows_x86_64", "darwin_x86_64_arm64"],
+                        "workload": "TESS/JWST Box-Least-Squares (BLS) 16,384-point light-curve folding & deterministic verification",
+                    },
+                },
+                "rewards_per_verified_workunit": {
+                    "hmt_reflexion_points": 250,
+                    "boinc_cobblestones": 45.0,
+                    "monetary_value_eur_usd": 0.0,
+                },
+                "live_counters": {
+                    "total_leases_issued": federated_state["lease_counter"],
+                    "active_leases_count": len(federated_state["active_leases"]),
+                    "completed_receipts_count": len(federated_state["completed_receipts"]),
+                },
+                "quickstart_commands": {
+                    "1_preflight_gpu": "python3 scripts/hivemind_volunteer_preflight.py --project-url https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app",
+                    "1b_preflight_cpu_solver": "python3 scripts/hivemind_volunteer_preflight.py --allow-cpu-solver --project-url https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app",
+                    "2_local_dry_run": "python3 scripts/hivemind_boinc_idle_worker.py --coordinator https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app --handle your-handle --domain physics_sim --dry-run",
+                    "3_single_workunit": "python3 scripts/hivemind_boinc_idle_worker.py --coordinator https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app --handle your-handle --domain physics_sim --once",
+                    "4_native_boinc_attach": "boinccmd --project_attach https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app YOUR_ACCOUNT_KEY",
+                },
+            }
         )
 
     return app

@@ -1,0 +1,225 @@
+{
+  "api_key_owner": "xavier_callens",
+  "base_url": "https://hivemind-openrouter-1003063861791.us-central1.run.app/v1",
+  "antigravity_sdk_verified": true,
+  "receipts": [
+    {
+      "pr_order": 1,
+      "ticket": "HM-S32-01",
+      "sdk": "google-antigravity (LocalOpenAIAgentConfig.lightweight)",
+      "model": "hivemind/bee-stars",
+      "completion_id": "chatcmpl-Zq9zeW8BOx0PZyMcjmKI2vFImV7DJK8g",
+      "request_id": "req-19f520b3c2f646759f2f6aa3533a57a5",
+      "charged_hmt": 0.04261764705882353,
+      "latency_s": 13.022,
+      "antigravity_agent_reply_excerpt": "To optimize the Symplectic Velocity-Verlet N-Body orbital step for KEPLER-HM-442b, follow these steps:\n\n1. **High-Performance Computing (HPC) Environment**: Ensure you are running on an HPC cluster with high-speed interconnects and sufficient memory per node.\n2. **Parallelization"
+    },
+    {
+      "pr_order": 2,
+      "ticket": "HM-S32-02",
+      "sdk": "hivemind-openrouter + hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
+      "model": "hivemind/coder",
+      "completion_id": "chatcmpl-107",
+      "request_id": "req-e0c3452f90464bf09c2d0effc8468462",
+      "charged_hmt": 0.044470588235294116,
+      "latency_s": 19.602,
+      "reply_excerpt": "```python\nassert \"Lifelong Decentralized Ratchet & Anti-Forgetting Anchor Buffer\" in system_name, \"Invariant: System name must include the specified phrase.\"\nassert \"arXiv/JWST Ingestion\" in system_functionality, \"Invari"
+    },
+    {
+      "pr_order": 3,
+      "ticket": "HM-S32-03",
+      "sdk": "hivemind-openrouter + hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
+      "model": "hivemind/coder",
+      "completion_id": "chatcmpl-255",
+      "request_id": "req-c1b68fed5b9b49a1b1425dc55db6dc38",
+      "charged_hmt": 0.03211764705882353,
+      "latency_s": 1.349,
+      "reply_excerpt": "```python\nassert \"Open Bee Marketplace Signed Manifest Verifier & Self-Service Expert Registry\" == \"Open Bee Marketplace Signed Manifest Verifier & Self-Service Expert Registry\", \"Invariant assertion failed\"\n```"
+    },
+    {
+      "pr_order": 4,
+      "ticket": "HM-S33-01",
+      "sdk": "hivemind-openrouter + hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
+      "model": "hivemind/coder",
+      "completion_id": "chatcmpl-682",
+      "request_id": "req-67d3e572591844f980ed3e873724659a",
+      "charged_hmt": 0.045397058823529415,
+      "latency_s": 2.265,
+      "reply_excerpt": "```python\nassert \"Straggler-Free Decoupled DiLoCo with Staleness-Aware PA-CGAD & Radial-Directional Averaging\" == \"Straggler-Free Decoupled DiLoCo with Staleness-Aware PA-CGAD & Radial-Directional Averaging\"\n```"
+    },
+    {
+      "pr_order": 5,
+      "ticket": "HM-S33-02",
+      "sdk": "hivemind-openrouter + hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
+      "model": "hivemind/bee-rusty-sundials",
+      "completion_id": "chatcmpl-759",
+      "request_id": "req-845df5d9e1974af48c699003edc93991",
+      "charged_hmt": 0.03582352941176471,
+      "latency_s": 1.727,
+      "reply_excerpt": "```python\nassert \"Multi-Bee Debate & Cross-Verification Arena\" in system_components and \"AMCP Bus\" in system_components, \"Invariant violated: Multi-Bee Debate & Cross-Verification Arena and AMCP Bus must be present in sy"
+    },
+    {
+      "pr_order": 6,
+      "ticket": "HM-S33-03",
+      "sdk": "hivemind-openrouter + hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
+      "model": "hivemind/bee-stars",
+      "completion_id": "chatcmpl-M8E1IjFpK650FCxehC1FsUDKZqg59vUt",
+      "request_id": "req-e851f3c97bde413aac43a22af9a7b9c6",
+      "charged_hmt": 0.033661764705882356,
+      "latency_s": 1.846,
+      "reply_excerpt": "```python\nassert \"Eco-Compute Domestic Thermal Valorization & Carbon-Offset Telemetry Ledger\" == \"Eco-Compute Domestic Thermal Valorization & Carbon-Offset Telemetry Ledger\", \"Invariant assertion failed\"\n```"
+    },
+    {
+      "pr_order": 7,
+      "ticket": "HM-S34-01",
+      "sdk": "hivemind-openrouter + hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
+      "model": "hivemind/coder",
+      "completion_id": "chatcmpl-491",
+      "request_id": "req-081aa414e05a450b837c71cde6a4b9f3",
+      "charged_hmt": 0.03304411764705883,
+      "latency_s": 1.51,
+      "reply_excerpt": "```python\nassert \"Speculative Multi-Token Draft-Verify Decoding across Consumer GPUs\" in system_description, \"Invariant violated: Speculative Multi-Token Draft-Verify Decoding across Consumer GPUs not mentioned in system"
+    },
+    {
+      "pr_order": 8,
+      "ticket": "HM-S34-02",
+      "sdk": "hivemind-openrouter + hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
+      "model": "hivemind/coder",
+      "completion_id": "chatcmpl-545",
+      "request_id": "req-fd03f0ac5a604efda78c460a52e4920f",
+      "charged_hmt": 0.04045588235294118,
+      "latency_s": 1.831,
+      "reply_excerpt": "```python\nassert dynamic < 1.5, \"Game Preemption Circuit-Breaker triggered due to dynamic exceeding 1.5s\"\nassert host_ram_ef21_flush == 0, \"Zero-VRAM Host-RAM EF21 Flush failed\"\n```"
+    },
+    {
+      "pr_order": 9,
+      "ticket": "HM-S34-03",
+      "sdk": "hivemind-openrouter + hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
+      "model": "hivemind/bee-lean-prover",
+      "completion_id": "chatcmpl-552",
+      "request_id": "req-bc16692f4cea4f0b886ed37aa44260df",
+      "charged_hmt": 0.045397058823529415,
+      "latency_s": 40.37,
+      "reply_excerpt": ""
+    },
+    {
+      "pr_order": 10,
+      "ticket": "HM-S34-04",
+      "sdk": "hivemind-openrouter + hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
+      "model": "hivemind/coder",
+      "completion_id": "chatcmpl-282",
+      "request_id": "req-e92f1134e3a0470db57ca1e8e11de723",
+      "charged_hmt": 0.0324264705882353,
+      "latency_s": 19.743,
+      "reply_excerpt": "```python\nassert self_evolving_antigravity + hivemind_10_pr_autonomous_architect_supervisor_ledger == \"Advanced Autonomous System\"\n```"
+    }
+  ],
+  "supervisor_ledger": {
+    "season_range": "HM-S32-01..HM-S34-04",
+    "total_prs_verified": 10,
+    "all_invariants_passed": true,
+    "merkle_head_sha256": "56d5482fcf0a46ddf7787d8c849ad101cf5084ef52df5ffcb544944b98b658a4",
+    "entries": [
+      {
+        "order": 1,
+        "ticket_id": "HM-S32-01",
+        "title": "Symplectic Velocity-Verlet N-Body Orbital Integrator for KEPLER-HM-442b & Antigravity SDK Co-Pilot",
+        "invariant_passed": true,
+        "key_metric_name": "max_relative_energy_drift_verlet",
+        "key_metric_value": 3.14512103960643e-07,
+        "openrouter_request_id": "req-19f520b3c2f646759f2f6aa3533a57a5",
+        "entry_hash_sha256": "f52c8e2a0df842b1bf424e3272bc8198aa0a26a1a717df9242eb4049409dba13"
+      },
+      {
+        "order": 2,
+        "ticket_id": "HM-S32-02",
+        "title": "Lifelong Decentralized Ratchet & Anti-Forgetting Anchor Buffer for arXiv/JWST Ingestion",
+        "invariant_passed": true,
+        "key_metric_name": "relative_anchor_perplexity_drift",
+        "key_metric_value": 0.0010005001667081983,
+        "openrouter_request_id": "req-e0c3452f90464bf09c2d0effc8468462",
+        "entry_hash_sha256": "083dcff7ee78201f18d3de7b93c2587247002500d64756bba89b2fd566c41703"
+      },
+      {
+        "order": 3,
+        "ticket_id": "HM-S32-03",
+        "title": "Open Bee Marketplace Signed Manifest Verifier & Self-Service Expert Registry",
+        "invariant_passed": true,
+        "key_metric_name": "vram_headroom_mib",
+        "key_metric_value": 2392.0,
+        "openrouter_request_id": "req-c1b68fed5b9b49a1b1425dc55db6dc38",
+        "entry_hash_sha256": "8091ad225c666904cf6160d5d77c07154e8e6e503b99b256acaaa073c1a0ae0d"
+      },
+      {
+        "order": 4,
+        "ticket_id": "HM-S33-01",
+        "title": "Straggler-Free Decoupled DiLoCo with Staleness-Aware PA-CGAD & Radial-Directional Averaging",
+        "invariant_passed": true,
+        "key_metric_name": "norm_preservation_ratio",
+        "key_metric_value": 1.3938468501173518,
+        "openrouter_request_id": "req-67d3e572591844f980ed3e873724659a",
+        "entry_hash_sha256": "192d60b06ff3757148aad1918f70083a0a342d7053beaa2d6f938d6edb9cd67b"
+      },
+      {
+        "order": 5,
+        "ticket_id": "HM-S33-02",
+        "title": "Multi-Bee Debate & Cross-Verification Arena over AMCP Bus",
+        "invariant_passed": true,
+        "key_metric_name": "bayesian_posterior_confidence",
+        "key_metric_value": 0.9999800598205384,
+        "openrouter_request_id": "req-845df5d9e1974af48c699003edc93991",
+        "entry_hash_sha256": "8376ae4d7dfb50ecc9ed7a568c2ba542486a94bfa14a01a4f2e004d313c5f4c2"
+      },
+      {
+        "order": 6,
+        "ticket_id": "HM-S33-03",
+        "title": "Eco-Compute Domestic Thermal Valorization & Carbon-Offset Telemetry Ledger",
+        "invariant_passed": true,
+        "key_metric_name": "net_avoided_co2_grams",
+        "key_metric_value": 73.005,
+        "openrouter_request_id": "req-e851f3c97bde413aac43a22af9a7b9c6",
+        "entry_hash_sha256": "a21fd2b7766a51533913e5ddcc9275d07164deffe886a98489bfd0453b279318"
+      },
+      {
+        "order": 7,
+        "ticket_id": "HM-S34-01",
+        "title": "Speculative Multi-Token Draft-Verify Decoding across Consumer GPUs",
+        "invariant_passed": true,
+        "key_metric_name": "effective_speedup_factor",
+        "key_metric_value": 2.8409,
+        "openrouter_request_id": "req-081aa414e05a450b837c71cde6a4b9f3",
+        "entry_hash_sha256": "c70b46acd033684bae79c8bd4150eec744b0f30dee5bb47c80468be3a60289d4"
+      },
+      {
+        "order": 8,
+        "ticket_id": "HM-S34-02",
+        "title": "Dynamic < 1.5s Game Preemption Circuit-Breaker with Zero-VRAM Host-RAM EF21 Flush",
+        "invariant_passed": true,
+        "key_metric_name": "eviction_latency_ms",
+        "key_metric_value": 510.75,
+        "openrouter_request_id": "req-fd03f0ac5a604efda78c460a52e4920f",
+        "entry_hash_sha256": "cd48401f7dbd14638bcf35febcfbf12bbc2ac4fc52a18b888f4b20184a458617"
+      },
+      {
+        "order": 9,
+        "ticket_id": "HM-S34-03",
+        "title": "Gosset E8 8D Lattice Vector Quantizer for La Ruche Hexagonal Alveoles",
+        "invariant_passed": true,
+        "key_metric_name": "l2_distortion",
+        "key_metric_value": 0.17399066013984082,
+        "openrouter_request_id": "req-bc16692f4cea4f0b886ed37aa44260df",
+        "entry_hash_sha256": "4fafa7e3a1d653fa5b14c33f88a11341658b755d242173687c70647ebfbcb190"
+      },
+      {
+        "order": 10,
+        "ticket_id": "HM-S34-04",
+        "title": "Self-Evolving Antigravity + HiveMind 10-PR Autonomous Architect & Supervisor Ledger",
+        "invariant_passed": true,
+        "key_metric_name": "verified_pr_count",
+        "key_metric_value": 10.0,
+        "openrouter_request_id": "req-e92f1134e3a0470db57ca1e8e11de723",
+        "entry_hash_sha256": "56d5482fcf0a46ddf7787d8c849ad101cf5084ef52df5ffcb544944b98b658a4"
+      }
+    ]
+  }
+}

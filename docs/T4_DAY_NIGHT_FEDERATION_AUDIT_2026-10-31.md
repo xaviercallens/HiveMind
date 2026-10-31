@@ -10,7 +10,7 @@ and `t4_node.jsonl` unless stated; "per subagent read" marks statements taken fr
 |---|---|---|
 | Inference has priority by day, QLoRA trains at night | **Built and running** (`t4_governor.py`, owner policy 2026-10-26) | 183 yields, 191 resumes, policy args match `expected_governor_args.txt` |
 | Preemption < 1.0 s, p99 < 450 ms (HM-S19-Q35-03) | **Missed**: 1.12-1.15 s (n = 4); no p99 possible | §3.2; `src/hivemind/core/preemption.py` does not exist |
-| Nocturnal QLoRA actually training | **Marginal**: 96 % of bursts are empty; training-enabled time fell from 164-286 min/day (25-28 Oct) to 20-35 min/day (29-31 Oct) | §3.1 |
+| Nocturnal QLoRA actually training | **Marginal, and capped by the governor itself**: 96 % of bursts are empty because the project's own validator replay is read as a foreign GPU user and locks out the next round for 30 min (observed live, §3.1); training-enabled time fell from 164-286 min/day (25-28 Oct) to 20-35 min/day (29-31 Oct) | §3.1 |
 | MoE served on the T4 by day | One MoE measured (gpt-oss:20b, 12.3 GiB, 19-45 tok/s); the live mix is dense (Bee 4.8 GB + 7B coder) | per subagent read: `deploy/t4_node/README.md` |
 | Daytime micro-batch harvesting (30 s idle, R:386) | **Contradicts the owner's policy** (7200 s by day); not built | `POLICY_READ_ME.txt` |
 | Large-GPU federation (T4 + RTX 2070 + volunteers) | **Not built**: no sharding or pooling code, no `tensorsharp`, no `swarm_fabric.py`; Kafka/AMCP and expert registry are in-memory or simulated | per subagent read; `grep` found nothing |
@@ -32,9 +32,15 @@ per subagent read). This audit changes none of them.
 - **Empty bursts**: 175 of 183 bursts ended with no BOINC GPU task running (`had_boinc_gpu_task` false). Median burst 134 s.
 - **Time with GPU mode `always` per UTC day**: 25 Oct 164 min, 26 Oct 186, 27 Oct 213, 28 Oct 286, **29 Oct 35, 30 Oct 32, 31 Oct 20 (so far)**. The 25-28 Oct values include the
   superseded experimental thresholds (5 s, 3800 MiB) and the first days of the campaign, so the drop is not a clean before/after of the owner policy; it is a fact to explain, not a conclusion.
-- **Structural ceiling at the owner's policy**: the night window has 9 h; with a 30 min quiet period before each burst and rounds of 3-4 min (`t4_workgen.py --inner-steps 80`), at most about 18 bursts x 3-4 min = 1 h of
-  training per night, 6-12 % of the window, and only if nothing else touches the GPU. The work generator's cadence (one workunit about every 32 min at night, `hmq_00135..146` on 30-31 Oct) matches this.
-- **Not established**: what the non-training GPU users are. The telemetry did not record process names. This audit adds that (schema 2, §5) and a live sampler was run (§4).
+- **Root cause of most empty bursts, observed live (one cycle, 2026-10-31, a 1 Hz sampler of GPU processes and the governor state)**: the governor resumed at about 21:56Z; the QLoRA task
+  (`python -W ignore -m hivemind.boinc.real_client.moe_app`, PID 774811, 3.0-3.7 GiB, 37-61 % SM) ran 21:56:21-21:58:41Z. At 21:59:17Z, 36 s later, **the BOINC server script**
+  (`... -m hivemind.boinc.real_client.boinc_server_scripts`, PID 779153, 2.5-3.7 GiB, 5-37 % SM, the validator's replay of the finished round) used the GPU for about 20 s. At 21:59:19Z the governor yielded with trigger `gpu`
+  and restarted its quiet period (`quiet_s` back to 0). The governor only recognises `moe_app` as its own GPU process (`boinc_gpu_pids`), so the project's validator counts as "another user". Each round therefore locks out the next:
+  one round per about 32 min at night (the work generator's cadence), 175 of 183 bursts with no task running when they ended. This is one observed cycle plus the consistent history, not a proof for every one of the 183 yields:
+  171 of the 183 yields were `gpu`-triggered, 11 nginx-triggered (all 8 yields that stopped a real task were nginx-triggered, i.e. a real request) and 1 has no trigger field. I have not identified the process behind each of the 171; the live sample identifies it for one.
+- **Structural ceiling at the owner's policy as the governor behaves today**: the night window has 9 h; with a 30 min quiet period before each burst and rounds of 3-4 min (`t4_workgen.py --inner-steps 80`), at most about 18 bursts x 3-4 min = 1 h of
+  training per night, 6-12 % of the window. With the validator no longer counted as foreign (§5, item 5) the quiet period would be required only once per night-time idle stretch, and rounds could follow each other until a real user touches the GPU.
+- **Also seen in the same sample**: at 22:03:20-22:03:22Z an Ollama `llama-server` loaded a model (a user or producer request), so the next night-time quiet period would have restarted anyway.
 
 ### 3.2 Preemption latency
 
@@ -76,7 +82,9 @@ The governor itself was unaffected (state `yielded` throughout, no BOINC task ru
 3. **README**: the stale "30 s of quiet" corrected to the owner's policy.
 4. **FOR OWNER REVIEW, separate commit**: `--yield-grace-s` default 1.0 s to 0.1 s (a constant `YIELD_GRACE_S`). Expected yield latency about 0.22 s; acceptance after install: at least 20 real yields with p99 < 450 ms in the report, else revert. It changes the governor code hash, so it takes effect only after `sudo bash deploy/t4_node/install_node.sh`, which clears and restores the immutable flag; I did not run it.
 
-Existing governor, drift and policy tests still pass (6 selected tests of `test_boinc_node_layer.py`).
+5. **FOR OWNER REVIEW, separate commit**: `other_gpu_busy` no longer counts the BOINC project's own server-script GPU processes (`real_client.boinc_server_scripts`, the validator replay) as a foreign user (new `boinc_pipeline_gpu_pids`). A real foreign user still triggers a yield (tested), and on a yield only `moe_app` is ended. Effect: rounds can follow each other at night until a real user touches the GPU, so the training duty cycle rises (this is the point, and also the cost: more night-time GPU use). Risk: a user request arriving during the ~20 s validator replay shares the card with it, since the validator is not killed; it already waits for an idle gateway (`wait_for_idle`, README). Acceptance after install: bursts with a real task per night in `t4_governor_report.py` rise from about 1 per 32 min to several per hour on a quiet night, and no user-visible slowdown in `chat_completions_since_last` (no 5xx/429); revert otherwise. Same install step as item 4. Not run.
+
+Existing governor, drift and policy tests still pass (6 selected tests of `test_boinc_node_layer.py`); 8 new tests in `tests/test_t4_governor_telemetry.py`.
 
 ## 6. Proposals that need the owner or a measurement first
 

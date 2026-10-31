@@ -27,7 +27,10 @@ import math
 from dataclasses import asdict, dataclass, field
 from typing import Any, Mapping, Sequence
 
-import torch
+try:
+    import torch
+except ImportError:  # Slim router container without torch
+    torch = None  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------

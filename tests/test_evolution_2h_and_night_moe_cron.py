@@ -65,3 +65,51 @@ def test_run_night_moe_training_cycle_enforces_vram_guards(tmp_path: Path, monke
     assert summary["rtx2070_live_guard"]["headroom_2048_mib_ok"] is True
     assert summary["nocturnal_workunits_executed"] == 5
     assert (tmp_path / "artifacts" / "expert_registry_s21.json").exists()
+
+
+def test_s21_hierarchical_expert_router_in_cockpit() -> None:
+    from fastapi.testclient import TestClient
+    from hivemind.game.exoplanet_hunter_cockpit import create_exoplanet_hunter_fastapi_app
+
+    # Ensure artifacts/expert_registry_s21.json has enriched keywords
+    run_night_moe_training_cycle(
+        {
+            "gpu_name": "NVIDIA GeForce RTX 2070",
+            "memory_used_mib": 1447.0,
+            "memory_free_mib": 6560.0,
+            "effective_sparse_moe_nf4_tflops": 65.24,
+        }
+    )
+
+    client = TestClient(create_exoplanet_hunter_fastapi_app())
+    reg_resp = client.get("/api/v1/monitor/expert-registry")
+    assert reg_resp.status_code == 200
+    reg_body = reg_resp.json()
+    assert reg_body["object"] == "hivemind.s21_expert_registry"
+    assert len(reg_body["registry"].get("experts", [])) >= 5
+    assert reg_body["residency_plan"].get("valid") is True
+
+    for prompt, expected_expert, expected_cluster in (
+        ("Please debug my python code traceback", "bee-s21-code_feedback_debug", "code"),
+        ("Fold the TESS exoplanet transit lightcurve with BLS", "bee-s21-astrophysics_transits", "astrophysics"),
+        ("Analyze the JWST NIRSpec Hycean methane spectrum", "bee-s21-astrophysics_spectra", "astrophysics"),
+        ("Prove this algebra theorem in Lean", "bee-s21-maths_olympiad", "maths"),
+        ("Audit this CVE security vulnerability", "bee-s21-cyber_threat_intel", "cyber"),
+    ):
+        r = client.post("/api/v1/monitor/expert-route", json={"prompt": prompt})
+        assert r.status_code == 200
+        body = r.json()
+        assert body["target"] == "expert"
+        assert body["expert_id"] == expected_expert
+        assert body["cluster_id"] == expected_cluster
+
+    chat_resp = client.post(
+        "/v1/chat/completions",
+        json={"messages": [{"role": "user", "content": "Debug this python bug and pytest traceback"}]},
+    )
+    assert chat_resp.status_code == 200
+    chat_body = chat_resp.json()
+    s21_route = chat_body["bee_moe_routing"]["s21_hierarchical_route"]
+    assert s21_route["expert_id"] == "bee-s21-code_feedback_debug"
+    assert s21_route["cluster_id"] == "code"
+

@@ -20,7 +20,16 @@
    ],
    "keywords": [
     "astrophysics_spectra",
-    "astrophysics"
+    "astrophysics",
+    "spectrum",
+    "spectra",
+    "jwst",
+    "nirspec",
+    "miri",
+    "atmosphere",
+    "hycean",
+    "dms",
+    "methane"
    ],
    "kind": "lora_domain",
    "source": "run_2h_roadmap_pr_and_night_moe_cron.py",
@@ -46,7 +55,14 @@
    ],
    "keywords": [
     "astrophysics_transits",
-    "astrophysics"
+    "astrophysics",
+    "exoplanet",
+    "transit",
+    "lightcurve",
+    "bls",
+    "tess",
+    "kepler",
+    "period"
    ],
    "kind": "lora_domain",
    "source": "run_2h_roadmap_pr_and_night_moe_cron.py",
@@ -72,7 +88,15 @@
    ],
    "keywords": [
     "code_feedback_debug",
-    "code"
+    "code",
+    "python",
+    "debug",
+    "bug",
+    "traceback",
+    "pytest",
+    "refactor",
+    "rust",
+    "typescript"
    ],
    "kind": "lora_domain",
    "source": "run_2h_roadmap_pr_and_night_moe_cron.py",
@@ -98,7 +122,14 @@
    ],
    "keywords": [
     "cyber_threat_intel",
-    "cyber"
+    "cyber",
+    "security",
+    "cve",
+    "vulnerability",
+    "exploit",
+    "firewall",
+    "audit",
+    "sandbox"
    ],
    "kind": "lora_domain",
    "source": "run_2h_roadmap_pr_and_night_moe_cron.py",
@@ -124,7 +155,15 @@
    ],
    "keywords": [
     "maths_olympiad",
-    "maths"
+    "maths",
+    "math",
+    "theorem",
+    "proof",
+    "lean",
+    "olympiad",
+    "algebra",
+    "calculus",
+    "equation"
    ],
    "kind": "lora_domain",
    "source": "run_2h_roadmap_pr_and_night_moe_cron.py",

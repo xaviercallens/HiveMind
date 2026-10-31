@@ -3077,6 +3077,44 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
             )
         )
 
+    def _route_s21_hierarchical(prompt_text: str, cluster_id: Optional[str] = None) -> Dict[str, Any]:
+        reg_path = ARTIFACTS_ROOT / "expert_registry_s21.json"
+        if not reg_path.exists():
+            return {
+                "target": "base",
+                "expert_id": None,
+                "cluster_id": cluster_id,
+                "reason": "no_registry_snapshot",
+                "load_on_demand": False,
+            }
+        try:
+            from hivemind.core.expert_registry import ExpertRegistry, HierarchicalExpertRouter
+
+            reg = ExpertRegistry.load(reg_path)
+            router = HierarchicalExpertRouter(
+                reg,
+                base_model_id="Qwen/Qwen2.5-Coder-7B-Instruct",
+                resident=None,
+                allow_cold_load=False,
+            )
+            dec = router.route(prompt_text, cluster_id=cluster_id)
+            return {
+                "target": dec.target,
+                "expert_id": dec.expert_id,
+                "cluster_id": dec.cluster_id,
+                "reason": dec.reason,
+                "load_on_demand": dec.load_on_demand,
+                "live_expert_count": router.live_count,
+            }
+        except Exception:
+            return {
+                "target": "base",
+                "expert_id": None,
+                "cluster_id": cluster_id,
+                "reason": "router_unavailable",
+                "load_on_demand": False,
+            }
+
     @app.post("/v1/chat/completions", response_class=JSONResponse)
     def api_openai_chat_completions(payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
         messages: List[Dict[str, Any]] = payload.get("messages", [])
@@ -3094,6 +3132,7 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
             max_new_tokens=max_toks,
             preferred_producer=pref,
         )
+        s21_route = _route_s21_hierarchical(prompt)
         return JSONResponse(
             content={
                 "id": f"chatcmpl-hivemind-{inf['inference_receipt_sha256'][:12]}",
@@ -3120,6 +3159,7 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                     "expert_gating_weights": inf["expert_gating_weights"],
                     "inference_latency_ms": inf["inference_latency_ms"],
                     "vram_allocated_mb": inf["vram_allocated_mb"],
+                    "s21_hierarchical_route": s21_route,
                 },
             }
         )
@@ -3625,6 +3665,46 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                 "rtx2070_3h_monitor_ledger": _read_json_safe(ARTIFACTS_ROOT / "rtx2070_3h_monitor_ledger.json"),
                 "night_moe_training_ledger": _read_json_safe(ARTIFACTS_ROOT / "night_moe_training_ledger.json"),
                 "community_gpu_benchmark_receipt": _read_json_safe(ARTIFACTS_ROOT / "community_gpu_benchmark_receipt.json"),
+                "expert_registry_s21": _read_json_safe(ARTIFACTS_ROOT / "expert_registry_s21.json"),
+            }
+        )
+
+    @app.get("/api/v1/monitor/expert-registry", response_class=JSONResponse)
+    def get_s21_expert_registry_status() -> JSONResponse:
+        reg_path = ARTIFACTS_ROOT / "expert_registry_s21.json"
+        night_path = ARTIFACTS_ROOT / "night_moe_training_ledger.json"
+        reg_data: Dict[str, Any] = {}
+        res_plan: Dict[str, Any] = {}
+        if reg_path.exists():
+            try:
+                reg_data = json.loads(reg_path.read_text(encoding="utf-8"))
+            except Exception:
+                reg_data = {}
+        if night_path.exists():
+            try:
+                res_plan = json.loads(night_path.read_text(encoding="utf-8")).get("s21_expert_residency_plan", {})
+            except Exception:
+                res_plan = {}
+        return JSONResponse(
+            content={
+                "object": "hivemind.s21_expert_registry",
+                "registry": reg_data,
+                "residency_plan": res_plan,
+            }
+        )
+
+    @app.post("/api/v1/monitor/expert-route", response_class=JSONResponse)
+    def post_s21_expert_route(payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
+        prompt_text = str(payload.get("prompt") or "")
+        cluster_id = payload.get("cluster_id")
+        if cluster_id is not None:
+            cluster_id = str(cluster_id)
+        decision = _route_s21_hierarchical(prompt_text, cluster_id=cluster_id)
+        return JSONResponse(
+            content={
+                "object": "hivemind.s21_route_decision",
+                "prompt": prompt_text,
+                **decision,
             }
         )
 

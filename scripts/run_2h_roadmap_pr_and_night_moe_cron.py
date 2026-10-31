@@ -189,7 +189,76 @@ def run_night_moe_training_cycle(gpu_telemetry: Dict[str, Any]) -> Dict[str, Any
             )
 
             reg_path = PROJECT_ROOT / "artifacts" / "expert_registry_s21.json"
-            reg = ExpertRegistry.load(reg_path) if reg_path.exists() else ExpertRegistry()
+            domain_keywords_map: Dict[str, tuple[str, ...]] = {
+                "code_feedback_debug": (
+                    "code_feedback_debug",
+                    "code",
+                    "python",
+                    "debug",
+                    "bug",
+                    "traceback",
+                    "pytest",
+                    "refactor",
+                    "rust",
+                    "typescript",
+                ),
+                "maths_olympiad": (
+                    "maths_olympiad",
+                    "maths",
+                    "math",
+                    "theorem",
+                    "proof",
+                    "lean",
+                    "olympiad",
+                    "algebra",
+                    "calculus",
+                    "equation",
+                ),
+                "astrophysics_transits": (
+                    "astrophysics_transits",
+                    "astrophysics",
+                    "exoplanet",
+                    "transit",
+                    "lightcurve",
+                    "bls",
+                    "tess",
+                    "kepler",
+                    "period",
+                ),
+                "astrophysics_spectra": (
+                    "astrophysics_spectra",
+                    "astrophysics",
+                    "spectrum",
+                    "spectra",
+                    "jwst",
+                    "nirspec",
+                    "miri",
+                    "atmosphere",
+                    "hycean",
+                    "dms",
+                    "methane",
+                ),
+                "cyber_threat_intel": (
+                    "cyber_threat_intel",
+                    "cyber",
+                    "security",
+                    "cve",
+                    "vulnerability",
+                    "exploit",
+                    "firewall",
+                    "audit",
+                    "sandbox",
+                ),
+            }
+            reg = ExpertRegistry()
+            if reg_path.exists():
+                loaded_reg = ExpertRegistry.load(reg_path)
+                # Keep loaded registry only if keywords are already enriched
+                if all(
+                    (f"bee-s21-{d}" in loaded_reg and len(loaded_reg.get(f"bee-s21-{d}").keywords) > 2)
+                    for d in domain_keywords_map
+                ):
+                    reg = loaded_reg
             demand_by_expert: Dict[str, float] = {}
             for wu_info in nocturnal_workunits_summary:
                 dom_name = str(wu_info["domain"])
@@ -204,7 +273,7 @@ def run_night_moe_training_cycle(gpu_telemetry: Dict[str, Any]) -> Dict[str, Any
                             base_model_id="Qwen/Qwen2.5-Coder-7B-Instruct",
                             adapter_sha256=sha_hex,
                             adapter_size_mib=18,
-                            keywords=(dom_name, dom_name.split("_")[0]),
+                            keywords=domain_keywords_map.get(dom_name, (dom_name, dom_name.split("_")[0])),
                             source="run_2h_roadmap_pr_and_night_moe_cron.py",
                         )
                     )

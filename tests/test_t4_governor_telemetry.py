@@ -28,6 +28,15 @@ def test_schema_is_additive_and_the_policy_guard_still_holds() -> None:
     assert "environ.get(" not in src and "getenv(" not in src and "INTENSE_MOE" not in src  # same guard as test_boinc_node_layer
 
 
+def test_yield_grace_default_meets_the_roadmap_latency_target_and_is_not_a_policy_argument() -> None:
+    import t4_governor
+
+    # HM-S19-Q35-03 asks for a preemption latency < 1.0 s; the measured latency is the grace plus ~0.12 s, so the grace must leave room for that
+    assert t4_governor.YIELD_GRACE_S + 0.12 < 1.0
+    src = (Path(__file__).resolve().parents[1] / "scripts" / "t4_governor.py").read_text()
+    assert "default=YIELD_GRACE_S" in src  # the unit file passes no --yield-grace-s, and the owner's policy arguments are untouched
+
+
 def _jl(tmp_path: Path, events: list[dict]) -> Path:
     p = tmp_path / "governor.jsonl"
     p.write_text("\n".join(json.dumps(e) for e in events) + "\nnot json\n")  # a corrupt line must be skipped

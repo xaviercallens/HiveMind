@@ -44,6 +44,9 @@ def gpu_state() -> dict:
     return {"used_mib": int(q[0]), "total_mib": int(q[1]), "temp_c": int(q[2]), "util_pct": int(q[3]), "procs": procs}
 
 
+YIELD_GRACE_S = 0.1  # was 1.0. Why it can be short: the QLoRA app does not use the BOINC API, so it never reads the <quit/> BOINC posts and only ends by itself
+#                      after 0.8-23 s; all four governor-ended yields measured 1122-1148 ms = this grace (1.0) + ~0.12 s to SIGTERM/SIGKILL the tree. The roadmap
+#                      (HM-S19-Q35-03) asks for < 1.0 s. A kill loses at most the current segment either way (atomic checkpoints), so a shorter grace costs no more work.
 SCHEMA = 2  # governor.jsonl event schema: 2 adds `schema` to every event and `other_procs` to a yield (fields are only ever added)
 
 
@@ -201,7 +204,7 @@ def main() -> int:
     ap.add_argument("--hold-file", type=Path, default=Path("/mnt/disks/disk-socrateai-local-1/hivemind_telemetry/HOLD"),
                     help="operator switch: while this file exists the governor keeps training OFF however quiet the node is "
                          "(`touch` to pause training, `rm` to allow it again)")
-    ap.add_argument("--yield-grace-s", type=float, default=1.0, help="seconds BOINC gets to stop the task by itself before the governor ends it")
+    ap.add_argument("--yield-grace-s", type=float, default=YIELD_GRACE_S, help="seconds BOINC gets to stop the task by itself before the governor ends it")
     ap.add_argument("--no-kill", action="store_true", help="never end the task process directly; rely on BOINC's own (slow) stop")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()

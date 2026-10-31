@@ -1,0 +1,26 @@
+[Unit]
+Description=HiveMind Canonical Producer Agent (Tesla T4 • >= 4,300 MiB Free VRAM Guard)
+After=network-online.target hivemind-live-shield-coder.service
+Requires=hivemind-live-shield-coder.service
+
+[Service]
+Type=simple
+User=callensxavier_gmail_com
+WorkingDirectory=/home/callensxavier_gmail_com/HiveMind
+EnvironmentFile=/etc/hivemind/live_producer.env
+ExecStart=/home/callensxavier_gmail_com/HiveMind/.venv/bin/python scripts/hivemind_producer_agent.py \
+    --gateway https://hivemind-openrouter-1003063861791.us-central1.run.app \
+    --endpoint ${HIVEMIND_PUBLIC_TUNNEL_URL} \
+    --model coder=qwen2.5-coder:7b \
+    --model coder-lite=qwen2.5-coder:1.5b \
+    --cost-per-1k 0.35 \
+    --capacity-1k 60 \
+    --gpu-vram-mib 15360 \
+    --pinned-vram-mib 4838 \
+    --min-free-vram-mib 4300 \
+    --control-state-file /run/hivemind/producer_control.json
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,23 @@
+[Unit]
+Description=HiveMind Canonical Producer Shield (Tesla T4 • Ollama 127.0.0.1:11434)
+After=network-online.target ollama.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=callensxavier_gmail_com
+WorkingDirectory=/home/callensxavier_gmail_com/HiveMind
+EnvironmentFile=/etc/hivemind/live_producer.env
+ExecStart=/home/callensxavier_gmail_com/HiveMind/.venv/bin/python scripts/hivemind_producer_shield.py \
+    --upstream http://127.0.0.1:11434 \
+    --listen-host 127.0.0.1 \
+    --listen-port 8089 \
+    --model qwen2.5-coder:7b \
+    --model qwen2.5-coder:1.5b \
+    --rate-limit-rpm 30 \
+    --control-state-file /run/hivemind/producer_control.json
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

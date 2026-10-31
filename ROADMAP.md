@@ -589,6 +589,28 @@ The full plan, with evidence, Definition of Done and the test for each finding (
 
 ---
 
+### Status update, 2026-10-31 (3-hourly review, evening)
+
+- **Merged since the last update:** [#388](https://github.com/xaviercallens/HiveMind/pull/388) (call for GPU producers in the onboarding guide) and [#390](https://github.com/xaviercallens/HiveMind/pull/390) (Qwen3.5 QLoRA script with CPU tests). The merged tests of #390 pass on the new `main` (10 passed).
+- **Blocked by the stub audit, now unblocked in review:** [#391](https://github.com/xaviercallens/HiveMind/pull/391) renames the launch-wave projection (IP-23). Its rename blocks #362 and #384, which edit the same module and will need a rebase.
+- **Still open and held:** [#369](https://github.com/xaviercallens/HiveMind/pull/369) and [#366](https://github.com/xaviercallens/HiveMind/pull/366) (CI failures: Lean receipt hash and a `gpu_ram` test); [#344](https://github.com/xaviercallens/HiveMind/pull/344) (CI fails DiLoCo and 2-bit compression tests that pass on `main`, so its own changes break them).
+- **Live:** the bee-stars producer answered 502 on all three public services in the last monitor run (12 of 15 probes passed). The enabled shield and agent-bee units are inactive; the fix belongs to the BOINC core node session.
+- **Open for claim (label `agent-ready`):**
+  - [#378](https://github.com/xaviercallens/HiveMind/issues/378) owner-key fallback and account takeover (PR-IP-01, PR-IP-02).
+  - [#379](https://github.com/xaviercallens/HiveMind/issues/379) server-verified credit (PR-IP-03).
+  - [#380](https://github.com/xaviercallens/HiveMind/issues/380) dashboard admin auth and CORS (PR-IP-05).
+  - [#381](https://github.com/xaviercallens/HiveMind/issues/381) BOINC workunit binding and credit (PR-IP-06).
+  - [#382](https://github.com/xaviercallens/HiveMind/issues/382) ledger reload and atomic writes (PR-IP-04).
+  - [#385](https://github.com/xaviercallens/HiveMind/issues/385) Multi-Krum reference schema (design needed first).
+  - [#386](https://github.com/xaviercallens/HiveMind/issues/386) bundle royalties after verification.
+  - [#387](https://github.com/xaviercallens/HiveMind/issues/387) scanner from the base ref and CB-02 false positives (PR-IP-07).
+  - [#392](https://github.com/xaviercallens/HiveMind/issues/392) default HMAC and state-channel secrets (PR-IP-08).
+  - [#393](https://github.com/xaviercallens/HiveMind/issues/393) ZK-OPoI wording and forged-receipt test (PR-IP-10).
+  - [#394](https://github.com/xaviercallens/HiveMind/issues/394) load-balancing gradient (PR-IP-10).
+- **Next proposed:** the remaining plan items PR-IP-09 (honest measurements), PR-IP-11 to PR-IP-14 have no issue yet.
+
+---
+
 ## 🎮 4. Opt-In Community GPU Testing Program (If Interested & Possible)
 
 If you have a consumer GPU (**NVIDIA GeForce RTX 20/30/40/50-series 6 GB–24 GB**, **AMD Radeon RX 6000/7000 via ROCm**, or **Apple Silicon M1/M2/M3/M4 via MPS**) and are interested in testing how your hardware performs on the HiveMind Sparse MoE + `EF21-DiLoCo` + `ZK-OPoI v4` stack, we provide a safe, opt-in, `< 1.5 GB` peak-VRAM benchmark suite:

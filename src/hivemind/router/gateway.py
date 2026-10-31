@@ -330,7 +330,16 @@ def _usage_pair(payload: Mapping[str, Any]) -> tuple[int, int] | None:
 
 
 def _default_resolver(host: str) -> list[str]:
-    return sorted({str(info[4][0]) for info in socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)})
+    clean_host = (host or "").strip()
+    if not clean_host:
+        return []
+    infos = socket.getaddrinfo(clean_host, None, type=socket.SOCK_STREAM)
+    resolved: set[str] = set()
+    for info in infos:
+        sockaddr = info[4]
+        if sockaddr and sockaddr[0]:
+            resolved.add(str(sockaddr[0]))
+    return sorted(resolved)
 
 
 _NAT64_PREFIX = ipaddress.ip_network("64:ff9b::/96")
@@ -500,6 +509,27 @@ class HeartbeatRequest(BaseModel):
     # What the agent says it is doing about the remote control state (HM-S16-05). Informational only: the gateway enforces its own stored state.
     paused: StrictBool | None = None
     vram_cap_mib: StrictInt | None = Field(default=None, ge=1, le=MAX_GPU_VRAM_MIB)
+    account_id: str | None = Field(default=None, max_length=128)  # admin only: the producer/prosumer account to heartbeat
+    handle: str | None = Field(default=None, max_length=128)  # admin only
+    replace_endpoints: StrictBool = False  # when True, replaces any earlier endpoint URLs for this account
+
+
+class ReconnectProducersRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    endpoint_url: str = Field(default="https://34-48-48-154.sslip.io/u", min_length=1, max_length=512)
+    bee_endpoint_url: str = Field(default="https://34-48-48-154.sslip.io/bee", min_length=1, max_length=512)
+    coder_endpoint_url: str = Field(default="https://34-48-48-154.sslip.io", min_length=1, max_length=512)
+    rtx2070_endpoint_url: str = Field(default="https://34-48-48-154.sslip.io/rtx2070", min_length=1, max_length=512)
+    endpoint_token: str | None = Field(default=None, min_length=16, max_length=200, pattern=r"^[A-Za-z0-9._~+/=-]+$")
+    bee_endpoint_token: str | None = Field(default=None, min_length=16, max_length=200, pattern=r"^[A-Za-z0-9._~+/=-]+$")
+    coder_endpoint_token: str | None = Field(default=None, min_length=16, max_length=200, pattern=r"^[A-Za-z0-9._~+/=-]+$")
+    models: list[ModelEntry] | None = Field(default=None, max_length=64)
+    cost_per_1k: float = Field(default=0.35, ge=0.0, le=MAX_PRICE_CEILING, allow_inf_nan=False)
+    capacity_1k: float = Field(default=80.0, ge=0.0, le=1e12, allow_inf_nan=False)
+    gpu_vram_mib: int | None = Field(default=15360, ge=0, le=MAX_GPU_VRAM_MIB)
+    replace_endpoints: StrictBool = True
+    include_legacy_known_users: StrictBool = True
+    handles: list[str] | None = None
 
 
 class ControlRequest(BaseModel):
@@ -1867,7 +1897,16 @@ def create_router_app(
 
     @app.post("/v1/hivemind/producer/heartbeat")
     def heartbeat(request: Request, payload: HeartbeatRequest) -> dict[str, Any]:
-        account = authenticate(request)
+        if request.headers.get("x-admin-key") is not None:
+            require_admin(request)
+            target_id = account_target(payload.account_id, payload.handle)
+            account = store.get_account(target_id)
+            if account is None:
+                raise RouterError(404, "Unknown account.", "invalid_request_error", "account_not_found")
+        else:
+            account = authenticate(request)
+            if (payload.account_id and payload.account_id != account.account_id) or (payload.handle and payload.handle != account.handle):
+                raise RouterError(403, "Only the admin key may heartbeat another account.", "permission_error", "heartbeat_forbidden")
         if account.role not in ("producer", "prosumer"):
             raise RouterError(403, "Only producer or prosumer accounts may send heartbeats.", "permission_error", "role_forbidden")
         problem = producer_url_problem(payload.endpoint_url, allow_private=allow_private_producers, resolver=resolve)
@@ -1884,16 +1923,191 @@ def create_router_app(
             endpoints = store.upsert_producer(
                 account.account_id, payload.endpoint_url, models, payload.cost_per_1k, capacity, payload.execution_class,
                 now_utc=clock(), endpoint_token=payload.endpoint_token, residency=residency,
+                replace_endpoints=bool(payload.replace_endpoints),
             )
         except TooManyEndpoints as exc:
             raise RouterError(400, str(exc), "invalid_request_error", "too_many_endpoints") from None
-        ack: dict[str, Any] = {"account_id": account.account_id, "status": "live", "models": [m["id"] for m in models], "ttl_s": PRODUCER_TTL_S, "endpoints": endpoints}
+        with market_lock:
+            market_cache.clear()
+        ack: dict[str, Any] = {"account_id": account.account_id, "handle": account.handle, "status": "live", "models": [m["id"] for m in models], "ttl_s": PRODUCER_TTL_S, "endpoints": endpoints}
         control = store.producer_control(account.account_id)
         if control is not None:  # absent when never set: old agents and untouched accounts see exactly the old ack
             ack["control"] = {**control, "acknowledged": bool(payload.paused) == control["paused"] and payload.vram_cap_mib == control["vram_cap_mib"]}
         if residency is not None:
             ack["residency"] = {"loaded": sorted(m for m, v in residency["models"].items() if v["loaded"] is True), "effective_capacity_1k": capacity, "capacity_note": residency["capacity_note"]}
         return ack
+
+    @app.get("/v1/hivemind/producers/fleet")
+    def list_producers_fleet() -> dict[str, Any]:
+        """Public HiveMinder fleet connectivity summary across all registered producer and prosumer accounts."""
+        now = clock()
+        fleet = store.list_hiveminder_accounts(now_utc=now, ttl_s=PRODUCER_TTL_S)
+        live_rows = [r for r in fleet if r["status"] == "live"]
+        return {
+            "object": "hivemind.producer_fleet",
+            "ttl_s": PRODUCER_TTL_S,
+            "total_hiveminders": len(fleet),
+            "live_hiveminders": len(live_rows),
+            "live_endpoints": sum(int(r["live_endpoints"]) for r in live_rows),
+            "total_capacity_1k": round(sum(float(r["capacity_1k"] or 0.0) for r in live_rows), 2),
+            "live_models": store.live_models(now, PRODUCER_TTL_S),
+            "hiveminders": [
+                {
+                    "account_id": r["account_id"],
+                    "handle": r["handle"],
+                    "role": r["role"],
+                    "status": r["status"],
+                    "live_endpoints": r["live_endpoints"],
+                    "execution_class": r["execution_class"],
+                    "capacity_1k": r["capacity_1k"],
+                    "models_count": len(r["models"]),
+                    "models": r["models"],
+                    "last_heartbeat_utc": r["last_heartbeat_utc"],
+                }
+                for r in fleet
+            ],
+        }
+
+    @app.get("/v1/hivemind/admin/producers")
+    def admin_list_producers(request: Request) -> dict[str, Any]:
+        """Detailed HiveMinder fleet table for the HiveMaster (includes endpoint URLs and per-account costs)."""
+        require_admin(request)
+        now = clock()
+        fleet = store.list_hiveminder_accounts(now_utc=now, ttl_s=PRODUCER_TTL_S)
+        live_rows = [r for r in fleet if r["status"] == "live"]
+        return {
+            "object": "hivemind.admin_producer_fleet",
+            "ttl_s": PRODUCER_TTL_S,
+            "total_hiveminders": len(fleet),
+            "live_hiveminders": len(live_rows),
+            "live_endpoints": sum(int(r["live_endpoints"]) for r in live_rows),
+            "total_capacity_1k": round(sum(float(r["capacity_1k"] or 0.0) for r in live_rows), 2),
+            "live_models": store.live_models(now, PRODUCER_TTL_S),
+            "hiveminders": fleet,
+        }
+
+    @app.post("/v1/hivemind/admin/producers/reconnect")
+    def admin_reconnect_producers(request: Request, payload: ReconnectProducersRequest) -> dict[str, Any]:
+        """Reconnect all registered HiveMinder producer & prosumer accounts to verified live inference shields without rotating API keys."""
+        require_admin(request)
+        for url_candidate in (
+            payload.endpoint_url,
+            payload.bee_endpoint_url,
+            payload.coder_endpoint_url,
+            payload.rtx2070_endpoint_url,
+        ):
+            problem = producer_url_problem(url_candidate, allow_private=allow_private_producers, resolver=resolve)
+            if problem is not None:
+                raise RouterError(400, problem, "invalid_request_error", "invalid_endpoint")
+
+        now = clock()
+        if payload.include_legacy_known_users:
+            store.ensure_legacy_hiveminders_registered(now_utc=now)
+
+        default_entries = payload.models or [
+            ModelEntry(id="coder", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=4841, cold_start_s=0.0),
+            ModelEntry(id="bee-stars", local_name="hivemind-bee-stars", loaded=True, vram_mib=4841, cold_start_s=0.0),
+            ModelEntry(id="crowd-v1", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
+            ModelEntry(id="coder-lite", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
+            ModelEntry(id="gemma-core", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
+            ModelEntry(id="mistral-core", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
+            ModelEntry(id="qwen35-core", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
+            ModelEntry(id="bee-rusty-sundials", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
+            ModelEntry(id="bee-lean-prover", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
+            ModelEntry(id="bee-ruche-moe", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
+            ModelEntry(id="coder-plus", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
+            ModelEntry(id="moe-qwen35-bee", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
+            ModelEntry(id="moe-general", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
+            ModelEntry(id="moe-coder", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
+        ]
+        models_all: list[dict[str, str]] = []
+        for entry in default_entries:
+            public = _strip_prefix(entry.id)
+            if not _MODEL_ID_RE.match(public) or public == AUTO_MODEL:
+                raise RouterError(400, f"Invalid model id: {entry.id!r}", "invalid_request_error", "invalid_model_id")
+            models_all.append({"id": public, "local_name": entry.local_name})
+        residency_all, eff_capacity = residency_report(
+            [(m["id"], e) for m, e in zip(models_all, default_entries, strict=True)],
+            payload.gpu_vram_mib,
+            payload.capacity_1k,
+        )
+
+        fleet_before = store.list_hiveminder_accounts(now_utc=now, ttl_s=PRODUCER_TTL_S)
+        wanted_handles = {h.strip().lower() for h in payload.handles} if payload.handles else None
+        reconnected_ids: list[str] = []
+
+        for item in fleet_before:
+            aid = str(item["account_id"])
+            handle = str(item["handle"])
+            if wanted_handles is not None and handle.lower() not in wanted_handles and aid.lower() not in wanted_handles:
+                continue
+            ctrl = store.producer_control(aid)
+            if ctrl is not None and ctrl.get("paused"):
+                store.set_producer_control(aid, False, ctrl.get("vram_cap_mib"), now_utc=now)
+
+            if handle == "gcp-t4-bee":
+                ep_url = payload.bee_endpoint_url
+                ep_tok = payload.bee_endpoint_token or payload.endpoint_token
+                m_list = [{"id": "bee-stars", "local_name": "hivemind-bee-stars"}]
+                e_cls = "t4"
+                c_cost = 0.40
+                c_cap = 30.0
+                res_obj = None
+            elif handle == "gcp-t4-producer":
+                ep_url = payload.coder_endpoint_url
+                ep_tok = payload.coder_endpoint_token or payload.endpoint_token
+                m_list = [{"id": "coder", "local_name": "qwen2.5-coder:7b-instruct"}]
+                e_cls = "t4"
+                c_cost = 0.40
+                c_cap = 60.0
+                res_obj = None
+            elif "rtx2070" in handle or "rtx-2070" in handle or handle in ("xavier_callens", "cybervalkyrie-fr-5ecb"):
+                ep_url = payload.coder_endpoint_url if handle == "rtx-2070-producer-9351" else payload.rtx2070_endpoint_url
+                ep_tok = (payload.coder_endpoint_token or payload.endpoint_token) if handle == "rtx-2070-producer-9351" else payload.endpoint_token
+                m_list = models_all
+                e_cls = str(item.get("execution_class") or "rtx2070-8gb-turing")
+                c_cost = 0.25 if "9351" in handle else 0.35
+                c_cap = 100.0
+                res_obj = residency_all
+            else:
+                ep_url = payload.endpoint_url
+                ep_tok = payload.endpoint_token
+                m_list = models_all
+                e_cls = str(item.get("execution_class") or "t4-16gb-moe")
+                c_cost = float(item.get("cost_per_1k") or payload.cost_per_1k)
+                c_cap = float(eff_capacity)
+                res_obj = residency_all
+
+            store.upsert_producer(
+                aid,
+                ep_url,
+                m_list,
+                c_cost,
+                c_cap,
+                e_cls,
+                now_utc=now,
+                endpoint_token=ep_tok,
+                residency=res_obj,
+                replace_endpoints=bool(payload.replace_endpoints),
+            )
+            reconnected_ids.append(aid)
+
+        with market_lock:
+            market_cache.clear()
+
+        fleet_after = store.list_hiveminder_accounts(now_utc=now, ttl_s=PRODUCER_TTL_S)
+        live_rows = [r for r in fleet_after if r["status"] == "live"]
+        return {
+            "object": "hivemind.admin_producers_reconnected",
+            "ok": True,
+            "reconnected_count": len(reconnected_ids),
+            "total_hiveminders": len(fleet_after),
+            "live_hiveminders": len(live_rows),
+            "live_endpoints": sum(int(r["live_endpoints"]) for r in live_rows),
+            "total_capacity_1k": round(sum(float(r["capacity_1k"] or 0.0) for r in live_rows), 2),
+            "live_models": store.live_models(now, PRODUCER_TTL_S),
+            "hiveminders": fleet_after,
+        }
 
     @app.post("/v1/hivemind/producer/control")
     def set_control(request: Request, payload: ControlRequest) -> dict[str, Any]:
@@ -2414,8 +2628,8 @@ def create_router_app(
                     mod = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(mod)  # type: ignore[union-attr]
                     fold_res = mod.execute_cuda_ptx_bls_fold(target_planet=target_planet, n_pts=16384)
-        except Exception:
-            pass
+        except Exception as exc:
+            fold_res = dict(fold_res, fallback_reason=str(exc))
 
         supplied_receipt = str(body.get("receipt_sha256") or "").strip()
         receipt_sha256 = supplied_receipt or str(

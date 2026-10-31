@@ -30,11 +30,18 @@ _LATEST_T4_SNAPSHOT: dict[str, Any] = {
     "secondary_induction_gpu": "NVIDIA GeForce RTX 2070 (8 GB GDDR6 Turing — Live Producer 58fd3df19d2b5ef8c10031e1389aac6a)",
     "gpu": {
         "used_mib": 4841,
+        "live_with_ollama_used_mib": 11817,
+        "live_active_experiment_used_mib": 12843,
         "total_mib": 15360,
         "free_mib": 10519,
         "temp_c": 66,
         "util_pct": 0,
         "power_w": 30.2,
+        "vram_reconciliation_note": (
+            "4841 MiB is the baseline footprint of llama-server (hivemind/bee-stars, 4838 MiB) alone on the T4; "
+            "live nvidia-smi on socreateai-agora-hermes-node1 reports 11817 MiB when Ollama warm models (~6977 MiB) "
+            "are co-resident, and 12843 MiB when an active GPU experiment or QLoRA job runs."
+        ),
         "resident_processes": [
             {
                 "name": "llama-server (hivemind/bee-stars • Qwen2.5-Coder-7B-Instruct + NIGHT-MOE-1 Stars LoRA)",
@@ -66,13 +73,17 @@ _LATEST_T4_SNAPSHOT: dict[str, Any] = {
     "qlora_progress": {
         "boinc_app": "hivemind_qlora_moe (BOINC 7.18.1 / 7.24 Core Node)",
         "workgen_daemon": "hivemind-t4-workgen.service",
-        "assimilated_workunits": 100,
-        "qlora_rounds_assimilated": 98,
+        "assimilated_workunits": 147,
+        "qlora_rounds_assimilated": 145,
+        "verification_workunits_assimilated": 2,
+        "latest_assimilated_workunit": "hmq_00145",
+        "latest_assimilated_sha256": "62eaca3f38bbf175fba6b4787b5022a873ddfeb20fe903b72573acd936904ee9",
+        "latest_eval_loss_after": 2.1277,
         "ratchet_accepted_rounds": 20,
-        "ratchet_held_rounds": 78,
+        "ratchet_held_rounds": 125,
         "chain_head_workunit": "hmq_00092",
         "chain_head_sha256": "e91e0ec338b92e52b13bf4abdc2c2d95999b56c3568cb85de5b306a8d3c9f5f8",
-        "queued_workunit": "hmq_00099 (chained from hmq_00092 latest_adapter.pt SHA-256)",
+        "queued_workunit": "hmq_00146 (chained from hmq_00092 latest_adapter.pt SHA-256)",
         "segment_checkpoint_steps": 10,
         "inner_steps_per_workunit": 40,
         "peak_training_vram_mib": 3409,
@@ -80,6 +91,12 @@ _LATEST_T4_SNAPSHOT: dict[str, Any] = {
         "verified_cobblestones": 5632.11,
         "held_out_eval_loss_before": 2.2705,
         "held_out_eval_loss_after": 2.1380,
+        "counter_reconciliation_note": (
+            "Live ledger (/mnt/disks/disk-socrateai-local-1/boinc/stack/project/hmproj/hivemind_ledger/assimilated.jsonl) "
+            "contains 147 rows: 2 initial E2E verification workunits (hmp_good_001, hmp_infer_001) + 145 chained QLoRA "
+            "rounds (hmq_00001..hmq_00145, latest eval_loss_after 2.1277). Previously this static Cloud Run snapshot "
+            "held the earlier 100-row checkpoint (2 hmp_* + 98 hmq_00001..hmq_00098)."
+        ),
         "held_out_eval_by_domain_baseline_hmq_00002": {
             "general": 2.3230,
             "math": 1.6440,

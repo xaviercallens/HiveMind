@@ -15,9 +15,11 @@ from hivemind.core.expert_registry import (
 from scripts.prepare_night_sci_wave3_datasets import prepare_wave3_datasets
 from scripts.run_night_sci_wave3_campaign import (
     VRAMHeadroomError,
+    audit_full_night_producers_prosumers_and_inference_floor,
     check_vram_headroom,
     evaluate_5x5_cross_domain_matrix,
     exact_mcnemar_p_value,
+    run_t4_gpu_dry_run_micro_step,
     run_wave3_campaign,
     verify_preregistration_integrity,
 )
@@ -83,3 +85,52 @@ def test_run_wave3_campaign_end_to_end(tmp_path: Path) -> None:
     assert (tmp_path / "wave3_expert_registry.json").exists()
     saved_reg = json.loads((tmp_path / "wave3_expert_registry.json").read_text(encoding="utf-8"))
     assert len(saved_reg["experts"]) == 5
+
+
+def test_run_t4_gpu_dry_run_micro_step_and_verifiers(tmp_path: Path) -> None:
+    prereg = prepare_wave3_datasets(tmp_path, n_train=4, n_val=2, n_test=2)
+    dry_run = run_t4_gpu_dry_run_micro_step(prereg, vram_probe=lambda: 7000)
+    assert dry_run["min_free_vram_observed_mib"] == 7000
+    assert set(dry_run["micro_lora_step_losses"]) == set(WAVE3_SCIENTIFIC_EXPERT_SPECS)
+    for bee_id, losses in dry_run["micro_lora_step_losses"].items():
+        assert len(losses) == 2
+        assert losses[1] <= losses[0], f"Expected micro-LoRA loss decrease for {bee_id}: {losses}"
+    for bee_id, status in dry_run["verifier_certificates"].items():
+        assert status == "VERIFIED", f"Expected VERIFIED certificate for {bee_id}, got {status}"
+
+
+def test_audit_full_night_producers_prosumers_and_inference_floor() -> None:
+    audit = audit_full_night_producers_prosumers_and_inference_floor()
+    assert audit["protected_t4_dir_untouched"] == "/opt/hivemind/t4"
+    assert audit["tonight_inference_capacity_guarantee"]["combined_capacity_tokens_per_min"] >= 310000
+    assert audit["tonight_inference_capacity_guarantee"]["guaranteed_daily_completion_capacity"] > (
+        audit["previous_days_traffic_baseline"]["total_billed_completions"]
+    )
+    assert audit["t4_governor"]["last_yield_ms"] <= 200
+
+
+def test_authorize_t4_night_training_offloads_t4_inference_and_secures_floor() -> None:
+    audit = audit_full_night_producers_prosumers_and_inference_floor(authorize_t4_night_training=True)
+    auth = audit["t4_night_training_authorization"]
+    assert auth["authorized_by_owner"] is True
+    assert auth["t4_inference_during_night_window"] is False
+    assert auth["vram_tier"] == "N2_DEDICATED_NO_T4_INFERENCE"
+    assert auth["mandatory_free_vram_floor_mib"] == 4300
+    assert auth["max_training_vram_budget_n2_mib"] == 15360 - 4300
+
+    # All T4 producers must be set to 0 inference during night training, while RTX2070 serves 100k tok/min
+    t4_agents = [a for a in audit["local_and_rtx_producer_agents"] if a["execution_class"].startswith("t4")]
+    assert len(t4_agents) == 3
+    assert all(a["night_inference_capacity_1k_per_min"] == 0 for a in t4_agents)
+    assert all(a["night_mode"] == "DEDICATED_TRAINING_NO_INFERENCE" for a in t4_agents)
+
+    guarantee = audit["tonight_inference_capacity_guarantee"]
+    assert guarantee["t4_night_inference_enabled"] is False
+    assert guarantee["combined_capacity_tokens_per_min"] == 100000
+    assert guarantee["guaranteed_daily_token_capacity"] == 144000000
+    assert guarantee["guaranteed_daily_completion_capacity"] > (
+        audit["previous_days_traffic_baseline"]["total_billed_completions"]
+    )
+    assert guarantee["inference_floor_secured"] is True
+
+

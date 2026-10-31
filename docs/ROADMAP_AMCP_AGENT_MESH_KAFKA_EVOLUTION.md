@@ -38,7 +38,8 @@ flowchart LR
     S22 --> S23[S23: Distributed ABC MoE Mesh<br>Employed / Observer / Scout]
     S23 --> S24[S24: Swarm Nectar Cache<br>Cross-Bee Food Sources]
     S24 --> S25[S25: Lean 4 Quorum Proofs<br>Formal Convergence Invariants]
-    S25 --> S26[S26: LayerStoRm x HiveMind<br>PCIe Expert Streaming & Two-Zone VRAM]
+    S25 --> S26[S26: LayerStoRm x HiveMind<br>PCIe Expert Streaming & Two-Zone VRAM]
+    S26 --> S34[S34: SwaT + Nocturnal Sleep<br>Wake KV Telepathy & NREM/REM Consolidation]
 ```
 
 ### 🔹 Milestone 1 (S22.1) : Moteur de Quorum Sensing & Danse Frétillante Kafka
@@ -82,6 +83,18 @@ flowchart LR
   4. **Compression KV Hybride (`HiSparse` + `SnapMLA` + `E8 Lattice`, `HM-S25-04`) :** Fusionner le délestage KV épars de LayerStoRm avec le quantificateur sur réseau $E_8$ de HiveMind pour supporter des contextes de 32k–128k tokens sous le plafond de $6\,656\text{ MiB}$.
   5. **Adaptateur Producteur BYOB `layerstorm-frontier-moe` (`HM-S25-05`) :** Connecteur dans `hivemind_producer_agent.py` avec préemption gamer `< 0,5\text{ s}$ (libération immédiate des files DMA épinglées au lancement d'un jeu Steam/Blender) et rémunération en points de réflexion HMT.
 - **Métrique Gate (Campagne pré-enregistrée `E19`) :** Débit de génération $> 18\text{ tok/s}$ sur modèles MoE $>30\text{B}$ avec 0 dépassement du plafond VRAM configuré et réduction de $60\%$ de la bande passante PCIe consommée sur les préfixes récurrents grâce au *Swarm Nectar Cache* (S23) placé en amont.
+
+### 🔹 Milestone 6 (S34) : « Swarm Telepathy » (`SwaT` + `Attention Matching`) — Transfert Direct de KV-Cache Inter-Familles Sans Pré-Remplissage (`arXiv:2610.15095`)
+- **Objectif :** Remplacer les résumés textuels (`T2T`) coûteux entre Abeilles de familles différentes (`Qwen3.5`, `SmolLM3`, `Gemma-3/4`, `Granite-3.3`, `Llama-3.2`, `Phi-4`) par le transfert direct et compacté de leur état latent interne (**KV-Cache**) via **SwaT** ([`Ar-Kareem/SwaT`](https://github.com/Ar-Kareem/SwaT), cloné dans [`third_party/SwaT/`](../third_party/SwaT/), [`docs/S34_SWAT_SWARM_TELEPATHY_INTEGRATION.md`](S34_SWAT_SWARM_TELEPATHY_INTEGRATION.md)).
+- **Livrables techniques clés (`HM-S34-01` à `HM-S34-07`) :**
+  1. **Traducteur de Cache `CacheRendererV2` & Alignement RoPE par Empans de Caractères (`HM-S34-01`) :** Dé-application du RoPE émetteur (`flatten_sender_cache`), cross-attention causale alignée sur les empans de caractères ($p_i = \max(0, j + \text{clip}_{[0,1]}((m_i - a^{\mathcal{R}}_j)/(b^{\mathcal{R}}_j - a^{\mathcal{R}}_j)) - 1/2)$) avec masque préfixe strict ($b^{\mathcal{S}}_i \le b^{\mathcal{R}}_j$), et recalibrage RMS par couche/tête (`bound_to_stats`).
+  2. **Nectar Latent Compacté (`SwaT + AM_U + FP8/E8`, `HM-S34-02`) :** Combinaison de `SwaT` avec la compaction **Attention Matching (`AM`, `arXiv:2602.16284`)** et nos codecs KV `FP8` / réseau de Gosset $E_8$ sur le bus `SwarmNectarCache` (`hivemind.mesh.telepathy_kv.v1`), offrant en moyenne **$+40\%$ ($+48,8\%$ géométrique) de précision** et un **gain de vitesse $\times 4$** face au résumé textuel `T2T`.
+  3. **Espace Latent Universel de la Ruche ($2n$ vs $n(n-1)$ Mappers, `HM-S34-03`) :** Passage d'une complexité quadratique $n(n-1)$ de paires émetteur-récepteur à $2n$ adaptateurs via un espace KV canonique partagé par toutes les abeilles BYOB.
+  4. **Télépathie Zéro-Shot Vision $\to$ Texte (`HM-S34-04`) & Extension de Fenêtre Contextuelle `28K -> 5.6K` (`HM-S34-05`) :** Transfert de capacités visuelles d'une abeille VLM (`Gemma-3` / `Reddit-Vision`) vers une abeille purement textuelle (`Coder`/`Solver`) et compression de longs contextes pré-remplis sur `T4`/`LayerStoRm` vers les GPU citoyens `8 Go` (`RTX 2070`, `< 6 656 MiB`).
+- **Métrique Gate (Campagne pré-enregistrée `E22`) :** Rétention zéro-shot $\ge 90\%$ (et $> 100\%$ en mode `Large -> Small`), accélération TTFT récepteur $\ge 2,5\times$ face à `T2T` à budget de tokens égal, zéro oubli catastrophique ($\Delta \mathcal{L}_{\text{guard}} \le 0$) + gain $\ge +2,5$ pts de `Knowledge Seeding + Dreaming` face au SFT nocturne classique (`P22d`–`P22e`), et preuve formelle Lean 4 (`Theorems 162–165`, `0 sorry`).
+- **Extension Sommeil Nocturne à Deux Stades (`HM-S34-08` à `HM-S34-10`, *Language Models Need Sleep*, `arXiv:2606.03979v2`) :**
+  5. **Stade 1 du Sommeil (NREM Consolidation — `Compute–Consolidate–Update` & `Knowledge Seeding`, `HM-S34-08`) :** Hiérarchie **Continuum Memory System (`CMS`, `1K -> 5K -> 10K`)** déverrouillant dynamiquement des experts MoE bas-rang ($r=64, \alpha=128$) dans les blocs lents, distillation ascendante (`KS` = `On-Policy GKD` + RL `Learning-to-Imitate` `LTI`) avec gel des anciens paramètres contre l'oubli catastrophique, puis remise à zéro/élagage synaptique des experts rapides.
+  6. **Stade 2 du Sommeil (REM `Dreaming` — Mixage Aléatoire d'Experts MoE & Filtrage par Norme de Gradient, `HM-S34-09` & `HM-S34-10`) :** Génération de $m$ rêves synthétiques avec injection d'un expert bas-rang aléatoire hors-domaine par routeur MoE, sélection Top-$k$ + $b$ par norme de gradient SFT $\omega^{(i)} = \|\nabla_\theta \mathcal{L}_{\text{SFT}}(\text{DREAM}^{(i)}, \theta)\|$ (`4x` moins coûteux que SEAL), et récompense binaire `ReST^EM` ($r=1$ ssi le score aval $\tau(\cdot)$ progresse), consolidant le nectar KV d'éveil (`SwaT+AM`) en mémoire permanente.
 
 ---
 

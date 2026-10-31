@@ -383,3 +383,140 @@ class SwaTTelepathyBridge:
             "hub_complexity": self.hub.complexity_report(),
             "transfer_sha256": transfer_sha256,
         }
+
+
+def compute_cms_chunk_periods(
+    frequencies: Sequence[float],
+    max_chunk_tokens: int = 10000,
+) -> list[int]:
+    """Compute Continuum Memory System (`CMS`) chunk periods `C^(l) = floor(max C / f_l)` (`HM-S34-08`, `arXiv:2606.03979v2` §3.2).
+
+    Requires positive frequencies in non-increasing order `f_1 >= f_2 >= ... >= f_k > 0`.
+    """
+    if not frequencies:
+        raise ValueError("frequencies must be non-empty")
+    if max_chunk_tokens <= 0:
+        raise ValueError("max_chunk_tokens must be positive")
+    periods: list[int] = []
+    prev_f = float("inf")
+    for f in frequencies:
+        fv = float(f)
+        if fv <= 0.0:
+            raise ValueError(f"CMS frequency must be positive, got {fv}")
+        if fv > prev_f + 1e-12:
+            raise ValueError("CMS frequencies must be ordered f_1 >= f_2 >= ... >= f_k")
+        prev_f = fv
+        periods.append(max(1, int(round(float(max_chunk_tokens) / fv))))
+    return periods
+
+
+def normalized_levenshtein_similarity(seq_a: Sequence[int] | str, seq_b: Sequence[int] | str) -> float:
+    """Return `r_abs = 1 - edit_distance(seq_a, seq_b) / max(|seq_a|, |seq_b|)` in `[0, 1]` (`arXiv:2606.03979v2` §3.3)."""
+    n, m = len(seq_a), len(seq_b)
+    if n == 0 and m == 0:
+        return 1.0
+    denom = float(max(n, m))
+    dp = list(range(m + 1))
+    for i in range(1, n + 1):
+        prev = dp[0]
+        dp[0] = i
+        a_i = seq_a[i - 1]
+        for j in range(1, m + 1):
+            temp = dp[j]
+            cost = 0 if a_i == seq_b[j - 1] else 1
+            dp[j] = min(dp[j] + 1, dp[j - 1] + 1, prev + cost)
+            prev = temp
+    return max(0.0, 1.0 - float(dp[m]) / denom)
+
+
+def compute_knowledge_seeding_loss(
+    student_log_probs: np.ndarray,
+    teacher_log_probs: np.ndarray,
+    student_tokens: Sequence[int] | str,
+    teacher_tokens: Sequence[int] | str,
+    *,
+    semantic_equivalence: float,
+    lambda_gkd: float = 1.0,
+    lambda_lti: float = 0.5,
+    alpha_sem: float = 0.7,
+    alpha_abs: float = 0.3,
+) -> dict[str, float]:
+    """Compute Stage 1 NREM Upward Distillation (`Knowledge Seeding`, `KS`) objective (`HM-S34-08`, `arXiv:2606.03979v2` §3.3).
+
+    Combines On-Policy Generalized Knowledge Distillation (`GKD`, forward KL on student rollouts)
+    with RL Learning-to-Imitate (`LTI`) rewarding both semantic equivalence (`r_sem`) and
+    normalized Levenshtein prefix similarity (`r_abs`).
+    """
+    s_lp = np.asarray(student_log_probs, dtype=np.float64)
+    t_lp = np.asarray(teacher_log_probs, dtype=np.float64)
+    if s_lp.shape != t_lp.shape or s_lp.size == 0:
+        raise ValueError("student_log_probs and teacher_log_probs must have identical non-empty shape")
+
+    # Normalize log-probs over vocabulary axis (-1)
+    s_lp = s_lp - np.log(np.maximum(np.sum(np.exp(s_lp - np.max(s_lp, axis=-1, keepdims=True)), axis=-1, keepdims=True), 1e-12)) - np.max(s_lp, axis=-1, keepdims=True)
+    t_lp = t_lp - np.log(np.maximum(np.sum(np.exp(t_lp - np.max(t_lp, axis=-1, keepdims=True)), axis=-1, keepdims=True), 1e-12)) - np.max(t_lp, axis=-1, keepdims=True)
+    t_prob = np.exp(t_lp)
+
+    # Token-averaged KL(teacher || student)
+    kl_per_token = np.sum(t_prob * (t_lp - s_lp), axis=-1)
+    gkd_loss = float(np.mean(np.maximum(kl_per_token, 0.0)))
+
+    r_sem = float(min(max(semantic_equivalence, 0.0), 1.0))
+    r_abs = normalized_levenshtein_similarity(student_tokens, teacher_tokens)
+    lti_reward = float(alpha_sem * r_sem + alpha_abs * r_abs)
+    lti_loss = max(0.0, 1.0 - lti_reward)
+
+    total_ks_loss = float(lambda_gkd * gkd_loss + lambda_lti * lti_loss)
+    return {
+        "ks_total_loss": round(total_ks_loss, 6),
+        "gkd_loss": round(gkd_loss, 6),
+        "lti_loss": round(lti_loss, 6),
+        "lti_reward": round(lti_reward, 6),
+        "r_sem": round(r_sem, 6),
+        "r_abs": round(r_abs, 6),
+    }
+
+
+def select_rem_dreams_by_gradient_norm(
+    dream_ids: Sequence[str],
+    sft_gradient_norms: Sequence[float],
+    injected_random_experts: Sequence[int],
+    *,
+    top_k: int = 12,
+    random_b: int = 3,
+    seed: int = 42,
+) -> dict[str, Any]:
+    """Select Top-`k` highest SFT gradient-norm dreams + `b` random diversity dreams (`HM-S34-09`, `arXiv:2606.03979v2` §3.4)."""
+    m = len(dream_ids)
+    if m == 0 or len(sft_gradient_norms) != m or len(injected_random_experts) != m:
+        raise ValueError("dream_ids, sft_gradient_norms, and injected_random_experts must have equal non-empty length")
+    if top_k < 0 or random_b < 0 or (top_k + random_b) == 0:
+        raise ValueError("top_k + random_b must be positive")
+
+    norms = np.asarray(sft_gradient_norms, dtype=np.float64)
+    ranked_indices = np.argsort(-norms, kind="mergesort").tolist()
+    k_eff = min(top_k, m)
+    top_indices = ranked_indices[:k_eff]
+    remaining = ranked_indices[k_eff:]
+
+    rng = np.random.default_rng(seed)
+    b_eff = min(random_b, len(remaining))
+    if b_eff > 0:
+        chosen_random = rng.choice(remaining, size=b_eff, replace=False).tolist()
+    else:
+        chosen_random = []
+
+    selected_indices = top_indices + chosen_random
+    speedup_vs_seal = float(m) / float(max(len(selected_indices), 1))
+    return {
+        "total_candidates_m": m,
+        "selected_count": len(selected_indices),
+        "top_k_indices": top_indices,
+        "random_b_indices": chosen_random,
+        "selected_dream_ids": [dream_ids[i] for i in selected_indices],
+        "selected_injected_experts": [int(injected_random_experts[i]) for i in selected_indices],
+        "mean_selected_grad_norm": round(float(np.mean(norms[selected_indices])), 6),
+        "mean_rejected_grad_norm": round(float(np.mean(norms[remaining])) if remaining else 0.0, 6),
+        "inner_loop_speedup_vs_seal": round(speedup_vs_seal, 3),
+    }
+

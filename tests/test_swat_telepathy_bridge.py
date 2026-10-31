@@ -11,10 +11,14 @@ from hivemind.swarm.swat_telepathy_bridge import (
     UniversalHiveLatentHub,
     audit_latent_kv_safety,
     bound_kv_to_rms_stats,
+    compute_cms_chunk_periods,
     compute_cross_causal_limits,
+    compute_knowledge_seeding_loss,
     compute_layer_group_slices,
     compute_virtual_positions,
     cross_attention_with_causal_limits,
+    normalized_levenshtein_similarity,
+    select_rem_dreams_by_gradient_norm,
 )
 
 
@@ -130,3 +134,42 @@ def test_universal_hive_latent_hub_2n_complexity_and_vram_guards() -> None:
     )
     assert vlm_gate_dense["use_swat_kv_transfer"] is False
     assert vlm_gate_dense["fallback_mode"] == "native_vlm_sender_decode"
+
+
+def test_nocturnal_sleep_cms_knowledge_seeding_and_rem_dream_selection() -> None:
+    """HM-S34-08 & HM-S34-09 (`arXiv:2606.03979v2`): verify CMS chunk periods, KS loss, and 4x REM dream filtering."""
+    # 1. CMS ordered chunk periods C^(l) = max_C / f_l -> [1000, 5000, 10000]
+    periods = compute_cms_chunk_periods([10.0, 2.0, 1.0], max_chunk_tokens=10000)
+    assert periods == [1000, 5000, 10000]
+
+    # 2. Knowledge Seeding (GKD + LTI) positive control: identical teacher & student gives 0 GKD loss and 1.0 LTI reward
+    logits = np.array([[2.0, 0.5, -1.0, 0.1], [0.2, 1.8, -0.4, 0.0]], dtype=np.float64)
+    tokens_t = [0, 1, 2, 3]
+    ks_exact = compute_knowledge_seeding_loss(
+        logits, logits, tokens_t, tokens_t, semantic_equivalence=1.0
+    )
+    assert ks_exact["gkd_loss"] == 0.0
+    assert ks_exact["r_abs"] == 1.0
+    assert ks_exact["lti_reward"] == 1.0
+    assert ks_exact["ks_total_loss"] == 0.0
+
+    # Divergent student has strictly positive GKD and LTI loss
+    ks_divergent = compute_knowledge_seeding_loss(
+        -logits, logits, [3, 3, 0, 1], tokens_t, semantic_equivalence=0.2
+    )
+    assert ks_divergent["gkd_loss"] > 0.5
+    assert ks_divergent["ks_total_loss"] > 0.5
+    assert 0.0 <= normalized_levenshtein_similarity("abcd", "abxd") < 1.0
+
+    # 3. Stage 2 REM Dreaming: m=60 dreams -> Top-12 + 3 random = 15 dreams (4.0x speedup vs SEAL)
+    dream_ids = [f"dream_{i:02d}" for i in range(60)]
+    grad_norms = [float(i + 1) * 0.15 for i in range(60)]
+    injected_experts = [i % 16 for i in range(60)]
+    rem = select_rem_dreams_by_gradient_norm(
+        dream_ids, grad_norms, injected_experts, top_k=12, random_b=3, seed=42
+    )
+    assert rem["total_candidates_m"] == 60
+    assert rem["selected_count"] == 15
+    assert rem["inner_loop_speedup_vs_seal"] == 4.0
+    assert rem["mean_selected_grad_norm"] > rem["mean_rejected_grad_norm"]
+

@@ -384,7 +384,101 @@ SLOT_FAMILIES = (
     "brusselator",
     "lotka_volterra",
     "stiff_chain",
+    "yukawa_crystal",
+    "qf_yukawa",
+    "gpe_vortex",
+    "qf_pgpe",
+    "art_exo_genetics",
+    "chromatin_remodeling",
+    "bao_cosmology",
+    "k3_quintessence",
 )
+
+
+def yukawa_crystal_spec(
+    kappa: float,
+    x0: float,
+    v0: float,
+    t_out: Sequence[float],
+    *,
+    damping: float = 0.2,
+    spec_id: str = "science-bee-yukawa",
+    **kw: Any,
+) -> Dict[str, Any]:
+    """2D Yukawa crystal phonon/defect mode relaxation around screened-Coulomb equilibrium."""
+    kap = _num(kappa, "kappa", positive=True)
+    dmp = _num(damping, "damping", nonneg=True)
+    omega_eff = math.sqrt(1.0 + 2.0 * (kap ** 2) * math.exp(-kap))
+    zeta = dmp / (2.0 * omega_eff)
+    return named_spec("harmonic", {"omega": omega_eff, "zeta": zeta}, [x0, v0], t_out, spec_id=spec_id, **kw)
+
+
+def gpe_vortex_spec(
+    g_int: float,
+    omega_trap: float,
+    x0: float,
+    v0: float,
+    t_out: Sequence[float],
+    *,
+    zeta: float = 0.0,
+    spec_id: str = "science-bee-gpe",
+    **kw: Any,
+) -> Dict[str, Any]:
+    """Gross-Pitaevskii / PGPE Bogoliubov collective mode oscillation in a harmonic trap."""
+    g_v = _num(g_int, "g_int", nonneg=True)
+    om_t = _num(omega_trap, "omega_trap", positive=True)
+    z_v = _num(zeta, "zeta", nonneg=True)
+    omega_bog = om_t * math.sqrt(2.0 + g_v)
+    return named_spec("harmonic", {"omega": omega_bog, "zeta": z_v}, [x0, v0], t_out, spec_id=spec_id, **kw)
+
+
+def art_exo_genetics_spec(
+    k_pol: float,
+    k_exo: float,
+    k_ext: float,
+    t0_conc: float,
+    m0_conc: float,
+    p0_conc: float,
+    t_out: Sequence[float],
+    *,
+    spec_id: str = "science-bee-art-exo",
+    **kw: Any,
+) -> Dict[str, Any]:
+    """Chimeric ART-Exo reverse transcription + exonuclease proofreading kinetic network [T, M, P]."""
+    kp = _num(k_pol, "k_pol", nonneg=True)
+    ke = _num(k_exo, "k_exo", nonneg=True)
+    kx = _num(k_ext, "k_ext", nonneg=True)
+    rx = [
+        {"reactants": {"T": 1}, "products": {"M": 1}, "k": kp},
+        {"reactants": {"M": 1}, "products": {"T": 1}, "k": ke},
+        {"reactants": {"M": 1}, "products": {"P": 1}, "k": kx},
+    ]
+    return mass_action_spec(["T", "M", "P"], rx, [t0_conc, m0_conc, p0_conc], t_out, spec_id=spec_id, **kw)
+
+
+def bao_cosmology_spec(
+    hubble: float,
+    m_eff: float,
+    phi0: float,
+    dphi0: float,
+    t_out: Sequence[float],
+    *,
+    source: float = 0.0,
+    spec_id: str = "science-bee-cosmo",
+    **kw: Any,
+) -> Dict[str, Any]:
+    """Klein-Gordon / quintessence cosmological scalar mode: phi'' + 3*H*phi' + m_eff^2*phi = source."""
+    h_val = _num(hubble, "hubble", nonneg=True)
+    m_val = _num(m_eff, "m_eff", nonneg=True)
+    s_val = _num(source, "source")
+    return linear_spec(
+        [[0.0, 1.0], [-(m_val ** 2), -3.0 * h_val]],
+        [0.0, s_val],
+        [phi0, dphi0],
+        t_out,
+        spec_id=spec_id,
+        **kw,
+    )
 
 
 def _slot_time_grid(raw: Mapping[str, Any], slots: Mapping[str, Any], conversions: List[str]) -> List[float]:
@@ -392,6 +486,8 @@ def _slot_time_grid(raw: Mapping[str, Any], slots: Mapping[str, Any], conversion
         ("t_out", 1.0, None),
         ("t_out_ms", 1e-3, "ms -> s (/ 1000)"),
         ("t_out_min", 60.0, "min -> s (* 60)"),
+        ("t_out_h", 3600.0, "h -> s (* 3600)"),
+        ("t_out_days", 86400.0, "days -> s (* 86400)"),
     ):
         val = slots.get(src_name, raw.get(src_name))
         if val is not None:
@@ -444,6 +540,16 @@ def compile_slot_spec(
         g_val = _num(slots.get("g", 9.81), "g", positive=True)
         if "g_over_l" in slots and slots["g_over_l"] is not None:
             g_over_l = _num(slots["g_over_l"], "g_over_l", positive=True)
+        elif "period_s" in slots and slots["period_s"] is not None:
+            per_s = _num(slots["period_s"], "period_s", positive=True)
+            g_over_l = (2.0 * math.pi / per_s) ** 2
+            derived.append(f"g_over_l = (2*pi / period_s)^2 = (2*pi / {per_s:g})^2 = {g_over_l:.12g}")
+        elif "period_ms" in slots and slots["period_ms"] is not None:
+            per_ms = _num(slots["period_ms"], "period_ms", positive=True)
+            per_s = per_ms / 1000.0
+            conversions.append(f"period_ms={per_ms:g} ms -> period_s={per_s:g} s")
+            g_over_l = (2.0 * math.pi / per_s) ** 2
+            derived.append(f"g_over_l = (2*pi / period_s)^2 = {g_over_l:.12g}")
         else:
             if "length_m" in slots and slots["length_m"] is not None:
                 length_m = _num(slots["length_m"], "length_m", positive=True)
@@ -754,6 +860,47 @@ def compile_slot_spec(
             a0 = _num(slots.get("a0", 1.0), "a0")
             y0_vec = [a0] + [0.0] * len(rates)
         spec = decay_chain_spec(rates, y0_vec, t_out, **kw)
+
+    elif slot_family in ("yukawa_crystal", "qf_yukawa"):
+        kappa = _num(slots.get("kappa", 1.0), "kappa", positive=True)
+        damping = _num(slots.get("damping", 0.2), "damping", nonneg=True)
+        x0 = _num(slots.get("x0", 0.1), "x0")
+        v0 = _num(slots.get("v0", 0.0), "v0")
+        omega_eff = math.sqrt(1.0 + 2.0 * (kappa ** 2) * math.exp(-kappa))
+        zeta = damping / (2.0 * omega_eff)
+        derived.append(
+            f"Yukawa phonon mode: omega_eff = sqrt(1 + 2*kappa^2*exp(-kappa)) = {omega_eff:.12g}, zeta = {zeta:.12g}"
+        )
+        spec = yukawa_crystal_spec(kappa, x0, v0, t_out, damping=damping, **kw)
+
+    elif slot_family in ("gpe_vortex", "qf_pgpe"):
+        g_int = _num(slots.get("g_int", slots.get("g", 2.0)), "g_int", nonneg=True)
+        omega_trap = _num(slots.get("omega_trap", slots.get("omega", 1.0)), "omega_trap", positive=True)
+        zeta = _num(slots.get("zeta", slots.get("damping", 0.0)), "zeta", nonneg=True)
+        x0 = _num(slots.get("x0", 0.1), "x0")
+        v0 = _num(slots.get("v0", 0.0), "v0")
+        omega_bog = omega_trap * math.sqrt(2.0 + g_int)
+        derived.append(f"Bogoliubov mode: omega_B = omega_trap * sqrt(2 + g_int) = {omega_bog:.12g}")
+        spec = gpe_vortex_spec(g_int, omega_trap, x0, v0, t_out, zeta=zeta, **kw)
+
+    elif slot_family in ("art_exo_genetics", "chromatin_remodeling"):
+        k_pol = _num(slots.get("k_pol", 0.5), "k_pol", nonneg=True)
+        k_exo = _num(slots.get("k_exo", 0.2), "k_exo", nonneg=True)
+        k_ext = _num(slots.get("k_ext", 0.1), "k_ext", nonneg=True)
+        t0_c = _num(slots.get("T0", slots.get("t0_conc", 1.0)), "T0", nonneg=True)
+        m0_c = _num(slots.get("M0", slots.get("m0_conc", 0.0)), "M0", nonneg=True)
+        p0_c = _num(slots.get("P0", slots.get("p0_conc", 0.0)), "P0", nonneg=True)
+        derived.append(f"ART-Exo proofreading network: k_pol={k_pol:g}, k_exo={k_exo:g}, k_ext={k_ext:g}")
+        spec = art_exo_genetics_spec(k_pol, k_exo, k_ext, t0_c, m0_c, p0_c, t_out, **kw)
+
+    elif slot_family in ("bao_cosmology", "k3_quintessence"):
+        hubble = _num(slots.get("hubble", slots.get("H", 0.1)), "hubble", nonneg=True)
+        m_eff = _num(slots.get("m_eff", slots.get("mass", 1.0)), "m_eff", nonneg=True)
+        phi0 = _num(slots.get("phi0", slots.get("x0", 1.0)), "phi0")
+        dphi0 = _num(slots.get("dphi0", slots.get("v0", 0.0)), "dphi0")
+        source = _num(slots.get("source", 0.0), "source")
+        derived.append(f"Klein-Gordon / quintessence linear system: 3*H={3.0 * hubble:.12g}, m_eff^2={m_eff ** 2:.12g}")
+        spec = bao_cosmology_spec(hubble, m_eff, phi0, dphi0, t_out, source=source, **kw)
 
     else:
         # Canonical named family in FAMILIES (harmonic, robertson, van_der_pol, brusselator, lotka_volterra, stiff_chain)

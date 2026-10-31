@@ -54,13 +54,14 @@ def other_gpu_procs(procs: list[tuple[str, ...]], mine: set[str], limit: int = 6
     """The GPU processes that are not the BOINC task, as seen when the governor decided someone else was busy (telemetry only).
 
     Without this a yield with trigger "gpu" says only that something used >= 10 % of the card; it cannot say whether that was a user's Ollama
-    client, the validator's replay or a research job. The command line is cut to 80 characters."""
+    client, the validator's replay or a research job. The command line is cut to 100 characters."""
     out = []
     for p in procs:
         if p[0] in mine:
             continue
-        try:
-            cmd = Path(f"/proc/{p[0]}/cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")[:80]
+        try:  # interpreter path reduced to its basename so the module / script name still fits: "python -W ignore -m hivemind...moe_app"
+            argv = Path(f"/proc/{p[0]}/cmdline").read_bytes().decode(errors="replace").split("\0")
+            cmd = " ".join([os.path.basename(argv[0]), *argv[1:]]).strip()[:100]
         except OSError:
             cmd = ""
         out.append({"pid": p[0], "name": p[1] if len(p) > 1 else "", "mib": p[2] if len(p) > 2 else "", "cmd": cmd})

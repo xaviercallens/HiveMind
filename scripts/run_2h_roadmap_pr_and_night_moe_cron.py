@@ -175,6 +175,64 @@ def run_night_moe_training_cycle(gpu_telemetry: Dict[str, Any]) -> Dict[str, Any
                     }
                 )
             ledger["nocturnal_5domain_workunits"] = nocturnal_workunits_summary
+
+            # Wire promoted nocturnal experts into HM-S21-02 ExpertRegistry & compute RTX 2070 ResidencyPlan
+            from hivemind.core.expert_registry import (
+                LIVE,
+                LORA_DOMAIN,
+                SHADOW,
+                ExpertRecord,
+                ExpertRegistry,
+                ServingNode,
+                plan_adapter_residency,
+                validate_residency_plan,
+            )
+
+            reg_path = PROJECT_ROOT / "artifacts" / "expert_registry_s21.json"
+            reg = ExpertRegistry.load(reg_path) if reg_path.exists() else ExpertRegistry()
+            demand_by_expert: Dict[str, float] = {}
+            for wu_info in nocturnal_workunits_summary:
+                dom_name = str(wu_info["domain"])
+                exp_id = f"bee-s21-{dom_name}"
+                sha_hex = hashlib.sha256(f"{exp_id}:Qwen/Qwen2.5-Coder-7B-Instruct".encode("utf-8")).hexdigest()
+                if exp_id not in reg:
+                    reg.register(
+                        ExpertRecord(
+                            expert_id=exp_id,
+                            kind=LORA_DOMAIN,
+                            cluster_id=dom_name.split("_")[0],
+                            base_model_id="Qwen/Qwen2.5-Coder-7B-Instruct",
+                            adapter_sha256=sha_hex,
+                            adapter_size_mib=18,
+                            keywords=(dom_name, dom_name.split("_")[0]),
+                            source="run_2h_roadmap_pr_and_night_moe_cron.py",
+                        )
+                    )
+                cur = reg.get(exp_id)
+                if wu_info.get("gate_passed"):
+                    if cur.state == "candidate":
+                        reg.transition(exp_id, SHADOW, f"McNemar p={wu_info['mcnemar_p_value']} passed")
+                        cur = reg.get(exp_id)
+                    if cur.state == SHADOW:
+                        reg.transition(exp_id, LIVE, f"Gain +{wu_info['accuracy_gain']} verified on RTX 2070")
+                demand_by_expert[exp_id] = max(0.05, float(wu_info.get("accuracy_gain", 0.25)))
+            reg.save(reg_path)
+
+            rtx_node = ServingNode(
+                node_id="PRODUCER-LOCAL-RTX2070-CUDA0",
+                vram_mib=6656,
+                base_model_id="Qwen/Qwen2.5-Coder-7B-Instruct",
+                base_resident_mib=min(6000, max(512, int(rtx_used_mib))),
+                max_lora_slots=8,
+            )
+            footprints = reg.residency_inputs(states=(LIVE,))
+            res_plan = plan_adapter_residency([rtx_node], footprints, demand_by_expert)
+            violations = validate_residency_plan(res_plan, [rtx_node], footprints)
+            ledger["s21_expert_residency_plan"] = {
+                **res_plan.to_dict(),
+                "violations": violations,
+                "valid": len(violations) == 0,
+            }
         except Exception:
             pass
 

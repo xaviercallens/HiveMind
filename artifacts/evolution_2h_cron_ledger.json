@@ -1,6 +1,6 @@
 {
   "schema_version": "hivemind.evolution_2h_and_night_moe_cron.v1",
-  "timestamp_utc": "2026-10-31T00:19:37Z",
+  "timestamp_utc": "2026-10-31T02:21:26Z",
   "mode": "both",
   "schedules": {
     "roadmap_pr_evolution_cron": "0 */2 * * *",
@@ -15,18 +15,18 @@
     "total_requests_served": 21
   },
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-10-31T00:19:37Z",
+    "timestamp_utc": "2026-10-31T02:21:26Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": false,
     "device": "nvml:cuda:0 (torch+cpu host)",
     "compute_capability": "7.5",
     "temperature_c": 26.0,
-    "gpu_utilization_pct": 10.0,
-    "power_draw_w": 9.0,
+    "gpu_utilization_pct": 13.0,
+    "power_draw_w": 8.69,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1445.0,
-    "memory_free_mib": 6562.0,
+    "memory_used_mib": 1447.0,
+    "memory_free_mib": 6560.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
@@ -35,15 +35,15 @@
     "graphics_clock_mhz": 300.0,
     "max_graphics_clock_mhz": 2145.0,
     "memory_clock_mhz": 405.0,
-    "host_tensor_gflops": 100.73,
+    "host_tensor_gflops": 108.92,
     "measured_fp32_tflops": 9.88,
     "measured_fp16_tensor_tflops": 39.54,
     "effective_sparse_moe_nf4_tflops": 65.24,
-    "microbench_elapsed_ms": 163.04
+    "microbench_elapsed_ms": 151.86
   },
   "roadmap_summary": {
     "exists": true,
-    "roadmap_sha256": "0f40e1cd7f61f82eacf56cca767a5238268319410f6aa770685568980fd19eb6",
+    "roadmap_sha256": "4b7b28cace8dd8fcf8355f475c77ef74731c5ce8244b4b12e03d8d3ee9e5ae07",
     "seasons_detected": [
       1,
       2,
@@ -87,9 +87,9 @@
       "| **`HM-S17-CW-02`** ([#204](https://github.com/xaviercallens/HiveMind/issues/204)) | `feat/s17-crowdgpt-multikrum-ratchet` | `src/hivemind/core/byzantine.py` $\\leftrightarrow$ `Vxtzq/CrowdGPT` | **WP-J2 \u2014 Byzantine-Robust Coordinator Upgrade for `Vxtzq`'s 100-Contributor Server**: Package `Multi-Krum`, `Coordinate-Wise Trimmed Mean`, Held-Out Validation Loss Ratchet, and strict `safetensors`-only delta verification for 1-hour offline `uint16` `.bin` shard training rounds. | **PRs open:** [#207](https://github.com/xaviercallens/HiveMind/pull/207) (`crowdgpt_bridge.py`, 3 tests) and upstream [Vxtzq/CrowdGPT#22](https://github.com/Vxtzq/CrowdGPT/pull/22) / [#21](https://github.com/Vxtzq/CrowdGPT/issues/21), awaiting the partner; not yet run on a real Crowd-v1 delta (`G3`) |",
       "| **`HM-S17-CW-03`** ([#204](https://github.com/xaviercallens/HiveMind/issues/204)) | `feat/s17-unified-rocm-directml-installer` | `scripts/hivemind_producer_shield.py` $\\leftrightarrow$ `Vxtzq/CrowdGPT` (`install.sh` / `install.bat`) | **WP-J3 \u2014 Unified Multi-Vendor Installer (`CUDA` / `ROCm` / `DirectML` / `MPS` / `XPU`)**: Combine `Vxtzq`, `MatrixMagician`, and `blaich499`'s cross-platform AMD ROCm (Fedora/Linux/Windows) and DirectML installer detection with HiveMind's zero-trust producer shield and `<1.0s` game preemption governor. | Open for Joint PR (`G2`) |",
       "| **`HM-S17-CW-04`** ([#204](https://github.com/xaviercallens/HiveMind/issues/204)) | `feat/s17-tronc-commun-greffons-qlora` | `src/hivemind/boinc/` & `scripts/run_hivemind_at_home_and_ruche_campaign.py` | **WP-J4 \u2014 \"Le Tronc Commun + Les Greffons\" Joint Federated Experiment (`Suite #3`)**: Train 18 MB rank-16 QLoRA domain adapters (`french`, `code`, `math/Lean 4`, `astrophysics`) grafted onto the `Vxtzq/Crowd-v1` 1B generalist trunk during the `22:00\u201307:00 CET` European night window and benchmark non-LLM epistemological routing (`u/Brilliant_Pie_1924` track). | Planned (`G1`/`G2`) |",
-      "| **`HM-S21-04`** core model upgrade | [#295](https://github.com/xaviercallens/HiveMind/pull/295) (merged) + follow-up [#302](https://github.com/xaviercallens/HiveMind/pull/302) (merged) | `src/hivemind/core/base_model_catalog.py`, `configs/base_models_s21.json`, `scripts/refresh_base_model_catalog.py`, [`docs/S21_BASE_MODELS.md`](docs/S21_BASE_MODELS.md) | Catalog fetched from the HF Hub (API metadata, `config.json` at the pinned revision, safetensors headers by range request; header totals must equal the Hub's, and since #302 a missing Hub total is a validation error). Labelled VRAM **estimator** for NF4 QLoRA training and Q4_0/Q8_0 GGUF serving with a 20 % margin (FITS / MARGINAL / DOES_NOT_FIT) and `calibrate_from_measurement` / `append_calibration` for real peaks. Per-tier upgrade plan computed by code; it only nominates candidates. Finding: three `Qwen3.5-Coder` ids used in the S19 plan do not exist on the Hub. | Exact McNemar promotion gate that also needs wins > losses and no regression on a guard pack: identical outcomes never promote (Hypothesis), a clearly better candidate does; each catalog defect is rejected. | Nothing ran on a GPU: no training, no weight download, no VRAM measurement; all VRAM numbers are uncalibrated estimates and no calibration record exists. No held-out evaluation, so the gate has not decided on any real candidate. The S19 tier table's nonexistent ids are not yet fixed. |",
       "| `HM-S1-07` security on the bus | anyone who reaches the Kafka port can publish or impersonate a bee | **Planned**: SASL/SCRAM or mTLS on Kafka, per-bee credentials, ACLs per topic, signed `TaskDone`, gateway API keys (plan P3) | any |",
-      "| `HM-S1-08` bridge to the OpenRouter gateway | producers should appear as bees, with HMT accounting unchanged | **Planned**: a producer-to-bee bridge, a gateway adapter, and a paired test that the charge is identical with the mesh on and off (plan P4); needs the owner's decision on consumer traffic | any |"
+      "| `HM-S1-08` bridge to the OpenRouter gateway | producers should appear as bees, with HMT accounting unchanged | **Planned**: a producer-to-bee bridge, a gateway adapter, and a paired test that the charge is identical with the mesh on and off (plan P4); needs the owner's decision on consumer traffic | any |",
+      "| `HM-S1-09` multi-region Kafka and a Rust lightweight bee | one broker is a single point of failure; a JVM is too heavy for some volunteers | **Planned**: replicated Kafka with a measured failover drill (plan P5); a Rust bee that speaks the same wire protocol, with a conformance test against the Java host (plan P6) | any |"
     ]
   },
   "pr_integration_summary": {
@@ -103,13 +103,13 @@
     ]
   },
   "night_moe_summary": {
-    "timestamp_utc": "2026-10-31T00:19:47Z",
+    "timestamp_utc": "2026-10-31T02:21:35Z",
     "status": "ACTIVE_OVERNIGHT_EXECUTION",
     "rtx2070_live_guard": {
-      "timestamp_utc": "2026-10-31T00:19:47Z",
+      "timestamp_utc": "2026-10-31T02:21:35Z",
       "gpu_name": "NVIDIA GeForce RTX 2070",
-      "memory_used_mib": 1445.0,
-      "memory_free_mib": 6562.0,
+      "memory_used_mib": 1447.0,
+      "memory_free_mib": 6560.0,
       "wddm_ceiling_6656_mib_ok": true,
       "headroom_2048_mib_ok": true,
       "t4_vram_headroom_guard_mib": 4300.0,
@@ -123,5 +123,5 @@
     ],
     "nocturnal_workunits_executed": 5
   },
-  "receipt_sha256": "ed32083aabe40063f0a4b200f64b9e90b63e6237bc3115035ff7eae4b0bb10ec"
+  "receipt_sha256": "32e4e08007ec2e1fdfc869e958d1538f3428f32a104062b42b792f35b6104199"
 }

@@ -71,7 +71,8 @@ def tensors_to_b64(d: Dict[str, torch.Tensor]) -> str:
 
 
 def b64_to_tensors(s: str) -> Dict[str, torch.Tensor]:
-    return torch.load(io.BytesIO(base64.b64decode(s)), map_location="cpu")
+    # The bytes come from another machine over HTTP. torch.load unpickles by default on torch < 2.6 (a peer could run code here); weights_only=True accepts tensors and plain containers only.
+    return torch.load(io.BytesIO(base64.b64decode(s)), map_location="cpu", weights_only=True)
 
 
 def inner_train(model_cls: Any, start_params: Dict[str, torch.Tensor], shard: Tuple[torch.Tensor, torch.Tensor], round_idx: int, seed: int) -> Dict[str, torch.Tensor]:
@@ -254,10 +255,12 @@ def run_syncer(args: argparse.Namespace) -> int:
             payload = json.loads(self.rfile.read(n))
             self._json(state.receive(payload))
 
-    srv = ThreadingHTTPServer(("0.0.0.0", args.port), H)
+    # The syncer has no authentication: it binds to ONE address, loopback by default (the SSH-reverse-tunnel launcher needs nothing else). For a private overlay pass that
+    # overlay address (for example 10.77.0.4) with --bind; never 0.0.0.0.
+    srv = ThreadingHTTPServer((args.bind, args.port), H)
     th = threading.Thread(target=srv.serve_forever, daemon=True)
     th.start()
-    print(f"[syncer] listening on :{args.port}; waiting for {args.learners} learners, K={args.k}, merge={args.merge}, grace={args.grace}", flush=True)
+    print(f"[syncer] listening on {args.bind}:{args.port}; waiting for {args.learners} learners, K={args.k}, merge={args.merge}, grace={args.grace}", flush=True)
     t0 = time.time()
     while not state.done:
         if state.try_close_round():
@@ -369,6 +372,7 @@ def main() -> int:
     sub = ap.add_subparsers(dest="mode", required=True)
     s = sub.add_parser("syncer")
     s.add_argument("--port", type=int, default=8765)
+    s.add_argument("--bind", default="127.0.0.1", help="the single address to listen on (default loopback); 0.0.0.0 is refused")
     s.add_argument("--learners", type=int, default=2)
     s.add_argument("--k", type=int, default=1)
     s.add_argument("--merge", choices=["direct", "rda"], default="rda")
@@ -389,6 +393,8 @@ def main() -> int:
     b.add_argument("--seed", type=int, default=1)
     b.add_argument("--out", default=str(HERE.parent / "artifacts" / "experiments" / "E8_pilot_baseline_report.json"))
     args = ap.parse_args()
+    if args.mode == "syncer" and args.bind.strip() in ("", "0.0.0.0", "::", "[::]"):
+        ap.error("--bind must be one specific address (loopback or a private overlay address): the syncer has no authentication")
     if args.mode == "syncer":
         return run_syncer(args)
     if args.mode == "learner":

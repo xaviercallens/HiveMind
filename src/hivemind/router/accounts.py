@@ -239,7 +239,15 @@ class InvalidCredentials(ValueError):
 LEGACY_KNOWN_USERS: dict[str, dict[str, Any]] = {
     "xavier_callens": {
         "handle": "xavier_callens",
-        "aliases": ("xaviercallens", "@xaviercallens", "callensxavier@gmail.com", "xavier@hivemind.network", "hm_live_xavier_994a102f88c"),
+        "aliases": (
+            "xaviercallens",
+            "@xaviercallens",
+            "callensxavier@gmail.com",
+            "xavier@hivemind.network",
+            "hm_live_xavier_994a102f88c",
+            "hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
+        ),
+        "api_key": "hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
         "email": "callensxavier@gmail.com",
         "role": "prosumer",
         "starter_hmt": 68500.0,
@@ -683,11 +691,15 @@ class RouterStore:
 
     def _issue_or_reuse_key(self, conn: sqlite3.Connection, account_id: str) -> str:
         cached = self._active_key_cache.get(account_id)
-        if cached:
-            row = conn.execute("SELECT key_hash FROM accounts WHERE account_id=?", (account_id,)).fetchone()
-            if row is not None and hmac.compare_digest(str(row["key_hash"]), self._hmac_hex(cached)):
-                return cached
-        new_key = "hm-" + secrets.token_urlsafe(32)
+        row = conn.execute("SELECT handle, key_hash FROM accounts WHERE account_id=?", (account_id,)).fetchone()
+        if cached and row is not None and hmac.compare_digest(str(row["key_hash"]), self._hmac_hex(cached)):
+            return cached
+        pinned_key = ""
+        if row is not None:
+            legacy = self._resolve_legacy_user(str(row["handle"]))
+            if legacy and legacy.get("api_key"):
+                pinned_key = str(legacy["api_key"])
+        new_key = pinned_key or ("hm-" + secrets.token_urlsafe(32))
         conn.execute("UPDATE accounts SET key_hash=? WHERE account_id=?", (self._hmac_hex(new_key), account_id))
         self._active_key_cache[account_id] = new_key
         return new_key
@@ -716,6 +728,7 @@ class RouterStore:
         account_id = self._hmac_hex(normalised)[:32]
         pwd_hash = self._hash_password(normalised, password) if password else None
         clean_email = email.strip().lower()[:128] if email else None
+        legacy = self._resolve_legacy_user(handle) or (self._resolve_legacy_user(email) if email else None)
 
         with self._tx() as conn:
             row = conn.execute(
@@ -737,7 +750,8 @@ class RouterStore:
                 api_key = self._issue_or_reuse_key(conn, existing_id)
                 return existing_id, api_key, False
 
-            api_key = "hm-" + secrets.token_urlsafe(32)
+            pinned_key = str(legacy["api_key"]) if legacy and legacy.get("api_key") else ""
+            api_key = pinned_key or ("hm-" + secrets.token_urlsafe(32))
             conn.execute(
                 "INSERT INTO accounts(account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, password_hash, email) "
                 "VALUES (?,?,?,?,?,?,?,?,?,?)",
@@ -755,7 +769,6 @@ class RouterStore:
                 ),
             )
             self._active_key_cache[account_id] = api_key
-            legacy = self._resolve_legacy_user(handle) or (self._resolve_legacy_user(email) if email else None)
             if legacy and self._balance(conn, account_id) <= 0.0:
                 self._append(conn, account_id, float(legacy.get("starter_hmt", 100.0)), "grant", "legacy-v1-migration", time.time())
         return account_id, api_key, True
@@ -862,9 +875,22 @@ class RouterStore:
         digest = self._hmac_hex(api_key)
         with self._lock:
             row = self._conn.execute("SELECT * FROM accounts WHERE key_hash=?", (digest,)).fetchone()
-        if row is None or not hmac.compare_digest(str(row["key_hash"]), digest):
-            return None
-        return self._row_account(row)
+        if row is not None and hmac.compare_digest(str(row["key_hash"]), digest):
+            return self._row_account(row)
+        legacy = self._resolve_legacy_user(api_key)
+        if legacy and legacy.get("api_key") == api_key:
+            acct_id, _, _ = self.register_with_credentials(
+                str(legacy["handle"]),
+                role=str(legacy.get("role", "prosumer")),
+                email=str(legacy.get("email", "")),
+            )
+            with self._tx() as conn:
+                conn.execute("UPDATE accounts SET key_hash=? WHERE account_id=?", (digest, acct_id))
+                if self._balance(conn, acct_id) <= 0.0:
+                    self._append(conn, acct_id, float(legacy.get("starter_hmt", 68500.0)), "grant", "founder-key-restore", time.time())
+            self._active_key_cache[acct_id] = api_key
+            return self.get_account(acct_id)
+        return None
 
     def get_account(self, account_id: str) -> Account | None:
         with self._lock:

@@ -149,3 +149,42 @@ flowchart LR
 4. **Maillage Décentralisé d'Experts & Consensus Localisé en Essaim :**
    * Sani et al. (CamLSys / Flower Labs), *FoMoE: Federated Mixture-of-Experts* ([`arXiv:2606.19025`](https://arxiv.org/abs/2606.19025)).
    * Karaboga & Basturk, *Artificial Bee Colony (ABC) Optimization & Decentralized Quorum Sensing* (appliqué au bus `AMCP` dans `HM-S22.1` / `HM-S23`).
+
+---
+
+## 5. Saisons 32 à 34 (`HM-S32` – `HM-S34`) : Boucle Auto-Évolutive Google Antigravity SDK + HiveMind OpenRouter (10 PRs Architecture, Supervision & Vérification)
+
+Cette phase établit la boucle d'auto-amélioration où **Google Antigravity SDK** (`google-antigravity`) et le routeur **HiveMind OpenRouter** (`https://hivemind-openrouter-1003063861791.us-central1.run.app/v1`) co-développent, supervisent, vérifient mathématiquement et fusionnent les **10 prochaines PRs** de la feuille de route :
+
+```python
+# Google Antigravity SDK (pip install google-antigravity) + Unity/Steam Scientific Game Co-Pilot
+import asyncio
+from google.antigravity import Agent, LocalOpenAIAgentConfig
+
+async def main():
+    config = LocalOpenAIAgentConfig(
+        model="hivemind/bee-stars",
+        base_url="https://hivemind-openrouter-1003063861791.us-central1.run.app/v1",
+    ).lightweight()
+    async with Agent(config=config) as agent:
+        reply = await agent.chat("Optimize our Symplectic Velocity-Verlet N-Body orbital step for KEPLER-HM-442b.")
+        print(await reply.text())
+
+asyncio.run(main())
+```
+
+### Tableau des 10 Nouvelles PRs de la Roadmap (`HM-S32-01` à `HM-S34-04`)
+
+| Ordre | Ticket | Titre & Portée Architecturale | Module Cible | Vérification & Invariant Physique / Mathématique |
+| :---: | :---: | :--- | :--- | :--- |
+| **PR #1** | `HM-S32-01` | **Tâche Fondamentale Python :** Intégrateur Orbital N-Corps Symplectique Velocity-Verlet pour `KEPLER-HM-442b` & Pont Co-Pilote Google Antigravity SDK (`LocalOpenAIAgentConfig.lightweight()`) | `src/hivemind/swarm/s32_01_verlet_kepler442b_copilot.py` | Conservation symplectique de l'hamiltonien $\|\Delta H / H_0\| < 10^{-6}$ et du moment cinétique $\|\Delta L_z / L_{z,0}\| < 10^{-12}$ |
+| **PR #2** | `HM-S32-02` | **Cliquet Décentralisé Continu (Lifelong Ratchet) :** Tampon d'Ancrage Anti-Oubli Catastrophique pour Ingestion Nocturne `arXiv` / `JWST` / `TESS` | `src/hivemind/swarm/s32_02_lifelong_decentralized_ratchet.py` | Rejet strict si la perplexité sur l'ensemble d'ancrage dérive de $> 0{,}5\,\%$ ($\Delta \mathcal{L}_{\text{anchor}} \le 0{,}005$) |
+| **PR #3** | `HM-S32-03` | **Open Bee Marketplace :** Registre Auto-Service d'Abeilles Spécialisées & Vérificateur Cryptographique de Manifestes Signés (`HMAC-SHA256`) | `src/hivemind/swarm/s32_03_open_bee_marketplace_registry.py` | Signature déterministe du manifeste, quota VRAM $\le 8\text{ Go}$ et rejet des poids non certifiés |
+| **PR #4** | `HM-S33-01` | **Decoupled DiLoCo Sans Retardataires :** Agrégation `PA-CGAD` Pondérée par la Fraîcheur & Moyennage Radial-Directionnel (`arXiv:2604.21428`) | `src/hivemind/swarm/s33_01_decoupled_diloco_pacgad.py` | Décroissance staleness $w(\tau) = (1+\tau)^{-\alpha}$ et préservation de la norme radiale des pseudo-gradients |
+| **PR #5** | `HM-S33-02` | **Arène de Débat Multi-Abeilles sur Bus `AMCP` :** Vérification Croisée `bee-stars` $\times$ `bee-rusty-sundials` $\times$ `bee-lean-prover` | `src/hivemind/swarm/s33_02_multibee_amcp_debate.py` | Quorum bayésien pondéré et rejet fail-closed si un solveur formel/numérique détecte une violation d'invariant |
+| **PR #6** | `HM-S33-03` | **Valorisation Thermique Domestique (Eco-Compute) :** Grand-Livre de Télémesure Thermique Utile (`65–72 °C`) & Empreinte Carbone Évitée | `src/hivemind/swarm/s33_03_eco_thermal_carbon_ledger.py` | Rendement exergétique domestique $\eta_{\text{heat}} \in [0, 1]$ et comptabilité `gCO2eq` par 1k tokens |
+| **PR #7** | `HM-S34-01` | **Décodage Spéculatif Distribué (Draft-Verify) :** Brouillon `0.8B` Local + Vérification Parallèle `9B/14B` sur GPUs Grand Public | `src/hivemind/swarm/s34_01_speculative_swarm_decoding.py` | Échantillonnage de rejet sans perte ($p_{\text{accept}} = \min(1, p_{\text{target}}/p_{\text{draft}})$) et accélération mesurée |
+| **PR #8** | `HM-S34-02` | **Disjoncteur de Préemption Jeu `< 1,5 s` :** Purge Zero-VRAM vers RAM Hôte avec Accumulateur d'Erreur `EF21` | `src/hivemind/swarm/s34_02_game_preemption_ef21_flush.py` | Latence d'éviction $< 1500\text{ ms}$, VRAM résiduelle $= 0\text{ Mo}$ et conservation exacte de l'état `EF21` |
+| **PR #9** | `HM-S34-03` | **Quantificateur Vectoriel sur Réseau de Gosset $E_8$ :** Compression `30,89x` (`FP16` $\to$ `2 bits/dim`) pour Alvéoles Hexagonales *La Ruche* | `src/hivemind/swarm/s34_03_gosset_e8_lattice_quantizer.py` | Projection exacte sur le réseau pair/impair $E_8 = D_8 \cup (D_8 + \tfrac{1}{2}\mathbf{1})$ en $\mathcal{O}(8 \log 8)$ |
+| **PR #10** | `HM-S34-04` | **Superviseur Auto-Évolutif Antigravity + HiveMind :** Orchestrateur Architecte-Vérificateur des 10 PRs & Grand-Livre d'Attestation | `src/hivemind/swarm/s34_04_self_evolving_roadmap_supervisor.py` | Chaîne de hachage `SHA-256` des 10 PRs, reçus OpenRouter/Antigravity SDK et porte de qualité `100 %` |
+

@@ -27,7 +27,7 @@ class NodeEndpoint:
         from transformers import AutoTokenizer
 
         self.spec, self.name = spec, served_name
-        state = torch.load(adapter_path, map_location="cpu")["state"]
+        state = torch.load(adapter_path, map_location="cpu", weights_only=True)["state"]
         self.adapter_sha = state_sha(state)
         self.model = load_peft_model(spec, state)
         self.model.eval()
@@ -37,7 +37,7 @@ class NodeEndpoint:
 
         class H(BaseHTTPRequestHandler):
             def log_message(self, *a: Any) -> None:
-                pass
+                _ = a
 
             def _json(self, obj: Any, code: int = 200) -> None:
                 b = json.dumps(obj).encode()

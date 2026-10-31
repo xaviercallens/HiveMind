@@ -172,7 +172,7 @@ def train(
     eval0 = None
     resumed = 0
     if ckpt.exists():
-        c = torch.load(ckpt, map_location="cpu")
+        c = torch.load(ckpt, map_location="cpu", weights_only=True)
         states, eval0, resumed = c["states"], c["eval0"], len(c["states"]) - 1
     if eval0 is None:
         eval0 = eval_by_domain(model, spec)
@@ -283,7 +283,7 @@ def main(argv: list[str] | None = None) -> int:
     if mode == "train":
         start_state = None
         if spec.get("start_adapter_sha256"):
-            start_state = torch.load(resolve_filename("adapter.pt"), map_location="cpu")["state"]
+            start_state = torch.load(resolve_filename("adapter.pt"), map_location="cpu", weights_only=True)["state"]
             if state_sha(start_state) != spec["start_adapter_sha256"]:
                 raise RuntimeError("the start adapter does not match the workunit's start_adapter_sha256")
         meta, states = train(spec, Path("hivemind_moe_ckpt.pt"), crash, lazy, start_state)
@@ -292,7 +292,7 @@ def main(argv: list[str] | None = None) -> int:
         out_json.write_text(json.dumps(meta, sort_keys=True))
         Path("hivemind_moe_ckpt.pt").unlink(missing_ok=True)
     else:
-        adapter = torch.load(resolve_filename("adapter.pt"), map_location="cpu")["state"]
+        adapter = torch.load(resolve_filename("adapter.pt"), map_location="cpu", weights_only=True)["state"]
         out_json.write_text(json.dumps(infer(spec, adapter), sort_keys=True))
     boinc_finish(0)
     return 0

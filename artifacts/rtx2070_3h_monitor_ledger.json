@@ -1,33 +1,33 @@
 {
   "schema_version": "rtx2070_3h_monitor.v1",
   "cadence_cron": "0 */3 * * *",
-  "timestamp_utc": "2026-10-31T18:19:42Z",
+  "timestamp_utc": "2026-10-31T20:20:05Z",
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-10-31T18:19:42Z",
+    "timestamp_utc": "2026-10-31T20:20:05Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": false,
     "device": "nvml:cuda:0 (torch+cpu host)",
     "compute_capability": "7.5",
     "temperature_c": 26.0,
-    "gpu_utilization_pct": 14.0,
-    "power_draw_w": 25.89,
+    "gpu_utilization_pct": 10.0,
+    "power_draw_w": 11.37,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1465.0,
-    "memory_free_mib": 6542.0,
+    "memory_used_mib": 1470.0,
+    "memory_free_mib": 6537.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
     "wddm_envelope_compliant": true,
     "headroom_guard_compliant": true,
-    "graphics_clock_mhz": 1410.0,
+    "graphics_clock_mhz": 300.0,
     "max_graphics_clock_mhz": 2145.0,
-    "memory_clock_mhz": 7000.0,
-    "host_tensor_gflops": 103.99,
+    "memory_clock_mhz": 405.0,
+    "host_tensor_gflops": 104.22,
     "measured_fp32_tflops": 9.88,
     "measured_fp16_tensor_tflops": 39.54,
     "effective_sparse_moe_nf4_tflops": 65.24,
-    "microbench_elapsed_ms": 159.34
+    "microbench_elapsed_ms": 158.19
   },
   "community_gpu_benchmark_summary": {
     "receipt_sha256": "e944272a1802d8053a28c26a59e7e121671eec23e2c3fcb22f2fb45c3b197580",
@@ -35,16 +35,16 @@
     "peak_allocated_mb": 0.0
   },
   "pr_integration_summary": {
-    "checked_utc": "2026-10-31T18:19:49Z",
+    "checked_utc": "2026-10-31T20:20:09Z",
     "open_prs_count": 9,
     "evaluated": [
       {
-        "pr": 383,
-        "title": "docs: roadmap status after the 2026-10-31 review round",
+        "pr": 384,
+        "title": "feat(portal): restore 3D /planet-forecast with real 59-node live situation vs >200-node forecast prediction & fix all portal links",
         "author": "xaviercallens",
-        "head_ref": "docs/roadmap-2026-10-31-17",
+        "head_ref": "feat/restore-planet-forecast-live-59node-and-portal-links",
         "base_ref": "main",
-        "head_sha": "4d621a5587",
+        "head_sha": "c9e7d4ec7c",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -100,7 +100,7 @@
         "author": "xaviercallens",
         "head_ref": "feat/openrouter-5lang-i18n",
         "base_ref": "main",
-        "head_sha": "1f41463df4",
+        "head_sha": "22a5c4f70e",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -173,5 +173,5 @@
       141
     ]
   },
-  "ledger_sha256": "862ee73dc8ef9867d1bbf33a611e0b22cdf839d16c66818ab379ec6db1f84e7b"
+  "ledger_sha256": "c5868b9d5dd57e197db70bec01436cf25fcf4292b8077af0f6e7bd8012d94567"
 }

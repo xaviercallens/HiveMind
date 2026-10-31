@@ -471,7 +471,7 @@ def audit_full_night_producers_prosumers_and_inference_floor(
     )
 
     return {
-        "protected_t4_dir_untouched": str(PROTECTED_T4_DIR),
+        "protected_t4_dir_untouched": PROTECTED_T4_DIR.as_posix(),
         "systemd_units_count": len(units),
         "all_systemd_units_active": all_units_active,
         "bee_stars_llama_8294_healthy": bee_llama_ok,

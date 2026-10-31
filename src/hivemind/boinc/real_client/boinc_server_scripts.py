@@ -377,7 +377,7 @@ def run_validation(args: list[str], mv: Any = None, log: Callable[[str], None] =
         if meta.get("app") in TRAIN_APPS and len(paths) >= 2:
             verdict = mv.validate_train(spec, paths[0], paths[1], host, replay_all=replay_all_for_result(args[-1] if args and args[-1].isdigit() else None, _host_directory()))
         elif meta.get("app") == "hivemind_moe_infer":
-            adapter = torch.load(SPEC_DIR / f"{wu}.adapter.pt", map_location="cpu")["state"]
+            adapter = torch.load(SPEC_DIR / f"{wu}.adapter.pt", map_location="cpu", weights_only=True)["state"]
             verdict = mv.validate_infer(spec, paths[0], adapter, host)
         else:
             log("unknown app in result")
@@ -431,7 +431,7 @@ def assimilate(args: list[str]) -> int:
         from hivemind.boinc.real_client.moe_app import state_sha
 
         stem = profile_for_app(meta["app"])["chain_stem"]  # each app has its own chain: a rank-16 adapter cannot continue a rank-8 one
-        state = torch.load(paths[1], map_location="cpu")["states"][-1]
+        state = torch.load(paths[1], map_location="cpu", weights_only=True)["states"][-1]
         out = LEDGER_DIR / f"adapter_{wu}.pt"
         sha = state_sha(state)
         torch.save({"state": state, "sha256": sha, "wu_id": wu}, out)

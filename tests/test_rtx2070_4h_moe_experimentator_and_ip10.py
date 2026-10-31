@@ -219,6 +219,35 @@ def test_ip22_ip23_launch_model_equal_assumptions_and_ip48_lane_emden_rk4() -> N
     assert wrong["invariants_verified"]["independent_integrator_match"] is False
 
 
+def test_ip42_pinned_revision_required_and_ip52_boinc_torch_load_weights_only(tmp_path: Path) -> None:
+    """IP-42 & IP-52: verify_remote_checkpoint_revision_and_digest rejects unpinned revisions; all BOINC torch.load calls pass weights_only=True."""
+    import hashlib
+    import pytest
+
+    from hivemind.core.quantization import verify_remote_checkpoint_revision_and_digest
+
+    with pytest.raises(ValueError, match="IP-42"):
+        verify_remote_checkpoint_revision_and_digest(None)
+    with pytest.raises(ValueError, match="IP-42"):
+        verify_remote_checkpoint_revision_and_digest("main")
+
+    dummy_ckpt = tmp_path / "model.safetensors"
+    dummy_ckpt.write_bytes(b"safetensors-weights")
+    good_sha = hashlib.sha256(b"safetensors-weights").hexdigest()
+    assert (
+        verify_remote_checkpoint_revision_and_digest("4befc48dcb29", str(dummy_ckpt), good_sha)
+        == "4befc48dcb29"
+    )
+    with pytest.raises(ValueError, match="SHA-256 mismatch"):
+        verify_remote_checkpoint_revision_and_digest("4befc48dcb29", str(dummy_ckpt), "0" * 64)
+
+    boinc_dir = Path(__file__).resolve().parents[1] / "src" / "hivemind" / "boinc"
+    for py_file in boinc_dir.rglob("*.py"):
+        for line in py_file.read_text(encoding="utf-8").splitlines():
+            if "torch.load(" in line:
+                assert "weights_only=True" in line, f"Missing weights_only=True in {py_file}: {line}"
+
+
 def test_run_4h_rtx2070_moe_experimentator_end_to_end(tmp_path: Path) -> None:
     """Verify the full 4-Stage RTX 2070 MoE Bee Experimentator produces a passing signed ledger."""
     out_file = tmp_path / "rtx2070_4h_moe_experimentator_ledger.json"

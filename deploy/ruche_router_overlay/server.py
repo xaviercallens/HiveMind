@@ -39,7 +39,18 @@ EXPERIMENTS = ARTIFACTS_DIR / "experiments"
 ROUTER = os.environ.get("HIVEMIND_ROUTER_URL", "https://hivemind-openrouter-1003063861791.us-central1.run.app").rstrip("/")
 PUBLIC_BASE = os.environ.get("HIVEMIND_PUBLIC_BASE", "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app").rstrip("/")
 REPLACED_PREFIXES = ("/v1/",)
-REPLACED_PATHS = {"/signup", "/login", "/openrouter", "/playground", "/join", "/rejoindre"}
+REPLACED_PATHS = {
+    "/signup",
+    "/login",
+    "/openrouter",
+    "/playground",
+    "/join",
+    "/rejoindre",
+    "/community",
+    "/boinc",
+    "/api/v1/community/hub",
+    "/api/v1/community/boinc-sync",
+}
 HOP_BY_HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers", "transfer-encoding", "upgrade",
               "host", "content-length", "content-encoding"}
 
@@ -174,7 +185,7 @@ def api_night_moe() -> JSONResponse:
     return JSONResponse(content=report)
 
 
-_COMMUNITY_STATE_PATH = Path("/tmp/hivemind_community_hub_state.json")
+_COMMUNITY_STATE_PATH = Path(os.environ.get("HIVEMIND_COMMUNITY_STATE_PATH", "/tmp/hivemind_community_hub_state.json"))
 _DEFAULT_COMMUNITY_STATE: dict[str, Any] = {
     "hub_title": "USS HiveMind NCC-31337 · Portail Communautaire BOINC, Joueurs Steam & Science Participative",
     "charter": "0.00 EUR / 0.00 USD · Points de Réflexion HiveMind (HMT) & Science Citoyenne",
@@ -232,16 +243,32 @@ _DEFAULT_COMMUNITY_STATE: dict[str, Any] = {
 
 
 def _load_community_state() -> dict[str, Any]:
-    if _COMMUNITY_STATE_PATH.exists():
-        try:
-            return json.loads(_COMMUNITY_STATE_PATH.read_text(encoding="utf-8"))
-        except Exception:
-            pass
+    import fcntl
+
+    lock_path = _COMMUNITY_STATE_PATH.with_suffix(".lock")
     try:
-        _COMMUNITY_STATE_PATH.write_text(json.dumps(_DEFAULT_COMMUNITY_STATE, indent=2, ensure_ascii=False), encoding="utf-8")
+        with lock_path.open("a+", encoding="utf-8") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_SH)
+            if _COMMUNITY_STATE_PATH.exists():
+                return json.loads(_COMMUNITY_STATE_PATH.read_text(encoding="utf-8"))
     except Exception:
         pass
+    _save_community_state(_DEFAULT_COMMUNITY_STATE)
     return json.loads(json.dumps(_DEFAULT_COMMUNITY_STATE))
+
+
+def _save_community_state(state: dict[str, Any]) -> None:
+    import fcntl
+
+    lock_path = _COMMUNITY_STATE_PATH.with_suffix(".lock")
+    try:
+        with lock_path.open("a+", encoding="utf-8") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            tmp_path = _COMMUNITY_STATE_PATH.with_suffix(".tmp")
+            tmp_path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+            tmp_path.replace(_COMMUNITY_STATE_PATH)
+    except Exception:
+        pass
 
 
 @app.get("/community", response_class=HTMLResponse)
@@ -272,8 +299,11 @@ def community_hub_page() -> HTMLResponse:
         "th{background:#1e293b}code,pre{background:#1e293b;padding:0.15rem 0.35rem;border-radius:0.3rem;font-family:ui-monospace,monospace}"
         "pre{padding:0.8rem;overflow-x:auto}.nav{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}</style></head><body>"
         "<nav class='nav'><a href='/rejoindre?lang=fr'>← Rejoindre HiveMind (FR/EN/ES/DE/ZH)</a>"
-        "<a href='https://hivemind-openrouter-1003063861791.us-central1.run.app/signup'>🔑 Sign Up / Register &amp; Login (/signup)</a>"
-        "<a href='https://hivemind-openrouter-1003063861791.us-central1.run.app/benchmarks'>📊 Comparatif &amp; Benchmarks (5 Langues)</a>"
+        "<a href='/'>🏠 HiveMind Portal</a>"
+        "<a href='/planet-forecast'>🌍 3D Planet HiveMiners (&gt;200 Nodes)</a>"
+        "<a href='/foundation-paper'>📜 Foundation Paper v4.2.0 (PDF &amp; E20)</a>"
+        f"<a href='{ROUTER}/signup'>🔑 Sign Up / Register &amp; Login (/signup)</a>"
+        f"<a href='{ROUTER}/benchmarks'>📊 Comparatif &amp; Benchmarks (5 Langues)</a>"
         "<a href='/game'>🎮 Jouer dans le Navigateur (Cockpit 4 Étapes)</a>"
         "<a href='/webgpu'>🌌 Jouer en WebGPU (@compute)</a>"
         "<a href='/download/steam-fat-client'>⬇ Télécharger Client Windows .EXE (v2.12.0)</a>"
@@ -302,10 +332,29 @@ def api_get_community_hub() -> JSONResponse:
     return JSONResponse(content=_load_community_state())
 
 
+_MAX_SYNC_COBBLESTONES_PER_WU = 100.0
+_MAX_SYNC_HMT_PER_WU = 250
+
+
 @app.post("/api/v1/community/boinc-sync", response_class=JSONResponse)
-def api_boinc_sync(payload: dict[str, Any] | None = None) -> JSONResponse:
+def api_boinc_sync(request: Request, payload: dict[str, Any] | None = None) -> JSONResponse:
     import hashlib
+    import hmac
     import time
+
+    sync_secret = os.environ.get("HIVEMIND_BOINC_SYNC_KEY", "").strip()
+    if sync_secret:
+        provided = (
+            request.headers.get("x-admin-key")
+            or request.headers.get("x-boinc-sync-key")
+            or request.headers.get("authorization", "").removeprefix("Bearer ").removeprefix("bearer ").strip()
+            or ""
+        )
+        if not provided or not hmac.compare_digest(provided, sync_secret):
+            return JSONResponse(
+                status_code=401,
+                content={"ok": False, "error": "Invalid or missing BOINC sync key", "code": "invalid_sync_key"},
+            )
 
     body = payload or {}
     st = _load_community_state()
@@ -313,14 +362,35 @@ def api_boinc_sync(payload: dict[str, Any] | None = None) -> JSONResponse:
     gpu_name = str(body.get("gpu_name") or body.get("gpu_model") or "NVIDIA GeForce RTX 2070")[:96]
     project_id = str(body.get("project_id") or "hivemind_tess_at_home")[:64]
     target_name = str(body.get("target_name") or body.get("target_planet") or "K2-18 b")[:64]
-    idle_seconds = float(body.get("idle_seconds") or body.get("gpu_idle_seconds") or 10.0)
-    cobblestones_delta = float(body.get("cobblestones", 45.0))
-    hmt_bonus = int(body.get("hmt_bonus", 250))
+    idle_seconds = max(0.0, float(body.get("idle_seconds") or body.get("gpu_idle_seconds") or 10.0))
+    raw_cobblestones = float(body.get("cobblestones_delta", body.get("cobblestones", 45.0)))
+    raw_hmt_bonus = int(body.get("hmt_delta", body.get("hmt_bonus", 250)))
+    cobblestones_delta = round(max(0.0, min(raw_cobblestones, _MAX_SYNC_COBBLESTONES_PER_WU)), 1)
+    hmt_bonus = max(0, min(raw_hmt_bonus, _MAX_SYNC_HMT_PER_WU))
 
     cuda_fold = body.get("cuda_fold") if isinstance(body.get("cuda_fold"), dict) else {}
     bls_depth_ppm = float(cuda_fold.get("recovered_transit_depth_ppm") or 2789.0)
     receipt_seed = f"{handle}:{gpu_name}:{project_id}:{target_name}:{bls_depth_ppm:.2f}:{time.time()}"
-    receipt_sha256 = str(body.get("digest") or hashlib.sha256(receipt_seed.encode("utf-8")).hexdigest())
+    receipt_sha256 = str(body.get("receipt_sha256") or body.get("digest") or hashlib.sha256(receipt_seed.encode("utf-8")).hexdigest())
+
+    existing_receipts = {str(f.get("gcp_receipt_sha256", "")) for f in st.get("coop_discovery_feed", [])}
+    if receipt_sha256 in existing_receipts:
+        return JSONResponse(
+            content={
+                "ok": True,
+                "deduplicated": True,
+                "duplicate_receipt": True,
+                "handle": handle,
+                "gpu_name": gpu_name,
+                "project_id": project_id,
+                "target_name": target_name,
+                "bls_depth_ppm": round(bls_depth_ppm, 1),
+                "cobblestones_earned": 0.0,
+                "hmt_points_earned": 0,
+                "receipt_sha256": receipt_sha256,
+                "charter": "HiveMind Reflexion Points (HMT) - Non-Monetary Compute Reciprocity",
+            }
+        )
 
     found = False
     for m in st.get("community_members", []):
@@ -356,13 +426,12 @@ def api_boinc_sync(payload: dict[str, Any] | None = None) -> JSONResponse:
         },
     )
     st["coop_discovery_feed"] = st["coop_discovery_feed"][:25]
-    try:
-        _COMMUNITY_STATE_PATH.write_text(json.dumps(st, indent=2, ensure_ascii=False), encoding="utf-8")
-    except Exception:
-        pass
+    _save_community_state(st)
     return JSONResponse(
         content={
             "ok": True,
+            "deduplicated": False,
+            "duplicate_receipt": False,
             "handle": handle,
             "gpu_name": gpu_name,
             "project_id": project_id,

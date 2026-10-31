@@ -238,6 +238,7 @@ class DeterministicSpotCheckValidator:
                 submission, "use_muon_lora_preconditioner", False
             ),
             muon_ns_steps=getattr(submission, "muon_ns_steps", 5),
+            use_paged_8bit_adamw=getattr(submission, "use_paged_8bit_adamw", False),
         )
 
         worker_record = submission.micro_checkpoints[selected_end]

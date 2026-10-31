@@ -1,6 +1,6 @@
 {
   "schema_version": "hivemind.evolution_2h_and_night_moe_cron.v1",
-  "timestamp_utc": "2026-10-30T22:20:42Z",
+  "timestamp_utc": "2026-10-31T00:19:37Z",
   "mode": "both",
   "schedules": {
     "roadmap_pr_evolution_cron": "0 */2 * * *",
@@ -15,18 +15,18 @@
     "total_requests_served": 21
   },
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-10-30T22:20:42Z",
+    "timestamp_utc": "2026-10-31T00:19:37Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": false,
     "device": "nvml:cuda:0 (torch+cpu host)",
     "compute_capability": "7.5",
     "temperature_c": 26.0,
-    "gpu_utilization_pct": 13.0,
-    "power_draw_w": 8.9,
+    "gpu_utilization_pct": 10.0,
+    "power_draw_w": 9.0,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1464.0,
-    "memory_free_mib": 6543.0,
+    "memory_used_mib": 1445.0,
+    "memory_free_mib": 6562.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
@@ -35,11 +35,11 @@
     "graphics_clock_mhz": 300.0,
     "max_graphics_clock_mhz": 2145.0,
     "memory_clock_mhz": 405.0,
-    "host_tensor_gflops": 106.16,
+    "host_tensor_gflops": 100.73,
     "measured_fp32_tflops": 9.88,
     "measured_fp16_tensor_tflops": 39.54,
     "effective_sparse_moe_nf4_tflops": 65.24,
-    "microbench_elapsed_ms": 155.66
+    "microbench_elapsed_ms": 163.04
   },
   "roadmap_summary": {
     "exists": true,
@@ -103,13 +103,13 @@
     ]
   },
   "night_moe_summary": {
-    "timestamp_utc": "2026-10-30T22:20:52Z",
+    "timestamp_utc": "2026-10-31T00:19:47Z",
     "status": "ACTIVE_OVERNIGHT_EXECUTION",
     "rtx2070_live_guard": {
-      "timestamp_utc": "2026-10-30T22:20:52Z",
+      "timestamp_utc": "2026-10-31T00:19:47Z",
       "gpu_name": "NVIDIA GeForce RTX 2070",
-      "memory_used_mib": 1464.0,
-      "memory_free_mib": 6543.0,
+      "memory_used_mib": 1445.0,
+      "memory_free_mib": 6562.0,
       "wddm_ceiling_6656_mib_ok": true,
       "headroom_2048_mib_ok": true,
       "t4_vram_headroom_guard_mib": 4300.0,
@@ -123,5 +123,5 @@
     ],
     "nocturnal_workunits_executed": 5
   },
-  "receipt_sha256": "c0f839b60c31878c8e9f3539b34b39f0758d2fc7c789607e8e4d6a3519849040"
+  "receipt_sha256": "ed32083aabe40063f0a4b200f64b9e90b63e6237bc3115035ff7eae4b0bb10ec"
 }

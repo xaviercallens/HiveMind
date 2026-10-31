@@ -118,3 +118,19 @@ def test_seven_day_orchestration_plan_completeness() -> None:
     assert len(plan["days"]) == 6
     assert len(plan["plan_sha256"]) == 64
     assert len(QWEN35_SPECIALIZED_BEES) == 14
+
+
+def test_hardware_tiers_backbones_exist_in_s21_catalog() -> None:
+    import json
+    from pathlib import Path
+
+    cat_path = Path(__file__).resolve().parents[1] / "configs" / "base_models_s21.json"
+    cat = json.loads(cat_path.read_text(encoding="utf-8"))
+    verified_ids = {m["model_id"] for m in cat["models"] if m.get("exists") is True}
+    not_found_ids = {m["model_id"] for m in cat.get("not_found", [])}
+
+    for tier_id, cfg in QWEN35_HARDWARE_TIERS.items():
+        for key in ("primary_backbone", "coder_backbone", "draft_backbone"):
+            model_id = cfg[key]
+            assert model_id in verified_ids, f"{tier_id}.{key}={model_id} missing from S21 verified models"
+            assert model_id not in not_found_ids, f"{tier_id}.{key}={model_id} is in S21 not_found list"

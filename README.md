@@ -4,10 +4,12 @@
 
 <br/>
 
-[![Release](https://img.shields.io/badge/Release-v2.11.0%20(Season%2025%20Live%20Ops%20%26%20323%2B%20PRs)-00f0ff?style=for-the-badge)](https://github.com/xaviercallens/HiveMind/releases/tag/v2.11.0)
+[![Release](https://img.shields.io/badge/Release-v2.16.0%20(Season%2035%20Live%20Ops%20%26%20365%2B%20PRs)-00f0ff?style=for-the-badge)](https://github.com/xaviercallens/HiveMind/releases/tag/v2.11.0)
+[![Sign Up & Login](https://img.shields.io/badge/Sign_Up_%26_Login-%2B100_HMT_Free_API_Key-22c55e?style=for-the-badge&logo=googlecloud)](https://hivemind-openrouter-1003063861791.us-central1.run.app/signup)
 [![Live OpenRouter](https://img.shields.io/badge/Live_OpenRouter_Gateway-15_Models_Online-10b981?style=for-the-badge&logo=googlecloud)](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app)
 [![Join in 5 Languages](https://img.shields.io/badge/Join_HiveMind-FR_%E2%80%A2_EN_%E2%80%A2_ES_%E2%80%A2_DE_%E2%80%A2_ZH-38bdf8?style=for-the-badge&logo=googlecloud)](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/rejoindre?lang=fr)
 [![Live La Ruche](https://img.shields.io/badge/La_Ruche_Portal-24_MoE_Bees_%26_Community_Hub-f59e0b?style=for-the-badge&logo=googlecloud)](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app)
+[![Collaboration Hub](https://img.shields.io/badge/Collaboration_Hub-HiveMind_%C3%97_AMCP_%C3%97_SocrateAI-ec4899?style=for-the-badge&logo=github)](https://github.com/xaviercallens/HiveMind-AMCP-Collaboration)
 [![HiveMind@home Web](https://img.shields.io/badge/HiveMind%40home_Site-Live_5--Language_Portal-a855f7?style=for-the-badge&logo=github)](https://hivemindathome.github.io/)
 [![Test Suite](https://img.shields.io/badge/Tests-Full%20suite%20in%20CI%20(coverage%20gate%2095%25)-brightgreen?style=for-the-badge)](.github/workflows/ci_swarm_tests.yml)
 [![Lean 4 Verified](https://img.shields.io/badge/Lean%204-Machine--checked%20theorems%20(0%20sorry%2C%200%20user%20axioms)-005cc5?style=for-the-badge)](lean4/HiveMindSpec.lean)
@@ -15,7 +17,7 @@
 [![Zenodo DOI v4.1](https://img.shields.io/badge/Zenodo%20DOI%20v4.1-10.5281%2Fzenodo.23776302-1682d4?style=for-the-badge)](https://doi.org/10.5281/zenodo.23776302)
 [![Zenodo DOI v4.0](https://img.shields.io/badge/Zenodo%20DOI%20v4.0-10.5281%2Fzenodo.23756909-1682d4?style=for-the-badge)](https://doi.org/10.5281/zenodo.23756909)
 [![Hardware Verified](https://img.shields.io/badge/Verified%20Dual--GPU-Tesla%20T4%20(16GB%20MoE)%20%2B%20RTX%202070%20(8GB%20Inference)-76b900?style=for-the-badge)](artifacts/rtx_intense_stress_and_steam_deploy_report.json)
-[![Community PRs](https://img.shields.io/badge/Merged%20PRs-323%2B%20Merged%20(Seasons%201--25)-a855f7?style=for-the-badge)](docs/CONTRIBUTOR_TASKS_AND_BOUNTIES.md)
+[![Community PRs](https://img.shields.io/badge/Merged%20PRs-365%2B%20Merged%20(Seasons%201--35)-a855f7?style=for-the-badge)](docs/CONTRIBUTOR_TASKS_AND_BOUNTIES.md)
 [![Project Wiki](https://img.shields.io/badge/Project%20Wiki-13%20Pages%20Live-f59e0b?style=for-the-badge)](https://github.com/xaviercallens/HiveMind/wiki)
 [![Strategy Engine](https://img.shields.io/badge/Strategy%20Engine-Pareto%20SI--01..11%20%2B%20H1..H10%20%2B%20E1..E4-ffd21e?style=for-the-badge)](docs/DILOCO_ARXIV_LITERATURE_AND_IMPROVEMENTS.md)
 [![Branch Protection](https://img.shields.io/badge/Main%20%26%20Tags-Protected%20%2B%20Immutable-10b981?style=for-the-badge)](GOVERNANCE.md)
@@ -63,15 +65,190 @@ Instead of requiring datacenter InfiniBand, each node trains specialized **4-bit
 > - **Tonight's Nocturnal Image-MoE Evolution Monitor (`GET /api/v1/night-moe/reddit-vision/evolution`)**: Live 3-generation Pareto evolution across (1) `Reddit-Vision` Culturally-Grounded VLM MoE (`0.00122` upcycled loss, `-94.60%` branch reduction), (2) `<1.5 GB` Exoplanet & Astrophysics V-MoE PoC (`0.00001` focal loss, `-99.97%` reduction, `1,410 MiB` peak VRAM), and (3) `La Ruche` 7-Division 42.87M-Sample 104-Bee Massive Image-MoE Swarm (`0.00000` focal loss, `100%` routing accuracy, `10,073 MiB` free Tesla T4 VRAM).
 
 ### 🧭 Quick Navigation
-- 🚀 [**00. Architecture Evolution (Seasons 1–25), Live Retour d'Expérience (REX), Multi-Season Roadmap & Call for Community / GPU Gamers**](#-00-architecture-evolution-seasons-125-live-retour-dexprience-rex-multi-season-roadmap--call-for-community--gpu-gamers)
+- ⚡ [**Start Here in 60 Seconds — Choose Your Role (`Developers` • `Contributors` • `HiveMiners` • `HiveMaster`)**](#-start-here-in-60-seconds--choose-your-role-in-the-hive)
+  - 💻 [**1. For Developers — Query 15+ Specialized MoE Bees (`Antigravity SDK` • `OpenAI` • `Claude Code` • `Cursor`)**](#-1-for-developers--query-15-specialized-moe-bees-in-60-seconds)
+  - 🛠️ [**2. For Contributors — Co-Develop Features, Propose Bees & Pass Zero-Stub Gates (`Seasons 1–35`)**](#️-2-for-contributors--co-develop-features-propose-bees--pass-zero-stub-gates)
+  - ⛏️ [**3. For HiveMiners — Provide Your Idle GPU (`8–24 GB VRAM`), Keep `<1.5s` Game Priority & Earn `HMT`**](#️-3-for-hiveminers--provide-your-idle-gpu-824-gb-vram--earn-hmt-compute-credits)
+  - 👑 [**4. For HiveMaster (Swarm Admin) — Operate, Govern, Monitor & Harden the Federation**](#-4-for-hivemaster-swarm-admin--operate-govern-monitor--harden-the-federation)
+- 🚀 [**00. Architecture Evolution (Seasons 1–35), Live Retour d'Expérience (REX), Multi-Season Roadmap & Call for Community / GPU Gamers**](#-00-architecture-evolution-seasons-125-live-retour-dexprience-rex-multi-season-roadmap--call-for-community--gpu-gamers)
 - ⚡ [**0A. Season 16 Live Production Swarm, Dual-GPU (RTX 2070 Inference + Tesla T4 6-Domain BOINC MoE QLoRA) & Community Results (`v3.8.0`)**](#-0a-season-16-live-production-swarm-dual-gpu-rtx-2070-inference--tesla-t4-6-domain-boinc-moe-qlora--community-results-v380)
-- 🌌 [**0. 24-Cycle Full-Day RTX 2070 Astrophysics & Cosmology BOINC Discovery Showcase**](#-0-24-cycle-full-day-rtx-2070-astrophysics--cosmology-boinc-discovery-showcase)
+- 🌌 [**0. 24-Cycle RTX 2070 Astrophysics & Cosmology BOINC Showcase**](#-0-24-cycle-rtx-2070-astrophysics--cosmology-boinc-showcase)
 - 🏛️ [**1. System Architecture & 5-Layer Visual Stack**](#-1-system-architecture--5-layer-visual-stack)
 - 🔥 [**2. Intense RTX 2070 (8 GB VRAM) Stress Test & PoC Benchmarks**](#-2-intense-rtx-2070-8-gb-vram-stress-test--poc-benchmarks)
 - 🎮 [**3. Hugging Face Hack-Miner & Free Steam RTX Tool (`v1.0.0`)**](#-3-hugging-face-hack-miner--free-steam-rtx-tool-v100)
 - 🔌 [**4. Connect & Integrate: Node Setup, OpenAI SSE Proxy & Cursor/Continue.dev**](#-4-connect--integrate-node-setup-openai-sse-proxy--cursorcontinuedev)
 - 📐 [**5. Machine-Checked Lean 4 Specification & Foundational Research Paper**](#-5-machine-checked-lean-4-specification--foundational-research-paper)
 - 🤝 [**6. Large-Scale Parallel Collaboration, Protected GitHub & Immutable Releases**](#-6-large-scale-parallel-collaboration-protected-github--immutable-releases)
+
+---
+
+## ⚡ Start Here in 60 Seconds — Choose Your Role in the Hive
+
+Project HiveMind is organized around **four complementary roles** that form a self-sustaining circular compute ecosystem:
+
+```mermaid
+flowchart LR
+    DEV["💻 1. Developers\nQuery 15+ Specialized MoE Bees\nvia OpenAI / Google Antigravity SDK\n(Spend HMT Credits)"]
+    CONTRIB["🛠️ 2. Contributors\nBuild Kernels, Propose Bees,\nProve Lean 4 Theorems & Open PRs\n(Earn Bounties in HMT)"]
+    MINER["⛏️ 3. HiveMiners (GPU Providers)\nShare Idle 8–24 GB Consumer GPUs\nwith <1.5s Game Preemption\n(Earn ~112–115 HMT/hr)"]
+    MASTER["👑 4. HiveMaster (Swarm Admin)\nOperate Gateways, Enforce Ratchet,\nMulti-Krum & 24/7 Cyber Defense\n(Govern the Federation)"]
+
+    MINER -->|"Serves Inference & Trains QLoRA"| MASTER
+    CONTRIB -->|"Ships Verified PRs & New Bees"| MASTER
+    MASTER -->|"Routes Traffic, Audits & Settles HMT"| DEV
+    DEV -->|"Prompts & Feedback Fuel Evolution"| MINER
+```
+
+| Your Role | Who You Are | What You Do in `< 60 Seconds` | Primary Entry Point |
+| :--- | :--- | :--- | :--- |
+| **💻 Developer** | AI app builder, IDE coder (`Claude Code`, `Cursor`, `Continue`, `Antigravity SDK`), scientist | Register a free account (`+100 HMT` starter grant) and call `15+` live specialized MoE models (`hivemind/coder`, `hivemind/bee-stars`, `hivemind/bee-lean-prover`, `hivemind/bee-rusty-sundials`) | 👉 **[Sign Up & Login (`/signup`)](https://hivemind-openrouter-1003063861791.us-central1.run.app/signup)** |
+| **🛠️ Contributor** | Python/Rust/CUDA engineer, ML researcher, Lean 4 formal prover | Fork & clone, pick an open task or propose a new Bee (`[Bee-Proposal]`), co-develop with `hivemind/coder`, and submit a PR verified by the 5-Layer Security & GWAYA Zero-Stub gates | 👉 **[Collaboration Hub (`HiveMind × AMCP`)](https://github.com/xaviercallens/HiveMind-AMCP-Collaboration)** & **[`CONTRIBUTOR_TASKS_AND_BOUNTIES.md`](docs/CONTRIBUTOR_TASKS_AND_BOUNTIES.md)** |
+| **⛏️ HiveMiner** | PC gamer (`RTX 2060–4090`), homelabber, Mac `M1–M4` or AMD `ROCm`/`DirectML` owner | Run a 1-command producer or nocturnal BOINC worker; your GPU yields in `< 150 ms` when a game launches and earns prorated `HMT` compute credits | 👉 **[Join as a HiveMiner (`/rejoindre`)](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/rejoindre?lang=fr)** & **[La Ruche Portal](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/)** |
+| **👑 HiveMaster** | Swarm administrator (`role="admin"`), cluster coordinator, security operator | Operate the OpenRouter & BOINC coordinators, enforce the Thermodynamic Monotonic Ratchet ($\Delta \mathcal{L}_{\text{eval}} \le 0$), Multi-Krum & 24/7 Cyber Protection sweeps | 👉 **[HiveMaster Admin Runbook (Below)](#-4-for-hivemaster-swarm-admin--operate-govern-monitor--harden-the-federation)** |
+
+---
+
+### 💻 1. For Developers — Query 15+ Specialized MoE Bees in 60 Seconds
+
+#### Step 1: Register or Log In (Free `+100.0 HMT` Starter Credits)
+- **Web Portal (Register & Returning User Login with Handle / Password / API Key):**
+  👉 **[`https://hivemind-openrouter-1003063861791.us-central1.run.app/signup`](https://hivemind-openrouter-1003063861791.us-central1.run.app/signup)** *(also linked from [La Ruche](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/))*
+- **Or via CLI in 1 command:**
+  ```bash
+  python3 scripts/hivemind_connect.py register --handle your-dev-handle --role consumer
+  ```
+
+#### Step 2: Call HiveMind from Python (`Google Antigravity SDK` or `OpenAI SDK`)
+
+```python
+# Option A — Google Antigravity SDK (pip install google-antigravity) + Scientific / Coding Co-Pilot
+import asyncio
+from google.antigravity import Agent, LocalOpenAIAgentConfig
+
+async def main():
+    config = LocalOpenAIAgentConfig(
+        model="hivemind/bee-stars",  # or "hivemind/coder", "hivemind/bee-lean-prover", "hivemind/bee-rusty-sundials"
+        base_url="https://hivemind-openrouter-1003063861791.us-central1.run.app/v1",
+    ).lightweight()
+    async with Agent(config=config) as agent:
+        reply = await agent.chat("Optimize our Symplectic Velocity-Verlet N-Body orbital step for KEPLER-HM-442b.")
+        print(await reply.text())
+
+asyncio.run(main())
+```
+
+```bash
+# Option B — Standard OpenAI-Compatible cURL / IDE (Claude Code, Cursor, Continue.dev, OpenCode)
+curl -sS https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/chat/completions \
+  -H "Authorization: Bearer hm-YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "hivemind/coder",
+    "messages": [{"role": "user", "content": "Write a branchless AVX2 Top-2 MoE router in Rust."}]
+  }'
+```
+
+#### Step 3: Pick the Right Specialized Model ("Bee") for Your Task
+| Model ID (`/v1/models`) | Specialization & Underlying Architecture | Typical Latency (`p50`) |
+| :--- | :--- | :---: |
+| **`hivemind/coder`** | Polyglot software engineering (`Python`, `Rust`, `C/C++`, `CUDA`, `TypeScript`) — `Qwen2.5-Coder-7B` + Swarm LoRA | `~180 ms` |
+| **`hivemind/coder-lite`** / **`coder-plus`** | Fast IDE autocomplete (`3B`) / deep architectural refactoring & security review | `~140 ms` / `~260 ms` |
+| **`hivemind/bee-stars`** | Astrophysics, orbital mechanics (`Velocity-Verlet`), GAIA/Hipparcos spectroscopy & exoplanet vetting (`+40.4%` McNemar gain) | `~210 ms` |
+| **`hivemind/bee-lean-prover`** | Formal verification in **Lean 4** (`0 sorry`, `0 user axioms`, coupled with `SocrateAI-Lean-Lib`) | `~220 ms` |
+| **`hivemind/bee-rusty-sundials`** | Stiff ODE/DAE numerical integration & conservation-law verification (`rusty-SUNDIALS` CVODE BDF) | `~210 ms` |
+| **`hivemind/bee-ruche-moe`** / **`moe-coder`** / **`moe-general`** | Multi-branch Sparse Mixture-of-Experts (`La Ruche` Top-2 routing across 6–24 domain adapters) | `~230 ms` |
+| **`hivemind/auto`** | Privacy-preserving intent router (`HM-S19-USAGE` + `xlaya`) that dispatches your prompt to the best warm Bee | `~185 ms` |
+
+- 📦 **Install Ready-to-Use Agent Skills (`SKILL.md`) for Claude Code, Cursor & Copilot:** Clone **[`xaviercallens/HiveMind-AMCP-Collaboration`](https://github.com/xaviercallens/HiveMind-AMCP-Collaboration)** for `amcp-hivemind-swarm`, `gwaya-zero-stub-mcp-gate`, and `socrateai-elenchus-lean4-audit`.
+
+---
+
+### 🛠️ 2. For Contributors — Co-Develop Features, Propose Bees & Pass Zero-Stub Gates
+
+We welcome Pull Requests from human developers and autonomous AI coding agents across **HiveMind** and the unified **[`HiveMind-AMCP-Collaboration`](https://github.com/xaviercallens/HiveMind-AMCP-Collaboration)** ecosystem (`AMCP`, `AutoevolveAI/ANSE`, `GWAYA`, `OptimalEnergyAI`, `SocrateAI-Lean-Lib`, `rusty-SUNDIALS`, and `x*` community fork bridges `XSwaT`, `xLayerStoRm`, `xensorSharp`, `xlaya`, `XHillock`).
+
+#### 4-Step Contributor Workflow
+1. **Clone & Set Up Environment (`uv`):**
+   ```bash
+   git clone https://github.com/xaviercallens/HiveMind.git
+   cd HiveMind
+   uv venv && uv pip install -e ".[dev]"
+   ```
+2. **Co-Develop with HiveMind's Own Coding Bees (`Self-Evolving Loop HM-S34-04`):**
+   Use your `hm-...` key with `hivemind/coder` or `hivemind/bee-stars` via the Google Antigravity SDK (`LocalOpenAIAgentConfig`) to draft kernels, unit tests, and Lean 4 proofs, then verify them locally.
+3. **Verify Mandatory Engineering & Security Gates Locally Before Opening a PR:**
+   - **Line 1 Copyright Header:** Every `.py` file under `src/hivemind/` must begin with:
+     `# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.`
+   - **Zero-Stub & Anti-Code-Boubou Gate (`GWAYA` + `PRSecurityScanner`):** Zero `pass` / `...` / `TODO` placeholders, zero `eval`/`exec`/`pickle`, and deterministic `pytest` unit tests:
+     ```bash
+     pytest tests/ -q
+     python3 -m hivemind.cli.main scan-pr-security
+     ```
+4. **Sign the CLA in Your PR Description or Comment:**
+   Include the exact phrase in your PR body or comment:
+   > `I have read the CLA Document and I hereby sign the CLA`
+
+---
+
+### ⛏️ 3. For HiveMiners — Provide Your Idle GPU (`8–24 GB VRAM`) & Earn `HMT` Compute Credits
+
+**HiveMiners** are gamers, students, researchers, and homelabbers who turn their idle GPUs (`NVIDIA GTX/RTX`, `Tesla T4`, `AMD ROCm/DirectML`, `Apple Silicon M1–M4`) into a decentralized AI supercomputer.
+
+#### 🛡️ Four Non-Negotiable Hardware Safety Guarantees for HiveMiners
+1. **Strict VRAM Ceiling (`Golden Invariant I1`):**
+   - **Citizen Split-ML Mode (`HM-S29-01` / `HM-S32-01`):** Uses **`<= 1,536 MiB` (`0.68 – 1.48 GB`) VRAM** by keeping only embedding + prelude layers locally.
+   - **Full Local Producer / QLoRA Mode (`8 GB GPU`):** Strictly clamped at **`<= 6.5 GB` VRAM**, leaving `>= 1.5 GB` untouched for your OS compositor and browser.
+2. **Instant `< 1.5s` (`135.5 ms` Measured) Game Preemption (`Golden Invariant I4`):**
+   - The Win32 / Linux / Steam process watchdog detects any game launch (`cs2.exe`, `cyberpunk2077.exe`, `eldenring.exe`, Steam AppID) or mouse/keyboard resume and **evicts weights to pinned RAM / NVMe in `< 150 ms`**, restoring `100%` of your GPU FPS immediately.
+3. **Bandwidth-Friendly & Privacy-Preserving (`HM-S29-02` / `HM-S32-02`):**
+   - `Top-1% 2D-DCT + EF21 Error-Feedback` + `OptimalEnergyAI` $A_2 / E_8$ lattice quantization compresses wire updates by **`225.4x`** so residential connections (`10–50 Mbps`) never lag.
+4. **Fair Prorated Compute Reciprocity (`HM-S33-01` Kelly Ledger):**
+   - An 8 GB consumer GPU mining reliably during quiet/night hours earns the **same prorated yield per verified TFLOP (`~112–115 HMT pts/hr`)** as multi-GPU rigs. Earn `HMT` when idle; spend `HMT` whenever you need frontier MoE coding or science inference.
+
+#### 🚀 Start Mining in `< 2 Minutes` (Pick Any Mode)
+
+```bash
+# Mode A — Live OpenRouter Inference Producer (serve local Ollama / llama.cpp models & earn HMT per 1k tokens):
+curl -sSLO https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/scripts/hivemind_producer_agent.py
+python3 hivemind_producer_agent.py \
+  --gateway https://hivemind-openrouter-1003063861791.us-central1.run.app \
+  --handle your-miner-tag
+
+# Mode B — Nocturnal BOINC / DiLoCo QLoRA Trainer (train specialized MoE Bees during idle/night windows):
+curl -sSLO https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/scripts/hivemind_boinc_idle_worker.py
+python3 hivemind_boinc_idle_worker.py \
+  --coordinator https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app \
+  --handle your-miner-tag --domain physics_sim --once
+```
+- 🌐 **Mode C — Zero-Install Browser WebGPU Miner:** Open **[`/webgpu-galaxy`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/webgpu-galaxy)** in Chrome/Edge/Firefox to contribute WebGPU compute shaders directly from your browser tab.
+- 🖥️ **Mode D — Native 1-Click Desktop Worker (`xensorSharp` / `HM-S35-04`):** Native Windows (`DirectML`/`CUDA`), macOS (`Metal`), and Linux worker without WSL2 or Python setup overhead.
+
+---
+
+### 👑 4. For HiveMaster (Swarm Admin) — Operate, Govern, Monitor & Harden the Federation
+
+The **HiveMaster** (`role="admin"`, Founding Protocol Architect & Federation Coordinator) governs the live Cloud Run gateways, the BOINC / DiLoCo outer-loop aggregators, the cryptographic reciprocity ledger, and the 24/7 security & self-evolution daemons.
+
+#### 🎛️ HiveMaster Command & Control Responsibilities
+| Governance Pillar | HiveMaster Tooling & Endpoints | Enforced Invariant / SLA |
+| :--- | :--- | :--- |
+| **1. Gateway & Coordinator Operations** | `hivemind serve-coordinator --port 8000`, [`src/hivemind/router/gateway.py`](src/hivemind/router/gateway.py), [`GET /v1/hivemind/t4/status`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/v1/hivemind/t4/status) | `100%` gateway availability (`0` HTTP `5xx`), warm-model residency priority (`HM-S16-06`), Litestream SQLite replication |
+| **2. Thermodynamic Ratchet & Scientific Gate** | [`src/hivemind/swarm/verified_update_gate.py`](src/hivemind/swarm/verified_update_gate.py), [`s35_02_gwaya_laya_failclosed_gate.py`](src/hivemind/swarm/s35_02_gwaya_laya_failclosed_gate.py), [`s35_03_elenchus_leanlib_sundials_r64.py`](src/hivemind/swarm/s35_03_elenchus_leanlib_sundials_r64.py) | Promotes `latest_adapter.pt` **only if** 6-domain mean held-out loss drops ($\Delta \mathcal{L}_{\text{eval}} \le 0$) and paired McNemar $p < 0.05$ |
+| **3. Byzantine & Anti-Farming Defense** | [`s33_02_canary_logits_verification.py`](src/hivemind/swarm/s33_02_canary_logits_verification.py), $2\sigma$-clipped Multi-Krum, 10% architecture-matched CUDA replay (`HM-S10-08`) | Zero-tolerance slashing of poisoned gradients, fake token-farming nodes, and Sybil replays |
+| **4. Remote Fleet & VRAM Governance** | `POST /v1/hivemind/producers/{id}/control` (`HM-S16-05`), `t4_governor.py` (`< 1.0s` T4 preemption, `58 ms` measured yield) | Remotely caps producer VRAM, pauses/resumes nodes, and balances daytime inference vs. nocturnal QLoRA |
+| **5. 24/7 Cyber Security & Self-Evolution** | `scripts/hivemind_30min_monitor.py`, `scripts/hivemind_2h_cyber_protection.py`, [`s34_04_self_evolving_roadmap_supervisor.py`](src/hivemind/swarm/s34_04_self_evolving_roadmap_supervisor.py) | `37/37` portal cyber tests (`CSP`, `nosniff`, `no-store`), `25/25` Red-Team vectors blocked, `128+` Lean 4 theorems verified |
+
+```bash
+# HiveMaster CLI Quick Commands:
+# 1. Launch the BOINC Coordinator & OpenAI-Compatible Router locally:
+python3 -m hivemind.cli.main serve-coordinator --host 0.0.0.0 --port 8000
+
+# 2. Run the 5-Layer PR Security & Anti-Code-Boubou Scanner across the repository:
+python3 -m hivemind.cli.main scan-pr-security
+
+# 3. Verify the unified Season 32–35 roadmap & cross-project ecosystem gates:
+PYTHONPATH=src pytest tests/test_s32_*.py tests/test_s33_*.py tests/test_s34_*.py tests/test_s35_*.py -v
+```
 
 ---
 
@@ -156,7 +333,7 @@ Operating a continuous 24/7 public swarm across **Google Cloud Run** (`hivemind-
 
 ---
 
-### 🗺️ 00.3 Multi-Season Evolution Roadmap (`Seasons 16–26+`)
+### 🗺️ 00.3 Multi-Season Evolution Roadmap (`Seasons 16–35+`)
 
 Full task specifications, pre-registrations, and acceptance gates live in **[`ROADMAP.md`](ROADMAP.md)** and **[`docs/CONTRIBUTOR_TASKS_AND_BOUNTIES.md`](docs/CONTRIBUTOR_TASKS_AND_BOUNTIES.md)**:
 
@@ -170,7 +347,8 @@ Full task specifications, pre-registrations, and acceptance gates live in **[`RO
 | **S24** | **Nocturnal Dream Phase (`1.58/2/3-Bit` Frontier Distillation)** | Automated `22:00–07:00 CET` distillation from `Tiel-Coder-35B-A3B` (`UD-IQ3_XXS` / `UD-IQ3_S`) and `prism-ml/Ternary-Bonsai-2-27B` (`PTQ1_0` / `PQ2_0`) into the 24 MoE Bees (`PR #323`) | ✅ **DELIVERED** |
 | **S25** | **`LayerStoRm` $\times$ HiveMind PCIe Streaming & Multi-Host Scaling** | Double-buffered pinned-RAM $\rightarrow$ PCIe expert streaming bridge (`src/hivemind/core/layerstorm_bridge.py`, `PR #322`), pre-registered experiments **`E18` ([`#308`](https://github.com/xaviercallens/HiveMind/issues/308))** & **`E19`** | 🟢 **IN PROGRESS** |
 | **S26–S28** | **Global DePIN Federation, 7-Division Vision-MoE (`42.87M` pairs) & Exoplanet PoC** | `< 1.5 GB` VRAM "La Ruche" Vision-MoE (`SigLIP`/`ViT`/`DINOv2` + `Muon` + `DCT DeMo` + `ZK-OPoI` + `FoMoE Top-2`), Exoplanet CWT/Focal-Loss PoC, DirectML/ROCm/MPS & browser-native WebGPU ([`/webgpu-galaxy`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/webgpu-galaxy)) | ✅ **DELIVERED** |
-| **S29–S32** | **Next-Gen Swarm Vision (`Adaptive Multi-Split ML`, `Top-1% DCT`, `zk-SNARKs` & `GeoMesh`)** | **[`docs/VISION_AND_NEXTGEN_SWARM_ROADMAP.md`](docs/VISION_AND_NEXTGEN_SWARM_ROADMAP.md)** *(Specification Only — Not Yet Implemented)*: Circular Compute Economy & Open Bee Marketplace, Adaptive Multi-Split ML + `Top-1%` quantization ($\div 100$ bandwidth), `< 10 ms` `zk-SNARK` verifiable compute (`ZK-OPoI v5`), Geocryptographic Neural Mesh & `15–20`-node Localized Fuzzy Sub-Swarm Consensus, and Lifelong Decentralized Learning | 🧭 **VISION & SWARM SPEC** |
+| **S29–S34** | **Adaptive Multi-Split ML, `Top-1% DCT + EF21`, Kelly Reciprocity, Canary Logits, Gosset $E_8$ & Self-Evolving Supervisor (`PRs #352–#361`)** | Citizen `<= 1,536 MiB` Split-ML (`HM-S32-01`), `225.4x` DCT-EF21 (`HM-S32-02`), 6-Region Super-Peer Fanout (`HM-S32-03`), Kelly `HMT` Ledger (`HM-S33-01`), Canary Anti-Farming (`HM-S33-02`), Symplectic Velocity-Verlet `KEPLER-HM-442b` (`HM-S34-01`), Gosset $E_8$ Quantizer (`HM-S34-03`), Self-Evolving Supervisor (`HM-S34-04`) | ✅ **DELIVERED** |
+| **S35** | **Unified `/home/xavkal/xdev` Ecosystem Bridge (`PR #363` & `HiveMind-AMCP-Collaboration`)** | 4-Layer integration across `11` original core IP repos (`HiveMind`, `AMCP`, `AutoevolveAI`, `GWAYA`, `OptimalEnergyAI`, `SocrateAI-Lean-Lib`, `rusty-SUNDIALS`, `RunuX`) & `8` `x*` fork bridges (`XSwaT`, `xLayerStoRm`, `xensorSharp`, `xlaya`, `XHillock`) | ✅ **DELIVERED** |
 
 ---
 

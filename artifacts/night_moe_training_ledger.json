@@ -143,12 +143,12 @@
     "goal_command": "/goal run overnight MoE convergence until checkpoint loss < 0.25",
     "schedule_command": "/schedule '0 21 * * *' trigger swarm night MoE training campaign"
   },
-  "last_cron_sync_utc": "2026-10-31T12:23:27Z",
+  "last_cron_sync_utc": "2026-10-31T21:00:49Z",
   "rtx2070_live_guard": {
-    "timestamp_utc": "2026-10-31T12:23:27Z",
+    "timestamp_utc": "2026-10-31T21:00:49Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
-    "memory_used_mib": 1447.0,
-    "memory_free_mib": 6560.0,
+    "memory_used_mib": 1465.0,
+    "memory_free_mib": 6542.0,
     "wddm_ceiling_6656_mib_ok": true,
     "headroom_2048_mib_ok": true,
     "t4_vram_headroom_guard_mib": 4300.0,
@@ -156,7 +156,7 @@
   },
   "nocturnal_5domain_workunits": [
     {
-      "wu_id": "wu-auto-code_feedback_debug-20261030-1793449407",
+      "wu_id": "wu-auto-code_feedback_debug-20261030-1793480449",
       "domain": "code_feedback_debug",
       "peak_vram_mb": 5105.2,
       "accuracy_gain": 0.342,
@@ -164,7 +164,7 @@
       "gate_passed": true
     },
     {
-      "wu_id": "wu-auto-maths_olympiad-20261031-1793449407",
+      "wu_id": "wu-auto-maths_olympiad-20261031-1793480449",
       "domain": "maths_olympiad",
       "peak_vram_mb": 5169.3,
       "accuracy_gain": 0.336,
@@ -172,7 +172,7 @@
       "gate_passed": true
     },
     {
-      "wu_id": "wu-auto-astrophysics_transits-20261032-1793449407",
+      "wu_id": "wu-auto-astrophysics_transits-20261032-1793480449",
       "domain": "astrophysics_transits",
       "peak_vram_mb": 5092.9,
       "accuracy_gain": 0.341,
@@ -180,7 +180,7 @@
       "gate_passed": true
     },
     {
-      "wu_id": "wu-auto-astrophysics_spectra-20261033-1793449407",
+      "wu_id": "wu-auto-astrophysics_spectra-20261033-1793480449",
       "domain": "astrophysics_spectra",
       "peak_vram_mb": 5237.3,
       "accuracy_gain": 0.303,
@@ -188,7 +188,7 @@
       "gate_passed": true
     },
     {
-      "wu_id": "wu-auto-cyber_threat_intel-20261034-1793449407",
+      "wu_id": "wu-auto-cyber_threat_intel-20261034-1793480449",
       "domain": "cyber_threat_intel",
       "peak_vram_mb": 5025.8,
       "accuracy_gain": 0.269,
@@ -201,14 +201,14 @@
     "mode": "gguf_serving",
     "config": "Q4_0 ctx4096 x1",
     "estimate_mib": 1286.5,
-    "measured_peak_mib": 1447.0,
+    "measured_peak_mib": 1465.0,
     "measured_kind": "process_peak",
-    "ratio_measured_to_estimate": 1.1248,
+    "ratio_measured_to_estimate": 1.1387,
     "within_margin": true,
     "margin": 0.2,
     "gpu": "NVIDIA GeForce RTX 2070",
     "source": "nvidia-smi NVML live resident peak via run_2h_roadmap_pr_and_night_moe_cron.py",
-    "recorded_at": "2026-10-31T12:23:27Z"
+    "recorded_at": "2026-10-31T21:00:49Z"
   },
   "s21_expert_residency_plan": {
     "placements": {
@@ -222,7 +222,7 @@
     },
     "cold": {},
     "node_free_mib": {
-      "PRODUCER-LOCAL-RTX2070-CUDA0": 5119
+      "PRODUCER-LOCAL-RTX2070-CUDA0": 5101
     },
     "node_free_slots": {
       "PRODUCER-LOCAL-RTX2070-CUDA0": 3
@@ -235,5 +235,93 @@
     "unknown_demand_ids": [],
     "violations": [],
     "valid": true
+  },
+  "s34_sleep_consolidation_report": {
+    "schema": "hivemind.sleep.wake_to_sleep_consolidation.v1",
+    "wake_episodes_consolidated": 5,
+    "cms_chunk_periods": [
+      1000,
+      5000,
+      10000
+    ],
+    "stage1_nrem_knowledge_seeding": {
+      "ks_total_loss": 0.028,
+      "gkd_loss": 0.0,
+      "lti_loss": 0.056,
+      "lti_reward": 0.944,
+      "r_sem": 0.92,
+      "r_abs": 1.0
+    },
+    "stage2_rem_dreaming": {
+      "total_candidates_m": 60,
+      "selected_count": 15,
+      "top_k_indices": [
+        19,
+        39,
+        59,
+        18,
+        38,
+        58,
+        17,
+        37,
+        57,
+        16,
+        36,
+        56
+      ],
+      "random_b_indices": [
+        25,
+        34,
+        3
+      ],
+      "selected_dream_ids": [
+        "dream_19",
+        "dream_39",
+        "dream_59",
+        "dream_18",
+        "dream_38",
+        "dream_58",
+        "dream_17",
+        "dream_37",
+        "dream_57",
+        "dream_16",
+        "dream_36",
+        "dream_56",
+        "dream_25",
+        "dream_34",
+        "dream_03"
+      ],
+      "selected_injected_experts": [
+        3,
+        7,
+        3,
+        2,
+        6,
+        2,
+        1,
+        5,
+        1,
+        0,
+        4,
+        0,
+        1,
+        2,
+        3
+      ],
+      "mean_selected_grad_norm": 2.47,
+      "mean_rejected_grad_norm": 1.275,
+      "inner_loop_speedup_vs_seal": 4.0
+    },
+    "dawn_kv_eviction": {
+      "evicted_episodes": 5,
+      "retained_kv_tokens_at_dawn": 0,
+      "swat_rms_stats_recalibrated": true
+    },
+    "vram_guards": {
+      "rtx2070_wddm_6656_ok": true,
+      "rtx2070_headroom_2048_ok": true,
+      "tesla_t4_free_4300_ok": true,
+      "all_guards_passed": true
+    }
   }
 }

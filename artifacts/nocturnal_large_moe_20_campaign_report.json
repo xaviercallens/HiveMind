@@ -1,5 +1,5 @@
 {
-  "execution_utc": 1793394085.155669,
+  "execution_utc": 1793480455.8953075,
   "is_european_night": true,
   "base_models": [
     "Qwen/Qwen2.5-Coder-7B-Instruct",
@@ -17,7 +17,7 @@
       "vram_gb": 24.0,
       "cost_per_1k": 0.35,
       "capacity_1k": 120.0,
-      "last_heartbeat_utc": 1793394083.658785
+      "last_heartbeat_utc": 1793480454.8922946
     },
     {
       "account_id": "621817e923e4a2e584fdf5a71dfa2995",
@@ -26,7 +26,7 @@
       "vram_gb": 16.0,
       "cost_per_1k": 0.32,
       "capacity_1k": 100.0,
-      "last_heartbeat_utc": 1793394083.658785
+      "last_heartbeat_utc": 1793480454.8922946
     },
     {
       "account_id": "fbc1d3042d377feba6b1e0ac6fd576a4",
@@ -35,7 +35,7 @@
       "vram_gb": 12.0,
       "cost_per_1k": 0.38,
       "capacity_1k": 80.0,
-      "last_heartbeat_utc": 1793394083.658785
+      "last_heartbeat_utc": 1793480454.8922946
     },
     {
       "account_id": "58fd3df19d2b5ef8c10031e1389aac6a",
@@ -44,13 +44,13 @@
       "vram_gb": 8.0,
       "cost_per_1k": 0.4,
       "capacity_1k": 50.0,
-      "last_heartbeat_utc": 1793394083.658785
+      "last_heartbeat_utc": 1793480454.8922946
     }
   ],
   "total_experts": 20,
   "workunits": [
     {
-      "wu_id": "wu-auto-maths_formal-100-1793394083",
+      "wu_id": "wu-auto-maths_formal-100-1793480454",
       "domain": "maths_formal",
       "base_model_id": "Qwen/Qwen2.5-Coder-7B-Instruct",
       "target_adapter_name": "hivemind-expert-maths_formal-night",
@@ -60,7 +60,7 @@
       "min_vram_gb": 6.0,
       "time_budget_minutes": 25.0,
       "seed": 100,
-      "created_utc": 1793394083.8885622,
+      "created_utc": 1793480454.892798,
       "hf_dataset": "hoskinson-center/proofnet",
       "cluster": "CLUSTER_00_SYSTEMS_FORMAL",
       "sample_pairs": [
@@ -665,10 +665,10 @@
           "source": "hoskinson-center/proofnet"
         }
       ],
-      "sha256_digest": "79d134483dcd8914716657d622f898ab947ef3b0156c01e5260690a32f61078d"
+      "sha256_digest": "ef74edacd77e475098d55f94e5430adb3a7439b6b429de3bbdd512b5cb0fe09d"
     },
     {
-      "wu_id": "wu-auto-code_rust_kernel-101-1793394083",
+      "wu_id": "wu-auto-code_rust_kernel-101-1793480454",
       "domain": "code_rust_kernel",
       "base_model_id": "google/gemma-2-9b-it",
       "target_adapter_name": "hivemind-expert-code_rust_kernel-night",
@@ -678,7 +678,7 @@
       "min_vram_gb": 6.0,
       "time_budget_minutes": 25.0,
       "seed": 101,
-      "created_utc": 1793394083.8894472,
+      "created_utc": 1793480454.892798,
       "hf_dataset": "bigcode/the-stack-v2-dedup",
       "cluster": "CLUSTER_00_SYSTEMS_FORMAL",
       "sample_pairs": [
@@ -1283,10 +1283,10 @@
           "source": "bigcode/the-stack-v2-dedup"
         }
       ],
-      "sha256_digest": "91b6f75f5c6aa09f13bfd0d747f36234f2f9f77fe914cd40f0e4f8f06d5d5763"
+      "sha256_digest": "b1caca9a150d61c7414f908ff25adee7131d1484bf1185d976a8903e4ba04bb3"
     },
     {
-      "wu_id": "wu-auto-code_python_perf-102-1793394083",
+      "wu_id": "wu-auto-code_python_perf-102-1793480454",
       "domain": "code_python_perf",
       "base_model_id": "google/gemma-3-4b-it",
       "target_adapter_name": "hivemind-expert-code_python_perf-night",
@@ -1296,7 +1296,7 @@
       "min_vram_gb": 6.0,
       "time_budget_minutes": 25.0,
       "seed": 102,
-      "created_utc": 1793394083.8894472,
+      "created_utc": 1793480454.892798,
       "hf_dataset": "HuggingFaceH4/CodeAlpaca_20K",
       "cluster": "CLUSTER_00_SYSTEMS_FORMAL",
       "sample_pairs": [
@@ -1901,10 +1901,10 @@
           "source": "HuggingFaceH4/CodeAlpaca_20K"
         }
       ],
-      "sha256_digest": "b5f7aafa90f3891005ec9c44489e60739547d7d6b77787cd72cbb604b264a68a"
+      "sha256_digest": "0bba5879b1ebe296ac29835678fdb6dbc523a163a2c1441aecbc005641799b12"
     },
     {
-      "wu_id": "wu-auto-code_feedback_debug-103-1793394083",
+      "wu_id": "wu-auto-code_feedback_debug-103-1793480454",
       "domain": "code_feedback_debug",
       "base_model_id": "Qwen/Qwen3.5-9B-Base",
       "target_adapter_name": "hivemind-expert-code_feedback_debug-night",
@@ -1914,7 +1914,7 @@
       "min_vram_gb": 6.0,
       "time_budget_minutes": 25.0,
       "seed": 103,
-      "created_utc": 1793394083.8894472,
+      "created_utc": 1793480454.892798,
       "hf_dataset": "m-a-p/CodeFeedback-Filtered-Instruction",
       "cluster": "CLUSTER_00_SYSTEMS_FORMAL",
       "sample_pairs": [
@@ -2519,10 +2519,10 @@
           "source": "m-a-p/CodeFeedback-Filtered-Instruction"
         }
       ],
-      "sha256_digest": "87ac878a8c99056771c132921e51833fd4d8217def378f64ac8e7ccce6caf0e8"
+      "sha256_digest": "b71a4a557889c0581fb7c92da3b5f2b29ee5f7fa972345d7d5c6174103299753"
     },
     {
-      "wu_id": "wu-auto-systems_distributed_p2p-104-1793394083",
+      "wu_id": "wu-auto-systems_distributed_p2p-104-1793480454",
       "domain": "systems_distributed_p2p",
       "base_model_id": "google/gemma-3-1b-it",
       "target_adapter_name": "hivemind-expert-systems_distributed_p2p-night",
@@ -2532,7 +2532,7 @@
       "min_vram_gb": 6.0,
       "time_budget_minutes": 25.0,
       "seed": 104,
-      "created_utc": 1793394083.8894472,
+      "created_utc": 1793480454.892798,
       "hf_dataset": "bigcode/santacoder",
       "cluster": "CLUSTER_00_SYSTEMS_FORMAL",
       "sample_pairs": [
@@ -3137,10 +3137,10 @@
           "source": "bigcode/santacoder"
         }
       ],
-      "sha256_digest": "7cfb2081c37ff718ccf363507aca5bfab48dfaa360f7f078db6ae0b37bf875e4"
+      "sha256_digest": "8cb5ff6923fa95b17e3ba8569e3c069fad71af0a0df8f262c4d8ff9f8258af7e"
     },
     {
-      "wu_id": "wu-auto-cuda_kernel_opt-105-1793394083",
+      "wu_id": "wu-auto-cuda_kernel_opt-105-1793480454",
       "domain": "cuda_kernel_opt",
       "base_model_id": "Qwen/Qwen2.5-7B-Instruct",
       "target_adapter_name": "hivemind-expert-cuda_kernel_opt-night",
@@ -3150,7 +3150,7 @@
       "min_vram_gb": 6.0,
       "time_budget_minutes": 25.0,
       "seed": 105,
-      "created_utc": 1793394083.8894472,
+      "created_utc": 1793480454.892798,
       "hf_dataset": "neuralmagic/LLM_Compression_Code",
       "cluster": "CLUSTER_00_SYSTEMS_FORMAL",
       "sample_pairs": [
@@ -3755,10 +3755,10 @@
           "source": "neuralmagic/LLM_Compression_Code"
         }
       ],
-      "sha256_digest": "ce04ae7a30b2c57dcc2374e8e36aa6633b7004a67ff10148006461194bce935b"
+      "sha256_digest": "a175b2a4ce77a91c27bf368fdfd818a4812fddc718c1087fd8df082bf3612f68"
     },
     {
-      "wu_id": "wu-auto-cyber_threat_intel-106-1793394083",
+      "wu_id": "wu-auto-cyber_threat_intel-106-1793480454",
       "domain": "cyber_threat_intel",
       "base_model_id": "Qwen/Qwen2.5-Coder-7B-Instruct",
       "target_adapter_name": "hivemind-expert-cyber_threat_intel-night",
@@ -3768,7 +3768,7 @@
       "min_vram_gb": 6.0,
       "time_budget_minutes": 25.0,
       "seed": 106,
-      "created_utc": 1793394083.8904467,
+      "created_utc": 1793480454.8944032,
       "hf_dataset": "giskard_cti/cti-bench",
       "cluster": "CLUSTER_01_CRYPTO_CYBER",
       "sample_pairs": [
@@ -4373,10 +4373,10 @@
           "source": "giskard_cti/cti-bench"
         }
       ],
-      "sha256_digest": "45025f7c2fbca05d99c9ba481fa0aa6f83ef38b1ea1fd101c068ab4a378201ba"
+      "sha256_digest": "ea1edf53f9feba4f8ea79f84ae497f89a883bbaa3af92a9a6c1d00990b905836"
     },
     {
-      "wu_id": "wu-auto-cyber_vulnerability-107-1793394083",
+      "wu_id": "wu-auto-cyber_vulnerability-107-1793480454",
       "domain": "cyber_vulnerability",
       "base_model_id": "google/gemma-2-9b-it",
       "target_adapter_name": "hivemind-expert-cyber_vulnerability-night",
@@ -4386,7 +4386,7 @@
       "min_vram_gb": 6.0,
       "time_budget_minutes": 25.0,
       "seed": 107,
-      "created_utc": 1793394083.8904467,
+      "created_utc": 1793480454.8944032,
       "hf_dataset": "SWE-bench/SWE-bench_Verified",
       "cluster": "CLUSTER_01_CRYPTO_CYBER",
       "sample_pairs": [
@@ -4991,10 +4991,10 @@
           "source": "SWE-bench/SWE-bench_Verified"
         }
       ],
-      "sha256_digest": "6798db0ac9203a0b61930f1b9021c4475590af106d950d4f15b4b3ea2729e178"
+      "sha256_digest": "63587fd4ae1759a98847e863192f208adbc9ce2e26746fb7048d9101f3584e7c"
     },
     {
-      "wu_id": "wu-auto-cyber_smart_contracts-108-1793394083",
+      "wu_id": "wu-auto-cyber_smart_contracts-108-1793480454",
       "domain": "cyber_smart_contracts",
       "base_model_id": "google/gemma-3-4b-it",
       "target_adapter_name": "hivemind-expert-cyber_smart_contracts-night",
@@ -5004,7 +5004,7 @@
       "min_vram_gb": 6.0,
       "time_budget_minutes": 25.0,
       "seed": 108,
-      "created_utc": 1793394083.8904467,
+      "created_utc": 1793480454.8944032,
       "hf_dataset": "ASSERT-KTH/DISL-Solidity-Smart-Contracts",
       "cluster": "CLUSTER_01_CRYPTO_CYBER",
       "sample_pairs": [
@@ -5609,10 +5609,10 @@
           "source": "ASSERT-KTH/DISL-Solidity-Smart-Contracts"
         }
       ],
-      "sha256_digest": "ce0683d756b890b23e2f53be37e85d67f396c9019e7d67d8d95151f161f413d6"
+      "sha256_digest": "d4a724c91292f5d2110df8f2ee009ba7d538ce4ed4c8c5aaf3f5e121b0208020"
     },
     {
-      "wu_id": "wu-auto-cryptography_zkp-109-1793394083",
+      "wu_id": "wu-auto-cryptography_zkp-109-1793480454",
       "domain": "cryptography_zkp",
       "base_model_id": "Qwen/Qwen3.5-9B-Base",
       "target_adapter_name": "hivemind-expert-cryptography_zkp-night",
@@ -5622,7 +5622,7 @@
       "min_vram_gb": 6.0,
       "time_budget_minutes": 25.0,
       "seed": 109,
-      "created_utc": 1793394083.8914464,
+      "created_utc": 1793480454.8954084,
       "hf_dataset": "0xPARC/zk-bench",
       "cluster": "CLUSTER_01_CRYPTO_CYBER",
       "sample_pairs": [
@@ -6227,10 +6227,10 @@
           "source": "0xPARC/zk-bench"
         }
       ],
-      "sha256_digest": "d57672249192ae8b6b0258f5df66d657980660b1d08bdfc7218eae4072557908"
+      "sha256_digest": "2e4c597ec40a8adaafd7bbac055782d74d9220248019f2cd8fc8da0c2b117bd5"
     },
     {
-      "wu_id": "wu-auto-cyber_reverse_engineering-110-1793394083",
+      "wu_id": "wu-auto-cyber_reverse_engineering-110-1793480454",
       "domain": "cyber_reverse_engineering",
       "base_model_id": "google/gemma-3-1b-it",
       "target_adapter_name": "hivemind-expert-cyber_reverse_engineering-night",
@@ -6240,7 +6240,7 @@
       "min_vram_gb": 6.0,
       "time_budget_minutes": 25.0,
       "seed": 110,
-      "created_utc": 1793394083.8914464,
+      "created_utc": 1793480454.8954084,
       "hf_dataset": "vxunderground/malware-analysis-prompts",
       "cluster": "CLUSTER_01_CRYPTO_CYBER",
       "sample_pairs": [
@@ -6845,10 +6845,10 @@
           "source": "vxunderground/malware-analysis-prompts"
         }
       ],
-      "sha256_digest": "983cc5160a0551d251ed68c7470989eff78dbbc7c2511ab5c9be06b864710349"
+      "sha256_digest": "f1dc13411889ff87ed0174addf4a23a1b5a989d6370661ec5404d871652ab382"
     },
     {
-      "wu_id": "wu-auto-astrophysics_transits-111-1793394083",
+      "wu_id": "wu-auto-astrophysics_transits-111-1793480454",
       "domain": "astrophysics_transits",
       "base_model_id": "Qwen/Qwen2.5-7B-Instruct",
       "target_adapter_name": "hivemind-expert-astrophysics_transits-night",
@@ -6858,7 +6858,7 @@
       "min_vram_gb": 6.0,
       "time_budget_minutes": 25.0,
       "seed": 111,
-      "created_utc": 1793394083.8924465,
+      "created_utc": 1793480454.8964078,
       "hf_dataset": "mzrk36/exoplanets-unified-dataset",
       "cluster": "CLUSTER_02_FRONTIER_SCIENCE",
       "sample_pairs": [
@@ -7463,10 +7463,10 @@
           "source": "mzrk36/exoplanets-unified-dataset"
         }
       ],
-      "sha256_digest": "b378ed5efffa02ec144cf75bda7a600926e4f1c43d4beb21200e3bf8d8a71ed3"
+      "sha256_digest": "8104bbecd233a16b7e38ead68c7e8443403b68856110006ac2d42888dfe06f1f"
     },
     {
-      "wu_id": "wu-auto-astrophysics_spectra-112-1793394083",
+      "wu_id": "wu-auto-astrophysics_spectra-112-1793480454",
       "domain": "astrophysics_spectra",
       "base_model_id": "Qwen/Qwen2.5-Coder-7B-Instruct",
       "target_adapter_name": "hivemind-expert-astrophysics_spectra-night",
@@ -7476,7 +7476,7 @@
       "min_vram_gb": 6.0,
       "time_budget_minutes": 25.0,
       "seed": 112,
-      "created_utc": 1793394083.8924465,
+      "created_utc": 1793480454.8964078,
       "hf_dataset": "BrunoBarreto/sdss_dr12_stars_regression",
       "cluster": "CLUSTER_02_FRONTIER_SCIENCE",
       "sample_pairs": [
@@ -8081,10 +8081,10 @@
           "source": "BrunoBarreto/sdss_dr12_stars_regression"
         }
       ],
-      "sha256_digest": "acb3f3959275f4fbf67e66f2e3910e585cb8b0604c1647da064419e5225411d1"
+      "sha256_digest": "e77d1c8fc756219c971921bb1d9bbfc4590c6cc397103563a8323c9b5b7aba2e"
     },
     {
-      "wu_id": "wu-auto-astrophysics_atmosphere-113-1793394083",
+      "wu_id": "wu-auto-astrophysics_atmosphere-113-1793480454",
       "domain": "astrophysics_atmosphere",
       "base_model_id": "google/gemma-2-9b-it",
       "target_adapter_name": "hivemind-expert-astrophysics_atmosphere-night",
@@ -8094,7 +8094,7 @@
       "min_vram_gb": 6.0,
       "time_budget_minutes": 25.0,
       "seed": 113,
-      "created_utc": 1793394083.8934464,
+      "created_utc": 1793480454.8974082,
       "hf_dataset": "Shoriful025/exoplanet_atmospheric_spectroscopy_results",
       "cluster": "CLUSTER_02_FRONTIER_SCIENCE",
       "sample_pairs": [
@@ -8699,10 +8699,10 @@
           "source": "Shoriful025/exoplanet_atmospheric_spectroscopy_results"
         }
       ],
-      "sha256_digest": "01f0d964aeddba2caab5fd135cd9159e865ff765e73d370cc260e815ecefcde2"
+      "sha256_digest": "b06cf12ea135dcedc8ecdb20154158b29aee697d1b4743f356b9cf987c897885"
     },
     {
-      "wu_id": "wu-auto-physics_quantum_lattice-114-1793394083",
+      "wu_id": "wu-auto-physics_quantum_lattice-114-1793480454",
       "domain": "physics_quantum_lattice",
       "base_model_id": "google/gemma-3-4b-it",
       "target_adapter_name": "hivemind-expert-physics_quantum_lattice-night",
@@ -8712,7 +8712,7 @@
       "min_vram_gb": 6.0,
       "time_budget_minutes": 25.0,
       "seed": 114,
-      "created_utc": 1793394083.8934464,
+      "created_utc": 1793480454.8974082,
       "hf_dataset": "MultimodalUniverse/multimodal_universe",
       "cluster": "CLUSTER_02_FRONTIER_SCIENCE",
       "sample_pairs": [
@@ -9317,10 +9317,10 @@
           "source": "MultimodalUniverse/multimodal_universe"
         }
       ],
-      "sha256_digest": "f2c54480e3025b72d09953fb43c0fa9ac1853966540258cfe8cf188b42b153fb"
+      "sha256_digest": "40f4c00709c8c8076e71cea95507191322f028b125ad3622cf005b3750ab02c6"
     },
     {
-      "wu_id": "wu-auto-chemistry_molecular_docking-115-1793394083",
+      "wu_id": "wu-auto-chemistry_molecular_docking-115-1793480454",
       "domain": "chemistry_molecular_docking",
       "base_model_id": "Qwen/Qwen3.5-9B-Base",
       "target_adapter_name": "hivemind-expert-chemistry_molecular_docking-night",
@@ -9330,7 +9330,7 @@
       "min_vram_gb": 6.0,
       "time_budget_minutes": 25.0,
       "seed": 115,
-      "created_utc": 1793394083.8934464,
+      "created_utc": 1793480454.8974082,
       "hf_dataset": "chainer/zinc250k",
       "cluster": "CLUSTER_02_FRONTIER_SCIENCE",
       "sample_pairs": [
@@ -9935,10 +9935,10 @@
           "source": "chainer/zinc250k"
         }
       ],
-      "sha256_digest": "4fae3e63a61310227db9a6399d0aaf78b0729cdcc121d0710a2d22b07def9632"
+      "sha256_digest": "8b493f9b807c80d61d650feed1c2dfb265dd87eae94e900624049dcdff132691"
     },
     {
-      "wu_id": "wu-auto-climate_earth_observation-116-1793394083",
+      "wu_id": "wu-auto-climate_earth_observation-116-1793480454",
       "domain": "climate_earth_observation",
       "base_model_id": "google/gemma-3-1b-it",
       "target_adapter_name": "hivemind-expert-climate_earth_observation-night",
@@ -9948,7 +9948,7 @@
       "min_vram_gb": 6.0,
       "time_budget_minutes": 25.0,
       "seed": 116,
-      "created_utc": 1793394083.8934464,
+      "created_utc": 1793480454.8974082,
       "hf_dataset": "nasa-impact/hls-foundation",
       "cluster": "CLUSTER_02_FRONTIER_SCIENCE",
       "sample_pairs": [
@@ -10553,10 +10553,10 @@
           "source": "nasa-impact/hls-foundation"
         }
       ],
-      "sha256_digest": "ff1635548d822364777f53568f3658c68581e5398d007a2e3cd618b0f4a0b6ab"
+      "sha256_digest": "b53300697622c3ea1ce75d6e37f4877c5906ae0ae3217ccb60b8ad2d4c2f61c7"
     },
     {
-      "wu_id": "wu-auto-maths_olympiad-117-1793394083",
+      "wu_id": "wu-auto-maths_olympiad-117-1793480454",
       "domain": "maths_olympiad",
       "base_model_id": "Qwen/Qwen2.5-7B-Instruct",
       "target_adapter_name": "hivemind-expert-maths_olympiad-night",
@@ -10566,7 +10566,7 @@
       "min_vram_gb": 6.0,
       "time_budget_minutes": 25.0,
       "seed": 117,
-      "created_utc": 1793394083.8944466,
+      "created_utc": 1793480454.898414,
       "hf_dataset": "openai/gsm8k",
       "cluster": "CLUSTER_03_REASONING_AND_LANGUAGE",
       "sample_pairs": [
@@ -11171,10 +11171,10 @@
           "source": "openai/gsm8k"
         }
       ],
-      "sha256_digest": "010848968e982186269fb138e92de42a0ca6d9037577b638692cf61f42e9d297"
+      "sha256_digest": "b925cbf65c8f3e5d6f4bd64a3bbca5fb201b6724667d75fb2d194a83f66a5d41"
     },
     {
-      "wu_id": "wu-auto-biomedical_genomics-118-1793394083",
+      "wu_id": "wu-auto-biomedical_genomics-118-1793480454",
       "domain": "biomedical_genomics",
       "base_model_id": "Qwen/Qwen2.5-Coder-7B-Instruct",
       "target_adapter_name": "hivemind-expert-biomedical_genomics-night",
@@ -11184,7 +11184,7 @@
       "min_vram_gb": 6.0,
       "time_budget_minutes": 25.0,
       "seed": 118,
-      "created_utc": 1793394083.8944466,
+      "created_utc": 1793480454.898414,
       "hf_dataset": "qiaojin/PubMedQA",
       "cluster": "CLUSTER_03_REASONING_AND_LANGUAGE",
       "sample_pairs": [
@@ -11789,10 +11789,10 @@
           "source": "qiaojin/PubMedQA"
         }
       ],
-      "sha256_digest": "b894fd5542a1fcad998918627ac439fc584439abda89aef09854be403871abbe"
+      "sha256_digest": "3c34e568fc35aeb5cd37e12920065192748acd35cf65c6ea8d79c0f8a22e70ab"
     },
     {
-      "wu_id": "wu-auto-biomedical_clinical-119-1793394083",
+      "wu_id": "wu-auto-biomedical_clinical-119-1793480454",
       "domain": "biomedical_clinical",
       "base_model_id": "google/gemma-2-9b-it",
       "target_adapter_name": "hivemind-expert-biomedical_clinical-night",
@@ -11802,7 +11802,7 @@
       "min_vram_gb": 6.0,
       "time_budget_minutes": 25.0,
       "seed": 119,
-      "created_utc": 1793394083.8944466,
+      "created_utc": 1793480454.898414,
       "hf_dataset": "epfl-llm/guidance-biomedical",
       "cluster": "CLUSTER_03_REASONING_AND_LANGUAGE",
       "sample_pairs": [
@@ -12407,12 +12407,12 @@
           "source": "epfl-llm/guidance-biomedical"
         }
       ],
-      "sha256_digest": "e074a6449258bb03e46e71e14bc50c030814d2c121ef9649a5e22b97aa37ecdb"
+      "sha256_digest": "b98c94b102c587327a49edb39f758dc8aee11e0f466c081bcf7d2b9178d62065"
     }
   ],
   "results": [
     {
-      "wu_id": "wu-auto-maths_formal-100-1793394083",
+      "wu_id": "wu-auto-maths_formal-100-1793480454",
       "domain": "maths_formal",
       "worker_id": "worker-cuda-sm86-fp16-3090",
       "account_id": "7a3e9c118b4f02a9e55d614cb9128f41",
@@ -12426,16 +12426,16 @@
       "contributed_tflops": 6.786,
       "peak_vram_mb": 4975.7,
       "duration_seconds": 176.8,
-      "delta_weights_hash": "b27cd3087fbf90664b2810c8cf275f54176113f37f6d7a81d4aa350f645c76e1",
+      "delta_weights_hash": "bddaaa70f9b75f3b70241173ed925ff9ff97599f55172ce43a3852b154d85dcf",
       "base_model_id": "Qwen/Qwen2.5-Coder-7B-Instruct",
       "hf_dataset": "hoskinson-center/proofnet",
       "cluster": "CLUSTER_00_SYSTEMS_FORMAL",
-      "completed_utc": 1793394083.8885622,
+      "completed_utc": 1793480454.892798,
       "delta_nll": -0.53,
       "accuracy_gain": 0.339
     },
     {
-      "wu_id": "wu-auto-code_rust_kernel-101-1793394083",
+      "wu_id": "wu-auto-code_rust_kernel-101-1793480454",
       "domain": "code_rust_kernel",
       "worker_id": "worker-tesla-t4-16gb-moe",
       "account_id": "621817e923e4a2e584fdf5a71dfa2995",
@@ -12449,16 +12449,16 @@
       "contributed_tflops": 8.214,
       "peak_vram_mb": 6266.6,
       "duration_seconds": 95.3,
-      "delta_weights_hash": "8cb8b95b69b0ec3aeca085cdd1d7760adf7e5d96811063dafb635fa5621cbd57",
+      "delta_weights_hash": "e87a5da4fb611ac329ad67f1b53ad0b08f819c989ff23f115a42ea57f2e2298b",
       "base_model_id": "google/gemma-2-9b-it",
       "hf_dataset": "bigcode/the-stack-v2-dedup",
       "cluster": "CLUSTER_00_SYSTEMS_FORMAL",
-      "completed_utc": 1793394083.8894472,
+      "completed_utc": 1793480454.892798,
       "delta_nll": -0.53,
       "accuracy_gain": 0.304
     },
     {
-      "wu_id": "wu-auto-code_python_perf-102-1793394083",
+      "wu_id": "wu-auto-code_python_perf-102-1793480454",
       "domain": "code_python_perf",
       "worker_id": "worker-cuda-sm89-fp16-4070",
       "account_id": "fbc1d3042d377feba6b1e0ac6fd576a4",
@@ -12472,16 +12472,16 @@
       "contributed_tflops": 6.25,
       "peak_vram_mb": 3004.0,
       "duration_seconds": 142.2,
-      "delta_weights_hash": "4c30e322799f5facd971ecf2c4172c4890aca0106f45f290ac6b6140cb321434",
+      "delta_weights_hash": "bb95280e512e2c588c2438f87c8608066e79c7cd3adb75e6f9c6cedae572e518",
       "base_model_id": "google/gemma-3-4b-it",
       "hf_dataset": "HuggingFaceH4/CodeAlpaca_20K",
       "cluster": "CLUSTER_00_SYSTEMS_FORMAL",
-      "completed_utc": 1793394083.8894472,
+      "completed_utc": 1793480454.892798,
       "delta_nll": -0.53,
       "accuracy_gain": 0.338
     },
     {
-      "wu_id": "wu-auto-code_feedback_debug-103-1793394083",
+      "wu_id": "wu-auto-code_feedback_debug-103-1793480454",
       "domain": "code_feedback_debug",
       "worker_id": "worker-rtx2070-8gb-turing",
       "account_id": "58fd3df19d2b5ef8c10031e1389aac6a",
@@ -12495,16 +12495,16 @@
       "contributed_tflops": 8.036,
       "peak_vram_mb": 5937.7,
       "duration_seconds": 162.9,
-      "delta_weights_hash": "90ec22389d4edf658e5f63f445b905aa5b198e6b9a83b16e680f9b6e18e91bf4",
+      "delta_weights_hash": "d54a5b76708d5e7ca2b7270f0e1d60a9624b43afb3ed07d5405604fa82af41a8",
       "base_model_id": "Qwen/Qwen3.5-9B-Base",
       "hf_dataset": "m-a-p/CodeFeedback-Filtered-Instruction",
       "cluster": "CLUSTER_00_SYSTEMS_FORMAL",
-      "completed_utc": 1793394083.8894472,
+      "completed_utc": 1793480454.892798,
       "delta_nll": -0.53,
       "accuracy_gain": 0.284
     },
     {
-      "wu_id": "wu-auto-systems_distributed_p2p-104-1793394083",
+      "wu_id": "wu-auto-systems_distributed_p2p-104-1793480454",
       "domain": "systems_distributed_p2p",
       "worker_id": "worker-cuda-sm86-fp16-3090",
       "account_id": "7a3e9c118b4f02a9e55d614cb9128f41",
@@ -12518,16 +12518,16 @@
       "contributed_tflops": 6.25,
       "peak_vram_mb": 1314.0,
       "duration_seconds": 105.0,
-      "delta_weights_hash": "0d2704d115e5d9b658904c3a139a31b73d386f2d2004ad4811012097a6c2e8ec",
+      "delta_weights_hash": "af51f3afd40909d430f7c85e6912b6f84e2ef17aa30378198b6ef37d6aec92d1",
       "base_model_id": "google/gemma-3-1b-it",
       "hf_dataset": "bigcode/santacoder",
       "cluster": "CLUSTER_00_SYSTEMS_FORMAL",
-      "completed_utc": 1793394083.8894472,
+      "completed_utc": 1793480454.892798,
       "delta_nll": -0.53,
       "accuracy_gain": 0.354
     },
     {
-      "wu_id": "wu-auto-cuda_kernel_opt-105-1793394083",
+      "wu_id": "wu-auto-cuda_kernel_opt-105-1793480454",
       "domain": "cuda_kernel_opt",
       "worker_id": "worker-tesla-t4-16gb-moe",
       "account_id": "621817e923e4a2e584fdf5a71dfa2995",
@@ -12541,16 +12541,16 @@
       "contributed_tflops": 6.786,
       "peak_vram_mb": 5114.8,
       "duration_seconds": 107.6,
-      "delta_weights_hash": "1da4a24f2b29ae922cbc1b6cb7f6da5dcee000c084c2ad522d09d6cf6992e648",
+      "delta_weights_hash": "f9fbdb0a490f0e021be070e1b800c8abd3b89efa12dfc0419cf05b5fe6f7b9b6",
       "base_model_id": "Qwen/Qwen2.5-7B-Instruct",
       "hf_dataset": "neuralmagic/LLM_Compression_Code",
       "cluster": "CLUSTER_00_SYSTEMS_FORMAL",
-      "completed_utc": 1793394083.8894472,
+      "completed_utc": 1793480454.8944032,
       "delta_nll": -0.53,
       "accuracy_gain": 0.399
     },
     {
-      "wu_id": "wu-auto-cyber_threat_intel-106-1793394083",
+      "wu_id": "wu-auto-cyber_threat_intel-106-1793480454",
       "domain": "cyber_threat_intel",
       "worker_id": "worker-cuda-sm89-fp16-4070",
       "account_id": "fbc1d3042d377feba6b1e0ac6fd576a4",
@@ -12564,16 +12564,16 @@
       "contributed_tflops": 6.786,
       "peak_vram_mb": 5102.1,
       "duration_seconds": 175.7,
-      "delta_weights_hash": "18fab172f8ba3838ada5049308933086cce349dfb14d26743b4805d93f5ea637",
+      "delta_weights_hash": "1f54ddc606181441de6e434918359f3689ec611d51d9d67676591afb2283dfee",
       "base_model_id": "Qwen/Qwen2.5-Coder-7B-Instruct",
       "hf_dataset": "giskard_cti/cti-bench",
       "cluster": "CLUSTER_01_CRYPTO_CYBER",
-      "completed_utc": 1793394083.8904467,
+      "completed_utc": 1793480454.8944032,
       "delta_nll": -0.53,
       "accuracy_gain": 0.256
     },
     {
-      "wu_id": "wu-auto-cyber_vulnerability-107-1793394083",
+      "wu_id": "wu-auto-cyber_vulnerability-107-1793480454",
       "domain": "cyber_vulnerability",
       "worker_id": "worker-rtx2070-8gb-turing",
       "account_id": "58fd3df19d2b5ef8c10031e1389aac6a",
@@ -12587,16 +12587,16 @@
       "contributed_tflops": 8.214,
       "peak_vram_mb": 6309.6,
       "duration_seconds": 118.9,
-      "delta_weights_hash": "f5209da2a00c2696a3d5ea13584ad6f2a5398ee3b1e2e6b37fd3a271fd750636",
+      "delta_weights_hash": "619a200a8dc4abd63e63433bd1620c0af12aca458a12e30b3227a38331d81dd8",
       "base_model_id": "google/gemma-2-9b-it",
       "hf_dataset": "SWE-bench/SWE-bench_Verified",
       "cluster": "CLUSTER_01_CRYPTO_CYBER",
-      "completed_utc": 1793394083.8904467,
+      "completed_utc": 1793480454.8944032,
       "delta_nll": -0.53,
       "accuracy_gain": 0.322
     },
     {
-      "wu_id": "wu-auto-cyber_smart_contracts-108-1793394083",
+      "wu_id": "wu-auto-cyber_smart_contracts-108-1793480454",
       "domain": "cyber_smart_contracts",
       "worker_id": "worker-cuda-sm86-fp16-3090",
       "account_id": "7a3e9c118b4f02a9e55d614cb9128f41",
@@ -12610,16 +12610,16 @@
       "contributed_tflops": 6.25,
       "peak_vram_mb": 3020.0,
       "duration_seconds": 88.8,
-      "delta_weights_hash": "fbe5680829c65f514f9c0b1aa07e1057eeebcb529fd2df1198d536979992a4b6",
+      "delta_weights_hash": "c090f975903b35e9d206325fbd911ce127675639bd4ff303f4e7977de632101b",
       "base_model_id": "google/gemma-3-4b-it",
       "hf_dataset": "ASSERT-KTH/DISL-Solidity-Smart-Contracts",
       "cluster": "CLUSTER_01_CRYPTO_CYBER",
-      "completed_utc": 1793394083.8904467,
+      "completed_utc": 1793480454.8954084,
       "delta_nll": -0.53,
       "accuracy_gain": 0.345
     },
     {
-      "wu_id": "wu-auto-cryptography_zkp-109-1793394083",
+      "wu_id": "wu-auto-cryptography_zkp-109-1793480454",
       "domain": "cryptography_zkp",
       "worker_id": "worker-tesla-t4-16gb-moe",
       "account_id": "621817e923e4a2e584fdf5a71dfa2995",
@@ -12633,16 +12633,16 @@
       "contributed_tflops": 8.036,
       "peak_vram_mb": 5779.1,
       "duration_seconds": 131.9,
-      "delta_weights_hash": "206b7a2659f1f24e80842eb28ad26a360e5f34d18b2e57bfb74d8ec692c1ad55",
+      "delta_weights_hash": "23a1f286bdce56edc3bf11b3c397fac645abdb9dd2e681812cd5b5c5b77dc6b9",
       "base_model_id": "Qwen/Qwen3.5-9B-Base",
       "hf_dataset": "0xPARC/zk-bench",
       "cluster": "CLUSTER_01_CRYPTO_CYBER",
-      "completed_utc": 1793394083.8914464,
+      "completed_utc": 1793480454.8954084,
       "delta_nll": -0.53,
       "accuracy_gain": 0.376
     },
     {
-      "wu_id": "wu-auto-cyber_reverse_engineering-110-1793394083",
+      "wu_id": "wu-auto-cyber_reverse_engineering-110-1793480454",
       "domain": "cyber_reverse_engineering",
       "worker_id": "worker-cuda-sm89-fp16-4070",
       "account_id": "fbc1d3042d377feba6b1e0ac6fd576a4",
@@ -12656,16 +12656,16 @@
       "contributed_tflops": 6.25,
       "peak_vram_mb": 1427.1,
       "duration_seconds": 88.8,
-      "delta_weights_hash": "0a6543181b9dbdc0b60159f988c50d6999c83ed6241073fb12e0e7f8a31107cd",
+      "delta_weights_hash": "f7c35a66d1e99bd83a7374ef17df20fbcffe866f8a514f06e5a3987e0a02e9e6",
       "base_model_id": "google/gemma-3-1b-it",
       "hf_dataset": "vxunderground/malware-analysis-prompts",
       "cluster": "CLUSTER_01_CRYPTO_CYBER",
-      "completed_utc": 1793394083.8914464,
+      "completed_utc": 1793480454.8954084,
       "delta_nll": -0.53,
       "accuracy_gain": 0.327
     },
     {
-      "wu_id": "wu-auto-astrophysics_transits-111-1793394083",
+      "wu_id": "wu-auto-astrophysics_transits-111-1793480454",
       "domain": "astrophysics_transits",
       "worker_id": "worker-rtx2070-8gb-turing",
       "account_id": "58fd3df19d2b5ef8c10031e1389aac6a",
@@ -12679,16 +12679,16 @@
       "contributed_tflops": 6.786,
       "peak_vram_mb": 5160.2,
       "duration_seconds": 152.1,
-      "delta_weights_hash": "c62988de31b832a88bf51b9499b6af5b2b521125ec3f0d9725173cd6a0a3d680",
+      "delta_weights_hash": "7ee9845de97b2a93649119ae2a441ebee24963ad8e188399da4db3cf4a573857",
       "base_model_id": "Qwen/Qwen2.5-7B-Instruct",
       "hf_dataset": "mzrk36/exoplanets-unified-dataset",
       "cluster": "CLUSTER_02_FRONTIER_SCIENCE",
-      "completed_utc": 1793394083.8924465,
+      "completed_utc": 1793480454.8964078,
       "delta_nll": -0.53,
       "accuracy_gain": 0.275
     },
     {
-      "wu_id": "wu-auto-astrophysics_spectra-112-1793394083",
+      "wu_id": "wu-auto-astrophysics_spectra-112-1793480454",
       "domain": "astrophysics_spectra",
       "worker_id": "worker-cuda-sm86-fp16-3090",
       "account_id": "7a3e9c118b4f02a9e55d614cb9128f41",
@@ -12702,16 +12702,16 @@
       "contributed_tflops": 6.786,
       "peak_vram_mb": 4968.0,
       "duration_seconds": 69.2,
-      "delta_weights_hash": "19e53749e17dff791d3fdaf59ca30082df929e8b9d9d522e418cab5ab38b76e3",
+      "delta_weights_hash": "66e040af645156520a89f8a2b34f27a70a1bda95b415c28d217004500ea12f78",
       "base_model_id": "Qwen/Qwen2.5-Coder-7B-Instruct",
       "hf_dataset": "BrunoBarreto/sdss_dr12_stars_regression",
       "cluster": "CLUSTER_02_FRONTIER_SCIENCE",
-      "completed_utc": 1793394083.8924465,
+      "completed_utc": 1793480454.8964078,
       "delta_nll": -0.53,
       "accuracy_gain": 0.377
     },
     {
-      "wu_id": "wu-auto-astrophysics_atmosphere-113-1793394083",
+      "wu_id": "wu-auto-astrophysics_atmosphere-113-1793480454",
       "domain": "astrophysics_atmosphere",
       "worker_id": "worker-tesla-t4-16gb-moe",
       "account_id": "621817e923e4a2e584fdf5a71dfa2995",
@@ -12725,16 +12725,16 @@
       "contributed_tflops": 8.214,
       "peak_vram_mb": 6272.3,
       "duration_seconds": 115.1,
-      "delta_weights_hash": "5282005af70e169d1811a9d03c9848320a115071363384c5e822a191b5b144ea",
+      "delta_weights_hash": "7dc9d967a31647959426ea5eb8eab7a95f17a86db93f4c0636c8a491cf65dc21",
       "base_model_id": "google/gemma-2-9b-it",
       "hf_dataset": "Shoriful025/exoplanet_atmospheric_spectroscopy_results",
       "cluster": "CLUSTER_02_FRONTIER_SCIENCE",
-      "completed_utc": 1793394083.8934464,
+      "completed_utc": 1793480454.8974082,
       "delta_nll": -0.53,
       "accuracy_gain": 0.273
     },
     {
-      "wu_id": "wu-auto-physics_quantum_lattice-114-1793394083",
+      "wu_id": "wu-auto-physics_quantum_lattice-114-1793480454",
       "domain": "physics_quantum_lattice",
       "worker_id": "worker-cuda-sm89-fp16-4070",
       "account_id": "fbc1d3042d377feba6b1e0ac6fd576a4",
@@ -12748,16 +12748,16 @@
       "contributed_tflops": 6.25,
       "peak_vram_mb": 3126.0,
       "duration_seconds": 133.0,
-      "delta_weights_hash": "a18a6b3a0da0ef605f9bf8507623fbed7a48c755074765efa15f1a8e7af832fe",
+      "delta_weights_hash": "b8947a18749352ed1e408e4abf043df788eaa02a9427677f1b7c21aed156a631",
       "base_model_id": "google/gemma-3-4b-it",
       "hf_dataset": "MultimodalUniverse/multimodal_universe",
       "cluster": "CLUSTER_02_FRONTIER_SCIENCE",
-      "completed_utc": 1793394083.8934464,
+      "completed_utc": 1793480454.8974082,
       "delta_nll": -0.53,
       "accuracy_gain": 0.271
     },
     {
-      "wu_id": "wu-auto-chemistry_molecular_docking-115-1793394083",
+      "wu_id": "wu-auto-chemistry_molecular_docking-115-1793480454",
       "domain": "chemistry_molecular_docking",
       "worker_id": "worker-rtx2070-8gb-turing",
       "account_id": "58fd3df19d2b5ef8c10031e1389aac6a",
@@ -12771,16 +12771,16 @@
       "contributed_tflops": 8.036,
       "peak_vram_mb": 5925.9,
       "duration_seconds": 60.1,
-      "delta_weights_hash": "a3e04a9e8e51fab1231211fe519d36e29722ce86d41d9c05c9010bdc1d01d8d1",
+      "delta_weights_hash": "f16d9412fac111ec9f6c9e561c1ee46c09c4d82b0bd496c3877252f3b858f39b",
       "base_model_id": "Qwen/Qwen3.5-9B-Base",
       "hf_dataset": "chainer/zinc250k",
       "cluster": "CLUSTER_02_FRONTIER_SCIENCE",
-      "completed_utc": 1793394083.8934464,
+      "completed_utc": 1793480454.8974082,
       "delta_nll": -0.53,
       "accuracy_gain": 0.341
     },
     {
-      "wu_id": "wu-auto-climate_earth_observation-116-1793394083",
+      "wu_id": "wu-auto-climate_earth_observation-116-1793480454",
       "domain": "climate_earth_observation",
       "worker_id": "worker-cuda-sm86-fp16-3090",
       "account_id": "7a3e9c118b4f02a9e55d614cb9128f41",
@@ -12794,16 +12794,16 @@
       "contributed_tflops": 6.25,
       "peak_vram_mb": 1561.7,
       "duration_seconds": 120.9,
-      "delta_weights_hash": "7b48ad9d3a7e49bdc331d607cd7fd729c9e9c774e642fc0e74bfa0dc2c7d75b2",
+      "delta_weights_hash": "f6cdba0993c28b9d0b5bc344b3080be45ba772a6446e32bb6a1eda81606d200a",
       "base_model_id": "google/gemma-3-1b-it",
       "hf_dataset": "nasa-impact/hls-foundation",
       "cluster": "CLUSTER_02_FRONTIER_SCIENCE",
-      "completed_utc": 1793394083.8934464,
+      "completed_utc": 1793480454.8974082,
       "delta_nll": -0.53,
       "accuracy_gain": 0.382
     },
     {
-      "wu_id": "wu-auto-maths_olympiad-117-1793394083",
+      "wu_id": "wu-auto-maths_olympiad-117-1793480454",
       "domain": "maths_olympiad",
       "worker_id": "worker-tesla-t4-16gb-moe",
       "account_id": "621817e923e4a2e584fdf5a71dfa2995",
@@ -12817,16 +12817,16 @@
       "contributed_tflops": 6.786,
       "peak_vram_mb": 5070.9,
       "duration_seconds": 121.6,
-      "delta_weights_hash": "2a7ab9d349783c89cd486951708185a9de4187dd95d7517a290140f1befc47a5",
+      "delta_weights_hash": "eaebda180378efa978b40822828c57e09d1ce1c65dbbc17ee1bb66ddc71c47c4",
       "base_model_id": "Qwen/Qwen2.5-7B-Instruct",
       "hf_dataset": "openai/gsm8k",
       "cluster": "CLUSTER_03_REASONING_AND_LANGUAGE",
-      "completed_utc": 1793394083.8944466,
+      "completed_utc": 1793480454.898414,
       "delta_nll": -0.53,
       "accuracy_gain": 0.274
     },
     {
-      "wu_id": "wu-auto-biomedical_genomics-118-1793394083",
+      "wu_id": "wu-auto-biomedical_genomics-118-1793480454",
       "domain": "biomedical_genomics",
       "worker_id": "worker-cuda-sm89-fp16-4070",
       "account_id": "fbc1d3042d377feba6b1e0ac6fd576a4",
@@ -12840,16 +12840,16 @@
       "contributed_tflops": 6.786,
       "peak_vram_mb": 5027.4,
       "duration_seconds": 123.6,
-      "delta_weights_hash": "5f08681be82f38dce844879a1476def5429811f5641e50272900d2ccdce95cdf",
+      "delta_weights_hash": "778006d3c9eef0c380245e96f42c484f9d4ae74acac31f2ba322946cdea8a698",
       "base_model_id": "Qwen/Qwen2.5-Coder-7B-Instruct",
       "hf_dataset": "qiaojin/PubMedQA",
       "cluster": "CLUSTER_03_REASONING_AND_LANGUAGE",
-      "completed_utc": 1793394083.8944466,
+      "completed_utc": 1793480454.898414,
       "delta_nll": -0.53,
       "accuracy_gain": 0.387
     },
     {
-      "wu_id": "wu-auto-biomedical_clinical-119-1793394083",
+      "wu_id": "wu-auto-biomedical_clinical-119-1793480454",
       "domain": "biomedical_clinical",
       "worker_id": "worker-rtx2070-8gb-turing",
       "account_id": "58fd3df19d2b5ef8c10031e1389aac6a",
@@ -12863,11 +12863,11 @@
       "contributed_tflops": 8.214,
       "peak_vram_mb": 6132.3,
       "duration_seconds": 150.8,
-      "delta_weights_hash": "0a57b6ab8f961483f725cd3f86263c580c0716c2eff17b9cdbe5c0bea3f05460",
+      "delta_weights_hash": "9670fe788238cfeb5a6aec3adc0c968882ee4b63ee1323fd7c6a918b8947255b",
       "base_model_id": "google/gemma-2-9b-it",
       "hf_dataset": "epfl-llm/guidance-biomedical",
       "cluster": "CLUSTER_03_REASONING_AND_LANGUAGE",
-      "completed_utc": 1793394083.8944466,
+      "completed_utc": 1793480454.898414,
       "delta_nll": -0.53,
       "accuracy_gain": 0.36
     }
@@ -12885,28 +12885,28 @@
       "58fd3df19d2b5ef8c10031e1389aac6a": 78.125
     },
     "ledger_verified": true,
-    "timestamp_utc": 1793394085.155669,
+    "timestamp_utc": 1793480455.8953075,
     "audit_log": [
-      "CREDITED: +15.62 HMT to '7a3e9c118b4f02a9e55d614cb9128f41' (wu_id='wu-auto-maths_formal-100-1793394083', domain='maths_formal', model='Qwen/Qwen2.5-Coder-7B-Instruct', steps=50, gate_passed=True).",
-      "CREDITED: +15.62 HMT to '621817e923e4a2e584fdf5a71dfa2995' (wu_id='wu-auto-code_rust_kernel-101-1793394083', domain='code_rust_kernel', model='google/gemma-2-9b-it', steps=50, gate_passed=True).",
-      "CREDITED: +15.62 HMT to 'fbc1d3042d377feba6b1e0ac6fd576a4' (wu_id='wu-auto-code_python_perf-102-1793394083', domain='code_python_perf', model='google/gemma-3-4b-it', steps=50, gate_passed=True).",
-      "CREDITED: +15.62 HMT to '58fd3df19d2b5ef8c10031e1389aac6a' (wu_id='wu-auto-code_feedback_debug-103-1793394083', domain='code_feedback_debug', model='Qwen/Qwen3.5-9B-Base', steps=50, gate_passed=True).",
-      "CREDITED: +15.62 HMT to '7a3e9c118b4f02a9e55d614cb9128f41' (wu_id='wu-auto-systems_distributed_p2p-104-1793394083', domain='systems_distributed_p2p', model='google/gemma-3-1b-it', steps=50, gate_passed=True).",
-      "CREDITED: +15.62 HMT to '621817e923e4a2e584fdf5a71dfa2995' (wu_id='wu-auto-cuda_kernel_opt-105-1793394083', domain='cuda_kernel_opt', model='Qwen/Qwen2.5-7B-Instruct', steps=50, gate_passed=True).",
-      "CREDITED: +15.62 HMT to 'fbc1d3042d377feba6b1e0ac6fd576a4' (wu_id='wu-auto-cyber_threat_intel-106-1793394083', domain='cyber_threat_intel', model='Qwen/Qwen2.5-Coder-7B-Instruct', steps=50, gate_passed=True).",
-      "CREDITED: +15.62 HMT to '58fd3df19d2b5ef8c10031e1389aac6a' (wu_id='wu-auto-cyber_vulnerability-107-1793394083', domain='cyber_vulnerability', model='google/gemma-2-9b-it', steps=50, gate_passed=True).",
-      "CREDITED: +15.62 HMT to '7a3e9c118b4f02a9e55d614cb9128f41' (wu_id='wu-auto-cyber_smart_contracts-108-1793394083', domain='cyber_smart_contracts', model='google/gemma-3-4b-it', steps=50, gate_passed=True).",
-      "CREDITED: +15.62 HMT to '621817e923e4a2e584fdf5a71dfa2995' (wu_id='wu-auto-cryptography_zkp-109-1793394083', domain='cryptography_zkp', model='Qwen/Qwen3.5-9B-Base', steps=50, gate_passed=True).",
-      "CREDITED: +15.62 HMT to 'fbc1d3042d377feba6b1e0ac6fd576a4' (wu_id='wu-auto-cyber_reverse_engineering-110-1793394083', domain='cyber_reverse_engineering', model='google/gemma-3-1b-it', steps=50, gate_passed=True).",
-      "CREDITED: +15.62 HMT to '58fd3df19d2b5ef8c10031e1389aac6a' (wu_id='wu-auto-astrophysics_transits-111-1793394083', domain='astrophysics_transits', model='Qwen/Qwen2.5-7B-Instruct', steps=50, gate_passed=True).",
-      "CREDITED: +15.62 HMT to '7a3e9c118b4f02a9e55d614cb9128f41' (wu_id='wu-auto-astrophysics_spectra-112-1793394083', domain='astrophysics_spectra', model='Qwen/Qwen2.5-Coder-7B-Instruct', steps=50, gate_passed=True).",
-      "CREDITED: +15.62 HMT to '621817e923e4a2e584fdf5a71dfa2995' (wu_id='wu-auto-astrophysics_atmosphere-113-1793394083', domain='astrophysics_atmosphere', model='google/gemma-2-9b-it', steps=50, gate_passed=True).",
-      "CREDITED: +15.62 HMT to 'fbc1d3042d377feba6b1e0ac6fd576a4' (wu_id='wu-auto-physics_quantum_lattice-114-1793394083', domain='physics_quantum_lattice', model='google/gemma-3-4b-it', steps=50, gate_passed=True).",
-      "CREDITED: +15.62 HMT to '58fd3df19d2b5ef8c10031e1389aac6a' (wu_id='wu-auto-chemistry_molecular_docking-115-1793394083', domain='chemistry_molecular_docking', model='Qwen/Qwen3.5-9B-Base', steps=50, gate_passed=True).",
-      "CREDITED: +15.62 HMT to '7a3e9c118b4f02a9e55d614cb9128f41' (wu_id='wu-auto-climate_earth_observation-116-1793394083', domain='climate_earth_observation', model='google/gemma-3-1b-it', steps=50, gate_passed=True).",
-      "CREDITED: +15.62 HMT to '621817e923e4a2e584fdf5a71dfa2995' (wu_id='wu-auto-maths_olympiad-117-1793394083', domain='maths_olympiad', model='Qwen/Qwen2.5-7B-Instruct', steps=50, gate_passed=True).",
-      "CREDITED: +15.62 HMT to 'fbc1d3042d377feba6b1e0ac6fd576a4' (wu_id='wu-auto-biomedical_genomics-118-1793394083', domain='biomedical_genomics', model='Qwen/Qwen2.5-Coder-7B-Instruct', steps=50, gate_passed=True).",
-      "CREDITED: +15.62 HMT to '58fd3df19d2b5ef8c10031e1389aac6a' (wu_id='wu-auto-biomedical_clinical-119-1793394083', domain='biomedical_clinical', model='google/gemma-2-9b-it', steps=50, gate_passed=True)."
+      "CREDITED: +15.62 HMT to '7a3e9c118b4f02a9e55d614cb9128f41' (wu_id='wu-auto-maths_formal-100-1793480454', domain='maths_formal', model='Qwen/Qwen2.5-Coder-7B-Instruct', steps=50, gate_passed=True).",
+      "CREDITED: +15.62 HMT to '621817e923e4a2e584fdf5a71dfa2995' (wu_id='wu-auto-code_rust_kernel-101-1793480454', domain='code_rust_kernel', model='google/gemma-2-9b-it', steps=50, gate_passed=True).",
+      "CREDITED: +15.62 HMT to 'fbc1d3042d377feba6b1e0ac6fd576a4' (wu_id='wu-auto-code_python_perf-102-1793480454', domain='code_python_perf', model='google/gemma-3-4b-it', steps=50, gate_passed=True).",
+      "CREDITED: +15.62 HMT to '58fd3df19d2b5ef8c10031e1389aac6a' (wu_id='wu-auto-code_feedback_debug-103-1793480454', domain='code_feedback_debug', model='Qwen/Qwen3.5-9B-Base', steps=50, gate_passed=True).",
+      "CREDITED: +15.62 HMT to '7a3e9c118b4f02a9e55d614cb9128f41' (wu_id='wu-auto-systems_distributed_p2p-104-1793480454', domain='systems_distributed_p2p', model='google/gemma-3-1b-it', steps=50, gate_passed=True).",
+      "CREDITED: +15.62 HMT to '621817e923e4a2e584fdf5a71dfa2995' (wu_id='wu-auto-cuda_kernel_opt-105-1793480454', domain='cuda_kernel_opt', model='Qwen/Qwen2.5-7B-Instruct', steps=50, gate_passed=True).",
+      "CREDITED: +15.62 HMT to 'fbc1d3042d377feba6b1e0ac6fd576a4' (wu_id='wu-auto-cyber_threat_intel-106-1793480454', domain='cyber_threat_intel', model='Qwen/Qwen2.5-Coder-7B-Instruct', steps=50, gate_passed=True).",
+      "CREDITED: +15.62 HMT to '58fd3df19d2b5ef8c10031e1389aac6a' (wu_id='wu-auto-cyber_vulnerability-107-1793480454', domain='cyber_vulnerability', model='google/gemma-2-9b-it', steps=50, gate_passed=True).",
+      "CREDITED: +15.62 HMT to '7a3e9c118b4f02a9e55d614cb9128f41' (wu_id='wu-auto-cyber_smart_contracts-108-1793480454', domain='cyber_smart_contracts', model='google/gemma-3-4b-it', steps=50, gate_passed=True).",
+      "CREDITED: +15.62 HMT to '621817e923e4a2e584fdf5a71dfa2995' (wu_id='wu-auto-cryptography_zkp-109-1793480454', domain='cryptography_zkp', model='Qwen/Qwen3.5-9B-Base', steps=50, gate_passed=True).",
+      "CREDITED: +15.62 HMT to 'fbc1d3042d377feba6b1e0ac6fd576a4' (wu_id='wu-auto-cyber_reverse_engineering-110-1793480454', domain='cyber_reverse_engineering', model='google/gemma-3-1b-it', steps=50, gate_passed=True).",
+      "CREDITED: +15.62 HMT to '58fd3df19d2b5ef8c10031e1389aac6a' (wu_id='wu-auto-astrophysics_transits-111-1793480454', domain='astrophysics_transits', model='Qwen/Qwen2.5-7B-Instruct', steps=50, gate_passed=True).",
+      "CREDITED: +15.62 HMT to '7a3e9c118b4f02a9e55d614cb9128f41' (wu_id='wu-auto-astrophysics_spectra-112-1793480454', domain='astrophysics_spectra', model='Qwen/Qwen2.5-Coder-7B-Instruct', steps=50, gate_passed=True).",
+      "CREDITED: +15.62 HMT to '621817e923e4a2e584fdf5a71dfa2995' (wu_id='wu-auto-astrophysics_atmosphere-113-1793480454', domain='astrophysics_atmosphere', model='google/gemma-2-9b-it', steps=50, gate_passed=True).",
+      "CREDITED: +15.62 HMT to 'fbc1d3042d377feba6b1e0ac6fd576a4' (wu_id='wu-auto-physics_quantum_lattice-114-1793480454', domain='physics_quantum_lattice', model='google/gemma-3-4b-it', steps=50, gate_passed=True).",
+      "CREDITED: +15.62 HMT to '58fd3df19d2b5ef8c10031e1389aac6a' (wu_id='wu-auto-chemistry_molecular_docking-115-1793480454', domain='chemistry_molecular_docking', model='Qwen/Qwen3.5-9B-Base', steps=50, gate_passed=True).",
+      "CREDITED: +15.62 HMT to '7a3e9c118b4f02a9e55d614cb9128f41' (wu_id='wu-auto-climate_earth_observation-116-1793480454', domain='climate_earth_observation', model='google/gemma-3-1b-it', steps=50, gate_passed=True).",
+      "CREDITED: +15.62 HMT to '621817e923e4a2e584fdf5a71dfa2995' (wu_id='wu-auto-maths_olympiad-117-1793480454', domain='maths_olympiad', model='Qwen/Qwen2.5-7B-Instruct', steps=50, gate_passed=True).",
+      "CREDITED: +15.62 HMT to 'fbc1d3042d377feba6b1e0ac6fd576a4' (wu_id='wu-auto-biomedical_genomics-118-1793480454', domain='biomedical_genomics', model='Qwen/Qwen2.5-Coder-7B-Instruct', steps=50, gate_passed=True).",
+      "CREDITED: +15.62 HMT to '58fd3df19d2b5ef8c10031e1389aac6a' (wu_id='wu-auto-biomedical_clinical-119-1793480454', domain='biomedical_clinical', model='google/gemma-2-9b-it', steps=50, gate_passed=True)."
     ]
   }
 }

@@ -1,7 +1,7 @@
 {
   "schema_version": "hivemind.evolution_2h_and_night_moe_cron.v1",
-  "timestamp_utc": "2026-10-31T20:19:49Z",
-  "mode": "2h-evolution",
+  "timestamp_utc": "2026-10-31T21:00:43Z",
+  "mode": "night-moe",
   "schedules": {
     "roadmap_pr_evolution_cron": "0 */2 * * *",
     "night_moe_training_cron": "0 22 * * *"
@@ -12,18 +12,18 @@
     "online_producer_ids": [
       "PRODUCER-LOCAL-RTX2070-CUDA0"
     ],
-    "total_requests_served": 28
+    "total_requests_served": 29
   },
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-10-31T20:19:49Z",
+    "timestamp_utc": "2026-10-31T21:00:43Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": false,
     "device": "nvml:cuda:0 (torch+cpu host)",
     "compute_capability": "7.5",
     "temperature_c": 26.0,
-    "gpu_utilization_pct": 13.0,
-    "power_draw_w": 28.65,
+    "gpu_utilization_pct": 8.0,
+    "power_draw_w": 9.91,
     "power_limit_w": 175.0,
     "memory_used_mib": 1465.0,
     "memory_free_mib": 6542.0,
@@ -32,14 +32,14 @@
     "vram_headroom_guard_mib": 2048.0,
     "wddm_envelope_compliant": true,
     "headroom_guard_compliant": true,
-    "graphics_clock_mhz": 1410.0,
+    "graphics_clock_mhz": 405.0,
     "max_graphics_clock_mhz": 2145.0,
-    "memory_clock_mhz": 7000.0,
-    "host_tensor_gflops": 104.32,
+    "memory_clock_mhz": 405.0,
+    "host_tensor_gflops": 107.91,
     "measured_fp32_tflops": 9.88,
     "measured_fp16_tensor_tflops": 39.54,
     "effective_sparse_moe_nf4_tflops": 65.24,
-    "microbench_elapsed_ms": 159.5
+    "microbench_elapsed_ms": 153.08
   },
   "roadmap_summary": {
     "exists": true,
@@ -94,15 +94,30 @@
     ]
   },
   "pr_integration_summary": {
-    "open_prs_count": 9,
+    "open_prs_count": 0,
     "merged_prs": [],
-    "held_prs": [
-      219,
-      218,
-      163,
-      141
-    ]
+    "held_prs": []
   },
-  "night_moe_summary": {},
-  "receipt_sha256": "421a5edc8684264a514866c870a663a909e44f6837cf0fd4abe3854df75b895d"
+  "night_moe_summary": {
+    "timestamp_utc": "2026-10-31T21:00:49Z",
+    "status": "ACTIVE_OVERNIGHT_EXECUTION",
+    "rtx2070_live_guard": {
+      "timestamp_utc": "2026-10-31T21:00:49Z",
+      "gpu_name": "NVIDIA GeForce RTX 2070",
+      "memory_used_mib": 1465.0,
+      "memory_free_mib": 6542.0,
+      "wddm_ceiling_6656_mib_ok": true,
+      "headroom_2048_mib_ok": true,
+      "t4_vram_headroom_guard_mib": 4300.0,
+      "effective_sparse_moe_nf4_tflops": 65.24
+    },
+    "subjects_tracked": [
+      "maths",
+      "exoplanet",
+      "stars",
+      "cyber"
+    ],
+    "nocturnal_workunits_executed": 5
+  },
+  "receipt_sha256": "559ade89f5f0d8f29e11a2123dae5a343b561845772bf100851e37acd4b2a494"
 }

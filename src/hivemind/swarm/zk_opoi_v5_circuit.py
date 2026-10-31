@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """HM-S30-01: ZK-OPoI v5 Fixed-Point (`INT8`/`INT4`) Verifiable DiLoCo Transition Circuit.
 
 Implements the succinct verifiable computation proof system specified in

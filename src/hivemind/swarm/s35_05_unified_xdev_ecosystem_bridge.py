@@ -1,5 +1,5 @@
 # Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
-"""HM-S35-05: Unified /home/xavkal/xdev Portfolio Registry & 4-Layer Cross-Project Execution Pipeline.
+"""HM-S35-05: Unified XDEV Portfolio Registry & 4-Layer Cross-Project Execution Pipeline.
 
 Distinguishes:
 - `original_core_ip`: Xavier Callens' original research & systems frameworks (`AMCP`, `HiveMind`,
@@ -72,8 +72,21 @@ def classify_repo_origin(repo_name: str) -> str:
     return "original_core_ip"
 
 
-def build_xdev_portfolio_catalog(xdev_root: Path = Path("/home/xavkal/xdev")) -> tuple[PortfolioProjectNode, ...]:
+def _default_xdev_root() -> Path:
+    """Resolve XDEV_ROOT from environment or relative to repository root without hardcoding user paths."""
+    import os
+
+    env_val = os.environ.get("XDEV_ROOT", "").strip()
+    if env_val:
+        return Path(env_val)
+    parents = Path(__file__).resolve().parents
+    return parents[7] if len(parents) > 7 else Path.cwd()
+
+
+def build_xdev_portfolio_catalog(xdev_root: Path | None = None) -> tuple[PortfolioProjectNode, ...]:
     """Build the complete catalog of original core IP projects and `x*` fork bridges."""
+    if xdev_root is None:
+        xdev_root = _default_xdev_root()
     specs = (
         (
             "AMCP",
@@ -229,9 +242,11 @@ def build_xdev_portfolio_catalog(xdev_root: Path = Path("/home/xavkal/xdev")) ->
 
 
 def run_unified_4layer_ecosystem_pipeline(
-    xdev_root: Path = Path("/home/xavkal/xdev"),
+    xdev_root: Path | None = None,
 ) -> UnifiedEcosystemExecutionReceipt:
     """Execute the end-to-end 4-Layer integration pipeline across all core & fork-bridge modules."""
+    if xdev_root is None:
+        xdev_root = _default_xdev_root()
     catalog = build_xdev_portfolio_catalog(xdev_root=xdev_root)
     orig_cnt = sum(1 for n in catalog if n.origin_type == "original_core_ip")
     fork_cnt = sum(1 for n in catalog if n.origin_type == "community_fork_bridge")

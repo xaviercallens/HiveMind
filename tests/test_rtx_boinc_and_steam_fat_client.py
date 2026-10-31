@@ -28,10 +28,13 @@ _spec.loader.exec_module(worker)  # type: ignore[union-attr]
 
 def test_rtx_gpu_status_and_telemetry() -> None:
     gpu = worker.query_nvidia_gpu_status()
+    if not gpu["available"]:
+        pytest.skip("no readable NVIDIA GPU on this machine (the worker reports it as busy and unavailable, never as an invented card)")
+    # nvidia-smi names cards "NVIDIA GeForce ...", "Tesla T4", "Quadro ...", "NVIDIA A100 ...": do not require the word NVIDIA
+    assert gpu["gpu_model"] not in ("", "unknown")
     assert gpu["total_mib"] >= 3500.0
     assert 0.0 <= gpu["utilization_pct"] <= 100.0
     assert 0.0 < gpu["temp_c"] < 105.0
-    assert "NVIDIA" in gpu["gpu_model"].upper()
 
 
 @pytest.mark.parametrize(
@@ -60,7 +63,7 @@ def test_cuda_ptx_bls_kernel_folds_all_eight_nasa_exoplanet_targets(planet: str,
 
 
 def test_active_gameplay_preempts_boinc_gpu_with_zero_cuda_allocation(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(worker, "get_user_idle_seconds", lambda: 0.15)
+    monkeypatch.setattr(worker, "get_user_idle_seconds", lambda assume_idle_when_unknown=False: 0.15)
     rep = worker.run_one_idle_gpu_boinc_cycle(
         commander="Cmdr_Gamer_Active_60FPS",
         idle_threshold_seconds=4.0,
@@ -73,11 +76,12 @@ def test_active_gameplay_preempts_boinc_gpu_with_zero_cuda_allocation(monkeypatc
 
 
 def test_idle_gpu_automatically_resumes_cuda_ptx_boinc_folding(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(worker, "get_user_idle_seconds", lambda: 8.5)
+    monkeypatch.setattr(worker, "get_user_idle_seconds", lambda assume_idle_when_unknown=False: 8.5)
     monkeypatch.setattr(
         worker,
         "query_nvidia_gpu_status",
         lambda: {
+            "available": True,
             "gpu_model": "NVIDIA GeForce RTX 2070",
             "utilization_pct": 12.0,
             "used_mib": 1400.0,

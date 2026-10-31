@@ -5,6 +5,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -110,3 +112,20 @@ def test_pattern_defining_security_files_are_exempt_from_the_forbidden_scan_but_
     assert len(hits) == 1
     assert "swarm/x.py" not in hits[0]["line"] and "os.environ" in hits[0]["line"]
     assert {"src/hivemind/security/hivemind_firewall.py", "tests/test_hivemind_firewall.py"} <= g.SCAN_EXEMPT_FILES
+
+
+LEAN_SORRY_WARNING = "warning: lean4/Probe.lean:1:0: declaration uses 'sorry'\nBuild completed successfully."
+LEAN_CLEAN_BUILD = "Build completed successfully."
+
+
+@pytest.mark.parametrize("lean_output", [LEAN_SORRY_WARNING, "warning: declaration uses `sorry`", "axiom sorryAx used"])
+def test_lean_check_refuses_a_build_that_uses_sorry_even_when_lake_exits_zero(monkeypatch, tmp_path: Path, lean_output: str) -> None:
+    monkeypatch.setattr(g, "sh", lambda cmd, cwd=None, timeout=600, env=None: (0, lean_output))
+    result = g.run_lean(tmp_path)
+    assert result["returncode"] == 0
+    assert result["passed"] is False
+
+
+def test_lean_check_accepts_a_clean_build_as_its_negative_control(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(g, "sh", lambda cmd, cwd=None, timeout=600, env=None: (0, LEAN_CLEAN_BUILD))
+    assert g.run_lean(tmp_path)["passed"] is True

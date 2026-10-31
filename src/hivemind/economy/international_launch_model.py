@@ -219,7 +219,7 @@ def compute_congestion_price(
     }
 
 
-def simulate_international_launch_wave(
+def project_international_launch_wave(
     wave_name: str,
     new_visitors: int,
     signup_rate: float = 0.18,
@@ -311,7 +311,7 @@ def evaluate_international_launch_readiness(
     )
     waves = [
         asdict(
-            simulate_international_launch_wave(
+            project_international_launch_wave(
                 wave_name="Stage 1: Producer-First Seed (r/BOINC, r/homelab, CrowdGPT, 3000-Dev Internal)",
                 new_visitors=1200,
                 signup_rate=0.20,
@@ -321,7 +321,7 @@ def evaluate_international_launch_readiness(
             )
         ),
         asdict(
-            simulate_international_launch_wave(
+            project_international_launch_wave(
                 wave_name="Stage 2: Technical ML/GPU Communities (r/LocalLLaMA, r/MachineLearning, r/SelfHosted)",
                 new_visitors=8000,
                 signup_rate=0.15,
@@ -339,7 +339,7 @@ def evaluate_international_launch_readiness(
             )
         ),
         asdict(
-            simulate_international_launch_wave(
+            project_international_launch_wave(
                 wave_name="Stage 3: Broad International Viral Wave (Hacker News Show HN, X/Twitter, Dev.to — 100 Producer Scale)",
                 new_visitors=25000,
                 signup_rate=0.14,

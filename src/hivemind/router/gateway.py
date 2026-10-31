@@ -1822,6 +1822,43 @@ def create_router_app(
         producers = len(store.active_producers("coder", clock(), PRODUCER_TTL_S))
         return build_t4_visibility_payload(now_utc=clock(), live_models=models, active_producers_count=producers)
 
+    @app.post("/v1/hivemind/t4/telemetry")
+    async def t4_telemetry_update(request: Request) -> dict[str, Any]:
+        """Authenticated endpoint for the local T4 governor/sync daemon to push live GPU & QLoRA telemetry."""
+        from hivemind.router.t4_visibility import update_t4_telemetry_snapshot
+
+        authorized = False
+        supplied_admin = request.headers.get("x-admin-key", "").strip()
+        if admin_key_hash is not None and supplied_admin and hmac.compare_digest(store.key_digest(supplied_admin), admin_key_hash):
+            authorized = True
+        if not authorized:
+            auth_header = request.headers.get("authorization", "")
+            scheme, _, token = auth_header.partition(" ")
+            bearer = token.strip() if scheme.lower() == "bearer" and token.strip() else ""
+            if bearer:
+                if admin_key_hash is not None and hmac.compare_digest(store.key_digest(bearer), admin_key_hash):
+                    authorized = True
+                else:
+                    acc = store.authenticate(bearer)
+                    if acc is not None and acc.role in ("producer", "prosumer"):
+                        authorized = True
+        if not authorized:
+            raise RouterError(
+                403,
+                "Admin key or producer bearer token required for T4 telemetry sync.",
+                "permission_error",
+                "telemetry_forbidden",
+            )
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+        except ValueError:
+            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+        if not isinstance(body, dict):
+            raise RouterError(400, "telemetry payload must be a JSON object", "invalid_request_error", "invalid_request")
+        snap = update_t4_telemetry_snapshot(body)
+        return {"ok": True, "updated_epoch": snap.get("updated_epoch"), "node_name": snap.get("node_name")}
+
     @app.post("/v1/hivemind/consumer/max-price")
     def set_max_price(request: Request, payload: MaxPriceRequest) -> dict[str, Any]:
         account = authenticate(request)
@@ -2227,7 +2264,30 @@ def create_router_app(
 
     import hashlib
 
-    steam_key_cache: dict[str, str] = {}
+    steam_key_cache: dict[str, tuple[str, str]] = {}
+    seen_boinc_receipts: set[str] = set()
+
+    def _resolve_existing_session_key(request: Request, body: Mapping[str, Any], account_id: str) -> str:
+        """Verify caller ownership of an existing account via Bearer token, body api_key, or same-client session cache."""
+        header = request.headers.get("authorization", "")
+        scheme, _, token = header.partition(" ")
+        candidate = token.strip() if scheme.lower() == "bearer" and token.strip() else ""
+        if not candidate:
+            candidate = str(body.get("api_key") or "").strip()
+        if candidate:
+            acc = store.authenticate(candidate)
+            if acc is not None and acc.account_id == account_id:
+                return candidate
+            raise RouterError(401, "Invalid API key for this handle.", "authentication_error", "invalid_api_key")
+        cached = steam_key_cache.get(account_id)
+        if cached is not None and cached[1] == client_key(request):
+            return cached[0]
+        raise RouterError(
+            409,
+            "That handle is already registered; sign in with your API key or choose another handle.",
+            "invalid_request_error",
+            "handle_taken",
+        )
 
     @app.get("/v1/hivemind/steam/status")
     def steam_free_game_status() -> dict[str, Any]:
@@ -2265,19 +2325,11 @@ def create_router_app(
         try:
             account_id, api_key = store.register(handle, role)
             created = True
-            steam_key_cache[account_id] = api_key
+            steam_key_cache[account_id] = (api_key, client_key(request))
             starter_grant(request, account_id)
         except HandleTaken:
             account_id = store.account_id_for(handle)
-            api_key = steam_key_cache.get(account_id, "")
-            if not api_key:
-                api_key = "hm-" + secrets.token_urlsafe(32)
-                with store._tx() as conn:
-                    conn.execute(
-                        "UPDATE accounts SET key_hash=? WHERE account_id=?",
-                        (store._hmac_hex(api_key), account_id),
-                    )
-                steam_key_cache[account_id] = api_key
+            api_key = _resolve_existing_session_key(request, body, account_id)
         except (SwarmSecurityViolationError, ReservedHandle):
             raise RouterError(400, "Invalid handle format.", "invalid_request_error", "invalid_handle") from None
 
@@ -2315,19 +2367,32 @@ def create_router_app(
         account_id: str | None = None
         handle = str(body.get("handle") or "Cmdr_RTX2070_Steam").strip()[:64]
         if auth.lower().startswith("bearer "):
-            try:
-                acc = authenticate(request)
-                account_id = acc.account_id
-                handle = acc.handle
-            except RouterError:
-                account_id = None
+            acc = authenticate(request)
+            account_id = acc.account_id
+            handle = acc.handle
+        elif body.get("api_key"):
+            acc = store.authenticate(str(body.get("api_key")).strip())
+            if acc is None:
+                raise RouterError(401, "Invalid API key.", "authentication_error", "invalid_api_key")
+            account_id = acc.account_id
+            handle = acc.handle
         if account_id is None:
             try:
                 account_id, api_key = store.register(handle, "prosumer")
-                steam_key_cache[account_id] = api_key
+                steam_key_cache[account_id] = (api_key, client_key(request))
                 starter_grant(request, account_id)
             except HandleTaken:
-                account_id = store.account_id_for(handle)
+                candidate_id = store.account_id_for(handle)
+                cached = steam_key_cache.get(candidate_id)
+                if cached is not None and cached[1] == client_key(request):
+                    account_id = candidate_id
+                else:
+                    raise RouterError(
+                        401,
+                        "Authorization: Bearer hm-... required to contribute to an existing account.",
+                        "authentication_error",
+                        "invalid_api_key",
+                    ) from None
 
         # Execute real CUDA Driver PTX BLS fold if scripts/hivemind_boinc_idle_worker.py is available
         fold_res: dict[str, Any] = {
@@ -2352,10 +2417,19 @@ def create_router_app(
         except Exception:
             pass
 
-        hmt_awarded = 250.0
-        cobblestones_awarded = 45.0
-        receipt_sha256 = str(fold_res.get("result_sha256") or hashlib.sha256(f"{account_id}:{clock()}".encode()).hexdigest())
-        store.grant(account_id, hmt_awarded, f"boinc:steam3133700:{receipt_sha256[:16]}")
+        supplied_receipt = str(body.get("receipt_sha256") or "").strip()
+        receipt_sha256 = supplied_receipt or str(
+            fold_res.get("result_sha256") or hashlib.sha256(f"{account_id}:{clock()}".encode()).hexdigest()
+        )
+        duplicate_receipt = receipt_sha256 in seen_boinc_receipts
+        if duplicate_receipt:
+            hmt_awarded = 0.0
+            cobblestones_awarded = 0.0
+        else:
+            seen_boinc_receipts.add(receipt_sha256)
+            hmt_awarded = 250.0
+            cobblestones_awarded = 45.0
+            store.grant(account_id, hmt_awarded, f"boinc:steam3133700:{receipt_sha256[:16]}")
         return {
             "object": "hivemind.steam_boinc_contribution",
             "ok": True,
@@ -2370,6 +2444,7 @@ def create_router_app(
             "recovered_transit_depth_ppm": fold_res.get("recovered_transit_depth_ppm", 2789.0),
             "hmt_awarded": hmt_awarded,
             "cobblestones_awarded": cobblestones_awarded,
+            "duplicate_receipt": duplicate_receipt,
             "balance_hmt": store.balance(account_id),
             "receipt_sha256": receipt_sha256,
         }
@@ -2437,19 +2512,11 @@ def create_router_app(
         try:
             account_id, api_key = store.register(handle, role)
             created = True
-            steam_key_cache[account_id] = api_key
+            steam_key_cache[account_id] = (api_key, client_key(request))
             starter_grant(request, account_id)
         except HandleTaken:
             account_id = store.account_id_for(handle)
-            api_key = steam_key_cache.get(account_id, "")
-            if not api_key:
-                api_key = "hm-" + secrets.token_urlsafe(32)
-                with store._tx() as conn:
-                    conn.execute(
-                        "UPDATE accounts SET key_hash=? WHERE account_id=?",
-                        (store._hmac_hex(api_key), account_id),
-                    )
-                steam_key_cache[account_id] = api_key
+            api_key = _resolve_existing_session_key(request, body, account_id)
         except (SwarmSecurityViolationError, ReservedHandle):
             raise RouterError(400, "Invalid handle format.", "invalid_request_error", "invalid_handle") from None
 
@@ -2497,9 +2564,16 @@ def create_router_app(
             kernel_exec_ms=kernel_ms,
             recovered_transit_depth_ppm=depth_ppm,
         )
-        hmt_awarded = 250.0
-        cobblestones_awarded = 45.0
-        store.grant(account.account_id, hmt_awarded, f"webgpu:wgsl:{verified['receipt_sha256'][:16]}")
+        receipt_sha256 = str(body.get("receipt_sha256") or verified["receipt_sha256"]).strip()
+        duplicate_receipt = receipt_sha256 in seen_boinc_receipts
+        if duplicate_receipt:
+            hmt_awarded = 0.0
+            cobblestones_awarded = 0.0
+        else:
+            seen_boinc_receipts.add(receipt_sha256)
+            hmt_awarded = 250.0
+            cobblestones_awarded = 45.0
+            store.grant(account.account_id, hmt_awarded, f"webgpu:wgsl:{receipt_sha256[:16]}")
         return {
             "object": "hivemind.webgpu_contribution",
             "ok": True,
@@ -2507,6 +2581,8 @@ def create_router_app(
             "handle": account.handle,
             "target_planet": target_planet,
             **verified,
+            "receipt_sha256": receipt_sha256,
+            "duplicate_receipt": duplicate_receipt,
             "hmt_awarded": hmt_awarded,
             "cobblestones_awarded": cobblestones_awarded,
             "balance_hmt": store.balance(account.account_id),

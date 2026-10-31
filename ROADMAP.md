@@ -595,6 +595,37 @@ In HiveMind's **Bi-Layer Honeybee Agent Mesh** (`HM-S22`–`S28`), **Open Bee Ma
 | **`HM-S34-09`** | `feat/s34-sleep-rem-dreaming-moe` ([PR #344](https://github.com/xaviercallens/HiveMind/pull/344)) | `src/hivemind/swarm/swat_telepathy_bridge.py`, `scripts/run_nocturnal_moe_auto_improvement.py` | **Stage 2 of Sleep — REM `Dreaming` with Random MoE Expert Mixing & Gradient-Norm Top-$k$+$b$ Selection (`arXiv:2606.03979v2` §3.4)**: `select_rem_dreams_by_gradient_norm` generates $m$ synthetic dreams with 1 random low-rank expert per MoE router and filters to Top-$k$ + $b$ candidates by SFT gradient norm. | `4.0x` (`>= 3.0x`) reduction in inner-loop LoRA updates vs unfiltered self-edits (`SEAL`, `test_nocturnal_sleep_cms_knowledge_seeding_and_rem_dream_selection`). |
 | **`HM-S34-10`** | `feat/s34-wake-swat-to-sleep-bridge` ([PR #344](https://github.com/xaviercallens/HiveMind/pull/344)) | `src/hivemind/swarm/swat_telepathy_bridge.py`, `src/hivemind/swarm/swarm_nectar_cache.py` | **Unified Wake (`SwaT+AM`) $\to$ Sleep (`Knowledge Seeding` + `Dreaming`) Lifecycle Bridge (`HM-S21-03`, `HM-S32-01`, `HM-S33-05`)**: `WakeToSleepConsolidationBridge` routes daytime verified `SwarmNectarCache` episodes and `SwaT+AM` compacted latent traces into the `22:00 CET` `Sleep` consolidation pipeline and evicts KV at dawn. | End-to-end daytime `SwaT+AM` KV handoff $\to$ nocturnal `Sleep` consolidation retains episode knowledge after KV eviction (`0` KV tokens at dawn) under `< 6,656 MiB` WDDM (`RTX 2070`) and `>= 4,300 MiB` free VRAM (`Tesla T4`). |
 
+---
+
+## 🛠️ 3.27 Improvement Plan (2026-10-31) — audit of `main` at `b69a9cc`, one PR per item
+
+The full plan, with evidence, Definition of Done and the test for each finding (negative control first), is [`docs/IMPROVEMENT_PLAN_2026-10-31.md`](docs/IMPROVEMENT_PLAN_2026-10-31.md). Findings are marked **R** (re-checked by the author) or **A** (audit-reported, to be confirmed by its PR). Each PR below is proposed; the assignee column is open for a developer or agent to claim.
+
+**Owner actions first (not PRs):** rotate the owner API key that is committed in tracked files (IP-01); audit the live ledger for owner-billed usage from unknown clients (§0.2); decide on live probing of the exposures in the plan (§0.3); decide the paper erratum (§0.4).
+
+| Proposed PR | Scope (plan items) | Assignee | Size | Definition of done (summary) |
+| :-- | :-- | :-- | :-- | :-- |
+| PR-IP-01 | Remove the owner key literal and the `Go-http-client` fallback (IP-01, IP-02) | _open_ | S | No key literal in `src/`/`artifacts/`; unauthenticated chat is 401 for every User-Agent |
+| PR-IP-02 | Account takeover and free minting on the gateway and cockpit (IP-03, IP-04, IP-59) | _open_ | M | Takeover and mint tests pass; legacy handle list removed |
+| PR-IP-03 | Credit only server-issued, checked work (IP-05, IP-06) | _open_ | M | Client receipts earn 0; anonymous contribute is 401 |
+| PR-IP-04 | Ledger reload, atomic writes, royalty after verification (IP-07, IP-08) | _open_ | M | Reopened ledger keeps balances; self-import pays 0 |
+| PR-IP-05 | Local cockpit CORS and Host allow-list; dashboard admin auth (IP-09, IP-10, IP-55) | _open_ | S | Foreign origins get no ACAO; `/api/v1/admin/*` is 401/403 without a key |
+| PR-IP-06 | Bind BOINC uploads to their workunit; server-side credit (IP-11, IP-12, IP-49) | _open_ | M | Replayed results rejected; credit independent of claimed time |
+| PR-IP-07 | Gatekeeper and CI integrity: Lean `sorry`, scanner from base ref, CB-02 false positives, Lean axiom check (IP-13, IP-14, IP-15, IP-24, IP-40, IP-44, IP-62) | _open_ | M | Gatekeeper refuses `sorry`; CI runs once per PR; main never cancelled |
+| PR-IP-08 | Remove default secrets; `weights_only=True`; strict deterministic mode (IP-16, IP-42, IP-43, IP-52) | _open_ | S | No default keys in `src/`; `torch.load` always restricted |
+| PR-IP-09 | Honest measurements: labels, no points from RNG, no fabricated verification (IP-17, IP-18, IP-21, IP-21b, IP-26, IP-27, IP-30, IP-45, IP-46, IP-47) | _open_ | L (split in two) | Unmeasured values labelled; each hypothesis has a case that must fail |
+| PR-IP-10 | Numerics and ML correctness: Multi-Krum reference, aux-loss gradient, held-out evaluation, quantiser fixes (IP-19, IP-20, IP-34, IP-35, IP-36, IP-37) | `rtx2070-experimentator` ([PR #344](https://github.com/xaviercallens/HiveMind/pull/344)) | M | Krum reference from schema; router gradient depends on the balancing term |
+| PR-IP-11 | Launch-model projections, audit in CI, computed counts, reproducible receipts (IP-22, IP-23, IP-38, IP-39, IP-48) | _open_ | M | Projections labelled; stub audit clean and run in CI |
+| PR-IP-12 | No fabricated Steam, device, registration or telemetry claims (IP-25, IP-28, IP-29, IP-31, IP-32, IP-33, IP-57, IP-58) | _open_ | M | No fabricated verification, device or registration claims |
+| PR-IP-13 | Governor retries, containers non-root, async-safe handlers, safe parsing (IP-50, IP-51, IP-53, IP-54, IP-56, IP-63) | _open_ | S | Governor retries failed `never`; last `USER` non-root; no blocking call in async routes |
+| PR-IP-14 | Hygiene: honest coverage gate, dedupe, dead modules, asset dedupe, version drift (IP-60, IP-61, IP-64 to IP-71) | _open_ | M | Coverage gate at two decimals; duplicates removed; artifacts carry generators |
+
+**Order:** PR-IP-01 (and the key rotation) first; then PR-IP-02 to PR-IP-05 (live exposure); PR-IP-07 early, because the gatekeeper's own gaps affect every later merge.
+
+**Rules for every PR:** owner-only merge gate; no edits to the security scanner or gatekeeper without an owner review; each new test fails on `main` before its fix; no live probing without owner approval.
+
+---
+
 ## 🎮 4. Opt-In Community GPU Testing Program (If Interested & Possible)
 
 If you have a consumer GPU (**NVIDIA GeForce RTX 20/30/40/50-series 6 GB–24 GB**, **AMD Radeon RX 6000/7000 via ROCm**, or **Apple Silicon M1/M2/M3/M4 via MPS**) and are interested in testing how your hardware performs on the HiveMind Sparse MoE + `EF21-DiLoCo` + `ZK-OPoI v4` stack, we provide a safe, opt-in, `< 1.5 GB` peak-VRAM benchmark suite:

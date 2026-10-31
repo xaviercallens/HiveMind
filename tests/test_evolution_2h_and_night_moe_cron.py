@@ -113,3 +113,27 @@ def test_s21_hierarchical_expert_router_in_cockpit() -> None:
     assert s21_route["expert_id"] == "bee-s21-code_feedback_debug"
     assert s21_route["cluster_id"] == "code"
 
+
+def test_s21_hierarchical_expert_router_in_openrouter_gateway(tmp_path: Path) -> None:
+    from fastapi.testclient import TestClient
+    from hivemind.router.accounts import RouterStore
+    from hivemind.router.gateway import create_router_app
+
+    store = RouterStore(tmp_path / "router.db", b"test-secret-0123456789abcdef0123")
+    gw_client = TestClient(create_router_app(store))
+
+    reg_resp = gw_client.get("/v1/hivemind/expert-registry")
+    assert reg_resp.status_code == 200
+    assert reg_resp.json()["object"] == "hivemind.s21_expert_registry"
+
+    route_resp = gw_client.post(
+        "/v1/hivemind/expert-route",
+        json={"prompt": "Analyze the JWST NIRSpec Hycean methane spectrum"},
+    )
+    assert route_resp.status_code == 200
+    route_body = route_resp.json()
+    assert route_body["target"] == "expert"
+    assert route_body["expert_id"] == "bee-s21-astrophysics_spectra"
+    assert route_body["cluster_id"] == "astrophysics"
+
+

@@ -2512,4 +2512,79 @@ def create_router_app(
             "s1b_cross_cpu_reproducibility": s1b,
         }
 
+    @app.get("/v1/hivemind/expert-registry")
+    @app.get("/api/v1/monitor/expert-registry")
+    async def s21_expert_registry_endpoint() -> dict[str, Any]:
+        """Return the Season 21 ExpertRegistry snapshot (`HM-S21-02`) and its validated ResidencyPlan."""
+        from pathlib import Path
+
+        artifacts_dir = Path(__file__).resolve().parents[3] / "artifacts"
+        reg_path = artifacts_dir / "expert_registry_s21.json"
+        night_path = artifacts_dir / "night_moe_training_ledger.json"
+        reg_data: dict[str, Any] = {}
+        res_plan: dict[str, Any] = {}
+        if reg_path.exists():
+            try:
+                reg_data = json.loads(reg_path.read_text(encoding="utf-8"))
+            except Exception:
+                reg_data = {}
+        if night_path.exists():
+            try:
+                res_plan = json.loads(night_path.read_text(encoding="utf-8")).get("s21_expert_residency_plan", {})
+            except Exception:
+                res_plan = {}
+        return {
+            "object": "hivemind.s21_expert_registry",
+            "registry": reg_data,
+            "residency_plan": res_plan,
+        }
+
+    @app.post("/v1/hivemind/expert-route")
+    @app.post("/api/v1/monitor/expert-route")
+    async def s21_expert_route_endpoint(request: Request) -> dict[str, Any]:
+        """Route a prompt across the live Season 21 ExpertRegistry using HierarchicalExpertRouter (`HM-S21-02`)."""
+        from pathlib import Path
+        from hivemind.core.expert_registry import ExpertRegistry, HierarchicalExpertRouter
+
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+        except ValueError:
+            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+
+        prompt_text = str(body.get("prompt") or "")
+        cluster_id = body.get("cluster_id")
+        if cluster_id is not None:
+            cluster_id = str(cluster_id)
+
+        reg_path = Path(__file__).resolve().parents[3] / "artifacts" / "expert_registry_s21.json"
+        if not reg_path.exists():
+            return {
+                "object": "hivemind.s21_route_decision",
+                "prompt": prompt_text,
+                "target": "base",
+                "expert_id": None,
+                "cluster_id": cluster_id,
+                "reason": "no_registry_snapshot",
+                "load_on_demand": False,
+            }
+        reg = ExpertRegistry.load(reg_path)
+        router = HierarchicalExpertRouter(
+            reg,
+            base_model_id="Qwen/Qwen2.5-Coder-7B-Instruct",
+            resident=None,
+            allow_cold_load=False,
+        )
+        dec = router.route(prompt_text, cluster_id=cluster_id)
+        return {
+            "object": "hivemind.s21_route_decision",
+            "prompt": prompt_text,
+            "target": dec.target,
+            "expert_id": dec.expert_id,
+            "cluster_id": dec.cluster_id,
+            "reason": dec.reason,
+            "load_on_demand": dec.load_on_demand,
+            "live_expert_count": router.live_count,
+        }
+
     return app

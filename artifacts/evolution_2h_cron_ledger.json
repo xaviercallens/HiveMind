@@ -1,7 +1,7 @@
 {
   "schema_version": "hivemind.evolution_2h_and_night_moe_cron.v1",
-  "timestamp_utc": "2026-10-31T04:22:26Z",
-  "mode": "both",
+  "timestamp_utc": "2026-10-31T06:21:22Z",
+  "mode": "2h-evolution",
   "schedules": {
     "roadmap_pr_evolution_cron": "0 */2 * * *",
     "night_moe_training_cron": "0 22 * * *"
@@ -15,35 +15,35 @@
     "total_requests_served": 21
   },
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-10-31T04:22:26Z",
+    "timestamp_utc": "2026-10-31T06:21:22Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": false,
     "device": "nvml:cuda:0 (torch+cpu host)",
     "compute_capability": "7.5",
     "temperature_c": 26.0,
-    "gpu_utilization_pct": 9.0,
-    "power_draw_w": 9.01,
+    "gpu_utilization_pct": 13.0,
+    "power_draw_w": 30.08,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1399.0,
-    "memory_free_mib": 6608.0,
+    "memory_used_mib": 1410.0,
+    "memory_free_mib": 6597.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
     "wddm_envelope_compliant": true,
     "headroom_guard_compliant": true,
-    "graphics_clock_mhz": 300.0,
+    "graphics_clock_mhz": 1410.0,
     "max_graphics_clock_mhz": 2145.0,
-    "memory_clock_mhz": 405.0,
-    "host_tensor_gflops": 96.49,
+    "memory_clock_mhz": 7000.0,
+    "host_tensor_gflops": 108.04,
     "measured_fp32_tflops": 9.88,
     "measured_fp16_tensor_tflops": 39.54,
     "effective_sparse_moe_nf4_tflops": 65.24,
-    "microbench_elapsed_ms": 170.05
+    "microbench_elapsed_ms": 152.51
   },
   "roadmap_summary": {
     "exists": true,
-    "roadmap_sha256": "5ad446d2e0b3a8778fb90f41c0a628d4e2df1a8fa3c1589af3988dc1dc78eb75",
+    "roadmap_sha256": "dd3ab80c49b4e31f6780368349652e511adb7b8d2a7b6891bda9b78898aed552",
     "seasons_detected": [
       1,
       2,
@@ -87,7 +87,7 @@
       "| **`HM-S17-CW-02`** ([#204](https://github.com/xaviercallens/HiveMind/issues/204)) | `feat/s17-crowdgpt-multikrum-ratchet` | `src/hivemind/core/byzantine.py` $\\leftrightarrow$ `Vxtzq/CrowdGPT` | **WP-J2 \u2014 Byzantine-Robust Coordinator Upgrade for `Vxtzq`'s 100-Contributor Server**: Package `Multi-Krum`, `Coordinate-Wise Trimmed Mean`, Held-Out Validation Loss Ratchet, and strict `safetensors`-only delta verification for 1-hour offline `uint16` `.bin` shard training rounds. | **PRs open:** [#207](https://github.com/xaviercallens/HiveMind/pull/207) (`crowdgpt_bridge.py`, 3 tests) and upstream [Vxtzq/CrowdGPT#22](https://github.com/Vxtzq/CrowdGPT/pull/22) / [#21](https://github.com/Vxtzq/CrowdGPT/issues/21), awaiting the partner; not yet run on a real Crowd-v1 delta (`G3`) |",
       "| **`HM-S17-CW-03`** ([#204](https://github.com/xaviercallens/HiveMind/issues/204)) | `feat/s17-unified-rocm-directml-installer` | `scripts/hivemind_producer_shield.py` $\\leftrightarrow$ `Vxtzq/CrowdGPT` (`install.sh` / `install.bat`) | **WP-J3 \u2014 Unified Multi-Vendor Installer (`CUDA` / `ROCm` / `DirectML` / `MPS` / `XPU`)**: Combine `Vxtzq`, `MatrixMagician`, and `blaich499`'s cross-platform AMD ROCm (Fedora/Linux/Windows) and DirectML installer detection with HiveMind's zero-trust producer shield and `<1.0s` game preemption governor. | Open for Joint PR (`G2`) |",
       "| **`HM-S17-CW-04`** ([#204](https://github.com/xaviercallens/HiveMind/issues/204)) | `feat/s17-tronc-commun-greffons-qlora` | `src/hivemind/boinc/` & `scripts/run_hivemind_at_home_and_ruche_campaign.py` | **WP-J4 \u2014 \"Le Tronc Commun + Les Greffons\" Joint Federated Experiment (`Suite #3`)**: Train 18 MB rank-16 QLoRA domain adapters (`french`, `code`, `math/Lean 4`, `astrophysics`) grafted onto the `Vxtzq/Crowd-v1` 1B generalist trunk during the `22:00\u201307:00 CET` European night window and benchmark non-LLM epistemological routing (`u/Brilliant_Pie_1924` track). | Planned (`G1`/`G2`) |",
-      "| **`HM-S21-02`** MoE scale registry | [#299](https://github.com/xaviercallens/HiveMind/pull/299) (merged) + [#344](https://github.com/xaviercallens/HiveMind/pull/344) | `src/hivemind/core/expert_registry.py`, `scripts/run_2h_roadmap_pr_and_night_moe_cron.py`, `artifacts/expert_registry_s21.json`, [`docs/S21_EXPERT_REGISTRY.md`](docs/S21_EXPERT_REGISTRY.md) | `ExpertRegistry` for `lora_domain`, `serving` and `byob` experts with a candidate \u2192 shadow \u2192 live \u2192 retired lifecycle, replayed history (hand-edited state rejected), adapters bound to sha256 + base model id, atomic saves. `plan_adapter_residency` (deterministic demand-weighted packing within each node's VRAM and LoRA slots) and an independent `validate_residency_plan`. `HierarchicalExpertRouter` (cluster \u2192 expert, inverted keyword index, optional QueenBee weights; falls back to a loaded expert of the same cluster, then the base; never routes to a non-live expert). Wired into `run_night_moe_training_cycle` to register/promote 5 McNemar-verified nocturnal experts (`candidate -> shadow -> live`) into `artifacts/expert_registry_s21.json` and validate the `PRODUCER-LOCAL-RTX2070-CUDA0` `ResidencyPlan` (`5,119 MiB` free VRAM, `valid=True`). | Hypothesis properties (no node over VRAM or slots, deterministic plans, every request goes to a live resident expert or the base), negative controls for a hand-made bad plan, forged history, adapter re-binding and illegal transitions; review added the `plan.hot` vs `plan.placements` check. Timing script `tests/bench_expert_registry_scale.py` runs on **synthetic** experts only (bookkeeping time, not expert quality). | The planner does not yet model replicating hot adapters across multi-node clusters, per-node maximum LoRA rank, load latency or KV-cache growth. |",
+      "| **`HM-S21-02`** MoE scale registry | [#299](https://github.com/xaviercallens/HiveMind/pull/299) (merged) + [#344](https://github.com/xaviercallens/HiveMind/pull/344) | `src/hivemind/core/expert_registry.py`, `src/hivemind/router/gateway.py`, `src/hivemind/game/exoplanet_hunter_cockpit.py`, `scripts/run_2h_roadmap_pr_and_night_moe_cron.py`, `artifacts/expert_registry_s21.json`, [`docs/S21_EXPERT_REGISTRY.md`](docs/S21_EXPERT_REGISTRY.md) | `ExpertRegistry` for `lora_domain`, `serving` and `byob` experts with a candidate \u2192 shadow \u2192 live \u2192 retired lifecycle, replayed history (hand-edited state rejected), adapters bound to sha256 + base model id, atomic saves. `plan_adapter_residency` (deterministic demand-weighted packing within each node's VRAM and LoRA slots) and an independent `validate_residency_plan`. `HierarchicalExpertRouter` (cluster \u2192 expert, inverted keyword index, optional QueenBee weights; falls back to a loaded expert of the same cluster, then the base; never routes to a non-live expert). Wired into `run_night_moe_training_cycle` (`artifacts/expert_registry_s21.json` + `PRODUCER-LOCAL-RTX2070-CUDA0` `ResidencyPlan`), live RTX 2070 serving (`POST /v1/chat/completions`, `GET /api/v1/monitor/expert-registry`, `POST /api/v1/monitor/expert-route`), and the OpenRouter Gateway (`GET /v1/hivemind/expert-registry`, `POST /v1/hivemind/expert-route`). | Hypothesis properties (no node over VRAM or slots, deterministic plans, every request goes to a live resident expert or the base), negative controls for a hand-made bad plan, forged history, adapter re-binding and illegal transitions; review added the `plan.hot` vs `plan.placements` check; `test_s21_hierarchical_expert_router_in_cockpit` and `test_s21_hierarchical_expert_router_in_openrouter_gateway` verify end-to-end 5-domain routing. | The planner does not yet model replicating hot adapters across multi-node clusters, per-node maximum LoRA rank, load latency or KV-cache growth. |",
       "| `HM-S1-07` security on the bus | anyone who reaches the Kafka port can publish or impersonate a bee | **Planned**: SASL/SCRAM or mTLS on Kafka, per-bee credentials, ACLs per topic, signed `TaskDone`, gateway API keys (plan P3) | any |",
       "| `HM-S1-08` bridge to the OpenRouter gateway | producers should appear as bees, with HMT accounting unchanged | **Planned**: a producer-to-bee bridge, a gateway adapter, and a paired test that the charge is identical with the mesh on and off (plan P4); needs the owner's decision on consumer traffic | any |"
     ]
@@ -102,26 +102,6 @@
       141
     ]
   },
-  "night_moe_summary": {
-    "timestamp_utc": "2026-10-31T04:22:36Z",
-    "status": "ACTIVE_OVERNIGHT_EXECUTION",
-    "rtx2070_live_guard": {
-      "timestamp_utc": "2026-10-31T04:22:36Z",
-      "gpu_name": "NVIDIA GeForce RTX 2070",
-      "memory_used_mib": 1399.0,
-      "memory_free_mib": 6608.0,
-      "wddm_ceiling_6656_mib_ok": true,
-      "headroom_2048_mib_ok": true,
-      "t4_vram_headroom_guard_mib": 4300.0,
-      "effective_sparse_moe_nf4_tflops": 65.24
-    },
-    "subjects_tracked": [
-      "maths",
-      "exoplanet",
-      "stars",
-      "cyber"
-    ],
-    "nocturnal_workunits_executed": 5
-  },
-  "receipt_sha256": "1d5232d0ce51078ecf6fceaf835918588f1bc12db5c14c544e1f2fc964c1e417"
+  "night_moe_summary": {},
+  "receipt_sha256": "7f9c2e74e15484b65ecad61b04affabfe7c1b8f2c6e4627e595d9e6e192772fb"
 }

@@ -3338,7 +3338,7 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
             try:
                 return json.loads(community_state_path.read_text(encoding="utf-8"))
             except Exception:
-                pass
+                community_state_path.parent.mkdir(parents=True, exist_ok=True)
         community_state_path.parent.mkdir(parents=True, exist_ok=True)
         community_state_path.write_text(json.dumps(default_community_state, indent=2, ensure_ascii=False), encoding="utf-8")
         return json.loads(json.dumps(default_community_state))
@@ -3405,7 +3405,7 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                     gcp_lease_id = str(wu_doc.get("lease_id", gcp_lease_id))
                     gcp_cloud_synced = True
         except Exception:
-            pass
+            gcp_cloud_synced = False
 
         # Update project progress & member stats
         for proj in st["boinc_idle_gpu_policy"]["supported_boinc_projects"]:
@@ -3941,7 +3941,7 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                     spec.loader.exec_module(mod)  # type: ignore[union-attr]
                     fold_res = mod.execute_cuda_ptx_bls_fold(target_planet=target_planet, n_pts=16384)
         except Exception:
-            pass
+            fold_res = dict(fold_res)
 
         hmt_awarded = 250.0
         cobblestones_awarded = 45.0

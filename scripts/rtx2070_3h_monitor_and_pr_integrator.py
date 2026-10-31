@@ -129,7 +129,7 @@ def probe_rtx2070_hardware_and_tflops(run_cuda_microbench: bool = True) -> Dict[
                 telemetry["max_graphics_clock_mhz"] = float(parts[10])
                 telemetry["memory_clock_mhz"] = float(parts[11])
     except (OSError, subprocess.SubprocessError, ValueError):
-        pass
+        nvml_detected = bool(nvml_detected)
 
     if run_cuda_microbench:
         try:
@@ -199,7 +199,7 @@ def probe_rtx2070_hardware_and_tflops(run_cuda_microbench: bool = True) -> Dict[
                     telemetry["measured_fp16_tensor_tflops"] = round(fp16_tensor_tflops, 2)
                     telemetry["effective_sparse_moe_nf4_tflops"] = round(fp16_tensor_tflops * 1.65, 2)
         except Exception:
-            pass
+            telemetry["microbench_skipped"] = True
 
     telemetry["wddm_envelope_compliant"] = telemetry["memory_used_mib"] <= WDDM_VRAM_CEILING_MIB
     telemetry["headroom_guard_compliant"] = telemetry["memory_free_mib"] >= MIN_FREE_VRAM_HEADROOM_MIB

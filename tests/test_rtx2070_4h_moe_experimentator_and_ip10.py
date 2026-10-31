@@ -133,6 +133,55 @@ def test_ip37_nf4_does_not_mutate_input_and_2bit_centroids_are_symmetric() -> No
     assert abs(pos_err - neg_err) / max(pos_err, neg_err) < 0.15
 
 
+def test_ip19_forged_receipt_with_poisoned_weights_and_zero_steps_is_rejected() -> None:
+    """IP-19: A forged ZKOPoIV5ProofReceipt with poisoned weights and 0 training steps must return valid=False."""
+    import hashlib
+    import json
+
+    from hivemind.swarm.zk_opoi_v5_circuit import (
+        ZKOPoIV5FixedPointCircuit,
+        ZKOPoIV5ProofReceipt,
+        _derive_fiat_shamir_challenge,
+    )
+
+    circuit = ZKOPoIV5FixedPointCircuit(quantization_bits=8)
+    shard_sha = hashlib.sha256(b"official-shard").hexdigest()
+    theta0_q = circuit.quantize_to_fixed_point([0.1, -0.2, 0.3, -0.4])
+    theta0_comm = hashlib.sha256(json.dumps(theta0_q).encode("utf-8")).hexdigest()
+    poisoned_q = [999999, -999999, 999999, -999999]
+    poisoned_comm = hashlib.sha256(json.dumps(poisoned_q).encode("utf-8")).hexdigest()
+    forged_merkle = hashlib.sha256(b"forged-zero-step-witness").hexdigest()
+    forged_challenge = _derive_fiat_shamir_challenge(
+        f"attacker-node:{shard_sha}:{theta0_comm}:{poisoned_comm}:{forged_merkle}"
+    )
+
+    forged_receipt = ZKOPoIV5ProofReceipt(
+        node_id="attacker-node",
+        step_count_h=0,
+        quantization_bits=8,
+        assigned_shard_sha256=shard_sha,
+        theta0_commitment=theta0_comm,
+        theta_final_commitment=poisoned_comm,
+        fiat_shamir_challenge=forged_challenge,
+        theta0_poly_eval=0,
+        grad_accum_poly_eval=0,
+        theta_final_poly_eval=0,
+        delta_l2_norm_fp=0,
+        max_allowed_l2_norm_fp=circuit.max_delta_l2_norm_fp,
+        spectral_bound_fp=0,
+        max_allowed_spectral_fp=circuit.max_spectral_fp,
+        witness_merkle_root=forged_merkle,
+        proof_size_bytes=512,
+    )
+
+    verdict = circuit.verify_receipt_cpu_o1(
+        forged_receipt,
+        expected_shard_sha256=shard_sha,
+        expected_theta0_commitment=theta0_comm,
+    )
+    assert verdict.valid is False
+
+
 def test_run_4h_rtx2070_moe_experimentator_end_to_end(tmp_path: Path) -> None:
     """Verify the full 4-Stage RTX 2070 MoE Bee Experimentator produces a passing signed ledger."""
     out_file = tmp_path / "rtx2070_4h_moe_experimentator_ledger.json"

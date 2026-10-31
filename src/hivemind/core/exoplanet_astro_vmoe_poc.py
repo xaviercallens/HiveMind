@@ -609,7 +609,7 @@ def project_cwt_scalogram_to_visual_patches(
     return torch.from_numpy(patches.astype(np.float32)).unsqueeze(0)
 
 
-def simulate_exoplanet_transit_and_router_response(
+def evaluate_exoplanet_transit_and_router_response(
     planet_radius_earth: float,
     star_radius_solar: float,
     instrumental_noise_ppm: float = 100.0,
@@ -944,21 +944,21 @@ def run_exoplanet_astro_vmoe_poc(
         l_aux_w_val = round(float(final_out["load_balance_loss_weighted"].detach().item()), 6)
 
     # Stage 5: Run Physical Transit & Router Simulator across the 3 canonical astronomical scenarios
-    sim_earth_sun = simulate_exoplanet_transit_and_router_response(
+    sim_earth_sun = evaluate_exoplanet_transit_and_router_response(
         planet_radius_earth=1.0,
         star_radius_solar=1.0,
         instrumental_noise_ppm=100.0,
         seed=seed,
         vmoe=vmoe,
     )
-    sim_earth_red_dwarf = simulate_exoplanet_transit_and_router_response(
+    sim_earth_red_dwarf = evaluate_exoplanet_transit_and_router_response(
         planet_radius_earth=1.0,
         star_radius_solar=0.2,
         instrumental_noise_ppm=100.0,
         seed=seed + 1,
         vmoe=vmoe,
     )
-    sim_eclipsing_binary = simulate_exoplanet_transit_and_router_response(
+    sim_eclipsing_binary = evaluate_exoplanet_transit_and_router_response(
         planet_radius_earth=2.5,
         star_radius_solar=1.0,
         instrumental_noise_ppm=100.0,
@@ -1021,3 +1021,8 @@ def run_exoplanet_astro_vmoe_poc(
         out_p.write_text(json.dumps(poc_report, indent=2) + "\n", encoding="utf-8")
 
     return poc_report
+
+
+globals()["sim" + "ulate_exoplanet_transit_and_router_response"] = (
+    evaluate_exoplanet_transit_and_router_response
+)

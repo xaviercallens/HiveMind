@@ -1,7 +1,7 @@
 {
   "campaign_id": "NIGHT-REDDIT-VISION-MOE-V1",
   "title": "Reddit-Vision HiveMind: Culturally-Grounded VLM & Decentralized Vision-Language MoE",
-  "timestamp_utc": "2026-10-29T21:05:47Z",
+  "timestamp_utc": "2026-10-30T21:00:54Z",
   "inner_diloco_steps": 500,
   "lora_rank": 16,
   "lora_alpha": 32.0,
@@ -230,7 +230,7 @@
     }
   ],
   "overall_gate_passed": true,
-  "report_sha256": "dd281a0f9a2bb52478edb8e8322f3d2433d8d39987fa2bddc5864c6cdd9a8a8b",
+  "report_sha256": "1dd3ac3c070ed7199d3f5b31ab0060cb0b3836f1afee98ef8217adff4d8a338a",
   "la_ruche_1500mb_vmoe_summary": {
     "architecture": "La Ruche V-MoE (< 1.5 GB VRAM, BTM + DiLoCo-QLoRA + Muon + DCT DeMo + ZK-OPoI + FoMoE Top-2)",
     "max_worker_vram_mib": 1490.0,

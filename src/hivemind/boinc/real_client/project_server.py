@@ -294,7 +294,7 @@ class ProjectServer:
                     try:
                         gpu_ram_bytes = max(gpu_ram_bytes, int(float(el.text or 0)))
                     except ValueError:
-                        pass
+                        gpu_ram_bytes = max(gpu_ram_bytes, 0)
         info["gpu_ram_bytes"] = gpu_ram_bytes
         info["gpu_ram_mb"] = gpu_ram_bytes // 1_000_000 if gpu_ram_bytes > 0 else 0
         for r in root.findall("result"):

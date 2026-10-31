@@ -70,7 +70,7 @@ def probe_local_8095_producer_server() -> Dict[str, Any]:
                         }
                         break
         except (urllib.error.URLError, OSError, ValueError):
-            pass
+            out["boinc_probe_fallback"] = True
         return out
     except (urllib.error.URLError, OSError, ValueError) as exc:
         return {
@@ -302,8 +302,8 @@ def run_night_moe_training_cycle(gpu_telemetry: Dict[str, Any]) -> Dict[str, Any
                 "violations": violations,
                 "valid": len(violations) == 0,
             }
-        except Exception:
-            pass
+        except Exception as exc:
+            ledger["s21_residency_warning"] = str(exc)[:120]
 
         # Record S21-04 live NVML RTX 2070 VRAM calibration if base_models_s21.json exists
         s21_cat_path = PROJECT_ROOT / "configs" / "base_models_s21.json"
@@ -333,8 +333,8 @@ def run_night_moe_training_cycle(gpu_telemetry: Dict[str, Any]) -> Dict[str, Any
                     cal_path = PROJECT_ROOT / "artifacts" / "vram_calibrations_s21.json"
                     append_calibration(cal_path, cal_rec)
                     ledger["s21_vram_calibration"] = cal_rec.to_dict()
-            except Exception:
-                pass
+            except Exception as exc:
+                ledger["s21_calibration_warning"] = str(exc)[:120]
 
         # Execute Season 34 Wake-to-Sleep Consolidation (HM-S34-08..10: NREM Knowledge Seeding + REM Dreaming)
         try:
@@ -356,8 +356,8 @@ def run_night_moe_training_cycle(gpu_telemetry: Dict[str, Any]) -> Dict[str, Any
                 t4_free_vram_mib=8200.0,
             )
             ledger["s34_sleep_consolidation_report"] = s34_sleep_report
-        except Exception:
-            pass
+        except Exception as exc:
+            ledger["s34_sleep_warning"] = str(exc)[:120]
 
     ledger_path.parent.mkdir(parents=True, exist_ok=True)
     ledger_path.write_text(json.dumps(ledger, indent=2), encoding="utf-8")

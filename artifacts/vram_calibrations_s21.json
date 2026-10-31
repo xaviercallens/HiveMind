@@ -124,5 +124,47 @@
   "gpu": "NVIDIA GeForce RTX 2070",
   "source": "nvidia-smi NVML live resident peak via run_2h_roadmap_pr_and_night_moe_cron.py",
   "recorded_at": "2026-10-31T04:22:36Z"
+ },
+ {
+  "model_id": "Qwen/Qwen3.5-0.8B",
+  "mode": "gguf_serving",
+  "config": "Q4_0 ctx4096 x1",
+  "estimate_mib": 1286.5,
+  "measured_peak_mib": 1447.0,
+  "measured_kind": "process_peak",
+  "ratio_measured_to_estimate": 1.1248,
+  "within_margin": true,
+  "margin": 0.2,
+  "gpu": "NVIDIA GeForce RTX 2070",
+  "source": "nvidia-smi NVML live resident peak via run_2h_roadmap_pr_and_night_moe_cron.py",
+  "recorded_at": "2026-10-31T06:21:20Z"
+ },
+ {
+  "model_id": "Qwen/Qwen3.5-0.8B",
+  "mode": "gguf_serving",
+  "config": "Q4_0 ctx4096 x1",
+  "estimate_mib": 1286.5,
+  "measured_peak_mib": 1447.0,
+  "measured_kind": "process_peak",
+  "ratio_measured_to_estimate": 1.1248,
+  "within_margin": true,
+  "margin": 0.2,
+  "gpu": "NVIDIA GeForce RTX 2070",
+  "source": "nvidia-smi NVML live resident peak via run_2h_roadmap_pr_and_night_moe_cron.py",
+  "recorded_at": "2026-10-31T06:22:23Z"
+ },
+ {
+  "model_id": "Qwen/Qwen3.5-0.8B",
+  "mode": "gguf_serving",
+  "config": "Q4_0 ctx4096 x1",
+  "estimate_mib": 1286.5,
+  "measured_peak_mib": 1447.0,
+  "measured_kind": "process_peak",
+  "ratio_measured_to_estimate": 1.1248,
+  "within_margin": true,
+  "margin": 0.2,
+  "gpu": "NVIDIA GeForce RTX 2070",
+  "source": "nvidia-smi NVML live resident peak via run_2h_roadmap_pr_and_night_moe_cron.py",
+  "recorded_at": "2026-10-31T12:23:27Z"
  }
 ]

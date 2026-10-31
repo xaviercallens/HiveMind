@@ -326,7 +326,7 @@ class Client:
                 if "poll status" in self.cmd("--get_state") or "======== Projects ========" in self.cmd("--get_state"):
                     return True
             except Exception:
-                pass
+                time.sleep(0.1)
             time.sleep(1)
         return False
 

@@ -1,17 +1,17 @@
 {
   "schema_version": "rtx2070_3h_monitor.v1",
   "cadence_cron": "0 */3 * * *",
-  "timestamp_utc": "2026-10-31T16:19:35Z",
+  "timestamp_utc": "2026-10-31T18:19:42Z",
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-10-31T16:19:35Z",
+    "timestamp_utc": "2026-10-31T18:19:42Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": false,
     "device": "nvml:cuda:0 (torch+cpu host)",
     "compute_capability": "7.5",
     "temperature_c": 26.0,
-    "gpu_utilization_pct": 7.0,
-    "power_draw_w": 9.55,
+    "gpu_utilization_pct": 14.0,
+    "power_draw_w": 25.89,
     "power_limit_w": 175.0,
     "memory_used_mib": 1465.0,
     "memory_free_mib": 6542.0,
@@ -20,14 +20,14 @@
     "vram_headroom_guard_mib": 2048.0,
     "wddm_envelope_compliant": true,
     "headroom_guard_compliant": true,
-    "graphics_clock_mhz": 300.0,
+    "graphics_clock_mhz": 1410.0,
     "max_graphics_clock_mhz": 2145.0,
-    "memory_clock_mhz": 405.0,
-    "host_tensor_gflops": 106.63,
+    "memory_clock_mhz": 7000.0,
+    "host_tensor_gflops": 103.99,
     "measured_fp32_tflops": 9.88,
     "measured_fp16_tensor_tflops": 39.54,
     "effective_sparse_moe_nf4_tflops": 65.24,
-    "microbench_elapsed_ms": 158.04
+    "microbench_elapsed_ms": 159.34
   },
   "community_gpu_benchmark_summary": {
     "receipt_sha256": "e944272a1802d8053a28c26a59e7e121671eec23e2c3fcb22f2fb45c3b197580",
@@ -35,9 +35,23 @@
     "peak_allocated_mb": 0.0
   },
   "pr_integration_summary": {
-    "checked_utc": "2026-10-31T16:19:43Z",
-    "open_prs_count": 8,
+    "checked_utc": "2026-10-31T18:19:49Z",
+    "open_prs_count": 9,
     "evaluated": [
+      {
+        "pr": 383,
+        "title": "docs: roadmap status after the 2026-10-31 review round",
+        "author": "xaviercallens",
+        "head_ref": "docs/roadmap-2026-10-31-17",
+        "base_ref": "main",
+        "head_sha": "4d621a5587",
+        "owner_authored": true,
+        "security_passed": true,
+        "injection_clean": true,
+        "decision": "ACCEPT",
+        "merged": false,
+        "merge_message": ""
+      },
       {
         "pr": 369,
         "title": "chore(lean4): resolve unused hypothesis warning in Theorem 120 and silence pynvml FutureWarning",
@@ -86,7 +100,7 @@
         "author": "xaviercallens",
         "head_ref": "feat/openrouter-5lang-i18n",
         "base_ref": "main",
-        "head_sha": "8e9cb8cc43",
+        "head_sha": "1f41463df4",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -159,5 +173,5 @@
       141
     ]
   },
-  "ledger_sha256": "76124cbd60a7d2f64888d78cb5fc59bfe993148478c0b7b694bf36a1ef40c4d7"
+  "ledger_sha256": "862ee73dc8ef9867d1bbf33a611e0b22cdf839d16c66818ab379ec6db1f84e7b"
 }

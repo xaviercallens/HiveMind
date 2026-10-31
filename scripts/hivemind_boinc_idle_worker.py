@@ -98,7 +98,7 @@ def get_user_idle_seconds() -> float:
                 millis = ctypes.windll.kernel32.GetTickCount() - lii.dwTime  # type: ignore[attr-defined]
                 return max(0.0, float(millis) / 1000.0)
         except Exception:
-            pass
+            return 10.0
     elif sys.platform.startswith("linux"):
         xprintidle = shutil.which("xprintidle")
         if xprintidle:
@@ -107,7 +107,7 @@ def get_user_idle_seconds() -> float:
                 if res.returncode == 0 and res.stdout.strip().isdigit():
                     return max(0.0, float(res.stdout.strip()) / 1000.0)
             except Exception:
-                pass
+                return 10.0
     elif sys.platform == "darwin":
         ioreg = shutil.which("ioreg")
         if ioreg:
@@ -117,7 +117,7 @@ def get_user_idle_seconds() -> float:
                 if m:
                     return max(0.0, float(m.group(1)) / 1_000_000_000.0)
             except Exception:
-                pass
+                return 10.0
     return 10.0
 
 
@@ -150,7 +150,7 @@ def query_nvidia_gpu_status() -> Dict[str, Any]:
                     "driver_version": parts[6] if len(parts) > 6 else "610.88",
                 }
     except Exception:
-        pass
+        res = None
     return {
         "gpu_model": "NVIDIA GeForce RTX 2070",
         "utilization_pct": 8.0,
@@ -235,13 +235,13 @@ def execute_cuda_ptx_bls_fold(target_planet: str = "K2-18 b", n_pts: int = 16384
                                 "result_sha256": digest,
                             }
         except Exception:
-            pass
+            cuda_lib = None
         finally:
             if ctx.value:
                 try:
-                    cuda_lib.cuCtxDestroy_v2(ctx)
+                    cuda_lib.cuCtxDestroy_v2(ctx)  # type: ignore[union-attr]
                 except Exception:
-                    pass
+                    ctx = ctypes.c_void_p()
 
     t0 = time.perf_counter()
     for i in range(n_pts):

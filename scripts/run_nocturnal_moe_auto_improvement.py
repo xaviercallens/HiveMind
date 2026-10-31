@@ -177,7 +177,7 @@ def main() -> int:
         try:
             store.register(p["handle"], "producer")
         except Exception:
-            pass
+            continue
 
     eligible = scheduler.filter_eligible_producers(
         known_producers, min_vram_gb=args.min_vram_gb

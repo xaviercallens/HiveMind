@@ -138,7 +138,7 @@ def detect_community_accelerator(preferred_device: str = "auto") -> dict[str, An
                     fallback["nvml_compute_capability"] = parts[2]
                     fallback["nvml_driver_version"] = parts[3]
         except Exception:
-            pass
+            fallback["nvml_probe_skipped"] = True
     return fallback
 
 

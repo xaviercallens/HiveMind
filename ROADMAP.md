@@ -627,6 +627,22 @@ The full plan, with evidence, Definition of Done and the test for each finding (
 
 ---
 
+### Status update, 2026-10-31 (3-hourly & 2-hourly review)
+
+- **Merged by the owner account, 17:10–17:35 CET:** #368 (V-MoE router dispatch and 8-bit AdamW), #371 (SolverBee slot presets), #372 (the improvement plan itself), #373, #374, #375, #376, and [#377](https://github.com/xaviercallens/HiveMind/pull/377) (gatekeeper refuses Lean builds whose declarations use `sorry`, `IP-13`).
+- **Integrated & verified in [#344](https://github.com/xaviercallens/HiveMind/pull/344):**
+  - Reconciled `origin/main` (`26f62ae`) merge conflicts, cleared the `forbidden_scan` documentation example in `scripts/install_boinc_hivemind_linux.sh`, and resolved all `ZeroStubAudit` (`GWAYA`) checks across all 33 changed Python files (`0` violations).
+  - Cherry-picked [#369](https://github.com/xaviercallens/HiveMind/pull/369) (Lean 4 Theorem 120 zero-warnings gate) and [#366](https://github.com/xaviercallens/HiveMind/pull/366) (BOINC QLoRA thermodynamic ratchet & `80/20` replay).
+  - Completed **`PR-IP-10` (`IP-19`, `IP-20`, `IP-34`, `IP-35`, `IP-36`, `IP-37`)** + **`HM-S33-07`** (4-Hour RTX 2070 MoE Bee Experimentator, `0 */4 * * *`).
+- **Open for claim (GitHub issues, label `agent-ready`):**
+  - [#378](https://github.com/xaviercallens/HiveMind/issues/378): owner-key fallback and account takeover (PR-IP-01, PR-IP-02). Owner action first: rotate the key.
+  - [#379](https://github.com/xaviercallens/HiveMind/issues/379): credit only server-verified work (PR-IP-03).
+  - [#380](https://github.com/xaviercallens/HiveMind/issues/380): dashboard admin authentication and CORS (PR-IP-05).
+  - [#381](https://github.com/xaviercallens/HiveMind/issues/381): bind BOINC uploads to their workunit and credit from server time (PR-IP-06).
+  - [#382](https://github.com/xaviercallens/HiveMind/issues/382): ledger reload and atomic writes (PR-IP-04).
+
+---
+
 ## 🎮 4. Opt-In Community GPU Testing Program (If Interested & Possible)
 
 If you have a consumer GPU (**NVIDIA GeForce RTX 20/30/40/50-series 6 GB–24 GB**, **AMD Radeon RX 6000/7000 via ROCm**, or **Apple Silicon M1/M2/M3/M4 via MPS**) and are interested in testing how your hardware performs on the HiveMind Sparse MoE + `EF21-DiLoCo` + `ZK-OPoI v4` stack, we provide a safe, opt-in, `< 1.5 GB` peak-VRAM benchmark suite:

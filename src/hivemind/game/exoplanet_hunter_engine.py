@@ -757,7 +757,7 @@ def _load_gemini_api_key_from_env() -> Optional[str]:
                         if len(val) > 15:
                             return val
             except Exception:
-                pass
+                continue
     env_val = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     if env_val and len(env_val.strip()) > 15:
         return env_val.strip()
@@ -914,7 +914,7 @@ def synthesize_gemini_or_gcp_free_tts(
                     "cached": False,
                 }
         except Exception:
-            pass
+            api_key = None
 
     if mp3_cache.exists() and mp3_cache.stat().st_size > 200:
         return {
@@ -983,7 +983,7 @@ def query_nasa_exoplanet_archive_tap(live_network: bool = False) -> Dict[str, An
                         "rows": rows,
                     }
         except Exception:
-            pass
+            live_network = False
 
     if cache_file.exists():
         try:
@@ -996,7 +996,7 @@ def query_nasa_exoplanet_archive_tap(live_network: bool = False) -> Dict[str, An
                 "rows": rows,
             }
         except Exception:
-            pass
+            rows = []
 
     fallback_rows = [
         {"pl_name": "TRAPPIST-1 e", "hostname": "TRAPPIST-1", "sy_dist": 12.429, "pl_orbper": 6.099615, "pl_rade": 0.920, "pl_bmasse": 0.692, "pl_orbeccen": 0.005, "pl_insol": 0.662, "pl_eqt": 251.3, "rv_flag": 1, "tran_flag": 1},
@@ -1460,7 +1460,7 @@ def load_real_hf_exoplanet_catalog(max_extra_per_category: int = 12) -> List[Dic
                     )
                     sector_num += 1
         except Exception:
-            pass
+            sector_num = int(sector_num)
 
     # Compute derived ESI, Habitable Zone, Taxonomy & 3D Galactic Coordinates for every target
     enriched_catalog: List[Dict[str, Any]] = []
@@ -1912,7 +1912,7 @@ class HiveMindMultiProducerInferencePool:
                         "power_w": float(parts[6]) if len(parts) > 6 and parts[6] not in ("[N/A]", "") else 15.0,
                     }
         except Exception:
-            pass
+            return {"detected": False}
         return {"detected": False}
 
     def _init_default_producers(self) -> None:
@@ -1971,7 +1971,7 @@ class HiveMindMultiProducerInferencePool:
                 encoding="utf-8",
             )
         except Exception:
-            pass
+            return None
 
     def register_or_update_producer(
         self,
@@ -2316,7 +2316,7 @@ class HiveMindMultiProducerInferencePool:
             self.monitor_path.parent.mkdir(parents=True, exist_ok=True)
             self.monitor_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         except Exception:
-            pass
+            return report
         return report
 
 

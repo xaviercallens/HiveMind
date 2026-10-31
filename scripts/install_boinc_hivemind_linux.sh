@@ -3,7 +3,7 @@
 # ==============================================================================
 # HiveMind@home — Official BOINC Client + Idle-GPU Worker Installer (Linux/macOS)
 # Usage:
-#   curl -sSL https://xaviercallens.github.io/HiveMindatHome.github.io/boinc/install_boinc_hivemind_linux.sh | bash -s -- "@YourBOINCHandle"
+#   curl -fsSLO https://xaviercallens.github.io/HiveMindatHome.github.io/boinc/install_boinc_hivemind_linux.sh && bash install_boinc_hivemind_linux.sh "@YourBOINCHandle"
 # ==============================================================================
 set -euo pipefail
 

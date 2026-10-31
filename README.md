@@ -41,6 +41,41 @@
 
 Instead of requiring datacenter InfiniBand, each node trains specialized **4-bit NF4 QLoRA** domain experts asynchronously using **DiLoCo** (`H=500` inner steps per synchronisation by default, i.e. 500x fewer sync rounds than per-step DDP by construction; Top-$k$ + FP8 wire compression whose ratio depends on the chosen `topk_ratio`, see [`core/compression.py`](src/hivemind/core/compression.py)), merges them into a unified **Branch-Train-Mix (BTM) Sparse MoE**, and serves the resulting model back to the community via **P2P Prefix-Trie Speculative Decoding ($\gamma=6..8$)**. Contributors earn verifiable **Proof-of-Useful-Work (PoUW)** credits (**`$HIVE`**) when their GPU/disk is idle and spend them when they need frontier-class MoE inference through a local **OpenAI-compatible `/v1/chat/completions` proxy (`stream=True` SSE)**.
 
+### 🚀 Easy to Join for Everyone / Rejoindre l'Essaim en 30 secondes
+
+| Profile / Profil | How to Participate / Comment Participer | Live Link / Lien Direct |
+| :--- | :--- | :--- |
+| 🌐 **Zero Installation (Browser Game & WebGPU `@compute`)** | Explore 6,000+ real NASA/JWST exoplanets in 3D and contribute idle browser GPU cycles without installing anything | 👉 [**Play & Contribute on WebGPU (`webgpu.html`)**](https://xaviercallens.github.io/HiveMindatHome.github.io/webgpu.html) · [**Router `/webgpu`**](https://hivemind-openrouter-1003063861791.us-central1.run.app/webgpu) |
+| 💬 **To Test the AI (5-Language OpenRouter & Playground)** | Create a free account in 1 click (no credit card) and query the 15 live MoE models & 24 specialist Bees in `EN`/`FR`/`ES`/`DE`/`ZH` | 👉 [**Test on HiveMind OpenRouter**](https://hivemind-openrouter-1003063861791.us-central1.run.app) · [**Version Française (`/fr`)**](https://hivemind-openrouter-1003063861791.us-central1.run.app/fr) |
+| 🐝 **To Join & Train (BOINC Night QLoRA & Gamer RTX 8–12 GB)** | Share your gaming GPU when idle (`< 1.5s` automatic release when you move the mouse or launch a Steam game) | 👉 [**Join & Train Guide (`/join#train`)**](https://hivemind-openrouter-1003063861791.us-central1.run.app/join#train) · [**Rejoindre (`/rejoindre#train`)**](https://hivemind-openrouter-1003063861791.us-central1.run.app/rejoindre#train) |
+| 🏛️ **La Ruche Community Dashboard & Source Code** | Inspect live BOINC workunits, Night-MoE evaluations, datasets, and contribute to the open-source codebase | 👉 [**La Ruche Dashboard**](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/) · [**Manifeste IA Citoyenne (`SETI@Home`)**](docs/MANIFESTE_IA_CITOYENNE_SETI_AT_HOME.md) |
+
+<details open>
+<summary><b>🇫🇷 Manifeste : Pour une IA citoyenne et décentralisée en souvenir de SETI@Home (Histoire & Vulgarisation)</b></summary>
+
+<br/>
+
+> **Discussions d'origine :** [`r/artificielle` — *Pour une IA citoyenne et décentralisée en souvenir de SETI@Home*](https://www.reddit.com/r/artificielle/comments/1xctxbf/pour_une_ai_citoyenne_et_d%C3%A9centralis%C3%A9e_en/) · [La question initiale sur `r/artificielle`](https://www.reddit.com/r/artificielle/comments/1x6vijg/comment/phgj7z2/) · [Échanges techniques sur `r/developpeurs`](https://www.reddit.com/r/developpeurs/comments/1xhit4c/comment/19rtqukepw39f/) · [Texte complet dans `docs/MANIFESTE_IA_CITOYENNE_SETI_AT_HOME.md`](docs/MANIFESTE_IA_CITOYENNE_SETI_AT_HOME.md)
+
+Il y a quelques jours sur `r/artificielle`, un utilisateur non-informaticien a posé une [question toute simple mais fondamentale](https://www.reddit.com/r/artificielle/comments/1x6vijg/comment/phgj7z2/) : *« Puisque les IA actuelles ont appris grâce aux textes produits par tout le monde sur Internet, pourquoi les modèles les plus puissants appartiennent-ils tous à une poignée de géants (OpenAI, Anthropic, Google) ? Pourquoi n'existe-t-il pas une IA décentralisée et citoyenne, sur le modèle de Wikipédia, Linux ou Folding@home ? »*
+
+#### 1. Pourquoi nos PC domestiques ne pouvaient pas rivaliser avec un Data Center jusqu'ici ?
+- **Le mur de la mémoire (VRAM) :** Un grand modèle monolithique (70B+ paramètres) demande des centaines de gigaoctets de VRAM ultra-rapide, impossible à charger sur une carte de joueur (**8 à 12 Go de VRAM**).
+- **Le mur de la latence (notre box fibre) :** Contrairement à *SETI@home* où chaque PC calcule dans son coin, l'entraînement classique (*SPMD*) oblige toutes les cartes à s'échanger des gigaoctets **à chaque milliseconde**. Sur de la fibre domestique (**20 à 50 ms**), les GPU passeraient **99 % de leur temps à s'attendre**.
+
+#### 2. Ce qui vient de changer : DiLoCo + les « Essaims d'Experts » (MoE)
+- **A. L'entraînement par « îlots » asynchrones (*DiLoCo* & *Decoupled DiLoCo*) :** Chaque PC travaille de façon autonome pendant des centaines d'étapes (`H=500`) sur son propre sujet avec **zéro communication réseau**, divisant par **~500** le besoin en bande passante. En version *découplée*, si un particulier éteint son PC ou lance un jeu, le reste de l'essaim continue sans jamais bloquer.
+- **B. Découper le géant en petits spécialistes (*Branch-Train-Mix* & *Sparse MoE*) :** On part d'un socle commun léger compressé en **4 bits (NF4)** et on divise l'intelligence en petits modules experts **LoRA (~15 Mo)** (*Code*, *Mathématiques*, *Sciences/STEM*, *Français*, *Médecine/Droit*) entraînables sur **8 Go de VRAM**, puis fusionnés en **Mixture-of-Experts (MoE)** où seules les 2 branches pertinentes s'activent par question.
+- **C. Éliminer les tricheurs sans refaire deux fois le calcul :** Empreintes cryptographiques **SHA-256** + rejeu aléatoire d'un court segment (**~10 % du travail**) + filtre statistique **Multi-Krum** contre les mises à jour aberrantes.
+
+#### 3. Les 4 Piliers d'une vraie « IA Citoyenne » (et le test concret sur une RTX 2070 de 8 Go)
+1. **La Ruche à Données (façon Wikipédia / Common Voice) :** Constitution et vérification collaborative de jeux de données ouverts par des citoyens, chercheurs, juristes, médecins et développeurs.
+2. **Zéro intrusion sur le PC :** Démon en veille qui sauvegarde son état sur SSD en **moins de 1,5 seconde** et libère **100 % du GPU** dès qu'on bouge la souris ou qu'on lance un jeu.
+3. **La réciprocité (façon ratio BitTorrent / Preuve de Calcul Utile) :** Aucune spéculation financière — prêter son GPU la nuit crédite des **Points de Réflexion HiveMind (HMT)** permettant d'interroger l'essaim gratuitement.
+4. **Le test concret sur RTX 2070 (8 Go de VRAM) :** Socle `Qwen2.5` 4-bit NF4 (**176 Mo**), 4 branches spécialisées (*Code*, *Maths*, *Sciences/STEM*, *Français*) entraînées en *DiLoCo-QLoRA* (**5 Mo** par mise à jour), fusionnées en **Sparse MoE (96 experts FFN sur 24 couches)** culminant à **1,5 Go de VRAM** avec décodage spéculatif ($\div 5$ sur l'impact de la latence réseau).
+
+</details>
+
 > [!IMPORTANT]
 > **⚖️ Binding Legal Notice — No Money Involved & Reciprocal Compute-Power Retribution ([`LEGAL_DISCLAIMER_AND_COMPUTE_RECIPROCITY.md`](LEGAL_DISCLAIMER_AND_COMPUTE_RECIPROCITY.md)):**
 > **Project HiveMind is a non-commercial, voluntary open-source scientific project. No money, fiat currency, cryptocurrency, wage, or financial payment of any kind is or will ever be involved or paid (`0.00 EUR / USD`).** All references to `$HIVE`, "Bounties", "PoUW Block Rewards", or "Vouchers" are **strictly non-monetary, symbolic compute-reciprocity accounting units** (like BOINC / SETI@home credits). Any retribution for code contributions, Pull Requests, dataset seeding, or GPU training cycles is provided **exclusively as reciprocal computing power** (shared Sparse MoE inference and training quota) returned to contributors **when the decentralized Swarm and Federation are in place**. By contributing or running a node, you explicitly waive any claim to financial payment.

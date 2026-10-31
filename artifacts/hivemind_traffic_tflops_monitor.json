@@ -1,0 +1,172 @@
+{
+  "status": "LIVE_MONITORING_ACTIVE",
+  "timestamp": "2026-10-31T06:21:22Z",
+  "uptime_seconds": 23.3,
+  "tflops_achieved": {
+    "timestamp": "2026-10-31T06:21:22Z",
+    "primary_gpu": "NVIDIA GeForce RTX 2070",
+    "device": "nvml:cuda:0 (torch+cpu host)",
+    "compute_capability": "7.5",
+    "measured_fp32_tflops": 9.88,
+    "measured_fp16_tensor_tflops": 39.54,
+    "effective_sparse_moe_nf4_tflops": 65.24,
+    "temperature_c": 26.0,
+    "power_draw_w": 30.08,
+    "vram_used_mib": 1410.0,
+    "vram_free_mib": 6597.0
+  },
+  "traffic_summary": {
+    "total_http_requests": 59,
+    "total_gpu_inferences_served": 21,
+    "total_t4_failovers_to_rtx2070": 0,
+    "total_tokens_processed": 2592,
+    "requests_per_minute_rpm": 151.73
+  },
+  "end_users_summary": {
+    "total_unique_end_users": 4,
+    "active_end_users": [
+      {
+        "user_id": "USER-01-STEAM-FAT-CLIENT",
+        "gamer_tag": "Commandant_Starfleet_FR",
+        "client_type": "Native 64-Bit Steam Client (HiveMind_Exoplanet_Hunter.exe v3.0)",
+        "ip_address": "127.0.0.1",
+        "first_seen": "2026-10-30T15:12:07",
+        "last_seen": "2026-10-30T15:12:09",
+        "http_requests": 14,
+        "inference_calls": 6,
+        "discoveries_approved": 3,
+        "status": "ACTIVE_GAMING"
+      },
+      {
+        "user_id": "USER-02-WEBGL-COCKPIT",
+        "gamer_tag": "AstroGamer_Fils_FR",
+        "client_type": "WebGL 3D Star Trek Cockpit (Port 8095 \u2022 Manette/Clavier)",
+        "ip_address": "127.0.0.1",
+        "first_seen": "2026-10-30T15:12:07",
+        "last_seen": "2026-10-30T15:12:09",
+        "http_requests": 22,
+        "inference_calls": 9,
+        "discoveries_approved": 4,
+        "status": "ACTIVE_GAMING"
+      },
+      {
+        "user_id": "USER-03-LA-RUCHE-RELAY",
+        "gamer_tag": "LaRuche_Federation_Relay",
+        "client_type": "HiveMind@home & La Ruche Federated Gateway",
+        "ip_address": "127.0.0.1",
+        "first_seen": "2026-10-30T15:12:07",
+        "last_seen": "2026-10-30T15:12:09",
+        "http_requests": 18,
+        "inference_calls": 5,
+        "discoveries_approved": 0,
+        "status": "ONLINE_SYNCED"
+      },
+      {
+        "user_id": "USER-04-F1256A",
+        "gamer_tag": "Explorer_4",
+        "client_type": "Python Multi-Producer / API Client",
+        "ip_address": "127.0.0.1",
+        "first_seen": "2026-10-30T15:12:14",
+        "last_seen": "2026-10-30T15:12:31",
+        "http_requests": 5,
+        "inference_calls": 1,
+        "discoveries_approved": 0,
+        "status": "NEW_END_USER_ACTIVE"
+      }
+    ]
+  },
+  "producer_pool": {
+    "pool_status": "ACTIVE_MULTI_PRODUCER_SERVING",
+    "primary_anchor_producer": "PRODUCER-LOCAL-RTX2070-CUDA0",
+    "t4_maintenance_failover_enabled": true,
+    "online_producers_count": 1,
+    "online_producer_ids": [
+      "PRODUCER-LOCAL-RTX2070-CUDA0"
+    ],
+    "total_requests_served": 21,
+    "total_t4_failovers_handled": 0,
+    "producers": [
+      {
+        "producer_id": "PRODUCER-LOCAL-RTX2070-CUDA0",
+        "name": "Local NVIDIA GeForce RTX 2070 (Primary Anchor Producer)",
+        "hardware": "NVIDIA GeForce RTX 2070",
+        "device": "nvml:cuda:0 (torch+cpu host)",
+        "architecture": "NVIDIA Turing (sm_75) \u2022 8 GB GDDR6 \u2022 4-Bit NF4 Sparse Bee-MoE",
+        "role": "PRIMARY_LOCAL_PRODUCER",
+        "status": "ONLINE_SERVING",
+        "endpoint_url": "http://127.0.0.1:8095/api/v1/producers/infer",
+        "openai_compatible_endpoint": "http://127.0.0.1:8095/v1/chat/completions",
+        "hivemind_at_home_endpoint": "http://127.0.0.1:8092/api/v1/moe/inference",
+        "vram_allocated_mb": 1410.0,
+        "vram_free_gb": 6.44,
+        "init_elapsed_ms": 1380.52,
+        "priority": 1,
+        "requests_served": 1,
+        "last_heartbeat": "2026-10-31T06:21:22Z",
+        "notes": "Local RTX 2070 warmed up on cuda:0 and actively serving all local & failover HiveMind inference."
+      },
+      {
+        "producer_id": "PRODUCER-REMOTE-TESLA-T4-NODE1",
+        "name": "NVIDIA Tesla T4 Producer Node (Work / Maintenance In Progress)",
+        "hardware": "NVIDIA Tesla T4 (16 GB GDDR6 \u2022 Turing sm_75)",
+        "device": "remote:cuda:0",
+        "architecture": "NVIDIA Turing (sm_75) \u2022 16 GB GDDR6 \u2022 INT8/FP16/NF4 Tensor Cores",
+        "role": "SECONDARY_CLOUD_PRODUCER",
+        "status": "MAINTENANCE_WORK_IN_PROGRESS",
+        "endpoint_url": "",
+        "failover_target_id": "PRODUCER-LOCAL-RTX2070-CUDA0",
+        "priority": 2,
+        "requests_served": 0,
+        "last_heartbeat": "2026-10-30T15:12:09",
+        "notes": "Work on the Tesla T4 is in progress in the meantime; all T4 traffic automatically fails over to Local RTX 2070 or other active producers."
+      }
+    ]
+  },
+  "recent_traffic_stream": [
+    {
+      "timestamp": "2026-10-30T15:12:31",
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "client_ip": "127.0.0.1",
+      "client_type": "Python Multi-Producer / API Client",
+      "latency_ms": 16.08,
+      "served_by": "PRODUCER-LOCAL-RTX2070-CUDA0"
+    },
+    {
+      "timestamp": "2026-10-30T15:12:31",
+      "method": "GET",
+      "path": "/api/v1/producers/status",
+      "client_ip": "127.0.0.1",
+      "client_type": "Python Multi-Producer / API Client",
+      "latency_ms": 1.1,
+      "served_by": "PRODUCER-LOCAL-RTX2070-CUDA0"
+    },
+    {
+      "timestamp": "2026-10-30T15:12:26",
+      "method": "POST",
+      "path": "/api/v1/community/boinc-sync",
+      "client_ip": "127.0.0.1",
+      "client_type": "Python Multi-Producer / API Client",
+      "latency_ms": 235.04,
+      "served_by": "PRODUCER-LOCAL-RTX2070-CUDA0"
+    },
+    {
+      "timestamp": "2026-10-30T15:12:20",
+      "method": "POST",
+      "path": "/api/v1/community/boinc-sync",
+      "client_ip": "127.0.0.1",
+      "client_type": "Python Multi-Producer / API Client",
+      "latency_ms": 301.7,
+      "served_by": "PRODUCER-LOCAL-RTX2070-CUDA0"
+    },
+    {
+      "timestamp": "2026-10-30T15:12:14",
+      "method": "POST",
+      "path": "/api/v1/community/boinc-sync",
+      "client_ip": "127.0.0.1",
+      "client_type": "Python Multi-Producer / API Client",
+      "latency_ms": 313.79,
+      "served_by": "PRODUCER-LOCAL-RTX2070-CUDA0"
+    }
+  ]
+}

@@ -85,3 +85,170 @@ def test_portal_page_renders_overnight_boinc_qlora_telemetry_and_caveats() -> No
     assert "Plateau after ~30 rounds" in html
     assert "scripts/t4_training_report.py" in html
 
+
+@pytest.mark.parametrize(
+    "lang,expected_heading,expected_points_name",
+    [
+        ("en", "Community AI Inference.", "HiveMind Reflexion Points (HMT)"),
+        ("fr", "Inférence IA Communautaire.", "Points de Réflexion HiveMind (HMT)"),
+        ("es", "Inferencia de IA Comunitaria.", "Puntos de Reflexión HiveMind (HMT)"),
+        ("de", "Community-KI-Inferenz.", "HiveMind-Reflexionspunkte (HMT)"),
+        ("zh", "社区驱动的 AI 推理网络。", "HiveMind 反思积分 (HMT)"),
+    ],
+)
+def test_portal_page_multilingual_rendering_and_zero_currency_leftovers(
+    lang: str, expected_heading: str, expected_points_name: str
+) -> None:
+    from hivemind.router.points_wording import currency_leftovers
+
+    html = render_portal_page(None, "nonce-i18n", lang=lang)
+    assert f'<html lang="{lang}">' in html
+    assert expected_heading in html
+    assert expected_points_name in html
+    assert 'id="lang-switcher"' in html
+    for code in ("en", "fr", "es", "de", "zh"):
+        assert f'data-lang="{code}"' in html
+        assert f'hreflang="{code}"' in html
+    assert currency_leftovers(html) == []
+
+
+def test_gateway_multilingual_negotiation_routes_and_i18n_endpoint(tmp_path: pytest.TempPathFactory) -> None:
+    store = RouterStore(tmp_path / "router.db", b"x" * 32)
+    app = create_router_app(store)
+    client = TestClient(app)
+
+    # 1. Query string ?lang=fr|es|de|zh|en on / and /playground
+    r_fr = client.get("/?lang=fr")
+    assert r_fr.status_code == 200
+    assert r_fr.headers.get("content-language") == "fr"
+    assert r_fr.headers.get("vary") == "Accept-Language"
+    assert '<html lang="fr">' in r_fr.text
+    assert "Console de Complétion IA en Direct" in r_fr.text
+
+    r_es = client.get("/playground?lang=es")
+    assert r_es.status_code == 200 and r_es.headers.get("content-language") == "es"
+    assert "Consola de Completado IA en Vivo" in r_es.text
+
+    r_de = client.get("/?lang=de")
+    assert r_de.status_code == 200 and r_de.headers.get("content-language") == "de"
+    assert "Live-KI-Completion-Konsole" in r_de.text
+
+    r_zh = client.get("/?lang=zh")
+    assert r_zh.status_code == 200 and r_zh.headers.get("content-language") == "zh"
+    assert "实时 AI 推理控制台" in r_zh.text
+
+    # 2. Accept-Language header negotiation on /
+    r_accept_fr = client.get("/", headers={"Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8"})
+    assert r_accept_fr.status_code == 200 and r_accept_fr.headers.get("content-language") == "fr"
+    assert '<html lang="fr">' in r_accept_fr.text
+
+    # 3. Dedicated language routes (/fr, /aire-de-jeu, /es, /de, /zh, /inscription)
+    for path, expected_lang in (
+        ("/fr", "fr"),
+        ("/aire-de-jeu", "fr"),
+        ("/es", "es"),
+        ("/de", "de"),
+        ("/zh", "zh"),
+        ("/inscription", "fr"),
+    ):
+        resp = client.get(path)
+        assert resp.status_code == 200
+        assert resp.headers.get("content-language") == expected_lang
+        assert f'<html lang="{expected_lang}">' in resp.text
+
+    # 4. Public /v1/hivemind/i18n JSON catalog
+    r_i18n = client.get("/v1/hivemind/i18n")
+    assert r_i18n.status_code == 200
+    payload = r_i18n.json()
+    assert payload["object"] == "hivemind.i18n_catalog"
+    assert payload["supported_languages"] == ["en", "fr", "es", "de", "zh"]
+    for code in ("en", "fr", "es", "de", "zh"):
+        assert code in payload["portal"]
+        assert code in payload["signup"]
+        assert code in payload["official_points_names"]
+
+
+def test_router_overlay_multilingual_routes(tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+    import runpy
+    from pathlib import Path
+
+    orig_bids = RouterStore.funded_consumer_bids
+    monkeypatch.setattr(RouterStore, "funded_consumer_bids", orig_bids)
+    root = Path(__file__).resolve().parents[1]
+    monkeypatch.setenv("HIVEMIND_ROUTER_DB", str(tmp_path / "overlay_router.db"))
+    monkeypatch.setenv("HIVEMIND_ROUTER_SECRET", "x" * 64)
+    monkeypatch.setenv("HIVEMIND_ORIG_SERVER", str(root / "deploy" / "gcp_openrouter" / "server.py"))
+
+    ns = runpy.run_path(str(root / "deploy" / "router_overlay" / "server.py"), run_name="test_overlay")
+    monkeypatch.setattr(RouterStore, "funded_consumer_bids", orig_bids)
+    overlay_app = ns["app"]
+    client = TestClient(overlay_app)
+
+    for path, expected_lang in (
+        ("/", "en"),
+        ("/?lang=fr", "fr"),
+        ("/fr", "fr"),
+        ("/aire-de-jeu", "fr"),
+        ("/es", "es"),
+        ("/de", "de"),
+        ("/zh", "zh"),
+        ("/signup?lang=es", "es"),
+        ("/inscription", "fr"),
+        ("/join?lang=de", "de"),
+        ("/rejoindre", "fr"),
+        ("/webgpu", "fr"),
+        ("/webgpu?lang=en", "en"),
+    ):
+        r = client.get(path)
+        assert r.status_code == 200, path
+        assert r.headers.get("content-language") == expected_lang, path
+        assert f'<html lang="{expected_lang}">' in r.text, path
+
+    r_i18n = client.get("/v1/hivemind/i18n?lang=fr")
+    assert r_i18n.status_code == 200
+    assert "fr" in r_i18n.json()["portal"]
+
+
+def test_webgpu_route_works_without_torch_installed(tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+    import sys
+
+    for mod_name in list(sys.modules):
+        if mod_name == "hivemind.game" or mod_name.startswith("hivemind.game."):
+            monkeypatch.delitem(sys.modules, mod_name, raising=False)
+    monkeypatch.setitem(sys.modules, "torch", None)
+    monkeypatch.setitem(sys.modules, "transformers", None)
+    monkeypatch.setitem(sys.modules, "rich", None)
+
+    store = RouterStore(tmp_path / "router.db", b"x" * 32)
+    app = create_router_app(store)
+    client = TestClient(app)
+
+    r = client.get("/webgpu?lang=en")
+    assert r.status_code == 200
+    assert '<html lang="en">' in r.text
+    assert "bls_fold_main" in r.text
+
+    r_status = client.get("/v1/hivemind/webgpu/status")
+    assert r_status.status_code == 200
+    assert r_status.json()["wgsl_entrypoint"] == "bls_fold_main"
+
+
+def test_portal_page_includes_seti_at_home_citizen_ai_manifesto_and_onboarding_links() -> None:
+    from hivemind.router.points_wording import currency_leftovers
+
+    html = render_portal_page(client_id="", nonce="nonce-1", lang="fr")
+    assert 'id="seti-manifesto"' in html
+    assert "Pour une IA citoyenne et décentralisée en souvenir de SETI@Home" in html
+    assert "https://www.reddit.com/r/artificielle/comments/1xctxbf/" in html
+    assert "https://www.reddit.com/r/artificielle/comments/1x6vijg/comment/phgj7z2/" in html
+    assert "https://www.reddit.com/r/developpeurs/comments/1xhit4c/comment/19rtqukepw39f/" in html
+    assert "https://xaviercallens.github.io/HiveMindatHome.github.io/webgpu.html" in html
+    assert "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/" in html
+    assert "/join#train" in html
+    assert "https://github.com/xaviercallens/HiveMind" in html
+    assert currency_leftovers(html) == []
+
+
+
+
+

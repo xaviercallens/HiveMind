@@ -23,6 +23,7 @@ def test_detect_community_accelerator_auto_and_cpu() -> None:
     assert cpu_info["device"] == "cpu"
     assert cpu_info["backend"] == "cpu_fallback"
     assert cpu_info["is_gpu"] is False
+    assert "nvml_detected_gpu" not in cpu_info
 
     with pytest.raises(ValueError, match="Unsupported preferred_device"):
         detect_community_accelerator("tpu")

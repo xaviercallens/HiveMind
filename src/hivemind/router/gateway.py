@@ -1221,18 +1221,66 @@ def create_router_app(
     @app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/playground", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/life-as-a-bee", methods=["GET", "HEAD"], response_class=HTMLResponse)
-    def portal() -> HTMLResponse:
+    @app.api_route("/fr", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/aire-de-jeu", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/es", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/de", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/zh", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def portal(request: Request) -> HTMLResponse:
+        path_defaults = {
+            "/fr": "fr",
+            "/aire-de-jeu": "fr",
+            "/es": "es",
+            "/de": "de",
+            "/zh": "zh",
+        }
+        default_lang = path_defaults.get(request.url.path, "en")
+        lang = pick_language(request.query_params.get("lang"), request.headers.get("accept-language"), default=default_lang)
         nonce = secrets.token_urlsafe(18)
-        page = render_portal_page(google.client_id if google else None, nonce)
+        page = render_portal_page(google.client_id if google else None, nonce, lang=lang)
         return HTMLResponse(
             page,
             headers={
                 "Content-Security-Policy": portal_content_security_policy(nonce),
                 "Cache-Control": "public, max-age=60",
+                "Vary": "Accept-Language",
+                "Content-Language": lang,
                 "X-Content-Type-Options": "nosniff",
                 "Referrer-Policy": "strict-origin-when-cross-origin",
             },
         )
+
+    @app.get("/v1/hivemind/i18n")
+    def portal_i18n_catalog(lang: str | None = None) -> dict[str, Any]:
+        """Public multilingual dictionary for the OpenRouter portal, playground, signup, and join pages (EN, FR, ES, DE, ZH)."""
+        from hivemind.router.portal_page import PORTAL_I18N, PORTAL_LANG_META, PORTAL_LANGS
+        from hivemind.router.signup_page import SIGNUP_I18N
+
+        selected = lang if lang in PORTAL_LANGS else None
+        return {
+            "object": "hivemind.i18n_catalog",
+            "supported_languages": list(PORTAL_LANGS),
+            "language_metadata": PORTAL_LANG_META,
+            "official_points_names": {
+                "en": "HiveMind Reflexion Points (HMT)",
+                "fr": "Points de Réflexion HiveMind (HMT)",
+                "es": "Puntos de Reflexión HiveMind (HMT)",
+                "de": "HiveMind-Reflexionspunkte (HMT)",
+                "zh": "HiveMind 反思积分 (HMT)",
+            },
+            "routes": {
+                "en": "/?lang=en",
+                "fr": "/fr",
+                "es": "/es",
+                "de": "/de",
+                "zh": "/zh",
+                "join": "/join",
+                "rejoindre": "/rejoindre",
+                "signup": "/signup",
+            },
+            "portal": {selected: PORTAL_I18N[selected]} if selected else PORTAL_I18N,
+            "signup": {selected: SIGNUP_I18N[selected]} if selected else SIGNUP_I18N,
+        }
 
     @app.get("/v1/hivemind/life-as-a-bee")
     def life_as_a_bee() -> dict[str, Any]:
@@ -1434,10 +1482,14 @@ def create_router_app(
     google = google_verifier or (GoogleIdTokenVerifier(google_client_id, clock=clock) if google_client_id else None)
 
     @app.api_route("/signup", methods=["GET", "HEAD"], response_class=HTMLResponse)
-    def signup() -> HTMLResponse:
+    @app.api_route("/inscription", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def signup(request: Request) -> HTMLResponse:
+        default_lang = "fr" if request.url.path == "/inscription" else "en"
+        lang = pick_language(request.query_params.get("lang"), request.headers.get("accept-language"), default=default_lang)
         nonce = secrets.token_urlsafe(18)
-        page = render_signup_page(google.client_id if google else None, nonce)
+        page = render_signup_page(google.client_id if google else None, nonce, lang=lang)
         return HTMLResponse(page, headers={"Content-Security-Policy": content_security_policy(nonce), "Cache-Control": "no-store",
+                                           "Vary": "Accept-Language", "Content-Language": lang,
                                            "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})
 
     @app.api_route("/join", methods=["GET", "HEAD"], response_class=HTMLResponse)
@@ -2112,14 +2164,39 @@ def create_router_app(
             "receipt_sha256": receipt_sha256,
         }
 
-    @app.api_route("/webgpu", methods=["GET", "HEAD"], response_class=HTMLResponse)
-    def webgpu_galaxy_page(request: Request) -> HTMLResponse:
-        """Zero-install WebGPU 3D Galaxy & WGSL @compute Citizen-Science Cockpit."""
-        from hivemind.game.webgpu_galaxy_cockpit import render_webgpu_galaxy_html
+    def _load_webgpu_cockpit_module() -> Any:
+        try:
+            from hivemind.game import webgpu_galaxy_cockpit as mod
 
+            return mod
+        except Exception:
+            import importlib.util
+            from pathlib import Path as _Path
+
+            cand = _Path(__file__).resolve().parents[1] / "game" / "webgpu_galaxy_cockpit.py"
+            spec = importlib.util.spec_from_file_location("hivemind_webgpu_galaxy_cockpit", cand)
+            if spec and spec.loader and cand.exists():
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)  # type: ignore[union-attr]
+                return mod
+            raise
+
+    @app.api_route("/webgpu", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def webgpu_galaxy_page(request: Request) -> Response:
+        """Zero-install WebGPU 3D Galaxy & WGSL @compute Citizen-Science Cockpit."""
         lang = pick_language(request.query_params.get("lang"), request.headers.get("accept-language"), default="fr")
+        try:
+            mod = _load_webgpu_cockpit_module()
+            html_body = mod.render_webgpu_galaxy_html(default_lang=lang)
+        except Exception:
+            from fastapi.responses import RedirectResponse
+
+            return RedirectResponse(
+                f"https://xaviercallens.github.io/HiveMindatHome.github.io/webgpu.html?lang={lang}",
+                status_code=307,
+            )
         return HTMLResponse(
-            render_webgpu_galaxy_html(default_lang=lang),
+            html_body,
             headers={
                 "Cache-Control": "no-store",
                 "Vary": "Accept-Language",
@@ -2131,7 +2208,8 @@ def create_router_app(
     @app.get("/v1/hivemind/webgpu/status")
     def webgpu_status() -> dict[str, Any]:
         """Public metadata for the Zero-Install WebGPU Galaxy & WGSL @compute Edition."""
-        from hivemind.game.webgpu_galaxy_cockpit import WGSL_BLS_COMPUTE_SHADER_SOURCE
+        mod = _load_webgpu_cockpit_module()
+        WGSL_BLS_COMPUTE_SHADER_SOURCE = mod.WGSL_BLS_COMPUTE_SHADER_SOURCE
 
         return {
             "object": "hivemind.webgpu_edition",
@@ -2208,7 +2286,8 @@ def create_router_app(
     @app.post("/v1/hivemind/webgpu/contribute")
     async def webgpu_contribute(request: Request) -> dict[str, Any]:
         """Record a verified browser WebGPU WGSL @compute workunit. Strictly requires registration & login (Bearer hm-...)."""
-        from hivemind.game.webgpu_galaxy_cockpit import execute_server_webgpu_verification_and_sync
+        mod = _load_webgpu_cockpit_module()
+        execute_server_webgpu_verification_and_sync = mod.execute_server_webgpu_verification_and_sync
 
         account = authenticate(request)
         raw = await request.body()
@@ -2431,6 +2510,81 @@ def create_router_app(
             **status,
             "latest_nocturnal_distillation": distill,
             "s1b_cross_cpu_reproducibility": s1b,
+        }
+
+    @app.get("/v1/hivemind/expert-registry")
+    @app.get("/api/v1/monitor/expert-registry")
+    async def s21_expert_registry_endpoint() -> dict[str, Any]:
+        """Return the Season 21 ExpertRegistry snapshot (`HM-S21-02`) and its validated ResidencyPlan."""
+        from pathlib import Path
+
+        artifacts_dir = Path(__file__).resolve().parents[3] / "artifacts"
+        reg_path = artifacts_dir / "expert_registry_s21.json"
+        night_path = artifacts_dir / "night_moe_training_ledger.json"
+        reg_data: dict[str, Any] = {}
+        res_plan: dict[str, Any] = {}
+        if reg_path.exists():
+            try:
+                reg_data = json.loads(reg_path.read_text(encoding="utf-8"))
+            except Exception:
+                reg_data = {}
+        if night_path.exists():
+            try:
+                res_plan = json.loads(night_path.read_text(encoding="utf-8")).get("s21_expert_residency_plan", {})
+            except Exception:
+                res_plan = {}
+        return {
+            "object": "hivemind.s21_expert_registry",
+            "registry": reg_data,
+            "residency_plan": res_plan,
+        }
+
+    @app.post("/v1/hivemind/expert-route")
+    @app.post("/api/v1/monitor/expert-route")
+    async def s21_expert_route_endpoint(request: Request) -> dict[str, Any]:
+        """Route a prompt across the live Season 21 ExpertRegistry using HierarchicalExpertRouter (`HM-S21-02`)."""
+        from pathlib import Path
+        from hivemind.core.expert_registry import ExpertRegistry, HierarchicalExpertRouter
+
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+        except ValueError:
+            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+
+        prompt_text = str(body.get("prompt") or "")
+        cluster_id = body.get("cluster_id")
+        if cluster_id is not None:
+            cluster_id = str(cluster_id)
+
+        reg_path = Path(__file__).resolve().parents[3] / "artifacts" / "expert_registry_s21.json"
+        if not reg_path.exists():
+            return {
+                "object": "hivemind.s21_route_decision",
+                "prompt": prompt_text,
+                "target": "base",
+                "expert_id": None,
+                "cluster_id": cluster_id,
+                "reason": "no_registry_snapshot",
+                "load_on_demand": False,
+            }
+        reg = ExpertRegistry.load(reg_path)
+        router = HierarchicalExpertRouter(
+            reg,
+            base_model_id="Qwen/Qwen2.5-Coder-7B-Instruct",
+            resident=None,
+            allow_cold_load=False,
+        )
+        dec = router.route(prompt_text, cluster_id=cluster_id)
+        return {
+            "object": "hivemind.s21_route_decision",
+            "prompt": prompt_text,
+            "target": dec.target,
+            "expert_id": dec.expert_id,
+            "cluster_id": dec.cluster_id,
+            "reason": dec.reason,
+            "load_on_demand": dec.load_on_demand,
+            "live_expert_count": router.live_count,
         }
 
     return app

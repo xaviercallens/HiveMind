@@ -105,7 +105,7 @@ def detect_community_accelerator(preferred_device: str = "auto") -> dict[str, An
             "is_gpu": True,
         }
 
-    return {
+    fallback: dict[str, Any] = {
         "device": "cpu",
         "backend": "cpu_fallback",
         "device_name": f"CPU ({platform.processor() or platform.machine()})",
@@ -115,6 +115,31 @@ def detect_community_accelerator(preferred_device: str = "auto") -> dict[str, An
         "cuda_or_hip_version": "none",
         "is_gpu": False,
     }
+    if preferred_device == "auto":
+        try:
+            import subprocess
+
+            proc = subprocess.run(
+                [
+                    "nvidia-smi",
+                    "--query-gpu=name,memory.total,compute_cap,driver_version",
+                    "--format=csv,noheader,nounits",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=3.0,
+                check=False,
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                parts = [p.strip() for p in proc.stdout.strip().splitlines()[0].split(",")]
+                if len(parts) >= 4:
+                    fallback["nvml_detected_gpu"] = parts[0]
+                    fallback["nvml_total_vram_mib"] = float(parts[1])
+                    fallback["nvml_compute_capability"] = parts[2]
+                    fallback["nvml_driver_version"] = parts[3]
+        except Exception:
+            pass
+    return fallback
 
 
 def run_community_gpu_benchmark(

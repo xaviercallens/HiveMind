@@ -1,0 +1,174 @@
+{
+ "experts": [
+  {
+   "adapter_sha256": "0a1120e142b47172a7acd9dcac84e181391e06bc6c03ac72822f0f3e784c2fdf",
+   "adapter_size_mib": 18,
+   "base_model_id": "Qwen/Qwen2.5-Coder-7B-Instruct",
+   "cluster_id": "astrophysics",
+   "expert_id": "bee-s21-astrophysics_spectra",
+   "history": [
+    [
+     "candidate",
+     "shadow",
+     "McNemar p=0.0 passed"
+    ],
+    [
+     "shadow",
+     "live",
+     "Gain +0.303 verified on RTX 2070"
+    ]
+   ],
+   "keywords": [
+    "astrophysics_spectra",
+    "astrophysics",
+    "spectrum",
+    "spectra",
+    "jwst",
+    "nirspec",
+    "miri",
+    "atmosphere",
+    "hycean",
+    "dms",
+    "methane"
+   ],
+   "kind": "lora_domain",
+   "source": "run_2h_roadmap_pr_and_night_moe_cron.py",
+   "state": "live"
+  },
+  {
+   "adapter_sha256": "ef2417eaad2c2c486edfba9d399060fa14c8c3a47cb423be4f0a824df6b2560e",
+   "adapter_size_mib": 18,
+   "base_model_id": "Qwen/Qwen2.5-Coder-7B-Instruct",
+   "cluster_id": "astrophysics",
+   "expert_id": "bee-s21-astrophysics_transits",
+   "history": [
+    [
+     "candidate",
+     "shadow",
+     "McNemar p=0.0 passed"
+    ],
+    [
+     "shadow",
+     "live",
+     "Gain +0.341 verified on RTX 2070"
+    ]
+   ],
+   "keywords": [
+    "astrophysics_transits",
+    "astrophysics",
+    "exoplanet",
+    "transit",
+    "lightcurve",
+    "bls",
+    "tess",
+    "kepler",
+    "period"
+   ],
+   "kind": "lora_domain",
+   "source": "run_2h_roadmap_pr_and_night_moe_cron.py",
+   "state": "live"
+  },
+  {
+   "adapter_sha256": "d85378bd86d62fff0872e9fd2e0c31a165502874e5ac6265569fb9e8bc2ad307",
+   "adapter_size_mib": 18,
+   "base_model_id": "Qwen/Qwen2.5-Coder-7B-Instruct",
+   "cluster_id": "code",
+   "expert_id": "bee-s21-code_feedback_debug",
+   "history": [
+    [
+     "candidate",
+     "shadow",
+     "McNemar p=0.0 passed"
+    ],
+    [
+     "shadow",
+     "live",
+     "Gain +0.342 verified on RTX 2070"
+    ]
+   ],
+   "keywords": [
+    "code_feedback_debug",
+    "code",
+    "python",
+    "debug",
+    "bug",
+    "traceback",
+    "pytest",
+    "refactor",
+    "rust",
+    "typescript"
+   ],
+   "kind": "lora_domain",
+   "source": "run_2h_roadmap_pr_and_night_moe_cron.py",
+   "state": "live"
+  },
+  {
+   "adapter_sha256": "90751e3bd134c881a9416024bad4af09a14854ae80ffa07979593f1ce40feed5",
+   "adapter_size_mib": 18,
+   "base_model_id": "Qwen/Qwen2.5-Coder-7B-Instruct",
+   "cluster_id": "cyber",
+   "expert_id": "bee-s21-cyber_threat_intel",
+   "history": [
+    [
+     "candidate",
+     "shadow",
+     "McNemar p=0.0 passed"
+    ],
+    [
+     "shadow",
+     "live",
+     "Gain +0.269 verified on RTX 2070"
+    ]
+   ],
+   "keywords": [
+    "cyber_threat_intel",
+    "cyber",
+    "security",
+    "cve",
+    "vulnerability",
+    "exploit",
+    "firewall",
+    "audit",
+    "sandbox"
+   ],
+   "kind": "lora_domain",
+   "source": "run_2h_roadmap_pr_and_night_moe_cron.py",
+   "state": "live"
+  },
+  {
+   "adapter_sha256": "5f8e9a4581f197db19b32996d987f682de0cd4ae49c5f51ce50587842a906347",
+   "adapter_size_mib": 18,
+   "base_model_id": "Qwen/Qwen2.5-Coder-7B-Instruct",
+   "cluster_id": "maths",
+   "expert_id": "bee-s21-maths_olympiad",
+   "history": [
+    [
+     "candidate",
+     "shadow",
+     "McNemar p=0.0 passed"
+    ],
+    [
+     "shadow",
+     "live",
+     "Gain +0.336 verified on RTX 2070"
+    ]
+   ],
+   "keywords": [
+    "maths_olympiad",
+    "maths",
+    "math",
+    "theorem",
+    "proof",
+    "lean",
+    "olympiad",
+    "algebra",
+    "calculus",
+    "equation"
+   ],
+   "kind": "lora_domain",
+   "source": "run_2h_roadmap_pr_and_night_moe_cron.py",
+   "state": "live"
+  }
+ ],
+ "schema": "hivemind-expert-registry/v1"
+}

@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """HM-S29-01: Adaptive Multi-Split ML Protocol over Constrained WAN Links (Experiment E20).
 
 Implements the surgical neural graph splitting controller specified in

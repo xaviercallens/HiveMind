@@ -69,8 +69,22 @@ async def forward_to_router(path: str, request: Request) -> Response:
 
 @app.api_route("/signup", methods=["GET", "HEAD"])
 @app.api_route("/login", methods=["GET", "HEAD"])
+@app.api_route("/register", methods=["GET", "HEAD"])
+@app.api_route("/connexion", methods=["GET", "HEAD"])
 def signup_redirect() -> RedirectResponse:
     return RedirectResponse(f"{ROUTER}/signup", status_code=307)
+
+
+@app.api_route("/benchmarks", methods=["GET", "HEAD"], response_class=HTMLResponse)
+@app.api_route("/comparatif", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def benchmarks_proxy(request: Request) -> Response:
+    lang_qs = f"?lang={request.query_params.get('lang')}" if request.query_params.get("lang") else ""
+    try:
+        resp = await _client.get(f"{ROUTER}{request.url.path}{lang_qs}", timeout=10.0)
+        out_headers = {k: v for k, v in resp.headers.items() if k.lower() not in HOP_BY_HOP}
+        return Response(content=resp.content, status_code=resp.status_code, headers=out_headers)
+    except httpx.HTTPError:
+        return RedirectResponse(f"{ROUTER}{request.url.path}{lang_qs}", status_code=307)
 
 
 @app.api_route("/life-as-a-bee", methods=["GET", "HEAD"], response_class=HTMLResponse)
@@ -258,6 +272,8 @@ def community_hub_page() -> HTMLResponse:
         "th{background:#1e293b}code,pre{background:#1e293b;padding:0.15rem 0.35rem;border-radius:0.3rem;font-family:ui-monospace,monospace}"
         "pre{padding:0.8rem;overflow-x:auto}.nav{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}</style></head><body>"
         "<nav class='nav'><a href='/rejoindre?lang=fr'>← Rejoindre HiveMind (FR/EN/ES/DE/ZH)</a>"
+        "<a href='https://hivemind-openrouter-1003063861791.us-central1.run.app/signup'>🔑 Sign Up / Register &amp; Login (/signup)</a>"
+        "<a href='https://hivemind-openrouter-1003063861791.us-central1.run.app/benchmarks'>📊 Comparatif &amp; Benchmarks (5 Langues)</a>"
         "<a href='/game'>🎮 Jouer dans le Navigateur (Cockpit 4 Étapes)</a>"
         "<a href='/webgpu'>🌌 Jouer en WebGPU (@compute)</a>"
         "<a href='/download/steam-fat-client'>⬇ Télécharger Client Windows .EXE (v2.12.0)</a>"
@@ -384,6 +400,7 @@ def download_onboarding_script(script_name: str) -> Response:
 
 
 @app.get("/game")
+@app.get("/game.html")
 @app.get("/exoplanet-hunter")
 @app.get("/cockpit-v46")
 def redirect_or_serve_playable_game() -> Response:
@@ -391,8 +408,9 @@ def redirect_or_serve_playable_game() -> Response:
 
 
 @app.get("/webgpu")
+@app.get("/webgpu.html")
 def redirect_or_serve_webgpu_game() -> Response:
-    return RedirectResponse("https://xaviercallens.github.io/HiveMindatHome.github.io/webgpu.html", status_code=307)
+    return RedirectResponse(f"{ROUTER}/webgpu", status_code=307)
 
 
 @app.get("/download/steam-fat-client")

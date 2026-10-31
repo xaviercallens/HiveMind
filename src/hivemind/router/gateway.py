@@ -47,6 +47,7 @@ from hivemind.router.accounts import (
     DuplicateRequest,
     HandleTaken,
     InsufficientBalance,
+    InvalidCredentials,
     ProducerRecord,
     ReservedHandle,
     RouterStore,
@@ -885,6 +886,11 @@ def create_router_app(
             name = best[1]
             routing_mode = "auto_supply"
         records = store.active_producers(name, now, PRODUCER_TTL_S)
+        if not records and name in ("moe-coder-polyglot-3tome", "moe-image-gen", "video-moe"):
+            for fallback_tier in ("coder", "gemma-core", "qwen35-core", "moe-coder"):
+                fb_records = store.active_producers(fallback_tier, now, PRODUCER_TTL_S)
+                if fb_records:
+                    return fallback_tier, fb_records, "super_moe_fallback"
         if not records:
             raise RouterError(404, f"The model '{requested}' is not served by any live producer.", "invalid_request_error", "model_not_found")
         return name, records, routing_mode
@@ -1484,11 +1490,163 @@ def create_router_app(
     google = google_verifier or (GoogleIdTokenVerifier(google_client_id, clock=clock) if google_client_id else None)
 
     @app.api_route("/signup", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/login", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/register", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/connexion", methods=["GET", "HEAD"], response_class=HTMLResponse)
     def signup() -> HTMLResponse:
         nonce = secrets.token_urlsafe(18)
         page = render_signup_page(google.client_id if google else None, nonce)
         return HTMLResponse(page, headers={"Content-Security-Policy": content_security_policy(nonce), "Cache-Control": "no-store",
                                            "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})
+
+    async def _parse_auth_payload(request: Request) -> dict[str, Any]:
+        import urllib.parse
+
+        raw = await request.body()
+        if not raw:
+            return {}
+        ct = (request.headers.get("content-type") or "").lower()
+        if "application/x-www-form-urlencoded" in ct:
+            parsed = urllib.parse.parse_qs(raw.decode("utf-8", errors="replace"), keep_blank_values=True)
+            return {k: (v[0] if v else "") for k, v in parsed.items()}
+        try:
+            body = json.loads(raw)
+            return body if isinstance(body, dict) else {}
+        except ValueError:
+            parsed = urllib.parse.parse_qs(raw.decode("utf-8", errors="replace"), keep_blank_values=True)
+            return {k: (v[0] if v else "") for k, v in parsed.items()}
+
+    def _execute_credential_register(request: Request, data: Mapping[str, Any]) -> dict[str, Any]:
+        if not open_registration:
+            raise RouterError(403, "Handle registration is closed. Sign in at /signup.", "permission_error", "registration_closed")
+        if not register_limiter.allow(client_key(request), clock()):
+            raise RouterError(429, "Too many registrations; try again in a minute.", "rate_limit_error", "rate_limited")
+        handle = str(data.get("handle") or data.get("identifier") or data.get("email") or "").strip()
+        password = str(data.get("password") or "").strip()
+        email = str(data.get("email") or "").strip()
+        role = str(data.get("role") or "prosumer").strip()
+        if role not in ("consumer", "producer", "prosumer"):
+            role = "prosumer"
+        if not handle:
+            raise RouterError(400, "Username / handle is required.", "invalid_request_error", "missing_handle")
+        try:
+            account_id, api_key, created = store.register_with_credentials(handle, password, role=role, email=email)
+        except HandleTaken:
+            raise RouterError(409, "That username is already registered (if it is yours, sign in with your password).", "invalid_request_error", "handle_taken") from None
+        except (SwarmSecurityViolationError, ReservedHandle):
+            raise RouterError(400, "Invalid username format: use 1-64 ASCII letters, digits and . _ @ + - characters.", "invalid_request_error", "invalid_handle") from None
+        acct = store.get_account(account_id)
+        grant_info = starter_grant(request, account_id) if created else {}
+        if created and store.balance(account_id) <= 0.0:
+            store.grant(account_id, 100.0, "welcome-signup-grant")
+        bal = store.balance(account_id)
+        return {
+            "object": "hivemind.auth_session",
+            "status": "REGISTERED" if created else "EXISTING_USER_RESTORED",
+            "ok": True,
+            "created": created,
+            "account_id": account_id,
+            "handle": acct.handle if acct else handle,
+            "role": acct.role if acct else role,
+            "api_key": api_key,
+            "token": api_key,
+            "balance": bal,
+            "balance_hmt": bal,
+            "compute_points": int(round(bal)),
+            **grant_info,
+        }
+
+    def _execute_credential_login(request: Request, data: Mapping[str, Any]) -> dict[str, Any]:
+        identifier = str(
+            data.get("identifier")
+            or data.get("handle_or_email")
+            or data.get("handle")
+            or data.get("username")
+            or data.get("email")
+            or data.get("api_key")
+            or ""
+        ).strip()
+        password = str(data.get("password") or "").strip()
+        api_key_hint = str(data.get("api_key") or "").strip()
+        strict_existing = bool(data.get("strict_existing", False))
+        if not identifier and not api_key_hint:
+            raise RouterError(400, "Enter your username, handle, email, or existing hm-... API key.", "invalid_request_error", "missing_identifier")
+        try:
+            acct, api_key, created = store.login_with_credentials(
+                identifier or api_key_hint,
+                password,
+                api_key_hint=api_key_hint,
+                auto_restore_previous=(not strict_existing),
+            )
+        except InvalidCredentials as exc:
+            raise RouterError(401, str(exc), "authentication_error", "invalid_credentials") from None
+        except (SwarmSecurityViolationError, ReservedHandle):
+            raise RouterError(400, "Invalid username or handle format.", "invalid_request_error", "invalid_handle") from None
+        if created and store.balance(acct.account_id) <= 0.0:
+            starter_grant(request, acct.account_id)
+            if store.balance(acct.account_id) <= 0.0:
+                store.grant(acct.account_id, 100.0, "welcome-login-restore")
+        bal = store.balance(acct.account_id)
+        return {
+            "object": "hivemind.auth_session",
+            "status": "AUTHENTICATED",
+            "ok": True,
+            "created": created,
+            "account_id": acct.account_id,
+            "handle": acct.handle,
+            "role": acct.role,
+            "api_key": api_key,
+            "token": api_key,
+            "balance": bal,
+            "balance_hmt": bal,
+            "compute_points": int(round(bal)),
+            "v1_migrated": True,
+            "v2_access_granted": True,
+        }
+
+    @app.post("/v1/hivemind/auth/register")
+    @app.post("/api/v1/auth/register")
+    async def auth_register_api(request: Request) -> JSONResponse:
+        data = await _parse_auth_payload(request)
+        body = await run_in_threadpool(_execute_credential_register, request, data)
+        return JSONResponse(body, headers={"Cache-Control": "no-store"})
+
+    @app.post("/v1/hivemind/auth/login")
+    @app.post("/api/v1/auth/login")
+    async def auth_login_api(request: Request) -> JSONResponse:
+        data = await _parse_auth_payload(request)
+        body = await run_in_threadpool(_execute_credential_login, request, data)
+        return JSONResponse(body, headers={"Cache-Control": "no-store"})
+
+    @app.post("/signup", response_class=HTMLResponse)
+    @app.post("/register", response_class=HTMLResponse)
+    async def signup_form_submit(request: Request) -> HTMLResponse:
+        nonce = secrets.token_urlsafe(18)
+        data = await _parse_auth_payload(request)
+        try:
+            res = await run_in_threadpool(_execute_credential_register, request, data)
+            page = render_signup_page(google.client_id if google else None, nonce, auth_result=res)
+            status = 200
+        except RouterError as exc:
+            page = render_signup_page(google.client_id if google else None, nonce, error_message=exc.message)
+            status = exc.status
+        return HTMLResponse(page, status_code=status, headers={"Content-Security-Policy": content_security_policy(nonce), "Cache-Control": "no-store",
+                                                               "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})
+
+    @app.post("/login", response_class=HTMLResponse)
+    @app.post("/connexion", response_class=HTMLResponse)
+    async def login_form_submit(request: Request) -> HTMLResponse:
+        nonce = secrets.token_urlsafe(18)
+        data = await _parse_auth_payload(request)
+        try:
+            res = await run_in_threadpool(_execute_credential_login, request, data)
+            page = render_signup_page(google.client_id if google else None, nonce, auth_result=res)
+            status = 200
+        except RouterError as exc:
+            page = render_signup_page(google.client_id if google else None, nonce, error_message=exc.message)
+            status = exc.status
+        return HTMLResponse(page, status_code=status, headers={"Content-Security-Policy": content_security_policy(nonce), "Cache-Control": "no-store",
+                                                               "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})
 
     @app.api_route("/join", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/rejoindre", methods=["GET", "HEAD"], response_class=HTMLResponse)

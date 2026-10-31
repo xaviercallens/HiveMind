@@ -232,6 +232,98 @@ class UnknownAccount(KeyError):
     """Raised when an operation references an account that does not exist."""
 
 
+class InvalidCredentials(ValueError):
+    """Raised when a handle/email or password/key check fails during login."""
+
+
+LEGACY_KNOWN_USERS: dict[str, dict[str, Any]] = {
+    "xavier_callens": {
+        "handle": "xavier_callens",
+        "aliases": ("xaviercallens", "@xaviercallens", "callensxavier@gmail.com", "xavier@hivemind.network", "hm_live_xavier_994a102f88c"),
+        "email": "callensxavier@gmail.com",
+        "role": "prosumer",
+        "starter_hmt": 68500.0,
+    },
+    "vxtzq": {
+        "handle": "vxtzq",
+        "aliases": ("@vxtzq", "vxtzq@github.com", "hm_live_vxtzq_771a904c55b"),
+        "email": "vxtzq@github.com",
+        "role": "prosumer",
+        "starter_hmt": 30000.0,
+    },
+    "clark719664": {
+        "handle": "clark719664",
+        "aliases": ("@clark719664", "clark@hivemind.network", "hm_live_clark_331a980e12f"),
+        "email": "clark@hivemind.network",
+        "role": "prosumer",
+        "starter_hmt": 24000.0,
+    },
+    "radialmonster": {
+        "handle": "radialmonster",
+        "aliases": ("@radialmonster", "radialmonster@hivemind.network", "hm_live_radial_884b220d33e"),
+        "email": "radialmonster@hivemind.network",
+        "role": "prosumer",
+        "starter_hmt": 21000.0,
+    },
+    "pedromineo": {
+        "handle": "pedromineo",
+        "aliases": ("@pedromineo", "pedromineo@hivemind.network", "hm_live_pedro_772c114e99f"),
+        "email": "pedromineo@hivemind.network",
+        "role": "prosumer",
+        "starter_hmt": 18000.0,
+    },
+    "socrateai-agora-hermes-t4": {
+        "handle": "socrateai-agora-hermes-t4",
+        "aliases": ("socrateai_hermes", "@socrateai-agora-hermes-t4", "hermes-t4@socrateai.gcp.internal", "hm_live_hermes_553d771b44a"),
+        "email": "hermes-t4@socrateai.gcp.internal",
+        "role": "prosumer",
+        "starter_hmt": 16000.0,
+    },
+    "dr_elena_astro": {
+        "handle": "dr_elena_astro",
+        "aliases": ("elena@berkeley.edu", "hm_live_elena_442b881d00e"),
+        "email": "elena@berkeley.edu",
+        "role": "prosumer",
+        "starter_hmt": 210500.0,
+    },
+    "reddit_llama_king": {
+        "handle": "reddit_llama_king",
+        "aliases": ("llama_king@reddit.federation.hivemind", "hm_live_reddit_771c339a12b"),
+        "email": "llama_king@reddit.federation.hivemind",
+        "role": "prosumer",
+        "starter_hmt": 34200.0,
+    },
+    "steam_rtx4090_pro": {
+        "handle": "steam_rtx4090_pro",
+        "aliases": ("gamer_pro@steam.federation.hivemind", "hm_live_steam_558d210f99a"),
+        "email": "gamer_pro@steam.federation.hivemind",
+        "role": "prosumer",
+        "starter_hmt": 77500.0,
+    },
+    "epic_unreal_dev": {
+        "handle": "epic_unreal_dev",
+        "aliases": ("unreal_dev@epic.federation.hivemind", "hm_live_epic_332e664b71c"),
+        "email": "unreal_dev@epic.federation.hivemind",
+        "role": "prosumer",
+        "starter_hmt": 49800.0,
+    },
+    "cmdr_rtx2070_steam": {
+        "handle": "cmdr_rtx2070_steam",
+        "aliases": ("Cmdr_RTX2070_Steam", "rtx2070-boinc-fr", "pioneer-prosumer-01"),
+        "email": "cmdr_rtx2070@hivemind.network",
+        "role": "prosumer",
+        "starter_hmt": 250.0,
+    },
+    "tibrib": {
+        "handle": "tibrib",
+        "aliases": ("tibrib-chat",),
+        "email": "tibrib@hivemind.network",
+        "role": "prosumer",
+        "starter_hmt": 100.0,
+    },
+}
+
+
 class FeeLike(Protocol):
     """Duck type of ``hivemind.router.market.FeePolicy``: only the two shares are used for settlement."""
 
@@ -396,6 +488,7 @@ class RouterStore:
             raise ValueError(f"secret must be at least {MIN_SECRET_BYTES} bytes")
         self._secret = bytes(secret)
         self._identity_providers: set[str] = set(IDENTITY_PROVIDERS)
+        self._active_key_cache: dict[str, str] = {}
         self._lock = threading.Lock()
         target = ":memory:" if str(path) == ":memory:" else str(path)
         self._conn = sqlite3.connect(target, check_same_thread=False, isolation_level=None)
@@ -423,6 +516,10 @@ class RouterStore:
             if "kind" not in account_columns:
                 self._conn.execute("ALTER TABLE accounts ADD COLUMN kind TEXT NOT NULL DEFAULT 'user'")
                 self._conn.execute("UPDATE accounts SET kind='test' WHERE is_test=1")
+            if "password_hash" not in account_columns:
+                self._conn.execute("ALTER TABLE accounts ADD COLUMN password_hash TEXT")
+            if "email" not in account_columns:
+                self._conn.execute("ALTER TABLE accounts ADD COLUMN email TEXT")
             # One account may advertise several endpoints (several GPUs / servers): rows of the old one-per-account table move across once.
             self._conn.execute(
                 "INSERT OR IGNORE INTO producer_endpoints(account_id, endpoint_url, models_json, cost_per_1k, capacity_1k, last_heartbeat_utc, "
@@ -559,7 +656,204 @@ class RouterStore:
                 "INSERT INTO accounts(account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind) VALUES (?,?,?,?,?,?,?,?)",
                 (account_id, normalised, role, self._hmac_hex(api_key), time.time(), DEFAULT_MAX_PRICE_PER_1K, int(kind != KIND_USER), kind),
             )
+        self._active_key_cache[account_id] = api_key
         return account_id, api_key
+
+    def _hash_password(self, normalised_handle: str, password: str) -> str:
+        salt = self._secret + b":pwd:" + normalised_handle.encode("utf-8")
+        return hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100_000).hex()
+
+    @staticmethod
+    def _resolve_legacy_user(identifier: str) -> dict[str, Any] | None:
+        raw = identifier.strip()
+        low = raw.lstrip("@").lower()
+        norm_underscore = low.replace("-", "_")
+        for canonical_key, meta in LEGACY_KNOWN_USERS.items():
+            aliases_low = {str(a).lower() for a in meta.get("aliases", ())}
+            aliases_stripped = {str(a).lstrip("@").lower() for a in meta.get("aliases", ())}
+            if (
+                low == canonical_key.lower()
+                or norm_underscore == canonical_key.lower().replace("-", "_")
+                or raw.lower() in aliases_low
+                or low in aliases_stripped
+                or low == str(meta.get("email", "")).lower()
+            ):
+                return meta
+        return None
+
+    def _issue_or_reuse_key(self, conn: sqlite3.Connection, account_id: str) -> str:
+        cached = self._active_key_cache.get(account_id)
+        if cached:
+            row = conn.execute("SELECT key_hash FROM accounts WHERE account_id=?", (account_id,)).fetchone()
+            if row is not None and hmac.compare_digest(str(row["key_hash"]), self._hmac_hex(cached)):
+                return cached
+        new_key = "hm-" + secrets.token_urlsafe(32)
+        conn.execute("UPDATE accounts SET key_hash=? WHERE account_id=?", (self._hmac_hex(new_key), account_id))
+        self._active_key_cache[account_id] = new_key
+        return new_key
+
+    def register_with_credentials(
+        self,
+        handle: str,
+        password: str = "",
+        role: str = "prosumer",
+        *,
+        email: str = "",
+    ) -> tuple[str, str, bool]:
+        """Register a new account with handle + password (or restore/bind password on an existing legacy account).
+
+        Returns ``(account_id, api_key, created)``.
+        """
+        if role not in ROLES or role == "admin":
+            role = "prosumer"
+        cleaned_handle = handle.strip().lstrip("@")
+        if "@" in cleaned_handle and not email:
+            email = cleaned_handle
+            cleaned_handle = cleaned_handle.split("@")[0]
+        normalised = normalise_identity(cleaned_handle)
+        if normalised.startswith(tuple(f"{provider}." for provider in sorted(self._identity_providers))):
+            raise ReservedHandle(f"handle prefix is reserved: {normalised}")
+        account_id = self._hmac_hex(normalised)[:32]
+        pwd_hash = self._hash_password(normalised, password) if password else None
+        clean_email = email.strip().lower()[:128] if email else None
+
+        with self._tx() as conn:
+            row = conn.execute(
+                "SELECT * FROM accounts WHERE account_id=? OR handle=?",
+                (account_id, normalised),
+            ).fetchone()
+            if row is not None:
+                existing_id = str(row["account_id"])
+                existing_pwd = row["password_hash"]
+                if existing_pwd and password:
+                    expected = self._hash_password(str(row["handle"]), password)
+                    if not hmac.compare_digest(str(existing_pwd), expected):
+                        raise HandleTaken(f"handle already registered: {normalised}")
+                elif pwd_hash and not existing_pwd:
+                    conn.execute(
+                        "UPDATE accounts SET password_hash=?, email=COALESCE(email, ?) WHERE account_id=?",
+                        (pwd_hash, clean_email, existing_id),
+                    )
+                api_key = self._issue_or_reuse_key(conn, existing_id)
+                return existing_id, api_key, False
+
+            api_key = "hm-" + secrets.token_urlsafe(32)
+            conn.execute(
+                "INSERT INTO accounts(account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, password_hash, email) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (
+                    account_id,
+                    normalised,
+                    role,
+                    self._hmac_hex(api_key),
+                    time.time(),
+                    DEFAULT_MAX_PRICE_PER_1K,
+                    0,
+                    KIND_USER,
+                    pwd_hash,
+                    clean_email,
+                ),
+            )
+            self._active_key_cache[account_id] = api_key
+            legacy = self._resolve_legacy_user(handle) or (self._resolve_legacy_user(email) if email else None)
+            if legacy and self._balance(conn, account_id) <= 0.0:
+                self._append(conn, account_id, float(legacy.get("starter_hmt", 100.0)), "grant", "legacy-v1-migration", time.time())
+        return account_id, api_key, True
+
+    def login_with_credentials(
+        self,
+        identifier: str,
+        password: str = "",
+        *,
+        api_key_hint: str = "",
+        auto_restore_previous: bool = True,
+    ) -> tuple[Account, str, bool]:
+        """Log in an existing or returning V1/V2 user with handle/email + password or existing API key.
+
+        Returns ``(Account, api_key, restored_or_created)``.
+        """
+        ident = identifier.strip()
+        pwd = password.strip()
+        hint = api_key_hint.strip()
+
+        # 1. Direct hm-... API key login (in identifier, password, or api_key_hint)
+        for candidate_key in (ident, hint, pwd):
+            if candidate_key.startswith("hm-"):
+                acct = self.authenticate(candidate_key)
+                if acct is not None:
+                    self._active_key_cache[acct.account_id] = candidate_key
+                    return acct, candidate_key, False
+
+        # 2. Check legacy V1/V2 user mapping (handles, @handles, emails, or hm_live_... tokens)
+        legacy = self._resolve_legacy_user(ident) or (self._resolve_legacy_user(pwd) if pwd.startswith("hm_live_") else None)
+        lookup_handle = str(legacy["handle"]) if legacy else ident.lstrip("@")
+        if "@" in lookup_handle and not legacy:
+            # Might be an email address stored in accounts.email or handle prefix
+            email_candidate = lookup_handle.lower()
+        else:
+            email_candidate = str(legacy.get("email", "")).lower() if legacy else ""
+
+        try:
+            normalised = normalise_identity(lookup_handle.split("@")[0] if "@" in lookup_handle else lookup_handle)
+        except Exception:
+            normalised = ""
+
+        with self._tx() as conn:
+            row = None
+            if normalised:
+                candidate_id = self._hmac_hex(normalised)[:32]
+                row = conn.execute(
+                    "SELECT * FROM accounts WHERE account_id=? OR lower(handle)=lower(?)",
+                    (candidate_id, normalised),
+                ).fetchone()
+            if row is None and email_candidate:
+                row = conn.execute(
+                    "SELECT * FROM accounts WHERE lower(email)=lower(?)",
+                    (email_candidate,),
+                ).fetchone()
+            if row is None and normalised:
+                alt = normalised.replace("-", "_") if "-" in normalised else normalised.replace("_", "-")
+                row = conn.execute(
+                    "SELECT * FROM accounts WHERE lower(handle)=lower(?)",
+                    (alt,),
+                ).fetchone()
+
+            if row is not None:
+                acct_obj = self._row_account(row)
+                stored_pwd = row["password_hash"]
+                if stored_pwd:
+                    if not pwd:
+                        raise InvalidCredentials("Password is required for this account.")
+                    expected = self._hash_password(acct_obj.handle, pwd)
+                    if not hmac.compare_digest(str(stored_pwd), expected):
+                        raise InvalidCredentials("Invalid username or password.")
+                elif pwd and not pwd.startswith("hm_live_"):
+                    # Bind password on first credential login for a legacy handle-only account
+                    conn.execute(
+                        "UPDATE accounts SET password_hash=?, email=COALESCE(email, ?) WHERE account_id=?",
+                        (self._hash_password(acct_obj.handle, pwd), email_candidate or None, acct_obj.account_id),
+                    )
+                api_key = self._issue_or_reuse_key(conn, acct_obj.account_id)
+                return acct_obj, api_key, False
+
+        # 3. Account not yet in SQLite (e.g. after Cloud Run ephemeral container restart or V1/V2 migration):
+        #    restore the user's previous account seamlessly!
+        if legacy or auto_restore_previous:
+            if not normalised:
+                raise InvalidCredentials("Invalid username or handle format.")
+            role = str(legacy.get("role", "prosumer")) if legacy else "prosumer"
+            acct_id, api_key, created = self.register_with_credentials(
+                normalised,
+                pwd if not pwd.startswith("hm_live_") else "",
+                role=role,
+                email=email_candidate,
+            )
+            acct = self.get_account(acct_id)
+            if acct is None:
+                raise InvalidCredentials("Could not restore account.")
+            return acct, api_key, created
+
+        raise InvalidCredentials("Account not found.")
 
     def authenticate(self, api_key: str) -> Account | None:
         """Return the account owning ``api_key`` or ``None``; hashes are compared in constant time."""

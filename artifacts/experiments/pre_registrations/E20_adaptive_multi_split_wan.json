@@ -1,0 +1,21 @@
+{
+  "experiment_id": "E20",
+  "task_id": "HM-S29-01",
+  "title": "Adaptive Multi-Split ML Protocol over Constrained WAN Links (Prelude <1.5 GB Client <-> Edge Core)",
+  "pre_registered_at": "2026-10-31T09:49:00Z",
+  "hypothesis": "Dynamically splitting the neural execution graph at low-dimensional cut-layer boundaries L_c in {1, 2, 3, 4} with INT8 boundary activation quantization and QUIC RTT/bandwidth adaptation reduces per-step WAN synchronization latency by >= 55% on a constrained 20 Mbps / 60 ms RTT residential link while keeping client GPU VRAM strictly <= 1536 MiB and gamer preemption <= 412 ms.",
+  "primary_metric": {
+    "name": "step_time_reduction_pct_at_20mbps_60ms",
+    "pass_threshold_min": 55.0,
+    "unit": "percent"
+  },
+  "invariants_enforced": {
+    "max_client_prelude_vram_mib": 1536.0,
+    "max_gamer_preemption_ms": 412.0,
+    "cohort_isolation": "Pre-Ampere (SM < 8.0, FP32) isolated from Ampere+ (SM >= 8.0, BF16)"
+  },
+  "controls": {
+    "positive_control": "Adaptive Multi-Split ML with INT8 cut-layer quantization and dynamic L_c selection over 20 Mbps / 60 ms RTT WAN link",
+    "negative_control": "Monolithic full-branch FP32 sync over the same 20 Mbps / 60 ms RTT WAN link without cut-layer splitting"
+  }
+}

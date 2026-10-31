@@ -258,6 +258,14 @@ python3 hivemind_boinc_idle_worker.py \
 - 🌐 **Mode C — Zero-Install Browser WebGPU Miner:** Open **[`/webgpu-galaxy`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/webgpu-galaxy)** in Chrome/Edge/Firefox to contribute WebGPU compute shaders directly from your browser tab.
 - 🖥️ **Mode D — Native 1-Click Desktop Worker (`xensorSharp` / `HM-S35-04`):** Native Windows (`DirectML`/`CUDA`), macOS (`Metal`), and Linux worker without WSL2 or Python setup overhead.
 
+#### 🌙 Nocturnal Training Cycle (`22:00–07:00 Europe/Paris`): End-Users & HiveMind Nodes Working Together
+Every night between **22:00 and 07:00 CET/CEST** (when interactive chat/coding traffic is lowest), the HiveMind network runs its **Diurnal/Nocturnal Evolution Loop** ([`/join?lang=en#train`](https://hivemind-openrouter-1003063861791.us-central1.run.app/join?lang=en#train), [`/night-moe`](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/night-moe), [`/boinc/status`](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/boinc/status)):
+
+| Participant | Daytime Role (`07:00–22:00 CET`) | Night Training Role (`22:00–07:00 CET`) | Reward & Verification |
+| :--- | :--- | :--- | :--- |
+| **🧑‍💻 End-Users (Volunteers, Developers & Gamers)** | Query `15+` OpenRouter Bees (`hivemind/coder`, `hivemind/bee-stars`, etc.) or play games (`0%` GPU overhead via `< 4s` idle preemption) | Leave PC/laptop running `scripts/hivemind_boinc_idle_worker.py` (or native `boinccmd`) to fold `16,384`-point TESS/JWST exoplanet light curves and compute **rank-4 QLoRA inner-loop updates** (`cuda_hivemind`, `cuda_hivemind_big`, or `cpu_hivemind_solver`) | **`+250 HMT Reflexion Points`** & **`+45.0 Cobblestones`** per verified workunit (spendable the next day on all models; receipts at [`/api/v1/federated/ledger`](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/ledger)) |
+| **🐝 HiveMind Nodes (Dedicated GPU Producers, HiveMiners & Owner Fleet — `RTX 2070 8 GB` + `GCP Tesla T4 16 GB`)** | Serve low-latency OpenRouter chat, coding, Lean 4 proof & scientific ODE/PDE requests (`p50 ~180–230 ms`) | Automatically switch to **Nocturnal DiLoCo Outer-Step Aggregation**, **$2\sigma$-Clipped Multi-Krum Byzantine Verification**, **SVD Spectral Ratchet** ($\ge 95\%$ spectral energy retained, $\Delta \mathcal{L}_{\text{eval}} < 0$), and **500-Step Teacher-to-Student Distillation** (`Tesla T4 16 GB` $\to$ `RTX 2070 8 GB`) | Hot-swaps improved Honeycomb Alveoli (`ALVEOLE-01..06` & 24 Sparse Bee-MoE experts) before morning traffic resumes (live node telemetry at [`/v1/hivemind/bees/owner-fleet-status`](https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/hivemind/bees/owner-fleet-status)) |
+
 ---
 
 ### 👑 4. For HiveMaster (Swarm Admin) — Operate, Govern, Monitor & Harden the Federation

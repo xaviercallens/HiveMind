@@ -1,20 +1,20 @@
 {
   "schema_version": "rtx2070_3h_monitor.v1",
   "cadence_cron": "0 */3 * * *",
-  "timestamp_utc": "2026-10-31T20:20:05Z",
+  "timestamp_utc": "2026-10-31T22:33:24Z",
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-10-31T20:20:05Z",
+    "timestamp_utc": "2026-10-31T22:33:24Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": false,
     "device": "nvml:cuda:0 (torch+cpu host)",
     "compute_capability": "7.5",
     "temperature_c": 26.0,
-    "gpu_utilization_pct": 10.0,
-    "power_draw_w": 11.37,
+    "gpu_utilization_pct": 2.0,
+    "power_draw_w": 9.48,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1470.0,
-    "memory_free_mib": 6537.0,
+    "memory_used_mib": 1459.0,
+    "memory_free_mib": 6548.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
@@ -23,11 +23,11 @@
     "graphics_clock_mhz": 300.0,
     "max_graphics_clock_mhz": 2145.0,
     "memory_clock_mhz": 405.0,
-    "host_tensor_gflops": 104.22,
+    "host_tensor_gflops": 108.25,
     "measured_fp32_tflops": 9.88,
     "measured_fp16_tensor_tflops": 39.54,
     "effective_sparse_moe_nf4_tflops": 65.24,
-    "microbench_elapsed_ms": 158.19
+    "microbench_elapsed_ms": 152.16
   },
   "community_gpu_benchmark_summary": {
     "receipt_sha256": "e944272a1802d8053a28c26a59e7e121671eec23e2c3fcb22f2fb45c3b197580",
@@ -35,20 +35,62 @@
     "peak_allocated_mb": 0.0
   },
   "pr_integration_summary": {
-    "checked_utc": "2026-10-31T20:20:09Z",
-    "open_prs_count": 9,
+    "checked_utc": "2026-10-31T22:33:27Z",
+    "open_prs_count": 12,
     "evaluated": [
       {
-        "pr": 384,
-        "title": "feat(portal): restore 3D /planet-forecast with real 59-node live situation vs >200-node forecast prediction & fix all portal links",
+        "pr": 399,
+        "title": "fix(volunteer): idle-GPU helper fails on the player's side; stock-BOINC gamer settings; join page corrected (no Steam game, no real-science claim)",
         "author": "xaviercallens",
-        "head_ref": "feat/restore-planet-forecast-live-59node-and-portal-links",
+        "head_ref": "feat/volunteer-gamer-config",
         "base_ref": "main",
-        "head_sha": "c9e7d4ec7c",
+        "head_sha": "1d9720eb09",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
         "decision": "ACCEPT",
+        "merged": false,
+        "merge_message": ""
+      },
+      {
+        "pr": 398,
+        "title": "feat(amcp): real Kafka cluster deployed (3 Spot voters + T4 broker over WireGuard), 5-node proof, runbook",
+        "author": "xaviercallens",
+        "head_ref": "feat/kafka-quorum-cluster",
+        "base_ref": "main",
+        "head_sha": "d9e4f69a9a",
+        "owner_authored": true,
+        "security_passed": true,
+        "injection_clean": true,
+        "decision": "ACCEPT",
+        "merged": false,
+        "merge_message": ""
+      },
+      {
+        "pr": 397,
+        "title": "T4 audit: governor telemetry and report, validator lockout finding, two owner-review changes (nothing deployed)",
+        "author": "xaviercallens",
+        "head_ref": "audit/t4-governor-telemetry",
+        "base_ref": "main",
+        "head_sha": "c4508af904",
+        "owner_authored": true,
+        "security_passed": true,
+        "injection_clean": true,
+        "decision": "HOLD (draft)",
+        "merged": false,
+        "merge_message": ""
+      },
+      {
+        "pr": 396,
+        "title": "docs(night): measured NIGHT-INTENSE-1 feasibility results (draft, unreviewed)",
+        "author": "xaviercallens",
+        "head_ref": "docs/night-probe-results",
+        "base_ref": "main",
+        "head_sha": "34896d2e30",
+        "owner_authored": true,
+        "security_passed": true,
+        "injection_clean": true,
+        "decision": "HOLD (draft)",
         "merged": false,
         "merge_message": ""
       },
@@ -100,7 +142,7 @@
         "author": "xaviercallens",
         "head_ref": "feat/openrouter-5lang-i18n",
         "base_ref": "main",
-        "head_sha": "22a5c4f70e",
+        "head_sha": "4497b6dabe",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -167,11 +209,13 @@
     ],
     "merged_prs": [],
     "held_prs": [
+      397,
+      396,
       219,
       218,
       163,
       141
     ]
   },
-  "ledger_sha256": "c5868b9d5dd57e197db70bec01436cf25fcf4292b8077af0f6e7bd8012d94567"
+  "ledger_sha256": "a11667212bbeeadbd6f2a88147b7c16190d28b0b641d8b284dcff409679b6f5a"
 }

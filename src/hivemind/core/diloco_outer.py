@@ -350,6 +350,18 @@ class DiLoCoOuterOptimizer:
         )
 
         expected_schema = {k: v.shape for k, v in theta_prev.items() if isinstance(v, torch.Tensor)}
+        if self.outer_optimizer_mode == "cosine_gated_adam_decay" and synced_fragments is not None:
+            declared_keys = set(synced_fragments)
+            if not declared_keys <= set(theta_prev):
+                raise ValueError("synced_fragments must name existing branch parameters")
+            if declared_keys and not all(
+                set(d.keys()) == set(theta_prev.keys()) for d in worker_deltas.values()
+            ):
+                expected_schema = {
+                    k: theta_prev[k].shape
+                    for k in declared_keys
+                    if isinstance(theta_prev[k], torch.Tensor)
+                }
         filter_report = filter_byzantine_deltas_multikrum(
             worker_deltas=worker_deltas,
             max_byzantine_f=self.max_byzantine_f,

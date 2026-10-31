@@ -860,6 +860,8 @@ class ComputeVisibleSparseLoCoCompressor:
             mask_b = q_bins == b
             if bool(mask_b.any().item()):
                 lookup[b] = centered[mask_b].mean()
+            else:
+                lookup[b] = float(b - offset) * scale
 
         dequant_selected = lookup[q_bins] + shift
         reconstructed = torch.zeros_like(flat)

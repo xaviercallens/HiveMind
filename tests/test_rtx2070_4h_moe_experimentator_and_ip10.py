@@ -248,6 +248,49 @@ def test_ip42_pinned_revision_required_and_ip52_boinc_torch_load_weights_only(tm
                 assert "weights_only=True" in line, f"Missing weights_only=True in {py_file}: {line}"
 
 
+def test_ip44_bee_energy_rejects_lean4_axiom_false() -> None:
+    """IP-44: evaluate_bee_candidate_energy rejects Lean 4 `axiom h : False` and `admit` with MAX_PAIN_ENERGY."""
+    from hivemind.verification.bee_energy import MAX_PAIN_ENERGY, evaluate_bee_candidate_energy
+
+    ev_axiom = evaluate_bee_candidate_energy(
+        candidate_id="cand-axiom",
+        response_text="axiom h : False\ntheorem t : 1 = 2 := False.elim h",
+        tests_passed=5,
+        tests_total=5,
+        latency_ms=10.0,
+        memory_mb=16.0,
+        domain="lean4",
+    )
+    assert ev_axiom.is_stub_or_invalid is True
+    assert ev_axiom.failure_reason == "LEAN4_AXIOM_DETECTED"
+    assert ev_axiom.total_energy == MAX_PAIN_ENERGY
+
+    ev_admit = evaluate_bee_candidate_energy(
+        candidate_id="cand-admit",
+        response_text="theorem t : True := by admit",
+        tests_passed=5,
+        tests_total=5,
+        latency_ms=10.0,
+        memory_mb=16.0,
+        domain="lean4",
+    )
+    assert ev_admit.is_stub_or_invalid is True
+    assert ev_admit.failure_reason == "LEAN4_SORRY_DETECTED"
+    assert ev_admit.total_energy == MAX_PAIN_ENERGY
+
+    ev_valid = evaluate_bee_candidate_energy(
+        candidate_id="cand-valid",
+        response_text="-- no axiom used\ntheorem t : 1 + 1 = 2 := rfl",
+        tests_passed=5,
+        tests_total=5,
+        latency_ms=10.0,
+        memory_mb=16.0,
+        domain="lean4",
+    )
+    assert ev_valid.is_stub_or_invalid is False
+    assert ev_valid.total_energy < MAX_PAIN_ENERGY
+
+
 def test_run_4h_rtx2070_moe_experimentator_end_to_end(tmp_path: Path) -> None:
     """Verify the full 4-Stage RTX 2070 MoE Bee Experimentator produces a passing signed ledger."""
     out_file = tmp_path / "rtx2070_4h_moe_experimentator_ledger.json"

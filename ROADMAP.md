@@ -616,7 +616,7 @@ The full plan, with evidence, Definition of Done and the test for each finding (
 | PR-IP-08 | Remove default secrets; `weights_only=True`; strict deterministic mode (IP-16, IP-42, IP-43, IP-52) | _open_ | S | No default keys in `src/`; `torch.load` always restricted |
 | PR-IP-09 | Honest measurements: labels, no points from RNG, no fabricated verification (IP-17, IP-18, IP-21, IP-21b, IP-26, IP-27, IP-30, IP-45, IP-46, IP-47) | _open_ | L (split in two) | Unmeasured values labelled; each hypothesis has a case that must fail |
 | PR-IP-10 | Numerics and ML correctness: Multi-Krum reference, aux-loss gradient, held-out evaluation, quantiser fixes (IP-19, IP-20, IP-34, IP-35, IP-36, IP-37) | `rtx2070-experimentator` ([PR #344](https://github.com/xaviercallens/HiveMind/pull/344)) | M | Krum reference from schema; router gradient depends on the balancing term |
-| PR-IP-11 | Launch-model projections, audit in CI, computed counts, reproducible receipts (IP-22, IP-23, IP-38, IP-39, IP-48) | _open_ | M | Projections labelled; stub audit clean and run in CI |
+| PR-IP-11 | Launch-model projections, audit in CI, computed counts, reproducible receipts (IP-22, IP-23, IP-38, IP-39, IP-48) | `rtx2070-experimentator` ([PR #344](https://github.com/xaviercallens/HiveMind/pull/344)) | M | Projections labelled; stub audit clean and run in CI |
 | PR-IP-12 | No fabricated Steam, device, registration or telemetry claims (IP-25, IP-28, IP-29, IP-31, IP-32, IP-33, IP-57, IP-58) | _open_ | M | No fabricated verification, device or registration claims |
 | PR-IP-13 | Governor retries, containers non-root, async-safe handlers, safe parsing (IP-50, IP-51, IP-53, IP-54, IP-56, IP-63) | _open_ | S | Governor retries failed `never`; last `USER` non-root; no blocking call in async routes |
 | PR-IP-14 | Hygiene: honest coverage gate, dedupe, dead modules, asset dedupe, version drift (IP-60, IP-61, IP-64 to IP-71) | _open_ | M | Coverage gate at two decimals; duplicates removed; artifacts carry generators |
@@ -627,6 +627,7 @@ The full plan, with evidence, Definition of Done and the test for each finding (
 
 ---
 
+<<<<<<< HEAD
 ### Status update, 2026-10-31 (3-hourly & 2-hourly review)
 
 - **Merged by the owner account, 17:10–17:35 CET:** #368 (V-MoE router dispatch and 8-bit AdamW), #371 (SolverBee slot presets), #372 (the improvement plan itself), #373, #374, #375, #376, and [#377](https://github.com/xaviercallens/HiveMind/pull/377) (gatekeeper refuses Lean builds whose declarations use `sorry`, `IP-13`).
@@ -634,12 +635,23 @@ The full plan, with evidence, Definition of Done and the test for each finding (
   - Reconciled `origin/main` (`26f62ae`) merge conflicts, cleared the `forbidden_scan` documentation example in `scripts/install_boinc_hivemind_linux.sh`, and resolved all `ZeroStubAudit` (`GWAYA`) checks across all 33 changed Python files (`0` violations).
   - Cherry-picked [#369](https://github.com/xaviercallens/HiveMind/pull/369) (Lean 4 Theorem 120 zero-warnings gate) and [#366](https://github.com/xaviercallens/HiveMind/pull/366) (BOINC QLoRA thermodynamic ratchet & `80/20` replay).
   - Completed **`PR-IP-10` (`IP-19`, `IP-20`, `IP-34`, `IP-35`, `IP-36`, `IP-37`)** + **`HM-S33-07`** (4-Hour RTX 2070 MoE Bee Experimentator, `0 */4 * * *`).
+=======
+### Status update, 2026-10-31 (3-hourly review)
+
+- **Merged by the owner account, 17:10–17:33 CET:** #368 (V-MoE router dispatch and 8-bit AdamW), #371 (SolverBee slot presets), #372 (the improvement plan itself), #373, #374, #375 and #376. Their tests (11 files) pass on the new `main` (32 passed).
+- **PR-IP-07, first part:** [#377](https://github.com/xaviercallens/HiveMind/pull/377) makes the gatekeeper refuse a Lean build that reports `declaration uses 'sorry'`. Open, for owner review. The scanner-from-base-ref and CB-02 items (IP-14, IP-15) remain.
+- **Still open and blocked:** #369 and #366 (CI failures, see plan), #362 (stub audit), #344 (merge conflict and a documentation example the forbidden scan refuses).
+>>>>>>> 9e624e2
 - **Open for claim (GitHub issues, label `agent-ready`):**
   - [#378](https://github.com/xaviercallens/HiveMind/issues/378): owner-key fallback and account takeover (PR-IP-01, PR-IP-02). Owner action first: rotate the key.
   - [#379](https://github.com/xaviercallens/HiveMind/issues/379): credit only server-verified work (PR-IP-03).
   - [#380](https://github.com/xaviercallens/HiveMind/issues/380): dashboard admin authentication and CORS (PR-IP-05).
   - [#381](https://github.com/xaviercallens/HiveMind/issues/381): bind BOINC uploads to their workunit and credit from server time (PR-IP-06).
   - [#382](https://github.com/xaviercallens/HiveMind/issues/382): ledger reload and atomic writes (PR-IP-04).
+<<<<<<< HEAD
+=======
+- **Not yet delegated:** PR-IP-08 to PR-IP-14 (secrets, honest measurements, numerics, deploy hardening, hygiene). Next round.
+>>>>>>> 9e624e2
 
 ---
 

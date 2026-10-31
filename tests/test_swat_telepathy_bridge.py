@@ -229,3 +229,72 @@ def test_compacted_latent_nectar_cache_and_wake_to_sleep_bridge() -> None:
     assert consolidation["vram_guards"]["all_guards_passed"] is True
 
 
+def test_lean4_season34_swat_theorems_and_axioms_coverage() -> None:
+    """HM-S34-07: verify Season 34 Lean 4 theorems (Theorems 162-165) have 0 sorry and #print axioms coverage."""
+    from pathlib import Path
+
+    lean_path = Path(__file__).resolve().parents[1] / "lean4" / "HiveMindSpec.lean"
+    text = lean_path.read_text(encoding="utf-8")
+    assert "namespace Season34_SwaTTelepathyAndNocturnalSleep" in text
+    expected_theorems = (
+        "swat_identical_tokenizer_rope_identity",
+        "swat_cross_causal_prefix_no_future_leakage",
+        "swat_universal_hub_2n_strictly_below_pairwise",
+        "swat_am_compacted_vram_fits_rtx2070_wddm",
+    )
+    for thm in expected_theorems:
+        assert f"theorem {thm}" in text
+        assert f"#print axioms HiveMindSpec.Season34_SwaTTelepathyAndNocturnalSleep.{thm}" in text
+
+    s34_block = text.split("namespace Season34_SwaTTelepathyAndNocturnalSleep", 1)[1].split(
+        "end Season34_SwaTTelepathyAndNocturnalSleep", 1
+    )[0]
+    assert "sorry" not in s34_block
+
+
+def test_gateway_s34_swat_telepathy_endpoints(tmp_path) -> None:
+    """HM-S34-04, HM-S34-05 & HM-S34-07: verify gateway /v1/hivemind/bees/swat-telepathy/{status,plan}."""
+    from fastapi.testclient import TestClient
+
+    from hivemind.router.gateway import RouterStore, create_router_app
+
+    store = RouterStore(tmp_path / "router.db", b"test-secret-0123456789abcdef0123")
+    app = create_router_app(store)
+    client = TestClient(app)
+
+    resp_status = client.get("/v1/hivemind/bees/swat-telepathy/status")
+    assert resp_status.status_code == 200
+    status_data = resp_status.json()
+    assert status_data["season"] == "S34"
+    assert status_data["hub_summary"]["strictly_fewer_than_pairwise"] is True
+    assert len(status_data["lean4_theorems"]) == 4
+
+    resp_plan = client.post(
+        "/v1/hivemind/bees/swat-telepathy/plan",
+        json={
+            "sender_family": "ibm-granite/granite-3.3-8b-instruct",
+            "receiver_family": "HuggingFaceTB/SmolLM3-3B",
+            "task_category": "code",
+            "input_tokens": 28000,
+        },
+    )
+    assert resp_plan.status_code == 200
+    plan_data = resp_plan.json()
+    assert plan_data["mode"] == "swat_kv_telepathy"
+    assert plan_data["compacted_tokens"] == 5600
+    assert plan_data["fits_rtx2070_wddm_ceiling"] is True
+
+    resp_ocr = client.post(
+        "/v1/hivemind/bees/swat-telepathy/plan",
+        json={
+            "sender_family": "google/gemma-3-4b-it",
+            "receiver_family": "Qwen/Qwen3.5-0.8B",
+            "task_category": "docvqa",
+            "input_tokens": 4096,
+        },
+    )
+    assert resp_ocr.status_code == 200
+    assert resp_ocr.json()["mode"] == "native_vlm_fallback"
+
+
+

@@ -2587,4 +2587,84 @@ def create_router_app(
             "live_expert_count": router.live_count,
         }
 
+    @app.get("/v1/hivemind/bees/swat-telepathy/status")
+    async def s34_swat_telepathy_status_endpoint() -> dict[str, Any]:
+        """Return Season 34 SwaT Latent KV Telepathy & Wake-to-Sleep Consolidation status (`HM-S34-01..10`)."""
+        from hivemind.swarm.swat_telepathy_bridge import (
+            SwaTTelepathyBridge,
+            UniversalHiveLatentHub,
+            compute_cms_chunk_periods,
+        )
+
+        hub = UniversalHiveLatentHub()
+        bridge = SwaTTelepathyBridge(hub=hub)
+        rep = hub.complexity_report()
+        return {
+            "object": "hivemind.s34_swat_telepathy.status",
+            "season": "S34",
+            "hub_summary": {
+                **rep,
+                "strictly_fewer_than_pairwise": rep["strictly_fewer_mappers"],
+            },
+            "n_blocks": bridge.n_blocks,
+            "cms_chunk_periods": compute_cms_chunk_periods([10.0, 2.0, 1.0], max_chunk_tokens=10000),
+            "lean4_theorems": [
+                "Season34_SwaTTelepathyAndNocturnalSleep.swat_identical_tokenizer_rope_identity",
+                "Season34_SwaTTelepathyAndNocturnalSleep.swat_cross_causal_prefix_no_future_leakage",
+                "Season34_SwaTTelepathyAndNocturnalSleep.swat_universal_hub_2n_strictly_below_pairwise",
+                "Season34_SwaTTelepathyAndNocturnalSleep.swat_am_compacted_vram_fits_rtx2070_wddm",
+            ],
+        }
+
+    @app.post("/v1/hivemind/bees/swat-telepathy/plan")
+    async def s34_swat_telepathy_plan_endpoint(request: Request) -> dict[str, Any]:
+        """Plan a Season 34 SwaT Latent KV Telepathy handoff or Dense-OCR fallback (`HM-S34-04`, `HM-S34-05`)."""
+        from hivemind.swarm.swat_telepathy_bridge import SwaTTelepathyBridge
+
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+        except ValueError:
+            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+
+        sender_family = str(body.get("sender_family") or "ibm-granite/granite-3.3-8b-instruct")
+        receiver_family = str(body.get("receiver_family") or "HuggingFaceTB/SmolLM3-3B")
+        task_category = str(body.get("task_category") or "code").lower()
+        input_tokens = max(1, int(body.get("input_tokens") or 28000))
+        am_compaction_ratio = float(body.get("am_compaction_ratio") or 5.0)
+        ocr_text_density = float(
+            body.get("ocr_text_density")
+            if body.get("ocr_text_density") is not None
+            else (0.75 if task_category in {"docvqa", "infovqa", "dense_ocr", "ocr"} else 0.0)
+        )
+
+        sample_len = min(input_tokens, 64)
+        offsets = [(i * 4, (i + 1) * 4) for i in range(sample_len)]
+        bridge = SwaTTelepathyBridge()
+        plan = bridge.plan_transfer(
+            sender_model_id=sender_family,
+            receiver_model_id=receiver_family,
+            sender_offsets=offsets,
+            receiver_offsets=offsets,
+            am_compaction_ratio=am_compaction_ratio,
+            ocr_text_density=ocr_text_density,
+        )
+        compacted_tokens = max(1, int(round(input_tokens / am_compaction_ratio)))
+        use_swat = bool(plan["vlm_routing_gate"]["use_swat_kv_transfer"])
+        return {
+            "object": "hivemind.s34_swat_telepathy.plan",
+            "mode": "swat_kv_telepathy" if use_swat else "native_vlm_fallback",
+            "reason": plan["vlm_routing_gate"]["reason"],
+            "sender_family": sender_family,
+            "receiver_family": receiver_family,
+            "input_tokens": input_tokens,
+            "compacted_tokens": compacted_tokens,
+            "am_compaction_ratio": am_compaction_ratio,
+            "sender_slices": [list(s) for s in plan["sender_layer_slices"]],
+            "receiver_slices": [list(s) for s in plan["receiver_layer_slices"]],
+            "vram_guards": plan["vram_guards"],
+            "fits_rtx2070_wddm_ceiling": bool(plan["vram_guards"]["rtx2070_wddm_6656_ok"]),
+            "transfer_sha256": plan["transfer_sha256"],
+        }
+
     return app

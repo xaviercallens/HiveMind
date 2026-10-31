@@ -1,5 +1,23 @@
 # Project HiveMind@home & La Ruche OpenRouter — GPU Producer Onboarding & Open Capabilities Guide
 
+## 0. Call for GPU producers (2026-10-31)
+
+HiveMind needs more GPUs online to serve inference and to run night QLoRA training on the community swarm. We are asking for idle GPUs and for people to test the producer on their own machine.
+
+**What helps most**
+
+- A producer on any NVIDIA GPU with **4 GB to 24 GB** of VRAM, idle for part of the day or night.
+- Test reports from a machine we have not tried: the GPU model, VRAM, the model the producer chose, and whether it stayed up.
+- Bug reports on the install path (see the warning below).
+
+**What you get:** a non-monetary record of compute contributed ("points", `HMT`), as set out in the charter at the top of `ROADMAP.md`. Nothing is paid.
+
+**Before you run anything:** read the install script first. Its one-liner in section 2 downloads and runs code. It also falls back to an 8 GB profile when `nvidia-smi` cannot read your GPU, so check the VRAM figure it reports against your card. Known issue, not yet fixed.
+
+**How to start:** use Option B in section 2 (manual setup with Ollama) if you want to see each step. Report results on the public discussion thread [#251](https://github.com/xaviercallens/HiveMind/issues/251).
+
+---
+
 ## 1. Congratulations to Pioneer End-User #1 (`fbc1d3042d377feba6b1e0ac6fd576a4`)
 
 On **2026-10-25**, Pioneer End-User #1 (`fbc1d3042d377feba6b1e0ac6fd576a4`, role: `prosumer`) completed the first live end-user completion on the decentralized **HiveMind OpenRouter (`/v1/chat/completions`)**:

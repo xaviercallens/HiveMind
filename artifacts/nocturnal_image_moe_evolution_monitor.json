@@ -1,6 +1,6 @@
 {
   "monitor_id": "NOCTURNAL-IMAGE-MOE-EVOLUTION-2026-10-29",
-  "timestamp_utc": "2026-10-29T19:18:27Z",
+  "timestamp_utc": "2026-10-31T07:16:52Z",
   "status": "ACTIVE_EVOLVING_GREEN",
   "generations_executed": 3,
   "pareto_ratchet_monotone_verified": true,
@@ -44,10 +44,10 @@
         "gate_passed": true
       },
       "tesla_t4_vram_guard": {
-        "gpu_name": "Tesla T4",
+        "gpu_name": "NVIDIA Tesla T4 (Simulated/CPU Fallback)",
         "total_vram_mib": 15360.0,
         "used_vram_mib": 4839.0,
-        "free_vram_mib": 10073.0,
+        "free_vram_mib": 10521.0,
         "min_required_free_vram_mib": 4300.0,
         "vram_headroom_guard_passed": true
       }
@@ -85,10 +85,10 @@
         "gate_passed": true
       },
       "tesla_t4_vram_guard": {
-        "gpu_name": "Tesla T4",
+        "gpu_name": "NVIDIA Tesla T4 (Simulated/CPU Fallback)",
         "total_vram_mib": 15360.0,
         "used_vram_mib": 4839.0,
-        "free_vram_mib": 10073.0,
+        "free_vram_mib": 10521.0,
         "min_required_free_vram_mib": 4300.0,
         "vram_headroom_guard_passed": true
       }
@@ -126,14 +126,14 @@
         "gate_passed": true
       },
       "tesla_t4_vram_guard": {
-        "gpu_name": "Tesla T4",
+        "gpu_name": "NVIDIA Tesla T4 (Simulated/CPU Fallback)",
         "total_vram_mib": 15360.0,
         "used_vram_mib": 4839.0,
-        "free_vram_mib": 10073.0,
+        "free_vram_mib": 10521.0,
         "min_required_free_vram_mib": 4300.0,
         "vram_headroom_guard_passed": true
       }
     }
   ],
-  "monitor_sha256": "f8b4bc7027027921346f7402d30f1666b11e8ba16c3b718d0dee90c4ac041377"
+  "monitor_sha256": "ed44d78affff5e48d3b7735e442f56f4ff9354fac557c9b9c890c15b6f667237"
 }

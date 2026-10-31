@@ -1,6 +1,6 @@
 {
   "schema_version": "hivemind.evolution_2h_and_night_moe_cron.v1",
-  "timestamp_utc": "2026-10-31T12:19:38Z",
+  "timestamp_utc": "2026-10-31T14:19:37Z",
   "mode": "2h-evolution",
   "schedules": {
     "roadmap_pr_evolution_cron": "0 */2 * * *",
@@ -15,35 +15,35 @@
     "total_requests_served": 21
   },
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-10-31T12:19:38Z",
+    "timestamp_utc": "2026-10-31T14:19:37Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": false,
     "device": "nvml:cuda:0 (torch+cpu host)",
     "compute_capability": "7.5",
-    "temperature_c": 26.0,
-    "gpu_utilization_pct": 13.0,
-    "power_draw_w": 9.13,
+    "temperature_c": 27.0,
+    "gpu_utilization_pct": 15.0,
+    "power_draw_w": 25.12,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1437.0,
-    "memory_free_mib": 6570.0,
+    "memory_used_mib": 1465.0,
+    "memory_free_mib": 6542.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
     "wddm_envelope_compliant": true,
     "headroom_guard_compliant": true,
-    "graphics_clock_mhz": 300.0,
+    "graphics_clock_mhz": 405.0,
     "max_graphics_clock_mhz": 2145.0,
     "memory_clock_mhz": 405.0,
-    "host_tensor_gflops": 106.09,
+    "host_tensor_gflops": 105.31,
     "measured_fp32_tflops": 9.88,
     "measured_fp16_tensor_tflops": 39.54,
     "effective_sparse_moe_nf4_tflops": 65.24,
-    "microbench_elapsed_ms": 156.86
+    "microbench_elapsed_ms": 159.07
   },
   "roadmap_summary": {
     "exists": true,
-    "roadmap_sha256": "f09c2aab82f1806feab2b33a6820eacdcd4b5fa0336f09d4b5e825a35bf4c48d",
+    "roadmap_sha256": "65c70b112e7fb274decf1d876b50831d30202a628d65bd3164dca075d149dae5",
     "seasons_detected": [
       1,
       2,
@@ -104,5 +104,5 @@
     ]
   },
   "night_moe_summary": {},
-  "receipt_sha256": "a124b01a5e08c2742db774e1064e020bd79f77f9af70d10abde4e5d8aae245e4"
+  "receipt_sha256": "66ba3c368867b9a62689f62a41cc3750c7d74906d0f5013503407d7aedc37597"
 }

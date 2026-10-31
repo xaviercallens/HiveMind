@@ -297,4 +297,37 @@ def test_gateway_s34_swat_telepathy_endpoints(tmp_path) -> None:
     assert resp_ocr.json()["mode"] == "native_vlm_fallback"
 
 
+def test_cockpit_s34_swat_telepathy_endpoints() -> None:
+    """HM-S34-04, HM-S34-05 & HM-S34-10: verify local RTX 2070 cockpit /api/v1/monitor/swat-telepathy endpoints."""
+    from fastapi.testclient import TestClient
+
+    from hivemind.game.exoplanet_hunter_cockpit import create_exoplanet_hunter_fastapi_app
+
+    app = create_exoplanet_hunter_fastapi_app()
+    client = TestClient(app)
+
+    r_status = client.get("/api/v1/monitor/swat-telepathy")
+    assert r_status.status_code == 200
+    body = r_status.json()
+    assert body["season"] == "S34"
+    assert body["cms_chunk_periods"] == [1000, 5000, 10000]
+    assert body["hub_summary"]["strictly_fewer_than_pairwise"] is True
+
+    r_plan = client.post(
+        "/api/v1/monitor/swat-telepathy/plan",
+        json={
+            "sender_family": "ibm-granite/granite-3.3-8b-instruct",
+            "receiver_family": "HuggingFaceTB/SmolLM3-3B",
+            "task_category": "code",
+            "input_tokens": 28000,
+        },
+    )
+    assert r_plan.status_code == 200
+    p_body = r_plan.json()
+    assert p_body["mode"] == "swat_kv_telepathy"
+    assert p_body["compacted_tokens"] == 5600
+    assert p_body["fits_rtx2070_wddm_ceiling"] is True
+
+
+
 

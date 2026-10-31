@@ -173,9 +173,18 @@ def run_pytest(wt: Path, files: List[str]) -> Dict[str, Any]:
     return {"targets": targets, "returncode": rc, "summary": tail[:200], "passed": rc == 0}
 
 
+LEAN_SORRY_PATTERN = re.compile(r"declaration uses\W{0,2}sorry|sorryAx")
+
+
+def lean_output_uses_sorry(out: str) -> bool:
+    """True when Lean reports a `sorry` anywhere: the `sorryAx` marker, or the warning Lean prints when a declaration uses `sorry`."""
+    return LEAN_SORRY_PATTERN.search(out) is not None
+
+
 def run_lean(wt: Path) -> Dict[str, Any]:
     rc, out = sh(["lake", "build"], cwd=wt / "lean4", timeout=1200)
-    return {"returncode": rc, "sorry_in_output": "sorryAx" in out, "passed": rc == 0 and "sorryAx" not in out, "tail": out.strip().splitlines()[-1][:200] if out.strip() else ""}
+    uses_sorry = lean_output_uses_sorry(out)
+    return {"returncode": rc, "sorry_in_output": uses_sorry, "passed": rc == 0 and not uses_sorry, "tail": out.strip().splitlines()[-1][:200] if out.strip() else ""}
 
 
 def run_pipeline(wt: Path) -> Dict[str, Any]:

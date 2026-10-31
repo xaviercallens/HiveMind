@@ -88,13 +88,13 @@ PATHS: Sequence[tuple[str, Pair, str, Pair, Pair]] = (
      ("Serve a model from your own machine and earn points when people use it.",
       "Servez un modèle depuis votre propre ordinateur et gagnez des points quand on l'utilise.")),
     ("train", ("Train models at night (BOINC)", "Entraîner des modèles la nuit (BOINC)"), "ok",
-     ("Available now · night MoE & astrophysics workunits", "Disponible maintenant · unités MoE nocturnes et astrophysique"),
-     ("Lend your GPU to night QLoRA training and BOINC astrophysics workunits on Linux, Windows or macOS.",
-      "Prêtez votre GPU aux tâches d'entraînement QLoRA nocturnes et aux unités BOINC d'astrophysique sous Linux, Windows ou macOS.")),
-    ("play", ("Gamers and Steam", "Joueurs et Steam"), "ok",
-     ("Available now · Free-to-Play Steam & automatic idle-GPU pause", "Disponible maintenant · jeu Steam gratuit et pause GPU automatique"),
-     ("Give GPU time only while you are not playing. The automatic idle-GPU pause and the Free-to-Play Steam game (AppID 3133700) are available today.",
-      "Donnez du temps de GPU seulement quand vous ne jouez pas. La pause GPU automatique et le jeu Steam gratuit (AppID 3133700) sont disponibles dès aujourd'hui.")),
+     ("Available now · night training workunits (BOINC)", "Disponible maintenant · unités d'entraînement nocturnes (BOINC)"),
+     ("Lend your GPU to night training workunits through the BOINC client on Linux, Windows or macOS.",
+      "Prêtez votre GPU aux unités d'entraînement nocturnes avec le client BOINC sous Linux, Windows ou macOS.")),
+    ("play", ("Gamers and Steam", "Joueurs et Steam"), "dev",
+     ("Helper script only · no Steam game yet", "Script d'aide seulement · pas encore de jeu Steam"),
+     ("Give GPU time only while you are not playing. A helper script pauses the BOINC GPU queue while you play; there is no HiveMind game on Steam yet.",
+      "Donnez du temps de GPU seulement quand vous ne jouez pas. Un script d'aide met en pause la file GPU de BOINC pendant que vous jouez ; il n'y a pas encore de jeu HiveMind sur Steam.")),
 )
 
 @dataclass(frozen=True)
@@ -243,8 +243,10 @@ SECTIONS: Sequence[tuple[str, Pair, Sequence[tuple[str, Any]]]] = (
         ]),
         ("code", "python3 scripts/hivemind_volunteer_preflight.py --project-url https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app"),
         ("ol", [
-            ("Run a complete local dry-run test (`--dry-run`) to verify 16,384-point TESS/JWST light-curve folding, rank-4 QLoRA outer-delta SVD verification, and coordinator reachability:",
-             "Exécutez un test à blanc complet sur votre machine (`--dry-run`) pour vérifier le pliage de courbe de lumière TESS/JWST (16 384 points), la validation SVD QLoRA de rang 4 et la connexion au coordinateur :"),
+            ("Run a complete local dry-run test (`--dry-run`). It checks that this machine can run a small GPU kernel on a built-in test pattern (a dip injected into a synthetic "
+             "16,384-point curve: a self-check, not real TESS or JWST data) and that the coordinator answers. It does not train a model:",
+             "Exécutez un test à blanc complet sur votre machine (`--dry-run`). Il vérifie que cette machine peut exécuter un petit noyau GPU sur un motif de test intégré (un creux "
+             "injecté dans une courbe synthétique de 16 384 points : un auto-test, pas de vraies données TESS ou JWST) et que le coordinateur répond. Il n'entraîne aucun modèle :"),
         ]),
         ("code", "python3 scripts/hivemind_boinc_idle_worker.py --coordinator https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app --handle your-handle --domain physics_sim --dry-run"),
         ("ol", [
@@ -260,22 +262,42 @@ SECTIONS: Sequence[tuple[str, Pair, Sequence[tuple[str, Any]]]] = (
         ]),
         ("code", "boinccmd --get_project_config https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app\n"
                  "boinccmd --project_attach https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app YOUR_ACCOUNT_KEY"),
+        ("p", ("Honest status of the helper script (`hivemind_boinc_idle_worker.py`): the result it submits is a deterministic placeholder computed from the workunit id, not a trained "
+               "model, so treat any points shown for it as provisional. Real training workunits run only through the BOINC client attached above.",
+               "État réel du script d'aide (`hivemind_boinc_idle_worker.py`) : le résultat qu'il soumet est un substitut déterministe calculé à partir de l'identifiant de l'unité, "
+               "pas un modèle entraîné ; considérez donc tout point affiché pour lui comme provisoire. Les vraies unités d'entraînement ne passent que par le client BOINC attaché ci-dessus.")),
+        ("p", ("On a PC you also play on, ask the BOINC client itself to step aside. This prints two small settings files (nothing is installed or changed "
+               "until you add `--apply` with your BOINC data folder; your old files are kept as backups):",
+               "Sur un PC où vous jouez aussi, demandez au client BOINC lui-même de s'effacer. Cette commande affiche deux petits fichiers de réglages "
+               "(rien n'est installé ni modifié tant que vous n'ajoutez pas `--apply` avec votre dossier de données BOINC ; vos anciens fichiers sont "
+               "gardés en copie) :")),
+        ("code", "python3 scripts/hivemind_volunteer_config.py gamer --game YourGame.exe"),
+        ("p", ("With these settings the BOINC client does no GPU work while you are using the computer, gives back the video memory of a paused task, and stops "
+               "GPU work at once while a program you name with `--game` is running. Tested with the real BOINC client on Linux. Not tested on Windows. "
+               "A game you do not name, played with a controller only, is not detected: name your games.",
+               "Avec ces réglages, le client BOINC ne fait aucun calcul GPU pendant que vous utilisez l'ordinateur, rend la mémoire vidéo d'une tâche en "
+               "pause, et arrête le calcul GPU aussitôt qu'un programme que vous nommez avec `--game` tourne. Testé avec le vrai client BOINC sous Linux. "
+               "Non testé sous Windows. Un jeu que vous ne nommez pas, joué à la manette seulement, n'est pas détecté : nommez vos jeux.")),
         ("note", ("Night training for end-users and HiveMind nodes (22:00–07:00 Paris time): End-users (volunteers, developers and gamers) leave their PC or laptop running overnight to fold exoplanet transits and compute rank-4 QLoRA inner-loop updates, earning 250 HMT and 45 Cobblestones per workunit to spend the next day on all models. Dedicated HiveMind nodes (GPU producers, HiveMiners and the owner fleet) switch from daytime OpenRouter inference (07:00–22:00) to nocturnal DiLoCo outer-step aggregation, Multi-Krum verification and SVD teacher-to-student distillation (live node telemetry at [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).",
                   "Entraînement nocturne pour les utilisateurs finaux et les nœuds HiveMind (22 h – 7 h, heure de Paris) : Les utilisateurs finaux (bénévoles, développeurs et joueurs) laissent leur PC ou portable calculer la nuit des transits d'exoplanètes et des mises à jour QLoRA de rang 4, gagnant 250 HMT et 45 Cobblestones par unité pour interroger tous les modèles le lendemain. Les nœuds dédiés HiveMind (producteurs GPU, HiveMiners et flotte principale) passent de l'inférence OpenRouter diurne (7 h – 22 h) à l'agrégation nocturne DiLoCo, la vérification Multi-Krum et la distillation SVD enseignant-étudiant (télémétrie des nœuds en direct sur [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).")),
     )),
     ("play", ("4. Gamers and Steam", "4. Joueurs et Steam"), (
-        ("p", ("Your GPU folds astrophysics and AI workunits only while you are not playing. Both the Free-to-Play Steam Edition "
-               "(`USS HiveMind NCC-31337: Astrophysics Exoplanet Hunter`, Steam `AppID 3133700`) and the automatic idle-GPU pause worker are available today, "
-               "connecting gamers and citizen scientists on the [live community hub](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community).",
-               "Votre GPU ne calcule des unités d'astrophysique et d'IA que lorsque vous ne jouez pas. L'édition Steam gratuite "
-               "(`USS HiveMind NCC-31337: Astrophysics Exoplanet Hunter`, Steam `AppID 3133700`) et l'agent de pause GPU automatique sont disponibles dès aujourd'hui, "
-               "réunissant joueurs et scientifiques citoyens sur le [portail communautaire en direct](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community).")),
-        ("p", ("While you play (`idle < 4 s` of keyboard/mouse input or GPU load above 45%), BOINC GPU compute pauses automatically (`boinccmd --set_gpu_mode never`, "
-               "0% GPU overhead) so your game keeps 100% of your graphics card at 60 FPS. After 4 seconds of inactivity (with GPU load below 45% and temperature below 78 °C), "
-               "it automatically resumes folding TESS/JWST Box-Least-Squares (BLS) exoplanet transits.",
-               "Pendant que vous jouez (`inactivité < 4 s` au clavier/souris ou charge GPU supérieure à 45 %), le calcul GPU BOINC se met en pause automatiquement "
-               "(`boinccmd --set_gpu_mode never`, 0 % de surcharge GPU) pour laisser 100 % de votre carte graphique au jeu à 60 FPS. Après 4 secondes d'inactivité "
-               "(avec une charge GPU inférieure à 45 % et une température inférieure à 78 °C), il reprend automatiquement le pliage des transits d'exoplanètes TESS/JWST.")),
+        ("p", ("Your GPU should work for HiveMind only while you are not playing. There is no HiveMind game on Steam yet: the Steam ID `3133700` that appears in this repository "
+               "belongs to an unrelated game add-on (Fantasy Grounds), so do not look for us there. What exists today is a helper script that pauses the BOINC GPU queue while you play "
+               "(below), and the BOINC client’s own settings (section 3). Citizen-science standings are on the [community page](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community).",
+               "Votre GPU ne devrait travailler pour HiveMind que lorsque vous ne jouez pas. Il n'existe pas encore de jeu HiveMind sur Steam : l'identifiant Steam `3133700` qui "
+               "apparaît dans ce dépôt appartient à un autre jeu (un ajout de Fantasy Grounds), ne le cherchez donc pas là. Ce qui existe aujourd'hui, c'est un script d'aide qui met "
+               "en pause la file GPU de BOINC pendant que vous jouez (ci-dessous), et les réglages propres du client BOINC (section 3). Le classement de science participative est "
+               "sur la [page communautaire](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community).")),
+        ("p", ("The helper pauses the BOINC GPU queue (`boinccmd --set_gpu_mode never`) when it sees keyboard or mouse input in the last 4 seconds, GPU load above 45%, or a GPU "
+               "temperature above 78 °C, and sets it back to `auto` otherwise. On Linux it needs `xprintidle` (X11 only); where it cannot measure your input it assumes you are playing "
+               "and does nothing. It changes the BOINC GPU mode itself, so it overrides a mode you set by hand. We have not measured its effect on frame rate. "
+               "What it computes while you are away is a built-in self-check pattern, not real telescope data (see section 3).",
+               "L'agent met en pause la file GPU de BOINC (`boinccmd --set_gpu_mode never`) quand il voit une action au clavier ou à la souris dans les 4 dernières secondes, une "
+               "charge GPU supérieure à 45 % ou une température GPU supérieure à 78 °C, et la remet en `auto` sinon. Sous Linux il a besoin de `xprintidle` (X11 seulement) ; là où "
+               "il ne peut pas mesurer votre activité, il suppose que vous jouez et ne fait rien. Il change lui-même le mode GPU de BOINC : il écrase donc un mode que vous avez "
+               "réglé à la main. Nous n'avons pas mesuré son effet sur le taux d'images. Ce qu'il calcule en votre absence est un motif d'auto-test intégré, pas de vraies données "
+               "de télescope (voir la section 3).")),
         ("ol", [
             ("Start the automatic idle-GPU worker (remove `--once` to leave the automatic pause/resume daemon running in the background while you play):",
              "Démarrez l'agent de pause GPU automatique (retirez `--once` pour laisser le démon de pause/reprise automatique tourner en arrière-plan pendant vos sessions de jeu) :"),
@@ -385,10 +407,20 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "de": "Jetzt verfügbar · nächtliche MoE- & Astrophysik-Aufgaben",
         "zh": "现已开放 · 夜间 MoE 与天体物理计算任务",
     },
+    "Available now · night training workunits (BOINC)": {
+        "es": "Disponible ahora · unidades de entrenamiento nocturno (BOINC)",
+        "de": "Jetzt verfügbar · nächtliche Trainingsaufgaben (BOINC)",
+        "zh": "现已开放 · 夜间训练任务 (BOINC)",
+    },
     "Lend your GPU to night QLoRA training and BOINC astrophysics workunits on Linux, Windows or macOS.": {
         "es": "Presta tu GPU para el entrenamiento nocturno QLoRA y unidades de astrofísica BOINC en Linux, Windows o macOS.",
         "de": "Stellen Sie Ihre GPU nachts für QLoRA-Training und BOINC-Astrophysik-Aufgaben unter Linux, Windows oder macOS bereit.",
         "zh": "在 Linux、Windows 或 macOS 上将您的 GPU 用于夜间 QLoRA 训练与 BOINC 天体物理计算任务。",
+    },
+    "Lend your GPU to night training workunits through the BOINC client on Linux, Windows or macOS.": {
+        "es": "Presta tu GPU a las unidades de entrenamiento nocturno mediante el cliente BOINC en Linux, Windows o macOS.",
+        "de": "Stellen Sie Ihre GPU über den BOINC-Client unter Linux, Windows oder macOS für nächtliche Trainingsaufgaben bereit.",
+        "zh": "在 Linux、Windows 或 macOS 上通过 BOINC 客户端借出您的 GPU 参与夜间训练任务。",
     },
     "Gamers and Steam": {
         "es": "Jugadores y Steam",
@@ -400,10 +432,20 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "de": "Jetzt verfügbar · kostenloses Steam-Spiel & automatische GPU-Pause",
         "zh": "现已开放 · Steam 免费游戏与 GPU 空闲自动暂停",
     },
+    "Helper script only · no Steam game yet": {
+        "es": "Solo script auxiliar · aún no hay juego en Steam",
+        "de": "Nur Hilfsskript · noch kein Steam-Spiel",
+        "zh": "仅辅助脚本 · 暂无 Steam 游戏",
+    },
     "Give GPU time only while you are not playing. The automatic idle-GPU pause and the Free-to-Play Steam game (AppID 3133700) are available today.": {
         "es": "Dona tiempo de GPU solo cuando no estés jugando. La pausa automática de GPU inactiva y el juego gratuito de Steam (AppID 3133700) están disponibles desde hoy.",
         "de": "Teilen Sie GPU-Zeit nur,Während Sie nicht spielen. Die automatische GPU-Pause und das kostenlose Steam-Spiel (AppID 3133700) sind ab sofort verfügbar.",
         "zh": "仅在您不玩游戏时贡献 GPU 算力。GPU 空闲自动暂停功能与 Steam 免费游戏（AppID 3133700）今日即可使用。",
+    },
+    "Give GPU time only while you are not playing. A helper script pauses the BOINC GPU queue while you play; there is no HiveMind game on Steam yet.": {
+        "es": "Dona tiempo de GPU solo cuando no estés jugando. Un script auxiliar pausa la cola GPU de BOINC mientras juegas; aún no existe un juego de HiveMind en Steam.",
+        "de": "Teilen Sie GPU-Zeit nur, während Sie nicht spielen. Ein Hilfsskript pausiert die BOINC-GPU-Warteschlange beim Spielen; es gibt noch kein HiveMind-Spiel auf Steam.",
+        "zh": "仅在您不玩游戏时贡献 GPU 时间。辅助脚本会在您游戏时暂停 BOINC GPU 队列；目前 Steam 上还没有 HiveMind 游戏。",
     },
     f"Create your account with a handle of your choice. {_HANDLE_RULE[0]}.": {
         "es": "Crea tu cuenta con el seudónimo que prefieras. El seudónimo es público (puede aparecer en listas y en el bus de mensajes), así que elige uno de 1 a 64 letras ASCII, cifras o . _ @ + -.",
@@ -551,6 +593,36 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "es": "Entrenamiento nocturno para usuarios finales y nodos de HiveMind (22:00–07:00, hora de París): Los usuarios finales (voluntarios, desarrolladores y jugadores) dejan su PC o portátil calculando por la noche tránsitos de exoplanetas y actualizaciones QLoRA de rango 4, ganando 250 HMT y 45 Cobblestones por unidad para usar todos los modelos al día siguiente. Los nodos dedicados de HiveMind (productores GPU, HiveMiners y la flota principal) pasan de la inferencia diurna de OpenRouter (07:00–22:00) a la agregación nocturna DiLoCo, la verificación Multi-Krum y la destilación SVD profesor-estudiante (telemetría de nodos en vivo en [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).",
         "de": "Nachttraining für Endnutzer und HiveMind-Knoten (22:00–07:00 Uhr Pariser Zeit): Endnutzer (Frewillige, Entwickler und Gamer) lassen ihren PC oder Laptop über Nacht Exoplaneten-Transits und Rang-4-QLoRA-Updates berechnen und erhalten 250 HMT sowie 45 Cobblestones pro Aufgabe, um am nächsten Tag alle Modelle zu nutzen. Dedizierte HiveMind-Knoten (GPU-Produzenten, HiveMiners und die Hauptflotte) wechseln von der OpenRouter-Tagesinferenz (07:00–22:00 Uhr) zur nächtlichen DiLoCo-Aggregation, Multi-Krum-Prüfung und SVD-Lehrer-Schüler-Destillation (Live-Knotentelemetrie unter [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).",
         "zh": "终端用户与 HiveMind 节点的夜间协同训练（巴黎时间 22:00–07:00）：终端用户（志愿者、开发者与游戏玩家）在夜间让个人电脑或笔记本自动折叠系外行星凌星光变曲线并计算 4 秩 QLoRA 内层更新，每完成一个任务即可获得 250 HMT 与 45 Cobblestones，次日可用于调用全部模型。专用 HiveMind 节点（GPU 生产者、HiveMiners 与核心集群节点）则从日间 OpenRouter 低延迟推理（07:00–22:00）自动切换至夜间 DiLoCo 外层聚合、Multi-Krum 拜占庭校验与 SVD 师生蒸馏（节点实时遥测见 [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)）。",
+    },
+    "Run a complete local dry-run test (`--dry-run`). It checks that this machine can run a small GPU kernel on a built-in test pattern (a dip injected into a synthetic 16,384-point curve: a self-check, not real TESS or JWST data) and that the coordinator answers. It does not train a model:": {
+        "es": "Ejecuta una prueba local completa (`--dry-run`). Comprueba que este equipo puede ejecutar un pequeño núcleo GPU sobre un patrón de prueba integrado (una caída inyectada en una curva sintética de 16 384 puntos: una autocomprobación, no datos reales de TESS o JWST) y que el coordinador responde. No entrena ningún modelo:",
+        "de": "Führen Sie einen vollständigen lokalen Testlauf (`--dry-run`) aus. Er prüft, ob dieser Rechner einen kleinen GPU-Kernel auf einem eingebauten Testmuster ausführen kann (ein Einbruch in einer synthetischen 16.384-Punkte-Kurve: ein Selbsttest, keine echten TESS- oder JWST-Daten) und ob der Koordinator antwortet. Dabei wird kein Modell trainiert:",
+        "zh": "运行完整的本地演练测试（`--dry-run`）。它会检查本机能否在内置测试图案（注入到 16,384 点合成曲线中的凹陷：自检测试，并非真实的 TESS 或 JWST 数据）上运行小型 GPU 内核，并确认协调器响应正常。此测试不会训练模型：",
+    },
+    "Honest status of the helper script (`hivemind_boinc_idle_worker.py`): the result it submits is a deterministic placeholder computed from the workunit id, not a trained model, so treat any points shown for it as provisional. Real training workunits run only through the BOINC client attached above.": {
+        "es": "Estado real del script auxiliar (`hivemind_boinc_idle_worker.py`): el resultado que envía es un marcador determinista calculado a partir del identificador de la unidad, no un modelo entrenado, por lo que cualquier punto mostrado debe considerarse provisional. Las unidades de entrenamiento reales solo se ejecutan mediante el cliente BOINC conectado arriba.",
+        "de": "Ehrlicher Status des Hilfsskripts (`hivemind_boinc_idle_worker.py`): Das gesendete Ergebnis ist ein deterministischer Platzhalter, der aus der Aufgaben-ID berechnet wird, kein trainiertes Modell; betrachten Sie dafür angezeigte Punkte daher als vorläufig. Echte Trainingsaufgaben laufen nur über den oben verbundenen BOINC-Client.",
+        "zh": "辅助脚本（`hivemind_boinc_idle_worker.py`）的真实状态：它提交的结果是根据任务 ID 计算出的确定性占位结果，而非训练好的模型，因此其显示的积分仅供参考。真正的训练任务仅通过上方挂载的标准 BOINC 客户端运行。",
+    },
+    "On a PC you also play on, ask the BOINC client itself to step aside. This prints two small settings files (nothing is installed or changed until you add `--apply` with your BOINC data folder; your old files are kept as backups):": {
+        "es": "En un PC en el que también juegues, pídele al propio cliente BOINC que se aparte. Este comando muestra dos pequeños archivos de configuración (no se instala ni modifica nada hasta que añadas `--apply` con tu carpeta de datos de BOINC; tus archivos anteriores se guardan como copia de seguridad):",
+        "de": "Auf einem PC, auf dem Sie auch spielen, weisen Sie den BOINC-Client selbst an, zurückzutreten. Dieser Befehl gibt zwei kleine Einstellungsdateien aus (nichts wird installiert oder geändert, bis Sie `--apply` mit Ihrem BOINC-Datenordner hinzufügen; Ihre alten Dateien bleiben als Sicherung erhalten):",
+        "zh": "在您同时用来玩游戏的电脑上，可以让 BOINC 客户端自动礼让。以下命令会输出两个小型配置文件（在您加上 `--apply` 与 BOINC 数据目录之前不会安装或修改任何内容；原有文件会保留备份）：",
+    },
+    "With these settings the BOINC client does no GPU work while you are using the computer, gives back the video memory of a paused task, and stops GPU work at once while a program you name with `--game` is running. Tested with the real BOINC client on Linux. Not tested on Windows. A game you do not name, played with a controller only, is not detected: name your games.": {
+        "es": "Con estos ajustes, el cliente BOINC no realiza trabajo en la GPU mientras usas el ordenador, libera la memoria de vídeo de las tareas en pausa y detiene el cálculo GPU en cuanto se ejecuta un programa indicado con `--game`. Probado con el cliente BOINC real en Linux. No probado en Windows. Un juego no indicado en la lista y jugado solo con mando no se detecta: indica tus juegos.",
+        "de": "Mit diesen Einstellungen führt der BOINC-Client keine GPU-Arbeit aus, während Sie den Computer benutzen, gibt den Videospeicher pausierter Aufgaben frei und stoppt GPU-Arbeit sofort, sobald ein mit `--game` benanntes Programm läuft. Getestet mit dem echten BOINC-Client unter Linux. Nicht getestet unter Windows. Ein nicht benanntes Spiel, das nur mit Controller gespielt wird, wird nicht erkannt: Benennen Sie Ihre Spiele.",
+        "zh": "使用这些设置后，BOINC 客户端在您使用电脑时不会进行 GPU 计算，会释放已暂停任务的显存，并在检测到 `--game` 指定的程序运行时立即停止 GPU 工作。已在 Linux 上使用真实 BOINC 客户端测试通过，尚未在 Windows 上测试。若未指定游戏名称且仅使用手柄游玩，则无法自动检测：请务必指定您的游戏程序名。",
+    },
+    "Your GPU should work for HiveMind only while you are not playing. There is no HiveMind game on Steam yet: the Steam ID `3133700` that appears in this repository belongs to an unrelated game add-on (Fantasy Grounds), so do not look for us there. What exists today is a helper script that pauses the BOINC GPU queue while you play (below), and the BOINC client’s own settings (section 3). Citizen-science standings are on the [community page](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community).": {
+        "es": "Tu GPU solo debería trabajar para HiveMind cuando no estés jugando. Aún no existe un juego de HiveMind en Steam: el identificador de Steam `3133700` que aparece en este repositorio pertenece a un complemento no relacionado (Fantasy Grounds), así que no nos busques allí. Lo que existe hoy es un script auxiliar que pausa la cola GPU de BOINC mientras juegas (abajo) y los propios ajustes del cliente BOINC (sección 3). La clasificación de ciencia ciudadana está en la [página comunitaria](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community).",
+        "de": "Ihre GPU sollte nur dann für HiveMind arbeiten, wenn Sie nicht spielen. Es gibt noch kein HiveMind-Spiel auf Steam: Die Steam-ID `3133700` in diesem Repository gehört zu einem unabhängigen Spiel-Add-on (Fantasy Grounds); suchen Sie uns dort also nicht. Was heute existiert, ist ein Hilfsskript, das die BOINC-GPU-Warteschlange beim Spielen pausiert (unten), sowie die eigenen Einstellungen des BOINC-Clients (Abschnitt 3). Die Citizen-Science-Rangliste finden Sie auf der [Community-Seite](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community).",
+        "zh": "您的 GPU 只应在您不玩游戏时为 HiveMind 工作。目前 Steam 上还没有 HiveMind 游戏：本仓库中出现的 Steam ID `3133700` 属于另一个无关的游戏扩展包（Fantasy Grounds），请勿在那里搜索我们。目前可用的是一个在您游戏时暂停 BOINC GPU 队列的辅助脚本（见下文），以及 BOINC 客户端自身的礼让设置（见第 3 节）。公民科学排行榜位于[社区页面](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community)。",
+    },
+    "The helper pauses the BOINC GPU queue (`boinccmd --set_gpu_mode never`) when it sees keyboard or mouse input in the last 4 seconds, GPU load above 45%, or a GPU temperature above 78 °C, and sets it back to `auto` otherwise. On Linux it needs `xprintidle` (X11 only); where it cannot measure your input it assumes you are playing and does nothing. It changes the BOINC GPU mode itself, so it overrides a mode you set by hand. We have not measured its effect on frame rate. What it computes while you are away is a built-in self-check pattern, not real telescope data (see section 3).": {
+        "es": "El script pausa la cola GPU de BOINC (`boinccmd --set_gpu_mode never`) cuando detecta actividad de teclado o ratón en los últimos 4 segundos, carga de GPU superior al 45 % o temperatura de GPU superior a 78 °C, y la devuelve a `auto` en caso contrario. En Linux necesita `xprintidle` (solo X11); donde no puede medir tu entrada asume que estás jugando y no hace nada. Cambia por sí mismo el modo GPU de BOINC, por lo que sobrescribe el modo que hayas fijado manualmente. No hemos medido su efecto en los fotogramas por segundo. Lo que calcula en tu ausencia es un patrón de autocomprobación integrado, no datos reales de telescopio (véase la sección 3).",
+        "de": "Das Hilfsskript pausiert die BOINC-GPU-Warteschlange (`boinccmd --set_gpu_mode never`), sobald es Tastatur- oder Mauseingaben in den letzten 4 Sekunden, eine GPU-Last über 45 % oder eine GPU-Temperatur über 78 °C erkennt, und setzt sie sonst auf `auto` zurück. Unter Linux benötigt es `xprintidle` (nur X11); wo es Ihre Eingaben nicht messen kann, nimmt es an, dass Sie spielen, und tut nichts. Es ändert den BOINC-GPU-Modus selbst und überschreibt daher einen manuell gesetzten Modus. Wir haben seine Auswirkung auf die Bildrate nicht gemessen. Was es in Ihrer Abwesenheit berechnet, ist ein eingebautes Selbsttestmuster, keine echten Teleskopdaten (siehe Abschnitt 3).",
+        "zh": "当辅助脚本检测到最近 4 秒内有键盘或鼠标输入、GPU 负载高于 45% 或 GPU 温度高于 78 °C 时，会暂停 BOINC GPU 队列（`boinccmd --set_gpu_mode never`），否则将其恢复为 `auto`。在 Linux 上它需要 `xprintidle`（仅限 X11）；在无法测量输入的环境中，它会默认您正在游戏而不执行任何操作。它会直接修改 BOINC 的 GPU 模式，因此会覆盖您手动设置的模式。我们尚未测量其对游戏帧率的影响。当您离开时，它计算的是内置自检图案，而非真实的望远镜数据（见第 3 节）。",
     },
     "4. Gamers and Steam": {
         "es": "4. Jugadores y Steam",

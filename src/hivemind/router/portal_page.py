@@ -1946,6 +1946,7 @@ python scripts/hivemind_producer_agent.py --gateway https://hivemind-openrouter-
         <a href="/v1/hivemind/catalog" data-i18n="footer_catalog">{html.escape(t["footer_catalog"])}</a>
         <a href="/healthz">Healthz</a>
         <a href="/health">Health</a>
+        <a href="/health">Health</a>
       </div>
     </footer>
   </div>

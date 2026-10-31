@@ -88,8 +88,13 @@ class _LASTINPUTINFO(ctypes.Structure):
     _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
 
 
-def get_user_idle_seconds() -> float:
-    """Return seconds since last keyboard/mouse input on Windows, Linux (xprintidle), or macOS (IOHIDSystem)."""
+def get_user_idle_seconds(assume_idle_when_unknown: bool = False) -> float:
+    """Return seconds since last keyboard/mouse input on Windows, Linux (xprintidle), or macOS (IOHIDSystem).
+
+    When the idle time cannot be measured (no xprintidle, Wayland, a headless box, a failed call) the safe answer for someone who is playing is "the user is active": 0.0.
+    The previous default of 10 s meant "idle", so on a Linux PC without xprintidle the worker would have kept working during a game. A dedicated headless machine that really is
+    never used can opt back in with ``assume_idle_when_unknown=True`` (``--assume-idle-when-unmeasurable``).
+    """
     if sys.platform == "win32":
         try:
             lii = _LASTINPUTINFO()
@@ -117,12 +122,16 @@ def get_user_idle_seconds() -> float:
                 if m:
                     return max(0.0, float(m.group(1)) / 1_000_000_000.0)
             except Exception:
-                return 10.0
-    return 10.0
+                _ = None
+    return 10.0 if assume_idle_when_unknown else 0.0
 
 
 def query_nvidia_gpu_status() -> Dict[str, Any]:
-    """Query NVIDIA GPU model, utilization %, temperature °C, VRAM, and power draw via `nvidia-smi`."""
+    """Query NVIDIA GPU model, utilization %, temperature °C, VRAM, and power draw via `nvidia-smi`.
+
+    If the card cannot be read the answer is ``available: False`` with the card treated as BUSY and HOT (100 %, 99 °C), so the worker does not start. It never invents a card:
+    the previous fallback reported a made-up "NVIDIA GeForce RTX 2070, 8 % load, 46 °C", which both hid a failure and made the PC look idle.
+    """
     try:
         res = subprocess.run(
             [
@@ -138,28 +147,19 @@ def query_nvidia_gpu_status() -> Dict[str, Any]:
         if res.returncode == 0 and res.stdout.strip():
             parts = [p.strip() for p in res.stdout.strip().splitlines()[0].split(",")]
             if len(parts) >= 3:
-                raw_model = parts[0]
-                gpu_model = raw_model if "NVIDIA" in raw_model.upper() else f"NVIDIA {raw_model}"
                 return {
-                    "gpu_model": gpu_model,
+                    "available": True,
+                    "gpu_model": parts[0],
                     "utilization_pct": float(parts[1]),
                     "temp_c": float(parts[2]),
-                    "total_mib": float(parts[3]) if len(parts) > 3 else 8192.0,
-                    "used_mib": float(parts[4]) if len(parts) > 4 else 512.0,
-                    "power_w": float(parts[5]) if len(parts) > 5 and parts[5] not in ("[N/A]", "") else 9.8,
-                    "driver_version": parts[6] if len(parts) > 6 else "610.88",
+                    "total_mib": float(parts[3]) if len(parts) > 3 else 0.0,
+                    "used_mib": float(parts[4]) if len(parts) > 4 else 0.0,
+                    "power_w": float(parts[5]) if len(parts) > 5 and parts[5] not in ("[N/A]", "") else None,
+                    "driver_version": parts[6] if len(parts) > 6 else "unknown",
                 }
     except Exception:
-        res = None
-    return {
-        "gpu_model": "NVIDIA GeForce RTX 2070",
-        "utilization_pct": 8.0,
-        "temp_c": 46.0,
-        "total_mib": 8192.0,
-        "used_mib": 512.0,
-        "power_w": 9.8,
-        "driver_version": "610.88",
-    }
+        _ = None
+    return {"available": False, "gpu_model": "unknown", "utilization_pct": 100.0, "temp_c": 99.0, "total_mib": 0.0, "used_mib": 0.0, "power_w": None, "driver_version": "unknown"}
 
 
 def execute_cuda_ptx_bls_fold(target_planet: str = "K2-18 b", n_pts: int = 16384) -> Dict[str, Any]:
@@ -266,13 +266,54 @@ def set_boinc_client_gpu_mode(enable_gpu: bool) -> str:
     """Pause (`never`) or resume (`auto`) the standard BOINC client GPU queue via `boinccmd` if installed."""
     boinccmd = shutil.which("boinccmd")
     if not boinccmd:
-        return "cuda_ptx_bls_gpu_worker" if enable_gpu else "cuda_ptx_bls_gpu_paused"
+        # Nothing was paused or resumed: say so (the old text claimed "paused" with no BOINC client at all).
+        return "boinccmd_not_found"
     mode = "auto" if enable_gpu else "never"
     try:
-        subprocess.run([boinccmd, "--set_gpu_mode", mode], capture_output=True, timeout=2.5, check=False)
-        return f"boinccmd_gpu_{mode}"
+        done = subprocess.run([boinccmd, "--set_gpu_mode", mode], capture_output=True, timeout=2.5, check=False)
     except Exception:
-        return f"cuda_ptx_bls_gpu_{mode}"
+        return "boinccmd_failed"
+    return f"boinccmd_gpu_{mode}" if done.returncode == 0 else f"boinccmd_failed_rc{done.returncode}"
+
+
+def compute_deterministic_qlora_outer_delta(workunit_id: str, domain: str, fold_digest: str) -> Dict[str, Any]:
+    """Compute a deterministic rank-4 QLoRA outer delta (A: 4x8, B: 8x4) and two-statistic spot-check metrics."""
+    seed_bytes = hashlib.sha256(f"QLORA_R4|{workunit_id}|{domain}|{fold_digest}".encode("utf-8")).digest()
+    lora_a: list[list[float]] = []
+    for r in range(4):
+        row_a = []
+        for c in range(8):
+            idx = (r * 8 + c) % len(seed_bytes)
+            val = ((seed_bytes[idx] / 255.0) - 0.5) * 0.24
+            if r == c:
+                val += 0.12
+            row_a.append(round(val, 5))
+        lora_a.append(row_a)
+
+    seed_b = hashlib.sha256(f"QLORA_R4_B|{workunit_id}|{domain}|{fold_digest}".encode("utf-8")).digest()
+    lora_b: list[list[float]] = []
+    for r in range(8):
+        row_b = []
+        for c in range(4):
+            idx = (r * 4 + c) % len(seed_b)
+            val = ((seed_b[idx] / 255.0) - 0.5) * 0.22
+            if r == c:
+                val += 0.10
+            row_b.append(round(val, 5))
+        lora_b.append(row_b)
+
+    return {
+        "canonical_rank_r": 4,
+        "wire_codec": "e8_2bit",
+        "train_nll_before": 2.184,
+        "train_nll_after": 1.712,
+        "holdout_nll_before": 2.215,
+        "holdout_nll_after": 1.798,
+        "lora_a_matrix": lora_a,
+        "lora_b_matrix": lora_b,
+        "spotcheck_replay_l2_drift": 0.00024,
+        "spotcheck_cosine_sim": 0.9996,
+    }
 
 
 def compute_deterministic_qlora_outer_delta(workunit_id: str, domain: str, fold_digest: str) -> Dict[str, Any]:
@@ -324,12 +365,13 @@ def run_one_idle_gpu_boinc_cycle(
     target_planet: str = "K2-18 b",
     force_fold: bool = False,
     dry_run: bool = False,
+    assume_idle_when_unknown: bool = False,
 ) -> Dict[str, Any]:
     """Run one automatic idle-GPU check, pause/resume BOINC accordingly, and lease/fold/submit a workunit when idle."""
-    idle_s = get_user_idle_seconds()
+    idle_s = get_user_idle_seconds(assume_idle_when_unknown)
     gpu = query_nvidia_gpu_status()
     is_gpu_idle_for_boinc = force_fold or dry_run or (
-        (idle_s >= idle_threshold_seconds) and (gpu["utilization_pct"] < max_gpu_load) and (gpu["temp_c"] < 78.0)
+        bool(gpu.get("available", True)) and (idle_s >= idle_threshold_seconds) and (gpu["utilization_pct"] < max_gpu_load) and (gpu["temp_c"] < 78.0)
     )
     boinc_driver = set_boinc_client_gpu_mode(is_gpu_idle_for_boinc)
 
@@ -355,7 +397,7 @@ def run_one_idle_gpu_boinc_cycle(
         "handle": commander,
         "contributor_handle": commander,
         "project_id": "hivemind_tess_at_home",
-        "gpu_idle_seconds": round(max(idle_threshold_seconds + 0.5, idle_s) if is_gpu_idle_for_boinc else idle_s, 2),
+        "gpu_idle_seconds": round(idle_s, 2),  # the measured value; it used to be raised to threshold + 0.5 s whenever the worker ran
         "gpu_utilization_pct": gpu["utilization_pct"],
         "gpu_model": gpu["gpu_model"],
         "target_planet": target_planet,
@@ -466,6 +508,7 @@ def run_one_idle_gpu_boinc_cycle(
         "boinc_driver": boinc_driver,
         "cuda_fold": cuda_fold,
         "qlora_outer_delta_summary": {
+            "placeholder_not_training": True,  # the delta and the loss numbers below are derived from a hash of the workunit id and fixed constants: no model was trained
             "canonical_rank_r": qlora_delta["canonical_rank_r"],
             "wire_codec": qlora_delta["wire_codec"],
             "holdout_nll_before": qlora_delta["holdout_nll_before"],
@@ -495,6 +538,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--target-planet", default="K2-18 b", help="Exoplanet light curve target to fold via CUDA PTX BLS kernel")
     parser.add_argument("--idle-threshold-seconds", type=float, default=4.0, help="Seconds of user inactivity before GPU folding resumes")
     parser.add_argument("--max-gpu-load", type=float, default=45.0, help="Pause BOINC if GPU load exceeds this percentage")
+    parser.add_argument("--assume-idle-when-unmeasurable", action="store_true",
+                        help="Treat the PC as idle when keyboard/mouse idle time cannot be measured (no xprintidle, Wayland, headless). Only for a machine nobody plays on: "
+                             "by default an unmeasurable idle time counts as 'the user is active' so a game is never disturbed")
     parser.add_argument("--force-fold", action="store_true", help="Force CUDA PTX kernel folding regardless of current mouse/keyboard idle timer")
     parser.add_argument("--dry-run", action="store_true", help="Run a single local + coordinator dry-run verification cycle and exit")
     parser.add_argument("--pause-now", action="store_true", help="Immediately pause BOINC GPU compute and exit")
@@ -521,6 +567,7 @@ def main(argv: list[str] | None = None) -> int:
             target_planet=args.target_planet,
             force_fold=args.force_fold or args.dry_run,
             dry_run=args.dry_run,
+            assume_idle_when_unknown=args.assume_idle_when_unmeasurable,
         )
         print(json.dumps(report, indent=2))
         if args.once or args.dry_run:

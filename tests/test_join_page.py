@@ -127,16 +127,25 @@ def test_the_languages_really_differ_declare_themselves_and_french_is_default() 
         assert f'hreflang="{code}"' in fr and f'href="/join?lang={code}"' in fr and name in fr
 
 
-def test_train_and_play_paths_are_available_now_with_working_commands() -> None:
-    assert [cls for _anchor, _title, cls, _status, _summary in PATHS] == ["ok", "ok", "ok", "ok"]
+def test_train_path_is_available_and_the_play_path_says_it_is_a_helper_script_with_no_steam_game() -> None:
+    """Steam's own store API says AppID 3133700 is 'Fantasy Grounds - Raiders of the Ghost Zone' (an add-on by another company), so the page must never offer it as ours."""
+    assert [cls for _anchor, _title, cls, _status, _summary in PATHS] == ["ok", "ok", "ok", "dev"]
     en, fr = page("en"), page("fr")
     assert "pas encore ouvert au public" not in fr and "not open to the public yet" not in en
-    assert "En développement" not in fr and "In development" not in en
-    assert "Disponible maintenant · unités MoE nocturnes et astrophysique" in fr
-    assert "Disponible maintenant · jeu Steam gratuit et pause GPU automatique" in fr
-    assert "Available now · night MoE &amp; astrophysics workunits" in en
-    assert "Available now · Free-to-Play Steam &amp; automatic idle-GPU pause" in en
-    assert "hivemind_boinc_idle_worker.py" in fr and "AppID 3133700" in fr
+    assert "Disponible maintenant · unités d'entraînement nocturnes (BOINC)" in fr.replace("&#x27;", "'")
+    assert "Available now · night training workunits (BOINC)" in en
+    assert "Helper script only · no Steam game yet" in en and "pas encore de jeu Steam" in fr
+    assert "Free-to-Play" not in en and "jeu Steam gratuit" not in fr
+    assert "belongs to an unrelated game add-on (Fantasy Grounds)" in en and "appartient à un autre jeu" in fr
+    assert "hivemind_boinc_idle_worker.py" in fr
+
+
+def test_the_page_does_not_call_the_synthetic_self_check_science_or_training() -> None:
+    """The worker folds a dip it injects into a synthetic curve, and its 'QLoRA delta' is derived from a hash: neither may be described as real data or training."""
+    en = html.unescape(re.sub(r"<[^>]+>", " ", page("en")))
+    assert "not real TESS or JWST data" in en and "It does not train a model" in en and "deterministic placeholder" in en
+    assert "0% GPU overhead" not in en and "60 FPS" not in en
+    assert "assumes you are playing" in en  # unmeasurable input counts as 'playing'
 
 
 def test_every_section_link_points_at_a_section_that_exists() -> None:
@@ -206,6 +215,7 @@ def test_every_script_and_flag_the_page_tells_people_to_use_exists() -> None:
         "hivemind_boinc_idle_worker.py",
         "hivemind_producer_agent.py",
         "hivemind_producer_shield.py",
+        "hivemind_volunteer_config.py",
         "hivemind_volunteer_preflight.py",
     }
     for name in scripts:

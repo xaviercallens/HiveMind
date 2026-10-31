@@ -231,15 +231,15 @@ def test_ip42_pinned_revision_required_and_ip52_boinc_torch_load_weights_only(tm
     with pytest.raises(ValueError, match="IP-42"):
         verify_remote_checkpoint_revision_and_digest("main")
 
-    dummy_ckpt = tmp_path / "model.safetensors"
-    dummy_ckpt.write_bytes(b"safetensors-weights")
+    sample_ckpt = tmp_path / "model.safetensors"
+    sample_ckpt.write_bytes(b"safetensors-weights")
     good_sha = hashlib.sha256(b"safetensors-weights").hexdigest()
     assert (
-        verify_remote_checkpoint_revision_and_digest("4befc48dcb29", str(dummy_ckpt), good_sha)
+        verify_remote_checkpoint_revision_and_digest("4befc48dcb29", str(sample_ckpt), good_sha)
         == "4befc48dcb29"
     )
     with pytest.raises(ValueError, match="SHA-256 mismatch"):
-        verify_remote_checkpoint_revision_and_digest("4befc48dcb29", str(dummy_ckpt), "0" * 64)
+        verify_remote_checkpoint_revision_and_digest("4befc48dcb29", str(sample_ckpt), "0" * 64)
 
     boinc_dir = Path(__file__).resolve().parents[1] / "src" / "hivemind" / "boinc"
     for py_file in boinc_dir.rglob("*.py"):
@@ -291,6 +291,61 @@ def test_ip44_bee_energy_rejects_lean4_axiom_false() -> None:
     assert ev_valid.total_energy < MAX_PAIN_ENERGY
 
 
+def test_ip43_deterministic_runtime_strict_and_ip50_governor_retries() -> None:
+    """IP-43 & IP-50: configure_deterministic_runtime defaults warn_only=False; governor_step retries set_gpu('never') and fails closed."""
+    from hivemind.config import configure_deterministic_runtime
+    from scripts.t4_governor import governor_step
+
+    det_info = configure_deterministic_runtime(seed=42)
+    assert det_info["warn_only"] is False
+    assert det_info["deterministic_algorithms"] is True
+    assert torch.are_deterministic_algorithms_enabled() is True
+    configure_deterministic_runtime(seed=42, warn_only=True)
+
+    calls: list[str] = []
+    outcomes = [False, True]
+
+    def set_gpu_probe(mode: str) -> bool:
+        calls.append(mode)
+        return outcomes.pop(0) if outcomes else True
+
+    s1 = governor_step(
+        "training",
+        {"in_flight": 1, "http_ok": True, "gpu_probe_ok": True},
+        set_gpu_probe,
+    )
+    assert s1["state"] == "yield_pending"
+    assert s1["set_gpu_ok"] is False
+
+    # Even if in_flight drops to 0 on the next tick, yield_pending must retry set_gpu('never')
+    s2 = governor_step(
+        s1["state"],
+        {"in_flight": 0, "http_ok": True, "gpu_probe_ok": True},
+        set_gpu_probe,
+    )
+    assert s2["state"] == "yielded"
+    assert s2["set_gpu_ok"] is True
+    assert calls == ["never", "never"]
+
+    # GPU probe failure while training fails closed
+    s_gpu = governor_step(
+        "training",
+        {"in_flight": 0, "http_ok": True, "gpu_probe_ok": False},
+        lambda m: True,
+    )
+    assert s_gpu["state"] == "yielded"
+    assert s_gpu["trigger"] == "gpu_probe_failed"
+
+    # Nginx status lost while training fails closed
+    s_nginx = governor_step(
+        "training",
+        {"in_flight": 0, "http_ok": False, "gpu_probe_ok": True},
+        lambda m: True,
+    )
+    assert s_nginx["state"] == "yielded"
+    assert s_nginx["trigger"] == "nginx_status_lost"
+
+
 def test_run_4h_rtx2070_moe_experimentator_end_to_end(tmp_path: Path) -> None:
     """Verify the full 4-Stage RTX 2070 MoE Bee Experimentator produces a passing signed ledger."""
     out_file = tmp_path / "rtx2070_4h_moe_experimentator_ledger.json"
@@ -302,4 +357,6 @@ def test_run_4h_rtx2070_moe_experimentator_end_to_end(tmp_path: Path) -> None:
     assert rep["stage3_moe_scale_and_inference"]["all_wave3_routes_matched"] is True
     assert rep["stage4_roadmap_pr_ip11"]["ip22_equal_rho_passed"] is True
     assert rep["stage4_roadmap_pr_ip11"]["ip48_passed"] is True
+    assert rep["stage4_roadmap_pr_ip11"]["ip43_strict_default_passed"] is True
+    assert rep["stage4_roadmap_pr_ip11"]["ip50_governor_fail_closed_passed"] is True
     assert len(rep["receipt_sha256"]) == 64

@@ -645,11 +645,11 @@ The full plan, with evidence, Definition of Done and the test for each finding (
 
 ---
 
-### Status update, 2026-10-31 (3-hourly review, evening)
+### Status update, 2026-10-31 (3-hourly review & 4-hour RTX 2070 MoE Bee Experimentator, late evening)
 
-- **Merged since the last update:** [#388](https://github.com/xaviercallens/HiveMind/pull/388) (call for GPU producers in the onboarding guide) and [#390](https://github.com/xaviercallens/HiveMind/pull/390) (Qwen3.5 QLoRA script with CPU tests). The merged tests of #390 pass on the new `main` (10 passed).
-- **Blocked by the stub audit, now unblocked in review:** [#391](https://github.com/xaviercallens/HiveMind/pull/391) renames the launch-wave projection (IP-23). Its rename blocks #362 and #384, which edit the same module and will need a rebase.
-- **Still open and held:** [#369](https://github.com/xaviercallens/HiveMind/pull/369) and [#366](https://github.com/xaviercallens/HiveMind/pull/366) (CI failures: Lean receipt hash and a `gpu_ram` test); [#344](https://github.com/xaviercallens/HiveMind/pull/344) (updated at `23:32 CET`: synced with `origin/main` `214b8d4` [#384, #391, #395], fixed the `test_diloco_outer_streaming_validation.py` and `test_compression_dct_2bit.py` regressions, and implemented `IP-22`, `IP-23`, `IP-42`, `IP-44`, `IP-48`, `IP-52`, and `IP-60` with `164/164` tests passing).
+- **Merged since the last update:** [#388](https://github.com/xaviercallens/HiveMind/pull/388) (call for GPU producers in the onboarding guide), [#390](https://github.com/xaviercallens/HiveMind/pull/390) (Qwen3.5 QLoRA script with CPU tests), [#398](https://github.com/xaviercallens/HiveMind/pull/398) (live AMCP v1.5 Kafka KRaft broker mesh on `socreateai-agora-hermes-node1` and local RTX 2070 joiner), and [#399](https://github.com/xaviercallens/HiveMind/pull/399) (one-command volunteer setup and preflight doctor).
+- **Blocked by the stub audit, now unblocked in review:** [#391](https://github.com/xaviercallens/HiveMind/pull/391) renames the launch-wave projection (`IP-23`, merged).
+- **Still open and held:** [#369](https://github.com/xaviercallens/HiveMind/pull/369) and [#366](https://github.com/xaviercallens/HiveMind/pull/366) (CI failures: Lean receipt hash and a `gpu_ram` test); [#344](https://github.com/xaviercallens/HiveMind/pull/344) (updated at `00:05 CET`: synced with `origin/main` `222f860` [#398, #399], fixed the `test_diloco_outer_streaming_validation.py` and `test_compression_dct_2bit.py` regressions, and implemented `IP-22`, `IP-23`, `IP-42`, `IP-43`, `IP-44`, `IP-48`, `IP-50`, `IP-52`, `IP-60`, and `IP-63`).
 - **Live:** the bee-stars producer answered 502 on all three public services in the last monitor run (12 of 15 probes passed). The enabled shield and agent-bee units are inactive; the fix belongs to the BOINC core node session.
 - **Open for claim (label `agent-ready`):**
   - [#378](https://github.com/xaviercallens/HiveMind/issues/378) owner-key fallback and account takeover (PR-IP-01, PR-IP-02).

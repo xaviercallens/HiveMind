@@ -2468,6 +2468,39 @@ def create_router_app(
             },
         )
 
+    @app.get("/stitch-assets/{asset_name}")
+    def router_stitch_v2_asset(asset_name: str) -> Any:
+        from fastapi.responses import Response as _FastAPIResponse
+
+        safe_name = asset_name.replace("..", "").replace("/", "").replace("\\", "")
+        if safe_name.startswith("stitch_v2_"):
+            svg_fallback = (
+                "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 200'>"
+                "<defs><radialGradient id='g' cx='50%' cy='50%' r='50%'>"
+                "<stop offset='0%' stop-color='#00f0ff'/><stop offset='55%' stop-color='#0284c7'/>"
+                "<stop offset='100%' stop-color='#030712'/></radialGradient></defs>"
+                "<rect width='320' height='200' fill='#030712'/>"
+                "<circle cx='160' cy='100' r='68' fill='url(#g)'/>"
+                "<ellipse cx='160' cy='100' rx='118' ry='22' fill='none' stroke='#fbbf24' stroke-width='2' stroke-opacity='0.65'/>"
+                f"<text x='160' y='188' text-anchor='middle' fill='#e2e8f0' font-family='monospace' font-size='10'>{safe_name[:42]}</text>"
+                "</svg>"
+            )
+            return _FastAPIResponse(
+                content=svg_fallback,
+                media_type="image/svg+xml",
+                headers={"Cache-Control": "public, max-age=86400", "X-Content-Type-Options": "nosniff"},
+            )
+        raise RouterError(404, f"Stitch asset {safe_name} not found", "not_found_error", "asset_not_found")
+
+    @app.api_route("/night-moe", methods=["GET", "HEAD"])
+    @app.api_route("/community", methods=["GET", "HEAD"])
+    @app.api_route("/boinc", methods=["GET", "HEAD"])
+    def router_ruche_redirect(request: Request) -> RedirectResponse:
+        return RedirectResponse(
+            f"https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app{request.url.path}",
+            status_code=307,
+        )
+
     @app.get("/v1/hivemind/webgpu/status")
     def webgpu_status() -> dict[str, Any]:
         """Public metadata for the Zero-Install WebGPU Galaxy & WGSL @compute Edition."""

@@ -1343,7 +1343,7 @@ python scripts/hivemind_producer_agent.py --gateway https://hivemind-openrouter-
         <a href="https://xaviercallens.github.io/HiveMindatHome.github.io/" target="_blank" rel="noopener">HiveMind@home</a>
         <a href="/signup">Sign in with Google</a>
         <a href="/v1/hivemind/catalog">Catalog JSON</a>
-        <a href="/healthz">Healthz</a>
+        <a href="/health">Health</a>
       </div>
     </footer>
   </div>

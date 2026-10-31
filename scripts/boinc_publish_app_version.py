@@ -21,36 +21,59 @@ import os
 import re
 import shutil
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from hivemind.boinc.real_client.moe_profiles import PROFILES  # noqa: E402
 from hivemind.boinc.real_client.server_stack import PLAN_CLASS, PLATFORM, Stack  # noqa: E402
 
-APPS = {"hivemind_qlora_moe": "train", "hivemind_moe_infer": "infer"}
+APPS = {
+    "hivemind_qlora_moe": "train",
+    "hivemind_qlora_moe_big": "train",
+    "hivemind_moe_infer": "infer",
+}
 BETA_PLAN_CLASS = f"{PLAN_CLASS}_beta"
 BETA_FLOPS_SCALE = "0.2"  # twice the stable class: a host that opted in to beta work prefers the beta version by projected speed
 
 
-def render_version_xml(launcher: str, archives: Sequence[str], plan_class: str) -> str:
+def plan_classes_for_app(app: str) -> tuple[str, str]:
+    """Return ``(stable_plan_class, beta_plan_class)`` for ``app``."""
+    for p in PROFILES.values():
+        if p["app"] == app:
+            stable = str(p["plan_class"])
+            return stable, f"{stable}_beta"
+    return PLAN_CLASS, BETA_PLAN_CLASS
+
+
+def gpu_ram_mb_for_app(app: str) -> int:
+    """Return the minimum GPU VRAM requirement (in MB) for ``app``."""
+    for p in PROFILES.values():
+        if p["app"] == app:
+            return int(p["min_gpu_ram_mb"])
+    return 3500
+
+
+def render_version_xml(launcher: str, archives: Sequence[str], plan_class: str, gpu_ram_mb: int = 3500) -> str:
     files = f" <file>\n  <physical_name>{launcher}</physical_name>\n  <main_program/>\n </file>\n" + "".join(
         f" <file>\n  <physical_name>{n}</physical_name>\n </file>\n" for n in archives)
     return (
         f"<version>\n{files} <plan_class>{plan_class}</plan_class>\n <avg_ncpus>1</avg_ncpus>\n <flops>4e12</flops>\n"
-        " <coproc>\n  <type>NVIDIA</type>\n  <count>1</count>\n </coproc>\n <gpu_ram>3500000000</gpu_ram>\n</version>\n"
+        f" <coproc>\n  <type>NVIDIA</type>\n  <count>1</count>\n </coproc>\n <gpu_ram>{int(gpu_ram_mb) * 1_000_000}</gpu_ram>\n</version>\n"
     )
 
 
-def plan_class_spec_with_beta(spec: str) -> str:
-    """``spec`` (plan_class_spec.xml text) plus a ``cuda_hivemind_beta`` class copied from the stable one, unless it already has it."""
-    if f"<name>{BETA_PLAN_CLASS}</name>" in spec:
+def plan_class_spec_with_beta(spec: str, stable_class: str = PLAN_CLASS, beta_class: str | None = None) -> str:
+    """``spec`` (plan_class_spec.xml text) plus a ``<stable_class>_beta`` class copied from ``stable_class``, unless it already has it."""
+    target_beta = beta_class or (BETA_PLAN_CLASS if stable_class == PLAN_CLASS else f"{stable_class}_beta")
+    if f"<name>{target_beta}</name>" in spec:
         return spec
-    block = re.search(rf"[ \t]*<plan_class>\s*<name>{re.escape(PLAN_CLASS)}</name>.*?</plan_class>\n?", spec, re.S)
+    block = re.search(rf"[ \t]*<plan_class>\s*<name>{re.escape(stable_class)}</name>.*?</plan_class>\n?", spec, re.S)
     if block is None:
-        raise SystemExit(f"plan_class_spec.xml has no '{PLAN_CLASS}' class to copy")
-    beta = block.group(0).replace(f"<name>{PLAN_CLASS}</name>", f"<name>{BETA_PLAN_CLASS}</name>")
+        raise SystemExit(f"plan_class_spec.xml has no '{stable_class}' class to copy")
+    beta = block.group(0).replace(f"<name>{stable_class}</name>", f"<name>{target_beta}</name>")
     beta = re.sub(r"<gpu_peak_flops_scale>[^<]*</gpu_peak_flops_scale>", f"<gpu_peak_flops_scale>{BETA_FLOPS_SCALE}</gpu_peak_flops_scale>", beta)
     return spec.replace("</plan_classes>", beta + ("" if beta.endswith("\n") else "\n") + "</plan_classes>")
 
@@ -71,16 +94,30 @@ def newest(dist: Path, kind: str, suffix: str) -> str:
     return found[-1].name
 
 
-def publish(st: Stack, dist: Path, version: int, plan_class: str, beta: bool) -> None:
+def publish(st: Stack, dist: Path, version: int, plan_class: str, beta: bool, apps: Mapping[str, str] | None = None) -> None:
+    target_apps = apps or APPS
+    live: list[str] = []
     if beta:
         live = st.sql(f"use {st.dbname}; select distinct plan_class from app_version where deprecated=0 and beta=0;").split()[1:]
         assert_beta_cannot_mask(plan_class, live)
         spec = st.root / "plan_class_spec.xml"
-        spec.write_text(plan_class_spec_with_beta(spec.read_text()))
+        spec_text = spec.read_text()
+        spec_text = plan_class_spec_with_beta(spec_text)
+        for app in target_apps:
+            stable_cls, beta_cls = plan_classes_for_app(app)
+            if f"<name>{stable_cls}</name>" in spec_text:
+                spec_text = plan_class_spec_with_beta(spec_text, stable_class=stable_cls, beta_class=beta_cls)
+        spec.write_text(spec_text)
     names = {"RUNTIME": newest(dist, "runtime", ".tar.xz"), "SRC": newest(dist, "src", ".tar.xz"), "MODEL": newest(dist, "model", ".tar")}
     template = (ROOT / "deploy" / "boinc_dist" / "launcher.sh.in").read_text()
-    for app, mode in APPS.items():
-        vdir = st.root / "apps" / app / str(version) / f"{PLATFORM}__{plan_class}"
+    published_plan_classes: set[str] = set()
+    for app, mode in target_apps.items():
+        stable_cls, beta_cls = plan_classes_for_app(app)
+        app_plan_class = (beta_cls if beta else stable_cls) if plan_class in (PLAN_CLASS, BETA_PLAN_CLASS) else plan_class
+        if beta:
+            assert_beta_cannot_mask(app_plan_class, live)
+        published_plan_classes.add(app_plan_class)
+        vdir = st.root / "apps" / app / str(version) / f"{PLATFORM}__{app_plan_class}"
         if (vdir / "version.xml").exists():
             raise SystemExit(f"{vdir} exists: BOINC files are immutable, choose a new version number")
         vdir.mkdir(parents=True, exist_ok=True)
@@ -97,9 +134,12 @@ def publish(st: Stack, dist: Path, version: int, plan_class: str, beta: bool) ->
                     os.link(dist / n, target)  # same filesystem: no second copy of gigabytes
                 except OSError:
                     shutil.copy2(dist / n, target)
-        (vdir / "version.xml").write_text(render_version_xml(exe.name, list(names.values()), plan_class))
+        (vdir / "version.xml").write_text(
+            render_version_xml(exe.name, list(names.values()), app_plan_class, gpu_ram_mb=gpu_ram_mb_for_app(app))
+        )
     print(st.update_versions())  # signs every file with the code-signing key, copies to download/, registers the app versions
-    st.sql(f"use {st.dbname}; update app_version set beta={1 if beta else 0} where version_num={version} and plan_class='{plan_class}';")
+    for cls in sorted(published_plan_classes):
+        st.sql(f"use {st.dbname}; update app_version set beta={1 if beta else 0} where version_num={version} and plan_class='{cls}';")
     if not beta:  # promotion: every older version, of any plan class, is retired so the cache offers exactly this one
         st.sql(f"use {st.dbname}; update app_version set deprecated=1 where version_num<{version};")
     (st.root / "reread_db").touch()  # the feeder reloads the app versions

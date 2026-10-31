@@ -138,8 +138,10 @@ def query_nvidia_gpu_status() -> Dict[str, Any]:
         if res.returncode == 0 and res.stdout.strip():
             parts = [p.strip() for p in res.stdout.strip().splitlines()[0].split(",")]
             if len(parts) >= 3:
+                raw_model = parts[0]
+                gpu_model = raw_model if "NVIDIA" in raw_model.upper() else f"NVIDIA {raw_model}"
                 return {
-                    "gpu_model": parts[0],
+                    "gpu_model": gpu_model,
                     "utilization_pct": float(parts[1]),
                     "temp_c": float(parts[2]),
                     "total_mib": float(parts[3]) if len(parts) > 3 else 8192.0,

@@ -1,0 +1,34 @@
+{
+  "experiment_id": "E21",
+  "roadmap_id": "HM-S30-02",
+  "title": "Empirical Scaling Benchmark: Multi-Krum + 10% Replay vs ZK-OPoI v5 at N = 32, 128, 512, 2048",
+  "status": "PRE_REGISTERED",
+  "registered_at": "2026-10-31T10:05:00Z",
+  "hypothesis": "At N in {32, 128}, Multi-Krum (O(N^2 d)) + 10% Spot-Check Replay achieves <30ms aggregation overhead and 100% Byzantine poisoning rejection up to f < N/2 - 1, outperforming full ZK-OPoI v5 on wall-clock overhead while maintaining equivalent model convergence. At N in {512, 2048}, full pairwise Multi-Krum distance matrices become quadratic-bound, making hierarchical Sub-Swarm Multi-Krum (k=16) + ZK-OPoI v5 Spot-Check Proof Verification the Pareto-optimal security regime.",
+  "independent_variables": {
+    "swarm_sizes_n": [32, 128, 512, 2048],
+    "byzantine_fraction_f_ratio": [0.1, 0.2, 0.3],
+    "model_grad_dim_d": 4096,
+    "defense_modes": [
+      "multi_krum_plus_10pct_replay",
+      "zk_opoi_v5_int8_full",
+      "hierarchical_subswarm_krum_zk_hybrid"
+    ]
+  },
+  "dependent_variables": [
+    "wall_clock_aggregation_ms",
+    "byzantine_rejection_rate",
+    "honest_cosine_fidelity",
+    "verifier_cpu_ms"
+  ],
+  "falsification_criteria": {
+    "min_byzantine_rejection_rate": 0.99,
+    "min_honest_cosine_fidelity": 0.92,
+    "crossover_n_threshold": 512
+  },
+  "openrouter_architect_receipt": {
+    "completion_id": "chatcmpl-458",
+    "request_id": "req-61afd9961ec048168b595568ebb5a98f",
+    "model": "hivemind/coder"
+  }
+}

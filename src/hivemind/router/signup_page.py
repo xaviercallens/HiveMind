@@ -14,7 +14,7 @@ All dynamic DOM updates use ``textContent`` (never ``innerHTML``), and the Conte
 from __future__ import annotations
 
 import html
-from typing import Any
+from typing import Any, Mapping
 
 from hivemind.router.google_auth import CLIENT_ID_RE
 
@@ -174,16 +174,18 @@ async function syncSignupLiveTelemetry() {
     const t4 = d.t4_boinc || {};
     const ot = d.opentrainer || {};
     if ($('signupLiveTelemetry')) {
+      const rd = function(v, thousands) { return (v === null || v === undefined) ? 'n/a' : (thousands ? Number(v).toLocaleString() : String(v)); };
+      const partial = [acct.total_registered_accounts, models.live_models_count, t4.vram_free_mib].some(function(v) { return v === null || v === undefined; });
       $('signupLiveTelemetry').textContent =
-        '🟢 Live GCP Swarm: ' + (acct.total_registered_accounts || 69) + ' Registered Accounts (' +
-        (byRole.prosumer || 32) + ' prosumers, ' +
-        (byRole.producer || 10) + ' producers, ' +
-        (byRole.consumer || 24) + ' consumers, ' +
-        (byRole.trainer || 0) + ' trainers) • ' +
-        (models.live_models_count || 15) + ' Live Models • T4 Free VRAM ' +
-        Number(t4.vram_free_mib || 10519).toLocaleString() + ' MiB • OpenTrainer ' +
-        (ot.total_registered_nodes || 1) + ' Trainer GPU(s) / ' +
-        (ot.accepted_rounds_count || 1) + ' Accepted Round(s)';
+        '🟢 ' + (partial ? 'GCP Swarm (live telemetry partly unavailable)' : 'Live GCP Swarm') + ': ' + rd(acct.total_registered_accounts) + ' Registered Accounts (' +
+        rd(byRole.prosumer) + ' prosumers, ' +
+        rd(byRole.producer) + ' producers, ' +
+        rd(byRole.consumer) + ' consumers, ' +
+        rd(byRole.trainer) + ' trainers) • ' +
+        rd(models.live_models_count) + ' Live Models • T4 Free VRAM ' +
+        rd(t4.vram_free_mib, true) + ' MiB • OpenTrainer ' +
+        rd(ot.total_registered_nodes) + ' Trainer GPU(s) / ' +
+        rd(ot.accepted_rounds_count) + ' Accepted Round(s)';
     }
   } catch (e) {}
 }
@@ -217,6 +219,15 @@ window.onGoogleLibraryLoad = init;
 """
 
 
+def _reading(source: Mapping[str, Any], key: str, *, thousands: bool = False) -> str:
+    """The integer reading at ``key`` as text, or "n/a" when the live snapshot has none."""
+    value = source.get(key)
+    if value is None:
+        return "n/a"
+    number = int(value)
+    return f"{number:,}" if thousands else str(number)
+
+
 def render_signup_page(
     client_id: str | None,
     nonce: str,
@@ -235,15 +246,17 @@ def render_signup_page(
     models_live = lt.get("models") or {}
     t4_live = lt.get("t4_boinc") or {}
     ot_live = lt.get("opentrainer") or {}
-    total_accts = int(acct_summary.get("total_registered_accounts", 69))
-    prosumers_cnt = int(by_role.get("prosumer", 32))
-    producers_cnt = int(by_role.get("producer", 10))
-    consumers_cnt = int(by_role.get("consumer", 24))
-    trainers_cnt = int(by_role.get("trainer", 0))
-    live_models_cnt = int(models_live.get("live_models_count", 15))
-    t4_free_mib = int(t4_live.get("vram_free_mib", 10519))
-    ot_nodes = int(ot_live.get("total_registered_nodes", 1))
-    ot_rounds = int(ot_live.get("accepted_rounds_count", 1))
+    # A missing reading is shown as "n/a", never replaced by an invented number.
+    total_accts = _reading(acct_summary, "total_registered_accounts")
+    prosumers_cnt = _reading(by_role, "prosumer")
+    producers_cnt = _reading(by_role, "producer")
+    consumers_cnt = _reading(by_role, "consumer")
+    trainers_cnt = _reading(by_role, "trainer")
+    live_models_cnt = _reading(models_live, "live_models_count")
+    t4_free_mib = _reading(t4_live, "vram_free_mib", thousands=True)
+    ot_nodes = _reading(ot_live, "total_registered_nodes")
+    ot_rounds = _reading(ot_live, "accepted_rounds_count")
+    telemetry_label = "Live GCP Swarm" if "n/a" not in (total_accts, live_models_cnt, t4_free_mib) else "GCP Swarm (live telemetry partly unavailable)"
 
     starter_line = (
         f"Starter grant on this gateway: {starter_grant_hmt:.2f} HMT per new account, at most a few per address per day."
@@ -318,7 +331,7 @@ def render_signup_page(
 </header>
 
 <div id="signupLiveTelemetry" class="card" style="padding:.65rem .9rem;margin-bottom:.9rem;border-color:#065f46;background:#022c22;color:#a7f3d0;font-family:ui-monospace,monospace;font-size:.82rem;">
-  🟢 Live GCP Swarm: {total_accts} Registered Accounts ({prosumers_cnt} prosumers, {producers_cnt} producers, {consumers_cnt} consumers, {trainers_cnt} trainers) • {live_models_cnt} Live Models • T4 Free VRAM {t4_free_mib:,} MiB • OpenTrainer {ot_nodes} Trainer GPU(s) / {ot_rounds} Accepted Round(s)
+  🟢 {telemetry_label}: {total_accts} Registered Accounts ({prosumers_cnt} prosumers, {producers_cnt} producers, {consumers_cnt} consumers, {trainers_cnt} trainers) • {live_models_cnt} Live Models • T4 Free VRAM {t4_free_mib} MiB • OpenTrainer {ot_nodes} Trainer GPU(s) / {ot_rounds} Accepted Round(s)
 </div>
 
 <section id="result" class="card ok-banner"{result_hidden}>

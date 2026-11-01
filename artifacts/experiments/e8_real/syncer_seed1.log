@@ -1,0 +1,29 @@
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/matplotlib/projections/__init__.py:63: UserWarning: Unable to import Axes3D. This may be due to multiple versions of Matplotlib being installed (e.g. as a system package and as a pip package). As a result, the 3D projection is not available.
+  warnings.warn("Unable to import Axes3D. This may be due to multiple versions of "
+[syncer] listening on 10.77.0.4:8765; waiting for 2 learners, K=2, merge=rda, grace=off
+[syncer] round  0 closed in 146.57s admitted=['0', '1'] deferred=[] loss=3.6891
+[syncer] round  1 closed in 1.06s admitted=['0', '1'] deferred=[] loss=3.2542
+[syncer] round  2 closed in 3.89s admitted=['1', '0'] deferred=[] loss=2.8355
+[syncer] round  3 closed in 1.92s admitted=['1', '0'] deferred=[] loss=2.4001
+[syncer] round  4 closed in 1.21s admitted=['1', '0'] deferred=[] loss=1.9683
+[syncer] round  5 closed in 1.17s admitted=['1', '0'] deferred=[] loss=1.7408
+[syncer] round  6 closed in 0.96s admitted=['1', '0'] deferred=[] loss=1.6526
+[syncer] round  7 closed in 1.42s admitted=['1', '0'] deferred=[] loss=1.6862
+[syncer] round  8 closed in 1.42s admitted=['1', '0'] deferred=[] loss=1.7521
+[syncer] round  9 closed in 1.37s admitted=['1', '0'] deferred=[] loss=1.8830
+[syncer] round 10 closed in 0.96s admitted=['0', '1'] deferred=[] loss=2.0989
+[syncer] round 11 closed in 1.11s admitted=['0', '1'] deferred=[] loss=2.3398
+{
+  "final_loss": 2.339773654937744,
+  "round_latency_s": {
+    "p50": 1.2907248735427856,
+    "p95": 68.09677284955968,
+    "p99": 130.87768281698237,
+    "mean": 13.588757614294687
+  },
+  "rounds_completed": 12,
+  "completed": true,
+  "receipt_sha256": "6ed6ec1470d75e7096a9bf06dcae5cd823de41a382f83ee92f49c11edfe864a3"
+}

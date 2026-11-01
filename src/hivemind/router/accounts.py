@@ -1201,12 +1201,13 @@ class RouterStore:
         now_utc: float | None = None,
         endpoint_token: str | None = None,
         residency: Mapping[str, Any] | None = None,
+        replace_endpoints: bool = False,
     ) -> int:
         """Insert or refresh ONE endpoint of a producer account; doubles as the heartbeat. Returns how many endpoints the account now advertises.
 
         An account may advertise several endpoints (several GPUs or servers, each with its own models, cost and capacity): endpoints are keyed
-        by ``(account, endpoint_url)``, so a heartbeat refreshes only its own endpoint and never evicts the others. At most
-        ``MAX_ENDPOINTS_PER_ACCOUNT`` per account (``TooManyEndpoints``); endpoints silent for a day are forgotten first.
+        by ``(account, endpoint_url)``, so a heartbeat refreshes only its own endpoint and never evicts the others unless ``replace_endpoints=True``.
+        At most ``MAX_ENDPOINTS_PER_ACCOUNT`` per account (``TooManyEndpoints``); endpoints silent for a day are forgotten first.
 
         ``endpoint_token`` is the bearer secret the gateway presents to the producer's own server so that only the
         gateway can use it; a heartbeat without one clears any earlier token.
@@ -1226,7 +1227,10 @@ class RouterStore:
             if str(row["role"]) not in PRODUCER_ROLES:
                 raise ValueError("account role cannot produce")
             url = endpoint_url.rstrip("/")
-            conn.execute("DELETE FROM producer_endpoints WHERE account_id=? AND last_heartbeat_utc < ?", (account_id, stamp - STALE_ENDPOINT_PURGE_S))
+            if replace_endpoints:
+                conn.execute("DELETE FROM producer_endpoints WHERE account_id=? AND endpoint_url!=?", (account_id, url))
+            else:
+                conn.execute("DELETE FROM producer_endpoints WHERE account_id=? AND last_heartbeat_utc < ?", (account_id, stamp - STALE_ENDPOINT_PURGE_S))
             known = {str(r["endpoint_url"]) for r in conn.execute("SELECT endpoint_url FROM producer_endpoints WHERE account_id=?", (account_id,))}
             if url not in known and len(known) >= MAX_ENDPOINTS_PER_ACCOUNT:
                 raise TooManyEndpoints(f"an account may advertise at most {MAX_ENDPOINTS_PER_ACCOUNT} endpoints")
@@ -1757,11 +1761,12 @@ class RouterStore:
             exec_classes[ec] = exec_classes.get(ec, 0) + 1
             total_capacity_1k += float(row["capacity_1k"] or 0.0)
             try:
-                for m in json.loads(str(row["models_json"])):
-                    if isinstance(m, Mapping) and "id" in m:
-                        live_models.add(str(m["id"]))
+                parsed_models = json.loads(str(row["models_json"]))
             except ValueError:
-                pass
+                parsed_models = []
+            for m in parsed_models:
+                if isinstance(m, Mapping) and "id" in m:
+                    live_models.add(str(m["id"]))
             residency = _load_residency(row["residency_json"])
             if residency is not None:
                 residency_endpoints += 1
@@ -1785,6 +1790,99 @@ class RouterStore:
             "warm_loaded_models_count": len(warm_models),
             "live_models_count": len(live_models),
         }
+
+    def ensure_legacy_hiveminders_registered(self, now_utc: float | None = None) -> list[str]:
+        """Ensure all known legacy/federation prosumer & producer accounts exist in ``accounts`` without rotating existing keys."""
+        stamp = time.time() if now_utc is None else float(now_utc)
+        created_ids: list[str] = []
+        with self._tx() as conn:
+            for meta in LEGACY_KNOWN_USERS.values():
+                role = str(meta.get("role", "prosumer"))
+                if role not in PRODUCER_ROLES:
+                    continue
+                handle = normalise_identity(str(meta["handle"]))
+                account_id = self._hmac_hex(handle)[:32]
+                exists = conn.execute(
+                    "SELECT account_id FROM accounts WHERE account_id=? OR lower(handle)=lower(?)",
+                    (account_id, handle),
+                ).fetchone()
+                if exists is not None:
+                    continue
+                pinned_key = str(meta.get("api_key") or "")
+                api_key = pinned_key or ("hm-" + secrets.token_urlsafe(32))
+                clean_email = str(meta.get("email") or "").strip().lower()[:128] or None
+                conn.execute(
+                    "INSERT INTO accounts(account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, email) "
+                    "VALUES (?,?,?,?,?,?,?,?,?)",
+                    (account_id, handle, role, self._hmac_hex(api_key), stamp, DEFAULT_MAX_PRICE_PER_1K, 0, KIND_USER, clean_email),
+                )
+                self._active_key_cache[account_id] = api_key
+                starter = float(meta.get("starter_hmt", 100.0))
+                if starter > 0.0:
+                    self._append(conn, account_id, starter, "grant", "legacy-hiveminder-restore", stamp)
+                created_ids.append(account_id)
+        return created_ids
+
+    def list_hiveminder_accounts(self, now_utc: float | None = None, ttl_s: float = 120.0) -> list[dict[str, Any]]:
+        """Return all real ('user') producer and prosumer accounts and their live endpoint connectivity."""
+        now = time.time() if now_utc is None else float(now_utc)
+        cutoff = now - float(ttl_s)
+        with self._lock:
+            acct_rows = self._conn.execute(
+                "SELECT account_id, handle, role, created_utc FROM accounts "
+                "WHERE role IN ('producer', 'prosumer') AND kind = 'user' AND account_id NOT LIKE 'sys:%' "
+                "ORDER BY created_utc ASC, account_id ASC"
+            ).fetchall()
+            ep_rows = self._conn.execute(
+                "SELECT account_id, endpoint_url, models_json, cost_per_1k, capacity_1k, last_heartbeat_utc, execution_class "
+                "FROM producer_endpoints ORDER BY account_id, last_heartbeat_utc DESC"
+            ).fetchall()
+            paused_ids = {
+                str(r["account_id"])
+                for r in self._conn.execute("SELECT account_id FROM producer_control WHERE paused=1").fetchall()
+            }
+        eps_by_acc: dict[str, list[sqlite3.Row]] = {}
+        for ep in ep_rows:
+            eps_by_acc.setdefault(str(ep["account_id"]), []).append(ep)
+
+        result: list[dict[str, Any]] = []
+        for row in acct_rows:
+            aid = str(row["account_id"])
+            eps = eps_by_acc.get(aid, [])
+            live_eps = [ep for ep in eps if float(ep["last_heartbeat_utc"]) >= cutoff]
+            is_paused = aid in paused_ids
+            models: list[str] = []
+            seen_m: set[str] = set()
+            for ep in (live_eps or eps[:1]):
+                try:
+                    ep_models = json.loads(str(ep["models_json"]))
+                except ValueError:
+                    ep_models = []
+                for m in ep_models:
+                    mid = str(m.get("id", ""))
+                    if mid and mid not in seen_m:
+                        seen_m.add(mid)
+                        models.append(mid)
+            latest_hb = max((float(ep["last_heartbeat_utc"]) for ep in eps), default=None)
+            primary_ep = (live_eps or eps)[0] if (live_eps or eps) else None
+            result.append(
+                {
+                    "account_id": aid,
+                    "handle": str(row["handle"]),
+                    "role": str(row["role"]),
+                    "status": "paused" if is_paused else ("live" if live_eps else "offline"),
+                    "live_endpoints": len(live_eps) if not is_paused else 0,
+                    "total_endpoints": len(eps),
+                    "endpoint_url": str(primary_ep["endpoint_url"]) if primary_ep is not None else None,
+                    "execution_class": str(primary_ep["execution_class"]) if primary_ep is not None else None,
+                    "capacity_1k": round(sum(float(ep["capacity_1k"]) for ep in live_eps), 2) if live_eps else (float(primary_ep["capacity_1k"]) if primary_ep is not None else 0.0),
+                    "cost_per_1k": float(primary_ep["cost_per_1k"]) if primary_ep is not None else None,
+                    "models": models,
+                    "last_heartbeat_utc": latest_hb,
+                }
+            )
+        return result
+
 
 
 

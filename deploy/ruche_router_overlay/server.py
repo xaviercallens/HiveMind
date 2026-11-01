@@ -51,6 +51,8 @@ REPLACED_PATHS = {
     "/benchmarks",
     "/comparatif",
     "/life-as-a-bee",
+    "/manifesto",
+    "/manifeste",
     "/night-moe",
     "/api/v1/night-moe",
     "/scripts/{script_name}",

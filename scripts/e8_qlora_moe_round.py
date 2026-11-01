@@ -119,11 +119,30 @@ def tiny_moe_config() -> Any:
                             num_experts_per_tok=2, max_position_embeddings=SEQ_LEN + 8, pad_token_id=0, bos_token_id=0, eos_token_id=0, tie_word_embeddings=False)
 
 
+_RNG_LOCK = threading.RLock()  # model construction and the LoRA initialisation use the global torch RNG: keep each such section atomic when several learners share a process
+
+
 def build_base_state(seed: int) -> Dict[str, torch.Tensor]:
+    """Base weights from a platform-independent generator (numpy PCG64 keyed by seed and parameter name), not from torch's RNG: every machine must get identical bytes,
+    whatever its operating system, and a host whose base hashes differently refuses the task (``federation_agents.check_offer``)."""
+    import zlib
+
+    import numpy as np
     from transformers import GraniteMoeForCausalLM
 
-    torch.manual_seed(seed)
-    return {k: v.detach().clone().float() for k, v in GraniteMoeForCausalLM(tiny_moe_config()).state_dict().items()}
+    with _RNG_LOCK:
+        sd = GraniteMoeForCausalLM(tiny_moe_config()).state_dict()
+    out: Dict[str, torch.Tensor] = {}
+    for k in sorted(sd):
+        t = sd[k]
+        if not t.dtype.is_floating_point:
+            out[k] = t.detach().clone()
+        elif "norm" in k:
+            out[k] = torch.ones(t.shape, dtype=torch.float32)
+        else:
+            rng = np.random.default_rng([int(seed), zlib.crc32(k.encode())])
+            out[k] = torch.from_numpy(rng.standard_normal(tuple(t.shape)).astype(np.float32) * 0.02)
+    return out
 
 
 def load_model(base_state: Dict[str, torch.Tensor], quant: str, device: str, lora_seed: int) -> Any:
@@ -144,6 +163,13 @@ def load_model(base_state: Dict[str, torch.Tensor], quant: str, device: str, lor
         model = GraniteMoeForCausalLM(cfg)
         model.load_state_dict(base_state)
         model.to(device)
+    with _RNG_LOCK:
+        return _attach_lora(model, lora_seed)
+
+
+def _attach_lora(model: Any, lora_seed: int) -> Any:
+    from peft import LoraConfig, get_peft_model
+
     torch.manual_seed(lora_seed)
     # lm_head is trained in full (a standard QLoRA choice, not quantised, 4,096 parameters here): with frozen random embeddings and a frozen random head the toy task is barely learnable.
     return get_peft_model(model, LoraConfig(r=LORA_R, lora_alpha=LORA_ALPHA, target_modules=LORA_TARGETS, lora_dropout=0.0, task_type="CAUSAL_LM", modules_to_save=["lm_head"]))

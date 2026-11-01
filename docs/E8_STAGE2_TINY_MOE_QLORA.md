@@ -48,19 +48,20 @@ Raw JSON (the syncer report names both hosts and records, per round, the held-ou
 
 ## 5. Results so far (T4 only; the cross-host cell has not been run)
 
-Measured on the T4 (Tesla T4, NF4, `--inner-steps 40 --inner-lr 2e-2 --rounds 4 --seed 1`, 2 learners). Mean held-out loss each round, then the final value; chance for a 64-token vocabulary is ln 64 = 4.159.
+Measured on the T4 (Tesla T4, NF4, `--inner-steps 40 --inner-lr 2e-2 --rounds 4 --seed 1`, 2 learners). Mean held-out loss each round (learners' own NF4 evaluation), then the final value; chance for a 64-token vocabulary is ln 64 = 4.159.
 
 | run | round 0 | round 1 | round 2 | round 3 | final |
 |---|---|---|---|---|---|
-| single process (baseline), real labels | 4.1825 | 2.0186 | 1.6971 | 1.7092 | **1.7029** |
-| two learners over HTTP on loopback, both on the T4 GPU | 4.1825 | 2.0186 | 1.6971 | 1.7092 | **1.7029** |
-| negative control, shuffled labels | 4.1825 | 4.1962 | 4.2299 | 4.1784 | **4.1787** |
+| single process (baseline), real labels | 4.1721 | 2.0106 | 1.6994 | 1.7079 | **1.7772** |
+| two learners over HTTP on loopback, both on the T4 GPU | 4.1721 | 2.0106 | 1.6994 | 1.7079 | **1.7772** |
+| negative control, shuffled labels | 4.1721 | 4.1920 | 4.2408 | 4.2341 | **4.2034** |
 
-* The two-learner round and the single-process baseline agree to every printed digit (difference 0), on the GPU with NF4. Both learners ran on the same GPU in the same process family, so this shows the protocol is exact, not that two different GPUs agree.
-* The negative control does not learn (it stays at chance), so the fall to 1.70 is learning, not an artifact of the pipeline.
-* Training only the attention LoRA with frozen random embeddings and head reached 3.93; training the output head as well reached 1.70 (same settings): that is why the head is trained.
-* Peak VRAM per learner as PyTorch allocated it: 27.8 MiB; the free VRAM stayed at 10,077 MiB before and after.
-* Round latency on loopback: 61.8 s for round 0 (both learners start, quantise and load), then 9 to 11 s per round.
+* The two-learner round and the single-process baseline agree to every printed digit (difference 0) on the GPU with NF4. Both learners ran on the same GPU, so this shows the protocol is exact, not that two different GPUs agree.
+* The negative control stays at chance, so the fall is learning, not an artifact of the pipeline.
+* The base model is built from a platform-independent generator (numpy PCG64 keyed by seed and parameter name). An earlier version used torch's RNG; two learners in one process then built different bases, which the hash check in the AMCP version caught. The numbers above were re-measured after that fix.
+* Training only the attention LoRA with frozen random embeddings and head reached a final loss of about 3.9; training the output head as well gives the numbers above (same settings): that is why the head is trained.
+* The loss rises slightly after round 2 with these settings (the outer step is aggressive); gentler settings (`--inner-lr 1e-2 --outer-lr 0.5 --outer-mu 0.5`) kept improving in the AMCP soak (see `docs/FEDERATION_V2_AMCP_AGLETS.md`). Neither setting was tuned.
+* Peak VRAM per learner as PyTorch allocated it: 27.8 MiB; free VRAM stayed near 10,000 MiB. Round latency on loopback: about 19 s for round 0 (both learners start, quantise and load), then 2 to 3 s per round.
 * Unit tests: 13 pass, including a real HTTP round across two learners compared with the baseline within 1e-4 on CPU, and the negative control. One test caught a real bug in my first shuffle implementation.
 
 **Not yet run: the cross-host cell** (T4 plus the 2070 host). It needs the 2070 host to run learner 1 with this script; whether NF4 loads there is unknown.

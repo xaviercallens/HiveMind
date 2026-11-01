@@ -155,7 +155,7 @@ def test_a_real_http_round_across_two_learners_matches_the_single_process_baseli
     ths = []
     for i in range(2):
         a = argparse.Namespace(syncer=f"http://127.0.0.1:{port}", learner_id=i, host_label=f"test-{i}", quant="none", device="cpu", shard_size=64, shuffle_labels=False,
-                               min_free_mib=4300.0, need_mib=600.0, **common)
+                               min_free_mib=4300.0, need_mib=600.0, connect_timeout=30.0, **common)
         th = threading.Thread(target=lambda a=a: rcs.__setitem__(f"l{a.learner_id}", q.run_learner(a)), daemon=True)
         th.start()
         ths.append(th)

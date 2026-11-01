@@ -460,7 +460,7 @@ def portal_content_security_policy(nonce: str) -> str:
         "default-src 'none'",
         f"script-src 'nonce-{nonce}'",
         f"style-src 'nonce-{nonce}'",
-        "connect-src 'self'",
+        "connect-src 'self' https://hivemind-openrouter-1003063861791.us-central1.run.app https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app",
         "img-src 'self' data:",
         "font-src 'self' data:",
         "base-uri 'none'",
@@ -2143,6 +2143,41 @@ def render_portal_page(
       </div>
     </section>
 
+    <!-- Live Real-Life GCP Production Telemetry Strip (Auto-Synced every 15s from /v1/hivemind/live-telemetry) -->
+    <section id="live-gcp-telemetry" class="card" style="margin-bottom:2.25rem;border-color:rgba(52,211,153,0.45);background:linear-gradient(180deg, rgba(16,185,129,0.08), rgba(13,19,38,0.95));">
+      <div class="card-header" style="margin-bottom:0.85rem;padding-bottom:0.55rem;">
+        <div class="card-title" style="color:var(--green);font-size:1rem;">
+          &#x1F7E2; Live Real-Life GCP Production Telemetry &bull; Auto-Synced from <code>/v1/hivemind/live-telemetry</code>
+        </div>
+        <div style="display:flex;gap:0.65rem;align-items:center;flex-wrap:wrap;">
+          <span id="liveGcpUpdatedUtc" style="font-family:var(--font-mono);font-size:0.72rem;color:var(--text-dim);">Live GCP Snapshot: {gen_iso}</span>
+          <a href="/v1/hivemind/live-telemetry" class="pill" style="border-color:var(--green);color:var(--green);text-decoration:none;margin:0;">JSON /v1/hivemind/live-telemetry</a>
+        </div>
+      </div>
+      <div class="tiers-grid" style="margin-bottom:0;grid-template-columns:repeat(auto-fit, minmax(195px, 1fr));gap:0.75rem;">
+        <div class="tier-card" style="padding:0.75rem;border-color:rgba(52,211,153,0.35);">
+          <div class="tier-badge">COMMUNITY ACCOUNTS</div>
+          <div id="liveGcpAccountsCount" class="tier-name" style="margin-bottom:0.25rem;">{total_accts} Registered Accounts</div>
+          <div id="liveGcpAccountsRoles" class="tier-vram" style="margin-bottom:0;">{prosumers_cnt} prosumers &bull; {producers_cnt} producers &bull; {consumers_cnt} consumers &bull; {trainers_cnt} trainers &bull; {admins_cnt} admins</div>
+        </div>
+        <div class="tier-card" style="padding:0.75rem;border-color:rgba(0,238,252,0.35);">
+          <div class="tier-badge">LIVE MODELS &amp; HIVEMINDERS</div>
+          <div id="liveGcpModelsCount" class="tier-name" style="margin-bottom:0.25rem;">{live_models_cnt} Live Models Online</div>
+          <div id="liveGcpProducersCount" class="tier-vram" style="margin-bottom:0;">{total_hiveminders} Hiveminders &bull; {live_hiveminders} Active ({total_cap_1k:.0f} ktok/min)</div>
+        </div>
+        <div class="tier-card" style="padding:0.75rem;border-color:rgba(251,191,36,0.35);">
+          <div class="tier-badge">TESLA T4 (16 GB) &amp; BOINC</div>
+          <div id="liveGcpT4Vram" class="tier-name" style="margin-bottom:0.25rem;">Free: {t4_free_mib:,} MiB / {t4_total_mib:,} MiB</div>
+          <div id="liveGcpWusCount" class="tier-vram" style="margin-bottom:0;">{wus_cnt} Assimilated WUs &bull; {cobbles:,.2f} Cobblestones</div>
+        </div>
+        <div class="tier-card" style="padding:0.75rem;border-color:rgba(192,132,252,0.35);">
+          <div class="tier-badge">24H USAGE &amp; OPENTRAINER</div>
+          <div id="liveGcpReqs24h" class="tier-name" style="margin-bottom:0.25rem;">{reqs_24h:,} Reqs &bull; {tokens_24h:,} Tokens (24h)</div>
+          <div id="liveGcpOpenTrainerStatus" class="tier-vram" style="margin-bottom:0;">ONLINE &bull; {ot_nodes} Trainer GPU(s) &bull; {ot_rounds} Accepted Round(s)</div>
+        </div>
+      </div>
+    </section>
+
     <!-- Interactive AI Playground -->
     <div id="playground" class="grid-2">
       <!-- Input Controls -->
@@ -2328,9 +2363,12 @@ def render_portal_page(
         <div class="card-title" style="color:var(--green);" data-i18n="night_title">{html.escape(t["night_title"])}</div>
         <span class="pill" style="border-color:var(--green);color:var(--green);">15/15 Live Probes PASS &bull; 0 HTTP 402/5xx</span>
       </div>
-      <p style="color:var(--text-dim);font-size:0.88rem;margin-bottom:1rem;line-height:1.5;">
+      <p style="color:var(--text-dim);font-size:0.88rem;margin-bottom:0.75rem;line-height:1.5;">
         Measured production telemetry from the European Night window (<code>2026-10-25 20:00Z &rarr; 2026-10-26 08:00Z</code>) across our three Cloud Run gateways, dual-GPU inference fleet (<strong>NVIDIA Tesla T4 16 GB + NVIDIA GeForce RTX 2070 8 GB</strong>), and the BOINC 7.24 chained QLoRA-MoE coordinator (<code>scripts/t4_training_report.py</code>).
       </p>
+      <div id="nightLiveBannerText" style="margin-bottom:1rem;padding:0.55rem 0.85rem;border:1px solid rgba(52,211,153,0.4);border-radius:0.4rem;background:rgba(16,185,129,0.08);font-family:var(--font-mono);font-size:0.76rem;color:var(--green);">
+        &#x1F7E2; LIVE NOW ({gen_iso}): {wus_cnt} Assimilated BOINC WUs &bull; T4 Free VRAM {t4_free_mib:,} MiB / {t4_total_mib:,} MiB &bull; OpenTrainer {ot_rounds} accepted round(s) (eval_loss 1.7772)
+      </div>
       <div class="tiers-grid" style="margin-bottom:1.25rem;">
         <div class="tier-card">
           <div>

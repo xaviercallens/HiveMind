@@ -71,7 +71,7 @@ def verify_quantum_fluid_relaxation(
     v_prime_scale: float,
     kappa: float,
     *,
-    reported_defect_charge_sum: int = 0,
+    reported_defect_charge_sum: Optional[int] = None,
     force_rel_tol: float = 1e-9,
     spec_id: str = "wave3-qf",
 ) -> Dict[str, Any]:
@@ -93,7 +93,9 @@ def verify_quantum_fluid_relaxation(
     }
     if not all(_is_finite_num(v) for v in (energy_init, energy_final, max_free_force, v_prime_scale, kappa)):
         return _cert(spec_id, "science_quantum_fluid", [], ["non-finite quantum fluid parameters"], payload, unverified=True)
-    if isinstance(reported_defect_charge_sum, bool) or not isinstance(reported_defect_charge_sum, int):
+    if reported_defect_charge_sum is not None and (
+        isinstance(reported_defect_charge_sum, bool) or not isinstance(reported_defect_charge_sum, int)
+    ):
         return _cert(spec_id, "science_quantum_fluid", [], ["reported_defect_charge_sum must be an int"], payload, unverified=True)
 
     checks: List[Dict[str, Any]] = []
@@ -122,6 +124,12 @@ def verify_quantum_fluid_relaxation(
     )
     if not force_ok:
         reasons.append(f"max_free_force={max_free_force:.3e} exceeds bound {force_bound:.3e}")
+
+    if reported_defect_charge_sum is None:
+        if any(c.get("status") == "fail" for c in checks):
+            return _cert(spec_id, "science_quantum_fluid", checks, reasons, payload)
+        reasons.append("reported_defect_charge_sum must be explicitly provided for VERIFIED certificate")
+        return _cert(spec_id, "science_quantum_fluid", checks, reasons, payload, unverified=True)
 
     charge_ok = int(reported_defect_charge_sum) == 0
     checks.append({"name": "topological_charge_neutrality", "status": "pass" if charge_ok else "fail", "charge_sum": int(reported_defect_charge_sum)})
@@ -425,7 +433,7 @@ def verify_numeric_solver_trajectory(
     y_coarse: Sequence[Sequence[float]],
     y_fine: Sequence[Sequence[float]],
     *,
-    invariant_drift: float = 0.0,
+    invariant_drift: Optional[float] = None,
     rtol: float = 1e-8,
     atol: float = 1e-10,
     invariant_tol: float = 1e-6,
@@ -444,6 +452,33 @@ def verify_numeric_solver_trajectory(
     except (SpecInvalid, TypeError, ValueError) as exc:
         return _cert(sid, "science_numeric_solver", [{"name": "spec_grammar", "status": "fail"}], [str(exc)], payload)
 
+    if (
+        not _is_finite_num(rtol)
+        or not _is_finite_num(atol)
+        or not _is_finite_num(invariant_tol)
+        or float(rtol) <= 0.0
+        or float(atol) <= 0.0
+        or float(invariant_tol) <= 0.0
+        or float(rtol) > 1e-2
+        or float(atol) > 1e-2
+    ):
+        return _cert(
+            sid,
+            "science_numeric_solver",
+            [{"name": "tolerance_bounds", "status": "fail"}],
+            ["rtol and atol must be finite numbers in (0, 1e-2]"],
+            payload,
+        )
+
+    if y_coarse is y_fine:
+        return _cert(
+            sid,
+            "science_numeric_solver",
+            [{"name": "independent_reference", "status": "fail"}],
+            ["y_coarse and y_fine must be independently integrated trajectories, not the same object"],
+            payload,
+        )
+
     n_times = len(validated["t_out"])
     n_dim = len(validated["y0"])
     if (
@@ -461,7 +496,8 @@ def verify_numeric_solver_trajectory(
     max_scaled_diff = 0.0
     for row_c, row_f in zip(y_coarse, y_fine):
         if (
-            not isinstance(row_c, (list, tuple))
+            row_c is row_f
+            or not isinstance(row_c, (list, tuple))
             or not isinstance(row_f, (list, tuple))
             or len(row_c) != n_dim
             or len(row_f) != n_dim
@@ -476,7 +512,7 @@ def verify_numeric_solver_trajectory(
 
     checks.append({"name": "shape", "status": "pass" if shape_ok else "fail"})
     if not shape_ok:
-        reasons.append("trajectory rows do not match state dimension or contain non-finite values")
+        reasons.append("trajectory rows do not match state dimension, are self-referential, or contain non-finite values")
         return _cert(sid, "science_numeric_solver", checks, reasons, payload)
 
     tight_ok = max_scaled_diff <= 10.0
@@ -484,8 +520,14 @@ def verify_numeric_solver_trajectory(
     if not tight_ok:
         reasons.append(f"100x tolerance tightening disagreement: max_scaled_diff={max_scaled_diff:.3f} > 10.0")
 
+    if invariant_drift is None:
+        if any(c.get("status") == "fail" for c in checks):
+            return _cert(sid, "science_numeric_solver", checks, reasons, payload)
+        reasons.append("invariant_drift must be explicitly provided for VERIFIED certificate")
+        return _cert(sid, "science_numeric_solver", checks, reasons, payload, unverified=True)
+
     inv_ok = _is_finite_num(invariant_drift) and abs(float(invariant_drift)) <= float(invariant_tol)
-    checks.append({"name": "invariants", "status": "pass" if inv_ok else "fail", "invariant_drift": float(invariant_drift)})
+    checks.append({"name": "invariants", "status": "pass" if inv_ok else "fail", "invariant_drift": float(invariant_drift) if _is_finite_num(invariant_drift) else None})
     if not inv_ok:
         reasons.append(f"invariant drift {invariant_drift} exceeds tolerance {invariant_tol}")
 

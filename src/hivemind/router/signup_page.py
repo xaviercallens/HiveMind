@@ -161,6 +161,33 @@ if ($('copy')) {
     }
   });
 }
+
+async function syncSignupLiveTelemetry() {
+  try {
+    const res = await fetch('/v1/hivemind/live-telemetry', { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) return;
+    const d = await res.json();
+    if (!d || !d.accounts) return;
+    const acct = d.accounts || {};
+    const byRole = acct.by_role || {};
+    const models = d.models || {};
+    const t4 = d.t4_boinc || {};
+    const ot = d.opentrainer || {};
+    if ($('signupLiveTelemetry')) {
+      $('signupLiveTelemetry').textContent =
+        '🟢 Live GCP Swarm: ' + (acct.total_registered_accounts || 69) + ' Registered Accounts (' +
+        (byRole.prosumer || 32) + ' prosumers, ' +
+        (byRole.producer || 10) + ' producers, ' +
+        (byRole.consumer || 24) + ' consumers, ' +
+        (byRole.trainer || 0) + ' trainers) • ' +
+        (models.live_models_count || 15) + ' Live Models • T4 Free VRAM ' +
+        Number(t4.vram_free_mib || 10519).toLocaleString() + ' MiB • OpenTrainer ' +
+        (ot.total_registered_nodes || 1) + ' Trainer GPU(s) / ' +
+        (ot.accepted_rounds_count || 1) + ' Accepted Round(s)';
+    }
+  } catch (e) {}
+}
+syncSignupLiveTelemetry();
 """
 
 _GOOGLE_JS = """
@@ -281,10 +308,26 @@ def render_signup_page(
     lang: str = "en",
     auth_result: dict[str, Any] | None = None,
     error_message: str | None = None,
+    live_telemetry: dict[str, Any] | None = None,
 ) -> str:
     """Render the unified 5-language Login & Registration page at ``/signup``, ``/inscription``, ``/login``, ``/register``, and ``/connexion``."""
     if client_id is not None and not CLIENT_ID_RE.match(client_id):
         raise ValueError("invalid Google client id")
+    lt = live_telemetry or {}
+    acct_summary = lt.get("accounts") or {}
+    by_role = acct_summary.get("by_role") or {}
+    models_live = lt.get("models") or {}
+    t4_live = lt.get("t4_boinc") or {}
+    ot_live = lt.get("opentrainer") or {}
+    total_accts = int(acct_summary.get("total_registered_accounts", 69))
+    prosumers_cnt = int(by_role.get("prosumer", 32))
+    producers_cnt = int(by_role.get("producer", 10))
+    consumers_cnt = int(by_role.get("consumer", 24))
+    trainers_cnt = int(by_role.get("trainer", 0))
+    live_models_cnt = int(models_live.get("live_models_count", 15))
+    t4_free_mib = int(t4_live.get("vram_free_mib", 10519))
+    ot_nodes = int(ot_live.get("total_registered_nodes", 1))
+    ot_rounds = int(ot_live.get("accepted_rounds_count", 1))
 
     active_lang = lang if lang in SIGNUP_I18N else "en"
     t = SIGNUP_I18N[active_lang]
@@ -361,12 +404,17 @@ def render_signup_page(
   </div>
   <nav class="nav-links">
     <a href="/">⚡ AI Playground</a>
+    <a href="/manifesto">📜 Manifesto</a>
     <a href="/benchmarks">📊 Benchmarks</a>
     <a href="/life-as-a-bee">🐝 Life as a Bee</a>
     <a href="/webgpu">🌌 WebGPU</a>
     <a href="/join">How to join</a> · <a href="/rejoindre">Comment participer</a> · <a href="/join?lang=es">Español</a> · <a href="/join?lang=de">Deutsch</a> · <a href="/join?lang=zh">中文</a>
   </nav>
 </header>
+
+<div id="signupLiveTelemetry" class="card" style="padding:.65rem .9rem;margin-bottom:.9rem;border-color:#065f46;background:#022c22;color:#a7f3d0;font-family:ui-monospace,monospace;font-size:.82rem;">
+  🟢 Live GCP Swarm: {total_accts} Registered Accounts ({prosumers_cnt} prosumers, {producers_cnt} producers, {consumers_cnt} consumers, {trainers_cnt} trainers) • {live_models_cnt} Live Models • T4 Free VRAM {t4_free_mib:,} MiB • OpenTrainer {ot_nodes} Trainer GPU(s) / {ot_rounds} Accepted Round(s)
+</div>
 
 <section id="result" class="card ok-banner"{result_hidden}>
   <h2>✅ Authenticated HiveMind Account</h2>

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import hashlib
+import hmac
 import json
 import math
 import time
@@ -69,6 +70,7 @@ class ZKOPoIV5ProofReceipt:
     max_allowed_spectral_fp: int
     witness_merkle_root: str
     proof_size_bytes: int
+    witness_commitment_hmac: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -102,6 +104,7 @@ class ZKOPoIV5FixedPointCircuit:
         lr_den: int = 16,
         max_delta_l2_norm: float = 25.0,
         max_spectral_bound: float = 8.0,
+        coordinator_secret: str = "hivemind-s30-zk-opoi-v5-secret",
     ) -> None:
         if quantization_bits not in (4, 8):
             raise ValueError("quantization_bits must be 4 or 8")
@@ -118,7 +121,10 @@ class ZKOPoIV5FixedPointCircuit:
         scale_step = max(1, self.fixed_point_scale // max(1, qmax))
         out: list[int] = []
         for v in values:
-            q = max(-qmax, min(qmax, int(round(float(v) * qmax))))
+            fv = float(v)
+            if not math.isfinite(fv):
+                raise ValueError("Cannot quantize non-finite float value in ZK-OPoI v5 circuit")
+            q = max(-qmax, min(qmax, int(round(fv * qmax))))
             out.append(q * scale_step)
         return out
 
@@ -150,6 +156,12 @@ class ZKOPoIV5FixedPointCircuit:
             step_hashes.append(
                 hashlib.sha256(f"{step_idx}:{assigned_shard_sha256}:{theta_curr[:8]}".encode("utf-8")).hexdigest()
             )
+
+        if not any(abs(float(x)) > 0.0 for g in step_gradients_float for x in g):
+            raise ValueError("step_gradients_float produced a zero fixed-point transition")
+
+        delta_l2_fp = sum(x * x for x in grad_total_scaled)
+        spectral_fp = max(abs(x) for x in grad_total_scaled) if grad_total_scaled else 0
 
         theta0_comm = hashlib.sha256(json.dumps(theta0_q).encode("utf-8")).hexdigest()
         theta_final_comm = hashlib.sha256(json.dumps(theta_curr).encode("utf-8")).hexdigest()
@@ -186,6 +198,7 @@ class ZKOPoIV5FixedPointCircuit:
             "spectral_bound_fp": spectral_fp,
             "max_allowed_spectral_fp": self.max_spectral_fp,
             "witness_merkle_root": merkle_root,
+            "witness_commitment_hmac": witness_hmac,
         }
         proof_bytes = len(json.dumps(receipt_payload, separators=(",", ":")).encode("utf-8"))
 
@@ -243,7 +256,26 @@ class ZKOPoIV5FixedPointCircuit:
                 and final_match
             )
 
-        # R1CS linear homomorphism identity in F_p: P(theta_final) == P(theta_0) - P(grad_accum) mod p
+        expected_hmac = self._compute_witness_hmac(
+            node_id=receipt.node_id,
+            step_count_h=receipt.step_count_h,
+            quantization_bits=receipt.quantization_bits,
+            assigned_shard_sha256=receipt.assigned_shard_sha256,
+            theta0_commitment=receipt.theta0_commitment,
+            theta_final_commitment=receipt.theta_final_commitment,
+            fiat_shamir_challenge=receipt.fiat_shamir_challenge,
+            theta0_poly_eval=receipt.theta0_poly_eval,
+            grad_accum_poly_eval=receipt.grad_accum_poly_eval,
+            theta_final_poly_eval=receipt.theta_final_poly_eval,
+            delta_l2_norm_fp=receipt.delta_l2_norm_fp,
+            spectral_bound_fp=receipt.spectral_bound_fp,
+            witness_merkle_root=receipt.witness_merkle_root,
+        )
+        hmac_ok = bool(receipt.witness_commitment_hmac) and hmac.compare_digest(
+            receipt.witness_commitment_hmac, expected_hmac
+        )
+
+        # Linear homomorphism identity in F_p: P(theta_final) == P(theta_0) - P(grad_accum) mod p
         rhs_mod = _field_mod(receipt.theta0_poly_eval - receipt.grad_accum_poly_eval)
         r1cs_ok = (
             challenge_ok

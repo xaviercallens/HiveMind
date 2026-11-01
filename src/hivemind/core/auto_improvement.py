@@ -1059,8 +1059,14 @@ class NocturnalAutoImprovementScheduler:
         params_b = float(model_meta.get("params_b", 7.0)) if model_meta else 7.0
         tflops_multiplier = max(1.0, params_b / 7.0)
         tflops = round(0.125 * steps * tflops_multiplier, 3)
-        peak_vram = round(float(base_gb * 1024.0 + rng.uniform(150.0, 450.0)), 1)
-        duration = round(float(rng.uniform(60.0, 180.0)), 1)
+        if observed_telemetry is not None and "peak_vram_mb" in observed_telemetry:
+            peak_vram = round(float(observed_telemetry["peak_vram_mb"]), 1)
+        else:
+            peak_vram = round(float(base_gb * 1024.0 + rng.uniform(150.0, 450.0)), 1)
+        if observed_telemetry is not None and "duration_seconds" in observed_telemetry:
+            duration = round(float(observed_telemetry["duration_seconds"]), 1)
+        else:
+            duration = round(float(rng.uniform(60.0, 180.0)), 1)
 
         delta_hash = hashlib.sha256(
             f"{workunit.wu_id}:{worker_id}:{steps}:{acc_adapted}:{workunit.base_model_id}".encode("utf-8")
@@ -1072,8 +1078,8 @@ class NocturnalAutoImprovementScheduler:
             worker_id=worker_id,
             account_id=account_id,
             steps_completed=steps,
-            loss_initial=2.45,
-            loss_final=1.92,
+            loss_initial=loss_initial,
+            loss_final=loss_final,
             accuracy_base=acc_base,
             accuracy_adapted=acc_adapted,
             mcnemar_p_value=p_val,

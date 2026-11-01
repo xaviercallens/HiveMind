@@ -1557,12 +1557,20 @@ class RouterStore:
                 "SELECT rating, task_domain FROM usage_feedback WHERE utc >= ?",
                 (since,),
             ).fetchall()
+            producer_acct_rows = self._conn.execute(
+                "SELECT account_id, handle, role FROM accounts"
+            ).fetchall()
 
+        acct_meta: dict[str, tuple[str, str]] = {
+            str(a["account_id"]): (str(a["handle"]), str(a["role"])) for a in producer_acct_rows
+        }
         by_domain: dict[str, dict[str, Any]] = {}
         by_language: dict[str, int] = {}
         by_client_sdk: dict[str, int] = {}
         by_model: dict[str, dict[str, Any]] = {}
         by_routing_mode: dict[str, int] = {}
+        by_producer: dict[str, dict[str, Any]] = {}
+        by_producer_role: dict[str, dict[str, Any]] = {}
         domain_tokens: dict[str, int] = {}
         latencies: list[float] = []
         total_tokens = 0
@@ -1575,6 +1583,8 @@ class RouterStore:
             sdk = str(r["client_sdk"])
             model = str(r["routed_model"])
             mode = str(r["routing_mode"])
+            prod_id = str(r["producer_id"])
+            prod_handle, prod_role = acct_meta.get(prod_id, (prod_id, "producer"))
             tokens = int(r["billed_tokens"])
             hmt = float(r["charged_hmt"])
             lat = float(r["latency_ms"])
@@ -1598,6 +1608,29 @@ class RouterStore:
             m_entry["requests"] += 1
             m_entry["billed_tokens"] += tokens
             m_entry["charged_hmt"] = round(m_entry["charged_hmt"] + hmt, 6)
+
+            p_entry = by_producer.setdefault(
+                prod_handle,
+                {
+                    "account_id": prod_id,
+                    "handle": prod_handle,
+                    "role": prod_role,
+                    "requests": 0,
+                    "billed_tokens": 0,
+                    "charged_hmt": 0.0,
+                },
+            )
+            p_entry["requests"] += 1
+            p_entry["billed_tokens"] += tokens
+            p_entry["charged_hmt"] = round(p_entry["charged_hmt"] + hmt, 6)
+
+            pr_entry = by_producer_role.setdefault(
+                prod_role,
+                {"requests": 0, "billed_tokens": 0, "charged_hmt": 0.0},
+            )
+            pr_entry["requests"] += 1
+            pr_entry["billed_tokens"] += tokens
+            pr_entry["charged_hmt"] = round(pr_entry["charged_hmt"] + hmt, 6)
 
         latencies.sort()
         if latencies:
@@ -1623,6 +1656,8 @@ class RouterStore:
             "by_client_sdk": by_client_sdk,
             "by_routed_model": by_model,
             "by_routing_mode": by_routing_mode,
+            "by_producer": by_producer,
+            "by_producer_role": by_producer_role,
             "latency_ms": {
                 "p50": round(p50, 2),
                 "p95": round(p95, 2),

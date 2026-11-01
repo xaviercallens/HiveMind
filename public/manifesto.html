@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manifeste de l&#x27;IA Citoyenne &amp; Synthèse des Échanges Reddit · HiveMind La Ruche</title>
+<meta name="description" content="Né de 16 326+ vues et 80+ échanges directs sur r/developpeurs, r/artificielle, r/QuebecTI, r/TechnologieFrance, r/LocalLLaMA et r/BOINC : comment vos critiques ont façonné une alternative ouverte, gratuite (0,00 €) et respectueuse de vos GPU.">
+<link rel="canonical" href="/manifesto?lang=fr">
+<link rel="alternate" hreflang="fr" href="/manifeste?lang=fr">
+<link rel="alternate" hreflang="en" href="/manifesto?lang=en">
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#090d16;
+  --card:#111827;
+  --card-alt:#172033;
+  --fg:#f8fafc;
+  --mut:#94a3b8;
+  --line:#1e293b;
+  --acc:#38bdf8;
+  --ok:#34d399;
+  --warn:#fbbf24;
+  --purple:#c084fc;
+}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg)}
+.wrap{max-width:74rem;margin:0 auto;padding:1.25rem 1.25rem 3.5rem}
+.topnav{display:flex;flex-wrap:wrap;gap:0.65rem;align-items:center;justify-content:space-between;padding:0.75rem 1rem;background:var(--card);border:1px solid var(--line);border-radius:0.75rem;margin-bottom:1.25rem}
+.topnav-links{display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center}
+.topnav a{color:var(--acc);text-decoration:none;font-weight:600;font-size:0.92rem;padding:0.3rem 0.6rem;border-radius:0.4rem}
+.topnav a:hover{background:var(--card-alt)}
+.topnav a.cta-portal{background:#0284c7;color:#fff}
+.topnav a.cta-signup{background:#059669;color:#fff}
+.live-banner{padding:0.85rem 1.1rem;border:1px solid rgba(52,211,153,0.45);background:rgba(6,78,59,0.28);border-radius:0.75rem;margin-bottom:1.5rem;font-size:0.92rem}
+.hero{padding:1.75rem 1.5rem;background:linear-gradient(135deg,#0f172a 0%,#1e1b4b 100%);border:1px solid #312e81;border-radius:0.9rem;margin-bottom:1.75rem}
+.hero h1{margin:0 0 0.6rem;font-size:2rem;line-height:1.25;color:#fff}
+.hero p{margin:0 0 1.1rem;color:#cbd5e1;font-size:1.05rem}
+.cta-row{display:flex;flex-wrap:wrap;gap:0.75rem;margin-top:1rem}
+.btn{display:inline-block;padding:0.65rem 1.15rem;border-radius:0.55rem;font-weight:700;text-decoration:none;font-size:0.95rem}
+.btn-primary{background:#38bdf8;color:#0f172a}
+.btn-green{background:#34d399;color:#064e3b}
+.btn-purple{background:#c084fc;color:#1e1b4b}
+.btn-outline{border:1px solid var(--acc);color:var(--acc)}
+h2{font-size:1.45rem;margin:2rem 0 0.75rem;border-bottom:1px solid var(--line);padding-bottom:0.4rem;color:#f1f5f9}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));gap:0.85rem;margin:1rem 0 1.5rem}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:0.65rem;padding:0.9rem 1rem}
+.kpi .val{font-size:1.55rem;font-weight:800;color:var(--ok)}
+.kpi .lbl{font-size:0.85rem;color:var(--mut)}
+table{width:100%;border-collapse:collapse;margin:1rem 0;background:var(--card);border-radius:0.65rem;overflow:hidden;font-size:0.92rem}
+th,td{border:1px solid var(--line);padding:0.7rem 0.8rem;text-align:left;vertical-align:top}
+th{background:var(--card-alt);color:#e2e8f0;font-weight:700}
+.badge{display:inline-block;padding:0.15rem 0.5rem;border-radius:0.35rem;background:rgba(56,189,248,0.18);color:var(--acc);font-family:ui-monospace,monospace;font-size:0.8rem;font-weight:700;margin-bottom:0.25rem}
+.pillars-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(20rem,1fr));gap:1rem;margin:1rem 0}
+.pillar-card{background:var(--card);border:1px solid var(--line);border-radius:0.75rem;padding:1.15rem}
+.pillar-num{font-family:ui-monospace,monospace;font-size:0.8rem;font-weight:800;color:var(--acc);letter-spacing:0.06em;margin-bottom:0.3rem}
+.pillar-card h3{margin:0 0 0.5rem;font-size:1.1rem;color:#fff}
+.pillar-card p{margin:0;color:#cbd5e1;font-size:0.93rem}
+.adopt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(19rem,1fr));gap:1rem;margin:1rem 0}
+.adopt-card{background:var(--card-alt);border:1px solid #334155;border-radius:0.75rem;padding:1.2rem}
+.adopt-card h3{margin:0 0 0.4rem;color:var(--ok)}
+code,pre{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;background:#090d16;padding:0.15rem 0.35rem;border-radius:0.3rem;font-size:0.86rem}
+pre{padding:0.75rem;overflow-x:auto;border:1px solid var(--line)}
+footer{margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--line);color:var(--mut);font-size:0.88rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:0.75rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="topnav" aria-label="Navigation principale">
+    <div class="topnav-links">
+      <a href="https://hivemind-openrouter-1003063861791.us-central1.run.app/portal" class="cta-portal">🏠 Portail GCP OpenRouter</a>
+      <a href="https://hivemind-openrouter-1003063861791.us-central1.run.app/signup" class="cta-signup">🔑 Créer un Compte (+100 HMT)</a>
+      <a href="https://hivemind-openrouter-1003063861791.us-central1.run.app/join?lang=fr">🤝 Rejoindre (GPU / Trainer)</a>
+      <a href="https://hivemind-openrouter-1003063861791.us-central1.run.app/benchmarks?lang=fr">📊 Comparatif 15 MoE</a>
+      <a href="https://hivemind-openrouter-1003063861791.us-central1.run.app/life-as-a-bee">🐝 Vie d'une Abeille</a>
+      <a href="https://hivemind-at-home-ruche-1003063861791.us-central1.run.app/">🐝 Dashboard La Ruche @Home</a>
+      <a href="https://hivemind-openrouter-1003063861791.us-central1.run.app/webgpu">🌌 Jeu Spatial WebGPU</a>
+    </div>
+    <div>
+      <a href="/manifeste?lang=fr">🇫🇷 Français</a> · <a href="/manifesto?lang=en">🇬🇧 English</a>
+    </div>
+  </nav>
+
+  <section id="manifesto-live-telemetry" class="live-banner">
+    <strong>🟢 TÉLÉMÉTRIE GCP EN DIRECT (/v1/hivemind/live-telemetry) :</strong>
+    <span id="manifesto-live-text">
+      66 comptes enregistrés (32 prosumers, 10 producers, 24 consumers, 0 trainers) ·
+      <strong>15 modèles MoE en ligne</strong> ·
+      <strong>42/42 HiveMinders actifs (équilibrés)</strong> ·
+      <strong>597 requêtes 24h</strong> ·
+      Tesla T4 BOINC: <strong>154 WUs</strong> · OpenTrainer: <strong>ONLINE</strong>
+    </span>
+  </section>
+
+  <header class="hero">
+    <h1>🐝 Manifeste de l&#x27;IA Citoyenne &amp; Synthèse des Échanges Reddit · HiveMind La Ruche</h1>
+    <p>Né de 16 326+ vues et 80+ échanges directs sur r/developpeurs, r/artificielle, r/QuebecTI, r/TechnologieFrance, r/LocalLLaMA et r/BOINC : comment vos critiques ont façonné une alternative ouverte, gratuite (0,00 €) et respectueuse de vos GPU.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://hivemind-openrouter-1003063861791.us-central1.run.app/portal">🚀 Ouvrir le Portail & Playground GCP</a>
+      <a class="btn btn-green" href="https://hivemind-openrouter-1003063861791.us-central1.run.app/signup">🔑 Obtenir ma Clé API Gratuite (+100 HMT)</a>
+      <a class="btn btn-purple" href="https://hivemind-openrouter-1003063861791.us-central1.run.app/join?lang=fr#train">⚡ Rejoindre comme Producer / OpenTrainer</a>
+      <a class="btn btn-outline" href="https://github.com/xaviercallens/HiveMind">💻 GitHub (AGPL-3.0)</a>
+    </div>
+  </header>
+
+  <section id="reddit-summary">
+    <h2>1. Synthèse des Dernières Conversations Reddit & Évolution de la Roadmap</h2>
+    <p>
+      Au cours des deux dernières semaines, nous avons publié nos travaux et échangé sans filtre avec la communauté francophone et internationale sur Reddit. Plutôt que d'ignorer les critiques ou le scepticisme légitime des développeurs, chaque objection soulevée en commentaire est devenue une tâche d'ingénierie vérifiée par tests unitaires et déployée en production sur Google Cloud Run :
+    </p>
+    <div class="kpi-grid">
+      <div class="kpi"><div class="val">16,326+</div><div class="lbl">Vues Reddit cumulées (r/developpeurs, r/artificielle, r/QuebecTI...)</div></div>
+      <div class="kpi"><div class="val">82+</div><div class="lbl">Commentaires & objections techniques analysés</div></div>
+      <div class="kpi"><div class="val" id="kpi-live-models">15 / 15</div><div class="lbl">Modèles MoE validés en direct (équilibrés Prosumers/Producers)</div></div>
+      <div class="kpi"><div class="val" id="kpi-live-hm">42 / 42</div><div class="lbl">HiveMinders connectés (32 Prosumers + 10 Producers)</div></div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Communauté & Discussion Reddit</th>
+          <th>Intervenants Clés</th>
+          <th>Question / Crainte Soulevée sur Reddit</th>
+          <th>Évolution Roadmap & Solution Déployée</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>r/developpeurs</strong><br><small><code>1xhit4c</code> · 10,310 views · 31 comments</small></td><td>u/SMB-Punt (RTX 5070 Ti), u/JolieFourchette (Mod)</td><td>Verrouillage VRAM d&#x27;Ollama (8–12 Go) pendant le jeu PC, risque d&#x27;ouvrir un port domestique, et rejet du formatage promotionnel généré par IA.</td><td><span class='badge'>HM-REDDIT-01 / HM-REDDIT-02</span><br>Plafond strict &lt; 1,5 Go (1 240 MiB) pour les workers V-MoE, préemption matérielle &lt; 1,2 s dès détection DirectX/Vulkan/Steam, et bouclier HMAC zéro-port entrant.</td></tr>
+<tr><td><strong>r/artificielle</strong><br><small><code>1xctxbf &amp; 1xf6p1d &amp; 1xgly9m</code> · 4,886 views · 51 comments</small></td><td>u/Vxtzq1 (CrowdGPT), u/artsnumeriques, user.913f8b6732605708, user-4ff192</td><td>Preuve Byzantine contre les gradients/tokens empoisonnés, erreurs HTTP 402 de la 1re heure, cold-start VRAM de 20 s, et coût électrique à domicile.</td><td><span class='badge'>HM-REDDIT-03 / HM-REDDIT-06 / HM-REDDIT-07</span><br>Quorum canari S-1 + Multi-Krum FP32 + ZK-OPoI v4, fenêtre d&#x27;activité Kelly 15 min (0 erreur 402), 15 modèles MoE épinglés en VRAM, et entraînement nocturne 22h–07h CET.</td></tr>
+<tr><td><strong>r/QuebecTI</strong><br><small><code>1xhizz8</code> · 2,450 views · 18 comments</small></td><td>Communauté SysAdmin &amp; Dev Québec</td><td>Comment traverser les pare-feux d&#x27;entreprise ou résidentiels (CGNAT) sans VPN complexe ni exposition du réseau local ?</td><td><span class='badge'>HM-REDDIT-04</span><br>Coordinateur central OpenTrainer (/v1/hivemind/opentrainer/*) en HTTPS sortant uniquement (long-polling 443) + service Auto-Start multi-plateforme (Windows/Linux/macOS).</td></tr>
+<tr><td><strong>r/TechnologieFrance</strong><br><small><code>1xicj0j</code> · 1,920 views · 15 comments</small></td><td>u/happyIndeGames (SaaS TPE/PME), u/NikopikVR</td><td>Confidentialité des prompts pour les TPE/PME (les bénévoles voient-ils le texte ?) et demande de synthèses techniques concises sans jargon.</td><td><span class='badge'>HM-REDDIT-05 / HM-REDDIT-08</span><br>Architecture Hybride Souveraine : nœud local privé pour les données sensibles TPE/PME + délestage du code/calcul ouvert sur les 42 HiveMinders de La Ruche.</td></tr>
+<tr><td><strong>r/webgpu &amp; r/SelfHostedAI</strong><br><small><code>1xj7db2 &amp; 1xjc76k</code> · 1,890 views · 4 comments</small></td><td>u/Aransentin, Homelab Self-Hosters</td><td>Preuve réelle du nombre de GPU physiques distincts par rapport aux comptes enregistrés et équilibrage réel de la charge entre Producteurs et Prosumers.</td><td><span class='badge'>HM-REDDIT-07 (#402, #403, #430)</span><br>Comptage honnête distinct_physical_gpus (#402), télémétrie GCP temps réel (/v1/hivemind/live-telemetry) sur 100 % des pages, et rotation WeightedRoundRobin sur les 42 HiveMinders (76,7 % Prosumers / 23,3 % Producers).</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="manifesto-pillars">
+    <h2>2. Les 7 Piliers du Manifeste de l'IA Citoyenne (« La Ruche »)</h2>
+    <div class="pillars-grid">
+      <article class='pillar-card'><div class='pillar-num'>PILIER 01</div><h3>Réciprocité de Calcul Citoyenne — Zéro Crypto, Zéro Spéculation (0,00 € / 0,00 $)</h3><p>L&#x27;intelligence artificielle ne doit être ni un monopole de méga-datacenters fermés, ni un prétexte à la spéculation crypto. Sur HiveMind La Ruche, les Points de Réflexion (HMT) n&#x27;ont aucune valeur monétaire : vous prêtez vos cycles GPU au repos et vous recevez en échange un quota d&#x27;inférence et d&#x27;entraînement sur les 15 modèles MoE de l&#x27;essaim. Chaque nouvel inscrit reçoit 100 HMT immédiatement sans carte bancaire.</p></article>
+<article class='pillar-card'><div class='pillar-num'>PILIER 02</div><h3>Respect Absolu du Matériel Hôte (&lt; 1,5 Go VRAM &amp; Préemption Jeu &lt; 1,2 s)</h3><p>Votre PC vous appartient. Suite aux retours des joueurs et développeurs sur r/developpeurs (u/SMB-Punt) et r/pcmasterrace, notre worker V-MoE plafonne son empreinte à 1 240 MiB de VRAM et surveille les processus DirectX 12, Vulkan et Steam (AppID 3133700). Dès qu&#x27;un jeu ou un rendu démarre, le GPU est libéré à 0 % en moins de 1,2 seconde.</p></article>
+<article class='pillar-card'><div class='pillar-num'>PILIER 03</div><h3>Zéro Port Entrant &amp; Traversée Pare-Feu Native (Bouclier HMAC &amp; OpenTrainer)</h3><p>Exposer Ollama (port 11434) sur Internet est dangereux. Notre bouclier local (hivemind_producer_shield.py) bloque toute commande d&#x27;administration (/api/pull, /api/delete), exige un jeton HMAC signé, et notre coordinateur OpenTrainer fonctionne à 100 % en HTTPS sortant (port 443) avec service Auto-Start persistant sous Windows, Linux et macOS.</p></article>
+<article class='pillar-card'><div class='pillar-num'>PILIER 04</div><h3>Transparence Scientifique &amp; Vérité des Chiffres (GPU Physiques vs Comptes)</h3><p>Aucune métrique simulée ni chiffre gonflé : toutes les pages Web GCP interrogent /v1/hivemind/live-telemetry en direct. Nous distinguons explicitement les 66 comptes enregistrés (dont 42 HiveMinders actifs : 32 Prosumers et 10 Producers équilibrés en WeightedRoundRobin) du nombre d&#x27;hôtes GPU physiques distincts (distinct_physical_gpus). Lorsqu&#x27;une hypothèse scientifique est réfutée, elle est publiée telle quelle.</p></article>
+<article class='pillar-card'><div class='pillar-num'>PILIER 05</div><h3>15 Abeilles MoE Spécialisées plutôt qu&#x27;un Monolithe Fermé</h3><p>Plutôt qu&#x27;un modèle unique de 500 milliards de paramètres impossible à héberger chez soi, La Ruche fédère 15 modèles et experts MoE spécialisés (hivemind/coder, hivemind/bee-stars, hivemind/bee-lean-prover, hivemind/bee-rusty-sundials, hivemind/moe-qwen35-bee, etc.) entraînés la nuit (22h00–07h00 CET) par compression spectrale 2D-DCT (56,2x moins de bande passante).</p></article>
+<article class='pillar-card'><div class='pillar-num'>PILIER 06</div><h3>Résilience Byzantine &amp; Preuves Formelles Lean 4 (Multi-Krum + ZK-OPoI v4)</h3><p>En réponse aux échanges avec u/Vxtzq1 (CrowdGPT) sur r/artificielle, chaque lot d&#x27;inférence est vérifié par quorum canari S-1 et chaque round d&#x27;entraînement DiLoCo/OpenTrainer entre RTX 2070, RTX 4070 et Tesla T4 est filtré par Multi-Krum en FP32, engagement Merkle SHA-256 ZK-OPoI v4 et 128 théorèmes vérifiés mécaniquement en Lean 4 (0 sorry).</p></article>
+<article class='pillar-card'><div class='pillar-num'>PILIER 07</div><h3>Souveraineté Hybride &amp; Confidentialité Explicite pour Développeurs et PME</h3><p>Suite aux discussions sur r/TechnologieFrance (u/happyIndeGames), notre charte est limpide : les producteurs bénévoles voient les requêtes qu&#x27;ils traitent. Gardez un micro-nœud local souverain pour vos données confidentielles/RGPD, et utilisez l&#x27;API compatible OpenAI (/v1/chat/completions) de La Ruche pour le code open-source, les mathématiques formelles et la science citoyenne.</p></article>
+    </div>
+  </section>
+
+  <section id="adopt-now">
+    <h2>3. Comment Adopter et Rejoindre La Ruche Aujourd'hui (4 Rôles Citoyens)</h2>
+    <div class="adopt-grid">
+      <div class="adopt-card">
+        <h3>1️⃣ Consumer / Développeur (0 € · +100 HMT)</h3>
+        <p>Utilisez immédiatement les 15 modèles MoE via l'API compatible OpenAI (/v1/chat/completions) dans Cursor, Continue.dev ou Python.</p>
+        <p><a class="btn btn-green" href="https://hivemind-openrouter-1003063861791.us-central1.run.app/signup">Créer mon compte sur /signup →</a></p>
+      </div>
+      <div class="adopt-card">
+        <h3>2️⃣ Prosumer / Gamer (GPU au repos < 1,5 Go)</h3>
+        <p>Partagez votre GPU quand vous ne jouez pas (pause automatique < 1,2 s dès que Steam ou Vulkan démarre) et gagnez des HMT sur chaque requête servie.</p>
+        <pre><code>python scripts/hivemind_producer_autostart.py windows --model coder=qwen2.5-coder:7b --apply ./producer-autostart</code></pre>
+        <p><a class="btn btn-primary" href="https://hivemind-openrouter-1003063861791.us-central1.run.app/join?lang=fr#share">Guide Auto-Start sur /join →</a></p>
+      </div>
+      <div class="adopt-card">
+        <h3>3️⃣ Intense GPU Trainer (OpenTrainer · BOINC + AMCP + Kafka)</h3>
+        <p>Nouvelle catégorie Portal : fédérez votre RTX 2070, RTX 4070 ou Tesla T4 pour l'entraînement intensif QLoRA/DiLoCo sans ouvrir aucun port entrant (HTTPS 443 sortant).</p>
+        <p><a class="btn btn-purple" href="https://hivemind-openrouter-1003063861791.us-central1.run.app/signup">S'inscrire comme Trainer sur /signup →</a></p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div>Project HiveMind · La Ruche Citoyenne · AGPL-3.0 · 0.00 EUR / 0.00 USD (HMT Compute Reciprocity Points Only)</div>
+    <div>
+      <a href="https://hivemind-openrouter-1003063861791.us-central1.run.app/portal" style="color:var(--acc)">Portal GCP</a> ·
+      <a href="https://hivemind-openrouter-1003063861791.us-central1.run.app/signup" style="color:var(--acc)">Sign Up</a> ·
+      <a href="https://hivemind-openrouter-1003063861791.us-central1.run.app/join" style="color:var(--acc)">Join</a> ·
+      <a href="https://hivemind-openrouter-1003063861791.us-central1.run.app/benchmarks" style="color:var(--acc)">Benchmarks</a> ·
+      <a href="https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/hivemind/manifesto" style="color:var(--acc)">JSON API</a>
+    </div>
+  </footer>
+</div>
+<script>
+(function(){
+  var init = {"total_registered_accounts": 66, "prosumers": 32, "producers": 10, "consumers": 24, "trainers": 0, "live_models": 15, "live_hiveminders": 42, "total_hiveminders": 42, "assimilated_workunits": 154, "requests_24h": 597, "opentrainer_status": "ONLINE"};
+  function refreshManifestoTelemetry(){
+    fetch("/v1/hivemind/live-telemetry", {cache: "no-store"})
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){
+        if(!d) return;
+        var a = d.accounts || {};
+        var roles = a.by_role || {};
+        var m = d.models || {};
+        var p = d.producers || d.producer_fleet || {};
+        var t = d.t4_boinc || d.tesla_t4_boinc || {};
+        var o = d.opentrainer || {};
+        var u = d.usage_24h || d.usage_capture || {};
+        var el = document.getElementById("manifesto-live-text");
+        if(el){
+          el.innerHTML = (a.total_registered_accounts || init.total_registered_accounts) +
+            " accounts (" + (roles.prosumer || init.prosumers) + " prosumers, " +
+            (roles.producer || init.producers) + " producers, " +
+            (roles.consumer || init.consumers) + " consumers, " +
+            (roles.trainer || init.trainers) + " trainers) · <strong>" +
+            (m.live_count || m.live_models_count || init.live_models) + " live MoE models</strong> · <strong>" +
+            (p.live_hiveminders || init.live_hiveminders) + "/" + (p.total_hiveminders || init.total_hiveminders) +
+            " active HiveMinders</strong> · <strong>" +
+            (u.total_requests || init.requests_24h) + " 24h requests</strong> · Tesla T4 BOINC: <strong>" +
+            (t.assimilated_workunits || init.assimilated_workunits) + " WUs</strong> · OpenTrainer: <strong>" +
+            (o.status || init.opentrainer_status) + "</strong>";
+        }
+      })
+      .catch(function(){});
+  }
+  refreshManifestoTelemetry();
+  setInterval(refreshManifestoTelemetry, 15000);
+})();
+</script>
+</body>
+</html>

@@ -1,9 +1,9 @@
 {
-  "updated_at_utc": "2026-10-29T19:18:27Z",
+  "updated_at_utc": "2026-11-01T09:17:26Z",
   "enrollments": [
     {
       "status": "ENROLLED_INTERNATIONAL_LAUNCH",
-      "enrollment_id": "ENROLL-EE75C42A4F8B",
+      "enrollment_id": "ENROLL-8ECF0A769176",
       "handle": "@xaviercallens",
       "participant_type": "human",
       "assigned_region": {
@@ -31,11 +31,31 @@
         "uplink_mbps": 120.0,
         "rtt_ms": 18.0
       },
+      "boinc_integration_plan": {
+        "boinc_project_url": "https://boinc.hivemind.socrate-ai-lab.com/hivemind_at_home/",
+        "recommended_plan_class": "cuda_hivemind",
+        "boinc_app_name": "hivemind_qlora",
+        "min_vram_floor_mib": 4500.0,
+        "quorum_replication": {
+          "min_quorum": 2,
+          "target_nresults": 2
+        },
+        "workload_focus": "4-bit NF4 QLoRA DiLoCo Inner Steps, <1.5GB Prelude Vision-MoE & 8-Expert MoE Evaluation",
+        "estimated_cobblestones_per_workunit": 120.0,
+        "ledger_sync_endpoint": "/boinc/v1/ledger/sync",
+        "non_monetary_reciprocity_note": "0.00 EUR / 0.00 USD — BOINC Cobblestones convert strictly to non-monetary HMT compute quota.",
+        "cli_onboarding_commands": {
+          "lookup_account": "boinccmd --lookup_account https://boinc.hivemind.socrate-ai-lab.com/hivemind_at_home/ <email> <password>",
+          "project_attach": "boinccmd --project_attach https://boinc.hivemind.socrate-ai-lab.com/hivemind_at_home/ <authenticator>",
+          "idle_worker_daemon": "uv run python scripts/hivemind_boinc_idle_worker.py --plan-class cuda_hivemind --min-free-vram-mib 4300"
+        },
+        "participant_mode": "volunteer_boinc_node"
+      },
       "preferred_language": "fr"
     },
     {
       "status": "ENROLLED_INTERNATIONAL_LAUNCH",
-      "enrollment_id": "ENROLL-5F45C4A4F9F8",
+      "enrollment_id": "ENROLL-173D0BE5572E",
       "handle": "agent://hivemind/queenbee-coordinator-v29",
       "participant_type": "agent",
       "assigned_region": {
@@ -62,6 +82,26 @@
         "step_latency_reduction_pct": 78.77,
         "uplink_mbps": 500.0,
         "rtt_ms": 12.0
+      },
+      "boinc_integration_plan": {
+        "boinc_project_url": "https://boinc.hivemind.socrate-ai-lab.com/hivemind_at_home/",
+        "recommended_plan_class": "cuda_hivemind",
+        "boinc_app_name": "hivemind_qlora",
+        "min_vram_floor_mib": 4500.0,
+        "quorum_replication": {
+          "min_quorum": 2,
+          "target_nresults": 2
+        },
+        "workload_focus": "4-bit NF4 QLoRA DiLoCo Inner Steps, <1.5GB Prelude Vision-MoE & 8-Expert MoE Evaluation",
+        "estimated_cobblestones_per_workunit": 120.0,
+        "ledger_sync_endpoint": "/boinc/v1/ledger/sync",
+        "non_monetary_reciprocity_note": "0.00 EUR / 0.00 USD — BOINC Cobblestones convert strictly to non-monetary HMT compute quota.",
+        "cli_onboarding_commands": {
+          "lookup_account": "boinccmd --lookup_account https://boinc.hivemind.socrate-ai-lab.com/hivemind_at_home/ <email> <password>",
+          "project_attach": "boinccmd --project_attach https://boinc.hivemind.socrate-ai-lab.com/hivemind_at_home/ <authenticator>",
+          "idle_worker_daemon": "uv run python scripts/hivemind_boinc_idle_worker.py --plan-class cuda_hivemind --min-free-vram-mib 4300"
+        },
+        "participant_mode": "autonomous_agent_worker"
       },
       "preferred_language": "en"
     }

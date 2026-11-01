@@ -70,18 +70,18 @@ Measured on the T4 (Tesla T4, NF4, `--inner-steps 40 --inner-lr 2e-2 --rounds 4 
 
 * **Environment on `XAVGAMSRV`**: `D:\xdev\HiveMind\.venv\Scripts\python.exe` (`torch=2.6.0+cu124`, `cuda=True`, `bitsandbytes` 4-bit NF4 GPU quantization enabled, `peft`, `transformers`, NVIDIA GeForce RTX 2070 8 GB SM 7.5).
 * **NF4 Status on RTX 2070**: **Loads and executes natively on the RTX 2070 GPU (`--quant nf4 --device cuda`)** with `6,553 MiB` free VRAM before and after (`1,454 MiB` used / `8,192 MiB` total, `25-27 °C`).
-* **Unit Tests (`tests/test_e8_qlora_moe_round.py`)**: **`13 passed in 14.47s`** after fixing `getattr(args, "connect_timeout", 300.0)` in `scripts/e8_qlora_moe_round.py` (when `Namespace` is constructed directly in `test_a_real_http_round_across_two_learners_matches_the_single_process_baseline`).
+* **Cross-Host Base Model Parity (numpy PCG64)**: With the platform-independent numpy PCG64 base-model generator (`d03a431`), Round 0 initial NF4 held-out loss on the Windows RTX 2070 (`4.1721077`) matches the Linux Tesla T4 (`4.1721`) to all 4 printed decimal places, and Round 1 (`2.0108` vs `2.0106`) and Round 2 (`1.6999` vs `1.6994`) track within `5e-4` across hosts.
 
 ### 6.1 Measured Single-Process NF4 CUDA Baselines & Shuffled-Labels Control on RTX 2070 (`XAVGAMSRV`, `--quant nf4 --device cuda --inner-steps 40 --inner-lr 2e-2 --rounds 4`)
 
 Raw JSON files are committed under `artifacts/experiments/e8_real/stage2_rtx2070_baseline_seed{1,2,3}.json` and `artifacts/experiments/e8_real/stage2_rtx2070_shuffled_seed1.json`:
 
-| Run on RTX 2070 (`XAVGAMSRV`, NF4 CUDA) | Round 0 | Round 1 | Round 2 | Round 3 | Final eval loss |
+| Run on RTX 2070 (`XAVGAMSRV`, NF4 CUDA, PCG64 base) | Round 0 | Round 1 | Round 2 | Round 3 | Final eval loss |
 |---|---:|---:|---:|---:|---:|
-| `baseline`, seed 1, real labels | `4.1825` | `2.0188` | `1.7055` | `1.7043` | **`1.7099`** |
-| `baseline`, seed 2, real labels | `4.1765` | `2.0398` | `1.7352` | `1.7431` | **`1.6895`** |
-| `baseline`, seed 3, real labels | `4.1718` | `1.9182` | `1.5810` | `1.6250` | **`1.5849`** |
-| Negative control (`--shuffle-labels`), seed 1 | `4.1825` | `4.1967` | `4.2332` | `4.2145` | **`4.1906`** |
+| `baseline`, seed 1, real labels | `4.1721` | `2.0108` | `1.6999` | `1.7181` | **`1.7156`** |
+| `baseline`, seed 2, real labels | `4.1788` | `1.9529` | `1.7411` | `1.7627` | **`1.8157`** |
+| `baseline`, seed 3, real labels | `4.1648` | `1.9202` | `1.6558` | `1.6100` | **`1.5699`** |
+| Negative control (`--shuffle-labels`), seed 1 | `4.1721` | `4.1986` | `4.2258` | `4.1936` | **`4.1854`** |
 
 ### 6.2 Live Two-Host Stage 2 Readiness (`XAVGAMSRV` <-> `socreateai-agora-hermes-node1`)
 

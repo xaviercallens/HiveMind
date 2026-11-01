@@ -1,20 +1,20 @@
 {
   "schema_version": "rtx2070_3h_monitor.v1",
   "cadence_cron": "0 */3 * * *",
-  "timestamp_utc": "2026-11-01T02:19:47Z",
+  "timestamp_utc": "2026-11-01T04:19:40Z",
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-11-01T02:19:47Z",
+    "timestamp_utc": "2026-11-01T04:19:40Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": true,
     "device": "cuda:0",
     "compute_capability": "7.5",
-    "temperature_c": 25.0,
-    "gpu_utilization_pct": 13.0,
-    "power_draw_w": 9.28,
+    "temperature_c": 26.0,
+    "gpu_utilization_pct": 11.0,
+    "power_draw_w": 8.97,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1455.0,
-    "memory_free_mib": 6552.0,
+    "memory_used_mib": 1454.0,
+    "memory_free_mib": 6553.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
@@ -24,10 +24,10 @@
     "max_graphics_clock_mhz": 2145.0,
     "memory_clock_mhz": 405.0,
     "host_tensor_gflops": 0.0,
-    "measured_fp32_tflops": 5.61,
-    "measured_fp16_tensor_tflops": 20.17,
-    "effective_sparse_moe_nf4_tflops": 37.31,
-    "microbench_elapsed_ms": 324.69
+    "measured_fp32_tflops": 5.6,
+    "measured_fp16_tensor_tflops": 19.69,
+    "effective_sparse_moe_nf4_tflops": 36.43,
+    "microbench_elapsed_ms": 291.29
   },
   "community_gpu_benchmark_summary": {
     "receipt_sha256": "e944272a1802d8053a28c26a59e7e121671eec23e2c3fcb22f2fb45c3b197580",
@@ -35,7 +35,7 @@
     "peak_allocated_mb": 0.0
   },
   "pr_integration_summary": {
-    "checked_utc": "2026-11-01T02:19:53Z",
+    "checked_utc": "2026-11-01T04:19:45Z",
     "open_prs_count": 12,
     "evaluated": [
       {
@@ -142,11 +142,11 @@
         "author": "xaviercallens",
         "head_ref": "feat/openrouter-5lang-i18n",
         "base_ref": "main",
-        "head_sha": "b5d49891f5",
+        "head_sha": "8d2c1d652a",
         "owner_authored": true,
         "security_passed": false,
         "injection_clean": true,
-        "decision": "REFUSE (security critical=2, high=0)",
+        "decision": "REFUSE (security critical=3, high=0)",
         "merged": false,
         "merge_message": ""
       },
@@ -219,5 +219,5 @@
       141
     ]
   },
-  "ledger_sha256": "1a108979cd94822424b87df7aa6d5b0cf219e74e5e206de124ef0a3cbceb42ec"
+  "ledger_sha256": "0d524b50ab98feaa72e2e3e7a391c85451b5a1f62b61fdeeb4180fb32e2eb34b"
 }

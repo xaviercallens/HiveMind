@@ -694,16 +694,18 @@ class SteamDaemonManager:
         self.gaming_preemption_threshold_percent = 75.0
         self.idle_trigger_seconds = 30.0
         self.max_temp_c = 68.0
-        self.current_gpu_temp_c = 54.2
-        self.current_gpu_utilization_pct = 12.4
-        self.vram_allocated_mb = 1280.0
-        self.vram_total_mb = 8192.0
-        self.workunits_completed = 142
-        self.points_retributed = 35500
-        self.unclaimed_points = 450
+        # Readings this process does not take are None (NOT_MEASURED), and counters start at zero: nothing here is
+        # read from a GPU or a ledger, so no figure may look like one.
+        self.current_gpu_temp_c: Optional[float] = None
+        self.current_gpu_utilization_pct: Optional[float] = None
+        self.vram_allocated_mb: Optional[float] = None
+        self.vram_total_mb: Optional[float] = None
+        self.workunits_completed = 0
+        self.points_retributed = 0
+        self.unclaimed_points = 0
         self.active_game_detected: Optional[str] = None
-        self.preemption_latency_ms = 412
-        self.contributor_handle = "callensxavier@gmail.com"
+        self.preemption_latency_ms: Optional[int] = None  # never measured by this manager
+        self.contributor_handle = ""
 
         try:
             import torch
@@ -718,18 +720,17 @@ class SteamDaemonManager:
         if action == "simulate_game":
             self.status = "PAUSED_GAMING"
             self.active_game_detected = game or "Cyberpunk 2077 (cyberpunk2077.exe)"
-            self.vram_allocated_mb = 0.0
             return {
                 "status": self.status,
                 "active_game_detected": self.active_game_detected,
                 "preemption_latency_ms": self.preemption_latency_ms,
-                "vram_yielded_mb": 1280.0,
-                "message": f"Preemption triggered: 100% VRAM yielded in {self.preemption_latency_ms} ms for {self.active_game_detected}!",
+                "vram_yielded_mb": None,
+                "measured": False,
+                "message": f"Preemption requested for {self.active_game_detected}; the yield time and freed VRAM are not measured by this daemon.",
             }
         elif action == "pause" or (action is None and self.status == "RUNNING"):
             self.status = "PAUSED"
             self.active_game_detected = None
-            self.vram_allocated_mb = 0.0
             return {
                 "status": self.status,
                 "message": "BOINC Contributor Daemon paused by user.",
@@ -737,7 +738,6 @@ class SteamDaemonManager:
         else:
             self.status = "RUNNING"
             self.active_game_detected = None
-            self.vram_allocated_mb = 1280.0
             return {
                 "status": self.status,
                 "message": "BOINC Contributor Daemon resumed. Contributing idle compute to HiveMind.",
@@ -745,27 +745,21 @@ class SteamDaemonManager:
 
     def claim_points(self, handle: Optional[str] = None, amount: Optional[int] = None) -> Dict[str, Any]:
         target_handle = handle or self.contributor_handle
-        claimed = amount if amount is not None and amount > 0 else self.unclaimed_points
-        if claimed <= 0:
-            claimed = 150
-        self.points_retributed += claimed
-        self.unclaimed_points = 0
-        self.workunits_completed += max(1, claimed // 150)
-
-        receipt_sha256 = hashlib.sha256(
-            f"STEAM_CLAIM:{self.app_id}:{target_handle}:{claimed}:{time.time()}".encode("utf-8")
+        requested = amount if amount is not None and amount > 0 else 0
+        # This daemon holds no server-verified workunit for anyone, so it credits nothing; the request is acknowledged only.
+        request_sha256 = hashlib.sha256(
+            f"STEAM_CLAIM_REQUEST:{self.app_id}:{target_handle}:{requested}:{time.time()}".encode("utf-8")
         ).hexdigest()
-
         return {
-            "status": "POINTS_RETRIBUTED",
+            "status": "NOT_CREDITED_UNVERIFIED",
             "contributor": target_handle,
-            "claimed_hmt": claimed,
+            "requested_hmt": requested,
+            "claimed_hmt": 0,
             "total_points_retributed": self.points_retributed,
             "unclaimed_remaining": self.unclaimed_points,
             "workunits_completed": self.workunits_completed,
-            "epoch": 412,
-            "receipt_sha256": receipt_sha256,
-            "message": f"Successfully retributed {claimed} HMT compute points to {target_handle} for verified RTX workunits!",
+            "request_sha256": request_sha256,
+            "message": "No points credited: points are credited only after the server verifies a workunit.",
         }
 
     def get_status(self) -> Dict[str, Any]:
@@ -788,7 +782,8 @@ class SteamDaemonManager:
             "unclaimed_points": self.unclaimed_points,
             "active_game_detected": self.active_game_detected,
             "contributor_handle": self.contributor_handle,
-            "active_tasks": ["sparse_moe_inference", "kepler_transit_folding", "lean4_ast_audit"],
+            "measured": False,
+            "active_tasks": [],
         }
 
 
@@ -2696,7 +2691,7 @@ def build_hivemind_at_home_state(
                 {"label": "VRAM Footprint Reduction", "value": "4.54x (<6,656 MiB Cap)"},
                 {"label": "Async Quorum Speedup", "value": "1.19x vs Stragglers"},
                 {"label": "Hetero Batch Speedup", "value": "3.50x Zero-Drop"},
-                {"label": "Game Preemption Latency", "value": "0.42s (<1.5s SLA)"},
+                {"label": "Game Preemption Latency", "value": "not measured (target < 1.5 s)"},
             ],
             "accent_color": "#10b981",
         },
@@ -2813,14 +2808,16 @@ def build_hivemind_at_home_state(
                 "NVIDIA GeForce RTX 5060 / 5070 / 5080 / 5090 (Blackwell)",
             ],
             "boinc_daemon": {
-                "status": "RUNNING",
+                "status": _steam_daemon_mgr.status,
                 "mode": "IDLE_INFERENCE_AND_ASTRO_WORKUNITS",
-                "idle_trigger_seconds": 30,
-                "preemption_latency_ms": 412,
-                "points_per_workunit": 150,
-                "points_retributed": 35500,
-                "unclaimed_points": 450,
-                "workunits_verified": 142,
+                "idle_trigger_seconds": _steam_daemon_mgr.idle_trigger_seconds,
+                "preemption_latency_ms": _steam_daemon_mgr.preemption_latency_ms,
+                "points_per_workunit": None,
+                "points_status": "NOT_CREDITED until the server verifies a workunit",
+                "points_retributed": _steam_daemon_mgr.points_retributed,
+                "unclaimed_points": _steam_daemon_mgr.unclaimed_points,
+                "workunits_verified": _steam_daemon_mgr.workunits_completed,
+                "measured": False,
             },
         },
         "gcp_cloud_fleet": gcp_cloud_fleet,
@@ -4994,7 +4991,7 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
           vidCtx.fillText('GPU-BEE-' + (b + 1), bx - 26, by + 40);
         }}
         vidCtx.fillStyle = '#34d399';
-        vidCtx.fillText('VRAM Cap: 6,656 MiB | Game Launch Preemption: 0.42s (<1.5s SLA)', 22, H - 18);
+        vidCtx.fillText('VRAM Cap: 6,656 MiB | Game Launch Preemption: not measured (target < 1.5 s)', 22, H - 18);
       }} else if (chapter === 1) {{
         // Chapter 2: 8D Gosset E8 Lattice 30.89x WAN Compression
         vidCtx.fillStyle = '#a855f7';
@@ -5213,12 +5210,12 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
           '<div style="margin-top:4px;color:#fbbf24;">Points: <strong>credited only after server-side verification</strong></div>';
       }});
       simGamingBtn.addEventListener('click', function() {{
-        gpuBadge.textContent = 'GAMING MODE (SWARM PAUSED IN 0.42s)';
+        gpuBadge.textContent = 'GAMING MODE (SWARM PAUSED; yield time not measured)';
         gpuBadge.style.borderColor = '#f59e0b';
         gpuBadge.style.color = '#fbbf24';
         preemptBox.style.borderColor = '#f59e0b';
         preemptBox.innerHTML =
-          '<div><strong style="color:#fbbf24;">&#x1F3AE; STATUS: GAME DETECTED (Cyberpunk2077.exe / Steam) &rarr; BEE ASLEEP IN 0.42s (&lt;1.5s SLA)</strong></div>' +
+          '<div><strong style="color:#fbbf24;">&#x1F3AE; STATUS: GAME DETECTED (Cyberpunk2077.exe / Steam) &rarr; BEE ASLEEP (yield time not measured; target &lt;1.5s)</strong></div>' +
           '<div style="margin-top:4px;color:#34d399;">Swarm GPU Usage: <strong>0.0%</strong> &bull; Swarm VRAM Freed: <strong>0 MiB used</strong> &bull; Your Game FPS: <strong>144 FPS (100% GPU Dedicated to You!)</strong></div>' +
           '<div style="margin-top:4px;color:#94a3b8;">Your Worker Bee automatically resumes foraging 60 seconds after you exit your game.</div>';
       }});
@@ -8592,14 +8589,15 @@ def create_hivemind_at_home_app(
         claim = _steam_daemon_mgr.claim_points(handle=handle, amount=250)
         return JSONResponse(
             content={
-                "status": "BOINC_CUDA_WORKUNIT_VERIFIED",
+                "status": "RECEIVED_UNVERIFIED",
                 "handle": handle,
                 "target_planet": target_planet,
                 "app_id": 3133700,
-                "hmt_awarded": 250,
-                "cobblestones_awarded": 128,
-                "balance_hmt": claim.get("total_points_earned_hmt", 2650),
-                "receipt_sha256": claim.get("receipt_sha256", ""),
+                "hmt_awarded": 0,
+                "cobblestones_awarded": 0,
+                "balance_hmt": claim.get("total_points_retributed", 0),
+                "request_sha256": claim.get("request_sha256", ""),
+                "message": claim.get("message", ""),
             }
         )
 

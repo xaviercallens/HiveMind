@@ -216,7 +216,16 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     )
     assert r_sub.status_code == 200
     sub_json = r_sub.json()
-    assert sub_json["status"] == "ADMITTED_TO_LA_RUCHE_QUORUM"
+    assert sub_json["status"] == "RECEIVED_CLIENT_CLAIMS_UNVERIFIED"
+    assert sub_json["reciprocity_points_awarded"] == 0
+    assert sub_json["spotcheck_verified"] is False
+    # Negative control: the same lease cannot be submitted twice, and an invented lease is refused.
+    replay = client.post("/api/v1/federated/workunit/submit", json={
+        "workunit_id": wu_json["workunit_id"], "lease_id": wu_json["lease_id"],
+        "lease_version_tag": wu_json["lease_version_tag"], "contributor_handle": "@test-gpu-node",
+        "domain_name": "code_python", "train_nll_before": 5.55, "train_nll_after": 5.12,
+        "holdout_nll_before": 5.50, "holdout_nll_after": 5.32})
+    assert replay.status_code == 422
     assert sub_json["monetary_payout_eur_usd"] == 0.0
 
     r_ledger = client.get("/api/v1/federated/ledger")

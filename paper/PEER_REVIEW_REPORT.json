@@ -5,7 +5,7 @@
   "disclosure": "This report is produced by a deterministic script. It is NOT a peer review: no language model and no human referee evaluated the manuscript. Verdicts below mean only that the listed artifact checks passed.",
   "lead_peer_review_model": "none (scripted static audit; no language-model call)",
   "co_auditor_model": "none",
-  "timestamp_utc": "2026-10-29T19:53:02Z",
+  "timestamp_utc": "2026-11-01T17:08:47Z",
   "tex_path": "paper/hivemind_foundation_article.tex",
   "pdf_path": "paper/hivemind_foundation_article.pdf",
   "pdf_exists": true,
@@ -2003,7 +2003,7 @@
   "latex_typography_and_figures_audit": {
     "figures_verified": 7,
     "missing_figures": [],
-    "bibliography_entries": 56,
+    "bibliography_entries": 62,
     "uncited_bibitems": [],
     "undefined_citations": [],
     "formal_theorem_blocks": 4,
@@ -2068,7 +2068,7 @@
       "co_auditor_model": "none",
       "gate_passed": true,
       "findings_resolved": [
-        "Verified 7/4 vector PDF/PNG figure pairs and 56/56 cited bibliography entries (0 uncited, 0 undefined).",
+        "Verified 7/4 vector PDF/PNG figure pairs and 62/62 cited bibliography entries (0 uncited, 0 undefined).",
         "Eliminated Overfull \\hbox (80.7pt) and fancyhdr headheight warnings via \\path{} line breaking and 21pt header height (0 Overfull \\hbox > 5pt)."
       ]
     }

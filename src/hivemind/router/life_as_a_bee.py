@@ -2021,6 +2021,16 @@ def render_life_as_a_bee_section(live_telemetry: dict[str, Any] | None = None) -
         </div>
         """)
 
+    def _fr(value: float, digits: int = 1) -> str:
+        return f"{value:.{digits}f}".replace(".", ",")
+
+    speeds = [sc.tokens_per_sec for sc in LIFE_AS_A_BEE_SCENARIOS]
+    gpu_100 = [sc for sc in LIFE_AS_A_BEE_SCENARIOS if sc.gpu_residency.startswith("100% GPU")]
+    summary_mean_speed = _fr(sum(speeds) / len(speeds), 2)
+    gpu_100_speed_range = f"{_fr(min(sc.tokens_per_sec for sc in gpu_100))} à {_fr(max(sc.tokens_per_sec for sc in gpu_100))} tok/s"
+    gpu_100_latency_range = f"{_fr(min(sc.warm_latency_ms for sc in gpu_100) / 1000)}s – {_fr(max(sc.warm_latency_ms for sc in gpu_100) / 1000)}s"
+    gpu_100_count = len(gpu_100)
+    sourced_count = sum(1 for sc in LIFE_AS_A_BEE_SCENARIOS if sc.source.startswith("artifacts/"))
     return f"""
     <!-- Life as a Bee Dashboard: Real End-User Scenarios & MoE Bee Usage Guide -->
     <section id="life-as-a-bee" class="card" style="margin-bottom:3rem;border-color:rgba(251,191,36,0.45);">
@@ -2053,13 +2063,13 @@ def render_life_as_a_bee_section(live_telemetry: dict[str, Any] | None = None) -
             <div class="tier-vram">2 291 Tokens Générés &bull; 0 Erreur</div>
             <div class="tier-desc">Toutes les 15 abeilles et modèles fondationnels (Gemma 3, Qwen 3.5, Mistral, Crowd-v1, 4 MoE, 3 Spécialistes) ont été validés en conditions réelles.</div>
           </div>
-          <div><span class="tier-tag">Moyenne: 25,64 tok/s</span></div>
+          <div><span class="tier-tag">Moyenne : {summary_mean_speed} tok/s (calculée sur {len(LIFE_AS_A_BEE_SCENARIOS)} scénarios ; {sourced_count} chiffres sourcés, instantané, pas en direct)</span></div>
         </div>
         <div class="tier-card" style="border-color:rgba(0,238,252,0.4);">
           <div>
             <div class="tier-badge">PALIER 100% GPU (1.5B–8B)</div>
-            <div class="tier-name">16,5 à 71,9 tok/s (1,0s – 4,8s)</div>
-            <div class="tier-vram">10 Modèles Logés 100% en VRAM</div>
+            <div class="tier-name">{gpu_100_speed_range} ({gpu_100_latency_range})</div>
+            <div class="tier-vram">{gpu_100_count} Modèles Logés 100% en VRAM</div>
             <div class="tier-desc"><code>crowd-v1</code> (71,9 tok/s), <code>coder-lite</code> (53,0 tok/s), <code>gemma-core</code> (37,0 tok/s), <code>mistral-core</code> (33,5 tok/s), <code>bee-rusty-sundials</code> (33,3 tok/s), <code>coder</code> (32,8 tok/s), <code>qwen35-core</code> (30,0 tok/s), <code>bee-stars</code> (27,9 tok/s).</div>
           </div>
           <div><span class="tier-tag">Read-Ahead Disque 16 Mo Actif</span></div>

@@ -141,3 +141,20 @@ def test_every_scenario_speed_is_sourced_or_marked_not_sourced() -> None:
     assert payload["summary"]["fastest_bee_tokens_per_sec"] == max(s.tokens_per_sec for s in LIFE_AS_A_BEE_SCENARIOS)
     assert payload["summary"]["scenarios_with_artifact_source"] == sourced
     assert all("source" in sc for sc in payload["scenarios"])
+
+
+def test_summary_figures_are_derived_from_the_scenario_table(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Changing one scenario's speed must change the rendered mean; a hand-typed constant would not move."""
+    import dataclasses
+
+    from hivemind.router import life_as_a_bee as lab
+
+    before = lab.render_life_as_a_bee_section()
+    assert "calculée sur 15 scénarios" in before
+    first = lab.LIFE_AS_A_BEE_SCENARIOS[0]
+    bumped = (dataclasses.replace(first, tokens_per_sec=first.tokens_per_sec + 150.0),) + tuple(lab.LIFE_AS_A_BEE_SCENARIOS[1:])
+    monkeypatch.setattr(lab, "LIFE_AS_A_BEE_SCENARIOS", bumped)
+    after = lab.render_life_as_a_bee_section()
+    expected = f"{sum(sc.tokens_per_sec for sc in bumped) / len(bumped):.2f}".replace(".", ",")
+    assert f"Moyenne : {expected} tok/s" in after
+    assert "Moyenne : 25,64 tok/s" not in after

@@ -12,8 +12,10 @@ import importlib.util
 import json
 import subprocess
 import sys
+import time as _time
 from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -375,7 +377,9 @@ def test_loop_mode_prints_per_transition_and_backs_off_60s_when_blocked(
             raise _StopLoopError
 
     monkeypatch.setattr(worker, "run_one_idle_gpu_boinc_cycle", fake_cycle)
-    monkeypatch.setattr(worker.time, "sleep", fake_sleep)
+    # A private stand-in: patching worker.time.sleep would patch the global time module, and any background thread
+    # from another test that sleeps would consume this fake and stop the loop early.
+    monkeypatch.setattr(worker, "time", SimpleNamespace(sleep=fake_sleep, perf_counter=_time.perf_counter, time=_time.time))
     with pytest.raises(_StopLoopError):
         worker.main([])
     lines = [ln for ln in capsys.readouterr().out.splitlines() if ln.strip()]

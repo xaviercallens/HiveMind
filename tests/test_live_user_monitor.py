@@ -100,3 +100,38 @@ def test_monitor_reads_real_and_test_users_from_the_router_admin_endpoint() -> N
     assert counts["real"]["total"] == 1 and counts["test"]["total"] == 1
     assert counts["real"]["created"] == 1 and counts["test"]["created"] == 1
     assert refused == {"error": "HTTP 403"}
+
+
+def _chat_row(latency: str, size: int, ua: str = "python-httpx/0.27", status: int = 200) -> dict[str, object]:
+    return {"timestamp": "2026-11-01T01:00:00Z",
+            "httpRequest": {"latency": latency, "responseSize": str(size), "userAgent": ua, "status": status, "requestUrl": "https://x/v1/chat/completions"}}
+
+
+def test_breakdown_separates_long_generations_from_slow_small_responses() -> None:
+    """Positive control: slow requests with big responses and slow requests with tiny ones land in different buckets."""
+    rows = [_chat_row("30.0s", 90_000), _chat_row("28.0s", 80_000), _chat_row("1.0s", 500), _chat_row("0.8s", 400),
+            _chat_row("25.0s", 600, ua="Mozilla/5.0")]
+    out = monitor.chat_latency_breakdown(rows)
+    assert out["by_response_size"]["ge_20kb"]["n"] == 2
+    assert out["by_response_size"]["ge_20kb"]["p50_s"] == 28.0  # _percentile rounds the middle index of two values down
+    assert out["by_response_size"]["lt_2kb"]["n"] == 3
+    assert out["by_response_size"]["lt_2kb"]["p95_s"] == 25.0  # the slow small response is visible, not averaged away
+    assert out["by_client"]["browser"]["n"] == 1 and out["by_client"]["scripted"]["n"] == 4
+    assert [s["latency_s"] for s in out["slowest"]] == [30.0, 28.0, 25.0, 1.0, 0.8]
+    assert out["slowest"][2]["client"] == "browser" and out["slowest"][2]["response_bytes"] == 600
+
+
+def test_breakdown_negative_control_uniform_traffic_has_no_spread_and_empty_input_is_empty() -> None:
+    """Negative control: identical rows give one bucket with equal p50 and p95; no rows give no buckets and no slowest."""
+    same = monitor.chat_latency_breakdown([_chat_row("2.0s", 1000) for _ in range(6)])
+    assert list(same["by_response_size"]) == ["lt_2kb"] and list(same["by_client"]) == ["scripted"]
+    assert same["by_response_size"]["lt_2kb"]["p50_s"] == same["by_response_size"]["lt_2kb"]["p95_s"] == 2.0
+    empty = monitor.chat_latency_breakdown([])
+    assert empty == {"by_client": {}, "by_response_size": {}, "slowest": []}
+
+
+def test_breakdown_keeps_no_url_address_or_identity() -> None:
+    row = _chat_row("3.0s", 100)
+    row["httpRequest"]["remoteIp"] = "203.0.113.9"  # type: ignore[index]
+    text = str(monitor.chat_latency_breakdown([row]))
+    assert "203.0.113.9" not in text and "v1/chat" not in text and "python-httpx" not in text

@@ -1640,6 +1640,7 @@ def render_benchmarks_page(
 
       <div class="cta-group">
         <a href="/#playground" class="btn btn-primary">{html.escape(copy["cta_playground"])}</a>
+        <a href="/manifesto" class="btn btn-outline" style="border-color:var(--green);color:var(--green);">&#x1F4DC; Citizen AI Manifesto (/manifesto)</a>
         <a href="/signup" class="btn btn-amber">&#x1F511; Login / Register (/signup)</a>
         <a href="/life-as-a-bee" class="btn btn-outline">{html.escape(copy["cta_life_bee"])}</a>
         <a href="/rejoindre" class="btn btn-outline">{html.escape(copy["cta_join"])}</a>

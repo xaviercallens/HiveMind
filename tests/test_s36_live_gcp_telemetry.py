@@ -48,6 +48,8 @@ def test_router_live_telemetry_endpoint_and_all_web_pages(tmp_path) -> None:
         "/rejoindre": "join-live-telemetry",
         "/webgpu": "webgpu-live-gcp-telemetry",
         "/game": "webgpu-live-gcp-telemetry",
+        "/manifesto": "manifesto-live-telemetry",
+        "/manifeste": "manifesto-live-telemetry",
     }
     for path, marker in page_expectations.items():
         r = client.get(path)
@@ -87,6 +89,8 @@ def test_ruche_live_telemetry_endpoint_and_all_web_pages() -> None:
         "/rejoindre",
         "/webgpu",
         "/cockpit-v46",
+        "/manifesto",
+        "/manifeste",
     ]
     for path in ruche_pages:
         r = client.get(path)
@@ -214,5 +218,49 @@ def test_15_moe_catalog_and_balanced_producer_prosumer_distribution(tmp_path) ->
     assert len(usage["by_producer"]) >= 4
     roles_served = set(usage["by_producer_role"].keys())
     assert "producer" in roles_served and "prosumer" in roles_served
+
+
+def test_manifesto_page_and_gcp_portal_links(tmp_path) -> None:
+    """Verify /manifesto, /manifeste, /v1/hivemind/manifesto, and cross-links to the GCP Portal."""
+    from hivemind.router.accounts import RouterStore
+    from hivemind.router.gateway import create_router_app
+
+    store = RouterStore(tmp_path / "accounts_manifesto.sqlite3", b"z" * 32)
+    store.register("reddit_pioneer", "prosumer")
+    app = create_router_app(store, allow_private_producers=True)
+    client = TestClient(app)
+
+    # 1. Verify /manifesto (EN & FR) and /manifeste
+    for route, lang_code, expected_phrase in (
+        ("/manifesto?lang=fr", "fr", "Manifeste de l'IA Citoyenne"),
+        ("/manifesto?lang=en", "en", "Citizen AI Manifesto"),
+        ("/manifeste", "fr", "Manifeste de l'IA Citoyenne"),
+    ):
+        resp = client.get(route)
+        assert resp.status_code == 200
+        assert resp.headers.get("content-language") == lang_code
+        assert expected_phrase in resp.text
+        # Must link directly to the GCP Portal
+        assert "https://hivemind-openrouter-1003063861791.us-central1.run.app/portal" in resp.text
+        assert "/v1/hivemind/live-telemetry" in resp.text
+        assert "HM-REDDIT-01" in resp.text
+        assert "HM-REDDIT-08" in resp.text
+
+    # 2. Verify /v1/hivemind/manifesto JSON endpoint
+    api_resp = client.get("/v1/hivemind/manifesto")
+    assert api_resp.status_code == 200
+    data = api_resp.json()
+    assert data["object"] == "hivemind.manifesto"
+    assert data["version"] == "1.0.0-s36"
+    assert data["portal_links"]["gcp_openrouter_portal"] == "https://hivemind-openrouter-1003063861791.us-central1.run.app/portal"
+    assert len(data["manifesto_pillars"]) == 7
+    assert len(data["reddit_summary"]["threads"]) == 5
+
+    # 3. Verify Portal, Benchmarks, Signup, and Join pages link to /manifesto
+    for page_path in ("/portal", "/benchmarks", "/signup", "/join"):
+        page_resp = client.get(page_path)
+        assert page_resp.status_code == 200
+        assert "/manifesto" in page_resp.text, f"Expected /manifesto link on {page_path}"
+
 
 

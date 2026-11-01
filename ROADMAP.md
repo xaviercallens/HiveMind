@@ -699,6 +699,38 @@ The full plan, with evidence, Definition of Done and the test for each finding (
 
 ---
 
+### Status update, 2026-11-01 (3-hourly review, 10:00 CET)
+
+- **Merged since the last update:** [#401](https://github.com/xaviercallens/HiveMind/pull/401) (two-host E8 test plan; its base64 decode is now strict, which also cleared the scanner rule), [#414](https://github.com/xaviercallens/HiveMind/pull/414) (launch model baseline labelled assumed), [#416](https://github.com/xaviercallens/HiveMind/pull/416) (roadmap) and [#417](https://github.com/xaviercallens/HiveMind/pull/417) (trainer portal category). Tests for #401 and #414 pass on the new `main`.
+- **Open for review:** [#418](https://github.com/xaviercallens/HiveMind/pull/418) clears two of the seven stub-audit failures; five files remain ([#415](https://github.com/xaviercallens/HiveMind/issues/415)). `auto_improvement.simulate_or_verify_execution` credits points from RNG-derived numbers and needs a real fix, not a rename.
+- **Still blocked:** [#410](https://github.com/xaviercallens/HiveMind/pull/410) (same base64 pattern as #401 before its fix, plus the stub audit; [#412](https://github.com/xaviercallens/HiveMind/issues/412)), [#362](https://github.com/xaviercallens/HiveMind/pull/362) and [#344](https://github.com/xaviercallens/HiveMind/pull/344) (stub audit), [#369](https://github.com/xaviercallens/HiveMind/pull/369) and [#366](https://github.com/xaviercallens/HiveMind/pull/366) (CI or conflicts).
+- **Measured since 06:00:** the T4 trained again and the QLoRA counter reached 154 (152 at 06:00); the probes passed 15 of 15 in three daytime runs; router chat p95 was 0.6 s to 6.2 s with probes included, with one 16.9 s request through ruche that was not a probe. Still missing: a yield recorded while a BOINC task runs (all logged yields were 54 to 87 ms with no task on the GPU).
+- **Open items for claim:** [#415](https://github.com/xaviercallens/HiveMind/issues/415), [#412](https://github.com/xaviercallens/HiveMind/issues/412), [#405](https://github.com/xaviercallens/HiveMind/issues/405), [#404](https://github.com/xaviercallens/HiveMind/issues/404), [#403](https://github.com/xaviercallens/HiveMind/issues/403) and the security issues [#378](https://github.com/xaviercallens/HiveMind/issues/378) to [#382](https://github.com/xaviercallens/HiveMind/issues/382).
+
+### 3.26b Daily audit update (2026-11-01) — `main` at `df65e71`
+
+The update is [`docs/IMPROVEMENT_PLAN_2026-11-01.md`](docs/IMPROVEMENT_PLAN_2026-11-01.md): 67 new items (IP-72 to IP-138; P0 2, P1 52, P2/P3 13), 6 of them re-checked by the author (**R**), the rest audit-reported (**A**). Closed or narrowed since 10-31: IP-13 (#377), IP-23 (#391), IP-28 worker part (#408), IP-22/IP-38 label (#414), IP-52 for the E8 pilot (#401), stub-audit files 7 to 5 (#418).
+
+| Proposed PR | Scope | Assignee | Size | Definition of done (summary) |
+| :-- | :-- | :-- | :-- | :-- |
+| PR-IP-15 | Gatekeeper, CI and orchestrator integrity (IP-72, IP-73, IP-119 and the CI items) | _open_ | M | Non-owner PR code is not executed on the host; merge pins the head commit; orchestrator scans the real diff |
+| PR-IP-16 | Swarm integrity (IP-109, IP-110 and the other swarm items) | _open_ | L (split) | Each item's negative control fails on `main` and passes after |
+| PR-IP-17 | Router, client, CLI, deploy items | _open_ | M | As listed in the plan |
+| PR-IP-18 | Game, economy, lab honesty items | _open_ | M | Hard-coded values labelled or measured |
+| PR-IP-19 | Core, data, BOINC, QueenBee, security items (IP-125 personal data) | _open_ | L (split) | As listed in the plan |
+
+**Round of 2026-11-01 (midday).** Merged since the 11-01 audit: #426 (owner-fleet-status reports configured policy, not invented telemetry), #427 (one-command federation plan for an RTX 2070 class node; training stays BLOCKED, cross-host pilot MANUAL), #428 to #432 (stub-audit clean-up for `src/hivemind`, MoE balance gradient, live GCP telemetry, ZK-OPoI witness binding). Open: #435 (La Ruche no longer credits 250 points from client-supplied numbers; an invented lease returned 200 on `main`), #434, #433.
+
+| Item | Owner | Status |
+| :-- | :-- | :-- |
+| La Ruche copy, wallet and leaderboard: remove fixed +250 claims and hard-coded totals (#436) | _open_ | proposed |
+| One starting-points value across `/join`, `/signup`, README (#437) | _open_ | proposed |
+| RTX 2070 plan: point the cross-host step at the AMCP learner after #410 (#438) | _open_ | blocked on #410 |
+| Open PRs with failing tests on their last run: #369, #366, #362 | PR authors | cause per PR in the hourly report; rebase and rerun |
+
+**Round of 2026-11-01 (afternoon).** Merged: #435 (La Ruche credits no points from client-supplied numbers), #433, #439. Open from this round: #441 (Life-as-a-Bee no longer states a 1.13 s yield; the figure had no measurement behind it) and issue #440 (source or label the remaining fixed figures on that page). #369 and #366 fail only because their branches are behind `main` (their failing tests pass on `main`): rebase needed from their authors. Router and ruche chat p95 showed a 5-6 s tail across several windows today while p50 stayed under 0.3 s (issue #404; cause not yet found).
+
+---
 ## 🎮 4. Opt-In Community GPU Testing Program (If Interested & Possible)
 
 If you have a consumer GPU (**NVIDIA GeForce RTX 20/30/40/50-series 6 GB–24 GB**, **AMD Radeon RX 6000/7000 via ROCm**, or **Apple Silicon M1/M2/M3/M4 via MPS**) and are interested in testing how your hardware performs on the HiveMind Sparse MoE + `EF21-DiLoCo` + `ZK-OPoI v4` stack, we provide a safe, opt-in, `< 1.5 GB` peak-VRAM benchmark suite:

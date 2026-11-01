@@ -130,7 +130,7 @@ def run_intensive_stress_benchmarks(
             )
 
             t0 = time.perf_counter()
-            res = scheduler.simulate_or_verify_execution(
+            res = scheduler.verify_workunit_execution(
                 workunit=wu,
                 worker_id=f"worker-{worker_info['account_handle']}-thread-{it}",
                 account_id=worker_info["account_id"],

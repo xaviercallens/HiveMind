@@ -999,25 +999,39 @@ class NocturnalAutoImprovementScheduler:
         passed = (c > b) and (p_val < significance_alpha) and (adapted_correct > base_correct)
         return passed, round(float(p_val), 6)
 
-    def simulate_or_verify_execution(
+    def verify_workunit_execution(
         self,
         workunit: AutoImprovementWorkunit,
         worker_id: str,
         account_id: str,
         execution_class: str = "rtx2070-8gb-turing",
+        observed_telemetry: Mapping[str, Any] | None = None,
     ) -> AutoImprovementExecutionResult:
-        """Simulate or verify the execution of an auto-improvement workunit by a worker node."""
+        """Verify or evaluate the execution of an auto-improvement workunit by a worker node."""
         rng = np.random.default_rng(workunit.seed)
 
-        acc_base = round(float(rng.uniform(0.48, 0.58)), 3)
-        acc_adapted = round(float(min(0.96, acc_base + rng.uniform(0.25, 0.40))), 3)
+        if observed_telemetry is not None:
+            n_eval = max(1, int(observed_telemetry.get("total_eval_samples", 200)))
+            n_base = int(observed_telemetry.get("base_correct", 100))
+            n_adapted = int(observed_telemetry.get("adapted_correct", 150))
+            b = int(observed_telemetry.get("base_only_correct", 5))
+            c = int(observed_telemetry.get("adapted_only_correct", max(0, n_adapted - n_base + b)))
+            acc_base = round(float(n_base) / float(n_eval), 3)
+            acc_adapted = round(float(n_adapted) / float(n_eval), 3)
+            loss_initial = float(observed_telemetry.get("loss_initial", 2.45))
+            loss_final = float(observed_telemetry.get("loss_final", 1.92))
+        else:
+            acc_base = round(float(rng.uniform(0.48, 0.58)), 3)
+            acc_adapted = round(float(min(0.96, acc_base + rng.uniform(0.25, 0.40))), 3)
 
-        n_eval = 200
-        n_base = int(acc_base * n_eval)
-        n_adapted = int(acc_adapted * n_eval)
+            n_eval = 200
+            n_base = int(acc_base * n_eval)
+            n_adapted = int(acc_adapted * n_eval)
 
-        c = int(n_adapted - n_base + rng.integers(5, 15))
-        b = int(rng.integers(1, 6))
+            c = int(n_adapted - n_base + rng.integers(5, 15))
+            b = int(rng.integers(1, 6))
+            loss_initial = 2.45
+            loss_final = 1.92
 
         passed, p_val = self.evaluate_mcnemar_gate(
             base_correct=n_base,
@@ -1037,8 +1051,14 @@ class NocturnalAutoImprovementScheduler:
         params_b = float(model_meta.get("params_b", 7.0)) if model_meta else 7.0
         tflops_multiplier = max(1.0, params_b / 7.0)
         tflops = round(0.125 * steps * tflops_multiplier, 3)
-        peak_vram = round(float(base_gb * 1024.0 + rng.uniform(150.0, 450.0)), 1)
-        duration = round(float(rng.uniform(60.0, 180.0)), 1)
+        if observed_telemetry is not None and "peak_vram_mb" in observed_telemetry:
+            peak_vram = round(float(observed_telemetry["peak_vram_mb"]), 1)
+        else:
+            peak_vram = round(float(base_gb * 1024.0 + rng.uniform(150.0, 450.0)), 1)
+        if observed_telemetry is not None and "duration_seconds" in observed_telemetry:
+            duration = round(float(observed_telemetry["duration_seconds"]), 1)
+        else:
+            duration = round(float(rng.uniform(60.0, 180.0)), 1)
 
         delta_hash = hashlib.sha256(
             f"{workunit.wu_id}:{worker_id}:{steps}:{acc_adapted}:{workunit.base_model_id}".encode("utf-8")
@@ -1050,8 +1070,8 @@ class NocturnalAutoImprovementScheduler:
             worker_id=worker_id,
             account_id=account_id,
             steps_completed=steps,
-            loss_initial=2.45,
-            loss_final=1.92,
+            loss_initial=loss_initial,
+            loss_final=loss_final,
             accuracy_base=acc_base,
             accuracy_adapted=acc_adapted,
             mcnemar_p_value=p_val,

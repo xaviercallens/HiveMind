@@ -158,6 +158,7 @@ def run_coordinator(args: argparse.Namespace, transport: Any = None, ring: Optio
     ok = True
     for rnd in range(start, args.rounds):
         retries = 0
+        carried: Dict[str, Dict[str, Any]] = {}  # results already accepted for this round: still valid on a re-offer (same round, same global state)
         while True:
             deadline = time.time() + args.round_deadline_s
             offer = fed.build_offer(run_id=args.run_id, rnd=rnd, sender_id="coordinator", global_state=global_state, base_sha256=base_sha, pin=pin, inner_steps=args.inner_steps,
@@ -166,6 +167,9 @@ def run_coordinator(args: argparse.Namespace, transport: Any = None, ring: Optio
             bus.publish(offer)
             book = fed.RoundBook(run_id=args.run_id, rnd=rnd, allowed=args.learners, quorum=args.quorum, deadline_unix=deadline, global_sha256=offer.payload["global_sha256"], pin=pin,
                                  max_delta_l2=args.max_delta_l2, template=global_state)
+            # Keep what arrived before the re-offer: a learner that already answered this round does not answer it again, and its result is still valid.
+            # (Without this, the cross-machine run B discarded the VM's valid round-0 result on retry and could never reach its quorum.)
+            book.accepted.update(carried)
             t_round = time.time()
             while book.status() == "open":
                 for ev in bus.poll():
@@ -176,6 +180,7 @@ def run_coordinator(args: argparse.Namespace, transport: Any = None, ring: Optio
             status = book.status()
             if status != "failed":
                 break
+            carried = dict(book.accepted)
             bus.publish(fed.build_abort(run_id=args.run_id, rnd=rnd, sender_id="coordinator", reason=f"quorum {args.quorum} not reached; rejected={len(book.rejected)}"))
             retries += 1
             print(f"[coordinator] round {rnd}: quorum not reached (accepted {sorted(book.accepted)}, claims {sorted(book.claims)}, rejected {book.rejected}); retry {retries}", flush=True)

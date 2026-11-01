@@ -1,0 +1,8 @@
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[coordinator] run crossA pin d980e290213a base 7e3bf9e2252e learners ['l0', 'l1'] quorum 2 initial eval 4.1709
+[coordinator] round 0: complete ['l0', 'l1'] eval 2.7079 (10.1s)
+[coordinator] round 1: complete ['l0', 'l1'] eval 1.7093 (2.1s)
+[coordinator] round 2: complete ['l0', 'l1'] eval 1.5354 (2.1s)
+[coordinator] round 3: complete ['l0', 'l1'] eval 1.4808 (2.1s)
+[coordinator] done: 4 rounds, final eval 1.4808382987976074

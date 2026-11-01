@@ -49,7 +49,7 @@ Round protocol (`scripts/e8_amcp_round.py`, `src/hivemind/swarm/federation_agent
 
 ## 6. What was validated
 
-All on the T4 unless stated. **Both learners ran on the same machine in every run below**, so this validates the protocol, the checks and the failure handling over the real bus; it is not yet a multi-machine result (the 2070 host is not on the overlay).
+Most rows ran both learners on the T4; the two **cross-machine** rows (2026-11-01) ran learner `l1` on a separate temporary VM (`hm-fed-val-1`, Debian 12, CPU, joined through the T4 WireGuard hub as `10.77.0.6`, code checked out from GitHub at the same commit) while `l0` and the coordinator ran on the T4 (Ubuntu 22.04). The RTX 2070 host is still not on the overlay.
 
 | What | Result |
 |---|---|
@@ -59,6 +59,8 @@ All on the T4 unless stated. **Both learners ran on the same machine in every ru
 | A poisoned delta (NaN) from a participant that holds the key | rejected with its reason, never reaches the global state, the honest learner carries the round (tested) |
 | A learner whose code differs | refuses the task, sends nothing (tested) |
 | **Live, real Kafka cluster** (three Spot VM brokers plus the T4, over WireGuard), NF4 on the T4 GPU, 6 rounds | the learners' start-of-round losses equal the single-process baseline's in all six rounds (difference 0 to the printed precision); coordinator and both learners exit 0 |
+| **Cross-machine run A**: two different machines (T4 + VM), both CPU full precision, quorum 2, 4 rounds, over the real Kafka cluster through the hub | every round complete with both machines; learner-side losses equal the single-process baseline: differences 0, 0, 0, +1.2e-07 (float32 rounding), final -4.8e-07; steady rounds 2.1 s |
+| **Cross-machine run B**: T4 GPU NF4 + VM CPU (heterogeneous), daytime | **did not train**: the T4 had 4,609 MiB free (inference services loaded), so its learner **refused** under the 4,300 MiB floor, three offers in a row: the guard worked on real data. It also exposed a gap, fixed: a re-offered round dropped the VM's valid earlier result; results now carry over to the retry (regression test). To repeat at night |
 | **Live churn soak**, 70 rounds, 28.6 minutes, learner `l1` killed with SIGKILL and restarted, then `l0` the same | 62 rounds complete, 8 closed by quorum (5 with only `l0`, 3 with only `l1`: exactly the outage windows), 0 retries, 0 rejections; both restarted learners rejoined on their own; held-out loss 4.171 to **1.448** (best 1.407); rounds took p50 2.9 s, quorum rounds about 60 s (the deadline) |
 | **The night run** | started 2026-11-01 01:09 UTC as run `night-001`: 540 rounds at a 30 s cadence (about 4.5 hours), learners gated to 22:00-07:00 Paris, the governor and the VRAM floor. Results: `artifacts/experiments/e8_real/night-001.json` (rewritten every 10 rounds) and `night-001_status.txt`. **Not known when this was written** |
 
@@ -88,3 +90,17 @@ You need: a machine with an NVIDIA GPU (or CPU for a smoke test), Python with `t
 7. **If it says it refused:** "different code version" means update your checkout; "base model hashes differently" means your Python or numpy produces different bytes (report it with the versions); "deadline has passed" means the machine was too slow for this round (raise the coordinator's `--round-deadline-s`).
 
 Operator side: `python scripts/hivemind_amcp.py provision` once (creates the topics), then `python scripts/e8_amcp_round.py coordinator --run-id <run> --learners <ids> --rounds <n> --quorum 1 --checkpoint <file> --out <report.json>`. The report records, per round, who was accepted and from which host, who was rejected and why, the held-out loss, delta sizes, peak VRAM and latency.
+
+## 9. Contract for a "trainer" registration in the web UI
+
+A web registration category for trainers (planned) should hand the participant exactly what section 8 needs, and nothing that weakens the checks:
+
+| The registration must produce | Why |
+|---|---|
+| a **learner id** (`^[A-Za-z0-9._-]{1,64}$`) that the operator adds to the coordinator's `--learners` list | results from ids not on the list are rejected |
+| a **shard index** | each learner trains its own data shard |
+| the **commit** to check out and the `--run-id` | the code pin refuses any other version |
+| the trainer's GPU model and free VRAM, and an explicit **night-only** consent (22:00-07:00 Paris) | the learner refuses to start below the VRAM floor and claims tasks only in the window |
+| the network way in: today a WireGuard public key to add as a hub member (`hm-wg-hub add-member 10.77.0.N/32`, plus the peer entry); later a single-use, expiring Headscale join key | the overlay is the security boundary; see `docs/OVERLAY_OPEN_SOURCE_TUNNELS.md` |
+
+It must **not**: show, store or e-mail the shared signing key (`HIVEMIND_AMCP_HMAC_KEYS`) in the browser, in local storage or in a page (it is handed over out of band, or replaced by per-participant keys first); accept a WireGuard **private** key (only public keys leave a machine); promise points or payment for training rounds (a delta is not verified work until there are at least five learners and a filter); or start training by itself.

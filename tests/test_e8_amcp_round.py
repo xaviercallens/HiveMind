@@ -227,3 +227,23 @@ def test_a_learner_that_declined_an_offer_takes_the_re_offer_of_the_same_round(t
     rep = json.loads((tmp_path / "rt5.json").read_text())
     assert rep["completed"] and rep["rounds"][0]["retries"] == 1 and rep["rounds"][0]["accepted"] == ["l0"]
     assert calls["n"] >= 2
+
+
+def test_a_result_delivered_before_a_re_offer_still_counts_after_it(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Cross-machine run B: the VM answered round 0, the T4 learner declined (VRAM floor); on the re-offer the coordinator dropped the VM's valid result and the VM, having
+    answered already, did not send it again, so the quorum of 2 could never be reached."""
+    seen = {"l0": 0}
+
+    def l0_busy_once(args, device, now=None):  # noqa: ANN001, ANN202
+        if args.learner_id == "l0":
+            seen["l0"] += 1
+            if seen["l0"] == 1:
+                return (False, "vram: test")
+        return (True, "ok")
+
+    monkeypatch.setattr(r, "gate", l0_busy_once)
+    hub = Hub()
+    rcs = run_threads(hub, coordinator_args(tmp_path, "rt6", ["l0", "l1"], rounds=1, quorum=2, deadline=6.0), [learner_args("rt6", "l0", 0), learner_args("rt6", "l1", 1)])
+    assert rcs == {"coord": 0, "l0": 0, "l1": 0}, rcs
+    rep = json.loads((tmp_path / "rt6.json").read_text())
+    assert rep["completed"] and rep["rounds"][0]["status"] == "complete" and rep["rounds"][0]["accepted"] == ["l0", "l1"] and rep["rounds"][0]["retries"] == 1

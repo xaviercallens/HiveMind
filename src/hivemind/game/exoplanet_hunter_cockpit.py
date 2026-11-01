@@ -3661,6 +3661,33 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
             )
         )
 
+    @app.get("/v1/hivemind/opentrainer/pioneer-campaign", response_class=JSONResponse)
+    @app.get("/v1/opentrainer/pioneer-campaign", response_class=JSONResponse)
+    def get_local_opentrainer_pioneer_campaign() -> JSONResponse:
+        return JSONResponse(content=_portal_store.pioneer_campaign_status(now_utc=time.time()))
+
+    @app.post("/v1/hivemind/opentrainer/promote-trainer", response_class=JSONResponse)
+    @app.post("/v1/opentrainer/promote-trainer", response_class=JSONResponse)
+    def post_local_opentrainer_promote_trainer(payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
+        handle = str(payload.get("handle") or payload.get("account_id") or "first")
+        bonus_hmt = float(payload.get("bonus_hmt") if payload.get("bonus_hmt") is not None else 5000.0)
+        rank = int(payload["rank"]) if payload.get("rank") is not None else None
+        badge = str(payload["badge"]) if payload.get("badge") else None
+        now = time.time()
+        promo = _portal_store.promote_pioneer_trainer(
+            handle,
+            bonus_hmt=bonus_hmt,
+            rank=rank,
+            badge=badge,
+            now_utc=now,
+        )
+        return JSONResponse(
+            content={
+                **promo,
+                "pioneer_campaign": _portal_store.pioneer_campaign_status(now_utc=now),
+            }
+        )
+
     @app.get("/v1/hivemind/producers/fleet", response_class=JSONResponse)
     def get_local_producers_fleet() -> JSONResponse:
         now = time.time()

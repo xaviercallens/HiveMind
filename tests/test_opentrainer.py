@@ -248,4 +248,31 @@ def test_web_ui_portal_renders_and_syncs_real_life_database_information() -> Non
     html_after = client.get("/").text
     assert "hm-opentrainer-1-cpu-sentinel" in html_after
     assert "opentrainer-vm-test" in html_after
+    assert "Founding Pioneer Trainer #1" in html_after
+
+    # 4. Verify promoting the first trainer grants +5,000 HMT idempotently on the hash-chained ledger
+    promo_res = client.post(
+        "/v1/hivemind/opentrainer/promote-trainer",
+        json={"handle": "rtx2070-xavgamsrv", "bonus_hmt": 5000.0, "rank": 1},
+    )
+    assert promo_res.status_code == 200
+    promo_json = promo_res.json()
+    assert promo_json["handle"] == "rtx2070-xavgamsrv"
+    assert promo_json["pioneer_rank"] == 1
+    assert promo_json["minted_now"] is True
+    assert promo_json["balance_hmt"] == 5000.0
+
+    # Calling promote-trainer a second time must be idempotent (no duplicate mint)
+    promo_again = client.post(
+        "/v1/hivemind/opentrainer/promote-trainer",
+        json={"handle": "rtx2070-xavgamsrv", "bonus_hmt": 5000.0, "rank": 1},
+    ).json()
+    assert promo_again["minted_now"] is False
+    assert promo_again["balance_hmt"] == 5000.0
+
+    camp = client.get("/v1/hivemind/opentrainer/pioneer-campaign").json()
+    assert camp["claimed_pioneer_slots"] == 1
+    assert camp["open_pioneer_slots"] == 9
+    assert camp["first_pioneer_trainer"]["handle"] == "rtx2070-xavgamsrv"
+    assert store.verify_chain() is True
     assert "2.5012" in html_after

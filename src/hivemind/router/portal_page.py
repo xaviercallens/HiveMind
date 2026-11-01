@@ -1612,6 +1612,33 @@ if ($('opentrainerSyncDbBtn')) {
   });
 }
 
+if ($('opentrainerPromoteBtn')) {
+  $('opentrainerPromoteBtn').addEventListener('click', async () => {
+    $('opentrainerPortalStatus').textContent = 'Promoting First Pioneer Trainer (+5,000 HMT Founder Grant on SQLite ledger)...';
+    try {
+      const res = await fetch('/v1/hivemind/opentrainer/promote-trainer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ handle: 'first', bonus_hmt: 5000.0, rank: 1 }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await refreshLiveDatabaseTelemetry();
+        $('opentrainerPortalStatus').textContent =
+          'PIONEER TRAINER PROMOTED: ' + (data.badge || 'Founding Pioneer Trainer #1') +
+          ' • Handle: ' + (data.handle || '') +
+          ' • GPU: ' + (data.gpu_name || '') +
+          ' • Rounds: ' + (data.rounds_completed || 0) +
+          ' • HMT Balance: ' + (data.balance_hmt || 5000) + ' HMT';
+      } else {
+        $('opentrainerPortalStatus').textContent = 'Failed to promote pioneer trainer.';
+      }
+    } catch (err) {
+      $('opentrainerPortalStatus').textContent = 'Network error promoting pioneer trainer.';
+    }
+  });
+}
+
 if ($('opentrainerHeartbeatBtn')) {
   $('opentrainerHeartbeatBtn').addEventListener('click', async () => {
     const apiKey = ($('apiKey') && $('apiKey').value.trim()) || localStorage.getItem('hivemind_api_key') || '';
@@ -1695,6 +1722,17 @@ def _render_live_db_sections(db_snapshot: Mapping[str, Any] | None = None) -> tu
     cur_loss_val = ot.get("latest_eval_loss") if ot.get("latest_eval_loss") is not None else vm.get("current_eval_loss", 2.8099)
     best_loss_val = ot.get("best_eval_loss") if ot.get("best_eval_loss") is not None else vm.get("current_eval_loss", 2.7043)
 
+    pioneer = snap.get("pioneer_campaign") if isinstance(snap.get("pioneer_campaign"), Mapping) else {}
+    first_pioneer = pioneer.get("first_pioneer_trainer") if isinstance(pioneer.get("first_pioneer_trainer"), Mapping) else {}
+    p_handle = str(first_pioneer.get("handle") or "rtx2070-xavgamsrv")
+    p_badge = str(first_pioneer.get("badge") or "🏆 Founding Pioneer Trainer #1")
+    p_gpu = str(first_pioneer.get("gpu_name") or "NVIDIA GeForce RTX 2070 (8 GB NF4 QLoRA)")
+    p_rounds = int(first_pioneer.get("rounds_completed") or distinct_db_rounds or vm_round or 0)
+    p_toks = int(first_pioneer.get("tokens_trained") or total_toks or 0)
+    p_bonus = float(first_pioneer.get("bonus_hmt") or 5000.0)
+    p_open_slots = int(pioneer.get("open_pioneer_slots") if pioneer.get("open_pioneer_slots") is not None else 9)
+    p_total_slots = int(pioneer.get("total_pioneer_slots") or 10)
+
     ot_nodes = ot.get("nodes") if isinstance(ot.get("nodes"), list) else []
     if ot_nodes:
         ot_nodes_rows = "".join(
@@ -1738,6 +1776,27 @@ def _render_live_db_sections(db_snapshot: Mapping[str, Any] | None = None) -> tu
         )
 
     ot_live_html = f"""
+      <div style="border:1px solid var(--amber);border-radius:0.55rem;padding:0.8rem 1rem;margin-bottom:1rem;background:linear-gradient(135deg, rgba(245,158,11,0.12), rgba(6,182,212,0.08));display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;">
+        <div>
+          <div style="font-size:0.74rem;font-weight:800;color:var(--amber);letter-spacing:0.06em;text-transform:uppercase;font-family:var(--font-mono);" id="otPioneerFirstBadge">
+            {html.escape(p_badge)} &bull; PIONEER TRAINER CAMPAIGN ACTIVE ({p_open_slots} / {p_total_slots} PIONEER SLOTS OPEN)
+          </div>
+          <div style="font-size:0.95rem;font-weight:700;color:var(--text);margin-top:0.2rem;" id="otPioneerFirstHandle">
+            First Trainer Promoted: <code>{html.escape(p_handle)}</code> &mdash; {html.escape(p_gpu)} ({p_rounds:,} Rounds &bull; {p_toks:,} Tokens &bull; +{p_bonus:,.0f} HMT Founder Grant)
+          </div>
+          <div style="font-size:0.76rem;color:var(--text-dim);margin-top:0.2rem;font-family:var(--font-mono);" id="otPioneerSlotsSub">
+            Join Slots #2&ndash;#10 for <strong>+2,500 HMT Pioneer Bonus</strong> + <strong>100 HMT/round</strong> + <strong>250 HMT/RTX BOINC WU</strong>: <code>python scripts/hivemind_rtx_boinc_deploy.py --mode standalone --handle &lt;your_handle&gt;</code>
+          </div>
+        </div>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+          <button type="button" id="opentrainerPromoteBtn" style="background:var(--amber);color:#020617;font-weight:800;border:none;border-radius:0.4rem;padding:0.45rem 0.8rem;cursor:pointer;font-size:0.78rem;">
+            Promote First Trainer (+5,000 HMT)
+          </button>
+          <a href="/signup?role=trainer" style="background:var(--cyan);color:#020617;font-weight:800;text-decoration:none;border-radius:0.4rem;padding:0.45rem 0.8rem;font-size:0.78rem;display:inline-flex;align-items:center;">
+            Join Training Campaign &rarr;
+          </a>
+        </div>
+      </div>
       <div class="tiers-grid" style="margin-bottom:1rem;">
         <div class="tier-card">
           <div>

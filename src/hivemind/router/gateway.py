@@ -2571,6 +2571,39 @@ def create_router_app(
             "database_summary": store.live_database_summary(now_utc=now, ttl_s=PRODUCER_TTL_S)["opentrainer"],
         }
 
+    @app.get("/v1/hivemind/opentrainer/pioneer-campaign")
+    @app.get("/v1/opentrainer/pioneer-campaign")
+    def get_opentrainer_pioneer_campaign() -> dict[str, Any]:
+        """Public Pioneer Trainer Campaign status: Founding Pioneer Trainer #1 spotlight, leaderboard, and open bonus slots."""
+        return store.pioneer_campaign_status(now_utc=clock())
+
+    @app.post("/v1/hivemind/opentrainer/promote-trainer")
+    @app.post("/v1/opentrainer/promote-trainer")
+    async def post_opentrainer_promote_trainer(request: Request) -> dict[str, Any]:
+        """Promote a trainer (default: the #1 GPU trainer) to Pioneer Trainer status with an idempotent HMT grant."""
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+        except ValueError:
+            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+
+        handle = str(body.get("handle") or body.get("account_id") or "first")
+        bonus_hmt = float(body.get("bonus_hmt") if body.get("bonus_hmt") is not None else 5000.0)
+        rank = int(body["rank"]) if body.get("rank") is not None else None
+        badge = str(body["badge"]) if body.get("badge") else None
+        now = clock()
+        promo = store.promote_pioneer_trainer(
+            handle,
+            bonus_hmt=bonus_hmt,
+            rank=rank,
+            badge=badge,
+            now_utc=now,
+        )
+        return {
+            **promo,
+            "pioneer_campaign": store.pioneer_campaign_status(now_utc=now),
+        }
+
     @app.get("/v1/hivemind/opentrainer/status")
     @app.get("/v1/opentrainer/status")
     def get_opentrainer_status() -> dict[str, Any]:

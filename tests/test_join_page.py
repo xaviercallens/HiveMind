@@ -213,6 +213,7 @@ def test_every_script_and_flag_the_page_tells_people_to_use_exists() -> None:
     scripts = set(re.findall(r"scripts/([a-z_]+\.py)", commands))
     assert scripts == {
         "hivemind_boinc_idle_worker.py",
+        "hivemind_federate_node.py",
         "hivemind_opentrainer_agent.py",
         "hivemind_producer_agent.py",
         "hivemind_producer_autostart.py",
@@ -403,3 +404,11 @@ def test_boinc_train_section_documents_plan_classes_dry_run_and_status_endpoints
     st = client.get("/boinc/status")
     assert st.status_code == 200 and st.json()["status"] == "ONLINE"
     assert "end_users" in st.json()["night_training_roles"] and "hivemind_nodes" in st.json()["night_training_roles"]
+
+
+@pytest.mark.parametrize("lang", LANGS)
+def test_newcomers_get_the_co_training_night_slot_procedure_in_every_language(lang: str) -> None:
+    body = page(lang)
+    assert "scripts/hivemind_federate_node.py" in body and "wg genkey" in body
+    assert f'href="{REPO_URL}/issues/431"' in body and f'href="{REPO_URL}/blob/main/docs/TRAINER_JOIN.md"' in body
+    assert "+250" not in body

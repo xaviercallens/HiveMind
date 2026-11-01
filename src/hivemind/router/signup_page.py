@@ -14,7 +14,7 @@ All dynamic DOM updates use ``textContent`` (never ``innerHTML``), and the Conte
 from __future__ import annotations
 
 import html
-from typing import Any
+from typing import Any, Mapping
 
 from hivemind.router.google_auth import CLIENT_ID_RE
 
@@ -78,7 +78,7 @@ function showSessionResult(body) {
   if ($('key')) $('key').textContent = body.api_key || '';
   if ($('acct')) $('acct').textContent = (body.account_id || '') + (body.handle ? ' (' + body.handle + ')' : '');
   if ($('role')) $('role').textContent = body.role || 'prosumer';
-  if ($('bal')) $('bal').textContent = (typeof body.balance_hmt === 'number' ? body.balance_hmt.toFixed(2) : (typeof body.balance === 'number' ? body.balance.toFixed(2) : '100.00')) + ' HMT';
+  if ($('bal')) $('bal').textContent = (typeof body.balance_hmt === 'number' ? body.balance_hmt.toFixed(2) : (typeof body.balance === 'number' ? body.balance.toFixed(2) : 'n/a')) + ' HMT';
   if ($('kind')) {
     $('kind').textContent = body.created
       ? 'Account created & authenticated! Your API key is saved in this browser for the Playground.'
@@ -133,7 +133,7 @@ if ($('registerForm')) {
       setStatus('Please choose a username / handle (e.g. alice_gpu or @alice).', true);
       return;
     }
-    setStatus('Creating your HiveMind account & minting starter HMT...', false);
+    setStatus('Creating your HiveMind account...', false);
     try {
       const reply = await fetch('/v1/hivemind/auth/register', {
         method: 'POST',
@@ -161,6 +161,35 @@ if ($('copy')) {
     }
   });
 }
+
+async function syncSignupLiveTelemetry() {
+  try {
+    const res = await fetch('/v1/hivemind/live-telemetry', { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) return;
+    const d = await res.json();
+    if (!d || !d.accounts) return;
+    const acct = d.accounts || {};
+    const byRole = acct.by_role || {};
+    const models = d.models || {};
+    const t4 = d.t4_boinc || {};
+    const ot = d.opentrainer || {};
+    if ($('signupLiveTelemetry')) {
+      const rd = function(v, thousands) { return (v === null || v === undefined) ? 'n/a' : (thousands ? Number(v).toLocaleString() : String(v)); };
+      const partial = [acct.total_registered_accounts, models.live_models_count, t4.vram_free_mib].some(function(v) { return v === null || v === undefined; });
+      $('signupLiveTelemetry').textContent =
+        '🟢 ' + (partial ? 'GCP Swarm (live telemetry partly unavailable)' : 'Live GCP Swarm') + ': ' + rd(acct.total_registered_accounts) + ' Registered Accounts (' +
+        rd(byRole.prosumer) + ' prosumers, ' +
+        rd(byRole.producer) + ' producers, ' +
+        rd(byRole.consumer) + ' consumers, ' +
+        rd(byRole.trainer) + ' trainers) • ' +
+        rd(models.live_models_count) + ' Live Models • T4 Free VRAM ' +
+        rd(t4.vram_free_mib, true) + ' MiB • OpenTrainer ' +
+        rd(ot.total_registered_nodes) + ' Trainer GPU(s) / ' +
+        rd(ot.accepted_rounds_count) + ' Accepted Round(s)';
+    }
+  } catch (e) {}
+}
+syncSignupLiveTelemetry();
 """
 
 _GOOGLE_JS = """
@@ -274,6 +303,16 @@ SIGNUP_I18N: dict[str, dict[str, str]] = {
 }
 
 
+
+def _reading(source: Mapping[str, Any], key: str, *, thousands: bool = False) -> str:
+    """The integer reading at ``key`` as text, or "n/a" when the live snapshot has none."""
+    value = source.get(key)
+    if value is None:
+        return "n/a"
+    number = int(value)
+    return f"{number:,}" if thousands else str(number)
+
+
 def render_signup_page(
     client_id: str | None,
     nonce: str,
@@ -282,8 +321,9 @@ def render_signup_page(
     auth_result: dict[str, Any] | None = None,
     error_message: str | None = None,
     live_telemetry: dict[str, Any] | None = None,
+    starter_grant_hmt: float = 0.0,
 ) -> str:
-    """Render the unified 5-language Login & Registration page at ``/signup``, ``/inscription``, ``/login``, ``/register``, and ``/connexion``."""
+    """Render the unified Login & Registration page at ``/signup`` and ``/login``."""
     if client_id is not None and not CLIENT_ID_RE.match(client_id):
         raise ValueError("invalid Google client id")
 
@@ -299,13 +339,35 @@ def render_signup_page(
         f'<a href="/?lang={active_lang}">{t["portal_link"]}</a>'
         '</nav>'
     )
+    lt = live_telemetry or {}
+    acct_summary = lt.get("accounts") or {}
+    by_role = acct_summary.get("by_role") or {}
+    models_live = lt.get("models") or {}
+    t4_live = lt.get("t4_boinc") or {}
+    ot_live = lt.get("opentrainer") or {}
+    # A missing reading is shown as "n/a", never replaced by an invented number.
+    total_accts = _reading(acct_summary, "total_registered_accounts")
+    prosumers_cnt = _reading(by_role, "prosumer")
+    producers_cnt = _reading(by_role, "producer")
+    consumers_cnt = _reading(by_role, "consumer")
+    trainers_cnt = _reading(by_role, "trainer")
+    live_models_cnt = _reading(models_live, "live_models_count")
+    t4_free_mib = _reading(t4_live, "vram_free_mib", thousands=True)
+    ot_nodes = _reading(ot_live, "total_registered_nodes")
+    ot_rounds = _reading(ot_live, "accepted_rounds_count")
+    telemetry_label = "Live GCP Swarm" if "n/a" not in (total_accts, live_models_cnt, t4_free_mib) else "GCP Swarm (live telemetry partly unavailable)"
 
+    starter_line = (
+        f"Starter grant on this gateway: {starter_grant_hmt:.2f} HMT per new account, at most a few per address per day."
+        if starter_grant_hmt > 0.0
+        else "A new account starts at 0.00 HMT on this gateway: points come from sharing a GPU or from an operator grant."
+    )
     result_hidden = "" if auth_result else " hidden"
     res_kind = ""
     res_key = ""
     res_acct = ""
     res_role = ""
-    res_bal = "100.00 HMT"
+    res_bal = "n/a"
     if auth_result:
         res_kind = (
             "Your account was created."
@@ -318,7 +380,7 @@ def render_signup_page(
             + (f" ({auth_result.get('handle')})" if auth_result.get("handle") else "")
         )
         res_role = html.escape(str(auth_result.get("role", "prosumer")))
-        bal_val = float(auth_result.get("balance_hmt", auth_result.get("balance", 100.0)))
+        bal_val = float(auth_result.get("balance_hmt", auth_result.get("balance", 0.0)))
         res_bal = f"{bal_val:.2f} HMT"
 
     err_html = html.escape(error_message) if error_message else ""
@@ -327,8 +389,7 @@ def render_signup_page(
     if client_id is None:
         google_section = (
             '<div class="card">'
-            f'<p>{t["disabled_notice"]}</p>'
-            f'<p class="mut">{t["disabled_hint"]}</p>'
+            f'<p>{t["disabled_notice"]}</p><p class="mut">{t["disabled_hint"]}</p>'
             '</div>'
         )
         scripts_html = f'<script nonce="{nonce}">{_AUTH_JS}</script>'
@@ -359,6 +420,7 @@ def render_signup_page(
   <div>
     <h1>🐝 {t["title"]}</h1>
     <p class="mut">{t["lead"]}</p>
+    <p class="mut" id="starter-grant">{starter_line}</p>
   </div>
   <nav class="nav-links">
     <a href="/">⚡ AI Playground</a>
@@ -371,7 +433,7 @@ def render_signup_page(
 </header>
 
 <div id="signupLiveTelemetry" class="card" style="padding:.65rem .9rem;margin-bottom:.9rem;border-color:#065f46;background:#022c22;color:#a7f3d0;font-family:ui-monospace,monospace;font-size:.82rem;">
-  🟢 Live GCP Swarm Telemetry (<a href="/v1/hivemind/live-telemetry" style="color:#6ee7b7;">/v1/hivemind/live-telemetry</a>)
+  🟢 {telemetry_label}: {total_accts} Registered Accounts ({prosumers_cnt} prosumers, {producers_cnt} producers, {consumers_cnt} consumers, {trainers_cnt} trainers) • {live_models_cnt} Live Models • T4 Free VRAM {t4_free_mib} MiB • OpenTrainer {ot_nodes} Trainer GPU(s) / {ot_rounds} Accepted Round(s)
 </div>
 
 <section id="result" class="card ok-banner"{result_hidden}>
@@ -389,7 +451,6 @@ def render_signup_page(
   <pre><code>export HIVEMIND_API_KEY=&lt;the key above&gt;
 python hivemind_connect.py check
 python hivemind_connect.py snippet continue --model coder</code></pre>
-  <p class="mut">{t["zero_points"]}</p>
 </section>
 
 <p id="status" class="{err_cls}" role="status">{err_html}</p>

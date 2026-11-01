@@ -38,3 +38,9 @@ def test_page_makes_no_fixed_point_reward_claim(tmp_path: Path) -> None:
     assert not re.search(r"\+\s?250\s*(pts|points|compute|hivemind|pts/wu)", html, re.I)
     assert "Earning Rate" not in html
     assert "credited only after server-side verification" in html
+
+
+def test_boinc_status_promises_no_fixed_reward(tmp_path: Path) -> None:
+    body = _client(tmp_path).get("/boinc/status").text
+    assert not re.search(r"\+\s?250\s*HMT", body)
+    assert "no fixed amount per workunit is promised" in body

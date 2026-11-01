@@ -9454,7 +9454,7 @@ def create_hivemind_at_home_app(
                         "who": "Volunteers, developers, students, and gamers on Linux, Windows, or macOS",
                         "schedule": "Overnight (22:00-07:00 Europe/Paris) or automatic idle-GPU pause (< 4s input inactivity)",
                         "workload": "Lease BOINC workunits (physics_sim, code_generation, math_reasoning), fold 16,384-point TESS/JWST light curves, and compute rank-4 QLoRA inner-loop updates",
-                        "reward": "+250 HMT Reflexion Points and +45.0 Cobblestones per verified workunit to spend the next day on all 15+ OpenRouter models",
+                        "reward": "Points and Cobblestones are credited only after the server verifies a workunit; no fixed amount per workunit is promised",
                     },
                     "hivemind_nodes": {
                         "who": "Dedicated GPU Producer Nodes, HiveMiners, and Owner Fleet (NVIDIA RTX 2070 8GB + GCP Tesla T4 16GB)",

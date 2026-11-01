@@ -64,10 +64,18 @@ def test_gpu_outreach_campaign_reads_db_and_renders_bilingual_templates(tmp_path
     db_path = tmp_path / "router.db"
     store = RouterStore(db_path, secret=b"outreach-campaign-test-secret-32b!")
     store.register_with_credentials("tibrib", "StrongPass123!", role="prosumer")
-    store.register_with_credentials("ilenemaurin@gmail.com", "StrongPass123!", role="prosumer", email="ilenemaurin@gmail.com")
+    store.register_with_credentials("vxtzq", "StrongPass123!", role="prosumer")
+    store.register_with_credentials("someone@example.com", "StrongPass123!", role="prosumer", email="someone@example.com")
+    cohort_path = tmp_path / "cohort.json"
+    cohort_path.write_text(
+        '[{"account_id": "x", "handle": "tibrib", "email": null, "role": "prosumer", "os_platform": "windows", '
+        '"known_gpu": "NVIDIA GeForce RTX 4070 (12,282 MiB VRAM)", "recommended_model_spec": "coder=qwen2.5-coder:7b", '
+        '"previous_tunnel_note": "test"}]',
+        encoding="utf-8",
+    )
 
     proc = subprocess.run(
-        [sys.executable, str(OUTREACH_SCRIPT), "--db", str(db_path), "--format", "json"],
+        [sys.executable, str(OUTREACH_SCRIPT), "--db", str(db_path), "--cohort-file", str(cohort_path), "--format", "json"],
         capture_output=True,
         text=True,
         check=False,

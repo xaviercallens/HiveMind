@@ -1884,6 +1884,7 @@ def create_router_app(
             nonce,
             lang=lang,
             live_telemetry=build_live_telemetry_snapshot(),
+            starter_grant_hmt=starter_grant_hmt,
         )
         return HTMLResponse(page, headers={"Content-Security-Policy": content_security_policy(nonce), "Cache-Control": "no-store",
                                            "Vary": "Accept-Language", "Content-Language": lang,
@@ -2015,10 +2016,10 @@ def create_router_app(
         data = await _parse_auth_payload(request)
         try:
             res = await run_in_threadpool(_execute_credential_register, request, data)
-            page = render_signup_page(google.client_id if google else None, nonce, auth_result=res, live_telemetry=build_live_telemetry_snapshot())
+            page = render_signup_page(google.client_id if google else None, nonce, auth_result=res, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt)
             status = 200
         except RouterError as exc:
-            page = render_signup_page(google.client_id if google else None, nonce, error_message=exc.message, live_telemetry=build_live_telemetry_snapshot())
+            page = render_signup_page(google.client_id if google else None, nonce, error_message=exc.message, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt)
             status = exc.status
         return HTMLResponse(page, status_code=status, headers={"Content-Security-Policy": content_security_policy(nonce), "Cache-Control": "no-store",
                                                                "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})
@@ -2030,10 +2031,10 @@ def create_router_app(
         data = await _parse_auth_payload(request)
         try:
             res = await run_in_threadpool(_execute_credential_login, request, data)
-            page = render_signup_page(google.client_id if google else None, nonce, auth_result=res, live_telemetry=build_live_telemetry_snapshot())
+            page = render_signup_page(google.client_id if google else None, nonce, auth_result=res, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt)
             status = 200
         except RouterError as exc:
-            page = render_signup_page(google.client_id if google else None, nonce, error_message=exc.message, live_telemetry=build_live_telemetry_snapshot())
+            page = render_signup_page(google.client_id if google else None, nonce, error_message=exc.message, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt)
             status = exc.status
         return HTMLResponse(page, status_code=status, headers={"Content-Security-Policy": content_security_policy(nonce), "Cache-Control": "no-store",
                                                                "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})

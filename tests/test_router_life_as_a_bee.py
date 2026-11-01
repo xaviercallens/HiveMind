@@ -85,3 +85,15 @@ def test_gateway_life_as_a_bee_endpoints(tmp_path: Path) -> None:
     assert "hivemind/bee-ruche-moe" in r_html.text
     assert "hivemind/gemma-core" in r_html.text
     assert "hivemind/qwen35-core" in r_html.text
+
+
+def test_phase_2_does_not_claim_a_measured_yield_time() -> None:
+    """No artifact holds a yield measured with a BOINC task running, so the page must not state one."""
+    from hivemind.router.life_as_a_bee import BEE_LIFECYCLE_PHASES
+
+    phase = next(p for p in BEE_LIFECYCLE_PHASES if p.phase_id == "PHASE-2-DAYTIME-NECTAR")
+    text = " ".join([phase.key_metric, phase.title_fr, phase.title_en, phase.summary_fr, phase.summary_en])
+    assert "1,13" not in text and "1.13" not in text
+    assert "non mesuré" in phase.key_metric
+    # The preemption figure may appear only as a target.
+    assert "objectif" in phase.title_fr and "target" in phase.title_en

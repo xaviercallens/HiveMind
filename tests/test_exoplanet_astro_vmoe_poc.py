@@ -23,7 +23,7 @@ from hivemind.core.exoplanet_astro_vmoe_poc import (
     compute_physical_transit_depth_ppm,
     generate_phase_folded_cwt_scalogram,
     run_exoplanet_astro_vmoe_poc,
-    simulate_exoplanet_transit_and_router_response,
+    synthesize_exoplanet_transit_and_router_response,
 )
 from hivemind.core.reddit_vision_vlm_moe import MAX_LA_RUCHE_BACKGROUND_VRAM_MIB
 
@@ -89,18 +89,18 @@ def test_cwt_scalogram_focal_loss_citizen_entropy_and_nesterov() -> None:
 
 def test_interactive_simulator_scenarios_and_end_to_end_poc(tmp_path: Path) -> None:
     """Verify the 3 interactive physical transit scenarios and full 4-stage PoC execution."""
-    s_sun = simulate_exoplanet_transit_and_router_response(1.0, 1.0, instrumental_noise_ppm=100.0)
+    s_sun = synthesize_exoplanet_transit_and_router_response(1.0, 1.0, instrumental_noise_ppm=100.0)
     assert s_sun["transit_depth_ppm"] == 84.0
     assert s_sun["submerged_in_instrumental_noise"] is True
     assert s_sun["citizen_science_review_triggered"] is True
 
-    s_mdwarf = simulate_exoplanet_transit_and_router_response(1.0, 0.2, instrumental_noise_ppm=100.0)
+    s_mdwarf = synthesize_exoplanet_transit_and_router_response(1.0, 0.2, instrumental_noise_ppm=100.0)
     assert s_mdwarf["transit_depth_ppm"] == 2100.0
     assert s_mdwarf["submerged_in_instrumental_noise"] is False
     assert s_mdwarf["top1_expert"] == "expert_1_stellar_transits"
     assert s_mdwarf["top1_probability"] > 0.85
 
-    s_eb = simulate_exoplanet_transit_and_router_response(
+    s_eb = synthesize_exoplanet_transit_and_router_response(
         2.0,
         1.0,
         instrumental_noise_ppm=100.0,

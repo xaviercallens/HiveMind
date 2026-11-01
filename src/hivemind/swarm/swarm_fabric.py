@@ -219,7 +219,7 @@ class PinnedRAMExpertDMAStreamer:
                 try:
                     cpu_t = cpu_t.pin_memory()
                 except Exception:
-                    pass
+                    cpu_t = cpu_t.contiguous()
             pinned_dict[k] = cpu_t
             total_bytes += cpu_t.numel() * cpu_t.element_size()
 

@@ -78,7 +78,7 @@ function showSessionResult(body) {
   if ($('key')) $('key').textContent = body.api_key || '';
   if ($('acct')) $('acct').textContent = (body.account_id || '') + (body.handle ? ' (' + body.handle + ')' : '');
   if ($('role')) $('role').textContent = body.role || 'prosumer';
-  if ($('bal')) $('bal').textContent = (typeof body.balance_hmt === 'number' ? body.balance_hmt.toFixed(2) : (typeof body.balance === 'number' ? body.balance.toFixed(2) : '100.00')) + ' HMT';
+  if ($('bal')) $('bal').textContent = (typeof body.balance_hmt === 'number' ? body.balance_hmt.toFixed(2) : (typeof body.balance === 'number' ? body.balance.toFixed(2) : 'n/a')) + ' HMT';
   if ($('kind')) {
     $('kind').textContent = body.created
       ? 'Account created & authenticated! Your API key is saved in this browser for the Playground.'
@@ -133,7 +133,7 @@ if ($('registerForm')) {
       setStatus('Please choose a username / handle (e.g. alice_gpu or @alice).', true);
       return;
     }
-    setStatus('Creating your HiveMind account & minting starter HMT...', false);
+    setStatus('Creating your HiveMind account...', false);
     try {
       const reply = await fetch('/v1/hivemind/auth/register', {
         method: 'POST',
@@ -224,6 +224,7 @@ def render_signup_page(
     auth_result: dict[str, Any] | None = None,
     error_message: str | None = None,
     live_telemetry: dict[str, Any] | None = None,
+    starter_grant_hmt: float = 0.0,
 ) -> str:
     """Render the unified Login & Registration page at ``/signup`` and ``/login``."""
     if client_id is not None and not CLIENT_ID_RE.match(client_id):
@@ -244,12 +245,17 @@ def render_signup_page(
     ot_nodes = int(ot_live.get("total_registered_nodes", 1))
     ot_rounds = int(ot_live.get("accepted_rounds_count", 1))
 
+    starter_line = (
+        f"Starter grant on this gateway: {starter_grant_hmt:.2f} HMT per new account, at most a few per address per day."
+        if starter_grant_hmt > 0.0
+        else "A new account starts at 0.00 HMT on this gateway: points come from sharing a GPU or from an operator grant."
+    )
     result_hidden = "" if auth_result else " hidden"
     res_kind = ""
     res_key = ""
     res_acct = ""
     res_role = ""
-    res_bal = "100.00 HMT"
+    res_bal = "n/a"
     if auth_result:
         res_kind = (
             "Your account was created."
@@ -262,7 +268,7 @@ def render_signup_page(
             + (f" ({auth_result.get('handle')})" if auth_result.get("handle") else "")
         )
         res_role = html.escape(str(auth_result.get("role", "prosumer")))
-        bal_val = float(auth_result.get("balance_hmt", auth_result.get("balance", 100.0)))
+        bal_val = float(auth_result.get("balance_hmt", auth_result.get("balance", 0.0)))
         res_bal = f"{bal_val:.2f} HMT"
 
     err_html = html.escape(error_message) if error_message else ""
@@ -298,6 +304,7 @@ def render_signup_page(
   <div>
     <h1>🐝 Join or Sign In to HiveMind</h1>
     <p class="mut">Use open coding, scientific &amp; visual MoE models from your editor, or share your GPU and earn HMT points (0.00 EUR/USD).</p>
+    <p class="mut" id="starter-grant">{starter_line}</p>
   </div>
   <nav class="nav-links">
     <a href="/">⚡ AI Playground</a>

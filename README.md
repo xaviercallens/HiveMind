@@ -4,7 +4,10 @@
 
 <br/>
 
-[![Release](https://img.shields.io/badge/Release-v2.16.0%20(Season%2035%20Live%20Ops%20%26%20365%2B%20PRs)-00f0ff?style=for-the-badge)](https://github.com/xaviercallens/HiveMind/releases/tag/v2.11.0)
+[![Release](https://img.shields.io/badge/Release-v2.16.0%20(Season%2034--35%20SwaT%2BSleep%2C%20MCP%20%26%20AutoEvolveAI)-00f0ff?style=for-the-badge)](https://github.com/xaviercallens/HiveMind/releases/tag/v2.16.0)
+[![MCP Server](https://img.shields.io/badge/MCP_Server-Solver_Bee_v2025--06--18_(Stdlib_JSON--RPC_2.0)-8b5cf6?style=for-the-badge)](docs/solver_bee/MCP.md)
+[![AutoEvolveAI Gate](https://img.shields.io/badge/AutoEvolveAI_Harness-ANSE_%C3%97_GWAYA_Fail--Closed_Gate-f43f5e?style=for-the-badge)](src/hivemind/swarm/s35_02_gwaya_laya_failclosed_gate.py)
+[![Reddit FR Update](https://img.shields.io/badge/Reddit_r%2FTechnologieFrance-Coding_%26_Image--MoE_Results-ff4500?style=for-the-badge&logo=reddit)](https://www.reddit.com/r/TechnologieFrance/s/mWoaPH7aAd)
 [![Sign Up & Login](https://img.shields.io/badge/Sign_Up_%26_Login-%2B100_HMT_Free_API_Key-22c55e?style=for-the-badge&logo=googlecloud)](https://hivemind-openrouter-1003063861791.us-central1.run.app/signup)
 [![Live OpenRouter](https://img.shields.io/badge/Live_OpenRouter_Gateway-15_Models_Online-10b981?style=for-the-badge&logo=googlecloud)](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app)
 [![Join in 5 Languages](https://img.shields.io/badge/Join_HiveMind-FR_%E2%80%A2_EN_%E2%80%A2_ES_%E2%80%A2_DE_%E2%80%A2_ZH-38bdf8?style=for-the-badge&logo=googlecloud)](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/rejoindre?lang=fr)
@@ -112,7 +115,7 @@ Il y a quelques jours sur `r/artificielle`, un utilisateur non-informaticien a p
 - 🏛️ [**1. System Architecture & 5-Layer Visual Stack**](#-1-system-architecture--5-layer-visual-stack)
 - 🔥 [**2. Intense RTX 2070 (8 GB VRAM) Stress Test & PoC Benchmarks**](#-2-intense-rtx-2070-8-gb-vram-stress-test--poc-benchmarks)
 - 🎮 [**3. Hugging Face Hack-Miner & Free Steam RTX Tool (`v1.0.0`)**](#-3-hugging-face-hack-miner--free-steam-rtx-tool-v100)
-- 🔌 [**4. Connect & Integrate: Node Setup, OpenAI SSE Proxy & Cursor/Continue.dev**](#-4-connect--integrate-node-setup-openai-sse-proxy--cursorcontinuedev)
+- 🔌 [**4. Connect & Integrate: Node Setup, OpenAI SSE Proxy, Solver Bee MCP Server & AutoEvolveAI Verification Harness**](#-4-connect--integrate-node-setup-openai-sse-proxy-solver-bee-mcp-server--autoevolveai-verification-harness)
 - 📐 [**5. Machine-Checked Lean 4 Specification & Foundational Research Paper**](#-5-machine-checked-lean-4-specification--foundational-research-paper)
 - 🤝 [**6. Large-Scale Parallel Collaboration, Protected GitHub & Immutable Releases**](#-6-large-scale-parallel-collaboration-protected-github--immutable-releases)
 
@@ -395,8 +398,8 @@ Full task specifications, pre-registrations, and acceptance gates live in **[`RO
 | **S24** | **Nocturnal Dream Phase (`1.58/2/3-Bit` Frontier Distillation)** | Automated `22:00–07:00 CET` distillation from `Tiel-Coder-35B-A3B` (`UD-IQ3_XXS` / `UD-IQ3_S`) and `prism-ml/Ternary-Bonsai-2-27B` (`PTQ1_0` / `PQ2_0`) into the 24 MoE Bees (`PR #323`) | ✅ **DELIVERED** |
 | **S25** | **`LayerStoRm` $\times$ HiveMind PCIe Streaming & Multi-Host Scaling** | Double-buffered pinned-RAM $\rightarrow$ PCIe expert streaming bridge (`src/hivemind/core/layerstorm_bridge.py`, `PR #322`), pre-registered experiments **`E18` ([`#308`](https://github.com/xaviercallens/HiveMind/issues/308))** & **`E19`** | 🟢 **IN PROGRESS** |
 | **S26–S28** | **Global DePIN Federation, 7-Division Vision-MoE (`42.87M` pairs) & Exoplanet PoC** | `< 1.5 GB` VRAM "La Ruche" Vision-MoE (`SigLIP`/`ViT`/`DINOv2` + `Muon` + `DCT DeMo` + `ZK-OPoI` + `FoMoE Top-2`), Exoplanet CWT/Focal-Loss PoC, DirectML/ROCm/MPS & browser-native WebGPU ([`/webgpu-galaxy`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/webgpu-galaxy)) | ✅ **DELIVERED** |
-| **S29–S34** | **Adaptive Multi-Split ML, `Top-1% DCT + EF21`, Kelly Reciprocity, Canary Logits, Gosset $E_8$ & Self-Evolving Supervisor (`PRs #352–#361`)** | Citizen `<= 1,536 MiB` Split-ML (`HM-S32-01`), `225.4x` DCT-EF21 (`HM-S32-02`), 6-Region Super-Peer Fanout (`HM-S32-03`), Kelly `HMT` Ledger (`HM-S33-01`), Canary Anti-Farming (`HM-S33-02`), Symplectic Velocity-Verlet `KEPLER-HM-442b` (`HM-S34-01`), Gosset $E_8$ Quantizer (`HM-S34-03`), Self-Evolving Supervisor (`HM-S34-04`) | ✅ **DELIVERED** |
-| **S35** | **Unified `/home/xavkal/xdev` Ecosystem Bridge (`PR #363` & `HiveMind-AMCP-Collaboration`)** | 4-Layer integration across `11` original core IP repos (`HiveMind`, `AMCP`, `AutoevolveAI`, `GWAYA`, `OptimalEnergyAI`, `SocrateAI-Lean-Lib`, `rusty-SUNDIALS`, `RunuX`) & `8` `x*` fork bridges (`XSwaT`, `xLayerStoRm`, `xensorSharp`, `xlaya`, `XHillock`) | ✅ **DELIVERED** |
+| **S29–S34** | **Adaptive Multi-Split ML, `Top-1% DCT + EF21`, Kelly Reciprocity, Canary Logits, Gosset $E_8$, Wake `SwaT` KV Telepathy & Nocturnal `Sleep` Consolidation (`PRs #344, #352–#361`)** | Citizen `<= 1,536 MiB` Split-ML (`HM-S32-01`), `225.4x` DCT-EF21 (`HM-S32-02`), 6-Region Super-Peer Fanout (`HM-S32-03`), Kelly `HMT` Ledger (`HM-S33-01`), Canary Anti-Farming (`HM-S33-02`), Symplectic Velocity-Verlet `KEPLER-HM-442b` (`HM-S34-01`), Gosset $E_8$ Quantizer (`HM-S34-03`), Self-Evolving Supervisor (`HM-S34-04`), **`SwaT` Universal Latent Hub ($2n$ mappers, [`arXiv:2610.15095`](https://arxiv.org/abs/2610.15095))** & **Two-Stage NREM+REM `Sleep` Consolidation (`CMS` + `GKD+LTI` + `4x` inner-loop reduction, [`arXiv:2606.03979v2`](https://arxiv.org/abs/2606.03979)) ([`docs/S34_SWAT_SWARM_TELEPATHY_INTEGRATION.md`](docs/S34_SWAT_SWARM_TELEPATHY_INTEGRATION.md))** | ✅ **DELIVERED** |
+| **S35** | **Unified `/home/xavkal/xdev` Ecosystem Bridge, AutoEvolveAI (`ANSE` × `GWAYA`) Fail-Closed Harness & Pioneer Trainer #1 (`PR #363`)** | 4-Layer integration across `11` original core IP repos (`HiveMind`, `AMCP`, `AutoevolveAI`, `GWAYA`, `OptimalEnergyAI`, `SocrateAI-Lean-Lib`, `rusty-SUNDIALS`, `RunuX`) & `8` `x*` fork bridges (`XSwaT`, `xLayerStoRm`, `xensorSharp`, `xlaya`, `XHillock`), `GWAYA` Arm `A3` Sample-and-Repair + `ANSE` Maximum Pain ($E = 10^6$) gate ([`s35_02_gwaya_laya_failclosed_gate.py`](src/hivemind/swarm/s35_02_gwaya_laya_failclosed_gate.py)), and Founding Pioneer Trainer #1 (`rtx2070-xavgamsrv`, `+5,000 HMT`) | ✅ **DELIVERED** |
 
 ---
 
@@ -910,7 +913,58 @@ Full design, safety boundaries and API examples: **[`docs/SEASON6_AGENT_ARENA.md
 
 ---
 
-## 🔌 4. Connect & Integrate: Node Setup, OpenAI SSE Proxy & Cursor/Continue.dev
+## 🔌 4. Connect & Integrate: Node Setup, OpenAI SSE Proxy, Solver Bee MCP Server & AutoEvolveAI Verification Harness
+
+### 4.0A Solver Bee Model Context Protocol (`MCP`) Server (`hivemind-solver-bee` — Stdlib JSON-RPC 2.0 over `stdio`)
+
+Implemented in [`src/hivemind/solverbee/mcp.py`](src/hivemind/solverbee/mcp.py), launched by [`scripts/solver_bee_mcp.py`](scripts/solver_bee_mcp.py), and documented in **[`docs/solver_bee/MCP.md`](docs/solver_bee/MCP.md)** (tested in [`tests/test_solverbee_mcp.py`](tests/test_solverbee_mcp.py)), HiveMind ships a **zero-dependency, Python-stdlib-only Model Context Protocol (`MCP`) server** (`protocolVersion: "2025-06-18"`, `"2025-03-26"`, `"2024-11-05"`) that couples any MCP-compatible coding assistant (**Claude Code**, **Claude Desktop**, **Cursor**, **Google Antigravity**, **Zed**) to the pinned `hivemind-solver` (`rusty-SUNDIALS` CVODE) executable and an independent **fail-closed verifier** ([`src/hivemind/solverbee/verifier.py`](src/hivemind/solverbee/verifier.py)).
+
+| MCP Tool | Input Schema (`additionalProperties: false`) | Verified Action & Returned Certificate |
+| :--- | :--- | :--- |
+| **`solve_ode`** | `{"spec": <hivemind-solver-spec/1>}` | Solves an ODE initial-value problem via pinned `rusty-SUNDIALS` CVODE and automatically re-verifies the trajectory at **$100\times$ tighter tolerances** (`rtol/100`, `atol/100`). Returns `verdict`, `sandbox` (`"namespace"` or `"none"`), `result`, `certificate`, and `solver_bee`. |
+| **`list_problems`** | `{}` | Lists curated reference ODE problems from [`solvers/problems/`](solvers/problems/) (`id`, `description`, `kind`, `dimension`, e.g., `harmonic_undamped`, `linear_2x2`, `robertson`). |
+| **`list_families`** | `{}` | Queries `hivemind-solver families` for named nonlinear ODE families, dimensions, symbolic equations (inert data, never `eval`ed), and default parameters. |
+| **`verify_result`** | `{"spec": <spec>, "result": <hivemind-solver-result/1>}` | Independently certifies an external trajectory against compact UTF-8 JSON SHA-256 input hashes, library reference solutions, conservation invariants, and a $100\times$ tightened rerun. |
+
+> **🔬 Epistemic Honesty on Solver Bee Verdicts ([`docs/solver_bee/MCP.md`](docs/solver_bee/MCP.md)):**
+> - **`VERIFIED`**: All listed checks passed (`shape`, `hashes`, `reference`, `invariants`, and $100\times$ `tightening` rerun; e.g., `harmonic_undamped` verified in `159 ms` under Linux `unshare` namespace isolation). **It does not mean your physical model, units, or equations are right** (and in our `E16` code-verification measurement, `5–7%` of `VERIFIED` code answers still failed hidden holdout tests).
+> - **`AUDITED`**: No closed-form/library reference exists for the custom `spec.id`, but `shape`, `hashes`, `invariants`, and $100\times$ `tightening` passed.
+> - **`FAILED`**: One or more mathematical or hash checks failed (exact failure reasons listed).
+> - **`UNVERIFIED`**: Fail-closed fallback whenever the solver crashes, times out, lacks user namespaces (`--allow-unsandboxed` not set), or the verifier is unavailable.
+
+**Configure in Claude Desktop / Cursor / Antigravity (`mcpServers`):**
+
+```json
+{
+  "mcpServers": {
+    "solver-bee": {
+      "command": "python3",
+      "args": [
+        "/path/to/HiveMind/scripts/solver_bee_mcp.py",
+        "--binary", "/path/to/hivemind-solver",
+        "--problems", "/path/to/HiveMind/solvers/problems"
+      ]
+    }
+  }
+}
+```
+*(On Windows or environments without Linux `unshare --user --mount --net --pid` namespaces, append `"--allow-unsandboxed"`; every tool response will explicitly report `"sandbox": "none"`.)*
+
+---
+
+### 4.0B AutoEvolveAI Fail-Closed Verification Harness (`ANSE` × `GWAYA` × `PRSecurityScanner`) & Season 34–35 Verified Modules
+
+Every code patch, weight update, and KV-cache transfer in Project HiveMind is gated by the **AutoEvolveAI (`ANSE`) + `GWAYA` (Gwen-Laya) + 5-Layer `PRSecurityScanner` fail-closed verification harness**:
+
+| Verification Layer | Implementation & Test Suite | Verified Guarantee & Measured Result |
+| :--- | :--- | :--- |
+| **1. `GWAYA` × `ANSE` Anti-Stub AST & Arm `A3` Repair Gate (`HM-S35-02`)** | [`src/hivemind/swarm/s35_02_gwaya_laya_failclosed_gate.py`](src/hivemind/swarm/s35_02_gwaya_laya_failclosed_gate.py) · [`tests/test_s35_02_gwaya_laya_failclosed_gate.py`](tests/test_s35_02_gwaya_laya_failclosed_gate.py) (`2/2 PASS`) | `inspect_python_ast_anti_stub` rejects bare `pass`, ellipsis `...`, unconditional `raise`, `mock_*/fake_*/stub_*` functions, and `todo!`/`unimplemented!`/`sorry`/`admit` tokens. Assigns **Maximum Pain Energy $E = 10^6$** (`UNVERIFIED_MAX_PAIN`) to any stub or failing candidate; `run_gwaya_a3_sample_and_repair` runs Best-of-3 + 3 repair rounds with Laya calibrated scoring (`laya_threshold = 0.75`). |
+| **2. Optimal-Energy $A_2$ Lattice RoPE & `AMCP` × `xSwaT` Codec (`HM-S35-01`)** | [`src/hivemind/swarm/s35_01_optimal_energy_amcp_xswat_codec.py`](src/hivemind/swarm/s35_01_optimal_energy_amcp_xswat_codec.py) · [`tests/test_s35_01_optimal_energy_amcp_xswat_codec.py`](tests/test_s35_01_optimal_energy_amcp_xswat_codec.py) (`2/2 PASS`) | Verified $A_2$ hexagonal lattice packing beats $\mathbb{Z}^2$ Cartesian quantization on 2D RoPE planes, coupled with `AMCP` CloudEvents envelope compression for `xSwaT` latent KV-cache chunks. |
+| **3. Wake-Phase `SwaT` KV Telepathy + Nocturnal `Sleep` Consolidation (`Season 34`)** | [`src/hivemind/swarm/swat_telepathy_bridge.py`](src/hivemind/swarm/swat_telepathy_bridge.py) · [`tests/test_swat_telepathy_bridge.py`](tests/test_swat_telepathy_bridge.py) (`9/9 PASS`) · [`docs/S34_SWAT_SWARM_TELEPATHY_INTEGRATION.md`](docs/S34_SWAT_SWARM_TELEPATHY_INTEGRATION.md) | **Wake (`07:00–22:00 CET`):** `UniversalHiveLatentHub` reduces cross-family KV-cache adapters from $O(n^2)$ ($552$ pairwise mappers for $24$ Bees) to **$2n = 48$ linear mappers (`11.5x` reduction)** (`arXiv:2610.15095`). **Sleep (`22:00–07:00 CET`):** Two-Stage NREM `Knowledge Seeding` (`CMS` + `GKD+LTI`) + REM `Dreaming` cuts inner-loop gradient steps per outer step by **`4x`** vs. `SEAL` (`arXiv:2606.03979v2`) while staying at **`4,162 MiB <= 6,656 MiB`** on RTX 2070 (`2,494 MiB` safety margin). |
+| **4. 5-Layer `PRSecurityScanner` & `OwnerOrderGuardrail`** | [`src/hivemind/security/pr_security_scanner.py`](src/hivemind/security/pr_security_scanner.py) (`python -m hivemind.cli.main scan-pr-security`) | Blocks hollow "Code Boubou" PRs (`fixes #N` with zero functional code), crypto/fiat payment extortion links (`0.00 EUR / USD` charter), Python AST RCE sinks (`eval`, `exec`, `pickle.loads`, `shell=True`), Trojan Source Unicode (`CVE-2021-42574`), and unauthorized CI/governance edits. |
+| **5. Exact Paired McNemar & Thermodynamic Ratchet Gate** | [`src/hivemind/swarm/verified_update_gate.py`](src/hivemind/swarm/verified_update_gate.py) · [`lean4/HiveMindSpec.lean`](lean4/HiveMindSpec.lean) (`161+` theorems, `0 sorry`) | Every nocturnal adapter promotion and `Sleep` checkpoint requires $\Delta \mathcal{L}_{\text{eval}} \le 0$ on the 6-domain interleaved holdout plus an exact paired McNemar binomial test ($p < 0.05$). |
+
+> **🇫🇷 Mise à jour Communauté Francophone (`r/TechnologieFrance` — Coding & Image-MoE):** Retrouvez le bilan technique détaillé en français (résultats vérifiés en **Coding / Formal Verification** avec `Tiel-Coder-35B-A3B` & `Solver Bee MCP`, et en **Vision / Image-MoE** sur les 7 divisions `La Ruche` & `ExoElenchus` NASA/JWST `< 1.5 Go` de VRAM) sur **[`r/TechnologieFrance` — Discussion & Résultats Coding + Image](https://www.reddit.com/r/TechnologieFrance/s/mWoaPH7aAd)**.
 
 ### 4.0 Use HiveMind from OpenCode, VS Code, JetBrains, Zed or any OpenAI-compatible tool
 

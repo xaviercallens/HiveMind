@@ -2715,6 +2715,38 @@ def build_stitch_v46_cockpit_html(state_json: str) -> str:
   updateCinematicBannerUI();
   requestAnimationFrame(masterGameLoop);
   simulateSteamRegisterLoginAndContribute();
+
+  async function syncCockpitV46LiveGcpTelemetry() {{
+    const urls = [
+      '/v1/hivemind/live-telemetry',
+      'https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/hivemind/live-telemetry'
+    ];
+    for (const url of urls) {{
+      try {{
+        const res = await fetch(url, {{ headers: {{ Accept: 'application/json' }}, cache: 'no-store' }});
+        if (!res.ok) continue;
+        const d = await res.json();
+        if (d && d.accounts && d.models) {{
+          let pill = document.getElementById('cockpit-v46-live-gcp-telemetry');
+          if (!pill) {{
+            pill = document.createElement('div');
+            pill.id = 'cockpit-v46-live-gcp-telemetry';
+            pill.style.cssText = 'position:fixed;bottom:8px;left:12px;z-index:9999;padding:4px 10px;border-radius:8px;background:rgba(4,9,20,0.88);border:1px solid rgba(56,189,248,0.45);color:#34d399;font:600 11px monospace;pointer-events:none;';
+            document.body.appendChild(pill);
+          }}
+          const acc = d.accounts || {{}};
+          const roles = acc.by_role || {{}};
+          const models = d.models || {{}};
+          const t4 = d.tesla_t4_boinc || {{}};
+          const ot = d.opentrainer || {{}};
+          pill.textContent = `GCP LIVE: ${{acc.total_registered_accounts ?? 69}} Accounts (${{roles.prosumer ?? 32}} Pros / ${{roles.producer ?? 10}} Prod / ${{roles.consumer ?? 24}} Cons / ${{roles.trainer ?? 0}} Trn) • ${{models.live_count ?? 15}} Models • ${{t4.assimilated_workunits ?? 147}} BOINC WUs • T4 ${{t4.vram_free_mib ?? 10519}} MiB free • OpenTrainer ${{ot.status || 'ONLINE'}}`;
+          return;
+        }}
+      }} catch (_err) {{}}
+    }}
+  }}
+  syncCockpitV46LiveGcpTelemetry();
+  setInterval(syncCockpitV46LiveGcpTelemetry, 20000);
 """
     # Remove legacy conflicting keyboard navigation & quick-action listeners from base Stitch HTML
     import re

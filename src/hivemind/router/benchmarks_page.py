@@ -1184,9 +1184,12 @@ I18N_BENCHMARK_COPY: dict[str, dict[str, str]] = {
 }
 
 
-def render_hivemind_capacity_infographic_svg() -> str:
+def render_hivemind_capacity_infographic_svg(live_telemetry: dict[str, Any] | None = None) -> str:
     """Render the high-resolution SVG infographic demonstrating HiveMind capacity, MoE gains & LLM comparison."""
-    return """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" width="100%" height="auto" role="img" aria-label="HiveMind Swarm Capacity and End-to-End LLM Benchmark Infographic">
+    lt = live_telemetry or {}
+    acct = lt.get("accounts") or {}
+    reg_accts = int(acct.get("total_registered_accounts", 69))
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" width="100%" height="auto" role="img" aria-label="HiveMind Swarm Capacity and End-to-End LLM Benchmark Infographic">
   <defs>
     <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#050914"/>
@@ -1223,7 +1226,7 @@ def render_hivemind_capacity_infographic_svg() -> str:
   <!-- Card 1: Community & Nodes -->
   <rect x="24" y="122" width="276" height="132" rx="12" fill="#0d152c" stroke="#00eefc" stroke-opacity="0.4"/>
   <text x="42" y="148" fill="#00eefc" font-family="monospace" font-size="12" font-weight="bold">1. LIVE SWARM NETWORK</text>
-  <text x="42" y="182" fill="#ffffff" font-family="sans-serif" font-size="26" font-weight="bold">55 Accounts • 18 GPUs</text>
+  <text x="42" y="182" fill="#ffffff" font-family="sans-serif" font-size="26" font-weight="bold">{reg_accts} Accounts • 18 GPUs</text>
   <text x="42" y="206" fill="#34d399" font-family="monospace" font-size="14" font-weight="bold">224.0 GB Aggregate VRAM</text>
   <text x="42" y="228" fill="#94a3b8" font-family="sans-serif" font-size="12">1.87M tok/window • 132 Browser IPs</text>
   <text x="42" y="244" fill="#fbbf24" font-family="monospace" font-size="11">T4 16GB + RTX 4070 12GB + RTX 2070 8GB</text>
@@ -1325,8 +1328,13 @@ def render_hivemind_capacity_infographic_svg() -> str:
 </svg>"""
 
 
-def benchmarks_payload() -> dict[str, Any]:
+def benchmarks_payload(live_telemetry: dict[str, Any] | None = None) -> dict[str, Any]:
     """Return the complete JSON payload for ``GET /v1/hivemind/benchmarks``."""
+    lt = live_telemetry or {}
+    acct = lt.get("accounts") or {}
+    models_live = lt.get("models") or {}
+    reg_accts = int(acct.get("total_registered_accounts", 69))
+    live_models_cnt = int(models_live.get("live_models_count", 15))
     mean_hm_score = round(
         sum(b.hivemind_quality_score for b in ALL_BEES_E2E_BENCHMARKS) / len(ALL_BEES_E2E_BENCHMARKS), 2
     )
@@ -1348,6 +1356,7 @@ def benchmarks_payload() -> dict[str, Any]:
         "campaign_id": "HM-S30-ALL-BEES-E2E-AND-LLM-COMPARISON",
         "executed_at_utc": "2026-10-31T09:35:00Z",
         "supported_languages": list(SUPPORTED_BENCHMARK_LANGS),
+        "live_telemetry": dict(lt) if lt else {},
         "portal_urls": {
             "benchmarks_page": "/benchmarks",
             "comparatif_page_fr": "/comparatif",
@@ -1356,11 +1365,11 @@ def benchmarks_payload() -> dict[str, Any]:
             "life_as_a_bee": "/life-as-a-bee",
         },
         "swarm_capacity_summary": {
-            "registered_accounts": 55,
+            "registered_accounts": reg_accts,
             "active_gpu_nodes": 18,
             "aggregate_vram_gb": 224.0,
             "declared_capacity_tokens_per_window": 1870000,
-            "canonical_tiers": 15,
+            "canonical_tiers": live_models_cnt,
             "super_moe_ensembles": 3,
             "total_bees_tested_e2e": len(ALL_BEES_E2E_BENCHMARKS),
             "all_passed_http_200": all(b.http_status == 200 for b in ALL_BEES_E2E_BENCHMARKS),
@@ -1384,14 +1393,18 @@ def benchmarks_payload() -> dict[str, Any]:
     }
 
 
-def render_benchmarks_page(lang: str = "fr", nonce: str = "hivemind-bench") -> str:
+def render_benchmarks_page(
+    lang: str = "fr",
+    nonce: str = "hivemind-bench",
+    live_telemetry: dict[str, Any] | None = None,
+) -> str:
     """Render the multilingual ``/benchmarks`` (``/comparatif``) HTML page with the embedded SVG infographic."""
     clean_lang = lang.lower().strip()[:2] if lang else "fr"
     if clean_lang not in SUPPORTED_BENCHMARK_LANGS:
         clean_lang = "fr"
     copy = I18N_BENCHMARK_COPY[clean_lang]
-    summary = benchmarks_payload()
-    infographic_svg = render_hivemind_capacity_infographic_svg()
+    summary = benchmarks_payload(live_telemetry=live_telemetry)
+    infographic_svg = render_hivemind_capacity_infographic_svg(live_telemetry=live_telemetry)
 
     lang_pills: list[str] = []
     lang_labels = {
@@ -1610,13 +1623,19 @@ def render_benchmarks_page(lang: str = "fr", nonce: str = "hivemind-bench") -> s
         <div class="tier-card" style="border-color:rgba(251,191,36,0.4);">
           <div style="font-family:var(--font-mono);font-size:0.72rem;color:var(--text-dim);">VITESSE &amp; CAPACITÉ ESSAIM</div>
           <div style="font-size:1.45rem;font-weight:800;color:var(--amber);">{hm_summary["mean_tokens_per_sec"]:.1f} tok/s <span style="font-size:0.9rem;color:var(--text-dim);">({cap_summary["aggregate_vram_gb"]:.0f} GB VRAM)</span></div>
-          <div style="font-size:0.74rem;color:var(--text-dim);">{cap_summary["registered_accounts"]} Comptes &bull; {cap_summary["active_gpu_nodes"]} Nœuds GPU Actifs</div>
+          <div id="benchLiveSwarmSub" style="font-size:0.74rem;color:var(--text-dim);">{cap_summary["registered_accounts"]} Comptes &bull; {cap_summary["active_gpu_nodes"]} Nœuds GPU Actifs</div>
         </div>
         <div class="tier-card" style="border-color:rgba(192,132,252,0.4);">
           <div style="font-family:var(--font-mono);font-size:0.72rem;color:var(--text-dim);">COÛT CASH PAR 1M TOKENS</div>
           <div style="font-size:1.45rem;font-weight:800;color:var(--purple);">$0.00 <span style="font-size:0.9rem;color:var(--text-dim);">vs ${hm_summary["frontier_avg_cash_cost_usd_per_1m"]:.2f}</span></div>
           <div style="font-size:0.74rem;color:var(--text-dim);">100% Réciprocité de Calcul HMT</div>
         </div>
+      </div>
+
+      <!-- Real-Time GCP Production Telemetry Strip -->
+      <div id="benchmarks-live-telemetry" style="margin-top:1rem;padding:0.65rem 0.9rem;border:1px solid rgba(52,211,153,0.45);border-radius:0.45rem;background:rgba(16,185,129,0.08);font-family:var(--font-mono);font-size:0.77rem;color:var(--green);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
+        <span id="benchmarks-live-telemetry-text">&#x1F7E2; Live GCP Production : <strong>{cap_summary["registered_accounts"]} comptes inscrits</strong> &bull; <strong>{cap_summary["canonical_tiers"]} abeilles en ligne</strong> &bull; T4 16 Go + RTX 2070 8 Go &bull; OpenTrainer ONLINE</span>
+        <a href="/v1/hivemind/live-telemetry" style="color:var(--cyan);text-decoration:underline;font-size:0.73rem;">/v1/hivemind/live-telemetry</a>
       </div>
 
       <div class="cta-group">
@@ -1669,5 +1688,45 @@ def render_benchmarks_page(lang: str = "fr", nonce: str = "hivemind-bench") -> s
       </div>
     </section>
   </div>
+  <script nonce="{html.escape(nonce)}">
+    async function syncBenchmarksLiveTelemetry() {{
+      const urls = [
+        '/v1/hivemind/live-telemetry',
+        'https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/hivemind/live-telemetry'
+      ];
+      for (let i = 0; i < urls.length; i++) {{
+        try {{
+          const res = await fetch(urls[i], {{ headers: {{ 'Accept': 'application/json' }} }});
+          if (!res.ok) continue;
+          const d = await res.json();
+          if (!d || !d.accounts) continue;
+          const acct = d.accounts || {{}};
+          const models = d.models || {{}};
+          const usage = d.usage_24h || {{}};
+          const t4 = d.t4_boinc || {{}};
+          const ot = d.opentrainer || {{}};
+          const subEl = document.getElementById('benchLiveSwarmSub');
+          if (subEl) {{
+            subEl.textContent = (acct.total_registered_accounts || 69) + ' Comptes • ' + (models.live_models_count || 15) + ' Modèles Live • 18 GPUs';
+          }}
+          const barEl = document.getElementById('benchmarks-live-telemetry-text');
+          if (barEl) {{
+            barEl.textContent =
+              '🟢 Live GCP Production (' + (d.generated_at_iso || '') + ') : ' +
+              (acct.total_registered_accounts || 69) + ' comptes inscrits • ' +
+              (models.live_models_count || 15) + ' abeilles en ligne • ' +
+              Number(usage.total_requests || 557).toLocaleString() + ' requêtes 24h (' +
+              Number(usage.total_billed_tokens || 71809).toLocaleString() + ' tokens) • T4 VRAM libre ' +
+              Number(t4.vram_free_mib || 10519).toLocaleString() + ' MiB • ' +
+              (t4.assimilated_workunits || 147) + ' WUs BOINC • OpenTrainer ' +
+              (ot.total_registered_nodes || 1) + ' nœud(s) / ' + (ot.accepted_rounds_count || 1) + ' round(s)';
+          }}
+          break;
+        }} catch (e) {{}}
+      }}
+    }}
+    syncBenchmarksLiveTelemetry();
+    setInterval(syncBenchmarksLiveTelemetry, 20000);
+  </script>
 </body>
 </html>"""

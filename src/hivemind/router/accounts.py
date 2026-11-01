@@ -1545,12 +1545,20 @@ class RouterStore:
                 "SELECT rating, task_domain FROM usage_feedback WHERE utc >= ?",
                 (since,),
             ).fetchall()
+            producer_acct_rows = self._conn.execute(
+                "SELECT account_id, handle, role FROM accounts"
+            ).fetchall()
 
+        acct_meta: dict[str, tuple[str, str]] = {
+            str(a["account_id"]): (str(a["handle"]), str(a["role"])) for a in producer_acct_rows
+        }
         by_domain: dict[str, dict[str, Any]] = {}
         by_language: dict[str, int] = {}
         by_client_sdk: dict[str, int] = {}
         by_model: dict[str, dict[str, Any]] = {}
         by_routing_mode: dict[str, int] = {}
+        by_producer: dict[str, dict[str, Any]] = {}
+        by_producer_role: dict[str, dict[str, Any]] = {}
         domain_tokens: dict[str, int] = {}
         latencies: list[float] = []
         total_tokens = 0
@@ -1563,6 +1571,8 @@ class RouterStore:
             sdk = str(r["client_sdk"])
             model = str(r["routed_model"])
             mode = str(r["routing_mode"])
+            prod_id = str(r["producer_id"])
+            prod_handle, prod_role = acct_meta.get(prod_id, (prod_id, "producer"))
             tokens = int(r["billed_tokens"])
             hmt = float(r["charged_hmt"])
             lat = float(r["latency_ms"])
@@ -1586,6 +1596,29 @@ class RouterStore:
             m_entry["requests"] += 1
             m_entry["billed_tokens"] += tokens
             m_entry["charged_hmt"] = round(m_entry["charged_hmt"] + hmt, 6)
+
+            p_entry = by_producer.setdefault(
+                prod_handle,
+                {
+                    "account_id": prod_id,
+                    "handle": prod_handle,
+                    "role": prod_role,
+                    "requests": 0,
+                    "billed_tokens": 0,
+                    "charged_hmt": 0.0,
+                },
+            )
+            p_entry["requests"] += 1
+            p_entry["billed_tokens"] += tokens
+            p_entry["charged_hmt"] = round(p_entry["charged_hmt"] + hmt, 6)
+
+            pr_entry = by_producer_role.setdefault(
+                prod_role,
+                {"requests": 0, "billed_tokens": 0, "charged_hmt": 0.0},
+            )
+            pr_entry["requests"] += 1
+            pr_entry["billed_tokens"] += tokens
+            pr_entry["charged_hmt"] = round(pr_entry["charged_hmt"] + hmt, 6)
 
         latencies.sort()
         if latencies:
@@ -1611,6 +1644,8 @@ class RouterStore:
             "by_client_sdk": by_client_sdk,
             "by_routed_model": by_model,
             "by_routing_mode": by_routing_mode,
+            "by_producer": by_producer,
+            "by_producer_role": by_producer_role,
             "latency_ms": {
                 "p50": round(p50, 2),
                 "p95": round(p95, 2),
@@ -2161,6 +2196,73 @@ class RouterStore:
             }
             for r in rows
         ]
+
+    def public_accounts_summary(self, now_utc: float | None = None, window_s: float = 86_400.0) -> dict[str, Any]:
+        """Return public real-life account statistics (by role, active 24h, total HMT circulation, newest handles)."""
+        now = time.time() if now_utc is None else float(now_utc)
+        cutoff = now - max(60.0, float(window_s))
+        by_role: dict[str, int] = {r: 0 for r in ("prosumer", "producer", "consumer", "trainer", "admin")}
+        newest: list[dict[str, Any]] = []
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT account_id, handle, role, created_utc FROM accounts "
+                "WHERE kind = 'user' AND account_id NOT LIKE 'sys:%' "
+                "ORDER BY created_utc DESC, account_id DESC"
+            ).fetchall()
+            active_ids = {
+                str(r[0])
+                for r in self._conn.execute(
+                    "SELECT consumer_id FROM usage WHERE utc >= ? "
+                    "UNION SELECT account_id FROM holds WHERE utc >= ? "
+                    "UNION SELECT account_id FROM producer_endpoints WHERE last_heartbeat_utc >= ? "
+                    "UNION SELECT account_id FROM opentrainer_nodes WHERE last_heartbeat_utc >= ?",
+                    (cutoff, cutoff, cutoff, cutoff),
+                ).fetchall()
+            }
+        real_account_ids: set[str] = set()
+        for idx, row in enumerate(rows):
+            aid = str(row["account_id"])
+            role = str(row["role"])
+            real_account_ids.add(aid)
+            by_role[role] = by_role.get(role, 0) + 1
+            if idx < 8:
+                newest.append(
+                    {
+                        "handle": str(row["handle"]),
+                        "role": role,
+                        "created_utc": float(row["created_utc"]),
+                    }
+                )
+        active_real = len(real_account_ids & active_ids)
+        return {
+            "total_registered_accounts": len(rows),
+            "by_role": by_role,
+            "active_accounts_24h": active_real,
+            "total_hmt_in_circulation": round(self.total_balances(), 2),
+            "newest_registered": newest,
+        }
+
+    def existing_endpoint_tokens(self) -> dict[str, str]:
+        """Return known non-empty endpoint tokens keyed by normalized endpoint_url and account_id."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT account_id, endpoint_url, endpoint_token FROM producer_endpoints "
+                "WHERE endpoint_token IS NOT NULL AND endpoint_token != '' "
+                "ORDER BY last_heartbeat_utc DESC"
+            ).fetchall()
+        out: dict[str, str] = {}
+        for row in rows:
+            tok = str(row["endpoint_token"]).strip()
+            if not tok:
+                continue
+            url = str(row["endpoint_url"]).rstrip("/")
+            aid = str(row["account_id"])
+            out.setdefault(url, tok)
+            out.setdefault(aid, tok)
+            out.setdefault("default", tok)
+        return out
+
+
 
 
 

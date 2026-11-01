@@ -5386,12 +5386,11 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
         }})
         .then(function(r) {{ return r.json(); }})
         .then(function(receipt) {{
-          updatePointsDisplay(computePointsBalance + (receipt.reciprocity_points_awarded || 250));
-          ptsOutput.textContent = '✅ WORKUNIT VERIFIED (+250 Compute Points Awarded! New Balance: ' + computePointsBalance + ' pts)\\n' + JSON.stringify(receipt, null, 2);
+          updatePointsDisplay(computePointsBalance + (receipt.reciprocity_points_awarded ?? 0));
+          ptsOutput.textContent = 'Workunit received, not verified (' + (receipt.reciprocity_points_awarded ?? 0) + ' points credited). Balance: ' + computePointsBalance + ' pts)\\n' + JSON.stringify(receipt, null, 2);
         }})
         .catch(function() {{
-          updatePointsDisplay(computePointsBalance + 250);
-          ptsOutput.textContent = '✅ Offline Simulation Mode: +250 HiveMind Reflexion Points added! Balance: ' + computePointsBalance + ' pts';
+          ptsOutput.textContent = 'Submission failed: no points were added. Balance: ' + computePointsBalance + ' pts';
         }});
       }});
     }}
@@ -5681,7 +5680,7 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
         }})
         .then(function(r) {{ return r.json(); }})
         .then(function(receipt) {{
-          updatePointsDisplay(computePointsBalance + 250);
+          updatePointsDisplay(computePointsBalance + (receipt.reciprocity_points_awarded ?? 0));
           outBox.textContent = JSON.stringify(receipt, null, 2);
         }})
         .catch(function(err) {{
@@ -7740,6 +7739,8 @@ def create_hivemind_at_home_app(
     @app.post("/api/v1/federated/workunit/submit", response_class=JSONResponse)
     def api_submit_federated_workunit(sub: FederatedWorkunitSubmission) -> JSONResponse:
         clean_handle = sanitize_handle(sub.contributor_handle)
+        if sub.lease_id not in federated_state["active_leases"]:
+            raise HTTPException(status_code=422, detail="Unknown or already submitted lease")
         if sub.holdout_nll_after >= sub.holdout_nll_before:
             raise HTTPException(
                 status_code=422,
@@ -7783,7 +7784,7 @@ def create_hivemind_at_home_app(
         )
 
         receipt = {
-            "status": "ADMITTED_TO_LA_RUCHE_QUORUM",
+            "status": "RECEIVED_CLIENT_CLAIMS_UNVERIFIED",
             "workunit_id": sub.workunit_id,
             "lease_id": sub.lease_id,
             "lease_version_tag": sub.lease_version_tag,
@@ -7793,13 +7794,14 @@ def create_hivemind_at_home_app(
             "wire_codec": sub.wire_codec,
             "outer_delta_frob_norm": round(frob_norm, 6),
             "svd_spectral_energy_retained": round(spectral_retained, 6),
-            "spotcheck_verified": True,
+            "spotcheck_verified": False,
             "spotcheck_replay_l2_drift": sub.spotcheck_replay_l2_drift,
             "spotcheck_cosine_sim": sub.spotcheck_cosine_sim,
             "holdout_perplexity_before": round(ppl_before, 4),
             "holdout_perplexity_after": round(ppl_after, 4),
             "perplexity_reduction_pct": round(ppl_reduction_pct, 2),
-            "reciprocity_points_awarded": 250,
+            "reciprocity_points_awarded": 0,
+            "points_status": "NOT_CREDITED: perplexity, drift and cosine figures are supplied by the client and not re-run here",
             "monetary_payout_eur_usd": 0.0,
             "submitted_at_epoch": time.time(),
             "charter": "HiveMind Reflexion Points (HMT) Non-Monetary Compute Reciprocity",

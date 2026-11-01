@@ -339,12 +339,51 @@ def validate_trainer_delta_submission(
     }
 
 
+def load_live_lowcost_vm_orchestrator_ledger(repo_root: Any = None) -> dict[str, Any]:
+    """Load the live Permanent Low-Cost VM OpenTrainer Orchestrator status ledger from disk if available."""
+    import json
+    from pathlib import Path
+
+    root = Path(repo_root) if repo_root is not None else Path(__file__).resolve().parents[3]
+    for rel in (
+        Path("artifacts") / "opentrainer" / "opentrainer_status.json",
+        Path("artifacts") / "opentrainer_lowcost_vm_verification.json",
+    ):
+        cand = root / rel
+        if cand.exists():
+            try:
+                raw = json.loads(cand.read_text(encoding="utf-8"))
+                if isinstance(raw, dict):
+                    return raw
+            except Exception:
+                continue
+    return {}
+
+
+def sync_live_opentrainer_into_store(
+    store: Any,
+    now_utc: float | None = None,
+    repo_root: Any = None,
+) -> dict[str, Any]:
+    """Sync the live Permanent Low-Cost VM OpenTrainer Orchestrator ledger into a persistent SQLite RouterStore."""
+    ledger = load_live_lowcost_vm_orchestrator_ledger(repo_root=repo_root)
+    if ledger and hasattr(store, "sync_opentrainer_orchestrator_ledger"):
+        try:
+            sync_stats = store.sync_opentrainer_orchestrator_ledger(ledger, now_utc=now_utc)
+            return {"synced": True, **sync_stats, "orchestrator_round": ledger.get("current_round", 0)}
+        except Exception:
+            return {"synced": False}
+    return {"synced": False}
+
+
 def build_opentrainer_status_payload(
     *,
     trainer_accounts: Sequence[Mapping[str, Any]],
     opentrainer_nodes: Sequence[Mapping[str, Any]],
     recent_rounds: Sequence[Mapping[str, Any]],
     now_utc: float | None = None,
+    lowcost_vm_orchestrator: Mapping[str, Any] | None = None,
+    database_summary: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the comprehensive ``/v1/hivemind/opentrainer/status`` payload."""
     now = time.time() if now_utc is None else float(now_utc)
@@ -354,7 +393,24 @@ def build_opentrainer_status_payload(
         for n in live_nodes
         if str(n.get("host_label") or n.get("node_id") or "")
     }
-    return {
+    vm_orch = dict(lowcost_vm_orchestrator) if lowcost_vm_orchestrator is not None else load_live_lowcost_vm_orchestrator_ledger()
+    vm_rounds = vm_orch.get("rounds") if isinstance(vm_orch.get("rounds"), list) else []
+    vm_summary = {
+        "component": vm_orch.get("component", "hivemind.opentrainer.lowcost_vm_orchestrator"),
+        "t4_required": bool(vm_orch.get("t4_required", False)),
+        "t4_participated_rounds": int(vm_orch.get("t4_participated_rounds", 0)),
+        "t4_independent_rounds_completed": int(
+            vm_orch.get("t4_independent_rounds_completed", len(vm_rounds))
+        ),
+        "current_round": int(vm_orch.get("current_round", len(vm_rounds))),
+        "initial_eval_loss": vm_orch.get("initial_eval_loss"),
+        "current_eval_loss": vm_orch.get("current_eval_loss"),
+        "loss_reduction": vm_orch.get("loss_reduction"),
+        "hosts_seen": list(vm_orch.get("hosts_seen") or []),
+        "learners_last_seen": dict(vm_orch.get("learners_last_seen") or {}),
+        "receipt_sha256": vm_orch.get("receipt_sha256"),
+    }
+    payload: dict[str, Any] = {
         "object": "hivemind.opentrainer.status",
         "component": "OpenTrainer",
         "version": OPENTRAINER_VERSION,
@@ -379,7 +435,11 @@ def build_opentrainer_status_payload(
         },
         "active_task_offer": default_active_task_offer(now_utc=now),
         "recent_training_rounds": list(recent_rounds),
+        "lowcost_vm_orchestrator": vm_summary,
         "firewall_traversal_modes": list(FIREWALL_TRAVERSAL_MODES),
         "aglet_amcp_kafka_lifecycle": list(AGLET_AMCP_LIFECYCLE_SPEC),
         "rtx2070_t4_integration_ledger": list(RTX2070_T4_INTEGRATION_LEDGER),
     }
+    if database_summary is not None:
+        payload["database_summary"] = dict(database_summary)
+    return payload

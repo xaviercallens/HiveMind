@@ -1,6 +1,6 @@
 {
   "schema_version": "hivemind.evolution_2h_and_night_moe_cron.v1",
-  "timestamp_utc": "2026-11-01T06:19:46Z",
+  "timestamp_utc": "2026-11-01T18:19:36Z",
   "mode": "2h-evolution",
   "schedules": {
     "roadmap_pr_evolution_cron": "0 */2 * * *",
@@ -12,44 +12,44 @@
     "online_producer_ids": [
       "PRODUCER-LOCAL-RTX2070-CUDA0"
     ],
-    "total_requests_served": 37,
+    "total_requests_served": 21,
     "boinc_rtx2070_worker": {
       "handle": "xaviercallens-rtx2070",
-      "boinc_workunits_completed": 2532,
-      "boinc_cobblestones": 113940.0,
-      "hmt_compute_points": 635400
+      "boinc_workunits_completed": 3131,
+      "boinc_cobblestones": 140895.0,
+      "hmt_compute_points": 785150
     }
   },
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-11-01T06:19:46Z",
+    "timestamp_utc": "2026-11-01T18:19:36Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": true,
     "device": "cuda:0",
     "compute_capability": "7.5",
-    "temperature_c": 25.0,
-    "gpu_utilization_pct": 8.0,
-    "power_draw_w": 9.23,
+    "temperature_c": 34.0,
+    "gpu_utilization_pct": 2.0,
+    "power_draw_w": 29.75,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1465.0,
-    "memory_free_mib": 6542.0,
+    "memory_used_mib": 1812.0,
+    "memory_free_mib": 6195.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
     "wddm_envelope_compliant": true,
     "headroom_guard_compliant": true,
-    "graphics_clock_mhz": 300.0,
+    "graphics_clock_mhz": 1410.0,
     "max_graphics_clock_mhz": 2145.0,
-    "memory_clock_mhz": 405.0,
+    "memory_clock_mhz": 6801.0,
     "host_tensor_gflops": 0.0,
     "measured_fp32_tflops": 5.66,
-    "measured_fp16_tensor_tflops": 19.71,
-    "effective_sparse_moe_nf4_tflops": 36.46,
-    "microbench_elapsed_ms": 1601.11
+    "measured_fp16_tensor_tflops": 20.06,
+    "effective_sparse_moe_nf4_tflops": 37.11,
+    "microbench_elapsed_ms": 239.56
   },
   "roadmap_summary": {
     "exists": true,
-    "roadmap_sha256": "3371af675c6f6aacb204a2877ec7add87f2907424821d9821fdc444ba6df089a",
+    "roadmap_sha256": "f1637f617e816908e0ccc4e1a64af1d0efa986fb91563e156abfb5977384cd08",
     "seasons_detected": [
       1,
       2,
@@ -100,13 +100,11 @@
     ]
   },
   "pr_integration_summary": {
-    "open_prs_count": 14,
+    "open_prs_count": 22,
     "merged_prs": [],
     "held_prs": [
-      410,
-      401,
+      446,
       397,
-      344,
       219,
       218,
       163,
@@ -114,5 +112,5 @@
     ]
   },
   "night_moe_summary": {},
-  "receipt_sha256": "eeb2526ebba1dcca82774f88e6f709355d1ba7f53d12cdbf6876adbcd6b3fb80"
+  "receipt_sha256": "d598f466bd43df086c02aca00f816c76d85b615b09560cf23f862680d8b0d74b"
 }

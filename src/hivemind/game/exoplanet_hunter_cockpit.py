@@ -3077,6 +3077,44 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
             )
         )
 
+    def _route_s21_hierarchical(prompt_text: str, cluster_id: Optional[str] = None) -> Dict[str, Any]:
+        reg_path = ARTIFACTS_ROOT / "expert_registry_s21.json"
+        if not reg_path.exists():
+            return {
+                "target": "base",
+                "expert_id": None,
+                "cluster_id": cluster_id,
+                "reason": "no_registry_snapshot",
+                "load_on_demand": False,
+            }
+        try:
+            from hivemind.core.expert_registry import ExpertRegistry, HierarchicalExpertRouter
+
+            reg = ExpertRegistry.load(reg_path)
+            router = HierarchicalExpertRouter(
+                reg,
+                base_model_id="Qwen/Qwen2.5-Coder-7B-Instruct",
+                resident=None,
+                allow_cold_load=False,
+            )
+            dec = router.route(prompt_text, cluster_id=cluster_id)
+            return {
+                "target": dec.target,
+                "expert_id": dec.expert_id,
+                "cluster_id": dec.cluster_id,
+                "reason": dec.reason,
+                "load_on_demand": dec.load_on_demand,
+                "live_expert_count": router.live_count,
+            }
+        except Exception:
+            return {
+                "target": "base",
+                "expert_id": None,
+                "cluster_id": cluster_id,
+                "reason": "router_unavailable",
+                "load_on_demand": False,
+            }
+
     @app.post("/v1/chat/completions", response_class=JSONResponse)
     def api_openai_chat_completions(payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
         messages: List[Dict[str, Any]] = payload.get("messages", [])
@@ -3094,6 +3132,7 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
             max_new_tokens=max_toks,
             preferred_producer=pref,
         )
+        s21_route = _route_s21_hierarchical(prompt)
         return JSONResponse(
             content={
                 "id": f"chatcmpl-hivemind-{inf['inference_receipt_sha256'][:12]}",
@@ -3120,6 +3159,7 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                     "expert_gating_weights": inf["expert_gating_weights"],
                     "inference_latency_ms": inf["inference_latency_ms"],
                     "vram_allocated_mb": inf["vram_allocated_mb"],
+                    "s21_hierarchical_route": s21_route,
                 },
             }
         )
@@ -3298,7 +3338,7 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
             try:
                 return json.loads(community_state_path.read_text(encoding="utf-8"))
             except Exception:
-                pass
+                community_state_path.parent.mkdir(parents=True, exist_ok=True)
         community_state_path.parent.mkdir(parents=True, exist_ok=True)
         community_state_path.write_text(json.dumps(default_community_state, indent=2, ensure_ascii=False), encoding="utf-8")
         return json.loads(json.dumps(default_community_state))
@@ -3365,7 +3405,7 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                     gcp_lease_id = str(wu_doc.get("lease_id", gcp_lease_id))
                     gcp_cloud_synced = True
         except Exception:
-            pass
+            gcp_cloud_synced = False
 
         # Update project progress & member stats
         for proj in st["boinc_idle_gpu_policy"]["supported_boinc_projects"]:
@@ -3494,29 +3534,290 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
             return JSONResponse(content=json.loads(mcp_cat_path.read_text(encoding="utf-8")))
         return JSONResponse(content={"schema": "hivemind.exoplanet_mcp.catalog/1", "targets": []})
 
-    # Mount the OpenRouter Portal (/portal, /playground) & Free Steam Game Registration/Login/Contribution API
+    # Mount the OpenRouter Portal (/portal, /playground, /fr, /es, /de, /zh, /signup, /inscription, /v1/hivemind/i18n)
+    # & Free Steam Game Registration/Login/Contribution API + Live Evolution Cron Telemetry
     import secrets as _secrets
     from hivemind.router.accounts import HandleTaken, ReservedHandle, RouterStore
-    from hivemind.router.portal_page import portal_content_security_policy, render_portal_page
+    from hivemind.router.join_page import pick_language
+    from hivemind.router.portal_page import (
+        PORTAL_LANG_META,
+        PORTAL_LANGS,
+        portal_content_security_policy,
+        render_portal_page,
+    )
+    from hivemind.router.signup_page import content_security_policy as signup_content_security_policy, render_signup_page
     from hivemind.security.hivemind_firewall import SwarmSecurityViolationError
 
     ARTIFACTS_ROOT.mkdir(parents=True, exist_ok=True)
     _portal_store = RouterStore(ARTIFACTS_ROOT / "local_portal_router.db", b"hivemind-local-steam-portal-secret-32b")
     _steam_key_cache: Dict[str, str] = {}
 
-    @app.api_route("/portal", methods=["GET", "HEAD"], response_class=HTMLResponse)
-    @app.api_route("/playground", methods=["GET", "HEAD"], response_class=HTMLResponse)
-    def get_portal_page() -> HTMLResponse:
+    def _serve_local_portal_html(request: Request, forced_lang: str | None = None) -> HTMLResponse:
+        from hivemind.router.opentrainer import sync_live_opentrainer_into_store
+
+        sync_live_opentrainer_into_store(_portal_store)
+        lang = forced_lang or pick_language(
+            request.query_params.get("lang"),
+            request.headers.get("accept-language"),
+            default="en",
+        )
         nonce = _secrets.token_urlsafe(18)
-        html = render_portal_page(None, nonce)
+        db_snapshot = _portal_store.live_database_summary()
+        html = render_portal_page(None, nonce, lang=lang, db_snapshot=db_snapshot)
         return HTMLResponse(
             content=html,
             headers={
                 "Content-Security-Policy": portal_content_security_policy(nonce),
                 "Cache-Control": "no-store",
+                "Vary": "Accept-Language",
+                "Content-Language": lang,
                 "X-Content-Type-Options": "nosniff",
                 "Referrer-Policy": "no-referrer",
             },
+        )
+
+    @app.api_route("/portal", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/playground", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def get_portal_page(request: Request) -> HTMLResponse:
+        return _serve_local_portal_html(request)
+
+    @app.api_route("/fr", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/aire-de-jeu", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def get_portal_page_fr(request: Request) -> HTMLResponse:
+        return _serve_local_portal_html(request, forced_lang="fr")
+
+    @app.api_route("/es", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def get_portal_page_es(request: Request) -> HTMLResponse:
+        return _serve_local_portal_html(request, forced_lang="es")
+
+    @app.api_route("/de", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def get_portal_page_de(request: Request) -> HTMLResponse:
+        return _serve_local_portal_html(request, forced_lang="de")
+
+    @app.api_route("/zh", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def get_portal_page_zh(request: Request) -> HTMLResponse:
+        return _serve_local_portal_html(request, forced_lang="zh")
+
+    @app.api_route("/signup", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/inscription", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def get_local_signup_page(request: Request) -> HTMLResponse:
+        default_lang = "fr" if request.url.path == "/inscription" else "en"
+        lang = pick_language(
+            request.query_params.get("lang"),
+            request.headers.get("accept-language"),
+            default=default_lang,
+        )
+        nonce = _secrets.token_urlsafe(18)
+        return HTMLResponse(
+            content=render_signup_page(None, nonce, lang=lang),
+            headers={
+                "Content-Security-Policy": signup_content_security_policy(nonce),
+                "Cache-Control": "no-store",
+                "Vary": "Accept-Language",
+                "Content-Language": lang,
+                "X-Content-Type-Options": "nosniff",
+                "Referrer-Policy": "no-referrer",
+            },
+        )
+
+
+    @app.get("/v1/hivemind/db/live", response_class=JSONResponse)
+    @app.get("/api/v1/db/live", response_class=JSONResponse)
+    def get_local_live_database_summary() -> JSONResponse:
+        from hivemind.router.opentrainer import load_live_lowcost_vm_orchestrator_ledger, sync_live_opentrainer_into_store
+
+        sync_live_opentrainer_into_store(_portal_store)
+        summary = _portal_store.live_database_summary()
+        summary["lowcost_vm_orchestrator"] = load_live_lowcost_vm_orchestrator_ledger()
+        return JSONResponse(content=summary)
+
+    @app.post("/v1/hivemind/opentrainer/sync-orchestrator", response_class=JSONResponse)
+    def post_local_opentrainer_sync_orchestrator() -> JSONResponse:
+        from hivemind.router.opentrainer import sync_live_opentrainer_into_store
+
+        sync_res = sync_live_opentrainer_into_store(_portal_store)
+        return JSONResponse(
+            content={
+                "object": "hivemind.opentrainer.sync_receipt",
+                **sync_res,
+                "database_summary": _portal_store.live_database_summary()["opentrainer"],
+            }
+        )
+
+    @app.get("/v1/hivemind/opentrainer/status", response_class=JSONResponse)
+    @app.get("/v1/opentrainer/status", response_class=JSONResponse)
+    def get_local_opentrainer_status() -> JSONResponse:
+        from hivemind.router.opentrainer import build_opentrainer_status_payload, sync_live_opentrainer_into_store
+
+        sync_live_opentrainer_into_store(_portal_store)
+        now = time.time()
+        return JSONResponse(
+            content=build_opentrainer_status_payload(
+                trainer_accounts=_portal_store.list_trainer_accounts(),
+                opentrainer_nodes=_portal_store.list_opentrainer_nodes(),
+                recent_rounds=_portal_store.list_opentrainer_rounds(limit=30),
+                now_utc=now,
+                database_summary=_portal_store.live_database_summary(now_utc=now),
+            )
+        )
+
+    @app.get("/v1/hivemind/opentrainer/pioneer-campaign", response_class=JSONResponse)
+    @app.get("/v1/opentrainer/pioneer-campaign", response_class=JSONResponse)
+    def get_local_opentrainer_pioneer_campaign() -> JSONResponse:
+        return JSONResponse(content=_portal_store.pioneer_campaign_status(now_utc=time.time()))
+
+    @app.post("/v1/hivemind/opentrainer/promote-trainer", response_class=JSONResponse)
+    @app.post("/v1/opentrainer/promote-trainer", response_class=JSONResponse)
+    def post_local_opentrainer_promote_trainer(payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
+        handle = str(payload.get("handle") or payload.get("account_id") or "first")
+        bonus_hmt = float(payload.get("bonus_hmt") if payload.get("bonus_hmt") is not None else 5000.0)
+        rank = int(payload["rank"]) if payload.get("rank") is not None else None
+        badge = str(payload["badge"]) if payload.get("badge") else None
+        now = time.time()
+        promo = _portal_store.promote_pioneer_trainer(
+            handle,
+            bonus_hmt=bonus_hmt,
+            rank=rank,
+            badge=badge,
+            now_utc=now,
+        )
+        return JSONResponse(
+            content={
+                **promo,
+                "pioneer_campaign": _portal_store.pioneer_campaign_status(now_utc=now),
+            }
+        )
+
+    @app.get("/v1/hivemind/producers/fleet", response_class=JSONResponse)
+    def get_local_producers_fleet() -> JSONResponse:
+        now = time.time()
+        fleet = _portal_store.list_hiveminder_accounts(now_utc=now, ttl_s=120.0)
+        scale = _portal_store.producer_fleet_scale_status(now_utc=now, ttl_s=120.0)
+        live_rows = [r for r in fleet if r["status"] == "live"]
+        return JSONResponse(
+            content={
+                "object": "hivemind.producer_fleet",
+                "ttl_s": 120.0,
+                "total_hiveminders": len(fleet),
+                "live_hiveminders": len(live_rows),
+                "distinct_physical_gpus": scale["distinct_physical_gpus"],
+                "live_endpoints": sum(int(r["live_endpoints"]) for r in live_rows),
+                "total_capacity_1k": round(sum(float(r["capacity_1k"] or 0.0) for r in live_rows), 2),
+                "live_models": _portal_store.live_models(now, 120.0),
+                "hiveminders": fleet,
+            }
+        )
+
+    @app.get("/v1/hivemind/i18n", response_class=JSONResponse)
+    def get_local_i18n_catalog(request: Request) -> JSONResponse:
+        negotiated = pick_language(
+            request.query_params.get("lang"),
+            request.headers.get("accept-language"),
+            default="en",
+        )
+        return JSONResponse(
+            content={
+                "object": "hivemind.i18n",
+                "default_language": "en",
+                "negotiated_language": negotiated,
+                "supported_languages": [
+                    {
+                        "code": code,
+                        "label": PORTAL_LANG_META[code]["name"],
+                        "portal_path": "/" if code == "en" else f"/{code}",
+                        "portal_query": f"/portal?lang={code}",
+                        "signup_query": f"/signup?lang={code}",
+                        "join_query": f"/join?lang={code}",
+                        "webgpu_query": f"/webgpu?lang={code}",
+                    }
+                    for code in PORTAL_LANGS
+                ],
+            }
+        )
+
+    @app.get("/api/v1/monitor/evolution-cron", response_class=JSONResponse)
+    def get_evolution_cron_status() -> JSONResponse:
+        def _read_json_safe(path_obj: Any) -> Dict[str, Any]:
+            if path_obj.exists():
+                try:
+                    return json.loads(path_obj.read_text(encoding="utf-8"))
+                except Exception:
+                    return {}
+            return {}
+
+        return JSONResponse(
+            content={
+                "object": "hivemind.evolution_cron_telemetry",
+                "schedules": {
+                    "roadmap_pr_evolution_2h": "0 */2 * * *",
+                    "rtx2070_monitor_3h": "0 */3 * * *",
+                    "rtx2070_moe_experimentator_4h": "0 */4 * * *",
+                    "night_moe_training_daily": "0 22 * * *",
+                },
+                "evolution_2h_cron_ledger": _read_json_safe(ARTIFACTS_ROOT / "evolution_2h_cron_ledger.json"),
+                "rtx2070_3h_monitor_ledger": _read_json_safe(ARTIFACTS_ROOT / "rtx2070_3h_monitor_ledger.json"),
+                "rtx2070_4h_moe_experimentator_ledger": _read_json_safe(ARTIFACTS_ROOT / "rtx2070_4h_moe_experimentator_ledger.json"),
+                "night_moe_training_ledger": _read_json_safe(ARTIFACTS_ROOT / "night_moe_training_ledger.json"),
+                "community_gpu_benchmark_receipt": _read_json_safe(ARTIFACTS_ROOT / "community_gpu_benchmark_receipt.json"),
+                "expert_registry_s21": _read_json_safe(ARTIFACTS_ROOT / "expert_registry_s21.json"),
+            }
+        )
+
+    @app.get("/api/v1/monitor/rtx2070-moe-experimentator", response_class=JSONResponse)
+    @app.get("/v1/hivemind/bees/rtx2070-moe-experimentator", response_class=JSONResponse)
+    def get_rtx2070_4h_moe_experimentator_status() -> JSONResponse:
+        exp_path = ARTIFACTS_ROOT / "rtx2070_4h_moe_experimentator_ledger.json"
+        exp_data: Dict[str, Any] = {}
+        if exp_path.exists():
+            try:
+                exp_data = json.loads(exp_path.read_text(encoding="utf-8"))
+            except Exception:
+                exp_data = {}
+        return JSONResponse(
+            content={
+                "object": "hivemind.rtx2070_4h_moe_experimentator",
+                "cadence_cron": "0 */4 * * *",
+                "ledger": exp_data,
+            }
+        )
+
+    @app.get("/api/v1/monitor/expert-registry", response_class=JSONResponse)
+    def get_s21_expert_registry_status() -> JSONResponse:
+        reg_path = ARTIFACTS_ROOT / "expert_registry_s21.json"
+        night_path = ARTIFACTS_ROOT / "night_moe_training_ledger.json"
+        reg_data: Dict[str, Any] = {}
+        res_plan: Dict[str, Any] = {}
+        if reg_path.exists():
+            try:
+                reg_data = json.loads(reg_path.read_text(encoding="utf-8"))
+            except Exception:
+                reg_data = {}
+        if night_path.exists():
+            try:
+                res_plan = json.loads(night_path.read_text(encoding="utf-8")).get("s21_expert_residency_plan", {})
+            except Exception:
+                res_plan = {}
+        return JSONResponse(
+            content={
+                "object": "hivemind.s21_expert_registry",
+                "registry": reg_data,
+                "residency_plan": res_plan,
+            }
+        )
+
+    @app.post("/api/v1/monitor/expert-route", response_class=JSONResponse)
+    def post_s21_expert_route(payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
+        prompt_text = str(payload.get("prompt") or "")
+        cluster_id = payload.get("cluster_id")
+        if cluster_id is not None:
+            cluster_id = str(cluster_id)
+        decision = _route_s21_hierarchical(prompt_text, cluster_id=cluster_id)
+        return JSONResponse(
+            content={
+                "object": "hivemind.s21_route_decision",
+                "prompt": prompt_text,
+                **decision,
+            }
         )
 
     @app.get("/api/v1/monitor/swat-telepathy", response_class=JSONResponse)
@@ -3732,7 +4033,7 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                     spec.loader.exec_module(mod)  # type: ignore[union-attr]
                     fold_res = mod.execute_cuda_ptx_bls_fold(target_planet=target_planet, n_pts=16384)
         except Exception:
-            pass
+            fold_res = dict(fold_res)
 
         hmt_awarded = 250.0
         cobblestones_awarded = 45.0
@@ -3954,5 +4255,10 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
             url="https://github.com/xaviercallens/HiveMind/releases/download/v2.12.0/HiveMind_Astrophysics_Exoplanet_Hunter_v2.11.0_Steam_Win64.zip",
             status_code=307,
         )
+
+    from hivemind.boinc.rtx_boinc_deployer import RTXBoincServer, build_rtx_boinc_fastapi_router
+
+    _cockpit_rtx_boinc_server = RTXBoincServer(router_store=_portal_store)
+    app.include_router(build_rtx_boinc_fastapi_router(_cockpit_rtx_boinc_server))
 
     return app

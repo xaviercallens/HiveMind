@@ -1473,22 +1473,73 @@ def create_router_app(
     @app.api_route("/portal", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/playground", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/life-as-a-bee", methods=["GET", "HEAD"], response_class=HTMLResponse)
-    def portal() -> HTMLResponse:
+    @app.api_route("/fr", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/aire-de-jeu", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/es", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/de", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/zh", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def portal(request: Request) -> HTMLResponse:
+        path_defaults = {
+            "/fr": "fr",
+            "/aire-de-jeu": "fr",
+            "/es": "es",
+            "/de": "de",
+            "/zh": "zh",
+        }
+        default_lang = path_defaults.get(request.url.path, "en")
+        lang = pick_language(request.query_params.get("lang"), request.headers.get("accept-language"), default=default_lang)
         nonce = secrets.token_urlsafe(18)
+        db_snapshot = store.live_database_summary(now_utc=clock(), ttl_s=PRODUCER_TTL_S)
         page = render_portal_page(
             google.client_id if google else None,
             nonce,
+            lang=lang,
+            db_snapshot=db_snapshot,
             live_telemetry=build_live_telemetry_snapshot(),
         )
         return HTMLResponse(
             page,
             headers={
                 "Content-Security-Policy": portal_content_security_policy(nonce),
-                "Cache-Control": "no-store",
+                "Cache-Control": "public, max-age=60",
+                "Vary": "Accept-Language",
+                "Content-Language": lang,
                 "X-Content-Type-Options": "nosniff",
                 "Referrer-Policy": "strict-origin-when-cross-origin",
             },
         )
+
+    @app.get("/v1/hivemind/i18n")
+    def portal_i18n_catalog(lang: str | None = None) -> dict[str, Any]:
+        """Public multilingual dictionary for the OpenRouter portal, playground, signup, and join pages (EN, FR, ES, DE, ZH)."""
+        from hivemind.router.portal_page import PORTAL_I18N, PORTAL_LANG_META, PORTAL_LANGS
+        from hivemind.router.signup_page import SIGNUP_I18N
+
+        selected = lang if lang in PORTAL_LANGS else None
+        return {
+            "object": "hivemind.i18n_catalog",
+            "supported_languages": list(PORTAL_LANGS),
+            "language_metadata": PORTAL_LANG_META,
+            "official_points_names": {
+                "en": "HiveMind Reflexion Points (HMT)",
+                "fr": "Points de Réflexion HiveMind (HMT)",
+                "es": "Puntos de Reflexión HiveMind (HMT)",
+                "de": "HiveMind-Reflexionspunkte (HMT)",
+                "zh": "HiveMind 反思积分 (HMT)",
+            },
+            "routes": {
+                "en": "/?lang=en",
+                "fr": "/fr",
+                "es": "/es",
+                "de": "/de",
+                "zh": "/zh",
+                "join": "/join",
+                "rejoindre": "/rejoindre",
+                "signup": "/signup",
+            },
+            "portal": {selected: PORTAL_I18N[selected]} if selected else PORTAL_I18N,
+            "signup": {selected: SIGNUP_I18N[selected]} if selected else SIGNUP_I18N,
+        }
 
     @app.get("/v1/hivemind/life-as-a-bee")
     def life_as_a_bee() -> dict[str, Any]:
@@ -1820,17 +1871,22 @@ def create_router_app(
     google = google_verifier or (GoogleIdTokenVerifier(google_client_id, clock=clock) if google_client_id else None)
 
     @app.api_route("/signup", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/inscription", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/login", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/register", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/connexion", methods=["GET", "HEAD"], response_class=HTMLResponse)
-    def signup() -> HTMLResponse:
+    def signup(request: Request) -> HTMLResponse:
+        default_lang = "fr" if request.url.path in ("/inscription", "/connexion") else "en"
+        lang = pick_language(request.query_params.get("lang"), request.headers.get("accept-language"), default=default_lang)
         nonce = secrets.token_urlsafe(18)
         page = render_signup_page(
             google.client_id if google else None,
             nonce,
+            lang=lang,
             live_telemetry=build_live_telemetry_snapshot(),
         )
         return HTMLResponse(page, headers={"Content-Security-Policy": content_security_policy(nonce), "Cache-Control": "no-store",
+                                           "Vary": "Accept-Language", "Content-Language": lang,
                                            "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})
 
     async def _parse_auth_payload(request: Request) -> dict[str, Any]:
@@ -2728,6 +2784,65 @@ def create_router_app(
         orders = store.list_bee_trade_orders(window_s=min(window_s, 30 * 86_400.0), now_utc=clock())
         return clear_bee_capacity_market(orders)
 
+    @app.get("/v1/hivemind/db/live")
+    @app.get("/api/v1/db/live")
+    def get_live_database_summary(sync_orchestrator: bool = False) -> dict[str, Any]:
+        """Public real-life SQLite database telemetry for the Web UI: accounts, producers, OpenTrainer nodes/rounds, usage, ledger & AMCP."""
+        from hivemind.router.opentrainer import load_live_lowcost_vm_orchestrator_ledger, sync_live_opentrainer_into_store
+
+        now = clock()
+        if sync_orchestrator:
+            sync_live_opentrainer_into_store(store, now_utc=now)
+        summary = store.live_database_summary(now_utc=now, ttl_s=PRODUCER_TTL_S)
+        summary["lowcost_vm_orchestrator"] = load_live_lowcost_vm_orchestrator_ledger()
+        return summary
+
+    @app.post("/v1/hivemind/opentrainer/sync-orchestrator")
+    def post_opentrainer_sync_orchestrator() -> dict[str, Any]:
+        """Idempotently sync the Permanent Low-Cost VM OpenTrainer Orchestrator ledger into the SQLite database."""
+        from hivemind.router.opentrainer import sync_live_opentrainer_into_store
+
+        now = clock()
+        sync_res = sync_live_opentrainer_into_store(store, now_utc=now)
+        return {
+            "object": "hivemind.opentrainer.sync_receipt",
+            **sync_res,
+            "database_summary": store.live_database_summary(now_utc=now, ttl_s=PRODUCER_TTL_S)["opentrainer"],
+        }
+
+    @app.get("/v1/hivemind/opentrainer/pioneer-campaign")
+    @app.get("/v1/opentrainer/pioneer-campaign")
+    def get_opentrainer_pioneer_campaign() -> dict[str, Any]:
+        """Public Pioneer Trainer Campaign status: Founding Pioneer Trainer #1 spotlight, leaderboard, and open bonus slots."""
+        return store.pioneer_campaign_status(now_utc=clock())
+
+    @app.post("/v1/hivemind/opentrainer/promote-trainer")
+    @app.post("/v1/opentrainer/promote-trainer")
+    async def post_opentrainer_promote_trainer(request: Request) -> dict[str, Any]:
+        """Promote a trainer (default: the #1 GPU trainer) to Pioneer Trainer status with an idempotent HMT grant."""
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+        except ValueError:
+            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+
+        handle = str(body.get("handle") or body.get("account_id") or "first")
+        bonus_hmt = float(body.get("bonus_hmt") if body.get("bonus_hmt") is not None else 5000.0)
+        rank = int(body["rank"]) if body.get("rank") is not None else None
+        badge = str(body["badge"]) if body.get("badge") else None
+        now = clock()
+        promo = store.promote_pioneer_trainer(
+            handle,
+            bonus_hmt=bonus_hmt,
+            rank=rank,
+            badge=badge,
+            now_utc=now,
+        )
+        return {
+            **promo,
+            "pioneer_campaign": store.pioneer_campaign_status(now_utc=now),
+        }
+
     @app.get("/v1/hivemind/opentrainer/status")
     @app.get("/v1/opentrainer/status")
     def get_opentrainer_status() -> dict[str, Any]:
@@ -2738,11 +2853,13 @@ def create_router_app(
         nodes = store.list_opentrainer_nodes()
         rounds = store.list_opentrainer_rounds(limit=30)
         trainer_accounts = store.list_trainer_accounts()
+        db_summary = store.live_database_summary(now_utc=now, ttl_s=PRODUCER_TTL_S)
         return build_opentrainer_status_payload(
             trainer_accounts=trainer_accounts,
             opentrainer_nodes=nodes,
             recent_rounds=rounds,
             now_utc=now,
+            database_summary=db_summary,
         )
 
     @app.post("/v1/hivemind/opentrainer/heartbeat")
@@ -3477,71 +3594,79 @@ def create_router_app(
 
         return OwnerFleetCoServingOrchestrator.public_status(foreground_gaming=foreground_gaming)
 
-    @app.api_route("/get_project_config.php", methods=["GET", "HEAD"])
-    @app.api_route("/boinc/get_project_config.php", methods=["GET", "HEAD"])
-    def router_boinc_get_project_config() -> Any:
-        from fastapi.responses import Response
+    @app.get("/v1/hivemind/expert-registry")
+    @app.get("/api/v1/monitor/expert-registry")
+    async def s21_expert_registry_endpoint() -> dict[str, Any]:
+        """Return the Season 21 ExpertRegistry snapshot (`HM-S21-02`) and its validated ResidencyPlan."""
+        from pathlib import Path
 
-        xml_body = (
-            '<?xml version="1.0" encoding="ISO-8859-1" ?>\n'
-            "<project_config>\n"
-            "    <name>HiveMind La Ruche (BOINC &amp; Night-MoE)</name>\n"
-            "    <master_url>https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/</master_url>\n"
-            "    <web_rpc_url_base>https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/</web_rpc_url_base>\n"
-            "    <local_revision>4.2.0</local_revision>\n"
-            "    <min_passwd_length>6</min_passwd_length>\n"
-            "    <account_manager/>\n"
-            "    <uses_username/>\n"
-            "    <client_account_creation_disabled>0</client_account_creation_disabled>\n"
-            "    <platforms>\n"
-            "        <platform>\n"
-            "            <platform_name>x86_64-pc-linux-gnu</platform_name>\n"
-            "            <user_friendly_name>Linux running on an AMD x86_64 or Intel EM64T CPU (NVIDIA GPU &gt;= 3.5 GB)</user_friendly_name>\n"
-            "            <plan_class>cuda_hivemind</plan_class>\n"
-            "        </platform>\n"
-            "        <platform>\n"
-            "            <platform_name>x86_64-pc-linux-gnu</platform_name>\n"
-            "            <user_friendly_name>Linux running on an AMD x86_64 or Intel EM64T CPU (NVIDIA GPU &gt;= 12 GB Big MoE)</user_friendly_name>\n"
-            "            <plan_class>cuda_hivemind_big</plan_class>\n"
-            "        </platform>\n"
-            "        <platform>\n"
-            "            <platform_name>x86_64-pc-linux-gnu</platform_name>\n"
-            "            <user_friendly_name>Cross-Platform CPU / BLS Transit &amp; Symbolic Solver</user_friendly_name>\n"
-            "            <plan_class>cpu_hivemind_solver</plan_class>\n"
-            "        </platform>\n"
-            "        <platform>\n"
-            "            <platform_name>windows_x86_64</platform_name>\n"
-            "            <user_friendly_name>Microsoft Windows (64-bit x86_64) CUDA / BLS Worker</user_friendly_name>\n"
-            "            <plan_class>cuda_hivemind</plan_class>\n"
-            "        </platform>\n"
-            "    </platforms>\n"
-            "</project_config>\n"
-        )
-        return Response(content=xml_body, media_type="application/xml; charset=utf-8")
-
-    @app.get("/boinc/status")
-    @app.get("/v1/hivemind/boinc/status")
-    def router_boinc_status() -> dict[str, Any]:
+        artifacts_dir = Path(__file__).resolve().parents[3] / "artifacts"
+        reg_path = artifacts_dir / "expert_registry_s21.json"
+        night_path = artifacts_dir / "night_moe_training_ledger.json"
+        reg_data: dict[str, Any] = {}
+        res_plan: dict[str, Any] = {}
+        if reg_path.exists():
+            try:
+                reg_data = json.loads(reg_path.read_text(encoding="utf-8"))
+            except Exception:
+                reg_data = {}
+        if night_path.exists():
+            try:
+                res_plan = json.loads(night_path.read_text(encoding="utf-8")).get("s21_expert_residency_plan", {})
+            except Exception:
+                res_plan = {}
         return {
-            "status": "ONLINE",
-            "project_name": "HiveMind La Ruche (BOINC & Night-MoE)",
-            "master_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/",
-            "join_guide_url": "https://hivemind-openrouter-1003063861791.us-central1.run.app/join?lang=en#train",
-            "project_config_xml_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/get_project_config.php",
-            "scheduler_rpc_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/boinc_cgi/cgi",
-            "federated_workunit_request_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/workunit/request",
-            "federated_workunit_submit_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/workunit/submit",
-            "federated_ledger_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/ledger",
-            "night_window": "22:00-07:00 Europe/Paris (24/7 on-demand workunits active)",
-            "night_training_roles": {
-                "end_users": "Overnight (22:00-07:00 CET) or idle-GPU BOINC folding & rank-4 QLoRA inner-loop updates (+250 HMT & +45 Cobblestones/WU)",
-                "hivemind_nodes": "Daytime (07:00-22:00 CET) OpenRouter inference -> Nighttime (22:00-07:00 CET) DiLoCo outer-step aggregation, Multi-Krum & SVD Teacher-to-Student distillation (/v1/hivemind/bees/owner-fleet-status)",
-            },
-            "plan_classes": ["cuda_hivemind", "cuda_hivemind_big", "cpu_hivemind_solver"],
-            "rewards_per_verified_workunit": {
-                "hmt_reflexion_points": 250,
-                "boinc_cobblestones": 45.0,
-            },
+            "object": "hivemind.s21_expert_registry",
+            "registry": reg_data,
+            "residency_plan": res_plan,
+        }
+
+    @app.post("/v1/hivemind/expert-route")
+    @app.post("/api/v1/monitor/expert-route")
+    async def s21_expert_route_endpoint(request: Request) -> dict[str, Any]:
+        """Route a prompt across the live Season 21 ExpertRegistry using HierarchicalExpertRouter (`HM-S21-02`)."""
+        from pathlib import Path
+        from hivemind.core.expert_registry import ExpertRegistry, HierarchicalExpertRouter
+
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+        except ValueError:
+            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+
+        prompt_text = str(body.get("prompt") or "")
+        cluster_id = body.get("cluster_id")
+        if cluster_id is not None:
+            cluster_id = str(cluster_id)
+
+        reg_path = Path(__file__).resolve().parents[3] / "artifacts" / "expert_registry_s21.json"
+        if not reg_path.exists():
+            return {
+                "object": "hivemind.s21_route_decision",
+                "prompt": prompt_text,
+                "target": "base",
+                "expert_id": None,
+                "cluster_id": cluster_id,
+                "reason": "no_registry_snapshot",
+                "load_on_demand": False,
+            }
+        reg = ExpertRegistry.load(reg_path)
+        router = HierarchicalExpertRouter(
+            reg,
+            base_model_id="Qwen/Qwen2.5-Coder-7B-Instruct",
+            resident=None,
+            allow_cold_load=False,
+        )
+        dec = router.route(prompt_text, cluster_id=cluster_id)
+        return {
+            "object": "hivemind.s21_route_decision",
+            "prompt": prompt_text,
+            "target": dec.target,
+            "expert_id": dec.expert_id,
+            "cluster_id": dec.cluster_id,
+            "reason": dec.reason,
+            "load_on_demand": dec.load_on_demand,
+            "live_expert_count": router.live_count,
         }
 
     @app.get("/v1/hivemind/bees/swat-telepathy/status")
@@ -3623,5 +3748,145 @@ def create_router_app(
             "fits_rtx2070_wddm_ceiling": bool(plan["vram_guards"]["rtx2070_wddm_6656_ok"]),
             "transfer_sha256": plan["transfer_sha256"],
         }
+
+    @app.get("/api/v1/monitor/rtx2070-moe-experimentator")
+    @app.get("/v1/hivemind/bees/rtx2070-moe-experimentator")
+    async def rtx2070_4h_moe_experimentator_endpoint() -> dict[str, Any]:
+        """Return the 4-Hour RTX 2070 MoE Bee Experimentator & PR-IP-10 validation ledger."""
+        from pathlib import Path
+
+        exp_path = Path(__file__).resolve().parents[3] / "artifacts" / "rtx2070_4h_moe_experimentator_ledger.json"
+        exp_data: dict[str, Any] = {}
+        if exp_path.exists():
+            try:
+                exp_data = json.loads(exp_path.read_text(encoding="utf-8"))
+            except Exception:
+                exp_data = {}
+        return {
+            "object": "hivemind.rtx2070_4h_moe_experimentator",
+            "cadence_cron": "0 */4 * * *",
+            "ledger": exp_data,
+        }
+
+    @app.api_route("/get_project_config.php", methods=["GET", "HEAD"])
+    @app.api_route("/boinc/get_project_config.php", methods=["GET", "HEAD"])
+    def router_boinc_get_project_config() -> Any:
+        from fastapi.responses import Response
+
+        xml_body = (
+            '<?xml version="1.0" encoding="ISO-8859-1" ?>\n'
+            "<project_config>\n"
+            "    <name>HiveMind La Ruche (BOINC &amp; Night-MoE)</name>\n"
+            "    <master_url>https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/</master_url>\n"
+            "    <web_rpc_url_base>https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/</web_rpc_url_base>\n"
+            "    <local_revision>4.2.0</local_revision>\n"
+            "    <min_passwd_length>6</min_passwd_length>\n"
+            "    <account_manager/>\n"
+            "    <uses_username/>\n"
+            "    <client_account_creation_disabled>0</client_account_creation_disabled>\n"
+            "    <platforms>\n"
+            "        <platform>\n"
+            "            <platform_name>x86_64-pc-linux-gnu</platform_name>\n"
+            "            <user_friendly_name>Linux running on an AMD x86_64 or Intel EM64T CPU (NVIDIA GPU &gt;= 3.5 GB)</user_friendly_name>\n"
+            "            <plan_class>cuda_hivemind</plan_class>\n"
+            "        </platform>\n"
+            "        <platform>\n"
+            "            <platform_name>x86_64-pc-linux-gnu</platform_name>\n"
+            "            <user_friendly_name>Linux running on an AMD x86_64 or Intel EM64T CPU (NVIDIA GPU &gt;= 12 GB Big MoE)</user_friendly_name>\n"
+            "            <plan_class>cuda_hivemind_big</plan_class>\n"
+            "        </platform>\n"
+            "        <platform>\n"
+            "            <platform_name>x86_64-pc-linux-gnu</platform_name>\n"
+            "            <user_friendly_name>Cross-Platform CPU / BLS Transit &amp; Symbolic Solver</user_friendly_name>\n"
+            "            <plan_class>cpu_hivemind_solver</plan_class>\n"
+            "        </platform>\n"
+            "        <platform>\n"
+            "            <platform_name>windows_x86_64</platform_name>\n"
+            "            <user_friendly_name>Microsoft Windows (64-bit x86_64) CUDA / BLS Worker</user_friendly_name>\n"
+            "            <plan_class>cuda_hivemind</plan_class>\n"
+            "        </platform>\n"
+            "    </platforms>\n"
+            "</project_config>\n"
+        )
+        return Response(content=xml_body, media_type="application/xml; charset=utf-8")
+
+    @app.get("/boinc/status")
+    @app.get("/v1/hivemind/boinc/status")
+    def router_boinc_status() -> dict[str, Any]:
+        return {
+            "status": "ONLINE",
+            "project_name": "HiveMind La Ruche (BOINC & Night-MoE)",
+            "master_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/",
+            "join_guide_url": "https://hivemind-openrouter-1003063861791.us-central1.run.app/join?lang=en#train",
+            "project_config_xml_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/get_project_config.php",
+            "scheduler_rpc_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/boinc_cgi/cgi",
+            "federated_workunit_request_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/workunit/request",
+            "federated_workunit_submit_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/workunit/submit",
+            "federated_ledger_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/ledger",
+            "night_window": "22:00-07:00 Europe/Paris (24/7 on-demand workunits active)",
+            "night_training_roles": {
+                "end_users": "Overnight (22:00-07:00 CET) or idle-GPU BOINC folding & rank-4 QLoRA inner-loop updates (+250 HMT & +45 Cobblestones/WU)",
+                "hivemind_nodes": "Daytime (07:00-22:00 CET) OpenRouter inference -> Nighttime (22:00-07:00 CET) DiLoCo outer-step aggregation, Multi-Krum & SVD Teacher-to-Student distillation (/v1/hivemind/bees/owner-fleet-status)",
+            },
+            "plan_classes": ["cuda_hivemind", "cuda_hivemind_big", "cpu_hivemind_solver"],
+            "rewards_per_verified_workunit": {
+                "hmt_reflexion_points": 250,
+                "boinc_cobblestones": 45.0,
+            },
+        }
+
+    from hivemind.boinc.rtx_boinc_deployer import (
+        RTXBoincServer,
+        RTXWorkunitLeaseRequest,
+        RTXWorkunitSubmitRequest,
+    )
+
+    _rtx_boinc_server = RTXBoincServer(router_store=store)
+
+    @app.get("/create_account.php")
+    async def router_boinc_create_account(request: Request) -> Any:
+        from fastapi.responses import Response
+
+        q = dict(request.query_params)
+        return Response(
+            content=_rtx_boinc_server.create_or_lookup_account_xml(q, create_if_missing=True),
+            media_type="text/xml",
+        )
+
+    @app.get("/lookup_account.php")
+    async def router_boinc_lookup_account(request: Request) -> Any:
+        from fastapi.responses import Response
+
+        q = dict(request.query_params)
+        return Response(
+            content=_rtx_boinc_server.create_or_lookup_account_xml(q, create_if_missing=False),
+            media_type="text/xml",
+        )
+
+    @app.post("/boinc_cgi/cgi")
+    @app.post("/cgi")
+    async def router_boinc_scheduler_cgi(request: Request) -> Any:
+        from fastapi.responses import Response
+
+        body = (await request.body()).decode("utf-8", errors="replace")
+        return Response(content=_rtx_boinc_server.handle_scheduler_rpc_xml(body), media_type="text/xml")
+
+    @app.get("/api/v1/boinc/rtx/status")
+    @app.get("/v1/hivemind/boinc/rtx/status")
+    async def router_boinc_rtx_status() -> dict[str, Any]:
+        return _rtx_boinc_server.status_summary()
+
+    @app.post("/api/v1/boinc/rtx/lease")
+    @app.post("/v1/hivemind/boinc/rtx/lease")
+    async def router_boinc_rtx_lease(payload: RTXWorkunitLeaseRequest) -> dict[str, Any]:
+        return _rtx_boinc_server.lease_workunit(payload)
+
+    @app.post("/api/v1/boinc/rtx/submit")
+    @app.post("/v1/hivemind/boinc/rtx/submit")
+    async def router_boinc_rtx_submit(payload: RTXWorkunitSubmitRequest) -> dict[str, Any]:
+        try:
+            return _rtx_boinc_server.submit_workunit(payload)
+        except ValueError as exc:
+            raise RouterError(404, str(exc), "not_found_error", "workunit_not_found") from exc
 
     return app

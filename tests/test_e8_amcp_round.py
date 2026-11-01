@@ -210,3 +210,20 @@ def test_the_gate_never_lets_a_learner_claim_when_it_must_not(tmp_path: Path, mo
     monkeypatch.setattr(q, "vram_guard", lambda *a, **k: (_ for _ in ()).throw(q.GuardError("4,400 MiB free")))
     ok, why = r.gate(a, "cuda", datetime(2026, 11, 1, 23, 0, tzinfo=z))
     assert not ok and why.startswith("vram:")
+
+
+def test_a_learner_that_declined_an_offer_takes_the_re_offer_of_the_same_round(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The first night run stopped after 13 rounds: inference was busy for one offer, the learners marked that round done and ignored every re-offer of it."""
+    calls = {"n": 0}
+
+    def busy_once(args, device, now=None):  # noqa: ANN001, ANN202
+        calls["n"] += 1
+        return (False, "inference in flight (governor)") if calls["n"] == 1 else (True, "ok")
+
+    monkeypatch.setattr(r, "gate", busy_once)
+    hub = Hub()
+    rcs = run_threads(hub, coordinator_args(tmp_path, "rt5", ["l0"], rounds=2, quorum=1, deadline=4.0), [learner_args("rt5", "l0", 0)])
+    assert rcs == {"coord": 0, "l0": 0}, rcs
+    rep = json.loads((tmp_path / "rt5.json").read_text())
+    assert rep["completed"] and rep["rounds"][0]["retries"] == 1 and rep["rounds"][0]["accepted"] == ["l0"]
+    assert calls["n"] >= 2

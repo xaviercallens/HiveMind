@@ -55,10 +55,6 @@ class ResultRejected(FederationError):
 # ------------------------------------------------------------------------------------------------------------------------------ hashes and pins
 
 
-def sha256_hex(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
 def code_pin(paths: Sequence[Path | str]) -> str:
     """One hash over the files that implement the round, in a fixed order. A host runs a task only if its own pin equals the offer's.
 
@@ -92,7 +88,8 @@ def decode_tensors(b64: str) -> dict[str, Any]:
     """Weights-only: a payload can carry tensors and plain containers, never code."""
     import torch
 
-    return torch.load(io.BytesIO(base64.b64decode(b64)), map_location="cpu", weights_only=True)
+    raw = base64.b64decode(b64, validate=True)  # strict: anything that is not base64 is refused before torch sees it
+    return torch.load(io.BytesIO(raw), map_location="cpu", weights_only=True)
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ events

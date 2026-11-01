@@ -229,3 +229,41 @@ def test_round_status_complete_open_quorum_failed() -> None:
     b.offer_result(result_payload("l1"))
     assert b.status(now) == "complete"
     assert book(deadline_unix=now + 60, quorum=2).status(now + 61) == "failed"
+
+
+# ----------------------------------------------------------------------------------------------------------------------- the remaining paths
+
+
+def test_a_run_id_with_unsafe_characters_is_refused() -> None:
+    with pytest.raises(fed.FederationError, match="run_id"):
+        fed.build_offer(run_id="bad id; rm", rnd=0, sender_id="c", global_state=state(), base_sha256=BASE, pin=PIN, inner_steps=1, deadline_unix=time.time() + 5, quorum=1)
+
+
+def test_an_offer_for_an_unknown_algorithm_is_refused() -> None:
+    p = offer_payload()
+    p["algo"] = "something_else"
+    with pytest.raises(fed.OfferRefused, match="unknown algorithm"):
+        fed.check_offer(p, my_pin=PIN, my_base_sha256=BASE)
+
+
+def test_a_result_with_no_tokens_is_rejected() -> None:
+    b = book()
+    assert not b.offer_result(result_payload("l0", tokens=0)) and "no tokens" in b.rejected[-1][1]
+
+
+def test_claim_and_abort_events_pass_the_schema_and_the_result_can_carry_peak_vram() -> None:
+    topic = KAFKA_TOPICS["federation"]
+    for ev in (fed.build_claim(run_id="r", rnd=1, learner_id="l0", host="h"), fed.build_abort(run_id="r", rnd=1, sender_id="c", reason="x" * 500)):
+        validate_event_dict(dataclasses.asdict(ev), topic)
+    assert len(fed.build_abort(run_id="r", rnd=1, sender_id="c", reason="x" * 500).payload["reason"]) == 128
+    assert result_payload("l0", vram_peak_mib=27.75)["vram_peak_mib"] == 27.75
+    assert "vram_peak_mib" not in result_payload("l0")
+
+
+def test_a_round_counts_only_claims_that_belong_to_it() -> None:
+    b = book()
+    b.claim({"run_id": "run1", "round": 3, "learner_id": "l0"})
+    b.claim({"run_id": "run1", "round": 2, "learner_id": "l1"})  # another round
+    b.claim({"run_id": "other", "round": 3, "learner_id": "l1"})  # another run
+    b.claim({"run_id": "run1", "round": 3, "learner_id": "mallory"})  # not on the allowed list
+    assert b.claims == {"l0"}

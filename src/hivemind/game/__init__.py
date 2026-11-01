@@ -25,7 +25,7 @@ try:
         build_free_steam_edition_package,
         create_hack_miner_fastapi_app,
     )
-except ImportError:  # Slim router image without torch/numpy
+except (ImportError, ValueError):  # Slim router image without torch/numpy or incompatible system sklearn
     ALL_HF_BOUNTY_CONTRACTS = ()  # type: ignore[assignment]
     SEASON_1_HF_BOUNTY_CONTRACTS = ()  # type: ignore[assignment]
     SEASON_2_HF_BOUNTY_CONTRACTS = ()  # type: ignore[assignment]

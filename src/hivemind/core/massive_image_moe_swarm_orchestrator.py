@@ -485,7 +485,7 @@ class MassiveSwarmSparseImageMoE(nn.Module):
                     )
                     h_mean = self.backbone.encode_patches(p_tok).mean(dim=(0, 1))
                     h_unit = h_mean / torch.clamp(torch.norm(h_mean), min=1e-6)
-                    self.router.weight[idx].copy_(h_unit * 4.5)
+                    self.router.weight[idx].copy_(h_unit * 0.5)
 
     def forward(self, visual_patches: torch.Tensor) -> Dict[str, Any]:
         h = self.backbone.encode_patches(visual_patches)
@@ -504,21 +504,20 @@ class MassiveSwarmSparseImageMoE(nn.Module):
         pooled = self.backbone.post_norm((h + base_ffn + moe_delta).mean(dim=1))
         logits = self.backbone.classifier(pooled)
 
+        # Switch Transformer Load-balancing auxiliary loss L_aux = N * sum_i (f_i * P_i) (IP-35)
         mean_prob = router_probs.mean(dim=(0, 1))
-        one_hot_topk = F.one_hot(topk_indices, num_classes=self.num_experts).to(router_probs.dtype)
-        dispatch_fraction = one_hot_topk.mean(dim=(0, 1, 2)).detach()
-        l_aux_raw_tensor = self.num_experts * (
-            0.5 * torch.sum(dispatch_fraction * mean_prob)
-            + 0.5 * torch.sum(mean_prob * mean_prob)
-        )
+        top1_dispatch = F.one_hot(topk_indices[:, :, 0], num_classes=self.num_experts).to(router_probs.dtype)
+        f_i = top1_dispatch.mean(dim=(0, 1)).detach()
+        l_aux_raw_tensor = self.num_experts * torch.sum(f_i * mean_prob)
         l_aux_weighted_tensor = self.load_balance_alpha * l_aux_raw_tensor
+        l_aux_raw = float(l_aux_raw_tensor.detach().item())
 
         return {
             "logits": logits,
             "router_probs": router_probs,
             "topk_indices": topk_indices,
             "topk_weights": topk_weights,
-            "load_balance_loss_raw": round(float(l_aux_raw_tensor.detach().item()), 5),
+            "load_balance_loss_raw": round(l_aux_raw, 5),
             "load_balance_loss_weighted": l_aux_weighted_tensor,
         }
 

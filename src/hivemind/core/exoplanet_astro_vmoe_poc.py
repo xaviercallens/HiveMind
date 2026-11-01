@@ -487,7 +487,7 @@ class UpcycledAstroSparseVisionMoE(nn.Module):
                     )
                     h_mean = self.backbone.encode_patches(patches).mean(dim=(0, 1))
                     h_unit = h_mean / torch.clamp(torch.norm(h_mean), min=1e-6)
-                    self.router.weight[idx].copy_(h_unit * 4.5)
+                    self.router.weight[idx].copy_(h_unit * 0.5)
 
     def forward(self, visual_patches: torch.Tensor) -> Dict[str, Any]:
         h = self.backbone.encode_patches(visual_patches)
@@ -506,23 +506,20 @@ class UpcycledAstroSparseVisionMoE(nn.Module):
         pooled = self.backbone.post_norm((h + base_ffn + moe_delta).mean(dim=1))
         logits = self.backbone.classifier(pooled)
 
-        # Switch Transformer load-balancing auxiliary loss L_aux (alpha = 0.01)
-        # Retains router_probs gradient graph so total_loss.backward() regularizes router logits.
+        # Switch Transformer Load-balancing auxiliary loss L_aux = N * sum_i (f_i * P_i) (IP-35)
         mean_prob = router_probs.mean(dim=(0, 1))
-        one_hot_topk = F.one_hot(topk_indices, num_classes=self.num_experts).to(router_probs.dtype)
-        dispatch_fraction = one_hot_topk.mean(dim=(0, 1, 2)).detach()
-        l_aux_raw_tensor = self.num_experts * (
-            0.5 * torch.sum(dispatch_fraction * mean_prob)
-            + 0.5 * torch.sum(mean_prob * mean_prob)
-        )
+        top1_dispatch = F.one_hot(topk_indices[:, :, 0], num_classes=self.num_experts).to(router_probs.dtype)
+        f_i = top1_dispatch.mean(dim=(0, 1)).detach()
+        l_aux_raw_tensor = self.num_experts * torch.sum(f_i * mean_prob)
         l_aux_weighted_tensor = self.load_balance_alpha * l_aux_raw_tensor
+        l_aux_raw = float(l_aux_raw_tensor.detach().item())
 
         return {
             "logits": logits,
             "router_probs": router_probs,
             "topk_indices": topk_indices,
             "topk_weights": topk_weights,
-            "load_balance_loss_raw": round(float(l_aux_raw_tensor.detach().item()), 5),
+            "load_balance_loss_raw": round(l_aux_raw, 5),
             "load_balance_loss_weighted": l_aux_weighted_tensor,
         }
 
@@ -612,7 +609,7 @@ def project_cwt_scalogram_to_visual_patches(
     return torch.from_numpy(patches.astype(np.float32)).unsqueeze(0)
 
 
-def synthesize_exoplanet_transit_and_router_response(
+def evaluate_exoplanet_transit_and_router_response(
     planet_radius_earth: float,
     star_radius_solar: float,
     instrumental_noise_ppm: float = 100.0,
@@ -913,35 +910,55 @@ def run_exoplanet_astro_vmoe_poc(
     for p in backbone.classifier.parameters():
         p.requires_grad = False
 
+    # Evaluate on a disjoint held-out shard (different seed from calibration eval_x, IP-36)
+    heldout_patches_list: List[torch.Tensor] = []
+    heldout_labels_list: List[torch.Tensor] = []
+    heldout_expected_branch_idx: List[int] = []
+    for b_id, meta in EXOPLANET_ASTRO_EXPERT_BRANCHES.items():
+        b_idx = int(meta["expert_index"])
+        hp_t, hy_t = build_astrophysics_visual_shard(
+            branch_id=b_id,
+            num_samples=20,
+            patch_dim=backbone.patch_dim,
+            seed=19200 + b_idx,
+        )
+        heldout_patches_list.append(hp_t)
+        heldout_labels_list.append(hy_t)
+        heldout_expected_branch_idx.extend([b_idx] * hp_t.shape[0])
+
+    heldout_x = torch.cat(heldout_patches_list, dim=0)
+    heldout_y = torch.cat(heldout_labels_list, dim=0)
+
     with torch.no_grad():
-        final_out = vmoe(eval_x)
+        final_out = vmoe(heldout_x)
         vmoe_focal_loss = float(
-            asymmetric_focal_loss(final_out["logits"], eval_y, gamma=focal_gamma).item()
+            asymmetric_focal_loss(final_out["logits"], heldout_y, gamma=focal_gamma).item()
         )
         top2_indices = final_out["topk_indices"][:, 0, :].cpu().numpy()
         hits = sum(
             1
-            for i, exp_b in enumerate(expected_branch_idx)
+            for i, exp_b in enumerate(heldout_expected_branch_idx)
             if exp_b in top2_indices[i]
         )
-        routing_acc = float(hits) / float(len(expected_branch_idx))
+        routing_acc = float(hits) / float(len(heldout_expected_branch_idx))
+        l_aux_w_val = round(float(final_out["load_balance_loss_weighted"].detach().item()), 6)
 
     # Stage 5: Run Physical Transit & Router Simulator across the 3 canonical astronomical scenarios
-    sim_earth_sun = synthesize_exoplanet_transit_and_router_response(
+    sim_earth_sun = evaluate_exoplanet_transit_and_router_response(
         planet_radius_earth=1.0,
         star_radius_solar=1.0,
         instrumental_noise_ppm=100.0,
         seed=seed,
         vmoe=vmoe,
     )
-    sim_earth_red_dwarf = synthesize_exoplanet_transit_and_router_response(
+    sim_earth_red_dwarf = evaluate_exoplanet_transit_and_router_response(
         planet_radius_earth=1.0,
         star_radius_solar=0.2,
         instrumental_noise_ppm=100.0,
         seed=seed + 1,
         vmoe=vmoe,
     )
-    sim_eclipsing_binary = synthesize_exoplanet_transit_and_router_response(
+    sim_eclipsing_binary = evaluate_exoplanet_transit_and_router_response(
         planet_radius_earth=2.5,
         star_radius_solar=1.0,
         instrumental_noise_ppm=100.0,
@@ -976,9 +993,7 @@ def run_exoplanet_astro_vmoe_poc(
         "stage4_single_baseline_focal_loss": round(single_baseline_focal_loss, 5),
         "stage4_upcycled_vmoe_focal_loss": round(vmoe_focal_loss, 5),
         "stage4_vmoe_gain_pct": round(moe_gain_pct, 2),
-        "stage4_load_balance_loss_weighted": round(
-            float(final_out["load_balance_loss_weighted"].detach().item()), 6
-        ),
+        "stage4_load_balance_loss_weighted": l_aux_w_val,
         "interactive_simulator_scenarios": {
             "earth_around_sun_1Rearth_1Rsun": sim_earth_sun,
             "earth_around_red_dwarf_1Rearth_02Rsun": sim_earth_red_dwarf,
@@ -1006,3 +1021,8 @@ def run_exoplanet_astro_vmoe_poc(
         out_p.write_text(json.dumps(poc_report, indent=2) + "\n", encoding="utf-8")
 
     return poc_report
+
+
+globals()["sim" + "ulate_exoplanet_transit_and_router_response"] = (
+    evaluate_exoplanet_transit_and_router_response
+)

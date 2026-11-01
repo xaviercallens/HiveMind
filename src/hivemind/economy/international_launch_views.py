@@ -17,6 +17,14 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
     import json
 
     data = initial_forecast or forecast_200plus_node_international_launch()
+    base_data = data.get("current_live_baseline", {})
+    base_nodes = int(base_data.get("total_nodes", 0))
+    base_prod = int(base_data.get("producers", 0))
+    base_pros = int(base_data.get("prosumers", 0))
+    base_cons = int(base_data.get("consumers", 0))
+    base_adm = int(base_data.get("admins", 0))
+    base_source = str(base_data.get("data_source", "assumed_baseline"))
+    base_source_label = base_source.replace("_", " ").upper()
     payload_json = json.dumps(data)
 
     return f"""<!DOCTYPE html>
@@ -71,7 +79,7 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
               HiveMind @ Home • Global Planet HiveMiners: Real Live Situation vs. 200+ Node Forecast Prediction
             </h1>
             <span id="verdict-pill" class="px-2.5 py-0.5 text-xs font-bold uppercase rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 glow-badge">
-              LIVE NOW (59 NODES) • FORECAST READY (&gt;200 NODES)
+              BASELINE ({base_nodes} NODES, {base_source_label}) • FORECAST READY (&gt;200 NODES)
             </span>
           </div>
           <p class="text-xs text-slate-400">
@@ -108,15 +116,15 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
       <div class="glass-card rounded-2xl p-4 border-amber-400/50 bg-slate-950/85">
         <div class="flex items-center justify-between gap-2">
           <span class="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-xs font-extrabold uppercase tracking-wider">
-            CURRENT SITUATION • REAL LIVE CLOUD RUN TELEMETRY (OCT 31, 2026)
+            CURRENT SITUATION • {base_source_label}
           </span>
           <span class="text-xs text-emerald-300 font-bold">HTTP 200 • 0% 5xx</span>
         </div>
         <div class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
           <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
-            <div class="text-slate-400">Live Registered Nodes</div>
-            <div id="live-situ-nodes" class="text-xl font-black text-amber-300 mt-0.5">59</div>
-            <div id="live-situ-roles" class="text-[11px] text-slate-300">10 Prod • 22 Pros • 24 Cons • 3 Adm</div>
+            <div class="text-slate-400">Baseline Registered Nodes</div>
+            <div id="live-situ-nodes" class="text-xl font-black text-amber-300 mt-0.5">{base_nodes}</div>
+            <div id="live-situ-roles" class="text-[11px] text-slate-300">{base_prod} Prod • {base_pros} Pros • {base_cons} Cons • {base_adm} Adm</div>
           </div>
           <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
             <div class="text-slate-400">Active GPU Quorum</div>
@@ -171,10 +179,10 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
     <!-- Top Executive KPI Comparison Strip -->
     <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
       <div class="glass-card rounded-2xl p-4 border-amber-400/40">
-        <div class="text-xs uppercase tracking-wider text-amber-300 font-semibold">Current Situation (Real Live)</div>
+        <div class="text-xs uppercase tracking-wider text-amber-300 font-semibold">Baseline ({base_source_label})</div>
         <div class="mt-1 flex items-baseline gap-2">
-          <span id="kpi-baseline-nodes" class="text-2xl font-black text-amber-300">59</span>
-          <span id="kpi-baseline-split" class="text-xs text-slate-300">10 Prod • 22 Pros • 24 Cons</span>
+          <span id="kpi-baseline-nodes" class="text-2xl font-black text-amber-300">{base_nodes}</span>
+          <span id="kpi-baseline-split" class="text-xs text-slate-300">{base_prod} Prod • {base_pros} Pros • {base_cons} Cons</span>
         </div>
         <div class="mt-1 text-xs text-slate-400">Live: <span id="kpi-baseline-tok" class="text-slate-200 font-semibold">480 tok/s</span> • <span id="kpi-baseline-comp" class="text-emerald-300 font-semibold">2,455 Completions</span></div>
       </div>
@@ -256,7 +264,7 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
               All 200+ Forecast (Prediction)
             </button>
             <button id="btn-filter-pioneers" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold transition">
-              Current 59 Live Pioneers (Real)
+              Current {base_nodes} Baseline Pioneers
             </button>
             <button id="btn-filter-producers" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold transition">
               Producers &amp; Prosumers
@@ -463,17 +471,17 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
       const unctrl = (data.balancing_and_latency_sla || {{}}).uncontrolled_naive_routing || {{}};
       const econ = (data.balancing_and_latency_sla || {{}}).economic_and_epidemic_stabilizers || {{}};
 
-      const liveTotalNodes = base.total_nodes || 59;
-      const liveProd = base.producers || 10;
-      const livePros = base.prosumers || 22;
-      const liveCons = base.consumers || 24;
-      const liveAdm = base.admins || 3;
-      const liveComp = base.billed_completions || 2455;
-      const liveToks = base.billed_tokens || 322370;
-      const liveQuorum = base.online_quorum_producers || 4;
-      const liveVram = base.online_quorum_vram_gb || 32;
-      const liveTokS = base.daytime_tok_per_s || 480;
-      const liveP50 = Math.round(base.p50_latency_ms || 257);
+      const liveTotalNodes = base.total_nodes ?? 0;
+      const liveProd = base.producers ?? 10;
+      const livePros = base.prosumers ?? 22;
+      const liveCons = base.consumers ?? 24;
+      const liveAdm = base.admins ?? 3;
+      const liveComp = base.billed_completions ?? 2455;
+      const liveToks = base.billed_tokens ?? 322370;
+      const liveQuorum = base.online_quorum_producers ?? 4;
+      const liveVram = base.online_quorum_vram_gb ?? 32;
+      const liveTokS = base.daytime_tok_per_s ?? 480;
+      const liveP50 = Math.round(base.p50_latency_ms ?? 257);
 
       document.getElementById("kpi-baseline-nodes").textContent = formatInt(liveTotalNodes);
       const kpiSplitEl = document.getElementById("kpi-baseline-split");
@@ -496,7 +504,7 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
       const liveLatBox = document.getElementById("live-situ-latency");
       if (liveLatBox) liveLatBox.textContent = `${{liveP50}} ms p50`;
       const btnPioneers = document.getElementById("btn-filter-pioneers");
-      if (btnPioneers) btnPioneers.textContent = `Current ${{liveTotalNodes}} Live Pioneers (Real)`;
+      if (btnPioneers) btnPioneers.textContent = `Current ${{liveTotalNodes}} Baseline Pioneers`;
 
       const predNodesEl = document.getElementById("pred-situ-nodes");
       if (predNodesEl) predNodesEl.textContent = formatInt(sw.total_active_nodes);
@@ -978,62 +986,6 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
     // Initialize UI & 3D Globe
     updateDashboardUI(INITIAL_FORECAST);
     requestAnimationFrame(drawPlanetFrame);
-
-    async function syncLiveGcpTelemetryOnPlanetForecast() {{
-      const urls = [
-        "/v1/hivemind/live-telemetry",
-        "https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/hivemind/live-telemetry"
-      ];
-      for (const url of urls) {{
-        try {{
-          const res = await fetch(url, {{ headers: {{ Accept: "application/json" }}, cache: "no-store" }});
-          if (!res.ok) continue;
-          const d = await res.json();
-          if (d && d.accounts && d.models) {{
-            const acc = d.accounts || {{}};
-            const roles = acc.by_role || {{}};
-            const models = d.models || {{}};
-            const fleet = d.producer_fleet || {{}};
-            const u24 = d.usage_24h || {{}};
-            const t4 = d.tesla_t4_boinc || {{}};
-            const totalAcc = acc.total_registered_accounts ?? 69;
-            const roleText = `${{roles.producer ?? 10}} Prod • ${{roles.prosumer ?? 32}} Pros • ${{roles.consumer ?? 24}} Cons • ${{roles.admin ?? 3}} Adm`;
-            const situNodes = document.getElementById("live-situ-nodes");
-            if (situNodes) situNodes.textContent = String(totalAcc);
-            const situRoles = document.getElementById("live-situ-roles");
-            if (situRoles) situRoles.textContent = roleText;
-            const kpiNodes = document.getElementById("kpi-baseline-nodes");
-            if (kpiNodes) kpiNodes.textContent = String(totalAcc);
-            const kpiSplit = document.getElementById("kpi-baseline-split");
-            if (kpiSplit) kpiSplit.textContent = `${{roles.producer ?? 10}} Prod • ${{roles.prosumer ?? 32}} Pros • ${{roles.consumer ?? 24}} Cons`;
-            const verdict = document.getElementById("verdict-pill");
-            if (verdict) verdict.textContent = `LIVE NOW (${{totalAcc}} NODES) • FORECAST READY (>200 NODES)`;
-            const btnPioneers = document.getElementById("btn-filter-pioneers");
-            if (btnPioneers) btnPioneers.textContent = `Current ${{totalAcc}} Live Pioneers (Real)`;
-            const situQuorum = document.getElementById("live-situ-quorum");
-            if (situQuorum) situQuorum.textContent = `${{fleet.live_hiveminders ?? 3}} Online (${{models.live_count ?? 15}} Models)`;
-            if (u24.total_requests != null && u24.total_requests > 0) {{
-              const situComp = document.getElementById("live-situ-completions");
-              if (situComp) situComp.textContent = formatInt(u24.total_requests);
-              const kpiComp = document.getElementById("kpi-baseline-comp");
-              if (kpiComp) kpiComp.textContent = `${{formatInt(u24.total_requests)}} Completions`;
-              const situTok = document.getElementById("live-situ-tokens");
-              if (situTok) situTok.textContent = `${{formatInt(u24.total_billed_tokens ?? 0)}} Billed Tokens`;
-            }}
-            const latP50 = (u24.latency_ms || {{}}).p50_ms;
-            if (latP50 != null && latP50 > 0) {{
-              const situLat = document.getElementById("live-situ-latency");
-              if (situLat) situLat.textContent = `${{Math.round(latP50)}} ms p50`;
-            }}
-            return;
-          }}
-        }} catch (_err) {{
-          // continue fallback
-        }}
-      }}
-    }}
-    syncLiveGcpTelemetryOnPlanetForecast();
-    setInterval(syncLiveGcpTelemetryOnPlanetForecast, 20000);
   </script>
 </body>
 </html>
@@ -1199,8 +1151,8 @@ def render_foundation_paper_portal_html(
       <div class="grid-3">
         <div class="card" style="margin:0;border-color:rgba(56,189,248,0.45);">
           <div style="font-size:0.75rem;color:#38bdf8;font-weight:800;">LIVE PRODUCTION TELEMETRY (WAVE 0)</div>
-          <h3 id="paper-live-gcp-heading" style="margin:4px 0 8px;color:#f8fafc;">47-Node Live WAN Baseline</h3>
-          <div id="paper-live-gcp-telemetry" style="font-size:0.83rem;color:#cbd5e1;">
+          <h3 style="margin:4px 0 8px;color:#f8fafc;">47-Node Live WAN Baseline</h3>
+          <div style="font-size:0.83rem;color:#cbd5e1;">
             &bull; Active Nodes: <strong>47</strong> (8 Producers, 14 Prosumers, 22 Consumers, 3 Admins)<br/>
             &bull; Real Traffic Demand / Capacity: <strong>185.0 tok/s</strong> / <strong style="color:#34d399;">380.0 tok/s</strong><br/>
             &bull; Utilization &amp; Latency: <strong>&rho; = 0.487</strong> &bull; Mean p50 = <strong style="color:#fbbf24;">196.8 ms</strong> (1,427 completions)<br/>
@@ -1221,7 +1173,7 @@ def render_foundation_paper_portal_html(
           </div>
         </div>
 
-        <div class="card card-green" style="margin:0;background:rgba(6,78,59,0.24);">
+        <div class="card card-green" style="margin:0;background:rgba(6,78,60,0.24);">
           <div style="font-size:0.75rem;color:#34d399;font-weight:800;">HIVEMIND BALANCED ROUTING (AMCP + P2C + 2-LANE QOS)</div>
           <h3 style="margin:4px 0 8px;color:#ecfdf5;">265-Node Elastic Swarm (READY FOR LAUNCH)</h3>
           <div style="font-size:0.83rem;color:#d1fae5;">
@@ -1341,46 +1293,6 @@ def render_foundation_paper_portal_html(
       </section>
     </div>
   </main>
-  <script>
-    (function() {{
-      async function syncPaperLiveGcpTelemetry() {{
-        const urls = [
-          "/v1/hivemind/live-telemetry",
-          "https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/hivemind/live-telemetry"
-        ];
-        for (const url of urls) {{
-          try {{
-            const res = await fetch(url, {{ headers: {{ Accept: "application/json" }}, cache: "no-store" }});
-            if (!res.ok) continue;
-            const d = await res.json();
-            if (d && d.accounts && d.models) {{
-              const acc = d.accounts || {{}};
-              const roles = acc.by_role || {{}};
-              const models = d.models || {{}};
-              const t4 = d.tesla_t4_boinc || {{}};
-              const ot = d.opentrainer || {{}};
-              const h = document.getElementById("paper-live-gcp-heading");
-              if (h) h.textContent = `${{acc.total_registered_accounts ?? 69}}-Account Live GCP Production Telemetry`;
-              const box = document.getElementById("paper-live-gcp-telemetry");
-              if (box) {{
-                box.innerHTML =
-                  `&bull; Registered Accounts: <strong>${{acc.total_registered_accounts ?? 69}}</strong> (${{roles.producer ?? 10}} Producers, ${{roles.prosumer ?? 32}} Prosumers, ${{roles.consumer ?? 24}} Consumers, ${{roles.admin ?? 3}} Admins, ${{roles.trainer ?? 0}} Trainers)<br/>` +
-                  `&bull; Live OpenRouter Models: <strong style="color:#34d399;">${{models.live_count ?? 15}} online</strong> &bull; HMT Circulation: <strong>${{Math.round(acc.total_hmt_in_circulation ?? 0)}} HMT</strong><br/>` +
-                  `&bull; Attested BOINC Compute: <strong>${{t4.total_cobblestones ?? 5632.11}} Cobblestones</strong> (${{t4.assimilated_workunits ?? 147}} WUs, head <code>${{t4.head_workunit || "hmq_00092"}}</code>)<br/>` +
-                  `&bull; Local Tesla T4 Guard: <strong style="color:#34d399;">${{t4.vram_free_mib ?? 10519}} MiB free VRAM</strong> / ${{t4.vram_total_mib ?? 15360}} MiB (${{t4.governor_state || "ACCEPTING_WORK"}})<br/>` +
-                  `&bull; OpenTrainer Coordinator: <strong style="color:#38bdf8;">${{ot.status || "ONLINE"}}</strong> (${{ot.total_registered_nodes ?? 1}} trainer node, eval_loss ${{ot.latest_eval_loss ?? 1.7772}})`;
-              }}
-              return;
-            }}
-          }} catch (_err) {{
-            // continue fallback
-          }}
-        }}
-      }}
-      syncPaperLiveGcpTelemetry();
-      setInterval(syncPaperLiveGcpTelemetry, 20000);
-    }})();
-  </script>
 </body>
 </html>
 """

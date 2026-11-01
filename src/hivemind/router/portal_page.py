@@ -910,6 +910,76 @@ if ($('steamContributeBtn')) {
     }
   });
 }
+
+if ($('opentrainerStatusBtn')) {
+  $('opentrainerStatusBtn').addEventListener('click', async () => {
+    $('opentrainerPortalStatus').textContent = 'Querying OpenTrainer central coordinator (/v1/hivemind/opentrainer/status)...';
+    try {
+      const res = await fetch('/v1/hivemind/opentrainer/status');
+      const data = await res.json();
+      if (!res.ok) {
+        $('opentrainerPortalStatus').textContent = 'Error querying OpenTrainer status.';
+        return;
+      }
+      const fl = data.live_opentrainer_fleet || {};
+      const cat = data.portal_category || {};
+      const rounds = data.recent_training_rounds || [];
+      const offer = data.active_task_offer || {};
+      $('opentrainerPortalStatus').textContent =
+        'OPENTRAINER ONLINE (' + (data.version || '1.0.0-s36') + ') • Topic: ' + (offer.topic || 'hivemind.amcp.federation.v1') +
+        ' • Registered Trainers: ' + (cat.registered_trainer_accounts_count || 0) +
+        ' • Live Nodes: ' + (fl.active_trainer_nodes || 0) +
+        ' • Accepted Rounds: ' + rounds.length +
+        ' • Firewall Traversal: Outbound HTTPS Relay (0 inbound ports)';
+    } catch (err) {
+      $('opentrainerPortalStatus').textContent = 'Network error querying OpenTrainer coordinator.';
+    }
+  });
+}
+
+if ($('opentrainerHeartbeatBtn')) {
+  $('opentrainerHeartbeatBtn').addEventListener('click', async () => {
+    const apiKey = ($('apiKey') && $('apiKey').value.trim()) || localStorage.getItem('hivemind_api_key') || '';
+    if (!apiKey) {
+      $('opentrainerPortalStatus').textContent = 'Paste your hm-... trainer/prosumer API key above (or register with role="trainer" at /signup) first.';
+      return;
+    }
+    const hostLabel = ($('otHostInput') && $('otHostInput').value.trim()) || 'XAVGAMSRV-RTX2070';
+    const gpuName = ($('otGpuInput') && $('otGpuInput').value.trim()) || 'NVIDIA GeForce RTX 2070';
+    const netMode = ($('otNetModeSelect') && $('otNetModeSelect').value) || 'outbound-https-relay';
+    $('opentrainerPortalStatus').textContent = 'Sending outbound HTTPS heartbeat to OpenTrainer (' + netMode + ')...';
+    try {
+      const res = await fetch('/v1/hivemind/opentrainer/heartbeat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + apiKey,
+        },
+        body: JSON.stringify({
+          host_label: hostLabel,
+          gpu_name: gpuName,
+          vram_total_mib: 8192,
+          vram_free_mib: 6400,
+          network_mode: netMode,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        $('opentrainerPortalStatus').textContent = 'Error: ' + ((data.error && data.error.message) || 'Heartbeat rejected');
+        return;
+      }
+      const offer = data.active_task_offer || {};
+      $('opentrainerPortalStatus').textContent =
+        'OPENTRAINER NODE LIVE • Host: ' + (data.node && data.node.host_label) +
+        ' • GPU: ' + (data.node && data.node.gpu_name) +
+        ' • Mode: ' + (data.node && data.node.network_mode) +
+        ' • Aglet Phase: ' + data.aglet_lifecycle_phase +
+        ' • Active Offer Round: ' + (offer.round_id || 1) + ' (' + (offer.base_model || '') + ')';
+    } catch (err) {
+      $('opentrainerPortalStatus').textContent = 'Network error sending OpenTrainer heartbeat.';
+    }
+  });
+}
 """
 
 
@@ -966,6 +1036,7 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
         <a href="#tiers" class="nav-link">Model Tiers</a>
         <a href="#integrations" class="nav-link">Editor Config</a>
         <a href="#steam-free-game" class="nav-link">&#x1F3AE; Free Steam Game</a>
+        <a href="#opentrainer" class="nav-link" style="color:var(--cyan);font-weight:700;">&#x1F525; Trainer (OpenTrainer)</a>
         <a href="#producers" class="nav-link">Share GPU</a>
         <a href="/signup" class="nav-link">&#x1F511; Sign In</a>
       </nav>
@@ -1306,6 +1377,53 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
       </div>
       <div id="steamPortalStatus" style="font-size:0.78rem;font-family:var(--font-mono);color:var(--green);background:#040711;border:1px solid var(--border);border-radius:0.375rem;padding:0.65rem;">
         Free Steam Game Registry: <code>AppID 3133700</code> (USS Hivemind: Exoplanet Hunter &mdash; Free BOINC Edition) &bull; Status: <strong>REGISTERED &amp; LIVE ON PORTAL</strong> &bull; Click &lsquo;Register &amp; Login Free Steam Game Account&rsquo; to authenticate.
+      </div>
+    </section>
+
+    <!-- OpenTrainer: Intense GPU Training Category (BOINC + AMCP + Kafka + Signed Aglets, Firewall-Friendly) -->
+    <section id="opentrainer" class="card" style="border-color:rgba(0,238,252,0.45);margin-bottom:3rem;">
+      <div class="card-header">
+        <div class="card-title" style="color:var(--cyan);">&#x1F525; Portal Category: Trainer (<code>role=&quot;trainer&quot;</code>) &amp; Central Component <code>OpenTrainer</code></div>
+        <span class="pill" style="border-color:var(--cyan);color:var(--cyan);">BOINC + AMCP + Kafka + Aglets &bull; Outbound HTTPS Relay (0 Inbound Ports)</span>
+      </div>
+      <p style="color:var(--text-dim);font-size:0.9rem;margin-bottom:1rem;line-height:1.5;">
+        The <strong>Trainer (<code>trainer</code>)</strong> portal category is dedicated to participants who provide a GPU for <strong>intense distributed training</strong> across our
+        <strong>RTX 2070 (<code>XAVGAMSRV</code>, 8 GB, Windows 11) &harr; GCP Tesla T4 (<code>socreateai-agora-hermes-node1</code>, 16 GB, Linux)</strong> federation cell (PRs <code>#366</code>, <code>#399</code>, <code>#401</code>, <code>#407</code>, <code>#408</code>, <code>#409</code>, <code>#410</code>):
+        Stage-2 Tiny Granite-MoE NF4 QLoRA (<code>loss 4.1721 &rarr; 1.7772</code>, 70-round Kafka churn soak), DiLoCo 2D-DCT outer steps, Signed Task Agents over AMCP &amp; Kafka (<code>hivemind.amcp.federation.v1</code>, IBM Aglet life cycle <code>dispatch &rarr; arrival &rarr; clone &rarr; result &rarr; retract</code> without mobile code), and BOINC nocturnal workunits.
+      </p>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:0.85rem;">
+        <div style="flex:1.2;min-width:190px;">
+          <label for="otHostInput">Trainer Host Label</label>
+          <input id="otHostInput" type="text" value="XAVGAMSRV-RTX2070" style="margin-bottom:0;" />
+        </div>
+        <div style="flex:1.3;min-width:200px;">
+          <label for="otGpuInput">Trainer GPU Hardware</label>
+          <input id="otGpuInput" type="text" value="NVIDIA GeForce RTX 2070 (8 GB VRAM)" style="margin-bottom:0;" />
+        </div>
+        <div style="flex:1.4;min-width:220px;">
+          <label for="otNetModeSelect">Firewall-Friendly Network Mode</label>
+          <select id="otNetModeSelect" style="margin-bottom:0;">
+            <option value="outbound-https-relay">Tier B: outbound-https-relay (TCP/443 Outbound Only, 0 Inbound Ports)</option>
+            <option value="amcp-kafka-aglet">Tier A: amcp-kafka-aglet (Signed Aglets on hivemind.amcp.federation.v1)</option>
+            <option value="wireguard-t4-hub">Tier A: wireguard-t4-hub (UDP/51820 to T4 Hub 10.77.0.1)</option>
+            <option value="ssh-loopback-tunnel">Tier A: ssh-loopback-tunnel (127.0.0.1:18766 -> 127.0.0.1:8765)</option>
+            <option value="boinc-night-workunit">Tier C: boinc-night-workunit (Async Night Workunits TCP/443)</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.85rem;">
+        <button id="opentrainerStatusBtn" type="button" class="btn btn-primary">&#x1F50D; Inspect Live OpenTrainer Coordinator</button>
+        <button id="opentrainerHeartbeatBtn" type="button" class="btn btn-amber">&#x1F525; Register / Heartbeat Trainer GPU (Outbound HTTPS)</button>
+        <a href="/signup" class="btn btn-outline">&#x1F41D; Register as Trainer (/signup)</a>
+        <a href="/join#opentrainer" class="btn btn-outline">&#x1F4D6; OpenTrainer &amp; Aglet Guide (/join#opentrainer)</a>
+      </div>
+      <div class="code-box" style="margin-bottom:0.65rem;">
+# Connect any firewalled GPU (Windows 10/11, Linux, macOS) to OpenTrainer over outbound HTTPS (0 inbound ports):
+export HIVEMIND_API_KEY=hm-YOUR_TRAINER_KEY
+python scripts/hivemind_opentrainer_agent.py --gateway https://hivemind-openrouter-1003063861791.us-central1.run.app --network-mode outbound-https-relay --check-firewall --submit-delta --once
+      </div>
+      <div id="opentrainerPortalStatus" style="font-size:0.78rem;font-family:var(--font-mono);color:var(--cyan);background:#040711;border:1px solid var(--border);border-radius:0.375rem;padding:0.65rem;">
+        OpenTrainer Central Component: <code>/v1/hivemind/opentrainer/status</code> &bull; Topic: <code>hivemind.amcp.federation.v1</code> &bull; Click &lsquo;Inspect Live OpenTrainer Coordinator&rsquo; or run <code>scripts/hivemind_opentrainer_agent.py</code>.
       </div>
     </section>
 

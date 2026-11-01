@@ -32,6 +32,7 @@ ROLE_KINDS: Mapping[str, frozenset[str]] = {
     "consumer": frozenset({HUMAN, AGENT}),  # its own agent (an IDE assistant) acts under its key
     "producer": frozenset({HUMAN, PRODUCER, BEE}),
     "prosumer": ALL_KINDS,  # uses models and serves them: all four hats
+    "trainer": ALL_KINDS,  # provides intense GPU training (OpenTrainer: BOINC, AMCP, Kafka & Aglets)
     "admin": ALL_KINDS,
 }
 

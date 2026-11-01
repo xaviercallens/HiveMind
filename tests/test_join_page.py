@@ -213,6 +213,7 @@ def test_every_script_and_flag_the_page_tells_people_to_use_exists() -> None:
     scripts = set(re.findall(r"scripts/([a-z_]+\.py)", commands))
     assert scripts == {
         "hivemind_boinc_idle_worker.py",
+        "hivemind_opentrainer_agent.py",
         "hivemind_producer_agent.py",
         "hivemind_producer_autostart.py",
         "hivemind_producer_shield.py",
@@ -361,7 +362,7 @@ def test_the_registration_example_is_a_request_the_real_endpoint_accepts() -> No
     assert body is not None
     request = RegisterRequest.model_validate_json(body.group(1))  # extra fields are forbidden by the model, so a typo would fail here
     assert request.role == "consumer" and request.kind is None and request.test is False
-    for role in ("producer", "prosumer"):  # the roles the producer step names: both must be roles the endpoint accepts
+    for role in ("producer", "prosumer", "trainer"):  # the roles the producer & OpenTrainer steps name: all must be roles the endpoint accepts
         RegisterRequest.model_validate({"handle": "x", "role": role})
         assert f'"{role}"' in html.unescape(page("en"))
 

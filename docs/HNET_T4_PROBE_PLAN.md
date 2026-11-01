@@ -25,9 +25,12 @@ prompts, on a T4? This is a measurement of the released checkpoints, not a train
 
 ## Scheduling rule
 
-The T4 VM serves live traffic and is governed by the BOINC core-node session. This probe runs only when that session accepts it
-and only while serving is idle. It uses its own directory and virtualenv, never edits the governor, the HOLD file,
-`/opt/hivemind/t4` or any `hivemind-*` unit, and stops at the first sign of router load.
+Owner decision relayed by the T4 operator session (2026-11-01, 20:07Z, issue #448): **the probe runs in night 3, Monday
+2 Nov 22:00 to Tuesday 3 Nov 07:00 Paris**, not before. The operator reviews this plan before then. The VRAM floor is the
+night-003 floor, **4,300 MiB free**, unchanged; in the daytime the T4 has had only about 4,609 MiB free (two llama-server
+processes hold about 10.3 GB), which is why a daytime slot is impractical. The probe uses its own directory and
+virtualenv, never edits the governor, the HOLD file, `/opt/hivemind/t4` or any `hivemind-*` unit, and stops at the first
+sign of router load or when free VRAM would drop below the floor.
 
 ## Measurements (each reported as measured or NOT_RUN)
 

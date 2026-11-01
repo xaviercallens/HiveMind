@@ -1,0 +1,36 @@
+{
+ "experiment": "TM1: does verifier-pruned branching across two local expert pools raise the verified pass rate per call over one call and over best-of-3 sampling?",
+ "registered_utc": "2026-11-01T20:35:00Z",
+ "status": "preregistered; NOT_RUN; the report will record this file's sha256",
+ "motivation": "The orchestration part of the H-Net + tree-of-thought + multi-MoE proposal (docs/HNET_TOT_MULTIMOE_ASSESSMENT.md) is the only part runnable on HiveMind today; it must be measured before any routing protocol is designed around it.",
+ "tasks": "40 MBPP problems sampled with seed 0 from the local Hugging Face cache (google-research-datasets/mbpp, test split); hidden tests = the dataset's test_list",
+ "models": {
+  "planner": "qwen2.5-coder:7b via local Ollama (no DeepSeek-R1 model is present on this host; stated in the report)",
+  "executor_pool_1": "qwen2.5-coder:3b via local Ollama",
+  "executor_pool_2": "qwen2.5-coder:1.5b via local Ollama",
+  "temperature": "0.0 for arm A and the planner; 0.8 for sampled branches"
+ },
+ "arms": {
+  "A": "one call to executor_pool_1 with the problem statement",
+  "B": "planner emits a plan with 3 distinct approaches; branch 1 and 3 go to pool_1, branch 2 to pool_2; the hidden tests select the first passing branch",
+  "C": "3 samples from executor_pool_1 at temperature 0.8, same verifier, no planner (best-of-3 without planning)"
+ },
+ "metrics": [
+  "pass_rate: fraction of the 40 tasks with a branch passing all hidden tests",
+  "calls_per_solved: model calls divided by solved tasks",
+  "tokens_per_task: generated tokens per task (sum over branches and planner)"
+ ],
+ "hypotheses": {
+  "H1": "pass_rate(B) - pass_rate(A) >= 0.10",
+  "H2": "pass_rate(B) - pass_rate(C) >= 0.05; otherwise the planner adds nothing over sampling",
+  "H3": "tokens_per_task(B) <= 3 * tokens_per_task(A)"
+ },
+ "controls": {
+  "positive": "oracle arm (stop at the first passing branch, perfect verifier) scores >= arm A on every seed; otherwise the harness is broken and the run is invalid",
+  "negative_1": "verifier replaced by accept-first-branch: B's pass rate, re-judged by the real hidden tests, must fall to within 0.05 of the single-branch rate; if it stays high the branches are not independent or the verifier was not doing the work",
+  "negative_2": "hidden tests swapped with another problem's tests (seeded permutation): pass rate must be <= 0.05, or the verifier is tautological"
+ },
+ "decision_rule": "H1, H2, H3 each reported as supported or not; the controls decide validity, not success. The meta-MoE routing protocol is designed only if the run is valid and H1 and H2 hold.",
+ "not_claimed": "nothing about latent chunks, H-Net, DeepSeek-R1 reasoning, bytes per chunk, or network traffic; nothing about tasks other than MBPP-style functions",
+ "known_blocker": "generated code must run to be verified; the bubblewrap sandbox is BLOCKED on this host (AppArmor unprivileged user namespaces). Run on a sandbox-capable host, or only with the owner's explicit acceptance of python -I in a temporary directory with a timeout and resource limits."
+}

@@ -50,37 +50,6 @@ def active_funded_consumer_bids(self: RouterStore, expected_tokens: int, *args: 
 
 RouterStore.funded_consumer_bids = active_funded_consumer_bids
 app: FastAPI = runpy.run_path(os.environ.get("HIVEMIND_ORIG_SERVER", "/app/server_orig.py"), run_name="hivemind_router_server")["app"]
-app.router.routes = [r for r in app.router.routes if getattr(r, "path", "") not in ("/join", "/rejoindre")]
-
-
-@app.api_route("/join", methods=["GET", "HEAD"], response_class=HTMLResponse)
-@app.api_route("/rejoindre", methods=["GET", "HEAD"], response_class=HTMLResponse)
-def join_page_overlay(request: Request) -> HTMLResponse:
-    french_path = request.url.path == "/rejoindre"
-    lang = pick_language(request.query_params.get("lang"), request.headers.get("accept-language"), default="fr")
-    nonce = secrets.token_urlsafe(18)
-    api_url = os.environ.get("HIVEMIND_PUBLIC_URL", DEFAULT_API_URL).rstrip("/")
-    google_enabled = bool(os.environ.get("HIVEMIND_GOOGLE_CLIENT_ID", "").strip())
-    handle_reg = os.environ.get("HIVEMIND_OPEN_REGISTRATION", "1").strip().lower() not in ("0", "false", "no")
-    return HTMLResponse(
-        render_join_page(
-            lang,
-            nonce,
-            tiers=catalog_payload()["tiers"],
-            api_url=api_url,
-            path="/rejoindre" if french_path else "/join",
-            google_enabled=google_enabled,
-            handle_registration=handle_reg,
-        ),
-        headers={
-            "Content-Security-Policy": join_content_security_policy(nonce),
-            "Cache-Control": "no-store",
-            "Vary": "Accept-Language",
-            "Content-Language": lang,
-            "X-Content-Type-Options": "nosniff",
-            "Referrer-Policy": "strict-origin-when-cross-origin",
-        },
-    )
 
 
 @app.api_route("/gallery/{filename}", methods=["GET", "HEAD"])

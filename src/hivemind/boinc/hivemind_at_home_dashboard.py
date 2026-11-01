@@ -1802,7 +1802,7 @@ MULTILINGUAL_I18N_DICTIONARY: Dict[str, Dict[str, str]] = {
         "step3_desc": "Chaque abeille entraîne un adaptateur QLoRA compressé 30,89x via le réseau E8 de Gosset et le scelle dans une alvéole hexagonale de La Ruche sur Google Cloud Storage.",
         "step4_tag": "4. GAGNEZ & UTILISEZ VOS POINTS",
         "step4_title": "Mobilisez La Ruche pour Vos Propres Besoins",
-        "step4_desc": "Chaque unité validée rapporte +250 Points de Réflexion HiveMind. Utilisez vos points pour le codage Python (GWAYA), l'astrophysique, la génération d'images ou téléchargez les modèles MoE !",
+        "step4_desc": "Les points ne sont crédités qu'après vérification par le serveur. Utilisez vos points pour le codage Python (GWAYA), l'astrophysique, la génération d'images ou téléchargez les modèles MoE !",
         "video_section_title": "🎬 Cinéma Interactif Cyber-Abeille & Exoplanètes (Vidéo HTML5 30 FPS + Visuels SVG)",
         "video_ch1": "Ch.1 : GPU Inactif & Préemption Jeu <1,5s",
         "video_ch2": "Ch.2 : Nectar E8 → Alvéoles de La Ruche",
@@ -1870,7 +1870,7 @@ MULTILINGUAL_I18N_DICTIONARY: Dict[str, Dict[str, str]] = {
         "step3_desc": "每只工蜂训练轻量级 QLoRA 适配器，经 8 维 Gosset E8 格量化压缩 30.89 倍后存入 SocrateAI GCP 云存储的六边形蜂房。",
         "step4_tag": "4. 赢取并消费反思积分",
         "step4_title": "将蜂巢智慧用于您自己的项目",
-        "step4_desc": "每个验证任务奖励 +250 反思积分。随时使用积分调用 Python 编程 (GWAYA)、系外行星检测、图像生成或下载开源 MoE 模型！",
+        "step4_desc": "积分仅在服务器验证后记入。随时使用积分调用 Python 编程 (GWAYA)、系外行星检测、图像生成或下载开源 MoE 模型！",
         "video_section_title": "🎬 赛博蜜蜂与系外行星互动影院 (实时 30 FPS HTML5 视频 + SVG 可视化)",
         "video_ch1": "第1章：闲置 GPU 与 <1.5秒 游戏抢占",
         "video_ch2": "第2章：E8 花蜜 → La Ruche 六边形蜂巢",
@@ -1938,7 +1938,7 @@ MULTILINGUAL_I18N_DICTIONARY: Dict[str, Dict[str, str]] = {
         "step3_desc": "Cada abeja entrena un adaptador QLoRA comprimido 30.89x mediante la red E8 de Gosset y lo sella en una celda hexagonal (Alvéole) en SocrateAI GCP Cloud Storage.",
         "step4_tag": "4. GANA Y USA PUNTOS DE CÓMPUTO",
         "step4_title": "Usa la Colmena para Tus Propios Proyectos",
-        "step4_desc": "Cada unidad verificada otorga +250 Puntos de Reflexión HiveMind. ¡Canjéalos en programación Python (GWAYA), astrofísica, generación visual o descarga los modelos MoE!",
+        "step4_desc": "Los puntos solo se acreditan tras la verificación del servidor. ¡Canjéalos en programación Python (GWAYA), astrofísica, generación visual o descarga los modelos MoE!",
         "video_section_title": "🎬 Cine Interactivo Cyber-Bee y Exoplanetas (Video HTML5 30 FPS + Visuales SVG)",
         "video_ch1": "Cap.1: GPU Inactiva y Preempción <1.5s",
         "video_ch2": "Cap.2: Néctar E8 → Panal La Ruche",
@@ -2006,7 +2006,7 @@ MULTILINGUAL_I18N_DICTIONARY: Dict[str, Dict[str, str]] = {
         "step3_desc": "Jede Biene trainiert einen QLoRA-Adapter, komprimiert ihn 30,89-fach mittels 8D-Gosset-E8-Gitter und versiegelt ihn in einer Wabe (Alvéole) auf SocrateAI GCP Cloud Storage.",
         "step4_tag": "4. RECHENPUNKTE SAMMELN & EINLÖSEN",
         "step4_title": "Nutze den Bienenstock für Eigene Projekte",
-        "step4_desc": "Jede validierte Arbeitseinheit bringt +250 HiveMind-Reflexionspunkte. Löse sie für Python-Code (GWAYA), Exoplaneten-Analyse, Bildsynthese ein oder lade die MoE-Modelle herunter!",
+        "step4_desc": "Punkte werden erst nach der Serverprüfung gutgeschrieben. Löse sie für Python-Code (GWAYA), Exoplaneten-Analyse, Bildsynthese ein oder lade die MoE-Modelle herunter!",
         "video_section_title": "🎬 Interaktives Cyber-Bienen- & Exoplaneten-Kino (Live 30 FPS HTML5-Video + SVG-Grafiken)",
         "video_ch1": "Kap.1: Leerlauf-GPU & <1,5s Spiel-Schutz",
         "video_ch2": "Kap.2: E8-Nektar → La Ruche Waben",
@@ -2275,7 +2275,7 @@ def render_cyber_bee_poster_svg() -> str:
 
   <rect x="22" y="184" width="150" height="44" rx="7" fill="#0b1329" stroke="#10b981" stroke-width="1.5"/>
   <text x="97" y="203" fill="#34d399" font-family="monospace" font-size="10" font-weight="bold" text-anchor="middle">CITIZEN GPU (&lt;8GB)</text>
-  <text x="97" y="218" fill="#94a3b8" font-family="monospace" font-size="8.5" text-anchor="middle">+250 Compute Points/WU</text>
+  <text x="97" y="218" fill="#94a3b8" font-family="monospace" font-size="8.5" text-anchor="middle">Points: after server check</text>
 
   <!-- Animated Nectar Lines -->
   <line x1="172" y1="50" x2="295" y2="115" stroke="#fbbf24" stroke-width="1.8" stroke-dasharray="6,5">
@@ -3222,7 +3222,7 @@ def redeem_compute_points_for_task(
     if req.points_balance_before < cost_pts:
         raise HTTPException(
             status_code=422,
-            detail=f"Insufficient HiveMind Reflexion Points ({req.points_balance_before} < {cost_pts}). Share an idle GPU workunit to earn +250 points!",
+            detail=f"Insufficient HiveMind Reflexion Points ({req.points_balance_before} < {cost_pts}). Points are credited only after the server verifies a workunit.",
         )
 
     inf = run_la_ruche_moe_inference(
@@ -4301,7 +4301,7 @@ def render_hivemind_at_home_html(
       <section class="card col-6">
         <h2>
           <span data-i18n="s2a_title">&#x1F3AE; Screen 02A &mdash; Join the Swarm &amp; Gaming Preemption Simulator</span>
-          <span id="gpu-mode-badge" class="badge-ok">IDLE SWARM MODE (+250 PTS/WU)</span>
+          <span id="gpu-mode-badge" class="badge-ok">IDLE SWARM MODE</span>
         </h2>
         <p style="font-size:0.82rem;color:#cbd5e1;margin:0 0 10px;">
           Test how your consumer GPU behaves when you launch a video game versus when your PC is idle:
@@ -4313,7 +4313,7 @@ def render_hivemind_at_home_html(
         <div id="preemption-telemetry-box" class="alveole-detail" style="border-color:#10b981;">
           <div><strong style="color:#34d399;">STATUS: WORKER BEE FORAGING (IDLE PC)</strong> &bull; Game Process: <code>None</code></div>
           <div style="margin-top:4px;color:#e2e8f0;">Swarm VRAM Budget: <strong>1,840 MiB / 6,656 MiB Ceiling</strong> (Hard-capped below 8 GB) &bull; GPU Temp: <strong>58&deg;C</strong></div>
-          <div style="margin-top:4px;color:#fbbf24;">Earning Rate: <strong>+250 HiveMind Reflexion Points / Verified Workunit</strong></div>
+          <div style="margin-top:4px;color:#fbbf24;">Points: <strong>credited only after server-side verification</strong></div>
         </div>
 
         <h3 style="font-size:0.86rem;color:#fbbf24;margin:14px 0 6px;text-transform:uppercase;">Join HiveMind@home in 3 Commands (Linux / Windows WSL2 / macOS)</h3>
@@ -4328,11 +4328,11 @@ uv run python scripts/test_public_gcp_hivemind_client.py --url {PUBLIC_GCP_CLOUD
           <span class="pill-gold">Wallet: <strong id="studio-points-wallet">1,250</strong> Compute Points</span>
         </h2>
         <p style="font-size:0.82rem;color:#cbd5e1;margin:0 0 10px;">
-          <strong>1. Earn Points:</strong> Click <em>Mine 1 Workunit (+250 pts)</em> to lease &amp; submit a real federated QLoRA update.<br/>
+          <strong>1. Earn Points:</strong> Click <em>Submit 1 Workunit</em> to lease &amp; submit a real federated QLoRA update.<br/>
           <strong>2. Spend Points:</strong> Use your points below for <strong>Python Coding (GWAYA)</strong>, <strong>Astrophysics Planet Detection</strong>, <strong>Visual Generation</strong>, or <strong>Lean 4 Proofs</strong>!
         </p>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-          <button id="mine-points-btn" type="button" class="btn-action btn-green" data-i18n="btn_mine_wu">&#x26CF;&#xFE0F; Mine 1 Federated Workunit (+250 pts)</button>
+          <button id="mine-points-btn" type="button" class="btn-action btn-green" data-i18n="btn_mine_wu">&#x26CF;&#xFE0F; Submit 1 Federated Workunit</button>
           <button type="button" class="btn-action btn-gold redeem-service-btn" data-service="python_coding_gwaya" data-cost="50">&#x1F40D; Python Coding GWAYA (-50 pts)</button>
           <button type="button" class="btn-action btn-gold redeem-service-btn" data-service="astrophysics_exoplanet" data-cost="50">&#x1FA90; Astrophysics Exoplanet (-50 pts)</button>
           <button type="button" class="btn-action btn-gold redeem-service-btn" data-service="image_spectrogram_synthesis" data-cost="75">&#x1F3A8; Generate Cosmic/Bee Art (-75 pts)</button>
@@ -5067,7 +5067,7 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
           vidCtx.fillText('GPU-BEE-' + (b + 1), bx - 26, by + 40);
         }}
         vidCtx.fillStyle = '#34d399';
-        vidCtx.fillText('VRAM Cap: 6,656 MiB | Game Launch Preemption: 0.42s (<1.5s SLA) | +250 Compute Pts/WU', 22, H - 18);
+        vidCtx.fillText('VRAM Cap: 6,656 MiB | Game Launch Preemption: 0.42s (<1.5s SLA)', 22, H - 18);
       }} else if (chapter === 1) {{
         // Chapter 2: 8D Gosset E8 Lattice 30.89x WAN Compression
         vidCtx.fillStyle = '#a855f7';
@@ -5276,14 +5276,14 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
 
     if (simIdleBtn && simGamingBtn) {{
       simIdleBtn.addEventListener('click', function() {{
-        gpuBadge.textContent = 'IDLE SWARM MODE (+250 PTS/WU)';
+        gpuBadge.textContent = 'IDLE SWARM MODE';
         gpuBadge.style.borderColor = '#10b981';
         gpuBadge.style.color = '#34d399';
         preemptBox.style.borderColor = '#10b981';
         preemptBox.innerHTML =
           '<div><strong style="color:#34d399;">&#x1F41D; STATUS: WORKER BEE FORAGING (IDLE PC)</strong> &bull; Game Process: <code>None</code></div>' +
           '<div style="margin-top:4px;color:#e2e8f0;">Swarm VRAM Budget: <strong>1,840 MiB / 6,656 MiB Ceiling</strong> (Hard-capped below 8 GB) &bull; GPU Temp: <strong>58&deg;C</strong></div>' +
-          '<div style="margin-top:4px;color:#fbbf24;">Earning Rate: <strong>+250 HiveMind Reflexion Points / Verified Workunit</strong></div>';
+          '<div style="margin-top:4px;color:#fbbf24;">Points: <strong>credited only after server-side verification</strong></div>';
       }});
       simGamingBtn.addEventListener('click', function() {{
         gpuBadge.textContent = 'GAMING MODE (SWARM PAUSED IN 0.42s)';

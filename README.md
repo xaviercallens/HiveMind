@@ -214,6 +214,10 @@ python3 hivemind_producer_agent.py \
   --gateway https://hivemind-openrouter-1003063861791.us-central1.run.app \
   --handle your-miner-tag
 
+# Mode A2 — Auto-Start Background Service across Reboots (Linux systemd, Windows 10/11 Scheduled Task, macOS launchd):
+python3 scripts/hivemind_producer_autostart.py windows --model coder=qwen2.5-coder:7b --apply ./producer-autostart
+python3 scripts/hivemind_producer_autostart.py linux   --model coder=qwen2.5-coder:7b --apply ~/.local/share/hivemind
+
 # Mode B — Nocturnal BOINC / DiLoCo QLoRA Trainer (train specialized MoE Bees during idle/night windows):
 curl -sSLO https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/scripts/hivemind_boinc_idle_worker.py
 python3 hivemind_boinc_idle_worker.py \

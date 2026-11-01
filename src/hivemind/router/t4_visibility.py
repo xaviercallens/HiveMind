@@ -26,8 +26,8 @@ _LATEST_T4_SNAPSHOT: dict[str, Any] = {
     "node_name": "socreateai-agora-hermes-node1",
     "zone": "us-east4-b",
     "gpu_model": "NVIDIA Tesla T4 (16 GB GDDR6)",
-    "sole_active_gpu": False,
-    "secondary_induction_gpu": "NVIDIA GeForce RTX 2070 (8 GB GDDR6 Turing — Live Producer 58fd3df19d2b5ef8c10031e1389aac6a)",
+    "sole_active_gpu": True,
+    "secondary_induction_gpu": None,
     "gpu": {
         "used_mib": 4841,
         "live_with_ollama_used_mib": 11817,
@@ -48,7 +48,7 @@ _LATEST_T4_SNAPSHOT: dict[str, Any] = {
                 "mib": 4838,
             },
             {
-                "name": "hivemind-rtx2070-agent (hivemind/coder • Qwen2.5-Coder-7B-Instruct & coder-lite on RTX 2070)",
+                "name": "ollama (hivemind/coder • Qwen2.5-Coder-7B-Instruct on Tesla T4)",
                 "mib": 5462,
             },
         ],
@@ -203,6 +203,8 @@ def build_t4_visibility_payload(
     now_utc: float | None = None,
     live_models: list[str] | None = None,
     active_producers_count: int = 1,
+    distinct_physical_gpus: int | None = None,
+    secondary_gpu: str | None = None,
 ) -> dict[str, Any]:
     """Build the complete JSON visibility payload for the Web UI and /v1/hivemind/t4/status."""
     ts = now_utc if now_utc is not None else time.time()
@@ -210,15 +212,20 @@ def build_t4_visibility_payload(
     dt_paris = dt_utc.astimezone(EUROPE_TZ)
     hour_cet = dt_paris.hour
     is_eu_night = hour_cet >= NIGHT_START_HOUR_CET or hour_cet < NIGHT_END_HOUR_CET
+    physical_gpus = max(1, int(distinct_physical_gpus if distinct_physical_gpus is not None else active_producers_count))
 
     with _SNAPSHOT_LOCK:
+        evidenced_secondary = secondary_gpu if secondary_gpu else (
+            _LATEST_T4_SNAPSHOT["secondary_induction_gpu"] if physical_gpus > 1 else None
+        )
         snap = {
             "node_name": _LATEST_T4_SNAPSHOT["node_name"],
             "zone": _LATEST_T4_SNAPSHOT["zone"],
             "gpu_model": _LATEST_T4_SNAPSHOT["gpu_model"],
-            "sole_active_gpu": active_producers_count <= 1 and bool(_LATEST_T4_SNAPSHOT["sole_active_gpu"]),
+            "sole_active_gpu": physical_gpus <= 1 and bool(_LATEST_T4_SNAPSHOT["sole_active_gpu"]) and not evidenced_secondary,
             "active_producers_count": max(1, int(active_producers_count)),
-            "secondary_induction_gpu": _LATEST_T4_SNAPSHOT["secondary_induction_gpu"],
+            "distinct_physical_gpus": physical_gpus,
+            "secondary_induction_gpu": evidenced_secondary,
             "gpu": dict(_LATEST_T4_SNAPSHOT["gpu"]),
             "governor": dict(_LATEST_T4_SNAPSHOT["governor"]),
             "qlora_progress": dict(_LATEST_T4_SNAPSHOT["qlora_progress"]),
@@ -263,6 +270,20 @@ def build_t4_visibility_payload(
         "hivemind/coder-lite",
     ]
 
+    hardware_block: dict[str, Any] = {
+        "primary_gpu": snap["gpu_model"],
+        "node_host": f"{snap['node_name']} ({snap['zone']})",
+        "vram_used_mib": snap["gpu"]["used_mib"],
+        "vram_total_mib": snap["gpu"]["total_mib"],
+        "vram_free_mib": snap["gpu"]["free_mib"],
+        "vram_utilization_pct": round(100.0 * snap["gpu"]["used_mib"] / max(1, snap["gpu"]["total_mib"]), 1),
+        "temp_c": snap["gpu"]["temp_c"],
+        "power_w": snap["gpu"]["power_w"],
+        "resident_processes": snap["gpu"]["resident_processes"],
+    }
+    if snap["secondary_induction_gpu"]:
+        hardware_block["secondary_gpu"] = snap["secondary_induction_gpu"]
+
     return {
         "status": "ok",
         "operational_mode": operational_mode,
@@ -270,18 +291,8 @@ def build_t4_visibility_payload(
         "inference_availability": inference_availability,
         "sole_active_gpu": snap["sole_active_gpu"],
         "active_producers_count": snap["active_producers_count"],
-        "hardware": {
-            "primary_gpu": snap["gpu_model"],
-            "node_host": f"{snap['node_name']} ({snap['zone']})",
-            "secondary_gpu": snap["secondary_induction_gpu"],
-            "vram_used_mib": snap["gpu"]["used_mib"],
-            "vram_total_mib": snap["gpu"]["total_mib"],
-            "vram_free_mib": snap["gpu"]["free_mib"],
-            "vram_utilization_pct": round(100.0 * snap["gpu"]["used_mib"] / max(1, snap["gpu"]["total_mib"]), 1),
-            "temp_c": snap["gpu"]["temp_c"],
-            "power_w": snap["gpu"]["power_w"],
-            "resident_processes": snap["gpu"]["resident_processes"],
-        },
+        "distinct_physical_gpus": snap["distinct_physical_gpus"],
+        "hardware": hardware_block,
         "european_schedule": {
             "timezone": "Europe/Paris (CET/CEST)",
             "current_utc_iso": dt_utc.isoformat(timespec="seconds"),

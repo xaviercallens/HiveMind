@@ -13,9 +13,9 @@ Add the calendar to your agenda: [`cotraining_nights_2026-11.ics`](cotraining_ni
 ## Trainers: what you need
 
 1. A machine with an NVIDIA GPU (any recent driver; Windows or Linux), or a CPU for a smoke test. Python 3.11 with `torch`, `transformers` 5.17, `peft` 0.21, `confluent-kafka`, and `bitsandbytes` for NF4.
-2. **A slot.** Comment on issue #431 with your WireGuard **public** key, GPU model, free VRAM and operating system. Never post a private key or any key the operator sends you. You get back a learner id, a shard index, an overlay address and the commit to check out.
+2. **A slot.** Make a WireGuard key pair first (Linux or macOS: `umask 077; wg genkey | tee hivemind-wg.key | wg pubkey`; Windows: in the WireGuard app, *Add empty tunnel*, which shows the public key). Then comment on issue #431 with your WireGuard **public** key, GPU model, free VRAM and operating system. Never post a private key or any key the operator sends you. You get back a learner id, a shard index, an overlay address and the commit to check out.
 3. **The overlay.** One WireGuard peer (the T4 hub). Steps and a ready config: `docs/OVERLAY_OPEN_SOURCE_TUNNELS.md` section 2.
-4. **The signing key.** It is handed over out of band, never in an issue, a chat or a log.
+4. **Your signing keys.** You receive your own key (`lk-<your learner id>`) and the coordinator key (`coord`) out of band, never in an issue, a chat or a log. Set them as `HIVEMIND_AMCP_HMAC_KEYS=coord:<hex>,lk-<id>:<hex>` and `HIVEMIND_AMCP_HMAC_ACTIVE_KID=lk-<id>`, and add `--coordinator-key coord` to the learner command. Results signed with someone else's key are rejected.
 5. **Join.** Follow `docs/FEDERATION_V2_AMCP_AGLETS.md` section 8:
    `python scripts/e8_amcp_round.py learner --run-id night-003 --learner-id <your id> --index <your shard> --quant nf4 --device cuda --night-only`
 

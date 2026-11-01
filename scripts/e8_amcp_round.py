@@ -61,6 +61,7 @@ class Bus:
     def __init__(self, transport: Any, ring: HMACKeyring, run_id: str, ttl_s: float = 900.0) -> None:
         self.pub = AMCPPublisher(transport, ring, ttl_s=ttl_s)
         self.inbox: Deque[Any] = deque()
+        self.key_of: Dict[str, str] = {}  # event id -> id of the key that signed it (who can be held to account for it)
         self.run_id = run_id
         self.con = AMCPConsumer(transport, EnvelopeVerifier(ring), topics=["federation"], poll_timeout_s=1.0)
         for t in (fed.OFFER, fed.CLAIM, fed.RESULT, fed.ABORT):
@@ -69,6 +70,7 @@ class Bus:
     def _take(self, verified: Any) -> None:
         if verified.event.payload.get("run_id") == self.run_id:
             self.inbox.append(verified.event)
+            self.key_of[verified.event.event_id] = verified.key_id
 
     def poll(self) -> List[Any]:
         self.con.run_once()
@@ -173,6 +175,13 @@ def run_coordinator(args: argparse.Namespace, transport: Any = None, ring: Optio
             t_round = time.time()
             while book.status() == "open":
                 for ev in bus.poll():
+                    if ev.event_type in (fed.CLAIM, fed.RESULT) and args.learner_key_prefix:
+                        # Per-learner keys: a claim or result counts only if it is signed with the key issued to the learner id it names, so a participant
+                        # cannot speak for another one (it can still only sign as itself).
+                        who, kid = str(ev.payload.get("learner_id", "?")), bus.key_of.get(ev.event_id, "")
+                        if kid != f"{args.learner_key_prefix}{who}":
+                            book.rejected.append((who, f"signed with key {kid!r}, not the key issued to {who!r}"))
+                            continue
                     if ev.event_type == fed.CLAIM:
                         book.claim(ev.payload)
                     elif ev.event_type == fed.RESULT:
@@ -244,6 +253,9 @@ def run_learner(args: argparse.Namespace, transport: Any = None, ring: Optional[
     while True:
         offers = []
         for ev in bus.poll():
+            if args.coordinator_key and ev.event_type in (fed.OFFER, fed.ABORT) and bus.key_of.get(ev.event_id) != args.coordinator_key:
+                skipped["offer or abort not signed with the coordinator key"] = skipped.get("offer or abort not signed with the coordinator key", 0) + 1
+                continue
             if ev.event_type == fed.ABORT and ev.payload.get("reason") in ("run_complete", "run_failed"):
                 print(f"[learner {args.learner_id}] run ended ({ev.payload['reason']}); skipped so far: {skipped}", flush=True)
                 return 0
@@ -328,6 +340,7 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--seed", type=int, default=1)
     c.add_argument("--pace-s", type=float, default=0.0, help="minimum seconds per round (a calm cadence for long runs)")
     c.add_argument("--report-every", type=int, default=10, help="rewrite the JSON report every N rounds (it is always written at the end)")
+    c.add_argument("--learner-key-prefix", default="", help="per-learner keys: accept a claim or result only if signed with key '<prefix><learner_id>' (e.g. lk-)")
     c.add_argument("--checkpoint", default="")
     c.add_argument("--resume", action="store_true")
     c.add_argument("--out", required=True)
@@ -344,6 +357,7 @@ def build_parser() -> argparse.ArgumentParser:
     lr.add_argument("--min-free-mib", type=float, default=4300.0)
     lr.add_argument("--need-mib", type=float, default=600.0)
     lr.add_argument("--idle-exit-s", type=float, default=0.0, help="leave after this many seconds without an offer (0 = never)")
+    lr.add_argument("--coordinator-key", default="", help="accept offers and aborts only if signed with this key id (e.g. coord)")
     return ap
 
 

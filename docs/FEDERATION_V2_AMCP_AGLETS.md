@@ -49,7 +49,23 @@ Round protocol (`scripts/e8_amcp_round.py`, `src/hivemind/swarm/federation_agent
 
 ## 6. What was validated
 
-SECTION6_PLACEHOLDER
+All on the T4 unless stated. **Both learners ran on the same machine in every run below**, so this validates the protocol, the checks and the failure handling over the real bus; it is not yet a multi-machine result (the 2070 host is not on the overlay).
+
+| What | Result |
+|---|---|
+| Tests | 28 new tests (protocol library, a signed in-memory bus, end-to-end rounds); with the existing AMCP suites 179 pass. Includes: a foreign-key message is ignored, every refusal path on both sides, a CRLF checkout pins the same as an LF one |
+| Two learners over the signed bus equal the single-process baseline | CPU, in-process: final loss within 1e-4 |
+| A learner missing from the run | rounds close at the quorum; the run finishes (tested) |
+| A poisoned delta (NaN) from a participant that holds the key | rejected with its reason, never reaches the global state, the honest learner carries the round (tested) |
+| A learner whose code differs | refuses the task, sends nothing (tested) |
+| **Live, real Kafka cluster** (three Spot VM brokers plus the T4, over WireGuard), NF4 on the T4 GPU, 6 rounds | the learners' start-of-round losses equal the single-process baseline's in all six rounds (difference 0 to the printed precision); coordinator and both learners exit 0 |
+| **Live churn soak**, 70 rounds, 28.6 minutes, learner `l1` killed with SIGKILL and restarted, then `l0` the same | 62 rounds complete, 8 closed by quorum (5 with only `l0`, 3 with only `l1`: exactly the outage windows), 0 retries, 0 rejections; both restarted learners rejoined on their own; held-out loss 4.171 to **1.448** (best 1.407); rounds took p50 2.9 s, quorum rounds about 60 s (the deadline) |
+| **The night run** | started 2026-11-01 01:09 UTC as run `night-001`: 540 rounds at a 30 s cadence (about 4.5 hours), learners gated to 22:00-07:00 Paris, the governor and the VRAM floor. Results: `artifacts/experiments/e8_real/night-001.json` (rewritten every 10 rounds) and `night-001_status.txt`. **Not known when this was written** |
+
+Caveats: the coordinator evaluates on a CPU full-precision model while learners evaluate on the NF4 GPU model, so compare like with like (learner-side losses with learner-side losses); the held-out set mixes both learners' data, so when a learner is absent its half is not learned and the mixture loss can rise (the soak shows it recovering once the learner returns); the settings (`--inner-lr 1e-2 --outer-lr 0.5 --outer-mu 0.5`) were not tuned, and the harsher ones (2e-2, 0.7, 0.65) overshoot after round 2 in the baseline too.
+
+Found on the way (and fixed): two learners in one process built **different** base models from torch's global RNG, which the base-hash check refused (so the check works); the base model is now built from a platform-independent generator. The coordinator sent a list where learners expect a count. The shuffled-label control indexed the wrong dimension.
+
 
 ## 7. Not built (honest list)
 

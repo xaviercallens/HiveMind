@@ -672,6 +672,8 @@ The update is [`docs/IMPROVEMENT_PLAN_2026-11-01.md`](docs/IMPROVEMENT_PLAN_2026
 | RTX 2070 plan: point the cross-host step at the AMCP learner after #410 (#438) | _open_ | blocked on #410 |
 | Open PRs with failing tests on their last run: #369, #366, #362 | PR authors | cause per PR in the hourly report; rebase and rerun |
 
+**Round of 2026-11-01 (afternoon).** Merged: #435 (La Ruche credits no points from client-supplied numbers), #433, #439. Open from this round: #441 (Life-as-a-Bee no longer states a 1.13 s yield; the figure had no measurement behind it) and issue #440 (source or label the remaining fixed figures on that page). #369 and #366 fail only because their branches are behind `main` (their failing tests pass on `main`): rebase needed from their authors. Router and ruche chat p95 showed a 5-6 s tail across several windows today while p50 stayed under 0.3 s (issue #404; cause not yet found).
+
 ---
 
 ## 🎮 4. Opt-In Community GPU Testing Program (If Interested & Possible)

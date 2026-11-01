@@ -31,3 +31,9 @@ def test_page_script_never_adds_a_fixed_250_points(tmp_path: Path) -> None:
     html = _client(tmp_path).get("/").text
     assert not re.search(r"computePointsBalance\s*\+\s*250", html)
     assert "|| 250" not in html
+
+
+def test_boinc_status_promises_no_fixed_reward(tmp_path: Path) -> None:
+    body = _client(tmp_path).get("/boinc/status").text
+    assert not re.search(r"\+\s?250\s*HMT", body)
+    assert "no fixed amount per workunit is promised" in body

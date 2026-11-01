@@ -643,6 +643,16 @@ The full plan, with evidence, Definition of Done and the test for each finding (
 
 ---
 
+### Status update, 2026-11-01 (3-hourly review, 10:00 CET)
+
+- **Merged since the last update:** [#401](https://github.com/xaviercallens/HiveMind/pull/401) (two-host E8 test plan; its base64 decode is now strict, which also cleared the scanner rule), [#414](https://github.com/xaviercallens/HiveMind/pull/414) (launch model baseline labelled assumed), [#416](https://github.com/xaviercallens/HiveMind/pull/416) (roadmap) and [#417](https://github.com/xaviercallens/HiveMind/pull/417) (trainer portal category). Tests for #401 and #414 pass on the new `main`.
+- **Open for review:** [#418](https://github.com/xaviercallens/HiveMind/pull/418) clears two of the seven stub-audit failures; five files remain ([#415](https://github.com/xaviercallens/HiveMind/issues/415)). `auto_improvement.simulate_or_verify_execution` credits points from RNG-derived numbers and needs a real fix, not a rename.
+- **Still blocked:** [#410](https://github.com/xaviercallens/HiveMind/pull/410) (same base64 pattern as #401 before its fix, plus the stub audit; [#412](https://github.com/xaviercallens/HiveMind/issues/412)), [#362](https://github.com/xaviercallens/HiveMind/pull/362) and [#344](https://github.com/xaviercallens/HiveMind/pull/344) (stub audit), [#369](https://github.com/xaviercallens/HiveMind/pull/369) and [#366](https://github.com/xaviercallens/HiveMind/pull/366) (CI or conflicts).
+- **Measured since 06:00:** the T4 trained again and the QLoRA counter reached 154 (152 at 06:00); the probes passed 15 of 15 in three daytime runs; router chat p95 was 0.6 s to 6.2 s with probes included, with one 16.9 s request through ruche that was not a probe. Still missing: a yield recorded while a BOINC task runs (all logged yields were 54 to 87 ms with no task on the GPU).
+- **Open items for claim:** [#415](https://github.com/xaviercallens/HiveMind/issues/415), [#412](https://github.com/xaviercallens/HiveMind/issues/412), [#405](https://github.com/xaviercallens/HiveMind/issues/405), [#404](https://github.com/xaviercallens/HiveMind/issues/404), [#403](https://github.com/xaviercallens/HiveMind/issues/403) and the security issues [#378](https://github.com/xaviercallens/HiveMind/issues/378) to [#382](https://github.com/xaviercallens/HiveMind/issues/382).
+
+---
+
 ## 🎮 4. Opt-In Community GPU Testing Program (If Interested & Possible)
 
 If you have a consumer GPU (**NVIDIA GeForce RTX 20/30/40/50-series 6 GB–24 GB**, **AMD Radeon RX 6000/7000 via ROCm**, or **Apple Silicon M1/M2/M3/M4 via MPS**) and are interested in testing how your hardware performs on the HiveMind Sparse MoE + `EF21-DiLoCo` + `ZK-OPoI v4` stack, we provide a safe, opt-in, `< 1.5 GB` peak-VRAM benchmark suite:

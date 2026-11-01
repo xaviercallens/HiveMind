@@ -4229,4 +4229,9 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
             status_code=307,
         )
 
+    from hivemind.boinc.rtx_boinc_deployer import RTXBoincServer, build_rtx_boinc_fastapi_router
+
+    _cockpit_rtx_boinc_server = RTXBoincServer(router_store=_portal_store)
+    app.include_router(build_rtx_boinc_fastapi_router(_cockpit_rtx_boinc_server))
+
     return app

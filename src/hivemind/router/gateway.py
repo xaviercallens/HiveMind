@@ -3598,4 +3598,58 @@ def create_router_app(
             },
         }
 
+    from hivemind.boinc.rtx_boinc_deployer import (
+        RTXBoincServer,
+        RTXWorkunitLeaseRequest,
+        RTXWorkunitSubmitRequest,
+    )
+
+    _rtx_boinc_server = RTXBoincServer(router_store=store)
+
+    @app.get("/create_account.php")
+    async def router_boinc_create_account(request: Request) -> Any:
+        from fastapi.responses import Response
+
+        q = dict(request.query_params)
+        return Response(
+            content=_rtx_boinc_server.create_or_lookup_account_xml(q, create_if_missing=True),
+            media_type="text/xml",
+        )
+
+    @app.get("/lookup_account.php")
+    async def router_boinc_lookup_account(request: Request) -> Any:
+        from fastapi.responses import Response
+
+        q = dict(request.query_params)
+        return Response(
+            content=_rtx_boinc_server.create_or_lookup_account_xml(q, create_if_missing=False),
+            media_type="text/xml",
+        )
+
+    @app.post("/boinc_cgi/cgi")
+    @app.post("/cgi")
+    async def router_boinc_scheduler_cgi(request: Request) -> Any:
+        from fastapi.responses import Response
+
+        body = (await request.body()).decode("utf-8", errors="replace")
+        return Response(content=_rtx_boinc_server.handle_scheduler_rpc_xml(body), media_type="text/xml")
+
+    @app.get("/api/v1/boinc/rtx/status")
+    @app.get("/v1/hivemind/boinc/rtx/status")
+    async def router_boinc_rtx_status() -> dict[str, Any]:
+        return _rtx_boinc_server.status_summary()
+
+    @app.post("/api/v1/boinc/rtx/lease")
+    @app.post("/v1/hivemind/boinc/rtx/lease")
+    async def router_boinc_rtx_lease(payload: RTXWorkunitLeaseRequest) -> dict[str, Any]:
+        return _rtx_boinc_server.lease_workunit(payload)
+
+    @app.post("/api/v1/boinc/rtx/submit")
+    @app.post("/v1/hivemind/boinc/rtx/submit")
+    async def router_boinc_rtx_submit(payload: RTXWorkunitSubmitRequest) -> dict[str, Any]:
+        try:
+            return _rtx_boinc_server.submit_workunit(payload)
+        except ValueError as exc:
+            raise RouterError(404, str(exc), "not_found_error", "workunit_not_found") from exc
+
     return app

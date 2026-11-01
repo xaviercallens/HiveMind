@@ -25,6 +25,7 @@ import hashlib
 import io
 import json
 import math
+import os
 import platform
 import subprocess
 import sys
@@ -315,8 +316,9 @@ def run_syncer(args: argparse.Namespace) -> int:
     st = SyncerState(args.learners, args.rounds, args.seed, args.outer_lr, args.outer_mu)
 
     class H(BaseHTTPRequestHandler):
-        def log_message(self, *a: Any) -> None:  # noqa: ANN401
-            pass
+        def log_message(self, fmt: str, *args: Any) -> None:  # noqa: ANN401
+            if os.environ.get("HIVEMIND_E8_HTTP_LOG"):  # one line per request is noisy over a long run; opt in when debugging
+                super().log_message(fmt, *args)
 
         def _json(self, obj: Any, code: int = 200) -> None:
             body = json.dumps(obj).encode()

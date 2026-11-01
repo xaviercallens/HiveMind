@@ -688,6 +688,17 @@ The full plan, with evidence, Definition of Done and the test for each finding (
 
 ---
 
+### Status update, 2026-11-01 (3-hourly review, 06:00 CET)
+
+- **Merged since the last update:** [#411](https://github.com/xaviercallens/HiveMind/pull/411) (chat latency by client class and response size in the monitor) and [#413](https://github.com/xaviercallens/HiveMind/pull/413) (roadmap status). Their tests pass on the new `main`.
+- **Open for review:** [#414](https://github.com/xaviercallens/HiveMind/pull/414) labels the launch model's hard-coded 59-account baseline as an assumed snapshot, not live telemetry (first part of [#403](https://github.com/xaviercallens/HiveMind/issues/403); the page copy and the JavaScript fallback remain).
+- **Stub audit:** `scripts/gwaya_stub_audit.py` fails 7 of 324 files on `main` and is the reason `gwaya_audit` refuses [#410](https://github.com/xaviercallens/HiveMind/pull/410), [#362](https://github.com/xaviercallens/HiveMind/pull/362) and [#344](https://github.com/xaviercallens/HiveMind/pull/344). The list and the per-file fix are in [#415](https://github.com/xaviercallens/HiveMind/issues/415).
+- **Scanner:** SEC-02 still blocks [#401](https://github.com/xaviercallens/HiveMind/pull/401) and #410 (decision in [#412](https://github.com/xaviercallens/HiveMind/issues/412)).
+- **Overnight measurements:** the T4 trained in four overnight windows and the QLoRA counter reached 152 (it was 147 at midnight); no yield was recorded during a BOINC task, so the yield-during-training measurement is still missing. 58 real accounts; no registrations overnight; router chat p95 settled at 10 to 12 s over 6 chats per half hour.
+- **Open items for claim:** [#415](https://github.com/xaviercallens/HiveMind/issues/415), [#412](https://github.com/xaviercallens/HiveMind/issues/412), [#405](https://github.com/xaviercallens/HiveMind/issues/405), [#404](https://github.com/xaviercallens/HiveMind/issues/404) (router logging of the model is the remaining part), [#403](https://github.com/xaviercallens/HiveMind/issues/403), and the security issues [#378](https://github.com/xaviercallens/HiveMind/issues/378) to [#382](https://github.com/xaviercallens/HiveMind/issues/382).
+
+---
+
 ## 🎮 4. Opt-In Community GPU Testing Program (If Interested & Possible)
 
 If you have a consumer GPU (**NVIDIA GeForce RTX 20/30/40/50-series 6 GB–24 GB**, **AMD Radeon RX 6000/7000 via ROCm**, or **Apple Silicon M1/M2/M3/M4 via MPS**) and are interested in testing how your hardware performs on the HiveMind Sparse MoE + `EF21-DiLoCo` + `ZK-OPoI v4` stack, we provide a safe, opt-in, `< 1.5 GB` peak-VRAM benchmark suite:

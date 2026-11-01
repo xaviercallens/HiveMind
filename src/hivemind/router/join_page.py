@@ -144,12 +144,12 @@ def _producer_account(flags: Flags) -> list[Pair]:
         return [_CLOSED]
     items: list[Pair] = []
     if flags.handles:
-        items.append(("Create a producer account the same way, with `\"role\":\"producer\"` (or `\"prosumer\"` if you also want to use models), and keep the key.",
-                      "Créez un compte producteur de la même façon, avec `\"role\":\"producer\"` (ou `\"prosumer\"` si vous voulez aussi utiliser les modèles), "
+        items.append(("Create a producer account the same way, with `\"role\":\"producer\"` (or `\"prosumer\"` if you also want to use models, or `\"trainer\"` for intense GPU training via OpenTrainer), and keep the key.",
+                      "Créez un compte producteur de la même façon, avec `\"role\":\"producer\"` (ou `\"prosumer\"` si vous voulez aussi utiliser les modèles, ou `\"trainer\"` pour l'entraînement GPU intensif via OpenTrainer), "
                       "et gardez la clé."))
     if flags.google:
-        items.append(("On the [sign-up page](/signup) with Google, choose “Share my GPU” or “Both”.",
-                      "Sur la [page d'inscription](/signup) avec Google, choisissez « Share my GPU » ou « Both »."))
+        items.append(("On the [sign-up page](/signup) with Google, choose “Share my GPU”, “Both”, or “Trainer (OpenTrainer)”.",
+                      "Sur la [page d'inscription](/signup) avec Google, choisissez « Share my GPU », « Both » ou « Trainer (OpenTrainer) »."))
     return items
 
 
@@ -286,6 +286,24 @@ SECTIONS: Sequence[tuple[str, Pair, Sequence[tuple[str, Any]]]] = (
                "Non testé sous Windows. Un jeu que vous ne nommez pas, joué à la manette seulement, n'est pas détecté : nommez vos jeux.")),
         ("note", ("Night training for end-users and HiveMind nodes (22:00–07:00 Paris time): End-users (volunteers, developers and gamers) leave their PC or laptop running overnight to fold exoplanet transits and compute rank-4 QLoRA inner-loop updates, earning 250 HMT and 45 Cobblestones per workunit to spend the next day on all models. Dedicated HiveMind nodes (GPU producers, HiveMiners and the owner fleet) switch from daytime OpenRouter inference (07:00–22:00) to nocturnal DiLoCo outer-step aggregation, Multi-Krum verification and SVD teacher-to-student distillation (live node telemetry at [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).",
                   "Entraînement nocturne pour les utilisateurs finaux et les nœuds HiveMind (22 h – 7 h, heure de Paris) : Les utilisateurs finaux (bénévoles, développeurs et joueurs) laissent leur PC ou portable calculer la nuit des transits d'exoplanètes et des mises à jour QLoRA de rang 4, gagnant 250 HMT et 45 Cobblestones par unité pour interroger tous les modèles le lendemain. Les nœuds dédiés HiveMind (producteurs GPU, HiveMiners et flotte principale) passent de l'inférence OpenRouter diurne (7 h – 22 h) à l'agrégation nocturne DiLoCo, la vérification Multi-Krum et la distillation SVD enseignant-étudiant (télémétrie des nœuds en direct sur [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).")),
+    )),
+    ("opentrainer", ("3b. OpenTrainer — Intense GPU Co-Training (BOINC + AMCP + Kafka + Aglets, Firewall-Friendly)", "3b. OpenTrainer — Co-entraînement GPU intensif (BOINC + AMCP + Kafka + Aglets, compatible pare-feu)"), (
+        ("p", ("Registering with the `\"trainer\"` role on [/signup](/signup) connects your GPU to `OpenTrainer` ([/v1/hivemind/opentrainer/status](/v1/hivemind/opentrainer/status)), the central coordinator integrating BOINC, AMCP v1.5, Kafka (`hivemind.amcp.federation.v1`), and Signed Task Agents (IBM Aglet life cycle without mobile code) built between the RTX 2070 (`XAVGAMSRV`, 8 GB, Windows 11) and the GCP Tesla T4 (`socreateai-agora-hermes-node1`, 16 GB, Linux) across PRs `#366`, `#399`, `#401`, `#407`, `#408`, `#409`, and `#410` (see the [OpenTrainer architecture guide]({REPO}/blob/main/docs/OPENTRAINER_BOINC_AMCP_KAFKA_ARCHITECTURE.md)).",
+               "L'inscription avec le rôle `\"trainer\"` sur [/signup](/signup) connecte votre GPU à `OpenTrainer` ([/v1/hivemind/opentrainer/status](/v1/hivemind/opentrainer/status)), le composant central intégrant BOINC, AMCP v1.5, Kafka (`hivemind.amcp.federation.v1`) et les agents de tâche signés (cycle de vie IBM Aglet sans code mobile) construits entre la RTX 2070 (`XAVGAMSRV`, 8 Go, Windows 11) et la Tesla T4 GCP (`socreateai-agora-hermes-node1`, 16 Go, Linux) dans les PR `#366`, `#399`, `#401`, `#407`, `#408`, `#409` et `#410` (voir le [guide d'architecture OpenTrainer]({REPO}/blob/main/docs/OPENTRAINER_BOINC_AMCP_KAFKA_ARCHITECTURE.md)).")),
+        ("ul", [
+            ("Tier B Outbound HTTPS Relay (`outbound-https-relay`): Your trainer GPU initiates outbound-only HTTPS (`TCP/443`) calls to `/v1/hivemind/opentrainer/heartbeat` and `/v1/hivemind/opentrainer/submit-delta` — zero inbound firewall ports, zero `0.0.0.0` listeners, works behind residential NAT, CGNAT, and Windows Firewall",
+             "Relais HTTPS sortant Tier B (`outbound-https-relay`) : Votre GPU d'entraînement émet uniquement des requêtes HTTPS sortantes (`TCP/443`) vers `/v1/hivemind/opentrainer/heartbeat` et `/v1/hivemind/opentrainer/submit-delta` — zéro port entrant, zéro écoute `0.0.0.0`, fonctionne derrière un NAT résidentiel, CGNAT et le pare-feu Windows"),
+            ("Tier A Signed Task Agents over AMCP & Kafka (`amcp-kafka-aglet` / `wireguard-t4-hub` / `ssh-loopback-tunnel`): Implements IBM's Aglet life cycle (`dispatch` `task_offer` -> `arrival` `check_offer` -> `clone` `task_claim` -> `result` `task_result` -> `retract` `task_abort`) without mobile code (`weights_only=True`, CRLF-normalized `code_pin`) for Stage-2 Tiny Granite-MoE NF4 QLoRA and DiLoCo 2D-DCT outer steps",
+             "Agents de tâche signés Tier A sur AMCP et Kafka (`amcp-kafka-aglet` / `wireguard-t4-hub` / `ssh-loopback-tunnel`) : Implémente le cycle de vie IBM Aglet (`dispatch` `task_offer` -> `arrival` `check_offer` -> `clone` `task_claim` -> `result` `task_result` -> `retract` `task_abort`) sans code mobile (`weights_only=True`, `code_pin` normalisé CRLF) pour le QLoRA NF4 Tiny Granite-MoE Stage-2 et les pas externes DiLoCo 2D-DCT"),
+            ("Tier C BOINC Night Workunits (`boinc-night-workunit`): Asynchronous night workunits over standard HTTPS (`TCP/443`) when the GPU is idle between 22:00 and 07:00",
+             "Unités nocturnes BOINC Tier C (`boinc-night-workunit`) : Unités de travail nocturnes asynchrones via HTTPS standard (`TCP/443`) lorsque le GPU est inactif entre 22 h et 7 h"),
+        ]),
+        ("ol", [
+            ("Verify outbound firewall traversal, register your trainer GPU on `OpenTrainer`, and submit a verified Aglet round receipt (remove `--once` to run continuously):",
+             "Vérifiez la traversée sortante du pare-feu, enregistrez votre GPU entraîneur sur `OpenTrainer` et soumettez un reçu de ronde Aglet vérifié (retirez `--once` pour tourner en continu) :"),
+        ]),
+        ("code", "export HIVEMIND_API_KEY=hm-YOUR_TRAINER_KEY\n"
+                 "python scripts/hivemind_opentrainer_agent.py --gateway {API} --network-mode outbound-https-relay --check-firewall --submit-delta --once"),
     )),
     ("play", ("4. Gamers and Steam", "4. Joueurs et Steam"), (
         ("p", ("Your GPU should work for HiveMind only while you are not playing. There is no HiveMind game on Steam yet: the Steam ID `3133700` that appears in this repository "
@@ -468,15 +486,15 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "de": "Sie können sich auch auf der [Registrierungsseite](/signup) mit Google anmelden; wir speichern dann nur einen anonymen Hash Ihrer Google-ID, nicht Ihre E-Mail-Adresse.",
         "zh": "您也可以在[注册页面](/signup)使用 Google 登录；我们仅保存您 Google ID 的匿名哈希值，绝不存储您的电子邮箱。",
     },
-    "Create a producer account the same way, with `\"role\":\"producer\"` (or `\"prosumer\"` if you also want to use models), and keep the key.": {
-        "es": "Crea una cuenta de productor del mismo modo, con `\"role\":\"producer\"` (o `\"prosumer\"` si también quieres usar modelos), y guarda la clave.",
-        "de": "Erstellen Sie auf dieselbe Weise ein Produzentenkonto mit `\"role\":\"producer\"` (oder `\"prosumer\"`, wenn Sie auch Modelle nutzen möchten), und bewahren Sie den Schlüssel auf.",
-        "zh": "以相同方式创建生产者账户，设置 `\"role\":\"producer\"`（若同时想调用模型可设为 `\"prosumer\"`），并妥善保存密钥。",
+    "Create a producer account the same way, with `\"role\":\"producer\"` (or `\"prosumer\"` if you also want to use models, or `\"trainer\"` for intense GPU training via OpenTrainer), and keep the key.": {
+        "es": "Crea una cuenta de productor del mismo modo, con `\"role\":\"producer\"` (o `\"prosumer\"` si también quieres usar modelos, o `\"trainer\"` para entrenamiento GPU intensivo vía OpenTrainer), y guarda la clave.",
+        "de": "Erstellen Sie auf dieselbe Weise ein Produzentenkonto mit `\"role\":\"producer\"` (oder `\"prosumer\"`, wenn Sie auch Modelle nutzen möchten, oder `\"trainer\"` für intensives GPU-Training über OpenTrainer), und bewahren Sie den Schlüssel auf.",
+        "zh": "以相同方式创建生产者账户，设置 `\"role\":\"producer\"`（若同时想调用模型可设为 `\"prosumer\"`，若用于 OpenTrainer 高强度 GPU 训练可设为 `\"trainer\"`），并妥善保存密钥。",
     },
-    "On the [sign-up page](/signup) with Google, choose “Share my GPU” or “Both”.": {
-        "es": "En la [página de registro](/signup) con Google, elige «Share my GPU» o «Both».",
-        "de": "Wählen Sie auf der [Registrierungsseite](/signup) mit Google „Share my GPU“ oder „Both“.",
-        "zh": "在 Google [注册页面](/signup)上，选择“Share my GPU”或“Both”。",
+    "On the [sign-up page](/signup) with Google, choose “Share my GPU”, “Both”, or “Trainer (OpenTrainer)”.": {
+        "es": "En la [página de registro](/signup) con Google, elige «Share my GPU», «Both» o «Trainer (OpenTrainer)».",
+        "de": "Wählen Sie auf der [Registrierungsseite](/signup) mit Google „Share my GPU“, „Both“ oder „Trainer (OpenTrainer)“.",
+        "zh": "在 Google [注册页面](/signup)上，选择“Share my GPU”、“Both”或“Trainer (OpenTrainer)”。",
     },
     "1. Use the models": {"es": "1. Usar los modelos", "de": "1. Modelle nutzen", "zh": "1. 使用 AI 模型"},
     "The reply holds your API key (`api_key`). It is shown once and cannot be recovered: store it somewhere safe. If you lose it, register a new handle.": {
@@ -634,6 +652,36 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "es": "El script pausa la cola GPU de BOINC (`boinccmd --set_gpu_mode never`) cuando detecta actividad de teclado o ratón en los últimos 4 segundos, carga de GPU superior al 45 % o temperatura de GPU superior a 78 °C, y la devuelve a `auto` en caso contrario. En Linux necesita `xprintidle` (solo X11); donde no puede medir tu entrada asume que estás jugando y no hace nada. Cambia por sí mismo el modo GPU de BOINC, por lo que sobrescribe el modo que hayas fijado manualmente. No hemos medido su efecto en los fotogramas por segundo. Lo que calcula en tu ausencia es un patrón de autocomprobación integrado, no datos reales de telescopio (véase la sección 3).",
         "de": "Das Hilfsskript pausiert die BOINC-GPU-Warteschlange (`boinccmd --set_gpu_mode never`), sobald es Tastatur- oder Mauseingaben in den letzten 4 Sekunden, eine GPU-Last über 45 % oder eine GPU-Temperatur über 78 °C erkennt, und setzt sie sonst auf `auto` zurück. Unter Linux benötigt es `xprintidle` (nur X11); wo es Ihre Eingaben nicht messen kann, nimmt es an, dass Sie spielen, und tut nichts. Es ändert den BOINC-GPU-Modus selbst und überschreibt daher einen manuell gesetzten Modus. Wir haben seine Auswirkung auf die Bildrate nicht gemessen. Was es in Ihrer Abwesenheit berechnet, ist ein eingebautes Selbsttestmuster, keine echten Teleskopdaten (siehe Abschnitt 3).",
         "zh": "当辅助脚本检测到最近 4 秒内有键盘或鼠标输入、GPU 负载高于 45% 或 GPU 温度高于 78 °C 时，会暂停 BOINC GPU 队列（`boinccmd --set_gpu_mode never`），否则将其恢复为 `auto`。在 Linux 上它需要 `xprintidle`（仅限 X11）；在无法测量输入的环境中，它会默认您正在游戏而不执行任何操作。它会直接修改 BOINC 的 GPU 模式，因此会覆盖您手动设置的模式。我们尚未测量其对游戏帧率的影响。当您离开时，它计算的是内置自检图案，而非真实的望远镜数据（见第 3 节）。",
+    },
+    "3b. OpenTrainer — Intense GPU Co-Training (BOINC + AMCP + Kafka + Aglets, Firewall-Friendly)": {
+        "es": "3b. OpenTrainer — Co-entrenamiento GPU intensivo (BOINC + AMCP + Kafka + Aglets, compatible con cortafuegos)",
+        "de": "3b. OpenTrainer — Intensives GPU-Co-Training (BOINC + AMCP + Kafka + Aglets, Firewall-freundlich)",
+        "zh": "3b. OpenTrainer — 高强度 GPU 协同训练（BOINC + AMCP + Kafka + Aglets，穿透防火墙）",
+    },
+    "Registering with the `\"trainer\"` role on [/signup](/signup) connects your GPU to `OpenTrainer` ([/v1/hivemind/opentrainer/status](/v1/hivemind/opentrainer/status)), the central coordinator integrating BOINC, AMCP v1.5, Kafka (`hivemind.amcp.federation.v1`), and Signed Task Agents (IBM Aglet life cycle without mobile code) built between the RTX 2070 (`XAVGAMSRV`, 8 GB, Windows 11) and the GCP Tesla T4 (`socreateai-agora-hermes-node1`, 16 GB, Linux) across PRs `#366`, `#399`, `#401`, `#407`, `#408`, `#409`, and `#410` (see the [OpenTrainer architecture guide]({REPO}/blob/main/docs/OPENTRAINER_BOINC_AMCP_KAFKA_ARCHITECTURE.md)).": {
+        "es": "Registrarse con el rol `\"trainer\"` en [/signup](/signup) conecta tu GPU a `OpenTrainer` ([/v1/hivemind/opentrainer/status](/v1/hivemind/opentrainer/status)), el coordinador central que integra BOINC, AMCP v1.5, Kafka (`hivemind.amcp.federation.v1`) y agentes de tarea firmados (ciclo de vida IBM Aglet sin código móvil) construido entre la RTX 2070 (`XAVGAMSRV`, 8 GB, Windows 11) y la Tesla T4 de GCP (`socreateai-agora-hermes-node1`, 16 GB, Linux) en los PR `#366`, `#399`, `#401`, `#407`, `#408`, `#409` y `#410` (consulta la [guía de arquitectura OpenTrainer]({REPO}/blob/main/docs/OPENTRAINER_BOINC_AMCP_KAFKA_ARCHITECTURE.md)).",
+        "de": "Die Registrierung mit der Rolle `\"trainer\"` unter [/signup](/signup) verbindet Ihre GPU mit `OpenTrainer` ([/v1/hivemind/opentrainer/status](/v1/hivemind/opentrainer/status)), dem zentralen Koordinator für BOINC, AMCP v1.5, Kafka (`hivemind.amcp.federation.v1`) und signierte Task-Agenten (IBM-Aglet-Lebenszyklus ohne mobilen Code) zwischen der RTX 2070 (`XAVGAMSRV`, 8 GB, Windows 11) und der GCP Tesla T4 (`socreateai-agora-hermes-node1`, 16 GB, Linux) aus den PRs `#366`, `#399`, `#401`, `#407`, `#408`, `#409` und `#410` (siehe [OpenTrainer-Architekturleitfaden]({REPO}/blob/main/docs/OPENTRAINER_BOINC_AMCP_KAFKA_ARCHITECTURE.md)).",
+        "zh": "选择 `\"trainer\"` 角色在 [/signup](/signup) 注册，即可将您的 GPU 接入核心协调器 `OpenTrainer`（[/v1/hivemind/opentrainer/status](/v1/hivemind/opentrainer/status)）。该组件集成了在 RTX 2070（`XAVGAMSRV`，8 GB，Windows 11）与 GCP Tesla T4（`socreateai-agora-hermes-node1`，16 GB，Linux）之间通过 PR `#366`、`#399`、`#401`、`#407`、`#408`、`#409` 和 `#410` 构建的 BOINC、AMCP v1.5、Kafka（`hivemind.amcp.federation.v1`）以及签名任务代理（无移动代码的 IBM Aglet 生命周期，详见 [OpenTrainer 架构指南]({REPO}/blob/main/docs/OPENTRAINER_BOINC_AMCP_KAFKA_ARCHITECTURE.md)）。",
+    },
+    "Tier B Outbound HTTPS Relay (`outbound-https-relay`): Your trainer GPU initiates outbound-only HTTPS (`TCP/443`) calls to `/v1/hivemind/opentrainer/heartbeat` and `/v1/hivemind/opentrainer/submit-delta` — zero inbound firewall ports, zero `0.0.0.0` listeners, works behind residential NAT, CGNAT, and Windows Firewall": {
+        "es": "Relé HTTPS saliente Tier B (`outbound-https-relay`): Tu GPU de entrenamiento realiza únicamente llamadas HTTPS salientes (`TCP/443`) a `/v1/hivemind/opentrainer/heartbeat` y `/v1/hivemind/opentrainer/submit-delta` — cero puertos entrantes, cero escuchas `0.0.0.0`, funciona tras NAT residencial, CGNAT y el cortafuegos de Windows",
+        "de": "Ausgehendes HTTPS-Relay Tier B (`outbound-https-relay`): Ihre Trainer-GPU baut ausschließlich ausgehende HTTPS-Verbindungen (`TCP/443`) zu `/v1/hivemind/opentrainer/heartbeat` und `/v1/hivemind/opentrainer/submit-delta` auf — null eingehende Ports, null `0.0.0.0`-Listener, funktioniert hinter Heim-NAT, CGNAT und der Windows-Firewall",
+        "zh": "Tier B 出站 HTTPS 中继（`outbound-https-relay`）：您的训练 GPU 仅通过出站 HTTPS（`TCP/443`）调用 `/v1/hivemind/opentrainer/heartbeat` 与 `/v1/hivemind/opentrainer/submit-delta` —— 零入站防火墙端口、零 `0.0.0.0` 监听，完美穿透家庭 NAT、CGNAT 与 Windows 防火墙",
+    },
+    "Tier A Signed Task Agents over AMCP & Kafka (`amcp-kafka-aglet` / `wireguard-t4-hub` / `ssh-loopback-tunnel`): Implements IBM's Aglet life cycle (`dispatch` `task_offer` -> `arrival` `check_offer` -> `clone` `task_claim` -> `result` `task_result` -> `retract` `task_abort`) without mobile code (`weights_only=True`, CRLF-normalized `code_pin`) for Stage-2 Tiny Granite-MoE NF4 QLoRA and DiLoCo 2D-DCT outer steps": {
+        "es": "Agentes de tarea firmados Tier A sobre AMCP y Kafka (`amcp-kafka-aglet` / `wireguard-t4-hub` / `ssh-loopback-tunnel`): Implementa el ciclo de vida IBM Aglet (`dispatch` `task_offer` -> `arrival` `check_offer` -> `clone` `task_claim` -> `result` `task_result` -> `retract` `task_abort`) sin código móvil (`weights_only=True`, `code_pin` normalizado CRLF) para QLoRA NF4 Tiny Granite-MoE Stage-2 y pasos externos DiLoCo 2D-DCT",
+        "de": "Signierte Tier-A-Task-Agenten über AMCP & Kafka (`amcp-kafka-aglet` / `wireguard-t4-hub` / `ssh-loopback-tunnel`): Implementiert den IBM-Aglet-Lebenszyklus (`dispatch` `task_offer` -> `arrival` `check_offer` -> `clone` `task_claim` -> `result` `task_result` -> `retract` `task_abort`) ohne mobilen Code (`weights_only=True`, CRLF-normalisierter `code_pin`) für Stage-2 Tiny Granite-MoE NF4 QLoRA und äußere DiLoCo-2D-DCT-Schritte",
+        "zh": "Tier A 基于 AMCP 与 Kafka 的签名任务代理（`amcp-kafka-aglet` / `wireguard-t4-hub` / `ssh-loopback-tunnel`）：实现无移动代码的 IBM Aglet 生命周期（`dispatch` `task_offer` -> `arrival` `check_offer` -> `clone` `task_claim` -> `result` `task_result` -> `retract` `task_abort`，强制 `weights_only=True` 与 CRLF 归一化 `code_pin`），用于 Stage-2 Tiny Granite-MoE NF4 QLoRA 与 DiLoCo 2D-DCT 外层步更新",
+    },
+    "Tier C BOINC Night Workunits (`boinc-night-workunit`): Asynchronous night workunits over standard HTTPS (`TCP/443`) when the GPU is idle between 22:00 and 07:00": {
+        "es": "Unidades nocturnas BOINC Tier C (`boinc-night-workunit`): Unidades nocturnas asíncronas sobre HTTPS estándar (`TCP/443`) cuando la GPU está inactiva entre las 22:00 y las 07:00",
+        "de": "Nächtliche Tier-C-BOINC-Aufgaben (`boinc-night-workunit`): Asynchrone Nacht-Aufgaben über Standard-HTTPS (`TCP/443`), wenn die GPU zwischen 22:00 und 07:00 Uhr im Leerlauf ist",
+        "zh": "Tier C BOINC 夜间计算单元（`boinc-night-workunit`）：在 22:00 至 07:00 GPU 空闲期间通过标准 HTTPS（`TCP/443`）运行异步夜间工作单元",
+    },
+    "Verify outbound firewall traversal, register your trainer GPU on `OpenTrainer`, and submit a verified Aglet round receipt (remove `--once` to run continuously):": {
+        "es": "Verifica el paso saliente del cortafuegos, registra tu GPU entrenadora en `OpenTrainer` y envía un recibo de ronda Aglet verificado (quita `--once` para ejecución continua):",
+        "de": "Prüfen Sie die ausgehende Firewall-Passage, registrieren Sie Ihre Trainer-GPU bei `OpenTrainer` und senden Sie eine verifizierte Aglet-Rundenquittung (entfernen Sie `--once` für den Dauerbetrieb):",
+        "zh": "验证出站防火墙穿透，将您的训练 GPU 注册到 `OpenTrainer` 并提交经验证的 Aglet 轮次回执（移除 `--once` 可持续运行）：",
     },
     "4. Gamers and Steam": {
         "es": "4. Jugadores y Steam",

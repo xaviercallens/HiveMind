@@ -469,7 +469,7 @@ class SlidingWindowLimiter:
 class RegisterRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     handle: str = Field(min_length=1, max_length=128)
-    role: Literal["consumer", "producer", "prosumer"]
+    role: Literal["consumer", "producer", "prosumer", "trainer"]
     test: bool = False  # test account: needs the admin key, never bids in the market, counted apart from real users
     kind: Literal["user", "test", "probe"] | None = None  # 'test' or 'probe' need the admin key too (HM-S16-07)
 
@@ -477,7 +477,7 @@ class RegisterRequest(BaseModel):
 class GoogleRegisterRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id_token: str = Field(min_length=1, max_length=4096)
-    role: Literal["consumer", "producer", "prosumer"] = "prosumer"
+    role: Literal["consumer", "producer", "prosumer", "trainer"] = "prosumer"
 
 
 class MaxPriceRequest(BaseModel):
@@ -601,6 +601,37 @@ class BeeTradeOrderRequest(BaseModel):
     subject_id: str = Field(default="SUBJ-01-PYTHON-RUST-CODER", min_length=4, max_length=64)
     capacity_1k: float = Field(gt=0.0, le=100_000.0, allow_inf_nan=False)
     price_per_1k: float = Field(gt=0.0, le=MAX_PRICE_CEILING, allow_inf_nan=False)
+
+
+class OpenTrainerHeartbeatRequest(BaseModel):
+    """Outbound-only heartbeat from an OpenTrainer GPU node (works behind NAT/firewalls with zero inbound ports)."""
+
+    model_config = ConfigDict(extra="forbid")
+    host_label: str = Field(default="trainer-node", min_length=1, max_length=128)
+    gpu_name: str = Field(default="NVIDIA GeForce RTX 2070", min_length=1, max_length=128)
+    vram_total_mib: int = Field(default=8192, ge=512, le=MAX_GPU_VRAM_MIB)
+    vram_free_mib: int = Field(default=6400, ge=0, le=MAX_GPU_VRAM_MIB)
+    network_mode: Literal["outbound-https-relay", "amcp-kafka-aglet", "wireguard-t4-hub", "ssh-loopback-tunnel", "boinc-night-workunit"] = "outbound-https-relay"
+    training_stack: str = Field(default="qlora-moe+diloco+amcp-aglet+boinc", min_length=1, max_length=128)
+    active_campaign: str = Field(default="E8-STAGE2-TINY-GRANITE-MOE-QLORA", min_length=1, max_length=128)
+    account_id: str | None = Field(default=None, max_length=128)  # admin only
+    handle: str | None = Field(default=None, max_length=128)  # admin only
+
+
+class OpenTrainerDeltaSubmitRequest(BaseModel):
+    """Submit a verified Stage-2 QLoRA / DiLoCo outer-step delta via OpenTrainer's outbound HTTPS relay."""
+
+    model_config = ConfigDict(extra="forbid")
+    round_id: int = Field(ge=0, le=1_000_000)
+    campaign_id: str = Field(default="E8-STAGE2-TINY-GRANITE-MOE-QLORA", min_length=3, max_length=128)
+    learner_index: int = Field(default=1, ge=0, le=1024)
+    inner_steps: int = Field(default=8, ge=1, le=100_000)
+    loss_before: float = Field(default=4.1721, ge=0.0, le=1_000.0, allow_inf_nan=False)
+    loss_after: float = Field(default=1.7772, ge=0.0, le=1_000.0, allow_inf_nan=False)
+    delta_norm: float = Field(default=0.142, gt=0.0, le=100.0, allow_inf_nan=False)
+    delta_sha256: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-fA-F]{64}$")
+    code_pin: str = Field(default="", max_length=128)
+    network_mode: Literal["outbound-https-relay", "amcp-kafka-aglet", "wireguard-t4-hub", "ssh-loopback-tunnel", "boinc-night-workunit"] = "outbound-https-relay"
 
 
 @dataclass(frozen=True)
@@ -1661,7 +1692,7 @@ def create_router_app(
         password = str(data.get("password") or "").strip()
         email = str(data.get("email") or "").strip()
         role = str(data.get("role") or "prosumer").strip()
-        if role not in ("consumer", "producer", "prosumer"):
+        if role not in ("consumer", "producer", "prosumer", "trainer"):
             role = "prosumer"
         if not handle:
             raise RouterError(400, "Username / handle is required.", "invalid_request_error", "missing_handle")
@@ -1930,7 +1961,7 @@ def create_router_app(
                     authorized = True
                 else:
                     acc = store.authenticate(bearer)
-                    if acc is not None and acc.role in ("producer", "prosumer"):
+                    if acc is not None and acc.role in ("producer", "prosumer", "trainer"):
                         authorized = True
         if not authorized:
             raise RouterError(
@@ -1967,8 +1998,8 @@ def create_router_app(
             account = authenticate(request)
             if (payload.account_id and payload.account_id != account.account_id) or (payload.handle and payload.handle != account.handle):
                 raise RouterError(403, "Only the admin key may heartbeat another account.", "permission_error", "heartbeat_forbidden")
-        if account.role not in ("producer", "prosumer"):
-            raise RouterError(403, "Only producer or prosumer accounts may send heartbeats.", "permission_error", "role_forbidden")
+        if account.role not in ("producer", "prosumer", "trainer"):
+            raise RouterError(403, "Only producer, prosumer, or trainer accounts may send heartbeats.", "permission_error", "role_forbidden")
         problem = producer_url_problem(payload.endpoint_url, allow_private=allow_private_producers, resolver=resolve)
         if problem is not None:
             raise RouterError(400, problem, "invalid_request_error", "invalid_endpoint")
@@ -2185,8 +2216,8 @@ def create_router_app(
             target = account_target(payload.account_id, payload.handle)
         else:
             account = authenticate(request)
-            if account.role not in ("producer", "prosumer"):
-                raise RouterError(403, "Only producer or prosumer accounts have remote control.", "permission_error", "role_forbidden")
+            if account.role not in ("producer", "prosumer", "trainer"):
+                raise RouterError(403, "Only producer, prosumer, or trainer accounts have remote control.", "permission_error", "role_forbidden")
             if (payload.account_id and payload.account_id != account.account_id) or (payload.handle and payload.handle != account.handle):
                 raise RouterError(403, "Only the admin key may control another account.", "permission_error", "control_forbidden")
             target = account.account_id
@@ -2507,6 +2538,170 @@ def create_router_app(
             raise RouterError(400, "window_s must be a finite number of seconds, zero or more.", "invalid_request_error", "invalid_request")
         orders = store.list_bee_trade_orders(window_s=min(window_s, 30 * 86_400.0), now_utc=clock())
         return clear_bee_capacity_market(orders)
+
+    @app.get("/v1/hivemind/opentrainer/status")
+    @app.get("/v1/opentrainer/status")
+    def get_opentrainer_status() -> dict[str, Any]:
+        """Public OpenTrainer coordinator status: BOINC + AMCP + Kafka + Signed Aglet Task Agents & firewall-friendly outbound relay."""
+        from hivemind.router.opentrainer import build_opentrainer_status_payload
+
+        now = clock()
+        nodes = store.list_opentrainer_nodes()
+        rounds = store.list_opentrainer_rounds(limit=30)
+        trainer_accounts = store.list_trainer_accounts()
+        return build_opentrainer_status_payload(
+            trainer_accounts=trainer_accounts,
+            opentrainer_nodes=nodes,
+            recent_rounds=rounds,
+            now_utc=now,
+        )
+
+    @app.post("/v1/hivemind/opentrainer/heartbeat")
+    @app.post("/v1/opentrainer/heartbeat")
+    def post_opentrainer_heartbeat(request: Request, payload: OpenTrainerHeartbeatRequest) -> dict[str, Any]:
+        """Register or refresh an OpenTrainer GPU node over an outbound-only HTTPS connection (no inbound port required)."""
+        from hivemind.router.opentrainer import (
+            AGLET_AMCP_LIFECYCLE_SPEC,
+            FIREWALL_TRAVERSAL_MODES,
+            OPENTRAINER_TOPIC,
+            OPENTRAINER_VERSION,
+            SUPPORTED_STACKS,
+            default_active_task_offer,
+        )
+
+        if request.headers.get("x-admin-key") is not None:
+            require_admin(request)
+            target_id = account_target(payload.account_id, payload.handle)
+            account = store.get_account(target_id)
+            if account is None:
+                raise RouterError(404, "Unknown account.", "invalid_request_error", "account_not_found")
+        else:
+            account = authenticate(request)
+            if (payload.account_id and payload.account_id != account.account_id) or (payload.handle and payload.handle != account.handle):
+                raise RouterError(403, "Only the admin key may heartbeat another OpenTrainer node.", "permission_error", "heartbeat_forbidden")
+        if account.role not in ("trainer", "prosumer", "producer", "admin"):
+            raise RouterError(
+                403,
+                "Only trainer, prosumer, or producer accounts may register an OpenTrainer GPU node.",
+                "permission_error",
+                "role_forbidden",
+            )
+        now = clock()
+        stacks = [s.strip() for s in payload.training_stack.replace("+", ",").split(",") if s.strip()] or list(SUPPORTED_STACKS)
+        node = store.upsert_opentrainer_node(
+            account_id=account.account_id,
+            handle=account.handle,
+            node_id=f"{account.handle}:{payload.host_label}",
+            gpu_name=payload.gpu_name,
+            vram_total_mib=payload.vram_total_mib,
+            vram_free_mib=min(payload.vram_free_mib, payload.vram_total_mib),
+            network_mode=payload.network_mode,
+            stacks=stacks,
+            host_label=payload.host_label,
+            now_utc=now,
+        )
+        node["role"] = account.role
+        offer = default_active_task_offer(now_utc=now)
+        fw_mode = next(
+            (m for m in FIREWALL_TRAVERSAL_MODES if m["mode_id"] == payload.network_mode),
+            FIREWALL_TRAVERSAL_MODES[0],
+        )
+        return {
+            "object": "hivemind.opentrainer_heartbeat_ack",
+            "component": "OpenTrainer",
+            "version": OPENTRAINER_VERSION,
+            "amcp_topic": OPENTRAINER_TOPIC,
+            "node": node,
+            "firewall_traversal": fw_mode,
+            "aglet_lifecycle_phase": "arrival",
+            "aglet_lifecycle_spec": list(AGLET_AMCP_LIFECYCLE_SPEC),
+            "active_task_offer": offer,
+        }
+
+    @app.post("/v1/hivemind/opentrainer/submit-delta")
+    @app.post("/v1/opentrainer/submit-delta")
+    def post_opentrainer_submit_delta(request: Request, payload: OpenTrainerDeltaSubmitRequest) -> dict[str, Any]:
+        """Submit a verified Stage-2 QLoRA / DiLoCo outer-step delta over OpenTrainer's outbound HTTPS relay."""
+        from hivemind.router.opentrainer import (
+            OPENTRAINER_TOPIC,
+            validate_trainer_delta_submission,
+        )
+
+        account = authenticate(request)
+        if account.role not in ("trainer", "prosumer", "producer", "admin"):
+            raise RouterError(
+                403,
+                "Only trainer, prosumer, or producer accounts may submit OpenTrainer deltas.",
+                "permission_error",
+                "role_forbidden",
+            )
+        now = clock()
+        try:
+            check = validate_trainer_delta_submission(
+                run_id=payload.campaign_id,
+                round_index=payload.round_id,
+                delta_l2=payload.delta_norm,
+                eval_loss=payload.loss_after,
+                tokens_trained=max(1, payload.inner_steps * 512),
+                vram_free_mib=6400,
+                vram_total_mib=8192,
+            )
+        except ValueError as exc:
+            raise RouterError(
+                400,
+                f"OpenTrainer delta submission rejected: {exc}",
+                "invalid_request_error",
+                "delta_rejected",
+            ) from None
+        saved = store.record_opentrainer_round_submission(
+            account_id=account.account_id,
+            handle=account.handle,
+            run_id=payload.campaign_id,
+            round_index=payload.round_id,
+            host_label=account.handle,
+            network_mode=payload.network_mode,
+            delta_l2=payload.delta_norm,
+            eval_loss=payload.loss_after,
+            tokens_trained=max(1, payload.inner_steps * 512),
+            vram_free_mib=6400,
+            vram_total_mib=8192,
+            now_utc=now,
+        )
+        saved["delta_sha256"] = payload.delta_sha256.lower()
+        event_id = "ev-ot-" + uuid.uuid4().hex[:14]
+        store.record_amcp_kafka_event(
+            event_id=event_id,
+            topic=OPENTRAINER_TOPIC,
+            event_type="io.hivemind.amcp.fed.task_result",
+            sender_id=account.handle,
+            sender_kind="gpu_producer",
+            recipient_id="coordinator.t4.hub",
+            subject_id=payload.campaign_id,
+            correlation_id=f"round-{payload.round_id:04d}",
+            payload={
+                "submission_id": saved["submission_id"],
+                "round_id": payload.round_id,
+                "learner_index": payload.learner_index,
+                "inner_steps": payload.inner_steps,
+                "loss_before": payload.loss_before,
+                "loss_after": payload.loss_after,
+                "delta_norm": payload.delta_norm,
+                "delta_sha256": payload.delta_sha256.lower(),
+                "network_mode": payload.network_mode,
+                "aglet_phase": "result",
+            },
+            now_utc=now,
+        )
+        return {
+            "object": "hivemind.opentrainer_delta_receipt",
+            "component": "OpenTrainer",
+            "accepted": True,
+            "aglet_lifecycle_phase": "result",
+            "amcp_topic": OPENTRAINER_TOPIC,
+            "amcp_event_id": event_id,
+            "submission": saved,
+            "validation": check,
+        }
 
     @app.post("/v1/hivemind/admin/grant")
     def admin_grant(request: Request, payload: GrantRequest) -> dict[str, Any]:

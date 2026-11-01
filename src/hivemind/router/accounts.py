@@ -32,8 +32,9 @@ from typing import Any, Protocol
 
 from hivemind.security.hivemind_firewall import normalise_identity
 
-ROLES: tuple[str, ...] = ("consumer", "producer", "prosumer", "admin")
-PRODUCER_ROLES: tuple[str, ...] = ("producer", "prosumer")
+ROLES: tuple[str, ...] = ("consumer", "producer", "prosumer", "trainer", "admin")
+PRODUCER_ROLES: tuple[str, ...] = ("producer", "prosumer", "trainer")
+TRAINER_ROLES: tuple[str, ...] = ("trainer", "prosumer", "producer")
 SYS_VALIDATORS = "sys:validators"
 SYS_BURN = "sys:burn"
 SYS_ESCROW = "sys:escrow"
@@ -52,7 +53,7 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS accounts(
     account_id TEXT PRIMARY KEY,
     handle TEXT NOT NULL UNIQUE,
-    role TEXT NOT NULL CHECK (role IN ('consumer','producer','prosumer','admin')),
+    role TEXT NOT NULL CHECK (role IN ('consumer','producer','prosumer','trainer','admin')),
     key_hash TEXT NOT NULL UNIQUE,
     created_utc REAL NOT NULL,
     max_price_per_1k REAL NOT NULL,
@@ -184,6 +185,34 @@ CREATE TABLE IF NOT EXISTS bee_trade_orders(
     subject_id TEXT NOT NULL,
     capacity_1k REAL NOT NULL,
     price_per_1k REAL NOT NULL,
+    utc REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS opentrainer_nodes(
+    account_id TEXT NOT NULL,
+    node_id TEXT NOT NULL,
+    handle TEXT NOT NULL,
+    gpu_name TEXT NOT NULL,
+    vram_total_mib INTEGER NOT NULL,
+    vram_free_mib INTEGER NOT NULL,
+    network_mode TEXT NOT NULL,
+    stacks_json TEXT NOT NULL,
+    host_label TEXT NOT NULL,
+    last_heartbeat_utc REAL NOT NULL,
+    PRIMARY KEY(account_id, node_id)
+);
+CREATE TABLE IF NOT EXISTS opentrainer_rounds(
+    submission_id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    handle TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    round_index INTEGER NOT NULL,
+    host_label TEXT NOT NULL,
+    network_mode TEXT NOT NULL,
+    delta_l2 REAL NOT NULL,
+    eval_loss REAL NOT NULL,
+    tokens_trained INTEGER NOT NULL,
+    vram_free_mib INTEGER NOT NULL,
+    vram_total_mib INTEGER NOT NULL,
     utc REAL NOT NULL
 );
 """
@@ -529,6 +558,26 @@ class RouterStore:
                 self._conn.execute("ALTER TABLE accounts ADD COLUMN password_hash TEXT")
             if "email" not in account_columns:
                 self._conn.execute("ALTER TABLE accounts ADD COLUMN email TEXT")
+            acct_sql_row = self._conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='accounts'"
+            ).fetchone()
+            if acct_sql_row and "'trainer'" not in str(acct_sql_row["sql"]):
+                self._conn.execute(
+                    "CREATE TABLE accounts_opentrainer_mig("
+                    "account_id TEXT PRIMARY KEY, handle TEXT NOT NULL UNIQUE, "
+                    "role TEXT NOT NULL CHECK (role IN ('consumer','producer','prosumer','trainer','admin')), "
+                    "key_hash TEXT NOT NULL UNIQUE, created_utc REAL NOT NULL, max_price_per_1k REAL NOT NULL, "
+                    "is_test INTEGER NOT NULL DEFAULT 0, kind TEXT NOT NULL DEFAULT 'user', "
+                    "password_hash TEXT, email TEXT)"
+                )
+                self._conn.execute(
+                    "INSERT INTO accounts_opentrainer_mig("
+                    "account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, password_hash, email"
+                    ") SELECT account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, password_hash, email "
+                    "FROM accounts"
+                )
+                self._conn.execute("DROP TABLE accounts")
+                self._conn.execute("ALTER TABLE accounts_opentrainer_mig RENAME TO accounts")
             # One account may advertise several endpoints (several GPUs / servers): rows of the old one-per-account table move across once.
             self._conn.execute(
                 "INSERT OR IGNORE INTO producer_endpoints(account_id, endpoint_url, models_json, cost_per_1k, capacity_1k, last_heartbeat_utc, "
@@ -1855,13 +1904,13 @@ class RouterStore:
         return created_ids
 
     def list_hiveminder_accounts(self, now_utc: float | None = None, ttl_s: float = 120.0) -> list[dict[str, Any]]:
-        """Return all real ('user') producer and prosumer accounts and their live endpoint connectivity."""
+        """Return all real ('user') producer, prosumer, and trainer accounts and their live endpoint connectivity."""
         now = time.time() if now_utc is None else float(now_utc)
         cutoff = now - float(ttl_s)
         with self._lock:
             acct_rows = self._conn.execute(
                 "SELECT account_id, handle, role, created_utc FROM accounts "
-                "WHERE role IN ('producer', 'prosumer') AND kind = 'user' AND account_id NOT LIKE 'sys:%' "
+                "WHERE role IN ('producer', 'prosumer', 'trainer') AND kind = 'user' AND account_id NOT LIKE 'sys:%' "
                 "ORDER BY created_utc ASC, account_id ASC"
             ).fetchall()
             ep_rows = self._conn.execute(
@@ -1924,6 +1973,195 @@ class RouterStore:
                 }
             )
         return result
+
+    def upsert_opentrainer_node(
+        self,
+        *,
+        account_id: str,
+        handle: str,
+        node_id: str,
+        gpu_name: str,
+        vram_total_mib: int,
+        vram_free_mib: int,
+        network_mode: str,
+        stacks: Sequence[str],
+        host_label: str,
+        now_utc: float | None = None,
+    ) -> dict[str, Any]:
+        """Register or update an OpenTrainer GPU node heartbeat."""
+        stamp = time.time() if now_utc is None else float(now_utc)
+        stacks_clean = [str(s) for s in stacks if str(s).strip()]
+        with self._tx() as conn:
+            conn.execute(
+                "INSERT INTO opentrainer_nodes("
+                "account_id, node_id, handle, gpu_name, vram_total_mib, vram_free_mib, "
+                "network_mode, stacks_json, host_label, last_heartbeat_utc"
+                ") VALUES (?,?,?,?,?,?,?,?,?,?) "
+                "ON CONFLICT(account_id, node_id) DO UPDATE SET "
+                "handle=excluded.handle, gpu_name=excluded.gpu_name, "
+                "vram_total_mib=excluded.vram_total_mib, vram_free_mib=excluded.vram_free_mib, "
+                "network_mode=excluded.network_mode, stacks_json=excluded.stacks_json, "
+                "host_label=excluded.host_label, last_heartbeat_utc=excluded.last_heartbeat_utc",
+                (
+                    account_id,
+                    node_id,
+                    handle,
+                    gpu_name,
+                    int(vram_total_mib),
+                    int(vram_free_mib),
+                    network_mode,
+                    json.dumps(stacks_clean),
+                    host_label,
+                    stamp,
+                ),
+            )
+        return {
+            "account_id": account_id,
+            "node_id": node_id,
+            "handle": handle,
+            "gpu_name": gpu_name,
+            "vram_total_mib": int(vram_total_mib),
+            "vram_free_mib": int(vram_free_mib),
+            "network_mode": network_mode,
+            "stacks": stacks_clean,
+            "host_label": host_label,
+            "last_heartbeat_utc": round(stamp, 3),
+        }
+
+    def list_opentrainer_nodes(self) -> list[dict[str, Any]]:
+        """Return all registered OpenTrainer GPU nodes ordered by latest heartbeat."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT account_id, node_id, handle, gpu_name, vram_total_mib, vram_free_mib, "
+                "network_mode, stacks_json, host_label, last_heartbeat_utc "
+                "FROM opentrainer_nodes ORDER BY last_heartbeat_utc DESC"
+            ).fetchall()
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            try:
+                stacks = json.loads(str(r["stacks_json"]))
+            except ValueError:
+                stacks = []
+            out.append(
+                {
+                    "account_id": str(r["account_id"]),
+                    "node_id": str(r["node_id"]),
+                    "handle": str(r["handle"]),
+                    "gpu_name": str(r["gpu_name"]),
+                    "vram_total_mib": int(r["vram_total_mib"]),
+                    "vram_free_mib": int(r["vram_free_mib"]),
+                    "network_mode": str(r["network_mode"]),
+                    "stacks": stacks,
+                    "host_label": str(r["host_label"]),
+                    "last_heartbeat_utc": float(r["last_heartbeat_utc"]),
+                }
+            )
+        return out
+
+    def record_opentrainer_round_submission(
+        self,
+        *,
+        account_id: str,
+        handle: str,
+        run_id: str,
+        round_index: int,
+        host_label: str,
+        network_mode: str,
+        delta_l2: float,
+        eval_loss: float,
+        tokens_trained: int,
+        vram_free_mib: int,
+        vram_total_mib: int,
+        now_utc: float | None = None,
+    ) -> dict[str, Any]:
+        """Record an accepted OpenTrainer QLoRA/DiLoCo round delta submission."""
+        stamp = time.time() if now_utc is None else float(now_utc)
+        submission_id = f"ot-{secrets.token_hex(8)}"
+        with self._tx() as conn:
+            conn.execute(
+                "INSERT INTO opentrainer_rounds("
+                "submission_id, account_id, handle, run_id, round_index, host_label, network_mode, "
+                "delta_l2, eval_loss, tokens_trained, vram_free_mib, vram_total_mib, utc"
+                ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    submission_id,
+                    account_id,
+                    handle,
+                    run_id,
+                    int(round_index),
+                    host_label,
+                    network_mode,
+                    float(delta_l2),
+                    float(eval_loss),
+                    int(tokens_trained),
+                    int(vram_free_mib),
+                    int(vram_total_mib),
+                    stamp,
+                ),
+            )
+        return {
+            "submission_id": submission_id,
+            "account_id": account_id,
+            "handle": handle,
+            "run_id": run_id,
+            "round_index": int(round_index),
+            "host_label": host_label,
+            "network_mode": network_mode,
+            "delta_l2": round(float(delta_l2), 6),
+            "eval_loss": round(float(eval_loss), 6),
+            "tokens_trained": int(tokens_trained),
+            "vram_free_mib": int(vram_free_mib),
+            "vram_total_mib": int(vram_total_mib),
+            "utc": round(stamp, 3),
+        }
+
+    def list_opentrainer_rounds(self, limit: int = 25) -> list[dict[str, Any]]:
+        """Return recent OpenTrainer round delta submissions."""
+        cap = max(1, min(int(limit), 200))
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT submission_id, account_id, handle, run_id, round_index, host_label, network_mode, "
+                "delta_l2, eval_loss, tokens_trained, vram_free_mib, vram_total_mib, utc "
+                "FROM opentrainer_rounds ORDER BY utc DESC LIMIT ?",
+                (cap,),
+            ).fetchall()
+        return [
+            {
+                "submission_id": str(r["submission_id"]),
+                "account_id": str(r["account_id"]),
+                "handle": str(r["handle"]),
+                "run_id": str(r["run_id"]),
+                "round_index": int(r["round_index"]),
+                "host_label": str(r["host_label"]),
+                "network_mode": str(r["network_mode"]),
+                "delta_l2": float(r["delta_l2"]),
+                "eval_loss": float(r["eval_loss"]),
+                "tokens_trained": int(r["tokens_trained"]),
+                "vram_free_mib": int(r["vram_free_mib"]),
+                "vram_total_mib": int(r["vram_total_mib"]),
+                "utc": float(r["utc"]),
+            }
+            for r in rows
+        ]
+
+    def list_trainer_accounts(self) -> list[dict[str, Any]]:
+        """Return all real ('user') accounts registered with the ``trainer`` role."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT account_id, handle, role, created_utc, email FROM accounts "
+                "WHERE role = 'trainer' AND kind = 'user' AND account_id NOT LIKE 'sys:%' "
+                "ORDER BY created_utc DESC"
+            ).fetchall()
+        return [
+            {
+                "account_id": str(r["account_id"]),
+                "handle": str(r["handle"]),
+                "role": str(r["role"]),
+                "created_utc": float(r["created_utc"]),
+            }
+            for r in rows
+        ]
+
 
 
 

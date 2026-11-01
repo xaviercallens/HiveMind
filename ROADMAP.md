@@ -672,6 +672,12 @@ The update is [`docs/IMPROVEMENT_PLAN_2026-11-01.md`](docs/IMPROVEMENT_PLAN_2026
 | RTX 2070 plan: point the cross-host step at the AMCP learner after #410 (#438) | _open_ | blocked on #410 |
 | Open PRs with failing tests on their last run: #369, #366, #362 | PR authors | cause per PR in the hourly report; rebase and rerun |
 
+### Research note, 2026-11-01 (evening): H-Net chunking, tree-of-thought orchestration and multi-MoE calls
+
+- Assessment in [`docs/HNET_TOT_MULTIMOE_ASSESSMENT.md`](docs/HNET_TOT_MULTIMOE_ASSESSMENT.md): of the proposal's three elements only verifier-pruned branching across expert pools is runnable on today's stack (token space); the boundary-triggered tree search rests on one INVALID run (HN1, [#455](https://github.com/xaviercallens/HiveMind/pull/455)); latent multi-MoE consensus has no shared latent space across backbones and no affordable path to one.
+- Preregistered next experiment **TM1** (`artifacts/experiments/TM1_verifier_pruned_branching_prereg.json`): 40 MBPP tasks, local `qwen2.5-coder` 7b/3b/1.5b, arms A (one call), B (planner + 3 branches on two pools + hidden-test verifier), C (best-of-3 without planner); positive and two negative controls; **NOT_RUN** until a sandbox-capable host or explicit owner acceptance of unsandboxed `python -I` execution. Owner/assignee: open.
+- Foundation paper: paragraph text ready in section 4 of the assessment, to land with [#452](https://github.com/xaviercallens/HiveMind/issues/452) after [#446](https://github.com/xaviercallens/HiveMind/pull/446); no numbers until TM1 has a report.
+
 ### Status update, 2026-11-01 (3-hourly review, 18:30 CET)
 
 - **Merged since the last update:** none. Eight owner PRs are green and waiting for the gatekeeper: [#441](https://github.com/xaviercallens/HiveMind/pull/441), [#442](https://github.com/xaviercallens/HiveMind/pull/442), [#443](https://github.com/xaviercallens/HiveMind/pull/443), [#444](https://github.com/xaviercallens/HiveMind/pull/444), [#445](https://github.com/xaviercallens/HiveMind/pull/445), [#447](https://github.com/xaviercallens/HiveMind/pull/447). The gatekeeper last ran at 14:34Z (its JSON: ACCEPT #434/#369/#366 but merged nothing because their CI fails) and the live monitor last ran at 13:34Z; both session crons had stopped and were recreated at 18:20Z.

@@ -660,7 +660,7 @@ class ComputePointsRedeemRequest(BaseModel):
         min_length=1,
         max_length=4096,
     )
-    points_balance_before: int = Field(default=1250, ge=50, le=1000000)
+    points_balance_before: int = Field(default=0, ge=0, le=1000000)
     lang: str = Field(
         default="en",
         description="Core UI/output language: en (English), fr (French), zh (Chinese), es (Spanish), de (German)",
@@ -2738,83 +2738,8 @@ def build_hivemind_at_home_state(
         },
     ]
 
-    contributor_leaderboard = [
-        {
-            "rank": 1,
-            "handle": "@xaviercallens",
-            "role": "Swarm Architect & Lead GPU Node",
-            "hardware": "NVIDIA GeForce RTX 5060 (8GB CUDA) + GCP TPU v5e",
-            "alveoles_trained": "code_python (GWAYA) & formal_lean4",
-            "workunits_completed": 142,
-            "workunits": 142,
-            "points": 35500,
-            "status": "👑 QUEEN-HIVE FOUNDER (Verified)",
-
-            "idle_gpu_hours_shared": 318.5,
-            "compute_points_earned": 35500,
-            "badge": "👑 QUEEN-HIVE FOUNDER",
-        },
-        {
-            "rank": 2,
-            "handle": "@clark719664",
-            "role": "Core Swarm & Security Systems Contributor",
-            "hardware": "NVIDIA RTX Consumer GPU Node (CUDA FP16)",
-            "alveoles_trained": "math_reasoning (E8) & cyber_sec (Firewall)",
-            "workunits_completed": 96,
-            "workunits": 96,
-            "points": 24000,
-            "status": "🐝 GOLDEN FORAGER BEE (Verified)",
-
-            "idle_gpu_hours_shared": 214.0,
-            "compute_points_earned": 24000,
-            "badge": "🐝 GOLDEN FORAGER BEE",
-        },
-        {
-            "rank": 3,
-            "handle": "@radialmonster",
-            "role": "Physics, Rust QUIC & MoE Kernel Contributor",
-            "hardware": "Multi-Stream Consumer CUDA GPU Node",
-            "alveoles_trained": "physics_sim (Astro) & systems_rust (QUIC)",
-            "workunits_completed": 84,
-            "workunits": 84,
-            "points": 21000,
-            "status": "🪐 ASTRO-SWARM PIONEER (Verified)",
-
-            "idle_gpu_hours_shared": 186.5,
-            "compute_points_earned": 21000,
-            "badge": "🪐 ASTRO-SWARM PIONEER",
-        },
-        {
-            "rank": 4,
-            "handle": "@pedromineo",
-            "role": "Biomedicine & Gwen/Qwen MoE Specialist Contributor",
-            "hardware": "Consumer RTX GPU + WSL2 Worker Bee",
-            "alveoles_trained": "bio_med (Proteins) & general_chat (Gwen MoE)",
-            "workunits_completed": 72,
-            "workunits": 72,
-            "points": 18000,
-            "status": "🧬 BIOMED & MOE BEE (Verified)",
-
-            "idle_gpu_hours_shared": 159.0,
-            "compute_points_earned": 18000,
-            "badge": "🧬 BIOMED & MOE BEE",
-        },
-        {
-            "rank": 5,
-            "handle": "@socrateai-agora-hermes-t4",
-            "role": "GCP Spot Preemptible Relay & Verification Bee",
-            "hardware": "NVIDIA Tesla T4 (16GB Spot us-east4-b)",
-            "alveoles_trained": "5% Execution-Class Spot-Check Verifier",
-            "workunits_completed": 64,
-            "workunits": 64,
-            "points": 16000,
-            "status": "⚡ SPOT-CHECK GUARDIAN (Verified)",
-
-            "idle_gpu_hours_shared": 140.0,
-            "compute_points_earned": 16000,
-            "badge": "⚡ SPOT-CHECK GUARDIAN",
-        },
-    ]
+    # No invented rows: the leaderboard shows only rows that carry a verified ledger receipt, and none exist yet.
+    contributor_leaderboard: list[dict[str, Any]] = []
 
     compute_points_services = [
         {
@@ -3366,7 +3291,7 @@ def render_hivemind_at_home_html(
 
     # Build Leaderboard rows for Screen 5
     lb_rows = []
-    for row in leaderboard:
+    for row in (r for r in leaderboard if r.get("ledger_receipt_sha256")):
         lb_rows.append(
             f"<tr>"
             f"<td><strong style='color:#fbbf24;'>#{row.get('rank')}</strong></td>"
@@ -3378,7 +3303,9 @@ def render_hivemind_at_home_html(
             f"<td><strong style='color:#34d399;font-size:0.95rem;'>{row.get('compute_points_earned'):,} pts</strong><br/><span style='font-size:0.68rem;color:#94a3b8;'>HiveMind Reflexion Points (HMT)</span></td>"
             f"</tr>"
         )
-    lb_rows_html = "\n".join(lb_rows)
+    lb_rows_html = "\n".join(lb_rows) or (
+        "<tr><td colspan='7' style='color:#94a3b8;'>No verified ledger rows yet: the leaderboard lists only work the server has verified, and no example rows are shown.</td></tr>"
+    )
 
     # Build table rows for GPU campaigns
     camp_rows = []
@@ -4020,7 +3947,7 @@ def render_hivemind_at_home_html(
           <button type="button" class="lang-btn" data-lang="de">&#x1F1E9;&#x1F1EA; DE</button>
         </div>
         <a id="header-signup-register-btn" href="https://hivemind-openrouter-1003063861791.us-central1.run.app/signup" style="text-decoration:none;padding:5px 14px;border-radius:999px;background:linear-gradient(90deg,#f59e0b,#fbbf24);color:#090e1f;font-weight:900;font-size:0.78rem;box-shadow:0 0 14px rgba(251,191,36,0.45);">&#x1F511; Sign Up / Register &amp; Login</a>
-        <span class="pill-gold"><span data-i18n="points_balance_label">Compute Points Balance</span>: <strong id="header-points-balance">1,250 pts</strong></span>
+        <span class="pill-gold"><span data-i18n="points_balance_label">Compute Points Balance</span>: <strong id="header-points-balance">0 pts</strong></span>
         <span class="pill">GCP Cloud Run: {cloud_run.get('service_name', 'hivemind-at-home-ruche')} (scales to zero when idle)</span>
         <span class="pill">TPU: {tpu.get('node_id')} ({tpu.get('zone')})</span>
         <span class="pill-green">Lean 4: {formal.get('lean4_theorems_verified')}/128 Theorems (0 sorry)</span>
@@ -4325,7 +4252,7 @@ uv run python scripts/test_public_gcp_hivemind_client.py --url {PUBLIC_GCP_CLOUD
       <section class="card card-amber col-6">
         <h2>
           <span data-i18n="s2b_title">&#x26A1; Screen 02B &mdash; Earn &amp; Spend HiveMind Reflexion Points Studio</span>
-          <span class="pill-gold">Wallet: <strong id="studio-points-wallet">1,250</strong> Compute Points</span>
+          <span class="pill-gold">Wallet: <strong id="studio-points-wallet">0</strong> Compute Points</span>
         </h2>
         <p style="font-size:0.82rem;color:#cbd5e1;margin:0 0 10px;">
           <strong>1. Earn Points:</strong> Click <em>Submit 1 Workunit</em> to lease &amp; submit a real federated QLoRA update.<br/>
@@ -4830,7 +4757,7 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
     var STATE = {state_json};
     var API_PREFIX = {json.dumps(api_prefix)};
     window.__HIVEMIND_AT_HOME_STATE = STATE;
-    var computePointsBalance = 1250;
+    var computePointsBalance = 0;
     var currentLang = 'en';
     var I18N = STATE.i18n_dictionary || {{}};
     var EXAMPLES = STATE.interactive_examples || [];

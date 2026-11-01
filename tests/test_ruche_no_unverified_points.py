@@ -44,3 +44,14 @@ def test_boinc_status_promises_no_fixed_reward(tmp_path: Path) -> None:
     body = _client(tmp_path).get("/boinc/status").text
     assert not re.search(r"\+\s?250\s*HMT", body)
     assert "no fixed amount per workunit is promised" in body
+
+
+def test_leaderboard_and_wallet_show_no_invented_figures(tmp_path: Path) -> None:
+    """Fresh vault: no invented leaderboard rows (35,500 pts for a founder) and no 1,250-point starting wallet."""
+    client = _client(tmp_path)
+    html = client.get("/").text
+    table = html.split("<th>HiveMind Reflexion Points</th>")[1].split("</table>")[0]
+    assert "No verified ledger rows yet" in table
+    assert "pts</strong>" not in table  # no row with a points total
+    assert "1,250" not in html
+    assert "computePointsBalance = 0;" in html

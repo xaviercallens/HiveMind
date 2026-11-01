@@ -72,7 +72,8 @@ def tensors_to_b64(d: Dict[str, torch.Tensor]) -> str:
 
 def b64_to_tensors(s: str) -> Dict[str, torch.Tensor]:
     # The bytes come from another machine over HTTP. torch.load unpickles by default on torch < 2.6 (a peer could run code here); weights_only=True accepts tensors and plain containers only.
-    return torch.load(io.BytesIO(base64.b64decode(s)), map_location="cpu", weights_only=True)
+    raw = base64.b64decode(s, validate=True)  # strict: anything that is not base64 is refused before torch sees it
+    return torch.load(io.BytesIO(raw), map_location="cpu", weights_only=True)
 
 
 def inner_train(model_cls: Any, start_params: Dict[str, torch.Tensor], shard: Tuple[torch.Tensor, torch.Tensor], round_idx: int, seed: int) -> Dict[str, torch.Tensor]:

@@ -163,9 +163,9 @@ def run(args: argparse.Namespace) -> int:
     torch.set_num_threads(args.threads)
     t0 = time.time()
     tok = AutoTokenizer.from_pretrained(MODEL_ID)
-    model = AutoModelForCausalLM.from_pretrained(MODEL_ID, torch_dtype=torch.float32).eval()
+    model = AutoModelForCausalLM.from_pretrained(MODEL_ID, dtype=torch.float32).train(False)
     config = AutoConfig.from_pretrained(MODEL_ID)
-    random_model = AutoModelForCausalLM.from_config(config).eval()
+    random_model = AutoModelForCausalLM.from_config(config).train(False)
     layer = config.num_hidden_layers // 2
 
     sets: dict[str, Any] = {}

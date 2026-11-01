@@ -97,3 +97,24 @@ def test_phase_2_does_not_claim_a_measured_yield_time() -> None:
     assert "non mesuré" in phase.key_metric
     # The preemption figure may appear only as a target.
     assert "objectif" in phase.title_fr and "target" in phase.title_en
+
+
+def test_every_phase_names_the_source_of_its_figures() -> None:
+    """Each lifecycle phase carries a source; any repo path it names exists; constants are not dressed as live readings."""
+    import re
+    from pathlib import Path
+
+    from hivemind.router.life_as_a_bee import BEE_LIFECYCLE_PHASES, life_as_a_bee_payload
+
+    root = Path(__file__).resolve().parents[1]
+    for phase in BEE_LIFECYCLE_PHASES:
+        assert phase.source.strip(), phase.phase_id
+        for rel in re.findall(r"(?:docs|artifacts)/[\w./-]+", phase.source):
+            assert (root / rel).exists(), (phase.phase_id, rel)
+    p1 = next(p for p in BEE_LIFECYCLE_PHASES if p.phase_id == "PHASE-1-POLLEN-INTENT")
+    assert "Temps réel" not in p1.time_window and "ms" not in p1.time_window
+    assert "0 HTTP 402/5xx" not in p1.key_metric
+    p4 = next(p for p in BEE_LIFECYCLE_PHASES if p.phase_id == "PHASE-4-NOCTURNAL-ROYAL-JELLY")
+    assert "%" not in p4.key_metric
+    payload = life_as_a_bee_payload()
+    assert all("source" in ph for ph in payload["lifecycle_phases"])

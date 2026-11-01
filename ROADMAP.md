@@ -663,6 +663,15 @@ The update is [`docs/IMPROVEMENT_PLAN_2026-11-01.md`](docs/IMPROVEMENT_PLAN_2026
 | PR-IP-18 | Game, economy, lab honesty items | _open_ | M | Hard-coded values labelled or measured |
 | PR-IP-19 | Core, data, BOINC, QueenBee, security items (IP-125 personal data) | _open_ | L (split) | As listed in the plan |
 
+**Round of 2026-11-01 (midday).** Merged since the 11-01 audit: #426 (owner-fleet-status reports configured policy, not invented telemetry), #427 (one-command federation plan for an RTX 2070 class node; training stays BLOCKED, cross-host pilot MANUAL), #428 to #432 (stub-audit clean-up for `src/hivemind`, MoE balance gradient, live GCP telemetry, ZK-OPoI witness binding). Open: #435 (La Ruche no longer credits 250 points from client-supplied numbers; an invented lease returned 200 on `main`), #434, #433.
+
+| Item | Owner | Status |
+| :-- | :-- | :-- |
+| La Ruche copy, wallet and leaderboard: remove fixed +250 claims and hard-coded totals (#436) | _open_ | proposed |
+| One starting-points value across `/join`, `/signup`, README (#437) | _open_ | proposed |
+| RTX 2070 plan: point the cross-host step at the AMCP learner after #410 (#438) | _open_ | blocked on #410 |
+| Open PRs with failing tests on their last run: #369, #366, #362 | PR authors | cause per PR in the hourly report; rebase and rerun |
+
 ---
 
 ## 🎮 4. Opt-In Community GPU Testing Program (If Interested & Possible)

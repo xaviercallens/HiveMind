@@ -1,0 +1,24 @@
+[Unit]
+Description=HiveMind Permanent Low-Cost VM OpenTrainer Collaborative Orchestrator (T4-Independent)
+After=network-online.target wg-quick@wg-hivemind.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hivemind
+Group=hivemind
+WorkingDirectory=/opt/hivemind/repo
+Environment="PYTHONPATH=/opt/hivemind/repo/src:/opt/hivemind/repo/scripts"
+EnvironmentFile=-/etc/hivemind-opentrainer/opentrainer.env
+ExecStart=/opt/hivemind/venv/bin/python /opt/hivemind/repo/scripts/opentrainer_vm_daemon.py orchestrator --host 0.0.0.0 --port 8096 --quorum 1 --checkpoint /var/lib/hivemind-opentrainer/checkpoint.pt --out /var/lib/hivemind-opentrainer/opentrainer_status.json
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/hivemind-opentrainer
+MemoryMax=1536M
+
+[Install]
+WantedBy=multi-user.target

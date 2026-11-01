@@ -185,13 +185,32 @@ def test_exemplar_byob_bees_lifecycle_and_attestation() -> None:
         assert partner.public_id == bee.public_id
         assert normalize_model_alias(bee.public_id) in (bee.bee_id, bee.base_tier_id)
 
-        # Register and attest
-        attestation = manager.register_and_attest_bee(bee)
+        # IP-21b negative control: calling register_and_attest_bee without evaluation_record must raise
+        with pytest.raises(ValueError, match="without a verified evaluation_record"):
+            manager.register_and_attest_bee(bee)
+
+        # Register and attest with a verified evaluation_record
+        attestation = manager.register_and_attest_bee(
+            bee,
+            evaluation_record={
+                "verdict": "ACCEPT",
+                "mcnemar_p_value": bee.mcnemar_p_value,
+                "accuracy_gain": bee.test_accuracy_gain,
+            },
+        )
         assert attestation["status"] == "APPROVED_LIVE"
         assert attestation["gate_passed"] is True
         assert attestation["accuracy_gain"] > 0.25
         assert attestation["mcnemar_p_value"] < 0.001
         assert len(attestation["attestation_sha256"]) == 64
+
+    # Verify a rejected evaluation record does not register
+    rejected_att = manager.register_and_attest_bee(
+        live_bees[0],
+        evaluation_record={"verdict": "REJECT", "mcnemar_p_value": 0.45, "accuracy_gain": -0.02},
+    )
+    assert rejected_att["status"] == "REJECTED"
+    assert rejected_att["gate_passed"] is False
 
     # Verify registry records
     assert len(registry) == 3

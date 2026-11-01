@@ -122,11 +122,29 @@ class FederatedLearningSecurityGuard:
             raise ValueError("Cannot sanitize empty worker_deltas.")
 
         if reference_keys_and_shapes is None:
-            # Infer canonical keys/shapes from the first structurally valid delta
-            first_wid = next(iter(worker_deltas))
-            reference_keys_and_shapes = {
-                k: v.shape for k, v in worker_deltas[first_wid].items() if isinstance(v, torch.Tensor)
-            }
+            # Infer canonical keys/shapes by plurality/majority vote across structurally valid worker deltas
+            # so a single first-arriving Byzantine attacker cannot quarantine honest peers (IP-20).
+            from collections import Counter
+
+            schema_counts: Counter[tuple[tuple[str, tuple[int, ...]], ...]] = Counter()
+            schema_map: Dict[tuple[tuple[str, tuple[int, ...]], ...], Dict[str, torch.Size]] = {}
+            for cand_dict in worker_deltas.values():
+                if not isinstance(cand_dict, dict) or not cand_dict:
+                    continue
+                if not all(isinstance(v, torch.Tensor) for v in cand_dict.values()):
+                    continue
+                sig = tuple(sorted((str(k), tuple(v.shape)) for k, v in cand_dict.items()))
+                schema_counts[sig] += 1
+                if sig not in schema_map:
+                    schema_map[sig] = {k: v.shape for k, v in cand_dict.items()}
+            if schema_counts:
+                best_sig = schema_counts.most_common(1)[0][0]
+                reference_keys_and_shapes = schema_map[best_sig]
+            else:
+                first_wid = next(iter(worker_deltas))
+                reference_keys_and_shapes = {
+                    k: v.shape for k, v in worker_deltas[first_wid].items() if isinstance(v, torch.Tensor)
+                }
 
         expected_keys = set(reference_keys_and_shapes.keys())
         clean_deltas: Dict[str, Dict[str, torch.Tensor]] = {}

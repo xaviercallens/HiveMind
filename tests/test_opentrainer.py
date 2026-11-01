@@ -160,3 +160,119 @@ def test_signup_and_portal_pages_include_trainer_and_opentrainer() -> None:
     )
     assert auth_reg.status_code == 200
     assert auth_reg.json()["role"] == "trainer"
+
+
+def test_web_ui_portal_renders_and_syncs_real_life_database_information() -> None:
+    store = RouterStore(":memory:", b"d" * 32)
+    client = TestClient(create_router_app(store))
+
+    reg = client.post("/v1/hivemind/register", json={"handle": "rtx2070_live_trainer", "role": "trainer"})
+    assert reg.status_code == 200
+    trainer_key = reg.json()["api_key"]
+
+    hb = client.post(
+        "/v1/hivemind/opentrainer/heartbeat",
+        headers={"Authorization": f"Bearer {trainer_key}"},
+        json={
+            "host_label": "XAVGAMSRV-RTX2070",
+            "gpu_name": "NVIDIA GeForce RTX 2070 (8 GB NF4)",
+            "vram_total_mib": 8192,
+            "vram_free_mib": 6420,
+            "network_mode": "outbound-https-relay",
+        },
+    )
+    assert hb.status_code == 200
+    offer = hb.json()["active_task_offer"]
+
+    delta_sha = hashlib.sha256(b"real-db-ui-round").hexdigest()
+    sub = client.post(
+        "/v1/hivemind/opentrainer/submit-delta",
+        headers={"Authorization": f"Bearer {trainer_key}"},
+        json={
+            "round_id": 7,
+            "campaign_id": "OPENTRAINER-LIVE-DB-ROUND",
+            "learner_index": 1,
+            "inner_steps": 20,
+            "loss_before": 4.1709,
+            "loss_after": 2.6123,
+            "delta_norm": 1.2345,
+            "delta_sha256": delta_sha,
+            "code_pin": offer["script_sha256"],
+            "network_mode": "outbound-https-relay",
+        },
+    )
+    assert sub.status_code == 200
+
+    # 1. Verify /v1/hivemind/db/live returns real SQLite database state
+    db_live = client.get("/v1/hivemind/db/live").json()
+    assert db_live["object"] == "hivemind.database.live_summary"
+    assert db_live["accounts"]["by_role"]["trainer"] == 1
+    assert db_live["opentrainer"]["registered_trainer_accounts_count"] == 1
+    assert db_live["opentrainer"]["active_trainer_nodes"] == 1
+    assert db_live["opentrainer"]["total_round_submissions_in_db"] == 1
+    assert db_live["opentrainer"]["latest_eval_loss"] == 2.6123
+    assert db_live["usage_and_ledger"]["ledger_chain_valid"] is True
+
+    # 2. Verify Web UI (GET / and GET /fr) renders real-life SQLite rows in its HTML tables
+    html_en = client.get("/").text
+    assert 'id="otNodesTableBody"' in html_en
+    assert 'id="otRoundsTableBody"' in html_en
+    assert 'id="dbProducersTableBody"' in html_en
+    assert "XAVGAMSRV-RTX2070" in html_en
+    assert "rtx2070_live_trainer" in html_en
+    assert "OPENTRAINER-LIVE-DB-ROUND" in html_en
+    assert "2.6123" in html_en
+    assert "refreshLiveDatabaseTelemetry" in html_en
+
+    # 3. Verify syncing the low-cost VM orchestrator ledger populates SQLite idempotently
+    store.sync_opentrainer_orchestrator_ledger(
+        {
+            "run_id": "opentrainer-vm-test",
+            "current_eval_loss": 2.5012,
+            "learners_last_seen": {
+                "l0": {"host": "hm-opentrainer-1-cpu-sentinel", "timestamp_unix": 1793524000.0, "vram_peak_mib": 0.0},
+                "l1": {"host": "rtx2070-XAVGAMSRV", "timestamp_unix": 1793524000.0, "vram_peak_mib": 18.85},
+            },
+            "rounds": [
+                {
+                    "round": 0,
+                    "accepted": ["l0", "l1"],
+                    "hosts": {"l0": "hm-opentrainer-1-cpu-sentinel", "l1": "rtx2070-XAVGAMSRV"},
+                    "delta_l2": {"l0": 4.32, "l1": 6.89},
+                    "vram_peak_mib": {"l0": 0.0, "l1": 18.85},
+                    "eval_loss_after": 2.5012,
+                }
+            ],
+        }
+    )
+    html_after = client.get("/").text
+    assert "hm-opentrainer-1-cpu-sentinel" in html_after
+    assert "opentrainer-vm-test" in html_after
+    assert "Founding Pioneer Trainer #1" in html_after
+
+    # 4. Verify promoting the first trainer grants +5,000 HMT idempotently on the hash-chained ledger
+    promo_res = client.post(
+        "/v1/hivemind/opentrainer/promote-trainer",
+        json={"handle": "rtx2070-xavgamsrv", "bonus_hmt": 5000.0, "rank": 1},
+    )
+    assert promo_res.status_code == 200
+    promo_json = promo_res.json()
+    assert promo_json["handle"] == "rtx2070-xavgamsrv"
+    assert promo_json["pioneer_rank"] == 1
+    assert promo_json["minted_now"] is True
+    assert promo_json["balance_hmt"] == 5000.0
+
+    # Calling promote-trainer a second time must be idempotent (no duplicate mint)
+    promo_again = client.post(
+        "/v1/hivemind/opentrainer/promote-trainer",
+        json={"handle": "rtx2070-xavgamsrv", "bonus_hmt": 5000.0, "rank": 1},
+    ).json()
+    assert promo_again["minted_now"] is False
+    assert promo_again["balance_hmt"] == 5000.0
+
+    camp = client.get("/v1/hivemind/opentrainer/pioneer-campaign").json()
+    assert camp["claimed_pioneer_slots"] == 1
+    assert camp["open_pioneer_slots"] == 9
+    assert camp["first_pioneer_trainer"]["handle"] == "rtx2070-xavgamsrv"
+    assert store.verify_chain() is True
+    assert "2.5012" in html_after

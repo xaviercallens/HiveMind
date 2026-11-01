@@ -1,0 +1,38 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
+# ==============================================================================
+# Turnkey RTX BOINC Server + Permanent OpenTrainer Orchestrator + RTX Client
+# Usage:
+#   docker compose -f deploy/rtx_boinc/docker-compose.rtx-boinc.yml up -d
+# ==============================================================================
+services:
+  rtx-boinc-server:
+    image: python:3.11-slim
+    container_name: hivemind-rtx-boinc-server
+    working_dir: /workspace
+    volumes:
+      - ../../:/workspace
+    environment:
+      - PYTHONPATH=/workspace/src:/workspace
+      - HIVEMIND_RTX_BOINC_DB=/workspace/artifacts/rtx_boinc_server.db
+      - HIVEMIND_LEDGER_DIR=/workspace/artifacts/boinc_ledger
+    ports:
+      - "8097:8097"
+    command: >
+      bash -c "pip install --no-cache-dir fastapi uvicorn pydantic torch --index-url https://download.pytorch.org/whl/cpu &&
+               python scripts/hivemind_rtx_boinc_deploy.py server --host 0.0.0.0 --port 8097 --allow-cpu"
+    restart: unless-stopped
+
+  opentrainer-orchestrator:
+    image: python:3.11-slim
+    container_name: hivemind-opentrainer-orchestrator
+    working_dir: /workspace
+    volumes:
+      - ../../:/workspace
+    environment:
+      - PYTHONPATH=/workspace/src:/workspace
+    ports:
+      - "8096:8096"
+    command: >
+      bash -c "pip install --no-cache-dir fastapi uvicorn pydantic torch --index-url https://download.pytorch.org/whl/cpu &&
+               python scripts/opentrainer_vm_daemon.py orchestrator --host 0.0.0.0 --port 8096 --quorum 1 --rounds 1000"
+    restart: unless-stopped

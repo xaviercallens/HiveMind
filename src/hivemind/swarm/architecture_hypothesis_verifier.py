@@ -489,8 +489,12 @@ class ArchitectureHypothesisVerifier:
             },
         )
 
-    def verify_h5_skip_attention_car_and_async_dma(self) -> HypothesisVerificationRecord:
-        """H5: Skip-Attention Speculative Expert Prefetch, Cache-Aware Routing (CAR) & Async DMA."""
+    def verify_h5_skip_attention_car_and_async_dma(
+        self,
+        simulated_attention_compute_ms: float = 5.0,
+        simulated_dma_copy_ms: Optional[float] = None,
+    ) -> HypothesisVerificationRecord:
+        """H5: Skip-Attention Speculative Expert Prefetch, Cache-Aware Routing (CAR) & Async DMA (IP-47)."""
         gen = torch.Generator().manual_seed(self.seed + 5)
         num_experts = 16
         hidden_dim = 32
@@ -506,7 +510,9 @@ class ArchitectureHypothesisVerifier:
         for name in expert_names:
             streamer.stage_expert_in_pinned_ram(name, sample_expert_tensors)
         for name in expert_names[:4]:
-            streamer.async_dma_prefetch_to_vram(name, simulated_attention_compute_ms=5.0)
+            streamer.async_dma_prefetch_to_vram(
+                name, simulated_attention_compute_ms=simulated_attention_compute_ms
+            )
 
         out = streamer.prefetch_and_route_skip_attention_car(
             post_ffn_residual=post_ffn,
@@ -518,7 +524,8 @@ class ArchitectureHypothesisVerifier:
             top_k=2,
             car_threshold=0.45,
             max_prefetch_experts=6,
-            simulated_attention_compute_ms=5.0,
+            simulated_attention_compute_ms=simulated_attention_compute_ms,
+            simulated_dma_copy_ms=simulated_dma_copy_ms,
         )
 
         passed = (

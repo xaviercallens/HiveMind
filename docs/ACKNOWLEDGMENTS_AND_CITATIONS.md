@@ -81,6 +81,9 @@ Entries are ordered by arXiv id. **Removed in this revision** (fabricated identi
 31. **Kale, Satyen, Douillard, Arthur, Donchev, Yanislav (2025).** *Eager Updates for Overlapped Communication and Computation in DiLoCo.* [`arXiv:2502.12996`](https://arxiv.org/abs/2502.12996) — Google DeepMind / Google Research. HiveMind use: 1-outer-step eager overlap as the candidate deferred-learner rule for `HM-S9-01` / `HM-S9-13` (verified 2026-10-23).
 32. **Defazio, Aaron, Mishchenko, Konstantin, Raman, Parameswaran, Shi, Hao-Jun Michael, Xiao, Lin (2025).** *Smoothing DiLoCo with Primal Averaging for Faster Training of LLMs.* [`arXiv:2512.17131`](https://arxiv.org/abs/2512.17131) — Meta Superintelligence Labs. HiveMind use: Generalized Primal Averaging as the control for the outer-momentum-restart factor of E5 (`HM-S9-05`) (verified 2026-10-23).
 33. **Wang, Yichuan, Li, Zhifei, Liu, Shu, Wu, Yongji, Mao, Ziming, Zhao, Yilong, Yan, Xiao, Xu, Zhiying, Zhou, Yang, Stoica, Ion, Min, Sewon, Zaharia, Matei, Gonzalez, Joseph E. (2025; Proceedings of Machine Learning and Systems 8, MLSys 2026).** *LEANN: A Low-Storage Vector Index* (MLSys title: *A Low-Storage Overhead Vector Index*). [`arXiv:2506.08276`](https://arxiv.org/abs/2506.08276v2) — UC Berkeley / CUHK / AWS / UC Davis; code MIT-licensed (upstream repository to be confirmed, see `docs/S22_LIGHT_MEMORY.md`). HiveMind use: **proposed only** (Season 22 `HM-S22-01`..`07`), not integrated, not measured on our hardware. Abstract and body read 2026-10-28; the MLSys PDF and the MarktechPost write-up were not.
+34. **Alabdulkareem, Abdulrahman, Tenison, Irene, Zhang, Yang, Zhu, Yada, Katz, Boris, Gutfreund, Dan (2026).** *Swarm Telepathy: Prefill-Free KV-Cache Transfer Across Families.* [`arXiv:2610.15095`](https://arxiv.org/abs/2610.15095) — MIT CSAIL & MIT-IBM Computing Research Lab; code [`Ar-Kareem/SwaT`](https://github.com/Ar-Kareem/SwaT) cloned in `third_party/SwaT/` (`commit ae2de2285caf82f4d500526bf6e6992747b98eea`). HiveMind use: Season 34 (`HM-S34-01`..`07`, `docs/S34_SWAT_SWARM_TELEPATHY_INTEGRATION.md`) prefill-free cross-family KV-cache transfer (`CacheRendererV2`), character-span RoPE alignment, and VLM-to-text / long-context Bee telepathy (full 25-page PDF and repository inspected 2026-10-31).
+35. **Zweiger, Adam, Fu, Xinghong, Guo, Han, Kim, Yoon (2026).** *Fast KV Compaction via Attention Matching.* [`arXiv:2602.16284`](https://arxiv.org/abs/2602.16284) — MIT. HiveMind use: Season 34 (`HM-S34-02`, `SwaT+AM`) Attention Matching KV-cache compaction paired with `SwaT` for compacted latent Nectar handoffs.
+36. **Behrouz, Ali, Hashemi, Farnoosh, Javanmard, Adel, Mirrokni, Vahab (2026).** *Language Models Need Sleep: Learning to Self-Modify and Consolidate Memories.* [`arXiv:2606.03979`](https://arxiv.org/abs/2606.03979) (`arXiv:2606.03979v2`) — Google Research & Cornell University. HiveMind use: Season 34 (`HM-S34-08`..`10`, `docs/S34_SWAT_SWARM_TELEPATHY_INTEGRATION.md`, strengthening `HM-S21-03`, `HM-S32-01`, and `HM-S33-05`) Two-Stage Nocturnal Sleep paradigm combining Stage 1 NREM Slow-Wave Memory Consolidation (`Continuum Memory System`, `Compute–Consolidate–Update`, Upward Distillation / `Knowledge Seeding` via On-Policy `GKD` + RL `Learning-to-Imitate`, and fast-expert synaptic pruning) with Stage 2 REM `Dreaming` (random MoE expert mixing + gradient-norm Top-$k$+$b$ dream selection + `ReST^EM` binary reward) (full 26-page PDF inspected 2026-10-31).
 
 ### Author's own publications used by the programme (DOIs read from the Zenodo API, 2026-10-23)
 
@@ -346,4 +349,32 @@ Software without an arXiv paper: [`pmerolla/fomoe`](https://github.com/pmerolla/
   year={2026},
   note={arXiv:2506.08276 (arXiv title: LEANN: A Low-Storage Vector Index); UC Berkeley / CUHK / AWS / UC Davis}
 }
-```
+@misc{alabdulkareem2026swarmtelepathyprefillfreekvcache,
+  title={Swarm Telepathy: Prefill-Free KV-Cache Transfer Across Families},
+  author={Alabdulkareem, Abdulrahman and Tenison, Irene and Zhang, Yang and Zhu, Yada and Katz, Boris and Gutfreund, Dan},
+  year={2026},
+  eprint={2610.15095},
+  archivePrefix={arXiv},
+  primaryClass={cs.LG},
+  url={https://arxiv.org/abs/2610.15095},
+  note={MIT CSAIL & MIT-IBM Computing Research Lab; code Ar-Kareem/SwaT}
+}
+@article{zweiger2026attentionmatching,
+  title={Fast KV Compaction via Attention Matching},
+  author={Zweiger, Adam and Fu, Xinghong and Guo, Han and Kim, Yoon},
+  journal={arXiv preprint arXiv:2602.16284},
+  year={2026},
+  url={https://arxiv.org/abs/2602.16284}
+}
+@misc{behrouz2026languagemodelsneedsleep,
+  title={Language Models Need Sleep: Learning to Self-Modify and Consolidate Memories},
+  author={Behrouz, Ali and Hashemi, Farnoosh and Javanmard, Adel and Mirrokni, Vahab},
+  year={2026},
+  eprint={2606.03979},
+  archivePrefix={arXiv},
+  primaryClass={cs.LG},
+  url={https://arxiv.org/abs/2606.03979},
+  note={Google Research & Cornell University}
+}
+}
+`

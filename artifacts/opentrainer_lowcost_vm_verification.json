@@ -1,0 +1,156 @@
+{
+  "base_sha256": "7e3bf9e2252e988135b35209e7a3fd9a06a2c2efe3976de7a0d5c0024adf4c96",
+  "code_pin": "d980e290213af9c49f54720e6a6ed263a44b9f25f68a1901446488a93514b4dd",
+  "completed": true,
+  "component": "hivemind.opentrainer.lowcost_vm_orchestrator",
+  "current_eval_loss": 2.809871,
+  "current_round": 3,
+  "global_sha256": "d78c5916800c871d83781774739c1d885972979572f1d6bb6b79186d7c6a37b6",
+  "hosts_seen": [
+    "hm-opentrainer-1-cpu-sentinel",
+    "rtx2070-NVIDIA_GeForce_RTX_2070"
+  ],
+  "initial_eval_loss": 4.170939,
+  "learners_last_seen": {
+    "l0": {
+      "host": "hm-opentrainer-1-cpu-sentinel",
+      "last_result_round": 2,
+      "timestamp_unix": 1793517897.0347896,
+      "vram_peak_mib": 0.0
+    },
+    "l1": {
+      "host": "rtx2070-NVIDIA_GeForce_RTX_2070",
+      "last_result_round": 2,
+      "timestamp_unix": 1793517897.731336,
+      "vram_peak_mib": 27.751953125
+    }
+  },
+  "loss_decreased": true,
+  "loss_reduction": 1.361068,
+  "orchestrator_host": "XAVGAMSRV",
+  "receipt_sha256": "b7458da769f87ac098ec5906f9753aa5eb84e584b301f7460e1db954da77635b",
+  "rounds": [
+    {
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "claims": [],
+      "delta_l2": {
+        "l0": 4.365898,
+        "l1": 7.519212
+      },
+      "eval_loss_after": 3.341262,
+      "eval_loss_before": 4.171523,
+      "hosts": {
+        "l0": "hm-opentrainer-1-cpu-sentinel",
+        "l1": "rtx2070-NVIDIA_GeForce_RTX_2070"
+      },
+      "latency_s": 5.4499,
+      "rejected": [],
+      "retries": 0,
+      "round": 0,
+      "status": "complete",
+      "t4_participated": false,
+      "vram_peak_mib": {
+        "l0": 0.0,
+        "l1": 18.853515625
+      }
+    },
+    {
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "claims": [],
+      "delta_l2": {
+        "l0": 4.321328,
+        "l1": 6.894276
+      },
+      "eval_loss_after": 2.704282,
+      "eval_loss_before": 3.340625,
+      "hosts": {
+        "l0": "hm-opentrainer-1-cpu-sentinel",
+        "l1": "rtx2070-NVIDIA_GeForce_RTX_2070"
+      },
+      "latency_s": 0.8265,
+      "rejected": [],
+      "retries": 0,
+      "round": 1,
+      "status": "complete",
+      "t4_participated": false,
+      "vram_peak_mib": {
+        "l0": 0.0,
+        "l1": 27.751953125
+      }
+    },
+    {
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "claims": [],
+      "delta_l2": {
+        "l0": 4.58365,
+        "l1": 5.349171
+      },
+      "eval_loss_after": 2.809871,
+      "eval_loss_before": 2.704708,
+      "hosts": {
+        "l0": "hm-opentrainer-1-cpu-sentinel",
+        "l1": "rtx2070-NVIDIA_GeForce_RTX_2070"
+      },
+      "latency_s": 0.8955,
+      "rejected": [],
+      "retries": 0,
+      "round": 2,
+      "status": "complete",
+      "t4_participated": false,
+      "vram_peak_mib": {
+        "l0": 0.0,
+        "l1": 27.751953125
+      }
+    }
+  ],
+  "run_id": "opentrainer-t4free-selftest",
+  "schema_version": 1,
+  "self_test_device": "cuda",
+  "self_test_gpu_name": "NVIDIA GeForce RTX 2070",
+  "self_test_quant": "nf4",
+  "t4_independent_rounds_completed": 3,
+  "t4_participated_rounds": 0,
+  "t4_required": false,
+  "total_rounds": 3,
+  "vm_governance": {
+    "checks": {
+      "low_cost_budget_under_10_usd": true,
+      "no_paid_unused_static_ip": true,
+      "spot_provisioning": true,
+      "stop_on_preemption": true,
+      "t4_independent": true,
+      "zero_gpu_accelerators": true
+    },
+    "compliant": true,
+    "profile": {
+      "accelerators_count": 0,
+      "boot_disk_gb": 20,
+      "boot_disk_type": "pd-standard",
+      "estimated_monthly_cost_usd": 3.65,
+      "keepalive_cron": "*/5 * * * *",
+      "keepalive_scheduler_job": "hm-opentrainer-1-keepalive",
+      "machine_type": "e2-small",
+      "memory_mib": 2048,
+      "project_id": "gen-lang-client-0625573011",
+      "provisioning_model": "SPOT",
+      "requires_t4_gpu": false,
+      "static_external_ip_reserved": false,
+      "systemd_unit": "hivemind-opentrainer.service",
+      "termination_action": "STOP",
+      "vcpus": 2,
+      "vm_name": "hm-opentrainer-1",
+      "vpc_private_ip": "10.150.0.14",
+      "wireguard_overlay_ip": "10.77.0.6",
+      "zone": "us-east4-b"
+    }
+  }
+}

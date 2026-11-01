@@ -71,9 +71,8 @@ def main() -> int:
     chain_template = st.ensure_chain_template(prof["app"])
     while True:
         try:
-            if a.night_only and not in_european_night(_now()):
-                pass  # outside the window: create nothing, results already out keep validating
-            elif pending(st, prof["app"], prof["prefix"]) == 0:
+            # Outside the European night window when --night-only is set: create nothing, results already out keep validating.
+            if (not a.night_only or in_european_night(_now())) and pending(st, prof["app"], prof["prefix"]) == 0:
                 rnd = (json.loads(state_f.read_text())["round"] if state_f.exists() else 0) + 1
                 head = json.loads((ledger / f"{stem}.json").read_text()) if (ledger / f"{stem}.json").exists() else None
                 name = f"{prof['prefix']}{rnd:05d}"

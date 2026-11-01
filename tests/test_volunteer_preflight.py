@@ -280,4 +280,10 @@ def test_ssrf_guard_matches_gateway() -> None:
 def test_first_download_figures() -> None:
     assert pf.FIRST_DOWNLOAD_GB == 4.4 and (pf.RUNTIME_GB, pf.MODEL_GB) == (1.76, 2.67)
     assert pf.PLAN_CLASS_MIN_MB == 3500
-    assert "<gpu_ram>3500000000</gpu_ram>" in (ROOT / "scripts" / "boinc_publish_app_version.py").read_text()
+    spec = importlib.util.spec_from_file_location("boinc_publish_app_version", ROOT / "scripts" / "boinc_publish_app_version.py")
+    assert spec is not None and spec.loader is not None
+    pub_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pub_mod)
+    xml_out = pub_mod.render_version_xml("launcher.sh", ("a.tar.xz",), "cuda_hivemind", gpu_ram_mb=pf.PLAN_CLASS_MIN_MB)
+    assert "<gpu_ram>3500000000</gpu_ram>" in xml_out
+    assert "<gpu_ram>12000000000</gpu_ram>" in pub_mod.render_version_xml("launcher.sh", ("a.tar.xz",), "cuda_hivemind_big", gpu_ram_mb=12000)

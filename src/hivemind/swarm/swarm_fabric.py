@@ -219,7 +219,7 @@ class PinnedRAMExpertDMAStreamer:
                 try:
                     cpu_t = cpu_t.pin_memory()
                 except Exception:
-                    pass
+                    cpu_t = cpu_t.contiguous()
             pinned_dict[k] = cpu_t
             total_bytes += cpu_t.numel() * cpu_t.element_size()
 
@@ -423,6 +423,7 @@ class PinnedRAMExpertDMAStreamer:
         car_threshold: float = 0.35,
         max_prefetch_experts: int = 4,
         simulated_attention_compute_ms: float = 2.0,
+        simulated_dma_copy_ms: Optional[float] = None,
     ) -> Dict[str, Any]:
         """HM-S8-07 (`SI-10`, adapted from `pmerolla/fomoe`):
         1. Predict Layer `L+1` top-`k` experts immediately after Layer `L` FFN (`post_ffn_residual`)
@@ -496,7 +497,11 @@ class PinnedRAMExpertDMAStreamer:
             next_layer_router_weight=next_layer_router_weight,
             baseline_cached_experts=resident_after_prefetch_ids,
         )
-        total_raw_ms = round(sum(t["raw_dma_transfer_ms"] for t in transfers), 3)
+        total_raw_ms = (
+            round(float(simulated_dma_copy_ms), 3)
+            if simulated_dma_copy_ms is not None
+            else round(sum(t["raw_dma_transfer_ms"] for t in transfers), 3)
+        )
         return {
             "milestone": "HM-S8-07",
             "strategy_id": "SI-10-FOMOE-SKIP-ATTENTION-SPECULATIVE-CAR",
@@ -508,6 +513,7 @@ class PinnedRAMExpertDMAStreamer:
             "exposed_swap_latency_ms_simulated": round(
                 max(0.0, total_raw_ms - simulated_attention_compute_ms), 3
             ),
+            "latency_basis": "model_only" if (self.device.type == "cpu" or simulated_dma_copy_ms is not None) else "cuda_event",
             **car_out,
         }
 

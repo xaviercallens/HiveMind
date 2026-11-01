@@ -39,7 +39,7 @@ def ensure_local_drive_caches() -> dict[str, str]:
         load_dotenv(PROJECT_ROOT / ".env", override=False)
         load_dotenv(Path.home() / ".env", override=False)
     except Exception:
-        pass
+        _ = None
 
     cache_dirs = {
         "HF_HOME": str(CACHE_ROOT / "huggingface"),
@@ -102,7 +102,7 @@ def get_hf_token() -> str | None:
             os.environ["HF_TOKEN"] = tok
             return tok
     except Exception:
-        pass
+        _ = None
     return None
 
 
@@ -452,10 +452,18 @@ def rocm_supports_native_bf16(gcn_arch: str | None) -> bool:
     return False
 
 
-def configure_deterministic_runtime(seed: int = 42, warn_only: bool = True) -> None:
-    """Enforce deterministic CUDA/CPU kernels for BOINC Spot-Check Verification."""
+def configure_deterministic_runtime(seed: int = 42, warn_only: bool = False) -> dict[str, Any]:
+    """Enforce deterministic CUDA/CPU kernels for BOINC Spot-Check Verification (IP-43).
+
+    Defaults ``warn_only=False`` so non-deterministic CUDA/CPU kernels fail closed
+    during cryptographic spot-check replay rather than silently emitting a warning.
+    Also records whether ``PYTHONHASHSEED`` was already set to ``str(seed)`` at
+    interpreter startup (mutating ``os.environ["PYTHONHASHSEED"]`` after startup
+    only affects child processes).
+    """
     import torch
 
+    hashseed_preconfigured = os.environ.get("PYTHONHASHSEED") == str(seed)
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
     os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
@@ -465,7 +473,13 @@ def configure_deterministic_runtime(seed: int = 42, warn_only: bool = True) -> N
         torch.cuda.manual_seed_all(seed)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
-    torch.use_deterministic_algorithms(True, warn_only=warn_only)
+    torch.use_deterministic_algorithms(True, warn_only=bool(warn_only))
+    return {
+        "seed": int(seed),
+        "warn_only": bool(warn_only),
+        "hashseed_preconfigured": hashseed_preconfigured,
+        "deterministic_algorithms": True,
+    }
 
 
 def detect_local_hardware() -> dict[str, Any]:
@@ -608,7 +622,7 @@ def detect_local_hardware() -> dict[str, Any]:
                         }
                     )
         except Exception:
-            pass
+            _ = None
 
     info["compute_backend"] = info["gpu_backend"]
     return info

@@ -578,6 +578,44 @@ def run_stage4_roadmap_pr_ip11_validation() -> Dict[str, Any]:
         and injected_58_forecast["hiveminers_on_globe"]["current_pioneer_nodes_count"] == 58
     )
 
+    from hivemind.core.auto_improvement import NocturnalAutoImprovementScheduler, PointsRetrofitManager
+    from hivemind.swarm.architecture_hypothesis_verifier import ArchitectureHypothesisVerifier
+    from hivemind.swarm.exemplar_byob_bees import EXEMPLAR_BYOB_BEES, ExemplarBYOBRegistryManager
+    from hivemind.swarm.s34_02_game_preemption_ef21_flush import GamePreemptionEF21CircuitBreaker
+
+    sched = NocturnalAutoImprovementScheduler()
+    retrofit = PointsRetrofitManager()
+    wu_sim = sched.create_domain_workunit(domain="maths_formal", num_samples=8, inner_steps=10, seed=42)
+    sim_res = sched.verify_workunit_execution(wu_sim, worker_id="w-sim", account_id="acc-sim")
+    ip18_passed = bool(sim_res.is_simulated is True and retrofit.calculate_work_reward(sim_res) == 0.0)
+
+    byob_mgr = ExemplarBYOBRegistryManager()
+    byob_raised = False
+    try:
+        byob_mgr.register_and_attest_bee(EXEMPLAR_BYOB_BEES[0])
+    except ValueError:
+        byob_raised = True
+    byob_acc = byob_mgr.register_and_attest_bee(
+        EXEMPLAR_BYOB_BEES[0],
+        evaluation_record={"verdict": "ACCEPT", "mcnemar_p_value": 0.0001, "accuracy_gain": 0.30},
+    )
+    ip21b_passed = bool(byob_raised and byob_acc["status"] == "APPROVED_LIVE")
+
+    breaker = GamePreemptionEF21CircuitBreaker()
+    rec_preempt_fail = breaker.trigger_game_preemption(
+        trigger_process="game.exe",
+        allocated_vram_mib=2048,
+        inflight_gradient=[0.5, -0.3, 0.1, 0.2],
+        prev_error_buffer=[0.0, 0.0, 0.0, 0.0],
+        measured_residual_vram_mib=128,
+    )
+    h5_verifier = ArchitectureHypothesisVerifier(seed=2026)
+    h5_fail = h5_verifier.verify_h5_skip_attention_car_and_async_dma(
+        simulated_attention_compute_ms=5.0,
+        simulated_dma_copy_ms=9.0,
+    )
+    ip47_passed = bool(rec_preempt_fail.invariant_4_satisfied is False and h5_fail.passed is False)
+
     return {
         "stage": "stage4_roadmap_pr_ip11_validation",
         "ip22_equal_assumptions_rho_with_controls": eq_proj.utilization_rho_with_controls,
@@ -589,6 +627,9 @@ def run_stage4_roadmap_pr_ip11_validation() -> Dict[str, Any]:
         "ip48_passed": ip48_passed,
         "ip43_strict_default_passed": ip43_strict_default_passed,
         "ip50_governor_fail_closed_passed": ip50_passed,
+        "ip18_rng_simulated_zero_points_passed": ip18_passed,
+        "ip21b_byob_eval_required_passed": ip21b_passed,
+        "ip47_h5_and_preemption_fail_case_passed": ip47_passed,
     }
 
 
@@ -620,6 +661,9 @@ def run_4h_rtx2070_moe_experimentator(
         and stage4["ip48_passed"]
         and stage4["ip43_strict_default_passed"]
         and stage4["ip50_governor_fail_closed_passed"]
+        and stage4["ip18_rng_simulated_zero_points_passed"]
+        and stage4["ip21b_byob_eval_required_passed"]
+        and stage4["ip47_h5_and_preemption_fail_case_passed"]
     )
 
     report: Dict[str, Any] = {
@@ -627,7 +671,7 @@ def run_4h_rtx2070_moe_experimentator(
         "generator": "scripts/run_4h_rtx2070_moe_bee_experimentator.py",
         "cadence_cron": "0 */4 * * *",
         "timestamp_utc": now_iso,
-        "implemented_roadmap_pr": "PR-IP-07 (IP-42, IP-44, IP-52) + PR-IP-08 (IP-43) + PR-IP-10 (IP-19, IP-20, IP-34, IP-35, IP-36, IP-37) + PR-IP-11 (IP-22, IP-23, IP-48, #403) + PR-IP-13 (IP-50, IP-63) + Wave 3 Scientific MoE Bees",
+        "implemented_roadmap_pr": "PR-IP-07 (IP-42, IP-44, IP-52) + PR-IP-08 (IP-43) + PR-IP-09 (IP-18, IP-21, IP-21b, IP-47) + PR-IP-10 (IP-19, IP-20, IP-34, IP-35, IP-36, IP-37) + PR-IP-11 (IP-22, IP-23, IP-48, #403) + PR-IP-13 (IP-50, IP-63) + Wave 3 Scientific MoE Bees",
         "rtx2070_telemetry": gpu_telemetry,
         "stage1_dry_run": stage1,
         "stage2_small_qlora_training": stage2,

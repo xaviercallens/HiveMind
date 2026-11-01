@@ -206,16 +206,49 @@ class ExemplarBYOBRegistryManager:
     def list_live_bees(self) -> list[ExemplarBYOBBee]:
         return list(self._live_exemplars.values())
 
-    def register_and_attest_bee(self, bee: ExemplarBYOBBee) -> dict[str, Any]:
-        """Perform simulated static validation, McNemar gate verification, and register into ExpertRegistry."""
-        manifest = bee.to_manifest()
+    def register_and_attest_bee(
+        self,
+        bee: ExemplarBYOBBee,
+        evaluation_record: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Validate a provided evaluation_record and McNemar gate before registering into ExpertRegistry (IP-21b).
 
-        # Deterministic attestation hash
+        Raises ``ValueError`` if ``evaluation_record`` is omitted. Returns ``APPROVED_LIVE`` only when
+        ``evaluation_record`` carries ``verdict == 'ACCEPT'`` and passes the McNemar gate (``p < 0.05``
+        and ``accuracy_gain > 0``).
+        """
+        if evaluation_record is None or not isinstance(evaluation_record, dict):
+            raise ValueError(
+                f"Cannot register or attest BYOB bee '{bee.bee_id}' without a verified evaluation_record (IP-21b)."
+            )
+
+        manifest = bee.to_manifest()
         raw_manifest = json.dumps(asdict(manifest), sort_keys=True).encode("utf-8")
         attestation_sha = hashlib.sha256(raw_manifest).hexdigest()
-        self._attestation_hashes[bee.bee_id] = attestation_sha
 
-        # Register into S21 ExpertRegistry
+        verdict = str(
+            evaluation_record.get("verdict")
+            or (evaluation_record.get("evaluation") or {}).get("verdict")
+            or ""
+        ).upper()
+        p_val = float(evaluation_record.get("mcnemar_p_value", bee.mcnemar_p_value))
+        acc_gain = float(evaluation_record.get("accuracy_gain", bee.test_accuracy_gain))
+        gate_passed = (verdict == "ACCEPT") and (p_val < 0.05) and (acc_gain > 0.0)
+
+        if not gate_passed:
+            return {
+                "status": "REJECTED",
+                "bee_id": bee.bee_id,
+                "public_id": bee.public_id,
+                "stage": "rejected",
+                "attestation_sha256": attestation_sha,
+                "base_model": bee.base_hf_repo,
+                "mcnemar_p_value": p_val,
+                "accuracy_gain": acc_gain,
+                "gate_passed": False,
+            }
+
+        self._attestation_hashes[bee.bee_id] = attestation_sha
         rec = ExpertRecord(
             expert_id=bee.bee_id,
             kind=BYOB,
@@ -233,7 +266,7 @@ class ExemplarBYOBRegistryManager:
             "stage": "live",
             "attestation_sha256": attestation_sha,
             "base_model": bee.base_hf_repo,
-            "mcnemar_p_value": bee.mcnemar_p_value,
-            "accuracy_gain": bee.test_accuracy_gain,
-            "gate_passed": bee.mcnemar_p_value < 0.05 and bee.test_accuracy_gain > 0.0,
+            "mcnemar_p_value": p_val,
+            "accuracy_gain": acc_gain,
+            "gate_passed": True,
         }

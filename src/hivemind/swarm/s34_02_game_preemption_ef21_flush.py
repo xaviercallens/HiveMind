@@ -32,6 +32,7 @@ class GamePreemptionFlushReceipt:
     reconstruction_l2_error: float
     invariant_4_satisfied: bool
     state_digest_sha256: str
+    residual_vram_measurement_kind: str = "model_only"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -77,15 +78,21 @@ class GamePreemptionEF21CircuitBreaker:
         inflight_gradient: Sequence[float],
         prev_error_buffer: Sequence[float],
         kernel_drain_ms: float = 42.0,
+        measured_residual_vram_mib: int | None = None,
     ) -> GamePreemptionFlushReceipt:
-        """Evict all GPU tensors to Host RAM under 1.5s and preserve EF21 state."""
+        """Evict all GPU tensors to Host RAM under 1.5s and preserve EF21 state (IP-47)."""
         if allocated_vram_mib < 0 or allocated_vram_mib > 8192:
             raise ValueError("allocated_vram_mib must be within [0, 8192] MiB")
 
         transmitted, host_error, recon_err = self.compress_ef21(inflight_gradient, prev_error_buffer)
         dma_flush_ms = (allocated_vram_mib / 1024.0) / self.pcie_dma_bandwidth_gbps * 1000.0
         total_latency_ms = round(float(kernel_drain_ms) + dma_flush_ms, 3)
-        residual_vram = 0
+        if measured_residual_vram_mib is None:
+            residual_vram = 0
+            measurement_kind = "model_only"
+        else:
+            residual_vram = int(measured_residual_vram_mib)
+            measurement_kind = "measured"
         invariant_ok = (total_latency_ms < MAX_PREEMPTION_LATENCY_MS) and (residual_vram == 0) and (recon_err < 1e-12)
 
         digest = hashlib.sha256(
@@ -110,4 +117,5 @@ class GamePreemptionEF21CircuitBreaker:
             reconstruction_l2_error=recon_err,
             invariant_4_satisfied=invariant_ok,
             state_digest_sha256=digest,
+            residual_vram_measurement_kind=measurement_kind,
         )

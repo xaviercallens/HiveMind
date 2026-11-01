@@ -69,3 +69,16 @@ def test_steam_daemon_reports_nothing_it_did_not_measure_and_credits_nothing(tmp
     cockpit = client.post(path, json={"handle": "sso-user-01"}).json()
     assert cockpit["hmt_awarded"] == 0 and cockpit["cobblestones_awarded"] == 0 and cockpit["status"] == "RECEIVED_UNVERIFIED"
     assert "0.42s" not in client.get("/").text
+
+
+def test_feeds_and_tool_calls_carry_no_fabricated_swarm_telemetry(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    messages = client.get("/api/v1/amcp/mesh/messages").text
+    assert "48,920" not in messages and "542.8" not in messages and "Epoch #412" not in messages
+    hub = client.get("/api/v1/community/hub").json()
+    assert hub["coop_discovery_feed"] == []
+    tool = client.post("/api/v1/amcp/tool/call", json={"tool_name": "swarm_overview", "arguments": {}}).json()
+    assert tool["active_nodes"] is None and tool["aggregate_pflops"] is None and tool["measured"] is False
+    admin = client.get("/api/v1/admin/dashboard").json()
+    nodes = admin["night_moe_training"]["allocated_training_nodes"]
+    assert all("RTX 4090" not in n and "@" not in n for n in nodes)

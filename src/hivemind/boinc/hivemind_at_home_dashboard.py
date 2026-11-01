@@ -6362,8 +6362,8 @@ def create_hivemind_at_home_app(
             "sender_type": "QUEEN_ROUTER",
             "sender_badge": "👑 Queen Router",
             "recipient": "@AllHiveMinders",
-            "content": "Swarm telemetry update: 48,920 worker nodes online across 6 continents. Global FP16 throughput 542.8 PFLOPS. Epoch #412 DiLoCo checkpoint synced.",
-            "tags": ["swarm_telemetry", "diloco", "epoch412"],
+            "content": "Swarm telemetry: this feed publishes no node count, throughput or epoch figure; the live readings are on /boinc/status and the T4 monitor.",
+            "tags": ["swarm_telemetry", "not_measured"],
         },
     ]
 
@@ -7139,11 +7139,13 @@ def create_hivemind_at_home_app(
         else:
             res = {
                 "tool": name,
-                "status": "OPTIMAL",
-                "active_nodes": 48920,
-                "aggregate_pflops": 542.8,
-                "mesh_latency_ms": 8.42,
-                "sigma_moe_cells": 8,
+                "status": "NOT_MEASURED",
+                "active_nodes": None,
+                "aggregate_pflops": None,
+                "mesh_latency_ms": None,
+                "sigma_moe_cells": None,
+                "measured": False,
+                "message": "This tool has no live swarm reading to return.",
             }
         return JSONResponse(content=res)
 
@@ -7873,7 +7875,8 @@ def create_hivemind_at_home_app(
                 "experiment_id": "NIGHT-MOE-2",
                 "active_window": "21:00 - 07:00 UTC/CET",
                 "upgraded_models": ["Qwen/Qwen3.5-MoE-Instruct", "google/gemma-3-moe", "google/gemma-2-9b-it"],
-                "allocated_training_nodes": ["Tesla T4 (16GB Spot us-east4-b)", "GCP Cloud TPU v5e Pods", "@clark719664 RTX 4090 Swarm"],
+                "allocated_training_nodes": ["Tesla T4 (16GB Spot us-east4-b)"],
+                "allocation_source": "configured list, not a live read; no volunteer GPU is connected",
                 "secured_inference_nodes": ["NVIDIA GeForce RTX 2070 (cuda:0 - 0% Training Load)"]
             },
             "rtx2070_shield": {
@@ -8767,17 +8770,8 @@ def create_hivemind_at_home_app(
                 "favorite_world": "LHS 1140 b",
             },
         ],
-        "coop_discovery_feed": [
-            {
-                "timestamp": "2026-10-29T09:30:00",
-                "gamer_handle": "rtx2070-boinc-fr",
-                "scientist_handle": "@GCP_BOINC_Validator",
-                "target": "K2-18 b",
-                "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-                "summary": "GPU idle on NVIDIA GeForce RTX 2070 -> Crunched BLS transit folding on K2-18 b (Depth=2789 ppm) -> +45.0 BOINC Cobblestones & +250 HMT!",
-                "gcp_receipt_sha256": "4a651ffce95b484a747748502c4bf093a1bc8f0ffa34400bad0b3c0a24bafd28",
-            },
-        ],
+        # Only real submissions are appended at runtime; a fresh vault starts with no discovery.
+        "coop_discovery_feed": [],
     }
 
     def _load_or_init_ruche_community_state() -> dict[str, Any]:

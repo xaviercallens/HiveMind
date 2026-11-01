@@ -17,6 +17,7 @@ including across processes, without starting a local server or implementing NAT 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime
 import functools
 import inspect
@@ -58,6 +59,37 @@ MAX_BATCH_FRAMES = 4096
 MAX_OPEN_STREAMS = 16
 MAX_PROTOCOL_BYTES = 1024
 MAX_SESSION_TICKETS = 1024
+
+
+@contextlib.asynccontextmanager
+async def _async_timeout(delay: Optional[float]):
+    native = getattr(asyncio, "timeout", None)
+    if native is not None:
+        async with native(delay):
+            yield
+        return
+    if delay is None:
+        yield
+        return
+    loop = asyncio.get_running_loop()
+    task = asyncio.current_task()
+    timed_out = False
+
+    def _on_timeout() -> None:
+        nonlocal timed_out
+        timed_out = True
+        if task is not None:
+            task.cancel()
+
+    handle = loop.call_later(delay, _on_timeout)
+    try:
+        yield
+    except asyncio.CancelledError as exc:
+        if timed_out:
+            raise TimeoutError from exc
+        raise
+    finally:
+        handle.cancel()
 STREAM_TIMEOUT_S = 10.0
 
 FrameHandler = Callable[[bytes], None]
@@ -463,7 +495,7 @@ async def quic_send_frames(
     attempted_delivery = False
     t0 = time.perf_counter()
     try:
-        async with asyncio.timeout(timeout):
+        async with _async_timeout(timeout):
             addresses = await loop.getaddrinfo(host, port, family=socket.AF_INET, type=socket.SOCK_DGRAM)
             transport, protocol = await loop.create_datagram_endpoint(
                 lambda: _ClientProtocol(connection), local_addr=("0.0.0.0", 0), family=socket.AF_INET
@@ -725,7 +757,7 @@ class WebSocketHiddenStateServer:
 
     async def _handle(self, websocket) -> None:
         try:
-            async with asyncio.timeout(self.timeout):
+            async with _async_timeout(self.timeout):
                 if _parse_multistream(await websocket.recv()) != MULTISTREAM:
                     raise LinkProtocolError("unsupported multistream version")
                 await websocket.send(_multistream_message(MULTISTREAM))
@@ -784,7 +816,7 @@ async def websocket_send_frames(
             options["server_hostname"] = server_name
     elif ssl_context is not None or server_name is not None:
         raise ValueError("TLS options require a wss endpoint")
-    async with asyncio.timeout(timeout):
+    async with _async_timeout(timeout):
         async with ws_connect(
             url, max_size=MAX_PROTOCOL_BYTES + 5, max_queue=4, compression=None,
             open_timeout=timeout, close_timeout=0.25, **options,

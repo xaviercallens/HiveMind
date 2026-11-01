@@ -24,6 +24,8 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
+import tempfile
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -114,13 +116,42 @@ class HiveSwarmLedger:
     HALVING_INTERVAL_BLOCKS = 10_000
 
     def __init__(self, ledger_path: Optional[Path] = None) -> None:
-        self.ledger_path = ledger_path
+        self.ledger_path = Path(ledger_path) if ledger_path is not None else None
         self.chain: List[HivePoUWBlock] = []
         self.balances: Dict[str, float] = {}
         self.reputation_scores: Dict[str, int] = {}
         self.slashed_registry: List[str] = []
         self.settlement_history: List[InferenceSettlementReceipt] = []
-        self._init_genesis_block()
+        if self.ledger_path is not None and self.ledger_path.exists():
+            self._load()
+        else:
+            self._init_genesis_block()
+
+    def _load(self) -> None:
+        assert self.ledger_path is not None
+        try:
+            raw = json.loads(self.ledger_path.read_text(encoding="utf-8"))
+            self.chain = [HivePoUWBlock(**b) for b in raw.get("chain", [])]
+            self.balances = {str(k): float(v) for k, v in raw.get("balances", {}).items()}
+            self.reputation_scores = {
+                str(k): int(v) for k, v in raw.get("reputation_scores", {}).items()
+            }
+            self.slashed_registry = [str(x) for x in raw.get("slashed_registry", [])]
+            self.settlement_history = [
+                InferenceSettlementReceipt(**s) for s in raw.get("settlement_history", [])
+            ]
+        except Exception as exc:
+            raise SwarmSecurityViolationError(
+                "LEDGER-06",
+                "CORRUPTED_LEDGER_FILE",
+                f"Failed to parse persisted ledger at {self.ledger_path}: {exc}",
+            ) from exc
+        if not self.verify_chain_integrity():
+            raise SwarmSecurityViolationError(
+                "LEDGER-06",
+                "CORRUPTED_LEDGER_CHAIN",
+                f"Persisted ledger at {self.ledger_path} failed cryptographic block hash verification.",
+            )
 
     def _init_genesis_block(self) -> None:
         genesis = HivePoUWBlock(
@@ -412,7 +443,26 @@ class HiveSwarmLedger:
                 "slashed_registry": self.slashed_registry,
                 "settlement_history": [asdict(s) for s in self.settlement_history],
             }
-            self.ledger_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            payload = json.dumps(data, indent=2)
+            tmp_path: Optional[Path] = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    encoding="utf-8",
+                    dir=str(self.ledger_path.parent),
+                    prefix=f".{self.ledger_path.name}.",
+                    suffix=".tmp",
+                    delete=False,
+                ) as tmp_file:
+                    tmp_path = Path(tmp_file.name)
+                    tmp_file.write(payload)
+                    tmp_file.flush()
+                    os.fsync(tmp_file.fileno())
+                os.replace(tmp_path, self.ledger_path)
+            except Exception:
+                if tmp_path is not None and tmp_path.exists():
+                    tmp_path.unlink(missing_ok=True)
+                raise
 
 
 @dataclass

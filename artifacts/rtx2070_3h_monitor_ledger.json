@@ -1,9 +1,9 @@
 {
   "schema_version": "rtx2070_3h_monitor.v1",
   "cadence_cron": "0 */3 * * *",
-  "timestamp_utc": "2026-11-01T20:19:43Z",
+  "timestamp_utc": "2026-11-01T22:19:40Z",
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-11-01T20:19:43Z",
+    "timestamp_utc": "2026-11-01T22:19:40Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": true,
@@ -11,7 +11,7 @@
     "compute_capability": "7.5",
     "temperature_c": 34.0,
     "gpu_utilization_pct": 2.0,
-    "power_draw_w": 41.65,
+    "power_draw_w": 30.04,
     "power_limit_w": 175.0,
     "memory_used_mib": 1812.0,
     "memory_free_mib": 6195.0,
@@ -24,10 +24,10 @@
     "max_graphics_clock_mhz": 2145.0,
     "memory_clock_mhz": 6801.0,
     "host_tensor_gflops": 0.0,
-    "measured_fp32_tflops": 5.67,
-    "measured_fp16_tensor_tflops": 19.77,
-    "effective_sparse_moe_nf4_tflops": 36.58,
-    "microbench_elapsed_ms": 238.92
+    "measured_fp32_tflops": 5.69,
+    "measured_fp16_tensor_tflops": 19.6,
+    "effective_sparse_moe_nf4_tflops": 36.26,
+    "microbench_elapsed_ms": 230.85
   },
   "community_gpu_benchmark_summary": {
     "receipt_sha256": "2f8ae97fd69be25f4c6036aa4cd2153a2affec9e8df435e38158b69028aed8f9",
@@ -35,58 +35,16 @@
     "peak_allocated_mb": 0.0
   },
   "pr_integration_summary": {
-    "checked_utc": "2026-11-01T20:19:46Z",
-    "open_prs_count": 18,
+    "checked_utc": "2026-11-01T22:19:44Z",
+    "open_prs_count": 15,
     "evaluated": [
       {
-        "pr": 459,
-        "title": "docs: trainer join page points at the operator runbooks; H-Net probe scheduled for night 3",
+        "pr": 466,
+        "title": "fix(ruche): Steam daemon reports nothing it did not measure and credits no points",
         "author": "xaviercallens",
-        "head_ref": "docs/trainer-join-point-at-runbooks",
+        "head_ref": "fix/ruche-daemon-counters-not-measured",
         "base_ref": "main",
-        "head_sha": "ee19362773",
-        "owner_authored": true,
-        "security_passed": true,
-        "injection_clean": true,
-        "decision": "ACCEPT",
-        "merged": false,
-        "merge_message": ""
-      },
-      {
-        "pr": 458,
-        "title": "fix(router): signup page shows n/a for missing live telemetry instead of invented counts",
-        "author": "xaviercallens",
-        "head_ref": "fix/signup-no-invented-telemetry",
-        "base_ref": "main",
-        "head_sha": "9835c40b75",
-        "owner_authored": true,
-        "security_passed": true,
-        "injection_clean": true,
-        "decision": "ACCEPT",
-        "merged": false,
-        "merge_message": ""
-      },
-      {
-        "pr": 457,
-        "title": "docs: H-Net + tree-of-thought + multi-MoE assessment, TM1 preregistration, roadmap note",
-        "author": "xaviercallens",
-        "head_ref": "docs/hnet-tot-multimoe-assessment",
-        "base_ref": "main",
-        "head_sha": "3a307dd129",
-        "owner_authored": true,
-        "security_passed": true,
-        "injection_clean": true,
-        "decision": "ACCEPT",
-        "merged": false,
-        "merge_message": ""
-      },
-      {
-        "pr": 455,
-        "title": "feat(research): HN1 boundary-signal experiment, first run INVALID by its own controls",
-        "author": "xaviercallens",
-        "head_ref": "feat/hn1-boundary-signal-probe",
-        "base_ref": "main",
-        "head_sha": "42f950bdcb",
+        "head_sha": "17a2b6ef37",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -142,7 +100,7 @@
         "author": "xaviercallens",
         "head_ref": "feat/e8-stage2-tiny-moe-qlora",
         "base_ref": "main",
-        "head_sha": "677f5b0136",
+        "head_sha": "7ad7988d36",
         "owner_authored": false,
         "security_passed": true,
         "injection_clean": true,
@@ -226,7 +184,7 @@
         "author": "xaviercallens",
         "head_ref": "feat/openrouter-5lang-i18n",
         "base_ref": "main",
-        "head_sha": "cdb4fc566c",
+        "head_sha": "4aa2c39b8d",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -302,5 +260,5 @@
       141
     ]
   },
-  "ledger_sha256": "0f65b729f5ddbb855c0893e9108fe1d7cc6c1184349726ebd366cd887aaac14d"
+  "ledger_sha256": "e5da1fecb48e345527f9692408de60dc26ab57eb925c7fc03fb189a90ce43b91"
 }

@@ -249,7 +249,7 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     assert "Gwen-Qwen2.5-MoE-Bee-v2.6" in r_index.text
     assert "Astro-Exoplanet-SETI-Bee-v2.6" in r_index.text
     assert len(state["community_results_carousel"]) == 6
-    assert len(state["contributor_leaderboard"]) >= 4
+    assert all(row.get("ledger_receipt_sha256") for row in state["contributor_leaderboard"])  # no invented rows
 
     # Verify Compute Points redemption endpoint across GWAYA Python coding & Astrophysics
     r_redeem = client.post(

@@ -304,6 +304,22 @@ SECTIONS: Sequence[tuple[str, Pair, Sequence[tuple[str, Any]]]] = (
         ]),
         ("code", "export HIVEMIND_API_KEY=hm-YOUR_TRAINER_KEY\n"
                  "python scripts/hivemind_opentrainer_agent.py --gateway {API} --network-mode outbound-https-relay --check-firewall --submit-delta --once"),
+        ("p", ('Newcomers are welcome at the co-training nights. Night 3 runs Monday 2 November 22:00 to Tuesday 07:00 Paris. You need no account to ask for a slot, and producers need no migration: producer, prosumer and trainer keys share the training role. Short guide: [docs/TRAINER_JOIN.md]({REPO}/blob/main/docs/TRAINER_JOIN.md).',
+               "Les nouveaux venus sont bienvenus aux nuits de co-entraînement. La nuit 3 va du lundi 2 novembre 22 h au mardi 7 h, heure de Paris. Aucun compte n'est nécessaire pour demander une place, et les producteurs n'ont rien à migrer : les clés producteur, prosumer et entraîneur partagent le rôle d'entraînement. Guide court : [docs/TRAINER_JOIN.md]({REPO}/blob/main/docs/TRAINER_JOIN.md).")),
+        ("ol", [
+            ('Create a WireGuard key pair and keep the private key to yourself; only the public key is ever shared:',
+             'Créez une paire de clés WireGuard et gardez la clé privée pour vous ; seule la clé publique est partagée :'),
+        ]),
+        ("code", "wg genkey | tee hivemind-wg-private.key | wg pubkey > hivemind-wg-public.key"),
+        ("ol", [
+            ("Print this machine's federation plan (read-only: it installs nothing and contacts nothing; exit code 2 means no GPU was read):",
+             "Affichez le plan de fédération de cette machine (lecture seule : il n'installe rien et ne contacte rien ; le code de sortie 2 signifie qu'aucun GPU n'a été lu) :"),
+        ]),
+        ("code", "PYTHONPATH=src python3 scripts/hivemind_federate_node.py --handle your-handle --coordinator https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app --json"),
+        ("ol", [
+            ('Reply on [issue #431]({REPO}/issues/431) before 18:00 Paris on the day of the night with your public key, GPU model, free video memory and operating system (attach the JSON plan; it holds no key). The operator answers with a learner id, an overlay address, the commit to check out and the shared signing key, out of band. Points: submissions are recorded as unverified and credit 0 until server-side verification exists.',
+             "Répondez sur le [billet #431]({REPO}/issues/431) avant 18 h, heure de Paris, le jour de la nuit, avec votre clé publique, le modèle de GPU, la mémoire vidéo libre et le système d'exploitation (joignez le plan JSON ; il ne contient aucune clé). L'opérateur répond avec un identifiant d'apprenant, une adresse de réseau privé, le commit à utiliser et la clé de signature partagée, hors ligne. Points : les soumissions sont enregistrées comme non vérifiées et créditent 0 tant qu'une vérification côté serveur n'existe pas."),
+        ]),
     )),
     ("play", ("4. Gamers and Steam", "4. Joueurs et Steam"), (
         ("p", ("Your GPU should work for HiveMind only while you are not playing. There is no HiveMind game on Steam yet: the Steam ID `3133700` that appears in this repository "
@@ -728,6 +744,26 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "zh": "HiveMind La Ruche · 开源软件 (AGPL-3.0) · 积分没有任何货币价值",
     },
     LABELS["status_prefix"][0]: {"es": "Estado: ", "de": "Status: ", "zh": "状态："},
+    'Newcomers are welcome at the co-training nights. Night 3 runs Monday 2 November 22:00 to Tuesday 07:00 Paris. You need no account to ask for a slot, and producers need no migration: producer, prosumer and trainer keys share the training role. Short guide: [docs/TRAINER_JOIN.md]({REPO}/blob/main/docs/TRAINER_JOIN.md).': {
+        "es": 'Los recién llegados son bienvenidos en las noches de co-entrenamiento. La noche 3 va del lunes 2 de noviembre a las 22:00 al martes a las 07:00, hora de París. No hace falta cuenta para pedir una plaza, y los productores no tienen que migrar: las claves de productor, prosumer y entrenador comparten el rol de entrenamiento. Guía corta: [docs/TRAINER_JOIN.md]({REPO}/blob/main/docs/TRAINER_JOIN.md).',
+        "de": 'Neulinge sind bei den Co-Training-Nächten willkommen. Nacht 3 läuft von Montag, 2. November, 22:00 bis Dienstag 07:00 Uhr Pariser Zeit. Für einen Platz braucht es kein Konto, und Produzenten müssen nichts migrieren: Produzenten-, Prosumer- und Trainer-Schlüssel teilen die Trainingsrolle. Kurzanleitung: [docs/TRAINER_JOIN.md]({REPO}/blob/main/docs/TRAINER_JOIN.md).',
+        "zh": '欢迎新人参加联合训练之夜。第 3 夜为巴黎时间 11 月 2 日（周一）22:00 至周二 07:00。申请名额无需账户，生产者也无需迁移：生产者、prosumer 和训练者密钥共享训练角色。简短指南：[docs/TRAINER_JOIN.md]({REPO}/blob/main/docs/TRAINER_JOIN.md)。',
+    },
+    'Create a WireGuard key pair and keep the private key to yourself; only the public key is ever shared:': {
+        "es": 'Crea un par de claves WireGuard y guarda la clave privada para ti; solo se comparte la clave pública:',
+        "de": 'Erstellen Sie ein WireGuard-Schlüsselpaar und behalten Sie den privaten Schlüssel für sich; nur der öffentliche Schlüssel wird je geteilt:',
+        "zh": '生成一对 WireGuard 密钥，私钥自己保管；只分享公钥：',
+    },
+    "Print this machine's federation plan (read-only: it installs nothing and contacts nothing; exit code 2 means no GPU was read):": {
+        "es": 'Imprime el plan de federación de esta máquina (solo lectura: no instala nada ni contacta con nada; el código de salida 2 significa que no se leyó ninguna GPU):',
+        "de": 'Geben Sie den Föderationsplan dieser Maschine aus (nur lesend: installiert nichts und kontaktiert nichts; Exit-Code 2 bedeutet, dass keine GPU gelesen wurde):',
+        "zh": '打印本机的联邦计划（只读：不安装、不联网；退出码 2 表示未读到 GPU）：',
+    },
+    'Reply on [issue #431]({REPO}/issues/431) before 18:00 Paris on the day of the night with your public key, GPU model, free video memory and operating system (attach the JSON plan; it holds no key). The operator answers with a learner id, an overlay address, the commit to check out and the shared signing key, out of band. Points: submissions are recorded as unverified and credit 0 until server-side verification exists.': {
+        "es": 'Responde en la [incidencia #431]({REPO}/issues/431) antes de las 18:00 de París el día de la noche con tu clave pública, modelo de GPU, memoria de vídeo libre y sistema operativo (adjunta el plan JSON; no contiene ninguna clave). El operador responde con un id de aprendiz, una dirección de red privada, el commit a usar y la clave de firma compartida, por un canal aparte. Puntos: los envíos se registran como no verificados y acreditan 0 hasta que exista verificación en el servidor.',
+        "de": 'Antworten Sie im [Issue #431]({REPO}/issues/431) vor 18:00 Uhr Pariser Zeit am Tag der Nacht mit Ihrem öffentlichen Schlüssel, GPU-Modell, freiem Videospeicher und Betriebssystem (JSON-Plan anhängen; er enthält keinen Schlüssel). Der Betreiber antwortet mit einer Lerner-Id, einer Overlay-Adresse, dem zu verwendenden Commit und dem gemeinsamen Signaturschlüssel, auf einem separaten Kanal. Punkte: Einreichungen werden als unverifiziert erfasst und bringen 0, bis eine serverseitige Prüfung existiert.',
+        "zh": '在当夜巴黎时间 18:00 前于 [issue #431]({REPO}/issues/431) 回复：公钥、GPU 型号、空闲显存和操作系统（附上 JSON 计划，其中不含任何密钥）。运营者会通过另一渠道回复学习者编号、内网地址、要检出的提交以及共享签名密钥。积分：在服务器端验证存在之前，提交记录为未验证且计 0 分。',
+    },
 }
 
 _CSS = """

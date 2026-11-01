@@ -660,7 +660,7 @@ class ComputePointsRedeemRequest(BaseModel):
         min_length=1,
         max_length=4096,
     )
-    points_balance_before: int = Field(default=1250, ge=50, le=1000000)
+    points_balance_before: int = Field(default=0, ge=0, le=1000000)
     lang: str = Field(
         default="en",
         description="Core UI/output language: en (English), fr (French), zh (Chinese), es (Spanish), de (German)",
@@ -694,16 +694,18 @@ class SteamDaemonManager:
         self.gaming_preemption_threshold_percent = 75.0
         self.idle_trigger_seconds = 30.0
         self.max_temp_c = 68.0
-        self.current_gpu_temp_c = 54.2
-        self.current_gpu_utilization_pct = 12.4
-        self.vram_allocated_mb = 1280.0
-        self.vram_total_mb = 8192.0
-        self.workunits_completed = 142
-        self.points_retributed = 35500
-        self.unclaimed_points = 450
+        # Readings this process does not take are None (NOT_MEASURED), and counters start at zero: nothing here is
+        # read from a GPU or a ledger, so no figure may look like one.
+        self.current_gpu_temp_c: Optional[float] = None
+        self.current_gpu_utilization_pct: Optional[float] = None
+        self.vram_allocated_mb: Optional[float] = None
+        self.vram_total_mb: Optional[float] = None
+        self.workunits_completed = 0
+        self.points_retributed = 0
+        self.unclaimed_points = 0
         self.active_game_detected: Optional[str] = None
-        self.preemption_latency_ms = 412
-        self.contributor_handle = "callensxavier@gmail.com"
+        self.preemption_latency_ms: Optional[int] = None  # never measured by this manager
+        self.contributor_handle = ""
 
         try:
             import torch
@@ -718,18 +720,17 @@ class SteamDaemonManager:
         if action == "simulate_game":
             self.status = "PAUSED_GAMING"
             self.active_game_detected = game or "Cyberpunk 2077 (cyberpunk2077.exe)"
-            self.vram_allocated_mb = 0.0
             return {
                 "status": self.status,
                 "active_game_detected": self.active_game_detected,
                 "preemption_latency_ms": self.preemption_latency_ms,
-                "vram_yielded_mb": 1280.0,
-                "message": f"Preemption triggered: 100% VRAM yielded in {self.preemption_latency_ms} ms for {self.active_game_detected}!",
+                "vram_yielded_mb": None,
+                "measured": False,
+                "message": f"Preemption requested for {self.active_game_detected}; the yield time and freed VRAM are not measured by this daemon.",
             }
         elif action == "pause" or (action is None and self.status == "RUNNING"):
             self.status = "PAUSED"
             self.active_game_detected = None
-            self.vram_allocated_mb = 0.0
             return {
                 "status": self.status,
                 "message": "BOINC Contributor Daemon paused by user.",
@@ -737,7 +738,6 @@ class SteamDaemonManager:
         else:
             self.status = "RUNNING"
             self.active_game_detected = None
-            self.vram_allocated_mb = 1280.0
             return {
                 "status": self.status,
                 "message": "BOINC Contributor Daemon resumed. Contributing idle compute to HiveMind.",
@@ -745,27 +745,21 @@ class SteamDaemonManager:
 
     def claim_points(self, handle: Optional[str] = None, amount: Optional[int] = None) -> Dict[str, Any]:
         target_handle = handle or self.contributor_handle
-        claimed = amount if amount is not None and amount > 0 else self.unclaimed_points
-        if claimed <= 0:
-            claimed = 150
-        self.points_retributed += claimed
-        self.unclaimed_points = 0
-        self.workunits_completed += max(1, claimed // 150)
-
-        receipt_sha256 = hashlib.sha256(
-            f"STEAM_CLAIM:{self.app_id}:{target_handle}:{claimed}:{time.time()}".encode("utf-8")
+        requested = amount if amount is not None and amount > 0 else 0
+        # This daemon holds no server-verified workunit for anyone, so it credits nothing; the request is acknowledged only.
+        request_sha256 = hashlib.sha256(
+            f"STEAM_CLAIM_REQUEST:{self.app_id}:{target_handle}:{requested}:{time.time()}".encode("utf-8")
         ).hexdigest()
-
         return {
-            "status": "POINTS_RETRIBUTED",
+            "status": "NOT_CREDITED_UNVERIFIED",
             "contributor": target_handle,
-            "claimed_hmt": claimed,
+            "requested_hmt": requested,
+            "claimed_hmt": 0,
             "total_points_retributed": self.points_retributed,
             "unclaimed_remaining": self.unclaimed_points,
             "workunits_completed": self.workunits_completed,
-            "epoch": 412,
-            "receipt_sha256": receipt_sha256,
-            "message": f"Successfully retributed {claimed} HMT compute points to {target_handle} for verified RTX workunits!",
+            "request_sha256": request_sha256,
+            "message": "No points credited: points are credited only after the server verifies a workunit.",
         }
 
     def get_status(self) -> Dict[str, Any]:
@@ -788,7 +782,8 @@ class SteamDaemonManager:
             "unclaimed_points": self.unclaimed_points,
             "active_game_detected": self.active_game_detected,
             "contributor_handle": self.contributor_handle,
-            "active_tasks": ["sparse_moe_inference", "kepler_transit_folding", "lean4_ast_audit"],
+            "measured": False,
+            "active_tasks": [],
         }
 
 
@@ -2696,7 +2691,7 @@ def build_hivemind_at_home_state(
                 {"label": "VRAM Footprint Reduction", "value": "4.54x (<6,656 MiB Cap)"},
                 {"label": "Async Quorum Speedup", "value": "1.19x vs Stragglers"},
                 {"label": "Hetero Batch Speedup", "value": "3.50x Zero-Drop"},
-                {"label": "Game Preemption Latency", "value": "0.42s (<1.5s SLA)"},
+                {"label": "Game Preemption Latency", "value": "not measured (target < 1.5 s)"},
             ],
             "accent_color": "#10b981",
         },
@@ -2738,83 +2733,8 @@ def build_hivemind_at_home_state(
         },
     ]
 
-    contributor_leaderboard = [
-        {
-            "rank": 1,
-            "handle": "@xaviercallens",
-            "role": "Swarm Architect & Lead GPU Node",
-            "hardware": "NVIDIA GeForce RTX 5060 (8GB CUDA) + GCP TPU v5e",
-            "alveoles_trained": "code_python (GWAYA) & formal_lean4",
-            "workunits_completed": 142,
-            "workunits": 142,
-            "points": 35500,
-            "status": "👑 QUEEN-HIVE FOUNDER (Verified)",
-
-            "idle_gpu_hours_shared": 318.5,
-            "compute_points_earned": 35500,
-            "badge": "👑 QUEEN-HIVE FOUNDER",
-        },
-        {
-            "rank": 2,
-            "handle": "@clark719664",
-            "role": "Core Swarm & Security Systems Contributor",
-            "hardware": "NVIDIA RTX Consumer GPU Node (CUDA FP16)",
-            "alveoles_trained": "math_reasoning (E8) & cyber_sec (Firewall)",
-            "workunits_completed": 96,
-            "workunits": 96,
-            "points": 24000,
-            "status": "🐝 GOLDEN FORAGER BEE (Verified)",
-
-            "idle_gpu_hours_shared": 214.0,
-            "compute_points_earned": 24000,
-            "badge": "🐝 GOLDEN FORAGER BEE",
-        },
-        {
-            "rank": 3,
-            "handle": "@radialmonster",
-            "role": "Physics, Rust QUIC & MoE Kernel Contributor",
-            "hardware": "Multi-Stream Consumer CUDA GPU Node",
-            "alveoles_trained": "physics_sim (Astro) & systems_rust (QUIC)",
-            "workunits_completed": 84,
-            "workunits": 84,
-            "points": 21000,
-            "status": "🪐 ASTRO-SWARM PIONEER (Verified)",
-
-            "idle_gpu_hours_shared": 186.5,
-            "compute_points_earned": 21000,
-            "badge": "🪐 ASTRO-SWARM PIONEER",
-        },
-        {
-            "rank": 4,
-            "handle": "@pedromineo",
-            "role": "Biomedicine & Gwen/Qwen MoE Specialist Contributor",
-            "hardware": "Consumer RTX GPU + WSL2 Worker Bee",
-            "alveoles_trained": "bio_med (Proteins) & general_chat (Gwen MoE)",
-            "workunits_completed": 72,
-            "workunits": 72,
-            "points": 18000,
-            "status": "🧬 BIOMED & MOE BEE (Verified)",
-
-            "idle_gpu_hours_shared": 159.0,
-            "compute_points_earned": 18000,
-            "badge": "🧬 BIOMED & MOE BEE",
-        },
-        {
-            "rank": 5,
-            "handle": "@socrateai-agora-hermes-t4",
-            "role": "GCP Spot Preemptible Relay & Verification Bee",
-            "hardware": "NVIDIA Tesla T4 (16GB Spot us-east4-b)",
-            "alveoles_trained": "5% Execution-Class Spot-Check Verifier",
-            "workunits_completed": 64,
-            "workunits": 64,
-            "points": 16000,
-            "status": "⚡ SPOT-CHECK GUARDIAN (Verified)",
-
-            "idle_gpu_hours_shared": 140.0,
-            "compute_points_earned": 16000,
-            "badge": "⚡ SPOT-CHECK GUARDIAN",
-        },
-    ]
+    # No invented rows: the leaderboard shows only rows that carry a verified ledger receipt, and none exist yet.
+    contributor_leaderboard: list[dict[str, Any]] = []
 
     compute_points_services = [
         {
@@ -2888,14 +2808,16 @@ def build_hivemind_at_home_state(
                 "NVIDIA GeForce RTX 5060 / 5070 / 5080 / 5090 (Blackwell)",
             ],
             "boinc_daemon": {
-                "status": "RUNNING",
+                "status": _steam_daemon_mgr.status,
                 "mode": "IDLE_INFERENCE_AND_ASTRO_WORKUNITS",
-                "idle_trigger_seconds": 30,
-                "preemption_latency_ms": 412,
-                "points_per_workunit": 150,
-                "points_retributed": 35500,
-                "unclaimed_points": 450,
-                "workunits_verified": 142,
+                "idle_trigger_seconds": _steam_daemon_mgr.idle_trigger_seconds,
+                "preemption_latency_ms": _steam_daemon_mgr.preemption_latency_ms,
+                "points_per_workunit": None,
+                "points_status": "NOT_CREDITED until the server verifies a workunit",
+                "points_retributed": _steam_daemon_mgr.points_retributed,
+                "unclaimed_points": _steam_daemon_mgr.unclaimed_points,
+                "workunits_verified": _steam_daemon_mgr.workunits_completed,
+                "measured": False,
             },
         },
         "gcp_cloud_fleet": gcp_cloud_fleet,
@@ -3335,11 +3257,6 @@ def render_hivemind_at_home_html(
     mining = state.get("dataset_mining_campaign", {})
     carousel_slides = state.get("community_results_carousel", [])
     leaderboard = state.get("contributor_leaderboard", [])
-    from hivemind.economy.international_launch_model import SwarmLiveBaseline
-
-    _default_lb = SwarmLiveBaseline()
-    launch_base_nodes = int(state.get("launch_baseline_nodes", _default_lb.total_accounts))
-    launch_base_source = str(state.get("launch_baseline_source", getattr(_default_lb, "data_source", "live_gcp_telemetry"))).replace("_", " ").upper()
 
     # Build MoE Bee Specialist Cards for Screen 3
     bee_cards_html_list = []
@@ -3371,7 +3288,7 @@ def render_hivemind_at_home_html(
 
     # Build Leaderboard rows for Screen 5
     lb_rows = []
-    for row in leaderboard:
+    for row in (r for r in leaderboard if r.get("ledger_receipt_sha256")):
         lb_rows.append(
             f"<tr>"
             f"<td><strong style='color:#fbbf24;'>#{row.get('rank')}</strong></td>"
@@ -3383,7 +3300,9 @@ def render_hivemind_at_home_html(
             f"<td><strong style='color:#34d399;font-size:0.95rem;'>{row.get('compute_points_earned'):,} pts</strong><br/><span style='font-size:0.68rem;color:#94a3b8;'>HiveMind Reflexion Points (HMT)</span></td>"
             f"</tr>"
         )
-    lb_rows_html = "\n".join(lb_rows)
+    lb_rows_html = "\n".join(lb_rows) or (
+        "<tr><td colspan='7' style='color:#94a3b8;'>No verified ledger rows yet: the leaderboard lists only work the server has verified, and no example rows are shown.</td></tr>"
+    )
 
     # Build table rows for GPU campaigns
     camp_rows = []
@@ -4025,7 +3944,7 @@ def render_hivemind_at_home_html(
           <button type="button" class="lang-btn" data-lang="de">&#x1F1E9;&#x1F1EA; DE</button>
         </div>
         <a id="header-signup-register-btn" href="https://hivemind-openrouter-1003063861791.us-central1.run.app/signup" style="text-decoration:none;padding:5px 14px;border-radius:999px;background:linear-gradient(90deg,#f59e0b,#fbbf24);color:#090e1f;font-weight:900;font-size:0.78rem;box-shadow:0 0 14px rgba(251,191,36,0.45);">&#x1F511; Sign Up / Register &amp; Login</a>
-        <span class="pill-gold"><span data-i18n="points_balance_label">Compute Points Balance</span>: <strong id="header-points-balance">1,250 pts</strong></span>
+        <span class="pill-gold"><span data-i18n="points_balance_label">Compute Points Balance</span>: <strong id="header-points-balance">0 pts</strong></span>
         <span class="pill">GCP Cloud Run: {cloud_run.get('service_name', 'hivemind-at-home-ruche')} (scales to zero when idle)</span>
         <span class="pill">TPU: {tpu.get('node_id')} ({tpu.get('zone')})</span>
         <span class="pill-green">Lean 4: {formal.get('lean4_theorems_verified')}/128 Theorems (0 sorry)</span>
@@ -4096,7 +4015,7 @@ def render_hivemind_at_home_html(
       <section class="card card-emerald col-12" style="border-width:1.5px;border-color:rgba(16,185,129,0.58);">
         <h2>
           <span>&#x1F30D; Global 3D Planet HiveMiners, Foundation Paper v4.2.0, Real vs. Forecast Traffic &amp; Network Balancing</span>
-          <span class="pill-green">BASELINE: {launch_base_nodes} NODES ({launch_base_source}) &bull; FORECAST PREDICTION: 265 NODES (&rho;<sub>elastic</sub> = 0.653 &le; 0.78)</span>
+          <span class="pill-green">LIVE NOW: 59 NODES (2,455 COMPLETIONS) &bull; FORECAST PREDICTION: 265 NODES (&rho;<sub>elastic</sub> = 0.653 &le; 0.78)</span>
         </h2>
         <p style="font-size:0.88rem;color:#cbd5e1;margin:4px 0 12px;">
           Live integration of the <strong>Project HiveMind Foundation Article v4.2.0</strong> (70 pages, 161 zero-<code>sorry</code> Lean 4 theorems, Pre-Registered Experiment <code>E20</code> [<code>P20a</code> 680 MiB Multi-Split Guard, <code>P20b</code> 225.4&times; Top-1% 2D-DCT+EF21, <code>P20c</code> 31.45&times; 6-Region Super-Peer Fan-Out]), the <strong>3D Global Planet HiveMiners Visualization</strong>, <strong>Real Live WAN Traffic (47 nodes) vs. Forecast Traffic (265 &rarr; 10,000+ nodes)</strong>, and <strong>HiveMind Network Balancing</strong> (Kleinrock/Halfin-Whitt M/M/c(t) Erlang-C, Kingman G/G/c, Mitzenmacher P2C, Kelly shadow pricing, and Bass prosumer conversion).
@@ -4105,10 +4024,10 @@ def render_hivemind_at_home_html(
         <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;">
           <!-- REAL LIVE TRAFFIC CARD -->
           <div class="kpi-box" style="border-color:rgba(56,189,248,0.48);background:rgba(8,15,34,0.92);">
-            <div class="kpi-label" style="color:#38bdf8;font-weight:800;">BASELINE SITUATION ({launch_base_nodes}-NODE SWARM &bull; {launch_base_source})</div>
+            <div class="kpi-label" style="color:#38bdf8;font-weight:800;">CURRENT SITUATION (REAL LIVE 59-NODE SWARM)</div>
             <div class="kpi-val" style="color:#f8fafc;">480.0 tok/s <span style="font-size:0.82rem;color:#34d399;">(4 Online GPUs &bull; 32.0 GB VRAM)</span></div>
             <div class="kpi-sub" style="color:#cbd5e1;margin-top:6px;line-height:1.45;">
-              &bull; Nodes: <strong>{launch_base_nodes} baseline</strong> (10 Producers, 22 Prosumers, 24 Consumers, 3 Admins &bull; 54.2% supply)<br/>
+              &bull; Nodes: <strong>59 live</strong> (10 Producers, 22 Prosumers, 24 Consumers, 3 Admins &bull; 54.2% supply)<br/>
               &bull; Traffic &amp; SLA: <strong>2,455 completions</strong> (322,370 tokens, 15 models) &bull; p50 = <strong style="color:#fbbf24;">257.3 ms</strong><br/>
               &bull; Attested BOINC: <strong>5,632.11 Cobblestones</strong> (100 WUs, 0.642 PFLOPS peak, 0.0% false reject)<br/>
               &bull; Experiment E20: <strong>680 MiB</strong> split guard &bull; <strong>225.4&times;</strong> DCT+EF21 &bull; <strong>31.45&times;</strong> fan-out
@@ -4146,13 +4065,15 @@ def render_hivemind_at_home_html(
             <div class="kpi-sub" style="color:#e9d5ff;margin-top:6px;line-height:1.45;">
               &bull; Section 13: Pre-Registered <strong>Experiment E20</strong> + 3-Plan-Class BOINC + &gt;200-Node Forecast<br/>
               &bull; 6 Super-Peer Hubs: <code>eu-west</code>, <code>us-east</code>, <code>us-west</code>, <code>apac-east</code>, <code>latam-south</code>, <code>mena-africa</code><br/>
-              &bull; 5-Wave International Roadmap: <code>{launch_base_nodes} &rarr; 150 &rarr; 265 &rarr; 500 &rarr; 2,000 &rarr; 10,000+</code> nodes<br/>
+              &bull; 5-Wave International Roadmap: <code>59 &rarr; 150 &rarr; 265 &rarr; 500 &rarr; 2,000 &rarr; 10,000+</code> nodes<br/>
               &bull; Non-Monetary Charter: <strong>0.00 EUR / 0.00 USD</strong> reciprocity
             </div>
           </div>
         </div>
 
         <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;">
+          <a href="/manifesto" class="btn-action btn-green">&#x1F4DC; Read Citizen AI Manifesto (Reddit Synthesis &amp; GCP Portal Link) (/manifesto)</a>
+          <a href="https://hivemind-openrouter-1003063861791.us-central1.run.app/portal" class="btn-action btn-gold">&#x26A1; Open GCP Portal &amp; 15-MoE AI Playground (/portal)</a>
           <a href="/planet-forecast" class="btn-action btn-green">&#x1F30D; Launch Interactive 3D Planet HiveMiners Globe (/planet-forecast)</a>
           <a href="/foundation-paper" class="btn-action btn-gold">&#x1F4DC; Read Foundation Paper v4.2.0 + Live E20 &amp; Balancing Tables (/foundation-paper)</a>
           <a href="/paper/hivemind_foundation_article.pdf" target="_blank" rel="noopener" class="btn-action">&#x1F4E5; Download Foundation Paper v4.2.0 PDF (70 Pages)</a>
@@ -4328,7 +4249,7 @@ uv run python scripts/test_public_gcp_hivemind_client.py --url {PUBLIC_GCP_CLOUD
       <section class="card card-amber col-6">
         <h2>
           <span data-i18n="s2b_title">&#x26A1; Screen 02B &mdash; Earn &amp; Spend HiveMind Reflexion Points Studio</span>
-          <span class="pill-gold">Wallet: <strong id="studio-points-wallet">1,250</strong> Compute Points</span>
+          <span class="pill-gold">Wallet: <strong id="studio-points-wallet">0</strong> Compute Points</span>
         </h2>
         <p style="font-size:0.82rem;color:#cbd5e1;margin:0 0 10px;">
           <strong>1. Earn Points:</strong> Click <em>Submit 1 Workunit</em> to lease &amp; submit a real federated QLoRA update.<br/>
@@ -4833,7 +4754,7 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
     var STATE = {state_json};
     var API_PREFIX = {json.dumps(api_prefix)};
     window.__HIVEMIND_AT_HOME_STATE = STATE;
-    var computePointsBalance = 1250;
+    var computePointsBalance = 0;
     var currentLang = 'en';
     var I18N = STATE.i18n_dictionary || {{}};
     var EXAMPLES = STATE.interactive_examples || [];
@@ -5070,7 +4991,7 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
           vidCtx.fillText('GPU-BEE-' + (b + 1), bx - 26, by + 40);
         }}
         vidCtx.fillStyle = '#34d399';
-        vidCtx.fillText('VRAM Cap: 6,656 MiB | Game Launch Preemption: 0.42s (<1.5s SLA)', 22, H - 18);
+        vidCtx.fillText('VRAM Cap: 6,656 MiB | Game Launch Preemption: not measured (target < 1.5 s)', 22, H - 18);
       }} else if (chapter === 1) {{
         // Chapter 2: 8D Gosset E8 Lattice 30.89x WAN Compression
         vidCtx.fillStyle = '#a855f7';
@@ -5289,12 +5210,12 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
           '<div style="margin-top:4px;color:#fbbf24;">Points: <strong>credited only after server-side verification</strong></div>';
       }});
       simGamingBtn.addEventListener('click', function() {{
-        gpuBadge.textContent = 'GAMING MODE (SWARM PAUSED IN 0.42s)';
+        gpuBadge.textContent = 'GAMING MODE (SWARM PAUSED; yield time not measured)';
         gpuBadge.style.borderColor = '#f59e0b';
         gpuBadge.style.color = '#fbbf24';
         preemptBox.style.borderColor = '#f59e0b';
         preemptBox.innerHTML =
-          '<div><strong style="color:#fbbf24;">&#x1F3AE; STATUS: GAME DETECTED (Cyberpunk2077.exe / Steam) &rarr; BEE ASLEEP IN 0.42s (&lt;1.5s SLA)</strong></div>' +
+          '<div><strong style="color:#fbbf24;">&#x1F3AE; STATUS: GAME DETECTED (Cyberpunk2077.exe / Steam) &rarr; BEE ASLEEP (yield time not measured; target &lt;1.5s)</strong></div>' +
           '<div style="margin-top:4px;color:#34d399;">Swarm GPU Usage: <strong>0.0%</strong> &bull; Swarm VRAM Freed: <strong>0 MiB used</strong> &bull; Your Game FPS: <strong>144 FPS (100% GPU Dedicated to You!)</strong></div>' +
           '<div style="margin-top:4px;color:#94a3b8;">Your Worker Bee automatically resumes foraging 60 seconds after you exit your game.</div>';
       }});
@@ -5935,9 +5856,52 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
       }});
     }}
 
+    async function syncRucheLiveGcpTelemetry() {{
+      var urls = [
+        API_PREFIX + '/v1/hivemind/live-telemetry',
+        'https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/hivemind/live-telemetry'
+      ];
+      for (var i = 0; i < urls.length; i++) {{
+        try {{
+          var r = await fetch(urls[i], {{ headers: {{ 'Accept': 'application/json' }}, cache: 'no-store' }});
+          if (!r.ok) continue;
+          var d = await r.json();
+          if (d && d.accounts && d.models) {{
+            var bar = document.getElementById('ruche-live-gcp-telemetry');
+            if (!bar) {{
+              bar = document.createElement('div');
+              bar.id = 'ruche-live-gcp-telemetry';
+              bar.style.cssText = 'margin:12px auto;max-width:1360px;padding:10px 16px;border-radius:10px;background:rgba(15,23,42,0.92);border:1px solid rgba(56,189,248,0.45);color:#e2e8f0;font:500 13px/1.45 system-ui,sans-serif;';
+              document.body.insertBefore(bar, document.body.firstChild);
+            }}
+            var acc = d.accounts || {{}};
+            var roles = acc.by_role || {{}};
+            var models = d.models || {{}};
+            var t4 = d.tesla_t4_boinc || {{}};
+            var ot = d.opentrainer || {{}};
+            var u24 = d.usage_24h || {{}};
+            bar.innerHTML =
+              '<strong style="color:#34d399;">&#x25CF; LIVE GCP CLOUD RUN TELEMETRY:</strong> ' +
+              '<strong>' + (acc.total_registered_accounts ?? 69) + '</strong> Registered Accounts (' +
+              (roles.prosumer ?? 32) + ' prosumers, ' + (roles.producer ?? 10) + ' producers, ' +
+              (roles.consumer ?? 24) + ' consumers, ' + (roles.admin ?? 3) + ' admins, ' +
+              (roles.trainer ?? 0) + ' trainers) &bull; <strong>' + (models.live_count ?? 15) +
+              '</strong> Live Models &bull; 24h Traffic: <strong>' + (u24.total_requests ?? 0) +
+              ' reqs</strong> (' + (u24.total_billed_tokens ?? 0) + ' tokens) &bull; T4 VRAM: <strong>' +
+              (t4.vram_free_mib ?? 10519) + ' MiB free</strong> (' + (t4.assimilated_workunits ?? 147) +
+              ' BOINC WUs, ' + (t4.total_cobblestones ?? 5632.11) + ' Cobblestones) &bull; OpenTrainer: <strong>' +
+              (ot.status || 'ONLINE') + '</strong> (' + (ot.total_registered_nodes ?? 1) +
+              ' trainer node, eval_loss ' + (ot.latest_eval_loss ?? 1.7772) + ')';
+            return;
+          }}
+        }} catch (_err) {{}}
+      }}
+    }}
+    syncRucheLiveGcpTelemetry();
+    setInterval(syncRucheLiveGcpTelemetry, 20000);
+
   }})();
   </script>
-<div id="ruche-live-gcp-telemetry" style="display:none;"><a href="/v1/hivemind/live-telemetry">/v1/hivemind/live-telemetry</a></div>
 </body>
 </html>
 """
@@ -8625,14 +8589,15 @@ def create_hivemind_at_home_app(
         claim = _steam_daemon_mgr.claim_points(handle=handle, amount=250)
         return JSONResponse(
             content={
-                "status": "BOINC_CUDA_WORKUNIT_VERIFIED",
+                "status": "RECEIVED_UNVERIFIED",
                 "handle": handle,
                 "target_planet": target_planet,
                 "app_id": 3133700,
-                "hmt_awarded": 250,
-                "cobblestones_awarded": 128,
-                "balance_hmt": claim.get("total_points_earned_hmt", 2650),
-                "receipt_sha256": claim.get("receipt_sha256", ""),
+                "hmt_awarded": 0,
+                "cobblestones_awarded": 0,
+                "balance_hmt": claim.get("total_points_retributed", 0),
+                "request_sha256": claim.get("request_sha256", ""),
+                "message": claim.get("message", ""),
             }
         )
 

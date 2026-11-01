@@ -118,3 +118,26 @@ def test_every_phase_names_the_source_of_its_figures() -> None:
     assert "%" not in p4.key_metric
     payload = life_as_a_bee_payload()
     assert all("source" in ph for ph in payload["lifecycle_phases"])
+
+
+def test_every_scenario_speed_is_sourced_or_marked_not_sourced() -> None:
+    """A scenario's tokens_per_sec either appears in the artifact its source names, or the source says NOT_SOURCED."""
+    from pathlib import Path
+
+    from hivemind.router.life_as_a_bee import LIFE_AS_A_BEE_SCENARIOS, life_as_a_bee_payload
+
+    root = Path(__file__).resolve().parents[1]
+    artifact_text = (root / "artifacts" / "all_bees_e2e_and_llm_comparison_report.json").read_text(encoding="utf-8")
+    sourced = 0
+    for scen in LIFE_AS_A_BEE_SCENARIOS:
+        assert scen.source.strip(), scen.scenario_id
+        if scen.source.startswith("artifacts/"):
+            assert str(scen.tokens_per_sec) in artifact_text, (scen.scenario_id, scen.tokens_per_sec)
+            sourced += 1
+        else:
+            assert scen.source.startswith("NOT_SOURCED"), scen.scenario_id
+    assert sourced >= 1
+    payload = life_as_a_bee_payload()
+    assert payload["summary"]["fastest_bee_tokens_per_sec"] == max(s.tokens_per_sec for s in LIFE_AS_A_BEE_SCENARIOS)
+    assert payload["summary"]["scenarios_with_artifact_source"] == sourced
+    assert all("source" in sc for sc in payload["scenarios"])

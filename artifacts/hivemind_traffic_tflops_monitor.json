@@ -1,17 +1,17 @@
 {
   "status": "LIVE_MONITORING_ACTIVE",
-  "timestamp": "2026-11-01T20:19:43Z",
+  "timestamp": "2026-11-01T22:19:40Z",
   "uptime_seconds": 23.3,
   "tflops_achieved": {
-    "timestamp": "2026-11-01T20:19:43Z",
+    "timestamp": "2026-11-01T22:19:40Z",
     "primary_gpu": "NVIDIA GeForce RTX 2070",
     "device": "cuda:0",
     "compute_capability": "7.5",
-    "measured_fp32_tflops": 5.67,
-    "measured_fp16_tensor_tflops": 19.77,
-    "effective_sparse_moe_nf4_tflops": 36.58,
+    "measured_fp32_tflops": 5.69,
+    "measured_fp16_tensor_tflops": 19.6,
+    "effective_sparse_moe_nf4_tflops": 36.26,
     "temperature_c": 34.0,
-    "power_draw_w": 41.65,
+    "power_draw_w": 30.04,
     "vram_used_mib": 1812.0,
     "vram_free_mib": 6195.0
   },
@@ -102,7 +102,7 @@
         "init_elapsed_ms": 1380.52,
         "priority": 1,
         "requests_served": 1,
-        "last_heartbeat": "2026-11-01T20:19:43Z",
+        "last_heartbeat": "2026-11-01T22:19:40Z",
         "notes": "Local RTX 2070 warmed up on cuda:0 and actively serving all local & failover HiveMind inference."
       },
       {

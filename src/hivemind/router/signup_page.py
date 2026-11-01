@@ -4,7 +4,7 @@
 Supports:
 1. **Returning / Previous User Login** (Username / Handle / Email + Password, or existing ``hm-...`` / ``hm_live_...`` API key)
    via ``POST /v1/hivemind/auth/login`` (and ``POST /login`` HTML form fallback).
-2. **New User Registration** (Username / Handle + Password + optional Email + Role ``prosumer`` / ``consumer`` / ``producer``)
+2. **New User Registration** (Username / Handle + Password + optional Email + Role ``prosumer`` / ``consumer`` / ``producer`` / ``trainer``)
    via ``POST /v1/hivemind/auth/register`` (and ``POST /signup`` HTML form fallback).
 3. **Google Sign-In** (when ``client_id`` is configured) via ``POST /v1/hivemind/register/google``.
 
@@ -312,11 +312,20 @@ python hivemind_connect.py snippet continue --model coder</code></pre>
         <label class="radio-label"><input type="radio" name="role" value="prosumer" checked> Both: use models and share my GPU (Prosumer)</label>
         <label class="radio-label"><input type="radio" name="role" value="consumer"> Use models in my editor / Playground (Consumer)</label>
         <label class="radio-label"><input type="radio" name="role" value="producer"> Share my GPU with the swarm (Producer)</label>
+        <label class="radio-label"><input type="radio" name="role" value="trainer"> Provide my GPU for intense training via OpenTrainer — BOINC, AMCP, Kafka &amp; Aglets (Trainer)</label>
       </fieldset>
       <p><button id="regSubmitBtn" type="submit">Create Account &amp; Get API Key · S'inscrire</button></p>
     </form>
   </section>
 </div>
+
+<section id="opentrainerCard" class="card">
+  <h2>🔥 OpenTrainer — Intense GPU Co-Training (BOINC + AMCP + Kafka + Signed Aglets, Firewall-Friendly)</h2>
+  <p class="mut">Choosing the <strong>Trainer (<code>trainer</code>)</strong> role registers your GPU for intense distributed training across the <strong>RTX 2070 (<code>XAVGAMSRV</code>, 8 GB, Windows 11) ↔ GCP Tesla T4 (<code>socreateai-agora-hermes-node1</code>, 16 GB, Linux)</strong> federation cell: Stage-2 Tiny Granite-MoE NF4 QLoRA, DiLoCo 2D-DCT outer steps, signed AMCP/Kafka Task Agents (IBM Aglet life cycle without mobile code), and BOINC nocturnal workunits.</p>
+  <p class="mut"><strong>Easy Network Integration Despite Firewalls:</strong> <code>OpenTrainer</code> uses outbound HTTPS (<code>TCP/443</code>) via <code>/v1/hivemind/opentrainer/heartbeat</code> and <code>/v1/hivemind/opentrainer/submit-delta</code> (zero inbound ports, zero <code>0.0.0.0</code> listeners, works behind residential NAT, CGNAT, and Windows Firewall):</p>
+  <pre><code>export HIVEMIND_API_KEY=&lt;your hm-... trainer key&gt;
+python scripts/hivemind_opentrainer_agent.py --gateway https://hivemind-openrouter-1003063861791.us-central1.run.app --network-mode outbound-https-relay --check-firewall --once</code></pre>
+</section>
 
 {google_section}
 

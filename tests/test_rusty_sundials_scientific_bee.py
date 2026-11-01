@@ -439,9 +439,9 @@ def test_nextgen_moe_science_bee_and_owner_fleet_gateway(tmp_path: Path) -> None
 
     # Owner RTX 2070 + T4 fleet status & S-1b cross-CPU reproducibility
     fleet = bee.fleet_orchestrator.fleet_status()
-    assert fleet["gcp_tesla_t4_16gb"]["free_vram_guard_compliant"] is True
-    assert fleet["gcp_tesla_t4_16gb"]["opt_hivemind_t4_untouched"] is True
-    assert fleet["rtx_2070_local_8gb"]["wddm_headroom_compliant"] is True
+    assert fleet["measured"] is False
+    assert fleet["gcp_tesla_t4_16gb"]["serving_state"] == "NOT_MEASURED"
+    assert fleet["rtx_2070_local_8gb"]["configured_vram_cap_mib"] == 6656
     distill = bee.fleet_orchestrator.distill_teacher_to_rtx2070_student(
         teacher_rank=32,
         student_rank=16,
@@ -496,7 +496,13 @@ def test_nextgen_moe_science_bee_and_owner_fleet_gateway(tmp_path: Path) -> None
     fleet_resp = client.get("/v1/hivemind/bees/owner-fleet-status")
     assert fleet_resp.status_code == 200
     fleet_json = fleet_resp.json()
-    assert fleet_json["gcp_tesla_t4_16gb"]["free_vram_guard_compliant"] is True
-    assert fleet_json["latest_nocturnal_distillation"]["wddm_compliant"] is True
-    assert fleet_json["s1b_cross_cpu_reproducibility"]["passed"] is True
+    assert fleet_json["measured"] is False
+    assert fleet_json["data_source"] == "CONFIGURED_POLICY_NOT_LIVE_TELEMETRY"
+    assert fleet_json["latest_nocturnal_distillation"]["status"] == "NOT_RUN"
+    assert fleet_json["s1b_cross_cpu_reproducibility"]["status"] == "NOT_RUN_CROSS_HOST"
+    # Negative control: fields that only a real reading could supply must be absent.
+    for node in ("rtx_2070_local_8gb", "gcp_tesla_t4_16gb"):
+        for fabricated in ("live_models", "serving_active", "allocated_vram_mib", "free_vram_mib"):
+            assert fabricated not in fleet_json[node]
+    assert "spectral_energy_retention" not in fleet_json["latest_nocturnal_distillation"]
 

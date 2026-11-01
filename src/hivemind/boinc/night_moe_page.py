@@ -83,7 +83,7 @@ def render_night_moe_html(report: dict[str, Any] | None) -> str:
         "<li><b>For HiveMind Nodes (Dedicated GPU Producers, HiveMiners &amp; Owner Fleet — RTX 2070 8 GB + GCP Tesla T4 16 GB):</b> "
         "During the day (07:00–22:00), HiveMind nodes serve low-latency OpenRouter inference (<code>hivemind/coder</code>, <code>hivemind/bee-stars</code>, etc.). "
         "At night (22:00–07:00), HiveMind nodes automatically switch to <b>Nocturnal DiLoCo Outer-Step Aggregation, Multi-Krum Byzantine Verification, and SVD "
-        "Teacher-to-Student Distillation</b> (<a href='/v1/hivemind/bees/owner-fleet-status'>Live Node Fleet Telemetry</a>).</li>"
+        "Teacher-to-Student Distillation</b> (<a href='/v1/hivemind/bees/owner-fleet-status'>Fleet policy, not live telemetry</a>).</li>"
         "</ul>"
         "<h2>Subjects</h2><table><tr><th>Subject</th><th>Own pack</th><th>Base</th><th>Adapter</th><th>Delta</th><th>p</th><th>Shuffled control</th>"
         "<th>Verdict</th></tr>" + "".join(rows) + "</table><h2>Transfer and interference</h2><table><tr><th>Adapter</th><th>Pack</th><th>Kind</th>"

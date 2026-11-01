@@ -9400,16 +9400,6 @@ def create_hivemind_at_home_app(
     def ruche_owner_fleet_status(foreground_gaming: bool = False) -> JSONResponse:
         from hivemind.swarm.rusty_sundials_scientific_bee import OwnerFleetCoServingOrchestrator
 
-        orch = OwnerFleetCoServingOrchestrator()
-        status = orch.fleet_status(foreground_gaming=foreground_gaming)
-        distill = orch.distill_teacher_to_rtx2070_student()
-        s1b = orch.verify_s1b_cross_cpu_reproducibility()
-        return JSONResponse(
-            content={
-                **status,
-                "latest_nocturnal_distillation": distill,
-                "s1b_cross_cpu_reproducibility": s1b,
-            }
-        )
+        return JSONResponse(content=OwnerFleetCoServingOrchestrator.public_status(foreground_gaming=foreground_gaming))
 
     return app

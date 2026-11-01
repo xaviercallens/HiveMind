@@ -232,6 +232,7 @@ def run_learner(args: argparse.Namespace, transport: Any = None, ring: Optional[
     model: Any = None
     base_cache: Dict[int, Tuple[Dict[str, torch.Tensor], str]] = {}
     done_rounds: set = set()
+    seen_offers: set = set()
     skipped: Dict[str, int] = {}
     last_offer = time.time()
     print(f"[learner {args.learner_id}] {host} device={device} quant={args.quant} pin {pin[:12]} waiting for offers of run {args.run_id}", flush=True)
@@ -249,11 +250,16 @@ def run_learner(args: argparse.Namespace, transport: Any = None, ring: Optional[
                 return 0
             continue
         last_offer = time.time()
-        ev = max(offers, key=lambda e: int(e.payload["round"]))
+        ev = max(offers, key=lambda e: (int(e.payload["round"]), float(e.payload.get("deadline_unix", 0))))
         p = ev.payload
         rnd = int(p["round"])
-        if rnd in done_rounds:
+        offer_key = (rnd, float(p.get("deadline_unix", 0)))
+        # A round is done once a result was sent. A refusal or a decline applies to ONE offer only: when the coordinator re-offers the round (new deadline) after
+        # a quorum failure, it is considered afresh. (Marking the round done on a decline stopped the first night run: inference was busy for one round, the
+        # learners ignored every re-offer of it, and the coordinator gave up.)
+        if rnd in done_rounds or offer_key in seen_offers:
             continue
+        seen_offers.add(offer_key)
         seed = int(p.get("params", {}).get("seed", 1))
         if seed not in base_cache:
             b = q.build_base_state(seed)
@@ -264,13 +270,11 @@ def run_learner(args: argparse.Namespace, transport: Any = None, ring: Optional[
         except fed.OfferRefused as exc:
             skipped[str(exc)[:60]] = skipped.get(str(exc)[:60], 0) + 1
             print(f"[learner {args.learner_id}] round {rnd}: refused: {exc}", flush=True)
-            done_rounds.add(rnd)
             continue
         ok, why = gate(args, device)
         if not ok:
             skipped[why[:60]] = skipped.get(why[:60], 0) + 1
             print(f"[learner {args.learner_id}] round {rnd}: not claiming ({why})", flush=True)
-            done_rounds.add(rnd)
             continue
         params = p.get("params", {})
         if model is None:

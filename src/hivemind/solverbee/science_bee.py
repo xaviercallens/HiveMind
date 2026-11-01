@@ -50,7 +50,7 @@ class Backend:
     name = "backend"
 
     def complete(self, messages: List[Dict[str, str]]) -> str:  # pragma: no cover - interface
-        raise NotImplementedError
+        raise BackendError(f"{self.name}: no language model backend configured")
 
 
 class FakeBackend(Backend):
@@ -104,7 +104,12 @@ def check_loopback_url(url: str) -> str:
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, *a: Any, **k: Any) -> None:  # type: ignore[override]
+    last_refused_url: str = ""
+    last_refused_code: int = 0
+
+    def redirect_request(self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> None:  # type: ignore[override]
+        self.last_refused_url = str(newurl) if newurl is not None else ""
+        self.last_refused_code = int(code) if isinstance(code, int) else 0
         return None
 
 

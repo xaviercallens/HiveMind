@@ -58,6 +58,7 @@ class ContributorPolicy:
 class HostDirectory(Protocol):
     def lookup(self, result_id: int | str) -> tuple[int | None, int]:
         """(BOINC user id, validated results of the host that returned the result); (None, 0) when unknown."""
+        return None, 0
 
 
 class BoincHostDirectory:

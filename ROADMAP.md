@@ -667,6 +667,17 @@ The full plan, with evidence, Definition of Done and the test for each finding (
 
 ---
 
+### Status update, 2026-11-01 (3-hourly review, night)
+
+- **Merged since the last update:** [#384](https://github.com/xaviercallens/HiveMind/pull/384) (planet forecast and portal links), [#398](https://github.com/xaviercallens/HiveMind/pull/398) (Kafka cluster deployment files) and [#399](https://github.com/xaviercallens/HiveMind/pull/399) (volunteer idle-GPU helper fixes). The tests #399 touches pass on the new `main` (84 passed, 2 skipped).
+- **Open, owner-authored:** [#400](https://github.com/xaviercallens/HiveMind/pull/400) (reconnect the 42 HiveMinder accounts) and [#401](https://github.com/xaviercallens/HiveMind/pull/401) (two-host E8 test plan, pilot syncer bound to one address, `weights_only=True`). Held: [#369](https://github.com/xaviercallens/HiveMind/pull/369), [#366](https://github.com/xaviercallens/HiveMind/pull/366), [#362](https://github.com/xaviercallens/HiveMind/pull/362), [#344](https://github.com/xaviercallens/HiveMind/pull/344) (CI or conflicts); drafts [#397](https://github.com/xaviercallens/HiveMind/pull/397), [#396](https://github.com/xaviercallens/HiveMind/pull/396), [#163](https://github.com/xaviercallens/HiveMind/pull/163).
+- **Measured, not assumed:** the router reports 58 real accounts and 0 test accounts (owner endpoint, 2026-11-01). It reports 4 live producers, but the "RTX 2070" endpoint is hosted on the T4 VM (one physical Tesla T4), so no second GPU host exists yet. The cross-host DiLoCo round therefore stays single-host until a second machine is available.
+- **DiLoCo plan:** Stage 1 is the existing E8 harness from #401 (toy model, CPU, two processes over the WireGuard overlay). Stage 2, a real LoRA round, is new code. Multi-Krum is not a control at K=2 (it keeps everyone below 5 deltas).
+- **New items open for claim (label `agent-ready`):** [#402](https://github.com/xaviercallens/HiveMind/issues/402) count distinct physical GPUs; [#403](https://github.com/xaviercallens/HiveMind/issues/403) the 59-account constant labelled as live telemetry; [#404](https://github.com/xaviercallens/HiveMind/issues/404) night chat p95 of 28-57 s against the idle baseline; [#405](https://github.com/xaviercallens/HiveMind/issues/405) Stage 2 real two-host LoRA round. Evidence for the pre-seeded fake GPU result was added to [#379](https://github.com/xaviercallens/HiveMind/issues/379).
+- **Idle-worker rewrite (in review, not yet a PR):** the volunteer worker no longer fabricates an RTX 2070 or a QLoRA delta; it reports BLOCKED when it cannot read a GPU. Review found that a CPU fold must not count as READY, that the gate and the fold must use the same GPU, and that the import workaround must be thread-safe; these are being fixed before the PR.
+
+---
+
 ## 🎮 4. Opt-In Community GPU Testing Program (If Interested & Possible)
 
 If you have a consumer GPU (**NVIDIA GeForce RTX 20/30/40/50-series 6 GB–24 GB**, **AMD Radeon RX 6000/7000 via ROCm**, or **Apple Silicon M1/M2/M3/M4 via MPS**) and are interested in testing how your hardware performs on the HiveMind Sparse MoE + `EF21-DiLoCo` + `ZK-OPoI v4` stack, we provide a safe, opt-in, `< 1.5 GB` peak-VRAM benchmark suite:

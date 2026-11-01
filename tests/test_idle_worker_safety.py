@@ -67,7 +67,8 @@ def test_a_gpu_that_cannot_be_read_is_busy_and_unavailable_never_an_invented_car
 
 
 def test_na_fields_from_nvidia_smi_are_not_filled_with_made_up_numbers(monkeypatch: pytest.MonkeyPatch) -> None:
-    out = SimpleNamespace(returncode=0, stdout="Tesla T4, 3, 41, 15360, 700, [N/A], 580.99\n")
+    out = SimpleNamespace(returncode=0, stdout="Tesla T4, 3, 41, 15360, 700, [N/A], 580.99\n", stderr="")
+    monkeypatch.setattr(worker.shutil, "which", lambda name: "/usr/bin/nvidia-smi")  # the probe checks the binary exists before running it
     monkeypatch.setattr(worker.subprocess, "run", lambda *a, **k: out)
     gpu = worker.query_nvidia_gpu_status()
     assert gpu["available"] is True and gpu["power_w"] is None and gpu["gpu_model"] == "Tesla T4"
@@ -88,43 +89,63 @@ def test_boinccmd_failure_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
     assert worker.set_boinc_client_gpu_mode(True) == "boinccmd_gpu_auto"
 
 
+_T4 = "Tesla T4, 3, 41, 15360, 500, 20.0, 1, 00000000:00:04.0\n"
+_REAL_PROBE_GPU = worker.probe_gpu  # captured before any monkeypatch replaces worker.probe_gpu
+
+
+def _probe_of(csv: str, returncode: int = 0, stderr: str = ""):  # noqa: ANN202
+    """A probe built through the injected runner (the only faked part is the external nvidia-smi process)."""
+    return _REAL_PROBE_GPU(
+        run=lambda *a, **k: SimpleNamespace(returncode=returncode, stdout=csv, stderr=stderr), which=lambda name: "/usr/bin/nvidia-smi"
+    )
+
+
+def _cuda_fold(target_planet: str = "K2-18 b", n_pts: int = 16384, gpu=None, cuda_lib=None) -> dict:  # noqa: ANN001
+    return {"backend": worker.CUDA_BACKEND, "cuda_device": gpu.name, "cuda_total_vram_mib": int(gpu.total_mib), "n_points_folded": n_pts, "vram_allocated_bytes": n_pts * 8,
+            "kernel_exec_ms": 0.3, "recovered_transit_depth_ppm": 2789.0, "orbital_period_days": 32.9, "result_sha256": "d" * 64}
+
+
 def test_when_the_gpu_cannot_be_read_the_worker_does_not_start_even_if_the_user_is_idle(monkeypatch: pytest.MonkeyPatch, offline: list[dict]) -> None:
     monkeypatch.setattr(worker, "get_user_idle_seconds", lambda assume=False: 600.0)
-    monkeypatch.setattr(worker, "query_nvidia_gpu_status", lambda: {"available": False, "gpu_model": "unknown", "utilization_pct": 100.0, "temp_c": 99.0,
-                                                                   "total_mib": 0.0, "used_mib": 0.0, "power_w": None, "driver_version": "unknown"})
+    monkeypatch.setattr(worker, "probe_gpu", lambda *a, **k: _probe_of("", returncode=1, stderr="no driver"))
     monkeypatch.setattr(worker, "set_boinc_client_gpu_mode", lambda enable: "boinccmd_gpu_auto" if enable else "boinccmd_gpu_never")
     out = worker.run_one_idle_gpu_boinc_cycle()
-    assert out["boinc_active"] is False and out["boinc_driver"] == "boinccmd_gpu_never" and out["cuda_fold"]["n_points_folded"] == 0
+    assert out["boinc_active"] is False and out["boinc_driver"] == "boinccmd_gpu_never" and "cuda_fold" not in out and out["status"] == "BLOCKED"
+    assert offline == []  # nothing was sent anywhere
 
 
 def test_a_player_is_never_disturbed_and_an_idle_pc_is_used(monkeypatch: pytest.MonkeyPatch, offline: list[dict]) -> None:
-    gpu = {"available": True, "gpu_model": "Test GPU", "utilization_pct": 3.0, "temp_c": 40.0, "total_mib": 8192.0, "used_mib": 500.0, "power_w": 20.0, "driver_version": "1"}
-    monkeypatch.setattr(worker, "query_nvidia_gpu_status", lambda: gpu)
+    monkeypatch.setattr(worker, "probe_gpu", lambda *a, **k: _probe_of(_T4))
+    monkeypatch.setattr(worker, "execute_cuda_ptx_bls_fold", _cuda_fold)  # the CUDA driver is external hardware
     monkeypatch.setattr(worker, "set_boinc_client_gpu_mode", lambda enable: "auto" if enable else "never")
     monkeypatch.setattr(worker, "get_user_idle_seconds", lambda assume=False: 1.0)  # typing a second ago
     assert worker.run_one_idle_gpu_boinc_cycle()["boinc_active"] is False
     monkeypatch.setattr(worker, "get_user_idle_seconds", lambda assume=False: 30.0)
     assert worker.run_one_idle_gpu_boinc_cycle()["boinc_active"] is True
-    busy = dict(gpu, utilization_pct=80.0)  # a game rendering with the player not touching anything (a cutscene)
-    monkeypatch.setattr(worker, "query_nvidia_gpu_status", lambda: busy)
+    # a game rendering with the player not touching anything (a cutscene)
+    monkeypatch.setattr(worker, "probe_gpu", lambda *a, **k: _probe_of("Tesla T4, 80, 41, 15360, 500, 20.0, 1, 00000000:00:04.0\n"))
     assert worker.run_one_idle_gpu_boinc_cycle()["boinc_active"] is False
 
 
 def test_the_idle_time_sent_to_the_hub_is_the_measured_one(monkeypatch: pytest.MonkeyPatch, offline: list[dict]) -> None:
     """It used to be raised to threshold + 0.5 s whenever the worker ran, so the hub was told a PC had been idle longer than anyone measured."""
-    gpu = {"available": True, "gpu_model": "Test GPU", "utilization_pct": 3.0, "temp_c": 40.0, "total_mib": 8192.0, "used_mib": 500.0, "power_w": 20.0, "driver_version": "1"}
-    monkeypatch.setattr(worker, "query_nvidia_gpu_status", lambda: gpu)
+    monkeypatch.setattr(worker, "probe_gpu", lambda *a, **k: _probe_of(_T4))
+    monkeypatch.setattr(worker, "execute_cuda_ptx_bls_fold", _cuda_fold)
     monkeypatch.setattr(worker, "set_boinc_client_gpu_mode", lambda enable: "auto")
     monkeypatch.setattr(worker, "get_user_idle_seconds", lambda assume=False: 4.2)
     worker.run_one_idle_gpu_boinc_cycle(idle_threshold_seconds=4.0)
     assert offline and all(body.get("gpu_idle_seconds") == 4.2 for body in offline if "gpu_idle_seconds" in body)
+    assert any("gpu_idle_seconds" in body for body in offline)
 
 
-def test_the_report_says_the_qlora_numbers_are_a_placeholder(monkeypatch: pytest.MonkeyPatch, offline: list[dict]) -> None:
+def test_the_report_carries_no_invented_qlora_numbers(monkeypatch: pytest.MonkeyPatch, offline: list[dict]) -> None:
+    """The deterministic hash-derived QLoRA "delta" (fixed loss 1.798 for every workunit) is gone; the report says training is BLOCKED."""
+    monkeypatch.setattr(worker, "probe_gpu", lambda *a, **k: _probe_of(_T4))
+    monkeypatch.setattr(worker, "execute_cuda_ptx_bls_fold", _cuda_fold)
     monkeypatch.setattr(worker, "get_user_idle_seconds", lambda assume=False: 60.0)
     monkeypatch.setattr(worker, "set_boinc_client_gpu_mode", lambda enable: "auto")
     out = worker.run_one_idle_gpu_boinc_cycle(force_fold=True)
-    assert out["qlora_outer_delta_summary"]["placeholder_not_training"] is True
-    a = worker.compute_deterministic_qlora_outer_delta("WU-1", "physics_sim", "d")
-    assert a == worker.compute_deterministic_qlora_outer_delta("WU-1", "physics_sim", "d")  # a pure function of its inputs: nothing was trained
-    assert a["holdout_nll_after"] == 1.798  # the same "result" for every workunit
+    assert out["qlora"] == {"status": "BLOCKED", "reason": "no_trainer_wired"}
+    assert "qlora_outer_delta_summary" not in out and "1.798" not in json.dumps(out)
+    assert not hasattr(worker, "compute_deterministic_qlora_outer_delta")
+    assert out["lease_attempted"] is False and out["submit_attempted"] is False

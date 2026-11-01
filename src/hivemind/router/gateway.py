@@ -1900,9 +1900,17 @@ def create_router_app(
     @app.get("/v1/hivemind/t4/status")
     def t4_status(request: Request) -> dict[str, Any]:
         from hivemind.router.t4_visibility import build_t4_visibility_payload
-        models = store.live_models(clock(), PRODUCER_TTL_S)
-        producers = len(store.active_producers("coder", clock(), PRODUCER_TTL_S))
-        return build_t4_visibility_payload(now_utc=clock(), live_models=models, active_producers_count=producers)
+        now = clock()
+        models = store.live_models(now, PRODUCER_TTL_S)
+        scale = store.producer_fleet_scale_status(now, PRODUCER_TTL_S)
+        producers = max(1, int(scale["live_producer_accounts"]))
+        distinct_gpus = max(1, int(scale["distinct_physical_gpus"]))
+        return build_t4_visibility_payload(
+            now_utc=now,
+            live_models=models,
+            active_producers_count=producers,
+            distinct_physical_gpus=distinct_gpus,
+        )
 
     @app.post("/v1/hivemind/t4/telemetry")
     async def t4_telemetry_update(request: Request) -> dict[str, Any]:
@@ -1994,13 +2002,16 @@ def create_router_app(
         """Public HiveMinder fleet connectivity summary across all registered producer and prosumer accounts."""
         now = clock()
         fleet = store.list_hiveminder_accounts(now_utc=now, ttl_s=PRODUCER_TTL_S)
+        scale = store.producer_fleet_scale_status(now_utc=now, ttl_s=PRODUCER_TTL_S)
         live_rows = [r for r in fleet if r["status"] == "live"]
         return {
             "object": "hivemind.producer_fleet",
             "ttl_s": PRODUCER_TTL_S,
             "total_hiveminders": len(fleet),
             "live_hiveminders": len(live_rows),
+            "distinct_physical_gpus": scale["distinct_physical_gpus"],
             "live_endpoints": sum(int(r["live_endpoints"]) for r in live_rows),
+            "shared_host_endpoints": scale["shared_host_endpoints"],
             "total_capacity_1k": round(sum(float(r["capacity_1k"] or 0.0) for r in live_rows), 2),
             "live_models": store.live_models(now, PRODUCER_TTL_S),
             "hiveminders": [
@@ -2010,6 +2021,8 @@ def create_router_app(
                     "role": r["role"],
                     "status": r["status"],
                     "live_endpoints": r["live_endpoints"],
+                    "host_root": r.get("host_root"),
+                    "shared_host": r.get("shared_host", False),
                     "execution_class": r["execution_class"],
                     "capacity_1k": r["capacity_1k"],
                     "models_count": len(r["models"]),
@@ -2026,13 +2039,16 @@ def create_router_app(
         require_admin(request)
         now = clock()
         fleet = store.list_hiveminder_accounts(now_utc=now, ttl_s=PRODUCER_TTL_S)
+        scale = store.producer_fleet_scale_status(now_utc=now, ttl_s=PRODUCER_TTL_S)
         live_rows = [r for r in fleet if r["status"] == "live"]
         return {
             "object": "hivemind.admin_producer_fleet",
             "ttl_s": PRODUCER_TTL_S,
             "total_hiveminders": len(fleet),
             "live_hiveminders": len(live_rows),
+            "distinct_physical_gpus": scale["distinct_physical_gpus"],
             "live_endpoints": sum(int(r["live_endpoints"]) for r in live_rows),
+            "shared_host_endpoints": scale["shared_host_endpoints"],
             "total_capacity_1k": round(sum(float(r["capacity_1k"] or 0.0) for r in live_rows), 2),
             "live_models": store.live_models(now, PRODUCER_TTL_S),
             "hiveminders": fleet,

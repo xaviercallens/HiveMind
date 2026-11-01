@@ -23,6 +23,7 @@ import secrets
 import sqlite3
 import threading
 import time
+import urllib.parse
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -1728,13 +1729,28 @@ class RouterStore:
             ).fetchall()
         return [{k: row[k] for k in row.keys()} for row in rows]
 
+    @staticmethod
+    def _endpoint_host_root(endpoint_url: str | None) -> str:
+        """Return the normalised lowercase hostname of ``endpoint_url`` so multiple paths/ports on one VM count as one physical GPU host."""
+        if not endpoint_url:
+            return ""
+        raw = str(endpoint_url).strip()
+        try:
+            parsed = urllib.parse.urlsplit(raw)
+            host = (parsed.hostname or "").strip().lower()
+            if host:
+                return host
+        except ValueError:
+            return raw.lower()
+        return raw.lower()
+
     def producer_fleet_scale_status(
         self,
         now_utc: float | None = None,
         ttl_s: float = 120.0,
         target_producers: int = 100,
     ) -> dict[str, Any]:
-        """Aggregate live producer accounts, endpoints, execution classes, and residency progress toward the 100-node gate."""
+        """Aggregate live producer accounts, endpoints, distinct physical GPU hosts, execution classes, and residency progress toward the 100-node gate."""
         now = time.time() if now_utc is None else float(now_utc)
         target = max(1, int(target_producers))
         with self._lock:
@@ -1754,9 +1770,14 @@ class RouterStore:
         warm_models: set[str] = set()
         residency_endpoints = 0
         total_capacity_1k = 0.0
+        host_endpoint_counts: dict[str, int] = {}
+        residency_vram_hosts: dict[str, int] = {}
 
         for row in rows:
             accounts.add(str(row["account_id"]))
+            host_root = self._endpoint_host_root(str(row["endpoint_url"] or ""))
+            if host_root:
+                host_endpoint_counts[host_root] = host_endpoint_counts.get(host_root, 0) + 1
             ec = str(row["execution_class"] or "ollama")
             exec_classes[ec] = exec_classes.get(ec, 0) + 1
             total_capacity_1k += float(row["capacity_1k"] or 0.0)
@@ -1770,6 +1791,9 @@ class RouterStore:
             residency = _load_residency(row["residency_json"])
             if residency is not None:
                 residency_endpoints += 1
+                vram_mib = int(residency.get("gpu_vram_mib") or 0)
+                if host_root and vram_mib > 0:
+                    residency_vram_hosts[host_root] = max(residency_vram_hosts.get(host_root, 0), vram_mib)
                 rmodels = residency.get("models")
                 if isinstance(rmodels, Mapping):
                     for mid, entry in rmodels.items():
@@ -1777,19 +1801,26 @@ class RouterStore:
                             warm_models.add(str(mid))
 
         live_acc_count = len(accounts)
+        distinct_gpus = len(host_endpoint_counts)
+        shared_host_eps = sum(count for count in host_endpoint_counts.values() if count > 1)
         return {
             "target_producers": target,
+            "distinct_physical_gpus": distinct_gpus,
+            "verified_vram_hosts": len(residency_vram_hosts),
             "live_producer_accounts": live_acc_count,
             "live_endpoints": len(rows),
+            "shared_host_endpoints": shared_host_eps,
             "paused_producer_accounts": paused_count,
-            "scale_readiness_pct": round(min(100.0, (100.0 * live_acc_count) / target), 2),
-            "target_reached": live_acc_count >= target,
+            "scale_readiness_pct": round(min(100.0, (100.0 * distinct_gpus) / target), 2),
+            "target_reached": distinct_gpus >= target,
             "total_capacity_1k": round(total_capacity_1k, 2),
             "execution_class_breakdown": exec_classes,
             "residency_reporting_endpoints": residency_endpoints,
             "warm_loaded_models_count": len(warm_models),
             "live_models_count": len(live_models),
         }
+
+    producer_scale_status = producer_fleet_scale_status
 
     def ensure_legacy_hiveminders_registered(self, now_utc: float | None = None) -> list[str]:
         """Ensure all known legacy/federation prosumer & producer accounts exist in ``accounts`` without rotating existing keys."""
@@ -1842,8 +1873,14 @@ class RouterStore:
                 for r in self._conn.execute("SELECT account_id FROM producer_control WHERE paused=1").fetchall()
             }
         eps_by_acc: dict[str, list[sqlite3.Row]] = {}
+        live_host_counts: dict[str, int] = {}
         for ep in ep_rows:
-            eps_by_acc.setdefault(str(ep["account_id"]), []).append(ep)
+            aid_ep = str(ep["account_id"])
+            eps_by_acc.setdefault(aid_ep, []).append(ep)
+            if aid_ep not in paused_ids and float(ep["last_heartbeat_utc"]) >= cutoff:
+                h_root = self._endpoint_host_root(str(ep["endpoint_url"] or ""))
+                if h_root:
+                    live_host_counts[h_root] = live_host_counts.get(h_root, 0) + 1
 
         result: list[dict[str, Any]] = []
         for row in acct_rows:
@@ -1865,6 +1902,9 @@ class RouterStore:
                         models.append(mid)
             latest_hb = max((float(ep["last_heartbeat_utc"]) for ep in eps), default=None)
             primary_ep = (live_eps or eps)[0] if (live_eps or eps) else None
+            primary_url = str(primary_ep["endpoint_url"]) if primary_ep is not None else None
+            host_root = self._endpoint_host_root(primary_url) if primary_url else None
+            shared_host = bool(host_root and live_host_counts.get(host_root, 0) > 1)
             result.append(
                 {
                     "account_id": aid,
@@ -1873,7 +1913,9 @@ class RouterStore:
                     "status": "paused" if is_paused else ("live" if live_eps else "offline"),
                     "live_endpoints": len(live_eps) if not is_paused else 0,
                     "total_endpoints": len(eps),
-                    "endpoint_url": str(primary_ep["endpoint_url"]) if primary_ep is not None else None,
+                    "endpoint_url": primary_url,
+                    "host_root": host_root,
+                    "shared_host": shared_host,
                     "execution_class": str(primary_ep["execution_class"]) if primary_ep is not None else None,
                     "capacity_1k": round(sum(float(ep["capacity_1k"]) for ep in live_eps), 2) if live_eps else (float(primary_ep["capacity_1k"]) if primary_ep is not None else 0.0),
                     "cost_per_1k": float(primary_ep["cost_per_1k"]) if primary_ep is not None else None,

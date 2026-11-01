@@ -214,6 +214,12 @@ SECTIONS: Sequence[tuple[str, Pair, Sequence[tuple[str, Any]]]] = (
         ("note", ("On Windows (PowerShell) set variables with `$env:NAME=\"value\"` instead of `export`. Remove `--once` to keep the agent running.",
                   "Sous Windows (PowerShell), définissez les variables avec `$env:NOM=\"valeur\"` au lieu de `export`. Retirez `--once` pour laisser l'agent "
                   "en marche.")),
+        ("ol", [
+            ("Optional — keep your GPU connected across reboots with an auto-start background service (`systemd` on Linux, Scheduled Task on Windows 10/11, `launchd` on macOS):",
+             "Optionnel — gardez votre GPU connecté après un redémarrage grâce au service automatique en arrière-plan (`systemd` sous Linux, tâche planifiée sous Windows 10/11, `launchd` sous macOS) :"),
+        ]),
+        ("code", "python scripts/hivemind_producer_autostart.py linux --model coder=qwen2.5-coder:7b --apply ./producer-autostart\n"
+                 "python scripts/hivemind_producer_autostart.py windows --model coder=qwen2.5-coder:7b --apply ./producer-autostart"),
         ("p", ("You can stop at any time: after about two minutes without a heartbeat the gateway stops sending you requests.",
                "Vous pouvez arrêter en tout temps : après environ deux minutes sans signal de vie, la passerelle cesse de vous envoyer des requêtes.")),
         ("tiers", None),
@@ -528,6 +534,11 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "es": "En Windows (PowerShell), define las variables con `$env:NAME=\"value\"` en lugar de `export`. Quita `--once` para mantener el agente en ejecución.",
         "de": "Unter Windows (PowerShell) setzen Sie Variablen mit `$env:NAME=\"value\"` statt `export`. Entfernen Sie `--once`, damit der Agent dauerhaft läuft.",
         "zh": "在 Windows (PowerShell) 中，请使用 `$env:NAME=\"value\"` 代替 `export` 设置环境变量。移除 `--once` 即可保持代理持续运行。",
+    },
+    "Optional — keep your GPU connected across reboots with an auto-start background service (`systemd` on Linux, Scheduled Task on Windows 10/11, `launchd` on macOS):": {
+        "es": "Opcional — mantén tu GPU conectada tras reiniciar mediante un servicio automático en segundo plano (`systemd` en Linux, tarea programada en Windows 10/11, `launchd` en macOS):",
+        "de": "Optional — halten Sie Ihre GPU auch nach einem Neustart über einen automatischen Hintergrunddienst verbunden (`systemd` unter Linux, geplante Aufgabe unter Windows 10/11, `launchd` unter macOS):",
+        "zh": "可选 — 配置后台自启动服务（Linux 使用 `systemd`，Windows 10/11 使用计划任务，macOS 使用 `launchd`），让您的 GPU 在重启后自动保持连接：",
     },
     "You can stop at any time: after about two minutes without a heartbeat the gateway stops sending you requests.": {
         "es": "Puedes detenerlo en cualquier momento: tras unos dos minutos sin señal de vida, la pasarela deja de enviarte peticiones.",

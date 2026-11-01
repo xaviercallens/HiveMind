@@ -48,7 +48,8 @@ class BeeEnergyEvaluation:
             not self.is_stub_or_invalid
             and self.tests_total > 0
             and self.tests_passed == self.tests_total
-            and self.invariant_residual <= 1e-4
+            and math.isfinite(self.invariant_residual)
+            and 0.0 <= self.invariant_residual <= 1e-4
         )
 
 
@@ -137,17 +138,27 @@ def evaluate_bee_candidate_energy(
         )
 
     is_stub, stub_reason = _has_ast_stub_or_syntax_error(response_text, domain=domain)
-    if is_stub or tests_total <= 0:
+    metrics_valid = (
+        math.isfinite(float(invariant_residual))
+        and float(invariant_residual) >= 0.0
+        and math.isfinite(float(latency_ms))
+        and float(latency_ms) >= 0.0
+        and math.isfinite(float(memory_mb))
+        and float(memory_mb) >= 0.0
+    )
+    if is_stub or tests_total <= 0 or not metrics_valid:
         return BeeEnergyEvaluation(
             candidate_id=candidate_id,
             response_text=response_text,
             tests_passed=max(0, int(tests_passed)),
             tests_total=max(0, int(tests_total)),
-            latency_ms=max(0.0, float(latency_ms)),
-            memory_mb=max(0.0, float(memory_mb)),
+            latency_ms=max(0.0, float(latency_ms)) if math.isfinite(float(latency_ms)) else 0.0,
+            memory_mb=max(0.0, float(memory_mb)) if math.isfinite(float(memory_mb)) else 0.0,
             invariant_residual=float(invariant_residual),
             is_stub_or_invalid=True,
-            failure_reason=stub_reason or error_message or "NO_HIDDEN_TESTS",
+            failure_reason=stub_reason or error_message or (
+                "INVALID_NONFINITE_OR_NEGATIVE_METRIC" if not metrics_valid else "NO_HIDDEN_TESTS"
+            ),
             total_energy=MAX_PAIN_ENERGY,
             receipt_sha256=raw_digest,
         )
@@ -337,6 +348,10 @@ def evaluate_child_bee_promotion(
     """
     if len(parent_energies) == 0 or len(parent_energies) != len(child_energies):
         raise ValueError("parent_energies and child_energies must be non-empty and equal length.")
+    if not math.isfinite(float(noise_margin)) or float(noise_margin) <= 0.0:
+        raise ValueError("noise_margin must be a strictly positive finite float from calibrate_noise_margin.")
+    if not all(math.isfinite(float(p)) and math.isfinite(float(c)) for p, c in zip(parent_energies, child_energies)):
+        raise ValueError("parent_energies and child_energies must contain only finite floats.")
     deltas = [float(c - p) for p, c in zip(parent_energies, child_energies)]
     med_delta = float(statistics.median(deltas))
     p_value: float | None = None
@@ -379,6 +394,15 @@ def evaluate_child_bee_promotion(
             shuffled_control_gained=False,
             reason=f"REJECTED_WITHIN_NOISE_MARGIN (median_delta={med_delta:+.4f} >= {-abs(noise_margin):+.4f})",
             mcnemar_p=p_value,
+        )
+    if paired_discordant is None:
+        return AutopoieticPromotionVerdict(
+            promoted=False,
+            median_delta_energy=med_delta,
+            parent_regressions_failed=0,
+            shuffled_control_gained=False,
+            reason="REJECTED_MISSING_PAIRED_DISCORDANT_MCNEMAR",
+            mcnemar_p=None,
         )
     return AutopoieticPromotionVerdict(
         promoted=True,

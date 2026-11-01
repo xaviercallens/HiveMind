@@ -33,50 +33,26 @@ class OutreachRecipient:
     previous_tunnel_note: str
 
 
-# Verified external & registered prosumer/producer cohort from /data/router.db forensic audit
-VERIFIED_COHORT: tuple[OutreachRecipient, ...] = (
-    OutreachRecipient(
-        account_id="4203a7421cb018af01507cd08d101465",
-        handle="tibrib",
-        email=None,
-        role="prosumer",
-        os_platform="windows",
-        known_gpu="NVIDIA GeForce RTX 4070 (12,282 MiB VRAM)",
-        recommended_model_spec="coder=qwen2.5-coder:7b",
-        previous_tunnel_note=(
-            "Previously connected from Windows 10 x64 via Cloudflare tunnels "
-            "(links-winter-swing-pubs.trycloudflare.com & robin-kernel-keyword-shaved.trycloudflare.com) "
-            "serving qwen2.5-coder:7b in 4,535 MiB VRAM."
-        ),
-    ),
-    OutreachRecipient(
-        account_id="60a79a85fe77942ecbe36892d8e3ee6b",
-        handle="ilenemaurin@gmail.com",
-        email="ilenemaurin@gmail.com",
-        role="prosumer",
-        os_platform="windows",
-        known_gpu="Consumer GPU (>= 6 GB VRAM) or CPU/BOINC Worker",
-        recommended_model_spec="coder=qwen2.5-coder:7b",
-        previous_tunnel_note="Registered prosumer account with 200 HMT balance ready for 1-click GPU producer onboarding.",
-    ),
-    OutreachRecipient(
-        account_id="a35cdd56e5892104ea8a95eb35853895",
-        handle="vxtzq",
-        email="vxtzq@github.com",
-        role="prosumer",
-        os_platform="linux",
-        known_gpu="CrowdGPT Partner GPU Node (Vxtzq/Crowd-v1)",
-        recommended_model_spec="crowd-v1=qwen2.5-coder:7b-instruct",
-        previous_tunnel_note="Registered CrowdGPT partner prosumer account for federated hivemind/crowd-v1 routing.",
-    ),
-)
+# No real person's contact data or account ids live in the repository (issue #425). The cohort comes from a router.db
+# snapshot (--db) and, optionally, an untracked JSON file with per-handle hardware notes (--cohort-file).
+VERIFIED_COHORT: tuple[OutreachRecipient, ...] = ()
 
 
-def load_recipients_from_db(db_path: Path) -> list[OutreachRecipient]:
-    """Load real user prosumer/producer accounts from a router.db SQLite file, merging with VERIFIED_COHORT metadata."""
-    by_handle = {r.handle.lower(): r for r in VERIFIED_COHORT}
+def load_cohort_file(path: Path) -> tuple[OutreachRecipient, ...]:
+    """Read per-recipient metadata from an untracked JSON list; each item has the OutreachRecipient field names."""
+    items = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(items, list):
+        raise ValueError("cohort file must contain a JSON list")
+    return tuple(OutreachRecipient(**item) for item in items)
+
+
+def load_recipients_from_db(
+    db_path: Path, cohort: tuple[OutreachRecipient, ...] = VERIFIED_COHORT
+) -> list[OutreachRecipient]:
+    """Load real user prosumer/producer accounts from a router.db SQLite file, merging with the optional cohort metadata."""
+    by_handle = {r.handle.lower(): r for r in cohort}
     if not db_path.exists():
-        return list(VERIFIED_COHORT)
+        return list(cohort)
 
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
@@ -113,7 +89,7 @@ def load_recipients_from_db(db_path: Path) -> list[OutreachRecipient]:
                 previous_tunnel_note="Registered HiveMinder prosumer account.",
             )
         )
-    for preset in VERIFIED_COHORT:
+    for preset in cohort:
         if preset.handle.lower() not in seen_handles:
             recipients.append(preset)
     return recipients
@@ -194,10 +170,11 @@ Xavier Callens — Project HiveMind (`{gateway_url}/join?lang=en`)
 def build_campaign_report(
     db_path: Path | None = None,
     *,
+    cohort: tuple[OutreachRecipient, ...] = VERIFIED_COHORT,
     gateway_url: str = DEFAULT_GATEWAY_URL,
     ruche_url: str = DEFAULT_RUCHE_URL,
 ) -> dict[str, Any]:
-    recipients = load_recipients_from_db(db_path) if db_path is not None else list(VERIFIED_COHORT)
+    recipients = load_recipients_from_db(db_path, cohort) if db_path is not None else list(cohort)
     invitations = [
         render_bilingual_invitation(r, gateway_url=gateway_url, ruche_url=ruche_url)
         for r in recipients
@@ -214,10 +191,12 @@ def build_campaign_report(
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--db", help="optional path to router.db SQLite file")
+    ap.add_argument("--cohort-file", help="optional untracked JSON list of per-recipient hardware notes")
     ap.add_argument("--format", choices=("markdown", "json"), default="markdown", help="output format")
     args = ap.parse_args(argv)
 
-    report = build_campaign_report(Path(args.db).expanduser() if args.db else None)
+    cohort = load_cohort_file(Path(args.cohort_file).expanduser()) if args.cohort_file else VERIFIED_COHORT
+    report = build_campaign_report(Path(args.db).expanduser() if args.db else None, cohort=cohort)
     if args.format == "json":
         print(json.dumps(report, indent=2, ensure_ascii=False))
         return 0

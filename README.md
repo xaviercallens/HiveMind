@@ -102,7 +102,7 @@ flowchart LR
 
 | Your Role | Who You Are | What You Do in `< 60 Seconds` | Primary Entry Point |
 | :--- | :--- | :--- | :--- |
-| **💻 Developer** | AI app builder, IDE coder (`Claude Code`, `Cursor`, `Continue`, `Antigravity SDK`), scientist | Register a free account (`+100 HMT` starter grant) and call `15+` live specialized MoE models (`hivemind/coder`, `hivemind/bee-stars`, `hivemind/bee-lean-prover`, `hivemind/bee-rusty-sundials`) | 👉 **[Sign Up & Login (`/signup`)](https://hivemind-openrouter-1003063861791.us-central1.run.app/signup)** |
+| **💻 Developer** | AI app builder, IDE coder (`Claude Code`, `Cursor`, `Continue`, `Antigravity SDK`), scientist | Register a free account (any starter grant is set by the operator and shown on `/signup`; 0 HMT unless configured) and call `15+` live specialized MoE models (`hivemind/coder`, `hivemind/bee-stars`, `hivemind/bee-lean-prover`, `hivemind/bee-rusty-sundials`) | 👉 **[Sign Up & Login (`/signup`)](https://hivemind-openrouter-1003063861791.us-central1.run.app/signup)** |
 | **🛠️ Contributor** | Python/Rust/CUDA engineer, ML researcher, Lean 4 formal prover | Fork & clone, pick an open task or propose a new Bee (`[Bee-Proposal]`), co-develop with `hivemind/coder`, and submit a PR verified by the 5-Layer Security & GWAYA Zero-Stub gates | 👉 **[Collaboration Hub (`HiveMind × AMCP`)](https://github.com/xaviercallens/HiveMind-AMCP-Collaboration)** & **[`CONTRIBUTOR_TASKS_AND_BOUNTIES.md`](docs/CONTRIBUTOR_TASKS_AND_BOUNTIES.md)** |
 | **⛏️ HiveMiner** | PC gamer (`RTX 2060–4090`), homelabber, Mac `M1–M4` or AMD `ROCm`/`DirectML` owner | Run a 1-command producer or nocturnal BOINC worker; your GPU yields in `< 150 ms` when a game launches and earns prorated `HMT` compute credits | 👉 **[Join as a HiveMiner (`/rejoindre`)](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/rejoindre?lang=fr)** & **[La Ruche Portal](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/)** |
 | **👑 HiveMaster** | Swarm administrator (`role="admin"`), cluster coordinator, security operator | Operate the OpenRouter & BOINC coordinators, enforce the Thermodynamic Monotonic Ratchet ($\Delta \mathcal{L}_{\text{eval}} \le 0$), Multi-Krum & 24/7 Cyber Protection sweeps | 👉 **[HiveMaster Admin Runbook (Below)](#-4-for-hivemaster-swarm-admin--operate-govern-monitor--harden-the-federation)** |
@@ -111,7 +111,7 @@ flowchart LR
 
 ### 💻 1. For Developers — Query 15+ Specialized MoE Bees in 60 Seconds
 
-#### Step 1: Register or Log In (Free `+100.0 HMT` Starter Credits)
+#### Step 1: Register or Log In (the starter grant, if any, is shown on `/signup`)
 - **Web Portal (Register & Returning User Login with Handle / Password / API Key):**
   👉 **[`https://hivemind-openrouter-1003063861791.us-central1.run.app/signup`](https://hivemind-openrouter-1003063861791.us-central1.run.app/signup)** *(also linked from [La Ruche](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/))*
 - **Or via CLI in 1 command:**
@@ -416,7 +416,7 @@ Project HiveMind is live in continuous production across **Google Cloud Run**, a
 
 | Portal / Service | Live URL | Key Capabilities & Endpoints |
 | :--- | :--- | :--- |
-| **⚡ HiveMind OpenRouter Gateway** | **[`https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app)** | OpenAI-compatible `POST /v1/chat/completions`, [`/signup`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/signup) (`+100.0 HMT` starter grant), [`/v1/models`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/v1/models) (**7 live models**), [`/v1/hivemind/t4/status`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/v1/hivemind/t4/status) |
+| **⚡ HiveMind OpenRouter Gateway** | **[`https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app)** | OpenAI-compatible `POST /v1/chat/completions`, [`/signup`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/signup) (starter grant set by the operator, shown on `/signup`), [`/v1/models`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/v1/models) (**7 live models**), [`/v1/hivemind/t4/status`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/v1/hivemind/t4/status) |
 | **🍯 La Ruche Honeycomb MoE Portal** | **[`https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app`](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app)** | Interactive 8-Alvéole Sparse MoE Vault, [`/night-moe`](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/night-moe) McNemar benchmark report, and live T4/RTX 2070 GPU telemetry banner |
 | **🛰️ HiveMind@home Tribute Node** | **[`https://hivemind-at-home-cfhmhmvv5a-uc.a.run.app`](https://hivemind-at-home-cfhmhmvv5a-uc.a.run.app)** | Tribute to `SETI@home`, `Folding@home`, and `BOINC` with live Spectrum & $E_8$ Lattice Waterfall |
 | **🐝 HiveMind@home 5-Language Web Site** | **[`https://hivemindathome.github.io/`](https://hivemindathome.github.io/)** | 5-Screen Interactive Cyber-Bee Portal in `EN • FR • 中文 • ES • DE` ([`HiveMindatHome/hivemindathome.github.io`](https://github.com/HiveMindatHome/hivemindathome.github.io)) |

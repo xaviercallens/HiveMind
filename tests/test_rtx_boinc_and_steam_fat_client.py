@@ -26,15 +26,35 @@ sys.modules["hivemind_boinc_idle_worker"] = worker
 _spec.loader.exec_module(worker)  # type: ignore[union-attr]
 
 
-def test_rtx_gpu_status_and_telemetry() -> None:
+_T4_CSV = "Tesla T4, 5, 52, 15360, 612, 28.4, 550.54.15\n"
+_REAL_PROBE_GPU = worker.probe_gpu  # captured before any monkeypatch replaces worker.probe_gpu
+
+
+def _ready_probe() -> object:
+    """A READY probe built from real nvidia-smi csv through the injected-runner path (external I/O faked only)."""
+    return _REAL_PROBE_GPU(
+        run=lambda *a, **k: subprocess.CompletedProcess(args=["nvidia-smi"], returncode=0, stdout=_T4_CSV, stderr=""),
+        which=lambda _name: "/usr/bin/nvidia-smi",
+    )
+
+
+def test_rtx_gpu_status_and_telemetry(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Positive: a real nvidia-smi line is parsed faithfully. Negative: no nvidia-smi means unavailable, never an invented card."""
+    monkeypatch.setattr(worker.shutil, "which", lambda _name: "/usr/bin/nvidia-smi")
+    monkeypatch.setattr(
+        worker.subprocess,
+        "run",
+        lambda *a, **k: subprocess.CompletedProcess(args=["nvidia-smi"], returncode=0, stdout=_T4_CSV, stderr=""),
+    )
     gpu = worker.query_nvidia_gpu_status()
-    if not gpu["available"]:
-        pytest.skip("no readable NVIDIA GPU on this machine (the worker reports it as busy and unavailable, never as an invented card)")
-    # nvidia-smi names cards "NVIDIA GeForce ...", "Tesla T4", "Quadro ...", "NVIDIA A100 ...": do not require the word NVIDIA
-    assert gpu["gpu_model"] not in ("", "unknown")
+    assert gpu["available"] is True
     assert gpu["total_mib"] >= 3500.0
     assert 0.0 <= gpu["utilization_pct"] <= 100.0
     assert 0.0 < gpu["temp_c"] < 105.0
+    assert gpu["gpu_model"] == "Tesla T4"
+
+    monkeypatch.setattr(worker.shutil, "which", lambda _name: None)
+    assert worker.query_nvidia_gpu_status()["available"] is False
 
 
 @pytest.mark.parametrize(
@@ -63,7 +83,8 @@ def test_cuda_ptx_bls_kernel_folds_all_eight_nasa_exoplanet_targets(planet: str,
 
 
 def test_active_gameplay_preempts_boinc_gpu_with_zero_cuda_allocation(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(worker, "get_user_idle_seconds", lambda assume_idle_when_unknown=False: 0.15)
+    monkeypatch.setattr(worker, "probe_gpu", lambda *a, **k: _ready_probe())
+    monkeypatch.setattr(worker, "get_user_idle_seconds", lambda *a, **k: 0.15)
     rep = worker.run_one_idle_gpu_boinc_cycle(
         commander="Cmdr_Gamer_Active_60FPS",
         idle_threshold_seconds=4.0,
@@ -76,28 +97,28 @@ def test_active_gameplay_preempts_boinc_gpu_with_zero_cuda_allocation(monkeypatc
 
 
 def test_idle_gpu_automatically_resumes_cuda_ptx_boinc_folding(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(worker, "get_user_idle_seconds", lambda assume_idle_when_unknown=False: 8.5)
-    monkeypatch.setattr(
-        worker,
-        "query_nvidia_gpu_status",
-        lambda: {
-            "available": True,
-            "gpu_model": "NVIDIA GeForce RTX 2070",
-            "utilization_pct": 12.0,
-            "used_mib": 1400.0,
-            "total_mib": 8192.0,
-            "temp_c": 52.0,
-        },
-    )
+    """On a host with a working CUDA driver this runs the real kernel and must be READY on the CUDA backend; on a host without one the
+    cycle must be BLOCKED (cuda_fold_unavailable) and never report boinc_active=True for a CPU loop."""
+    monkeypatch.setattr(worker, "get_user_idle_seconds", lambda *a, **k: 8.5)
+    monkeypatch.setattr(worker, "probe_gpu", lambda *a, **k: _ready_probe())
+    boinc_calls: list[bool] = []
+    monkeypatch.setattr(worker, "set_boinc_client_gpu_mode", lambda enable: boinc_calls.append(enable) or "test_driver")
     rep = worker.run_one_idle_gpu_boinc_cycle(
         commander="Cmdr_Gamer_Idle_BOINC",
         idle_threshold_seconds=4.0,
         target_planet="LHS 1140 b",
         force_fold=False,
     )
-    assert rep["boinc_active"] is True
-    assert rep["cuda_fold"]["n_points_folded"] == 16384
-    assert abs(rep["cuda_fold"]["recovered_transit_depth_ppm"] - 5385.0) < 1.0
+    if rep["status"] == "READY":
+        assert rep["boinc_active"] is True and boinc_calls == [True]
+        assert rep["cuda_fold"]["backend"] == worker.CUDA_BACKEND
+        assert rep["cuda_fold"]["cuda_device"] not in ("", "CPU")
+        assert rep["cuda_fold"]["n_points_folded"] == 16384
+        assert abs(rep["cuda_fold"]["recovered_transit_depth_ppm"] - 5385.0) < 1.0
+    else:
+        assert rep["status"] == "BLOCKED" and rep["reason"] == "cuda_fold_unavailable"
+        assert rep["boinc_active"] is False and boinc_calls == []
+        assert rep["cuda_fold"]["backend"] == "cpu_fallback"
 
 
 def test_cli_pause_now_and_resume_now_flags(capsys: pytest.CaptureFixture[str]) -> None:

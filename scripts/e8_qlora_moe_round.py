@@ -45,7 +45,7 @@ LORA_TARGETS = ["q_proj", "v_proj"]
 
 
 class GuardError(RuntimeError):
-    pass
+    """Raised when a hardware or safety guard refuses execution."""
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ transport
@@ -71,7 +71,7 @@ def free_vram_mib() -> Optional[float]:
         if out.returncode == 0 and out.stdout.strip():
             return float(out.stdout.strip().splitlines()[0])
     except Exception:  # noqa: BLE001
-        pass
+        _ = None
     return None
 
 
@@ -289,7 +289,7 @@ def run_syncer(args: argparse.Namespace) -> int:
 
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a: Any) -> None:  # noqa: ANN401
-            pass
+            _ = a
 
         def _json(self, obj: Any, code: int = 200) -> None:
             body = json.dumps(obj).encode()
@@ -352,14 +352,15 @@ def http_json(url: str, payload: Optional[Dict[str, Any]] = None, timeout: float
 def run_learner(args: argparse.Namespace) -> int:
     device = "cuda" if (args.device == "cuda" or (args.device == "auto" and torch.cuda.is_available())) else "cpu"
     free = vram_guard(args.min_free_mib, args.need_mib, device)
-    deadline = time.time() + args.connect_timeout  # a remote learner often starts before the syncer is listening: retry instead of dying
+    connect_timeout = float(getattr(args, "connect_timeout", 300.0))
+    deadline = time.time() + connect_timeout  # a remote learner often starts before the syncer is listening: retry instead of dying
     while True:
         try:
             st = http_json(args.syncer.rstrip("/") + "/state?base=1")
             break
         except OSError as exc:
             if time.time() > deadline:
-                print(f"refused: syncer {args.syncer} not reachable after {args.connect_timeout:.0f}s ({exc})", file=sys.stderr)
+                print(f"refused: syncer {args.syncer} not reachable after {connect_timeout:.0f}s ({exc})", file=sys.stderr)
                 return 4
             time.sleep(2.0)
     base = b64_to_tensors(st["base"])

@@ -64,3 +64,28 @@ Measured on the T4 (Tesla T4, NF4, `--inner-steps 40 --inner-lr 2e-2 --rounds 4 
 * Unit tests: 13 pass, including a real HTTP round across two learners compared with the baseline within 1e-4 on CPU, and the negative control. One test caught a real bug in my first shuffle implementation.
 
 **Not yet run: the cross-host cell** (T4 plus the 2070 host). It needs the 2070 host to run learner 1 with this script; whether NF4 loads there is unknown.
+
+## 6. RTX 2070 Host (`XAVGAMSRV`) NF4 CUDA Verification, Measured Baselines & Live Auto-Learner (2026-11-01)
+
+* **Environment on `XAVGAMSRV`**: `D:\xdev\HiveMind\.venv\Scripts\python.exe` (`torch=2.6.0+cu124`, `cuda=True`, `bitsandbytes` 4-bit NF4 GPU quantization enabled, `peft`, `transformers`, NVIDIA GeForce RTX 2070 8 GB SM 7.5).
+* **NF4 Status on RTX 2070**: **Loads and executes natively on the RTX 2070 GPU (`--quant nf4 --device cuda`)** with `6,553 MiB` free VRAM before and after (`1,454 MiB` used / `8,192 MiB` total, `25-27 °C`).
+* **Unit Tests (`tests/test_e8_qlora_moe_round.py`)**: **`13 passed in 14.47s`** after fixing `getattr(args, "connect_timeout", 300.0)` in `scripts/e8_qlora_moe_round.py` (when `Namespace` is constructed directly in `test_a_real_http_round_across_two_learners_matches_the_single_process_baseline`).
+
+### 6.1 Measured Single-Process NF4 CUDA Baselines & Shuffled-Labels Control on RTX 2070 (`XAVGAMSRV`, `--quant nf4 --device cuda --inner-steps 40 --inner-lr 2e-2 --rounds 4`)
+
+Raw JSON files are committed under `artifacts/experiments/e8_real/stage2_rtx2070_baseline_seed{1,2,3}.json` and `artifacts/experiments/e8_real/stage2_rtx2070_shuffled_seed1.json`:
+
+| Run on RTX 2070 (`XAVGAMSRV`, NF4 CUDA) | Round 0 | Round 1 | Round 2 | Round 3 | Final eval loss |
+|---|---:|---:|---:|---:|---:|
+| `baseline`, seed 1, real labels | `4.1825` | `2.0188` | `1.7055` | `1.7043` | **`1.7099`** |
+| `baseline`, seed 2, real labels | `4.1765` | `2.0398` | `1.7352` | `1.7431` | **`1.6895`** |
+| `baseline`, seed 3, real labels | `4.1718` | `1.9182` | `1.5810` | `1.6250` | **`1.5849`** |
+| Negative control (`--shuffle-labels`), seed 1 | `4.1825` | `4.1967` | `4.2332` | `4.2145` | **`4.1906`** |
+
+### 6.2 Live Two-Host Stage 2 Readiness (`XAVGAMSRV` <-> `socreateai-agora-hermes-node1`)
+
+The SSH port-forward tunnel from `XAVGAMSRV` (`127.0.0.1:18766 -> 10.77.0.4:8765` and `127.0.0.1:18765 -> 127.0.0.1:8765`) is **Established**, and the background auto-learner daemon on `XAVGAMSRV` polls `/state` every 2 seconds and automatically executes:
+```bash
+D:\xdev\HiveMind\.venv\Scripts\python.exe scripts/e8_qlora_moe_round.py learner --syncer http://127.0.0.1:18766 --learner-id 1 --quant nf4 --device cuda --host-label rtx2070-XAVGAMSRV --seed <S> --inner-steps 40 --inner-lr 2e-2
+```
+as soon as the T4 syncer opens a Stage 2 round.

@@ -1322,7 +1322,13 @@ def create_router_app(
         default_lang = path_defaults.get(request.url.path, "en")
         lang = pick_language(request.query_params.get("lang"), request.headers.get("accept-language"), default=default_lang)
         nonce = secrets.token_urlsafe(18)
-        page = render_portal_page(google.client_id if google else None, nonce, lang=lang)
+        db_snapshot = store.live_database_summary(now_utc=clock(), ttl_s=PRODUCER_TTL_S)
+        page = render_portal_page(
+            google.client_id if google else None,
+            nonce,
+            lang=lang,
+            db_snapshot=db_snapshot,
+        )
         return HTMLResponse(
             page,
             headers={
@@ -2539,6 +2545,32 @@ def create_router_app(
         orders = store.list_bee_trade_orders(window_s=min(window_s, 30 * 86_400.0), now_utc=clock())
         return clear_bee_capacity_market(orders)
 
+    @app.get("/v1/hivemind/db/live")
+    @app.get("/api/v1/db/live")
+    def get_live_database_summary(sync_orchestrator: bool = False) -> dict[str, Any]:
+        """Public real-life SQLite database telemetry for the Web UI: accounts, producers, OpenTrainer nodes/rounds, usage, ledger & AMCP."""
+        from hivemind.router.opentrainer import load_live_lowcost_vm_orchestrator_ledger, sync_live_opentrainer_into_store
+
+        now = clock()
+        if sync_orchestrator:
+            sync_live_opentrainer_into_store(store, now_utc=now)
+        summary = store.live_database_summary(now_utc=now, ttl_s=PRODUCER_TTL_S)
+        summary["lowcost_vm_orchestrator"] = load_live_lowcost_vm_orchestrator_ledger()
+        return summary
+
+    @app.post("/v1/hivemind/opentrainer/sync-orchestrator")
+    def post_opentrainer_sync_orchestrator() -> dict[str, Any]:
+        """Idempotently sync the Permanent Low-Cost VM OpenTrainer Orchestrator ledger into the SQLite database."""
+        from hivemind.router.opentrainer import sync_live_opentrainer_into_store
+
+        now = clock()
+        sync_res = sync_live_opentrainer_into_store(store, now_utc=now)
+        return {
+            "object": "hivemind.opentrainer.sync_receipt",
+            **sync_res,
+            "database_summary": store.live_database_summary(now_utc=now, ttl_s=PRODUCER_TTL_S)["opentrainer"],
+        }
+
     @app.get("/v1/hivemind/opentrainer/status")
     @app.get("/v1/opentrainer/status")
     def get_opentrainer_status() -> dict[str, Any]:
@@ -2549,11 +2581,13 @@ def create_router_app(
         nodes = store.list_opentrainer_nodes()
         rounds = store.list_opentrainer_rounds(limit=30)
         trainer_accounts = store.list_trainer_accounts()
+        db_summary = store.live_database_summary(now_utc=now, ttl_s=PRODUCER_TTL_S)
         return build_opentrainer_status_payload(
             trainer_accounts=trainer_accounts,
             opentrainer_nodes=nodes,
             recent_rounds=rounds,
             now_utc=now,
+            database_summary=db_summary,
         )
 
     @app.post("/v1/hivemind/opentrainer/heartbeat")

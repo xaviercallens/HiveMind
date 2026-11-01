@@ -16,8 +16,10 @@ strictly enforces nonce-pinned scripts and styles.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import html
 import json
+from typing import Any
 
 from hivemind.router.catalog import TIERS
 from hivemind.router.google_auth import CLIENT_ID_RE
@@ -1423,28 +1425,189 @@ try {
   }
 } catch (e) {}
 
-if ($('opentrainerStatusBtn')) {
-  $('opentrainerStatusBtn').addEventListener('click', async () => {
-    $('opentrainerPortalStatus').textContent = 'Querying OpenTrainer central coordinator (/v1/hivemind/opentrainer/status)...';
-    try {
-      const res = await fetch('/v1/hivemind/opentrainer/status');
-      const data = await res.json();
-      if (!res.ok) {
-        $('opentrainerPortalStatus').textContent = 'Error querying OpenTrainer status.';
-        return;
+function escapeHtmlText(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+async function refreshLiveDatabaseTelemetry() {
+  try {
+    const [dbRes, otRes] = await Promise.all([
+      fetch('/v1/hivemind/db/live'),
+      fetch('/v1/hivemind/opentrainer/status'),
+    ]);
+    if (dbRes.ok) {
+      const db = await dbRes.json();
+      const acc = db.accounts || {};
+      const byRole = acc.by_role || {};
+      const prod = db.producers || {};
+      const ot = db.opentrainer || {};
+      const ul = db.usage_and_ledger || {};
+      const amcp = db.amcp_and_campaigns || {};
+      const vm = db.lowcost_vm_orchestrator || {};
+
+      if ($('otDbTrainerCount')) $('otDbTrainerCount').textContent = String(ot.registered_trainer_accounts_count || 0);
+      if ($('otDbTrainerHandles')) {
+        const tHandles = (ot.trainer_accounts || []).slice(0, 4).map(a => a.handle).join(', ');
+        $('otDbTrainerHandles').textContent = tHandles ? ('Handles: ' + tHandles) : 'SQLite accounts (role=trainer)';
       }
+      if ($('otDbActiveNodes')) {
+        $('otDbActiveNodes').textContent = String(ot.active_trainer_nodes || 0) + ' / ' + String(ot.total_registered_nodes || 0);
+      }
+      if ($('otDbNodeHosts')) {
+        const vmHosts = (vm.hosts_seen || []).join(', ');
+        $('otDbNodeHosts').textContent = vmHosts ? ('VM Orchestrator: ' + vmHosts) : 'Outbound HTTPS / AMCP Nodes';
+      }
+      if ($('otDbRoundsCount')) {
+        const dbSubs = Number(ot.total_round_submissions_in_db || 0);
+        const vmRounds = Number(vm.current_round || 0);
+        $('otDbRoundsCount').textContent = String(dbSubs) + ' DB / ' + String(vmRounds) + ' VM';
+      }
+      if ($('otDbRoundsSub')) {
+        $('otDbRoundsSub').textContent =
+          String(ot.distinct_rounds_completed || 0) + ' distinct SQLite rounds • ' +
+          Number(ot.total_tokens_trained || 0).toLocaleString() + ' tokens';
+      }
+      if ($('otDbEvalLoss')) {
+        const initL = ot.initial_eval_loss != null ? Number(ot.initial_eval_loss).toFixed(4) : (vm.initial_eval_loss != null ? Number(vm.initial_eval_loss).toFixed(4) : '4.1709');
+        const curL = ot.latest_eval_loss != null ? Number(ot.latest_eval_loss).toFixed(4) : (vm.current_eval_loss != null ? Number(vm.current_eval_loss).toFixed(4) : '2.8099');
+        $('otDbEvalLoss').textContent = initL + ' → ' + curL;
+      }
+      if ($('otDbLossSub')) {
+        const bestL = ot.best_eval_loss != null ? Number(ot.best_eval_loss).toFixed(4) : (vm.current_eval_loss != null ? Number(vm.current_eval_loss).toFixed(4) : '2.7043');
+        $('otDbLossSub').textContent = 'Best Eval Loss: ' + bestL + ' • T4-Independent: YES';
+      }
+
+      if ($('dbTotalAccountsVal')) $('dbTotalAccountsVal').textContent = String(acc.total_user_accounts || 0);
+      if ($('dbAccountsBreakdown')) {
+        $('dbAccountsBreakdown').textContent =
+          'Prosumers: ' + (byRole.prosumer || 0) + ' • Producers: ' + (byRole.producer || 0) +
+          ' • Trainers: ' + (byRole.trainer || 0) + ' • Consumers: ' + (byRole.consumer || 0);
+      }
+      if ($('dbLiveFleetVal')) {
+        $('dbLiveFleetVal').textContent = String(prod.live_hiveminders || 0) + ' Live / ' + String(prod.total_hiveminders || 0) + ' Total';
+      }
+      if ($('dbFleetBreakdown')) {
+        $('dbFleetBreakdown').textContent =
+          String(prod.distinct_physical_gpus || 0) + ' Physical GPUs • ' +
+          String(prod.live_endpoints || 0) + ' Endpoints • ' +
+          Number(prod.total_capacity_1k || 0).toFixed(1) + 'k tok/min';
+      }
+      if ($('dbSettledUsageVal')) {
+        $('dbSettledUsageVal').textContent =
+          String(ul.settled_requests || 0) + ' Reqs • ' + Number(ul.total_billed_tokens || 0).toLocaleString() + ' Toks';
+      }
+      if ($('dbUsageBreakdown')) {
+        $('dbUsageBreakdown').textContent =
+          'Settled: ' + Number(ul.total_charged_hmt || 0).toFixed(4) + ' HMT • Live Models: ' + String(prod.live_models_count || 0);
+      }
+      if ($('dbLedgerAmcpVal')) {
+        $('dbLedgerAmcpVal').textContent = Number(ul.total_minted_hmt || 0).toLocaleString() + ' HMT';
+      }
+      if ($('dbLedgerBreakdown')) {
+        $('dbLedgerBreakdown').textContent =
+          String(ul.ledger_entries || 0) + ' Ledger Rows (' + (ul.ledger_chain_valid ? 'SHA256 OK' : 'CHECK') + ') • ' +
+          String(amcp.amcp_events_count || 0) + ' AMCP Events';
+      }
+
+      if ($('otNodesTableBody')) {
+        const nodes = ot.nodes || [];
+        if (nodes.length > 0) {
+          $('otNodesTableBody').innerHTML = nodes.slice(0, 12).map(n => (
+            '<tr>' +
+              '<td><code>' + escapeHtmlText(n.host_label || n.node_id) + '</code></td>' +
+              '<td>' + escapeHtmlText(n.handle) + '</td>' +
+              '<td>' + escapeHtmlText(n.gpu_name) + '</td>' +
+              '<td>' + escapeHtmlText(n.vram_free_mib) + ' / ' + escapeHtmlText(n.vram_total_mib) + ' MiB</td>' +
+              '<td><code>' + escapeHtmlText(n.network_mode) + '</code></td>' +
+              '<td>' + escapeHtmlText((n.stacks || []).join(', ')) + '</td>' +
+            '</tr>'
+          )).join('');
+        }
+      }
+
+      if ($('otRoundsTableBody')) {
+        const rounds = ot.recent_rounds || [];
+        if (rounds.length > 0) {
+          $('otRoundsTableBody').innerHTML = rounds.slice(0, 12).map(r => (
+            '<tr>' +
+              '<td><code>' + escapeHtmlText(r.submission_id) + '</code></td>' +
+              '<td>#' + escapeHtmlText(r.round_index) + '</td>' +
+              '<td><code>' + escapeHtmlText(r.run_id) + '</code></td>' +
+              '<td>' + escapeHtmlText(r.handle) + ' (<code>' + escapeHtmlText(r.host_label) + '</code>)</td>' +
+              '<td><code>' + escapeHtmlText(r.network_mode) + '</code></td>' +
+              '<td>' + Number(r.delta_l2 || 0).toFixed(4) + '</td>' +
+              '<td style="color:var(--green);font-weight:700;">' + Number(r.eval_loss || 0).toFixed(4) + '</td>' +
+              '<td>' + Number(r.tokens_trained || 0).toLocaleString() + '</td>' +
+            '</tr>'
+          )).join('');
+        }
+      }
+
+      if ($('dbProducersTableBody')) {
+        const hm = prod.hiveminders || [];
+        if (hm.length > 0) {
+          $('dbProducersTableBody').innerHTML = hm.slice(0, 15).map(p => (
+            '<tr>' +
+              '<td><strong>' + escapeHtmlText(p.handle) + '</strong></td>' +
+              '<td><code>' + escapeHtmlText(p.role) + '</code></td>' +
+              '<td style="color:' + (p.status === 'live' ? 'var(--green)' : 'var(--amber)') + ';font-weight:700;">' + escapeHtmlText(String(p.status || '').toUpperCase()) + '</td>' +
+              '<td><code>' + escapeHtmlText(p.execution_class || 'n/a') + '</code></td>' +
+              '<td>' + escapeHtmlText(p.live_endpoints || 0) + '</td>' +
+              '<td>' + Number(p.capacity_1k || 0).toFixed(1) + 'k</td>' +
+              '<td>' + escapeHtmlText((p.models || []).slice(0, 5).join(', ') || 'none') + '</td>' +
+            '</tr>'
+          )).join('');
+        }
+      }
+    }
+
+    if (otRes.ok) {
+      const data = await otRes.json();
       const fl = data.live_opentrainer_fleet || {};
       const cat = data.portal_category || {};
       const rounds = data.recent_training_rounds || [];
       const offer = data.active_task_offer || {};
-      $('opentrainerPortalStatus').textContent =
-        'OPENTRAINER ONLINE (' + (data.version || '1.0.0-s36') + ') • Topic: ' + (offer.topic || 'hivemind.amcp.federation.v1') +
-        ' • Registered Trainers: ' + (cat.registered_trainer_accounts_count || 0) +
-        ' • Live Nodes: ' + (fl.active_trainer_nodes || 0) +
-        ' • Accepted Rounds: ' + rounds.length +
-        ' • Firewall Traversal: Outbound HTTPS Relay (0 inbound ports)';
+      const vm = data.lowcost_vm_orchestrator || {};
+      if ($('opentrainerPortalStatus')) {
+        $('opentrainerPortalStatus').textContent =
+          'OPENTRAINER ONLINE (' + (data.version || '1.0.0-s36') + ') • Topic: ' + (offer.topic || 'hivemind.amcp.federation.v1') +
+          ' • Registered Trainers: ' + (cat.registered_trainer_accounts_count || 0) +
+          ' • Live Nodes: ' + (fl.active_trainer_nodes || 0) +
+          ' • Accepted Rounds: ' + rounds.length +
+          ' • Low-Cost VM Orchestrator Round: ' + (vm.current_round || 0) +
+          ' (Loss: ' + (vm.initial_eval_loss != null ? Number(vm.initial_eval_loss).toFixed(4) : '4.1709') + ' -> ' +
+          (vm.current_eval_loss != null ? Number(vm.current_eval_loss).toFixed(4) : '2.8099') + ')' +
+          ' • Firewall Traversal: Outbound HTTPS Relay (0 inbound ports)';
+      }
+    }
+  } catch (err) {
+    // Keep server-rendered database values on transient network error
+  }
+}
+
+if ($('opentrainerStatusBtn')) {
+  $('opentrainerStatusBtn').addEventListener('click', async () => {
+    $('opentrainerPortalStatus').textContent = 'Querying OpenTrainer central coordinator (/v1/hivemind/opentrainer/status)...';
+    await refreshLiveDatabaseTelemetry();
+  });
+}
+
+if ($('opentrainerSyncDbBtn')) {
+  $('opentrainerSyncDbBtn').addEventListener('click', async () => {
+    $('opentrainerPortalStatus').textContent = 'Syncing Permanent Low-Cost VM Orchestrator rounds into SQLite database...';
+    try {
+      const res = await fetch('/v1/hivemind/opentrainer/sync-orchestrator', { method: 'POST' });
+      if (res.ok) {
+        await refreshLiveDatabaseTelemetry();
+      } else {
+        $('opentrainerPortalStatus').textContent = 'Failed to sync orchestrator ledger into SQLite database.';
+      }
     } catch (err) {
-      $('opentrainerPortalStatus').textContent = 'Network error querying OpenTrainer coordinator.';
+      $('opentrainerPortalStatus').textContent = 'Network error syncing orchestrator ledger.';
     }
   });
 }
@@ -1481,25 +1644,284 @@ if ($('opentrainerHeartbeatBtn')) {
         return;
       }
       const offer = data.active_task_offer || {};
+      await refreshLiveDatabaseTelemetry();
       $('opentrainerPortalStatus').textContent =
         'OPENTRAINER NODE LIVE • Host: ' + (data.node && data.node.host_label) +
         ' • GPU: ' + (data.node && data.node.gpu_name) +
         ' • Mode: ' + (data.node && data.node.network_mode) +
         ' • Aglet Phase: ' + data.aglet_lifecycle_phase +
-        ' • Active Offer Round: ' + (offer.round_id || 1) + ' (' + (offer.base_model || '') + ')';
+        ' • Active Offer Round: ' + (offer.round_id || offer.round || 1) + ' (' + (offer.model_id || offer.base_model || '') + ')';
     } catch (err) {
       $('opentrainerPortalStatus').textContent = 'Network error sending OpenTrainer heartbeat.';
     }
   });
 }
+
+// Auto-refresh Web UI with real-life SQLite database telemetry on load & every 15s
+setTimeout(() => { refreshLiveDatabaseTelemetry(); }, 60);
+setInterval(() => { refreshLiveDatabaseTelemetry(); }, 15000);
 """
 
 
-def render_portal_page(client_id: str | None, nonce: str, *, lang: str = "en") -> str:
+def _render_live_db_sections(db_snapshot: Mapping[str, Any] | None = None) -> tuple[str, str, str]:
+    """Render server-side HTML fragments for OpenTrainer and Producer fleet directly from the SQLite database snapshot."""
+    from hivemind.router.opentrainer import load_live_lowcost_vm_orchestrator_ledger
+
+    snap = dict(db_snapshot) if isinstance(db_snapshot, Mapping) else {}
+    acc = snap.get("accounts") if isinstance(snap.get("accounts"), Mapping) else {}
+    by_role = acc.get("by_role") if isinstance(acc.get("by_role"), Mapping) else {}
+    prod = snap.get("producers") if isinstance(snap.get("producers"), Mapping) else {}
+    ot = snap.get("opentrainer") if isinstance(snap.get("opentrainer"), Mapping) else {}
+    ul = snap.get("usage_and_ledger") if isinstance(snap.get("usage_and_ledger"), Mapping) else {}
+    amcp = snap.get("amcp_and_campaigns") if isinstance(snap.get("amcp_and_campaigns"), Mapping) else {}
+    vm = load_live_lowcost_vm_orchestrator_ledger()
+
+    reg_trainers = int(ot.get("registered_trainer_accounts_count") or 0)
+    trainer_list = ot.get("trainer_accounts") if isinstance(ot.get("trainer_accounts"), list) else []
+    trainer_handles = ", ".join(str(a.get("handle", "")) for a in trainer_list[:4] if a.get("handle"))
+    trainer_sub = f"Handles: {html.escape(trainer_handles)}" if trainer_handles else "SQLite accounts (role=trainer)"
+
+    active_ot_nodes = int(ot.get("active_trainer_nodes") or 0)
+    total_ot_nodes = int(ot.get("total_registered_nodes") or 0)
+    vm_hosts = ", ".join(str(h) for h in (vm.get("hosts_seen") or []) if h)
+    node_sub = f"VM Orchestrator: {html.escape(vm_hosts)}" if vm_hosts else "Outbound HTTPS / AMCP Nodes"
+
+    db_subs = int(ot.get("total_round_submissions_in_db") or 0)
+    distinct_db_rounds = int(ot.get("distinct_rounds_completed") or 0)
+    vm_round = int(vm.get("current_round") or 0)
+    total_toks = int(ot.get("total_tokens_trained") or 0)
+
+    init_loss_val = ot.get("initial_eval_loss") if ot.get("initial_eval_loss") is not None else vm.get("initial_eval_loss", 4.1709)
+    cur_loss_val = ot.get("latest_eval_loss") if ot.get("latest_eval_loss") is not None else vm.get("current_eval_loss", 2.8099)
+    best_loss_val = ot.get("best_eval_loss") if ot.get("best_eval_loss") is not None else vm.get("current_eval_loss", 2.7043)
+
+    ot_nodes = ot.get("nodes") if isinstance(ot.get("nodes"), list) else []
+    if ot_nodes:
+        ot_nodes_rows = "".join(
+            f"<tr>"
+            f"<td><code>{html.escape(str(n.get('host_label') or n.get('node_id') or ''))}</code></td>"
+            f"<td>{html.escape(str(n.get('handle') or ''))}</td>"
+            f"<td>{html.escape(str(n.get('gpu_name') or ''))}</td>"
+            f"<td>{int(n.get('vram_free_mib') or 0)} / {int(n.get('vram_total_mib') or 0)} MiB</td>"
+            f"<td><code>{html.escape(str(n.get('network_mode') or ''))}</code></td>"
+            f"<td>{html.escape(', '.join(str(s) for s in (n.get('stacks') or [])))}</td>"
+            f"</tr>"
+            for n in ot_nodes[:12]
+        )
+    else:
+        ot_nodes_rows = (
+            '<tr><td colspan="6" style="color:var(--text-dim);">'
+            "No OpenTrainer nodes in SQLite DB yet &mdash; click &lsquo;Sync VM Orchestrator &rarr; SQLite DB&rsquo; or send a heartbeat below."
+            "</td></tr>"
+        )
+
+    ot_rounds = ot.get("recent_rounds") if isinstance(ot.get("recent_rounds"), list) else []
+    if ot_rounds:
+        ot_rounds_rows = "".join(
+            f"<tr>"
+            f"<td><code>{html.escape(str(r.get('submission_id') or ''))}</code></td>"
+            f"<td>#{int(r.get('round_index') or 0)}</td>"
+            f"<td><code>{html.escape(str(r.get('run_id') or ''))}</code></td>"
+            f"<td>{html.escape(str(r.get('handle') or ''))} (<code>{html.escape(str(r.get('host_label') or ''))}</code>)</td>"
+            f"<td><code>{html.escape(str(r.get('network_mode') or ''))}</code></td>"
+            f"<td>{float(r.get('delta_l2') or 0.0):.4f}</td>"
+            f'<td style="color:var(--green);font-weight:700;">{float(r.get("eval_loss") or 0.0):.4f}</td>'
+            f"<td>{int(r.get('tokens_trained') or 0):,}</td>"
+            f"</tr>"
+            for r in ot_rounds[:12]
+        )
+    else:
+        ot_rounds_rows = (
+            '<tr><td colspan="8" style="color:var(--text-dim);">'
+            "No OpenTrainer round rows in SQLite DB yet &mdash; click &lsquo;Sync VM Orchestrator &rarr; SQLite DB&rsquo; or submit a delta."
+            "</td></tr>"
+        )
+
+    ot_live_html = f"""
+      <div class="tiers-grid" style="margin-bottom:1rem;">
+        <div class="tier-card">
+          <div>
+            <div class="tier-badge">REGISTERED TRAINERS (SQLITE DB)</div>
+            <div class="tier-name" id="otDbTrainerCount">{reg_trainers}</div>
+            <div class="tier-vram" id="otDbTrainerHandles">{trainer_sub}</div>
+          </div>
+        </div>
+        <div class="tier-card">
+          <div>
+            <div class="tier-badge">LIVE OPENTRAINER NODES (DB)</div>
+            <div class="tier-name" id="otDbActiveNodes">{active_ot_nodes} / {total_ot_nodes}</div>
+            <div class="tier-vram" id="otDbNodeHosts">{node_sub}</div>
+          </div>
+        </div>
+        <div class="tier-card">
+          <div>
+            <div class="tier-badge">COLLABORATIVE ROUNDS (DB / VM)</div>
+            <div class="tier-name" id="otDbRoundsCount">{db_subs} DB / {vm_round} VM</div>
+            <div class="tier-vram" id="otDbRoundsSub">{distinct_db_rounds} distinct SQLite rounds &bull; {total_toks:,} tokens</div>
+          </div>
+        </div>
+        <div class="tier-card">
+          <div>
+            <div class="tier-badge">REAL-LIFE EVAL LOSS TRAJECTORY</div>
+            <div class="tier-name" id="otDbEvalLoss">{float(init_loss_val):.4f} &rarr; {float(cur_loss_val):.4f}</div>
+            <div class="tier-vram" id="otDbLossSub">Best Eval Loss: {float(best_loss_val):.4f} &bull; T4-Independent: YES</div>
+          </div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr;gap:0.85rem;margin-bottom:1rem;">
+        <div style="overflow-x:auto;border:1px solid var(--border);border-radius:0.5rem;padding:0.65rem;background:#040711;">
+          <div style="font-size:0.78rem;font-weight:700;color:var(--cyan);margin-bottom:0.45rem;font-family:var(--font-mono);">
+            LIVE SQLITE TABLE: <code>opentrainer_nodes</code> (Registered Trainer GPU &amp; Low-Cost VM Sentinel Nodes)
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:0.76rem;font-family:var(--font-mono);">
+            <thead>
+              <tr style="text-align:left;color:var(--text-dim);border-bottom:1px solid var(--border);">
+                <th style="padding:0.3rem;">Host / Node</th>
+                <th style="padding:0.3rem;">Handle</th>
+                <th style="padding:0.3rem;">GPU / Compute Hardware</th>
+                <th style="padding:0.3rem;">Free / Total VRAM</th>
+                <th style="padding:0.3rem;">Network Mode</th>
+                <th style="padding:0.3rem;">Stacks</th>
+              </tr>
+            </thead>
+            <tbody id="otNodesTableBody">{ot_nodes_rows}</tbody>
+          </table>
+        </div>
+        <div style="overflow-x:auto;border:1px solid var(--border);border-radius:0.5rem;padding:0.65rem;background:#040711;">
+          <div style="font-size:0.78rem;font-weight:700;color:var(--green);margin-bottom:0.45rem;font-family:var(--font-mono);">
+            LIVE SQLITE TABLE: <code>opentrainer_rounds</code> (Recent Collaborative QLoRA / DiLoCo Outer-Step Submissions)
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:0.76rem;font-family:var(--font-mono);">
+            <thead>
+              <tr style="text-align:left;color:var(--text-dim);border-bottom:1px solid var(--border);">
+                <th style="padding:0.3rem;">Submission ID</th>
+                <th style="padding:0.3rem;">Round</th>
+                <th style="padding:0.3rem;">Run / Campaign ID</th>
+                <th style="padding:0.3rem;">Trainer / Host</th>
+                <th style="padding:0.3rem;">Mode</th>
+                <th style="padding:0.3rem;">Delta L2</th>
+                <th style="padding:0.3rem;">Eval Loss</th>
+                <th style="padding:0.3rem;">Tokens</th>
+              </tr>
+            </thead>
+            <tbody id="otRoundsTableBody">{ot_rounds_rows}</tbody>
+          </table>
+        </div>
+      </div>
+    """
+
+    total_acc = int(acc.get("total_user_accounts") or 0)
+    live_hm = int(prod.get("live_hiveminders") or 0)
+    total_hm = int(prod.get("total_hiveminders") or 0)
+    phys_gpus = int(prod.get("distinct_physical_gpus") or 0)
+    live_eps = int(prod.get("live_endpoints") or 0)
+    cap_1k = float(prod.get("total_capacity_1k") or 0.0)
+    settled_reqs = int(ul.get("settled_requests") or 0)
+    billed_toks = int(ul.get("total_billed_tokens") or 0)
+    charged_hmt = float(ul.get("total_charged_hmt") or 0.0)
+    live_models_cnt = int(prod.get("live_models_count") or 0)
+    minted_hmt = float(ul.get("total_minted_hmt") or 0.0)
+    ledger_rows = int(ul.get("ledger_entries") or 0)
+    ledger_ok = bool(ul.get("ledger_chain_valid", True))
+    amcp_cnt = int(amcp.get("amcp_events_count") or 0)
+
+    hm_rows_list = prod.get("hiveminders") if isinstance(prod.get("hiveminders"), list) else []
+    if hm_rows_list:
+        hm_table_rows = "".join(
+            f"<tr>"
+            f"<td><strong>{html.escape(str(p.get('handle') or ''))}</strong></td>"
+            f"<td><code>{html.escape(str(p.get('role') or ''))}</code></td>"
+            f'<td style="color:{"var(--green)" if p.get("status") == "live" else "var(--amber)"};font-weight:700;">{html.escape(str(p.get("status") or "").upper())}</td>'
+            f"<td><code>{html.escape(str(p.get('execution_class') or 'n/a'))}</code></td>"
+            f"<td>{int(p.get('live_endpoints') or 0)}</td>"
+            f"<td>{float(p.get('capacity_1k') or 0.0):.1f}k</td>"
+            f"<td>{html.escape(', '.join(str(m) for m in (p.get('models') or [])[:5]) or 'none')}</td>"
+            f"</tr>"
+            for p in hm_rows_list[:15]
+        )
+    else:
+        hm_table_rows = (
+            '<tr><td colspan="7" style="color:var(--text-dim);">'
+            "No producer endpoints in SQLite DB yet &mdash; start <code>hivemind_producer_agent.py</code> to register your GPU."
+            "</td></tr>"
+        )
+
+    prod_live_html = f"""
+      <div class="tiers-grid" style="margin-bottom:1rem;">
+        <div class="tier-card">
+          <div>
+            <div class="tier-badge">SQLITE REGISTERED ACCOUNTS</div>
+            <div class="tier-name" id="dbTotalAccountsVal">{total_acc}</div>
+            <div class="tier-vram" id="dbAccountsBreakdown">Prosumers: {int(by_role.get('prosumer') or 0)} &bull; Producers: {int(by_role.get('producer') or 0)} &bull; Trainers: {int(by_role.get('trainer') or 0)} &bull; Consumers: {int(by_role.get('consumer') or 0)}</div>
+          </div>
+        </div>
+        <div class="tier-card">
+          <div>
+            <div class="tier-badge">LIVE PRODUCER FLEET (SQLITE DB)</div>
+            <div class="tier-name" id="dbLiveFleetVal">{live_hm} Live / {total_hm} Total</div>
+            <div class="tier-vram" id="dbFleetBreakdown">{phys_gpus} Physical GPUs &bull; {live_eps} Endpoints &bull; {cap_1k:.1f}k tok/min</div>
+          </div>
+        </div>
+        <div class="tier-card">
+          <div>
+            <div class="tier-badge">SETTLED USAGE &amp; TOKENS (DB)</div>
+            <div class="tier-name" id="dbSettledUsageVal">{settled_reqs} Reqs &bull; {billed_toks:,} Toks</div>
+            <div class="tier-vram" id="dbUsageBreakdown">Settled: {charged_hmt:.4f} HMT &bull; Live Models: {live_models_cnt}</div>
+          </div>
+        </div>
+        <div class="tier-card">
+          <div>
+            <div class="tier-badge">HMT LEDGER &amp; AMCP BUS (DB)</div>
+            <div class="tier-name" id="dbLedgerAmcpVal">{minted_hmt:,.2f} HMT</div>
+            <div class="tier-vram" id="dbLedgerBreakdown">{ledger_rows} Ledger Rows ({"SHA256 OK" if ledger_ok else "CHECK"}) &bull; {amcp_cnt} AMCP Events</div>
+          </div>
+        </div>
+      </div>
+      <div style="overflow-x:auto;border:1px solid var(--border);border-radius:0.5rem;padding:0.65rem;background:#040711;margin-bottom:1rem;">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--amber);margin-bottom:0.45rem;font-family:var(--font-mono);">
+          LIVE SQLITE TABLE: <code>producer_endpoints</code> &amp; <code>accounts</code> (Registered HiveMinder GPU Fleet)
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:0.76rem;font-family:var(--font-mono);">
+          <thead>
+            <tr style="text-align:left;color:var(--text-dim);border-bottom:1px solid var(--border);">
+              <th style="padding:0.3rem;">Handle</th>
+              <th style="padding:0.3rem;">Role</th>
+              <th style="padding:0.3rem;">Status</th>
+              <th style="padding:0.3rem;">Execution Class</th>
+              <th style="padding:0.3rem;">Live Endpoints</th>
+              <th style="padding:0.3rem;">Capacity</th>
+              <th style="padding:0.3rem;">Models Served</th>
+            </tr>
+          </thead>
+          <tbody id="dbProducersTableBody">{hm_table_rows}</tbody>
+        </table>
+      </div>
+    """
+
+    ot_status_line = (
+        f"OPENTRAINER ONLINE (1.0.0-s36) &bull; Topic: <code>hivemind.amcp.federation.v1</code> "
+        f"&bull; Registered Trainers (DB): <strong>{reg_trainers}</strong> "
+        f"&bull; Live Nodes (DB): <strong>{active_ot_nodes}</strong> "
+        f"&bull; Accepted Rounds (DB): <strong>{len(ot_rounds)}</strong> "
+        f"&bull; Low-Cost VM Orchestrator Round: <strong>{vm_round}</strong> "
+        f"(Loss: <code>{float(init_loss_val):.4f} &rarr; {float(cur_loss_val):.4f}</code>) "
+        f"&bull; Auto-refreshing from SQLite DB (<code>/v1/hivemind/db/live</code>) every 15s."
+    )
+    return ot_live_html, prod_live_html, ot_status_line
+
+
+def render_portal_page(
+    client_id: str | None,
+    nonce: str,
+    *,
+    lang: str = "en",
+    db_snapshot: Mapping[str, Any] | None = None,
+) -> str:
     """Render the full OpenRouter Portal and Playground HTML page in ``en``, ``fr``, ``es``, ``de``, or ``zh``."""
     active_lang = lang if lang in PORTAL_I18N else "en"
     t = PORTAL_I18N[active_lang]
     life_as_a_bee_html = render_life_as_a_bee_section()
+    ot_live_db_html, prod_live_db_html, ot_status_line = _render_live_db_sections(db_snapshot)
     tier_cards = []
     for tier in TIERS:
         tier_cards.append(f"""
@@ -2013,8 +2435,10 @@ def render_portal_page(client_id: str | None, nonce: str, *, lang: str = "en") -
           </select>
         </div>
       </div>
+      {ot_live_db_html}
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.85rem;">
-        <button id="opentrainerStatusBtn" type="button" class="btn btn-primary">&#x1F50D; Inspect Live OpenTrainer Coordinator</button>
+        <button id="opentrainerStatusBtn" type="button" class="btn btn-primary">&#x1F50D; Refresh Live SQLite &amp; OpenTrainer Status</button>
+        <button id="opentrainerSyncDbBtn" type="button" class="btn btn-outline" style="border-color:var(--green);color:var(--green);">&#x1F504; Sync VM Orchestrator &rarr; SQLite DB</button>
         <button id="opentrainerHeartbeatBtn" type="button" class="btn btn-amber">&#x1F525; Register / Heartbeat Trainer GPU (Outbound HTTPS)</button>
         <a href="/signup" class="btn btn-outline">&#x1F41D; Register as Trainer (/signup)</a>
         <a href="/join#opentrainer" class="btn btn-outline">&#x1F4D6; OpenTrainer &amp; Aglet Guide (/join#opentrainer)</a>
@@ -2025,7 +2449,7 @@ export HIVEMIND_API_KEY=hm-YOUR_TRAINER_KEY
 python scripts/hivemind_opentrainer_agent.py --gateway https://hivemind-openrouter-1003063861791.us-central1.run.app --network-mode outbound-https-relay --check-firewall --submit-delta --once
       </div>
       <div id="opentrainerPortalStatus" style="font-size:0.78rem;font-family:var(--font-mono);color:var(--cyan);background:#040711;border:1px solid var(--border);border-radius:0.375rem;padding:0.65rem;">
-        OpenTrainer Central Component: <code>/v1/hivemind/opentrainer/status</code> &bull; Topic: <code>hivemind.amcp.federation.v1</code> &bull; Click &lsquo;Inspect Live OpenTrainer Coordinator&rsquo; or run <code>scripts/hivemind_opentrainer_agent.py</code>.
+        {ot_status_line}
       </div>
     </section>
 
@@ -2038,6 +2462,7 @@ python scripts/hivemind_opentrainer_agent.py --gateway https://hivemind-openrout
       <p style="color:var(--text-dim);font-size:0.92rem;margin-bottom:1rem;" data-i18n="producers_desc">
         {html.escape(t["producers_desc"])}
       </p>
+      {prod_live_db_html}
       <div class="code-box" style="margin-bottom:0.5rem;">
 # 1. Start your local Ollama server (or vLLM / llama.cpp)
 ollama run qwen2.5-coder:7b

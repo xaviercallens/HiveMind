@@ -3553,13 +3553,17 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
     _steam_key_cache: Dict[str, str] = {}
 
     def _serve_local_portal_html(request: Request, forced_lang: str | None = None) -> HTMLResponse:
+        from hivemind.router.opentrainer import sync_live_opentrainer_into_store
+
+        sync_live_opentrainer_into_store(_portal_store)
         lang = forced_lang or pick_language(
             request.query_params.get("lang"),
             request.headers.get("accept-language"),
             default="en",
         )
         nonce = _secrets.token_urlsafe(18)
-        html = render_portal_page(None, nonce, lang=lang)
+        db_snapshot = _portal_store.live_database_summary()
+        html = render_portal_page(None, nonce, lang=lang, db_snapshot=db_snapshot)
         return HTMLResponse(
             content=html,
             headers={
@@ -3614,6 +3618,67 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                 "X-Content-Type-Options": "nosniff",
                 "Referrer-Policy": "no-referrer",
             },
+        )
+
+
+    @app.get("/v1/hivemind/db/live", response_class=JSONResponse)
+    @app.get("/api/v1/db/live", response_class=JSONResponse)
+    def get_local_live_database_summary() -> JSONResponse:
+        from hivemind.router.opentrainer import load_live_lowcost_vm_orchestrator_ledger, sync_live_opentrainer_into_store
+
+        sync_live_opentrainer_into_store(_portal_store)
+        summary = _portal_store.live_database_summary()
+        summary["lowcost_vm_orchestrator"] = load_live_lowcost_vm_orchestrator_ledger()
+        return JSONResponse(content=summary)
+
+    @app.post("/v1/hivemind/opentrainer/sync-orchestrator", response_class=JSONResponse)
+    def post_local_opentrainer_sync_orchestrator() -> JSONResponse:
+        from hivemind.router.opentrainer import sync_live_opentrainer_into_store
+
+        sync_res = sync_live_opentrainer_into_store(_portal_store)
+        return JSONResponse(
+            content={
+                "object": "hivemind.opentrainer.sync_receipt",
+                **sync_res,
+                "database_summary": _portal_store.live_database_summary()["opentrainer"],
+            }
+        )
+
+    @app.get("/v1/hivemind/opentrainer/status", response_class=JSONResponse)
+    @app.get("/v1/opentrainer/status", response_class=JSONResponse)
+    def get_local_opentrainer_status() -> JSONResponse:
+        from hivemind.router.opentrainer import build_opentrainer_status_payload, sync_live_opentrainer_into_store
+
+        sync_live_opentrainer_into_store(_portal_store)
+        now = time.time()
+        return JSONResponse(
+            content=build_opentrainer_status_payload(
+                trainer_accounts=_portal_store.list_trainer_accounts(),
+                opentrainer_nodes=_portal_store.list_opentrainer_nodes(),
+                recent_rounds=_portal_store.list_opentrainer_rounds(limit=30),
+                now_utc=now,
+                database_summary=_portal_store.live_database_summary(now_utc=now),
+            )
+        )
+
+    @app.get("/v1/hivemind/producers/fleet", response_class=JSONResponse)
+    def get_local_producers_fleet() -> JSONResponse:
+        now = time.time()
+        fleet = _portal_store.list_hiveminder_accounts(now_utc=now, ttl_s=120.0)
+        scale = _portal_store.producer_fleet_scale_status(now_utc=now, ttl_s=120.0)
+        live_rows = [r for r in fleet if r["status"] == "live"]
+        return JSONResponse(
+            content={
+                "object": "hivemind.producer_fleet",
+                "ttl_s": 120.0,
+                "total_hiveminders": len(fleet),
+                "live_hiveminders": len(live_rows),
+                "distinct_physical_gpus": scale["distinct_physical_gpus"],
+                "live_endpoints": sum(int(r["live_endpoints"]) for r in live_rows),
+                "total_capacity_1k": round(sum(float(r["capacity_1k"] or 0.0) for r in live_rows), 2),
+                "live_models": _portal_store.live_models(now, 120.0),
+                "hiveminders": fleet,
+            }
         )
 
     @app.get("/v1/hivemind/i18n", response_class=JSONResponse)

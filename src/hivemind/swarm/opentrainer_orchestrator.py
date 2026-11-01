@@ -494,8 +494,18 @@ class PermanentOpenTrainerOrchestrator:
         self.retries_in_round = 0
 
         self._save_checkpoint()
+        rep = self.build_report()
         if self.config.report_path is not None:
-            _atomic_write_json(self.config.report_path, self.build_report())
+            _atomic_write_json(self.config.report_path, rep)
+        try:
+            local_db = REPO_ROOT / "artifacts" / "local_portal_router.db"
+            if local_db.exists():
+                from hivemind.router.accounts import RouterStore
+
+                _st = RouterStore(local_db, b"hivemind-local-steam-portal-secret-32b")
+                _st.sync_opentrainer_orchestrator_ledger(rep)
+        except Exception as _exc:
+            _ = _exc
 
         if not self.is_completed:
             self._open_new_round_offer(now=now)

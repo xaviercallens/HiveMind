@@ -2,10 +2,10 @@
   "schema_version": "hivemind.rtx2070_4h_moe_experimentator.v1",
   "generator": "scripts/run_4h_rtx2070_moe_bee_experimentator.py",
   "cadence_cron": "0 */4 * * *",
-  "timestamp_utc": "2026-11-01T18:56:28Z",
+  "timestamp_utc": "2026-11-01T22:54:41Z",
   "implemented_roadmap_pr": "PR-IP-07 (IP-42, IP-44, IP-52) + PR-IP-08 (IP-43) + PR-IP-09 (IP-18, IP-21, IP-21b, IP-47) + PR-IP-10 (IP-19, IP-20, IP-34, IP-35, IP-36, IP-37) + PR-IP-11 (IP-22, IP-23, IP-48, #403) + PR-IP-13 (IP-50, IP-63) + Wave 3 Scientific MoE Bees",
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-11-01T18:56:28Z",
+    "timestamp_utc": "2026-11-01T22:54:41Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": true,
@@ -13,7 +13,7 @@
     "compute_capability": "7.5",
     "temperature_c": 34.0,
     "gpu_utilization_pct": 2.0,
-    "power_draw_w": 29.88,
+    "power_draw_w": 42.15,
     "power_limit_w": 175.0,
     "memory_used_mib": 1812.0,
     "memory_free_mib": 6195.0,
@@ -26,10 +26,10 @@
     "max_graphics_clock_mhz": 2145.0,
     "memory_clock_mhz": 6801.0,
     "host_tensor_gflops": 0.0,
-    "measured_fp32_tflops": 5.83,
-    "measured_fp16_tensor_tflops": 20.08,
-    "effective_sparse_moe_nf4_tflops": 37.14,
-    "microbench_elapsed_ms": 236.35
+    "measured_fp32_tflops": 5.65,
+    "measured_fp16_tensor_tflops": 21.01,
+    "effective_sparse_moe_nf4_tflops": 38.86,
+    "microbench_elapsed_ms": 243.33
   },
   "stage1_dry_run": {
     "stage": "stage1_dry_run_and_wddm_residency",
@@ -138,7 +138,7 @@
       "batch_tokens_routed": 512,
       "unique_experts_selected": 126,
       "aux_loss": 2.002409,
-      "routing_latency_ms": 2.311
+      "routing_latency_ms": 3.014
     },
     "wave3_scientific_bee_routing": [
       {
@@ -191,7 +191,7 @@
     "all_wave3_routes_matched": true,
     "live_8095_inference_probe": {
       "online": true,
-      "latency_ms": 30.34,
+      "latency_ms": 61.8,
       "model": "hivemind/qwen2.5-coder-7b-moe",
       "served_by_producer": "PRODUCER-LOCAL-RTX2070-CUDA0",
       "s21_expert_routing": {}
@@ -213,5 +213,5 @@
     "ip47_h5_and_preemption_fail_case_passed": true
   },
   "overall_experiment_passed": true,
-  "receipt_sha256": "4dc684924a81c0e912363913e49dc7ea4fa2357dc72df2ab8c326cb235ee2047"
+  "receipt_sha256": "4c7de3481eb7405e84cf07fe5f42e174080e1ba28c6e1f8fa71b4e1ea4460569"
 }

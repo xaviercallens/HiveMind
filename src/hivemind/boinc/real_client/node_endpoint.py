@@ -12,7 +12,6 @@ Binds to 127.0.0.1 only. Exposing it is the owner's decision (see docs/BOINC_COR
 from __future__ import annotations
 
 import json
-import logging
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -22,21 +21,13 @@ from typing import Any
 from hivemind.boinc.real_client.moe_app import HF_CACHE, load_peft_model, state_sha
 
 
-_LOG = logging.getLogger(__name__)
-
-
-def log_request(client: str, fmt: str, *args: Any) -> None:
-    """Record one HTTP request line at DEBUG level instead of writing it to stderr (the handler's default)."""
-    _LOG.debug("node endpoint %s: %s", client, fmt % args if args else fmt)
-
-
 class NodeEndpoint:
     def __init__(self, spec: dict[str, Any], adapter_path: Path, port: int = 0, served_name: str = "hivemind-granite-moe-qlora") -> None:
         import torch
         from transformers import AutoTokenizer
 
         self.spec, self.name = spec, served_name
-        state = torch.load(adapter_path, map_location="cpu")["state"]
+        state = torch.load(adapter_path, map_location="cpu", weights_only=True)["state"]
         self.adapter_sha = state_sha(state)
         self.model = load_peft_model(spec, state)
         self.model.eval()
@@ -45,8 +36,8 @@ class NodeEndpoint:
         node = self
 
         class H(BaseHTTPRequestHandler):
-            def log_message(self, format: str, *args: Any) -> None:
-                log_request(self.address_string(), format, *args)
+            def log_message(self, *a: Any) -> None:
+                _ = a
 
             def _json(self, obj: Any, code: int = 200) -> None:
                 b = json.dumps(obj).encode()

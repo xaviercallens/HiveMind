@@ -3,7 +3,7 @@
 This guide documents:
 1. **Honest Physical GPU Telemetry (`#402`)**: how the HiveMind OpenRouter gateway counts distinct physical GPU hosts (`distinct_physical_gpus`) separately from logical producer accounts (`live_producer_accounts`) and endpoint paths (`live_endpoints`).
 2. **Cross-Platform Producer Auto-Start Service (`scripts/hivemind_producer_autostart.py`)**: how volunteer HiveMiners on **Windows 10/11**, **Linux (`systemd --user`)**, and **macOS (`launchd`)** keep their local GPU producer + Cloudflare tunnel + authenticating shield connected across reboots and terminal closures.
-3. **End-User GPU Reconnection & Onboarding Campaign (`scripts/hivemind_gpu_outreach_campaign.py`)**: how to generate personalized bilingual (FR/EN) outreach invitations for registered prosumer/producer accounts (`tibrib`, `ilenemaurin@gmail.com`, `vxtzq`, etc.).
+3. **End-User GPU Reconnection & Onboarding Campaign (`scripts/hivemind_gpu_outreach_campaign.py`)**: how to generate personalized bilingual (FR/EN) outreach invitations for registered prosumer/producer accounts (read from a router.db snapshot).
 
 ---
 
@@ -72,11 +72,11 @@ launchctl load -w ~/Library/LaunchAgents/org.hivemind.producer.plist
 
 ## 3. Organizing the End-User GPU Reconnection Campaign
 
-Run `scripts/hivemind_gpu_outreach_campaign.py` to generate ready-to-send bilingual (FR/EN) outreach messages for the registered prosumer/producer cohort (`tibrib`, `ilenemaurin@gmail.com`, `vxtzq`, or any SQLite `router.db` snapshot):
+Run `scripts/hivemind_gpu_outreach_campaign.py` to generate ready-to-send bilingual (FR/EN) outreach messages for the registered prosumer/producer cohort (read from a SQLite `router.db` snapshot; optional per-recipient hardware notes come from an untracked `--cohort-file` JSON, never from the repository):
 
 ```bash
 # Generate Markdown outreach kit for all registered prosumers/producers:
-python3 scripts/hivemind_gpu_outreach_campaign.py --format markdown
+python3 scripts/hivemind_gpu_outreach_campaign.py --db /path/to/router.db --format markdown
 
 # Or inspect structured JSON from a specific router.db snapshot:
 python3 scripts/hivemind_gpu_outreach_campaign.py --db /path/to/router.db --format json

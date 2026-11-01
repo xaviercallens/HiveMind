@@ -91,6 +91,32 @@ def _percentile(values: list[float], q: float) -> float | None:
     return ordered[min(len(ordered) - 1, int(round(q * (len(ordered) - 1))))]
 
 
+def chat_latency_breakdown(chat_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Where chat latency comes from, using only what Cloud Run request logs carry (latency, response size, user agent, status).
+
+    The logs hold no model name and no stream flag, so the split is by client class and by response size: a p95 driven by
+    large responses is long generations, a p95 at small sizes is queueing or a slow producer. Counts and times only; no URL,
+    address or identity is kept.
+    """
+    def _row(r: dict[str, Any]) -> tuple[float, int, str, int, str]:
+        h = r.get("httpRequest", {})
+        client = "browser" if "Mozilla" in h.get("userAgent", "") else "scripted"
+        return (float(str(h.get("latency", "0s")).rstrip("s") or 0.0), int(h.get("responseSize", 0) or 0), client,
+                int(h.get("status", 0)), str(r.get("timestamp", "")))
+
+    rows = [_row(r) for r in chat_rows]
+
+    def _stats(lat: list[float]) -> dict[str, Any]:
+        return {"n": len(lat), "p50_s": _percentile(lat, 0.5), "p95_s": _percentile(lat, 0.95)}
+
+    by_client = {c: _stats([x[0] for x in rows if x[2] == c]) for c in ("browser", "scripted") if any(x[2] == c for x in rows)}
+    bounds = (("lt_2kb", 0, 2048), ("2kb_to_20kb", 2048, 20480), ("ge_20kb", 20480, 1 << 62))
+    by_size = {name: _stats([x[0] for x in rows if lo <= x[1] < hi]) for name, lo, hi in bounds if any(lo <= x[1] < hi for x in rows)}
+    slowest = [{"latency_s": x[0], "response_bytes": x[1], "client": x[2], "status": x[3], "time": x[4]}
+               for x in sorted(rows, key=lambda x: -x[0])[:5]]
+    return {"by_client": by_client, "by_response_size": by_size, "slowest": slowest}
+
+
 def traffic_summary(since: datetime) -> dict[str, Any]:
     """Aggregate Cloud Run request logs of the public services; returns counts only."""
     names = " OR ".join(f'"{n}"' for n in CLOUD_RUN_NAMES.values())
@@ -107,6 +133,7 @@ def traffic_summary(since: datetime) -> dict[str, Any]:
                 and r.get("httpRequest", {}).get("requestUrl", "").split(".run.app")[-1].startswith(USER_PATH_PREFIXES)]
         statuses: Counter[str] = Counter()
         chat_latency: list[float] = []
+        chat_rows: list[dict[str, Any]] = []
         browser = scripted = registrations = 0
         for r in mine:
             h = r.get("httpRequest", {})
@@ -121,6 +148,7 @@ def traffic_summary(since: datetime) -> dict[str, Any]:
                 registrations += 1
             if group == "chat":
                 chat_latency.append(float(str(h.get("latency", "0s")).rstrip("s") or 0.0))
+                chat_rows.append(r)
             if group not in ("heartbeat",):
                 if "Mozilla" in h.get("userAgent", ""):
                     browser += 1
@@ -130,6 +158,7 @@ def traffic_summary(since: datetime) -> dict[str, Any]:
             "requests": len(mine), "status": dict(sorted(statuses.items())), "registrations": registrations,
             "chat": {"n": len(chat_latency), "p50_s": _percentile(chat_latency, 0.5), "p95_s": _percentile(chat_latency, 0.95),
                      "max_s": max(chat_latency) if chat_latency else None},
+            "chat_breakdown": chat_latency_breakdown(chat_rows),
             "http_402": sum(n for k, n in statuses.items() if k.endswith(":402")),
             "http_5xx": sum(n for k, n in statuses.items() if k.split(":")[1].startswith("5")),
             "browser_requests": browser, "scripted_requests": scripted,

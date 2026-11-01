@@ -47,6 +47,7 @@ class BeeLifecyclePhase:
     summary_fr: str
     summary_en: str
     protocol_endpoints: tuple[str, ...]
+    source: str  # where each figure in time_window/key_metric comes from, or NOT_MEASURED
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -98,8 +99,8 @@ BEE_LIFECYCLE_PHASES: tuple[BeeLifecyclePhase, ...] = (
         step_number=1,
         title_fr="1. Butinage d'Intention & Routage de Liquidité (Pollen Classifier)",
         title_en="1. Pollen Intent Classification & Liquidity Routing",
-        time_window="0 – 35 ms (Temps réel)",
-        key_metric="15 Modèles Actifs • 0 HTTP 402/5xx",
+        time_window="Classification côté routeur (latence non mesurée sur cette page)",
+        key_metric="15 modèles au catalogue • 402/5xx : lire le moniteur, pas ce texte",
         summary_fr=(
             "Lorsqu'un développeur ou un IDE (VS Code Continue, OpenCode, Cline, Python SDK) envoie une requête, "
             "hivemind/auto analyse l'intention (code Python/Rust, EDO raide, astrophysique, preuve Lean 4, synthèse FR) "
@@ -110,6 +111,7 @@ BEE_LIFECYCLE_PHASES: tuple[BeeLifecyclePhase, ...] = (
             "already warm in producer VRAM with optimal HMT double-auction liquidity."
         ),
         protocol_endpoints=("/v1/chat/completions", "/v1/models", "/v1/hivemind/market"),
+        source="catalog: hivemind.router.catalog.TIERS (15 entries); routing latency and 402/5xx counts: NOT_MEASURED on this page",
     ),
     BeeLifecyclePhase(
         phase_id="PHASE-2-DAYTIME-NECTAR",
@@ -128,6 +130,7 @@ BEE_LIFECYCLE_PHASES: tuple[BeeLifecyclePhase, ...] = (
             "(up to 71.9 tok/s) and 20B Sparse MoE bees at 6.3–7.2 tok/s. Launching a game is designed to preempt in < 1.5s (a target; the delay under a running BOINC task has not been measured yet)."
         ),
         protocol_endpoints=("/v1/hivemind/producer/heartbeat", "/v1/hivemind/t4/status"),
+        source="tok/s: snapshot artifacts/all_bees_e2e_and_llm_comparison_report.json (executed_at_utc 2026-10-31T09:35:00Z), not live; yield under a BOINC task: NOT_MEASURED",
     ),
     BeeLifecyclePhase(
         phase_id="PHASE-3-AMCP-WAGGLE-DANCE",
@@ -146,6 +149,7 @@ BEE_LIFECYCLE_PHASES: tuple[BeeLifecyclePhase, ...] = (
             "to specialist bees (bee-rusty-sundials, bee-stars) and clear capacity on hivemind.amcp.bee_trading.v1."
         ),
         protocol_endpoints=("/v1/hivemind/bees/coordinate", "/v1/hivemind/bees/trade", "/v1/hivemind/amcp/events"),
+        source="design description (topic count from docs/OPENTRAINER_BOINC_AMCP_KAFKA_ARCHITECTURE.md); no measurement shown",
     ),
     BeeLifecyclePhase(
         phase_id="PHASE-4-NOCTURNAL-ROYAL-JELLY",
@@ -153,7 +157,7 @@ BEE_LIFECYCLE_PHASES: tuple[BeeLifecyclePhase, ...] = (
         title_fr="4. Gelée Royale Nocturne (Distillation BOINC QLoRA-MoE)",
         title_en="4. Nocturnal Royal Jelly (BOINC Chained QLoRA-MoE Distillation)",
         time_window="22:00 – 07:00 CET (Nuit Européenne)",
-        key_metric="-5,8% NLL Global • -15,1% Math",
+        key_metric="Gains de nuit : voir docs/NIGHT_MOE_RESULTS.md (aucun chiffre non sourcé ici)",
         summary_fr=(
             "La nuit, les gros producteurs GPU basculent sur des workunits BOINC QLoRA 4-bit NF4 chaînées (hmq_*). "
             "Les retours positifs du jour (+1 feedback) et les campagnes votées par la communauté affinent les experts "
@@ -164,6 +168,7 @@ BEE_LIFECYCLE_PHASES: tuple[BeeLifecyclePhase, ...] = (
             "thumbs-up traces and community-voted subject sprints under a strict monotone loss ratchet."
         ),
         protocol_endpoints=("/v1/hivemind/campaigns/poll", "/v1/hivemind/feedback", "/v1/hivemind/usage-capture"),
+        source="measured results: docs/NIGHT_MOE_RESULTS.md; the former -5.8 % NLL / -15.1 % math figures had no artifact and were removed",
     ),
 )
 
@@ -1842,6 +1847,7 @@ def render_life_as_a_bee_section(live_telemetry: dict[str, Any] | None = None) -
             <div class="tier-badge">{html.escape(phase.time_window)}</div>
             <div class="tier-name">{html.escape(phase.title_fr)}</div>
             <div class="tier-vram">{html.escape(phase.key_metric)}</div>
+            <div class="tier-desc" style="font-size:0.7rem;color:var(--text-dim);">Source : {html.escape(phase.source)}</div>
             <div class="tier-desc">{html.escape(phase.summary_fr)}</div>
           </div>
           <div style="font-size:0.7rem;color:var(--text-dim);margin-top:0.4rem;">{endpoints_html}</div>

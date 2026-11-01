@@ -155,7 +155,7 @@ def test_vram_physical_envelope_and_large_models_scaling() -> None:
         inner_steps=50,
         seed=42,
     )
-    res_32b = scheduler.simulate_or_verify_execution(
+    res_32b = scheduler.verify_workunit_execution(
         workunit=wu_32b,
         worker_id="worker-3090",
         account_id="rtx3090_producer",
@@ -211,7 +211,7 @@ def test_concurrent_multi_worker_dispatch_under_load() -> None:
     results: list[AutoImprovementExecutionResult] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
         futures = [
-            executor.submit(scheduler.simulate_or_verify_execution, wu, w_id, acc_id, exe_cls)
+            executor.submit(scheduler.verify_workunit_execution, wu, w_id, acc_id, exe_cls)
             for wu, w_id, acc_id, exe_cls in workunits
         ]
         for fut in concurrent.futures.as_completed(futures):
@@ -309,7 +309,7 @@ def test_pouw_ledger_concurrency_idempotency_and_anti_tampering(store: RouterSto
         wu = scheduler.create_domain_workunit(
             domain=domain, num_samples=20, inner_steps=50, seed=5000 + idx
         )
-        res = scheduler.simulate_or_verify_execution(wu, worker_id=f"worker-{pid}", account_id=pid)
+        res = scheduler.verify_workunit_execution(wu, worker_id=f"worker-{pid}", account_id=pid)
         results.append(res)
 
     assert len(results) == 20

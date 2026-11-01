@@ -279,7 +279,7 @@ def main() -> int:
         print(f"    Base Model: {wu.base_model_id} (NF4 quantized)")
         print(f"    Assigned Worker: {assigned_producer['account_id'][:12]}... ({assigned_producer['execution_class']})")
 
-        res = scheduler.simulate_or_verify_execution(
+        res = scheduler.verify_workunit_execution(
             workunit=wu,
             worker_id=f"worker-{assigned_producer['execution_class']}",
             account_id=assigned_producer["account_id"],

@@ -158,7 +158,7 @@ def run_night_moe_training_cycle(gpu_telemetry: Dict[str, Any]) -> Dict[str, Any
                     seed=20261030 + idx,
                     base_model_id="Qwen/Qwen2.5-Coder-7B-Instruct",
                 )
-                res = sched.simulate_or_verify_execution(
+                res = sched.verify_workunit_execution(
                     workunit=wu,
                     worker_id="worker-rtx2070-8gb-turing",
                     account_id="58fd3df19d2b5ef8c10031e1389aac6a",

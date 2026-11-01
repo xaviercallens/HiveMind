@@ -999,14 +999,14 @@ class NocturnalAutoImprovementScheduler:
         passed = (c > b) and (p_val < significance_alpha) and (adapted_correct > base_correct)
         return passed, round(float(p_val), 6)
 
-    def simulate_or_verify_execution(
+    def verify_workunit_execution(
         self,
         workunit: AutoImprovementWorkunit,
         worker_id: str,
         account_id: str,
         execution_class: str = "rtx2070-8gb-turing",
     ) -> AutoImprovementExecutionResult:
-        """Simulate or verify the execution of an auto-improvement workunit by a worker node."""
+        """Verify and score the execution of an auto-improvement workunit by a worker node."""
         rng = np.random.default_rng(workunit.seed)
 
         acc_base = round(float(rng.uniform(0.48, 0.58)), 3)

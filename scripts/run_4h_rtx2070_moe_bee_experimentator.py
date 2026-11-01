@@ -571,9 +571,10 @@ def run_stage4_roadmap_pr_ip11_validation() -> Dict[str, Any]:
     default_forecast = forecast_200plus_node_international_launch()
     injected_58_forecast = forecast_200plus_node_international_launch(live_account_count=58)
     issue403_passed = bool(
-        default_forecast["current_live_baseline"]["data_source"] == "assumed_baseline"
-        and default_forecast["current_live_baseline"]["snapshot_date_utc"] is None
+        default_forecast["current_live_baseline"]["data_source"] == "ASSUMED_BASELINE_SNAPSHOT_NOT_LIVE"
+        and default_forecast["current_live_baseline"]["baseline_source"] == "module_default"
         and injected_58_forecast["current_live_baseline"]["total_nodes"] == 58
+        and injected_58_forecast["current_live_baseline"]["data_source"] == "CALLER_SUPPLIED_BASELINE"
         and injected_58_forecast["hiveminers_on_globe"]["current_pioneer_nodes_count"] == 58
     )
 

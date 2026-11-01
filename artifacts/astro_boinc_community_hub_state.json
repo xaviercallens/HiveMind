@@ -23,8 +23,8 @@
         "name": "HiveMind-TESS@Home (Box-Least-Squares Exoplanet Transit Folding)",
         "url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/",
         "active_workunit": "WU-TESS-K218B-BLS-092",
-        "progress_pct": 94.9,
-        "cobblestones_awarded": 235595.0
+        "progress_pct": 2.4,
+        "cobblestones_awarded": 300440.0
       },
       {
         "project_id": "milkyway_at_home",
@@ -51,9 +51,9 @@
       "gpu": "NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi)",
       "exoplanets_landed": 3,
       "candidates_vetted": 5,
-      "boinc_workunits_completed": 1223,
-      "boinc_cobblestones": 55035.0,
-      "hmt_compute_points": 308150,
+      "boinc_workunits_completed": 2664,
+      "boinc_cobblestones": 119880.0,
+      "hmt_compute_points": 668400,
       "favorite_world": "K2-18 b"
     },
     {
@@ -158,184 +158,184 @@
   ],
   "coop_discovery_feed": [
     {
-      "timestamp": "2026-11-01T05:20:52",
+      "timestamp": "2026-11-01T07:32:05",
       "gamer_handle": "xaviercallens-rtx2070",
       "scientist_handle": "@GCP_BOINC_Validator",
       "target": "K2-18 b",
       "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2899 ppm, SNR=129.7σ in 0.292 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-45add78a9564fc28",
-      "gcp_receipt_sha256": "f04727109d2c164a0f9510b69cbc4e25d5bd1af277a5a4920d69a0e2c9b1c824"
+      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2950 ppm, SNR=135.5σ in 0.3 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-67fbec385f8f909c",
+      "gcp_receipt_sha256": "60f8cafce3bc9d9293081a28046c905ca114c6507b0f98703c8f49e8a3f146fb"
     },
     {
-      "timestamp": "2026-11-01T05:20:47",
+      "timestamp": "2026-11-01T07:31:59",
       "gamer_handle": "xaviercallens-rtx2070",
       "scientist_handle": "@GCP_BOINC_Validator",
       "target": "K2-18 b",
       "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2922 ppm, SNR=134.1σ in 0.314 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-df90ac3f2084252e",
-      "gcp_receipt_sha256": "e54887ea62fe19e026ea82c9636221256d443ba2a45c9f8b92faae85f063de16"
+      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2947 ppm, SNR=129.0σ in 0.266 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-ff03d7ed1ff76dc3",
+      "gcp_receipt_sha256": "c9856596d479099d92d3015477051b1d01f0de26fbcc64412e1c9f4a29f7d53d"
     },
     {
-      "timestamp": "2026-11-01T05:20:41",
+      "timestamp": "2026-11-01T07:31:54",
       "gamer_handle": "xaviercallens-rtx2070",
       "scientist_handle": "@GCP_BOINC_Validator",
       "target": "K2-18 b",
       "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2896 ppm, SNR=141.1σ in 0.274 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-e6bbfdd47d6efd3b",
-      "gcp_receipt_sha256": "a36b7b981d04af8d92e38728fbf4ca8ddd91f06b827041960c341d3c6b0de518"
+      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2899 ppm, SNR=133.5σ in 0.28 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-7c22a6ea7ab3fe7f",
+      "gcp_receipt_sha256": "26158fdb499404f4b94cf16544c2d21e84e4158c9e8ad447b2ef004c3f0946d5"
     },
     {
-      "timestamp": "2026-11-01T05:20:36",
+      "timestamp": "2026-11-01T07:31:48",
       "gamer_handle": "xaviercallens-rtx2070",
       "scientist_handle": "@GCP_BOINC_Validator",
       "target": "K2-18 b",
       "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2943 ppm, SNR=129.9σ in 0.277 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-ac7bdafdbb624de5",
-      "gcp_receipt_sha256": "d5eb9b7c36338557298b3d926b16c46ac0bc0c8494d861385112a154d7f4df4f"
+      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2940 ppm, SNR=135.5σ in 0.305 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-76e5d1e5cfd27c93",
+      "gcp_receipt_sha256": "8db21776373e93a304b189e9090828ea0ab691db6de2ba2d4116c0dd5db818d3"
     },
     {
-      "timestamp": "2026-11-01T05:20:30",
+      "timestamp": "2026-11-01T07:31:43",
       "gamer_handle": "xaviercallens-rtx2070",
       "scientist_handle": "@GCP_BOINC_Validator",
       "target": "K2-18 b",
       "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2919 ppm, SNR=127.5σ in 0.342 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-3255343b8b39b642",
-      "gcp_receipt_sha256": "72f53f87a94dc65142a280701aa1fba32f65a5a9bb1f77a0da52634332320977"
+      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2960 ppm, SNR=131.7σ in 0.289 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-d9b0d27484015603",
+      "gcp_receipt_sha256": "37a0e0108d513917d51783511d905ce2abbe2685a2f268f45e328b67a7e2ec24"
     },
     {
-      "timestamp": "2026-11-01T05:20:25",
+      "timestamp": "2026-11-01T07:31:37",
       "gamer_handle": "xaviercallens-rtx2070",
       "scientist_handle": "@GCP_BOINC_Validator",
       "target": "K2-18 b",
       "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2901 ppm, SNR=124.6σ in 0.268 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-a791284b8f206c53",
-      "gcp_receipt_sha256": "38fd28cb6efa5e1e6fb878aebc5dd9783ab93386590063db72758607e46a43eb"
+      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2889 ppm, SNR=128.3σ in 0.267 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-62ad66aa30aedd5e",
+      "gcp_receipt_sha256": "aaa7fff7538f616571f42277b5c0f83c2ca52cc91d7abc9f5605c3de9d589a17"
     },
     {
-      "timestamp": "2026-11-01T05:20:20",
+      "timestamp": "2026-11-01T07:31:32",
       "gamer_handle": "xaviercallens-rtx2070",
       "scientist_handle": "@GCP_BOINC_Validator",
       "target": "K2-18 b",
       "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2922 ppm, SNR=144.5σ in 0.283 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-bc0349c331b72417",
-      "gcp_receipt_sha256": "74e8a64e684c121958e8cccce11c86b776d406ce413d0450e266a581e7c6b561"
+      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2901 ppm, SNR=132.2σ in 0.269 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-c26c4a607c9f4f07",
+      "gcp_receipt_sha256": "974c9afd0c4eecc5c8fb7625ae6c686552e8d1a6dc78f3b143deb457432270ff"
     },
     {
-      "timestamp": "2026-11-01T05:20:14",
+      "timestamp": "2026-11-01T07:31:27",
       "gamer_handle": "xaviercallens-rtx2070",
       "scientist_handle": "@GCP_BOINC_Validator",
       "target": "K2-18 b",
       "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2914 ppm, SNR=140.0σ in 0.281 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-9a6e32d45fbbed8b",
-      "gcp_receipt_sha256": "6cd47e97a045e012f5bd6910a420824d97df0d7100e31aef38007d102c3d69e0"
+      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2948 ppm, SNR=131.7σ in 0.279 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-de579bfdc124d6a1",
+      "gcp_receipt_sha256": "a41df092b5858684a49f973d07ac4bafafb7c8dbc0acd0082fb8b85cf5422375"
     },
     {
-      "timestamp": "2026-11-01T05:20:09",
+      "timestamp": "2026-11-01T07:31:21",
       "gamer_handle": "xaviercallens-rtx2070",
       "scientist_handle": "@GCP_BOINC_Validator",
       "target": "K2-18 b",
       "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2962 ppm, SNR=131.5σ in 0.287 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-a6fc80f5f405ce1d",
-      "gcp_receipt_sha256": "86c35cbed00bc9cc6f8606a2a089c4c4369e480d0c3709142e5d5527fe10ad67"
+      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2932 ppm, SNR=135.7σ in 0.323 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-9d82f1d852a42745",
+      "gcp_receipt_sha256": "887d692b11179f548188b84b92eff52f956852badf7e6ed4edc360a5b83d031f"
     },
     {
-      "timestamp": "2026-11-01T05:20:03",
+      "timestamp": "2026-11-01T07:31:16",
       "gamer_handle": "xaviercallens-rtx2070",
       "scientist_handle": "@GCP_BOINC_Validator",
       "target": "K2-18 b",
       "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2922 ppm, SNR=132.6σ in 0.298 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-b1b2a47e122b955d",
-      "gcp_receipt_sha256": "664dadd7f89b849729a416326ca45030d62ad970df8c3c7bea7ca7db2ef783df"
+      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2878 ppm, SNR=124.8σ in 0.254 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-729d338544a58b6c",
+      "gcp_receipt_sha256": "5d930e902a1bd200c33b34102d3c4789b213ed06a91783561210733fcc3ba05a"
     },
     {
-      "timestamp": "2026-11-01T05:19:58",
+      "timestamp": "2026-11-01T07:31:10",
       "gamer_handle": "xaviercallens-rtx2070",
       "scientist_handle": "@GCP_BOINC_Validator",
       "target": "K2-18 b",
       "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2938 ppm, SNR=136.3σ in 0.295 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-21e4411350843529",
-      "gcp_receipt_sha256": "084e2b94b252de9f1c06ba211377060299647f8ff624e62cda46b69e4082cbfc"
+      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2961 ppm, SNR=132.4σ in 0.277 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-5a2b8380df4eec8d",
+      "gcp_receipt_sha256": "e84f5e333c0a8e4cfa3551fca85b043a4ba25ccde77c37ae308aa1daf3ca1ea5"
     },
     {
-      "timestamp": "2026-11-01T05:19:52",
+      "timestamp": "2026-11-01T07:31:05",
       "gamer_handle": "xaviercallens-rtx2070",
       "scientist_handle": "@GCP_BOINC_Validator",
       "target": "K2-18 b",
       "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2950 ppm, SNR=131.8σ in 0.266 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-543f5423bbec18a8",
-      "gcp_receipt_sha256": "97156ea47d6e586bfa1f5db00c61723db42321187b3c179020608210f2662f15"
+      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2921 ppm, SNR=132.2σ in 0.281 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-117be570a39b7f6a",
+      "gcp_receipt_sha256": "bb127386096f7de9a9a24d8629c838c755d37ec4c9740f39924cfe5309fa1821"
     },
     {
-      "timestamp": "2026-11-01T05:19:47",
+      "timestamp": "2026-11-01T07:30:59",
       "gamer_handle": "xaviercallens-rtx2070",
       "scientist_handle": "@GCP_BOINC_Validator",
       "target": "K2-18 b",
       "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2912 ppm, SNR=133.6σ in 0.267 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-b9a6a81c98fca1f3",
-      "gcp_receipt_sha256": "7f5a3178b9b1fbf1d4f1915d3f9223743420740f44b50c10648bdd1f26b26d47"
+      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2882 ppm, SNR=134.3σ in 0.285 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-7003e435188c6904",
+      "gcp_receipt_sha256": "d69aed66b853d287a7f93c428cfc300b6f8dff046c7e45ba3cf33672b29c8706"
     },
     {
-      "timestamp": "2026-11-01T05:19:41",
+      "timestamp": "2026-11-01T07:30:54",
       "gamer_handle": "xaviercallens-rtx2070",
       "scientist_handle": "@GCP_BOINC_Validator",
       "target": "K2-18 b",
       "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2934 ppm, SNR=129.6σ in 0.414 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-3ab52e8e9511a54c",
-      "gcp_receipt_sha256": "db2ae536630354c60187c6c5ddc5ef556c6dbfb4a02145a06c3125fe0ff783c8"
+      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2938 ppm, SNR=137.5σ in 0.257 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-804fa273e8742a11",
+      "gcp_receipt_sha256": "3548ef921929ba846bf5f738f115485491ea9a88ccdd29d211f5e14956887ea5"
     },
     {
-      "timestamp": "2026-11-01T05:19:36",
+      "timestamp": "2026-11-01T07:30:48",
       "gamer_handle": "xaviercallens-rtx2070",
       "scientist_handle": "@GCP_BOINC_Validator",
       "target": "K2-18 b",
       "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2909 ppm, SNR=128.1σ in 0.27 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-20d71af3e0420e28",
-      "gcp_receipt_sha256": "3489e5dc933bed9882881d67aea6547d83f54832f921e7f9720457e15f38d1b4"
+      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2894 ppm, SNR=126.5σ in 0.281 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-159484da9b77c91f",
+      "gcp_receipt_sha256": "ef70196e136c3eb407886f01fab53da7870d3aa7227ca4eeb207960889d75dc2"
     },
     {
-      "timestamp": "2026-11-01T05:19:31",
+      "timestamp": "2026-11-01T07:30:43",
       "gamer_handle": "xaviercallens-rtx2070",
       "scientist_handle": "@GCP_BOINC_Validator",
       "target": "K2-18 b",
       "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2905 ppm, SNR=124.7σ in 0.287 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-1e96acfe46cd5a07",
-      "gcp_receipt_sha256": "dd86625fc1c9ebce412d76d14b351e0b60a8ab126766d977afc1874220308d52"
+      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2916 ppm, SNR=129.5σ in 0.305 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-1a85e924151399b8",
+      "gcp_receipt_sha256": "de8a6b6a99702248ed899918d60d2a272436900055ff8539842f0d79427b3039"
     },
     {
-      "timestamp": "2026-11-01T05:19:25",
+      "timestamp": "2026-11-01T07:30:38",
       "gamer_handle": "xaviercallens-rtx2070",
       "scientist_handle": "@GCP_BOINC_Validator",
       "target": "K2-18 b",
       "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2969 ppm, SNR=132.5σ in 0.28 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-b6a5cbf7da1ffd99",
-      "gcp_receipt_sha256": "efa83fcfb256d17aa419e8a07aaea5b30b783f90927645bd49fe5b6431e64cc2"
+      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2912 ppm, SNR=137.6σ in 0.377 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-316cd017e3133945",
+      "gcp_receipt_sha256": "7ba8cf1a881826b15ce691f770a8c28ea809d22d970d7f6f32925cddd7c70b0e"
     },
     {
-      "timestamp": "2026-11-01T05:19:20",
+      "timestamp": "2026-11-01T07:30:32",
       "gamer_handle": "xaviercallens-rtx2070",
       "scientist_handle": "@GCP_BOINC_Validator",
       "target": "K2-18 b",
       "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2921 ppm, SNR=128.2σ in 0.305 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-f1521f57555678d0",
-      "gcp_receipt_sha256": "b189937df73da3180e9ef685761692c8f6c5e641c24f1a4aad33cb9405d17c6d"
+      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2929 ppm, SNR=134.4σ in 0.258 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-acf220346f942a93",
+      "gcp_receipt_sha256": "e888c5e7491fe120c591ad3b090396aaef983d1969ee6ab90cd52e61ff9f176a"
     },
     {
-      "timestamp": "2026-11-01T05:19:14",
+      "timestamp": "2026-11-01T07:30:27",
       "gamer_handle": "xaviercallens-rtx2070",
       "scientist_handle": "@GCP_BOINC_Validator",
       "target": "K2-18 b",
       "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2921 ppm, SNR=131.7σ in 0.273 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-a970d57b4263fb7e",
-      "gcp_receipt_sha256": "d0aed3850d28df6196aec3e58c911d1db377d4427591cae605301ad3c9e173ab"
+      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2919 ppm, SNR=128.4σ in 0.339 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-130592d84db0a5dd",
+      "gcp_receipt_sha256": "96f3faf4a0fd262ad60244851159d4c7056182f7d407c57cb7a5866e47a1aebb"
     },
     {
-      "timestamp": "2026-11-01T05:19:09",
+      "timestamp": "2026-11-01T07:30:21",
       "gamer_handle": "xaviercallens-rtx2070",
       "scientist_handle": "@GCP_BOINC_Validator",
       "target": "K2-18 b",
       "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2910 ppm, SNR=140.8σ in 0.266 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-38f1a158fb99f990",
-      "gcp_receipt_sha256": "7cd8d92ee478c5322d2c11519a5f3a95db9123f5f6ac655704e967475b00daa2"
+      "summary": "GPU idle for 12.4s on NVIDIA GeForce RTX 2070 (Detected via NVML/nvidia-smi) -> Crunched BLS transit folding on K2-18 b (Depth=2879 ppm, SNR=126.9σ in 0.275 ms) -> +45.0 BOINC Cobblestones & +250 HMT! GCP Lease: LEASE-0b10f367b25ce459",
+      "gcp_receipt_sha256": "550ea8dc567ff2944e88f471c41d1fab4a08a5336e3700e589351f9eee92a85c"
     }
   ]
 }

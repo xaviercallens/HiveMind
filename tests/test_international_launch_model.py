@@ -371,19 +371,17 @@ def test_international_launch_views_modular_separation() -> None:
 
 
 def test_default_launch_baseline_is_labelled_assumed_with_no_snapshot_or_real_live_claim() -> None:
-    """Issue #403 / IP-22: default baseline carries 'assumed_baseline' and no snapshot/REAL_LIVE claim."""
+    """Issue #403 / PR #414 / IP-22: default baseline carries ASSUMED_BASELINE_SNAPSHOT_NOT_LIVE and module_default."""
     report = forecast_200plus_node_international_launch()
     cur = report["current_live_baseline"]
-    assert cur["data_source"] == "assumed_baseline"
+    assert cur["data_source"] == "ASSUMED_BASELINE_SNAPSHOT_NOT_LIVE"
+    assert cur["baseline_source"] == "module_default"
     assert cur["baseline_status"] == "assumed_baseline"
-    assert cur["snapshot_date_utc"] is None
-    assert "REAL_LIVE" not in str(cur["data_source"]).upper()
-    assert "assumed_baseline" in report["verdict_summary"]
+    assert "ASSUMED_BASELINE_SNAPSHOT_NOT_LIVE" in report["verdict_summary"]
 
     paper = build_foundation_paper_v42_portal_payload()
-    assert paper["live_experimentation_v42"]["live_47_node_wan_baseline"]["data_source"] == "assumed_baseline"
-    assert paper["live_experimentation_v42"]["live_47_node_wan_baseline"]["snapshot_date_utc"] is None
-    assert paper["real_vs_forecast_traffic_and_balancing"]["real_live_47_node_traffic"]["data_source"] == "assumed_baseline"
+    assert paper["live_experimentation_v42"]["live_47_node_wan_baseline"]["data_source"] == "ASSUMED_BASELINE_SNAPSHOT_NOT_LIVE"
+    assert paper["real_vs_forecast_traffic_and_balancing"]["real_live_47_node_traffic"]["data_source"] == "ASSUMED_BASELINE_SNAPSHOT_NOT_LIVE"
 
 
 def test_injected_live_account_count_58_propagates_everywhere_and_views_contain_no_literal_59() -> None:
@@ -397,7 +395,8 @@ def test_injected_live_account_count_58_propagates_everywhere_and_views_contain_
 
     report_58 = forecast_200plus_node_international_launch(live_account_count=58)
     assert report_58["current_live_baseline"]["total_nodes"] == 58
-    assert report_58["current_live_baseline"]["data_source"] == "live_router_read"
+    assert report_58["current_live_baseline"]["data_source"] == "CALLER_SUPPLIED_BASELINE"
+    assert report_58["current_live_baseline"]["baseline_source"] == "caller_supplied"
     assert report_58["hiveminers_on_globe"]["current_pioneer_nodes_count"] == 58
     assert "58 Accounts" in report_58["verdict_summary"]
 

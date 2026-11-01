@@ -32,10 +32,10 @@ from typing import Any
 
 @dataclass(frozen=True)
 class SwarmLiveBaseline:
-    """Reference baseline for hivemind-openrouter and hivemind-at-home-ruche.
+    """Hard-coded snapshot of the live situation as recorded on 2026-10-31. These defaults are constants, not a live read.
 
-    Without a live router read, ``data_source`` defaults to ``"assumed_baseline"``
-    and ``snapshot_date_utc`` defaults to ``None`` (no snapshot claim).
+    The router's owner endpoint reported 58 real accounts on 2026-11-01, so a payload built from the defaults must say
+    it is an assumed baseline (see ``baseline_source``); a caller that reads the live router passes its own values.
     """
 
     total_accounts: int = 59
@@ -58,8 +58,9 @@ class SwarmLiveBaseline:
     p50_latency_s: float = 0.2573
     p95_latency_s: float = 0.5922
     baseline_status: str = "assumed_baseline"
-    data_source: str = "assumed_baseline"
-    snapshot_date_utc: str | None = None
+    data_source: str = "ASSUMED_BASELINE_SNAPSHOT_NOT_LIVE"
+    baseline_source: str = "module_default"
+    snapshot_date_utc: str | None = "2026-10-31"
 
 
 def baseline_from_live_counts(
@@ -69,7 +70,7 @@ def baseline_from_live_counts(
     prosumers: int | None = None,
     consumers: int | None = None,
     admins: int = 3,
-    data_source: str = "live_router_read",
+    data_source: str = "CALLER_SUPPLIED_BASELINE",
     snapshot_date_utc: str | None = "2026-11-01",
 ) -> SwarmLiveBaseline:
     """Construct a SwarmLiveBaseline from an injected or live-read account count (#403)."""
@@ -84,8 +85,9 @@ def baseline_from_live_counts(
         prosumers=pros,
         consumers=cons,
         admins=adm,
-        baseline_status="live_telemetry" if data_source != "assumed_baseline" else "assumed_baseline",
+        baseline_status="live_telemetry" if data_source != "ASSUMED_BASELINE_SNAPSHOT_NOT_LIVE" else "assumed_baseline",
         data_source=data_source,
+        baseline_source="caller_supplied",
         snapshot_date_utc=snapshot_date_utc,
     )
 
@@ -1172,7 +1174,10 @@ def forecast_200plus_node_international_launch(
         },
         "current_live_baseline": {
             "snapshot_date_utc": baseline.snapshot_date_utc,
-            "data_source": baseline.data_source,
+            "data_source": (
+                "ASSUMED_BASELINE_SNAPSHOT_NOT_LIVE" if baseline == SwarmLiveBaseline() else "CALLER_SUPPLIED_BASELINE"
+            ),
+            "baseline_source": "module_default" if baseline == SwarmLiveBaseline() else "caller_supplied",
             "baseline_status": baseline.baseline_status,
             "total_nodes": baseline.total_accounts,
             "producers": baseline.producers,

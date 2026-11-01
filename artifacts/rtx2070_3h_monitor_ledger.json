@@ -1,20 +1,20 @@
 {
   "schema_version": "rtx2070_3h_monitor.v1",
   "cadence_cron": "0 */3 * * *",
-  "timestamp_utc": "2026-11-01T04:19:40Z",
+  "timestamp_utc": "2026-11-01T06:19:46Z",
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-11-01T04:19:40Z",
+    "timestamp_utc": "2026-11-01T06:19:46Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": true,
     "device": "cuda:0",
     "compute_capability": "7.5",
-    "temperature_c": 26.0,
-    "gpu_utilization_pct": 11.0,
-    "power_draw_w": 8.97,
+    "temperature_c": 25.0,
+    "gpu_utilization_pct": 8.0,
+    "power_draw_w": 9.23,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1454.0,
-    "memory_free_mib": 6553.0,
+    "memory_used_mib": 1465.0,
+    "memory_free_mib": 6542.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
@@ -24,10 +24,10 @@
     "max_graphics_clock_mhz": 2145.0,
     "memory_clock_mhz": 405.0,
     "host_tensor_gflops": 0.0,
-    "measured_fp32_tflops": 5.6,
-    "measured_fp16_tensor_tflops": 19.69,
-    "effective_sparse_moe_nf4_tflops": 36.43,
-    "microbench_elapsed_ms": 291.29
+    "measured_fp32_tflops": 5.66,
+    "measured_fp16_tensor_tflops": 19.71,
+    "effective_sparse_moe_nf4_tflops": 36.46,
+    "microbench_elapsed_ms": 1601.11
   },
   "community_gpu_benchmark_summary": {
     "receipt_sha256": "e944272a1802d8053a28c26a59e7e121671eec23e2c3fcb22f2fb45c3b197580",
@@ -35,9 +35,37 @@
     "peak_allocated_mb": 0.0
   },
   "pr_integration_summary": {
-    "checked_utc": "2026-11-01T04:19:45Z",
-    "open_prs_count": 12,
+    "checked_utc": "2026-11-01T06:20:10Z",
+    "open_prs_count": 14,
     "evaluated": [
+      {
+        "pr": 416,
+        "title": "docs: roadmap status after the 06:00 review round",
+        "author": "xaviercallens",
+        "head_ref": "docs/roadmap-2026-11-01-05",
+        "base_ref": "main",
+        "head_sha": "17f17ce215",
+        "owner_authored": true,
+        "security_passed": true,
+        "injection_clean": true,
+        "decision": "ACCEPT",
+        "merged": false,
+        "merge_message": ""
+      },
+      {
+        "pr": 414,
+        "title": "fix(economy): launch model default baseline is labelled assumed, not live telemetry",
+        "author": "xaviercallens",
+        "head_ref": "fix/launch-baseline-labelled-assumed",
+        "base_ref": "main",
+        "head_sha": "27f731ab9a",
+        "owner_authored": true,
+        "security_passed": true,
+        "injection_clean": true,
+        "decision": "ACCEPT",
+        "merged": false,
+        "merge_message": ""
+      },
       {
         "pr": 410,
         "title": "feat(federation): signed task agents over AMCP and Kafka (Aglet life cycle, no mobile code), co-training rounds, live churn soak, participant procedure",
@@ -142,7 +170,7 @@
         "author": "xaviercallens",
         "head_ref": "feat/openrouter-5lang-i18n",
         "base_ref": "main",
-        "head_sha": "8d2c1d652a",
+        "head_sha": "5e74fdca5b",
         "owner_authored": true,
         "security_passed": false,
         "injection_clean": true,
@@ -219,5 +247,5 @@
       141
     ]
   },
-  "ledger_sha256": "0d524b50ab98feaa72e2e3e7a391c85451b5a1f62b61fdeeb4180fb32e2eb34b"
+  "ledger_sha256": "2aa1b88501f5d73f593c71b13cdbd529aeaef45dd6df00a7b9b6f0bcdf0b535e"
 }

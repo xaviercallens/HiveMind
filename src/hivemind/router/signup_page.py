@@ -301,6 +301,7 @@ def render_signup_page(
   </div>
   <nav class="nav-links">
     <a href="/">⚡ AI Playground</a>
+    <a href="/manifesto">📜 Manifesto</a>
     <a href="/benchmarks">📊 Benchmarks</a>
     <a href="/life-as-a-bee">🐝 Life as a Bee</a>
     <a href="/webgpu">🌌 WebGPU</a>

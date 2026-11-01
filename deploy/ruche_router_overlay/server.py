@@ -114,6 +114,28 @@ async def life_as_a_bee_proxy() -> Response:
         return RedirectResponse(f"{ROUTER}/life-as-a-bee", status_code=307)
 
 
+@app.api_route("/manifesto", methods=["GET", "HEAD"], response_class=HTMLResponse)
+@app.api_route("/manifeste", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def manifesto_proxy(request: Request) -> Response:
+    lang_qs = f"?lang={request.query_params.get('lang')}" if request.query_params.get("lang") else ""
+    try:
+        resp = await _client.get(f"{ROUTER}{request.url.path}{lang_qs}", timeout=10.0)
+        out_headers = {k: v for k, v in resp.headers.items() if k.lower() not in HOP_BY_HOP}
+        return Response(content=resp.content, status_code=resp.status_code, headers=out_headers)
+    except httpx.HTTPError:
+        return RedirectResponse(f"{ROUTER}{request.url.path}{lang_qs}", status_code=307)
+
+
+@app.get("/v1/hivemind/manifesto")
+async def manifesto_json_proxy() -> Response:
+    try:
+        resp = await _client.get(f"{ROUTER}/v1/hivemind/manifesto", timeout=10.0)
+        out_headers = {k: v for k, v in resp.headers.items() if k.lower() not in HOP_BY_HOP}
+        return Response(content=resp.content, status_code=resp.status_code, headers=out_headers)
+    except httpx.HTTPError:
+        return RedirectResponse(f"{ROUTER}/v1/hivemind/manifesto", status_code=307)
+
+
 @app.api_route("/join", methods=["GET", "HEAD"], response_class=HTMLResponse)
 @app.api_route("/rejoindre", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def join_page(request: Request) -> HTMLResponse:

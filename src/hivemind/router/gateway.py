@@ -1551,6 +1551,45 @@ def create_router_app(
             },
         )
 
+    @app.api_route("/manifesto", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/manifeste", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def manifesto_page(request: Request) -> HTMLResponse:
+        """Bilingual (FR/EN) Citizen AI Manifesto page grounded in Reddit community discussions and linked to the GCP Portal."""
+        from hivemind.router.manifesto_page import pick_manifesto_language, render_manifesto_page
+
+        default_lang = "fr" if request.url.path == "/manifeste" else "fr"
+        lang = pick_manifesto_language(
+            request.query_params.get("lang"),
+            request.headers.get("accept-language"),
+            default=default_lang,
+        )
+        if request.url.path == "/manifeste" and not request.query_params.get("lang"):
+            lang = "fr"
+        nonce = secrets.token_urlsafe(18)
+        page = render_manifesto_page(
+            lang=lang,
+            nonce=nonce,
+            live_telemetry=build_live_telemetry_snapshot(),
+        )
+        return HTMLResponse(
+            page,
+            headers={
+                "Content-Security-Policy": portal_content_security_policy(nonce),
+                "Cache-Control": "no-store",
+                "Vary": "Accept-Language",
+                "Content-Language": lang,
+                "X-Content-Type-Options": "nosniff",
+                "Referrer-Policy": "strict-origin-when-cross-origin",
+            },
+        )
+
+    @app.get("/v1/hivemind/manifesto")
+    def manifesto_api() -> dict[str, Any]:
+        """Public JSON telemetry for the HiveMind Citizen AI Manifesto, Reddit thread synthesis, and live GCP metrics."""
+        from hivemind.router.manifesto_page import manifesto_payload
+
+        return manifesto_payload(live_telemetry=build_live_telemetry_snapshot())
+
     @app.get("/v1/hivemind/catalog")
     def catalog() -> dict[str, Any]:
         """Public list of capability tiers (which model fits which GPU); static data, no account needed."""

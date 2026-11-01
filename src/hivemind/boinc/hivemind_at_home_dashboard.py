@@ -4148,6 +4148,8 @@ def render_hivemind_at_home_html(
         </div>
 
         <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;">
+          <a href="/manifesto" class="btn-action btn-green">&#x1F4DC; Read Citizen AI Manifesto (Reddit Synthesis &amp; GCP Portal Link) (/manifesto)</a>
+          <a href="https://hivemind-openrouter-1003063861791.us-central1.run.app/portal" class="btn-action btn-gold">&#x26A1; Open GCP Portal &amp; 15-MoE AI Playground (/portal)</a>
           <a href="/planet-forecast" class="btn-action btn-green">&#x1F30D; Launch Interactive 3D Planet HiveMiners Globe (/planet-forecast)</a>
           <a href="/foundation-paper" class="btn-action btn-gold">&#x1F4DC; Read Foundation Paper v4.2.0 + Live E20 &amp; Balancing Tables (/foundation-paper)</a>
           <a href="/paper/hivemind_foundation_article.pdf" target="_blank" rel="noopener" class="btn-action">&#x1F4E5; Download Foundation Paper v4.2.0 PDF (70 Pages)</a>
@@ -9554,5 +9556,34 @@ def create_hivemind_at_home_app(
                 "s1b_cross_cpu_reproducibility": s1b,
             }
         )
+
+    @app.api_route("/manifesto", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/manifeste", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def ruche_manifesto_page(request: Request) -> HTMLResponse:
+        import secrets as _secrets
+        from hivemind.router.manifesto_page import pick_manifesto_language, render_manifesto_page
+
+        lang = pick_manifesto_language(
+            request.query_params.get("lang"),
+            request.headers.get("accept-language"),
+            default="fr",
+        )
+        if request.url.path == "/manifeste" and not request.query_params.get("lang"):
+            lang = "fr"
+        nonce = _secrets.token_urlsafe(18)
+        return HTMLResponse(
+            content=render_manifesto_page(lang=lang, nonce=nonce),
+            headers={
+                "Cache-Control": "no-store",
+                "Vary": "Accept-Language",
+                "Content-Language": lang,
+            },
+        )
+
+    @app.get("/v1/hivemind/manifesto", response_class=JSONResponse)
+    def ruche_manifesto_api() -> JSONResponse:
+        from hivemind.router.manifesto_page import manifesto_payload
+
+        return JSONResponse(content=manifesto_payload())
 
     return app

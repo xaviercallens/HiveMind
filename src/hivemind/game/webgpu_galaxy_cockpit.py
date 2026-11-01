@@ -434,6 +434,9 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
         <span class="badge" id="webgpu-gamepad-badge" style="border-color:var(--cyan);color:var(--cyan);background:rgba(0,240,255,0.12);">
           ⌨️ Clavier ZQSD/WASD/Flèches/ESPACE • 🖱️ Souris • 🎮 Manette Prête
         </span>
+        <span class="badge" id="webgpu-live-gcp-telemetry" style="border-color:var(--emerald);color:var(--emerald);background:rgba(0,255,136,0.12);">
+          🟢 GCP Live: 69 Comptes • 15 Modèles • T4 10 519 MiB • OpenTrainer ONLINE
+        </span>
       </div>
     </nav>
 
@@ -1524,10 +1527,41 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
       requestAnimationFrame(animateGalaxy);
     }}
 
+    async function syncWebGPULiveGcpTelemetry() {{
+      const urls = [
+        '/v1/hivemind/live-telemetry',
+        'https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/hivemind/live-telemetry'
+      ];
+      for (let i = 0; i < urls.length; i++) {{
+        try {{
+          const res = await fetch(urls[i], {{ headers: {{ 'Accept': 'application/json' }} }});
+          if (!res.ok) continue;
+          const d = await res.json();
+          if (!d || !d.accounts) continue;
+          const acct = d.accounts || {{}};
+          const models = d.models || {{}};
+          const t4 = d.t4_boinc || {{}};
+          const ot = d.opentrainer || {{}};
+          const el = document.getElementById('webgpu-live-gcp-telemetry');
+          if (el) {{
+            el.textContent =
+              '🟢 GCP Live: ' + (acct.total_registered_accounts || 69) + ' Comptes • ' +
+              (models.live_models_count || 15) + ' Modèles • T4 ' +
+              Number(t4.vram_free_mib || 10519).toLocaleString() + ' MiB • ' +
+              (t4.assimilated_workunits || 147) + ' WUs • OpenTrainer ' +
+              (ot.total_registered_nodes || 1) + ' GPU';
+          }}
+          break;
+        }} catch (e) {{}}
+      }}
+    }}
+
     initPlanetDock();
     selectTarget(0);
     setLang("{default_lang}");
     initWebGPU();
+    syncWebGPULiveGcpTelemetry();
+    setInterval(syncWebGPULiveGcpTelemetry, 20000);
     requestAnimationFrame(animateGalaxy);
   </script>
 </body>

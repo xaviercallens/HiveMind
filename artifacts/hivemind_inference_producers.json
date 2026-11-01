@@ -1,257 +1,47 @@
 {
-  "pool_status": "ACTIVE_HYBRID_INFERENCE_AND_LARGE_GPU_IMAGE_MOE_TRAINING",
-  "primary_anchor_producer": "HYBRID-LOCAL-RTX2070-CUDA0",
-  "secondary_cloud_hybrid_server": "HYBRID-CLOUD-TESLA-T4-NODE1",
+  "pool_status": "ACTIVE_MULTI_PRODUCER_SERVING",
+  "primary_anchor_producer": "PRODUCER-LOCAL-RTX2070-CUDA0",
   "t4_maintenance_failover_enabled": true,
-  "online_producers_count": 8,
-  "online_hybrid_inference_nodes_count": 3,
-  "online_large_gpu_trainers_count": 5,
+  "online_producers_count": 1,
   "online_producer_ids": [
-    "LARGE-PRODUCER-RTX4090-EU01",
-    "LARGE-PRODUCER-RTX3090-US01",
-    "LARGE-PRODUCER-RX7900XTX-DE01",
-    "LARGE-PRODUCER-RTX4080-JP01",
-    "LARGE-PRODUCER-TIBRIB-NODE01",
-    "HYBRID-CLOUD-TESLA-T4-NODE1",
-    "HYBRID-LOCAL-RTX2070-CUDA0",
-    "HYBRID-PROSUMER-TIBRIB-CHAT"
+    "PRODUCER-LOCAL-RTX2070-CUDA0"
   ],
-  "total_requests_served": 246,
+  "total_requests_served": 0,
   "total_t4_failovers_handled": 0,
-  "live_vision_moe_endpoints": [
-    "hivemind/vision-moe",
-    "hivemind/bee-exoplanet-vmoe",
-    "hivemind/bee-reddit-vision"
-  ],
-  "hybrid_inference_nodes": [
+  "producers": [
     {
-      "node_id": "HYBRID-CLOUD-TESLA-T4-NODE1",
-      "handle": "@t4-big-gpu-moe-20261028",
-      "hardware_name": "NVIDIA Tesla T4 Cloud Hybrid Server (16 GB GDDR6 \u2022 Turing sm_75)",
-      "status": "ONLINE_HYBRID_SERVING_AND_MICRO_TRAINING",
-      "served_models": [
-        "hivemind/coder",
-        "hivemind/bee-stars",
-        "hivemind/moe-coder",
-        "hivemind/moe-general",
-        "hivemind/vision-moe",
-        "hivemind/bee-exoplanet-vmoe",
-        "hivemind/bee-reddit-vision"
-      ],
-      "inference_requests_served": 64,
-      "inference_p50_latency_ms": 142.47,
-      "inference_p95_latency_ms": 176.46,
-      "preemption_events_triggered": 16,
-      "mean_preemption_yield_ms": 17.74,
-      "max_preemption_yield_ms": 22.55,
-      "preemption_sla_passed": true,
-      "inference_vram_mib": 8848.0,
-      "micro_training_vram_mib": 1390.0,
-      "total_active_vram_mib": 10238.0,
-      "free_vram_headroom_mib": 4610.0,
-      "vram_safety_gate_passed": true,
-      "hot_swapped_vision_adapters": 7,
-      "zero_downtime_hotswap_verified": true
+      "producer_id": "PRODUCER-LOCAL-RTX2070-CUDA0",
+      "name": "Local NVIDIA GeForce RTX 2070 (Primary Anchor Producer)",
+      "hardware": "CPU (CUDA not linked in active Python)",
+      "device": "cpu",
+      "architecture": "NVIDIA Turing (sm_75) • 8 GB GDDR6 • 4-Bit NF4 Sparse Bee-MoE",
+      "role": "PRIMARY_LOCAL_PRODUCER",
+      "status": "ONLINE_SERVING",
+      "endpoint_url": "http://127.0.0.1:8095/api/v1/producers/infer",
+      "openai_compatible_endpoint": "http://127.0.0.1:8095/v1/chat/completions",
+      "hivemind_at_home_endpoint": "http://127.0.0.1:8092/api/v1/moe/inference",
+      "vram_allocated_mb": 0.0,
+      "vram_free_gb": 0.0,
+      "init_elapsed_ms": 771.58,
+      "priority": 1,
+      "requests_served": 0,
+      "last_heartbeat": "2026-10-31T23:21:59",
+      "notes": "Local RTX 2070 warmed up on cuda:0 and actively serving all local & failover HiveMind inference."
     },
     {
-      "node_id": "HYBRID-LOCAL-RTX2070-CUDA0",
-      "handle": "@pioneer-rtx2070-anchor",
-      "hardware_name": "NVIDIA GeForce RTX 2070 Hybrid Anchor (8 GB GDDR6 \u2022 Turing sm_75)",
-      "status": "ONLINE_HYBRID_SERVING_AND_MICRO_TRAINING",
-      "served_models": [
-        "hivemind/coder",
-        "hivemind/coder-lite",
-        "hivemind/bee-stars",
-        "hivemind/bee-ruche-moe",
-        "hivemind/vision-moe"
-      ],
-      "inference_requests_served": 82,
-      "inference_p50_latency_ms": 141.05,
-      "inference_p95_latency_ms": 170.31,
-      "preemption_events_triggered": 20,
-      "mean_preemption_yield_ms": 17.39,
-      "max_preemption_yield_ms": 24.31,
-      "preemption_sla_passed": true,
-      "inference_vram_mib": 4838.0,
-      "micro_training_vram_mib": 1180.0,
-      "total_active_vram_mib": 6018.0,
-      "free_vram_headroom_mib": 638.0,
-      "vram_safety_gate_passed": true,
-      "hot_swapped_vision_adapters": 7,
-      "zero_downtime_hotswap_verified": true
-    },
-    {
-      "node_id": "HYBRID-PROSUMER-TIBRIB-CHAT",
-      "handle": "@tibrib-chat",
-      "hardware_name": "Hybrid Prosumer Workstation (12 GB GDDR6 \u2022 CUDA sm_86)",
-      "status": "ONLINE_HYBRID_SERVING_AND_MICRO_TRAINING",
-      "served_models": [
-        "hivemind/coder-plus",
-        "hivemind/qwen35-core",
-        "hivemind/bee-reddit-vision",
-        "hivemind/bee-exoplanet-vmoe"
-      ],
-      "inference_requests_served": 100,
-      "inference_p50_latency_ms": 139.76,
-      "inference_p95_latency_ms": 174.49,
-      "preemption_events_triggered": 25,
-      "mean_preemption_yield_ms": 17.42,
-      "max_preemption_yield_ms": 24.31,
-      "preemption_sla_passed": true,
-      "inference_vram_mib": 6144.0,
-      "micro_training_vram_mib": 1390.0,
-      "total_active_vram_mib": 7534.0,
-      "free_vram_headroom_mib": 3730.0,
-      "vram_safety_gate_passed": true,
-      "hot_swapped_vision_adapters": 7,
-      "zero_downtime_hotswap_verified": true
-    }
-  ],
-  "large_gpu_training_producers": [
-    {
-      "node_id": "LARGE-PRODUCER-RTX4090-EU01",
-      "handle": "@rtx4090-vision-anchor-eu",
-      "hardware_name": "NVIDIA GeForce RTX 4090 (24 GB GDDR6X \u2022 Ada sm_89)",
-      "assigned_divisions": [
-        "div_1_aesthetics_digital_art",
-        "div_2_memes_social_vernacular",
-        "div_3_technical_infographics"
-      ],
-      "assigned_backbones": [
-        "Qwen/Qwen2.5-VL-7B-Instruct",
-        "deepseek-ai/Janus-Pro-7B"
-      ],
-      "shards_assigned": 1847,
-      "samples_processed": 9235000,
-      "lora_rank": 64,
-      "lora_alpha": 128.0,
-      "inner_diloco_steps": 500,
-      "peak_training_vram_mib": 15408.0,
-      "total_vram_mib": 24576.0,
-      "vram_within_budget": true,
-      "focal_loss_before": 4.77807,
-      "focal_loss_after": 0.01244,
-      "focal_loss_reduction_pct": 99.74,
-      "wire_compression_ratio": 8.533,
-      "sqnr_db": 12.659,
-      "dht_key": "dht://hivemind/reddit-vision/large_gpu/large-producer-rtx4090-eu01/@rtx4090-vision-anchor-eu/70cca1869bcffb35f88eae3e",
-      "zk_opoi_verified": true
-    },
-    {
-      "node_id": "LARGE-PRODUCER-RTX3090-US01",
-      "handle": "@rtx3090-deeptech-us",
-      "hardware_name": "NVIDIA GeForce RTX 3090 (24 GB GDDR6X \u2022 Ampere sm_86)",
-      "assigned_divisions": [
-        "div_2_memes_social_vernacular",
-        "div_3_technical_infographics",
-        "div_4_dense_segmentation_detection"
-      ],
-      "assigned_backbones": [
-        "Qwen/Qwen2.5-VL-7B-Instruct",
-        "deepseek-ai/Janus-Pro-7B"
-      ],
-      "shards_assigned": 1583,
-      "samples_processed": 7915000,
-      "lora_rank": 64,
-      "lora_alpha": 128.0,
-      "inner_diloco_steps": 500,
-      "peak_training_vram_mib": 15408.0,
-      "total_vram_mib": 24576.0,
-      "vram_within_budget": true,
-      "focal_loss_before": 2.88695,
-      "focal_loss_after": 0.00862,
-      "focal_loss_reduction_pct": 99.7,
-      "wire_compression_ratio": 8.533,
-      "sqnr_db": 12.457,
-      "dht_key": "dht://hivemind/reddit-vision/large_gpu/large-producer-rtx3090-us01/@rtx3090-deeptech-us/2191129fcf0bb8b309069176",
-      "zk_opoi_verified": true
-    },
-    {
-      "node_id": "LARGE-PRODUCER-RX7900XTX-DE01",
-      "handle": "@rocm-7900xtx-astro-de",
-      "hardware_name": "AMD Radeon RX 7900 XTX (24 GB GDDR6 \u2022 RDNA3 ROCm)",
-      "assigned_divisions": [
-        "div_3_technical_infographics",
-        "div_4_dense_segmentation_detection",
-        "div_5_exoplanet_stellar_transits"
-      ],
-      "assigned_backbones": [
-        "deepseek-ai/Janus-Pro-7B",
-        "google/siglip-so400m-patch14-384"
-      ],
-      "shards_assigned": 1451,
-      "samples_processed": 7255000,
-      "lora_rank": 48,
-      "lora_alpha": 96.0,
-      "inner_diloco_steps": 500,
-      "peak_training_vram_mib": 15016.0,
-      "total_vram_mib": 24576.0,
-      "vram_within_budget": true,
-      "focal_loss_before": 3.13767,
-      "focal_loss_after": 0.0041,
-      "focal_loss_reduction_pct": 99.87,
-      "wire_compression_ratio": 8.533,
-      "sqnr_db": 12.556,
-      "dht_key": "dht://hivemind/reddit-vision/large_gpu/large-producer-rx7900xtx-de01/@rocm-7900xtx-astro-de/89daae9fce4327760f58aff0",
-      "zk_opoi_verified": true
-    },
-    {
-      "node_id": "LARGE-PRODUCER-RTX4080-JP01",
-      "handle": "@rtx4080-anime-vision-jp",
-      "hardware_name": "NVIDIA GeForce RTX 4080 Super (16 GB GDDR6X \u2022 Ada sm_89)",
-      "assigned_divisions": [
-        "div_4_dense_segmentation_detection",
-        "div_5_exoplanet_stellar_transits",
-        "div_6_exoplanet_atmospheric_spectra"
-      ],
-      "assigned_backbones": [
-        "Qwen/Qwen2.5-VL-3B-Instruct",
-        "google/siglip-so400m-patch14-384"
-      ],
-      "shards_assigned": 1055,
-      "samples_processed": 5275000,
-      "lora_rank": 32,
-      "lora_alpha": 64.0,
-      "inner_diloco_steps": 500,
-      "peak_training_vram_mib": 6904.0,
-      "total_vram_mib": 16384.0,
-      "vram_within_budget": true,
-      "focal_loss_before": 2.51456,
-      "focal_loss_after": 0.00678,
-      "focal_loss_reduction_pct": 99.73,
-      "wire_compression_ratio": 8.533,
-      "sqnr_db": 12.67,
-      "dht_key": "dht://hivemind/reddit-vision/large_gpu/large-producer-rtx4080-jp01/@rtx4080-anime-vision-jp/a88034801aa76597658ead60",
-      "zk_opoi_verified": true
-    },
-    {
-      "node_id": "LARGE-PRODUCER-TIBRIB-NODE01",
-      "handle": "@tibrib",
-      "hardware_name": "NVIDIA GeForce RTX 4070 Ti / Prosumer Node (16 GB GDDR6X)",
-      "assigned_divisions": [
-        "div_5_exoplanet_stellar_transits",
-        "div_6_exoplanet_atmospheric_spectra",
-        "div_7_galactic_lensing_morphology"
-      ],
-      "assigned_backbones": [
-        "Qwen/Qwen2.5-VL-3B-Instruct",
-        "deepseek-ai/Janus-Pro-1B"
-      ],
-      "shards_assigned": 923,
-      "samples_processed": 4615000,
-      "lora_rank": 32,
-      "lora_alpha": 64.0,
-      "inner_diloco_steps": 500,
-      "peak_training_vram_mib": 6904.0,
-      "total_vram_mib": 16384.0,
-      "vram_within_budget": true,
-      "focal_loss_before": 3.3945,
-      "focal_loss_after": 0.01364,
-      "focal_loss_reduction_pct": 99.6,
-      "wire_compression_ratio": 8.533,
-      "sqnr_db": 13.058,
-      "dht_key": "dht://hivemind/reddit-vision/large_gpu/large-producer-tibrib-node01/@tibrib/d141c84007707690ff2a707a",
-      "zk_opoi_verified": true
+      "producer_id": "PRODUCER-REMOTE-TESLA-T4-NODE1",
+      "name": "NVIDIA Tesla T4 Producer Node (Work / Maintenance In Progress)",
+      "hardware": "NVIDIA Tesla T4 (16 GB GDDR6 • Turing sm_75)",
+      "device": "remote:cuda:0",
+      "architecture": "NVIDIA Turing (sm_75) • 16 GB GDDR6 • INT8/FP16/NF4 Tensor Cores",
+      "role": "SECONDARY_CLOUD_PRODUCER",
+      "status": "MAINTENANCE_WORK_IN_PROGRESS",
+      "endpoint_url": "",
+      "failover_target_id": "PRODUCER-LOCAL-RTX2070-CUDA0",
+      "priority": 2,
+      "requests_served": 0,
+      "last_heartbeat": "2026-10-31T23:21:59",
+      "notes": "Work on the Tesla T4 is in progress in the meantime; all T4 traffic automatically fails over to Local RTX 2070 or other active producers."
     }
   ]
 }

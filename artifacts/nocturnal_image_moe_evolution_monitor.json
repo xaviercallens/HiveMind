@@ -1,12 +1,12 @@
 {
   "monitor_id": "NOCTURNAL-IMAGE-MOE-EVOLUTION-2026-10-29",
-  "timestamp_utc": "2026-10-31T07:16:52Z",
+  "timestamp_utc": "2026-11-01T09:17:26Z",
   "status": "ACTIVE_EVOLVING_GREEN",
   "generations_executed": 3,
   "pareto_ratchet_monotone_verified": true,
   "tesla_t4_vram_guard_all_passed": true,
   "best_ratcheted_losses": {
-    "reddit_vision_vlm_moe_loss": 0.00122,
+    "reddit_vision_vlm_moe_loss": 0.0012,
     "exoplanet_astro_vmoe_focal_loss": 0.0,
     "massive_7div_104bee_focal_loss": 0.0
   },
@@ -58,15 +58,15 @@
       "lora_alpha": 36.0,
       "focal_gamma": 2.15,
       "reddit_vision_vlm_moe": {
-        "candidate_moe_loss": 0.00242,
-        "ratcheted_moe_loss": 0.00213,
+        "candidate_moe_loss": 0.00204,
+        "ratcheted_moe_loss": 0.00204,
         "mean_loss_reduction_pct": 94.35,
         "routing_accuracy": 1.0,
-        "pareto_admitted": false,
+        "pareto_admitted": true,
         "gate_passed": true
       },
       "exoplanet_astro_vmoe_1500mb": {
-        "candidate_focal_loss": 0.02294,
+        "candidate_focal_loss": 0.02236,
         "ratcheted_focal_loss": 1e-05,
         "mean_focal_loss_reduction_pct": 99.97,
         "routing_accuracy": 1.0,
@@ -75,7 +75,7 @@
         "gate_passed": true
       },
       "massive_7div_104bee_image_moe": {
-        "candidate_focal_loss": 0.00152,
+        "candidate_focal_loss": 0.00151,
         "ratcheted_focal_loss": 0.0,
         "mean_focal_loss_reduction_pct": 99.76,
         "routing_accuracy": 1.0,
@@ -99,8 +99,8 @@
       "lora_alpha": 40.0,
       "focal_gamma": 2.3,
       "reddit_vision_vlm_moe": {
-        "candidate_moe_loss": 0.00122,
-        "ratcheted_moe_loss": 0.00122,
+        "candidate_moe_loss": 0.0012,
+        "ratcheted_moe_loss": 0.0012,
         "mean_loss_reduction_pct": 94.17,
         "routing_accuracy": 1.0,
         "pareto_admitted": true,
@@ -135,5 +135,5 @@
       }
     }
   ],
-  "monitor_sha256": "ed44d78affff5e48d3b7735e442f56f4ff9354fac557c9b9c890c15b6f667237"
+  "monitor_sha256": "573dd8e7721978ae093ab41e0210fc277083d68833c5597f5062f4ef1cd2f78f"
 }

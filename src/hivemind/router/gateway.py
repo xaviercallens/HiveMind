@@ -3433,18 +3433,10 @@ def create_router_app(
 
     @app.get("/v1/hivemind/bees/owner-fleet-status")
     async def owner_fleet_status_endpoint(foreground_gaming: bool = False) -> dict[str, Any]:
-        """Return Owner Lead-by-Example RTX 2070 + GCP Tesla T4 co-serving & nocturnal SVD distillation status (#272)."""
+        """Return the configured owner-fleet policy (#272); it is not live telemetry."""
         from hivemind.swarm.rusty_sundials_scientific_bee import OwnerFleetCoServingOrchestrator
 
-        orch = OwnerFleetCoServingOrchestrator()
-        status = orch.fleet_status(foreground_gaming=foreground_gaming)
-        distill = orch.distill_teacher_to_rtx2070_student()
-        s1b = orch.verify_s1b_cross_cpu_reproducibility()
-        return {
-            **status,
-            "latest_nocturnal_distillation": distill,
-            "s1b_cross_cpu_reproducibility": s1b,
-        }
+        return OwnerFleetCoServingOrchestrator.public_status(foreground_gaming=foreground_gaming)
 
     @app.api_route("/get_project_config.php", methods=["GET", "HEAD"])
     @app.api_route("/boinc/get_project_config.php", methods=["GET", "HEAD"])

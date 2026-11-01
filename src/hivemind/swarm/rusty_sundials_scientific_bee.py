@@ -1488,55 +1488,57 @@ class OwnerFleetCoServingOrchestrator:
         self.distillation_history: list[dict[str, Any]] = []
 
     def fleet_status(self, *, foreground_gaming: bool | None = None) -> dict[str, Any]:
-        """Return live co-serving health, VRAM invariants, and routing weights across RTX 2070 + T4."""
+        """Return the configured fleet policy. Nothing here is measured.
+
+        The router runs on Cloud Run and cannot read a GPU, so it reports only the configured caps and states that no
+        live reading exists. Live T4 readings come from the T4 monitor (`scripts/live_user_monitor.py --t4`).
+        `foreground_gaming` is accepted for API compatibility and has no effect on the reported policy.
+        """
         if foreground_gaming is not None:
             self.rtx2070_foreground_gaming = bool(foreground_gaming)
-        rtx_alloc = 0 if self.rtx2070_foreground_gaming else self.RTX2070_ALLOCATED_MIB
-        t4_free = self.T4_TOTAL_VRAM_MIB - self.T4_ALLOCATED_MIB
         return {
             "object": "hivemind.owner_fleet_co_serving_status",
             "issue": 272,
+            "measured": False,
+            "data_source": "CONFIGURED_POLICY_NOT_LIVE_TELEMETRY",
+            "note": (
+                "These are configured limits, not readings. No GPU on this fleet is queried by this endpoint, so "
+                "serving state, allocated memory and loaded models are not reported here."
+            ),
             "zero_fiat_invariant": "0.00 EUR / 0.00 USD (non-monetary HMT points only)",
             "rtx_2070_local_8gb": {
                 "node_id": "owner-rtx2070-local",
                 "hardware_tier": "std_8gb",
-                "vram_cap_mib": self.RTX2070_VRAM_CAP_MIB,
-                "allocated_vram_mib": rtx_alloc,
-                "wddm_headroom_compliant": rtx_alloc <= self.RTX2070_VRAM_CAP_MIB,
-                "foreground_gaming_active": self.rtx2070_foreground_gaming,
-                "preemption_latency_ms": 180.0,
-                "preemption_sla_compliant": 180.0 < self.RTX2070_PREEMPTION_SLA_MS,
-                "serving_active": not self.rtx2070_foreground_gaming,
-                "live_models": (
-                    []
-                    if self.rtx2070_foreground_gaming
-                    else [
-                        "hivemind/coder",
-                        "hivemind/bee-rusty-sundials",
-                        NEXTGEN_SCIENCE_BEE_PUBLIC_ID,
-                    ]
-                ),
-                "cpu_solver_sandbox": "hivemind-solver (1 vCPU inside E15 sandbox)",
+                "configured_vram_cap_mib": self.RTX2070_VRAM_CAP_MIB,
+                "configured_preemption_sla_ms": self.RTX2070_PREEMPTION_SLA_MS,
+                "serving_state": "NOT_MEASURED",
             },
             "gcp_tesla_t4_16gb": {
                 "node_id": "owner-gcp-t4-fleet",
                 "hardware_tier": "xl_16gb_plus",
                 "total_vram_mib": self.T4_TOTAL_VRAM_MIB,
-                "allocated_vram_mib": self.T4_ALLOCATED_MIB,
-                "free_vram_mib": t4_free,
-                "min_free_vram_guard_mib": self.T4_MIN_FREE_VRAM_MIB,
-                "free_vram_guard_compliant": t4_free >= self.T4_MIN_FREE_VRAM_MIB,
-                "opt_hivemind_t4_untouched": True,
-                "resident_validator_socket": "/run/hivemind/resident_validator.sock",
-                "live_models": [
-                    "hivemind/bee-rusty-sundials",
-                    "hivemind/bee-stars",
-                    "hivemind/coder",
-                    "hivemind/coder-plus",
-                    NEXTGEN_SCIENCE_BEE_PUBLIC_ID,
-                ],
+                "configured_min_free_vram_mib": self.T4_MIN_FREE_VRAM_MIB,
+                "serving_state": "NOT_MEASURED",
             },
             "distillation_runs": len(self.distillation_history),
+        }
+
+    @staticmethod
+    def public_status(*, foreground_gaming: bool | None = None) -> dict[str, Any]:
+        """Payload for the public owner-fleet-status endpoints: policy plus explicit NOT_RUN entries."""
+        orch = OwnerFleetCoServingOrchestrator()
+        return {
+            **orch.fleet_status(foreground_gaming=foreground_gaming),
+            "latest_nocturnal_distillation": {
+                "status": "NOT_RUN",
+                "reason": "No teacher-to-student distillation has been executed on the fleet; the SVD retention figure "
+                          "this endpoint used to show came from an assumed singular spectrum, not from an adapter.",
+            },
+            "s1b_cross_cpu_reproducibility": {
+                "status": "NOT_RUN_CROSS_HOST",
+                "reason": "The earlier receipt compared two replicas computed in one process and labelled them as two "
+                          "hosts. A cross-host check needs a second physical machine.",
+            },
         }
 
     def distill_teacher_to_rtx2070_student(
@@ -1546,7 +1548,8 @@ class OwnerFleetCoServingOrchestrator:
         student_rank: int = 16,
         verified_trajectories_count: int = 48,
     ) -> dict[str, Any]:
-        """Project a rank-32 T4 teacher LoRA adapter onto a rank-16 RTX 2070 student adapter via truncated SVD."""
+        """Truncated-SVD energy retention for an ASSUMED singular spectrum sigma_i = (i+1)^-1.35. This is a model of what a
+        projection would keep; it is not computed from any adapter and is not served by the public endpoints."""
         if teacher_rank <= 0 or student_rank <= 0 or student_rank > teacher_rank:
             raise ValueError("Require 0 < student_rank <= teacher_rank")
         # Rapidly decaying singular spectrum typical of physics-verified LoRA updates: sigma_i = 1 / (i + 1)^1.35
@@ -1579,7 +1582,7 @@ class OwnerFleetCoServingOrchestrator:
         rtol: float = 1e-6,
         atol: float = 1e-9,
     ) -> dict[str, Any]:
-        """Run pre-registered S-1(b) cross-CPU reproducibility check (RTX 2070 consumer CPU vs GCP T4 Xeon)."""
+        """Agreement of two replicas computed in this one process. It does not compare two hosts."""
         quorum = run_wave2_parameter_sweep_quorum(family=family, steps=20, dt=0.05, wu_id=f"s1b_{family}")
         rep_a = quorum["replica_a"]["sweep_results"]
         rep_b = quorum["replica_b"]["sweep_results"]

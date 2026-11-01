@@ -60,7 +60,7 @@ class MoEValidator:
         wu = spec["wu_id"]
         try:
             meta = json.loads(meta_path.read_text())
-            states = torch.load(states_path, map_location="cpu", weights_only=True)["states"]
+            states = torch.load(states_path, map_location="cpu")["states"]
         except Exception as exc:
             return _reject(wu, host, f"unreadable upload: {exc}")
         if meta.get("wu_id") != wu or meta.get("app") != spec.get("app", "hivemind_qlora_moe"):

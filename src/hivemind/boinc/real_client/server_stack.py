@@ -286,13 +286,6 @@ class Stack:
                 time.sleep(1)
         return False
 
-    def reconcile_credits(self, ledger_dir: Path | None = None) -> dict[str, Any]:
-        """Synchronize validated HiveMind cobblestone verdicts from ``ledger_dir`` into the BOINC MariaDB tables."""
-        from hivemind.boinc.real_client.boinc_server_scripts import reconcile_boinc_credits
-
-        target_dir = ledger_dir if ledger_dir is not None else (self.root / "hivemind_ledger")
-        return reconcile_boinc_credits(target_dir, self.sql, dbname=self.dbname)
-
 
 def launcher(venv_python: str, repo_src: Path, module: str, args: list[str], env: dict[str, str]) -> str:
     exports = "".join(f"export {k}={v}\n" for k, v in env.items())

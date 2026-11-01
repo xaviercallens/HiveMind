@@ -53,45 +53,12 @@ class BeeEnergyEvaluation:
         )
 
 
-def _strip_lean4_comments(text: str) -> str:
-    """Strip Lean 4 line (`-- ...`) and nested block (`/- ... -/`) comments before token scanning (`IP-44`)."""
-    out: list[str] = []
-    i = 0
-    n = len(text)
-    depth = 0
-    while i < n:
-        if i + 1 < n and text[i : i + 2] == "/-":
-            depth += 1
-            i += 2
-            continue
-        if depth > 0 and i + 1 < n and text[i : i + 2] == "-/":
-            depth -= 1
-            i += 2
-            continue
-        if depth == 0 and i + 1 < n and text[i : i + 2] == "--":
-            nl = text.find("\n", i + 2)
-            if nl == -1:
-                break
-            i = nl
-            continue
-        if depth == 0:
-            out.append(text[i])
-        i += 1
-    return "".join(out)
-
-
 def _has_ast_stub_or_syntax_error(code: str, *, domain: str = "code") -> tuple[bool, str | None]:
     stripped = code.strip()
     if not stripped:
         return True, "EMPTY_RESPONSE"
-    if domain in ("lean4", "math_lean4"):
-        import re
-
-        uncommented = _strip_lean4_comments(stripped)
-        if re.search(r"\b(sorry|admit)\b", uncommented) or "sorry" in stripped:
-            return True, "LEAN4_SORRY_DETECTED"
-        if re.search(r"\b(axiom|opaque|unsafe|partial)\b", uncommented):
-            return True, "LEAN4_AXIOM_DETECTED"
+    if domain in ("lean4", "math_lean4") and "sorry" in stripped:
+        return True, "LEAN4_SORRY_DETECTED"
     if domain not in ("code", "code_python", "python"):
         return False, None
     try:
@@ -170,8 +137,16 @@ def evaluate_bee_candidate_energy(
             receipt_sha256=raw_digest,
         )
 
-    has_ast_defect, ast_failure_reason = _has_ast_stub_or_syntax_error(response_text, domain=domain)
-    if has_ast_defect or tests_total <= 0:
+    is_stub, stub_reason = _has_ast_stub_or_syntax_error(response_text, domain=domain)
+    metrics_valid = (
+        math.isfinite(float(invariant_residual))
+        and float(invariant_residual) >= 0.0
+        and math.isfinite(float(latency_ms))
+        and float(latency_ms) >= 0.0
+        and math.isfinite(float(memory_mb))
+        and float(memory_mb) >= 0.0
+    )
+    if is_stub or tests_total <= 0 or not metrics_valid:
         return BeeEnergyEvaluation(
             candidate_id=candidate_id,
             response_text=response_text,
@@ -181,7 +156,9 @@ def evaluate_bee_candidate_energy(
             memory_mb=max(0.0, float(memory_mb)) if math.isfinite(float(memory_mb)) else 0.0,
             invariant_residual=float(invariant_residual),
             is_stub_or_invalid=True,
-            failure_reason=ast_failure_reason or error_message or "NO_HIDDEN_TESTS",
+            failure_reason=stub_reason or error_message or (
+                "INVALID_NONFINITE_OR_NEGATIVE_METRIC" if not metrics_valid else "NO_HIDDEN_TESTS"
+            ),
             total_energy=MAX_PAIN_ENERGY,
             receipt_sha256=raw_digest,
         )

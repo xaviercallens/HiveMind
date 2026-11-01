@@ -6,26 +6,26 @@
   "online_producer_ids": [
     "PRODUCER-LOCAL-RTX2070-CUDA0"
   ],
-  "total_requests_served": 38,
+  "total_requests_served": 0,
   "total_t4_failovers_handled": 0,
   "producers": [
     {
       "producer_id": "PRODUCER-LOCAL-RTX2070-CUDA0",
       "name": "Local NVIDIA GeForce RTX 2070 (Primary Anchor Producer)",
       "hardware": "NVIDIA GeForce RTX 2070",
-      "device": "cuda:0 (NVML + PTX)",
+      "device": "cuda:0",
       "architecture": "NVIDIA Turing (sm_75) • 8 GB GDDR6 • 4-Bit NF4 Sparse Bee-MoE",
       "role": "PRIMARY_LOCAL_PRODUCER",
       "status": "ONLINE_SERVING",
       "endpoint_url": "http://127.0.0.1:8095/api/v1/producers/infer",
       "openai_compatible_endpoint": "http://127.0.0.1:8095/v1/chat/completions",
       "hivemind_at_home_endpoint": "http://127.0.0.1:8092/api/v1/moe/inference",
-      "vram_allocated_mb": 1527.0,
-      "vram_free_gb": 6.33,
-      "init_elapsed_ms": 1380.52,
+      "vram_allocated_mb": 1908.0,
+      "vram_free_gb": 5.96,
+      "init_elapsed_ms": 2101.16,
       "priority": 1,
-      "requests_served": 18,
-      "last_heartbeat": "2026-11-01T07:28:38",
+      "requests_served": 0,
+      "last_heartbeat": "2026-11-01T18:45:56",
       "notes": "Local RTX 2070 warmed up on cuda:0 and actively serving all local & failover HiveMind inference."
     },
     {
@@ -40,7 +40,7 @@
       "failover_target_id": "PRODUCER-LOCAL-RTX2070-CUDA0",
       "priority": 2,
       "requests_served": 0,
-      "last_heartbeat": "2026-10-30T15:12:09",
+      "last_heartbeat": "2026-11-01T18:45:56",
       "notes": "Work on the Tesla T4 is in progress in the meantime; all T4 traffic automatically fails over to Local RTX 2070 or other active producers."
     }
   ]

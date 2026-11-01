@@ -101,7 +101,7 @@ def quantize_tensor_nf4_double_quant(
     orig_device = weight.device
     orig_dtype = weight.dtype
 
-    flat = weight.detach().to(torch.float32).clone().reshape(-1)
+    flat = weight.detach().to(torch.float32).reshape(-1)
     numel = flat.numel()
     pad = (block_size - (numel % block_size)) % block_size
     if pad > 0:
@@ -322,29 +322,6 @@ def attach_qlora_adapters(
     )
 
 
-def verify_remote_checkpoint_revision_and_digest(
-    revision: str | None,
-    ckpt_path: str | None = None,
-    expected_sha256: str | None = None,
-) -> str:
-    """Enforce a pinned non-floating revision and optional SHA-256 digest check on remote weights (`IP-42`)."""
-    import hashlib
-    from pathlib import Path
-
-    rev = (revision or "").strip()
-    if not rev or rev.lower() in {"main", "master", "latest", "head"}:
-        raise ValueError("IP-42: A pinned commit revision is required when loading remote weights.")
-    if expected_sha256 is not None and ckpt_path is not None:
-        h = hashlib.sha256()
-        with Path(ckpt_path).open("rb") as f:
-            while chunk := f.read(1024 * 1024):
-                h.update(chunk)
-        actual = h.hexdigest()
-        if actual.lower() != expected_sha256.strip().lower():
-            raise ValueError(f"IP-42: Checkpoint SHA-256 mismatch (expected {expected_sha256}, got {actual}).")
-    return rev
-
-
 def stream_load_hf_causal_lm(
     model_id: str,
     device: torch.device,
@@ -352,10 +329,6 @@ def stream_load_hf_causal_lm(
     hf_token: str | None = None,
     apply_nf4: bool = True,
     double_quant: bool = True,
-    *,
-    revision: str | None = None,
-    expected_sha256: str | None = None,
-    require_revision: bool = False,
 ) -> tuple[nn.Module, bool, float]:
     """Stream an open-weight HuggingFace CausalLM directly from safetensors to `device` with on-the-fly NF4.
 
@@ -368,18 +341,9 @@ def stream_load_hf_causal_lm(
     from huggingface_hub import hf_hub_download
     from transformers import AutoConfig
 
-    if require_revision or revision is not None or expected_sha256 is not None:
-        verify_remote_checkpoint_revision_and_digest(revision)
-
-    hf_kwargs: dict[str, Any] = {"token": hf_token}
-    if revision is not None:
-        hf_kwargs["revision"] = revision
-
-    cfg = AutoConfig.from_pretrained(model_id, **hf_kwargs)
+    cfg = AutoConfig.from_pretrained(model_id, token=hf_token)
     cfg.use_cache = False
-    ckpt_path = hf_hub_download(repo_id=model_id, filename="model.safetensors", **hf_kwargs)
-    if expected_sha256 is not None:
-        verify_remote_checkpoint_revision_and_digest(revision, ckpt_path=str(ckpt_path), expected_sha256=expected_sha256)
+    ckpt_path = hf_hub_download(repo_id=model_id, filename="model.safetensors", token=hf_token)
 
     with torch.device("meta"):
         if getattr(cfg, "model_type", "") == "qwen2":

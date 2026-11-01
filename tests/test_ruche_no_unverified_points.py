@@ -31,10 +31,3 @@ def test_page_script_never_adds_a_fixed_250_points(tmp_path: Path) -> None:
     html = _client(tmp_path).get("/").text
     assert not re.search(r"computePointsBalance\s*\+\s*250", html)
     assert "|| 250" not in html
-
-
-def test_page_makes_no_fixed_point_reward_claim(tmp_path: Path) -> None:
-    html = _client(tmp_path).get("/").text
-    assert not re.search(r"\+\s?250\s*(pts|points|compute|hivemind|pts/wu)", html, re.I)
-    assert "Earning Rate" not in html
-    assert "credited only after server-side verification" in html

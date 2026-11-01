@@ -36,122 +36,14 @@ S1_CROSS_CPU_RTOL: float = 1e-6
 S1_CROSS_CPU_ATOL: float = 1e-9
 
 
-def _sql_runner() -> tuple[Callable[[str], str], str] | None:
-    """Return ``(Stack.sql, dbname)`` when ``HIVEMIND_STACK_BASE`` and ``HIVEMIND_BOINC_SRC`` are configured."""
+def _host_directory() -> BoincHostDirectory | None:
+    """Result -> account lookup through the project database, when the validator shim says where the project is (community mode only)."""
     base, src = os.environ.get("HIVEMIND_STACK_BASE"), os.environ.get("HIVEMIND_BOINC_SRC")
     if not base or not src:
         return None
     from hivemind.boinc.real_client.server_stack import Stack
 
-    st = Stack(Path(base), Path(src), sys.executable, Path(__file__).resolve().parents[3])
-    return st.sql, st.dbname
-
-
-def _host_directory() -> BoincHostDirectory | None:
-    """Result -> account lookup through the project database, when the validator shim says where the project is (community mode only)."""
-    pair = _sql_runner()
-    if pair is None:
-        return None
-    sql, _ = pair
-    return BoincHostDirectory(sql)
-
-
-def sync_verified_credit_to_boinc_db(
-    result_id: int | str,
-    cobblestones: float,
-    sql_runner: Callable[[str], str],
-    dbname: str = "hmproj",
-) -> bool:
-    """Synchronize HiveMind's ``verified_credit`` cobblestones into BOINC's ``result``, ``user``, and ``host`` tables."""
-    try:
-        rid = int(result_id)
-        credit = max(0.0, float(cobblestones))
-        if not math.isfinite(credit):
-            return False
-        prefix = f"use {dbname}; " if dbname else ""
-        out = sql_runner(f"{prefix}select userid, hostid, granted_credit from result where id = {rid};")
-        lines = [ln.strip() for ln in out.strip().splitlines() if ln.strip()]
-        if not lines:
-            return False
-        parts = lines[-1].split()
-        if len(parts) < 3 or not parts[0].isdigit() or not parts[1].isdigit():
-            return False
-        uid, hid, prev_credit = int(parts[0]), int(parts[1]), float(parts[2])
-        delta = max(0.0, credit - prev_credit)
-        sql_runner(
-            f"{prefix}"
-            f"update result set granted_credit = {credit:.6f}, claimed_credit = {credit:.6f} where id = {rid}; "
-            f"update user set total_credit = total_credit + {delta:.6f}, expavg_credit = expavg_credit + {delta:.6f} where id = {uid}; "
-            f"update host set total_credit = total_credit + {delta:.6f}, expavg_credit = expavg_credit + {delta:.6f} where id = {hid};"
-        )
-        return True
-    except Exception:
-        return False
-
-
-def reconcile_boinc_credits(
-    ledger_dir: Path,
-    sql_runner: Callable[[str], str],
-    dbname: str = "hmproj",
-) -> dict[str, Any]:
-    """Idempotently synchronize all ``verdict_*.json`` cobblestone credits in ``ledger_dir`` into the BOINC database."""
-    ledger_dir.mkdir(parents=True, exist_ok=True)
-    state_file = ledger_dir / "credit_synced.json"
-    synced: dict[str, Any] = {}
-    if state_file.is_file():
-        try:
-            loaded = json.loads(state_file.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                synced = loaded
-        except Exception:
-            synced = {}
-
-    synced_count = 0
-    already_synced_count = 0
-    total_cobblestones_synced = 0.0
-
-    for vfile in sorted(ledger_dir.glob("verdict_*.json")):
-        try:
-            data = json.loads(vfile.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        if not isinstance(data, dict) or not data.get("valid"):
-            continue
-        host = str(data.get("host", ""))
-        if not host.startswith("result-"):
-            continue
-        rid = host.removeprefix("result-")
-        if not rid.isdigit():
-            continue
-        if rid in synced:
-            already_synced_count += 1
-            continue
-        credit_obj = data.get("grant") or data.get("credit") or {}
-        if isinstance(credit_obj, (int, float)):
-            cobblestones = float(credit_obj)
-        elif isinstance(credit_obj, dict):
-            cobblestones = float(credit_obj.get("cobblestones", 0.0))
-        else:
-            cobblestones = 0.0
-        if cobblestones <= 0.0:
-            continue
-        if sync_verified_credit_to_boinc_db(rid, cobblestones, sql_runner, dbname=dbname):
-            synced[rid] = {
-                "wu_id": data.get("wu_id", ""),
-                "cobblestones": round(cobblestones, 6),
-                "synced_at": time.time(),
-            }
-            synced_count += 1
-            total_cobblestones_synced += cobblestones
-
-    tmp = ledger_dir / "credit_synced.json.tmp"
-    tmp.write_text(json.dumps(synced, indent=2, sort_keys=True), encoding="utf-8")
-    tmp.replace(state_file)
-    return {
-        "synced_count": synced_count,
-        "already_synced_count": already_synced_count,
-        "total_cobblestones_synced": round(total_cobblestones_synced, 6),
-    }
+    return BoincHostDirectory(Stack(Path(base), Path(src), sys.executable, Path(__file__).resolve().parents[3]).sql)
 
 
 def _meta(files: list[str]) -> tuple[dict, list[Path]]:
@@ -217,9 +109,9 @@ def _trajectory_max_rel_diff(
 
 def validate_solver_sweep(
     spec: dict[str, Any],
-    meta: dict[str, Any] | Path,
+    meta: dict[str, Any],
     host: str,
-    peer_meta: dict[str, Any] | Path | None = None,
+    peer_meta: dict[str, Any] | None = None,
 ) -> Verdict:
     """Validate a Wave 2 CPU solver or parameter-sweep workunit (``hivemind_solver_sweep`` / ``hivemind_solver``).
 
@@ -229,10 +121,6 @@ def validate_solver_sweep(
     3. S-1 class-aware cross-CPU trajectory tolerance against ``reference_trajectories`` and/or a quorum-of-2
        replica result (``peer_meta``).
     """
-    if isinstance(meta, Path):
-        meta = json.loads(meta.read_text(encoding="utf-8"))
-    if isinstance(peer_meta, Path):
-        peer_meta = json.loads(peer_meta.read_text(encoding="utf-8"))
     wu = str(spec.get("wu_id", ""))
     if meta.get("wu_id") != wu or meta.get("app") not in SOLVER_SWEEP_APPS:
         return _reject(wu, host, "result is not for this solver workunit/app")
@@ -377,23 +265,13 @@ def run_validation(args: list[str], mv: Any = None, log: Callable[[str], None] =
         if meta.get("app") in TRAIN_APPS and len(paths) >= 2:
             verdict = mv.validate_train(spec, paths[0], paths[1], host, replay_all=replay_all_for_result(args[-1] if args and args[-1].isdigit() else None, _host_directory()))
         elif meta.get("app") == "hivemind_moe_infer":
-            adapter = torch.load(SPEC_DIR / f"{wu}.adapter.pt", map_location="cpu", weights_only=True)["state"]
+            adapter = torch.load(SPEC_DIR / f"{wu}.adapter.pt", map_location="cpu")["state"]
             verdict = mv.validate_infer(spec, paths[0], adapter, host)
         else:
             log("unknown app in result")
             return 3
     LEDGER_DIR.mkdir(parents=True, exist_ok=True)
     (LEDGER_DIR / f"verdict_{wu}_{int(time.time())}.json").write_text(json.dumps(verdict.to_dict(), indent=2, sort_keys=True))
-    if verdict.valid and os.environ.get("HIVEMIND_SYNC_BOINC_CREDIT") == "1" and args and args[-1].isdigit():
-        pair = _sql_runner()
-        if pair is not None:
-            sql, dbname = pair
-            cobblestones = float(
-                verdict.credit
-                if isinstance(verdict.credit, (int, float))
-                else (verdict.grant or {}).get("cobblestones", 0.0)
-            )
-            sync_verified_credit_to_boinc_db(args[-1], cobblestones, sql, dbname=dbname)
     log(f"{wu}: valid={verdict.valid} {verdict.reason}")
     return 0 if verdict.valid else 1
 
@@ -431,7 +309,7 @@ def assimilate(args: list[str]) -> int:
         from hivemind.boinc.real_client.moe_app import state_sha
 
         stem = profile_for_app(meta["app"])["chain_stem"]  # each app has its own chain: a rank-16 adapter cannot continue a rank-8 one
-        state = torch.load(paths[1], map_location="cpu", weights_only=True)["states"][-1]
+        state = torch.load(paths[1], map_location="cpu")["states"][-1]
         out = LEDGER_DIR / f"adapter_{wu}.pt"
         sha = state_sha(state)
         torch.save({"state": state, "sha256": sha, "wu_id": wu}, out)
@@ -439,57 +317,12 @@ def assimilate(args: list[str]) -> int:
         entry["eval_loss_before"], entry["eval_loss_after"] = meta.get("eval_loss_before"), meta.get("eval_loss_after")
         entry["domain"] = meta.get("domain")
         entry["eval_by_domain_before"], entry["eval_by_domain_after"] = meta.get("eval_by_domain_before"), meta.get("eval_by_domain_after")
-        # publish the chain head only when held-out eval loss improves or holds steady (thermodynamic ratchet)
-        head_json_path = LEDGER_DIR / f"{stem}.json"
-        best_loss: float | None = None
-        if head_json_path.is_file():
-            try:
-                prev_head = json.loads(head_json_path.read_text(encoding="utf-8"))
-                prev_loss = prev_head.get("eval_loss_after")
-                if isinstance(prev_loss, (int, float)) and not isinstance(prev_loss, bool) and math.isfinite(prev_loss):
-                    best_loss = float(prev_loss)
-            except (OSError, ValueError):
-                best_loss = None
-        curr_loss = meta.get("eval_loss_after")
-        has_curr_loss = isinstance(curr_loss, (int, float)) and not isinstance(curr_loss, bool) and math.isfinite(curr_loss)
-        ratchet_accepted = best_loss is None or not has_curr_loss or float(curr_loss) <= best_loss
-        entry["ratchet_accepted"] = ratchet_accepted
-        entry["ratchet_best_loss_before_wu"] = best_loss
-        if ratchet_accepted:
-            tmp = LEDGER_DIR / f"{stem}.pt.tmp"
-            torch.save({"state": state, "sha256": sha, "wu_id": wu}, tmp)
-            tmp.replace(LEDGER_DIR / f"{stem}.pt")
-            head_json_path.write_text(
-                json.dumps(
-                    {
-                        "wu_id": wu,
-                        "sha256": sha,
-                        "eval_loss_before": meta.get("eval_loss_before"),
-                        "eval_loss_after": meta.get("eval_loss_after"),
-                        "ratchet_accepted": True,
-                        "t": time.time(),
-                    }
-                ),
-                encoding="utf-8",
-            )
-        domain = meta.get("domain")
-        if isinstance(domain, str) and domain and meta.get("domain_isolated_adapter"):
-            dom_tmp = LEDGER_DIR / f"{stem}_{domain}.pt.tmp"
-            torch.save({"state": state, "sha256": sha, "wu_id": wu, "domain": domain}, dom_tmp)
-            dom_tmp.replace(LEDGER_DIR / f"{stem}_{domain}.pt")
-            (LEDGER_DIR / f"{stem}_{domain}.json").write_text(
-                json.dumps(
-                    {
-                        "wu_id": wu,
-                        "domain": domain,
-                        "sha256": sha,
-                        "eval_loss_before": meta.get("eval_loss_before"),
-                        "eval_loss_after": meta.get("eval_loss_after"),
-                        "t": time.time(),
-                    }
-                ),
-                encoding="utf-8",
-            )
+        # publish the chain head: the work generator starts the next workunit from this adapter
+        tmp = LEDGER_DIR / f"{stem}.pt.tmp"
+        torch.save({"state": state, "sha256": sha, "wu_id": wu}, tmp)
+        tmp.replace(LEDGER_DIR / f"{stem}.pt")
+        (LEDGER_DIR / f"{stem}.json").write_text(json.dumps(
+            {"wu_id": wu, "sha256": sha, "eval_loss_before": meta.get("eval_loss_before"), "eval_loss_after": meta.get("eval_loss_after"), "t": time.time()}))
     elif meta["app"] in SOLVER_SWEEP_APPS:
         sweep_results = meta.get("sweep_results", [])
         cert_bytes = json.dumps(sweep_results, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -516,22 +349,6 @@ def assimilate(args: list[str]) -> int:
         entry["sweep_count"] = len(sweep_results)
         entry["certificate_sha256"] = cert_sha
         entry["certificate_file"] = out_cert.name
-        (LEDGER_DIR / "latest_solver_sweep.json").write_text(
-            json.dumps(
-                {
-                    "wu_id": wu,
-                    "app": meta["app"],
-                    "family": entry["family"],
-                    "parameter_name": entry["parameter_name"],
-                    "sweep_count": entry["sweep_count"],
-                    "certificate_sha256": cert_sha,
-                    "certificate_file": out_cert.name,
-                    "t": entry["t"],
-                },
-                sort_keys=True,
-            ),
-            encoding="utf-8",
-        )
     else:
         entry["completions"] = meta.get("completions", [])
     with open(LEDGER_DIR / "assimilated.jsonl", "a") as f:

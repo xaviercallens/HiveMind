@@ -100,7 +100,7 @@ def run(
     micro: dict[str, str] = {}
     start, losses = 0, []
     if ckpt.exists():
-        c = torch.load(ckpt, map_location=device, weights_only=True)
+        c = torch.load(ckpt, map_location=device)
         a.data.copy_(c["a"])
         b.data.copy_(c["b"])
         start, losses, micro = int(c["step"]), list(c["losses"]), dict(c["micro"])

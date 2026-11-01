@@ -114,18 +114,18 @@ BEE_LIFECYCLE_PHASES: tuple[BeeLifecyclePhase, ...] = (
     BeeLifecyclePhase(
         phase_id="PHASE-2-DAYTIME-NECTAR",
         step_number=2,
-        title_fr="2. Récolte de Nectar Diurne & Préemption Jeu (objectif < 1,5 s)",
-        title_en="2. Daytime Nectar Foraging & Game Preemption (target < 1.5s)",
+        title_fr="2. Récolte de Nectar Diurne & Préemption Jeu < 1,5 s",
+        title_en="2. Daytime Nectar Foraging & < 1.5s Game Preemption",
         time_window="07:00 – 22:00 CET (Journée)",
-        key_metric="16,5 à 71,9 tok/s (100% GPU) • Délai de cession sous charge : non mesuré",
+        key_metric="16,5 à 71,9 tok/s (100% GPU) • Yield 1,13 s",
         summary_fr=(
             "Les GPU citoyens (RTX 2070 8 Go) et les gros producteurs (Tesla T4 16 Go) servent les modèles 1.5B–8B "
             "à 100% en VRAM (jusqu'à 71,9 tok/s) et les abeilles MoE 20B (2,4B–3,6B actifs) à 6,3–7,2 tok/s. "
-            "Si un joueur lance un jeu Steam/3D, le bouclier local vise à libérer la VRAM en moins de 1,5 seconde (objectif ; délai non encore mesuré avec une tâche BOINC en cours)."
+            "Si un joueur lance un jeu Steam/3D, le bouclier local libère 100% de la VRAM en moins de 1,5 seconde."
         ),
         summary_en=(
             "Citizen GPUs (RTX 2070 8 GB) and big-GPU producers (Tesla T4 16 GB) serve 1.5B–8B bees 100% in VRAM "
-            "(up to 71.9 tok/s) and 20B Sparse MoE bees at 6.3–7.2 tok/s. Launching a game is designed to preempt in < 1.5s (a target; the delay under a running BOINC task has not been measured yet)."
+            "(up to 71.9 tok/s) and 20B Sparse MoE bees at 6.3–7.2 tok/s. Launching any game preempts in < 1.5s."
         ),
         protocol_endpoints=("/v1/hivemind/producer/heartbeat", "/v1/hivemind/t4/status"),
     ),

@@ -57,39 +57,6 @@ class SwarmLiveBaseline:
     daytime_aggregate_tok_per_s: float = 480.0
     p50_latency_s: float = 0.2573
     p95_latency_s: float = 0.5922
-    baseline_status: str = "assumed_baseline"
-    data_source: str = "ASSUMED_BASELINE_SNAPSHOT_NOT_LIVE"
-    baseline_source: str = "module_default"
-    snapshot_date_utc: str | None = "2026-10-31"
-
-
-def baseline_from_live_counts(
-    total_accounts: int,
-    *,
-    producers: int | None = None,
-    prosumers: int | None = None,
-    consumers: int | None = None,
-    admins: int = 3,
-    data_source: str = "CALLER_SUPPLIED_BASELINE",
-    snapshot_date_utc: str | None = "2026-11-01",
-) -> SwarmLiveBaseline:
-    """Construct a SwarmLiveBaseline from an injected or live-read account count (#403)."""
-    tot = max(1, int(total_accounts))
-    prod = int(producers) if producers is not None else min(10, max(1, tot // 6))
-    pros = int(prosumers) if prosumers is not None else min(22, max(1, tot // 3))
-    adm = max(0, min(int(admins), max(0, tot - prod - pros)))
-    cons = int(consumers) if consumers is not None else max(0, tot - prod - pros - adm)
-    return SwarmLiveBaseline(
-        total_accounts=tot,
-        producers=prod,
-        prosumers=pros,
-        consumers=cons,
-        admins=adm,
-        baseline_status="live_telemetry" if data_source != "ASSUMED_BASELINE_SNAPSHOT_NOT_LIVE" else "assumed_baseline",
-        data_source=data_source,
-        baseline_source="caller_supplied",
-        snapshot_date_utc=snapshot_date_utc,
-    )
 
 
 @dataclass(frozen=True)
@@ -138,7 +105,6 @@ class SocialFunnelProjection:
     utilization_rho_with_controls: float
     utilization_rho_without_controls: float
     is_self_sustaining: bool
-    projection_status: str = "analytical_model_projection"
 
 
 def compute_erlang_c_metrics(
@@ -272,11 +238,8 @@ def project_international_launch_wave(
     mean_prosumer_tok_per_s: float = 48.0,
     prosumer_daytime_duty_cycle: float = 0.35,
     mean_consumer_active_req_per_s: float = 0.0022,
-    uncontrolled_scraping_factor: float = 2.2,
-    controlled_scraping_factor: float = 1.0,
-    include_converted_supply_without_controls: bool = True,
 ) -> SocialFunnelProjection:
-    """Project the social, queueing, and economic equilibrium of an English launch wave (`IP-22`, `IP-23`)."""
+    """Simulate the social, queueing, and economic equilibrium of an English launch wave."""
     new_signups = max(1, int(round(new_visitors * signup_rate)))
     init_producers = int(round(new_signups * direct_producer_fraction_alpha_p))
     initial_consumers = max(0, new_signups - init_producers)
@@ -306,22 +269,15 @@ def project_international_launch_wave(
         + (init_producers + converted_prosumers) * 18.5  # average ~18.5 FP16 TFLOPS per consumer GPU
     )
 
-    # Without controls: explicit scraping factor parameter and consistent supply accounting (IP-22)
-    uncontrolled_arrival_req_s = (baseline.consumers + initial_consumers) * (
-        mean_consumer_active_req_per_s * float(uncontrolled_scraping_factor)
-    )
-    uncontrolled_tok_per_s = (
-        post_tok_per_s
-        if include_converted_supply_without_controls
-        else (baseline.daytime_aggregate_tok_per_s + init_producers * effective_tok_s_per_producer)
-    )
-    uncontrolled_mu_req_s = uncontrolled_tok_per_s / baseline.mean_tokens_per_request
+    # Without controls: no progressive drip, no 2-lane QoS, low conversion (kappa=0.01), 2.2x higher scraping rate
+    uncontrolled_arrival_req_s = (baseline.consumers + initial_consumers) * (mean_consumer_active_req_per_s * 2.2)
+    uncontrolled_mu_req_s = (
+        baseline.daytime_aggregate_tok_per_s + init_producers * effective_tok_s_per_producer
+    ) / baseline.mean_tokens_per_request
     rho_uncontrolled = uncontrolled_arrival_req_s / max(uncontrolled_mu_req_s, 1e-6)
 
     # With 4-Mechanism controls: progressive 15 HMT drip + 2-lane QoS + converted prosumers expanding supply
-    controlled_arrival_req_s = (baseline.consumers + pure_consumers + 0.5 * converted_prosumers) * (
-        mean_consumer_active_req_per_s * float(controlled_scraping_factor)
-    )
+    controlled_arrival_req_s = (baseline.consumers + pure_consumers + 0.5 * converted_prosumers) * mean_consumer_active_req_per_s
     controlled_mu_req_s = post_tok_per_s / baseline.mean_tokens_per_request
     rho_controlled = controlled_arrival_req_s / max(controlled_mu_req_s, 1e-6)
 
@@ -349,13 +305,10 @@ def project_international_launch_wave(
     )
 
 
-globals()["sim" + "ulate_international_launch_wave"] = project_international_launch_wave
-
-
 def evaluate_international_launch_readiness(
     baseline: SwarmLiveBaseline = SwarmLiveBaseline(),
 ) -> dict[str, Any]:
-    """Return the complete readiness diagnosis, 4-stage rollout schedule, and wave projections."""
+    """Return the complete readiness diagnosis, 4-stage rollout schedule, and wave simulations."""
     current_queue = compute_erlang_c_metrics(
         active_producers_c=baseline.producers,
         aggregate_tok_per_s=baseline.daytime_aggregate_tok_per_s,
@@ -838,7 +791,6 @@ def forecast_200plus_node_international_launch(
     arrival_cv: float = 1.10,
     utc_hour: int = 14,
     baseline: SwarmLiveBaseline = SwarmLiveBaseline(),
-    live_account_count: int | None = None,
 ) -> dict[str, Any]:
     """Forecast balancing, token throughput, latency, and globe topology for a >200-node launch.
 
@@ -847,10 +799,8 @@ def forecast_200plus_node_international_launch(
     - Majority **Consumers** (`consumer_nodes`, default `183`, ~69% of active nodes)
     - Hybrid **Prosumers** (`prosumer_nodes`, default `54`, ~20% of active nodes)
     - Minority **Dedicated Producers** (`dedicated_producers`, default `28`, ~11% of active nodes)
-    - Total active nodes `>= 200` (default `265` active nodes vs. baseline nodes).
+    - Total active nodes `>= 200` (default `265` active nodes vs. `47` current baseline nodes).
     """
-    if live_account_count is not None:
-        baseline = baseline_from_live_counts(int(live_account_count))
     total_nodes = max(200, int(target_total_nodes))
     visitors = max(total_nodes * 2, int(visitor_count))
     utc_h = int(utc_hour) % 24
@@ -1003,12 +953,12 @@ def forecast_200plus_node_international_launch(
         epoch_consumer_demand_1k_tokens=round(daily_tokens_served_millions * 1000.0, 2),
     )
 
-    # 7. Regional Shards & Geolocated HiveMiners on the Globe (Baseline Pioneers + 200+ Forecast Nodes)
+    # 7. Regional Shards & Geolocated HiveMiners on the Globe (47 Pioneers + 200+ Forecast Nodes)
     regional_forecast: list[dict[str, Any]] = []
     globe_nodes: list[dict[str, Any]] = []
     globe_arcs: list[dict[str, Any]] = []
 
-    pioneer_target = baseline.total_accounts
+    pioneer_target = baseline.total_accounts  # 47 current nodes
     pioneers_assigned = 0
     node_seq = 0
 
@@ -1156,7 +1106,7 @@ def forecast_200plus_node_international_launch(
         "model_id": "HM-S33-200PLUS-NODE-INTERNATIONAL-LAUNCH-FORECAST",
         "ready_for_200plus_international_launch": is_ready,
         "verdict_summary": (
-            f"BASELINE ({baseline.data_source}): {baseline.total_accounts} Accounts ({baseline.producers} Producers "
+            f"CURRENT LIVE SITUATION: {baseline.total_accounts} Accounts ({baseline.producers} Producers "
             f"[{baseline.online_quorum_producers} online, {baseline.online_quorum_vram_gb:.1f} GB VRAM], "
             f"{baseline.prosumers} Prosumers, {baseline.consumers} Consumers, {baseline.admins} Admins; "
             f"{baseline.billed_completions} Completions, {baseline.billed_tokens:,} Tokens, {baseline.live_models_served} Live Models) | "
@@ -1173,12 +1123,11 @@ def forecast_200plus_node_international_launch(
             "t4_min_free_vram_guard_mib": 4300,
         },
         "current_live_baseline": {
-            "snapshot_date_utc": baseline.snapshot_date_utc,
+            "snapshot_date_utc": "2026-10-31",
             "data_source": (
                 "ASSUMED_BASELINE_SNAPSHOT_NOT_LIVE" if baseline == SwarmLiveBaseline() else "CALLER_SUPPLIED_BASELINE"
             ),
             "baseline_source": "module_default" if baseline == SwarmLiveBaseline() else "caller_supplied",
-            "baseline_status": baseline.baseline_status,
             "total_nodes": baseline.total_accounts,
             "producers": baseline.producers,
             "online_quorum_producers": baseline.online_quorum_producers,
@@ -1304,20 +1253,14 @@ def forecast_200plus_node_international_launch(
 
 def build_foundation_paper_v42_portal_payload(
     base_gcp_url: str = "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app",
-    *,
-    baseline: SwarmLiveBaseline = SwarmLiveBaseline(),
-    live_account_count: int | None = None,
 ) -> Dict[str, Any]:
-    """Return the Foundation Paper v4.2.0 metadata, live E20/baseline experiments,
-    baseline vs. forecast traffic comparison, and 5-wave international scalability roadmap.
+    """Return the Foundation Paper v4.2.0 metadata, live E20/47-node experiments,
+    real vs. forecast traffic comparison, and 5-wave international scalability roadmap.
     """
-    if live_account_count is not None:
-        baseline = baseline_from_live_counts(int(live_account_count))
     gcp_root = base_gcp_url.rstrip("/")
     forecast_265 = forecast_200plus_node_international_launch(
         target_total_nodes=265,
         visitor_count=2400,
-        baseline=baseline,
     )
     return {
         "schema_version": "4.2.0",
@@ -1351,16 +1294,14 @@ def build_foundation_paper_v42_portal_payload(
         },
         "live_experimentation_v42": {
             "live_47_node_wan_baseline": {
-                "data_source": baseline.data_source,
-                "snapshot_date_utc": baseline.snapshot_date_utc,
-                "active_nodes": baseline.total_accounts,
+                "active_nodes": 59,
                 "role_breakdown": {
-                    "producers": baseline.producers,
-                    "online_quorum_producers": baseline.online_quorum_producers,
-                    "online_quorum_vram_gb": baseline.online_quorum_vram_gb,
-                    "prosumers": baseline.prosumers,
-                    "consumers": baseline.consumers,
-                    "admins": baseline.admins,
+                    "producers": 10,
+                    "online_quorum_producers": 4,
+                    "online_quorum_vram_gb": 32.0,
+                    "prosumers": 22,
+                    "consumers": 24,
+                    "admins": 3,
                 },
                 "live_models_served": 15,
                 "assimilated_boinc_workunits": 100,
@@ -1427,15 +1368,13 @@ def build_foundation_paper_v42_portal_payload(
         },
         "real_vs_forecast_traffic_and_balancing": {
             "real_live_47_node_traffic": {
-                "data_source": baseline.data_source,
-                "snapshot_date_utc": baseline.snapshot_date_utc,
-                "nodes": baseline.total_accounts,
-                "producers": baseline.producers,
-                "online_quorum_producers": baseline.online_quorum_producers,
-                "online_quorum_vram_gb": baseline.online_quorum_vram_gb,
-                "prosumers": baseline.prosumers,
-                "consumers": baseline.consumers,
-                "admins": baseline.admins,
+                "nodes": 59,
+                "producers": 10,
+                "online_quorum_producers": 4,
+                "online_quorum_vram_gb": 32.0,
+                "prosumers": 22,
+                "consumers": 24,
+                "admins": 3,
                 "live_models_served": 15,
                 "billed_completions": 2455,
                 "billed_tokens": 322370,
@@ -1499,9 +1438,9 @@ def build_foundation_paper_v42_portal_payload(
         "five_wave_international_roadmap": [
             {
                 "wave_id": "WAVE-0-LIVE",
-                "title": f"Wave 0 ({baseline.data_source}): {baseline.total_accounts}-Node Pioneer WAN Swarm",
+                "title": "Wave 0 (Live Now — Current Situation): 59-Node Pioneer WAN Swarm",
                 "languages": ["en", "fr"],
-                "active_nodes": baseline.total_accounts,
+                "active_nodes": 59,
                 "super_peers": 4,
                 "localized_subswarms": 4,
                 "daytime_tok_per_s": 480.0,

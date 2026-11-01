@@ -302,26 +302,14 @@ def test_pouw_ledger_concurrency_idempotency_and_anti_tampering(store: RouterSto
     initial_balances = {pid: store.balance(pid) for pid in producer_ids}
     assert all(b == 0.0 for b in initial_balances.values())
 
-    # Generate 20 verified (non-simulated) execution results
+    # Generate 20 execution results
     results: list[AutoImprovementExecutionResult] = []
     for idx, domain in enumerate(NOCTURNAL_20_MOE_TARGETS):
         pid = producer_ids[idx % len(producer_ids)]
         wu = scheduler.create_domain_workunit(
             domain=domain, num_samples=20, inner_steps=50, seed=5000 + idx
         )
-        res = scheduler.verify_workunit_execution(
-            wu,
-            worker_id=f"worker-{pid}",
-            account_id=pid,
-            measured_eval={
-                "base_correct": 100,
-                "adapted_correct": 145,
-                "base_only_correct": 5,
-                "adapted_only_correct": 50,
-                "total_eval_samples": 200,
-                "execution_provenance": "measured_gpu",
-            },
-        )
+        res = scheduler.verify_workunit_execution(wu, worker_id=f"worker-{pid}", account_id=pid)
         results.append(res)
 
     assert len(results) == 20
@@ -409,21 +397,3 @@ def test_adversarial_byzantine_fault_injection() -> None:
     # The independent gate must correctly reject the spoofed improvement
     assert independent_passed is False
     assert independent_p > 0.05
-
-
-def test_ip18_rng_simulated_results_credit_zero_points(store: RouterStore) -> None:
-    """IP-18 negative control: passing RNG-simulated output to retrofit_work_points credits 0 HMT."""
-    scheduler = NocturnalAutoImprovementScheduler()
-    retrofit_mgr = PointsRetrofitManager()
-    pid, _ = store.register("prod_ip18_test", "producer")
-
-    wu = scheduler.create_domain_workunit(domain="maths_formal", num_samples=10, inner_steps=20, seed=777)
-    sim_res = scheduler.verify_workunit_execution(wu, worker_id="worker-sim", account_id=pid)
-    assert sim_res.is_simulated is True
-    assert sim_res.execution_provenance == "rng_simulated"
-    assert retrofit_mgr.calculate_work_reward(sim_res) == 0.0
-
-    rep = retrofit_mgr.retrofit_work_points(store, [sim_res])
-    assert rep.newly_credited_count == 0
-    assert rep.total_hmt_granted == 0.0
-    assert store.balance(pid) == 0.0

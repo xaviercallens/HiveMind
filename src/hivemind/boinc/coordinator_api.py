@@ -12,9 +12,7 @@ Provides:
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
-import os
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -68,114 +66,6 @@ class WorkunitRequestPayload(BaseModel):
     vram_gb: float = 8.0
 
 
-class RealBoincLedgerBridge:
-    """Reads and summarizes a real BOINC project server's ``hivemind_ledger`` directory."""
-
-    def __init__(self, ledger_dir: Path) -> None:
-        self.ledger_dir = Path(ledger_dir)
-
-    def _read_json_if_exists(self, name: str) -> dict[str, Any] | None:
-        p = self.ledger_dir / name
-        if not p.is_file():
-            return None
-        try:
-            data = json.loads(p.read_text(encoding="utf-8"))
-            return data if isinstance(data, dict) else None
-        except Exception:
-            return None
-
-    def summarize(self) -> dict[str, Any]:
-        assimilated_total = 0
-        assimilated_by_app: dict[str, int] = {}
-        assimilated_by_domain: dict[str, int] = {}
-        latest_eval_by_domain: dict[str, float] = {}
-
-        jsonl_path = self.ledger_dir / "assimilated.jsonl"
-        if jsonl_path.is_file():
-            for line in jsonl_path.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                except Exception:
-                    continue
-                if not isinstance(entry, dict):
-                    continue
-                assimilated_total += 1
-                app_name = str(entry.get("app", "unknown"))
-                assimilated_by_app[app_name] = assimilated_by_app.get(app_name, 0) + 1
-                dom = entry.get("domain")
-                if isinstance(dom, str) and dom:
-                    assimilated_by_domain[dom] = assimilated_by_domain.get(dom, 0) + 1
-                    loss_after = entry.get("eval_loss_after")
-                    if isinstance(loss_after, (int, float)):
-                        latest_eval_by_domain[dom] = float(loss_after)
-                eval_map = entry.get("eval_by_domain_after")
-                if isinstance(eval_map, dict):
-                    for d_key, d_val in eval_map.items():
-                        if isinstance(d_val, (int, float)):
-                            latest_eval_by_domain[str(d_key)] = float(d_val)
-
-        verdicts_total = 0
-        verdicts_valid = 0
-        verdicts_rejected = 0
-        verified_cobblestones_total = 0.0
-        verified_flops_total = 0.0
-        credits_by_host: dict[str, dict[str, Any]] = {}
-
-        if self.ledger_dir.is_dir():
-            for vfile in sorted(self.ledger_dir.glob("verdict_*.json")):
-                try:
-                    vdata = json.loads(vfile.read_text(encoding="utf-8"))
-                except Exception:
-                    continue
-                if not isinstance(vdata, dict):
-                    continue
-                verdicts_total += 1
-                host = str(vdata.get("host", "host"))
-                host_rec = credits_by_host.setdefault(
-                    host,
-                    {
-                        "valid_workunits": 0,
-                        "rejected_workunits": 0,
-                        "cobblestones": 0.0,
-                        "flops_granted": 0.0,
-                    },
-                )
-                if vdata.get("valid"):
-                    verdicts_valid += 1
-                    host_rec["valid_workunits"] += 1
-                    credit = vdata.get("grant") or vdata.get("credit") or {}
-                    if isinstance(credit, dict):
-                        cobb = float(credit.get("cobblestones", 0.0))
-                        flops = float(credit.get("flops_granted", cobb * 432.0e9))
-                        verified_cobblestones_total += cobb
-                        verified_flops_total += flops
-                        host_rec["cobblestones"] = round(host_rec["cobblestones"] + cobb, 6)
-                        host_rec["flops_granted"] = round(host_rec["flops_granted"] + flops, 2)
-                else:
-                    verdicts_rejected += 1
-                    host_rec["rejected_workunits"] += 1
-
-        return {
-            "ledger_dir": str(self.ledger_dir),
-            "assimilated_total": assimilated_total,
-            "assimilated_by_app": assimilated_by_app,
-            "assimilated_by_domain": assimilated_by_domain,
-            "latest_eval_by_domain": latest_eval_by_domain,
-            "latest_adapter": self._read_json_if_exists("latest_adapter.json"),
-            "latest_adapter_big": self._read_json_if_exists("latest_adapter_big.json"),
-            "latest_solver_sweep": self._read_json_if_exists("latest_solver_sweep.json"),
-            "verdicts_total": verdicts_total,
-            "verdicts_valid": verdicts_valid,
-            "verdicts_rejected": verdicts_rejected,
-            "verified_cobblestones_total": round(verified_cobblestones_total, 6),
-            "verified_flops_total": round(verified_flops_total, 2),
-            "credits_by_host": credits_by_host,
-        }
-
-
 class BOINCCoordinatorService:
     """Central Coordinator managing E=8 BTM branches, Workunits, Validation, and Multi-Krum."""
 
@@ -186,7 +76,6 @@ class BOINCCoordinatorService:
         base_model_sha256: str,
         shards_dir: Path | None = None,
         vocab_size: int = 4096,
-        boinc_ledger_dir: Path | None = None,
     ) -> None:
         self.config = config
         self.base_model_sha256 = base_model_sha256
@@ -195,13 +84,6 @@ class BOINCCoordinatorService:
         self.checkpoints_dir = ARTIFACTS_ROOT / "checkpoints"
         self.shards_dir.mkdir(parents=True, exist_ok=True)
         self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
-        self.boinc_ledger_dir = Path(
-            boinc_ledger_dir
-            if boinc_ledger_dir is not None
-            else os.environ.get("HIVEMIND_LEDGER_DIR", str(ARTIFACTS_ROOT / "boinc_ledger"))
-        )
-        self.ledger_bridge = RealBoincLedgerBridge(self.boinc_ledger_dir)
-        self._synced_boinc_verdicts: set[str] = set()
 
         # Phase A: Initialize E=8 independent domain branches from identical W_0
         self.branches: dict[str, ExpertBranchState] = initialize_domain_branches(
@@ -410,53 +292,6 @@ class BOINCCoordinatorService:
         self.pending_branch_deltas[branch_name] = {}
         return res
 
-    def get_boinc_ledger_summary(self) -> dict[str, Any]:
-        """Return a structured summary of the real BOINC project server's ``hivemind_ledger`` directory."""
-        return self.ledger_bridge.summarize()
-
-    def sync_from_real_boinc_ledger(
-        self,
-        host_to_steam_id64: dict[str, str] | None = None,
-    ) -> dict[str, Any]:
-        """Idempotently ingest validated/rejected BOINC verdicts from ``boinc_ledger_dir`` into ``reputation_ledger``."""
-        mapping = host_to_steam_id64 or {}
-        ingested = 0
-        if self.boinc_ledger_dir.is_dir():
-            for vfile in sorted(self.boinc_ledger_dir.glob("verdict_*.json")):
-                if vfile.name in self._synced_boinc_verdicts:
-                    continue
-                try:
-                    data = json.loads(vfile.read_text(encoding="utf-8"))
-                except Exception:
-                    continue
-                if not isinstance(data, dict):
-                    continue
-                host = str(data.get("host", "boinc-host"))
-                steam_id64 = str(mapping.get(host, f"boinc:{host}"))
-                rec = self.reputation_ledger.setdefault(
-                    steam_id64,
-                    NodeReputationRecord(steam_id64=steam_id64, worker_id=host),
-                )
-                if data.get("valid"):
-                    rec.validated_workunits += 1
-                    credit = data.get("grant") or data.get("credit") or {}
-                    cobb = float(credit.get("cobblestones", 0.0)) if isinstance(credit, dict) else 0.0
-                    flops = float(credit.get("flops_granted", cobb * 432.0e9)) if isinstance(credit, dict) else 0.0
-                    rec.contributed_tflops = round(rec.contributed_tflops + flops / 1e12, 6)
-                    rec.minted_api_credits = round(rec.minted_api_credits + max(cobb, 0.1), 4)
-                    rec.reputation_score = min(100.0, round(rec.reputation_score + 2.5, 2))
-                else:
-                    rec.rejected_workunits += 1
-                    rec.reputation_score = 0.0
-                    rec.flagged_byzantine = True
-                self._synced_boinc_verdicts.add(vfile.name)
-                ingested += 1
-        return {
-            "ingested_verdicts": ingested,
-            "total_tracked_verdicts": len(self._synced_boinc_verdicts),
-            "registered_nodes": len(self.reputation_ledger),
-        }
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -553,16 +388,6 @@ def create_coordinator_fastapi_app(coordinator: BOINCCoordinatorService, identit
             }
             for sid, r in coordinator.reputation_ledger.items()
         }
-
-    @app.get("/boinc/v1/ledger/summary")
-    def get_boinc_ledger_summary() -> dict[str, Any]:
-        return coordinator.get_boinc_ledger_summary()
-
-    @app.post("/boinc/v1/ledger/sync")
-    def sync_boinc_ledger(payload: dict[str, Any] | None = None) -> dict[str, Any]:
-        body = payload or {}
-        host_map = body.get("host_to_steam_id64") if isinstance(body.get("host_to_steam_id64"), dict) else None
-        return coordinator.sync_from_real_boinc_ledger(host_to_steam_id64=host_map)
 
     @app.post("/v1/chat/completions", response_model=None)
     def openai_chat_completions_gateway(payload: dict[str, Any], request: Request) -> Any:

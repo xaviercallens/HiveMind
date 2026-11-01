@@ -32,7 +32,11 @@ from typing import Any
 
 @dataclass(frozen=True)
 class SwarmLiveBaseline:
-    """Empirical live situation measured on hivemind-openrouter and hivemind-at-home-ruche (2026-10-31)."""
+    """Hard-coded snapshot of the live situation as recorded on 2026-10-31. These defaults are constants, not a live read.
+
+    The router's owner endpoint reported 58 real accounts on 2026-11-01, so a payload built from the defaults must say
+    it is an assumed baseline (see ``baseline_source``); a caller that reads the live router passes its own values.
+    """
 
     total_accounts: int = 59
     producers: int = 10
@@ -1120,7 +1124,10 @@ def forecast_200plus_node_international_launch(
         },
         "current_live_baseline": {
             "snapshot_date_utc": "2026-10-31",
-            "data_source": "REAL_LIVE_CLOUD_RUN_TELEMETRY",
+            "data_source": (
+                "ASSUMED_BASELINE_SNAPSHOT_NOT_LIVE" if baseline == SwarmLiveBaseline() else "CALLER_SUPPLIED_BASELINE"
+            ),
+            "baseline_source": "module_default" if baseline == SwarmLiveBaseline() else "caller_supplied",
             "total_nodes": baseline.total_accounts,
             "producers": baseline.producers,
             "online_quorum_producers": baseline.online_quorum_producers,

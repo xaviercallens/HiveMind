@@ -2,34 +2,34 @@
   "schema_version": "hivemind.rtx2070_4h_moe_experimentator.v1",
   "generator": "scripts/run_4h_rtx2070_moe_bee_experimentator.py",
   "cadence_cron": "0 */4 * * *",
-  "timestamp_utc": "2026-10-31T23:05:30Z",
-  "implemented_roadmap_pr": "PR-IP-07 (IP-42, IP-44, IP-52) + PR-IP-08 (IP-43) + PR-IP-10 (IP-19, IP-20, IP-34, IP-35, IP-36, IP-37) + PR-IP-11 (IP-22, IP-23, IP-48) + PR-IP-13 (IP-50, IP-63) + Wave 3 Scientific MoE Bees",
+  "timestamp_utc": "2026-11-01T03:09:32Z",
+  "implemented_roadmap_pr": "PR-IP-07 (IP-42, IP-44, IP-52) + PR-IP-08 (IP-43) + PR-IP-10 (IP-19, IP-20, IP-34, IP-35, IP-36, IP-37) + PR-IP-11 (IP-22, IP-23, IP-48, #403) + PR-IP-13 (IP-50, IP-63) + Wave 3 Scientific MoE Bees",
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-10-31T23:05:30Z",
+    "timestamp_utc": "2026-11-01T03:09:32Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
-    "cuda_available": false,
-    "device": "nvml:cuda:0 (torch+cpu host)",
+    "cuda_available": true,
+    "device": "cuda:0",
     "compute_capability": "7.5",
-    "temperature_c": 26.0,
-    "gpu_utilization_pct": 13.0,
-    "power_draw_w": 9.38,
+    "temperature_c": 27.0,
+    "gpu_utilization_pct": 4.0,
+    "power_draw_w": 9.07,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1464.0,
-    "memory_free_mib": 6543.0,
+    "memory_used_mib": 1457.0,
+    "memory_free_mib": 6550.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
     "wddm_envelope_compliant": true,
     "headroom_guard_compliant": true,
-    "graphics_clock_mhz": 300.0,
+    "graphics_clock_mhz": 405.0,
     "max_graphics_clock_mhz": 2145.0,
     "memory_clock_mhz": 405.0,
-    "host_tensor_gflops": 280.5,
-    "measured_fp32_tflops": 9.88,
-    "measured_fp16_tensor_tflops": 39.54,
-    "effective_sparse_moe_nf4_tflops": 65.24,
-    "microbench_elapsed_ms": 68.4
+    "host_tensor_gflops": 0.0,
+    "measured_fp32_tflops": 5.63,
+    "measured_fp16_tensor_tflops": 20.01,
+    "effective_sparse_moe_nf4_tflops": 37.03,
+    "microbench_elapsed_ms": 285.66
   },
   "stage1_dry_run": {
     "stage": "stage1_dry_run_and_wddm_residency",
@@ -138,7 +138,7 @@
       "batch_tokens_routed": 512,
       "unique_experts_selected": 126,
       "aux_loss": 2.002409,
-      "routing_latency_ms": 1.912
+      "routing_latency_ms": 2.73
     },
     "wave3_scientific_bee_routing": [
       {
@@ -191,7 +191,7 @@
     "all_wave3_routes_matched": true,
     "live_8095_inference_probe": {
       "online": true,
-      "latency_ms": 16.45,
+      "latency_ms": 14.8,
       "model": "hivemind/qwen2.5-coder-7b-moe",
       "served_by_producer": "PRODUCER-LOCAL-RTX2070-CUDA0",
       "s21_expert_routing": {}
@@ -202,6 +202,7 @@
     "ip22_equal_assumptions_rho_with_controls": 0.1577,
     "ip22_equal_assumptions_rho_without_controls": 0.1577,
     "ip22_equal_rho_passed": true,
+    "issue403_assumed_baseline_and_injected_58_passed": true,
     "ip48_lane_emden_n15_drift": 0.0,
     "ip48_lane_emden_wrong_n_drift": 0.214039,
     "ip48_passed": true,
@@ -209,5 +210,5 @@
     "ip50_governor_fail_closed_passed": true
   },
   "overall_experiment_passed": true,
-  "receipt_sha256": "943182130defc1bf21b230f8e5f414dfb10b6e632ac2e75e8b06308b379e603b"
+  "receipt_sha256": "bc9448b62f7410852d6761a788da788c55c72a4437d703021251f107893d4736"
 }

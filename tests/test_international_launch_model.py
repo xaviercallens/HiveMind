@@ -369,3 +369,49 @@ def test_international_launch_views_modular_separation() -> None:
     assert html_planet == international_launch_model.render_gcp_planet_forecast_html()
     assert html_paper == international_launch_model.render_foundation_paper_portal_html()
 
+
+def test_default_launch_baseline_is_labelled_assumed_with_no_snapshot_or_real_live_claim() -> None:
+    """Issue #403 / IP-22: default baseline carries 'assumed_baseline' and no snapshot/REAL_LIVE claim."""
+    report = forecast_200plus_node_international_launch()
+    cur = report["current_live_baseline"]
+    assert cur["data_source"] == "assumed_baseline"
+    assert cur["baseline_status"] == "assumed_baseline"
+    assert cur["snapshot_date_utc"] is None
+    assert "REAL_LIVE" not in str(cur["data_source"]).upper()
+    assert "assumed_baseline" in report["verdict_summary"]
+
+    paper = build_foundation_paper_v42_portal_payload()
+    assert paper["live_experimentation_v42"]["live_47_node_wan_baseline"]["data_source"] == "assumed_baseline"
+    assert paper["live_experimentation_v42"]["live_47_node_wan_baseline"]["snapshot_date_utc"] is None
+    assert paper["real_vs_forecast_traffic_and_balancing"]["real_live_47_node_traffic"]["data_source"] == "assumed_baseline"
+
+
+def test_injected_live_account_count_58_propagates_everywhere_and_views_contain_no_literal_59() -> None:
+    """Issue #403: injected count of 58 appears everywhere in forecast, paper payload, and HTML views."""
+    import re
+    from hivemind.economy import international_launch_views
+
+    views_src = Path(international_launch_views.__file__).read_text(encoding="utf-8")
+    assert re.search(r"\b59\b", views_src) is None
+    assert "REAL_LIVE" not in views_src
+
+    report_58 = forecast_200plus_node_international_launch(live_account_count=58)
+    assert report_58["current_live_baseline"]["total_nodes"] == 58
+    assert report_58["current_live_baseline"]["data_source"] == "live_router_read"
+    assert report_58["hiveminers_on_globe"]["current_pioneer_nodes_count"] == 58
+    assert "58 Accounts" in report_58["verdict_summary"]
+
+    paper_58 = build_foundation_paper_v42_portal_payload(live_account_count=58)
+    assert paper_58["live_experimentation_v42"]["live_47_node_wan_baseline"]["active_nodes"] == 58
+    assert paper_58["real_vs_forecast_traffic_and_balancing"]["real_live_47_node_traffic"]["nodes"] == 58
+    assert paper_58["five_wave_international_roadmap"][0]["active_nodes"] == 58
+    assert "58-Node" in paper_58["five_wave_international_roadmap"][0]["title"]
+
+    html_58 = render_gcp_planet_forecast_html(initial_forecast=report_58)
+    assert "BASELINE (58 NODES" in html_58
+    assert 'id="live-situ-nodes" class="text-xl font-black text-amber-300 mt-0.5">58<' in html_58
+    assert 'id="kpi-baseline-nodes" class="text-2xl font-black text-amber-300">58<' in html_58
+    assert "Current 58 Baseline Pioneers" in html_58
+    assert "59 NODES" not in html_58
+
+

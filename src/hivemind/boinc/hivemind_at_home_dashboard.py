@@ -3335,6 +3335,11 @@ def render_hivemind_at_home_html(
     mining = state.get("dataset_mining_campaign", {})
     carousel_slides = state.get("community_results_carousel", [])
     leaderboard = state.get("contributor_leaderboard", [])
+    from hivemind.economy.international_launch_model import SwarmLiveBaseline
+
+    _default_lb = SwarmLiveBaseline()
+    launch_base_nodes = int(state.get("launch_baseline_nodes", _default_lb.total_accounts))
+    launch_base_source = str(state.get("launch_baseline_source", _default_lb.data_source)).replace("_", " ").upper()
 
     # Build MoE Bee Specialist Cards for Screen 3
     bee_cards_html_list = []
@@ -4091,7 +4096,7 @@ def render_hivemind_at_home_html(
       <section class="card card-emerald col-12" style="border-width:1.5px;border-color:rgba(16,185,129,0.58);">
         <h2>
           <span>&#x1F30D; Global 3D Planet HiveMiners, Foundation Paper v4.2.0, Real vs. Forecast Traffic &amp; Network Balancing</span>
-          <span class="pill-green">LIVE NOW: 59 NODES (2,455 COMPLETIONS) &bull; FORECAST PREDICTION: 265 NODES (&rho;<sub>elastic</sub> = 0.653 &le; 0.78)</span>
+          <span class="pill-green">BASELINE: {launch_base_nodes} NODES ({launch_base_source}) &bull; FORECAST PREDICTION: 265 NODES (&rho;<sub>elastic</sub> = 0.653 &le; 0.78)</span>
         </h2>
         <p style="font-size:0.88rem;color:#cbd5e1;margin:4px 0 12px;">
           Live integration of the <strong>Project HiveMind Foundation Article v4.2.0</strong> (70 pages, 161 zero-<code>sorry</code> Lean 4 theorems, Pre-Registered Experiment <code>E20</code> [<code>P20a</code> 680 MiB Multi-Split Guard, <code>P20b</code> 225.4&times; Top-1% 2D-DCT+EF21, <code>P20c</code> 31.45&times; 6-Region Super-Peer Fan-Out]), the <strong>3D Global Planet HiveMiners Visualization</strong>, <strong>Real Live WAN Traffic (47 nodes) vs. Forecast Traffic (265 &rarr; 10,000+ nodes)</strong>, and <strong>HiveMind Network Balancing</strong> (Kleinrock/Halfin-Whitt M/M/c(t) Erlang-C, Kingman G/G/c, Mitzenmacher P2C, Kelly shadow pricing, and Bass prosumer conversion).
@@ -4100,10 +4105,10 @@ def render_hivemind_at_home_html(
         <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;">
           <!-- REAL LIVE TRAFFIC CARD -->
           <div class="kpi-box" style="border-color:rgba(56,189,248,0.48);background:rgba(8,15,34,0.92);">
-            <div class="kpi-label" style="color:#38bdf8;font-weight:800;">CURRENT SITUATION (REAL LIVE 59-NODE SWARM)</div>
+            <div class="kpi-label" style="color:#38bdf8;font-weight:800;">BASELINE SITUATION ({launch_base_nodes}-NODE SWARM &bull; {launch_base_source})</div>
             <div class="kpi-val" style="color:#f8fafc;">480.0 tok/s <span style="font-size:0.82rem;color:#34d399;">(4 Online GPUs &bull; 32.0 GB VRAM)</span></div>
             <div class="kpi-sub" style="color:#cbd5e1;margin-top:6px;line-height:1.45;">
-              &bull; Nodes: <strong>59 live</strong> (10 Producers, 22 Prosumers, 24 Consumers, 3 Admins &bull; 54.2% supply)<br/>
+              &bull; Nodes: <strong>{launch_base_nodes} baseline</strong> (10 Producers, 22 Prosumers, 24 Consumers, 3 Admins &bull; 54.2% supply)<br/>
               &bull; Traffic &amp; SLA: <strong>2,455 completions</strong> (322,370 tokens, 15 models) &bull; p50 = <strong style="color:#fbbf24;">257.3 ms</strong><br/>
               &bull; Attested BOINC: <strong>5,632.11 Cobblestones</strong> (100 WUs, 0.642 PFLOPS peak, 0.0% false reject)<br/>
               &bull; Experiment E20: <strong>680 MiB</strong> split guard &bull; <strong>225.4&times;</strong> DCT+EF21 &bull; <strong>31.45&times;</strong> fan-out
@@ -4141,7 +4146,7 @@ def render_hivemind_at_home_html(
             <div class="kpi-sub" style="color:#e9d5ff;margin-top:6px;line-height:1.45;">
               &bull; Section 13: Pre-Registered <strong>Experiment E20</strong> + 3-Plan-Class BOINC + &gt;200-Node Forecast<br/>
               &bull; 6 Super-Peer Hubs: <code>eu-west</code>, <code>us-east</code>, <code>us-west</code>, <code>apac-east</code>, <code>latam-south</code>, <code>mena-africa</code><br/>
-              &bull; 5-Wave International Roadmap: <code>59 &rarr; 150 &rarr; 265 &rarr; 500 &rarr; 2,000 &rarr; 10,000+</code> nodes<br/>
+              &bull; 5-Wave International Roadmap: <code>{launch_base_nodes} &rarr; 150 &rarr; 265 &rarr; 500 &rarr; 2,000 &rarr; 10,000+</code> nodes<br/>
               &bull; Non-Monetary Charter: <strong>0.00 EUR / 0.00 USD</strong> reciprocity
             </div>
           </div>

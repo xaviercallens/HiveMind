@@ -492,7 +492,10 @@ def run_stage3_moe_routing_verifiers_and_scale_benchmark(seed: int = 20261031) -
 def run_stage4_roadmap_pr_ip11_validation() -> Dict[str, Any]:
     """Stage 4: Validate PR-IP-11 (IP-22, IP-23, IP-48), PR-IP-08 (IP-43), and PR-IP-13 (IP-50, IP-63)."""
     from hivemind.config import configure_deterministic_runtime
-    from hivemind.economy.international_launch_model import project_international_launch_wave
+    from hivemind.economy.international_launch_model import (
+        forecast_200plus_node_international_launch,
+        project_international_launch_wave,
+    )
     from hivemind.swarm.rusty_sundials_scientific_bee import solve_wave2_method_of_lines_pde
     from scripts.t4_governor import governor_step
 
@@ -565,11 +568,21 @@ def run_stage4_roadmap_pr_ip11_validation() -> Dict[str, Any]:
         and step_nginx_lost["trigger"] == "nginx_status_lost"
     )
 
+    default_forecast = forecast_200plus_node_international_launch()
+    injected_58_forecast = forecast_200plus_node_international_launch(live_account_count=58)
+    issue403_passed = bool(
+        default_forecast["current_live_baseline"]["data_source"] == "assumed_baseline"
+        and default_forecast["current_live_baseline"]["snapshot_date_utc"] is None
+        and injected_58_forecast["current_live_baseline"]["total_nodes"] == 58
+        and injected_58_forecast["hiveminers_on_globe"]["current_pioneer_nodes_count"] == 58
+    )
+
     return {
         "stage": "stage4_roadmap_pr_ip11_validation",
         "ip22_equal_assumptions_rho_with_controls": eq_proj.utilization_rho_with_controls,
         "ip22_equal_assumptions_rho_without_controls": eq_proj.utilization_rho_without_controls,
         "ip22_equal_rho_passed": ip22_equal_rho_passed,
+        "issue403_assumed_baseline_and_injected_58_passed": issue403_passed,
         "ip48_lane_emden_n15_drift": round(float(le_clean["invariant_drift"]), 10),
         "ip48_lane_emden_wrong_n_drift": round(float(le_wrong["invariant_drift"]), 6),
         "ip48_passed": ip48_passed,
@@ -602,6 +615,7 @@ def run_4h_rtx2070_moe_experimentator(
         and stage3["ip35_router_grad_depends_on_aux"]
         and stage3["all_wave3_routes_matched"]
         and stage4["ip22_equal_rho_passed"]
+        and stage4["issue403_assumed_baseline_and_injected_58_passed"]
         and stage4["ip48_passed"]
         and stage4["ip43_strict_default_passed"]
         and stage4["ip50_governor_fail_closed_passed"]
@@ -612,7 +626,7 @@ def run_4h_rtx2070_moe_experimentator(
         "generator": "scripts/run_4h_rtx2070_moe_bee_experimentator.py",
         "cadence_cron": "0 */4 * * *",
         "timestamp_utc": now_iso,
-        "implemented_roadmap_pr": "PR-IP-07 (IP-42, IP-44, IP-52) + PR-IP-08 (IP-43) + PR-IP-10 (IP-19, IP-20, IP-34, IP-35, IP-36, IP-37) + PR-IP-11 (IP-22, IP-23, IP-48) + PR-IP-13 (IP-50, IP-63) + Wave 3 Scientific MoE Bees",
+        "implemented_roadmap_pr": "PR-IP-07 (IP-42, IP-44, IP-52) + PR-IP-08 (IP-43) + PR-IP-10 (IP-19, IP-20, IP-34, IP-35, IP-36, IP-37) + PR-IP-11 (IP-22, IP-23, IP-48, #403) + PR-IP-13 (IP-50, IP-63) + Wave 3 Scientific MoE Bees",
         "rtx2070_telemetry": gpu_telemetry,
         "stage1_dry_run": stage1,
         "stage2_small_qlora_training": stage2,

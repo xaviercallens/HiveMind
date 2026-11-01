@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Checkers of the live monitor: each must accept the right answer and reject near-misses, or the probes prove nothing."""
 
 from __future__ import annotations
@@ -68,7 +69,7 @@ def test_t4_reader_summarises_governor_telemetry(tmp_path: Path) -> None:
             {"event": "snapshot", "state": "serving", "t": 1201.0}]
     (tmp_path / "governor.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\nnot json\n")
     (tmp_path / "HOLD").write_text("")
-    out = subprocess.run([sys.executable, "-c", monitor._T4_READER % (tmp_path, 1000.0)], capture_output=True, text=True, check=True)
+    out = subprocess.run([sys.executable, "-c", monitor._T4_READER % (tmp_path.as_posix(), 1000.0)], capture_output=True, text=True, check=True)
     summary = json.loads(out.stdout)
     assert summary["snapshot_states"] == {"training": 1, "serving": 1}
     assert summary["yield_ms"] == [840, 7129, 60]

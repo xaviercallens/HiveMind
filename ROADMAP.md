@@ -678,6 +678,16 @@ The full plan, with evidence, Definition of Done and the test for each finding (
 
 ---
 
+### Status update, 2026-11-01 (3-hourly review, 03:00 CET)
+
+- **Merged since the last update:** [#400](https://github.com/xaviercallens/HiveMind/pull/400) (reconnect the 42 HiveMinder accounts), [#406](https://github.com/xaviercallens/HiveMind/pull/406) (previous roadmap update), [#407](https://github.com/xaviercallens/HiveMind/pull/407) (first real two-host E8 data cell), [#408](https://github.com/xaviercallens/HiveMind/pull/408) (idle-GPU worker reports READY only when the fold ran on the gated CUDA device) and [#409](https://github.com/xaviercallens/HiveMind/pull/409) (honest physical GPU counting, issue [#402](https://github.com/xaviercallens/HiveMind/issues/402)). Tests of #408 and #409 pass on the new `main`.
+- **Open for review:** [#411](https://github.com/xaviercallens/HiveMind/pull/411) (monitor splits chat latency by client class and response size; data half of [#404](https://github.com/xaviercallens/HiveMind/issues/404)).
+- **Blocked by one scanner rule:** [#401](https://github.com/xaviercallens/HiveMind/pull/401) and [#410](https://github.com/xaviercallens/HiveMind/pull/410) both fail rule SEC-02 on a `base64.b64decode` that feeds `torch.load(weights_only=True)`. Decision tracked in [#412](https://github.com/xaviercallens/HiveMind/issues/412); the scanner changes only with an owner review.
+- **Measured:** 58 real accounts, no new registrations overnight; the T4 trained in two overnight windows and the QLoRA counter went from 147 to 150; router chat p95 ranged 11.6 s to 57 s over 4 to 31 chats per half hour. The router logs carry no model name, so a per-model split needs a router logging change (noted in #404).
+- **Still held:** [#369](https://github.com/xaviercallens/HiveMind/pull/369), [#366](https://github.com/xaviercallens/HiveMind/pull/366), [#344](https://github.com/xaviercallens/HiveMind/pull/344) (CI or conflicts), [#362](https://github.com/xaviercallens/HiveMind/pull/362) (stub audit). Open items for claim: [#378](https://github.com/xaviercallens/HiveMind/issues/378) to [#382](https://github.com/xaviercallens/HiveMind/issues/382), [#385](https://github.com/xaviercallens/HiveMind/issues/385) to [#387](https://github.com/xaviercallens/HiveMind/issues/387), [#392](https://github.com/xaviercallens/HiveMind/issues/392) to [#394](https://github.com/xaviercallens/HiveMind/issues/394), [#403](https://github.com/xaviercallens/HiveMind/issues/403), [#405](https://github.com/xaviercallens/HiveMind/issues/405).
+
+---
+
 ## 🎮 4. Opt-In Community GPU Testing Program (If Interested & Possible)
 
 If you have a consumer GPU (**NVIDIA GeForce RTX 20/30/40/50-series 6 GB–24 GB**, **AMD Radeon RX 6000/7000 via ROCm**, or **Apple Silicon M1/M2/M3/M4 via MPS**) and are interested in testing how your hardware performs on the HiveMind Sparse MoE + `EF21-DiLoCo` + `ZK-OPoI v4` stack, we provide a safe, opt-in, `< 1.5 GB` peak-VRAM benchmark suite:

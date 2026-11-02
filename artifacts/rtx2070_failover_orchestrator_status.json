@@ -1,0 +1,46 @@
+{
+  "schema_version": "rtx2070_failover_orchestrator.v1",
+  "timestamp_utc": "2026-11-02T06:34:31Z",
+  "gateway": "https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app",
+  "local_ollama_warm": true,
+  "shield_listening_8787": true,
+  "cloudflare_tunnel_url": "https://mandatory-creator-required-mall.trycloudflare.com",
+  "gcp_t4_probe": {
+    "t4_reachable": true,
+    "http_status": 200,
+    "latency_ms": 388.5
+  },
+  "traffic_routing": {
+    "tunnel_url": "https://mandatory-creator-required-mall.trycloudflare.com",
+    "admin_reconnect_http": 200,
+    "reconnected_count": 42,
+    "live_hiveminders": 42,
+    "live_models_count": 14,
+    "producer_heartbeat_http": 200
+  },
+  "e8_stage2_controller": {
+    "round_id": 417,
+    "next_checkpoint_round": 418,
+    "inner_steps": 20,
+    "loss_before": 1.398699,
+    "loss_after": 1.393575,
+    "delta_norm": 3.953338,
+    "code_pin": "08672343a444",
+    "elapsed_s": 1.78,
+    "checkpoint_path": "/home/xavkal/xdev/AutoevolveAI/sub_projects/hivemind/HiveMind/artifacts/experiments/e8_real/rtx2070-controller.ckpt",
+    "timestamp_utc": "2026-11-02T06:34:29Z"
+  },
+  "opentrainer_sync": {
+    "opentrainer_heartbeat_ok": true,
+    "opentrainer_node": "xavier_callens:XAVGAMSRV-RTX2070",
+    "delta_receipt_round": 417,
+    "telemetry_push_http": 200
+  },
+  "live_chat_completion_probe": {
+    "http_status": 200,
+    "latency_ms": 1774.6,
+    "reply": "OK",
+    "ok": true
+  },
+  "status_sha256": "36a86cda2e66a4af5a128d6b2e62a5c7a1659f0e5dd7a681aa38c91012063453"
+}

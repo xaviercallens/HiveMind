@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "experiment_id": "E8-stage2-rtx2070-controller",
+  "resumed_from": "artifacts/experiments/e8_real/night-002b.ckpt (round 412)",
+  "latest_round": 417,
+  "latest_eval_loss": 1.393575,
+  "rounds": [
+    {
+      "round_id": 412,
+      "next_checkpoint_round": 413,
+      "inner_steps": 20,
+      "loss_before": 1.420761,
+      "loss_after": 1.415629,
+      "delta_norm": 4.028998,
+      "code_pin": "08672343a444",
+      "elapsed_s": 1.93,
+      "checkpoint_path": "/home/xavkal/xdev/AutoevolveAI/sub_projects/hivemind/HiveMind/artifacts/experiments/e8_real/rtx2070-controller.ckpt",
+      "timestamp_utc": "2026-11-02T06:28:50Z"
+    },
+    {
+      "round_id": 413,
+      "next_checkpoint_round": 414,
+      "inner_steps": 20,
+      "loss_before": 1.415629,
+      "loss_after": 1.408781,
+      "delta_norm": 3.990903,
+      "code_pin": "08672343a444",
+      "elapsed_s": 6.48,
+      "checkpoint_path": "/home/xavkal/xdev/AutoevolveAI/sub_projects/hivemind/HiveMind/artifacts/experiments/e8_real/rtx2070-controller.ckpt",
+      "timestamp_utc": "2026-11-02T06:30:14Z"
+    },
+    {
+      "round_id": 414,
+      "next_checkpoint_round": 415,
+      "inner_steps": 20,
+      "loss_before": 1.408781,
+      "loss_after": 1.402609,
+      "delta_norm": 4.115149,
+      "code_pin": "08672343a444",
+      "elapsed_s": 2.67,
+      "checkpoint_path": "/home/xavkal/xdev/AutoevolveAI/sub_projects/hivemind/HiveMind/artifacts/experiments/e8_real/rtx2070-controller.ckpt",
+      "timestamp_utc": "2026-11-02T06:31:40Z"
+    },
+    {
+      "round_id": 415,
+      "next_checkpoint_round": 416,
+      "inner_steps": 20,
+      "loss_before": 1.402609,
+      "loss_after": 1.402875,
+      "delta_norm": 4.053746,
+      "code_pin": "08672343a444",
+      "elapsed_s": 2.63,
+      "checkpoint_path": "/home/xavkal/xdev/AutoevolveAI/sub_projects/hivemind/HiveMind/artifacts/experiments/e8_real/rtx2070-controller.ckpt",
+      "timestamp_utc": "2026-11-02T06:32:50Z"
+    },
+    {
+      "round_id": 416,
+      "next_checkpoint_round": 417,
+      "inner_steps": 20,
+      "loss_before": 1.402875,
+      "loss_after": 1.398699,
+      "delta_norm": 4.014454,
+      "code_pin": "08672343a444",
+      "elapsed_s": 1.76,
+      "checkpoint_path": "/home/xavkal/xdev/AutoevolveAI/sub_projects/hivemind/HiveMind/artifacts/experiments/e8_real/rtx2070-controller.ckpt",
+      "timestamp_utc": "2026-11-02T06:33:40Z"
+    },
+    {
+      "round_id": 417,
+      "next_checkpoint_round": 418,
+      "inner_steps": 20,
+      "loss_before": 1.398699,
+      "loss_after": 1.393575,
+      "delta_norm": 3.953338,
+      "code_pin": "08672343a444",
+      "elapsed_s": 1.78,
+      "checkpoint_path": "/home/xavkal/xdev/AutoevolveAI/sub_projects/hivemind/HiveMind/artifacts/experiments/e8_real/rtx2070-controller.ckpt",
+      "timestamp_utc": "2026-11-02T06:34:29Z"
+    }
+  ]
+}

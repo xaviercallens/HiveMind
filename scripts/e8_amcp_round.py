@@ -46,7 +46,6 @@ from hivemind.swarm.amcp_kafka_transport import (  # noqa: E402
     HMACKeyring,
     KafkaBrokerTransport,
     KafkaSettings,
-    TransportError,
 )
 
 PIN_FILES = [HERE / "e8_qlora_moe_round.py", HERE / "e8_amcp_round.py", HERE.parent / "src" / "hivemind" / "swarm" / "federation_agents.py"]
@@ -79,19 +78,8 @@ class Bus:
         self.inbox.clear()
         return out
 
-    def publish(self, event: Any, retry_s: float = 300.0) -> None:
-        """Publish, retrying through a transient broker outage. A Spot Kafka voter preempted at 00:31Z made one publish miss its 20 s confirmation and the
-        night-002b coordinator crashed; a leader change usually settles within a minute, so keep trying for ``retry_s`` before giving up."""
-        deadline = time.time() + retry_s
-        while True:
-            try:
-                self.pub.publish(event)
-                return
-            except TransportError as exc:
-                if time.time() >= deadline:
-                    raise
-                print(f"[bus] publish not confirmed ({str(exc)[:80]}); retrying", flush=True)
-                time.sleep(5.0)
+    def publish(self, event: Any) -> None:
+        self.pub.publish(event)
 
 
 def make_transport(args: argparse.Namespace, role: str) -> Any:

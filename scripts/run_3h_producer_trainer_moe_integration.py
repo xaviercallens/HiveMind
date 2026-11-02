@@ -30,7 +30,6 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import json
-import os
 from pathlib import Path
 import time
 import urllib.error
@@ -38,13 +37,13 @@ import urllib.request
 from typing import Any
 
 from rtx2070_failover_orchestrator import (
-    DEFAULT_OPENROUTER_URL,
+    DEFAULT_GATEWAY,
     STATUS_JSON_PATH,
+    _read_producer_key,
     check_gcp_t4_status,
     discover_local_ollama_models,
-    query_local_gpu,
     step_e8_stage2_controller_round,
-    submit_opentrainer_heartbeat_and_delta,
+    sync_opentrainer_and_gpu_telemetry,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -140,52 +139,44 @@ def verify_live_inference_service(
 
 def run_3h_integration_cycle(
     *,
-    openrouter_url: str = DEFAULT_OPENROUTER_URL,
+    openrouter_url: str = DEFAULT_GATEWAY,
     rounds_per_cycle: int = 3,
     inner_steps: int = 24,
 ) -> dict[str, Any]:
     """Execute one 3-hour Producer + Trainer MoE self-training integration and portal verification cycle."""
     now_iso = datetime.now(timezone.utc).isoformat()
-    api_key = os.environ.get("HIVEMIND_API_KEY", "").strip()
+    api_key = _read_producer_key()
     t4_status = check_gcp_t4_status()
-    gpu_info = query_local_gpu()
     local_models = discover_local_ollama_models()
 
     training_rounds: list[dict[str, Any]] = []
     for _ in range(max(1, rounds_per_cycle)):
         round_metrics = step_e8_stage2_controller_round(inner_steps=inner_steps)
-        ot_sync = submit_opentrainer_heartbeat_and_delta(
-            openrouter_url=openrouter_url,
-            api_key=api_key,
-            gpu_info=gpu_info,
-            training_metrics=round_metrics,
+        ot_sync = sync_opentrainer_and_gpu_telemetry(
+            openrouter_url,
+            round_metrics,
             t4_reachable=bool(t4_status.get("t4_reachable")),
         )
         training_rounds.append(
             {
-                "round": round_metrics.get("round"),
+                "round_id": round_metrics.get("round_id"),
                 "loss_before": round_metrics.get("loss_before"),
                 "loss_after": round_metrics.get("loss_after"),
                 "delta_norm": round_metrics.get("delta_norm"),
-                "delta_sha256": round_metrics.get("delta_sha256"),
+                "code_pin": round_metrics.get("code_pin"),
                 "opentrainer_sync": ot_sync,
             }
         )
 
     hub_code, hub_data = _http_json(f"{openrouter_url.rstrip('/')}/v1/hivemind/contributive-hub")
     moe_code, moe_data = _http_json(f"{openrouter_url.rstrip('/')}/v1/hivemind/opentrainer/moe-self-training")
-    inference_check = (
-        verify_live_inference_service(openrouter_url, api_key)
-        if api_key
-        else {"all_models_healthy": False, "skipped_reason": "HIVEMIND_API_KEY not set"}
-    )
+    inference_check = verify_live_inference_service(openrouter_url, api_key)
 
     report = {
         "timestamp_utc": now_iso,
         "openrouter_url": openrouter_url,
         "cadence": "every_3_hours",
         "gcp_t4_status": t4_status,
-        "rtx2070_gpu": gpu_info,
         "local_ollama_models": local_models,
         "self_training_burst": {
             "rounds_executed": len(training_rounds),
@@ -197,6 +188,9 @@ def run_3h_integration_cycle(
         "contributive_hub_summary": {
             "openrouter_producer_fleet": hub_data.get("openrouter_producer_fleet"),
             "opentrainer_moe_self_training": hub_data.get("opentrainer_moe_self_training"),
+            "multi_gpu_2_to_4_byom_playbook_topologies": len(
+                (hub_data.get("multi_gpu_2_to_4_byom_playbook") or {}).get("supported_topologies") or []
+            ),
         },
         "moe_self_training_endpoint_http": moe_code,
         "moe_self_training_progress": moe_data,
@@ -210,7 +204,7 @@ def run_3h_integration_cycle(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run 3-Hour Producer + Trainer Self-Training MoE Integration Cycle")
-    parser.add_argument("--openrouter-url", default=DEFAULT_OPENROUTER_URL)
+    parser.add_argument("--openrouter-url", default=DEFAULT_GATEWAY)
     parser.add_argument("--rounds", type=int, default=3, help="Number of QLoRA self-training rounds per 3h burst")
     parser.add_argument("--inner-steps", type=int, default=24, help="Inner steps per QLoRA round")
     args = parser.parse_args()

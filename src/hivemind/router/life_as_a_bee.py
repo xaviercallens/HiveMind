@@ -21,6 +21,7 @@ import functools
 import html
 from dataclasses import asdict, dataclass
 from typing import Any
+from hivemind.router.telemetry_figures import shown_figure
 
 from hivemind.core.image_moe_inference_gallery_benchmark import (
     PublicImageScenarioSpec,
@@ -1864,14 +1865,14 @@ def render_life_as_a_bee_section(live_telemetry: dict[str, Any] | None = None) -
     usage_live = lt.get("usage_24h") or {}
     t4_live = lt.get("t4_boinc") or {}
     ot_live = lt.get("opentrainer") or {}
-    total_accts = int(acct.get("total_registered_accounts", 69))
-    live_models_cnt = int(models_live.get("live_models_count", 15))
-    reqs_24h = int(usage_live.get("total_requests", 557))
-    tokens_24h = int(usage_live.get("total_billed_tokens", 71809))
-    t4_free_mib = int(t4_live.get("vram_free_mib", 10519))
-    wus_cnt = int(t4_live.get("assimilated_workunits", 147))
-    ot_nodes = int(ot_live.get("total_registered_nodes", 1))
-    ot_rounds = int(ot_live.get("accepted_rounds_count", 1))
+    total_accts = shown_figure(acct.get("total_registered_accounts"))
+    live_models_cnt = shown_figure(models_live.get("live_models_count"))
+    reqs_24h = shown_figure(usage_live.get("total_requests"))
+    tokens_24h = shown_figure(usage_live.get("total_billed_tokens"))
+    t4_free_mib = shown_figure(t4_live.get("vram_free_mib"))
+    wus_cnt = shown_figure(t4_live.get("assimilated_workunits"))
+    ot_nodes = shown_figure(ot_live.get("total_registered_nodes"))
+    ot_rounds = shown_figure(ot_live.get("accepted_rounds_count"))
     lifecycle_cards: list[str] = []
     for phase in BEE_LIFECYCLE_PHASES:
         endpoints_html = " &bull; ".join(f"<code>{html.escape(ep)}</code>" for ep in phase.protocol_endpoints)
@@ -2068,7 +2069,7 @@ def render_life_as_a_bee_section(live_telemetry: dict[str, Any] | None = None) -
 
       <!-- Real-Time Production Swarm Pulse (auto-synced with /v1/hivemind/live-telemetry) -->
       <div id="laab-live-telemetry" style="margin-bottom:1.1rem;padding:0.65rem 0.9rem;border:1px solid rgba(52,211,153,0.45);border-radius:0.45rem;background:rgba(16,185,129,0.08);font-family:var(--font-mono);font-size:0.78rem;color:var(--green);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
-        <span id="laab-live-telemetry-text">&#x1F7E2; Télémétrie GCP Temps Réel : <strong>{total_accts} comptes inscrits</strong> &bull; <strong>{live_models_cnt} abeilles en ligne</strong> &bull; <strong>{reqs_24h} requêtes 24h ({tokens_24h:,} tokens)</strong> &bull; T4 VRAM libre <strong>{t4_free_mib:,} MiB</strong> &bull; <strong>{wus_cnt} WUs BOINC</strong> &bull; OpenTrainer <strong>{ot_nodes} nœud(s) / {ot_rounds} round(s)</strong></span>
+        <span id="laab-live-telemetry-text">&#x1F7E2; Télémétrie GCP Temps Réel : <strong>{total_accts} comptes inscrits</strong> &bull; <strong>{live_models_cnt} abeilles en ligne</strong> &bull; <strong>{reqs_24h} requêtes 24h ({tokens_24h} tokens)</strong> &bull; T4 VRAM libre <strong>{t4_free_mib} MiB</strong> &bull; <strong>{wus_cnt} WUs BOINC</strong> &bull; OpenTrainer <strong>{ot_nodes} nœud(s) / {ot_rounds} round(s)</strong></span>
         <a href="/v1/hivemind/live-telemetry" style="color:var(--cyan);text-decoration:underline;font-size:0.74rem;">/v1/hivemind/live-telemetry</a>
       </div>
 

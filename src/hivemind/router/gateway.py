@@ -1440,7 +1440,9 @@ def create_router_app(
                 "total_registered_nodes": int(ot_fleet.get("total_registered_nodes", 1)),
                 "active_trainer_nodes": int(ot_fleet.get("active_trainer_nodes", 1)),
                 "accepted_rounds_count": len(ot_rounds),
-                "latest_eval_loss": float(ot_rounds[0].get("eval_loss", 1.7772)) if ot_rounds else 1.7772,
+                # None until a round is recorded: 1.7772 was the Stage-2 soak's final loss, not this fleet's figure.
+                "latest_eval_loss": float(ot_rounds[0]["eval_loss"]) if ot_rounds and ot_rounds[0].get("eval_loss") is not None else None,
+                "latest_eval_loss_source": "RECORDED_ROUND" if ot_rounds and ot_rounds[0].get("eval_loss") is not None else "NO_ROUNDS_RECORDED_YET",
                 "moe_self_training": ot_doc.get("moe_self_training_progress") or {},
             },
             "usage_24h": usage_block,

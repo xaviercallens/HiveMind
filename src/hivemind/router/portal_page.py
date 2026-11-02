@@ -24,6 +24,7 @@ from typing import Any
 from hivemind.router.catalog import TIERS
 from hivemind.router.google_auth import CLIENT_ID_RE
 from hivemind.router.life_as_a_bee import render_life_as_a_bee_section
+from hivemind.router.telemetry_figures import shown_figure
 
 PORTAL_LANGS: tuple[str, ...] = ("en", "fr", "es", "de", "zh")
 
@@ -1748,6 +1749,8 @@ if ($('contributiveHubBtn')) {
   });
 }
 
+// A missing figure is shown as n/a; the page never prints a number the payload did not carry.
+const v = function (x) { return (x === null || x === undefined) ? 'n/a' : (typeof x === 'number' ? x.toLocaleString() : x); };
 // Auto-refresh Web UI with real-life SQLite database telemetry on load & every 15s
 setTimeout(() => { refreshLiveDatabaseTelemetry(); }, 60);
 setInterval(() => { refreshLiveDatabaseTelemetry(); }, 15000);
@@ -2050,11 +2053,11 @@ def render_portal_page(
     lt_prod = lt.get("producers") or lt.get("producer_fleet") or {}
     lt_models = lt.get("models") or {}
     lt_ot = lt.get("opentrainer") or {}
-    live_hiveminders = int(lt_prod.get("live_hiveminders", 3))
-    total_hiveminders = int(lt_prod.get("total_hiveminders", 42))
-    live_models_cnt = int(lt_models.get("live_models_count") or lt_models.get("live_count") or 15)
-    ot_rounds = max(1, int(lt_ot.get("accepted_rounds_count", 1)))
-    ot_nodes = max(1, int(lt_ot.get("active_trainer_nodes", 1)))
+    live_hiveminders = shown_figure(lt_prod.get("live_hiveminders"))
+    total_hiveminders = shown_figure(lt_prod.get("total_hiveminders"))
+    live_models_cnt = shown_figure(lt_models.get("live_models_count") if lt_models.get("live_models_count") is not None else lt_models.get("live_count"))
+    ot_rounds = shown_figure(lt_ot.get("accepted_rounds_count"))
+    ot_nodes = shown_figure(lt_ot.get("active_trainer_nodes"))
     tier_cards = []
     for tier in TIERS:
         tier_cards.append(f"""

@@ -1079,6 +1079,20 @@ class RouterStore:
             row = self._conn.execute("SELECT COALESCE(SUM(delta), 0.0) AS s FROM ledger").fetchone()
         return float(row["s"])
 
+    def system_account_balances(self) -> dict[str, float]:
+        """Balance of each system account (``sys:validators``, ``sys:burn``); burned HMT is not in circulation."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT account_id, COALESCE(SUM(delta), 0.0) AS s FROM ledger WHERE account_id IN (?, ?) GROUP BY account_id",
+                SYSTEM_ACCOUNTS,
+            ).fetchall()
+        found = {str(r["account_id"]): float(r["s"]) for r in rows}
+        return {acct: found.get(acct, 0.0) for acct in SYSTEM_ACCOUNTS}
+
+    def total_in_circulation(self) -> float:
+        """HMT held by non-system accounts: total balances minus the burn and validator pools (IP-175)."""
+        return self.total_balances() - sum(self.system_account_balances().values())
+
     def min_balance(self) -> float:
         """Smallest balance over all accounts that appear in the ledger (0.0 when the ledger is empty)."""
         with self._lock:
@@ -2238,7 +2252,11 @@ class RouterStore:
             "total_registered_accounts": len(rows),
             "by_role": by_role,
             "active_accounts_24h": active_real,
-            "total_hmt_in_circulation": round(self.total_balances(), 2),
+            # Burned and validator-pool HMT are not in circulation; they are reported beside it (IP-175).
+            "total_hmt_in_circulation": round(self.total_in_circulation(), 2),
+            "total_hmt_burned": round(self.system_account_balances()[SYS_BURN], 2),
+            "total_hmt_validator_pool": round(self.system_account_balances()[SYS_VALIDATORS], 2),
+            "total_hmt_minted": round(self.total_minted(), 2),
             "newest_registered": newest,
         }
 

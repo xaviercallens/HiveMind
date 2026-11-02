@@ -1,6 +1,6 @@
 {
   "schema_version": "hivemind.evolution_2h_and_night_moe_cron.v1",
-  "timestamp_utc": "2026-11-02T08:19:38Z",
+  "timestamp_utc": "2026-11-02T10:19:40Z",
   "mode": "2h-evolution",
   "schedules": {
     "roadmap_pr_evolution_cron": "0 */2 * * *",
@@ -15,13 +15,13 @@
     "total_requests_served": 34,
     "boinc_rtx2070_worker": {
       "handle": "xaviercallens-rtx2070",
-      "boinc_workunits_completed": 12412,
-      "boinc_cobblestones": 558540.0,
-      "hmt_compute_points": 3105400
+      "boinc_workunits_completed": 13731,
+      "boinc_cobblestones": 617895.0,
+      "hmt_compute_points": 3435150
     }
   },
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-11-02T08:19:38Z",
+    "timestamp_utc": "2026-11-02T10:19:40Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": true,
@@ -29,10 +29,10 @@
     "compute_capability": "7.5",
     "temperature_c": 34.0,
     "gpu_utilization_pct": 2.0,
-    "power_draw_w": 29.88,
+    "power_draw_w": 30.19,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1812.0,
-    "memory_free_mib": 6195.0,
+    "memory_used_mib": 1820.0,
+    "memory_free_mib": 6187.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
@@ -42,10 +42,10 @@
     "max_graphics_clock_mhz": 2145.0,
     "memory_clock_mhz": 6801.0,
     "host_tensor_gflops": 0.0,
-    "measured_fp32_tflops": 5.54,
-    "measured_fp16_tensor_tflops": 19.73,
-    "effective_sparse_moe_nf4_tflops": 36.51,
-    "microbench_elapsed_ms": 321.74
+    "measured_fp32_tflops": 5.67,
+    "measured_fp16_tensor_tflops": 19.77,
+    "effective_sparse_moe_nf4_tflops": 36.57,
+    "microbench_elapsed_ms": 264.13
   },
   "roadmap_summary": {
     "exists": true,
@@ -98,7 +98,7 @@
     ]
   },
   "pr_integration_summary": {
-    "open_prs_count": 16,
+    "open_prs_count": 17,
     "merged_prs": [],
     "held_prs": [
       485,
@@ -112,5 +112,5 @@
     ]
   },
   "night_moe_summary": {},
-  "receipt_sha256": "24901c9fa4d282cdc628c2252965f25068780d7997a36a2fef80946574b41f41"
+  "receipt_sha256": "61430a8df8b47b96b31be47af3ef2166071a71b81ba4a3ebd5a681792561f43e"
 }

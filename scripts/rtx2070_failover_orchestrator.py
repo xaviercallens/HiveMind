@@ -11,9 +11,13 @@ is stopped or preempted:
    - Supervises `hivemind_producer_shield.py` on `127.0.0.1:8787` using a locally generated
      `0600` secret (`~/.config/hivemind/local_producer/endpoint_token`) and `cloudflared tunnel`
      publishing a verified `https://*.trycloudflare.com` endpoint.
-   - Probes actual Ollama `/api/ps` residency and reconnects the router models to the
-     active RTX 2070 / local orchestrator shield tunnel so `/v1/chat/completions` serves
-     100% of requests with 0 5xx errors when the GCP T4 stops.
+   - Strictly inspects local Ollama `GET /api/tags` and `GET /api/ps`:
+     * Never advertises a model that local Ollama does not actually serve in `/api/tags`.
+     * Never claims `bee-stars` (which requires the T4 `NIGHT-MOE-1` Stars LoRA adapter on `llama-server`).
+     * Marks `loaded=True` only for models currently resident in `/api/ps`.
+   - Never calls `/v1/hivemind/admin/producers/reconnect` while `t4_reachable=True` or when the
+     local shield/tunnel health probe fails; issues at most ONE reconnect per state change
+     (`t4_reachable: True -> False`).
 
 2. Training & E8 Stage-2 QLoRA Controller (`night-002b.ckpt` Round 412 -> `rtx2070-controller.ckpt`):
    - Resumes E8 Stage-2 Tiny-Granite-MoE QLoRA outer steps directly from `night-002b.ckpt`
@@ -22,8 +26,6 @@ is stopped or preempted:
    - Continuously heartbeats `OpenTrainer` (`/v1/hivemind/opentrainer/heartbeat`) and submits
      verified outer-step deltas (`/v1/hivemind/opentrainer/submit-delta`) for
      `XAVGAMSRV-RTX2070` (`NVIDIA GeForce RTX 2070`, 8192 MiB).
-   - Pushes fresh telemetry to `/v1/hivemind/t4/telemetry` so `/v1/hivemind/t4/status`
-     stays `FRESH`.
 """
 
 from __future__ import annotations
@@ -61,27 +63,19 @@ STATE_DIR = Path("/tmp/hivemind_rtx2070_orchestrator")
 TUNNEL_LOG_PATH = STATE_DIR / "cloudflared.log"
 SHIELD_LOG_PATH = STATE_DIR / "shield.log"
 TUNNEL_URL_FILE = STATE_DIR / "tunnel_url.txt"
+FAILOVER_STATE_FILE = STATE_DIR / "failover_state.json"
 STATUS_JSON_PATH = REPO_ROOT / "artifacts" / "rtx2070_failover_orchestrator_status.json"
 
 E8_SEED_CKPT = REPO_ROOT / "artifacts" / "experiments" / "e8_real" / "night-002b.ckpt"
 E8_CTRL_CKPT = REPO_ROOT / "artifacts" / "experiments" / "e8_real" / "rtx2070-controller.ckpt"
 E8_CTRL_JSON = REPO_ROOT / "artifacts" / "experiments" / "e8_real" / "rtx2070-controller.json"
 
-ALL_14_MODELS: tuple[str, ...] = (
-    "coder",
-    "bee-stars",
-    "crowd-v1",
-    "coder-lite",
-    "gemma-core",
-    "mistral-core",
-    "qwen35-core",
-    "bee-rusty-sundials",
-    "bee-lean-prover",
-    "bee-ruche-moe",
-    "coder-plus",
-    "moe-qwen35-bee",
-    "moe-general",
-    "moe-coder",
+# Candidate public model IDs to local Ollama tag preferences (checked against GET /api/tags).
+# NOTE: `bee-stars` is intentionally excluded because it requires the NIGHT-MOE-1 Stars LoRA
+# adapter served by llama-server on the T4, which plain local Ollama does not have.
+LOCAL_OLLAMA_MODEL_CANDIDATES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("coder", ("qwen2.5-coder:7b-instruct", "qwen2.5-coder:7b", "qwen2.5-coder:1.5b")),
+    ("coder-lite", ("qwen2.5-coder:3b", "qwen2.5-coder:1.5b")),
 )
 
 
@@ -143,12 +137,12 @@ def _is_port_open(host: str, port: int, timeout: float = 1.0) -> bool:
         sock.close()
 
 
-def warm_local_ollama(local_model: str = "qwen2.5-coder:1.5b") -> bool:
+def warm_local_ollama(local_model: str = "qwen2.5-coder:1.5b", ollama_url: str = OLLAMA_URL) -> bool:
     """Keep the fast failover model pinned in Ollama RAM (`keep_alive: 24h`) for sub-second responses."""
     try:
         with httpx.Client(timeout=20.0) as client:
             resp = client.post(
-                f"{OLLAMA_URL}/api/generate",
+                f"{ollama_url.rstrip('/')}/api/generate",
                 json={
                     "model": local_model,
                     "prompt": "ok",
@@ -162,11 +156,14 @@ def warm_local_ollama(local_model: str = "qwen2.5-coder:1.5b") -> bool:
         return False
 
 
-def probe_ollama_residency(local_model: str = "qwen2.5-coder:1.5b") -> tuple[bool, int]:
+def probe_ollama_residency(
+    local_model: str = "qwen2.5-coder:1.5b",
+    ollama_url: str = OLLAMA_URL,
+) -> tuple[bool, int]:
     """Check whether `local_model` is currently loaded in Ollama via `/api/ps`."""
     try:
         with httpx.Client(timeout=4.0) as client:
-            resp = client.get(f"{OLLAMA_URL}/api/ps")
+            resp = client.get(f"{ollama_url.rstrip('/')}/api/ps")
             if resp.status_code == 200:
                 for item in resp.json().get("models", []):
                     name = str(item.get("name") or item.get("model") or "")
@@ -176,6 +173,80 @@ def probe_ollama_residency(local_model: str = "qwen2.5-coder:1.5b") -> tuple[boo
     except (httpx.HTTPError, ValueError):
         pass
     return False, 0
+
+
+def discover_local_ollama_models(
+    ollama_url: str = OLLAMA_URL,
+    *,
+    http_client: httpx.Client | None = None,
+) -> list[dict[str, Any]]:
+    """Build verified model entries strictly from local Ollama `/api/tags` and `/api/ps`.
+
+    - Never lists a model whose `local_name` is absent from `/api/tags`.
+    - Never claims `bee-stars` (which requires the T4 Stars LoRA adapter).
+    - Sets `loaded=True` only when `local_name` is present in `/api/ps`.
+    """
+    close_client = False
+    if http_client is None:
+        http_client = httpx.Client(timeout=5.0)
+        close_client = True
+
+    try:
+        tags_resp = http_client.get(f"{ollama_url.rstrip('/')}/api/tags")
+        if tags_resp.status_code != 200:
+            return []
+        tags_payload = tags_resp.json()
+        available_tags: set[str] = set()
+        for item in tags_payload.get("models", []):
+            for key in ("name", "model"):
+                val = str(item.get(key) or "").strip()
+                if val:
+                    available_tags.add(val)
+
+        resident_mib_by_tag: dict[str, int] = {}
+        try:
+            ps_resp = http_client.get(f"{ollama_url.rstrip('/')}/api/ps")
+            if ps_resp.status_code == 200:
+                for item in ps_resp.json().get("models", []):
+                    size_bytes = int(item.get("size") or item.get("size_vram") or 0)
+                    mib = max(512, size_bytes // (1024 * 1024)) if size_bytes > 0 else 512
+                    for key in ("name", "model"):
+                        val = str(item.get(key) or "").strip()
+                        if val:
+                            resident_mib_by_tag[val] = mib
+        except (httpx.HTTPError, ValueError):
+            pass
+
+        entries: list[dict[str, Any]] = []
+        accounted_tags: set[str] = set()
+        for public_id, candidate_tags in LOCAL_OLLAMA_MODEL_CANDIDATES:
+            if public_id == "bee-stars":
+                continue
+            present = [t for t in candidate_tags if t in available_tags]
+            if not present:
+                continue
+            # Prefer a candidate tag that is currently resident in /api/ps; otherwise take first installed tag.
+            chosen = next((t for t in present if t in resident_mib_by_tag), present[0])
+            is_loaded = chosen in resident_mib_by_tag
+            vram_mib = 0
+            if is_loaded and chosen not in accounted_tags:
+                vram_mib = resident_mib_by_tag[chosen]
+                accounted_tags.add(chosen)
+            entries.append(
+                {
+                    "id": public_id,
+                    "local_name": chosen,
+                    "loaded": is_loaded,
+                    "vram_mib": vram_mib,
+                    "cold_start_s": 0.0 if is_loaded else 5.0,
+                }
+            )
+        return entries
+    except (httpx.HTTPError, ValueError):
+        return []
+    finally:
+        if close_client:
+            http_client.close()
 
 
 def ensure_shield_running(endpoint_token: str | None = None) -> bool:
@@ -191,8 +262,7 @@ def ensure_shield_running(endpoint_token: str | None = None) -> bool:
                     return True
         except httpx.HTTPError:
             pass
-        # Token rotated or shield unhealthy: restart shield process
-        subprocess.run(["pkill", "-f", "hivemind_producer_shield.py"], check=False)
+        subprocess.run(["pkill", "-f", "[h]ivemind_producer_shield.py"], check=False)
         time.sleep(0.5)
 
     env = dict(os.environ)
@@ -232,18 +302,29 @@ def ensure_shield_running(endpoint_token: str | None = None) -> bool:
     return False
 
 
-def _verify_tunnel_url(url: str, endpoint_token: str) -> bool:
+def _verify_tunnel_url(
+    url: str,
+    endpoint_token: str,
+    *,
+    http_client: httpx.Client | None = None,
+) -> bool:
     if not url or not url.startswith("https://"):
         return False
+    close_client = False
+    if http_client is None:
+        http_client = httpx.Client(timeout=8.0)
+        close_client = True
     try:
-        with httpx.Client(timeout=8.0) as client:
-            r = client.get(
-                f"{url.rstrip('/')}/v1/models",
-                headers={"Authorization": f"Bearer {endpoint_token}"},
-            )
-            return r.status_code == 200
+        r = http_client.get(
+            f"{url.rstrip('/')}/v1/models",
+            headers={"Authorization": f"Bearer {endpoint_token}"},
+        )
+        return r.status_code == 200
     except httpx.HTTPError:
         return False
+    finally:
+        if close_client:
+            http_client.close()
 
 
 def ensure_cloudflare_tunnel(endpoint_token: str | None = None) -> str:
@@ -264,7 +345,7 @@ def ensure_cloudflare_tunnel(endpoint_token: str | None = None) -> str:
                 TUNNEL_URL_FILE.write_text(candidate, encoding="utf-8")
                 return candidate
 
-    subprocess.run(["pkill", "-f", f"cloudflared.*127.0.0.1:{SHIELD_PORT}"], check=False)
+    subprocess.run(["pkill", "-f", f"[c]loudflared.*127.0.0.1:{SHIELD_PORT}"], check=False)
     if TUNNEL_LOG_PATH.exists():
         TUNNEL_LOG_PATH.unlink()
 
@@ -324,35 +405,130 @@ def check_gcp_t4_status() -> dict[str, Any]:
         }
 
 
+def _load_failover_state(state_file: Path = FAILOVER_STATE_FILE) -> dict[str, Any]:
+    if state_file.exists():
+        try:
+            data = json.loads(state_file.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+        except (ValueError, OSError):
+            pass
+    return {"last_t4_reachable": None, "reconnected_for_outage": False}
+
+
+def _save_failover_state(state: dict[str, Any], state_file: Path = FAILOVER_STATE_FILE) -> None:
+    try:
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        state_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    except OSError:
+        pass
+
+
 def route_traffic_to_rtx2070_orchestrator(
     gateway: str,
     tunnel_url: str,
     *,
+    t4_reachable: bool,
+    shield_ok: bool = True,
     endpoint_token: str | None = None,
-    local_model: str = "qwen2.5-coder:1.5b",
+    ollama_url: str = OLLAMA_URL,
+    state: dict[str, Any] | None = None,
+    state_file: Path = FAILOVER_STATE_FILE,
+    http_client: httpx.Client | None = None,
 ) -> dict[str, Any]:
-    """Point the OpenRouter producer fleet and `xavier_callens` RTX 2070 account to the active tunnel."""
-    tok = endpoint_token or _read_or_create_endpoint_token()
-    admin_key = _read_admin_key()
-    producer_key = _read_producer_key()
-    is_loaded, resident_mib = probe_ollama_residency(local_model)
-    model_entries = [
-        {
-            "id": mid,
-            "local_name": local_model,
-            "loaded": is_loaded,
-            "vram_mib": resident_mib if (is_loaded and idx == 0) else 0,
-            "cold_start_s": 0.0 if is_loaded else 5.0,
-        }
-        for idx, mid in enumerate(ALL_14_MODELS)
-    ]
+    """Fail over traffic to the RTX 2070 tunnel ONLY when T4 is unreachable, tunnel is healthy, and state changed.
 
-    result: dict[str, Any] = {
-        "tunnel_url": tunnel_url,
-        "ollama_resident": is_loaded,
-        "ollama_resident_mib": resident_mib,
-    }
-    with httpx.Client(timeout=25.0) as client:
+    Guarantees (Issue #487):
+    1. With `t4_reachable=True` or a failing tunnel/shield probe, NO `/v1/hivemind/admin/producers/reconnect`
+       request is ever issued.
+    2. A reconnect or heartbeat never lists a model that local Ollama does not serve in `/api/tags`,
+       never claims `bee-stars`, and only marks `loaded=True` if present in `/api/ps`.
+    3. At most ONE `/v1/hivemind/admin/producers/reconnect` is issued per state change
+       (`t4_reachable` transitioning to `False`).
+    """
+    tok = endpoint_token or _read_or_create_endpoint_token()
+    persisted_state = state if state is not None else _load_failover_state(state_file)
+
+    close_client = False
+    if http_client is None:
+        http_client = httpx.Client(timeout=25.0)
+        close_client = True
+
+    try:
+        model_entries = discover_local_ollama_models(ollama_url=ollama_url, http_client=http_client)
+        loaded_ids = [m["id"] for m in model_entries if m.get("loaded")]
+        resident_mib = sum(int(m.get("vram_mib") or 0) for m in model_entries)
+
+        if t4_reachable:
+            persisted_state["last_t4_reachable"] = True
+            persisted_state["reconnected_for_outage"] = False
+            if state is None:
+                _save_failover_state(persisted_state, state_file)
+            return {
+                "action": "noop_t4_reachable",
+                "reconnected": False,
+                "t4_reachable": True,
+                "tunnel_url": tunnel_url,
+                "verified_models": [m["id"] for m in model_entries],
+                "loaded_models": loaded_ids,
+                "ollama_resident": bool(loaded_ids),
+                "ollama_resident_mib": resident_mib,
+            }
+
+        tunnel_ok = bool(shield_ok) and _verify_tunnel_url(tunnel_url, tok, http_client=http_client)
+        if not tunnel_ok:
+            return {
+                "action": "aborted_tunnel_unhealthy",
+                "reconnected": False,
+                "t4_reachable": False,
+                "tunnel_ok": False,
+                "tunnel_url": tunnel_url,
+                "verified_models": [m["id"] for m in model_entries],
+                "loaded_models": loaded_ids,
+                "ollama_resident": bool(loaded_ids),
+                "ollama_resident_mib": resident_mib,
+            }
+
+        if not model_entries:
+            return {
+                "action": "aborted_no_verified_ollama_models",
+                "reconnected": False,
+                "t4_reachable": False,
+                "tunnel_ok": True,
+                "tunnel_url": tunnel_url,
+                "verified_models": [],
+                "loaded_models": [],
+                "ollama_resident": False,
+                "ollama_resident_mib": 0,
+            }
+
+        if persisted_state.get("reconnected_for_outage") is True and persisted_state.get("last_t4_reachable") is False:
+            return {
+                "action": "noop_already_reconnected_for_current_outage",
+                "reconnected": False,
+                "t4_reachable": False,
+                "tunnel_ok": True,
+                "tunnel_url": tunnel_url,
+                "verified_models": [m["id"] for m in model_entries],
+                "loaded_models": loaded_ids,
+                "ollama_resident": bool(loaded_ids),
+                "ollama_resident_mib": resident_mib,
+            }
+
+        admin_key = _read_admin_key()
+        producer_key = _read_producer_key()
+        result: dict[str, Any] = {
+            "action": "failover_reconnect",
+            "reconnected": False,
+            "t4_reachable": False,
+            "tunnel_ok": True,
+            "tunnel_url": tunnel_url,
+            "verified_models": [m["id"] for m in model_entries],
+            "loaded_models": loaded_ids,
+            "ollama_resident": bool(loaded_ids),
+            "ollama_resident_mib": resident_mib,
+        }
+
         if admin_key:
             reconnect_body = {
                 "endpoint_url": tunnel_url,
@@ -367,7 +543,7 @@ def route_traffic_to_rtx2070_orchestrator(
                 "replace_endpoints": True,
                 "include_legacy_known_users": True,
             }
-            r_rec = client.post(
+            r_rec = http_client.post(
                 f"{gateway.rstrip('/')}/v1/hivemind/admin/producers/reconnect",
                 headers={"X-Admin-Key": admin_key},
                 json=reconnect_body,
@@ -375,9 +551,15 @@ def route_traffic_to_rtx2070_orchestrator(
             result["admin_reconnect_http"] = r_rec.status_code
             if r_rec.status_code == 200:
                 rec_data = r_rec.json()
+                result["reconnected"] = True
                 result["reconnected_count"] = rec_data.get("reconnected_count")
                 result["live_hiveminders"] = rec_data.get("live_hiveminders")
                 result["live_models_count"] = len(rec_data.get("live_models", []))
+                persisted_state["last_t4_reachable"] = False
+                persisted_state["reconnected_for_outage"] = True
+                persisted_state["last_reconnected_tunnel_url"] = tunnel_url
+                if state is None:
+                    _save_failover_state(persisted_state, state_file)
 
         hb_body = {
             "endpoint_url": tunnel_url,
@@ -389,14 +571,16 @@ def route_traffic_to_rtx2070_orchestrator(
             "endpoint_token": tok,
             "replace_endpoints": True,
         }
-        r_hb = client.post(
+        r_hb = http_client.post(
             f"{gateway.rstrip('/')}/v1/hivemind/producer/heartbeat",
             headers={"Authorization": f"Bearer {producer_key}"},
             json=hb_body,
         )
         result["producer_heartbeat_http"] = r_hb.status_code
-
-    return result
+        return result
+    finally:
+        if close_client:
+            http_client.close()
 
 
 def step_e8_stage2_controller_round(inner_steps: int = 20) -> dict[str, Any]:
@@ -636,17 +820,24 @@ def run_orchestrator_cycle(gateway: str, *, inner_steps: int = 20, verify_chat: 
     shield_ok = ensure_shield_running(tok)
     tunnel_url = ensure_cloudflare_tunnel(tok)
     t4_check = check_gcp_t4_status()
-    routing = route_traffic_to_rtx2070_orchestrator(gateway, tunnel_url, endpoint_token=tok)
+    t4_reachable = bool(t4_check.get("t4_reachable"))
+    routing = route_traffic_to_rtx2070_orchestrator(
+        gateway,
+        tunnel_url,
+        t4_reachable=t4_reachable,
+        shield_ok=shield_ok,
+        endpoint_token=tok,
+    )
     e8_round = step_e8_stage2_controller_round(inner_steps=inner_steps)
     ot_sync = sync_opentrainer_and_gpu_telemetry(
         gateway,
         e8_round,
-        t4_reachable=bool(t4_check.get("t4_reachable")),
+        t4_reachable=t4_reachable,
     )
     chat_probe = verify_live_gateway_completion(gateway) if verify_chat else {"skipped": True}
 
     status = {
-        "schema_version": "rtx2070_failover_orchestrator.v1",
+        "schema_version": "rtx2070_failover_orchestrator.v2",
         "timestamp_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "gateway": gateway,
         "local_ollama_warm": warm_ok,
@@ -693,7 +884,8 @@ def main(argv: list[str] | None = None) -> int:
                         "timestamp_utc": report["timestamp_utc"],
                         "tunnel_url": report["cloudflare_tunnel_url"],
                         "t4_reachable": report["gcp_t4_probe"].get("t4_reachable"),
-                        "reconnected_count": report["traffic_routing"].get("reconnected_count"),
+                        "routing_action": report["traffic_routing"].get("action"),
+                        "reconnected": report["traffic_routing"].get("reconnected"),
                         "e8_round": report["e8_stage2_controller"]["round_id"],
                         "e8_eval_loss": report["e8_stage2_controller"]["loss_after"],
                         "opentrainer_node": report["opentrainer_sync"].get("opentrainer_node"),

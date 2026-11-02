@@ -9,7 +9,7 @@ Scans open Pull Requests, Roadmap progress, Experimental receipts, and GitHub Di
    `Ideas`) to answer questions from human developers and AI agents, validate
    shared `community_gpu_benchmark_receipt.json` hashes, and coordinate Season 7/8/9
    (`HM-S7-01..10`, `HM-S8-01..10`, `HM-S9-01..08`) branch claims.
-3. Audits hourly quality, Lean 4 formal proofs (`116` machine-checked theorems),
+3. Audits hourly quality, Lean 4 formal proofs (theorem count read from the file at audit time),
    architecture hypothesis verification (`H1`–`H10`), and experimental provenance (`E1`–`E4`).
 4. Enforces the Non-Monetary Reciprocal Compute-Points Charter (`HiveMind Reflexion Points (HMT)`;
    accumulated `PTS` / `$HIVE` points provide only computing processing benefits
@@ -543,6 +543,14 @@ def evaluate_pull_request_for_merge(
     }
 
 
+def declared_lean_theorem_count(repo_root: Path | None = None) -> int | None:
+    """Number of `theorem` declarations in lean4/HiveMindSpec.lean, counted now; None when the file is absent."""
+    lean_path = (repo_root or REPO_ROOT) / "lean4" / "HiveMindSpec.lean"
+    if not lean_path.exists():
+        return None
+    return int(verify_lean_print_axioms_coverage(lean_path.read_text(encoding="utf-8"))["declared_theorems"])
+
+
 def compose_discussion_reply(discussion: dict[str, Any]) -> dict[str, Any]:
     """Inspect a GitHub Discussion and compose a grounded reply if the latest message is unanswered."""
     disc_id = str(discussion.get("id", ""))
@@ -620,7 +628,13 @@ def compose_discussion_reply(discussion: dict[str, Any]) -> dict[str, Any]:
         or ("stage3_three_tier_128_moe" in lower_text and sha_match)
         or ("operation-polyglot-singularity-128" in lower_text and sha_match)
     ):
-        receipt_hash = sha_match.group(1) if sha_match else "verified-format"
+        # Nothing here verifies a receipt: at most we can say whether a 64-hex string is present. Say exactly that.
+        receipt_line = (
+            f"- **Receipt hash found:** `{sha_match.group(1)}` (format check only: a 64-hex string is present; "
+            "the receipt was not verified against any ledger or benchmark run)\n"
+            if sha_match
+            else "- **Receipt hash:** none found (no 64-hex SHA-256 in the comment; nothing was verified)\n"
+        )
         is_multi_moe = "campaign_sha256" in lower_text or "polyglot-singularity-128" in lower_text
         campaign_label = (
             "Operation Polyglot-Singularity-128 Multi-MoE & 8-Domain Hugging Face Campaign Receipt"
@@ -629,7 +643,7 @@ def compose_discussion_reply(discussion: dict[str, Any]) -> dict[str, Any]:
         )
         reply = (
             f"👋 Thanks `@{target_author}` for sharing your **{campaign_label}**!\n\n"
-            f"- **Receipt Signature Check:** `{receipt_hash}` (64-hex SHA-256 format verified)\n"
+            f"{receipt_line}"
             f"- **Next Step:** Feel free to open a PR adding your hardware & multi-domain MoE profile under "
             f"`HM-S7-09` (`feat/s7-polyglot-singularity-128-campaign`), `HM-S7-06`, or `HM-S7-07`.\n"
             f"- **📚 Project HiveMind Wiki References:**\n{wiki_links_md}\n"
@@ -674,12 +688,19 @@ def compose_discussion_reply(discussion: dict[str, Any]) -> dict[str, Any]:
             "reply_markdown": reply,
         }
 
-    # 3. General Q&A / Technical Support Reply
+    # 3. General Q&A / Technical Support Reply. Only figures counted at reply time are stated; the rest points at the
+    # roadmap's latest status block instead of repeating numbers that go stale.
+    theorem_count = declared_lean_theorem_count()
+    lean_line = (
+        f"`{theorem_count}` `theorem` declarations counted in `lean4/HiveMindSpec.lean` at reply time (axiom and `sorry` status: see the hourly audit), "
+        if theorem_count is not None
+        else "Lean 4 theorem count: not available at reply time, "
+    )
     reply = (
         f"👋 Hi `@{target_author}`, thanks for posting in the **Project HiveMind Community Discussions**!\n\n"
-        f"- **Current Architecture & Publication Status (`v2.0.0` / Paper `v3.1.0`):** `63/63` Community & Dependabot PRs merged across Waves 1–7, "
-        f"`116` machine-checked Lean 4 `theorem` declarations (`0 sorry`, `0` custom axioms) in `lean4/HiveMindSpec.lean`, "
-        f"`10/10` verified architectural hypotheses (`H1`–`H10`), and `4/4` controlled experimental suites (`E1`–`E4`).\n"
+        f"- **Current status:** {lean_line}"
+        f"merged PRs, verified hypotheses and experiment suites are listed with dates in the latest status block of "
+        f"[`ROADMAP.md`](https://github.com/xaviercallens/HiveMind/blob/main/ROADMAP.md), not repeated here.\n"
         f"- **Open Season 9 (`Wave 8`) Human & AI Agent Tasks (`HM-S9-01`..`HM-S9-08`):** See [`ROADMAP.md`](https://github.com/xaviercallens/HiveMind/blob/main/ROADMAP.md) "
         f"and [`docs/CONTRIBUTOR_TASKS_AND_BOUNTIES.md`](https://github.com/xaviercallens/HiveMind/blob/main/docs/CONTRIBUTOR_TASKS_AND_BOUNTIES.md) for Multi-Host Residential WAN Benchmarks, "
         f"`GSM8K`/`HumanEval` MoE Evaluation, Real-Activation `Skip-Attention` Routing, `ALIE` Byzantine Red-Teaming, and Season 14 Lean 4 Proofs (`Theorems 117–128`).\n"

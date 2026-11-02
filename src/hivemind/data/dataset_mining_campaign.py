@@ -356,11 +356,9 @@ def run_dataset_mining_and_ruche_campaign(
         trainable_params = [p for p in model.parameters() if p.requires_grad]
         optimizer = torch.optim.AdamW(trainable_params, lr=learning_rate, weight_decay=0.0)
 
-        combined_texts = train_texts + holdout_texts
-        adapt_batch = {
-            k: v.to(device)
-            for k, v in tokenize_documents(combined_texts, sequence_length=96).items()
-        }
+        # Train on the train split only. The holdout split is evaluated, never optimised on, otherwise the
+        # 'holdout' perplexity below would measure memorisation of the holdout itself.
+        adapt_batch = train_batch
 
         model.train()
         for _ in range(training_steps):

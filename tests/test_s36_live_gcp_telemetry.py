@@ -366,3 +366,21 @@ def test_portal_page_script_prints_na_not_a_literal_for_a_missing_live_figure() 
     assert "const v = function (x)" in html_text
     for literal in ("|| 69)", "|| 147)", "|| 5632.11)", "|| 10519)", "|| 71809)", "|| 557)", "|| 20480)", "|| 1.7772)", "|| 'ONLINE')", "|| 15360)", "|| 42)", "|| 210)"):
         assert literal not in html_text, literal
+
+
+def test_manifesto_shows_na_not_a_literal_when_the_payload_lacks_a_figure() -> None:
+    """IP-177 / IP-146 (manifesto): without a payload the page printed 66 accounts, 154 WUs, 597 requests and
+    OpenTrainer ONLINE as if measured."""
+    from hivemind.router.manifesto_page import render_manifesto_page
+
+    html_text = render_manifesto_page("en", "abcdefgh12345678", live_telemetry=None)
+    assert "n/a registered accounts" in html_text and "OpenTrainer: <strong>n/a</strong>" in html_text
+    # (the manifesto's own prose cites "the 66 registered accounts" of its writing date; the live line is what is checked)
+    for literal in ("66 registered accounts (32 prosumers", "154 WUs", "597 24h requests", "OpenTrainer: <strong>ONLINE</strong>", "42/42 active"):
+        assert literal not in html_text, literal
+    live = render_manifesto_page(
+        "en", "abcdefgh12345678",
+        live_telemetry={"accounts": {"total_registered_accounts": 7, "by_role": {"prosumer": 1}}, "t4_boinc": {"assimilated_workunits": 161},
+                        "opentrainer": {"status": "COORDINATOR_UP_NO_TRAINERS"}, "usage_24h": {"total_requests": 12}},
+    )
+    assert "7 registered accounts" in live and "161 WUs" in live and "COORDINATOR_UP_NO_TRAINERS" in live and "12 24h requests" in live

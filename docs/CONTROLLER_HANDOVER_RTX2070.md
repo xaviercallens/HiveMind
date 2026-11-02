@@ -15,6 +15,8 @@ Written 2026-11-02, when the owner announced that the T4 instance (`socreateai-a
 
 ## 2. The overlay without the T4
 
+**Update (2026-11-02, later): use the Spot federation master instead, `docs/FEDERATION_MASTER_SPOT.md`.** The 2070 keeps one peer, `hm-fed-master` (10.77.0.10), which reaches the voters over their stable internal addresses. The voters' external addresses below had already changed by the afternoon (a Spot preemption gives a new one), so the direct configuration is a fallback only.
+
 The three Kafka VMs already list the 2070's public key (`WOsqyc4w...`) as peer `10.77.0.5`. Their external addresses are **ephemeral** (no paid static IPs, per `AGENTS.md`) and change when a Spot VM is preempted. Read the current ones with `gcloud compute instances list --filter="name~hm-kafka" --format="table(name,networkInterfaces[0].accessConfigs[0].natIP)"`. On 2026-11-02 they were:
 
 ```ini
@@ -47,6 +49,8 @@ PersistentKeepalive = 25
 Check: `ping 10.77.0.1`, `Test-NetConnection 10.77.0.1 -Port 9092`. If a VM is preempted, its address changes: update that `Endpoint`.
 
 ## 3. Running the coordinator on the 2070
+
+**Update:** sessions now run on `hm-fed-master` (section 3 of `docs/FEDERATION_MASTER_SPOT.md`), so the 2070 only needs to be a learner. Running the coordinator on the 2070 as below still works, as a fallback.
 
 1. Check out the PR #410 branch (or `main` once it is merged). The coordinator now retries a publish through a broker outage instead of crashing, the failure that ended `night-002b` during a voter preemption.
 2. Get the resume point: `artifacts/experiments/e8_real/night-002b.ckpt` (round 412, loss 1.420), also in the data lake. Copy it as `night-003.ckpt` to continue from it, or start fresh.

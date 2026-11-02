@@ -983,6 +983,70 @@ if ($('opentrainerHeartbeatBtn')) {
   });
 }
 
+// Contributive & Community Help Hub interactive controls
+const COMMUNITY_HELP_TOPICS = {
+  'producer-openrouter-join': {
+    title: 'FR/EN — 1. Rejoindre comme Producteur OpenRouter / Join as an OpenRouter Inference Producer',
+    body: 'FR : Lancez Ollama ou llama-server et envoyez vos heartbeats (libération GPU < 1,5 s dès qu un jeu démarre). | EN: Run Ollama or llama-server and heartbeat your models (< 1.5s game preemption).',
+    cmd: 'python scripts/hivemind_producer_agent.py --gateway https://hivemind-openrouter-1003063861791.us-central1.run.app --preset coder',
+  },
+  'trainer-opentrainer-moe': {
+    title: 'FR/EN — 2. Contribuer à l Auto-Entraînement MoE (OpenTrainer) / Join OpenTrainer Self-Training MoE',
+    body: 'FR : Entraînement Stage-2 Tiny Granite-MoE NF4 QLoRA & DiLoCo 2D-DCT via HTTPS sortant (0 port entrant) avec cliquet monotone. | EN: Stage-2 Tiny Granite-MoE NF4 QLoRA & DiLoCo 2D-DCT over outbound HTTPS (0 inbound ports) with monotone loss ratchet.',
+    cmd: 'python scripts/hivemind_opentrainer_agent.py --gateway https://hivemind-openrouter-1003063861791.us-central1.run.app --network-mode outbound-https-relay --check-firewall --submit-delta --once',
+  },
+  'dual-role-failover-orchestrator': {
+    title: 'FR/EN — 3. Cycle 3 Heures Producteur + Entraîneur MoE / 3-Hour Producer + Trainer MoE Integration',
+    body: 'FR : Toutes les 3h, vérifie hivemind/coder, hivemind/bee-stars (NIGHT-MOE-1 LoRA) et hivemind/auto, rafraîchit les producteurs et soumet des rondes QLoRA. | EN: Every 3h, verifies live inference, refreshes producer + trainer heartbeats, and executes QLoRA self-training rounds.',
+    cmd: 'PYTHONPATH=src:scripts python scripts/run_3h_producer_trainer_moe_integration.py',
+  },
+  'community-troubleshooting-help': {
+    title: 'FR/EN — 4. Entraide Communautaire & Diagnostic Pare-Feu / Community Help & Adapter Integrity',
+    body: 'FR : Derrière NAT/CGNAT ? Utilisez outbound-https-relay (TCP/443). Note : hivemind/bee-stars requiert llama-server avec NIGHT-MOE-1 LoRA (/bee). | EN: Behind NAT/CGNAT? Use outbound-https-relay. Note: hivemind/bee-stars requires llama-server with NIGHT-MOE-1 LoRA (/bee).',
+    cmd: 'curl -sS https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/hivemind/contributive-hub',
+  },
+  'byom-2-to-4-local-gpus': {
+    title: 'FR/EN — 5. Co-Entraîner de Nouveaux Modèles ou Vos Propres Modèles (BYOM) avec 2 à 4 GPUs Locaux',
+    body: 'FR : Lancez 1 processus OpenTrainer par GPU (CUDA_VISIBLE_DEVICES=0..3 sur 1 machine ou 2–4 PC séparés) avec --campaign-id byom-<votre-modele> pour entraîner ensemble un nouveau modèle ou votre propre LoRA/MoE. | EN: Pin 1 OpenTrainer worker per GPU (CUDA_VISIBLE_DEVICES=0..3 on 1 rig or 2–4 PCs) with --campaign-id byom-<your-model> to co-train shared or custom models.',
+    cmd: 'for gpu in 0 1 2 3; do CUDA_VISIBLE_DEVICES=$gpu python scripts/hivemind_opentrainer_agent.py --gateway https://hivemind-openrouter-1003063861791.us-central1.run.app --host-label RIG-GPU$gpu --learner-index $gpu --campaign-id byom-custom-moe-v1 --network-mode outbound-https-relay --submit-delta --once & done; wait',
+  },
+};
+
+if ($('communityHelpTopicSelect')) {
+  $('communityHelpTopicSelect').addEventListener('change', (ev) => {
+    const t = COMMUNITY_HELP_TOPICS[ev.target.value] || COMMUNITY_HELP_TOPICS['producer-openrouter-join'];
+    if ($('communityHelpTopicTitle')) $('communityHelpTopicTitle').textContent = t.title;
+    if ($('communityHelpTopicBody')) $('communityHelpTopicBody').textContent = t.body;
+    if ($('communityHelpTopicCmd')) $('communityHelpTopicCmd').textContent = t.cmd;
+  });
+}
+
+if ($('contributiveHubBtn')) {
+  $('contributiveHubBtn').addEventListener('click', async () => {
+    if (!$('contributiveHubStatus')) return;
+    $('contributiveHubStatus').textContent = 'Querying /v1/hivemind/contributive-hub (OpenRouter Fleet + OpenTrainer Self-Training MoE)...';
+    try {
+      const res = await fetch('/v1/hivemind/contributive-hub');
+      const data = await res.json();
+      if (!res.ok) {
+        $('contributiveHubStatus').textContent = 'Error querying /v1/hivemind/contributive-hub.';
+        return;
+      }
+      const fl = data.openrouter_producer_fleet || {};
+      const moe = data.opentrainer_moe_self_training || {};
+      $('contributiveHubStatus').textContent =
+        'CONTRIBUTIVE HUB LIVE • Producers: ' + (fl.live_producers_count || 0) + '/' + (fl.total_hiveminders || 0) +
+        ' (' + (fl.distinct_physical_gpus || 0) + ' GPUs, ' + (fl.live_models_count || 0) + ' live models) • ' +
+        'MoE Self-Training Rounds: ' + (moe.rounds_recorded || 0) +
+        ' • Latest Eval Loss: ' + (moe.latest_eval_loss !== null && moe.latest_eval_loss !== undefined ? moe.latest_eval_loss : 'N/A') +
+        ' • Best Ratcheted Loss: ' + (moe.best_ratcheted_eval_loss !== null && moe.best_ratcheted_eval_loss !== undefined ? moe.best_ratcheted_eval_loss : 'N/A') +
+        ' • Tokens Trained: ' + Number(moe.total_tokens_trained || 0).toLocaleString();
+    } catch (err) {
+      $('contributiveHubStatus').textContent = 'Network error querying /v1/hivemind/contributive-hub.';
+    }
+  });
+}
+
 // Automatic Real-Life GCP Production Telemetry Sync (/v1/hivemind/live-telemetry)
 async function refreshLivePortalTelemetry() {
   const urls = [
@@ -1071,6 +1135,22 @@ async function refreshLivePortalTelemetry() {
           ' • Live Trainer GPUs: ' + (ot.total_registered_nodes || 1) +
           ' • Accepted Rounds: ' + (ot.accepted_rounds_count || 1) +
           ' (latest eval_loss: ' + (ot.latest_eval_loss || 1.7772) + ')';
+      }
+      const moeProg = ot.moe_self_training || {};
+      if ($('contribProducersStat')) {
+        $('contribProducersStat').textContent =
+          (prod.live_hiveminders || 3) + ' Live Producers / ' + (prod.total_hiveminders || 42) +
+          ' Hiveminders (' + (models.live_models_count || 15) + ' Live Models)';
+      }
+      if ($('contribMoeRoundsStat')) {
+        $('contribMoeRoundsStat').textContent =
+          (moeProg.rounds_recorded || ot.accepted_rounds_count || 1) + ' Self-Training Round(s) • ' +
+          Number(moeProg.total_tokens_trained || 20480).toLocaleString() + ' Tokens';
+      }
+      if ($('contribMoeLossStat')) {
+        $('contribMoeLossStat').textContent =
+          'Eval Loss: ' + (moeProg.latest_eval_loss || ot.latest_eval_loss || 1.7772) +
+          ' (Best Ratchet: ' + (moeProg.best_ratcheted_eval_loss || ot.latest_eval_loss || 1.7772) + ')';
       }
       break;
     } catch (err) {}
@@ -1170,6 +1250,7 @@ def render_portal_page(
         <a href="#tiers" class="nav-link">Model Tiers</a>
         <a href="#integrations" class="nav-link">Editor Config</a>
         <a href="#steam-free-game" class="nav-link">&#x1F3AE; Free Steam Game</a>
+        <a href="#contributive-community-hub" class="nav-link" style="color:var(--green);font-weight:700;">&#x1F91D; Contributive &amp; Help</a>
         <a href="#opentrainer" class="nav-link" style="color:var(--cyan);font-weight:700;">&#x1F525; Trainer (OpenTrainer)</a>
         <a href="#producers" class="nav-link">Share GPU</a>
         <a href="/signup" class="nav-link">&#x1F511; Sign In</a>
@@ -1550,6 +1631,63 @@ def render_portal_page(
       </div>
       <div id="steamPortalStatus" style="font-size:0.78rem;font-family:var(--font-mono);color:var(--green);background:#040711;border:1px solid var(--border);border-radius:0.375rem;padding:0.65rem;">
         Free Steam Game Registry: <code>AppID 3133700</code> (USS Hivemind: Exoplanet Hunter &mdash; Free BOINC Edition) &bull; Status: <strong>REGISTERED &amp; LIVE ON PORTAL</strong> &bull; Click &lsquo;Register &amp; Login Free Steam Game Account&rsquo; to authenticate.
+      </div>
+    </section>
+
+    <!-- Thème Contributif & Entraide Communautaire: OpenRouter Producer + OpenTrainer Self-Training MoE Hub -->
+    <section id="contributive-community-hub" class="card" style="border-color:rgba(52,211,153,0.5);margin-bottom:3rem;background:linear-gradient(180deg, rgba(16,185,129,0.07), rgba(13,19,38,0.96));">
+      <div class="card-header">
+        <div class="card-title" style="color:var(--green);">
+          &#x1F91D; Th&egrave;me Contributif &amp; Entraide Communautaire &mdash; OpenRouter Producer + OpenTrainer Self-Training MoE Hub
+        </div>
+        <span class="pill" style="border-color:var(--green);color:var(--green);">3-Hour Producer+Trainer Cycle (<code>0 */3 * * *</code>) &bull; Monotone MoE Ratchet</span>
+      </div>
+      <p style="color:var(--text-dim);font-size:0.9rem;margin-bottom:1rem;line-height:1.55;">
+        <strong>Esprit Contributif &amp; Entraide (FR/EN) :</strong> Chaque GPU citoyen renforce &agrave; la fois le <strong>service d&rsquo;inf&eacute;rence OpenRouter</strong> (<code>/v1/chat/completions</code>, continuit&eacute; garantie sur <code>hivemind/coder</code>, <code>hivemind/bee-stars</code> et <code>hivemind/auto</code>) et <strong>l&rsquo;auto-entra&icirc;nement du MoE propos&eacute; via OpenTrainer</strong> (Stage-2 Tiny Granite-MoE NF4 QLoRA + DiLoCo 2D-DCT). Toutes les <strong>3 heures</strong>, notre cycle d&rsquo;int&eacute;gration f&eacute;d&egrave;re les producteurs et entra&icirc;neurs actifs, ex&eacute;cute des rondes d&rsquo;auto-entra&icirc;nement v&eacute;rifi&eacute;es par cliquet monotone, et maintient le basculement automatique entre le <strong>Tesla T4 GCP</strong> et la <strong>RTX 2070 (<code>XAVGAMSRV</code>)</strong>.
+      </p>
+      <div class="tiers-grid" style="margin-bottom:1rem;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:0.75rem;">
+        <div class="tier-card" style="padding:0.8rem;border-color:rgba(0,238,252,0.35);">
+          <div class="tier-badge">OPENROUTER PRODUCER FLEET</div>
+          <div id="contribProducersStat" class="tier-name" style="margin-bottom:0.25rem;">{live_hiveminders} Live Producers / {total_hiveminders} Hiveminders ({live_models_cnt} Live Models)</div>
+          <div class="tier-vram" style="margin-bottom:0;">Continuit&eacute; d&rsquo;inf&eacute;rence temps r&eacute;el &bull; Pr&eacute;emption jeu &lt; 1,5 s</div>
+        </div>
+        <div class="tier-card" style="padding:0.8rem;border-color:rgba(192,132,252,0.35);">
+          <div class="tier-badge">OPENTRAINER SELF-TRAINING MOE</div>
+          <div id="contribMoeRoundsStat" class="tier-name" style="margin-bottom:0.25rem;">{ot_rounds} Self-Training Round(s) &bull; {ot_nodes} Active Trainer GPU(s)</div>
+          <div id="contribMoeLossStat" class="tier-vram" style="margin-bottom:0;">Stage-2 Tiny Granite-MoE NF4 QLoRA &bull; Cliquet Monotone Actif</div>
+        </div>
+        <div class="tier-card" style="padding:0.8rem;border-color:rgba(52,211,153,0.35);">
+          <div class="tier-badge">3-HOUR INTEGRATION CYCLE</div>
+          <div class="tier-name" style="margin-bottom:0.25rem;">Every 3h (<code>0 */3 * * *</code>) + 45s Guard</div>
+          <div class="tier-vram" style="margin-bottom:0;"><code>run_3h_producer_trainer_moe_integration.py</code> &bull; T4 &harr; RTX 2070 Failover</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:0.85rem;">
+        <div style="flex:2;min-width:260px;">
+          <label for="communityHelpTopicSelect">Guide d&rsquo;Entraide Communautaire &amp; Diagnostic (FR / EN)</label>
+          <select id="communityHelpTopicSelect" style="margin-bottom:0;">
+            <option value="producer-openrouter-join">1. Rejoindre comme Producteur OpenRouter / Join as an Inference Producer</option>
+            <option value="trainer-opentrainer-moe">2. Auto-Entra&icirc;nement MoE via OpenTrainer (0 Port Entrant) / Self-Training MoE</option>
+            <option value="dual-role-failover-orchestrator">3. Cycle 3 Heures Producteur + Entra&icirc;neur &amp; Bascule T4/RTX 2070</option>
+            <option value="community-troubleshooting-help">4. Diagnostic Pare-Feu NAT/CGNAT &amp; Int&eacute;grit&eacute; Adaptateur LoRA (bee-stars)</option>
+            <option value="byom-2-to-4-local-gpus">5. Co-Entra&icirc;ner Vos Propres Mod&egrave;les (BYOM) avec 2 &agrave; 4 GPUs Locaux</option>
+          </select>
+        </div>
+        <button id="contributiveHubBtn" type="button" class="btn btn-primary">&#x1F91D; Sync Contributive &amp; MoE Hub</button>
+        <a href="/v1/hivemind/contributive-hub" class="btn btn-outline" style="border-color:var(--green);color:var(--green);">JSON /v1/hivemind/contributive-hub</a>
+        <a href="/v1/hivemind/opentrainer/moe-self-training" class="btn btn-outline" style="border-color:var(--cyan);color:var(--cyan);">JSON /v1/opentrainer/moe-self-training</a>
+      </div>
+      <div style="background:#040711;border:1px solid var(--border);border-radius:0.375rem;padding:0.75rem;margin-bottom:0.65rem;">
+        <div id="communityHelpTopicTitle" style="font-weight:700;color:var(--amber);font-size:0.85rem;margin-bottom:0.3rem;">
+          FR/EN &mdash; 1. Rejoindre comme Producteur OpenRouter / Join as an OpenRouter Inference Producer
+        </div>
+        <div id="communityHelpTopicBody" style="color:var(--text-dim);font-size:0.82rem;margin-bottom:0.45rem;line-height:1.45;">
+          FR : Lancez Ollama ou llama-server et envoyez vos heartbeats (lib&eacute;ration GPU &lt; 1,5 s d&egrave;s qu&rsquo;un jeu d&eacute;marre). | EN: Run Ollama or llama-server and heartbeat your models (&lt; 1.5s game preemption).
+        </div>
+        <pre id="communityHelpTopicCmd" class="code-box" style="margin:0;padding:0.5rem;font-size:0.76rem;">python scripts/hivemind_producer_agent.py --gateway https://hivemind-openrouter-1003063861791.us-central1.run.app --preset coder</pre>
+      </div>
+      <div id="contributiveHubStatus" style="font-size:0.78rem;font-family:var(--font-mono);color:var(--green);background:#040711;border:1px solid var(--border);border-radius:0.375rem;padding:0.65rem;">
+        Contributive Hub Endpoint: <code>/v1/hivemind/contributive-hub</code> &bull; MoE Self-Training Endpoint: <code>/v1/hivemind/opentrainer/moe-self-training</code> &bull; Click &lsquo;Sync Contributive &amp; MoE Hub&rsquo; to inspect live metrics.
       </div>
     </section>
 

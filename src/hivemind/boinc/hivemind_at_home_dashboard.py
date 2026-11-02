@@ -8836,12 +8836,13 @@ def create_hivemind_at_home_app(
             f"<ul>{feed_items}</ul>"
             "<script>(function(){async function s(){const u=['/v1/hivemind/live-telemetry','https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/hivemind/live-telemetry'];"
             "for(const x of u){try{const r=await fetch(x,{headers:{Accept:'application/json'},cache:'no-store'});if(!r.ok)continue;const d=await r.json();"
-            "if(d&&d.accounts&&d.models){const el=document.getElementById('community-live-gcp-text');if(!el)return;"
+            "if(d&&d.accounts&&d.models&&d.status==='LIVE_GCP_PRODUCTION'){const el=document.getElementById('community-live-gcp-text');if(!el)return;"
+            "const v=function(x){return (x===null||x===undefined)?'n/a':x;};"
             "const a=d.accounts,b=a.by_role||{},m=d.models||{},t=d.tesla_t4_boinc||{},o=d.opentrainer||{};"
-            "el.textContent=a.total_registered_accounts+' comptes inscrits ('+(b.prosumer||0)+' prosumers, '+(b.producer||0)+' producteurs, '+"
-            "(b.consumer||0)+' consommateurs, '+(b.admin||0)+' admins, '+(b.trainer||0)+' trainers) • '+(m.live_count||0)+' modèles en ligne • '+"
-            "(t.assimilated_workunits||147)+' unités BOINC ('+(t.total_cobblestones||5632.11)+' Cobblestones) • T4 VRAM libre '+(t.vram_free_mib||10519)+' MiB • '+"
-            "'OpenTrainer '+(o.status||'ONLINE')+' ('+(o.total_registered_nodes||1)+' nœud trainer, eval_loss '+(o.latest_eval_loss||1.7772)+')';return;}}catch(_e){}}}s();setInterval(s,20000);})();</script>"
+            "el.textContent=v(a.total_registered_accounts)+' comptes inscrits ('+v(b.prosumer)+' prosumers, '+v(b.producer)+' producteurs, '+"
+            "v(b.consumer)+' consommateurs, '+v(b.admin)+' admins, '+v(b.trainer)+' trainers) • '+v(m.live_count)+' modèles en ligne • '+"
+            "v(t.assimilated_workunits)+' unités BOINC ('+v(t.total_cobblestones)+' Cobblestones) • T4 VRAM libre '+v(t.vram_free_mib)+' MiB ['+v(t.data_source)+'] • '+"
+            "'OpenTrainer '+v(o.status)+' ('+v(o.total_registered_nodes)+' nœud trainer, eval_loss '+v(o.latest_eval_loss)+')';return;}}catch(_e){}}}s();setInterval(s,20000);})();</script>"
             "</body></html>"
         )
         return HTMLResponse(content=page_html)
@@ -8948,75 +8949,85 @@ def create_hivemind_at_home_app(
         return JSONResponse(content={"ok": True, "receipt_sha256": receipt, "feed": st["coop_discovery_feed"][:6]})
 
     def _build_ruche_live_telemetry() -> dict[str, Any]:
+        """What this ruche process can measure itself; everything it cannot is None with a data_source saying so.
+
+        The ruche holds no router ledger, no usage log and no T4 governor feed, so account, usage, producer-fleet,
+        T4 and OpenTrainer figures are not available here (IP-148). The pages read the router's own
+        /v1/hivemind/live-telemetry for those; this payload never carries a literal in their place.
+        """
         from hivemind.router.catalog import catalog_payload
 
         tiers = catalog_payload()["tiers"]
         live_tier_ids = [str(t.get("id")) for t in tiers if t.get("id")]
         st = _load_or_init_ruche_community_state()
+        not_here = "NOT_MEASURED_ON_RUCHE (read the router's /v1/hivemind/live-telemetry)"
+        receipts = federated_state["completed_receipts"]
         return {
-            "status": "LIVE_GCP_PRODUCTION",
+            "status": "RUCHE_LOCAL_STATE_NOT_ROUTER_TELEMETRY",
             "timestamp_utc": time.time(),
             "service": "hivemind-at-home-ruche",
             "gcp_cloud_run_url": "https://hivemind-at-home-ruche-1003063861791.us-central1.run.app",
             "openrouter_url": "https://hivemind-openrouter-1003063861791.us-central1.run.app",
             "accounts": {
-                "total_registered_accounts": 69,
-                "by_role": {
-                    "prosumer": 32,
-                    "producer": 10,
-                    "consumer": 24,
-                    "admin": 3,
-                    "trainer": 0,
-                },
-                "active_accounts_24h": 4,
-                "total_hmt_in_circulation": 161250.0,
+                "total_registered_accounts": None,
+                "by_role": {},
+                "active_accounts_24h": None,
+                "total_hmt_in_circulation": None,
+                "data_source": not_here,
             },
             "models": {
-                "live_count": len(live_tier_ids) or 15,
+                "live_count": len(live_tier_ids),
                 "live_model_ids": live_tier_ids,
+                "data_source": "catalog tiers declared in hivemind.router.catalog, not producers seen live",
             },
             "producer_fleet": {
-                "total_hiveminders": 42,
-                "live_hiveminders": 3,
-                "distinct_physical_gpus": 1,
-                "live_endpoints": 3,
-                "total_capacity_1k": 210.0,
-                "live_handles": ["xavier_callens", "node_rtx2070_home", "node_gcp_t4_spot"],
+                "total_hiveminders": None,
+                "live_hiveminders": None,
+                "distinct_physical_gpus": None,
+                "live_endpoints": None,
+                "total_capacity_1k": None,
+                "live_handles": [],
+                "data_source": not_here,
             },
             "usage_24h": {
                 "window_hours": 24.0,
-                "total_requests": 610,
-                "stream_requests": 142,
-                "total_billed_tokens": 322370,
-                "total_charged_hmt": 684.5,
-                "latency_ms": {"p50_ms": 196.8, "p95_ms": 482.0},
+                "total_requests": None,
+                "stream_requests": None,
+                "total_billed_tokens": None,
+                "total_charged_hmt": None,
+                "latency_ms": {"p50_ms": None, "p95_ms": None},
+                "data_source": not_here,
             },
             "tesla_t4_boinc": {
-                "instance": "socreateai-agora-hermes-node1 (us-east4-b)",
-                "gpu_name": "NVIDIA Tesla T4 (16 GB GDDR6)",
-                "vram_used_mib": 4841,
-                "vram_free_mib": 10519,
-                "vram_total_mib": 15360,
-                "governor_state": "ACCEPTING_WORK",
-                "assimilated_workunits": 147 + len(federated_state["completed_receipts"]),
-                "total_cobblestones": 5632.11 + 45.0 * len(federated_state["completed_receipts"]),
-                "head_workunit": "hmq_00092",
-                "held_out_nll_baseline": 2.2705,
-                "held_out_nll_post_round": 2.1380,
+                "instance": None,
+                "gpu_name": None,
+                "vram_used_mib": None,
+                "vram_free_mib": None,
+                "vram_total_mib": None,
+                "governor_state": None,
+                "assimilated_workunits": None,
+                "total_cobblestones": None,
+                "head_workunit": None,
+                "held_out_nll_baseline": None,
+                "held_out_nll_post_round": None,
+                "completed_receipts_count": len(receipts),
+                "completed_receipts_status": "RECEIVED_UNVERIFIED (client-supplied figures, not replayed here)",
                 "active_leases_count": len(federated_state["active_leases"]),
                 "community_members_count": len(st.get("community_members", [])),
+                "data_source": "this process's federated_state and community state for the counts; " + not_here,
             },
             "opentrainer": {
-                "status": "ONLINE",
+                "status": None,
                 "coordinator": "opentrainer",
-                "version": "1.0.0-s36",
-                "topic": "hivemind.amcp.federation.v1",
-                "total_registered_nodes": 1,
-                "accepted_rounds_count": 1,
-                "latest_eval_loss": 1.7772,
+                "version": None,
+                "topic": None,
+                "total_registered_nodes": None,
+                "accepted_rounds_count": None,
+                "latest_eval_loss": None,
+                "data_source": not_here,
             },
             "boinc_coordinator": {
-                "status": "ONLINE",
+                "status": "SERVING (this process answered the request)",
                 "master_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/",
                 "steam_app_id": 3133700,
             },

@@ -67,14 +67,25 @@ def test_ruche_live_telemetry_endpoint_and_all_web_pages() -> None:
     app = create_hivemind_at_home_app()
     client = TestClient(app)
 
+    from hivemind.router.catalog import catalog_payload
+
+    declared_tiers = len([t for t in catalog_payload()["tiers"] if t.get("id")])
     for ep in ("/v1/hivemind/live-telemetry", "/v1/live-telemetry", "/api/v1/live-telemetry"):
         resp = client.get(ep)
         assert resp.status_code == 200
         data = resp.json()
-        assert data["status"] == "LIVE_GCP_PRODUCTION"
-        assert data["accounts"]["total_registered_accounts"] >= 59
-        assert data["models"]["live_count"] >= 15
-        assert data["opentrainer"]["status"] == "ONLINE"
+        # IP-148: the ruche holds no router ledger, usage log or T4 feed, so it must not call itself live production
+        # telemetry nor carry a figure for them; only what this process measured is a number.
+        assert data["status"] != "LIVE_GCP_PRODUCTION" and "NOT_ROUTER_TELEMETRY" in data["status"]
+        assert data["accounts"]["total_registered_accounts"] is None and data["accounts"]["by_role"] == {}
+        assert data["models"]["live_count"] == declared_tiers and "catalog" in data["models"]["data_source"]
+        assert data["opentrainer"]["status"] is None and data["opentrainer"]["latest_eval_loss"] is None
+        t4 = data["tesla_t4_boinc"]
+        assert t4["assimilated_workunits"] is None and t4["total_cobblestones"] is None and t4["vram_free_mib"] is None
+        assert t4["completed_receipts_count"] == 0 and t4["active_leases_count"] == 0
+        for section in ("accounts", "producer_fleet", "usage_24h", "tesla_t4_boinc", "opentrainer"):
+            assert "NOT_MEASURED_ON_RUCHE" in data[section]["data_source"], section
+        assert "5632.11" not in resp.text and "161250" not in resp.text and "1.7772" not in resp.text
 
     ruche_pages = [
         "/",
@@ -270,3 +281,38 @@ def test_manifesto_page_and_gcp_portal_links(tmp_path) -> None:
 
 
 
+
+
+def test_ruche_pages_read_only_the_routers_live_payload_and_carry_no_literal_fallbacks() -> None:
+    """The community and night-MoE scripts skip a payload that is not the router's live telemetry and never print
+    a literal (147 workunits, 5632.11 cobblestones, eval_loss 1.7772, 'ONLINE') in place of a missing figure."""
+    from hivemind.boinc.hivemind_at_home_dashboard import create_hivemind_at_home_app
+
+    client = TestClient(create_hivemind_at_home_app())
+    for path in ("/community", "/night-moe"):
+        html = client.get(path).text
+        assert "d.status==='LIVE_GCP_PRODUCTION'" in html, path
+        for literal in ("||147", "||5632.11", "||10519", "||1.7772", "||'ONLINE'", "||2.2705", "||2.138"):
+            assert literal not in html, (path, literal)
+
+
+def test_pages_show_na_not_a_literal_when_a_telemetry_figure_is_missing() -> None:
+    """IP-146 server side: the portal, join and bee renderers printed 69 accounts, 147 workunits, 5,632.11 cobblestones,
+    71,809 tokens or eval_loss 1.7772 whenever the payload lacked the figure; now they print n/a."""
+    from hivemind.boinc.hivemind_at_home_dashboard import create_hivemind_at_home_app
+    from hivemind.router.join_page import render_join_page
+    from hivemind.router.portal_page import render_portal_page
+    from hivemind.router.telemetry_figures import shown_figure
+
+    assert shown_figure(None) == "n/a" and shown_figure(float("nan")) == "n/a" and shown_figure(True) == "n/a"
+    assert shown_figure(71809) == "71,809" and shown_figure(5632.11, decimals=2) == "5,632.11" and shown_figure(2.12239, decimals=4) == "2.1224"
+    for html_text in (render_portal_page(None, "n", live_telemetry=None), render_portal_page(None, "n", live_telemetry={"accounts": {}, "t4_boinc": {}})):
+        assert "n/a" in html_text
+        # (the dated 25-26 Oct night report section quotes its own measured figures and is not a fallback)
+        for literal in ("71,809", "10,519", "eval_loss 1.7772", "69 registered", "557 "):
+            assert literal not in html_text, literal
+    join_html = render_join_page("en", "abcdefgh12345678", live_telemetry={"accounts": {"total_registered_accounts": None}})
+    assert "n/a registered accounts" in join_html and "69 registered accounts" not in join_html and "147 assimilated" not in join_html
+    # the ruche's /join page renders its own honest payload without crashing and without a literal
+    ruche = TestClient(create_hivemind_at_home_app()).get("/join", headers={"Accept-Language": "en"})
+    assert ruche.status_code == 200 and "n/a registered accounts" in ruche.text and "147 assimilated" not in ruche.text

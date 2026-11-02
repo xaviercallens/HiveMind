@@ -1,0 +1,218 @@
+[learner l0] t4-l0-cpu device=cpu quant=none pin 08672343a444 waiting for offers of run night-002b
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[learner l0] round 216: global eval 1.4511, |delta| 4.9643
+[learner l0] round 217: global eval 1.4512, |delta| 4.8291
+[learner l0] round 218: global eval 1.4407, |delta| 4.9123
+[learner l0] round 219: global eval 1.4378, |delta| 4.9590
+[learner l0] round 220: global eval 1.4323, |delta| 4.8541
+[learner l0] round 221: global eval 1.4280, |delta| 4.8474
+[learner l0] round 222: global eval 1.4210, |delta| 4.9847
+[learner l0] round 223: global eval 1.4134, |delta| 4.8814
+[learner l0] round 224: global eval 1.4180, |delta| 4.9392
+[learner l0] round 225: global eval 1.4183, |delta| 4.9380
+[learner l0] round 226: global eval 1.4283, |delta| 4.9158
+[learner l0] round 227: global eval 1.4270, |delta| 4.8127
+[learner l0] round 228: global eval 1.4205, |delta| 4.9748
+[learner l0] round 229: global eval 1.4129, |delta| 4.6853
+[learner l0] round 230: global eval 1.4079, |delta| 4.8706
+[learner l0] round 231: global eval 1.4114, |delta| 5.0205
+[learner l0] round 232: global eval 1.4155, |delta| 4.8241
+[learner l0] round 233: global eval 1.4162, |delta| 4.8357
+[learner l0] round 234: global eval 1.4213, |delta| 4.9191
+[learner l0] round 235: global eval 1.4269, |delta| 4.9612
+[learner l0] round 236: global eval 1.4295, |delta| 4.8398
+[learner l0] round 237: global eval 1.4267, |delta| 4.8019
+[learner l0] round 238: global eval 1.4276, |delta| 4.9049
+[learner l0] round 239: global eval 1.4249, |delta| 4.8553
+[learner l0] round 240: global eval 1.4291, |delta| 5.0022
+[learner l0] round 241: global eval 1.4313, |delta| 4.8907
+[learner l0] round 242: global eval 1.4384, |delta| 4.9250
+[learner l0] round 243: global eval 1.4358, |delta| 4.8570
+[learner l0] round 244: global eval 1.4292, |delta| 4.8990
+[learner l0] round 245: global eval 1.4270, |delta| 4.8154
+[learner l0] round 246: global eval 1.4217, |delta| 4.7506
+[learner l0] round 247: global eval 1.4225, |delta| 4.8330
+[learner l0] round 248: global eval 1.4226, |delta| 4.7987
+[learner l0] round 249: global eval 1.4230, |delta| 4.8587
+[learner l0] round 250: global eval 1.4190, |delta| 4.9726
+[learner l0] round 251: global eval 1.4187, |delta| 4.8348
+[learner l0] round 252: global eval 1.4235, |delta| 4.9247
+[learner l0] round 253: global eval 1.4213, |delta| 4.8047
+[learner l0] round 254: global eval 1.4242, |delta| 4.9217
+[learner l0] round 255: global eval 1.4216, |delta| 4.7843
+[learner l0] round 256: global eval 1.4238, |delta| 5.0129
+[learner l0] round 257: global eval 1.4371, |delta| 4.8838
+[learner l0] round 258: global eval 1.4412, |delta| 4.8811
+[learner l0] round 259: global eval 1.4388, |delta| 4.9637
+[learner l0] round 260: global eval 1.4338, |delta| 4.7967
+[learner l0] round 261: global eval 1.4289, |delta| 4.7787
+[learner l0] round 262: global eval 1.4229, |delta| 4.8905
+[learner l0] round 263: global eval 1.4236, |delta| 4.7374
+[learner l0] round 264: global eval 1.4322, |delta| 4.8977
+[learner l0] round 265: global eval 1.4395, |delta| 4.9059
+[learner l0] round 266: global eval 1.4413, |delta| 4.9074
+[learner l0] round 267: not claiming (inference in flight (governor))
+[learner l0] round 267: global eval 1.4408, |delta| 4.9251
+[learner l0] round 268: global eval 1.4337, |delta| 4.8154
+[learner l0] round 269: global eval 1.4295, |delta| 4.8478
+[learner l0] round 270: global eval 1.4311, |delta| 4.8641
+[learner l0] round 271: global eval 1.4296, |delta| 4.8581
+[learner l0] round 272: global eval 1.4221, |delta| 4.8805
+[learner l0] round 273: global eval 1.4202, |delta| 4.8240
+[learner l0] round 274: global eval 1.4245, |delta| 4.7305
+[learner l0] round 275: global eval 1.4246, |delta| 4.8251
+[learner l0] round 276: global eval 1.4225, |delta| 4.7486
+[learner l0] round 277: global eval 1.4206, |delta| 4.7600
+[learner l0] round 278: global eval 1.4200, |delta| 4.8617
+[learner l0] round 279: global eval 1.4161, |delta| 4.8070
+[learner l0] round 280: global eval 1.4177, |delta| 4.8008
+[learner l0] round 281: global eval 1.4252, |delta| 4.9382
+[learner l0] round 282: global eval 1.4284, |delta| 4.7456
+[learner l0] round 283: global eval 1.4266, |delta| 4.9253
+[learner l0] round 284: global eval 1.4212, |delta| 4.8557
+[learner l0] round 285: global eval 1.4185, |delta| 4.8488
+[learner l0] round 286: global eval 1.4177, |delta| 4.8723
+[learner l0] round 287: global eval 1.4169, |delta| 4.7998
+[learner l0] round 288: global eval 1.4150, |delta| 4.7349
+[learner l0] round 289: global eval 1.4175, |delta| 4.8245
+[learner l0] round 290: global eval 1.4147, |delta| 4.7844
+[learner l0] round 291: global eval 1.4126, |delta| 4.9342
+[learner l0] round 292: global eval 1.4150, |delta| 4.8139
+[learner l0] round 293: global eval 1.4172, |delta| 4.7395
+[learner l0] round 294: global eval 1.4202, |delta| 4.8144
+[learner l0] round 295: global eval 1.4257, |delta| 4.8988
+[learner l0] round 296: global eval 1.4293, |delta| 4.7981
+[learner l0] round 297: global eval 1.4318, |delta| 4.9427
+[learner l0] round 298: global eval 1.4322, |delta| 4.8261
+[learner l0] round 299: global eval 1.4353, |delta| 4.8249
+[learner l0] round 300: global eval 1.4381, |delta| 4.8909
+[learner l0] round 301: global eval 1.4402, |delta| 4.7389
+[learner l0] round 302: global eval 1.4396, |delta| 4.7811
+[learner l0] round 303: global eval 1.4352, |delta| 4.8116
+[learner l0] round 304: global eval 1.4250, |delta| 4.9027
+[learner l0] round 305: global eval 1.4197, |delta| 4.8673
+[learner l0] round 306: global eval 1.4164, |delta| 4.8240
+[learner l0] round 307: global eval 1.4174, |delta| 4.8225
+[learner l0] round 308: global eval 1.4157, |delta| 4.7845
+[learner l0] round 309: global eval 1.4127, |delta| 4.6507
+[learner l0] round 310: global eval 1.4108, |delta| 4.8168
+[learner l0] round 311: global eval 1.4119, |delta| 4.8372
+[learner l0] round 312: global eval 1.4107, |delta| 4.7048
+[learner l0] round 313: global eval 1.4141, |delta| 4.8021
+[learner l0] round 314: global eval 1.4179, |delta| 4.7941
+[learner l0] round 315: global eval 1.4155, |delta| 4.9465
+[learner l0] round 316: global eval 1.4164, |delta| 4.8356
+[learner l0] round 317: global eval 1.4233, |delta| 4.8634
+[learner l0] round 318: global eval 1.4262, |delta| 4.7867
+[learner l0] round 319: global eval 1.4227, |delta| 4.7929
+[learner l0] round 320: global eval 1.4161, |delta| 4.7970
+[learner l0] round 321: global eval 1.4151, |delta| 4.9189
+[learner l0] round 322: global eval 1.4203, |delta| 4.7711
+[learner l0] round 323: global eval 1.4252, |delta| 4.7638
+[learner l0] round 324: global eval 1.4268, |delta| 4.7639
+[learner l0] round 325: global eval 1.4283, |delta| 4.8717
+[learner l0] round 326: global eval 1.4292, |delta| 4.9528
+[learner l0] round 327: global eval 1.4300, |delta| 4.8698
+[learner l0] round 328: global eval 1.4352, |delta| 4.6866
+[learner l0] round 329: global eval 1.4403, |delta| 4.8730
+[learner l0] round 330: global eval 1.4416, |delta| 4.8095
+[learner l0] round 331: global eval 1.4431, |delta| 4.8167
+[learner l0] round 332: global eval 1.4421, |delta| 4.8678
+[learner l0] round 333: global eval 1.4434, |delta| 4.8103
+[learner l0] round 334: global eval 1.4359, |delta| 4.8419
+[learner l0] round 335: global eval 1.4269, |delta| 4.9750
+[learner l0] round 336: global eval 1.4267, |delta| 4.8382
+[learner l0] round 337: global eval 1.4258, |delta| 4.9125
+[learner l0] round 338: global eval 1.4240, |delta| 4.8388
+[learner l0] round 339: global eval 1.4281, |delta| 4.7973
+[learner l0] round 340: global eval 1.4322, |delta| 4.8004
+[learner l0] round 341: global eval 1.4277, |delta| 4.8742
+[learner l0] round 342: global eval 1.4311, |delta| 4.7418
+[learner l0] round 343: global eval 1.4337, |delta| 4.8155
+[learner l0] round 344: global eval 1.4306, |delta| 4.7579
+[learner l0] round 345: global eval 1.4295, |delta| 4.8373
+[learner l0] round 346: global eval 1.4258, |delta| 4.8744
+[learner l0] round 347: global eval 1.4268, |delta| 4.9353
+[learner l0] round 348: global eval 1.4212, |delta| 4.8254
+[learner l0] round 349: global eval 1.4254, |delta| 4.8599
+[learner l0] round 350: global eval 1.4192, |delta| 4.6587
+[learner l0] round 351: global eval 1.4186, |delta| 4.7623
+[learner l0] round 352: global eval 1.4196, |delta| 4.8075
+[learner l0] round 353: global eval 1.4219, |delta| 4.9124
+[learner l0] round 354: global eval 1.4230, |delta| 4.7862
+[learner l0] round 355: global eval 1.4276, |delta| 4.7646
+[learner l0] round 356: global eval 1.4275, |delta| 4.8353
+[learner l0] round 357: global eval 1.4204, |delta| 4.8153
+[learner l0] round 358: global eval 1.4174, |delta| 4.9319
+[learner l0] round 359: global eval 1.4143, |delta| 4.8670
+[learner l0] round 360: global eval 1.4162, |delta| 4.8595
+[learner l0] round 361: global eval 1.4165, |delta| 4.7547
+[learner l0] round 362: global eval 1.4167, |delta| 4.8124
+[learner l0] round 363: global eval 1.4134, |delta| 4.9233
+[learner l0] round 364: global eval 1.4169, |delta| 4.8980
+[learner l0] round 365: global eval 1.4215, |delta| 4.7455
+[learner l0] round 366: global eval 1.4246, |delta| 4.8911
+[learner l0] round 367: global eval 1.4201, |delta| 4.6583
+[learner l0] round 368: global eval 1.4181, |delta| 4.7487
+[learner l0] round 369: global eval 1.4158, |delta| 4.8352
+[learner l0] round 370: global eval 1.4142, |delta| 4.8853
+[learner l0] round 371: global eval 1.4161, |delta| 4.7592
+[learner l0] round 372: global eval 1.4197, |delta| 4.9463
+[learner l0] round 373: global eval 1.4164, |delta| 4.7762
+[learner l0] round 374: global eval 1.4095, |delta| 4.7010
+[learner l0] round 375: global eval 1.4100, |delta| 4.9269
+[learner l0] round 376: global eval 1.4141, |delta| 4.6741
+[learner l0] round 377: global eval 1.4127, |delta| 4.8869
+[learner l0] round 378: global eval 1.4088, |delta| 4.8526
+[learner l0] round 379: global eval 1.4067, |delta| 4.8199
+[learner l0] round 380: global eval 1.4044, |delta| 4.7774
+[learner l0] round 381: global eval 1.4105, |delta| 4.7875
+[learner l0] round 382: global eval 1.4171, |delta| 4.7538
+[learner l0] round 383: not claiming (inference in flight (governor))
+[learner l0] round 383: global eval 1.4218, |delta| 4.9112
+[learner l0] round 384: global eval 1.4229, |delta| 4.7874
+[learner l0] round 385: global eval 1.4248, |delta| 4.7882
+[learner l0] round 386: global eval 1.4259, |delta| 4.8255
+[learner l0] round 387: global eval 1.4225, |delta| 4.7690
+[learner l0] round 388: global eval 1.4279, |delta| 4.8222
+[learner l0] round 389: global eval 1.4311, |delta| 4.8645
+[learner l0] round 390: global eval 1.4323, |delta| 4.9144
+[learner l0] round 391: global eval 1.4341, |delta| 4.7687
+[learner l0] round 392: global eval 1.4300, |delta| 4.7427
+[learner l0] round 393: global eval 1.4240, |delta| 4.7764
+[learner l0] round 394: global eval 1.4183, |delta| 4.8237
+[learner l0] round 395: global eval 1.4197, |delta| 4.7990
+[learner l0] round 396: global eval 1.4255, |delta| 4.7468
+[learner l0] round 397: global eval 1.4316, |delta| 4.8156
+[learner l0] round 398: global eval 1.4319, |delta| 4.7998
+[learner l0] round 399: global eval 1.4238, |delta| 4.7515
+[learner l0] round 400: global eval 1.4197, |delta| 4.6903
+[learner l0] round 401: global eval 1.4188, |delta| 4.7872
+[learner l0] round 402: global eval 1.4254, |delta| 4.8080
+[learner l0] round 403: global eval 1.4256, |delta| 4.7931
+[learner l0] round 404: global eval 1.4242, |delta| 4.8169
+[learner l0] round 405: global eval 1.4251, |delta| 4.7000
+[learner l0] round 406: global eval 1.4291, |delta| 4.7853
+[learner l0] round 407: global eval 1.4302, |delta| 4.8865
+[learner l0] round 408: global eval 1.4305, |delta| 4.7366
+[learner l0] round 409: global eval 1.4291, |delta| 4.7815
+[learner l0] round 410: global eval 1.4228, |delta| 4.8316
+[learner l0] round 411: global eval 1.4200, |delta| 4.8183
+%6|1793579540.628|FAIL|fed-learner-l0#consumer-2| [thrd:10.77.0.1:9092/1]: 10.77.0.1:9092/1: Disconnected: connection closed by peer: receive 0 after POLLIN (after 6116288ms in state UP)
+%6|1793579540.639|FAIL|fed-learner-l0#producer-1| [thrd:10.77.0.1:9092/1]: 10.77.0.1:9092/1: Disconnected: connection closed by peer: receive 0 after POLLIN (after 6077820ms in state UP)
+Traceback (most recent call last):
+  File "/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-kafka-quorum/scripts/e8_amcp_round.py", line 374, in <module>
+    raise SystemExit(main())
+  File "/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-kafka-quorum/scripts/e8_amcp_round.py", line 367, in main
+    return {"coordinator": run_coordinator, "learner": run_learner}[args.mode](args)
+  File "/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-kafka-quorum/scripts/e8_amcp_round.py", line 309, in run_learner
+    bus.publish(fed.build_result(run_id=args.run_id, rnd=rnd, learner_id=args.learner_id, host=host, tokens=out["tokens"], delta=out["delta"], delta_l2=out["delta_l2"],
+  File "/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-kafka-quorum/scripts/e8_amcp_round.py", line 82, in publish
+    self.pub.publish(event)
+  File "/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-kafka-quorum/src/hivemind/swarm/amcp_kafka_transport.py", line 856, in publish
+    ack = self.transport.publish(event.topic, key.encode("utf-8"), value)
+  File "/home/callensxavier_gmail_com/HiveMind/.claude/worktrees/feat-kafka-quorum/src/hivemind/swarm/amcp_kafka_transport.py", line 412, in publish
+    raise TransportError(f"delivery to {topic} not confirmed within {self._flush_timeout_s}s")
+hivemind.swarm.amcp_kafka_transport.TransportError: delivery to hivemind.amcp.federation.v1 not confirmed within 20.0s
+%4|1793579560.560|TERMINATE|fed-learner-l0#producer-1| [thrd:app]: Producer terminating with 1 message (38593 bytes) still in queue or transit: use flush() to wait for outstanding message delivery

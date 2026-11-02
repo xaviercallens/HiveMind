@@ -1,0 +1,3 @@
+night-002b started 2026-11-01T22:50:21Z (continues night-002 from round 215, outer lr 0.25, CPU learners)
+coordinator rc=1 at 2026-11-02T00:34:08Z
+night run night-002b finished at 2026-11-02T00:34:28Z

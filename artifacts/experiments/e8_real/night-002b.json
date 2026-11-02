@@ -1,0 +1,5884 @@
+{
+  "schema_version": 1,
+  "experiment_id": "E8-stage2-amcp-night",
+  "run_id": "night-002b",
+  "completed": false,
+  "final": false,
+  "coordinator_host": "socreateai-agora-hermes-node1",
+  "code_pin": "08672343a4443a8e1a2d465e8c4288119936e18cf6e1c6de57af139b308f97f2",
+  "base_sha256": "7e3bf9e2252e988135b35209e7a3fd9a06a2c2efe3976de7a0d5c0024adf4c96",
+  "config": {
+    "learners": [
+      "l0",
+      "l1"
+    ],
+    "quorum": 1,
+    "rounds": 1100,
+    "seed": 1,
+    "inner_steps": 40,
+    "inner_lr": 0.01,
+    "batch": 16,
+    "outer_lr": 0.25,
+    "outer_mu": 0.5,
+    "round_deadline_s": 90.0
+  },
+  "initial_eval_loss": 1.4511070251464844,
+  "rounds": [
+    {
+      "round": 216,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4511070251464844,
+      "eval_loss_after": 1.4511643648147583,
+      "delta_l2": {
+        "l0": 4.964324644909863,
+        "l1": 4.899054870151799
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 11.131423711776733,
+      "wall_s": 11.177942514419556
+    },
+    {
+      "round": 217,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4511643648147583,
+      "eval_loss_after": 1.44070565700531,
+      "delta_l2": {
+        "l0": 4.8291257234746165,
+        "l1": 5.010713480910106
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 2.061347007751465,
+      "wall_s": 32.190948486328125
+    },
+    {
+      "round": 218,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.44070565700531,
+      "eval_loss_after": 1.437848687171936,
+      "delta_l2": {
+        "l0": 4.9122671993072355,
+        "l1": 4.95698438822162
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 4.066373109817505,
+      "wall_s": 64.29163599014282
+    },
+    {
+      "round": 219,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.437848687171936,
+      "eval_loss_after": 1.4322924613952637,
+      "delta_l2": {
+        "l0": 4.959031779786466,
+        "l1": 4.926629936441498
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0586371421813965,
+      "wall_s": 93.39296770095825
+    },
+    {
+      "round": 220,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4322924613952637,
+      "eval_loss_after": 1.4280345439910889,
+      "delta_l2": {
+        "l0": 4.854095940081473,
+        "l1": 4.868296121931532
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0594985485076904,
+      "wall_s": 123.50959992408752
+    },
+    {
+      "round": 221,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4280345439910889,
+      "eval_loss_after": 1.421026349067688,
+      "delta_l2": {
+        "l0": 4.847413139179844,
+        "l1": 4.839070228297043
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 2.057950258255005,
+      "wall_s": 152.61896920204163
+    },
+    {
+      "round": 222,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.421026349067688,
+      "eval_loss_after": 1.4134323596954346,
+      "delta_l2": {
+        "l0": 4.984723034131122,
+        "l1": 4.94893197099648
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0701541900634766,
+      "wall_s": 183.74405694007874
+    },
+    {
+      "round": 223,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4134323596954346,
+      "eval_loss_after": 1.4179548025131226,
+      "delta_l2": {
+        "l0": 4.881448216388397,
+        "l1": 4.779950772579639
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.065359592437744,
+      "wall_s": 213.85200953483582
+    },
+    {
+      "round": 224,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4179548025131226,
+      "eval_loss_after": 1.418309211730957,
+      "delta_l2": {
+        "l0": 4.9392475343321465,
+        "l1": 5.0873343253281975
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.055375814437866,
+      "wall_s": 243.90906620025635
+    },
+    {
+      "round": 225,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.418309211730957,
+      "eval_loss_after": 1.4283252954483032,
+      "delta_l2": {
+        "l0": 4.9380472791344685,
+        "l1": 4.9735354944486785
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0572385787963867,
+      "wall_s": 274.00591254234314
+    },
+    {
+      "round": 226,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4283252954483032,
+      "eval_loss_after": 1.4269797801971436,
+      "delta_l2": {
+        "l0": 4.9158088085878555,
+        "l1": 4.846027269634613
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.06819748878479,
+      "wall_s": 304.1281888484955
+    },
+    {
+      "round": 227,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4269797801971436,
+      "eval_loss_after": 1.4204728603363037,
+      "delta_l2": {
+        "l0": 4.812686845322942,
+        "l1": 4.982142429747322
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0564653873443604,
+      "wall_s": 334.22943592071533
+    },
+    {
+      "round": 228,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4204728603363037,
+      "eval_loss_after": 1.4128777980804443,
+      "delta_l2": {
+        "l0": 4.974759929701708,
+        "l1": 4.8940012280274
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.063128709793091,
+      "wall_s": 364.3483486175537
+    },
+    {
+      "round": 229,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4128777980804443,
+      "eval_loss_after": 1.4079407453536987,
+      "delta_l2": {
+        "l0": 4.685273379143016,
+        "l1": 4.753002667028432
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 4.064985275268555,
+      "wall_s": 395.4611392021179
+    },
+    {
+      "round": 230,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4079407453536987,
+      "eval_loss_after": 1.4114397764205933,
+      "delta_l2": {
+        "l0": 4.8705518125862675,
+        "l1": 4.918343436562453
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.061601400375366,
+      "wall_s": 424.56424617767334
+    },
+    {
+      "round": 231,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4114397764205933,
+      "eval_loss_after": 1.4155187606811523,
+      "delta_l2": {
+        "l0": 5.0204834120312745,
+        "l1": 4.954929657825584
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.127887487411499,
+      "wall_s": 460.7348976135254
+    },
+    {
+      "round": 232,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4155187606811523,
+      "eval_loss_after": 1.416247010231018,
+      "delta_l2": {
+        "l0": 4.824132963336717,
+        "l1": 4.820701441228622
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 7.064985752105713,
+      "wall_s": 488.7849428653717
+    },
+    {
+      "round": 233,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.416247010231018,
+      "eval_loss_after": 1.4212677478790283,
+      "delta_l2": {
+        "l0": 4.835705435735815,
+        "l1": 4.840435659991874
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 8.09416651725769,
+      "wall_s": 519.9317655563354
+    },
+    {
+      "round": 234,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4212677478790283,
+      "eval_loss_after": 1.4269332885742188,
+      "delta_l2": {
+        "l0": 4.919125757927255,
+        "l1": 4.82578694419037
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 10.110560417175293,
+      "wall_s": 552.0645022392273
+    },
+    {
+      "round": 235,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4269332885742188,
+      "eval_loss_after": 1.429451823234558,
+      "delta_l2": {
+        "l0": 4.961196823551171,
+        "l1": 4.902007613493658
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.099460124969482,
+      "wall_s": 581.1675026416779
+    },
+    {
+      "round": 236,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.429451823234558,
+      "eval_loss_after": 1.4266568422317505,
+      "delta_l2": {
+        "l0": 4.839807182340126,
+        "l1": 4.834348818209373
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0685622692108154,
+      "wall_s": 605.2476489543915
+    },
+    {
+      "round": 237,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4266568422317505,
+      "eval_loss_after": 1.4275825023651123,
+      "delta_l2": {
+        "l0": 4.801870109295443,
+        "l1": 4.9840155385186184
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 6.057375192642212,
+      "wall_s": 638.3484923839569
+    },
+    {
+      "round": 238,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4275825023651123,
+      "eval_loss_after": 1.4249114990234375,
+      "delta_l2": {
+        "l0": 4.904897412258748,
+        "l1": 4.971015191915025
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0713627338409424,
+      "wall_s": 665.4468564987183
+    },
+    {
+      "round": 239,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4249114990234375,
+      "eval_loss_after": 1.429113745689392,
+      "delta_l2": {
+        "l0": 4.8552500736161335,
+        "l1": 4.839912183153096
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.095791578292847,
+      "wall_s": 701.5824389457703
+    },
+    {
+      "round": 240,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.429113745689392,
+      "eval_loss_after": 1.4313104152679443,
+      "delta_l2": {
+        "l0": 5.002223629025331,
+        "l1": 4.7866397037395325
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.109414100646973,
+      "wall_s": 731.6829342842102
+    },
+    {
+      "round": 241,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4313104152679443,
+      "eval_loss_after": 1.4383739233016968,
+      "delta_l2": {
+        "l0": 4.890729354622557,
+        "l1": 4.8651120244357395
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 7.099078893661499,
+      "wall_s": 759.7785975933075
+    },
+    {
+      "round": 242,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4383739233016968,
+      "eval_loss_after": 1.4357737302780151,
+      "delta_l2": {
+        "l0": 4.924978860940443,
+        "l1": 4.920335295701
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 10.063890933990479,
+      "wall_s": 792.8596105575562
+    },
+    {
+      "round": 243,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4357737302780151,
+      "eval_loss_after": 1.4292099475860596,
+      "delta_l2": {
+        "l0": 4.8569892012635325,
+        "l1": 4.848739767287516
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 7.079119920730591,
+      "wall_s": 819.940614938736
+    },
+    {
+      "round": 244,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4292099475860596,
+      "eval_loss_after": 1.4269688129425049,
+      "delta_l2": {
+        "l0": 4.899014245839692,
+        "l1": 4.907825438741384
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 11.222983121871948,
+      "wall_s": 854.1976926326752
+    },
+    {
+      "round": 245,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4269688129425049,
+      "eval_loss_after": 1.4216820001602173,
+      "delta_l2": {
+        "l0": 4.815435820718548,
+        "l1": 4.909099723144929
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.076353549957275,
+      "wall_s": 882.1493651866913
+    },
+    {
+      "round": 246,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4216820001602173,
+      "eval_loss_after": 1.4224697351455688,
+      "delta_l2": {
+        "l0": 4.750603424191898,
+        "l1": 4.852693410573233
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 4.07352876663208,
+      "wall_s": 907.256276845932
+    },
+    {
+      "round": 247,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4224697351455688,
+      "eval_loss_after": 1.422622561454773,
+      "delta_l2": {
+        "l0": 4.832989177563873,
+        "l1": 4.861783252712979
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 8.067505598068237,
+      "wall_s": 941.2770776748657
+    },
+    {
+      "round": 248,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.422622561454773,
+      "eval_loss_after": 1.4229811429977417,
+      "delta_l2": {
+        "l0": 4.798725131726348,
+        "l1": 4.830463401770496
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 12.08699345588684,
+      "wall_s": 975.411455154419
+    },
+    {
+      "round": 249,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4229811429977417,
+      "eval_loss_after": 1.4189869165420532,
+      "delta_l2": {
+        "l0": 4.858657385284708,
+        "l1": 4.850858093577091
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 10.10841679573059,
+      "wall_s": 1003.5324776172638
+    },
+    {
+      "round": 250,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4189869165420532,
+      "eval_loss_after": 1.418724775314331,
+      "delta_l2": {
+        "l0": 4.9725936412241065,
+        "l1": 4.894931591128709
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 10.078997373580933,
+      "wall_s": 1033.6262454986572
+    },
+    {
+      "round": 251,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.418724775314331,
+      "eval_loss_after": 1.4235228300094604,
+      "delta_l2": {
+        "l0": 4.834810495395675,
+        "l1": 4.731063972277889
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.105534076690674,
+      "wall_s": 1062.7624161243439
+    },
+    {
+      "round": 252,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4235228300094604,
+      "eval_loss_after": 1.4213184118270874,
+      "delta_l2": {
+        "l0": 4.924655664697996,
+        "l1": 4.824033497330702
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.06784462928772,
+      "wall_s": 1092.83762383461
+    },
+    {
+      "round": 253,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4213184118270874,
+      "eval_loss_after": 1.4242472648620605,
+      "delta_l2": {
+        "l0": 4.804707075869991,
+        "l1": 4.803893729289896
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 10.151970863342285,
+      "wall_s": 1124.0372579097748
+    },
+    {
+      "round": 254,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4242472648620605,
+      "eval_loss_after": 1.4216364622116089,
+      "delta_l2": {
+        "l0": 4.921702042825628,
+        "l1": 4.8712821563039155
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 6.093167304992676,
+      "wall_s": 1150.0888555049896
+    },
+    {
+      "round": 255,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4216364622116089,
+      "eval_loss_after": 1.4237968921661377,
+      "delta_l2": {
+        "l0": 4.784346416221063,
+        "l1": 4.988955285664288
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.114039897918701,
+      "wall_s": 1183.2207553386688
+    },
+    {
+      "round": 256,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4237968921661377,
+      "eval_loss_after": 1.4370930194854736,
+      "delta_l2": {
+        "l0": 5.0129300153027865,
+        "l1": 4.825728519195453
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.100098133087158,
+      "wall_s": 1213.3187623023987
+    },
+    {
+      "round": 257,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4370930194854736,
+      "eval_loss_after": 1.4412404298782349,
+      "delta_l2": {
+        "l0": 4.883848071337765,
+        "l1": 4.845581997238127
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 11.106427431106567,
+      "wall_s": 1245.4394788742065
+    },
+    {
+      "round": 258,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4412404298782349,
+      "eval_loss_after": 1.4388359785079956,
+      "delta_l2": {
+        "l0": 4.881095871341954,
+        "l1": 4.84640271857565
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 7.097930192947388,
+      "wall_s": 1271.5394909381866
+    },
+    {
+      "round": 259,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4388359785079956,
+      "eval_loss_after": 1.4337977170944214,
+      "delta_l2": {
+        "l0": 4.963711075895537,
+        "l1": 4.811759873239398
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 5.082381010055542,
+      "wall_s": 1299.6361722946167
+    },
+    {
+      "round": 260,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4337977170944214,
+      "eval_loss_after": 1.4288511276245117,
+      "delta_l2": {
+        "l0": 4.79673699481772,
+        "l1": 4.808934925535619
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 12.154197216033936,
+      "wall_s": 1336.8179895877838
+    },
+    {
+      "round": 261,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4288511276245117,
+      "eval_loss_after": 1.4228808879852295,
+      "delta_l2": {
+        "l0": 4.778727501804517,
+        "l1": 4.880839933590982
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 11.0873441696167,
+      "wall_s": 1365.7809703350067
+    },
+    {
+      "round": 262,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4228808879852295,
+      "eval_loss_after": 1.423606514930725,
+      "delta_l2": {
+        "l0": 4.890478183748574,
+        "l1": 4.882793383751642
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 5.103447914123535,
+      "wall_s": 1389.908237695694
+    },
+    {
+      "round": 263,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.423606514930725,
+      "eval_loss_after": 1.4322326183319092,
+      "delta_l2": {
+        "l0": 4.737372780654328,
+        "l1": 4.928457711284591
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 6.078205823898315,
+      "wall_s": 1421.0033211708069
+    },
+    {
+      "round": 264,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4322326183319092,
+      "eval_loss_after": 1.439523458480835,
+      "delta_l2": {
+        "l0": 4.897709088109697,
+        "l1": 4.8423685195731
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.075113534927368,
+      "wall_s": 1454.1149454116821
+    },
+    {
+      "round": 265,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.439523458480835,
+      "eval_loss_after": 1.4413200616836548,
+      "delta_l2": {
+        "l0": 4.905897513562625,
+        "l1": 5.017861740988238
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 10.102811336517334,
+      "wall_s": 1485.2545728683472
+    },
+    {
+      "round": 266,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4413200616836548,
+      "eval_loss_after": 1.4407680034637451,
+      "delta_l2": {
+        "l0": 4.907369470745412,
+        "l1": 4.9543001182886615
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 8.1391019821167,
+      "wall_s": 1513.3145051002502
+    },
+    {
+      "round": 267,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 1,
+      "rejected": [],
+      "eval_loss_before": 1.4407680034637451,
+      "eval_loss_after": 1.4337371587753296,
+      "delta_l2": {
+        "l0": 4.9250639893155626,
+        "l1": 4.833765577508701
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 7.08277153968811,
+      "wall_s": 1632.4372911453247
+    },
+    {
+      "round": 268,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4337371587753296,
+      "eval_loss_after": 1.4294785261154175,
+      "delta_l2": {
+        "l0": 4.815350778088286,
+        "l1": 4.823665936259726
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 7.120803117752075,
+      "wall_s": 1662.5918633937836
+    },
+    {
+      "round": 269,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4294785261154175,
+      "eval_loss_after": 1.4310705661773682,
+      "delta_l2": {
+        "l0": 4.84775347923381,
+        "l1": 4.866261003708665
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 8.106848001480103,
+      "wall_s": 1693.691324710846
+    },
+    {
+      "round": 270,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4310705661773682,
+      "eval_loss_after": 1.4295780658721924,
+      "delta_l2": {
+        "l0": 4.864107378915901,
+        "l1": 4.785449131935919
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 5.082703590393066,
+      "wall_s": 1720.7591488361359
+    },
+    {
+      "round": 271,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4295780658721924,
+      "eval_loss_after": 1.4221080541610718,
+      "delta_l2": {
+        "l0": 4.858109174388774,
+        "l1": 4.833012193734477
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.09059453010559,
+      "wall_s": 1754.8814730644226
+    },
+    {
+      "round": 272,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4221080541610718,
+      "eval_loss_after": 1.4201661348342896,
+      "delta_l2": {
+        "l0": 4.880461793775198,
+        "l1": 4.821556011286817
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 7.109702825546265,
+      "wall_s": 1783.013510465622
+    },
+    {
+      "round": 273,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4201661348342896,
+      "eval_loss_after": 1.4245203733444214,
+      "delta_l2": {
+        "l0": 4.823986801563739,
+        "l1": 4.869345784981619
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.082355499267578,
+      "wall_s": 1815.097508430481
+    },
+    {
+      "round": 274,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4245203733444214,
+      "eval_loss_after": 1.424575686454773,
+      "delta_l2": {
+        "l0": 4.730482663701935,
+        "l1": 4.797646025656232
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 8.069767475128174,
+      "wall_s": 1844.1980345249176
+    },
+    {
+      "round": 275,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.424575686454773,
+      "eval_loss_after": 1.4224525690078735,
+      "delta_l2": {
+        "l0": 4.825063123438333,
+        "l1": 4.80525736336868
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 13.085256099700928,
+      "wall_s": 1879.3251156806946
+    },
+    {
+      "round": 276,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4224525690078735,
+      "eval_loss_after": 1.420559048652649,
+      "delta_l2": {
+        "l0": 4.7486034586487955,
+        "l1": 4.790870934909086
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 10.087600469589233,
+      "wall_s": 1906.4374778270721
+    },
+    {
+      "round": 277,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.420559048652649,
+      "eval_loss_after": 1.420007586479187,
+      "delta_l2": {
+        "l0": 4.759992178501787,
+        "l1": 4.893776438874288
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 10.08476734161377,
+      "wall_s": 1936.547263622284
+    },
+    {
+      "round": 278,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.420007586479187,
+      "eval_loss_after": 1.416083812713623,
+      "delta_l2": {
+        "l0": 4.8616844006844735,
+        "l1": 4.947645468724954
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 7.09178900718689,
+      "wall_s": 1963.6656608581543
+    },
+    {
+      "round": 279,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.416083812713623,
+      "eval_loss_after": 1.4177168607711792,
+      "delta_l2": {
+        "l0": 4.806952617119305,
+        "l1": 4.955588534376517
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 8.10590672492981,
+      "wall_s": 1994.7926292419434
+    },
+    {
+      "round": 280,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4177168607711792,
+      "eval_loss_after": 1.4252170324325562,
+      "delta_l2": {
+        "l0": 4.800843414574604,
+        "l1": 4.906984158881976
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.10260558128357,
+      "wall_s": 2025.8938825130463
+    },
+    {
+      "round": 281,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4252170324325562,
+      "eval_loss_after": 1.4283875226974487,
+      "delta_l2": {
+        "l0": 4.938214464645789,
+        "l1": 4.83558206376707
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 10.208979845046997,
+      "wall_s": 2057.095762729645
+    },
+    {
+      "round": 282,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4283875226974487,
+      "eval_loss_after": 1.4266022443771362,
+      "delta_l2": {
+        "l0": 4.745557319874918,
+        "l1": 4.781012360894143
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 7.099169492721558,
+      "wall_s": 2084.099980354309
+    },
+    {
+      "round": 283,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4266022443771362,
+      "eval_loss_after": 1.4211543798446655,
+      "delta_l2": {
+        "l0": 4.925305137040631,
+        "l1": 4.846312706339692
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 8.096141576766968,
+      "wall_s": 2115.209989786148
+    },
+    {
+      "round": 284,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4211543798446655,
+      "eval_loss_after": 1.4185107946395874,
+      "delta_l2": {
+        "l0": 4.855704212080271,
+        "l1": 4.919236920308682
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 7.119066953659058,
+      "wall_s": 2144.3436090946198
+    },
+    {
+      "round": 285,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4185107946395874,
+      "eval_loss_after": 1.4177327156066895,
+      "delta_l2": {
+        "l0": 4.848766147589588,
+        "l1": 4.8177846682575325
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 11.117496728897095,
+      "wall_s": 2178.453177690506
+    },
+    {
+      "round": 286,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4177327156066895,
+      "eval_loss_after": 1.416936993598938,
+      "delta_l2": {
+        "l0": 4.8723281758468735,
+        "l1": 4.897722611895792
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 8.079104661941528,
+      "wall_s": 2205.513298511505
+    },
+    {
+      "round": 287,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.416936993598938,
+      "eval_loss_after": 1.4150052070617676,
+      "delta_l2": {
+        "l0": 4.799752462729694,
+        "l1": 4.856604058996257
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 8.073466300964355,
+      "wall_s": 2235.581975698471
+    },
+    {
+      "round": 288,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4150052070617676,
+      "eval_loss_after": 1.417545199394226,
+      "delta_l2": {
+        "l0": 4.734890683104579,
+        "l1": 4.770889466870278
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 8.08060884475708,
+      "wall_s": 2265.7027077674866
+    },
+    {
+      "round": 289,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.417545199394226,
+      "eval_loss_after": 1.4146888256072998,
+      "delta_l2": {
+        "l0": 4.8245132541725475,
+        "l1": 4.825053228568941
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 11.082988023757935,
+      "wall_s": 2298.8161928653717
+    },
+    {
+      "round": 290,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4146888256072998,
+      "eval_loss_after": 1.4126414060592651,
+      "delta_l2": {
+        "l0": 4.784444477316851,
+        "l1": 4.919011151749963
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.098341703414917,
+      "wall_s": 2326.939353466034
+    },
+    {
+      "round": 291,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4126414060592651,
+      "eval_loss_after": 1.4149781465530396,
+      "delta_l2": {
+        "l0": 4.934171194321322,
+        "l1": 4.891068334868974
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 8.090314626693726,
+      "wall_s": 2356.0162143707275
+    },
+    {
+      "round": 292,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4149781465530396,
+      "eval_loss_after": 1.4172462224960327,
+      "delta_l2": {
+        "l0": 4.81392964579387,
+        "l1": 4.917736887295091
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.075157403945923,
+      "wall_s": 2387.1152844429016
+    },
+    {
+      "round": 293,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4172462224960327,
+      "eval_loss_after": 1.4202443361282349,
+      "delta_l2": {
+        "l0": 4.739499676842935,
+        "l1": 4.769803529132999
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 7.422505140304565,
+      "wall_s": 2415.5901358127594
+    },
+    {
+      "round": 294,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4202443361282349,
+      "eval_loss_after": 1.4257489442825317,
+      "delta_l2": {
+        "l0": 4.814390359279829,
+        "l1": 4.845119359664132
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 5.107209920883179,
+      "wall_s": 2443.3974635601044
+    },
+    {
+      "round": 295,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4257489442825317,
+      "eval_loss_after": 1.429305911064148,
+      "delta_l2": {
+        "l0": 4.89882801634759,
+        "l1": 4.927907078121012
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 8.064501523971558,
+      "wall_s": 2476.465980529785
+    },
+    {
+      "round": 296,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.429305911064148,
+      "eval_loss_after": 1.4317522048950195,
+      "delta_l2": {
+        "l0": 4.798075115788777,
+        "l1": 4.83273404067269
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 11.09384536743164,
+      "wall_s": 2509.603085756302
+    },
+    {
+      "round": 297,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4317522048950195,
+      "eval_loss_after": 1.432180643081665,
+      "delta_l2": {
+        "l0": 4.942684454570474,
+        "l1": 4.740836467942486
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 8.121682405471802,
+      "wall_s": 2536.731458425522
+    },
+    {
+      "round": 298,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.432180643081665,
+      "eval_loss_after": 1.4353009462356567,
+      "delta_l2": {
+        "l0": 4.826105883836846,
+        "l1": 4.883443150801748
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 11.092097520828247,
+      "wall_s": 2569.814233779907
+    },
+    {
+      "round": 299,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4353009462356567,
+      "eval_loss_after": 1.4380775690078735,
+      "delta_l2": {
+        "l0": 4.824853418278085,
+        "l1": 4.74218437659775
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.09481167793274,
+      "wall_s": 2597.923665046692
+    },
+    {
+      "round": 300,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4380775690078735,
+      "eval_loss_after": 1.4402390718460083,
+      "delta_l2": {
+        "l0": 4.890892414545493,
+        "l1": 4.786930583601762
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.105128765106201,
+      "wall_s": 2628.046140193939
+    },
+    {
+      "round": 301,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4402390718460083,
+      "eval_loss_after": 1.439558744430542,
+      "delta_l2": {
+        "l0": 4.738931499623856,
+        "l1": 4.7764363085967645
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 7.092072248458862,
+      "wall_s": 2656.147971391678
+    },
+    {
+      "round": 302,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.439558744430542,
+      "eval_loss_after": 1.4352306127548218,
+      "delta_l2": {
+        "l0": 4.781148797254424,
+        "l1": 4.8768709425595835
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 6.121160507202148,
+      "wall_s": 2685.2875859737396
+    },
+    {
+      "round": 303,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4352306127548218,
+      "eval_loss_after": 1.4249933958053589,
+      "delta_l2": {
+        "l0": 4.811552579933579,
+        "l1": 4.8263440072498405
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 7.101233959197998,
+      "wall_s": 2716.389079809189
+    },
+    {
+      "round": 304,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4249933958053589,
+      "eval_loss_after": 1.4196960926055908,
+      "delta_l2": {
+        "l0": 4.902698844420454,
+        "l1": 4.851461262038277
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 10.130640983581543,
+      "wall_s": 2749.5327026844025
+    },
+    {
+      "round": 305,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4196960926055908,
+      "eval_loss_after": 1.4163504838943481,
+      "delta_l2": {
+        "l0": 4.8673002496337885,
+        "l1": 4.793676064553989
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 6.090542793273926,
+      "wall_s": 2775.604444503784
+    },
+    {
+      "round": 306,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4163504838943481,
+      "eval_loss_after": 1.417426347732544,
+      "delta_l2": {
+        "l0": 4.823977577883888,
+        "l1": 4.793912258411125
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 6.075981616973877,
+      "wall_s": 2805.7010872364044
+    },
+    {
+      "round": 307,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.417426347732544,
+      "eval_loss_after": 1.4157408475875854,
+      "delta_l2": {
+        "l0": 4.822530369156235,
+        "l1": 4.694360293727324
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 10.116150617599487,
+      "wall_s": 2839.8571224212646
+    },
+    {
+      "round": 308,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4157408475875854,
+      "eval_loss_after": 1.41273832321167,
+      "delta_l2": {
+        "l0": 4.784459389528487,
+        "l1": 4.817851654876436
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 11.135102033615112,
+      "wall_s": 2870.9876799583435
+    },
+    {
+      "round": 309,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.41273832321167,
+      "eval_loss_after": 1.4108141660690308,
+      "delta_l2": {
+        "l0": 4.650721967957878,
+        "l1": 4.922203116606191
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 5.077545404434204,
+      "wall_s": 2895.022691488266
+    },
+    {
+      "round": 310,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4108141660690308,
+      "eval_loss_after": 1.4118796586990356,
+      "delta_l2": {
+        "l0": 4.816768635701145,
+        "l1": 4.797170229223375
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 7.064914226531982,
+      "wall_s": 2927.123582839966
+    },
+    {
+      "round": 311,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4118796586990356,
+      "eval_loss_after": 1.4106725454330444,
+      "delta_l2": {
+        "l0": 4.8371999168224304,
+        "l1": 4.899351314624169
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 7.0850279331207275,
+      "wall_s": 2957.25972533226
+    },
+    {
+      "round": 312,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4106725454330444,
+      "eval_loss_after": 1.4140565395355225,
+      "delta_l2": {
+        "l0": 4.704811937427871,
+        "l1": 4.855665075578902
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 8.068320751190186,
+      "wall_s": 2988.3542375564575
+    },
+    {
+      "round": 313,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4140565395355225,
+      "eval_loss_after": 1.4178721904754639,
+      "delta_l2": {
+        "l0": 4.802130829940988,
+        "l1": 4.830095379802828
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 10.080297946929932,
+      "wall_s": 3020.4807636737823
+    },
+    {
+      "round": 314,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4178721904754639,
+      "eval_loss_after": 1.4155099391937256,
+      "delta_l2": {
+        "l0": 4.794075114578789,
+        "l1": 4.770763328682753
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 10.1733980178833,
+      "wall_s": 3050.6740674972534
+    },
+    {
+      "round": 315,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4155099391937256,
+      "eval_loss_after": 1.4163898229599,
+      "delta_l2": {
+        "l0": 4.94654258387108,
+        "l1": 4.852368350834933
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.07762861251831,
+      "wall_s": 3079.6894748210907
+    },
+    {
+      "round": 316,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4163898229599,
+      "eval_loss_after": 1.4232842922210693,
+      "delta_l2": {
+        "l0": 4.835641895065978,
+        "l1": 4.826786902099252
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.139577865600586,
+      "wall_s": 3109.86207985878
+    },
+    {
+      "round": 317,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4232842922210693,
+      "eval_loss_after": 1.4261894226074219,
+      "delta_l2": {
+        "l0": 4.863444016884924,
+        "l1": 4.889408051570343
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 11.066181659698486,
+      "wall_s": 3141.895271539688
+    },
+    {
+      "round": 318,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4261894226074219,
+      "eval_loss_after": 1.4226683378219604,
+      "delta_l2": {
+        "l0": 4.786731311276682,
+        "l1": 4.87605958818634
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 8.074775218963623,
+      "wall_s": 3169.004280090332
+    },
+    {
+      "round": 319,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4226683378219604,
+      "eval_loss_after": 1.4160953760147095,
+      "delta_l2": {
+        "l0": 4.792856347243568,
+        "l1": 4.864295118426648
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.080769300460815,
+      "wall_s": 3200.110097885132
+    },
+    {
+      "round": 320,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4160953760147095,
+      "eval_loss_after": 1.41513991355896,
+      "delta_l2": {
+        "l0": 4.796953178911853,
+        "l1": 4.9741965408272755
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.117469787597656,
+      "wall_s": 3230.2582342624664
+    },
+    {
+      "round": 321,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.41513991355896,
+      "eval_loss_after": 1.4202834367752075,
+      "delta_l2": {
+        "l0": 4.918905573448289,
+        "l1": 4.912683502681728
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 6.09187126159668,
+      "wall_s": 3257.345608472824
+    },
+    {
+      "round": 322,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4202834367752075,
+      "eval_loss_after": 1.4251552820205688,
+      "delta_l2": {
+        "l0": 4.771126910578984,
+        "l1": 4.847389714908096
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 7.093809604644775,
+      "wall_s": 3288.4594893455505
+    },
+    {
+      "round": 323,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4251552820205688,
+      "eval_loss_after": 1.426822543144226,
+      "delta_l2": {
+        "l0": 4.763840954271882,
+        "l1": 4.845844523509065
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 13.144100666046143,
+      "wall_s": 3324.5402479171753
+    },
+    {
+      "round": 324,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.426822543144226,
+      "eval_loss_after": 1.428269386291504,
+      "delta_l2": {
+        "l0": 4.7638507541981285,
+        "l1": 4.895746571874536
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.098746538162231,
+      "wall_s": 3350.5774936676025
+    },
+    {
+      "round": 325,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.428269386291504,
+      "eval_loss_after": 1.4292114973068237,
+      "delta_l2": {
+        "l0": 4.871733751139624,
+        "l1": 4.881543191342049
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 10.130872249603271,
+      "wall_s": 3381.723420381546
+    },
+    {
+      "round": 326,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4292114973068237,
+      "eval_loss_after": 1.4299681186676025,
+      "delta_l2": {
+        "l0": 4.952778948539597,
+        "l1": 4.862919505196968
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 11.109897136688232,
+      "wall_s": 3412.8114006519318
+    },
+    {
+      "round": 327,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4299681186676025,
+      "eval_loss_after": 1.4352418184280396,
+      "delta_l2": {
+        "l0": 4.869807611191158,
+        "l1": 4.91415235076416
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 10.10843801498413,
+      "wall_s": 3441.916107416153
+    },
+    {
+      "round": 328,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4352418184280396,
+      "eval_loss_after": 1.4403142929077148,
+      "delta_l2": {
+        "l0": 4.686629411596568,
+        "l1": 4.919208309798752
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 9.073435068130493,
+      "wall_s": 3470.9917466640472
+    },
+    {
+      "round": 329,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4403142929077148,
+      "eval_loss_after": 1.4416435956954956,
+      "delta_l2": {
+        "l0": 4.873043544974556,
+        "l1": 4.798731696185106
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 8.08618712425232,
+      "wall_s": 3500.117862224579
+    },
+    {
+      "round": 330,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4416435956954956,
+      "eval_loss_after": 1.4431369304656982,
+      "delta_l2": {
+        "l0": 4.809522841166026,
+        "l1": 4.774354353414518
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0674774646759033,
+      "wall_s": 3525.2117495536804
+    },
+    {
+      "round": 331,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4431369304656982,
+      "eval_loss_after": 1.4420653581619263,
+      "delta_l2": {
+        "l0": 4.8167088050825,
+        "l1": 4.852145100133951
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 5.060988426208496,
+      "wall_s": 3557.311611175537
+    },
+    {
+      "round": 332,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4420653581619263,
+      "eval_loss_after": 1.4434406757354736,
+      "delta_l2": {
+        "l0": 4.867762419910817,
+        "l1": 4.951253787234042
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0626704692840576,
+      "wall_s": 3585.4199764728546
+    },
+    {
+      "round": 333,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4434406757354736,
+      "eval_loss_after": 1.4358665943145752,
+      "delta_l2": {
+        "l0": 4.810343739243283,
+        "l1": 4.871352561309538
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.060260772705078,
+      "wall_s": 3615.532006263733
+    },
+    {
+      "round": 334,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4358665943145752,
+      "eval_loss_after": 1.426926851272583,
+      "delta_l2": {
+        "l0": 4.841905251813861,
+        "l1": 4.855865385591759
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0618088245391846,
+      "wall_s": 3645.642774581909
+    },
+    {
+      "round": 335,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.426926851272583,
+      "eval_loss_after": 1.4267089366912842,
+      "delta_l2": {
+        "l0": 4.975008340090561,
+        "l1": 4.882095336127166
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0662035942077637,
+      "wall_s": 3675.7521624565125
+    },
+    {
+      "round": 336,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4267089366912842,
+      "eval_loss_after": 1.425790548324585,
+      "delta_l2": {
+        "l0": 4.838162207805951,
+        "l1": 4.857228501124806
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0574684143066406,
+      "wall_s": 3705.828425168991
+    },
+    {
+      "round": 337,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.425790548324585,
+      "eval_loss_after": 1.4240140914916992,
+      "delta_l2": {
+        "l0": 4.9124973970508234,
+        "l1": 4.796766015843245
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.066098690032959,
+      "wall_s": 3735.950192451477
+    },
+    {
+      "round": 338,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4240140914916992,
+      "eval_loss_after": 1.4281458854675293,
+      "delta_l2": {
+        "l0": 4.838800732014807,
+        "l1": 4.9363843647339465
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0617525577545166,
+      "wall_s": 3766.0445489883423
+    },
+    {
+      "round": 339,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4281458854675293,
+      "eval_loss_after": 1.432155966758728,
+      "delta_l2": {
+        "l0": 4.797318543669621,
+        "l1": 4.90863991800199
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0690741539001465,
+      "wall_s": 3796.165186405182
+    },
+    {
+      "round": 340,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.432155966758728,
+      "eval_loss_after": 1.4276649951934814,
+      "delta_l2": {
+        "l0": 4.800385976462108,
+        "l1": 4.819161644038134
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0626418590545654,
+      "wall_s": 3826.2570402622223
+    },
+    {
+      "round": 341,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4276649951934814,
+      "eval_loss_after": 1.4310704469680786,
+      "delta_l2": {
+        "l0": 4.874195763077776,
+        "l1": 4.876867948192371
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 2.055288314819336,
+      "wall_s": 3855.3622052669525
+    },
+    {
+      "round": 342,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4310704469680786,
+      "eval_loss_after": 1.4336538314819336,
+      "delta_l2": {
+        "l0": 4.741807862723241,
+        "l1": 4.777912190290704
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0582773685455322,
+      "wall_s": 3886.4701805114746
+    },
+    {
+      "round": 343,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4336538314819336,
+      "eval_loss_after": 1.4305517673492432,
+      "delta_l2": {
+        "l0": 4.81553849062738,
+        "l1": 4.932080161270437
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0616345405578613,
+      "wall_s": 3916.557248353958
+    },
+    {
+      "round": 344,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4305517673492432,
+      "eval_loss_after": 1.42952299118042,
+      "delta_l2": {
+        "l0": 4.757910212247855,
+        "l1": 4.722465864687201
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 4.066128730773926,
+      "wall_s": 3947.668948173523
+    },
+    {
+      "round": 345,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.42952299118042,
+      "eval_loss_after": 1.4258347749710083,
+      "delta_l2": {
+        "l0": 4.8372952091378165,
+        "l1": 4.89279441736109
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0569374561309814,
+      "wall_s": 3976.7502431869507
+    },
+    {
+      "round": 346,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4258347749710083,
+      "eval_loss_after": 1.4267770051956177,
+      "delta_l2": {
+        "l0": 4.874391606465585,
+        "l1": 4.863636212244615
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.075957775115967,
+      "wall_s": 4006.872458934784
+    },
+    {
+      "round": 347,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4267770051956177,
+      "eval_loss_after": 1.4212290048599243,
+      "delta_l2": {
+        "l0": 4.935288440986521,
+        "l1": 4.881751724985013
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 2.052457571029663,
+      "wall_s": 4035.9480261802673
+    },
+    {
+      "round": 348,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4212290048599243,
+      "eval_loss_after": 1.425410509109497,
+      "delta_l2": {
+        "l0": 4.825362609668314,
+        "l1": 4.86284958482502
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 4.059227228164673,
+      "wall_s": 4068.0647492408752
+    },
+    {
+      "round": 349,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.425410509109497,
+      "eval_loss_after": 1.4192237854003906,
+      "delta_l2": {
+        "l0": 4.8599383527472195,
+        "l1": 4.844053763432219
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0530011653900146,
+      "wall_s": 4097.169322967529
+    },
+    {
+      "round": 350,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4192237854003906,
+      "eval_loss_after": 1.418604850769043,
+      "delta_l2": {
+        "l0": 4.658656241013633,
+        "l1": 4.774129895379224
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0595388412475586,
+      "wall_s": 4127.287195682526
+    },
+    {
+      "round": 351,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.418604850769043,
+      "eval_loss_after": 1.4195985794067383,
+      "delta_l2": {
+        "l0": 4.7622863456279925,
+        "l1": 4.765528043167137
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0643370151519775,
+      "wall_s": 4157.353094816208
+    },
+    {
+      "round": 352,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4195985794067383,
+      "eval_loss_after": 1.4218592643737793,
+      "delta_l2": {
+        "l0": 4.80754620555647,
+        "l1": 4.796557996880604
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.069626808166504,
+      "wall_s": 4187.466225147247
+    },
+    {
+      "round": 353,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4218592643737793,
+      "eval_loss_after": 1.423007845878601,
+      "delta_l2": {
+        "l0": 4.912363340816262,
+        "l1": 4.871287472810574
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 4.076278209686279,
+      "wall_s": 4218.581076622009
+    },
+    {
+      "round": 354,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.423007845878601,
+      "eval_loss_after": 1.4275840520858765,
+      "delta_l2": {
+        "l0": 4.786209881062211,
+        "l1": 4.7846250215828325
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.062246084213257,
+      "wall_s": 4247.674409866333
+    },
+    {
+      "round": 355,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4275840520858765,
+      "eval_loss_after": 1.427475094795227,
+      "delta_l2": {
+        "l0": 4.764620524999224,
+        "l1": 4.831905653237931
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 2.0556411743164062,
+      "wall_s": 4276.778110980988
+    },
+    {
+      "round": 356,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.427475094795227,
+      "eval_loss_after": 1.4204174280166626,
+      "delta_l2": {
+        "l0": 4.835298751775022,
+        "l1": 4.83835556759173
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0654051303863525,
+      "wall_s": 4307.896119594574
+    },
+    {
+      "round": 357,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4204174280166626,
+      "eval_loss_after": 1.4173699617385864,
+      "delta_l2": {
+        "l0": 4.815264765356594,
+        "l1": 4.7563833367133626
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.058342218399048,
+      "wall_s": 4337.997408866882
+    },
+    {
+      "round": 358,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4173699617385864,
+      "eval_loss_after": 1.414280891418457,
+      "delta_l2": {
+        "l0": 4.931853243333026,
+        "l1": 4.841612501123204
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.065319299697876,
+      "wall_s": 4368.110789060593
+    },
+    {
+      "round": 359,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.414280891418457,
+      "eval_loss_after": 1.41615891456604,
+      "delta_l2": {
+        "l0": 4.867017675654746,
+        "l1": 4.797482256396839
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.055126905441284,
+      "wall_s": 4398.196661472321
+    },
+    {
+      "round": 360,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.41615891456604,
+      "eval_loss_after": 1.41645348072052,
+      "delta_l2": {
+        "l0": 4.859500910976822,
+        "l1": 4.906131946455488
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.061788558959961,
+      "wall_s": 4428.311691999435
+    },
+    {
+      "round": 361,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.41645348072052,
+      "eval_loss_after": 1.4166699647903442,
+      "delta_l2": {
+        "l0": 4.75474003773125,
+        "l1": 4.869784297699546
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.061124563217163,
+      "wall_s": 4458.40053653717
+    },
+    {
+      "round": 362,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4166699647903442,
+      "eval_loss_after": 1.4133949279785156,
+      "delta_l2": {
+        "l0": 4.812421664925665,
+        "l1": 4.7963908786827485
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0753397941589355,
+      "wall_s": 4488.4944460392
+    },
+    {
+      "round": 363,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4133949279785156,
+      "eval_loss_after": 1.4168503284454346,
+      "delta_l2": {
+        "l0": 4.923305542756478,
+        "l1": 4.659622596696509
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0585732460021973,
+      "wall_s": 4518.578261137009
+    },
+    {
+      "round": 364,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4168503284454346,
+      "eval_loss_after": 1.4214770793914795,
+      "delta_l2": {
+        "l0": 4.8980071230099025,
+        "l1": 4.762737609537799
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0737924575805664,
+      "wall_s": 4548.706089735031
+    },
+    {
+      "round": 365,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4214770793914795,
+      "eval_loss_after": 1.4245558977127075,
+      "delta_l2": {
+        "l0": 4.745505100997902,
+        "l1": 4.7685962200992735
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0623626708984375,
+      "wall_s": 4578.806216955185
+    },
+    {
+      "round": 366,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4245558977127075,
+      "eval_loss_after": 1.4200999736785889,
+      "delta_l2": {
+        "l0": 4.89109385622609,
+        "l1": 4.728563503068683
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.065281629562378,
+      "wall_s": 4608.919729709625
+    },
+    {
+      "round": 367,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4200999736785889,
+      "eval_loss_after": 1.4180576801300049,
+      "delta_l2": {
+        "l0": 4.658329832005195,
+        "l1": 4.947402858826194
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0590627193450928,
+      "wall_s": 4639.025055646896
+    },
+    {
+      "round": 368,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4180576801300049,
+      "eval_loss_after": 1.415808916091919,
+      "delta_l2": {
+        "l0": 4.748654375712594,
+        "l1": 4.7761413015402745
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.062293767929077,
+      "wall_s": 4669.126972198486
+    },
+    {
+      "round": 369,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.415808916091919,
+      "eval_loss_after": 1.4142086505889893,
+      "delta_l2": {
+        "l0": 4.83524705213257,
+        "l1": 4.824723539313559
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.06227445602417,
+      "wall_s": 4699.237859964371
+    },
+    {
+      "round": 370,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4142086505889893,
+      "eval_loss_after": 1.4160655736923218,
+      "delta_l2": {
+        "l0": 4.885345863799842,
+        "l1": 4.851689458343811
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0595483779907227,
+      "wall_s": 4729.325876235962
+    },
+    {
+      "round": 371,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4160655736923218,
+      "eval_loss_after": 1.4197027683258057,
+      "delta_l2": {
+        "l0": 4.759248122304322,
+        "l1": 4.7777217518940125
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.069540500640869,
+      "wall_s": 4759.434647798538
+    },
+    {
+      "round": 372,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4197027683258057,
+      "eval_loss_after": 1.416385293006897,
+      "delta_l2": {
+        "l0": 4.946298091236246,
+        "l1": 4.716724134559577
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0589165687561035,
+      "wall_s": 4789.533157587051
+    },
+    {
+      "round": 373,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.416385293006897,
+      "eval_loss_after": 1.4095046520233154,
+      "delta_l2": {
+        "l0": 4.776164937967828,
+        "l1": 4.857080028056451
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.060784101486206,
+      "wall_s": 4819.628308534622
+    },
+    {
+      "round": 374,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4095046520233154,
+      "eval_loss_after": 1.4099620580673218,
+      "delta_l2": {
+        "l0": 4.70097902835111,
+        "l1": 4.9111224295945775
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.071173906326294,
+      "wall_s": 4849.750453948975
+    },
+    {
+      "round": 375,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4099620580673218,
+      "eval_loss_after": 1.4140857458114624,
+      "delta_l2": {
+        "l0": 4.926909644941337,
+        "l1": 4.955359153612139
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 4.061407566070557,
+      "wall_s": 4880.849404096603
+    },
+    {
+      "round": 376,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4140857458114624,
+      "eval_loss_after": 1.4127274751663208,
+      "delta_l2": {
+        "l0": 4.6741436964560945,
+        "l1": 4.851949796098882
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 4.06527042388916,
+      "wall_s": 4910.964577674866
+    },
+    {
+      "round": 377,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4127274751663208,
+      "eval_loss_after": 1.4088114500045776,
+      "delta_l2": {
+        "l0": 4.886879479976659,
+        "l1": 4.833417775249577
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 2.0546350479125977,
+      "wall_s": 4939.05913567543
+    },
+    {
+      "round": 378,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4088114500045776,
+      "eval_loss_after": 1.4067097902297974,
+      "delta_l2": {
+        "l0": 4.852598316232363,
+        "l1": 4.9169217571529185
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 5.068393707275391,
+      "wall_s": 4972.183121442795
+    },
+    {
+      "round": 379,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4067097902297974,
+      "eval_loss_after": 1.404435396194458,
+      "delta_l2": {
+        "l0": 4.819939869430419,
+        "l1": 4.845158344536404
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.076209306716919,
+      "wall_s": 5000.2938776016235
+    },
+    {
+      "round": 380,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.404435396194458,
+      "eval_loss_after": 1.4104562997817993,
+      "delta_l2": {
+        "l0": 4.777426867880978,
+        "l1": 4.786717978219502
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.065493106842041,
+      "wall_s": 5030.330306768417
+    },
+    {
+      "round": 381,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4104562997817993,
+      "eval_loss_after": 1.4170656204223633,
+      "delta_l2": {
+        "l0": 4.787498340033699,
+        "l1": 4.856359502915257
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0692853927612305,
+      "wall_s": 5060.369789600372
+    },
+    {
+      "round": 382,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4170656204223633,
+      "eval_loss_after": 1.4217718839645386,
+      "delta_l2": {
+        "l0": 4.753753336795676,
+        "l1": 4.880687473990047
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0658161640167236,
+      "wall_s": 5090.452850103378
+    },
+    {
+      "round": 383,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 1,
+      "rejected": [],
+      "eval_loss_before": 1.4217718839645386,
+      "eval_loss_after": 1.4229342937469482,
+      "delta_l2": {
+        "l0": 4.9111596222618115,
+        "l1": 4.853912533777954
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 4.063816785812378,
+      "wall_s": 5211.59983253479
+    },
+    {
+      "round": 384,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4229342937469482,
+      "eval_loss_after": 1.4248135089874268,
+      "delta_l2": {
+        "l0": 4.78735543299196,
+        "l1": 4.810096220899947
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0593433380126953,
+      "wall_s": 5240.691254377365
+    },
+    {
+      "round": 385,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4248135089874268,
+      "eval_loss_after": 1.4258983135223389,
+      "delta_l2": {
+        "l0": 4.788202006212877,
+        "l1": 4.804957749744678
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 4.061845064163208,
+      "wall_s": 5271.730628728867
+    },
+    {
+      "round": 386,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4258983135223389,
+      "eval_loss_after": 1.4225119352340698,
+      "delta_l2": {
+        "l0": 4.825481110635945,
+        "l1": 4.720711600343785
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.062304735183716,
+      "wall_s": 5300.810749053955
+    },
+    {
+      "round": 387,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4225119352340698,
+      "eval_loss_after": 1.4279347658157349,
+      "delta_l2": {
+        "l0": 4.7689734905263625,
+        "l1": 4.86817446050423
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 4.056741237640381,
+      "wall_s": 5331.909016132355
+    },
+    {
+      "round": 388,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4279347658157349,
+      "eval_loss_after": 1.4311048984527588,
+      "delta_l2": {
+        "l0": 4.82216577129105,
+        "l1": 4.857028584803991
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.063829183578491,
+      "wall_s": 5361.026284456253
+    },
+    {
+      "round": 389,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4311048984527588,
+      "eval_loss_after": 1.4322909116744995,
+      "delta_l2": {
+        "l0": 4.864533433991807,
+        "l1": 4.874180997007416
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0605010986328125,
+      "wall_s": 5391.1319053173065
+    },
+    {
+      "round": 390,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4322909116744995,
+      "eval_loss_after": 1.4340811967849731,
+      "delta_l2": {
+        "l0": 4.914404049088524,
+        "l1": 4.849000687487619
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.061119556427002,
+      "wall_s": 5421.241254806519
+    },
+    {
+      "round": 391,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4340811967849731,
+      "eval_loss_after": 1.4299646615982056,
+      "delta_l2": {
+        "l0": 4.768746388785218,
+        "l1": 4.859220548303329
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.065136432647705,
+      "wall_s": 5451.355628967285
+    },
+    {
+      "round": 392,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4299646615982056,
+      "eval_loss_after": 1.424017071723938,
+      "delta_l2": {
+        "l0": 4.742658233531567,
+        "l1": 4.754629658407695
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0603864192962646,
+      "wall_s": 5481.4623239040375
+    },
+    {
+      "round": 393,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.424017071723938,
+      "eval_loss_after": 1.4183244705200195,
+      "delta_l2": {
+        "l0": 4.77638233707313,
+        "l1": 4.737764221815002
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.060880422592163,
+      "wall_s": 5511.557130813599
+    },
+    {
+      "round": 394,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4183244705200195,
+      "eval_loss_after": 1.4196748733520508,
+      "delta_l2": {
+        "l0": 4.823693093144352,
+        "l1": 4.85907239677044
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0617876052856445,
+      "wall_s": 5541.662941455841
+    },
+    {
+      "round": 395,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4196748733520508,
+      "eval_loss_after": 1.4254626035690308,
+      "delta_l2": {
+        "l0": 4.798980011824451,
+        "l1": 4.7099269839618545
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0600409507751465,
+      "wall_s": 5571.759544372559
+    },
+    {
+      "round": 396,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4254626035690308,
+      "eval_loss_after": 1.4315742254257202,
+      "delta_l2": {
+        "l0": 4.746786417081219,
+        "l1": 4.805765685394777
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 4.065626859664917,
+      "wall_s": 5602.872425079346
+    },
+    {
+      "round": 397,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4315742254257202,
+      "eval_loss_after": 1.4319496154785156,
+      "delta_l2": {
+        "l0": 4.8156254391481275,
+        "l1": 4.858613368508625
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.053574323654175,
+      "wall_s": 5631.960701227188
+    },
+    {
+      "round": 398,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4319496154785156,
+      "eval_loss_after": 1.4237511157989502,
+      "delta_l2": {
+        "l0": 4.799816469195508,
+        "l1": 4.772795741742986
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0616633892059326,
+      "wall_s": 5662.075046777725
+    },
+    {
+      "round": 399,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4237511157989502,
+      "eval_loss_after": 1.4196709394454956,
+      "delta_l2": {
+        "l0": 4.751534377281111,
+        "l1": 4.8200877367538375
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.059526205062866,
+      "wall_s": 5692.185966491699
+    },
+    {
+      "round": 400,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4196709394454956,
+      "eval_loss_after": 1.418756365776062,
+      "delta_l2": {
+        "l0": 4.690339700128309,
+        "l1": 4.789756923691837
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 4.053598165512085,
+      "wall_s": 5723.299852371216
+    },
+    {
+      "round": 401,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.418756365776062,
+      "eval_loss_after": 1.4253664016723633,
+      "delta_l2": {
+        "l0": 4.787208543650657,
+        "l1": 4.796253344236654
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0581376552581787,
+      "wall_s": 5752.426247835159
+    },
+    {
+      "round": 402,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4253664016723633,
+      "eval_loss_after": 1.4255506992340088,
+      "delta_l2": {
+        "l0": 4.807986868050965,
+        "l1": 4.7634918754450695
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0598602294921875,
+      "wall_s": 5782.537520647049
+    },
+    {
+      "round": 403,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4255506992340088,
+      "eval_loss_after": 1.4242331981658936,
+      "delta_l2": {
+        "l0": 4.793118173746343,
+        "l1": 4.723322017619555
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0568292140960693,
+      "wall_s": 5812.614045381546
+    },
+    {
+      "round": 404,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4242331981658936,
+      "eval_loss_after": 1.4250539541244507,
+      "delta_l2": {
+        "l0": 4.816929045532748,
+        "l1": 4.894507895959667
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 4.067532777786255,
+      "wall_s": 5843.736615180969
+    },
+    {
+      "round": 405,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4250539541244507,
+      "eval_loss_after": 1.4291366338729858,
+      "delta_l2": {
+        "l0": 4.700010900408706,
+        "l1": 4.78117479938384
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.073777914047241,
+      "wall_s": 5872.84788942337
+    },
+    {
+      "round": 406,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4291366338729858,
+      "eval_loss_after": 1.4301786422729492,
+      "delta_l2": {
+        "l0": 4.785343611805477,
+        "l1": 4.692829399014953
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0601232051849365,
+      "wall_s": 5902.940021514893
+    },
+    {
+      "round": 407,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4301786422729492,
+      "eval_loss_after": 1.4305479526519775,
+      "delta_l2": {
+        "l0": 4.886527883337889,
+        "l1": 4.796110110853855
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.057648181915283,
+      "wall_s": 5933.047434329987
+    },
+    {
+      "round": 408,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.4305479526519775,
+      "eval_loss_after": 1.429081916809082,
+      "delta_l2": {
+        "l0": 4.736590977876547,
+        "l1": 4.785513992950138
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.077704906463623,
+      "wall_s": 5963.191383838654
+    },
+    {
+      "round": 409,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.429081916809082,
+      "eval_loss_after": 1.422797441482544,
+      "delta_l2": {
+        "l0": 4.781486371374648,
+        "l1": 4.879662872726244
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.0765435695648193,
+      "wall_s": 5993.310031175613
+    },
+    {
+      "round": 410,
+      "status": "complete",
+      "accepted": [
+        "l0",
+        "l1"
+      ],
+      "hosts": {
+        "l0": "t4-l0-cpu",
+        "l1": "t4-l1-cpu"
+      },
+      "claims": [
+        "l0",
+        "l1"
+      ],
+      "retries": 0,
+      "rejected": [],
+      "eval_loss_before": 1.422797441482544,
+      "eval_loss_after": 1.4200397729873657,
+      "delta_l2": {
+        "l0": 4.83164810598286,
+        "l1": 4.807380947869639
+      },
+      "vram_peak_mib": {
+        "l0": null,
+        "l1": null
+      },
+      "latency_s": 3.083660364151001,
+      "wall_s": 6023.429140090942
+    }
+  ],
+  "final_eval_loss": 1.4200397729873657,
+  "hosts_seen": [
+    "t4-l0-cpu",
+    "t4-l1-cpu"
+  ],
+  "receipt_sha256": "aa8a755f86adce9c25ccf0d74b844168d16fa1ccc2dc93d412d4e763a2ba08cc"
+}

@@ -243,6 +243,9 @@ def main(
             parser.error(f"set the {API_KEY_ENV} environment variable to your producer API key")
         if not args.endpoint:
             parser.error("--endpoint is required")
+        endpoint_url = urlsplit(args.endpoint)
+        if endpoint_url.scheme != "https" and not (endpoint_url.scheme == "http" and endpoint_url.hostname in ("localhost", "127.0.0.1", "::1")):
+            parser.error("--endpoint must be https (plain http is allowed only for localhost): the gateway sends your endpoint token with every request")
         models: list[dict[str, str]] = list(args.model)
         cost, capacity = args.cost_per_1k, args.capacity_1k
         if args.preset:

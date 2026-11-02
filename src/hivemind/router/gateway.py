@@ -879,6 +879,14 @@ def create_router_app(
         location = ".".join(str(p) for p in first.get("loc", ()) if p != "body")
         return _error_response(400, f"invalid request: {location or 'body'}: {first.get('msg', 'invalid')}", "invalid_request_error", "invalid_request")
 
+    @app.exception_handler(Exception)
+    def _unhandled_error(_: Request, exc: Exception) -> JSONResponse:
+        # Fail closed with a generic body: no exception text, path or stack trace reaches the caller (the server log keeps it).
+        # This handler runs outside the notice middleware, so the proof-of-concept header is set here.
+        return _error_response(
+            500, "internal server error", "server_error", "internal_error", {"X-HiveMind-Status": POC_STATUS_HEADER}
+        )
+
     @app.exception_handler(StarletteHTTPException)
     def _http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
         kind = "not_found_error" if exc.status_code == 404 else "invalid_request_error"

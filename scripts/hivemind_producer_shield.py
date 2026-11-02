@@ -46,6 +46,9 @@ def _error(status: int, message: str, code: str) -> JSONResponse:
     return JSONResponse({"error": {"message": message, "type": "shield_error", "code": code}}, status_code=status)
 
 
+MAX_TOKENS_CAP = 16384  # per-request ceiling for max_tokens / max_completion_tokens
+
+
 def create_shield_app(
     upstream: str,
     token: str,
@@ -147,7 +150,18 @@ def create_shield_app(
             return _error(400, "Body must be JSON.", "invalid_json")
         if not isinstance(body, dict):
             return _error(400, "Body must be a JSON object.", "invalid_json")
-        if allowed and body.get("model") not in allowed:
+        model = body.get("model")
+        if not isinstance(model, str):  # a list or object would raise TypeError in the set/dict lookups below (a 500)
+            return _error(400, "model must be a string.", "invalid_request")
+        clamped = False
+        for limit_key in ("max_tokens", "max_completion_tokens"):  # a consumer can not make one request run for ever
+            limit = body.get(limit_key)
+            if isinstance(limit, (int, float)) and not isinstance(limit, bool) and limit > MAX_TOKENS_CAP:
+                body[limit_key] = MAX_TOKENS_CAP
+                clamped = True
+        if clamped:
+            raw = json.dumps(body).encode("utf-8")
+        if allowed and model not in allowed:
             return _error(403, "This model is not offered by this producer.", "model_not_allowed")
         now = time.monotonic()
         for stale in [n for n, started in inflight.items() if now - started > UPSTREAM_TIMEOUT_S + 30.0]:
@@ -158,7 +172,7 @@ def create_shield_app(
         inflight[number] = now
         try:
             upstream_request = client.build_request(
-                "POST", route_base.get(body.get("model"), base) + "/v1/chat/completions", content=raw, headers={"Content-Type": "application/json"}
+                "POST", route_base.get(model, base) + "/v1/chat/completions", content=raw, headers={"Content-Type": "application/json"}
             )
             upstream_response = await client.send(upstream_request, stream=True)
         except httpx.HTTPError:

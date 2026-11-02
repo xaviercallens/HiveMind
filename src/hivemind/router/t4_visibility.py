@@ -120,7 +120,9 @@ _LATEST_T4_SNAPSHOT: dict[str, Any] = {
             "and granite-3.1-1b-a400m-base + LoRA is evaluated offline (not yet served by the router)."
         ),
     },
-    "updated_epoch": time.time(),
+    # None until the governor pushes a reading: the defaults above are a recorded snapshot, not live telemetry.
+    "updated_epoch": None,
+    "telemetry_source": "DEFAULT_SNAPSHOT_NO_TELEMETRY_RECEIVED",
 }
 
 QLORA_MOE_MULTI_DATASET_CURRICULUM: list[dict[str, Any]] = [
@@ -180,10 +182,24 @@ QLORA_MOE_MULTI_DATASET_CURRICULUM: list[dict[str, Any]] = [
 ]
 
 
+TELEMETRY_FRESH_WINDOW_S = 900.0
+_NUMERIC_GPU_FIELDS = ("used_mib", "total_mib", "free_mib", "temp_c", "util_pct", "power_w")
+
+
+def _require_finite_numbers(section: str, values: dict[str, Any], fields: tuple[str, ...]) -> None:
+    """Refuse a telemetry update whose numeric fields are not finite numbers (a poisoned or malformed push)."""
+    for key in fields:
+        if key in values:
+            v = values[key]
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or v in (float("inf"), float("-inf")):
+                raise ValueError(f"{section}.{key} must be a finite number, got {v!r}")
+
+
 def update_t4_telemetry_snapshot(update: dict[str, Any]) -> dict[str, Any]:
     """Update the in-memory T4 telemetry snapshot from the monitor or T4 node."""
     with _SNAPSHOT_LOCK:
         if "gpu" in update and isinstance(update["gpu"], dict):
+            _require_finite_numbers("gpu", update["gpu"], _NUMERIC_GPU_FIELDS)
             _LATEST_T4_SNAPSHOT["gpu"].update(update["gpu"])
             used = int(_LATEST_T4_SNAPSHOT["gpu"].get("used_mib", 10303))
             total = int(_LATEST_T4_SNAPSHOT["gpu"].get("total_mib", 15360))
@@ -195,6 +211,7 @@ def update_t4_telemetry_snapshot(update: dict[str, Any]) -> dict[str, Any]:
         if "sole_active_gpu" in update:
             _LATEST_T4_SNAPSHOT["sole_active_gpu"] = bool(update["sole_active_gpu"])
         _LATEST_T4_SNAPSHOT["updated_epoch"] = time.time()
+        _LATEST_T4_SNAPSHOT["telemetry_source"] = "LIVE_UPDATE"
         return dict(_LATEST_T4_SNAPSHOT)
 
 
@@ -230,7 +247,15 @@ def build_t4_visibility_payload(
             "governor": dict(_LATEST_T4_SNAPSHOT["governor"]),
             "qlora_progress": dict(_LATEST_T4_SNAPSHOT["qlora_progress"]),
             "updated_epoch": _LATEST_T4_SNAPSHOT["updated_epoch"],
+            "telemetry_source": _LATEST_T4_SNAPSHOT["telemetry_source"],
         }
+
+    if snap["updated_epoch"] is None:
+        telemetry_age_s: float | None = None
+        telemetry_status = "NO_TELEMETRY_RECEIVED"
+    else:
+        telemetry_age_s = round(max(0.0, ts - float(snap["updated_epoch"])), 1)
+        telemetry_status = "FRESH" if telemetry_age_s <= TELEMETRY_FRESH_WINDOW_S else "STALE"
 
     gov = snap["governor"]
     boinc_mode = str(gov.get("boinc_gpu_mode", "never"))
@@ -286,6 +311,9 @@ def build_t4_visibility_payload(
 
     return {
         "status": "ok",
+        "telemetry_status": telemetry_status,
+        "telemetry_age_s": telemetry_age_s,
+        "telemetry_source": snap["telemetry_source"],
         "operational_mode": operational_mode,
         "mode_badge": mode_badge,
         "inference_availability": inference_availability,

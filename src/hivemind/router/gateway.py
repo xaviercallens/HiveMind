@@ -552,6 +552,12 @@ class GrantRequest(BaseModel):
     ref: str = Field(default="admin-grant", min_length=1, max_length=256)
 
 
+class AccountTargetRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    account_id: str | None = Field(default=None, max_length=128)
+    handle: str | None = Field(default=None, max_length=128)
+
+
 class AccountFlagRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     account_id: str | None = Field(default=None, max_length=128)
@@ -2992,6 +2998,18 @@ def create_router_app(
         except UnknownAccount:
             raise RouterError(404, "Unknown account.", "invalid_request_error", "account_not_found") from None
         return {"account_id": target, "granted": payload.amount, "balance": store.balance(target)}
+
+    @app.post("/v1/hivemind/admin/accounts/rotate-key")
+    def admin_rotate_key(request: Request, payload: AccountTargetRequest) -> JSONResponse:
+        """Admin recovery: issue a fresh key for an account and invalidate every earlier one (e.g. after a key was published).
+        The new key is shown once, in this response only."""
+        require_admin(request)
+        target = account_target(payload.account_id, payload.handle)
+        try:
+            new_key = store.rotate_key(target)
+        except UnknownAccount:
+            raise RouterError(404, "Unknown account.", "invalid_request_error", "account_not_found") from None
+        return JSONResponse({"account_id": target, "api_key": new_key}, headers={"Cache-Control": "no-store"})
 
     @app.post("/v1/hivemind/admin/test-flag")
     def admin_test_flag(request: Request, payload: AccountFlagRequest) -> dict[str, Any]:

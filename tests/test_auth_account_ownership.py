@@ -133,3 +133,19 @@ def test_password_login_is_rate_limited() -> None:
     codes = [client.post("/v1/hivemind/auth/login", json={"identifier": "target", "password": f"wrong{i}"}).status_code for i in range(12)]
     assert 429 in codes
     assert codes[0] == 401
+
+
+def test_admin_can_issue_a_fresh_key_for_an_account_and_the_old_one_dies() -> None:
+    store = RouterStore(":memory:", SECRET)
+    admin_key = "admin-secret-key-for-hivemaster"
+    client = TestClient(create_router_app(store, admin_key_hash=store.key_digest(admin_key), starter_grant_hmt=0.0))
+    aid, old = store.register("owner-account", "prosumer")
+    assert client.post("/v1/hivemind/admin/accounts/rotate-key", json={"handle": "owner-account"}).status_code in (401, 403)
+    r = client.post("/v1/hivemind/admin/accounts/rotate-key", headers={"x-admin-key": admin_key}, json={"handle": "owner-account"})
+    assert r.status_code == 200
+    new = r.json()["api_key"]
+    assert r.json()["account_id"] == aid and new != old
+    assert client.get("/v1/hivemind/me", headers={"Authorization": f"Bearer {new}"}).status_code == 200
+    assert client.get("/v1/hivemind/me", headers={"Authorization": f"Bearer {old}"}).status_code == 401
+    missing = client.post("/v1/hivemind/admin/accounts/rotate-key", headers={"x-admin-key": admin_key}, json={"handle": "nobody"})
+    assert missing.status_code == 404

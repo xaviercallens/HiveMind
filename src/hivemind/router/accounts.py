@@ -915,6 +915,16 @@ class RouterStore:
             return self._row_account(row)
         return None
 
+    def rotate_key(self, account_id: str) -> str:
+        """Issue a fresh key for ``account_id`` and invalidate every earlier one (admin recovery). ``UnknownAccount`` if absent."""
+        new_key = "hm-" + secrets.token_urlsafe(32)
+        with self._tx() as conn:
+            if conn.execute("SELECT 1 FROM accounts WHERE account_id=?", (account_id,)).fetchone() is None:
+                raise UnknownAccount(account_id)
+            conn.execute("UPDATE accounts SET key_hash=? WHERE account_id=?", (self._hmac_hex(new_key), account_id))
+        self._active_key_cache[account_id] = new_key
+        return new_key
+
     def get_account(self, account_id: str) -> Account | None:
         with self._lock:
             row = self._conn.execute("SELECT * FROM accounts WHERE account_id=?", (account_id,)).fetchone()

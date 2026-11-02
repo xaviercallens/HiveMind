@@ -40,6 +40,7 @@ def test_admin_heartbeat_keeps_user_api_key_intact() -> None:
             "capacity_1k": 80.0,
             "execution_class": "t4-16gb-moe",
             "endpoint_token": "test-endpoint-token-0123456789abcdefghijk",
+            "models": [{"id": "coder", "local_name": "qwen2.5-coder:7b-instruct", "loaded": True, "vram_mib": 4841}, {"id": "bee-stars", "local_name": "hivemind-bee-stars", "loaded": True, "vram_mib": 4841}],
             "replace_endpoints": True,
         },
     )
@@ -100,6 +101,7 @@ def test_admin_reconnect_all_hiveminders_and_replace_stale_endpoints() -> None:
             "coder_endpoint_url": "https://34-48-48-154.sslip.io",
             "rtx2070_endpoint_url": "https://34-48-48-154.sslip.io/rtx2070",
             "endpoint_token": "test-endpoint-token-0123456789abcdefghijk",
+            "models": [{"id": "coder", "local_name": "qwen2.5-coder:7b-instruct", "loaded": True, "vram_mib": 4841}, {"id": "bee-stars", "local_name": "hivemind-bee-stars", "loaded": True, "vram_mib": 4841}],
             "replace_endpoints": True,
             "include_legacy_known_users": True,
         },
@@ -141,3 +143,20 @@ def test_reconnect_without_any_endpoint_token_is_refused_and_no_token_is_built_i
     )
     assert resp.status_code == 400
     assert resp.json()["error"]["code"] == "endpoint_token_required"
+
+
+def test_reconnect_without_a_model_list_is_refused() -> None:
+    """The handler must not fill in a model table on the caller's behalf."""
+    client, store, admin_key = _make_app_and_store()
+    store.register("list-less-miner", "producer")
+    resp = client.post(
+        "/v1/hivemind/admin/producers/reconnect",
+        headers={"x-admin-key": admin_key},
+        json={
+            "endpoint_url": "https://34-48-48-154.sslip.io/u",
+            "endpoint_token": "test-endpoint-token-0123456789abcdefghijk",
+            "include_legacy_known_users": False,
+        },
+    )
+    assert resp.status_code == 400
+    assert resp.json()["error"]["code"] == "models_required"

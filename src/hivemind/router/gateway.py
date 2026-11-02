@@ -2306,22 +2306,15 @@ def create_router_app(
                 "endpoint_token_required",
             )
 
-        default_entries = payload.models or [
-            ModelEntry(id="coder", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=4841, cold_start_s=0.0),
-            ModelEntry(id="bee-stars", local_name="hivemind-bee-stars", loaded=True, vram_mib=4841, cold_start_s=0.0),
-            ModelEntry(id="crowd-v1", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-            ModelEntry(id="coder-lite", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-            ModelEntry(id="gemma-core", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-            ModelEntry(id="mistral-core", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-            ModelEntry(id="qwen35-core", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-            ModelEntry(id="bee-rusty-sundials", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-            ModelEntry(id="bee-lean-prover", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-            ModelEntry(id="bee-ruche-moe", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-            ModelEntry(id="coder-plus", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-            ModelEntry(id="moe-qwen35-bee", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-            ModelEntry(id="moe-general", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-            ModelEntry(id="moe-coder", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-        ]
+        if not payload.models:
+            # An admin reconnect does not invent a model table: the caller must list what the endpoint actually serves.
+            raise RouterError(
+                400,
+                "models is required: list the model ids and local names the endpoint serves; a reconnect does not assume them.",
+                "invalid_request_error",
+                "models_required",
+            )
+        default_entries = payload.models
         models_all: list[dict[str, str]] = []
         for entry in default_entries:
             public = _strip_prefix(entry.id)

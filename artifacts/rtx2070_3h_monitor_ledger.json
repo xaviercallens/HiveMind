@@ -1,20 +1,20 @@
 {
   "schema_version": "rtx2070_3h_monitor.v1",
   "cadence_cron": "0 */3 * * *",
-  "timestamp_utc": "2026-11-02T00:19:37Z",
+  "timestamp_utc": "2026-11-02T02:19:37Z",
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-11-02T00:19:37Z",
+    "timestamp_utc": "2026-11-02T02:19:37Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": true,
     "device": "cuda:0",
     "compute_capability": "7.5",
     "temperature_c": 34.0,
-    "gpu_utilization_pct": 2.0,
-    "power_draw_w": 29.84,
+    "gpu_utilization_pct": 3.0,
+    "power_draw_w": 29.95,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1812.0,
-    "memory_free_mib": 6195.0,
+    "memory_used_mib": 1813.0,
+    "memory_free_mib": 6194.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
@@ -25,9 +25,9 @@
     "memory_clock_mhz": 6801.0,
     "host_tensor_gflops": 0.0,
     "measured_fp32_tflops": 5.67,
-    "measured_fp16_tensor_tflops": 19.73,
-    "effective_sparse_moe_nf4_tflops": 36.5,
-    "microbench_elapsed_ms": 242.17
+    "measured_fp16_tensor_tflops": 19.83,
+    "effective_sparse_moe_nf4_tflops": 36.69,
+    "microbench_elapsed_ms": 245.26
   },
   "community_gpu_benchmark_summary": {
     "receipt_sha256": "2f8ae97fd69be25f4c6036aa4cd2153a2affec9e8df435e38158b69028aed8f9",
@@ -35,16 +35,16 @@
     "peak_allocated_mb": 0.0
   },
   "pr_integration_summary": {
-    "checked_utc": "2026-11-02T00:19:41Z",
+    "checked_utc": "2026-11-02T02:19:40Z",
     "open_prs_count": 15,
     "evaluated": [
       {
-        "pr": 470,
-        "title": "fix(ruche): feeds and tool calls carry no fabricated swarm telemetry",
+        "pr": 472,
+        "title": "fix(economy): launch model cobblestones use the BOINC unit (200 per GFLOPS-day) and are labelled modelled",
         "author": "xaviercallens",
-        "head_ref": "fix/ruche-feed-no-fabricated-telemetry",
+        "head_ref": "fix/ip91-cobblestones-units",
         "base_ref": "main",
-        "head_sha": "c9b7fec562",
+        "head_sha": "895c5d974b",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -184,7 +184,7 @@
         "author": "xaviercallens",
         "head_ref": "feat/openrouter-5lang-i18n",
         "base_ref": "main",
-        "head_sha": "ebbee8c6ac",
+        "head_sha": "32ee40f066",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -260,5 +260,5 @@
       141
     ]
   },
-  "ledger_sha256": "9ea671093bbd2639b325dffda4d5d69e5157b1fa6b3025379745c87187c1e667"
+  "ledger_sha256": "d8c49fd455523b775deeda821560b3035ab43dd419061480520f94750259b6d0"
 }

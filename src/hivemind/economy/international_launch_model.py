@@ -30,6 +30,9 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 
+COBBLESTONES_PER_GFLOPS_DAY: float = 200.0  # BOINC definition: one cobblestone is 1/200 day of one GFLOPS
+
+
 @dataclass(frozen=True)
 class SwarmLiveBaseline:
     """Hard-coded snapshot of the live situation as recorded on 2026-10-31. These defaults are constants, not a live read.
@@ -987,7 +990,10 @@ def forecast_200plus_node_international_launch(
         c_prod * 54.0 + c_pros * 42.0 + c_cons * 2.2,
         1,
     )
-    daily_boinc_cobblestones = round((daytime_tflops_fp16 * 0.45 + nocturnal_diloco_tflops_fp16 * 0.55) * 200.0, 1)
+    # BOINC credit: 1 cobblestone = 1/200 of a day of 1 GFLOPS, so 200 cobblestones per GFLOPS-day; the figures above are
+    # TFLOPS, hence the factor 1000. This is a model of assumed capacity, not a verified credit.
+    blended_tflops_fp16 = daytime_tflops_fp16 * 0.45 + nocturnal_diloco_tflops_fp16 * 0.55
+    daily_modelled_boinc_cobblestones = round(blended_tflops_fp16 * 1000.0 * COBBLESTONES_PER_GFLOPS_DAY, 1)
 
     # 6. Bass / Epidemic Conversion & Kelly Congestion Price
     effective_conversion_kappa = round((c_prod + c_pros) / max(1, total_nodes), 4)
@@ -1229,7 +1235,8 @@ def forecast_200plus_node_international_launch(
             "daytime_inference_pflops_fp16": round(daytime_tflops_fp16 / 1000.0, 3),
             "nocturnal_diloco_tflops_fp16": nocturnal_diloco_tflops_fp16,
             "nocturnal_diloco_pflops_fp16": round(nocturnal_diloco_tflops_fp16 / 1000.0, 3),
-            "daily_verified_boinc_cobblestones": daily_boinc_cobblestones,
+            "daily_modelled_boinc_cobblestones": daily_modelled_boinc_cobblestones,
+            "cobblestones_basis": "modelled from the assumed TFLOPS mix at 200 cobblestones per GFLOPS-day; not a verified BOINC credit",
         },
         "balancing_and_latency_sla": {
             "uncontrolled_naive_routing": {

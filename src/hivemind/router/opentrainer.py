@@ -575,7 +575,10 @@ def build_opentrainer_status_payload(
         "object": "hivemind.opentrainer.status",
         "component": "OpenTrainer",
         "version": OPENTRAINER_VERSION,
-        "status": "ONLINE",
+        # The state is derived from the heartbeats seen in the last 300 s, never a literal: the coordinator answering
+        # this request says nothing about trainers being connected.
+        "status": "TRAINERS_LIVE" if live_nodes else "COORDINATOR_UP_NO_TRAINERS",
+        "status_basis": f"{len(live_nodes)} node heartbeat(s) within 300 s of {round(now, 3)}",
         "updated_utc": round(now, 3),
         "portal_category": {
             "role": "trainer",

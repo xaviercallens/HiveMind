@@ -1067,91 +1067,93 @@ async function refreshLivePortalTelemetry() {
       const t4 = d.t4_boinc || {};
       const ot = d.opentrainer || {};
       const usage = d.usage_24h || {};
+      // A missing figure is shown as n/a; the page never prints a number the payload did not carry.
+      const v = function (x) { return (x === null || x === undefined) ? 'n/a' : (typeof x === 'number' ? x.toLocaleString() : x); };
       if ($('liveGcpAccountsCount')) {
-        $('liveGcpAccountsCount').textContent = (acct.total_registered_accounts || 69) + ' Registered Accounts';
+        $('liveGcpAccountsCount').textContent = v(acct.total_registered_accounts) + ' Registered Accounts';
       }
       if ($('liveGcpAccountsRoles')) {
         $('liveGcpAccountsRoles').textContent =
-          (byRole.prosumer || 32) + ' prosumers • ' +
-          (byRole.producer || 10) + ' producers • ' +
-          (byRole.consumer || 24) + ' consumers • ' +
+          v(byRole.prosumer) + ' prosumers • ' +
+          v(byRole.producer) + ' producers • ' +
+          v(byRole.consumer) + ' consumers • ' +
           (byRole.trainer || 0) + ' trainers • ' +
-          (byRole.admin || 3) + ' admins';
+          v(byRole.admin) + ' admins';
       }
       if ($('liveGcpModelsCount')) {
-        $('liveGcpModelsCount').textContent = (models.live_models_count || 15) + ' Live Models Online';
+        $('liveGcpModelsCount').textContent = v(models.live_models_count) + ' Live Models Online';
       }
       if ($('liveGcpProducersCount')) {
         $('liveGcpProducersCount').textContent =
-          (prod.total_hiveminders || 42) + ' Hiveminders • ' +
-          (prod.live_hiveminders || 3) + ' Active (' + (prod.total_capacity_1k || 210) + ' ktok/min)';
+          v(prod.total_hiveminders) + ' Hiveminders • ' +
+          v(prod.live_hiveminders) + ' Active (' + v(prod.total_capacity_1k) + ' ktok/min)';
       }
       if ($('liveGcpT4Vram')) {
         $('liveGcpT4Vram').textContent =
-          'Free: ' + Number(t4.vram_free_mib || 10519).toLocaleString() + ' MiB / ' +
-          Number(t4.vram_total_mib || 15360).toLocaleString() + ' MiB';
+          'Free: ' + v(t4.vram_free_mib) + ' MiB / ' +
+          v(t4.vram_total_mib) + ' MiB';
       }
       if ($('liveGcpWusCount')) {
         $('liveGcpWusCount').textContent =
-          (t4.assimilated_workunits || 147) + ' Assimilated WUs • ' +
-          Number(t4.total_cobblestones || 5632.11).toLocaleString() + ' Cobblestones';
+          v(t4.assimilated_workunits) + ' Assimilated WUs • ' +
+          v(t4.total_cobblestones) + ' Cobblestones';
       }
       if ($('liveGcpReqs24h')) {
         $('liveGcpReqs24h').textContent =
-          Number(usage.total_requests || 557).toLocaleString() + ' Reqs • ' +
-          Number(usage.total_billed_tokens || 71809).toLocaleString() + ' Tokens (24h)';
+          v(usage.total_requests) + ' Reqs • ' +
+          v(usage.total_billed_tokens) + ' Tokens (24h)';
       }
       if ($('liveGcpOpenTrainerStatus')) {
         $('liveGcpOpenTrainerStatus').textContent =
-          (ot.status || 'ONLINE') + ' • ' +
-          (ot.total_registered_nodes || 1) + ' Trainer GPU(s) • ' +
-          (ot.accepted_rounds_count || 1) + ' Accepted Round(s)';
+          v(ot.status) + ' • ' +
+          v(ot.total_registered_nodes) + ' Trainer GPU(s) • ' +
+          v(ot.accepted_rounds_count) + ' Accepted Round(s)';
       }
       if ($('liveGcpUpdatedUtc')) {
         $('liveGcpUpdatedUtc').textContent = 'Live GCP Snapshot: ' + (d.generated_at_iso || 'just now');
       }
       if ($('laab-live-telemetry-text')) {
         $('laab-live-telemetry-text').textContent =
-          '🟢 Télémétrie GCP Temps Réel : ' + (acct.total_registered_accounts || 69) + ' comptes inscrits • ' +
-          (models.live_models_count || 15) + ' abeilles en ligne • ' +
-          Number(usage.total_requests || 557).toLocaleString() + ' requêtes 24h (' +
-          Number(usage.total_billed_tokens || 71809).toLocaleString() + ' tokens) • T4 VRAM libre ' +
-          Number(t4.vram_free_mib || 10519).toLocaleString() + ' MiB • ' +
-          (t4.assimilated_workunits || 147) + ' WUs BOINC • OpenTrainer ' +
-          (ot.total_registered_nodes || 1) + ' nœud(s) / ' + (ot.accepted_rounds_count || 1) + ' round(s)';
+          '🟢 Télémétrie GCP Temps Réel : ' + v(acct.total_registered_accounts) + ' comptes inscrits • ' +
+          v(models.live_models_count) + ' abeilles en ligne • ' +
+          v(usage.total_requests) + ' requêtes 24h (' +
+          v(usage.total_billed_tokens) + ' tokens) • T4 VRAM libre ' +
+          v(t4.vram_free_mib) + ' MiB • ' +
+          v(t4.assimilated_workunits) + ' WUs BOINC • OpenTrainer ' +
+          v(ot.total_registered_nodes) + ' nœud(s) / ' + v(ot.accepted_rounds_count) + ' round(s)';
       }
       if ($('nightLiveBannerText')) {
         $('nightLiveBannerText').textContent =
           '🟢 LIVE NOW (' + (d.generated_at_iso || '') + '): ' +
-          (t4.assimilated_workunits || 147) + ' Assimilated BOINC WUs • T4 Free VRAM ' +
-          Number(t4.vram_free_mib || 10519).toLocaleString() + ' MiB / ' +
-          Number(t4.vram_total_mib || 15360).toLocaleString() + ' MiB • Governor ' +
+          v(t4.assimilated_workunits) + ' Assimilated BOINC WUs • T4 Free VRAM ' +
+          v(t4.vram_free_mib) + ' MiB / ' +
+          v(t4.vram_total_mib) + ' MiB • Governor ' +
           (t4.governor_state || 'IDLE_COMPUTE_GREEN') + ' • OpenTrainer ' +
-          (ot.accepted_rounds_count || 1) + ' accepted round(s) (eval_loss ' + (ot.latest_eval_loss || 1.7772) + ')';
+          v(ot.accepted_rounds_count) + ' accepted round(s) (eval_loss ' + v(ot.latest_eval_loss) + ')';
       }
       if ($('opentrainerPortalStatus') && !$('opentrainerPortalStatus').dataset.userClicked) {
         $('opentrainerPortalStatus').textContent =
           'LIVE OPENTRAINER (' + (ot.version || '1.0.0-s36') + ') • Topic: ' + (ot.topic || 'hivemind.amcp.federation.v1') +
           ' • Registered Trainers: ' + (ot.registered_trainer_accounts_count || 0) +
-          ' • Live Trainer GPUs: ' + (ot.total_registered_nodes || 1) +
-          ' • Accepted Rounds: ' + (ot.accepted_rounds_count || 1) +
-          ' (latest eval_loss: ' + (ot.latest_eval_loss || 1.7772) + ')';
+          ' • Live Trainer GPUs: ' + v(ot.total_registered_nodes) +
+          ' • Accepted Rounds: ' + v(ot.accepted_rounds_count) +
+          ' (latest eval_loss: ' + v(ot.latest_eval_loss) + ')';
       }
       const moeProg = ot.moe_self_training || {};
       if ($('contribProducersStat')) {
         $('contribProducersStat').textContent =
-          (prod.live_hiveminders || 3) + ' Live Producers / ' + (prod.total_hiveminders || 42) +
-          ' Hiveminders (' + (models.live_models_count || 15) + ' Live Models)';
+          v(prod.live_hiveminders) + ' Live Producers / ' + v(prod.total_hiveminders) +
+          ' Hiveminders (' + v(models.live_models_count) + ' Live Models)';
       }
       if ($('contribMoeRoundsStat')) {
         $('contribMoeRoundsStat').textContent =
-          (moeProg.rounds_recorded || ot.accepted_rounds_count || 1) + ' Self-Training Round(s) • ' +
-          Number(moeProg.total_tokens_trained || 20480).toLocaleString() + ' Tokens';
+          v(moeProg.rounds_recorded ?? ot.accepted_rounds_count) + ' Self-Training Round(s) • ' +
+          v(moeProg.total_tokens_trained) + ' Tokens';
       }
       if ($('contribMoeLossStat')) {
         $('contribMoeLossStat').textContent =
-          'Eval Loss: ' + (moeProg.latest_eval_loss || ot.latest_eval_loss || 1.7772) +
-          ' (Best Ratchet: ' + (moeProg.best_ratcheted_eval_loss || ot.latest_eval_loss || 1.7772) + ')';
+          'Eval Loss: ' + v(moeProg.latest_eval_loss ?? ot.latest_eval_loss) +
+          ' (Best Ratchet: ' + v(moeProg.best_ratcheted_eval_loss ?? ot.latest_eval_loss) + ')';
       }
       break;
     } catch (err) {}

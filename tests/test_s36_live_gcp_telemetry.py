@@ -341,3 +341,28 @@ def test_every_live_gcp_script_uses_only_the_routers_payload_and_prints_na_for_a
             checked += 1
             assert "d.status === 'LIVE_GCP_PRODUCTION'" in html_text, name
     assert checked >= 3, checked
+
+def test_router_live_telemetry_opentrainer_eval_loss_is_none_until_a_round_is_recorded() -> None:
+    """IP-146 (router side): with no OpenTrainer round recorded the block said latest_eval_loss 1.7772, the Stage-2
+    soak's final loss, while its own moe_self_training block said NO_ROUNDS_RECORDED_YET."""
+    from hivemind.router.accounts import RouterStore
+    from hivemind.router.gateway import create_router_app
+
+    client = TestClient(create_router_app(RouterStore(":memory:", b"k" * 32)))
+    ot = client.get("/v1/hivemind/live-telemetry").json()["opentrainer"]
+    assert ot["accepted_rounds_count"] == 0 and ot["latest_eval_loss"] is None
+    assert ot["latest_eval_loss_source"] == "NO_ROUNDS_RECORDED_YET"
+    # IP-177: no trainer heartbeat -> the state names that, never ONLINE
+    assert ot["status"] == "COORDINATOR_UP_NO_TRAINERS" and ot["status_basis"].startswith("0 node heartbeat(s)")
+    assert ot["moe_self_training"]["latest_eval_loss"] is None
+
+
+def test_portal_page_script_prints_na_not_a_literal_for_a_missing_live_figure() -> None:
+    """IP-146 (page-JS half): the portal's live-GCP script carried `|| 69`, `|| 147`, `|| 5632.11`, `|| 10519`,
+    `|| 71809`, `|| 557`, `|| 20480`, `|| 1.7772` and `|| 'ONLINE'` fallbacks, so a null figure rendered as a number."""
+    from hivemind.router.portal_page import render_portal_page
+
+    html_text = render_portal_page(None, "n")
+    assert "const v = function (x)" in html_text
+    for literal in ("|| 69)", "|| 147)", "|| 5632.11)", "|| 10519)", "|| 71809)", "|| 557)", "|| 20480)", "|| 1.7772)", "|| 'ONLINE')", "|| 15360)", "|| 42)", "|| 210)"):
+        assert literal not in html_text, literal

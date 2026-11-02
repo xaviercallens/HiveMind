@@ -93,6 +93,52 @@ def test_migration_status_is_admin_only(tmp_path: Path) -> None:
     assert "callensxavier@gmail.com" not in r.text
 
 
+def test_public_forecast_inputs_are_clamped() -> None:
+    import time as _time
+
+    from hivemind.economy import international_launch_model as m
+
+    t0 = _time.monotonic()
+    m.forecast_200plus_node_international_launch(target_total_nodes=10**9, visitor_count=10**12)
+    assert _time.monotonic() - t0 < 10.0  # 10^7 nodes used to take 44 s; 10^9 is clamped to MAX_FORECAST_NODES
+    with pytest.raises(ValueError):
+        m.compute_erlang_c_metrics(m.MAX_FORECAST_NODES + 1, 100.0, 1.0)
+
+
+def test_federated_submit_refuses_oversized_lora_factors(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    lease = client.post("/api/v1/federated/workunit/request", json={"contributor_handle": "bee-1"})
+    assert lease.status_code == 200, lease.text[:200]
+    wu = lease.json()
+    n = 5000  # a rank-1 1xN / Nx1 pair used to force an NxN matmul + SVD
+    r = client.post(
+        "/api/v1/federated/workunit/submit",
+        json={
+            "workunit_id": wu["workunit_id"],
+            "lease_id": wu["lease_id"],
+            "contributor_handle": "bee-1",
+            "domain_name": wu["domain_name"],
+            "train_nll_before": 2.0,
+            "train_nll_after": 1.0,
+            "holdout_nll_before": 2.0,
+            "holdout_nll_after": 1.0,
+            "lora_a_matrix": [[0.001] * n],
+            "lora_b_matrix": [[0.001] for _ in range(n)],
+        },
+    )
+    assert r.status_code == 422
+    assert "r <= 64" in r.text  # refused by the shape bound, before any matmul or SVD
+
+
+def test_rate_limiter_keys_on_the_rightmost_forwarded_address(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    codes = [
+        client.post("/api/v1/auth/guest", headers={"X-Forwarded-For": f"10.0.{i // 250}.{i % 250}, 203.0.113.9"}, json={}).status_code
+        for i in range(320)
+    ]
+    assert 429 in codes  # a rotating first X-Forwarded-For entry no longer gets a fresh bucket per request
+
+
 def test_a_new_user_keeps_working_with_its_own_token(tmp_path: Path) -> None:
     client = _client(tmp_path)
     r = client.post("/api/v1/auth/register", json={"handle": "new-bee", "email": "new-bee@example.org"})

@@ -293,7 +293,9 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         client_ip = request.client.host if request.client else "127.0.0.1"
         x_forwarded = request.headers.get("x-forwarded-for")
         if x_forwarded:
-            client_ip = x_forwarded.split(",")[0].strip()
+            # the RIGHT-most entry is the one Cloud Run's front end appended; the first one is whatever the client sent,
+            # so keying on it let every request pick a fresh rate-limit bucket
+            client_ip = x_forwarded.split(",")[-1].strip() or client_ip
 
         now = time.time()
         self.total_requests += 1
@@ -7768,6 +7770,15 @@ def create_hivemind_at_home_app(
 
         mat_a = np.asarray(sub.lora_a_matrix, dtype=np.float32)
         mat_b = np.asarray(sub.lora_b_matrix, dtype=np.float32)
+        # bounded shapes: a rank-1 1xN / Nx1 pair forced an NxN matmul and SVD (N=4000 from a 47 KB body took 401 s of CPU)
+        if (
+            mat_a.ndim != 2 or mat_b.ndim != 2
+            or mat_b.shape[1] != mat_a.shape[0]
+            or mat_a.shape[0] > 64
+            or mat_a.shape[1] > 4096 or mat_b.shape[0] > 4096
+            or mat_b.shape[0] * mat_a.shape[1] > 1_048_576
+        ):
+            raise HTTPException(status_code=422, detail="LoRA factors must be B:(m x r) and A:(r x n) with r <= 64, m, n <= 4096 and m*n <= 2^20")
         if not (np.all(np.isfinite(mat_a)) and np.all(np.isfinite(mat_b))):
             raise HTTPException(
                 status_code=422, detail="Non-finite values in submitted LoRA matrices"

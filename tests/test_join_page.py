@@ -402,7 +402,9 @@ def test_boinc_train_section_documents_plan_classes_dry_run_and_status_endpoints
     cfg = client.get("/get_project_config.php")
     assert cfg.status_code == 200 and "<project_config>" in cfg.text and "cuda_hivemind" in cfg.text
     st = client.get("/boinc/status")
-    assert st.status_code == 200 and st.json()["status"] == "ONLINE"
+    # IP-177: the state is the probe's result, with its basis; ONLINE only when the Ruche answered
+    assert st.status_code == 200 and (st.json()["status"] in ("ONLINE", "UNREACHABLE") or st.json()["status"].startswith("HTTP_"))
+    assert st.json()["probe"]["probe_url"] == st.json()["master_url"] and "GET " in st.json()["status_basis"]
     assert "end_users" in st.json()["night_training_roles"] and "hivemind_nodes" in st.json()["night_training_roles"]
 
 

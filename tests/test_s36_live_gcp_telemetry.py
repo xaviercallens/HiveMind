@@ -340,3 +340,29 @@ def test_portal_page_script_prints_na_not_a_literal_for_a_missing_live_figure() 
     assert "const v = function (x)" in html_text
     for literal in ("|| 69)", "|| 147)", "|| 5632.11)", "|| 10519)", "|| 71809)", "|| 557)", "|| 20480)", "|| 1.7772)", "|| 'ONLINE')", "|| 15360)", "|| 42)", "|| 210)"):
         assert literal not in html_text, literal
+
+
+
+def test_every_live_gcp_script_uses_only_the_routers_payload_and_prints_na_for_a_missing_figure() -> None:
+    """IP-171: the ruche cockpit, the foundation-paper view and the Stitch cockpit scripts rendered the first payload
+    with accounts/models keys (the ruche's own, which carries none of those figures since #506) and substituted
+    69 accounts, 147 WUs, 5632.11 cobblestones, 10519 MiB, 1.7772, ONLINE, ACCEPTING_WORK or hmq_00092."""
+    from hivemind.boinc.hivemind_at_home_dashboard import create_hivemind_at_home_app
+
+    literals = ("?? 147", "?? 1.7772", "?? 10519", "?? 5632.11", "?? 69", "?? 15360", '|| "ONLINE"', "|| 'ONLINE'",
+                '|| "ACCEPTING_WORK"', '|| "hmq_00092"')
+    pages: list[tuple[str, str]] = []
+    ruche = TestClient(create_hivemind_at_home_app())
+    for path in ("/", "/v1", "/v2", "/community", "/boinc", "/night-moe", "/planet-forecast", "/foundation-paper", "/cockpit-v46", "/join"):
+        r = ruche.get(path)
+        assert r.status_code == 200, path
+        pages.append((f"ruche {path}", r.text))
+    # the router's own portal script is covered by test_portal_page_script_prints_na_not_a_literal_for_a_missing_live_figure
+    checked = 0
+    for name, html_text in pages:
+        for literal in literals:
+            assert literal not in html_text, (name, literal)
+        if "d && d.accounts && d.models" in html_text:
+            checked += 1
+            assert "d.status === 'LIVE_GCP_PRODUCTION'" in html_text, name
+    assert checked >= 3, checked

@@ -5866,7 +5866,9 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
           var r = await fetch(urls[i], {{ headers: {{ 'Accept': 'application/json' }}, cache: 'no-store' }});
           if (!r.ok) continue;
           var d = await r.json();
-          if (d && d.accounts && d.models) {{
+          if (d && d.accounts && d.models && d.status === 'LIVE_GCP_PRODUCTION') {{
+            // A missing figure is shown as n/a; no number is printed that the payload did not carry.
+            const v = function (x) {{ return (x === null || x === undefined) ? 'n/a' : x; }};
             var bar = document.getElementById('ruche-live-gcp-telemetry');
             if (!bar) {{
               bar = document.createElement('div');
@@ -5882,16 +5884,16 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
             var u24 = d.usage_24h || {{}};
             bar.innerHTML =
               '<strong style="color:#34d399;">&#x25CF; LIVE GCP CLOUD RUN TELEMETRY:</strong> ' +
-              '<strong>' + (acc.total_registered_accounts ?? 69) + '</strong> Registered Accounts (' +
-              (roles.prosumer ?? 32) + ' prosumers, ' + (roles.producer ?? 10) + ' producers, ' +
-              (roles.consumer ?? 24) + ' consumers, ' + (roles.admin ?? 3) + ' admins, ' +
-              (roles.trainer ?? 0) + ' trainers) &bull; <strong>' + (models.live_count ?? 15) +
+              '<strong>' + v(acc.total_registered_accounts) + '</strong> Registered Accounts (' +
+              v(roles.prosumer) + ' prosumers, ' + v(roles.producer) + ' producers, ' +
+              v(roles.consumer) + ' consumers, ' + v(roles.admin) + ' admins, ' +
+              (roles.trainer ?? 0) + ' trainers) &bull; <strong>' + v(models.live_count) +
               '</strong> Live Models &bull; 24h Traffic: <strong>' + (u24.total_requests ?? 0) +
               ' reqs</strong> (' + (u24.total_billed_tokens ?? 0) + ' tokens) &bull; T4 VRAM: <strong>' +
-              (t4.vram_free_mib ?? 10519) + ' MiB free</strong> (' + (t4.assimilated_workunits ?? 147) +
-              ' BOINC WUs, ' + (t4.total_cobblestones ?? 5632.11) + ' Cobblestones) &bull; OpenTrainer: <strong>' +
-              (ot.status || 'ONLINE') + '</strong> (' + (ot.total_registered_nodes ?? 1) +
-              ' trainer node, eval_loss ' + (ot.latest_eval_loss ?? 1.7772) + ')';
+              v(t4.vram_free_mib) + ' MiB free</strong> (' + v(t4.assimilated_workunits) +
+              ' BOINC WUs, ' + v(t4.total_cobblestones) + ' Cobblestones) &bull; OpenTrainer: <strong>' +
+              v(ot.status) + '</strong> (' + v(ot.total_registered_nodes) +
+              ' trainer node, eval_loss ' + v(ot.latest_eval_loss) + ')';
             return;
           }}
         }} catch (_err) {{}}

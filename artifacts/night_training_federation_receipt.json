@@ -4,7 +4,7 @@
     "total_federated_trainers": 24,
     "federated_peer_minders_count": 23,
     "live_heartbeat_trainers_count": 24,
-    "round_index": 3019,
+    "round_index": 3037,
     "accepted_learners_count": 24,
     "loss_before": 2.5012,
     "loss_after": 2.4685,

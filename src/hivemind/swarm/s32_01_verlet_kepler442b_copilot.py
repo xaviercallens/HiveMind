@@ -7,19 +7,20 @@ Starts the 10-PR self-evolving roadmap with a foundational Python scientific & S
    (semi-major axis ``a = 0.409 AU``, eccentricity ``e = 0.04``, host star ``M = 0.61 M_sun``), proving
    bounded Hamiltonian drift ``|dH / H_0| < 1e-6`` and angular momentum conservation ``|dL_z / L_{z,0}| < 1e-12``.
 3. Provides :class:`AntigravityHiveMindCoPilot` connecting the Google Antigravity SDK and ``hivemind/bee-stars``
-   with user key ``hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E``.
+   with the caller's own HiveMind key (``api_key=`` or ``HIVEMIND_API_KEY``); no key is built into this module.
 """
 
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import asdict, dataclass
 from typing import Any
 
 import httpx
 
 DEFAULT_HIVEMIND_BASE_URL = "https://hivemind-openrouter-1003063861791.us-central1.run.app/v1"
-DEFAULT_FOUNDER_API_KEY = "hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E"
+HIVEMIND_API_KEY_ENV = "HIVEMIND_API_KEY"
 DEFAULT_BEE_STARS_MODEL = "hivemind/bee-stars"
 
 # Canonical gravitational parameter in AU^3 / year^2: G * M_sun = 4 * pi^2
@@ -244,10 +245,14 @@ class AntigravityHiveMindCoPilot:
     def __init__(
         self,
         *,
-        api_key: str = DEFAULT_FOUNDER_API_KEY,
+        api_key: str | None = None,
         base_url: str = DEFAULT_HIVEMIND_BASE_URL,
         model: str = DEFAULT_BEE_STARS_MODEL,
     ) -> None:
+        # The key is the caller's: an explicit argument or the HIVEMIND_API_KEY variable. There is no built-in key.
+        api_key = (api_key or os.environ.get(HIVEMIND_API_KEY_ENV, "")).strip()
+        if not api_key:
+            raise ValueError(f"api_key is required: pass api_key= or set {HIVEMIND_API_KEY_ENV}; no key is built in")
         if not api_key.startswith("hm-"):
             raise ValueError("api_key must be a valid HiveMind 'hm-...' key")
         ensure_antigravity_sdk_lightweight_compat()

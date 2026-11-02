@@ -55,10 +55,11 @@ wg_conf() {
 
 sync_wg() {
   local new; new="$(wg_conf)"
-  if [ "$new" != "$(cat /etc/wireguard/wg-hivemind.conf 2>/dev/null)" ]; then
-    (umask 077; printf '%s\n' "$new" > /etc/wireguard/wg-hivemind.conf)
-    if ip link show wg-hivemind >/dev/null 2>&1; then wg syncconf wg-hivemind <(wg-quick strip wg-hivemind); else wg-quick up wg-hivemind > $B/wg.log 2>&1; fi
-  fi
+  local changed=0
+  if [ "$new" != "$(cat /etc/wireguard/wg-hivemind.conf 2>/dev/null)" ]; then (umask 077; printf '%s\n' "$new" > /etc/wireguard/wg-hivemind.conf); changed=1; fi
+  # after a reboot the config is unchanged but the interface is gone: bring it up whenever it is missing
+  if ! ip link show wg-hivemind >/dev/null 2>&1; then wg-quick up wg-hivemind > $B/wg.log 2>&1
+  elif [ "$changed" = 1 ]; then wg syncconf wg-hivemind <(wg-quick strip wg-hivemind); fi
   # forward only member -> overlay, masqueraded, so the Kafka voters see 10.77.0.10 and need no per-member peer; drop everything else
   local members=(); while read -r id pub; do [ -n "${pub:-}" ] && members+=("10.77.0.${id}/32"); done < <(attr hm-members)
   [ "${#members[@]}" -eq 0 ] || bash $REPO/deploy/amcp/hm-wg-hub.sh up "${members[@]}" > /dev/null 2>&1

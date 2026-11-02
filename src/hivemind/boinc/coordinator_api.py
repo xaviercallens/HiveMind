@@ -440,9 +440,15 @@ def create_coordinator_fastapi_app(coordinator: BOINCCoordinatorService, identit
             consumer_id="seti-node-paris-01",
             provider_ids=["seti-node-lyon-02", "seti-node-nice-03"],
         )
-        auditor = OptimisticProofOfInferenceAuditor(audit_probability=0.05)
-        ref_act = torch.ones(1, 8, 64, dtype=torch.float16)
-        opoi = auditor.verify_activation_commitment("seti-node-lyon-02", ref_act, ref_act)
+        # No producer activation commitment reaches this endpoint, so no OPoI audit can be performed here. The previous
+        # code compared a reference tensor with itself and reported the inevitable pass as an audit result.
+        opoi = {
+            "status": "NOT_PERFORMED",
+            "reason": "no producer activation commitment is available on this endpoint; nothing was audited",
+            "opoi_passed": None,
+            "slashed": False,
+            "auditor": OptimisticProofOfInferenceAuditor.__name__,
+        }
         completion_id = f"chatcmpl-hivemind-{uuid.uuid4().hex[:10]}"
         created_ts = int(time.time())
         prompt_tokens = max(1, len(user_prompt.split()))

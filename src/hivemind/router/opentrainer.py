@@ -339,6 +339,218 @@ def validate_trainer_delta_submission(
     }
 
 
+COMMUNITY_HELP_AND_CONTRIBUTIVE_GUIDE: Sequence[dict[str, Any]] = (
+    {
+        "topic_id": "producer-openrouter-join",
+        "category": "producer_openrouter",
+        "title_en": "1. Join as an OpenRouter Inference Producer (Share Idle GPU & Earn HMT)",
+        "title_fr": "1. Rejoindre comme Producteur d'Inférence OpenRouter (Partage GPU & HMT)",
+        "summary_en": (
+            "Run Ollama, llama-server, or vLLM locally and heartbeat your models to the HiveMind OpenRouter gateway. "
+            "Whenever a local game or heavy workload starts, your GPU yields in < 1.5s."
+        ),
+        "summary_fr": (
+            "Lancez Ollama, llama-server ou vLLM localement et envoyez vos heartbeats vers la passerelle HiveMind OpenRouter. "
+            "Dès qu'un jeu ou une tâche lourde démarre, votre GPU libère la VRAM en < 1,5 s."
+        ),
+        "cli_command": (
+            "python scripts/hivemind_producer_agent.py "
+            "--gateway https://hivemind-openrouter-1003063861791.us-central1.run.app --preset coder"
+        ),
+        "verification_endpoint": "/v1/hivemind/producers",
+    },
+    {
+        "topic_id": "trainer-opentrainer-moe",
+        "category": "trainer_opentrainer_moe",
+        "title_en": "2. Join as an OpenTrainer Self-Training MoE Node (0 Inbound Ports)",
+        "title_fr": "2. Contribuer à l'Auto-Entraînement MoE via OpenTrainer (0 Port Entrant)",
+        "summary_en": (
+            "Participate in Stage-2 Tiny Granite-MoE NF4 QLoRA and DiLoCo 2D-DCT outer steps over outbound HTTPS "
+            "(TCP/443) or signed AMCP/Kafka Aglets (`hivemind.amcp.federation.v1`). Monotone validation-loss ratchet "
+            "ensures only loss-improving rounds advance the checkpoint."
+        ),
+        "summary_fr": (
+            "Participez à l'auto-entraînement Stage-2 Tiny Granite-MoE NF4 QLoRA et aux pas externes DiLoCo 2D-DCT "
+            "via HTTPS sortant (TCP/443) ou Aglets signés AMCP/Kafka (`hivemind.amcp.federation.v1`). Le cliquet "
+            "monotone rejette toute mise à jour qui dégrade la loss de validation."
+        ),
+        "cli_command": (
+            "python scripts/hivemind_opentrainer_agent.py "
+            "--gateway https://hivemind-openrouter-1003063861791.us-central1.run.app "
+            "--network-mode outbound-https-relay --check-firewall --submit-delta --once"
+        ),
+        "verification_endpoint": "/v1/hivemind/opentrainer/status",
+    },
+    {
+        "topic_id": "dual-role-failover-orchestrator",
+        "category": "dual_producer_trainer_3h_cycle",
+        "title_en": "3. Dual Producer + Trainer Co-Serving & 3-Hour MoE Self-Training Cycle",
+        "title_fr": "3. Orchestrateur Hybride Producteur + Entraîneur & Cycle MoE 3 Heures",
+        "summary_en": (
+            "Every 3 hours, the Producer+Trainer MoE integration orchestrator verifies live OpenRouter inference "
+            "(`hivemind/coder`, `hivemind/bee-stars` with NIGHT-MOE-1 LoRA, `hivemind/auto`), refreshes producer "
+            "and OpenTrainer heartbeats, and executes verified QLoRA self-training rounds."
+        ),
+        "summary_fr": (
+            "Toutes les 3 heures, l'orchestrateur d'intégration Producteur+Entraîneur vérifie le service d'inférence "
+            "OpenRouter (`hivemind/coder`, `hivemind/bee-stars` avec adaptateur NIGHT-MOE-1 LoRA, `hivemind/auto`), "
+            "rafraîchit les heartbeats Producteur/OpenTrainer et exécute des rondes d'auto-entraînement QLoRA."
+        ),
+        "cli_command": (
+            "PYTHONPATH=src:scripts python scripts/run_3h_producer_trainer_moe_integration.py"
+        ),
+        "verification_endpoint": "/v1/hivemind/contributive-hub",
+    },
+    {
+        "topic_id": "community-troubleshooting-help",
+        "category": "community_mutual_aid",
+        "title_en": "4. Community Help, Firewall Diagnostics & Honest Adapter Rules",
+        "title_fr": "4. Entraide Communautaire, Diagnostic Pare-Feu & Règles d'Intégrité",
+        "summary_en": (
+            "Behind NAT/CGNAT or Windows Firewall? Use `outbound-https-relay` (TCP/443 outbound only). "
+            "Note: `hivemind/bee-stars` requires the `NIGHT-MOE-1` LoRA adapter on `llama-server` (`/bee`); "
+            "plain Ollama nodes should advertise base/coder models without `bee-stars`."
+        ),
+        "summary_fr": (
+            "Derrière un NAT/CGNAT ou pare-feu Windows ? Utilisez `outbound-https-relay` (TCP/443 sortant uniquement). "
+            "Important : `hivemind/bee-stars` requiert l'adaptateur LoRA `NIGHT-MOE-1` sur `llama-server` (`/bee`) ; "
+            "un nœud Ollama standard ne doit pas annoncer `bee-stars` sans l'adaptateur."
+        ),
+        "cli_command": (
+            "curl -sS https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/hivemind/contributive-hub"
+        ),
+        "verification_endpoint": "/v1/hivemind/contributive-hub",
+    },
+    {
+        "topic_id": "byom-2-to-4-local-gpus",
+        "category": "byom_multi_gpu_co_training",
+        "title_en": "5. Co-Train New or Custom Models (BYOM) with 2 to 4 Local GPUs",
+        "title_fr": "5. Co-Entraîner de Nouveaux Modèles ou Vos Propres Modèles (BYOM) avec 2 à 4 GPUs",
+        "summary_en": (
+            "Join as a Trainer (`role=\"trainer\"`) to co-train shared HiveMind MoE models OR your own custom base "
+            "models/LoRA adapters (`--campaign-id byom-<your-model>`) across 2 to 4 local GPUs (same rig via "
+            "`CUDA_VISIBLE_DEVICES=0..3` or 2–4 LAN/WAN machines). Each GPU takes a disjoint non-IID data shard "
+            "(`--learner-index 0..3 --num-learners K`) and merges outer steps via DiLoCo 2D-DCT + Multi-Krum."
+        ),
+        "summary_fr": (
+            "Rejoignez comme Entraîneur (`role=\"trainer\"`) pour co-entraîner de nouveaux modèles communs OU vos "
+            "propres modèles/adaptateurs LoRA (`--campaign-id byom-<votre-modele>`) avec 2 à 4 GPUs locaux (même "
+            "machine via `CUDA_VISIBLE_DEVICES=0..3` ou 2 à 4 PC en réseau). Chaque GPU entraîne une partition "
+            "disjointe (`--learner-index 0..3 --num-learners K`) et synchronise par pas externe DiLoCo 2D-DCT."
+        ),
+        "cli_command": (
+            "for gpu in 0 1 2 3; do CUDA_VISIBLE_DEVICES=$gpu python scripts/hivemind_opentrainer_agent.py "
+            "--gateway https://hivemind-openrouter-1003063861791.us-central1.run.app "
+            "--host-label RIG-GPU$gpu --learner-index $gpu --campaign-id byom-custom-moe-v1 "
+            "--network-mode outbound-https-relay --submit-delta --once & done; wait"
+        ),
+        "verification_endpoint": "/v1/hivemind/opentrainer/status",
+    },
+)
+
+
+MULTI_GPU_2_TO_4_BYOM_CO_TRAINING_PLAYBOOK: dict[str, Any] = {
+    "title_en": "Co-Training New & Custom (BYOM) Models with 2 to 4 Local GPUs on OpenTrainer",
+    "title_fr": "Co-Entraîner de Nouveaux Modèles ou Vos Propres Modèles (BYOM) avec 2 à 4 GPUs Locaux",
+    "supported_topologies": [
+        {
+            "topology_id": "single_host_2_to_4_gpus",
+            "label_en": "Topology A — 1 Workstation / Homelab Server with 2 to 4 GPUs (CUDA_VISIBLE_DEVICES=0..3)",
+            "label_fr": "Topologie A — 1 Station / Serveur Homelab avec 2 à 4 GPUs (CUDA_VISIBLE_DEVICES=0..3)",
+            "how_it_works": (
+                "Pin one OpenTrainer worker per physical GPU (`CUDA_VISIBLE_DEVICES=0..K-1`), assign each worker "
+                "a distinct `--host-label RIG-GPU$i` and `--learner-index $i`, and run H=20..40 inner QLoRA steps "
+                "before outer-step DiLoCo / RDA aggregation."
+            ),
+        },
+        {
+            "topology_id": "multi_host_lan_or_wan_2_to_4_gpus",
+            "label_en": "Topology B — 2 to 4 Separate Gaming PCs / Laptops Across LAN or Internet (0 Inbound Ports)",
+            "label_fr": "Topologie B — 2 à 4 PC Gamers / Machines Séparées en LAN ou Internet (0 Port Entrant)",
+            "how_it_works": (
+                "Each PC runs `scripts/hivemind_opentrainer_agent.py --network-mode outbound-https-relay` (or local "
+                "syncer `scripts/run_experiment_E8_pilot.py --role syncer --bind 127.0.0.1` over SSH loopback tunnel) "
+                "and submits only compact FP16/2D-DCT LoRA deltas (~6–18 MB per round, never raw private datasets)."
+            ),
+        },
+        {
+            "topology_id": "bring_your_own_model_byom",
+            "label_en": "Topology C — Bring Your Own Model (BYOM) / Custom Domain LoRA Campaign",
+            "label_fr": "Topologie C — Entraîner Votre Propre Modèle (BYOM) / Campagne LoRA Personnalisée",
+            "how_it_works": (
+                "Specify a custom `--campaign-id byom-<your-project>` when submitting deltas to "
+                "`/v1/hivemind/opentrainer/submit-delta`, or launch a private 2–4 GPU DiLoCo coordinator locally while "
+                "optionally publishing the trained GGUF/LoRA bee onto HiveMind OpenRouter (`/v1/chat/completions`)."
+            ),
+        },
+    ],
+    "vram_budget_per_gpu_tier": {
+        "6gb_to_8gb_gpus_e_g_rtx2070_3060_4060": "NF4 4-bit base + rank-4/rank-8 QLoRA (batch=1, grad_accum=8, seq_len=1024, >=1,536 MiB free VRAM safety floor)",
+        "12gb_to_16gb_gpus_e_g_rtx3060_12g_4070ti_t4": "NF4/FP8 base + rank-16 QLoRA or 8-expert Tiny-MoE (batch=2, grad_accum=8, seq_len=2048, >=4,300 MiB free VRAM floor on T4)",
+        "24gb_plus_gpus_e_g_rtx3090_4090_a5000": "14B–30B MoE expert shards + rank-32 QLoRA / teacher distillation",
+    },
+}
+
+
+def summarize_moe_self_training_progress(
+    *,
+    recent_rounds: Sequence[Mapping[str, Any]],
+    opentrainer_nodes: Sequence[Mapping[str, Any]],
+    now_utc: float | None = None,
+) -> dict[str, Any]:
+    """Compute real, non-fabricated MoE self-training trajectory metrics from recorded OpenTrainer rounds."""
+    now = time.time() if now_utc is None else float(now_utc)
+    live_nodes = [n for n in opentrainer_nodes if (now - float(n.get("last_heartbeat_utc") or 0.0)) <= 300.0]
+    ordered = sorted(
+        recent_rounds,
+        key=lambda r: (float(r.get("submitted_utc") or 0.0), int(r.get("round_index") or 0)),
+    )
+    eval_losses = [
+        float(r["eval_loss"])
+        for r in ordered
+        if r.get("eval_loss") is not None and math.isfinite(float(r["eval_loss"]))
+    ]
+    total_tokens = sum(max(0, int(r.get("tokens_trained") or 0)) for r in ordered)
+    campaigns = sorted({str(r.get("run_id") or "") for r in ordered if str(r.get("run_id") or "").strip()})
+    handles = sorted({str(r.get("handle") or "") for r in ordered if str(r.get("handle") or "").strip()})
+    latest_round = int(ordered[-1].get("round_index") or 0) if ordered else 0
+
+    if eval_losses:
+        initial_loss = round(eval_losses[0], 6)
+        latest_loss = round(eval_losses[-1], 6)
+        best_loss = round(min(eval_losses), 6)
+        loss_delta = round(initial_loss - latest_loss, 6)
+        ratchet_improved = latest_loss <= initial_loss
+        data_source = "LIVE_RECORDED_OPENTRAINER_ROUNDS"
+    else:
+        initial_loss = None
+        latest_loss = None
+        best_loss = None
+        loss_delta = 0.0
+        ratchet_improved = False
+        data_source = "NO_ROUNDS_RECORDED_YET"
+
+    return {
+        "object": "hivemind.opentrainer.moe_self_training_progress",
+        "target_model": "hivemind/granite-moe-qlora-nf4",
+        "architecture": "Stage-2 Tiny Granite-MoE NF4 QLoRA + DiLoCo 2D-DCT Outer Step + Monotone Loss Ratchet",
+        "cadence": "every_3_hours_and_continuous_45s_micro_rounds",
+        "data_source": data_source,
+        "rounds_recorded": len(ordered),
+        "latest_round_index": latest_round,
+        "initial_eval_loss": initial_loss,
+        "latest_eval_loss": latest_loss,
+        "best_ratcheted_eval_loss": best_loss,
+        "loss_improvement_delta": loss_delta,
+        "monotone_ratchet_improved": ratchet_improved,
+        "total_tokens_trained": total_tokens,
+        "active_campaigns": campaigns,
+        "participating_handles": handles,
+        "active_trainer_nodes_count": len(live_nodes),
+        "total_registered_trainer_nodes": len(opentrainer_nodes),
+    }
+
+
 def load_live_lowcost_vm_orchestrator_ledger(repo_root: Any = None) -> dict[str, Any]:
     """Load the live Permanent Low-Cost VM OpenTrainer Orchestrator status ledger from disk if available."""
     import json
@@ -433,6 +645,13 @@ def build_opentrainer_status_payload(
             "total_registered_nodes": len(opentrainer_nodes),
             "nodes": list(opentrainer_nodes),
         },
+        "moe_self_training_progress": summarize_moe_self_training_progress(
+            recent_rounds=recent_rounds,
+            opentrainer_nodes=opentrainer_nodes,
+            now_utc=now,
+        ),
+        "community_help_guide": list(COMMUNITY_HELP_AND_CONTRIBUTIVE_GUIDE),
+        "multi_gpu_2_to_4_byom_playbook": MULTI_GPU_2_TO_4_BYOM_CO_TRAINING_PLAYBOOK,
         "active_task_offer": default_active_task_offer(now_utc=now),
         "recent_training_rounds": list(recent_rounds),
         "lowcost_vm_orchestrator": vm_summary,

@@ -26,7 +26,7 @@ from hivemind.boinc.real_client.bridge import Verdict
 from hivemind.boinc.real_client.contributor_policy import BoincHostDirectory, replay_all_for_result
 from hivemind.boinc.real_client.moe_bridge import MoEValidator, _reject
 from hivemind.boinc.real_client.moe_profiles import TRAIN_APPS, profile_for_app
-from hivemind.economy.compute_coin import CreditClaim, verified_credit
+from hivemind.economy.compute_coin import CreditClaim, claim_figures_are_finite_and_positive, verified_credit
 
 SPEC_DIR = Path(os.environ.get("HIVEMIND_SPEC_DIR", "hivemind_specs"))
 LEDGER_DIR = Path(os.environ.get("HIVEMIND_LEDGER_DIR", "hivemind_ledger"))
@@ -330,8 +330,11 @@ def validate_solver_sweep(
                 )
 
     flops_claimed = float(meta.get("flops_claimed", len(sweep_results) * 2.5e9))
-    wall_s = max(float(meta.get("wall_seconds", 1.0)), 1e-6)
+    wall_s = float(meta.get("wall_seconds", 1.0))
+    # Checked on the raw figures: a floor such as max(wall, 1e-6) keeps NaN and silently credits a negative wall time.
     claim = CreditClaim(host, wu, flops_claimed, wall_s, CPU_SOLVER_PEAK_GFLOPS, True, True)
+    if not claim_figures_are_finite_and_positive(claim):
+        return _reject(wu, host, f"wall_seconds/flops_claimed not finite and positive: {meta.get('wall_seconds')!r}, {meta.get('flops_claimed')!r}")
     detail = {
         "sweep_points": len(sweep_results),
         "worst_invariant_drift": worst_drift,

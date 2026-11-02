@@ -4,7 +4,7 @@
 Orchestrates and audits the 10-PR self-evolving roadmap (``HM-S32-01`` through ``HM-S34-04``):
 1. Executes all 9 preceding roadmap modules deterministically and verifies their mathematical/physical invariants.
 2. Records live OpenRouter & Google Antigravity SDK completion receipts under founder key
-   ``hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E``.
+   the caller's own key (``HIVEMIND_API_KEY``).
 3. Computes a hash-chained ``SHA-256`` supervisor attestation across all 10 PRs before merge.
 """
 

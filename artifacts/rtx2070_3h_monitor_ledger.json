@@ -1,9 +1,9 @@
 {
   "schema_version": "rtx2070_3h_monitor.v1",
   "cadence_cron": "0 */3 * * *",
-  "timestamp_utc": "2026-11-02T10:19:40Z",
+  "timestamp_utc": "2026-11-02T12:19:40Z",
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-11-02T10:19:40Z",
+    "timestamp_utc": "2026-11-02T12:19:40Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": true,
@@ -11,10 +11,10 @@
     "compute_capability": "7.5",
     "temperature_c": 34.0,
     "gpu_utilization_pct": 2.0,
-    "power_draw_w": 30.19,
+    "power_draw_w": 41.95,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1820.0,
-    "memory_free_mib": 6187.0,
+    "memory_used_mib": 1812.0,
+    "memory_free_mib": 6195.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
@@ -24,10 +24,10 @@
     "max_graphics_clock_mhz": 2145.0,
     "memory_clock_mhz": 6801.0,
     "host_tensor_gflops": 0.0,
-    "measured_fp32_tflops": 5.67,
-    "measured_fp16_tensor_tflops": 19.77,
-    "effective_sparse_moe_nf4_tflops": 36.57,
-    "microbench_elapsed_ms": 264.13
+    "measured_fp32_tflops": 5.63,
+    "measured_fp16_tensor_tflops": 19.56,
+    "effective_sparse_moe_nf4_tflops": 36.19,
+    "microbench_elapsed_ms": 281.21
   },
   "community_gpu_benchmark_summary": {
     "receipt_sha256": "2f8ae97fd69be25f4c6036aa4cd2153a2affec9e8df435e38158b69028aed8f9",
@@ -35,16 +35,16 @@
     "peak_allocated_mb": 0.0
   },
   "pr_integration_summary": {
-    "checked_utc": "2026-11-02T10:19:43Z",
+    "checked_utc": "2026-11-02T12:19:44Z",
     "open_prs_count": 17,
     "evaluated": [
       {
-        "pr": 497,
-        "title": "fix(router): T4 telemetry pushes are validated per field; a malformed push changes nothing",
+        "pr": 505,
+        "title": "feat(router,opentrainer,portal): Contributive & Community Help Hub, 3h Producer+Trainer Self-Training MoE & 2-4 GPU BYOM Playbook (#487, #494)",
         "author": "xaviercallens",
-        "head_ref": "fix/ip145-t4-telemetry-validate-sections",
+        "head_ref": "feat/contributive-portal-openrouter-opentrainer-moe",
         "base_ref": "main",
-        "head_sha": "00925b0562",
+        "head_sha": "9bf6ff080b",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -53,12 +53,12 @@
         "merge_message": ""
       },
       {
-        "pr": 491,
-        "title": "docs: daily audit update 2026-11-02 (57 new findings, IP-139 to IP-195) and roadmap 3.26c",
+        "pr": 504,
+        "title": "fix(economy,boinc): reject non-finite or non-positive wall time and FLOP claims before crediting (IP-159, #500)",
         "author": "xaviercallens",
-        "head_ref": "docs/improvement-plan-2026-11-02",
+        "head_ref": "fix/ip159-credit-rejects-nonfinite-wall-and-flops",
         "base_ref": "main",
-        "head_sha": "577e7a4d07",
+        "head_sha": "9df7239505",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -212,7 +212,7 @@
         "author": "xaviercallens",
         "head_ref": "feat/openrouter-5lang-i18n",
         "base_ref": "main",
-        "head_sha": "d5529d7df0",
+        "head_sha": "6e5cdcf655",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -289,5 +289,5 @@
       141
     ]
   },
-  "ledger_sha256": "8e8e291d448e4acdfec75bf13bc3cc60f812ed6e26985c3841636c2e11e709e1"
+  "ledger_sha256": "3424354b893fae562f2e14778153be20bcd4747ffceea886fee4422988c32d4d"
 }

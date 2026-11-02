@@ -152,7 +152,7 @@ def test_15_moe_catalog_and_balanced_producer_prosumer_distribution(tmp_path) ->
     rec = client.post(
         "/v1/hivemind/admin/producers/reconnect",
         headers={"x-admin-key": admin_token},
-        json={"replace_endpoints": True, "include_legacy_known_users": True},
+        json={"replace_endpoints": True, "include_legacy_known_users": True, "endpoint_token": "test-endpoint-token-0123456789abcdefghijk"},
     )
     assert rec.status_code == 200
     rec_data = rec.json()

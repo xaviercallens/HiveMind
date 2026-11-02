@@ -39,7 +39,7 @@ def test_admin_heartbeat_keeps_user_api_key_intact() -> None:
             "cost_per_1k": 0.35,
             "capacity_1k": 80.0,
             "execution_class": "t4-16gb-moe",
-            "endpoint_token": "sDkyBiiDsjX3KL48lUZxdfZu1LK0c8QZXoS7RnJ7D2Q",
+            "endpoint_token": "test-endpoint-token-0123456789abcdefghijk",
             "replace_endpoints": True,
         },
     )
@@ -99,7 +99,7 @@ def test_admin_reconnect_all_hiveminders_and_replace_stale_endpoints() -> None:
             "bee_endpoint_url": "https://34-48-48-154.sslip.io/bee",
             "coder_endpoint_url": "https://34-48-48-154.sslip.io",
             "rtx2070_endpoint_url": "https://34-48-48-154.sslip.io/rtx2070",
-            "endpoint_token": "sDkyBiiDsjX3KL48lUZxdfZu1LK0c8QZXoS7RnJ7D2Q",
+            "endpoint_token": "test-endpoint-token-0123456789abcdefghijk",
             "replace_endpoints": True,
             "include_legacy_known_users": True,
         },
@@ -126,3 +126,18 @@ def test_admin_reconnect_all_hiveminders_and_replace_stale_endpoints() -> None:
     pub = client.get("/v1/hivemind/producers/fleet")
     assert pub.status_code == 200
     assert pub.json()["live_hiveminders"] == data["live_hiveminders"]
+
+
+def test_reconnect_without_any_endpoint_token_is_refused_and_no_token_is_built_in() -> None:
+    from hivemind.router.gateway import ReconnectProducersRequest
+
+    assert ReconnectProducersRequest.model_fields["endpoint_token"].default is None
+    client, store, admin_key = _make_app_and_store()
+    store.register("fresh-miner", "producer")
+    resp = client.post(
+        "/v1/hivemind/admin/producers/reconnect",
+        headers={"x-admin-key": admin_key},
+        json={"endpoint_url": "https://34-48-48-154.sslip.io/u", "include_legacy_known_users": False},
+    )
+    assert resp.status_code == 400
+    assert resp.json()["error"]["code"] == "endpoint_token_required"

@@ -83,16 +83,33 @@ class CreditGrant:
         return asdict(self)
 
 
+def claim_figures_are_finite_and_positive(claim: CreditClaim) -> bool:
+    """True when wall time and class peak are finite and > 0 and the FLOP claim is finite and >= 0.
+
+    `max(nan, 1e-6)` is nan and `min(1e30, nan)` is 1e30, so a NaN wall time used to pass the `<= 0` test and
+    disable the class-peak cap; non-finite figures are rejected here before any arithmetic.
+    """
+    return (
+        math.isfinite(claim.wall_seconds) and claim.wall_seconds > 0.0
+        and math.isfinite(claim.class_peak_gflops) and claim.class_peak_gflops > 0.0
+        and math.isfinite(claim.flops_claimed) and claim.flops_claimed >= 0.0
+    )
+
+
 def verified_credit(claim: CreditClaim, replica_claims: Sequence[CreditClaim] = ()) -> CreditGrant:
     """Credit granted for one claim: zero unless verified; capped by the class peak and by the canonical replica."""
     if not claim.spot_check_passed or not claim.multikrum_accepted:
         return CreditGrant(claim.node_id, claim.workunit_id, 0.0, "rejected", "spot-check failed or delta not admitted by Multi-Krum")
-    if claim.wall_seconds <= 0.0 or claim.class_peak_gflops <= 0.0:
-        return CreditGrant(claim.node_id, claim.workunit_id, 0.0, "rejected", "non-positive wall time or class peak")
+    if not claim_figures_are_finite_and_positive(claim):
+        return CreditGrant(claim.node_id, claim.workunit_id, 0.0, "rejected", "wall time, class peak or FLOP claim is non-finite or non-positive")
     peak_flops = claim.class_peak_gflops * GFLOP * claim.wall_seconds
     flops = cobblestones_from_flops(min(claim.flops_claimed, peak_flops))
     capped_by = "class_peak" if claim.flops_claimed > peak_flops else "verified"
-    verified_replicas = [r for r in replica_claims if r.workunit_id == claim.workunit_id and r.spot_check_passed and r.multikrum_accepted and r.node_id != claim.node_id]
+    verified_replicas = [
+        r for r in replica_claims
+        if r.workunit_id == claim.workunit_id and r.spot_check_passed and r.multikrum_accepted and r.node_id != claim.node_id
+        and claim_figures_are_finite_and_positive(r)  # a replica with NaN figures cannot set the canonical claim
+    ]
     if verified_replicas:
         canonical = min(cobblestones_from_flops(min(r.flops_claimed, r.class_peak_gflops * GFLOP * r.wall_seconds)) for r in verified_replicas)
         if canonical < flops:

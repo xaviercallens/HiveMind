@@ -1,6 +1,6 @@
-# Install torch==2.14.1+cpu first from https://download.pytorch.org/whl/cpu.
+# Install torch==2.15.0+cpu first from https://download.pytorch.org/whl/cpu.
 # This bounded offline smoke path does not need the project's GPU dependencies.
-torch==2.14.1
+torch==2.15.0
 transformers==5.20.2
 peft==0.21.2
 safetensors==0.8.0

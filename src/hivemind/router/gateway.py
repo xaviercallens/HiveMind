@@ -1441,6 +1441,7 @@ def create_router_app(
                 "active_trainer_nodes": int(ot_fleet.get("active_trainer_nodes", 1)),
                 "accepted_rounds_count": len(ot_rounds),
                 "latest_eval_loss": float(ot_rounds[0].get("eval_loss", 1.7772)) if ot_rounds else 1.7772,
+                "moe_self_training": ot_doc.get("moe_self_training_progress") or {},
             },
             "usage_24h": usage_block,
             "usage_capture": usage_block,
@@ -2196,26 +2197,28 @@ def create_router_app(
             models.append({"id": public, "local_name": entry.local_name})
         residency, capacity = residency_report([(m["id"], e) for m, e in zip(models, payload.models, strict=True)], payload.gpu_vram_mib, payload.capacity_1k)
         try:
+            endpoints = store.upsert_producer(
+                account.account_id,
+                payload.endpoint_url,
+                models,
+                payload.cost_per_1k,
+                capacity,
+                payload.execution_class,
+                now_utc=clock(),
+                endpoint_token=payload.endpoint_token,
+                residency=residency,
+                replace_endpoints=bool(payload.replace_endpoints),
+            )
             if reconnected_fleet_keepalive["active"] and account.account_id in reconnected_fleet_keepalive["entries"]:
-                saved_entry = reconnected_fleet_keepalive["entries"][account.account_id]
-                endpoints = store.upsert_producer(
-                    account.account_id,
-                    saved_entry["endpoint_url"],
-                    saved_entry["models"],
-                    saved_entry["cost_per_1k"],
-                    saved_entry["capacity_1k"],
-                    saved_entry["execution_class"],
-                    now_utc=clock(),
-                    endpoint_token=saved_entry["endpoint_token"],
-                    residency=saved_entry["residency"],
-                    replace_endpoints=True,
-                )
-            else:
-                endpoints = store.upsert_producer(
-                    account.account_id, payload.endpoint_url, models, payload.cost_per_1k, capacity, payload.execution_class,
-                    now_utc=clock(), endpoint_token=payload.endpoint_token, residency=residency,
-                    replace_endpoints=bool(payload.replace_endpoints),
-                )
+                reconnected_fleet_keepalive["entries"][account.account_id] = {
+                    "endpoint_url": payload.endpoint_url,
+                    "models": models,
+                    "cost_per_1k": payload.cost_per_1k,
+                    "capacity_1k": capacity,
+                    "execution_class": payload.execution_class,
+                    "endpoint_token": payload.endpoint_token,
+                    "residency": residency,
+                }
         except TooManyEndpoints as exc:
             raise RouterError(400, str(exc), "invalid_request_error", "too_many_endpoints") from None
         with market_lock:
@@ -2761,6 +2764,78 @@ def create_router_app(
             recent_rounds=rounds,
             now_utc=now,
         )
+
+    @app.get("/v1/hivemind/opentrainer/moe-self-training")
+    @app.get("/v1/opentrainer/moe-self-training")
+    def get_opentrainer_moe_self_training() -> dict[str, Any]:
+        """Public MoE self-training trajectory and monotone ratchet progress from recorded OpenTrainer rounds."""
+        from hivemind.router.opentrainer import summarize_moe_self_training_progress
+
+        now = clock()
+        nodes = store.list_opentrainer_nodes()
+        rounds = store.list_opentrainer_rounds(limit=100)
+        return summarize_moe_self_training_progress(
+            recent_rounds=rounds,
+            opentrainer_nodes=nodes,
+            now_utc=now,
+        )
+
+    @app.get("/v1/hivemind/contributive-hub")
+    @app.get("/v1/contributive-hub")
+    def get_contributive_hub() -> dict[str, Any]:
+        """Public Contributive & Community Help Hub: OpenRouter Producer Fleet + OpenTrainer Self-Training MoE + Bilingual Mutual-Aid Guide."""
+        from hivemind.router.opentrainer import (
+            COMMUNITY_HELP_AND_CONTRIBUTIVE_GUIDE,
+            FIREWALL_TRAVERSAL_MODES,
+            MULTI_GPU_2_TO_4_BYOM_CO_TRAINING_PLAYBOOK,
+            default_active_task_offer,
+            summarize_moe_self_training_progress,
+        )
+
+        now = clock()
+        fleet = store.list_hiveminder_accounts(now_utc=now, ttl_s=PRODUCER_TTL_S)
+        live_producers = [r for r in fleet if r["status"] == "live"]
+        scale = store.producer_fleet_scale_status(now_utc=now, ttl_s=PRODUCER_TTL_S)
+        models_raw = store.live_models(now, PRODUCER_TTL_S)
+        public_models = [_public_model(AUTO_MODEL), *(_public_model(m) for m in models_raw)]
+        ot_nodes = store.list_opentrainer_nodes()
+        ot_rounds = store.list_opentrainer_rounds(limit=100)
+        moe_progress = summarize_moe_self_training_progress(
+            recent_rounds=ot_rounds,
+            opentrainer_nodes=ot_nodes,
+            now_utc=now,
+        )
+        return {
+            "object": "hivemind.contributive_hub",
+            "theme": "Contributive & Community Mutual Aid — OpenRouter Producer + OpenTrainer Self-Training MoE",
+            "updated_utc": round(now, 3),
+            "integration_cycle": {
+                "cadence_hours": 3,
+                "cron_expression": "0 */3 * * *",
+                "script": "scripts/run_3h_producer_trainer_moe_integration.py",
+                "failover_daemon": "scripts/rtx2070_failover_orchestrator.py",
+                "inference_continuity_verified_models": [
+                    "hivemind/coder",
+                    "hivemind/bee-stars",
+                    "hivemind/auto",
+                ],
+            },
+            "openrouter_producer_fleet": {
+                "total_hiveminders": len(fleet),
+                "live_producers_count": len(live_producers),
+                "distinct_physical_gpus": scale["distinct_physical_gpus"],
+                "live_endpoints": sum(int(r["live_endpoints"]) for r in live_producers),
+                "total_capacity_1k": round(sum(float(r["capacity_1k"] or 0.0) for r in live_producers), 2),
+                "live_handles": [r["handle"] for r in live_producers],
+                "live_models_count": len(public_models),
+                "live_models": public_models,
+            },
+            "opentrainer_moe_self_training": moe_progress,
+            "active_task_offer": default_active_task_offer(now_utc=now),
+            "firewall_traversal_modes": list(FIREWALL_TRAVERSAL_MODES),
+            "community_help_guide": list(COMMUNITY_HELP_AND_CONTRIBUTIVE_GUIDE),
+            "multi_gpu_2_to_4_byom_playbook": MULTI_GPU_2_TO_4_BYOM_CO_TRAINING_PLAYBOOK,
+        }
 
     @app.post("/v1/hivemind/opentrainer/heartbeat")
     @app.post("/v1/opentrainer/heartbeat")

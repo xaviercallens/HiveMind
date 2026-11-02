@@ -19,6 +19,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
+from hivemind.router.telemetry_figures import shown_figure
 
 REPO_URL = "https://github.com/xaviercallens/HiveMind"
 DEFAULT_API_URL = "https://hivemind-openrouter-1003063861791.us-central1.run.app"
@@ -882,15 +883,15 @@ def render_join_page(lang: str = "fr", nonce: str = "abcdefgh12345678", *, tiers
         models_live = live_telemetry.get("models") or {}
         t4_live = live_telemetry.get("t4_boinc") or {}
         ot_live = live_telemetry.get("opentrainer") or {}
-        total_accts = int(acct.get("total_registered_accounts", 69))
-        prosumers_cnt = int(by_role.get("prosumer", 32))
-        producers_cnt = int(by_role.get("producer", 10))
-        consumers_cnt = int(by_role.get("consumer", 24))
-        trainers_cnt = int(by_role.get("trainer", 0))
-        live_models_cnt = int(models_live.get("live_models_count", 15))
-        wus_cnt = int(t4_live.get("assimilated_workunits", 147))
-        ot_nodes = int(ot_live.get("total_registered_nodes", 1))
-        ot_rounds = int(ot_live.get("accepted_rounds_count", 1))
+        total_accts = shown_figure(acct.get("total_registered_accounts"))
+        prosumers_cnt = shown_figure(by_role.get("prosumer"))
+        producers_cnt = shown_figure(by_role.get("producer"))
+        consumers_cnt = shown_figure(by_role.get("consumer"))
+        trainers_cnt = shown_figure(by_role.get("trainer"))
+        live_models_cnt = shown_figure(models_live.get("live_models_count"))
+        wus_cnt = shown_figure(t4_live.get("assimilated_workunits"))
+        ot_nodes = shown_figure(ot_live.get("total_registered_nodes"))
+        ot_rounds = shown_figure(ot_live.get("accepted_rounds_count"))
         live_texts = {
             "fr": (
                 f"🟢 État temps réel de La Ruche GCP : {total_accts} comptes inscrits "

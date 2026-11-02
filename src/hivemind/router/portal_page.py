@@ -21,6 +21,7 @@ from typing import Any
 from hivemind.router.catalog import TIERS
 from hivemind.router.google_auth import CLIENT_ID_RE
 from hivemind.router.life_as_a_bee import render_life_as_a_bee_section
+from hivemind.router.telemetry_figures import shown_figure
 
 
 def portal_content_security_policy(nonce: str) -> str:
@@ -1180,24 +1181,25 @@ def render_portal_page(
     t4_live = lt.get("t4_boinc") or {}
     ot_live = lt.get("opentrainer") or {}
     usage_live = lt.get("usage_24h") or {}
-    total_accts = int(acct.get("total_registered_accounts", 69))
-    prosumers_cnt = int(by_role.get("prosumer", 32))
-    producers_cnt = int(by_role.get("producer", 10))
-    consumers_cnt = int(by_role.get("consumer", 24))
-    trainers_cnt = int(by_role.get("trainer", 0))
-    admins_cnt = int(by_role.get("admin", 3))
-    live_models_cnt = int(models_live.get("live_models_count", 15))
-    total_hiveminders = int(prod_live.get("total_hiveminders", 42))
-    live_hiveminders = int(prod_live.get("live_hiveminders", 3))
-    total_cap_1k = float(prod_live.get("total_capacity_1k", 210.0))
-    t4_free_mib = int(t4_live.get("vram_free_mib", 10519))
-    t4_total_mib = int(t4_live.get("vram_total_mib", 15360))
-    wus_cnt = int(t4_live.get("assimilated_workunits", 147))
-    cobbles = float(t4_live.get("total_cobblestones", 5632.11))
-    reqs_24h = int(usage_live.get("total_requests", 557))
-    tokens_24h = int(usage_live.get("total_billed_tokens", 71809))
-    ot_nodes = int(ot_live.get("total_registered_nodes", 1))
-    ot_rounds = int(ot_live.get("accepted_rounds_count", 1))
+    total_accts = shown_figure(acct.get("total_registered_accounts"))
+    prosumers_cnt = shown_figure(by_role.get("prosumer"))
+    producers_cnt = shown_figure(by_role.get("producer"))
+    consumers_cnt = shown_figure(by_role.get("consumer"))
+    trainers_cnt = shown_figure(by_role.get("trainer"))
+    admins_cnt = shown_figure(by_role.get("admin"))
+    live_models_cnt = shown_figure(models_live.get("live_models_count"))
+    total_hiveminders = shown_figure(prod_live.get("total_hiveminders"))
+    live_hiveminders = shown_figure(prod_live.get("live_hiveminders"))
+    total_cap_1k = shown_figure(prod_live.get("total_capacity_1k"), decimals=0)
+    t4_free_mib = shown_figure(t4_live.get("vram_free_mib"))
+    t4_total_mib = shown_figure(t4_live.get("vram_total_mib"))
+    wus_cnt = shown_figure(t4_live.get("assimilated_workunits"))
+    cobbles = shown_figure(t4_live.get("total_cobblestones"), decimals=2)
+    reqs_24h = shown_figure(usage_live.get("total_requests"))
+    tokens_24h = shown_figure(usage_live.get("total_billed_tokens"))
+    ot_nodes = shown_figure(ot_live.get("total_registered_nodes"))
+    ot_rounds = shown_figure(ot_live.get("accepted_rounds_count"))
+    ot_eval = shown_figure(ot_live.get("latest_eval_loss"), decimals=4)
     gen_iso = str(lt.get("generated_at_iso", "live"))
     tier_cards = []
     for tier in TIERS:
@@ -1295,16 +1297,16 @@ def render_portal_page(
         <div class="tier-card" style="padding:0.75rem;border-color:rgba(0,238,252,0.35);">
           <div class="tier-badge">LIVE MODELS &amp; HIVEMINDERS</div>
           <div id="liveGcpModelsCount" class="tier-name" style="margin-bottom:0.25rem;">{live_models_cnt} Live Models Online</div>
-          <div id="liveGcpProducersCount" class="tier-vram" style="margin-bottom:0;">{total_hiveminders} Hiveminders &bull; {live_hiveminders} Active ({total_cap_1k:.0f} ktok/min)</div>
+          <div id="liveGcpProducersCount" class="tier-vram" style="margin-bottom:0;">{total_hiveminders} Hiveminders &bull; {live_hiveminders} Active ({total_cap_1k} ktok/min)</div>
         </div>
         <div class="tier-card" style="padding:0.75rem;border-color:rgba(251,191,36,0.35);">
           <div class="tier-badge">TESLA T4 (16 GB) &amp; BOINC</div>
-          <div id="liveGcpT4Vram" class="tier-name" style="margin-bottom:0.25rem;">Free: {t4_free_mib:,} MiB / {t4_total_mib:,} MiB</div>
-          <div id="liveGcpWusCount" class="tier-vram" style="margin-bottom:0;">{wus_cnt} Assimilated WUs &bull; {cobbles:,.2f} Cobblestones</div>
+          <div id="liveGcpT4Vram" class="tier-name" style="margin-bottom:0.25rem;">Free: {t4_free_mib} MiB / {t4_total_mib} MiB</div>
+          <div id="liveGcpWusCount" class="tier-vram" style="margin-bottom:0;">{wus_cnt} Assimilated WUs &bull; {cobbles} Cobblestones</div>
         </div>
         <div class="tier-card" style="padding:0.75rem;border-color:rgba(192,132,252,0.35);">
           <div class="tier-badge">24H USAGE &amp; OPENTRAINER</div>
-          <div id="liveGcpReqs24h" class="tier-name" style="margin-bottom:0.25rem;">{reqs_24h:,} Reqs &bull; {tokens_24h:,} Tokens (24h)</div>
+          <div id="liveGcpReqs24h" class="tier-name" style="margin-bottom:0.25rem;">{reqs_24h} Reqs &bull; {tokens_24h} Tokens (24h)</div>
           <div id="liveGcpOpenTrainerStatus" class="tier-vram" style="margin-bottom:0;">ONLINE &bull; {ot_nodes} Trainer GPU(s) &bull; {ot_rounds} Accepted Round(s)</div>
         </div>
       </div>
@@ -1499,7 +1501,7 @@ def render_portal_page(
         Measured production telemetry from the European Night window (<code>2026-10-25 20:00Z &rarr; 2026-10-26 08:00Z</code>) across our three Cloud Run gateways, dual-GPU inference fleet (<strong>NVIDIA Tesla T4 16 GB + NVIDIA GeForce RTX 2070 8 GB</strong>), and the BOINC 7.24 chained QLoRA-MoE coordinator (<code>scripts/t4_training_report.py</code>).
       </p>
       <div id="nightLiveBannerText" style="margin-bottom:1rem;padding:0.55rem 0.85rem;border:1px solid rgba(52,211,153,0.4);border-radius:0.4rem;background:rgba(16,185,129,0.08);font-family:var(--font-mono);font-size:0.76rem;color:var(--green);">
-        &#x1F7E2; LIVE NOW ({gen_iso}): {wus_cnt} Assimilated BOINC WUs &bull; T4 Free VRAM {t4_free_mib:,} MiB / {t4_total_mib:,} MiB &bull; OpenTrainer {ot_rounds} accepted round(s) (eval_loss 1.7772)
+        &#x1F7E2; LIVE NOW ({gen_iso}): {wus_cnt} Assimilated BOINC WUs &bull; T4 Free VRAM {t4_free_mib} MiB / {t4_total_mib} MiB &bull; OpenTrainer {ot_rounds} accepted round(s) (eval_loss {ot_eval})
       </div>
       <div class="tiers-grid" style="margin-bottom:1.25rem;">
         <div class="tier-card">

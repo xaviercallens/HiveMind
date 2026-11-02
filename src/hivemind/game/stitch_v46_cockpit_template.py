@@ -2726,7 +2726,9 @@ def build_stitch_v46_cockpit_html(state_json: str) -> str:
         const res = await fetch(url, {{ headers: {{ Accept: 'application/json' }}, cache: 'no-store' }});
         if (!res.ok) continue;
         const d = await res.json();
-        if (d && d.accounts && d.models) {{
+        if (d && d.accounts && d.models && d.status === 'LIVE_GCP_PRODUCTION') {{
+          // A missing figure is shown as n/a; no number is printed that the payload did not carry.
+          const v = function (x) {{ return (x === null || x === undefined) ? 'n/a' : x; }};
           let pill = document.getElementById('cockpit-v46-live-gcp-telemetry');
           if (!pill) {{
             pill = document.createElement('div');
@@ -2739,7 +2741,7 @@ def build_stitch_v46_cockpit_html(state_json: str) -> str:
           const models = d.models || {{}};
           const t4 = d.tesla_t4_boinc || {{}};
           const ot = d.opentrainer || {{}};
-          pill.textContent = `GCP LIVE: ${{acc.total_registered_accounts ?? 69}} Accounts (${{roles.prosumer ?? 32}} Pros / ${{roles.producer ?? 10}} Prod / ${{roles.consumer ?? 24}} Cons / ${{roles.trainer ?? 0}} Trn) • ${{models.live_count ?? 15}} Models • ${{t4.assimilated_workunits ?? 147}} BOINC WUs • T4 ${{t4.vram_free_mib ?? 10519}} MiB free • OpenTrainer ${{ot.status || 'ONLINE'}}`;
+          pill.textContent = `GCP LIVE: ${{v(acc.total_registered_accounts)}} Accounts (${{v(roles.prosumer)}} Pros / ${{v(roles.producer)}} Prod / ${{v(roles.consumer)}} Cons / ${{roles.trainer ?? 0}} Trn) • ${{v(models.live_count)}} Models • ${{v(t4.assimilated_workunits)}} BOINC WUs • T4 ${{v(t4.vram_free_mib)}} MiB free • OpenTrainer ${{ot.status || 'ONLINE'}}`;
           return;
         }}
       }} catch (_err) {{}}

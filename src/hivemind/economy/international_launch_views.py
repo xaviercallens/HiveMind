@@ -989,15 +989,17 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
           const res = await fetch(url, {{ headers: {{ Accept: "application/json" }}, cache: "no-store" }});
           if (!res.ok) continue;
           const d = await res.json();
-          if (d && d.accounts && d.models) {{
+          if (d && d.accounts && d.models && d.status === 'LIVE_GCP_PRODUCTION') {{
+            // A missing figure is shown as n/a; no number is printed that the payload did not carry.
+            const v = function (x) {{ return (x === null || x === undefined) ? 'n/a' : x; }};
             const acc = d.accounts || {{}};
             const roles = acc.by_role || {{}};
             const models = d.models || {{}};
             const fleet = d.producer_fleet || {{}};
             const u24 = d.usage_24h || {{}};
             const t4 = d.tesla_t4_boinc || {{}};
-            const totalAcc = acc.total_registered_accounts ?? 69;
-            const roleText = `${{roles.producer ?? 10}} Prod • ${{roles.prosumer ?? 32}} Pros • ${{roles.consumer ?? 24}} Cons • ${{roles.admin ?? 3}} Adm`;
+            const totalAcc = v(acc.total_registered_accounts);
+            const roleText = `${{v(roles.producer)}} Prod • ${{v(roles.prosumer)}} Pros • ${{v(roles.consumer)}} Cons • ${{v(roles.admin)}} Adm`;
             const situNodes = document.getElementById("live-situ-nodes");
             if (situNodes) situNodes.textContent = String(totalAcc);
             const situRoles = document.getElementById("live-situ-roles");
@@ -1005,13 +1007,13 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
             const kpiNodes = document.getElementById("kpi-baseline-nodes");
             if (kpiNodes) kpiNodes.textContent = String(totalAcc);
             const kpiSplit = document.getElementById("kpi-baseline-split");
-            if (kpiSplit) kpiSplit.textContent = `${{roles.producer ?? 10}} Prod • ${{roles.prosumer ?? 32}} Pros • ${{roles.consumer ?? 24}} Cons`;
+            if (kpiSplit) kpiSplit.textContent = `${{v(roles.producer)}} Prod • ${{v(roles.prosumer)}} Pros • ${{v(roles.consumer)}} Cons`;
             const verdict = document.getElementById("verdict-pill");
             if (verdict) verdict.textContent = `LIVE NOW (${{totalAcc}} NODES) • FORECAST READY (>200 NODES)`;
             const btnPioneers = document.getElementById("btn-filter-pioneers");
             if (btnPioneers) btnPioneers.textContent = `Current ${{totalAcc}} Live Pioneers (Real)`;
             const situQuorum = document.getElementById("live-situ-quorum");
-            if (situQuorum) situQuorum.textContent = `${{fleet.live_hiveminders ?? 3}} Online (${{models.live_count ?? 15}} Models)`;
+            if (situQuorum) situQuorum.textContent = `${{v(fleet.live_hiveminders)}} Online (${{v(models.live_count)}} Models)`;
             if (u24.total_requests != null && u24.total_requests > 0) {{
               const situComp = document.getElementById("live-situ-completions");
               if (situComp) situComp.textContent = formatInt(u24.total_requests);
@@ -1353,22 +1355,24 @@ def render_foundation_paper_portal_html(
             const res = await fetch(url, {{ headers: {{ Accept: "application/json" }}, cache: "no-store" }});
             if (!res.ok) continue;
             const d = await res.json();
-            if (d && d.accounts && d.models) {{
+            if (d && d.accounts && d.models && d.status === 'LIVE_GCP_PRODUCTION') {{
+              // A missing figure is shown as n/a; no number is printed that the payload did not carry.
+              const v = function (x) {{ return (x === null || x === undefined) ? 'n/a' : x; }};
               const acc = d.accounts || {{}};
               const roles = acc.by_role || {{}};
               const models = d.models || {{}};
               const t4 = d.tesla_t4_boinc || {{}};
               const ot = d.opentrainer || {{}};
               const h = document.getElementById("paper-live-gcp-heading");
-              if (h) h.textContent = `${{acc.total_registered_accounts ?? 69}}-Account Live GCP Production Telemetry`;
+              if (h) h.textContent = `${{v(acc.total_registered_accounts)}}-Account Live GCP Production Telemetry`;
               const box = document.getElementById("paper-live-gcp-telemetry");
               if (box) {{
                 box.innerHTML =
-                  `&bull; Registered Accounts: <strong>${{acc.total_registered_accounts ?? 69}}</strong> (${{roles.producer ?? 10}} Producers, ${{roles.prosumer ?? 32}} Prosumers, ${{roles.consumer ?? 24}} Consumers, ${{roles.admin ?? 3}} Admins, ${{roles.trainer ?? 0}} Trainers)<br/>` +
-                  `&bull; Live OpenRouter Models: <strong style="color:#34d399;">${{models.live_count ?? 15}} online</strong> &bull; HMT Circulation: <strong>${{Math.round(acc.total_hmt_in_circulation ?? 0)}} HMT</strong><br/>` +
-                  `&bull; Attested BOINC Compute: <strong>${{t4.total_cobblestones ?? 5632.11}} Cobblestones</strong> (${{t4.assimilated_workunits ?? 147}} WUs, head <code>${{t4.head_workunit || "hmq_00092"}}</code>)<br/>` +
-                  `&bull; Local Tesla T4 Guard: <strong style="color:#34d399;">${{t4.vram_free_mib ?? 10519}} MiB free VRAM</strong> / ${{t4.vram_total_mib ?? 15360}} MiB (${{t4.governor_state || "ACCEPTING_WORK"}})<br/>` +
-                  `&bull; OpenTrainer Coordinator: <strong style="color:#38bdf8;">${{ot.status || "ONLINE"}}</strong> (${{ot.total_registered_nodes ?? 1}} trainer node, eval_loss ${{ot.latest_eval_loss ?? 1.7772}})`;
+                  `&bull; Registered Accounts: <strong>${{v(acc.total_registered_accounts)}}</strong> (${{v(roles.producer)}} Producers, ${{v(roles.prosumer)}} Prosumers, ${{v(roles.consumer)}} Consumers, ${{v(roles.admin)}} Admins, ${{roles.trainer ?? 0}} Trainers)<br/>` +
+                  `&bull; Live OpenRouter Models: <strong style="color:#34d399;">${{v(models.live_count)}} online</strong> &bull; HMT Circulation: <strong>${{Math.round(acc.total_hmt_in_circulation ?? 0)}} HMT</strong><br/>` +
+                  `&bull; Attested BOINC Compute: <strong>${{v(t4.total_cobblestones)}} Cobblestones</strong> (${{v(t4.assimilated_workunits)}} WUs, head <code>${{v(t4.head_workunit)}}</code>)<br/>` +
+                  `&bull; Local Tesla T4 Guard: <strong style="color:#34d399;">${{v(t4.vram_free_mib)}} MiB free VRAM</strong> / ${{v(t4.vram_total_mib)}} MiB (${{v(t4.governor_state)}})<br/>` +
+                  `&bull; OpenTrainer Coordinator: <strong style="color:#38bdf8;">${{v(ot.status)}}</strong> (${{v(ot.total_registered_nodes)}} trainer node, eval_loss ${{v(ot.latest_eval_loss)}})`;
               }}
               return;
             }}

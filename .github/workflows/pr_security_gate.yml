@@ -22,14 +22,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
-    env:
-      PYTHONPATH: "src:."
-
     steps:
-      - name: Checkout Repository with Full History for Diff Analysis
+      - name: "Checkout the tree under review (treated as data only, with full history for the diff)"
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: "Checkout the trusted scanner from the BASE commit (a pull request cannot change the code that judges it)"
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: trusted
+          persist-credentials: false
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -42,12 +47,15 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          python - <<'PY'
+          python -I - <<'PY'
           import json
           import os
           import subprocess
           import sys
           from pathlib import Path
+
+          # the scanner comes from the base commit checked out under ./trusted, never from the tree being reviewed
+          sys.path.insert(0, str(Path("trusted/src").resolve()))
           from hivemind.security.pr_security_scanner import PRSecurityScanner
 
           scanner = PRSecurityScanner()

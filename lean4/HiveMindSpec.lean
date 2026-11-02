@@ -1847,7 +1847,7 @@ theorem decoupled_token_weight_monotone
     `K = 0` degenerate counterexample. -/
 theorem decoupled_quorum_admitted_count_bounds
     (M K extra : Nat)
-    (h_K : 1 <= K)
+    (_h_K : 1 <= K)
     (h_KM : K <= M)
     (h_extra : extra <= M - K) :
     K <= admittedCount K extra ∧

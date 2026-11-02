@@ -328,6 +328,8 @@ def test_router_live_telemetry_opentrainer_eval_loss_is_none_until_a_round_is_re
     ot = client.get("/v1/hivemind/live-telemetry").json()["opentrainer"]
     assert ot["accepted_rounds_count"] == 0 and ot["latest_eval_loss"] is None
     assert ot["latest_eval_loss_source"] == "NO_ROUNDS_RECORDED_YET"
+    # IP-177: no trainer heartbeat -> the state names that, never ONLINE
+    assert ot["status"] == "COORDINATOR_UP_NO_TRAINERS" and ot["status_basis"].startswith("0 node heartbeat(s)")
     assert ot["moe_self_training"]["latest_eval_loss"] is None
 
 

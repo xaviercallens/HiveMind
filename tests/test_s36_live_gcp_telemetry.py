@@ -323,8 +323,6 @@ def test_every_live_gcp_script_uses_only_the_routers_payload_and_prints_na_for_a
     with accounts/models keys (the ruche's own, which carries none of those figures since #506) and substituted
     69 accounts, 147 WUs, 5632.11 cobblestones, 10519 MiB, 1.7772, ONLINE, ACCEPTING_WORK or hmq_00092."""
     from hivemind.boinc.hivemind_at_home_dashboard import create_hivemind_at_home_app
-    from hivemind.router.accounts import RouterStore
-    from hivemind.router.gateway import create_router_app
 
     literals = ("?? 147", "?? 1.7772", "?? 10519", "?? 5632.11", "?? 69", "?? 15360", '|| "ONLINE"', "|| 'ONLINE'",
                 '|| "ACCEPTING_WORK"', '|| "hmq_00092"')
@@ -334,11 +332,7 @@ def test_every_live_gcp_script_uses_only_the_routers_payload_and_prints_na_for_a
         r = ruche.get(path)
         assert r.status_code == 200, path
         pages.append((f"ruche {path}", r.text))
-    router = TestClient(create_router_app(RouterStore(":memory:", b"k" * 32)))
-    for path in ("/", "/foundation-paper", "/planet-forecast", "/life-as-a-bee"):
-        r = router.get(path)
-        if r.status_code == 200:
-            pages.append((f"router {path}", r.text))
+    # the router's own portal script is covered by test_portal_page_script_prints_na_not_a_literal_for_a_missing_live_figure
     checked = 0
     for name, html_text in pages:
         for literal in literals:

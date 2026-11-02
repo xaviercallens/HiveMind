@@ -2741,7 +2741,7 @@ def build_stitch_v46_cockpit_html(state_json: str) -> str:
           const models = d.models || {{}};
           const t4 = d.tesla_t4_boinc || {{}};
           const ot = d.opentrainer || {{}};
-          pill.textContent = `GCP LIVE: ${{v(acc.total_registered_accounts)}} Accounts (${{v(roles.prosumer)}} Pros / ${{v(roles.producer)}} Prod / ${{v(roles.consumer)}} Cons / ${{roles.trainer ?? 0}} Trn) • ${{v(models.live_count)}} Models • ${{v(t4.assimilated_workunits)}} BOINC WUs • T4 ${{v(t4.vram_free_mib)}} MiB free • OpenTrainer ${{ot.status || 'ONLINE'}}`;
+          pill.textContent = `GCP LIVE: ${{v(acc.total_registered_accounts)}} Accounts (${{v(roles.prosumer)}} Pros / ${{v(roles.producer)}} Prod / ${{v(roles.consumer)}} Cons / ${{roles.trainer ?? 0}} Trn) • ${{v(models.live_count)}} Models • ${{v(t4.assimilated_workunits)}} BOINC WUs • T4 ${{v(t4.vram_free_mib)}} MiB free • OpenTrainer ${{v(ot.status)}}`;
           return;
         }}
       }} catch (_err) {{}}

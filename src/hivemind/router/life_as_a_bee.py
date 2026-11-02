@@ -2031,6 +2031,24 @@ def render_life_as_a_bee_section(live_telemetry: dict[str, Any] | None = None) -
     gpu_100_latency_range = f"{_fr(min(sc.warm_latency_ms for sc in gpu_100) / 1000)}s – {_fr(max(sc.warm_latency_ms for sc in gpu_100) / 1000)}s"
     gpu_100_count = len(gpu_100)
     sourced_count = sum(1 for sc in LIFE_AS_A_BEE_SCENARIOS if sc.source.startswith("artifacts/"))
+    gpu_100_list = ", ".join(
+        f"<code>{html.escape(sc.model_id.split('/')[-1])}</code> ({_fr(sc.tokens_per_sec)} tok/s)"
+        for sc in sorted(gpu_100, key=lambda sc: sc.tokens_per_sec, reverse=True)
+    )
+    moe = [sc for sc in LIFE_AS_A_BEE_SCENARIOS if sc.category == "moe_bee"]
+    dense_14b = [sc for sc in LIFE_AS_A_BEE_SCENARIOS if "14B" in sc.architecture]
+    moe_speed_range = f"{_fr(min(sc.tokens_per_sec for sc in moe), 2)} à {_fr(max(sc.tokens_per_sec for sc in moe), 2)} tok/s"
+    moe_mean_warm_s = sum(sc.warm_latency_ms for sc in moe) / len(moe) / 1000
+    if dense_14b:
+        dense_warm_s = dense_14b[0].warm_latency_ms / 1000
+        moe_ratio_line = f"{_fr(dense_warm_s / moe_mean_warm_s, 2)}x plus rapide (moyenne des {len(moe)} MoE) que le 14B dense"
+        moe_ratio_desc = (
+            f"Même avec un partage GPU/CPU (64 %/36 % sur T4 16 Go), nos {len(moe)} abeilles MoE 20B répondent en {_fr(moe_mean_warm_s)} s en moyenne "
+            f"contre {_fr(dense_warm_s)} s ({_fr(dense_14b[0].tokens_per_sec, 2)} tok/s) pour le modèle 14B dense ; instantané du tableau des scénarios, pas en direct."
+        )
+    else:
+        moe_ratio_line = "Comparaison au 14B dense : NOT_SOURCED (aucun scénario 14B dans le tableau)"
+        moe_ratio_desc = f"Nos {len(moe)} abeilles MoE 20B répondent en {_fr(moe_mean_warm_s)} s en moyenne ; instantané du tableau des scénarios, pas en direct."
     return f"""
     <!-- Life as a Bee Dashboard: Real End-User Scenarios & MoE Bee Usage Guide -->
     <section id="life-as-a-bee" class="card" style="margin-bottom:3rem;border-color:rgba(251,191,36,0.45);">
@@ -2070,16 +2088,16 @@ def render_life_as_a_bee_section(live_telemetry: dict[str, Any] | None = None) -
             <div class="tier-badge">PALIER 100% GPU (1.5B–8B)</div>
             <div class="tier-name">{gpu_100_speed_range} ({gpu_100_latency_range})</div>
             <div class="tier-vram">{gpu_100_count} Modèles Logés 100% en VRAM</div>
-            <div class="tier-desc"><code>crowd-v1</code> (71,9 tok/s), <code>coder-lite</code> (53,0 tok/s), <code>gemma-core</code> (37,0 tok/s), <code>mistral-core</code> (33,5 tok/s), <code>bee-rusty-sundials</code> (33,3 tok/s), <code>coder</code> (32,8 tok/s), <code>qwen35-core</code> (30,0 tok/s), <code>bee-stars</code> (27,9 tok/s).</div>
+            <div class="tier-desc">{gpu_100_list}</div>
           </div>
           <div><span class="tier-tag">Read-Ahead Disque 16 Mo Actif</span></div>
         </div>
         <div class="tier-card" style="border-color:rgba(192,132,252,0.4);">
           <div>
             <div class="tier-badge">AVANTAGE SPARSE MoE 20B</div>
-            <div class="tier-name">1,83x Plus Rapide que le 14B Dense</div>
-            <div class="tier-vram">6,26 à 7,20 tok/s (2,4B–3,6B Actifs)</div>
-            <div class="tier-desc">Même avec un partage GPU/CPU (64%/36% sur T4 16 Go), nos 4 abeilles MoE 20B répondent en ~15,3s contre 28,0s (3,93 tok/s) pour le modèle 14B dense.</div>
+            <div class="tier-name">{moe_ratio_line}</div>
+            <div class="tier-vram">{moe_speed_range} (2,4B–3,6B Actifs)</div>
+            <div class="tier-desc">{moe_ratio_desc}</div>
           </div>
           <div><span class="tier-tag">Top-2 Gating Parcimonieux</span></div>
         </div>

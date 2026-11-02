@@ -301,3 +301,34 @@ def test_delta_submission_has_no_default_measurements_and_is_labelled_unverified
     assert body["validation"]["verification"] == "CLIENT_REPORTED_UNVERIFIED"
     assert body["validation"]["vram_values_reported_by_client"] is False
     assert body["submission"]["eval_loss"] == 2.4
+
+
+def test_opentrainer_status_is_derived_from_live_heartbeats_not_a_literal() -> None:
+    clock = [1_000_000.0]
+    store = RouterStore(":memory:", b"k" * 32)
+    client = TestClient(create_router_app(store, clock=lambda: clock[0]))
+
+    empty = client.get("/v1/hivemind/opentrainer/status").json()
+    assert empty["status"] == "COORDINATOR_UP_NO_TRAINERS"
+    assert empty["status"] != "ONLINE"
+    assert empty["live_opentrainer_fleet"]["active_trainer_nodes"] == 0
+    assert "0 node heartbeat(s)" in empty["status_basis"]
+    assert client.get("/v1/hivemind/live-telemetry").json()["opentrainer"]["status"] == "COORDINATOR_UP_NO_TRAINERS"
+
+    key = client.post("/v1/hivemind/register", json={"handle": "hb_trainer", "role": "trainer"}).json()["api_key"]
+    hb = client.post(
+        "/v1/hivemind/opentrainer/heartbeat",
+        headers={"Authorization": f"Bearer {key}"},
+        json={"host_label": "rig", "gpu_name": "RTX 2070", "vram_total_mib": 8192, "vram_free_mib": 6400},
+    )
+    assert hb.status_code == 200
+    live = client.get("/v1/hivemind/opentrainer/status").json()
+    assert live["status"] == "TRAINERS_LIVE"
+    assert "1 node heartbeat(s)" in live["status_basis"]
+    assert client.get("/v1/hivemind/live-telemetry").json()["opentrainer"]["status"] == "TRAINERS_LIVE"
+
+    # Past the 300 s window the heartbeat is stale and status falls back.
+    clock[0] += 301.0
+    stale = client.get("/v1/hivemind/opentrainer/status").json()
+    assert stale["status"] == "COORDINATOR_UP_NO_TRAINERS"
+    assert stale["live_opentrainer_fleet"]["active_trainer_nodes"] == 0

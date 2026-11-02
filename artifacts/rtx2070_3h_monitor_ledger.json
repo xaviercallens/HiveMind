@@ -1,9 +1,9 @@
 {
   "schema_version": "rtx2070_3h_monitor.v1",
   "cadence_cron": "0 */3 * * *",
-  "timestamp_utc": "2026-11-02T14:19:36Z",
+  "timestamp_utc": "2026-11-02T16:19:39Z",
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-11-02T14:19:36Z",
+    "timestamp_utc": "2026-11-02T16:19:39Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": true,
@@ -11,10 +11,10 @@
     "compute_capability": "7.5",
     "temperature_c": 34.0,
     "gpu_utilization_pct": 2.0,
-    "power_draw_w": 42.42,
+    "power_draw_w": 42.17,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1810.0,
-    "memory_free_mib": 6197.0,
+    "memory_used_mib": 1808.0,
+    "memory_free_mib": 6199.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
@@ -24,10 +24,10 @@
     "max_graphics_clock_mhz": 2145.0,
     "memory_clock_mhz": 6801.0,
     "host_tensor_gflops": 0.0,
-    "measured_fp32_tflops": 5.67,
-    "measured_fp16_tensor_tflops": 21.7,
-    "effective_sparse_moe_nf4_tflops": 40.14,
-    "microbench_elapsed_ms": 316.28
+    "measured_fp32_tflops": 5.76,
+    "measured_fp16_tensor_tflops": 19.68,
+    "effective_sparse_moe_nf4_tflops": 36.42,
+    "microbench_elapsed_ms": 234.31
   },
   "community_gpu_benchmark_summary": {
     "receipt_sha256": "2f8ae97fd69be25f4c6036aa4cd2153a2affec9e8df435e38158b69028aed8f9",
@@ -35,16 +35,16 @@
     "peak_allocated_mb": 0.0
   },
   "pr_integration_summary": {
-    "checked_utc": "2026-11-02T14:19:40Z",
+    "checked_utc": "2026-11-02T16:19:42Z",
     "open_prs_count": 16,
     "evaluated": [
       {
-        "pr": 507,
-        "title": "fix(router,portal): no literal in place of a missing live figure \u2014 eval_loss None until a round exists, portal script prints n/a (IP-146)",
+        "pr": 508,
+        "title": "fix(ruche,views,game): cockpit scripts render only the router's live payload and print n/a for a missing figure (IP-171)",
         "author": "xaviercallens",
-        "head_ref": "fix/ip146-router-opentrainer-eval-loss-and-portal-js-fallbacks",
+        "head_ref": "fix/ip171-ruche-cockpit-no-literal-fallbacks",
         "base_ref": "main",
-        "head_sha": "d8e7394992",
+        "head_sha": "4b66bacc57",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -198,7 +198,7 @@
         "author": "xaviercallens",
         "head_ref": "feat/openrouter-5lang-i18n",
         "base_ref": "main",
-        "head_sha": "bfd2f5b611",
+        "head_sha": "e37bbcb83d",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -275,5 +275,5 @@
       141
     ]
   },
-  "ledger_sha256": "ee05bc114a127d8cfbb6f56689d9b99ee97950f66f83232f992309f4f3bf1148"
+  "ledger_sha256": "78385c9b26ac88c49d781df0e383986ee46c1f4728b8752d41c8c3548a335990"
 }

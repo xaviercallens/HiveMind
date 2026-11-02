@@ -1433,7 +1433,8 @@ def create_router_app(
             "tesla_t4_boinc": t4_block,
             "opentrainer": {
                 "coordinator": "opentrainer",
-                "status": ot_doc.get("status", "ONLINE"),
+                "status": ot_doc.get("status", "NOT_REPORTED"),
+                "status_basis": ot_doc.get("status_basis"),
                 "version": ot_doc.get("version", "1.0.0-s36"),
                 "topic": (ot_doc.get("active_task_offer") or {}).get("topic", "hivemind.amcp.federation.v1"),
                 "registered_trainer_accounts_count": int(ot_cat.get("registered_trainer_accounts_count", 0)),

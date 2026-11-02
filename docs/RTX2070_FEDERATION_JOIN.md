@@ -74,6 +74,13 @@ accepted, run the same command without `--once` (heartbeat every 60 s by default
 2070's handle with `status: live` and its endpoint host `34-145-228-3.sslip.io`; a chat probe to a model the 2070
 serves answers from it (the integration host's 30-minute monitor reports this).
 
+**Caveat — the master's address is ephemeral.** `34.145.228.3` belongs to a Spot VM; after a preemption the address,
+and with it the relay hostname `34-145-228-3.sslip.io`, change. Both the tunnel `Endpoint` (step 1) and the
+heartbeat `--endpoint` (this step) must follow the new value, read with
+`gcloud compute instances describe hm-fed-master --zone us-east4-a --format="value(networkInterfaces[0].accessConfigs[0].natIP)"`.
+The permanent fix is attaching `darkmatter-static-ip` to the master once the T4 is stopped — the owner's decision
+(`docs/FEDERATION_MASTER_SPOT.md`, section 4).
+
 ## Acceptance
 
 Federated means all four hold at the same time, each measured, none assumed:

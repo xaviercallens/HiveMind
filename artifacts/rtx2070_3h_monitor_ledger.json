@@ -1,9 +1,9 @@
 {
   "schema_version": "rtx2070_3h_monitor.v1",
   "cadence_cron": "0 */3 * * *",
-  "timestamp_utc": "2026-11-02T16:19:39Z",
+  "timestamp_utc": "2026-11-02T18:19:43Z",
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-11-02T16:19:39Z",
+    "timestamp_utc": "2026-11-02T18:19:43Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": true,
@@ -11,10 +11,10 @@
     "compute_capability": "7.5",
     "temperature_c": 34.0,
     "gpu_utilization_pct": 2.0,
-    "power_draw_w": 42.17,
+    "power_draw_w": 42.18,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1808.0,
-    "memory_free_mib": 6199.0,
+    "memory_used_mib": 1722.0,
+    "memory_free_mib": 6285.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
@@ -24,10 +24,10 @@
     "max_graphics_clock_mhz": 2145.0,
     "memory_clock_mhz": 6801.0,
     "host_tensor_gflops": 0.0,
-    "measured_fp32_tflops": 5.76,
-    "measured_fp16_tensor_tflops": 19.68,
-    "effective_sparse_moe_nf4_tflops": 36.42,
-    "microbench_elapsed_ms": 234.31
+    "measured_fp32_tflops": 5.7,
+    "measured_fp16_tensor_tflops": 20.18,
+    "effective_sparse_moe_nf4_tflops": 37.33,
+    "microbench_elapsed_ms": 275.55
   },
   "community_gpu_benchmark_summary": {
     "receipt_sha256": "2f8ae97fd69be25f4c6036aa4cd2153a2affec9e8df435e38158b69028aed8f9",
@@ -35,20 +35,20 @@
     "peak_allocated_mb": 0.0
   },
   "pr_integration_summary": {
-    "checked_utc": "2026-11-02T16:19:42Z",
+    "checked_utc": "2026-11-02T18:19:46Z",
     "open_prs_count": 16,
     "evaluated": [
       {
-        "pr": 508,
-        "title": "fix(ruche,views,game): cockpit scripts render only the router's live payload and print n/a for a missing figure (IP-171)",
+        "pr": 517,
+        "title": "fix(router,failover): RTX 2070 failover no longer re-points the whole producer fleet; keepalive keeps account_id",
         "author": "xaviercallens",
-        "head_ref": "fix/ip171-ruche-cockpit-no-literal-fallbacks",
+        "head_ref": "fix/failover-no-fleet-hijack",
         "base_ref": "main",
-        "head_sha": "4b66bacc57",
-        "owner_authored": true,
-        "security_passed": true,
+        "head_sha": "f24c97b84e",
+        "owner_authored": false,
+        "security_passed": false,
         "injection_clean": true,
-        "decision": "ACCEPT",
+        "decision": "HOLD (non-owner author 'xaviercallens'; checked, held for manual review)",
         "merged": false,
         "merge_message": ""
       },
@@ -114,7 +114,7 @@
         "author": "xaviercallens",
         "head_ref": "feat/e8-stage2-tiny-moe-qlora",
         "base_ref": "main",
-        "head_sha": "1b08e8ddc7",
+        "head_sha": "cf88615eb0",
         "owner_authored": false,
         "security_passed": true,
         "injection_clean": true,
@@ -198,7 +198,7 @@
         "author": "xaviercallens",
         "head_ref": "feat/openrouter-5lang-i18n",
         "base_ref": "main",
-        "head_sha": "e37bbcb83d",
+        "head_sha": "9a4ccb3c35",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -265,6 +265,7 @@
     ],
     "merged_prs": [],
     "held_prs": [
+      517,
       485,
       446,
       410,
@@ -275,5 +276,5 @@
       141
     ]
   },
-  "ledger_sha256": "78385c9b26ac88c49d781df0e383986ee46c1f4728b8752d41c8c3548a335990"
+  "ledger_sha256": "a57996e5d50bb1927080ef895c537b8b7031860faa1785987d2aa08f4c9f7962"
 }

@@ -25,6 +25,7 @@ import math
 import re
 import secrets
 import socket
+import os
 import threading
 import time
 import uuid
@@ -2269,7 +2270,10 @@ def create_router_app(
                 replace_endpoints=bool(payload.replace_endpoints),
             )
             if reconnected_fleet_keepalive["active"] and account.account_id in reconnected_fleet_keepalive["entries"]:
+                # merge, so the entry keeps "account_id" and "handle": the 35 s refresh reads item["account_id"]
                 reconnected_fleet_keepalive["entries"][account.account_id] = {
+                    **reconnected_fleet_keepalive["entries"][account.account_id],
+                    "account_id": account.account_id,
                     "endpoint_url": payload.endpoint_url,
                     "models": models,
                     "cost_per_1k": payload.cost_per_1k,
@@ -4013,10 +4017,17 @@ def create_router_app(
     @app.get("/boinc/status")
     @app.get("/v1/hivemind/boinc/status")
     def router_boinc_status() -> dict[str, Any]:
+        from hivemind.router.remote_probe import probe_remote_status
+
+        # The Ruche's state is what a bounded probe of its master URL returned just now, never a literal (IP-177).
+        master_url = os.environ.get("HIVEMIND_RUCHE_MASTER_URL", "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/")
+        probe = probe_remote_status(master_url)
         return {
-            "status": "ONLINE",
+            "status": probe["status"],
+            "status_basis": probe["status_basis"],
+            "probe": probe,
             "project_name": "HiveMind La Ruche (BOINC & Night-MoE)",
-            "master_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/",
+            "master_url": master_url,
             "join_guide_url": "https://hivemind-openrouter-1003063861791.us-central1.run.app/join?lang=en#train",
             "project_config_xml_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/get_project_config.php",
             "scheduler_rpc_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/boinc_cgi/cgi",

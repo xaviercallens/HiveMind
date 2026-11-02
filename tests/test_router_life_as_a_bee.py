@@ -158,3 +158,23 @@ def test_summary_figures_are_derived_from_the_scenario_table(monkeypatch: pytest
     expected = f"{sum(sc.tokens_per_sec for sc in bumped) / len(bumped):.2f}".replace(".", ",")
     assert f"Moyenne : {expected} tok/s" in after
     assert "Moyenne : 25,64 tok/s" not in after
+
+
+def test_moe_ratio_and_tier_list_are_derived_from_the_scenario_table(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The MoE-versus-dense ratio uses the mean of all MoE bees, and moving one MoE latency moves it."""
+    import dataclasses
+
+    from hivemind.router import life_as_a_bee as lab
+
+    html_before = lab.render_life_as_a_bee_section()
+    moe = [sc for sc in lab.LIFE_AS_A_BEE_SCENARIOS if sc.category == "moe_bee"]
+    dense = next(sc for sc in lab.LIFE_AS_A_BEE_SCENARIOS if "14B" in sc.architecture)
+    ratio = dense.warm_latency_ms / (sum(sc.warm_latency_ms for sc in moe) / len(moe))
+    assert f"{ratio:.2f}".replace(".", ",") + "x plus rapide" in html_before
+    assert "1,83x Plus Rapide" not in html_before and "~15,3s" not in html_before
+    bumped = tuple(dataclasses.replace(sc, warm_latency_ms=sc.warm_latency_ms * 2) if sc.category == "moe_bee" else sc for sc in lab.LIFE_AS_A_BEE_SCENARIOS)
+    monkeypatch.setattr(lab, "LIFE_AS_A_BEE_SCENARIOS", bumped)
+    html_after = lab.render_life_as_a_bee_section()
+    assert f"{ratio / 2:.2f}".replace(".", ",") + "x plus rapide" in html_after
+    fastest = max((sc for sc in lab.LIFE_AS_A_BEE_SCENARIOS if sc.gpu_residency.startswith("100% GPU")), key=lambda sc: sc.tokens_per_sec)
+    assert f"<code>{fastest.model_id.split('/')[-1]}</code>" in html_before

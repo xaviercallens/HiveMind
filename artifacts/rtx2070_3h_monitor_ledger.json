@@ -1,9 +1,9 @@
 {
   "schema_version": "rtx2070_3h_monitor.v1",
   "cadence_cron": "0 */3 * * *",
-  "timestamp_utc": "2026-11-01T22:19:40Z",
+  "timestamp_utc": "2026-11-02T00:19:37Z",
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-11-01T22:19:40Z",
+    "timestamp_utc": "2026-11-02T00:19:37Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": true,
@@ -11,7 +11,7 @@
     "compute_capability": "7.5",
     "temperature_c": 34.0,
     "gpu_utilization_pct": 2.0,
-    "power_draw_w": 30.04,
+    "power_draw_w": 29.84,
     "power_limit_w": 175.0,
     "memory_used_mib": 1812.0,
     "memory_free_mib": 6195.0,
@@ -24,10 +24,10 @@
     "max_graphics_clock_mhz": 2145.0,
     "memory_clock_mhz": 6801.0,
     "host_tensor_gflops": 0.0,
-    "measured_fp32_tflops": 5.69,
-    "measured_fp16_tensor_tflops": 19.6,
-    "effective_sparse_moe_nf4_tflops": 36.26,
-    "microbench_elapsed_ms": 230.85
+    "measured_fp32_tflops": 5.67,
+    "measured_fp16_tensor_tflops": 19.73,
+    "effective_sparse_moe_nf4_tflops": 36.5,
+    "microbench_elapsed_ms": 242.17
   },
   "community_gpu_benchmark_summary": {
     "receipt_sha256": "2f8ae97fd69be25f4c6036aa4cd2153a2affec9e8df435e38158b69028aed8f9",
@@ -35,16 +35,16 @@
     "peak_allocated_mb": 0.0
   },
   "pr_integration_summary": {
-    "checked_utc": "2026-11-01T22:19:44Z",
+    "checked_utc": "2026-11-02T00:19:41Z",
     "open_prs_count": 15,
     "evaluated": [
       {
-        "pr": 466,
-        "title": "fix(ruche): Steam daemon reports nothing it did not measure and credits no points",
+        "pr": 470,
+        "title": "fix(ruche): feeds and tool calls carry no fabricated swarm telemetry",
         "author": "xaviercallens",
-        "head_ref": "fix/ruche-daemon-counters-not-measured",
+        "head_ref": "fix/ruche-feed-no-fabricated-telemetry",
         "base_ref": "main",
-        "head_sha": "17a2b6ef37",
+        "head_sha": "c9b7fec562",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -184,7 +184,7 @@
         "author": "xaviercallens",
         "head_ref": "feat/openrouter-5lang-i18n",
         "base_ref": "main",
-        "head_sha": "4aa2c39b8d",
+        "head_sha": "ebbee8c6ac",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -260,5 +260,5 @@
       141
     ]
   },
-  "ledger_sha256": "e5da1fecb48e345527f9692408de60dc26ab57eb925c7fc03fb189a90ce43b91"
+  "ledger_sha256": "9ea671093bbd2639b325dffda4d5d69e5157b1fa6b3025379745c87187c1e667"
 }

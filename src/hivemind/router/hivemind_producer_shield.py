@@ -152,6 +152,11 @@ def create_shield_app(
     return app
 
 
+POC_NOTICE = (
+    "Proof of concept (PoC): not a production service. Until HiveMind is fully secured, prompts you serve and requests you make must contain only public, non-sensitive data (no secrets, personal, private or enterprise data); the people using your node are anonymous, and nothing yet verifies producers or their output."
+)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Authenticating proxy in front of a local OpenAI-compatible model server.")
     parser.add_argument("--upstream", default="http://127.0.0.1:11434", help="Your model server (default: Ollama on this machine)")
@@ -162,6 +167,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--allow-model", action="append", default=[], metavar="NAME",
                         help="Only run this local model name (repeat). Recommended: it keeps your GPU for the model you advertise.")
     args = parser.parse_args(argv)
+    print(f"NOTICE: {POC_NOTICE}", file=sys.stderr)
     token = os.environ.get(ENDPOINT_TOKEN_ENV, "")
     if len(token) < MIN_TOKEN_CHARS:
         parser.error(f"set {ENDPOINT_TOKEN_ENV} to a random secret of at least {MIN_TOKEN_CHARS} characters")

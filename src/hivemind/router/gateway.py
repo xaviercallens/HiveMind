@@ -37,7 +37,7 @@ from urllib.parse import urlsplit
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -728,6 +728,36 @@ Receive = Callable[[], Awaitable[ASGIMessage]]
 Send = Callable[[ASGIMessage], Awaitable[None]]
 
 
+POC_STATUS_HEADER = "proof-of-concept; send only public, non-sensitive data (no secrets, personal, private or enterprise data)"
+POC_API_DESCRIPTION = (
+    "**Proof of concept (PoC), not a production service.** Until HiveMind is fully secured, send only public, non-sensitive "
+    "data: no secrets, passwords, API keys, personal information, or private or enterprise data. Prompts are processed by "
+    "volunteer-run nodes whose operators are not verified. See SECURITY.md."
+)
+
+
+class PocNoticeMiddleware:
+    """Pure ASGI middleware: every HTTP response, streaming ones included, carries ``X-HiveMind-Status`` (proof of concept:
+    public data only), so API clients and tools that never render the HTML pages still see the notice."""
+
+    def __init__(self, app: Callable[[ASGIMessage, Receive, Send], Awaitable[None]]) -> None:
+        self.app = app
+
+    async def __call__(self, scope: ASGIMessage, receive: Receive, send: Send) -> None:
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_notice(message: ASGIMessage) -> None:
+            if message.get("type") == "http.response.start":
+                headers = list(message.get("headers", []))
+                headers.append((b"x-hivemind-status", POC_STATUS_HEADER.encode("ascii")))
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, send_with_notice)
+
+
 class BodyLimitMiddleware:
     """Pure ASGI middleware: refuse request bodies above ``max_bytes`` with 413 before any routing or JSON parsing.
 
@@ -822,7 +852,7 @@ def create_router_app(
     """
     client = http_client if http_client is not None else httpx.Client(timeout=PRODUCER_TIMEOUT_S, follow_redirects=False)
     resolve: Resolver = resolver if resolver is not None else _default_resolver
-    app = FastAPI(title="HiveMind OpenRouter", version="1.0.0")
+    app = FastAPI(title="HiveMind OpenRouter (proof of concept)", version="1.0.0", description=POC_API_DESCRIPTION)
     rotation = WeightedRoundRobin()
     register_limiter = SlidingWindowLimiter(REGISTER_LIMIT, REGISTER_WINDOW_S)
     login_limiter = SlidingWindowLimiter(LOGIN_LIMIT, LOGIN_WINDOW_S)
@@ -836,6 +866,7 @@ def create_router_app(
         raise ValueError("starter_grant_hmt and starter_grants_per_ip_24h must be finite and not negative")
     proxy_networks = tuple(ipaddress.ip_network(entry, strict=False) for entry in trusted_proxies)
     app.add_middleware(BodyLimitMiddleware, max_bytes=MAX_BODY_BYTES)
+    app.add_middleware(PocNoticeMiddleware)  # added last = outermost, so it also marks the 413 from the body limit
 
     # ------------------------------------------------------------------ errors
     @app.exception_handler(RouterError)

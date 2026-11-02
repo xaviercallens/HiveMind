@@ -553,6 +553,11 @@ def render_table(report: dict[str, Any], color: bool = False) -> str:
     return "\n".join(lines)
 
 
+POC_NOTICE = (
+    "Proof of concept (PoC): not a production service. Until HiveMind is fully secured, prompts you serve and requests you make must contain only public, non-sensitive data (no secrets, personal, private or enterprise data); the people using your node are anonymous, and nothing yet verifies producers or their output."
+)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Check this machine before joining HiveMind as a BOINC volunteer. Installs nothing; no network unless --project-url.")
     ap.add_argument("--data-dir", help="directory BOINC will use (default: the BOINC data dir if found, else your home directory)")
@@ -562,6 +567,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--no-color", action="store_true", help="plain output (default is already plain unless stdout is a terminal)")
     ap.add_argument("--explain", action="store_true", help="print what each check reads, then exit")
     args = ap.parse_args(argv)
+    if not args.json:
+        print(f"NOTICE: {POC_NOTICE}", file=sys.stderr)
     if args.explain:
         print(EXPLAIN)
         return 0

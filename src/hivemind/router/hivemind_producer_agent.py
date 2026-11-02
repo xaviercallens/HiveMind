@@ -168,6 +168,11 @@ def preflight(client: httpx.Client, endpoint: str, token: str | None, local_name
     return [name for name in local_names if name not in served and f"{name}:latest" not in served]
 
 
+POC_NOTICE = (
+    "Proof of concept (PoC): not a production service. Until HiveMind is fully secured, prompts you serve and requests you make must contain only public, non-sensitive data (no secrets, personal, private or enterprise data); the people using your node are anonymous, and nothing yet verifies producers or their output."
+)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the command-line parser."""
     parser = argparse.ArgumentParser(
@@ -224,6 +229,7 @@ def main(
     """Run the producer agent. Returns a process exit code."""
     parser = build_parser()
     args = parser.parse_args(argv)
+    print(f"NOTICE: {POC_NOTICE}", file=sys.stderr)
     gateway_url = urlsplit(args.gateway)
     if gateway_url.scheme != "https" and not (gateway_url.scheme == "http" and gateway_url.hostname in ("localhost", "127.0.0.1", "::1")):
         parser.error("--gateway must be https (plain http is allowed only for localhost): your API key is sent in every heartbeat")

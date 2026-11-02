@@ -215,6 +215,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         )
         response.headers["X-Frame-Options"] = "SAMEORIGIN" if allow_sameorigin_frame else "DENY"
         response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-HiveMind-Status"] = "proof-of-concept; send only public, non-sensitive data (no secrets, personal, private or enterprise data)"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = (
@@ -5961,8 +5962,12 @@ def create_hivemind_at_home_app(
 ) -> FastAPI:
     """Create the FastAPI web server for HiveMind@home, GCP Cloud Telemetry, La Ruche & Federated AI."""
     app = FastAPI(
-        title="HiveMind@home & La Ruche Community MoE + Federated AI Gateway",
+        title="HiveMind@home & La Ruche Community MoE + Federated AI Gateway (proof of concept)",
         version="2.7.0",
+        description=(
+            "Proof of concept (PoC), not a production service. Until HiveMind is fully secured, send only public, "
+            "non-sensitive data: no secrets, passwords, API keys, personal information, or private or enterprise data."
+        ),
     )
     # Zero-Trust Defense Shield & Rate Limiting Middlewares
     app.add_middleware(SecurityHeadersMiddleware)
@@ -6342,7 +6347,16 @@ def create_hivemind_at_home_app(
             if _dashboard_admin_sha is None or not supplied or not hmac.compare_digest(
                 hashlib.sha256(supplied.encode()).hexdigest(), _dashboard_admin_sha
             ):
-                return JSONResponse(status_code=403, content={"detail": "Dashboard admin key required (x-admin-key)."})
+                # this gate is the outermost middleware, so its own refusal skips SecurityHeadersMiddleware: set the headers here
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Dashboard admin key required (x-admin-key)."},
+                    headers={
+                        "X-Content-Type-Options": "nosniff",
+                        "Cache-Control": "no-store",
+                        "X-HiveMind-Status": "proof-of-concept; send only public, non-sensitive data (no secrets, personal, private or enterprise data)",
+                    },
+                )
         return await call_next(request)
 
     mesh_messages_store: List[Dict[str, Any]] = [

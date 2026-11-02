@@ -93,6 +93,22 @@ def test_migration_status_is_admin_only(tmp_path: Path) -> None:
     assert "callensxavier@gmail.com" not in r.text
 
 
+def test_dashboard_responses_and_volunteer_tools_carry_the_proof_of_concept_notice(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    client = _client(tmp_path)
+    for resp in (client.get("/health"), client.get("/api/v1/auth/migration/status")):
+        assert "proof-of-concept" in resp.headers.get("x-hivemind-status", "")
+    assert "Proof of concept" in client.get("/openapi.json").json()["info"]["description"]
+
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import hivemind_volunteer_preflight as pf
+
+    pf.main(["--explain"])
+    err = capsys.readouterr().err
+    assert "Proof of concept" in err and "public, non-sensitive" in err
+
+
 def test_public_forecast_inputs_are_clamped() -> None:
     import time as _time
 

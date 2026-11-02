@@ -187,3 +187,23 @@ def test_receipt_reply_never_claims_verification() -> None:
     assert "none found" in without_hash["reply_markdown"]
     assert "verified-format" not in without_hash["reply_markdown"]
     assert "nothing was verified" in without_hash["reply_markdown"]
+
+
+def test_general_reply_states_only_counts_taken_at_reply_time() -> None:
+    from hivemind.cli.community_orchestrator import REPO_ROOT, declared_lean_theorem_count
+
+    disc = {
+        "id": "D_20",
+        "number": 120,
+        "title": "Question about joining",
+        "body": "How do I start?",
+        "author": {"login": "newcomer"},
+        "comments": {"nodes": [{"id": "DC_20", "author": {"login": "newcomer"}, "body": "How do I start?"}]},
+    }
+    reply = compose_discussion_reply(disc)["reply_markdown"]
+    count = declared_lean_theorem_count(REPO_ROOT)
+    assert count is not None and count > 0
+    assert f"`{count}` `theorem` declarations" in reply
+    for stale in ("63/63", "`116`", "10/10", "4/4"):
+        assert stale not in reply
+    assert declared_lean_theorem_count(REPO_ROOT / "does-not-exist") is None

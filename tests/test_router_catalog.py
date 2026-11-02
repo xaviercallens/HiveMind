@@ -34,9 +34,25 @@ def test_every_tier_id_is_routable_and_unique_and_ordered_by_memory() -> None:
 
 def test_moe_tiers_exist_and_declare_their_active_parameters() -> None:
     moe = [tier for tier in TIERS if tier.moe]
-    assert {tier.tier_id for tier in moe} == {"bee-ruche-moe", "moe-qwen35-bee", "moe-general", "moe-coder"}
+    assert {tier.tier_id for tier in moe} == {"granite-moe", "bee-ruche-moe", "moe-qwen35-bee", "moe-general", "moe-coder"}
     assert all(tier.active_params_b is not None and tier.active_params_b < 10 for tier in moe)
     assert all(tier.active_params_b is None for tier in TIERS if not tier.moe)
+
+
+def test_no_catalog_entry_links_to_an_unpublished_repository_or_claims_training_it_did_not_do() -> None:
+    """Every partner entry whose Hugging Face repository does not exist is shown as unpublished, without a link, a parameter
+    count or a training-token count, and names the off-the-shelf model that actually serves its tier."""
+    from hivemind.router.catalog import PREWIRED_PARTNER_MODELS, UNPUBLISHED_HF_REPOS
+
+    assert UNPUBLISHED_HF_REPOS
+    for entry in PREWIRED_PARTNER_MODELS:
+        assert entry.hf_repo not in UNPUBLISHED_HF_REPOS
+        assert not entry.hf_repo.startswith("xaviercallens/"), entry.public_id
+        if not entry.published:
+            assert entry.hf_repo == "" and entry.parameters_b == 0.0 and entry.tokens_trained_b == 0.0
+            assert entry.status == "UNPUBLISHED_NOT_TRAINED" and entry.title.startswith("Planned, not trained yet")
+        if entry.tier_id in {t.tier_id for t in TIERS}:
+            assert entry.served_by, entry.public_id
 
 
 @pytest.mark.parametrize(

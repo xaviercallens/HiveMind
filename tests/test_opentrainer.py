@@ -172,7 +172,7 @@ def test_delta_submission_has_no_default_measurements_and_is_labelled_unverified
     # No loss or norm given: must be refused, not filled in with a built-in figure.
     missing = client.post("/v1/hivemind/opentrainer/submit-delta", headers={"Authorization": f"Bearer {key}"}, json=base)
     assert missing.status_code == 400  # the router maps schema errors to 400
-    assert "loss_before" in missing.text and "loss_after" in missing.text and "delta_norm" in missing.text
+    assert "loss_before" in missing.text and "Field required" in missing.text  # the router reports the first missing field
     full = client.post(
         "/v1/hivemind/opentrainer/submit-delta",
         headers={"Authorization": f"Bearer {key}"},

@@ -620,7 +620,13 @@ def compose_discussion_reply(discussion: dict[str, Any]) -> dict[str, Any]:
         or ("stage3_three_tier_128_moe" in lower_text and sha_match)
         or ("operation-polyglot-singularity-128" in lower_text and sha_match)
     ):
-        receipt_hash = sha_match.group(1) if sha_match else "verified-format"
+        # Nothing here verifies a receipt: at most we can say whether a 64-hex string is present. Say exactly that.
+        receipt_line = (
+            f"- **Receipt hash found:** `{sha_match.group(1)}` (format check only: a 64-hex string is present; "
+            "the receipt was not verified against any ledger or benchmark run)\n"
+            if sha_match
+            else "- **Receipt hash:** none found (no 64-hex SHA-256 in the comment; nothing was verified)\n"
+        )
         is_multi_moe = "campaign_sha256" in lower_text or "polyglot-singularity-128" in lower_text
         campaign_label = (
             "Operation Polyglot-Singularity-128 Multi-MoE & 8-Domain Hugging Face Campaign Receipt"
@@ -629,7 +635,7 @@ def compose_discussion_reply(discussion: dict[str, Any]) -> dict[str, Any]:
         )
         reply = (
             f"👋 Thanks `@{target_author}` for sharing your **{campaign_label}**!\n\n"
-            f"- **Receipt Signature Check:** `{receipt_hash}` (64-hex SHA-256 format verified)\n"
+            f"{receipt_line}"
             f"- **Next Step:** Feel free to open a PR adding your hardware & multi-domain MoE profile under "
             f"`HM-S7-09` (`feat/s7-polyglot-singularity-128-campaign`), `HM-S7-06`, or `HM-S7-07`.\n"
             f"- **📚 Project HiveMind Wiki References:**\n{wiki_links_md}\n"

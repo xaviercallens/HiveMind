@@ -958,6 +958,13 @@ class TurnRelayServer(StunServer):
     Set `advertised_ip` explicitly when a NAT forwards the relay's UDP ports to a public address.
     """
 
+    _DENIED_PRIVATE_NETWORKS = (
+        ipaddress.IPv4Network("10.0.0.0/8"),
+        ipaddress.IPv4Network("172.16.0.0/12"),
+        ipaddress.IPv4Network("192.168.0.0/16"),
+        ipaddress.IPv4Network("100.64.0.0/10"),
+    )
+
     def __init__(
         self,
         users: Dict[str, str],
@@ -967,7 +974,13 @@ class TurnRelayServer(StunServer):
         max_lifetime: int = 3600,
         advertised_ip: Optional[str] = None,
         channel_lifetime: int = 600,
+        max_allocations_per_user: int = 16,
+        max_total_allocations: int = 256,
+        allow_private_peers: bool = False,
+        allow_loopback_peers: bool = True,
     ) -> None:
+        if int(max_allocations_per_user) < 1 or int(max_total_allocations) < 1:
+            raise ValueError("allocation quotas must be >= 1")
         if advertised_ip is not None:
             advertised_ip = self._validate_relay_ip(advertised_ip)
         super().__init__(host, port)
@@ -975,6 +988,10 @@ class TurnRelayServer(StunServer):
         self.realm = realm
         self.max_lifetime = max_lifetime
         self.channel_lifetime = int(channel_lifetime)
+        self.max_allocations_per_user = int(max_allocations_per_user)
+        self.max_total_allocations = int(max_total_allocations)
+        self.allow_private_peers = bool(allow_private_peers)
+        self.allow_loopback_peers = bool(allow_loopback_peers)
         self.nonce = secrets.token_hex(16).encode("ascii")
         self.allocations: Dict[Address, _Allocation] = {}
         self._by_relay: Dict[socket.socket, _Allocation] = {}
@@ -996,6 +1013,15 @@ class TurnRelayServer(StunServer):
         if ip.version != 4 or ip.is_unspecified or ip.is_multicast or str(ip) == "255.255.255.255":
             raise ValueError("advertised relay IP must be a specific unicast IPv4 address")
         return str(ip)
+
+    def _is_forbidden_peer_ip(self, ip: ipaddress.IPv4Address) -> bool:
+        if ip.is_unspecified or ip.is_multicast or ip.is_link_local or str(ip) == "255.255.255.255":
+            return True
+        if not self.allow_loopback_peers and ip.is_loopback:
+            return True
+        if not self.allow_private_peers and any(ip in net for net in self._DENIED_PRIVATE_NETWORKS):
+            return True
+        return False
 
     def _sockets(self) -> List[socket.socket]:
         return [self.sock, *self._by_relay]
@@ -1162,11 +1188,17 @@ class TurnRelayServer(StunServer):
         return min(requested, self.max_lifetime)
 
     def _allocate(self, request: StunMessage, addr: Address, user: str) -> Optional[StunMessage]:
+        self._housekeeping()
         if addr in self.allocations:
             return self._error_response(request, 437, "Allocation Mismatch")
         transport = request.get(REQUESTED_TRANSPORT)
         if transport is None or transport[0] != UDP_PROTOCOL_NUMBER:
             return self._error_response(request, 442, "Unsupported Transport Protocol")
+        if len(self.allocations) >= self.max_total_allocations:
+            return self._error_response(request, 508, "Insufficient Capacity")
+        user_allocations = sum(1 for a in self.allocations.values() if a.username == user)
+        if user_allocations >= self.max_allocations_per_user:
+            return self._error_response(request, 486, "Allocation Quota Reached")
         lifetime = self._requested_lifetime(request)
         try:
             relay_ip = self.advertised_ip or self.address[0]
@@ -1215,8 +1247,11 @@ class TurnRelayServer(StunServer):
         if peer is None:
             return self._error_response(request, 400, "Bad Request")
         peer_ip = decode_xor_address(peer, request.transaction_id)[0]
-        if ipaddress.ip_address(peer_ip).version != 4:
+        ip_obj = ipaddress.ip_address(peer_ip)
+        if ip_obj.version != 4:
             return self._error_response(request, 443, "Peer Address Family Mismatch")
+        if self._is_forbidden_peer_ip(ip_obj):
+            return self._error_response(request, 403, "Forbidden")
         allocation.permit(peer_ip)
         return StunMessage(CREATE_PERMISSION, SUCCESS, request.transaction_id)
 
@@ -1243,8 +1278,11 @@ class TurnRelayServer(StunServer):
         except StunError:
             return self._error_response(request, 400, "Bad Request")
         peer_addr = decode_xor_address(peer, request.transaction_id)
-        if ipaddress.ip_address(peer_addr[0]).version != 4:
+        ip_obj = ipaddress.ip_address(peer_addr[0])
+        if ip_obj.version != 4:
             return self._error_response(request, 443, "Peer Address Family Mismatch")
+        if self._is_forbidden_peer_ip(ip_obj):
+            return self._error_response(request, 403, "Forbidden")
         by_number = self._live_channel(addr, number)
         if by_number is not None and by_number.peer != peer_addr:
             return self._error_response(request, 400, "Bad Request")

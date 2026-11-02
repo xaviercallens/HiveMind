@@ -1,20 +1,20 @@
 {
   "schema_version": "rtx2070_3h_monitor.v1",
   "cadence_cron": "0 */3 * * *",
-  "timestamp_utc": "2026-11-02T02:19:37Z",
+  "timestamp_utc": "2026-11-02T04:19:39Z",
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-11-02T02:19:37Z",
+    "timestamp_utc": "2026-11-02T04:19:39Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": true,
     "device": "cuda:0",
     "compute_capability": "7.5",
     "temperature_c": 34.0,
-    "gpu_utilization_pct": 3.0,
-    "power_draw_w": 29.95,
+    "gpu_utilization_pct": 2.0,
+    "power_draw_w": 42.04,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1813.0,
-    "memory_free_mib": 6194.0,
+    "memory_used_mib": 1812.0,
+    "memory_free_mib": 6195.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
@@ -24,10 +24,10 @@
     "max_graphics_clock_mhz": 2145.0,
     "memory_clock_mhz": 6801.0,
     "host_tensor_gflops": 0.0,
-    "measured_fp32_tflops": 5.67,
-    "measured_fp16_tensor_tflops": 19.83,
-    "effective_sparse_moe_nf4_tflops": 36.69,
-    "microbench_elapsed_ms": 245.26
+    "measured_fp32_tflops": 5.66,
+    "measured_fp16_tensor_tflops": 21.51,
+    "effective_sparse_moe_nf4_tflops": 39.79,
+    "microbench_elapsed_ms": 243.93
   },
   "community_gpu_benchmark_summary": {
     "receipt_sha256": "2f8ae97fd69be25f4c6036aa4cd2153a2affec9e8df435e38158b69028aed8f9",
@@ -35,16 +35,16 @@
     "peak_allocated_mb": 0.0
   },
   "pr_integration_summary": {
-    "checked_utc": "2026-11-02T02:19:40Z",
+    "checked_utc": "2026-11-02T04:19:43Z",
     "open_prs_count": 15,
     "evaluated": [
       {
-        "pr": 472,
-        "title": "fix(economy): launch model cobblestones use the BOINC unit (200 per GFLOPS-day) and are labelled modelled",
+        "pr": 477,
+        "title": "fix(boinc): coordinator chat endpoint stops reporting a self-comparison as an OPoI audit",
         "author": "xaviercallens",
-        "head_ref": "fix/ip91-cobblestones-units",
+        "head_ref": "fix/ip78-opoi-audit-compares-itself",
         "base_ref": "main",
-        "head_sha": "895c5d974b",
+        "head_sha": "491ed284d0",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -184,7 +184,7 @@
         "author": "xaviercallens",
         "head_ref": "feat/openrouter-5lang-i18n",
         "base_ref": "main",
-        "head_sha": "32ee40f066",
+        "head_sha": "568fb2bf87",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -260,5 +260,5 @@
       141
     ]
   },
-  "ledger_sha256": "d8c49fd455523b775deeda821560b3035ab43dd419061480520f94750259b6d0"
+  "ledger_sha256": "ca4b0f713d043ec4b350162b76ea3f633da835d9793c11462a210e66537638d0"
 }

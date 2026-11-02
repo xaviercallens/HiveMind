@@ -1,6 +1,6 @@
 {
   "schema_version": "hivemind.evolution_2h_and_night_moe_cron.v1",
-  "timestamp_utc": "2026-11-02T02:19:37Z",
+  "timestamp_utc": "2026-11-02T04:19:39Z",
   "mode": "2h-evolution",
   "schedules": {
     "roadmap_pr_evolution_cron": "0 */2 * * *",
@@ -12,27 +12,27 @@
     "online_producer_ids": [
       "PRODUCER-LOCAL-RTX2070-CUDA0"
     ],
-    "total_requests_served": 29,
+    "total_requests_served": 32,
     "boinc_rtx2070_worker": {
       "handle": "xaviercallens-rtx2070",
-      "boinc_workunits_completed": 8432,
-      "boinc_cobblestones": 379440.0,
-      "hmt_compute_points": 2110400
+      "boinc_workunits_completed": 9759,
+      "boinc_cobblestones": 439155.0,
+      "hmt_compute_points": 2442150
     }
   },
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-11-02T02:19:37Z",
+    "timestamp_utc": "2026-11-02T04:19:39Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": true,
     "device": "cuda:0",
     "compute_capability": "7.5",
     "temperature_c": 34.0,
-    "gpu_utilization_pct": 3.0,
-    "power_draw_w": 29.95,
+    "gpu_utilization_pct": 2.0,
+    "power_draw_w": 42.04,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1813.0,
-    "memory_free_mib": 6194.0,
+    "memory_used_mib": 1812.0,
+    "memory_free_mib": 6195.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
@@ -42,14 +42,14 @@
     "max_graphics_clock_mhz": 2145.0,
     "memory_clock_mhz": 6801.0,
     "host_tensor_gflops": 0.0,
-    "measured_fp32_tflops": 5.67,
-    "measured_fp16_tensor_tflops": 19.83,
-    "effective_sparse_moe_nf4_tflops": 36.69,
-    "microbench_elapsed_ms": 245.26
+    "measured_fp32_tflops": 5.66,
+    "measured_fp16_tensor_tflops": 21.51,
+    "effective_sparse_moe_nf4_tflops": 39.79,
+    "microbench_elapsed_ms": 243.93
   },
   "roadmap_summary": {
     "exists": true,
-    "roadmap_sha256": "0cdcc39e36bb6d4c856f77d8b599ee3e14bf4795354fcb36465ffb5e54cd502b",
+    "roadmap_sha256": "5157f1b9f5be5836e7b99e5d7d16317fa2a1df0bb400dea2586fe31a85f6f5a4",
     "seasons_detected": [
       1,
       2,
@@ -111,5 +111,5 @@
     ]
   },
   "night_moe_summary": {},
-  "receipt_sha256": "c70c961acdc39ca6e2077a4172c29a721a99709866ab456e844b44e43acddb26"
+  "receipt_sha256": "b67e522d8236cd5a292cc39c5509da6f29a447ac975711fd26aeb4ef535aa8cd"
 }

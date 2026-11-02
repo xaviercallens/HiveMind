@@ -2213,7 +2213,10 @@ def create_router_app(
                 replace_endpoints=bool(payload.replace_endpoints),
             )
             if reconnected_fleet_keepalive["active"] and account.account_id in reconnected_fleet_keepalive["entries"]:
+                # merge, so the entry keeps "account_id" and "handle": the 35 s refresh reads item["account_id"]
                 reconnected_fleet_keepalive["entries"][account.account_id] = {
+                    **reconnected_fleet_keepalive["entries"][account.account_id],
+                    "account_id": account.account_id,
                     "endpoint_url": payload.endpoint_url,
                     "models": models,
                     "cost_per_1k": payload.cost_per_1k,

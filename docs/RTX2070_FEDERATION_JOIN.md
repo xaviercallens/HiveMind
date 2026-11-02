@@ -9,7 +9,7 @@ router, the T4 or the master.
 | What | Measured | Meaning |
 |---|---|---|
 | Router fleet (`GET /v1/hivemind/producers/fleet`) | 3 live of 45: `gcp-t4-producer`, `gcp-t4-bee`, `t4-big-gpu-moe-20261028`; every RTX 2070 account offline, `last_heartbeat_utc` ≈ 12:17Z | the 2070 has not heartbeated on its own since the reconnect keepalive stamped it |
-| `hm-fed-master` `wg show` (35.145/10.77 hub, port 51820) | peers 10.77.0.1/.2/.3 handshake every ≤ 2 min; peer `WOsqyc4w…RFk=` = 10.77.0.5 (the 2070): **no endpoint, latest handshake 0** | the 2070's WireGuard tunnel has never come up |
+| `hm-fed-master` `wg show` (hub 34.145.228.3:51820, overlay 10.77.0.10) | peers 10.77.0.1/.2/.3 handshake every ≤ 2 min; peer `WOsqyc4w…RFk=` = 10.77.0.5 (the 2070): **no endpoint, latest handshake 0** | the 2070's WireGuard tunnel has never come up |
 | Relay `https://34-145-228-3.sslip.io/rtx2070/v1/models` | TLS OK, **HTTP 502** (upstream `10.77.0.5:8787` unreachable), per the T4 session since ~18:52Z | the master forwards to the 2070 as soon as the tunnel and the shield answer |
 
 So the only missing pieces are on the 2070 host: (1) the tunnel, (2) the shield listening on the overlay address,

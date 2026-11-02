@@ -255,6 +255,10 @@ class DeterministicSpotCheckValidator:
                 .max()
                 .item()
             )
+            # A NaN or infinite tensor must fail, not slip through: NaN compares False against every threshold.
+            if not math.isfinite(diff):
+                max_diff = float("inf")
+                break
             if diff > max_diff:
                 max_diff = diff
 
@@ -263,6 +267,9 @@ class DeterministicSpotCheckValidator:
             reconstructed_delta = init_t.to(torch.float32).cpu() - submission.theta_final[name].to(torch.float32).cpu()
             submitted_raw = submission.raw_delta[name].to(torch.float32).cpu()
             delta_mismatch = float((reconstructed_delta - submitted_raw).abs().max().item())
+            if not math.isfinite(delta_mismatch):
+                max_diff = float("inf")
+                break
             if delta_mismatch > max_diff:
                 max_diff = delta_mismatch
 

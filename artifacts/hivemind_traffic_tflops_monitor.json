@@ -1,19 +1,19 @@
 {
   "status": "LIVE_MONITORING_ACTIVE",
-  "timestamp": "2026-11-02T18:19:43Z",
+  "timestamp": "2026-11-02T20:19:45Z",
   "uptime_seconds": 23.3,
   "tflops_achieved": {
-    "timestamp": "2026-11-02T18:19:43Z",
+    "timestamp": "2026-11-02T20:19:45Z",
     "primary_gpu": "NVIDIA GeForce RTX 2070",
     "device": "cuda:0",
     "compute_capability": "7.5",
-    "measured_fp32_tflops": 5.7,
-    "measured_fp16_tensor_tflops": 20.18,
-    "effective_sparse_moe_nf4_tflops": 37.33,
+    "measured_fp32_tflops": 5.67,
+    "measured_fp16_tensor_tflops": 20.78,
+    "effective_sparse_moe_nf4_tflops": 38.44,
     "temperature_c": 34.0,
-    "power_draw_w": 42.18,
-    "vram_used_mib": 1722.0,
-    "vram_free_mib": 6285.0
+    "power_draw_w": 42.04,
+    "vram_used_mib": 3938.0,
+    "vram_free_mib": 4069.0
   },
   "traffic_summary": {
     "total_http_requests": 59,
@@ -97,12 +97,12 @@
         "endpoint_url": "http://127.0.0.1:8095/api/v1/producers/infer",
         "openai_compatible_endpoint": "http://127.0.0.1:8095/v1/chat/completions",
         "hivemind_at_home_endpoint": "http://127.0.0.1:8092/api/v1/moe/inference",
-        "vram_allocated_mb": 1722.0,
-        "vram_free_gb": 6.14,
+        "vram_allocated_mb": 3938.0,
+        "vram_free_gb": 3.97,
         "init_elapsed_ms": 1380.52,
         "priority": 1,
         "requests_served": 1,
-        "last_heartbeat": "2026-11-02T18:19:43Z",
+        "last_heartbeat": "2026-11-02T20:19:45Z",
         "notes": "Local RTX 2070 warmed up on cuda:0 and actively serving all local & failover HiveMind inference."
       },
       {

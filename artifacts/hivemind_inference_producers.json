@@ -6,7 +6,7 @@
   "online_producer_ids": [
     "PRODUCER-LOCAL-RTX2070-CUDA0"
   ],
-  "total_requests_served": 0,
+  "total_requests_served": 21,
   "total_t4_failovers_handled": 0,
   "producers": [
     {
@@ -24,8 +24,8 @@
       "vram_free_gb": 6.25,
       "init_elapsed_ms": 11947.7,
       "priority": 1,
-      "requests_served": 0,
-      "last_heartbeat": "2026-11-02T18:49:24",
+      "requests_served": 1,
+      "last_heartbeat": "2026-11-02T19:54:40",
       "notes": "Local RTX 2070 warmed up on cuda:0 and actively serving all local & failover HiveMind inference."
     },
     {

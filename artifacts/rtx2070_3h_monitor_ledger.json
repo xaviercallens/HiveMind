@@ -1,20 +1,20 @@
 {
   "schema_version": "rtx2070_3h_monitor.v1",
   "cadence_cron": "0 */3 * * *",
-  "timestamp_utc": "2026-11-02T18:19:43Z",
+  "timestamp_utc": "2026-11-02T20:19:45Z",
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-11-02T18:19:43Z",
+    "timestamp_utc": "2026-11-02T20:19:45Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": true,
     "device": "cuda:0",
     "compute_capability": "7.5",
     "temperature_c": 34.0,
-    "gpu_utilization_pct": 2.0,
-    "power_draw_w": 42.18,
+    "gpu_utilization_pct": 3.0,
+    "power_draw_w": 42.04,
     "power_limit_w": 175.0,
-    "memory_used_mib": 1722.0,
-    "memory_free_mib": 6285.0,
+    "memory_used_mib": 3938.0,
+    "memory_free_mib": 4069.0,
     "memory_total_mib": 8192.0,
     "wddm_ceiling_mib": 6656.0,
     "vram_headroom_guard_mib": 2048.0,
@@ -24,10 +24,10 @@
     "max_graphics_clock_mhz": 2145.0,
     "memory_clock_mhz": 6801.0,
     "host_tensor_gflops": 0.0,
-    "measured_fp32_tflops": 5.7,
-    "measured_fp16_tensor_tflops": 20.18,
-    "effective_sparse_moe_nf4_tflops": 37.33,
-    "microbench_elapsed_ms": 275.55
+    "measured_fp32_tflops": 5.67,
+    "measured_fp16_tensor_tflops": 20.78,
+    "effective_sparse_moe_nf4_tflops": 38.44,
+    "microbench_elapsed_ms": 320.44
   },
   "community_gpu_benchmark_summary": {
     "receipt_sha256": "2f8ae97fd69be25f4c6036aa4cd2153a2affec9e8df435e38158b69028aed8f9",
@@ -35,20 +35,76 @@
     "peak_allocated_mb": 0.0
   },
   "pr_integration_summary": {
-    "checked_utc": "2026-11-02T18:19:46Z",
-    "open_prs_count": 16,
+    "checked_utc": "2026-11-02T20:19:49Z",
+    "open_prs_count": 20,
     "evaluated": [
       {
-        "pr": 517,
-        "title": "fix(router,failover): RTX 2070 failover no longer re-points the whole producer fleet; keepalive keeps account_id",
-        "author": "xaviercallens",
-        "head_ref": "fix/failover-no-fleet-hijack",
+        "pr": 530,
+        "title": "build(deps): bump transformers from 5.20.2 to 5.22.1",
+        "author": "dependabot[bot]",
+        "head_ref": "dependabot/pip/transformers-5.22.1",
         "base_ref": "main",
-        "head_sha": "f24c97b84e",
+        "head_sha": "7b6757fd5d",
+        "owner_authored": false,
+        "security_passed": true,
+        "injection_clean": true,
+        "decision": "HOLD (non-owner author 'dependabot[bot]'; checked, held for manual review)",
+        "merged": false,
+        "merge_message": ""
+      },
+      {
+        "pr": 529,
+        "title": "build(deps): bump torch from 2.14.1 to 2.15.0",
+        "author": "dependabot[bot]",
+        "head_ref": "dependabot/pip/torch-2.15.0",
+        "base_ref": "main",
+        "head_sha": "019041b772",
         "owner_authored": false,
         "security_passed": false,
         "injection_clean": true,
-        "decision": "HOLD (non-owner author 'xaviercallens'; checked, held for manual review)",
+        "decision": "HOLD (non-owner author 'dependabot[bot]'; checked, held for manual review)",
+        "merged": false,
+        "merge_message": ""
+      },
+      {
+        "pr": 528,
+        "title": "build(deps): bump leanprover/lean-action from 1.6.2 to 1.7.0",
+        "author": "dependabot[bot]",
+        "head_ref": "dependabot/github_actions/leanprover/lean-action-1.7.0",
+        "base_ref": "main",
+        "head_sha": "a09844ffe5",
+        "owner_authored": false,
+        "security_passed": false,
+        "injection_clean": true,
+        "decision": "HOLD (non-owner author 'dependabot[bot]'; checked, held for manual review)",
+        "merged": false,
+        "merge_message": ""
+      },
+      {
+        "pr": 527,
+        "title": "fix(swarm): La Ruche deposit gate rejects non-finite or non-positive figures; NLLs labelled caller-reported (IP-163)",
+        "author": "xaviercallens",
+        "head_ref": "fix/ip163-vault-deposit-rejects-nonfinite-nll",
+        "base_ref": "main",
+        "head_sha": "801f2b03af",
+        "owner_authored": true,
+        "security_passed": true,
+        "injection_clean": true,
+        "decision": "ACCEPT",
+        "merged": false,
+        "merge_message": ""
+      },
+      {
+        "pr": 525,
+        "title": "fix(router): manifesto page shows n/a for a missing live figure, never 66 accounts, 154 WUs, 597 requests or ONLINE (IP-177, IP-146)",
+        "author": "xaviercallens",
+        "head_ref": "fix/ip177-manifesto-no-literal-defaults",
+        "base_ref": "main",
+        "head_sha": "61e3b9199b",
+        "owner_authored": true,
+        "security_passed": true,
+        "injection_clean": true,
+        "decision": "ACCEPT",
         "merged": false,
         "merge_message": ""
       },
@@ -198,7 +254,7 @@
         "author": "xaviercallens",
         "head_ref": "feat/openrouter-5lang-i18n",
         "base_ref": "main",
-        "head_sha": "9a4ccb3c35",
+        "head_sha": "4f8da745ac",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -265,7 +321,9 @@
     ],
     "merged_prs": [],
     "held_prs": [
-      517,
+      530,
+      529,
+      528,
       485,
       446,
       410,
@@ -276,5 +334,5 @@
       141
     ]
   },
-  "ledger_sha256": "a57996e5d50bb1927080ef895c537b8b7031860faa1785987d2aa08f4c9f7962"
+  "ledger_sha256": "2c3f0f577efb62c63013902e7ed2579e402cf89640ddf1fee8e204afcf2d940a"
 }

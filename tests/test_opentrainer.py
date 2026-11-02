@@ -184,3 +184,22 @@ def test_delta_submission_has_no_default_measurements_and_is_labelled_unverified
     assert body["validation"]["verification"] == "CLIENT_REPORTED_UNVERIFIED"
     assert body["validation"]["vram_values_reported_by_client"] is False
     assert body["submission"]["eval_loss"] == 2.4
+
+
+def test_opentrainer_status_is_derived_from_live_heartbeats_not_a_literal() -> None:
+    """IP-177: the status said ONLINE with zero live trainer nodes; it is now the zero-node state or TRAINERS_LIVE."""
+    from hivemind.router.opentrainer import build_opentrainer_status_payload
+
+    now = 1_800_000_000.0
+    empty = build_opentrainer_status_payload(trainer_accounts=[], opentrainer_nodes=[], recent_rounds=[], now_utc=now)
+    assert empty["status"] == "COORDINATOR_UP_NO_TRAINERS" and empty["status"] != "ONLINE"
+    assert empty["status_basis"].startswith("0 node heartbeat(s)")
+    stale = build_opentrainer_status_payload(
+        trainer_accounts=[], opentrainer_nodes=[{"node_id": "n1", "last_heartbeat_utc": now - 400.0}], recent_rounds=[], now_utc=now
+    )
+    assert stale["status"] == "COORDINATOR_UP_NO_TRAINERS" and stale["live_opentrainer_fleet"]["active_trainer_nodes"] == 0
+    live = build_opentrainer_status_payload(
+        trainer_accounts=[], opentrainer_nodes=[{"node_id": "n1", "last_heartbeat_utc": now - 30.0}], recent_rounds=[], now_utc=now
+    )
+    assert live["status"] == "TRAINERS_LIVE" and live["live_opentrainer_fleet"]["active_trainer_nodes"] == 1
+    assert live["status_basis"].startswith("1 node heartbeat(s)")

@@ -237,6 +237,18 @@ def test_wave2_method_of_lines_pdes_and_quorum2_parameter_sweep() -> None:
     assert "quorum" in bad_verdict.reason or "divergence" in bad_verdict.reason or "trajectory" in bad_verdict.reason
 
 
+def test_solver_sweep_with_nan_wall_time_and_huge_flop_claim_is_rejected_not_credited() -> None:
+    # IP-159 (#500): json.loads accepts NaN; max(nan, 1e-6) is nan; the class-peak cap then kept a 1e30 FLOP claim.
+    bundle = run_wave2_parameter_sweep_quorum(family="van_der_pol", parameter_grid=[0.1, 0.25], steps=12, dt=0.01)
+    honest = validate_solver_sweep(bundle["spec"], bundle["replica_a"], host="cpu-a", peer_meta=bundle["replica_b"])
+    assert honest.valid is True and 0.0 < honest.credit < 1e6
+    for wall in (float("nan"), float("inf"), -5.0):
+        forged = {**bundle["replica_a"], "wall_seconds": wall, "flops_claimed": 1e30}
+        verdict = validate_solver_sweep(bundle["spec"], forged, host="cpu-a", peer_meta=bundle["replica_b"])
+        assert verdict.valid is False and verdict.credit == 0.0, (wall, verdict)
+        assert "wall_seconds" in verdict.reason
+
+
 def test_wave2_gateway_surrogate_sweep_and_producer_quorum_scaling(tmp_path: Path) -> None:
     store = RouterStore(tmp_path / "router_wave2.db", b"w" * 32)
     app = create_router_app(store, allow_private_producers=True)

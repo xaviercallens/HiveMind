@@ -40,6 +40,20 @@ def test_credit_is_zero_unless_verified_and_capped_by_class_peak_and_canonical_r
     assert e.verified_credit(ok, [unverified_replica]).cobblestones == pytest.approx(2.0)
 
 
+def test_non_finite_wall_time_or_flop_claim_is_rejected_and_cannot_set_the_canonical_replica() -> None:
+    # IP-159 (#500): NaN wall time used to disable the class-peak cap and grant 2.3e18 cobblestones "verified".
+    for wall, flops in ((math.nan, 1e30), (math.inf, 1e30), (-1.0, 1e30), (100.0, math.nan), (100.0, math.inf), (100.0, -1.0)):
+        g = e.verified_credit(e.CreditClaim("n1", "wu", flops, wall, 8000.0, True, True))
+        assert g.capped_by == "rejected" and g.cobblestones == 0.0, (wall, flops, g)
+    bad_peak = e.verified_credit(e.CreditClaim("n1", "wu", 1e12, 100.0, math.nan, True, True))
+    assert bad_peak.capped_by == "rejected" and bad_peak.cobblestones == 0.0
+    honest = e.CreditClaim("n1", "wu", 864e9, 100.0, 10.0, True, True)
+    nan_replica = e.CreditClaim("n2", "wu", 1e9, math.nan, 10.0, True, True)
+    g = e.verified_credit(honest, [nan_replica])
+    assert g.capped_by == "verified" and g.cobblestones == pytest.approx(2.0) and math.isfinite(g.cobblestones)
+    assert e.claim_figures_are_finite_and_positive(honest) and not e.claim_figures_are_finite_and_positive(nan_replica)
+
+
 @settings(max_examples=100, deadline=None)
 @given(st.floats(min_value=0.0, max_value=1e15, allow_nan=False), st.floats(min_value=0.1, max_value=1e4), st.floats(min_value=0.1, max_value=200.0))
 def test_credit_never_exceeds_claim_or_class_peak(flops: float, wall: float, peak_gflops: float) -> None:

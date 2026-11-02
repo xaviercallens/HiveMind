@@ -1,9 +1,9 @@
 {
   "schema_version": "rtx2070_3h_monitor.v1",
   "cadence_cron": "0 */3 * * *",
-  "timestamp_utc": "2026-11-02T06:19:40Z",
+  "timestamp_utc": "2026-11-02T08:19:38Z",
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-11-02T06:19:40Z",
+    "timestamp_utc": "2026-11-02T08:19:38Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": true,
@@ -11,7 +11,7 @@
     "compute_capability": "7.5",
     "temperature_c": 34.0,
     "gpu_utilization_pct": 2.0,
-    "power_draw_w": 41.97,
+    "power_draw_w": 29.88,
     "power_limit_w": 175.0,
     "memory_used_mib": 1812.0,
     "memory_free_mib": 6195.0,
@@ -25,9 +25,9 @@
     "memory_clock_mhz": 6801.0,
     "host_tensor_gflops": 0.0,
     "measured_fp32_tflops": 5.54,
-    "measured_fp16_tensor_tflops": 21.49,
-    "effective_sparse_moe_nf4_tflops": 39.76,
-    "microbench_elapsed_ms": 240.04
+    "measured_fp16_tensor_tflops": 19.73,
+    "effective_sparse_moe_nf4_tflops": 36.51,
+    "microbench_elapsed_ms": 321.74
   },
   "community_gpu_benchmark_summary": {
     "receipt_sha256": "2f8ae97fd69be25f4c6036aa4cd2153a2affec9e8df435e38158b69028aed8f9",
@@ -35,20 +35,34 @@
     "peak_allocated_mb": 0.0
   },
   "pr_integration_summary": {
-    "checked_utc": "2026-11-02T06:19:44Z",
-    "open_prs_count": 15,
+    "checked_utc": "2026-11-02T08:19:42Z",
+    "open_prs_count": 16,
     "evaluated": [
       {
-        "pr": 482,
-        "title": "fix(data): dataset-mining campaign trains on the train split only, not on the holdout it reports",
+        "pr": 486,
+        "title": "fix(router): admin producers/reconnect requires the caller's model list instead of inventing one",
         "author": "xaviercallens",
-        "head_ref": "fix/ip80-dataset-mining-holdout",
+        "head_ref": "fix/reconnect-requires-explicit-models",
         "base_ref": "main",
-        "head_sha": "913de75bc3",
+        "head_sha": "87b7115535",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
         "decision": "ACCEPT",
+        "merged": false,
+        "merge_message": ""
+      },
+      {
+        "pr": 485,
+        "title": "docs: Gen 6 verified-swarm design (router v2, expert registry, receipts, staged preregistered plan)",
+        "author": "xaviercallens",
+        "head_ref": "design/gen6-verified-router-2026-11-01",
+        "base_ref": "main",
+        "head_sha": "7da137a2ea",
+        "owner_authored": false,
+        "security_passed": false,
+        "injection_clean": true,
+        "decision": "HOLD (non-owner author 'xaviercallens'; checked, held for manual review)",
         "merged": false,
         "merge_message": ""
       },
@@ -184,7 +198,7 @@
         "author": "xaviercallens",
         "head_ref": "feat/openrouter-5lang-i18n",
         "base_ref": "main",
-        "head_sha": "a8166b16be",
+        "head_sha": "ebeca5442b",
         "owner_authored": true,
         "security_passed": true,
         "injection_clean": true,
@@ -251,6 +265,7 @@
     ],
     "merged_prs": [],
     "held_prs": [
+      485,
       446,
       410,
       397,
@@ -260,5 +275,5 @@
       141
     ]
   },
-  "ledger_sha256": "d9554b6a4b2c57d5e77e515cd7b4e522380234499b9d3b422482c93fb99bdf62"
+  "ledger_sha256": "a5482ded88649a8838a2cb973cedba0868c8595142630100c054a3a9fa4aff70"
 }

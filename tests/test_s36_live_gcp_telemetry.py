@@ -152,7 +152,13 @@ def test_15_moe_catalog_and_balanced_producer_prosumer_distribution(tmp_path) ->
     rec = client.post(
         "/v1/hivemind/admin/producers/reconnect",
         headers={"x-admin-key": admin_token},
-        json={"replace_endpoints": True, "include_legacy_known_users": True},
+        json={
+            "replace_endpoints": True,
+            "include_legacy_known_users": True,
+            "endpoint_token": "test-endpoint-token-0123456789abcdefghijk",
+            # The test declares the catalog it expects; the handler no longer assumes one.
+            "models": [{"id": "coder", "local_name": "qwen2.5-coder:7b-instruct", "loaded": True, "vram_mib": 0}, {"id": "bee-stars", "local_name": "hivemind-bee-stars", "loaded": True, "vram_mib": 0}, {"id": "crowd-v1", "local_name": "qwen2.5-coder:7b-instruct", "loaded": True, "vram_mib": 0}, {"id": "coder-lite", "local_name": "qwen2.5-coder:7b-instruct", "loaded": True, "vram_mib": 0}, {"id": "gemma-core", "local_name": "qwen2.5-coder:7b-instruct", "loaded": True, "vram_mib": 0}, {"id": "mistral-core", "local_name": "qwen2.5-coder:7b-instruct", "loaded": True, "vram_mib": 0}, {"id": "qwen35-core", "local_name": "qwen2.5-coder:7b-instruct", "loaded": True, "vram_mib": 0}, {"id": "bee-rusty-sundials", "local_name": "qwen2.5-coder:7b-instruct", "loaded": True, "vram_mib": 0}, {"id": "bee-lean-prover", "local_name": "qwen2.5-coder:7b-instruct", "loaded": True, "vram_mib": 0}, {"id": "bee-ruche-moe", "local_name": "qwen2.5-coder:7b-instruct", "loaded": True, "vram_mib": 0}, {"id": "coder-plus", "local_name": "qwen2.5-coder:7b-instruct", "loaded": True, "vram_mib": 0}, {"id": "moe-qwen35-bee", "local_name": "qwen2.5-coder:7b-instruct", "loaded": True, "vram_mib": 0}, {"id": "moe-general", "local_name": "qwen2.5-coder:7b-instruct", "loaded": True, "vram_mib": 0}, {"id": "moe-coder", "local_name": "qwen2.5-coder:7b-instruct", "loaded": True, "vram_mib": 0}],
+        },
     )
     assert rec.status_code == 200
     rec_data = rec.json()

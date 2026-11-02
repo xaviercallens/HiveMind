@@ -520,7 +520,7 @@ class ReconnectProducersRequest(BaseModel):
     bee_endpoint_url: str = Field(default="https://34-48-48-154.sslip.io/bee", min_length=1, max_length=512)
     coder_endpoint_url: str = Field(default="https://34-48-48-154.sslip.io", min_length=1, max_length=512)
     rtx2070_endpoint_url: str = Field(default="https://34-48-48-154.sslip.io/rtx2070", min_length=1, max_length=512)
-    endpoint_token: str | None = Field(default="sDkyBiiDsjX3KL48lUZxdfZu1LK0c8QZXoS7RnJ7D2Q", min_length=16, max_length=200, pattern=r"^[A-Za-z0-9._~+/=-]+$")
+    endpoint_token: str | None = Field(default=None, min_length=16, max_length=200, pattern=r"^[A-Za-z0-9._~+/=-]+$")
     bee_endpoint_token: str | None = Field(default=None, min_length=16, max_length=200, pattern=r"^[A-Za-z0-9._~+/=-]+$")
     coder_endpoint_token: str | None = Field(default=None, min_length=16, max_length=200, pattern=r"^[A-Za-z0-9._~+/=-]+$")
     models: list[ModelEntry] | None = Field(default=None, max_length=64)
@@ -2353,24 +2353,24 @@ def create_router_app(
             store.ensure_legacy_hiveminders_registered(now_utc=now)
 
         existing_tokens = store.existing_endpoint_tokens()
-        fallback_tok = payload.endpoint_token or existing_tokens.get("default") or "sDkyBiiDsjX3KL48lUZxdfZu1LK0c8QZXoS7RnJ7D2Q"
+        fallback_tok = payload.endpoint_token or existing_tokens.get("default")
+        if not fallback_tok:
+            raise RouterError(
+                400,
+                "endpoint_token is required: no token was supplied and none is stored for any live endpoint.",
+                "invalid_request_error",
+                "endpoint_token_required",
+            )
 
-        default_entries = payload.models or [
-            ModelEntry(id="coder", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=4841, cold_start_s=0.0),
-            ModelEntry(id="bee-stars", local_name="hivemind-bee-stars", loaded=True, vram_mib=4841, cold_start_s=0.0),
-            ModelEntry(id="crowd-v1", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-            ModelEntry(id="coder-lite", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-            ModelEntry(id="gemma-core", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-            ModelEntry(id="mistral-core", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-            ModelEntry(id="qwen35-core", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-            ModelEntry(id="bee-rusty-sundials", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-            ModelEntry(id="bee-lean-prover", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-            ModelEntry(id="bee-ruche-moe", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-            ModelEntry(id="coder-plus", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-            ModelEntry(id="moe-qwen35-bee", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-            ModelEntry(id="moe-general", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-            ModelEntry(id="moe-coder", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=0, cold_start_s=0.0),
-        ]
+        if not payload.models:
+            # An admin reconnect does not invent a model table: the caller must list what the endpoint actually serves.
+            raise RouterError(
+                400,
+                "models is required: list the model ids and local names the endpoint serves; a reconnect does not assume them.",
+                "invalid_request_error",
+                "models_required",
+            )
+        default_entries = payload.models
         models_all: list[dict[str, str]] = []
         for entry in default_entries:
             public = _strip_prefix(entry.id)

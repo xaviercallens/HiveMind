@@ -1,6 +1,6 @@
 {
   "schema_version": "hivemind.evolution_2h_and_night_moe_cron.v1",
-  "timestamp_utc": "2026-11-02T06:19:40Z",
+  "timestamp_utc": "2026-11-02T08:19:38Z",
   "mode": "2h-evolution",
   "schedules": {
     "roadmap_pr_evolution_cron": "0 */2 * * *",
@@ -12,16 +12,16 @@
     "online_producer_ids": [
       "PRODUCER-LOCAL-RTX2070-CUDA0"
     ],
-    "total_requests_served": 32,
+    "total_requests_served": 34,
     "boinc_rtx2070_worker": {
       "handle": "xaviercallens-rtx2070",
-      "boinc_workunits_completed": 11086,
-      "boinc_cobblestones": 498870.0,
-      "hmt_compute_points": 2773900
+      "boinc_workunits_completed": 12412,
+      "boinc_cobblestones": 558540.0,
+      "hmt_compute_points": 3105400
     }
   },
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-11-02T06:19:40Z",
+    "timestamp_utc": "2026-11-02T08:19:38Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": true,
@@ -29,7 +29,7 @@
     "compute_capability": "7.5",
     "temperature_c": 34.0,
     "gpu_utilization_pct": 2.0,
-    "power_draw_w": 41.97,
+    "power_draw_w": 29.88,
     "power_limit_w": 175.0,
     "memory_used_mib": 1812.0,
     "memory_free_mib": 6195.0,
@@ -43,13 +43,13 @@
     "memory_clock_mhz": 6801.0,
     "host_tensor_gflops": 0.0,
     "measured_fp32_tflops": 5.54,
-    "measured_fp16_tensor_tflops": 21.49,
-    "effective_sparse_moe_nf4_tflops": 39.76,
-    "microbench_elapsed_ms": 240.04
+    "measured_fp16_tensor_tflops": 19.73,
+    "effective_sparse_moe_nf4_tflops": 36.51,
+    "microbench_elapsed_ms": 321.74
   },
   "roadmap_summary": {
     "exists": true,
-    "roadmap_sha256": "5157f1b9f5be5836e7b99e5d7d16317fa2a1df0bb400dea2586fe31a85f6f5a4",
+    "roadmap_sha256": "f0bed9fecc17c88d4f2098da3bb8db37bee2fcec11b43df21f638baf93874602",
     "seasons_detected": [
       1,
       2,
@@ -98,9 +98,10 @@
     ]
   },
   "pr_integration_summary": {
-    "open_prs_count": 15,
+    "open_prs_count": 16,
     "merged_prs": [],
     "held_prs": [
+      485,
       446,
       410,
       397,
@@ -111,5 +112,5 @@
     ]
   },
   "night_moe_summary": {},
-  "receipt_sha256": "51bb46ec4f366a596a86fba16063ce77b5df2115720e19ea4136633435816365"
+  "receipt_sha256": "24901c9fa4d282cdc628c2252965f25068780d7997a36a2fef80946574b41f41"
 }

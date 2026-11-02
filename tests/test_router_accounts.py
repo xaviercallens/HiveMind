@@ -473,3 +473,23 @@ def test_escrow_preserves_conservation_and_never_overdraws(ops: list[tuple[objec
     assert store.balance("sys:escrow") >= -1e-9
     assert store.active_hold_count(consumer) == len(open_ids)
     assert store.verify_chain()
+
+
+def test_hmt_in_circulation_excludes_burned_and_validator_pool_hmt() -> None:
+    """IP-175: total_hmt_in_circulation was total_balances(), so burned HMT was published as circulating."""
+    store = _store()
+    consumer = store.register("c_circ", "consumer")[0]
+    producer = store.register("p_circ", "producer")[0]
+    store.grant(consumer, 100.0, "seed")
+    assert store.public_accounts_summary()["total_hmt_in_circulation"] == pytest.approx(100.0)
+    store.settle("r_circ", consumer, producer, "m", 0, 1000, 1000, 40.0, _Fee(0.15, 0.05))  # 40 HMT: 6 to validators, 2 burned
+    summary = store.public_accounts_summary()
+    assert summary["total_hmt_in_circulation"] <= 95.0  # on the old code this read 100.0: burned HMT counted as circulating
+    sys_bal = store.system_account_balances()
+    assert sys_bal["sys:burn"] > 0.0 and sys_bal["sys:validators"] > 0.0
+    assert summary["total_hmt_in_circulation"] == pytest.approx(100.0 - sys_bal["sys:burn"] - sys_bal["sys:validators"], abs=0.01)
+    assert summary["total_hmt_in_circulation"] <= 95.0
+    assert summary["total_hmt_burned"] == pytest.approx(sys_bal["sys:burn"], abs=0.01)
+    assert summary["total_hmt_validator_pool"] == pytest.approx(sys_bal["sys:validators"], abs=0.01)
+    assert summary["total_hmt_minted"] == pytest.approx(100.0)
+    assert store.total_in_circulation() + sum(sys_bal.values()) == pytest.approx(store.total_balances(), abs=1e-9)

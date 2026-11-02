@@ -1,6 +1,6 @@
 {
   "schema_version": "hivemind.evolution_2h_and_night_moe_cron.v1",
-  "timestamp_utc": "2026-11-02T04:19:39Z",
+  "timestamp_utc": "2026-11-02T06:19:40Z",
   "mode": "2h-evolution",
   "schedules": {
     "roadmap_pr_evolution_cron": "0 */2 * * *",
@@ -15,13 +15,13 @@
     "total_requests_served": 32,
     "boinc_rtx2070_worker": {
       "handle": "xaviercallens-rtx2070",
-      "boinc_workunits_completed": 9759,
-      "boinc_cobblestones": 439155.0,
-      "hmt_compute_points": 2442150
+      "boinc_workunits_completed": 11086,
+      "boinc_cobblestones": 498870.0,
+      "hmt_compute_points": 2773900
     }
   },
   "rtx2070_telemetry": {
-    "timestamp_utc": "2026-11-02T04:19:39Z",
+    "timestamp_utc": "2026-11-02T06:19:40Z",
     "gpu_name": "NVIDIA GeForce RTX 2070",
     "driver_version": "591.86",
     "cuda_available": true,
@@ -29,7 +29,7 @@
     "compute_capability": "7.5",
     "temperature_c": 34.0,
     "gpu_utilization_pct": 2.0,
-    "power_draw_w": 42.04,
+    "power_draw_w": 41.97,
     "power_limit_w": 175.0,
     "memory_used_mib": 1812.0,
     "memory_free_mib": 6195.0,
@@ -42,10 +42,10 @@
     "max_graphics_clock_mhz": 2145.0,
     "memory_clock_mhz": 6801.0,
     "host_tensor_gflops": 0.0,
-    "measured_fp32_tflops": 5.66,
-    "measured_fp16_tensor_tflops": 21.51,
-    "effective_sparse_moe_nf4_tflops": 39.79,
-    "microbench_elapsed_ms": 243.93
+    "measured_fp32_tflops": 5.54,
+    "measured_fp16_tensor_tflops": 21.49,
+    "effective_sparse_moe_nf4_tflops": 39.76,
+    "microbench_elapsed_ms": 240.04
   },
   "roadmap_summary": {
     "exists": true,
@@ -111,5 +111,5 @@
     ]
   },
   "night_moe_summary": {},
-  "receipt_sha256": "b67e522d8236cd5a292cc39c5509da6f29a447ac975711fd26aeb4ef535aa8cd"
+  "receipt_sha256": "51bb46ec4f366a596a86fba16063ce77b5df2115720e19ea4136633435816365"
 }

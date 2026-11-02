@@ -1358,8 +1358,9 @@ def build_foundation_paper_v42_portal_payload(
         },
         "live_experimentation_v42": {
             "live_47_node_wan_baseline": {
-                "data_source": baseline.data_source,
-                "snapshot_date_utc": baseline.snapshot_date_utc,
+                "data_source": "SNAPSHOT_2026-10-31_NOT_LIVE" if baseline == SwarmLiveBaseline() else baseline.data_source,
+                "snapshot_date_utc": baseline.snapshot_date_utc or "2026-10-31",
+                "live_readings_at": ["/boinc/status", "/v1/hivemind/bees/owner-fleet-status"],
                 "active_nodes": baseline.total_accounts,
                 "role_breakdown": {
                     "producers": baseline.producers,
@@ -1371,8 +1372,8 @@ def build_foundation_paper_v42_portal_payload(
                 },
                 "live_models_served": 15,
                 "assimilated_boinc_workunits": 100,
-                "verified_boinc_cobblestones": 5632.11,
-                "attested_compute_pflops": 2.433,
+                "boinc_cobblestones_snapshot": 5632.11,
+                "compute_pflops_snapshot": 2.433,
                 "cumulative_tflops_hours": 4802.1,
                 "openrouter_completions_served": 2455,
                 "human_prosumer_completions": 160,

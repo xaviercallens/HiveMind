@@ -1,0 +1,11 @@
+%4|1793493392.297|GETPID|fed-coordinator#producer-1| [thrd:main]: Failed to acquire idempotence PID from broker 10.77.0.2:9092/2: Broker: Coordinator load in progress: retrying
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[coordinator] run live-val-1 pin d4d51d288339 base 7e3bf9e2252e learners ['l0', 'l1'] quorum 1 initial eval 4.1709
+[coordinator] round 0: complete ['l0', 'l1'] eval 2.0126 (18.6s)
+[coordinator] round 1: complete ['l0', 'l1'] eval 1.7079 (3.4s)
+[coordinator] round 2: complete ['l0', 'l1'] eval 1.7204 (2.7s)
+[coordinator] round 3: complete ['l0', 'l1'] eval 1.7833 (3.3s)
+[coordinator] round 4: complete ['l0', 'l1'] eval 1.8014 (2.9s)
+[coordinator] round 5: complete ['l0', 'l1'] eval 1.7818 (2.7s)
+[coordinator] done: 6 rounds, final eval 1.7818046808242798

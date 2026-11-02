@@ -46,6 +46,7 @@ from hivemind.swarm.amcp_kafka_transport import (  # noqa: E402
     HMACKeyring,
     KafkaBrokerTransport,
     KafkaSettings,
+    TransportError,
 )
 
 PIN_FILES = [HERE / "e8_qlora_moe_round.py", HERE / "e8_amcp_round.py", HERE.parent / "src" / "hivemind" / "swarm" / "federation_agents.py"]
@@ -61,6 +62,7 @@ class Bus:
     def __init__(self, transport: Any, ring: HMACKeyring, run_id: str, ttl_s: float = 900.0) -> None:
         self.pub = AMCPPublisher(transport, ring, ttl_s=ttl_s)
         self.inbox: Deque[Any] = deque()
+        self.key_of: Dict[str, str] = {}  # event id -> id of the key that signed it (who can be held to account for it)
         self.run_id = run_id
         self.con = AMCPConsumer(transport, EnvelopeVerifier(ring), topics=["federation"], poll_timeout_s=1.0)
         for t in (fed.OFFER, fed.CLAIM, fed.RESULT, fed.ABORT):
@@ -69,6 +71,7 @@ class Bus:
     def _take(self, verified: Any) -> None:
         if verified.event.payload.get("run_id") == self.run_id:
             self.inbox.append(verified.event)
+            self.key_of[verified.event.event_id] = verified.key_id
 
     def poll(self) -> List[Any]:
         self.con.run_once()
@@ -76,8 +79,19 @@ class Bus:
         self.inbox.clear()
         return out
 
-    def publish(self, event: Any) -> None:
-        self.pub.publish(event)
+    def publish(self, event: Any, retry_s: float = 300.0) -> None:
+        """Publish, retrying through a transient broker outage. A Spot Kafka voter preempted at 00:31Z made one publish miss its 20 s confirmation and the
+        night-002b coordinator crashed; a leader change usually settles within a minute, so keep trying for ``retry_s`` before giving up."""
+        deadline = time.time() + retry_s
+        while True:
+            try:
+                self.pub.publish(event)
+                return
+            except TransportError as exc:
+                if time.time() >= deadline:
+                    raise
+                print(f"[bus] publish not confirmed ({str(exc)[:80]}); retrying", flush=True)
+                time.sleep(5.0)
 
 
 def make_transport(args: argparse.Namespace, role: str) -> Any:
@@ -158,6 +172,7 @@ def run_coordinator(args: argparse.Namespace, transport: Any = None, ring: Optio
     ok = True
     for rnd in range(start, args.rounds):
         retries = 0
+        carried: Dict[str, Dict[str, Any]] = {}  # results already accepted for this round: still valid on a re-offer (same round, same global state)
         while True:
             deadline = time.time() + args.round_deadline_s
             offer = fed.build_offer(run_id=args.run_id, rnd=rnd, sender_id="coordinator", global_state=global_state, base_sha256=base_sha, pin=pin, inner_steps=args.inner_steps,
@@ -166,9 +181,19 @@ def run_coordinator(args: argparse.Namespace, transport: Any = None, ring: Optio
             bus.publish(offer)
             book = fed.RoundBook(run_id=args.run_id, rnd=rnd, allowed=args.learners, quorum=args.quorum, deadline_unix=deadline, global_sha256=offer.payload["global_sha256"], pin=pin,
                                  max_delta_l2=args.max_delta_l2, template=global_state)
+            # Keep what arrived before the re-offer: a learner that already answered this round does not answer it again, and its result is still valid.
+            # (Without this, the cross-machine run B discarded the VM's valid round-0 result on retry and could never reach its quorum.)
+            book.accepted.update(carried)
             t_round = time.time()
             while book.status() == "open":
                 for ev in bus.poll():
+                    if ev.event_type in (fed.CLAIM, fed.RESULT) and args.learner_key_prefix:
+                        # Per-learner keys: a claim or result counts only if it is signed with the key issued to the learner id it names, so a participant
+                        # cannot speak for another one (it can still only sign as itself).
+                        who, kid = str(ev.payload.get("learner_id", "?")), bus.key_of.get(ev.event_id, "")
+                        if kid != f"{args.learner_key_prefix}{who}":
+                            book.rejected.append((who, f"signed with key {kid!r}, not the key issued to {who!r}"))
+                            continue
                     if ev.event_type == fed.CLAIM:
                         book.claim(ev.payload)
                     elif ev.event_type == fed.RESULT:
@@ -176,6 +201,7 @@ def run_coordinator(args: argparse.Namespace, transport: Any = None, ring: Optio
             status = book.status()
             if status != "failed":
                 break
+            carried = dict(book.accepted)
             bus.publish(fed.build_abort(run_id=args.run_id, rnd=rnd, sender_id="coordinator", reason=f"quorum {args.quorum} not reached; rejected={len(book.rejected)}"))
             retries += 1
             print(f"[coordinator] round {rnd}: quorum not reached (accepted {sorted(book.accepted)}, claims {sorted(book.claims)}, rejected {book.rejected}); retry {retries}", flush=True)
@@ -239,6 +265,9 @@ def run_learner(args: argparse.Namespace, transport: Any = None, ring: Optional[
     while True:
         offers = []
         for ev in bus.poll():
+            if args.coordinator_key and ev.event_type in (fed.OFFER, fed.ABORT) and bus.key_of.get(ev.event_id) != args.coordinator_key:
+                skipped["offer or abort not signed with the coordinator key"] = skipped.get("offer or abort not signed with the coordinator key", 0) + 1
+                continue
             if ev.event_type == fed.ABORT and ev.payload.get("reason") in ("run_complete", "run_failed"):
                 print(f"[learner {args.learner_id}] run ended ({ev.payload['reason']}); skipped so far: {skipped}", flush=True)
                 return 0
@@ -323,6 +352,7 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--seed", type=int, default=1)
     c.add_argument("--pace-s", type=float, default=0.0, help="minimum seconds per round (a calm cadence for long runs)")
     c.add_argument("--report-every", type=int, default=10, help="rewrite the JSON report every N rounds (it is always written at the end)")
+    c.add_argument("--learner-key-prefix", default="", help="per-learner keys: accept a claim or result only if signed with key '<prefix><learner_id>' (e.g. lk-)")
     c.add_argument("--checkpoint", default="")
     c.add_argument("--resume", action="store_true")
     c.add_argument("--out", required=True)
@@ -339,6 +369,7 @@ def build_parser() -> argparse.ArgumentParser:
     lr.add_argument("--min-free-mib", type=float, default=4300.0)
     lr.add_argument("--need-mib", type=float, default=600.0)
     lr.add_argument("--idle-exit-s", type=float, default=0.0, help="leave after this many seconds without an offer (0 = never)")
+    lr.add_argument("--coordinator-key", default="", help="accept offers and aborts only if signed with this key id (e.g. coord)")
     return ap
 
 

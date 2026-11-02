@@ -1,0 +1,13 @@
+[learner l0] t4-l0 device=cuda quant=nf4 pin d4d51d288339 waiting for offers of run live-val-1
+%4|1793493367.277|GETPID|fed-learner-l0#producer-1| [thrd:main]: Failed to acquire idempotence PID from broker 10.77.0.3:9092/3: Broker: Coordinator load in progress: retrying
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+Writing model shards:   0%|          | 0/1 [00:00<?, ?it/s]Writing model shards: 100%|██████████| 1/1 [00:00<00:00, 139.59it/s]
+Loading weights:   0%|          | 0/21 [00:00<?, ?it/s]Loading weights: 100%|██████████| 21/21 [00:00<00:00, 363.90it/s]
+[learner l0] round 0: global eval 4.1721, |delta| 15.2114
+[learner l0] round 1: global eval 2.0106, |delta| 11.1998
+[learner l0] round 2: global eval 1.6994, |delta| 10.4449
+[learner l0] round 3: global eval 1.7079, |delta| 10.3167
+[learner l0] round 4: global eval 1.7772, |delta| 9.9132
+[learner l0] round 5: global eval 1.7963, |delta| 10.0481
+[learner l0] run ended (run_complete); skipped so far: {}

@@ -2206,7 +2206,10 @@ def create_router_app(
             raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
         if not isinstance(body, dict):
             raise RouterError(400, "telemetry payload must be a JSON object", "invalid_request_error", "invalid_request")
-        snap = update_t4_telemetry_snapshot(body)
+        try:
+            snap = update_t4_telemetry_snapshot(body)
+        except ValueError as exc:
+            raise RouterError(400, f"telemetry rejected: {exc}", "invalid_request_error", "invalid_request") from None
         return {"ok": True, "updated_epoch": snap.get("updated_epoch"), "node_name": snap.get("node_name")}
 
     @app.post("/v1/hivemind/consumer/max-price")

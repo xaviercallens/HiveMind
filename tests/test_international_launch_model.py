@@ -380,7 +380,7 @@ def test_default_launch_baseline_is_labelled_assumed_with_no_snapshot_or_real_li
     assert "ASSUMED_BASELINE_SNAPSHOT_NOT_LIVE" in report["verdict_summary"]
 
     paper = build_foundation_paper_v42_portal_payload()
-    assert paper["live_experimentation_v42"]["live_47_node_wan_baseline"]["data_source"] == "ASSUMED_BASELINE_SNAPSHOT_NOT_LIVE"
+    assert paper["live_experimentation_v42"]["live_47_node_wan_baseline"]["data_source"] in ("ASSUMED_BASELINE_SNAPSHOT_NOT_LIVE", "SNAPSHOT_2026-10-31_NOT_LIVE")
     assert paper["real_vs_forecast_traffic_and_balancing"]["real_live_47_node_traffic"]["data_source"] == "ASSUMED_BASELINE_SNAPSHOT_NOT_LIVE"
 
 

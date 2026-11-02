@@ -227,3 +227,104 @@ def test_a_learner_that_declined_an_offer_takes_the_re_offer_of_the_same_round(t
     rep = json.loads((tmp_path / "rt5.json").read_text())
     assert rep["completed"] and rep["rounds"][0]["retries"] == 1 and rep["rounds"][0]["accepted"] == ["l0"]
     assert calls["n"] >= 2
+
+
+def test_a_result_delivered_before_a_re_offer_still_counts_after_it(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Cross-machine run B: the VM answered round 0, the T4 learner declined (VRAM floor); on the re-offer the coordinator dropped the VM's valid result and the VM, having
+    answered already, did not send it again, so the quorum of 2 could never be reached."""
+    seen = {"l0": 0}
+
+    def l0_busy_once(args, device, now=None):  # noqa: ANN001, ANN202
+        if args.learner_id == "l0":
+            seen["l0"] += 1
+            if seen["l0"] == 1:
+                return (False, "vram: test")
+        return (True, "ok")
+
+    monkeypatch.setattr(r, "gate", l0_busy_once)
+    hub = Hub()
+    rcs = run_threads(hub, coordinator_args(tmp_path, "rt6", ["l0", "l1"], rounds=1, quorum=2, deadline=6.0), [learner_args("rt6", "l0", 0), learner_args("rt6", "l1", 1)])
+    assert rcs == {"coord": 0, "l0": 0, "l1": 0}, rcs
+    rep = json.loads((tmp_path / "rt6.json").read_text())
+    assert rep["completed"] and rep["rounds"][0]["status"] == "complete" and rep["rounds"][0]["accepted"] == ["l0", "l1"] and rep["rounds"][0]["retries"] == 1
+
+
+def test_a_publish_survives_a_short_broker_outage_and_gives_up_after_its_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    """night-002b stopped when one publish was not confirmed during a Kafka voter preemption; the bus now retries."""
+    from hivemind.swarm.amcp_kafka_transport import TransportError
+
+    bus = r.Bus(Hub().view(), RING, "rt9")
+    calls = {"n": 0}
+
+    def flaky(event):  # noqa: ANN001, ANN202
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise TransportError("delivery not confirmed within 20.0s")
+        return {"ok": True}
+
+    monkeypatch.setattr(bus.pub, "publish", flaky)
+    monkeypatch.setattr(r.time, "sleep", lambda s: None)
+    bus.publish(fed.build_claim(run_id="rt9", rnd=0, learner_id="l0", host="h"))
+    assert calls["n"] == 3
+
+    def down(event):  # noqa: ANN001, ANN202
+        raise TransportError("broker down")
+
+    monkeypatch.setattr(bus.pub, "publish", down)
+    with pytest.raises(TransportError):
+        bus.publish(fed.build_claim(run_id="rt9", rnd=0, learner_id="l0", host="h"), retry_s=0.0)
+
+
+# ----------------------------------------------------------------------------------------------------------------------- per-learner keys
+
+K_COORD, K_L0, K_L1 = bytes(range(32)), bytes(range(40, 72)), bytes(range(80, 112))
+
+
+def test_with_per_learner_keys_nobody_can_submit_a_result_in_another_learners_name(tmp_path: Path) -> None:
+    hub = Hub()
+    coord_ring = HMACKeyring(keys={"coord": K_COORD, "lk-l0": K_L0, "lk-l1": K_L1}, active_kid="coord")
+    l0_ring = HMACKeyring(keys={"coord": K_COORD, "lk-l0": K_L0}, active_kid="lk-l0")
+    rogue_ring = HMACKeyring(keys={"coord": K_COORD, "lk-l1": K_L1}, active_kid="lk-l1")  # holds l1's key, pretends to be l0
+    stop = threading.Event()
+
+    def rogue() -> None:
+        bus = r.Bus(hub.view(), rogue_ring, "rt7")
+        pin = fed.code_pin(r.PIN_FILES)
+        while not stop.is_set():
+            for ev in bus.poll():
+                if ev.event_type == fed.OFFER:
+                    g = fed.decode_tensors(ev.payload["global_b64"])
+                    bus.publish(fed.build_result(run_id="rt7", rnd=int(ev.payload["round"]), learner_id="l0", host="rogue", tokens=10,
+                                                 delta={k: v * 0.0 for k, v in g.items()}, delta_l2=0.0, eval_loss_global=4.0, pin=pin, global_sha256=ev.payload["global_sha256"]))
+                if ev.event_type == fed.ABORT:
+                    return
+
+    coord = parse("coordinator", "--run-id", "rt7", "--learners", "l0", "l1", "--rounds", "1", "--quorum", "1", "--round-deadline-s", "6", "--inner-steps", "4", *COORD,
+                  "--learner-key-prefix", "lk-", "--out", str(tmp_path / "rt7.json"))
+    rcs: dict = {}
+    t_rogue = threading.Thread(target=rogue, daemon=True)
+    t_l0 = threading.Thread(target=lambda: rcs.__setitem__("l0", r.run_learner(learner_args("rt7", "l0", 0, argv="--coordinator-key coord"), hub.view(), l0_ring)), daemon=True)
+    t_c = threading.Thread(target=lambda: rcs.__setitem__("coord", r.run_coordinator(coord, hub.view(), coord_ring)), daemon=True)
+    for t in (t_rogue, t_l0, t_c):
+        t.start()
+    t_c.join(240)
+    t_l0.join(60)
+    stop.set()
+    assert rcs == {"coord": 0, "l0": 0}, rcs
+    rnd = json.loads((tmp_path / "rt7.json").read_text())["rounds"][0]
+    assert rnd["accepted"] == ["l0"] and rnd["hosts"]["l0"] != "rogue"  # the accepted l0 result is the honest one
+    assert any(who == "l0" and "not the key issued to 'l0'" in why for who, why in rnd["rejected"])
+
+
+def test_a_learner_pinned_to_the_coordinator_key_ignores_offers_signed_by_anyone_else(tmp_path: Path) -> None:
+    hub = Hub()
+    other = HMACKeyring(keys={"coord": K_COORD, "lk-l1": K_L1}, active_kid="lk-l1")
+    l0_ring = HMACKeyring(keys={"coord": K_COORD, "lk-l0": K_L0, "lk-l1": K_L1}, active_kid="lk-l0")  # can verify l1's signature, but must not obey it
+    base = q.build_base_state(1)
+    r.Bus(hub.view(), other, "rt8").publish(fed.build_offer(run_id="rt8", rnd=0, sender_id="coordinator", global_state=q.initial_lora(base, 1), base_sha256=fed.tensors_sha256(base),
+                                                            pin=fed.code_pin(r.PIN_FILES), inner_steps=2, deadline_unix=time.time() + 60, quorum=1,
+                                                            params={"seed": 1, "shard_size": 64, "learners": 1}))
+    rc = r.run_learner(parse("learner", "--run-id", "rt8", "--learner-id", "l0", "--device", "cpu", "--governor-log", "", "--idle-exit-s", "2", "--coordinator-key", "coord"), hub.view(), l0_ring)
+    assert rc == 0
+    types = [json.loads(rec.value)["type"] for rec in hub.records]
+    assert fed.CLAIM not in types and fed.RESULT not in types

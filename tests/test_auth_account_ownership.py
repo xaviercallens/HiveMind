@@ -135,6 +135,13 @@ def test_password_login_is_rate_limited() -> None:
     assert codes[0] == 401
 
 
+@pytest.mark.parametrize("path", ["/signup", "/join"])
+def test_public_pages_carry_the_proof_of_concept_notice(path: str) -> None:
+    r = _client(RouterStore(":memory:", SECRET)).get(path)
+    assert r.status_code == 200
+    assert 'id="poc-notice"' in r.text and "Proof of concept" in r.text and "personal" in r.text
+
+
 def test_admin_can_issue_a_fresh_key_for_an_account_and_the_old_one_dies() -> None:
     store = RouterStore(":memory:", SECRET)
     admin_key = "admin-secret-key-for-hivemaster"

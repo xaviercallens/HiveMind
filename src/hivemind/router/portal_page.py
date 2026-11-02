@@ -1234,6 +1234,7 @@ def render_portal_page(
   <style nonce="{nonce}">{_CSS}</style>
 </head>
 <body>
+<p role="note" id="poc-notice"><strong>&#9888; Proof of concept (PoC)</strong> &mdash; not a production service yet. Until HiveMind is fully secured, send only public, non-sensitive data: no secrets, passwords, API keys, personal information, or private or enterprise data. Prompts are processed by volunteer-run nodes whose operators are not verified.</p>
   <div class="container">
     <header>
       <div class="brand">

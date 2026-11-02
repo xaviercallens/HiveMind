@@ -1,3 +1,9 @@
+> [!WARNING]
+> **Proof of concept (PoC): not a production service yet.** Until HiveMind is fully secured, send only **public, non-sensitive data**:
+> no secrets, passwords, API keys, personal information, or private or enterprise data. Prompts are processed by
+> volunteer-run nodes whose operators are not verified, and the security of the gateway and dashboard is still being
+> hardened (see [SECURITY.md](SECURITY.md)).
+
 <div align="center">
 
 <img src="docs/assets/hivemind_hero_banner.svg" alt="Project HiveMind — Decentralized Sparse MoE Training & Inference on Consumer Gaming GPUs" width="100%"/>

@@ -3931,7 +3931,7 @@ def render_hivemind_at_home_html(
     }}
   </style>
 </head>
-<body class="cyber-scanlines">
+<body class="cyber-scanlines"><p role="note" id="poc-notice"><strong>&#9888; Proof of concept (PoC)</strong> &mdash; not a production service yet. Until HiveMind is fully secured, send only public, non-sensitive data: no secrets, passwords, API keys, personal information, or private or enterprise data. Prompts are processed by volunteer-run nodes whose operators are not verified.</p>
   <header>
     <div class="header-top">
       <div>
@@ -8876,7 +8876,7 @@ def create_hivemind_at_home_app(
             "<style>body{font:16px/1.55 system-ui,-apple-system,sans-serif;max-width:64rem;margin:0 auto;padding:1.2rem;background:#0f172a;color:#f8fafc}"
             "a{color:#38bdf8}table{width:100%;border-collapse:collapse;margin:1rem 0}th,td{border:1px solid #334155;padding:0.5rem;text-align:left}"
             "th{background:#1e293b}code,pre{background:#1e293b;padding:0.15rem 0.35rem;border-radius:0.3rem;font-family:ui-monospace,monospace}"
-            "pre{padding:0.8rem;overflow-x:auto}.nav{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}</style></head><body>"
+            "pre{padding:0.8rem;overflow-x:auto}.nav{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}</style></head><body><p role='note' id='poc-notice'><strong>&#9888; Proof of concept (PoC)</strong> &mdash; not a production service yet. Until HiveMind is fully secured, send only public, non-sensitive data: no secrets, passwords, API keys, personal information, or private or enterprise data. Prompts are processed by volunteer-run nodes whose operators are not verified.</p>"
             "<nav class='nav'><a href='/rejoindre?lang=fr'>← Rejoindre HiveMind (FR/EN/ES/DE/ZH)</a>"
             "<a href='/night-moe'>Résultats Night-MoE</a>"
             "<a href='/life-as-a-bee'>Vie d'une Abeille (24 MoE)</a>"

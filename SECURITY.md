@@ -7,6 +7,13 @@
 
 ---
 
+## 0. Status: proof of concept
+
+HiveMind is a **proof of concept (PoC)** until it is declared production-ready. Until then, users must send only public,
+non-sensitive data through the gateway, the La Ruche dashboard or any producer: no secrets, passwords, API keys,
+personal information, or private or enterprise data. Prompts are processed by volunteer-run nodes whose operators are not
+verified, and nothing yet checks what a node keeps. The same notice is shown on the sign-up, join, portal and dashboard pages.
+
 ## 1. Supported Versions
 
 | Version | Security Patch Support | Automated 5-Layer PR Scanner | Lean 4 Formal Proof Gate (`48+` Theorems) |

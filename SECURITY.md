@@ -7,6 +7,13 @@
 
 ---
 
+## 0. Status: proof of concept
+
+HiveMind is a **proof of concept (PoC)** until it is declared production-ready. Until then, users must send only public,
+non-sensitive data through the gateway, the La Ruche dashboard or any producer: no secrets, passwords, API keys,
+personal information, or private or enterprise data. Prompts are processed by volunteer-run nodes whose operators are not
+verified, and nothing yet checks what a node keeps. The same notice is shown on the sign-up, join, portal and dashboard pages.
+
 ## 1. Supported Versions
 
 | Version | Security Patch Support | Automated 5-Layer PR Scanner | Lean 4 Formal Proof Gate (`48+` Theorems) |
@@ -46,7 +53,7 @@ All `.py` files modified in a Pull Request are parsed via Python's `ast` module 
 
 ### Layer 4 — Credential Exfiltration & Hardcoded Secret Detection (`SEC-03`, `SEC-05`)
 - **`SEC-03` (`CREDENTIAL_OR_ENV_EXFILTRATION`):** Blocks outbound webhooks and reverse tunnels (`webhook.site`, `ngrok.io`, `ngrok-free.app`, `pipedream.net`, `requestbin`, `oastify.com`, `discord.com/api/webhooks`, `api.telegram.org/bot`).
-- **`SEC-05` (`HARDCODED_SECRET_OR_PRIVATE_KEY`):** Blocks PEM private keys (`-----BEGIN ... PRIVATE KEY-----`), GitHub PATs (`ghp_...`, `github_pat_...`), Hugging Face tokens (`hf_...`), AWS keys (`AKIA...`), and Slack tokens.
+- **`SEC-05` (`HARDCODED_SECRET_OR_PRIVATE_KEY`):** Blocks PEM private keys (`-----BEGIN ... PRIVATE KEY-----`), GitHub PATs (`ghp_...`, `github_pat_...`), Hugging Face tokens (`hf_...`), AWS keys (`AKIA...`), Slack tokens, and HiveMind gateway API keys (`hm-` + 40 or more URL-safe characters).
 
 ### Layer 5 — Trojan Source Bidirectional Unicode Defense (`SEC-04`, CVE-2021-42574)
 - **`SEC-04` (`TROJAN_SOURCE_BIDI_UNICODE`):** Scans every PR title, body, commit message, and source line for hidden Unicode bidirectional override/isolate characters (`U+202A`–`U+202E`, `U+2066`–`U+2069`) that visually disguise malicious logic during human code review.

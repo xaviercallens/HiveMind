@@ -199,9 +199,14 @@ def test_portal_free_steam_game_registration_login_and_boinc_contribution(tmp_pa
     assert reg["steam_session_ticket"].startswith("STEAM-3133700-")
     initial_bal = float(reg["balance_hmt"])
 
-    # 4. Simulate returning Login with the same handle
+    # 4. A returning login on the handle alone is refused (it used to return the key to anyone from the same address);
+    #    with the account's own key it signs in.
+    anon = client.post("/v1/hivemind/steam/register-login", json={"handle": "Cmdr_RTX2070_Test", "steam_id64": "76561198031337001"})
+    assert anon.status_code == 409
+    assert "api_key" not in anon.text
     login = client.post(
         "/v1/hivemind/steam/register-login",
+        headers={"Authorization": f"Bearer {reg['api_key']}"},
         json={
             "handle": "Cmdr_RTX2070_Test",
             "steam_id64": "76561198031337001",
@@ -212,20 +217,21 @@ def test_portal_free_steam_game_registration_login_and_boinc_contribution(tmp_pa
     assert login["created"] is False
     assert login["account_id"] == reg["account_id"]
 
-    # 5. Contribute a real CUDA PTX BOINC workunit and verify HMT points are credited
+    # 5. A contribution is recorded but earns no HMT until it can be verified server-side (client receipts minted credit).
     contrib = client.post(
         "/v1/hivemind/steam/contribute-boinc",
         headers={"Authorization": f"Bearer {login['api_key']}"},
         json={"handle": "Cmdr_RTX2070_Test", "target_planet": "K2-18 b", "app_id": 3133700},
     ).json()
     assert contrib["ok"] is True
-    assert contrib["hmt_awarded"] == 250.0
-    assert contrib["cobblestones_awarded"] == 45.0
-    assert abs(float(contrib["balance_hmt"]) - (initial_bal + 250.0)) < 1e-6
+    assert contrib["hmt_awarded"] == 0.0
+    assert contrib["credit_status"] == "pending_verification"
+    assert abs(float(contrib["balance_hmt"]) - initial_bal) < 1e-6
 
-    # 6. Verify /v1/hivemind/me reflects the updated balance
+    # 6. Without a key the contribution route refuses (it used to create or pick the account from the body's handle).
+    assert client.post("/v1/hivemind/steam/contribute-boinc", json={"handle": "Cmdr_RTX2070_Test", "receipt_sha256": "1"}).status_code == 401
     me = client.get("/v1/hivemind/me", headers={"Authorization": f"Bearer {login['api_key']}"}).json()
-    assert abs(float(me["balance"]) - (initial_bal + 250.0)) < 1e-6
+    assert abs(float(me["balance"]) - initial_bal) < 1e-6
 
 
 def test_webgpu_zero_install_requires_login_and_credits_wgsl_compute(tmp_path: Path, monkeypatch):
@@ -292,9 +298,13 @@ def test_webgpu_zero_install_requires_login_and_credits_wgsl_compute(tmp_path: P
     assert reg["api_key"].startswith("hm-")
     start_bal = float(reg["balance_hmt"])
 
-    # 5. Returning login with the same handle reuses the account
+    # 5. Returning login: refused on the handle alone, reuses the account with its own key
+    anon = client.post("/v1/hivemind/webgpu/register-login", json={"handle": "Cmdr_WebGPU_ZeroInstall"})
+    assert anon.status_code == 409
+    assert "api_key" not in anon.text
     login = client.post(
         "/v1/hivemind/webgpu/register-login",
+        headers={"Authorization": f"Bearer {reg['api_key']}"},
         json={
             "handle": "Cmdr_WebGPU_ZeroInstall",
             "gpu_adapter": "NVIDIA GeForce RTX 2070 (WebGPU / Dawn D3D12)",
@@ -319,9 +329,9 @@ def test_webgpu_zero_install_requires_login_and_credits_wgsl_compute(tmp_path: P
     assert contrib.status_code == 200
     payload = contrib.json()
     assert payload["ok"] is True
-    assert payload["hmt_awarded"] == 250.0
-    assert payload["cobblestones_awarded"] == 45.0
-    assert abs(float(payload["balance_hmt"]) - (start_bal + 250.0)) < 1e-6
+    assert payload["hmt_awarded"] == 0.0  # recorded, but no credit for a receipt the server cannot verify
+    assert payload["credit_status"] == "pending_verification"
+    assert abs(float(payload["balance_hmt"]) - start_bal) < 1e-6
     assert payload["receipt_sha256"].startswith("489f9ffd9ac611fb")
 
 

@@ -110,6 +110,10 @@ class SocialFunnelProjection:
     is_self_sustaining: bool
 
 
+MAX_FORECAST_NODES = 10_000  # upper bound for any node count reachable from a public request
+MAX_FORECAST_VISITORS = 1_000_000
+
+
 def compute_erlang_c_metrics(
     active_producers_c: int,
     aggregate_tok_per_s: float,
@@ -123,6 +127,9 @@ def compute_erlang_c_metrics(
         raise ValueError("active_producers_c >= 1, aggregate_tok_per_s > 0, and mean_tokens_per_req > 0 required")
     if arrival_rate_req_per_s < 0.0:
         raise ValueError("arrival_rate_req_per_s must be >= 0")
+    if active_producers_c > MAX_FORECAST_NODES:
+        # the Erlang-C sum is O(c): an unbounded c from a public query string held a worker for minutes to hours
+        raise ValueError(f"active_producers_c must be <= {MAX_FORECAST_NODES}")
 
     c = int(active_producers_c)
     mu_tot = aggregate_tok_per_s / mean_tokens_per_req
@@ -804,9 +811,13 @@ def forecast_200plus_node_international_launch(
     - Minority **Dedicated Producers** (`dedicated_producers`, default `28`, ~11% of active nodes)
     - Total active nodes `>= 200` (default `265` active nodes vs. `47` current baseline nodes).
     """
-    total_nodes = max(200, int(target_total_nodes))
-    visitors = max(total_nodes * 2, int(visitor_count))
+    # public inputs are clamped: the Erlang-C model is O(nodes) per call (10^7 nodes took 44 s)
+    total_nodes = min(max(200, int(target_total_nodes)), MAX_FORECAST_NODES)
+    visitors = min(max(total_nodes * 2, int(visitor_count)), MAX_FORECAST_VISITORS)
     utc_h = int(utc_hour) % 24
+    dedicated_producers = None if dedicated_producers is None else min(max(0, int(dedicated_producers)), MAX_FORECAST_NODES)
+    prosumer_nodes = None if prosumer_nodes is None else min(max(0, int(prosumer_nodes)), MAX_FORECAST_NODES)
+    consumer_nodes = None if consumer_nodes is None else min(max(0, int(consumer_nodes)), MAX_FORECAST_NODES)
 
     if (
         dedicated_producers is not None

@@ -90,31 +90,28 @@ def test_legacy_handle_and_previous_v1_user_migration_login() -> None:
 
     client = TestClient(create_router_app(store, starter_grant_hmt=100.0))
 
-    # First login with legacy handle + password binds password and preserves 250.0 HMT balance
+    # GHSA-gjc6-74f9-wmrr: a handle-only account has no password to check, so a password login on its handle is refused
+    # and binds nothing (it used to bind the caller's password and return the account's key to whoever asked first).
     r1 = client.post(
         "/v1/hivemind/auth/login",
         json={"identifier": "quebec-tester-2147", "password": "QuebecSecretPassword"},
     )
-    assert r1.status_code == 200
-    b1 = r1.json()
-    assert b1["account_id"] == legacy_id
-    assert b1["balance_hmt"] == 250.0
-    assert b1["api_key"].startswith("hm-")
+    assert r1.status_code == 401
+    assert "api_key" not in r1.text
+    r_again = client.post("/v1/hivemind/auth/login", json={"identifier": "quebec-tester-2147", "password": "QuebecSecretPassword"})
+    assert r_again.status_code == 401  # still refused: the first attempt did not bind the password
+    assert store.balance(legacy_id) == 250.0
 
-    # Subsequent login with wrong password fails
-    r_wrong = client.post(
-        "/v1/hivemind/auth/login",
-        json={"identifier": "quebec-tester-2147", "password": "wrong"},
-    )
-    assert r_wrong.status_code == 401
+    # The owner of that account still signs in with the account's own API key.
+    _legacy_id2, legacy_key = store.register("quebec-tester-key", "consumer")
+    r_key = client.post("/v1/hivemind/auth/login", json={"identifier": legacy_key})
+    assert r_key.status_code == 200
+    assert r_key.json()["handle"] == "quebec-tester-key"
 
-    # Previous V1/V2 seeded user (e.g. @Vxtzq or callensxavier@gmail.com) restores seamlessly
+    # A seeded legacy handle that is not in the store is not created on login, and no starter HMT is granted.
     r_v1 = client.post(
         "/v1/hivemind/auth/login",
         json={"identifier": "@Vxtzq", "password": "vxtzq_password"},
     )
-    assert r_v1.status_code == 200
-    bv1 = r_v1.json()
-    assert bv1["handle"] == "vxtzq"
-    assert bv1["balance_hmt"] >= 30000.0
-    assert bv1["api_key"].startswith("hm-")
+    assert r_v1.status_code == 401
+    assert store.get_account(store.account_id_for("vxtzq")) is None

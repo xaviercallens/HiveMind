@@ -62,6 +62,7 @@ def test_ready_machine_rtx3060() -> None:
     assert g.status == "ok"
     assert g.data["tiers_servable_total"] == [
         "crowd-v1",
+        "granite-moe",
         "coder-lite",
         "gemma-core",
         "bee-stars",
@@ -78,7 +79,7 @@ def test_ready_machine_rtx3060() -> None:
 
 def test_four_gb_card_trains_but_only_small_tiers() -> None:
     g = by_id(run(runner=smi(SMALL4)), "gpu")
-    assert g.status == "ok" and g.data["tiers_servable_total"] == ["crowd-v1", "coder-lite"]
+    assert g.status == "ok" and g.data["tiers_servable_total"] == ["crowd-v1", "granite-moe", "coder-lite"]
 
 
 def test_two_gb_card_fails() -> None:

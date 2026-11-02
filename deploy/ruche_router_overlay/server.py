@@ -385,6 +385,12 @@ def api_boinc_sync(request: Request, payload: dict[str, Any] | None = None) -> J
     import time
 
     sync_secret = os.environ.get("HIVEMIND_BOINC_SYNC_KEY", "").strip()
+    if not sync_secret:
+        # fail closed: with no key configured this route credited HMT and cobblestones to any handle, anonymously
+        return JSONResponse(
+            status_code=503,
+            content={"ok": False, "error": "BOINC sync is closed until HIVEMIND_BOINC_SYNC_KEY is configured", "code": "sync_closed"},
+        )
     if sync_secret:
         provided = (
             request.headers.get("x-admin-key")

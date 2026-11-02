@@ -34,9 +34,12 @@ Provides:
 from __future__ import annotations
 
 import hashlib
+import hmac
 import html
 import json
 import math
+import os
+import secrets
 import time
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Optional, Tuple
@@ -290,7 +293,9 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         client_ip = request.client.host if request.client else "127.0.0.1"
         x_forwarded = request.headers.get("x-forwarded-for")
         if x_forwarded:
-            client_ip = x_forwarded.split(",")[0].strip()
+            # the RIGHT-most entry is the one Cloud Run's front end appended; the first one is whatever the client sent,
+            # so keying on it let every request pick a fresh rate-limit bucket
+            client_ip = x_forwarded.split(",")[-1].strip() or client_ip
 
         now = time.time()
         self.total_requests += 1
@@ -1645,7 +1650,7 @@ _ide_mgr = BrowserIDEManager()
 
 
 class V1AccountMigrateRequest(BaseModel):
-    handle_or_email: Optional[str] = "callensxavier@gmail.com"
+    handle_or_email: Optional[str] = None  # no default identity (it defaulted to the owner's e-mail)
     v1_token: Optional[str] = None
     target_profile: Optional[str] = "developer"
 
@@ -3928,7 +3933,7 @@ def render_hivemind_at_home_html(
     }}
   </style>
 </head>
-<body class="cyber-scanlines">
+<body class="cyber-scanlines"><p role="note" id="poc-notice"><strong>&#9888; Proof of concept (PoC)</strong> &mdash; not a production service yet. Until HiveMind is fully secured, send only public, non-sensitive data: no secrets, passwords, API keys, personal information, or private or enterprise data. Prompts are processed by volunteer-run nodes whose operators are not verified.</p>
   <header>
     <div class="header-top">
       <div>
@@ -6286,6 +6291,11 @@ def create_hivemind_at_home_app(
             "user_state": "EXISTING_USER",
         },
     }
+    # The seeded records' tokens were published in source: every start issues fresh, unguessable ones instead, so the
+    # published values never authenticate (GHSA-gjc6-74f9-wmrr). A seeded user signs in with the token it is given.
+    for _seed in seeded_users.values():
+        _seed["token"] = "hm_live_" + secrets.token_hex(16)
+
     auth_state: Dict[str, Any] = {
         "users": dict(seeded_users),
         "active_sessions": {},
@@ -6310,6 +6320,32 @@ def create_hivemind_at_home_app(
             **{u["token"]: u for u in seeded_users.values()},
         },
     }
+
+    def _require_token_owner(request: Request, user: Dict[str, Any]) -> None:
+        """An existing account's token is returned only to a caller who already presents it (Authorization: Bearer).
+        Knowing a handle or an e-mail address proves nothing; no password is stored by this dashboard."""
+        scheme, _, tok = request.headers.get("authorization", "").partition(" ")
+        tok = tok.strip() if scheme.lower() == "bearer" else ""
+        if not tok or not hmac.compare_digest(tok, str(user.get("token", ""))):
+            raise HTTPException(
+                status_code=401,
+                detail="This account already exists: sign in with its token (Authorization: Bearer hm_live_...).",
+            )
+
+    _dashboard_admin_key = os.environ.get("HIVEMIND_DASHBOARD_ADMIN_KEY", "")
+    _dashboard_admin_sha = hashlib.sha256(_dashboard_admin_key.encode()).hexdigest() if _dashboard_admin_key else None
+
+    @app.middleware("http")
+    async def _admin_gate(request: Request, call_next: Any) -> Any:
+        """Admin routes and the user list need the dashboard admin key (x-admin-key); without one configured they are closed."""
+        path = request.url.path
+        if path.startswith("/api/v1/admin/") or path in ("/api/v1/auth/users", "/api/v1/auth/migration/status"):
+            supplied = request.headers.get("x-admin-key", "")
+            if _dashboard_admin_sha is None or not supplied or not hmac.compare_digest(
+                hashlib.sha256(supplied.encode()).hexdigest(), _dashboard_admin_sha
+            ):
+                return JSONResponse(status_code=403, content={"detail": "Dashboard admin key required (x-admin-key)."})
+        return await call_next(request)
 
     mesh_messages_store: List[Dict[str, Any]] = [
         {
@@ -6553,7 +6589,7 @@ def create_hivemind_at_home_app(
 
     @app.post("/api/v1/auth/guest", response_class=JSONResponse)
     def api_auth_guest() -> JSONResponse:
-        guest_token = "hm_live_demo_" + hashlib.sha256(f"guest:{time.time()}".encode()).hexdigest()[:16]
+        guest_token = "hm_live_demo_" + secrets.token_hex(16)
         guest_record = {
             "handle": "guest_hiveminder",
             "email": "demo@hivemind.network",
@@ -6580,14 +6616,20 @@ def create_hivemind_at_home_app(
     def api_auth_upgrade_guest(req: AuthUpgradeGuestRequest, request: Request) -> JSONResponse:
         auth_header = request.headers.get("Authorization", "")
         old_token = auth_header.replace("Bearer ", "").strip()
-        old_guest = auth_state["api_keys"].get(old_token)
-        carried_points = int(old_guest.get("compute_points", 2500)) if old_guest else 2500
+        old_guest = auth_state["api_keys"].get(old_token) if old_token else None
+        # Only a real guest session can be upgraded, once, into a handle nobody holds: this route used to overwrite any
+        # existing account (seeded admins included) and to add 2,500 points on every call.
+        if not old_guest or not old_guest.get("is_guest"):
+            raise HTTPException(status_code=401, detail="A guest session token is required to upgrade (Authorization: Bearer).")
+        carried_points = int(old_guest.get("compute_points", 2500))
 
         clean_handle = sanitize_handle(req.handle)
+        if clean_handle in auth_state["users"] or clean_handle.lstrip("@").lower() in auth_state["users"]:
+            raise HTTPException(status_code=409, detail="That handle is already registered.")
         clean_email = sanitize_prompt_text(req.email)
         prov = req.provider.lower() if req.provider else "google"
         prov_badge = f"{prov.upper()}_SSO" if prov != "email" else "EMAIL_PASSKEY"
-        new_token = "hm_live_" + hashlib.sha256(f"upgrade:{clean_handle}:{time.time()}".encode()).hexdigest()[:24]
+        new_token = "hm_live_" + secrets.token_hex(16)
 
         if old_token:
             auth_state["api_keys"].pop(old_token, None)
@@ -6618,7 +6660,7 @@ def create_hivemind_at_home_app(
         })
 
     @app.post("/api/v1/auth/register", response_class=JSONResponse)
-    def api_auth_register(req: AuthRegisterRequest) -> JSONResponse:
+    def api_auth_register(req: AuthRegisterRequest, request: Request) -> JSONResponse:
         clean_email = sanitize_prompt_text(req.email)
         raw_handle = (req.handle or "").strip()
         if not raw_handle:
@@ -6645,6 +6687,7 @@ def create_hivemind_at_home_app(
         if matched_existing:
             if req.strict_new:
                 raise HTTPException(status_code=409, detail=f"Handle '{clean_handle}' or email '{clean_email}' is already registered")
+            _require_token_owner(request, matched_existing)
             matched_existing["login_count"] = int(matched_existing.get("login_count", 1)) + 1
             matched_existing["is_new_user"] = False
             matched_existing["is_guest"] = False
@@ -6673,7 +6716,7 @@ def create_hivemind_at_home_app(
                 "v1_migrated": True,
             })
 
-        token = "hm_live_" + hashlib.sha256(f"{clean_handle}:{clean_email}:{time.time()}".encode()).hexdigest()[:24]
+        token = "hm_live_" + secrets.token_hex(16)
         user_record = {
             "handle": clean_handle,
             "email": clean_email,
@@ -6713,9 +6756,10 @@ def create_hivemind_at_home_app(
         })
 
     @app.post("/api/v1/auth/login", response_class=JSONResponse)
-    def api_auth_login(req: AuthLoginRequest) -> JSONResponse:
+    def api_auth_login(req: AuthLoginRequest, request: Request) -> JSONResponse:
         key = req.handle_or_email.strip()
-        matched = auth_state["users"].get(key) or auth_state["users"].get(key.lstrip("@").lower()) or auth_state["api_keys"].get(key)
+        by_token = auth_state["api_keys"].get(key) if key.startswith("hm_live_") else None
+        matched = by_token or auth_state["users"].get(key) or auth_state["users"].get(key.lstrip("@").lower())
         if not matched:
             norm_k = key.lstrip("@").lower().replace("-", "_")
             for k_u, u in auth_state["users"].items():
@@ -6733,6 +6777,8 @@ def create_hivemind_at_home_app(
                     break
 
         if matched:
+            if matched is not by_token:  # matched by handle or e-mail: the caller must already hold the token
+                _require_token_owner(request, matched)
             matched["login_count"] = int(matched.get("login_count", 1)) + 1
             matched["is_new_user"] = False
             matched["is_guest"] = False
@@ -6765,7 +6811,7 @@ def create_hivemind_at_home_app(
             raise HTTPException(status_code=404, detail=f"Existing operator '{key}' not found")
 
         # Fallback on-the-fly login
-        token = "hm_live_" + hashlib.sha256(f"{key}:{time.time()}".encode()).hexdigest()[:24]
+        token = "hm_live_" + secrets.token_hex(16)
         matched = {
             "handle": key,
             "email": f"{key}@hivemind.network",
@@ -6801,7 +6847,7 @@ def create_hivemind_at_home_app(
         })
 
     @app.post("/api/v1/auth/sso/{provider}", response_class=JSONResponse)
-    def api_auth_sso(provider: str, req: AuthSSORequest) -> JSONResponse:
+    def api_auth_sso(provider: str, req: AuthSSORequest, request: Request) -> JSONResponse:
         prov = provider.lower()
         if prov not in SUPPORTED_SSO_PROVIDERS:
             raise HTTPException(status_code=400, detail=f"Unsupported SSO provider '{provider}'")
@@ -6811,7 +6857,12 @@ def create_hivemind_at_home_app(
         clean_handle = sanitize_handle(hint)
 
         existing = auth_state["users"].get(clean_handle)
-        if existing and req.user_mode != "force_new":
+        if existing and req.user_mode == "force_new":
+            # "force_new" on a taken handle used to skip the ownership check and overwrite the account
+            raise HTTPException(status_code=409, detail="That handle is already registered.")
+        if existing:
+            # the provider token is not verified here, so a handle hint must not open an existing account
+            _require_token_owner(request, existing)
             existing["login_count"] = int(existing.get("login_count", 1)) + 1
             existing["is_new_user"] = False
             existing["is_guest"] = False
@@ -6838,7 +6889,7 @@ def create_hivemind_at_home_app(
                 "user_state": "EXISTING_USER",
             })
 
-        token = "hm_live_" + hashlib.sha256(f"{prov}:{clean_handle}:{time.time()}".encode()).hexdigest()[:24]
+        token = "hm_live_" + secrets.token_hex(16)
         user_record = {
             "handle": clean_handle,
             "email": f"{clean_handle}@{prov}.federation.hivemind",
@@ -6882,9 +6933,7 @@ def create_hivemind_at_home_app(
 
         auth_header = request.headers.get("Authorization", "")
         token = auth_header.replace("Bearer ", "").strip()
-        user = auth_state["api_keys"].get(token)
-        if not user and req.handle:
-            user = auth_state["users"].get(sanitize_handle(req.handle))
+        user = auth_state["api_keys"].get(token)  # token only: a handle in the body used to edit (and credit) anyone's account
         if not user:
             raise HTTPException(status_code=401, detail="Active authenticated session required to link SSO provider")
 
@@ -6911,7 +6960,7 @@ def create_hivemind_at_home_app(
         auth_header = request.headers.get("Authorization", "")
         old_token = auth_header.replace("Bearer ", "").strip()
         user = auth_state["api_keys"].get(old_token)
-        new_token = "hm_live_" + hashlib.sha256(f"rotate:{old_token}:{time.time()}".encode()).hexdigest()[:24]
+        new_token = "hm_live_" + secrets.token_hex(16)
         if user:
             auth_state["api_keys"].pop(old_token, None)
             user["token"] = new_token
@@ -6930,7 +6979,7 @@ def create_hivemind_at_home_app(
         })
 
     @app.post("/api/v1/auth/magic-link", response_class=JSONResponse)
-    def api_auth_magic_link(req: AuthMagicLinkRequest) -> JSONResponse:
+    def api_auth_magic_link(req: AuthMagicLinkRequest, request: Request) -> JSONResponse:
         clean_email = sanitize_prompt_text(req.email)
         local_part = clean_email.split("@")[0] if "@" in clean_email else clean_email
         clean_handle = sanitize_handle(local_part)
@@ -6942,13 +6991,15 @@ def create_hivemind_at_home_app(
                     break
 
         if existing:
+            # no e-mail is sent, so the "magic link" proves nothing about the address: only the token holder gets back in
+            _require_token_owner(request, existing)
             existing["login_count"] = int(existing.get("login_count", 1)) + 1
             existing["is_new_user"] = False
             existing["user_state"] = "EXISTING_USER"
             auth_state["api_keys"][existing["token"]] = existing
             user_record = existing
         else:
-            token = "hm_live_" + hashlib.sha256(f"magic:{clean_email}:{time.time()}".encode()).hexdigest()[:24]
+            token = "hm_live_" + secrets.token_hex(16)
             user_record = {
                 "handle": clean_handle,
                 "email": clean_email,
@@ -7721,6 +7772,15 @@ def create_hivemind_at_home_app(
 
         mat_a = np.asarray(sub.lora_a_matrix, dtype=np.float32)
         mat_b = np.asarray(sub.lora_b_matrix, dtype=np.float32)
+        # bounded shapes: a rank-1 1xN / Nx1 pair forced an NxN matmul and SVD (N=4000 from a 47 KB body took 401 s of CPU)
+        if (
+            mat_a.ndim != 2 or mat_b.ndim != 2
+            or mat_b.shape[1] != mat_a.shape[0]
+            or mat_a.shape[0] > 64
+            or mat_a.shape[1] > 4096 or mat_b.shape[0] > 4096
+            or mat_b.shape[0] * mat_a.shape[1] > 1_048_576
+        ):
+            raise HTTPException(status_code=422, detail="LoRA factors must be B:(m x r) and A:(r x n) with r <= 64, m, n <= 4096 and m*n <= 2^20")
         if not (np.all(np.isfinite(mat_a)) and np.all(np.isfinite(mat_b))):
             raise HTTPException(
                 status_code=422, detail="Non-finite values in submitted LoRA matrices"
@@ -8408,13 +8468,15 @@ def create_hivemind_at_home_app(
         )
 
     @app.post("/api/v1/auth/v1-migrate", response_class=JSONResponse)
-    def api_auth_v1_migrate(req: Optional[V1AccountMigrateRequest] = None) -> JSONResponse:
-        raw_key = (req.handle_or_email if req and req.handle_or_email else "callensxavier@gmail.com").strip()
+    def api_auth_v1_migrate(request: Request, req: Optional[V1AccountMigrateRequest] = None) -> JSONResponse:
+        # no default identity: an empty request used to migrate (and return the token of) the owner's account
+        raw_key = (req.handle_or_email if req and req.handle_or_email else "").strip()
         v1_tok = (req.v1_token if req and req.v1_token else "").strip()
 
         matched = None
+        by_token = None
         if v1_tok and v1_tok in auth_state["api_keys"]:
-            matched = auth_state["api_keys"][v1_tok]
+            matched = by_token = auth_state["api_keys"][v1_tok]
         if not matched and raw_key:
             matched = auth_state["users"].get(raw_key) or auth_state["users"].get(raw_key.lstrip("@").lower())
         if not matched and raw_key:
@@ -8427,6 +8489,8 @@ def create_hivemind_at_home_app(
                     break
 
         if matched:
+            if matched is not by_token:
+                _require_token_owner(request, matched)
             matched["login_count"] = int(matched.get("login_count", 1)) + 1
             matched["v1_migrated"] = True
             matched["v2_access_granted"] = True
@@ -8460,7 +8524,10 @@ def create_hivemind_at_home_app(
         clean_part = raw_key.split("@")[0] if "@" in raw_key and "." in raw_key else raw_key.lstrip("@")
         clean_handle = sanitize_handle(clean_part or "v1_operator")
         clean_email = raw_key if ("@" in raw_key and "." in raw_key) else f"{clean_handle}@hivemind.network"
-        token = v1_tok if v1_tok.startswith("hm_live_") else ("hm_live_v1_" + hashlib.sha256(f"{clean_handle}:{time.time()}".encode()).hexdigest()[:20])
+        if clean_handle in auth_state["users"]:
+            # never overwrite an existing record from this unauthenticated path
+            raise HTTPException(status_code=409, detail="That handle already exists: sign in with its token.")
+        token = "hm_live_v1_" + secrets.token_hex(16)  # server-issued, never a client-chosen value
         new_v1_record = {
             "handle": clean_handle,
             "email": clean_email,
@@ -8569,7 +8636,7 @@ def create_hivemind_at_home_app(
             pass
         handle = sanitize_handle(str(body.get("handle") or "Cmdr_RTX2070_Steam"))
         steam_id64 = str(body.get("steam_id64") or "76561198031337001")
-        api_key = "hm_live_steam_" + hashlib.sha256(f"{handle}:{steam_id64}".encode("utf-8")).hexdigest()[:20]
+        api_key = "hm_live_steam_" + secrets.token_hex(16)
         return JSONResponse(
             content={
                 "status": "STEAM_REGISTERED_AND_AUTHENTICATED",
@@ -8779,7 +8846,11 @@ def create_hivemind_at_home_app(
     def _load_or_init_ruche_community_state() -> dict[str, Any]:
         if community_state_path.exists():
             try:
-                return json.loads(community_state_path.read_text(encoding="utf-8"))
+                # NaN/Infinity (e.g. from one "cobblestones": "nan" sync) used to make every later hub response a 500, even
+                # after a restart: non-finite numbers are read as 0
+                return json.loads(
+                    community_state_path.read_text(encoding="utf-8"), parse_constant=lambda _c: 0.0
+                )
             except Exception:
                 pass
         try:
@@ -8818,7 +8889,7 @@ def create_hivemind_at_home_app(
             "<style>body{font:16px/1.55 system-ui,-apple-system,sans-serif;max-width:64rem;margin:0 auto;padding:1.2rem;background:#0f172a;color:#f8fafc}"
             "a{color:#38bdf8}table{width:100%;border-collapse:collapse;margin:1rem 0}th,td{border:1px solid #334155;padding:0.5rem;text-align:left}"
             "th{background:#1e293b}code,pre{background:#1e293b;padding:0.15rem 0.35rem;border-radius:0.3rem;font-family:ui-monospace,monospace}"
-            "pre{padding:0.8rem;overflow-x:auto}.nav{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}</style></head><body>"
+            "pre{padding:0.8rem;overflow-x:auto}.nav{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}</style></head><body><p role='note' id='poc-notice'><strong>&#9888; Proof of concept (PoC)</strong> &mdash; not a production service yet. Until HiveMind is fully secured, send only public, non-sensitive data: no secrets, passwords, API keys, personal information, or private or enterprise data. Prompts are processed by volunteer-run nodes whose operators are not verified.</p>"
             "<nav class='nav'><a href='/rejoindre?lang=fr'>← Rejoindre HiveMind (FR/EN/ES/DE/ZH)</a>"
             "<a href='/night-moe'>Résultats Night-MoE</a>"
             "<a href='/life-as-a-bee'>Vie d'une Abeille (24 MoE)</a>"

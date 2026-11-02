@@ -312,7 +312,7 @@ def render_signup_page(
         )
 
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Join &amp; Sign In — HiveMind OpenRouter</title><style nonce="{nonce}">{_CSS}</style></head><body><main>
+<title>Join &amp; Sign In — HiveMind OpenRouter</title><style nonce="{nonce}">{_CSS}</style></head><body><p role="note" id="poc-notice"><strong>&#9888; Proof of concept (PoC)</strong> &mdash; not a production service yet. Until HiveMind is fully secured, send only public, non-sensitive data: no secrets, passwords, API keys, personal information, or private or enterprise data. Prompts are processed by volunteer-run nodes whose operators are not verified.</p><main>
 <header>
   <div>
     <h1>🐝 Join or Sign In to HiveMind</h1>

@@ -951,7 +951,7 @@ def render_join_page(lang: str = "fr", nonce: str = "abcdefgh12345678", *, tiers
         f"<title>{esc(_t(TITLE, lang))}</title><meta name=\"description\" content=\"{esc(_t(DESCRIPTION, lang), quote=True)}\">"
         f'<link rel="canonical" href="{path}?lang={lang}">{alternates}'
         f'<link rel="alternate" hreflang="x-default" href="{path}?lang=fr">'
-        f'<style nonce="{nonce}">{_CSS}.visually{{position:absolute;left:-999px}}</style></head><body>'
+        f'<style nonce="{nonce}">{_CSS}.visually{{position:absolute;left:-999px}}</style></head><body><p role="note" id="poc-notice"><strong>&#9888; Proof of concept (PoC)</strong> &mdash; not a production service yet. Until HiveMind is fully secured, send only public, non-sensitive data: no secrets, passwords, API keys, personal information, or private or enterprise data. Prompts are processed by volunteer-run nodes whose operators are not verified.</p>'
         f'<a class="skip" href="#main">{esc(_t(LABELS["skip"], lang))}</a>'
         f'<header><nav class="lang" aria-label="Language / Langue">{lang_links} · <a href="/manifesto">📜 Manifeste / Manifesto</a> · <a href="/portal">⚡ GCP Portal</a></nav>'
         f'<h1>{esc(_t(TITLE, lang))}</h1><p class="lead">{esc(_t(LEAD, lang))}</p>{live_banner_html}</header>'

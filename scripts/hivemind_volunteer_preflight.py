@@ -52,6 +52,7 @@ MIB_TO_MB = 1.048576
 # (tier_id, min_vram_gb) in the order of src/hivemind/router/catalog.py TIERS
 TIERS: tuple[tuple[str, float], ...] = (
     ("crowd-v1", 4.0),
+    ("granite-moe", 4.0),
     ("coder-lite", 4.0),
     ("gemma-core", 4.5),
     ("bee-stars", 5.5),

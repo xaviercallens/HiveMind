@@ -405,6 +405,20 @@ def check_gcp_t4_status() -> dict[str, Any]:
         }
 
 
+T4_OFFLINE_AFTER_FAILURES = 3  # consecutive failed probes (about 2 minutes at the 45 s interval) before the T4 counts as offline
+
+
+def debounce_t4_reachable(probe_ok: bool, state_file: Path = FAILOVER_STATE_FILE, threshold: int = T4_OFFLINE_AFTER_FAILURES) -> bool:
+    """One failed 5 s probe is not an outage: from some networks the T4's sslip.io URL briefly returns 530 or times out
+    while it answers in 50 ms elsewhere. Report the T4 unreachable only after ``threshold`` consecutive failures; any
+    success resets the streak. The streak is kept in the failover state file so it survives restarts."""
+    persisted = _load_failover_state(state_file)
+    streak = 0 if probe_ok else int(persisted.get("t4_fail_streak") or 0) + 1
+    persisted["t4_fail_streak"] = streak
+    _save_failover_state(persisted, state_file)
+    return streak < threshold
+
+
 def _load_failover_state(state_file: Path = FAILOVER_STATE_FILE) -> dict[str, Any]:
     if state_file.exists():
         try:
@@ -435,8 +449,15 @@ def route_traffic_to_rtx2070_orchestrator(
     state: dict[str, Any] | None = None,
     state_file: Path = FAILOVER_STATE_FILE,
     http_client: httpx.Client | None = None,
+    allow_fleet_reconnect: bool = False,
 ) -> dict[str, Any]:
     """Fail over traffic to the RTX 2070 tunnel ONLY when T4 is unreachable, tunnel is healthy, and state changed.
+
+    By default the failover only heartbeats the 2070's OWN producer account (every cycle while the T4 is down), which is
+    enough for the router to send it the models it serves. The fleet-wide ``admin/producers/reconnect`` re-points every
+    registered account (about 42) at this one tunnel and the router keeps re-applying it from memory every 35 s; on
+    2026-11-02 a flapping T4 probe made it fire about 65 times and every model returned 502 once the tunnel failed. It
+    now runs only with ``allow_fleet_reconnect=True`` (``--allow-fleet-reconnect``), an explicit owner decision.
 
     Guarantees (Issue #487):
     1. With `t4_reachable=True` or a failing tunnel/shield probe, NO `/v1/hivemind/admin/producers/reconnect`
@@ -502,7 +523,7 @@ def route_traffic_to_rtx2070_orchestrator(
                 "ollama_resident_mib": 0,
             }
 
-        if persisted_state.get("reconnected_for_outage") is True and persisted_state.get("last_t4_reachable") is False:
+        if allow_fleet_reconnect and persisted_state.get("reconnected_for_outage") is True and persisted_state.get("last_t4_reachable") is False:
             return {
                 "action": "noop_already_reconnected_for_current_outage",
                 "reconnected": False,
@@ -515,10 +536,10 @@ def route_traffic_to_rtx2070_orchestrator(
                 "ollama_resident_mib": resident_mib,
             }
 
-        admin_key = _read_admin_key()
+        admin_key = _read_admin_key() if allow_fleet_reconnect else ""
         producer_key = _read_producer_key()
         result: dict[str, Any] = {
-            "action": "failover_reconnect",
+            "action": "failover_reconnect" if allow_fleet_reconnect else "heartbeat_own_account",
             "reconnected": False,
             "t4_reachable": False,
             "tunnel_ok": True,
@@ -813,20 +834,22 @@ def verify_live_gateway_completion(gateway: str) -> dict[str, Any]:
         return {"http_status": 0, "ok": False, "error": str(exc)[:120]}
 
 
-def run_orchestrator_cycle(gateway: str, *, inner_steps: int = 20, verify_chat: bool = True) -> dict[str, Any]:
+def run_orchestrator_cycle(gateway: str, *, inner_steps: int = 20, verify_chat: bool = True, allow_fleet_reconnect: bool = False) -> dict[str, Any]:
     """Execute one complete traffic + training + telemetry orchestration cycle."""
     tok = _read_or_create_endpoint_token()
     warm_ok = warm_local_ollama()
     shield_ok = ensure_shield_running(tok)
     tunnel_url = ensure_cloudflare_tunnel(tok)
     t4_check = check_gcp_t4_status()
-    t4_reachable = bool(t4_check.get("t4_reachable"))
+    t4_reachable = debounce_t4_reachable(bool(t4_check.get("t4_reachable")))
+    t4_check["t4_reachable_debounced"] = t4_reachable
     routing = route_traffic_to_rtx2070_orchestrator(
         gateway,
         tunnel_url,
         t4_reachable=t4_reachable,
         shield_ok=shield_ok,
         endpoint_token=tok,
+        allow_fleet_reconnect=allow_fleet_reconnect,
     )
     e8_round = step_e8_stage2_controller_round(inner_steps=inner_steps)
     ot_sync = sync_opentrainer_and_gpu_telemetry(
@@ -861,10 +884,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--interval-s", type=float, default=45.0, help="Orchestrator loop interval in seconds")
     parser.add_argument("--inner-steps", type=int, default=20, help="E8 Stage-2 QLoRA inner steps per cycle")
     parser.add_argument("--once", action="store_true", help="Run one full failover & training cycle and exit")
+    parser.add_argument(
+        "--allow-fleet-reconnect",
+        action="store_true",
+        help="Also re-point EVERY registered producer account at this tunnel via admin/producers/reconnect (owner decision; off by default)",
+    )
     args = parser.parse_args(argv)
 
     if args.once:
-        report = run_orchestrator_cycle(args.gateway, inner_steps=args.inner_steps, verify_chat=True)
+        report = run_orchestrator_cycle(args.gateway, inner_steps=args.inner_steps, verify_chat=True, allow_fleet_reconnect=args.allow_fleet_reconnect)
         print(json.dumps(report, indent=2))
         return 0 if report["shield_listening_8787"] and report["cloudflare_tunnel_url"] else 1
 
@@ -876,6 +904,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.gateway,
                 inner_steps=args.inner_steps,
                 verify_chat=(cycle_idx % 4 == 1),
+                allow_fleet_reconnect=args.allow_fleet_reconnect,
             )
             print(
                 json.dumps(

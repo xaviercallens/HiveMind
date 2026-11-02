@@ -96,6 +96,7 @@ def test_no_reconnect_when_t4_is_reachable_or_tunnel_fails(monkeypatch: pytest.M
             shield_ok=True,
             state=state,
             http_client=client,
+            allow_fleet_reconnect=True,
         )
     assert res_a["reconnected"] is False
     assert res_a["action"] == "noop_t4_reachable"
@@ -116,6 +117,7 @@ def test_no_reconnect_when_t4_is_reachable_or_tunnel_fails(monkeypatch: pytest.M
             shield_ok=True,
             state=state,
             http_client=client,
+            allow_fleet_reconnect=True,
         )
     assert res_b["reconnected"] is False
     assert res_b["action"] == "aborted_tunnel_unhealthy"
@@ -136,6 +138,7 @@ def test_no_reconnect_when_t4_is_reachable_or_tunnel_fails(monkeypatch: pytest.M
             shield_ok=False,
             state=state,
             http_client=client,
+            allow_fleet_reconnect=True,
         )
     assert res_c["reconnected"] is False
     assert res_c["action"] == "aborted_tunnel_unhealthy"
@@ -167,6 +170,7 @@ def test_reconnect_only_lists_models_served_by_ollama_tags_and_accurate_loaded_s
             shield_ok=True,
             state=state,
             http_client=client,
+            allow_fleet_reconnect=True,
         )
 
     assert res["reconnected"] is True
@@ -213,6 +217,7 @@ def test_at_most_one_reconnect_per_state_change(monkeypatch: pytest.MonkeyPatch)
             shield_ok=True,
             state=state,
             http_client=client,
+            allow_fleet_reconnect=True,
         )
         # Cycles 2 and 3: T4 remains down (False -> False) -> 0 additional reconnects
         r2 = orch.route_traffic_to_rtx2070_orchestrator(
@@ -222,6 +227,7 @@ def test_at_most_one_reconnect_per_state_change(monkeypatch: pytest.MonkeyPatch)
             shield_ok=True,
             state=state,
             http_client=client,
+            allow_fleet_reconnect=True,
         )
         r3 = orch.route_traffic_to_rtx2070_orchestrator(
             "https://router.example.test",
@@ -230,6 +236,7 @@ def test_at_most_one_reconnect_per_state_change(monkeypatch: pytest.MonkeyPatch)
             shield_ok=True,
             state=state,
             http_client=client,
+            allow_fleet_reconnect=True,
         )
 
         reconnect_calls = [r for r in recorded if str(r.url).endswith("/v1/hivemind/admin/producers/reconnect")]
@@ -247,6 +254,7 @@ def test_at_most_one_reconnect_per_state_change(monkeypatch: pytest.MonkeyPatch)
             shield_ok=True,
             state=state,
             http_client=client,
+            allow_fleet_reconnect=True,
         )
         assert r4["reconnected"] is False
         assert len([r for r in recorded if str(r.url).endswith("/v1/hivemind/admin/producers/reconnect")]) == 1
@@ -259,6 +267,48 @@ def test_at_most_one_reconnect_per_state_change(monkeypatch: pytest.MonkeyPatch)
             shield_ok=True,
             state=state,
             http_client=client,
+            allow_fleet_reconnect=True,
         )
         assert r5["reconnected"] is True
         assert len([r for r in recorded if str(r.url).endswith("/v1/hivemind/admin/producers/reconnect")]) == 2
+
+
+def test_by_default_an_outage_only_heartbeats_the_own_account_every_cycle_and_never_reconnects_the_fleet(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """2026-11-02 incident: the fleet reconnect re-pointed ~42 accounts at one tunnel; by default it must never be called,
+    and the 2070's own heartbeat must keep going every cycle of the outage (the early 'already reconnected' return stopped it)."""
+    monkeypatch.setenv("HIVEMIND_ADMIN_KEY", "test-admin-key-do-not-print")
+    monkeypatch.setenv("HIVEMIND_API_KEY", "hm-test-producer-key-do-not-print")
+    monkeypatch.setenv("HIVEMIND_ENDPOINT_TOKEN", "test-endpoint-token-0123456789abcdef")
+    recorded: list[httpx.Request] = []
+    state: dict[str, Any] = {"last_t4_reachable": True, "reconnected_for_outage": False}
+    with _build_test_client(
+        ollama_tags=["qwen2.5-coder:1.5b"], ollama_ps=[("qwen2.5-coder:1.5b", 1319)], tunnel_status=200, recorded_requests=recorded
+    ) as client:
+        results = [
+            orch.route_traffic_to_rtx2070_orchestrator(
+                "https://router.example.test",
+                "https://healthy-tunnel.trycloudflare.com",
+                t4_reachable=False,
+                shield_ok=True,
+                state=state,
+                http_client=client,
+            )
+            for _ in range(3)
+        ]
+    assert [r["action"] for r in results] == ["heartbeat_own_account"] * 3
+    assert all(r["reconnected"] is False and r["producer_heartbeat_http"] == 200 for r in results)
+    assert not any(str(r.url).endswith("/v1/hivemind/admin/producers/reconnect") for r in recorded)
+    heartbeats = [r for r in recorded if str(r.url).endswith("/v1/hivemind/producer/heartbeat")]
+    assert len(heartbeats) == 3
+    assert all("x-admin-key" not in r.headers for r in heartbeats)
+
+
+def test_one_failed_probe_is_not_an_outage(tmp_path: Path) -> None:
+    """The T4 counts as unreachable only after T4_OFFLINE_AFTER_FAILURES consecutive failed probes; a success resets the streak."""
+    state_file = tmp_path / "failover_state.json"
+    seq = [False, False, True, False, False, False, False]
+    got = [orch.debounce_t4_reachable(ok, state_file=state_file) for ok in seq]
+    assert got == [True, True, True, True, True, False, False]
+    assert json.loads(state_file.read_text(encoding="utf-8"))["t4_fail_streak"] == 4

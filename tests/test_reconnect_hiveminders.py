@@ -160,3 +160,57 @@ def test_reconnect_without_a_model_list_is_refused() -> None:
     )
     assert resp.status_code == 400
     assert resp.json()["error"]["code"] == "models_required"
+
+
+def test_keepalive_refresh_after_a_producer_heartbeat_keeps_the_account_id_and_the_new_endpoint() -> None:
+    """Regression (2026-11-02): a producer's own heartbeat rewrote its keepalive entry without "account_id", and the next
+    35 s refresh read item["account_id"] and raised KeyError on every route that refreshes the fleet."""
+    secret = b"hivemind-test-secret-at-least-32-bytes-long!"
+    store = RouterStore(":memory:", secret)
+    admin_key = "admin-secret-key-for-hivemaster"
+    now = [1_800_000_000.0]
+    client = TestClient(
+        create_router_app(
+            store,
+            allow_private_producers=True,
+            admin_key_hash=store.key_digest(admin_key),
+            resolver=lambda _h: ["34.48.48.154"],
+            clock=lambda: now[0],
+        )
+    )
+    _aid, key = store.register("tibrib", "producer")
+    models = [{"id": "coder", "local_name": "qwen2.5-coder:7b-instruct"}]
+    resp = client.post(
+        "/v1/hivemind/admin/producers/reconnect",
+        headers={"x-admin-key": admin_key},
+        json={
+            "endpoint_url": "https://34-48-48-154.sslip.io/u",
+            "endpoint_token": "test-endpoint-token-0123456789abcdefghijk",
+            "models": models,
+            "replace_endpoints": True,
+            "include_legacy_known_users": False,
+        },
+    )
+    assert resp.status_code == 200
+
+    own = "https://34-48-48-154.sslip.io/own"
+    hb = client.post(
+        "/v1/hivemind/producer/heartbeat",
+        headers={"Authorization": f"Bearer {key}"},
+        json={
+            "endpoint_url": own,
+            "models": models,
+            "cost_per_1k": 0.3,
+            "capacity_1k": 50.0,
+            "execution_class": "t4-16gb-moe",
+            "endpoint_token": "own-endpoint-token-0123456789abcdefghij",
+            "replace_endpoints": True,
+        },
+    )
+    assert hb.status_code == 200
+
+    now[0] += 40.0  # past the 35 s refresh interval
+    assert client.get("/v1/hivemind/producers/fleet").status_code == 200
+    rows = {r["handle"]: r for r in client.get("/v1/hivemind/admin/producers", headers={"x-admin-key": admin_key}).json()["hiveminders"]}
+    assert rows["tibrib"]["endpoint_url"] == own
+    assert rows["tibrib"]["status"] == "live"

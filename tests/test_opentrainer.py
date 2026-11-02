@@ -160,3 +160,27 @@ def test_signup_and_portal_pages_include_trainer_and_opentrainer() -> None:
     )
     assert auth_reg.status_code == 200
     assert auth_reg.json()["role"] == "trainer"
+
+
+def test_delta_submission_has_no_default_measurements_and_is_labelled_unverified() -> None:
+    store = RouterStore(":memory:", b"k" * 32)
+    client = TestClient(create_router_app(store))
+    reg = client.post("/v1/hivemind/register", json={"handle": "ot_tester", "role": "trainer"})
+    key = reg.json()["api_key"]
+    sha = hashlib.sha256(b"delta").hexdigest()
+    base = {"round_id": 3, "delta_sha256": sha, "network_mode": "outbound-https-relay"}
+    # No loss or norm given: must be refused, not filled in with a built-in figure.
+    missing = client.post("/v1/hivemind/opentrainer/submit-delta", headers={"Authorization": f"Bearer {key}"}, json=base)
+    assert missing.status_code == 400  # the router maps schema errors to 400
+    assert "loss_before" in missing.text and "Field required" in missing.text  # the router reports the first missing field
+    full = client.post(
+        "/v1/hivemind/opentrainer/submit-delta",
+        headers={"Authorization": f"Bearer {key}"},
+        json=base | {"loss_before": 2.5, "loss_after": 2.4, "delta_norm": 0.05},
+    )
+    assert full.status_code == 200
+    body = full.json()
+    assert body["verified"] is False and "CLIENT_REPORTED_UNVERIFIED" in body["verification"]
+    assert body["validation"]["verification"] == "CLIENT_REPORTED_UNVERIFIED"
+    assert body["validation"]["vram_values_reported_by_client"] is False
+    assert body["submission"]["eval_loss"] == 2.4

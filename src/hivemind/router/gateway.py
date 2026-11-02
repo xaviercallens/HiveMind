@@ -619,16 +619,20 @@ class OpenTrainerHeartbeatRequest(BaseModel):
 
 
 class OpenTrainerDeltaSubmitRequest(BaseModel):
-    """Submit a verified Stage-2 QLoRA / DiLoCo outer-step delta via OpenTrainer's outbound HTTPS relay."""
+    """Submit a Stage-2 QLoRA / DiLoCo outer-step delta via OpenTrainer's outbound HTTPS relay.
+
+    The loss and norm figures are the client's own report: they are checked for shape, recorded as unverified, and
+    never defaulted (a default would be recorded as a measurement nobody took).
+    """
 
     model_config = ConfigDict(extra="forbid")
     round_id: int = Field(ge=0, le=1_000_000)
     campaign_id: str = Field(default="E8-STAGE2-TINY-GRANITE-MOE-QLORA", min_length=3, max_length=128)
     learner_index: int = Field(default=1, ge=0, le=1024)
     inner_steps: int = Field(default=8, ge=1, le=100_000)
-    loss_before: float = Field(default=4.1721, ge=0.0, le=1_000.0, allow_inf_nan=False)
-    loss_after: float = Field(default=1.7772, ge=0.0, le=1_000.0, allow_inf_nan=False)
-    delta_norm: float = Field(default=0.142, gt=0.0, le=100.0, allow_inf_nan=False)
+    loss_before: float = Field(ge=0.0, le=1_000.0, allow_inf_nan=False)
+    loss_after: float = Field(ge=0.0, le=1_000.0, allow_inf_nan=False)
+    delta_norm: float = Field(gt=0.0, le=100.0, allow_inf_nan=False)
     delta_sha256: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-fA-F]{64}$")
     code_pin: str = Field(default="", max_length=128)
     network_mode: Literal["outbound-https-relay", "amcp-kafka-aglet", "wireguard-t4-hub", "ssh-loopback-tunnel", "boinc-night-workunit"] = "outbound-https-relay"
@@ -2811,7 +2815,7 @@ def create_router_app(
     @app.post("/v1/hivemind/opentrainer/submit-delta")
     @app.post("/v1/opentrainer/submit-delta")
     def post_opentrainer_submit_delta(request: Request, payload: OpenTrainerDeltaSubmitRequest) -> dict[str, Any]:
-        """Submit a verified Stage-2 QLoRA / DiLoCo outer-step delta over OpenTrainer's outbound HTTPS relay."""
+        """Record a Stage-2 QLoRA / DiLoCo outer-step delta report; the figures are the client's and are not verified here."""
         from hivemind.router.opentrainer import (
             OPENTRAINER_TOPIC,
             validate_trainer_delta_submission,
@@ -2843,6 +2847,8 @@ def create_router_app(
                 "invalid_request_error",
                 "delta_rejected",
             ) from None
+        check["verification"] = "CLIENT_REPORTED_UNVERIFIED"
+        check["vram_values_reported_by_client"] = False  # the 6400/8192 MiB passed to the gate are placeholders, not a reading
         saved = store.record_opentrainer_round_submission(
             account_id=account.account_id,
             handle=account.handle,
@@ -2886,6 +2892,8 @@ def create_router_app(
             "object": "hivemind.opentrainer_delta_receipt",
             "component": "OpenTrainer",
             "accepted": True,
+            "verified": False,
+            "verification": "CLIENT_REPORTED_UNVERIFIED: shape checks only; loss and norm are the submitter's figures",
             "aglet_lifecycle_phase": "result",
             "amcp_topic": OPENTRAINER_TOPIC,
             "amcp_event_id": event_id,

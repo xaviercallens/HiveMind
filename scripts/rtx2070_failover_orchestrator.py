@@ -8,17 +8,16 @@ is stopped or preempted:
 
 1. Traffic & Inference Failover (`127.0.0.1:8787` Shield + Cloudflare Tunnel -> `hivemind-openrouter`):
    - Keeps warm `qwen2.5-coder` models resident in local Ollama (`127.0.0.1:11434`).
-   - Supervises `hivemind_producer_shield.py` on `127.0.0.1:8787` and `cloudflared tunnel`
+   - Supervises `hivemind_producer_shield.py` on `127.0.0.1:8787` using a locally generated
+     `0600` secret (`~/.config/hivemind/local_producer/endpoint_token`) and `cloudflared tunnel`
      publishing a verified `https://*.trycloudflare.com` endpoint.
-   - Reconnects all 14 live router models (`coder`, `bee-stars`, `crowd-v1`, `coder-lite`,
-     `gemma-core`, `mistral-core`, `qwen35-core`, `bee-rusty-sundials`, `bee-lean-prover`,
-     `bee-ruche-moe`, `coder-plus`, `moe-qwen35-bee`, `moe-general`, `moe-coder`) to the
+   - Probes actual Ollama `/api/ps` residency and reconnects the router models to the
      active RTX 2070 / local orchestrator shield tunnel so `/v1/chat/completions` serves
      100% of requests with 0 5xx errors when the GCP T4 stops.
 
 2. Training & E8 Stage-2 QLoRA Controller (`night-002b.ckpt` Round 412 -> `rtx2070-controller.ckpt`):
    - Resumes E8 Stage-2 Tiny-Granite-MoE QLoRA outer steps directly from `night-002b.ckpt`
-     (round 412, `eval_loss = 1.420040`), executing real PyTorch `learner_round` + `outer_step`
+     (round 412, `eval_loss = 1.420761`), executing real PyTorch `learner_round` + `outer_step`
      updates and persisting `artifacts/experiments/e8_real/rtx2070-controller.ckpt`.
    - Continuously heartbeats `OpenTrainer` (`/v1/hivemind/opentrainer/heartbeat`) and submits
      verified outer-step deltas (`/v1/hivemind/opentrainer/submit-delta`) for
@@ -36,6 +35,7 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import shutil
 import socket
 import subprocess
@@ -54,8 +54,6 @@ if str(REPO_ROOT / "src") not in sys.path:
 
 DEFAULT_GATEWAY = "https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app"
 T4_SSLIP_URL = "https://34-48-48-154.sslip.io/u"
-DEFAULT_ENDPOINT_TOKEN = "sDkyBiiDsjX3KL48lUZxdfZu1LK0c8QZXoS7RnJ7D2Q"
-DEFAULT_PRODUCER_KEY = "hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E"
 SHIELD_PORT = 8787
 OLLAMA_URL = "http://127.0.0.1:11434"
 
@@ -101,7 +99,36 @@ def _read_producer_key() -> str:
     env_key = os.environ.get("HIVEMIND_API_KEY", "").strip()
     if env_key:
         return env_key
-    return DEFAULT_PRODUCER_KEY
+    for candidate in (
+        Path.home() / ".config" / "hivemind" / "producer_api_key",
+        Path.home() / ".config" / "hivemind" / "owner_test_key",
+    ):
+        if candidate.exists():
+            val = candidate.read_text(encoding="utf-8").strip()
+            if val:
+                return val
+    raise RuntimeError(
+        "HIVEMIND_API_KEY not set and ~/.config/hivemind/producer_api_key not found"
+    )
+
+
+def _read_or_create_endpoint_token() -> str:
+    """Read or generate an owner-only (0600) endpoint token; never hardcode tokens in source."""
+    env_tok = os.environ.get("HIVEMIND_ENDPOINT_TOKEN", "").strip()
+    if len(env_tok) >= 16:
+        return env_tok
+    tok_path = Path.home() / ".config" / "hivemind" / "local_producer" / "endpoint_token"
+    if tok_path.exists():
+        existing = tok_path.read_text(encoding="utf-8").strip()
+        if len(existing) >= 24:
+            return existing
+    tok_path.parent.mkdir(parents=True, exist_ok=True)
+    fresh = secrets.token_urlsafe(32)
+    fd = os.open(str(tok_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(fresh + "\n")
+    os.chmod(tok_path, 0o600)
+    return fresh
 
 
 def _is_port_open(host: str, port: int, timeout: float = 1.0) -> bool:
@@ -135,10 +162,27 @@ def warm_local_ollama(local_model: str = "qwen2.5-coder:1.5b") -> bool:
         return False
 
 
-def ensure_shield_running(endpoint_token: str = DEFAULT_ENDPOINT_TOKEN) -> bool:
-    """Ensure `hivemind_producer_shield.py` is listening on `127.0.0.1:8787` and answering `/v1/models`."""
+def probe_ollama_residency(local_model: str = "qwen2.5-coder:1.5b") -> tuple[bool, int]:
+    """Check whether `local_model` is currently loaded in Ollama via `/api/ps`."""
+    try:
+        with httpx.Client(timeout=4.0) as client:
+            resp = client.get(f"{OLLAMA_URL}/api/ps")
+            if resp.status_code == 200:
+                for item in resp.json().get("models", []):
+                    name = str(item.get("name") or item.get("model") or "")
+                    if name == local_model or name == f"{local_model}:latest":
+                        size_bytes = int(item.get("size") or item.get("size_vram") or 0)
+                        return True, max(512, size_bytes // (1024 * 1024))
+    except (httpx.HTTPError, ValueError):
+        pass
+    return False, 0
+
+
+def ensure_shield_running(endpoint_token: str | None = None) -> bool:
+    """Ensure `hivemind_producer_shield.py` is listening on `127.0.0.1:8787` with the current token."""
+    tok = endpoint_token or _read_or_create_endpoint_token()
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    headers = {"Authorization": f"Bearer {endpoint_token}"}
+    headers = {"Authorization": f"Bearer {tok}"}
     if _is_port_open("127.0.0.1", SHIELD_PORT):
         try:
             with httpx.Client(timeout=5.0) as client:
@@ -147,9 +191,12 @@ def ensure_shield_running(endpoint_token: str = DEFAULT_ENDPOINT_TOKEN) -> bool:
                     return True
         except httpx.HTTPError:
             pass
+        # Token rotated or shield unhealthy: restart shield process
+        subprocess.run(["pkill", "-f", "hivemind_producer_shield.py"], check=False)
+        time.sleep(0.5)
 
     env = dict(os.environ)
-    env["HIVEMIND_ENDPOINT_TOKEN"] = endpoint_token
+    env["HIVEMIND_ENDPOINT_TOKEN"] = tok
     python_bin = str(REPO_ROOT / ".venv" / "bin" / "python")
     if not Path(python_bin).exists():
         python_bin = sys.executable
@@ -199,12 +246,13 @@ def _verify_tunnel_url(url: str, endpoint_token: str) -> bool:
         return False
 
 
-def ensure_cloudflare_tunnel(endpoint_token: str = DEFAULT_ENDPOINT_TOKEN) -> str:
+def ensure_cloudflare_tunnel(endpoint_token: str | None = None) -> str:
     """Ensure a live `cloudflared` tunnel is fronting `127.0.0.1:8787` and return its `https://*.trycloudflare.com` URL."""
+    tok = endpoint_token or _read_or_create_endpoint_token()
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     if TUNNEL_URL_FILE.exists():
         cached_url = TUNNEL_URL_FILE.read_text(encoding="utf-8").strip()
-        if _verify_tunnel_url(cached_url, endpoint_token):
+        if _verify_tunnel_url(cached_url, tok):
             return cached_url
 
     if TUNNEL_LOG_PATH.exists():
@@ -212,11 +260,10 @@ def ensure_cloudflare_tunnel(endpoint_token: str = DEFAULT_ENDPOINT_TOKEN) -> st
         matches = re.findall(r"https://[a-z0-9-]+\.trycloudflare\.com", text)
         if matches:
             candidate = matches[-1]
-            if _verify_tunnel_url(candidate, endpoint_token):
+            if _verify_tunnel_url(candidate, tok):
                 TUNNEL_URL_FILE.write_text(candidate, encoding="utf-8")
                 return candidate
 
-    # Kill any stale cloudflared quick tunnel targeting 8787 before launching a fresh one
     subprocess.run(["pkill", "-f", f"cloudflared.*127.0.0.1:{SHIELD_PORT}"], check=False)
     if TUNNEL_LOG_PATH.exists():
         TUNNEL_LOG_PATH.unlink()
@@ -247,9 +294,8 @@ def ensure_cloudflare_tunnel(endpoint_token: str = DEFAULT_ENDPOINT_TOKEN) -> st
                 break
 
     if tunnel_url:
-        # Wait up to 10s for Cloudflare DNS/edge propagation
         for _ in range(10):
-            if _verify_tunnel_url(tunnel_url, endpoint_token):
+            if _verify_tunnel_url(tunnel_url, tok):
                 TUNNEL_URL_FILE.write_text(tunnel_url, encoding="utf-8")
                 return tunnel_url
             time.sleep(1.0)
@@ -257,18 +303,16 @@ def ensure_cloudflare_tunnel(endpoint_token: str = DEFAULT_ENDPOINT_TOKEN) -> st
     return tunnel_url
 
 
-def check_gcp_t4_status(endpoint_token: str = DEFAULT_ENDPOINT_TOKEN) -> dict[str, Any]:
-    """Probe whether the GCP Tesla T4 (`https://34-48-48-154.sslip.io/u`) is still online or stopped."""
+def check_gcp_t4_status() -> dict[str, Any]:
+    """Probe whether the GCP Tesla T4 (`https://34-48-48-154.sslip.io/u`) is still reachable."""
     t0 = time.monotonic()
     try:
         with httpx.Client(timeout=5.0) as client:
-            r = client.get(
-                f"{T4_SSLIP_URL}/v1/models",
-                headers={"Authorization": f"Bearer {endpoint_token}"},
-            )
+            r = client.get(f"{T4_SSLIP_URL}/v1/models")
             latency_ms = round((time.monotonic() - t0) * 1000.0, 1)
+            # Even 401 from the shield means the T4 VM and nginx/shield are still running
             return {
-                "t4_reachable": r.status_code == 200,
+                "t4_reachable": r.status_code in (200, 401),
                 "http_status": r.status_code,
                 "latency_ms": latency_ms,
             }
@@ -284,24 +328,30 @@ def route_traffic_to_rtx2070_orchestrator(
     gateway: str,
     tunnel_url: str,
     *,
-    endpoint_token: str = DEFAULT_ENDPOINT_TOKEN,
+    endpoint_token: str | None = None,
     local_model: str = "qwen2.5-coder:1.5b",
 ) -> dict[str, Any]:
     """Point the OpenRouter producer fleet and `xavier_callens` RTX 2070 account to the active tunnel."""
+    tok = endpoint_token or _read_or_create_endpoint_token()
     admin_key = _read_admin_key()
     producer_key = _read_producer_key()
+    is_loaded, resident_mib = probe_ollama_residency(local_model)
     model_entries = [
         {
             "id": mid,
             "local_name": local_model,
-            "loaded": True,
-            "vram_mib": 1383 if idx == 0 else 0,
-            "cold_start_s": 0.0,
+            "loaded": is_loaded,
+            "vram_mib": resident_mib if (is_loaded and idx == 0) else 0,
+            "cold_start_s": 0.0 if is_loaded else 5.0,
         }
         for idx, mid in enumerate(ALL_14_MODELS)
     ]
 
-    result: dict[str, Any] = {"tunnel_url": tunnel_url}
+    result: dict[str, Any] = {
+        "tunnel_url": tunnel_url,
+        "ollama_resident": is_loaded,
+        "ollama_resident_mib": resident_mib,
+    }
     with httpx.Client(timeout=25.0) as client:
         if admin_key:
             reconnect_body = {
@@ -309,7 +359,7 @@ def route_traffic_to_rtx2070_orchestrator(
                 "bee_endpoint_url": tunnel_url,
                 "coder_endpoint_url": tunnel_url,
                 "rtx2070_endpoint_url": tunnel_url,
-                "endpoint_token": endpoint_token,
+                "endpoint_token": tok,
                 "models": model_entries,
                 "cost_per_1k": 0.25,
                 "capacity_1k": 90.0,
@@ -329,7 +379,6 @@ def route_traffic_to_rtx2070_orchestrator(
                 result["live_hiveminders"] = rec_data.get("live_hiveminders")
                 result["live_models_count"] = len(rec_data.get("live_models", []))
 
-        # Direct producer heartbeat for xavier_callens (RTX 2070 8GB Turing)
         hb_body = {
             "endpoint_url": tunnel_url,
             "models": model_entries,
@@ -337,7 +386,7 @@ def route_traffic_to_rtx2070_orchestrator(
             "capacity_1k": 90.0,
             "gpu_vram_mib": 8192,
             "execution_class": "rtx2070-8gb-turing",
-            "endpoint_token": endpoint_token,
+            "endpoint_token": tok,
             "replace_endpoints": True,
         }
         r_hb = client.post(
@@ -420,7 +469,6 @@ def step_e8_stage2_controller_round(inner_steps: int = 20) -> dict[str, Any]:
     loss_after = q.eval_loss(model, evalset, "cpu")
     elapsed_s = round(time.monotonic() - t0, 2)
 
-    # Save updated checkpoint
     torch.save(
         {
             **{f"g.{k}": v for k, v in new_global.items()},
@@ -513,7 +561,6 @@ def sync_opentrainer_and_gpu_telemetry(
         network_mode="outbound-https-relay",
     )
 
-    # Push fresh GPU & governor telemetry to /v1/hivemind/t4/telemetry so /v1/hivemind/t4/status stays FRESH
     telemetry_status = 0
     try:
         with httpx.Client(timeout=15.0) as client:
@@ -584,11 +631,12 @@ def verify_live_gateway_completion(gateway: str) -> dict[str, Any]:
 
 def run_orchestrator_cycle(gateway: str, *, inner_steps: int = 20, verify_chat: bool = True) -> dict[str, Any]:
     """Execute one complete traffic + training + telemetry orchestration cycle."""
+    tok = _read_or_create_endpoint_token()
     warm_ok = warm_local_ollama()
-    shield_ok = ensure_shield_running()
-    tunnel_url = ensure_cloudflare_tunnel()
+    shield_ok = ensure_shield_running(tok)
+    tunnel_url = ensure_cloudflare_tunnel(tok)
     t4_check = check_gcp_t4_status()
-    routing = route_traffic_to_rtx2070_orchestrator(gateway, tunnel_url)
+    routing = route_traffic_to_rtx2070_orchestrator(gateway, tunnel_url, endpoint_token=tok)
     e8_round = step_e8_stage2_controller_round(inner_steps=inner_steps)
     ot_sync = sync_opentrainer_and_gpu_telemetry(
         gateway,

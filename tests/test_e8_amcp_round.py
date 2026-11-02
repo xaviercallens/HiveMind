@@ -249,6 +249,32 @@ def test_a_result_delivered_before_a_re_offer_still_counts_after_it(tmp_path: Pa
     assert rep["completed"] and rep["rounds"][0]["status"] == "complete" and rep["rounds"][0]["accepted"] == ["l0", "l1"] and rep["rounds"][0]["retries"] == 1
 
 
+def test_a_publish_survives_a_short_broker_outage_and_gives_up_after_its_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    """night-002b stopped when one publish was not confirmed during a Kafka voter preemption; the bus now retries."""
+    from hivemind.swarm.amcp_kafka_transport import TransportError
+
+    bus = r.Bus(Hub().view(), RING, "rt9")
+    calls = {"n": 0}
+
+    def flaky(event):  # noqa: ANN001, ANN202
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise TransportError("delivery not confirmed within 20.0s")
+        return {"ok": True}
+
+    monkeypatch.setattr(bus.pub, "publish", flaky)
+    monkeypatch.setattr(r.time, "sleep", lambda s: None)
+    bus.publish(fed.build_claim(run_id="rt9", rnd=0, learner_id="l0", host="h"))
+    assert calls["n"] == 3
+
+    def down(event):  # noqa: ANN001, ANN202
+        raise TransportError("broker down")
+
+    monkeypatch.setattr(bus.pub, "publish", down)
+    with pytest.raises(TransportError):
+        bus.publish(fed.build_claim(run_id="rt9", rnd=0, learner_id="l0", host="h"), retry_s=0.0)
+
+
 # ----------------------------------------------------------------------------------------------------------------------- per-learner keys
 
 K_COORD, K_L0, K_L1 = bytes(range(32)), bytes(range(40, 72)), bytes(range(80, 112))

@@ -88,6 +88,8 @@ WARMUP_MIN_INTERVAL_S = 30.0
 DEFAULT_MAX_TOKENS = 1024
 REGISTER_LIMIT = 10
 REGISTER_WINDOW_S = 60.0
+LOGIN_LIMIT = 10  # password logins per client per window: slows online password guessing
+LOGIN_WINDOW_S = 60.0
 AMCP_PUBLISH_LIMIT = 30  # bus events per account per window: the bus is for coordination, not bulk traffic
 AMCP_PUBLISH_WINDOW_S = 60.0
 MAX_BODY_BYTES = 4_000_000
@@ -817,6 +819,7 @@ def create_router_app(
     app = FastAPI(title="HiveMind OpenRouter", version="1.0.0")
     rotation = WeightedRoundRobin()
     register_limiter = SlidingWindowLimiter(REGISTER_LIMIT, REGISTER_WINDOW_S)
+    login_limiter = SlidingWindowLimiter(LOGIN_LIMIT, LOGIN_WINDOW_S)
     amcp_publish_limiter = SlidingWindowLimiter(AMCP_PUBLISH_LIMIT, AMCP_PUBLISH_WINDOW_S)
     market_cache: dict[tuple[str, int], dict[str, Any]] = {}
     market_lock = threading.Lock()
@@ -855,13 +858,6 @@ def create_router_app(
                 or str(request.query_params.get("api_key") or "").strip()
                 or str(request.headers.get("x-api-key") or "").strip()
             )
-        if (
-            not candidate
-            and request.url.path.endswith("/chat/completions")
-            and request.headers.get("user-agent", "").startswith("Go-http-client")
-        ):
-            # Google Antigravity SDK LocalOpenAIAgentConfig (localharness GemmaEndpoint)
-            candidate = "hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E"
         account = store.authenticate(candidate) if candidate else None
         if account is None:
             raise RouterError(401, "Invalid or missing API key. Send 'Authorization: Bearer hm-...'.", "authentication_error", "invalid_api_key")
@@ -1888,9 +1884,7 @@ def create_router_app(
         except (SwarmSecurityViolationError, ReservedHandle):
             raise RouterError(400, "Invalid username format: use 1-64 ASCII letters, digits and . _ @ + - characters.", "invalid_request_error", "invalid_handle") from None
         acct = store.get_account(account_id)
-        grant_info = starter_grant(request, account_id) if created else {}
-        if created and store.balance(account_id) <= 0.0:
-            store.grant(account_id, 100.0, "welcome-signup-grant")
+        grant_info = starter_grant(request, account_id) if created else {}  # per-IP capped; no unconditional grant after the cap
         bal = store.balance(account_id)
         return {
             "object": "hivemind.auth_session",
@@ -1923,6 +1917,8 @@ def create_router_app(
         strict_existing = bool(data.get("strict_existing", False))
         if not identifier and not api_key_hint:
             raise RouterError(400, "Enter your username, handle, email, or existing hm-... API key.", "invalid_request_error", "missing_identifier")
+        if not login_limiter.allow(client_key(request), clock()):
+            raise RouterError(429, "Too many sign-in attempts; try again in a minute.", "rate_limit_error", "rate_limited")
         try:
             acct, api_key, created = store.login_with_credentials(
                 identifier or api_key_hint,
@@ -1934,11 +1930,7 @@ def create_router_app(
             raise RouterError(401, str(exc), "authentication_error", "invalid_credentials") from None
         except (SwarmSecurityViolationError, ReservedHandle):
             raise RouterError(400, "Invalid username or handle format.", "invalid_request_error", "invalid_handle") from None
-        if created and store.balance(acct.account_id) <= 0.0:
-            starter_grant(request, acct.account_id)
-            if store.balance(acct.account_id) <= 0.0:
-                store.grant(acct.account_id, 100.0, "welcome-login-restore")
-        bal = store.balance(acct.account_id)
+        bal = store.balance(acct.account_id)  # login never creates an account, so it never grants
         return {
             "object": "hivemind.auth_session",
             "status": "AUTHENTICATED",
@@ -3029,7 +3021,6 @@ def create_router_app(
 
     import hashlib
 
-    steam_key_cache: dict[str, tuple[str, str]] = {}
     seen_boinc_receipts: set[str] = set()
 
     def _resolve_existing_session_key(request: Request, body: Mapping[str, Any], account_id: str) -> str:
@@ -3044,9 +3035,8 @@ def create_router_app(
             if acc is not None and acc.account_id == account_id:
                 return candidate
             raise RouterError(401, "Invalid API key for this handle.", "authentication_error", "invalid_api_key")
-        cached = steam_key_cache.get(account_id)
-        if cached is not None and cached[1] == client_key(request):
-            return cached[0]
+        # No key-by-IP fallback: returning a cached key to any caller from the same address handed accounts to whoever
+        # shared that address (NAT, carrier-grade NAT, the same Wi-Fi). The client keeps the key it was given at creation.
         raise RouterError(
             409,
             "That handle is already registered; sign in with your API key or choose another handle.",
@@ -3090,7 +3080,6 @@ def create_router_app(
         try:
             account_id, api_key = store.register(handle, role)
             created = True
-            steam_key_cache[account_id] = (api_key, client_key(request))
             starter_grant(request, account_id)
         except HandleTaken:
             account_id = store.account_id_for(handle)
@@ -3128,36 +3117,11 @@ def create_router_app(
         except ValueError:
             raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
         target_planet = str(body.get("target_planet") or "K2-18 b").strip()[:64]
-        auth = request.headers.get("authorization", "")
-        account_id: str | None = None
-        handle = str(body.get("handle") or "Cmdr_RTX2070_Steam").strip()[:64]
-        if auth.lower().startswith("bearer "):
-            acc = authenticate(request)
-            account_id = acc.account_id
-            handle = acc.handle
-        elif body.get("api_key"):
-            acc = store.authenticate(str(body.get("api_key")).strip())
-            if acc is None:
-                raise RouterError(401, "Invalid API key.", "authentication_error", "invalid_api_key")
-            account_id = acc.account_id
-            handle = acc.handle
-        if account_id is None:
-            try:
-                account_id, api_key = store.register(handle, "prosumer")
-                steam_key_cache[account_id] = (api_key, client_key(request))
-                starter_grant(request, account_id)
-            except HandleTaken:
-                candidate_id = store.account_id_for(handle)
-                cached = steam_key_cache.get(candidate_id)
-                if cached is not None and cached[1] == client_key(request):
-                    account_id = candidate_id
-                else:
-                    raise RouterError(
-                        401,
-                        "Authorization: Bearer hm-... required to contribute to an existing account.",
-                        "authentication_error",
-                        "invalid_api_key",
-                    ) from None
+        # Always authenticated: no account is created or chosen from the body (a "handle" in the body used to create or
+        # select the credited account without any key).
+        acc = authenticate(request)
+        account_id = acc.account_id
+        handle = acc.handle
 
         # Execute real CUDA Driver PTX BLS fold if scripts/hivemind_boinc_idle_worker.py is available
         fold_res: dict[str, Any] = {
@@ -3187,16 +3151,14 @@ def create_router_app(
             fold_res.get("result_sha256") or hashlib.sha256(f"{account_id}:{clock()}".encode()).hexdigest()
         )
         duplicate_receipt = receipt_sha256 in seen_boinc_receipts
-        if duplicate_receipt:
-            hmt_awarded = 0.0
-            cobblestones_awarded = 0.0
-        else:
-            seen_boinc_receipts.add(receipt_sha256)
-            hmt_awarded = 250.0
-            cobblestones_awarded = 45.0
-            store.grant(account_id, hmt_awarded, f"boinc:steam3133700:{receipt_sha256[:16]}")
+        seen_boinc_receipts.add(receipt_sha256)
+        # No HMT for a client-supplied receipt: nothing in it can be checked by the server (it used to grant 250 HMT per
+        # unseen value, so credit could be minted without limit). Credit comes back once results are verified server-side.
+        hmt_awarded = 0.0
+        cobblestones_awarded = 0.0
         return {
             "object": "hivemind.steam_boinc_contribution",
+            "credit_status": "pending_verification",
             "ok": True,
             "account_id": account_id,
             "handle": handle,
@@ -3310,7 +3272,6 @@ def create_router_app(
         try:
             account_id, api_key = store.register(handle, role)
             created = True
-            steam_key_cache[account_id] = (api_key, client_key(request))
             starter_grant(request, account_id)
         except HandleTaken:
             account_id = store.account_id_for(handle)
@@ -3364,16 +3325,14 @@ def create_router_app(
         )
         receipt_sha256 = str(body.get("receipt_sha256") or verified["receipt_sha256"]).strip()
         duplicate_receipt = receipt_sha256 in seen_boinc_receipts
-        if duplicate_receipt:
-            hmt_awarded = 0.0
-            cobblestones_awarded = 0.0
-        else:
-            seen_boinc_receipts.add(receipt_sha256)
-            hmt_awarded = 250.0
-            cobblestones_awarded = 45.0
-            store.grant(account.account_id, hmt_awarded, f"webgpu:wgsl:{receipt_sha256[:16]}")
+        seen_boinc_receipts.add(receipt_sha256)
+        # No HMT: the "verification" hashes client-supplied figures, so a receipt proves no work (it used to grant 250 HMT
+        # per unseen receipt). Credit comes back once results are verified server-side.
+        hmt_awarded = 0.0
+        cobblestones_awarded = 0.0
         return {
             "object": "hivemind.webgpu_contribution",
+            "credit_status": "pending_verification",
             "ok": True,
             "account_id": account.account_id,
             "handle": account.handle,

@@ -59,6 +59,7 @@ def test_la_ruche_rejects_degraded_expert_and_accepts_improved_expert(
 
 def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     tmp_path: Path,
+    monkeypatch,  # noqa: ANN001
 ) -> None:
     """Verify end-to-end 8-domain Dataset Mining Campaign, La Ruche MoE export, and HiveMind@home FastAPI portal."""
     assert len(RUCHE_ALVEOLE_HEX_LAYOUT) == 8
@@ -124,11 +125,13 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     )
     assert node_res.returncode == 0, f"JS Syntax Error: {node_res.stderr.decode()}"
 
+    monkeypatch.setenv("HIVEMIND_DASHBOARD_ADMIN_KEY", "test-dashboard-admin-key")  # admin routes need it (GHSA-gjc6-74f9-wmrr)
     app = create_hivemind_at_home_app(
         mining_ruche_report_path=mining_report_path,
         vault_dir=vault_dir,
     )
     client = TestClient(app)
+    ADMIN = {"x-admin-key": "test-dashboard-admin-key"}
     r_index = client.get("/")
     assert r_index.status_code == 200
     assert "la-ruche-svg" in r_index.text
@@ -440,16 +443,17 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     )
     assert r_up.status_code == 200
 
+    r_reg = client.post("/api/v1/auth/register", json={"handle": "reg-user-01", "email": "reg01@hivemind.ai"})
+    assert r_reg.status_code == 200
+    reg_token = r_reg.json()["token"]
+    # GHSA-gjc6-74f9-wmrr: an existing account is only returned to the caller holding its token
+    r_again = client.post("/api/v1/auth/register", json={"handle": "reg-user-01", "email": "reg01@hivemind.ai"})
+    assert r_again.status_code == 401
+    assert reg_token not in r_again.text
     assert (
         client.post(
             "/api/v1/auth/register",
-            json={"handle": "reg-user-01", "email": "reg01@hivemind.ai"},
-        ).status_code
-        == 200
-    )
-    assert (
-        client.post(
-            "/api/v1/auth/register",
+            headers={"Authorization": f"Bearer {reg_token}"},
             json={"handle": "reg-user-01", "email": "reg01@hivemind.ai"},
         ).status_code
         == 200
@@ -462,7 +466,8 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
         == 409
     )
 
-    assert client.post("/api/v1/auth/login", json={"handle_or_email": "reg-user-01"}).status_code == 200
+    assert client.post("/api/v1/auth/login", json={"handle_or_email": "reg-user-01"}).status_code == 401
+    assert client.post("/api/v1/auth/login", json={"handle_or_email": reg_token}).status_code == 200
     assert client.post("/api/v1/auth/login", json={"handle_or_email": "login-created-01"}).status_code == 200
     assert (
         client.post(
@@ -472,27 +477,44 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
         == 404
     )
 
+    r_sso = client.post("/api/v1/auth/sso/google", json={"handle_hint": "sso-user-01"})
+    assert r_sso.status_code == 200
+    sso_token = r_sso.json()["token"]
+    # an unverified handle hint must not reopen an existing account; its token does
+    assert client.post("/api/v1/auth/sso/google", json={"handle_hint": "sso-user-01"}).status_code == 401
     assert (
-        client.post("/api/v1/auth/sso/google", json={"handle_hint": "sso-user-01"}).status_code
+        client.post(
+            "/api/v1/auth/sso/google", headers={"Authorization": f"Bearer {sso_token}"}, json={"handle_hint": "sso-user-01"}
+        ).status_code
         == 200
     )
-    assert client.post("/api/v1/auth/sso/google", json={"handle_hint": "sso-user-01"}).status_code == 200
     assert client.post("/api/v1/auth/sso/unsupported_idp", json={"handle_hint": "sso-user-01"}).status_code == 400
 
+    # linking a provider needs the account's token; a handle in the body is not enough (GHSA-gjc6-74f9-wmrr)
+    assert client.post("/api/v1/auth/link-provider", json={"handle": "sso-user-01", "provider": "github"}).status_code == 401
     assert (
-        client.post("/api/v1/auth/link-provider", json={"handle": "sso-user-01", "provider": "github"}).status_code
+        client.post(
+            "/api/v1/auth/link-provider", headers={"Authorization": f"Bearer {sso_token}"}, json={"provider": "github"}
+        ).status_code
         == 200
     )
     assert client.post("/api/v1/auth/rotate-key", headers={"Authorization": f"Bearer {r_up.json()['token']}"}).status_code == 200
-    assert client.post("/api/v1/auth/magic-link", json={"email": "magic@hivemind.ai"}).status_code == 200
-    assert client.post("/api/v1/auth/magic-link", json={"email": "magic@hivemind.ai"}).status_code == 200
-    assert client.get("/api/v1/auth/users").status_code == 200
+    r_magic = client.post("/api/v1/auth/magic-link", json={"email": "magic@hivemind.ai"})
+    assert r_magic.status_code == 200
+    assert client.post("/api/v1/auth/magic-link", json={"email": "magic@hivemind.ai"}).status_code == 401  # no e-mail is sent
+    assert (
+        client.post(
+            "/api/v1/auth/magic-link", headers={"Authorization": f"Bearer {r_magic.json()['token']}"}, json={"email": "magic@hivemind.ai"}
+        ).status_code
+        == 200
+    )
+    assert client.get("/api/v1/auth/users").status_code == 403  # admin only
     assert client.get("/api/v1/auth/session", headers={"Authorization": f"Bearer {r_up.json()['token']}"}).status_code == 200
     assert client.get("/api/v1/auth/session").status_code == 200
     assert client.post("/api/v1/auth/logout").status_code == 200
 
     assert client.get("/api/v1/auth/migration/status").status_code == 200
-    assert client.post("/api/v1/auth/v1-migrate", json={"handle_or_email": "callensxavier@gmail.com"}).status_code == 200
+    assert client.post("/api/v1/auth/v1-migrate", json={"handle_or_email": "callensxavier@gmail.com"}).status_code == 401
     assert client.post("/api/v1/auth/v1-migrate", json={"handle_or_email": "migrated-v1-custom"}).status_code == 200
 
     # 3. AMCP Mesh & OpenRouter Models
@@ -523,11 +545,13 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     assert client.post("/api/v1/night-moe/start", json={}).status_code == 200
     assert client.get("/api/v1/hardware/rtx2070/shield").status_code == 200
     assert client.post("/api/v1/hardware/rtx2070/shield/lock").status_code == 200
-    assert client.get("/api/v1/admin/dashboard").status_code == 200
-    assert client.get("/api/v1/admin/masterminders").status_code == 200
+    assert client.get("/api/v1/admin/dashboard").status_code == 403
+    assert client.get("/api/v1/admin/dashboard", headers=ADMIN).status_code == 200
+    assert client.get("/api/v1/admin/masterminders", headers=ADMIN).status_code == 200
     assert (
         client.post(
             "/api/v1/admin/campaigns/create",
+            headers=ADMIN,
             json={"name": "Test Campaign", "domain": "code_python"},
         ).status_code
         == 200
@@ -535,6 +559,7 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     assert (
         client.post(
             "/api/v1/admin/moe/train-expert",
+            headers=ADMIN,
             json={"domain_name": "physics_sim", "hardware_override": "cuda:0 RTX 2070"},
         ).status_code
         == 200
@@ -542,6 +567,7 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     assert (
         client.post(
             "/api/v1/admin/moe/train-expert",
+            headers=ADMIN,
             json={"domain_name": "physics_sim", "hardware_override": "cloud-a10g"},
         ).status_code
         == 200
@@ -549,6 +575,7 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     assert (
         client.post(
             "/api/v1/admin/moe/models/select",
+            headers=ADMIN,
             json={"model_id": "hivemind/moe-queenbee-256b"},
         ).status_code
         == 200
@@ -603,11 +630,12 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
         )
     assert client.post("/api/v1/finops/simulate-idle").status_code == 200
 
-    assert client.get("/api/v1/admin/deployment-review/status").status_code == 200
+    assert client.get("/api/v1/admin/deployment-review/status", headers=ADMIN).status_code == 200
     for action in ("request_review", "approve", "reset"):
         assert (
             client.post(
                 "/api/v1/admin/deployment-review/request",
+                headers=ADMIN,
                 json={"action": action, "reviewer": "@Vxtzq", "comment": "Reviewed"},
             ).status_code
             == 200

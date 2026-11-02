@@ -65,14 +65,15 @@ def test_boinc_and_webgpu_contribute_deduplicate_replayed_receipts(tmp_path: Pat
     api_key = reg.json()["api_key"]
     headers = {"Authorization": f"Bearer {api_key}"}
 
-    # First submission with explicit receipt_sha256 awards 250 HMT
+    # A client-chosen receipt_sha256 earns nothing (GHSA-gjc6-74f9-wmrr: it used to mint 250 HMT per unseen value)
     r1 = client.post(
         "/v1/hivemind/webgpu/contribute",
         json={"target_planet": "K2-18 b", "receipt_sha256": "a" * 64},
         headers=headers,
     )
     assert r1.status_code == 200
-    assert r1.json()["hmt_awarded"] == 250.0
+    assert r1.json()["hmt_awarded"] == 0.0
+    assert r1.json()["credit_status"] == "pending_verification"
     assert r1.json()["duplicate_receipt"] is False
     bal_after_first = r1.json()["balance_hmt"]
 

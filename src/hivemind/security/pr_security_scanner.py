@@ -163,6 +163,8 @@ SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("Hugging Face API Token", re.compile(r"\bhf_[A-Za-z0-9]{34,}\b")),
     ("AWS Access Key ID", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
     ("Slack Webhook / Bot Token", re.compile(r"\bxox[baprs]-[0-9A-Za-z\-]{10,48}\b")),
+    # HiveMind gateway keys are "hm-" + 43 URL-safe characters; 40+ avoids test fixtures such as "hm-test-...-do-not-print"
+    ("HiveMind Gateway API Key", re.compile(r"\bhm-[A-Za-z0-9_-]{40,}")),
 ]
 
 # 3. Exfiltration & Suspicious Outbound Sinks

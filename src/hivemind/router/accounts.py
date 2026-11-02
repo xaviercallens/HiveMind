@@ -266,6 +266,13 @@ class InvalidCredentials(ValueError):
     """Raised when a handle/email or password/key check fails during login."""
 
 
+# SHA-256 of gateway keys that were published (in source or artifacts) and must never authenticate again, whatever a stored
+# row says. Only digests are kept here; the keys themselves are revoked, not secrets.
+BURNED_KEY_SHA256: frozenset[str] = frozenset({
+    "468aec404688b4caa879a89456c9ae5c11b095f56cdd4e61ae3b393dcfc5f121",  # owner key published 2026-10-24 (GHSA-gjc6-74f9-wmrr)
+})
+
+# Legacy handles and aliases, used only to map an identifier to a handle. No entry carries a key, and none is a credential.
 LEGACY_KNOWN_USERS: dict[str, dict[str, Any]] = {
     "xavier_callens": {
         "handle": "xavier_callens",
@@ -275,9 +282,7 @@ LEGACY_KNOWN_USERS: dict[str, dict[str, Any]] = {
             "callensxavier@gmail.com",
             "xavier@hivemind.network",
             "hm_live_xavier_994a102f88c",
-            "hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
         ),
-        "api_key": "hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
         "email": "callensxavier@gmail.com",
         "role": "prosumer",
         "starter_hmt": 68500.0,
@@ -744,12 +749,7 @@ class RouterStore:
         row = conn.execute("SELECT handle, key_hash FROM accounts WHERE account_id=?", (account_id,)).fetchone()
         if cached and row is not None and hmac.compare_digest(str(row["key_hash"]), self._hmac_hex(cached)):
             return cached
-        pinned_key = ""
-        if row is not None:
-            legacy = self._resolve_legacy_user(str(row["handle"]))
-            if legacy and legacy.get("api_key"):
-                pinned_key = str(legacy["api_key"])
-        new_key = pinned_key or ("hm-" + secrets.token_urlsafe(32))
+        new_key = "hm-" + secrets.token_urlsafe(32)  # never a pinned or published key
         conn.execute("UPDATE accounts SET key_hash=? WHERE account_id=?", (self._hmac_hex(new_key), account_id))
         self._active_key_cache[account_id] = new_key
         return new_key
@@ -778,7 +778,6 @@ class RouterStore:
         account_id = self._hmac_hex(normalised)[:32]
         pwd_hash = self._hash_password(normalised, password) if password else None
         clean_email = email.strip().lower()[:128] if email else None
-        legacy = self._resolve_legacy_user(handle) or (self._resolve_legacy_user(email) if email else None)
 
         with self._tx() as conn:
             row = conn.execute(
@@ -786,22 +785,20 @@ class RouterStore:
                 (account_id, normalised),
             ).fetchone()
             if row is not None:
+                # An existing handle is returned ONLY to a caller who proves it with the account's own password. A caller
+                # without a password, or an account without one (handle-only, Google/OIDC), gets HandleTaken: register
+                # never hands out an existing account's key and never binds a password to an account it did not create.
                 existing_id = str(row["account_id"])
                 existing_pwd = row["password_hash"]
-                if existing_pwd and password:
-                    expected = self._hash_password(str(row["handle"]), password)
-                    if not hmac.compare_digest(str(existing_pwd), expected):
-                        raise HandleTaken(f"handle already registered: {normalised}")
-                elif pwd_hash and not existing_pwd:
-                    conn.execute(
-                        "UPDATE accounts SET password_hash=?, email=COALESCE(email, ?) WHERE account_id=?",
-                        (pwd_hash, clean_email, existing_id),
-                    )
+                if not (existing_pwd and password):
+                    raise HandleTaken(f"handle already registered: {normalised}")
+                expected = self._hash_password(str(row["handle"]), password)
+                if not hmac.compare_digest(str(existing_pwd), expected):
+                    raise HandleTaken(f"handle already registered: {normalised}")
                 api_key = self._issue_or_reuse_key(conn, existing_id)
                 return existing_id, api_key, False
 
-            pinned_key = str(legacy["api_key"]) if legacy and legacy.get("api_key") else ""
-            api_key = pinned_key or ("hm-" + secrets.token_urlsafe(32))
+            api_key = "hm-" + secrets.token_urlsafe(32)
             conn.execute(
                 "INSERT INTO accounts(account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, password_hash, email) "
                 "VALUES (?,?,?,?,?,?,?,?,?,?)",
@@ -819,8 +816,6 @@ class RouterStore:
                 ),
             )
             self._active_key_cache[account_id] = api_key
-            if legacy and self._balance(conn, account_id) <= 0.0:
-                self._append(conn, account_id, float(legacy.get("starter_hmt", 100.0)), "grant", "legacy-v1-migration", time.time())
         return account_id, api_key, True
 
     def login_with_credentials(
@@ -848,7 +843,7 @@ class RouterStore:
                     return acct, candidate_key, False
 
         # 2. Check legacy V1/V2 user mapping (handles, @handles, emails, or hm_live_... tokens)
-        legacy = self._resolve_legacy_user(ident) or (self._resolve_legacy_user(pwd) if pwd.startswith("hm_live_") else None)
+        legacy = self._resolve_legacy_user(ident)  # maps a legacy alias to its handle only; it is never a credential
         lookup_handle = str(legacy["handle"]) if legacy else ident.lstrip("@")
         if "@" in lookup_handle and not legacy:
             # Might be an email address stored in accounts.email or handle prefix
@@ -884,62 +879,40 @@ class RouterStore:
             if row is not None:
                 acct_obj = self._row_account(row)
                 stored_pwd = row["password_hash"]
-                if stored_pwd:
-                    if not pwd:
-                        raise InvalidCredentials("Password is required for this account.")
-                    expected = self._hash_password(acct_obj.handle, pwd)
-                    if not hmac.compare_digest(str(stored_pwd), expected):
-                        raise InvalidCredentials("Invalid username or password.")
-                elif pwd and not pwd.startswith("hm_live_"):
-                    # Bind password on first credential login for a legacy handle-only account
-                    conn.execute(
-                        "UPDATE accounts SET password_hash=?, email=COALESCE(email, ?) WHERE account_id=?",
-                        (self._hash_password(acct_obj.handle, pwd), email_candidate or None, acct_obj.account_id),
+                if not stored_pwd:
+                    # A handle-only or Google/OIDC account has no password to check: knowing its handle proves nothing, and
+                    # binding the caller's password here would hand the account to whoever asks first.
+                    raise InvalidCredentials(
+                        "This account has no password: sign in with your hm-... API key or with the provider you signed up with."
                     )
+                if not pwd:
+                    raise InvalidCredentials("Password is required for this account.")
+                expected = self._hash_password(acct_obj.handle, pwd)
+                if not hmac.compare_digest(str(stored_pwd), expected):
+                    raise InvalidCredentials("Invalid username or password.")
                 api_key = self._issue_or_reuse_key(conn, acct_obj.account_id)
                 return acct_obj, api_key, False
 
-        # 3. Account not yet in SQLite (e.g. after Cloud Run ephemeral container restart or V1/V2 migration):
-        #    restore the user's previous account seamlessly!
-        if legacy or auto_restore_previous:
-            if not normalised:
-                raise InvalidCredentials("Invalid username or handle format.")
-            role = str(legacy.get("role", "prosumer")) if legacy else "prosumer"
-            acct_id, api_key, created = self.register_with_credentials(
-                normalised,
-                pwd if not pwd.startswith("hm_live_") else "",
-                role=role,
-                email=email_candidate,
-            )
-            acct = self.get_account(acct_id)
-            if acct is None:
-                raise InvalidCredentials("Could not restore account.")
-            return acct, api_key, created
-
+        # 3. Unknown account: login never creates one (it used to "restore" it, with a starter grant, for any handle asked
+        #    for). The store is replicated, so a real account does not vanish; new users register. ``auto_restore_previous``
+        #    is kept for callers' compatibility and ignored.
+        del auto_restore_previous
         raise InvalidCredentials("Account not found.")
 
     def authenticate(self, api_key: str) -> Account | None:
-        """Return the account owning ``api_key`` or ``None``; hashes are compared in constant time."""
+        """Return the account owning ``api_key`` or ``None``; hashes are compared in constant time.
+
+        Only keys stored (as HMAC digests) in the database authenticate. A key that was ever published is refused even if a
+        stored row still carries its digest (see ``BURNED_KEY_SHA256``), so publishing a fix is enough to revoke it."""
         if not isinstance(api_key, str) or not api_key.startswith("hm-"):
+            return None
+        if hashlib.sha256(api_key.encode("utf-8")).hexdigest() in BURNED_KEY_SHA256:
             return None
         digest = self._hmac_hex(api_key)
         with self._lock:
             row = self._conn.execute("SELECT * FROM accounts WHERE key_hash=?", (digest,)).fetchone()
         if row is not None and hmac.compare_digest(str(row["key_hash"]), digest):
             return self._row_account(row)
-        legacy = self._resolve_legacy_user(api_key)
-        if legacy and legacy.get("api_key") == api_key:
-            acct_id, _, _ = self.register_with_credentials(
-                str(legacy["handle"]),
-                role=str(legacy.get("role", "prosumer")),
-                email=str(legacy.get("email", "")),
-            )
-            with self._tx() as conn:
-                conn.execute("UPDATE accounts SET key_hash=? WHERE account_id=?", (digest, acct_id))
-                if self._balance(conn, acct_id) <= 0.0:
-                    self._append(conn, acct_id, float(legacy.get("starter_hmt", 68500.0)), "grant", "founder-key-restore", time.time())
-            self._active_key_cache[acct_id] = api_key
-            return self.get_account(acct_id)
         return None
 
     def get_account(self, account_id: str) -> Account | None:
@@ -1923,8 +1896,7 @@ class RouterStore:
                 ).fetchone()
                 if exists is not None:
                     continue
-                pinned_key = str(meta.get("api_key") or "")
-                api_key = pinned_key or ("hm-" + secrets.token_urlsafe(32))
+                api_key = "hm-" + secrets.token_urlsafe(32)
                 clean_email = str(meta.get("email") or "").strip().lower()[:128] or None
                 conn.execute(
                     "INSERT INTO accounts(account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, email) "

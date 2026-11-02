@@ -46,7 +46,7 @@ All `.py` files modified in a Pull Request are parsed via Python's `ast` module 
 
 ### Layer 4 — Credential Exfiltration & Hardcoded Secret Detection (`SEC-03`, `SEC-05`)
 - **`SEC-03` (`CREDENTIAL_OR_ENV_EXFILTRATION`):** Blocks outbound webhooks and reverse tunnels (`webhook.site`, `ngrok.io`, `ngrok-free.app`, `pipedream.net`, `requestbin`, `oastify.com`, `discord.com/api/webhooks`, `api.telegram.org/bot`).
-- **`SEC-05` (`HARDCODED_SECRET_OR_PRIVATE_KEY`):** Blocks PEM private keys (`-----BEGIN ... PRIVATE KEY-----`), GitHub PATs (`ghp_...`, `github_pat_...`), Hugging Face tokens (`hf_...`), AWS keys (`AKIA...`), and Slack tokens.
+- **`SEC-05` (`HARDCODED_SECRET_OR_PRIVATE_KEY`):** Blocks PEM private keys (`-----BEGIN ... PRIVATE KEY-----`), GitHub PATs (`ghp_...`, `github_pat_...`), Hugging Face tokens (`hf_...`), AWS keys (`AKIA...`), Slack tokens, and HiveMind gateway API keys (`hm-` + 40 or more URL-safe characters).
 
 ### Layer 5 — Trojan Source Bidirectional Unicode Defense (`SEC-04`, CVE-2021-42574)
 - **`SEC-04` (`TROJAN_SOURCE_BIDI_UNICODE`):** Scans every PR title, body, commit message, and source line for hidden Unicode bidirectional override/isolate characters (`U+202A`–`U+202E`, `U+2066`–`U+2069`) that visually disguise malicious logic during human code review.

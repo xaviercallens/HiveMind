@@ -71,7 +71,8 @@ def test_steam_daemon_reports_nothing_it_did_not_measure_and_credits_nothing(tmp
     assert "0.42s" not in client.get("/").text
 
 
-def test_feeds_and_tool_calls_carry_no_fabricated_swarm_telemetry(tmp_path: Path) -> None:
+def test_feeds_and_tool_calls_carry_no_fabricated_swarm_telemetry(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setenv("HIVEMIND_DASHBOARD_ADMIN_KEY", "test-dashboard-admin-key")  # admin routes need it (GHSA-gjc6-74f9-wmrr)
     client = _client(tmp_path)
     messages = client.get("/api/v1/amcp/mesh/messages").text
     assert "48,920" not in messages and "542.8" not in messages and "Epoch #412" not in messages
@@ -79,6 +80,7 @@ def test_feeds_and_tool_calls_carry_no_fabricated_swarm_telemetry(tmp_path: Path
     assert hub["coop_discovery_feed"] == []
     tool = client.post("/api/v1/amcp/tool/call", json={"tool_name": "swarm_overview", "arguments": {}}).json()
     assert tool["active_nodes"] is None and tool["aggregate_pflops"] is None and tool["measured"] is False
-    admin = client.get("/api/v1/admin/dashboard").json()
+    assert client.get("/api/v1/admin/dashboard").status_code == 403
+    admin = client.get("/api/v1/admin/dashboard", headers={"x-admin-key": "test-dashboard-admin-key"}).json()
     nodes = admin["night_moe_training"]["allocated_training_nodes"]
     assert all("RTX 4090" not in n and "@" not in n for n in nodes)

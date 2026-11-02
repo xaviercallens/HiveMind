@@ -651,6 +651,23 @@ The full plan, with evidence, Definition of Done and the test for each finding (
 - **Measured since 06:00:** the T4 trained again and the QLoRA counter reached 154 (152 at 06:00); the probes passed 15 of 15 in three daytime runs; router chat p95 was 0.6 s to 6.2 s with probes included, with one 16.9 s request through ruche that was not a probe. Still missing: a yield recorded while a BOINC task runs (all logged yields were 54 to 87 ms with no task on the GPU).
 - **Open items for claim:** [#415](https://github.com/xaviercallens/HiveMind/issues/415), [#412](https://github.com/xaviercallens/HiveMind/issues/412), [#405](https://github.com/xaviercallens/HiveMind/issues/405), [#404](https://github.com/xaviercallens/HiveMind/issues/404), [#403](https://github.com/xaviercallens/HiveMind/issues/403) and the security issues [#378](https://github.com/xaviercallens/HiveMind/issues/378) to [#382](https://github.com/xaviercallens/HiveMind/issues/382).
 
+### 3.26c Daily audit update (2026-11-02) — `main` at `36da030`
+
+The update is [`docs/IMPROVEMENT_PLAN_2026-11-02.md`](docs/IMPROVEMENT_PLAN_2026-11-02.md): 57 new items (IP-139 to IP-195; P0 3, P1 20, P2 22, P3 12), 7 re-checked by the author (**R**). Closed since 3.26b: IP-75, IP-78, IP-80, IP-81, IP-84, IP-91, IP-98, IP-99 (#474, #477, #482, #429, #472, #488/#490, #476); narrowed: IP-94 (#478, rest in #481), IP-101 (#479), IP-103 (#484, #486). Owner actions first: revoke the router key committed at `src/hivemind/swarm/s32_01_verlet_kepler442b_copilot.py:22`; check the remote for `checkpoint/t4-campaign-state` (private memory notes pushed by `scripts/checkpoint_state.py`); rotate the admin key and endpoint token.
+
+| Proposed PR | Scope | Assignee | Size | Status / definition of done (summary) |
+| :-- | :-- | :-- | :-- | :-- |
+| PR-IP-15 | Gatekeeper, CI and orchestrator integrity (IP-72, IP-73, IP-119, IP-123, IP-124) | _open_ | M | unchanged; owner decisions pending |
+| PR-IP-16 | Swarm integrity (IP-109, IP-110 and the other swarm items) | _open_ | L | IP-109/IP-110 in #434 (coverage gate 94 % < 95 %) |
+| PR-IP-17 | Router, client, CLI, deploy items | _open_ | M | IP-99 closed, IP-101/IP-103 narrowed; rest open |
+| PR-IP-18 | Game, economy, lab honesty items | _open_ | M | IP-91 closed, IP-94 narrowed (#481); rest open |
+| PR-IP-19 | Core, data, BOINC, QueenBee, security items | _open_ | L | IP-75, IP-78, IP-80, IP-81, IP-84 closed; rest open |
+| PR-IP-20 | Swarm: committed key, fail-open VRAM guard, ZK-OPoI verifier, surrogate, scripted supervisors (IP-139, IP-147, IP-149-152, IP-163-166, IP-182, IP-185) | _open_ | L (split) | each negative control fails on `main` first; key revoked by the owner |
+| PR-IP-21 | Game cockpit and Steam edition: authentication, minting, XSS, measured-or-null telemetry (IP-141, IP-142, IP-153-158, IP-167-170) | _open_ | L (split) | anonymous posts mint nothing and rotate nothing |
+| PR-IP-22 | Router honesty and liveness (IP-143-146, IP-175-178, IP-186, IP-190) | _open_ | L (split) | live telemetry reflects pushed values; reconnected producers expire without heartbeats |
+| PR-IP-23 | BOINC and core credit integrity (IP-148, IP-159, IP-160, IP-171, IP-173, IP-174, IP-181, IP-184, IP-187-189) | _open_ | L (split) | NaN wall seconds grant 0; a CPU result cannot claim a T4 cap |
+| PR-IP-24 | CI, tests, scripts, Lean (IP-140, IP-161, IP-162, IP-172, IP-179, IP-180, IP-183, IP-191-195) | _open_ | M | memory notes never pushed; PROV-31 cannot pass on a changed Lean file |
+
 ### 3.26b Daily audit update (2026-11-01) — `main` at `df65e71`
 
 The update is [`docs/IMPROVEMENT_PLAN_2026-11-01.md`](docs/IMPROVEMENT_PLAN_2026-11-01.md): 67 new items (IP-72 to IP-138; P0 2, P1 52, P2/P3 13), 6 of them re-checked by the author (**R**), the rest audit-reported (**A**). Closed or narrowed since 10-31: IP-13 (#377), IP-23 (#391), IP-28 worker part (#408), IP-22/IP-38 label (#414), IP-52 for the E8 pilot (#401), stub-audit files 7 to 5 (#418).

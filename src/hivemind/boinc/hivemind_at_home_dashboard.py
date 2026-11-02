@@ -1622,7 +1622,7 @@ class BrowserIDEManager:
             },
             {
                 "id": "cyber_waf_zero_trust",
-                "name": "Zero-Trust Cyber WAF & Post-Quantum Kyber-1024 Shield",
+                "name": "Request filtering and rate limiting (proof of concept)",
                 "passed": bool(waf_check["threat_detected"]),
                 "detail": f"WAF blocked probe with verdict={waf_check['verdict']}.",
             },
@@ -7220,7 +7220,7 @@ def create_hivemind_at_home_app(
             "protocol": "AMCP (Agent Mesh Context Protocol)",
             "version": "2.1.0",
             "transport": ["WebRTC-Direct", "WebSocket-P2P", "QUIC-GeoRing", "HTTPS-REST"],
-            "security": "Post-Quantum Kyber-1024 + TLS 1.3",
+            "security": "TLS 1.3 (terminated by Cloud Run); proof of concept",
             "capabilities": ["inference", "tool_dispatch", "state_sync", "reciprocity_ledger"],
         })
 
@@ -8580,7 +8580,7 @@ def create_hivemind_at_home_app(
             content={
                 "status": "ARMED_ZERO_TRUST",
                 "security_engine": "HiveMind Cognitive Shield, Cyber WAF & Byzantine Gatekeeper v2.8",
-                "tls_post_quantum": "TLS 1.3 + Post-Quantum Kyber-1024 Key Encapsulation",
+                "tls": "TLS 1.3 (terminated by Cloud Run); no post-quantum cryptography is implemented",
                 "http_security_headers": {
                     "Content-Security-Policy": "strict self + trusted origins, object-src 'none', frame-ancestors 'none'",
                     "X-Frame-Options": "DENY",

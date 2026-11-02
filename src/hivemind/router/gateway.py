@@ -1359,8 +1359,12 @@ def create_router_app(
             active_producers_count=max(1, int(scale["live_producer_accounts"])),
             distinct_physical_gpus=max(1, int(scale["distinct_physical_gpus"])),
         )
-        t4_gpu = t4_doc.get("t4_gpu") or {}
-        t4_boinc = t4_doc.get("boinc_qlora_training") or {}
+        # Read the T4 block from the keys the visibility payload actually emits (hardware, governor, qlora_progress);
+        # the previous keys did not exist, so every figure here was a literal fallback dressed as live telemetry.
+        t4_hw = t4_doc.get("hardware") or {}
+        t4_gov = t4_doc.get("governor") or {}
+        t4_qlora = t4_doc.get("qlora_progress") or {}
+        t4_telemetry_status = str(t4_doc.get("telemetry_status") or "NO_TELEMETRY_RECEIVED")
         ot_doc = build_opentrainer_status_payload(
             trainer_accounts=store.list_trainer_accounts(),
             opentrainer_nodes=store.list_opentrainer_nodes(),
@@ -1380,17 +1384,22 @@ def create_router_app(
             "live_handles": [r["handle"] for r in live_rows],
         }
         t4_block = {
-            "node_name": t4_doc.get("node_name", "socreateai-agora-hermes-node1"),
-            "gpu_name": t4_gpu.get("gpu_name", "NVIDIA Tesla T4 (16 GB GDDR6)"),
-            "vram_total_mib": int(t4_gpu.get("vram_total_mib", 15360)),
-            "vram_used_mib": int(t4_gpu.get("vram_used_mib", 4841)),
-            "vram_free_mib": int(t4_gpu.get("vram_free_mib", 10519)),
-            "governor_state": t4_gpu.get("governor_state", "IDLE_COMPUTE_GREEN"),
-            "assimilated_workunits": int(t4_boinc.get("assimilated_workunits", 147)),
-            "total_cobblestones": float(t4_boinc.get("total_cobblestones", 5632.11)),
-            "head_workunit": t4_boinc.get("head_workunit", "hmq_00092"),
-            "held_out_nll_baseline": float(t4_boinc.get("held_out_nll_baseline", 2.2705)),
-            "held_out_nll_current": float(t4_boinc.get("held_out_nll_current", 2.1380)),
+            "node_name": t4_doc.get("node_name"),
+            "gpu_name": t4_hw.get("primary_gpu"),
+            "vram_total_mib": t4_hw.get("vram_total_mib"),
+            "vram_used_mib": t4_hw.get("vram_used_mib"),
+            "vram_free_mib": t4_hw.get("vram_free_mib"),
+            "governor_state": t4_gov.get("state"),
+            "assimilated_workunits": t4_qlora.get("assimilated_workunits"),
+            "total_cobblestones": t4_qlora.get("verified_cobblestones"),
+            "head_workunit": t4_qlora.get("chain_head_workunit"),
+            "held_out_nll_baseline": t4_qlora.get("held_out_eval_loss_before"),
+            "held_out_nll_current": t4_qlora.get("held_out_eval_loss_after"),
+            # Freshness of the figures above: FRESH only when a governor push arrived within the window.
+            "telemetry_status": t4_telemetry_status,
+            "telemetry_age_s": t4_doc.get("telemetry_age_s"),
+            "telemetry_source": t4_doc.get("telemetry_source"),
+            "data_source": "T4_LIVE_PUSH" if t4_telemetry_status == "FRESH" else f"T4_SNAPSHOT_NOT_LIVE ({t4_telemetry_status})",
         }
         usage_block = {
             "total_requests": int(usage_doc.get("total_requests", 0)),

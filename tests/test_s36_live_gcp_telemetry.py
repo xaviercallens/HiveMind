@@ -318,6 +318,30 @@ def test_pages_show_na_not_a_literal_when_a_telemetry_figure_is_missing() -> Non
     assert ruche.status_code == 200 and "n/a registered accounts" in ruche.text and "147 assimilated" not in ruche.text
 
 
+def test_every_live_gcp_script_uses_only_the_routers_payload_and_prints_na_for_a_missing_figure() -> None:
+    """IP-171: the ruche cockpit, the foundation-paper view and the Stitch cockpit scripts rendered the first payload
+    with accounts/models keys (the ruche's own, which carries none of those figures since #506) and substituted
+    69 accounts, 147 WUs, 5632.11 cobblestones, 10519 MiB, 1.7772, ONLINE, ACCEPTING_WORK or hmq_00092."""
+    from hivemind.boinc.hivemind_at_home_dashboard import create_hivemind_at_home_app
+
+    literals = ("?? 147", "?? 1.7772", "?? 10519", "?? 5632.11", "?? 69", "?? 15360", '|| "ONLINE"', "|| 'ONLINE'",
+                '|| "ACCEPTING_WORK"', '|| "hmq_00092"')
+    pages: list[tuple[str, str]] = []
+    ruche = TestClient(create_hivemind_at_home_app())
+    for path in ("/", "/v1", "/v2", "/community", "/boinc", "/night-moe", "/planet-forecast", "/foundation-paper", "/cockpit-v46", "/join"):
+        r = ruche.get(path)
+        assert r.status_code == 200, path
+        pages.append((f"ruche {path}", r.text))
+    # the router's own portal script is covered by test_portal_page_script_prints_na_not_a_literal_for_a_missing_live_figure
+    checked = 0
+    for name, html_text in pages:
+        for literal in literals:
+            assert literal not in html_text, (name, literal)
+        if "d && d.accounts && d.models" in html_text:
+            checked += 1
+            assert "d.status === 'LIVE_GCP_PRODUCTION'" in html_text, name
+    assert checked >= 3, checked
+
 def test_router_live_telemetry_opentrainer_eval_loss_is_none_until_a_round_is_recorded() -> None:
     """IP-146 (router side): with no OpenTrainer round recorded the block said latest_eval_loss 1.7772, the Stage-2
     soak's final loss, while its own moe_self_training block said NO_ROUNDS_RECORDED_YET."""

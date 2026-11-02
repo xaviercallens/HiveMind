@@ -2140,13 +2140,9 @@ def create_router_app(
             auth_header = request.headers.get("authorization", "")
             scheme, _, token = auth_header.partition(" ")
             bearer = token.strip() if scheme.lower() == "bearer" and token.strip() else ""
-            if bearer:
-                if admin_key_hash is not None and hmac.compare_digest(store.key_digest(bearer), admin_key_hash):
-                    authorized = True
-                else:
-                    acc = store.authenticate(bearer)
-                    if acc is not None and acc.role in ("producer", "prosumer", "trainer"):
-                        authorized = True
+            # admin key only: any free producer/prosumer account used to be able to overwrite the public T4 telemetry
+            if bearer and admin_key_hash is not None and hmac.compare_digest(store.key_digest(bearer), admin_key_hash):
+                authorized = True
         if not authorized:
             raise RouterError(
                 403,
@@ -2309,12 +2305,13 @@ def create_router_app(
         if payload.include_legacy_known_users:
             store.ensure_legacy_hiveminders_registered(now_utc=now)
 
-        existing_tokens = store.existing_endpoint_tokens()
-        fallback_tok = payload.endpoint_token or existing_tokens.get("default")
+        # explicit token only: the stored "default" was the latest heartbeat token of ANY account, so an attacker heartbeating
+        # often chose the token the gateway then presented to the owner's endpoints
+        fallback_tok = payload.endpoint_token
         if not fallback_tok:
             raise RouterError(
                 400,
-                "endpoint_token is required: no token was supplied and none is stored for any live endpoint.",
+                "endpoint_token is required: give the token of the endpoints you are reconnecting to.",
                 "invalid_request_error",
                 "endpoint_token_required",
             )
@@ -3095,6 +3092,12 @@ def create_router_app(
         if role not in ("consumer", "producer", "prosumer"):
             role = "prosumer"
         created = False
+        # same gates as the other registration routes: these created unlimited accounts even with registration closed
+        if not register_limiter.allow(client_key(request), clock()):
+            raise RouterError(429, "Too many registrations; try again in a minute.", "rate_limit_error", "rate_limited")
+        has_key = bool(request.headers.get("authorization", "").strip() or str(body.get("api_key") or "").strip())
+        if not open_registration and not has_key:
+            raise RouterError(403, "Handle registration is closed. Sign in at /signup.", "permission_error", "registration_closed")
         try:
             account_id, api_key = store.register(handle, role)
             created = True
@@ -3287,6 +3290,12 @@ def create_router_app(
         if role not in ("consumer", "producer", "prosumer"):
             role = "prosumer"
         created = False
+        # same gates as the other registration routes: these created unlimited accounts even with registration closed
+        if not register_limiter.allow(client_key(request), clock()):
+            raise RouterError(429, "Too many registrations; try again in a minute.", "rate_limit_error", "rate_limited")
+        has_key = bool(request.headers.get("authorization", "").strip() or str(body.get("api_key") or "").strip())
+        if not open_registration and not has_key:
+            raise RouterError(403, "Handle registration is closed. Sign in at /signup.", "permission_error", "registration_closed")
         try:
             account_id, api_key = store.register(handle, role)
             created = True

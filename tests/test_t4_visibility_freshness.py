@@ -9,6 +9,8 @@ from fastapi.testclient import TestClient
 from hivemind.router import RouterStore, create_router_app
 from hivemind.router import t4_visibility as t4
 
+T4_ADMIN = "t4-sync-admin-key-for-tests"
+
 
 @pytest.fixture()
 def restore_snapshot():
@@ -50,8 +52,11 @@ def test_malformed_numbers_are_refused_in_module_and_over_http(restore_snapshot)
     with pytest.raises(ValueError):
         t4.update_t4_telemetry_snapshot({"gpu": {"temp_c": float("nan")}})
     store = RouterStore(":memory:", b"k" * 32)
-    client = TestClient(create_router_app(store))
-    key = client.post("/v1/hivemind/register", json={"handle": "t4_pusher", "role": "producer"}).json()["api_key"]
+    client = TestClient(create_router_app(store, admin_key_hash=store.key_digest(T4_ADMIN)))
+    producer = client.post("/v1/hivemind/register", json={"handle": "t4_pusher", "role": "producer"}).json()["api_key"]
+    # only the admin (the T4 sync daemon) may push: a producer key used to overwrite the public T4 telemetry
+    assert client.post("/v1/hivemind/t4/telemetry", headers={"Authorization": f"Bearer {producer}"}, json={"gpu": {"used_mib": 1}}).status_code == 403
+    key = T4_ADMIN
     bad = client.post("/v1/hivemind/t4/telemetry", headers={"Authorization": f"Bearer {key}"}, json={"gpu": {"used_mib": "x"}})
     assert bad.status_code == 400 and "used_mib" in bad.text
     good = client.post("/v1/hivemind/t4/telemetry", headers={"Authorization": f"Bearer {key}"}, json={"gpu": {"used_mib": 4841}})
@@ -77,8 +82,11 @@ def test_governor_and_qlora_pushes_are_validated_and_a_bad_push_changes_nothing(
     good = t4.update_t4_telemetry_snapshot({"governor": {"in_flight_requests": 2, "state": "yielded"}, "qlora_progress": {"assimilated_workunits": 161}})
     assert good["governor"]["in_flight_requests"] == 2 and good["qlora_progress"]["assimilated_workunits"] == 161
     store = RouterStore(":memory:", b"k" * 32)
-    client = TestClient(create_router_app(store))
-    key = client.post("/v1/hivemind/register", json={"handle": "t4_pusher2", "role": "producer"}).json()["api_key"]
+    client = TestClient(create_router_app(store, admin_key_hash=store.key_digest(T4_ADMIN)))
+    producer = client.post("/v1/hivemind/register", json={"handle": "t4_pusher2", "role": "producer"}).json()["api_key"]
+    # only the admin (the T4 sync daemon) may push: a producer key used to overwrite the public T4 telemetry
+    assert client.post("/v1/hivemind/t4/telemetry", headers={"Authorization": f"Bearer {producer}"}, json={"gpu": {"used_mib": 1}}).status_code == 403
+    key = T4_ADMIN
     r = client.post("/v1/hivemind/t4/telemetry", headers={"Authorization": f"Bearer {key}"}, json={"governor": {"in_flight_requests": "x"}})
     assert r.status_code == 400 and "in_flight_requests" in r.text
     assert client.get("/v1/hivemind/t4/status").status_code == 200
@@ -86,13 +94,16 @@ def test_governor_and_qlora_pushes_are_validated_and_a_bad_push_changes_nothing(
 
 def test_live_telemetry_t4_block_reflects_pushed_values_and_states_freshness(restore_snapshot) -> None:
     store = RouterStore(":memory:", b"k" * 32)
-    client = TestClient(create_router_app(store))
+    client = TestClient(create_router_app(store, admin_key_hash=store.key_digest(T4_ADMIN)))
     t4._LATEST_T4_SNAPSHOT["updated_epoch"] = None
     t4._LATEST_T4_SNAPSHOT["telemetry_source"] = "DEFAULT_SNAPSHOT_NO_TELEMETRY_RECEIVED"
     before = client.get("/v1/hivemind/live-telemetry").json()["t4_boinc"]
     assert before["telemetry_status"] == "NO_TELEMETRY_RECEIVED"
     assert before["data_source"].startswith("T4_SNAPSHOT_NOT_LIVE")
-    key = client.post("/v1/hivemind/register", json={"handle": "t4_pusher3", "role": "producer"}).json()["api_key"]
+    producer = client.post("/v1/hivemind/register", json={"handle": "t4_pusher3", "role": "producer"}).json()["api_key"]
+    # only the admin (the T4 sync daemon) may push: a producer key used to overwrite the public T4 telemetry
+    assert client.post("/v1/hivemind/t4/telemetry", headers={"Authorization": f"Bearer {producer}"}, json={"gpu": {"used_mib": 1}}).status_code == 403
+    key = T4_ADMIN
     r = client.post(
         "/v1/hivemind/t4/telemetry",
         headers={"Authorization": f"Bearer {key}"},

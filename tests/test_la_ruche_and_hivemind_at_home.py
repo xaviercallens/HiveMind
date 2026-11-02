@@ -513,7 +513,8 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     assert client.get("/api/v1/auth/session").status_code == 200
     assert client.post("/api/v1/auth/logout").status_code == 200
 
-    assert client.get("/api/v1/auth/migration/status").status_code == 200
+    assert client.get("/api/v1/auth/migration/status").status_code == 403  # lists every account: admin only
+    assert client.get("/api/v1/auth/migration/status", headers=ADMIN).status_code == 200
     assert client.post("/api/v1/auth/v1-migrate", json={"handle_or_email": "callensxavier@gmail.com"}).status_code == 401
     assert client.post("/api/v1/auth/v1-migrate", json={"handle_or_email": "migrated-v1-custom"}).status_code == 200
 

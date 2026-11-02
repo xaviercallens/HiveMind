@@ -6335,7 +6335,7 @@ def create_hivemind_at_home_app(
     async def _admin_gate(request: Request, call_next: Any) -> Any:
         """Admin routes and the user list need the dashboard admin key (x-admin-key); without one configured they are closed."""
         path = request.url.path
-        if path.startswith("/api/v1/admin/") or path == "/api/v1/auth/users":
+        if path.startswith("/api/v1/admin/") or path in ("/api/v1/auth/users", "/api/v1/auth/migration/status"):
             supplied = request.headers.get("x-admin-key", "")
             if _dashboard_admin_sha is None or not supplied or not hmac.compare_digest(
                 hashlib.sha256(supplied.encode()).hexdigest(), _dashboard_admin_sha
@@ -6585,7 +6585,7 @@ def create_hivemind_at_home_app(
 
     @app.post("/api/v1/auth/guest", response_class=JSONResponse)
     def api_auth_guest() -> JSONResponse:
-        guest_token = "hm_live_demo_" + hashlib.sha256(f"guest:{time.time()}".encode()).hexdigest()[:16]
+        guest_token = "hm_live_demo_" + secrets.token_hex(16)
         guest_record = {
             "handle": "guest_hiveminder",
             "email": "demo@hivemind.network",
@@ -6612,14 +6612,20 @@ def create_hivemind_at_home_app(
     def api_auth_upgrade_guest(req: AuthUpgradeGuestRequest, request: Request) -> JSONResponse:
         auth_header = request.headers.get("Authorization", "")
         old_token = auth_header.replace("Bearer ", "").strip()
-        old_guest = auth_state["api_keys"].get(old_token)
-        carried_points = int(old_guest.get("compute_points", 2500)) if old_guest else 2500
+        old_guest = auth_state["api_keys"].get(old_token) if old_token else None
+        # Only a real guest session can be upgraded, once, into a handle nobody holds: this route used to overwrite any
+        # existing account (seeded admins included) and to add 2,500 points on every call.
+        if not old_guest or not old_guest.get("is_guest"):
+            raise HTTPException(status_code=401, detail="A guest session token is required to upgrade (Authorization: Bearer).")
+        carried_points = int(old_guest.get("compute_points", 2500))
 
         clean_handle = sanitize_handle(req.handle)
+        if clean_handle in auth_state["users"] or clean_handle.lstrip("@").lower() in auth_state["users"]:
+            raise HTTPException(status_code=409, detail="That handle is already registered.")
         clean_email = sanitize_prompt_text(req.email)
         prov = req.provider.lower() if req.provider else "google"
         prov_badge = f"{prov.upper()}_SSO" if prov != "email" else "EMAIL_PASSKEY"
-        new_token = "hm_live_" + hashlib.sha256(f"upgrade:{clean_handle}:{time.time()}".encode()).hexdigest()[:24]
+        new_token = "hm_live_" + secrets.token_hex(16)
 
         if old_token:
             auth_state["api_keys"].pop(old_token, None)
@@ -6706,7 +6712,7 @@ def create_hivemind_at_home_app(
                 "v1_migrated": True,
             })
 
-        token = "hm_live_" + hashlib.sha256(f"{clean_handle}:{clean_email}:{time.time()}".encode()).hexdigest()[:24]
+        token = "hm_live_" + secrets.token_hex(16)
         user_record = {
             "handle": clean_handle,
             "email": clean_email,
@@ -6801,7 +6807,7 @@ def create_hivemind_at_home_app(
             raise HTTPException(status_code=404, detail=f"Existing operator '{key}' not found")
 
         # Fallback on-the-fly login
-        token = "hm_live_" + hashlib.sha256(f"{key}:{time.time()}".encode()).hexdigest()[:24]
+        token = "hm_live_" + secrets.token_hex(16)
         matched = {
             "handle": key,
             "email": f"{key}@hivemind.network",
@@ -6847,7 +6853,10 @@ def create_hivemind_at_home_app(
         clean_handle = sanitize_handle(hint)
 
         existing = auth_state["users"].get(clean_handle)
-        if existing and req.user_mode != "force_new":
+        if existing and req.user_mode == "force_new":
+            # "force_new" on a taken handle used to skip the ownership check and overwrite the account
+            raise HTTPException(status_code=409, detail="That handle is already registered.")
+        if existing:
             # the provider token is not verified here, so a handle hint must not open an existing account
             _require_token_owner(request, existing)
             existing["login_count"] = int(existing.get("login_count", 1)) + 1
@@ -6876,7 +6885,7 @@ def create_hivemind_at_home_app(
                 "user_state": "EXISTING_USER",
             })
 
-        token = "hm_live_" + hashlib.sha256(f"{prov}:{clean_handle}:{time.time()}".encode()).hexdigest()[:24]
+        token = "hm_live_" + secrets.token_hex(16)
         user_record = {
             "handle": clean_handle,
             "email": f"{clean_handle}@{prov}.federation.hivemind",
@@ -6947,7 +6956,7 @@ def create_hivemind_at_home_app(
         auth_header = request.headers.get("Authorization", "")
         old_token = auth_header.replace("Bearer ", "").strip()
         user = auth_state["api_keys"].get(old_token)
-        new_token = "hm_live_" + hashlib.sha256(f"rotate:{old_token}:{time.time()}".encode()).hexdigest()[:24]
+        new_token = "hm_live_" + secrets.token_hex(16)
         if user:
             auth_state["api_keys"].pop(old_token, None)
             user["token"] = new_token
@@ -6986,7 +6995,7 @@ def create_hivemind_at_home_app(
             auth_state["api_keys"][existing["token"]] = existing
             user_record = existing
         else:
-            token = "hm_live_" + hashlib.sha256(f"magic:{clean_email}:{time.time()}".encode()).hexdigest()[:24]
+            token = "hm_live_" + secrets.token_hex(16)
             user_record = {
                 "handle": clean_handle,
                 "email": clean_email,
@@ -8614,7 +8623,7 @@ def create_hivemind_at_home_app(
             pass
         handle = sanitize_handle(str(body.get("handle") or "Cmdr_RTX2070_Steam"))
         steam_id64 = str(body.get("steam_id64") or "76561198031337001")
-        api_key = "hm_live_steam_" + hashlib.sha256(f"{handle}:{steam_id64}".encode("utf-8")).hexdigest()[:20]
+        api_key = "hm_live_steam_" + secrets.token_hex(16)
         return JSONResponse(
             content={
                 "status": "STEAM_REGISTERED_AND_AUTHENTICATED",
@@ -8824,7 +8833,11 @@ def create_hivemind_at_home_app(
     def _load_or_init_ruche_community_state() -> dict[str, Any]:
         if community_state_path.exists():
             try:
-                return json.loads(community_state_path.read_text(encoding="utf-8"))
+                # NaN/Infinity (e.g. from one "cobblestones": "nan" sync) used to make every later hub response a 500, even
+                # after a restart: non-finite numbers are read as 0
+                return json.loads(
+                    community_state_path.read_text(encoding="utf-8"), parse_constant=lambda _c: 0.0
+                )
             except Exception:
                 pass
         try:

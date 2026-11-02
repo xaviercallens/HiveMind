@@ -58,6 +58,41 @@ def test_seeded_tokens_are_fresh_at_every_start(tmp_path: Path) -> None:
         assert "admin:all" not in r.text and "MasterCommander" not in r.text
 
 
+def test_upgrade_guest_cannot_take_an_existing_handle_or_mint_points(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    victim = client.post("/api/v1/auth/register", json={"handle": "victim01", "email": "v1@example.org"}).json()["token"]
+    body = {"handle": "victim01", "email": "x@example.org", "provider": "google"}
+    assert client.post("/api/v1/auth/upgrade-guest", json=body).status_code == 401  # no guest session
+    guest = client.post("/api/v1/auth/guest", json={}).json()["token"]
+    assert client.post("/api/v1/auth/upgrade-guest", headers={"Authorization": f"Bearer {guest}"}, json=body).status_code == 409
+    for seeded in ("xavier_callens", "clark719664"):
+        r = client.post("/api/v1/auth/upgrade-guest", headers={"Authorization": f"Bearer {guest}"}, json=dict(body, handle=seeded))
+        assert r.status_code == 409, seeded
+    # the victim still signs in with its own token
+    assert client.post("/api/v1/auth/login", headers={"Authorization": f"Bearer {victim}"}, json={"handle_or_email": "victim01"}).status_code == 200
+    # one upgrade per guest session: the upgraded token is not a guest any more, so chaining mints nothing
+    up = client.post("/api/v1/auth/upgrade-guest", headers={"Authorization": f"Bearer {guest}"}, json=dict(body, handle="fresh-bee"))
+    assert up.status_code == 200
+    again = client.post(
+        "/api/v1/auth/upgrade-guest", headers={"Authorization": f"Bearer {up.json()['token']}"}, json=dict(body, handle="fresh-bee-2")
+    )
+    assert again.status_code == 401
+
+
+def test_sso_force_new_cannot_overwrite_an_existing_handle(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    client.post("/api/v1/auth/register", json={"handle": "victim02", "email": "v2@example.org"})
+    for handle in ("victim02", "clark719664"):
+        r = client.post("/api/v1/auth/sso/google", json={"handle_hint": handle, "user_mode": "force_new"})
+        assert r.status_code == 409, handle
+
+
+def test_migration_status_is_admin_only(tmp_path: Path) -> None:
+    r = _client(tmp_path).get("/api/v1/auth/migration/status")
+    assert r.status_code == 403
+    assert "callensxavier@gmail.com" not in r.text
+
+
 def test_a_new_user_keeps_working_with_its_own_token(tmp_path: Path) -> None:
     client = _client(tmp_path)
     r = client.post("/api/v1/auth/register", json={"handle": "new-bee", "email": "new-bee@example.org"})

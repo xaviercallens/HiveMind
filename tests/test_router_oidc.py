@@ -83,6 +83,14 @@ def test_a_token_is_single_use_per_verifier(key: rsa.RSAPrivateKey) -> None:
     v, token = acme(key), sign(key)
     v.verify(token)
     assert code_of(v, token) == "replayed"
+    # a re-encoded spelling of the same signed token is not a new token: padding or extra characters are refused, and the
+    # replay cache is keyed on the signed bytes (it used to hash the raw string, so tok + "==" was accepted again)
+    for variant in (token + "==", token + "=", token.replace(".", ".=", 1)):
+        assert code_of(v, variant) in ("malformed_token", "replayed"), variant
+    h, c, s = token.split(".")
+    last = s[-1]
+    flipped = s[:-1] + ("A" if last != "A" else "B")  # same signature bytes only if the unused trailing bits change
+    assert code_of(v, f"{h}.{c}.{flipped}") in ("malformed_token", "replayed", "bad_signature")
 
 
 @settings(max_examples=100, deadline=None)

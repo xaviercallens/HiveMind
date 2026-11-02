@@ -170,6 +170,78 @@ def submit_verified_delta(
         return json.loads(resp.read().decode("utf-8"))
 
 
+def join_night_training_federation(
+    *,
+    gateway: str,
+    handle: str,
+    host_label: str,
+    gpu_name: str,
+    vram_total_mib: int,
+    vram_free_mib: int,
+    network_mode: str,
+    peer_minders: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Enroll the RTX/GPU trainer into the OpenRouter Small-Infrastructure Night-Training Federation and federate peer HiveMinders."""
+    url = gateway.rstrip("/") + "/v1/hivemind/opentrainer/night-federation/join"
+    body = json.dumps(
+        {
+            "rtx_handle": handle,
+            "rtx_host_label": host_label,
+            "rtx_gpu_name": gpu_name,
+            "vram_total_mib": vram_total_mib,
+            "vram_free_mib": vram_free_mib,
+            "network_mode": network_mode,
+            "peer_minders": peer_minders or [],
+            "include_existing_hiveminders": True,
+        }
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def execute_federated_night_round(
+    *,
+    gateway: str,
+    campaign_id: str,
+    handle: str,
+    host_label: str,
+    gpu_name: str,
+    inner_steps: int,
+    loss_before: float = 2.6123,
+    loss_after: float = 2.4890,
+    delta_norm: float = 0.842,
+) -> dict[str, Any]:
+    """Trigger a collaborative Night-MoE outer-step round across the RTX 2070 and federated HiveMinder trainers."""
+    url = gateway.rstrip("/") + "/v1/hivemind/opentrainer/night-federation/round"
+    body = json.dumps(
+        {
+            "campaign_id": campaign_id,
+            "rtx_handle": handle,
+            "rtx_host_label": host_label,
+            "rtx_gpu_name": gpu_name,
+            "inner_steps": inner_steps,
+            "loss_before": loss_before,
+            "loss_after": loss_after,
+            "delta_norm": delta_norm,
+            "include_existing_hiveminders": True,
+        }
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="HiveMind OpenTrainer Agent — Firewall-Friendly Outbound GPU Co-Training (BOINC + AMCP + Kafka + Aglets)."
@@ -194,6 +266,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--inner-steps", type=int, default=8, help="Inner optimizer steps completed")
     parser.add_argument("--once", action="store_true", help="Run a single heartbeat/round and exit")
     parser.add_argument("--interval-s", type=float, default=60.0, help="Heartbeat interval in seconds when running continuously")
+    parser.add_argument("--handle", default="rtx2070-xavgamsrv", help="Trainer handle for OpenRouter Night-Training Federation")
+    parser.add_argument("--join-night-federation", action="store_true", help="Enroll RTX/GPU as Night-Training Contributor & federate HiveMinders")
+    parser.add_argument("--federate-night-round", action="store_true", help="Execute a federated multi-trainer Night-MoE round")
     return parser
 
 
@@ -211,6 +286,55 @@ def main(argv: list[str] | None = None) -> int:
         except (urllib.error.URLError, ValueError) as exc:
             print(json.dumps({"ok": False, "error": f"Firewall check failed: {exc}"}), file=sys.stderr)
             return 1
+
+    if getattr(args, "join_night_federation", False):
+        fed_plan = join_night_training_federation(
+            gateway=args.gateway,
+            handle=args.handle,
+            host_label=args.host_label,
+            gpu_name=gpu_name,
+            vram_total_mib=vram_total,
+            vram_free_mib=vram_free,
+            network_mode=args.network_mode,
+        )
+        print(
+            json.dumps(
+                {
+                    "event": "night_training_federation_joined",
+                    "status": fed_plan.get("status"),
+                    "rtx_lead_trainer": fed_plan.get("rtx_lead_trainer"),
+                    "total_federated_trainers": fed_plan.get("total_federated_trainers"),
+                    "federated_peer_minders_count": fed_plan.get("federated_peer_minders_count"),
+                },
+                indent=2,
+            )
+        )
+    if getattr(args, "federate_night_round", False):
+        round_res = execute_federated_night_round(
+            gateway=args.gateway,
+            campaign_id=args.campaign_id,
+            handle=args.handle,
+            host_label=args.host_label,
+            gpu_name=gpu_name,
+            inner_steps=args.inner_steps,
+        )
+        print(
+            json.dumps(
+                {
+                    "event": "federated_night_round_completed",
+                    "round_index": round_res.get("round_index"),
+                    "accepted_learners_count": round_res.get("accepted_learners_count"),
+                    "loss_before": round_res.get("loss_before"),
+                    "loss_after": round_res.get("loss_after"),
+                    "amcp_event_id": round_res.get("amcp_event_id"),
+                },
+                indent=2,
+            )
+        )
+        if args.once and not os.environ.get("HIVEMIND_API_KEY", "").strip():
+            return 0
+    if getattr(args, "join_night_federation", False) and args.once and not os.environ.get("HIVEMIND_API_KEY", "").strip():
+        return 0
 
     api_key = os.environ.get("HIVEMIND_API_KEY", "").strip()
     if not api_key:

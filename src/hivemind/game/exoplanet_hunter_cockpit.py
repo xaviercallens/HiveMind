@@ -3644,6 +3644,88 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
             }
         )
 
+    @app.get("/v1/hivemind/opentrainer/night-federation/status", response_class=JSONResponse)
+    @app.get("/v1/opentrainer/night-federation/status", response_class=JSONResponse)
+    def get_local_opentrainer_night_federation_status() -> JSONResponse:
+        from hivemind.router.opentrainer import (
+            build_night_training_federation_plan,
+            load_live_lowcost_vm_orchestrator_ledger,
+            sync_live_opentrainer_into_store,
+        )
+
+        now = time.time()
+        sync_live_opentrainer_into_store(_portal_store, now_utc=now)
+        return JSONResponse(
+            content=build_night_training_federation_plan(
+                trainer_accounts=_portal_store.list_trainer_accounts(),
+                opentrainer_nodes=_portal_store.list_opentrainer_nodes(),
+                recent_rounds=_portal_store.list_opentrainer_rounds(limit=50),
+                hiveminder_accounts=_portal_store.list_hiveminder_accounts(now_utc=now),
+                lowcost_vm_orchestrator=load_live_lowcost_vm_orchestrator_ledger(),
+                now_utc=now,
+            )
+        )
+
+    @app.post("/v1/hivemind/opentrainer/night-federation/join", response_class=JSONResponse)
+    @app.post("/v1/opentrainer/night-federation/join", response_class=JSONResponse)
+    def post_local_opentrainer_night_federation_join(payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
+        rtx_handle = str(payload.get("rtx_handle") or payload.get("handle") or "rtx2070-xavgamsrv")
+        rtx_host = str(payload.get("rtx_host_label") or payload.get("host_label") or "XAVGAMSRV-RTX2070")
+        rtx_gpu = str(payload.get("rtx_gpu_name") or payload.get("gpu_name") or "NVIDIA GeForce RTX 2070 (8 GB NF4 QLoRA)")
+        rtx_tot = int(payload.get("vram_total_mib") or 8192)
+        rtx_free = int(payload.get("vram_free_mib") or 6400)
+        net_mode = str(payload.get("network_mode") or "outbound-https-relay")
+        peer_minders = payload.get("peer_minders") if isinstance(payload.get("peer_minders"), list) else None
+        include_existing = bool(payload.get("include_existing_hiveminders", True))
+        return JSONResponse(
+            content=_portal_store.enroll_and_federate_night_trainers(
+                rtx_handle=rtx_handle,
+                rtx_host_label=rtx_host,
+                rtx_gpu_name=rtx_gpu,
+                rtx_vram_total_mib=rtx_tot,
+                rtx_vram_free_mib=rtx_free,
+                network_mode=net_mode,
+                peer_minders=peer_minders,
+                include_existing_hiveminders=include_existing,
+                now_utc=time.time(),
+            )
+        )
+
+    @app.post("/v1/hivemind/opentrainer/night-federation/round", response_class=JSONResponse)
+    @app.post("/v1/opentrainer/night-federation/round", response_class=JSONResponse)
+    def post_local_opentrainer_night_federation_round(payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
+        campaign_id = str(payload.get("campaign_id") or "NIGHT-MOE-OPENROUTER-SMALL-INFRA-V1")
+        round_idx = int(payload["round_index"]) if payload.get("round_index") is not None else None
+        inner_steps = int(payload.get("inner_steps") or 20)
+        rtx_handle = str(payload.get("rtx_handle") or payload.get("handle") or "rtx2070-xavgamsrv")
+        rtx_host = str(payload.get("rtx_host_label") or payload.get("host_label") or "XAVGAMSRV-RTX2070")
+        rtx_gpu = str(payload.get("rtx_gpu_name") or payload.get("gpu_name") or "NVIDIA GeForce RTX 2070 (8 GB NF4 QLoRA)")
+        loss_before = float(payload.get("loss_before") if payload.get("loss_before") is not None else 2.6123)
+        loss_after = float(payload.get("loss_after") if payload.get("loss_after") is not None else 2.4890)
+        delta_norm = float(payload.get("delta_norm") if payload.get("delta_norm") is not None else 0.842)
+        peer_subs = payload.get("peer_submissions") if isinstance(payload.get("peer_submissions"), list) else None
+        include_existing = bool(payload.get("include_existing_hiveminders", True))
+        reward_hmt = float(payload.get("reward_hmt_per_trainer") if payload.get("reward_hmt_per_trainer") is not None else 100.0)
+        try:
+            res = _portal_store.execute_federated_night_training_round(
+                campaign_id=campaign_id,
+                round_index=round_idx,
+                inner_steps=inner_steps,
+                rtx_handle=rtx_handle,
+                rtx_host_label=rtx_host,
+                rtx_gpu_name=rtx_gpu,
+                rtx_loss_before=loss_before,
+                rtx_loss_after=loss_after,
+                rtx_delta_norm=delta_norm,
+                peer_submissions=peer_subs,
+                include_existing_hiveminders=include_existing,
+                reward_hmt_per_trainer=reward_hmt,
+                now_utc=time.time(),
+            )
+            return JSONResponse(content=res)
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={"error": {"message": str(exc)}})
+
     @app.get("/v1/hivemind/opentrainer/status", response_class=JSONResponse)
     @app.get("/v1/opentrainer/status", response_class=JSONResponse)
     def get_local_opentrainer_status() -> JSONResponse:

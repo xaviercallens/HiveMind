@@ -2866,6 +2866,100 @@ def create_router_app(
             "pioneer_campaign": store.pioneer_campaign_status(now_utc=now),
         }
 
+    @app.get("/v1/hivemind/opentrainer/night-federation/status")
+    @app.get("/v1/opentrainer/night-federation/status")
+    def get_opentrainer_night_federation_status() -> dict[str, Any]:
+        """Public OpenRouter Small-Infrastructure Night-Training Federation status (RTX 2070 + Federated HiveMinders)."""
+        from hivemind.router.opentrainer import (
+            build_night_training_federation_plan,
+            load_live_lowcost_vm_orchestrator_ledger,
+        )
+
+        now = clock()
+        return build_night_training_federation_plan(
+            trainer_accounts=store.list_trainer_accounts(),
+            opentrainer_nodes=store.list_opentrainer_nodes(),
+            recent_rounds=store.list_opentrainer_rounds(limit=50),
+            hiveminder_accounts=store.list_hiveminder_accounts(now_utc=now, ttl_s=PRODUCER_TTL_S),
+            lowcost_vm_orchestrator=load_live_lowcost_vm_orchestrator_ledger(),
+            now_utc=now,
+        )
+
+    @app.post("/v1/hivemind/opentrainer/night-federation/join")
+    @app.post("/v1/opentrainer/night-federation/join")
+    async def post_opentrainer_night_federation_join(request: Request) -> dict[str, Any]:
+        """Enroll the RTX 2070 as Night-Training Contributor on the OpenRouter Small Infrastructure and federate peer HiveMinders."""
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+        except ValueError:
+            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+
+        rtx_handle = str(body.get("rtx_handle") or body.get("handle") or "rtx2070-xavgamsrv")
+        rtx_host = str(body.get("rtx_host_label") or body.get("host_label") or "XAVGAMSRV-RTX2070")
+        rtx_gpu = str(body.get("rtx_gpu_name") or body.get("gpu_name") or "NVIDIA GeForce RTX 2070 (8 GB NF4 QLoRA)")
+        rtx_tot = int(body.get("vram_total_mib") or 8192)
+        rtx_free = int(body.get("vram_free_mib") or 6400)
+        net_mode = str(body.get("network_mode") or "outbound-https-relay")
+        peer_minders = body.get("peer_minders") if isinstance(body.get("peer_minders"), list) else None
+        include_existing = bool(body.get("include_existing_hiveminders", True))
+        sync_orch = bool(body.get("sync_orchestrator", True))
+
+        return store.enroll_and_federate_night_trainers(
+            rtx_handle=rtx_handle,
+            rtx_host_label=rtx_host,
+            rtx_gpu_name=rtx_gpu,
+            rtx_vram_total_mib=rtx_tot,
+            rtx_vram_free_mib=rtx_free,
+            network_mode=net_mode,
+            peer_minders=peer_minders,
+            include_existing_hiveminders=include_existing,
+            sync_orchestrator=sync_orch,
+            now_utc=clock(),
+        )
+
+    @app.post("/v1/hivemind/opentrainer/night-federation/round")
+    @app.post("/v1/opentrainer/night-federation/round")
+    async def post_opentrainer_night_federation_round(request: Request) -> dict[str, Any]:
+        """Execute a collaborative Night-MoE outer-step round uniting the RTX 2070 and federated HiveMinder trainers."""
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+        except ValueError:
+            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+
+        campaign_id = str(body.get("campaign_id") or "NIGHT-MOE-OPENROUTER-SMALL-INFRA-V1")
+        round_idx = int(body["round_index"]) if body.get("round_index") is not None else None
+        inner_steps = int(body.get("inner_steps") or 20)
+        rtx_handle = str(body.get("rtx_handle") or body.get("handle") or "rtx2070-xavgamsrv")
+        rtx_host = str(body.get("rtx_host_label") or body.get("host_label") or "XAVGAMSRV-RTX2070")
+        rtx_gpu = str(body.get("rtx_gpu_name") or body.get("gpu_name") or "NVIDIA GeForce RTX 2070 (8 GB NF4 QLoRA)")
+        loss_before = float(body.get("loss_before") if body.get("loss_before") is not None else 2.6123)
+        loss_after = float(body.get("loss_after") if body.get("loss_after") is not None else 2.4890)
+        delta_norm = float(body.get("delta_norm") if body.get("delta_norm") is not None else 0.842)
+        peer_subs = body.get("peer_submissions") if isinstance(body.get("peer_submissions"), list) else None
+        include_existing = bool(body.get("include_existing_hiveminders", True))
+        reward_hmt = float(body.get("reward_hmt_per_trainer") if body.get("reward_hmt_per_trainer") is not None else 100.0)
+
+        try:
+            return store.execute_federated_night_training_round(
+                campaign_id=campaign_id,
+                round_index=round_idx,
+                inner_steps=inner_steps,
+                rtx_handle=rtx_handle,
+                rtx_host_label=rtx_host,
+                rtx_gpu_name=rtx_gpu,
+                rtx_loss_before=loss_before,
+                rtx_loss_after=loss_after,
+                rtx_delta_norm=delta_norm,
+                peer_submissions=peer_subs,
+                include_existing_hiveminders=include_existing,
+                reward_hmt_per_trainer=reward_hmt,
+                now_utc=clock(),
+            )
+        except ValueError as exc:
+            raise RouterError(400, str(exc), "invalid_request_error", "night_round_rejected") from None
+
     @app.get("/v1/hivemind/opentrainer/status")
     @app.get("/v1/opentrainer/status")
     def get_opentrainer_status() -> dict[str, Any]:
@@ -2951,6 +3045,13 @@ def create_router_app(
                 "live_models": public_models,
             },
             "opentrainer_moe_self_training": moe_progress,
+            "openrouter_small_infra_night_federation": __import__("hivemind.router.opentrainer", fromlist=["build_night_training_federation_plan"]).build_night_training_federation_plan(
+                trainer_accounts=store.list_trainer_accounts(),
+                opentrainer_nodes=ot_nodes,
+                recent_rounds=ot_rounds,
+                hiveminder_accounts=fleet,
+                now_utc=now,
+            ),
             "active_task_offer": default_active_task_offer(now_utc=now),
             "firewall_traversal_modes": list(FIREWALL_TRAVERSAL_MODES),
             "community_help_guide": list(COMMUNITY_HELP_AND_CONTRIBUTIVE_GUIDE),

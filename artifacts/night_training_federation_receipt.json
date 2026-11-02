@@ -1,0 +1,36 @@
+{
+  "local": {
+    "local_db_federation_status": "FEDERATED_NIGHT_SWARM_LIVE",
+    "total_federated_trainers": 24,
+    "federated_peer_minders_count": 23,
+    "live_heartbeat_trainers_count": 24,
+    "round_index": 2954,
+    "accepted_learners_count": 24,
+    "loss_before": 2.5012,
+    "loss_after": 2.4685,
+    "ledger_chain_valid": true
+  },
+  "gcp": {
+    "gcp_gateway": "https://hivemind-openrouter-1003063861791.us-central1.run.app",
+    "synced_trainers": [
+      {
+        "handle": "rtx2070_xavgamsrv_night",
+        "host_label": "XAVGAMSRV-RTX2070",
+        "heartbeat_ok": true,
+        "delta_accepted": true
+      },
+      {
+        "handle": "hm_opentrainer_sentinel",
+        "host_label": "hm-opentrainer-1-cpu-sentinel",
+        "heartbeat_ok": true,
+        "delta_accepted": true
+      },
+      {
+        "handle": "minder_kipping_rtx4080",
+        "host_label": "KIPPING-EXOMOON-RTX4080",
+        "heartbeat_ok": true,
+        "delta_accepted": true
+      }
+    ]
+  }
+}

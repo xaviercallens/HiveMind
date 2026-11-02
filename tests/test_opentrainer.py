@@ -332,3 +332,85 @@ def test_opentrainer_status_is_derived_from_live_heartbeats_not_a_literal() -> N
     stale = client.get("/v1/hivemind/opentrainer/status").json()
     assert stale["status"] == "COORDINATOR_UP_NO_TRAINERS"
     assert stale["live_opentrainer_fleet"]["active_trainer_nodes"] == 0
+
+
+def test_rtx_night_training_integration_and_hiveminders_federation() -> None:
+    store = RouterStore(":memory:", b"f" * 32)
+    client = TestClient(create_router_app(store))
+
+    # 1. Register peer HiveMinders across trainer, prosumer, and producer roles on the OpenRouter small infrastructure
+    client.post("/v1/hivemind/register", json={"handle": "minder_rtx3080_paris", "role": "trainer"})
+    client.post("/v1/hivemind/register", json={"handle": "minder_rtx4070_lyon", "role": "prosumer"})
+    client.post("/v1/hivemind/register", json={"handle": "minder_a5000_zurich", "role": "producer"})
+
+    # 2. Enroll the RTX 2070 as Night-Training Contributor and federate all HiveMinder trainers
+    join_res = client.post(
+        "/v1/hivemind/opentrainer/night-federation/join",
+        json={
+            "rtx_handle": "rtx2070-xavgamsrv",
+            "rtx_host_label": "XAVGAMSRV-RTX2070",
+            "rtx_gpu_name": "NVIDIA GeForce RTX 2070 (8 GB NF4 QLoRA)",
+            "vram_total_mib": 8192,
+            "vram_free_mib": 6420,
+            "network_mode": "outbound-https-relay",
+            "include_existing_hiveminders": True,
+            "sync_orchestrator": False,
+        },
+    )
+    assert join_res.status_code == 200
+    fed = join_res.json()
+    assert fed["object"] == "hivemind.opentrainer.night_training_federation"
+    assert fed["status"] == "FEDERATED_NIGHT_SWARM_LIVE"
+    assert fed["rtx_integrated_as_night_trainer"] is True
+    assert fed["rtx_lead_trainer"]["handle"] == "rtx2070-xavgamsrv"
+    assert fed["rtx_lead_trainer"]["contributor_kind"] == "rtx_primary_night_trainer"
+    assert fed["total_federated_trainers"] >= 4
+    assert fed["federated_peer_minders_count"] >= 3
+    roster_handles = {m["handle"] for m in fed["federated_roster"]}
+    assert {"rtx2070-xavgamsrv", "minder_rtx3080_paris", "minder_rtx4070_lyon", "minder_a5000_zurich"} <= roster_handles
+
+    # 3. Verify OpenTrainer status is now TRAINERS_LIVE and exposes the Night Federation plan
+    st = client.get("/v1/hivemind/opentrainer/status").json()
+    assert st["status"] == "TRAINERS_LIVE"
+    assert st["openrouter_small_infra_night_federation"]["status"] == "FEDERATED_NIGHT_SWARM_LIVE"
+
+    # 4. Execute a collaborative Federated Night-MoE Round across RTX 2070 + peer HiveMinders
+    round_res = client.post(
+        "/v1/hivemind/opentrainer/night-federation/round",
+        json={
+            "campaign_id": "NIGHT-MOE-OPENROUTER-SMALL-INFRA-V1",
+            "round_index": 101,
+            "inner_steps": 24,
+            "rtx_handle": "rtx2070-xavgamsrv",
+            "loss_before": 2.6123,
+            "loss_after": 2.4412,
+            "delta_norm": 0.785,
+            "reward_hmt_per_trainer": 100.0,
+        },
+    )
+    assert round_res.status_code == 200
+    rbody = round_res.json()
+    assert rbody["accepted"] is True
+    assert rbody["monotone_ratchet_passed"] is True
+    assert rbody["round_index"] == 101
+    assert rbody["loss_after"] == 2.4412
+    assert rbody["accepted_learners_count"] >= 4
+    assert store.verify_chain() is True
+
+    # 5. Monotone validation-loss ratchet must reject a regressed federated night round
+    bad_round = client.post(
+        "/v1/hivemind/opentrainer/night-federation/round",
+        json={
+            "campaign_id": "NIGHT-MOE-OPENROUTER-SMALL-INFRA-V1",
+            "round_index": 102,
+            "loss_before": 2.4412,
+            "loss_after": 2.9500,
+        },
+    )
+    assert bad_round.status_code == 400
+
+    # 6. Verify Web UI renders the OpenRouter Small-Infra Night-Training Federation table
+    html_portal = client.get("/").text
+    assert 'id="otNightFederationTableBody"' in html_portal
+    assert "minder_rtx3080_paris" in html_portal
+    assert "rtx2070-xavgamsrv" in html_portal

@@ -551,6 +551,287 @@ def summarize_moe_self_training_progress(
     }
 
 
+OPENROUTER_SMALL_INFRA_SPEC: dict[str, Any] = {
+    "infrastructure_id": "openrouter-small-infra-v1",
+    "title_en": "HiveMind OpenRouter Small Infrastructure — RTX 2070 Night-Training Contributor & Federated HiveMinders",
+    "title_fr": "Petite Infrastructure OpenRouter HiveMind — Contributeur RTX 2070 d'Entraînement Nocturne & HiveMinders Fédérés",
+    "gateway_component": {
+        "service": "hivemind-openrouter",
+        "cpu": "1 vCPU",
+        "memory": "1 GiB",
+        "persistence": "Litestream SQLite Single-Writer (RouterStore)",
+        "public_url": "https://hivemind-openrouter-1003063861791.us-central1.run.app",
+        "local_portal_url": "http://127.0.0.1:8095",
+    },
+    "orchestrator_component": {
+        "service": "hm-opentrainer-1-cpu-sentinel",
+        "bind": "127.0.0.1:8096",
+        "vm_tier": "Permanent Low-Cost VM / e2-small CPU Sentinel",
+        "t4_required": False,
+        "role": "24/7 Quorum Sentinel, Non-IID Shard Dispatcher & DiLoCo/Multi-Krum Coordinator",
+    },
+    "rtx_primary_trainer": {
+        "handle": "rtx2070-xavgamsrv",
+        "host_label": "XAVGAMSRV-RTX2070",
+        "gpu_name": "NVIDIA GeForce RTX 2070 (8 GB NF4 QLoRA)",
+        "vram_total_mib": 8192,
+        "vram_safety_floor_mib": DEFAULT_MIN_FREE_VRAM_MIB_8GB,
+        "wddm_ceiling_mib": 6656,
+        "role": "trainer",
+        "badge": "🏆 Founding Pioneer Trainer #1",
+    },
+    "night_window_policy": {
+        "deep_night_window_cet": "22:00-07:00 Europe/Paris (80-160 QLoRA inner steps + SwaT Sleep Consolidation)",
+        "continuous_micro_round_cadence_s": 45,
+        "evolution_sync_cadence_hours": 2,
+        "moe_experimentator_cadence_hours": 4,
+        "federation_protocol": "DiLoCo 2D-DCT Outer Step + Multi-Krum Byzantine Resilience + Monotone Held-Out Loss Ratchet",
+    },
+}
+
+NIGHT_TRAINING_DOMAIN_SHARDS: tuple[dict[str, str], ...] = (
+    {
+        "shard_id": "shard-0-code-rust-python",
+        "domain": "Code & Systems Engineering (Python / Rust / FastAPI)",
+        "target_expert": "hivemind/coder",
+    },
+    {
+        "shard_id": "shard-1-math-lean4-sympy",
+        "domain": "Formal Verification & Symbolic Math (Lean 4 / SymPy)",
+        "target_expert": "hivemind/bee-lean-prover",
+    },
+    {
+        "shard_id": "shard-2-science-astro-pde",
+        "domain": "Astrophysics BLS & Sundials PDE/ODE Simulation",
+        "target_expert": "hivemind/bee-rusty-sundials",
+    },
+    {
+        "shard_id": "shard-3-multilingual-i18n",
+        "domain": "5-Language Citizen AI & SwaT Sleep Consolidation (EN/FR/ES/DE/ZH)",
+        "target_expert": "hivemind/moe-general",
+    },
+)
+
+
+def build_night_training_federation_plan(
+    *,
+    trainer_accounts: Sequence[Mapping[str, Any]],
+    opentrainer_nodes: Sequence[Mapping[str, Any]],
+    recent_rounds: Sequence[Mapping[str, Any]],
+    hiveminder_accounts: Sequence[Mapping[str, Any]] = (),
+    lowcost_vm_orchestrator: Mapping[str, Any] | None = None,
+    now_utc: float | None = None,
+) -> dict[str, Any]:
+    """Build the OpenRouter Small-Infrastructure Night-Training Federation plan uniting the RTX 2070 and peer HiveMinders."""
+    now = time.time() if now_utc is None else float(now_utc)
+    vm_orch = dict(lowcost_vm_orchestrator) if lowcost_vm_orchestrator is not None else load_live_lowcost_vm_orchestrator_ledger()
+
+    nodes_by_handle: dict[str, dict[str, Any]] = {}
+    for n in opentrainer_nodes:
+        h = str(n.get("handle") or "").strip().lower()
+        if not h:
+            continue
+        existing = nodes_by_handle.get(h)
+        if existing is None or float(n.get("last_heartbeat_utc") or 0.0) >= float(existing.get("last_heartbeat_utc") or 0.0):
+            nodes_by_handle[h] = dict(n)
+
+    # Collect all federated participants: RTX 2070 primary night contributor + OpenTrainer nodes + Trainer accounts + Producer/Prosumer HiveMinders
+    ordered_handles: list[str] = []
+    handle_meta: dict[str, dict[str, Any]] = {}
+
+    def _register_candidate(
+        handle_raw: str,
+        *,
+        role: str,
+        host_label: str,
+        gpu_name: str,
+        vram_total_mib: int,
+        vram_free_mib: int,
+        network_mode: str,
+        last_heartbeat_utc: float,
+        contributor_kind: str,
+    ) -> None:
+        clean = handle_raw.strip()
+        if not clean:
+            return
+        key = clean.lower()
+        if key not in ordered_handles:
+            ordered_handles.append(key)
+            handle_meta[key] = {
+                "handle": clean,
+                "role": role,
+                "host_label": host_label,
+                "gpu_name": gpu_name,
+                "vram_total_mib": int(vram_total_mib),
+                "vram_free_mib": int(vram_free_mib),
+                "network_mode": network_mode,
+                "last_heartbeat_utc": float(last_heartbeat_utc),
+                "contributor_kind": contributor_kind,
+            }
+        else:
+            cur = handle_meta[key]
+            if float(last_heartbeat_utc) > float(cur["last_heartbeat_utc"]):
+                cur["last_heartbeat_utc"] = float(last_heartbeat_utc)
+            if vram_total_mib > cur["vram_total_mib"]:
+                cur["vram_total_mib"] = int(vram_total_mib)
+                cur["vram_free_mib"] = int(vram_free_mib)
+                cur["gpu_name"] = gpu_name
+
+    # 1. Existing OpenTrainer nodes (putting RTX 2070 first if present)
+    sorted_ot_nodes = sorted(
+        opentrainer_nodes,
+        key=lambda x: (
+            0 if ("rtx" in str(x.get("handle", "")).lower() or "rtx" in str(x.get("gpu_name", "")).lower() or "xavgamsrv" in str(x.get("host_label", "")).lower()) else 1,
+            -float(x.get("last_heartbeat_utc") or 0.0),
+        ),
+    )
+    for n in sorted_ot_nodes:
+        h = str(n.get("handle") or "").strip()
+        host_l = str(n.get("host_label") or h)
+        gpu_n = str(n.get("gpu_name") or "NVIDIA GeForce RTX 2070")
+        is_rtx = "rtx" in h.lower() or "rtx" in gpu_n.lower() or "xavgamsrv" in host_l.lower()
+        is_sentinel = "sentinel" in h.lower() or "sentinel" in host_l.lower()
+        c_kind = (
+            "rtx_primary_night_trainer"
+            if is_rtx
+            else ("openrouter_small_infra_sentinel" if is_sentinel else "federated_hiveminder_trainer")
+        )
+        _register_candidate(
+            h,
+            role="trainer",
+            host_label=host_l,
+            gpu_name=gpu_n,
+            vram_total_mib=int(n.get("vram_total_mib") or 8192),
+            vram_free_mib=int(n.get("vram_free_mib") or 6400),
+            network_mode=str(n.get("network_mode") or "outbound-https-relay"),
+            last_heartbeat_utc=float(n.get("last_heartbeat_utc") or 0.0),
+            contributor_kind=c_kind,
+        )
+
+    # 2. Registered trainer accounts not yet in opentrainer_nodes
+    for t_acc in trainer_accounts:
+        h = str(t_acc.get("handle") or "").strip()
+        is_rtx = "rtx" in h.lower() or "xavgamsrv" in h.lower()
+        _register_candidate(
+            h,
+            role=str(t_acc.get("role") or "trainer"),
+            host_label="XAVGAMSRV-RTX2070" if is_rtx else f"{h}-node",
+            gpu_name="NVIDIA GeForce RTX 2070 (8 GB NF4 QLoRA)" if is_rtx else "Federated HiveMinder GPU",
+            vram_total_mib=8192,
+            vram_free_mib=6400,
+            network_mode="outbound-https-relay",
+            last_heartbeat_utc=float(t_acc.get("created_utc") or 0.0),
+            contributor_kind="rtx_primary_night_trainer" if is_rtx else "federated_hiveminder_trainer",
+        )
+
+    # 3. Registered Producer / Prosumer HiveMinders from OpenRouter small infrastructure
+    for hm in hiveminder_accounts:
+        h = str(hm.get("handle") or "").strip()
+        role = str(hm.get("role") or "prosumer")
+        if role not in ("trainer", "prosumer", "producer"):
+            continue
+        _register_candidate(
+            h,
+            role=role,
+            host_label=f"{h}-openrouter-producer",
+            gpu_name=f"Federated OpenRouter {role.capitalize()} GPU ({hm.get('execution_class') or 'cuda'})",
+            vram_total_mib=8192,
+            vram_free_mib=6400,
+            network_mode="outbound-https-relay",
+            last_heartbeat_utc=float(hm.get("last_heartbeat_utc") or 0.0),
+            contributor_kind="federated_openrouter_hiveminder",
+        )
+
+    federated_roster: list[dict[str, Any]] = []
+    num_participants = max(1, len(ordered_handles))
+    for idx, key in enumerate(ordered_handles):
+        meta = handle_meta[key]
+        shard = NIGHT_TRAINING_DOMAIN_SHARDS[idx % len(NIGHT_TRAINING_DOMAIN_SHARDS)]
+        vram_tot = int(meta["vram_total_mib"])
+        if vram_tot <= 4096 or "sentinel" in meta["contributor_kind"]:
+            qlora_profile = "CPU Sentinel / Rank-4 Aglet Quorum Validator"
+        elif vram_tot <= 10240:
+            qlora_profile = "NF4 4-bit Base + QLoRA (rank=4, alpha=8, batch=1, seq=1024, >=1536 MiB free floor)"
+        elif vram_tot <= 16384:
+            qlora_profile = "NF4/FP8 Base + QLoRA (rank=16, alpha=32, batch=2, seq=2048, >=4300 MiB free floor)"
+        else:
+            qlora_profile = "Full 14B-30B MoE Expert Shard + Rank-32 QLoRA / Teacher Distillation"
+        hb_age_s = round(max(0.0, now - float(meta["last_heartbeat_utc"])), 3) if meta["last_heartbeat_utc"] > 0 else None
+        hb_fresh = hb_age_s is not None and hb_age_s <= 300.0
+        federated_roster.append(
+            {
+                "learner_id": f"l{idx}",
+                "learner_index": idx,
+                "total_learners": num_participants,
+                "handle": meta["handle"],
+                "role": meta["role"],
+                "contributor_kind": meta["contributor_kind"],
+                "host_label": meta["host_label"],
+                "gpu_name": meta["gpu_name"],
+                "vram_total_mib": vram_tot,
+                "vram_free_mib": int(meta["vram_free_mib"]),
+                "network_mode": meta["network_mode"],
+                "shard_index": idx % len(NIGHT_TRAINING_DOMAIN_SHARDS),
+                "shard_id": shard["shard_id"],
+                "domain_focus": shard["domain"],
+                "target_expert": shard["target_expert"],
+                "qlora_profile": qlora_profile,
+                "heartbeat_fresh": hb_fresh,
+                "heartbeat_age_s": hb_age_s,
+                "last_heartbeat_utc": round(float(meta["last_heartbeat_utc"]), 3),
+            }
+        )
+
+    live_federated = [m for m in federated_roster if m["heartbeat_fresh"]]
+    rtx_entry = next(
+        (m for m in federated_roster if m["contributor_kind"] == "rtx_primary_night_trainer"),
+        federated_roster[0] if federated_roster else None,
+    )
+    peer_minders = [
+        m for m in federated_roster if rtx_entry is None or m["handle"].lower() != rtx_entry["handle"].lower()
+    ]
+
+    moe_prog = summarize_moe_self_training_progress(
+        recent_rounds=recent_rounds,
+        opentrainer_nodes=opentrainer_nodes,
+        now_utc=now,
+    )
+    n_live = len(live_federated)
+    # Byzantine tolerance f for Multi-Krum: 2f + 2 < n  =>  f = max(0, (n - 3) // 2)
+    byzantine_f = max(0, (len(federated_roster) - 3) // 2)
+
+    return {
+        "object": "hivemind.opentrainer.night_training_federation",
+        "infrastructure": OPENROUTER_SMALL_INFRA_SPEC,
+        "status": "FEDERATED_NIGHT_SWARM_LIVE" if live_federated else "AWAITING_TRAINER_HEARTBEATS",
+        "updated_utc": round(now, 3),
+        "rtx_lead_trainer": rtx_entry,
+        "rtx_integrated_as_night_trainer": rtx_entry is not None,
+        "federated_peer_minders_count": len(peer_minders),
+        "total_federated_trainers": len(federated_roster),
+        "live_heartbeat_trainers_count": n_live,
+        "quorum_satisfied": n_live >= 1 or int(vm_orch.get("current_round") or 0) > 0,
+        "multi_krum_byzantine_tolerance_f": byzantine_f,
+        "orchestrator_independent_rounds": int(vm_orch.get("current_round") or 0),
+        "moe_self_training_progress": moe_prog,
+        "domain_shards": list(NIGHT_TRAINING_DOMAIN_SHARDS),
+        "federated_roster": federated_roster,
+        "federate_cli_commands": {
+            "rtx_lead_night_trainer": (
+                "python scripts/hivemind_opentrainer_agent.py "
+                "--gateway https://hivemind-openrouter-1003063861791.us-central1.run.app "
+                '--host-label XAVGAMSRV-RTX2070 --gpu-name "NVIDIA GeForce RTX 2070 (8 GB NF4 QLoRA)" '
+                "--join-night-federation --federate-night-round --once"
+            ),
+            "peer_hiveminder_join": (
+                "python scripts/hivemind_opentrainer_agent.py "
+                "--gateway https://hivemind-openrouter-1003063861791.us-central1.run.app "
+                "--host-label <YOUR_RIG_NAME> --join-night-federation --submit-delta --once"
+            ),
+        },
+    }
+
+
 def load_live_lowcost_vm_orchestrator_ledger(repo_root: Any = None) -> dict[str, Any]:
     """Load the live Permanent Low-Cost VM OpenTrainer Orchestrator status ledger from disk if available."""
     import json
@@ -658,6 +939,13 @@ def build_opentrainer_status_payload(
         "active_task_offer": default_active_task_offer(now_utc=now),
         "recent_training_rounds": list(recent_rounds),
         "lowcost_vm_orchestrator": vm_summary,
+        "openrouter_small_infra_night_federation": build_night_training_federation_plan(
+            trainer_accounts=trainer_accounts,
+            opentrainer_nodes=opentrainer_nodes,
+            recent_rounds=recent_rounds,
+            lowcost_vm_orchestrator=vm_orch,
+            now_utc=now,
+        ),
         "firewall_traversal_modes": list(FIREWALL_TRAVERSAL_MODES),
         "aglet_amcp_kafka_lifecycle": list(AGLET_AMCP_LIFECYCLE_SPEC),
         "rtx2070_t4_integration_ledger": list(RTX2070_T4_INTEGRATION_LEDGER),

@@ -11,7 +11,8 @@
 #   hm-ckpt-gs       optional gs:// checkpoint to resume a new session from (copied once)
 #   hm-results-gs    gs:// prefix; the session's results, logs and checkpoint are copied there every 5 minutes and at the end
 #   hm-relay-target  optional "10.77.0.5:8787": the 2070 producer shield, served at https://<this ip as a-b-c-d>.sslip.io/rtx2070
-# Status (no SSH needed): gcloud compute instances get-guest-attributes hm-fed-master --zone us-east4-a  (hivemind/status, wg-pubkey, session, relay)
+# Status (no SSH needed; create the VM with metadata enable-guest-attributes=TRUE):
+#   gcloud compute instances get-guest-attributes hm-fed-master --zone us-east4-a  (hivemind/status, wg-pubkey, session, relay)
 set -uo pipefail
 md() { curl -fsS -H 'Metadata-Flavor: Google' "http://metadata.google.internal/computeMetadata/v1/instance/$1" 2>/dev/null || true; }
 attr() { md "attributes/$1"; }
@@ -111,6 +112,7 @@ results_loop() { while true; do sleep 300; for f in $B/sessions/*.log; do [ -e "
 session_loop &
 results_loop &
 while true; do
+  put wg-pubkey "$(wg pubkey < /etc/wireguard/hm.key)"  # re-published every minute: guest attributes may be enabled after boot
   sync_wg
   sync_relay
   put status "wg=$(ip link show wg-hivemind >/dev/null 2>&1 && echo up || echo down) peers=$(wg show wg-hivemind peers 2>/dev/null | grep -c .) handshakes=[$(wg show wg-hivemind latest-handshakes 2>/dev/null | awk -v n="$(date +%s)" '{printf "%s:%d ", substr($1,1,6), ($2==0 ? -1 : n-$2)}')] t=$(date -u +%FT%TZ)"

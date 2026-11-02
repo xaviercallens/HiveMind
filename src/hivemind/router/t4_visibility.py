@@ -195,19 +195,81 @@ def _require_finite_numbers(section: str, values: dict[str, Any], fields: tuple[
                 raise ValueError(f"{section}.{key} must be a finite number, got {v!r}")
 
 
+MAX_TELEMETRY_STRING = 256
+MAX_TELEMETRY_LIST = 64
+
+
+def _is_finite_number(v: Any) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and v == v and v not in (float("inf"), float("-inf"))
+
+
+def _validated_section(section: str, current: dict[str, Any], update: dict[str, Any]) -> dict[str, Any]:
+    """Return the validated new values for a telemetry section, or raise ValueError.
+
+    Only keys already present in the snapshot are accepted (the snapshot is the whitelist), and each value must keep the
+    type class of the value it replaces: finite numbers stay finite numbers, strings stay bounded strings, booleans stay
+    booleans, lists stay bounded lists of finite numbers or bounded strings, dicts stay dicts of the same. A push that
+    fails any rule changes nothing.
+    """
+    out: dict[str, Any] = {}
+    for key, value in update.items():
+        if key not in current:
+            raise ValueError(f"{section}.{key} is not a known telemetry field")
+        _check_like(f"{section}.{key}", current[key], value)
+        out[key] = value
+    return out
+
+
+def _check_like(path: str, template: Any, value: Any) -> None:
+    if isinstance(template, bool):
+        if not isinstance(value, bool):
+            raise ValueError(f"{path} must be a boolean, got {value!r}")
+    elif isinstance(template, (int, float)):
+        if not _is_finite_number(value):
+            raise ValueError(f"{path} must be a finite number, got {value!r}")
+    elif isinstance(template, str):
+        if not isinstance(value, str) or len(value) > MAX_TELEMETRY_STRING:
+            raise ValueError(f"{path} must be a string of at most {MAX_TELEMETRY_STRING} characters")
+    elif isinstance(template, list):
+        if not isinstance(value, list) or len(value) > MAX_TELEMETRY_LIST:
+            raise ValueError(f"{path} must be a list of at most {MAX_TELEMETRY_LIST} items")
+        for i, item in enumerate(value):
+            if isinstance(item, dict):
+                for k, v in item.items():
+                    if not isinstance(k, str) or not (_is_finite_number(v) or (isinstance(v, str) and len(v) <= MAX_TELEMETRY_STRING)):
+                        raise ValueError(f"{path}[{i}].{k} must be a finite number or a bounded string")
+            elif not (_is_finite_number(item) or (isinstance(item, str) and len(item) <= MAX_TELEMETRY_STRING)):
+                raise ValueError(f"{path}[{i}] must be a finite number or a bounded string")
+    elif isinstance(template, dict):
+        if not isinstance(value, dict):
+            raise ValueError(f"{path} must be an object")
+        for k, v in value.items():
+            if k in template:
+                _check_like(f"{path}.{k}", template[k], v)
+            elif not (_is_finite_number(v) or (isinstance(v, str) and len(v) <= MAX_TELEMETRY_STRING)):
+                raise ValueError(f"{path}.{k} must be a finite number or a bounded string")
+    elif template is None:
+        if not (value is None or _is_finite_number(value) or (isinstance(value, str) and len(value) <= MAX_TELEMETRY_STRING)):
+            raise ValueError(f"{path} must be null, a finite number or a bounded string")
+
+
 def update_t4_telemetry_snapshot(update: dict[str, Any]) -> dict[str, Any]:
-    """Update the in-memory T4 telemetry snapshot from the monitor or T4 node."""
+    """Update the in-memory T4 telemetry snapshot from the monitor or T4 node; a malformed push changes nothing."""
     with _SNAPSHOT_LOCK:
+        staged: dict[str, dict[str, Any]] = {}
         if "gpu" in update and isinstance(update["gpu"], dict):
             _require_finite_numbers("gpu", update["gpu"], _NUMERIC_GPU_FIELDS)
-            _LATEST_T4_SNAPSHOT["gpu"].update(update["gpu"])
+            staged["gpu"] = _validated_section("gpu", _LATEST_T4_SNAPSHOT["gpu"], update["gpu"])
+        if "governor" in update and isinstance(update["governor"], dict):
+            staged["governor"] = _validated_section("governor", _LATEST_T4_SNAPSHOT["governor"], update["governor"])
+        if "qlora_progress" in update and isinstance(update["qlora_progress"], dict):
+            staged["qlora_progress"] = _validated_section("qlora_progress", _LATEST_T4_SNAPSHOT["qlora_progress"], update["qlora_progress"])
+        for section, values in staged.items():
+            _LATEST_T4_SNAPSHOT[section].update(values)
+        if "gpu" in staged:
             used = int(_LATEST_T4_SNAPSHOT["gpu"].get("used_mib", 10303))
             total = int(_LATEST_T4_SNAPSHOT["gpu"].get("total_mib", 15360))
             _LATEST_T4_SNAPSHOT["gpu"]["free_mib"] = max(0, total - used)
-        if "governor" in update and isinstance(update["governor"], dict):
-            _LATEST_T4_SNAPSHOT["governor"].update(update["governor"])
-        if "qlora_progress" in update and isinstance(update["qlora_progress"], dict):
-            _LATEST_T4_SNAPSHOT["qlora_progress"].update(update["qlora_progress"])
         if "sole_active_gpu" in update:
             _LATEST_T4_SNAPSHOT["sole_active_gpu"] = bool(update["sole_active_gpu"])
         _LATEST_T4_SNAPSHOT["updated_epoch"] = time.time()

@@ -681,7 +681,7 @@ def build_night_training_federation_plan(
     sorted_ot_nodes = sorted(
         opentrainer_nodes,
         key=lambda x: (
-            0 if ("rtx" in str(x.get("handle", "")).lower() or "rtx" in str(x.get("gpu_name", "")).lower() or "xavgamsrv" in str(x.get("host_label", "")).lower()) else 1,
+            0 if ("xavgamsrv" in str(x.get("handle", "")).lower() or "xavgamsrv" in str(x.get("host_label", "")).lower()) else (1 if "rtx" in str(x.get("handle", "")).lower() else 2),
             -float(x.get("last_heartbeat_utc") or 0.0),
         ),
     )

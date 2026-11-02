@@ -520,7 +520,7 @@ class ReconnectProducersRequest(BaseModel):
     bee_endpoint_url: str = Field(default="https://34-48-48-154.sslip.io/bee", min_length=1, max_length=512)
     coder_endpoint_url: str = Field(default="https://34-48-48-154.sslip.io", min_length=1, max_length=512)
     rtx2070_endpoint_url: str = Field(default="https://34-48-48-154.sslip.io/rtx2070", min_length=1, max_length=512)
-    endpoint_token: str | None = Field(default="sDkyBiiDsjX3KL48lUZxdfZu1LK0c8QZXoS7RnJ7D2Q", min_length=16, max_length=200, pattern=r"^[A-Za-z0-9._~+/=-]+$")
+    endpoint_token: str | None = Field(default=None, min_length=16, max_length=200, pattern=r"^[A-Za-z0-9._~+/=-]+$")
     bee_endpoint_token: str | None = Field(default=None, min_length=16, max_length=200, pattern=r"^[A-Za-z0-9._~+/=-]+$")
     coder_endpoint_token: str | None = Field(default=None, min_length=16, max_length=200, pattern=r"^[A-Za-z0-9._~+/=-]+$")
     models: list[ModelEntry] | None = Field(default=None, max_length=64)
@@ -2297,7 +2297,14 @@ def create_router_app(
             store.ensure_legacy_hiveminders_registered(now_utc=now)
 
         existing_tokens = store.existing_endpoint_tokens()
-        fallback_tok = payload.endpoint_token or existing_tokens.get("default") or "sDkyBiiDsjX3KL48lUZxdfZu1LK0c8QZXoS7RnJ7D2Q"
+        fallback_tok = payload.endpoint_token or existing_tokens.get("default")
+        if not fallback_tok:
+            raise RouterError(
+                400,
+                "endpoint_token is required: no token was supplied and none is stored for any live endpoint.",
+                "invalid_request_error",
+                "endpoint_token_required",
+            )
 
         default_entries = payload.models or [
             ModelEntry(id="coder", local_name="qwen2.5-coder:7b-instruct", loaded=True, vram_mib=4841, cold_start_s=0.0),

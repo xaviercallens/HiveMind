@@ -616,9 +616,11 @@ class OpenTrainerHeartbeatRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     host_label: str = Field(default="trainer-node", min_length=1, max_length=128)
-    gpu_name: str = Field(default="NVIDIA GeForce RTX 2070", min_length=1, max_length=128)
-    vram_total_mib: int = Field(default=8192, ge=512, le=MAX_GPU_VRAM_MIB)
-    vram_free_mib: int = Field(default=6400, ge=0, le=MAX_GPU_VRAM_MIB)
+    # No invented defaults: these used to default to an RTX 2070 with 8192 / 6400 MiB, so a node that reported nothing was recorded as such a card.
+    # A missing value is stored as "not reported" / 0 (the VRAM safety gate treats a 0 total as unknown).
+    gpu_name: str | None = Field(default=None, min_length=1, max_length=128)
+    vram_total_mib: int | None = Field(default=None, ge=512, le=MAX_GPU_VRAM_MIB)
+    vram_free_mib: int | None = Field(default=None, ge=0, le=MAX_GPU_VRAM_MIB)
     network_mode: Literal["outbound-https-relay", "amcp-kafka-aglet", "wireguard-t4-hub", "ssh-loopback-tunnel", "boinc-night-workunit"] = "outbound-https-relay"
     training_stack: str = Field(default="qlora-moe+diloco+amcp-aglet+boinc", min_length=1, max_length=128)
     active_campaign: str = Field(default="E8-STAGE2-TINY-GRANITE-MOE-QLORA", min_length=1, max_length=128)
@@ -2910,9 +2912,9 @@ def create_router_app(
             account_id=account.account_id,
             handle=account.handle,
             node_id=f"{account.handle}:{payload.host_label}",
-            gpu_name=payload.gpu_name,
-            vram_total_mib=payload.vram_total_mib,
-            vram_free_mib=min(payload.vram_free_mib, payload.vram_total_mib),
+            gpu_name=payload.gpu_name or "not reported",
+            vram_total_mib=payload.vram_total_mib or 0,
+            vram_free_mib=min(payload.vram_free_mib or 0, payload.vram_total_mib or 0),
             network_mode=payload.network_mode,
             stacks=stacks,
             host_label=payload.host_label,
@@ -2961,8 +2963,8 @@ def create_router_app(
                 delta_l2=payload.delta_norm,
                 eval_loss=payload.loss_after,
                 tokens_trained=max(1, payload.inner_steps * 512),
-                vram_free_mib=6400,
-                vram_total_mib=8192,
+                vram_free_mib=0,  # 0 = not reported: the request carries no hardware reading
+                vram_total_mib=0,
             )
         except ValueError as exc:
             raise RouterError(
@@ -2972,7 +2974,8 @@ def create_router_app(
                 "delta_rejected",
             ) from None
         check["verification"] = "CLIENT_REPORTED_UNVERIFIED"
-        check["vram_values_reported_by_client"] = False  # the 6400/8192 MiB passed to the gate are placeholders, not a reading
+        check["vram_values_reported_by_client"] = False  # no hardware reading was sent: 0 MiB is recorded as "not reported"
+        check["tokens_trained_is_estimate"] = True  # inner_steps * 512, not a count the client measured
         saved = store.record_opentrainer_round_submission(
             account_id=account.account_id,
             handle=account.handle,
@@ -2983,10 +2986,11 @@ def create_router_app(
             delta_l2=payload.delta_norm,
             eval_loss=payload.loss_after,
             tokens_trained=max(1, payload.inner_steps * 512),
-            vram_free_mib=6400,
-            vram_total_mib=8192,
+            vram_free_mib=0,
+            vram_total_mib=0,
             now_utc=now,
         )
+        saved["tokens_trained_is_estimate"] = True
         saved["delta_sha256"] = payload.delta_sha256.lower()
         event_id = "ev-ot-" + uuid.uuid4().hex[:14]
         store.record_amcp_kafka_event(

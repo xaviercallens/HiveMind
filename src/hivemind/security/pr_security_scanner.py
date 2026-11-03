@@ -165,6 +165,9 @@ SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("Slack Webhook / Bot Token", re.compile(r"\bxox[baprs]-[0-9A-Za-z\-]{10,48}\b")),
     # HiveMind gateway keys are "hm-" + 43 URL-safe characters; 40+ avoids test fixtures such as "hm-test-...-do-not-print"
     ("HiveMind Gateway API Key", re.compile(r"\bhm-[A-Za-z0-9_-]{40,}")),
+    # Dashboard live keys are "hm_live_" + 32 hex characters (the format of the GHSA-gjc6-74f9-wmrr leak); a source
+    # line that builds one at run time ("hm_live_" + secrets.token_hex(16)) carries no hex run and is not matched.
+    ("HiveMind Dashboard Live Key", re.compile(r"\bhm_live_(?:demo_)?[0-9a-f]{20,}\b")),
 ]
 
 # 3. Exfiltration & Suspicious Outbound Sinks

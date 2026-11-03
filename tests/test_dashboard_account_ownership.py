@@ -175,3 +175,21 @@ def test_user_facing_texts_carry_the_notice_and_no_longer_claim_post_quantum_or_
         text = path.read_text(encoding="utf-8", errors="ignore")
         assert "Kyber-1024" not in text, path  # no post-quantum cryptography is implemented anywhere
         assert "100% Safe for Your" not in text and "**100% Private**" not in text, path
+
+
+def test_guest_key_is_issued_fresh_per_start_and_no_published_value_authenticates(tmp_path, monkeypatch) -> None:
+    """IP-240: the guest api_keys entry kept a literal token after the seeded users were reseeded."""
+    import re
+
+    from fastapi.testclient import TestClient
+
+    from hivemind.boinc.hivemind_at_home_dashboard import create_hivemind_at_home_app
+
+    monkeypatch.chdir(tmp_path)
+    client = TestClient(create_hivemind_at_home_app())
+    # a syntactically valid guest-looking key that was never issued by this process must not open the pre-seeded
+    # guest account (login-by-unknown-string registers a new account of that name, which is a different matter)
+    r = client.post("/api/v1/auth/login", json={"handle_or_email": "hm_live_" + "0" * 32})
+    assert r.json().get("handle") != "guest_hiveminder"
+    source = open(__import__("hivemind.boinc.hivemind_at_home_dashboard", fromlist=["x"]).__file__, encoding="utf-8").read()
+    assert re.search(r"hm_live_[0-9a-f]{20,}", source) is None

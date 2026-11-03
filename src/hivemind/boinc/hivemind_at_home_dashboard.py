@@ -6301,18 +6301,21 @@ def create_hivemind_at_home_app(
     for _seed in seeded_users.values():
         _seed["token"] = "hm_live_" + secrets.token_hex(16)
 
+    # The pre-seeded guest key was a literal in this file; like the seeded users it is issued fresh at every start,
+    # so no published value authenticates (IP-240, GHSA-gjc6-74f9-wmrr).
+    _guest_token = "hm_live_" + secrets.token_hex(16)
     auth_state: Dict[str, Any] = {
         "users": dict(seeded_users),
         "active_sessions": {},
         "api_keys": {
-            "hm_live_7a9f201bc6e488102d5f": {
+            _guest_token: {
                 "handle": "guest_hiveminder",
                 "email": "guest@hivemind.network",
                 "role": "HiveMinder Contributor",
                 "target_profile": "gamer",
                 "compute_points": 2500,
                 "points": 2500,
-                "token": "hm_live_7a9f201bc6e488102d5f",
+                "token": _guest_token,
                 "node_id": "0xDEMO48920",
                 "provider": "ONE-CLICK DEMO",
                 "linked_providers": ["GUEST_SANDBOX"],

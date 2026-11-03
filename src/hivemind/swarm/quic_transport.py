@@ -282,6 +282,8 @@ class ContinentalSuperRingRouter:
     # ------------------------------------------------------------------
     def register_peer(self, node: SuperRingPeerNode) -> bool:
         """Admit `node` into its Tier-1 Regional Geo-Ring (only if the `<20 ms` SLA holds)."""
+        if not math.isfinite(node.rtt_ms):
+            return False
         if node.rtt_ms > self.max_regional_rtt_ms:
             return False
         existing = self.peers.get(node.peer_id)

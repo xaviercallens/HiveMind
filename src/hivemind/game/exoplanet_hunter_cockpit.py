@@ -2185,7 +2185,7 @@ def render_traffic_and_tflops_monitor_html() -> str:
             <td>${ev.timestamp}</td>
             <td style="color:var(--amber);font-weight:700;">${ev.method}</td>
             <td style="color:var(--cyan);">${ev.path}</td>
-            <td>${ev.client_type} (${ev.client_ip})</td>
+            <td>${ev.client_type}</td>
             <td><span class="badge badge-ok">${ev.served_by}</span></td>
             <td style="color:var(--emerald);font-weight:700;">${ev.latency_ms} ms</td>
           </tr>

@@ -267,6 +267,51 @@ def test_hold_moves_funds_to_escrow_and_a_second_hold_cannot_double_spend() -> N
     assert store.verify_chain()
 
 
+def test_settle_refuses_a_hold_that_belongs_to_another_account_and_changes_nothing() -> None:
+    store = _store()
+    holder, producer = _setup(store)
+    other, _ = store.register("someone-else", "consumer")
+    store.grant(holder, 10.0, "seed")
+    store.grant(other, 10.0, "seed")
+    store.hold("r1", holder, 4.0)
+    before = (store.balance(holder), store.balance(other), store.balance(producer), store.balance("sys:escrow"))
+
+    with pytest.raises(ValueError):
+        store.settle("r1", other, producer, "m", 10, 10, 20, 1.0, _Fee())
+
+    assert (store.balance(holder), store.balance(other), store.balance(producer), store.balance("sys:escrow")) == before
+    assert store.active_hold_count(holder) == 1  # the hold is untouched and can still be settled by its owner
+    assert store.settle("r1", holder, producer, "m", 10, 10, 20, 1.0, _Fee()).charge > 0
+    assert store.verify_chain()
+
+
+def test_concurrent_holds_cannot_overspend_one_balance() -> None:
+    import threading
+
+    store = _store()
+    consumer, _ = _setup(store)
+    store.grant(consumer, 10.0, "seed")
+    results: list[str] = []
+
+    def attempt(n: int) -> None:
+        try:
+            store.hold(f"c{n}", consumer, 4.0)
+            results.append("ok")
+        except InsufficientBalance:
+            results.append("refused")
+
+    threads = [threading.Thread(target=attempt, args=(n,)) for n in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert results.count("ok") == 2 and results.count("refused") == 6  # 10 HMT pays for two holds of 4, never three
+    assert store.balance(consumer) == pytest.approx(2.0)
+    assert store.total_balances() == pytest.approx(store.total_minted(), abs=1e-9)
+    assert store.verify_chain()
+
+
 def test_settle_against_a_hold_is_capped_at_the_escrow_and_never_free() -> None:
     store = _store()
     consumer, producer = _setup(store)

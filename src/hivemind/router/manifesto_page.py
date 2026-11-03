@@ -355,6 +355,7 @@ footer{{margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--line);colo
 </style>
 </head>
 <body>
+<p role="note" id="poc-notice" style="margin:0;padding:10px 16px;background:#2a2208;color:#ffc943;font-size:14px;"><strong>&#9888; Proof of concept (PoC).</strong> Not a production service yet: send only public, non-sensitive data (no secrets, personal, private or enterprise data).</p>
 <div class="wrap">
   <nav class="topnav" aria-label="Navigation principale">
     <div class="topnav-links">

@@ -47,6 +47,9 @@ def _error(status: int, message: str, code: str) -> JSONResponse:
     return JSONResponse({"error": {"message": message, "type": "shield_error", "code": code}}, status_code=status)
 
 
+MAX_TOKENS_CAP = 16384  # per-request ceiling for max_tokens / max_completion_tokens
+
+
 def create_shield_app(
     upstream: str,
     token: str,
@@ -120,7 +123,18 @@ def create_shield_app(
             return _error(400, "Body must be JSON.", "invalid_json")
         if not isinstance(body, dict):
             return _error(400, "Body must be a JSON object.", "invalid_json")
-        if allowed and body.get("model") not in allowed:
+        model = body.get("model")
+        if not isinstance(model, str):  # a list or object would raise TypeError in the set/dict lookups below (a 500)
+            return _error(400, "model must be a string.", "invalid_request")
+        clamped = False
+        for limit_key in ("max_tokens", "max_completion_tokens"):  # a consumer can not make one request run for ever
+            limit = body.get(limit_key)
+            if isinstance(limit, (int, float)) and not isinstance(limit, bool) and limit > MAX_TOKENS_CAP:
+                body[limit_key] = MAX_TOKENS_CAP
+                clamped = True
+        if clamped:
+            raw = json.dumps(body).encode("utf-8")
+        if allowed and model not in allowed:
             return _error(403, "This model is not offered by this producer.", "model_not_allowed")
         now = time.monotonic()
         for stale in [n for n, started in inflight.items() if now - started > UPSTREAM_TIMEOUT_S + 30.0]:
@@ -152,6 +166,11 @@ def create_shield_app(
     return app
 
 
+POC_NOTICE = (
+    "Proof of concept (PoC): not a production service. Until HiveMind is fully secured, prompts you serve and requests you make must contain only public, non-sensitive data (no secrets, personal, private or enterprise data); the people using your node are anonymous, and nothing yet verifies producers or their output."
+)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Authenticating proxy in front of a local OpenAI-compatible model server.")
     parser.add_argument("--upstream", default="http://127.0.0.1:11434", help="Your model server (default: Ollama on this machine)")
@@ -162,6 +181,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--allow-model", action="append", default=[], metavar="NAME",
                         help="Only run this local model name (repeat). Recommended: it keeps your GPU for the model you advertise.")
     args = parser.parse_args(argv)
+    print(f"NOTICE: {POC_NOTICE}", file=sys.stderr)
     token = os.environ.get(ENDPOINT_TOKEN_ENV, "")
     if len(token) < MIN_TOKEN_CHARS:
         parser.error(f"set {ENDPOINT_TOKEN_ENV} to a random secret of at least {MIN_TOKEN_CHARS} characters")

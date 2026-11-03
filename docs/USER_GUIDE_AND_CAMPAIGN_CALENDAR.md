@@ -1,5 +1,8 @@
 # 🎮📅 Project HiveMind — User Guide (Zero Technical Skills Required), Developer & AI Agent Playbook, and Synchronized Quorum Calendar (`v1.8.0`)
 
+> [!WARNING]
+> **Proof of concept (PoC): not a production service yet.** Until HiveMind is fully secured, send only **public, non-sensitive data**: no secrets, passwords, API keys, personal information, or private or enterprise data. See [SECURITY.md](https://github.com/xaviercallens/HiveMind/blob/main/SECURITY.md).
+
 Welcome to **Project HiveMind (`Operation Polyglot-Singularity-128`)**! Whether you are a **PC gamer or student with zero coding experience**, a **software/ML developer**, or an **autonomous AI coding agent** (`Antigravity`, `Claude Code`, `Codex`, `Cursor`, `OpenHands`), this guide shows you how to join the campaign in **under 60 seconds** and when to connect so our community reaches **Swarm Quorum** together.
 
 ---
@@ -17,10 +20,10 @@ Welcome to **Project HiveMind (`Operation Polyglot-Singularity-128`)**! Whether 
 
 You do **not** need to know how to code to help train and validate our 8-Subject Open-Science AI (covering Rust safety, Lean 4 math proofs, cybersecurity, GPU kernels, biomedical clinical QA, and NASA/JWST exoplanet astronomy).
 
-### Why Is It 100% Safe for Your Gaming PC or Laptop?
+### Is It Safe for Your Gaming PC or Laptop? (proof of concept)
 1. **Tiny Memory Footprint (`< 1.5 GB` VRAM)**: Runs safely on any modern GPU (`NVIDIA GeForce RTX 2060/2070/3060/4060/4070+`, `AMD Radeon`, `Apple M1/M2/M3/M4`) or even a standard CPU if you don't have a dedicated graphics card.
 2. **Zero Gaming Stutter (`< 1.5 Second` Auto-Pause)**: Our built-in Game Watchdog detects if you launch a game (`Steam`, `Epic`, `Cyberpunk 2077`, `Counter-Strike 2`, `Valorant`, etc.) and pauses background AI work in **under 95 milliseconds**.
-3. **100% Private**: Never reads your personal files; it only processes the open-science benchmark text and generates a short verification receipt (`campaign_sha256`).
+3. **Designed not to read your personal files**: it only processes the open-science benchmark text and generates a short verification receipt (`campaign_sha256`). HiveMind is a proof of concept and has not had an independent security audit: do not treat this as a guarantee, and keep the machine's sensitive data out of reach as you would for any volunteer-computing client.
 
 ### 🚀 Join in 3 Easy Steps (Under 60 Seconds)
 

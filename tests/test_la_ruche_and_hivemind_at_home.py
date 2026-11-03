@@ -557,30 +557,27 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
         ).status_code
         == 200
     )
-    assert (
-        client.post(
+    # the training endpoint only records a request: no trainer is attached, so it is 202 with no metrics (it used to return
+    # fixed losses and TRAINING_COMPLETED_VERIFIED)
+    for hardware in ("cuda:0 RTX 2070", "cloud-a10g"):
+        queued = client.post(
             "/api/v1/admin/moe/train-expert",
             headers=ADMIN,
-            json={"domain_name": "physics_sim", "hardware_override": "cuda:0 RTX 2070"},
-        ).status_code
-        == 200
+            json={"domain_name": "physics_sim", "hardware_override": hardware},
+        )
+        assert queued.status_code == 202
+        receipt = queued.json()["training_receipt"]
+        assert queued.json()["status"] == "QUEUED_NOT_STARTED" and receipt["status"] == "QUEUED_NOT_STARTED"
+        assert receipt["metrics"] is None and "train_nll_after" not in receipt and "perplexity_reduction_pct" not in receipt
+    selected = client.post(
+        "/api/v1/admin/moe/models/select",
+        headers=ADMIN,
+        json={"model_id": "hivemind/moe-queenbee-256b"},
     )
-    assert (
-        client.post(
-            "/api/v1/admin/moe/train-expert",
-            headers=ADMIN,
-            json={"domain_name": "physics_sim", "hardware_override": "cloud-a10g"},
-        ).status_code
-        == 200
-    )
-    assert (
-        client.post(
-            "/api/v1/admin/moe/models/select",
-            headers=ADMIN,
-            json={"model_id": "hivemind/moe-queenbee-256b"},
-        ).status_code
-        == 200
-    )
+    assert selected.status_code == 200
+    assert selected.json()["status"] == "SELECTION_RECORDED" and "not deployed" in selected.json()["message"]
+    assert selected.json()["active_model"]["deployed"] is False and selected.json()["active_model"]["status"] == "SELECTED_IN_MEMORY"
+    assert client.get("/api/v1/admin/dashboard", headers=ADMIN).json()["active_model"]["deployed"] is False
     assert (
         client.post(
             "/api/v1/son/feedback",

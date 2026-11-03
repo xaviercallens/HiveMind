@@ -215,6 +215,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         )
         response.headers["X-Frame-Options"] = "SAMEORIGIN" if allow_sameorigin_frame else "DENY"
         response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-HiveMind-Status"] = "proof-of-concept; send only public, non-sensitive data (no secrets, personal, private or enterprise data)"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = (
@@ -1621,7 +1622,7 @@ class BrowserIDEManager:
             },
             {
                 "id": "cyber_waf_zero_trust",
-                "name": "Zero-Trust Cyber WAF & Post-Quantum Kyber-1024 Shield",
+                "name": "Request filtering and rate limiting (proof of concept)",
                 "passed": bool(waf_check["threat_detected"]),
                 "detail": f"WAF blocked probe with verdict={waf_check['verdict']}.",
             },
@@ -5963,8 +5964,12 @@ def create_hivemind_at_home_app(
 ) -> FastAPI:
     """Create the FastAPI web server for HiveMind@home, GCP Cloud Telemetry, La Ruche & Federated AI."""
     app = FastAPI(
-        title="HiveMind@home & La Ruche Community MoE + Federated AI Gateway",
+        title="HiveMind@home & La Ruche Community MoE + Federated AI Gateway (proof of concept)",
         version="2.7.0",
+        description=(
+            "Proof of concept (PoC), not a production service. Until HiveMind is fully secured, send only public, "
+            "non-sensitive data: no secrets, passwords, API keys, personal information, or private or enterprise data."
+        ),
     )
     # Zero-Trust Defense Shield & Rate Limiting Middlewares
     app.add_middleware(SecurityHeadersMiddleware)
@@ -6344,7 +6349,16 @@ def create_hivemind_at_home_app(
             if _dashboard_admin_sha is None or not supplied or not hmac.compare_digest(
                 hashlib.sha256(supplied.encode()).hexdigest(), _dashboard_admin_sha
             ):
-                return JSONResponse(status_code=403, content={"detail": "Dashboard admin key required (x-admin-key)."})
+                # this gate is the outermost middleware, so its own refusal skips SecurityHeadersMiddleware: set the headers here
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Dashboard admin key required (x-admin-key)."},
+                    headers={
+                        "X-Content-Type-Options": "nosniff",
+                        "Cache-Control": "no-store",
+                        "X-HiveMind-Status": "proof-of-concept; send only public, non-sensitive data (no secrets, personal, private or enterprise data)",
+                    },
+                )
         return await call_next(request)
 
     mesh_messages_store: List[Dict[str, Any]] = [
@@ -7208,7 +7222,7 @@ def create_hivemind_at_home_app(
             "protocol": "AMCP (Agent Mesh Context Protocol)",
             "version": "2.1.0",
             "transport": ["WebRTC-Direct", "WebSocket-P2P", "QUIC-GeoRing", "HTTPS-REST"],
-            "security": "Post-Quantum Kyber-1024 + TLS 1.3",
+            "security": "TLS 1.3 (terminated by Cloud Run); proof of concept",
             "capabilities": ["inference", "tool_dispatch", "state_sync", "reciprocity_ledger"],
         })
 
@@ -7867,14 +7881,15 @@ def create_hivemind_at_home_app(
             "compute_points": 68500,
         },
         "active_model": {
-            "model_id": "hivemind/la-ruche-moe-v2.6",
-            "version": "v2.6.0",
-            "architecture": "HiveMind-BTM-UpcycledSparseMoE-8xQLoRA",
-            "routing_mode": "sigma_moe",
-            "top_k": 2,
-            "status": "DEPLOYED_LIVE",
-            "activated_at": time.time() - 3600,
-            "activated_by": "callensxavier@gmail.com",
+            # no HiveMind-trained model is deployed: this record used to name "la-ruche-moe-v2.6" as DEPLOYED_LIVE, a model that does not exist
+            "model_id": "none",
+            "version": None,
+            "architecture": "n/a (tiers are served by off-the-shelf models, see the router catalog)",
+            "routing_mode": "n/a",
+            "top_k": None,
+            "status": "NONE_DEPLOYED",
+            "activated_at": None,
+            "activated_by": None,
         },
         "campaigns": [
             {
@@ -8021,44 +8036,44 @@ def create_hivemind_at_home_app(
             hw_allocated = "NVIDIA Tesla T4 (16GB Spot us-east4-b) + Cloud TPU v5e Swarm (RTX 2070 Shielded for Inference)"
             rtx2070_shield_engaged = True
 
-        train_result = {
+        # Nothing here trains a model: real training runs through the BOINC QLoRA workunit chain (scripts/t4_workgen.py ->
+        # boinc/real_client/moe_app.py) on volunteer GPUs. This endpoint only records the request, so it reports no loss,
+        # perplexity or "verified" status (it used to return fixed numbers and mark the job COMPLETED).
+        queued = {
             "training_receipt_id": receipt_id,
             "domain_name": req.domain_name,
             "adapter_rank": req.adapter_rank,
             "training_steps": req.training_steps,
             "priority": req.priority,
-            "hardware_allocated": hw_allocated,
+            "hardware_requested": hw_allocated,
             "rtx2070_inference_shield_engaged": rtx2070_shield_engaged,
-            "rtx2070_inference_lock": True,
-            "base_models_evolution": ["Qwen/Qwen3.5-MoE-Instruct", "google/gemma-3-moe"],
-            "contributor_handle": req.contributor_handle or "@xaviercallens",
-            "train_nll_before": 5.54,
-            "train_nll_after": 5.10,
-            "holdout_nll_before": 5.52,
-            "holdout_nll_after": 5.21,
-            "perplexity_reduction_pct": 14.85,
-            "spectral_energy_retained": 0.9998,
-            "deposited_to_ruche": True,
-            "status": "TRAINING_COMPLETED_VERIFIED",
-            "completed_at": time.time(),
+            "contributor_handle": req.contributor_handle,
+            "metrics": None,
+            "deposited_to_ruche": False,
+            "status": "QUEUED_NOT_STARTED",
+            "queued_at": time.time(),
         }
         admin_state["internal_swarm_queue"].insert(0, {
             "job_id": receipt_id,
             "domain": req.domain_name,
             "type": "QLORA_EXPERT_TRAINING",
-            "status": "COMPLETED",
+            "status": "QUEUED_NOT_STARTED",
         })
         admin_state["audit_log"].append({
             "timestamp": time.time(),
-            "actor": req.contributor_handle or "callensxavier@gmail.com",
-            "action": "INTERNAL_MOE_TRAINED",
-            "detail": f"Internal training completed for {req.domain_name} (Rank {req.adapter_rank}, PPL -8.45%).",
+            "actor": req.contributor_handle or "admin",
+            "action": "INTERNAL_MOE_TRAINING_REQUESTED",
+            "detail": f"Training request recorded for {req.domain_name} (rank {req.adapter_rank}); not started: no trainer is attached to this endpoint.",
         })
-        return JSONResponse(content={
-            "status": "INTERNAL_TRAINING_SUCCESS",
-            "training_receipt": train_result,
-            "message": f"Successfully trained new expert for domain '{req.domain_name}' with internal swarm priority.",
-        })
+        return JSONResponse(
+            status_code=202,
+            content={
+                "status": "QUEUED_NOT_STARTED",
+                "training_receipt": queued,
+                "message": f"Request for domain '{req.domain_name}' recorded. No training has run: no trainer is attached to this endpoint; "
+                "real training runs through the BOINC QLoRA workunit chain.",
+            },
+        )
 
     @app.post("/api/v1/admin/moe/models/select", response_class=JSONResponse)
     def api_admin_select_model(req: AdminSelectModelRequest) -> JSONResponse:
@@ -8066,8 +8081,9 @@ def create_hivemind_at_home_app(
             "model_id": sanitize_prompt_text(req.model_id),
             "routing_mode": req.routing_mode,
             "active_domains": req.active_domains or ["code_python", "math_reasoning", "physics_sim", "formal_lean4"],
-            "deploy_live": req.deploy_live,
-            "status": "DEPLOYED_LIVE",
+            "deploy_live_requested": req.deploy_live,
+            "status": "SELECTED_IN_MEMORY",  # records the selection for this process only; nothing is deployed to producers
+            "deployed": False,
             "activated_at": time.time(),
             "activated_by": req.initiator or "callensxavier@gmail.com",
         }
@@ -8079,9 +8095,9 @@ def create_hivemind_at_home_app(
             "detail": f"Active model set to '{req.model_id}' with routing mode '{req.routing_mode}'.",
         })
         return JSONResponse(content={
-            "status": "MODEL_ACTIVATED",
+            "status": "SELECTION_RECORDED",
             "active_model": model_record,
-            "message": f"Model '{req.model_id}' is now active across all OpenRouter and AMCP endpoints.",
+            "message": f"Model '{req.model_id}' was recorded as the selection of this dashboard process. It is not deployed to any producer or endpoint.",
         })
 
     
@@ -8568,7 +8584,7 @@ def create_hivemind_at_home_app(
             content={
                 "status": "ARMED_ZERO_TRUST",
                 "security_engine": "HiveMind Cognitive Shield, Cyber WAF & Byzantine Gatekeeper v2.8",
-                "tls_post_quantum": "TLS 1.3 + Post-Quantum Kyber-1024 Key Encapsulation",
+                "tls": "TLS 1.3 (terminated by Cloud Run); no post-quantum cryptography is implemented",
                 "http_security_headers": {
                     "Content-Security-Policy": "strict self + trusted origins, object-src 'none', frame-ancestors 'none'",
                     "X-Frame-Options": "DENY",

@@ -53,6 +53,7 @@ from hivemind.router.accounts import (
     ReservedHandle,
     RouterStore,
     TooManyEndpoints,
+    TooManyOpenTrainerNodes,
     TooManyHolds,
     UnknownAccount,
     fit_loaded_models,
@@ -2912,18 +2913,21 @@ def create_router_app(
             )
         now = clock()
         stacks = [s.strip() for s in payload.training_stack.replace("+", ",").split(",") if s.strip()] or list(SUPPORTED_STACKS)
-        node = store.upsert_opentrainer_node(
-            account_id=account.account_id,
-            handle=account.handle,
-            node_id=f"{account.handle}:{payload.host_label}",
-            gpu_name=payload.gpu_name or "not reported",
-            vram_total_mib=payload.vram_total_mib or 0,
-            vram_free_mib=min(payload.vram_free_mib or 0, payload.vram_total_mib or 0),
-            network_mode=payload.network_mode,
-            stacks=stacks,
-            host_label=payload.host_label,
-            now_utc=now,
-        )
+        try:
+            node = store.upsert_opentrainer_node(
+                account_id=account.account_id,
+                handle=account.handle,
+                node_id=f"{account.handle}:{payload.host_label}",
+                gpu_name=payload.gpu_name or "not reported",
+                vram_total_mib=payload.vram_total_mib or 0,
+                vram_free_mib=min(payload.vram_free_mib or 0, payload.vram_total_mib or 0),
+                network_mode=payload.network_mode,
+                stacks=stacks,
+                host_label=payload.host_label,
+                now_utc=now,
+            )
+        except TooManyOpenTrainerNodes as exc:
+            raise RouterError(400, str(exc), "invalid_request_error", "too_many_nodes") from None
         node["role"] = account.role
         offer = default_active_task_offer(now_utc=now)
         fw_mode = next(
@@ -3673,13 +3677,16 @@ def create_router_app(
             "federated_ledger_url": "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/ledger",
             "night_window": "22:00-07:00 Europe/Paris (24/7 on-demand workunits active)",
             "night_training_roles": {
-                "end_users": "Overnight (22:00-07:00 CET) or idle-GPU BOINC folding & rank-4 QLoRA inner-loop updates (+250 HMT & +45 Cobblestones/WU)",
+                "end_users": "Overnight (22:00-07:00 CET) or idle-GPU BOINC folding & rank-4 QLoRA inner-loop updates (credit pending server-side verification; 0 HMT awarded per workunit today)",
                 "hivemind_nodes": "Daytime (07:00-22:00 CET) OpenRouter inference -> Nighttime (22:00-07:00 CET) DiLoCo outer-step aggregation, Multi-Krum & SVD Teacher-to-Student distillation (/v1/hivemind/bees/owner-fleet-status)",
             },
             "plan_classes": ["cuda_hivemind", "cuda_hivemind_big", "cpu_hivemind_solver"],
-            "rewards_per_verified_workunit": {
-                "hmt_reflexion_points": 250,
-                "boinc_cobblestones": 45.0,
+            # IP-212: no per-workunit credit is awarded until a server-side verified path exists (steam_contribute_boinc
+            # awards 0 and marks the receipt pending_verification), so no schedule is advertised here.
+            "credit_policy": {
+                "hmt_per_verified_workunit": None,
+                "boinc_cobblestones_per_verified_workunit": None,
+                "basis": "NOT_PERFORMED: no verified credit path is implemented; client-supplied receipts award 0 HMT",
             },
         }
 

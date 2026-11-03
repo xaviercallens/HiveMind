@@ -239,6 +239,11 @@ class TooManyEndpoints(ValueError):
     """Raised by :meth:`RouterStore.upsert_producer` when an account already advertises ``MAX_ENDPOINTS_PER_ACCOUNT`` endpoints."""
 
 
+class TooManyOpenTrainerNodes(ValueError):
+    """Raised by :meth:`RouterStore.upsert_opentrainer_node` when an account already has ``MAX_OPENTRAINER_NODES_PER_ACCOUNT`` distinct host labels."""
+
+
+MAX_OPENTRAINER_NODES_PER_ACCOUNT = 8  # IP-211: host_label is caller-chosen, so one account could otherwise register unlimited "GPUs"
 MAX_ENDPOINTS_PER_ACCOUNT = 8  # one account may run several GPUs / servers; bounded so a heartbeat flood cannot grow the table without limit
 STALE_ENDPOINT_PURGE_S = 86_400.0  # an endpoint silent for a day is forgotten (it left the pool long ago) and frees its slot
 
@@ -2023,10 +2028,22 @@ class RouterStore:
         host_label: str,
         now_utc: float | None = None,
     ) -> dict[str, Any]:
-        """Register or update an OpenTrainer GPU node heartbeat."""
+        """Register or update an OpenTrainer GPU node heartbeat.
+
+        An account may hold at most ``MAX_OPENTRAINER_NODES_PER_ACCOUNT`` distinct ``host_label`` values
+        (``TooManyOpenTrainerNodes`` otherwise); refreshing an existing label is always allowed.
+        """
         stamp = time.time() if now_utc is None else float(now_utc)
         stacks_clean = [str(s) for s in stacks if str(s).strip()]
         with self._tx() as conn:
+            known_labels = {
+                str(r["host_label"])
+                for r in conn.execute("SELECT host_label FROM opentrainer_nodes WHERE account_id=?", (account_id,))
+            }
+            if host_label not in known_labels and len(known_labels) >= MAX_OPENTRAINER_NODES_PER_ACCOUNT:
+                raise TooManyOpenTrainerNodes(
+                    f"an account may register at most {MAX_OPENTRAINER_NODES_PER_ACCOUNT} OpenTrainer nodes"
+                )
             conn.execute(
                 "INSERT INTO opentrainer_nodes("
                 "account_id, node_id, handle, gpu_name, vram_total_mib, vram_free_mib, "

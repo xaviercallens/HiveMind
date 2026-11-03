@@ -722,3 +722,25 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
             == 200
         )
 
+
+
+def test_la_ruche_gate_rejects_non_finite_or_non_positive_figures_and_labels_figures_as_caller_reported(tmp_path: Path) -> None:
+    """IP-163: `after >= before` is False for NaN, so a NaN holdout loss used to be deposited with perplexity_reduction_pct=nan."""
+    import math
+
+    vault = LaRucheModelVault(vault_dir=tmp_path / "ruche_nan", hidden_size=32, vocab_size=259, canonical_rank_r=4)
+    tensors = {
+        "base_model.model.model.layers.0.self_attn.q_proj.lora_A.default.weight": torch.randn(4, 32),
+        "base_model.model.model.layers.0.self_attn.q_proj.lora_B.default.weight": torch.randn(32, 4),
+    }
+    good = dict(domain_name="code_python", adapter_tensors=tensors, contributor_handle="@tester", hardware_device="cpu",
+                dataset_shard_cid="cid://sha256/test", train_nll_before=5.5, train_nll_after=5.0, holdout_nll_before=5.5,
+                holdout_nll_after=5.1, holdout_perplexity_before=244.69, holdout_perplexity_after=164.02)
+    for field, bad in (("holdout_nll_after", math.nan), ("holdout_nll_after", math.inf), ("holdout_nll_before", -1.0),
+                       ("holdout_perplexity_after", math.nan), ("train_nll_after", 0.0)):
+        with pytest.raises(ValueError, match="finite positive number"):
+            vault.deposit_qlora_expert(**{**good, field: bad})
+    assert vault.cells == {}
+    cell = vault.deposit_qlora_expert(**good)
+    assert math.isfinite(cell.perplexity_reduction_pct) and cell.perplexity_reduction_pct > 0.0
+    assert cell.nll_source == "CALLER_REPORTED_UNVERIFIED"

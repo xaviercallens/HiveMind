@@ -695,6 +695,13 @@ The update is [`docs/IMPROVEMENT_PLAN_2026-11-01.md`](docs/IMPROVEMENT_PLAN_2026
 - Preregistered next experiment **TM1** (`artifacts/experiments/TM1_verifier_pruned_branching_prereg.json`): 40 MBPP tasks, local `qwen2.5-coder` 7b/3b/1.5b, arms A (one call), B (planner + 3 branches on two pools + hidden-test verifier), C (best-of-3 without planner); positive and two negative controls; **NOT_RUN** until a sandbox-capable host or explicit owner acceptance of unsandboxed `python -I` execution. Owner/assignee: open.
 - Foundation paper: paragraph text ready in section 4 of the assessment, to land with [#452](https://github.com/xaviercallens/HiveMind/issues/452) after [#446](https://github.com/xaviercallens/HiveMind/pull/446); no numbers until TM1 has a report.
 
+### Status update, 2026-11-03 (3-hourly review, 12:30 CET addendum)
+
+- **Remote:** `main` unchanged at `faa3112` since 08:53Z; no branch moved since. The integration host still has no valid GitHub token (`gh` *Bad credentials*, `git push` *Authentication failed* since 2026-11-02 22:40Z): the hourly gatekeeper has not run since then and nothing could be pushed or filed.
+- **Daily audit done locally:** `docs/IMPROVEMENT_PLAN_2026-11-03.md` and roadmap 3.26d (54 new items IP-196 to IP-249, P0 2, 8 re-checked) are committed on `docs/improvement-plan-2026-11-03` (`694acd7`). Fixes prepared since, also unpushed: IP-239 + IP-240 (`fix/ip239-scanner-matches-hm-live-keys`, `42a77d0`: the PR gate's scanner now matches `hm_live_` keys and the committed guest key is generated per start) and IP-213 (`fix/ip213-probe-online-only-for-2xx`, `a51e119`). Six branches wait for a token; the five issues of the plan's section 4 are filed when it exists.
+- **Live 08:46–11:15Z (7 rows):** probes 15/15 each; 0 × 402/5xx; 9–68 scripted chats per window (orchestrator PID 212195 still running from Antigravity); QLoRA **163** all morning (util 51 % at 08:46Z and 69 % at 11:15Z: workunits in progress, none assimilated since the overnight +2).
+- No new implementation or issue this round on purpose (six unpushed branches already queued).
+
 ### Status update, 2026-11-03 (3-hourly review, 09:30 CET addendum)
 
 - **Merged 08:53Z by the owner's authority (main `faa3112`):** [#534](https://github.com/xaviercallens/HiveMind/pull/534) (`docs/MVP_REALITY_AUDIT.md`: what is real vs simulated across 191 files, noreply author), [#527](https://github.com/xaviercallens/HiveMind/pull/527) (IP-163 vault gate), [#525](https://github.com/xaviercallens/HiveMind/pull/525) (manifesto n/a). Post-merge on `faa3112`: vault, ruche telemetry, portal, accounts and AGPL suites **52 passed**.

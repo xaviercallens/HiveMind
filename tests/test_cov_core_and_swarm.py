@@ -1622,12 +1622,16 @@ def test_hf_community_hub_and_strategy_optimizer_branches(tmp_path: Path) -> Non
         push_live = manager.exporter.push_bundle_to_hf_hub(
             bundle_dir, token="hf_valid", offline_fallback=False
         )
-        assert push_live["mode"] == "huggingface_hub_live"
+        assert push_live["mode"] == "huggingface_hub_live" and push_live["status"] == "pushed"
         mock_hf_api.side_effect = RuntimeError("hub offline")
         push_fb = manager.exporter.push_bundle_to_hf_hub(
             bundle_dir, token="hf_valid", offline_fallback=False
         )
-        assert push_fb["mode"] == "mock_hf_hub_offline"
+        # IP-165: a raised upload is reported as a failure, not as "pushed" with a silent local fallback
+        assert push_fb["status"] != "pushed", push_fb["status"]
+        assert push_fb["status"] == "UPLOAD_FAILED" and push_live["pushed_to_hub"] is True
+        assert push_fb["pushed_to_hub"] is False and push_fb["local_mirror_only"] is True
+        assert push_fb["mode"] == "huggingface_hub_upload_failed" and push_fb["upload_error"].startswith("RuntimeError: hub offline")
 
     # pull_bundle_from_hf_hub from local mock mirror (lines 401-405) AND live snapshot_download (lines 407-412)
     pull_mirror = manager.exporter.pull_bundle_from_hf_hub(

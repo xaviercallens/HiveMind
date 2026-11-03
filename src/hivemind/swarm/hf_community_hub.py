@@ -346,22 +346,33 @@ print(import_report["status"], import_report["royalties_settled_hive"])
         target_repo_id = repo_id or manifest["hf_repo_id"]
         hf_token = token or os.environ.get("HF_TOKEN")
 
+        # The record says what happened: "pushed" only when the Hub accepted the upload; a failed upload is
+        # UPLOAD_FAILED with the error, never "pushed" with a silent fallback to the local mirror (IP-165).
         mode = "mock_hf_hub_offline"
+        status = "mirrored_locally_not_pushed"
+        pushed_to_hub = False
+        hub_commit: Optional[str] = None
+        upload_error: Optional[str] = None
         if hf_token and not offline_fallback:
             try:
                 from huggingface_hub import HfApi  # type: ignore
 
                 api = HfApi(token=hf_token)
                 api.create_repo(repo_id=target_repo_id, repo_type="model", exist_ok=True)
-                api.upload_folder(
+                commit_info = api.upload_folder(
                     folder_path=str(bundle_path),
                     repo_id=target_repo_id,
                     repo_type="model",
                     commit_message=f"Publish HiveMind bundle {manifest['bundle_id']}",
                 )
                 mode = "huggingface_hub_live"
-            except Exception:
-                mode = "mock_hf_hub_offline"
+                status = "pushed"
+                pushed_to_hub = True
+                hub_commit = str(getattr(commit_info, "commit_url", None) or getattr(commit_info, "oid", None) or commit_info or "")[:200]
+            except Exception as exc:
+                mode = "huggingface_hub_upload_failed"
+                status = "UPLOAD_FAILED"
+                upload_error = f"{type(exc).__name__}: {exc}"[:200]
 
         repo_slug = target_repo_id.replace("/", "__")
         mirror_dir = self.mock_hub_root / repo_slug
@@ -373,7 +384,11 @@ print(import_report["status"], import_report["royalties_settled_hive"])
                 copied_files.append(fpath.name)
 
         record = {
-            "status": "pushed",
+            "status": status,
+            "pushed_to_hub": pushed_to_hub,
+            "hub_commit": hub_commit,
+            "upload_error": upload_error,
+            "local_mirror_only": not pushed_to_hub,
             "mode": mode,
             "repo_id": target_repo_id,
             "bundle_id": manifest["bundle_id"],

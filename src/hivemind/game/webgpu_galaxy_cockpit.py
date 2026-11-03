@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import math
 import secrets
 import time
 import urllib.request
@@ -1579,7 +1580,18 @@ def execute_server_webgpu_verification_and_sync(
     kernel_exec_ms: float,
     recovered_transit_depth_ppm: float,
 ) -> dict[str, Any]:
-    """Generate a cryptographic SHA-256 receipt for a WebGPU WGSL @compute workunit and sync with GCP Ruche."""
+    """Generate a cryptographic SHA-256 receipt for a WebGPU WGSL @compute workunit and sync with GCP Ruche.
+
+    Raises ``ValueError`` for non-positive / non-finite client numbers so no receipt is issued for them.
+    """
+    if (
+        int(n_points_folded) <= 0
+        or not math.isfinite(float(kernel_exec_ms))
+        or float(kernel_exec_ms) <= 0.0
+        or not math.isfinite(float(recovered_transit_depth_ppm))
+        or float(recovered_transit_depth_ppm) <= 0.0
+    ):
+        raise ValueError("n_points_folded, kernel_exec_ms and recovered_transit_depth_ppm must be positive")
     seed = f"webgpu:{handle}:{target_planet}:{gpu_adapter}:{recovered_transit_depth_ppm:.1f}:{time.time()}"
     receipt_sha256 = hashlib.sha256(seed.encode("utf-8")).hexdigest()
     gcp_lease_id = f"GCP-WEBGPU-{receipt_sha256[:12].upper()}"

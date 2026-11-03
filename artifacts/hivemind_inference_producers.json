@@ -2,11 +2,12 @@
   "pool_status": "ACTIVE_MULTI_PRODUCER_SERVING",
   "primary_anchor_producer": "PRODUCER-LOCAL-RTX2070-CUDA0",
   "t4_maintenance_failover_enabled": true,
-  "online_producers_count": 1,
+  "online_producers_count": 2,
   "online_producer_ids": [
-    "PRODUCER-LOCAL-RTX2070-CUDA0"
+    "PRODUCER-LOCAL-RTX2070-CUDA0",
+    "P1"
   ],
-  "total_requests_served": 0,
+  "total_requests_served": 23,
   "total_t4_failovers_handled": 0,
   "producers": [
     {
@@ -22,10 +23,10 @@
       "hivemind_at_home_endpoint": "http://127.0.0.1:8092/api/v1/moe/inference",
       "vram_allocated_mb": 0.0,
       "vram_free_gb": 0.0,
-      "init_elapsed_ms": 771.58,
+      "init_elapsed_ms": 44.31,
       "priority": 1,
-      "requests_served": 0,
-      "last_heartbeat": "2026-10-31T23:21:59",
+      "requests_served": 3,
+      "last_heartbeat": "2026-11-02T21:23:06",
       "notes": "Local RTX 2070 warmed up on cuda:0 and actively serving all local & failover HiveMind inference."
     },
     {
@@ -40,8 +41,22 @@
       "failover_target_id": "PRODUCER-LOCAL-RTX2070-CUDA0",
       "priority": 2,
       "requests_served": 0,
-      "last_heartbeat": "2026-10-31T23:21:59",
+      "last_heartbeat": "2026-11-02T21:23:06",
       "notes": "Work on the Tesla T4 is in progress in the meantime; all T4 traffic automatically fails over to Local RTX 2070 or other active producers."
+    },
+    {
+      "producer_id": "P1",
+      "name": "N1",
+      "hardware": "RTX",
+      "device": "remote:cuda:0",
+      "role": "EXTERNAL_SWARM_PRODUCER",
+      "status": "ONLINE_SERVING",
+      "endpoint_url": "",
+      "failover_target_id": "PRODUCER-LOCAL-RTX2070-CUDA0",
+      "priority": 2,
+      "requests_served": 0,
+      "last_heartbeat": "2026-11-02T21:23:06",
+      "notes": "Registered external HiveMind inference producer."
     }
   ]
 }

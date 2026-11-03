@@ -756,7 +756,7 @@ STAGE_5_DUAL_ENGINE_ARCHI_HTML = """<!-- STAGE 5 VIEW: DUAL-ENGINE ARCHITECTURE 
           </div>
           <ul class="space-y-1 text-[8.5px] text-slate-300">
             <li>• <strong class="text-tacticalCyan">Volumetric Planetary Rendering:</strong> Ray-marched Hycean atmospheres (K2-18 b / LHS 1140 b) + Oolite 3D Ship Mesh at 120 FPS.</li>
-            <li>• <strong class="text-tacticalGreen">Dedicated BOINC Folding Daemon:</strong> Background CUDA PTX BLS Transit Periodogram &amp; Bee-MoE Swarm inference (+250 HMT/WU).</li>
+            <li>• <strong class="text-tacticalGreen">Dedicated BOINC Folding Daemon:</strong> Background CUDA PTX BLS Transit Periodogram &amp; Bee-MoE Swarm inference (credit after server-side verification).</li>
             <li>• <strong class="text-tacticalAmber">Steamworks SDK Integration:</strong> Single-click Free Steam Game install (`steam://install/3133700`), achievements &amp; cloud saves.</li>
           </ul>
         </div>
@@ -768,7 +768,7 @@ STAGE_5_DUAL_ENGINE_ARCHI_HTML = """<!-- STAGE 5 VIEW: DUAL-ENGINE ARCHITECTURE 
           <div class="w-full bg-slate-900 h-1.5 rounded overflow-hidden mb-2"><div class="bg-tacticalCyan h-full" style="width: 78%"></div></div>
           <div class="flex flex-wrap gap-1.5">
             <button class="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold py-1 px-2 rounded text-[9.5px] cursor-pointer transition" onclick="simulateSteamRegisterLoginAndContribute()">
-              ⚡ EXÉCUTER WORKUNIT BOINC RTX 2070 (+250 HMT)
+              ⚡ EXÉCUTER WORKUNIT BOINC RTX 2070
             </button>
             <a id="btn-s5-download-exe" class="bg-emerald-700 hover:bg-emerald-600 border border-emerald-300 text-white font-extrabold py-1 px-2 rounded text-[9.5px]" href="https://github.com/xaviercallens/HiveMind/releases/download/v2.12.0/HiveMind_Exoplanet_Hunter.exe" target="_blank" rel="noopener">
               ⬇ WINDOWS .EXE (v2.12.0)
@@ -1768,7 +1768,7 @@ def build_stitch_v46_cockpit_html(state_json: str) -> str:
     scoreHmt += 500;
     const scoreEl = document.getElementById('score-hmt');
     if (scoreEl) scoreEl.textContent = scoreHmt.toLocaleString('en-US');
-    showToast(`✅ SYNCHRONISATION ORBITALE 100% (+500 HMT) ! DESCENTE ATMOSPHÉRIQUE SUR ${{data.name.toUpperCase()}}...`);
+    showToast(`✅ SYNCHRONISATION ORBITALE 100% (+500 pts de jeu) ! DESCENTE ATMOSPHÉRIQUE SUR ${{data.name.toUpperCase()}}...`);
     switchStage(3);
   }};
 
@@ -2626,84 +2626,10 @@ def build_stitch_v46_cockpit_html(state_json: str) -> str:
   }}
 
   window.simulateSteamRegisterLoginAndContribute = async function() {{
+    // Local game animation only. It sends nothing: no account is registered, no GPU contribution is posted and no HMT is awarded
+    // (it used to register 'Cmdr_RTX2070_Steam' and post a fabricated RTX 2070 contribution for every visitor on page load).
     const badge = document.getElementById('steam-auth-badge');
-    if (badge) badge.textContent = '🔄 STEAM (AppID 3133700) + BOINC CUDA PTX SYNC...';
-    const pName = (PLANET_DATA[currentPlanetKey] && PLANET_DATA[currentPlanetKey].name) || 'LHS 1140 b';
-    try {{
-      const regRes = await fetch('/v1/hivemind/steam/register-login', {{
-        method: 'POST',
-        headers: {{ 'Content-Type': 'application/json' }},
-        body: JSON.stringify({{
-          handle: 'Cmdr_RTX2070_Steam',
-          steam_id64: '76561198120474852',
-          app_id: 3133700,
-          gpu_model: 'NVIDIA GeForce RTX 2070 (8 GB VRAM)',
-          role: 'prosumer'
-        }})
-      }});
-      if (regRes.ok) {{
-        const regData = await regRes.json();
-        const apiKey = regData.api_key || '';
-        if (apiKey) localStorage.setItem('hivemind_api_key', apiKey);
-        const boincRes = await fetch('/v1/hivemind/steam/contribute-boinc', {{
-          method: 'POST',
-          headers: {{
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + apiKey
-          }},
-          body: JSON.stringify({{
-            handle: regData.handle || 'Cmdr_RTX2070_Steam',
-            target_planet: pName,
-            app_id: 3133700
-          }})
-        }});
-        const boincData = await boincRes.json();
-        const newBalance = Math.round(Number(boincData.balance_hmt || regData.balance_hmt || 2650));
-        scoreHmt = Math.max(scoreHmt, newBalance);
-        const scoreEl = document.getElementById('score-hmt');
-        if (scoreEl) scoreEl.textContent = scoreHmt.toLocaleString('en-US');
-        if (badge) {{
-          badge.textContent = `🟢 STEAM (AppID 3133700) • ${{regData.handle}} • +${{boincData.hmt_awarded}} HMT & +${{boincData.cobblestones_awarded}} BOINC`;
-        }}
-        fetch('https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/community/boinc-sync', {{
-          method: 'POST',
-          headers: {{ 'Content-Type': 'application/json' }},
-          body: JSON.stringify({{
-            contributor_handle: regData.handle || 'Cmdr_RTX2070_Steam',
-            gpu_model: 'NVIDIA GeForce RTX 2070 (8 GB VRAM)',
-            gpu_utilization_pct: 5.8,
-            gpu_idle_seconds: 12.0,
-            target_planet: pName,
-            project_id: 'BOINC-ASTRO-BLS-TRANSIT'
-          }})
-        }}).catch(() => {{}});
-        return;
-      }}
-    }} catch (err) {{}}
-    // Fallback to live GCP Cloud Run coordinator when hosted statically (e.g., GitHub Pages)
-    try {{
-      const gcpRes = await fetch('https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/community/boinc-sync', {{
-        method: 'POST',
-        headers: {{ 'Content-Type': 'application/json' }},
-        body: JSON.stringify({{
-          contributor_handle: 'Cmdr_RTX2070_Steam',
-          gpu_model: 'NVIDIA GeForce RTX 2070 (8 GB VRAM)',
-          gpu_utilization_pct: 5.8,
-          gpu_idle_seconds: 12.0,
-          target_planet: pName,
-          project_id: 'BOINC-ASTRO-BLS-TRANSIT'
-        }})
-      }});
-      const gcpData = await gcpRes.json();
-      scoreHmt += Number(gcpData.hmt_points_awarded || 250);
-      const scoreEl = document.getElementById('score-hmt');
-      if (scoreEl) scoreEl.textContent = scoreHmt.toLocaleString('en-US');
-      if (badge) {{
-        badge.textContent = `🟢 STEAM + GCP CLOUD RUN • Cmdr_RTX2070_Steam • +${{gcpData.hmt_points_awarded || 250}} HMT & +${{gcpData.cobblestones_awarded || 45}} BOINC`;
-      }}
-    }} catch (gcpErr) {{
-      if (badge) badge.textContent = '🟢 STEAM LOCAL MODE ACTIVE (+250 HMT)';
-    }}
+    if (badge) badge.textContent = 'SIMULATION LOCALE — aucune contribution GPU envoyée. Pour contribuer pour de vrai : /join';
   }};
 
   window.switchStage = switchStage;
@@ -2714,7 +2640,6 @@ def build_stitch_v46_cockpit_html(state_json: str) -> str:
   selectRandomNasaMysteryPlanet(false);
   updateCinematicBannerUI();
   requestAnimationFrame(masterGameLoop);
-  simulateSteamRegisterLoginAndContribute();
 
   async function syncCockpitV46LiveGcpTelemetry() {{
     const urls = [

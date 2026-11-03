@@ -102,7 +102,7 @@ fi
 ENDPOINT_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
 echo ""
 echo "=============================================================================="
-echo "🛡️ SAFE & EASY GPU PRODUCER ONBOARDING (T4 16GB / RTX 2070 8GB / ANY GPU):"
+echo "GPU PRODUCER ONBOARDING (T4 16GB / RTX 2070 8GB / ANY GPU) - PROOF OF CONCEPT, public data only:"
 echo "=============================================================================="
 echo "1. Pull & run your recommended Ollama model locally:"
 echo "   • RTX 2070 (8 GB) / Consumer 8 GB:  ollama run qwen2.5-coder:7b"
@@ -185,6 +185,7 @@ def build_welcome_email_content(
 
     text_body = (
         f"Hello {handle or account_id[:12]},\n\n"
+        "PROOF OF CONCEPT: HiveMind is not a production service yet. Until it is fully secured, send only public, non-sensitive data (no secrets, passwords, API keys, personal, private or enterprise data). Prompts are processed by volunteer-run nodes whose operators are not verified.\n\n"
         f"{pioneer_banner_text}"
         "Thank you for joining Project HiveMind@home & La Ruche OpenRouter!\n\n"
         "1. YOUR ACCOUNT & HIVEMIND POINTS (HMT) SUMMARY\n"
@@ -243,6 +244,7 @@ def build_welcome_email_content(
 </head>
 <body style="margin:0;padding:24px;background:#0d0e11;color:#e4e2e6;font-family:'Inter',system-ui,-apple-system,sans-serif;line-height:1.6;">
   <div style="max-width:720px;margin:0 auto;background:#131417;border:1px solid rgba(255,201,67,0.35);border-radius:12px;padding:28px;">
+    <p style="margin:0 0 16px;padding:10px 12px;border:1px solid #ffc943;border-radius:8px;color:#ffc943;font-size:13px;"><strong>&#9888; Proof of concept.</strong> HiveMind is not a production service yet. Until it is fully secured, send only public, non-sensitive data (no secrets, passwords, API keys, personal, private or enterprise data). Prompts are processed by volunteer-run nodes whose operators are not verified.</p>
     <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:16px;margin-bottom:20px;">
       <div>
         <div style="font-size:18px;font-weight:800;color:#ffc943;">🐝 PROJECT HIVEMIND@HOME &amp; LA RUCHE OPENROUTER</div>

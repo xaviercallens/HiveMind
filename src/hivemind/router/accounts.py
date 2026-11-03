@@ -1200,6 +1200,10 @@ class RouterStore:
                     raise UnknownAccount(acct)
             if conn.execute("SELECT 1 FROM usage WHERE request_id=?", (request_id,)).fetchone() is not None:
                 raise DuplicateRequest(request_id)
+            hold_row = conn.execute("SELECT account_id FROM holds WHERE request_id=? AND state='active'", (request_id,)).fetchone()
+            if hold_row is not None and str(hold_row["account_id"]) != consumer_id:
+                # the escrow would go back to the holder while the named consumer is debited
+                raise ValueError("hold belongs to a different account than the consumer being settled")
             held = self._release(conn, request_id, now)
             billed = int(billed_tokens)
             charge = price * billed / 1000.0

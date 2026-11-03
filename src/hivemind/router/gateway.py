@@ -38,7 +38,7 @@ from urllib.parse import urlsplit
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -617,9 +617,11 @@ class OpenTrainerHeartbeatRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     host_label: str = Field(default="trainer-node", min_length=1, max_length=128)
-    gpu_name: str = Field(default="NVIDIA GeForce RTX 2070", min_length=1, max_length=128)
-    vram_total_mib: int = Field(default=8192, ge=512, le=MAX_GPU_VRAM_MIB)
-    vram_free_mib: int = Field(default=6400, ge=0, le=MAX_GPU_VRAM_MIB)
+    # No invented defaults: these used to default to an RTX 2070 with 8192 / 6400 MiB, so a node that reported nothing was recorded as such a card.
+    # A missing value is stored as "not reported" / 0 (the VRAM safety gate treats a 0 total as unknown).
+    gpu_name: str | None = Field(default=None, min_length=1, max_length=128)
+    vram_total_mib: int | None = Field(default=None, ge=512, le=MAX_GPU_VRAM_MIB)
+    vram_free_mib: int | None = Field(default=None, ge=0, le=MAX_GPU_VRAM_MIB)
     network_mode: Literal["outbound-https-relay", "amcp-kafka-aglet", "wireguard-t4-hub", "ssh-loopback-tunnel", "boinc-night-workunit"] = "outbound-https-relay"
     training_stack: str = Field(default="qlora-moe+diloco+amcp-aglet+boinc", min_length=1, max_length=128)
     active_campaign: str = Field(default="E8-STAGE2-TINY-GRANITE-MOE-QLORA", min_length=1, max_length=128)
@@ -729,6 +731,36 @@ Receive = Callable[[], Awaitable[ASGIMessage]]
 Send = Callable[[ASGIMessage], Awaitable[None]]
 
 
+POC_STATUS_HEADER = "proof-of-concept; send only public, non-sensitive data (no secrets, personal, private or enterprise data)"
+POC_API_DESCRIPTION = (
+    "**Proof of concept (PoC), not a production service.** Until HiveMind is fully secured, send only public, non-sensitive "
+    "data: no secrets, passwords, API keys, personal information, or private or enterprise data. Prompts are processed by "
+    "volunteer-run nodes whose operators are not verified. See SECURITY.md."
+)
+
+
+class PocNoticeMiddleware:
+    """Pure ASGI middleware: every HTTP response, streaming ones included, carries ``X-HiveMind-Status`` (proof of concept:
+    public data only), so API clients and tools that never render the HTML pages still see the notice."""
+
+    def __init__(self, app: Callable[[ASGIMessage, Receive, Send], Awaitable[None]]) -> None:
+        self.app = app
+
+    async def __call__(self, scope: ASGIMessage, receive: Receive, send: Send) -> None:
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_notice(message: ASGIMessage) -> None:
+            if message.get("type") == "http.response.start":
+                headers = list(message.get("headers", []))
+                headers.append((b"x-hivemind-status", POC_STATUS_HEADER.encode("ascii")))
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, send_with_notice)
+
+
 class BodyLimitMiddleware:
     """Pure ASGI middleware: refuse request bodies above ``max_bytes`` with 413 before any routing or JSON parsing.
 
@@ -823,7 +855,7 @@ def create_router_app(
     """
     client = http_client if http_client is not None else httpx.Client(timeout=PRODUCER_TIMEOUT_S, follow_redirects=False)
     resolve: Resolver = resolver if resolver is not None else _default_resolver
-    app = FastAPI(title="HiveMind OpenRouter", version="1.0.0")
+    app = FastAPI(title="HiveMind OpenRouter (proof of concept)", version="1.0.0", description=POC_API_DESCRIPTION)
     rotation = WeightedRoundRobin()
     register_limiter = SlidingWindowLimiter(REGISTER_LIMIT, REGISTER_WINDOW_S)
     login_limiter = SlidingWindowLimiter(LOGIN_LIMIT, LOGIN_WINDOW_S)
@@ -837,6 +869,7 @@ def create_router_app(
         raise ValueError("starter_grant_hmt and starter_grants_per_ip_24h must be finite and not negative")
     proxy_networks = tuple(ipaddress.ip_network(entry, strict=False) for entry in trusted_proxies)
     app.add_middleware(BodyLimitMiddleware, max_bytes=MAX_BODY_BYTES)
+    app.add_middleware(PocNoticeMiddleware)  # added last = outermost, so it also marks the 413 from the body limit
 
     # ------------------------------------------------------------------ errors
     @app.exception_handler(RouterError)
@@ -848,6 +881,14 @@ def create_router_app(
         first = exc.errors()[0] if exc.errors() else {}
         location = ".".join(str(p) for p in first.get("loc", ()) if p != "body")
         return _error_response(400, f"invalid request: {location or 'body'}: {first.get('msg', 'invalid')}", "invalid_request_error", "invalid_request")
+
+    @app.exception_handler(Exception)
+    def _unhandled_error(_: Request, exc: Exception) -> JSONResponse:
+        # Fail closed with a generic body: no exception text, path or stack trace reaches the caller (the server log keeps it).
+        # This handler runs outside the notice middleware, so the proof-of-concept header is set here.
+        return _error_response(
+            500, "internal server error", "server_error", "internal_error", {"X-HiveMind-Status": POC_STATUS_HEADER}
+        )
 
     @app.exception_handler(StarletteHTTPException)
     def _http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
@@ -2875,9 +2916,9 @@ def create_router_app(
             account_id=account.account_id,
             handle=account.handle,
             node_id=f"{account.handle}:{payload.host_label}",
-            gpu_name=payload.gpu_name,
-            vram_total_mib=payload.vram_total_mib,
-            vram_free_mib=min(payload.vram_free_mib, payload.vram_total_mib),
+            gpu_name=payload.gpu_name or "not reported",
+            vram_total_mib=payload.vram_total_mib or 0,
+            vram_free_mib=min(payload.vram_free_mib or 0, payload.vram_total_mib or 0),
             network_mode=payload.network_mode,
             stacks=stacks,
             host_label=payload.host_label,
@@ -2926,8 +2967,8 @@ def create_router_app(
                 delta_l2=payload.delta_norm,
                 eval_loss=payload.loss_after,
                 tokens_trained=max(1, payload.inner_steps * 512),
-                vram_free_mib=6400,
-                vram_total_mib=8192,
+                vram_free_mib=0,  # 0 = not reported: the request carries no hardware reading
+                vram_total_mib=0,
             )
         except ValueError as exc:
             raise RouterError(
@@ -2937,7 +2978,8 @@ def create_router_app(
                 "delta_rejected",
             ) from None
         check["verification"] = "CLIENT_REPORTED_UNVERIFIED"
-        check["vram_values_reported_by_client"] = False  # the 6400/8192 MiB passed to the gate are placeholders, not a reading
+        check["vram_values_reported_by_client"] = False  # no hardware reading was sent: 0 MiB is recorded as "not reported"
+        check["tokens_trained_is_estimate"] = True  # inner_steps * 512, not a count the client measured
         saved = store.record_opentrainer_round_submission(
             account_id=account.account_id,
             handle=account.handle,
@@ -2948,10 +2990,11 @@ def create_router_app(
             delta_l2=payload.delta_norm,
             eval_loss=payload.loss_after,
             tokens_trained=max(1, payload.inner_steps * 512),
-            vram_free_mib=6400,
-            vram_total_mib=8192,
+            vram_free_mib=0,
+            vram_total_mib=0,
             now_utc=now,
         )
+        saved["tokens_trained_is_estimate"] = True
         saved["delta_sha256"] = payload.delta_sha256.lower()
         event_id = "ev-ot-" + uuid.uuid4().hex[:14]
         store.record_amcp_kafka_event(

@@ -34,6 +34,11 @@ class ModelTier:
     suggested_cost_per_1k: float  # HMT per 1,000 tokens a producer might ask; HMT have no cash value
     suggested_capacity_1k: float  # 1,000-token units per epoch to advertise
     good_for: str
+    # What the tier really is (set by ``_classify_tiers``, never by hand): "base" = an off-the-shelf model you can pull as is; "adapter" = a LoRA
+    # served under a local alias (the tag is a llama-server alias, not a pullable model); "alias" = the same model as another tier under a
+    # different name (``alias_of`` names that tier), so it is a label, not a different model.
+    kind: str = "base"
+    alias_of: str = ""
 
     def __post_init__(self) -> None:
         if not self.tier_id or set(self.tier_id) - _ID_CHARS:
@@ -92,6 +97,26 @@ TIERS: tuple[ModelTier, ...] = (
     ModelTier("moe-coder", "Coder MoE (Qwen3-Coder 30B, 3.3B active)", "qwen3-coder:30b", 19.0, 24.0, True, 3.3, 1.2, 100.0,
               "the strongest coding tier: agentic edits across files with a long context"),
 )
+
+
+def _classify_tiers(tiers: tuple[ModelTier, ...]) -> tuple[ModelTier, ...]:
+    """Set ``kind``/``alias_of`` from the data: several tiers sharing one model tag are labels of the same model, and a tag that is a local
+    llama-server alias (``hivemind-*``) is a LoRA adapter, not something ``ollama pull`` can fetch."""
+    groups: dict[str, list[ModelTier]] = {}
+    for tier in tiers:
+        groups.setdefault(tier.ollama_tag, []).append(tier)
+    out: list[ModelTier] = []
+    for tier in tiers:
+        if tier.ollama_tag.startswith("hivemind-"):
+            out.append(replace(tier, kind="adapter"))
+            continue
+        group = groups[tier.ollama_tag]
+        base = next((t for t in group if "bee" not in t.tier_id), group[0])  # the plainly named tier is the model, the rest are branded labels of it
+        out.append(tier if base.tier_id == tier.tier_id else replace(tier, kind="alias", alias_of=base.tier_id))
+    return tuple(out)
+
+
+TIERS = _classify_tiers(TIERS)
 
 
 @dataclass(frozen=True)

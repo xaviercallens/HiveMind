@@ -39,6 +39,25 @@ def test_moe_tiers_exist_and_declare_their_active_parameters() -> None:
     assert all(tier.active_params_b is None for tier in TIERS if not tier.moe)
 
 
+def test_every_tier_says_what_it_really_is_base_adapter_or_alias() -> None:
+    from hivemind.router.catalog import catalog_payload
+
+    by_id = {t.tier_id: t for t in TIERS}
+    assert {t.kind for t in TIERS} <= {"base", "adapter", "alias"}
+    assert by_id["bee-stars"].kind == "adapter"  # a LoRA served under a local alias, not an Ollama library tag
+    assert by_id["coder"].kind == "base" and by_id["bee-rusty-sundials"].kind == "alias" and by_id["bee-rusty-sundials"].alias_of == "coder"
+    assert by_id["moe-general"].kind == "base" and by_id["bee-ruche-moe"].alias_of == "moe-general" and by_id["moe-qwen35-bee"].alias_of == "moe-general"
+    for tier in TIERS:  # an alias always points at a base tier that has the very same model tag
+        if tier.kind == "alias":
+            assert by_id[tier.alias_of].kind == "base" and by_id[tier.alias_of].ollama_tag == tier.ollama_tag
+        else:
+            assert tier.alias_of == ""
+    exposed = {t["tier_id"]: t for t in catalog_payload()["tiers"]}
+    assert exposed["bee-rusty-sundials"]["kind"] == "alias" and exposed["bee-rusty-sundials"]["alias_of"] == "coder"
+    # one model tag, several labels: the number of distinct pullable models is smaller than the number of tiers
+    assert len({t.ollama_tag for t in TIERS if t.kind != "adapter"}) < len([t for t in TIERS if t.kind != "adapter"])
+
+
 def test_no_catalog_entry_links_to_an_unpublished_repository_or_claims_training_it_did_not_do() -> None:
     """Every partner entry whose Hugging Face repository does not exist is shown as unpublished, without a link, a parameter
     count or a training-token count, and names the off-the-shelf model that actually serves its tier."""

@@ -135,6 +135,36 @@ def test_password_login_is_rate_limited() -> None:
     assert codes[0] == 401
 
 
+def test_every_gateway_response_carries_the_proof_of_concept_header() -> None:
+    client = _client(RouterStore(":memory:", SECRET))
+    for resp in (
+        client.get("/health"),
+        client.get("/v1/models"),
+        client.get("/definitely-not-a-route"),  # 404
+        client.post("/v1/chat/completions", json={"model": "hivemind/auto", "messages": []}),  # 401
+    ):
+        assert "proof-of-concept" in resp.headers.get("x-hivemind-status", ""), resp.status_code
+        assert "public" in resp.headers["x-hivemind-status"]
+    big = client.post("/v1/chat/completions", content=b"x" * (5 * 1024 * 1024))  # refused by the body limit before routing
+    assert big.status_code == 413
+    assert "proof-of-concept" in big.headers.get("x-hivemind-status", "")
+    assert "Proof of concept" in client.get("/openapi.json").json()["info"]["description"]
+
+
+def test_an_unexpected_error_is_a_generic_500_with_the_notice_and_no_internals() -> None:
+    app = create_router_app(RouterStore(":memory:", SECRET), starter_grant_hmt=0.0)
+
+    @app.get("/boom-for-test")
+    def boom() -> None:
+        raise RuntimeError("secret internal detail /home/user/x.py")
+
+    r = TestClient(app, raise_server_exceptions=False).get("/boom-for-test")
+    assert r.status_code == 500
+    assert r.json()["error"]["code"] == "internal_error"
+    assert "secret internal detail" not in r.text and "Traceback" not in r.text and "/home/" not in r.text
+    assert "proof-of-concept" in r.headers.get("x-hivemind-status", "")
+
+
 @pytest.mark.parametrize("path", ["/signup", "/join"])
 def test_public_pages_carry_the_proof_of_concept_notice(path: str) -> None:
     r = _client(RouterStore(":memory:", SECRET)).get(path)

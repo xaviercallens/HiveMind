@@ -150,6 +150,25 @@ def scan_and_sanitize_waf_payload(raw_text: str) -> Dict[str, Any]:
     }
 
 
+def _flag(report: Dict[str, Any], *keys: str) -> Optional[bool]:
+    """Pass flag from a campaign report: None (NOT_MEASURED) unless every named key is present."""
+    if any(k not in report for k in keys):
+        return None
+    return all(bool(report[k]) for k in keys)
+
+
+def _probe_cuda_device() -> Optional[str]:
+    """Device string for the local CUDA GPU, or None when torch reports no CUDA device."""
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            return f"cuda:0 ({torch.cuda.get_device_name(0)})"
+    except Exception:
+        return None
+    return None
+
+
 def sanitize_handle(handle: str) -> str:
     """Validate and sanitize contributor handle against injection, XSS, and path traversal."""
     if not isinstance(handle, str):
@@ -2513,84 +2532,61 @@ def build_hivemind_at_home_state(
         c2 = gpu_campaigns["campaign_2_s9_sigma_and_looped_moe"]
         c3 = gpu_campaigns["campaign_3_s10_lattice_wire_and_kv"]
         c4 = gpu_campaigns["campaign_4_s10_spotcheck_leasing_and_gossip"]
+        # Missing keys are NOT_MEASURED (None), never a pass or a literal metric.
         parsed_s9_10_campaigns = [
             {
                 "campaign_id": c1.get("campaign_id", "CAMP-S9-E5-QUORUM-RDA-GPU"),
                 "season": "Season 9 (Wave 8)",
                 "title": "Decoupled Quorum DiLoCo (k<M) + Async Straggler Folding & RDA",
                 "device": hw_dev,
-                "duration_ms": c1.get("elapsed_ms", 0.0),
+                "duration_ms": c1.get("elapsed_ms"),
                 "metrics": {
-                    "quorum_admitted": c1.get("quorum_admitted_count", 4),
-                    "rda_norm_ratio": c1.get("rda_delta_cosine", {}).get(
-                        "rda_to_direct_norm_ratio_rt", 1.86
-                    ),
+                    "quorum_admitted": c1.get("quorum_admitted_count"),
+                    "rda_norm_ratio": c1.get("rda_delta_cosine", {}).get("rda_to_direct_norm_ratio_rt"),
                     "dropped_tokens_deferred": c1.get("straggler_modes", {})
                     .get("deferred_token_weighted", {})
-                    .get("dropped_tokens", 0),
+                    .get("dropped_tokens"),
                 },
-                "passed": bool(c1.get("quorum_reached", True)),
+                "passed": _flag(c1, "quorum_reached"),
             },
             {
                 "campaign_id": c2.get("campaign_id", "CAMP-S9-E7-SIGMA-LOOPED-MOE-GPU"),
                 "season": "Season 9 (Wave 8)",
                 "title": "3-Tier 128-MoE + Sigma-MoE Peri-LN + Looped OrthoInj & Terminal-KV",
                 "device": hw_dev,
-                "duration_ms": c2.get("elapsed_ms", 0.0),
+                "duration_ms": c2.get("elapsed_ms"),
                 "metrics": {
-                    "flops_saved_fraction": c2.get("skip_token_report", {}).get(
-                        "measured_expert_flops_saved_fraction", 0.42
-                    ),
-                    "kv_cache_saved": c2.get("terminal_kv_sharing", {}).get(
-                        "core_kv_cache_saved_fraction", 0.5
-                    ),
-                    "router_gating_reduction_x": c2.get(
-                        "router_128_gating_reduction_x", 8.0
-                    ),
+                    "flops_saved_fraction": c2.get("skip_token_report", {}).get("measured_expert_flops_saved_fraction"),
+                    "kv_cache_saved": c2.get("terminal_kv_sharing", {}).get("core_kv_cache_saved_fraction"),
+                    "router_gating_reduction_x": c2.get("router_128_gating_reduction_x"),
                 },
-                "passed": True,
+                "passed": None,  # this report carries no pass flag for campaign 2
             },
             {
                 "campaign_id": c3.get("campaign_id", "CAMP-S10-E11-LATTICE-KV-WIRE-GPU"),
                 "season": "Season 10 (Wave 9)",
                 "title": "Conway-Sloane E8 & A2 Lattice Wire Quantizer + 5-Codec KV-Cache",
                 "device": hw_dev,
-                "duration_ms": c3.get("elapsed_ms", 0.0),
+                "duration_ms": c3.get("elapsed_ms"),
                 "metrics": {
-                    "e8_2bit_mse": c3.get("wire_codecs_at_2bit", {})
-                    .get("E8", {})
-                    .get("relative_mse", 0.000175),
-                    "z_2bit_mse": c3.get("wire_codecs_at_2bit", {})
-                    .get("Z", {})
-                    .get("relative_mse", 0.000485),
-                    "controls_passed": c3.get("kv_cache_codec_benchmark", {}).get(
-                        "controls_all_passed", True
-                    ),
+                    "e8_2bit_mse": c3.get("wire_codecs_at_2bit", {}).get("E8", {}).get("relative_mse"),
+                    "z_2bit_mse": c3.get("wire_codecs_at_2bit", {}).get("Z", {}).get("relative_mse"),
+                    "controls_passed": c3.get("kv_cache_codec_benchmark", {}).get("controls_all_passed"),
                 },
-                "passed": bool(
-                    c3.get("a2_decoder_brute_force_passed", True)
-                    and c3.get("e8_decoder_brute_force_passed", True)
-                ),
+                "passed": _flag(c3, "a2_decoder_brute_force_passed", "e8_decoder_brute_force_passed"),
             },
             {
-                "campaign_id": c4.get(
-                    "campaign_id", "CAMP-S10-E12-HETERO-SPOTCHECK-WAN-GPU"
-                ),
+                "campaign_id": c4.get("campaign_id", "CAMP-S10-E12-HETERO-SPOTCHECK-WAN-GPU"),
                 "season": "Season 10 (Wave 9)",
                 "title": "Execution-Class Two-Stat Spot-Check + Q16 Digest + CAS Leases & Mix1/Mix2",
                 "device": hw_dev,
-                "duration_ms": c4.get("elapsed_ms", 0.0),
+                "duration_ms": c4.get("elapsed_ms"),
                 "metrics": {
-                    "tampered_rejected": c4.get("tampered_replay_rejected", True),
-                    "q16_exact_digest": c4.get("fixed_point_q16_exact_digest", True),
-                    "saved_blocking_wire_bytes": c4.get("factored_gossip", {}).get(
-                        "saved_blocking_wire_bytes", 9216
-                    ),
+                    "tampered_rejected": c4.get("tampered_replay_rejected"),
+                    "q16_exact_digest": c4.get("fixed_point_q16_exact_digest"),
+                    "saved_blocking_wire_bytes": c4.get("factored_gossip", {}).get("saved_blocking_wire_bytes"),
                 },
-                "passed": bool(
-                    c4.get("exact_class_replay_passed", True)
-                    and c4.get("tampered_replay_rejected", True)
-                ),
+                "passed": _flag(c4, "exact_class_replay_passed", "tampered_replay_rejected"),
             },
         ]
 
@@ -2828,9 +2824,7 @@ def build_hivemind_at_home_state(
         },
         "gcp_cloud_fleet": gcp_cloud_fleet,
         "season9_10_gpu_campaigns": {
-            "all_campaigns_passed": bool(
-                gpu_campaigns.get("all_campaigns_passed", True)
-            ),
+            "all_campaigns_passed": _flag(gpu_campaigns, "all_campaigns_passed"),
             "campaign_suite_sha256": str(
                 gpu_campaigns.get("campaign_suite_sha256", "")
             ),
@@ -3323,7 +3317,7 @@ def render_hivemind_at_home_html(
             f"<td><code>{c.get('device')}</code></td>"
             f"<td>{c.get('duration_ms')} ms</td>"
             f"<td style='font-size:0.78rem;color:#94a3b8;'>{metric_summary}</td>"
-            f"<td><span class='badge-ok'>{'PASS' if c.get('passed') else 'FAIL'}</span></td>"
+            f"<td><span class='badge-ok'>{'PASS' if c.get('passed') is True else ('FAIL' if c.get('passed') is False else 'NOT_MEASURED')}</span></td>"
             f"</tr>"
         )
     camp_rows_html = "\n".join(camp_rows)
@@ -6301,18 +6295,21 @@ def create_hivemind_at_home_app(
     for _seed in seeded_users.values():
         _seed["token"] = "hm_live_" + secrets.token_hex(16)
 
+    # The pre-seeded guest key was a literal in this file; like the seeded users it is issued fresh at every start,
+    # so no published value authenticates (IP-240, GHSA-gjc6-74f9-wmrr).
+    _guest_token = "hm_live_" + secrets.token_hex(16)
     auth_state: Dict[str, Any] = {
         "users": dict(seeded_users),
         "active_sessions": {},
         "api_keys": {
-            "hm_live_7a9f201bc6e488102d5f": {
+            _guest_token: {
                 "handle": "guest_hiveminder",
                 "email": "guest@hivemind.network",
                 "role": "HiveMinder Contributor",
                 "target_profile": "gamer",
                 "compute_points": 2500,
                 "points": 2500,
-                "token": "hm_live_7a9f201bc6e488102d5f",
+                "token": _guest_token,
                 "node_id": "0xDEMO48920",
                 "provider": "ONE-CLICK DEMO",
                 "linked_providers": ["GUEST_SANDBOX"],
@@ -6611,7 +6608,7 @@ def create_hivemind_at_home_app(
             "linked_providers": ["GUEST_SANDBOX"],
             "role": "HiveMinder Contributor",
             "target_profile": "gamer",
-            "compute_points": 2500,
+            "compute_points": 0,  # no points for an unverified guest; minting per cycle is refused
             "token": guest_token,
             "node_id": "0xDEMO48920",
             "registered_at": time.time(),
@@ -6635,7 +6632,9 @@ def create_hivemind_at_home_app(
         # existing account (seeded admins included) and to add 2,500 points on every call.
         if not old_guest or not old_guest.get("is_guest"):
             raise HTTPException(status_code=401, detail="A guest session token is required to upgrade (Authorization: Bearer).")
-        carried_points = int(old_guest.get("compute_points", 2500))
+        # Guest sessions hold 0 points and the upgrade bonus needs a server-verified workunit, which this route
+        # does not have yet, so the upgrade mints nothing.
+        carried_points = int(old_guest.get("compute_points", 0))
 
         clean_handle = sanitize_handle(req.handle)
         if clean_handle in auth_state["users"] or clean_handle.lstrip("@").lower() in auth_state["users"]:
@@ -6648,13 +6647,13 @@ def create_hivemind_at_home_app(
         if old_token:
             auth_state["api_keys"].pop(old_token, None)
 
-        upgraded_points = carried_points + 2500  # +2,500 HMT Permanent Upgrade Bonus
+        upgraded_points = carried_points  # no upgrade bonus without a server-verified workunit
         user_record = {
             "handle": clean_handle,
             "email": clean_email,
             "provider": prov_badge,
             "linked_providers": ["GUEST_SANDBOX", prov_badge],
-            "role": req.role,
+            "role": "HiveMinder Human",  # fixed server-side; the client's role string is never stored
             "target_profile": req.target_profile,
             "compute_points": upgraded_points,
             "token": new_token,
@@ -7355,15 +7354,13 @@ def create_hivemind_at_home_app(
 
     @app.post("/api/v1/night-moe/start", response_class=JSONResponse)
     def api_night_moe_start(req: Request) -> JSONResponse:
-        job_id = f"NIGHT-MOE2-{hashlib.sha256(str(time.time()).encode()).hexdigest()[:8].upper()}"
+        # No training dispatcher is wired into this dashboard, so nothing is started and no job id is issued.
         return JSONResponse(content={
-            "status": "NIGHT_TRAINING_DISPATCHED",
-            "job_id": job_id,
+            "status": "NOT_PERFORMED",
+            "measured": False,
+            "job_id": None,
             "experiment": "NIGHT-MOE-2",
-            "models": ["Qwen/Qwen3.5-MoE-Instruct", "google/gemma-3-moe"],
-            "training_producers": ["NVIDIA Tesla T4 (16GB Spot us-east4-b)", "GCP TPU v5e Swarm"],
-            "inference_hardware_secured": "NVIDIA GeForce RTX 2070 (cuda:0 - 0% Training Load)",
-            "message": "Night MoE training job dispatched across Tesla T4 & Cloud TPU v5e pods. Local RTX 2070 isolated exclusively for inference."
+            "message": "No night MoE dispatcher is attached to this dashboard; no training job was started."
         })
 
     @app.get("/api/v1/night-moe/reddit-vision/status", response_class=JSONResponse)
@@ -7515,13 +7512,14 @@ def create_hivemind_at_home_app(
 
     @app.post("/api/v1/hardware/rtx2070/shield/lock", response_class=JSONResponse)
     def api_hardware_rtx2070_shield_lock() -> JSONResponse:
+        # No preemption lock is applied by this route; the device is what torch reports, or null without CUDA.
         return JSONResponse(content={
-            "status": "LOCKED_INFERENCE_EXCLUSIVE",
-            "gpu_name": "NVIDIA GeForce RTX 2070",
-            "device": "cuda:0",
-            "training_preemption_lock": True,
-            "training_workloads_allowed": False,
-            "message": "Local RTX 2070 inference isolation locked. All training redirected to Tesla T4 & Cloud big producers."
+            "status": "NOT_PERFORMED",
+            "measured": False,
+            "device": _probe_cuda_device(),
+            "training_preemption_lock": False,
+            "training_workloads_allowed": None,
+            "message": "No inference lock was applied; this route only reports the detected CUDA device."
         })
 
     @app.get("/health", response_class=JSONResponse)
@@ -8710,22 +8708,20 @@ def create_hivemind_at_home_app(
             pass
         target_id = str(body.get("target_id") or "k218b").lower()
         classification = str(body.get("player_classification") or "PLANET").upper()
-        approved = classification == "PLANET"
-        hmt_awarded = 600 if approved else 300
-        info = _galaxy_mgr.planet_analysis_and_life.get(
-            target_id,
-            _galaxy_mgr.planet_analysis_and_life["k218b"],
-        )
-        receipt = hashlib.sha256(f"ASTRO_DISCOVER:{target_id}:{classification}:{time.time()}".encode("utf-8")).hexdigest()
+        info = _galaxy_mgr.planet_analysis_and_life.get(target_id)
+        if info is None:
+            raise HTTPException(status_code=404, detail="Unknown astro target; nothing recorded, no HMT awarded.")
+        # Nothing is persisted and no discovery is verified here, so no receipt and no award.
         return JSONResponse(
             content={
-                "status": "DISCOVERY_RECORDED",
+                "status": "NOT_PERFORMED",
+                "measured": False,
                 "target_id": target_id,
                 "player_classification": classification,
-                "hmt_awarded": hmt_awarded,
+                "hmt_awarded": 0,
                 "planet_analysis_fr": info["fr"],
                 "planet_analysis_en": info["en"],
-                "receipt_sha256": receipt,
+                "receipt_sha256": None,
             }
         )
 

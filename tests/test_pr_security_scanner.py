@@ -305,3 +305,22 @@ def test_full_repository_audit_and_cli_integration(tmp_path: Path) -> None:
     assert bad_report["passed"] is False
     assert bad_report["blocked_merge"] is True
     assert bad_report["critical_count"] >= 3
+
+
+def test_scanner_matches_dashboard_hm_live_keys_but_not_their_run_time_construction() -> None:
+    """IP-239: the only HiveMind pattern was hm-…; the hm_live_<hex> format of the GHSA leak passed the gate."""
+    import re
+    import secrets
+    from pathlib import Path
+
+    from hivemind.security.pr_security_scanner import PRSecurityScanner
+
+    scanner = PRSecurityScanner()
+    token = "hm_live_" + secrets.token_hex(16)  # generated here, never committed
+    flagged = scanner.scan_text_for_secrets_and_exfiltration(f'"token": "{token}"', "src/hivemind/x.py")
+    assert any("HARDCODED_SECRET" in str(getattr(f, "category", f)) for f in flagged), flagged
+    benign = scanner.scan_text_for_secrets_and_exfiltration('_seed["token"] = "hm_live_" + secrets.token_hex(16)', "src/hivemind/x.py")
+    assert not any("HARDCODED_SECRET" in str(getattr(f, "category", f)) for f in benign), benign
+    # IP-240: the dashboard source carries no such literal any more
+    dashboard = (Path(__file__).resolve().parents[1] / "src" / "hivemind" / "boinc" / "hivemind_at_home_dashboard.py").read_text(encoding="utf-8")
+    assert re.search(r"hm_live_(?:demo_)?[0-9a-f]{20,}", dashboard) is None

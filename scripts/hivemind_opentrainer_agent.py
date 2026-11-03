@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import platform
 import socket
@@ -125,6 +126,44 @@ def send_heartbeat(
         return json.loads(resp.read().decode("utf-8"))
 
 
+def load_round_report(report_path: str) -> dict[str, Any]:
+    """Read measured round results from a JSON report and hash the real delta file bytes.
+
+    The report must contain finite ``loss_before``, ``loss_after`` and ``delta_norm`` numbers and a
+    ``delta_path`` string. A relative ``delta_path`` is resolved against the report's directory.
+    Raises ``ValueError`` when the report or the delta file is missing or malformed.
+    """
+    try:
+        with open(report_path, "r", encoding="utf-8") as fh:
+            report = json.load(fh)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"round report unreadable: {report_path}: {exc}") from exc
+    if not isinstance(report, dict):
+        raise ValueError("round report must be a JSON object")
+    measured: dict[str, float] = {}
+    for key in ("loss_before", "loss_after", "delta_norm"):
+        value = report.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+            raise ValueError(f"round report field {key!r} must be a finite number")
+        measured[key] = float(value)
+    delta_path_raw = report.get("delta_path")
+    if not isinstance(delta_path_raw, str) or not delta_path_raw.strip():
+        raise ValueError("round report field 'delta_path' must be a non-empty string")
+    delta_path = delta_path_raw if os.path.isabs(delta_path_raw) else os.path.join(os.path.dirname(os.path.abspath(report_path)), delta_path_raw)
+    try:
+        with open(delta_path, "rb") as fh:
+            delta_bytes = fh.read()
+    except OSError as exc:
+        raise ValueError(f"delta file unreadable: {delta_path}: {exc}") from exc
+    if not delta_bytes:
+        raise ValueError(f"delta file is empty: {delta_path}")
+    return {
+        **measured,
+        "delta_sha256": hashlib.sha256(delta_bytes).hexdigest(),
+        "delta_bytes": len(delta_bytes),
+    }
+
+
 def submit_verified_delta(
     *,
     gateway: str,
@@ -136,12 +175,11 @@ def submit_verified_delta(
     loss_before: float,
     loss_after: float,
     delta_norm: float,
+    delta_sha256: str,
     code_pin: str,
     network_mode: str,
 ) -> dict[str, Any]:
     url = gateway.rstrip("/") + "/v1/hivemind/opentrainer/submit-delta"
-    digest_seed = f"{campaign_id}:{round_id}:{learner_index}:{inner_steps}:{loss_before:.6f}:{loss_after:.6f}:{delta_norm:.6f}".encode("utf-8")
-    delta_sha256 = hashlib.sha256(digest_seed).hexdigest()
     body = json.dumps(
         {
             "round_id": round_id,
@@ -188,7 +226,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--vram-free-mib", type=int, default=0, help="Override free GPU VRAM in MiB")
     parser.add_argument("--training-stack", default="qlora-moe+diloco+amcp-aglet+boinc", help="Active training stack descriptor")
     parser.add_argument("--campaign-id", default="E8-STAGE2-TINY-GRANITE-MOE-QLORA", help="Active co-training campaign ID")
-    parser.add_argument("--submit-delta", action="store_true", help="Submit a verified Aglet task_result delta after heartbeat")
+    parser.add_argument("--submit-delta", action="store_true", help="Submit a measured round delta after heartbeat (requires --round-report)")
+    parser.add_argument(
+        "--round-report",
+        default="",
+        help="JSON file with measured loss_before, loss_after, delta_norm and delta_path (required with --submit-delta)",
+    )
     parser.add_argument("--round-id", type=int, default=1, help="Round ID for delta submission")
     parser.add_argument("--learner-index", type=int, default=1, help="Learner index in the K-node cell (0=T4 hub, 1=RTX 2070, ...)")
     parser.add_argument("--inner-steps", type=int, default=8, help="Inner optimizer steps completed")
@@ -199,6 +242,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    round_report: dict[str, Any] | None = None
+    if args.submit_delta:
+        if not args.round_report:
+            print("Error: --submit-delta requires --round-report; no delta was submitted.", file=sys.stderr)
+            return 2
+        try:
+            round_report = load_round_report(args.round_report)
+        except ValueError as exc:
+            print(f"Error: {exc}; no delta was submitted.", file=sys.stderr)
+            return 2
     detected_gpu, detected_total, detected_free = detect_local_gpu()
     gpu_name = args.gpu_name or detected_gpu
     vram_total = args.vram_total_mib if args.vram_total_mib > 0 else detected_total
@@ -245,6 +298,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
             if args.submit_delta:
+                assert round_report is not None
                 receipt = submit_verified_delta(
                     gateway=args.gateway,
                     api_key=api_key,
@@ -252,9 +306,10 @@ def main(argv: list[str] | None = None) -> int:
                     campaign_id=args.campaign_id,
                     learner_index=args.learner_index,
                     inner_steps=args.inner_steps,
-                    loss_before=4.1721,
-                    loss_after=1.7772,
-                    delta_norm=0.142,
+                    loss_before=round_report["loss_before"],
+                    loss_after=round_report["loss_after"],
+                    delta_norm=round_report["delta_norm"],
+                    delta_sha256=round_report["delta_sha256"],
                     code_pin=str(offer.get("script_sha256") or offer.get("code_pin") or ""),
                     network_mode=args.network_mode,
                 )

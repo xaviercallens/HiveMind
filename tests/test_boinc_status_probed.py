@@ -86,3 +86,17 @@ def test_boinc_status_is_not_online_when_the_ruche_answers_404(monkeypatch) -> N
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_ip212_boinc_status_reports_no_credit_schedule_without_a_verified_path(monkeypatch) -> None:
+    monkeypatch.setenv("HIVEMIND_RUCHE_MASTER_URL", "http://127.0.0.1:9/")
+    _clear_probe_cache()
+    client = TestClient(create_router_app(RouterStore(":memory:", b"k" * 32)))
+    raw = client.get("/boinc/status").text
+    # no hard-coded +250 HMT / +45 Cobblestones schedule: the only credit path awards 0 until server-side verification exists
+    assert "+250 HMT" not in raw and "+45 Cobblestones" not in raw
+    assert "hmt_reflexion_points" not in raw
+    body = client.get("/boinc/status").json()
+    assert "rewards_per_verified_workunit" not in body
+    assert body["credit_policy"]["hmt_per_verified_workunit"] is None
+    assert body["credit_policy"]["basis"].startswith("NOT_PERFORMED")

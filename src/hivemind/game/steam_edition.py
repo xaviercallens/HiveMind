@@ -1231,10 +1231,26 @@ pause
     }
 
 
-def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> Any:
-    """Create a FastAPI server serving the Interactive Cyberpunk Hack-Miner HUD and Live REST API."""
+def bearer_token_from_header(authorization: str | None) -> str:
+    """Return the token of an ``Authorization: Bearer <token>`` header, or ``""`` if absent or malformed."""
+    if not authorization:
+        return ""
+    scheme, _, token = authorization.strip().partition(" ")
+    if scheme.lower() != "bearer":
+        return ""
+    return token.strip()
+
+
+def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None, *, worker_token: str | None = None) -> Any:
+    """Create a FastAPI server serving the Interactive Cyberpunk Hack-Miner HUD and Live REST API.
+
+    ``worker_token`` (default: the ``HIVEMIND_STRATEGY_WORKER_TOKEN`` environment variable) is the bearer that trainer
+    workers present to feed the shared strategy optimizer; without one the telemetry is read-only (IP-198).
+    """
+    import hmac
+    import os
     import torch
-    from fastapi import Body, FastAPI, HTTPException, WebSocket
+    from fastapi import Body, FastAPI, Header, HTTPException, WebSocket
     import hivemind.game.steam_edition as _steam_mod
 
     _steam_mod.WebSocket = WebSocket
@@ -1285,6 +1301,15 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> 
     tournament_engine = GuildTournamentEngine()
     # Season 6 (`HM-S6-04`) live SI-01..SI-05 Pareto strategy telemetry.
     strategy_engine = StrategyOptimizerTelemetryEngine()
+    # The engine is process-wide: every viewer of the HUD sees what the last writer posted, so writing needs an identity.
+    strategy_worker_token = (worker_token if worker_token is not None else os.environ.get("HIVEMIND_STRATEGY_WORKER_TOKEN", "")).strip()
+
+    def _require_strategy_worker(authorization: str | None) -> None:
+        presented = bearer_token_from_header(authorization)
+        if not strategy_worker_token:
+            raise HTTPException(status_code=401, detail="strategy telemetry is read-only: no worker token is configured on this server")
+        if not presented or not hmac.compare_digest(presented, strategy_worker_token):
+            raise HTTPException(status_code=401, detail="worker token required (Authorization: Bearer)")
     # Season 19 Unity + Steamworks.NET + Google Antigravity Scientific Discovery Game engine.
     scientific_game_engine = HiveMindScientificGameEngine()
 
@@ -1406,8 +1431,9 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> 
         return snapshot
 
     @app.post("/api/strategy-optimizer", response_class=JSONResponse)
-    def post_strategy_optimizer(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
-        """Feed live link/curriculum observations into SI-02/SI-03 and refresh the frontier."""
+    def post_strategy_optimizer(payload: Dict[str, Any] = Body(default={}), authorization: str | None = Header(default=None)) -> Dict[str, Any]:
+        """Feed live link/curriculum observations into SI-02/SI-03 and refresh the frontier (worker bearer required, IP-198)."""
+        _require_strategy_worker(authorization)
         try:
             snapshot = strategy_engine.update(payload)
         except ValueError as exc:
@@ -1748,8 +1774,20 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> 
     @app.post("/api/scientific-game/la-ruche-copilot", response_class=JSONResponse)
     def post_scientific_game_la_ruche_copilot(
         payload: Dict[str, Any] = Body(default={}),
+        authorization: str | None = Header(default=None),
     ) -> Dict[str, Any]:
-        """Query a live Specialist Bee on La Ruche or local GPU swarm and score ANSE Bee Energy."""
+        """Query a live Specialist Bee on La Ruche or local GPU swarm and score ANSE Bee Energy.
+
+        The caller must present their own router key (IP-201); it is forwarded to La Ruche and the
+        server-held key is never used for caller prompts. Anonymous calls get 401.
+        """
+        router_api_key = bearer_token_from_header(authorization)
+        if not router_api_key:
+            raise HTTPException(
+                status_code=401,
+                detail="caller router API key required (Authorization: Bearer)",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         prompt = str(
             payload.get(
                 "prompt",
@@ -1760,6 +1798,7 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> 
         gamer_tag = str(payload.get("gamer_tag", "CyberValkyrie_FR"))
         return ask_la_ruche_bee_copilot_live(
             prompt=prompt,
+            router_api_key=router_api_key,
             model=model,
             gamer_tag=gamer_tag,
         )

@@ -17,7 +17,7 @@ import hashlib
 import json
 import math
 from dataclasses import asdict, dataclass
-from typing import Any, Sequence
+from typing import Any, Optional, Sequence
 
 MAX_ANCHOR_PERPLEXITY_DRIFT_RATIO = 0.005
 
@@ -56,7 +56,7 @@ class LifelongRatchetVerdict:
     relative_anchor_perplexity_drift: float
     max_allowed_anchor_drift: float
     domain_nll_delta: float
-    ewc_fisher_penalty: float
+    ewc_fisher_penalty: Optional[float]
     ratchet_certificate_sha256: str
 
     def to_dict(self) -> dict[str, Any]:
@@ -83,6 +83,10 @@ class LifelongDecentralizedRatchet:
     def weighted_perplexity(samples: Sequence[AnchorEvalSample], *, use_candidate: bool) -> float:
         if not samples:
             raise ValueError("samples must be non-empty")
+        for s in samples:
+            value = s.candidate_nll if use_candidate else s.baseline_nll
+            if not math.isfinite(value):
+                raise ValueError(f"non-finite NLL for anchor sample {s.sample_id!r}: {value!r}")
         total_w = sum(max(0.0, s.weight) for s in samples)
         if total_w <= 0.0:
             raise ValueError("sum of sample weights must be positive")
@@ -113,16 +117,34 @@ class LifelongDecentralizedRatchet:
         anchor_samples: Sequence[AnchorEvalSample],
         daily_batch: DailyCorpusIngestionBatch,
         *,
-        fisher_diag: Sequence[float] = (1.0, 1.0, 1.0, 1.0),
-        anchor_params: Sequence[float] = (0.0, 0.0, 0.0, 0.0),
-        candidate_params: Sequence[float] = (0.01, -0.01, 0.005, 0.0),
+        fisher_diag: Optional[Sequence[float]] = None,
+        anchor_params: Optional[Sequence[float]] = None,
+        candidate_params: Optional[Sequence[float]] = None,
     ) -> LifelongRatchetVerdict:
-        """Evaluate whether ``checkpoint_id`` passes the anti-forgetting anchor gate and improves on ``daily_batch``."""
+        """Evaluate whether ``checkpoint_id`` passes the anti-forgetting anchor gate and improves on ``daily_batch``.
+
+        The EWC penalty is computed only when ``fisher_diag``, ``anchor_params`` and ``candidate_params`` are all
+        supplied; when all three are absent it is ``None`` and the domain delta is the raw NLL change. No parameter
+        vector is invented. Supplying only some of them raises ``ValueError``.
+        """
+        for name, value in (
+            ("candidate_domain_nll", daily_batch.candidate_domain_nll),
+            ("baseline_domain_nll", daily_batch.baseline_domain_nll),
+        ):
+            if not math.isfinite(value):
+                raise ValueError(f"{name} must be finite, got {value!r}")
+        ewc_inputs = (fisher_diag, anchor_params, candidate_params)
+        ewc_pen: Optional[float]
+        if all(v is None for v in ewc_inputs):
+            ewc_pen = None
+        elif any(v is None for v in ewc_inputs):
+            raise ValueError("fisher_diag, anchor_params and candidate_params must be supplied together")
+        else:
+            ewc_pen = self.compute_ewc_penalty(fisher_diag, anchor_params, candidate_params)  # type: ignore[arg-type]
         base_ppl = self.weighted_perplexity(anchor_samples, use_candidate=False)
         cand_ppl = self.weighted_perplexity(anchor_samples, use_candidate=True)
         rel_drift = (cand_ppl - base_ppl) / max(base_ppl, 1e-12)
-        ewc_pen = self.compute_ewc_penalty(fisher_diag, anchor_params, candidate_params)
-        domain_delta = daily_batch.candidate_domain_nll + ewc_pen - daily_batch.baseline_domain_nll
+        domain_delta = daily_batch.candidate_domain_nll + (ewc_pen or 0.0) - daily_batch.baseline_domain_nll
 
         if rel_drift > self.max_anchor_drift_ratio:
             promoted = False

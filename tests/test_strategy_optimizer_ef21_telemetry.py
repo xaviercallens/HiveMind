@@ -26,13 +26,13 @@ def _entry(worker: str = "w-01", branch: str = "Code", **overrides) -> dict:
 
 
 def test_posted_telemetry_is_served_with_its_basis() -> None:
-    client = TestClient(create_hack_miner_fastapi_app(), raise_server_exceptions=False)
+    client = TestClient(create_hack_miner_fastapi_app(worker_token="test-worker-token-not-a-secret"), raise_server_exceptions=False)
     empty = client.get("/api/strategy-optimizer").json()["ef21_live_telemetry"]
     assert empty["workers"] == [] and "self-reported" in empty["basis"]
 
-    assert client.post("/api/strategy-optimizer", json={"ef21": _entry()}).status_code == 200
+    assert client.post("/api/strategy-optimizer", headers={"Authorization": "Bearer test-worker-token-not-a-secret"}, json={"ef21": _entry()}).status_code == 200
     posted = client.post(
-        "/api/strategy-optimizer", json={"ef21": [_entry("w-02", "STEM", contraction_factor=None)]}
+        "/api/strategy-optimizer", headers={"Authorization": "Bearer test-worker-token-not-a-secret"}, json={"ef21": [_entry("w-02", "STEM", contraction_factor=None)]}
     )
     assert posted.status_code == 200
     workers = client.get("/api/strategy-optimizer").json()["ef21_live_telemetry"]["workers"]

@@ -383,3 +383,29 @@ def test_warmup_rate_limit_holds_and_expires() -> None:
     assert world.chat(ckey, f"hivemind/{MODEL}").status_code == 503
     _wait_calls(fake, 2)
     assert len(fake.calls) == 2
+
+
+def test_a_cheaper_producer_that_unloaded_the_model_does_not_block_a_warm_dearer_one(w: World) -> None:
+    """2026-11-03 incident: the cheapest producer reported coder not loaded, the posted-price equilibrium selected it alone
+    and the residency gate answered 503 while a warm producer for the same model stood idle."""
+    cid, ckey = w.consumer(50.0)
+    _, _, warm = add_producer(w, "warm.test", loaded=True)
+    cheap_id, cheap_key = w.register("producer")
+    cheap = FakeProducer()
+    w.producers["cheap.test"] = cheap
+    body = {
+        "endpoint_url": "https://cheap.test",
+        "models": [{"id": MODEL, "local_name": "q", "loaded": False, "cold_start_s": 90.0}],
+        "cost_per_1k": COST / 4.0, "capacity_1k": 100.0, "execution_class": "t4",
+    }
+    assert w.app_client.post("/v1/hivemind/producer/heartbeat", headers={"Authorization": f"Bearer {cheap_key}"}, json=body).status_code == 200
+    response = w.chat(ckey, f"hivemind/{MODEL}")
+    assert response.status_code == 200, response.text
+    assert len(warm.calls) == 1 and not cheap.calls
+    assert w.store.balance(cid) < 50.0  # the request was served and charged
+    # when the only producers left are all cold, the explicit model_loading answer is unchanged
+    w2 = _build_world(warmup_unloaded=False)
+    _, ckey2 = w2.consumer(10.0)
+    _, _, cold = add_producer(w2, "cold.test", loaded=False, cold=90.0)
+    r2 = w2.chat(ckey2, f"hivemind/{MODEL}")
+    assert r2.status_code == 503 and r2.json()["error"]["code"] == "model_loading" and not cold.calls

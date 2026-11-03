@@ -929,9 +929,9 @@ if ($('opentrainerStatusBtn')) {
       const rounds = data.recent_training_rounds || [];
       const offer = data.active_task_offer || {};
       $('opentrainerPortalStatus').textContent =
-        'OPENTRAINER ONLINE (' + (data.version || '1.0.0-s36') + ') • Topic: ' + (offer.topic || 'hivemind.amcp.federation.v1') +
-        ' • Registered Trainers: ' + (cat.registered_trainer_accounts_count || 0) +
-        ' • Live Nodes: ' + (fl.active_trainer_nodes || 0) +
+        (data.status || 'n/a') + ' (' + (data.version || 'n/a') + ') • Topic: ' + (offer.topic || 'n/a') +
+        ' • Registered Trainers: ' + (cat.registered_trainer_accounts_count ?? 'n/a') +
+        ' • Live Nodes: ' + (fl.active_trainer_nodes ?? 'n/a') +
         ' • Accepted Rounds: ' + rounds.length +
         ' • Firewall Traversal: Outbound HTTPS Relay (0 inbound ports)';
     } catch (err) {
@@ -947,9 +947,17 @@ if ($('opentrainerHeartbeatBtn')) {
       $('opentrainerPortalStatus').textContent = 'Paste your hm-... trainer/prosumer API key above (or register with role="trainer" at /signup) first.';
       return;
     }
-    const hostLabel = ($('otHostInput') && $('otHostInput').value.trim()) || 'XAVGAMSRV-RTX2070';
-    const gpuName = ($('otGpuInput') && $('otGpuInput').value.trim()) || 'NVIDIA GeForce RTX 2070';
+    const hostLabel = ($('otHostInput') && $('otHostInput').value.trim()) || '';
+    const gpuName = ($('otGpuInput') && $('otGpuInput').value.trim()) || '';
+    const vramTotal = ($('otVramTotalInput') && $('otVramTotalInput').value.trim()) || '';
+    const vramFree = ($('otVramFreeInput') && $('otVramFreeInput').value.trim()) || '';
     const netMode = ($('otNetModeSelect') && $('otNetModeSelect').value) || 'outbound-https-relay';
+    // Only fields the user typed are sent; a field left out is stored by the server as "not reported".
+    const payload = { network_mode: netMode };
+    if (hostLabel) payload.host_label = hostLabel;
+    if (gpuName) payload.gpu_name = gpuName;
+    if (vramTotal !== '') payload.vram_total_mib = Number(vramTotal);
+    if (vramFree !== '') payload.vram_free_mib = Number(vramFree);
     $('opentrainerPortalStatus').textContent = 'Sending outbound HTTPS heartbeat to OpenTrainer (' + netMode + ')...';
     try {
       const res = await fetch('/v1/hivemind/opentrainer/heartbeat', {
@@ -958,13 +966,7 @@ if ($('opentrainerHeartbeatBtn')) {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ' + apiKey,
         },
-        body: JSON.stringify({
-          host_label: hostLabel,
-          gpu_name: gpuName,
-          vram_total_mib: 8192,
-          vram_free_mib: 6400,
-          network_mode: netMode,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -1077,7 +1079,7 @@ async function refreshLivePortalTelemetry() {
           v(byRole.prosumer) + ' prosumers • ' +
           v(byRole.producer) + ' producers • ' +
           v(byRole.consumer) + ' consumers • ' +
-          (byRole.trainer || 0) + ' trainers • ' +
+          v(byRole.trainer) + ' trainers • ' +
           v(byRole.admin) + ' admins';
       }
       if ($('liveGcpModelsCount')) {
@@ -1110,7 +1112,7 @@ async function refreshLivePortalTelemetry() {
           v(ot.accepted_rounds_count) + ' Accepted Round(s)';
       }
       if ($('liveGcpUpdatedUtc')) {
-        $('liveGcpUpdatedUtc').textContent = 'Live GCP Snapshot: ' + (d.generated_at_iso || 'just now');
+        $('liveGcpUpdatedUtc').textContent = 'Live GCP Snapshot: ' + v(d.generated_at_iso);
       }
       if ($('laab-live-telemetry-text')) {
         $('laab-live-telemetry-text').textContent =
@@ -1124,17 +1126,17 @@ async function refreshLivePortalTelemetry() {
       }
       if ($('nightLiveBannerText')) {
         $('nightLiveBannerText').textContent =
-          '🟢 LIVE NOW (' + (d.generated_at_iso || '') + '): ' +
+          '🟢 LIVE NOW (' + v(d.generated_at_iso) + '): ' +
           v(t4.assimilated_workunits) + ' Assimilated BOINC WUs • T4 Free VRAM ' +
           v(t4.vram_free_mib) + ' MiB / ' +
           v(t4.vram_total_mib) + ' MiB • Governor ' +
-          (t4.governor_state || 'IDLE_COMPUTE_GREEN') + ' • OpenTrainer ' +
+          v(t4.governor_state) + ' • OpenTrainer ' +
           v(ot.accepted_rounds_count) + ' accepted round(s) (eval_loss ' + v(ot.latest_eval_loss) + ')';
       }
       if ($('opentrainerPortalStatus') && !$('opentrainerPortalStatus').dataset.userClicked) {
         $('opentrainerPortalStatus').textContent =
-          'LIVE OPENTRAINER (' + (ot.version || '1.0.0-s36') + ') • Topic: ' + (ot.topic || 'hivemind.amcp.federation.v1') +
-          ' • Registered Trainers: ' + (ot.registered_trainer_accounts_count || 0) +
+          v(ot.status) + ' (' + v(ot.version) + ') • Topic: ' + v(ot.topic) +
+          ' • Registered Trainers: ' + v(ot.registered_trainer_accounts_count) +
           ' • Live Trainer GPUs: ' + v(ot.total_registered_nodes) +
           ' • Accepted Rounds: ' + v(ot.accepted_rounds_count) +
           ' (latest eval_loss: ' + v(ot.latest_eval_loss) + ')';
@@ -1710,11 +1712,19 @@ def render_portal_page(
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:0.85rem;">
         <div style="flex:1.2;min-width:190px;">
           <label for="otHostInput">Trainer Host Label</label>
-          <input id="otHostInput" type="text" value="XAVGAMSRV-RTX2070" style="margin-bottom:0;" />
+          <input id="otHostInput" type="text" placeholder="your host label (optional)" style="margin-bottom:0;" />
         </div>
         <div style="flex:1.3;min-width:200px;">
           <label for="otGpuInput">Trainer GPU Hardware</label>
-          <input id="otGpuInput" type="text" value="NVIDIA GeForce RTX 2070 (8 GB VRAM)" style="margin-bottom:0;" />
+          <input id="otGpuInput" type="text" placeholder="your GPU model (optional)" style="margin-bottom:0;" />
+        </div>
+        <div style="flex:1;min-width:150px;">
+          <label for="otVramTotalInput">VRAM Total (MiB, optional)</label>
+          <input id="otVramTotalInput" type="number" min="512" placeholder="not reported" style="margin-bottom:0;" />
+        </div>
+        <div style="flex:1;min-width:150px;">
+          <label for="otVramFreeInput">VRAM Free (MiB, optional)</label>
+          <input id="otVramFreeInput" type="number" min="0" placeholder="not reported" style="margin-bottom:0;" />
         </div>
         <div style="flex:1.4;min-width:220px;">
           <label for="otNetModeSelect">Firewall-Friendly Network Mode</label>

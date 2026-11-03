@@ -93,6 +93,22 @@ def test_migration_status_is_admin_only(tmp_path: Path) -> None:
     assert "callensxavier@gmail.com" not in r.text
 
 
+def test_dashboard_responses_and_volunteer_tools_carry_the_proof_of_concept_notice(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    client = _client(tmp_path)
+    for resp in (client.get("/health"), client.get("/api/v1/auth/migration/status")):
+        assert "proof-of-concept" in resp.headers.get("x-hivemind-status", "")
+    assert "Proof of concept" in client.get("/openapi.json").json()["info"]["description"]
+
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import hivemind_volunteer_preflight as pf
+
+    pf.main(["--explain"])
+    err = capsys.readouterr().err
+    assert "Proof of concept" in err and "public, non-sensitive" in err
+
+
 def test_public_forecast_inputs_are_clamped() -> None:
     import time as _time
 
@@ -147,3 +163,15 @@ def test_a_new_user_keeps_working_with_its_own_token(tmp_path: Path) -> None:
     assert client.post("/api/v1/auth/login", json={"handle_or_email": tok}).status_code == 200
     assert client.post("/api/v1/auth/login", json={"handle_or_email": "new-bee"}).status_code == 401
     assert client.post("/api/v1/auth/login", headers={"Authorization": f"Bearer {tok}"}, json={"handle_or_email": "new-bee"}).status_code == 200
+
+
+def test_user_facing_texts_carry_the_notice_and_no_longer_claim_post_quantum_or_100_percent_safety() -> None:
+    root = Path(__file__).resolve().parents[1]
+    for rel in ("wiki/Home.md", "docs/USER_GUIDE_AND_CAMPAIGN_CALENDAR.md", "README.md"):
+        assert "Proof of concept" in (root / rel).read_text(encoding="utf-8")[:2500], rel
+    for rel in ("src/hivemind/router/welcome_email.py", "src/hivemind/router/manifesto_page.py"):
+        assert "Proof of concept" in (root / rel).read_text(encoding="utf-8"), rel
+    for path in list((root / "src").rglob("*.py")) + list((root / "docs").glob("*.md")):
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        assert "Kyber-1024" not in text, path  # no post-quantum cryptography is implemented anywhere
+        assert "100% Safe for Your" not in text and "**100% Private**" not in text, path

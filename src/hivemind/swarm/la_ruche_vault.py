@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import hashlib
+import math
 import json
 import time
 from pathlib import Path
@@ -142,6 +143,9 @@ class RucheHoneycombCell:
     wire_codec: str
     deposited_at_epoch: float
     verified: bool = True
+    # The NLL and perplexity figures are what the contributor reported; the vault re-runs none of them. `verified`
+    # covers the adapter checks made here (finite tensors, non-silent, SVD rank/energy), not these figures.
+    nll_source: str = "CALLER_REPORTED_UNVERIFIED"
 
 
 @dataclass
@@ -264,6 +268,17 @@ class LaRucheModelVault:
             raise ValueError(
                 f"Unknown La Ruche domain '{domain_name}'. Expected one of {sorted(self._layout_by_domain)}"
             )
+        # NaN compares False against everything, so `after >= before` let a NaN loss through the gate (IP-163):
+        # every reported figure must be a finite, positive number before any comparison.
+        for figure_name, figure in (
+            ("train_nll_before", train_nll_before), ("train_nll_after", train_nll_after),
+            ("holdout_nll_before", holdout_nll_before), ("holdout_nll_after", holdout_nll_after),
+            ("holdout_perplexity_before", holdout_perplexity_before), ("holdout_perplexity_after", holdout_perplexity_after),
+        ):
+            if not isinstance(figure, (int, float)) or isinstance(figure, bool) or not math.isfinite(figure) or figure <= 0.0:
+                raise ValueError(
+                    f"La Ruche quality gate rejected expert for '{domain_name}': {figure_name} must be a finite positive number, got {figure!r}"
+                )
         if holdout_nll_after >= holdout_nll_before:
             raise ValueError(
                 f"La Ruche quality gate rejected expert for '{domain_name}': "

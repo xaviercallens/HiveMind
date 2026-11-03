@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import html
 import json
+
+from hivemind.router.telemetry_figures import shown_figure
 from typing import Any, Mapping
 
 DEFAULT_ROUTER_URL = "https://hivemind-openrouter-1003063861791.us-central1.run.app"
@@ -216,17 +218,18 @@ def render_manifesto_page(
     ot = telem.get("opentrainer") if isinstance(telem.get("opentrainer"), Mapping) else {}
     usage = telem.get("usage_24h") if isinstance(telem.get("usage_24h"), Mapping) else {}
 
-    total_acc = int(acc.get("total_registered_accounts", 66))
-    prosumers_n = int(roles.get("prosumer", 32))
-    producers_n = int(roles.get("producer", 10))
-    consumers_n = int(roles.get("consumer", 24))
-    trainers_n = int(roles.get("trainer", 0))
-    live_models_n = int(mods.get("live_count", mods.get("live_models_count", 15)))
-    live_hm = int(prods.get("live_hiveminders", 42))
-    total_hm = int(prods.get("total_hiveminders", 42))
-    wus_n = int(t4.get("assimilated_workunits", 154))
-    reqs_24h = int(usage.get("total_requests", 597))
-    ot_status = str(ot.get("status", "ONLINE"))
+    # A figure the payload does not carry is shown as n/a (IP-146, IP-177), never 66 accounts, 154 WUs or ONLINE.
+    total_acc = shown_figure(acc.get("total_registered_accounts"))
+    prosumers_n = shown_figure(roles.get("prosumer"))
+    producers_n = shown_figure(roles.get("producer"))
+    consumers_n = shown_figure(roles.get("consumer"))
+    trainers_n = shown_figure(roles.get("trainer"))
+    live_models_n = shown_figure(mods.get("live_count", mods.get("live_models_count")))
+    live_hm = shown_figure(prods.get("live_hiveminders"))
+    total_hm = shown_figure(prods.get("total_hiveminders"))
+    wus_n = shown_figure(t4.get("assimilated_workunits"))
+    reqs_24h = shown_figure(usage.get("total_requests"))
+    ot_status = shown_figure(ot.get("status"))
 
     nonce_attr = f' nonce="{html.escape(nonce)}"' if nonce else ""
     router_base = api_url.rstrip("/")
@@ -355,6 +358,7 @@ footer{{margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--line);colo
 </style>
 </head>
 <body>
+<p role="note" id="poc-notice" style="margin:0;padding:10px 16px;background:#2a2208;color:#ffc943;font-size:14px;"><strong>&#9888; Proof of concept (PoC).</strong> Not a production service yet: send only public, non-sensitive data (no secrets, personal, private or enterprise data).</p>
 <div class="wrap">
   <nav class="topnav" aria-label="Navigation principale">
     <div class="topnav-links">

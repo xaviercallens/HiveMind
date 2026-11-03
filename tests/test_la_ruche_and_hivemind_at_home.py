@@ -557,30 +557,27 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
         ).status_code
         == 200
     )
-    assert (
-        client.post(
+    # the training endpoint only records a request: no trainer is attached, so it is 202 with no metrics (it used to return
+    # fixed losses and TRAINING_COMPLETED_VERIFIED)
+    for hardware in ("cuda:0 RTX 2070", "cloud-a10g"):
+        queued = client.post(
             "/api/v1/admin/moe/train-expert",
             headers=ADMIN,
-            json={"domain_name": "physics_sim", "hardware_override": "cuda:0 RTX 2070"},
-        ).status_code
-        == 200
+            json={"domain_name": "physics_sim", "hardware_override": hardware},
+        )
+        assert queued.status_code == 202
+        receipt = queued.json()["training_receipt"]
+        assert queued.json()["status"] == "QUEUED_NOT_STARTED" and receipt["status"] == "QUEUED_NOT_STARTED"
+        assert receipt["metrics"] is None and "train_nll_after" not in receipt and "perplexity_reduction_pct" not in receipt
+    selected = client.post(
+        "/api/v1/admin/moe/models/select",
+        headers=ADMIN,
+        json={"model_id": "hivemind/moe-queenbee-256b"},
     )
-    assert (
-        client.post(
-            "/api/v1/admin/moe/train-expert",
-            headers=ADMIN,
-            json={"domain_name": "physics_sim", "hardware_override": "cloud-a10g"},
-        ).status_code
-        == 200
-    )
-    assert (
-        client.post(
-            "/api/v1/admin/moe/models/select",
-            headers=ADMIN,
-            json={"model_id": "hivemind/moe-queenbee-256b"},
-        ).status_code
-        == 200
-    )
+    assert selected.status_code == 200
+    assert selected.json()["status"] == "SELECTION_RECORDED" and "not deployed" in selected.json()["message"]
+    assert selected.json()["active_model"]["deployed"] is False and selected.json()["active_model"]["status"] == "SELECTED_IN_MEMORY"
+    assert client.get("/api/v1/admin/dashboard", headers=ADMIN).json()["active_model"]["deployed"] is False
     assert (
         client.post(
             "/api/v1/son/feedback",
@@ -725,3 +722,25 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
             == 200
         )
 
+
+
+def test_la_ruche_gate_rejects_non_finite_or_non_positive_figures_and_labels_figures_as_caller_reported(tmp_path: Path) -> None:
+    """IP-163: `after >= before` is False for NaN, so a NaN holdout loss used to be deposited with perplexity_reduction_pct=nan."""
+    import math
+
+    vault = LaRucheModelVault(vault_dir=tmp_path / "ruche_nan", hidden_size=32, vocab_size=259, canonical_rank_r=4)
+    tensors = {
+        "base_model.model.model.layers.0.self_attn.q_proj.lora_A.default.weight": torch.randn(4, 32),
+        "base_model.model.model.layers.0.self_attn.q_proj.lora_B.default.weight": torch.randn(32, 4),
+    }
+    good = dict(domain_name="code_python", adapter_tensors=tensors, contributor_handle="@tester", hardware_device="cpu",
+                dataset_shard_cid="cid://sha256/test", train_nll_before=5.5, train_nll_after=5.0, holdout_nll_before=5.5,
+                holdout_nll_after=5.1, holdout_perplexity_before=244.69, holdout_perplexity_after=164.02)
+    for field, bad in (("holdout_nll_after", math.nan), ("holdout_nll_after", math.inf), ("holdout_nll_before", -1.0),
+                       ("holdout_perplexity_after", math.nan), ("train_nll_after", 0.0)):
+        with pytest.raises(ValueError, match="finite positive number"):
+            vault.deposit_qlora_expert(**{**good, field: bad})
+    assert vault.cells == {}
+    cell = vault.deposit_qlora_expert(**good)
+    assert math.isfinite(cell.perplexity_reduction_pct) and cell.perplexity_reduction_pct > 0.0
+    assert cell.nll_source == "CALLER_REPORTED_UNVERIFIED"

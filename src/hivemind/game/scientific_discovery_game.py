@@ -765,12 +765,19 @@ def sync_game_with_la_ruche_live(
 def ask_la_ruche_bee_copilot_live(
     *,
     prompt: str,
+    router_api_key: str,
     model: str = "hivemind/bee-stars",
     gamer_tag: str = "CyberValkyrie_FR",
     ruche_url: str = LA_RUCHE_CLOUD_URL,
     local_ollama_url: str = LOCAL_SWARM_OLLAMA_URL,
 ) -> Dict[str, Any]:
-    """Query a live Specialist Bee on La Ruche (or local GPU swarm tunnel) and score its ANSE Energy."""
+    """Query a live Specialist Bee on La Ruche (or local GPU swarm tunnel) and score its ANSE Energy.
+
+    The La Ruche call is made with the caller's own router key only; the server-held cached
+    session key is never used for caller prompts (IP-201).
+    """
+    if not router_api_key.strip():
+        raise ValueError("router_api_key is required: caller prompts never use the server-held key")
     t0 = time.perf_counter()
     reply_text = ""
     provider_used = "la_ruche_cloud"
@@ -778,11 +785,7 @@ def ask_la_ruche_bee_copilot_live(
     ledger_after: Dict[str, Any] = {}
 
     try:
-        session_info = _load_or_register_la_ruche_gamer_session(
-            ruche_url=ruche_url,
-            gamer_tag=gamer_tag,
-        )
-        headers = {"Authorization": f"Bearer {session_info['api_key']}"}
+        headers = {"Authorization": f"Bearer {router_api_key.strip()}"}
         with httpx.Client(timeout=10.0) as client:
             chat_res = client.post(
                 f"{ruche_url.rstrip('/')}/v1/chat/completions",

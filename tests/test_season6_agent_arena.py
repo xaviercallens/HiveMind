@@ -51,7 +51,7 @@ SEASON_6_MISSION_IDS = [
 
 @pytest.fixture(scope="module")
 def client() -> TestClient:
-    return TestClient(create_hack_miner_fastapi_app())
+    return TestClient(create_hack_miner_fastapi_app(worker_token="test-worker-token-not-a-secret"))
 
 
 def test_hm_s6_04_season6_missions_catalog_and_offline_corpora() -> None:
@@ -356,6 +356,7 @@ def test_hm_s6_04_hud_and_api_endpoints(client: TestClient) -> None:
 
     posted_strategy = client.post(
         "/api/strategy-optimizer",
+        headers={"Authorization": "Bearer test-worker-token-not-a-secret"},
         json={
             "ring_rtt_ms": 145.0,
             "bbr_pacing_mbps": 18.0,
@@ -365,7 +366,7 @@ def test_hm_s6_04_hud_and_api_endpoints(client: TestClient) -> None:
     )
     assert posted_strategy.status_code == 200
     assert posted_strategy.json()["sequence"] >= 1
-    invalid_strategy = client.post("/api/strategy-optimizer", json={"ring_rtt_ms": -5})
+    invalid_strategy = client.post("/api/strategy-optimizer", headers={"Authorization": "Bearer test-worker-token-not-a-secret"}, json={"ring_rtt_ms": -5})
     assert invalid_strategy.status_code == 400
 
     missions = client.get("/api/missions").json()

@@ -594,6 +594,8 @@ def build_opentrainer_status_payload(
         "live_opentrainer_fleet": {
             "active_trainer_nodes": len(live_nodes),
             "distinct_physical_trainer_gpus": len(distinct_hosts),
+            # IP-211: host labels are self-declared; the count is bounded by accounts x MAX_OPENTRAINER_NODES_PER_ACCOUNT, not verified GPUs.
+            "distinct_physical_trainer_gpus_basis": "self-declared host_label, at most 8 per account (not verified hardware)",
             "total_registered_nodes": len(opentrainer_nodes),
             "nodes": list(opentrainer_nodes),
         },

@@ -203,3 +203,28 @@ def test_opentrainer_status_is_derived_from_live_heartbeats_not_a_literal() -> N
     )
     assert live["status"] == "TRAINERS_LIVE" and live["live_opentrainer_fleet"]["active_trainer_nodes"] == 1
     assert live["status_basis"].startswith("1 node heartbeat(s)")
+
+
+def test_ip211_ninth_distinct_host_label_is_refused_and_fleet_count_stays_bounded() -> None:
+    store = RouterStore(":memory:", b"k" * 32)
+    client = TestClient(create_router_app(store))
+    reg = client.post("/v1/hivemind/register", json={"handle": "ip211_fleet_owner", "role": "trainer"})
+    assert reg.status_code == 200
+    headers = {"Authorization": f"Bearer {reg.json()['api_key']}"}
+
+    for i in range(8):
+        ok = client.post("/v1/hivemind/opentrainer/heartbeat", headers=headers, json={"host_label": f"host-{i}"})
+        assert ok.status_code == 200, ok.text
+
+    ninth = client.post("/v1/hivemind/opentrainer/heartbeat", headers=headers, json={"host_label": "host-8"})
+    assert ninth.status_code == 400, ninth.text
+    assert ninth.json()["error"]["code"] == "too_many_nodes"
+
+    # a refreshed heartbeat from an existing label is still accepted
+    refresh = client.post("/v1/hivemind/opentrainer/heartbeat", headers=headers, json={"host_label": "host-3"})
+    assert refresh.status_code == 200, refresh.text
+
+    fleet = client.get("/v1/hivemind/opentrainer/status").json()["live_opentrainer_fleet"]
+    assert fleet["total_registered_nodes"] == 8
+    assert fleet["distinct_physical_trainer_gpus"] <= 8
+    assert "self-declared" in fleet["distinct_physical_trainer_gpus_basis"]

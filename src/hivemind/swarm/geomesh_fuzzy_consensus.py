@@ -85,12 +85,14 @@ def triangulate_rtt_consistency(
       2. Upper bound (stretch): RTT <= max_routing_stretch * (2 * d_km / FIBER_SPEED_KM_PER_MS) + jitter.
     """
     if not anchors:
-        return True, "no_anchors"
+        return False, "no_anchors"
     verified_count = 0
     for anchor_id, (alat, alon) in anchors.items():
         if anchor_id not in node.anchor_rtts_ms:
             continue
         rtt_ms = float(node.anchor_rtts_ms[anchor_id])
+        if not math.isfinite(rtt_ms):
+            return False, f"non_finite_rtt:{anchor_id}"
         dist_km = haversine_km(node.lat_deg, node.lon_deg, alat, alon)
         min_physical_rtt = max(0.2, (2.0 * dist_km) / FIBER_SPEED_KM_PER_MS - 1.5)
         max_plausible_rtt = max_routing_stretch * ((2.0 * dist_km) / FIBER_SPEED_KM_PER_MS) + base_switching_jitter_ms

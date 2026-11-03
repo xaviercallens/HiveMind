@@ -4,6 +4,9 @@
 
 from __future__ import annotations
 
+import re
+
+import pytest
 from fastapi.testclient import TestClient
 
 from hivemind.router.accounts import RouterStore
@@ -17,6 +20,15 @@ def _client() -> tuple[TestClient, RouterStore, dict[str, str], str]:
     client = TestClient(create_router_app(store, starter_grant_hmt=0.0))
     aid, key = store.register("ot-node", "trainer")
     return client, store, {"Authorization": f"Bearer {key}"}, aid
+
+
+def _invented_hardware_figures(text: str) -> list[str]:
+    """The old placeholder figures, matched where they would be stored as a reading.
+
+    A bare substring test for 6400 or 8192 also matches random hexadecimal ids such as ``ot-640098d0...`` (it failed CI
+    that way), so the figures are only counted when they sit in a VRAM field.
+    """
+    return re.findall(r"vram_(?:total|free)_mib'?\"?: ?(?:6400|8192)\b", text)
 
 
 def test_a_heartbeat_without_hardware_is_recorded_as_not_reported() -> None:
@@ -50,6 +62,22 @@ def test_a_delta_submission_records_unknown_hardware_and_flags_the_token_estimat
     assert r.status_code == 200, r.text
     body = r.json()
     text = str(body)
-    assert "6400" not in text and "8192" not in text
+    assert not _invented_hardware_figures(text), text
     assert "CLIENT_REPORTED_UNVERIFIED" in text
     assert "tokens_trained_is_estimate" in text and "'vram_free_mib': 0" in text and "'vram_total_mib': 0" in text
+
+
+def test_a_random_submission_id_containing_the_old_figures_is_not_mistaken_for_invented_hardware(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, _store, auth, _aid = _client()
+    monkeypatch.setattr("hivemind.router.accounts.secrets.token_hex", lambda n=16: "6400819264008192"[: 2 * n])
+    r = client.post(
+        "/v1/hivemind/opentrainer/submit-delta",
+        headers=auth,
+        json={"round_id": 4, "inner_steps": 8, "loss_before": 2.0, "loss_after": 1.5, "delta_norm": 0.7, "delta_sha256": "b" * 64},
+    )
+    assert r.status_code == 200, r.text
+    text = str(r.json())
+    assert "ot-6400819264008192" in text  # the id really carries the digits the old check rejected
+    assert _invented_hardware_figures(text) == []
+    # and the check still catches a stored placeholder reading
+    assert _invented_hardware_figures("{'vram_total_mib': 6400}") and _invented_hardware_figures("{'vram_free_mib': 8192}")

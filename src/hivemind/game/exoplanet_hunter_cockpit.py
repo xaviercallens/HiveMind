@@ -18,8 +18,11 @@ import hashlib
 import json
 import math
 import random
+import re
+import threading
 import time
 import urllib.request
+from collections import deque
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -72,6 +75,24 @@ class PlanetDiscoveryRequest(BaseModel):
     gamer_tag: str = Field(default="Commandant_Starfleet_FR")
     player_classification: str = Field(default="PLANET")
     notes: str = Field(default="")
+
+
+FEEDBACK_MAX_FIELD_CHARS = 2048
+FEEDBACK_RATE_LIMIT_MAX = 5
+FEEDBACK_RATE_WINDOW_S = 600.0
+BENCHMARK_COOLDOWN_S = 300.0
+TAP_REFRESH_INTERVAL_S = 6 * 3600.0
+
+
+def _sanitise_display_tag(raw: Any) -> str:
+    """Reduce a free-text gamer tag to letters, digits, spaces and `._-@`, max 64 chars.
+
+    Markdown and line-break characters are removed so a tag cannot start a heading or a new line
+    in the feedback log.
+    """
+    cleaned = re.sub(r"[^\w ._\-@]", "", str(raw))
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()[:64]
+    return cleaned or "Anonyme"
 
 
 def _get_asset_data_uri(filename: str, mime: str = "image/jpeg") -> str:
@@ -2874,14 +2895,54 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
     def api_monitor_telemetry() -> JSONResponse:
         return JSONResponse(content=producer_pool.get_live_traffic_and_tflops_report())
 
+    benchmark_gate: Dict[str, Any] = {"lock": threading.Lock(), "last_done": None, "last_result": None}
+
     @app.post("/api/v1/monitor/benchmark-tflops", response_class=JSONResponse)
     def api_benchmark_tflops() -> JSONResponse:
-        metrics = producer_pool.benchmark_live_tflops(matrix_dim=3072)
-        return JSONResponse(content=metrics)
+        gate = benchmark_gate
+        if not gate["lock"].acquire(blocking=False):
+            return JSONResponse(
+                status_code=409,
+                content={"status": "BUSY", "message": "A TFLOPS benchmark is already running; retry later."},
+            )
+        try:
+            now = time.monotonic()
+            if gate["last_done"] is not None and now - gate["last_done"] < BENCHMARK_COOLDOWN_S:
+                remaining = BENCHMARK_COOLDOWN_S - (now - gate["last_done"])
+                return JSONResponse(
+                    status_code=429,
+                    content={
+                        "status": "COOLDOWN",
+                        "retry_after_s": round(remaining, 1),
+                        "last_result": gate["last_result"],
+                    },
+                )
+            metrics = producer_pool.benchmark_live_tflops(matrix_dim=3072)
+            gate["last_done"] = time.monotonic()
+            gate["last_result"] = metrics
+            return JSONResponse(content={**metrics, "benchmark_status": "MEASURED_NOW"})
+        finally:
+            gate["lock"].release()
+
+    tap_cache: Dict[str, Any] = {"lock": threading.Lock(), "fetched_at": None, "payload": None}
 
     @app.get("/api/astro/nasa-tap-sync", response_class=JSONResponse)
     def api_nasa_tap_sync() -> JSONResponse:
-        return JSONResponse(content=query_nasa_exoplanet_archive_tap(live_network=True))
+        cache = tap_cache
+        with cache["lock"]:
+            now = time.monotonic()
+            fresh = cache["fetched_at"] is not None and now - cache["fetched_at"] < TAP_REFRESH_INTERVAL_S
+            if not fresh:
+                cache["payload"] = query_nasa_exoplanet_archive_tap(live_network=True)
+                cache["fetched_at"] = now
+                served_from = "UPSTREAM_REFRESH"
+            else:
+                served_from = "MEMORY_CACHE"
+            body = dict(cache["payload"])
+            body["served_from"] = served_from
+            body["refresh_interval_s"] = TAP_REFRESH_INTERVAL_S
+            body["age_s"] = round(now - cache["fetched_at"], 1)
+        return JSONResponse(content=body)
 
     @app.get("/api/astro/stitch_project", response_class=JSONResponse)
     def api_stitch_project() -> JSONResponse:
@@ -3161,12 +3222,39 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         choice = random.choice(service.catalog[8:] if len(service.catalog) > 8 else service.catalog)
         return JSONResponse(content=choice)
 
+    feedback_hits: Dict[str, deque] = {}
+    feedback_lock = threading.Lock()
+
     @app.post("/api/v1/son/feedback", response_class=JSONResponse)
-    def api_son_feedback(payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
-        tag = str(payload.get("gamer_tag", "AstroGamer_FR"))[:64]
-        rating = max(1, min(5, int(payload.get("overall_rating", 5))))
-        comments = str(payload.get("review_text", ""))[:2048]
-        ideas = str(payload.get("feature_suggestions", ""))[:2048]
+    def api_son_feedback(request: Request, payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
+        if not isinstance(payload, dict):
+            return JSONResponse(status_code=400, content={"status": "rejected", "message": "JSON object expected."})
+        comments_raw = str(payload.get("review_text", ""))
+        ideas_raw = str(payload.get("feature_suggestions", ""))
+        if len(comments_raw) > FEEDBACK_MAX_FIELD_CHARS or len(ideas_raw) > FEEDBACK_MAX_FIELD_CHARS:
+            return JSONResponse(
+                status_code=413,
+                content={"status": "rejected", "message": f"Each text field is capped at {FEEDBACK_MAX_FIELD_CHARS} characters."},
+            )
+        try:
+            rating = max(1, min(5, int(payload.get("overall_rating", 5))))
+        except (TypeError, ValueError):
+            return JSONResponse(status_code=400, content={"status": "rejected", "message": "overall_rating must be an integer."})
+        client_key = request.client.host if request.client else "unknown"
+        now_mono = time.monotonic()
+        with feedback_lock:
+            hits = feedback_hits.setdefault(client_key, deque())
+            while hits and now_mono - hits[0] > FEEDBACK_RATE_WINDOW_S:
+                hits.popleft()
+            if len(hits) >= FEEDBACK_RATE_LIMIT_MAX:
+                return JSONResponse(
+                    status_code=429,
+                    content={"status": "rate_limited", "message": "Too many feedback submissions; try again later."},
+                )
+            hits.append(now_mono)
+        tag = _sanitise_display_tag(payload.get("gamer_tag", "AstroGamer_FR"))
+        comments = comments_raw
+        ideas = ideas_raw
         now_iso = datetime.datetime.now().isoformat()[:19]
         stars = "⭐" * rating
         md_path = ARTIFACTS_ROOT / "SON_FEEDBACK.md"
@@ -3175,7 +3263,15 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                 f"\n## 🖖 Avis Star Trek Exoplanet Hunter v4.0 de {tag} ({stars}) — {now_iso}\n"
                 f"- **Commentaires :** {comments}\n- **Idées :** {ideas}\n---\n"
             )
-        return JSONResponse(content={"status": "success", "message": f"Merci {tag} ! (+500 HMT)"})
+        return JSONResponse(
+            content={
+                "status": "success",
+                "message": f"Merci {tag} !",
+                "hmt_credited": False,
+                "hmt_awarded": 0,
+                "note": "This endpoint issues no HMT credit; feedback is stored for review.",
+            }
+        )
 
     # Shared In-Memory + Persistent State for the GCP Gamer & Citizen-Scientist Community Hub + BOINC Idle-GPU Coordinator
     community_state_path = ARTIFACTS_ROOT / "astro_boinc_community_hub_state.json"

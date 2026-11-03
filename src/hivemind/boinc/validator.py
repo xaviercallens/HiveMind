@@ -22,6 +22,12 @@ from hivemind.core.diloco_inner import InnerLoopResult, replay_inner_segment
 from hivemind.core.quantization import compute_state_dict_sha256
 
 VALID_EXECUTION_DTYPES = ("fp32", "bf16", "fp16", "fixed_point_q16")
+NON_FINITE_TENSOR = "NON_FINITE_TENSOR"
+
+
+def _has_non_finite(state: dict[str, torch.Tensor]) -> bool:
+    """Return True when any element of any tensor in `state` is NaN or +/-inf (IP-238)."""
+    return any(not bool(torch.isfinite(t.detach().to(device="cpu")).all()) for t in state.values())
 
 
 @dataclass(frozen=True)
@@ -90,6 +96,8 @@ def quantize_fixed_point_q16_state(
     out: dict[str, torch.Tensor] = {}
     for k in sorted(state_dict.keys()):
         t = state_dict[k].detach().to(dtype=torch.float64, device="cpu")
+        if not bool(torch.isfinite(t).all()):
+            raise ValueError(f"{NON_FINITE_TENSOR}: parameter {k!r} contains NaN or inf")
         out[k] = torch.round(t * scale).to(torch.int64)
     return out
 
@@ -103,6 +111,15 @@ def verify_fixed_point_q16_digest(
     """Compare two LoRA state dicts in fixed-point `Q(frac_bits)` integer space (`HM-S10-08`)."""
     if max_ulp_drift < 0:
         raise ValueError("max_ulp_drift must be >= 0")
+    if _has_non_finite(state_a) or _has_non_finite(state_b):
+        return {
+            "passed": False,
+            "exact_digest_match": False,
+            "max_ulp_diff": float("inf"),
+            "reason": NON_FINITE_TENSOR,
+            "digest_a": "",
+            "digest_b": "",
+        }
     qa = quantize_fixed_point_q16_state(state_a, frac_bits=frac_bits)
     qb = quantize_fixed_point_q16_state(state_b, frac_bits=frac_bits)
     if set(qa.keys()) != set(qb.keys()):
@@ -375,6 +392,23 @@ class DeterministicSpotCheckValidator:
                 dtype_matched=dtype_ok,
                 passed=False,
                 reason="REJECTED: parameter key mismatch or empty state dict.",
+            )
+
+        if _has_non_finite(worker_state) or _has_non_finite(validator_state):
+            # Checked over every tensor before any max/threshold comparison: NaN compares False
+            # against every bound, so a NaN in a non-first key would otherwise pass (IP-238).
+            return TwoStatisticSpotCheckResult(
+                linf_divergence=float("inf"),
+                num_tensors_above_eps=len(validator_state),
+                total_tensors=len(validator_state),
+                tensor_fraction_above_eps=1.0,
+                base_eps=eps0,
+                effective_eps=eps0,
+                max_tensor_fraction_above_eps=max_tensor_fraction_above_eps,
+                exact_class_matched=exact_ok,
+                dtype_matched=dtype_ok,
+                passed=False,
+                reason=f"{NON_FINITE_TENSOR}: worker or validator state contains NaN or inf.",
             )
 
         per_tensor_linf: list[float] = []

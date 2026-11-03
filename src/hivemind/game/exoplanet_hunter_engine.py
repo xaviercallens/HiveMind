@@ -25,6 +25,7 @@ import json
 import math
 import os
 import random
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -1512,6 +1513,8 @@ def load_real_hf_exoplanet_catalog(max_extra_per_category: int = 12) -> List[Dic
     return enriched_catalog
 
 
+_DISCOVERY_LOCK = threading.Lock()
+
 class AstroBeeMoEGPUService:
     """Live RTX 2070 (`cuda:0`) 4-Expert Sparse MoE Inference Service for Exoplanet Discovery."""
 
@@ -1741,8 +1744,9 @@ class AstroBeeMoEGPUService:
         player_classification: str,
         notes: str = "",
     ) -> Dict[str, Any]:
-        """Log a player's confirmed exoplanet discovery or false-positive bust into the Galactic Passport."""
+        """Log a player's discovery once per (account, target); replays earn 0 and are not recorded."""
         target = self.resolve_target(target_id)
+        account_key = str(gamer_tag).strip().casefold()
         true_disp = target["disposition"]
         vetting_type = str(target.get("vetting_anomaly_type", "NONE")).upper()
         is_correct = (
@@ -1751,6 +1755,44 @@ class AstroBeeMoEGPUService:
         )
         bonus_pts = 600 if is_correct else 150
 
+        with _DISCOVERY_LOCK:
+            ledger_entries: List[Dict[str, Any]] = []
+            if self.discoveries_path.exists():
+                try:
+                    ledger_entries = json.loads(self.discoveries_path.read_text(encoding="utf-8"))
+                except Exception:
+                    ledger_entries = []
+            already = any(
+                str(prior.get("gamer_tag", "")).strip().casefold() == account_key
+                and prior.get("target_id") == target["target_id"]
+                for prior in ledger_entries
+            )
+            if already:
+                return {
+                    "status": "duplicate_no_award",
+                    "accurate": is_correct,
+                    "points_earned": 0,
+                    "award_granted": False,
+                    "discovery_entry": None,
+                    "total_discoveries_logged": len(ledger_entries),
+                }
+            return self._append_discovery(
+                target, target_id, gamer_tag, player_classification, notes, is_correct, bonus_pts, ledger_entries
+            )
+
+    def _append_discovery(
+        self,
+        target: Dict[str, Any],
+        target_id: str,
+        gamer_tag: str,
+        player_classification: str,
+        notes: str,
+        is_correct: bool,
+        bonus_pts: int,
+        ledger_entries: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Append one first-time award to the ledger (caller holds `_DISCOVERY_LOCK`)."""
+        true_disp = target["disposition"]
         entry = {
             "discovery_id": f"DISC-{hashlib.sha256(f'{target_id}:{gamer_tag}:{time.time()}'.encode()).hexdigest()[:10].upper()}",
             "timestamp": datetime.datetime.now().isoformat()[:19],
@@ -1770,12 +1812,6 @@ class AstroBeeMoEGPUService:
             "notes": notes,
         }
 
-        ledger_entries: List[Dict[str, Any]] = []
-        if self.discoveries_path.exists():
-            try:
-                ledger_entries = json.loads(self.discoveries_path.read_text(encoding="utf-8"))
-            except Exception:
-                ledger_entries = []
         ledger_entries.insert(0, entry)
         self.discoveries_path.parent.mkdir(parents=True, exist_ok=True)
         self.discoveries_path.write_text(json.dumps(ledger_entries[:200], indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -1784,6 +1820,7 @@ class AstroBeeMoEGPUService:
             "status": "recorded",
             "accurate": is_correct,
             "points_earned": bonus_pts,
+            "award_granted": True,
             "discovery_entry": entry,
             "total_discoveries_logged": len(ledger_entries),
         }

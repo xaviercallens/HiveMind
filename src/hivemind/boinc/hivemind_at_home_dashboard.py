@@ -7879,14 +7879,15 @@ def create_hivemind_at_home_app(
             "compute_points": 68500,
         },
         "active_model": {
-            "model_id": "hivemind/la-ruche-moe-v2.6",
-            "version": "v2.6.0",
-            "architecture": "HiveMind-BTM-UpcycledSparseMoE-8xQLoRA",
-            "routing_mode": "sigma_moe",
-            "top_k": 2,
-            "status": "DEPLOYED_LIVE",
-            "activated_at": time.time() - 3600,
-            "activated_by": "callensxavier@gmail.com",
+            # no HiveMind-trained model is deployed: this record used to name "la-ruche-moe-v2.6" as DEPLOYED_LIVE, a model that does not exist
+            "model_id": "none",
+            "version": None,
+            "architecture": "n/a (tiers are served by off-the-shelf models, see the router catalog)",
+            "routing_mode": "n/a",
+            "top_k": None,
+            "status": "NONE_DEPLOYED",
+            "activated_at": None,
+            "activated_by": None,
         },
         "campaigns": [
             {
@@ -8033,44 +8034,44 @@ def create_hivemind_at_home_app(
             hw_allocated = "NVIDIA Tesla T4 (16GB Spot us-east4-b) + Cloud TPU v5e Swarm (RTX 2070 Shielded for Inference)"
             rtx2070_shield_engaged = True
 
-        train_result = {
+        # Nothing here trains a model: real training runs through the BOINC QLoRA workunit chain (scripts/t4_workgen.py ->
+        # boinc/real_client/moe_app.py) on volunteer GPUs. This endpoint only records the request, so it reports no loss,
+        # perplexity or "verified" status (it used to return fixed numbers and mark the job COMPLETED).
+        queued = {
             "training_receipt_id": receipt_id,
             "domain_name": req.domain_name,
             "adapter_rank": req.adapter_rank,
             "training_steps": req.training_steps,
             "priority": req.priority,
-            "hardware_allocated": hw_allocated,
+            "hardware_requested": hw_allocated,
             "rtx2070_inference_shield_engaged": rtx2070_shield_engaged,
-            "rtx2070_inference_lock": True,
-            "base_models_evolution": ["Qwen/Qwen3.5-MoE-Instruct", "google/gemma-3-moe"],
-            "contributor_handle": req.contributor_handle or "@xaviercallens",
-            "train_nll_before": 5.54,
-            "train_nll_after": 5.10,
-            "holdout_nll_before": 5.52,
-            "holdout_nll_after": 5.21,
-            "perplexity_reduction_pct": 14.85,
-            "spectral_energy_retained": 0.9998,
-            "deposited_to_ruche": True,
-            "status": "TRAINING_COMPLETED_VERIFIED",
-            "completed_at": time.time(),
+            "contributor_handle": req.contributor_handle,
+            "metrics": None,
+            "deposited_to_ruche": False,
+            "status": "QUEUED_NOT_STARTED",
+            "queued_at": time.time(),
         }
         admin_state["internal_swarm_queue"].insert(0, {
             "job_id": receipt_id,
             "domain": req.domain_name,
             "type": "QLORA_EXPERT_TRAINING",
-            "status": "COMPLETED",
+            "status": "QUEUED_NOT_STARTED",
         })
         admin_state["audit_log"].append({
             "timestamp": time.time(),
-            "actor": req.contributor_handle or "callensxavier@gmail.com",
-            "action": "INTERNAL_MOE_TRAINED",
-            "detail": f"Internal training completed for {req.domain_name} (Rank {req.adapter_rank}, PPL -8.45%).",
+            "actor": req.contributor_handle or "admin",
+            "action": "INTERNAL_MOE_TRAINING_REQUESTED",
+            "detail": f"Training request recorded for {req.domain_name} (rank {req.adapter_rank}); not started: no trainer is attached to this endpoint.",
         })
-        return JSONResponse(content={
-            "status": "INTERNAL_TRAINING_SUCCESS",
-            "training_receipt": train_result,
-            "message": f"Successfully trained new expert for domain '{req.domain_name}' with internal swarm priority.",
-        })
+        return JSONResponse(
+            status_code=202,
+            content={
+                "status": "QUEUED_NOT_STARTED",
+                "training_receipt": queued,
+                "message": f"Request for domain '{req.domain_name}' recorded. No training has run: no trainer is attached to this endpoint; "
+                "real training runs through the BOINC QLoRA workunit chain.",
+            },
+        )
 
     @app.post("/api/v1/admin/moe/models/select", response_class=JSONResponse)
     def api_admin_select_model(req: AdminSelectModelRequest) -> JSONResponse:
@@ -8078,8 +8079,9 @@ def create_hivemind_at_home_app(
             "model_id": sanitize_prompt_text(req.model_id),
             "routing_mode": req.routing_mode,
             "active_domains": req.active_domains or ["code_python", "math_reasoning", "physics_sim", "formal_lean4"],
-            "deploy_live": req.deploy_live,
-            "status": "DEPLOYED_LIVE",
+            "deploy_live_requested": req.deploy_live,
+            "status": "SELECTED_IN_MEMORY",  # records the selection for this process only; nothing is deployed to producers
+            "deployed": False,
             "activated_at": time.time(),
             "activated_by": req.initiator or "callensxavier@gmail.com",
         }
@@ -8091,9 +8093,9 @@ def create_hivemind_at_home_app(
             "detail": f"Active model set to '{req.model_id}' with routing mode '{req.routing_mode}'.",
         })
         return JSONResponse(content={
-            "status": "MODEL_ACTIVATED",
+            "status": "SELECTION_RECORDED",
             "active_model": model_record,
-            "message": f"Model '{req.model_id}' is now active across all OpenRouter and AMCP endpoints.",
+            "message": f"Model '{req.model_id}' was recorded as the selection of this dashboard process. It is not deployed to any producer or endpoint.",
         })
 
     

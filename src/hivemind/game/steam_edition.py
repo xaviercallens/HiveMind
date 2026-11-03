@@ -1231,10 +1231,20 @@ pause
     }
 
 
+def bearer_token_from_header(authorization: str | None) -> str:
+    """Return the token of an ``Authorization: Bearer <token>`` header, or ``""`` if absent or malformed."""
+    if not authorization:
+        return ""
+    scheme, _, token = authorization.strip().partition(" ")
+    if scheme.lower() != "bearer":
+        return ""
+    return token.strip()
+
+
 def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> Any:
     """Create a FastAPI server serving the Interactive Cyberpunk Hack-Miner HUD and Live REST API."""
     import torch
-    from fastapi import Body, FastAPI, HTTPException, WebSocket
+    from fastapi import Body, FastAPI, Header, HTTPException, WebSocket
     import hivemind.game.steam_edition as _steam_mod
 
     _steam_mod.WebSocket = WebSocket
@@ -1748,8 +1758,20 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> 
     @app.post("/api/scientific-game/la-ruche-copilot", response_class=JSONResponse)
     def post_scientific_game_la_ruche_copilot(
         payload: Dict[str, Any] = Body(default={}),
+        authorization: str | None = Header(default=None),
     ) -> Dict[str, Any]:
-        """Query a live Specialist Bee on La Ruche or local GPU swarm and score ANSE Bee Energy."""
+        """Query a live Specialist Bee on La Ruche or local GPU swarm and score ANSE Bee Energy.
+
+        The caller must present their own router key (IP-201); it is forwarded to La Ruche and the
+        server-held key is never used for caller prompts. Anonymous calls get 401.
+        """
+        router_api_key = bearer_token_from_header(authorization)
+        if not router_api_key:
+            raise HTTPException(
+                status_code=401,
+                detail="caller router API key required (Authorization: Bearer)",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         prompt = str(
             payload.get(
                 "prompt",
@@ -1760,6 +1782,7 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> 
         gamer_tag = str(payload.get("gamer_tag", "CyberValkyrie_FR"))
         return ask_la_ruche_bee_copilot_live(
             prompt=prompt,
+            router_api_key=router_api_key,
             model=model,
             gamer_tag=gamer_tag,
         )

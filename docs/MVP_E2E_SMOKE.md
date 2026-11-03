@@ -46,3 +46,11 @@ Ledger: consumer spent 0.0383 HMT, producer earned 0.0326 HMT, all 15 checks pas
 It shows that the metered request path (escrow, dispatch to a producer behind the shield, metering, settlement, ledger) works end to end with a real
 model. It does **not** show that producers are honest (their output is still unverified), that the models are trained by HiveMind (they are
 off-the-shelf), or anything about throughput at scale. See `SECURITY.md` and the catalog's `served_by` fields.
+
+## CPU base tier: `hivemind/granite-1b-base` (2026-11-03)
+
+The same 15 checks pass for the plain IBM Granite 3.1 1B-A400M **base** model (Q4_K_M, about 0.8 GB, about 1.2 GB RAM, about 68 tokens/s on 6 CPU threads,
+0 MiB of GPU memory): `python scripts/mvp_e2e_smoke.py --gguf base-q4km.gguf --tier granite-1b-base --chat-template-file deploy/granite_cpu/completion.jinja --prompt "..."`.
+Requests took 0.95 s and 0.78 s (48 tokens each); the consumer paid 0.0274 HMT and the producer earned 0.0233 HMT.
+A base model cannot chat: through its default template it echoed the prompt as raw chat markup, so `deploy/granite_cpu/completion.jinja` passes the user text through and
+the model continues it. Quality was not measured; it was visibly weak (wrong third planet, repetition). Serve it with `deploy/granite_cpu/start.sh`.

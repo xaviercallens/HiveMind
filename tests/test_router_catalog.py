@@ -34,7 +34,7 @@ def test_every_tier_id_is_routable_and_unique_and_ordered_by_memory() -> None:
 
 def test_moe_tiers_exist_and_declare_their_active_parameters() -> None:
     moe = [tier for tier in TIERS if tier.moe]
-    assert {tier.tier_id for tier in moe} == {"granite-moe", "bee-ruche-moe", "moe-qwen35-bee", "moe-general", "moe-coder"}
+    assert {tier.tier_id for tier in moe} == {"granite-1b-base", "granite-moe", "bee-ruche-moe", "moe-qwen35-bee", "moe-general", "moe-coder"}
     assert all(tier.active_params_b is not None and tier.active_params_b < 10 for tier in moe)
     assert all(tier.active_params_b is None for tier in TIERS if not tier.moe)
 
@@ -77,7 +77,8 @@ def test_no_catalog_entry_links_to_an_unpublished_repository_or_claims_training_
 @pytest.mark.parametrize(
     ("vram", "expected"),
     [
-        (3.9, None),
+        (0.4, None),
+        (3.9, "granite-1b-base"),  # the CPU-capable base tier fits any card; it is a text-completion model, not an assistant
         (4.0, "coder-lite"),
         (4.5, "gemma-core"),
         (5.5, "bee-stars"),

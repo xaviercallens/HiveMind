@@ -87,6 +87,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--max-tokens", type=int, default=96)
     ap.add_argument("--startup-timeout", type=float, default=240.0)
     ap.add_argument("--report", help="write the JSON report here")
+    ap.add_argument("--tier", default=TIER, help="catalog tier id to serve in the test")
+    ap.add_argument("--chat-template-file", help="llama-server chat template (a base model needs the pass-through one)")
+    ap.add_argument("--prompt", action="append", help="prompt to send (repeat for several); default: two chat prompts")
     args = ap.parse_args(argv)
 
     report: dict[str, Any] = {"model_file": Path(args.gguf).name, "checks": {}, "requests": []}
@@ -101,7 +104,8 @@ def main(argv: list[str] | None = None) -> int:
         log_path = Path(os.environ.get("TMPDIR", "/tmp")) / f"llama-smoke-{llama_port}.log"
         llama = subprocess.Popen(
             [args.llama_server, "-m", args.gguf, "--host", "127.0.0.1", "--port", str(llama_port), "-c", "2048", "-ngl", "0",
-             "-t", str(args.threads), "--alias", local_name],
+             "-t", str(args.threads), "--alias", local_name]
+            + (["--jinja", "--chat-template-file", args.chat_template_file] if args.chat_template_file else []),
             stdout=open(log_path, "wb"), stderr=subprocess.STDOUT,
         )
         checks["model_server_started"] = wait_http(f"http://127.0.0.1:{llama_port}/health", args.startup_timeout)
@@ -134,20 +138,21 @@ def main(argv: list[str] | None = None) -> int:
         beat = client.post(
             "/v1/hivemind/producer/heartbeat",
             headers={"Authorization": f"Bearer {prod['api_key']}"},
-            json={"endpoint_url": f"http://127.0.0.1:{shield_port}", "models": [{"id": TIER, "local_name": local_name}],
+            json={"endpoint_url": f"http://127.0.0.1:{shield_port}", "models": [{"id": args.tier, "local_name": local_name}],
                   "cost_per_1k": 0.2, "capacity_1k": 40.0, "execution_class": "cpu-smoke", "endpoint_token": endpoint_token},
         )
         checks["producer_registered"] = beat.status_code == 200
         minted_before = store.total_minted()
 
         # 4. real requests, real answers
+        prompts = args.prompt or PROMPTS
         answers: list[str] = []
-        for prompt in PROMPTS:
+        for prompt in prompts:
             t0 = time.monotonic()
             r = client.post(
                 "/v1/chat/completions",
                 headers={"Authorization": f"Bearer {cons['api_key']}"},
-                json={"model": f"hivemind/{TIER}", "messages": [{"role": "user", "content": prompt}], "max_tokens": args.max_tokens, "temperature": 0},
+                json={"model": f"hivemind/{args.tier}", "messages": [{"role": "user", "content": prompt}], "max_tokens": args.max_tokens, "temperature": 0},
             )
             body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
             text = (((body.get("choices") or [{}])[0]).get("message") or {}).get("content", "") if r.status_code == 200 else ""
@@ -157,7 +162,8 @@ def main(argv: list[str] | None = None) -> int:
         checks["both_requests_ok"] = all(q["status"] == 200 for q in report["requests"])
         checks["answers_non_empty"] = all(len(a.strip()) > 10 for a in answers)
         checks["answers_differ_so_not_a_constant"] = len(set(answers)) == len(answers)
-        checks["code_prompt_answered_with_code"] = "def " in answers[0]
+        if not args.prompt:
+            checks["code_prompt_answered_with_code"] = "def " in answers[0]
 
         # 5. the money: debit, credit, fee, conservation, hash chain
         spent = 50.0 - store.balance(cons["account_id"])

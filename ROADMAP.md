@@ -695,6 +695,12 @@ The update is [`docs/IMPROVEMENT_PLAN_2026-11-01.md`](docs/IMPROVEMENT_PLAN_2026
 - Preregistered next experiment **TM1** (`artifacts/experiments/TM1_verifier_pruned_branching_prereg.json`): 40 MBPP tasks, local `qwen2.5-coder` 7b/3b/1.5b, arms A (one call), B (planner + 3 branches on two pools + hidden-test verifier), C (best-of-3 without planner); positive and two negative controls; **NOT_RUN** until a sandbox-capable host or explicit owner acceptance of unsandboxed `python -I` execution. Owner/assignee: open.
 - Foundation paper: paragraph text ready in section 4 of the assessment, to land with [#452](https://github.com/xaviercallens/HiveMind/issues/452) after [#446](https://github.com/xaviercallens/HiveMind/pull/446); no numbers until TM1 has a report.
 
+### Status update, 2026-11-03 (3-hourly review, 15:30 CET addendum)
+
+- **Remote:** `main` still `faa3112` (08:53Z). One branch moved: `hardening/readiness-round4` (T4 session, noreply author) got `f89291a` at 12:00Z — `scripts/adapter_to_served.py` (adapter → GGUF → held-out `llama-perplexity` gate; hmq_00147 fails the gate and is reported, not served), two gate artifacts, `docs/TRAIN_TO_SERVE_GATE.md`; read-only check: syntax OK, no stub/mock identifiers, a hard-coded `LLAMA_SRC` path for the T4 host only. The integration host still has no valid GitHub token: no gatekeeper run, push, PR or issue since 2026-11-02 22:40Z.
+- **Live 11:45–14:15Z (6 rows):** probes 15/15 each; 0 × 402/5xx; 29–64 scripted chats per window (orchestrator PID 212195 still running from Antigravity; at 12:16Z one external host sent 30 keyless chats, all 401 as designed); fleet 4 live incl. `rtx2070_xavgamsrv_night`; QLoRA **163** all day (util 27 % at 12:45Z, nothing assimilated since the overnight +2).
+- **Queued on the integration host, push-ready on `faa3112` (6):** `docs/improvement-plan-2026-11-03` (daily audit, 54 items), this roadmap branch, `fix/ip239-scanner-matches-hm-live-keys` (P0 pair), `fix/ip213-probe-online-only-for-2xx`, `fix/ip179-…`, `fix/ip165-…`. No new implementation or issue this round on purpose.
+
 ### Status update, 2026-11-03 (3-hourly review, 12:30 CET addendum)
 
 - **Remote:** `main` unchanged at `faa3112` since 08:53Z; no branch moved since. The integration host still has no valid GitHub token (`gh` *Bad credentials*, `git push` *Authentication failed* since 2026-11-02 22:40Z): the hourly gatekeeper has not run since then and nothing could be pushed or filed.

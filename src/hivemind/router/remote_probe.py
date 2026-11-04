@@ -21,7 +21,7 @@ _LOCK = threading.Lock()
 
 
 def probe_remote_status(url: str, *, timeout_s: float = PROBE_TIMEOUT_S, now_utc: float | None = None) -> dict[str, Any]:
-    """GET ``url`` once; ONLINE on HTTP < 500, HTTP_<code> otherwise, UNREACHABLE on a transport error or timeout."""
+    """GET ``url`` once; ONLINE on a 2xx answer, HTTP_<code> otherwise, UNREACHABLE on a transport error or timeout."""
     now = time.time() if now_utc is None else float(now_utc)
     with _LOCK:
         hit = _CACHE.get(url)
@@ -31,7 +31,8 @@ def probe_remote_status(url: str, *, timeout_s: float = PROBE_TIMEOUT_S, now_utc
     try:
         resp = httpx.get(url, timeout=timeout_s, follow_redirects=True)
         latency_ms = round((time.perf_counter() - started) * 1000.0, 1)
-        status = "ONLINE" if resp.status_code < 500 else f"HTTP_{resp.status_code}"
+        # ONLINE only for a 2xx answer: a deleted Cloud Run service answers 404 and a login wall 3xx, neither is "serving" (IP-213).
+        status = "ONLINE" if 200 <= resp.status_code < 300 else f"HTTP_{resp.status_code}"
         result: dict[str, Any] = {"status": status, "http_status": resp.status_code, "probe_latency_ms": latency_ms, "probe_error": None}
     except httpx.HTTPError as exc:
         latency_ms = round((time.perf_counter() - started) * 1000.0, 1)

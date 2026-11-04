@@ -60,6 +60,34 @@ def test_boinc_status_is_online_only_when_the_ruche_answers(monkeypatch) -> None
         server.server_close()
 
 
+def test_boinc_status_is_not_online_when_the_ruche_answers_404(monkeypatch) -> None:
+    """IP-213: a deleted or renamed Cloud Run service answers 404; the probe called that ONLINE."""
+
+    class _NotFound(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802 - http.server API
+            self.send_response(404)
+            self.end_headers()
+            self.wfile.write(b"not found")
+
+        def log_message(self, *args: object) -> None:
+            return
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), _NotFound)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        url = f"http://127.0.0.1:{server.server_port}/"
+        monkeypatch.setenv("HIVEMIND_RUCHE_MASTER_URL", url)
+        _clear_probe_cache()
+        client = TestClient(create_router_app(RouterStore(":memory:", b"k" * 32)))
+        body = client.get("/boinc/status").json()
+        assert body["status"] == "HTTP_404" and body["status"] != "ONLINE"
+        assert body["probe"]["http_status"] == 404
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_ip212_boinc_status_reports_no_credit_schedule_without_a_verified_path(monkeypatch) -> None:
     monkeypatch.setenv("HIVEMIND_RUCHE_MASTER_URL", "http://127.0.0.1:9/")
     _clear_probe_cache()

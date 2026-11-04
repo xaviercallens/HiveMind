@@ -40,3 +40,12 @@ def test_readme_and_join_page_make_no_fixed_100_claim() -> None:
     assert not re.search(r"\+\s?100(\.0)?\s*HMT", readme)
     join = (ROOT / "src" / "hivemind" / "router" / "join_page.py").read_text(encoding="utf-8")
     assert "0 points unless the operator grants some" in join
+
+
+def test_register_card_does_not_promise_starter_points_when_the_grant_is_zero(tmp_path: Path) -> None:
+    html = _page(tmp_path, 0.0)
+    assert "starts at 0.00 HMT" in html
+    assert "starter HMT points" not in html
+    configured = _page(tmp_path, 25.0)
+    assert "Starter grant on this gateway: 25.00 HMT" in configured
+    assert "starter HMT points" not in configured

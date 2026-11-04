@@ -368,7 +368,7 @@ python hivemind_connect.py snippet continue --model coder</code></pre>
 
   <section id="registerCard" class="card">
     <h2>🐝 New User Registration (Créer un compte)</h2>
-    <p class="mut">Create a new HiveMind account with a username and password to receive your <code>hm-...</code> API key and starter HMT points.</p>
+    <p class="mut">Create a new HiveMind account with a username and password to receive your <code>hm-...</code> API key. The starting balance is stated above.</p>
     <form id="registerForm" method="post" action="/signup">
       <label for="regHandle">Username / Handle</label>
       <input id="regHandle" name="handle" type="text" required autocomplete="username" placeholder="e.g. alice_gpu or dev-paris" />

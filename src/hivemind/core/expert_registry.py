@@ -52,6 +52,7 @@ from typing import (
 REGISTRY_SCHEMA = "hivemind-expert-registry/v1"
 
 CANDIDATE, SHADOW, LIVE, RETIRED = "candidate", "shadow", "live", "retired"
+_GATE_REASON_PREFIX = "train-to-serve gate passed:"
 LIFECYCLE_STATES: Tuple[str, ...] = (CANDIDATE, SHADOW, LIVE, RETIRED)
 # shadow -> candidate sends an adapter back for another evaluation round; live -> shadow demotes without retiring.
 LEGAL_TRANSITIONS: Dict[str, frozenset[str]] = {
@@ -259,6 +260,10 @@ class AdapterBaseMismatchError(ValueError):
     """An adapter offered to a base model other than the one it was trained on."""
 
 
+class GateNotPassedError(ValueError):
+    """An adapter was offered for LIVE without a passing train-to-serve gate for exactly its bytes."""
+
+
 @dataclass(frozen=True)
 class ExpertRecord:
     """One expert. Adapter kinds carry ``adapter_sha256`` and ``adapter_size_mib``; a serving expert carries neither."""
@@ -335,7 +340,9 @@ def replay_history(history: Sequence[Tuple[str, str, str]], final_state: str) ->
 class ExpertRegistry:
     """Experts indexed by id, state, cluster and adapter content hash."""
 
-    def __init__(self) -> None:
+    def __init__(self, strict: bool = False) -> None:
+        # strict: an adapter expert can reach LIVE only through promote_with_gate (the train-to-serve gate, docs/TRAIN_TO_SERVE_GATE.md)
+        self.strict = strict
         self._experts: Dict[str, ExpertRecord] = {}
         self._by_state: Dict[str, set[str]] = {s: set() for s in LIFECYCLE_STATES}
         self._by_cluster: Dict[str, set[str]] = {}
@@ -375,11 +382,13 @@ class ExpertRegistry:
     def get(self, expert_id: str) -> ExpertRecord:
         return self._experts[expert_id]
 
-    def transition(self, expert_id: str, to_state: str, reason: str) -> ExpertRecord:
+    def transition(self, expert_id: str, to_state: str, reason: str, *, _gate_verified: bool = False) -> ExpertRecord:
         """Move an expert along the lifecycle; raises :class:`IllegalTransitionError` for anything not allowed."""
         rec = self._experts[expert_id]
         if to_state not in LEGAL_TRANSITIONS[rec.state]:
             raise IllegalTransitionError(f"{expert_id!r}: {rec.state!r} -> {to_state!r} is not a legal transition")
+        if self.strict and to_state == LIVE and rec.has_adapter and not _gate_verified:
+            raise GateNotPassedError(f"{expert_id!r}: a strict registry promotes adapters to LIVE only through promote_with_gate")
         if not reason.strip():
             raise ValueError("a transition needs a reason")
         new = replace(rec, state=to_state, history=rec.history + ((rec.state, to_state, reason.strip()),))
@@ -387,6 +396,24 @@ class ExpertRegistry:
         self._by_state[to_state].add(expert_id)
         self._experts[expert_id] = new
         return new
+
+    def promote_with_gate(self, expert_id: str, gate: Mapping[str, Any]) -> ExpertRecord:
+        """SHADOW -> LIVE for an adapter, only if ``gate`` (the JSON written by ``scripts/adapter_to_served.py evaluate``) says ``servable`` for exactly this
+        adapter's bytes (``adapter.lora_gguf_sha256`` equals the registered ``adapter_sha256``) and this base model. Anything else raises and changes nothing."""
+        rec = self._experts[expert_id]
+        if not rec.has_adapter:
+            raise GateNotPassedError(f"{expert_id!r} is a serving expert: there is no adapter to gate")
+        if gate.get("servable") is not True:
+            raise GateNotPassedError(f"{expert_id!r}: the gate did not pass (servable={gate.get('servable')!r})")
+        tested = (gate.get("adapter") or {}).get("lora_gguf_sha256")
+        if tested != rec.adapter_sha256:
+            raise GateNotPassedError(f"{expert_id!r}: the gate tested adapter {str(tested)[:12]!r}, not the registered {str(rec.adapter_sha256)[:12]!r}")
+        base = str(gate.get("base", ""))
+        if base and base != rec.base_model_id:
+            raise GateNotPassedError(f"{expert_id!r}: the gate tested base {base!r}, the expert is for {rec.base_model_id!r}")
+        pooled = gate.get("pooled") or {}
+        reason = f"{_GATE_REASON_PREFIX} pooled gain {pooled.get('mean_nll_gain_nats')} nats, ci {pooled.get('bootstrap95')}, worst domain {gate.get('worst_domain_regression')}"
+        return self.transition(expert_id, LIVE, reason, _gate_verified=True)
 
     def ids_in_state(self, state: str) -> List[str]:
         if state not in LIFECYCLE_STATES:

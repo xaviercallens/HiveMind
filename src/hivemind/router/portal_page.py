@@ -1505,6 +1505,10 @@ def render_portal_page(
       <p style="color:var(--text-dim);font-size:0.88rem;margin-bottom:0.75rem;line-height:1.5;">
         Measured production telemetry from the European Night window (<code>2026-10-25 20:00Z &rarr; 2026-10-26 08:00Z</code>) across our three Cloud Run gateways, dual-GPU inference fleet (<strong>NVIDIA Tesla T4 16 GB + NVIDIA GeForce RTX 2070 8 GB</strong>), and the BOINC 7.24 chained QLoRA-MoE coordinator (<code>scripts/t4_training_report.py</code>).
       </p>
+      <p style="color:var(--amber);font-size:0.8rem;margin-bottom:0.75rem;line-height:1.5;" id="night-report-static-note">
+        This section is a <strong>dated report</strong> typed in after that night; the figures in the cards below are not updated live. Later BOINC rounds have not improved on it, and the best adapter so far
+        failed the train-to-serve gate on the served files (<code>docs/TRAIN_TO_SERVE_GATE.md</code>), so no HiveMind-trained model is served. Current numbers: the live line below and <code>/v1/hivemind/benchmarks</code>.
+      </p>
       <div id="nightLiveBannerText" style="margin-bottom:1rem;padding:0.55rem 0.85rem;border:1px solid rgba(52,211,153,0.4);border-radius:0.4rem;background:rgba(16,185,129,0.08);font-family:var(--font-mono);font-size:0.76rem;color:var(--green);">
         &#x1F7E2; LIVE NOW ({gen_iso}): {wus_cnt} Assimilated BOINC WUs &bull; T4 Free VRAM {t4_free_mib} MiB / {t4_total_mib} MiB &bull; OpenTrainer {ot_rounds} accepted round(s) (eval_loss {ot_eval})
       </div>

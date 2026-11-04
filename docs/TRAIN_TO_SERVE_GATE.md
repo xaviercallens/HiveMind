@@ -13,8 +13,8 @@
 
 | Served format | Pooled gain (nats/token) | 95% bootstrap | Worst domain | Servable |
 | :-- | :-- | :-- | :-- | :-- |
-| f16 base + f16 LoRA (primary) | -0.0017 | [-0.0144, +0.0120] | +3.7% (edu_web) | **no** |
-| Q4_K_M base + f16 LoRA (post-hoc, exploratory) | +0.0040 | [-0.0089, +0.0178] | +3.3% (edu_web) | **no** |
+| f16 base + f16 LoRA (primary) | -0.0017 | [-0.0144, +0.0120] | +3.7% (french; edu_web +3.6%) | **no** |
+| Q4_K_M base + f16 LoRA (post-hoc, exploratory) | +0.0040 | [-0.0089, +0.0178] | +3.3% (french; edu_web +3.3%) | **no** |
 
 Per domain the adapter helps math (about -9%) and biomed (about -3%) and is flat or worse on general, french, edu_web and news. The conversion works (the adapter clearly changes the output); the improvement the chain reports does not carry over to the served model on this evaluation. Possible contributors, not tested separately: the chain trains on an NF4 base, and each round is about 80 steps on one domain, with a plateau since round 147.
 

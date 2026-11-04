@@ -1,0 +1,58 @@
+# =============================================================================
+# STAGED GCP PUBLIC DNS PORTAL MANIFEST (DO NOT DEPLOY YET)
+# Project: gen-lang-client-0625573011 | Region: us-central1
+# Public DNS: https://hivemind.socrate-ai-lab.com (portal.socrate-ai-lab.com)
+# Forwarding Rule: socrate-forwarding-rule (34.54.227.33)
+# Managed SSL Certificate: socrate-ai-ssl (TLS 1.3)
+# =============================================================================
+apiVersion: domains.cloudrun.com/v1
+kind: DomainMapping
+metadata:
+  name: hivemind.socrate-ai-lab.com
+  namespace: gen-lang-client-0625573011
+  labels:
+    cloud.googleapis.com/location: us-central1
+    portal.hivemind.io/deployment-state: "STAGED_READY_NOT_DEPLOYED"
+    portal.hivemind.io/deployed-to-gcp: "false"
+  annotations:
+    portal.hivemind.io/secondary-domain: "portal.socrate-ai-lab.com"
+    portal.hivemind.io/forwarding-rule: "socrate-forwarding-rule"
+    portal.hivemind.io/forwarding-ip: "34.54.227.33"
+    portal.hivemind.io/managed-ssl-cert: "socrate-ai-ssl"
+    portal.hivemind.io/security-advisory: "GHSA-gjc6-74f9-wmrr-PR-532-RESOLVED"
+spec:
+  routeName: hivemind-at-home-ruche
+  certificateMode: AUTOMATIC
+---
+# Cloud DNS Staged Records (Reference Only - Do Not Apply Until Explicit Sign-Off)
+dns_records:
+  - fqdn: "hivemind.socrate-ai-lab.com."
+    type: "A"
+    ttl: 300
+    rrdatas:
+      - "34.54.227.33" # socrate-forwarding-rule
+  - fqdn: "portal.socrate-ai-lab.com."
+    type: "CNAME"
+    ttl: 300
+    rrdatas:
+      - "hivemind.socrate-ai-lab.com."
+security_profile:
+  deployment_state: "STAGED_READY_NOT_DEPLOYED"
+  deployed_to_gcp: false
+  tls_policy: "TLS_1_3_STRICT"
+  password_kdf: "PBKDF2-HMAC-SHA256 (200,000 iterations + 16-byte CSPRNG salt)"
+  core_mvp_sso_providers:
+    - google
+    - reddit
+    - steam
+    - github
+  standard_email_registration: true
+  red_team_controls:
+    - account_ownership_verification
+    - csprng_session_tokens_secrets_token_hex_16
+    - randomized_startup_seed_tokens
+    - admin_gate_middleware_x_admin_key_or_masterminder_bearer
+    - rightmost_x_forwarded_for_rate_limiter
+    - federated_workunit_lease_and_lora_shape_bounds
+    - json_nan_infinity_constant_guard
+    - poc_status_header_and_zero_kyber_claims

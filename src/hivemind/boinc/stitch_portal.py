@@ -827,6 +827,29 @@ def render_stitch_enhanced_portal(
         </p>
       </section>
 
+      
+      <!-- Verified Federated Ledger & Compute Points Table (Zero Unverified Points Policy) -->
+      <section id="verified-reflexion-ledger" data-testid="verified-reflexion-ledger" class="glass-panel p-4 rounded-xl border border-outline/40 text-xs font-mono space-y-2">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span class="text-primary font-bold">VERIFIED FEDERATED REFLEXION POINTS LEDGER (v3.1.0 / v3.0.0 Core)</span>
+          <span class="text-on-surface-variant">Points are credited only after server-side verification of workunits (no fixed reward promised).</span>
+        </div>
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="border-b border-outline/30 text-on-surface-variant">
+              <th>Contributor</th>
+              <th>HiveMind Reflexion Points</th>
+              <th>Verification Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colspan="3" class="py-2 text-on-surface-variant">No verified ledger rows yet &mdash; points are credited only after server-side verification.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
       <!-- =================================================================== -->
       <!-- RELEASE V3.0.0 MVP COMMAND CENTER, KAFKA SPACE, CALENDAR & 4 DASHBOARDS -->
       <!-- =================================================================== -->
@@ -837,7 +860,7 @@ def render_stitch_enhanced_portal(
             <div class="space-y-1.5">
               <div class="flex flex-wrap items-center gap-2">
                 <span class="px-2.5 py-0.5 rounded-full bg-cyan-500/20 border border-cyan-400 text-cyan-300 text-[11px] font-extrabold">
-                  🚀 RELEASE V3.0.0 MVP &bull; CLAUDE CODE SESSION ALIGNED
+                  🚀 RELEASE V3.1.0 ON V3.0.0 CORE ENGINE &bull; REAL-CLAIM SCORECARD &amp; RED TEAM VERIFIED
                 </span>
                 <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400 text-emerald-300 text-[10px] font-bold">
                   ☀️ DAYTIME INFERENCE (RTX 2070 24/7 + VOLUNTEERS)
@@ -3625,7 +3648,7 @@ const res = await openai.chat.completions.create({{ model: "hivemind/sparse-moe-
             </div>
             <div class="p-3 rounded-xl bg-surface-container-highest/60 border border-outline/30 space-y-1">
               <div class="text-[10px] text-on-surface-variant font-bold">GAME PREEMPTION</div>
-              <div class="font-bold text-emerald-400">&lt; 1.5s SLA (0.42s Act.)</div>
+              <div class="font-bold text-emerald-400">&lt; 1.5s Target SLA</div>
             </div>
             <div class="p-3 rounded-xl bg-surface-container-highest/60 border border-outline/30 space-y-1">
               <div class="text-[10px] text-on-surface-variant font-bold">THERMAL CAP</div>
@@ -4310,6 +4333,7 @@ print('Routed Top-2 Experts for', target_planet, ':', routed)</textarea>
     let activeTargetProfile = 'gamer';
     let byobMultiplier = 1.0;
     let currentLang = 'en';
+    let computePointsBalance = 0;
 
     document.addEventListener("DOMContentLoaded", () => {{
       const savedUser = localStorage.getItem("hivemind_user");
@@ -4740,7 +4764,7 @@ print('Routed Top-2 Experts for', target_planet, ':', routed)</textarea>
           linkedProviders: data.linked_providers || ["GUEST_SANDBOX"],
           role: data.role || "HiveMinder Contributor",
           targetProfile: data.target_profile || "gamer",
-          points: data.compute_points || 2500,
+          points: data.compute_points ?? 0,
           token: data.token || "hm_live_demo_guest",
           nodeId: data.node_id || "0xDEMO48920",
           loginCount: 1,
@@ -5527,7 +5551,7 @@ print('Routed Top-2 Experts for', target_planet, ':', routed)</textarea>
       if (e) e.preventDefault();
       const name = document.getElementById("admin-campaign-name").value.trim();
       const domain = document.getElementById("admin-campaign-domain").value;
-      const steps = parseInt(document.getElementById("admin-campaign-steps").value, 10) || 250;
+      const steps = parseInt(document.getElementById("admin-campaign-steps").value, 10) || 200;
       const priority = document.getElementById("admin-campaign-priority").value;
       const budget = parseInt(document.getElementById("admin-campaign-budget").value, 10) || 75000;
       const desc = document.getElementById("admin-campaign-desc").value.trim();

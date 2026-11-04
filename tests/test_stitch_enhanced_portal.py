@@ -1693,7 +1693,9 @@ def test_v3_mvp_overview_and_claude_code_alignment() -> None:
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "RELEASE_V3_MVP_READY"
-    assert data["version"] == "3.0.0"
+    assert data["version"] == "3.1.0"
+    assert data["base_engine_release"] == "v3.0.0"
+    assert data["base_engine_tag_url"] == "https://github.com/xaviercallens/HiveMind/releases/tag/v3.0.0"
     assert data["claude_code_alignment"]["aligned"] is True
     assert "A2_multi_host_split_moe" in data["claude_code_alignment"]["mvp_scorecard"]
     assert "B3_train_to_serve_gate" in data["claude_code_alignment"]["mvp_scorecard"]
@@ -2027,3 +2029,66 @@ def test_red_team_v3_all_six_findings_verified() -> None:
         assert item["hf_repo"] == ""
         assert "xaviercallens/" not in item["description"]
 
+
+def test_v3_1_deployment_on_v3_0_0_gateway_and_core_engine_alignment() -> None:
+    """Verify V3.1 GCP Unified Web Interface deploys cleanly on the v3.0.0 OpenRouter Gateway (create_router_app)
+    and binds to v3.0.0 core economy/ledger functions and measured_results.json artifacts."""
+    import hivemind
+    from hivemind.router.accounts import RouterStore
+    from hivemind.router.gateway import create_router_app
+
+    assert hivemind.__version__ == "3.1.0"
+
+    store = RouterStore(":memory:", b"0" * 32)
+    router_app = create_router_app(store)
+    gw_client = TestClient(router_app)
+
+    # 1. OpenRouter root portal displays v3.1.0 (v3.0.0 Core Engine) and links to /stitch-portal
+    r_root = gw_client.get("/")
+    assert r_root.status_code == 200
+    assert "v3.1.0 (v3.0.0 Core Engine)" in r_root.text
+    assert 'href="/stitch-portal"' in r_root.text
+
+    # 2. Stitch V3.1 GCP Unified Web Interface is served directly by the v3.0.0 Gateway at /stitch-portal, /v3-portal, /v3.1
+    for path in ("/stitch-portal", "/v3-portal", "/v3.1"):
+        r_stitch = gw_client.get(path)
+        assert r_stitch.status_code == 200
+        assert r_stitch.headers.get("X-Frame-Options") == "DENY"
+        assert "proof-of-concept" in (r_stitch.headers.get("X-HiveMind-PoC-Status") or "")
+        assert 'id="poc-notice"' in r_stitch.text
+        assert 'data-testid="v3-mvp-command-center"' in r_stitch.text
+        assert "RELEASE V3.1.0 ON V3.0.0 CORE ENGINE" in r_stitch.text
+
+    # 3. All V3.1 API routes work directly on the v3.0.0 OpenRouter Gateway
+    r_ov = gw_client.get("/api/v1/v3.1/overview")
+    assert r_ov.status_code == 200
+    ov = r_ov.json()
+    assert ov["version"] == "3.1.0"
+    assert ov["base_engine_release"] == "v3.0.0"
+    assert "f4d159a" in ov["claude_code_alignment"]["reference_commits"]
+    assert ov["measured_models_count"] >= 3
+
+    # 4. Nash Equilibrium endpoint executes live verification against v3.0.0 core economy & ledger modules
+    r_nash = gw_client.get("/api/v1/dashboard/nash-equilibrium")
+    assert r_nash.status_code == 200
+    nash = r_nash.json()
+    v3_core = nash["v3_core_engine_verification"]
+    assert v3_core["core_release"] == "v3.0.0"
+    assert v3_core["erlang_c_log_space_stable"] is True
+    assert 0.0 <= v3_core["erlang_c_delay_prob"] <= 1.0
+    assert v3_core["non_finite_inputs_rejected"] is True
+    assert v3_core["integer_micro_unit_fee_split_conserves"] is True
+
+    # 5. AMCP Kafka Space, Training Calendar, Globe Dashboard, Inference Analytics, Real MoE Bees & Red Team Audit on Gateway
+    assert gw_client.get("/api/v1/amcp/kafka/space").status_code == 200
+    assert gw_client.get("/api/v1/training/calendar").status_code == 200
+    assert gw_client.get("/api/v1/training/t4-daily-schedule").status_code == 200
+    assert gw_client.get("/api/v1/dashboard/globe-users").status_code == 200
+    assert gw_client.get("/api/v1/dashboard/inference-analytics").status_code == 200
+    r_bees = gw_client.get("/api/v1/dashboard/moe-bees")
+    assert r_bees.status_code == 200
+    assert r_bees.json()["honesty_policy"]["only_real_trained_moe_shown"] is True
+    assert r_bees.json()["gated_adapters_held_back"][0]["servable"] is False
+    r_rt = gw_client.get("/api/v1/security/red-team-v3-audit")
+    assert r_rt.status_code == 200
+    assert r_rt.json()["all_6_findings_verified"] is True

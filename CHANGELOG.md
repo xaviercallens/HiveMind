@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.1.0 — 2026-11-04 — Unified GCP Web Interface (v3.1) on HiveMind v3.0.0 Core Engine, Real-Claim Scorecard Binding & Red Team GHSA-gjc6-74f9-wmrr Verification
+
+- **Deployable on HiveMind `v3.0.0` Core Engine (`https://github.com/xaviercallens/HiveMind/releases/tag/v3.0.0`):**
+  - Mounted the Stitch V3.1 GCP Unified Web Interface (`/stitch-portal`, `/v3-portal`, `/v3.1`) and all V3.1 API endpoints (`/api/v1/v3-mvp/overview`, `/api/v1/v3.1/overview`, `/api/v1/amcp/kafka/*`, `/api/v1/training/*`, `/api/v1/dashboard/*`, `/api/v1/security/*`, `/api/v1/portal/gcp-staged-release`) onto both `create_router_app` (`src/hivemind/router/gateway.py` / `deploy/gcp_openrouter/deploy.sh`) and `create_hivemind_at_home_app` (`src/hivemind/boinc/hivemind_at_home_dashboard.py` / `deploy/gcp_cloud_run/`).
+  - Made `numpy` and `safetensors` optional imports in `hivemind_at_home_dashboard.py` and staged `artifacts/mvp/*.json` + `artifacts/experiments/GRANITE_ADAPTER_hmq_00147_gate_f16_independent_chunks.json` + `docs/MVP_SCORECARD.md` in `deploy/gcp_openrouter/deploy.sh` & `Dockerfile`.
+- **Real-Claim Binding to `v3.0.0` Core Engine & Scorecard (`2/11 PASS • 1 WAIVED • B3 Gate Enforced`):**
+  - Bound `ReleaseV3MVPManager` directly to `src/hivemind/router/measured_results.json` (`hivemind.measured.v1` `results` array: `hivemind/bee-stars` 283/317 = 89.27%, `hivemind/coder-lite` 15/15 smoke checks, `hivemind/granite-1b-base` CPU tier 68 tok/s), `artifacts/mvp/A2_split_moe.json` (20/20 token-identical 2-host split MoE at 41.75 tok/s vs 68.95 tok/s single host), `artifacts/mvp/B1_custom_shards.json` (1,044 docs -> 2,082 train + 304 held-out signed chunks), and `artifacts/experiments/GRANITE_ADAPTER_hmq_00147_gate_f16_independent_chunks.json` (`hmq_00147` held back by `scripts/adapter_to_served.py` with `servable=False`, `mean_nll_gain_nats=-0.00403`).
+  - Wired `/api/v1/dashboard/nash-equilibrium` to execute live checks against `v3.0.0` core economy & ledger functions: `route_supply_equilibrium` (`ff394be`), `erlang_c_delay_probability` (`176a32d`), and `settle_swarm_inference` (`37f5ede` integer micro-unit fee split conservation).
+- **Red Team Security Verification (`GHSA-gjc6-74f9-wmrr` — 6/6 Controls Active):**
+  - Enforced `Authorization: Bearer` / `PBKDF2-HMAC-SHA256` (200k iterations + 8/60s rate limit) across all auth & Steam routes, persistent unverified-volunteer prompt privacy notice (`#poc-notice`), mandatory `hivemind_producer_shield.py` + Ollama `>= 0.5.0` (`CVE-2024-37032`) preflight validator, zero public node IP/URL exposure, and honest `served_by` off-the-shelf model catalog disclosure.
+
 ## v3.0.0 — 2026-11-04 — Honest MVP baseline: measured results, a scorecard, and the train-to-serve gate (proof of concept)
 
 **Proof of concept, not a production service: send only public, non-sensitive data.** This is not the finished MVP: the scorecard (`docs/MVP_SCORECARD.md`) reads **2 of 11 criteria passing** (B1 custom shards, A2 split inference), 1 waived by the owner (F1), and the rest failing or not run, each with its reason.

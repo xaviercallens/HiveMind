@@ -207,3 +207,14 @@ def test_hf_spec_parsing(monkeypatch: pytest.MonkeyPatch) -> None:
         with pytest.raises(SystemExit):
             cli.parse_hf_spec(bad)
     assert cli.resolve("/local/file.safetensors") == Path("/local/file.safetensors")
+
+
+def test_a_recompute_that_returns_too_few_or_non_finite_values_is_rejected(world) -> None:
+    """The spot check must see every picked window: an empty, short or NaN recompute verifies nothing and must not be accepted."""
+    _, _, _, receipt = world
+    honest = lc.cpu_recompute_fn(factory, world[1], world[2], world[0], W)
+    assert verify(receipt, world).accepted  # positive control: the real recompute is accepted
+    assert not verify(receipt, world, recompute=lambda which, starts: []).accepted
+    assert not verify(receipt, world, recompute=lambda which, starts: honest(which, starts)[:-1]).accepted
+    assert not verify(receipt, world, recompute=lambda which, starts: [float("nan")] * len(starts)).accepted
+    assert verify(receipt, world, recompute=lambda which, starts: [9.0] * len(starts)).reason.startswith("REJECTED_SPOT_CHECK")

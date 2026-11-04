@@ -411,6 +411,13 @@ def scan_text_for_injection(text: str, depth: int = 0) -> InjectionScan:
         findings.append(InjectionFinding("PI-07", "MIXED_SCRIPT_HOMOGLYPH", ",".join(mixed[:5])))
     layers = 0
     decoded_injection = False
+    # Compatibility forms (fullwidth Latin and similar) fold to ASCII under NFKC; judge that form as well, or a fullwidth
+    # directive is read as CLEAN while the same words in ASCII are INJECTION.
+    folded = unicodedata.normalize("NFKC", text)
+    if depth < 2 and folded != text:
+        if scan_text_for_injection(folded, depth + 1).verdict is InjectionVerdict.INJECTION:
+            findings.append(InjectionFinding("PI-08", "COMPATIBILITY_FORM_DIRECTIVE", folded[:50]))
+            decoded_injection = True
     if depth < 2:
         for kind, dec in _decode_candidates(text):
             layers += 1

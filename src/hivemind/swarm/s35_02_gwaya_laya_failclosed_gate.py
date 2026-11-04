@@ -74,12 +74,15 @@ def inspect_python_ast_anti_stub(source_code: str) -> list[str]:
                 violations.append(f"Forbidden simulated function name: {node.name}")
             # Strip leading docstring if present
             body = list(node.body)
-            if (
-                len(body) > 1
-                and isinstance(body[0], ast.Expr)
+            has_leading_docstring = (
+                isinstance(body[0], ast.Expr)
                 and isinstance(body[0].value, ast.Constant)
                 and isinstance(body[0].value.value, str)
-            ):
+            )
+            if has_leading_docstring and len(body) == 1:
+                # A body that is only a docstring returns None and does nothing: it is a stub like 'pass'.
+                violations.append(f"Function '{node.name}' body is only a docstring stub")
+            elif has_leading_docstring:
                 body = body[1:]
             if len(body) == 1:
                 stmt = body[0]

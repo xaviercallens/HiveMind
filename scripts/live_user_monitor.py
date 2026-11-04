@@ -117,6 +117,15 @@ def chat_latency_breakdown(chat_rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {"by_client": by_client, "by_response_size": by_size, "slowest": slowest}
 
 
+def breakdown_line(breakdown: dict[str, Any] | None) -> str:
+    """One printable line from chat_latency_breakdown: p95 per client class and the three slowest chats (time, client, bytes)."""
+    if not breakdown or not breakdown.get("slowest"):
+        return "no chats in window"
+    clients = ", ".join(f"{c} n={v['n']} p95={v['p95_s']:.2f}s" for c, v in breakdown["by_client"].items())
+    slow = "; ".join(f"{x['latency_s']:.1f}s {x['client']} {x['response_bytes']}B at {x['time'][11:19]}Z" for x in breakdown["slowest"][:3])
+    return f"by client: {clients} | slowest: {slow}"
+
+
 def traffic_summary(since: datetime) -> dict[str, Any]:
     """Aggregate Cloud Run request logs of the public services; returns counts only."""
     names = " OR ".join(f'"{n}"' for n in CLOUD_RUN_NAMES.values())
@@ -299,6 +308,7 @@ def main() -> int:
         for svc, s in t["services"].items():
             print(f"{svc:8s} requests {s['requests']:4d}  chat {s['chat']['n']:3d} (p50 {s['chat']['p50_s']}, p95 {s['chat']['p95_s']} s)  "
                   f"402 {s['http_402']}  5xx {s['http_5xx']}  registrations {s['registrations']}  browser {s['browser_requests']}")
+            print(f"         {breakdown_line(s.get('chat_breakdown'))}")
     else:
         print("traffic:", t)
     if "users" in record:

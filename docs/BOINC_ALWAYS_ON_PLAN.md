@@ -18,7 +18,7 @@ Later the same day: the RTX 2070 serves `coder-lite` and `granite-moe` all the t
 
 1. **Cross-class validation.** The replay check is exact only within one execution class (`docs/BOINC_PRODUCTION_SERVER.md`). A T4 may not be able to validate RTX 2070 or other volunteers' results within `1e-4`. Measure it on a real 2070 result. If it fails, volunteers' work cannot be validated by the T4 alone: each class needs a validator of its own class or a quorum.
 2. **Timeouts:** nothing may expire or be reissued during about 19 hours a day without validation.
-3. **Host resilience:** `hm-fed-master` is Spot. One preemption stops the WireGuard hub, the 2070 relay and BOINC together, and its IP is ephemeral, while BOINC clients need a stable project URL. A static IP in use costs about the same as an ephemeral one; a standard (non-Spot) e2-medium costs about 15 USD a month more.
+3. **Host resilience (owner chose Spot, 2026-11-04):** `hm-fed-master` stays Spot. One preemption stops the WireGuard hub, the 2070 relay and BOINC together, and its IP is ephemeral, while BOINC clients need a stable project URL. A static IP in use costs about the same as an ephemeral one; a standard (non-Spot) e2-medium costs about 15 USD a month more.
 
 ## Rules for going public (today `master_url` is `127.0.0.1:8081`)
 

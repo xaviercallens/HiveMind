@@ -2,7 +2,7 @@
 
 > **Proof of concept (PoC):** not a production service. Send only public, non-sensitive data.
 
-Owner decision (2026-11-04): the RTX 2070 serves inference all the time (free), the T4 VM runs as Spot a few hours a day or night for training only. `scripts/t4_training_window.sh` applies this with a GCE instance schedule. **It is not applied yet.**
+Owner decision (2026-11-04): the RTX 2070 serves inference all the time (free), the T4 VM runs as Spot a few hours a day or night for training only. `scripts/t4_training_window.sh` applies this with a GCE instance schedule. **Applied 2026-11-04 at 18:00 Paris on the owner's word (17:00-22:00 Europe/Paris), before the BOINC move and the 2070 advertisement were finished**: until they are, BOINC and every T4-served tier are off outside the window. The first scheduled stop and start show whether GCE's service agent has the permission it needs (`roles/compute.instanceAdmin.v1` if not).
 
 ## Check before applying
 

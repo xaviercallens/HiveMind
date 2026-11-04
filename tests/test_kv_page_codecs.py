@@ -117,3 +117,16 @@ def test_eviction_mirrors_fp8_paged_cache():
         cache.read_kv_page(0, 2)
     assert list(ref._pages_k) == list(new._pages_k)
     assert ref.total_kv_cache_bytes() == new.total_kv_cache_bytes()
+
+
+@pytest.mark.parametrize("codec", [IntMinMaxPageCodec(8), LatticePageCodec("Z", 1.0), LatticePageCodec("A2", 1.0), LatticePageCodec("E8", 1.0)])
+def test_encode_refuses_nan_and_fp16_overflow_but_accepts_a_normal_page(codec) -> None:
+    g = torch.Generator().manual_seed(0)
+    ok = torch.randn(4, 16, generator=g)
+    assert torch.isfinite(codec.decode(codec.encode(ok), torch.float32)).all()
+    nan_page = ok.clone()
+    nan_page[0, 0] = float("nan")
+    with pytest.raises(ValueError):
+        codec.encode(nan_page)
+    with pytest.raises(ValueError):
+        codec.encode(ok * 1e6)  # RMS / min / max above fp16's 65504 overflow the stored side information

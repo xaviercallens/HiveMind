@@ -201,3 +201,26 @@ def test_campaign_poll_votes_are_rate_limited_and_stop_growing_the_event_log() -
     events = len(store.list_amcp_kafka_events(limit=1000))
     assert client.post("/v1/hivemind/campaigns/poll", headers=headers, json=body).status_code == 429
     assert len(store.list_amcp_kafka_events(limit=1000)) == events
+
+
+def test_identical_re_vote_writes_no_new_bus_event_but_a_changed_vote_does() -> None:
+    store = RouterStore(":memory:", SECRET)
+    client = TestClient(create_router_app(store, starter_grant_hmt=50.0))
+    user = client.post("/v1/hivemind/register", json={"handle": "poll-reposter", "role": "prosumer"}).json()
+    headers = {"Authorization": f"Bearer {user['api_key']}"}
+    body = {"subject_id": "SUBJ-02-RUSTY-SUNDIALS-FLUID-ODE", "participant_kind": "human_researcher", "pledged_vram_gb": 8.0, "availability_slot": "eu_evening_cet"}
+
+    def events() -> int:
+        return len(store.list_amcp_kafka_events(limit=1000))
+
+    before = events()
+    first = client.post("/v1/hivemind/campaigns/poll", headers=headers, json=body)
+    assert first.status_code == 200 and first.json()["amcp_event"] is not None
+    assert events() == before + 1
+    again = client.post("/v1/hivemind/campaigns/poll", headers=headers, json=body)
+    assert again.status_code == 200 and again.json()["amcp_event"] is None
+    assert again.json()["registration"]["subject_id"] == body["subject_id"]
+    assert events() == before + 1  # an identical vote did not grow the never-pruned log
+    changed = client.post("/v1/hivemind/campaigns/poll", headers=headers, json={**body, "pledged_vram_gb": 16.0})
+    assert changed.status_code == 200 and changed.json()["amcp_event"] is not None
+    assert events() == before + 2

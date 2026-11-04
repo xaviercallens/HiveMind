@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — Federation v2: co-training over AMCP and Kafka, T4 WireGuard hub
+
+- **Signed task agents over AMCP** (`src/hivemind/swarm/federation_agents.py`, topic `hivemind.amcp.federation.v1`): offers carry hashes of the model state and of the code version, learners verify before running and send back only LoRA deltas, the coordinator checks every result before aggregating. Design and participant procedure: `docs/FEDERATION_V2_AMCP_AGLETS.md`.
+- **Joint QLoRA rounds on a tiny Mixture-of-Experts** (`scripts/e8_qlora_moe_round.py`, `scripts/e8_amcp_round.py`) with the night window, governor and 4,300 MiB VRAM floor enforced in code.
+- **Validated live**: two different machines over the real Kafka cluster matched the single-process baseline (largest difference 1.2e-07); a 70-round churn soak with learners killed and restarted completed with 0 rejections; the VRAM floor refused a daytime GPU run on real data.
+- **T4 WireGuard hub** for members behind NAT (`deploy/amcp/hm-wg-hub.sh`) and an open-source tunnel comparison (`docs/OVERLAY_OPEN_SOURCE_TUNNELS.md`).
+- **E8 two-host test instructions** and pilot syncer hardening (`docs/E8_TWO_HOST_REAL_TEST.md`, `--bind`, weights-only payloads).
+
 ## v2.15.0 — 2026-10-29 — Season 29 International Launch Weekend Scaler (`HM-S29-01`, `HM-S29-02`, `HM-S31-02`), Human & Agent Calendar, Nocturnal Image-MoE Evolution Monitor & 161 Lean 4 Theorems
 
 - **Pre-Registered Experiment `E20` & Large-Audience Scalability (`src/hivemind/swarm/international_launch_scaler.py`):**

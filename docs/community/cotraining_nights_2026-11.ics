@@ -1,0 +1,58 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Project HiveMind//Co-training nights//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:HiveMind co-training nights
+BEGIN:VEVENT
+UID:hivemind-night2-20261101@hivemind.project
+DTSTAMP:20261101T180000Z
+DTSTART:20261101T210000Z
+DTEND:20261102T060000Z
+SUMMARY:HiveMind co-training night 2 (closed: T4 only)
+DESCRIPTION:Run night-002 resumes from night-001 (round 13). Two learners 
+ on the T4 only\; the list of learners is fixed when the run starts\, so i
+ t is not open to others. Results: artifacts/experiments/e8_real/night-002
+ .json.
+URL:https://github.com/xaviercallens/HiveMind/blob/main/docs/community/COT
+ RAINING_NIGHTS.md
+END:VEVENT
+BEGIN:VEVENT
+UID:hivemind-night3-slots-20261102@hivemind.project
+DTSTAMP:20261101T180000Z
+DTSTART:20261102T170000Z
+DTEND:20261102T173000Z
+SUMMARY:HiveMind night 3: last call for trainer slots (18:00 Paris)
+DESCRIPTION:To train on night 3\, comment on issue #431 before this time w
+ ith: your WireGuard PUBLIC key\, GPU model and free VRAM\, operating syst
+ em. Never post a private key.
+URL:https://github.com/xaviercallens/HiveMind/blob/main/docs/community/COT
+ RAINING_NIGHTS.md
+END:VEVENT
+BEGIN:VEVENT
+UID:hivemind-night3-20261102@hivemind.project
+DTSTAMP:20261101T180000Z
+DTSTART:20261102T210000Z
+DTEND:20261103T060000Z
+SUMMARY:HiveMind co-training night 3 (open to registered trainers) + H-Net
+  probe on the T4
+DESCRIPTION:Run night-003: open to trainers given a slot (learner ids t01-
+ t08). The coordinator runs on the T4 CPU\; the T4 GPU is reserved that ni
+ ght for the idle-only H-Net checkpoint probe (issue #448). How to join: d
+ ocs/FEDERATION_V2_AMCP_AGLETS.md section 8.
+URL:https://github.com/xaviercallens/HiveMind/blob/main/docs/community/COT
+ RAINING_NIGHTS.md
+END:VEVENT
+BEGIN:VEVENT
+UID:hivemind-night4-20261103@hivemind.project
+DTSTAMP:20261101T180000Z
+DTSTART:20261103T210000Z
+DTEND:20261104T060000Z
+SUMMARY:HiveMind co-training night 4 (open: T4 learners + registered train
+ ers)
+DESCRIPTION:Run night-004: the T4 learners plus registered trainers. Slots
+  as for night 3 (request on issue #431 by 18:00 Paris the same day).
+URL:https://github.com/xaviercallens/HiveMind/blob/main/docs/community/COT
+ RAINING_NIGHTS.md
+END:VEVENT
+END:VCALENDAR

@@ -1117,13 +1117,14 @@ namespace HiveMind.ExoplanetHunterClient
                 {
                     try
                     {
-                        string url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=" + Uri.EscapeDataString(apiKey);
+                        string url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent";
                         string escapedText = (text ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", " ").Replace("\n", " ");
                         string jsonBody = "{\"contents\":[{\"parts\":[{\"text\":\"" + escapedText + "\"}]}],\"generationConfig\":{\"responseModalities\":[\"AUDIO\"],\"speechConfig\":{\"voiceConfig\":{\"prebuiltVoiceConfig\":{\"voiceName\":\"" + voiceName + "\"}}}}}";
 
                         HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
                         req.Method = "POST";
                         req.ContentType = "application/json; charset=utf-8";
+                        req.Headers["x-goog-api-key"] = apiKey;
                         req.Timeout = 5500;
                         byte[] bodyBytes = Encoding.UTF8.GetBytes(jsonBody);
                         req.ContentLength = bodyBytes.Length;

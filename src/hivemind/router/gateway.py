@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hmac
 import ipaddress
+import html
 import json
 import logging
 import math
@@ -741,23 +742,62 @@ POC_API_DESCRIPTION = (
 )
 
 
+MAINTENANCE_ENV = "HIVEMIND_MAINTENANCE_NOTICE"
+_BODY_TAG = re.compile(rb"<body[^>]*>", re.IGNORECASE)
+
+
+def maintenance_banner_html(notice: str) -> bytes:
+    """The visible banner injected right after ``<body>`` of every HTML page while maintenance mode is on (the text is escaped)."""
+    return (
+        '<div id="hivemind-maintenance-banner" role="alert" style="position:sticky;top:0;z-index:99999;background:#7c2d12;color:#ffedd5;'
+        'padding:10px 16px;font:600 14px/1.4 system-ui,sans-serif;text-align:center;">'
+        + "Maintenance: " + html.escape(notice) + "</div>"
+    ).encode("utf-8")
+
+
 class PocNoticeMiddleware:
     """Pure ASGI middleware: every HTTP response, streaming ones included, carries ``X-HiveMind-Status`` (proof of concept:
-    public data only), so API clients and tools that never render the HTML pages still see the notice."""
+    public data only), so API clients and tools that never render the HTML pages still see the notice.
 
-    def __init__(self, app: Callable[[ASGIMessage, Receive, Send], Awaitable[None]]) -> None:
+    With a ``maintenance`` notice (``HIVEMIND_MAINTENANCE_NOTICE``) every response also carries ``X-HiveMind-Maintenance`` and HTML pages get a visible
+    banner. The notice is operator text, not user input; it is limited to printable ASCII in the header and escaped in the page."""
+
+    def __init__(self, app: Callable[[ASGIMessage, Receive, Send], Awaitable[None]], maintenance: str | None = None) -> None:
         self.app = app
+        self.maintenance = (maintenance or "").strip()[:300] or None
 
     async def __call__(self, scope: ASGIMessage, receive: Receive, send: Send) -> None:
         if scope.get("type") != "http":
             await self.app(scope, receive, send)
             return
+        maint = self.maintenance
+        pending: dict[str, Any] = {"start": None, "body": bytearray(), "html": False}
 
         async def send_with_notice(message: ASGIMessage) -> None:
-            if message.get("type") == "http.response.start":
+            kind = message.get("type")
+            if kind == "http.response.start":
                 headers = list(message.get("headers", []))
                 headers.append((b"x-hivemind-status", POC_STATUS_HEADER.encode("ascii")))
+                if maint:
+                    headers.append((b"x-hivemind-maintenance", maint.encode("ascii", "replace").replace(b"\r", b" ").replace(b"\n", b" ")))
+                    ctype = next((v for k, v in headers if k.lower() == b"content-type"), b"")
+                    if ctype.lower().startswith(b"text/html"):
+                        pending["html"] = True
+                        pending["start"] = {**message, "headers": [(k, v) for k, v in headers if k.lower() != b"content-length"]}
+                        return
                 message = {**message, "headers": headers}
+            elif kind == "http.response.body" and pending["html"]:
+                pending["body"] += message.get("body", b"")
+                if message.get("more_body", False):
+                    return
+                body = bytes(pending["body"])
+                if body:
+                    body = _BODY_TAG.sub(lambda m: m.group(0) + maintenance_banner_html(maint or ""), body, count=1)
+                start = pending["start"]
+                start["headers"] = start["headers"] + [(b"content-length", str(len(body)).encode("ascii"))]
+                await send(start)
+                await send({"type": "http.response.body", "body": body, "more_body": False})
+                return
             await send(message)
 
         await self.app(scope, receive, send_with_notice)
@@ -833,6 +873,7 @@ def create_router_app(
     starter_grant_hmt: float = 0.0,
     starter_grants_per_ip_24h: int = 3,
     trusted_proxies: Sequence[str] = (),
+    maintenance_notice: str | None = None,
 ) -> FastAPI:
     """Build the gateway app. ``resolver`` (host -> IP strings) is injectable for tests of the SSRF guard.
 
@@ -871,7 +912,7 @@ def create_router_app(
         raise ValueError("starter_grant_hmt and starter_grants_per_ip_24h must be finite and not negative")
     proxy_networks = tuple(ipaddress.ip_network(entry, strict=False) for entry in trusted_proxies)
     app.add_middleware(BodyLimitMiddleware, max_bytes=MAX_BODY_BYTES)
-    app.add_middleware(PocNoticeMiddleware)  # added last = outermost, so it also marks the 413 from the body limit
+    app.add_middleware(PocNoticeMiddleware, maintenance=maintenance_notice if maintenance_notice is not None else os.environ.get(MAINTENANCE_ENV))  # added last = outermost, so it also marks the 413 from the body limit
 
     # ------------------------------------------------------------------ errors
     @app.exception_handler(RouterError)

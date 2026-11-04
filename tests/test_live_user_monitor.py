@@ -135,3 +135,12 @@ def test_breakdown_keeps_no_url_address_or_identity() -> None:
     row["httpRequest"]["remoteIp"] = "203.0.113.9"  # type: ignore[index]
     text = str(monitor.chat_latency_breakdown([row]))
     assert "203.0.113.9" not in text and "v1/chat" not in text and "python-httpx" not in text
+
+
+def test_breakdown_line_names_the_slowest_chats_and_the_client_class() -> None:
+    rows = [_chat_row("0.2s", 900) for _ in range(5)] + [_chat_row("6.0s", 1900)]
+    line = monitor.breakdown_line(monitor.chat_latency_breakdown(rows))
+    assert "scripted n=6" in line and "p95=" in line
+    assert "6.0s scripted 1900B" in line
+    assert monitor.breakdown_line(monitor.chat_latency_breakdown([])) == "no chats in window"
+    assert monitor.breakdown_line(None) == "no chats in window"

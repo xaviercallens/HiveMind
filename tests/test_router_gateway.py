@@ -1482,3 +1482,25 @@ def test_concurrent_load_survives_a_producer_kill_and_the_money_balances(world: 
     earned = world.store.balance(a_id) + world.store.balance(b_id)
     assert spent > 0 and 0 < earned <= spent  # producers are paid out of what the consumer paid; the difference is the fee
     assert abs(world.store.total_minted() - minted) < 1e-9 and abs(world.store.total_balances() - world.store.total_minted()) < 1e-6  # no HMT created or lost
+
+
+def test_usage_capture_is_cached_per_window_bucket_and_recomputed_after_the_ttl(world: World, monkeypatch: pytest.MonkeyPatch) -> None:
+    from hivemind.router.gateway import USAGE_CAPTURE_TTL_S
+
+    calls: list[float] = []
+    real = world.store.usage_capture_summary
+
+    def counting(**kwargs: Any) -> dict[str, Any]:
+        calls.append(kwargs["window_s"])
+        return real(**kwargs)
+
+    monkeypatch.setattr(world.store, "usage_capture_summary", counting)
+    first = world.app_client.get("/v1/hivemind/usage-capture?window_s=86400")
+    second = world.app_client.get("/v1/hivemind/usage-capture?window_s=86400")
+    assert first.status_code == second.status_code == 200 and first.json() == second.json()
+    assert len(calls) == 1  # the second call inside the TTL did not scan
+    world.app_client.get("/v1/hivemind/usage-capture?window_s=3600")
+    assert len(calls) == 2  # a different window bucket is its own entry
+    world.clock.now += USAGE_CAPTURE_TTL_S + 1.0
+    world.app_client.get("/v1/hivemind/usage-capture?window_s=86400")
+    assert len(calls) == 3

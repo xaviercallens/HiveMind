@@ -1,0 +1,41 @@
+{
+  "criterion": "A1",
+  "model": "hivemind/granite-moe",
+  "gateway_revision_note": "production gateway",
+  "producers": {
+    "t4": "86cd37a1",
+    "rtx2070": "ef1f1643"
+  },
+  "killed": "t4",
+  "kill_cmd": "sudo systemctl stop hivemind-live-shield-user",
+  "distinct_gpus": 1,
+  "before_kill": {
+    "requests": 24,
+    "status_codes": {
+      "200": 3,
+      "502": 21
+    },
+    "non_200": 21,
+    "answered_by": {
+      "t4": 3
+    },
+    "p50_s": 16.01,
+    "max_s": 22.66,
+    "charged_hmt": 0.028535
+  },
+  "after_kill": {
+    "requests": 24,
+    "status_codes": {
+      "502": 24
+    },
+    "non_200": 24,
+    "answered_by": {},
+    "p50_s": null,
+    "max_s": null,
+    "charged_hmt": 0.0
+  },
+  "balance_delta_hmt": 0.028535,
+  "restore_exit": 0,
+  "passed": false,
+  "reason": "both GPUs did not serve before the kill: {'t4': 3}; 24 failed requests after the kill: {'502': 24}; the surviving GPU answered nothing after the kill"
+}

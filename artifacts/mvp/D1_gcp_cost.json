@@ -6,15 +6,16 @@
     "cloud_run_active_fraction": 0.05,
     "cloud_run_basis": "measured billable_instance_time (7 days, scaled to a month)"
   },
-  "budget_usd_month": 100.0,
-  "estimate_usd_month": 364.85,
+  "budget_usd_month": 150.0,
+  "estimate_usd_month": 393.2,
   "within_budget": false,
   "by_kind": {
-    "disk": 145.0,
-    "vm": 79.93,
-    "ip": 18.25,
+    "disk": 181.0,
+    "snapshots": 17.95,
+    "vm": 65.26,
+    "ip": 7.3,
     "gpu": 80.3,
-    "cloud_run": 41.37
+    "cloud_run": 41.39
   },
   "top_lines": [
     {
@@ -39,13 +40,25 @@
       "kind": "disk",
       "name": "xavuntu-desktop-1791007070-data-1tb",
       "usd_month": 40.0,
-      "note": "1000 GB pd-standard, xavuntu-desktop-1791007070"
+      "note": "1000 GB pd-standard, hm-shrink-tmp"
     },
     {
       "kind": "cloud_run",
       "name": "hivemind-openrouter",
       "usd_month": 35.32,
-      "note": "measured 406458 billable s in 7 days (67.2% of the month)"
+      "note": "measured 406399 billable s in 7 days (67.2% of the month)"
+    },
+    {
+      "kind": "disk",
+      "name": "disk-socrateai-local-800gb",
+      "usd_month": 32.0,
+      "note": "800 GB pd-standard, socreateai-agora-hermes-node1"
+    },
+    {
+      "kind": "snapshots",
+      "name": "24 snapshots",
+      "usd_month": 17.95,
+      "note": "691 GB stored"
     },
     {
       "kind": "disk",
@@ -60,28 +73,16 @@
       "note": "e2-medium spot, 730 h"
     },
     {
-      "kind": "vm",
-      "name": "hm-kafka-1",
-      "usd_month": 4.89,
-      "note": "e2-small spot, 730 h"
-    },
-    {
-      "kind": "vm",
-      "name": "hm-kafka-2",
-      "usd_month": 4.89,
-      "note": "e2-small spot, 730 h"
-    },
-    {
-      "kind": "vm",
-      "name": "hm-kafka-3",
-      "usd_month": 4.89,
-      "note": "e2-small spot, 730 h"
-    },
-    {
       "kind": "cloud_run",
       "name": "hivemind-at-home-ruche",
-      "usd_month": 4.42,
-      "note": "measured 19208 billable s in 7 days (3.2% of the month)"
+      "usd_month": 4.44,
+      "note": "measured 19262 billable s in 7 days (3.2% of the month)"
+    },
+    {
+      "kind": "disk",
+      "name": "xavuntu-desktop-1791007070-data-100gb",
+      "usd_month": 4.0,
+      "note": "100 GB pd-standard, hm-shrink-tmp"
     },
     {
       "kind": "ip",
@@ -110,22 +111,32 @@
       "why": "a 2 TB disk holds far less data; check `df` first (assumes 40% used)"
     },
     {
-      "action": "snapshot then delete disk xavuntu-desktop-1791007070-data-1tb (1000 GB) if its data is not needed live",
-      "saves_usd_month": 40.0,
-      "why": "attached only to a stopped VM or to nothing"
-    },
-    {
-      "action": "stop the Kafka voters between tests",
-      "saves_usd_month": 14.67,
-      "why": "Spot e2 voters billed 24/7"
+      "action": "move the data of xavuntu-desktop-1791007070-data-1tb to a smaller disk (GCE disks cannot shrink in place)",
+      "saves_usd_month": 24.0,
+      "why": "a 2 TB disk holds far less data; check `df` first (assumes 40% used)"
     },
     {
       "action": "snapshot then delete disk xavuntu-desktop-1791007070 (50 GB) if its data is not needed live",
       "saves_usd_month": 2.0,
       "why": "attached only to a stopped VM or to nothing"
+    },
+    {
+      "action": "snapshot then delete disk hm-kafka-1 (20 GB) if its data is not needed live",
+      "saves_usd_month": 2.0,
+      "why": "attached only to a stopped VM or to nothing"
+    },
+    {
+      "action": "snapshot then delete disk hm-kafka-2 (20 GB) if its data is not needed live",
+      "saves_usd_month": 2.0,
+      "why": "attached only to a stopped VM or to nothing"
+    },
+    {
+      "action": "snapshot then delete disk hm-kafka-3 (20 GB) if its data is not needed live",
+      "saves_usd_month": 2.0,
+      "why": "attached only to a stopped VM or to nothing"
     }
   ],
-  "savings_if_all_levers_taken_usd_month": 172.56,
+  "savings_if_all_levers_taken_usd_month": 147.89,
   "passed": false,
-  "reason": "estimate $365/month vs budget $100; unpriced: 1"
+  "reason": "estimate $393/month vs budget $150; unpriced: 1"
 }

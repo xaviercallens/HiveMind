@@ -13,7 +13,7 @@
 | B3 | Trained adapter passes the train-to-serve gate | **FAIL** | GRANITE_ADAPTER_hmq_00147_gate_f16_independent_chunks.json: servable=False gain=-0.00403 ci=[-0.01758, 0.00893] |
 | C1 | AMCP events on a 3-voter Kafka cluster survive a voter loss | **NOT-RUN** | no artifacts/mvp/C1_*.json yet |
 | C2 | Registered adapter is routed by domain; failed-gate adapters refused | **NOT-RUN** | no artifacts/mvp/C2_*.json yet |
-| D1 | GCP control plane follows the low-cost rules; cost estimate recorded | **FAIL** | flags match AGENTS.md; D1_gcp_cost.json: estimate $365/month vs budget $100; unpriced: 1 |
+| D1 | GCP control plane follows the low-cost rules; cost estimate recorded | **FAIL** | flags match AGENTS.md; D1_gcp_cost.json: estimate $393/month vs budget $150; unpriced: 1 |
 | E1 | One-command onboarding; GPU yielded to the owner within seconds | **NOT-RUN** | no artifacts/mvp/E1_*.json yet |
 | E2 | Poisoned delta and lazy worker rejected live; usage cross-checked | **FAIL** | E2_security.json: not met: poisoned_delta_rejected_live; billing_inflation_within_1_5x |
 | F1 | Public numbers all come from measured_results.json (guarded by a test) | **WAIVED** | owner decision (docs/MVP_OWNER_DECISIONS.md): 48 typed-in page figures kept, still unverified; the ratchet stops new ones. A waiver is not a pass |

@@ -1102,6 +1102,16 @@ def create_router_app(
         model_id, records, routing_mode = resolve_model(requested, preferred_tier=intent.preferred_tier)
         if store.balance(account.account_id) <= 0.0:
             raise RouterError(402, "Balance is empty; ask an admin for a grant or earn HMT as a producer.", "insufficient_quota", "insufficient_balance")
+        # Residency-aware pricing: a producer whose every server reports the model NOT loaded with a cold start above the
+        # wait budget cannot serve this request now, so it does not take part in the equilibrium when any other producer
+        # for the model can (2026-11-03 incident: the cheapest producer had unloaded the model, the posted-price
+        # equilibrium selected it alone, and the gate below answered 503 while a warm producer stood idle).
+        ready = [
+            r for r in records
+            if not all(s.model_state(model_id) is False and _cold_start_of(s, model_id) >= cold_start_wait_budget_s for s in r.per_endpoint())
+        ]
+        if ready and len(ready) < len(records):
+            records = ready
         eq = equilibrium(model_id, records, account)
         if eq.mechanism == MECHANISM_NO_TRADE and eq.price_per_1k <= 0.0:
             raise RouterError(503, f"No capacity is offered for '{requested}' right now.", "service_unavailable", "no_capacity")

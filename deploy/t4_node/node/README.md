@@ -18,7 +18,7 @@ Installed on 2026-10-25 at the owner's request. Inference always has priority; t
 ## Policy (owner, 2026-10-25): serving first, training only after long silence, mostly at night
 
 - The governor starts in `never` on every (re)start. Training resumes only after **30 minutes** without an in-flight request
-  **inside the night window** (22:00-07:00 `Europe/Paris`, an assumption about the owner's night; `--night-tz/-start-h/-end-h`), or after
+  **inside the training window** (17:00-22:00 `Europe/Paris`, owner decision 2026-11-04; was 22:00-07:00, an assumption about the owner's night; `--night-tz/-start-h/-end-h`), or after
   **2 hours** of silence outside it. Any request suspends it immediately.
 - `…/hivemind_telemetry/HOLD` is an operator switch: while it exists nothing trains (`touch` to pause, `rm` to allow).
 - The validator's GPU replay also waits for a quiet moment.

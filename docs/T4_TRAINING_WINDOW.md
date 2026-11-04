@@ -12,7 +12,7 @@ While the VM is off, everything on it is off.
 2. **BOINC:** the project server (Apache, MariaDB, daemons, work generator) runs on this VM. Volunteer trainers get no work and cannot report outside the window. To let other HiveMinders train around the clock it must move to an always-on small VM, which adds about 15-25 USD a month.
 3. **Other work on the VM:** Claude Code sessions, Redis, the local Kafka and other projects on the data disk stop with it. Long jobs must fit the window or resume.
 4. **Boot:** units must start by themselves (`deploy/t4_node/install_node.sh` enables them). `hivemind-kafka-t4-node` stays off unless the voters are started.
-5. **Training time:** the governor starts training only after 1800 s without a request in its night window (22:00-07:00 Paris) and with 4,300 MiB free, so a 4-hour window gives about 3.5 hours of training; `coder` must not be pinned in VRAM.
+5. **Training time:** the owner chose 17:00-22:00 (Europe/Paris). The governor's training window matches it (`--night-start-h 17 --night-end-h 22`), so training starts after 1800 s without a request and with 4,300 MiB free: about 4.5 hours a day; `coder` must not be pinned in VRAM.
 
 TPU is not an option for this chain today: the QLoRA workunits use 4-bit bitsandbytes on CUDA.
 

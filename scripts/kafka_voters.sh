@@ -27,14 +27,14 @@ case "${1:-status}" in
     if [ -n "$recent" ]; then echo "NOT stopping: topic data written in the last $IDLE_MIN min:"; echo "$recent"; exit 2; fi
     loc=$(scheduler_location)
     for i in 1 2 3; do gcloud scheduler jobs pause "hm-kafka-$i-keepalive" --location "$loc" --project "$PROJECT" --quiet; done
-    sudo systemctl stop hivemind-kafka-t4-node
+    sudo systemctl disable --now hivemind-kafka-t4-node  # not at boot either: the T4 VM reboots daily and the broker has no quorum without the voters
     for v in "${VOTERS[@]}"; do set -- $v; gcloud compute instances stop "$1" --zone "$2" --project "$PROJECT" --quiet; done
     ;;
   start)
     loc=$(scheduler_location)
     for v in "${VOTERS[@]}"; do set -- $v; gcloud compute instances start "$1" --zone "$2" --project "$PROJECT" --quiet; done
     for i in 1 2 3; do gcloud scheduler jobs resume "hm-kafka-$i-keepalive" --location "$loc" --project "$PROJECT" --quiet; done
-    sudo systemctl start hivemind-kafka-t4-node
+    sudo systemctl enable --now hivemind-kafka-t4-node
     ;;
   *) echo "usage: $0 status|stop|start"; exit 64 ;;
 esac

@@ -201,7 +201,9 @@ def build_train_spec(
     else:
         train = _chunks(domain_ids(tok, domain, "train", shard_index, n_seq * seq_len), seq_len, n_seq)
     # the held-out set of EVERY domain is always evaluated, so a round trained on French also shows what it did to English
-    eval_sets = {d: _chunks(domain_ids(tok, d, "eval", 0, n_eval * seq_len), seq_len, n_eval) for d in DOMAIN_ORDER}
+    # a stratified round is judged on the domains it trains on: the chain's ratchet compares means, so the set must match the head's (the six the chain has always reported)
+    eval_domains = MIX_DOMAINS if domain == MIX else DOMAIN_ORDER
+    eval_sets = {d: _chunks(domain_ids(tok, d, "eval", 0, n_eval * seq_len), seq_len, n_eval) for d in eval_domains}
     if custom is not None:
         eval_sets[domain] = custom[1][:n_eval]  # the user's own held-out chunks are reported next to the built-in domains
     spec = {

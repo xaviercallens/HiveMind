@@ -39,6 +39,13 @@ def test_the_unknown_domain_error_mentions_mix() -> None:
     assert "MIX" in inspect.getsource(mw.build_train_spec) and mw.MIX == "mix"
 
 
+def test_a_mix_round_is_evaluated_on_the_six_domains_so_the_ratchet_stays_comparable() -> None:
+    import inspect
+
+    src = inspect.getsource(mw.build_train_spec)
+    assert "eval_domains = MIX_DOMAINS if domain == MIX else DOMAIN_ORDER" in src
+
+
 def test_the_work_generator_exposes_the_flag() -> None:
     from pathlib import Path
 

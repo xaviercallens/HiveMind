@@ -835,6 +835,7 @@ def synthesize_gemini_or_gcp_free_tts(
          (`en`, `fr`, `es`, `de`, `zh-CN`) with zero API key required and local disk caching.
     """
     import base64
+    import urllib.error
     import urllib.parse
     import urllib.request
 
@@ -928,12 +929,16 @@ def synthesize_gemini_or_gcp_free_tts(
     # Tier 2: Google Cloud Free-Tier Neural TTS (`translate.googleapis.com/translate_tts`)
     chunks = _split_text_for_gcp_tts(text, max_chars=180)
     combined_mp3 = bytearray()
-    for chunk in chunks:
-        q = urllib.parse.quote(chunk)
-        tts_url = f"https://translate.googleapis.com/translate_tts?ie=UTF-8&client=tw-ob&tl={tl}&q={q}"
-        req = urllib.request.Request(tts_url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=8.0) as resp:
-            combined_mp3.extend(resp.read())
+    try:
+        for chunk in chunks:
+            q = urllib.parse.quote(chunk)
+            tts_url = f"https://translate.googleapis.com/translate_tts?ie=UTF-8&client=tw-ob&tl={tl}&q={q}"
+            req = urllib.request.Request(tts_url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=8.0) as resp:
+                combined_mp3.extend(resp.read())
+    except (urllib.error.URLError, OSError, TimeoutError) as exc:
+        # No network (or the service refused): answer ok=False so the caller falls back to browser speech; nothing is cached.
+        return {"ok": False, "engine": "none", "error": type(exc).__name__}
 
     mp3_bytes = bytes(combined_mp3)
     if len(mp3_bytes) > 200:

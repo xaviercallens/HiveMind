@@ -396,11 +396,12 @@ def route_supply_equilibrium(workers: Sequence[Worker], queues: Sequence[Queue],
     if len({w.node_id for w in workers}) != len(workers) or len({q.queue_id for q in queues}) != len(queues):
         raise ValueError("duplicate worker or queue ids")
     for w in workers:
-        if w.cost_per_cobblestone <= 0.0 or w.capacity_cobblestones <= 0.0:
-            raise ValueError(f"worker {w.node_id}: cost and capacity must be > 0")
+        # NaN fails every comparison, so `<= 0.0` alone lets it through and the certificate then reports a Nash point
+        if not (math.isfinite(w.cost_per_cobblestone) and math.isfinite(w.capacity_cobblestones)) or w.cost_per_cobblestone <= 0.0 or w.capacity_cobblestones <= 0.0:
+            raise ValueError(f"worker {w.node_id}: cost and capacity must be finite and > 0")
     pools = {q.queue_id: float(q.pool_hive) for q in queues}
     reserve = {q.queue_id: float(q.reserve_cobblestones) for q in queues}
-    if any(p <= 0.0 for p in pools.values()):
+    if any((not math.isfinite(p)) or p <= 0.0 for p in pools.values()):
         raise ValueError("every queue pool must be > 0")
     # start: each worker spreads a tenth of its capacity evenly (a strictly positive, symmetric start)
     alloc: dict[str, dict[str, float]] = {w.node_id: {q: 0.1 * w.capacity_cobblestones / len(pools) for q in pools} for w in workers}

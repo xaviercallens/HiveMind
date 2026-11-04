@@ -15,5 +15,5 @@
 | C2 | Registered adapter is routed by domain; failed-gate adapters refused | **NOT-RUN** | no artifacts/mvp/C2_*.json yet |
 | D1 | GCP control plane follows the low-cost rules; cost estimate recorded | **FAIL** | deploy.sh lacks AGENTS.md flags: ['--min-instances 1', '--no-cpu-throttling', '--concurrency 80'] |
 | E1 | One-command onboarding; GPU yielded to the owner within seconds | **NOT-RUN** | no artifacts/mvp/E1_*.json yet |
-| E2 | Poisoned delta and lazy worker rejected live; usage cross-checked | **NOT-RUN** | no artifacts/mvp/E2_*.json yet |
+| E2 | Poisoned delta and lazy worker rejected live; usage cross-checked | **FAIL** | E2_security.json: not met: poisoned_delta_rejected_live; billing_inflation_within_1_5x |
 | F1 | Public numbers all come from measured_results.json (guarded by a test) | **FAIL** | 48 typed-in figures remain in page modules (the ratchet test only stops new ones); each must be removed or backed by an artifact |

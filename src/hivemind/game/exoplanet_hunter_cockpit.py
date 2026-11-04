@@ -1922,6 +1922,9 @@ def render_exoplanet_hunter_cockpit_html(service: AstroBeeMoEGPUService, classic
 """
 
 
+MAX_TTS_TEXT_CHARS = 2000  # longest text the public text-to-speech route accepts; longer answers 413
+
+
 def render_traffic_and_tflops_monitor_html() -> str:
     """Render the real-time Star Trek LCARS Traffic, New End-Users & TFLOPS Telemetry Monitor."""
     return """<!DOCTYPE html>
@@ -3073,6 +3076,13 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         lang: str = "en",
         voice: str = "Puck",
     ) -> Response:
+        if len(text) > MAX_TTS_TEXT_CHARS:
+            # Refused before any outbound request or cache write: this route is public, and each distinct text used to be
+            # forwarded to a third party and cached on disk without a bound.
+            return JSONResponse(
+                status_code=413,
+                content={"ok": False, "error": f"text is limited to {MAX_TTS_TEXT_CHARS} characters", "length": len(text)},
+            )
         res = synthesize_gemini_or_gcp_free_tts(text=text, lang=lang, voice_name=voice)
         if res.get("ok") and res.get("audio_bytes"):
             return Response(

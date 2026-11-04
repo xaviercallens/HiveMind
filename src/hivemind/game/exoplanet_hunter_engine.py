@@ -1912,7 +1912,7 @@ class HiveMindMultiProducerInferencePool:
         self.recent_traffic: List[Dict[str, Any]] = []
         self.tflops_metrics: Dict[str, Any] = {}
         self._init_default_producers()
-        self._init_baseline_end_users()
+        # No sample users and no pre-set counters: a fresh pool has served nobody, and every figure here is counted from real requests.
         self.benchmark_live_tflops(matrix_dim=2048)
 
     def _init_default_producers(self) -> None:
@@ -2081,47 +2081,6 @@ class HiveMindMultiProducerInferencePool:
         self.total_tokens_processed += int(gen_res.get("input_token_count", 48)) + int(max_new_tokens)
         self._persist_registry()
         return gen_res
-
-    def _init_baseline_end_users(self) -> None:
-        now_iso = datetime.datetime.now().isoformat()[:19]
-        self.end_users = {
-            "Commandant_Starfleet_FR (Steam Fat Client v3.0)": {
-                "user_id": "USER-01-STEAM-FAT-CLIENT",
-                "gamer_tag": "Commandant_Starfleet_FR",
-                "client_type": "Native 64-Bit Steam Client (HiveMind_Exoplanet_Hunter.exe v3.0)",
-                "first_seen": self.started_at_iso,
-                "last_seen": now_iso,
-                "http_requests": 14,
-                "inference_calls": 6,
-                "discoveries_approved": 3,
-                "status": "ACTIVE_GAMING",
-            },
-            "AstroGamer_Fils_FR (WebGL 3D Cockpit)": {
-                "user_id": "USER-02-WEBGL-COCKPIT",
-                "gamer_tag": "AstroGamer_Fils_FR",
-                "client_type": "WebGL 3D Star Trek Cockpit (Port 8095 • Manette/Clavier)",
-                "first_seen": self.started_at_iso,
-                "last_seen": now_iso,
-                "http_requests": 22,
-                "inference_calls": 9,
-                "discoveries_approved": 4,
-                "status": "ACTIVE_GAMING",
-            },
-            "HiveMind_At_Home_Swarm_Relay (Port 8092)": {
-                "user_id": "USER-03-LA-RUCHE-RELAY",
-                "gamer_tag": "LaRuche_Federation_Relay",
-                "client_type": "HiveMind@home & La Ruche Federated Gateway",
-                "first_seen": self.started_at_iso,
-                "last_seen": now_iso,
-                "http_requests": 18,
-                "inference_calls": 5,
-                "discoveries_approved": 0,
-                "status": "ONLINE_SYNCED",
-            },
-        }
-        self.total_http_requests = 54
-        self.total_requests_served = 20
-        self.total_tokens_processed = 2480
 
     def benchmark_live_tflops(self, matrix_dim: int = 3072) -> Dict[str, Any]:
         """Measure live sustained FP32, FP16 Tensor Core, and Effective 4-Bit NF4 Sparse MoE TFLOPS on `cuda:0`."""

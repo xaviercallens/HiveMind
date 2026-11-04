@@ -185,3 +185,19 @@ def test_in_memory_kafka_bridge_and_double_auction_edge_cases() -> None:
         ]
     )
     assert no_trade["matched_trades_count"] == 0
+
+
+def test_campaign_poll_votes_are_rate_limited_and_stop_growing_the_event_log() -> None:
+    from hivemind.router.gateway import CAMPAIGN_POLL_LIMIT
+
+    store = RouterStore(":memory:", SECRET)
+    client = TestClient(create_router_app(store, starter_grant_hmt=50.0))
+    user = client.post("/v1/hivemind/register", json={"handle": "poll-spammer", "role": "prosumer"}).json()
+    body = {"subject_id": "SUBJ-02-RUSTY-SUNDIALS-FLUID-ODE", "participant_kind": "human_researcher", "pledged_vram_gb": 8.0, "availability_slot": "eu_evening_cet"}
+    headers = {"Authorization": f"Bearer {user['api_key']}"}
+    codes = [client.post("/v1/hivemind/campaigns/poll", headers=headers, json=body).status_code for _ in range(CAMPAIGN_POLL_LIMIT + 5)]
+    assert codes[:CAMPAIGN_POLL_LIMIT] == [200] * CAMPAIGN_POLL_LIMIT
+    assert codes[CAMPAIGN_POLL_LIMIT:] == [429] * 5
+    events = len(store.list_amcp_kafka_events(limit=1000))
+    assert client.post("/v1/hivemind/campaigns/poll", headers=headers, json=body).status_code == 429
+    assert len(store.list_amcp_kafka_events(limit=1000)) == events

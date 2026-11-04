@@ -61,6 +61,13 @@ def test_levers_do_not_double_count_a_disk() -> None:
     assert r["savings_if_all_levers_taken_usd_month"] == round(sum(l["saves_usd_month"] for l in r["levers_largest_first"]), 2) or r["savings_if_all_levers_taken_usd_month"] >= 0
 
 
+def test_snapshots_are_counted_and_a_planned_vm_schedule_lowers_the_bill() -> None:
+    with_snaps = {**INV, "snapshots": [{"name": "s", "storage_bytes": 100 * 2**30}]}
+    assert d1.estimate(with_snaps, billable_7d={})["by_kind"]["snapshots"] == 2.6
+    full, part = d1.estimate(INV, billable_7d={}), d1.estimate(INV, billable_7d={}, vm_hours={"gpu-vm": 182.5})
+    assert part["by_kind"]["gpu"] == round(0.11 * 182.5, 2) and part["estimate_usd_month"] < full["estimate_usd_month"]
+
+
 def test_a_cheap_inventory_within_budget_passes() -> None:
     cheap = {"disks": [{"name": "d", "size_gb": 20, "type": "pd-balanced", "attached_to": ["v"]}],
              "instances": [{"name": "v", "machine_type": "e2-small", "status": "RUNNING", "spot": True, "gpus": [], "external_ip": False}], "cloud_run": [], "addresses": [], "sql": []}

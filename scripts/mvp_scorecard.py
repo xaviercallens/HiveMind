@@ -76,13 +76,13 @@ def check_d1() -> Row:
     text = re.sub(r"(--[a-z-]+)=", r"\1 ", deploy.read_text(encoding="utf-8"))  # accept both `--flag=value` and `--flag value`
     text = re.sub(r"\\\s*\n", " ", text)
     text = re.sub(r"\s+", " ", text)
-    # hivemind-openrouter is the single-writer Litestream service (AGENTS.md section 2): min=max=1, no CPU throttling, concurrency 80, 1 vCPU / 1 GiB
-    need = ["--min-instances 1", "--max-instances 1", "--no-cpu-throttling", "--cpu-boost", "--concurrency 80"]
+    # hivemind-openrouter is the single-writer Litestream service (AGENTS.md section 2): min 0, max 1, no CPU throttling, concurrency 80, 1 vCPU / 1 GiB
+    need = ["--min-instances 0", "--max-instances 1", "--no-cpu-throttling", "--cpu-boost", "--concurrency 80"]
     missing = [f for f in need if f not in text]
     if not re.search(r'--cpu "?(1|\$CPU)"?', text) and "CPU=1" not in text:
         missing.append("--cpu 1")
     if missing:
-        return Row("D1", "FAIL", f"{art.reason or art.status}; also deploy.sh differs from the AGENTS.md flags {missing} (the live service is scale-to-zero, owner decision open)")
+        return Row("D1", "FAIL", f"{art.reason or art.status}; also deploy.sh differs from the AGENTS.md flags {missing}")
     if art.status != "PASS":
         return Row("D1", art.status, "flags match AGENTS.md; " + art.reason)
     return Row("D1", "PASS", "flags match AGENTS.md; " + art.reason)

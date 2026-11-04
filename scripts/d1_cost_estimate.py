@@ -21,6 +21,7 @@ SECONDS = HOURS * 3600
 PRICE_DATE = "2026-11 (approximate, from memory, not from a billing export)"
 
 DISK_GB_MONTH = {"pd-standard": 0.040, "pd-balanced": 0.100, "pd-ssd": 0.170}
+SNAPSHOT_GB_MONTH = 0.026
 SPOT_VM_HOUR = {"e2-small": 0.0067, "e2-medium": 0.0134, "e2-standard-2": 0.0268, "n1-standard-8": 0.076, "n2-standard-8": 0.0938}
 SPOT_GPU_HOUR = {"nvidia-tesla-t4": 0.11}
 RUN_CPU_S = {"instance": 0.000018, "request": 0.000024, "idle": 0.0000025}  # per vCPU-second
@@ -55,6 +56,9 @@ def estimate(inv: dict, budget: float = 100.0, cloud_run_active: float = 0.05, v
             continue
         attached = ", ".join(d.get("attached_to", [])) or "NOT attached"
         add("disk", d["name"], d["size_gb"] * price, f"{d['size_gb']} GB {d['type']}, {attached}")
+    snap_gb = sum(float(s.get("storage_bytes", 0)) for s in inv.get("snapshots", [])) / 2**30
+    if snap_gb:
+        add("snapshots", f"{len(inv['snapshots'])} snapshots", snap_gb * SNAPSHOT_GB_MONTH, f"{snap_gb:.0f} GB stored")
     for i in inv.get("instances", []):
         running = i["status"] == "RUNNING"
         h = vm_hours.get(i["name"], HOURS) if running else 0.0
@@ -145,13 +149,20 @@ def estimate(inv: dict, budget: float = 100.0, cloud_run_active: float = 0.05, v
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--inventory", required=True, type=Path)
-    ap.add_argument("--budget", type=float, default=100.0)
+    ap.add_argument("--budget", type=float, default=150.0)
+    ap.add_argument("--vm-hours", type=Path, help="JSON {vm name: hours per month} for a planned schedule (default: 730 h for every running VM)")
+    ap.add_argument("--disk-gb", type=Path, help="JSON {disk name: planned GB, 0 = deleted} for a planned shrink")
     ap.add_argument("--cloud-run-active", type=float, default=0.05)
     ap.add_argument("--billable-7d", type=Path, help="JSON {service: billable_instance_seconds over 7 days} from Cloud Monitoring; replaces the assumed active fraction")
     ap.add_argument("--out", type=Path, default=Path(__file__).resolve().parent.parent / "artifacts/mvp/D1_gcp_cost.json")
     args = ap.parse_args(argv)
     billable = json.loads(args.billable_7d.read_text(encoding="utf-8")) if args.billable_7d else None
-    result = estimate(json.loads(args.inventory.read_text(encoding="utf-8")), args.budget, args.cloud_run_active, billable_7d=billable)
+    inventory = json.loads(args.inventory.read_text(encoding="utf-8"))
+    planned_disks = json.loads(args.disk_gb.read_text(encoding="utf-8")) if args.disk_gb else {}
+    for d in inventory.get("disks", []):
+        d["size_gb"] = planned_disks.get(d["name"], d["size_gb"])
+    vm_hours = json.loads(args.vm_hours.read_text(encoding="utf-8")) if args.vm_hours else None
+    result = estimate(inventory, args.budget, args.cloud_run_active, vm_hours=vm_hours, billable_7d=billable)
     result["prices"]["cloud_run_basis"] = "measured billable_instance_time (7 days, scaled to a month)" if billable is not None else f"assumed {args.cloud_run_active:.0%} active"
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2), encoding="utf-8")

@@ -2554,7 +2554,7 @@ class ReleaseV3MVPManager:
             "base_engine_tag_url": "https://github.com/xaviercallens/HiveMind/releases/tag/v3.0.0",
             "claude_code_alignment": {
                 "aligned": True,
-                "reference_commits": ["f4d159a", "5eece17", "176a32d", "07f36f5", "37f5ede", "33af036", "ab66fea", "ff394be", "1064b97", "0b89d8f"],
+                "reference_commits": ["6ef7a81", "d9daddb", "7b486e7", "f4d159a", "5eece17", "176a32d", "07f36f5", "37f5ede", "33af036", "ab66fea", "ff394be", "1064b97", "0b89d8f"],
                 "scorecard_summary": "2/11 PASS (A2, B1) • 1 WAIVED (F1) • 3 FAIL (B3, D1, E2) • 5 NOT-RUN (A1, B2, C1, C2, E1)",
                 "owner_decisions_locked": [
                     "1. Model Policy: Serve ONLY models with real measured_results.json / A2_split_moe.json proof",

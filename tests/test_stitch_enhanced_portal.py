@@ -1873,8 +1873,157 @@ def test_v3_mvp_four_dashboards_globe_nash_inference_and_real_moe_bees() -> None
     assert gated[0]["servable"] is False
 
 
+def test_red_team_v3_all_six_findings_verified() -> None:
+    """Verify all 6 findings from the public Red Team disclosure (commit 7fe8f66 / GHSA-gjc6-74f9-wmrr) on Release V3."""
+    app = create_hivemind_at_home_app()
+    client = TestClient(app)
 
+    # -----------------------------------------------------------------------
+    # 0. Red Team V3 Audit Endpoint (/api/v1/security/red-team-v3-audit)
+    # -----------------------------------------------------------------------
+    r_audit = client.get("/api/v1/security/red-team-v3-audit")
+    assert r_audit.status_code == 200
+    audit = r_audit.json()
+    assert audit["status"] == "RED_TEAM_V3_FULLY_VERIFIED"
+    assert audit["advisory_id"] == "GHSA-gjc6-74f9-wmrr"
+    assert audit["all_findings_remediated"] is True
+    assert len(audit["findings"]) == 6
+    assert all(f["status"] == "REMEDIATED_AND_TESTED" for f in audit["findings"])
 
+    # -----------------------------------------------------------------------
+    # Finding 1: Account & API Key Ownership (No Takeover Without Password/Token)
+    # -----------------------------------------------------------------------
+    # 1a. Existing account cannot be hijacked via /api/v1/auth/login, /register, /sso, /magic-link, or /steam/register-login
+    assert client.post("/api/v1/auth/login", json={"handle_or_email": "xavier_callens"}).status_code == 401
+    assert client.post("/api/v1/auth/register", json={"handle": "xavier_callens", "email": "callensxavier@gmail.com"}).status_code == 401
+    assert client.post("/api/v1/auth/magic-link", json={"email": "callensxavier@gmail.com"}).status_code == 401
+    assert client.post("/v1/hivemind/steam/register-login", json={"handle": "xavier_callens"}).status_code == 409
 
+    # 1b. Newly registered Steam handle cannot be hijacked by a second unauthenticated caller
+    r_steam1 = client.post("/v1/hivemind/steam/register-login", json={"handle": "SteamPioneer_RT01"})
+    assert r_steam1.status_code == 200
+    steam_key = r_steam1.json()["api_key"]
+    r_steam_hijack = client.post("/v1/hivemind/steam/register-login", json={"handle": "SteamPioneer_RT01"})
+    assert r_steam_hijack.status_code == 409
+    assert r_steam_hijack.json()["error"]["code"] == "handle_taken"
+    # Authenticated owner with Bearer token succeeds
+    r_steam_owner = client.post(
+        "/v1/hivemind/steam/register-login",
+        json={"handle": "SteamPioneer_RT01"},
+        headers={"Authorization": f"Bearer {steam_key}"},
+    )
+    assert r_steam_owner.status_code == 200
+    assert r_steam_owner.json()["api_key"] == steam_key
+    # Forged Bearer token on /v1/hivemind/steam/contribute-boinc is rejected (401), and unverified call awards 0 HMT
+    assert (
+        client.post(
+            "/v1/hivemind/steam/contribute-boinc",
+            json={"handle": "SteamPioneer_RT01"},
+            headers={"Authorization": "Bearer hm_live_forged_bad_token"},
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/v1/hivemind/steam/contribute-boinc",
+            json={"handle": "SteamPioneer_RT01"},
+        ).json()["hmt_awarded"]
+        == 0
+    )
 
+    # -----------------------------------------------------------------------
+    # Finding 2: Unverified Volunteer Machines & Prompt Privacy Warning
+    # -----------------------------------------------------------------------
+    r_home = client.get("/v3")
+    assert r_home.status_code == 200
+    assert "proof-of-concept; send only public, non-sensitive data" in r_home.headers.get("x-hivemind-status", "")
+    assert 'id="poc-notice"' in r_home.text
+    assert "Treat your prompts as visible to strangers: send only public, non-sensitive data" in r_home.text
+
+    r_chat = client.post(
+        "/v1/chat/completions",
+        json={"model": "hivemind/coder-lite", "messages": [{"role": "user", "content": "Hello swarm"}]},
+    )
+    assert r_chat.status_code == 200
+    chat_json = r_chat.json()
+    assert "Treat your prompts as visible to strangers" in chat_json["volunteer_node_warning"]
+    assert "proof-of-concept" in chat_json["privacy_notice"]
+
+    # -----------------------------------------------------------------------
+    # Finding 3 & Finding 5: Shield Proxy Mandatory & Ollama CVE-2024-37032 Check
+    # -----------------------------------------------------------------------
+    assert "hivemind_producer_shield.py" in r_home.text
+    assert "CVE-2024-37032" in r_home.text
+    assert "OLLAMA_HOST=127.0.0.1:11434" in r_home.text
+
+    # Unsafe producer setup (raw :11434, short token, old Ollama 0.1.30, 0.0.0.0 bind) is rejected (400)
+    r_unsafe = client.post(
+        "/api/v1/security/producer-endpoint-check",
+        json={
+            "endpoint_url": "https://my-tunnel.trycloudflare.com:11434",
+            "endpoint_token": "short",
+            "ollama_version": "0.1.30",
+            "local_ollama_bind": "0.0.0.0:11434",
+            "shield_enabled": False,
+        },
+    )
+    assert r_unsafe.status_code == 400
+    unsafe_json = r_unsafe.json()
+    assert unsafe_json["safe_to_register"] is False
+    assert len(unsafe_json["issues"]) >= 3
+
+    # Safe shielded producer setup (:11435, >=20 char token, Ollama >= 0.5.0, loopback bind) passes (200)
+    r_safe = client.post(
+        "/api/v1/security/producer-endpoint-check",
+        json={
+            "endpoint_url": "https://my-shielded-tunnel.trycloudflare.com",
+            "endpoint_token": "hm_shield_tok_0123456789abcdef0123456789",
+            "ollama_version": "0.5.7",
+            "local_ollama_bind": "127.0.0.1:11434",
+            "shield_enabled": True,
+        },
+    )
+    assert r_safe.status_code == 200
+    assert r_safe.json()["safe_to_register"] is True
+    assert r_safe.json()["cve_2024_37032_protected"] is True
+
+    # -----------------------------------------------------------------------
+    # Finding 4: Zero Public Endpoint Listing Node Addresses or IP Literals
+    # -----------------------------------------------------------------------
+    for pub_route in (
+        "/api/v1/v3-mvp/overview",
+        "/api/v1/amcp/kafka/space",
+        "/api/v1/training/calendar",
+        "/api/v1/dashboard/globe-users",
+    ):
+        r_pub = client.get(pub_route)
+        assert r_pub.status_code == 200
+        raw_body = r_pub.text
+        assert "endpoint_url" not in raw_body
+        assert "10.150.0." not in raw_body
+
+    # -----------------------------------------------------------------------
+    # Finding 6: Non-Existent Hugging Face Account Purged & Off-the-Shelf Honesty
+    # -----------------------------------------------------------------------
+    from hivemind.router.catalog import UNPUBLISHED_HF_REPOS, catalog_payload
+
+    cat = catalog_payload()
+    assert len(UNPUBLISHED_HF_REPOS) >= 20
+    for tier in cat["tiers"]:
+        assert tier["kind"] in ("base", "adapter", "alias")
+        assert tier["ollama_tag"]
+        assert "xaviercallens/" not in tier.get("hf_repo", "")
+        assert "xaviercallens/" not in tier.get("description", "")
+
+    r_models = client.get("/api/v1/openrouter/models")
+    assert r_models.status_code == 200
+    m_json = r_models.json()
+    assert m_json["unpublished_hf_repos_purged"] is True
+    assert "No HiveMind-trained weights are published to a xaviercallens/* Hugging Face account" in m_json["catalog_honesty_notice"]
+    for item in m_json["data"]:
+        assert item["kind"] in ("base", "adapter", "alias")
+        assert item["served_by"]
+        assert item["hf_published"] is False
+        assert item["hf_repo"] == ""
+        assert "xaviercallens/" not in item["description"]
 

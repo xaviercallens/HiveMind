@@ -807,6 +807,27 @@ def render_stitch_enhanced_portal(
       </section>
 
       <!-- =================================================================== -->
+      <!-- RED TEAM SECURITY & VOLUNTEER NODE PROMPT PRIVACY BANNER (GHSA-gjc6-74f9-wmrr) -->
+      <!-- =================================================================== -->
+      <section id="poc-notice" data-testid="poc-notice" role="note" class="glass-panel p-4 sm:p-5 rounded-2xl border-2 border-amber-400/70 bg-slate-950/95 space-y-2 font-mono text-xs">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="text-amber-300 font-extrabold text-sm flex items-center gap-2">
+            <span>🛡️</span>
+            <span>PROOF-OF-CONCEPT SECURITY &amp; VOLUNTEER NODE PRIVACY NOTICE (GHSA-gjc6-74f9-wmrr VERIFIED ON V3)</span>
+          </div>
+          <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400 text-emerald-300 text-[10px] font-bold">
+            6/6 RED TEAM CONTROLS ACTIVE
+          </span>
+        </div>
+        <p class="text-slate-200 leading-relaxed font-sans text-xs">
+          <strong>1. Prompt Privacy (Unverified Volunteer Machines):</strong> Prompts sent through <code>/v1/chat/completions</code> are routed to volunteer GPU nodes whose operators are not hardware-attested. <strong>Treat your prompts as visible to strangers: send only public, non-sensitive data (no private data, no client code, no secrets).</strong><br/>
+          <strong>2. Account &amp; API Key Protection:</strong> Existing handles require <code>Authorization: Bearer &lt;token&gt;</code> or <code>PBKDF2-HMAC-SHA256</code> password verification (rate-limited at 8 attempts/60s). Never reuse a password you use on another site.<br/>
+          <strong>3. GPU Node Operators (<code>CVE-2024-37032</code> &amp; Shield Proxy):</strong> Never expose raw Ollama port <code>:11434</code> to a public tunnel. Bind Ollama to loopback (<code>OLLAMA_HOST=127.0.0.1:11434</code>), update Ollama to <code>&ge; 0.5.0</code>, and run <code>scripts/hivemind_producer_shield.py</code> on <code>:11435</code> with a <code>&ge; 20</code>-char Bearer token. Zero node URLs or IPs are listed on public endpoints.<br/>
+          <strong>4. Model Catalog Honesty:</strong> No custom weights are published to a <code>xaviercallens/*</code> Hugging Face account; gateway tiers explicitly declare the off-the-shelf <code>served_by</code> model that volunteers download or the local verified checkpoint in <code>measured_results.json</code>.
+        </p>
+      </section>
+
+      <!-- =================================================================== -->
       <!-- RELEASE V3.0.0 MVP COMMAND CENTER, KAFKA SPACE, CALENDAR & 4 DASHBOARDS -->
       <!-- =================================================================== -->
       <section id="v3-mvp-command-center" data-testid="v3-mvp-command-center" class="glass-panel p-6 sm:p-8 rounded-2xl border-2 border-cyan-400/60 bg-gradient-to-br from-slate-950/95 via-[#071224]/95 to-emerald-950/30 shadow-2xl space-y-8 font-mono">
@@ -849,7 +870,7 @@ def render_stitch_enhanced_portal(
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-[11px]">
             <div class="p-3 rounded-xl bg-slate-900/90 border border-cyan-500/40 space-y-1">
               <div class="text-cyan-300 font-bold">1. AMCP v1.5 Kafka KRaft Cluster</div>
-              <div class="text-slate-300">3 Voters: <code>hm-kafka-1</code> (10.150.0.13), <code>hm-kafka-2</code> (10.150.0.14), <code>hm-kafka-3</code> (10.150.0.11) &bull; <code>scripts/kafka_voters.sh</code></div>
+              <div class="text-slate-300">3 Voters: <code>hm-kafka-1</code>, <code>hm-kafka-2</code>, <code>hm-kafka-3</code> (<code>vpc-internal:9092</code>) &bull; <code>scripts/kafka_voters.sh</code></div>
             </div>
             <div class="p-3 rounded-xl bg-slate-900/90 border border-emerald-500/40 space-y-1">
               <div class="text-emerald-300 font-bold">2. BOINC Server &amp; B3 Gate</div>
@@ -2489,23 +2510,24 @@ def render_stitch_enhanced_portal(
             </div>
           </div>
 
-          <!-- Method 3: Docker / Container Bee -->
+          <!-- Method 3: Shielded Ollama / Docker Producer Bee (CVE-2024-37032 Safe) -->
           <div class="glass-panel p-6 rounded-2xl border border-outline/40 space-y-3">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2 text-tertiary font-bold text-sm">
-                <span class="material-symbols-outlined">terminal</span>
-                <span>3. One-Line Docker / Ollama Bee</span>
+                <span class="material-symbols-outlined">shield_lock</span>
+                <span>3. Shielded Ollama Producer Bee</span>
               </div>
-              <span class="px-2 py-0.5 rounded bg-tertiary/20 text-tertiary text-[10px]">CONTAINER</span>
+              <span class="px-2 py-0.5 rounded bg-tertiary/20 text-tertiary text-[10px]">SHIELD + CVE-2024-37032 SAFE</span>
             </div>
             <p class="text-on-surface-variant text-[11px] leading-relaxed">
-              Launch an autonomous worker bee on your server, homelab, or cloud VM with a single docker command:
+              <strong>Mandatory Security:</strong> Update Ollama to <code>&ge; 0.5.0</code> (patches <code>CVE-2024-37032</code>), bind Ollama to loopback (<code>127.0.0.1:11434</code>), and place <code>hivemind_producer_shield.py</code> on <code>:11435</code> in front of your tunnel (never expose <code>:11434</code>):
             </p>
             <pre class="bg-surface-container p-2.5 rounded-lg text-[10px] text-tertiary overflow-x-auto">
-docker run -d --gpus all \\
-  -e SWARM_GATEWAY="{api_prefix}" \\
-  -e DOMAIN="astrophysics" \\
-  hivemind/bee-expert:latest</pre>
+# 1) Loopback-only Ollama (&ge; 0.5.0 for CVE-2024-37032)
+OLLAMA_HOST=127.0.0.1:11434 ollama serve &amp;
+# 2) Mandatory Bearer-authenticated Shield Proxy on :11435
+export HIVEMIND_SHIELD_TOKEN="$(openssl rand -hex 24)"
+python3 scripts/hivemind_producer_shield.py --listen 127.0.0.1:11435 --upstream http://127.0.0.1:11434</pre>
           </div>
 
           <!-- Method 4: Custom QLoRA Adapter Swarm -->

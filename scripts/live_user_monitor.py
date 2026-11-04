@@ -203,7 +203,18 @@ def _chat(client: httpx.Client, base: str, key: str, model: str, messages: list[
     return status, "".join(parts), time.monotonic() - t0
 
 
-def run_probes(key: str, bee_item: dict[str, Any], services: dict[str, str]) -> dict[str, Any]:
+def probe_ok(model: str, status: int, check_passed: bool, retired: frozenset[str]) -> bool:
+    """A probe passes when it answers correctly; a model the owner declared retired passes only while it answers 404.
+
+    The retired set is declared by the caller, never inferred from /v1/models: a live model that silently vanishes from
+    the list is exactly the outage this probe exists to catch. A declared-retired model that answers 200 again fails, so
+    the declaration cannot go stale unnoticed."""
+    if model in retired:
+        return status == 404
+    return status == 200 and check_passed
+
+
+def run_probes(key: str, bee_item: dict[str, Any], services: dict[str, str], retired: frozenset[str] = frozenset()) -> dict[str, Any]:
     gold_reply = bee_item["expected_reply"]
     controls = checker_controls(gold_reply)
     if not all(controls.values()):
@@ -222,7 +233,7 @@ def run_probes(key: str, bee_item: dict[str, Any], services: dict[str, str]) -> 
                 except httpx.HTTPError as exc:
                     status, text, secs = 0, f"{type(exc).__name__}", 0.0
                 results.append({"service": svc, "model": model, "stream": stream, "status": status, "secs": round(secs, 2),
-                                "ok": status == 200 and check(text), "reply_head": text[:80]})
+                                "ok": probe_ok(model, status, check(text), retired), "retired": model in retired, "reply_head": text[:80]})
             unknown = client.post(base + "/v1/chat/completions", headers={"Authorization": f"Bearer {key}"},
                                   json={"model": "hivemind/no-such-model", "messages": [{"role": "user", "content": "hi"}]})
             nokey = client.post(base + "/v1/chat/completions", json={"model": "hivemind/auto", "messages": [{"role": "user", "content": "hi"}]})
@@ -278,6 +289,7 @@ def main() -> int:
     parser.add_argument("--out", type=Path, required=True, help="JSONL file; one line is appended per run")
     parser.add_argument("--since", default="", help="ISO time for the traffic window (default: one hour ago)")
     parser.add_argument("--no-probes", action="store_true", help="traffic summary only")
+    parser.add_argument("--retired-models", default="", help="comma-separated model ids the owner retired on purpose: their probe passes only while it answers 404")
     parser.add_argument("--admin-key-file", type=Path, help="file holding the router's admin key: adds real and test user counts to the record")
     parser.add_argument("--t4", action="store_true", help="add the T4 node's serving/training state (via gcloud compute ssh)")
     args = parser.parse_args()
@@ -286,7 +298,8 @@ def main() -> int:
     code = 0
     if not args.no_probes:
         bee_item = json.loads(Path(BEE_ITEM_PATH).read_text(encoding="utf-8"))
-        probes = run_probes(args.key_file.read_text(encoding="utf-8").strip(), bee_item, SERVICES)
+        probes = run_probes(args.key_file.read_text(encoding="utf-8").strip(), bee_item, SERVICES,
+                             frozenset(m.strip() for m in args.retired_models.split(",") if m.strip()))
         record["probes"] = probes
         if not probes["valid"]:
             code = 2

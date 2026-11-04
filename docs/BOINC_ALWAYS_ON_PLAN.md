@@ -4,6 +4,8 @@
 
 Owner decision (2026-11-04): the BOINC server moves off the T4 VM, which will run only 17:00-22:00 Paris, and work is delegated to HiveMinder trainers and producers, and the T4 when it is on.
 
+Later the same day: the RTX 2070 serves `coder-lite` and `granite-moe` all the time and may train during the European night (22:00-07:00 Paris), yielding to inference; volunteers are welcome for both inference and training. That needs this server to be publicly reachable.
+
 ## What needs a GPU and what does not
 
 | Part | GPU? | Where |

@@ -96,6 +96,7 @@ LOGIN_LIMIT = 10  # password logins per client per window: slows online password
 LOGIN_WINDOW_S = 60.0
 AMCP_PUBLISH_LIMIT = 30  # bus events per account per window: the bus is for coordination, not bulk traffic
 AMCP_PUBLISH_WINDOW_S = 60.0
+USAGE_CAPTURE_TTL_S = 60.0  # the anonymous usage-capture summary is recomputed at most once per window bucket per this many seconds
 CAMPAIGN_POLL_LIMIT = 20  # poll votes per account per window: every vote writes a never-pruned bus event, so it needs the same guard as /amcp/publish
 MAX_BODY_BYTES = 4_000_000
 MAX_PRICE_CEILING = 1_000.0
@@ -904,6 +905,7 @@ def create_router_app(
     register_limiter = SlidingWindowLimiter(REGISTER_LIMIT, REGISTER_WINDOW_S)
     login_limiter = SlidingWindowLimiter(LOGIN_LIMIT, LOGIN_WINDOW_S)
     amcp_publish_limiter = SlidingWindowLimiter(AMCP_PUBLISH_LIMIT, AMCP_PUBLISH_WINDOW_S)
+    usage_capture_cache: dict[int, tuple[float, dict[str, Any]]] = {}
     campaign_poll_limiter = SlidingWindowLimiter(CAMPAIGN_POLL_LIMIT, AMCP_PUBLISH_WINDOW_S)
     market_cache: dict[tuple[str, int], dict[str, Any]] = {}
     market_lock = threading.Lock()
@@ -2597,7 +2599,17 @@ def create_router_app(
         """Public anonymized usage & adoption telemetry (domains, French vs English share, client SDKs, latency, MoE weights)."""
         if not math.isfinite(window_s) or window_s < 0.0:
             raise RouterError(400, "window_s must be a finite number of seconds, zero or more.", "invalid_request_error", "invalid_request")
-        return store.usage_capture_summary(now_utc=clock(), window_s=min(window_s, 30 * 86_400.0))
+        # The summary scans every telemetry row under the store lock (about 3 s at 100,000 rows) for an anonymous caller, so it is
+        # cached per whole-minute window bucket for USAGE_CAPTURE_TTL_S; the bucket count is bounded by the 30-day clamp.
+        now = clock()
+        window = min(window_s, 30 * 86_400.0)
+        key = int(window // 60.0)
+        hit = usage_capture_cache.get(key)
+        if hit is not None and 0.0 <= now - hit[0] < USAGE_CAPTURE_TTL_S:
+            return hit[1]
+        summary = store.usage_capture_summary(now_utc=now, window_s=window)
+        usage_capture_cache[key] = (now, summary)
+        return summary
 
     @app.post("/v1/hivemind/feedback")
     def submit_feedback(request: Request, payload: FeedbackRequest) -> dict[str, Any]:

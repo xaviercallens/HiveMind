@@ -1684,6 +1684,11 @@ class RouterStore:
         vram = max(0.0, min(float(pledged_vram_gb), 1024.0)) if math.isfinite(pledged_vram_gb) else 0.0
         clean_comment = str(comment).strip()[:256]
         with self._tx() as conn:
+            previous = conn.execute(
+                "SELECT participant_kind, pledged_vram_gb, availability_slot, comment FROM campaign_poll_votes WHERE account_id=? AND subject_id=?",
+                (str(account_id), str(subject_id)[:64]),
+            ).fetchone()
+            changed = previous is None or (previous[0], previous[1], previous[2], previous[3]) != (str(participant_kind)[:32], vram, str(availability_slot)[:32], clean_comment)
             conn.execute(
                 "INSERT INTO campaign_poll_votes(account_id, subject_id, participant_handle, participant_kind, "
                 "pledged_vram_gb, availability_slot, comment, utc) VALUES (?,?,?,?,?,?,?,?) "
@@ -1710,6 +1715,7 @@ class RouterStore:
             "availability_slot": availability_slot,
             "comment": clean_comment,
             "utc": stamp,
+            "changed": changed,  # False when an identical vote was re-sent: callers publish a bus event only for a real change
         }
 
     def list_campaign_poll_votes(self) -> list[dict[str, Any]]:

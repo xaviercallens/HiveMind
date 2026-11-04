@@ -2674,37 +2674,39 @@ def create_router_app(
             comment=payload.comment,
             now_utc=clock(),
         )
-        ev = build_amcp_kafka_event(
-            topic_key="campaigns",
-            event_type="io.hivemind.amcp.campaign.poll_registered",
-            sender_id=account.handle,
-            sender_kind=payload.participant_kind,
-            recipient_id="broadcast",
-            subject_id=payload.subject_id,
-            payload={
-                "pledged_vram_gb": payload.pledged_vram_gb,
-                "availability_slot": payload.availability_slot,
-                "comment": payload.comment,
-            },
-            now_utc=clock(),
-        )
-        store.record_amcp_kafka_event(
-            event_id=ev.event_id,
-            topic=ev.topic,
-            event_type=ev.event_type,
-            sender_id=ev.sender_id,
-            sender_kind=ev.sender_kind,
-            recipient_id=ev.recipient_id,
-            subject_id=ev.subject_id,
-            correlation_id=ev.correlation_id,
-            payload=ev.payload,
-            now_utc=ev.utc,
-        )
+        ev = None
+        if vote["changed"]:  # an identical re-vote writes no new never-pruned bus event
+            ev = build_amcp_kafka_event(
+                topic_key="campaigns",
+                event_type="io.hivemind.amcp.campaign.poll_registered",
+                sender_id=account.handle,
+                sender_kind=payload.participant_kind,
+                recipient_id="broadcast",
+                subject_id=payload.subject_id,
+                payload={
+                    "pledged_vram_gb": payload.pledged_vram_gb,
+                    "availability_slot": payload.availability_slot,
+                    "comment": payload.comment,
+                },
+                now_utc=clock(),
+            )
+            store.record_amcp_kafka_event(
+                event_id=ev.event_id,
+                topic=ev.topic,
+                event_type=ev.event_type,
+                sender_id=ev.sender_id,
+                sender_kind=ev.sender_kind,
+                recipient_id=ev.recipient_id,
+                subject_id=ev.subject_id,
+                correlation_id=ev.correlation_id,
+                payload=ev.payload,
+                now_utc=ev.utc,
+            )
         summary = compute_campaign_poll_summary(store.list_campaign_poll_votes())
         return {
             "object": "hivemind.campaign_poll_receipt",
             "registration": vote,
-            "amcp_event": ev.to_dict(),
+            "amcp_event": ev.to_dict() if ev is not None else None,
             "poll_summary": summary,
         }
 

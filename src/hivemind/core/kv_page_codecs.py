@@ -69,6 +69,13 @@ def _require_encodable(codec: str, page: Tensor, *side: Tensor) -> None:
         raise ValueError(f"{codec}: per-row side information overflows fp16 (page magnitude above 65504)")
 
 
+def _require_not_underflowed(codec: str, page: Tensor, stored_scale: Tensor) -> None:
+    """Refuse a nonzero row whose fp16 side information collapsed to zero: it would decode to zeros while payload_bits still reports a cost."""
+    nonzero_row = page.abs().amax(dim=-1, keepdim=True) > 0
+    if bool((nonzero_row & (stored_scale == 0)).any()):
+        raise ValueError(f"{codec}: per-row magnitude underflows fp16 (below about 6e-8); the page would decode to zeros")
+
+
 class IntMinMaxPageCodec:
     """Asymmetric per-row min-max integer quantiser: ``2**bits`` levels, fp16 min and max stored per row."""
 
@@ -83,6 +90,7 @@ class IntMinMaxPageCodec:
         mn = x.amin(dim=-1, keepdim=True).to(torch.float16)
         mx = x.amax(dim=-1, keepdim=True).to(torch.float16)
         _require_encodable(self.name, x, mn, mx)
+        _require_not_underflowed(self.name, x, torch.maximum(mn.abs(), mx.abs()))
         step = ((mx.to(torch.float32) - mn.to(torch.float32)) / float((1 << self.bits) - 1)).clamp_min(1e-12)
         codes = torch.round((x - mn.to(torch.float32)) / step).clamp(0, (1 << self.bits) - 1)
         return codes.to(torch.int32), mn, mx
@@ -118,7 +126,10 @@ class LatticePageCodec:
 
     def encode(self, page: Tensor) -> Dict[str, Any]:
         x = page.detach().to(torch.float64)
-        rms = x.pow(2).mean(dim=-1, keepdim=True).sqrt().clamp_min(1e-6).to(torch.float16)
+        true_rms = x.pow(2).mean(dim=-1, keepdim=True).sqrt()
+        if bool(((true_rms > 0) & (true_rms < 1e-6)).any()):  # the 1e-6 floor below would hide it: the row quantises to zeros
+            raise ValueError(f"{self.name}: per-row RMS below 1e-6 would decode to zeros")
+        rms = true_rms.clamp_min(1e-6).to(torch.float16)
         _require_encodable(self.name, x, rms)
         rows, ctx = to_rows(self.kind, x / rms.to(torch.float64))
         c = DECODERS_T[self.kind](rows / self.scale)

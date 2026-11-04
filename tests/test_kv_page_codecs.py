@@ -130,3 +130,14 @@ def test_encode_refuses_nan_and_fp16_overflow_but_accepts_a_normal_page(codec) -
         codec.encode(nan_page)
     with pytest.raises(ValueError):
         codec.encode(ok * 1e6)  # RMS / min / max above fp16's 65504 overflow the stored side information
+
+
+@pytest.mark.parametrize("codec", [IntMinMaxPageCodec(8), LatticePageCodec("Z", 1.0), LatticePageCodec("A2", 1.0), LatticePageCodec("E8", 1.0)])
+def test_encode_refuses_a_page_that_would_decode_to_zeros_but_keeps_an_all_zero_page(codec) -> None:
+    g = torch.Generator().manual_seed(1)
+    with pytest.raises(ValueError):
+        codec.encode(torch.randn(4, 16, generator=g) * 1e-8)
+    zero = codec.decode(codec.encode(torch.zeros(4, 16)), torch.float32)  # an all-zero page is legitimate and round-trips
+    assert torch.count_nonzero(zero) == 0
+    ok = torch.randn(4, 16, generator=g)
+    assert torch.count_nonzero(codec.decode(codec.encode(ok), torch.float32)) > 0

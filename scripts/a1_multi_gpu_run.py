@@ -90,6 +90,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--restore-cmd", required=True)
     ap.add_argument("--requests", type=int, default=24)
     ap.add_argument("--workers", type=int, default=6)
+    ap.add_argument("--workers-after", type=int, help="concurrency after the kill (default --workers); keep it within what the survivor can carry alone")
+    ap.add_argument("--note", default="", help="recorded in the artifact")
     ap.add_argument("--max-tokens", type=int, default=16)
     ap.add_argument("--settle-s", type=float, default=2.0)
     ap.add_argument("--out", type=Path, default=Path(__file__).resolve().parent.parent / "artifacts/mvp/A1_multi_gpu_serving.json")
@@ -102,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
     kill = subprocess.run(a.kill_cmd, shell=True, capture_output=True, text=True)  # noqa: S602 - the operator's own command line
     time.sleep(a.settle_s)
     try:
-        after_rows = burst(client, a.model, a.requests, a.workers, a.max_tokens)
+        after_rows = burst(client, a.model, a.requests, a.workers_after or a.workers, a.max_tokens)
     finally:
         restore = subprocess.run(a.restore_cmd, shell=True, capture_output=True, text=True)  # noqa: S602
     time.sleep(3)
@@ -111,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
     passed, problems = decide(before, after, killed, survivor, start_balance - end_balance)
     if kill.returncode:
         passed, problems = False, [f"kill command failed: {kill.stderr[:100]}", *problems]
-    result = {"criterion": "A1", "model": a.model, "gateway_revision_note": "production gateway", "producers": producers, "killed": killed, "kill_cmd": a.kill_cmd,
+    result = {"criterion": "A1", "model": a.model, "gateway_revision_note": "production gateway", "note": a.note, "workers": a.workers, "workers_after": a.workers_after or a.workers, "producers": producers, "killed": killed, "kill_cmd": a.kill_cmd,
               "distinct_gpus": sum(1 for p in producers if before["answered_by"].get(p)), "before_kill": before, "after_kill": after,
               "balance_delta_hmt": round(start_balance - end_balance, 6), "restore_exit": restore.returncode, "passed": passed, "reason": "; ".join(problems)}
     a.out.parent.mkdir(parents=True, exist_ok=True)

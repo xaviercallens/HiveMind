@@ -364,6 +364,9 @@ def verify_receipt(receipt: LossCheckReceipt, *, evaluator_keys: Mapping[str, by
         if not idx:
             continue
         got = recompute(which, [receipt.starts[i] for i in idx])
+        # zip() would silently verify fewer windows than were picked (or none): a short or non-finite answer verifies nothing.
+        if len(got) != len(idx) or not all(math.isfinite(float(g)) for g in got):
+            return LossCheckVerdict(False, "REJECTED_RECOMPUTE_INCOMPLETE")
         claimed = receipt.losses_before if which == "before" else receipt.losses_after
         for i, g in zip(idx, got):
             checked.append({"which": which, "window": i, "start": receipt.starts[i], "claimed": claimed[i], "recomputed": float(g),

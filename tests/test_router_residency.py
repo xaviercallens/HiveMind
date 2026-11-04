@@ -135,8 +135,9 @@ def test_unknown_ranks_after_loaded_but_before_not_loaded(w: World) -> None:
     _, _, unknown = add_producer(w, "unknown.test")
     _, _, hot = add_producer(w, "hot.test", loaded=True, agent=FakeProducer(explode=True))
     for _ in range(4):
-        assert w.chat(ckey, f"hivemind/{MODEL}").status_code == 200  # hot fails first, the fallback is the unknown producer
-    assert len(hot.calls) == 4 and len(unknown.calls) == 4 and not cold.calls
+        assert w.chat(ckey, f"hivemind/{MODEL}").status_code == 200  # the fallback is the unknown producer, never the known-not-loaded one
+    # the first request tries the loaded producer first (residency rank), it fails, and it then cools down: later requests go to the unknown producer directly
+    assert len(hot.calls) == 1 and len(unknown.calls) == 4 and not cold.calls
 
 
 # ------------------------------------------------------------------------------------------ model_loading

@@ -81,6 +81,7 @@ LOGGER = logging.getLogger("hivemind.router.gateway")
 MODEL_PREFIX = "hivemind/"
 AUTO_MODEL = "auto"
 PRODUCER_TTL_S = 120.0
+ENDPOINT_COOLDOWN_S = 10.0  # after a failed request an endpoint is tried last for this long (MVP criterion A1: failover without paying a failed attempt first)
 PRODUCER_TIMEOUT_S = 120.0
 DEFAULT_COLD_START_WAIT_BUDGET_S = 20.0  # forward to a known-unloaded model only when it is expected to load within this
 DEFAULT_COLD_START_S = 60.0  # assumed load time of a model reported not loaded without a cold_start_s estimate
@@ -1168,7 +1169,7 @@ def create_router_app(
                 candidates.extend(by_url[u] for u in rotation.order(f"{model_id}|{a}", shares))
             else:
                 candidates.append(servers[0])
-        candidates.sort(key=lambda r: _residency_rank(r, model_id))  # stable: loaded, then unknown, then known-not-loaded; rotation order kept within a rank
+        candidates.sort(key=lambda r: (_cooling(r), _residency_rank(r, model_id)))  # cooling endpoints last; then: loaded, then unknown, then known-not-loaded; rotation order kept within a rank
         return _Plan(
             request_id=request_id,
             model_id=model_id,
@@ -1267,6 +1268,21 @@ def create_router_app(
             return RouterError(504, "The producer did not answer in time; you were not charged.", "api_error", "upstream_timeout")
         return RouterError(502, "Every producer for this model failed; you were not charged.", "api_error", "upstream_failure")
 
+    cooldown_until: dict[str, float] = {}
+    cooldown_lock = threading.Lock()
+
+    def _cooling(record: ProducerRecord) -> bool:
+        with cooldown_lock:
+            return cooldown_until.get(record.endpoint_url, 0.0) > clock()
+
+    def _mark_failed(record: ProducerRecord) -> None:
+        with cooldown_lock:
+            cooldown_until[record.endpoint_url] = clock() + ENDPOINT_COOLDOWN_S
+
+    def _mark_ok(record: ProducerRecord) -> None:
+        with cooldown_lock:
+            cooldown_until.pop(record.endpoint_url, None)
+
     def chat_blocking(plan: _Plan, account: Account, body: Mapping[str, Any]) -> JSONResponse:
         timed_out: ProducerRecord | None = None
         for record in plan.candidates:
@@ -1288,7 +1304,9 @@ def create_router_app(
                     timed_out = record
             if not isinstance(payload, dict) or not has_completion_choice(payload):
                 LOGGER.warning("producer %s failed request %s", record.account_id, plan.request_id)
+                _mark_failed(record)
                 continue
+            _mark_ok(record)
             reported = _usage_pair(payload)
             cbytes = completion_byte_count(payload, delta=False)
             if reported is None:
@@ -1319,11 +1337,14 @@ def create_router_app(
                 if isinstance(exc, httpx.TimeoutException) and timed_out is None:
                     timed_out = record
                 LOGGER.warning("producer %s failed request %s", record.account_id, plan.request_id)
+                _mark_failed(record)
                 continue
             if upstream.status_code != 200:
                 upstream.close()
                 LOGGER.warning("producer %s answered %s for %s", record.account_id, upstream.status_code, plan.request_id)
+                _mark_failed(record)
                 continue
+            _mark_ok(record)
             return StreamingResponse(_stream_body(plan, account, record.account_id, upstream), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
         raise upstream_exhausted(plan, timed_out)
 

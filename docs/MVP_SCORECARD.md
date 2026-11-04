@@ -10,7 +10,7 @@
 | A2 | One MoE split across 2 hosts, token-identical to single host | **NOT-RUN** | no artifacts/mvp/A2_*.json yet |
 | B1 | Custom dataset -> signed shards + held-out split | **NOT-RUN** | no artifacts/mvp/B1_*.json yet |
 | B2 | OpenDiLoCo-style QLoRA rounds on >= 2 physical hosts | **NOT-RUN** | no artifacts/mvp/B2_*.json yet |
-| B3 | Trained adapter passes the train-to-serve gate | **FAIL** | GRANITE_ADAPTER_hmq_00147_gate_f16.json: servable=False gain=-0.00168 ci=[-0.01437, 0.01201] |
+| B3 | Trained adapter passes the train-to-serve gate | **FAIL** | GRANITE_ADAPTER_hmq_00147_gate_f16_independent_chunks.json: servable=False gain=-0.00403 ci=[-0.01758, 0.00893] |
 | C1 | AMCP events on a 3-voter Kafka cluster survive a voter loss | **NOT-RUN** | no artifacts/mvp/C1_*.json yet |
 | C2 | Registered adapter is routed by domain; failed-gate adapters refused | **NOT-RUN** | no artifacts/mvp/C2_*.json yet |
 | D1 | GCP control plane follows the low-cost rules; cost estimate recorded | **FAIL** | deploy.sh lacks AGENTS.md flags: ['--min-instances 1', '--no-cpu-throttling', '--concurrency 80'] |

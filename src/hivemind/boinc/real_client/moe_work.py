@@ -112,6 +112,24 @@ def _chunks(ids: list[int], seq_len: int, n: int) -> list[list[int]]:
     return [ids[i * seq_len : (i + 1) * seq_len] for i in range(min(n, len(ids) // seq_len))]
 
 
+def load_custom_shards(custom_dir: Path | str, secret: bytes | None = None) -> tuple[list[list[int]], list[list[int]], dict[str, Any]]:
+    """Read shards written by ``scripts/make_custom_shards.py`` and verify them against the manifest (sha256 of both files, HMAC of the training shard).
+    Any mismatch raises: a tampered or truncated shard never becomes a workunit."""
+    import hashlib
+    import hmac
+
+    d = Path(custom_dir)
+    manifest = json.loads((d / "manifest.json").read_text(encoding="utf-8"))
+    train_bytes, held_bytes = (d / "train.json").read_bytes(), (d / "heldout.json").read_bytes()
+    if hashlib.sha256(train_bytes).hexdigest() != manifest["train_sha256"] or hashlib.sha256(held_bytes).hexdigest() != manifest["heldout_sha256"]:
+        raise ValueError(f"custom shards in {d} do not match their manifest (sha256)")
+    if secret is not None:
+        _, sig = sign_shard_bytes(train_bytes, int(manifest["seed"]), secret)
+        if not hmac.compare_digest(sig, manifest["train_hmac_signature"]):
+            raise ValueError(f"custom shards in {d} fail the HMAC check (wrong secret or tampered)")
+    return json.loads(train_bytes), json.loads(held_bytes), manifest
+
+
 def build_train_spec(
     wu_id: str,
     shard_index: int = 0,
@@ -130,22 +148,37 @@ def build_train_spec(
     start_adapter_sha256: str | None = None,
     domain: str = "general",
     profile: str | None = None,
+    custom_dir: str | None = None,
+    custom_secret: bytes | None = None,
 ) -> dict[str, Any]:
     from transformers import AutoTokenizer
 
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
     from hivemind.boinc.real_client.moe_app import HF_CACHE
 
-    if domain not in _SOURCES:
+    custom: tuple[list[list[int]], list[list[int]], dict[str, Any]] | None = None
+    if custom_dir:  # the user's own dataset, built and signed by scripts/make_custom_shards.py; verified before use
+        custom = load_custom_shards(custom_dir, custom_secret)
+        domain = str(custom[2]["domain"])
+    elif domain not in _SOURCES:
         raise ValueError(f"unknown domain {domain!r}; choose from {DOMAIN_ORDER}")
     prof = PROFILES[profile] if profile else None
     if prof:  # a profile fixes the sizes; explicit arguments are ignored so a big workunit cannot be built half-sized
         seq_len, n_seq, micro_batch, rank, alpha = prof["seq_len"], prof["n_seq"], prof["micro_batch"], prof["rank"], prof["alpha"]
         inner_steps, segment_steps = prof["inner_steps"], prof["segment_steps"]
     tok = AutoTokenizer.from_pretrained(model_id, cache_dir=HF_CACHE)
-    train = _chunks(domain_ids(tok, domain, "train", shard_index, n_seq * seq_len), seq_len, n_seq)
+    if custom is not None:
+        if int(custom[2]["seq_len"]) != seq_len:
+            raise ValueError(f"custom shards were cut at seq_len {custom[2]['seq_len']}, this workunit uses {seq_len}")
+        pool = custom[0]
+        start = (shard_index * n_seq) % len(pool)
+        train = [pool[(start + i) % len(pool)] for i in range(min(n_seq, len(pool)))]  # a cursor past the end wraps; the held-out chunks are a separate file
+    else:
+        train = _chunks(domain_ids(tok, domain, "train", shard_index, n_seq * seq_len), seq_len, n_seq)
     # the held-out set of EVERY domain is always evaluated, so a round trained on French also shows what it did to English
     eval_sets = {d: _chunks(domain_ids(tok, d, "eval", 0, n_eval * seq_len), seq_len, n_eval) for d in DOMAIN_ORDER}
+    if custom is not None:
+        eval_sets[domain] = custom[1][:n_eval]  # the user's own held-out chunks are reported next to the built-in domains
     spec = {
         "wu_id": wu_id, "model_id": model_id, "inner_steps": inner_steps, "segment_steps": segment_steps,
         "micro_batch": micro_batch, "lr": lr, "weight_decay": 0.01, "rank": rank, "alpha": alpha,

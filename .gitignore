@@ -20,6 +20,9 @@ artifacts/*
 !artifacts/experiments/
 artifacts/experiments/*
 !artifacts/experiments/*.json
+!artifacts/mvp/
+artifacts/mvp/*
+!artifacts/mvp/*.json
 checkpoints/
 shards/
 models_cache/

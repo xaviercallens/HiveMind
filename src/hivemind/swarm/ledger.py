@@ -334,8 +334,13 @@ class HiveSwarmLedger:
             )
 
         self.balances[consumer_node_id] = round(consumer_bal - total_fee, 6)
-        share = round(total_fee / len(provider_node_ids), 6)
-        for pid in provider_node_ids:
+        # Split in integer micro-units so the credits sum to exactly the fee debited: rounding each equal share
+        # (5e-06 over 3 providers -> 3 x 2e-06 = 6e-06) minted value. The remainder goes one micro-unit at a time
+        # to the first providers.
+        fee_micro = int(round(total_fee * 1_000_000))
+        base, extra = divmod(fee_micro, len(provider_node_ids))
+        for i, pid in enumerate(provider_node_ids):
+            share = (base + (1 if i < extra else 0)) / 1_000_000
             self.balances[pid] = round(self.balances.get(pid, 0.0) + share, 6)
 
         receipt = InferenceSettlementReceipt(

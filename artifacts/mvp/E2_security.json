@@ -1,0 +1,75 @@
+{
+  "criterion": "E2",
+  "multikrum": {
+    "kind": "offline, synthetic deltas, real filter",
+    "accepted": [
+      "honest-0",
+      "honest-1",
+      "honest-2",
+      "honest-3",
+      "honest-4",
+      "honest-5"
+    ],
+    "rejected": [
+      "poisoned-scaled-12x",
+      "poisoned-sign-flip"
+    ],
+    "quarantined_pre_krum": {},
+    "poisoned_rejected": true,
+    "honest_accepted_fraction": 1.0
+  },
+  "ledger": {
+    "kind": "live BOINC server verdicts (read-only)",
+    "ledger": "/mnt/disks/disk-socrateai-local-1/boinc/stack/project/hmproj/hivemind_ledger",
+    "honest_verified": true,
+    "lazy_rejected": true,
+    "details": [
+      {
+        "wu": "hmp_good_001",
+        "valid": true,
+        "reason": "verified segment 2/4: max_diff=0.00e+00"
+      },
+      {
+        "wu": "hmp_infer_001",
+        "valid": true,
+        "reason": "verified: identical greedy token ids"
+      },
+      {
+        "wu": "hmp_lazy_001",
+        "valid": false,
+        "reason": "REJECTED segment 0: divergence 1.998e-03 exceeds eps=1e-04"
+      }
+    ],
+    "chain_verdicts": {
+      "valid": 169,
+      "invalid": 0
+    }
+  },
+  "metering": {
+    "kind": "measured on gateway.meter_usage",
+    "completion_bytes": 4000,
+    "honest_billed_tokens": 1000,
+    "max_billable_tokens_for_these_bytes": 4000,
+    "max_inflation_factor": 4.0,
+    "note": "capped by the completion BYTES (a token is at least one byte), so a producer can still overstate by up to the bytes-per-token ratio (about 4x for English); there is no tokenizer-based cross-check yet"
+  },
+  "wired": {
+    "kind": "static check",
+    "multikrum_called_from": {
+      "src/hivemind/boinc/real_client/moe_app.py": false,
+      "src/hivemind/boinc/real_client/moe_bridge.py": false,
+      "src/hivemind/boinc/real_client/resident_validator.py": false
+    },
+    "multikrum_wired_into_boinc_training": false
+  },
+  "checks": {
+    "multikrum_rejects_poisoned_offline": true,
+    "multikrum_accepts_honest_offline": true,
+    "honest_workunit_verified_live": true,
+    "lazy_worker_rejected_live": true,
+    "poisoned_delta_rejected_live": false,
+    "billing_inflation_within_1_5x": false
+  },
+  "passed": false,
+  "reason": "not met: poisoned_delta_rejected_live; billing_inflation_within_1_5x"
+}

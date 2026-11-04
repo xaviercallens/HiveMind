@@ -33,5 +33,20 @@
       "source": "docs/MVP_E2E_SMOKE.md",
       "caveats": "Two requests: a smoke test of the metering path, not a benchmark. End-to-end time, not time-to-first-token."
     }
+    ,
+    {
+      "id": "granite-1b-base-cpu-smoke",
+      "model_id": "hivemind/granite-1b-base",
+      "what": "End-to-end request latency of the plain Granite 3.1 1B-A400M base model (Q4_K_M) on CPU through shield, gateway, escrow and ledger; speed measured with 6 threads",
+      "n": 2,
+      "latency_seconds": [0.95, 0.78],
+      "tokens": [{"prompt": 10, "completion": 48}, {"prompt": 5, "completion": 48}],
+      "ledger": {"consumer_spent_hmt": 0.027424, "producer_earned_hmt": 0.02331},
+      "date": "2026-11-03",
+      "hardware": "8 vCPU, no GPU (llama.cpp -ngl 0), about 1.2 GB RAM; generation about 68 tokens/s",
+      "method": "scripts/mvp_e2e_smoke.py --tier granite-1b-base (15 checks, all passed); deploy/granite_cpu/completion.jinja",
+      "source": "docs/MVP_E2E_SMOKE.md",
+      "caveats": "A base model: it continues text and does not follow instructions. Quality was not measured; in the two test prompts it named Uranus instead of Neptune as a large planet and repeated itself. Two requests: a metering-path smoke test, not a benchmark."
+    }
   ]
 }

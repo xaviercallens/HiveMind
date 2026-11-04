@@ -69,8 +69,8 @@ chown "$USER_NAME:$USER_NAME" "$OPT/expected_governor_args.txt" "$OPT/expected_c
 cat > "$OPT/POLICY_READ_ME.txt" <<'POLICY'
 HiveMind T4 node: the control-plane files here are protected ON PURPOSE.
 
-Owner's decision (2026-10-26): the governor's policy - resume training only after 1800 s without a request inside the night window
-(22:00-07:00 Europe/Paris), 7200 s by day, and at least 4300 MiB of free VRAM - changes ONLY through a reviewed change to the repo
+Owner's decision (2026-10-26, window changed 2026-11-04): the governor's policy - resume training only after 1800 s without a request inside the training window
+(17:00-22:00 Europe/Paris, when the T4 VM runs), 7200 s otherwise, and at least 4300 MiB of free VRAM - changes ONLY through a reviewed change to the repo
 (deploy/t4_node/node/hivemind-t4-governor.service and scripts/t4_governor.py), followed by `sudo bash deploy/t4_node/install_node.sh`.
 The "intense-moe" mode (5-10 s) is not wanted. Earlier unauthorised edits (a systemd drop-in at 22:08Z on 25 Oct, code edits at 02:08Z and
 03:09Z on 26 Oct) were reverted; they are in /var/log/auth.log and /opt/hivemind/t4/removed-overrides/.

@@ -25,7 +25,7 @@ agent findings: re-check a line reference before acting on it.
 | C5. Gateway canary prompt and tokenizer cross-check of reported usage | Open |
 | C8. Training-round table and rollback ratchet | Open |
 | C9. Time-to-first-token and tokens/s in settlement | Open |
-| C10. Close the train-to-serve loop (BOINC adapter -> GGUF -> evaluated -> served tier) | Open: the largest step, needs a base-model decision |
+| C10. Close the train-to-serve loop (BOINC adapter -> GGUF -> evaluated -> served tier) | **Pipeline done** (`scripts/adapter_to_served.py`, `docs/TRAIN_TO_SERVE_GATE.md`); the current adapter **fails the gate** (no measurable gain on the served files), so nothing is served from it |
 | C11. Run the smoke test nightly in CI | Open: needs a tiny GGUF in CI |
 
 ## The plan, as produced by the audit

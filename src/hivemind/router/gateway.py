@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hmac
 import ipaddress
+import html
 import json
 import logging
 import math
@@ -81,6 +82,7 @@ LOGGER = logging.getLogger("hivemind.router.gateway")
 MODEL_PREFIX = "hivemind/"
 AUTO_MODEL = "auto"
 PRODUCER_TTL_S = 120.0
+ENDPOINT_COOLDOWN_S = 10.0  # after a failed request an endpoint is tried last for this long (MVP criterion A1: failover without paying a failed attempt first)
 PRODUCER_TIMEOUT_S = 120.0
 DEFAULT_COLD_START_WAIT_BUDGET_S = 20.0  # forward to a known-unloaded model only when it is expected to load within this
 DEFAULT_COLD_START_S = 60.0  # assumed load time of a model reported not loaded without a cold_start_s estimate
@@ -740,23 +742,62 @@ POC_API_DESCRIPTION = (
 )
 
 
+MAINTENANCE_ENV = "HIVEMIND_MAINTENANCE_NOTICE"
+_BODY_TAG = re.compile(rb"<body[^>]*>", re.IGNORECASE)
+
+
+def maintenance_banner_html(notice: str) -> bytes:
+    """The visible banner injected right after ``<body>`` of every HTML page while maintenance mode is on (the text is escaped)."""
+    return (
+        '<div id="hivemind-maintenance-banner" role="alert" style="position:sticky;top:0;z-index:99999;background:#7c2d12;color:#ffedd5;'
+        'padding:10px 16px;font:600 14px/1.4 system-ui,sans-serif;text-align:center;">'
+        + "Maintenance: " + html.escape(notice) + "</div>"
+    ).encode("utf-8")
+
+
 class PocNoticeMiddleware:
     """Pure ASGI middleware: every HTTP response, streaming ones included, carries ``X-HiveMind-Status`` (proof of concept:
-    public data only), so API clients and tools that never render the HTML pages still see the notice."""
+    public data only), so API clients and tools that never render the HTML pages still see the notice.
 
-    def __init__(self, app: Callable[[ASGIMessage, Receive, Send], Awaitable[None]]) -> None:
+    With a ``maintenance`` notice (``HIVEMIND_MAINTENANCE_NOTICE``) every response also carries ``X-HiveMind-Maintenance`` and HTML pages get a visible
+    banner. The notice is operator text, not user input; it is limited to printable ASCII in the header and escaped in the page."""
+
+    def __init__(self, app: Callable[[ASGIMessage, Receive, Send], Awaitable[None]], maintenance: str | None = None) -> None:
         self.app = app
+        self.maintenance = (maintenance or "").strip()[:300] or None
 
     async def __call__(self, scope: ASGIMessage, receive: Receive, send: Send) -> None:
         if scope.get("type") != "http":
             await self.app(scope, receive, send)
             return
+        maint = self.maintenance
+        pending: dict[str, Any] = {"start": None, "body": bytearray(), "html": False}
 
         async def send_with_notice(message: ASGIMessage) -> None:
-            if message.get("type") == "http.response.start":
+            kind = message.get("type")
+            if kind == "http.response.start":
                 headers = list(message.get("headers", []))
                 headers.append((b"x-hivemind-status", POC_STATUS_HEADER.encode("ascii")))
+                if maint:
+                    headers.append((b"x-hivemind-maintenance", maint.encode("ascii", "replace").replace(b"\r", b" ").replace(b"\n", b" ")))
+                    ctype = next((v for k, v in headers if k.lower() == b"content-type"), b"")
+                    if ctype.lower().startswith(b"text/html"):
+                        pending["html"] = True
+                        pending["start"] = {**message, "headers": [(k, v) for k, v in headers if k.lower() != b"content-length"]}
+                        return
                 message = {**message, "headers": headers}
+            elif kind == "http.response.body" and pending["html"]:
+                pending["body"] += message.get("body", b"")
+                if message.get("more_body", False):
+                    return
+                body = bytes(pending["body"])
+                if body:
+                    body = _BODY_TAG.sub(lambda m: m.group(0) + maintenance_banner_html(maint or ""), body, count=1)
+                start = pending["start"]
+                start["headers"] = start["headers"] + [(b"content-length", str(len(body)).encode("ascii"))]
+                await send(start)
+                await send({"type": "http.response.body", "body": body, "more_body": False})
+                return
             await send(message)
 
         await self.app(scope, receive, send_with_notice)
@@ -832,6 +873,7 @@ def create_router_app(
     starter_grant_hmt: float = 0.0,
     starter_grants_per_ip_24h: int = 3,
     trusted_proxies: Sequence[str] = (),
+    maintenance_notice: str | None = None,
 ) -> FastAPI:
     """Build the gateway app. ``resolver`` (host -> IP strings) is injectable for tests of the SSRF guard.
 
@@ -870,7 +912,7 @@ def create_router_app(
         raise ValueError("starter_grant_hmt and starter_grants_per_ip_24h must be finite and not negative")
     proxy_networks = tuple(ipaddress.ip_network(entry, strict=False) for entry in trusted_proxies)
     app.add_middleware(BodyLimitMiddleware, max_bytes=MAX_BODY_BYTES)
-    app.add_middleware(PocNoticeMiddleware)  # added last = outermost, so it also marks the 413 from the body limit
+    app.add_middleware(PocNoticeMiddleware, maintenance=maintenance_notice if maintenance_notice is not None else os.environ.get(MAINTENANCE_ENV))  # added last = outermost, so it also marks the 413 from the body limit
 
     # ------------------------------------------------------------------ errors
     @app.exception_handler(RouterError)
@@ -1168,7 +1210,7 @@ def create_router_app(
                 candidates.extend(by_url[u] for u in rotation.order(f"{model_id}|{a}", shares))
             else:
                 candidates.append(servers[0])
-        candidates.sort(key=lambda r: _residency_rank(r, model_id))  # stable: loaded, then unknown, then known-not-loaded; rotation order kept within a rank
+        candidates.sort(key=lambda r: (_cooling(r), _residency_rank(r, model_id)))  # cooling endpoints last; then: loaded, then unknown, then known-not-loaded; rotation order kept within a rank
         return _Plan(
             request_id=request_id,
             model_id=model_id,
@@ -1267,6 +1309,21 @@ def create_router_app(
             return RouterError(504, "The producer did not answer in time; you were not charged.", "api_error", "upstream_timeout")
         return RouterError(502, "Every producer for this model failed; you were not charged.", "api_error", "upstream_failure")
 
+    cooldown_until: dict[str, float] = {}
+    cooldown_lock = threading.Lock()
+
+    def _cooling(record: ProducerRecord) -> bool:
+        with cooldown_lock:
+            return cooldown_until.get(record.endpoint_url, 0.0) > clock()
+
+    def _mark_failed(record: ProducerRecord) -> None:
+        with cooldown_lock:
+            cooldown_until[record.endpoint_url] = clock() + ENDPOINT_COOLDOWN_S
+
+    def _mark_ok(record: ProducerRecord) -> None:
+        with cooldown_lock:
+            cooldown_until.pop(record.endpoint_url, None)
+
     def chat_blocking(plan: _Plan, account: Account, body: Mapping[str, Any]) -> JSONResponse:
         timed_out: ProducerRecord | None = None
         for record in plan.candidates:
@@ -1288,7 +1345,9 @@ def create_router_app(
                     timed_out = record
             if not isinstance(payload, dict) or not has_completion_choice(payload):
                 LOGGER.warning("producer %s failed request %s", record.account_id, plan.request_id)
+                _mark_failed(record)
                 continue
+            _mark_ok(record)
             reported = _usage_pair(payload)
             cbytes = completion_byte_count(payload, delta=False)
             if reported is None:
@@ -1319,11 +1378,14 @@ def create_router_app(
                 if isinstance(exc, httpx.TimeoutException) and timed_out is None:
                     timed_out = record
                 LOGGER.warning("producer %s failed request %s", record.account_id, plan.request_id)
+                _mark_failed(record)
                 continue
             if upstream.status_code != 200:
                 upstream.close()
                 LOGGER.warning("producer %s answered %s for %s", record.account_id, upstream.status_code, plan.request_id)
+                _mark_failed(record)
                 continue
+            _mark_ok(record)
             return StreamingResponse(_stream_body(plan, account, record.account_id, upstream), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
         raise upstream_exhausted(plan, timed_out)
 

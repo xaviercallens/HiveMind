@@ -96,6 +96,7 @@ LOGIN_LIMIT = 10  # password logins per client per window: slows online password
 LOGIN_WINDOW_S = 60.0
 AMCP_PUBLISH_LIMIT = 30  # bus events per account per window: the bus is for coordination, not bulk traffic
 AMCP_PUBLISH_WINDOW_S = 60.0
+CAMPAIGN_POLL_LIMIT = 20  # poll votes per account per window: every vote writes a never-pruned bus event, so it needs the same guard as /amcp/publish
 MAX_BODY_BYTES = 4_000_000
 MAX_PRICE_CEILING = 1_000.0
 MAX_PRODUCER_RESPONSE_BYTES = 8_000_000
@@ -903,6 +904,7 @@ def create_router_app(
     register_limiter = SlidingWindowLimiter(REGISTER_LIMIT, REGISTER_WINDOW_S)
     login_limiter = SlidingWindowLimiter(LOGIN_LIMIT, LOGIN_WINDOW_S)
     amcp_publish_limiter = SlidingWindowLimiter(AMCP_PUBLISH_LIMIT, AMCP_PUBLISH_WINDOW_S)
+    campaign_poll_limiter = SlidingWindowLimiter(CAMPAIGN_POLL_LIMIT, AMCP_PUBLISH_WINDOW_S)
     market_cache: dict[tuple[str, int], dict[str, Any]] = {}
     market_lock = threading.Lock()
     capacity_clamp = float(max_producer_capacity_1k)
@@ -2643,6 +2645,8 @@ def create_router_app(
         account = authenticate(request)
         if payload.subject_id not in SUBJECT_BY_ID:
             raise RouterError(404, f"Unknown subject_id '{payload.subject_id}'.", "invalid_request_error", "subject_not_found")
+        if not campaign_poll_limiter.allow(account.account_id, clock()):
+            raise RouterError(429, "Too many poll votes from this account; try again in a minute.", "rate_limit_error", "rate_limited")
         vote = store.record_campaign_poll_vote(
             account_id=account.account_id,
             participant_handle=account.handle,

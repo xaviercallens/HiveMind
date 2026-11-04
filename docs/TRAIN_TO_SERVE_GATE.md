@@ -24,6 +24,17 @@ Raw results: `artifacts/experiments/GRANITE_ADAPTER_hmq_00147_gate_f16.json` and
 **Re-check on independent chunks.** The chain picked `hmq_00147` as best-of-N on the first 8 chunks of each held-out stream. The gate now skips those chunks (`SKIP_CHUNKS`) and the result is the same:
 pooled gain -0.0040 nats, 95% interval [-0.0176, +0.0089], french +3.6% (`..._gate_f16_independent_chunks.json`). The gate itself has unit tests (`tests/test_adapter_to_served.py`).
 
+## Installing `--mix` on the T4 node (owner approved the deployment on 2026-11-04; NOT yet run)
+
+The reviewed change is in the repo (`scripts/t4_workgen.py --mix`, `deploy/t4_node/node/hivemind-t4-workgen.service`). The only sanctioned way to put it on the node is `sudo bash deploy/t4_node/install_node.sh`,
+and a dry run (read-only, 2026-11-04) shows that it does much more than switch one flag, because the deployed copy is older than `main`:
+
+* `rsync --delete` of `src/hivemind/` changes **204 files** in `/opt/hivemind/t4/src/hivemind`, among them the BOINC validator, `moe_app`, `moe_bridge` and the work builder; `moe_work.py` must be the new one because the new workgen imports `MIX` from it;
+* the `hivemind-live-bee-llama` unit and `boinc_ensure_daemons.sh` would be replaced by the repo versions (the governor, monitor and the other units/scripts are byte-identical);
+* `expected_code_hashes.txt` is regenerated; nothing is started, so a restart of `hivemind-t4-workgen` (and a look at the validator) is a separate step.
+
+Decide when: ideally between rounds (no workunit in progress) and with the bee-stars/coder VRAM budget in mind, since training needs about 3.4 GB and the governor only trains with >= 4,300 MiB free after it.
+
 ## Pre-registered next experiment (not run yet)
 
 Hypothesis: one-domain rounds turn the adapter into a specialist (it helps math/biomed and hurts the rest). Change: stratified rounds, `python scripts/t4_workgen.py --mix`

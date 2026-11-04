@@ -37,6 +37,17 @@ Met or partly met: A1 (request routing, market, escrow: real; 2 physical GPUs on
 reported earlier), E2 (shield, validator, spot-check, Multi-Krum exist and have tests), F1 (benchmarks page measured-only). Not met: A2, B1, B2 (the BOINC chain
 trains on one host; two-host DiLoCo exists only on a toy LM), B3 (the current adapter fails the gate), C2, D1 (no recorded cost estimate), E1.
 
+## Loop log
+
+| Iteration | Scorecard | What changed |
+| :-- | :-- | :-- |
+| 0 (2026-11-04) | 0/11 | target + scorecard written; 13 low-tier agents reviewed every criterion (`MVP review` workflow) and produced the ranked backlog |
+| 1 | 1/11 (B1 pass; B3, D1, E2, F1 fail with reasons; A1, A2, B2, C1, C2, E1 not run) | W1 figure ratchet (48 typed-in page figures recorded, may only fall); W2 gate unit tests + selection-independent re-check (hmq_00147 still fails); W3 gated expert promotion (C2 code-ready, no router link yet); W7 endpoint cooldown + concurrent kill test (A1 code-ready, needs two physical GPUs); W5 custom shards (B1 pass on a real run); W4 E2 evaluation (live lazy-worker rejection and honest verification, offline Multi-Krum; poisoned-delta-live and tight billing check still open); stratified `--mix` rounds (pre-registered experiment, not run) |
+
+Open items and what each needs: A1 real run = two physical GPUs + permission to kill one producer; A2 = second host + RPC-enabled llama.cpp; B2 = two hosts running QLoRA rounds
+(the T4 must keep 4,300 MiB free, so training there is governor-gated); B3 = the `--mix` experiment deployed by the owner; C1 = Kafka VMs; D1 = owner decision (scale-to-zero vs the AGENTS.md
+single-writer rule) and a budget; E1 = a fresh volunteer machine; F1 = owner decision on which of the 48 page figures to keep.
+
 ## The loop
 
 ```

@@ -58,6 +58,17 @@ class FP8E4M3PageCodec:
         return float(q.numel() * q.element_size() * 8 + scale.numel() * scale.element_size() * 8)
 
 
+def _require_encodable(codec: str, page: Tensor, *side: Tensor) -> None:
+    """Refuse a page the fp16 side information cannot represent, instead of returning a payload that decodes to inf/NaN.
+
+    NaN or inf in the page, or a finite page whose per-row min/max/RMS overflows fp16 (above 65504), would otherwise be
+    encoded silently and `payload_bits` would still report a cost for a payload that is unusable."""
+    if not bool(torch.isfinite(page).all()):
+        raise ValueError(f"{codec}: page contains NaN or inf")
+    if not all(bool(torch.isfinite(t).all()) for t in side):
+        raise ValueError(f"{codec}: per-row side information overflows fp16 (page magnitude above 65504)")
+
+
 class IntMinMaxPageCodec:
     """Asymmetric per-row min-max integer quantiser: ``2**bits`` levels, fp16 min and max stored per row."""
 
@@ -71,6 +82,7 @@ class IntMinMaxPageCodec:
         x = page.detach().to(torch.float32)
         mn = x.amin(dim=-1, keepdim=True).to(torch.float16)
         mx = x.amax(dim=-1, keepdim=True).to(torch.float16)
+        _require_encodable(self.name, x, mn, mx)
         step = ((mx.to(torch.float32) - mn.to(torch.float32)) / float((1 << self.bits) - 1)).clamp_min(1e-12)
         codes = torch.round((x - mn.to(torch.float32)) / step).clamp(0, (1 << self.bits) - 1)
         return codes.to(torch.int32), mn, mx
@@ -107,6 +119,7 @@ class LatticePageCodec:
     def encode(self, page: Tensor) -> Dict[str, Any]:
         x = page.detach().to(torch.float64)
         rms = x.pow(2).mean(dim=-1, keepdim=True).sqrt().clamp_min(1e-6).to(torch.float16)
+        _require_encodable(self.name, x, rms)
         rows, ctx = to_rows(self.kind, x / rms.to(torch.float64))
         c = DECODERS_T[self.kind](rows / self.scale)
         rate = factorised_rate_t(self.kind, c, ctx)

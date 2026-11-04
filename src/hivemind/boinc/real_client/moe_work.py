@@ -112,6 +112,26 @@ def _chunks(ids: list[int], seq_len: int, n: int) -> list[list[int]]:
     return [ids[i * seq_len : (i + 1) * seq_len] for i in range(min(n, len(ids) // seq_len))]
 
 
+MIX = "mix"
+MIX_DOMAINS = tuple(DOMAIN_ORDER[:6])  # the six the chain evaluates every round: general, french, edu_web, news, biomed, math
+
+
+def mix_counts(n: int, k: int) -> list[int]:
+    """Split ``n`` sequences over ``k`` domains as evenly as possible (the first domains take the remainder); sums to ``n``."""
+    if n < k or k <= 0:
+        raise ValueError(f"need at least one sequence per domain: n={n}, k={k}")
+    base, extra = divmod(n, k)
+    return [base + (1 if i < extra else 0) for i in range(k)]
+
+
+def interleave(parts: list[list[list[int]]]) -> list[list[int]]:
+    """Round-robin the per-domain chunk lists so no domain forms a contiguous block of the shard."""
+    out: list[list[int]] = []
+    for i in range(max((len(p) for p in parts), default=0)):
+        out += [p[i] for p in parts if i < len(p)]
+    return out
+
+
 def load_custom_shards(custom_dir: Path | str, secret: bytes | None = None) -> tuple[list[list[int]], list[list[int]], dict[str, Any]]:
     """Read shards written by ``scripts/make_custom_shards.py`` and verify them against the manifest (sha256 of both files, HMAC of the training shard).
     Any mismatch raises: a tampered or truncated shard never becomes a workunit."""
@@ -160,8 +180,8 @@ def build_train_spec(
     if custom_dir:  # the user's own dataset, built and signed by scripts/make_custom_shards.py; verified before use
         custom = load_custom_shards(custom_dir, custom_secret)
         domain = str(custom[2]["domain"])
-    elif domain not in _SOURCES:
-        raise ValueError(f"unknown domain {domain!r}; choose from {DOMAIN_ORDER}")
+    elif domain not in _SOURCES and domain != MIX:
+        raise ValueError(f"unknown domain {domain!r}; choose from {DOMAIN_ORDER} or {MIX!r}")
     prof = PROFILES[profile] if profile else None
     if prof:  # a profile fixes the sizes; explicit arguments are ignored so a big workunit cannot be built half-sized
         seq_len, n_seq, micro_batch, rank, alpha = prof["seq_len"], prof["n_seq"], prof["micro_batch"], prof["rank"], prof["alpha"]
@@ -173,6 +193,11 @@ def build_train_spec(
         pool = custom[0]
         start = (shard_index * n_seq) % len(pool)
         train = [pool[(start + i) % len(pool)] for i in range(min(n_seq, len(pool)))]  # a cursor past the end wraps; the held-out chunks are a separate file
+    elif domain == MIX:
+        # a stratified round: every round sees all of MIX_DOMAINS in equal share (one-domain rounds turned the adapter into a math/biomed specialist that lost on the rest)
+        counts = mix_counts(n_seq, len(MIX_DOMAINS))
+        parts = [_chunks(domain_ids(tok, d, "train", shard_index, c * seq_len), seq_len, c) for d, c in zip(MIX_DOMAINS, counts)]
+        train = interleave(parts)
     else:
         train = _chunks(domain_ids(tok, domain, "train", shard_index, n_seq * seq_len), seq_len, n_seq)
     # the held-out set of EVERY domain is always evaluated, so a round trained on French also shows what it did to English

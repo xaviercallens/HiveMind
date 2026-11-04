@@ -20,3 +20,12 @@ Per domain the adapter helps math (about -9%) and biomed (about -3%) and is flat
 
 **Consequence:** no adapter-based tier is added to the catalog and nothing is deployed from this adapter. The plain base model (no adapter) can still be served as a base tier.
 Raw results: `artifacts/experiments/GRANITE_ADAPTER_hmq_00147_gate_f16.json` and `..._gate_q4km_posthoc.json`.
+
+**Re-check on independent chunks.** The chain picked `hmq_00147` as best-of-N on the first 8 chunks of each held-out stream. The gate now skips those chunks (`SKIP_CHUNKS`) and the result is the same:
+pooled gain -0.0040 nats, 95% interval [-0.0176, +0.0089], french +3.6% (`..._gate_f16_independent_chunks.json`). The gate itself has unit tests (`tests/test_adapter_to_served.py`).
+
+## Pre-registered next experiment (not run yet)
+
+Hypothesis: one-domain rounds turn the adapter into a specialist (it helps math/biomed and hurts the rest). Change: stratified rounds, `python scripts/t4_workgen.py --mix`
+(each round draws equally from general, french, edu_web, news, biomed, math; `moe_work.MIX_DOMAINS`), everything else unchanged. Success is decided by this same gate on the best adapter of the new chain, on the
+same independent chunks, with the same rule; a second failure is recorded as such. Deploying the flag to the protected `/opt/hivemind/t4/` copy of the work generator, and the GPU time (the T4 must keep >= 4,300 MiB free), are the owner's call.

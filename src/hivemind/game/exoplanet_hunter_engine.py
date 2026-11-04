@@ -869,10 +869,8 @@ def synthesize_gemini_or_gcp_free_tts(
     api_key = _load_gemini_api_key_from_env()
     if api_key:
         try:
-            url = (
-                "https://generativelanguage.googleapis.com/v1beta/models/"
-                f"gemini-2.5-flash-preview-tts:generateContent?key={api_key}"
-            )
+            # The key travels in a header: a key in the query string ends up in proxy and server logs.
+            url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent"
             payload = {
                 "contents": [
                     {
@@ -898,7 +896,7 @@ def synthesize_gemini_or_gcp_free_tts(
             req = urllib.request.Request(
                 url,
                 data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
+                headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
             )
             with urllib.request.urlopen(req, timeout=12.0) as resp:
                 body = json.loads(resp.read().decode("utf-8"))

@@ -144,3 +144,18 @@ def test_breakdown_line_names_the_slowest_chats_and_the_client_class() -> None:
     assert "6.0s scripted 1900B" in line
     assert monitor.breakdown_line(monitor.chat_latency_breakdown([])) == "no chats in window"
     assert monitor.breakdown_line(None) == "no chats in window"
+
+
+def test_declared_retired_model_passes_only_while_it_answers_404() -> None:
+    retired = frozenset({"hivemind/coder"})
+    assert monitor.probe_ok("hivemind/coder", 404, False, retired)
+    assert not monitor.probe_ok("hivemind/coder", 200, True, retired)  # it came back: the declaration is stale
+    assert not monitor.probe_ok("hivemind/coder", 502, False, retired)
+
+
+def test_an_undeclared_model_that_vanishes_still_fails_and_a_live_one_passes() -> None:
+    retired = frozenset({"hivemind/coder"})
+    assert not monitor.probe_ok("hivemind/bee-stars", 404, False, retired)  # not declared retired: a real outage
+    assert not monitor.probe_ok("hivemind/auto", 200, False, retired)  # wrong answer
+    assert monitor.probe_ok("hivemind/auto", 200, True, retired)
+    assert monitor.probe_ok("hivemind/auto", 200, True, frozenset())

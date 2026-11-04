@@ -821,6 +821,37 @@ def _split_text_for_gcp_tts(text: str, max_chars: int = 180) -> List[str]:
     return chunks
 
 
+VOICE_CACHE_MAX_FILES = 500  # most cached speech files kept on disk
+VOICE_CACHE_MAX_BYTES = 256 * 1024 * 1024  # most bytes of cached speech kept on disk
+
+
+def _prune_voice_cache(cache_dir: Path) -> None:
+    """Delete the oldest cached speech files until the cache fits the file-count and byte limits.
+
+    Only the files this module writes (gemini_*.wav and gcp_*.mp3) are considered, so nothing else in the directory is touched.
+    """
+    entries: List[Tuple[float, int, Path]] = []
+    for pattern in ("gemini_*.wav", "gcp_*.mp3"):
+        for f in cache_dir.glob(pattern):
+            try:
+                st = f.stat()
+            except OSError:
+                continue
+            entries.append((st.st_mtime, st.st_size, f))
+    entries.sort(key=lambda e: e[0])  # oldest first
+    total = sum(e[1] for e in entries)
+    count = len(entries)
+    for _mtime, size, f in entries:
+        if count <= VOICE_CACHE_MAX_FILES and total <= VOICE_CACHE_MAX_BYTES:
+            break
+        try:
+            f.unlink()
+        except OSError:
+            continue
+        count -= 1
+        total -= size
+
+
 def synthesize_gemini_or_gcp_free_tts(
     text: str,
     lang: str = "en",
@@ -905,6 +936,7 @@ def synthesize_gemini_or_gcp_free_tts(
                 pcm_bytes = base64.b64decode(inline_data["data"])
                 wav_bytes = _wrap_pcm16_to_wav(pcm_bytes, sample_rate=24000)
                 wav_cache.write_bytes(wav_bytes)
+                _prune_voice_cache(cache_dir)
                 return {
                     "ok": True,
                     "engine": f"Gemini-2.5-Flash-TTS ({voice_name})",
@@ -943,6 +975,7 @@ def synthesize_gemini_or_gcp_free_tts(
     mp3_bytes = bytes(combined_mp3)
     if len(mp3_bytes) > 200:
         mp3_cache.write_bytes(mp3_bytes)
+        _prune_voice_cache(cache_dir)
     return {
         "ok": True,
         "engine": f"GCP-Cloud-Neural-TTS ({tl})",

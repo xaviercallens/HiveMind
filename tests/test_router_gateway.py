@@ -1416,6 +1416,20 @@ def test_the_users_report_rejects_a_bad_window(world: World, window: str) -> Non
     assert reply.status_code == 400 and reply.json()["error"]["code"] == "invalid_request"
 
 
+def test_502_upstream_failure_log_names_the_model_and_producers_but_no_key(world: World, caplog: pytest.LogCaptureFixture) -> None:
+    consumer_id, key = world.consumer(10.0)
+    producer_id, _, _ = world.producer("prod-a.test", {"qwen": "q"}, agent=FakeProducer(explode=True))
+
+    with caplog.at_level("WARNING", logger="hivemind.router.gateway"):
+        response = world.chat(key)
+
+    assert response.status_code == 502
+    lines = [r.getMessage() for r in caplog.records if "upstream_failure" in r.getMessage()]
+    assert len(lines) == 1
+    assert "model=qwen " in lines[0] and producer_id in lines[0]
+    assert key not in lines[0] and PROMPT not in lines[0]
+
+
 # --- MVP criterion A1: failover under concurrent load, and a failed endpoint is tried last ------------------------------------------------------
 def test_a_failed_endpoint_is_tried_last_while_it_cools_down_and_first_again_after(world: World) -> None:
     from hivemind.router.gateway import ENDPOINT_COOLDOWN_S

@@ -1309,6 +1309,11 @@ def create_router_app(
             if timed_out.model_state(plan.model_id) is False:
                 return model_loading_error(plan.model_id, _cold_start_of(timed_out, plan.model_id))
             return RouterError(504, "The producer did not answer in time; you were not charged.", "api_error", "upstream_timeout")
+        # A 502 burst was previously unattributable (the Cloud Run entries carried no text): name the model and producers, never keys or prompts.
+        LOGGER.warning(
+            "upstream_failure: every producer failed model=%s request_id=%s candidates=%d producers=%s",
+            plan.model_id, plan.request_id, len(plan.candidates), ",".join(r.account_id for r in plan.candidates[:8]),
+        )
         return RouterError(502, "Every producer for this model failed; you were not charged.", "api_error", "upstream_failure")
 
     cooldown_until: dict[str, float] = {}

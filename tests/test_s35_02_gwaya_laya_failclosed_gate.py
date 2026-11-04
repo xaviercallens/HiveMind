@@ -53,3 +53,14 @@ def test_a_function_whose_body_is_only_a_docstring_is_a_stub() -> None:
     real = 'def f(x):\n    "doc"\n    return x + 1\n'
     assert inspect_python_ast_anti_stub(real) == []
     assert audit_candidate_gwaya_anse(real, lambda s: True, lambda s: True).verdict == "VERIFIED"
+
+
+def test_confidence_must_be_a_probability_not_nan_or_out_of_range() -> None:
+    import pytest
+
+    good_src = "def f(x: int) -> int:\n    return x + 1\n"
+    for bad in (float("nan"), float("inf"), -0.1, 1.5):
+        with pytest.raises(ValueError):
+            audit_candidate_gwaya_anse(good_src, lambda s: True, lambda s: True, raw_logprob_confidence=bad)
+    ok = audit_candidate_gwaya_anse(good_src, lambda s: True, lambda s: True, raw_logprob_confidence=0.93)
+    assert ok.verdict == "VERIFIED"

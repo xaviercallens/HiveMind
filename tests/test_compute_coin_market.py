@@ -180,3 +180,14 @@ def test_routing_always_returns_a_certificate_and_a_feasible_allocation(wspec: l
     assert r.max_deviation_gain_rel >= 0.0
     if r.converged:
         assert r.is_epsilon_nash, r.max_deviation_gain_rel
+
+
+@pytest.mark.parametrize("bad", ["cost", "capacity", "pool"])
+def test_route_supply_equilibrium_rejects_nan_inputs_instead_of_certifying_them(bad: str) -> None:
+    nan = float("nan")
+    ws = [e.Worker("a", nan if bad == "cost" else 1.0, nan if bad == "capacity" else 5.0), e.Worker("b", 1.0, 5.0)]
+    qs = [e.Queue("train", nan if bad == "pool" else 100.0)]
+    with pytest.raises(ValueError):
+        e.route_supply_equilibrium(ws, qs)
+    good = e.route_supply_equilibrium([e.Worker("a", 1.0, 5.0), e.Worker("b", 1.0, 5.0)], [e.Queue("train", 100.0)])
+    assert good.is_epsilon_nash and math.isfinite(good.max_deviation_gain_rel)

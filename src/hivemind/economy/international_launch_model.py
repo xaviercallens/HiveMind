@@ -127,6 +127,8 @@ def compute_erlang_c_metrics(
         raise ValueError("active_producers_c >= 1, aggregate_tok_per_s > 0, and mean_tokens_per_req > 0 required")
     if arrival_rate_req_per_s < 0.0:
         raise ValueError("arrival_rate_req_per_s must be >= 0")
+    if not all(math.isfinite(x) for x in (aggregate_tok_per_s, arrival_rate_req_per_s, mean_tokens_per_req)):
+        raise ValueError("aggregate_tok_per_s, arrival_rate_req_per_s and mean_tokens_per_req must be finite")
     if active_producers_c > MAX_FORECAST_NODES:
         # the Erlang-C sum is O(c): an unbounded c from a public query string held a worker for minutes to hours
         raise ValueError(f"active_producers_c must be <= {MAX_FORECAST_NODES}")
@@ -155,14 +157,12 @@ def compute_erlang_c_metrics(
         )
 
     a = c * rho  # offered load in Erlangs
-    # Compute sum_{k=0}^{c-1} a^k / k! using log-space or iterative terms for numerical stability
-    sum_terms = 1.0
-    term = 1.0
-    for k in range(1, c):
-        term *= a / k
-        sum_terms += term
-    last_term = (term * (a / c)) / (1.0 - rho)
-    prob_queue = last_term / (sum_terms + last_term) if a > 0.0 else 0.0
+    # Erlang-B by the stable recursion B(k) = a*B(k-1) / (k + a*B(k-1)), then Erlang-C = B / (1 - rho*(1 - B)).
+    # The direct sum of a^k/k! overflows a float near c = 925-1450 and returned NaN with is_stable True.
+    blocking = 1.0
+    for k in range(1, c + 1):
+        blocking = a * blocking / (k + a * blocking)
+    prob_queue = blocking / (1.0 - rho * (1.0 - blocking)) if a > 0.0 else 0.0
 
     expected_wait_s = prob_queue / (mu_tot - arrival_rate_req_per_s)
     service_time_s = 1.0 / mu_single if c == 1 else (1.0 / mu_tot) * min(c, 2.2)

@@ -1428,3 +1428,57 @@ def test_502_upstream_failure_log_names_the_model_and_producers_but_no_key(world
     assert len(lines) == 1
     assert "model=qwen " in lines[0] and producer_id in lines[0]
     assert key not in lines[0] and PROMPT not in lines[0]
+
+
+# --- MVP criterion A1: failover under concurrent load, and a failed endpoint is tried last ------------------------------------------------------
+def test_a_failed_endpoint_is_tried_last_while_it_cools_down_and_first_again_after(world: World) -> None:
+    from hivemind.router.gateway import ENDPOINT_COOLDOWN_S
+
+    _, key = world.consumer(50.0)
+    _, _, heavy = world.producer("prod-heavy.test", {"qwen": "q"}, capacity=1000.0, agent=FakeProducer(explode=True))
+    _, _, light = world.producer("prod-light.test", {"qwen": "q"}, capacity=1.0)
+
+    assert world.chat(key).status_code == 200  # the heavy producer is tried first, fails, the light one answers
+    failed_calls = len(heavy.calls)
+    assert failed_calls == 1
+    for _ in range(5):
+        assert world.chat(key).status_code == 200
+    assert len(heavy.calls) == failed_calls  # while cooling it is not tried first: no failed attempt is paid for these requests
+    assert len(light.calls) == 6
+
+    heavy.explode = False  # it recovers; once the cooldown is over it is tried again
+    world.clock.now += ENDPOINT_COOLDOWN_S + 1
+    for _ in range(4):
+        assert world.chat(key).status_code == 200
+    assert len(heavy.calls) > failed_calls
+
+
+def test_concurrent_load_survives_a_producer_kill_and_the_money_balances(world: World) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    workers = 6
+    consumer_id, key = world.consumer(500.0)
+    a_id, _, a = world.producer("prod-a.test", {"qwen": "q"}, capacity=100.0)
+    b_id, _, b = world.producer("prod-b.test", {"qwen": "q"}, capacity=100.0)
+    minted = world.store.total_minted()
+
+    def burst(n: int) -> list[int]:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            return list(pool.map(lambda _: world.chat(key).status_code, range(n)))
+
+    first = burst(24)
+    assert first == [200] * 24 and len(a.calls) > 0 and len(b.calls) > 0  # both producers carry load
+    a_before = len(a.calls)
+
+    a.explode = True  # kill producer A in the middle of the run
+    second = burst(24)
+    assert second == [200] * 24  # no failed request: the gateway fails over
+    assert len(a.calls) - a_before <= workers  # at most one in-flight attempt per worker reached the dead producer before it started cooling
+    after_burst = len(a.calls)
+    assert [world.chat(key).status_code for _ in range(6)] == [200] * 6
+    assert len(a.calls) == after_burst  # afterwards the dead producer is not tried at all
+
+    spent = 500.0 - world.store.balance(consumer_id)
+    earned = world.store.balance(a_id) + world.store.balance(b_id)
+    assert spent > 0 and 0 < earned <= spent  # producers are paid out of what the consumer paid; the difference is the fee
+    assert abs(world.store.total_minted() - minted) < 1e-9 and abs(world.store.total_balances() - world.store.total_minted()) < 1e-6  # no HMT created or lost

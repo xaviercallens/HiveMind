@@ -1,0 +1,142 @@
+{
+  "criterion": "D1",
+  "prices": {
+    "date": "2026-11 (approximate, from memory, not from a billing export)",
+    "hours_per_month": 730.0,
+    "cloud_run_active_fraction": 0.05,
+    "cloud_run_basis": "measured billable_instance_time (7 days, scaled to a month)"
+  },
+  "budget_usd_month": 150.0,
+  "estimate_usd_month": 393.2,
+  "within_budget": false,
+  "by_kind": {
+    "disk": 181.0,
+    "snapshots": 17.95,
+    "vm": 65.26,
+    "ip": 7.3,
+    "gpu": 80.3,
+    "cloud_run": 41.39
+  },
+  "top_lines": [
+    {
+      "kind": "gpu",
+      "name": "socreateai-agora-hermes-node1/nvidia-tesla-t4",
+      "usd_month": 80.3,
+      "note": "1x nvidia-tesla-t4 spot, 730 h"
+    },
+    {
+      "kind": "disk",
+      "name": "disk-socrateai-local-1",
+      "usd_month": 80.0,
+      "note": "2000 GB pd-standard, socreateai-agora-hermes-node1"
+    },
+    {
+      "kind": "vm",
+      "name": "socreateai-agora-hermes-node1",
+      "usd_month": 55.48,
+      "note": "n1-standard-8 spot, 730 h"
+    },
+    {
+      "kind": "disk",
+      "name": "xavuntu-desktop-1791007070-data-1tb",
+      "usd_month": 40.0,
+      "note": "1000 GB pd-standard, hm-shrink-tmp"
+    },
+    {
+      "kind": "cloud_run",
+      "name": "hivemind-openrouter",
+      "usd_month": 35.32,
+      "note": "measured 406399 billable s in 7 days (67.2% of the month)"
+    },
+    {
+      "kind": "disk",
+      "name": "disk-socrateai-local-800gb",
+      "usd_month": 32.0,
+      "note": "800 GB pd-standard, socreateai-agora-hermes-node1"
+    },
+    {
+      "kind": "snapshots",
+      "name": "24 snapshots",
+      "usd_month": 17.95,
+      "note": "691 GB stored"
+    },
+    {
+      "kind": "disk",
+      "name": "socreateai-agora-hermes-node1",
+      "usd_month": 15.0,
+      "note": "150 GB pd-balanced, socreateai-agora-hermes-node1"
+    },
+    {
+      "kind": "vm",
+      "name": "hm-fed-master",
+      "usd_month": 9.78,
+      "note": "e2-medium spot, 730 h"
+    },
+    {
+      "kind": "cloud_run",
+      "name": "hivemind-at-home-ruche",
+      "usd_month": 4.44,
+      "note": "measured 19262 billable s in 7 days (3.2% of the month)"
+    },
+    {
+      "kind": "disk",
+      "name": "xavuntu-desktop-1791007070-data-100gb",
+      "usd_month": 4.0,
+      "note": "100 GB pd-standard, hm-shrink-tmp"
+    },
+    {
+      "kind": "ip",
+      "name": "hm-fed-master",
+      "usd_month": 3.65,
+      "note": "ephemeral external IPv4"
+    }
+  ],
+  "unpriced": [
+    "cloud sql darkmatter-k3-db (STOPPED, NEVER): storage not priced"
+  ],
+  "agents_md_rules": {
+    "no_idle_tpu": true,
+    "no_unused_static_ip": true,
+    "running_vms_are_spot": true
+  },
+  "levers_largest_first": [
+    {
+      "action": "run socreateai-agora-hermes-node1 (GPU Spot) 12 h/day instead of 24 h/day",
+      "saves_usd_month": 67.89,
+      "why": "the biggest compute line"
+    },
+    {
+      "action": "move the data of disk-socrateai-local-1 to a smaller disk (GCE disks cannot shrink in place)",
+      "saves_usd_month": 48.0,
+      "why": "a 2 TB disk holds far less data; check `df` first (assumes 40% used)"
+    },
+    {
+      "action": "move the data of xavuntu-desktop-1791007070-data-1tb to a smaller disk (GCE disks cannot shrink in place)",
+      "saves_usd_month": 24.0,
+      "why": "a 2 TB disk holds far less data; check `df` first (assumes 40% used)"
+    },
+    {
+      "action": "snapshot then delete disk xavuntu-desktop-1791007070 (50 GB) if its data is not needed live",
+      "saves_usd_month": 2.0,
+      "why": "attached only to a stopped VM or to nothing"
+    },
+    {
+      "action": "snapshot then delete disk hm-kafka-1 (20 GB) if its data is not needed live",
+      "saves_usd_month": 2.0,
+      "why": "attached only to a stopped VM or to nothing"
+    },
+    {
+      "action": "snapshot then delete disk hm-kafka-2 (20 GB) if its data is not needed live",
+      "saves_usd_month": 2.0,
+      "why": "attached only to a stopped VM or to nothing"
+    },
+    {
+      "action": "snapshot then delete disk hm-kafka-3 (20 GB) if its data is not needed live",
+      "saves_usd_month": 2.0,
+      "why": "attached only to a stopped VM or to nothing"
+    }
+  ],
+  "savings_if_all_levers_taken_usd_month": 147.89,
+  "passed": false,
+  "reason": "estimate $393/month vs budget $150; unpriced: 1"
+}

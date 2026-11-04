@@ -62,6 +62,10 @@ class ModelTier:
 
 # Ordered by min_vram_gb ascending; ``recommend_tier`` relies on that order (checked by __post_init__ of the tuple below).
 TIERS: tuple[ModelTier, ...] = (
+    # Runs on CPU (no GPU memory): the plain IBM Granite 3.1 1B-A400M BASE model, Q4_K_M GGUF (about 0.8 GB, about 1.2 GB RAM, 68 tokens/s measured on 6 CPU
+    # threads, 2026-11-03). There is no Ollama library tag for the base model: serve the GGUF with deploy/granite_cpu/start.sh. It is NOT instruction tuned.
+    ModelTier("granite-1b-base", "Granite 3.1 1B-A400M base (CPU, text completion)", "granite-3.1-1b-a400m-base", 0.8, 0.5, True, 0.4, 0.05, 30.0,
+              "CPU-only text continuation (it continues your text, it does not follow instructions or chat); the base model the BOINC training chain starts from"),
     ModelTier("crowd-v1", "CrowdGPT Crowd-v1 (1B Generalist Trunk)", "hf.co/Vxtzq/Crowd-v1", 1.1, 4.0, False, None, 0.15, 50.0,
               "1B citizen generalist trunk trained on 7B FineWeb tokens (CrowdGPT x La Ruche joint federation)"),
     # Real small MoE for 4-8 GB cards: IBM Granite 3.1 MoE, 3.3B parameters with 800M active, Apache-2.0

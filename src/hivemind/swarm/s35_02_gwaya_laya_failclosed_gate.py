@@ -109,6 +109,9 @@ def audit_candidate_gwaya_anse(
     laya_threshold: float = 0.75,
 ) -> GWAYACandidateAudit:
     """Evaluate a code candidate with GWAYA fail-closed AST/test checks and Laya calibrated scoring."""
+    # NaN passed `min(0.99, 0.55 + 0.45 * nan)` and scored VERIFIED; a confidence outside [0, 1] is not a probability.
+    if not (isinstance(raw_logprob_confidence, (int, float)) and 0.0 <= raw_logprob_confidence <= 1.0):
+        raise ValueError(f"raw_logprob_confidence must be a number in [0, 1], got {raw_logprob_confidence!r}")
     violations = inspect_python_ast_anti_stub(source_code)
     is_ast_clean = len(violations) == 0
 

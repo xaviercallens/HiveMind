@@ -25,7 +25,7 @@ from datetime import datetime, timezone  # noqa: E402
 
 from hivemind.boinc.real_client.contributor_policy import in_european_night  # noqa: E402
 from hivemind.boinc.real_client.moe_profiles import PROFILES, STANDARD, flops_estimate  # noqa: E402
-from hivemind.boinc.real_client.moe_work import DOMAIN_ORDER, build_train_spec  # noqa: E402
+from hivemind.boinc.real_client.moe_work import DOMAIN_ORDER, MIX, build_train_spec  # noqa: E402
 from hivemind.boinc.real_client.server_stack import Stack  # noqa: E402
 
 FPOPS = 4.8e14
@@ -59,6 +59,7 @@ def main() -> int:
     ap.add_argument("--segment-steps", type=int, default=10)
     ap.add_argument("--profile", choices=sorted(PROFILES), default=STANDARD, help="standard: any GPU >= 3.5 GB; big: its own app, plan class and adapter chain for GPUs >= 10 GB")
     ap.add_argument("--night-only", action="store_true", help="create work only 22:00-07:00 Europe/Paris (community work: offered when end-user load is lowest)")
+    ap.add_argument("--mix", action="store_true", help="stratified rounds over the six evaluated domains instead of one domain per round (the single-domain pattern failed the train-to-serve gate)")
     ap.add_argument("--once", action="store_true")
     a = ap.parse_args()
     prof = PROFILES[a.profile]
@@ -77,8 +78,11 @@ def main() -> int:
                 rnd = (json.loads(state_f.read_text())["round"] if state_f.exists() else 0) + 1
                 head = json.loads((ledger / f"{stem}.json").read_text()) if (ledger / f"{stem}.json").exists() else None
                 name = f"{prof['prefix']}{rnd:05d}"
-                domain = DOMAIN_ORDER[(rnd - 1) % len(DOMAIN_ORDER)]  # one domain per round; each domain advances its own cursor
-                shard = ((rnd - 1) // len(DOMAIN_ORDER)) % a.shards
+                if a.mix:  # stratified rounds: every round draws from the six evaluated domains (see moe_work.MIX_DOMAINS)
+                    domain, shard = MIX, (rnd - 1) % a.shards
+                else:
+                    domain = DOMAIN_ORDER[(rnd - 1) % len(DOMAIN_ORDER)]  # one domain per round; each domain advances its own cursor
+                    shard = ((rnd - 1) // len(DOMAIN_ORDER)) % a.shards
                 spec = build_train_spec(name, shard_index=shard, domain=domain, inner_steps=a.inner_steps, segment_steps=a.segment_steps,
                                         start_adapter_sha256=head["sha256"] if head else None, profile=None if not big else a.profile)
                 (st.root / "hivemind_specs" / f"{name}.json").write_text(json.dumps(spec))

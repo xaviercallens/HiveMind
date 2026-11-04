@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.0.0 — 2026-11-04 — Honest MVP baseline: measured results, a scorecard, and the train-to-serve gate (proof of concept)
+
+**Proof of concept, not a production service: send only public, non-sensitive data.** This is not the finished MVP: the scorecard (`docs/MVP_SCORECARD.md`) reads **2 of 11 criteria passing** (B1 custom shards, A2 split inference), 1 waived by the owner (F1), and the rest failing or not run, each with its reason.
+
+- **Target and measure:** `docs/MVP_TARGET.md` (11 machine-checkable criteria), `scripts/mvp_scorecard.py`, `docs/MVP_OWNER_DECISIONS.md`.
+- **Reality audit:** `docs/MVP_REALITY_AUDIT.md` classifies all 191 source files; hard-coded benchmark claims, fabricated browser credit, invented training and hardware records are removed; the benchmarks page shows measured results only.
+- **Inference:** real-model smoke test (`scripts/mvp_e2e_smoke.py`); failed endpoints cool down for 10 s; one MoE split across two hosts over llama.cpp RPC is token-identical to a single host on 20/20 prompts with `--no-repack` (CPU on both hosts; 8/20 with the default repacked kernels); `granite-1b-base` CPU tier; catalog tiers state base, adapter or alias.
+- **Training:** `scripts/adapter_to_served.py` gates a trained adapter on the served files. **The BOINC adapter `hmq_00147` fails it**, so no HiveMind-trained adapter from the chain is served. `make_custom_shards.py` builds signed shards from your own JSONL; stratified rounds (`t4_workgen.py --mix`) are implemented, not yet run.
+- **Security:** live BOINC verdicts verify an honest workunit and reject a lazy worker; Multi-Krum rejects poisoned deltas offline only; billing inflation is bounded loosely (about 4x). Round-4 hardening. Gated expert promotion.
+- **Operations:** maintenance mode (`HIVEMIND_MAINTENANCE_NOTICE`); budget target 150 USD a month, `hivemind-openrouter` scale-to-zero (AGENTS.md changed); `scripts/d1_cost_estimate.py` (currently over budget), `scripts/kafka_voters.sh`, `scripts/t4_training_window.sh` (not applied).
+
 ## v2.15.0 — 2026-10-29 — Season 29 International Launch Weekend Scaler (`HM-S29-01`, `HM-S29-02`, `HM-S31-02`), Human & Agent Calendar, Nocturnal Image-MoE Evolution Monitor & 161 Lean 4 Theorems
 
 - **Pre-Registered Experiment `E20` & Large-Audience Scalability (`src/hivemind/swarm/international_launch_scaler.py`):**

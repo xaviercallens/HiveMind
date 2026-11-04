@@ -359,10 +359,37 @@ def assimilate(args: list[str]) -> int:
     return 0
 
 
+VERDICT_DIR = Path(os.environ.get("HIVEMIND_VERDICT_DIR", str(LEDGER_DIR / "verdicts")))
+RETRY_LATER = 75  # EX_TEMPFAIL; deploy/boinc_always_on/script_validator_retry.patch maps it to BOINC's transient path (retry in 6 h)
+
+
+def lookup_verdict(args: list[str], log: Callable[[str], None] = _log_stderr) -> int:
+    """Validator hook for a server without a GPU: the replay ran on a GPU host, which left ``<result_id>.json`` in ``VERDICT_DIR``.
+    Only a well-formed verdict decides: anything else means "not decided yet", so an honest result is never rejected because that host was off."""
+    result_id = args[-1] if args else ""
+    if not result_id.isdigit():
+        log(f"no usable result id in {args!r}")
+        return RETRY_LATER
+    try:
+        verdict = json.loads((VERDICT_DIR / f"{result_id}.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return RETRY_LATER
+    if not isinstance(verdict, dict) or not isinstance(verdict.get("valid"), bool):
+        log(f"verdict for result {result_id} is malformed")
+        return RETRY_LATER
+    wu = str(verdict.get("wu_id", result_id)).replace("/", "_")
+    LEDGER_DIR.mkdir(parents=True, exist_ok=True)
+    (LEDGER_DIR / f"verdict_{wu}_{int(time.time())}.json").write_text(json.dumps(verdict, indent=2, sort_keys=True), encoding="utf-8")
+    log(f"{wu}: valid={verdict['valid']} {verdict.get('reason', '')}")
+    return 0 if verdict["valid"] else 1
+
+
 def main() -> int:
     cmd, rest = sys.argv[1], sys.argv[2:]
     if cmd == "validate":
         return validate(rest)
+    if cmd == "verdict-lookup":
+        return lookup_verdict(rest)
     if cmd == "assimilate":
         # script_assimilator passes: <wu_db_id> <files...> ; the helper wants the files only
         return assimilate(rest[1:] if rest and rest[0].isdigit() else rest)

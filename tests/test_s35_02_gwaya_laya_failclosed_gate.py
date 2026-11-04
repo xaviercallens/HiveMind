@@ -40,3 +40,16 @@ def test_gwaya_a3_sample_and_repair_recovers_from_initial_failure() -> None:
     assert report.final_a3_passed is True
     assert report.rounds_used == 3
     assert report.final_energy < 100.0
+
+
+def test_a_function_whose_body_is_only_a_docstring_is_a_stub() -> None:
+    from hivemind.swarm.s35_02_gwaya_laya_failclosed_gate import audit_candidate_gwaya_anse, inspect_python_ast_anti_stub
+
+    doc_only = 'def f(x):\n    "doc"\n'
+    assert any("docstring" in v for v in inspect_python_ast_anti_stub(doc_only))
+    verdict = audit_candidate_gwaya_anse(doc_only, lambda s: True, lambda s: True).verdict
+    assert verdict != "VERIFIED"
+    # positive control: a docstring plus a real statement is not a stub
+    real = 'def f(x):\n    "doc"\n    return x + 1\n'
+    assert inspect_python_ast_anti_stub(real) == []
+    assert audit_candidate_gwaya_anse(real, lambda s: True, lambda s: True).verdict == "VERIFIED"

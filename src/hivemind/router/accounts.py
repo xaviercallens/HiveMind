@@ -235,6 +235,10 @@ class DuplicateRequest(ValueError):
     """Raised when a ``request_id`` has already been settled."""
 
 
+class DuplicateOpenTrainerRound(ValueError):
+    """Raised by :meth:`RouterStore.record_opentrainer_round_submission` when this account already submitted this (run_id, round_index)."""
+
+
 class TooManyEndpoints(ValueError):
     """Raised by :meth:`RouterStore.upsert_producer` when an account already advertises ``MAX_ENDPOINTS_PER_ACCOUNT`` endpoints."""
 
@@ -2136,6 +2140,10 @@ class RouterStore:
         stamp = time.time() if now_utc is None else float(now_utc)
         submission_id = f"ot-{secrets.token_hex(8)}"
         with self._tx() as conn:
+            if conn.execute(
+                "SELECT 1 FROM opentrainer_rounds WHERE account_id=? AND run_id=? AND round_index=?", (account_id, run_id, int(round_index))
+            ).fetchone() is not None:
+                raise DuplicateOpenTrainerRound(f"round {int(round_index)} of run {run_id} was already submitted by this account")
             conn.execute(
                 "INSERT INTO opentrainer_rounds("
                 "submission_id, account_id, handle, run_id, round_index, host_label, network_mode, "

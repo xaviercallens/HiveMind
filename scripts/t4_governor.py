@@ -57,6 +57,25 @@ def boinc_gpu_pids(procs: list[tuple[str, ...]]) -> list[str]:
     return out
 
 
+# The validator replays a finished work unit on the GPU for ~15 s (about 2.5 GB). It belongs to the training pipeline, so it
+# must not count as "someone else is asking": measured on 2026-11-05, counting it restarted the 30-minute quiet wait after every
+# work unit and left training about 6% of the time (one work unit per ~32 min).
+PIPELINE_MARKERS = ("real_client.moe_app", "real_client.boinc_server_scripts")
+
+
+def pipeline_gpu_pids(procs: list[tuple[str, ...]]) -> list[str]:
+    """GPU processes of the training pipeline itself: the QLoRA app and the project's validator/assimilator scripts."""
+    out = []
+    for pid, *_ in procs:
+        try:
+            cmd = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode()
+        except OSError:
+            continue
+        if any(m in cmd for m in PIPELINE_MARKERS):
+            out.append(pid)
+    return out
+
+
 def descendants(pid: int) -> list[int]:
     """All child/grandchild processes of ``pid`` (from /proc), the same set the BOINC client enumerates."""
     kids: dict[int, list[int]] = {}
@@ -119,11 +138,11 @@ def parse_pmon(text: str) -> dict[str, int]:
 
 
 def other_gpu_busy(g: dict, threshold_pct: int = 10) -> tuple[bool, int]:
-    """Is something other than the BOINC task using the GPU? This catches callers that never pass through nginx (local Ollama or
+    """Is something other than the training pipeline (BOINC task, validator) using the GPU? This catches callers that never pass through nginx (local Ollama or
     llama-server clients) and requests shorter than the in-flight poll interval.
 
-    No BOINC task running: whole-GPU utilisation >= threshold. BOINC task running: the highest SM% among the other processes."""
-    mine = set(boinc_gpu_pids(g["procs"]))
+    No pipeline process on the GPU: whole-GPU utilisation >= threshold. Task or validator running: the highest SM% among the other processes."""
+    mine = set(pipeline_gpu_pids(g["procs"]))
     if not mine:
         return g["util_pct"] >= threshold_pct, g["util_pct"]
     try:

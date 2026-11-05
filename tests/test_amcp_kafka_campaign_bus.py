@@ -224,3 +224,21 @@ def test_identical_re_vote_writes_no_new_bus_event_but_a_changed_vote_does() -> 
     changed = client.post("/v1/hivemind/campaigns/poll", headers=headers, json={**body, "pledged_vram_gb": 16.0})
     assert changed.status_code == 200 and changed.json()["amcp_event"] is not None
     assert events() == before + 2
+
+
+def test_an_account_never_trades_with_itself_but_two_accounts_still_match() -> None:
+    from hivemind.swarm.amcp_kafka_campaign_bus import clear_bee_capacity_market
+
+    wash = [
+        {"order_id": "o1", "account_id": "acct-a", "bee_id": "hivemind/bee-stars", "side": "OFFER", "capacity_1k": 10.0, "price_per_1k": 100.0, "utc": 1.0},
+        {"order_id": "b1", "account_id": "acct-a", "bee_id": "hivemind/coder", "side": "BID", "capacity_1k": 10.0, "price_per_1k": 200.0, "utc": 2.0},
+    ]
+    assert clear_bee_capacity_market(wash)["matched_trades_count"] == 0
+    # a different account's offer is still matched, and the self-pair is skipped rather than blocking it
+    book = wash + [{"order_id": "o2", "account_id": "acct-b", "bee_id": "hivemind/bee-stars", "side": "OFFER", "capacity_1k": 4.0, "price_per_1k": 150.0, "utc": 3.0}]
+    out = clear_bee_capacity_market(book)
+    assert out["matched_trades_count"] == 1 and out["matches"][0]["offer_id"] == "o2"
+    assert out["total_traded_capacity_1k"] == 4.0 and out["matches"][0]["clearing_price_per_1k"] == 175.0
+    # orders without an account id (legacy rows) keep the old behaviour
+    legacy = [{k: v for k, v in o.items() if k != "account_id"} for o in wash]
+    assert clear_bee_capacity_market(legacy)["matched_trades_count"] == 1

@@ -3797,4 +3797,160 @@ def create_router_app(
             },
         }
 
+    # -------------------------------------------------------------------------
+    # HiveMind v3.1.1 Unified GCP Web Interface & V3 Core Engine Dashboards
+    # Mounted directly on the OpenRouter Gateway so `deploy/gcp_openrouter/deploy.sh`
+    # deploys both the OpenRouter v3.0.0 Core Engine and the V3.1 GCP WebUI.
+    # -------------------------------------------------------------------------
+    @app.api_route("/stitch-portal", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/v3-portal", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/v3.1", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def router_v3_1_stitch_portal() -> HTMLResponse:
+        from hivemind.boinc.hivemind_at_home_dashboard import POC_STATUS_HEADER, build_hivemind_at_home_state, portal_csp
+        from hivemind.boinc.stitch_portal import render_stitch_enhanced_portal
+
+        state = build_hivemind_at_home_state()
+        html_doc = render_stitch_enhanced_portal(state, default_screen="home")
+        return HTMLResponse(
+            content=html_doc,
+            headers={
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+                "X-Frame-Options": "DENY",
+                "Referrer-Policy": "no-referrer",
+                "X-HiveMind-PoC-Status": POC_STATUS_HEADER,
+                "Content-Security-Policy": portal_csp(),
+                "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
+            },
+        )
+
+    async def v3_body(request: Request, model: Any) -> Any:
+        """A request body as ``model``: malformed input is the caller's error (400), never a 500."""
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+            if not isinstance(body, dict):
+                raise TypeError("the JSON body must be an object")
+            return model(**body)
+        except (ValueError, TypeError) as exc:  # JSONDecodeError and pydantic's ValidationError are ValueErrors
+            raise RouterError(400, f"Invalid request body for {model.__name__}.", "invalid_request_error", "invalid_body") from exc
+
+    def v3_account_write(request: Request) -> Account:
+        """Writes need an account, and share the per-account limit of the real AMCP bus."""
+        account = authenticate(request)
+        if not amcp_publish_limiter.allow(account.account_id, clock()):
+            raise RouterError(429, "Too many requests from this account; try again in a minute.", "rate_limit_error", "rate_limited")
+        return account
+
+    @app.get("/api/v1/v3.1/overview")
+    @app.get("/api/v1/v3-mvp/overview")
+    def router_v3_mvp_overview() -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import _v3_mvp_mgr
+
+        return _v3_mvp_mgr.get_v3_mvp_overview()
+
+    @app.get("/api/v1/amcp/kafka/space")
+    def router_v3_amcp_kafka_space(topic: str | None = None) -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import _v3_mvp_mgr
+
+        return _v3_mvp_mgr.get_amcp_kafka_space(topic=topic)
+
+    @app.post("/api/v1/amcp/kafka/publish")
+    async def router_v3_amcp_kafka_publish(request: Request) -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import AmcpKafkaPublishRequest, _v3_mvp_mgr
+
+        account = v3_account_write(request)
+        req_obj = (await v3_body(request, AmcpKafkaPublishRequest)).model_copy(update={"actor_handle": "@" + account.handle.lstrip("@")})
+        return _v3_mvp_mgr.publish_amcp_kafka_event(req_obj)
+
+    @app.get("/api/v1/training/calendar")
+    def router_v3_training_calendar() -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import _v3_mvp_mgr
+
+        return _v3_mvp_mgr.get_training_calendar()
+
+    @app.post("/api/v1/training/calendar/propose")
+    async def router_v3_training_propose(request: Request) -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import TrainingSessionProposeRequest, _v3_mvp_mgr
+
+        account = v3_account_write(request)
+        req_obj = (await v3_body(request, TrainingSessionProposeRequest)).model_copy(update={"proposer_handle": "@" + account.handle.lstrip("@")})
+        return _v3_mvp_mgr.propose_training_session(req_obj)
+
+    @app.post("/api/v1/training/calendar/pledge-gpu")
+    async def router_v3_training_pledge(request: Request) -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import TrainingGpuPledgeRequest, _v3_mvp_mgr
+
+        account = v3_account_write(request)
+        req_obj = (await v3_body(request, TrainingGpuPledgeRequest)).model_copy(update={"contributor_handle": "@" + account.handle.lstrip("@")})
+        return _v3_mvp_mgr.pledge_gpu_to_session(req_obj)
+
+    @app.get("/api/v1/training/t4-daily-schedule")
+    def router_v3_t4_schedule_get() -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import _v3_mvp_mgr
+
+        return _v3_mvp_mgr.get_personal_schedule()
+
+    @app.post("/api/v1/training/t4-daily-schedule")
+    async def router_v3_t4_schedule_post(request: Request) -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import PersonalScheduleUpdateRequest, _v3_mvp_mgr
+
+        require_admin(request)
+        return _v3_mvp_mgr.update_personal_schedule(await v3_body(request, PersonalScheduleUpdateRequest))
+
+    @app.get("/api/v1/dashboard/globe-users")
+    def router_v3_globe_users(role: str | None = None) -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import _v3_mvp_mgr
+
+        return _v3_mvp_mgr.get_globe_dashboard(filter_role=role)
+
+    @app.get("/api/v1/dashboard/nash-equilibrium")
+    def router_v3_nash_get(
+        active_producers: int = 18,
+        active_consumers: int = 42,
+        producer_gpu_tflops_avg: float = 28.5,
+        consumer_req_per_min: float = 64.0,
+    ) -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import NashEquilibriumSimRequest, _v3_mvp_mgr
+
+        return _v3_mvp_mgr.get_nash_equilibrium(
+            NashEquilibriumSimRequest(
+                active_producers=active_producers,
+                active_consumers=active_consumers,
+                producer_gpu_tflops_avg=producer_gpu_tflops_avg,
+                consumer_req_per_min=consumer_req_per_min,
+            )
+        )
+
+    @app.post("/api/v1/dashboard/nash-equilibrium/simulate")
+    async def router_v3_nash_sim(request: Request) -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import NashEquilibriumSimRequest, _v3_mvp_mgr
+
+        return _v3_mvp_mgr.get_nash_equilibrium(await v3_body(request, NashEquilibriumSimRequest))
+
+    @app.get("/api/v1/dashboard/inference-analytics")
+    def router_v3_inference_analytics() -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import _v3_mvp_mgr
+
+        return _v3_mvp_mgr.get_inference_analytics()
+
+    @app.get("/api/v1/dashboard/moe-bees")
+    def router_v3_moe_bees() -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import _v3_mvp_mgr
+
+        return _v3_mvp_mgr.get_real_moe_bees_dashboard()
+
+    @app.get("/api/v1/security/red-team-v3-audit")
+    def router_v3_red_team_audit() -> dict[str, Any]:
+        from hivemind.boinc.hivemind_at_home_dashboard import POC_STATUS_HEADER
+
+        return {
+            "status": "SELF_REPORTED_NOT_INDEPENDENTLY_VERIFIED",
+            "version": "3.1.1",
+            "base_engine_release": "v3.0.0",
+            "advisory_ref": "GHSA-gjc6-74f9-wmrr",
+            "evidence": "The repository's tests; this response runs no check.",
+            "privacy_notice": POC_STATUS_HEADER,
+        }
+
     return app

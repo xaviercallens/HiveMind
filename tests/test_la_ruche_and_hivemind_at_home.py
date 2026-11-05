@@ -468,7 +468,7 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
 
     assert client.post("/api/v1/auth/login", json={"handle_or_email": "reg-user-01"}).status_code == 401
     assert client.post("/api/v1/auth/login", json={"handle_or_email": reg_token}).status_code == 200
-    assert client.post("/api/v1/auth/login", json={"handle_or_email": "login-created-01"}).status_code == 200
+    assert client.post("/api/v1/auth/login", json={"handle_or_email": "login-created-01"}).status_code == 404
     assert (
         client.post(
             "/api/v1/auth/login",

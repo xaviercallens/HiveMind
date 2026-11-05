@@ -1243,12 +1243,13 @@ def render_portal_page(
         <span style="font-size:1.8rem;">&#x1F41D;</span>
         <div>
           <h1>HiveMind OpenRouter</h1>
-          <div style="font-size:0.75rem;color:var(--text-dim);">Decentralized AI Inference Gateway &bull; v2.10.1</div>
+          <div style="font-size:0.75rem;color:var(--text-dim);">Decentralized AI Inference Gateway &bull; v3.1.1 (v3.0.0 Core Engine)</div>
         </div>
         <span class="badge-live">Gateway Live</span>
       </div>
       <nav>
         <a href="#playground" class="nav-link active">Playground</a>
+        <a href="/stitch-portal" class="nav-link" style="color:var(--cyan);font-weight:700;">&#x1F310; V3.1 GCP Unified Portal</a>
         <a href="/manifesto" class="nav-link" style="color:var(--green);font-weight:700;">&#x1F4DC; Manifesto (Reddit)</a>
         <a href="/benchmarks" class="nav-link" style="color:var(--amber);font-weight:700;">&#x1F4CA; Benchmarks &amp; LLM Comparison</a>
         <a href="#life-as-a-bee" class="nav-link">&#x1F41D; Life as a Bee</a>
@@ -1273,6 +1274,7 @@ def render_portal_page(
       </p>
       <div class="cta-group">
         <a href="#playground" class="btn btn-primary">&#x26A1; Try In-Browser Playground</a>
+        <a href="/stitch-portal" class="btn btn-outline" style="border-color:var(--cyan);color:var(--cyan);">&#x1F310; Launch V3.1 GCP Unified Portal &amp; 4 Dashboards</a>
         <a href="/manifesto" class="btn btn-outline" style="border-color:var(--green);color:var(--green);">&#x1F4DC; Citizen AI Manifesto (Reddit Synthesis)</a>
         <a href="/benchmarks" class="btn btn-outline" style="border-color:var(--purple);color:var(--purple);">&#x1F4CA; All-Bees Benchmarks &amp; LLM Comparison (5 Langs)</a>
         <a href="#steam-free-game" class="btn btn-outline" style="border-color:var(--green);color:var(--green);">&#x1F3AE; Free Steam Game (AppID 3133700)</a>

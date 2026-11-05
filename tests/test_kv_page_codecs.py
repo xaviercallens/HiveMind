@@ -167,3 +167,21 @@ def test_fp8_codec_refuses_nan_fp16_scale_overflow_and_underflow_but_keeps_norma
     mixed[2] = 0.0
     dec = codec.decode(codec.encode(mixed), torch.float32)
     assert torch.isfinite(dec).all() and torch.count_nonzero(dec[2]) == 0 and torch.count_nonzero(dec[0]) > 0
+
+
+def test_a_refused_write_does_not_evict_a_cached_page() -> None:
+    cache = PluggableKVPageCache(max_pages=1, codec=IntMinMaxPageCodec(8))
+    g = torch.Generator().manual_seed(4)
+    good_k, good_v = torch.randn(4, 16, generator=g), torch.randn(4, 16, generator=g)
+    cache.write_kv_page(0, 0, good_k, good_v)
+    bad = good_k.clone()
+    bad[0, 0] = float("nan")
+    with pytest.raises(ValueError):
+        cache.write_kv_page(0, 1, bad, good_v)
+    with pytest.raises(ValueError):
+        cache.write_kv_page(0, 1, good_k, bad)  # the V half is refused after K encoded: still nothing may change
+    assert list(cache._pages_k) == [(0, 0)] and list(cache._pages_v) == [(0, 0)]
+    k, v = cache.read_kv_page(0, 0, torch.float32)
+    assert torch.isfinite(k).all() and torch.isfinite(v).all()
+    cache.write_kv_page(0, 1, good_v, good_k)  # a good write still evicts the oldest page
+    assert list(cache._pages_k) == [(0, 1)]

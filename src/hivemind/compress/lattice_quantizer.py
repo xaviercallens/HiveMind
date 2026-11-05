@@ -170,6 +170,13 @@ class QuantizedDelta:
     residual: torch.Tensor  # v - Q(v) (carried when error feedback is on)
 
 
+def _require_finite_delta(v: torch.Tensor) -> None:
+    """Refuse a NaN/inf delta: ``vn > 0`` is False for NaN, which reported ``relative_mse 0.0`` and, with error feedback,
+    stored a NaN residual that poisoned every later call."""
+    if not bool(torch.isfinite(v).all()):
+        raise ValueError("delta contains NaN or inf; refusing to quantise it")
+
+
 class LatticeDeltaQuantizer:
     """Quantise a flat delta blockwise on ``scale · L`` (L ∈ {ℤ⁸, A₂, E₈}); optional EF21 error feedback."""
 
@@ -184,6 +191,7 @@ class LatticeDeltaQuantizer:
 
     def quantize(self, vec: torch.Tensor) -> QuantizedDelta:
         v = vec.detach().to(torch.float32).reshape(-1)
+        _require_finite_delta(v)
         if self.error_feedback and self._carry is not None:
             v = v + self._carry
         n = v.numel()
@@ -209,6 +217,7 @@ class SignDeltaQuantizer:
 
     def quantize(self, vec: torch.Tensor) -> QuantizedDelta:
         v = vec.detach().to(torch.float32).reshape(-1)
+        _require_finite_delta(v)
         if self.error_feedback and self._carry is not None:
             v = v + self._carry
         deq = v.abs().mean() * torch.sign(v)

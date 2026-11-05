@@ -1504,3 +1504,15 @@ def test_usage_capture_is_cached_per_window_bucket_and_recomputed_after_the_ttl(
     world.clock.now += USAGE_CAPTURE_TTL_S + 1.0
     world.app_client.get("/v1/hivemind/usage-capture?window_s=86400")
     assert len(calls) == 3
+
+
+def test_failed_producer_log_names_the_reason_in_the_blocking_path(world: World, caplog: pytest.LogCaptureFixture) -> None:
+    consumer_id, key = world.consumer(10.0)
+    producer_id, _, _ = world.producer("prod-a.test", {"qwen": "q"}, agent=FakeProducer(explode=True))
+
+    with caplog.at_level("WARNING", logger="hivemind.router.gateway"):
+        assert world.chat(key).status_code == 502
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith(f"producer {producer_id} failed request")]
+    assert len(lines) == 1
+    reason = lines[0].rsplit(": ", 1)[-1]
+    assert reason and reason != lines[0] and key not in lines[0] and PROMPT not in lines[0]

@@ -152,3 +152,67 @@ def test_nasa_tap_sync_served_from_cache_within_interval(cockpit_env: Path, monk
     assert second["served_from"] == "MEMORY_CACHE"
     assert second["refresh_interval_s"] == cockpit_mod.TAP_REFRESH_INTERVAL_S
     assert len(upstream) == 1
+
+
+def test_discover_dedup_survives_200_entry_eviction_and_caps_tag_length_ip286(cockpit_env: Path) -> None:
+    """IP-286: dedupe must persist across 200-entry display ledger eviction, and gamer_tag/notes lengths are capped."""
+    svc = engine_mod.AstroBeeMoEGPUService()
+    svc.discoveries_path = cockpit_env / "ledger_ip286.json"
+    target = "SECTOR-02-K2-18B"
+
+    first = svc.record_planet_discovery(target, "Alice", "PLANET")
+    assert first["award_granted"] is True and first["points_earned"] == 600
+
+    for i in range(205):
+        svc.record_planet_discovery(target, f"junk-{i}", "PLANET")
+
+    # Even after 205 intervening entries evict Alice from the 200-row display ledger, Alice earns 0 on replay
+    second = svc.record_planet_discovery(target, "Alice", "PLANET")
+    assert second["award_granted"] is False
+    assert second["points_earned"] == 0
+    assert second["status"] == "duplicate_no_award"
+
+    # Oversized gamer_tag and notes are capped
+    long_res = svc.record_planet_discovery("SECTOR-06-LHS-1140B", "A" * 5000, "PLANET", notes="N" * 5000)
+    assert long_res["award_granted"] is True
+    assert len(long_res["discovery_entry"]["gamer_tag"]) <= 64
+    assert len(long_res["discovery_entry"]["notes"]) <= 512
+
+
+def test_serve_inference_counts_generated_tokens_and_producer_register_is_capped_ip290(
+    cockpit_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """IP-290: serve_inference counts generated tokens (clamping max_new_tokens), and producer registration is capped & auth-checked."""
+    monkeypatch.setattr(
+        engine_mod.HiveMindMultiProducerInferencePool,
+        "benchmark_live_tflops",
+        lambda self, matrix_dim=3072: {"measured_fp32_tflops": 0.0},
+    )
+    svc = engine_mod.AstroBeeMoEGPUService()
+    pool = engine_mod.HiveMindMultiProducerInferencePool(svc)
+    pool.serve_inference("Reply with OK.", max_new_tokens=10**9)
+    assert pool.total_tokens_processed < 10_000
+
+    client = TestClient(cockpit_mod.create_exoplanet_hunter_fastapi_app())
+    # Primary anchor producer cannot be set offline
+    bad_anchor = client.post(
+        "/api/v1/producers/register",
+        json={"producer_id": "PRODUCER-LOCAL-RTX2070-CUDA0", "name": "Anchor", "hardware": "RTX", "status": "OFFLINE"},
+    )
+    assert bad_anchor.status_code == 400
+
+    # Flooding registrations hits the 64-producer cap (413)
+    statuses = [
+        client.post(
+            "/api/v1/producers/register",
+            json={"producer_id": f"FLOOD-{i}", "name": f"N-{i}", "hardware": "GPU"},
+        ).status_code
+        for i in range(80)
+    ]
+    assert 413 in statuses
+
+    # When HIVEMIND_PRODUCER_REGISTER_TOKEN is set, unauthenticated requests return 401
+    monkeypatch.setenv("HIVEMIND_PRODUCER_REGISTER_TOKEN", "secret-reg-token")
+    unauth = client.post("/api/v1/producers/register", json={"producer_id": "FLOOD-0", "name": "N", "hardware": "GPU"})
+    assert unauth.status_code == 401
+

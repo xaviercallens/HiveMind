@@ -312,3 +312,103 @@ def test_one_failed_probe_is_not_an_outage(tmp_path: Path) -> None:
     got = [orch.debounce_t4_reachable(ok, state_file=state_file) for ok in seq]
     assert got == [True, True, True, True, True, False, False]
     assert json.loads(state_file.read_text(encoding="utf-8"))["t4_fail_streak"] == 4
+
+
+def test_sync_opentrainer_and_gpu_telemetry_uses_live_gpu_probe_and_blocks_when_absent_ip291_ip292(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """IP-291 & IP-292: telemetry POST must reflect live GPU probe, send nothing when probe fails, and default hb_ack ok to False."""
+    import hivemind_opentrainer_agent as ota
+
+    monkeypatch.setenv("HIVEMIND_API_KEY", "hm-test-producer-key-do-not-print")
+    hb_return: dict[str, Any] = {}
+    monkeypatch.setattr(ota, "send_heartbeat", lambda **kwargs: dict(hb_return))
+    monkeypatch.setattr(ota, "submit_verified_delta", lambda **kwargs: {"round_id": kwargs["round_id"]})
+
+    recorded: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        recorded.append(request)
+        if str(request.url).endswith("/v1/hivemind/t4/telemetry"):
+            return httpx.Response(200, json={"ok": True})
+        return httpx.Response(404, json={"error": "not_found"})
+
+    e8_round = {
+        "round_id": 413,
+        "inner_steps": 4,
+        "loss_before": 1.42,
+        "loss_after": 1.39,
+        "delta_norm": 0.12,
+        "code_pin": "a" * 64,
+    }
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        # 1. Probe #1 with empty hb_ack -> opentrainer_heartbeat_ok must be False (IP-292), POST matches probe #1 (IP-291)
+        res1 = orch.sync_opentrainer_and_gpu_telemetry(
+            "https://router.example.test",
+            e8_round,
+            t4_reachable=False,
+            gpu_probe_fn=lambda: {
+                "gpu_name": "NVIDIA GeForce RTX 2070",
+                "used_mib": 3210,
+                "total_mib": 8192,
+                "free_mib": 4982,
+                "temp_c": 51.5,
+                "util_pct": 44.0,
+                "power_w": 88.2,
+            },
+            http_client=client,
+        )
+        assert res1["opentrainer_heartbeat_ok"] is False
+        assert res1["telemetry_push_http"] == 200
+        assert res1["telemetry_state"] == "SENT"
+        assert len(recorded) == 1
+        body1 = json.loads(recorded[0].content.decode("utf-8"))
+        assert body1["gpu"] == {
+            "used_mib": 3210,
+            "total_mib": 8192,
+            "free_mib": 4982,
+            "temp_c": 51.5,
+            "util_pct": 44.0,
+            "power_w": 88.2,
+        }
+
+        # 2. Probe #2 with different GPU values and hb_ack={"ok": True} -> POST body changes accordingly
+        hb_return["ok"] = True
+        hb_return["node"] = {"node_id": "node-rtx2070"}
+        res2 = orch.sync_opentrainer_and_gpu_telemetry(
+            "https://router.example.test",
+            e8_round,
+            t4_reachable=True,
+            gpu_probe_fn=lambda: {
+                "gpu_name": "NVIDIA GeForce RTX 2070",
+                "used_mib": 4100,
+                "total_mib": 8192,
+                "free_mib": 4092,
+                "temp_c": 62.0,
+                "util_pct": 78.5,
+                "power_w": 125.4,
+            },
+            http_client=client,
+        )
+        assert res2["opentrainer_heartbeat_ok"] is True
+        assert len(recorded) == 2
+        body2 = json.loads(recorded[1].content.decode("utf-8"))
+        assert body2["gpu"]["used_mib"] == 4100
+        assert body2["gpu"]["free_mib"] == 4092
+        assert body2["gpu"]["temp_c"] == 62.0
+
+        # 3. No readable GPU (probe returns None) -> no POST sent (BLOCKED)
+        recorded.clear()
+        res3 = orch.sync_opentrainer_and_gpu_telemetry(
+            "https://router.example.test",
+            e8_round,
+            t4_reachable=False,
+            gpu_probe_fn=lambda: None,
+            http_client=client,
+        )
+        assert res3["telemetry_push_http"] == 0
+        assert res3["telemetry_state"] == "BLOCKED"
+        assert res3["opentrainer_heartbeat_ok"] is False
+        assert recorded == []
+

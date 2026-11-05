@@ -58,6 +58,9 @@ class DARLShardLeaseCoordinator:
     def __init__(self, shard_ids: list[str], *, alpha: float = 4.0) -> None:
         if not shard_ids or len(set(shard_ids)) != len(shard_ids):
             raise ValueError("shard_ids must be a non-empty list of unique shard identifiers")
+        # alpha=inf would make every lease immortal; NaN or a non-positive alpha was silently clamped to a 1 s TTL.
+        if not (math.isfinite(float(alpha)) and float(alpha) > 0.0):
+            raise ValueError(f"alpha must be finite and > 0, got {alpha!r}")
         self.alpha = float(alpha)
         self._pending_shards: list[str] = list(shard_ids)
         self._total_shards = len(shard_ids)

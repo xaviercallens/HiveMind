@@ -191,3 +191,35 @@ def test_route_supply_equilibrium_rejects_nan_inputs_instead_of_certifying_them(
         e.route_supply_equilibrium(ws, qs)
     good = e.route_supply_equilibrium([e.Worker("a", 1.0, 5.0), e.Worker("b", 1.0, 5.0)], [e.Queue("train", 100.0)])
     assert good.is_epsilon_nash and math.isfinite(good.max_deviation_gain_rel)
+
+
+def _grant(node: str, wu: str, cobblestones: float) -> e.CreditGrant:
+    return e.CreditGrant(node, wu, cobblestones, "verified", "test")
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf")])
+def test_settle_epoch_rejects_non_finite_inputs(bad: float) -> None:
+    # NaN and inf pass every `< 0.0` check, so an inf grant gave minted_by_node == {"n": nan}.
+    with pytest.raises(ValueError, match="finite"):
+        e.settle_epoch(0, [_grant("n", "w1", bad)], 0.0, 0.0)
+    with pytest.raises(ValueError, match="finite"):
+        e.settle_epoch(0, [_grant("n", "w1", 5.0)], bad, 0.0)
+    with pytest.raises(ValueError, match="finite"):
+        e.settle_epoch(0, [_grant("n", "w1", 5.0)], 0.0, bad)
+    ok = e.settle_epoch(0, [_grant("n", "w1", 5.0)], 1.0, 0.0)
+    assert math.isfinite(ok.minted_hive) and math.isfinite(ok.minted_by_node["n"])
+
+
+@pytest.mark.parametrize("field", ["initial_hive_per_cobblestone", "decay_per_epoch", "max_supply_hive"])
+def test_emission_schedule_rejects_non_finite_parameters(field: str) -> None:
+    for bad in (float("nan"), float("inf")):
+        with pytest.raises(ValueError, match="finite"):
+            e.EmissionSchedule(**{field: bad})
+
+
+def test_settle_epoch_pays_a_repeated_grant_only_once() -> None:
+    once = e.settle_epoch(0, [_grant("n", "w1", 5.0)], 0.0, 0.0)
+    twice = e.settle_epoch(0, [_grant("n", "w1", 5.0), _grant("n", "w1", 5.0)], 0.0, 0.0)
+    assert twice.total_verified_cobblestones == once.total_verified_cobblestones == 5.0
+    assert twice.minted_by_node == once.minted_by_node
+    assert e.settle_epoch(0, [_grant("n", "w1", 5.0), _grant("n", "w2", 5.0)], 0.0, 0.0).total_verified_cobblestones == 10.0

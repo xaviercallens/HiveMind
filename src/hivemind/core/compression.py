@@ -115,6 +115,12 @@ def compute_pseudo_gradient_delta(
     return delta
 
 
+def _require_finite_delta(name: str, delta: torch.Tensor) -> None:
+    """Refuse a NaN/inf delta: it made the absmax scale NaN/inf, so the whole payload decoded to NaN (one inf was not even preserved)."""
+    if not bool(torch.isfinite(delta).all()):
+        raise ValueError(f"{name}: delta contains NaN or inf")
+
+
 def compress_tensor_topk_fp8(
     tensor: torch.Tensor,
     topk_ratio: float = 0.20,
@@ -124,6 +130,7 @@ def compress_tensor_topk_fp8(
         raise ValueError(f"topk_ratio must be in (0, 1], got {topk_ratio}")
 
     flat = tensor.detach().to(torch.float32).cpu().reshape(-1)
+    _require_finite_delta("compress_tensor_topk_fp8", flat)
     numel = flat.numel()
     k = max(1, int(round(numel * topk_ratio)))
 
@@ -311,6 +318,7 @@ def compress_tensor_dct_sparse_2bit(
         raise ValueError(f"2-bit compression requires exactly 4 bins, got {n_bins}")
 
     delta = tensor.detach().to(torch.float32).cpu()
+    _require_finite_delta("compress_tensor_dct_sparse_2bit", delta)
     matrix, padded_shape = _prepare_chunked_dct_matrix(delta, int(chunk_size))
     basis = _orthonormal_dct_basis(int(chunk_size))
     frequencies = _chunked_dct_forward(matrix, basis)

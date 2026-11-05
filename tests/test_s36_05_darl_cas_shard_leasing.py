@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import math
+
+import pytest
+
 from hivemind.swarm.s36_05_darl_cas_shard_leasing import DARLShardLeaseCoordinator
 
 
@@ -58,3 +62,12 @@ def test_non_finite_times_are_rejected_and_expiry_still_works() -> None:
     # positive control: after the TTL a finite clock still expires the lease and refuses the late commit
     assert coord.commit_lease(lease.lease_id, "w1", now_s=1e6) is False
     assert coord.commit_lease(coord.grant_lease("w3", now_s=1e6).lease_id, "w3", now_s=1e6 + 0.5) is True
+
+
+@pytest.mark.parametrize("alpha", [float("inf"), float("-inf"), float("nan"), 0.0, -5.0])
+def test_alpha_must_be_finite_and_positive(alpha: float) -> None:
+    # alpha=inf gave expires_at_s=inf (a lease never reclaimed); NaN or a negative alpha silently clamped the TTL to 1.0.
+    with pytest.raises(ValueError, match="alpha"):
+        DARLShardLeaseCoordinator(["s1", "s2"], alpha=alpha)
+    rec = DARLShardLeaseCoordinator(["s1"], alpha=4.0).grant_lease("w", now_s=0.0)
+    assert rec is not None and math.isfinite(rec.expires_at_s)

@@ -1343,9 +1343,12 @@ def create_router_app(
             if request is None:
                 continue
             payload: Any = None
+            why = "no completion choice"  # the reason named in the log when this producer is marked failed; never a key or prompt
             try:
                 upstream = client.send(request, stream=True)
                 try:
+                    if upstream.status_code != 200:
+                        why = f"HTTP {upstream.status_code}"
                     if upstream.status_code == 200:
                         raw = read_limited(upstream, max_bytes=MAX_PRODUCER_RESPONSE_BYTES, deadline=time.monotonic() + PRODUCER_DEADLINE_S)
                         payload = json.loads(raw)
@@ -1353,10 +1356,11 @@ def create_router_app(
                     upstream.close()
             except (httpx.HTTPError, ValueError, UpstreamLimitError) as exc:
                 payload = None
+                why = type(exc).__name__
                 if isinstance(exc, httpx.TimeoutException) and timed_out is None:
                     timed_out = record
             if not isinstance(payload, dict) or not has_completion_choice(payload):
-                LOGGER.warning("producer %s failed request %s", record.account_id, plan.request_id)
+                LOGGER.warning("producer %s failed request %s: %s", record.account_id, plan.request_id, why)
                 _mark_failed(record)
                 continue
             _mark_ok(record)
@@ -1389,7 +1393,7 @@ def create_router_app(
             except httpx.HTTPError as exc:
                 if isinstance(exc, httpx.TimeoutException) and timed_out is None:
                     timed_out = record
-                LOGGER.warning("producer %s failed request %s", record.account_id, plan.request_id)
+                LOGGER.warning("producer %s failed request %s: %s", record.account_id, plan.request_id, type(exc).__name__)
                 _mark_failed(record)
                 continue
             if upstream.status_code != 200:

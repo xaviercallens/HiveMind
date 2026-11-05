@@ -134,6 +134,10 @@ class EmissionSchedule:
     burn_share: float = 0.05
 
     def __post_init__(self) -> None:
+        # NaN and inf pass every ordering check below, so they are refused first.
+        for name in ("initial_hive_per_cobblestone", "decay_per_epoch", "max_supply_hive", "worker_share", "validator_share", "burn_share"):
+            if not math.isfinite(getattr(self, name)):
+                raise ValueError(f"{name} must be finite, got {getattr(self, name)!r}")
         if not (0.0 < self.decay_per_epoch <= 1.0) or self.initial_hive_per_cobblestone <= 0.0:
             raise ValueError("decay must be in (0, 1] and the initial emission positive")
         if abs(self.worker_share + self.validator_share + self.burn_share - 1.0) > 1e-12:
@@ -166,11 +170,19 @@ class EpochSettlement:
 def settle_epoch(epoch: int, grants: Sequence[CreditGrant], consumer_payment_hive: float, circulating_supply_hive: float,
                  schedule: EmissionSchedule = EmissionSchedule()) -> EpochSettlement:
     """Mint for verified credit (cap-aware) and split consumer payments pro rata to verified credit."""
+    if not (math.isfinite(consumer_payment_hive) and math.isfinite(circulating_supply_hive)):
+        raise ValueError("payments and supply must be finite")
     if consumer_payment_hive < 0.0 or circulating_supply_hive < 0.0:
         raise ValueError("payments and supply must be >= 0")
     by_node: dict[str, float] = {}
+    paid: set[tuple[str, str]] = set()
     for g in grants:
+        if not math.isfinite(g.cobblestones):
+            raise ValueError(f"grant {g.node_id}/{g.workunit_id} has a non-finite cobblestone figure: {g.cobblestones!r}")
         if g.cobblestones > 0.0:
+            if (g.node_id, g.workunit_id) in paid:  # the same grant passed twice must not mint twice
+                continue
+            paid.add((g.node_id, g.workunit_id))
             by_node[g.node_id] = by_node.get(g.node_id, 0.0) + g.cobblestones
     total = sum(by_node.values())
     rate = schedule.emission_per_cobblestone(epoch)

@@ -571,6 +571,7 @@ def udp_hole_punch(
     ack = PUNCH_MAGIC + b"A" + session
     deadline = time.monotonic() + timeout
     t0 = time.perf_counter()
+    last_probe_sent_at = t0
     probes = 0
     next_probe = 0.0
     winner: Optional[Address] = None
@@ -578,6 +579,7 @@ def udp_hole_punch(
     while time.monotonic() < deadline:
         now = time.monotonic()
         if winner is None and now >= next_probe:
+            last_probe_sent_at = time.perf_counter()
             for candidate in candidates:
                 try:
                     sock.sendto(syn, candidate)
@@ -603,7 +605,7 @@ def udp_hole_punch(
                 continue
         elif data == ack and winner is None:
             winner = addr
-            rtt_ms = (time.perf_counter() - t0) * 1000.0
+            rtt_ms = (time.perf_counter() - last_probe_sent_at) * 1000.0
             deadline = time.monotonic() + linger
     return PunchResult(winner is not None, winner, rtt_ms, probes)
 
@@ -1047,6 +1049,16 @@ class TurnRelayServer(StunServer):
     def _on_readable(self, sock: socket.socket) -> None:
         if sock is self.sock:
             super()._on_readable(sock)
+            # If a SEND/ChannelData frame forwarded to a local relay socket on this server,
+            # drain any immediately-readable relay sockets in the same timeslice.
+            relay_socks = list(self._by_relay)
+            if relay_socks:
+                try:
+                    ready_relays, _, _ = select.select(relay_socks, [], [], 0.0)
+                except (OSError, ValueError):
+                    ready_relays = []
+                for r_sock in ready_relays:
+                    self._on_readable(r_sock)
             return
         allocation = self._by_relay.get(sock)
         try:

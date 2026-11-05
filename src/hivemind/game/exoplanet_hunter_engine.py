@@ -821,8 +821,31 @@ def _split_text_for_gcp_tts(text: str, max_chars: int = 180) -> List[str]:
     return chunks
 
 
+import re
+
 VOICE_CACHE_MAX_FILES = 500  # most cached speech files kept on disk
 VOICE_CACHE_MAX_BYTES = 256 * 1024 * 1024  # most bytes of cached speech kept on disk
+ALLOWED_GEMINI_VOICES: frozenset[str] = frozenset(
+    {
+        "Puck",
+        "Aoede",
+        "Kore",
+        "Charon",
+        "Fenrir",
+        "Zephyr",
+        "Leda",
+        "Orus",
+        "Callirrhoe",
+        "Autonoe",
+        "Enceladus",
+        "Iapetus",
+        "Umbriel",
+        "Algieba",
+        "Despina",
+    }
+)
+_TTS_VOICE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
+_TTS_LANG_CODE_RE = re.compile(r"^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$")
 
 
 def _prune_voice_cache(cache_dir: Path) -> None:
@@ -869,6 +892,21 @@ def synthesize_gemini_or_gcp_free_tts(
     import urllib.error
     import urllib.parse
     import urllib.request
+
+    if (
+        not isinstance(voice_name, str)
+        or not _TTS_VOICE_NAME_RE.fullmatch(voice_name)
+        or voice_name not in ALLOWED_GEMINI_VOICES
+    ):
+        raise ValueError(
+            f"voice_name must be one of {sorted(ALLOWED_GEMINI_VOICES)}; got {voice_name!r}"
+        )
+    if (
+        not isinstance(lang, str)
+        or len(lang) > 12
+        or not _TTS_LANG_CODE_RE.fullmatch(lang)
+    ):
+        raise ValueError(f"lang must be a valid language code (<= 12 chars); got {lang!r}")
 
     if cache_dir is None:
         cache_dir = (

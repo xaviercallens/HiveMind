@@ -3089,7 +3089,10 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
             )
         if not _TTS_VOICE_RE.fullmatch(voice) or not _TTS_LANG_RE.fullmatch(lang) or len(lang) > 12:
             return JSONResponse(status_code=400, content={"ok": False, "error": "voice must be 1-32 letters, digits, '_' or '-'; lang a language code such as en or zh-CN"})
-        res = synthesize_gemini_or_gcp_free_tts(text=text, lang=lang, voice_name=voice)
+        try:
+            res = synthesize_gemini_or_gcp_free_tts(text=text, lang=lang, voice_name=voice)
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={"ok": False, "error": str(exc)})
         if res.get("ok") and res.get("audio_bytes"):
             return Response(
                 content=res["audio_bytes"],

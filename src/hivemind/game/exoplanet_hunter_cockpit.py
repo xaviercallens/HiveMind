@@ -1923,6 +1923,10 @@ def render_exoplanet_hunter_cockpit_html(service: AstroBeeMoEGPUService, classic
 
 
 MAX_TTS_TEXT_CHARS = 2000  # longest text the public text-to-speech route accepts; longer answers 413
+# voice and lang are interpolated into a cache file name, so a 300-character voice raised OSError (File name too long) and the route answered 500.
+# Shapes only (not an allow-list of names, which Google may extend): a short token of letters, digits, '_' and '-'.
+_TTS_VOICE_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
+_TTS_LANG_RE = re.compile(r"^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$")
 
 
 def render_traffic_and_tflops_monitor_html() -> str:
@@ -3083,6 +3087,8 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                 status_code=413,
                 content={"ok": False, "error": f"text is limited to {MAX_TTS_TEXT_CHARS} characters", "length": len(text)},
             )
+        if not _TTS_VOICE_RE.fullmatch(voice) or not _TTS_LANG_RE.fullmatch(lang) or len(lang) > 12:
+            return JSONResponse(status_code=400, content={"ok": False, "error": "voice must be 1-32 letters, digits, '_' or '-'; lang a language code such as en or zh-CN"})
         res = synthesize_gemini_or_gcp_free_tts(text=text, lang=lang, voice_name=voice)
         if res.get("ok") and res.get("audio_bytes"):
             return Response(

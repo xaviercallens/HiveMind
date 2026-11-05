@@ -37,3 +37,14 @@ def test_a_normal_text_is_still_spoken_and_the_limit_is_inclusive(calls: list[di
     over = client.get("/api/astro/gemini-tts", params={"text": "y" * (cockpit_mod.MAX_TTS_TEXT_CHARS + 1)})
     assert over.status_code == 413
     assert [c["chars"] for c in calls] == [cockpit_mod.MAX_TTS_TEXT_CHARS]
+
+
+def test_an_oversized_or_malformed_voice_or_lang_is_a_400_and_never_reaches_synthesis(calls: list[dict[str, Any]]) -> None:
+    client = TestClient(cockpit_mod.create_exoplanet_hunter_fastapi_app())
+    for params in ({"voice": "P" * 300}, {"voice": "../etc/passwd"}, {"voice": ""}, {"lang": "e" * 300}, {"lang": "en/../x"}):
+        r = client.get("/api/astro/gemini-tts", params={"text": "hi", **params})
+        assert r.status_code == 400, params
+    assert calls == []
+    for good in ({"voice": "Puck", "lang": "en"}, {"voice": "Kore", "lang": "zh-CN"}, {"voice": "Zephyr", "lang": "fr"}):
+        assert client.get("/api/astro/gemini-tts", params={"text": "hi", **good}).status_code == 200
+    assert len(calls) == 3

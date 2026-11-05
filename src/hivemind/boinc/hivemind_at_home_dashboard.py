@@ -9249,6 +9249,16 @@ def create_hivemind_at_home_app(
 
         return JSONResponse(content=build_international_launch_roadmap())
 
+    def _planet_forecast_mean_tokens(value: Any) -> float:
+        """A public, unauthenticated parameter: finite and within a sane per-request token range, else 422 (it was a 500)."""
+        try:
+            v = float(value)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="mean_tokens_per_req must be a number")
+        if not (math.isfinite(v) and 1.0 <= v <= 100_000.0):
+            raise HTTPException(status_code=422, detail="mean_tokens_per_req must be finite and between 1 and 100000")
+        return v
+
     @app.get("/api/v1/launch/planet-forecast", response_class=JSONResponse)
     @app.get("/.well-known/hivemind-planet-forecast.json", response_class=JSONResponse)
     def api_international_launch_planet_forecast(
@@ -9271,7 +9281,7 @@ def create_hivemind_at_home_app(
                 dedicated_producers=dedicated_producers,
                 prosumer_nodes=prosumer_nodes,
                 consumer_nodes=consumer_nodes,
-                mean_tokens_per_req=mean_tokens_per_req,
+                mean_tokens_per_req=_planet_forecast_mean_tokens(mean_tokens_per_req),
                 utc_hour=utc_hour,
             )
         )
@@ -9304,7 +9314,7 @@ def create_hivemind_at_home_app(
                     if body.get("consumer_nodes") is not None
                     else None
                 ),
-                mean_tokens_per_req=float(body.get("mean_tokens_per_req", 168.3)),
+                mean_tokens_per_req=_planet_forecast_mean_tokens(body.get("mean_tokens_per_req", 168.3)),
                 utc_hour=int(body.get("utc_hour", 14)),
             )
         )

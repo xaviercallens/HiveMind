@@ -301,18 +301,20 @@ class ContentAddressedSwarmStore:
         meta = dict(payload.get("metadata", {}))
         raw_state: Dict[str, torch.Tensor] = payload.get("lora_state", {})
 
-        # Verify cryptographic CID digest against metadata + tensor bytes
-        if cid.startswith("cid://sha256/expert-"):
-            serializable_meta = json.dumps(meta, sort_keys=True).encode("utf-8")
-            hasher = hashlib.sha256(serializable_meta)
-            for k in sorted(raw_state.keys()):
-                t_fp16 = raw_state[k].detach().cpu().to(torch.float16).contiguous()
-                hasher.update(t_fp16.numpy().tobytes())
-            recomputed_prefix = hasher.hexdigest()[:24]
-            if not cid.endswith(f"-{recomputed_prefix}"):
-                raise ChunkIntegrityError(
-                    f"Cryptographic CID digest mismatch for '{cid}' (expected suffix '-{recomputed_prefix}')."
-                )
+        # Verify cryptographic CID digest against metadata + tensor bytes. A payload whose cid is not an expert cid has
+        # nothing to verify against, so it is refused instead of loaded unchecked.
+        if not cid.startswith("cid://sha256/expert-"):
+            raise ChunkIntegrityError(f"Checkpoint cid '{cid}' is not a content-addressed expert cid.")
+        serializable_meta = json.dumps(meta, sort_keys=True).encode("utf-8")
+        hasher = hashlib.sha256(serializable_meta)
+        for k in sorted(raw_state.keys()):
+            t_fp16 = raw_state[k].detach().cpu().to(torch.float16).contiguous()
+            hasher.update(t_fp16.numpy().tobytes())
+        recomputed_prefix = hasher.hexdigest()[:24]
+        if not cid.endswith(f"-{recomputed_prefix}"):
+            raise ChunkIntegrityError(
+                f"Cryptographic CID digest mismatch for '{cid}' (expected suffix '-{recomputed_prefix}')."
+            )
 
         lora_state = {k: v.to(dtype=dtype) for k, v in raw_state.items()}
         self._guard.validate_lora_tensors(

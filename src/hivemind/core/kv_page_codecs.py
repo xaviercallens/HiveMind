@@ -47,7 +47,18 @@ class FP8E4M3PageCodec:
     name = "fp8_e4m3"
 
     def encode(self, page: Tensor) -> Tuple[Tensor, Tensor]:
-        return FP8PagedKVCache._quantize_page_fp8(page)
+        x = page.detach().to(torch.float32)
+        _require_encodable(self.name, x)
+        q, scale = FP8PagedKVCache._quantize_page_fp8(page)
+        _require_encodable(self.name, x, scale)
+        _require_not_underflowed(self.name, x, scale)
+        # An all-zero row has scale = 1e-6/448, which is 0 in fp16, so the static quantiser divides 0 by 0 and the row
+        # decodes to NaN. Store such a row as zero codes with a unit scale: it decodes to exact zeros.
+        zero_row = x.abs().amax(dim=-1, keepdim=True) == 0
+        if bool(zero_row.any()):
+            q = q.to(torch.float32).masked_fill(zero_row, 0.0).to(q.dtype)
+            scale = scale.masked_fill(zero_row, 1.0)
+        return q, scale
 
     def decode(self, payload: Tuple[Tensor, Tensor], dtype: torch.dtype = torch.float16) -> Tensor:
         q, scale = payload

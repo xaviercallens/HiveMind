@@ -141,3 +141,29 @@ def test_encode_refuses_a_page_that_would_decode_to_zeros_but_keeps_an_all_zero_
     assert torch.count_nonzero(zero) == 0
     ok = torch.randn(4, 16, generator=g)
     assert torch.count_nonzero(codec.decode(codec.encode(ok), torch.float32)) > 0
+
+
+def test_fp8_codec_refuses_nan_fp16_scale_overflow_and_underflow_but_keeps_normal_and_zero_pages() -> None:
+    codec = FP8E4M3PageCodec()
+    g = torch.Generator().manual_seed(3)
+    ok = torch.randn(4, 16, generator=g)
+    assert torch.isfinite(codec.decode(codec.encode(ok), torch.float32)).all()
+    assert torch.count_nonzero(codec.decode(codec.encode(ok), torch.float32)) > 0
+    nan_page = ok.clone()
+    nan_page[1, 2] = float("nan")
+    with pytest.raises(ValueError):
+        codec.encode(nan_page)
+    inf_page = ok.clone()
+    inf_page[0, 0] = float("inf")
+    with pytest.raises(ValueError):
+        codec.encode(inf_page)
+    with pytest.raises(ValueError):
+        codec.encode(ok * 1e9)  # the per-row scale (absmax / 448) is above fp16's 65504
+    with pytest.raises(ValueError):
+        codec.encode(ok * 1e-9)  # the per-row scale rounds to 0 in fp16: the page would decode to zeros
+    zero = codec.decode(codec.encode(torch.zeros(4, 16)), torch.float32)
+    assert torch.isfinite(zero).all() and torch.count_nonzero(zero) == 0  # was NaN: scale 0 in fp16 gave 0/0
+    mixed = ok.clone()
+    mixed[2] = 0.0
+    dec = codec.decode(codec.encode(mixed), torch.float32)
+    assert torch.isfinite(dec).all() and torch.count_nonzero(dec[2]) == 0 and torch.count_nonzero(dec[0]) > 0

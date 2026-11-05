@@ -64,3 +64,31 @@ def test_confidence_must_be_a_probability_not_nan_or_out_of_range() -> None:
             audit_candidate_gwaya_anse(good_src, lambda s: True, lambda s: True, raw_logprob_confidence=bad)
     ok = audit_candidate_gwaya_anse(good_src, lambda s: True, lambda s: True, raw_logprob_confidence=0.93)
     assert ok.verdict == "VERIFIED"
+
+
+def test_gwaya_ast_anti_stub_catches_all_six_stub_shapes_ip272() -> None:
+    stub_shapes = [
+        "def f(x): return None",
+        'def f(x):\n    x = 1\n    raise NotImplementedError("later")',
+        "class A: pass",
+        "def f(x): return NotImplemented",
+        'def f(x):\n    "doc"\n    return ...',
+        "g = lambda x: 1",
+        "async def af(x):\n    return None",
+    ]
+    for snippet in stub_shapes:
+        violations = inspect_python_ast_anti_stub(snippet)
+        assert violations, f"Expected non-empty violations for {snippet!r}, got {violations!r}"
+
+    # Positive controls: non-stub class, function, and lambda pass
+    clean_code = (
+        "class Accumulator:\n"
+        "    def __init__(self, start: int) -> None:\n"
+        "        self.total = start\n"
+        "    def add(self, x: int) -> int:\n"
+        "        self.total += x\n"
+        "        return self.total\n"
+        "scale = lambda x: x * 2\n"
+    )
+    assert inspect_python_ast_anti_stub(clean_code) == []
+

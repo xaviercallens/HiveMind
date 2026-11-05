@@ -53,6 +53,54 @@ class GWAYAA3RepairReport:
     audit_trail: tuple[GWAYACandidateAudit, ...]
 
 
+def _param_names(args: ast.arguments) -> set[str]:
+    names: set[str] = set()
+    for arg in (*args.posonlyargs, *args.args, *args.kwonlyargs):
+        if arg.arg not in ("self", "cls"):
+            names.add(arg.arg)
+    if args.vararg and args.vararg.arg not in ("self", "cls"):
+        names.add(args.vararg.arg)
+    if args.kwarg and args.kwarg.arg not in ("self", "cls"):
+        names.add(args.kwarg.arg)
+    return names
+
+
+def _referenced_names(nodes: Sequence[ast.AST]) -> set[str]:
+    used: set[str] = set()
+    for root in nodes:
+        for sub in ast.walk(root):
+            if isinstance(sub, ast.Name) and isinstance(sub.ctx, ast.Load):
+                used.add(sub.id)
+    return used
+
+
+def _is_not_implemented_raise(stmt: ast.Raise) -> bool:
+    exc = stmt.exc
+    if exc is None:
+        return False
+    if isinstance(exc, ast.Name) and exc.id in ("NotImplementedError", "NotImplemented"):
+        return True
+    if isinstance(exc, ast.Call):
+        func = exc.func
+        if isinstance(func, ast.Name) and func.id in ("NotImplementedError", "NotImplemented"):
+            return True
+        if isinstance(func, ast.Attribute) and func.attr in ("NotImplementedError", "NotImplemented"):
+            return True
+    return False
+
+
+def _strip_leading_docstring(body: Sequence[ast.stmt]) -> tuple[list[ast.stmt], bool]:
+    stmts = list(body)
+    if (
+        stmts
+        and isinstance(stmts[0], ast.Expr)
+        and isinstance(stmts[0].value, ast.Constant)
+        and isinstance(stmts[0].value.value, str)
+    ):
+        return stmts[1:], True
+    return stmts, False
+
+
 def inspect_python_ast_anti_stub(source_code: str) -> list[str]:
     """Return all fail-closed AST stub or forbidden placeholder violations in Python code."""
     violations: list[str] = []
@@ -70,32 +118,61 @@ def inspect_python_ast_anti_stub(source_code: str) -> list[str]:
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if node.name.startswith(("mock_", "fake_", "stub_")):
+            if node.name.startswith(("mock_", "fake_", "stub_", "simulate_")):
                 violations.append(f"Forbidden simulated function name: {node.name}")
-            # Strip leading docstring if present
-            body = list(node.body)
-            has_leading_docstring = (
-                isinstance(body[0], ast.Expr)
-                and isinstance(body[0].value, ast.Constant)
-                and isinstance(body[0].value.value, str)
-            )
-            if has_leading_docstring and len(body) == 1:
+            body, has_leading_docstring = _strip_leading_docstring(node.body)
+            if has_leading_docstring and not body:
                 # A body that is only a docstring returns None and does nothing: it is a stub like 'pass'.
                 violations.append(f"Function '{node.name}' body is only a docstring stub")
-            elif has_leading_docstring:
-                body = body[1:]
-            if len(body) == 1:
-                stmt = body[0]
-                if isinstance(stmt, ast.Pass):
-                    violations.append(f"Function '{node.name}' body is a bare 'pass' stub")
-                elif (
-                    isinstance(stmt, ast.Expr)
-                    and isinstance(stmt.value, ast.Constant)
-                    and stmt.value.value is Ellipsis
-                ):
-                    violations.append(f"Function '{node.name}' body is an ellipsis '...' stub")
-                elif isinstance(stmt, ast.Raise):
-                    violations.append(f"Function '{node.name}' raises unconditional exception stub")
+                continue
+            if not body:
+                violations.append(f"Function '{node.name}' has an empty body")
+                continue
+            for stmt in body:
+                if isinstance(stmt, ast.Raise) and _is_not_implemented_raise(stmt):
+                    violations.append(f"Function '{node.name}' raises NotImplementedError stub")
+                    break
+            last = body[-1]
+            if isinstance(last, ast.Pass):
+                violations.append(f"Function '{node.name}' ends with a bare 'pass' stub")
+            elif (
+                isinstance(last, ast.Expr)
+                and isinstance(last.value, ast.Constant)
+                and last.value.value is Ellipsis
+            ):
+                violations.append(f"Function '{node.name}' ends with an ellipsis '...' stub")
+            elif isinstance(last, ast.Raise) and len(body) == 1:
+                violations.append(f"Function '{node.name}' raises unconditional exception stub")
+            elif isinstance(last, ast.Return):
+                val = last.value
+                if isinstance(val, ast.Constant) and val.value is Ellipsis:
+                    violations.append(f"Function '{node.name}' returns ellipsis '...' stub")
+                elif isinstance(val, ast.Name) and val.id == "NotImplemented":
+                    violations.append(f"Function '{node.name}' returns NotImplemented stub")
+                elif val is None or (isinstance(val, ast.Constant) and val.value is None):
+                    params = _param_names(node.args)
+                    used = _referenced_names(body)
+                    if len(body) == 1 or (params and not (params & used)):
+                        violations.append(
+                            f"Function '{node.name}' returns None stub without computing on its inputs"
+                        )
+        elif isinstance(node, ast.ClassDef):
+            body, _ = _strip_leading_docstring(node.body)
+            if not body or all(
+                isinstance(s, ast.Pass)
+                or (
+                    isinstance(s, ast.Expr)
+                    and isinstance(s.value, ast.Constant)
+                    and s.value.value is Ellipsis
+                )
+                for s in body
+            ):
+                violations.append(f"Class '{node.name}' body is an empty/pass/ellipsis stub")
+        elif isinstance(node, ast.Lambda):
+            if isinstance(node.body, ast.Constant) or (
+                isinstance(node.body, ast.Name) and node.body.id == "NotImplemented"
+            ):
+                violations.append("Lambda body is a constant/placeholder stub")
     return violations
 
 

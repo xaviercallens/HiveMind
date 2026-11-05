@@ -44,6 +44,7 @@ class WorkReceipt:
     spot_check_passed: bool
     multikrum_accepted: bool
     delta_sha256: str
+    validator_node_id: Optional[str] = None
 
 
 @dataclass
@@ -56,6 +57,7 @@ class StorageProofReceipt:
     merkle_proof_hash: str
     bytes_stored: int
     verified: bool
+    validator_node_id: Optional[str] = None
 
 
 @dataclass
@@ -103,6 +105,33 @@ class HivePoUWBlock:
         return hashlib.sha256(raw).hexdigest()
 
 
+class _MintedTrackingBalances(dict):
+    """Balance map that records the cumulative minted high-water mark so slashed coins never become re-mintable."""
+
+    def __init__(self, ledger: "HiveSwarmLedger") -> None:
+        super().__init__()
+        self._ledger = ledger
+
+    def _sync_minted(self) -> None:
+        if not self._ledger._in_transfer:
+            current_total = round(sum(self.values()) + self._ledger._slashed_total_hive, 6)
+            if current_total > self._ledger._cumulative_minted_hive:
+                self._ledger._cumulative_minted_hive = current_total
+
+    def __setitem__(self, key: str, value: float) -> None:
+        super().__setitem__(key, value)
+        self._sync_minted()
+
+    def update(self, *args: Any, **kwargs: Any) -> None:
+        super().update(*args, **kwargs)
+        self._sync_minted()
+
+    def setdefault(self, key: str, default: float = 0.0) -> float:
+        res = super().setdefault(key, default)
+        self._sync_minted()
+        return res
+
+
 class HiveSwarmLedger:
     """Bitcoin-inspired Proof-of-Useful-Work (PoUW) Ledger for Project HiveMind.
 
@@ -116,7 +145,10 @@ class HiveSwarmLedger:
     def __init__(self, ledger_path: Optional[Path] = None) -> None:
         self.ledger_path = ledger_path
         self.chain: List[HivePoUWBlock] = []
-        self.balances: Dict[str, float] = {}
+        self._cumulative_minted_hive: float = 0.0
+        self._slashed_total_hive: float = 0.0
+        self._in_transfer: bool = False
+        self.balances: Dict[str, float] = _MintedTrackingBalances(self)
         self.reputation_scores: Dict[str, int] = {}
         self.slashed_registry: List[str] = []
         self.settlement_history: List[InferenceSettlementReceipt] = []
@@ -141,6 +173,11 @@ class HiveSwarmLedger:
         """Return total `$HIVE` currently held across all node balances."""
         return round(sum(self.balances.values()), 6)
 
+    def total_minted_supply(self) -> float:
+        """Return cumulative `$HIVE` ever minted (including coins later destroyed by slashing)."""
+        live_plus_slashed = round(sum(self.balances.values()) + self._slashed_total_hive, 6)
+        return round(max(self._cumulative_minted_hive, live_plus_slashed), 6)
+
     def block_reward_at_height(self, height: int) -> float:
         if height < 0:
             return 0.0
@@ -148,7 +185,7 @@ class HiveSwarmLedger:
         if halvings >= 64:
             return 0.0
         raw_reward = self.INITIAL_BLOCK_REWARD * (0.5**halvings)
-        remaining_cap = max(0.0, self.MAX_SUPPLY_HIVE - self.total_circulating_supply())
+        remaining_cap = max(0.0, self.MAX_SUPPLY_HIVE - self.total_minted_supply())
         return round(min(raw_reward, remaining_cap), 6)
 
     @staticmethod
@@ -215,10 +252,10 @@ class HiveSwarmLedger:
                     self.slashed_registry.append(w.node_id)
                 self.reputation_scores[w.node_id] = self.reputation_scores.get(w.node_id, 100) - 50
                 # Slash 50% of any existing balance for Byzantine behavior
-                if w.node_id in self.balances:
-                    self.balances[w.node_id] = round(self.balances[w.node_id] * 0.5, 6)
-                else:
-                    self.balances[w.node_id] = 0.0
+                old_bal = self.balances.get(w.node_id, 0.0)
+                new_bal = round(old_bal * 0.5, 6)
+                self._slashed_total_hive = round(self._slashed_total_hive + (old_bal - new_bal), 6)
+                self.balances[w.node_id] = new_bal
 
         total_weighted_flops = sum(
             w.flops_contributed * max(0.05, w.cosine_alignment) for w in valid_workers
@@ -254,16 +291,33 @@ class HiveSwarmLedger:
                 allocations[s.node_id] = round(allocations.get(s.node_id, 0.0) + earned, 6)
 
         # 3. Process Spot-Check Validators (10% of Block Reward)
+        # IP-270: Validator payout requires at least one verified receipt in the same block;
+        # when receipts bind explicit validator_node_id values, only bound validators earn.
         validator_pool = 0.10 * reward
-        unique_validators = [
-            vid for vid in dict.fromkeys(validator_node_ids) if vid not in self.slashed_registry
-        ]
+        has_verified_receipts = bool(valid_workers or valid_seeders)
+        bound_validators = {
+            r.validator_node_id
+            for r in (*valid_workers, *valid_seeders)
+            if getattr(r, "validator_node_id", None)
+        }
+        if has_verified_receipts:
+            unique_validators = [
+                vid
+                for vid in dict.fromkeys(validator_node_ids)
+                if vid
+                and vid not in self.slashed_registry
+                and (not bound_validators or vid in bound_validators)
+            ]
+        else:
+            unique_validators = []
         if unique_validators:
             per_val = round(validator_pool / len(unique_validators), 6)
             for vid in unique_validators:
                 allocations[vid] = round(allocations.get(vid, 0.0) + per_val, 6)
 
-        # Commit balances
+        # Commit balances and cumulative minted supply (IP-271)
+        minted_this_block = round(sum(allocations.values()), 6)
+        self._cumulative_minted_hive = round(self._cumulative_minted_hive + minted_this_block, 6)
         for node_id, amount in allocations.items():
             self.balances[node_id] = round(self.balances.get(node_id, 0.0) + amount, 6)
 
@@ -273,6 +327,7 @@ class HiveSwarmLedger:
             + [expert_cid]
         )
         merkle_root = self._compute_merkle_root(merkle_leaves)
+        effective_reward = reward if allocations else 0.0
 
         block = HivePoUWBlock(
             block_height=height,
@@ -281,7 +336,7 @@ class HiveSwarmLedger:
             outer_step=outer_step,
             expert_cid=expert_cid,
             merkle_root=merkle_root,
-            total_block_reward=reward,
+            total_block_reward=effective_reward,
             reward_allocations=allocations,
             slashed_nodes=slashed,
         )
@@ -333,15 +388,19 @@ class HiveSwarmLedger:
                 f"Node {consumer_node_id} has insufficient $HIVE ({consumer_bal} < {total_fee})"
             )
 
-        self.balances[consumer_node_id] = round(consumer_bal - total_fee, 6)
-        # Split in integer micro-units so the credits sum to exactly the fee debited: rounding each equal share
-        # (5e-06 over 3 providers -> 3 x 2e-06 = 6e-06) minted value. The remainder goes one micro-unit at a time
-        # to the first providers.
-        fee_micro = int(round(total_fee * 1_000_000))
-        base, extra = divmod(fee_micro, len(provider_node_ids))
-        for i, pid in enumerate(provider_node_ids):
-            share = (base + (1 if i < extra else 0)) / 1_000_000
-            self.balances[pid] = round(self.balances.get(pid, 0.0) + share, 6)
+        self._in_transfer = True
+        try:
+            self.balances[consumer_node_id] = round(consumer_bal - total_fee, 6)
+            # Split in integer micro-units so the credits sum to exactly the fee debited: rounding each equal share
+            # (5e-06 over 3 providers -> 3 x 2e-06 = 6e-06) minted value. The remainder goes one micro-unit at a time
+            # to the first providers.
+            fee_micro = int(round(total_fee * 1_000_000))
+            base, extra = divmod(fee_micro, len(provider_node_ids))
+            for i, pid in enumerate(provider_node_ids):
+                share = (base + (1 if i < extra else 0)) / 1_000_000
+                self.balances[pid] = round(self.balances.get(pid, 0.0) + share, 6)
+        finally:
+            self._in_transfer = False
 
         receipt = InferenceSettlementReceipt(
             consumer_node_id=consumer_node_id,
@@ -381,12 +440,13 @@ class HiveSwarmLedger:
                 "NON_POSITIVE_OR_NON_FINITE_REWARD",
                 f"amount_hive ({amount_hive}) must be finite and strictly positive (> 0.0).",
             )
-        if self.total_circulating_supply() + float(amount_hive) > self.MAX_SUPPLY_HIVE:
+        if self.total_minted_supply() + float(amount_hive) > self.MAX_SUPPLY_HIVE:
             raise SwarmSecurityViolationError(
                 "LEDGER-04",
                 "MAX_SUPPLY_CAP_EXCEEDED",
                 f"Crediting {amount_hive} $HIVE would exceed the 21,000,000 $HIVE supply cap.",
             )
+        self._cumulative_minted_hive = round(self._cumulative_minted_hive + float(amount_hive), 6)
         self.balances[node_id] = round(self.balances.get(node_id, 0.0) + float(amount_hive), 6)
         self.reputation_scores[node_id] = self.reputation_scores.get(node_id, 100) + 5
         self._persist()
@@ -487,7 +547,11 @@ class GuildSlashingInsurancePool:
                 "INSUFFICIENT_BALANCE",
                 f"Node '{node_id}' holds {balance} $HIVE, needs {amount}.",
             )
-        self.ledger.balances[node_id] = round(balance - amount, 6)
+        self.ledger._in_transfer = True
+        try:
+            self.ledger.balances[node_id] = round(balance - amount, 6)
+        finally:
+            self.ledger._in_transfer = False
 
     def bond_stake(self, guild_id: str, peer_id: str, amount_hive: float) -> float:
         """Move `amount_hive` from `peer_id`'s balance into its bonded stake."""
@@ -582,9 +646,13 @@ class GuildSlashingInsurancePool:
         surplus = round(stake - from_stake, 6)
         self.reserve_hive = round(self.reserve_hive - from_reserve + surplus, 6)
         paid = round(from_stake + from_reserve, 6)
-        self.ledger.balances[consumer_node_id] = round(
-            self.ledger.balances.get(consumer_node_id, 0.0) + paid, 6
-        )
+        self.ledger._in_transfer = True
+        try:
+            self.ledger.balances[consumer_node_id] = round(
+                self.ledger.balances.get(consumer_node_id, 0.0) + paid, 6
+            )
+        finally:
+            self.ledger._in_transfer = False
         if peer_id not in self.ledger.slashed_registry:
             self.ledger.slashed_registry.append(peer_id)
         self.ledger.reputation_scores[peer_id] = 0

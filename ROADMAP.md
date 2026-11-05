@@ -727,6 +727,16 @@ The update is [`docs/IMPROVEMENT_PLAN_2026-11-01.md`](docs/IMPROVEMENT_PLAN_2026
 - Preregistered next experiment **TM1** (`artifacts/experiments/TM1_verifier_pruned_branching_prereg.json`): 40 MBPP tasks, local `qwen2.5-coder` 7b/3b/1.5b, arms A (one call), B (planner + 3 branches on two pools + hidden-test verifier), C (best-of-3 without planner); positive and two negative controls; **NOT_RUN** until a sandbox-capable host or explicit owner acceptance of unsandboxed `python -I` execution. Owner/assignee: open.
 - Foundation paper: paragraph text ready in section 4 of the assessment, to land with [#452](https://github.com/xaviercallens/HiveMind/issues/452) after [#446](https://github.com/xaviercallens/HiveMind/pull/446); no numbers until TM1 has a report.
 
+### Status update, 2026-11-05 (3-hourly review, 03:30 CET)
+
+- **Merged since 00:30 CET:** #613 (a re-sent identical poll vote writes no new bus event), #615 (00:30 roadmap block), #616 (OpenTrainer delta replay answers 409, 20 per minute per account answers 429), #617 (the bee capacity market never matches an account's orders with each other). Main CI on the latest runs: success on both workflows.
+- **Open, owner-authored, this session:** none.
+- **Not done on purpose:** the `campaign_id` allow-list from [#576](https://github.com/xaviercallens/HiveMind/issues/576) (the repo uses several id forms, so the rule is an owner decision: [#618](https://github.com/xaviercallens/HiveMind/issues/618)); BID escrow, `bee_id` ownership and an open-order cap from [#577](https://github.com/xaviercallens/HiveMind/issues/577).
+- **Not reviewed:** #595 (titled the v3.1.0 release) and the draft #604; non-owner branches `fix/v3.1-hardening` and `feat/boinc-always-on-server`. #442, #434, #369, #366 still ACCEPT without merging (#569); #362 REFUSE on `gwaya_audit`.
+- **Live, 00:00-03:00 CET (probes skipped at night):** 0 x 402/5xx in every window; router chat p95 1.8-2.0 s on 6-9 scripted chats per window, none in the last window; no registrations. T4 governor yielded in every window, QLoRA assimilated 174 (173 -> 174 at 00:15), VRAM 5.2 GiB at 0 % utilisation ([#608](https://github.com/xaviercallens/HiveMind/issues/608)). The T4 VM still shows RUNNING with last stop 22:13 and last start 22:15 CET ([#614](https://github.com/xaviercallens/HiveMind/issues/614)).
+- **New items:** [#618](https://github.com/xaviercallens/HiveMind/issues/618) (valid OpenTrainer campaign ids, owner decision).
+- **Open items for claim:** #618 (owner), #614 (owner), [#608](https://github.com/xaviercallens/HiveMind/issues/608), [#598](https://github.com/xaviercallens/HiveMind/issues/598) (per-producer failure reason), #576 and #577 (the parts above), [#590](https://github.com/xaviercallens/HiveMind/issues/590), [#591](https://github.com/xaviercallens/HiveMind/issues/591). The monitor cron command still lacks `--retired-models hivemind/bee-stars,hivemind/coder` (owner edit).
+
 ### Status update, 2026-11-05 (3-hourly review, 00:30 CET)
 
 - **Merged since 21:30 CET:** #602 (model and producers logged on a 502), #606 (campaign poll votes rate-limited), #607 (`--retired-models` for the monitor), #610 (21:30 roadmap block), #611 (KV page codecs refuse a page that would decode to zeros), #612 (usage-capture summary cached per window bucket). Main CI on the latest runs: success on both workflows.

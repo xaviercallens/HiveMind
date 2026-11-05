@@ -651,6 +651,23 @@ The full plan, with evidence, Definition of Done and the test for each finding (
 - **Measured since 06:00:** the T4 trained again and the QLoRA counter reached 154 (152 at 06:00); the probes passed 15 of 15 in three daytime runs; router chat p95 was 0.6 s to 6.2 s with probes included, with one 16.9 s request through ruche that was not a probe. Still missing: a yield recorded while a BOINC task runs (all logged yields were 54 to 87 ms with no task on the GPU).
 - **Open items for claim:** [#415](https://github.com/xaviercallens/HiveMind/issues/415), [#412](https://github.com/xaviercallens/HiveMind/issues/412), [#405](https://github.com/xaviercallens/HiveMind/issues/405), [#404](https://github.com/xaviercallens/HiveMind/issues/404), [#403](https://github.com/xaviercallens/HiveMind/issues/403) and the security issues [#378](https://github.com/xaviercallens/HiveMind/issues/378) to [#382](https://github.com/xaviercallens/HiveMind/issues/382).
 
+### 3.26f Daily audit update (2026-11-05) — `main` at `816badd`
+
+The update is [`docs/IMPROVEMENT_PLAN_2026-11-05.md`](docs/IMPROVEMENT_PLAN_2026-11-05.md): 23 new items (IP-270 to IP-292; P0 0, P1 9, P2 9, P3 5); seven re-checked by the author (R), sixteen agent-reported (A). Closed or narrowed since 3.26e: IP-250 to IP-264 and IP-269 (all but IP-260, which is narrowed to escrow, ownership and an open-order cap in [#577](https://github.com/xaviercallens/HiveMind/issues/577)). Still open from 3.26e: IP-265 to IP-268.
+
+| Proposed PR | Open items now | Unassigned work for others |
+| :-- | :-- | :-- |
+| PR-IP-24 (CI, tests, scripts, Lean) | IP-291, IP-292 | issue [#625](https://github.com/xaviercallens/HiveMind/issues/625) |
+| PR-IP-25 (swarm gates) | IP-272, IP-273, IP-274, IP-275 | open for claim |
+| PR-IP-26 (game and economy honesty) | IP-287, IP-288, IP-289 | open for claim |
+| PR-IP-27 (cockpit minting/auth) | IP-265 to IP-268 remain; new IP-286, IP-290 | IP-286 is issue [#628](https://github.com/xaviercallens/HiveMind/issues/628); IP-290 depends on the owner's decision in [#522](https://github.com/xaviercallens/HiveMind/issues/522) |
+| PR-IP-29 (validator, registry, security) | IP-282 | open for claim |
+| PR-IP-31 (ledger minting and supply cap) | IP-270, IP-271 | issue [#624](https://github.com/xaviercallens/HiveMind/issues/624) |
+| PR-IP-32 (router anonymous routes) | IP-276, IP-277, IP-278, IP-279 | issue [#627](https://github.com/xaviercallens/HiveMind/issues/627) (IP-277 overlaps [#577](https://github.com/xaviercallens/HiveMind/issues/577)) |
+| PR-IP-33 (compress, KV, knowledge market) | IP-280, IP-281, IP-283, IP-284, IP-285 | IP-281, IP-283, IP-285 are issue [#626](https://github.com/xaviercallens/HiveMind/issues/626); IP-280 and IP-284 open for claim |
+
+Owner actions: close the issues already fixed on main (#513 apart from its `/boinc/status` probe part, #519, #520, #523, #554, #573, #574, #575, #582, #583); decide the PR-gate owner e-mail change ([#512](https://github.com/xaviercallens/HiveMind/issues/512) with [#511](https://github.com/xaviercallens/HiveMind/issues/511)); rebase or close #442, #434, #369, #366 ([#569](https://github.com/xaviercallens/HiveMind/issues/569)); redeploy the router when the owner wants the 502 logging live.
+
 ### 3.26e Daily audit update (2026-11-04) — `main` at `815199e`
 
 The update is [`docs/IMPROVEMENT_PLAN_2026-11-04.md`](docs/IMPROVEMENT_PLAN_2026-11-04.md): 20 new items (IP-250 to IP-269; P0 0, P1 6, P2 8, P3 6); six re-checked by the author (R), the rest agent-reported (A). The tests, CI and Lean audit found nothing new and found the PR security gate, release workflow and Lean verification sound (not every script or test was read). Closed since 2026-11-03: IP-165, IP-168, IP-179, IP-198, IP-200, IP-202, IP-204, IP-208 to IP-213, IP-221, IP-227, IP-229, IP-233, IP-238, IP-239, IP-240, IP-241, IP-243, IP-244, IP-246 (see the plan, section 1).

@@ -1516,3 +1516,94 @@ def test_failed_producer_log_names_the_reason_in_the_blocking_path(world: World,
     assert len(lines) == 1
     reason = lines[0].rsplit(": ", 1)[-1]
     assert reason and reason != lines[0] and key not in lines[0] and PROMPT not in lines[0]
+
+
+def test_ip278_raw_json_endpoints_validate_inputs_and_return_400_instead_of_500(world: World) -> None:
+    """IP-278: Raw request.body() endpoints must reject non-dict JSON, non-numeric parameters, and oversized questions with HTTP 400."""
+    bad_sim = world.app_client.post(
+        "/v1/hivemind/producers/scale-100-simulate",
+        json={"active_producers": "not-an-int"},
+    )
+    assert bad_sim.status_code == 400
+    assert bad_sim.json()["error"]["code"] == "invalid_parameter"
+
+    bad_rescue = world.app_client.post(
+        "/v1/hivemind/bees/rusty-sundials/rescue",
+        json={"steps": "not-an-int"},
+    )
+    assert bad_rescue.status_code == 400
+    assert bad_rescue.json()["error"]["code"] == "invalid_parameter"
+
+    bad_surrogate_list = world.app_client.post(
+        "/v1/hivemind/bees/rusty-sundials/surrogate",
+        json=[1, 2, 3],
+    )
+    assert bad_surrogate_list.status_code == 400
+    assert bad_surrogate_list.json()["error"]["code"] == "invalid_request"
+
+    bad_sweep_nan = world.app_client.post(
+        "/v1/hivemind/bees/rusty-sundials/sweep",
+        json={"steps": 16, "parameter_grid": ["bad"]},
+    )
+    assert bad_sweep_nan.status_code == 400
+    assert bad_sweep_nan.json()["error"]["code"] == "invalid_parameter"
+
+    oversized_question = world.app_client.post(
+        "/v1/hivemind/bees/science-bee/ask",
+        json={"question": "x" * 4001},
+    )
+    assert oversized_question.status_code == 400
+    assert oversized_question.json()["error"]["code"] == "invalid_question"
+
+
+def test_ip276_anonymous_solver_sweep_is_work_budgeted_and_fast(world: World) -> None:
+    """IP-276: Anonymous rusty-sundials parameter sweep bounds steps across the grid and runs in threadpool under 1.0s."""
+    import time as _time
+    import hivemind.swarm.rusty_sundials_scientific_bee  # noqa: F401 — pre-load module so timing measures endpoint execution
+
+    t0 = _time.perf_counter()
+    res = world.app_client.post(
+        "/v1/hivemind/bees/rusty-sundials/sweep",
+        json={"steps": 128, "parameter_grid": [0.1] * 16},
+    )
+    elapsed = _time.perf_counter() - t0
+    assert res.status_code == 200, res.text
+    assert elapsed < 1.0
+    body = res.json()
+    assert body["quorum_verified"] is True
+
+
+def test_ip277_bee_trade_endpoint_enforces_per_account_rate_limit(world: World) -> None:
+    """IP-277: /v1/hivemind/bees/trade enforces per-account rate limiting so an account cannot flood the order book."""
+    _, key = world.consumer(10.0)
+    payload = {
+        "bee_id": "bee-math-01",
+        "side": "OFFER",
+        "subject_id": "hivemind/qwen3-8b-coder",
+        "capacity_1k": 10.0,
+        "price_per_1k": 0.25,
+    }
+    statuses = [
+        world.app_client.post("/v1/hivemind/bees/trade", headers=_auth(key), json=payload).status_code
+        for _ in range(21)
+    ]
+    assert statuses[:20] == [200] * 20
+    assert statuses[20] == 429
+
+
+def test_ip279_cloud_run_scaling_docs_and_deploy_scripts_agree_on_zero_to_one() -> None:
+    """IP-279: Cloud Run deploy script, spec, wiki, and autoscaler skill all specify min-instances=0 and max-instances=1."""
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[1]
+    deploy_sh = (repo_root / "deploy" / "gcp_openrouter" / "deploy.sh").read_text(encoding="utf-8")
+    spec_md = (repo_root / "docs" / "HIVEMIND_OPENROUTER_SPEC.md").read_text(encoding="utf-8")
+    wiki_md = (repo_root / "wiki" / "HiveMind-at-Home-GCP-Dashboard-and-La-Ruche-Vault.md").read_text(encoding="utf-8")
+    skill_md = (repo_root / ".agents" / "skills" / "gcp-cost-autoscaler-ops" / "SKILL.md").read_text(encoding="utf-8")
+
+    assert "--min-instances 0" in deploy_sh and "--max-instances 1" in deploy_sh
+    assert "--min-instances 0 --max-instances 1" in spec_md
+    assert "--min-instances=0 --max-instances=1" in wiki_md
+    assert "--min-instances=1" not in skill_md
+    assert "--max-instances=2" not in skill_md
+    assert "--min-instances=0 --max-instances=1" in skill_md

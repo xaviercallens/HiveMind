@@ -910,6 +910,44 @@ def create_router_app(
     opentrainer_delta_limiter = SlidingWindowLimiter(OPENTRAINER_DELTA_LIMIT, AMCP_PUBLISH_WINDOW_S)
     usage_capture_cache: dict[int, tuple[float, dict[str, Any]]] = {}
     campaign_poll_limiter = SlidingWindowLimiter(CAMPAIGN_POLL_LIMIT, AMCP_PUBLISH_WINDOW_S)
+    bee_trade_limiter = SlidingWindowLimiter(20, AMCP_PUBLISH_WINDOW_S)
+    anon_compute_limiter = SlidingWindowLimiter(30, AMCP_PUBLISH_WINDOW_S)
+
+    def _parse_json_dict(raw: bytes) -> dict[str, Any]:
+        try:
+            parsed = json.loads(raw) if raw else {}
+        except (ValueError, RecursionError):
+            raise RouterError(400, "invalid request: body must be a JSON object", "invalid_request_error", "invalid_request") from None
+        if not isinstance(parsed, dict):
+            raise RouterError(400, "invalid request: body must be a JSON object", "invalid_request_error", "invalid_request")
+        return parsed
+
+    def _finite_int(val: Any, default: int, lo: int, hi: int, name: str) -> int:
+        if val is None or val == "":
+            return default
+        if isinstance(val, bool):
+            raise RouterError(400, f"invalid {name}: must be an integer", "invalid_request_error", "invalid_parameter")
+        try:
+            fval = float(val)
+            ival = int(val)
+        except (TypeError, ValueError, OverflowError):
+            raise RouterError(400, f"invalid {name}: must be an integer", "invalid_request_error", "invalid_parameter") from None
+        if not math.isfinite(fval):
+            raise RouterError(400, f"invalid {name}: must be finite", "invalid_request_error", "invalid_parameter")
+        return max(lo, min(ival, hi))
+
+    def _finite_float(val: Any, default: float, lo: float, hi: float, name: str) -> float:
+        if val is None or val == "":
+            return default
+        if isinstance(val, bool):
+            raise RouterError(400, f"invalid {name}: must be a number", "invalid_request_error", "invalid_parameter")
+        try:
+            fval = float(val)
+        except (TypeError, ValueError, OverflowError):
+            raise RouterError(400, f"invalid {name}: must be a number", "invalid_request_error", "invalid_parameter") from None
+        if not math.isfinite(fval):
+            raise RouterError(400, f"invalid {name}: must be finite", "invalid_request_error", "invalid_parameter")
+        return max(lo, min(fval, hi))
     market_cache: dict[tuple[str, int], dict[str, Any]] = {}
     market_lock = threading.Lock()
     capacity_clamp = float(max_producer_capacity_1k)
@@ -1805,49 +1843,49 @@ def create_router_app(
             select_100_node_optimal_producer,
         )
 
+        if not anon_compute_limiter.allow(client_key(request), clock()):
+            raise RouterError(429, "Too many requests; try again in a minute.", "rate_limit_error", "rate_limited")
         raw = await request.body()
-        try:
-            body = json.loads(raw) if raw else {}
-        except (ValueError, RecursionError):
-            raise RouterError(400, "invalid request: body must be a JSON object", "invalid_request_error", "invalid_request") from None
-        if not isinstance(body, dict):
-            raise RouterError(400, "invalid request: body must be a JSON object", "invalid_request_error", "invalid_request")
+        body = _parse_json_dict(raw)
 
-        active_producers = max(4, min(int(body.get("active_producers", 100)), 1000))
-        standby_prosumers = max(0, min(int(body.get("standby_prosumers", 160)), 5000))
-        arrival_rate = max(0.1, min(float(body.get("arrival_rate_req_per_s", 24.0)), 500.0))
+        active_producers = _finite_int(body.get("active_producers"), 100, 4, 1000, "active_producers")
+        standby_prosumers = _finite_int(body.get("standby_prosumers"), 160, 0, 5000, "standby_prosumers")
+        arrival_rate = _finite_float(body.get("arrival_rate_req_per_s"), 24.0, 0.1, 500.0, "arrival_rate_req_per_s")
         client_region = str(body.get("client_region", "eu-west"))[:32]
         model_id = str(body.get("model_id", "hivemind/qwen3.5-coder-14b"))[:128]
 
-        fleet_plan = build_100_producer_international_fleet_plan(
-            active_producers=active_producers,
-            standby_prosumers=standby_prosumers,
-            arrival_rate_req_per_s=arrival_rate,
-        )
-        regions = ("eu-west", "us-east", "us-west", "ap-northeast")
-        synthetic_candidates = [
-            {
-                "account_id": f"producer-{i:03d}",
-                "endpoint_id": f"ep-{i % 2}",
-                "region": regions[i % len(regions)],
-                "loaded": (i % 3 == 0),
-                "inflight": i % 5,
-                "capacity_1k": 20 + (i % 4) * 10,
-                "models": [model_id],
+        def _run_sim() -> dict[str, Any]:
+            fleet_plan = build_100_producer_international_fleet_plan(
+                active_producers=active_producers,
+                standby_prosumers=standby_prosumers,
+                arrival_rate_req_per_s=arrival_rate,
+            )
+            regions = ("eu-west", "us-east", "us-west", "ap-northeast")
+            synthetic_candidates = [
+                {
+                    "account_id": f"producer-{i:03d}",
+                    "endpoint_id": f"ep-{i % 2}",
+                    "region": regions[i % len(regions)],
+                    "loaded": (i % 3 == 0),
+                    "inflight": i % 5,
+                    "capacity_1k": 20 + (i % 4) * 10,
+                    "models": [model_id],
+                }
+                for i in range(active_producers)
+            ]
+            dispatch_sample = select_100_node_optimal_producer(
+                synthetic_candidates,
+                model_id=model_id,
+                client_region=client_region,
+            )
+            return {
+                "object": "hivemind.producer_scale_100_simulation",
+                "fleet_plan": fleet_plan,
+                "amcp_mesh_scaling": plan_100_producer_mesh_scaling(active_producers=active_producers),
+                "p2c_dispatch_sample": dispatch_sample,
             }
-            for i in range(active_producers)
-        ]
-        dispatch_sample = select_100_node_optimal_producer(
-            synthetic_candidates,
-            model_id=model_id,
-            client_region=client_region,
-        )
-        return {
-            "object": "hivemind.producer_scale_100_simulation",
-            "fleet_plan": fleet_plan,
-            "amcp_mesh_scaling": plan_100_producer_mesh_scaling(active_producers=active_producers),
-            "p2c_dispatch_sample": dispatch_sample,
-        }
+
+        return await run_in_threadpool(_run_sim)
 
     @app.get("/v1/hivemind/bees/rusty-sundials")
     def get_rusty_sundials_bee() -> dict[str, Any]:
@@ -1861,17 +1899,14 @@ def create_router_app(
         """Deterministic numeric calculation rescue & physical/mathematical structural analysis across astronomy, fluid mechanics, quantum fluids & genetics."""
         from hivemind.swarm.rusty_sundials_scientific_bee import rescue_numeric_calculation
 
+        if not anon_compute_limiter.allow(client_key(request), clock()):
+            raise RouterError(429, "Too many requests; try again in a minute.", "rate_limit_error", "rate_limited")
         raw = await request.body()
-        try:
-            body = json.loads(raw) if raw else {}
-        except (ValueError, RecursionError):
-            raise RouterError(400, "invalid request: body must be a JSON object", "invalid_request_error", "invalid_request") from None
-        if not isinstance(body, dict):
-            raise RouterError(400, "invalid request: body must be a JSON object", "invalid_request_error", "invalid_request")
+        body = _parse_json_dict(raw)
         prompt = str(body.get("prompt", "Rescue numerical PDE/ODE calculation"))[:2048]
         domain = str(body["domain"])[:64] if body.get("domain") else None
-        steps = max(4, min(int(body.get("steps", 64)), 256))
-        dt = max(1e-5, min(float(body.get("dt", 0.01)), 0.1))
+        steps = _finite_int(body.get("steps"), 64, 4, 256, "steps")
+        dt = _finite_float(body.get("dt"), 0.01, 1e-5, 0.1, "dt")
         result = await run_in_threadpool(rescue_numeric_calculation, prompt, domain, steps, dt)
         return result.to_dict()
 
@@ -2838,6 +2873,22 @@ def create_router_app(
         )
 
         account = authenticate(request)
+        now = clock()
+        if not bee_trade_limiter.allow(account.account_id, now):
+            raise RouterError(
+                429,
+                "Too many bee trade orders from this account; try again in a minute.",
+                "rate_limit_error",
+                "rate_limited",
+            )
+        existing_orders = store.list_bee_trade_orders(window_s=86_400.0, now_utc=now)
+        if sum(1 for o in existing_orders if o.get("account_id") == account.account_id) >= 32:
+            raise RouterError(
+                429,
+                "Per-account open bee trade order cap reached (max 32 in 24h).",
+                "rate_limit_error",
+                "order_cap_reached",
+            )
         order_id = "ord-" + uuid.uuid4().hex[:14]
         order = store.record_bee_trade_order(
             order_id=order_id,
@@ -2847,7 +2898,7 @@ def create_router_app(
             subject_id=payload.subject_id,
             capacity_1k=payload.capacity_1k,
             price_per_1k=payload.price_per_1k,
-            now_utc=clock(),
+            now_utc=now,
         )
         ev = build_amcp_kafka_event(
             topic_key="bee_trading",
@@ -2862,7 +2913,7 @@ def create_router_app(
                 "capacity_1k": payload.capacity_1k,
                 "price_per_1k": payload.price_per_1k,
             },
-            now_utc=clock(),
+            now_utc=now,
         )
         store.record_amcp_kafka_event(
             event_id=ev.event_id,
@@ -2876,7 +2927,7 @@ def create_router_app(
             payload=ev.payload,
             now_utc=ev.utc,
         )
-        clearing = clear_bee_capacity_market(store.list_bee_trade_orders(window_s=86_400.0, now_utc=clock()))
+        clearing = clear_bee_capacity_market(existing_orders + [order])
         return {
             "object": "hivemind.bee_trade_receipt",
             "order": order,
@@ -3558,30 +3609,33 @@ def create_router_app(
     @app.post("/v1/hivemind/bees/rusty-sundials/surrogate")
     async def rusty_sundials_surrogate_endpoint(request: Request) -> dict[str, Any]:
         """Run Wave 2 Solver-Taught Neural Surrogate with fail-closed rusty-SUNDIALS teacher verification."""
-        from hivemind.swarm.rusty_sundials_scientific_bee import SolverTaughtSurrogateExpert
+        if not anon_compute_limiter.allow(client_key(request), clock()):
+            raise RouterError(429, "Too many anonymous compute requests from this IP; try again in a minute.", "rate_limit_error", "rate_limited")
 
         raw = await request.body()
-        try:
-            body = json.loads(raw) if raw else {}
-        except ValueError:
-            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+        body = _parse_json_dict(raw)
 
-        prompt = str(body.get("prompt") or "Integrate stiff Robertson chemical kinetics ODE with mass conservation")
+        prompt = str(body.get("prompt") or "Integrate stiff Robertson chemical kinetics ODE with mass conservation")[:4000]
         domain = body.get("domain")
         if domain is not None:
-            domain = str(domain)
-        steps = max(4, min(int(body.get("steps") or 32), 256))
-        dt = max(1e-5, min(float(body.get("dt") or 0.01), 0.25))
-        injected_noise = max(0.0, min(float(body.get("injected_perturbation") or 0.0), 10.0))
+            domain = str(domain)[:128]
+        steps = _finite_int(body.get("steps"), 32, 4, 256, "steps")
+        dt = _finite_float(body.get("dt"), 0.01, 1e-5, 0.25, "dt")
+        injected_noise = _finite_float(body.get("injected_perturbation"), 0.0, 0.0, 10.0, "injected_perturbation")
 
-        surrogate = SolverTaughtSurrogateExpert()
-        verdict = surrogate.predict_and_verify(
-            prompt,
-            domain=domain,
-            steps=steps,
-            dt=dt,
-            force_surrogate_perturbation=injected_noise,
-        )
+        def _run_surrogate() -> dict[str, Any]:
+            from hivemind.swarm.rusty_sundials_scientific_bee import SolverTaughtSurrogateExpert
+
+            surrogate = SolverTaughtSurrogateExpert()
+            return surrogate.predict_and_verify(
+                prompt,
+                domain=domain,
+                steps=steps,
+                dt=dt,
+                force_surrogate_perturbation=injected_noise,
+            )
+
+        verdict = await run_in_threadpool(_run_surrogate)
         return {
             **verdict,
             "object": "hivemind.bee.rusty_sundials.surrogate_verification",
@@ -3591,79 +3645,96 @@ def create_router_app(
     @app.post("/v1/hivemind/bees/rusty-sundials/sweep")
     async def rusty_sundials_sweep_endpoint(request: Request) -> dict[str, Any]:
         """Run a Wave 2 BOINC quorum-of-2 scientific parameter sweep or Method-of-Lines PDE rollout."""
-        from hivemind.swarm.rusty_sundials_scientific_bee import (
-            run_wave2_parameter_sweep_quorum,
-            solve_wave2_method_of_lines_pde,
-        )
+        if not anon_compute_limiter.allow(client_key(request), clock()):
+            raise RouterError(429, "Too many anonymous compute requests from this IP; try again in a minute.", "rate_limit_error", "rate_limited")
 
         raw = await request.body()
-        try:
-            body = json.loads(raw) if raw else {}
-        except ValueError:
-            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+        body = _parse_json_dict(raw)
 
         pde_family = body.get("pde_family")
         if pde_family:
-            grid_points = max(8, min(int(body.get("grid_points") or 32), 128))
-            steps = max(4, min(int(body.get("steps") or 24), 256))
-            dt = max(1e-5, min(float(body.get("dt") or 0.005), 0.1))
-            param = float(body.get("param") or 0.05)
-            pde_res = solve_wave2_method_of_lines_pde(
-                str(pde_family),
-                grid_points=grid_points,
-                steps=steps,
-                dt=dt,
-                param=param,
-            )
+            grid_points = _finite_int(body.get("grid_points"), 32, 8, 64, "grid_points")
+            steps = _finite_int(body.get("steps"), 24, 4, 64, "steps")
+            dt = _finite_float(body.get("dt"), 0.005, 1e-5, 0.1, "dt")
+            param = _finite_float(body.get("param"), 0.05, -100.0, 100.0, "param")
+
+            def _run_pde() -> dict[str, Any]:
+                from hivemind.swarm.rusty_sundials_scientific_bee import solve_wave2_method_of_lines_pde
+
+                return solve_wave2_method_of_lines_pde(
+                    str(pde_family)[:64],
+                    grid_points=grid_points,
+                    steps=steps,
+                    dt=dt,
+                    param=param,
+                )
+
+            pde_res = await run_in_threadpool(_run_pde)
             return {
                 "object": "hivemind.bee.rusty_sundials.mol_pde",
                 "succeeded": float(pde_res["invariant_drift"]) < 1e-2,
                 **pde_res,
             }
 
-        family = str(body.get("family") or body.get("domain") or "van_der_pol")
+        family = str(body.get("family") or body.get("domain") or "van_der_pol")[:64]
         raw_grid = body.get("parameter_grid")
-        if isinstance(raw_grid, list) and raw_grid:
-            param_grid = [float(x) for x in raw_grid[:16]]
+        if raw_grid is not None:
+            if not isinstance(raw_grid, list) or not raw_grid:
+                raise RouterError(400, "parameter_grid must be a non-empty list of finite numbers", "invalid_request_error", "invalid_parameter")
+            param_grid = [_finite_float(x, 0.2, -100.0, 100.0, "parameter_grid") for x in raw_grid[:16]]
         else:
             param_grid = [0.2, 0.4, 0.6, 0.8]
-        steps = max(4, min(int(body.get("steps") or 24), 128))
-        dt = max(1e-5, min(float(body.get("dt") or 0.01), 0.1))
+        raw_steps = _finite_int(body.get("steps"), 24, 4, 128, "steps")
+        # Bound total ODE integration steps across the quorum-of-2 grid so worst-case wall time stays well under 1s
+        steps = max(4, min(raw_steps, 192 // max(1, len(param_grid))))
+        dt = _finite_float(body.get("dt"), 0.01, 1e-5, 0.1, "dt")
 
-        sweep_bundle = run_wave2_parameter_sweep_quorum(
-            family=family,
-            parameter_grid=param_grid,
-            steps=steps,
-            dt=dt,
-        )
-        try:
-            from hivemind.boinc.real_client.boinc_server_scripts import validate_solver_sweep
+        def _run_sweep() -> dict[str, Any]:
+            import sys as _sys
+            from hivemind.swarm.rusty_sundials_scientific_bee import run_wave2_parameter_sweep_quorum
 
-            verdict = validate_solver_sweep(
-                sweep_bundle["spec"],
-                sweep_bundle["replica_a"],
-                host=str(sweep_bundle["replica_a"].get("host", "cpu-host-a")),
-                peer_meta=sweep_bundle["replica_b"],
+            sweep_bundle = run_wave2_parameter_sweep_quorum(
+                family=family,
+                parameter_grid=param_grid,
+                steps=steps,
+                dt=dt,
             )
-            q_valid = verdict.valid
-            q_reason = verdict.reason
-            q_credit = verdict.credit
-            q_pflops = verdict.pflops_seconds
-        except (ImportError, ValueError):
-            # Slim router container without torch: verify S-1 cross-CPU quorum directly in stdlib
-            q_valid = sweep_bundle["replica_a"].get("sha256_digest") == sweep_bundle["replica_b"].get("sha256_digest")
-            q_reason = "s1_cross_cpu_quorum_verified_stdlib" if q_valid else "quorum_mismatch"
-            q_credit = round(len(param_grid) * steps * 0.125, 4) if q_valid else 0.0
-            q_pflops = round(len(param_grid) * steps * 1.28e-4, 6)
-        return {
-            "object": "hivemind.bee.rusty_sundials.parameter_sweep",
-            "family": family,
-            "quorum_verified": q_valid,
-            "validator_reason": q_reason,
-            "credit": q_credit,
-            "pflops_seconds": q_pflops,
-            **sweep_bundle,
-        }
+            if "hivemind.boinc.real_client.boinc_server_scripts" in _sys.modules:
+                try:
+                    from hivemind.boinc.real_client.boinc_server_scripts import validate_solver_sweep
+
+                    verdict = validate_solver_sweep(
+                        sweep_bundle["spec"],
+                        sweep_bundle["replica_a"],
+                        host=str(sweep_bundle["replica_a"].get("host", "cpu-host-a")),
+                        peer_meta=sweep_bundle["replica_b"],
+                    )
+                    q_valid = verdict.valid
+                    q_reason = verdict.reason
+                    q_credit = verdict.credit
+                    q_pflops = verdict.pflops_seconds
+                except (ImportError, ValueError):
+                    q_valid = sweep_bundle["replica_a"].get("sha256_digest") == sweep_bundle["replica_b"].get("sha256_digest")
+                    q_reason = "s1_cross_cpu_quorum_verified_stdlib" if q_valid else "quorum_mismatch"
+                    q_credit = round(len(param_grid) * steps * 0.125, 4) if q_valid else 0.0
+                    q_pflops = round(len(param_grid) * steps * 1.28e-4, 6)
+            else:
+                # Avoid cold-importing torch inside the HTTP router: verify S-1 cross-CPU quorum directly in stdlib
+                q_valid = sweep_bundle["replica_a"].get("sha256_digest") == sweep_bundle["replica_b"].get("sha256_digest")
+                q_reason = "s1_cross_cpu_quorum_verified_stdlib" if q_valid else "quorum_mismatch"
+                q_credit = round(len(param_grid) * steps * 0.125, 4) if q_valid else 0.0
+                q_pflops = round(len(param_grid) * steps * 1.28e-4, 6)
+            return {
+                "object": "hivemind.bee.rusty_sundials.parameter_sweep",
+                "family": family,
+                "quorum_verified": q_valid,
+                "validator_reason": q_reason,
+                "credit": q_credit,
+                "pflops_seconds": q_pflops,
+                **sweep_bundle,
+            }
+
+        return await run_in_threadpool(_run_sweep)
 
     @app.post("/v1/hivemind/bees/science-bee/slot-compile")
     async def science_bee_slot_compile_endpoint(request: Request) -> dict[str, Any]:
@@ -3671,17 +3742,21 @@ def create_router_app(
         from hivemind.solverbee import families as fam
         from hivemind.solverbee import science_bee as sb
 
-        raw = await request.body()
-        try:
-            body = json.loads(raw) if raw else {}
-        except ValueError:
-            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+        if not anon_compute_limiter.allow(client_key(request), clock()):
+            raise RouterError(429, "Too many anonymous compute requests from this IP; try again in a minute.", "rate_limit_error", "rate_limited")
 
-        try:
+        raw = await request.body()
+        body = _parse_json_dict(raw)
+
+        def _compile_slots() -> tuple[Any, Any, Any]:
             spec, trace = fam.compile_slot_spec(body, return_trace=True)
             validated = sb.with_house_tolerances(sb.validate_spec(spec))
-            echo = sb.echo_interpreted_problem(validated, language=str(body.get("language", "en")), slot_trace=trace)
-        except (fam.FamilyError, sb.SpecInvalid) as exc:
+            echo = sb.echo_interpreted_problem(validated, language=str(body.get("language", "en"))[:16], slot_trace=trace)
+            return validated, trace, echo
+
+        try:
+            validated, trace, echo = await run_in_threadpool(_compile_slots)
+        except (fam.FamilyError, sb.SpecInvalid, TypeError, ValueError) as exc:
             raise RouterError(400, str(exc), "invalid_request_error", "invalid_slot_spec") from None
 
         return {
@@ -3696,18 +3771,23 @@ def create_router_app(
         """Ask the Next-Gen MoE Science Bee (`hivemind/moe-science-bee-v2`) a plain-language science question."""
         from hivemind.swarm.rusty_sundials_scientific_bee import NextGenMoEScienceBee
 
+        if not anon_compute_limiter.allow(client_key(request), clock()):
+            raise RouterError(429, "Too many anonymous compute requests from this IP; try again in a minute.", "rate_limit_error", "rate_limited")
+
         raw = await request.body()
-        try:
-            body = json.loads(raw) if raw else {}
-        except ValueError:
-            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+        body = _parse_json_dict(raw)
 
         question = str(body.get("question") or body.get("prompt") or "").strip()
         if not question:
             raise RouterError(400, "question is required", "invalid_request_error", "missing_question")
+        if len(question) > 4000:
+            raise RouterError(400, "question must be <= 4000 characters", "invalid_request_error", "invalid_question")
 
         bee = NextGenMoEScienceBee()
-        ans = bee.ask(question, language=body.get("language"))
+        try:
+            ans = await run_in_threadpool(bee.ask, question, language=body.get("language"))
+        except (TypeError, ValueError) as exc:
+            raise RouterError(400, str(exc), "invalid_request_error", "invalid_question") from None
         return {
             "object": "hivemind.bee.science_bee.answer",
             **ans,

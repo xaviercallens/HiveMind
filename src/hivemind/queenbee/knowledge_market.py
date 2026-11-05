@@ -65,31 +65,113 @@ def firewall_scanner(text: str) -> bool:
     return scan_text_for_injection(text).verdict.value == "CLEAN"
 
 
-def admit_share(share: KnowledgeShare, text: str, *, scanner: Scanner = firewall_scanner, prior_points_this_epoch: int = 0,
-                cap_per_identity_per_epoch: int = 20) -> Admission:
+def admit_share(
+    share: KnowledgeShare,
+    text: str,
+    *,
+    scanner: Scanner = firewall_scanner,
+    prior_points_this_epoch: int = 0,
+    cap_per_identity_per_epoch: int = 20,
+    expected_epoch: int | None = None,
+    seen_shares: set[tuple[str, str]] | None = None,
+    epoch_counts: dict[tuple[int, str], int] | None = None,
+) -> Admission:
     """Admit or refuse a share. The hash in the share must match the text, so the record cannot be swapped later."""
     if cap_per_identity_per_epoch < 1:
         raise ValueError("cap_per_identity_per_epoch must be >= 1")
+    if expected_epoch is not None and share.epoch != expected_epoch:
+        return Admission(False, "epoch_mismatch", share)
     if not share.verified:
         return Admission(False, "not_verified", share)
     if share.licence not in PERMITTED_LICENCES:
         return Admission(False, "licence_not_permitted", share)
     if hashlib.sha256(text.encode("utf-8")).hexdigest() != share.text_sha256:
         return Admission(False, "hash_mismatch", share)
-    if prior_points_this_epoch >= cap_per_identity_per_epoch:
+    key = (share.account_id, share.text_sha256)
+    if seen_shares is not None and key in seen_shares:
+        return Admission(False, "duplicate_share", share)
+    tracked_prior = (epoch_counts or {}).get((share.epoch, share.account_id), 0)
+    if max(prior_points_this_epoch, tracked_prior) >= cap_per_identity_per_epoch:
         return Admission(False, "identity_cap_reached", share)
     if not scanner(text):
         return Admission(False, "injection_scan_failed", share)
+    if seen_shares is not None:
+        seen_shares.add(key)
+    if epoch_counts is not None:
+        epoch_counts[(share.epoch, share.account_id)] = tracked_prior + 1
     return Admission(True, "admitted", share)
 
 
-def knowledge_points(admissions: Iterable[Admission]) -> dict[str, int]:
-    """One point per admitted share, per account."""
+def knowledge_points(
+    admissions: Iterable[Admission],
+    *,
+    expected_epoch: int | None = None,
+    cap_per_identity_per_epoch: int = 20,
+) -> dict[str, int]:
+    """One point per unique admitted (account_id, text_sha256) share in the epoch, capped per identity."""
+    if cap_per_identity_per_epoch < 1:
+        raise ValueError("cap_per_identity_per_epoch must be >= 1")
     out: dict[str, int] = {}
+    seen: set[tuple[str, str]] = set()
+    active_epoch = expected_epoch
     for a in admissions:
-        if a.admitted:
-            out[a.share.account_id] = out.get(a.share.account_id, 0) + 1
+        if not a.admitted:
+            continue
+        if active_epoch is None:
+            active_epoch = a.share.epoch
+        elif a.share.epoch != active_epoch:
+            raise ValueError(f"Mixed share epochs in knowledge_points: expected {active_epoch}, got {a.share.epoch}")
+        key = (a.share.account_id, a.share.text_sha256)
+        if key in seen:
+            continue
+        current = out.get(a.share.account_id, 0)
+        if current >= cap_per_identity_per_epoch:
+            continue
+        seen.add(key)
+        out[a.share.account_id] = current + 1
     return out
+
+
+class KnowledgeMarket:
+    """Stateful per-epoch knowledge share registry enforcing epoch binding, deduplication, and per-identity caps."""
+
+    def __init__(
+        self,
+        epoch: int,
+        *,
+        cap_per_identity_per_epoch: int = 20,
+        scanner: Scanner = firewall_scanner,
+    ) -> None:
+        if epoch < 0:
+            raise ValueError("epoch must be >= 0")
+        if cap_per_identity_per_epoch < 1:
+            raise ValueError("cap_per_identity_per_epoch must be >= 1")
+        self.epoch = epoch
+        self.cap_per_identity_per_epoch = cap_per_identity_per_epoch
+        self.scanner = scanner
+        self._seen_shares: set[tuple[str, str]] = set()
+        self._epoch_counts: dict[tuple[int, str], int] = {}
+        self._admissions: list[Admission] = []
+
+    def admit(self, share: KnowledgeShare, text: str) -> Admission:
+        admission = admit_share(
+            share,
+            text,
+            scanner=self.scanner,
+            cap_per_identity_per_epoch=self.cap_per_identity_per_epoch,
+            expected_epoch=self.epoch,
+            seen_shares=self._seen_shares,
+            epoch_counts=self._epoch_counts,
+        )
+        self._admissions.append(admission)
+        return admission
+
+    def points(self) -> dict[str, int]:
+        return knowledge_points(
+            self._admissions,
+            expected_epoch=self.epoch,
+            cap_per_identity_per_epoch=self.cap_per_identity_per_epoch,
+        )
 
 
 @dataclass(frozen=True)

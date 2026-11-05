@@ -817,3 +817,16 @@ def test_shard_lease_clock_must_be_finite_so_a_lease_can_always_expire(swarm_sto
         swarm_store.grant_shard_lease("other", "a", now_s=bad)
     assert lease.status == "active" and lease.expires_at_s == pytest.approx(2.2)
     assert swarm_store.reclaim_expired_leases(now_s=3.0) == [lease]
+
+
+@pytest.mark.parametrize("forged_cid", ["forged", "", "cid://sha256/other-xyz", "cid://sha256/expert-"])
+def test_checkpoint_with_a_non_expert_or_forged_cid_is_rejected_on_path_load(swarm_store, tmp_path, forged_cid):
+    # The digest check used to run only when the payload's own cid started with the expert prefix, so a path load of a
+    # checkpoint saved with cid="forged" skipped it entirely.
+    cid, path = swarm_store.publish_lora_expert_checkpoint("math", {"lora_a": torch.ones(2, 2)}, {"rank": 2})
+    good = torch.load(path, map_location="cpu", weights_only=True)
+    forged = tmp_path / "forged.pt"
+    torch.save({**good, "cid": forged_cid, "metadata": {"rank": 999}}, forged)
+    with pytest.raises(storage.ChunkIntegrityError):
+        swarm_store.load_lora_expert_checkpoint(forged)
+    assert swarm_store.load_lora_expert_checkpoint(path)[0] == cid

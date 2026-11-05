@@ -180,12 +180,13 @@ class PluggableKVPageCache:
 
     def write_kv_page(self, layer_idx: int, page_idx: int, k_tensor: Tensor, v_tensor: Tensor) -> Dict[str, Any]:
         """Encode and store a ``(K, V)`` page; evicts the oldest page when full (same rule as FP8PagedKVCache)."""
+        # Encode both halves first: a codec that refuses the page (NaN, overflow, underflow) must not have evicted a good page already.
+        pk = self.codec.encode(k_tensor.to(self.device))
+        pv = self.codec.encode(v_tensor.to(self.device))
         if len(self._pages_k) >= self.max_pages and (layer_idx, page_idx) not in self._pages_k:
             oldest_key = next(iter(self._pages_k))
             self._pages_k.pop(oldest_key, None)
             self._pages_v.pop(oldest_key, None)
-        pk = self.codec.encode(k_tensor.to(self.device))
-        pv = self.codec.encode(v_tensor.to(self.device))
         self._pages_k[(layer_idx, page_idx)] = pk
         self._pages_v[(layer_idx, page_idx)] = pv
         fp16_bytes = (k_tensor.numel() + v_tensor.numel()) * 2

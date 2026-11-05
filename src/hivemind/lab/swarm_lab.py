@@ -110,6 +110,10 @@ class Scenario:
     outer_momentum: float = 0.9
 
     def validate(self) -> "Scenario":
+        # NaN fails every comparison below, so range checks alone would accept it and the run would report final_loss nan.
+        for name in ("eta", "sigma", "spread", "offset", "penalty", "grace", "outer_lr", "outer_momentum"):
+            if not math.isfinite(getattr(self, name)):
+                raise ValueError(f"{name} must be finite, got {getattr(self, name)!r}")
         if not 1 <= self.M <= 6:
             raise ValueError("M must be in 1..6")
         if not 1 <= self.K <= self.M:

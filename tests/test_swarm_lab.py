@@ -250,3 +250,12 @@ def test_runner_script_and_hivemind_subcommand() -> None:
     assert set(json.loads(r.stdout)) == set(PRESETS)
     cli_main = pytest.importorskip("hivemind.cli.main")
     assert cli_main.main(["swarm-lab", "presets"]) == 0
+
+
+@pytest.mark.parametrize("knob", ["eta", "sigma", "spread", "offset", "penalty", "grace", "outer_lr", "outer_momentum"])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_float_knobs_are_rejected(knob: str, value: float) -> None:
+    # NaN fails every comparison, so the range checks alone let it through and the run reported final_loss nan.
+    with pytest.raises(ValueError, match="finite"):
+        simulate({knob: value})
+    assert math.isfinite(simulate({})["final_loss"])

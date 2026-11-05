@@ -369,3 +369,29 @@ def test_international_launch_views_modular_separation() -> None:
     assert html_planet == international_launch_model.render_gcp_planet_forecast_html()
     assert html_paper == international_launch_model.render_foundation_paper_portal_html()
 
+
+
+def test_planet_forecast_route_rejects_out_of_range_mean_tokens_with_422() -> None:
+    import math
+
+    from hivemind.boinc.hivemind_at_home_dashboard import create_hivemind_at_home_app
+
+    client = TestClient(create_hivemind_at_home_app(), raise_server_exceptions=False)
+    # 0, nan, 1e308 and -1 gave a 500 (1e308 gave inf in 15 fields) before the route validated the figure.
+    for bad in ("0", "nan", "inf", "1e308", "-1"):
+        assert client.get(f"/api/v1/launch/planet-forecast?mean_tokens_per_req={bad}").status_code == 422, bad
+    for bad in (0, -1, 1e308, "abc", None):
+        resp = client.post("/api/v1/launch/planet-forecast", json={"mean_tokens_per_req": bad})
+        assert resp.status_code == 422, bad
+    ok = client.get("/api/v1/launch/planet-forecast?mean_tokens_per_req=200")
+    assert ok.status_code == 200
+
+    def _numbers(node: object) -> list[float]:
+        if isinstance(node, dict):
+            return [n for v in node.values() for n in _numbers(v)]
+        if isinstance(node, list):
+            return [n for v in node for n in _numbers(v)]
+        return [float(node)] if isinstance(node, (int, float)) and not isinstance(node, bool) else []
+
+    figures = _numbers(ok.json())
+    assert figures and all(math.isfinite(v) for v in figures)

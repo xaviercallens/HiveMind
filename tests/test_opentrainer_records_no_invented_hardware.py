@@ -81,3 +81,20 @@ def test_a_random_submission_id_containing_the_old_figures_is_not_mistaken_for_i
     assert _invented_hardware_figures(text) == []
     # and the check still catches a stored placeholder reading
     assert _invented_hardware_figures("{'vram_total_mib': 6400}") and _invented_hardware_figures("{'vram_free_mib': 8192}")
+
+
+def test_the_same_round_twice_is_refused_and_a_flood_of_distinct_rounds_is_rate_limited() -> None:
+    from hivemind.router.gateway import OPENTRAINER_DELTA_LIMIT
+
+    client, store, auth, _aid = _client()
+
+    def submit(round_id: int) -> int:
+        body = {"round_id": round_id, "inner_steps": 8, "loss_before": 2.0, "loss_after": 1.5, "delta_norm": 0.7, "delta_sha256": "c" * 64}
+        return client.post("/v1/hivemind/opentrainer/submit-delta", headers=auth, json=body).status_code
+
+    assert submit(1) == 200
+    assert submit(1) == 409  # replay of the same (account, run, round)
+    assert len(store.list_opentrainer_rounds(limit=1000)) == 1
+    codes = [submit(r) for r in range(2, OPENTRAINER_DELTA_LIMIT + 10)]
+    assert 429 in codes
+    assert len(store.list_opentrainer_rounds(limit=1000)) <= OPENTRAINER_DELTA_LIMIT

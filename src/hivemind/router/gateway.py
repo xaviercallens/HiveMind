@@ -46,6 +46,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from hivemind.router.accounts import (
     Account,
+    DuplicateOpenTrainerRound,
     DuplicateRequest,
     HandleTaken,
     InsufficientBalance,
@@ -96,6 +97,7 @@ LOGIN_LIMIT = 10  # password logins per client per window: slows online password
 LOGIN_WINDOW_S = 60.0
 AMCP_PUBLISH_LIMIT = 30  # bus events per account per window: the bus is for coordination, not bulk traffic
 AMCP_PUBLISH_WINDOW_S = 60.0
+OPENTRAINER_DELTA_LIMIT = 20  # delta submissions per account per window: each accepted one adds to the public contributive-hub totals
 USAGE_CAPTURE_TTL_S = 60.0  # the anonymous usage-capture summary is recomputed at most once per window bucket per this many seconds
 CAMPAIGN_POLL_LIMIT = 20  # poll votes per account per window: every vote writes a never-pruned bus event, so it needs the same guard as /amcp/publish
 MAX_BODY_BYTES = 4_000_000
@@ -905,6 +907,7 @@ def create_router_app(
     register_limiter = SlidingWindowLimiter(REGISTER_LIMIT, REGISTER_WINDOW_S)
     login_limiter = SlidingWindowLimiter(LOGIN_LIMIT, LOGIN_WINDOW_S)
     amcp_publish_limiter = SlidingWindowLimiter(AMCP_PUBLISH_LIMIT, AMCP_PUBLISH_WINDOW_S)
+    opentrainer_delta_limiter = SlidingWindowLimiter(OPENTRAINER_DELTA_LIMIT, AMCP_PUBLISH_WINDOW_S)
     usage_capture_cache: dict[int, tuple[float, dict[str, Any]]] = {}
     campaign_poll_limiter = SlidingWindowLimiter(CAMPAIGN_POLL_LIMIT, AMCP_PUBLISH_WINDOW_S)
     market_cache: dict[tuple[str, int], dict[str, Any]] = {}
@@ -3059,6 +3062,8 @@ def create_router_app(
                 "role_forbidden",
             )
         now = clock()
+        if not opentrainer_delta_limiter.allow(account.account_id, now):
+            raise RouterError(429, "Too many OpenTrainer delta submissions from this account; try again in a minute.", "rate_limit_error", "rate_limited")
         try:
             check = validate_trainer_delta_submission(
                 run_id=payload.campaign_id,
@@ -3079,20 +3084,23 @@ def create_router_app(
         check["verification"] = "CLIENT_REPORTED_UNVERIFIED"
         check["vram_values_reported_by_client"] = False  # no hardware reading was sent: 0 MiB is recorded as "not reported"
         check["tokens_trained_is_estimate"] = True  # inner_steps * 512, not a count the client measured
-        saved = store.record_opentrainer_round_submission(
-            account_id=account.account_id,
-            handle=account.handle,
-            run_id=payload.campaign_id,
-            round_index=payload.round_id,
-            host_label=account.handle,
-            network_mode=payload.network_mode,
-            delta_l2=payload.delta_norm,
-            eval_loss=payload.loss_after,
-            tokens_trained=max(1, payload.inner_steps * 512),
-            vram_free_mib=0,
-            vram_total_mib=0,
-            now_utc=now,
-        )
+        try:
+            saved = store.record_opentrainer_round_submission(
+                account_id=account.account_id,
+                handle=account.handle,
+                run_id=payload.campaign_id,
+                round_index=payload.round_id,
+                host_label=account.handle,
+                network_mode=payload.network_mode,
+                delta_l2=payload.delta_norm,
+                eval_loss=payload.loss_after,
+                tokens_trained=max(1, payload.inner_steps * 512),
+                vram_free_mib=0,
+                vram_total_mib=0,
+                now_utc=now,
+            )
+        except DuplicateOpenTrainerRound as exc:
+            raise RouterError(409, str(exc), "invalid_request_error", "round_already_submitted") from None
         saved["tokens_trained_is_estimate"] = True
         saved["delta_sha256"] = payload.delta_sha256.lower()
         event_id = "ev-ot-" + uuid.uuid4().hex[:14]

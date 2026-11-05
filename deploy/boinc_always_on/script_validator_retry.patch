@@ -1,0 +1,10 @@
+--- a/sched/script_validator.cpp
++++ b/sched/script_validator.cpp
+@@
+     retval = system(cmd);
++    // HiveMind: the GPU replay runs elsewhere. Exit 75 (EX_TEMPFAIL) from the script means "no verdict yet": BOINC's transient path, which retries in 6 h.
++    // Without this every nonzero exit marks the result invalid, so an honest volunteer would lose its credit because the validator's GPU host was off.
++    if (retval != -1 && WIFEXITED(retval) && WEXITSTATUS(retval) == 75) return ERR_OPENDIR;
+     if (retval) {
+         return retval;
+     }

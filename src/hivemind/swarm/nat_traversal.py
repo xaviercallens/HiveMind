@@ -571,7 +571,6 @@ def udp_hole_punch(
     ack = PUNCH_MAGIC + b"A" + session
     deadline = time.monotonic() + timeout
     t0 = time.perf_counter()
-    last_probe_sent_at = t0
     probes = 0
     next_probe = 0.0
     winner: Optional[Address] = None
@@ -579,7 +578,6 @@ def udp_hole_punch(
     while time.monotonic() < deadline:
         now = time.monotonic()
         if winner is None and now >= next_probe:
-            last_probe_sent_at = time.perf_counter()
             for candidate in candidates:
                 try:
                     sock.sendto(syn, candidate)
@@ -605,7 +603,7 @@ def udp_hole_punch(
                 continue
         elif data == ack and winner is None:
             winner = addr
-            rtt_ms = (time.perf_counter() - last_probe_sent_at) * 1000.0
+            rtt_ms = (time.perf_counter() - t0) * 1000.0
             deadline = time.monotonic() + linger
     return PunchResult(winner is not None, winner, rtt_ms, probes)
 

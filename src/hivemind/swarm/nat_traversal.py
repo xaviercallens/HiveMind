@@ -1047,6 +1047,16 @@ class TurnRelayServer(StunServer):
     def _on_readable(self, sock: socket.socket) -> None:
         if sock is self.sock:
             super()._on_readable(sock)
+            # If a SEND/ChannelData frame forwarded to a local relay socket on this server,
+            # drain any immediately-readable relay sockets in the same timeslice.
+            relay_socks = list(self._by_relay)
+            if relay_socks:
+                try:
+                    ready_relays, _, _ = select.select(relay_socks, [], [], 0.0)
+                except (OSError, ValueError):
+                    ready_relays = []
+                for r_sock in ready_relays:
+                    self._on_readable(r_sock)
             return
         allocation = self._by_relay.get(sock)
         try:

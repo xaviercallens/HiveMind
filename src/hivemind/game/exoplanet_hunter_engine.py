@@ -1564,6 +1564,7 @@ class AstroBeeMoEGPUService:
         self.init_elapsed_ms = 0.0
         self.catalog = load_real_hf_exoplanet_catalog(max_extra_per_category=10)
         self.discoveries_path = ARTIFACTS_ROOT / "exoplanet_discoveries_ledger.json"
+        self._awarded_discoveries: set[tuple[str, str]] = set()
 
     def ensure_gpu_moe_ready(self) -> None:
         """Lazily initialize the 4-Expert Astrophysics Sparse MoE on `cuda:0`."""
@@ -1779,10 +1780,13 @@ class AstroBeeMoEGPUService:
         gamer_tag: str,
         player_classification: str,
         notes: str = "",
+        account_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Log a player's discovery once per (account, target); replays earn 0 and are not recorded."""
         target = self.resolve_target(target_id)
-        account_key = str(gamer_tag).strip().casefold()
+        clean_tag = str(gamer_tag or "").strip()[:64] or "Anonyme"
+        clean_notes = str(notes or "")[:512]
+        account_key = str(account_id or clean_tag).strip().casefold()[:128]
         true_disp = target["disposition"]
         vetting_type = str(target.get("vetting_anomaly_type", "NONE")).upper()
         is_correct = (
@@ -1790,6 +1794,7 @@ class AstroBeeMoEGPUService:
             or (player_classification.upper() in ("PLANET", "HABITABLE_PLANET") and true_disp in ("CONFIRMED", "CANDIDATE"))
         )
         bonus_pts = 600 if is_correct else 150
+        dedup_path = self.discoveries_path.with_suffix(".dedup.json")
 
         with _DISCOVERY_LOCK:
             ledger_entries: List[Dict[str, Any]] = []
@@ -1798,12 +1803,22 @@ class AstroBeeMoEGPUService:
                     ledger_entries = json.loads(self.discoveries_path.read_text(encoding="utf-8"))
                 except Exception:
                     ledger_entries = []
-            already = any(
-                str(prior.get("gamer_tag", "")).strip().casefold() == account_key
-                and prior.get("target_id") == target["target_id"]
-                for prior in ledger_entries
-            )
-            if already:
+            dedup_keys: set[tuple[str, str]] = set(self._awarded_discoveries)
+            if dedup_path.exists():
+                try:
+                    for pair in json.loads(dedup_path.read_text(encoding="utf-8")):
+                        if isinstance(pair, list) and len(pair) == 2:
+                            dedup_keys.add((str(pair[0]), str(pair[1])))
+                except Exception:
+                    pass
+            for prior in ledger_entries:
+                prior_acct = str(prior.get("account_id") or prior.get("gamer_tag", "")).strip().casefold()[:128]
+                prior_tid = str(prior.get("target_id", ""))
+                if prior_acct and prior_tid:
+                    dedup_keys.add((prior_acct, prior_tid))
+            key = (account_key, str(target["target_id"]))
+            if key in dedup_keys:
+                self._awarded_discoveries = dedup_keys
                 return {
                     "status": "duplicate_no_award",
                     "accurate": is_correct,
@@ -1812,8 +1827,18 @@ class AstroBeeMoEGPUService:
                     "discovery_entry": None,
                     "total_discoveries_logged": len(ledger_entries),
                 }
+            dedup_keys.add(key)
+            self._awarded_discoveries = dedup_keys
+            try:
+                dedup_path.parent.mkdir(parents=True, exist_ok=True)
+                dedup_path.write_text(
+                    json.dumps([list(k) for k in sorted(dedup_keys)], ensure_ascii=False),
+                    encoding="utf-8",
+                )
+            except Exception:
+                pass
             return self._append_discovery(
-                target, target_id, gamer_tag, player_classification, notes, is_correct, bonus_pts, ledger_entries
+                target, target_id, clean_tag, player_classification, clean_notes, is_correct, bonus_pts, ledger_entries
             )
 
     def _append_discovery(
@@ -1870,6 +1895,7 @@ class AstroBeeMoEGPUService:
         """Serve general HiveMind Bee-MoE inference on Local RTX 2070 (`cuda:0`) or failover from T4/other producers."""
         self.ensure_gpu_moe_ready()
         t0 = time.perf_counter()
+        clamped_max_new_tokens = max(1, min(512, int(max_new_tokens)))
 
         clean_prompt = (prompt or "HiveMind Bee MoE inference check").strip()[:2048]
         raw_bytes = clean_prompt.encode("utf-8")
@@ -1897,6 +1923,7 @@ class AstroBeeMoEGPUService:
             f"in {latency_ms} ms | Top-2 Experts: {', '.join(routed_bees)}] "
             f"Processed query ({len(tok_ids)} tokens): '{clean_prompt[:160]}'"
         )
+        generated_token_count = min(clamped_max_new_tokens, max(1, len(response_text.split())))
         receipt_hash = hashlib.sha256(f"{clean_prompt}:{latency_ms}:{time.time()}".encode("utf-8")).hexdigest()
 
         return {
@@ -1913,7 +1940,8 @@ class AstroBeeMoEGPUService:
             "routed_experts": routed_bees,
             "expert_gating_weights": {ASTRO_BEE_EXPERTS[i]["bee_id"]: gate_probs[i] for i in range(4)},
             "input_token_count": len(tok_ids),
-            "max_new_tokens": max_new_tokens,
+            "generated_token_count": generated_token_count,
+            "max_new_tokens": clamped_max_new_tokens,
             "generated_text": response_text,
             "inference_receipt_sha256": receipt_hash,
         }
@@ -2005,6 +2033,8 @@ class HiveMindMultiProducerInferencePool:
         except Exception:
             pass
 
+    MAX_REGISTERED_PRODUCERS = 64
+
     def register_or_update_producer(
         self,
         producer_id: str,
@@ -2016,23 +2046,31 @@ class HiveMindMultiProducerInferencePool:
         notes: str = "",
     ) -> Dict[str, Any]:
         """Register a new external producer (or switch the Tesla T4 to ONLINE_SERVING when ready)."""
+        clean_pid = str(producer_id or "").strip()[:64]
+        if not clean_pid:
+            raise ValueError("producer_id must be non-empty")
+        clean_status = str(status or "ONLINE_SERVING").strip().upper()[:32]
+        if clean_pid == "PRODUCER-LOCAL-RTX2070-CUDA0" and clean_status != "ONLINE_SERVING":
+            raise ValueError("Cannot set primary anchor producer PRODUCER-LOCAL-RTX2070-CUDA0 offline")
+        if clean_pid not in self.producers and len(self.producers) >= self.MAX_REGISTERED_PRODUCERS:
+            raise OverflowError(f"Producer registry capacity reached (max {self.MAX_REGISTERED_PRODUCERS})")
         now_iso = datetime.datetime.now().isoformat()[:19]
-        existing = self.producers.get(producer_id, {})
+        existing = self.producers.get(clean_pid, {})
         entry = {
-            "producer_id": producer_id,
-            "name": name or existing.get("name", producer_id),
-            "hardware": hardware or existing.get("hardware", "Custom GPU/CPU Producer"),
+            "producer_id": clean_pid,
+            "name": (str(name or "").strip()[:128]) or existing.get("name", clean_pid),
+            "hardware": (str(hardware or "").strip()[:128]) or existing.get("hardware", "Custom GPU/CPU Producer"),
             "device": existing.get("device", "remote:cuda:0"),
             "role": existing.get("role", "EXTERNAL_SWARM_PRODUCER"),
-            "status": status.upper(),
-            "endpoint_url": endpoint_url if endpoint_url else existing.get("endpoint_url", ""),
+            "status": clean_status,
+            "endpoint_url": (str(endpoint_url or "").strip()[:256]) if endpoint_url else existing.get("endpoint_url", ""),
             "failover_target_id": "PRODUCER-LOCAL-RTX2070-CUDA0",
-            "priority": priority,
+            "priority": int(priority),
             "requests_served": existing.get("requests_served", 0),
             "last_heartbeat": now_iso,
-            "notes": notes or existing.get("notes", "Registered external HiveMind inference producer."),
+            "notes": (str(notes or "").strip()[:512]) or existing.get("notes", "Registered external HiveMind inference producer."),
         }
-        self.producers[producer_id] = entry
+        self.producers[clean_pid] = entry
         self._persist_registry()
         return entry
 
@@ -2101,9 +2139,10 @@ class HiveMindMultiProducerInferencePool:
             self._persist_registry()
             return astro_res
 
+        clamped_max_new_tokens = max(1, min(512, int(max_new_tokens)))
         gen_res = self.gpu_service.run_general_hivemind_moe_inference(
             prompt=prompt,
-            max_new_tokens=max_new_tokens,
+            max_new_tokens=clamped_max_new_tokens,
             preferred_producer=preferred_producer,
         )
         gen_res["producer_pool_summary"] = {
@@ -2114,7 +2153,9 @@ class HiveMindMultiProducerInferencePool:
                 [p for p in self.producers.values() if p.get("status") == "ONLINE_SERVING"]
             ),
         }
-        self.total_tokens_processed += int(gen_res.get("input_token_count", 48)) + int(max_new_tokens)
+        self.total_tokens_processed += int(gen_res.get("input_token_count", 48)) + int(
+            gen_res.get("generated_token_count", min(clamped_max_new_tokens, 64))
+        )
         self._persist_registry()
         return gen_res
 

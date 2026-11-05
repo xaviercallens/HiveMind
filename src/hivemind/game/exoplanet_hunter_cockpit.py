@@ -3124,16 +3124,35 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         return JSONResponse(content=producer_pool.get_pool_status())
 
     @app.post("/api/v1/producers/register", response_class=JSONResponse)
-    def api_producers_register(req: ProducerRegistrationRequest) -> JSONResponse:
-        updated = producer_pool.register_or_update_producer(
-            producer_id=req.producer_id,
-            name=req.name,
-            hardware=req.hardware,
-            status=req.status,
-            endpoint_url=req.endpoint_url,
-            priority=req.priority,
-            notes=req.notes,
-        )
+    def api_producers_register(req: ProducerRegistrationRequest, request: Request) -> JSONResponse:
+        import os
+
+        expected_tok = os.environ.get("HIVEMIND_PRODUCER_REGISTER_TOKEN", "").strip()
+        if expected_tok:
+            auth_hdr = request.headers.get("authorization", "").strip()
+            if auth_hdr != f"Bearer {expected_tok}":
+                return JSONResponse(status_code=401, content={"status": "rejected", "error": "unauthorized"})
+        if (
+            len(req.producer_id) > 64
+            or len(req.name) > 128
+            or len(req.hardware) > 128
+            or len(req.notes) > 512
+        ):
+            return JSONResponse(status_code=413, content={"status": "rejected", "error": "field_too_large"})
+        try:
+            updated = producer_pool.register_or_update_producer(
+                producer_id=req.producer_id,
+                name=req.name,
+                hardware=req.hardware,
+                status=req.status,
+                endpoint_url=req.endpoint_url,
+                priority=req.priority,
+                notes=req.notes,
+            )
+        except OverflowError as exc:
+            return JSONResponse(status_code=413, content={"status": "rejected", "error": str(exc)})
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={"status": "rejected", "error": str(exc)})
         return JSONResponse(
             content={
                 "status": "registered",
@@ -3165,12 +3184,13 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         if "prompt" in payload:
             prompt = str(payload["prompt"])
         pref = str(payload.get("preferred_producer", payload.get("producer", "auto")))
-        max_toks = int(payload.get("max_tokens", 64))
+        max_toks = max(1, min(512, int(payload.get("max_tokens", 64))))
         inf = producer_pool.serve_inference(
             prompt=prompt,
             max_new_tokens=max_toks,
             preferred_producer=pref,
         )
+        comp_toks = int(inf.get("generated_token_count", max_toks))
         return JSONResponse(
             content={
                 "id": f"chatcmpl-hivemind-{inf['inference_receipt_sha256'][:12]}",
@@ -3189,8 +3209,8 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                 ],
                 "usage": {
                     "prompt_tokens": inf["input_token_count"],
-                    "completion_tokens": max_toks,
-                    "total_tokens": inf["input_token_count"] + max_toks,
+                    "completion_tokens": comp_toks,
+                    "total_tokens": inf["input_token_count"] + comp_toks,
                 },
                 "bee_moe_routing": {
                     "routed_experts": inf["routed_experts"],

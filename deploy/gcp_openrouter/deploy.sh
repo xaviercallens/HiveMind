@@ -36,6 +36,10 @@ repo="$(cd "$here/../.." && pwd)"
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 cp -r "$repo/src" "$stage/src"
+mkdir -p "$stage/artifacts/mvp" "$stage/artifacts/experiments" "$stage/docs"
+cp -f "$repo/artifacts/mvp/"*.json "$stage/artifacts/mvp/" 2>/dev/null || true
+cp -f "$repo/artifacts/experiments/GRANITE_ADAPTER_"*.json "$stage/artifacts/experiments/" 2>/dev/null || true
+cp -f "$repo/docs/MVP_SCORECARD.md" "$repo/docs/MVP_OWNER_DECISIONS.md" "$stage/docs/" 2>/dev/null || true
 find "$stage/src" -name __pycache__ -type d -prune -exec rm -rf {} +
 cp "$here/Dockerfile" "$here/server.py" "$here/entrypoint.sh" "$here/requirements.txt" "$stage/"
 chmod +x "$stage/entrypoint.sh"

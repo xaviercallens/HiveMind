@@ -154,12 +154,12 @@ async def join_page(request: Request) -> HTMLResponse:
         google = any(p.get("name") == "google" for p in providers.get("providers", []))
         handles = bool(providers.get("handle_registration", True))
     except (httpx.HTTPError, ValueError, AttributeError):
-        pass
+        _ = None
     live_telem = None
     try:
         live_telem = (await _client.get(f"{ROUTER}/v1/hivemind/live-telemetry", timeout=4.0)).json()
     except (httpx.HTTPError, ValueError):
-        pass
+        _ = None
     nonce = secrets.token_urlsafe(18)
     return HTMLResponse(
         render_join_page(lang, nonce, tiers=tiers, api_url=ROUTER, path="/rejoindre" if french_path else "/join", google_enabled=google, handle_registration=handles, live_telemetry=live_telem),
@@ -278,32 +278,40 @@ _DEFAULT_COMMUNITY_STATE: dict[str, Any] = {
 
 
 def _load_community_state() -> dict[str, Any]:
-    import fcntl
+    try:
+        import fcntl
+    except ImportError:
+        fcntl = None  # type: ignore[assignment]
 
     lock_path = _COMMUNITY_STATE_PATH.with_suffix(".lock")
     try:
         with lock_path.open("a+", encoding="utf-8") as lock_file:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_SH)
+            if fcntl is not None:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_SH)
             if _COMMUNITY_STATE_PATH.exists():
                 return json.loads(_COMMUNITY_STATE_PATH.read_text(encoding="utf-8"))
     except Exception:
-        pass
+        _ = None
     _save_community_state(_DEFAULT_COMMUNITY_STATE)
     return json.loads(json.dumps(_DEFAULT_COMMUNITY_STATE))
 
 
 def _save_community_state(state: dict[str, Any]) -> None:
-    import fcntl
+    try:
+        import fcntl
+    except ImportError:
+        fcntl = None  # type: ignore[assignment]
 
     lock_path = _COMMUNITY_STATE_PATH.with_suffix(".lock")
     try:
         with lock_path.open("a+", encoding="utf-8") as lock_file:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            if fcntl is not None:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
             tmp_path = _COMMUNITY_STATE_PATH.with_suffix(".tmp")
             tmp_path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
             tmp_path.replace(_COMMUNITY_STATE_PATH)
     except Exception:
-        pass
+        _ = None
 
 
 @app.get("/community", response_class=HTMLResponse)

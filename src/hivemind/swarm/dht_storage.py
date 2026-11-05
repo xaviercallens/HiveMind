@@ -20,6 +20,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 import hashlib
 import json
+import math
 from pathlib import Path
 import shutil
 import time
@@ -77,6 +78,17 @@ class BundleSeedManifest:
     bundle_merkle_root: str
     files: List[ChunkedFileEntry]
     seeders: List[str] = field(default_factory=list)
+
+
+def _lease_clock(now_s: Optional[float]) -> float:
+    """The lease clock: wall time, or a finite caller-supplied time. A NaN `now_s` makes every `now > expires_at_s`
+    comparison False, so a lease granted at 0.0 would commit (and never be reclaimed) at any later time."""
+    if now_s is None:
+        return time.time()
+    now = float(now_s)
+    if not math.isfinite(now):
+        raise ValueError("now_s must be finite")
+    return now
 
 
 def compute_lease_ttl_s(alpha: float, t_step_s: float, rtt_s: float) -> float:
@@ -705,7 +717,7 @@ class ContentAddressedSwarmStore:
             active_id = self._active_shard_lease_by_cid[cid]
             raise ValueError(f"Shard {cid!r} already has an active lease ({active_id!r})")
 
-        now = float(now_s) if now_s is not None else time.time()
+        now = _lease_clock(now_s)
         ttl = compute_lease_ttl_s(alpha=alpha, t_step_s=t_step_s, rtt_s=rtt_s)
         self._lease_seq += 1
         lease_id = f"lease-{self._lease_seq:06d}-{hashlib.sha256(f'{cid}:{wid}:{self._lease_seq}'.encode('utf-8')).hexdigest()[:10]}"
@@ -735,7 +747,7 @@ class ContentAddressedSwarmStore:
         lease = self._shard_leases[lease_id]
         if lease.status != "active":
             raise ValueError(f"Cannot heartbeat lease {lease_id!r} in status {lease.status!r}")
-        now = float(now_s) if now_s is not None else time.time()
+        now = _lease_clock(now_s)
         if now > lease.expires_at_s:
             raise ValueError(f"Lease {lease_id!r} expired at {lease.expires_at_s:.3f}s (now={now:.3f}s)")
         lease.expires_at_s = now + lease.ttl_s
@@ -758,7 +770,7 @@ class ContentAddressedSwarmStore:
             raise ValueError(
                 f"Worker {worker_id!r} does not own lease {lease_id!r} (owner={lease.worker_id!r})"
             )
-        now = float(now_s) if now_s is not None else time.time()
+        now = _lease_clock(now_s)
         if now > lease.expires_at_s:
             raise ValueError(f"Cannot commit expired lease {lease_id!r} (now={now:.3f}s > {lease.expires_at_s:.3f}s)")
         if lease.shard_cid in self._committed_shards:
@@ -775,7 +787,7 @@ class ContentAddressedSwarmStore:
         now_s: Optional[float] = None,
     ) -> List[DataShardLease]:
         """Reclaim all active leases whose `expires_at_s < now` and return them to the reclaim queue."""
-        now = float(now_s) if now_s is not None else time.time()
+        now = _lease_clock(now_s)
         reclaimed: List[DataShardLease] = []
         for lease in self._shard_leases.values():
             if lease.status == "active" and now > lease.expires_at_s:

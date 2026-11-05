@@ -802,3 +802,18 @@ def test_wan_websocket_reports_lossy_quic_failure_and_closes_listener(monkeypatc
     assert report["lossy_quic_path"]["frames_delivered"] == 0
     links[1].send_frames.assert_awaited_once()
     server.close.assert_awaited_once_with()
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_shard_lease_clock_must_be_finite_so_a_lease_can_always_expire(swarm_store, bad):
+    lease = swarm_store.grant_shard_lease("shard", "a", now_s=0.0)
+    with pytest.raises(ValueError, match="finite"):
+        swarm_store.commit_shard_lease(lease.lease_id, "a", now_s=bad)
+    with pytest.raises(ValueError, match="finite"):
+        swarm_store.heartbeat_shard_lease(lease.lease_id, now_s=bad)
+    with pytest.raises(ValueError, match="finite"):
+        swarm_store.reclaim_expired_leases(now_s=bad)
+    with pytest.raises(ValueError, match="finite"):
+        swarm_store.grant_shard_lease("other", "a", now_s=bad)
+    assert lease.status == "active" and lease.expires_at_s == pytest.approx(2.2)
+    assert swarm_store.reclaim_expired_leases(now_s=3.0) == [lease]

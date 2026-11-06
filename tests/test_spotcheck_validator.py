@@ -145,3 +145,19 @@ def test_deterministic_spot_check_validator_accepts_honest_and_flags_cheater(tmp
     assert verdict_bad.passed is False
     assert verdict_bad.steam_account_flagged is True
     assert "76561198000009999" in validator.flagged_steam_accounts
+
+    # IP-218 negative control: verify_submission refuses a BOINCWorkunit with empty shard_sha256 or shard_hmac_signature
+    import pytest
+
+    wu_unsigned = copy.deepcopy(wu)
+    wu_unsigned.shard_sha256 = ""
+    with pytest.raises(ValueError, match="shard_sha256"):
+        validator.verify_submission(
+            validator_model=bundle.model,
+            workunit=wu_unsigned,
+            submission=honest_res,
+            token_sequences=tokens,
+            steam_id64="76561198000000001",
+            lr=1e-3,
+            micro_batch_size=2,
+        )

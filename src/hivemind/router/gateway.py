@@ -1587,9 +1587,29 @@ def create_router_app(
                 "charged_hmt": float(usage_doc.get("total_charged_hmt", 0.0)),
             },
         }
+        k_service = os.environ.get("K_SERVICE", "").strip()
+        replica_url = os.environ.get("HIVEMIND_ROUTER_REPLICA_URL", "").strip()
+        total_reg_accounts = int(accounts_summary.get("total_registered_accounts", 0) or 0)
+        if k_service:
+            telem_status = "LIVE_GCP_PRODUCTION"
+            telem_status_basis = f"GCP_CLOUD_RUN_K_SERVICE ({k_service})"
+        elif replica_url:
+            telem_status = "LIVE_GCP_PRODUCTION"
+            telem_status_basis = "LITESTREAM_REPLICA_URL"
+        elif total_reg_accounts > 0:
+            telem_status = "LIVE_GCP_PRODUCTION"
+            telem_status_basis = "POPULATED_ROUTER_STORE"
+        else:
+            telem_status = "LOCAL_EMPTY_ROUTER_STORE"
+            telem_status_basis = "EMPTY_UNCONFIGURED_ROUTER_STORE"
+
+        ot_total_nodes = ot_fleet.get("total_registered_nodes")
+        ot_active_nodes = ot_fleet.get("active_trainer_nodes")
+
         return {
             "object": "hivemind.live_telemetry",
-            "status": "LIVE_GCP_PRODUCTION",
+            "status": telem_status,
+            "status_basis": telem_status_basis,
             "generated_at_utc": round(now, 3),
             "generated_at_iso": iso_now,
             "accounts": accounts_summary,
@@ -1609,8 +1629,8 @@ def create_router_app(
                 "version": ot_doc.get("version", "1.0.0-s36"),
                 "topic": (ot_doc.get("active_task_offer") or {}).get("topic", "hivemind.amcp.federation.v1"),
                 "registered_trainer_accounts_count": int(ot_cat.get("registered_trainer_accounts_count", 0)),
-                "total_registered_nodes": int(ot_fleet.get("total_registered_nodes", 1)),
-                "active_trainer_nodes": int(ot_fleet.get("active_trainer_nodes", 1)),
+                "total_registered_nodes": int(ot_total_nodes) if ot_total_nodes is not None else None,
+                "active_trainer_nodes": int(ot_active_nodes) if ot_active_nodes is not None else None,
                 "accepted_rounds_count": len(ot_rounds),
                 # None until a round is recorded: 1.7772 was the Stage-2 soak's final loss, not this fleet's figure.
                 "latest_eval_loss": float(ot_rounds[0]["eval_loss"]) if ot_rounds and ot_rounds[0].get("eval_loss") is not None else None,
@@ -1622,7 +1642,8 @@ def create_router_app(
             "steam": {
                 "app_id": 3133700,
                 "edition": "USS HiveMind NCC-31337: Astrophysics Exoplanet Hunter (Free Steam Edition)",
-                "preemption_sla_ms": 1133,
+                "preemption_target_sla_ms": 1500,
+                "preemption_sla_basis": "design_target_not_measured_on_router",
             },
         }
 

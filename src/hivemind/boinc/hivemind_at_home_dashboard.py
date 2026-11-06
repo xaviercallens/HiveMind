@@ -8058,10 +8058,16 @@ def create_hivemind_at_home_app(
             else {"handle": handle_or_email, "email": email or f"{handle_or_email}@hivemind.network", "password": password, "role": role}
         )
         try:
+            import urllib.request
+
             req_obj = urllib.request.Request(
                 f"{upstream}{endpoint}",
                 data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json", "Accept": "application/json"},
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "User-Agent": "HiveMind-Ruche-AuthSync/3.1.1",
+                },
                 method="POST",
             )
             with urllib.request.urlopen(req_obj, timeout=4.0) as resp:

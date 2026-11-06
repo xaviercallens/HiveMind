@@ -329,3 +329,61 @@ def test_old_user_previous_password_with_email_handle_collision_and_legacy_pbkdf
     assert r_cred_login.json()["account_id"] == legacy_acc_id
 
 
+def test_dashboard_cross_service_openrouter_previous_password_login(monkeypatch, tmp_path) -> None:
+    import io
+    import json
+    import urllib.request
+    from hivemind.boinc.hivemind_at_home_dashboard import create_hivemind_at_home_app
+
+    monkeypatch.setenv("HIVEMIND_OPENROUTER_URL", "https://hivemind-openrouter.example.test")
+
+    class _FakeResp:
+        status = 200
+
+        def __init__(self, payload: dict) -> None:
+            self._buf = io.BytesIO(json.dumps(payload).encode("utf-8"))
+
+        def read(self) -> bytes:
+            return self._buf.read()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def _fake_urlopen(req, timeout=4.0):
+        body = json.loads(req.data.decode("utf-8"))
+        if body.get("handle_or_email") == "upstream_vet@hivemind.network" and body.get("password") == "UpstreamPass!2025":
+            return _FakeResp(
+                {
+                    "ok": True,
+                    "status": "AUTHENTICATED",
+                    "handle": "upstream_vet",
+                    "email": "upstream_vet@hivemind.network",
+                    "role": "prosumer",
+                    "token": "hm_live_upstream1234567890",
+                    "balance": 1500,
+                }
+            )
+        raise urllib.error.HTTPError(req.full_url, 401, "Unauthorized", {}, None)
+
+    monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
+    client = TestClient(create_hivemind_at_home_app(vault_dir=tmp_path / "vault"))
+
+    r_ok = client.post(
+        "/api/v1/auth/login",
+        json={"handle_or_email": "upstream_vet@hivemind.network", "password": "UpstreamPass!2025"},
+    )
+    assert r_ok.status_code == 200
+    assert r_ok.json()["handle"] == "upstream_vet"
+    assert r_ok.json()["token"] == "hm_live_upstream1234567890"
+
+    r_bad = client.post(
+        "/api/v1/auth/login",
+        json={"handle_or_email": "upstream_vet@hivemind.network", "password": "WrongPassword"},
+    )
+    assert r_bad.status_code == 401
+
+
+

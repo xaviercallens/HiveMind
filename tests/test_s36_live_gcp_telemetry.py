@@ -384,3 +384,47 @@ def test_manifesto_shows_na_not_a_literal_when_the_payload_lacks_a_figure() -> N
                         "opentrainer": {"status": "COORDINATOR_UP_NO_TRAINERS"}, "usage_24h": {"total_requests": 12}},
     )
     assert "7 registered accounts" in live and "161 WUs" in live and "COORDINATOR_UP_NO_TRAINERS" in live and "12 24h requests" in live
+
+
+def test_ip214_215_216_217_deploy_overlay_and_telemetry_honesty(monkeypatch) -> None:
+    """IP-214..217: deploy.sh matches AGENTS.md, ruche overlay has no ||66/||42/||147/||'ONLINE' fallbacks,
+    empty in-memory router does not report LIVE_GCP_PRODUCTION or unbased preemption_sla_ms, and missing ot_fleet keys default to None."""
+    from pathlib import Path
+    from hivemind.router import opentrainer
+    from hivemind.router.accounts import RouterStore
+    from hivemind.router.gateway import create_router_app
+
+    # IP-214: deploy.sh and AGENTS.md agree on single-writer Litestream Cloud Run flags
+    deploy_sh = Path("deploy/gcp_openrouter/deploy.sh").read_text(encoding="utf-8")
+    agents_md = Path("AGENTS.md").read_text(encoding="utf-8")
+    for flag in ("--min-instances 0", "--max-instances 1", "--no-cpu-throttling", "--cpu-boost", "--concurrency 80"):
+        assert flag in deploy_sh, flag
+    for doc_flag in ("--min-instances=0", "--max-instances=1", "--no-cpu-throttling", "--cpu-boost", "--concurrency=80"):
+        assert doc_flag in agents_md, doc_flag
+
+    # IP-215: deploy/ruche_router_overlay/server.py must not contain ||66, ||42, ||147, ||'ONLINE'
+    overlay_src = Path("deploy/ruche_router_overlay/server.py").read_text(encoding="utf-8")
+    for forbidden in ("||66", "||15", "||42", "||147", "||'ONLINE'"):
+        assert forbidden not in overlay_src, forbidden
+
+    # IP-216: empty in-memory router with no K_SERVICE/HIVEMIND_ROUTER_REPLICA_URL must not report LIVE_GCP_PRODUCTION
+    monkeypatch.delenv("K_SERVICE", raising=False)
+    monkeypatch.delenv("HIVEMIND_ROUTER_REPLICA_URL", raising=False)
+    empty_client = TestClient(create_router_app(RouterStore(":memory:", b"k" * 32)))
+    empty_payload = empty_client.get("/v1/hivemind/live-telemetry").json()
+    assert empty_payload["status"] != "LIVE_GCP_PRODUCTION"
+    assert empty_payload["status"] == "LOCAL_EMPTY_ROUTER_STORE"
+    assert "status_basis" in empty_payload
+    assert "preemption_sla_ms" not in empty_payload["steam"]
+    assert empty_payload["steam"]["preemption_sla_basis"] == "design_target_not_measured_on_router"
+
+    # IP-217: when live_opentrainer_fleet is empty ({}), total_registered_nodes and active_trainer_nodes are None (not 1)
+    orig_build = opentrainer.build_opentrainer_status_payload
+    monkeypatch.setattr(
+        opentrainer,
+        "build_opentrainer_status_payload",
+        lambda **kw: {**orig_build(**kw), "live_opentrainer_fleet": {}},
+    )
+    ot_empty = empty_client.get("/v1/hivemind/live-telemetry").json()["opentrainer"]
+    assert ot_empty["total_registered_nodes"] is None
+    assert ot_empty["active_trainer_nodes"] is None

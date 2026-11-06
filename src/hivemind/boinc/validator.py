@@ -195,6 +195,13 @@ class DeterministicSpotCheckValidator:
         validator_fingerprint: object | None = None,
     ) -> SpotCheckVerdict:
         """Select one micro-checkpoint segment and verify worker determinism within eps = 1e-4."""
+        if hasattr(workunit, "shard_sha256") and (
+            not str(getattr(workunit, "shard_sha256", "")).strip()
+            or not str(getattr(workunit, "shard_hmac_signature", "")).strip()
+        ):
+            raise ValueError(
+                f"workunit {getattr(workunit, 'wu_id', '')!r} requires non-empty shard_sha256 and shard_hmac_signature (IP-218)"
+            )
         # HM-S10-08: eps is only meaningful within one accelerator class; do not replay or flag across classes
         if (
             worker_fingerprint is not None

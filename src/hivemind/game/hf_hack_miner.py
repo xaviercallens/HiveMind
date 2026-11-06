@@ -2993,15 +2993,19 @@ def run_hf_hack_mining_game(
             )
             gamer_losses[gtag] = (inner_res.initial_loss, inner_res.final_loss)
 
+            from hivemind.boinc.workunit import sign_shard_bytes
+
+            gamer_shard_path = Path(engine.store.cid_to_path[gamer_shard_cids[gtag]])
+            gamer_shard_sha, gamer_shard_sig = sign_shard_bytes(gamer_shard_path.read_bytes(), seed_i)
             wu = BOINCWorkunit(
                 wu_id=f"hack-{contract.contract_id.lower()}-{profile.node_id}",
                 branch_name=contract.domain_expert,
                 outer_step=m_idx,
                 base_model_id=bundle.base_model_sha256,
                 lora_checkpoint_url=gamer_shard_cids[gtag],
-                data_shard_parquet=str(engine.store.cid_to_path[gamer_shard_cids[gtag]]),
-                shard_sha256="",
-                shard_hmac_signature="",
+                data_shard_parquet=str(gamer_shard_path),
+                shard_sha256=gamer_shard_sha,
+                shard_hmac_signature=gamer_shard_sig,
                 rng_seed=seed_i,
                 inner_steps_H=inner_steps,
                 spot_check_interval_s=spot_interval,

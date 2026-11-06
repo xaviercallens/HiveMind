@@ -969,6 +969,7 @@ class SpeculativeBatchCommitment:
     root: str
     num_steps: int
     num_layers: int
+    signature: str = ""
 
     @property
     def leaf_count(self) -> int:
@@ -979,8 +980,29 @@ class SpeculativeBatchCommitment:
         """Upper bound on sibling hashes in one opening: `ceil(log2(num_steps * num_layers))`."""
         return len(_batch_level_sizes(self.leaf_count)) - 1
 
+    def canonical_payload(self) -> bytes:
+        return f"hivemind/opoi-batch/commitment|{self.peer_id}|{self.root}|{self.num_steps}|{self.num_layers}".encode(
+            "utf-8"
+        )
+
+    def sign(self, secret: bytes) -> "SpeculativeBatchCommitment":
+        sig = hmac.new(bytes(secret), self.canonical_payload(), hashlib.sha256).hexdigest()
+        return SpeculativeBatchCommitment(
+            peer_id=self.peer_id,
+            root=self.root,
+            num_steps=self.num_steps,
+            num_layers=self.num_layers,
+            signature=sig,
+        )
+
+    def verify_signature(self, secret: bytes) -> bool:
+        if not self.signature or not self.signature.isascii():
+            return False
+        expected = hmac.new(bytes(secret), self.canonical_payload(), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected, self.signature)
+
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        out: Dict[str, Any] = {
             "peer_id": self.peer_id,
             "root": self.root,
             "num_steps": self.num_steps,
@@ -988,6 +1010,9 @@ class SpeculativeBatchCommitment:
             "leaf_count": self.leaf_count,
             "max_opening_siblings": self.max_opening_siblings,
         }
+        if self.signature:
+            out["signature"] = self.signature
+        return out
 
 
 @dataclass(frozen=True)
@@ -1035,6 +1060,31 @@ class OptimisticProofOfInferenceAuditor:
         self.merkle_root: str = ""
         self._batch_levels: List[List[bytes]] = []
         self._batch_commitment: Optional[SpeculativeBatchCommitment] = None
+        self._issued_commitments: set[Tuple[str, str, int, int]] = set()
+        self._peer_secrets: Dict[str, bytes] = {}
+
+    def register_peer_secret(self, peer_id: str, secret: bytes) -> None:
+        """Register a per-peer HMAC signing secret for batch commitment attribution (IP-107)."""
+        if not str(peer_id).strip():
+            raise ValueError("peer_id must be non-empty")
+        if len(secret) < 16:
+            raise ValueError("secret must be at least 16 bytes")
+        self._peer_secrets[str(peer_id)] = bytes(secret)
+
+    def is_commitment_attributed(self, commitment: SpeculativeBatchCommitment) -> bool:
+        """Return True iff `commitment` carries a valid peer HMAC signature or was produced by `commit_speculative_batch`."""
+        peer_secret = self._peer_secrets.get(str(commitment.peer_id))
+        if peer_secret is not None:
+            return commitment.verify_signature(peer_secret)
+        if commitment.signature:
+            return False
+        key = (
+            str(commitment.peer_id),
+            str(commitment.root),
+            int(commitment.num_steps),
+            int(commitment.num_layers),
+        )
+        return key in self._issued_commitments
 
     def should_spot_audit_token(self, rng_seed: int | None = None) -> bool:
         rng = random.Random(rng_seed)
@@ -1356,6 +1406,12 @@ class OptimisticProofOfInferenceAuditor:
             root=_batch_root_hex(str(peer_id), len(step_activations), num_layers, levels[-1][0]),
             num_steps=len(step_activations),
             num_layers=num_layers,
+        )
+        peer_secret = self._peer_secrets.get(str(peer_id))
+        if peer_secret is not None:
+            commitment = commitment.sign(peer_secret)
+        self._issued_commitments.add(
+            (commitment.peer_id, commitment.root, commitment.num_steps, commitment.num_layers)
         )
         self._batch_levels = levels
         self._batch_commitment = commitment

@@ -410,7 +410,8 @@ class RegionalDHTSwarmRing:
                 target_probs = torch.softmax(target_logits.to(torch.float32), dim=-1)
                 target_preds = torch.argmax(target_probs, dim=-1)
 
-                accepted_in_pass = 0
+                draft_accepted_in_pass = 0
+                emitted_before_bonus = 0
                 for i, d_tok in enumerate(draft_tokens):
                     proposed_total += 1
                     t_tok = int(target_preds[i].item())
@@ -420,19 +421,19 @@ class RegionalDHTSwarmRing:
                     if d_tok == t_tok or (max_p > 0 and (draft_p / max_p) >= 0.65):
                         generated.append(d_tok)
                         accepted_total += 1
-                        accepted_in_pass += 1
+                        draft_accepted_in_pass += 1
+                        emitted_before_bonus += 1
                         if len(generated) >= max_new_tokens:
                             break
                     else:
-                        # Accept the target MoE correction token and resync draft sequence
+                        # Accept the target MoE correction token and resync draft sequence;
+                        # rejected draft tokens do not count as accepted draft proposals (IP-114).
                         generated.append(t_tok)
-                        accepted_total += 1
-                        accepted_in_pass += 1
+                        emitted_before_bonus += 1
                         break
 
-                # If all gamma draft tokens matched, we also get 1 bonus token from the final position
-                emitted_before_bonus = accepted_in_pass
-                if accepted_in_pass == draft_gamma and len(generated) < max_new_tokens:
+                # Only if all gamma draft tokens were genuinely accepted do we emit a bonus token at draft_gamma (IP-114)
+                if draft_accepted_in_pass == draft_gamma and len(generated) < max_new_tokens:
                     bonus_tok = int(target_preds[draft_gamma].item())
                     generated.append(bonus_tok)
                     emitted_before_bonus += 1

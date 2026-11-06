@@ -104,19 +104,28 @@ class SyncerRoundTelemetry:
     mean_learner_delta_norm: float
 
 
-def token_weighted_quality_weight(tokens_since_sync: int, steps_since_sync: int) -> float:
+def token_weighted_quality_weight(
+    tokens_since_sync: int,
+    steps_since_sync: int,
+    *,
+    max_total_tokens: float = 65_536.0,
+    max_tokens_per_step: float = 256.0,
+) -> float:
     """Decoupled DiLoCo learner weight `Weight(c_tokens, c_steps) = c_tokens * (c_tokens / c_steps)`.
 
     The paper reads this as `(quantity) x (quality)`: more tokens are worth more, and the
     same tokens are worth more when amortised over fewer inner steps. A learner that took
     no inner step since the last sync has no new information and receives weight `0`.
+    Both quantity and per-step token rate are bounded (IP-113) so an adversary reporting
+    inflated `tokens_since_sync` with `steps_since_sync=1` cannot obtain unbounded quadratic weight.
     """
     if tokens_since_sync < 0 or steps_since_sync < 0:
         raise ValueError("tokens_since_sync and steps_since_sync must be >= 0")
     if steps_since_sync == 0:
         return 0.0
-    tokens = float(tokens_since_sync)
-    return tokens * (tokens / float(steps_since_sync))
+    tokens = min(float(tokens_since_sync), float(max_total_tokens))
+    quality = min(tokens / float(steps_since_sync), float(max_tokens_per_step))
+    return tokens * quality
 
 
 def select_quorum(
@@ -254,6 +263,8 @@ def _validate_vectors_and_weights(
         if v.shape != shape:
             raise ValueError("all vectors must share the same shape")
     stacked = torch.stack([v.detach().to(torch.float32).reshape(-1) for v in vectors], dim=0)
+    if not bool(torch.isfinite(stacked).all()):
+        raise ValueError("all vectors must contain finite values")
     if weights is None:
         w = torch.ones(stacked.shape[0], dtype=torch.float32)
     else:
@@ -322,6 +333,7 @@ class DecoupledDiLoCoQuorumSyncer:
         self.min_quorum_k = int(min_quorum_k)
         self.merge_mode = merge_mode
         self.grace_controller = grace_controller
+        self.max_tokens_per_step = 256
 
     @torch.no_grad()
     def merge_fragment(
@@ -368,9 +380,12 @@ class DecoupledDiLoCoQuorumSyncer:
             return None, selection, telemetry
 
         prev32 = global_prev.detach().to(torch.float32)
+        if not bool(torch.isfinite(prev32).all()):
+            raise ValueError("global_prev must contain finite values")
         deltas: List[torch.Tensor] = []
         weights: List[float] = []
         learner_weights: Dict[str, float] = {}
+        admitted_ids: List[str] = []
         admitted_tokens = 0
         for learner_id in selection.admitted_learner_ids:
             if learner_id not in learner_fragments:
@@ -378,13 +393,18 @@ class DecoupledDiLoCoQuorumSyncer:
             theta_m = learner_fragments[learner_id].detach().to(torch.float32)
             if theta_m.shape != prev32.shape:
                 raise ValueError(f"fragment shape mismatch for learner {learner_id!r}")
+            if not bool(torch.isfinite(theta_m).all()):
+                # Drop poisoned NaN/Inf learner fragments before merging (IP-113)
+                continue
             a = by_id[learner_id]
-            w_m = token_weighted_quality_weight(a.tokens_since_sync, a.steps_since_sync)
+            eff_tokens = min(int(a.tokens_since_sync), int(a.steps_since_sync) * self.max_tokens_per_step)
+            w_m = token_weighted_quality_weight(eff_tokens, a.steps_since_sync)
             deltas.append(prev32 - theta_m)
             weights.append(w_m)
             learner_weights[learner_id] = w_m
+            admitted_ids.append(learner_id)
             admitted_tokens += a.tokens_since_sync
-        if sum(weights) <= 0.0:
+        if len(deltas) < self.min_quorum_k or sum(weights) <= 0.0:
             raise ValueError("no admitted learner performed any inner step since the last sync")
 
         direct = direct_weighted_average(deltas, weights)
@@ -395,11 +415,11 @@ class DecoupledDiLoCoQuorumSyncer:
             fragment_name=fragment_name,
             merge_mode=self.merge_mode,
             num_arrivals=len(arrivals),
-            num_admitted=len(selection.admitted_learner_ids),
+            num_admitted=len(admitted_ids),
             num_deferred=len(selection.deferred_learner_ids),
             min_quorum_k=self.min_quorum_k,
             grace_window_s=float(grace_window_s),
-            admitted_learner_ids=selection.admitted_learner_ids,
+            admitted_learner_ids=tuple(admitted_ids),
             learner_weights=learner_weights,
             admitted_tokens=int(admitted_tokens),
             deferred_tokens=int(deferred_tokens),
@@ -482,6 +502,8 @@ class ContinuousAsyncLearnerCoordinator:
         if int(origin_round) == self.current_round and lid in self._fresh_inbox:
             raise ValueError("learner already has a pending update for the current round")
         d32 = delta.detach().to(torch.float32).clone()
+        if not bool(torch.isfinite(d32).all()):
+            raise ValueError("delta must contain only finite values")
         self.total_submitted_tokens += int(tokens_since_sync)
 
         if int(origin_round) == self.current_round:
@@ -561,31 +583,59 @@ class ContinuousAsyncLearnerCoordinator:
         """
         p32 = global_param.detach().to(torch.float32).clone()
 
-        # 1. If eager_one_step items are queued, apply them immediately with staleness damping
-        eager_ids: List[str] = []
-        for item in self._eager_queue:
-            lag = int(item["lag_rounds"])  # type: ignore[arg-type]
-            damp = self.staleness_decay ** lag
-            d_vec = item["delta"]  # type: ignore[assignment]
-            p32 = p32 - float(outer_lr) * damp * d_vec  # type: ignore[operator]
-            self.merged_tokens += int(item["tokens"])  # type: ignore[arg-type]
-            self.eager_applied_steps += 1
-            eager_ids.append(str(item["learner_id"]))
-        self._eager_queue.clear()
-
-        # 2. Combine fresh inbox + deferred carry learners for the quorum selection
-        combined: Dict[str, Dict[str, object]] = dict(self._deferred_carry)
+        # 1. Combine fresh inbox + deferred carry learners, dropping zero-step or malformed entries
+        #    before mutating eager updates or merged_tokens so a bad submission cannot wedge the round (IP-132).
+        raw_combined: Dict[str, Dict[str, object]] = dict(self._deferred_carry)
         for lid, entry in self._fresh_inbox.items():
-            if lid in combined:
-                prev = combined[lid]
-                combined[lid] = {
+            if lid in raw_combined:
+                prev = raw_combined[lid]
+                if prev["delta"].shape != entry["delta"].shape:  # type: ignore[union-attr]
+                    self.dropped_tokens += int(entry["tokens"])  # type: ignore[arg-type]
+                    continue
+                raw_combined[lid] = {
                     "delta": prev["delta"] + entry["delta"],  # type: ignore[operator]
                     "tokens": int(prev["tokens"]) + int(entry["tokens"]),  # type: ignore[arg-type]
                     "steps": int(prev["steps"]) + int(entry["steps"]),  # type: ignore[arg-type]
                     "arrival_time_s": float(entry["arrival_time_s"]),  # type: ignore[arg-type]
                 }
             else:
+                raw_combined[lid] = entry
+
+        combined: Dict[str, Dict[str, object]] = {}
+        invalid_learners: List[str] = []
+        for lid, entry in raw_combined.items():
+            d_tensor = entry["delta"]  # type: ignore[assignment]
+            steps = int(entry["steps"])  # type: ignore[arg-type]
+            tokens = int(entry["tokens"])  # type: ignore[arg-type]
+            if (
+                steps <= 0
+                or tokens <= 0
+                or d_tensor.shape != p32.shape
+                or not bool(torch.isfinite(d_tensor).all())
+            ):
+                self.dropped_tokens += max(0, tokens)
+                self._fresh_inbox.pop(lid, None)
+                self._deferred_carry.pop(lid, None)
+                invalid_learners.append(lid)
+            else:
                 combined[lid] = entry
+
+        # 2. If eager_one_step items are queued, apply valid ones with staleness damping
+        eager_ids: List[str] = []
+        for item in self._eager_queue:
+            lag = int(item["lag_rounds"])  # type: ignore[arg-type]
+            damp = self.staleness_decay ** lag
+            d_vec = item["delta"]  # type: ignore[assignment]
+            e_tokens = int(item["tokens"])  # type: ignore[arg-type]
+            e_steps = int(item["steps"])  # type: ignore[arg-type]
+            if e_steps <= 0 or e_tokens <= 0 or d_vec.shape != p32.shape or not bool(torch.isfinite(d_vec).all()):
+                self.dropped_tokens += max(0, e_tokens)
+                continue
+            p32 = p32 - float(outer_lr) * damp * d_vec  # type: ignore[operator]
+            self.merged_tokens += e_tokens
+            self.eager_applied_steps += 1
+            eager_ids.append(str(item["learner_id"]))
+        self._eager_queue.clear()
 
         arrivals = [
             LearnerArrival(
@@ -602,12 +652,13 @@ class ContinuousAsyncLearnerCoordinator:
 
         admitted_deltas: List[torch.Tensor] = []
         admitted_weights: List[float] = []
+        admitted_token_sum = 0
         for lid in selection.admitted_learner_ids:
             v = combined[lid]
             admitted_deltas.append(v["delta"])  # type: ignore[arg-type]
             w_m = token_weighted_quality_weight(int(v["tokens"]), int(v["steps"]))  # type: ignore[arg-type]
             admitted_weights.append(w_m)
-            self.merged_tokens += int(v["tokens"])  # type: ignore[arg-type]
+            admitted_token_sum += int(v["tokens"])  # type: ignore[arg-type]
 
         if admitted_deltas:
             merged_delta = (
@@ -616,6 +667,7 @@ class ContinuousAsyncLearnerCoordinator:
                 else direct_weighted_average(admitted_deltas, admitted_weights)
             )
             p32 = p32 - float(outer_lr) * merged_delta
+            self.merged_tokens += admitted_token_sum
 
         round_closed: Optional[int] = None
         if selection.reached:
@@ -642,6 +694,7 @@ class ContinuousAsyncLearnerCoordinator:
             "straggler_mode": self.straggler_mode,
             "admitted_learners": list(selection.admitted_learner_ids),
             "deferred_learners": list(selection.deferred_learner_ids),
+            "dropped_invalid_learners": invalid_learners,
             "eager_applied_learners": eager_ids,
             "total_submitted_tokens": self.total_submitted_tokens,
             "merged_tokens": self.merged_tokens,

@@ -16,8 +16,58 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
     """Render the interactive 3D Planet HiveMiners & >200-Node Capacity Forecast GCP Web Page."""
     import json
 
-    data = initial_forecast or forecast_200plus_node_international_launch()
+    default_forecast = forecast_200plus_node_international_launch()
+    if initial_forecast is None:
+        data = default_forecast
+    else:
+        data = {**default_forecast, **initial_forecast}
     payload_json = json.dumps(data)
+
+    raw_base = data.get("current_live_baseline")
+    base: dict[str, Any] = raw_base if isinstance(raw_base, dict) else {}
+    data_source = str(
+        base.get("data_source")
+        or data.get("data_source")
+        or "ASSUMED_BASELINE_SNAPSHOT_NOT_LIVE"
+    )
+    is_live_source = data_source.startswith("LIVE") and "NOT_LIVE" not in data_source
+    situation_heading = (
+        f"CURRENT SITUATION • LIVE CLOUD RUN TELEMETRY ({data_source})"
+        if is_live_source
+        else f"BASELINE SITUATION • {data_source}"
+    )
+    kpi_heading = (
+        f"Current Situation ({data_source})"
+        if is_live_source
+        else f"Baseline Snapshot ({data_source})"
+    )
+
+    def _fmt_int(val: Any) -> str:
+        if isinstance(val, bool) or not isinstance(val, (int, float)):
+            return "n/a"
+        return f"{int(round(float(val))):,}"
+
+    b_nodes = _fmt_int(base.get("total_nodes"))
+    b_prod = _fmt_int(base.get("producers"))
+    b_pros = _fmt_int(base.get("prosumers"))
+    b_cons = _fmt_int(base.get("consumers"))
+    b_adm = _fmt_int(base.get("admins"))
+    b_quorum = _fmt_int(base.get("online_quorum_producers"))
+    b_vram = _fmt_int(base.get("online_quorum_vram_gb"))
+    b_comp = _fmt_int(base.get("billed_completions"))
+    b_toks = _fmt_int(base.get("billed_tokens"))
+    b_tok_s = _fmt_int(base.get("daytime_tok_per_s"))
+    b_p50 = _fmt_int(base.get("p50_latency_ms"))
+    verdict_prefix = (
+        f"LIVE NOW ({b_nodes} NODES)"
+        if is_live_source
+        else f"BASELINE ({b_nodes} NODES • {data_source})"
+    )
+    pioneers_btn_lbl = (
+        f"Current {b_nodes} Live Pioneers"
+        if is_live_source
+        else f"Baseline {b_nodes} Pioneers ({data_source})"
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="en" class="dark">
@@ -68,10 +118,10 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
         <div>
           <div class="flex items-center gap-2">
             <h1 class="text-base sm:text-lg font-extrabold tracking-tight text-white">
-              HiveMind @ Home • Global Planet HiveMiners: Real Live Situation vs. 200+ Node Forecast Prediction
+              HiveMind @ Home • Global Planet HiveMiners: Baseline vs. 200+ Node Forecast Prediction
             </h1>
             <span id="verdict-pill" class="px-2.5 py-0.5 text-xs font-bold uppercase rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 glow-badge">
-              LIVE NOW (59 NODES) • FORECAST READY (&gt;200 NODES)
+              {verdict_prefix} • FORECAST READY (&gt;200 NODES)
             </span>
           </div>
           <p class="text-xs text-slate-400">
@@ -103,35 +153,35 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
   </header>
 
   <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-    <!-- Dedicated Side-by-Side Panel: Real Current Live Situation vs. Forecast Prediction -->
+    <!-- Dedicated Side-by-Side Panel: Baseline Situation vs. Forecast Prediction -->
     <section class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div class="glass-card rounded-2xl p-4 border-amber-400/50 bg-slate-950/85">
         <div class="flex items-center justify-between gap-2">
-          <span class="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-xs font-extrabold uppercase tracking-wider">
-            CURRENT SITUATION • REAL LIVE CLOUD RUN TELEMETRY (OCT 31, 2026)
+          <span id="baseline-source-badge" class="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-xs font-extrabold uppercase tracking-wider">
+            {situation_heading}
           </span>
-          <span class="text-xs text-emerald-300 font-bold">HTTP 200 • 0% 5xx</span>
+          <span class="text-xs text-emerald-300 font-bold">{data_source}</span>
         </div>
         <div class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
           <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
-            <div class="text-slate-400">Live Registered Nodes</div>
-            <div id="live-situ-nodes" class="text-xl font-black text-amber-300 mt-0.5">59</div>
-            <div id="live-situ-roles" class="text-[11px] text-slate-300">10 Prod • 22 Pros • 24 Cons • 3 Adm</div>
+            <div class="text-slate-400">Registered Nodes</div>
+            <div id="live-situ-nodes" class="text-xl font-black text-amber-300 mt-0.5">{b_nodes}</div>
+            <div id="live-situ-roles" class="text-[11px] text-slate-300">{b_prod} Prod • {b_pros} Pros • {b_cons} Cons • {b_adm} Adm</div>
           </div>
           <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
             <div class="text-slate-400">Active GPU Quorum</div>
-            <div id="live-situ-quorum" class="text-xl font-black text-emerald-300 mt-0.5">4 Online (32 GB)</div>
-            <div class="text-[11px] text-slate-300">15 Live Models • 480 tok/s</div>
+            <div id="live-situ-quorum" class="text-xl font-black text-emerald-300 mt-0.5">{b_quorum} Online ({b_vram} GB)</div>
+            <div class="text-[11px] text-slate-300">{b_tok_s} tok/s</div>
           </div>
           <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
-            <div class="text-slate-400">Real Billed Completions</div>
-            <div id="live-situ-completions" class="text-xl font-black text-sky-300 mt-0.5">2,455</div>
-            <div id="live-situ-tokens" class="text-[11px] text-slate-300">322,370 Billed Tokens</div>
+            <div class="text-slate-400">Billed Completions</div>
+            <div id="live-situ-completions" class="text-xl font-black text-sky-300 mt-0.5">{b_comp}</div>
+            <div id="live-situ-tokens" class="text-[11px] text-slate-300">{b_toks} Billed Tokens</div>
           </div>
           <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
-            <div class="text-slate-400">Live Latency &amp; BOINC</div>
-            <div id="live-situ-latency" class="text-xl font-black text-fuchsia-300 mt-0.5">257 ms p50</div>
-            <div class="text-[11px] text-slate-300">100 WUs • 5,632 Cobblestones</div>
+            <div class="text-slate-400">Latency &amp; BOINC</div>
+            <div id="live-situ-latency" class="text-xl font-black text-fuchsia-300 mt-0.5">{b_p50} ms p50</div>
+            <div class="text-[11px] text-slate-300">BOINC Baseline</div>
           </div>
         </div>
       </div>
@@ -171,12 +221,12 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
     <!-- Top Executive KPI Comparison Strip -->
     <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
       <div class="glass-card rounded-2xl p-4 border-amber-400/40">
-        <div class="text-xs uppercase tracking-wider text-amber-300 font-semibold">Current Situation (Real Live)</div>
+        <div id="kpi-baseline-heading" class="text-xs uppercase tracking-wider text-amber-300 font-semibold">{kpi_heading}</div>
         <div class="mt-1 flex items-baseline gap-2">
-          <span id="kpi-baseline-nodes" class="text-2xl font-black text-amber-300">59</span>
-          <span id="kpi-baseline-split" class="text-xs text-slate-300">10 Prod • 22 Pros • 24 Cons</span>
+          <span id="kpi-baseline-nodes" class="text-2xl font-black text-amber-300">{b_nodes}</span>
+          <span id="kpi-baseline-split" class="text-xs text-slate-300">{b_prod} Prod • {b_pros} Pros • {b_cons} Cons</span>
         </div>
-        <div class="mt-1 text-xs text-slate-400">Live: <span id="kpi-baseline-tok" class="text-slate-200 font-semibold">480 tok/s</span> • <span id="kpi-baseline-comp" class="text-emerald-300 font-semibold">2,455 Completions</span></div>
+        <div class="mt-1 text-xs text-slate-400">Baseline: <span id="kpi-baseline-tok" class="text-slate-200 font-semibold">{b_tok_s} tok/s</span> • <span id="kpi-baseline-comp" class="text-emerald-300 font-semibold">{b_comp} Completions</span></div>
       </div>
 
       <div class="glass-card rounded-2xl p-4 border-sky-400/40">
@@ -256,7 +306,7 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
               All 200+ Forecast (Prediction)
             </button>
             <button id="btn-filter-pioneers" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold transition">
-              Current 59 Live Pioneers (Real)
+              {pioneers_btn_lbl}
             </button>
             <button id="btn-filter-producers" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold transition">
               Producers &amp; Prosumers
@@ -451,7 +501,9 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
     ];
 
     function formatInt(n) {{
-      return Math.round(Number(n) || 0).toLocaleString("en-US");
+      return (n === null || n === undefined || n === "" || Number.isNaN(Number(n)))
+        ? "n/a"
+        : Math.round(Number(n)).toLocaleString("en-US");
     }}
 
     function updateDashboardUI(data) {{
@@ -463,40 +515,59 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
       const unctrl = (data.balancing_and_latency_sla || {{}}).uncontrolled_naive_routing || {{}};
       const econ = (data.balancing_and_latency_sla || {{}}).economic_and_epidemic_stabilizers || {{}};
 
-      const liveTotalNodes = base.total_nodes || 59;
-      const liveProd = base.producers || 10;
-      const livePros = base.prosumers || 22;
-      const liveCons = base.consumers || 24;
-      const liveAdm = base.admins || 3;
-      const liveComp = base.billed_completions || 2455;
-      const liveToks = base.billed_tokens || 322370;
-      const liveQuorum = base.online_quorum_producers || 4;
-      const liveVram = base.online_quorum_vram_gb || 32;
-      const liveTokS = base.daytime_tok_per_s || 480;
-      const liveP50 = Math.round(base.p50_latency_ms || 257);
+      const baseSource = base.data_source || data.data_source || "ASSUMED_BASELINE_SNAPSHOT_NOT_LIVE";
+      const isLiveSource = String(baseSource).startsWith("LIVE") && !String(baseSource).includes("NOT_LIVE");
+      const liveTotalNodes = formatInt(base.total_nodes);
+      const liveProd = formatInt(base.producers);
+      const livePros = formatInt(base.prosumers);
+      const liveCons = formatInt(base.consumers);
+      const liveAdm = formatInt(base.admins);
+      const liveComp = formatInt(base.billed_completions);
+      const liveToks = formatInt(base.billed_tokens);
+      const liveQuorum = formatInt(base.online_quorum_producers);
+      const liveVram = formatInt(base.online_quorum_vram_gb);
+      const liveTokS = formatInt(base.daytime_tok_per_s);
+      const liveP50 = formatInt(base.p50_latency_ms);
 
-      document.getElementById("kpi-baseline-nodes").textContent = formatInt(liveTotalNodes);
+      const srcBadge = document.getElementById("baseline-source-badge");
+      if (srcBadge) {{
+        srcBadge.textContent = isLiveSource
+          ? `CURRENT SITUATION • LIVE CLOUD RUN TELEMETRY (${{baseSource}})`
+          : `BASELINE SITUATION • ${{baseSource}}`;
+      }}
+      const kpiHeadEl = document.getElementById("kpi-baseline-heading");
+      if (kpiHeadEl) {{
+        kpiHeadEl.textContent = isLiveSource
+          ? `Current Situation (${{baseSource}})`
+          : `Baseline Snapshot (${{baseSource}})`;
+      }}
+
+      document.getElementById("kpi-baseline-nodes").textContent = liveTotalNodes;
       const kpiSplitEl = document.getElementById("kpi-baseline-split");
       if (kpiSplitEl) kpiSplitEl.textContent = `${{liveProd}} Prod • ${{livePros}} Pros • ${{liveCons}} Cons`;
       const kpiTokEl = document.getElementById("kpi-baseline-tok");
-      if (kpiTokEl) kpiTokEl.textContent = `${{formatInt(liveTokS)}} tok/s`;
+      if (kpiTokEl) kpiTokEl.textContent = `${{liveTokS}} tok/s`;
       const kpiCompEl = document.getElementById("kpi-baseline-comp");
-      if (kpiCompEl) kpiCompEl.textContent = `${{formatInt(liveComp)}} Completions`;
+      if (kpiCompEl) kpiCompEl.textContent = `${{liveComp}} Completions`;
 
       const liveNodesEl = document.getElementById("live-situ-nodes");
-      if (liveNodesEl) liveNodesEl.textContent = formatInt(liveTotalNodes);
+      if (liveNodesEl) liveNodesEl.textContent = liveTotalNodes;
       const liveRolesEl = document.getElementById("live-situ-roles");
       if (liveRolesEl) liveRolesEl.textContent = `${{liveProd}} Prod • ${{livePros}} Pros • ${{liveCons}} Cons • ${{liveAdm}} Adm`;
       const liveQuoEl = document.getElementById("live-situ-quorum");
       if (liveQuoEl) liveQuoEl.textContent = `${{liveQuorum}} Online (${{liveVram}} GB)`;
       const liveCompBox = document.getElementById("live-situ-completions");
-      if (liveCompBox) liveCompBox.textContent = formatInt(liveComp);
+      if (liveCompBox) liveCompBox.textContent = liveComp;
       const liveTokBox = document.getElementById("live-situ-tokens");
-      if (liveTokBox) liveTokBox.textContent = `${{formatInt(liveToks)}} Billed Tokens`;
+      if (liveTokBox) liveTokBox.textContent = `${{liveToks}} Billed Tokens`;
       const liveLatBox = document.getElementById("live-situ-latency");
       if (liveLatBox) liveLatBox.textContent = `${{liveP50}} ms p50`;
       const btnPioneers = document.getElementById("btn-filter-pioneers");
-      if (btnPioneers) btnPioneers.textContent = `Current ${{liveTotalNodes}} Live Pioneers (Real)`;
+      if (btnPioneers) {{
+        btnPioneers.textContent = isLiveSource
+          ? `Current ${{liveTotalNodes}} Live Pioneers`
+          : `Baseline ${{liveTotalNodes}} Pioneers (${{baseSource}})`;
+      }}
 
       const predNodesEl = document.getElementById("pred-situ-nodes");
       if (predNodesEl) predNodesEl.textContent = formatInt(sw.total_active_nodes);
@@ -1011,7 +1082,7 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
             const verdict = document.getElementById("verdict-pill");
             if (verdict) verdict.textContent = `LIVE NOW (${{totalAcc}} NODES) • FORECAST READY (>200 NODES)`;
             const btnPioneers = document.getElementById("btn-filter-pioneers");
-            if (btnPioneers) btnPioneers.textContent = `Current ${{totalAcc}} Live Pioneers (Real)`;
+            if (btnPioneers) btnPioneers.textContent = `Current ${{totalAcc}} Live Pioneers`;
             const situQuorum = document.getElementById("live-situ-quorum");
             if (situQuorum) situQuorum.textContent = `${{v(fleet.live_hiveminders)}} Online (${{v(models.live_count)}} Models)`;
             if (u24.total_requests != null && u24.total_requests > 0) {{

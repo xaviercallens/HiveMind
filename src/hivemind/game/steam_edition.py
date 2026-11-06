@@ -382,21 +382,23 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
       }}
       const tbody = document.querySelector('#leaderboard-table tbody');
       tbody.innerHTML = '';
+      const fmtN = (v) => (v === null || v === undefined ? 'n/a' : Number(v).toLocaleString());
+      const fmtFixed = (v, d) => (v === null || v === undefined ? 'n/a' : Number(v).toFixed(d));
       (GAME_DATA.leaderboard || []).forEach((g, idx) => {{
         const tr = document.createElement('tr');
         const achHtml = (g.achievements_unlocked || []).map(a => `<span class="pill">${{escHtml(a)}}</span>`).join(' ');
         const rpHtml = g.rich_presence_status ? `<div style="color:#00ff9d;font-size:0.74rem;margin-top:4px;">RP: ${{escHtml(g.rich_presence_status)}}</div>` : '';
         const receipt = g.steam_leaderboard_receipt ? `<div style="color:#64748b;font-size:0.72rem;margin-top:2px;">HMAC: ${{escHtml(g.steam_leaderboard_receipt)}}</div>` : '';
-        const bossPts = Number(g.boss_raid_points || 0);
+        const bossPts = g.boss_raid_points ?? 'n/a';
         tr.innerHTML = `
           <td class="${{idx === 0 ? 'crown' : ''}}">${{idx === 0 ? '#1 CHAMPION' : '#' + (idx + 1)}}</td>
           <td><strong>${{escHtml(g.gamer_tag)}}</strong><br/><span style="color:#38bdf8;font-size:0.8rem;">${{escHtml(g.rank_title)}}</span></td>
-          <td>${{Number(g.data_discovery_points || 0).toLocaleString()}} PTS<br/><span style="color:#94a3b8;font-size:0.76rem;">${{Number(g.shards_mined || 0)}} Shards</span></td>
-          <td>${{Number(g.lora_training_points || 0).toLocaleString()}} PTS<br/><span style="color:#00ff9d;font-size:0.78rem;">-${{escHtml(g.best_loss_reduction_pct)}}% Loss</span></td>
-          <td>${{Number(g.solution_bounty_points || 0).toLocaleString()}} PTS<br/><span style="color:#fcee09;font-size:0.78rem;">${{Number(g.bounties_solved || 0)}} Solved</span></td>
-          <td>${{Number(g.swarm_contribution_points || 0).toLocaleString()}} PTS<br/><span style="color:#c084fc;font-size:0.78rem;">${{Number(g.swarm_tokens_served || 0)}} Toks (+${{bossPts}} Boss)</span></td>
-          <td class="crown">${{Number(g.total_points || 0).toLocaleString()}} PTS</td>
-          <td style="color:#00ff9d;font-weight:bold;">${{Number(g.hive_balance || 0).toFixed(4)}} $HIVE</td>
+          <td>${{fmtN(g.data_discovery_points)}} PTS<br/><span style="color:#94a3b8;font-size:0.76rem;">${{g.shards_mined ?? 'n/a'}} Shards</span></td>
+          <td>${{fmtN(g.lora_training_points)}} PTS<br/><span style="color:#00ff9d;font-size:0.78rem;">-${{escHtml(g.best_loss_reduction_pct)}}% Loss</span></td>
+          <td>${{fmtN(g.solution_bounty_points)}} PTS<br/><span style="color:#fcee09;font-size:0.78rem;">${{g.bounties_solved ?? 'n/a'}} Solved</span></td>
+          <td>${{fmtN(g.swarm_contribution_points)}} PTS<br/><span style="color:#c084fc;font-size:0.78rem;">${{g.swarm_tokens_served ?? 'n/a'}} Toks (+${{bossPts}} Boss)</span></td>
+          <td class="crown">${{fmtN(g.total_points)}} PTS</td>
+          <td style="color:#00ff9d;font-weight:bold;">${{fmtFixed(g.hive_balance, 4)}} $HIVE</td>
           <td>${{achHtml}}${{rpHtml}}${{receipt}}</td>
         `;
         tbody.appendChild(tr);
@@ -410,7 +412,7 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
       const bc = m.bounty_challenge;
       const term = document.getElementById('mission-terminal');
       term.textContent =
-        `[SEASON ${{m.season || 1}} CONTRACT] ${{m.contract_id}} // ${{m.mission_codename}}\\n` +
+        `[SEASON ${{m.season ?? 'n/a'}} CONTRACT] ${{m.contract_id}} // ${{m.mission_codename}}\\n` +
         `[HF DATASET NODE] ${{m.dataset_id}} -> Expert: ${{m.domain_expert}}\\n` +
         `[PUBLISHED CAS CID] ${{m.expert_cid}}\\n` +
         `[SOLUTION PERPLEXITY] Pre-LoRA: ${{bc.pre_lora_eval.solution_perplexity}} -> Post-LoRA: ${{bc.post_lora_eval.solution_perplexity}} (-${{bc.perplexity_improvement_pct}}%)\\n\\n` +
@@ -424,11 +426,13 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
       const raid = moe.speculative_boss_raid || {{}};
       const tree = moe.token_tree_speculation_gamma6 || {{}};
       const term = document.getElementById('mission-terminal');
+      const initLossTxt = moe.router_initial_loss != null ? Number(moe.router_initial_loss).toFixed(4) : 'n/a';
+      const finalLossTxt = moe.router_final_loss != null ? Number(moe.router_final_loss).toFixed(4) : 'n/a';
       term.textContent =
-        `[OMEGA FINAL BOSS STAGE] ${{moe.num_experts || 6}}-EXPERT SPARSE MoE MULTI-DOMAIN SPECULATIVE RAID\\n` +
-        `[REGIONAL RING] ${{raid.region_ring || 'EU-West-Swarm-Ring'}} (${{raid.active_ring_peers || 3}} Peers | Mean Ping: ${{raid.mean_ring_ping_ms || 14.1}} ms)\\n` +
-        `[SPECULATIVE DECODING] Ring gamma=${{raid.draft_gamma || 5}} (${{raid.latency_reduction_factor ?? 'n/a'}} tokens/pass, simulated RTT) | Token-Tree gamma=${{tree.tree_depth_gamma || 6}} (Accepted: ${{tree.accepted_length || 7}} toks)\\n` +
-        `[TOP-2 ROUTER CALIBRATION] Loss: ${{Number(moe.router_initial_loss || 2.45).toFixed(4)}} -> ${{Number(moe.router_final_loss || 1.71).toFixed(4)}}\\n\\n` +
+        `[OMEGA FINAL BOSS STAGE] ${{moe.num_experts ?? 'n/a'}}-EXPERT SPARSE MoE MULTI-DOMAIN SPECULATIVE RAID\\n` +
+        `[REGIONAL RING] ${{raid.region_ring || 'EU-West-Swarm-Ring'}} (${{raid.active_ring_peers ?? 'n/a'}} Peers | Mean Ping: ${{raid.mean_ring_ping_ms ?? 'n/a'}} ms)\\n` +
+        `[SPECULATIVE DECODING] Ring gamma=${{raid.draft_gamma ?? 'n/a'}} (${{raid.latency_reduction_factor ?? 'n/a'}} tokens/pass, simulated RTT) | Token-Tree gamma=${{tree.tree_depth_gamma ?? 'n/a'}} (Accepted: ${{tree.accepted_length ?? 'n/a'}} toks)\\n` +
+        `[TOP-2 ROUTER CALIBRATION] Loss: ${{initLossTxt}} -> ${{finalLossTxt}}\\n\\n` +
         `--- MULTI-DOMAIN BOSS PROMPT ---\\n${{raid.prompt || 'Write a memory-safe function atp_hive_yield(cells, blocks)...'}}\\n` +
         `--- MULTI-EXPERT SPARSE MoE SPECULATIVE OUTPUT ---\\n${{raid.generated_boss_solution || 'def atp_hive_yield(cells, blocks): return cells * blocks * 50'}}`;
     }}
@@ -440,17 +444,19 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
       const dma = moe.double_buffered_dma_lookahead || [];
       const el = document.getElementById('moe-panel');
       const util = moe.expert_utilization || {{}};
+      const initLossTxt = moe.router_initial_loss != null ? Number(moe.router_initial_loss).toFixed(4) : 'n/a';
+      const finalLossTxt = moe.router_final_loss != null ? Number(moe.router_final_loss).toFixed(4) : 'n/a';
       el.innerHTML = `
-        <p><strong>Active Hot-Plugged Experts:</strong> ${{moe.num_experts || 6}} (${{(moe.expert_domains || []).join(', ')}})</p>
-        <p><strong>Top-2 Router Calibration Loss:</strong> ${{Number(moe.router_initial_loss || 0).toFixed(4)}} &rarr; <span style="color:#00ff9d;font-weight:bold;">${{Number(moe.router_final_loss || 0).toFixed(4)}}</span></p>
+        <p><strong>Active Hot-Plugged Experts:</strong> ${{moe.num_experts ?? 'n/a'}} (${{(moe.expert_domains || []).join(', ')}})</p>
+        <p><strong>Top-2 Router Calibration Loss:</strong> ${{initLossTxt}} &rarr; <span style="color:#00ff9d;font-weight:bold;">${{finalLossTxt}}</span></p>
         <p><strong>Swarm Expert Routing Utilization:</strong></p>
         <ul>
           ${{Object.entries(util).map(([k, v]) => `<li>${{k}}: <strong>${{(v * 100).toFixed(1)}}%</strong></li>`).join('')}}
         </ul>
-        <p><strong>2-Slot Double-Buffered Pinned RAM DMA (HM-M2-01):</strong> <span style="color:#00ff9d;">${{dma.length || 6}} Experts Staged (simulated swap latency, not measured)</span></p>
-        <p><strong>Speculative Swarm Ring (&gamma;=${{raid.draft_gamma || 5}} / Tree &gamma;=6):</strong> <span style="color:#00f0ff;">${{raid.latency_reduction_factor ?? 'n/a'}} tokens/pass (simulated RTT, not a measured speedup)</span> (${{raid.effective_tokens_per_sec || 28.5}} tok/s)</p>
+        <p><strong>2-Slot Double-Buffered Pinned RAM DMA (HM-M2-01):</strong> <span style="color:#00ff9d;">${{dma.length}} Experts Staged (simulated swap latency, not measured)</span></p>
+        <p><strong>Speculative Swarm Ring (&gamma;=${{raid.draft_gamma ?? 'n/a'}} / Tree &gamma;=6):</strong> <span style="color:#00f0ff;">${{raid.latency_reduction_factor ?? 'n/a'}} tokens/pass (simulated RTT, not a measured speedup)</span> (${{raid.effective_tokens_per_sec ?? 'n/a'}} tok/s)</p>
         <p><strong>Steamworks Anti-Cheat Firewall:</strong> <span style="color:#ff007f;">Sybil_Bot_Limited_00 Blocked ($0 &lt; $5)</span> | <span style="color:#ff007f;">DarkNet_Spoofer_99 Slashed (Multi-Krum 2&sigma;)</span></p>
-        <p><strong>Peak RTX 2070 VRAM:</strong> ${{vram.peak_allocated_mb || 1192.6}} MiB (${{vram.free_vram_gb || 5.62}} GiB Free)</p>
+        <p><strong>Peak RTX 2070 VRAM:</strong> ${{vram.peak_allocated_mb ?? 'n/a'}} MiB (${{vram.free_vram_gb ?? 'n/a'}} GiB Free)</p>
       `;
     }}
 
@@ -666,10 +672,11 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
       const m = SEASON4_MISSIONS[idx];
       if (!m) return;
       const term = document.getElementById('season4-terminal');
+      const skulls4 = m.difficulty_skulls != null ? Number(m.difficulty_skulls) : 5;
       term.textContent =
         `[SEASON 4 CONTRACT] ${{m.contract_id}} // ${{m.mission_codename}}\\n` +
         `[HF DATASET NODE] ${{m.dataset_id}} -> Expert: ${{m.domain_expert}}\\n` +
-        `[DIFFICULTY] ${{'*'.repeat(m.difficulty_skulls || 5)}} | [BASE BOUNTY] ${{m.base_bounty_pts}} PTS\\n` +
+        `[DIFFICULTY] ${{'*'.repeat(skulls4)}} | [BASE BOUNTY] ${{m.base_bounty_pts}} PTS\\n` +
         `[TELEMETRY] Live frame stream on /ws/swarm-telemetry (Season 4: 4 contracts, 1,800 $HIVE pool)`;
     }}
 
@@ -678,12 +685,13 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
       if (!term || !f) return;
       const m = f.active_mission || {{}};
       const lb = (f.leaderboard || [])[0] || {{}};
+      const lbBalTxt = lb.hive_balance != null ? Number(lb.hive_balance).toFixed(4) : 'n/a';
       term.textContent =
         `[LIVE TELEMETRY] seq ${{f.seq}} | ${{f.timestamp_iso}} | stream=${{f.stream}}\\n` +
         `[SEASON 4] ${{f.season4_missions}} contracts | active: ${{m.contract_id}} (${{m.domain_expert}})\\n` +
         `[SWARM RING] ${{f.num_nodes}} nodes | ${{f.active_ring_peers}} peers | mean RTT ${{f.mean_ring_rtt_ms}} ms\\n` +
         `[THROUGHPUT] ${{f.swarm_tokens_per_sec}} tok/s | mined ${{f.hive_minted_total}} $HIVE\\n` +
-        `[LEADER] ${{lb.gamer_tag || 'n/a'}} | ${{lb.total_points || 0}} PTS | ${{Number(lb.hive_balance || 0).toFixed(4)}} $HIVE`;
+        `[LEADER] ${{lb.gamer_tag || 'n/a'}} | ${{lb.total_points ?? 'n/a'}} PTS | ${{lbBalTxt}} $HIVE`;
     }}
 
     function connectSwarmTelemetry() {{
@@ -745,10 +753,11 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
       const m = SEASON5_MISSIONS[idx];
       if (!m) return;
       const term = document.getElementById('season5-terminal');
+      const skulls5 = m.difficulty_skulls != null ? Number(m.difficulty_skulls) : 5;
       term.textContent =
         `[SEASON 5 CONTRACT] ${{m.contract_id}} // ${{m.mission_codename}}\\n` +
         `[HF DATASET NODE] ${{m.dataset_id}} -> Expert: ${{m.domain_expert}}\\n` +
-        `[DIFFICULTY] ${{'*'.repeat(m.difficulty_skulls || 5)}} | [BASE BOUNTY] ${{m.base_bounty_pts}} PTS\\n` +
+        `[DIFFICULTY] ${{'*'.repeat(skulls5)}} | [BASE BOUNTY] ${{m.base_bounty_pts}} PTS\\n` +
         `[GUILD WARS] This mission feeds the multi-domain holdout of the cross-guild tournament (raid arcs on the 3D globe).`;
     }}
 
@@ -824,10 +833,11 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
       const m = SEASON6_MISSIONS[idx];
       if (!m) return;
       const term = document.getElementById('season6-terminal');
+      const skulls6 = m.difficulty_skulls != null ? Number(m.difficulty_skulls) : 5;
       term.textContent =
         `[SEASON 6 CONTRACT] ${{m.contract_id}} // ${{m.mission_codename}}\\n` +
         `[ARENA DATASET NODE] ${{m.dataset_id}} -> Expert: ${{m.domain_expert}}\\n` +
-        `[DIFFICULTY] ${{'*'.repeat(m.difficulty_skulls || 5)}} | [BASE BOUNTY] ${{m.base_bounty_pts}} PTS\\n` +
+        `[DIFFICULTY] ${{'*'.repeat(skulls6)}} | [BASE BOUNTY] ${{m.base_bounty_pts}} PTS\\n` +
         `[ENDPOINTS] /api/agent-arena | /api/strategy-optimizer | /api/forge-lora-mission`;
     }}
 
@@ -899,11 +909,12 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
         `  ${{p.strategy_profile}} - loss ${{p.holdout_loss}} | ${{p.parallel_speedup_x}}x | ${{p.hive_per_gpu_hour}} HIVE/GPU-hr | overhead ${{p.comm_overhead_pct}}% | pareto=${{p.pareto_optimal}}`).join('\\n');
       const ef21 = ((s.ef21_live_telemetry || {{}}).workers || []).map(w =>
         `  ${{w.worker_id}}/${{w.branch_name}} step ${{w.outer_step}} | residual ${{w.residual_norm}} | raw ${{w.raw_delta_norm}} | contraction ${{w.contraction_factor}} | clips ${{w.clip_events}}`).join('\\n') || '  (no worker has posted EF21 telemetry yet)';
+      const commRatioPct = link.communication_overhead_ratio != null ? (Number(link.communication_overhead_ratio) * 100).toFixed(2) : 'n/a';
       term.textContent =
         `[STRATEGY OPTIMIZER] ${{s.schema_version}} | seq ${{s.sequence}} | ${{s.strategy_ids.join(' ')}}\\n` +
         `[SI-01 FISHER RANKS] ${{JSON.stringify(si01.allocated_ranks_by_domain || {{}})}} | budget conserved=${{si01.vram_budget_conserved}}\\n` +
         `[SI-02 UCB1] top2 ${{(si02.top2_prioritized_domains || []).join(', ')}} | scores ${{JSON.stringify(si02.ucb1_scores || {{}})}}\\n` +
-        `[SI-03 CADENCE] H=${{link.recommended_inner_steps_H}} | top-k ${{link.recommended_topk_ratio}} | overhead ${{(Number(link.communication_overhead_ratio || 0) * 100).toFixed(2)}}% | SLA=${{link.sla_8pct_satisfied}}\\n` +
+        `[SI-03 CADENCE] H=${{link.recommended_inner_steps_H}} | top-k ${{link.recommended_topk_ratio}} | overhead ${{commRatioPct}}% | SLA=${{link.sla_8pct_satisfied}}\\n` +
         `[SI-04 REPUTATION TIES] uniform ${{si04.uniform_ties_holdout_loss}} -> weighted ${{si04.reputation_weighted_ties_holdout_loss}} (improved=${{si04.reputation_weighted_beats_uniform}})\\n` +
         `[SI-05 PARETO FRONTIER]\\n${{frontier}}\\n` +
         `[EF21 RESIDUALS] self-reported by workers\\n${{ef21}}\\n` +

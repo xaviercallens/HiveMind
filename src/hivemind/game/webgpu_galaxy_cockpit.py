@@ -54,6 +54,33 @@ fn bls_fold_main(@builtin(global_invocation_id) global_id : vec3<u32>) {
 """.strip()
 
 
+def format_webgpu_live_gcp_telemetry_banner(payload: dict[str, Any] | None) -> str:
+    """Format the WebGPU GCP live telemetry banner using ``n/a`` for missing figures (never literals)."""
+    d = payload if isinstance(payload, dict) else {}
+    acct = d.get("accounts") if isinstance(d.get("accounts"), dict) else {}
+    models = d.get("models") if isinstance(d.get("models"), dict) else {}
+    t4 = d.get("t4_boinc") if isinstance(d.get("t4_boinc"), dict) else {}
+    ot = d.get("opentrainer") if isinstance(d.get("opentrainer"), dict) else {}
+
+    def _v(val: Any) -> str:
+        if isinstance(val, bool) or val is None:
+            return "n/a"
+        return str(val)
+
+    def _mib(val: Any) -> str:
+        if isinstance(val, bool) or not isinstance(val, (int, float)):
+            return "n/a"
+        return f"{int(round(float(val))):,}"
+
+    return (
+        f"🟢 GCP Live: {_v(acct.get('total_registered_accounts'))} Comptes • "
+        f"{_v(models.get('live_models_count'))} Modèles • T4 "
+        f"{_mib(t4.get('vram_free_mib'))} MiB • "
+        f"{_v(t4.get('assimilated_workunits'))} WUs • OpenTrainer "
+        f"{_v(ot.get('total_registered_nodes'))} GPU"
+    )
+
+
 def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
     """Render the standalone Zero-Install WebGPU 3D Galaxy & WGSL @compute Contribution App."""
     if default_lang not in ("fr", "en", "es", "de", "zh"):
@@ -897,7 +924,7 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
       authState.accountId = data.account_id;
       authState.apiKey = data.api_key;
       authState.sessionTicket = data.webgpu_session_ticket;
-      authState.balanceHmt = Number(data.balance_hmt || 0);
+      authState.balanceHmt = data.balance_hmt != null ? Number(data.balance_hmt) : 0;
 
       document.getElementById("apiKeyInput").value = data.api_key;
       localStorage.setItem("hivemind_api_key", data.api_key);
@@ -964,13 +991,15 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
         }}
 
         authState.balanceHmt = Number(data.balance_hmt != null ? data.balance_hmt : authState.balanceHmt);
-        authState.cobblestones = Math.round((authState.cobblestones + Number(data.cobblestones_awarded || 0)) * 10) / 10;
+        const awardedCob = data.cobblestones_awarded != null ? Number(data.cobblestones_awarded) : 0;
+        authState.cobblestones = Math.round((authState.cobblestones + awardedCob) * 10) / 10;
         document.getElementById("val-balance").textContent =
           `${{authState.balanceHmt.toFixed(0)}} HMT • ${{authState.cobblestones.toFixed(1)}} Cobblestones`;
+        const awardedHmt = data.hmt_awarded != null ? Number(data.hmt_awarded) : 'n/a';
         computeBox.textContent =
           `⚡ WORKUNIT WEBGPU ENREGISTRÉE (${{data.backend}}) • Cible : ${{data.target_planet}} • ` +
           `Profondeur BLS : ${{data.recovered_transit_depth_ppm}} ppm en ${{data.kernel_exec_ms}} ms • ` +
-          `HMT attribués : ${{Number(data.hmt_awarded || 0)}} (${{data.credit_status || 'crédit après vérification'}}) • SHA256 : ${{String(data.receipt_sha256 || "").slice(0, 16)}}...`;
+          `HMT attribués : ${{awardedHmt}} (${{data.credit_status || 'crédit après vérification'}}) • SHA256 : ${{String(data.receipt_sha256 || "").slice(0, 16)}}...`;
       }} catch (err) {{
         computeBox.textContent = "❌ Erreur lors de l'envoi de la preuve WebGPU.";
       }} finally {{
@@ -1022,12 +1051,14 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
       const lifeEl = document.getElementById("webgpu-life-analysis");
       if (lifeEl) lifeEl.innerHTML = `🧬 <strong>Exobiologie :</strong> ${{selectedTarget.life || ""}}`;
 
-      const amp = Math.min(18, Math.max(5, Math.log10((selectedTarget.rvMs || 1) + 1) * 9));
+      const rvVal = selectedTarget.rvMs != null ? Number(selectedTarget.rvMs) : 1;
+      const amp = Math.min(18, Math.max(5, Math.log10(rvVal + 1) * 9));
       const dopplerPath = document.getElementById("svg-doppler-path");
       if (dopplerPath) {{
         dopplerPath.setAttribute("d", `M 4 23 Q 45 ${{23 - amp}}, 90 23 T 176 23`);
       }}
-      const dip = Math.min(22, Math.max(5, Math.sqrt(selectedTarget.depthPpm || 500) * 0.16));
+      const depthVal = selectedTarget.depthPpm != null ? Number(selectedTarget.depthPpm) : 500;
+      const dip = Math.min(22, Math.max(5, Math.sqrt(depthVal) * 0.16));
       const transitPath = document.getElementById("svg-transit-path");
       if (transitPath) {{
         transitPath.setAttribute("d", `M 4 11 L 60 11 L 70 ${{11 + dip}} L 110 ${{11 + dip}} L 120 11 L 176 11`);
@@ -1035,7 +1066,8 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
     }}
 
     function setWebGPUStage(stageNum) {{
-      currentStage = Math.max(1, Math.min(4, Number(stageNum) || 1));
+      const parsedStage = Number(stageNum);
+      currentStage = Math.max(1, Math.min(4, Number.isFinite(parsedStage) && parsedStage > 0 ? parsedStage : 1));
       [1, 2, 3, 4].forEach(s => {{
         const btn = document.getElementById("webgpu-stage-" + s);
         if (btn) btn.classList.toggle("active", s === currentStage);
@@ -1053,7 +1085,8 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
         landerVelMs = 38.0 + difficultyLevel * 4.5;
         landerTouchdown = false;
         if (cta) cta.textContent = "🔥 Rétro-Fusées & Poser Sonde [ESPACE / ENTRÉE]";
-        showWebGPUToast(`🛬 Étape 3 : Descente atmosphérique sur ${{selectedTarget.id}} (g=${{selectedTarget.gravMs2 || 11.8}} m/s²)`);
+        const gravTxt = selectedTarget.gravMs2 ?? 'n/a';
+        showWebGPUToast(`🛬 Étape 3 : Descente atmosphérique sur ${{selectedTarget.id}} (g=${{gravTxt}} m/s²)`);
       }} else if (currentStage === 4) {{
         if (cta) cta.textContent = "✅ Valider Analyse JWST [ENTRÉE / BOUTON A]";
         showWebGPUToast(`🔬 Étape 4 : Spectrométrie JWST NIRSpec•MIRI de ${{selectedTarget.id}}`);
@@ -1208,8 +1241,10 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
       if (!gp) return;
       const gpBadge = document.getElementById("webgpu-gamepad-badge");
       if (gpBadge) gpBadge.textContent = `🎮 Manette Active : ${{String(gp.id || "Gamepad").slice(0, 22)}}`;
-      const axX = Math.abs(gp.axes[0] || 0) > 0.15 ? gp.axes[0] : 0;
-      const axY = Math.abs(gp.axes[1] || 0) > 0.15 ? gp.axes[1] : 0;
+      const rawAx0 = gp.axes && gp.axes.length > 0 ? Number(gp.axes[0]) : 0;
+      const rawAx1 = gp.axes && gp.axes.length > 1 ? Number(gp.axes[1]) : 0;
+      const axX = Math.abs(rawAx0) > 0.15 ? rawAx0 : 0;
+      const axY = Math.abs(rawAx1) > 0.15 ? rawAx1 : 0;
       if (axX !== 0 || axY !== 0) {{
         idleSeconds = 0;
         shipX = Math.max(-0.75, Math.min(0.75, shipX + axX * dt * 0.55));
@@ -1292,9 +1327,12 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
         canvas.height = window.innerHeight;
       }}
 
-      const spiralTightness = parseFloat(document.getElementById("sl-spiral").value) || 4.2;
-      const nebulaDensity = parseFloat(document.getElementById("sl-nebula").value) || 1.15;
-      const rotSpeed = parseFloat(document.getElementById("sl-rot").value) || 0.65;
+      const rawSpiral = parseFloat(document.getElementById("sl-spiral").value);
+      const rawNebula = parseFloat(document.getElementById("sl-nebula").value);
+      const rawRot = parseFloat(document.getElementById("sl-rot").value);
+      const spiralTightness = Number.isFinite(rawSpiral) ? rawSpiral : 4.2;
+      const nebulaDensity = Number.isFinite(rawNebula) ? rawNebula : 1.15;
+      const rotSpeed = Number.isFinite(rawRot) ? rawRot : 0.65;
       camPitch = parseFloat(document.getElementById("sl-tilt").value) || camPitch;
 
       rotAngle += dt * rotSpeed * 0.22;
@@ -1418,8 +1456,9 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
         ctx.fillStyle = "#ffffff";
         ctx.fillText(`🤖 ESSAIM BEE-MOE • SYNC ORBITALE : ${{beeOrbitSync.toFixed(0)}}% (Cible: Anneau Vert)`, cx - 195, cy - 165);
       }} else if (currentStage === 3) {{
+        const gravVal = selectedTarget.gravMs2 != null ? Number(selectedTarget.gravMs2) : 9.8;
         if (!landerTouchdown) {{
-          const g = (selectedTarget.gravMs2 || 11.8) * 0.35;
+          const g = gravVal * 0.35;
           landerVelMs = Math.max(2.0, landerVelMs + (g - (landerRetroActive ? 28.0 : 0.0)) * dt);
           landerAltKm = Math.max(0.0, landerAltKm - landerVelMs * dt * 0.25);
           if (landerAltKm <= 0.5) advanceWebGPUStageAction();
@@ -1432,7 +1471,7 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
         ctx.font = "bold 13px JetBrains Mono, monospace";
         ctx.fillStyle = "#00ff88";
         ctx.fillText(
-          `🛬 DESCENTE OOLITE SUR ${{selectedTarget.id}} • ALT: ${{landerAltKm.toFixed(1)}} km • V_DESC: ${{landerVelMs.toFixed(1)}} m/s • g=${{selectedTarget.gravMs2 || 11.8}} m/s²`,
+          `🛬 DESCENTE OOLITE SUR ${{selectedTarget.id}} • ALT: ${{landerAltKm.toFixed(1)}} km • V_DESC: ${{landerVelMs.toFixed(1)}} m/s • g=${{selectedTarget.gravMs2 ?? 'n/a'}} m/s²`,
           cx - 260,
           cy - 180
         );
@@ -1484,12 +1523,14 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
           const ot = d.opentrainer || {{}};
           const el = document.getElementById('webgpu-live-gcp-telemetry');
           if (el) {{
+            const fmtV = (v) => (v === null || v === undefined ? 'n/a' : v);
+            const fmtMiB = (v) => (v === null || v === undefined ? 'n/a' : Number(v).toLocaleString());
             el.textContent =
-              '🟢 GCP Live: ' + (acct.total_registered_accounts || 69) + ' Comptes • ' +
-              (models.live_models_count || 15) + ' Modèles • T4 ' +
-              Number(t4.vram_free_mib || 10519).toLocaleString() + ' MiB • ' +
-              (t4.assimilated_workunits || 147) + ' WUs • OpenTrainer ' +
-              (ot.total_registered_nodes || 1) + ' GPU';
+              '🟢 GCP Live: ' + fmtV(acct.total_registered_accounts) + ' Comptes • ' +
+              fmtV(models.live_models_count) + ' Modèles • T4 ' +
+              fmtMiB(t4.vram_free_mib) + ' MiB • ' +
+              fmtV(t4.assimilated_workunits) + ' WUs • OpenTrainer ' +
+              fmtV(ot.total_registered_nodes) + ' GPU';
           }}
           break;
         }} catch (e) {{}}

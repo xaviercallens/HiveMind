@@ -1,0 +1,8 @@
+[learner l0] t4-l0 device=cpu quant=none pin d980e290213a waiting for offers of run crossA
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[learner l0] round 0: global eval 4.1709, |delta| 11.1623
+[learner l0] round 1: global eval 2.7079, |delta| 8.9272
+[learner l0] round 2: global eval 1.7093, |delta| 7.0202
+[learner l0] round 3: global eval 1.5354, |delta| 6.4634
+[learner l0] run ended (run_complete); skipped so far: {}

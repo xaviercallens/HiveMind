@@ -1,0 +1,5 @@
+[learner l0] t4-l0 device=cuda quant=nf4 pin d980e290213a waiting for offers of run crossB
+[learner l0] round 0: not claiming (vram: 4609 MiB free, this run needs about 600 MiB, and 4300 MiB must stay free: refusing)
+[learner l0] round 0: not claiming (vram: 4609 MiB free, this run needs about 600 MiB, and 4300 MiB must stay free: refusing)
+[learner l0] round 0: not claiming (vram: 4609 MiB free, this run needs about 600 MiB, and 4300 MiB must stay free: refusing)
+[learner l0] run ended (run_failed); skipped so far: {'vram: 4609 MiB free, this run needs about 600 MiB, and 4300 ': 3}

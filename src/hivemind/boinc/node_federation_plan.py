@@ -23,6 +23,9 @@ CUDA_BIG_MIN_VRAM_MIB: Final[int] = 12000
 # Usable fraction of total VRAM for a desktop (WDDM) card: 6656 MiB of 8192 MiB, the owner-fleet cap for the RTX 2070.
 DESKTOP_USABLE_FRACTION: Final[float] = 6656 / 8192
 OVERLAY_SYNCER: Final[str] = "http://10.77.0.4:8765"
+AMCP_LEARNER_SCRIPT: Final[str] = "scripts/e8_amcp_round.py"
+NIGHT_WINDOW_PARIS: Final[str] = "22:00-07:00 Paris"
+MIN_FREE_VRAM_MIB: Final[int] = 4300
 
 
 @dataclass(frozen=True)
@@ -96,11 +99,13 @@ def build_plan(
     if overlay_ip is None:
         steps.append(PlanStep("cross_host_pilot", "MANUAL", "",
                               "needs the operator to open UDP 51820 on the T4 and add this node's WireGuard key; "
-                              "see docs/E8_TWO_HOST_REAL_TEST.md"))
+                              "AMCP learners claim only 22:00-07:00 Paris and never below 4,300 MiB free VRAM; "
+                              "see docs/FEDERATION_V2_AMCP_AGLETS.md"))
     else:
         steps.append(PlanStep("cross_host_pilot", "READY" if measured else "BLOCKED",
-                              f"python3 scripts/run_experiment_E8_pilot.py learner --syncer {OVERLAY_SYNCER} "
-                              f"--learner-id 1 --host-label {handle}",
-                              f"overlay address {overlay_ip}; the T4 syncer must be running"))
+                              f"python3 {AMCP_LEARNER_SCRIPT} learner --run-id night-003 "
+                              f"--learner-id {handle} --index 1 --quant nf4 --device cuda --night-only",
+                              f"overlay address {overlay_ip}; AMCP learner claims only {NIGHT_WINDOW_PARIS} "
+                              f"and never below 4,300 MiB free VRAM"))
     return FederationPlan(gpu_name or "none", float(total_mib or 0.0), usable, plan_class,
                           bee.public_id if bee else None, bee_note, tuple(steps))

@@ -1,0 +1,21 @@
+[learner l0] t4-l0 device=cuda quant=nf4 pin 6d50b7222508 waiting for offers of run night-001
+/home/callensxavier_gmail_com/.local/lib/python3.10/site-packages/torch/cuda/__init__.py:61: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+Writing model shards:   0%|          | 0/1 [00:00<?, ?it/s]Writing model shards: 100%|██████████| 1/1 [00:00<00:00, 149.14it/s]
+Loading weights:   0%|          | 0/21 [00:00<?, ?it/s]Loading weights:  38%|███▊      | 8/21 [00:00<00:00, 68.48it/s]Loading weights: 100%|██████████| 21/21 [00:00<00:00, 166.49it/s]
+[learner l0] round 0: global eval 4.1721, |delta| 11.1915
+[learner l0] round 1: global eval 2.7116, |delta| 8.9261
+[learner l0] round 2: global eval 1.7212, |delta| 7.0220
+[learner l0] round 3: global eval 1.5371, |delta| 6.4757
+[learner l0] round 4: global eval 1.4899, |delta| 6.2266
+[learner l0] round 5: global eval 1.4621, |delta| 6.0804
+[learner l0] round 6: global eval 1.4628, |delta| 6.0224
+[learner l0] round 7: global eval 1.4766, |delta| 5.9477
+[learner l0] round 8: global eval 1.4603, |delta| 5.9423
+[learner l0] round 9: global eval 1.4431, |delta| 5.9140
+[learner l0] round 10: global eval 1.4276, |delta| 5.8880
+[learner l0] round 11: global eval 1.4217, |delta| 5.6849
+[learner l0] round 12: global eval 1.4117, |delta| 5.7726
+[learner l0] round 13: not claiming (inference in flight (governor))
+%6|1793495979.364|FAIL|fed-learner-l0#consumer-2| [thrd:10.77.0.1:9092/1]: 10.77.0.1:9092/1: Disconnected: connection closed by peer: receive 0 after POLLIN (after 631811ms in state UP)
+[learner l0] run ended (run_failed); skipped so far: {'inference in flight (governor)': 1}

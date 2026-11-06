@@ -3,12 +3,22 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from hypothesis import given
 from hypothesis import strategies as st
 
-from hivemind.boinc.node_federation_plan import build_plan, classify_plan_class, pick_bee
+from hivemind.boinc.node_federation_plan import (
+    AMCP_LEARNER_SCRIPT,
+    MIN_FREE_VRAM_MIB,
+    NIGHT_WINDOW_PARIS,
+    build_plan,
+    classify_plan_class,
+    pick_bee,
+)
 
 COORD = "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app"
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _plan(name: str | None, mib: float | None, overlay: str | None = None):
@@ -46,7 +56,22 @@ def test_training_is_always_blocked_and_never_claims_points() -> None:
 
 
 def test_overlay_enables_the_pilot_command_only_with_a_gpu() -> None:
-    assert _step(_plan("gpu", 8192.0, "10.77.0.5"), "cross_host_pilot").status == "READY"
+    manual_with_gpu = _step(_plan("NVIDIA GeForce RTX 2070", 8192.0, None), "cross_host_pilot")
+    assert manual_with_gpu.status == "MANUAL"
+    assert manual_with_gpu.command == ""
+    assert NIGHT_WINDOW_PARIS in manual_with_gpu.note
+    assert "4,300 MiB" in manual_with_gpu.note and MIN_FREE_VRAM_MIB == 4300
+
+    ready_step = _step(_plan("gpu", 8192.0, "10.77.0.5"), "cross_host_pilot")
+    assert ready_step.status == "READY"
+    assert ready_step.command == (
+        "python3 scripts/e8_amcp_round.py learner --run-id night-003 "
+        "--learner-id node-x --index 1 --quant nf4 --device cuda --night-only"
+    )
+    assert "10.77.0.5" in ready_step.note
+    assert NIGHT_WINDOW_PARIS in ready_step.note and "4,300 MiB" in ready_step.note
+    assert (REPO_ROOT / AMCP_LEARNER_SCRIPT).is_file()
+
     assert _step(_plan(None, None, "10.77.0.5"), "cross_host_pilot").status == "BLOCKED"
 
 

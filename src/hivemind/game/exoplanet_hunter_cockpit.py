@@ -1280,8 +1280,8 @@ def render_exoplanet_hunter_cockpit_html(service: AstroBeeMoEGPUService, classic
       try {{
         const r = await fetch('/api/astro/nasa-tap-sync');
         const d = await r.json();
-        document.getElementById('telemetry-counter').textContent = `TAP:${{d.row_count || 8}}/6000+`;
-        speakWithSubtitles(`Synchronisation NASA Exoplanet Archive TAP ADQL réussie : ${{d.row_count || 8}} systèmes de référence vérifiés.`);
+        document.getElementById('telemetry-counter').textContent = `TAP:${{d.row_count ?? 'n/a'}}/6000+`;
+        speakWithSubtitles(`Synchronisation NASA Exoplanet Archive TAP ADQL réussie : ${{d.row_count ?? 'n/a'}} systèmes de référence vérifiés.`);
       }} catch (e) {{}}
     }}
 
@@ -1911,10 +1911,15 @@ def render_exoplanet_hunter_cockpit_html(service: AstroBeeMoEGPUService, classic
           }})
         }});
         const boincData = await boincRes.json();
-        const newBalance = Math.round(Number(boincData.balance_hmt || regData.balance_hmt || 2650));
-        scoreHmt = Math.max(scoreHmt, newBalance);
+        const rawBalance = boincData.balance_hmt ?? regData.balance_hmt;
         const scoreEl = document.getElementById('score-hmt');
-        if (scoreEl) scoreEl.textContent = scoreHmt.toLocaleString('en-US');
+        if (rawBalance != null && !Number.isNaN(Number(rawBalance))) {{
+          const newBalance = Math.round(Number(rawBalance));
+          scoreHmt = Math.max(scoreHmt, newBalance);
+          if (scoreEl) scoreEl.textContent = scoreHmt.toLocaleString('en-US');
+        }} else if (scoreEl) {{
+          scoreEl.textContent = 'n/a';
+        }}
         if (badge) {{
           badge.textContent = `🟢 STEAM FREE GAME (AppID 3133700) • ${{regData.handle}} • AUTH (${{regData.steam_session_ticket}}) • +${{boincData.hmt_awarded}} HMT & +${{boincData.cobblestones_awarded}} BOINC`;
         }}
@@ -2179,20 +2184,26 @@ def render_traffic_and_tflops_monitor_html() -> str:
         const eu = d.end_users_summary || {};
         const pool = d.producer_pool || {};
 
-        const effTflops = tf.effective_sparse_moe_nf4_tflops || 53.82;
-        tflopsHistory.push(effTflops);
-        if (tflopsHistory.length > 30) tflopsHistory.shift();
-
-        document.getElementById('kpi-moe-tflops').textContent = effTflops.toFixed(2) + ' TFLOPS';
+        const effTflops = tf.effective_sparse_moe_nf4_tflops != null ? Number(tf.effective_sparse_moe_nf4_tflops) : null;
+        if (effTflops !== null && !Number.isNaN(effTflops)) {
+          tflopsHistory.push(effTflops);
+          if (tflopsHistory.length > 30) tflopsHistory.shift();
+          document.getElementById('kpi-moe-tflops').textContent = effTflops.toFixed(2) + ' TFLOPS';
+        } else {
+          document.getElementById('kpi-moe-tflops').textContent = 'n/a TFLOPS';
+        }
+        const fp16Txt = tf.measured_fp16_tensor_tflops != null ? Number(tf.measured_fp16_tensor_tflops).toFixed(2) : 'n/a';
+        const fp32Txt = tf.measured_fp32_tflops != null ? Number(tf.measured_fp32_tflops).toFixed(2) : 'n/a';
         document.getElementById('kpi-fp16-tflops').textContent =
-          `FP16 Tensor : ${(tf.measured_fp16_tensor_tflops || 29.09).toFixed(2)} TFLOPS | FP32 : ${(tf.measured_fp32_tflops || 6.10).toFixed(2)} TFLOPS`;
+          `FP16 Tensor : ${fp16Txt} TFLOPS | FP32 : ${fp32Txt} TFLOPS`;
 
-        document.getElementById('kpi-users-count').textContent = String(eu.total_unique_end_users || 0);
-        document.getElementById('kpi-http-reqs').textContent = `${tr.total_http_requests || 0} reqs (${tr.requests_per_minute_rpm || 0} RPM)`;
+        document.getElementById('kpi-users-count').textContent = String(eu.total_unique_end_users ?? 'n/a');
+        document.getElementById('kpi-http-reqs').textContent = `${tr.total_http_requests ?? 'n/a'} reqs (${tr.requests_per_minute_rpm ?? 'n/a'} RPM)`;
+        const tokTxt = tr.total_tokens_processed != null ? Number(tr.total_tokens_processed).toLocaleString() : 'n/a';
         document.getElementById('kpi-infer-stats').textContent =
-          `${tr.total_gpu_inferences_served || 0} Inférences CUDA:0 • ${(tr.total_tokens_processed || 0).toLocaleString()} Tokens`;
+          `${tr.total_gpu_inferences_served ?? 'n/a'} Inférences CUDA:0 • ${tokTxt} Tokens`;
         document.getElementById('kpi-t4-failover').textContent =
-          `Tesla T4 : En Travaux (Bascules vers RTX 2070 : ${tr.total_t4_failovers_to_rtx2070 || 0})`;
+          `Tesla T4 : En Travaux (Bascules vers RTX 2070 : ${tr.total_t4_failovers_to_rtx2070 ?? 'n/a'})`;
         document.getElementById('last-updated-lbl').textContent = `Mis à jour : ${d.timestamp} (Uptime : ${d.uptime_seconds}s)`;
 
         const users = eu.active_end_users || [];
@@ -2213,7 +2224,7 @@ def render_traffic_and_tflops_monitor_html() -> str:
             <td style="font-weight:700;color:#fff;">${p.producer_id}</td>
             <td>${p.hardware}</td>
             <td><span class="badge ${p.status === 'ONLINE_SERVING' ? 'badge-ok' : 'badge-warn'}">${p.status}</span></td>
-            <td style="color:var(--gold);font-weight:700;">${p.requests_served || 0}</td>
+            <td style="color:var(--gold);font-weight:700;">${p.requests_served ?? 'n/a'}</td>
           </tr>
         `).join('');
 
@@ -2737,11 +2748,22 @@ def render_citizen_scientist_community_hub_html() -> str:
         const res = await fetch('/api/v1/community/hub');
         const data = await res.json();
         const stats = data.community_stats || {};
-        document.getElementById('kpi-members').textContent = (stats.total_registered_citizen_scientists || 1428).toLocaleString();
-        document.getElementById('kpi-split').textContent = `${stats.active_steam_gamers || 912} Steam Gamers | ${stats.active_astrophysicists || 516} Astrophysicists`;
-        document.getElementById('kpi-cobblestones').textContent = Number(stats.total_boinc_cobblestones || 184920.5).toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1});
-        document.getElementById('kpi-wus').textContent = `${(stats.total_idle_gpu_workunits_completed || 6842).toLocaleString()} Workunits Folded on Idle GPUs`;
-        document.getElementById('kpi-candidates').textContent = stats.confirmed_exoplanet_candidates_coop || 39;
+        document.getElementById('kpi-members').textContent =
+          stats.total_registered_citizen_scientists != null
+            ? Number(stats.total_registered_citizen_scientists).toLocaleString()
+            : 'n/a';
+        document.getElementById('kpi-split').textContent =
+          `${stats.active_steam_gamers ?? 'n/a'} Steam Gamers | ${stats.active_astrophysicists ?? 'n/a'} Astrophysicists`;
+        document.getElementById('kpi-cobblestones').textContent =
+          stats.total_boinc_cobblestones != null
+            ? Number(stats.total_boinc_cobblestones).toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})
+            : 'n/a';
+        const wusFoldedTxt =
+          stats.total_idle_gpu_workunits_completed != null
+            ? Number(stats.total_idle_gpu_workunits_completed).toLocaleString()
+            : 'n/a';
+        document.getElementById('kpi-wus').textContent = `${wusFoldedTxt} Workunits Folded on Idle GPUs`;
+        document.getElementById('kpi-candidates').textContent = stats.confirmed_exoplanet_candidates_coop ?? 'n/a';
 
         const projs = (data.boinc_idle_gpu_policy && data.boinc_idle_gpu_policy.supported_boinc_projects) || [];
         const projHtml = projs.map(p => `
@@ -2763,17 +2785,22 @@ def render_citizen_scientist_community_hub_html() -> str:
         document.getElementById('boinc-projects-list').innerHTML = projHtml;
 
         const leaders = data.community_members || data.leaderboard || [];
-        document.getElementById('leaderboard-tbody').innerHTML = leaders.map((r, idx) => `
+        document.getElementById('leaderboard-tbody').innerHTML = leaders.map((r, idx) => {
+          const ptsRaw = r.hmt_compute_points ?? r.game_score;
+          const ptsTxt = ptsRaw != null ? Number(ptsRaw).toLocaleString() : 'n/a';
+          const cobTxt = r.boinc_cobblestones != null ? Number(r.boinc_cobblestones).toLocaleString(undefined, {minimumFractionDigits:1}) : 'n/a';
+          return `
           <tr>
             <td style="color:var(--amber);font-weight:700;">#${r.rank || (idx + 1)}</td>
             <td><strong>${r.handle || r.commander}</strong><div style="font-size:0.68rem;color:var(--steel);">${r.gpu}</div></td>
             <td><span class="badge-role">${r.role}</span></td>
-            <td style="color:var(--cyan);font-weight:700;">${Number(r.hmt_compute_points || r.game_score || 0).toLocaleString()}</td>
-            <td style="color:var(--emerald);font-weight:700;">${Number(r.boinc_cobblestones || 0).toLocaleString(undefined, {minimumFractionDigits:1})}</td>
-            <td>${r.boinc_workunits_completed || r.idle_gpu_workunits || 0}</td>
-            <td style="color:var(--amber);">${r.candidates_vetted || r.verified_transits || 0}</td>
+            <td style="color:var(--cyan);font-weight:700;">${ptsTxt}</td>
+            <td style="color:var(--emerald);font-weight:700;">${cobTxt}</td>
+            <td>${r.boinc_workunits_completed ?? r.idle_gpu_workunits ?? 'n/a'}</td>
+            <td style="color:var(--amber);">${r.candidates_vetted ?? r.verified_transits ?? 'n/a'}</td>
           </tr>
-        `).join('');
+        `;
+        }).join('');
 
         const feed = data.coop_discovery_feed || [];
         document.getElementById('discovery-feed-list').innerHTML = feed.slice(0, 6).map(f => `
@@ -3078,9 +3105,10 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         return JSONResponse(
             content={
                 "app_id": STEAM_APP_ID,
-                "depot_id": 3133702,
-                "executable": "HiveMind_Exoplanet_Hunter.exe",
-                "status": "READY",
+                "depot_id": None,
+                "executable": None,
+                "status": "NOT_BUILT",
+                "manifest_present": False,
             }
         )
 

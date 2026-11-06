@@ -3651,19 +3651,29 @@ def create_router_app(
         target_planet = str(body.get("target_planet") or "K2-18 b").strip()[:64]
         gpu_adapter = str(body.get("gpu_adapter") or "WebGPU Hardware Adapter (WGSL @compute)").strip()[:96]
         backend = str(body.get("backend") or "webgpu_wgsl_compute_shader").strip()[:64]
-        n_points = int(body.get("n_points_folded") or 16384)
-        kernel_ms = float(body.get("kernel_exec_ms") or 0.42)
-        depth_ppm = float(body.get("recovered_transit_depth_ppm") or 2789.0)
-
-        verified = execute_server_webgpu_verification_and_sync(
-            handle=account.handle,
-            target_planet=target_planet,
-            gpu_adapter=gpu_adapter,
-            backend=backend,
-            n_points_folded=n_points,
-            kernel_exec_ms=kernel_ms,
-            recovered_transit_depth_ppm=depth_ppm,
-        )
+        raw_n_points = body.get("n_points_folded")
+        raw_kernel_ms = body.get("kernel_exec_ms")
+        raw_depth_ppm = body.get("recovered_transit_depth_ppm")
+        try:
+            n_points = 16384 if raw_n_points is None else raw_n_points
+            kernel_ms = 0.42 if raw_kernel_ms is None else raw_kernel_ms
+            depth_ppm = 2789.0 if raw_depth_ppm is None else raw_depth_ppm
+            verified = execute_server_webgpu_verification_and_sync(
+                handle=account.handle,
+                target_planet=target_planet,
+                gpu_adapter=gpu_adapter,
+                backend=backend,
+                n_points_folded=n_points,
+                kernel_exec_ms=kernel_ms,
+                recovered_transit_depth_ppm=depth_ppm,
+            )
+        except (TypeError, ValueError) as exc:
+            raise RouterError(
+                400,
+                f"Invalid WebGPU contribution parameters: {exc}",
+                "invalid_request_error",
+                "invalid_parameter",
+            ) from None
         receipt_sha256 = str(body.get("receipt_sha256") or verified["receipt_sha256"]).strip()
         duplicate_receipt = receipt_sha256 in seen_boinc_receipts
         seen_boinc_receipts.add(receipt_sha256)

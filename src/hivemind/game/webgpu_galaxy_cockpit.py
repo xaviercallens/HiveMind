@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import math
 import secrets
 import time
 import urllib.request
@@ -1561,10 +1562,25 @@ def execute_server_webgpu_verification_and_sync(
     recovered_transit_depth_ppm: float,
 ) -> dict[str, Any]:
     """Generate a cryptographic SHA-256 receipt for a WebGPU WGSL @compute workunit and sync with GCP Ruche."""
-    seed = f"webgpu:{handle}:{target_planet}:{gpu_adapter}:{recovered_transit_depth_ppm:.1f}:{time.time()}"
+    if isinstance(n_points_folded, bool):
+        raise ValueError("n_points_folded must be an integer, not bool")
+    n_pts = int(n_points_folded)
+    if n_pts < 64 or n_pts > 1_048_576:
+        raise ValueError(f"n_points_folded out of range [64, 1048576]: {n_pts}")
+    exec_ms = float(kernel_exec_ms)
+    if not math.isfinite(exec_ms) or exec_ms <= 0.0 or exec_ms > 600_000.0:
+        raise ValueError(f"kernel_exec_ms must be finite and in (0, 600000]: {kernel_exec_ms}")
+    depth_ppm = float(recovered_transit_depth_ppm)
+    if not math.isfinite(depth_ppm) or depth_ppm <= 0.0 or depth_ppm >= 1_000_000.0:
+        raise ValueError(
+            f"recovered_transit_depth_ppm must be finite and in (0, 1000000): {recovered_transit_depth_ppm}"
+        )
+
+    seed = f"webgpu:{handle}:{target_planet}:{gpu_adapter}:{depth_ppm:.1f}:{time.time()}"
     receipt_sha256 = hashlib.sha256(seed.encode("utf-8")).hexdigest()
     gcp_lease_id = f"GCP-WEBGPU-{receipt_sha256[:12].upper()}"
     gcp_synced = False
+    gcp_sync_error: str | None = None
     try:
         req = urllib.request.Request(
             "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/workunit/request",
@@ -1584,19 +1600,21 @@ def execute_server_webgpu_verification_and_sync(
                 doc = json.loads(resp.read().decode("utf-8"))
                 gcp_lease_id = str(doc.get("lease_id", gcp_lease_id))
                 gcp_synced = True
-    except Exception:
-        pass
+    except Exception as exc:
+        gcp_sync_error = f"{type(exc).__name__}: {exc}"
 
     return {
         "receipt_id": f"WEBGPU-BLS-{receipt_sha256[:8].upper()}",
         "receipt_sha256": receipt_sha256,
         "gcp_lease_id": gcp_lease_id,
         "gcp_cloud_synced": gcp_synced,
+        "gcp_sync_error": gcp_sync_error,
+        "verification_status": "CLIENT_REPORTED_UNVERIFIED",
         "wgsl_entrypoint": "bls_fold_main",
         "workgroup_size": 64,
-        "n_points_folded": n_points_folded,
-        "kernel_exec_ms": round(float(kernel_exec_ms), 3),
-        "recovered_transit_depth_ppm": round(float(recovered_transit_depth_ppm), 1),
+        "n_points_folded": n_pts,
+        "kernel_exec_ms": round(exec_ms, 3),
+        "recovered_transit_depth_ppm": round(depth_ppm, 1),
         "backend": backend,
         "gpu_adapter": gpu_adapter,
     }

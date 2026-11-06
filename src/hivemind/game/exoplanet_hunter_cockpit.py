@@ -15,6 +15,7 @@ from __future__ import annotations
 import base64
 import datetime
 import hashlib
+import html
 import json
 import math
 import random
@@ -2174,6 +2175,14 @@ def render_traffic_and_tflops_monitor_html() -> str:
 
   <script>
     const tflopsHistory = [52.4, 53.1, 53.8, 53.5, 53.9, 53.82];
+    function escHtml(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
 
     async function refreshTelemetry() {
       try {
@@ -2209,34 +2218,34 @@ def render_traffic_and_tflops_monitor_html() -> str:
         const users = eu.active_end_users || [];
         document.getElementById('users-tbody').innerHTML = users.map(u => `
           <tr>
-            <td style="color:var(--gold);font-weight:700;">👤 ${u.gamer_tag}</td>
-            <td>${u.client_type}</td>
-            <td>${u.http_requests}</td>
-            <td style="color:var(--cyan);font-weight:700;">${u.inference_calls}</td>
-            <td style="color:var(--emerald);font-weight:700;">🪐 ${u.discoveries_approved}</td>
-            <td>${u.last_seen}</td>
+            <td style="color:var(--gold);font-weight:700;">👤 ${escHtml(u.gamer_tag)}</td>
+            <td>${escHtml(u.client_type)}</td>
+            <td>${escHtml(u.http_requests)}</td>
+            <td style="color:var(--cyan);font-weight:700;">${escHtml(u.inference_calls)}</td>
+            <td style="color:var(--emerald);font-weight:700;">🪐 ${escHtml(u.discoveries_approved)}</td>
+            <td>${escHtml(u.last_seen)}</td>
           </tr>
         `).join('');
 
         const prods = pool.producers || [];
         document.getElementById('producers-tbody').innerHTML = prods.map(p => `
           <tr>
-            <td style="font-weight:700;color:#fff;">${p.producer_id}</td>
-            <td>${p.hardware}</td>
-            <td><span class="badge ${p.status === 'ONLINE_SERVING' ? 'badge-ok' : 'badge-warn'}">${p.status}</span></td>
-            <td style="color:var(--gold);font-weight:700;">${p.requests_served ?? 'n/a'}</td>
+            <td style="font-weight:700;color:#fff;">${escHtml(p.producer_id)}</td>
+            <td>${escHtml(p.hardware)}</td>
+            <td><span class="badge ${p.status === 'ONLINE_SERVING' ? 'badge-ok' : 'badge-warn'}">${escHtml(p.status)}</span></td>
+            <td style="color:var(--gold);font-weight:700;">${escHtml(p.requests_served ?? 'n/a')}</td>
           </tr>
         `).join('');
 
         const stream = d.recent_traffic_stream || [];
         document.getElementById('traffic-tbody').innerHTML = stream.map(ev => `
           <tr>
-            <td>${ev.timestamp}</td>
-            <td style="color:var(--amber);font-weight:700;">${ev.method}</td>
-            <td style="color:var(--cyan);">${ev.path}</td>
-            <td>${ev.client_type}</td>
-            <td><span class="badge badge-ok">${ev.served_by}</span></td>
-            <td style="color:var(--emerald);font-weight:700;">${ev.latency_ms} ms</td>
+            <td>${escHtml(ev.timestamp)}</td>
+            <td style="color:var(--amber);font-weight:700;">${escHtml(ev.method)}</td>
+            <td style="color:var(--cyan);">${escHtml(ev.path)}</td>
+            <td>${escHtml(ev.client_type)}</td>
+            <td><span class="badge badge-ok">${escHtml(ev.served_by)}</span></td>
+            <td style="color:var(--emerald);font-weight:700;">${escHtml(ev.latency_ms)} ms</td>
           </tr>
         `).join('');
 
@@ -2712,6 +2721,14 @@ def render_citizen_scientist_community_hub_html() -> str:
     let idleSeconds = 4.2;
     let autoIdleEnabled = true;
     let crunchInFlight = false;
+    function escHtml(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
 
     function resetIdleTimer() {
       idleSeconds = 0.0;
@@ -2769,16 +2786,16 @@ def render_citizen_scientist_community_hub_html() -> str:
         const projHtml = projs.map(p => `
           <div class="proj-item">
             <div class="proj-head">
-              <strong>${p.name}</strong>
+              <strong>${escHtml(p.name)}</strong>
               <span style="color:var(--emerald);">${Number(p.progress_pct).toFixed(1)}%</span>
             </div>
             <div class="progress-track">
               <div class="progress-fill" style="width:${Math.min(100, Number(p.progress_pct))}%;"></div>
             </div>
             <div class="proj-meta">
-              <span>Workunit: <code>${p.active_workunit}</code></span>
+              <span>Workunit: <code>${escHtml(p.active_workunit)}</code></span>
               <span>Cobblestones: <strong style="color:var(--amber);">${Number(p.cobblestones_awarded).toFixed(1)}</strong></span>
-              <a href="#" onclick="triggerBoincCrunch('${p.project_id}');return false;" style="color:var(--cyan);">[⚡ Fold Now]</a>
+              <a href="#" onclick="triggerBoincCrunch('${escHtml(p.project_id)}');return false;" style="color:var(--cyan);">[⚡ Fold Now]</a>
             </div>
           </div>
         `).join('');
@@ -2791,13 +2808,13 @@ def render_citizen_scientist_community_hub_html() -> str:
           const cobTxt = r.boinc_cobblestones != null ? Number(r.boinc_cobblestones).toLocaleString(undefined, {minimumFractionDigits:1}) : 'n/a';
           return `
           <tr>
-            <td style="color:var(--amber);font-weight:700;">#${r.rank || (idx + 1)}</td>
-            <td><strong>${r.handle || r.commander}</strong><div style="font-size:0.68rem;color:var(--steel);">${r.gpu}</div></td>
-            <td><span class="badge-role">${r.role}</span></td>
-            <td style="color:var(--cyan);font-weight:700;">${ptsTxt}</td>
-            <td style="color:var(--emerald);font-weight:700;">${cobTxt}</td>
-            <td>${r.boinc_workunits_completed ?? r.idle_gpu_workunits ?? 'n/a'}</td>
-            <td style="color:var(--amber);">${r.candidates_vetted ?? r.verified_transits ?? 'n/a'}</td>
+            <td style="color:var(--amber);font-weight:700;">#${escHtml(r.rank || (idx + 1))}</td>
+            <td><strong>${escHtml(r.handle || r.commander)}</strong><div style="font-size:0.68rem;color:var(--steel);">${escHtml(r.gpu)}</div></td>
+            <td><span class="badge-role">${escHtml(r.role)}</span></td>
+            <td style="color:var(--cyan);font-weight:700;">${escHtml(ptsTxt)}</td>
+            <td style="color:var(--emerald);font-weight:700;">${escHtml(cobTxt)}</td>
+            <td>${escHtml(r.boinc_workunits_completed ?? r.idle_gpu_workunits ?? 'n/a')}</td>
+            <td style="color:var(--amber);">${escHtml(r.candidates_vetted ?? r.verified_transits ?? 'n/a')}</td>
           </tr>
         `;
         }).join('');
@@ -2806,10 +2823,10 @@ def render_citizen_scientist_community_hub_html() -> str:
         document.getElementById('discovery-feed-list').innerHTML = feed.slice(0, 6).map(f => `
           <div class="feed-item">
             <div class="feed-head">
-              <span><strong>${f.gamer_handle || f.author || '@Cmdr'}</strong> + <strong>${f.scientist_handle || f.role || 'Astrophysicist'}</strong> • <em>${f.target}</em></span>
-              <span>${f.timestamp || f.timestamp_utc || ''} | ${(f.gcp_receipt_sha256 || f.boinc_workunit || '').slice(0, 12)}</span>
+              <span><strong>${escHtml(f.gamer_handle || f.author || '@Cmdr')}</strong> + <strong>${escHtml(f.scientist_handle || f.role || 'Astrophysicist')}</strong> • <em>${escHtml(f.target)}</em></span>
+              <span>${escHtml(f.timestamp || f.timestamp_utc || '')} | ${escHtml((f.gcp_receipt_sha256 || f.boinc_workunit || '').slice(0, 12))}</span>
             </div>
-            <div class="feed-body">${f.summary || f.note || ''}</div>
+            <div class="feed-body">${escHtml(f.summary || f.note || '')}</div>
           </div>
         `).join('');
       } catch (e) {
@@ -2841,9 +2858,9 @@ def render_citizen_scientist_community_hub_html() -> str:
         const bls = rec.bls_transit_metrics || {};
         box.innerHTML = `
           <strong>✅ VERIFIED IDLE-GPU BOINC WORKUNIT COMPLETED &amp; SYNCED TO GCP:</strong><br/>
-          • <strong>Receipt ID:</strong> <code>${rec.receipt_id}</code> | <strong>SHA-256:</strong> <code>${(rec.result_sha256 || '').slice(0, 24)}...</code><br/>
-          • <strong>Target:</strong> ${rec.target_planet} | <strong>Best Period:</strong> ${bls.best_period_days} d | <strong>Transit Depth:</strong> ${bls.transit_depth_ppm} ppm | <strong>SNR:</strong> ${bls.snr}<br/>
-          • <strong>GCP Cloud Run Lease:</strong> <code>${rec.gcp_cloud_run_lease_id}</code> (${rec.gcp_federated_sync}) | <strong>Reward:</strong> +${rec.cobblestones_earned} Cobblestones &amp; +${rec.game_points_earned} Game PTS
+          • <strong>Receipt ID:</strong> <code>${escHtml(rec.receipt_id)}</code> | <strong>SHA-256:</strong> <code>${escHtml((rec.result_sha256 || '').slice(0, 24))}...</code><br/>
+          • <strong>Target:</strong> ${escHtml(rec.target_planet)} | <strong>Best Period:</strong> ${escHtml(bls.best_period_days)} d | <strong>Transit Depth:</strong> ${escHtml(bls.transit_depth_ppm)} ppm | <strong>SNR:</strong> ${escHtml(bls.snr)}<br/>
+          • <strong>GCP Cloud Run Lease:</strong> <code>${escHtml(rec.gcp_cloud_run_lease_id)}</code> (${escHtml(rec.gcp_federated_sync)}) | <strong>Reward:</strong> +${escHtml(rec.cobblestones_earned)} Cobblestones &amp; +${escHtml(rec.game_points_earned)} Game PTS
         `;
         await loadCommunityHub();
       } catch (e) {
@@ -3500,10 +3517,13 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
     @app.post("/api/v1/community/boinc-sync", response_class=JSONResponse)
     def api_boinc_idle_gpu_sync(payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
         st = _load_or_init_community_state()
-        handle = str(payload.get("handle", "@Commander_Puck_FR"))[:64]
-        gpu_name = str(payload.get("gpu_name", service.hw_info.get("gpu_name", "NVIDIA GeForce RTX 2070")))[:96]
-        project_id = str(payload.get("project_id", "hivemind_tess_at_home"))
-        target_name = str(payload.get("target_name", "K2-18 b"))
+        handle = html.escape(str(payload.get("handle", "@Commander_Puck_FR"))[:64], quote=True)
+        gpu_name = html.escape(
+            str(payload.get("gpu_name", service.hw_info.get("gpu_name", "NVIDIA GeForce RTX 2070")))[:96],
+            quote=True,
+        )
+        project_id = html.escape(str(payload.get("project_id", "hivemind_tess_at_home"))[:64], quote=True)
+        target_name = html.escape(str(payload.get("target_name", "K2-18 b"))[:64], quote=True)
         idle_seconds = float(payload.get("idle_seconds", 12.4))
         cobblestones_delta = float(payload.get("cobblestones", 45.0))
         hmt_bonus = int(payload.get("hmt_bonus", 250))
@@ -3620,12 +3640,15 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
     @app.post("/api/v1/community/post-note", response_class=JSONResponse)
     def api_community_post_note(payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
         st = _load_or_init_community_state()
-        handle = str(payload.get("handle", "@CitizenScientist_FR"))[:64]
-        role = str(payload.get("role", "Astrophysics Citizen Scientist"))[:64]
-        target = str(payload.get("target", "K2-18 b (Hycean Ocean World)"))[:64]
-        note = str(payload.get("note", "Confirmed U-shaped transit and JWST CH4/CO2 absorption peak at 4.3 um!"))[:500]
+        handle = html.escape(str(payload.get("handle", "@CitizenScientist_FR"))[:64], quote=True)
+        role = html.escape(str(payload.get("role", "Astrophysics Citizen Scientist"))[:64], quote=True)
+        target = html.escape(str(payload.get("target", "K2-18 b (Hycean Ocean World)"))[:64], quote=True)
+        note = html.escape(
+            str(payload.get("note", "Confirmed U-shaped transit and JWST CH4/CO2 absorption peak at 4.3 um!"))[:500],
+            quote=True,
+        )
         receipt = hashlib.sha256(f"{handle}:{target}:{note}:{time.time()}".encode("utf-8")).hexdigest()
-        st["coop_discovery_feed"].insert(0, {
+        entry = {
             "timestamp": datetime.datetime.now().isoformat()[:19],
             "gamer_handle": handle,
             "scientist_handle": role,
@@ -3633,10 +3656,11 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
             "event": "CITIZEN SCIENTIST & GAMER CO-OP OBSERVATION",
             "summary": note,
             "gcp_receipt_sha256": receipt,
-        })
+        }
+        st["coop_discovery_feed"].insert(0, entry)
         st["coop_discovery_feed"] = st["coop_discovery_feed"][:20]
         community_state_path.write_text(json.dumps(st, indent=2, ensure_ascii=False), encoding="utf-8")
-        return JSONResponse(content={"ok": True, "receipt_sha256": receipt, "feed": st["coop_discovery_feed"][:6]})
+        return JSONResponse(content={"ok": True, "entry": entry, "receipt_sha256": receipt, "feed": st["coop_discovery_feed"][:6]})
 
     @app.api_route("/join", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/rejoindre", methods=["GET", "HEAD"], response_class=HTMLResponse)
@@ -3682,7 +3706,14 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
 
     ARTIFACTS_ROOT.mkdir(parents=True, exist_ok=True)
     _portal_store = RouterStore(ARTIFACTS_ROOT / "local_portal_router.db", b"hivemind-local-steam-portal-secret-32b")
-    _steam_key_cache: Dict[str, str] = {}
+
+    def _extract_bearer_token(request: Request, payload: Dict[str, Any] | None = None) -> str:
+        auth = request.headers.get("authorization", "")
+        if auth.lower().startswith("bearer "):
+            return auth.split(" ", 1)[1].strip()
+        if payload:
+            return str(payload.get("api_key") or "").strip()
+        return ""
 
     @app.api_route("/portal", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/playground", methods=["GET", "HEAD"], response_class=HTMLResponse)
@@ -3719,7 +3750,7 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         )
 
     @app.post("/v1/hivemind/steam/register-login", response_class=JSONResponse)
-    def post_steam_register_or_login(payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
+    def post_steam_register_or_login(request: Request, payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
         handle = str(payload.get("handle") or "Cmdr_RTX2070_Steam").strip()[:64]
         steam_id64 = str(payload.get("steam_id64") or "76561198031337001").strip()[:32]
         gpu_model = str(payload.get("gpu_name") or payload.get("gpu_model") or "NVIDIA GeForce RTX 2070 (8 GB VRAM)").strip()[:96]
@@ -3727,22 +3758,26 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         if role not in ("consumer", "producer", "prosumer"):
             role = "prosumer"
         created = False
+        api_key: str | None
         try:
             account_id, api_key = _portal_store.register(handle, role)
             created = True
-            _steam_key_cache[account_id] = api_key
-            _portal_store.grant(account_id, 2400.0, "starter:steam_free_game_3133700")
         except HandleTaken:
             account_id = _portal_store.account_id_for(handle)
-            api_key = _steam_key_cache.get(account_id, "")
-            if not api_key:
-                api_key = "hm-" + _secrets.token_urlsafe(32)
-                with _portal_store._tx() as conn:
-                    conn.execute(
-                        "UPDATE accounts SET key_hash=? WHERE account_id=?",
-                        (_portal_store._hmac_hex(api_key), account_id),
-                    )
-                _steam_key_cache[account_id] = api_key
+            candidate = _extract_bearer_token(request, payload)
+            authed = _portal_store.authenticate(candidate) if candidate else None
+            if authed is None or authed.account_id != account_id:
+                return JSONResponse(
+                    status_code=401,
+                    content={
+                        "error": {
+                            "message": f"handle '{handle}' is already registered; supply its Bearer hm-... key to resume the session",
+                            "type": "authentication_error",
+                            "code": "handle_taken",
+                        }
+                    },
+                )
+            api_key = None
         except (SwarmSecurityViolationError, ReservedHandle):
             return JSONResponse(status_code=400, content={"error": {"message": "Invalid handle format."}})
 
@@ -3763,7 +3798,8 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                 "api_key": api_key,
                 "steam_session_ticket": f"STEAM-3133700-{ticket_hash}",
                 "balance_hmt": _portal_store.balance(account_id),
-            }
+            },
+            headers={"Cache-Control": "no-store"},
         )
 
     @app.get("/v1/hivemind/me", response_class=JSONResponse)
@@ -3790,22 +3826,21 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
 
     @app.post("/v1/hivemind/steam/contribute-boinc", response_class=JSONResponse)
     def post_steam_contribute_boinc(request: Request, payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
+        token = _extract_bearer_token(request)
+        if not token:
+            return JSONResponse(
+                status_code=401,
+                content={"error": {"message": "Missing Authorization: Bearer hm-... header.", "type": "authentication_error"}},
+            )
+        acc = _portal_store.authenticate(token)
+        if acc is None:
+            return JSONResponse(
+                status_code=401,
+                content={"error": {"message": "Invalid API key.", "type": "authentication_error"}},
+            )
+        account_id = acc.account_id
+        handle = acc.handle
         target_planet = str(payload.get("target_planet") or "K2-18 b").strip()[:64]
-        handle = str(payload.get("handle") or "Cmdr_RTX2070_Steam").strip()[:64]
-        account_id: str | None = None
-        auth = request.headers.get("authorization", "")
-        if auth.lower().startswith("bearer "):
-            acc = _portal_store.authenticate(auth.split(" ", 1)[1].strip())
-            if acc is not None:
-                account_id = acc.account_id
-                handle = acc.handle
-        if account_id is None:
-            try:
-                account_id, api_key = _portal_store.register(handle, "prosumer")
-                _steam_key_cache[account_id] = api_key
-                _portal_store.grant(account_id, 2400.0, "starter:steam_free_game_3133700")
-            except HandleTaken:
-                account_id = _portal_store.account_id_for(handle)
 
         # Execute real CUDA Driver PTX BLS fold on local RTX 2070
         fold_res: Dict[str, Any] = {
@@ -3829,10 +3864,9 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         except Exception:
             pass
 
-        hmt_awarded = 250.0
-        cobblestones_awarded = 45.0
+        hmt_awarded = 0.0
+        cobblestones_awarded = 0.0
         receipt_sha256 = str(fold_res.get("result_sha256") or "")
-        _portal_store.grant(account_id, hmt_awarded, f"boinc:steam3133700:{receipt_sha256[:16]}")
 
         # Also record into the Community Hub state so both views stay synchronized
         api_boinc_idle_gpu_sync(
@@ -3850,6 +3884,7 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         return JSONResponse(
             content={
                 "object": "hivemind.steam_boinc_contribution",
+                "credit_status": "pending_verification",
                 "ok": True,
                 "account_id": account_id,
                 "handle": handle,
@@ -3864,7 +3899,8 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                 "cobblestones_awarded": cobblestones_awarded,
                 "balance_hmt": _portal_store.balance(account_id),
                 "receipt_sha256": receipt_sha256,
-            }
+            },
+            headers={"Cache-Control": "no-store"},
         )
 
     @app.api_route("/webgpu", methods=["GET", "HEAD"], response_class=HTMLResponse)
@@ -3912,29 +3948,33 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         )
 
     @app.post("/v1/hivemind/webgpu/register-login", response_class=JSONResponse)
-    def post_webgpu_register_or_login(payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
+    def post_webgpu_register_or_login(request: Request, payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
         handle = str(payload.get("handle") or "Cmdr_WebGPU_RTX2070").strip()[:64]
         gpu_adapter = str(payload.get("gpu_adapter") or "WebGPU Hardware Adapter (WGSL @compute)").strip()[:96]
         role = str(payload.get("role") or "prosumer").strip()
         if role not in ("consumer", "producer", "prosumer"):
             role = "prosumer"
         created = False
+        api_key: str | None
         try:
             account_id, api_key = _portal_store.register(handle, role)
             created = True
-            _steam_key_cache[account_id] = api_key
-            _portal_store.grant(account_id, 2400.0, "starter:webgpu_zero_install")
         except HandleTaken:
             account_id = _portal_store.account_id_for(handle)
-            api_key = _steam_key_cache.get(account_id, "")
-            if not api_key:
-                api_key = "hm-" + _secrets.token_urlsafe(32)
-                with _portal_store._tx() as conn:
-                    conn.execute(
-                        "UPDATE accounts SET key_hash=? WHERE account_id=?",
-                        (_portal_store._hmac_hex(api_key), account_id),
-                    )
-                _steam_key_cache[account_id] = api_key
+            candidate = _extract_bearer_token(request, payload)
+            authed = _portal_store.authenticate(candidate) if candidate else None
+            if authed is None or authed.account_id != account_id:
+                return JSONResponse(
+                    status_code=401,
+                    content={
+                        "error": {
+                            "message": f"handle '{handle}' is already registered; supply its Bearer hm-... key to resume the session",
+                            "type": "authentication_error",
+                            "code": "handle_taken",
+                        }
+                    },
+                )
+            api_key = None
         except (SwarmSecurityViolationError, ReservedHandle):
             return JSONResponse(status_code=400, content={"error": {"message": "Invalid handle format."}})
 
@@ -3951,7 +3991,8 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                 "api_key": api_key,
                 "webgpu_session_ticket": f"WEBGPU-{ticket_hash}",
                 "balance_hmt": _portal_store.balance(account_id),
-            }
+            },
+            headers={"Cache-Control": "no-store"},
         )
 
     @app.post("/v1/hivemind/webgpu/contribute", response_class=JSONResponse)
@@ -3975,22 +4016,29 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         target_planet = str(payload.get("target_planet") or "K2-18 b").strip()[:64]
         gpu_adapter = str(payload.get("gpu_adapter") or "WebGPU Hardware Adapter (WGSL @compute)").strip()[:96]
         backend = str(payload.get("backend") or "webgpu_wgsl_compute_shader").strip()[:64]
-        n_points = int(payload.get("n_points_folded") or 16384)
-        kernel_ms = float(payload.get("kernel_exec_ms") or 0.42)
-        depth_ppm = float(payload.get("recovered_transit_depth_ppm") or 2789.0)
-
-        verified = execute_server_webgpu_verification_and_sync(
-            handle=acc.handle,
-            target_planet=target_planet,
-            gpu_adapter=gpu_adapter,
-            backend=backend,
-            n_points_folded=n_points,
-            kernel_exec_ms=kernel_ms,
-            recovered_transit_depth_ppm=depth_ppm,
-        )
-        hmt_awarded = 250.0
-        cobblestones_awarded = 45.0
-        _portal_store.grant(acc.account_id, hmt_awarded, f"webgpu:wgsl:{verified['receipt_sha256'][:16]}")
+        raw_n_points = payload.get("n_points_folded")
+        raw_kernel_ms = payload.get("kernel_exec_ms")
+        raw_depth_ppm = payload.get("recovered_transit_depth_ppm")
+        try:
+            n_points = 16384 if raw_n_points is None else raw_n_points
+            kernel_ms = 0.42 if raw_kernel_ms is None else raw_kernel_ms
+            depth_ppm = 2789.0 if raw_depth_ppm is None else raw_depth_ppm
+            verified = execute_server_webgpu_verification_and_sync(
+                handle=acc.handle,
+                target_planet=target_planet,
+                gpu_adapter=gpu_adapter,
+                backend=backend,
+                n_points_folded=n_points,
+                kernel_exec_ms=kernel_ms,
+                recovered_transit_depth_ppm=depth_ppm,
+            )
+        except (TypeError, ValueError) as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"error": {"message": f"Invalid WebGPU contribution parameters: {exc}", "type": "invalid_request_error"}},
+            )
+        hmt_awarded = 0.0
+        cobblestones_awarded = 0.0
 
         # Sync with Community Hub state as well
         api_boinc_idle_gpu_sync(
@@ -4008,6 +4056,7 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         return JSONResponse(
             content={
                 "object": "hivemind.webgpu_contribution",
+                "credit_status": "pending_verification",
                 "ok": True,
                 "account_id": acc.account_id,
                 "handle": acc.handle,
@@ -4016,7 +4065,8 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                 "hmt_awarded": hmt_awarded,
                 "cobblestones_awarded": cobblestones_awarded,
                 "balance_hmt": _portal_store.balance(acc.account_id),
-            }
+            },
+            headers={"Cache-Control": "no-store"},
         )
 
 

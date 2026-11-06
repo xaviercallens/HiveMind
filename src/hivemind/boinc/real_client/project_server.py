@@ -116,7 +116,8 @@ class ProjectServer:
     ) -> str:
         """Register a workunit: ``spec`` is the ``in.json`` input; ``extra_inputs`` maps an open name to bytes."""
         wu = spec["wu_id"]
-        inputs = {"in.json": json.dumps(spec, sort_keys=True).encode(), **(extra_inputs or {})}
+        volunteer_spec = {k: v for k, v in spec.items() if k != "reference_trajectories"}
+        inputs = {"in.json": json.dumps(volunteer_spec, sort_keys=True).encode(), **(extra_inputs or {})}
         files = []
         for open_name, data in inputs.items():
             fname = f"{wu}_{open_name.replace('.', '_')}"

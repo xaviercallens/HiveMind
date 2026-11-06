@@ -2178,15 +2178,26 @@ theorem layerstorm_two_zone_vram_ceiling (denseMiB kvMiB zoneA zoneB expertMiB v
     Nat.add_mul zoneA zoneB expertMiB
   omega
 
-/-- Theorem 144 (Cosine-Damped Outer Momentum Bounds IID Overshoot — Issue #308 / E18b):
-    When peer deltas are aligned with integer-scaled cosine `c ∈ [0, scale]`, damping outer momentum by
-    `mu_eff = mu_base * (scale - c)` ensures `mu_eff ≤ mu_base * scale` for all `c` and `mu_eff = 0` (exact FedAvg
-    zero-momentum regime) when `c = scale` (perfect IID alignment), preventing Nesterov carryover overshoot. -/
+/-- Arithmetic Lemma 144 (Linear Damping Monotonicity and Zero-At-Cap — Issue #308 / E18b):
+    Arithmetic property of the integer linear damping function `dampedMu muBase scale c := muBase * (scale - c)`
+    for `c ∈ [0, scale]`: `dampedMu muBase scale c ≤ muBase * scale`, `dampedMu muBase scale scale = 0`, and
+    higher alignment `c1 ≤ c2` never increases the damped factor (`dampedMu muBase scale c2 ≤ dampedMu muBase scale c1`). -/
+def dampedMu (muBase scale c : Nat) : Nat :=
+  muBase * (scale - c)
+
 theorem e18_cosine_damped_outer_momentum_bounds_iid_amplification (muBase scale c : Nat)
     (hc : c ≤ scale) :
-    muBase * (scale - c) ≤ muBase * scale ∧ muBase * (scale - scale) = 0 := by
+    dampedMu muBase scale c ≤ muBase * scale ∧ dampedMu muBase scale scale = 0 := by
+  unfold dampedMu
   have h_sub : scale - c ≤ scale := by omega
   exact ⟨Nat.mul_le_mul_left muBase h_sub, by simp⟩
+
+theorem e18_damped_mu_antitone (muBase scale c1 c2 : Nat)
+    (h12 : c1 ≤ c2) :
+    dampedMu muBase scale c2 ≤ dampedMu muBase scale c1 := by
+  unfold dampedMu
+  have h_sub : scale - c2 ≤ scale - c1 := by omega
+  exact Nat.mul_le_mul_left muBase h_sub
 
 end Season24_25_HoneybeeQuorumAndLayerStoRmVRAM
 
@@ -2588,6 +2599,7 @@ end HiveMindSpec
 #print axioms HiveMindSpec.Season24_25_HoneybeeQuorumAndLayerStoRmVRAM.swarm_nectar_cache_dedup_saves_pcie_bytes
 #print axioms HiveMindSpec.Season24_25_HoneybeeQuorumAndLayerStoRmVRAM.layerstorm_two_zone_vram_ceiling
 #print axioms HiveMindSpec.Season24_25_HoneybeeQuorumAndLayerStoRmVRAM.e18_cosine_damped_outer_momentum_bounds_iid_amplification
+#print axioms HiveMindSpec.Season24_25_HoneybeeQuorumAndLayerStoRmVRAM.e18_damped_mu_antitone
 #print axioms HiveMindSpec.Season25_Wave2ScientificMoEAndProducerQuorum.solver_surrogate_verifier_soundness
 #print axioms HiveMindSpec.Season25_Wave2ScientificMoEAndProducerQuorum.producer_quorum_moe_activation_monotone
 #print axioms HiveMindSpec.Season25_Wave2ScientificMoEAndProducerQuorum.s1_cross_cpu_quorum2_agreement_triangle_bound

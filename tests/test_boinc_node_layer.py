@@ -155,7 +155,15 @@ def test_governor_policy_comes_only_from_its_arguments() -> None:
 
 
 def test_wait_for_idle_does_not_block_when_there_is_no_status_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("HIVEMIND_IDLE_URL", "http://127.0.0.1:9/nginx_status")  # nothing listens here
-    t = time.time()
-    wait_for_idle(quiet_s=5, max_wait_s=30)
-    assert time.time() - t < 5  # a box without nginx must not stall validation
+    import urllib.error
+    import urllib.request
+
+    sleeps: list[float] = []
+    now = [100.0]
+
+    def _fail_open(*_a, **_kw):
+        raise urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr(urllib.request, "urlopen", _fail_open)
+    waited = wait_for_idle(quiet_s=5, max_wait_s=30, clock=lambda: now[0], sleep_fn=sleeps.append)
+    assert waited == 0.0 and sleeps == []

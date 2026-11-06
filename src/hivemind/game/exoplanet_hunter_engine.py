@@ -2245,7 +2245,7 @@ class HiveMindMultiProducerInferencePool:
 
                 del a32, b32, a16, b16
 
-            # 4-bit NF4 Sparse Top-2/4 Bee-MoE Effective TFLOPS (2x active expert sparsity + NF4 dequant throughput)
+            # 4-bit NF4 Sparse Top-2/4 Bee-MoE Effective TFLOPS (estimated 1.85x active expert sparsity + NF4 dequant throughput)
             effective_moe_tflops = round(fp16_tflops * 1.85, 2)
             vram = measure_vram_footprint(dev)
             self.tflops_metrics = {
@@ -2260,20 +2260,22 @@ class HiveMindMultiProducerInferencePool:
                 "measured_fp32_tflops": round(fp32_tflops, 2),
                 "measured_fp16_tensor_tflops": round(fp16_tflops, 2),
                 "effective_sparse_moe_nf4_tflops": effective_moe_tflops,
+                "effective_sparse_moe_nf4_basis": "estimated_from_fp16_times_1.85",
                 "theoretical_fp32_peak_tflops": 7.47,
                 "theoretical_fp16_tensor_peak_tflops": 59.70,
-                "t4_standby_capacity_fp16_tflops": 65.00,
+                "t4_standby_capacity_fp16_tflops": None,
                 "t4_current_active_tflops": 0.00,
                 "total_active_node_tflops": effective_moe_tflops,
-                "total_cluster_capacity_with_t4_tflops": round(effective_moe_tflops + 65.00, 2),
+                "total_cluster_capacity_with_t4_tflops": effective_moe_tflops,
             }
         else:
             self.tflops_metrics = {
                 "timestamp": now_iso,
                 "primary_gpu": "CPU Fallback",
-                "measured_fp32_tflops": 0.45,
-                "measured_fp16_tensor_tflops": 0.90,
-                "effective_sparse_moe_nf4_tflops": 1.65,
+                "status": "CUDA_UNAVAILABLE",
+                "measured_fp32_tflops": None,
+                "measured_fp16_tensor_tflops": None,
+                "effective_sparse_moe_nf4_tflops": None,
             }
         return self.tflops_metrics
 

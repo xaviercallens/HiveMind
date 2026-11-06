@@ -248,3 +248,142 @@ def test_dashboard_returning_user_login_and_register_after_logout_and_rotation(t
     assert client.post("/api/v1/auth/login", json={"handle_or_email": "bob_veteran", "password": tok}).status_code == 401
     assert client.post("/api/v1/auth/login", json={"handle_or_email": new_tok}).status_code == 200
 
+    # 7. Recreating the app with the same vault_dir preserves bob_veteran's previous password and rotated token
+    client_restarted = TestClient(create_hivemind_at_home_app(vault_dir=tmp_path / "vault"))
+    r_restart_login = client_restarted.post(
+        "/api/v1/auth/login",
+        json={"handle_or_email": "bob@hivemind.network", "password": "  BobStrongPass#2026  "},
+    )
+    assert r_restart_login.status_code == 200
+    assert r_restart_login.json()["handle"] == "bob_veteran"
+    assert r_restart_login.json()["token"] == new_tok
+
+
+def test_old_user_previous_password_with_email_handle_collision_and_legacy_pbkdf2_and_credentials_table(tmp_path) -> None:
+    import hashlib
+    import sqlite3
+
+    db_path = tmp_path / "router_legacy.db"
+    store = RouterStore(db_path, SECRET)
+    client = TestClient(create_router_app(store, starter_grant_hmt=100.0))
+
+    # User 1 has handle 'alice' with a different email and password
+    r_u1 = client.post(
+        "/v1/hivemind/auth/register",
+        json={"handle": "alice", "email": "other_alice@domain.org", "password": "OtherAlicePassword!1"},
+    )
+    assert r_u1.status_code == 200
+
+    # User 2 (old user) has handle 'alice_legacy_2025' and email 'alice@hivemind.network' (prefix 'alice' collides with User 1!)
+    r_u2 = client.post(
+        "/v1/hivemind/auth/register",
+        json={"handle": "alice_legacy_2025", "email": "alice@hivemind.network", "password": "MyOld2025Password#99"},
+    )
+    assert r_u2.status_code == 200
+    u2 = r_u2.json()
+
+    # Old user logs in with their email + previous password (even with incidental whitespace) -> must resolve to User 2, not fail on User 1!
+    r_login = client.post(
+        "/v1/hivemind/auth/login",
+        json={"identifier": "alice@hivemind.network", "password": " MyOld2025Password#99 "},
+    )
+    assert r_login.status_code == 200
+    assert r_login.json()["account_id"] == u2["account_id"]
+    assert r_login.json()["handle"] == "alice_legacy_2025"
+
+    # Also works via /api/v1/auth/login and /api/v1/auth/register restore
+    r_v1_login = client.post(
+        "/api/v1/auth/login",
+        json={"handle_or_email": "alice@hivemind.network", "password": "MyOld2025Password#99"},
+    )
+    assert r_v1_login.status_code == 200
+    assert r_v1_login.json()["account_id"] == u2["account_id"]
+
+    r_v1_reg = client.post(
+        "/api/v1/auth/register",
+        json={"handle": "alice", "email": "alice@hivemind.network", "password": "MyOld2025Password#99"},
+    )
+    assert r_v1_reg.status_code == 200
+    assert r_v1_reg.json()["account_id"] == u2["account_id"]
+    assert r_v1_reg.json()["status"] == "EXISTING_USER_RESTORED"
+
+    # Test legacy SQLite `credentials` table (salt_hex + 200_000 PBKDF2-HMAC-SHA256) when accounts.password_hash is empty
+    legacy_acc_id, _legacy_key = store.register("veteran_pbkdf2", "prosumer")
+    salt_hex = "aabbccddeeff00112233445566778899"
+    pwd_hash = hashlib.pbkdf2_hmac("sha256", b"VeteranPass2024!", bytes.fromhex(salt_hex), 200_000).hex()
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS credentials (email_hash TEXT PRIMARY KEY, account_id TEXT NOT NULL, salt_hex TEXT NOT NULL, password_hash TEXT NOT NULL)"
+        )
+        conn.execute(
+            "INSERT INTO credentials(email_hash, account_id, salt_hex, password_hash) VALUES (?, ?, ?, ?)",
+            ("ehash1", legacy_acc_id, salt_hex, pwd_hash),
+        )
+        conn.commit()
+
+    r_cred_login = client.post(
+        "/v1/hivemind/auth/login",
+        json={"identifier": "veteran_pbkdf2", "password": "VeteranPass2024!"},
+    )
+    assert r_cred_login.status_code == 200
+    assert r_cred_login.json()["account_id"] == legacy_acc_id
+
+
+def test_dashboard_cross_service_openrouter_previous_password_login(monkeypatch, tmp_path) -> None:
+    import io
+    import json
+    import urllib.request
+    from hivemind.boinc.hivemind_at_home_dashboard import create_hivemind_at_home_app
+
+    monkeypatch.setenv("HIVEMIND_OPENROUTER_URL", "https://hivemind-openrouter.example.test")
+
+    class _FakeResp:
+        status = 200
+
+        def __init__(self, payload: dict) -> None:
+            self._buf = io.BytesIO(json.dumps(payload).encode("utf-8"))
+
+        def read(self) -> bytes:
+            return self._buf.read()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def _fake_urlopen(req, timeout=4.0):
+        body = json.loads(req.data.decode("utf-8"))
+        if body.get("handle_or_email") == "upstream_vet@hivemind.network" and body.get("password") == "UpstreamPass!2025":
+            return _FakeResp(
+                {
+                    "ok": True,
+                    "status": "AUTHENTICATED",
+                    "handle": "upstream_vet",
+                    "email": "upstream_vet@hivemind.network",
+                    "role": "prosumer",
+                    "token": "hm_live_upstream1234567890",
+                    "balance": 1500,
+                }
+            )
+        raise urllib.error.HTTPError(req.full_url, 401, "Unauthorized", {}, None)
+
+    monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
+    client = TestClient(create_hivemind_at_home_app(vault_dir=tmp_path / "vault"))
+
+    r_ok = client.post(
+        "/api/v1/auth/login",
+        json={"handle_or_email": "upstream_vet@hivemind.network", "password": "UpstreamPass!2025"},
+    )
+    assert r_ok.status_code == 200
+    assert r_ok.json()["handle"] == "upstream_vet"
+    assert r_ok.json()["token"] == "hm_live_upstream1234567890"
+
+    r_bad = client.post(
+        "/api/v1/auth/login",
+        json={"handle_or_email": "upstream_vet@hivemind.network", "password": "WrongPassword"},
+    )
+    assert r_bad.status_code == 401
+
+
+

@@ -597,13 +597,18 @@ def probe_rtx2070_hardware_and_vram(
     flops = 2.0 * (384.0 ** 3)
     gflops = round((flops / max(kernel_ms * 1e-3, 1e-6)) / 1e9, 2)
 
-    allocated_mb = (
+    measured_vram_mb = (
         round(torch.cuda.memory_allocated(0) / (1024.0 * 1024.0), 2)
         if cuda_ok
+        else None
+    )
+    allocated_mb = (
+        measured_vram_mb
+        if measured_vram_mb is not None
         else round(prof.vram_budget.total_peak_vram_gb * 1024.0, 1)
     )
     ceiling_mb = 8192.0
-    headroom_mb = round(ceiling_mb - (prof.vram_budget.total_peak_vram_gb * 1024.0), 1)
+    headroom_mb = round(ceiling_mb - allocated_mb, 1)
 
     return {
         "profile_name": prof.name,
@@ -612,9 +617,15 @@ def probe_rtx2070_hardware_and_vram(
         "detected_device_name": device_name,
         "cuda_available": cuda_ok,
         "vram_ceiling_mb": ceiling_mb,
+        "measured_vram_allocated_mb": measured_vram_mb,
+        "measured_vram_within_8gb": (measured_vram_mb < ceiling_mb) if measured_vram_mb is not None else None,
         "vram_allocated_or_budget_mb": allocated_mb,
         "wddm_game_headroom_mb": headroom_mb,
-        "within_8gb_golden_invariant": prof.vram_budget.total_peak_vram_gb < 8.0,
+        "within_8gb_golden_invariant": (
+            bool(measured_vram_mb < ceiling_mb and prof.vram_budget.total_peak_vram_gb < 8.0)
+            if measured_vram_mb is not None
+            else prof.vram_budget.total_peak_vram_gb < 8.0
+        ),
         "vram_budget_gb": {
             "frozen_base_nf4_gb": prof.vram_budget.frozen_base_nf4_gb,
             "lora_trainable_r64_gb": prof.vram_budget.lora_trainable_r64_gb,

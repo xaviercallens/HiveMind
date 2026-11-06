@@ -1680,13 +1680,21 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None, *, 
         profile_name = str(payload.get("profile", "rtx2070_7b_worker"))
         cfg = HiveMindConfig.from_yaml()
         prof = cfg.profiles.get(profile_name) or cfg.profiles["rtx2070_7b_worker"]
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        cuda_ok = bool(torch.cuda.is_available())
+        device = torch.device("cuda:0" if cuda_ok else "cpu")
         vram = measure_vram_footprint(device)
+        allocated_gb = float(vram.get("allocated_mb", 0.0) or 0.0) / 1024.0
+        diagnostic_passed = bool(
+            cuda_ok
+            and prof.vram_budget.total_peak_vram_gb < 8.0
+            and allocated_gb < 8.0
+        )
         return {
             "steam_app_id": STEAM_APP_ID,
             "profile_tested": prof.name,
             "device": str(device),
-            "cuda_available": torch.cuda.is_available(),
+            "cuda_available": cuda_ok,
+            "status": "VERIFIED_CUDA" if diagnostic_passed else ("BLOCKED_NO_CUDA" if not cuda_ok else "FAILED_VRAM_BUDGET"),
             "live_vram_telemetry": vram,
             "vram_budget_gb": {
                 "frozen_base_nf4_gb": prof.vram_budget.frozen_base_nf4_gb,
@@ -1694,7 +1702,7 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None, *, 
                 "paged_adamw_8bit_gb": prof.vram_budget.paged_adamw_8bit_gb,
                 "total_peak_vram_gb": prof.vram_budget.total_peak_vram_gb,
             },
-            "diagnostic_passed": True,
+            "diagnostic_passed": diagnostic_passed,
         }
 
     @app.get("/api/steam-manifest", response_class=JSONResponse)
@@ -1839,7 +1847,7 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None, *, 
             simulated_active_game=game_exe if foreground_active else None,
         )
         should_preempt = daemon.should_preempt()
-        eviction_ms = round((time.perf_counter() - t0) * 1000.0 + 14.2, 2)
+        eviction_ms = round((time.perf_counter() - t0) * 1000.0, 3)
         return {
             "steam_app_id": STEAM_APP_ID,
             "gamer_tag": str(payload.get("gamer_tag", "CyberValkyrie_FR")),

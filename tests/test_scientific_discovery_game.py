@@ -211,5 +211,31 @@ def test_multiplayer_cohort_playtest_and_sybil_defense() -> None:
     assert r_cohort.json()["total_cohort_scientific_pts"] == 13650
 
 
+def test_ip158_ip170_ip171_honest_cpu_telemetry_and_diagnostic_gates(monkeypatch) -> None:
+    import torch
+    from hivemind.boinc.night_moe_page import render_night_moe_html
+    from hivemind.game.exoplanet_hunter_engine import AstroBeeMoEGPUService, HiveMindMultiProducerInferencePool
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    pool = HiveMindMultiProducerInferencePool(AstroBeeMoEGPUService())
+    tf = pool.benchmark_live_tflops(matrix_dim=128)
+    assert tf["measured_fp32_tflops"] is None
+    assert tf["measured_fp16_tensor_tflops"] is None
+    assert tf["effective_sparse_moe_nf4_tflops"] is None
+
+    steam_client = TestClient(create_hack_miner_fastapi_app())
+    diag = steam_client.post("/api/run-rtx-diagnostic", json={}).json()
+    assert diag["cuda_available"] is False
+    assert diag["diagnostic_passed"] is False
+    assert diag["status"] == "BLOCKED_NO_CUDA"
+
+    preempt = steam_client.post("/api/scientific-game/preempt", json={"foreground_active": True}).json()
+    assert preempt["preemption_eviction_ms"] < 14.0
+
+    night_html = render_night_moe_html({"subjects": {}, "base_model": "test", "alpha": 0.05, "bonferroni_alpha": 0.01, "n_other_cells": 0})
+    assert "250 HMT Reflexion Points" not in night_html
+    assert "no automatic HMT or Cobblestone points are minted today" in night_html
+
+
 
 

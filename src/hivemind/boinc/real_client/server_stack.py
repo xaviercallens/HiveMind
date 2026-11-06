@@ -126,7 +126,8 @@ class Stack:
         text = re.sub(r"<host>[^<]*</host>", f"<host>{socket.gethostname().split('.')[0]}</host>", text, count=1)
         daemons = ["<daemons>", "<daemon><cmd>feeder -d 3</cmd></daemon>", "<daemon><cmd>transitioner -d 3</cmd></daemon>", "<daemon><cmd>file_deleter -d 3</cmd></daemon>"]
         for app in apps:  # same executable twice needs distinct output/pid files, or the start script skips the second
-            daemons.append(f"<daemon><cmd>script_validator -d 3 --app {app} --init_script \"{validator_shim} files result_id\"</cmd>"
+            compare_arg = f' --compare_script "{validator_shim} compare files2"' if app == "hivemind_solver_sweep" else ""
+            daemons.append(f"<daemon><cmd>script_validator -d 3 --app {app} --init_script \"{validator_shim} files result_id\"{compare_arg}</cmd>"
                            f"<output>validator_{app}.log</output><pid_file>validator_{app}.pid</pid_file></daemon>")
             daemons.append(f"<daemon><cmd>script_assimilator -d 3 --app {app} --script \"{assimilator_shim} wu_id files\"</cmd>"
                            f"<output>assimilator_{app}.log</output><pid_file>assimilator_{app}.pid</pid_file></daemon>")

@@ -248,6 +248,23 @@ def test_solver_sweep_with_nan_wall_time_and_huge_flop_claim_is_rejected_not_cre
         assert verdict.valid is False and verdict.credit == 0.0, (wall, verdict)
         assert "wall_seconds" in verdict.reason
 
+    # IP-173: omitting invariant_drift even when y is copied from reference must be rejected
+    missing_drift = {
+        **bundle["replica_a"],
+        "sweep_results": [
+            {k: v for k, v in item.items() if k != "invariant_drift"}
+            for item in bundle["replica_a"]["sweep_results"]
+        ],
+    }
+    v_no_drift = validate_solver_sweep(bundle["spec"], missing_drift, host="cpu-a", peer_meta=bundle["replica_b"])
+    assert v_no_drift.valid is False and v_no_drift.credit == 0.0
+    assert "invariant_drift" in v_no_drift.reason
+
+    # IP-173: validator computes reference trajectory even when reference_trajectories is stripped from spec
+    spec_without_ref = {k: v for k, v in bundle["spec"].items() if k != "reference_trajectories"}
+    v_noref = validate_solver_sweep(spec_without_ref, bundle["replica_a"], host="cpu-a", peer_meta=bundle["replica_b"])
+    assert v_noref.valid is True and v_noref.credit > 0.0
+
 
 def test_wave2_gateway_surrogate_sweep_and_producer_quorum_scaling(tmp_path: Path) -> None:
     store = RouterStore(tmp_path / "router_wave2.db", b"w" * 32)

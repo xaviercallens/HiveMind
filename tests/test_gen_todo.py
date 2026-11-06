@@ -1,57 +1,120 @@
 # Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
-"""scripts/gen_todo.py builds TODO.md from recorded issue and pull request data and detects a stale file (no network)."""
+"""Offline tests for ``scripts/gen_todo.py`` (Issue #555)."""
 
 from __future__ import annotations
 
-import importlib.util
 import json
-import re
 from pathlib import Path
-from typing import Any
+import re
 
-import pytest
+from scripts.gen_todo import (
+    check_todo_file,
+    main as gen_todo_main,
+    render_todo_markdown,
+    strip_season_ids_and_closing_keywords,
+)
 
-_SPEC = importlib.util.spec_from_file_location("gen_todo", Path(__file__).resolve().parent.parent / "scripts" / "gen_todo.py")
-assert _SPEC is not None and _SPEC.loader is not None
-gen = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(gen)
+RECORDED_GH_FIXTURE = {
+    "issues": [
+        {
+            "number": 493,
+            "title": "[P0 Security] Cockpit steam/register-login rotates an existing handle's key without auth (IP-141)",
+        },
+        {
+            "number": 522,
+            "title": "[P1 Security] /api/astro/gemini-tts is an unauthenticated open proxy (IP-169)",
+        },
+        {
+            "number": 555,
+            "title": "[P2 Docs/CI] Generate TODO.md from the open issues in a script and check it in CI",
+        },
+        {
+            "number": 487,
+            "title": "[Incident] RTX 2070 failover orchestrator re-pointed all 42 producers to a dead tunnel",
+        },
+        {
+            "number": 269,
+            "title": "[S19-W1-9] Newcomer quickstart for Solver Bee + Stretch W1b NL-to-Spec Coder Translator",
+        },
+        {
+            "number": 208,
+            "title": "[Epic] Season 18 Operation Energy-Bees (HM-S18-AE-01..05): Fixes #191 and closes #166",
+        },
+    ],
+    "prs": [
+        {
+            "number": 664,
+            "title": "fix(swarm): clamp Multi-Krum token weights (HM-S35-04, resolves #582)",
+            "author": {"login": "xaviercallens"},
+            "isDraft": False,
+        },
+        {
+            "number": 397,
+            "title": "T4 audit: governor telemetry and report (Season 20)",
+            "author": {"login": "xaviercallens"},
+            "isDraft": True,
+        },
+    ],
+}
 
-ISSUES: list[dict[str, Any]] = [
-    {"number": 12, "title": "[P0 Security] key committed in a module"},
-    {"number": 10, "title": "[P1 Swarm] gate fails open | HM-S16-06: on NaN"},
-    {"number": 9, "title": "[Incident] orchestrator re-pointed producers"},
-    {"number": 7, "title": "Join page misses the status table"},
-]
-PRS: list[dict[str, Any]] = [
-    {"number": 40, "title": "fix: something", "author": {"login": "xaviercallens"}, "isDraft": False},
-    {"number": 39, "title": "draft work", "author": {"login": "someone"}, "isDraft": True},
-]
+
+def test_gen_todo_check_fails_when_issue_removed_and_passes_when_fresh(tmp_path: Path) -> None:
+    """Negative control first: --check fails when one issue is removed from TODO.md and passes when freshly generated."""
+    fixture_path = tmp_path / "gh_fixture.json"
+    todo_path = tmp_path / "TODO.md"
+    fixture_path.write_text(json.dumps(RECORDED_GH_FIXTURE), encoding="utf-8")
+
+    # Generate fresh TODO.md
+    rc_gen = gen_todo_main(
+        ["--output", str(todo_path), "--fixture-json", str(fixture_path), "--date", "2026-11-06"]
+    )
+    assert rc_gen == 0
+
+    # Positive control: --check passes on freshly generated TODO.md
+    rc_ok = gen_todo_main(
+        ["--output", str(todo_path), "--fixture-json", str(fixture_path), "--check"]
+    )
+    assert rc_ok == 0
+
+    # Negative control: remove one issue line from TODO.md -> --check must exit non-zero
+    lines = todo_path.read_text(encoding="utf-8").splitlines()
+    mutated = "\n".join(line for line in lines if "issue 522:" not in line) + "\n"
+    todo_path.write_text(mutated, encoding="utf-8")
+
+    rc_fail = gen_todo_main(
+        ["--output", str(todo_path), "--fixture-json", str(fixture_path), "--check"]
+    )
+    assert rc_fail != 0
+    passed, reason = check_todo_file(
+        todo_path, RECORDED_GH_FIXTURE["issues"], RECORDED_GH_FIXTURE["prs"]
+    )
+    assert passed is False
+    assert "out of date" in reason
 
 
-def test_groups_by_priority_and_cleans_titles() -> None:
-    text = gen.build_todo(ISSUES, PRS, "2026-11-04")
-    assert text.index("## P0") < text.index("## P1") < text.index("## Incidents") < text.index("## Other open issues")
-    assert "- [ ] issue 12: [P0 Security] key committed in a module" in text
-    assert "HM-S16" not in text and "|" not in text
-    assert "Open issues: 4. Open pull requests: 2 (1 drafts)." in text
-    assert "- PR 39 (draft) by someone: draft work" in text
+def test_gen_todo_strips_season_ids_and_closing_keywords() -> None:
+    """Verify generator output contains no season IDs and no GitHub closing keywords before issue numbers."""
+    rendered = render_todo_markdown(
+        RECORDED_GH_FIXTURE["issues"],
+        RECORDED_GH_FIXTURE["prs"],
+        generated_date="2026-11-06",
+    )
+    assert "Open issues: 6. Open pull requests: 2 (1 draft)." in rendered
+    assert "## P0: security or safety, fix first (1)" in rendered
+    assert "## P1: a claim the code does not back, or a verifier that cannot fail (1)" in rendered
+    assert "## P2: correctness and CI (1)" in rendered
+    assert "## Incidents (1)" in rendered
+    assert "## Other open issues (honesty, experiments, UX, federation) (2)" in rendered
+    assert "- PR 397 (draft) by xaviercallens:" in rendered
 
+    # No season IDs (S19, HM-S18, HM-S35, Season 18, Season 20)
+    assert re.search(r"\b(?:HM-)?S\d+\b", rendered) is None
+    assert re.search(r"\bSeason\s+\d+\b", rendered, flags=re.IGNORECASE) is None
 
-def test_check_detects_a_removed_issue_and_ignores_the_date() -> None:
-    committed = gen.build_todo(ISSUES, PRS, "2026-11-01")
-    assert gen.is_current(committed, ISSUES, PRS)  # a later day alone is not a difference
-    assert not gen.is_current(committed, ISSUES[:-1], PRS)
-    assert not gen.is_current(committed, ISSUES, PRS[:-1])
-
-
-def test_cli_writes_then_checks_from_recorded_files(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    (tmp_path / "i.json").write_text(json.dumps(ISSUES), encoding="utf-8")
-    (tmp_path / "p.json").write_text(json.dumps(PRS), encoding="utf-8")
-    todo = tmp_path / "TODO.md"
-    base = ["--issues", str(tmp_path / "i.json"), "--prs", str(tmp_path / "p.json"), "--todo", str(todo)]
-    assert gen.main(["--check", *base]) == 1  # no file yet
-    assert gen.main(base) == 0 and re.search(r"^Generated \d{4}-\d{2}-\d{2} ", todo.read_text(encoding="utf-8"), re.M)
-    assert gen.main(["--check", *base]) == 0
-    (tmp_path / "i.json").write_text(json.dumps(ISSUES[:-1]), encoding="utf-8")
-    assert gen.main(["--check", *base]) == 1
-    assert "out of date" in capsys.readouterr().err
+    # No closing keywords followed by an issue number
+    assert re.search(
+        r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#?\d+\b",
+        rendered,
+        flags=re.IGNORECASE,
+    ) is None
+    assert strip_season_ids_and_closing_keywords("Fixes #555 in HM-S35-02") == "issue 555 in"

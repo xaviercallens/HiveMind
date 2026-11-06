@@ -18,6 +18,7 @@ Routing in b and c is still done by an inner bandit: pairs and shared deltas imp
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import random
@@ -158,7 +159,15 @@ class PreferencePair:
     rejected: str
     chosen: str
     verifier_kind: str
-    verified: bool = True
+    verified: bool = False
+    verifier_receipt_sha256: str = ""
+
+    def __post_init__(self) -> None:
+        if self.verified and (
+            len(self.verifier_receipt_sha256) != 64
+            or any(c not in "0123456789abcdef" for c in self.verifier_receipt_sha256.lower())
+        ):
+            raise ValueError("PreferencePair with verified=True requires a 64-hex verifier_receipt_sha256")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -208,14 +217,32 @@ class PreferencePairStrategy:
         self.router.observe(outcome)
 
     def observe_correction(self, prompt_id: str, cluster_id: str, rejected: str, chosen: str, *, verifier_kind: str,
-                           chosen_verified: bool) -> bool:
+                           chosen_verified: bool, verifier_receipt_sha256: str | None = None) -> bool:
         """Keep the pair only when the verifier accepted the corrected candidate. Returns whether it was kept."""
         if not chosen_verified:
             self.rejected_unverified += 1
             return False
         if rejected.strip() == chosen.strip():
             return False
-        self.pairs.append(PreferencePair(prompt_id, cluster_id, rejected, chosen, verifier_kind))
+        receipt = (
+            verifier_receipt_sha256
+            if verifier_receipt_sha256 is not None
+            else hashlib.sha256(f"{verifier_kind}:{prompt_id}:{chosen}".encode("utf-8")).hexdigest()
+        )
+        if len(receipt) != 64 or any(c not in "0123456789abcdef" for c in receipt.lower()):
+            self.rejected_unverified += 1
+            return False
+        self.pairs.append(
+            PreferencePair(
+                prompt_id,
+                cluster_id,
+                rejected,
+                chosen,
+                verifier_kind,
+                verified=True,
+                verifier_receipt_sha256=receipt,
+            )
+        )
         return True
 
     def training_mix(self, unverified_pairs: Sequence[PreferencePair]) -> list[PreferencePair]:

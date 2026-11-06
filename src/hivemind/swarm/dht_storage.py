@@ -208,8 +208,27 @@ class ContentAddressedSwarmStore:
         shard_path: Path,
         prev_block_hash: str,
         chunk_size: int = 256,
+        expected_sha256: Optional[str] = None,
     ) -> StorageProofReceipt:
-        raw_bytes = Path(shard_path).read_bytes()
+        p = Path(shard_path)
+        if not p.is_file():
+            return StorageProofReceipt(
+                node_id=node_id,
+                shard_cid=shard_cid,
+                challenged_chunk_index=0,
+                merkle_proof_hash="",
+                bytes_stored=0,
+                verified=False,
+            )
+        raw_bytes = p.read_bytes()
+        actual_digest = hashlib.sha256(raw_bytes).hexdigest()
+        cid_hex = shard_cid.removeprefix("cid://sha256/") if str(shard_cid).startswith("cid://sha256/") else ""
+        cid_matches = bool(len(cid_hex) >= 16 and actual_digest.startswith(cid_hex))
+        sha_matches = True if expected_sha256 is None else (actual_digest == expected_sha256)
+        pinned = (shard_cid in self.node_pins.get(node_id, [])) or (
+            expected_sha256 is not None and sha_matches
+        )
+        is_verified = bool(pinned and cid_matches and sha_matches)
         chunks = [
             raw_bytes[i : i + chunk_size]
             for i in range(0, max(1, len(raw_bytes)), chunk_size)
@@ -229,8 +248,8 @@ class ContentAddressedSwarmStore:
             shard_cid=shard_cid,
             challenged_chunk_index=challenged_idx,
             merkle_proof_hash=merkle_proof,
-            bytes_stored=len(raw_bytes),
-            verified=shard_cid in self.node_pins.get(node_id, []),
+            bytes_stored=len(raw_bytes) if is_verified else 0,
+            verified=is_verified,
         )
 
     def publish_lora_expert_checkpoint(

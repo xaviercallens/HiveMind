@@ -1236,20 +1236,19 @@ def run_24h_astrophysics_gpu_campaign(
                 "post_cycle_loss": post_cycle_loss,
             },
         )
+        seeder_node_id = f"{honest_worker_specs[0][0]}-c{cycle_idx + 1:02d}"
+        pos_receipt = cas_store.verify_proof_of_storage(
+            node_id=seeder_node_id,
+            shard_cid=f"cid://sha256/{s_meta['shard_sha256'][:32]}",
+            shard_path=Path(s_meta["shard_path"]),
+            prev_block_hash=ledger.chain[-1].block_hash,
+            expected_sha256=s_meta["shard_sha256"],
+        )
         pouw_block = ledger.mine_pouw_block(
             outer_step=cycle_idx + 1,
             expert_cid=expert_cid,
             work_receipts=work_receipts,
-            storage_receipts=[
-                StorageProofReceipt(
-                    node_id=f"{honest_worker_specs[0][0]}-c{cycle_idx + 1:02d}",
-                    shard_cid=f"cid://sha256/{s_meta['shard_sha256'][:32]}",
-                    challenged_chunk_index=cycle_idx % 4,
-                    merkle_proof_hash=s_meta["shard_sha256"],
-                    bytes_stored=Path(s_meta["shard_path"]).stat().st_size,
-                    verified=True,
-                )
-            ],
+            storage_receipts=[pos_receipt],
             validator_node_ids=["boinc-spotcheck-validator-primary"],
         )
 
@@ -1265,6 +1264,7 @@ def run_24h_astrophysics_gpu_campaign(
                 "post_cycle_loss": post_cycle_loss,
                 "mean_worker_inner_loss": round(float(np.mean(cycle_worker_losses)), 6),
                 "spot_checks_passed": 3,
+                "storage_proof_verified": bool(pos_receipt.verified),
                 "byzantine_poisoner_slashed": byz_id,
                 "multikrum_rejected": outer_res.filter_report.rejected_workers,
                 "cas_expert_cid": expert_cid,
@@ -1343,11 +1343,12 @@ def run_24h_astrophysics_gpu_campaign(
     vram_stats = measure_vram_footprint(device)
     elapsed_sec = round(time.perf_counter() - t0, 3)
     all_improved = all(b["loss_improved"] for b in branch_summaries.values())
+    all_storage_verified = all(bool(c.get("storage_proof_verified")) for c in hourly_cycle_log)
     ledger_ok = ledger.verify_chain_integrity()
 
     report: Dict[str, Any] = {
         "campaign": "Project HiveMind — 24-Cycle Local RTX 2070 Astrophysics & Cosmology BOINC Campaign",
-        "overall_passed": bool(all_improved and ledger_ok and cb_final.safe_to_continue),
+        "overall_passed": bool(all_improved and all_storage_verified and ledger_ok and cb_final.safe_to_continue),
         "execution_device": str(device),
         "gpu_hardware": hw_info,
         "gpu_circuit_breaker_status": cb_final.to_dict(),

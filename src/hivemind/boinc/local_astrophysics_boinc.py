@@ -616,11 +616,33 @@ def run_local_boinc_astrophysics_campaign(
                 "boinc_wu_id": wu_id,
             },
         )
-        shard_cid, _, _ = cas_store.store_hf_dataset_shard(
-            node_id=honest_worker_specs[0][0] + f"-d{domain_idx}",
+        seeder_node_id = honest_worker_specs[0][0] + f"-d{domain_idx}"
+        shard_cid, cas_shard_path, _ = cas_store.store_hf_dataset_shard(
+            node_id=seeder_node_id,
             domain_name=branch_name,
             shard_id=domain_idx + 1,
             samples=sample_texts,
+        )
+        cas_pos_receipt = cas_store.verify_proof_of_storage(
+            node_id=seeder_node_id,
+            shard_cid=shard_cid,
+            shard_path=cas_shard_path,
+            prev_block_hash=ledger.chain[-1].block_hash,
+        )
+        parquet_pos_receipt = cas_store.verify_proof_of_storage(
+            node_id=seeder_node_id,
+            shard_cid=f"cid://sha256/{shard_sha256[:32]}",
+            shard_path=shard_path,
+            prev_block_hash=ledger.chain[-1].block_hash,
+            expected_sha256=shard_sha256,
+        )
+        storage_receipt = StorageProofReceipt(
+            node_id=seeder_node_id,
+            shard_cid=shard_cid,
+            challenged_chunk_index=cas_pos_receipt.challenged_chunk_index,
+            merkle_proof_hash=cas_pos_receipt.merkle_proof_hash,
+            bytes_stored=parquet_pos_receipt.bytes_stored if cas_pos_receipt.verified else 0,
+            verified=bool(cas_pos_receipt.verified and parquet_pos_receipt.verified),
         )
 
         # Mine $HIVE PoUW Block (rewards honest GPU miners & slashes Byzantine node)
@@ -628,16 +650,7 @@ def run_local_boinc_astrophysics_campaign(
             outer_step=outer_res.outer_step,
             expert_cid=expert_cid,
             work_receipts=work_receipts,
-            storage_receipts=[
-                StorageProofReceipt(
-                    node_id=honest_worker_specs[0][0] + f"-d{domain_idx}",
-                    shard_cid=shard_cid,
-                    challenged_chunk_index=0,
-                    merkle_proof_hash=shard_sha256,
-                    bytes_stored=shard_path.stat().st_size,
-                    verified=True,
-                )
-            ],
+            storage_receipts=[storage_receipt],
             validator_node_ids=["boinc-spotcheck-validator-01"],
         )
 
@@ -649,6 +662,7 @@ def run_local_boinc_astrophysics_campaign(
             "parquet_shard_bytes": shard_path.stat().st_size,
             "shard_sha256": shard_sha256,
             "shard_hmac_signature": shard_sig,
+            "storage_proof_verified": bool(storage_receipt.verified),
             "sample_astrophysics_observation": sample_texts[0],
             "phase_s2_shard_verdict": shard_verdict,
             "pre_boinc_shard_loss": pre_boinc_loss,
@@ -713,7 +727,9 @@ def run_local_boinc_astrophysics_campaign(
     elapsed_sec = round(time.perf_counter() - t_start, 3)
 
     all_branches_improved = all(
-        b["loss_improved"] and len(b["honest_workers_accepted"]) == 3
+        b["loss_improved"]
+        and len(b["honest_workers_accepted"]) == 3
+        and bool(b.get("storage_proof_verified"))
         for b in branch_campaign_reports.values()
     )
     ledger_valid = ledger.verify_chain_integrity()

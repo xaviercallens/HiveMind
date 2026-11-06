@@ -488,7 +488,7 @@ def user_counts(client: httpx.Client, base: str, admin_key: str, window_s: float
 
 def _chat(client: httpx.Client, base: str, key: str, model: str, messages: list[dict[str, str]], stream: bool) -> tuple[int, str, float]:
     body = {"model": model, "messages": messages, "temperature": 0, "max_tokens": 96, "stream": stream}
-    headers = {"Authorization": f"Bearer {key}", "User-Agent": PROBE_USER_AGENT}
+    headers = {"Authorization": f"Bearer {key}", "User-Agent": PROBE_USER_AGENT, "X-HiveMind-Probe": "1"}
     t0 = time.monotonic()
     if not stream:
         r = client.post(base + "/v1/chat/completions", json=body, headers=headers)
@@ -604,6 +604,153 @@ def t4_summary(since: datetime) -> dict[str, Any]:
     if proc.returncode != 0 or not lines:
         return {"error": (proc.stderr.strip() or "no output")[-300:]}
     return json.loads(lines[-1])
+
+
+def build_public_status_and_alerts(records: list[dict[str, Any]], *, burst_5xx_threshold: int = 1) -> dict[str, Any]:
+    """Build the public status page payload and alert list from monitor JSONL records (#195 / HM-S16-08).
+
+    Emits an alert within one monitor period on:
+    - any failed or invalid probe (``probe_failed``),
+    - any 402 returned to a default-price account (``402_default_price``), or
+    - a 5xx burst (``5xx_burst`` when 5xx count >= ``burst_5xx_threshold``).
+    """
+    probe_total = 0
+    probe_passed = 0
+    periods_up = 0
+    p50_vals: list[float] = []
+    p95_vals: list[float] = []
+    total_402 = 0
+    total_5xx = 0
+    alerts: list[dict[str, Any]] = []
+
+    for rec in records:
+        ts = str(rec.get("utc", ""))
+        probes = rec.get("probes") or {}
+        results = probes.get("results") or []
+        valid = probes.get("valid", True)
+        period_passed = sum(1 for r in results if r.get("ok"))
+        period_total = len(results)
+        probe_total += period_total
+        probe_passed += period_passed
+
+        if not valid or (period_total > 0 and period_passed < period_total):
+            alerts.append(
+                {
+                    "utc": ts,
+                    "type": "probe_failed",
+                    "passed": period_passed,
+                    "total": period_total,
+                    "valid": valid,
+                }
+            )
+        elif period_total > 0:
+            periods_up += 1
+
+        traffic_svcs = (rec.get("traffic") or {}).get("services") or {}
+        period_402 = 0
+        period_5xx = 0
+        for svc_data in traffic_svcs.values():
+            if not isinstance(svc_data, dict):
+                continue
+            c402 = int(svc_data.get("402", 0) or 0)
+            c5xx = int(svc_data.get("5xx", 0) or 0)
+            period_402 += c402
+            period_5xx += c5xx
+            lat = svc_data.get("chat_latency_s") or {}
+            if isinstance(lat.get("p50"), (int, float)):
+                p50_vals.append(float(lat["p50"]))
+            if isinstance(lat.get("p95"), (int, float)):
+                p95_vals.append(float(lat["p95"]))
+
+        total_402 += period_402
+        total_5xx += period_5xx
+        if period_402 > 0 or rec.get("default_price_402", 0) > 0:
+            alerts.append({"utc": ts, "type": "402_default_price", "count": max(period_402, int(rec.get("default_price_402", 0)))})
+        if period_5xx >= max(1, int(burst_5xx_threshold)):
+            alerts.append({"utc": ts, "type": "5xx_burst", "count": period_5xx})
+
+    n_periods = len(records)
+    return {
+        "periods_evaluated": n_periods,
+        "uptime_pct": round((100.0 * periods_up) / n_periods, 2) if n_periods > 0 else 100.0,
+        "probe_pass_rate": round(probe_passed / probe_total, 4) if probe_total > 0 else 1.0,
+        "chat_p50_s": _percentile(p50_vals, 0.5),
+        "chat_p95_s": _percentile(p95_vals, 0.95),
+        "total_402": total_402,
+        "total_5xx": total_5xx,
+        "alerts": alerts,
+    }
+
+
+def verify_canary_post_deploy_contract(
+    canary_probes: dict[str, Any],
+    html_pages: dict[str, str],
+    *,
+    default_price_first_request_status: int = 200,
+    gold_bee_reply: str = "Class: M",
+) -> dict[str, Any]:
+    """Gate every Cloud Run traffic switch on the post-deploy contract (#189 / HM-S16-02)."""
+    from hivemind.router.points_wording import currency_leftovers
+
+    controls = checker_controls(gold_bee_reply)
+    controls_ok = all(controls.values()) and bool(canary_probes.get("valid", False))
+    results = canary_probes.get("results") or []
+    no_key_rows = [r for r in results if r.get("model") == "control:no-key"]
+    unknown_rows = [r for r in results if r.get("model") == "control:unknown-model"]
+    bee_rows = [r for r in results if r.get("model") == "hivemind/bee-stars"]
+    tier_rows = [r for r in results if not str(r.get("model", "")).startswith("control:")]
+
+    no_key_401 = bool(no_key_rows) and all(r.get("status") == 401 and r.get("ok") for r in no_key_rows)
+    unknown_404 = bool(unknown_rows) and all(r.get("status") == 404 and r.get("ok") for r in unknown_rows)
+    bee_ok = bool(bee_rows) and all(r.get("ok") and gold_bee_reply in str(r.get("reply_head", gold_bee_reply)) for r in bee_rows)
+    tiers_ok = bool(tier_rows) and all(r.get("ok") for r in tier_rows) and int(default_price_first_request_status) == 200
+
+    currency_hits: dict[str, list[str]] = {}
+    for page_name, html_text in html_pages.items():
+        leftovers = currency_leftovers(html_text)
+        if leftovers:
+            currency_hits[page_name] = list(leftovers)
+    zero_currency = len(currency_hits) == 0
+
+    all_passed = controls_ok and no_key_401 and unknown_404 and bee_ok and tiers_ok and zero_currency
+    return {
+        "valid": controls_ok,
+        "all_passed": all_passed,
+        "default_price_served": int(default_price_first_request_status) == 200,
+        "no_key_401": no_key_401,
+        "unknown_model_404": unknown_404,
+        "bee_class_m_ok": bee_ok,
+        "zero_currency_mentions": zero_currency,
+        "currency_hits": currency_hits,
+    }
+
+
+def verify_clean_tagged_main_deploy(
+    git_status_porcelain: str,
+    head_sha: str,
+    tag_sha: str,
+    image_commit_sha: str,
+) -> dict[str, Any]:
+    """Refuse any Cloud Run deployment from a dirty working tree or an untagged/non-main commit (#188 / HM-S16-01)."""
+    clean_tree = len(git_status_porcelain.strip()) == 0
+    head_clean = head_sha.strip()
+    tag_matches_head = bool(head_clean) and tag_sha.strip() == head_clean
+    image_maps_to_main = bool(head_clean) and image_commit_sha.strip() == head_clean
+    allowed = clean_tree and tag_matches_head and image_maps_to_main
+    reasons: list[str] = []
+    if not clean_tree:
+        reasons.append("dirty_working_tree")
+    if not tag_matches_head:
+        reasons.append("untagged_or_mismatched_tag")
+    if not image_maps_to_main:
+        reasons.append("image_commit_mismatch")
+    return {
+        "allowed": allowed,
+        "clean_working_tree": clean_tree,
+        "tag_matches_main": tag_matches_head,
+        "image_maps_to_main": image_maps_to_main,
+        "reasons": reasons,
+    }
 
 
 def main() -> int:

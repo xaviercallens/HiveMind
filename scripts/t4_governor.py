@@ -146,6 +146,30 @@ def in_night(now: float, tz: str, start_h: int, end_h: int) -> bool:
     return (start_h <= h < end_h) if start_h < end_h else (h >= start_h or h < end_h)
 
 
+def should_resume_training(
+    busy: bool,
+    state: str,
+    quiet_s: float,
+    *,
+    in_night_window: bool,
+    idle_start_s: float = 1800.0,
+    day_idle_s: float = 300.0,
+    schedule: str = "DAY_AND_NIGHT",
+) -> bool:
+    """Evaluate whether the serving-first governor may resume BOINC GPU training (#509).
+
+    - If ``busy`` is True or ``state`` is not in ``("init", "yielded")``, never resume.
+    - Under ``schedule="NIGHT_ONLY"``, daytime training is disabled outside ``in_night_window``.
+    - Otherwise, require ``quiet_s >= idle_start_s`` in the night window and ``quiet_s >= day_idle_s`` in daytime.
+    """
+    if busy or state not in ("init", "yielded"):
+        return False
+    if schedule == "NIGHT_ONLY" and not in_night_window:
+        return False
+    threshold = float(idle_start_s) if in_night_window else float(day_idle_s)
+    return float(quiet_s) >= max(0.0, threshold)
+
+
 class Boinc:
     def __init__(self, boinccmd: str, lib: str, port: int, datadir: Path, dry: bool) -> None:
         self.cmd, self.lib, self.port, self.dir, self.dry = boinccmd, lib, port, datadir, dry

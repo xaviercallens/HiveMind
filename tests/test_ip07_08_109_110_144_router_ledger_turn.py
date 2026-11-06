@@ -250,3 +250,161 @@ def test_ip110_turn_relay_rejects_private_peers_enforces_allocation_quota_and_su
             c1.close()
             c2.close()
         assert server._thread is not None and server._thread.is_alive()
+
+
+def test_l2_state_channel_ledger_and_welcome_email_branch_coverage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exercise validation, refund, persistence failure, La Ruche GCS loader, and welcome email branches."""
+    import io
+    import os
+    import smtplib
+    import urllib.request
+
+    import hivemind.swarm.la_ruche_vault as lrv
+    from hivemind.router.welcome_email import (
+        _mask_email,
+        build_install_producer_shell_script,
+        send_or_spool_welcome_email,
+    )
+
+    # 1. HiveLayer2StateChannel validation and refund_consumer_escrow branches
+    with pytest.raises(ValueError, match="escrow_hive"):
+        HiveLayer2StateChannel("c", ["p"], escrow_hive=0.0)
+    with pytest.raises(ValueError, match="rate_per_token"):
+        HiveLayer2StateChannel("c", ["p"], rate_per_token=0.0)
+    with pytest.raises(ValueError, match="secret_key"):
+        HiveLayer2StateChannel("c", ["p"], secret_key=b"short")
+
+    ledger = HiveSwarmLedger(ledger_path=tmp_path / "cov_ledger.json")
+    assert ledger.balances.setdefault("c-low", 0.5) == 0.5
+    with pytest.raises(ValueError, match="insufficient"):
+        HiveLayer2StateChannel("c-low", ["p"], escrow_hive=5.0, ledger=ledger)
+
+    ledger.credit_reward("c-ok", 10.0, "init")
+    l2 = HiveLayer2StateChannel(
+        "c-ok",
+        ["p"],
+        escrow_hive=2.0,
+        rate_per_token=0.1,
+        secret_key=b"0123456789abcdef",
+        ledger=ledger,
+    )
+    with pytest.raises(ValueError, match="tokens_generated"):
+        l2.sign_micro_voucher(0)
+    v = l2.sign_micro_voucher(4)
+    assert l2.verify_voucher(StateChannelVoucher("other", "c-ok", ["p"], 1, 4, 0.4, v.signature_hmac)) is False
+    assert l2.verify_voucher(StateChannelVoucher(l2.channel_id, "c-ok", ["p"], 0, 4, 0.4, v.signature_hmac)) is False
+    assert l2.verify_voucher(StateChannelVoucher(l2.channel_id, "c-ok", ["p"], 1, 4, 0.0, v.signature_hmac)) is False
+    assert l2.verify_voucher(StateChannelVoucher(l2.channel_id, "c-ok", ["p"], 1, 4, 9.9, v.signature_hmac)) is False
+    assert l2.verify_voucher(StateChannelVoucher(l2.channel_id, "c-ok", ["p"], 1, 4, 0.9, v.signature_hmac)) is False
+    refunded = l2.refund_consumer_escrow()
+    assert refunded == 0.4
+    assert ledger.get_balance("c-ok") == 10.0
+
+    # 2. HiveSwarmLedger error branches
+    with pytest.raises(ValueError, match="node_id"):
+        ledger.slash("")
+    bad_empty = tmp_path / "empty_chain.json"
+    bad_empty.write_text('{"chain": []}', encoding="utf-8")
+    with pytest.raises(ValueError, match="Corrupt ledger"):
+        HiveSwarmLedger(ledger_path=bad_empty)
+
+    orig_replace = os.replace
+    monkeypatch.setattr(os, "replace", lambda *_a, **_k: (_ for _ in ()).throw(OSError("disk full")))
+    with pytest.raises(OSError, match="disk full"):
+        ledger.credit_reward("c-ok", 1.0, "fail")
+    monkeypatch.setattr(os, "replace", orig_replace)
+
+    # 3. la_ruche_vault load_community_moe_from_gcs_or_https & error branches
+    with pytest.raises(FileNotFoundError):
+        lrv.load_community_moe_from_ruche(tmp_path / "missing_vault")
+    fake_bytes = b"fake-safetensors-payload"
+    import hashlib
+
+    fake_sha = hashlib.sha256(fake_bytes).hexdigest()
+    fake_manifest = {
+        "combined_safetensors_path": "community_moe_release/fake.safetensors",
+        "combined_safetensors_sha256": fake_sha,
+    }
+
+    class _FakeResp(io.BytesIO):
+        def __enter__(self) -> _FakeResp:
+            return self
+
+        def __exit__(self, *_a: object) -> None:
+            self.close()
+
+    def _fake_urlopen(req: urllib.request.Request, timeout: float = 30.0) -> _FakeResp:
+        if req.full_url.endswith("ruche_manifest.json"):
+            return _FakeResp(json.dumps(fake_manifest).encode("utf-8"))
+        return _FakeResp(fake_bytes)
+
+    monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
+    monkeypatch.setattr(lrv, "load_community_moe_from_ruche", lambda cache_path, seed=20261024: ("ok", fake_manifest))
+    gcs_cache = tmp_path / "gcs_cache"
+    res1 = lrv.load_community_moe_from_gcs_or_https(gcs_cache, "https://example.org/ruche")
+    res2 = lrv.load_community_moe_from_gcs_or_https(gcs_cache, "https://example.org/ruche")
+    assert res1[0] == "ok" and res2[0] == "ok"
+
+    fake_manifest["combined_safetensors_sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="SHA-256 mismatch"):
+        lrv.load_community_moe_from_gcs_or_https(tmp_path / "gcs_bad", "https://example.org/ruche")
+
+    # 4. welcome_email branches
+    assert "hivemind_producer_agent.py" in build_install_producer_shell_script("https://example.org/")
+    assert _mask_email("no-at-sign") == "***"
+    assert _mask_email("ab@example.org") == "a***@example.org"
+    assert _mask_email("xavier@example.org") == "xa***@example.org"
+
+    class _FakeSMTP:
+        def __init__(self, *_a: object, **_k: object) -> None:
+            pass
+
+        def __enter__(self) -> _FakeSMTP:
+            return self
+
+        def __exit__(self, *_a: object) -> None:
+            pass
+
+        def ehlo(self) -> None:
+            pass
+
+        def starttls(self) -> None:
+            pass
+
+        def login(self, *_a: object) -> None:
+            pass
+
+        def send_message(self, _msg: object) -> None:
+            pass
+
+    monkeypatch.setenv("HIVEMIND_SMTP_HOST", "smtp.example.org")
+    monkeypatch.setenv("HIVEMIND_SMTP_PORT", "587")
+    monkeypatch.setenv("HIVEMIND_SMTP_USER", "u")
+    monkeypatch.setenv("HIVEMIND_SMTP_PASSWORD", "p")
+    monkeypatch.setattr(smtplib, "SMTP", _FakeSMTP)
+    sent = send_or_spool_welcome_email(
+        account_id="acc-pioneer",
+        handle="pioneer",
+        role="prosumer",
+        balance_hmt=100.0,
+        recipient_email="xavier@example.org",
+        is_pioneer_first_user=True,
+    )
+    assert sent["delivery_status"] == "SENT_VIA_SMTP"
+
+    class _FailSMTP(_FakeSMTP):
+        def send_message(self, _msg: object) -> None:
+            raise RuntimeError("smtp down")
+
+    monkeypatch.setattr(smtplib, "SMTP", _FailSMTP)
+    fallback = send_or_spool_welcome_email(
+        account_id="acc-2",
+        handle="user2",
+        role="consumer",
+        balance_hmt=50.0,
+        recipient_email="ab@example.org",
+    )
+    assert "SPOOL_FALLBACK" in fallback["delivery_status"]
+

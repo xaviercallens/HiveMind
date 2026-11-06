@@ -16,6 +16,8 @@ import hashlib
 import hmac
 import json
 import math
+import os
+import secrets
 import time
 from dataclasses import asdict, dataclass
 from typing import Sequence
@@ -96,12 +98,17 @@ class ZKOPoIV5Int8TransitionVerifier:
     def __init__(
         self,
         *,
-        coordinator_secret: str = "hivemind-s36-zk-opoi-v5-secret",
+        coordinator_secret: str | None = None,
         max_l2_norm: float = 15.0,
         max_linf_norm: float = 2.5,
         scale_q: int = 127,
     ) -> None:
-        self._secret_bytes = coordinator_secret.encode("utf-8")
+        effective_secret = (
+            coordinator_secret
+            if coordinator_secret is not None
+            else (os.environ.get("HIVEMIND_ZK_OPOI_SECRET") or secrets.token_hex(32))
+        )
+        self._secret_bytes = effective_secret.encode("utf-8")
         self.max_l2_norm = float(max_l2_norm)
         self.max_linf_norm = float(max_linf_norm)
         self.scale_q = int(scale_q)
@@ -170,10 +177,14 @@ class ZKOPoIV5Int8TransitionVerifier:
 
         sketch_len = min(32, len(q_delta))
         sketch = q_delta[:sketch_len]
+        sketch_dot_mod_p = _mod_mersenne61(sum(r * int(d) for r, d in zip(challenges[:sketch_len], sketch)))
+        norm_l2_rounded = round(l2_norm, 8)
+        norm_linf_rounded = round(linf_norm, 8)
 
         msg = (
             f"{worker_id}|{workunit_id}|{shard_sha256}|{theta0_sha256}|{theta_final_sha256}|"
             f"{inner_steps_h}|{quant_bits}|{self.scale_q}|{lhs}|{rhs}|"
+            f"{norm_l2_rounded:.8f}|{norm_linf_rounded:.8f}|{sketch_dot_mod_p}|"
             f"{','.join(str(x) for x in sketch)}"
         ).encode("utf-8")
         commitment_hmac = hmac.new(self._secret_bytes, msg, hashlib.sha256).hexdigest()
@@ -187,8 +198,8 @@ class ZKOPoIV5Int8TransitionVerifier:
             inner_steps_h=int(inner_steps_h),
             quant_bits=int(quant_bits),
             scale_q=self.scale_q,
-            delta_l2_norm=round(l2_norm, 8),
-            delta_linf_norm=round(linf_norm, 8),
+            delta_l2_norm=norm_l2_rounded,
+            delta_linf_norm=norm_linf_rounded,
             fiat_shamir_challenge_hex=fs_seed.hex(),
             bilinear_lhs_mod_p=lhs,
             bilinear_rhs_mod_p=rhs,
@@ -205,6 +216,19 @@ class ZKOPoIV5Int8TransitionVerifier:
     ) -> ZKOPoIV5VerificationReport:
         """Verify a ZK-OPoI v5 proof receipt on CPU in O(1) (<5 ms)."""
         t0 = time.perf_counter()
+        if not math.isfinite(receipt.delta_l2_norm) or not math.isfinite(receipt.delta_linf_norm):
+            elapsed_ms = (time.perf_counter() - t0) * 1000.0
+            return ZKOPoIV5VerificationReport(
+                workunit_id=receipt.workunit_id,
+                verified=False,
+                verify_cpu_ms=round(elapsed_ms, 4),
+                proof_bytes=0,
+                within_5ms_sla=elapsed_ms < MAX_VERIFY_CPU_MS,
+                within_32kb_bound=False,
+                rejection_reason="delta_l2_norm_out_of_bounds"
+                if not math.isfinite(receipt.delta_l2_norm)
+                else "delta_linf_norm_out_of_bounds",
+            )
         proof_bytes = receipt.serialized_bytes
 
         def _reject(reason: str) -> ZKOPoIV5VerificationReport:
@@ -244,11 +268,20 @@ class ZKOPoIV5Int8TransitionVerifier:
         if _mod_mersenne61(receipt.bilinear_lhs_mod_p) != _mod_mersenne61(receipt.bilinear_rhs_mod_p):
             return _reject("bilinear_freivalds_equation_failed")
 
+        sketch_challenges = _derive_field_challenges(
+            bytes.fromhex(expected_fs_seed),
+            len(receipt.quantized_sketch_int8),
+        )
+        sketch_dot_mod_p = _mod_mersenne61(
+            sum(r * int(d) for r, d in zip(sketch_challenges, receipt.quantized_sketch_int8))
+        )
+
         msg = (
             f"{receipt.worker_id}|{receipt.workunit_id}|{receipt.shard_sha256}|"
             f"{receipt.theta0_sha256}|{receipt.theta_final_sha256}|"
             f"{receipt.inner_steps_h}|{receipt.quant_bits}|{receipt.scale_q}|"
             f"{receipt.bilinear_lhs_mod_p}|{receipt.bilinear_rhs_mod_p}|"
+            f"{float(receipt.delta_l2_norm):.8f}|{float(receipt.delta_linf_norm):.8f}|{sketch_dot_mod_p}|"
             f"{','.join(str(x) for x in receipt.quantized_sketch_int8)}"
         ).encode("utf-8")
         expected_mac = hmac.new(self._secret_bytes, msg, hashlib.sha256).hexdigest()

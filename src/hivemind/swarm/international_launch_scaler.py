@@ -1148,10 +1148,15 @@ def query_local_tesla_t4_vram_guard(min_free_mib: float = TESLA_T4_MIN_FREE_VRAM
         used_mib = float(parts[2])
         free_mib = float(parts[3])
     except Exception:
-        gpu_name = "NVIDIA Tesla T4 (Simulated/CPU Fallback)"
-        total_mib = 15360.0
-        used_mib = 4839.0
-        free_mib = 10521.0
+        return {
+            "gpu_name": None,
+            "total_vram_mib": None,
+            "used_vram_mib": None,
+            "free_vram_mib": None,
+            "min_required_free_vram_mib": float(min_free_mib),
+            "vram_headroom_guard_passed": False,
+            "probe_status": "NVIDIA_SMI_UNAVAILABLE",
+        }
 
     guard_ok = free_mib >= float(min_free_mib)
     return {
@@ -1161,6 +1166,7 @@ def query_local_tesla_t4_vram_guard(min_free_mib: float = TESLA_T4_MIN_FREE_VRAM
         "free_vram_mib": free_mib,
         "min_required_free_vram_mib": float(min_free_mib),
         "vram_headroom_guard_passed": guard_ok,
+        "probe_status": "MEASURED_NVIDIA_SMI",
     }
 
 
@@ -1189,7 +1195,7 @@ def monitor_nocturnal_image_moe_evolution(
     artifacts_dir = root / "artifacts"
 
     vram_before = query_local_tesla_t4_vram_guard()
-    if not vram_before["vram_headroom_guard_passed"]:
+    if vram_before["free_vram_mib"] is not None and not vram_before["vram_headroom_guard_passed"]:
         raise RuntimeError(
             f"Tesla T4 VRAM headroom guard breached before evolution: "
             f"{vram_before['free_vram_mib']} MiB < {TESLA_T4_MIN_FREE_VRAM_MIB} MiB"

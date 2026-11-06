@@ -241,8 +241,34 @@ def build_xdev_portfolio_catalog(xdev_root: Path | None = None) -> tuple[Portfol
     return tuple(nodes)
 
 
+def _eval_conservation_candidate_public(source_code: str) -> bool:
+    ns: dict[str, object] = {}
+    exec(compile(source_code, "<gwaya_candidate>", "exec"), ns)
+    fn = ns.get("compute_conservation_residual")
+    if not callable(fn):
+        return False
+    return abs(float(fn(10.0, 10.25)) - 0.25) < 1e-9 and abs(float(fn(5.0, 5.0))) < 1e-9
+
+
+def _eval_conservation_candidate_hidden(source_code: str) -> bool:
+    ns: dict[str, object] = {}
+    exec(compile(source_code, "<gwaya_candidate>", "exec"), ns)
+    fn = ns.get("compute_conservation_residual")
+    if not callable(fn):
+        return False
+    return (
+        abs(float(fn(-3.5, 1.5)) - 5.0) < 1e-9
+        and abs(float(fn(100.0, 99.125)) - 0.875) < 1e-9
+    )
+
+
 def run_unified_4layer_ecosystem_pipeline(
     xdev_root: Path | None = None,
+    *,
+    candidates: Sequence[str] | None = None,
+    lean_source: str | None = None,
+    sent_arguments: dict[str, object] | None = None,
+    received_arguments: dict[str, object] | None = None,
 ) -> UnifiedEcosystemExecutionReceipt:
     """Execute the end-to-end 4-Layer integration pipeline across all core & fork-bridge modules."""
     if xdev_root is None:
@@ -274,25 +300,35 @@ def run_unified_4layer_ecosystem_pipeline(
     pcie_plan = compute_xlayerstorm_turboquant_schedule()
 
     # Layer 3: GWAYA Fail-Closed Anti-Stub Gate + Arm A3 Sample-and-Repair Loop
-    candidates: Sequence[str] = (
-        "def compute_conservation_residual(m0: float, m1: float) -> float:\n    pass\n",
-        "def compute_conservation_residual(m0: float, m1: float) -> float:\n    return abs(m1 - m0)\n",
+    effective_candidates: Sequence[str] = (
+        candidates
+        if candidates is not None
+        else (
+            "def compute_conservation_residual(m0: float, m1: float) -> float:\n    pass\n",
+            "def compute_conservation_residual(m0: float, m1: float) -> float:\n    return abs(m1 - m0)\n",
+        )
     )
     a3_report = run_gwaya_a3_sample_and_repair(
-        candidates=candidates,
-        public_test_fn=lambda code: "abs(m1 - m0)" in code,
-        hidden_test_fn=lambda code: "pass" not in code and "abs(" in code,
+        candidates=effective_candidates,
+        public_test_fn=_eval_conservation_candidate_public,
+        hidden_test_fn=_eval_conservation_candidate_hidden,
     )
 
     # Layer 4: Elenchus Comment-Stripped Lean 4 Audit + rusty-SUNDIALS Tier-X R-64 Provenance
     sample_lean = (
-        "/- **Kernel Certified:** 0 sorry, 0 admit. -/\n"
-        "-- No sorry allowed in SocrateAI-Lean-Lib\n"
-        "theorem k3_euler_characteristic : 24 = 24 := by rfl\n"
+        lean_source
+        if lean_source is not None
+        else (
+            "/- **Kernel Certified:** 0 sorry, 0 admit. -/\n"
+            "-- No sorry allowed in SocrateAI-Lean-Lib\n"
+            "theorem k3_euler_characteristic : 24 = 24 := by rfl\n"
+        )
     )
     lean_audit = audit_lean4_source_elenchus(sample_lean)
-    args = {"problem": "robertson", "rtol": 1e-9, "atol": 1e-12, "max_order": 5}
-    sundials_receipt = verify_robertson_sundials_tier_x(sent_arguments=args, received_arguments=args)
+    default_args: dict[str, object] = {"problem": "robertson", "rtol": 1e-9, "atol": 1e-12, "max_order": 5}
+    eff_sent = sent_arguments if sent_arguments is not None else default_args
+    eff_recv = received_arguments if received_arguments is not None else dict(eff_sent)
+    sundials_receipt = verify_robertson_sundials_tier_x(sent_arguments=eff_sent, received_arguments=eff_recv)
 
     all_passed = (
         a2_report.beats_z2_in_mse

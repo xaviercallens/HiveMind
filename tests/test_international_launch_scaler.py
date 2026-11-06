@@ -213,11 +213,32 @@ def test_five_wave_international_launch_roadmap_and_compliance_matrix() -> None:
     assert roadmap["scalability_milestones"]["wave4_100k_leaf_plan"]["total_leaf_nodes"] == 100_000
 
 
-def test_nocturnal_image_moe_evolution_monitor_and_dashboard_routes(tmp_path: Path) -> None:
+def test_nocturnal_image_moe_evolution_monitor_and_dashboard_routes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Verify Nocturnal Image-MoE Pareto evolution monitor, Tesla T4 VRAM guard, and FastAPI endpoints."""
+    import subprocess
+
+    # IP-147 negative control: when nvidia-smi raises, guard must fail closed (not substitute 10,521 MiB)
+    def _raise_no_nvidia_smi(*_args: object, **_kwargs: object) -> str:
+        raise FileNotFoundError("nvidia-smi not found")
+
+    monkeypatch.setattr(subprocess, "check_output", _raise_no_nvidia_smi)
+    vram_unavail = query_local_tesla_t4_vram_guard()
+    assert vram_unavail["vram_headroom_guard_passed"] is False
+    assert vram_unavail["free_vram_mib"] is None
+    assert vram_unavail["probe_status"] == "NVIDIA_SMI_UNAVAILABLE"
+
+    # Positive control with measured nvidia-smi output
+    monkeypatch.setattr(
+        subprocess,
+        "check_output",
+        lambda *_a, **_kw: "NVIDIA Tesla T4, 15360, 4839, 10521\n",
+    )
     vram = query_local_tesla_t4_vram_guard()
     assert vram["min_required_free_vram_mib"] == TESLA_T4_MIN_FREE_VRAM_MIB
     assert vram["vram_headroom_guard_passed"] is True
+    assert vram["probe_status"] == "MEASURED_NVIDIA_SMI"
 
     mon = monitor_nocturnal_image_moe_evolution(
         generations=2,

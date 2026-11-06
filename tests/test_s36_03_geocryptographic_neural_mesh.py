@@ -17,6 +17,12 @@ def test_geomesh_router_selects_nearest_verified_node_and_rejects_tampered() -> 
     assert eval_res["meets_40pct_reduction_gate"] is True
     assert float(eval_res["p95_reduction_pct"]) >= 40.0
 
+    # IP-164 negative control: placing the central gateway at the client's coordinate must fail the 40% reduction gate
+    co_located_res = router.evaluate_multi_region_p95_reduction(
+        central_gateway_coord=VivaldiCoord3D(12.5, 10.2, 2.5, 1.2),
+    )
+    assert co_located_res["meets_40pct_reduction_gate"] is False
+
 
 def test_geomesh_router_fails_closed_when_all_adapters_are_tampered() -> None:
     router = GeocryptographicNeuralMeshRouter()

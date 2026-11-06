@@ -33,3 +33,26 @@ def test_unified_4layer_ecosystem_pipeline_passes_all_invariants() -> None:
     assert receipt.layer4_lean_kernel_clean is True
     assert receipt.layer4_sundials_tier_x_accepted is True
     assert len(receipt.merkle_root_sha256) == 64
+
+    # IP-152 negative controls: stub candidate, wrong-math candidate with substring comment, and sorry Lean source fail
+    stub_receipt = run_unified_4layer_ecosystem_pipeline(
+        candidates=("def compute_conservation_residual(m0: float, m1: float) -> float:\n    pass\n",),
+    )
+    assert stub_receipt.layer3_gwaya_a3_verified is False
+    assert stub_receipt.all_layers_passed is False
+
+    wrong_math_receipt = run_unified_4layer_ecosystem_pipeline(
+        candidates=(
+            "def compute_conservation_residual(m0: float, m1: float) -> float:\n"
+            "    # abs(m1 - m0)\n"
+            "    return m0 + m1\n",
+        ),
+    )
+    assert wrong_math_receipt.layer3_gwaya_a3_verified is False
+    assert wrong_math_receipt.all_layers_passed is False
+
+    sorry_lean_receipt = run_unified_4layer_ecosystem_pipeline(
+        lean_source="theorem bad_claim : 1 = 2 := by sorry\n",
+    )
+    assert sorry_lean_receipt.layer4_lean_kernel_clean is False
+    assert sorry_lean_receipt.all_layers_passed is False

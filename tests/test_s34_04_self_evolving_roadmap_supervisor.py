@@ -8,8 +8,19 @@ from hivemind.swarm.s34_04_self_evolving_roadmap_supervisor import SelfEvolvingR
 
 def test_self_evolving_supervisor_verifies_all_10_roadmap_prs_and_hash_chain() -> None:
     supervisor = SelfEvolvingRoadmapSupervisor()
-    report = supervisor.verify_all_10_roadmap_modules()
 
+    # IP-151 negative control: calling with no request ids must NOT invent req-s32-s34-NN or report passed
+    blocked_report = supervisor.verify_all_10_roadmap_modules()
+    assert blocked_report["all_invariants_passed"] is False
+    assert blocked_report["status"] == "BLOCKED_MISSING_REQUEST_RECEIPTS"
+    assert blocked_report["total_prs_verified"] == 0
+    assert all(e["openrouter_request_id"] == "" for e in blocked_report["entries"])
+
+    # Positive control: supplying 10 verified request receipt IDs passes all 10 PR checks
+    req_ids = [f"or-live-receipt-{i:02d}" for i in range(1, 11)]
+    report = supervisor.verify_all_10_roadmap_modules(openrouter_request_ids=req_ids)
+
+    assert report["status"] == "VERIFIED"
     assert report["total_prs_verified"] == 10
     assert report["all_invariants_passed"] is True
     assert len(report["merkle_head_sha256"]) == 64

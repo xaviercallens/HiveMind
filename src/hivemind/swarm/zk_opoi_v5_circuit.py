@@ -105,7 +105,7 @@ class ZKOPoIV5FixedPointCircuit:
         lr_den: int = 16,
         max_delta_l2_norm: float = 25.0,
         max_spectral_bound: float = 8.0,
-        coordinator_secret: str = "hivemind-s30-zk-opoi-v5-secret",
+        coordinator_secret: str | None = None,
     ) -> None:
         if quantization_bits not in (4, 8):
             raise ValueError("quantization_bits must be 4 or 8")
@@ -115,7 +115,15 @@ class ZKOPoIV5FixedPointCircuit:
         self.lr_den = int(lr_den)
         self.max_delta_l2_norm_fp = int(round(max_delta_l2_norm * fixed_point_scale * fixed_point_scale))
         self.max_spectral_fp = int(round(max_spectral_bound * fixed_point_scale))
-        self._secret_bytes = coordinator_secret.encode("utf-8")
+        import os as _os
+        import secrets as _secrets
+
+        effective_secret = (
+            coordinator_secret
+            if coordinator_secret is not None
+            else (_os.environ.get("HIVEMIND_ZK_OPOI_SECRET") or _secrets.token_hex(32))
+        )
+        self._secret_bytes = effective_secret.encode("utf-8")
 
     def _compute_witness_hmac(
         self,

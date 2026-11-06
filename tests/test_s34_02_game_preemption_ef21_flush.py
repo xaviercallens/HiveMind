@@ -27,3 +27,24 @@ def test_game_preemption_flushes_6gb_vram_under_1500ms_and_conserves_ef21_state(
     # Top 25% of 8 elements = 2 non-zero transmitted entries
     non_zero = [x for x in receipt.ef21_top_k_transmitted if abs(x) > 0.0]
     assert len(non_zero) == 2
+
+    # IP-182 negative control: without a CUDA device, receipt must not claim preempted=True
+    receipt_no_cuda = breaker.trigger_game_preemption(
+        trigger_process="uss_hivemind_steam_3133700.exe",
+        allocated_vram_mib=6144,
+        inflight_gradient=grad,
+        prev_error_buffer=err,
+        kernel_drain_ms=38.0,
+        cuda_device_available=False,
+    )
+    assert receipt_no_cuda.preempted is False
+
+    receipt_with_cuda = breaker.trigger_game_preemption(
+        trigger_process="uss_hivemind_steam_3133700.exe",
+        allocated_vram_mib=6144,
+        inflight_gradient=grad,
+        prev_error_buffer=err,
+        kernel_drain_ms=38.0,
+        cuda_device_available=True,
+    )
+    assert receipt_with_cuda.preempted is True

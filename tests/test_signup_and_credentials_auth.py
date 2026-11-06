@@ -117,3 +117,134 @@ def test_legacy_handle_and_previous_v1_user_migration_login() -> None:
     )
     assert r_v1.status_code == 401
     assert store.get_account(store.account_id_for("vxtzq")) is None
+
+
+def test_returning_user_restore_by_email_and_password_and_bearer_header_on_router() -> None:
+    store = RouterStore(":memory:", SECRET)
+    client = TestClient(create_router_app(store, starter_grant_hmt=100.0))
+
+    # 1. Register alice_coder with custom handle + email + password on /api/v1/auth/register
+    r_reg = client.post(
+        "/api/v1/auth/register",
+        json={
+            "handle": "alice_coder",
+            "email": "alice@hivemind.network",
+            "password": "MyStrongPassword!42",
+            "role": "HiveMinder Contributor",
+        },
+    )
+    assert r_reg.status_code == 200
+    reg = r_reg.json()
+    assert reg["status"] == "REGISTERED"
+    assert reg["handle"] == "alice_coder"
+    assert reg["token"].startswith("hm-")
+
+    # 2. Check /api/v1/auth/session with Bearer token
+    s_ok = client.get("/api/v1/auth/session", headers={"Authorization": f"Bearer {reg['token']}"})
+    assert s_ok.status_code == 200
+    assert s_ok.json()["authenticated"] is True
+    assert s_ok.json()["user"]["handle"] == "alice_coder"
+
+    # 3. Returning user submits email-only registration form (handle derived as 'alice' from email) + right password
+    r_restore = client.post(
+        "/api/v1/auth/register",
+        json={
+            "handle": "alice",
+            "email": "alice@hivemind.network",
+            "password": "MyStrongPassword!42",
+        },
+    )
+    assert r_restore.status_code == 200
+    restored = r_restore.json()
+    assert restored["status"] == "EXISTING_USER_RESTORED"
+    assert restored["created"] is False
+    assert restored["account_id"] == reg["account_id"]
+    assert restored["handle"] == "alice_coder"
+    assert restored["token"] == reg["token"]
+
+    # 4. Wrong password with existing email is rejected with 409
+    r_conflict = client.post(
+        "/api/v1/auth/register",
+        json={
+            "handle": "alice",
+            "email": "alice@hivemind.network",
+            "password": "WrongPassword999",
+        },
+    )
+    assert r_conflict.status_code == 409
+
+    # 5. Handle-only previous user can log in on /api/v1/auth/login using Authorization: Bearer hm-...
+    _lid, legacy_key = store.register("quebec-tester-key", "prosumer")
+    r_bearer_login = client.post(
+        "/api/v1/auth/login",
+        headers={"Authorization": f"Bearer {legacy_key}"},
+        json={"handle_or_email": "quebec-tester-key"},
+    )
+    assert r_bearer_login.status_code == 200
+    assert r_bearer_login.json()["handle"] == "quebec-tester-key"
+
+    # 6. Another user's Bearer header cannot log into alice_coder without alice_coder's password
+    r_cross = client.post(
+        "/api/v1/auth/login",
+        headers={"Authorization": f"Bearer {legacy_key}"},
+        json={"handle_or_email": "alice_coder", "password": "WrongPassword"},
+    )
+    assert r_cross.status_code == 401
+
+    # 7. E2E v3.1 write routes work with the authenticated router token
+    hdr = {"Authorization": f"Bearer {reg['token']}"}
+    pub = client.post("/api/v1/amcp/kafka/publish", headers=hdr, json={"message": "E2E router test"})
+    assert pub.status_code == 200
+    assert pub.json()["published_event"]["actor_handle"] == "@alice_coder"
+
+
+def test_dashboard_returning_user_login_and_register_after_logout_and_rotation(tmp_path) -> None:
+    from hivemind.boinc.hivemind_at_home_dashboard import create_hivemind_at_home_app
+
+    client = TestClient(create_hivemind_at_home_app(vault_dir=tmp_path / "vault"))
+
+    # 1. Register bob_veteran with password
+    r_reg = client.post(
+        "/api/v1/auth/register",
+        json={
+            "handle": "bob_veteran",
+            "email": "bob@hivemind.network",
+            "password": "BobStrongPass#2026",
+        },
+    )
+    assert r_reg.status_code == 200
+    tok = r_reg.json()["token"]
+    assert tok.startswith("hm_live_")
+
+    # 2. Logout removes token from active sessions
+    assert client.post("/api/v1/auth/logout", headers={"Authorization": f"Bearer {tok}"}).status_code == 200
+    assert client.get("/api/v1/auth/session", headers={"Authorization": f"Bearer {tok}"}).json()["authenticated"] is False
+    assert client.post("/api/v1/amcp/kafka/publish", headers={"Authorization": f"Bearer {tok}"}, json={"message": "hi"}).status_code == 401
+
+    # 3. Returning user can sign back in after logout using their hm_live_... token in handle_or_email
+    r_tok_login = client.post("/api/v1/auth/login", json={"handle_or_email": tok})
+    assert r_tok_login.status_code == 200
+    assert r_tok_login.json()["handle"] == "bob_veteran"
+    assert client.get("/api/v1/auth/session", headers={"Authorization": f"Bearer {tok}"}).json()["authenticated"] is True
+
+    # 4. Logout again, then sign back in using handle + hm_live_... token in the password field
+    client.post("/api/v1/auth/logout", headers={"Authorization": f"Bearer {tok}"})
+    r_pwd_tok = client.post("/api/v1/auth/login", json={"handle_or_email": "bob_veteran", "password": tok})
+    assert r_pwd_tok.status_code == 200
+    assert r_pwd_tok.json()["token"] == tok
+
+    # 5. Logout again, then sign back in using email + password
+    client.post("/api/v1/auth/logout", headers={"Authorization": f"Bearer {tok}"})
+    r_email_pwd = client.post("/api/v1/auth/login", json={"handle_or_email": "bob@hivemind.network", "password": "BobStrongPass#2026"})
+    assert r_email_pwd.status_code == 200
+    assert r_email_pwd.json()["handle"] == "bob_veteran"
+
+    # 6. Rotate key -> old token is permanently revoked even for login, new token works
+    r_rot = client.post("/api/v1/auth/rotate-key", headers={"Authorization": f"Bearer {tok}"})
+    assert r_rot.status_code == 200
+    new_tok = r_rot.json()["token"]
+    assert new_tok != tok
+    assert client.post("/api/v1/auth/login", json={"handle_or_email": tok}).status_code == 404
+    assert client.post("/api/v1/auth/login", json={"handle_or_email": "bob_veteran", "password": tok}).status_code == 401
+    assert client.post("/api/v1/auth/login", json={"handle_or_email": new_tok}).status_code == 200
+

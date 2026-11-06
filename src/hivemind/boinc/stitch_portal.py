@@ -4678,9 +4678,10 @@ print('Routed Top-2 Experts for', target_planet, ':', routed)</textarea>
           }})
         }});
         const data = await resp.json();
+        const errMsg = data.detail || (data.error && data.error.message);
         if (!resp.ok) {{
-          _renderMvpAuthStatus(`<div>🔒 <strong>Registration Guard (${{resp.status}}):</strong> ${{esc(data.detail || "Could not register account")}}</div>`, true);
-          showToast(data.detail || "Registration rejected");
+          _renderMvpAuthStatus(`<div>🔒 <strong>Registration Guard (${{resp.status}}):</strong> ${{esc(errMsg || "Could not register account")}}</div>`, true);
+          showToast(errMsg || "Registration rejected");
           return;
         }}
         currentUser = {{
@@ -4845,9 +4846,10 @@ print('Routed Top-2 Experts for', target_planet, ':', routed)</textarea>
           body: JSON.stringify(payload)
         }});
         const data = await resp.json();
+        const errMsg = data.detail || (data.error && data.error.message);
         if (!resp.ok) {{
-          _renderMvpAuthStatus(`<div>🔒 <strong>Zero-Trust Login Guard (${{resp.status}}):</strong> ${{esc(data.detail || "Provide valid Bearer token or password")}}</div>`, true);
-          showToast(data.detail || "Authentication required (Bearer token or password)");
+          _renderMvpAuthStatus(`<div>🔒 <strong>Zero-Trust Login Guard (${{resp.status}}):</strong> ${{esc(errMsg || "Provide valid Bearer token or password")}}</div>`, true);
+          showToast(errMsg || "Authentication required (Bearer token or password)");
           return;
         }}
         currentUser = {{
@@ -4966,9 +4968,10 @@ print('Routed Top-2 Experts for', target_planet, ':', routed)</textarea>
           body: JSON.stringify(payload)
         }});
         const data = await resp.json();
+        const errMsg = data.detail || (data.error && data.error.message);
         if (!resp.ok) {{
-          _renderMvpAuthStatus(`<div>🔒 <strong>Email Registration Guard (${{resp.status}}):</strong> ${{esc(data.detail || "Account already registered")}}</div>`, true);
-          showToast(data.detail || "Account already exists; provide password or token");
+          _renderMvpAuthStatus(`<div>🔒 <strong>Email Registration Guard (${{resp.status}}):</strong> ${{esc(errMsg || "Account already registered")}}</div>`, true);
+          showToast(errMsg || "Account already exists; provide password or token");
           return;
         }}
         currentUser = {{
@@ -5017,8 +5020,9 @@ print('Routed Top-2 Experts for', target_planet, ':', routed)</textarea>
           body: JSON.stringify(payload)
         }});
         const data = await resp.json();
+        const errMsg = data.detail || (data.error && data.error.message);
         if (!resp.ok) {{
-          showToast(data.detail || "Could not create account");
+          showToast(errMsg || "Could not create account");
           return;
         }}
         currentUser = {{

@@ -395,3 +395,23 @@ def test_planet_forecast_route_rejects_out_of_range_mean_tokens_with_422() -> No
 
     figures = _numbers(ok.json())
     assert figures and all(math.isfinite(v) for v in figures)
+
+    # IP-248 negative control: target_total_nodes=2_000_000 (or <=0) must return HTTP 422.
+    for bad_nodes in (0, -5, 10_001, 2_000_000):
+        assert (
+            client.get(f"/api/v1/launch/planet-forecast?target_total_nodes={bad_nodes}").status_code
+            == 422
+        ), bad_nodes
+        assert (
+            client.post("/api/v1/launch/planet-forecast", json={"target_total_nodes": bad_nodes}).status_code
+            == 422
+        ), bad_nodes
+    for bad_visitors in (0, -1, 1_000_001, 5_000_000):
+        assert (
+            client.get(f"/api/v1/launch/planet-forecast?visitor_count={bad_visitors}").status_code
+            == 422
+        ), bad_visitors
+        assert (
+            client.post("/api/v1/launch/planet-forecast", json={"visitor_count": bad_visitors}).status_code
+            == 422
+        ), bad_visitors

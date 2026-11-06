@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import hashlib
+
 import pytest
 
 from hivemind.core.expert_registry import (
@@ -21,24 +23,65 @@ from hivemind.core.expert_registry import (
 )
 
 
+def _content_hashes(tag: str) -> dict[str, str]:
+    return {
+        name: hashlib.sha256(f"adapter-bytes:{tag}:{name}".encode("utf-8")).hexdigest()
+        for name in WAVE3_SCIENTIFIC_EXPERT_SPECS
+    }
+
+
 def test_register_wave3_scientific_experts_qwen3_and_granite() -> None:
     assert len(WAVE3_SCIENTIFIC_EXPERT_SPECS) == 5
 
     reg_qwen = ExpertRegistry()
-    added_qwen = reg_qwen.register_wave3_scientific_experts(base_model_id=WAVE3_PRIMARY_BASE_MODEL_ID)
+    # IP-245 negative control: importing without real adapter_hashes must raise ValueError (no label hashes).
+    with pytest.raises(ValueError, match="adapter_hashes is required"):
+        reg_qwen.register_wave3_scientific_experts(base_model_id=WAVE3_PRIMARY_BASE_MODEL_ID)
+
+    # IP-245 negative control: supplying the old synthetic label hash sha256("wave3:<base>:<name>") is rejected.
+    label_hashes = {
+        name: hashlib.sha256(f"wave3:{WAVE3_PRIMARY_BASE_MODEL_ID}:{name}".encode("utf-8")).hexdigest()
+        for name in WAVE3_SCIENTIFIC_EXPERT_SPECS
+    }
+    with pytest.raises(ValueError, match="synthetic label hash"):
+        reg_qwen.register_wave3_scientific_experts(
+            base_model_id=WAVE3_PRIMARY_BASE_MODEL_ID,
+            adapter_hashes=label_hashes,
+        )
+
+    added_qwen = reg_qwen.register_wave3_scientific_experts(
+        base_model_id=WAVE3_PRIMARY_BASE_MODEL_ID,
+        adapter_hashes=_content_hashes("qwen"),
+    )
     assert len(added_qwen) == 5
     assert set(reg_qwen.ids_in_state(CANDIDATE)) == set(WAVE3_SCIENTIFIC_EXPERT_SPECS)
 
     reg_granite = ExpertRegistry()
+    # IP-245 negative control: promote_to_shadow=True without a gate_report_id is rejected.
+    with pytest.raises(ValueError, match="gate_report_id"):
+        reg_granite.import_wave3_scientific_experts(
+            base_model_id=WAVE3_PAIRED_MOE_BASE_MODEL_ID,
+            adapter_hashes=_content_hashes("granite-no-gate"),
+            promote_to_shadow=True,
+        )
+
+    reg_granite = ExpertRegistry()
     added_granite = reg_granite.import_wave3_scientific_experts(
         base_model_id=WAVE3_PAIRED_MOE_BASE_MODEL_ID,
+        adapter_hashes=_content_hashes("granite"),
         promote_to_shadow=True,
+        gate_report_id="gate-wave3-granite-001",
     )
     assert len(added_granite) == 5
     assert set(reg_granite.ids_in_state(SHADOW)) == set(WAVE3_SCIENTIFIC_EXPERT_SPECS)
+    for eid in WAVE3_SCIENTIFIC_EXPERT_SPECS:
+        assert "gate_report_id=gate-wave3-granite-001" in reg_granite.get(eid).history[-1][2]
 
     with pytest.raises(ValueError, match="not in WAVE3_SUPPORTED_BASE_MODELS"):
-        reg_qwen.register_wave3_scientific_experts(base_model_id="unsupported/model")
+        reg_qwen.register_wave3_scientific_experts(
+            base_model_id="unsupported/model",
+            adapter_hashes=_content_hashes("bad"),
+        )
 
 
 def test_evaluate_wave3_promotion_gates_g1_g2_g3() -> None:
@@ -92,7 +135,9 @@ def test_wave3_hierarchical_router_and_t4_residency() -> None:
     reg = ExpertRegistry()
     reg.register_wave3_scientific_experts(
         base_model_id=WAVE3_PRIMARY_BASE_MODEL_ID,
+        adapter_hashes=_content_hashes("t4-residency"),
         promote_to_shadow=True,
+        gate_report_id="gate-wave3-t4-001",
     )
     for eid in WAVE3_SCIENTIFIC_EXPERT_SPECS:
         reg.transition(eid, LIVE, "promoted to live for routing test")

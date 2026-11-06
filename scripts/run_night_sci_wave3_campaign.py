@@ -42,6 +42,8 @@ MIN_FREE_VRAM_MIB = 4300
 class VRAMHeadroomError(RuntimeError):
     """Raised when free GPU VRAM on the local Tesla T4 falls below the 4,300 MiB floor."""
 
+    error_code: str = "VRAM_HEADROOM_BELOW_FLOOR"
+
 
 def query_free_vram_mib() -> int:
     """Query free GPU memory (MiB) via `nvidia-smi`."""
@@ -137,17 +139,64 @@ def evaluate_5x5_cross_domain_matrix(
     metrics_by_bee: Mapping[str, Mapping[str, Any]],
     *,
     base_model_id: str = WAVE3_PRIMARY_BASE_MODEL_ID,
+    adapter_hashes: Optional[Mapping[str, str]] = None,
 ) -> Dict[str, Any]:
-    """Phase 7: Evaluate 5x5 specialization matrix, check Gates G1-G3, and promote passing bees to `shadow`."""
+    """Phase 7: Evaluate 5x5 specialization matrix, check Gates G1-G3, and promote passing bees to `shadow`.
+
+    Discordant McNemar counts (`discordant_expert_wins`, `discordant_base_wins`) are mandatory per bee;
+    missing counts refuse promotion (IP-245). Only bees with a real content `adapter_sha256` (via
+    `adapter_hashes` or `metrics_by_bee[bee_id]["adapter_sha256"]`) are registered and promoted with a
+    `gate_report_id` recorded in their transition history.
+    """
     reg = ExpertRegistry()
-    reg.register_wave3_scientific_experts(base_model_id=base_model_id)
+    explicit_hashes: Dict[str, str] = dict(adapter_hashes or {})
+    for bee_id in sorted(WAVE3_SCIENTIFIC_EXPERT_SPECS):
+        m = metrics_by_bee.get(bee_id) or {}
+        if bee_id not in explicit_hashes and isinstance(m.get("adapter_sha256"), str):
+            explicit_hashes[bee_id] = str(m["adapter_sha256"])
+
+    if len(explicit_hashes) == len(WAVE3_SCIENTIFIC_EXPERT_SPECS):
+        reg.register_wave3_scientific_experts(
+            base_model_id=base_model_id,
+            adapter_hashes=explicit_hashes,
+        )
 
     gate_reports: Dict[str, Any] = {}
     promoted: List[str] = []
     for bee_id in sorted(WAVE3_SCIENTIFIC_EXPERT_SPECS):
-        m = metrics_by_bee[bee_id]
-        b_disc = int(m.get("discordant_expert_wins", 18))
-        c_disc = int(m.get("discordant_base_wins", 2))
+        m = metrics_by_bee.get(bee_id)
+        if not isinstance(m, Mapping):
+            gate_reports[bee_id] = {
+                "passed": False,
+                "gate_report_id": f"gate-{bee_id}-missing-metrics",
+                "reasons": [f"missing evaluation metrics for {bee_id}"],
+            }
+            continue
+        if "discordant_expert_wins" not in m or "discordant_base_wins" not in m:
+            gate_reports[bee_id] = {
+                "passed": False,
+                "gate_report_id": f"gate-{bee_id}-missing-mcnemar-counts",
+                "reasons": [
+                    "missing McNemar discordant counts (discordant_expert_wins and discordant_base_wins are required)"
+                ],
+            }
+            continue
+        if any(k not in m for k in ("in_domain_acc", "base_acc", "max_off_diagonal_acc")):
+            gate_reports[bee_id] = {
+                "passed": False,
+                "gate_report_id": f"gate-{bee_id}-missing-accuracy-fields",
+                "reasons": ["missing required accuracy fields (in_domain_acc, base_acc, max_off_diagonal_acc)"],
+            }
+            continue
+        b_disc = int(m["discordant_expert_wins"])
+        c_disc = int(m["discordant_base_wins"])
+        if b_disc < 0 or c_disc < 0:
+            gate_reports[bee_id] = {
+                "passed": False,
+                "gate_report_id": f"gate-{bee_id}-negative-mcnemar-counts",
+                "reasons": ["discordant McNemar counts must be >= 0"],
+            }
+            continue
         p_val = float(m.get("mcnemar_p_value", exact_mcnemar_p_value(b_disc, c_disc)))
         report = evaluate_wave3_promotion_gates(
             in_domain_acc=float(m["in_domain_acc"]),
@@ -156,12 +205,18 @@ def evaluate_5x5_cross_domain_matrix(
             mcnemar_p_value=p_val,
             wrong_verified_count=int(m.get("wrong_verified_count", 0)),
         )
+        sha_tag = explicit_hashes.get(bee_id, "unregistered")[:12]
+        gate_report_id = str(m.get("gate_report_id") or f"gate-{bee_id}-{sha_tag}")
+        report["gate_report_id"] = gate_report_id
         gate_reports[bee_id] = report
-        if report["passed"]:
+        if report["passed"] and bee_id in reg:
             reg.transition(
                 bee_id,
                 SHADOW,
-                f"NIGHT-SCI-WAVE3 Gates G1-G3 passed (lift=+{report['in_domain_margin']:.2%}, p={p_val:.4g})",
+                (
+                    f"NIGHT-SCI-WAVE3 gate_report_id={gate_report_id}: Gates G1-G3 passed "
+                    f"(lift=+{report['in_domain_margin']:.2%}, p={p_val:.4g})"
+                ),
             )
             promoted.append(bee_id)
 
@@ -192,31 +247,57 @@ def run_wave3_campaign(
     *,
     base_model_id: str = WAVE3_PRIMARY_BASE_MODEL_ID,
     vram_probe: Optional[Callable[[], int]] = None,
+    metrics_by_bee: Optional[Mapping[str, Mapping[str, Any]]] = None,
+    adapter_hashes: Optional[Mapping[str, str]] = None,
+    eval_report_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    """Run the Wave 3 pre-flight & campaign verification pipeline and write the campaign report."""
+    """Run the Wave 3 pre-flight & campaign verification pipeline and write the campaign report.
+
+    Does not fabricate simulation metrics (IP-220): if neither ``metrics_by_bee`` nor an existing
+    ``eval_report_path`` is supplied, the campaign status is ``BLOCKED`` and zero bees are promoted.
+    """
     prereg = verify_preregistration_integrity(prereg_path)
     free_vram_mib = check_vram_headroom(MIN_FREE_VRAM_MIB, vram_probe=vram_probe)
     s3b_baseline = evaluate_s3b_slot_baseline(prereg)
-
-    # Default pre-flight / teacher-verified simulation metrics for dry-run / pre-flight check
-    simulated_metrics: Dict[str, Dict[str, Any]] = {}
-    for bee_id in sorted(WAVE3_SCIENTIFIC_EXPERT_SPECS):
-        simulated_metrics[bee_id] = {
-            "in_domain_acc": 0.90,
-            "base_acc": 0.64,
-            "max_off_diagonal_acc": 0.60,
-            "discordant_expert_wins": 16,
-            "discordant_base_wins": 2,
-            "wrong_verified_count": 0,
-        }
-
-    eval_summary = evaluate_5x5_cross_domain_matrix(simulated_metrics, base_model_id=base_model_id)
     out_dir = Path(prereg_path).parent
     registry_path = out_dir / "wave3_expert_registry.json"
-    ExpertRegistry.from_dict(eval_summary["registry"]).save(registry_path)
+
+    resolved_metrics = metrics_by_bee
+    resolved_hashes = adapter_hashes
+    if resolved_metrics is None and eval_report_path is not None and Path(eval_report_path).exists():
+        loaded_eval = json.loads(Path(eval_report_path).read_text(encoding="utf-8"))
+        if isinstance(loaded_eval.get("metrics_by_bee"), Mapping):
+            resolved_metrics = loaded_eval["metrics_by_bee"]
+        if resolved_hashes is None and isinstance(loaded_eval.get("adapter_hashes"), Mapping):
+            resolved_hashes = loaded_eval["adapter_hashes"]
+
+    if resolved_metrics is None:
+        empty_reg = ExpertRegistry()
+        empty_reg.save(registry_path)
+        eval_summary: Dict[str, Any] = {
+            "status": "BLOCKED",
+            "blocked_reason": "No measured 5x5 evaluation metrics supplied (pass metrics_by_bee or eval_report_path).",
+            "base_model_id": base_model_id,
+            "promoted_to_shadow": [],
+            "gate_reports": {},
+            "residency_plan": {"hot": {}, "cold": []},
+            "residency_violations": [],
+            "registry": empty_reg.to_dict(),
+        }
+        status = "BLOCKED"
+    else:
+        eval_summary = evaluate_5x5_cross_domain_matrix(
+            resolved_metrics,
+            base_model_id=base_model_id,
+            adapter_hashes=resolved_hashes,
+        )
+        eval_summary["status"] = "EVALUATED"
+        ExpertRegistry.from_dict(eval_summary["registry"]).save(registry_path)
+        status = "COMPLETED" if eval_summary["promoted_to_shadow"] else "GATES_BLOCKED"
 
     report = {
         "campaign_id": prereg["campaign_id"],
+        "status": status,
         "primary_base_model_id": WAVE3_PRIMARY_BASE_MODEL_ID,
         "paired_moe_base_model_id": WAVE3_PAIRED_MOE_BASE_MODEL_ID,
         "active_base_model_id": base_model_id,

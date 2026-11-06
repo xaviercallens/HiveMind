@@ -46,8 +46,28 @@ def _host_directory() -> BoincHostDirectory | None:
     return BoincHostDirectory(Stack(Path(base), Path(src), sys.executable, Path(__file__).resolve().parents[3]).sql)
 
 
+def _parse_wu_args(files: list[str]) -> tuple[str | None, list[str]]:
+    expected_wu: str | None = os.environ.get("HIVEMIND_EXPECTED_WU_ID") or None
+    cleaned: list[str] = []
+    i = 0
+    while i < len(files):
+        tok = files[i]
+        if tok == "--wu-name" and i + 1 < len(files):
+            expected_wu = files[i + 1]
+            i += 2
+            continue
+        if tok.startswith("--wu-name="):
+            expected_wu = tok.partition("=")[2] or expected_wu
+            i += 1
+            continue
+        cleaned.append(tok)
+        i += 1
+    return expected_wu, cleaned
+
+
 def _meta(files: list[str]) -> tuple[dict, list[Path]]:
-    paths = [Path(f) for f in files if not f.isdigit()]
+    _, cleaned = _parse_wu_args(files)
+    paths = [Path(f) for f in cleaned if not f.isdigit()]
     meta = json.loads(paths[0].read_text())
     return meta, paths
 
@@ -118,6 +138,7 @@ def validate_solver_sweep(
     meta: dict[str, Any],
     host: str,
     peer_meta: dict[str, Any] | None = None,
+    server_elapsed_seconds: float | None = None,
 ) -> Verdict:
     """Validate a Wave 2 CPU solver or parameter-sweep workunit (``hivemind_solver_sweep`` / ``hivemind_solver``).
 
@@ -257,12 +278,23 @@ def validate_solver_sweep(
                     {"sweep_index": idx, "max_abs_diff": abs_d, "s1_ratio": ratio},
                 )
 
-    flops_claimed = float(meta.get("flops_claimed", len(sweep_results) * 2.5e9))
-    wall_s = float(meta.get("wall_seconds", 1.0))
+    try:
+        raw_flops = float(meta.get("flops_claimed", len(sweep_results) * 2.5e9))
+        raw_wall = float(meta.get("wall_seconds", 1.0))
+    except (TypeError, ValueError) as exc:
+        return _reject(wu, host, f"invalid credit figures: {exc}")
     # Checked on the raw figures: a floor such as max(wall, 1e-6) keeps NaN and silently credits a negative wall time.
-    claim = CreditClaim(host, wu, flops_claimed, wall_s, CPU_SOLVER_PEAK_GFLOPS, True, True)
-    if not claim_figures_are_finite_and_positive(claim):
+    raw_claim = CreditClaim(host, wu, raw_flops, raw_wall, CPU_SOLVER_PEAK_GFLOPS, True, True)
+    if not claim_figures_are_finite_and_positive(raw_claim):
         return _reject(wu, host, f"wall_seconds/flops_claimed not finite and positive: {meta.get('wall_seconds')!r}, {meta.get('flops_claimed')!r}")
+    spec_flops_bound = float(spec.get("flops_bound") or spec.get("rsc_fpops_est") or (len(sweep_results) * 2.5e9))
+    srv_elapsed = server_elapsed_seconds if server_elapsed_seconds is not None else spec.get("server_elapsed_seconds")
+    eff_wall = (
+        min(raw_wall, float(srv_elapsed))
+        if isinstance(srv_elapsed, (int, float)) and not isinstance(srv_elapsed, bool) and math.isfinite(srv_elapsed) and float(srv_elapsed) > 0.0
+        else raw_wall
+    )
+    claim = CreditClaim(host, wu, min(raw_flops, spec_flops_bound), eff_wall, CPU_SOLVER_PEAK_GFLOPS, True, True)
     detail = {
         "sweep_points": len(sweep_results),
         "worst_invariant_drift": worst_drift,
@@ -284,25 +316,44 @@ def validate_solver_sweep(
     )
 
 
-def run_validation(args: list[str], mv: Any = None, log: Callable[[str], None] = _log_stderr) -> int:
+def run_validation(
+    args: list[str],
+    mv: Any = None,
+    log: Callable[[str], None] = _log_stderr,
+    directory: Any = None,
+) -> int:
     """The validation itself, shared by the one-shot ``hivemind_validate`` and the optional resident validator
     (``resident_validator.py``): both run exactly this function, so their verdicts cannot differ. ``mv`` is the validator
     object (default: a fresh ``MoEValidator``; the resident server passes one whose base model comes from a cache)."""
-    meta, paths = _meta(args)
-    wu = meta.get("wu_id", "")
+    cli_wu, cleaned_args = _parse_wu_args(args)
+    meta, paths = _meta(cleaned_args)
+    result_id = cleaned_args[-1] if cleaned_args and cleaned_args[-1].isdigit() else None
+    host_dir = directory if directory is not None else _host_directory()
+    db_wu: str | None = None
+    server_elapsed_s: float | None = None
+    if result_id is not None and host_dir is not None and hasattr(host_dir, "result_workunit_and_elapsed"):
+        db_wu, server_elapsed_s = host_dir.result_workunit_and_elapsed(result_id)
+    expected_wu = cli_wu or db_wu
+    wu = expected_wu or meta.get("wu_id", "")
     spec_path = SPEC_DIR / f"{wu}.json"
     if not wu or not spec_path.is_file() or "/" in wu or ".." in wu:
         log(f"unknown workunit {wu!r}")
         return 2
     spec = json.loads(spec_path.read_text())
-    host = f"result-{args[-1]}" if args and args[-1].isdigit() else "host"
-    if meta.get("app") in SOLVER_SWEEP_APPS:
+    host = f"result-{result_id}" if result_id is not None else "host"
+    if expected_wu and meta.get("wu_id") != expected_wu:
+        verdict = _reject(
+            expected_wu,
+            host,
+            f"result workunit mismatch: upload claims {meta.get('wu_id')!r}, expected {expected_wu!r}",
+        )
+    elif meta.get("app") in SOLVER_SWEEP_APPS:
         peer_meta = (
             json.loads(paths[1].read_text())
             if len(paths) >= 2 and paths[1].suffix == ".json" and paths[1].resolve() != paths[0].resolve()
             else None
         )
-        verdict = validate_solver_sweep(spec, meta, host, peer_meta=peer_meta)
+        verdict = validate_solver_sweep(spec, meta, host, peer_meta=peer_meta, server_elapsed_seconds=server_elapsed_s)
     else:
         import torch
 
@@ -310,10 +361,21 @@ def run_validation(args: list[str], mv: Any = None, log: Callable[[str], None] =
         if mv is None:
             mv = MoEValidator()
         if meta.get("app") in TRAIN_APPS and len(paths) >= 2:
-            verdict = mv.validate_train(spec, paths[0], paths[1], host, replay_all=replay_all_for_result(args[-1] if args and args[-1].isdigit() else None, _host_directory()))
+            replay_all = replay_all_for_result(result_id, host_dir)
+            try:
+                verdict = mv.validate_train(
+                    spec, paths[0], paths[1], host, replay_all=replay_all, server_elapsed_seconds=server_elapsed_s
+                )
+            except TypeError:
+                verdict = mv.validate_train(spec, paths[0], paths[1], host, replay_all=replay_all)
         elif meta.get("app") == "hivemind_moe_infer":
             adapter = torch.load(SPEC_DIR / f"{wu}.adapter.pt", map_location="cpu", weights_only=True)["state"]
-            verdict = mv.validate_infer(spec, paths[0], adapter, host)
+            try:
+                verdict = mv.validate_infer(
+                    spec, paths[0], adapter, host, server_elapsed_seconds=server_elapsed_s
+                )
+            except TypeError:
+                verdict = mv.validate_infer(spec, paths[0], adapter, host)
         else:
             log("unknown app in result")
             return 3
@@ -342,23 +404,61 @@ def validate(args: list[str]) -> int:
     return run_validation(args)
 
 
-def assimilate(args: list[str]) -> int:
+def assimilate(args: list[str], directory: Any = None) -> int:
     LEDGER_DIR.mkdir(parents=True, exist_ok=True)
     if args and args[0] == "--error":
         (LEDGER_DIR / f"assimilate_error_{int(time.time())}.json").write_text(json.dumps({"error_mask": args[1], "wu_db_id": args[2]}))
         return 0
-    meta, paths = _meta(args)
+    cli_wu, cleaned_args = _parse_wu_args(args)
+    wu_db_id: str | None = None
+    if cleaned_args and cleaned_args[0].isdigit():
+        wu_db_id = cleaned_args[0]
+        cleaned_args = cleaned_args[1:]
+    host_dir = directory if directory is not None else _host_directory()
+    db_wu = (
+        host_dir.workunit_name(wu_db_id)
+        if wu_db_id is not None and host_dir is not None and hasattr(host_dir, "workunit_name")
+        else None
+    )
+    expected_wu = cli_wu or db_wu
+    meta, paths = _meta(cleaned_args)
     wu = meta["wu_id"]
+    if expected_wu and wu != expected_wu:
+        _log_stderr(f"assimilate workunit mismatch: upload claims {wu!r}, expected {expected_wu!r}")
+        return 1
     entry: dict[str, Any] = {"wu_id": wu, "app": meta["app"], "t": time.time()}
+    if wu_db_id is not None:
+        entry["wu_db_id"] = int(wu_db_id)
     if meta["app"] in TRAIN_APPS:
         import torch
 
         from hivemind.boinc.real_client.moe_app import state_sha
 
         stem = profile_for_app(meta["app"])["chain_stem"]  # each app has its own chain: a rank-16 adapter cannot continue a rank-8 one
-        state = torch.load(paths[1], map_location="cpu", weights_only=True)["states"][-1]
         out = LEDGER_DIR / f"adapter_{wu}.pt"
+        if out.exists():
+            _log_stderr(f"assimilate: workunit {wu!r} already assimilated; refusing replay")
+            return 1
+        loaded_states = torch.load(paths[1], map_location="cpu", weights_only=True)["states"]
+        state = loaded_states[-1]
         sha = state_sha(state)
+        head_json = LEDGER_DIR / f"{stem}.json"
+        if head_json.exists():
+            current_head = json.loads(head_json.read_text())
+            if current_head.get("wu_id") == wu:
+                _log_stderr(f"assimilate: {wu!r} is already the chain head")
+                return 1
+            spec_file = SPEC_DIR / f"{wu}.json"
+            parent_sha = (
+                json.loads(spec_file.read_text()).get("start_adapter_sha256")
+                if spec_file.is_file()
+                else (state_sha(loaded_states[0]) if len(loaded_states) >= 2 else None)
+            )
+            if parent_sha is not None and parent_sha != current_head.get("sha256"):
+                _log_stderr(
+                    f"assimilate: refusing rollback of {stem} from {current_head.get('wu_id')!r} to {wu!r}"
+                )
+                return 1
         torch.save({"state": state, "sha256": sha, "wu_id": wu}, out)
         entry["adapter"], entry["adapter_sha256"] = out.name, sha
         entry["eval_loss_before"], entry["eval_loss_after"] = meta.get("eval_loss_before"), meta.get("eval_loss_after")
@@ -368,7 +468,7 @@ def assimilate(args: list[str]) -> int:
         tmp = LEDGER_DIR / f"{stem}.pt.tmp"
         torch.save({"state": state, "sha256": sha, "wu_id": wu}, tmp)
         tmp.replace(LEDGER_DIR / f"{stem}.pt")
-        (LEDGER_DIR / f"{stem}.json").write_text(json.dumps(
+        head_json.write_text(json.dumps(
             {"wu_id": wu, "sha256": sha, "eval_loss_before": meta.get("eval_loss_before"), "eval_loss_after": meta.get("eval_loss_after"), "t": time.time()}))
     elif meta["app"] in SOLVER_SWEEP_APPS:
         sweep_results = meta.get("sweep_results", [])
@@ -408,8 +508,7 @@ def main() -> int:
     if cmd == "validate":
         return validate(rest)
     if cmd == "assimilate":
-        # script_assimilator passes: <wu_db_id> <files...> ; the helper wants the files only
-        return assimilate(rest[1:] if rest and rest[0].isdigit() else rest)
+        return assimilate(rest)
     return 64
 
 

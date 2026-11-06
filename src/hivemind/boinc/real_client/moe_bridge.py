@@ -14,6 +14,7 @@ One model copy is kept resident (loading takes seconds once cached) and shared b
 from __future__ import annotations
 
 import json
+import math
 import random
 import threading
 from pathlib import Path
@@ -22,7 +23,7 @@ from typing import Any
 from hivemind.boinc.real_client.bridge import Verdict
 from hivemind.boinc.validator import DeterministicSpotCheckValidator
 from hivemind.boinc.workunit import sign_shard_bytes
-from hivemind.economy.compute_coin import CreditClaim, verified_credit
+from hivemind.economy.compute_coin import CreditClaim, claim_figures_are_finite_and_positive, verified_credit
 
 T4_PEAK_GFLOPS = 8141.0  # what the BOINC client itself reported for this card
 EPS = DeterministicSpotCheckValidator().tolerance_eps
@@ -31,6 +32,37 @@ EPS = DeterministicSpotCheckValidator().tolerance_eps
 def _reject(wu: str, host: str, reason: str, detail: dict[str, Any] | None = None) -> Verdict:
     g = verified_credit(CreditClaim(host, wu, 0.0, 1.0, 1.0, False, False)).to_dict()
     return Verdict(wu, host, False, reason, None, None, g, detail or {})
+
+
+def _spec_flops_bound_train(spec: dict[str, Any]) -> float:
+    for key in ("flops_bound", "rsc_fpops_est", "max_flops"):
+        val = spec.get(key)
+        if isinstance(val, (int, float)) and not isinstance(val, bool) and math.isfinite(val) and float(val) > 0.0:
+            return float(val)
+    train_tokens = spec.get("train_tokens")
+    seq_len = (
+        len(train_tokens[0])
+        if isinstance(train_tokens, list) and train_tokens and isinstance(train_tokens[0], list) and train_tokens[0]
+        else int(spec.get("seq_len", 128))
+    )
+    tokens_seen = max(1, int(spec.get("inner_steps", 1)) * int(spec.get("micro_batch", 1)) * max(1, seq_len))
+    return 6.0 * 4.0e8 * float(tokens_seen)
+
+
+def _spec_flops_bound_infer(spec: dict[str, Any], completions: list[dict[str, Any]]) -> float:
+    for key in ("flops_bound", "rsc_fpops_est", "max_flops"):
+        val = spec.get(key)
+        if isinstance(val, (int, float)) and not isinstance(val, bool) and math.isfinite(val) and float(val) > 0.0:
+            return float(val)
+    total_tokens = max(1, sum(len(c.get("token_ids", ())) for c in completions))
+    return 2.0 * 4.0e8 * float(total_tokens)
+
+
+def _resolve_server_elapsed(spec: dict[str, Any], server_elapsed_seconds: float | None) -> float | None:
+    cand = server_elapsed_seconds if server_elapsed_seconds is not None else spec.get("server_elapsed_seconds")
+    if isinstance(cand, (int, float)) and not isinstance(cand, bool) and math.isfinite(cand) and float(cand) > 0.0:
+        return float(cand)
+    return None
 
 
 class MoEValidator:
@@ -51,7 +83,15 @@ class MoEValidator:
             self._init_state = extract_lora_state_dict(self._model)
             self._model_key = key
 
-    def validate_train(self, spec: dict[str, Any], meta_path: Path, states_path: Path, host: str, replay_all: bool = False) -> Verdict:
+    def validate_train(
+        self,
+        spec: dict[str, Any],
+        meta_path: Path,
+        states_path: Path,
+        host: str,
+        replay_all: bool = False,
+        server_elapsed_seconds: float | None = None,
+    ) -> Verdict:
         import torch
 
         from hivemind.boinc.real_client.moe_app import state_sha
@@ -96,10 +136,33 @@ class MoEValidator:
                   "eval_loss_before": meta.get("eval_loss_before"), "eval_loss_after": meta.get("eval_loss_after")}
         if not diff <= EPS:
             return _reject(wu, host, f"REJECTED segment {k}: divergence {diff:.3e} exceeds eps={EPS:.0e}", detail)
-        claim = CreditClaim(host, wu, float(meta["flops_claimed"]), max(float(meta["wall_seconds"]), 1e-6), T4_PEAK_GFLOPS, True, True)
+        try:
+            raw_flops = float(meta["flops_claimed"])
+            raw_wall = float(meta["wall_seconds"])
+        except (KeyError, TypeError, ValueError) as exc:
+            return _reject(wu, host, f"invalid credit figures: {exc}", detail)
+        raw_claim = CreditClaim(host, wu, raw_flops, raw_wall, T4_PEAK_GFLOPS, True, True)
+        if not claim_figures_are_finite_and_positive(raw_claim):
+            return _reject(
+                wu,
+                host,
+                f"non-finite or non-positive wall_seconds/flops_claimed: {raw_wall!r}, {raw_flops!r}",
+                detail,
+            )
+        srv_elapsed = _resolve_server_elapsed(spec, server_elapsed_seconds)
+        eff_wall = min(raw_wall, srv_elapsed) if srv_elapsed is not None else raw_wall
+        eff_flops = min(raw_flops, _spec_flops_bound_train(spec))
+        claim = CreditClaim(host, wu, eff_flops, eff_wall, T4_PEAK_GFLOPS, True, True)
         return Verdict(wu, host, True, (f"verified all {k_total} segments" if replay_all else f"verified segment {k}/{k_total}") + f": max_diff={diff:.2e}", diff == 0.0, None, verified_credit(claim).to_dict(), detail)
 
-    def validate_infer(self, spec: dict[str, Any], meta_path: Path, adapter: dict[str, Any], host: str) -> Verdict:
+    def validate_infer(
+        self,
+        spec: dict[str, Any],
+        meta_path: Path,
+        adapter: dict[str, Any],
+        host: str,
+        server_elapsed_seconds: float | None = None,
+    ) -> Verdict:
         from hivemind.boinc.real_client.moe_app import infer
 
         wu = spec["wu_id"]
@@ -115,5 +178,20 @@ class MoEValidator:
         expect = [c["token_ids"] for c in ref["completions"]]
         if claimed != expect or meta.get("adapter_sha256") != ref["adapter_sha256"]:
             return _reject(wu, host, "greedy completions differ from the validator's replay", {"claimed": claimed, "expected": expect})
-        claim = CreditClaim(host, wu, float(meta["flops_claimed"]), max(float(meta["wall_seconds"]), 1e-6), T4_PEAK_GFLOPS, True, True)
+        try:
+            raw_flops = float(meta["flops_claimed"])
+            raw_wall = float(meta["wall_seconds"])
+        except (KeyError, TypeError, ValueError) as exc:
+            return _reject(wu, host, f"invalid credit figures: {exc}")
+        raw_claim = CreditClaim(host, wu, raw_flops, raw_wall, T4_PEAK_GFLOPS, True, True)
+        if not claim_figures_are_finite_and_positive(raw_claim):
+            return _reject(
+                wu,
+                host,
+                f"non-finite or non-positive wall_seconds/flops_claimed: {raw_wall!r}, {raw_flops!r}",
+            )
+        srv_elapsed = _resolve_server_elapsed(spec, server_elapsed_seconds)
+        eff_wall = min(raw_wall, srv_elapsed) if srv_elapsed is not None else raw_wall
+        eff_flops = min(raw_flops, _spec_flops_bound_infer(spec, ref["completions"]))
+        claim = CreditClaim(host, wu, eff_flops, eff_wall, T4_PEAK_GFLOPS, True, True)
         return Verdict(wu, host, True, "verified: identical greedy token ids", True, None, verified_credit(claim).to_dict(), {"n_prompts": len(claimed)})

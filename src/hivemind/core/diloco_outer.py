@@ -82,10 +82,31 @@ def flatten_delta_dict(delta_dict: dict[str, torch.Tensor]) -> torch.Tensor:
     return torch.cat(parts, dim=0)
 
 
+def _infer_plurality_reference_schema(
+    worker_deltas: dict[str, dict[str, torch.Tensor]],
+) -> dict[str, torch.Size] | None:
+    schema_counts: dict[tuple[tuple[str, torch.Size], ...], int] = {}
+    first_schema_map: dict[tuple[tuple[str, torch.Size], ...], dict[str, torch.Size]] = {}
+    for delta_dict in worker_deltas.values():
+        if not isinstance(delta_dict, dict) or not delta_dict:
+            continue
+        if not all(isinstance(v, torch.Tensor) for v in delta_dict.values()):
+            continue
+        sig = tuple((k, delta_dict[k].shape) for k in sorted(delta_dict.keys()))
+        schema_counts[sig] = schema_counts.get(sig, 0) + 1
+        if sig not in first_schema_map:
+            first_schema_map[sig] = {k: delta_dict[k].shape for k in delta_dict}
+    if not schema_counts:
+        return None
+    best_sig = max(schema_counts.keys(), key=lambda s: schema_counts[s])
+    return first_schema_map[best_sig]
+
+
 def filter_byzantine_deltas_multikrum(
     worker_deltas: dict[str, dict[str, torch.Tensor]],
     max_byzantine_f: int = 1,
     cosine_sigma: float = 2.0,
+    reference_keys_and_shapes: dict[str, torch.Size] | None = None,
 ) -> ByzantineFilterReport:
     """Filter worker pseudo-gradients using Pre-Krum Sanitization, Multi-Krum, and a 2-sigma pairwise cosine filter."""
     all_worker_ids = list(worker_deltas.keys())
@@ -93,8 +114,16 @@ def filter_byzantine_deltas_multikrum(
     if total_K == 0:
         raise ValueError("Cannot run Multi-Krum on empty worker_deltas.")
 
+    eff_ref_schema = (
+        reference_keys_and_shapes
+        if reference_keys_and_shapes is not None
+        else _infer_plurality_reference_schema(worker_deltas)
+    )
     fl_guard = FederatedLearningSecurityGuard()
-    clean_deltas, quarantined = fl_guard.sanitize_worker_deltas_pre_krum(worker_deltas)
+    clean_deltas, quarantined = fl_guard.sanitize_worker_deltas_pre_krum(
+        worker_deltas,
+        reference_keys_and_shapes=eff_ref_schema,
+    )
     worker_ids = list(clean_deltas.keys())
     K = len(worker_ids)
 
@@ -371,10 +400,39 @@ class DiLoCoOuterOptimizer:
             eff_restart is not None and outer_step > 0 and (outer_step % eff_restart == 0)
         )
 
+        parameter_keys = set(theta_prev)
+        full_schema = {k: v.shape for k, v in theta_prev.items()}
+        if self.outer_optimizer_mode == "cosine_gated_adam_decay" and synced_fragments is not None:
+            declared_keys = set(synced_fragments)
+            if not declared_keys <= parameter_keys:
+                raise ValueError("synced_fragments must name existing branch parameters")
+            if declared_keys and declared_keys != parameter_keys:
+                subset_schema = {k: theta_prev[k].shape for k in declared_keys}
+                full_matches = sum(
+                    1
+                    for d in worker_deltas.values()
+                    if isinstance(d, dict)
+                    and set(d.keys()) == parameter_keys
+                    and all(isinstance(d[k], torch.Tensor) and d[k].shape == full_schema[k] for k in parameter_keys)
+                )
+                subset_matches = sum(
+                    1
+                    for d in worker_deltas.values()
+                    if isinstance(d, dict)
+                    and set(d.keys()) == declared_keys
+                    and all(isinstance(d[k], torch.Tensor) and d[k].shape == subset_schema[k] for k in declared_keys)
+                )
+                round_reference_schema = full_schema if full_matches > subset_matches else subset_schema
+            else:
+                round_reference_schema = full_schema
+        else:
+            round_reference_schema = full_schema
+
         filter_report = filter_byzantine_deltas_multikrum(
             worker_deltas=worker_deltas,
             max_byzantine_f=self.max_byzantine_f,
             cosine_sigma=self.cosine_sigma,
+            reference_keys_and_shapes=round_reference_schema,
         )
         valid_ids = filter_report.accepted_workers
         surviving_deltas = {wid: worker_deltas[wid] for wid in valid_ids}

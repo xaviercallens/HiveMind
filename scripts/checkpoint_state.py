@@ -127,9 +127,28 @@ def metadata_flag(path: str) -> Optional[str]:
         return None
 
 
-def checkpoint(dry_run: bool, keep: int, data_disk: str, reason: str) -> Dict[str, object]:
+def is_private_remote(remote: str = "origin") -> bool:
+    if os.environ.get("HIVEMIND_PRIVATE_REMOTE") == "1":
+        return True
+    try:
+        url = git("remote", "get-url", remote, check=False).lower()
+    except Exception:
+        return False
+    if not url or "github.com/xaviercallens/hivemind" in url or "github.com:xaviercallens/hivemind" in url:
+        return False
+    return True
+
+
+def checkpoint(
+    dry_run: bool,
+    keep: int,
+    data_disk: str,
+    reason: str,
+    include_memory: bool = False,
+) -> Dict[str, object]:
     SKIPPED_SECRET_LIKE.clear()
-    items = collect()
+    allow_mem = bool(include_memory and is_private_remote())
+    items = collect(include_memory=allow_mem)
     head = git("rev-parse", "--short", "HEAD")
     branch = git("rev-parse", "--abbrev-ref", "HEAD")
     when = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
@@ -185,11 +204,22 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--keep", type=int, default=6)
     ap.add_argument("--data-disk", default=DATA_DISK_DEFAULT)
+    ap.add_argument(
+        "--include-memory",
+        action="store_true",
+        help="Include MEMORY_DIR notes only when explicitly requested and the git remote is private (IP-140).",
+    )
     a = ap.parse_args()
     if not (a.once or a.watch):
         ap.error("--once or --watch")
     if a.once:
-        print(json.dumps(checkpoint(a.dry_run, a.keep, a.data_disk, "manual"), indent=1), flush=True)
+        print(
+            json.dumps(
+                checkpoint(a.dry_run, a.keep, a.data_disk, "manual", include_memory=a.include_memory),
+                indent=1,
+            ),
+            flush=True,
+        )
         return 0
     last = 0.0
     on_gce = metadata_flag("name") is not None
@@ -198,7 +228,13 @@ def main() -> int:
         preempted = on_gce and (metadata_flag("preempted") == "TRUE" or (metadata_flag("maintenance-event") or "NONE") not in ("NONE", ""))
         if preempted or time.time() - last >= a.every:
             try:
-                res = checkpoint(a.dry_run, a.keep, a.data_disk, "PREEMPTION NOTICE" if preempted else "periodic")
+                res = checkpoint(
+                    a.dry_run,
+                    a.keep,
+                    a.data_disk,
+                    "PREEMPTION NOTICE" if preempted else "periodic",
+                    include_memory=a.include_memory,
+                )
                 print(f"[checkpoint] {time.strftime('%H:%M:%S')} {json.dumps(res)}", flush=True)
             except Exception as exc:  # a failed checkpoint must never kill the watcher
                 print(f"[checkpoint] failed: {exc!r}", flush=True)

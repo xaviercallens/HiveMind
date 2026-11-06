@@ -79,6 +79,33 @@ class BoincHostDirectory:
         except Exception:  # no row, bad output, database down: unknown, which the policy treats as untrusted
             return None, 0
 
+    def result_workunit_and_elapsed(self, result_id: int | str) -> tuple[str | None, float | None]:
+        """Return ``(workunit_name, server_elapsed_seconds)`` for ``result_id`` by joining ``result`` to ``workunit``."""
+        try:
+            rid = int(result_id)
+            out = self._sql(
+                "select w.name, greatest(r.received_time - r.sent_time, 0) "
+                f"from result r join workunit w on w.id = r.workunitid where r.id = {rid};"
+            )
+            parts = out.strip().splitlines()[-1].split()
+            if not parts:
+                return None, None
+            wu_name = parts[0].strip() or None
+            elapsed = float(parts[1]) if len(parts) >= 2 else None
+            return wu_name, (elapsed if elapsed is not None and elapsed > 0.0 else None)
+        except Exception:
+            return None, None
+
+    def workunit_name(self, wu_db_id: int | str) -> str | None:
+        """Return the canonical BOINC ``workunit.name`` for ``wu_db_id``."""
+        try:
+            wid = int(wu_db_id)
+            out = self._sql(f"select w.name from workunit w where w.id = {wid};")
+            name = out.strip().splitlines()[-1].split()[0].strip()
+            return name or None
+        except Exception:
+            return None
+
 
 def replay_all_for_result(result_id: int | str | None, directory: HostDirectory | None, env: Mapping[str, str] | None = None) -> bool:
     """Full replay for this result? False unless community mode is on (``HIVEMIND_COMMUNITY=1``), so existing behaviour is unchanged."""

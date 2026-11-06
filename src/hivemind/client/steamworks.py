@@ -18,7 +18,10 @@ import os
 import platform
 import re
 import secrets
+import json
 import time
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -49,6 +52,7 @@ class SteamAuthSessionTicket:
     account_spend_usd: float
     is_vac_banned: bool
     ticket_hex: str
+    web_api_verified: bool = False
 
     @property
     def is_non_limited(self) -> bool:
@@ -337,8 +341,13 @@ class SteamworksSDKBridge:
         steam_id64: str,
         account_spend_usd: float = 25.0,
         is_vac_banned: bool = False,
+        web_api_verified: bool = False,
     ) -> SteamAuthSessionTicket:
-        """Generate an ISteamUser::GetAuthSessionTicket for BOINC Coordinator Sybil verification."""
+        """Generate an ISteamUser::GetAuthSessionTicket for BOINC Coordinator Sybil verification.
+
+        ``web_api_verified`` must only be True when the spend / VAC fields come from
+        :meth:`fetch_steam_account_status` (Steam Web API), never from a client request.
+        """
         payload = f"{steam_id64}:{STEAMWORKS_APP_ID}:{account_spend_usd:.2f}:{int(is_vac_banned)}"
         sig = hmac.new(self.signing_secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
         return SteamAuthSessionTicket(
@@ -347,10 +356,49 @@ class SteamworksSDKBridge:
             account_spend_usd=account_spend_usd,
             is_vac_banned=is_vac_banned,
             ticket_hex=sig,
+            web_api_verified=web_api_verified,
         )
 
-    def verify_sybil_resistance(self, ticket: SteamAuthSessionTicket) -> tuple[bool, str]:
-        """Verify ticket authenticity and enforce Steam Non-Limited ($5+) Sybil requirement."""
+    def fetch_steam_account_status(self, steam_id64: str, timeout: float = 5.0) -> dict[str, Any] | None:
+        """Query the Steam Web API (``STEAM_WEB_API_KEY``) for VAC bans and Steam level.
+
+        Returns ``None`` when no key is configured, the SteamID is malformed or the API is
+        unreachable; callers must then treat the account as unverified. Steam exposes no
+        spend figure, so ``account_spend_usd`` is ``MIN_STEAM_SPEND_USD`` only when the public
+        Steam level is >= 1 (the Web API proxy for a Non-Limited account), else ``0.0``.
+        """
+        key = os.environ.get("STEAM_WEB_API_KEY", "")
+        if not key or not re.fullmatch(r"\d{17}", str(steam_id64)):
+            return None
+        base = "https://api.steampowered.com"
+        query = urllib.parse.urlencode({"key": key, "steamids": steam_id64, "steamid": steam_id64})
+        try:
+            with urllib.request.urlopen(
+                f"{base}/ISteamUser/GetPlayerBans/v1/?{query}", timeout=timeout
+            ) as resp:
+                bans = json.loads(resp.read().decode("utf-8")).get("players", [])
+            with urllib.request.urlopen(
+                f"{base}/IPlayerService/GetSteamLevel/v1/?{query}", timeout=timeout
+            ) as resp:
+                level = int(json.loads(resp.read().decode("utf-8")).get("response", {}).get("player_level", 0))
+        except Exception:
+            return None
+        if not bans:
+            return None
+        vac = bool(bans[0].get("VACBanned")) or int(bans[0].get("NumberOfGameBans", 0)) > 0
+        return {
+            "is_vac_banned": vac,
+            "steam_level": level,
+            "account_spend_usd": MIN_STEAM_SPEND_USD if level >= 1 else 0.0,
+        }
+
+    def verify_sybil_resistance(
+        self, ticket: SteamAuthSessionTicket, require_web_api: bool = False
+    ) -> tuple[bool, str]:
+        """Verify ticket authenticity and enforce Steam Non-Limited ($5+) Sybil requirement.
+
+        With ``require_web_api`` the spend / VAC fields must have come from the Steam Web API.
+        """
         payload = (
             f"{ticket.steam_id64}:{ticket.app_id}:"
             f"{ticket.account_spend_usd:.2f}:{int(ticket.is_vac_banned)}"
@@ -360,6 +408,10 @@ class SteamworksSDKBridge:
         ).hexdigest()
         if not hmac.compare_digest(ticket.ticket_hex, expected_sig):
             reason = "Invalid ISteamUser::GetAuthSessionTicket signature."
+            self.sybil_rejection_log.append({"steam_id64": ticket.steam_id64, "reason": reason})
+            return False, reason
+        if require_web_api and not ticket.web_api_verified:
+            reason = "Steam account status unverified: no Steam Web API confirmation."
             self.sybil_rejection_log.append({"steam_id64": ticket.steam_id64, "reason": reason})
             return False, reason
         if ticket.is_vac_banned:

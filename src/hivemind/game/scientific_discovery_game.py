@@ -880,20 +880,24 @@ class HiveMindScientificGameEngine:
         steps: int = 400,
         dt: float = 0.015,
         num_byzantine: int = 2,
-        account_spend_usd: float = 25.0,
-        is_vac_banned: bool = False,
     ) -> Dict[str, Any]:
-        """Run and verify a single Scientific Discovery Mission (`MISSION-SCI-01..03`)."""
+        """Run and verify a single Scientific Discovery Mission (`MISSION-SCI-01..03`).
+
+        Sybil fields come only from the Steam Web API; without it the account is
+        unverified and earns 0 points.
+        """
         spec = next(
             (m for m in SCIENTIFIC_MISSIONS_CATALOG if m.mission_id == mission_id),
             SCIENTIFIC_MISSIONS_CATALOG[0],
         )
+        account_status = self.steam_bridge.fetch_steam_account_status(steam_id64)
         ticket = self.steam_bridge.get_auth_session_ticket(
             steam_id64=steam_id64,
-            account_spend_usd=account_spend_usd,
-            is_vac_banned=is_vac_banned,
+            account_spend_usd=float(account_status["account_spend_usd"]) if account_status else 0.0,
+            is_vac_banned=bool(account_status["is_vac_banned"]) if account_status else False,
+            web_api_verified=account_status is not None,
         )
-        sybil_ok, sybil_msg = self.steam_bridge.verify_sybil_resistance(ticket)
+        sybil_ok, sybil_msg = self.steam_bridge.verify_sybil_resistance(ticket, require_web_api=True)
 
         if spec.mission_id == "MISSION-SCI-01-SYMPLECTIC-EXOPLANET":
             orbit_res = integrate_orbital_symplectic_comparison(steps=steps, dt=dt)
@@ -1086,8 +1090,6 @@ class HiveMindScientificGameEngine:
         for spec in cohort_specs:
             tag = spec["gamer_tag"]
             sid = spec["steam_id64"]
-            spend = float(spec["account_spend_usd"])
-            vac = bool(spec["is_vac_banned"])
 
             sweep_trace: List[Dict[str, Any]] = []
             for p_try in spec["period_sweep_days"]:
@@ -1114,8 +1116,6 @@ class HiveMindScientificGameEngine:
                     steam_id64=sid,
                     trial_period_days=float(p_days),
                     num_byzantine=int(f_byz),
-                    account_spend_usd=spend,
-                    is_vac_banned=vac,
                 )
                 player_pts += int(res["scientific_pts_awarded"])
                 best_energy = min(best_energy, float(res["bee_energy_total"]))

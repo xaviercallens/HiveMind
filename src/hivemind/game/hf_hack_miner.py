@@ -2284,6 +2284,8 @@ class GuildTournamentEngine:
             s.guild_id: s for s in (squads or DEFAULT_GUILD_TOURNAMENT_SQUADS)
         }
         self.updates: Dict[str, Dict[str, Any]] = {}
+        # Unverified self-reports (`squad_reported`): never used for ranking.
+        self.squad_reported: Dict[str, Dict[str, Any]] = {}
 
     # -- measurement ---------------------------------------------------
     def measure_domain_holdout_perplexity(self) -> Dict[str, Dict[str, Any]]:
@@ -2513,6 +2515,7 @@ class GuildTournamentEngine:
             "num_matches": len(matches),
             "num_raid_arcs": len(raid_arcs),
             "champion_guild_id": standings[0]["guild_id"] if standings else None,
+            "squad_reported": {k: dict(v) for k, v in self.squad_reported.items()},
             "guilds": guild_payload,
             "standings": [
                 {
@@ -2570,12 +2573,24 @@ class GuildTournamentEngine:
         multi_domain_holdout_perplexity: float | None = None,
         speculative_tokens_per_sec: float | None = None,
         gamer_tag: str | None = None,
+        receipt_verified: bool = False,
     ) -> Dict[str, Any]:
-        """Register a squad's self-reported tournament metrics and re-run the matchmaking."""
+        """Register a squad's tournament metrics and re-run the matchmaking.
+
+        Metrics are stored as ``squad_reported`` and excluded from the standings
+        unless ``receipt_verified`` is True (backed by a verified receipt).
+        """
         key = str(guild_id or "").strip().upper()
         if key not in self.squads:
             raise KeyError(f"Unknown guild squad: {guild_id}")
-        record = self.updates.setdefault(key, {})
+        if multi_domain_holdout_perplexity is not None and not (
+            float(multi_domain_holdout_perplexity) > 0.0
+        ):
+            raise ValueError("multi_domain_holdout_perplexity must be positive")
+        if speculative_tokens_per_sec is not None and float(speculative_tokens_per_sec) < 0.0:
+            raise ValueError("speculative_tokens_per_sec must be non-negative")
+        target = self.updates if receipt_verified else self.squad_reported
+        record = target.setdefault(key, {})
         if multi_domain_holdout_perplexity is not None:
             record["multi_domain_holdout_perplexity"] = max(
                 GUILD_TOURNAMENT_MIN_PERPLEXITY, float(multi_domain_holdout_perplexity)
@@ -3794,12 +3809,19 @@ def execute_interactive_bounty_probe(
         )
 
     total_kw_hits = code_hits + bio_hits + math_hits + rust_hits + cyber_hits + fr_hits
-    bounty_pts_awarded = 580 + total_kw_hits * 45
-    swarm_pts_awarded = 275
+    # Prompt keyword hits are a client-reported signal, not a verified solve:
+    # no points are awarded without a verified receipt.
+    client_reported_pts = 580 + total_kw_hits * 45
+    bounty_pts_awarded = 0
+    swarm_pts_awarded = 0
     fee_hive = 0.225
 
     report_path = ARTIFACTS_ROOT / "hf_hack_miner_game_report.json"
-    if report_path.exists() and not os.environ.get("PYTEST_CURRENT_TEST"):
+    if (
+        (bounty_pts_awarded or swarm_pts_awarded)
+        and report_path.exists()
+        and not os.environ.get("PYTEST_CURRENT_TEST")
+    ):
         data = json.loads(report_path.read_text(encoding="utf-8"))
         for g in data.get("leaderboard", []):
             if g.get("gamer_tag") == gamer_tag:
@@ -3851,6 +3873,8 @@ def execute_interactive_bounty_probe(
         "solution_bounty_pts_awarded": bounty_pts_awarded,
         "swarm_contribution_pts_awarded": swarm_pts_awarded,
         "total_pts_awarded": bounty_pts_awarded + swarm_pts_awarded,
+        "client_reported_pts": client_reported_pts,
+        "points_status": "client_reported: excluded from points without a verified receipt",
     }
 
 
@@ -3874,13 +3898,22 @@ def execute_interactive_lora_micro_forge(
         num_gamers=1,
         target_keywords=contract.target_keywords,
     )
-    init_loss = 3.12
-    final_loss = round(max(0.18, init_loss * (1.0 - min(0.82, 0.55 + sig_score * 0.25))), 4)
-    loss_drop_pct = round(100.0 * (init_loss - final_loss) / init_loss, 2)
-    lora_pts = int(round(loss_drop_pct * 11.5))
-    bounty_pts = contract.base_bounty_pts + 220
-    total_pts = lora_pts + bounty_pts
-    hive_minted = 15.0
+    # No LoRA optimisation step is executed here, so there is no measured loss
+    # and no DeterministicSpotCheckValidator verdict to back a mint.
+    if not rows:
+        training_status = "empty_corpus"
+    elif not torch.cuda.is_available():
+        training_status = "no_cuda"
+    else:
+        training_status = "no_training_step_executed"
+    spot_check_passed = False
+    init_loss = None
+    final_loss = None
+    loss_drop_pct = 0.0
+    lora_pts = 0
+    bounty_pts = 0
+    total_pts = 0
+    hive_minted = 0.0
 
     bridge = SteamworksSDKBridge()
     rp = bridge.set_rich_presence(
@@ -3892,7 +3925,7 @@ def execute_interactive_lora_micro_forge(
     )
 
     report_path = ARTIFACTS_ROOT / "hf_hack_miner_game_report.json"
-    if report_path.exists() and not os.environ.get("PYTEST_CURRENT_TEST"):
+    if spot_check_passed and report_path.exists() and not os.environ.get("PYTEST_CURRENT_TEST"):
         data = json.loads(report_path.read_text(encoding="utf-8"))
         for g in data.get("leaderboard", []):
             if g.get("gamer_tag") == gamer_tag:
@@ -3950,7 +3983,8 @@ def execute_interactive_lora_micro_forge(
         "initial_loss": init_loss,
         "final_loss": final_loss,
         "loss_reduction_pct": loss_drop_pct,
-        "spot_check_passed": True,
+        "spot_check_passed": spot_check_passed,
+        "training_status": training_status,
         "lora_pts_awarded": lora_pts,
         "bounty_pts_awarded": bounty_pts,
         "total_pts_awarded": total_pts,

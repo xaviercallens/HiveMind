@@ -3947,9 +3947,26 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         target_planet = str(payload.get("target_planet") or "K2-18 b").strip()[:64]
         gpu_adapter = str(payload.get("gpu_adapter") or "WebGPU Hardware Adapter (WGSL @compute)").strip()[:96]
         backend = str(payload.get("backend") or "webgpu_wgsl_compute_shader").strip()[:64]
-        n_points = int(payload.get("n_points_folded") or 16384)
-        kernel_ms = float(payload.get("kernel_exec_ms") or 0.42)
-        depth_ppm = float(payload.get("recovered_transit_depth_ppm") or 2789.0)
+        try:
+            n_points = int(payload.get("n_points_folded") or 16384)
+            kernel_ms = float(payload.get("kernel_exec_ms") or 0.42)
+            depth_ppm = float(payload.get("recovered_transit_depth_ppm") or 2789.0)
+        except (TypeError, ValueError):
+            return JSONResponse(
+                status_code=400,
+                content={"error": {"message": "Invalid numeric field in WebGPU contribution."}},
+            )
+        if (
+            n_points <= 0
+            or not math.isfinite(kernel_ms)
+            or kernel_ms <= 0.0
+            or not math.isfinite(depth_ppm)
+            or depth_ppm <= 0.0
+        ):
+            return JSONResponse(
+                status_code=400,
+                content={"error": {"message": "n_points_folded, kernel_exec_ms and transit depth must be positive."}},
+            )
 
         verified = execute_server_webgpu_verification_and_sync(
             handle=acc.handle,

@@ -79,3 +79,36 @@ def test_missing_results_file_is_a_404_for_the_api_and_a_notice_for_the_page(tmp
     client = TestClient(create_hivemind_at_home_app(night_moe_results_path=missing))
     assert client.get("/api/v1/night-moe").status_code == 404
     assert "No results file" in client.get("/night-moe").text and "No results file" in render_night_moe_html(None)
+
+
+def test_routed_bee_moe_system_self_solution_and_bonferroni_grid_hm_s14_02_03_04() -> None:
+    root = Path(__file__).resolve().parents[1]
+    stored = json.loads((root / "artifacts" / "experiments" / "NIGHT_MOE_results.json").read_text(encoding="utf-8"))
+    routed = nm.evaluate_routed_bee_moe_system(stored)
+    assert routed["admitted_adapters"] == ["exoplanet", "stars"]
+    assert routed["system_totals"]["gated_routed_correct"] > routed["system_totals"]["ungated_routed_correct"]
+    assert routed["system_totals"]["gated_routed_correct"] > routed["routing_plateau"]["correct"]
+    assert routed["gated_vs_base_receipt"]["decision"] == "ACCEPT"
+    assert routed["gated_vs_best_single_plateau_receipt"]["decision"] == "ACCEPT"
+    assert routed["corrupted_misrouted_negative_control_receipt"]["decision"] == "REJECT"
+
+    base_map = {f"k{i}": i < 35 for i in range(50)}
+    gold_map = {f"k{i}": i < 20 for i in range(50)}
+    self_map = {f"k{i}": i < 47 for i in range(50)}
+    cross_map = {f"k{i}": i < 25 for i in range(50)}
+    comp = nm.compare_self_solution_vs_gold_adapter(base_map, gold_map, self_map, cross_map, base_unparsable_keys=["k48", "k49"])
+    assert comp["supported"] is True
+    assert comp["self_solution_gate_receipt"]["decision"] == "ACCEPT"
+    assert comp["gold_adapter_gate_receipt"]["decision"] == "REJECT"
+
+    summaries = {
+        "base_p": _s("base_p", 100, 50),
+        "base_q": _s("base_q", 100, 40),
+        "a_p": _s("a_p", 100, 80, 32, 2, 0.0),
+        "x_a_q": _s("x_a_q", 100, 65, 27, 2, 0.0),
+        "b_q": _s("b_q", 100, 75, 36, 1, 0.0),
+        "x_b_p": _s("x_b_p", 100, 51, 3, 2, 1.0),
+    }
+    grid = nm.evaluate_full_interference_bonferroni_grid(summaries, subjects={"a": "p", "b": "q"})
+    assert grid["complete_full_size_grid"] is True and grid["bonferroni_alpha"] == 0.025
+    assert grid["bonferroni_survivors"] == ["a->q:GAIN"]

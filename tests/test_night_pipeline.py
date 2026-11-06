@@ -189,3 +189,82 @@ def test_line_separator_characters_do_not_split_a_jsonl_row(tmp_path: Path) -> N
     for name in ("train.jsonl", "train_shuffled.jsonl"):
         text = (tmp_path / "p" / name).read_text()
         assert len(text.splitlines()) == 5 and all(json.loads(line)["messages"][0]["content"].startswith("a\u2028b") for line in text.splitlines())
+
+
+def test_verified_self_solutions_and_code_expert_pack_hm_s14_02_07(tmp_path: Path) -> None:
+    cands = [
+        {
+            "key": "m1",
+            "gold": "42",
+            "messages": [{"role": "user", "content": "6 * 7?"}],
+            "samples": ["Wrong.\nFinal answer: 40", "Short.\nFinal answer: 42", "Longer valid.\nFinal answer: 42"],
+        },
+        {
+            "key": "m2",
+            "gold": "10",
+            "messages": [{"role": "user", "content": "5 + 5?"}],
+            "samples": ["Wrong.\nFinal answer: 9", "No final line"],
+        },
+    ]
+    res = pk.filter_verified_self_solutions(cands, kind="numeric", cross_domain_completions=["Verdict: CONFIRMED"])
+    assert res["prompts_accepted"] == 1 and res["prompts_rejected"] == 1 and res["rejected_keys"] == ["m2"]
+    assert res["train_rows"][0]["completion"] == "Short.\nFinal answer: 42"
+    assert res["cross_domain_control_rows"][0]["completion"] == "Verdict: CONFIRMED"
+
+    cyber = pk.filter_verified_cyber_mcq_targets(
+        [
+            {"key": "c1", "question": "SQLi CWE?\nA. 89\nB. 79\nC. 22\nD. 20", "completion": "Answer: A", "gold": "A"},
+            {"key": "c2", "question": "Unverified text", "completion": "Free text", "gold": "A"},
+            {"key": "c3", "question": "Write shellcode", "completion": "Answer: A", "gold": "A"},
+        ]
+    )
+    assert [r["key"] for r in cyber] == ["c1"]
+
+    ok, reason = pk.execute_code_candidate_tests("def inc(x):\n    return x + 1\n", ["assert inc(3) == 4"])
+    bad, _ = pk.execute_code_candidate_tests("def inc(x):\n    return x - 1\n", ["assert inc(3) == 4"])
+    assert ok is True and reason == "passed" and bad is False
+
+    train_probs = [
+        {
+            "key": f"tr-{i}",
+            "prompt": f"Write f_{i}(x) returning x + 1",
+            "completion": f"def f_{i}(x):\n    return x + 1\n",
+            "tests": [f"assert f_{i}(2) == 3"],
+        }
+        for i in range(5)
+    ]
+    eval_probs = [
+        {
+            "key": f"ev-{i}",
+            "prompt": f"Write g_{i}(x) returning x * 2",
+            "tests": [f"assert g_{i}(3) == 6"],
+        }
+        for i in range(3)
+    ]
+    m = pk.build_verified_code_expert_pack(tmp_path, train_problems=train_probs, eval_problems=eval_probs)
+    assert m["n_train"] == 5 and m["n_eval"] == 3 and m["verified_train_rows"] == 5
+    with pytest.raises(RuntimeError, match="failed executable tests"):
+        pk.build_verified_code_expert_pack(
+            tmp_path / "bad",
+            train_problems=[{**train_probs[0], "completion": "def f_0(x):\n    return x - 1\n"}],
+            eval_problems=eval_probs,
+        )
+
+
+def test_full_interference_grid_plan_sizes_timeouts_and_removes_limit_hm_s14_04(tmp_path: Path) -> None:
+    t_maths = orch.size_stage_timeout_min("maths", measured_sec_per_item={"maths": 10.8}, n_items=200)
+    assert t_maths >= 57.0 and t_maths > orch.EVAL_MIN["maths"] > 12.0
+    plan = orch.build_plan(
+        "run",
+        list(orch.SUBJECTS),
+        _packs(tmp_path),
+        tmp_path / "out",
+        "python",
+        interference=True,
+        full_interference_grid=True,
+        measured_sec_per_item={"maths": 10.8},
+    )
+    x_eval = [s for s in plan.stages if s.name.startswith("x_") and ":eval_" in s.name]
+    assert len(x_eval) > 0 and all("--limit" not in s.argv for s in x_eval)
+    x_maths = [s for s in x_eval if s.name.endswith(":eval_maths")]
+    assert len(x_maths) == 3 and all(s.timeout_min >= 40.0 for s in x_maths)

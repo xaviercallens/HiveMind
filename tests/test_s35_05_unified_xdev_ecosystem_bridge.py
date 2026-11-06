@@ -56,3 +56,13 @@ def test_unified_4layer_ecosystem_pipeline_passes_all_invariants() -> None:
     )
     assert sorry_lean_receipt.layer4_lean_kernel_clean is False
     assert sorry_lean_receipt.all_layers_passed is False
+
+    # Exercise docstring, Constant, unsupported op, wrong arg count, and missing return in candidate evaluator
+    edge_candidates = (
+        'def compute_conservation_residual(m0: float) -> float:\n    return 0.0\n',
+        'def compute_conservation_residual(m0: float, m1: float) -> float:\n    x = 1\n',
+        'def compute_conservation_residual(m0: float, m1: float) -> float:\n    return m0 * m1\n',
+        'def compute_conservation_residual(m0: float, m1: float) -> float:\n    "doc"\n    return abs(m1 - m0) + 0.0\n',
+    )
+    edge_receipt = run_unified_4layer_ecosystem_pipeline(candidates=edge_candidates)
+    assert edge_receipt.layer3_gwaya_a3_verified is True

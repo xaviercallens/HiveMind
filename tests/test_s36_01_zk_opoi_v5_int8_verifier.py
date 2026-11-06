@@ -116,3 +116,56 @@ def test_zk_opoi_v5_rejects_tampered_shard_bilinear_or_norm_bounds() -> None:
     )
     assert rep_other.verified is False
     assert rep_other.rejection_reason == "commitment_hmac_invalid"
+    assert rep_other.to_dict()["verified"] is False
+
+    # Additional rejection paths: theta0 mismatch, zero transition, linf norm out of bounds, fiat-shamir tampered
+    assert (
+        verifier.verify_proof(
+            receipt,
+            expected_shard_sha256="shard_abc",
+            expected_theta0_sha256="wrong_theta0",
+        ).rejection_reason
+        == "theta0_sha256_mismatch"
+    )
+    assert (
+        verifier.verify_proof(
+            replace(receipt, theta_final_sha256=receipt.theta0_sha256),
+            expected_shard_sha256="shard_abc",
+            expected_theta0_sha256=receipt.theta0_sha256,
+        ).rejection_reason
+        == "zero_transition_detected"
+    )
+    assert (
+        verifier.verify_proof(
+            replace(receipt, delta_linf_norm=99.0),
+            expected_shard_sha256="shard_abc",
+            expected_theta0_sha256=receipt.theta0_sha256,
+        ).rejection_reason
+        == "delta_linf_norm_out_of_bounds"
+    )
+    assert (
+        verifier.verify_proof(
+            replace(receipt, fiat_shamir_challenge_hex="0" * 64),
+            expected_shard_sha256="shard_abc",
+            expected_theta0_sha256=receipt.theta0_sha256,
+        ).rejection_reason
+        == "fiat_shamir_challenge_tampered"
+    )
+    with pytest.raises(ValueError, match="non-finite"):
+        verifier.quantize_to_int8([float("nan")])
+    with pytest.raises(ValueError, match="equal non-zero"):
+        verifier.generate_proof(
+            worker_id="w",
+            workunit_id="wu",
+            shard_sha256="s",
+            theta0=[0.1],
+            delta_weights=[],
+        )
+    with pytest.raises(ValueError, match="all-zero"):
+        verifier.generate_proof(
+            worker_id="w",
+            workunit_id="wu",
+            shard_sha256="s",
+            theta0=[0.1, 0.2],
+            delta_weights=[0.0, 0.0],
+        )

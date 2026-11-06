@@ -248,8 +248,6 @@ def _eval_safe_arith_expr(node: object, env: dict[str, float]) -> float:
         return float(node.value)
     if isinstance(node, _ast.Name) and node.id in env:
         return float(env[node.id])
-    if isinstance(node, _ast.UnaryOp) and isinstance(node.op, _ast.USub):
-        return -_eval_safe_arith_expr(node.operand, env)
     if isinstance(node, _ast.BinOp):
         left = _eval_safe_arith_expr(node.left, env)
         right = _eval_safe_arith_expr(node.right, env)
@@ -257,10 +255,6 @@ def _eval_safe_arith_expr(node: object, env: dict[str, float]) -> float:
             return left - right
         if isinstance(node.op, _ast.Add):
             return left + right
-        if isinstance(node.op, _ast.Mult):
-            return left * right
-        if isinstance(node.op, _ast.Div):
-            return left / right
     if (
         isinstance(node, _ast.Call)
         and isinstance(node.func, _ast.Name)

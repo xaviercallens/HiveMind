@@ -846,7 +846,7 @@ def evaluate_served_expert_bandit_routing(
     seeds: Sequence[int] = tuple(range(2026, 2046)),
     rounds: int = 240,
     warm_records: Sequence[DanceRecord] = (),
-    secret: bytes = b"hm-s15-03-served-expert-secret",
+    secret: bytes | None = None,
     max_trials_per_signer: float = 60.0,
 ) -> dict[str, Any]:
     """Evaluate `StrategyManager` / `BanditStrategy` routing among served experts on tasks with executable tests (HM-S15-03 / #173).
@@ -860,6 +860,7 @@ def evaluate_served_expert_bandit_routing(
 
     if not tasks:
         raise ValueError("tasks must be non-empty")
+    eff_secret = secret if secret is not None else hashlib.sha256(str(tuple(seeds)).encode("utf-8")).digest()
     experts = sorted(tasks[0].expert_candidates.keys())
     if not experts:
         raise ValueError("tasks must name at least one served expert")
@@ -899,14 +900,14 @@ def evaluate_served_expert_bandit_routing(
                 n_pilot = 20
                 s_pilot = int(round(rate * n_pilot))
                 pilot_records.append(
-                    DanceRecord(e, e, cid, n_pilot, s_pilot, 0.4, 10, "unit_tests", f"scout-{cid}").signed(secret)
+                    DanceRecord(e, e, cid, n_pilot, s_pilot, 0.4, 10, "unit_tests", f"scout-{cid}").signed(eff_secret)
                 )
     warm_report = recruitment_weights(
         pilot_records,
         now_epoch=10,
         horizon_epochs=5,
         cap_per_record=0.5,
-        secret=secret,
+        secret=eff_secret,
         max_trials_per_signer=max_trials_per_signer,
     )
 

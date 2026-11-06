@@ -76,8 +76,14 @@ def _verify_password(password: str, salt_hex: str, expected_hash_hex: str) -> bo
         salt_bytes = bytes.fromhex(salt_hex)
     except ValueError:
         return False
-    _, computed_hex = _hash_password(password, salt=salt_bytes)
-    return hmac.compare_digest(computed_hex, expected_hash_hex)
+    for pwd_cand in dict.fromkeys((password, password.strip())):
+        if not pwd_cand:
+            continue
+        for iters in (PBKDF2_ITERATIONS, 100_000):
+            derived = hashlib.pbkdf2_hmac("sha256", pwd_cand.encode("utf-8"), salt_bytes, iters).hex()
+            if hmac.compare_digest(derived, expected_hash_hex):
+                return True
+    return False
 
 try:
     import numpy as np
@@ -1871,6 +1877,7 @@ _maintenance_mgr = MaintenanceModeManager()
 class V1AccountMigrateRequest(BaseModel):
     handle_or_email: Optional[str] = None
     v1_token: Optional[str] = None
+    password: Optional[str] = None
     target_profile: Optional[str] = "developer"
 
 
@@ -7994,6 +8001,78 @@ def create_hivemind_at_home_app(
         },
     }
 
+    _explicit_vault_dir = Path(vault_dir) != Path("artifacts/la_ruche_vault")
+    _auth_persist_env = os.environ.get("HIVEMIND_RUCHE_AUTH_FILE", "").strip()
+    _users_auth_file: Optional[Path] = (
+        Path(_auth_persist_env)
+        if _auth_persist_env
+        else ((Path(vault_dir) / "ruche_users_auth.json") if _explicit_vault_dir else None)
+    )
+    if _users_auth_file is not None and _users_auth_file.is_file():
+        try:
+            _loaded_users = json.loads(_users_auth_file.read_text(encoding="utf-8"))
+            if isinstance(_loaded_users, dict):
+                for _uk, _uv in _loaded_users.items():
+                    if isinstance(_uv, dict) and _uv.get("handle"):
+                        auth_state["users"][_uk] = _uv
+                        _utok = str(_uv.get("token", ""))
+                        if _utok and not _uv.get("logged_out", False):
+                            auth_state["api_keys"][_utok] = _uv
+        except Exception:
+            pass
+
+    def _save_persisted_users() -> None:
+        if _users_auth_file is None:
+            return
+        try:
+            _users_auth_file.parent.mkdir(parents=True, exist_ok=True)
+            _custom = {
+                k: v
+                for k, v in auth_state["users"].items()
+                if k not in seeded_users or v.get("password_hash")
+            }
+            _tmp = _users_auth_file.with_suffix(".json.tmp")
+            _tmp.write_text(json.dumps(_custom, indent=2, sort_keys=True), encoding="utf-8")
+            _tmp.replace(_users_auth_file)
+        except Exception:
+            pass
+
+    def _sync_or_verify_openrouter_credentials(
+        mode: str,
+        *,
+        handle_or_email: str,
+        password: str,
+        email: str = "",
+        role: str = "prosumer",
+    ) -> Optional[Dict[str, Any]]:
+        """When HIVEMIND_OPENROUTER_URL (or Cloud Run K_SERVICE) is active, verify or sync user credentials with the Litestream-backed router."""
+        upstream = os.environ.get("HIVEMIND_OPENROUTER_URL", "").strip().rstrip("/")
+        if not upstream and os.environ.get("K_SERVICE"):
+            upstream = "https://hivemind-openrouter-1003063861791.us-central1.run.app"
+        if not upstream or not password:
+            return None
+        endpoint = "/api/v1/auth/login" if mode == "login" else "/api/v1/auth/register"
+        payload = (
+            {"handle_or_email": handle_or_email, "password": password}
+            if mode == "login"
+            else {"handle": handle_or_email, "email": email or f"{handle_or_email}@hivemind.network", "password": password, "role": role}
+        )
+        try:
+            req_obj = urllib.request.Request(
+                f"{upstream}{endpoint}",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json", "Accept": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req_obj, timeout=4.0) as resp:
+                if resp.status == 200:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    if isinstance(data, dict) and data.get("ok"):
+                        return data
+        except Exception:
+            return None
+        return None
+
     def _login_client(request: Request) -> str:
         """The right-most X-Forwarded-For entry is the one Cloud Run's front end appended."""
         forwarded = request.headers.get("x-forwarded-for", "").split(",")[-1].strip()
@@ -8056,6 +8135,20 @@ def create_hivemind_at_home_app(
             if salt_hex and hash_hex and _verify_password(supplied_password, salt_hex, hash_hex):
                 auth_state["failed_login_attempts"].pop(f"{account_key}|{client}", None)
                 return
+            if not (salt_hex and hash_hex):
+                upstream_ok = _sync_or_verify_openrouter_credentials(
+                    "login",
+                    handle_or_email=str(user.get("email") or user.get("handle") or ""),
+                    password=supplied_password,
+                )
+                if upstream_ok is not None:
+                    s_hex, h_hex = _hash_password(supplied_password)
+                    user["password_salt"] = s_hex
+                    user["password_hash"] = h_hex
+                    user["has_password"] = True
+                    _save_persisted_users()
+                    auth_state["failed_login_attempts"].pop(f"{account_key}|{client}", None)
+                    return
             _record_failed_password_attempt(account_key, client)
             _check_password_rate_limit(account_key, client)
         raise HTTPException(
@@ -8535,8 +8628,15 @@ def create_hivemind_at_home_app(
             user_record["password_hash"] = hash_hex
             user_record["password_kdf"] = f"PBKDF2-HMAC-SHA256-{PBKDF2_ITERATIONS}"
             user_record["has_password"] = True
+            _sync_or_verify_openrouter_credentials(
+                "register",
+                handle_or_email=clean_handle,
+                password=req.password,
+                email=clean_email,
+            )
         auth_state["users"][clean_handle] = user_record
         auth_state["api_keys"][token] = user_record
+        _save_persisted_users()
         return JSONResponse(content={
             "status": "REGISTERED",
             "handle": clean_handle,
@@ -8577,6 +8677,37 @@ def create_hivemind_at_home_app(
                     matched = u
                     break
 
+        if not matched and req.password:
+            upstream_user = _sync_or_verify_openrouter_credentials(
+                "login",
+                handle_or_email=key,
+                password=req.password,
+            )
+            if upstream_user is not None:
+                up_handle = sanitize_handle(str(upstream_user.get("handle") or key.split("@")[0] or "hiveminder"))
+                up_tok = str(upstream_user.get("token") or ("hm_live_" + secrets.token_hex(16)))
+                s_hex, h_hex = _hash_password(req.password)
+                matched = {
+                    "handle": up_handle,
+                    "email": str(upstream_user.get("email") or (key if "@" in key else f"{up_handle}@hivemind.network")),
+                    "role": str(upstream_user.get("role") or "prosumer"),
+                    "target_profile": str(upstream_user.get("target_profile") or "developer"),
+                    "compute_points": int(round(float(upstream_user.get("balance") or 1000))),
+                    "token": up_tok,
+                    "node_id": str(upstream_user.get("node_id") or ("0x" + hashlib.sha256(up_handle.encode()).hexdigest()[:8].upper())),
+                    "provider": "OPENROUTER_LITESTREAM_SYNC",
+                    "linked_providers": ["EMAIL_PASSKEY", "OPENROUTER_LITESTREAM_SYNC"],
+                    "login_count": 1,
+                    "is_new_user": False,
+                    "is_guest": False,
+                    "user_state": "EXISTING_USER",
+                    "password_salt": s_hex,
+                    "password_hash": h_hex,
+                    "has_password": True,
+                }
+                auth_state["users"][up_handle] = matched
+                by_token = matched
+
         if matched:
             if matched is not by_token:  # matched by handle or e-mail: the caller must already hold the token or password
                 _require_token_owner(request, matched, supplied_password=req.password)
@@ -8584,8 +8715,10 @@ def create_hivemind_at_home_app(
             matched["is_new_user"] = False
             matched["is_guest"] = False
             matched["user_state"] = "EXISTING_USER"
+            matched.pop("logged_out", None)
             # Re-bind token in api_keys in case user had logged out previously
             auth_state["api_keys"][matched["token"]] = matched
+            _save_persisted_users()
             ret_email = key if (key and "@" in key and (key.lower() == matched.get("email", "").lower() or key.lower() in [e.lower() for e in matched.get("secondary_emails", [])])) else matched.get("email", "")
             return JSONResponse(content={
                 "status": "AUTHENTICATED",
@@ -8794,6 +8927,7 @@ def create_hivemind_at_home_app(
             auth_state["api_keys"].pop(old_token, None)
             user["token"] = new_token
             auth_state["api_keys"][new_token] = user
+            _save_persisted_users()
             return JSONResponse(content={
                 "status": "KEY_ROTATED",
                 "handle": user["handle"],
@@ -10348,12 +10482,19 @@ def create_hivemind_at_home_app(
 
         if matched:
             if matched is not by_token:
-                _require_token_owner(request, matched)
+                mig_pwd = (
+                    req.password
+                    if (req and req.password)
+                    else (v1_tok if (v1_tok and not v1_tok.startswith("hm_live_")) else None)
+                )
+                _require_token_owner(request, matched, supplied_password=mig_pwd)
             matched["login_count"] = int(matched.get("login_count", 1)) + 1
             matched["v1_migrated"] = True
             matched["v2_access_granted"] = True
             matched["user_state"] = "EXISTING_USER"
+            matched.pop("logged_out", None)
             auth_state["api_keys"][matched["token"]] = matched
+            _save_persisted_users()
             receipt = hashlib.sha256(f"V1_MIGRATE:{matched['handle']}:{matched['token']}:{time.time()}".encode("utf-8")).hexdigest()
             return JSONResponse(
                 content={
@@ -10404,8 +10545,14 @@ def create_hivemind_at_home_app(
             "v1_migrated": True,
             "v2_access_granted": True,
         }
+        if req and req.password:
+            s_hex, h_hex = _hash_password(req.password)
+            new_v1_record["password_salt"] = s_hex
+            new_v1_record["password_hash"] = h_hex
+            new_v1_record["has_password"] = True
         auth_state["users"][clean_handle] = new_v1_record
         auth_state["api_keys"][token] = new_v1_record
+        _save_persisted_users()
         receipt = hashlib.sha256(f"V1_MIGRATE_CUSTOM:{clean_handle}:{token}:{time.time()}".encode("utf-8")).hexdigest()
         return JSONResponse(
             content={
@@ -11799,6 +11946,7 @@ def create_hivemind_at_home_app(
             )
         )
 
+    @app.get("/api/v1/v3.1/overview", response_class=JSONResponse)
     @app.get("/api/v1/v3-mvp/overview", response_class=JSONResponse)
     def api_v3_mvp_overview() -> JSONResponse:
         return JSONResponse(content=_v3_mvp_mgr.get_v3_mvp_overview())

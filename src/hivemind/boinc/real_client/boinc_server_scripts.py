@@ -52,28 +52,34 @@ def _meta(files: list[str]) -> tuple[dict, list[Path]]:
     return meta, paths
 
 
-def wait_for_idle(quiet_s: float = 5.0, max_wait_s: float | None = None) -> float:
+def wait_for_idle(
+    quiet_s: float = 5.0,
+    max_wait_s: float | None = None,
+    *,
+    clock: Callable[[], float] = time.time,
+    sleep_fn: Callable[[float], None] = time.sleep,
+) -> float:
     """Block until nginx shows no in-flight inference request for ``quiet_s`` seconds, so the validator's GPU replay never competes
     with end users. Gives up after ``max_wait_s`` (default 30 min) so validation cannot starve forever. Returns seconds waited."""
     import urllib.request
 
     url = os.environ.get("HIVEMIND_IDLE_URL", "http://127.0.0.1:8091/nginx_status")
     limit = float(os.environ.get("HIVEMIND_IDLE_WAIT_S", 1800)) if max_wait_s is None else max_wait_s
-    t0, quiet_since = time.time(), None
-    while time.time() - t0 < limit:
+    t0, quiet_since = clock(), None
+    while clock() - t0 < limit:
         try:
             txt = urllib.request.urlopen(url, timeout=2).read().decode()
             writing = int(txt.split("Writing:")[1].split()[0]) - 1  # minus this poll
         except Exception:
-            return time.time() - t0  # no status endpoint (e.g. a test box): do not block
+            return clock() - t0  # no status endpoint (e.g. a test box): do not block
         if writing <= 0:
-            quiet_since = quiet_since or time.time()
-            if time.time() - quiet_since >= quiet_s:
+            quiet_since = quiet_since or clock()
+            if clock() - quiet_since >= quiet_s:
                 break
         else:
             quiet_since = None
-        time.sleep(1)
-    return time.time() - t0
+        sleep_fn(1)
+    return clock() - t0
 
 
 def _log_stderr(line: str) -> None:
@@ -153,6 +159,32 @@ def validate_solver_sweep(
     worst_abs_diff = 0.0
 
     ref_trajs = spec.get("reference_trajectories")
+    if (
+        not isinstance(ref_trajs, list)
+        and spec.get("family") == "van_der_pol"
+        and isinstance(expected_grid, list)
+        and isinstance(expected_t_out, list)
+        and len(expected_t_out) >= 1
+    ):
+        step_dt = float(expected_t_out[0])
+        n_steps = len(expected_t_out)
+        computed_refs: list[list[list[float]]] = []
+        for g_val in expected_grid:
+            mu = float(g_val)
+            x, v = 1.0, 0.0
+            rows: list[list[float]] = []
+            for _ in range(n_steps):
+                ax1 = v
+                av1 = mu * (1.0 - x * x) * v - x
+                x_mid = x + 0.5 * step_dt * ax1
+                v_mid = v + 0.5 * step_dt * av1
+                ax2 = v_mid
+                av2 = mu * (1.0 - x_mid * x_mid) * v_mid - x_mid
+                x = x + step_dt * ax2
+                v = v + step_dt * av2
+                rows.append([round(x, 12), round(v, 12)])
+            computed_refs.append(rows)
+        ref_trajs = computed_refs
     peer_sweeps = peer_meta.get("sweep_results") if isinstance(peer_meta, dict) else None
     if isinstance(peer_sweeps, list) and len(peer_sweeps) != len(sweep_results):
         return _reject(wu, host, "quorum peer sweep_results length mismatch")
@@ -179,7 +211,15 @@ def validate_solver_sweep(
                 isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in row
             ):
                 return _reject(wu, host, f"sweep point {idx} contains non-finite state values")
-        drift = float(item.get("invariant_drift", 0.0))
+        raw_drift = item.get("invariant_drift")
+        if (
+            "invariant_drift" not in item
+            or raw_drift is None
+            or isinstance(raw_drift, bool)
+            or not isinstance(raw_drift, (int, float))
+        ):
+            return _reject(wu, host, f"sweep point {idx} missing or non-numeric invariant_drift")
+        drift = float(raw_drift)
         if not math.isfinite(drift) or drift < 0.0 or drift > max_allowed_drift:
             return _reject(
                 wu,
@@ -257,7 +297,11 @@ def run_validation(args: list[str], mv: Any = None, log: Callable[[str], None] =
     spec = json.loads(spec_path.read_text())
     host = f"result-{args[-1]}" if args and args[-1].isdigit() else "host"
     if meta.get("app") in SOLVER_SWEEP_APPS:
-        peer_meta = json.loads(paths[1].read_text()) if len(paths) >= 2 and paths[1].suffix == ".json" else None
+        peer_meta = (
+            json.loads(paths[1].read_text())
+            if len(paths) >= 2 and paths[1].suffix == ".json" and paths[1].resolve() != paths[0].resolve()
+            else None
+        )
         verdict = validate_solver_sweep(spec, meta, host, peer_meta=peer_meta)
     else:
         import torch

@@ -23,7 +23,7 @@ from typing import Any
 
 from hivemind.boinc.real_client.app import run
 from hivemind.boinc.validator import verify_fixed_point_q16_digest
-from hivemind.economy.compute_coin import CreditClaim, CreditGrant, verified_credit
+from hivemind.economy.compute_coin import CreditClaim, CreditGrant, claim_figures_are_finite_and_positive, verified_credit
 
 # Measured peak of the class, in GFLOPS, for the credit cap. Conservative: well above what the tiny adapter
 # reaches, so the cap only bites on an inflated claim.
@@ -96,6 +96,7 @@ def validate_result(spec: dict[str, Any], result: dict[str, Any], host: str, *, 
     exact: bool | None = None
     worst_ulp = 0.0
     cross_seen = False
+    replayed_classes: list[str] = []
     for dev in replay_devices:
         if dev == "cuda":
             import torch
@@ -103,7 +104,9 @@ def validate_result(spec: dict[str, Any], result: dict[str, Any], host: str, *, 
             if not torch.cuda.is_available():
                 continue
         ref = _replay(spec, dev)
-        same_class = ref["fingerprint"]["accelerator_class"] == volunteer_class and ref["fingerprint"]["torch_build"] == result["fingerprint"]["torch_build"]
+        ref_class = str(ref["fingerprint"]["accelerator_class"])
+        replayed_classes.append(ref_class)
+        same_class = ref_class == volunteer_class and ref["fingerprint"]["torch_build"] == result["fingerprint"]["torch_build"]
         cmp = verify_fixed_point_q16_digest(claimed, _state(ref), max_ulp_drift=0 if same_class else 1)
         if same_class:
             exact = bool(cmp["exact_digest_match"])
@@ -114,8 +117,16 @@ def validate_result(spec: dict[str, Any], result: dict[str, Any], host: str, *, 
             worst_ulp = max(worst_ulp, float(cmp["max_ulp_diff"]))
             if not cmp["passed"]:
                 return reject(f"cross-class replay on {dev} differs by {cmp['max_ulp_diff']} Q16 units (> 1)", exact, float(cmp["max_ulp_diff"]))
+    cap_peak = _peak(volunteer_class) if exact else min(_peak(volunteer_class), max((_peak(c) for c in replayed_classes), default=50.0))
+    try:
+        raw_flops = float(result["flops_claimed"])
+        raw_wall = float(result["wall_seconds"])
+    except (KeyError, TypeError, ValueError) as exc:
+        return reject(f"invalid credit figures: {exc}", exact, worst_ulp if cross_seen else None)
     claim = CreditClaim(
-        host, wu, float(result["flops_claimed"]), max(float(result["wall_seconds"]), 1e-6), _peak(volunteer_class), True, True
+        host, wu, raw_flops, raw_wall, cap_peak, True, True
     )
+    if not claim_figures_are_finite_and_positive(claim):
+        return reject(f"non-finite or non-positive wall_seconds/flops_claimed: {raw_wall!r}, {raw_flops!r}", exact, worst_ulp if cross_seen else None)
     grant: CreditGrant = verified_credit(claim)
     return Verdict(wu, host, True, "verified", exact, worst_ulp if cross_seen else None, grant.to_dict())

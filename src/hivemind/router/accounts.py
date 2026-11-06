@@ -735,6 +735,66 @@ class RouterStore:
         salt = self._secret + b":pwd:" + normalised_handle.encode("utf-8")
         return hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100_000).hex()
 
+    def _verify_row_password(self, conn: sqlite3.Connection, row: sqlite3.Row, password: str) -> tuple[bool, bool]:
+        """Return ``(has_password, password_matches)`` for ``row`` across current and legacy password formats."""
+        stored_pwd = str(row["password_hash"] or "") if "password_hash" in row.keys() else ""
+        legacy_cred_row = None
+        if not stored_pwd:
+            try:
+                legacy_cred_row = conn.execute(
+                    "SELECT salt_hex, password_hash FROM credentials WHERE account_id=?",
+                    (str(row["account_id"]),),
+                ).fetchone()
+            except sqlite3.OperationalError:
+                legacy_cred_row = None
+        has_pwd = bool(stored_pwd or legacy_cred_row is not None)
+        if not has_pwd:
+            return False, False
+        pwd_candidates = [p for p in dict.fromkeys((password, password.strip())) if p]
+        if not pwd_candidates:
+            return True, False
+
+        raw_handle = str(row["handle"] or "")
+        handle_candidates = {raw_handle, raw_handle.lower()}
+        try:
+            handle_candidates.add(normalise_identity(raw_handle))
+        except Exception:
+            pass
+
+        if stored_pwd:
+            if ":" in stored_pwd:
+                salt_hex, _, exp_hex = stored_pwd.partition(":")
+                try:
+                    salt_bytes = bytes.fromhex(salt_hex)
+                except ValueError:
+                    salt_bytes = b""
+                if salt_bytes and exp_hex:
+                    for p_cand in pwd_candidates:
+                        for iters in (200_000, 100_000):
+                            digest = hashlib.pbkdf2_hmac("sha256", p_cand.encode("utf-8"), salt_bytes, iters).hex()
+                            if hmac.compare_digest(exp_hex, digest):
+                                return True, True
+            for h_cand in handle_candidates:
+                for p_cand in pwd_candidates:
+                    if hmac.compare_digest(stored_pwd, self._hash_password(h_cand, p_cand)):
+                        return True, True
+
+        if legacy_cred_row is not None:
+            salt_hex = str(legacy_cred_row["salt_hex"] or "")
+            exp_hex = str(legacy_cred_row["password_hash"] or "")
+            try:
+                salt_bytes = bytes.fromhex(salt_hex)
+            except ValueError:
+                salt_bytes = b""
+            if salt_bytes and exp_hex:
+                for p_cand in pwd_candidates:
+                    for iters in (200_000, 100_000):
+                        digest = hashlib.pbkdf2_hmac("sha256", p_cand.encode("utf-8"), salt_bytes, iters).hex()
+                        if hmac.compare_digest(exp_hex, digest):
+                            return True, True
+
+        return True, False
+
     @staticmethod
     def _resolve_legacy_user(identifier: str) -> dict[str, Any] | None:
         raw = identifier.strip()
@@ -791,28 +851,32 @@ class RouterStore:
         pwd_hash = self._hash_password(normalised, password) if password else None
 
         with self._tx() as conn:
-            row = conn.execute(
-                "SELECT * FROM accounts WHERE account_id=? OR handle=?",
-                (account_id, normalised),
-            ).fetchone()
-            if row is None and clean_email:
-                row = conn.execute(
+            candidate_rows: list[sqlite3.Row] = []
+            if clean_email:
+                email_row = conn.execute(
                     "SELECT * FROM accounts WHERE lower(email)=lower(?)",
                     (clean_email,),
                 ).fetchone()
-            if row is not None:
-                # An existing handle is returned ONLY to a caller who proves it with the account's own password. A caller
-                # without a password, or an account without one (handle-only, Google/OIDC), gets HandleTaken: register
-                # never hands out an existing account's key and never binds a password to an account it did not create.
-                existing_id = str(row["account_id"])
-                existing_pwd = row["password_hash"]
-                if not (existing_pwd and password):
+                if email_row is not None:
+                    candidate_rows.append(email_row)
+            handle_row = conn.execute(
+                "SELECT * FROM accounts WHERE account_id=? OR lower(handle)=lower(?)",
+                (account_id, normalised),
+            ).fetchone()
+            if handle_row is not None and all(str(r["account_id"]) != str(handle_row["account_id"]) for r in candidate_rows):
+                candidate_rows.append(handle_row)
+
+            if candidate_rows:
+                # An existing handle/email is returned ONLY to a caller who proves it with the account's own password.
+                if not password:
                     raise HandleTaken(f"handle already registered: {normalised}")
-                expected = self._hash_password(str(row["handle"]), password)
-                if not hmac.compare_digest(str(existing_pwd), expected):
-                    raise HandleTaken(f"handle already registered: {normalised}")
-                api_key = self._issue_or_reuse_key(conn, existing_id)
-                return existing_id, api_key, False
+                for cand in candidate_rows:
+                    has_pwd, matched_pwd = self._verify_row_password(conn, cand, password)
+                    if has_pwd and matched_pwd:
+                        existing_id = str(cand["account_id"])
+                        api_key = self._issue_or_reuse_key(conn, existing_id)
+                        return existing_id, api_key, False
+                raise HandleTaken(f"handle already registered: {normalised}")
 
             api_key = "hm-" + secrets.token_urlsafe(32)
             conn.execute(
@@ -884,29 +948,46 @@ class RouterStore:
             normalised = ""
 
         with self._tx() as conn:
-            row = None
+            candidate_rows: list[sqlite3.Row] = []
+
+            def _add_candidate(r: sqlite3.Row | None) -> None:
+                if r is not None and all(str(x["account_id"]) != str(r["account_id"]) for x in candidate_rows):
+                    candidate_rows.append(r)
+
+            if email_candidate:
+                _add_candidate(
+                    conn.execute(
+                        "SELECT * FROM accounts WHERE lower(email)=lower(?)",
+                        (email_candidate,),
+                    ).fetchone()
+                )
             if normalised:
                 candidate_id = self._hmac_hex(normalised)[:32]
-                row = conn.execute(
-                    "SELECT * FROM accounts WHERE account_id=? OR lower(handle)=lower(?)",
-                    (candidate_id, normalised),
-                ).fetchone()
-            if row is None and email_candidate:
-                row = conn.execute(
-                    "SELECT * FROM accounts WHERE lower(email)=lower(?)",
-                    (email_candidate,),
-                ).fetchone()
-            if row is None and normalised:
+                _add_candidate(
+                    conn.execute(
+                        "SELECT * FROM accounts WHERE account_id=? OR lower(handle)=lower(?)",
+                        (candidate_id, normalised),
+                    ).fetchone()
+                )
                 alt = normalised.replace("-", "_") if "-" in normalised else normalised.replace("_", "-")
-                row = conn.execute(
-                    "SELECT * FROM accounts WHERE lower(handle)=lower(?)",
-                    (alt,),
-                ).fetchone()
+                _add_candidate(
+                    conn.execute(
+                        "SELECT * FROM accounts WHERE lower(handle)=lower(?)",
+                        (alt,),
+                    ).fetchone()
+                )
 
-            if row is not None:
-                acct_obj = self._row_account(row)
-                stored_pwd = row["password_hash"]
-                if not stored_pwd:
+            if candidate_rows:
+                any_has_pwd = False
+                for cand in candidate_rows:
+                    has_pwd, matched_pwd = self._verify_row_password(conn, cand, password)
+                    if has_pwd:
+                        any_has_pwd = True
+                    if has_pwd and matched_pwd:
+                        acct_obj = self._row_account(cand)
+                        api_key = self._issue_or_reuse_key(conn, acct_obj.account_id)
+                        return acct_obj, api_key, False
+                if not any_has_pwd:
                     # A handle-only or Google/OIDC account has no password to check: knowing its handle proves nothing, and
                     # binding the caller's password here would hand the account to whoever asks first.
                     raise InvalidCredentials(
@@ -914,11 +995,7 @@ class RouterStore:
                     )
                 if not pwd:
                     raise InvalidCredentials("Password is required for this account.")
-                expected = self._hash_password(acct_obj.handle, pwd)
-                if not hmac.compare_digest(str(stored_pwd), expected):
-                    raise InvalidCredentials("Invalid username or password.")
-                api_key = self._issue_or_reuse_key(conn, acct_obj.account_id)
-                return acct_obj, api_key, False
+                raise InvalidCredentials("Invalid username or password.")
 
         # 3. Unknown account: login never creates one (it used to "restore" it, with a starter grant, for any handle asked
         #    for). The store is replicated, so a real account does not vanish; new users register. ``auto_restore_previous``

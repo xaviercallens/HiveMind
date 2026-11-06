@@ -192,6 +192,39 @@ def test_exemplar_byob_bees_lifecycle_and_attestation() -> None:
         assert attestation["accuracy_gain"] > 0.25
         assert attestation["mcnemar_p_value"] < 0.001
         assert len(attestation["attestation_sha256"]) == 64
+        assert len(attestation["adapter_sha256"]) == 64
+        assert attestation["adapter_sha256"] != attestation["attestation_sha256"]
+
+    # IP-166 negative control: paired outcomes with no accuracy gain must fail McNemar gate
+    no_gain_attestation = manager.register_and_attest_bee(
+        live_bees[0],
+        paired_outcomes=[(True, True), (False, False), (True, False), (False, True)],
+    )
+    assert no_gain_attestation["gate_passed"] is False
+    assert no_gain_attestation["status"] == "REJECTED_MCNEMAR_GATE"
+    assert no_gain_attestation["accuracy_gain"] <= 0.0
+
+    # Positive paired outcomes + explicit weights bytes / sha256 validation
+    assert manager.get_bee("bee-quantum-simd") is not None
+    pos_outcomes = [(False, True)] * 10 + [(True, True)] * 5
+    pos_att = manager.register_and_attest_bee(
+        live_bees[0],
+        paired_outcomes=pos_outcomes,
+        adapter_weights_bytes=b"verified-safetensors-weights",
+    )
+    assert pos_att["gate_passed"] is True
+    assert pos_att["status"] == "APPROVED_LIVE"
+
+    sha_att = manager.register_and_attest_bee(
+        live_bees[1],
+        adapter_sha256="f" * 64,
+    )
+    assert sha_att["adapter_sha256"] == "f" * 64
+
+    with pytest.raises(ValueError, match="adapter_sha256"):
+        manager.register_and_attest_bee(live_bees[0], adapter_sha256="invalid-sha")
+    with pytest.raises(ValueError, match="paired_outcomes"):
+        manager.register_and_attest_bee(live_bees[0], paired_outcomes=[])
 
     # Verify registry records
     assert len(registry) == 3

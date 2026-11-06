@@ -241,8 +241,74 @@ def build_xdev_portfolio_catalog(xdev_root: Path | None = None) -> tuple[Portfol
     return tuple(nodes)
 
 
+def _eval_safe_arith_expr(node: object, env: dict[str, float]) -> float:
+    import ast as _ast
+
+    if isinstance(node, _ast.Constant) and isinstance(node.value, (int, float)):
+        return float(node.value)
+    if isinstance(node, _ast.Name) and node.id in env:
+        return float(env[node.id])
+    if isinstance(node, _ast.BinOp):
+        left = _eval_safe_arith_expr(node.left, env)
+        right = _eval_safe_arith_expr(node.right, env)
+        if isinstance(node.op, _ast.Sub):
+            return left - right
+        if isinstance(node.op, _ast.Add):
+            return left + right
+    if (
+        isinstance(node, _ast.Call)
+        and isinstance(node.func, _ast.Name)
+        and node.func.id == "abs"
+        and len(node.args) == 1
+    ):
+        return abs(_eval_safe_arith_expr(node.args[0], env))
+    raise ValueError(f"Unsupported AST expression in candidate: {type(node).__name__}")
+
+
+def _eval_ast_conservation_fn(source_code: str, m0: float, m1: float) -> float:
+    import ast as _ast
+
+    tree = _ast.parse(source_code)
+    for node in tree.body:
+        if isinstance(node, _ast.FunctionDef) and node.name == "compute_conservation_residual":
+            if len(node.args.args) != 2:
+                raise ValueError("Expected 2 arguments")
+            arg0 = node.args.args[0].arg
+            arg1 = node.args.args[1].arg
+            env = {arg0: float(m0), arg1: float(m1)}
+            for stmt in node.body:
+                if isinstance(stmt, _ast.Expr) and isinstance(stmt.value, _ast.Constant) and isinstance(stmt.value.value, str):
+                    continue
+                if isinstance(stmt, _ast.Return) and stmt.value is not None:
+                    return _eval_safe_arith_expr(stmt.value, env)
+    raise ValueError("No valid return statement found in compute_conservation_residual")
+
+
+def _eval_conservation_candidate_public(source_code: str) -> bool:
+    try:
+        v1 = _eval_ast_conservation_fn(source_code, 10.0, 10.25)
+        v2 = _eval_ast_conservation_fn(source_code, 5.0, 5.0)
+        return abs(v1 - 0.25) < 1e-9 and abs(v2) < 1e-9
+    except Exception:
+        return False
+
+
+def _eval_conservation_candidate_hidden(source_code: str) -> bool:
+    try:
+        v1 = _eval_ast_conservation_fn(source_code, -3.5, 1.5)
+        v2 = _eval_ast_conservation_fn(source_code, 100.0, 99.125)
+        return abs(v1 - 5.0) < 1e-9 and abs(v2 - 0.875) < 1e-9
+    except Exception:
+        return False
+
+
 def run_unified_4layer_ecosystem_pipeline(
     xdev_root: Path | None = None,
+    *,
+    candidates: Sequence[str] | None = None,
+    lean_source: str | None = None,
+    sent_arguments: dict[str, object] | None = None,
+    received_arguments: dict[str, object] | None = None,
 ) -> UnifiedEcosystemExecutionReceipt:
     """Execute the end-to-end 4-Layer integration pipeline across all core & fork-bridge modules."""
     if xdev_root is None:
@@ -274,25 +340,35 @@ def run_unified_4layer_ecosystem_pipeline(
     pcie_plan = compute_xlayerstorm_turboquant_schedule()
 
     # Layer 3: GWAYA Fail-Closed Anti-Stub Gate + Arm A3 Sample-and-Repair Loop
-    candidates: Sequence[str] = (
-        "def compute_conservation_residual(m0: float, m1: float) -> float:\n    pass\n",
-        "def compute_conservation_residual(m0: float, m1: float) -> float:\n    return abs(m1 - m0)\n",
+    effective_candidates: Sequence[str] = (
+        candidates
+        if candidates is not None
+        else (
+            "def compute_conservation_residual(m0: float, m1: float) -> float:\n    pass\n",
+            "def compute_conservation_residual(m0: float, m1: float) -> float:\n    return abs(m1 - m0)\n",
+        )
     )
     a3_report = run_gwaya_a3_sample_and_repair(
-        candidates=candidates,
-        public_test_fn=lambda code: "abs(m1 - m0)" in code,
-        hidden_test_fn=lambda code: "pass" not in code and "abs(" in code,
+        candidates=effective_candidates,
+        public_test_fn=_eval_conservation_candidate_public,
+        hidden_test_fn=_eval_conservation_candidate_hidden,
     )
 
     # Layer 4: Elenchus Comment-Stripped Lean 4 Audit + rusty-SUNDIALS Tier-X R-64 Provenance
     sample_lean = (
-        "/- **Kernel Certified:** 0 sorry, 0 admit. -/\n"
-        "-- No sorry allowed in SocrateAI-Lean-Lib\n"
-        "theorem k3_euler_characteristic : 24 = 24 := by rfl\n"
+        lean_source
+        if lean_source is not None
+        else (
+            "/- **Kernel Certified:** 0 sorry, 0 admit. -/\n"
+            "-- No sorry allowed in SocrateAI-Lean-Lib\n"
+            "theorem k3_euler_characteristic : 24 = 24 := by rfl\n"
+        )
     )
     lean_audit = audit_lean4_source_elenchus(sample_lean)
-    args = {"problem": "robertson", "rtol": 1e-9, "atol": 1e-12, "max_order": 5}
-    sundials_receipt = verify_robertson_sundials_tier_x(sent_arguments=args, received_arguments=args)
+    default_args: dict[str, object] = {"problem": "robertson", "rtol": 1e-9, "atol": 1e-12, "max_order": 5}
+    eff_sent = sent_arguments if sent_arguments is not None else default_args
+    eff_recv = received_arguments if received_arguments is not None else dict(eff_sent)
+    sundials_receipt = verify_robertson_sundials_tier_x(sent_arguments=eff_sent, received_arguments=eff_recv)
 
     all_passed = (
         a2_report.beats_z2_in_mse

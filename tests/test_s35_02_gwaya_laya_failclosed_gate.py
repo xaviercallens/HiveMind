@@ -92,3 +92,20 @@ def test_gwaya_ast_anti_stub_catches_all_six_stub_shapes_ip272() -> None:
     )
     assert inspect_python_ast_anti_stub(clean_code) == []
 
+
+def test_clean_candidate_with_low_confidence_triggers_abstain_repair_ip185() -> None:
+    clean_candidate = "def f(x: int) -> int:\n    return x * 2\n"
+    audit = audit_candidate_gwaya_anse(
+        clean_candidate,
+        lambda _s: True,
+        lambda _s: True,
+        raw_logprob_confidence=0.3,
+    )
+    assert audit.is_ast_clean is True
+    assert audit.passed_public_test is True
+    assert audit.passed_hidden_tests is True
+    assert audit.laya_calibrated_score == 0.685
+    assert audit.verdict == "ABSTAIN_REPAIR"
+    assert audit.anse_energy == MAXIMUM_PAIN_ENERGY
+
+

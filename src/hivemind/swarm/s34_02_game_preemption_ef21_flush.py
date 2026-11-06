@@ -77,10 +77,21 @@ class GamePreemptionEF21CircuitBreaker:
         inflight_gradient: Sequence[float],
         prev_error_buffer: Sequence[float],
         kernel_drain_ms: float = 42.0,
+        cuda_device_available: bool | None = None,
     ) -> GamePreemptionFlushReceipt:
         """Evict all GPU tensors to Host RAM under 1.5s and preserve EF21 state."""
         if allocated_vram_mib < 0 or allocated_vram_mib > 8192:
             raise ValueError("allocated_vram_mib must be within [0, 8192] MiB")
+
+        if cuda_device_available is None:
+            try:
+                import torch
+
+                has_cuda = bool(torch.cuda.is_available())
+            except Exception:
+                has_cuda = False
+        else:
+            has_cuda = bool(cuda_device_available)
 
         transmitted, host_error, recon_err = self.compress_ef21(inflight_gradient, prev_error_buffer)
         dma_flush_ms = (allocated_vram_mib / 1024.0) / self.pcie_dma_bandwidth_gbps * 1000.0
@@ -101,7 +112,7 @@ class GamePreemptionEF21CircuitBreaker:
 
         return GamePreemptionFlushReceipt(
             trigger_process=trigger_process,
-            preempted=True,
+            preempted=has_cuda,
             eviction_latency_ms=total_latency_ms,
             vram_before_mib=allocated_vram_mib,
             residual_vram_after_mib=residual_vram,

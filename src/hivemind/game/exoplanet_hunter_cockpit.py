@@ -80,6 +80,7 @@ class PlanetDiscoveryRequest(BaseModel):
 FEEDBACK_MAX_FIELD_CHARS = 2048
 FEEDBACK_RATE_LIMIT_MAX = 5
 FEEDBACK_RATE_WINDOW_S = 600.0
+FEEDBACK_MAX_FILE_BYTES = 256 * 1024
 BENCHMARK_COOLDOWN_S = 300.0
 TAP_REFRESH_INTERVAL_S = 6 * 3600.0
 
@@ -93,6 +94,15 @@ def _sanitise_display_tag(raw: Any) -> str:
     cleaned = re.sub(r"[^\w ._\-@]", "", str(raw))
     cleaned = re.sub(r"\s+", " ", cleaned).strip()[:64]
     return cleaned or "Anonyme"
+
+
+def _sanitise_feedback_field(raw: Any) -> str:
+    """Collapse newlines/whitespace and neutralise markdown heading/HTML characters (IP-267)."""
+    collapsed = re.sub(r"[\r\n\t]+", " ", str(raw))
+    collapsed = re.sub(r"#+\s*", "", collapsed)
+    collapsed = collapsed.replace("<", "&lt;").replace(">", "&gt;").replace("`", "'")
+    collapsed = re.sub(r"\s+", " ", collapsed).strip()
+    return collapsed[:FEEDBACK_MAX_FIELD_CHARS]
 
 
 def _get_asset_data_uri(filename: str, mime: str = "image/jpeg") -> str:
@@ -3285,6 +3295,10 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
             hits = feedback_hits.setdefault(client_key, deque())
             while hits and now_mono - hits[0] > FEEDBACK_RATE_WINDOW_S:
                 hits.popleft()
+            for stale_key in [
+                k for k, q in feedback_hits.items() if k != client_key and (not q or now_mono - q[-1] > FEEDBACK_RATE_WINDOW_S)
+            ]:
+                del feedback_hits[stale_key]
             if len(hits) >= FEEDBACK_RATE_LIMIT_MAX:
                 return JSONResponse(
                     status_code=429,
@@ -3292,11 +3306,14 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                 )
             hits.append(now_mono)
         tag = _sanitise_display_tag(payload.get("gamer_tag", "AstroGamer_FR"))
-        comments = comments_raw
-        ideas = ideas_raw
+        comments = _sanitise_feedback_field(comments_raw)
+        ideas = _sanitise_feedback_field(ideas_raw)
         now_iso = datetime.datetime.now().isoformat()[:19]
         stars = "⭐" * rating
         md_path = ARTIFACTS_ROOT / "SON_FEEDBACK.md"
+        md_path.parent.mkdir(parents=True, exist_ok=True)
+        if md_path.exists() and md_path.stat().st_size >= FEEDBACK_MAX_FILE_BYTES:
+            os.replace(md_path, md_path.with_suffix(".md.1"))
         with open(md_path, "a", encoding="utf-8") as fp:
             fp.write(
                 f"\n## 🖖 Avis Star Trek Exoplanet Hunter v4.0 de {tag} ({stars}) — {now_iso}\n"

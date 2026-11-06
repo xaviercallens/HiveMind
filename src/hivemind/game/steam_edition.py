@@ -37,7 +37,7 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
     """Generate a self-contained interactive Cyberpunk HTML5 HUD v2 preloaded with live RTX 2070 game data."""
     from hivemind.game.hf_hack_miner import build_georing_3d_topology_snapshot
 
-    embedded_json = json.dumps(game_report, indent=2)
+    embedded_json = json.dumps(game_report, indent=2).replace("</", "<\\/")
     georing_snapshot_json = json.dumps(
         {"nodes": build_georing_3d_topology_snapshot()["nodes"]}
     ).replace("</", "<\\/")
@@ -360,6 +360,15 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
   <script>
     let GAME_DATA = {embedded_json};
 
+    function escHtml(v) {{
+      return String(v == null ? '' : v)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }}
+
     function renderLeaderboard() {{
       if (GAME_DATA.hardware) {{
         document.getElementById('gpu-name').textContent = GAME_DATA.hardware.gpu_name + ' (' + GAME_DATA.hardware.vram_total_gb + ' GB VRAM)';
@@ -375,19 +384,19 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
       tbody.innerHTML = '';
       (GAME_DATA.leaderboard || []).forEach((g, idx) => {{
         const tr = document.createElement('tr');
-        const achHtml = (g.achievements_unlocked || []).map(a => `<span class="pill">${{a}}</span>`).join(' ');
-        const rpHtml = g.rich_presence_status ? `<div style="color:#00ff9d;font-size:0.74rem;margin-top:4px;">RP: ${{g.rich_presence_status}}</div>` : '';
-        const receipt = g.steam_leaderboard_receipt ? `<div style="color:#64748b;font-size:0.72rem;margin-top:2px;">HMAC: ${{g.steam_leaderboard_receipt}}</div>` : '';
-        const bossPts = g.boss_raid_points || 0;
+        const achHtml = (g.achievements_unlocked || []).map(a => `<span class="pill">${{escHtml(a)}}</span>`).join(' ');
+        const rpHtml = g.rich_presence_status ? `<div style="color:#00ff9d;font-size:0.74rem;margin-top:4px;">RP: ${{escHtml(g.rich_presence_status)}}</div>` : '';
+        const receipt = g.steam_leaderboard_receipt ? `<div style="color:#64748b;font-size:0.72rem;margin-top:2px;">HMAC: ${{escHtml(g.steam_leaderboard_receipt)}}</div>` : '';
+        const bossPts = Number(g.boss_raid_points || 0);
         tr.innerHTML = `
           <td class="${{idx === 0 ? 'crown' : ''}}">${{idx === 0 ? '#1 CHAMPION' : '#' + (idx + 1)}}</td>
-          <td><strong>${{g.gamer_tag}}</strong><br/><span style="color:#38bdf8;font-size:0.8rem;">${{g.rank_title}}</span></td>
-          <td>${{g.data_discovery_points.toLocaleString()}} PTS<br/><span style="color:#94a3b8;font-size:0.76rem;">${{g.shards_mined}} Shards</span></td>
-          <td>${{g.lora_training_points.toLocaleString()}} PTS<br/><span style="color:#00ff9d;font-size:0.78rem;">-${{g.best_loss_reduction_pct}}% Loss</span></td>
-          <td>${{g.solution_bounty_points.toLocaleString()}} PTS<br/><span style="color:#fcee09;font-size:0.78rem;">${{g.bounties_solved}} Solved</span></td>
-          <td>${{g.swarm_contribution_points.toLocaleString()}} PTS<br/><span style="color:#c084fc;font-size:0.78rem;">${{g.swarm_tokens_served}} Toks (+${{bossPts}} Boss)</span></td>
-          <td class="crown">${{g.total_points.toLocaleString()}} PTS</td>
-          <td style="color:#00ff9d;font-weight:bold;">${{Number(g.hive_balance).toFixed(4)}} $HIVE</td>
+          <td><strong>${{escHtml(g.gamer_tag)}}</strong><br/><span style="color:#38bdf8;font-size:0.8rem;">${{escHtml(g.rank_title)}}</span></td>
+          <td>${{Number(g.data_discovery_points || 0).toLocaleString()}} PTS<br/><span style="color:#94a3b8;font-size:0.76rem;">${{Number(g.shards_mined || 0)}} Shards</span></td>
+          <td>${{Number(g.lora_training_points || 0).toLocaleString()}} PTS<br/><span style="color:#00ff9d;font-size:0.78rem;">-${{escHtml(g.best_loss_reduction_pct)}}% Loss</span></td>
+          <td>${{Number(g.solution_bounty_points || 0).toLocaleString()}} PTS<br/><span style="color:#fcee09;font-size:0.78rem;">${{Number(g.bounties_solved || 0)}} Solved</span></td>
+          <td>${{Number(g.swarm_contribution_points || 0).toLocaleString()}} PTS<br/><span style="color:#c084fc;font-size:0.78rem;">${{Number(g.swarm_tokens_served || 0)}} Toks (+${{bossPts}} Boss)</span></td>
+          <td class="crown">${{Number(g.total_points || 0).toLocaleString()}} PTS</td>
+          <td style="color:#00ff9d;font-weight:bold;">${{Number(g.hive_balance || 0).toFixed(4)}} $HIVE</td>
           <td>${{achHtml}}${{rpHtml}}${{receipt}}</td>
         `;
         tbody.appendChild(tr);

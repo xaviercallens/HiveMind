@@ -25,6 +25,7 @@ THEOREMS = (
     "lump_sum_bonus_preserves_best_response",
     "lump_sum_bonus_preserves_nash",
     "knowledge_bonus_payouts_never_exceed_pool",
+    "signer_pseudo_trials_le_budget",
 )
 HELPERS = ("add_div_le_div_add", "payouts_le_pool_times_weights_over_W")
 ALLOWED = {"propext", "Quot.sound", "Classical.choice"}

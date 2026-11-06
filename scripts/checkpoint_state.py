@@ -45,11 +45,14 @@ MAX_FILE = 25 * 1024 * 1024
 LOG_TAIL = 400 * 1024
 DENY_NAME = ("token", "secret", "credential", "passwd", "password", ".env", "id_ed25519", "id_rsa", "apikey", "api_key", ".pem", ".key")
 DENY_SUFFIX = (".pt", ".pth", ".safetensors", ".bin", ".parquet", ".gguf", ".ckpt", ".npy", ".npz", ".tar", ".gz", ".zip")
-SECRET_RE = re.compile(rb"(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|hf_[A-Za-z0-9]{25,}|AIza[0-9A-Za-z_\-]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|"
-                       rb"AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|(?i:bearer)\s+[A-Za-z0-9._\-]{25,}|(?i:zenodo[_-]?token)\s*[=:]\s*\S{10,})")
+SECRET_RE = re.compile(
+    rb"(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|hf_[A-Za-z0-9]{25,}|AIza[0-9A-Za-z_\-]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|"
+    rb"AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|(?i:bearer)\s+[A-Za-z0-9._\-]{25,}|(?i:zenodo[_-]?token)\s*[=:]\s*\S{10,}|"
+    rb"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})"
+)
 SKIPPED_SECRET_LIKE: List[str] = []
 JOB_DIR = Path(os.environ.get("CLAUDE_JOB_DIR", ""))
-MEMORY_DIR = Path.home() / ".claude" / "projects" / "-home-callensxavier-gmail-com-HiveMind" / "memory"
+MEMORY_DIR = Path(os.environ.get("HIVEMIND_CHECKPOINT_MEMORY_DIR", ""))
 DATA_DISK_DEFAULT = "/mnt/disks/disk-socrateai-local-1/hivemind_checkpoints"
 META = "http://metadata.google.internal/computeMetadata/v1/instance/"
 
@@ -83,7 +86,7 @@ def allowed(path: Path) -> bool:
     return not (any(k in n for k in DENY_NAME) or n.endswith(DENY_SUFFIX) or path.stat().st_size > MAX_FILE and path.suffix not in (".log", ".jsonl"))
 
 
-def collect() -> List[Tuple[str, bytes]]:
+def collect(include_memory: bool = False) -> List[Tuple[str, bytes]]:
     """(path inside the checkpoint tree, content) of everything worth protecting."""
     items: List[Tuple[str, bytes]] = []
 
@@ -93,23 +96,24 @@ def collect() -> List[Tuple[str, bytes]]:
         data = p.read_bytes()
         if len(data) > (LOG_TAIL if tail else MAX_FILE):
             data = data[-LOG_TAIL:] if tail else data[:MAX_FILE]
-        if SECRET_RE.search(data):  # content scan on top of the name denylist: never store a file that looks like it holds a credential
+        if SECRET_RE.search(data):  # content scan on top of the name denylist: never store a file that looks like it holds a credential or e-mail
             SKIPPED_SECRET_LIKE.append(rel)
             return
         items.append((rel, data))
 
     exp = ROOT / "artifacts" / "experiments"
-    for sub in sorted(d for d in exp.iterdir() if d.is_dir()):  # E15/, E16/, ... (git-ignored)
-        for f in sorted(sub.rglob("*")):
-            add(f"state/artifacts/experiments/{sub.name}/{f.relative_to(sub)}", f)
-    for f in sorted(exp.glob("*partial*.json")) + sorted(exp.glob("T4_benchmark_queue*.json")):  # queue state + leftovers
-        add(f"state/artifacts/experiments/{f.name}", f)
-    if JOB_DIR.is_dir():
+    if exp.is_dir():
+        for sub in sorted(d for d in exp.iterdir() if d.is_dir()):  # E15/, E16/, ... (git-ignored)
+            for f in sorted(sub.rglob("*")):
+                add(f"state/artifacts/experiments/{sub.name}/{f.relative_to(sub)}", f)
+        for f in sorted(exp.glob("*partial*.json")) + sorted(exp.glob("T4_benchmark_queue*.json")):  # queue state + leftovers
+            add(f"state/artifacts/experiments/{f.name}", f)
+    if str(JOB_DIR) and JOB_DIR != Path(".") and JOB_DIR.is_dir():
         for f in sorted((JOB_DIR / "tmp" / "queue_logs").glob("*.log")):
             add(f"state/job_logs/{f.name}", f, tail=True)
         for f in sorted((JOB_DIR / "tmp").glob("*.py")) + sorted((JOB_DIR / "tmp").glob("*.json")):
             add(f"state/job_tmp/{f.name}", f)
-    if MEMORY_DIR.is_dir():
+    if include_memory and str(MEMORY_DIR) and MEMORY_DIR != Path(".") and MEMORY_DIR.is_dir():
         for f in sorted(MEMORY_DIR.glob("*.md")):
             add(f"state/memory/{f.name}", f)
     return items

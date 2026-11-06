@@ -57,6 +57,8 @@ def test_register_and_login_with_username_and_password_preserves_key_and_balance
     assert login_body["account_id"] == reg_body["account_id"]
     assert login_body["api_key"] == reg_body["api_key"]
     assert login_body["balance_hmt"] == reg_body["balance_hmt"]
+    assert "v1_migrated" not in login_body
+    assert "v2_access_granted" not in login_body
 
     # 3. Log in with email + password
     r_email = client.post(

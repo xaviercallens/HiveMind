@@ -33,6 +33,7 @@ from hivemind.boinc.workunit import (
     sign_shard_bytes,
     verify_and_load_parquet_shard,
 )
+from hivemind.cli.simulate_e2e import estimate_workunit_tflops
 from hivemind.client.daemon import ZeroIntrusionDaemon
 from hivemind.client.steamworks import SteamworksSDKBridge
 from hivemind.config import (
@@ -384,11 +385,16 @@ def run_huggingface_rtx2070_poc(
                     weight_decay=0.01,
                     micro_batch_size=2,
                 )
-                steamworks.record_validated_workunit(
+                tflops_wu = estimate_workunit_tflops(
+                    workunit=wu,
+                    total_params=bundle.total_params,
+                    micro_batch_size=2,
+                )
+                steam_entry = steamworks.record_validated_workunit(
                     steam_id64=steam_id,
                     persona_name=f"HF_Swarm_Miner_{w_idx + 1}",
                     wu_id=wu.wu_id,
-                    tflops_contributed=4.2,
+                    tflops_contributed=tflops_wu,
                     credits_minted=15.0,
                 )
                 hf_worker_trajectories[w_id] = {
@@ -398,6 +404,7 @@ def run_huggingface_rtx2070_poc(
                     "final_loss": inner_res.final_loss,
                     "spot_check_passed": verdict.passed,
                     "spot_check_max_diff": verdict.max_abs_divergence,
+                    "verified_tflops": steam_entry.verified_tflops,
                 }
                 inner_res.micro_checkpoints.clear()
                 inner_res.theta_init.clear()
@@ -449,6 +456,7 @@ def run_huggingface_rtx2070_poc(
                 "outer_delta_norm": outer_res.aggregated_delta_norm,
                 "shared_expert_cid": shared_expert_cid,
                 "shared_expert_path": str(shared_expert_path),
+                "verified_tflops": hf_worker_trajectories[worker_names[0]]["verified_tflops"],
             }
             del first_inner_res, ref_delta, worker_pool_deltas, outer_res
             gc.collect()
@@ -513,11 +521,16 @@ def run_huggingface_rtx2070_poc(
             weight_decay=0.01,
             micro_batch_size=2,
         )
-        steamworks.record_validated_workunit(
+        tflops_wu = estimate_workunit_tflops(
+            workunit=wu,
+            total_params=bundle.total_params,
+            micro_batch_size=2,
+        )
+        steam_entry = steamworks.record_validated_workunit(
             steam_id64=steam_id,
             persona_name=f"RTX2070_Gamer_{domain}",
             wu_id=wu.wu_id,
-            tflops_contributed=4.2,
+            tflops_contributed=tflops_wu,
             credits_minted=15.0,
         )
 
@@ -566,6 +579,7 @@ def run_huggingface_rtx2070_poc(
             "multikrum_accepted": outer_res.filter_report.accepted_workers,
             "multikrum_rejected": outer_res.filter_report.rejected_workers,
             "outer_delta_norm": outer_res.aggregated_delta_norm,
+            "verified_tflops": steam_entry.verified_tflops,
         }
 
         del inner_res, decompressed_honest, worker_pool_deltas, outer_res

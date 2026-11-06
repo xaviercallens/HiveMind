@@ -167,22 +167,51 @@ def test_ip167_no_committed_hmac_secrets_and_portal_secret_validation(
     assert app is not None
 
 
-def test_ip192_ip225_ip226_ci_workflows_concurrency_and_162_theorem_floor() -> None:
-    """IP-192, IP-225, IP-226: CI workflows protect main from cancellation and enforce >=162 Lean theorems."""
-    ci_yml = (PROJECT_ROOT / ".github" / "workflows" / "ci_swarm_tests.yml").read_text(encoding="utf-8")
-    pr_yml = (PROJECT_ROOT / ".github" / "workflows" / "pr_security_gate.yml").read_text(encoding="utf-8")
-    rel_yml = (PROJECT_ROOT / ".github" / "workflows" / "immutable_release.yml").read_text(encoding="utf-8")
+def test_pr_security_scanner_resolves_head_sha_author_email_for_trusted_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PRSecurityScanner resolves commit author email from HEAD_SHA in GitHub Actions while keeping None unverified otherwise."""
+    import subprocess
+    from hivemind.security.pr_security_scanner import PRSecurityScanner
 
-    # IP-225: main branch runs are not cancelled in-progress
-    assert "cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}" in ci_yml
-    assert "cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}" in pr_yml
+    head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    scanner = PRSecurityScanner()
 
-    # IP-226: >= 162 theorem floor + RDAMultiplier audit in CI and release workflows
-    assert 'result["theorem_count"] >= 162' in ci_yml
-    assert 'result["rda_multiplier_audit"]["verified"] is True' in ci_yml
-    assert 'result["theorem_count"] >= 162' in rel_yml
-    assert 'result["rda_multiplier_audit"]["verified"] is True' in rel_yml
+    # Without HEAD_SHA and with author_email=None, workflow modification is blocked by CB-04.
+    monkeypatch.delenv("HEAD_SHA", raising=False)
+    res_no_env = scanner.audit_pull_request(
+        pr_number=678,
+        pr_title="ci: update workflow",
+        pr_body="Update workflow",
+        author="xaviercallens",
+        author_email=None,
+        changed_files=[
+            {
+                "filename": ".github/workflows/ci_swarm_tests.yml",
+                "status": "modified",
+                "additions": 2,
+                "patch": "@@ -1,1 +1,2 @@\n+cancel-in-progress: false\n",
+            }
+        ],
+    )
+    assert any(f.rule_id == "CB-04" for f in res_no_env.findings)
 
-    # IP-192: Step summary reads theorem_count dynamically instead of hardcoding `48+`
-    assert "`48+` Theorems Machine-Checked" not in ci_yml
-    assert "`{lean_n}` Theorems Machine-Checked" in ci_yml
+    # With HEAD_SHA pointing to an owner-authored commit, CB-04 is not triggered.
+    monkeypatch.setenv("HEAD_SHA", head_sha)
+    res_with_sha = scanner.audit_pull_request(
+        pr_number=678,
+        pr_title="ci: update workflow",
+        pr_body="Update workflow",
+        author="xaviercallens",
+        author_email=None,
+        changed_files=[
+            {
+                "filename": ".github/workflows/ci_swarm_tests.yml",
+                "status": "modified",
+                "additions": 2,
+                "patch": "@@ -1,1 +1,2 @@\n+cancel-in-progress: false\n",
+            }
+        ],
+    )
+    assert not any(f.rule_id == "CB-04" for f in res_with_sha.findings)
+

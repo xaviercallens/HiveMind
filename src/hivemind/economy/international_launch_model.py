@@ -25,8 +25,10 @@ This module implements the 4-Mechanism Self-Balancing International Launch Model
 
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 
@@ -812,6 +814,12 @@ def forecast_200plus_node_international_launch(
     - Total active nodes `>= 200` (default `265` active nodes vs. `47` current baseline nodes).
     """
     # public inputs are clamped: the Erlang-C model is O(nodes) per call (10^7 nodes took 44 s)
+    if isinstance(mean_tokens_per_req, bool) or not (
+        math.isfinite(float(mean_tokens_per_req)) and 1.0 <= float(mean_tokens_per_req) <= 100_000.0
+    ):
+        raise ValueError("mean_tokens_per_req must be finite and between 1 and 100000")
+    if not (math.isfinite(float(token_length_cv)) and math.isfinite(float(arrival_cv))):
+        raise ValueError("token_length_cv and arrival_cv must be finite")
     total_nodes = min(max(200, int(target_total_nodes)), MAX_FORECAST_NODES)
     visitors = min(max(total_nodes * 2, int(visitor_count)), MAX_FORECAST_VISITORS)
     utc_h = int(utc_hour) % 24
@@ -1271,6 +1279,7 @@ def forecast_200plus_node_international_launch(
 
 def build_foundation_paper_v42_portal_payload(
     base_gcp_url: str = "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app",
+    e20_artifact_path: str | Path | None = None,
 ) -> Dict[str, Any]:
     """Return the Foundation Paper v4.2.0 metadata, live E20/47-node experiments,
     real vs. forecast traffic comparison, and 5-wave international scalability roadmap.
@@ -1280,6 +1289,36 @@ def build_foundation_paper_v42_portal_payload(
         target_total_nodes=265,
         visitor_count=2400,
     )
+    default_e20_path = (
+        Path(__file__).resolve().parents[3]
+        / "artifacts"
+        / "experiments"
+        / "E20_international_launch_split_dct_report.json"
+    )
+    e20_path = Path(e20_artifact_path) if e20_artifact_path is not None else default_e20_path
+    e20_doc: Dict[str, Any] = {}
+    if e20_path.is_file():
+        try:
+            loaded_e20 = json.loads(e20_path.read_text(encoding="utf-8"))
+            if isinstance(loaded_e20, dict):
+                e20_doc = loaded_e20
+        except (OSError, ValueError):
+            e20_doc = {}
+    if e20_doc:
+        e20_preds = dict(e20_doc.get("predictions_check") or {})
+        e20_executed_at = str(e20_doc.get("executed_at_utc") or "2026-11-01T09:15:25Z")
+        e20_artifact_rel = "artifacts/experiments/E20_international_launch_split_dct_report.json"
+        e20_data_source = f"{e20_artifact_rel} ({e20_executed_at})"
+        e20_status = (
+            "VERIFIED_PASS"
+            if (e20_preds and all(bool(v) for v in e20_preds.values()))
+            else str(e20_doc.get("status") or "NOT_SOURCED")
+        )
+    else:
+        e20_executed_at = "NOT_SOURCED"
+        e20_artifact_rel = "NOT_SOURCED"
+        e20_data_source = "NOT_SOURCED"
+        e20_status = "NOT_SOURCED"
     return {
         "schema_version": "4.2.0",
         "paper_version": "4.2.0",
@@ -1345,8 +1384,14 @@ def build_foundation_paper_v42_portal_payload(
             "experiment_e20_international_launch": {
                 "experiment_id": "E20",
                 "roadmap_refs": ["HM-S29-01", "HM-S29-02", "HM-S31-02"],
-                "status": "VERIFIED_PASS",
+                "status": e20_status,
+                "data_source": e20_data_source,
+                "artifact_path": e20_artifact_rel,
+                "executed_at_utc": e20_executed_at,
                 "P20a_adaptive_multisplit_guard": {
+                    "data_source": e20_data_source,
+                    "artifact_path": e20_artifact_rel,
+                    "executed_at_utc": e20_executed_at,
                     "selected_cut_name": "patch_stem_int4_bottleneck",
                     "client_prelude_vram_mib": 680.0,
                     "ceiling_mib": 1536.0,
@@ -1360,6 +1405,9 @@ def build_foundation_paper_v42_portal_payload(
                     ],
                 },
                 "P20b_top1pct_2d_dct_ef21": {
+                    "data_source": e20_data_source,
+                    "artifact_path": e20_artifact_rel,
+                    "executed_at_utc": e20_executed_at,
                     "tensor_shape": [256, 256],
                     "uncompressed_fp32_bytes": 262144,
                     "compressed_wire_bytes": 1163,
@@ -1368,6 +1416,9 @@ def build_foundation_paper_v42_portal_payload(
                     "wire_vs_direct_drift": 3.0e-8,
                 },
                 "P20c_super_peer_fanout_and_sqlite_coalescer": {
+                    "data_source": e20_data_source,
+                    "artifact_path": e20_artifact_rel,
+                    "executed_at_utc": e20_executed_at,
                     "leaf_nodes": 10000,
                     "regions_active": 6,
                     "super_peers": 318,
@@ -1378,7 +1429,8 @@ def build_foundation_paper_v42_portal_payload(
                 },
             },
             "nocturnal_vmoe_pareto_ratchet": {
-                "status": "ACTIVE_EVOLVING_GREEN",
+                "status": "NOT_SOURCED",
+                "data_source": "NOT_SOURCED (constants from paper v4.2.0 section 02, not read from a live artifact)",
                 "reddit_vision_vlm_moe_loss": 0.0003,
                 "reddit_vision_loss_reduction_pct": 94.42,
                 "exoplanet_astro_vmoe_focal_loss": 0.0,
@@ -1391,6 +1443,8 @@ def build_foundation_paper_v42_portal_payload(
         },
         "real_vs_forecast_traffic_and_balancing": {
             "real_live_47_node_traffic": {
+                "data_source": "SNAPSHOT_2026-10-31_NOT_LIVE",
+                "snapshot_date_utc": "2026-10-31",
                 "nodes": 59,
                 "producers": 10,
                 "online_quorum_producers": 4,

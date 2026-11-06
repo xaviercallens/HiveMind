@@ -56,7 +56,7 @@
   ]
  },
  "spec_file": "lean4/HiveMindSpec.lean",
- "spec_sha256": "0fea293a4aca5c9a2dd71522c309ab98f8b0152531ea778d484e52b3d6971945",
+ "spec_sha256": "5531e803cd06b20561ca27703865bf3d74e79b7a8b7d8523b799c3f6360d0337",
  "theorems_failing_whitelist": [],
  "theorems_in_file": 164,
  "whitelist": [

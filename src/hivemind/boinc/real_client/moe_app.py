@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
+import random
 import sys
 import time
 from pathlib import Path
@@ -36,6 +38,55 @@ LORA_TARGETS = ("q_proj", "k_proj", "v_proj", "o_proj")
 
 def tokens_sha(tokens: list[list[int]]) -> str:
     return hashlib.sha256(json.dumps(tokens, separators=(",", ":")).encode()).hexdigest()
+
+
+def build_mixed_domain_train_tokens(
+    target_tokens: list[list[int]],
+    replay_pools_by_domain: dict[str, list[list[int]]] | None,
+    *,
+    target_domain: str = "general",
+    replay_ratio: float = 0.2,
+    rng_seed: int = 42,
+) -> list[list[int]]:
+    """Construct an 80/20 mixed-domain token batch schedule to prevent cross-domain forgetting on shared attention LoRAs.
+
+    Replaces ``round(len(target_tokens) * replay_ratio)`` sequences at deterministic indices with sequences sampled
+    uniformly across non-target domains in ``replay_pools_by_domain``.
+    """
+    if not target_tokens or not replay_pools_by_domain or replay_ratio <= 0.0:
+        return [list(seq) for seq in target_tokens]
+    other_domains = sorted(d for d, pool in replay_pools_by_domain.items() if d != target_domain and pool)
+    if not other_domains:
+        return [list(seq) for seq in target_tokens]
+    clamped_ratio = min(0.5, max(0.0, float(replay_ratio)))
+    n_total = len(target_tokens)
+    n_replay = max(1, int(round(n_total * clamped_ratio))) if n_total >= 2 else 0
+    rng = random.Random(int(rng_seed))
+    mixed = [list(seq) for seq in target_tokens]
+    replay_positions = sorted(rng.sample(range(n_total), k=min(n_replay, n_total)))
+    for idx, pos in enumerate(replay_positions):
+        dom = other_domains[idx % len(other_domains)]
+        pool = replay_pools_by_domain[dom]
+        chosen = pool[rng.randrange(len(pool))]
+        mixed[pos] = list(chosen)
+    return mixed
+
+
+def cosine_segment_lr(
+    base_lr: float,
+    segment_idx: int,
+    total_segments: int,
+    *,
+    round_idx: int = 0,
+    total_rounds: int = 100,
+    min_lr_scale: float = 0.2,
+) -> float:
+    """Cosine learning-rate schedule across chained BOINC QLoRA rounds and inner segments."""
+    tot_steps = max(1, int(total_rounds) * max(1, int(total_segments)))
+    cur_step = min(tot_steps, max(0, int(round_idx) * max(1, int(total_segments)) + int(segment_idx)))
+    cosine = 0.5 * (1.0 + math.cos(math.pi * cur_step / tot_steps))
+    scale = float(min_lr_scale) + (1.0 - float(min_lr_scale)) * cosine
+    return float(base_lr) * scale
 
 
 def load_peft_model(spec: dict[str, Any], adapter_state: dict[str, Any] | None = None):
@@ -102,7 +153,16 @@ def train(
     from hivemind.core.diloco_inner import replay_inner_segment
     from hivemind.core.quantization import extract_lora_state_dict, load_lora_state_dict
 
-    train_tokens = torch.tensor(spec["train_tokens"], dtype=torch.long)
+    raw_train_tokens = spec["train_tokens"]
+    if spec.get("replay_pools") and not spec.get("domain_isolated_adapter", False):
+        raw_train_tokens = build_mixed_domain_train_tokens(
+            raw_train_tokens,
+            spec["replay_pools"],
+            target_domain=str(spec.get("domain", "general")),
+            replay_ratio=float(spec.get("replay_ratio", 0.2)),
+            rng_seed=int(spec.get("rng_seed", 0)),
+        )
+    train_tokens = torch.tensor(raw_train_tokens, dtype=torch.long)
     model = load_peft_model(spec)
     if start_state is not None:
         load_lora_state_dict(model, start_state)
@@ -117,14 +177,28 @@ def train(
     if eval0 is None:
         eval0 = eval_by_domain(model, spec)
     t0 = time.time()
+    use_cosine_lr = bool(spec.get("cosine_lr", False))
     for k in range(len(states) - 1, k_total):
         if lazy:  # red-team control: claim progress without computing it
             states.append({n: t.clone() for n, t in states[-1].items()})
         else:
+            base_lr = float(spec["lr"])
+            seg_lr = (
+                cosine_segment_lr(
+                    base_lr,
+                    k,
+                    k_total,
+                    round_idx=int(spec.get("round_idx", 0)),
+                    total_rounds=int(spec.get("total_rounds", 1)),
+                    min_lr_scale=float(spec.get("min_lr_scale", 0.2)),
+                )
+                if use_cosine_lr
+                else base_lr
+            )
             states.append(
                 replay_inner_segment(
                     model, states[k], train_tokens, k * seg, (k + 1) * seg,
-                    lr=float(spec["lr"]), weight_decay=float(spec["weight_decay"]),
+                    lr=seg_lr, weight_decay=float(spec["weight_decay"]),
                     rng_seed=int(spec["rng_seed"]), micro_batch_size=int(spec["micro_batch"]),
                 )
             )
@@ -138,12 +212,14 @@ def train(
     load_lora_state_dict(model, states[-1])
     eval1 = eval_by_domain(model, spec)
     wall = time.time() - t0
-    tokens_seen = steps * int(spec["micro_batch"]) * len(spec["train_tokens"][0])
+    tokens_seen = steps * int(spec["micro_batch"]) * len(raw_train_tokens[0])
     meta = {
         "app": spec.get("app", TRAIN_APP), "app_version": APP_VERSION, "wu_id": spec["wu_id"], "model_id": spec["model_id"],
         "device_name": torch.cuda.get_device_name(0), "fingerprint": class_fingerprint("cuda", "fp16"),
         "segments": k_total, "segment_steps": seg, "resumed_from_segment": resumed,
         "state_sha256": [state_sha(s) for s in states], "domain": spec.get("domain", "general"),
+        "domain_isolated_adapter": bool(spec.get("domain_isolated_adapter", False)),
+        "replay_ratio": float(spec.get("replay_ratio", 0.2 if spec.get("replay_pools") else 0.0)),
         "eval_by_domain_before": eval0, "eval_by_domain_after": eval1,
         "eval_loss_before": sum(eval0.values()) / len(eval0), "eval_loss_after": sum(eval1.values()) / len(eval1),  # mean over domains
         "trainable_params": sum(p.numel() for p in model.parameters() if p.requires_grad),

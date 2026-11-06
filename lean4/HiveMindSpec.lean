@@ -1847,7 +1847,7 @@ theorem decoupled_token_weight_monotone
     `K = 0` degenerate counterexample. -/
 theorem decoupled_quorum_admitted_count_bounds
     (M K extra : Nat)
-    (h_K : 1 <= K)
+    (_h_K : 1 <= K)
     (h_KM : K <= M)
     (h_extra : extra <= M - K) :
     K <= admittedCount K extra ∧
@@ -2180,7 +2180,7 @@ theorem waggle_dance_quorum_lock_soundness (recruits extra quorumThreshold : Nat
     cycle adds `step ≥ 1` recruits to `initialRecruits`, after `t` cycles satisfying `quorumThreshold ≤ initialRecruits + t * step`,
     the Seeley quorum lock `quorumLocked` is guaranteed to hold. -/
 theorem waggle_dance_quorum_convergence (initialRecruits step t quorumThreshold : Nat)
-    (h_step : 1 ≤ step) (h_conv : quorumThreshold ≤ initialRecruits + t * step) :
+    (_h_step : 1 ≤ step) (h_conv : quorumThreshold ≤ initialRecruits + t * step) :
     quorumLocked (initialRecruits + t * step) quorumThreshold = true := by
   unfold quorumLocked
   simp only [decide_eq_true_eq]

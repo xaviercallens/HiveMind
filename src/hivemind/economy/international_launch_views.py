@@ -1120,6 +1120,41 @@ def render_foundation_paper_portal_html(
     Real vs. Forecast Traffic, Network Balancing, and Embedded PDF + 3D Globe Portal Page.
     """
     data = payload or build_foundation_paper_v42_portal_payload()
+    live_exp = dict(data.get("live_experimentation_v42") or {})
+    wan = dict(live_exp.get("live_47_node_wan_baseline") or {})
+    wan_source = str(wan.get("data_source") or "SNAPSHOT_2026-10-31_NOT_LIVE")
+    wan_date = str(wan.get("snapshot_date_utc") or "2026-10-31")
+    wan_nodes = int(wan.get("active_nodes", 59))
+    wan_roles = dict(wan.get("role_breakdown") or {})
+    wan_prods = int(wan_roles.get("producers", 10))
+    wan_pros = int(wan_roles.get("prosumers", 22))
+    wan_cons = int(wan_roles.get("consumers", 24))
+    wan_admins = int(wan_roles.get("admins", 3))
+    wan_demand = float(wan.get("daytime_sustained_demand_tok_per_s", 218.0))
+    wan_cap = float(wan.get("daytime_capacity_tok_per_s", 480.0))
+    wan_rho = float(wan.get("utilization_rho", 0.4542))
+    wan_p50 = float(wan.get("mean_endpoint_p50_latency_ms", 257.3))
+    wan_comp = int(wan.get("openrouter_completions_served", 2455))
+    wan_cobb = float(wan.get("boinc_cobblestones_snapshot", 5632.11))
+    wan_pflops = float(wan.get("compute_pflops_snapshot", 2.433))
+    wan_wus = int(wan.get("assimilated_boinc_workunits", 100))
+    wan_t4_free = float(wan.get("tesla_t4_free_vram_mib", 10519.0))
+    wan_t4_floor = float(wan.get("tesla_t4_min_free_vram_guard_mib", 4300.0))
+
+    e20 = dict(live_exp.get("experiment_e20_international_launch") or {})
+    e20_status = str(e20.get("status") or "NOT_SOURCED")
+    e20_source = str(e20.get("data_source") or "NOT_SOURCED")
+    p20a = dict(e20.get("P20a_adaptive_multisplit_guard") or {})
+    p20b = dict(e20.get("P20b_top1pct_2d_dct_ef21") or {})
+    p20c = dict(e20.get("P20c_super_peer_fanout_and_sqlite_coalescer") or {})
+    p20a_vram = float(p20a.get("client_prelude_vram_mib", 680.0))
+    p20b_ratio = float(p20b.get("compression_ratio", 225.4))
+    p20c_red = float(p20c.get("coordinator_ingress_reduction_factor", 31.45))
+
+    vmoe = dict(live_exp.get("nocturnal_vmoe_pareto_ratchet") or {})
+    vmoe_status = str(vmoe.get("status") or "NOT_SOURCED")
+    vmoe_source = str(vmoe.get("data_source") or "NOT_SOURCED")
+
     wave_rows_html = []
     for w in data.get("five_wave_international_roadmap", []):
         is_target = w.get("wave_id") == "WAVE-2-M2-TARGET"
@@ -1271,14 +1306,14 @@ def render_foundation_paper_portal_html(
       </p>
       <div class="grid-3">
         <div class="card" style="margin:0;border-color:rgba(56,189,248,0.45);">
-          <div style="font-size:0.75rem;color:#38bdf8;font-weight:800;">LIVE PRODUCTION TELEMETRY (WAVE 0)</div>
-          <h3 id="paper-live-gcp-heading" style="margin:4px 0 8px;color:#f8fafc;">47-Node Live WAN Baseline</h3>
+          <div style="font-size:0.75rem;color:#38bdf8;font-weight:800;">SNAPSHOT TELEMETRY ({wan_source} &bull; {wan_date})</div>
+          <h3 id="paper-live-gcp-heading" style="margin:4px 0 8px;color:#f8fafc;">{wan_nodes}-Node WAN Baseline ({wan_source})</h3>
           <div id="paper-live-gcp-telemetry" style="font-size:0.83rem;color:#cbd5e1;">
-            &bull; Active Nodes: <strong>47</strong> (8 Producers, 14 Prosumers, 22 Consumers, 3 Admins)<br/>
-            &bull; Real Traffic Demand / Capacity: <strong>185.0 tok/s</strong> / <strong style="color:#34d399;">380.0 tok/s</strong><br/>
-            &bull; Utilization &amp; Latency: <strong>&rho; = 0.487</strong> &bull; Mean p50 = <strong style="color:#fbbf24;">196.8 ms</strong> (1,427 completions)<br/>
-            &bull; Attested BOINC Compute: <strong>5,632.11 Cobblestones</strong> (2.433 PFLOPs, 124 WUs, 0.0% false reject)<br/>
-            &bull; Local Tesla T4 Guard: <strong style="color:#34d399;">10,073 MiB free VRAM</strong> (&ge; 4,300 MiB floor)
+            &bull; Active Nodes: <strong>{wan_nodes}</strong> ({wan_prods} Producers, {wan_pros} Prosumers, {wan_cons} Consumers, {wan_admins} Admins)<br/>
+            &bull; Real Traffic Demand / Capacity: <strong>{wan_demand:.1f} tok/s</strong> / <strong style="color:#34d399;">{wan_cap:.1f} tok/s</strong><br/>
+            &bull; Utilization &amp; Latency: <strong>&rho; = {wan_rho:.4f}</strong> &bull; Mean p50 = <strong style="color:#fbbf24;">{wan_p50:.1f} ms</strong> ({wan_comp:,} completions)<br/>
+            &bull; BOINC Compute Snapshot: <strong>{wan_cobb:,.2f} Cobblestones</strong> ({wan_pflops:.3f} PFLOPs, {wan_wus} WUs, source: <code>{wan_source}</code>)<br/>
+            &bull; Local Tesla T4 Guard: <strong style="color:#34d399;">{wan_t4_free:,.1f} MiB free VRAM</strong> (&ge; {wan_t4_floor:,.0f} MiB floor)
           </div>
         </div>
 
@@ -1311,6 +1346,7 @@ def render_foundation_paper_portal_html(
     <!-- SECTION 2: LIVE EXPERIMENT E20 & NOCTURNAL V-MOE EVOLUTION -->
     <section class="card">
       <h2>02 // Live Experiment E20 (HM-S29-01, HM-S29-02, HM-S31-02) &amp; Nocturnal V-MoE Pareto-Ratchet Results</h2>
+      <p style="font-size:0.78rem;color:#94a3b8;margin:0 0 8px;">E20 source: <code>{e20_source}</code> &bull; V-MoE source: <code>{vmoe_source}</code></p>
       <table>
         <thead>
           <tr>
@@ -1325,30 +1361,30 @@ def render_foundation_paper_portal_html(
           <tr>
             <td><strong>E20-P20a: Adaptive Multi-Split Guard</strong></td>
             <td>GTX 1650 (4G), Steam Deck OLED, RTX 2070 (8G), Apple M2</td>
-            <td><strong>680.0 MiB</strong> client prelude VRAM; 48 KB wire; <strong>-94.34% to -98.29%</strong> step latency</td>
+            <td><strong>{p20a_vram:.1f} MiB</strong> client prelude VRAM; 48 KB wire; <strong>-94.34% to -98.29%</strong> step latency</td>
             <td>&le; 1,536 MiB &amp; &lt; 250 ms</td>
-            <td><span style="color:#34d399;font-weight:800;">VERIFIED PASS</span></td>
+            <td><span style="color:#34d399;font-weight:800;">{e20_status}</span></td>
           </tr>
           <tr>
             <td><strong>E20-P20b: Top-1% 2D-DCT + EF21</strong></td>
             <td>256&times;256 FP32 outer pseudo-gradient (262,144 B &rarr; 1,163 B)</td>
-            <td><strong>225.4&times; compression</strong>; EF21 L2 error 1.52e-15; wire drift <strong>3.0e-8</strong></td>
+            <td><strong>{p20b_ratio:.1f}&times; compression</strong>; EF21 L2 error 1.52e-15; wire drift <strong>3.0e-8</strong></td>
             <td>&ge; 100&times; &amp; drift &le; 1e-5</td>
-            <td><span style="color:#34d399;font-weight:800;">VERIFIED PASS</span></td>
+            <td><span style="color:#34d399;font-weight:800;">{e20_status}</span></td>
           </tr>
           <tr>
             <td><strong>E20-P20c: 6-Region Super-Peer Tree</strong></td>
             <td>10,000 leaf nodes &rarr; 318 Super-Peers (558 sub-swarms of 18)</td>
-            <td><strong>31.45&times; coordinator ingress reduction</strong> + <strong>62.5% SQLite write-IOPS cut</strong> (2,554 HMT exact)</td>
+            <td><strong>{p20c_red:.2f}&times; coordinator ingress reduction</strong> + <strong>62.5% SQLite write-IOPS cut</strong> (2,554 HMT exact)</td>
             <td>&ge; 25&times; &amp; 0 HMT drift</td>
-            <td><span style="color:#34d399;font-weight:800;">VERIFIED PASS</span></td>
+            <td><span style="color:#34d399;font-weight:800;">{e20_status}</span></td>
           </tr>
           <tr>
             <td><strong>Nocturnal V-MoE Pareto Evolution</strong></td>
             <td>Reddit V-MoE / Exoplanet CWT / 7-Div 104-Bee (42.87M samples)</td>
-            <td>Ratcheted losses <strong>0.0003 / 0.0000 / 0.00227</strong> (-94.4% to -99.95%); T4 free <strong>10,073 MiB</strong></td>
+            <td>Ratcheted losses <strong>0.0003 / 0.0000 / 0.00227</strong> (-94.4% to -99.95%); T4 free <strong>{wan_t4_free:,.0f} MiB</strong></td>
             <td>Monotone ratchet &amp; &ge; 4,300 MiB</td>
-            <td><span style="color:#34d399;font-weight:800;">ACTIVE GREEN</span></td>
+            <td><span style="color:#fbbf24;font-weight:800;">{vmoe_status}</span></td>
           </tr>
         </tbody>
       </table>

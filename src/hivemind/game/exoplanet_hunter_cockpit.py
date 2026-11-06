@@ -2919,16 +2919,37 @@ def create_exoplanet_hunter_fastapi_app(
         title="USS HiveMind NCC-31337 v4.0 — Star Trek Curved Console & 5-Language Voice/Subtitles + Multi-Producer GPU Server",
         version="4.0.0",
     )
+    _allowed_cockpit_origins = [
+        "http://127.0.0.1",
+        "http://localhost",
+        "http://127.0.0.1:8788",
+        "http://localhost:8788",
+        "http://127.0.0.1:8080",
+        "http://localhost:8080",
+        "http://127.0.0.1:8095",
+        "http://localhost:8095",
+    ]
+    _allowed_cockpit_hosts = {"127.0.0.1", "localhost", "::1", "[::1]", "testserver"}
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
+        allow_origins=_allowed_cockpit_origins,
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
     @app.middleware("http")
     async def traffic_monitor_middleware(request: Request, call_next):
+        raw_host = request.headers.get("host", "127.0.0.1").strip().lower()
+        if raw_host.startswith("["):
+            host_only = raw_host.split("]")[0] + "]" if "]" in raw_host else raw_host
+        else:
+            host_only = raw_host.partition(":")[0]
+        if host_only and host_only not in _allowed_cockpit_hosts:
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"Invalid Host header '{raw_host}' for local cockpit"},
+            )
         t0 = time.perf_counter()
         response = await call_next(request)
         elapsed_ms = (time.perf_counter() - t0) * 1000.0

@@ -87,8 +87,9 @@ if [ -n "$overrides" ]; then
   echo "$overrides"
 fi
 systemctl daemon-reload
+# The T4 trains only (owner decision 2026-11-04): its producer heartbeats hivemind-live-agent-bee and -coder are NOT enabled; the RTX 2070 and volunteers serve inference.
 for u in hivemind-boinc-db hivemind-boinc-apache hivemind-boinc-daemons hivemind-boinc-client hivemind-t4-governor hivemind-t4-workgen hivemind-t4-monitor \
-         hivemind-live-bee-llama hivemind-live-shield-bee hivemind-live-agent-bee hivemind-live-shield-coder hivemind-live-agent-coder; do
+         hivemind-live-bee-llama hivemind-live-shield-bee hivemind-live-shield-coder; do
   systemctl enable "$u.service" >/dev/null 2>&1 && echo "enabled $u" || echo "FAILED to enable $u"
 done
 systemctl enable hivemind-boinc-watchdog.timer >/dev/null 2>&1 && echo "enabled hivemind-boinc-watchdog.timer" || echo "FAILED to enable hivemind-boinc-watchdog.timer"

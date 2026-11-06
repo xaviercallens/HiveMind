@@ -117,7 +117,10 @@ class _MintedTrackingBalances(dict):
 
     def _sync_minted(self) -> None:
         if not self._ledger._in_transfer:
-            current_total = round(sum(self.values()) + self._ledger._slashed_total_hive, 6)
+            current_total = round(
+                sum(self.values()) + self._ledger.total_pool_holdings() + self._ledger._slashed_total_hive,
+                6,
+            )
             if current_total > self._ledger._cumulative_minted_hive:
                 self._ledger._cumulative_minted_hive = current_total
 
@@ -156,10 +159,21 @@ class HiveSwarmLedger:
         self.reputation_scores: Dict[str, int] = {}
         self.slashed_registry: List[str] = []
         self.settlement_history: List[InferenceSettlementReceipt] = []
+        self.peer_stakes: Dict[str, float] = {}
+        self.peer_guilds: Dict[str, str] = {}
+        self.reserve_hive: float = 0.0
+        self.guild_reserve_contributions: Dict[str, float] = {}
+        self._insurance_pool: Optional["GuildSlashingInsurancePool"] = None
         if self.ledger_path is not None and self.ledger_path.exists():
             self._load_persisted(self.ledger_path)
         else:
             self._init_genesis_block()
+
+    def total_pool_holdings(self) -> float:
+        """Return total `$HIVE` currently bonded in stakes or held in the insurance reserve."""
+        if self._insurance_pool is not None:
+            return self._insurance_pool.total_holdings()
+        return round(sum(self.peer_stakes.values()) + self.reserve_hive, 6)
 
     def _load_persisted(self, path: Path) -> None:
         try:
@@ -175,6 +189,22 @@ class HiveSwarmLedger:
             ]
             slashed_total = float(raw.get("slashed_total_hive", 0.0))
             cumulative_minted = float(raw.get("cumulative_minted_hive", 0.0))
+            pool_raw = raw.get("insurance_pool") if isinstance(raw.get("insurance_pool"), dict) else {}
+            loaded_stakes = {
+                str(k): float(v)
+                for k, v in dict(raw.get("peer_stakes", pool_raw.get("peer_stakes", {}))).items()
+            }
+            loaded_guilds = {
+                str(k): str(v)
+                for k, v in dict(raw.get("peer_guilds", pool_raw.get("peer_guilds", {}))).items()
+            }
+            loaded_reserve = float(raw.get("reserve_hive", pool_raw.get("reserve_hive", 0.0)))
+            loaded_guild_contrib = {
+                str(k): float(v)
+                for k, v in dict(
+                    raw.get("guild_reserve_contributions", pool_raw.get("guild_reserve_contributions", {}))
+                ).items()
+            }
         except Exception as exc:
             raise ValueError(f"Corrupt ledger file at {path}: {exc}") from exc
 
@@ -186,6 +216,10 @@ class HiveSwarmLedger:
         try:
             self._slashed_total_hive = round(slashed_total, 6)
             self._cumulative_minted_hive = round(cumulative_minted, 6)
+            self.peer_stakes.update(loaded_stakes)
+            self.peer_guilds.update(loaded_guilds)
+            self.reserve_hive = round(loaded_reserve, 6)
+            self.guild_reserve_contributions.update(loaded_guild_contrib)
             self.balances.update(loaded_balances)
             self.reputation_scores.update(loaded_reputation)
             self.slashed_registry.extend(loaded_slashed)
@@ -214,8 +248,11 @@ class HiveSwarmLedger:
         return round(sum(self.balances.values()), 6)
 
     def total_minted_supply(self) -> float:
-        """Return cumulative `$HIVE` ever minted (including coins later destroyed by slashing)."""
-        live_plus_slashed = round(sum(self.balances.values()) + self._slashed_total_hive, 6)
+        """Return cumulative `$HIVE` ever minted (including bonded stakes, reserve, and slashed coins)."""
+        live_plus_slashed = round(
+            sum(self.balances.values()) + self.total_pool_holdings() + self._slashed_total_hive,
+            6,
+        )
         return round(max(self._cumulative_minted_hive, live_plus_slashed), 6)
 
     def block_reward_at_height(self, height: int) -> float:
@@ -275,6 +312,15 @@ class HiveSwarmLedger:
             seen_workers.add(w.node_id)
             dedup_work.append(w)
 
+        # Validate all storage receipts before any slashing or reputation mutation (IP-134)
+        for s in storage_receipts:
+            if int(s.bytes_stored) < 0:
+                raise SwarmSecurityViolationError(
+                    "LEDGER-03",
+                    "NEGATIVE_STORAGE_BYTES_RECEIPT",
+                    f"Seeder '{s.node_id}' submitted negative bytes_stored={s.bytes_stored}.",
+                )
+
         # 1. Process GPU Training Miners (60% of Block Reward + 15% Inference Reserve Pool)
         gpu_pool = 0.75 * reward
         valid_workers = [
@@ -307,12 +353,6 @@ class HiveSwarmLedger:
         seen_seeders: set[str] = set()
         valid_seeders: List[StorageProofReceipt] = []
         for s in storage_receipts:
-            if int(s.bytes_stored) < 0:
-                raise SwarmSecurityViolationError(
-                    "LEDGER-03",
-                    "NEGATIVE_STORAGE_BYTES_RECEIPT",
-                    f"Seeder '{s.node_id}' submitted negative bytes_stored={s.bytes_stored}.",
-                )
             if s.verified and s.node_id not in self.slashed_registry and s.node_id not in seen_seeders and int(s.bytes_stored) > 0:
                 seen_seeders.add(s.node_id)
                 valid_seeders.append(s)
@@ -521,8 +561,24 @@ class HiveSwarmLedger:
         return True
 
     def _persist(self) -> None:
+        if self._insurance_pool is not None:
+            self.peer_stakes = dict(self._insurance_pool.peer_stakes)
+            self.peer_guilds = dict(self._insurance_pool.peer_guilds)
+            self.reserve_hive = self._insurance_pool.reserve_hive
+            self.guild_reserve_contributions = dict(self._insurance_pool.guild_reserve_contributions)
         if self.ledger_path is not None and not self._loading:
             self.ledger_path.parent.mkdir(parents=True, exist_ok=True)
+            pool_snap = (
+                self._insurance_pool.snapshot()
+                if self._insurance_pool is not None
+                else {
+                    "peer_stakes": dict(self.peer_stakes),
+                    "peer_guilds": dict(self.peer_guilds),
+                    "reserve_hive": self.reserve_hive,
+                    "guild_reserve_contributions": dict(self.guild_reserve_contributions),
+                    "total_holdings": self.total_pool_holdings(),
+                }
+            )
             data = {
                 "chain": [asdict(b) for b in self.chain],
                 "balances": dict(self.balances),
@@ -531,6 +587,11 @@ class HiveSwarmLedger:
                 "settlement_history": [asdict(s) for s in self.settlement_history],
                 "slashed_total_hive": self._slashed_total_hive,
                 "cumulative_minted_hive": self._cumulative_minted_hive,
+                "peer_stakes": dict(self.peer_stakes),
+                "peer_guilds": dict(self.peer_guilds),
+                "reserve_hive": self.reserve_hive,
+                "guild_reserve_contributions": dict(self.guild_reserve_contributions),
+                "insurance_pool": pool_snap,
             }
             payload = json.dumps(data, indent=2)
             fd, tmp_name = tempfile.mkstemp(
@@ -585,11 +646,12 @@ class GuildSlashingInsurancePool:
     def __init__(self, ledger: HiveSwarmLedger, max_claim_hive: float = 1_000.0) -> None:
         self.ledger = ledger
         self.max_claim_hive = self._require_amount(max_claim_hive, "INVALID_CLAIM_CAP")
-        self.peer_stakes: Dict[str, float] = {}
-        self.peer_guilds: Dict[str, str] = {}
-        self.reserve_hive = 0.0
-        self.guild_reserve_contributions: Dict[str, float] = {}
+        self.peer_stakes: Dict[str, float] = dict(ledger.peer_stakes)
+        self.peer_guilds: Dict[str, str] = dict(ledger.peer_guilds)
+        self.reserve_hive = float(ledger.reserve_hive)
+        self.guild_reserve_contributions: Dict[str, float] = dict(ledger.guild_reserve_contributions)
         self.receipts: Dict[str, IndemnityReceipt] = {}
+        self.ledger._insurance_pool = self
 
     @staticmethod
     def _require_amount(amount_hive: float, category: str) -> float:
@@ -672,6 +734,12 @@ class GuildSlashingInsurancePool:
 
         One indemnity is paid per batch commitment root, however many of its leaves are bad.
         """
+        if hasattr(auditor, "is_commitment_attributed") and not auditor.is_commitment_attributed(commitment):
+            raise SwarmSecurityViolationError(
+                "LEDGER-05",
+                "UNATTRIBUTED_COMMITMENT",
+                f"Commitment root {getattr(commitment, 'root', '')[:16]} is not signed by or attributed to peer '{getattr(commitment, 'peer_id', '')}'.",
+            )
         verdict = auditor.verify_speculative_batch_challenge(
             commitment, opening, claimed_activation, recomputed_activation
         )

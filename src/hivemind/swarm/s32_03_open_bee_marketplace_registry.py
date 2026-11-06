@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import math
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -105,10 +106,21 @@ class OpenBeeMarketplaceRegistry:
         """Verify cryptographic signature, 8 GB VRAM ceiling, and benchmark threshold before admitting a Bee."""
         if not manifest.bee_id.startswith("hivemind/bee-"):
             return {"accepted": False, "reason": "INVALID_BEE_ID_PREFIX"}
+        if not str(manifest.owner_handle).strip():
+            return {"accepted": False, "reason": "INVALID_OWNER_HANDLE"}
+        existing = self._bees.get(manifest.bee_id)
+        if existing is not None and existing.owner_handle != manifest.owner_handle:
+            return {"accepted": False, "reason": "BEE_ID_OWNED"}
         if manifest.vram_required_mib <= 0 or manifest.vram_required_mib > MAX_CONSUMER_VRAM_MIB:
             return {"accepted": False, "reason": "VRAM_CEILING_EXCEEDED_8GB"}
         if len(manifest.weights_sha256) != 64:
             return {"accepted": False, "reason": "INVALID_WEIGHTS_SHA256"}
+        if (
+            not math.isfinite(float(manifest.benchmark_score))
+            or float(manifest.benchmark_score) < 0.0
+            or float(manifest.benchmark_score) > 1.0
+        ):
+            return {"accepted": False, "reason": "INVALID_SCORE"}
         if manifest.benchmark_score < self.min_benchmark_score:
             return {"accepted": False, "reason": "BENCHMARK_SCORE_BELOW_THRESHOLD"}
         expected_sig = hmac.new(
@@ -116,7 +128,7 @@ class OpenBeeMarketplaceRegistry:
             manifest.canonical_payload().encode("utf-8"),
             hashlib.sha256,
         ).hexdigest()
-        if not hmac.compare_digest(expected_sig, manifest.signature_hex):
+        if not manifest.signature_hex.isascii() or not hmac.compare_digest(expected_sig, manifest.signature_hex):
             return {"accepted": False, "reason": "INVALID_MANIFEST_SIGNATURE"}
 
         self._bees[manifest.bee_id] = manifest

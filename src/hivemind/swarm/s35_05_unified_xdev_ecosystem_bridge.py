@@ -365,7 +365,13 @@ def run_unified_4layer_ecosystem_pipeline(
         )
     )
     lean_audit = audit_lean4_source_elenchus(sample_lean)
-    default_args: dict[str, object] = {"problem": "robertson", "rtol": 1e-9, "atol": 1e-12, "max_order": 5}
+    default_args: dict[str, object] = {
+        "problem": "robertson",
+        "rtol": 1e-9,
+        "atol": 1e-12,
+        "max_order": 5,
+        "y_final": [0.2083340149701255, 0.0000008333360770, 0.7916651516937975],
+    }
     eff_sent = sent_arguments if sent_arguments is not None else default_args
     eff_recv = received_arguments if received_arguments is not None else dict(eff_sent)
     sundials_receipt = verify_robertson_sundials_tier_x(sent_arguments=eff_sent, received_arguments=eff_recv)

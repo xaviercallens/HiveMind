@@ -83,8 +83,12 @@ class StragglerFreeDecoupledDiLoCoAggregator:
         if dim == 0:
             raise ValueError("current_params must be non-empty")
         valid = [
-            c for c in contributions
-            if len(c.pseudo_gradient) == dim and 0 <= c.staleness_steps <= self.max_staleness_steps and _l2_norm(c.pseudo_gradient) > 1e-12
+            c
+            for c in contributions
+            if len(c.pseudo_gradient) == dim
+            and 0 <= c.staleness_steps <= self.max_staleness_steps
+            and all(math.isfinite(float(x)) for x in c.pseudo_gradient)
+            and _l2_norm(c.pseudo_gradient) > 1e-12
         ]
         if not valid:
             raise ValueError("no valid non-zero worker pseudo-gradients within max_staleness_steps")

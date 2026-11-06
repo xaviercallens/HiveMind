@@ -37,6 +37,7 @@ KAFKA_TOPICS: dict[str, str] = {
     "human_agent": "hivemind.amcp.human_agent.v1",
     "bee_coord": "hivemind.amcp.bee_coord.v1",
     "bee_trading": "hivemind.amcp.bee_trading.v1",
+    "federation": "hivemind.amcp.federation.v1",  # signed task offers, claims, results and aborts for co-training rounds (see docs/FEDERATION_V2_AMCP_AGLETS.md)
 }
 
 ParticipantKind = Literal["human_researcher", "gpu_producer", "ai_agent", "bee_specialist"]

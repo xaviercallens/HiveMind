@@ -1,7 +1,7 @@
 {
   "schema_version": "hivemind-gwaya-stub-audit/v1.0",
   "auditor": "gwaya.ast_audit.ZeroStubAudit (GWAYA-GwenLayaOpenModel)",
-  "files_audited": 347,
+  "files_audited": 349,
   "files_failed": [],
   "all_passed": true,
   "results": [
@@ -907,6 +907,15 @@
     },
     {
       "file": "src/hivemind/router/life_as_a_bee.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/router/litestream_lock.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -2148,6 +2157,15 @@
       }
     },
     {
+      "file": "scripts/extract_csharp_fat_client.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "scripts/fill_deployment_guide.py",
       "passed": true,
       "detail": {
@@ -3129,6 +3147,6 @@
       }
     }
   ],
-  "written_utc": "2026-11-06T13:48:44Z",
-  "receipt_sha256": "df2216987ddf5f55e0a2f25e443c230f593b37a74c6f3a4582b6032f971c22f0"
+  "written_utc": "2026-11-06T14:55:25Z",
+  "receipt_sha256": "bc28881c15f895930ad4ec5f2f12866adaa836fc265520f80d8a54c7af876e64"
 }

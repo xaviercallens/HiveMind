@@ -535,78 +535,90 @@ def _finite(value: float, name: str) -> float:
 class RouterStore:
     """SQLite-backed accounts, API keys, producer registry, usage log and hash-chained HMT ledger."""
 
-    def __init__(self, path: Path | str, secret: bytes) -> None:
+    def __init__(self, path: Path | str, secret: bytes, *, writer_lock: Any = None) -> None:
         if not isinstance(secret, (bytes, bytearray)) or len(secret) < MIN_SECRET_BYTES:
             raise ValueError(f"secret must be at least {MIN_SECRET_BYTES} bytes")
         self._secret = bytes(secret)
         self._identity_providers: set[str] = set(IDENTITY_PROVIDERS)
         self._active_key_cache: dict[str, str] = {}
         self._lock = threading.Lock()
+        self._writer_lock: Any = None
+        has_write_lease = True
+        if writer_lock is not None:
+            has_write_lease = bool(writer_lock.acquire())
         target = ":memory:" if str(path) == ":memory:" else str(path)
         self._conn = sqlite3.connect(target, check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
-        if target != ":memory:":
+        if target != ":memory:" and has_write_lease:
             self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
-        with self._tx():
-            for statement in _SCHEMA.split(";"):
-                if statement.strip():
-                    self._conn.execute(statement)
-            # Databases created before the endpoint token existed are upgraded in place (additive, NULL for old rows).
-            columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(producers)")}
-            if "endpoint_token" not in columns:
-                self._conn.execute("ALTER TABLE producers ADD COLUMN endpoint_token TEXT")
-            # Databases created before model residency reporting (HM-S16-06) gain the nullable column in place.
-            endpoint_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(producer_endpoints)")}
-            if "residency_json" not in endpoint_columns:
-                self._conn.execute("ALTER TABLE producer_endpoints ADD COLUMN residency_json TEXT")
-            # Databases created before the test/probe flag existed gain it in place; every existing account stays a real one.
-            account_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(accounts)")}
-            if "is_test" not in account_columns:
-                self._conn.execute("ALTER TABLE accounts ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0")
-            # Databases created before account kinds (HM-S16-07) gain the column in place: flagged accounts become 'test', all others 'user'.
-            if "kind" not in account_columns:
-                self._conn.execute("ALTER TABLE accounts ADD COLUMN kind TEXT NOT NULL DEFAULT 'user'")
-                self._conn.execute("UPDATE accounts SET kind='test' WHERE is_test=1")
-            if "password_hash" not in account_columns:
-                self._conn.execute("ALTER TABLE accounts ADD COLUMN password_hash TEXT")
-            if "email" not in account_columns:
-                self._conn.execute("ALTER TABLE accounts ADD COLUMN email TEXT")
-            acct_sql_row = self._conn.execute(
-                "SELECT sql FROM sqlite_master WHERE type='table' AND name='accounts'"
-            ).fetchone()
-            if acct_sql_row and "'trainer'" not in str(acct_sql_row["sql"]):
+        if has_write_lease:
+            with self._tx():
+                for statement in _SCHEMA.split(";"):
+                    if statement.strip():
+                        self._conn.execute(statement)
+                # Databases created before the endpoint token existed are upgraded in place (additive, NULL for old rows).
+                columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(producers)")}
+                if "endpoint_token" not in columns:
+                    self._conn.execute("ALTER TABLE producers ADD COLUMN endpoint_token TEXT")
+                # Databases created before model residency reporting (HM-S16-06) gain the nullable column in place.
+                endpoint_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(producer_endpoints)")}
+                if "residency_json" not in endpoint_columns:
+                    self._conn.execute("ALTER TABLE producer_endpoints ADD COLUMN residency_json TEXT")
+                # Databases created before the test/probe flag existed gain it in place; every existing account stays a real one.
+                account_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(accounts)")}
+                if "is_test" not in account_columns:
+                    self._conn.execute("ALTER TABLE accounts ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0")
+                # Databases created before account kinds (HM-S16-07) gain the column in place: flagged accounts become 'test', all others 'user'.
+                if "kind" not in account_columns:
+                    self._conn.execute("ALTER TABLE accounts ADD COLUMN kind TEXT NOT NULL DEFAULT 'user'")
+                    self._conn.execute("UPDATE accounts SET kind='test' WHERE is_test=1")
+                if "password_hash" not in account_columns:
+                    self._conn.execute("ALTER TABLE accounts ADD COLUMN password_hash TEXT")
+                if "email" not in account_columns:
+                    self._conn.execute("ALTER TABLE accounts ADD COLUMN email TEXT")
+                acct_sql_row = self._conn.execute(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name='accounts'"
+                ).fetchone()
+                if acct_sql_row and "'trainer'" not in str(acct_sql_row["sql"]):
+                    self._conn.execute(
+                        "CREATE TABLE accounts_opentrainer_mig("
+                        "account_id TEXT PRIMARY KEY, handle TEXT NOT NULL UNIQUE, "
+                        "role TEXT NOT NULL CHECK (role IN ('consumer','producer','prosumer','trainer','admin')), "
+                        "key_hash TEXT NOT NULL UNIQUE, created_utc REAL NOT NULL, max_price_per_1k REAL NOT NULL, "
+                        "is_test INTEGER NOT NULL DEFAULT 0, kind TEXT NOT NULL DEFAULT 'user', "
+                        "password_hash TEXT, email TEXT)"
+                    )
+                    self._conn.execute(
+                        "INSERT INTO accounts_opentrainer_mig("
+                        "account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, password_hash, email"
+                        ") SELECT account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, password_hash, email "
+                        "FROM accounts"
+                    )
+                    self._conn.execute("DROP TABLE accounts")
+                    self._conn.execute("ALTER TABLE accounts_opentrainer_mig RENAME TO accounts")
+                # One account may advertise several endpoints (several GPUs / servers): rows of the old one-per-account table move across once.
                 self._conn.execute(
-                    "CREATE TABLE accounts_opentrainer_mig("
-                    "account_id TEXT PRIMARY KEY, handle TEXT NOT NULL UNIQUE, "
-                    "role TEXT NOT NULL CHECK (role IN ('consumer','producer','prosumer','trainer','admin')), "
-                    "key_hash TEXT NOT NULL UNIQUE, created_utc REAL NOT NULL, max_price_per_1k REAL NOT NULL, "
-                    "is_test INTEGER NOT NULL DEFAULT 0, kind TEXT NOT NULL DEFAULT 'user', "
-                    "password_hash TEXT, email TEXT)"
+                    "INSERT OR IGNORE INTO producer_endpoints(account_id, endpoint_url, models_json, cost_per_1k, capacity_1k, last_heartbeat_utc, "
+                    "execution_class, endpoint_token) SELECT account_id, rtrim(endpoint_url, '/'), models_json, cost_per_1k, capacity_1k, last_heartbeat_utc, "
+                    "execution_class, endpoint_token FROM producers"
                 )
-                self._conn.execute(
-                    "INSERT INTO accounts_opentrainer_mig("
-                    "account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, password_hash, email"
-                    ") SELECT account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, password_hash, email "
-                    "FROM accounts"
-                )
-                self._conn.execute("DROP TABLE accounts")
-                self._conn.execute("ALTER TABLE accounts_opentrainer_mig RENAME TO accounts")
-            # One account may advertise several endpoints (several GPUs / servers): rows of the old one-per-account table move across once.
-            self._conn.execute(
-                "INSERT OR IGNORE INTO producer_endpoints(account_id, endpoint_url, models_json, cost_per_1k, capacity_1k, last_heartbeat_utc, "
-                "execution_class, endpoint_token) SELECT account_id, rtrim(endpoint_url, '/'), models_json, cost_per_1k, capacity_1k, last_heartbeat_utc, "
-                "execution_class, endpoint_token FROM producers"
-            )
-            for sys_id in _ESCROW_ACCOUNTS:
-                self._conn.execute(
-                    "INSERT OR IGNORE INTO accounts(account_id, handle, role, key_hash, created_utc, max_price_per_1k) VALUES (?,?,?,?,?,?)",
-                    (sys_id, sys_id, "admin", f"!{sys_id}", time.time(), 0.0),
-                )
+                for sys_id in _ESCROW_ACCOUNTS:
+                    self._conn.execute(
+                        "INSERT OR IGNORE INTO accounts(account_id, handle, role, key_hash, created_utc, max_price_per_1k) VALUES (?,?,?,?,?,?)",
+                        (sys_id, sys_id, "admin", f"!{sys_id}", time.time(), 0.0),
+                    )
+        self._writer_lock = writer_lock
+
+    @property
+    def read_only(self) -> bool:
+        return bool(self._writer_lock is not None and not self._writer_lock.is_writer)
 
     # ------------------------------------------------------------------ plumbing
     @contextmanager
     def _tx(self) -> Iterator[sqlite3.Connection]:
+        if self._writer_lock is not None:
+            self._writer_lock.assert_writable()
         with self._lock:
             self._conn.execute("BEGIN IMMEDIATE")
             try:
@@ -622,6 +634,8 @@ class RouterStore:
 
     def close(self) -> None:
         with self._lock:
+            if self._writer_lock is not None and self._writer_lock.is_writer:
+                self._writer_lock.release()
             self._conn.close()
 
     @staticmethod

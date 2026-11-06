@@ -73,6 +73,8 @@ _LATEST_T4_SNAPSHOT: dict[str, Any] = {
     "qlora_progress": {
         "boinc_app": "hivemind_qlora_moe (BOINC 7.18.1 / 7.24 Core Node)",
         "workgen_daemon": "hivemind-t4-workgen.service",
+        "schedule": "NIGHT_ONLY",
+        "daytime_policy": "SERVING_PRIORITY_NIGHT_TRAINING_22_07_PARIS",
         "assimilated_workunits": 147,
         "qlora_rounds_assimilated": 145,
         "verification_workunits_assimilated": 2,

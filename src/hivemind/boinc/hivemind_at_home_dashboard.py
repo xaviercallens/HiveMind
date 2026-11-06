@@ -10909,7 +10909,7 @@ def create_hivemind_at_home_app(
         return JSONResponse(status_code=404, content={"error": f"Stitch asset {safe_name} not found"})
 
 
-    community_state_path = vault_path / "community_hub_state.json"
+    community_state_path = (Path(vault_dir).resolve() if _explicit_vault_dir else vault_path) / "community_hub_state.json"
     default_community_state: dict[str, Any] = {
         "hub_title": "USS HiveMind NCC-31337 · Portail Communautaire BOINC, Joueurs Steam & Science Participative",
         "charter": "0.00 EUR / 0.00 USD · Points de Réflexion HiveMind (HMT) & Science Citoyenne",

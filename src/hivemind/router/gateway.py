@@ -4294,12 +4294,14 @@ def create_router_app(
 
     @app.post("/api/v1/boinc/rtx/lease")
     @app.post("/v1/hivemind/boinc/rtx/lease")
-    async def router_boinc_rtx_lease(payload: RTXWorkunitLeaseRequest) -> dict[str, Any]:
+    async def router_boinc_rtx_lease(request: Request) -> dict[str, Any]:
+        payload = await v3_body(request, RTXWorkunitLeaseRequest)
         return _rtx_boinc_server.lease_workunit(payload)
 
     @app.post("/api/v1/boinc/rtx/submit")
     @app.post("/v1/hivemind/boinc/rtx/submit")
-    async def router_boinc_rtx_submit(payload: RTXWorkunitSubmitRequest) -> dict[str, Any]:
+    async def router_boinc_rtx_submit(request: Request) -> dict[str, Any]:
+        payload = await v3_body(request, RTXWorkunitSubmitRequest)
         try:
             return _rtx_boinc_server.submit_workunit(payload)
         except ValueError as exc:

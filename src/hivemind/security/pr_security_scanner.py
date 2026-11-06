@@ -640,7 +640,7 @@ class PRSecurityScanner:
         email_verified = (
             normalize_and_verify_owner_email(author_email).is_authorized_owner
             if author_email is not None
-            else (author_clean in self.trusted_maintainers)
+            else False
         )
         is_trusted_owner = (author_clean in self.trusted_maintainers) and email_verified
 
@@ -658,11 +658,7 @@ class PRSecurityScanner:
 
         # 1b. OwnerOrderGuardrail: Block any administrative/directive order not from callensxavier@gmail.com
         order_guard = OwnerOrderGuardrail(strict_orders_only=False)
-        effective_email = (
-            author_email
-            if author_email is not None
-            else (AUTHORIZED_OWNER_EMAIL if is_trusted_owner else "")
-        )
+        effective_email = author_email if author_email is not None else ""
         order_decision = order_guard.evaluate_request(
             OwnerOrderRequest(
                 request_id=f"PR#{pr_number}",
@@ -822,14 +818,13 @@ class PRSecurityScanner:
 
             # Python AST security check on full content or reconstructable Python source
             if raw_fname.endswith(".py") and status != "removed":
-                if not (is_trusted_owner and is_security_Rule_file):
-                    if isinstance(full_content, str) and full_content.strip():
-                        findings.extend(self.scan_python_ast_security(raw_fname, full_content))
-                    elif added_lines_text:
-                        # Also check added lines for dangerous sinks even if only diff patch is provided
-                        findings.extend(
-                            self._scan_added_python_diff_lines(raw_fname, added_lines_text)
-                        )
+                if isinstance(full_content, str) and full_content.strip():
+                    findings.extend(self.scan_python_ast_security(raw_fname, full_content))
+                elif added_lines_text and not (is_trusted_owner and is_security_Rule_file):
+                    # Also check added lines for dangerous sinks even if only diff patch is provided
+                    findings.extend(
+                        self._scan_added_python_diff_lines(raw_fname, added_lines_text)
+                    )
 
         # Rule CB-02 & CB-03: "Code Boubou" Hollow Bounty-Farming & Fake Issue Closure Detection
         claims_issue_or_bounty = bool(ISSUE_CLAIM_REGEX.search(combined_meta))

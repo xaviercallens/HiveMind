@@ -228,3 +228,33 @@ def test_ip211_ninth_distinct_host_label_is_refused_and_fleet_count_stays_bounde
     assert fleet["total_registered_nodes"] == 8
     assert fleet["distinct_physical_trainer_gpus"] <= 8
     assert "self-declared" in fleet["distinct_physical_trainer_gpus_basis"]
+
+
+def test_ip176_task_offer_hashes_real_round_script_and_keeps_global_sha_stable_across_windows(
+    tmp_path: Path,
+) -> None:
+    """IP-176: script_sha256 must match scripts/e8_qlora_moe_round.py and global_sha256 must not drift with the clock."""
+    from hivemind.router.opentrainer import compute_default_code_pin, default_active_task_offer
+
+    repo_root = Path(__file__).resolve().parents[1]
+    script_file = repo_root / "scripts" / "e8_qlora_moe_round.py"
+    expected_script_sha = hashlib.sha256(script_file.read_bytes()).hexdigest()
+
+    offer_t1 = default_active_task_offer(1000.0)
+    offer_t2 = default_active_task_offer(2800.0)
+    assert offer_t1["script_sha256"] == expected_script_sha
+    assert offer_t1["global_sha256"] == offer_t2["global_sha256"]
+    assert offer_t1["quorum"] >= 2
+
+    # Changing the script or global checkpoint updates the offer digests deterministically
+    custom_script = tmp_path / "custom_round.py"
+    custom_script.write_text("print('custom round v2')\n", encoding="utf-8")
+    custom_offer = default_active_task_offer(
+        2800.0,
+        global_sha256="a" * 64,
+        script_path=custom_script,
+    )
+    assert custom_offer["script_sha256"] == hashlib.sha256(custom_script.read_bytes()).hexdigest()
+    assert custom_offer["script_sha256"] != offer_t1["script_sha256"]
+    assert custom_offer["global_sha256"] == "a" * 64
+    assert compute_default_code_pin(tmp_path / "missing_round.py") != custom_offer["script_sha256"]

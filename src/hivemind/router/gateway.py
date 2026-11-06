@@ -2140,8 +2140,6 @@ def create_router_app(
             "balance": bal,
             "balance_hmt": bal,
             "compute_points": int(round(bal)),
-            "v1_migrated": True,
-            "v2_access_granted": True,
         }
 
     @app.post("/v1/hivemind/auth/register")

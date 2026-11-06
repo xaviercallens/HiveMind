@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+from pathlib import Path
 import time
 from typing import Any, Mapping, Sequence
 
@@ -260,18 +261,31 @@ AGLET_AMCP_LIFECYCLE_SPEC: Sequence[dict[str, str]] = (
 )
 
 
-def compute_default_code_pin() -> str:
-    """Return a deterministic SHA-256 code pin for the OpenTrainer Stage-2 QLoRA / DiLoCo protocol."""
+DEFAULT_ROUND_SCRIPT_PATH = Path(__file__).resolve().parents[3] / "scripts" / "e8_qlora_moe_round.py"
+
+
+def compute_default_code_pin(script_path: Path | None = None) -> str:
+    """Return a deterministic SHA-256 code pin for the OpenTrainer Stage-2 QLoRA / DiLoCo round script (IP-176)."""
+    candidate = script_path if script_path is not None else DEFAULT_ROUND_SCRIPT_PATH
+    if candidate.is_file():
+        return hashlib.sha256(candidate.read_bytes()).hexdigest()
     return hashlib.sha256(b"hivemind-opentrainer-e8-qlora-moe-v1-2026-11-01").hexdigest()
 
 
-def default_active_task_offer(now_utc: float | None = None) -> dict[str, Any]:
+def default_active_task_offer(
+    now_utc: float | None = None,
+    *,
+    global_sha256: str | None = None,
+    round_index: int | None = None,
+    quorum: int = 2,
+    script_path: Path | None = None,
+) -> dict[str, Any]:
     """Return the current active OpenTrainer Aglet ``task_offer`` descriptor for connecting trainers."""
     now = time.time() if now_utc is None else float(now_utc)
-    round_idx = int(now // 1800) % 10000
-    pin = compute_default_code_pin()
+    round_idx = int(round_index) if round_index is not None else (int(now // 1800) % 10000)
+    pin = compute_default_code_pin(script_path=script_path)
     base_sha = hashlib.sha256(b"granite-moe-tiny-nf4-pcg64-seed1").hexdigest()
-    global_sha = hashlib.sha256(f"opentrainer-global-round-{round_idx}".encode()).hexdigest()
+    global_sha = str(global_sha256).strip().lower() if global_sha256 else base_sha
     return {
         "event_type": "io.hivemind.amcp.fed.task_offer",
         "topic": OPENTRAINER_TOPIC,
@@ -288,7 +302,7 @@ def default_active_task_offer(now_utc: float | None = None) -> dict[str, Any]:
         "outer_mu": 0.5,
         "qlora_rank": 4,
         "qlora_alpha": 8,
-        "quorum": 1,
+        "quorum": max(1, int(quorum)),
         "max_delta_l2": DEFAULT_MAX_DELTA_L2,
         "min_free_vram_mib_t4": DEFAULT_MIN_FREE_VRAM_MIB_T4,
         "min_free_vram_mib_8gb": DEFAULT_MIN_FREE_VRAM_MIB_8GB,

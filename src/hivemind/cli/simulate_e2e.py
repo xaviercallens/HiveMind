@@ -25,7 +25,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from hivemind.boinc.coordinator_api import BOINCCoordinatorService
-from hivemind.boinc.workunit import verify_and_load_parquet_shard
+from hivemind.boinc.workunit import BOINCWorkunit, verify_and_load_parquet_shard
 from hivemind.client.daemon import ZeroIntrusionDaemon
 from hivemind.client.steamworks import SteamworksSDKBridge
 from hivemind.client.worker_node import HiveMindWorkerNode
@@ -47,6 +47,20 @@ from hivemind.core.quantization import (
 from hivemind.swarm.inference_ring import RegionalDHTSwarmRing, SwarmPeerNode
 
 console = Console()
+
+
+def estimate_workunit_tflops(
+    workunit: BOINCWorkunit,
+    total_params: int = 0,
+    micro_batch_size: int = 2,
+) -> float:
+    """Estimate training TFLOPs executed for a BOINC workunit from its step and token counts (IP-178)."""
+    steps = max(1, int(workunit.inner_steps_H))
+    seq_len = max(1, int(workunit.seq_len))
+    batch_tokens = max(1, int(micro_batch_size)) * seq_len
+    effective_params = max(int(total_params), 100_000_000)
+    flops = 6.0 * float(effective_params) * float(steps) * float(batch_tokens)
+    return round(flops / 1e12, 6)
 
 
 def run_end_to_end_simulation(
@@ -173,11 +187,16 @@ def run_end_to_end_simulation(
             weight_decay=0.01,
             micro_batch_size=2,
         )
-        steamworks.record_validated_workunit(
+        tflops_wu = estimate_workunit_tflops(
+            workunit=wu,
+            total_params=bundle.total_params,
+            micro_batch_size=2,
+        )
+        steam_entry = steamworks.record_validated_workunit(
             steam_id64=steam_id,
             persona_name=worker.persona_name,
             wu_id=wu.wu_id,
-            tflops_contributed=2.5,
+            tflops_contributed=tflops_wu,
             credits_minted=10.0,
         )
 
@@ -214,6 +233,7 @@ def run_end_to_end_simulation(
             "multikrum_accepted": outer_res.filter_report.accepted_workers,
             "multikrum_rejected": outer_res.filter_report.rejected_workers,
             "outer_delta_norm": outer_res.aggregated_delta_norm,
+            "verified_tflops": steam_entry.verified_tflops,
         }
 
     # Also test Spot-Check Validator rejecting a tampered worker submission

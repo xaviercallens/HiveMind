@@ -215,6 +215,12 @@ CREATE TABLE IF NOT EXISTS opentrainer_rounds(
     vram_total_mib INTEGER NOT NULL,
     utc REAL NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS boinc_receipts (
+    receipt_sha256 TEXT PRIMARY KEY,
+    account_id     TEXT NOT NULL,
+    utc            REAL NOT NULL
+);
 """
 
 
@@ -1938,9 +1944,11 @@ class RouterStore:
             ).fetchall()
         return [{k: row[k] for k in row.keys()} for row in rows]
 
-    @staticmethod
-    def _endpoint_host_root(endpoint_url: str | None) -> str:
-        """Return the normalised lowercase hostname of ``endpoint_url`` so multiple paths/ports on one VM count as one physical GPU host."""
+    _WILDCARD_DNS_IP_RE = re.compile(r"(?:^|\.)((?:\d{1,3}[-.]){3}\d{1,3})\.(sslip\.io|nip\.io|xip\.io)$")
+
+    @classmethod
+    def _endpoint_host_root(cls, endpoint_url: str | None) -> str:
+        """Return the normalised lowercase hostname of ``endpoint_url`` so multiple paths/ports/wildcard-DNS labels on one VM count as one physical GPU host."""
         if not endpoint_url:
             return ""
         raw = str(endpoint_url).strip()
@@ -1948,6 +1956,13 @@ class RouterStore:
             parsed = urllib.parse.urlsplit(raw)
             host = (parsed.hostname or "").strip().lower()
             if host:
+                m = cls._WILDCARD_DNS_IP_RE.search(host)
+                if m:
+                    return f"{m.group(1).replace('.', '-')}.{m.group(2)}"
+                if host.endswith((".sslip.io", ".nip.io", ".xip.io")):
+                    parts = [p for p in host.split(".") if p]
+                    if len(parts) > 3:
+                        return ".".join(parts[-3:])
                 return host
         except ValueError:
             return raw.lower()
@@ -2405,6 +2420,29 @@ class RouterStore:
             out.setdefault(aid, tok)
             out.setdefault("default", tok)
         return out
+
+    def record_boinc_receipt(
+        self,
+        receipt_sha256: str,
+        account_id: str,
+        now_utc: float | None = None,
+    ) -> bool:
+        """Persist a BOINC/WebGPU contribution receipt digest; return ``True`` if already seen (replay), ``False`` if newly recorded."""
+        digest = str(receipt_sha256).strip().lower()
+        now = time.time() if now_utc is None else float(now_utc)
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT 1 FROM boinc_receipts WHERE receipt_sha256 = ?",
+                (digest,),
+            ).fetchone()
+            if row is not None:
+                return True
+            self._conn.execute(
+                "INSERT INTO boinc_receipts(receipt_sha256, account_id, utc) VALUES (?, ?, ?)",
+                (digest, str(account_id), now),
+            )
+            self._conn.commit()
+            return False
 
 
 

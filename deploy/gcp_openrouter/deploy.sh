@@ -9,8 +9,8 @@
 #   REGION (default us-central1), SECRET_NAME (default hivemind-router-secret),
 #   SERVICE_ACCOUNT (default hivemind-openrouter@$GCP_PROJECT.iam.gserviceaccount.com),
 #   LEDGER_BUCKET (default hivemind-openrouter-ledger-<project number>)
-#   HIVEMIND_GOOGLE_CLIENT_ID  OAuth web client id that enables "Sign in with Google" at /signup (set it on EVERY deploy:
-#                              --set-env-vars replaces the service's variables). HIVEMIND_OPEN_REGISTRATION=0 closes
+#   HIVEMIND_GOOGLE_CLIENT_ID  OAuth web client id that enables "Sign in with Google" at /signup (passed via
+#                              --update-env-vars so extra variables are preserved). HIVEMIND_OPEN_REGISTRATION=0 closes
 #                              handle-only registration once Google sign-in works.
 #
 # Pre-provisioned (one time): the service account, the Secret Manager secret (accessor role for the account) and the
@@ -66,5 +66,5 @@ gcloud run deploy hivemind-openrouter \
   --concurrency 80 \
   --memory "$MEMORY" \
   --timeout 600 \
-  --set-env-vars "${ENV_VARS}" \
+  --update-env-vars "${ENV_VARS}" \
   --set-secrets "HIVEMIND_ROUTER_SECRET=${SECRET_NAME}:latest"

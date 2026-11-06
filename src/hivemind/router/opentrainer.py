@@ -337,7 +337,7 @@ def validate_trainer_delta_submission(
     if tokens_trained <= 0:
         raise ValueError("tokens_trained must be > 0")
     min_floor = DEFAULT_MIN_FREE_VRAM_MIB_T4 if vram_total_mib >= 14000 else DEFAULT_MIN_FREE_VRAM_MIB_8GB
-    if vram_total_mib > 0 and vram_free_mib < min_floor:
+    if (vram_total_mib > 0 or vram_free_mib > 0) and vram_free_mib < min_floor:
         raise ValueError(
             f"vram_free_mib ({vram_free_mib} MiB) is below the required safety floor ({min_floor} MiB) for a {vram_total_mib} MiB GPU"
         )
@@ -576,9 +576,9 @@ def build_opentrainer_status_payload(
     now = time.time() if now_utc is None else float(now_utc)
     live_nodes = [n for n in opentrainer_nodes if (now - float(n.get("last_heartbeat_utc") or 0.0)) <= 300.0]
     distinct_hosts = {
-        str(n.get("host_label") or n.get("node_id") or "")
+        str(n.get("account_id") or n.get("host_label") or n.get("node_id") or "")
         for n in live_nodes
-        if str(n.get("host_label") or n.get("node_id") or "")
+        if str(n.get("account_id") or n.get("host_label") or n.get("node_id") or "")
     }
     moe_progress = summarize_moe_self_training_progress(
         recent_rounds=recent_rounds,

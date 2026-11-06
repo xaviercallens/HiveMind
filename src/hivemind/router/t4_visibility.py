@@ -301,7 +301,7 @@ def build_t4_visibility_payload(
     *,
     now_utc: float | None = None,
     live_models: list[str] | None = None,
-    active_producers_count: int = 1,
+    active_producers_count: int = 0,
     distinct_physical_gpus: int | None = None,
     secondary_gpu: str | None = None,
 ) -> dict[str, Any]:
@@ -311,7 +311,7 @@ def build_t4_visibility_payload(
     dt_paris = dt_utc.astimezone(EUROPE_TZ)
     hour_cet = dt_paris.hour
     is_eu_night = hour_cet >= NIGHT_START_HOUR_CET or hour_cet < NIGHT_END_HOUR_CET
-    physical_gpus = max(1, int(distinct_physical_gpus if distinct_physical_gpus is not None else active_producers_count))
+    physical_gpus = max(0, int(distinct_physical_gpus if distinct_physical_gpus is not None else active_producers_count))
 
     with _SNAPSHOT_LOCK:
         evidenced_secondary = secondary_gpu if secondary_gpu else (
@@ -322,7 +322,7 @@ def build_t4_visibility_payload(
             "zone": _LATEST_T4_SNAPSHOT["zone"],
             "gpu_model": _LATEST_T4_SNAPSHOT["gpu_model"],
             "sole_active_gpu": physical_gpus <= 1 and bool(_LATEST_T4_SNAPSHOT["sole_active_gpu"]) and not evidenced_secondary,
-            "active_producers_count": max(1, int(active_producers_count)),
+            "active_producers_count": max(0, int(active_producers_count)),
             "distinct_physical_gpus": physical_gpus,
             "secondary_induction_gpu": evidenced_secondary,
             "gpu": dict(_LATEST_T4_SNAPSHOT["gpu"]),

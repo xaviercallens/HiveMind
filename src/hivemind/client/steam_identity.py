@@ -93,7 +93,7 @@ class SteamOpenIDVerifier:
         self._seen: dict[str, float] = {}
         self._lock = threading.Lock()
 
-    def _fresh_unused_nonce(self, nonce: str) -> None:
+    def _check_fresh_unused_nonce(self, nonce: str) -> None:
         match = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z[\x21-\x7e]{0,64}", nonce)
         if not match:
             raise IdentityError("malformed response nonce")
@@ -101,6 +101,16 @@ class SteamOpenIDVerifier:
         now = self._clock()
         if stamp < now - self._ttl or stamp > now + 60.0:
             raise IdentityError("stale or future response nonce")
+        with self._lock:
+            for key in [k for k, until in self._seen.items() if until < now]:
+                del self._seen[key]
+            if nonce in self._seen:
+                raise IdentityError("response nonce was already used")
+            if len(self._seen) >= self._max:
+                raise IdentityError("too many sign-ins in flight; try again shortly")
+
+    def _commit_nonce(self, nonce: str) -> None:
+        now = self._clock()
         with self._lock:
             for key in [k for k, until in self._seen.items() if until < now]:
                 del self._seen[key]
@@ -129,12 +139,14 @@ class SteamOpenIDVerifier:
             ids.append(value[len(prefix):])
         if ids[0] != ids[1]:
             raise IdentityError("claimed_id and identity disagree")
-        self._fresh_unused_nonce(params.get("openid.response_nonce", ""))
+        nonce = params.get("openid.response_nonce", "")
+        self._check_fresh_unused_nonce(nonce)
         check = {k: v for k, v in params.items() if k.startswith("openid.")}
         check["openid.mode"] = "check_authentication"
         status, body = self._http("POST", OPENID_ENDPOINT, check)
         if status != 200 or not re.search(r"(?m)^is_valid:true\s*$", body):
             raise IdentityError("Steam did not confirm the assertion")
+        self._commit_nonce(nonce)
         return ids[0]
 
 

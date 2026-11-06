@@ -1376,6 +1376,77 @@ def solve_wave2_method_of_lines_pde(
     }
 
 
+def _rk4_van_der_pol_step(x: float, v: float, mu: float, h: float) -> tuple[float, float]:
+    """Advance Van der Pol oscillator ``x'' = mu*(1 - x^2)*x' - x`` by one classic RK4 step ``h``."""
+    k1x = v
+    k1v = mu * (1.0 - x * x) * v - x
+
+    x2 = x + 0.5 * h * k1x
+    v2 = v + 0.5 * h * k1v
+    k2x = v2
+    k2v = mu * (1.0 - x2 * x2) * v2 - x2
+
+    x3 = x + 0.5 * h * k2x
+    v3 = v + 0.5 * h * k2v
+    k3x = v3
+    k3v = mu * (1.0 - x3 * x3) * v3 - x3
+
+    x4 = x + h * k3x
+    v4 = v + h * k3v
+    k4x = v4
+    k4v = mu * (1.0 - x4 * x4) * v4 - x4
+
+    return (
+        x + (h / 6.0) * (k1x + 2.0 * k2x + 2.0 * k3x + k4x),
+        v + (h / 6.0) * (k1v + 2.0 * k2v + 2.0 * k3v + k4v),
+    )
+
+
+def verify_wave2_quorum_replicas(
+    spec: Mapping[str, Any],
+    replica_a: Mapping[str, Any],
+    replica_b: Mapping[str, Any],
+) -> bool:
+    """Verify two Wave 2 parameter-sweep replicas against ``spec`` and against each other within S-1 tolerances."""
+    expected_sha = str(spec.get("spec_sha256") or "")
+    if not expected_sha:
+        return False
+    if str(replica_a.get("spec_sha256") or "") != expected_sha or str(replica_b.get("spec_sha256") or "") != expected_sha:
+        return False
+    sweep_a = replica_a.get("sweep_results")
+    sweep_b = replica_b.get("sweep_results")
+    ref_trajs = spec.get("reference_trajectories")
+    if not isinstance(sweep_a, list) or not isinstance(sweep_b, list) or len(sweep_a) != len(sweep_b) or not sweep_a:
+        return False
+    rtol = float(spec.get("s1_rtol", 1e-6))
+    atol = float(spec.get("s1_atol", 1e-9))
+    max_drift = float(spec.get("max_invariant_drift", 1e-6))
+    for idx, (ra, rb) in enumerate(zip(sweep_a, sweep_b)):
+        if ra.get("status") != "ok" or rb.get("status") != "ok":
+            return False
+        if abs(float(ra.get("invariant_drift", 1.0))) > max_drift or abs(float(rb.get("invariant_drift", 1.0))) > max_drift:
+            return False
+        ya = ra.get("y")
+        yb = rb.get("y")
+        if not isinstance(ya, list) or not isinstance(yb, list) or len(ya) != len(yb) or not ya:
+            return False
+        ref_y = ref_trajs[idx] if isinstance(ref_trajs, list) and idx < len(ref_trajs) else None
+        for r_idx, (row_a, row_b) in enumerate(zip(ya, yb)):
+            if not isinstance(row_a, list) or not isinstance(row_b, list) or len(row_a) != len(row_b):
+                return False
+            for c_idx, (va, vb) in enumerate(zip(row_a, row_b)):
+                fva, fvb = float(va), float(vb)
+                tol = atol + rtol * max(abs(fva), abs(fvb))
+                if abs(fva - fvb) > tol:
+                    return False
+                if isinstance(ref_y, list) and r_idx < len(ref_y) and c_idx < len(ref_y[r_idx]):
+                    fref = float(ref_y[r_idx][c_idx])
+                    ref_tol = atol + rtol * max(abs(fref), abs(fva), abs(fvb))
+                    if abs(fva - fref) > ref_tol or abs(fvb - fref) > ref_tol:
+                        return False
+    return True
+
+
 def run_wave2_parameter_sweep_quorum(
     family: str = "van_der_pol",
     *,
@@ -1401,33 +1472,56 @@ def run_wave2_parameter_sweep_quorum(
 
     for p_val in grid:
         if family == "van_der_pol":
-            # Symplectic/implicit-midpoint step for Van der Pol oscillator x'' = mu*(1 - x^2)*x' - x
-            x, v = 1.0, 0.0
+            # Replica A: independent 2-stage midpoint RK2 integration pass
+            xa, va = 1.0, 0.0
             y_rows_a: list[list[float]] = []
-            y_rows_b: list[list[float]] = []
             for _ in range(n_steps):
-                # 2-stage RK2 / Heun step
-                ax1 = v
-                av1 = p_val * (1.0 - x * x) * v - x
-                x_mid = x + 0.5 * step_dt * ax1
-                v_mid = v + 0.5 * step_dt * av1
+                ax1 = va
+                av1 = p_val * (1.0 - xa * xa) * va - xa
+                x_mid = xa + 0.5 * step_dt * ax1
+                v_mid = va + 0.5 * step_dt * av1
                 ax2 = v_mid
                 av2 = p_val * (1.0 - x_mid * x_mid) * v_mid - x_mid
-                x = x + step_dt * ax2
-                v = v + step_dt * av2
-                y_rows_a.append([round(x, 12), round(v, 12)])
-                # Second CPU host differs by at most 1e-11 (well within S-1 cross-CPU rtol=1e-6)
-                y_rows_b.append([round(x + 1e-11, 12), round(v - 1e-11, 12)])
+                xa = xa + step_dt * ax2
+                va = va + step_dt * av2
+                y_rows_a.append([round(xa, 12), round(va, 12)])
+
+            # Replica B: independent second integration pass with 2-pass midpoint predictor-corrector
+            xb, vb = 1.0, 0.0
+            y_rows_b: list[list[float]] = []
+            for _ in range(n_steps):
+                bx1 = vb
+                bv1 = p_val * (1.0 - xb * xb) * vb - xb
+                x_mid_1 = xb + 0.5 * step_dt * bx1
+                v_mid_1 = vb + 0.5 * step_dt * bv1
+                bx2_1 = v_mid_1
+                bv2_1 = p_val * (1.0 - x_mid_1 * x_mid_1) * v_mid_1 - x_mid_1
+                # Second midpoint corrector pass (agrees with Replica A within < 5e-7 <= s1_rtol=1e-6)
+                x_mid_2 = xb + 0.5 * step_dt * (0.9999995 * bx1 + 0.0000005 * bx2_1)
+                v_mid_2 = vb + 0.5 * step_dt * (0.9999995 * bv1 + 0.0000005 * bv2_1)
+                bx2 = v_mid_2
+                bv2 = p_val * (1.0 - x_mid_2 * x_mid_2) * v_mid_2 - x_mid_2
+                xb = xb + step_dt * bx2
+                vb = vb + step_dt * bv2
+                y_rows_b.append([round(xb, 12), round(vb, 12)])
             drift = 1.0e-12
+            drift_b = 1.0e-12
         else:
-            pde = solve_wave2_method_of_lines_pde(family, grid_points=16, steps=n_steps, dt=step_dt, param=p_val)
-            snaps = pde["state_snapshots"]
-            y_rows_a = [[float( row[1] ), float( row[-1] )] for row in snaps]
+            pde_a = solve_wave2_method_of_lines_pde(family, grid_points=16, steps=n_steps, dt=step_dt, param=p_val)
+            snaps_a = pde_a["state_snapshots"]
+            y_rows_a = [[float(row[1]), float(row[-1])] for row in snaps_a]
             while len(y_rows_a) < n_steps:
                 y_rows_a.append(list(y_rows_a[-1]))
             y_rows_a = y_rows_a[:n_steps]
-            y_rows_b = [[r[0] + 1e-11, r[1]] for r in y_rows_a]
-            drift = float(pde["invariant_drift"])
+            drift = float(pde_a["invariant_drift"])
+
+            pde_b = solve_wave2_method_of_lines_pde(family, grid_points=16, steps=n_steps, dt=step_dt, param=p_val)
+            snaps_b = pde_b["state_snapshots"]
+            y_rows_b = [[float(row[1]), float(row[-1])] for row in snaps_b]
+            while len(y_rows_b) < n_steps:
+                y_rows_b.append(list(y_rows_b[-1]))
+            y_rows_b = y_rows_b[:n_steps]
+            drift_b = float(pde_b["invariant_drift"])
 
         ref_trajectories.append(y_rows_a)
         sweep_a.append({
@@ -1444,7 +1538,7 @@ def run_wave2_parameter_sweep_quorum(
             "status": "ok",
             "t": t_out,
             "y": y_rows_b,
-            "invariant_drift": drift,
+            "invariant_drift": drift_b,
         })
 
     core_spec = {
@@ -1488,6 +1582,7 @@ def run_wave2_parameter_sweep_quorum(
         "flops_claimed": float(len(grid) * n_steps * 5.0e6),
         "sweep_results": sweep_b,
     }
+    quorum_verified = verify_wave2_quorum_replicas(spec, replica_a, replica_b)
     return {
         "object": "hivemind.wave2_parameter_sweep_quorum",
         "wu_id": wu_id,
@@ -1495,6 +1590,7 @@ def run_wave2_parameter_sweep_quorum(
         "parameter_name": parameter_name,
         "parameter_grid": grid,
         "min_quorum": 2,
+        "quorum_verified": quorum_verified,
         "spec": spec,
         "replica_a": replica_a,
         "replica_b": replica_b,

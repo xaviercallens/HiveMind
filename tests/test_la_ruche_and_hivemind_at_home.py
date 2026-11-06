@@ -258,7 +258,7 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     r_redeem = client.post(
         "/api/v1/compute-points/redeem",
         json={
-            "contributor_handle": "@test-gpu-node",
+            "contributor_handle": "@Vxtzq",
             "service_id": "python_coding_gwaya",
             "prompt": "Write a vectorized E8 lattice quantizer in Python.",
             "points_balance_before": 1250,
@@ -267,10 +267,23 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     assert r_redeem.status_code == 200
     redeem_json = r_redeem.json()
     assert redeem_json["status"] == "COMPUTE_POINTS_REDEEMED"
+    assert redeem_json["points_balance_before"] == 30000
     assert redeem_json["points_spent"] == 50
-    assert redeem_json["points_balance_after"] == 1200
+    assert redeem_json["points_balance_after"] == 29950
     assert redeem_json["monetary_cost_eur_usd"] == 0.0
-    assert "quantize_e8_coset_2bit" in redeem_json["domain_output"]
+    assert "La Ruche Top-2 Sparse MoE Routing" in redeem_json["domain_output"]
+
+    # Negative control (IP-242): unknown handle with client-supplied points_balance_before=999999 is refused
+    r_unknown_redeem = client.post(
+        "/api/v1/compute-points/redeem",
+        json={
+            "contributor_handle": "@test-gpu-node",
+            "service_id": "python_coding_gwaya",
+            "prompt": "Write a vectorized E8 lattice quantizer in Python.",
+            "points_balance_before": 999999,
+        },
+    )
+    assert r_unknown_redeem.status_code == 422
 
     # Verify 5-Language Support (English, French, Chinese, Spanish, German)
     r_i18n_all = client.get("/api/v1/i18n")
@@ -287,7 +300,7 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
         r_red_lang = client.post(
             "/api/v1/compute-points/redeem",
             json={
-                "contributor_handle": "@test-gpu-node",
+                "contributor_handle": "@Vxtzq",
                 "service_id": "astrophysics_exoplanet",
                 "prompt": "Detect Kepler-186f exoplanet transit dip.",
                 "points_balance_before": 1250,

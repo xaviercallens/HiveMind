@@ -39,3 +39,40 @@ def test_the_committed_scorecard_matches_the_current_evidence() -> None:
     committed = (Path(__file__).resolve().parents[1] / "docs/MVP_SCORECARD.md")
     if committed.exists():
         assert committed.read_text(encoding="utf-8") == sc.render(sc.run()), "run: python scripts/mvp_scorecard.py --write"
+
+
+def test_regressing_workunit_record_is_labeled_assimilated_no_held_out_gain(tmp_path: Path) -> None:
+    """Issue #633: A synthetic work-unit record where eval_loss_after > eval_loss_before is labeled 'assimilated, no held-out gain'."""
+    import t4_monitor
+    from hivemind.boinc.real_client.boinc_server_scripts import classify_workunit_eval_gain
+    from hivemind.router.t4_visibility import format_workunit_counter_label
+
+    synthetic_wu = {
+        "wu_id": "hmq_00181",
+        "wu": "hmq_00181",
+        "app": "hivemind_qlora_moe",
+        "domain": "mix",
+        "round": 181,
+        "loss_before": 1.664,
+        "loss_after": 1.3849,
+        "eval_loss_before": 1.8832,
+        "eval_loss_after": 2.2889,
+    }
+    verdict = classify_workunit_eval_gain(synthetic_wu)
+    assert verdict["held_out_gain"] < 0
+    assert verdict["improved"] is False
+    assert verdict["progress_label"] == "assimilated, no held-out gain"
+    assert verdict["assimilator_action"] == "counted_in_ledger_not_improvement_chain_head_held"
+    assert verdict["eval_basis"]["basis_id"] == "6_domain_mix_stratified"
+
+    b3_row = sc.check_b3(wu_record=synthetic_wu)
+    assert b3_row.status == "FAIL"
+    assert "assimilated, no held-out gain" in b3_row.reason
+    assert "basis=6_domain_mix_stratified" in b3_row.reason
+
+    (tmp_path / "assimilated.jsonl").write_text(json.dumps(synthetic_wu) + "\n", encoding="utf-8")
+    prog = t4_monitor.progress(tmp_path)
+    assert prog["last"]["progress_label"] == "assimilated, no held-out gain"
+    assert prog["assimilated_no_held_out_gain"] == 1
+    assert prog["counter_label"] == "assimilated, no held-out gain"
+    assert format_workunit_counter_label(synthetic_wu) == "assimilated, no held-out gain"

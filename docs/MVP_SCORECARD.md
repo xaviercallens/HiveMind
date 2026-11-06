@@ -10,7 +10,7 @@
 | A2 | One MoE split across 2 hosts, token-identical to single host | **PASS** | A2_split_moe.json: passed |
 | B1 | Custom dataset -> signed shards + held-out split | **PASS** | B1_custom_shards.json: passed |
 | B2 | OpenDiLoCo-style QLoRA rounds on >= 2 physical hosts | **NOT-RUN** | no artifacts/mvp/B2_*.json yet |
-| B3 | Trained adapter passes the train-to-serve gate | **FAIL** | GRANITE_ADAPTER_hmq_00147_gate_f16_independent_chunks.json: servable=False gain=-0.00403 ci=[-0.01758, 0.00893] |
+| B3 | Trained adapter passes the train-to-serve gate | **FAIL** | GRANITE_ADAPTER_hmq_00147_gate_f16_independent_chunks.json: servable=False gain=-0.00403 ci=[-0.01758, 0.00893] basis=6-domain_200x128 (assimilated, no held-out gain) |
 | C1 | AMCP events on a 3-voter Kafka cluster survive a voter loss | **NOT-RUN** | no artifacts/mvp/C1_*.json yet |
 | C2 | Registered adapter is routed by domain; failed-gate adapters refused | **NOT-RUN** | no artifacts/mvp/C2_*.json yet |
 | D1 | GCP control plane follows the low-cost rules; cost estimate recorded | **FAIL** | flags match AGENTS.md; D1_gcp_cost.json: estimate $393/month vs budget $150; unpriced: 1 |

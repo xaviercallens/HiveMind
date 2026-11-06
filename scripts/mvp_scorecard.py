@@ -57,7 +57,14 @@ def _artifact_rows(cid: str) -> Row:
     return Row(cid, "FAIL", f"{Path(files[-1]).name}: {data.get('reason') or 'passed is not true'}")
 
 
-def check_b3() -> Row:
+def check_b3(wu_record: dict | None = None, tolerance: float = 1e-6) -> Row:
+    if wu_record is not None:
+        before = wu_record.get("eval_loss_before")
+        after = wu_record.get("eval_loss_after")
+        basis_obj = wu_record.get("eval_basis") if isinstance(wu_record.get("eval_basis"), dict) else {}
+        basis = basis_obj.get("basis_id", "6_domain_mix_stratified")
+        if isinstance(before, (int, float)) and isinstance(after, (int, float)) and float(after) > float(before) + float(tolerance):
+            return Row("B3", "FAIL", f"{wu_record.get('wu_id', 'wu')}: assimilated, no held-out gain (after={after} > before={before}, basis={basis})")
     files = sorted(glob.glob(str(ROOT / "artifacts/experiments/GRANITE_ADAPTER_*gate*.json")))
     primary = [f for f in files if "posthoc" not in f]
     if not primary:
@@ -65,7 +72,9 @@ def check_b3() -> Row:
     latest = json.loads(Path(sorted(primary)[-1]).read_text(encoding="utf-8"))
     ok = latest.get("servable") is True
     pooled = latest.get("pooled", {})
-    return Row("B3", "PASS" if ok else "FAIL", f"{Path(sorted(primary)[-1]).name}: servable={latest.get('servable')} gain={pooled.get('mean_nll_gain_nats')} ci={pooled.get('bootstrap95')}")
+    gain = pooled.get("mean_nll_gain_nats")
+    label = "held-out gain" if (ok and isinstance(gain, (int, float)) and gain > 0) else "assimilated, no held-out gain"
+    return Row("B3", "PASS" if ok else "FAIL", f"{Path(sorted(primary)[-1]).name}: servable={latest.get('servable')} gain={gain} ci={pooled.get('bootstrap95')} basis=6-domain_200x128 ({label})")
 
 
 def check_d1() -> Row:

@@ -159,3 +159,65 @@ def test_an_undeclared_model_that_vanishes_still_fails_and_a_live_one_passes() -
     assert not monitor.probe_ok("hivemind/auto", 200, False, retired)  # wrong answer
     assert monitor.probe_ok("hivemind/auto", 200, True, retired)
     assert monitor.probe_ok("hivemind/auto", 200, True, frozenset())
+
+
+def test_split_probe_and_user_chats_separates_15_probes_from_2_non_probe_chats() -> None:
+    """Issue #588/#590: 15 probe chats and 2 non-probe chats yield non_probe n == 2 and probe n == 15."""
+    probe_rows = [
+        _chat_row("0.5s", 1100, ua="hivemind-live-user-monitor/1.0")
+        for _ in range(15)
+    ]
+    user_rows = [
+        _chat_row("1.2s", 900, ua="Mozilla/5.0"),
+        _chat_row("2.4s", 1400, ua="curl/8.5.0"),
+    ]
+    split = monitor.split_probe_and_user_chats(probe_rows + user_rows)
+    assert split["non_probe"]["n"] == 2
+    assert split["probe"]["n"] == 15
+    assert split["non_probe"]["p50_s"] == 1.2
+    assert split["non_probe"]["p95_s"] == 2.4
+    line = monitor.format_service_chat_line("ruche", split)
+    assert "users chat   2 (p50 1.2, p95 2.4 s)" in line
+    assert "probe chat  15" in line
+
+
+def test_split_probe_and_user_chats_reports_none_p95_when_zero_non_probe_chats() -> None:
+    """Issue #588: With 0 non-probe chats, non_probe p95 is None and the summary line says so."""
+    probe_rows = [
+        _chat_row("0.4s", 1126, ua="python-httpx/0.28.1"),
+        _chat_row("20.5s", 4580, ua="python-httpx/0.28.1"),
+    ] + [
+        _chat_row("1.1s", 1100, ua="python-httpx/0.28.1")
+        for _ in range(13)
+    ]
+    split = monitor.split_probe_and_user_chats(
+        probe_rows,
+        probe_windows=[("2026-11-01T00:59:59Z", "2026-11-01T01:00:35Z")],
+    )
+    assert split["non_probe"]["n"] == 0
+    assert split["non_probe"]["p50_s"] is None
+    assert split["non_probe"]["p95_s"] is None
+    assert split["probe"]["n"] == 15
+    line = monitor.format_service_chat_line("router", split)
+    assert "users chat 0 (no p95 for users)" in line
+    assert "probe chat  15" in line
+
+
+def test_thirty_two_second_caller_and_per_tier_probe_latency_breakdown() -> None:
+    """Issue #590: The :32 caller is identified and per-tier probe latency is reported."""
+    caller = monitor.THIRTY_TWO_SECOND_CALLER
+    assert "scripts/live_user_monitor.py" in caller["script"]
+    assert "hivemind/coder" in caller["second_request"]
+    assert caller["doc"] == "docs/MONITOR_32_SECOND_CALLER.md"
+    doc = Path(__file__).resolve().parents[1] / "docs/MONITOR_32_SECOND_CALLER.md"
+    assert doc.exists() and "hivemind/coder" in doc.read_text(encoding="utf-8")
+
+    sample_cases = [
+        {"service": "ruche", "model": "hivemind/bee-stars", "stream": False, "secs": 0.4, "ok": True},
+        {"service": "ruche", "model": "hivemind/coder", "stream": True, "secs": 20.5, "ok": True},
+        {"service": "router", "model": "hivemind/coder", "stream": True, "secs": 18.2, "ok": True},
+    ]
+    by_tier = monitor.probe_latency_by_tier(sample_cases)
+    assert by_tier["hivemind/coder"]["max_s"] == 20.5
+    assert by_tier["hivemind/coder"]["n"] == 2
+    assert by_tier["hivemind/bee-stars"]["p50_s"] == 0.4

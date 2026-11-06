@@ -404,6 +404,107 @@ def validate(args: list[str]) -> int:
     return run_validation(args)
 
 
+SIX_EVAL_DOMAINS: tuple[str, ...] = ("general", "french", "edu_web", "news", "biomed", "math")
+HELD_OUT_BASELINE_NLL: float = 2.12
+DEFAULT_EVAL_GAIN_TOLERANCE: float = 1e-6
+
+
+def _is_positive_finite(val: Any) -> bool:
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        return False
+    f = float(val)
+    return math.isfinite(f) and f > 0.0
+
+
+def classify_workunit_eval_gain(
+    record: dict[str, Any],
+    *,
+    tolerance: float = DEFAULT_EVAL_GAIN_TOLERANCE,
+    baseline_nll: float = HELD_OUT_BASELINE_NLL,
+) -> dict[str, Any]:
+    """Classify a training workunit's held-out evaluation basis and whether it achieved a held-out gain.
+
+    A workunit with ``eval_loss_after > eval_loss_before + tolerance`` is never reported as an improvement:
+    its ``progress_label`` is ``"assimilated, no held-out gain"`` and ``improved`` is ``False``.
+    Records whether the evaluation basis changed at ``hmq_00171`` (6-domain ``MIX_DOMAINS`` vs 16-domain
+    ``DOMAIN_ORDER``, ``8x128`` held-out tokens/domain, baseline ``2.12``).
+    """
+    wu_id = str(record.get("wu_id") or "")
+    by_dom_before = record.get("eval_by_domain_before") if isinstance(record.get("eval_by_domain_before"), dict) else {}
+    by_dom_after = record.get("eval_by_domain_after") if isinstance(record.get("eval_by_domain_after"), dict) else {}
+    domains = sorted(by_dom_after.keys()) or sorted(by_dom_before.keys())
+    if not domains and record.get("domain"):
+        dom_str = str(record["domain"])
+        domains = list(SIX_EVAL_DOMAINS) if dom_str == "mix" else [dom_str]
+
+    six_present_before = all(d in by_dom_before and _is_positive_finite(by_dom_before[d]) for d in SIX_EVAL_DOMAINS)
+    six_present_after = all(d in by_dom_after and _is_positive_finite(by_dom_after[d]) for d in SIX_EVAL_DOMAINS)
+    six_mean_before = (
+        round(sum(float(by_dom_before[d]) for d in SIX_EVAL_DOMAINS) / len(SIX_EVAL_DOMAINS), 6)
+        if six_present_before
+        else None
+    )
+    six_mean_after = (
+        round(sum(float(by_dom_after[d]) for d in SIX_EVAL_DOMAINS) / len(SIX_EVAL_DOMAINS), 6)
+        if six_present_after
+        else None
+    )
+
+    raw_before = record.get("eval_loss_before")
+    raw_after = record.get("eval_loss_after")
+    loss_before = float(raw_before) if _is_positive_finite(raw_before) else six_mean_before
+    loss_after = float(raw_after) if _is_positive_finite(raw_after) else six_mean_after
+
+    wu_num = int(wu_id.split("_")[-1]) if wu_id.startswith("hmq_") and wu_id.split("_")[-1].isdigit() else 0
+    basis_changed = (wu_num >= 171) or (len(domains) not in (0, 6)) or (str(record.get("domain") or "") == "mix")
+    basis_id = (
+        "6_domain_mix_stratified"
+        if str(record.get("domain") or "") == "mix" or set(domains) == set(SIX_EVAL_DOMAINS)
+        else (f"{len(domains)}_domain_extended" if len(domains) > 6 else "single_or_partial_domain")
+    )
+    eval_basis = {
+        "basis_id": basis_id,
+        "domains": domains,
+        "domain_count": len(domains),
+        "held_out_set": "8x128_tokens_per_domain",
+        "baseline_nll": float(baseline_nll),
+        "basis_changed_at_hmq_00171": bool(basis_changed),
+        "six_domain_rescored_before": six_mean_before,
+        "six_domain_rescored_after": six_mean_after,
+    }
+
+    if loss_before is not None and loss_after is not None:
+        gain = round(loss_before - loss_after, 6)
+        no_regression = loss_after <= (loss_before + float(tolerance))
+        strictly_improved = (loss_after < (loss_before - float(tolerance))) and (loss_after < float(baseline_nll))
+    else:
+        gain = None
+        no_regression = True
+        strictly_improved = False
+
+    if loss_before is not None and loss_after is not None and loss_after > (loss_before + float(tolerance)):
+        progress_label = "assimilated, no held-out gain"
+        assimilator_action = "counted_in_ledger_not_improvement_chain_head_held"
+        chain_head_ratchet_pass = False
+    elif not strictly_improved:
+        progress_label = "assimilated, no held-out gain"
+        assimilator_action = "counted_in_ledger_not_improvement"
+        chain_head_ratchet_pass = bool(no_regression)
+    else:
+        progress_label = "assimilated, held-out gain"
+        assimilator_action = "chain_head_advanced"
+        chain_head_ratchet_pass = True
+
+    return {
+        "eval_basis": eval_basis,
+        "held_out_gain": gain,
+        "improved": bool(strictly_improved),
+        "progress_label": progress_label,
+        "assimilator_action": assimilator_action,
+        "chain_head_ratchet_pass": chain_head_ratchet_pass,
+    }
+
+
 def assimilate(args: list[str], directory: Any = None) -> int:
     LEDGER_DIR.mkdir(parents=True, exist_ok=True)
     if args and args[0] == "--error":
@@ -464,12 +565,18 @@ def assimilate(args: list[str], directory: Any = None) -> int:
         entry["eval_loss_before"], entry["eval_loss_after"] = meta.get("eval_loss_before"), meta.get("eval_loss_after")
         entry["domain"] = meta.get("domain")
         entry["eval_by_domain_before"], entry["eval_by_domain_after"] = meta.get("eval_by_domain_before"), meta.get("eval_by_domain_after")
-        # publish the chain head: the work generator starts the next workunit from this adapter
-        tmp = LEDGER_DIR / f"{stem}.pt.tmp"
-        torch.save({"state": state, "sha256": sha, "wu_id": wu}, tmp)
-        tmp.replace(LEDGER_DIR / f"{stem}.pt")
-        head_json.write_text(json.dumps(
-            {"wu_id": wu, "sha256": sha, "eval_loss_before": meta.get("eval_loss_before"), "eval_loss_after": meta.get("eval_loss_after"), "t": time.time()}))
+        eval_gain_info = classify_workunit_eval_gain(entry)
+        entry.update(eval_gain_info)
+        # Advance the chain head when no head exists yet or when held-out loss did not regress beyond tolerance
+        advance_head = (not head_json.exists()) or bool(eval_gain_info["chain_head_ratchet_pass"])
+        entry["chain_head_advanced"] = advance_head
+        if advance_head:
+            tmp = LEDGER_DIR / f"{stem}.pt.tmp"
+            torch.save({"state": state, "sha256": sha, "wu_id": wu}, tmp)
+            tmp.replace(LEDGER_DIR / f"{stem}.pt")
+            head_json.write_text(json.dumps(
+                {"wu_id": wu, "sha256": sha, "eval_loss_before": meta.get("eval_loss_before"), "eval_loss_after": meta.get("eval_loss_after"),
+                 "progress_label": eval_gain_info["progress_label"], "eval_basis": eval_gain_info["eval_basis"], "t": time.time()}))
     elif meta["app"] in SOLVER_SWEEP_APPS:
         sweep_results = meta.get("sweep_results", [])
         cert_bytes = json.dumps(sweep_results, sort_keys=True, separators=(",", ":")).encode("utf-8")

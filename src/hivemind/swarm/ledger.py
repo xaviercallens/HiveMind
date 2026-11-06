@@ -21,9 +21,12 @@ Implements:
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import math
+import os
+import tempfile
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -143,16 +146,53 @@ class HiveSwarmLedger:
     HALVING_INTERVAL_BLOCKS = 10_000
 
     def __init__(self, ledger_path: Optional[Path] = None) -> None:
-        self.ledger_path = ledger_path
+        self.ledger_path = Path(ledger_path) if ledger_path is not None else None
         self.chain: List[HivePoUWBlock] = []
         self._cumulative_minted_hive: float = 0.0
         self._slashed_total_hive: float = 0.0
         self._in_transfer: bool = False
+        self._loading: bool = False
         self.balances: Dict[str, float] = _MintedTrackingBalances(self)
         self.reputation_scores: Dict[str, int] = {}
         self.slashed_registry: List[str] = []
         self.settlement_history: List[InferenceSettlementReceipt] = []
-        self._init_genesis_block()
+        if self.ledger_path is not None and self.ledger_path.exists():
+            self._load_persisted(self.ledger_path)
+        else:
+            self._init_genesis_block()
+
+    def _load_persisted(self, path: Path) -> None:
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict) or not isinstance(raw.get("chain"), list) or not raw["chain"]:
+                raise ValueError("Missing or empty chain in persisted ledger")
+            loaded_chain = [HivePoUWBlock(**b) for b in raw["chain"]]
+            loaded_balances = {str(k): float(v) for k, v in dict(raw.get("balances", {})).items()}
+            loaded_reputation = {str(k): int(v) for k, v in dict(raw.get("reputation_scores", {})).items()}
+            loaded_slashed = [str(x) for x in list(raw.get("slashed_registry", []))]
+            loaded_settlements = [
+                InferenceSettlementReceipt(**s) for s in list(raw.get("settlement_history", []))
+            ]
+            slashed_total = float(raw.get("slashed_total_hive", 0.0))
+            cumulative_minted = float(raw.get("cumulative_minted_hive", 0.0))
+        except Exception as exc:
+            raise ValueError(f"Corrupt ledger file at {path}: {exc}") from exc
+
+        self.chain = loaded_chain
+        if not self.verify_chain_integrity():
+            raise ValueError(f"Corrupt ledger chain integrity at {path}")
+
+        self._loading = True
+        try:
+            self._slashed_total_hive = round(slashed_total, 6)
+            self._cumulative_minted_hive = round(cumulative_minted, 6)
+            self.balances.update(loaded_balances)
+            self.reputation_scores.update(loaded_reputation)
+            self.slashed_registry.extend(loaded_slashed)
+            self.settlement_history.extend(loaded_settlements)
+        finally:
+            self._loading = False
+        self.balances._sync_minted()
 
     def _init_genesis_block(self) -> None:
         genesis = HivePoUWBlock(
@@ -248,14 +288,7 @@ class HiveSwarmLedger:
         for w in dedup_work:
             if not w.spot_check_passed or not w.multikrum_accepted:
                 slashed.append(w.node_id)
-                if w.node_id not in self.slashed_registry:
-                    self.slashed_registry.append(w.node_id)
-                self.reputation_scores[w.node_id] = self.reputation_scores.get(w.node_id, 100) - 50
-                # Slash 50% of any existing balance for Byzantine behavior
-                old_bal = self.balances.get(w.node_id, 0.0)
-                new_bal = round(old_bal * 0.5, 6)
-                self._slashed_total_hive = round(self._slashed_total_hive + (old_bal - new_bal), 6)
-                self.balances[w.node_id] = new_bal
+                self.slash(w.node_id, fraction=0.5, persist=False)
 
         total_weighted_flops = sum(
             w.flops_contributed * max(0.05, w.cosine_alignment) for w in valid_workers
@@ -452,6 +485,26 @@ class HiveSwarmLedger:
         self._persist()
         return self.balances[node_id]
 
+    def slash(self, node_id: str, fraction: float = 1.0, *, persist: bool = True) -> float:
+        """Slash a dishonest node's balance and reputation, record it in `slashed_registry`, and persist."""
+        if not node_id or not str(node_id).strip():
+            raise ValueError("node_id must be non-empty")
+        frac = min(1.0, max(0.0, float(fraction)))
+        if node_id not in self.slashed_registry:
+            self.slashed_registry.append(node_id)
+        if frac >= 1.0:
+            self.reputation_scores[node_id] = 0
+        else:
+            self.reputation_scores[node_id] = self.reputation_scores.get(node_id, 100) - 50
+        old_bal = self.balances.get(node_id, 0.0)
+        slashed_amt = round(old_bal * frac, 6)
+        new_bal = round(old_bal - slashed_amt, 6)
+        self._slashed_total_hive = round(self._slashed_total_hive + slashed_amt, 6)
+        self.balances[node_id] = new_bal
+        if persist:
+            self._persist()
+        return slashed_amt
+
     def get_balance(self, node_id: str) -> float:
         """Return the current `$HIVE` balance for `node_id`."""
         return round(self.balances.get(node_id, 0.0), 6)
@@ -468,16 +521,33 @@ class HiveSwarmLedger:
         return True
 
     def _persist(self) -> None:
-        if self.ledger_path is not None:
+        if self.ledger_path is not None and not self._loading:
             self.ledger_path.parent.mkdir(parents=True, exist_ok=True)
             data = {
                 "chain": [asdict(b) for b in self.chain],
-                "balances": self.balances,
-                "reputation_scores": self.reputation_scores,
-                "slashed_registry": self.slashed_registry,
+                "balances": dict(self.balances),
+                "reputation_scores": dict(self.reputation_scores),
+                "slashed_registry": list(self.slashed_registry),
                 "settlement_history": [asdict(s) for s in self.settlement_history],
+                "slashed_total_hive": self._slashed_total_hive,
+                "cumulative_minted_hive": self._cumulative_minted_hive,
             }
-            self.ledger_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            payload = json.dumps(data, indent=2)
+            fd, tmp_name = tempfile.mkstemp(
+                prefix=f".{self.ledger_path.name}.",
+                suffix=".tmp",
+                dir=str(self.ledger_path.parent),
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    handle.write(payload)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(tmp_name, self.ledger_path)
+            except Exception:
+                with contextlib.suppress(OSError):
+                    os.unlink(tmp_name)
+                raise
 
 
 @dataclass

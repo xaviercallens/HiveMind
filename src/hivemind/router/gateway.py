@@ -1082,26 +1082,10 @@ def create_router_app(
         with keepalive_lock:
             if not reconnected_fleet_keepalive["active"]:
                 return
-            if now_val - float(reconnected_fleet_keepalive["last_refresh_utc"]) < 35.0:
-                return
-            reconnected_fleet_keepalive["last_refresh_utc"] = now_val
-            entries_snapshot = list(reconnected_fleet_keepalive["entries"].values())
-        for item in entries_snapshot:
-            ctrl = store.producer_control(item["account_id"])
-            if ctrl is not None and ctrl.get("paused"):
-                continue
-            store.upsert_producer(
-                item["account_id"],
-                item["endpoint_url"],
-                item["models"],
-                item["cost_per_1k"],
-                item["capacity_1k"],
-                item["execution_class"],
-                now_utc=now_val,
-                endpoint_token=item["endpoint_token"],
-                residency=item["residency"],
-                replace_endpoints=True,
-            )
+            if now_val - float(reconnected_fleet_keepalive["last_refresh_utc"]) >= PRODUCER_TTL_S:
+                reconnected_fleet_keepalive["entries"].clear()
+                reconnected_fleet_keepalive["active"] = False
+            return
 
     def equilibrium(model_id: str, records: Sequence[ProducerRecord], extra: Account | None) -> MarketEquilibrium:
         return clear_market(model_id, bids_for(extra), offers_for(records), fee)

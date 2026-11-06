@@ -463,6 +463,7 @@ class CommunityAdapterBundleManager:
         self.royalty_pts_per_import = int(royalty_pts_per_import)
         self.exporter = HFCommunityModelCardExporter()
         self.published_bundles: Dict[str, CommunityAdapterBundle] = {}
+        self._settled_bundle_imports: set[tuple[str, str]] = set()
         self.import_history: List[Dict[str, Any]] = []
         self.miner_royalty_pts: Dict[str, int] = {}
 
@@ -601,6 +602,8 @@ class CommunityAdapterBundleManager:
 
         for entry in manifest["entries"]:
             dom = entry["domain_name"]
+            if dom not in loaded_states:
+                raise ValueError(f"Missing tensor state for community expert '{dom}'")
             state = loaded_states[dom]
             actual_sha = _compute_state_dict_sha256(state)
             if actual_sha != entry["tensor_sha256"]:
@@ -610,6 +613,20 @@ class CommunityAdapterBundleManager:
                 )
             verified_entries.append(dom)
 
+        recomputed_bundle_sha = hashlib.sha256(
+            "|".join(
+                f"{e['domain_name']}:{e['tensor_sha256']}" for e in manifest["entries"]
+            ).encode("utf-8")
+        ).hexdigest()
+        if recomputed_bundle_sha != manifest["bundle_sha256"]:
+            raise ValueError("Bundle manifest SHA-256 integrity check failed.")
+
+        import_key = (recomputed_bundle_sha, str(importer_agent_id))
+        already_imported = import_key in self._settled_bundle_imports
+
+        for entry in manifest["entries"]:
+            dom = entry["domain_name"]
+            state = loaded_states[dom]
             if moe_model is not None and dom not in moe_model.expert_domains:
                 moe_model.hotplug_domain_expert(
                     domain_name=dom,
@@ -619,6 +636,10 @@ class CommunityAdapterBundleManager:
                 )
 
             author_tag = entry["author_gamer_tag"]
+            author_handle = entry.get("author_contributor_handle", "")
+            if already_imported or str(importer_agent_id) in (str(author_tag), str(author_handle)):
+                continue
+
             self.ledger.credit_reward(
                 node_id=author_tag,
                 amount_hive=self.royalty_hive_per_import,
@@ -631,19 +652,13 @@ class CommunityAdapterBundleManager:
                 {
                     "domain_name": dom,
                     "author_gamer_tag": author_tag,
-                    "author_contributor_handle": entry["author_contributor_handle"],
+                    "author_contributor_handle": author_handle,
                     "royalty_hive": self.royalty_hive_per_import,
                     "royalty_pts": self.royalty_pts_per_import,
                 }
             )
 
-        recomputed_bundle_sha = hashlib.sha256(
-            "|".join(
-                f"{e['domain_name']}:{e['tensor_sha256']}" for e in manifest["entries"]
-            ).encode("utf-8")
-        ).hexdigest()
-        if recomputed_bundle_sha != manifest["bundle_sha256"]:
-            raise ValueError("Bundle manifest SHA-256 integrity check failed.")
+        self._settled_bundle_imports.add(import_key)
 
         final_experts = moe_model.num_experts if moe_model is not None else len(verified_entries)
         receipt = {

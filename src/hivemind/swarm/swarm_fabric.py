@@ -1607,10 +1607,7 @@ class OptimisticProofOfInferenceAuditor:
         refunded_hive = 0.0
         if fraud_proven:
             if ledger is not None:
-                ledger.balances[peer_id] = 0.0
-                ledger.reputation_scores[peer_id] = 0
-                if peer_id not in ledger.slashed_registry:
-                    ledger.slashed_registry.append(peer_id)
+                ledger.slash(peer_id, fraction=1.0)
             if l2_channel is not None:
                 refunded_hive = l2_channel.refund_consumer_escrow()
 
@@ -1732,10 +1729,7 @@ class OptimisticProofOfInferenceAuditor:
 
         if fraud_proven:
             if ledger is not None:
-                ledger.balances[peer_id] = 0.0
-                ledger.reputation_scores[peer_id] = 0
-                if peer_id not in ledger.slashed_registry:
-                    ledger.slashed_registry.append(peer_id)
+                ledger.slash(peer_id, fraction=1.0)
                 ledger.credit_reward(
                     node_id=challenger_id,
                     amount_hive=challenger_bounty,
@@ -1786,40 +1780,103 @@ class StateChannelVoucher:
 class HiveLayer2StateChannel:
     """M4: Layer-2 `$HIVE` off-chain state channel with batch settlement to L1 `HiveSwarmLedger`."""
 
+    MIN_SECRET_KEY_BYTES = 16
+
     def __init__(
         self,
         consumer_id: str,
         provider_ids: List[str],
         escrow_hive: float = 5.0,
         rate_per_token: float = 0.005,
-        secret_key: bytes = b"HiveMind-L2-StateChannel-Key",
+        secret_key: Optional[bytes] = None,
+        ledger: Optional[HiveSwarmLedger] = None,
     ) -> None:
+        if not math.isfinite(float(escrow_hive)) or float(escrow_hive) <= 0.0:
+            raise ValueError("escrow_hive must be a finite positive number")
+        if not math.isfinite(float(rate_per_token)) or float(rate_per_token) <= 0.0:
+            raise ValueError("rate_per_token must be a finite positive number")
+        if secret_key is not None:
+            if not isinstance(secret_key, (bytes, bytearray)) or len(secret_key) < self.MIN_SECRET_KEY_BYTES:
+                raise ValueError(f"secret_key must be at least {self.MIN_SECRET_KEY_BYTES} bytes")
+            resolved_key = bytes(secret_key)
+        else:
+            resolved_key = secrets.token_bytes(32)
         self.channel_id = f"l2-chan-{hashlib.sha256(f'{consumer_id}:{time.time()}'.encode()).hexdigest()[:12]}"
         self.consumer_id = consumer_id
-        self.provider_ids = provider_ids
-        self.escrow_hive = escrow_hive
-        self.rate_per_token = rate_per_token
-        self.secret_key = secret_key
+        self.provider_ids = list(provider_ids)
+        self.escrow_hive = round(float(escrow_hive), 6)
+        self.rate_per_token = float(rate_per_token)
+        self.secret_key = resolved_key
         self.nonce = 0
         self.cumulative_tokens = 0
         self.cumulative_hive_spent = 0.0
         self.latest_voucher: StateChannelVoucher | None = None
+        self.vouchers: List[StateChannelVoucher] = []
         self.disputed_and_refunded: bool = False
+        self.locked_escrow_hive: float = 0.0
+        self._escrow_locked_on_ledger: Optional[HiveSwarmLedger] = None
+        if ledger is not None:
+            self._lock_escrow_on_ledger(ledger)
+
+    def _lock_escrow_on_ledger(self, ledger: HiveSwarmLedger) -> None:
+        bal = ledger.balances.get(self.consumer_id, 0.0)
+        if bal < self.escrow_hive:
+            raise ValueError(
+                f"Consumer '{self.consumer_id}' has insufficient $HIVE ({bal} < {self.escrow_hive}) to lock L2 escrow"
+            )
+        ledger._in_transfer = True
+        try:
+            ledger.balances[self.consumer_id] = round(bal - self.escrow_hive, 6)
+        finally:
+            ledger._in_transfer = False
+        self.locked_escrow_hive = self.escrow_hive
+        self._escrow_locked_on_ledger = ledger
+        ledger._persist()
+
+    def _voucher_payload(self, nonce: int, cumulative_tokens: int, cumulative_hive_spent: float) -> str:
+        return (
+            f"{self.channel_id}:{self.consumer_id}:{nonce}:"
+            f"{cumulative_tokens}:{cumulative_hive_spent:.6f}"
+        )
+
+    def verify_voucher(self, voucher: StateChannelVoucher) -> bool:
+        """Verify HMAC signature, channel/consumer binding, and escrow ceiling of a voucher."""
+        if voucher.channel_id != self.channel_id or voucher.consumer_id != self.consumer_id:
+            return False
+        if voucher.nonce <= 0 or voucher.cumulative_tokens <= 0:
+            return False
+        if not math.isfinite(voucher.cumulative_hive_spent) or voucher.cumulative_hive_spent <= 0.0:
+            return False
+        if voucher.cumulative_hive_spent > self.escrow_hive + 1e-9:
+            return False
+        expected_spent = round(voucher.cumulative_tokens * self.rate_per_token, 6)
+        if abs(voucher.cumulative_hive_spent - expected_spent) > 1e-5:
+            return False
+        payload = self._voucher_payload(
+            voucher.nonce,
+            voucher.cumulative_tokens,
+            voucher.cumulative_hive_spent,
+        )
+        expected_sig = hmac.new(self.secret_key, payload.encode("utf-8"), hashlib.sha256).hexdigest()[:32]
+        return hmac.compare_digest(voucher.signature_hmac, expected_sig)
 
     def sign_micro_voucher(self, tokens_generated: int) -> StateChannelVoucher:
         """Issue an instant 0-latency off-chain `$HIVE` micro-voucher for `tokens_generated`."""
+        if int(tokens_generated) <= 0:
+            raise ValueError("tokens_generated must be a positive integer")
         fee = round(tokens_generated * self.rate_per_token, 6)
         if self.cumulative_hive_spent + fee > self.escrow_hive:
             raise ValueError("L2 State Channel escrow exhausted.")
         self.nonce += 1
         self.cumulative_tokens += tokens_generated
         self.cumulative_hive_spent = round(self.cumulative_hive_spent + fee, 6)
-        payload = (
-            f"{self.channel_id}:{self.consumer_id}:{self.nonce}:"
-            f"{self.cumulative_tokens}:{self.cumulative_hive_spent:.6f}"
+        payload = self._voucher_payload(
+            self.nonce,
+            self.cumulative_tokens,
+            self.cumulative_hive_spent,
         )
         sig = hmac.new(self.secret_key, payload.encode("utf-8"), hashlib.sha256).hexdigest()[:32]
-        self.latest_voucher = StateChannelVoucher(
+        voucher = StateChannelVoucher(
             channel_id=self.channel_id,
             consumer_id=self.consumer_id,
             provider_ids=list(self.provider_ids),
@@ -1828,14 +1885,30 @@ class HiveLayer2StateChannel:
             cumulative_hive_spent=self.cumulative_hive_spent,
             signature_hmac=sig,
         )
-        return self.latest_voucher
+        self.latest_voucher = voucher
+        self.vouchers.append(voucher)
+        return voucher
 
     def refund_consumer_escrow(self) -> float:
         """Refund accumulated off-chain vouchers back to the consumer if OPoI Merkle fraud is proven."""
         refunded = self.cumulative_hive_spent
+        if self._escrow_locked_on_ledger is not None and self.locked_escrow_hive > 0.0:
+            ledger = self._escrow_locked_on_ledger
+            ledger._in_transfer = True
+            try:
+                ledger.balances[self.consumer_id] = round(
+                    ledger.balances.get(self.consumer_id, 0.0) + self.locked_escrow_hive,
+                    6,
+                )
+            finally:
+                ledger._in_transfer = False
+            self.locked_escrow_hive = 0.0
+            self._escrow_locked_on_ledger = None
+            ledger._persist()
         self.cumulative_hive_spent = 0.0
         self.cumulative_tokens = 0
         self.latest_voucher = None
+        self.vouchers.clear()
         self.disputed_and_refunded = True
         return refunded
 
@@ -1845,20 +1918,41 @@ class HiveLayer2StateChannel:
         domain_expert: str = "Python_Systems_Code",
     ) -> Dict[str, Any]:
         """Close/checkpoint the L2 channel and settle accumulated `$HIVE` fees on L1 `HiveSwarmLedger`."""
-        if self.latest_voucher is None or self.cumulative_tokens == 0:
-            return {"status": "no_vouchers_to_settle", "settled_hive": 0.0}
+        if self.disputed_and_refunded or self.latest_voucher is None or self.cumulative_tokens == 0:
+            return {"status": "no_vouchers_to_settle", "settled_hive": 0.0, "settled_tokens": 0}
+        vouchers_to_check = [*self.vouchers, self.latest_voucher]
+        for v in vouchers_to_check:
+            if not self.verify_voucher(v):
+                raise ValueError("Invalid or forged L2 state channel voucher signature or amount exceeds escrow")
+        tokens_to_settle = int(self.latest_voucher.cumulative_tokens)
+        final_nonce = int(self.latest_voucher.nonce)
+        if self._escrow_locked_on_ledger is ledger and self.locked_escrow_hive > 0.0:
+            ledger._in_transfer = True
+            try:
+                ledger.balances[self.consumer_id] = round(
+                    ledger.balances.get(self.consumer_id, 0.0) + self.locked_escrow_hive,
+                    6,
+                )
+            finally:
+                ledger._in_transfer = False
+            self.locked_escrow_hive = 0.0
+            self._escrow_locked_on_ledger = None
         tx = ledger.settle_swarm_inference(
             consumer_node_id=self.consumer_id,
             provider_node_ids=self.provider_ids,
             domain_expert=domain_expert,
-            verified_tokens=self.cumulative_tokens,
+            verified_tokens=tokens_to_settle,
             rtt_speedup=None,
             rate_per_token=self.rate_per_token,
         )
+        self.cumulative_tokens = 0
+        self.cumulative_hive_spent = 0.0
+        self.latest_voucher = None
+        self.vouchers.clear()
         return {
             "channel_id": self.channel_id,
-            "final_nonce": self.nonce,
-            "settled_tokens": self.cumulative_tokens,
+            "final_nonce": final_nonce,
+            "settled_tokens": tokens_to_settle,
             "settled_hive": tx.fee_paid_hive,
             "l1_settlement_tx": tx,
         }

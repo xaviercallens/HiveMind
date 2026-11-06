@@ -46,6 +46,66 @@ ARTIFACTS_DIR = HIVEMIND_DIR / "artifacts"
 STRESS_REPORT_PATH = ARTIFACTS_DIR / "nocturnal_20_moe_stress_test_report.json"
 
 
+def compute_security_and_soundness_summary(
+    all_execution_results: list[Any],
+    domain_telemetry: dict[str, dict[str, Any]],
+    *,
+    ledger_intact: bool,
+    idempotent_report: Any | None = None,
+) -> dict[str, Any]:
+    """Compute security and soundness summary fields from actual benchmark executions and audits."""
+    exec_rates: list[float] = []
+    if all_execution_results:
+        passed_runs = sum(1 for r in all_execution_results if bool(getattr(r, "gate_passed", False)))
+        exec_rates.append(passed_runs / len(all_execution_results))
+    if domain_telemetry:
+        dom_vals: list[float] = []
+        for dom_entry in domain_telemetry.values():
+            if "gate_passed" in dom_entry:
+                dom_vals.append(1.0 if bool(dom_entry["gate_passed"]) else 0.0)
+            elif "gate_passed_rate" in dom_entry:
+                dom_vals.append(float(dom_entry["gate_passed_rate"]))
+            else:
+                dom_vals.append(0.0)
+        if dom_vals:
+            exec_rates.append(sum(dom_vals) / len(dom_vals))
+    gate_success_rate = round(min(exec_rates), 4) if exec_rates else 0.0
+
+    vram_breaches = sum(
+        1
+        for dom_entry in domain_telemetry.values()
+        if float(dom_entry.get("vram_headroom_mb", 0.0)) < 0.0
+    )
+    for r in all_execution_results:
+        budget_mb = getattr(r, "vram_budget_mb", None)
+        peak_mb = getattr(r, "peak_vram_mb", None)
+        if isinstance(budget_mb, (int, float)) and isinstance(peak_mb, (int, float)) and float(peak_mb) > float(budget_mb):
+            vram_breaches += 1
+
+    has_runs = len(all_execution_results) > 0
+    total_granted = getattr(idempotent_report, "total_hmt_granted", None) if idempotent_report is not None else None
+    already_credited = getattr(idempotent_report, "already_credited_count", None) if idempotent_report is not None else None
+    idempotency_ok = bool(
+        has_runs
+        and idempotent_report is not None
+        and total_granted == 0.0
+        and already_credited == len(all_execution_results)
+    )
+    replay_blocked = bool(
+        has_runs
+        and idempotent_report is not None
+        and total_granted == 0.0
+    )
+
+    return {
+        "mcnemar_gate_success_rate": gate_success_rate,
+        "ledger_hash_chain_verified": bool(ledger_intact),
+        "idempotency_audit_passed": idempotency_ok,
+        "byzantine_replay_blocked": replay_blocked,
+        "vram_envelope_breaches": int(vram_breaches),
+    }
+
+
 def run_intensive_stress_benchmarks(
     num_iterations: int = 3,
     samples_per_domain: int = 50,
@@ -148,6 +208,10 @@ def run_intensive_stress_benchmarks(
         tflops_list = [r.contributed_tflops for r in domain_runs]
         vram_list = [r.peak_vram_mb for r in domain_runs]
 
+        domain_gate_rate = round(
+            float(np.mean([1.0 if r.gate_passed else 0.0 for r in domain_runs])) if domain_runs else 0.0,
+            4,
+        )
         domain_telemetry[canonical] = {
             "title": meta["title"],
             "hf_dataset": meta["hf_dataset"],
@@ -159,7 +223,7 @@ def run_intensive_stress_benchmarks(
             "mean_accuracy_adapted": round(float(np.mean(acc_adapted)), 4),
             "mean_accuracy_delta": round(float(np.mean(acc_adapted) - np.mean(acc_bases)), 4),
             "max_mcnemar_p_value": round(float(np.max(p_vals)), 6),
-            "gate_passed_rate": float(all(r.gate_passed for r in domain_runs)),
+            "gate_passed_rate": domain_gate_rate,
             "mean_contributed_tflops": round(float(np.mean(tflops_list)), 3),
             "total_domain_tflops": round(float(np.sum(tflops_list)), 3),
             "mean_peak_vram_mb": round(float(np.mean(vram_list)), 1),
@@ -168,9 +232,10 @@ def run_intensive_stress_benchmarks(
             ),
         }
 
+        gate_label = "PASSED" if domain_gate_rate >= 1.0 else f"PARTIAL ({domain_gate_rate:.0%})"
         print(
             f"     -> Acc: {np.mean(acc_bases):.1%} -> {np.mean(acc_adapted):.1%} (+{np.mean(acc_adapted) - np.mean(acc_bases):.1%}) "
-            f"| McNemar p={np.max(p_vals):.6f} | Gate: PASSED "
+            f"| McNemar p={np.max(p_vals):.6f} | Gate: {gate_label} "
             f"| TFLOPs: {np.sum(tflops_list):.2f} | Peak VRAM: {np.mean(vram_list):.0f} MB"
         )
 
@@ -203,9 +268,16 @@ def run_intensive_stress_benchmarks(
     # Byzantine & Idempotency Audit
     print("\n[*] Auditing Idempotency and Anti-Tampering Hardness...")
     idempotent_report = retrofit_mgr.retrofit_work_points(store, all_execution_results)
-    assert idempotent_report.total_hmt_granted == 0.0, "Replay attack failed to be blocked!"
-    assert idempotent_report.already_credited_count == len(all_execution_results)
-    print("[*] Idempotency Protection: Replay attack successfully blocked (0 HMT leaked)")
+    soundness = compute_security_and_soundness_summary(
+        all_execution_results,
+        domain_telemetry,
+        ledger_intact=ledger_intact,
+        idempotent_report=idempotent_report,
+    )
+    if soundness["idempotency_audit_passed"]:
+        print("[*] Idempotency Protection: Replay attack successfully blocked (0 HMT leaked)")
+    else:
+        print("[!] Idempotency Protection FAILED")
 
     total_duration_s = time.time() - start_time
 
@@ -230,13 +302,7 @@ def run_intensive_stress_benchmarks(
                 p["account_handle"]: round(store.balance(p["account_id"]), 4) for p in swarm_fleet
             },
         },
-        "security_and_soundness": {
-            "mcnemar_gate_success_rate": 1.0,
-            "ledger_hash_chain_verified": ledger_intact,
-            "idempotency_audit_passed": True,
-            "byzantine_replay_blocked": True,
-            "vram_envelope_breaches": 0,
-        },
+        "security_and_soundness": soundness,
         "domain_telemetry": domain_telemetry,
     }
 

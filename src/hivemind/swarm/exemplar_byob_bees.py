@@ -261,7 +261,7 @@ class ExemplarBYOBRegistryManager:
             and acc_gain > 0.0
         )
 
-        if gate_passed:
+        if gate_passed and bee.bee_id not in self._expert_registry:
             rec = ExpertRecord(
                 expert_id=bee.bee_id,
                 kind=BYOB,

@@ -468,3 +468,65 @@ def test_night_moe_paired_control_rescore_and_stars_update_gate_hm_s14_01_08() -
     assert stars_gate["own_pack_receipt"]["decision"] == "ACCEPT"
     assert stars_gate["pooled_regression_receipt"]["decision"] == "ACCEPT"
     assert stars_gate["may_serve_on_own_and_pooled_gate"] is True
+
+
+def test_bee_moe_system_router_and_served_expert_bandit_hm_s14_03_hm_s15_03() -> None:
+    from hivemind.queenbee.strategies import (
+        BeeMoESystemRouter,
+        ServedExpertTask,
+        evaluate_served_expert_bandit_routing,
+        verify_python_candidate_isolated,
+    )
+
+    router = BeeMoESystemRouter(admitted_adapters=("exoplanet", "stars"))
+    d_exo, e_exo = router.route_messages(
+        [{"role": "user", "content": "Kepler transit signal: orbital period (days): 12.4"}],
+        enforce_gate=True,
+    )
+    d_math, e_math = router.route_messages(
+        [{"role": "system", "content": "Think step by step, Final answer: <number>"}],
+        enforce_gate=True,
+    )
+    _, e_math_ungated = router.route_messages(
+        [{"role": "system", "content": "Think step by step, Final answer: <number>"}],
+        enforce_gate=False,
+    )
+    assert d_exo == "exoplanet" and e_exo == "exoplanet"
+    assert d_math == "maths" and e_math == "base" and e_math_ungated == "maths"
+
+    assert verify_python_candidate_isolated("def f(a, b):\n    return a + b\n", ["assert f(3, 4) == 7"]) is True
+    assert verify_python_candidate_isolated("def f(a, b):\n    return a - b\n", ["assert f(3, 4) == 7"]) is False
+    assert verify_python_candidate_isolated("x = 5\n", ["assert x == 5"]) is False
+
+    tasks = [
+        ServedExpertTask(
+            task_id=f"t-alg-{i}",
+            cluster_id="alg",
+            prompt="Double x",
+            tests=("assert dbl(3) == 6", "assert dbl(0) == 0"),
+            expert_candidates={
+                "e_alg": "def dbl(x):\n    return x * 2\n",
+                "e_math": "def dbl(x):\n    return x * 2\n" if i == 0 else "def dbl(x):\n    return x\n",
+            },
+        )
+        for i in range(4)
+    ] + [
+        ServedExpertTask(
+            task_id=f"t-math-{i}",
+            cluster_id="math",
+            prompt="Square x",
+            tests=("assert sq(4) == 16", "assert sq(-2) == 4"),
+            expert_candidates={
+                "e_alg": "def sq(x):\n    return x + x\n",
+                "e_math": "def sq(x):\n    return x * x\n",
+            },
+        )
+        for i in range(4)
+    ]
+    res = evaluate_served_expert_bandit_routing(tasks, seeds=(2026, 2027, 2028, 2029, 2030), rounds=80)
+    assert res["best_single_expert"] == "e_math"
+    assert abs(res["routing_plateau_pass_rate"] - 5 / 8) < 1e-9
+    assert res["controls"]["positive_wiring"] is True
+    assert res["controls"]["negative_flat_world"] is True
+    assert res["arm_means"]["bandit_cold"]["last_half_expected_pass_rate"] > res["routing_plateau_pass_rate"]
+    assert res["arm_means"]["bandit_warm_budgeted"]["early_regret"] < res["arm_means"]["bandit_cold"]["early_regret"]

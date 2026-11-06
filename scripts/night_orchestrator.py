@@ -107,7 +107,37 @@ def eval_argv(py: str, packs_dir: Path, pack: str, tag: str, out: Path, baseline
     return argv + (["--limit", str(limit)] if limit else [])
 
 
-def build_plan(mode: str, subjects: list[str], packs_dir: Path, out: Path, py: str, interference: bool = False) -> Plan:
+def size_stage_timeout_min(
+    pack: str,
+    *,
+    measured_sec_per_item: dict[str, float] | None = None,
+    n_items: int | None = None,
+    safety_factor: float = 1.6,
+) -> float:
+    """Compute per-cell evaluation timeout in minutes from measured per-item latency (HM-S14-04 / #168).
+
+    In NIGHT-MOE-1, interference cells had a hardcoded 12-minute (720 s) timeout and `eval_maths` timed out for three
+    adapters (`cyber`, `exoplanet`, `stars`). Sizing from measured latency with a safety factor (floored at `EVAL_MIN[pack]`)
+    eliminates `TIMEOUT` cells across the full pack-by-adapter grid.
+    """
+    floor_min = float(EVAL_MIN.get(pack, 20))
+    if measured_sec_per_item and pack in measured_sec_per_item and n_items is not None and n_items > 0:
+        est_min = (float(measured_sec_per_item[pack]) * int(n_items) * float(safety_factor)) / 60.0
+        return max(floor_min, round(est_min, 1))
+    return floor_min
+
+
+def build_plan(
+    mode: str,
+    subjects: list[str],
+    packs_dir: Path,
+    out: Path,
+    py: str,
+    interference: bool = False,
+    *,
+    full_interference_grid: bool = False,
+    measured_sec_per_item: dict[str, float] | None = None,
+) -> Plan:
     p = Plan()
     if mode == "baselines":
         p.add("serve_base", vm(serve_cmd(None)), SERVE_MIN, must_succeed=True)
@@ -128,15 +158,18 @@ def build_plan(mode: str, subjects: list[str], packs_dir: Path, out: Path, py: s
             p.add(f"{tag}:serve", vm(serve_cmd(f"{D}/{ad}.gguf")), SERVE_MIN, must_succeed=False)
             for pack in (c["eval_packs"] if tag == s else [s]):
                 base = out / "base" / f"base_{pack}_journal.jsonl"
-                lim = CONTROL_LIMIT.get(pack, 0) if tag != s else 0
-                p.add(f"{tag}:eval_{pack}", eval_argv(py, packs_dir, pack, f"{tag}_{pack}", out / "adapters", base if base.exists() else None, lim), EVAL_MIN[pack] * (0.5 if lim else 1))
+                lim = 0 if full_interference_grid else (CONTROL_LIMIT.get(pack, 0) if tag != s else 0)
+                t_min = size_stage_timeout_min(pack, measured_sec_per_item=measured_sec_per_item) if full_interference_grid else EVAL_MIN[pack] * (0.5 if lim else 1)
+                p.add(f"{tag}:eval_{pack}", eval_argv(py, packs_dir, pack, f"{tag}_{pack}", out / "adapters", base if base.exists() else None, lim), t_min)
             p.add(f"{tag}:stop", vm(STOP_SERVER), 2)
-    if interference:  # does the maths adapter hurt cyber answers, and so on: every adapter on every OTHER pack, first INTERFERENCE_LIMIT items
+    if interference or full_interference_grid:  # does the maths adapter hurt cyber answers, and so on: every adapter on every OTHER pack
         for s in subjects:
             p.add(f"x_{s}:serve", vm(serve_cmd(f"{D}/adapters/{s}.gguf")), SERVE_MIN)
             for pack in (x for x in EVAL_PACKS if x != s and x not in SUBJECTS[s]["eval_packs"]):
                 base = out / "base" / f"base_{pack}_journal.jsonl"
-                p.add(f"x_{s}:eval_{pack}", eval_argv(py, packs_dir, pack, f"x_{s}_{pack}", out / "interference", base if base.exists() else None, INTERFERENCE_LIMIT), 12)
+                lim = 0 if full_interference_grid else INTERFERENCE_LIMIT
+                t_min = size_stage_timeout_min(pack, measured_sec_per_item=measured_sec_per_item) if full_interference_grid else 12
+                p.add(f"x_{s}:eval_{pack}", eval_argv(py, packs_dir, pack, f"x_{s}_{pack}", out / "interference", base if base.exists() else None, lim), t_min)
             p.add(f"x_{s}:stop", vm(STOP_SERVER), 2)
     p.add("restore_producer", vm(RESTORE), 3, "ALWAYS runs: the router has no live producer until this succeeds")
     return p

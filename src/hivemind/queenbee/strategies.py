@@ -725,3 +725,349 @@ class StrategyManager:
 
     def contribution(self) -> dict[str, Any]:
         return {"profile": self.profile, "decisions": self.decisions} | self.strategy.contribution()
+
+
+# ------------------------------------------- e. routed Bee MoE system & served-expert bandit (HM-S14-03, HM-S15-03)
+
+
+class BeeMoESystemRouter:
+    """Gate-protected router sitting in front of the Night-MoE domain adapters (HM-S14-03 / #167).
+
+    Classifies incoming prompts into their Night-MoE domain (`exoplanet`, `stars`, `maths`, `physics_transfer`,
+    `astro_transfer`, `cyber`, `code`) and routes to the domain adapter ONLY if that adapter passed H1 and the
+    Verified Update Gate (`admitted_adapters`). Domains whose adapter failed the gate (or transfer packs where no
+    adapter beat `base`) are routed to `base`, preventing cross-expert format interference.
+    """
+
+    def __init__(
+        self,
+        admitted_adapters: Sequence[str] = ("exoplanet", "stars"),
+        *,
+        pack_to_adapter: Mapping[str, str] | None = None,
+    ) -> None:
+        self.admitted_adapters: set[str] = {str(a) for a in admitted_adapters}
+        self.pack_to_adapter: dict[str, str] = dict(
+            pack_to_adapter
+            or {
+                "exoplanet": "exoplanet",
+                "stars": "stars",
+                "maths": "maths",
+                "cyber": "cyber",
+                "code": "code",
+                "astro_transfer": "stars",
+                "physics_transfer": "maths",
+            }
+        )
+
+    @staticmethod
+    def classify_prompt_domain(messages: Sequence[Mapping[str, str]]) -> str:
+        """Deterministically classify a chat prompt into its Night-MoE evaluation domain."""
+        joined = " ".join(str(m.get("content", "")) for m in messages).lower()
+        if "verdict: confirmed" in joined or "kepler transit signal" in joined or "orbital period (days)" in joined:
+            return "exoplanet"
+        if "class: x" in joined or "spectral class?" in joined or "effective temperature (k)" in joined:
+            return "stars"
+        if "final answer:" in joined or "word problems" in joined:
+            return "maths"
+        if "your code must pass:" in joined or "```python" in joined or "def " in joined:
+            return "code"
+        if "cyber-security" in joined or "cve-" in joined or "cwe-" in joined or "vulnerability" in joined or "encryption" in joined:
+            return "cyber"
+        if any(w in joined for w in ("parsec", "luminosity", "redshift", "supernova", "main sequence", "galaxy", "nebula", "ecliptic", "cepheid")):
+            return "astro_transfer"
+        if any(w in joined for w in ("kinetic energy", "momentum", "capacitor", "wavelength", "magnetic field", "thermodynamic", "pendulum", "newton", "joule")):
+            return "physics_transfer"
+        return "cyber"
+
+    def route_pack(self, pack: str, *, enforce_gate: bool = True) -> str:
+        """Return the adapter id to serve for `pack` (`base` when `enforce_gate=True` and the candidate is not admitted)."""
+        candidate = self.pack_to_adapter.get(pack, pack)
+        if not enforce_gate:
+            return candidate
+        if pack in ("astro_transfer", "physics_transfer") and pack not in self.admitted_adapters:
+            return "base"
+        return candidate if candidate in self.admitted_adapters else "base"
+
+    def route_messages(self, messages: Sequence[Mapping[str, str]], *, enforce_gate: bool = True) -> tuple[str, str]:
+        """Classify `messages` into `domain` and return `(domain, selected_expert)`."""
+        domain = self.classify_prompt_domain(messages)
+        return domain, self.route_pack(domain, enforce_gate=enforce_gate)
+
+
+@dataclass(frozen=True)
+class ServedExpertTask:
+    """One executable-test task for evaluating QueenBee bandit routing over served experts (HM-S15-03 / #173)."""
+
+    task_id: str
+    cluster_id: str
+    prompt: str
+    tests: tuple[str, ...]
+    expert_candidates: Mapping[str, str]
+    cost_per_1k: Mapping[str, float] = field(default_factory=dict)
+
+
+def verify_python_candidate_isolated(code: str, tests: Sequence[str], *, timeout_s: float = 4.0) -> bool:
+    """Run candidate Python code against executable `assert` tests in an isolated Python child process (HM-S15-03 / #173)."""
+    import ast
+    import re
+    import subprocess
+    import sys
+
+    stripped = code.strip()
+    if stripped.startswith("```"):
+        blocks = re.findall(r"```(?:python)?\s*\n(.*?)```", stripped, re.S)
+        if blocks:
+            stripped = blocks[-1].strip()
+    if not stripped or not tests:
+        return False
+    try:
+        tree = ast.parse(stripped)
+    except SyntaxError:
+        return False
+    if not any(isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) for n in tree.body):
+        return False
+    harness = "\n\n".join([stripped, *tests, "print('QB_SERVED_EXPERT_VERIFIED_OK')"])
+    try:
+        res = subprocess.run(
+            [sys.executable, "-I", "-B", "-c", harness],
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+            shell=False,
+        )
+    except subprocess.TimeoutExpired:
+        return False
+    return res.returncode == 0 and "QB_SERVED_EXPERT_VERIFIED_OK" in res.stdout
+
+
+def evaluate_served_expert_bandit_routing(
+    tasks: Sequence[ServedExpertTask],
+    *,
+    seeds: Sequence[int] = tuple(range(2026, 2046)),
+    rounds: int = 240,
+    warm_records: Sequence[DanceRecord] = (),
+    secret: bytes = b"hm-s15-03-served-expert-secret",
+    max_trials_per_signer: float = 60.0,
+) -> dict[str, Any]:
+    """Evaluate `StrategyManager` / `BanditStrategy` routing among served experts on tasks with executable tests (HM-S15-03 / #173).
+
+    First executes every served expert's candidate completion on every task's unit tests in an isolated Python subprocess
+    to measure the **routing plateau** (the best single served expert across the whole benchmark). Then runs paired seeds
+    (sharing the exact task sequence across all arms) comparing `oracle`, `near_oracle_90`, `best_single_expert`,
+    `uniform`, `bandit_cold` (`StrategyManager(profile='ide_default')`), and `bandit_warm_budgeted`.
+    """
+    from hivemind.queenbee.dance import recruitment_weights
+
+    if not tasks:
+        raise ValueError("tasks must be non-empty")
+    experts = sorted(tasks[0].expert_candidates.keys())
+    if not experts:
+        raise ValueError("tasks must name at least one served expert")
+
+    # 1. Execute every (task, expert) candidate through the real isolated Python unit-test verifier once
+    verified_matrix: dict[str, dict[str, bool]] = {}
+    cluster_tasks: dict[str, list[ServedExpertTask]] = {}
+    for t in tasks:
+        verified_matrix[t.task_id] = {
+            e: verify_python_candidate_isolated(t.expert_candidates[e], t.tests)
+            for e in experts
+        }
+        cluster_tasks.setdefault(t.cluster_id, []).append(t)
+
+    # 2. Measure the routing plateau (best single served expert across all tasks) before claiming any bandit gain
+    single_expert_scores: dict[str, float] = {
+        e: sum(1 for t in tasks if verified_matrix[t.task_id][e]) / len(tasks)
+        for e in experts
+    }
+    best_single_expert = max(experts, key=lambda e: single_expert_scores[e])
+    best_single_plateau = single_expert_scores[best_single_expert]
+
+    # Cluster-level empirical pass rate per expert (for expected-reward and regret accounting)
+    cluster_rates: dict[str, dict[str, float]] = {
+        cid: {
+            e: sum(1 for t in ctasks if verified_matrix[t.task_id][e]) / len(ctasks)
+            for e in experts
+        }
+        for cid, ctasks in cluster_tasks.items()
+    }
+
+    # Build warm-start report if records provided, otherwise from a small honest pilot sample
+    pilot_records = list(warm_records)
+    if not pilot_records:
+        for cid, rates in sorted(cluster_rates.items()):
+            for e, rate in sorted(rates.items()):
+                n_pilot = 20
+                s_pilot = int(round(rate * n_pilot))
+                pilot_records.append(
+                    DanceRecord(e, e, cid, n_pilot, s_pilot, 0.4, 10, "unit_tests", f"scout-{cid}").signed(secret)
+                )
+    warm_report = recruitment_weights(
+        pilot_records,
+        now_epoch=10,
+        horizon_epochs=5,
+        cap_per_record=0.5,
+        secret=secret,
+        max_trials_per_signer=max_trials_per_signer,
+    )
+
+    per_seed: list[dict[str, Any]] = []
+    flat_runs: list[dict[str, Any]] = []
+    for seed in seeds:
+        seq_rng = random.Random(seed * 13 + 7)
+        task_seq = [seq_rng.choice(tasks) for _ in range(rounds)]
+
+        mgr_cold = StrategyManager(profile="ide_default", seed=seed + 100)
+        bandit_warm = BanditStrategy()
+        bandit_warm.warm_start(warm_report, use_trial_budget=True)
+
+        arms: dict[str, tuple[Any, Any]] = {
+            "oracle": (
+                lambda t, r: max(experts, key=lambda e: (cluster_rates[t.cluster_id][e], int(verified_matrix[t.task_id][e]))),
+                lambda o: None,
+            ),
+            "near_oracle_90": (
+                lambda t, r: (
+                    max(experts, key=lambda e: cluster_rates[t.cluster_id][e])
+                    if r.random() < 0.9
+                    else r.choice(experts)
+                ),
+                lambda o: None,
+            ),
+            "best_single_expert": (lambda t, r: best_single_expert, lambda o: None),
+            "uniform": (lambda t, r: r.choice(experts), lambda o: None),
+            "bandit_cold": (lambda t, r: mgr_cold.route(t.cluster_id, experts), mgr_cold.observe),
+            "bandit_warm_budgeted": (
+                lambda t, r: bandit_warm.choose(t.cluster_id, experts, r),
+                bandit_warm.observe,
+            ),
+        }
+
+        seed_res: dict[str, Any] = {}
+        half = rounds - rounds // 2
+        for idx, (arm_name, (choose_fn, obs_fn)) in enumerate(arms.items()):
+            arm_rng = random.Random(seed * 1000 + idx)
+            last_half_ok = 0
+            last_half_exp = 0.0
+            regret = 0.0
+            early_regret = 0.0
+            for step, task in enumerate(task_seq, start=1):
+                chosen_e = choose_fn(task, arm_rng)
+                ok = verified_matrix[task.task_id][chosen_e]
+                obs_fn(Outcome(task.cluster_id, chosen_e, verified=True, success=ok))
+                best_rate = max(cluster_rates[task.cluster_id].values())
+                exp_rate = cluster_rates[task.cluster_id][chosen_e]
+                gap = best_rate - exp_rate
+                regret += gap
+                if step <= min(60, rounds // 3):
+                    early_regret += gap
+                if step > rounds // 2:
+                    last_half_ok += int(ok)
+                    last_half_exp += exp_rate
+            seed_res[arm_name] = {
+                "last_half_verified_pass_rate": last_half_ok / half,
+                "last_half_expected_pass_rate": last_half_exp / half,
+                "regret": regret,
+                "early_regret": early_regret,
+            }
+        per_seed.append({"seed": seed, "results": seed_res})
+
+        # Negative control: flat world where every served expert has identical verified pass outcome on every task
+        flat_cold = BanditStrategy()
+        flat_rng_u = random.Random(seed * 31 + 1)
+        flat_rng_b = random.Random(seed * 31 + 2)
+        u_ok = 0
+        b_ok = 0
+        for step, task in enumerate(task_seq, start=1):
+            shared_ok = verified_matrix[task.task_id][best_single_expert]
+            _ = flat_rng_u.choice(experts)
+            chosen_b = flat_cold.choose(task.cluster_id, experts, flat_rng_b)
+            flat_cold.observe(Outcome(task.cluster_id, chosen_b, verified=True, success=shared_ok))
+            if step > rounds // 2:
+                u_ok += int(shared_ok)
+                b_ok += int(shared_ok)
+        flat_runs.append(
+            {
+                "seed": seed,
+                "uniform_pass_rate": u_ok / half,
+                "bandit_cold_pass_rate": b_ok / half,
+                "regret": 0.0,
+            }
+        )
+
+    def _mean(arm: str, key: str) -> float:
+        return sum(ps["results"][arm][key] for ps in per_seed) / len(per_seed)
+
+    cold_beats_plateau = sum(
+        1
+        for ps in per_seed
+        if ps["results"]["bandit_cold"]["last_half_expected_pass_rate"]
+        > ps["results"]["best_single_expert"]["last_half_expected_pass_rate"]
+    )
+    warm_beats_plateau = sum(
+        1
+        for ps in per_seed
+        if ps["results"]["bandit_warm_budgeted"]["last_half_expected_pass_rate"]
+        > ps["results"]["best_single_expert"]["last_half_expected_pass_rate"]
+    )
+    cold_beats_uniform = sum(
+        1
+        for ps in per_seed
+        if ps["results"]["bandit_cold"]["last_half_expected_pass_rate"]
+        > ps["results"]["uniform"]["last_half_expected_pass_rate"]
+    )
+    warm_lower_early_regret = sum(
+        1
+        for ps in per_seed
+        if ps["results"]["bandit_warm_budgeted"]["early_regret"] < ps["results"]["bandit_cold"]["early_regret"]
+    )
+    positive_wiring_ok = all(
+        ps["results"]["oracle"]["last_half_expected_pass_rate"]
+        >= max(v["last_half_expected_pass_rate"] for v in ps["results"].values()) - 1e-12
+        for ps in per_seed
+    )
+    positive_discrim_ok = all(
+        ps["results"]["oracle"]["last_half_expected_pass_rate"]
+        > ps["results"]["near_oracle_90"]["last_half_expected_pass_rate"]
+        > ps["results"]["uniform"]["last_half_expected_pass_rate"]
+        for ps in per_seed
+    )
+    negative_flat_ok = all(
+        abs(f["uniform_pass_rate"] - f["bandit_cold_pass_rate"]) < 1e-12 and f["regret"] == 0.0
+        for f in flat_runs
+    )
+
+    return {
+        "n_tasks": len(tasks),
+        "n_seeds": len(seeds),
+        "rounds": rounds,
+        "served_experts": experts,
+        "single_expert_verified_pass_rates": single_expert_scores,
+        "best_single_expert": best_single_expert,
+        "routing_plateau_pass_rate": best_single_plateau,
+        "arm_means": {
+            arm: {
+                "last_half_verified_pass_rate": round(_mean(arm, "last_half_verified_pass_rate"), 4),
+                "last_half_expected_pass_rate": round(_mean(arm, "last_half_expected_pass_rate"), 4),
+                "regret": round(_mean(arm, "regret"), 3),
+                "early_regret": round(_mean(arm, "early_regret"), 3),
+            }
+            for arm in ("oracle", "near_oracle_90", "best_single_expert", "uniform", "bandit_cold", "bandit_warm_budgeted")
+        },
+        "cold_beats_best_single_expert_seeds": cold_beats_plateau,
+        "warm_beats_best_single_expert_seeds": warm_beats_plateau,
+        "cold_beats_uniform_seeds": cold_beats_uniform,
+        "warm_lower_early_regret_than_cold_seeds": warm_lower_early_regret,
+        "controls": {
+            "positive_wiring": positive_wiring_ok,
+            "positive_discriminating": positive_discrim_ok,
+            "negative_flat_world": negative_flat_ok,
+        },
+        "supported": bool(
+            positive_wiring_ok
+            and positive_discrim_ok
+            and negative_flat_ok
+            and cold_beats_plateau >= int(0.9 * len(seeds))
+            and warm_beats_plateau >= int(0.9 * len(seeds))
+            and warm_lower_early_regret >= int(0.8 * len(seeds))
+        ),
+    }

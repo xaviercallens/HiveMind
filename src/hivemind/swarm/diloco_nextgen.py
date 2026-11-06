@@ -370,10 +370,20 @@ class ReputationWeightedIsoCTSMerger:
             return {k: v.clone() for k, v in base_lora_state.items()}, {"num_workers": 0}
 
         num_workers = len(worker_lora_states)
-        if worker_reputation_weights is None or len(worker_reputation_weights) != num_workers:
+        if worker_reputation_weights is None:
             weights = [1.0 for _ in range(num_workers)]
         else:
-            weights = [max(1e-4, float(w)) for w in worker_reputation_weights]
+            if len(worker_reputation_weights) != num_workers:
+                raise ValueError(
+                    f"worker_reputation_weights length ({len(worker_reputation_weights)}) "
+                    f"must match worker_lora_states length ({num_workers})"
+                )
+            weights = []
+            for w in worker_reputation_weights:
+                fw = float(w)
+                if not math.isfinite(fw):
+                    raise ValueError("worker_reputation_weights must be finite")
+                weights.append(max(1e-4, fw))
         w_tensor = torch.tensor(weights, dtype=torch.float32)
         w_tensor = w_tensor / w_tensor.sum().clamp_min(1e-8)
 

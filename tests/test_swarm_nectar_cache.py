@@ -159,3 +159,45 @@ def test_multi_node_nectar_sync_backend_under_50ms_and_royalties():
     stats_b = node_b_cache.stats()
     assert stats_b["sync_backend_enabled"] is True
     assert stats_b["last_lookup_latency_ms"] < 50.0
+    assert stats_b["tokens_saved_basis"] == "modeled_450_tokens_per_hit"
+
+
+def test_ip234_nectar_cache_rejects_nan_richness_and_blocks_self_hit_royalties():
+    """IP-234: NaN/inf nectar_richness raises ValueError; discoverer self-hits accrue zero royalties."""
+    cache = SwarmNectarCache(default_ttl_s=3600.0)
+    with pytest.raises(ValueError, match="nectar_richness"):
+        cache.put(
+            tool_name="web_search",
+            query="nan richness probe",
+            content={"ok": True},
+            discovered_by_bee="hivemind/bee-alpha",
+            nectar_richness=float("nan"),
+        )
+    with pytest.raises(ValueError, match="nectar_richness"):
+        cache.put(
+            tool_name="web_search",
+            query="inf richness probe",
+            content={"ok": True},
+            discovered_by_bee="hivemind/bee-alpha",
+            nectar_richness=float("inf"),
+        )
+
+    entry = cache.put(
+        tool_name="web_search",
+        query="self hit royalty probe",
+        content={"result": "cached"},
+        discovered_by_bee="hivemind/bee-alpha",
+        nectar_richness=0.85,
+    )
+    # Self-hit increments access_count but does not credit royalties
+    self_hit = cache.get("web_search", "self hit royalty probe", requesting_bee="hivemind/bee-alpha")
+    assert self_hit is not None
+    assert self_hit.access_count == 1
+    assert self_hit.hmt_royalties_earned == 0.0
+
+    # Peer hit credits royalty
+    peer_hit = cache.get("web_search", "self hit royalty probe", requesting_bee="hivemind/bee-beta")
+    assert peer_hit is not None
+    assert peer_hit.access_count == 2
+    assert peer_hit.hmt_royalties_earned == MICRO_ROYALTY_HMT
+    assert cache.stats()["tokens_saved_basis"] == "modeled_450_tokens_per_hit"

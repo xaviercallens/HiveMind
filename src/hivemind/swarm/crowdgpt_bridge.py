@@ -18,6 +18,8 @@ import gzip
 import hashlib
 import io
 import json
+import math
+import statistics
 import struct
 from typing import Any, Mapping, Sequence
 
@@ -185,6 +187,9 @@ def chunked_pairwise_sq_l2(
     return dist_sq.to(torch.float32)
 
 
+MAX_TOKEN_WEIGHT_MEDIAN_MULTIPLE: float = 1.25
+
+
 @dataclass(frozen=True)
 class MultiKrumAggregationResult:
     """Result of Multi-Krum filtering and token-weighted DiLoCo aggregation."""
@@ -194,6 +199,25 @@ class MultiKrumAggregationResult:
     krum_scores: list[float]
     aggregated_delta_bf16: torch.Tensor
     effective_tokens: int
+    byzantine_filter_active: bool = True
+
+
+def _validate_and_clamp_token_weights(
+    token_weights: Sequence[int | float],
+    expected_len: int,
+) -> list[float]:
+    """Validate finite positive token weights and clamp outliers to a multiple of the median."""
+    if len(token_weights) != expected_len:
+        raise ValueError("token_weights length must match deltas length.")
+    parsed: list[float] = []
+    for w in token_weights:
+        fw = float(w)
+        if not math.isfinite(fw) or fw <= 0.0:
+            raise ValueError(f"token_weights must be finite and positive, got {w!r}")
+        parsed.append(max(1.0, fw))
+    med_w = float(statistics.median(parsed))
+    cap_w = max(1.0, MAX_TOKEN_WEIGHT_MEDIAN_MULTIPLE * med_w)
+    return [min(w, cap_w) for w in parsed]
 
 
 def multi_krum_select_and_aggregate(
@@ -213,15 +237,22 @@ def multi_krum_select_and_aggregate(
     if n == 0:
         raise ValueError("At least one delta is required.")
 
+    clamped_all_w = (
+        _validate_and_clamp_token_weights(token_weights, n)
+        if token_weights is not None
+        else None
+    )
+
     flat = [_flatten_delta(d) for d in deltas]
     if n == 1:
-        tok = int(token_weights[0]) if token_weights else 1
+        tok = int(round(clamped_all_w[0])) if clamped_all_w is not None else 1
         return MultiKrumAggregationResult(
             selected_indices=[0],
             rejected_indices=[],
             krum_scores=[0.0],
             aggregated_delta_bf16=flat[0].to(torch.bfloat16),
             effective_tokens=max(1, tok),
+            byzantine_filter_active=False,
         )
 
     eff_f = min(max(0, f_byzantine), max(0, (n - 3) // 2))
@@ -237,13 +268,31 @@ def multi_krum_select_and_aggregate(
         scores.append(float(nearest.sum().item()))
 
     ranked = sorted(range(n), key=lambda idx: (scores[idx], idx))
-    selected = sorted(ranked[:m])
-    rejected = sorted(ranked[m:])
+    candidate_ranked = ranked[:m]
+    extra_rejected = ranked[m:]
 
-    if token_weights is not None:
-        if len(token_weights) != n:
-            raise ValueError("token_weights length must match deltas length.")
-        raw_w = [max(1.0, float(token_weights[i])) for i in selected]
+    if m_select is None and eff_f > 0 and len(candidate_ranked) > 1:
+        core_count = max(1, (n + 1) // 2)
+        cluster_med = float(statistics.median(scores[idx] for idx in ranked[:core_count]))
+        score_ceiling = 4.0 * max(cluster_med, 1e-9)
+        min_keep = max(1, n - 2 * eff_f)
+        filtered: list[int] = []
+        pruned: list[int] = []
+        for pos, idx in enumerate(candidate_ranked):
+            if pos < min_keep or scores[idx] <= score_ceiling:
+                filtered.append(idx)
+            else:
+                pruned.append(idx)
+        selected = sorted(filtered)
+        rejected = sorted(pruned + extra_rejected)
+    else:
+        selected = sorted(candidate_ranked)
+        rejected = sorted(extra_rejected)
+
+    if clamped_all_w is not None:
+        sel_med = float(statistics.median(clamped_all_w[i] for i in selected))
+        sel_cap = max(1.0, MAX_TOKEN_WEIGHT_MEDIAN_MULTIPLE * sel_med)
+        raw_w = [min(clamped_all_w[i], sel_cap) for i in selected]
     else:
         raw_w = [1.0 for _ in selected]
 
@@ -252,13 +301,19 @@ def multi_krum_select_and_aggregate(
     for idx, w in zip(selected, raw_w):
         agg.add_(flat[idx], alpha=w / total_w)
 
-    eff_tokens = int(sum(int(token_weights[i]) for i in selected)) if token_weights else len(selected)
+    eff_tokens = (
+        int(sum(int(round(w)) for w in raw_w))
+        if clamped_all_w is not None
+        else len(selected)
+    )
+    filter_active = bool(eff_f > 0 and len(selected) < n)
     return MultiKrumAggregationResult(
         selected_indices=selected,
         rejected_indices=rejected,
         krum_scores=scores,
         aggregated_delta_bf16=agg.to(torch.bfloat16),
         effective_tokens=eff_tokens,
+        byzantine_filter_active=filter_active,
     )
 
 

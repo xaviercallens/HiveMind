@@ -6,7 +6,7 @@
 
 | ID | Criterion | Status | Evidence |
 | :-- | :-- | :-- | :-- |
-| A1 | Request-level MoE inference over >= 2 consumer GPUs, with failover | **NOT-RUN** | no artifacts/mvp/A1_*.json yet |
+| A1 | Request-level MoE inference over >= 2 consumer GPUs, with failover | **FAIL** | A1_multi_gpu_serving.json: both GPUs did not serve before the kill: {'t4': 3}; 24 failed requests after the kill: {'502': 24}; the surviving GPU answered nothing after the kill |
 | A2 | One MoE split across 2 hosts, token-identical to single host | **PASS** | A2_split_moe.json: passed |
 | B1 | Custom dataset -> signed shards + held-out split | **PASS** | B1_custom_shards.json: passed |
 | B2 | OpenDiLoCo-style QLoRA rounds on >= 2 physical hosts | **NOT-RUN** | no artifacts/mvp/B2_*.json yet |

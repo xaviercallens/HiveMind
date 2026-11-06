@@ -14,5 +14,8 @@ Decisions given by the owner (xaviercallens) in the Claude Code session of 2026-
 | `--mix` stratified training | May be deployed to the protected `/opt/hivemind/t4/` copy and given GPU time | only through the reviewed installer `deploy/t4_node/install_node.sh` (it clears and restores the immutable flag and refreshes `expected_code_hashes.txt`); the governor policy (1800 s night / 7200 s day idle, 4300 MiB free VRAM) is unchanged |
 | Outages | Allowed for MVP work if end users are told | maintenance mode: `HIVEMIND_MAINTENANCE_NOTICE` (header on every response, banner on HTML pages) |
 | Router fallback fix and redeploy | Allowed | fix is #536 (merged); deployed from PR #566's branch as `hivemind-openrouter-00065-ner` (previous good revision `00054-kxf`) |
+| RTX 2070 role | Serves `coder-lite` and `granite-moe` all the time; MoE training on hold, later helps only 23:00-06:00 Paris, yielding to inference | other tiers need volunteers |
+| T4 VM | 17:00-22:00 Paris, training only: its producer heartbeats are stopped and disabled | `scripts/t4_training_window.sh`, applied only after the 2070 is serving and BOINC has moved |
+| BOINC server | Moves to always-on infrastructure; HiveMinders train and serve as volunteers | `docs/BOINC_ALWAYS_ON_PLAN.md`; the GPU replay validator stays on a GPU host |
 | GitHub token | Rotate later | the token pasted in the chat is visible in the transcript |
 

@@ -781,18 +781,25 @@ class RouterStore:
         if "@" in cleaned_handle and not email:
             email = cleaned_handle
             cleaned_handle = cleaned_handle.split("@")[0]
+        clean_email = email.strip().lower()[:128] if email else None
+        if clean_email and 0 < len(cleaned_handle) < 3 and cleaned_handle.lower() == clean_email.split("@")[0].lower():
+            cleaned_handle = f"{cleaned_handle}_user"
         normalised = normalise_identity(cleaned_handle)
         if normalised.startswith(tuple(f"{provider}." for provider in sorted(self._identity_providers))):
             raise ReservedHandle(f"handle prefix is reserved: {normalised}")
         account_id = self._hmac_hex(normalised)[:32]
         pwd_hash = self._hash_password(normalised, password) if password else None
-        clean_email = email.strip().lower()[:128] if email else None
 
         with self._tx() as conn:
             row = conn.execute(
                 "SELECT * FROM accounts WHERE account_id=? OR handle=?",
                 (account_id, normalised),
             ).fetchone()
+            if row is None and clean_email:
+                row = conn.execute(
+                    "SELECT * FROM accounts WHERE lower(email)=lower(?)",
+                    (clean_email,),
+                ).fetchone()
             if row is not None:
                 # An existing handle is returned ONLY to a caller who proves it with the account's own password. A caller
                 # without a password, or an account without one (handle-only, Google/OIDC), gets HandleTaken: register
@@ -848,6 +855,17 @@ class RouterStore:
             if candidate_key.startswith("hm-"):
                 acct = self.authenticate(candidate_key)
                 if acct is not None:
+                    if candidate_key != ident and ident:
+                        ident_norm = ident.lstrip("@").lower()
+                        if ident_norm not in (acct.handle.lower(), acct.account_id.lower()):
+                            with self._lock:
+                                email_row = self._conn.execute(
+                                    "SELECT email FROM accounts WHERE account_id=?",
+                                    (acct.account_id,),
+                                ).fetchone()
+                            stored_email = str(email_row["email"] or "").lower() if email_row else ""
+                            if not stored_email or ident_norm != stored_email:
+                                continue
                     self._active_key_cache[acct.account_id] = candidate_key
                     return acct, candidate_key, False
 

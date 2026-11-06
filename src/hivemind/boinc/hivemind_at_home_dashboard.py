@@ -8017,6 +8017,21 @@ def create_hivemind_at_home_app(
                 detail="Too many failed login attempts for this account; please wait 60 seconds",
             )
 
+    def _lookup_user_by_token(token: str) -> Optional[Dict[str, Any]]:
+        """Look up a user by active API token or unrotated user token (allowing sign-in after logout)."""
+        tok = token.strip()
+        if not tok:
+            return None
+        direct = auth_state["api_keys"].get(tok)
+        if direct is not None:
+            return direct
+        if tok.startswith("hm_live_"):
+            for u in auth_state["users"].values():
+                u_tok = str(u.get("token", ""))
+                if u_tok and hmac.compare_digest(tok, u_tok):
+                    return u
+        return None
+
     def _require_token_owner(
         request: Request,
         user: Dict[str, Any],
@@ -8032,6 +8047,10 @@ def create_hivemind_at_home_app(
         if tok and hmac.compare_digest(tok, str(user.get("token", ""))):
             return
         if supplied_password is not None:
+            clean_pwd = supplied_password.strip()
+            if clean_pwd.startswith("hm_live_") and hmac.compare_digest(clean_pwd, str(user.get("token", ""))):
+                auth_state["failed_login_attempts"].pop(f"{account_key}|{client}", None)
+                return
             salt_hex = str(user.get("password_salt", ""))
             hash_hex = str(user.get("password_hash", ""))
             if salt_hex and hash_hex and _verify_password(supplied_password, salt_hex, hash_hex):
@@ -8540,7 +8559,7 @@ def create_hivemind_at_home_app(
     @app.post("/api/v1/auth/login", response_class=JSONResponse)
     def api_auth_login(req: AuthLoginRequest, request: Request) -> JSONResponse:
         key = req.handle_or_email.strip()
-        by_token = auth_state["api_keys"].get(key) if key.startswith("hm_live_") else None
+        by_token = _lookup_user_by_token(key) if key.startswith("hm_live_") else None
         matched = by_token or auth_state["users"].get(key) or auth_state["users"].get(key.lstrip("@").lower())
         if not matched:
             norm_k = key.lstrip("@").lower().replace("-", "_")
@@ -10312,8 +10331,10 @@ def create_hivemind_at_home_app(
 
         matched = None
         by_token = None
-        if v1_tok and v1_tok in auth_state["api_keys"]:
-            matched = by_token = auth_state["api_keys"][v1_tok]
+        if v1_tok:
+            matched = by_token = _lookup_user_by_token(v1_tok)
+        if not matched and raw_key.startswith("hm_live_"):
+            matched = by_token = _lookup_user_by_token(raw_key)
         if not matched and raw_key:
             matched = auth_state["users"].get(raw_key) or auth_state["users"].get(raw_key.lstrip("@").lower())
         if not matched and raw_key:

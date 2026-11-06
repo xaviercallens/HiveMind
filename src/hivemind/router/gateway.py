@@ -2082,14 +2082,27 @@ def create_router_app(
         acct = store.get_account(account_id)
         grant_info = starter_grant(request, account_id) if created else {}  # per-IP capped; no unconditional grant after the cap
         bal = store.balance(account_id)
+        resolved_handle = acct.handle if acct else handle
+        node_id = "0x" + hashlib.sha256(resolved_handle.encode("utf-8")).hexdigest()[:8].upper()
         return {
             "object": "hivemind.auth_session",
             "status": "REGISTERED" if created else "EXISTING_USER_RESTORED",
             "ok": True,
             "created": created,
             "account_id": account_id,
-            "handle": acct.handle if acct else handle,
+            "handle": resolved_handle,
+            "email": email or f"{resolved_handle}@hivemind.network",
             "role": acct.role if acct else role,
+            "target_profile": str(data.get("target_profile") or "developer"),
+            "provider": "EMAIL_PASSKEY",
+            "linked_providers": ["EMAIL_PASSKEY"],
+            "node_id": node_id,
+            "login_count": 1 if created else 2,
+            "is_new_user": bool(created),
+            "is_guest": False,
+            "user_state": "NEW_USER" if created else "EXISTING_USER",
+            "v1_migrated": True,
+            "v2_access_granted": True,
             "api_key": api_key,
             "token": api_key,
             "balance": bal,
@@ -2109,7 +2122,10 @@ def create_router_app(
             or ""
         ).strip()
         password = str(data.get("password") or "").strip()
-        api_key_hint = str(data.get("api_key") or "").strip()
+        auth_hdr = request.headers.get("authorization", "")
+        scheme, _, bearer_tok = auth_hdr.partition(" ")
+        bearer_key = bearer_tok.strip() if scheme.lower() == "bearer" and bearer_tok.strip().startswith("hm-") else ""
+        api_key_hint = str(data.get("api_key") or bearer_key or "").strip()
         strict_existing = bool(data.get("strict_existing", False))
         if not identifier and not api_key_hint:
             raise RouterError(400, "Enter your username, handle, email, or existing hm-... API key.", "invalid_request_error", "missing_identifier")
@@ -2127,6 +2143,7 @@ def create_router_app(
         except (SwarmSecurityViolationError, ReservedHandle):
             raise RouterError(400, "Invalid username or handle format.", "invalid_request_error", "invalid_handle") from None
         bal = store.balance(acct.account_id)  # login never creates an account, so it never grants
+        node_id = "0x" + hashlib.sha256(acct.handle.encode("utf-8")).hexdigest()[:8].upper()
         return {
             "object": "hivemind.auth_session",
             "status": "AUTHENTICATED",
@@ -2134,7 +2151,16 @@ def create_router_app(
             "created": created,
             "account_id": acct.account_id,
             "handle": acct.handle,
+            "email": identifier if "@" in identifier else f"{acct.handle}@hivemind.network",
             "role": acct.role,
+            "target_profile": str(data.get("target_profile") or "developer"),
+            "provider": "EXISTING_AUTH",
+            "linked_providers": ["EXISTING_AUTH"],
+            "node_id": node_id,
+            "login_count": 2,
+            "is_new_user": False,
+            "is_guest": False,
+            "user_state": "EXISTING_USER",
             "api_key": api_key,
             "token": api_key,
             "balance": bal,
@@ -2157,6 +2183,34 @@ def create_router_app(
         data = await _parse_auth_payload(request)
         body = await run_in_threadpool(_execute_credential_login, request, data)
         return JSONResponse(body, headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/v1/auth/session")
+    def auth_session_api(request: Request) -> JSONResponse:
+        header = request.headers.get("authorization", "")
+        scheme, _, token = header.partition(" ")
+        candidate = token.strip() if scheme.lower() == "bearer" and token.strip() else ""
+        acct = store.authenticate(candidate) if candidate else None
+        if acct is None:
+            return JSONResponse({"authenticated": False, "user": None}, headers={"Cache-Control": "no-store"})
+        bal = store.balance(acct.account_id)
+        return JSONResponse(
+            {
+                "authenticated": True,
+                "user": {
+                    "account_id": acct.account_id,
+                    "handle": acct.handle,
+                    "role": acct.role,
+                    "compute_points": int(round(bal)),
+                    "balance_hmt": bal,
+                    "user_state": "EXISTING_USER",
+                },
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/v1/auth/logout")
+    def auth_logout_api() -> JSONResponse:
+        return JSONResponse({"status": "LOGGED_OUT"}, headers={"Cache-Control": "no-store"})
 
     @app.post("/signup", response_class=HTMLResponse)
     @app.post("/register", response_class=HTMLResponse)

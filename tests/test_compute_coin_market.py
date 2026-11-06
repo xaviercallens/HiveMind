@@ -223,3 +223,13 @@ def test_settle_epoch_pays_a_repeated_grant_only_once() -> None:
     assert twice.total_verified_cobblestones == once.total_verified_cobblestones == 5.0
     assert twice.minted_by_node == once.minted_by_node
     assert e.settle_epoch(0, [_grant("n", "w1", 5.0), _grant("n", "w2", 5.0)], 0.0, 0.0).total_verified_cobblestones == 10.0
+
+
+def test_ip207_settle_epoch_zero_verified_work_refunds_worker_pool() -> None:
+    """IP-207: settle_epoch with zero verified work gives validators only their 15% share and refunds the 80% worker pool."""
+    empty = e.settle_epoch(0, [], 100.0, 0.0)
+    assert empty.fees_to_validators == pytest.approx(15.0)
+    assert empty.refund_to_consumer == pytest.approx(80.0)
+    assert empty.fees_burned == pytest.approx(5.0)
+    assert empty.fees_to_workers == {}
+    assert empty.to_dict()["refund_to_consumer"] == pytest.approx(80.0)

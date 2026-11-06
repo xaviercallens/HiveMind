@@ -1831,7 +1831,10 @@ def create_router_app(
             "object": "hivemind.producer_scale_100_status",
             "live_store_scale_status": live_status,
             "hundred_producer_fleet_plan": build_100_producer_international_fleet_plan(active_producers=100),
-            "amcp_mesh_scaling": plan_100_producer_mesh_scaling(active_producers=100),
+            "amcp_mesh_scaling": plan_100_producer_mesh_scaling(
+                active_producers=int(live_status.get("live_producer_accounts", 0)),
+                live_endpoints=int(live_status.get("live_endpoints", 0)),
+            ),
         }
 
     @app.post("/v1/hivemind/producers/scale-100-simulate")

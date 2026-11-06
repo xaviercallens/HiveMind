@@ -159,6 +159,7 @@ class EpochSettlement:
     fees_burned: float
     cap_binding: bool
     total_verified_cobblestones: float
+    refund_to_consumer: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -195,8 +196,19 @@ def settle_epoch(epoch: int, grants: Sequence[CreditGrant], consumer_payment_hiv
     worker_pool = consumer_payment_hive * schedule.worker_share
     fees_to_workers = {n: worker_pool * c / total for n, c in by_node.items()} if total > 0.0 else {}
     burned = consumer_payment_hive * schedule.burn_share
-    to_validators = consumer_payment_hive * schedule.validator_share + (worker_pool if total == 0.0 else 0.0)  # nobody worked: validators keep the pool
-    return EpochSettlement(epoch, minted, minted_by_node, fees_to_workers, to_validators, burned, cap_binding, total)
+    to_validators = consumer_payment_hive * schedule.validator_share
+    refund_to_consumer = worker_pool if total == 0.0 else 0.0
+    return EpochSettlement(
+        epoch,
+        minted,
+        minted_by_node,
+        fees_to_workers,
+        to_validators,
+        burned,
+        cap_binding,
+        total,
+        refund_to_consumer,
+    )
 
 
 # ---------------------------------------------------------------------------------------------------------

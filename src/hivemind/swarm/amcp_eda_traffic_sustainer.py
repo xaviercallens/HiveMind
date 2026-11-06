@@ -130,6 +130,7 @@ class ElasticEDAScalingResult:
     cold_start_504_prevented_by_pr249: int
     mobility_commands_emitted: list[dict[str, Any]]
     sustained_without_drops: bool
+    basis: str = "closed_form_model"
 
 
 class AMCPEventDrivenTrafficSustainer:
@@ -446,23 +447,28 @@ def plan_100_producer_mesh_scaling(
     active_producers: int = 100,
     endpoints_per_producer: int = 2,
     heartbeat_interval_s: float = 30.0,
+    *,
+    live_endpoints: int | None = None,
 ) -> dict[str, Any]:
-    """Compute AMCP v1.5 topic-partitioned heartbeat & P2C dispatch scaling metrics for 100 producer nodes."""
-    c = max(1, int(active_producers))
+    """Compute AMCP v1.5 topic-partitioned heartbeat & P2C dispatch scaling metrics for producer nodes."""
+    c = max(0, int(active_producers)) if live_endpoints is not None else max(1, int(active_producers))
     ep_per_prod = max(1, min(8, int(endpoints_per_producer)))
-    total_endpoints = c * ep_per_prod
+    modeled_endpoints = max(1, int(active_producers)) * ep_per_prod
+    total_endpoints = max(0, int(live_endpoints)) if live_endpoints is not None else modeled_endpoints
     interval_s = max(5.0, float(heartbeat_interval_s))
 
-    unbatched_wal_writes_per_s = round(total_endpoints / interval_s, 4)
+    unbatched_wal_writes_per_s = round(modeled_endpoints / interval_s, 4)
     regional_partitions = 4  # eu-west, us-east, us-west, ap-northeast
     batched_wal_commits_per_s = round(regional_partitions / interval_s, 4)
-    sqlite_lock_reduction_factor = round(total_endpoints / regional_partitions, 2)
+    sqlite_lock_reduction_factor = round(modeled_endpoints / regional_partitions, 2)
 
     return {
+        "basis": "closed_form_model",
         "active_producers": c,
         "endpoints_per_producer": ep_per_prod,
         "total_live_endpoints": total_endpoints,
-        "max_supported_endpoints": c * 8,
+        "modeled_target_endpoints": modeled_endpoints,
+        "max_supported_endpoints": max(1, int(active_producers)) * 8,
         "amcp_topic_partitions": [
             "io.hivemind.amcp.heartbeat.eu-west",
             "io.hivemind.amcp.heartbeat.us-east",

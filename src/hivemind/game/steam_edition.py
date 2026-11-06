@@ -1566,6 +1566,14 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None, *, 
             },
         }
 
+    def _is_verified_worker(authorization: str | None) -> bool:
+        presented = bearer_token_from_header(authorization)
+        return bool(
+            strategy_worker_token
+            and presented
+            and hmac.compare_digest(presented, strategy_worker_token)
+        )
+
     @app.get("/api/guild-tournament", response_class=JSONResponse)
     def get_guild_tournament() -> Dict[str, Any]:
         """Serve the live cross-guild Co-Op tournament & WebGL raid-arc geometry."""
@@ -1574,14 +1582,22 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None, *, 
         return state
 
     @app.post("/api/guild-tournament", response_class=JSONResponse)
-    def post_guild_tournament(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
-        """Register a guild squad's self-reported metrics and re-run the matchmaking."""
+    def post_guild_tournament(
+        payload: Dict[str, Any] = Body(default={}),
+        authorization: str | None = Header(default=None),
+    ) -> Dict[str, Any]:
+        """Register a guild squad's self-reported metrics and re-run the matchmaking.
+
+        Unauthenticated callers cannot override measured holdout perplexity or speculative
+        throughput to re-rank the tournament champion (IP-153).
+        """
         try:
             state = tournament_engine.register_squad_update(
                 guild_id=str(payload.get("guild_id", "")),
                 multi_domain_holdout_perplexity=payload.get("multi_domain_holdout_perplexity"),
                 speculative_tokens_per_sec=payload.get("speculative_tokens_per_sec"),
                 gamer_tag=payload.get("gamer_tag"),
+                verified_worker=_is_verified_worker(authorization),
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc))
@@ -1730,13 +1746,27 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None, *, 
         return res
 
     @app.post("/api/forge-lora-mission", response_class=JSONResponse)
-    def post_forge_lora_mission(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    def post_forge_lora_mission(
+        payload: Dict[str, Any] = Body(default={}),
+        authorization: str | None = Header(default=None),
+    ) -> Dict[str, Any]:
         gamer_tag = str(payload.get("gamer_tag", "CyberValkyrie_FR"))
         contract_id = str(payload.get("contract_id", "CONTRACT-HF-04-RUST-SYSTEMS"))
-        return execute_interactive_lora_micro_forge(gamer_tag=gamer_tag, contract_id=contract_id)
+        corpus_override = payload.get("corpus") if isinstance(payload.get("corpus"), list) else None
+        require_cuda = bool(payload.get("require_cuda", True))
+        return execute_interactive_lora_micro_forge(
+            gamer_tag=gamer_tag,
+            contract_id=contract_id,
+            corpus_override=corpus_override,
+            require_cuda=require_cuda,
+            persist_leaderboard=_is_verified_worker(authorization),
+        )
 
     @app.post("/api/solve-bounty", response_class=JSONResponse)
-    def post_solve_bounty(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    def post_solve_bounty(
+        payload: Dict[str, Any] = Body(default={}),
+        authorization: str | None = Header(default=None),
+    ) -> Dict[str, Any]:
         gamer_tag = str(payload.get("gamer_tag", "CyberValkyrie_FR"))
         prompt = str(
             payload.get(
@@ -1744,7 +1774,11 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None, *, 
                 "Write a Python function to calculate total cellular ATP and HIVE minted across 3 blocks.",
             )
         )
-        return execute_interactive_bounty_probe(gamer_tag=gamer_tag, prompt=prompt)
+        return execute_interactive_bounty_probe(
+            gamer_tag=gamer_tag,
+            prompt=prompt,
+            persist_leaderboard=_is_verified_worker(authorization),
+        )
 
     @app.post("/api/joined-campaign", response_class=JSONResponse)
     def post_joined_campaign(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:

@@ -893,6 +893,7 @@ class HiveMindScientificGameEngine:
         num_byzantine: int = 2,
         account_spend_usd: float = 25.0,
         is_vac_banned: bool = False,
+        steam_api_verified: bool = False,
     ) -> Dict[str, Any]:
         """Run and verify a single Scientific Discovery Mission (`MISSION-SCI-01..03`)."""
         spec = next(
@@ -904,7 +905,13 @@ class HiveMindScientificGameEngine:
             account_spend_usd=account_spend_usd,
             is_vac_banned=is_vac_banned,
         )
-        sybil_ok, sybil_msg = self.steam_bridge.verify_sybil_resistance(ticket)
+        local_sybil_rule_passed, sybil_msg = self.steam_bridge.verify_sybil_resistance(ticket)
+        steam_sybil_verified = bool(steam_api_verified and local_sybil_rule_passed)
+        if not steam_api_verified and local_sybil_rule_passed:
+            sybil_msg = (
+                "Local spend/VAC rule passed on caller-supplied values; "
+                "unverified (no upstream Steam Web API check performed)."
+            )
 
         if spec.mission_id == "MISSION-SCI-01-SYMPLECTIC-EXOPLANET":
             orbit_res = integrate_orbital_symplectic_comparison(steps=steps, dt=dt)
@@ -953,7 +960,7 @@ class HiveMindScientificGameEngine:
             )
             telemetry = {"anse_energy_reactor": reactor_res}
 
-        pts_awarded = spec.base_scientific_pts if (verified and sybil_ok) else 0
+        pts_awarded = spec.base_scientific_pts if (verified and local_sybil_rule_passed) else 0
         rp_state = self.steam_bridge.set_rich_presence(
             steam_id64=steam_id64,
             persona_name=gamer_tag,
@@ -978,7 +985,11 @@ class HiveMindScientificGameEngine:
             "gamer_tag": gamer_tag,
             "steam_id64": steam_id64,
             "steam_app_id": STEAMWORKS_APP_ID,
-            "steam_sybil_verified": sybil_ok,
+            "steam_sybil_verified": steam_sybil_verified,
+            "local_sybil_rule_passed": local_sybil_rule_passed,
+            "sybil_verification_source": (
+                "steam_web_api_verified" if steam_api_verified else "caller_supplied_unverified"
+            ),
             "steam_sybil_message": sybil_msg,
             "verified": verified,
             "scientific_pts_awarded": pts_awarded,
@@ -1115,7 +1126,8 @@ class HiveMindScientificGameEngine:
             player_pts = 0
             best_energy = 1e6
             last_hmac = ""
-            sybil_verified = True
+            sybil_verified = False
+            local_rule_passed = True
             sybil_reason = ""
 
             for m_id, p_days, f_byz in spec["missions_to_play"]:
@@ -1127,17 +1139,20 @@ class HiveMindScientificGameEngine:
                     num_byzantine=int(f_byz),
                     account_spend_usd=spend,
                     is_vac_banned=vac,
+                    steam_api_verified=False,
                 )
                 player_pts += int(res["scientific_pts_awarded"])
                 best_energy = min(best_energy, float(res["bee_energy_total"]))
                 last_hmac = str(res["steam_leaderboard_hmac"])
                 sybil_verified = bool(res["steam_sybil_verified"])
+                local_rule_passed = bool(res["local_sybil_rule_passed"])
                 sybil_reason = str(res["steam_sybil_message"])
                 mission_results.append(
                     {
                         "mission_id": m_id,
                         "verified": res["verified"],
                         "steam_sybil_verified": sybil_verified,
+                        "local_sybil_rule_passed": local_rule_passed,
                         "pts_awarded": res["scientific_pts_awarded"],
                         "bee_energy_total": res["bee_energy_total"],
                         "receipt_sha256": res["bee_energy_receipt_sha256"],
@@ -1151,6 +1166,7 @@ class HiveMindScientificGameEngine:
                     "hardware_rig": spec["hardware_rig"],
                     "foreground_game": spec["foreground_game"],
                     "steam_sybil_verified": sybil_verified,
+                    "local_sybil_rule_passed": local_rule_passed,
                     "steam_sybil_message": sybil_reason,
                     "period_sweep_trace": sweep_trace,
                     "missions_played": mission_results,
@@ -1163,10 +1179,11 @@ class HiveMindScientificGameEngine:
                 {
                     "gamer_tag": tag,
                     "hardware_rig": spec["hardware_rig"],
-                    "missions_completed": sum(1 for m in mission_results if m["verified"] and m["steam_sybil_verified"]),
+                    "missions_completed": sum(1 for m in mission_results if m["verified"] and m["local_sybil_rule_passed"]),
                     "total_scientific_pts": player_pts,
                     "best_bee_energy": round(best_energy, 6),
                     "steam_sybil_verified": sybil_verified,
+                    "local_sybil_rule_passed": local_rule_passed,
                     "leaderboard_hmac": last_hmac[:16],
                 }
             )
@@ -1177,9 +1194,13 @@ class HiveMindScientificGameEngine:
 
         return {
             "cohort_id": "COHORT-S19-MULTIPLAYER-ODYSSEY-5P",
+            "cohort_basis": "scripted_local_rule_simulation",
             "total_players": len(sessions),
             "honest_players_verified": sum(1 for s in sessions if s["steam_sybil_verified"]),
-            "sybil_attackers_blocked": sum(1 for s in sessions if not s["steam_sybil_verified"]),
+            "scripted_honest_profiles_passed_local_rule": sum(
+                1 for s in sessions if s["local_sybil_rule_passed"]
+            ),
+            "sybil_attackers_blocked": sum(1 for s in sessions if not s["local_sybil_rule_passed"]),
             "total_cohort_scientific_pts": sum(s["total_scientific_pts"] for s in sessions),
             "non_monetary_charter": NON_MONETARY_CHARTER_NOTICE,
             "leaderboard": leaderboard,

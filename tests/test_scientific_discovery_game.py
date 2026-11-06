@@ -194,7 +194,9 @@ def test_frontend_dom_controls_and_js_handlers_contract() -> None:
 def test_multiplayer_cohort_playtest_and_sybil_defense() -> None:
     cohort = run_multiplayer_cohort_playtest()
     assert cohort["total_players"] == 5
-    assert cohort["honest_players_verified"] == 4
+    assert cohort["cohort_basis"] == "scripted_local_rule_simulation"
+    assert cohort["honest_players_verified"] == 0
+    assert cohort["scripted_honest_profiles_passed_local_rule"] == 4
     assert cohort["sybil_attackers_blocked"] == 1
     assert cohort["total_cohort_scientific_pts"] == 4050 + 4050 + 2850 + 2700 + 0
 
@@ -204,6 +206,7 @@ def test_multiplayer_cohort_playtest_and_sybil_defense() -> None:
     assert lb[-1]["gamer_tag"] == "SybilBot_ZeroSpend_VAC"
     assert lb[-1]["total_scientific_pts"] == 0
     assert lb[-1]["steam_sybil_verified"] is False
+    assert lb[-1]["local_sybil_rule_passed"] is False
 
     client = TestClient(create_hack_miner_fastapi_app())
     r_cohort = client.post("/api/scientific-game/playtest-cohort")

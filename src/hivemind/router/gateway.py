@@ -2870,9 +2870,17 @@ def create_router_app(
         from hivemind.swarm.amcp_kafka_campaign_bus import (
             build_amcp_kafka_event,
             clear_bee_capacity_market,
+            is_allowed_bee_id,
         )
 
         account = authenticate(request)
+        if not is_allowed_bee_id(payload.bee_id, account.handle, account.account_id):
+            raise RouterError(
+                403,
+                f"Bee '{payload.bee_id}' is not in the canonical bee allow-list or owned by account '{account.handle}'.",
+                "permission_error",
+                "forbidden_bee_id",
+            )
         now = clock()
         if not bee_trade_limiter.allow(account.account_id, now):
             raise RouterError(
@@ -2890,6 +2898,25 @@ def create_router_app(
                 "order_cap_reached",
             )
         order_id = "ord-" + uuid.uuid4().hex[:14]
+        escrow_hmt = 0.0
+        if payload.side == "BID":
+            escrow_hmt = round(payload.capacity_1k * payload.price_per_1k, 6)
+            try:
+                store.hold(order_id, account.account_id, escrow_hmt, now_utc=now)
+            except InsufficientBalance:
+                raise RouterError(
+                    402,
+                    "Insufficient HMT balance to escrow this capacity BID.",
+                    "payment_required",
+                    "insufficient_balance",
+                ) from None
+            except TooManyHolds:
+                raise RouterError(
+                    429,
+                    "Too many active escrow holds for this account.",
+                    "rate_limit_error",
+                    "too_many_holds",
+                ) from None
         order = store.record_bee_trade_order(
             order_id=order_id,
             account_id=account.account_id,
@@ -2912,6 +2939,7 @@ def create_router_app(
                 "side": payload.side,
                 "capacity_1k": payload.capacity_1k,
                 "price_per_1k": payload.price_per_1k,
+                "escrow_hold_hmt": escrow_hmt,
             },
             now_utc=now,
         )
@@ -2931,6 +2959,7 @@ def create_router_app(
         return {
             "object": "hivemind.bee_trade_receipt",
             "order": order,
+            "escrow_hold_hmt": escrow_hmt,
             "amcp_event": ev.to_dict(),
             "market_clearing": clearing,
         }

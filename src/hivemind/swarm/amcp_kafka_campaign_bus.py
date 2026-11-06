@@ -181,6 +181,60 @@ JOINT_SUBJECT_CAMPAIGNS: tuple[SubjectCampaign, ...] = (
 
 SUBJECT_BY_ID: dict[str, SubjectCampaign] = {c.subject_id: c for c in JOINT_SUBJECT_CAMPAIGNS}
 
+CANONICAL_BEE_IDS: frozenset[str] = frozenset(
+    {
+        *(c.lead_bee for c in JOINT_SUBJECT_CAMPAIGNS),
+        *(b for c in JOINT_SUBJECT_CAMPAIGNS for b in c.co_bees),
+        "hivemind/granite-1b-base",
+        "hivemind/crowd-v1",
+        "hivemind/granite-moe",
+        "hivemind/coder-lite",
+        "hivemind/gemma-core",
+        "hivemind/bee-stars",
+        "hivemind/mistral-core",
+        "hivemind/qwen35-core",
+        "hivemind/bee-rusty-sundials",
+        "hivemind/coder",
+        "hivemind/bee-lean-prover",
+        "hivemind/bee-ruche-moe",
+        "hivemind/coder-plus",
+        "hivemind/moe-qwen35-bee",
+        "hivemind/moe-general",
+        "hivemind/moe-coder",
+        "hivemind/moe-science",
+        "hivemind/moe-science-bee-v2",
+        "hivemind/moe-vision",
+        "hivemind/math-prover",
+        "hivemind/fast",
+        "hivemind/general",
+        "hivemind/reasoning",
+        "hivemind/french",
+        "hivemind/auto",
+        "bee-math-01",
+    }
+)
+
+
+def is_allowed_bee_id(bee_id: str, account_handle: str, account_id: str = "") -> bool:
+    """Return True iff ``bee_id`` is in the canonical HiveMind bee allow-list or owned by ``account_handle`` (IP-260)."""
+    candidate = bee_id.strip()
+    if not candidate:
+        return False
+    if candidate in CANONICAL_BEE_IDS:
+        return True
+    handle = account_handle.strip().lower()
+    if handle and candidate.lower() in {
+        handle,
+        f"hivemind/{handle}",
+        f"bee-{handle}",
+        f"hivemind/bee-{handle}",
+    }:
+        return True
+    if account_id and candidate == account_id.strip():
+        return True
+    return False
+
+
 
 @dataclass(frozen=True)
 class AMCPKafkaEvent:

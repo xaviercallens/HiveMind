@@ -1330,17 +1330,49 @@ def create_router_app(
             "routing_mode": plan.routing_mode,
         }
 
-    def upstream_exhausted(plan: _Plan, timed_out: ProducerRecord | None) -> RouterError:
+    def upstream_exhausted(
+        plan: _Plan,
+        timed_out: ProducerRecord | None,
+        *,
+        account: Account | None = None,
+        reasons: Sequence[str] = (),
+    ) -> RouterError:
         """The explicit error once every candidate failed; a timeout is never opaque: ``model_loading`` only when the producer reported the model not loaded, else an explicit 504."""
         if timed_out is not None:
             if timed_out.model_state(plan.model_id) is False:
                 return model_loading_error(plan.model_id, _cold_start_of(timed_out, plan.model_id))
             return RouterError(504, "The producer did not answer in time; you were not charged.", "api_error", "upstream_timeout")
-        # A 502 burst was previously unattributable (the Cloud Run entries carried no text): name the model and producers, never keys or prompts.
+        # A 502 burst was previously unattributable (the Cloud Run entries carried no text): name the model, producers, and per-producer failure reasons (never keys or prompts).
+        reasons_summary = ",".join(reasons[:8]) if reasons else "none_recorded"
         LOGGER.warning(
-            "upstream_failure: every producer failed model=%s request_id=%s candidates=%d producers=%s",
-            plan.model_id, plan.request_id, len(plan.candidates), ",".join(r.account_id for r in plan.candidates[:8]),
+            "upstream_failure: every producer failed model=%s request_id=%s candidates=%d producers=%s reasons=%s",
+            plan.model_id,
+            plan.request_id,
+            len(plan.candidates),
+            ",".join(r.account_id for r in plan.candidates[:8]),
+            reasons_summary,
         )
+        if account is not None:
+            latency_ms = max(0.0, (time.monotonic() - plan.started_monotonic) * 1000.0) if plan.started_monotonic > 0.0 else 0.0
+            store.record_usage_telemetry(
+                request_id=plan.request_id,
+                consumer_id=account.account_id,
+                producer_id="upstream_failure",
+                requested_model=plan.requested_model or plan.model_id,
+                routed_model=plan.model_id,
+                routing_mode=plan.routing_mode,
+                task_domain=plan.task_domain,
+                language=plan.language,
+                client_sdk=plan.client_sdk,
+                app_title=plan.app_title,
+                is_stream=plan.is_stream,
+                latency_ms=latency_ms,
+                prompt_tokens=0,
+                completion_tokens=0,
+                billed_tokens=0,
+                charged_hmt=0.0,
+                now_utc=clock(),
+            )
         return RouterError(502, "Every producer for this model failed; you were not charged.", "api_error", "upstream_failure")
 
     cooldown_until: dict[str, float] = {}
@@ -1360,9 +1392,11 @@ def create_router_app(
 
     def chat_blocking(plan: _Plan, account: Account, body: Mapping[str, Any]) -> JSONResponse:
         timed_out: ProducerRecord | None = None
+        failure_reasons: list[str] = []
         for record in plan.candidates:
             request = producer_request(record, plan, body, stream=False)
             if request is None:
+                failure_reasons.append(f"{record.account_id}:skipped_request")
                 continue
             payload: Any = None
             why = "no completion choice"  # the reason named in the log when this producer is marked failed; never a key or prompt
@@ -1382,6 +1416,7 @@ def create_router_app(
                 if isinstance(exc, httpx.TimeoutException) and timed_out is None:
                     timed_out = record
             if not isinstance(payload, dict) or not has_completion_choice(payload):
+                failure_reasons.append(f"{record.account_id}:{why}")
                 LOGGER.warning("producer %s failed request %s: %s", record.account_id, plan.request_id, why)
                 _mark_failed(record)
                 continue
@@ -1402,30 +1437,34 @@ def create_router_app(
             }
             payload["hivemind"] = {k: info[k] for k in ("price_per_1k", "charged_hmt", "producer_id", "mechanism", "request_id")}
             return JSONResponse(payload)
-        raise upstream_exhausted(plan, timed_out)
+        raise upstream_exhausted(plan, timed_out, account=account, reasons=failure_reasons)
 
     def chat_streaming(plan: _Plan, account: Account, body: Mapping[str, Any]) -> StreamingResponse:
         timed_out: ProducerRecord | None = None
+        failure_reasons: list[str] = []
         for record in plan.candidates:
             request = producer_request(record, plan, body, stream=True)
             if request is None:
+                failure_reasons.append(f"{record.account_id}:skipped_request")
                 continue
             try:
                 upstream = client.send(request, stream=True)
             except httpx.HTTPError as exc:
                 if isinstance(exc, httpx.TimeoutException) and timed_out is None:
                     timed_out = record
+                failure_reasons.append(f"{record.account_id}:{type(exc).__name__}")
                 LOGGER.warning("producer %s failed request %s: %s", record.account_id, plan.request_id, type(exc).__name__)
                 _mark_failed(record)
                 continue
             if upstream.status_code != 200:
                 upstream.close()
+                failure_reasons.append(f"{record.account_id}:HTTP {upstream.status_code}")
                 LOGGER.warning("producer %s answered %s for %s", record.account_id, upstream.status_code, plan.request_id)
                 _mark_failed(record)
                 continue
             _mark_ok(record)
             return StreamingResponse(_stream_body(plan, account, record.account_id, upstream), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
-        raise upstream_exhausted(plan, timed_out)
+        raise upstream_exhausted(plan, timed_out, account=account, reasons=failure_reasons)
 
     def _stream_body(plan: _Plan, account: Account, producer_id: str, upstream: httpx.Response) -> Iterator[bytes]:
         public = _public_model(plan.model_id)

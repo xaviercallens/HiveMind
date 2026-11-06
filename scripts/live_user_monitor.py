@@ -214,6 +214,205 @@ def format_service_chat_line(svc: str, s: dict[str, Any]) -> str:
     )
 
 
+def _sanitize_route(url: str) -> str:
+    path = url.split(".run.app")[-1].split("?")[0] if ".run.app" in url else url.split("?")[0]
+    if path.startswith("http://") or path.startswith("https://"):
+        parts = path.split("/", 3)
+        path = "/" + parts[3] if len(parts) > 3 else "/"
+    if path.startswith("/k/"):
+        segs = path.split("/")
+        if len(segs) >= 3:
+            segs[2] = "***"
+            path = "/".join(segs)
+    return path or "/v1/chat/completions"
+
+
+def _extract_model_name(row: dict[str, Any], response_bytes: int, latency_s: float) -> str:
+    jp = row.get("jsonPayload") if isinstance(row.get("jsonPayload"), dict) else {}
+    labels = row.get("labels") if isinstance(row.get("labels"), dict) else {}
+    for cand in (row.get("model"), jp.get("model"), jp.get("routed_model"), labels.get("model")):
+        if isinstance(cand, str) and cand.strip():
+            return cand.strip()
+    if response_bytes >= 1500 and latency_s >= 4.0:
+        return "hivemind/coder (inferred: >=1.5kB SSE stream)"
+    return "unlogged"
+
+
+def attribute_slow_chats(
+    chat_rows: list[dict[str, Any]],
+    *,
+    threshold_s: float = 3.0,
+    limit: int = 10,
+    probe_windows: list[tuple[str, str]] | tuple[tuple[str, str], ...] = (),
+) -> list[dict[str, Any]]:
+    """List the slowest chats in a window with route, model name, caller class, and sanitized user agent (#570).
+
+    Never includes API keys, prompts, or IP addresses.
+    """
+    attributed: list[dict[str, Any]] = []
+    for r in chat_rows:
+        h = r.get("httpRequest", {}) or {}
+        lat_s = float(str(h.get("latency", "0s")).rstrip("s") or 0.0)
+        if lat_s < threshold_s:
+            continue
+        resp_bytes = int(h.get("responseSize", 0) or 0)
+        ua_raw = str(h.get("userAgent", "") or "unknown").split()[0][:64]
+        is_probe = is_probe_chat_row(r, probe_windows=probe_windows)
+        caller_class = "probe" if is_probe else ("browser" if "Mozilla" in str(h.get("userAgent", "")) else "scripted")
+        route = _sanitize_route(str(h.get("requestUrl", "/v1/chat/completions")))
+        model = _extract_model_name(r, resp_bytes, lat_s)
+        if is_probe and resp_bytes >= 1500:
+            cause = "monitor_probe_coder_sse_stream"
+        elif resp_bytes >= 1500:
+            cause = "long_generation_or_coder_320_token_request"
+        else:
+            cause = "cold_model_or_gpu_contention"
+        attributed.append(
+            {
+                "time": str(r.get("timestamp", "")),
+                "latency_s": round(lat_s, 3),
+                "response_bytes": resp_bytes,
+                "route": route,
+                "model": model,
+                "caller_class": caller_class,
+                "user_agent": ua_raw,
+                "status": int(h.get("status", 0) or 0),
+                "likely_cause": cause,
+            }
+        )
+    attributed.sort(key=lambda item: -float(item["latency_s"]))
+    return attributed[:limit]
+
+
+def latency_by_model_and_producer(chat_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate per-model and per-producer chat latency (TTFT, total latency, token count) and classify the p95 cause (#404)."""
+    by_model_rows: dict[str, list[dict[str, Any]]] = {}
+    by_producer_rows: dict[str, list[dict[str, Any]]] = {}
+    for r in chat_rows:
+        h = r.get("httpRequest", {}) or {}
+        jp = r.get("jsonPayload") if isinstance(r.get("jsonPayload"), dict) else {}
+        lat_s = float(str(h.get("latency", r.get("latency_s", "0s"))).rstrip("s") or 0.0)
+        resp_bytes = int(h.get("responseSize", r.get("response_bytes", 0)) or 0)
+        ttft_s_raw = r.get("ttft_s", jp.get("ttft_s"))
+        ttft_s = float(ttft_s_raw) if isinstance(ttft_s_raw, (int, float)) else None
+        tokens_raw = r.get("total_tokens", jp.get("total_tokens", jp.get("billed_tokens")))
+        tokens = int(tokens_raw) if isinstance(tokens_raw, (int, float)) else max(1, resp_bytes // 4) if resp_bytes > 0 else 0
+        model = _extract_model_name(r, resp_bytes, lat_s)
+        producer = str(r.get("producer_id") or jp.get("producer_id") or "unlogged_producer")
+        rec = {"latency_s": lat_s, "ttft_s": ttft_s, "tokens": tokens, "response_bytes": resp_bytes}
+        by_model_rows.setdefault(model, []).append(rec)
+        by_producer_rows.setdefault(producer, []).append(rec)
+
+    def _agg(items: list[dict[str, Any]]) -> dict[str, Any]:
+        lats = [float(x["latency_s"]) for x in items]
+        ttfts = [float(x["ttft_s"]) for x in items if x["ttft_s"] is not None]
+        toks = [int(x["tokens"]) for x in items]
+        rbytes = [int(x["response_bytes"]) for x in items]
+        p95_s = _percentile(lats, 0.95)
+        p95_bytes = _percentile([float(b) for b in rbytes], 0.95) or 0.0
+        mean_toks = round(sum(toks) / len(toks), 1) if toks else 0.0
+        if (p95_s or 0.0) >= 5.0 and (p95_bytes >= 1500.0 or mean_toks >= 120.0):
+            cause = "long_generation"
+        elif (p95_s or 0.0) >= 5.0:
+            cause = "slow_or_overloaded_producer"
+        else:
+            cause = "within_idle_baseline"
+        return {
+            "n": len(items),
+            "p50_s": _percentile(lats, 0.5),
+            "p95_s": p95_s,
+            "max_s": max(lats) if lats else None,
+            "ttft_p50_s": _percentile(ttfts, 0.5) if ttfts else None,
+            "ttft_p95_s": _percentile(ttfts, 0.95) if ttfts else None,
+            "mean_tokens": mean_toks,
+            "mean_response_bytes": round(sum(rbytes) / len(rbytes), 1) if rbytes else 0.0,
+            "dominant_cause": cause,
+        }
+
+    by_model = {k: _agg(v) for k, v in sorted(by_model_rows.items())}
+    by_producer = {k: _agg(v) for k, v in sorted(by_producer_rows.items())}
+    slow_models = [k for k, v in by_model.items() if (v.get("p95_s") or 0.0) >= 5.0]
+    causes = [by_model[k]["dominant_cause"] for k in slow_models]
+    if "slow_or_overloaded_producer" in causes:
+        overall = "slow_or_overloaded_producer"
+    elif "long_generation" in causes:
+        overall = "long_generation"
+    else:
+        overall = "within_idle_baseline"
+    return {
+        "by_model": by_model,
+        "by_producer": by_producer,
+        "slow_models": slow_models,
+        "dominant_cause": overall,
+        "routing_proposal": (
+            "Prefer producers with model loaded=True, deprioritize endpoints with high active in-flight streams, "
+            "and cap synthetic monitor stream probes at max_tokens=48 (proposal only, not auto-applied)."
+        ),
+    }
+
+
+def attribute_t4_window_snapshots(
+    snapshots: list[dict[str, Any]],
+    *,
+    assimilated_before: int = 0,
+    assimilated_after: int = 0,
+) -> dict[str, Any]:
+    """Build the training-snapshot util/VRAM table (#608) and classify GPU contention vs cold reload (#591, replaces #589)."""
+    training_table = [
+        {
+            "index": idx,
+            "state": str(s.get("state", "unknown")),
+            "util_pct": int(s.get("gpu_util_pct", s.get("util_pct", 0)) or 0),
+            "vram_mib": int(s.get("gpu_used_mib", s.get("used_mib", 0)) or 0),
+            "boinc_procs": list(s.get("boinc_procs") or []),
+        }
+        for idx, s in enumerate(snapshots)
+        if str(s.get("state")) == "training"
+    ]
+    all_utils = [int(s.get("gpu_util_pct", s.get("util_pct", 0)) or 0) for s in snapshots]
+    all_vrams = [int(s.get("gpu_used_mib", s.get("used_mib", 0)) or 0) for s in snapshots]
+    max_train_util = max((r["util_pct"] for r in training_table), default=0)
+    delta_wu = int(assimilated_after) - int(assimilated_before)
+
+    if delta_wu > 0 and max_train_util == 0:
+        training_statement = (
+            f"QLoRA assimilated advanced {assimilated_before} -> {assimilated_after} while all {len(training_table)} "
+            "training snapshots read 0% GPU util at ~5.2 GiB VRAM: the counter advanced from assimilation of an "
+            "already-uploaded result or CPU-side/short between-poll work rather than sustained GPU training during those 15 snapshots."
+        )
+        gpu_trained_in_snapshots = False
+    elif delta_wu > 0 and max_train_util > 0:
+        training_statement = (
+            f"QLoRA assimilated advanced {assimilated_before} -> {assimilated_after} with GPU util reaching "
+            f"{max_train_util}% across {len(training_table)} training snapshots: training ran on the GPU."
+        )
+        gpu_trained_in_snapshots = True
+    else:
+        training_statement = "No QLoRA workunit was assimilated in this window."
+        gpu_trained_in_snapshots = max_train_util > 0
+
+    peak_util = max(all_utils, default=0)
+    min_vram = min(all_vrams, default=0)
+    max_vram = max(all_vrams, default=0)
+    if peak_util >= 80:
+        slow_chat_cause = "gpu_contention_high_util"
+    elif max_vram - min_vram >= 3500:
+        slow_chat_cause = "model_unloaded_and_reloaded_hypothesis"
+    else:
+        slow_chat_cause = "steady_residency"
+
+    return {
+        "training_snapshots_count": len(training_table),
+        "training_table": training_table,
+        "gpu_trained_in_snapshots": gpu_trained_in_snapshots,
+        "training_statement": training_statement,
+        "peak_window_util_pct": peak_util,
+        "vram_range_mib": [min_vram, max_vram],
+        "slow_chat_attribution": slow_chat_cause,
+        "operator_decision": "keep_alive_24h_on_primary_serving_tiers_and_separate_probe_from_user_p95",
+    }
+
+
 def summarize_service_rows(
     rows: list[dict[str, Any]],
     *,
@@ -257,6 +456,8 @@ def summarize_service_rows(
             "chat_probe": split["probe"],
             "chat_by_source": split,
             "chat_breakdown": chat_latency_breakdown(chat_rows),
+            "slow_chats_attributed": attribute_slow_chats(chat_rows, probe_windows=probe_windows),
+            "by_model_and_producer": latency_by_model_and_producer(chat_rows),
             "http_402": sum(n for k, n in statuses.items() if k.endswith(":402")),
             "http_5xx": sum(n for k, n in statuses.items() if k.split(":")[1].startswith("5")),
             "browser_requests": browser, "scripted_requests": scripted,

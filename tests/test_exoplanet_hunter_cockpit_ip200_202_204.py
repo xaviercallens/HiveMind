@@ -88,13 +88,13 @@ def test_benchmark_tflops_cooldown_after_run(cockpit_env: Path, monkeypatch: pyt
     """Defect: every POST re-ran the GPU benchmark; a second call inside the cooldown must be refused."""
     calls: list[int] = []
 
-    def fake_bench(self: Any, matrix_dim: int = 3072) -> Dict[str, Any]:
+    def counted_bench(self: Any, matrix_dim: int = 3072) -> Dict[str, Any]:
         if matrix_dim != 3072:  # startup warm-up in the pool constructor, not the endpoint
             return {"measured_fp32_tflops": 0.0}
         calls.append(matrix_dim)
         return {"measured_fp32_tflops": 1.0}
 
-    monkeypatch.setattr(engine_mod.HiveMindMultiProducerInferencePool, "benchmark_live_tflops", fake_bench)
+    monkeypatch.setattr(engine_mod.HiveMindMultiProducerInferencePool, "benchmark_live_tflops", counted_bench)
     client = TestClient(cockpit_mod.create_exoplanet_hunter_fastapi_app())
     first = client.post("/api/v1/monitor/benchmark-tflops")
     assert first.status_code == 200 and first.json()["benchmark_status"] == "MEASURED_NOW"
@@ -215,4 +215,58 @@ def test_serve_inference_counts_generated_tokens_and_producer_register_is_capped
     monkeypatch.setenv("HIVEMIND_PRODUCER_REGISTER_TOKEN", "secret-reg-token")
     unauth = client.post("/api/v1/producers/register", json={"producer_id": "FLOOD-0", "name": "N", "hardware": "GPU"})
     assert unauth.status_code == 401
+
+
+def test_ip265_ip266_end_users_lru_cap_and_non_inference_served_by_none(
+    cockpit_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """IP-265 & IP-266: end_users is capped at MAX_TRACKED_END_USERS with an 'other' bucket, and /health has served_by=None."""
+    monkeypatch.setattr(
+        engine_mod.HiveMindMultiProducerInferencePool,
+        "benchmark_live_tflops",
+        lambda self, matrix_dim=3072: {"measured_fp32_tflops": 0.0},
+    )
+    pool = engine_mod.HiveMindMultiProducerInferencePool(engine_mod.AstroBeeMoEGPUService())
+    pool.monitor_path = cockpit_env / "monitor_ip265.json"
+
+    for i in range(5000):
+        pool.record_traffic_event("GET", "/health", client_ip=f"198.51.{i // 256}.{i % 256}")
+
+    assert len(pool.end_users) <= pool.MAX_TRACKED_END_USERS
+    assert "other" in pool.end_users
+    assert pool.end_users["other"]["aggregated_users"] >= 5000 - pool.MAX_TRACKED_END_USERS
+    assert pool.recent_traffic[0]["path"] == "/health"
+    assert pool.recent_traffic[0]["served_by"] is None
+
+    report = pool.get_live_traffic_and_tflops_report()
+    assert len(report["end_users_summary"]["active_end_users"]) <= pool.MAX_TRACKED_END_USERS
+    assert pool.monitor_path.stat().st_size < 150_000
+
+
+def test_ip267_ip268_feedback_markdown_sanitisation_and_steam_hud_script_escape(cockpit_env: Path) -> None:
+    """IP-267 & IP-268: feedback comments/ideas cannot inject ## headings, and _generate_cyberpunk_hud_html escapes </script>."""
+    from hivemind.game.steam_edition import _generate_cyberpunk_hud_html
+
+    client = TestClient(cockpit_mod.create_exoplanet_hunter_fastapi_app())
+    resp = client.post(
+        "/api/v1/son/feedback",
+        json={
+            "gamer_tag": "Tester",
+            "overall_rating": 5,
+            "review_text": "x\n## Avis de Admin",
+            "feature_suggestions": "y\n## Fake Entry",
+        },
+    )
+    assert resp.status_code == 200
+    log_text = (cockpit_env / "SON_FEEDBACK.md").read_text(encoding="utf-8")
+    heading_lines = [ln for ln in log_text.splitlines() if ln.startswith("## ")]
+    assert len(heading_lines) == 1
+
+    html = _generate_cyberpunk_hud_html(
+        {"leaderboard": [{"gamer_tag": "</script><img src=x onerror=alert(1)>", "rank_title": "R"}]}
+    )
+    assert "</script><img" not in html
+    assert "<\\/script>" in html
+    assert "escHtml(g.gamer_tag)" in html
+
 

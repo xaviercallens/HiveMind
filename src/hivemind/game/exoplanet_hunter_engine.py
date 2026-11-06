@@ -21,10 +21,12 @@ from __future__ import annotations
 
 import datetime
 import hashlib
+import hmac
 import json
 import math
 import os
 import random
+import secrets
 import threading
 import time
 from pathlib import Path
@@ -1999,6 +2001,9 @@ class HiveMindMultiProducerInferencePool:
          dynamically register, send heartbeats, or serve requests via `/api/v1/producers/*`.
     """
 
+    MAX_TRACKED_END_USERS = 256
+    MONITOR_WRITE_MIN_INTERVAL_S = 2.0
+
     def __init__(self, gpu_service: AstroBeeMoEGPUService) -> None:
         self.gpu_service = gpu_service
         self.registry_path = ARTIFACTS_ROOT / "hivemind_inference_producers.json"
@@ -2011,6 +2016,9 @@ class HiveMindMultiProducerInferencePool:
         self.total_tokens_processed = 0
         self.producers: Dict[str, Dict[str, Any]] = {}
         self.end_users: Dict[str, Dict[str, Any]] = {}
+        self._end_user_salt = os.environ.get("HIVEMIND_END_USER_HASH_SALT", secrets.token_hex(16)).encode("utf-8")
+        self._last_serving_producer_id: Optional[str] = None
+        self._last_monitor_write_mono: float = 0.0
         self.recent_traffic: List[Dict[str, Any]] = []
         self.tflops_metrics: Dict[str, Any] = {}
         self._init_default_producers()
@@ -2277,6 +2285,7 @@ class HiveMindMultiProducerInferencePool:
         user_agent: str = "Browser",
         latency_ms: float = 1.2,
         gamer_tag: str = "",
+        served_by: Optional[str] = None,
     ) -> None:
         """Record an incoming HTTP or inference request and track new/active end-users."""
         if path.startswith("/api/v1/monitor/telemetry"):
@@ -2292,14 +2301,65 @@ class HiveMindMultiProducerInferencePool:
         elif "unity" in user_agent.lower() or "csharp" in user_agent.lower():
             ua_short = "Steam Fat Client / Unity Engine"
 
-        user_key = gamer_tag if gamer_tag else f"{client_ip} ({ua_short})"
+        raw_identity = gamer_tag if gamer_tag else f"{client_ip} ({ua_short})"
+        salted_digest = hmac.new(
+            self._end_user_salt, raw_identity.encode("utf-8"), hashlib.sha256
+        ).hexdigest()[:10].upper()
+        user_key = f"tag:{gamer_tag}" if gamer_tag else f"anon:{salted_digest}"
         is_inference = any(k in path for k in ("/infer", "/completions", "/bee-moe-scan"))
         is_discovery = "/discover" in path
 
-        if user_key not in self.end_users:
+        if user_key in self.end_users:
+            u = self.end_users.pop(user_key)
+            u["last_seen"] = now_iso
+            u["http_requests"] = int(u.get("http_requests", 0)) + 1
+            if is_inference:
+                u["inference_calls"] = int(u.get("inference_calls", 0)) + 1
+            if is_discovery:
+                u["discoveries_approved"] = int(u.get("discoveries_approved", 0)) + 1
+            self.end_users[user_key] = u
+        else:
+            if len(self.end_users) >= self.MAX_TRACKED_END_USERS:
+                other = self.end_users.get("other")
+                oldest_key = next((k for k in self.end_users if k != "other"), None)
+                evicted = self.end_users.pop(oldest_key) if oldest_key is not None else None
+                if other is None:
+                    other = {
+                        "user_id": "USER-OTHER-OVERFLOW",
+                        "gamer_tag": "other",
+                        "client_type": "Aggregated Overflow Bucket",
+                        "first_seen": evicted["first_seen"] if evicted else now_iso,
+                        "last_seen": now_iso,
+                        "http_requests": int(evicted.get("http_requests", 0)) if evicted else 0,
+                        "inference_calls": int(evicted.get("inference_calls", 0)) if evicted else 0,
+                        "discoveries_approved": int(evicted.get("discoveries_approved", 0)) if evicted else 0,
+                        "aggregated_users": 1 if evicted else 0,
+                        "status": "AGGREGATED_OVERFLOW",
+                    }
+                    self.end_users["other"] = other
+                elif evicted is not None:
+                    other["last_seen"] = now_iso
+                    other["http_requests"] = int(other.get("http_requests", 0)) + int(evicted.get("http_requests", 0))
+                    other["inference_calls"] = int(other.get("inference_calls", 0)) + int(evicted.get("inference_calls", 0))
+                    other["discoveries_approved"] = int(other.get("discoveries_approved", 0)) + int(
+                        evicted.get("discoveries_approved", 0)
+                    )
+                    other["aggregated_users"] = int(other.get("aggregated_users", 0)) + 1
+                if len(self.end_users) >= self.MAX_TRACKED_END_USERS:
+                    oldest_key2 = next((k for k in self.end_users if k != "other"), None)
+                    if oldest_key2 is not None:
+                        ev2 = self.end_users.pop(oldest_key2)
+                        other["http_requests"] = int(other.get("http_requests", 0)) + int(ev2.get("http_requests", 0))
+                        other["inference_calls"] = int(other.get("inference_calls", 0)) + int(ev2.get("inference_calls", 0))
+                        other["discoveries_approved"] = int(other.get("discoveries_approved", 0)) + int(
+                            ev2.get("discoveries_approved", 0)
+                        )
+                        other["aggregated_users"] = int(other.get("aggregated_users", 0)) + 1
+
+            seq_num = len(self.end_users) + 1
             self.end_users[user_key] = {
-                "user_id": f"USER-{len(self.end_users) + 1:02d}-{hashlib.sha256(user_key.encode()).hexdigest()[:6].upper()}",
-                "gamer_tag": gamer_tag or f"Explorer_{len(self.end_users) + 1}",
+                "user_id": f"USER-{seq_num:02d}-{salted_digest}",
+                "gamer_tag": gamer_tag or f"Explorer_{seq_num}",
                 "client_type": ua_short,
                 "first_seen": now_iso,
                 "last_seen": now_iso,
@@ -2308,14 +2368,13 @@ class HiveMindMultiProducerInferencePool:
                 "discoveries_approved": 1 if is_discovery else 0,
                 "status": "NEW_END_USER_ACTIVE",
             }
-        else:
-            u = self.end_users[user_key]
-            u["last_seen"] = now_iso
-            u["http_requests"] = int(u.get("http_requests", 0)) + 1
-            if is_inference:
-                u["inference_calls"] = int(u.get("inference_calls", 0)) + 1
-            if is_discovery:
-                u["discoveries_approved"] = int(u.get("discoveries_approved", 0)) + 1
+
+        resolved_served_by: Optional[str] = served_by
+        if resolved_served_by is None and is_inference:
+            if self._last_serving_producer_id:
+                resolved_served_by = self._last_serving_producer_id
+            elif torch.cuda.is_available():
+                resolved_served_by = "PRODUCER-LOCAL-RTX2070-CUDA0"
 
         event = {
             "timestamp": now_iso,
@@ -2323,7 +2382,7 @@ class HiveMindMultiProducerInferencePool:
             "path": path,
             "client_type": ua_short,
             "latency_ms": round(latency_ms, 2),
-            "served_by": "PRODUCER-LOCAL-RTX2070-CUDA0",
+            "served_by": resolved_served_by,
         }
         self.recent_traffic.insert(0, event)
         if len(self.recent_traffic) > 40:
@@ -2351,11 +2410,16 @@ class HiveMindMultiProducerInferencePool:
             "producer_pool": self.get_pool_status(),
             "recent_traffic_stream": self.recent_traffic[:20],
         }
-        try:
-            self.monitor_path.parent.mkdir(parents=True, exist_ok=True)
-            self.monitor_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        except Exception:
-            pass
+        now_mono = time.monotonic()
+        if not self.monitor_path.exists() or (now_mono - self._last_monitor_write_mono) >= self.MONITOR_WRITE_MIN_INTERVAL_S:
+            try:
+                self.monitor_path.parent.mkdir(parents=True, exist_ok=True)
+                tmp_path = self.monitor_path.with_suffix(".json.tmp")
+                tmp_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+                os.replace(tmp_path, self.monitor_path)
+                self._last_monitor_write_mono = now_mono
+            except OSError:
+                self._last_monitor_write_mono = now_mono
         return report
 
 

@@ -277,6 +277,8 @@ def test_hm_s6_04_live_strategy_optimizer_engine() -> None:
     assert frontier[-1]["pareto_optimal"] is True
     assert all(p["coordinates_modeled"] is True for p in frontier)
     assert snapshot["honesty"]["modeled"]
+    assert all("closed-form" not in item for item in snapshot["honesty"]["measured"])
+    assert any("SI-03" in item and "closed-form" in item for item in snapshot["honesty"]["modeled"])
 
     # Live link/curriculum updates recompute SI-02/SI-03 and advance the sequence.
     updated = engine.update(

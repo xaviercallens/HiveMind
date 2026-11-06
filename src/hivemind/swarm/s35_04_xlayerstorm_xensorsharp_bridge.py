@@ -49,6 +49,7 @@ class NativeCrossPlatformWorkerSpec:
     active_vram_cap_mib: float
     steam_preemption_ms: float
     openai_compatible_endpoint: str
+    basis: str = "planning_targets"
 
 
 def compute_xlayerstorm_turboquant_schedule(

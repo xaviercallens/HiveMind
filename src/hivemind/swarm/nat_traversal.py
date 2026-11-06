@@ -22,6 +22,7 @@ Only IPv4 transport is used for sockets; IPv6 addresses are still encoded and de
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import heapq
 import hmac
@@ -919,7 +920,8 @@ class StunServer:
                 encode_xor_address(self.mapped_address_for(addr), message.transaction_id),
             )
             response.add(SOFTWARE, SOFTWARE_NAME.encode("utf-8"))
-            self.sock.sendto(response.encode(fingerprint=True), addr)
+            with contextlib.suppress(OSError):
+                self.sock.sendto(response.encode(fingerprint=True), addr)
 
 
 @dataclass
@@ -947,6 +949,14 @@ class _Channel:
     expires: float
 
 
+_RFC1918_AND_CGNAT_NETS = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("100.64.0.0/10"),
+)
+
+
 class TurnRelayServer(StunServer):
     """Minimal RFC 5766 TURN relay (UDP allocations, permissions, Send/Data indications).
 
@@ -967,6 +977,10 @@ class TurnRelayServer(StunServer):
         max_lifetime: int = 3600,
         advertised_ip: Optional[str] = None,
         channel_lifetime: int = 600,
+        max_allocations_per_user: int = 4,
+        max_allocations: int = 64,
+        allow_private_peers: bool = False,
+        allow_loopback_peers: Optional[bool] = None,
     ) -> None:
         if advertised_ip is not None:
             advertised_ip = self._validate_relay_ip(advertised_ip)
@@ -975,6 +989,14 @@ class TurnRelayServer(StunServer):
         self.realm = realm
         self.max_lifetime = max_lifetime
         self.channel_lifetime = int(channel_lifetime)
+        self.max_allocations_per_user = int(max_allocations_per_user)
+        self.max_allocations = int(max_allocations)
+        self.allow_private_peers = bool(allow_private_peers)
+        self.allow_loopback_peers = (
+            (self.address[0] in ("127.0.0.1", "0.0.0.0") and advertised_ip is None)
+            if allow_loopback_peers is None
+            else bool(allow_loopback_peers)
+        )
         self.nonce = secrets.token_hex(16).encode("ascii")
         self.allocations: Dict[Address, _Allocation] = {}
         self._by_relay: Dict[socket.socket, _Allocation] = {}
@@ -989,6 +1011,16 @@ class TurnRelayServer(StunServer):
         self._responses: OrderedDict[
             Tuple[Address, int, bytes], Tuple[float, bytes, bytes]
         ] = OrderedDict()
+
+    def _is_permitted_peer_ip(self, peer_ip: str) -> bool:
+        ip = ipaddress.ip_address(peer_ip)
+        if ip.version != 4 or ip.is_unspecified or ip.is_multicast or ip.is_link_local or str(ip) == "255.255.255.255":
+            return False
+        if ip.is_loopback:
+            return bool(self.allow_loopback_peers and str(ip) == "127.0.0.1")
+        if any(ip in net for net in _RFC1918_AND_CGNAT_NETS):
+            return bool(self.allow_private_peers)
+        return True
 
     @staticmethod
     def _validate_relay_ip(value: str) -> str:
@@ -1105,7 +1137,8 @@ class TurnRelayServer(StunServer):
                     # A transaction ID cannot authorize a different request. Replay only
                     # the exact original datagram, including its authentication bytes.
                     if hmac.compare_digest(digest, hashlib.sha256(data).digest()):
-                        self.sock.sendto(response, addr)
+                        with contextlib.suppress(OSError):
+                            self.sock.sendto(response, addr)
                     return
                 del self._responses[cache_key]
             self._on_authenticated_request(message, data, addr)
@@ -1123,7 +1156,8 @@ class TurnRelayServer(StunServer):
         if challenge:
             response.add(REALM, self.realm.encode("utf-8"))
             response.add(NONCE, self.nonce)
-        self.sock.sendto(response.encode(fingerprint=True), addr)
+        with contextlib.suppress(OSError):
+            self.sock.sendto(response.encode(fingerprint=True), addr)
 
     def _on_authenticated_request(self, request: StunMessage, raw: bytes, addr: Address) -> None:
         username = request.get(USERNAME)
@@ -1164,7 +1198,8 @@ class TurnRelayServer(StunServer):
             )
             while len(self._responses) > TRANSACTION_CACHE_LIMIT:
                 self._responses.popitem(last=False)
-            self.sock.sendto(encoded, addr)
+            with contextlib.suppress(OSError):
+                self.sock.sendto(encoded, addr)
 
     def _requested_lifetime(self, request: StunMessage) -> int:
         value = request.get(LIFETIME)
@@ -1174,6 +1209,9 @@ class TurnRelayServer(StunServer):
     def _allocate(self, request: StunMessage, addr: Address, user: str) -> Optional[StunMessage]:
         if addr in self.allocations:
             return self._error_response(request, 437, "Allocation Mismatch")
+        user_allocs = sum(1 for a in self.allocations.values() if a.username == user)
+        if len(self.allocations) >= self.max_allocations or user_allocs >= self.max_allocations_per_user:
+            return self._error_response(request, 486, "Allocation Quota Reached")
         transport = request.get(REQUESTED_TRANSPORT)
         if transport is None or transport[0] != UDP_PROTOCOL_NUMBER:
             return self._error_response(request, 442, "Unsupported Transport Protocol")
@@ -1227,6 +1265,8 @@ class TurnRelayServer(StunServer):
         peer_ip = decode_xor_address(peer, request.transaction_id)[0]
         if ipaddress.ip_address(peer_ip).version != 4:
             return self._error_response(request, 443, "Peer Address Family Mismatch")
+        if not self._is_permitted_peer_ip(peer_ip):
+            return self._error_response(request, 403, "Forbidden")
         allocation.permit(peer_ip)
         return StunMessage(CREATE_PERMISSION, SUCCESS, request.transaction_id)
 
@@ -1255,6 +1295,8 @@ class TurnRelayServer(StunServer):
         peer_addr = decode_xor_address(peer, request.transaction_id)
         if ipaddress.ip_address(peer_addr[0]).version != 4:
             return self._error_response(request, 443, "Peer Address Family Mismatch")
+        if not self._is_permitted_peer_ip(peer_addr[0]):
+            return self._error_response(request, 403, "Forbidden")
         by_number = self._live_channel(addr, number)
         if by_number is not None and by_number.peer != peer_addr:
             return self._error_response(request, 400, "Bad Request")

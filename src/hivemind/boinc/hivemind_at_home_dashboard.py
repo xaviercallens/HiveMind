@@ -11138,6 +11138,26 @@ def create_hivemind_at_home_app(
             raise HTTPException(status_code=422, detail="mean_tokens_per_req must be finite and between 1 and 100000")
         return v
 
+    def _planet_forecast_bounded_int(
+        name: str,
+        value: Any,
+        *,
+        lower: int,
+        upper: int,
+    ) -> int:
+        if isinstance(value, bool):
+            raise HTTPException(status_code=422, detail=f"{name} must be an integer")
+        try:
+            iv = int(value)
+        except (TypeError, ValueError, OverflowError):
+            raise HTTPException(status_code=422, detail=f"{name} must be an integer")
+        if not (lower <= iv <= upper):
+            raise HTTPException(
+                status_code=422,
+                detail=f"{name} must be between {lower} and {upper} (got {iv})",
+            )
+        return iv
+
     @app.get("/api/v1/launch/planet-forecast", response_class=JSONResponse)
     @app.get("/.well-known/hivemind-planet-forecast.json", response_class=JSONResponse)
     def api_international_launch_planet_forecast(
@@ -11150,18 +11170,49 @@ def create_hivemind_at_home_app(
         utc_hour: int = 14,
     ) -> JSONResponse:
         from hivemind.economy.international_launch_model import (
+            MAX_FORECAST_NODES,
+            MAX_FORECAST_VISITORS,
             forecast_200plus_node_international_launch,
         )
 
+        valid_total_nodes = _planet_forecast_bounded_int(
+            "target_total_nodes", target_total_nodes, lower=1, upper=MAX_FORECAST_NODES
+        )
+        valid_visitors = _planet_forecast_bounded_int(
+            "visitor_count", visitor_count, lower=1, upper=MAX_FORECAST_VISITORS
+        )
+        valid_prod = (
+            _planet_forecast_bounded_int(
+                "dedicated_producers", dedicated_producers, lower=0, upper=MAX_FORECAST_NODES
+            )
+            if dedicated_producers is not None
+            else None
+        )
+        valid_pros = (
+            _planet_forecast_bounded_int(
+                "prosumer_nodes", prosumer_nodes, lower=0, upper=MAX_FORECAST_NODES
+            )
+            if prosumer_nodes is not None
+            else None
+        )
+        valid_cons = (
+            _planet_forecast_bounded_int(
+                "consumer_nodes", consumer_nodes, lower=0, upper=MAX_FORECAST_NODES
+            )
+            if consumer_nodes is not None
+            else None
+        )
+        valid_utc = _planet_forecast_bounded_int("utc_hour", utc_hour, lower=0, upper=23)
+
         return JSONResponse(
             content=forecast_200plus_node_international_launch(
-                target_total_nodes=target_total_nodes,
-                visitor_count=visitor_count,
-                dedicated_producers=dedicated_producers,
-                prosumer_nodes=prosumer_nodes,
-                consumer_nodes=consumer_nodes,
+                target_total_nodes=valid_total_nodes,
+                visitor_count=valid_visitors,
+                dedicated_producers=valid_prod,
+                prosumer_nodes=valid_pros,
+                consumer_nodes=valid_cons,
                 mean_tokens_per_req=_planet_forecast_mean_tokens(mean_tokens_per_req),
-                utc_hour=utc_hour,
+                utc_hour=valid_utc,
             )
         )
 
@@ -11170,31 +11221,50 @@ def create_hivemind_at_home_app(
         payload: Optional[Dict[str, Any]] = None,
     ) -> JSONResponse:
         from hivemind.economy.international_launch_model import (
+            MAX_FORECAST_NODES,
+            MAX_FORECAST_VISITORS,
             forecast_200plus_node_international_launch,
         )
 
         body = payload or {}
+        valid_total_nodes = _planet_forecast_bounded_int(
+            "target_total_nodes", body.get("target_total_nodes", 265), lower=1, upper=MAX_FORECAST_NODES
+        )
+        valid_visitors = _planet_forecast_bounded_int(
+            "visitor_count", body.get("visitor_count", 2400), lower=1, upper=MAX_FORECAST_VISITORS
+        )
+        valid_prod = (
+            _planet_forecast_bounded_int(
+                "dedicated_producers", body["dedicated_producers"], lower=0, upper=MAX_FORECAST_NODES
+            )
+            if body.get("dedicated_producers") is not None
+            else None
+        )
+        valid_pros = (
+            _planet_forecast_bounded_int(
+                "prosumer_nodes", body["prosumer_nodes"], lower=0, upper=MAX_FORECAST_NODES
+            )
+            if body.get("prosumer_nodes") is not None
+            else None
+        )
+        valid_cons = (
+            _planet_forecast_bounded_int(
+                "consumer_nodes", body["consumer_nodes"], lower=0, upper=MAX_FORECAST_NODES
+            )
+            if body.get("consumer_nodes") is not None
+            else None
+        )
+        valid_utc = _planet_forecast_bounded_int("utc_hour", body.get("utc_hour", 14), lower=0, upper=23)
+
         return JSONResponse(
             content=forecast_200plus_node_international_launch(
-                target_total_nodes=int(body.get("target_total_nodes", 265)),
-                visitor_count=int(body.get("visitor_count", 2400)),
-                dedicated_producers=(
-                    int(body["dedicated_producers"])
-                    if body.get("dedicated_producers") is not None
-                    else None
-                ),
-                prosumer_nodes=(
-                    int(body["prosumer_nodes"])
-                    if body.get("prosumer_nodes") is not None
-                    else None
-                ),
-                consumer_nodes=(
-                    int(body["consumer_nodes"])
-                    if body.get("consumer_nodes") is not None
-                    else None
-                ),
+                target_total_nodes=valid_total_nodes,
+                visitor_count=valid_visitors,
+                dedicated_producers=valid_prod,
+                prosumer_nodes=valid_pros,
+                consumer_nodes=valid_cons,
                 mean_tokens_per_req=_planet_forecast_mean_tokens(body.get("mean_tokens_per_req", 168.3)),
-                utc_hour=int(body.get("utc_hour", 14)),
+                utc_hour=valid_utc,
             )
         )
 

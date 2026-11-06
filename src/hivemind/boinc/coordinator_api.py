@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -76,6 +77,9 @@ class BOINCCoordinatorService:
         base_model_sha256: str,
         shards_dir: Path | None = None,
         vocab_size: int = 4096,
+        max_active_workunits_per_node: int = 8,
+        max_total_active_workunits: int = 512,
+        workunit_ttl_s: float = 3600.0,
     ) -> None:
         self.config = config
         self.base_model_sha256 = base_model_sha256
@@ -84,6 +88,9 @@ class BOINCCoordinatorService:
         self.checkpoints_dir = ARTIFACTS_ROOT / "checkpoints"
         self.shards_dir.mkdir(parents=True, exist_ok=True)
         self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
+        self.max_active_workunits_per_node = max(1, int(max_active_workunits_per_node))
+        self.max_total_active_workunits = max(1, int(max_total_active_workunits))
+        self.workunit_ttl_s = max(1.0, float(workunit_ttl_s))
 
         # Phase A: Initialize E=8 independent domain branches from identical W_0
         self.branches: dict[str, ExpertBranchState] = initialize_domain_branches(
@@ -101,11 +108,34 @@ class BOINCCoordinatorService:
         )
         self.fl_security_guard = FederatedLearningSecurityGuard()
         self.active_workunits: dict[str, BOINCWorkunit] = {}
+        self._workunit_meta: dict[str, tuple[str, float]] = {}
+        self._shard_cache: dict[tuple[str, int, int, int, int], tuple[Path, str, str]] = {}
         self.pending_branch_deltas: dict[str, dict[str, dict[str, torch.Tensor]]] = {
             dom: {} for dom in self.branches
         }
         self.reputation_ledger: dict[str, NodeReputationRecord] = {}
         self._rr_branch_idx = 0
+
+    def prune_active_workunits(self, now_s: float | None = None) -> int:
+        """Evict consumed, stale-outer-step, or TTL-expired entries from ``active_workunits`` (IP-249)."""
+        now = time.monotonic() if now_s is None else float(now_s)
+        consumed = self.fl_security_guard.consumed_workunit_ids
+        to_remove: list[str] = []
+        for wu_id, wu in list(self.active_workunits.items()):
+            branch_state = self.branches.get(wu.branch_name)
+            expected_step = (branch_state.outer_step + 1) if branch_state is not None else wu.outer_step
+            meta = self._workunit_meta.get(wu_id)
+            assigned_at = meta[1] if meta is not None else now
+            if (
+                wu_id in consumed
+                or wu.outer_step != expected_step
+                or (now - assigned_at) > self.workunit_ttl_s
+            ):
+                to_remove.append(wu_id)
+        for wu_id in to_remove:
+            self.active_workunits.pop(wu_id, None)
+            self._workunit_meta.pop(wu_id, None)
+        return len(to_remove)
 
     def register_or_get_node(
         self,
@@ -166,15 +196,46 @@ class BOINCCoordinatorService:
         wu_id = f"wu-{branch_name.lower()}-t{outer_step}-{uuid.uuid4().hex[:6]}"
         seed = rng_seed if rng_seed is not None else (1000 + outer_step * 137 + branch_state.branch_id * 17)
 
-        shard_file = self.shards_dir / f"{wu_id}.parquet"
-        shard_path, shard_sha256, shard_sig = create_signed_parquet_shard(
-            shard_path=shard_file,
-            branch_name=branch_name,
-            rng_seed=seed,
-            num_sequences=num_sequences,
-            seq_len=seq_len,
-            vocab_size=self.vocab_size,
-        )
+        now = time.monotonic()
+        self.prune_active_workunits(now_s=now)
+
+        node_wus = [
+            (wid, meta[1])
+            for wid, meta in self._workunit_meta.items()
+            if meta[0] == steam_id64 and wid in self.active_workunits
+        ]
+        if len(node_wus) >= self.max_active_workunits_per_node:
+            node_wus.sort(key=lambda item: item[1])
+            for stale_wid, _ in node_wus[: len(node_wus) - self.max_active_workunits_per_node + 1]:
+                self.active_workunits.pop(stale_wid, None)
+                self._workunit_meta.pop(stale_wid, None)
+
+        if len(self.active_workunits) >= self.max_total_active_workunits:
+            all_wus = sorted(
+                ((wid, self._workunit_meta.get(wid, ("", 0.0))[1]) for wid in self.active_workunits),
+                key=lambda item: item[1],
+            )
+            for stale_wid, _ in all_wus[: len(all_wus) - self.max_total_active_workunits + 1]:
+                self.active_workunits.pop(stale_wid, None)
+                self._workunit_meta.pop(stale_wid, None)
+
+        shard_key = (branch_name, outer_step, int(seed), int(num_sequences), int(seq_len))
+        cached_shard = self._shard_cache.get(shard_key)
+        if cached_shard is not None and cached_shard[0].exists():
+            shard_path, shard_sha256, shard_sig = cached_shard
+        else:
+            shard_file = self.shards_dir / (
+                f"shard-{branch_name.lower()}-t{outer_step}-s{seed}-n{num_sequences}-l{seq_len}.parquet"
+            )
+            shard_path, shard_sha256, shard_sig = create_signed_parquet_shard(
+                shard_path=shard_file,
+                branch_name=branch_name,
+                rng_seed=seed,
+                num_sequences=num_sequences,
+                seq_len=seq_len,
+                vocab_size=self.vocab_size,
+            )
+            self._shard_cache[shard_key] = (shard_path, shard_sha256, shard_sig)
 
         ckpt_path = self.checkpoints_dir / f"lora_{branch_name}_t{branch_state.outer_step}.pt"
         wu = BOINCWorkunit(
@@ -193,6 +254,7 @@ class BOINCCoordinatorService:
             num_sequences=num_sequences,
         )
         self.active_workunits[wu_id] = wu
+        self._workunit_meta[wu_id] = (steam_id64, now)
         self.fl_security_guard.register_workunit_assignment(wu_id, worker_id=worker_id, steam_id64=steam_id64)
         return wu, {k: v.clone() for k, v in branch_state.lora_state.items()}
 
@@ -262,6 +324,7 @@ class BOINCCoordinatorService:
             rec.reputation_score = 0.0
             rec.flagged_byzantine = True
 
+        self.prune_active_workunits()
         return verdict
 
     def inject_raw_delta_for_aggregation(
@@ -290,6 +353,7 @@ class BOINCCoordinatorService:
         branch.lora_state = res.theta_updated
         branch.outer_step = next_step
         self.pending_branch_deltas[branch_name] = {}
+        self.prune_active_workunits()
         return res
 
 

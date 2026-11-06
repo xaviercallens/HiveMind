@@ -241,25 +241,71 @@ def build_xdev_portfolio_catalog(xdev_root: Path | None = None) -> tuple[Portfol
     return tuple(nodes)
 
 
+def _eval_safe_arith_expr(node: object, env: dict[str, float]) -> float:
+    import ast as _ast
+
+    if isinstance(node, _ast.Constant) and isinstance(node.value, (int, float)):
+        return float(node.value)
+    if isinstance(node, _ast.Name) and node.id in env:
+        return float(env[node.id])
+    if isinstance(node, _ast.UnaryOp) and isinstance(node.op, _ast.USub):
+        return -_eval_safe_arith_expr(node.operand, env)
+    if isinstance(node, _ast.BinOp):
+        left = _eval_safe_arith_expr(node.left, env)
+        right = _eval_safe_arith_expr(node.right, env)
+        if isinstance(node.op, _ast.Sub):
+            return left - right
+        if isinstance(node.op, _ast.Add):
+            return left + right
+        if isinstance(node.op, _ast.Mult):
+            return left * right
+        if isinstance(node.op, _ast.Div):
+            return left / right
+    if (
+        isinstance(node, _ast.Call)
+        and isinstance(node.func, _ast.Name)
+        and node.func.id == "abs"
+        and len(node.args) == 1
+    ):
+        return abs(_eval_safe_arith_expr(node.args[0], env))
+    raise ValueError(f"Unsupported AST expression in candidate: {type(node).__name__}")
+
+
+def _eval_ast_conservation_fn(source_code: str, m0: float, m1: float) -> float:
+    import ast as _ast
+
+    tree = _ast.parse(source_code)
+    for node in tree.body:
+        if isinstance(node, _ast.FunctionDef) and node.name == "compute_conservation_residual":
+            if len(node.args.args) != 2:
+                raise ValueError("Expected 2 arguments")
+            arg0 = node.args.args[0].arg
+            arg1 = node.args.args[1].arg
+            env = {arg0: float(m0), arg1: float(m1)}
+            for stmt in node.body:
+                if isinstance(stmt, _ast.Expr) and isinstance(stmt.value, _ast.Constant) and isinstance(stmt.value.value, str):
+                    continue
+                if isinstance(stmt, _ast.Return) and stmt.value is not None:
+                    return _eval_safe_arith_expr(stmt.value, env)
+    raise ValueError("No valid return statement found in compute_conservation_residual")
+
+
 def _eval_conservation_candidate_public(source_code: str) -> bool:
-    ns: dict[str, object] = {}
-    exec(compile(source_code, "<gwaya_candidate>", "exec"), ns)
-    fn = ns.get("compute_conservation_residual")
-    if not callable(fn):
+    try:
+        v1 = _eval_ast_conservation_fn(source_code, 10.0, 10.25)
+        v2 = _eval_ast_conservation_fn(source_code, 5.0, 5.0)
+        return abs(v1 - 0.25) < 1e-9 and abs(v2) < 1e-9
+    except Exception:
         return False
-    return abs(float(fn(10.0, 10.25)) - 0.25) < 1e-9 and abs(float(fn(5.0, 5.0))) < 1e-9
 
 
 def _eval_conservation_candidate_hidden(source_code: str) -> bool:
-    ns: dict[str, object] = {}
-    exec(compile(source_code, "<gwaya_candidate>", "exec"), ns)
-    fn = ns.get("compute_conservation_residual")
-    if not callable(fn):
+    try:
+        v1 = _eval_ast_conservation_fn(source_code, -3.5, 1.5)
+        v2 = _eval_ast_conservation_fn(source_code, 100.0, 99.125)
+        return abs(v1 - 5.0) < 1e-9 and abs(v2 - 0.875) < 1e-9
+    except Exception:
         return False
-    return (
-        abs(float(fn(-3.5, 1.5)) - 5.0) < 1e-9
-        and abs(float(fn(100.0, 99.125)) - 0.875) < 1e-9
-    )
 
 
 def run_unified_4layer_ecosystem_pipeline(

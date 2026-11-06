@@ -37,6 +37,7 @@ from hivemind.swarm.opentrainer_orchestrator import (  # noqa: E402
     OpenTrainerConfig,
     PermanentOpenTrainerOrchestrator,
     create_opentrainer_app,
+    execute_http_learner_round,
     resolve_opentrainer_keyring,
 )
 
@@ -328,3 +329,112 @@ def test_opentrainer_fastapi_http_endpoints_end_to_end(tmp_path: Path) -> None:
     assert status_resp.status_code == 200
     assert status_resp.json()["current_round"] == 1
     assert status_resp.json()["t4_independent_rounds_completed"] == 1
+
+    # Also test /tick with empty non-JSON body and error handling on /claim and /result
+    empty_tick = client.post("/v1/opentrainer/tick", content=b"")
+    assert empty_tick.status_code == 200
+
+    bad_claim = client.post("/v1/opentrainer/claim", json={"bad": "envelope"})
+    assert bad_claim.status_code == 400
+    bad_result = client.post("/v1/opentrainer/result", json={"bad": "envelope"})
+    assert bad_result.status_code == 400
+
+
+def test_execute_http_learner_round_and_edge_cases(tmp_path: Path, monkeypatch: Any) -> None:
+    import io
+    import json
+    import urllib.request
+
+    import pytest
+
+    monkeypatch.setenv("HIVEMIND_AMCP_HMAC_KEYS", "k1:" + "ab" * 32)
+    keyring = resolve_opentrainer_keyring()
+    assert keyring.active_kid == "k1"
+
+    bus_events: list[Any] = []
+
+    class _DummyBus:
+        def publish(self, ev: Any) -> None:
+            bus_events.append(ev)
+
+    cfg = OpenTrainerConfig(
+        run_id="test-http-learner-fn",
+        learners=("l0", "l1"),
+        quorum=1,
+        rounds=1,
+        inner_steps=4,
+        round_deadline_s=10.0,
+        cpu_sentinel_when_t4_offline=True,
+        checkpoint_path=tmp_path / "learner_fn_state.pt",
+        report_path=tmp_path / "learner_fn_report.json",
+    )
+    orch = PermanentOpenTrainerOrchestrator(cfg, keyring=keyring, bus=_DummyBus())  # type: ignore[arg-type]
+    app = create_opentrainer_app(orch)
+    client = TestClient(app)
+
+    # Test wrong event type rejections on submit_claim_envelope and submit_result_envelope
+    offer_env = orch.get_signed_offer_envelope()
+    with pytest.raises(ValueError, match="Expected"):
+        orch.submit_claim_envelope(offer_env)
+    with pytest.raises(ValueError, match="Expected"):
+        orch.submit_result_envelope(offer_env)
+
+    # Test timeout re-offer when deadline expires with 0 results
+    timeout_tick = orch.tick(now=time.time() + 100.0, run_sentinel_if_t4_absent=False)
+    assert timeout_tick["round_status"] == "reoffered_after_timeout"
+    assert orch.retries_in_round == 1
+
+    # Route urllib.request.urlopen to FastAPI TestClient
+    class _FakeHTTPResp:
+        def __init__(self, body: bytes) -> None:
+            self._buf = io.BytesIO(body)
+
+        def read(self) -> bytes:
+            return self._buf.read()
+
+        def __enter__(self) -> _FakeHTTPResp:
+            return self
+
+        def __exit__(self, *args: Any) -> None:
+            pass
+
+    def _fake_urlopen(req_or_url: Any, timeout: float = 10.0) -> _FakeHTTPResp:
+        if isinstance(req_or_url, str):
+            path = "/" + req_or_url.split("/", 3)[-1]
+            r = client.get(path)
+            return _FakeHTTPResp(r.content)
+        path = "/" + req_or_url.full_url.split("/", 3)[-1]
+        r = client.post(path, content=req_or_url.data, headers=dict(req_or_url.headers))
+        return _FakeHTTPResp(r.content)
+
+    monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
+
+    # Run l0 via CPU sentinel, then l1 via execute_http_learner_round so round 0 completes
+    s_res = orch.run_cpu_sentinel_step_if_needed()
+    assert s_res["ran_sentinel"] is True
+    # Calling sentinel again in the same round returns learner_already_active_in_round
+    s_dup = orch.run_cpu_sentinel_step_if_needed()
+    assert s_dup["ran_sentinel"] is False
+    assert s_dup["reason"] == "learner_already_active_in_round"
+
+    l1_out = execute_http_learner_round(
+        "http://opentrainer.local",
+        learner_id="l1",
+        learner_index=1,
+        keyring=keyring,
+        device="cpu",
+    )
+    assert l1_out["status"] == "submitted"
+    assert orch.is_completed is True
+
+    # Calling execute_http_learner_round after completion receives ABORT
+    abort_out = execute_http_learner_round(
+        "http://opentrainer.local",
+        learner_id="l1",
+        learner_index=1,
+        keyring=keyring,
+        device="cpu",
+    )
+    assert abort_out["status"] == "aborted"
+    assert orch.run_cpu_sentinel_step_if_needed()["reason"] == "no_open_round"
+    assert len(bus_events) >= 2

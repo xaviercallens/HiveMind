@@ -319,5 +319,80 @@ def test_cockpit_s34_swat_telepathy_endpoints() -> None:
     assert p_body["fits_rtx2070_wddm_ceiling"] is True
 
 
+def test_swat_telepathy_validation_and_edge_branches() -> None:
+    import pytest
+
+    from hivemind.swarm.swat_telepathy_bridge import ModelKVSpec
+
+    with pytest.raises(ValueError, match="n_blocks must be positive"):
+        compute_layer_group_slices(16, 0)
+    with pytest.raises(ValueError, match="must be at least n_blocks"):
+        compute_layer_group_slices(4, 8)
+
+    assert compute_virtual_positions([], [(0, 4)]).size == 0
+    with pytest.raises(ValueError, match="receiver_offsets must be non-empty"):
+        compute_virtual_positions([(0, 4)], [])
+    np.testing.assert_allclose(compute_virtual_positions([(0, 4), (4, 8)], [(0, 8)], mode="naive"), [0.0, 1.0])
+    np.testing.assert_allclose(compute_virtual_positions([(0, 4), (4, 8)], [(0, 8)], mode="scaled"), [0.0, 0.5])
+    with pytest.raises(ValueError, match="unknown position mode"):
+        compute_virtual_positions([(0, 4)], [(0, 4)], mode="invalid")
+
+    assert compute_cross_causal_limits([(0, 4)], []).size == 0
+    np.testing.assert_array_equal(compute_cross_causal_limits([], [(0, 4), (4, 8)]), [0, 0])
+    zero_attn = cross_attention_with_causal_limits(
+        np.ones((2, 4)), np.ones((2, 4)), np.ones((2, 4)), np.array([0, 1])
+    )
+    np.testing.assert_array_equal(zero_attn[0], np.zeros(4))
+
+    with pytest.raises(ValueError, match="pred_kv must have shape"):
+        bound_kv_to_rms_stats(np.zeros((2, 2)), np.ones((2, 2)), np.ones((2, 2)))
+
+    nan_kv = np.full((1, 4, 2, 2, 2, 4), np.nan)
+    nan_audit = audit_latent_kv_safety(nan_kv, np.ones((2, 2)), np.ones((2, 2)))
+    assert nan_audit["accepted"] is False
+    assert "non_finite_kv_entries" in nan_audit["reasons"]
+
+    tiny_kv = np.full((1, 4, 2, 2, 2, 4), 1e-4)
+    col_audit = audit_latent_kv_safety(tiny_kv, np.ones((2, 2)), np.ones((2, 2)))
+    assert col_audit["accepted"] is False
+    assert any("rms_scale_collapse" in r for r in col_audit["reasons"])
+
+    hub = UniversalHiveLatentHub()
+    hub.register_model(ModelKVSpec("custom/tiny", "tiny", 16, 2, 64, 512))
+    assert "custom/tiny" in hub.registered_models
+    bridge = SwaTTelepathyBridge(hub=hub)
+    with pytest.raises(KeyError, match="sender_model_id"):
+        bridge.plan_transfer("unknown", "custom/tiny", [(0, 4)], [(0, 4)])
+    with pytest.raises(KeyError, match="receiver_model_id"):
+        bridge.plan_transfer("custom/tiny", "unknown", [(0, 4)], [(0, 4)])
+    with pytest.raises(ValueError, match="am_compaction_ratio"):
+        bridge.plan_transfer("custom/tiny", "custom/tiny", [(0, 4)], [(0, 4)], am_compaction_ratio=0.5)
+
+    with pytest.raises(ValueError, match="frequencies must be non-empty"):
+        compute_cms_chunk_periods([])
+    with pytest.raises(ValueError, match="max_chunk_tokens must be positive"):
+        compute_cms_chunk_periods([1.0], max_chunk_tokens=0)
+    with pytest.raises(ValueError, match="must be positive"):
+        compute_cms_chunk_periods([0.0])
+    with pytest.raises(ValueError, match="must be ordered"):
+        compute_cms_chunk_periods([1.0, 5.0])
+
+    assert normalized_levenshtein_similarity("", "") == 1.0
+    with pytest.raises(ValueError, match="identical non-empty shape"):
+        compute_knowledge_seeding_loss(np.zeros((2, 3)), np.zeros((2, 4)), [1], [1], semantic_equivalence=1.0)
+
+    with pytest.raises(ValueError, match="equal non-empty length"):
+        select_rem_dreams_by_gradient_norm([], [], [])
+    with pytest.raises(ValueError, match="must be positive"):
+        select_rem_dreams_by_gradient_norm(["d0"], [1.0], [0], top_k=0, random_b=0)
+    rem_no_rand = select_rem_dreams_by_gradient_norm(["d0", "d1"], [1.0, 2.0], [0, 1], top_k=2, random_b=0)
+    assert rem_no_rand["random_b_indices"] == []
+
+    with pytest.raises(ValueError, match="pred_kv must have shape"):
+        compact_kv_with_attention_matching(np.zeros((2, 2)))
+    with pytest.raises(ValueError, match="target_ratio must be >= 1.0"):
+        compact_kv_with_attention_matching(np.ones((1, 4, 2, 2, 2, 4)), target_ratio=0.5)
+
+
 
 

@@ -236,3 +236,88 @@ def test_bee_lora_router_contract_and_collab_summary() -> None:
     assert summary["interpolated_hardware_estimates"]["is_interpolated_estimate"] is True
     assert summary["tesla_t4_measured_single_model_validation"]["commit"] == TENSORSHARP_VALIDATED_COMMIT
     assert len(summary["collab_pillars"]) == 5
+
+
+def test_tensorsharp_offload_and_spec_edge_branches() -> None:
+    with pytest.raises(KeyError, match="Unknown TensorSharp model_id"):
+        plan_tensorsharp_moe_offload("unknown-model")
+
+    # High VRAM branch (usable_vram_mib >= prof.resident_vram_mib)
+    high_plan = plan_tensorsharp_moe_offload("qwen3.5-35b-a3b", total_vram_mib=96_000, reserved_free_vram_mib=4_000)
+    assert high_plan.n_cpu_moe_layers == 0
+    assert high_plan.fits_vram_budget is True
+    assert high_plan.expected_pp8192_tok_s == high_plan.estimated_pp8192_tok_s
+    assert high_plan.expected_tg128_tok_s == high_plan.estimated_tg128_tok_s
+
+    # Too-low VRAM branch (usable_vram_mib < prof.min_offload_vram_mib)
+    low_plan = plan_tensorsharp_moe_offload("qwen3.5-35b-a3b", total_vram_mib=2_000, reserved_free_vram_mib=1_500)
+    assert low_plan.fits_vram_budget is False
+    assert low_plan.n_cpu_moe_layers == low_plan.total_moe_layers
+
+    # SingleModelProducerSpec with n_cpu_moe and validation failures
+    spec_moe = TensorSharpSingleModelProducerSpec(
+        model_path="/models/gpt-oss-20b-MXFP4.gguf",
+        v1_models_id="gpt-oss-20b-MXFP4",
+        public_tier_id="hivemind/gpt-oss-20b",
+        public_https_shield_url="https://t4-shield.example.com",
+        endpoint_token="hm_shield_secret_token_1234567890",
+        hivemind_api_key="hm_live_producer_key_abcdef",
+        n_cpu_moe=18,
+    )
+    assert "--n-cpu-moe" in spec_moe.build_server_command()
+
+    with pytest.raises(ValueError, match="at least 16"):
+        TensorSharpSingleModelProducerSpec(
+            model_path="/models/m.gguf",
+            v1_models_id="m",
+            public_tier_id="hivemind/m",
+            public_https_shield_url="https://t4.example.com",
+            endpoint_token="short",
+            hivemind_api_key="hm_key",
+        ).validate()
+
+    with pytest.raises(ValueError, match="HIVEMIND_API_KEY is required"):
+        TensorSharpSingleModelProducerSpec(
+            model_path="/models/m.gguf",
+            v1_models_id="m",
+            public_tier_id="hivemind/m",
+            public_https_shield_url="https://t4.example.com",
+            endpoint_token="hm_shield_secret_token_1234567890",
+            hivemind_api_key="   ",
+        ).validate()
+
+    # DistributedClusterSpec validation & worker command
+    worker = TensorSharpDistributedClusterSpec(
+        model_path="/models/m.gguf",
+        mode="layer-split",
+        local_degree=2,
+        node_id=1,
+        peer_endpoints=["10.0.0.1:9500", "10.0.0.2:9500"],
+        n_cpu_moe=12,
+        server_host_mode=False,
+    )
+    w_cmd = worker.build_command()
+    w_env = worker.build_env()
+    assert "TensorSharp.Cli/bin/TensorSharp.Cli.dll" in w_cmd
+    assert "--n-cpu-moe" in w_cmd
+    assert w_env["TENSORSHARP_LAYER_SPLIT_DEGREE"] == "2"
+
+    with pytest.raises(ValueError, match="local_degree"):
+        TensorSharpDistributedClusterSpec("/m.gguf", "tp", 0, 0, ["10.0.0.1:9500"]).validate()
+    with pytest.raises(ValueError, match="peer_endpoints"):
+        TensorSharpDistributedClusterSpec("/m.gguf", "tp", 1, 0, []).validate()
+    with pytest.raises(ValueError, match="out of range"):
+        TensorSharpDistributedClusterSpec("/m.gguf", "tp", 1, 5, ["10.0.0.1:9500"]).validate()
+    with pytest.raises(ValueError, match="loopback"):
+        TensorSharpDistributedClusterSpec(
+            "/m.gguf", "tp", 1, 0, ["10.0.0.1:9500"], server_host_mode=True, http_host="0.0.0.0"
+        ).validate()
+
+    # BeeLoRARouter validation branches
+    with pytest.raises(ValueError, match="Backend"):
+        TensorSharpBeeLoRARouter(backend="vulkan")
+    with pytest.raises(ValueError, match="at most 32"):
+        TensorSharpBeeLoRARouter(registered_bee_adapters={f"bee-{i}": f"a-{i}" for i in range(35)})
+    router = TensorSharpBeeLoRARouter()
+    with pytest.raises(ValueError, match="https://"):
+        router.build_openrouter_heartbeat(public_endpoint_url="http://insecure.example.com")

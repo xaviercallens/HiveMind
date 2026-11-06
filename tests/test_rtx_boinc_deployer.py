@@ -220,3 +220,147 @@ def test_gateway_exposes_rtx_boinc_server_endpoints(tmp_path: Path) -> None:
     acct = client.get("/create_account.php?email_addr=gw@hivemind.local")
     assert acct.status_code == 200
     assert "<authenticator>" in acct.text
+
+
+def test_rtx_boinc_client_cycle_and_edge_cases(tmp_path: Path, monkeypatch: object) -> None:
+    import io
+    import urllib.request
+
+    from hivemind.boinc.rtx_boinc_deployer import (
+        PLATFORM_MACOS,
+        current_boinc_platform,
+        run_rtx_boinc_client_cycle,
+    )
+
+    assert current_boinc_platform("darwin") == PLATFORM_MACOS
+
+    # Test auto-detection without overrides via probe_nvidia_gpus
+    import scripts.hivemind_boinc_idle_worker as idle_worker
+
+    monkeypatch.setattr(  # type: ignore[attr-defined]
+        idle_worker,
+        "probe_nvidia_gpus",
+        lambda: [
+            {
+                "name": "NVIDIA GeForce RTX 2070",
+                "memory_total_mb": 8192,
+                "memory_free_mb": 6800,
+                "driver_version": "560.94",
+            }
+        ],
+        raising=False,
+    )
+    auto_prof = detect_rtx_boinc_profile(sys_platform="linux")
+    assert auto_prof.gpu_detected is True
+    assert auto_prof.plan_class == PLAN_CLASS_STANDARD
+
+    # Test XML account lookup edge cases & scheduler RPC edge cases
+    srv = RTXBoincServer(
+        db_path=tmp_path / "edge_boinc.db",
+        boinc_ledger_dir=tmp_path / "edge_ledger",
+        require_cuda=True,
+    )
+    assert "Missing email_addr" in srv.create_or_lookup_account_xml({})
+    assert "Account not found" in srv.create_or_lookup_account_xml(
+        {"email_addr": "missing@hivemind.local"}, create_if_missing=False
+    )
+    srv.create_or_lookup_account_xml(
+        {"email_addr": "pw@hivemind.local", "passwd_hash": "correct_hash"}, create_if_missing=True
+    )
+    assert "Bad password" in srv.create_or_lookup_account_xml(
+        {"email_addr": "pw@hivemind.local", "passwd_hash": "wrong_hash"}, create_if_missing=False
+    )
+
+    # Scheduler XML with result ack and malformed XML fallback
+    ack_xml = srv.handle_scheduler_rpc_xml(
+        "<scheduler_request><hostid>9</hostid><result><name>wu_123_0</name></result></scheduler_request>"
+    )
+    assert "<result_ack><name>wu_123_0</name></result_ack>" in ack_xml
+    bad_xml = srv.handle_scheduler_rpc_xml("<scheduler_request><unclosed>")
+    assert "<scheduler_reply>" in bad_xml
+
+    # Submit workunit validation failures (unknown WU, HMAC mismatch, require_cuda, missing digests)
+    app = FastAPI()
+    app.include_router(build_rtx_boinc_fastapi_router(srv))
+    client = TestClient(app)
+
+    not_found = client.post(
+        "/api/v1/boinc/rtx/submit",
+        json={
+            "wu_id": "nonexistent_wu",
+            "handle": "h",
+            "node_id": "n",
+            "gpu_name": "RTX",
+            "plan_class": PLAN_CLASS_STANDARD,
+            "app_name": "hivemind_qlora_moe",
+            "domain": "code",
+            "cuda_verified": True,
+            "eval_loss_before": 2.0,
+            "eval_loss_after": 1.5,
+            "state_sha256": ["abc"],
+        },
+    )
+    assert not_found.status_code == 404
+
+    leased = srv.lease_workunit(
+        RTXWorkunitLeaseRequest(
+            handle="h",
+            node_id="n",
+            gpu_name="NVIDIA GeForce RTX 2070",
+            vram_total_mib=8192,
+            vram_free_mib=6800,
+        )
+    )
+    bad_verdict = srv.submit_workunit(
+        RTXWorkunitSubmitRequest(
+            wu_id=leased["wu_id"],
+            handle="h",
+            node_id="n",
+            gpu_name="CPU-Fallback",
+            plan_class=PLAN_CLASS_STANDARD,
+            app_name="hivemind_qlora_moe",
+            domain=leased["domain"],
+            cuda_verified=False,
+            eval_loss_before=2.0,
+            eval_loss_after=1.5,
+            state_sha256=[],
+            ptx_sha256="",
+            hmac_signature="bad_hmac",
+        )
+    )
+    assert bad_verdict["valid"] is False
+    assert "HMAC signature mismatch" in bad_verdict["reason"]
+    assert "CUDA hardware verification required" in bad_verdict["reason"]
+    assert "Missing cryptographic" in bad_verdict["reason"]
+
+    # Test run_rtx_boinc_client_cycle against srv with require_cuda=False
+    srv.require_cuda = False
+
+    class _FakeResp:
+        def __init__(self, content: bytes) -> None:
+            self._buf = io.BytesIO(content)
+
+        def read(self) -> bytes:
+            return self._buf.read()
+
+        def __enter__(self) -> _FakeResp:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            pass
+
+    def _fake_urlopen(req: urllib.request.Request, timeout: float = 20.0) -> _FakeResp:
+        path = "/" + req.full_url.split("/", 3)[-1]
+        r = client.post(path, content=req.data, headers=dict(req.headers))
+        return _FakeResp(r.content)
+
+    monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)  # type: ignore[attr-defined]
+    cycle = run_rtx_boinc_client_cycle(
+        server_url="http://rtx-boinc.local",
+        handle="volunteer-cycle",
+        node_id="rtx2070-cycle-node",
+        preferred_domain="math",
+        device="cpu",
+    )
+    assert cycle["ok"] is True
+    assert cycle["leased_spec"]["domain"] == "math"

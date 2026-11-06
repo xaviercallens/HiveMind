@@ -875,14 +875,17 @@ def build_rtx_boinc_fastapi_router(server: RTXBoincServer) -> APIRouter:
         return Response(content=server.handle_scheduler_rpc_xml(body), media_type="text/xml")
 
     @router.get("/api/v1/boinc/rtx/status")
+    @router.get("/v1/hivemind/boinc/rtx/status")
     async def rtx_boinc_status() -> dict[str, Any]:
         return server.status_summary()
 
     @router.post("/api/v1/boinc/rtx/lease")
+    @router.post("/v1/hivemind/boinc/rtx/lease")
     async def rtx_boinc_lease(payload: RTXWorkunitLeaseRequest) -> dict[str, Any]:
         return server.lease_workunit(payload)
 
     @router.post("/api/v1/boinc/rtx/submit")
+    @router.post("/v1/hivemind/boinc/rtx/submit")
     async def rtx_boinc_submit(payload: RTXWorkunitSubmitRequest) -> dict[str, Any]:
         try:
             return server.submit_workunit(payload)

@@ -23,6 +23,7 @@ import cmath
 import hashlib
 import json
 import math
+import re
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -285,11 +286,31 @@ def analyze_physical_mathematical_problem(
 # 2. Four-Domain Numeric Calculation Rescue Solvers
 # ---------------------------------------------------------------------------
 
-def _rescue_astronomy_kepler(steps: int = 200, dt: float = 0.025) -> NumericRescueResult:
+def _extract_prompt_param(
+    prompt: str,
+    names: Sequence[str],
+    default: float,
+    low: float,
+    high: float,
+) -> float:
+    """Parse an optional numeric initial-condition override (`name=val` or `name: val`) from `prompt`."""
+    for name in names:
+        m = re.search(rf"\b{re.escape(name)}\s*[:=]\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)", prompt, re.IGNORECASE)
+        if m:
+            try:
+                val = float(m.group(1))
+                if math.isfinite(val):
+                    return max(low, min(high, val))
+            except ValueError:
+                pass
+    return default
+
+
+def _rescue_astronomy_kepler(steps: int = 200, dt: float = 0.025, ecc: float = 0.6) -> NumericRescueResult:
     """Rescue an eccentric Kepler / Post-Newtonian orbit from explicit Euler energy blowup using RK4 + Dual-RRK."""
     diag = analyze_physical_mathematical_problem("kepler post-newtonian hamiltonian orbit", domain_hint="astronomy")
     mu = 1.0
-    ecc = 0.6
+    ecc = max(0.01, min(0.95, float(ecc)))
     # Periastron initial state: r0 = 1 - e, v0 = sqrt((1 + e)/(1 - e))
     x0, y0 = 1.0 - ecc, 0.0
     vx0, vy0 = 0.0, math.sqrt((1.0 + ecc) / (1.0 - ecc))
@@ -389,11 +410,11 @@ def _rescue_astronomy_kepler(steps: int = 200, dt: float = 0.025) -> NumericResc
     )
 
 
-def _rescue_fluid_mechanics_dyadic_ns(steps: int = 80, dt: float = 0.01) -> NumericRescueResult:
+def _rescue_fluid_mechanics_dyadic_ns(steps: int = 80, dt: float = 0.01, nu: float = 0.05) -> NumericRescueResult:
     """Rescue the stiff dyadic Navier-Stokes shell model from explicit float blowup using IMEX ARS(2,2,2)."""
     diag = analyze_physical_mathematical_problem("stiff dyadic navier-stokes enstrophy hypothesis u", domain_hint="fluid_mechanics")
     num_shells = 8
-    nu = 0.05
+    nu = max(1e-4, min(1.0, float(nu)))
     k = [float(2**n) for n in range(num_shells)]
     u0 = [1.0 / (n + 1.0) for n in range(num_shells)]
 
@@ -511,14 +532,14 @@ def _rescue_fluid_mechanics_dyadic_ns(steps: int = 80, dt: float = 0.01) -> Nume
     )
 
 
-def _rescue_quantum_fluid_pgpe(steps: int = 100, dt: float = 0.02) -> NumericRescueResult:
+def _rescue_quantum_fluid_pgpe(steps: int = 100, dt: float = 0.02, amp: float = 0.8) -> NumericRescueResult:
     """Rescue 1D/2D Projected Gross-Pitaevskii superfluid evolution using Fourier IF-RK4 + k_cut=k_max/2."""
     diag = analyze_physical_mathematical_problem("projected gross-pitaevskii superfluid vortex", domain_hint="quantum_fluid")
     n_grid = 16
     length = 2.0 * math.pi
     dx = length / n_grid
     g_coupling = 1.0
-    amp = 0.8
+    amp = max(0.05, min(5.0, float(amp)))
     k0 = 2.0  # Plane wave wavenumber k0 = 2 (below de-aliasing cutoff k_cut = 4)
     omega_exact = 0.5 * (k0 ** 2) + g_coupling * (amp ** 2)
 
@@ -640,7 +661,7 @@ def _rescue_quantum_fluid_pgpe(steps: int = 100, dt: float = 0.02) -> NumericRes
     )
 
 
-def _rescue_genetics_stiff_hopfield_and_dna_lk(steps: int = 80, dt: float = 0.01) -> NumericRescueResult:
+def _rescue_genetics_stiff_hopfield_and_dna_lk(steps: int = 80, dt: float = 0.01, lk0: float = 104.0) -> NumericRescueResult:
     """Rescue stiff Hopfield-Ninio kinetic proofreading & DNA Lk=Tw+Wr conservation via implicit BDF."""
     diag = analyze_physical_mathematical_problem(
         "hopfield-ninio kinetic proofreading and dna supercoiling linking number",
@@ -656,8 +677,8 @@ def _rescue_genetics_stiff_hopfield_and_dna_lk(steps: int = 80, dt: float = 0.01
     total_mass = sum(y_init)
 
     # DNA topological supercoiling state: Lk = Tw + Wr
-    lk0 = 104.0
-    tw0, wr0 = 100.0, 4.0
+    lk0 = max(10.0, min(1000.0, float(lk0)))
+    tw0, wr0 = lk0 - 4.0, 4.0
 
     # 1. Naive explicit Euler (dt * k_on = 0.01 * 5000 = 50 >> 2 -> negative concentrations and explosion!)
     y_euler = list(y_init)
@@ -779,12 +800,20 @@ def rescue_numeric_calculation(
     """Analyze a physical/mathematical problem and execute the matching rusty-SUNDIALS rescue solver."""
     diag = analyze_physical_mathematical_problem(prompt_or_equation, domain_hint=domain)
     if diag.domain == "astronomy":
-        return _rescue_astronomy_kepler(steps=steps, dt=dt)
+        r0 = _extract_prompt_param(prompt_or_equation, ("r0", "periastron"), -1.0, 0.05, 0.99)
+        if r0 > 0.0:
+            ecc = 1.0 - r0
+        else:
+            ecc = _extract_prompt_param(prompt_or_equation, ("eccentricity", "ecc", "e"), 0.6, 0.01, 0.95)
+        return _rescue_astronomy_kepler(steps=steps, dt=dt, ecc=ecc)
     if diag.domain == "fluid_mechanics":
-        return _rescue_fluid_mechanics_dyadic_ns(steps=min(steps, 100), dt=min(dt, 0.01))
+        nu = _extract_prompt_param(prompt_or_equation, ("viscosity", "nu"), 0.05, 1e-4, 1.0)
+        return _rescue_fluid_mechanics_dyadic_ns(steps=min(steps, 100), dt=min(dt, 0.01), nu=nu)
     if diag.domain == "quantum_fluid":
-        return _rescue_quantum_fluid_pgpe(steps=steps, dt=dt)
-    return _rescue_genetics_stiff_hopfield_and_dna_lk(steps=steps, dt=min(dt, 0.01))
+        amp = _extract_prompt_param(prompt_or_equation, ("amplitude", "amp"), 0.8, 0.05, 5.0)
+        return _rescue_quantum_fluid_pgpe(steps=steps, dt=dt, amp=amp)
+    lk0 = _extract_prompt_param(prompt_or_equation, ("lk0", "lk", "linking_number"), 104.0, 10.0, 1000.0)
+    return _rescue_genetics_stiff_hopfield_and_dna_lk(steps=steps, dt=min(dt, 0.01), lk0=lk0)
 
 
 # ---------------------------------------------------------------------------
@@ -1138,27 +1167,40 @@ class SolverTaughtSurrogateExpert:
         model = self._domain_models[dom]
         self.trials += 1
 
-        # Compute surrogate trajectory and injected/residual drift
+        # Candidate surrogate trajectory (anchors + optional perturbation)
+        cand_trajectory = [
+            {k: (v + float(force_surrogate_perturbation) if isinstance(v, float) and k != "t" else v) for k, v in pt.items()}
+            for pt in model["anchors"]
+        ]
+
+        # Run deterministic rusty-SUNDIALS verifier on the requested problem / initial state / grid
+        exact = rescue_numeric_calculation(prompt_or_equation, domain=dom, steps=steps, dt=dt)
+        ref_trajectory = exact.sample_trajectory
+        if len(cand_trajectory) != len(ref_trajectory):
+            traj_max_err = 1.0
+        else:
+            traj_max_err = 0.0
+            for cand_pt, ref_pt in zip(cand_trajectory, ref_trajectory):
+                for key, ref_val in ref_pt.items():
+                    if isinstance(ref_val, (int, float)) and isinstance(cand_pt.get(key), (int, float)):
+                        traj_max_err = max(traj_max_err, abs(float(cand_pt[key]) - float(ref_val)))
+
         base_drift = float(model["teacher_drift"])
-        surrogate_drift = base_drift + abs(float(force_surrogate_perturbation))
+        surrogate_drift = base_drift + abs(float(force_surrogate_perturbation)) + traj_max_err
         surrogate_passed = bool(math.isfinite(surrogate_drift) and surrogate_drift <= max_surrogate_drift_tol)
 
         if surrogate_passed:
             self.verified_passes += 1
             verdict = "VERIFIED"
             served_by = "surrogate_fast_path_verified"
-            trajectory = [
-                {k: (v + float(force_surrogate_perturbation) if isinstance(v, float) and k != "t" else v) for k, v in pt.items()}
-                for pt in model["anchors"]
-            ]
+            trajectory = cand_trajectory
             invariants = dict(model["invariants_verified"])
             final_drift = surrogate_drift
         else:
             self.fallback_rescues += 1
             verdict = "FALLBACK_RESCUED_BY_SOLVER"
             served_by = "rusty_sundials_deterministic_teacher_fallback"
-            exact = rescue_numeric_calculation(prompt_or_equation, domain=dom, steps=steps, dt=dt)
-            trajectory = exact.sample_trajectory
+            trajectory = ref_trajectory
             invariants = exact.invariants_verified
             final_drift = exact.rescued_invariant_drift
 

@@ -21,7 +21,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import torch
 
-DEFAULT_COORDINATOR_SECRET = b"ProjectHiveMind-BOINC-Coordinator-Signing-Key-v1"
+DEFAULT_COORDINATOR_SECRET = b"ProjectHiveMind-BOINC-Coordinator-Integrity-Tag-v1"
 
 
 @dataclass
@@ -52,6 +52,8 @@ def sign_shard_bytes(
     secret_key: bytes = DEFAULT_COORDINATOR_SECRET,
 ) -> tuple[str, str]:
     """Compute SHA-256 digest and HMAC-SHA256 cryptographic signature over a Parquet shard."""
+    if not secret_key:
+        raise ValueError("secret_key must be non-empty bytes for BOINC shard HMAC signing")
     shard_sha256 = hashlib.sha256(parquet_bytes).hexdigest()
     msg = parquet_bytes + f":seed={rng_seed}".encode("utf-8")
     signature = hmac.new(secret_key, msg, hashlib.sha256).hexdigest()

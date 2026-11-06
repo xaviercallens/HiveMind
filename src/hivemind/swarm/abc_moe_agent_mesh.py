@@ -88,6 +88,8 @@ class WaggleDanceMessage(BaseModel):
 
     def sign(self, secret_key: str = DEFAULT_HMAC_SECRET) -> WaggleDanceMessage:
         """Sign canonical message content with HMAC-SHA256."""
+        if not secret_key:
+            raise ValueError("secret_key must be non-empty for WaggleDanceMessage HMAC signing")
         payload = (
             f"{self.dance_id}:{self.task_id}:{self.scout_bee_id}:{self.confidence_score}:"
             f"{self.dance_duration_ms}:{self.quorum_status}:{self.timestamp_utc}"
@@ -98,7 +100,7 @@ class WaggleDanceMessage(BaseModel):
 
     def verify_signature(self, secret_key: str = DEFAULT_HMAC_SECRET) -> bool:
         """Verify HMAC-SHA256 signature."""
-        if not self.signature_hmac:
+        if not self.signature_hmac or not secret_key:
             return False
         payload = (
             f"{self.dance_id}:{self.task_id}:{self.scout_bee_id}:{self.confidence_score}:"

@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Live monitor for end users of the public HiveMind services: real traffic from request logs plus synthetic probes.
 
 Two parts, each written as one JSON line to ``--out``:
@@ -40,6 +41,20 @@ SERVICES: dict[str, str] = {
 USER_PATH_PREFIXES: tuple[str, ...] = ("/v1/", "/signup", "/login")
 CLOUD_RUN_NAMES: dict[str, str] = {"ruche": "hivemind-at-home-ruche", "tribute": "hivemind-at-home", "router": "hivemind-openrouter"}
 BEE_ITEM_PATH: str = "artifacts/experiments/BEE_STARS_probe_item.json"
+PROBE_USER_AGENT: str = "hivemind-live-user-monitor/1.0 (python-httpx)"
+# Origin of the :32 request pair at every :15/:45 window (#590):
+# The monitor starts at :15:00/:45:00; traffic_summary() runs `gcloud logging read` (~32 s), so run_probes() begins its first
+# service (`ruche`) at :15:32/:45:32. Because `ruche` (`deploy/ruche_router_overlay/server.py`) forwards `/v1/*` to `router`,
+# both `ruche` and `router` log the first two probe calls at :32: (1) `hivemind/bee-stars` (`stream=False`, ~1.1 kB, ~0.4 s)
+# and (2) `hivemind/coder` (`stream=True`, 25-30 SSE chunks totaling 1,644-4,580 B, taking 19.2-34.5 s while the coder tier
+# responds). Because `run_probes()` is sequential, the remaining 13 probe requests arrive 19-35 s later.
+THIRTY_TWO_SECOND_CALLER: dict[str, str] = {
+    "script": "scripts/live_user_monitor.py:run_probes",
+    "proxy_hop": "deploy/ruche_router_overlay/server.py:forward_to_router",
+    "first_request": "POST /v1/chat/completions model=hivemind/bee-stars stream=False (~1.1 kB, ~0.4 s)",
+    "second_request": "POST /v1/chat/completions model=hivemind/coder stream=True (1,644-4,580 B SSE frames, 5-34.5 s)",
+    "doc": "docs/MONITOR_32_SECOND_CALLER.md",
+}
 
 
 def check_bee(text: str, gold_reply: str) -> bool:
@@ -126,16 +141,86 @@ def breakdown_line(breakdown: dict[str, Any] | None) -> str:
     return f"by client: {clients} | slowest: {slow}"
 
 
-def traffic_summary(since: datetime) -> dict[str, Any]:
-    """Aggregate Cloud Run request logs of the public services; returns counts only."""
-    names = " OR ".join(f'"{n}"' for n in CLOUD_RUN_NAMES.values())
-    flt = (f'resource.type="cloud_run_revision" AND resource.labels.service_name=({names}) AND '
-           f'timestamp>="{since.strftime("%Y-%m-%dT%H:%M:%SZ")}" AND httpRequest.requestUrl:("/v1/" OR "/signup" OR "/login")')
-    proc = subprocess.run(["gcloud", "logging", "read", flt, "--limit", "5000", "--format=json"], capture_output=True, text=True,
-                          timeout=180, check=False)
-    if proc.returncode != 0:
-        return {"error": proc.stderr.strip()[-300:]}
-    rows = json.loads(proc.stdout or "[]")
+def is_probe_chat_row(
+    row: dict[str, Any],
+    probe_windows: list[tuple[str, str]] | tuple[tuple[str, str], ...] = (),
+) -> bool:
+    """True when a Cloud Run chat-completion log row comes from the monitor's own probe batch."""
+    if row.get("probe") is True:
+        return True
+    if row.get("probe") is False:
+        return False
+    h = row.get("httpRequest", {}) or {}
+    ua = str(h.get("userAgent", ""))
+    if "hivemind-live-user-monitor" in ua or PROBE_USER_AGENT in ua:
+        return True
+    ts = str(row.get("timestamp", ""))
+    for start_iso, end_iso in probe_windows:
+        if start_iso and end_iso and start_iso <= ts <= end_iso and "Mozilla" not in ua:
+            return True
+    return False
+
+
+def split_probe_and_user_chats(
+    chat_rows: list[dict[str, Any]],
+    probe_windows: list[tuple[str, str]] | tuple[tuple[str, str], ...] = (),
+) -> dict[str, Any]:
+    """Separate monitor probe chats from non-probe ('other' / 'users') chats so probe batches never distort user p95."""
+    probe_rows: list[dict[str, Any]] = []
+    other_rows: list[dict[str, Any]] = []
+    for r in chat_rows:
+        if is_probe_chat_row(r, probe_windows=probe_windows):
+            probe_rows.append(r)
+        else:
+            other_rows.append(r)
+
+    def _lat_list(rs: list[dict[str, Any]]) -> list[float]:
+        return [float(str((x.get("httpRequest", {}) or {}).get("latency", "0s")).rstrip("s") or 0.0) for x in rs]
+
+    def _group_stats(rs: list[dict[str, Any]]) -> dict[str, Any]:
+        lats = _lat_list(rs)
+        return {
+            "n": len(lats),
+            "p50_s": _percentile(lats, 0.5),
+            "p95_s": _percentile(lats, 0.95),
+            "max_s": max(lats) if lats else None,
+            "breakdown": chat_latency_breakdown(rs),
+        }
+
+    non_probe = _group_stats(other_rows)
+    probe = _group_stats(probe_rows)
+    return {
+        "non_probe": non_probe,
+        "other": non_probe,
+        "probe": probe,
+    }
+
+
+def format_service_chat_line(svc: str, s: dict[str, Any]) -> str:
+    """Format one service's traffic summary line with non-probe user chats and probe chats reported apart."""
+    split = s.get("chat_by_source") or s
+    non_probe = split.get("non_probe") or s.get("chat_non_probe") or {"n": 0, "p50_s": None, "p95_s": None}
+    probe = split.get("probe") or s.get("chat_probe") or {"n": 0, "p50_s": None, "p95_s": None}
+    if non_probe["n"] == 0:
+        user_part = "users chat 0 (no p95 for users)"
+    else:
+        user_part = f"users chat {non_probe['n']:3d} (p50 {non_probe['p50_s']}, p95 {non_probe['p95_s']} s)"
+    probe_part = f"probe chat {probe['n']:3d} (p50 {probe['p50_s']}, p95 {probe['p95_s']} s)"
+    req_cnt = int(s.get("requests", int(non_probe["n"]) + int(probe["n"])))
+    return (
+        f"{svc:8s} requests {req_cnt:4d}  {user_part}  {probe_part}  "
+        f"402 {s.get('http_402', 0)}  5xx {s.get('http_5xx', 0)}  "
+        f"registrations {s.get('registrations', 0)}  browser {s.get('browser_requests', 0)}"
+    )
+
+
+def summarize_service_rows(
+    rows: list[dict[str, Any]],
+    *,
+    since: datetime,
+    probe_windows: list[tuple[str, str]] | tuple[tuple[str, str], ...] = (),
+) -> dict[str, Any]:
+    """Summarize pre-fetched or live Cloud Run request log rows per service, splitting probe chats from other chats."""
     by_service: dict[str, Any] = {}
     for svc_key, svc_name in CLOUD_RUN_NAMES.items():
         mine = [r for r in rows if r.get("resource", {}).get("labels", {}).get("service_name") == svc_name
@@ -163,16 +248,33 @@ def traffic_summary(since: datetime) -> dict[str, Any]:
                     browser += 1
                 else:
                     scripted += 1
+        split = split_probe_and_user_chats(chat_rows, probe_windows=probe_windows)
         by_service[svc_key] = {
             "requests": len(mine), "status": dict(sorted(statuses.items())), "registrations": registrations,
             "chat": {"n": len(chat_latency), "p50_s": _percentile(chat_latency, 0.5), "p95_s": _percentile(chat_latency, 0.95),
                      "max_s": max(chat_latency) if chat_latency else None},
+            "chat_non_probe": split["non_probe"],
+            "chat_probe": split["probe"],
+            "chat_by_source": split,
             "chat_breakdown": chat_latency_breakdown(chat_rows),
             "http_402": sum(n for k, n in statuses.items() if k.endswith(":402")),
             "http_5xx": sum(n for k, n in statuses.items() if k.split(":")[1].startswith("5")),
             "browser_requests": browser, "scripted_requests": scripted,
         }
     return {"since_utc": since.isoformat(), "log_rows": len(rows), "services": by_service}
+
+
+def traffic_summary(since: datetime, probe_windows: list[tuple[str, str]] | tuple[tuple[str, str], ...] = ()) -> dict[str, Any]:
+    """Aggregate Cloud Run request logs of the public services; returns counts only."""
+    names = " OR ".join(f'"{n}"' for n in CLOUD_RUN_NAMES.values())
+    flt = (f'resource.type="cloud_run_revision" AND resource.labels.service_name=({names}) AND '
+           f'timestamp>="{since.strftime("%Y-%m-%dT%H:%M:%SZ")}" AND httpRequest.requestUrl:("/v1/" OR "/signup" OR "/login")')
+    proc = subprocess.run(["gcloud", "logging", "read", flt, "--limit", "5000", "--format=json"], capture_output=True, text=True,
+                          timeout=180, check=False)
+    if proc.returncode != 0:
+        return {"error": proc.stderr.strip()[-300:]}
+    rows = json.loads(proc.stdout or "[]")
+    return summarize_service_rows(rows, since=since, probe_windows=probe_windows)
 
 
 def user_counts(client: httpx.Client, base: str, admin_key: str, window_s: float) -> dict[str, Any]:
@@ -185,7 +287,7 @@ def user_counts(client: httpx.Client, base: str, admin_key: str, window_s: float
 
 def _chat(client: httpx.Client, base: str, key: str, model: str, messages: list[dict[str, str]], stream: bool) -> tuple[int, str, float]:
     body = {"model": model, "messages": messages, "temperature": 0, "max_tokens": 96, "stream": stream}
-    headers = {"Authorization": f"Bearer {key}"}
+    headers = {"Authorization": f"Bearer {key}", "User-Agent": PROBE_USER_AGENT}
     t0 = time.monotonic()
     if not stream:
         r = client.post(base + "/v1/chat/completions", json=body, headers=headers)
@@ -214,18 +316,29 @@ def probe_ok(model: str, status: int, check_passed: bool, retired: frozenset[str
     return status == 200 and check_passed
 
 
+def probe_latency_by_tier(results: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Summarize probe latency per model tier from the probe run itself."""
+    tiers = sorted({str(r["model"]) for r in results if "secs" in r and not str(r.get("model", "")).startswith("control:")})
+    out: dict[str, dict[str, Any]] = {}
+    for tier in tiers:
+        vals = [float(r["secs"]) for r in results if r.get("model") == tier and isinstance(r.get("secs"), (int, float))]
+        out[tier] = {"n": len(vals), "p50_s": _percentile(vals, 0.5), "p95_s": _percentile(vals, 0.95), "max_s": max(vals) if vals else None}
+    return out
+
+
 def run_probes(key: str, bee_item: dict[str, Any], services: dict[str, str], retired: frozenset[str] = frozenset()) -> dict[str, Any]:
     gold_reply = bee_item["expected_reply"]
     controls = checker_controls(gold_reply)
     if not all(controls.values()):
-        return {"valid": False, "controls": controls, "results": []}
+        return {"valid": False, "controls": controls, "results": [], "latency_by_tier": {}}
     cases: list[tuple[str, list[dict[str, str]], Callable[[str], bool], bool]] = [
         ("hivemind/bee-stars", bee_item["messages"], lambda t: check_bee(t, gold_reply), False),
         ("hivemind/coder", [{"role": "user", "content": "Write a Python function add(a, b) that returns a + b. Code only."}], check_coder, True),
         ("hivemind/auto", [{"role": "user", "content": "What is 17 * 23? Answer with the number only."}], check_arith, False),
     ]
     results: list[dict[str, Any]] = []
-    with httpx.Client(timeout=180) as client:
+    start_utc = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    with httpx.Client(timeout=180, headers={"User-Agent": PROBE_USER_AGENT}) as client:
         for svc, base in services.items():
             for model, messages, check, stream in cases:
                 try:
@@ -234,14 +347,23 @@ def run_probes(key: str, bee_item: dict[str, Any], services: dict[str, str], ret
                     status, text, secs = 0, f"{type(exc).__name__}", 0.0
                 results.append({"service": svc, "model": model, "stream": stream, "status": status, "secs": round(secs, 2),
                                 "ok": probe_ok(model, status, check(text), retired), "retired": model in retired, "reply_head": text[:80]})
-            unknown = client.post(base + "/v1/chat/completions", headers={"Authorization": f"Bearer {key}"},
+            unknown = client.post(base + "/v1/chat/completions", headers={"Authorization": f"Bearer {key}", "User-Agent": PROBE_USER_AGENT},
                                   json={"model": "hivemind/no-such-model", "messages": [{"role": "user", "content": "hi"}]})
-            nokey = client.post(base + "/v1/chat/completions", json={"model": "hivemind/auto", "messages": [{"role": "user", "content": "hi"}]})
+            nokey = client.post(base + "/v1/chat/completions", headers={"User-Agent": PROBE_USER_AGENT},
+                                json={"model": "hivemind/auto", "messages": [{"role": "user", "content": "hi"}]})
             results.append({"service": svc, "model": "control:unknown-model", "status": unknown.status_code, "ok": unknown.status_code == 404})
             results.append({"service": svc, "model": "control:no-key", "status": nokey.status_code, "ok": nokey.status_code == 401})
-        me = client.get(services["router"] + "/v1/hivemind/me", headers={"Authorization": f"Bearer {key}"})
+        me = client.get(services["router"] + "/v1/hivemind/me", headers={"Authorization": f"Bearer {key}", "User-Agent": PROBE_USER_AGENT})
+    end_utc = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     balance = me.json().get("balance") if me.status_code == 200 else None
-    return {"valid": True, "controls": controls, "results": results, "probe_balance_hmt": balance}
+    return {
+        "valid": True,
+        "controls": controls,
+        "results": results,
+        "latency_by_tier": probe_latency_by_tier(results),
+        "probe_window_utc": (start_utc, end_utc),
+        "probe_balance_hmt": balance,
+    }
 
 
 T4_HOST: tuple[str, str] = ("socreateai-agora-hermes-node1", "us-east4-b")
@@ -319,8 +441,7 @@ def main() -> int:
     t = record["traffic"]
     if "services" in t:
         for svc, s in t["services"].items():
-            print(f"{svc:8s} requests {s['requests']:4d}  chat {s['chat']['n']:3d} (p50 {s['chat']['p50_s']}, p95 {s['chat']['p95_s']} s)  "
-                  f"402 {s['http_402']}  5xx {s['http_5xx']}  registrations {s['registrations']}  browser {s['browser_requests']}")
+            print(format_service_chat_line(svc, s))
             print(f"         {breakdown_line(s.get('chat_breakdown'))}")
     else:
         print("traffic:", t)

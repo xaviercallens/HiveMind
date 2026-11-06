@@ -81,6 +81,12 @@ _LATEST_T4_SNAPSHOT: dict[str, Any] = {
         "latest_eval_loss_after": 2.1277,
         "ratchet_accepted_rounds": 20,
         "ratchet_held_rounds": 125,
+        "progress_label": "assimilated, no held-out gain",
+        "eval_basis": "6-domain MIX_DOMAINS (8x128 held-out tokens/domain, baseline 2.12; basis changed at hmq_00171)",
+        "assimilator_policy": (
+            "Units with eval_loss_after > eval_loss_before + tolerance are logged in assimilated.jsonl with "
+            "progress_label='assimilated, no held-out gain' and do not advance the chain head."
+        ),
         "chain_head_workunit": "hmq_00092",
         "chain_head_sha256": "e91e0ec338b92e52b13bf4abdc2c2d95999b56c3568cb85de5b306a8d3c9f5f8",
         "queued_workunit": "hmq_00146 (chained from hmq_00092 latest_adapter.pt SHA-256)",
@@ -251,6 +257,18 @@ def _check_like(path: str, template: Any, value: Any) -> None:
     elif template is None:
         if not (value is None or _is_finite_number(value) or (isinstance(value, str) and len(value) <= MAX_TELEMETRY_STRING)):
             raise ValueError(f"{path} must be null, a finite number or a bounded string")
+
+
+def format_workunit_counter_label(record: dict[str, Any], *, tolerance: float = 1e-6, baseline_nll: float = 2.12) -> str:
+    """Format a workunit counter label; units with eval_loss_after > eval_loss_before + tolerance are 'assimilated, no held-out gain'."""
+    before = record.get("eval_loss_before", record.get("held_out_eval_loss_before"))
+    after = record.get("eval_loss_after", record.get("held_out_eval_loss_after"))
+    if _is_finite_number(before) and _is_finite_number(after):
+        if float(after) > float(before) + float(tolerance) or float(after) >= float(baseline_nll):
+            return "assimilated, no held-out gain"
+        if float(after) < float(before) - float(tolerance):
+            return "assimilated, held-out gain"
+    return str(record.get("progress_label") or "assimilated, no held-out gain")
 
 
 def update_t4_telemetry_snapshot(update: dict[str, Any]) -> dict[str, Any]:

@@ -413,4 +413,33 @@ def test_newcomers_get_the_co_training_night_slot_procedure_in_every_language(la
     body = page(lang)
     assert "scripts/hivemind_federate_node.py" in body and "wg genkey" in body
     assert f'href="{REPO_URL}/issues/431"' in body and f'href="{REPO_URL}/blob/main/docs/TRAINER_JOIN.md"' in body
-    assert "+250" not in body
+    assert "+250" not in body and "250 HMT" not in body
+
+
+def test_trainer_section_lists_all_five_federation_plan_steps_and_statuses() -> None:
+    """Issue #453: Both en and fr render the trainer section, all 5 step names from node_federation_plan, their statuses, and docs/TRAINER_JOIN.md."""
+    from hivemind.boinc.node_federation_plan import build_plan
+
+    plan = build_plan(
+        "RTX 2070",
+        8192.0,
+        coordinator=COORDINATOR_URL,
+        handle="test-trainer",
+    )
+    step_names = [s.name for s in plan.steps]
+    assert step_names == [
+        "preflight",
+        "register",
+        "idle_gate_dry_run",
+        "qlora_training",
+        "cross_host_pilot",
+    ]
+    for lang in ("en", "fr"):
+        rendered = render_join_page(lang)
+        assert '<section id="opentrainer">' in rendered
+        for step_name in step_names:
+            assert f"<code>{step_name}</code>" in rendered, (lang, step_name)
+        for status in ("READY", "BLOCKED", "MANUAL"):
+            assert f"<code>{status}</code>" in rendered, (lang, status)
+        assert "docs/TRAINER_JOIN.md" in rendered
+        assert "+250 HMT" not in rendered and "250 HMT" not in rendered

@@ -72,9 +72,8 @@ def main() -> int:
     chain_template = st.ensure_chain_template(prof["app"])
     while True:
         try:
-            if a.night_only and not in_european_night(_now()):
-                pass  # outside the window: create nothing, results already out keep validating
-            elif pending(st, prof["app"], prof["prefix"]) == 0:
+            in_window = (not a.night_only) or in_european_night(_now())
+            if in_window and pending(st, prof["app"], prof["prefix"]) == 0:
                 rnd = (json.loads(state_f.read_text())["round"] if state_f.exists() else 0) + 1
                 head = json.loads((ledger / f"{stem}.json").read_text()) if (ledger / f"{stem}.json").exists() else None
                 name = f"{prof['prefix']}{rnd:05d}"
@@ -85,6 +84,15 @@ def main() -> int:
                     shard = ((rnd - 1) // len(DOMAIN_ORDER)) % a.shards
                 spec = build_train_spec(name, shard_index=shard, domain=domain, inner_steps=a.inner_steps, segment_steps=a.segment_steps,
                                         start_adapter_sha256=head["sha256"] if head else None, profile=None if not big else a.profile)
+                eval_domains = sorted((spec.get("eval_sets") or {}).keys())
+                spec["eval_basis"] = {
+                    "basis_id": "6_domain_mix_stratified" if domain == MIX else f"{len(eval_domains)}_domain_extended",
+                    "domains": eval_domains,
+                    "domain_count": len(eval_domains),
+                    "held_out_set": "8x128_tokens_per_domain",
+                    "baseline_nll": 2.12,
+                    "basis_changed_at_hmq_00171": rnd >= 171 or domain == MIX,
+                }
                 (st.root / "hivemind_specs" / f"{name}.json").write_text(json.dumps(spec))
                 inputs = {"in.json": json.dumps(spec, sort_keys=True).encode()}
                 template = None
@@ -93,7 +101,7 @@ def main() -> int:
                     inputs["adapter.pt"] = adapter_bytes
                     template = chain_template
                 st.create_work(prof["app"], name, inputs, flops_estimate(a.profile) if big else FPOPS, template=template)
-                state_f.write_text(json.dumps({"round": rnd, "created": name, "chained": bool(head), "t": time.time()}))
+                state_f.write_text(json.dumps({"round": rnd, "created": name, "chained": bool(head), "eval_basis": spec["eval_basis"], "t": time.time()}))
                 print(f"created {name} (domain {domain}, shard {shard}, chained={bool(head)})", flush=True)
                 prune(ledger, prefix=prof["prefix"])
         except Exception as exc:

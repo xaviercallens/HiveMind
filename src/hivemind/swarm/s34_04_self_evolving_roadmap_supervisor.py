@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import secrets
 from dataclasses import asdict, dataclass
 from typing import Any, Sequence
 
@@ -105,7 +106,7 @@ class SelfEvolvingRoadmapSupervisor:
         )
 
         # 3. HM-S32-03 Open Bee Marketplace
-        sec = b"supervisor-marketplace-secret-key"
+        sec = secrets.token_bytes(32)
         reg = OpenBeeMarketplaceRegistry(sec)
         m3 = sign_bee_manifest(
             bee_id="hivemind/bee-exoplanet- transit",

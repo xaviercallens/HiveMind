@@ -170,16 +170,40 @@ class ChatLog:
         return {"ok": True, "n": sum(by.values()), "by": dict(by)}
 
 
+def _label_workunit_progress(row: dict, tolerance: float = 1e-6, baseline_nll: float = 2.12) -> str:
+    """Label a training workunit record: units with eval_loss_after > eval_loss_before + tolerance are 'assimilated, no held-out gain'."""
+    if row.get("progress_label"):
+        return str(row["progress_label"])
+    before, after = row.get("eval_loss_before"), row.get("eval_loss_after")
+    if isinstance(before, (int, float)) and isinstance(after, (int, float)):
+        if float(after) > float(before) + float(tolerance) or float(after) >= float(baseline_nll):
+            return "assimilated, no held-out gain"
+        if float(after) < float(before) - float(tolerance):
+            return "assimilated, held-out gain"
+    return "assimilated, no held-out gain"
+
+
 def progress(ledger: Path) -> dict:
     out = {"assimilated": 0, "last": None}
     f = ledger / "assimilated.jsonl"
     if f.exists():
         rows = [json.loads(x) for x in f.read_text().splitlines() if x.strip()]
         out["assimilated"] = len(rows)
-        keys = ("wu_id", "app", "domain", "adapter_sha256", "eval_loss_before", "eval_loss_after", "eval_by_domain_after")
-        out["last"] = {k: rows[-1].get(k) for k in keys} if rows else None
+        keys = ("wu_id", "app", "domain", "adapter_sha256", "eval_loss_before", "eval_loss_after", "eval_by_domain_after", "eval_basis")
+        if rows:
+            last_row = {k: rows[-1].get(k) for k in keys if k in rows[-1] or k != "eval_basis"}
+            last_row["progress_label"] = _label_workunit_progress(rows[-1])
+            out["last"] = last_row
         train = [r for r in rows if r.get("app") == "hivemind_qlora_moe"]
         out["train_rounds"] = len(train)
+        with_gain = sum(1 for r in train if _label_workunit_progress(r) == "assimilated, held-out gain")
+        out["assimilated_with_held_out_gain"] = with_gain
+        out["assimilated_no_held_out_gain"] = len(train) - with_gain
+        out["counter_label"] = (
+            "assimilated, no held-out gain"
+            if (train and _label_workunit_progress(train[-1]) == "assimilated, no held-out gain")
+            else ("assimilated, held-out gain" if with_gain > 0 else "assimilated, no held-out gain")
+        )
         out["mean_eval_loss_trend"] = [round(r["eval_loss_after"], 4) for r in train[-10:] if r.get("eval_loss_after") is not None]
     return out
 

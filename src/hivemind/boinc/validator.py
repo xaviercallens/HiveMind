@@ -240,6 +240,23 @@ class DeterministicSpotCheckValidator:
                 reason="Submission contained zero micro-checkpoints.",
             )
 
+        if 0 not in submission.micro_checkpoints:
+            self._flag_account(steam_id64, f"Missing step-0 micro-checkpoint in WU {workunit.wu_id}")
+            return SpotCheckVerdict(
+                wu_id=workunit.wu_id,
+                worker_id=submission.worker_id,
+                steam_id64=steam_id64,
+                segment_start_step=0,
+                segment_end_step=0,
+                verification_overhead_pct=0.0,
+                max_abs_divergence=float("inf"),
+                tolerance_eps=self.tolerance_eps,
+                hash_matched=False,
+                passed=False,
+                steam_account_flagged=True,
+                reason="Submission missing required step-0 micro-checkpoint.",
+            )
+
         # Select the first 50-step segment [0, s_1] for stateless deterministic verification
         # (or a randomly selected segment when optimizer state is checkpointed)
         rng = random.Random(validator_rng_seed if validator_rng_seed is not None else workunit.rng_seed)
@@ -248,9 +265,11 @@ class DeterministicSpotCheckValidator:
 
         overhead_pct = round(100.0 * (selected_end - selected_start) / max(1, workunit.inner_steps_H), 2)
 
+        step0_record = submission.micro_checkpoints[0]
+        step0_sha = compute_state_dict_sha256(step0_record.state_snapshot)
         expected_State = replay_inner_segment(
             model=validator_model,
-            start_lora_state=submission.micro_checkpoints[0].state_snapshot,
+            start_lora_state=step0_record.state_snapshot,
             token_sequences=token_sequences,
             start_step=selected_start,
             end_step=selected_end,
@@ -300,17 +319,28 @@ class DeterministicSpotCheckValidator:
         expected_sha = compute_state_dict_sha256(expected_State)
         expected_State.clear()
         del expected_State
-        hash_matched = expected_sha == worker_record.lora_sha256
-        passed = max_diff <= self.tolerance_eps
+        hash_matched = (
+            expected_sha == worker_record.lora_sha256
+            and step0_sha == step0_record.lora_sha256
+        )
+        passed = (max_diff <= self.tolerance_eps) and hash_matched
 
         flagged = not passed
-        reason = (
-            f"Verified segment [{selected_start}, {selected_end}] ({overhead_pct}% overhead): "
-            f"max_diff={max_diff:.2e} <= eps={self.tolerance_eps:.1e}"
-            if passed
-            else f"REJECTED segment [{selected_start}, {selected_end}]: "
-            f"divergence {max_diff:.2e} exceeds tolerance eps={self.tolerance_eps:.1e}"
-        )
+        if passed:
+            reason = (
+                f"Verified segment [{selected_start}, {selected_end}] ({overhead_pct}% overhead): "
+                f"max_diff={max_diff:.2e} <= eps={self.tolerance_eps:.1e}"
+            )
+        elif not hash_matched and max_diff <= self.tolerance_eps:
+            reason = (
+                f"REJECTED segment [{selected_start}, {selected_end}]: "
+                f"checkpoint lora_sha256 mismatch (expected {expected_sha[:16]}, got {worker_record.lora_sha256[:16]})"
+            )
+        else:
+            reason = (
+                f"REJECTED segment [{selected_start}, {selected_end}]: "
+                f"divergence {max_diff:.2e} exceeds tolerance eps={self.tolerance_eps:.1e}"
+            )
         if flagged:
             self._flag_account(steam_id64, reason)
 

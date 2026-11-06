@@ -33,6 +33,7 @@ class KnowledgeShare:
     verified: bool
     epoch: int
     text_sha256: str
+    verifier_receipt_sha256: str = ""
 
     def __post_init__(self) -> None:
         if not self.account_id:
@@ -75,6 +76,7 @@ def admit_share(
     expected_epoch: int | None = None,
     seen_shares: set[tuple[str, str]] | None = None,
     epoch_counts: dict[tuple[int, str], int] | None = None,
+    verifier_receipt_sha256: str | None = None,
 ) -> Admission:
     """Admit or refuse a share. The hash in the share must match the text, so the record cannot be swapped later."""
     if cap_per_identity_per_epoch < 1:
@@ -83,6 +85,9 @@ def admit_share(
         return Admission(False, "epoch_mismatch", share)
     if not share.verified:
         return Admission(False, "not_verified", share)
+    receipt = verifier_receipt_sha256 if verifier_receipt_sha256 is not None else share.verifier_receipt_sha256
+    if not receipt or len(receipt) != 64 or any(c not in "0123456789abcdef" for c in receipt.lower()):
+        return Admission(False, "missing_verifier_receipt", share)
     if share.licence not in PERMITTED_LICENCES:
         return Admission(False, "licence_not_permitted", share)
     if hashlib.sha256(text.encode("utf-8")).hexdigest() != share.text_sha256:
@@ -153,7 +158,13 @@ class KnowledgeMarket:
         self._epoch_counts: dict[tuple[int, str], int] = {}
         self._admissions: list[Admission] = []
 
-    def admit(self, share: KnowledgeShare, text: str) -> Admission:
+    def admit(
+        self,
+        share: KnowledgeShare,
+        text: str,
+        *,
+        verifier_receipt_sha256: str | None = None,
+    ) -> Admission:
         admission = admit_share(
             share,
             text,
@@ -162,6 +173,7 @@ class KnowledgeMarket:
             expected_epoch=self.epoch,
             seen_shares=self._seen_shares,
             epoch_counts=self._epoch_counts,
+            verifier_receipt_sha256=verifier_receipt_sha256,
         )
         self._admissions.append(admission)
         return admission

@@ -237,7 +237,16 @@ def test_manager_profiles_default_to_the_bandit_and_log_decisions(tmp_path: Path
 
 
 def _share(account: str, text: str, licence: str = "CC0-1.0", verified: bool = True) -> KnowledgeShare:
-    return KnowledgeShare(account, "verified_code", licence, verified, 3, hashlib.sha256(text.encode()).hexdigest())
+    receipt = hashlib.sha256(f"verifier_receipt:{account}:{text}".encode()).hexdigest() if verified else ""
+    return KnowledgeShare(
+        account,
+        "verified_code",
+        licence,
+        verified,
+        3,
+        hashlib.sha256(text.encode()).hexdigest(),
+        verifier_receipt_sha256=receipt,
+    )
 
 
 def test_share_admission_rules() -> None:
@@ -264,7 +273,15 @@ def test_knowledge_market_deduplicates_and_enforces_epoch_and_cap_ip280() -> Non
 
     # Epoch mismatch is rejected both by admit_share(expected_epoch=...) and mixed-epoch knowledge_points
     assert admit_share(sh, clean, expected_epoch=99).reason == "epoch_mismatch"
-    sh_epoch4 = KnowledgeShare("u2", "verified_code", "CC0-1.0", True, 4, hashlib.sha256(clean.encode()).hexdigest())
+    sh_epoch4 = KnowledgeShare(
+        "u2",
+        "verified_code",
+        "CC0-1.0",
+        True,
+        4,
+        hashlib.sha256(clean.encode()).hexdigest(),
+        verifier_receipt_sha256=hashlib.sha256(f"verifier_receipt:u2:{clean}".encode()).hexdigest(),
+    )
     with pytest.raises(ValueError, match="Mixed share epochs"):
         knowledge_points([admit_share(sh, clean), admit_share(sh_epoch4, clean)])
 

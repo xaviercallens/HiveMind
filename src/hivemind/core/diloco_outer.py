@@ -103,7 +103,7 @@ def filter_byzantine_deltas_multikrum(
             f"All {total_K} worker deltas were quarantined during pre-Krum security sanitization: {quarantined}"
         )
 
-    if K <= 2:
+    if K == 1:
         return ByzantineFilterReport(
             total_submissions=total_K,
             max_byzantine_f=0,
@@ -137,6 +137,36 @@ def filter_byzantine_deltas_multikrum(
     diag = torch.diag(gram).clamp_min(0.0)
     # Pairwise squared Euclidean distances: ||u - v||^2 = ||u||^2 + ||v||^2 - 2 <u, v>
     dist_matrix = (diag.unsqueeze(1) + diag.unsqueeze(0) - 2.0 * gram).clamp_min(0.0).to(torch.float32)
+    norms = torch.sqrt(diag).clamp_min(1e-12)
+    cos_matrix = (gram / (norms.unsqueeze(1) * norms.unsqueeze(0))).clamp(-1.0, 1.0).to(torch.float32)
+
+    if K == 2:
+        w0, w1 = worker_ids[0], worker_ids[1]
+        pair_cos = round(float(cos_matrix[0, 1].item()), 6)
+        pair_dist = round(float(dist_matrix[0, 1].item()), 6)
+        n0 = float(norms[0].item())
+        n1 = float(norms[1].item())
+        if pair_cos < 0.0:
+            survivor = w0 if n0 <= n1 else w1
+            outlier = w1 if survivor == w0 else w0
+            accepted_k2 = [survivor]
+            rejected_k2 = list(quarantined.keys()) + [outlier]
+            eff_f = min(max_byzantine_f, 1)
+        else:
+            accepted_k2 = [w0, w1]
+            rejected_k2 = list(quarantined.keys())
+            eff_f = 0
+        return ByzantineFilterReport(
+            total_submissions=total_K,
+            max_byzantine_f=eff_f,
+            accepted_workers=accepted_k2,
+            rejected_workers=rejected_k2,
+            krum_scores={w0: pair_dist, w1: pair_dist},
+            mean_cosine_similarities={w0: pair_cos, w1: pair_cos},
+            median_cosine=pair_cos,
+            cosine_threshold_lower=0.0,
+            quarantined_pre_krum=quarantined,
+        )
 
     krum_scores: dict[str, float] = {}
     for i, wid in enumerate(worker_ids):

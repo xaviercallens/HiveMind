@@ -163,9 +163,6 @@ def compute_state_dict_sha256(state_dict: dict[str, torch.Tensor]) -> str:
     hasher = hashlib.sha256()
     for key in sorted(state_dict.keys()):
         t = state_dict[key].detach()
-        # Full exact hash for all LoRA adapter matrices; strided slice for frozen base weights
-        if "lora_" not in key and t.numel() > 4096:
-            t = t.reshape(-1)[::256]
         tensor = t.to(device="cpu", dtype=torch.float32).contiguous()
         hasher.update(key.encode("utf-8"))
         hasher.update(tensor.numpy().tobytes())

@@ -4171,4 +4171,138 @@ def create_router_app(
             "privacy_notice": POC_STATUS_HEADER,
         }
 
+    @app.get("/v1/hivemind/bees/swat-telepathy/status")
+    async def s34_swat_telepathy_status_endpoint() -> dict[str, Any]:
+        """Return Season 34 SwaT Latent KV Telepathy & Wake-to-Sleep Consolidation status (`HM-S34-01..10`)."""
+        from hivemind.swarm.swat_telepathy_bridge import (
+            SwaTTelepathyBridge,
+            UniversalHiveLatentHub,
+            compute_cms_chunk_periods,
+        )
+
+        hub = UniversalHiveLatentHub()
+        bridge = SwaTTelepathyBridge(hub=hub)
+        rep = hub.complexity_report()
+        return {
+            "object": "hivemind.s34_swat_telepathy.status",
+            "season": "S34",
+            "hub_summary": {
+                **rep,
+                "strictly_fewer_than_pairwise": rep["strictly_fewer_mappers"],
+            },
+            "n_blocks": bridge.n_blocks,
+            "cms_chunk_periods": compute_cms_chunk_periods([10.0, 2.0, 1.0], max_chunk_tokens=10000),
+            "lean4_theorems": [
+                "Season34_SwaTTelepathyAndNocturnalSleep.swat_identical_tokenizer_rope_identity",
+                "Season34_SwaTTelepathyAndNocturnalSleep.swat_cross_causal_prefix_no_future_leakage",
+                "Season34_SwaTTelepathyAndNocturnalSleep.swat_universal_hub_2n_strictly_below_pairwise",
+                "Season34_SwaTTelepathyAndNocturnalSleep.swat_am_compacted_vram_fits_rtx2070_wddm",
+            ],
+        }
+
+    @app.post("/v1/hivemind/bees/swat-telepathy/plan")
+    async def s34_swat_telepathy_plan_endpoint(request: Request) -> dict[str, Any]:
+        """Plan a Season 34 SwaT Latent KV Telepathy handoff or Dense-OCR fallback (`HM-S34-04`, `HM-S34-05`)."""
+        from hivemind.swarm.swat_telepathy_bridge import SwaTTelepathyBridge
+
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+        except ValueError:
+            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+
+        sender_family = str(body.get("sender_family") or "ibm-granite/granite-3.3-8b-instruct")
+        receiver_family = str(body.get("receiver_family") or "HuggingFaceTB/SmolLM3-3B")
+        task_category = str(body.get("task_category") or "code").lower()
+        input_tokens = max(1, int(body.get("input_tokens") or 28000))
+        am_compaction_ratio = float(body.get("am_compaction_ratio") or 5.0)
+        ocr_text_density = float(
+            body.get("ocr_text_density")
+            if body.get("ocr_text_density") is not None
+            else (0.75 if task_category in {"docvqa", "infovqa", "dense_ocr", "ocr"} else 0.0)
+        )
+
+        sample_len = min(input_tokens, 64)
+        offsets = [(i * 4, (i + 1) * 4) for i in range(sample_len)]
+        bridge = SwaTTelepathyBridge()
+        plan = bridge.plan_transfer(
+            sender_model_id=sender_family,
+            receiver_model_id=receiver_family,
+            sender_offsets=offsets,
+            receiver_offsets=offsets,
+            am_compaction_ratio=am_compaction_ratio,
+            ocr_text_density=ocr_text_density,
+        )
+        compacted_tokens = max(1, int(round(input_tokens / am_compaction_ratio)))
+        use_swat = bool(plan["vlm_routing_gate"]["use_swat_kv_transfer"])
+        return {
+            "object": "hivemind.s34_swat_telepathy.plan",
+            "mode": "swat_kv_telepathy" if use_swat else "native_vlm_fallback",
+            "reason": plan["vlm_routing_gate"]["reason"],
+            "sender_family": sender_family,
+            "receiver_family": receiver_family,
+            "input_tokens": input_tokens,
+            "compacted_tokens": compacted_tokens,
+            "am_compaction_ratio": am_compaction_ratio,
+            "sender_slices": [list(s) for s in plan["sender_layer_slices"]],
+            "receiver_slices": [list(s) for s in plan["receiver_layer_slices"]],
+            "vram_guards": plan["vram_guards"],
+            "fits_rtx2070_wddm_ceiling": bool(plan["vram_guards"]["rtx2070_wddm_6656_ok"]),
+            "transfer_sha256": plan["transfer_sha256"],
+        }
+
+    from hivemind.boinc.rtx_boinc_deployer import (
+        RTXBoincServer,
+        RTXWorkunitLeaseRequest,
+        RTXWorkunitSubmitRequest,
+    )
+
+    _rtx_boinc_server = RTXBoincServer(router_store=store)
+
+    @app.get("/create_account.php")
+    async def router_boinc_create_account(request: Request) -> Any:
+        from fastapi.responses import Response
+
+        q = dict(request.query_params)
+        return Response(
+            content=_rtx_boinc_server.create_or_lookup_account_xml(q, create_if_missing=True),
+            media_type="text/xml",
+        )
+
+    @app.get("/lookup_account.php")
+    async def router_boinc_lookup_account(request: Request) -> Any:
+        from fastapi.responses import Response
+
+        q = dict(request.query_params)
+        return Response(
+            content=_rtx_boinc_server.create_or_lookup_account_xml(q, create_if_missing=False),
+            media_type="text/xml",
+        )
+
+    @app.post("/boinc_cgi/cgi")
+    @app.post("/cgi")
+    async def router_boinc_scheduler_cgi(request: Request) -> Any:
+        from fastapi.responses import Response
+
+        body = (await request.body()).decode("utf-8", errors="replace")
+        return Response(content=_rtx_boinc_server.handle_scheduler_rpc_xml(body), media_type="text/xml")
+
+    @app.get("/api/v1/boinc/rtx/status")
+    @app.get("/v1/hivemind/boinc/rtx/status")
+    async def router_boinc_rtx_status() -> dict[str, Any]:
+        return _rtx_boinc_server.status_summary()
+
+    @app.post("/api/v1/boinc/rtx/lease")
+    @app.post("/v1/hivemind/boinc/rtx/lease")
+    async def router_boinc_rtx_lease(payload: RTXWorkunitLeaseRequest) -> dict[str, Any]:
+        return _rtx_boinc_server.lease_workunit(payload)
+
+    @app.post("/api/v1/boinc/rtx/submit")
+    @app.post("/v1/hivemind/boinc/rtx/submit")
+    async def router_boinc_rtx_submit(payload: RTXWorkunitSubmitRequest) -> dict[str, Any]:
+        try:
+            return _rtx_boinc_server.submit_workunit(payload)
+        except ValueError as exc:
+            raise RouterError(404, str(exc), "not_found_error", "workunit_not_found") from exc
+
     return app

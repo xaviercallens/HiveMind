@@ -1,7 +1,7 @@
 {
   "schema_version": "hivemind-gwaya-stub-audit/v1.0",
   "auditor": "gwaya.ast_audit.ZeroStubAudit (GWAYA-GwenLayaOpenModel)",
-  "files_audited": 176,
+  "files_audited": 347,
   "files_failed": [],
   "all_passed": true,
   "results": [
@@ -69,7 +69,25 @@
       }
     },
     {
+      "file": "src/hivemind/boinc/node_federation_plan.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "src/hivemind/boinc/real_client/app.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/boinc/real_client/boinc_server_scripts.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -96,7 +114,88 @@
       }
     },
     {
+      "file": "src/hivemind/boinc/real_client/contributor_policy.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/boinc/real_client/moe_app.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/boinc/real_client/moe_bridge.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/boinc/real_client/moe_profiles.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/boinc/real_client/moe_work.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/boinc/real_client/node_endpoint.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "src/hivemind/boinc/real_client/project_server.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/boinc/real_client/resident_validator.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/boinc/real_client/server_stack.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/boinc/stitch_portal.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -240,6 +339,15 @@
       }
     },
     {
+      "file": "src/hivemind/client/steam_identity.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "src/hivemind/client/steamworks.py",
       "passed": true,
       "detail": {
@@ -303,6 +411,24 @@
       }
     },
     {
+      "file": "src/hivemind/core/auto_improvement.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/core/base_model_catalog.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "src/hivemind/core/btm_moe.py",
       "passed": true,
       "detail": {
@@ -330,6 +456,15 @@
       }
     },
     {
+      "file": "src/hivemind/core/dev_image_video_moe_integration_benchmark.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "src/hivemind/core/diloco_inner.py",
       "passed": true,
       "detail": {
@@ -348,7 +483,43 @@
       }
     },
     {
+      "file": "src/hivemind/core/exoplanet_astro_vmoe_poc.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/core/expert_registry.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "src/hivemind/core/fomoe_sigma_routing.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/core/hybrid_inference_and_large_gpu_image_moe_distributor.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/core/image_moe_inference_gallery_benchmark.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -366,7 +537,43 @@
       }
     },
     {
+      "file": "src/hivemind/core/massive_image_moe_swarm_orchestrator.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/core/nocturnal_coding_moe.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "src/hivemind/core/quantization.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/core/qwen35_usage_moe_orchestrator.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/core/reddit_vision_vlm_moe.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -394,6 +601,15 @@
     },
     {
       "file": "src/hivemind/data/dataset_mining_campaign.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/data/dataset_registry.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -438,7 +654,52 @@
       }
     },
     {
+      "file": "src/hivemind/economy/international_launch_model.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/economy/international_launch_views.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "src/hivemind/game/__init__.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/game/exoplanet_hunter_cockpit.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/game/exoplanet_hunter_engine.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/game/fat_steam_astro_builder.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -484,6 +745,24 @@
     },
     {
       "file": "src/hivemind/game/steam_edition.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/game/stitch_v46_cockpit_template.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/game/webgpu_galaxy_cockpit.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -564,6 +843,15 @@
       }
     },
     {
+      "file": "src/hivemind/router/benchmarks_page.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "src/hivemind/router/catalog.py",
       "passed": true,
       "detail": {
@@ -609,6 +897,33 @@
       }
     },
     {
+      "file": "src/hivemind/router/join_page.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/router/life_as_a_bee.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/router/manifesto_page.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "src/hivemind/router/market.py",
       "passed": true,
       "detail": {
@@ -619,6 +934,15 @@
     },
     {
       "file": "src/hivemind/router/oidc_auth.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/router/opentrainer.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -645,6 +969,15 @@
       }
     },
     {
+      "file": "src/hivemind/router/remote_probe.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "src/hivemind/router/signup_page.py",
       "passed": true,
       "detail": {
@@ -655,6 +988,24 @@
     },
     {
       "file": "src/hivemind/router/t4_visibility.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/router/telemetry_figures.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/router/usage_capture.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -762,7 +1113,151 @@
       }
     },
     {
+      "file": "src/hivemind/solverbee/__init__.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/solverbee/families.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/solverbee/mcp.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/solverbee/sandbox.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/solverbee/science_bee.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/solverbee/scoring.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/solverbee/service.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/solverbee/verifier.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/solverbee/wave3_verifiers.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "src/hivemind/swarm/__init__.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/abc_moe_agent_mesh.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/adaptive_multi_split_wan.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/amcp_collab.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/amcp_eda_traffic_sustainer.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/amcp_github.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/amcp_kafka_campaign_bus.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/amcp_kafka_transport.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -780,7 +1275,43 @@
       }
     },
     {
+      "file": "src/hivemind/swarm/byob.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/campaign_orchestrator.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "src/hivemind/swarm/crowdgpt_bridge.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/crowdgpt_loss_check.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/crowdgpt_loss_check_service.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -816,7 +1347,34 @@
       }
     },
     {
+      "file": "src/hivemind/swarm/dynamic_diurnal_moe_engine.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "src/hivemind/swarm/ef_compression_benchmark.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/exemplar_byob_bees.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/geomesh_fuzzy_consensus.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -843,7 +1401,34 @@
       }
     },
     {
+      "file": "src/hivemind/swarm/international_launch_scaler.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/krum_vs_zkopoi_v5_benchmark.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "src/hivemind/swarm/la_ruche_vault.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/layerstorm_backend.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -870,6 +1455,15 @@
       }
     },
     {
+      "file": "src/hivemind/swarm/pr_first_openrouter_orchestrator.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "src/hivemind/swarm/quic_link.py",
       "passed": true,
       "detail": {
@@ -880,6 +1474,204 @@
     },
     {
       "file": "src/hivemind/swarm/quic_transport.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/rusty_sundials_scientific_bee.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/s32_01_verlet_kepler442b_copilot.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/s32_02_lifelong_decentralized_ratchet.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/s32_03_open_bee_marketplace_registry.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/s33_01_decoupled_diloco_pacgad.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/s33_02_multibee_amcp_debate.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/s33_03_eco_thermal_carbon_ledger.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/s34_01_speculative_swarm_decoding.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/s34_02_game_preemption_ef21_flush.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/s34_03_gosset_e8_lattice_quantizer.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/s34_04_self_evolving_roadmap_supervisor.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/s35_01_optimal_energy_amcp_xswat_codec.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/s35_02_gwaya_laya_failclosed_gate.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/s35_03_elenchus_leanlib_sundials_r64.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/s35_04_xlayerstorm_xensorsharp_bridge.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/s35_05_unified_xdev_ecosystem_bridge.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/s36_01_zk_opoi_v5_int8_verifier.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/s36_02_e21_multikrum_vs_zk_crossover.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/s36_03_geocryptographic_neural_mesh.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/s36_04_fuzzy_subswarm_consensus.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/s36_05_darl_cas_shard_leasing.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/s36_06_hourly_coding_assistant_orchestrator.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -915,6 +1707,24 @@
       }
     },
     {
+      "file": "src/hivemind/swarm/swarm_nectar_cache.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "src/hivemind/swarm/top1pct_dct_ef21_compressor.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "src/hivemind/swarm/verified_update_gate.py",
       "passed": true,
       "detail": {
@@ -933,7 +1743,34 @@
       }
     },
     {
+      "file": "src/hivemind/swarm/zk_opoi_v5_circuit.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "src/hivemind/verification/bee_energy.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/a2_split_moe_rpc.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/adapter_to_served.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -952,6 +1789,42 @@
     },
     {
       "file": "scripts/aggregate_e8_pilot.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/amcp_github_bridge.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/amcp_kafka_cluster.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/amcp_kafka_quorum_proof.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/amcp_kafka_real_proof.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -987,7 +1860,79 @@
       }
     },
     {
+      "file": "scripts/boinc_core_node_e2e.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/boinc_core_node_endpoint_check.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/boinc_distribution_e2e.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/boinc_prod_server_e2e.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/boinc_prod_server_rescore.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/boinc_publish_app_version.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "scripts/boinc_real_e2e.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/boinc_server_stack.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/boinc_volunteer_config_e2e.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -1014,6 +1959,24 @@
       }
     },
     {
+      "file": "scripts/byob_submit.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/check_cla.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "scripts/checkpoint_state.py",
       "passed": true,
       "detail": {
@@ -1024,6 +1987,42 @@
     },
     {
       "file": "scripts/compare_replication.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/crowdgpt_loss_check.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/crowdgpt_loss_check_agent.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/d1_cost_estimate.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/dream_phase_plan.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -1095,6 +2094,15 @@
       }
     },
     {
+      "file": "scripts/e17_ckpt.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "scripts/e17_eval.py",
       "passed": true,
       "detail": {
@@ -1122,7 +2130,43 @@
       }
     },
     {
+      "file": "scripts/e2_security_eval.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/e8_qlora_moe_round.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "scripts/fill_deployment_guide.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/gen_todo.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/generate_live_wan_swarm_report.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -1158,6 +2202,24 @@
       }
     },
     {
+      "file": "scripts/hivemind_amcp.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/hivemind_boinc_idle_worker.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "scripts/hivemind_connect.py",
       "passed": true,
       "detail": {
@@ -1167,7 +2229,43 @@
       }
     },
     {
+      "file": "scripts/hivemind_federate_node.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/hivemind_gpu_outreach_campaign.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/hivemind_opentrainer_agent.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "scripts/hivemind_producer_agent.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/hivemind_producer_autostart.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -1194,6 +2292,24 @@
       }
     },
     {
+      "file": "scripts/hivemind_volunteer_config.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/hivemind_volunteer_preflight.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "scripts/live_user_monitor.py",
       "passed": true,
       "detail": {
@@ -1212,7 +2328,70 @@
       }
     },
     {
+      "file": "scripts/make_custom_shards.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "scripts/merge_e13_reports.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/moe_fetch_domains.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/moe_standalone_check.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/monitor_nocturnal_night_run.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/mvp_b1_check.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/mvp_e2e_smoke.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/mvp_scorecard.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -1248,7 +2427,34 @@
       }
     },
     {
+      "file": "scripts/night_probe_queue.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "scripts/pr_gatekeeper.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/prepare_night_sci_wave3_datasets.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/producer_train_kit.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -1275,6 +2481,42 @@
       }
     },
     {
+      "file": "scripts/qlora_vram_estimate.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/qwen35_qlora_train.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/refresh_base_model_catalog.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/refresh_dataset_registry.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "scripts/router_gamer_e2e.py",
       "passed": true,
       "detail": {
@@ -1285,6 +2527,24 @@
     },
     {
       "file": "scripts/router_live_e2e.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/rtx2070_failover_orchestrator.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/run_3h_producer_trainer_moe_integration.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -1329,7 +2589,25 @@
       }
     },
     {
+      "file": "scripts/run_dev_image_video_moe_benchmark.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "scripts/run_ef21_error_feedback_benchmark.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/run_exoplanet_astro_vmoe_poc.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -1410,6 +2688,24 @@
       }
     },
     {
+      "file": "scripts/run_experiment_E18b_cosine_damped_momentum.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/run_experiment_E19_t4_pcie_nectar.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "scripts/run_experiment_E5_het.py",
       "passed": true,
       "detail": {
@@ -1437,7 +2733,34 @@
       }
     },
     {
+      "file": "scripts/run_experiment_HN1_boundary_signal.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "scripts/run_experiment_QB1_bandit_routing.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/run_experiment_S2_fault_injection.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/run_experiment_S3_formulation.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -1464,7 +2787,97 @@
       }
     },
     {
+      "file": "scripts/run_hourly_hivemind_roadmap_evolver.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/run_hybrid_inference_and_large_gpu_image_moe.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/run_image_moe_inference_gallery_benchmark.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/run_international_launch_and_vmoe_monitor.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/run_massive_image_moe_swarm.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "scripts/run_multi_moe_hf_campaign.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/run_night_sci_wave3_campaign.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/run_nocturnal_20_moe_stress_benchmarks.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/run_nocturnal_coding_moe.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/run_nocturnal_moe_auto_improvement.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/run_nocturnal_reddit_vision_moe.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -1509,6 +2922,51 @@
       }
     },
     {
+      "file": "scripts/s3_analyze.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/s3_paired_report.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/solver_bee.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/solver_bee_e2e.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/solver_bee_mcp.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
       "file": "scripts/swarm_lab.py",
       "passed": true,
       "detail": {
@@ -1518,7 +2976,7 @@
       }
     },
     {
-      "file": "scripts/test_public_gcp_hivemind_client.py",
+      "file": "scripts/t4_capture_producer_env.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -1527,7 +2985,79 @@
       }
     },
     {
-      "file": "scripts/test_public_openrouter_and_ruche_e2e.py",
+      "file": "scripts/t4_governor.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/t4_inference_report.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/t4_model_candidates.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/t4_model_probe.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/t4_monitor.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/t4_node_bootstrap.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/t4_training_report.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/t4_workgen.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/test_public_gcp_hivemind_client.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -1546,6 +3076,15 @@
     },
     {
       "file": "scripts/toy_model.py",
+      "passed": true,
+      "detail": {
+        "is_clean": true,
+        "violations": [],
+        "penalty_energy": 0.0
+      }
+    },
+    {
+      "file": "scripts/train_and_serve_rusty_sundials_bee.py",
       "passed": true,
       "detail": {
         "is_clean": true,
@@ -1590,6 +3129,6 @@
       }
     }
   ],
-  "written_utc": "2026-10-26T13:22:17Z",
-  "receipt_sha256": "28f4342225921dbf789d07068e8baf2637f70f82cbc6eeda6c47d566074421a6"
+  "written_utc": "2026-11-06T13:48:44Z",
+  "receipt_sha256": "df2216987ddf5f55e0a2f25e443c230f593b37a74c6f3a4582b6032f971c22f0"
 }

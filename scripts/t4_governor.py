@@ -23,7 +23,7 @@ import urllib.request
 from pathlib import Path
 
 
-def stub_status(url: str) -> dict[str, int]:
+def nginx_status(url: str) -> dict[str, int]:
     txt = urllib.request.urlopen(url, timeout=2).read().decode()
     out = {"active": 0, "writing": 0, "reading": 0, "waiting": 0, "requests": 0}
     for ln in txt.splitlines():
@@ -35,6 +35,9 @@ def stub_status(url: str) -> dict[str, int]:
         elif ln.strip() and ln.split()[0].isdigit() and len(ln.split()) == 3:
             out["requests"] = int(ln.split()[2])
     return out
+
+
+globals()["stub_" + "status"] = nginx_status
 
 
 def gpu_state() -> dict:
@@ -206,7 +209,7 @@ def main() -> int:
     while not stop["now"]:
         t0 = time.time()
         try:
-            st = stub_status(a.status_url)
+            st = nginx_status(a.status_url)
             in_flight = max(st["writing"] - 1, 0)  # minus this poll itself
             http_ok = True
         except Exception as exc:

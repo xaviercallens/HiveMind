@@ -221,14 +221,20 @@ def pending_accept(decision: Optional[str]) -> bool:
 
 
 def retry_merge(pr: Dict[str, Any], decision: str, merge: bool, dry_run: bool) -> Dict[str, Any]:
-    """Re-attempt the merge of a head already ACCEPTed by a previous run; the decision itself is not revisited."""
+    """Re-attempt the merge of a head already ACCEPTed by a previous run; if it became conflicting or draft, update to HOLD."""
     n = pr["number"]
+    if pr.get("isDraft"):
+        decision = "HOLD (draft)"
+    elif pr.get("mergeable") == "CONFLICTING":
+        decision = "HOLD (merge conflict)"
     result: Dict[str, Any] = {"pr": n, "head": pr["headRefOid"], "decision": decision, "skipped": "already gated at this head", "merged": False}
     if merge and not dry_run and pending_accept(decision):
         rc, out = sh(["gh", "pr", "merge", str(n), "--merge", "--admin", "--match-head-commit", pr["headRefOid"]], cwd=PROJECT_ROOT, timeout=300)
         result["merged"] = rc == 0
         result["merge_output"] = out[-300:]
         result["merge_retry"] = True
+        if rc != 0 and ("not mergeable" in out.lower() or "conflict" in out.lower()):
+            result["decision"] = "HOLD (merge conflict)"
     return result
 
 
@@ -323,7 +329,9 @@ def main() -> int:
     for pr in prs:
         key = f"{pr['number']}@{pr['headRefOid']}"
         if key in gated and not args.pr:
-            run["results"].append(retry_merge(pr, gated[key], merge=args.merge, dry_run=args.dry_run))
+            retried = retry_merge(pr, gated[key], merge=args.merge, dry_run=args.dry_run)
+            run["results"].append(retried)
+            gated[key] = retried["decision"]
             continue
         try:
             res = gate_pr(pr, merge=args.merge, dry_run=args.dry_run)

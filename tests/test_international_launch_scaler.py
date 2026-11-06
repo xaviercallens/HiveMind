@@ -227,8 +227,25 @@ def test_nocturnal_image_moe_evolution_monitor_and_dashboard_routes(tmp_path: Pa
     )
     assert mon["status"] == "ACTIVE_EVOLVING_GREEN"
     assert mon["generations_executed"] == 2
+    assert mon["rejected_generations"] == 0
     assert mon["pareto_ratchet_monotone_verified"] is True
     assert (tmp_path / "artifacts" / "nocturnal_image_moe_evolution_monitor.json").exists()
+
+    # IP-231 negative control: strictly worsening candidate losses must NOT report verified or GREEN
+    worsening = monitor_nocturnal_image_moe_evolution(
+        generations=2,
+        base_inner_steps=15,
+        repo_root=tmp_path,
+        save_artifacts=False,
+        candidate_losses_override=[
+            {"reddit": 1.0, "astro": 1.0, "massive": 1.0},
+            {"reddit": 1.5, "astro": 1.5, "massive": 1.5},
+        ],
+    )
+    assert worsening["pareto_ratchet_monotone_verified"] is False
+    assert worsening["candidate_losses_monotone"] is False
+    assert worsening["rejected_generations"] == 1
+    assert worsening["status"] != "ACTIVE_EVOLVING_GREEN"
 
     app = create_hivemind_at_home_app()
     client = TestClient(app)

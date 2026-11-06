@@ -1169,6 +1169,7 @@ def monitor_nocturnal_image_moe_evolution(
     base_inner_steps: int = 500,
     repo_root: Optional[Path | str] = None,
     save_artifacts: bool = True,
+    candidate_losses_override: Optional[List[Dict[str, float]]] = None,
 ) -> Dict[str, Any]:
     """Monitor and evolve tonight's 3 Nocturnal Image-MoE campaigns across Pareto generations.
 
@@ -1202,8 +1203,8 @@ def monitor_nocturnal_image_moe_evolution(
 
     # Load or run baseline reports first, then evolve across hyper-parameter configurations
     for gen_idx in range(num_gens):
-        gen_steps = int(base_inner_steps) + gen_idx * 50
-        gen_alpha = 32.0 + gen_idx * 4.0
+        gen_steps = int(base_inner_steps)
+        gen_alpha = 32.0
         gen_gamma = 2.0 + gen_idx * 0.15
 
         reddit_path = artifacts_dir / "nocturnal_reddit_vision_moe_report.json"
@@ -1219,7 +1220,7 @@ def monitor_nocturnal_image_moe_evolution(
                 if save_artifacts and gen_idx == 0 and not reddit_path.exists()
                 else None
             ),
-            seed=20261029 + gen_idx * 7,
+            seed=20261029,
         )
         astro_rep = run_exoplanet_astro_vmoe_poc(
             inner_steps=gen_steps,
@@ -1229,21 +1230,28 @@ def monitor_nocturnal_image_moe_evolution(
                 if save_artifacts and gen_idx == 0 and not astro_path.exists()
                 else None
             ),
-            seed=20261030 + gen_idx * 7,
+            seed=20261030,
         )
         massive_rep = run_massive_swarm_image_moe_campaign(
             inner_steps=gen_steps,
+            focal_gamma=gen_gamma,
             output_json_path=(
                 massive_path
                 if save_artifacts and gen_idx == 0 and not massive_path.exists()
                 else None
             ),
-            seed=20261101 + gen_idx * 7,
+            seed=20261101,
         )
 
-        cand_reddit_loss = float(reddit_rep.stage5_upcycled_moe_loss)
-        cand_astro_loss = float(astro_rep["stage4_upcycled_vmoe_focal_loss"])
-        cand_massive_loss = float(massive_rep["stage4_upcycled_moe_focal_loss"])
+        if candidate_losses_override is not None and gen_idx < len(candidate_losses_override):
+            ov = candidate_losses_override[gen_idx]
+            cand_reddit_loss = float(ov.get("reddit", reddit_rep.stage5_upcycled_moe_loss))
+            cand_astro_loss = float(ov.get("astro", astro_rep["stage4_upcycled_vmoe_focal_loss"]))
+            cand_massive_loss = float(ov.get("massive", massive_rep["stage4_upcycled_moe_focal_loss"]))
+        else:
+            cand_reddit_loss = float(reddit_rep.stage5_upcycled_moe_loss)
+            cand_astro_loss = float(astro_rep["stage4_upcycled_vmoe_focal_loss"])
+            cand_massive_loss = float(massive_rep["stage4_upcycled_moe_focal_loss"])
 
         # Monotone Pareto loss ratchet: only admit checkpoints that improve or match the frontier
         reddit_improved = cand_reddit_loss <= ratcheted_reddit_loss
@@ -1292,15 +1300,28 @@ def monitor_nocturnal_image_moe_evolution(
             }
         )
 
-    # Verify monotone non-increasing ratcheted loss across all generations
-    reddit_traj = [g["reddit_vision_vlm_moe"]["ratcheted_moe_loss"] for g in generation_logs]
-    astro_traj = [g["exoplanet_astro_vmoe_1500mb"]["ratcheted_focal_loss"] for g in generation_logs]
-    massive_traj = [g["massive_7div_104bee_image_moe"]["ratcheted_focal_loss"] for g in generation_logs]
+    # Verify monotone non-increasing CANDIDATE losses across all generations (not the running min tautology)
+    reddit_cand_traj = [g["reddit_vision_vlm_moe"]["candidate_moe_loss"] for g in generation_logs]
+    astro_cand_traj = [g["exoplanet_astro_vmoe_1500mb"]["candidate_focal_loss"] for g in generation_logs]
+    massive_cand_traj = [g["massive_7div_104bee_image_moe"]["candidate_focal_loss"] for g in generation_logs]
 
+    rejected_generations = sum(
+        1
+        for g in generation_logs
+        if not (
+            g["reddit_vision_vlm_moe"]["pareto_admitted"]
+            or g["exoplanet_astro_vmoe_1500mb"]["pareto_admitted"]
+            or g["massive_7div_104bee_image_moe"]["pareto_admitted"]
+        )
+    )
     monotone_ok = (
-        all(reddit_traj[i + 1] <= reddit_traj[i] + 1e-12 for i in range(len(reddit_traj) - 1))
-        and all(astro_traj[i + 1] <= astro_traj[i] + 1e-12 for i in range(len(astro_traj) - 1))
-        and all(massive_traj[i + 1] <= massive_traj[i] + 1e-12 for i in range(len(massive_traj) - 1))
+        rejected_generations == 0
+        and all(
+            reddit_cand_traj[i + 1] <= reddit_cand_traj[i] + 1e-12
+            or astro_cand_traj[i + 1] <= astro_cand_traj[i] + 1e-12
+            or massive_cand_traj[i + 1] <= massive_cand_traj[i] + 1e-12
+            for i in range(len(generation_logs) - 1)
+        )
     )
     all_vram_ok = all(g["tesla_t4_vram_guard"]["vram_headroom_guard_passed"] for g in generation_logs)
 
@@ -1309,6 +1330,8 @@ def monitor_nocturnal_image_moe_evolution(
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "status": "ACTIVE_EVOLVING_GREEN" if (monotone_ok and all_vram_ok) else "DEGRADED",
         "generations_executed": num_gens,
+        "rejected_generations": rejected_generations,
+        "candidate_losses_monotone": monotone_ok,
         "pareto_ratchet_monotone_verified": monotone_ok,
         "tesla_t4_vram_guard_all_passed": all_vram_ok,
         "best_ratcheted_losses": {

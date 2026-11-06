@@ -637,23 +637,9 @@ class PRSecurityScanner:
 
         findings: list[SecurityFinding] = []
         author_clean = (author or "unknown").strip().lower()
-        resolved_email = author_email
-        if resolved_email is None and author_clean in self.trusted_maintainers:
-            import os as _os
-            head_sha_env = _os.environ.get("HEAD_SHA", "").strip()
-            if head_sha_env:
-                import subprocess as _sp
-                try:
-                    resolved_email = _sp.check_output(
-                        ["git", "log", "-1", "--format=%ae", head_sha_env],
-                        text=True,
-                        stderr=_sp.DEVNULL,
-                    ).strip() or None
-                except Exception:
-                    resolved_email = None
         email_verified = (
-            normalize_and_verify_owner_email(resolved_email).is_authorized_owner
-            if resolved_email is not None
+            normalize_and_verify_owner_email(author_email).is_authorized_owner
+            if author_email is not None
             else False
         )
         is_trusted_owner = (author_clean in self.trusted_maintainers) and email_verified

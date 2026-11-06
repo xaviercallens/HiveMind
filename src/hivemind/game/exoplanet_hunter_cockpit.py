@@ -2908,7 +2908,10 @@ def render_citizen_scientist_community_hub_html() -> str:
 """
 
 
-def create_exoplanet_hunter_fastapi_app() -> FastAPI:
+def create_exoplanet_hunter_fastapi_app(
+    portal_secret: bytes | str | None = None,
+    require_portal_secret: bool = False,
+) -> FastAPI:
     """Create the FastAPI server for the v4.0 Star Trek Curved Console Game + Multi-Producer Router."""
     service = AstroBeeMoEGPUService()
     producer_pool = HiveMindMultiProducerInferencePool(service)
@@ -3699,13 +3702,28 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         return JSONResponse(content={"schema": "hivemind.exoplanet_mcp.catalog/1", "targets": []})
 
     # Mount the OpenRouter Portal (/portal, /playground) & Free Steam Game Registration/Login/Contribution API
+    import os as _os
     import secrets as _secrets
     from hivemind.router.accounts import HandleTaken, ReservedHandle, RouterStore
     from hivemind.router.portal_page import portal_content_security_policy, render_portal_page
     from hivemind.security.hivemind_firewall import SwarmSecurityViolationError
 
     ARTIFACTS_ROOT.mkdir(parents=True, exist_ok=True)
-    _portal_store = RouterStore(ARTIFACTS_ROOT / "local_portal_router.db", b"hivemind-local-steam-portal-secret-32b")
+    if portal_secret is not None:
+        _portal_secret_bytes = (
+            portal_secret.encode("utf-8") if isinstance(portal_secret, str) else bytes(portal_secret)
+        )
+        if len(_portal_secret_bytes) < 32:
+            raise RuntimeError("HIVEMIND_PORTAL_SECRET must be at least 32 bytes")
+    elif "HIVEMIND_PORTAL_SECRET" in _os.environ:
+        _portal_secret_bytes = _os.environ["HIVEMIND_PORTAL_SECRET"].encode("utf-8")
+        if len(_portal_secret_bytes) < 32:
+            raise RuntimeError("HIVEMIND_PORTAL_SECRET must be at least 32 bytes")
+    elif require_portal_secret or _os.environ.get("HIVEMIND_REQUIRE_PORTAL_SECRET", "").strip().lower() in ("1", "true", "yes"):
+        raise RuntimeError("HIVEMIND_PORTAL_SECRET (>= 32 bytes) is required")
+    else:
+        _portal_secret_bytes = _secrets.token_bytes(32)
+    _portal_store = RouterStore(ARTIFACTS_ROOT / "local_portal_router.db", _portal_secret_bytes)
 
     def _extract_bearer_token(request: Request, payload: Dict[str, Any] | None = None) -> str:
         auth = request.headers.get("authorization", "")

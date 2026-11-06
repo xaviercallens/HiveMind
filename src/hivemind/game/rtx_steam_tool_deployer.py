@@ -875,8 +875,13 @@ def run_intense_rtx_stress_suite(
     )
 
     cert_payload = f"RTX_CERT:{STEAM_APP_ID}:{hw.get('gpu_name')}:{all_stages_passed}:{vram_final['peak_allocated_mb']}"
+    import secrets as _secrets
+    _rtx_cert_key = (
+        os.environ.get("HIVEMIND_RTX_CERT_SECRET", "").encode("utf-8")
+        or _secrets.token_bytes(32)
+    )
     cert_hmac = hmac.new(
-        b"HiveMind-Steamworks-RTX-Deploy-Key", cert_payload.encode("utf-8"), hashlib.sha256
+        _rtx_cert_key, cert_payload.encode("utf-8"), hashlib.sha256
     ).hexdigest()[:32]
 
     report: Dict[str, Any] = {

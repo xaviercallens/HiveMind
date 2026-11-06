@@ -48,14 +48,15 @@ jobs:
           lint: "false"
           use-mathlib-cache: "false"
 
-      - name: Require compiler-checked proofs (48+ Theorems) and complete axiom audit
+      - name: Require compiler-checked proofs (162+ Theorems) and complete axiom audit
         run: |
           uv run --no-sync python - <<'PY'
           from paper.autoevolve_peer_review_pipeline import require_machine_checked, verify_lean4_specification
           result = verify_lean4_specification()
           print("Lean audit:", result)
           require_machine_checked(result)
-          assert result["theorem_count"] >= 48, f"Expected at least 48 theorems, got {result['theorem_count']}"
+          assert result["theorem_count"] >= 162, f"Expected at least 162 theorems, got {result['theorem_count']}"
+          assert result["rda_multiplier_audit"]["verified"] is True, f"RDAMultiplier Lean receipt check failed: {result['rda_multiplier_audit']}"
           PY
 
       - name: Pre-Release Gate — Full Test Suite & >=95% Coverage Enforcement

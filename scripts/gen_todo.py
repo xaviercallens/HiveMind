@@ -1,124 +1,216 @@
 # Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
-"""Generate TODO.md from the open GitHub issues and pull requests, or check that the committed file is current.
+"""Generate or verify ``TODO.md`` from open GitHub issues and pull requests (Issue #555).
 
-    python scripts/gen_todo.py            # fetch with the gh CLI and rewrite TODO.md
-    python scripts/gen_todo.py --check    # exit 1 when TODO.md differs from what the open issues and PRs produce
-    python scripts/gen_todo.py --issues issues.json --prs prs.json   # use recorded data, no network
-
-The date line is not part of the comparison, so a check does not fail only because a day went by.
+Groups open issues by ``[P0]`` / ``[P1]`` / ``[P2]`` / ``[Incident]`` prefix, strips season IDs
+and GitHub closing keywords before issue numbers, lists open pull requests, and provides a
+``--check`` mode that exits non-zero when ``TODO.md`` differs from the generated text.
 """
 
 from __future__ import annotations
 
 import argparse
-import collections
-import datetime
+from collections.abc import Mapping, Sequence
+from datetime import datetime, timezone
 import json
+from pathlib import Path
 import re
 import subprocess
 import sys
-from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-TODO_PATH = REPO_ROOT / "TODO.md"
-GENERATED_LINE = re.compile(r"^Generated \d{4}-\d{2}-\d{2} ", re.M)
-SEASON_ID = re.compile(r"\bHM-S\d+(?:-\d+)*\b[:,]?\s*")
-SECTIONS: list[tuple[str, str]] = [
-    ("P0", "P0: security or safety, fix first"),
-    ("P1", "P1: a claim the code does not back, or a verifier that cannot fail"),
-    ("P2", "P2: correctness and CI"),
-    ("INC", "Incidents"),
-    ("OTHER", "Other open issues (honesty, experiments, UX, federation)"),
-]
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_TODO_PATH = PROJECT_ROOT / "TODO.md"
+
+_SEASON_TOKEN_RE = re.compile(
+    r"\b(?:CAMP-S\d+(?:-[A-Za-z0-9_]+)*|HM-S\d+(?:-[A-Za-z0-9_]+)*|S\d+(?:-[A-Za-z0-9_]+)*|Season\s+\d+(?:\s*/\s*\d+)?)\b"
+)
+_CLOSING_KEYWORD_RE = re.compile(
+    r"(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#?(\d+)\b"
+)
+_GENERATED_DATE_RE = re.compile(r"^Generated (\d{4}-\d{2}-\d{2}) from the repository's open GitHub issues", re.MULTILINE)
 
 
-def clean_title(title: str) -> str:
-    """Drop season ids (docs rule) and table-breaking pipes from an issue or PR title."""
-    return SEASON_ID.sub("", title).replace("|", "/").strip()
+def strip_season_ids_and_closing_keywords(text: str) -> str:
+    """Remove season identifiers and neutralize GitHub closing keywords before issue numbers."""
+    cleaned = _SEASON_TOKEN_RE.sub("", str(text))
+    cleaned = _CLOSING_KEYWORD_RE.sub(r"issue \1", cleaned)
+    cleaned = re.sub(r"\[\s*[-:]+\s*", "[", cleaned)
+    cleaned = re.sub(r"\(\s*[-:,]+\s*\)", "()", cleaned)
+    cleaned = re.sub(r" {2,}", " ", cleaned)
+    return cleaned.strip()
 
 
-def priority_of(title: str) -> str:
-    match = re.match(r"\[(P\d)", title)
-    if match:
-        return match.group(1) if match.group(1) in ("P0", "P1", "P2") else "OTHER"
-    return "INC" if title.startswith("[Incident") else "OTHER"
+def fetch_open_github_items(repo_root: Path = PROJECT_ROOT) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Fetch open issues and open pull requests from GitHub via the ``gh`` CLI."""
+    issue_proc = subprocess.run(
+        ["gh", "issue", "list", "--state", "open", "--limit", "500", "--json", "number,title"],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    pr_proc = subprocess.run(
+        ["gh", "pr", "list", "--state", "open", "--limit", "200", "--json", "number,title,author,isDraft"],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    issues = json.loads(issue_proc.stdout)
+    prs = json.loads(pr_proc.stdout)
+    return list(issues), list(prs)
 
 
-def build_todo(issues: list[dict[str, Any]], prs: list[dict[str, Any]], today: str) -> str:
-    """Return the TODO.md text for the given open issues and pull requests."""
-    grouped: dict[str, list[dict[str, Any]]] = collections.defaultdict(list)
-    for issue in sorted(issues, key=lambda i: int(i["number"]), reverse=True):
-        grouped[priority_of(str(issue["title"]))].append(issue)
-    drafts = sum(1 for p in prs if p.get("isDraft"))
-    lines = [
+def render_todo_markdown(
+    issues: Sequence[Mapping[str, Any]],
+    prs: Sequence[Mapping[str, Any]],
+    *,
+    generated_date: str | None = None,
+) -> str:
+    """Render deterministic ``TODO.md`` content from open issues and pull requests."""
+    date_str = generated_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    sorted_issues = sorted(issues, key=lambda item: int(item["number"]), reverse=True)
+    sorted_prs = sorted(prs, key=lambda item: int(item["number"]), reverse=True)
+
+    p0: list[str] = []
+    p1: list[str] = []
+    p2: list[str] = []
+    incidents: list[str] = []
+    other: list[str] = []
+
+    for item in sorted_issues:
+        num = int(item["number"])
+        raw_title = str(item.get("title", "")).strip()
+        clean_title = strip_season_ids_and_closing_keywords(raw_title)
+        line = f"- [ ] issue {num}: {clean_title}"
+        if raw_title.startswith("[P0"):
+            p0.append(line)
+        elif raw_title.startswith("[P1"):
+            p1.append(line)
+        elif raw_title.startswith("[P2"):
+            p2.append(line)
+        elif raw_title.startswith("[Incident]"):
+            incidents.append(line)
+        else:
+            other.append(line)
+
+    draft_count = sum(1 for pr in sorted_prs if bool(pr.get("isDraft")))
+    draft_word = "draft" if draft_count == 1 else "drafts"
+
+    pr_lines: list[str] = []
+    for pr in sorted_prs:
+        num = int(pr["number"])
+        author_obj = pr.get("author")
+        if isinstance(author_obj, Mapping):
+            author_login = str(author_obj.get("login", "unknown"))
+        else:
+            author_login = str(author_obj or "unknown")
+        draft_suffix = " (draft)" if bool(pr.get("isDraft")) else ""
+        clean_pr_title = strip_season_ids_and_closing_keywords(str(pr.get("title", "")))[:120]
+        pr_lines.append(f"- PR {num}{draft_suffix} by {author_login}: {clean_pr_title}")
+
+    sections: list[str] = [
         "<!-- Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0. -->",
         "# TODO: what is still open",
         "",
-        f"Generated {today} from the repository's open GitHub issues and pull requests, not from memory. Nothing here claims that something works; "
-        "it lists what is not finished. Re-generate it with scripts/gen_todo.py instead of hand-editing the counts.",
+        (
+            f"Generated {date_str} from the repository's open GitHub issues and pull requests, "
+            "not from memory. Nothing here claims that something works; it lists what is not finished. "
+            "Re-generate it instead of hand-editing the counts."
+        ),
         "",
-        f"Open issues: {len(issues)}. Open pull requests: {len(prs)} ({drafts} drafts).",
+        f"Open issues: {len(sorted_issues)}. Open pull requests: {len(sorted_prs)} ({draft_count} {draft_word}).",
         "",
-        "Rules for anyone taking an item: AGPL header on every file under src/hivemind; no stub bodies and no mock_, simulate_ or dummy_ identifiers "
-        "outside tests/; a new test must fail on unfixed main before it passes; no fabricated numbers; merges are owner-only through the hourly gatekeeper.",
+        (
+            "Rules for anyone taking an item: AGPL header on every file under src/hivemind; "
+            "no stub bodies and no mock_, simulate_ or dummy_ identifiers outside tests/; "
+            "a new test must fail on unfixed main before it passes; no fabricated numbers; "
+            "merges are owner-only through the hourly gatekeeper."
+        ),
         "",
-        "What is real and what is simulated across the codebase is audited in [docs/MVP_REALITY_AUDIT.md](docs/MVP_REALITY_AUDIT.md); the smoke path is in "
-        "[docs/MVP_E2E_SMOKE.md](docs/MVP_E2E_SMOKE.md). Per-row status lives in the dated docs/IMPROVEMENT_PLAN_*.md files.",
+        (
+            "What is real and what is simulated across the codebase is audited in "
+            "[docs/MVP_REALITY_AUDIT.md](docs/MVP_REALITY_AUDIT.md); the smoke path is in "
+            "[docs/MVP_E2E_SMOKE.md](docs/MVP_E2E_SMOKE.md). Per-row status lives in the dated "
+            "docs/IMPROVEMENT_PLAN_*.md files."
+        ),
+        "",
+        f"## P0: security or safety, fix first ({len(p0)})",
+        "",
+        *p0,
+        "",
+        f"## P1: a claim the code does not back, or a verifier that cannot fail ({len(p1)})",
+        "",
+        *p1,
+        "",
+        f"## P2: correctness and CI ({len(p2)})",
+        "",
+        *p2,
+        "",
+        f"## Incidents ({len(incidents)})",
+        "",
+        *incidents,
+        "",
+        f"## Other open issues (honesty, experiments, UX, federation) ({len(other)})",
+        "",
+        *other,
+        "",
+        "## Open pull requests",
+        "",
+        "Owner pull requests are merged by the hourly gatekeeper when every check passes; the rest are held.",
+        "",
+        *pr_lines,
         "",
     ]
-    for key, name in SECTIONS:
-        if grouped[key]:
-            lines += [f"## {name} ({len(grouped[key])})", ""]
-            lines += [f"- [ ] issue {i['number']}: {clean_title(str(i['title']))}" for i in grouped[key]]
-            lines.append("")
-    lines += ["## Open pull requests", "", "Owner pull requests are merged by the hourly gatekeeper when every check passes; the rest are held.", ""]
-    for pr in sorted(prs, key=lambda p: int(p["number"]), reverse=True):
-        author = (pr.get("author") or {}).get("login", "unknown")
-        lines.append(f"- PR {pr['number']}{' (draft)' if pr.get('isDraft') else ''} by {author}: {clean_title(str(pr['title']))[:110]}")
-    return "\n".join(lines) + "\n"
+    return "\n".join(sections)
 
 
-def without_date(text: str) -> str:
-    """The text with the day in the Generated line blanked, for comparison."""
-    return GENERATED_LINE.sub("Generated DATE ", text)
+def check_todo_file(
+    todo_path: Path,
+    issues: Sequence[Mapping[str, Any]],
+    prs: Sequence[Mapping[str, Any]],
+    *,
+    generated_date: str | None = None,
+) -> tuple[bool, str]:
+    """Verify that ``todo_path`` matches the freshly generated markdown."""
+    if not todo_path.exists():
+        return False, f"{todo_path} does not exist"
+    current = todo_path.read_text(encoding="utf-8")
+    effective_date = generated_date
+    if effective_date is None:
+        match = _GENERATED_DATE_RE.search(current)
+        if match is not None:
+            effective_date = match.group(1)
+    expected = render_todo_markdown(issues, prs, generated_date=effective_date)
+    if current != expected:
+        return False, f"{todo_path} is out of date with open issues/PRs; re-run scripts/gen_todo.py"
+    return True, "ok"
 
 
-def is_current(committed: str, issues: list[dict[str, Any]], prs: list[dict[str, Any]]) -> bool:
-    """True when the committed TODO.md matches what the given issues and pull requests produce."""
-    return without_date(committed) == without_date(build_todo(issues, prs, "1970-01-01"))
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Generate or check TODO.md from open GitHub issues and PRs.")
+    parser.add_argument("--output", type=Path, default=DEFAULT_TODO_PATH, help="Path to TODO.md")
+    parser.add_argument("--check", action="store_true", help="Exit non-zero if TODO.md differs from generated text")
+    parser.add_argument("--fixture-json", type=Path, default=None, help="Offline JSON fixture with issues and prs")
+    parser.add_argument("--date", type=str, default=None, help="Override YYYY-MM-DD generation date")
+    args = parser.parse_args(list(argv) if argv is not None else None)
 
+    if args.fixture_json is not None:
+        payload = json.loads(args.fixture_json.read_text(encoding="utf-8"))
+        issues = list(payload.get("issues", []))
+        prs = list(payload.get("prs", []))
+    else:
+        issues, prs = fetch_open_github_items()
 
-def fetch(kind: str) -> list[dict[str, Any]]:
-    fields = "number,title" if kind == "issue" else "number,title,author,isDraft"
-    out = subprocess.run(["gh", kind, "list", "--state", "open", "--limit", "1000", "--json", fields], capture_output=True, text=True, check=True, timeout=120)
-    data = json.loads(out.stdout)
-    if not isinstance(data, list):
-        raise ValueError(f"gh {kind} list did not return a list")
-    return data
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--check", action="store_true", help="exit 1 when TODO.md is not current; write nothing")
-    parser.add_argument("--issues", type=Path, help="JSON list of open issues (number, title) instead of calling gh")
-    parser.add_argument("--prs", type=Path, help="JSON list of open pull requests (number, title, author, isDraft) instead of calling gh")
-    parser.add_argument("--todo", type=Path, default=TODO_PATH, help="path of the TODO.md to write or check")
-    args = parser.parse_args(argv)
-    issues = json.loads(args.issues.read_text(encoding="utf-8")) if args.issues else fetch("issue")
-    prs = json.loads(args.prs.read_text(encoding="utf-8")) if args.prs else fetch("pr")
     if args.check:
-        if not args.todo.exists():
-            print(f"{args.todo} does not exist", file=sys.stderr)
+        passed, reason = check_todo_file(args.output, issues, prs, generated_date=args.date)
+        if not passed:
+            print(reason, file=sys.stderr)
             return 1
-        if is_current(args.todo.read_text(encoding="utf-8"), issues, prs):
-            print(f"{args.todo.name} is current ({len(issues)} issues, {len(prs)} pull requests)")
-            return 0
-        print(f"{args.todo.name} is out of date: regenerate it with scripts/gen_todo.py", file=sys.stderr)
-        return 1
-    today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
-    args.todo.write_text(build_todo(issues, prs, today), encoding="utf-8")
-    print(f"wrote {args.todo} ({len(issues)} issues, {len(prs)} pull requests)")
+        return 0
+
+    rendered = render_todo_markdown(issues, prs, generated_date=args.date)
+    args.output.write_text(rendered, encoding="utf-8")
     return 0
 
 

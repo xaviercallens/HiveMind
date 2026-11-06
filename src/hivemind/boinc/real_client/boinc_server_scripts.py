@@ -544,8 +544,12 @@ def assimilate(args: list[str], directory: Any = None) -> int:
         state = loaded_states[-1]
         sha = state_sha(state)
         head_json = LEDGER_DIR / f"{stem}.json"
+        best_loss: float | None = None
         if head_json.exists():
             current_head = json.loads(head_json.read_text())
+            prev_loss = current_head.get("eval_loss_after")
+            if isinstance(prev_loss, (int, float)) and not isinstance(prev_loss, bool) and math.isfinite(prev_loss):
+                best_loss = float(prev_loss)
             if current_head.get("wu_id") == wu:
                 _log_stderr(f"assimilate: {wu!r} is already the chain head")
                 return 1
@@ -567,16 +571,39 @@ def assimilate(args: list[str], directory: Any = None) -> int:
         entry["eval_by_domain_before"], entry["eval_by_domain_after"] = meta.get("eval_by_domain_before"), meta.get("eval_by_domain_after")
         eval_gain_info = classify_workunit_eval_gain(entry)
         entry.update(eval_gain_info)
+        curr_loss = meta.get("eval_loss_after")
+        has_curr_loss = isinstance(curr_loss, (int, float)) and not isinstance(curr_loss, bool) and math.isfinite(curr_loss)
+        ratchet_vs_head = best_loss is None or not has_curr_loss or float(curr_loss) <= (best_loss + DEFAULT_EVAL_GAIN_TOLERANCE)
         # Advance the chain head when no head exists yet or when held-out loss did not regress beyond tolerance
-        advance_head = (not head_json.exists()) or bool(eval_gain_info["chain_head_ratchet_pass"])
+        advance_head = ((not head_json.exists()) or bool(eval_gain_info["chain_head_ratchet_pass"])) and ratchet_vs_head
         entry["chain_head_advanced"] = advance_head
+        entry["ratchet_accepted"] = advance_head
+        entry["ratchet_best_loss_before_wu"] = best_loss
         if advance_head:
             tmp = LEDGER_DIR / f"{stem}.pt.tmp"
             torch.save({"state": state, "sha256": sha, "wu_id": wu}, tmp)
             tmp.replace(LEDGER_DIR / f"{stem}.pt")
             head_json.write_text(json.dumps(
                 {"wu_id": wu, "sha256": sha, "eval_loss_before": meta.get("eval_loss_before"), "eval_loss_after": meta.get("eval_loss_after"),
-                 "progress_label": eval_gain_info["progress_label"], "eval_basis": eval_gain_info["eval_basis"], "t": time.time()}))
+                 "ratchet_accepted": True, "progress_label": eval_gain_info["progress_label"], "eval_basis": eval_gain_info["eval_basis"], "t": time.time()}))
+        domain = meta.get("domain")
+        if isinstance(domain, str) and domain and meta.get("domain_isolated_adapter"):
+            dom_tmp = LEDGER_DIR / f"{stem}_{domain}.pt.tmp"
+            torch.save({"state": state, "sha256": sha, "wu_id": wu, "domain": domain}, dom_tmp)
+            dom_tmp.replace(LEDGER_DIR / f"{stem}_{domain}.pt")
+            (LEDGER_DIR / f"{stem}_{domain}.json").write_text(
+                json.dumps(
+                    {
+                        "wu_id": wu,
+                        "domain": domain,
+                        "sha256": sha,
+                        "eval_loss_before": meta.get("eval_loss_before"),
+                        "eval_loss_after": meta.get("eval_loss_after"),
+                        "t": time.time(),
+                    }
+                ),
+                encoding="utf-8",
+            )
     elif meta["app"] in SOLVER_SWEEP_APPS:
         sweep_results = meta.get("sweep_results", [])
         cert_bytes = json.dumps(sweep_results, sort_keys=True, separators=(",", ":")).encode("utf-8")

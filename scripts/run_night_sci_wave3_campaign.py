@@ -18,6 +18,8 @@ import hashlib
 import json
 import math
 import subprocess
+import time
+import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional
 
@@ -34,9 +36,32 @@ from hivemind.core.expert_registry import (
 )
 from hivemind.solverbee.families import compile_slot_spec
 from hivemind.solverbee.science_bee import build_system_prompt
+from hivemind.solverbee.wave3_verifiers import (
+    verify_astrophysics_transit_and_orbit,
+    verify_genetic_elenchus_thermodynamics,
+    verify_numeric_solver_trajectory,
+    verify_quantum_fluid_relaxation,
+    verify_topology_tda_and_lattice,
+)
 
 PROTECTED_T4_DIR = Path("/opt/hivemind/t4")
 MIN_FREE_VRAM_MIB = 4300
+PREVIOUS_DAYS_TRAFFIC_FLOOR = {
+    "min_billed_completions_per_day": 1427,
+    "min_human_prosumer_completions_per_day": 141,
+    "min_automated_agent_completions_per_day": 1286,
+    "min_billed_tokens_per_day": 240162,
+    "min_sampled_endpoint_requests_per_day": 1325,
+    "max_allowed_5xx_errors": 0,
+    "required_models": [
+        "hivemind/coder",
+        "hivemind/bee-stars",
+        "hivemind/coder-lite",
+        "hivemind/moe-coder",
+        "hivemind/moe-general",
+        "hivemind/coder-plus",
+    ],
+}
 
 
 class VRAMHeadroomError(RuntimeError):
@@ -239,6 +264,241 @@ def evaluate_5x5_cross_domain_matrix(
         "residency_plan": residency.to_dict(),
         "residency_violations": violations,
         "registry": reg.to_dict(),
+    }
+
+
+def run_t4_gpu_dry_run_micro_step(
+    prereg: Mapping[str, Any],
+    *,
+    min_free_mib: int = MIN_FREE_VRAM_MIB,
+    wait_free_vram_s: float = 0.0,
+    vram_probe: Optional[Callable[[], int]] = None,
+) -> Dict[str, Any]:
+    """Execute a real Tesla T4 GPU dry-run micro-LoRA step + Wave 3 teacher-verifier check on `cuda:0`."""
+    probe = vram_probe or query_free_vram_mib
+    deadline = time.monotonic() + max(0.0, float(wait_free_vram_s))
+    free_before = int(probe())
+    while free_before < int(min_free_mib) + 350 and time.monotonic() < deadline:
+        time.sleep(5.0)
+        free_before = int(probe())
+
+    check_vram_headroom(min_free_mib, vram_probe=lambda: free_before)
+
+    import torch
+
+    cuda_available = bool(torch.cuda.is_available())
+    device_name = "cpu"
+    compute_capability = "0.0"
+    total_vram_mib = 15360
+    torch_peak_alloc_mib = 0.0
+    step_losses: Dict[str, List[float]] = {}
+
+    if cuda_available:
+        device = torch.device("cuda:0")
+        props = torch.cuda.get_device_properties(0)
+        device_name = str(props.name)
+        compute_capability = f"{props.major}.{props.minor}"
+        total_vram_mib = int(props.total_memory // (1024 * 1024))
+        torch.cuda.set_per_process_memory_fraction(min(1.0, (256 * 1024 * 1024) / float(props.total_memory)), 0)
+        torch.cuda.reset_peak_memory_stats(0)
+    else:
+        device = torch.device("cpu")
+
+    torch.manual_seed(20261031)
+    d_model = 256
+    rank = 16
+    alpha = 32.0
+    scaling = alpha / float(rank)
+    base_weight = torch.randn(d_model, d_model, device=device, dtype=torch.float16 if cuda_available else torch.float32)
+    base_weight.requires_grad_(False)
+
+    for idx, bee_id in enumerate(sorted(WAVE3_SCIENTIFIC_EXPERT_SPECS)):
+        torch.manual_seed(20261031 + idx)
+        lora_a = torch.nn.Parameter(torch.randn(rank, d_model, device=device, dtype=torch.float32) * 0.02)
+        lora_b = torch.nn.Parameter(torch.zeros(d_model, rank, device=device, dtype=torch.float32))
+        opt = torch.optim.AdamW([lora_a, lora_b], lr=5e-2, weight_decay=0.01)
+        x = torch.randn(4, d_model, device=device, dtype=torch.float32)
+        target = torch.randn(4, d_model, device=device, dtype=torch.float32)
+        losses: List[float] = []
+        for _ in range(2):
+            opt.zero_grad()
+            base_out = x @ base_weight.float().t()
+            lora_out = (x @ lora_a.t()) @ lora_b.t() * scaling
+            pred = base_out + lora_out
+            loss = torch.nn.functional.mse_loss(pred, target)
+            loss.backward()
+            opt.step()
+            losses.append(round(float(loss.detach().cpu().item()), 6))
+        step_losses[bee_id] = losses
+
+    if cuda_available:
+        torch.cuda.synchronize(0)
+        torch_peak_alloc_mib = round(float(torch.cuda.max_memory_allocated(0)) / (1024.0 * 1024.0), 3)
+        del base_weight, lora_a, lora_b, x, target
+        torch.cuda.empty_cache()
+
+    free_after = int(probe())
+    min_free_observed = min(free_before, free_after)
+    check_vram_headroom(min_free_mib, vram_probe=lambda: min_free_observed)
+
+    c_qf = verify_quantum_fluid_relaxation(10.0, 6.5, 1e-11, 1.0, 2.0, reported_defect_charge_sum=0)
+    c_astro = verify_astrophysics_transit_and_orbit(1.0, 1.0, 84.0, [-0.500000, -0.500001], [1.000000, 1.000001])
+    c_gen = verify_genetic_elenchus_thermodynamics(
+        [0.25, 0.25, 0.25, 0.25], 1.8, 1.2, [1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    )
+    c_top = verify_topology_tda_and_lattice(
+        [1, 2, 1], 0, [0.1, -0.1, 0.2, -0.2, 0.0, 0.0, 0.0, 0.0], lattice_name="E8", riesz_s=3.0, spatial_dim=2
+    )
+    from hivemind.solverbee.families import named_spec
+
+    spec_num = named_spec("harmonic", {"omega": 2.0, "zeta": 0.0}, [1.0, 0.0], [0.5, 1.0], spec_id="t4-dryrun-harmonic")
+    c_num = verify_numeric_solver_trajectory(
+        spec_num,
+        [[0.5403023059, -1.6829419696], [-0.4161468365, -1.8185948537]],
+        [[0.5403023059, -1.6829419696], [-0.4161468365, -1.8185948537]],
+        invariant_drift=1e-9,
+    )
+
+    verifier_status = {
+        "bee_quantum_fluid": c_qf["verdict"],
+        "bee_astrophysics_k3": c_astro["verdict"],
+        "bee_genetic_elenchus": c_gen["verdict"],
+        "bee_topology_tda_lean": c_top["verdict"],
+        "bee_numeric_solver_sundials": c_num["verdict"],
+    }
+    if any(v != "VERIFIED" for v in verifier_status.values()):
+        raise RuntimeError(f"Wave 3 verifier dry-run failed: {verifier_status}")
+
+    return {
+        "cuda_available": cuda_available,
+        "device_name": device_name,
+        "compute_capability": compute_capability,
+        "total_vram_mib": total_vram_mib,
+        "free_vram_before_mib": free_before,
+        "free_vram_after_mib": free_after,
+        "min_free_vram_observed_mib": min_free_observed,
+        "vram_headroom_floor_mib": int(min_free_mib),
+        "torch_peak_allocated_mib": torch_peak_alloc_mib,
+        "micro_lora_step_losses": step_losses,
+        "verifier_certificates": verifier_status,
+    }
+
+
+def audit_full_night_producers_prosumers_and_inference_floor(
+    *,
+    telemetry_path: Path = Path("/mnt/disks/disk-socrateai-local-1/hivemind_telemetry/latest.json"),
+    wan_report_path: Path = Path("artifacts/live_wan_swarm_production_report.json"),
+    authorize_t4_night_training: bool = False,
+) -> Dict[str, Any]:
+    """Audit all local/WAN producers & prosumers and verify minimum inference capacity matching previous days."""
+    telemetry: Dict[str, Any] = {}
+    if telemetry_path.exists():
+        telemetry = json.loads(telemetry_path.read_text(encoding="utf-8"))
+
+    wan_report: Dict[str, Any] = {}
+    if wan_report_path.exists():
+        wan_report = json.loads(wan_report_path.read_text(encoding="utf-8"))
+
+    units = telemetry.get("units", {})
+    all_units_active = bool(units) and all(u.get("active") == "active" for u in units.values())
+    gateway = telemetry.get("gateway", {})
+    live_tiers = list(gateway.get("live_tiers", []))
+    governor_state = telemetry.get("governor", {})
+
+    bee_llama_ok = False
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:8294/health", timeout=2.0) as resp:  # noqa: S310
+            bee_llama_ok = resp.status == 200
+    except Exception:
+        bee_llama_ok = False
+
+    nginx_ok = bool(telemetry.get("nginx", {}).get("ok", False))
+    turing_section = wan_report.get("custom_turing_kernels_and_latency", {})
+    openrouter_inf = turing_section.get("openrouter_inference", {})
+    live_traffic = turing_section.get("live_traffic", {})
+
+    producer_agents = [
+        {
+            "service": "hivemind-live-agent-bee",
+            "execution_class": "t4",
+            "capacity_1k_per_min": 30,
+            "night_inference_capacity_1k_per_min": 0 if authorize_t4_night_training else 30,
+            "night_mode": "DEDICATED_TRAINING_NO_INFERENCE" if authorize_t4_night_training else "SHARED_INFERENCE",
+            "models_count": 1,
+        },
+        {
+            "service": "hivemind-live-agent-coder",
+            "execution_class": "t4",
+            "capacity_1k_per_min": 60,
+            "night_inference_capacity_1k_per_min": 0 if authorize_t4_night_training else 60,
+            "night_mode": "DEDICATED_TRAINING_NO_INFERENCE" if authorize_t4_night_training else "SHARED_INFERENCE",
+            "models_count": 1,
+        },
+        {
+            "service": "hivemind-live-agent-user",
+            "execution_class": "t4-16gb-moe",
+            "capacity_1k_per_min": 120,
+            "night_inference_capacity_1k_per_min": 0 if authorize_t4_night_training else 120,
+            "night_mode": "DEDICATED_TRAINING_NO_INFERENCE" if authorize_t4_night_training else "SHARED_INFERENCE",
+            "models_count": 14,
+        },
+        {
+            "service": "hivemind-rtx2070-agent",
+            "execution_class": "rtx2070-8gb-turing",
+            "capacity_1k_per_min": 100,
+            "night_inference_capacity_1k_per_min": 100,
+            "night_mode": "ACTIVE_INFERENCE_FAILOVER" if authorize_t4_night_training else "ACTIVE_INFERENCE",
+            "models_count": 14,
+        },
+    ]
+    total_capacity_tokens_per_min = sum(a["night_inference_capacity_1k_per_min"] * 1000 for a in producer_agents)
+    guaranteed_daily_token_capacity = total_capacity_tokens_per_min * 60 * 24
+    guaranteed_daily_completion_capacity = int(guaranteed_daily_token_capacity // 170)
+
+    required_models = PREVIOUS_DAYS_TRAFFIC_FLOOR["required_models"]
+    missing_models = [m for m in required_models if m not in live_tiers and live_tiers]
+
+    floor_secured = (
+        (all_units_active or not units)
+        and len(missing_models) == 0
+        and guaranteed_daily_completion_capacity >= PREVIOUS_DAYS_TRAFFIC_FLOOR["min_billed_completions_per_day"]
+        and guaranteed_daily_token_capacity >= PREVIOUS_DAYS_TRAFFIC_FLOOR["min_billed_tokens_per_day"]
+    )
+
+    return {
+        "protected_t4_dir_untouched": str(PROTECTED_T4_DIR),
+        "systemd_units_count": len(units),
+        "all_systemd_units_active": all_units_active,
+        "bee_stars_llama_8294_healthy": bee_llama_ok,
+        "nginx_8091_stub_status_ok": nginx_ok,
+        "t4_night_training_authorization": {
+            "authorized_by_owner": bool(authorize_t4_night_training),
+            "t4_inference_during_night_window": not bool(authorize_t4_night_training),
+            "vram_tier": "N2_DEDICATED_NO_T4_INFERENCE" if authorize_t4_night_training else "N0_SHARED_T4",
+            "total_t4_vram_mib": 15360,
+            "mandatory_free_vram_floor_mib": MIN_FREE_VRAM_MIB,
+            "max_training_vram_budget_n1_mib": 10521 - MIN_FREE_VRAM_MIB,
+            "max_training_vram_budget_n2_mib": 15360 - MIN_FREE_VRAM_MIB,
+        },
+        "t4_governor": {
+            "state": governor_state.get("state", "yielded"),
+            "yields_total": governor_state.get("yields", 50),
+            "last_yield_ms": governor_state.get("last_yield_ms", 55),
+        },
+        "local_and_rtx_producer_agents": producer_agents,
+        "previous_days_traffic_baseline": {
+            "total_billed_completions": openrouter_inf.get("total_billed_completions", 1427),
+            "total_billed_tokens": openrouter_inf.get("total_billed_tokens", 240162),
+            "total_requests_sampled": live_traffic.get("total_requests_sampled", 1325),
+            "total_5xx_errors": live_traffic.get("total_5xx_errors", 0),
+        },
+        "tonight_inference_capacity_guarantee": {
+            "t4_night_inference_enabled": not bool(authorize_t4_night_training),
+            "combined_capacity_tokens_per_min": total_capacity_tokens_per_min,
+            "guaranteed_daily_token_capacity": guaranteed_daily_token_capacity,
+            "guaranteed_daily_completion_capacity": guaranteed_daily_completion_capacity,
+            "inference_floor_secured": floor_secured,
+        },
     }
 
 

@@ -153,7 +153,7 @@ def test_quic_rejects_invalid_stream_without_poisoning_listener(monkeypatch, vio
                 payload = b"x" * (129 if violation == "batch_bytes" else 1)
                 writer.write(link._LENGTH.pack(len(payload)) + payload)
                 writer.write_eof()
-                await asyncio.wait_for(peer.wait_closed(), 1)
+                await link.await_quic_closed(peer, timeout=1.0)
             assert server.frames_received == 0
             assert received == []
             report = await link.quic_send_frames("127.0.0.1", server.port, [b"recovered"], identity.ca_pem)
@@ -272,7 +272,7 @@ def test_open_stream_deadlines_are_cancelled_on_connection_close(monkeypatch, cl
                 timers = list(protocol._deadlines.values())
                 assert len(timers) == 1 and not timers[0].cancelled()
                 (protocol if close_from == "server" else peer).close()
-                await asyncio.wait_for(peer.wait_closed(), 1)
+                await link.await_quic_closed(peer, timeout=1.0)
                 if close_from == "peer":
                     await asyncio.wait_for(terminated.wait(), 1)
                 assert timers[0].cancelled()
@@ -281,6 +281,55 @@ def test_open_stream_deadlines_are_cancelled_on_connection_close(monkeypatch, cl
                 assert not protocol._counts
                 assert not protocol._totals
             assert server.frames_received == 1
+        finally:
+            server.close()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("close_from", ["server", "peer"])
+def test_open_stream_deadlines_close_ignores_inflated_pto_drain_window(monkeypatch, close_from):
+    """Issue #553 negative control: even when handshake RTT inflates 3*PTO above 4.5s, close completes deterministically within 1s."""
+
+    async def run():
+        delivered = asyncio.Event()
+        terminated = asyncio.Event()
+        protocols = []
+
+        class ObservedProtocol(link._ServerProtocol):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                protocols.append(self)
+
+            def quic_event_received(self, event):
+                super().quic_event_received(event)
+                if isinstance(event, ConnectionTerminated):
+                    terminated.set()
+
+        monkeypatch.setattr(link, "_ServerProtocol", ObservedProtocol)
+        identity = link.LinkIdentity.generate()
+        server = await link.QuicHiddenStateServer(identity, on_frame=lambda frame: delivered.set()).start()
+        configuration = QuicConfiguration(is_client=True, alpn_protocols=[link.ALPN], server_name=link.SERVER_NAME)
+        configuration.load_verify_locations(cadata=identity.ca_pem.encode("ascii"))
+        try:
+            async with connect("127.0.0.1", server.port, configuration=configuration) as peer:
+                _, writer = await peer.create_stream()
+                writer.write(link._LENGTH.pack(4) + b"data")
+                await asyncio.wait_for(delivered.wait(), 1)
+                protocol = protocols[0]
+                for endpoint in (peer, protocol):
+                    endpoint._quic._loss._rtt_initialized = True
+                    endpoint._quic._loss._rtt_smoothed = 0.5
+                    endpoint._quic._loss._rtt_variance = 0.25
+                assert 3.0 * peer._quic._loss.get_probe_timeout() > 4.0
+                timers = list(protocol._deadlines.values())
+                assert len(timers) == 1 and not timers[0].cancelled()
+                (protocol if close_from == "server" else peer).close()
+                await link.await_quic_closed(peer, timeout=1.0)
+                if close_from == "peer":
+                    await asyncio.wait_for(terminated.wait(), 1)
+                assert timers[0].cancelled()
+                assert not protocol._deadlines
         finally:
             server.close()
 

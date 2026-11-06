@@ -54,6 +54,7 @@ for b in $("${GIT[@]}" ls-tree --name-only HEAD deploy/t4_node/node/bin/ 2>/dev/
 done
 chown -R root:root "$OPT"
 
+# Install committed node/*.service and node/*.timer units directly from HEAD
 for u in $("${GIT[@]}" ls-tree --name-only HEAD deploy/t4_node/node/ 2>/dev/null || true); do
   case "$(basename "$u")" in
     *.service|*.timer)

@@ -86,7 +86,6 @@ def detect_community_accelerator(preferred_device: str = "auto") -> dict[str, An
             "wddm_usable_budget_mib": min(total_mib, 6656.0),
             "cuda_or_hip_version": str(hip_ver or torch.version.cuda or "unknown"),
             "is_gpu": True,
-            "measured_on_gpu": True,
         }
 
     mps_available = bool(
@@ -104,7 +103,6 @@ def detect_community_accelerator(preferred_device: str = "auto") -> dict[str, An
             "wddm_usable_budget_mib": 6656.0,
             "cuda_or_hip_version": "mps",
             "is_gpu": True,
-            "measured_on_gpu": True,
         }
 
     return {
@@ -116,7 +114,6 @@ def detect_community_accelerator(preferred_device: str = "auto") -> dict[str, An
         "wddm_usable_budget_mib": 6656.0,
         "cuda_or_hip_version": "none",
         "is_gpu": False,
-        "measured_on_gpu": False,
     }
 
 
@@ -339,6 +336,7 @@ def run_community_gpu_benchmark(
     gpu_points_awarded = 500 if hw["is_gpu"] else 0
     hardware_summary = {
         **hw,
+        "measured_on_gpu": bool(hw["is_gpu"]),
         "peak_allocated_vram_mib": peak_vram_mib,
         "within_8gb_wddm_envelope": peak_vram_mib <= hw["wddm_usable_budget_mib"],
     }

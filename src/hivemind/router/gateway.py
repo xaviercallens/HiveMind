@@ -1443,7 +1443,7 @@ def create_router_app(
                 "served_model": _public_model(plan.model_id),
                 "requested_model": _public_model(plan.requested_model or plan.model_id),
                 "routing_mode": plan.routing_mode,
-                "local_model": record.models.get(plan.model_id, plan.model_id),
+                "local_model": record.local_name(plan.model_id) or plan.model_id,
             }
             return JSONResponse(payload)
         raise upstream_exhausted(plan, timed_out, account=account, reasons=failure_reasons)

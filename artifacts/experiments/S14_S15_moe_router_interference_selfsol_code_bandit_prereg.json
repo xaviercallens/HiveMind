@@ -1,0 +1,78 @@
+{
+  "arms": {
+    "HM_S14_02_verified_self_solutions": [
+      "base_model",
+      "gold_text_sft_adapter",
+      "verified_self_solution_rft_adapter",
+      "cross_domain_control_adapter"
+    ],
+    "HM_S14_03_routed_bee_moe_system": [
+      "base_all_packs",
+      "best_single_adapter_plateau",
+      "ungated_routed_moe",
+      "gated_routed_bee_moe",
+      "corrupted_misrouted_moe_negative_control"
+    ],
+    "HM_S14_04_full_interference_grid": [
+      "sampled_n100_12min_cap_legacy",
+      "full_pack_sized_timeout_bonferroni_grid"
+    ],
+    "HM_S14_07_verified_cyber_and_executable_code_expert": [
+      "base_model",
+      "unverified_text_cyber_legacy",
+      "verified_executable_code_expert",
+      "shuffled_control"
+    ],
+    "HM_S15_03_served_expert_bandit_routing": [
+      "oracle",
+      "near_oracle_90",
+      "best_single_served_expert_plateau",
+      "uniform_served_expert",
+      "bandit_cold_strategy_manager",
+      "bandit_warm_budgeted_strategy_manager"
+    ]
+  },
+  "controls": {
+    "negative": "Planted defects must fire: (1) shuffled/corrupted self-solutions rejected by numeric verifier; (2) corrupted router (misroute_rate=0.85) degrades routed accuracy below base and is rejected by verified_update_gate; (3) legacy 12-minute interference cap flags maths cells as TIMEOUT/under-sized; (4) broken Python code candidate fails executable test gate; (5) in a flat world where all served experts have identical pass rates on executable tests, bandit_cold has zero regret and does not beat uniform random.",
+    "positive": "Clean references must pass: (1) verified self-solutions pass 100% of numeric verifier checks; (2) deterministic prompt router classifies held-out Night-MoE prompts with accuracy >= 0.98; (3) sized timeouts cover full-pack evaluation times with >= 1.6x safety factor and zero TIMEOUT cells; (4) reference Python solutions pass 100% of executable unit tests; (5) oracle upper bound is never beaten on expected pass rate across all 20 paired seeds, and near_oracle_90 sits strictly between oracle and uniform."
+  },
+  "decision_rules": {
+    "HM_S14_02": "Rejection-sampled verified self-solution adapter on maths (n=200) beats gold-text SFT adapter (exact paired McNemar p < 0.05), beats cross-domain control adapter (H1, p < 0.05), beats base model on base-parsed items (H2, p < 0.05), and is ACCEPTed by verified_update_gate while gold-text SFT is REJECTed.",
+    "HM_S14_03": "Router domain accuracy >= 0.98 on held-out items; gated routed Bee MoE beats both base and the best single adapter (routing plateau) across the full Night-MoE evaluation suite (exact paired McNemar p < 1e-10) with zero cross-expert interference harm and verified_update_gate ACCEPT.",
+    "HM_S14_04": "Full 4x6 pack-by-adapter grid (20 off-diagonal transfer/interference cells) evaluated at full pack sizes (no n=100 limit) as one Bonferroni family (alpha_bonf = 0.05 / 20 = 0.0025), with per-stage timeouts sized from measured per-item latency so timeout_cells == [] and missing_cells == [].",
+    "HM_S14_07": "Executable-test code expert (100% of training rows verified by isolated Python test runner) and verified-target cyber MCQ pack beat both base and matched control (exact paired McNemar p < 0.05) and pass verified_update_gate (ACCEPT).",
+    "HM_S15_03": "On real executable-test coding/math/security/astronomy tasks routed across served experts via StrategyManager, best single expert (routing plateau) is measured first; bandit_cold and bandit_warm_budgeted beat best_single_served_expert_plateau and uniform on >= 18/20 paired seeds, and bandit_warm_budgeted achieves lower early regret than bandit_cold on >= 16/20 seeds."
+  },
+  "experiment_id": "S14_S15_MOE_ROUTER_INTERFERENCE_SELFSOL_CODE_BANDIT",
+  "issues": [
+    166,
+    167,
+    168,
+    169,
+    173,
+    319
+  ],
+  "preregistered_utc": "2026-11-06T16:40:00Z",
+  "seeds": [
+    2026,
+    2027,
+    2028,
+    2029,
+    2030,
+    2031,
+    2032,
+    2033,
+    2034,
+    2035,
+    2036,
+    2037,
+    2038,
+    2039,
+    2040,
+    2041,
+    2042,
+    2043,
+    2044,
+    2045
+  ]
+}

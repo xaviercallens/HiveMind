@@ -1706,17 +1706,20 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None, *, 
         return json.loads(cloud_path.read_text(encoding="utf-8"))
 
     @app.post("/api/scan-hf-shard", response_class=JSONResponse)
-    def post_scan_hf_shard(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    def post_scan_hf_shard(payload: Dict[str, Any] = Body(default={})) -> Any:
         gamer_tag = str(payload.get("gamer_tag", "CyberValkyrie_FR"))
         dataset_id = str(payload.get("dataset_id", "sahil2801/CodeAlpaca-20k"))
         custom_rows = payload.get("custom_rows")
         target_keywords = payload.get("target_keywords")
-        return execute_interactive_hf_shard_scan(
+        res = execute_interactive_hf_shard_scan(
             gamer_tag=gamer_tag,
             dataset_id=dataset_id,
             custom_rows=custom_rows,
             target_keywords=target_keywords,
         )
+        if res.get("status") == "BLOCKED":
+            return JSONResponse(status_code=400, content=res)
+        return res
 
     @app.post("/api/forge-lora-mission", response_class=JSONResponse)
     def post_forge_lora_mission(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:

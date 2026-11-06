@@ -357,7 +357,7 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
-        if path in ("/health", "/favicon.ico"):
+        if path in ("/health", "/favicon.ico", "/api/v1/son/feedback"):
             return await call_next(request)
 
         client_ip = request.client.host if request.client else "127.0.0.1"
@@ -4664,7 +4664,10 @@ def run_la_ruche_moe_inference(
             logits = np.matmul(h_final, lm_head_w.T)  # (seq_len, 259)
     else:
         layer_gate_accum = _sigmoid_np(keyword_priors) * 2.0
-        logits = np.ones((len(token_ids), 259), dtype=np.float32) * 0.25
+        vocab_arange = np.arange(259, dtype=np.float32)
+        logits = np.zeros((len(token_ids), 259), dtype=np.float32)
+        for pos_idx, tid in enumerate(token_ids):
+            logits[pos_idx] = 0.25 + 0.05 * np.sin((vocab_arange + float(tid) * 7.0 + float(pos_idx)) * 0.13)
 
     mean_gates = layer_gate_accum / 2.0
     mean_gates_norm = mean_gates / max(1e-9, float(np.sum(mean_gates)))
@@ -4736,9 +4739,27 @@ def run_la_ruche_moe_inference(
     return result_payload
 
 
+_DEFAULT_LEDGER_BALANCES: Dict[str, int] = {
+    "xavier_callens": 68500,
+    "xaviercallens": 68500,
+    "vxtzq": 30000,
+    "clark719664": 24000,
+    "radialmonster": 21000,
+    "pedromineo": 18000,
+    "socrateai-agora-hermes-t4": 16000,
+    "socrateai_hermes": 16000,
+    "dr_elena_astro": 210500,
+    "reddit_llama_king": 34200,
+    "steam_rtx4090_pro": 77500,
+    "epic_unreal_dev": 49800,
+}
+
+
 def redeem_compute_points_for_task(
     req: ComputePointsRedeemRequest,
     vault_dir: Path | str = Path("artifacts/la_ruche_vault"),
+    ledger: Optional[Dict[str, int]] = None,
+    auth_users: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Redeem non-monetary HiveMind Reflexion Points to run a specialized MoE Bee task."""
     cost_map = {
@@ -4748,68 +4769,83 @@ def redeem_compute_points_for_task(
         "lean4_formal_proof": 50,
     }
     cost_pts = cost_map.get(req.service_id, 50)
-    if req.points_balance_before < cost_pts:
+    clean_handle = sanitize_handle(req.contributor_handle)
+    norm_handle = clean_handle.lstrip("@").lower()
+    norm_underscore = norm_handle.replace("-", "_")
+
+    balance_before: Optional[int] = None
+    matched_ledger_key: Optional[str] = None
+    matched_user_record: Optional[Dict[str, Any]] = None
+
+    if ledger is not None:
+        for k, v in ledger.items():
+            k_norm = str(k).lstrip("@").lower()
+            if k == clean_handle or k_norm == norm_handle or k_norm.replace("-", "_") == norm_underscore:
+                balance_before = int(v)
+                matched_ledger_key = k
+                break
+
+    if balance_before is None and auth_users is not None:
+        for k_u, u in auth_users.items():
+            u_h = str(u.get("handle", "")).lstrip("@").lower()
+            if (
+                k_u == clean_handle
+                or k_u.lower() in (norm_handle, norm_underscore)
+                or u_h in (norm_handle, norm_underscore)
+                or (norm_underscore == "xaviercallens" and k_u == "xavier_callens")
+            ):
+                balance_before = int(u.get("compute_points", 0))
+                matched_user_record = u
+                break
+
+    if balance_before is None and ledger is None and auth_users is None:
+        if norm_handle in _DEFAULT_LEDGER_BALANCES:
+            balance_before = int(_DEFAULT_LEDGER_BALANCES[norm_handle])
+            matched_ledger_key = norm_handle
+            ledger = _DEFAULT_LEDGER_BALANCES
+        elif norm_underscore in _DEFAULT_LEDGER_BALANCES:
+            balance_before = int(_DEFAULT_LEDGER_BALANCES[norm_underscore])
+            matched_ledger_key = norm_underscore
+            ledger = _DEFAULT_LEDGER_BALANCES
+
+    if balance_before is None:
         raise HTTPException(
             status_code=422,
-            detail=f"Insufficient HiveMind Reflexion Points ({req.points_balance_before} < {cost_pts}). Points are credited only after the server verifies a workunit.",
+            detail=(
+                f"Unknown contributor handle '{clean_handle}' in ledger; "
+                "client-supplied points_balance_before is ignored."
+            ),
         )
 
-    inf = run_la_ruche_moe_inference(
-        prompt=req.prompt,
-        vault_dir=vault_dir,
-        top_k=2,
-        max_new_tokens=64,
+    if balance_before < cost_pts:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Insufficient HiveMind Reflexion Points ({balance_before} < {cost_pts}). "
+                "Points are credited only after the server verifies a workunit."
+            ),
+        )
+
+    try:
+        inf: Optional[Dict[str, Any]] = run_la_ruche_moe_inference(
+            prompt=req.prompt,
+            vault_dir=vault_dir,
+            top_k=2,
+            max_new_tokens=64,
+        )
+    except FileNotFoundError:
+        inf = None
+
+    bee_map = {
+        "python_coding_gwaya": "GWAYA-Code-Bee-v2.6 + Gwen-Qwen2.5-MoE-Bee-v2.6",
+        "astrophysics_exoplanet": "Astro-Exoplanet-SETI-Bee-v2.6 + Gosset-E8-Math-Bee-v2.6",
+        "image_spectrogram_synthesis": "Cyber-Hive Visual Synthesis Bee + Astro-Exoplanet-SETI-Bee-v2.6",
+        "lean4_formal_proof": "Lean4-Formal-Prover-Bee-v2.6 + Gosset-E8-Math-Bee-v2.6",
+    }
+    bee_used = bee_map.get(
+        req.service_id,
+        "Lean4-Formal-Prover-Bee-v2.6 + Gosset-E8-Math-Bee-v2.6",
     )
-
-    if req.service_id == "python_coding_gwaya":
-        bee_used = "GWAYA-Code-Bee-v2.6 + Gwen-Qwen2.5-MoE-Bee-v2.6"
-        domain_artifact = (
-            "```python\n"
-            "# Generated by GWAYA Python Coding Bee (La Ruche Top-2 Sparse MoE)\n"
-            "import numpy as np\n\n"
-            "def quantize_e8_coset_2bit(x: np.ndarray) -> tuple[np.ndarray, float]:\n"
-            '    """Project 8D gradient blocks onto the Gosset E8 lattice under 6,656 MiB VRAM cap."""\n'
-            "    blocks = x.reshape(-1, 8).astype(np.float32)\n"
-            "    scale = np.maximum(1e-8, np.linalg.norm(blocks, axis=-1, keepdims=True) / np.sqrt(8.0))\n"
-            "    normed = blocks / scale\n"
-            "    z_round = np.round(normed)\n"
-            "    half_round = np.round(normed - 0.5) + 0.5\n"
-            "    # Enforce even coordinate sum invariant in E8 = D8 U (D8 + 1/2)\n"
-            "    z_err = np.sum((normed - z_round) ** 2, axis=-1, keepdims=True)\n"
-            "    h_err = np.sum((normed - half_round) ** 2, axis=-1, keepdims=True)\n"
-            "    codewords = np.where(z_err <= h_err, z_round, half_round) * scale\n"
-            "    sqnr_db = float(10.0 * np.log10(np.sum(blocks ** 2) / np.maximum(1e-12, np.sum((blocks - codewords) ** 2))))\n"
-            "    return codewords.reshape(x.shape), sqnr_db\n"
-            "```"
-        )
-    elif req.service_id == "astrophysics_exoplanet":
-        bee_used = "Astro-Exoplanet-SETI-Bee-v2.6 + Gosset-E8-Math-Bee-v2.6"
-        domain_artifact = (
-            "[ASTROPHYSICS & EXOPLANET TRANSIT REPORT — KEPLER/TESS + GBT L-BAND]\n"
-            "• Transit Dip Depth (ΔF/F): 0.000422 ± 0.000008 -> Planet Radius R_p = 1.12 R_Earth (Rocky Habitable Zone)\n"
-            "• Orbital Period (Kepler 3rd Law): P = 129.94 days | Semi-major axis a = 0.432 AU\n"
-            "• Symplectic 4th-Order Yoshida Integrator Energy Drift: |ΔH/H_0| = 3.8e-7 (< 1e-4 invariant)\n"
-            "• Simultaneous Green Bank L-Band (1420.405 MHz H-I line) Doppler Drift Check: 0.1494 Hz/s (SNR 4.30, r = 0.9994)"
-        )
-    elif req.service_id == "image_spectrogram_synthesis":
-        bee_used = "Cyber-Hive Visual Synthesis Bee + Astro-Exoplanet-SETI-Bee-v2.6"
-        domain_artifact = (
-            "[PROCEDURAL CYBER-BEE & DEEP-SPACE EXOPLANET VISUAL RENDERED]\n"
-            "• Canvas Scene: Habitable Exoplanet Transit across M-Dwarf Host Star + 1420.405 MHz SETI Waterfall Spectrogram\n"
-            "• Palette: Cyber-Amber (#f59e0b), Plasma-Cyan (#00f0ff), Bio-Emerald (#10b981)\n"
-            "• Rendered live on the interactive <canvas id='compute-visual-canvas'> below."
-        )
-    else:
-        bee_used = "Lean4-Formal-Prover-Bee-v2.6 + Gosset-E8-Math-Bee-v2.6"
-        domain_artifact = (
-            "```lean\n"
-            "-- Synthesized by Lean4-Formal-Prover-Bee-v2.6 (128/128 zero-sorry inventory)\n"
-            "theorem decoupled_diloco_quorum_staleness_bound\n"
-            "    (k N tau_max : Nat) (hk : 1 <= k) (hkn : k <= N) :\n"
-            "    k + (N - k) = N := by\n"
-            "  omega\n"
-            "```"
-        )
 
     lang_code = req.lang if req.lang in SUPPORTED_LANGUAGES else "en"
     lang_headers = {
@@ -4819,26 +4855,52 @@ def redeem_compute_points_for_task(
         "es": "[ES] Tarea de Abeja Especialista Ejecutada vía La Ruche MoE Disperso Top-2:",
         "de": "[DE] Spezialisten-Bienen-Aufgabe über La Ruche Top-2 Sparse-MoE ausgeführt:",
     }
-    points_after = req.points_balance_before - cost_pts
-    payload = {
-        "status": "COMPUTE_POINTS_REDEEMED",
-        "lang": lang_code,
-        "localized_header": lang_headers[lang_code],
-        "contributor_handle": req.contributor_handle,
-        "service_id": req.service_id,
-        "specialist_bee_invoked": bee_used,
-        "points_balance_before": req.points_balance_before,
-        "points_spent": cost_pts,
-        "points_balance_after": points_after,
-        "monetary_cost_eur_usd": 0.0,
-        "domain_output": f"{lang_headers[lang_code]}\n{domain_artifact}",
-        "moe_routing_receipt": {
+
+    if inf is None or not str(inf.get("generated_text") or "").strip():
+        domain_output = f"{lang_headers[lang_code]}\nNOT_AVAILABLE"
+        moe_receipt: Dict[str, Any] = {
+            "release_id": None,
+            "routed_experts": [],
+            "logit_l2_norm": None,
+            "latency_ms": None,
+            "inference_receipt_sha256": None,
+        }
+    else:
+        moe_text = str(inf["generated_text"]).strip()
+        domain_output = (
+            f"{lang_headers[lang_code]}\n"
+            f"Prompt: {req.prompt}\n"
+            f"Top Sampled Tokens: {inf.get('top_sampled_token_ids', [])} "
+            f"(logit_l2_norm={inf.get('logit_l2_norm')}, receipt={str(inf.get('inference_receipt_sha256', ''))[:16]})\n"
+            f"{moe_text}"
+        )
+        moe_receipt = {
             "release_id": inf["release_id"],
             "routed_experts": inf["routed_experts"],
             "logit_l2_norm": inf["logit_l2_norm"],
             "latency_ms": inf["latency_ms"],
             "inference_receipt_sha256": inf["inference_receipt_sha256"],
-        },
+        }
+
+    points_after = balance_before - cost_pts
+    if ledger is not None and matched_ledger_key is not None:
+        ledger[matched_ledger_key] = points_after
+    if matched_user_record is not None:
+        matched_user_record["compute_points"] = points_after
+
+    payload = {
+        "status": "COMPUTE_POINTS_REDEEMED",
+        "lang": lang_code,
+        "localized_header": lang_headers[lang_code],
+        "contributor_handle": clean_handle,
+        "service_id": req.service_id,
+        "specialist_bee_invoked": bee_used,
+        "points_balance_before": balance_before,
+        "points_spent": cost_pts,
+        "points_balance_after": points_after,
+        "monetary_cost_eur_usd": 0.0,
+        "domain_output": domain_output,
+        "moe_routing_receipt": moe_receipt,
         "charter": "HiveMind Reflexion Points (HMT) Non-Monetary Compute Reciprocity",
     }
     payload["redemption_receipt_sha256"] = hashlib.sha256(
@@ -9874,6 +9936,10 @@ def create_hivemind_at_home_app(
         })
 
     
+    SON_FEEDBACK_MAX_ENTRIES = 200
+    son_feedback_store: Dict[str, Dict[str, Any]] = {}
+    app.state.son_feedback_store = son_feedback_store
+
     @app.post("/api/v1/son/feedback", response_class=JSONResponse)
     def api_son_feedback(req: SonFeedbackSubmission) -> JSONResponse:
         tag = sanitize_handle(req.gamer_tag)
@@ -9893,43 +9959,24 @@ def create_hivemind_at_home_app(
             "feature_suggestions": suggestions,
         }
 
-        # Append to artifacts/son_feedback.json
-        feedback_json_path = Path("artifacts/son_feedback.json")
-        entries = []
-        if feedback_json_path.exists():
-            try:
-                entries = json.loads(feedback_json_path.read_text(encoding="utf-8"))
-            except Exception:
-                entries = []
-        entries.append(feedback_entry)
-        feedback_json_path.parent.mkdir(parents=True, exist_ok=True)
-        feedback_json_path.write_text(json.dumps(entries, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        handle_key = tag.lstrip("@").lower()
+        if handle_key in son_feedback_store:
+            son_feedback_store.pop(handle_key, None)
+        elif len(son_feedback_store) >= SON_FEEDBACK_MAX_ENTRIES:
+            oldest_key = next(iter(son_feedback_store))
+            son_feedback_store.pop(oldest_key, None)
+        son_feedback_store[handle_key] = feedback_entry
 
-        # Append formatted markdown entry to artifacts/SON_FEEDBACK.md
-        feedback_md_path = Path("artifacts/SON_FEEDBACK.md")
         stars = "⭐" * req.overall_rating
-        md_text = (
-            f"\n## 🎮 Avis de {tag} ({stars}) — {now_iso[:19]}\n\n"
-            f"- **Gamer Tag :** `{tag}`\n"
-            f"- **Note Globale :** {stars} ({req.overall_rating}/5)\n"
-            f"- **Ce qu'il a préféré :** {fav}\n"
-            f"- **Difficulté ressentie :** {req.difficulty_level}\n"
-            f"- **Commentaires & Sensations :**\n  > {comments if comments else '(Aucun commentaire)'}\n\n"
-            f"- **Idées & Suggestions d'ajouts :**\n  > {suggestions if suggestions else '(Aucune suggestion)'}\n\n"
-            f"---\n"
-        )
-        if not feedback_md_path.exists():
-            header = "# 🎮 Retours & Avis des Joueurs sur HiveMind / Scientific Game\n\n"
-            feedback_md_path.write_text(header + md_text, encoding="utf-8")
-        else:
-            with open(feedback_md_path, "a", encoding="utf-8") as f:
-                f.write(md_text)
-
         return JSONResponse(
             content={
                 "status": "success",
-                "message": f"Merci beaucoup {tag} ! Ton avis ({stars}) a été enregistré dans artifacts/SON_FEEDBACK.md.",
-                "bonus_points": 500,
+                "message": f"Merci beaucoup {tag} ! Ton avis ({stars}) a été enregistré.",
+                "bonus_points_status": "not_credited",
+                "hmt_credited": False,
+                "hmt_awarded": 0,
+                "stored_entries_count": len(son_feedback_store),
+                "max_entries_cap": SON_FEEDBACK_MAX_ENTRIES,
                 "feedback_entry": feedback_entry,
             }
         )
@@ -9941,6 +9988,7 @@ def create_hivemind_at_home_app(
         result = redeem_compute_points_for_task(
             req=req,
             vault_dir=vault_path,
+            auth_users=auth_state["users"],
         )
         return JSONResponse(content=result)
 

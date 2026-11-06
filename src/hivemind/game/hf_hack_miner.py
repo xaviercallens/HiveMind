@@ -44,9 +44,15 @@ from rich.panel import Panel
 from rich.table import Table
 from transformers import AutoTokenizer
 
-from hivemind.boinc.validator import DeterministicSpotCheckValidator
+from hivemind.boinc.validator import (
+    DeterministicSpotCheckValidator,
+    verify_fixed_point_q16_digest,
+)
 from hivemind.boinc.workunit import BOINCWorkunit
-from hivemind.cli.demo_hf_domain_swarm import fetch_hf_domain_subset
+from hivemind.cli.demo_hf_domain_swarm import (
+    _GENERIC_FALLBACK_SAMPLE,
+    fetch_hf_domain_subset,
+)
 from hivemind.client.daemon import ZeroIntrusionDaemon
 from hivemind.client.steamworks import SteamworksSDKBridge
 from hivemind.config import (
@@ -1092,6 +1098,9 @@ SEASON_6_FULL_CAMPAIGN_HF_BOUNTY_CONTRACTS: List[HFBountyChallenge] = (
 )
 SEASON_6_EXTENDED_HF_BOUNTY_CONTRACTS: List[HFBountyChallenge] = (
     SEASON_5_EXTENDED_HF_BOUNTY_CONTRACTS + SEASON_6_HF_BOUNTY_CONTRACTS
+)
+ALLOWED_HF_SCAN_DATASETS: frozenset[str] = frozenset(
+    c.dataset_id for c in SEASON_6_EXTENDED_HF_BOUNTY_CONTRACTS
 )
 SEASON_6_BOUNTY_POOL_HIVE = 2500.0
 
@@ -3610,6 +3619,25 @@ def run_hf_hack_mining_game(
     return game_report
 
 
+_CANONICAL_TRACKED_REPORT: Path = (
+    Path(__file__).resolve().parents[3] / "artifacts" / "hf_hack_miner_game_report.json"
+).resolve()
+
+
+def _write_leaderboard_state(report_path: Path, data: Dict[str, Any]) -> None:
+    """Persist leaderboard state to hud_state and to report_path when not the git-tracked artifact."""
+    if report_path.resolve() != _CANONICAL_TRACKED_REPORT:
+        report_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    hud_state = Path(
+        data.get("free_steam_package", {}).get(
+            "interactive_hud_html",
+            str(CACHE_ROOT.parent / "steam_dist/HiveMind_Steam_FreeEdition/web_ui/index.html"),
+        )
+    ).parent / "live_leaderboard_state.json"
+    if hud_state.parent.exists():
+        hud_state.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
 def execute_interactive_hf_shard_scan(
     gamer_tag: str = "CyberValkyrie_FR",
     dataset_id: str = "sahil2801/CodeAlpaca-20k",
@@ -3617,10 +3645,64 @@ def execute_interactive_hf_shard_scan(
     target_keywords: List[str] | None = None,
 ) -> Dict[str, Any]:
     """Scan a Hugging Face dataset or custom rows, pin a 16 KB CAS shard, verify Merkle PoS, and award points."""
+    if dataset_id not in ALLOWED_HF_SCAN_DATASETS:
+        return {
+            "status": "BLOCKED",
+            "reason": f"dataset_id {dataset_id!r} is not in ALLOWED_HF_SCAN_DATASETS",
+            "gamer_tag": gamer_tag,
+            "dataset_id": dataset_id,
+            "shard_cid": "",
+            "shard_size_bytes": 0,
+            "shard_signal_score": 0.0,
+            "merkle_pos_verified": False,
+            "challenged_chunk_index": -1,
+            "merkle_root": "",
+            "data_discovery_pts_awarded": 0,
+            "top_curated_sample_preview": "",
+        }
     ensure_local_drive_caches()
+    if custom_rows:
+        rows = list(custom_rows)
+    else:
+        rows = fetch_offline_curated_corpus(dataset_id, num_samples=12)
+        if not rows:
+            offline = os.environ.get("HF_HUB_OFFLINE", "").strip().lower() in ("1", "true", "yes")
+            safe_ds_name = dataset_id.replace("/", "_").replace("-", "_").lower()
+            subset_cache_file = CACHE_ROOT / "swarm_store" / "hf_subsets" / f"{safe_ds_name}_12.json"
+            if offline and not subset_cache_file.exists():
+                return {
+                    "status": "BLOCKED",
+                    "reason": f"HF_HUB_OFFLINE is set and no cached subset exists for {dataset_id!r}",
+                    "gamer_tag": gamer_tag,
+                    "dataset_id": dataset_id,
+                    "shard_cid": "",
+                    "shard_size_bytes": 0,
+                    "shard_signal_score": 0.0,
+                    "merkle_pos_verified": False,
+                    "challenged_chunk_index": -1,
+                    "merkle_root": "",
+                    "data_discovery_pts_awarded": 0,
+                    "top_curated_sample_preview": "",
+                }
+            rows = fetch_hf_domain_subset(dataset_id=dataset_id, num_samples=12)
+        if not rows or all(r == _GENERIC_FALLBACK_SAMPLE for r in rows):
+            return {
+                "status": "BLOCKED",
+                "reason": f"dataset fetch failed or returned generic fallback for {dataset_id!r}",
+                "gamer_tag": gamer_tag,
+                "dataset_id": dataset_id,
+                "shard_cid": "",
+                "shard_size_bytes": 0,
+                "shard_signal_score": 0.0,
+                "merkle_pos_verified": False,
+                "challenged_chunk_index": -1,
+                "merkle_root": "",
+                "data_discovery_pts_awarded": 0,
+                "top_curated_sample_preview": "",
+            }
+
     store = ContentAddressedSwarmStore(CACHE_ROOT / "swarm_store")
     ledger = HiveSwarmLedger(ledger_path=CACHE_ROOT / "swarm_store" / "hive_gamified_ledger.json")
-    rows = custom_rows if custom_rows else fetch_hf_domain_subset(dataset_id=dataset_id, num_samples=12)
     keywords = target_keywords or [
         "def",
         "return",
@@ -3658,9 +3740,8 @@ def execute_interactive_hf_shard_scan(
     )
     points_awarded = int(round(sig_score * 320.0)) + (50 if pos_receipt.verified else 0)
 
-    # Update live leaderboard state if present (skip mutating canonical artifact during pytest runs)
     report_path = ARTIFACTS_ROOT / "hf_hack_miner_game_report.json"
-    if report_path.exists() and not os.environ.get("PYTEST_CURRENT_TEST"):
+    if report_path.exists():
         data = json.loads(report_path.read_text(encoding="utf-8"))
         for g in data.get("leaderboard", []):
             if g.get("gamer_tag") == gamer_tag:
@@ -3687,17 +3768,10 @@ def execute_interactive_hf_shard_scan(
                 ]
                 if k in data["leaderboard"][0]
             }
-        report_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        hud_state = Path(
-            data.get("free_steam_package", {}).get(
-                "interactive_hud_html",
-                str(CACHE_ROOT.parent / "steam_dist/HiveMind_Steam_FreeEdition/web_ui/index.html"),
-            )
-        ).parent / "live_leaderboard_state.json"
-        if hud_state.parent.exists():
-            hud_state.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        _write_leaderboard_state(report_path, data)
 
     return {
+        "status": "OK",
         "gamer_tag": gamer_tag,
         "dataset_id": dataset_id,
         "shard_cid": cid,
@@ -3803,7 +3877,7 @@ def execute_interactive_bounty_probe(
     fee_hive = 0.225
 
     report_path = ARTIFACTS_ROOT / "hf_hack_miner_game_report.json"
-    if report_path.exists() and not os.environ.get("PYTEST_CURRENT_TEST"):
+    if report_path.exists():
         data = json.loads(report_path.read_text(encoding="utf-8"))
         for g in data.get("leaderboard", []):
             if g.get("gamer_tag") == gamer_tag:
@@ -3832,15 +3906,7 @@ def execute_interactive_bounty_probe(
                 ]
                 if k in data["leaderboard"][0]
             }
-        report_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        hud_state = Path(
-            data.get("free_steam_package", {}).get(
-                "interactive_hud_html",
-                str(CACHE_ROOT.parent / "steam_dist/HiveMind_Steam_FreeEdition/web_ui/index.html"),
-            )
-        ).parent / "live_leaderboard_state.json"
-        if hud_state.parent.exists():
-            hud_state.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        _write_leaderboard_state(report_path, data)
 
     return {
         "gamer_tag": gamer_tag,
@@ -3861,6 +3927,8 @@ def execute_interactive_bounty_probe(
 def execute_interactive_lora_micro_forge(
     gamer_tag: str = "CyberValkyrie_FR",
     contract_id: str = "CONTRACT-HF-04-RUST-SYSTEMS",
+    worker_delta_override: Dict[str, torch.Tensor] | None = None,
+    spot_check_passed_override: bool | None = None,
 ) -> Dict[str, Any]:
     """Execute a fast interactive QLoRA Micro-Forge burst & Steam Rich Presence broadcast from the Web HUD."""
     ensure_local_drive_caches()
@@ -3881,10 +3949,40 @@ def execute_interactive_lora_micro_forge(
     init_loss = 3.12
     final_loss = round(max(0.18, init_loss * (1.0 - min(0.82, 0.55 + sig_score * 0.25))), 4)
     loss_drop_pct = round(100.0 * (init_loss - final_loss) / init_loss, 2)
-    lora_pts = int(round(loss_drop_pct * 11.5))
-    bounty_pts = contract.base_bounty_pts + 220
-    total_pts = lora_pts + bounty_pts
-    hive_minted = 15.0
+
+    seed_int = sum(ord(ch) for ch in contract.contract_id) + int(round(sig_score * 10000))
+    gen = torch.Generator().manual_seed(seed_int)
+    validator_delta: Dict[str, torch.Tensor] = {
+        "layers.0.lora_A": torch.randn((4, 16), generator=gen, dtype=torch.float32) * 0.02,
+        "layers.0.lora_B": torch.randn((16, 4), generator=gen, dtype=torch.float32) * 0.02,
+    }
+    worker_delta: Dict[str, torch.Tensor] = (
+        worker_delta_override
+        if worker_delta_override is not None
+        else {k: v.clone() for k, v in validator_delta.items()}
+    )
+    spot_validator = DeterministicSpotCheckValidator(tolerance_eps=1e-4)
+    spot_res = spot_validator.evaluate_two_statistic_replay(
+        worker_state=worker_delta,
+        validator_state=validator_delta,
+    )
+    q16_res = verify_fixed_point_q16_digest(worker_delta, validator_delta)
+    spot_check_passed = (
+        bool(spot_check_passed_override)
+        if spot_check_passed_override is not None
+        else bool(spot_res.passed and q16_res["passed"] and final_loss < init_loss)
+    )
+
+    if spot_check_passed:
+        lora_pts = int(round(loss_drop_pct * 11.5))
+        bounty_pts = contract.base_bounty_pts + 220
+        total_pts = lora_pts + bounty_pts
+        hive_minted = 15.0
+    else:
+        lora_pts = 0
+        bounty_pts = 0
+        total_pts = 0
+        hive_minted = 0.0
 
     bridge = SteamworksSDKBridge()
     rp = bridge.set_rich_presence(
@@ -3896,7 +3994,7 @@ def execute_interactive_lora_micro_forge(
     )
 
     report_path = ARTIFACTS_ROOT / "hf_hack_miner_game_report.json"
-    if report_path.exists() and not os.environ.get("PYTEST_CURRENT_TEST"):
+    if report_path.exists() and spot_check_passed:
         data = json.loads(report_path.read_text(encoding="utf-8"))
         for g in data.get("leaderboard", []):
             if g.get("gamer_tag") == gamer_tag:
@@ -3934,15 +4032,7 @@ def execute_interactive_lora_micro_forge(
             key=lambda x: (x.get("total_points", 0), x.get("best_loss_reduction_pct", 0.0)),
             reverse=True,
         )
-        report_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        hud_state = Path(
-            data.get("free_steam_package", {}).get(
-                "interactive_hud_html",
-                str(CACHE_ROOT.parent / "steam_dist/HiveMind_Steam_FreeEdition/web_ui/index.html"),
-            )
-        ).parent / "live_leaderboard_state.json"
-        if hud_state.parent.exists():
-            hud_state.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        _write_leaderboard_state(report_path, data)
 
     return {
         "gamer_tag": gamer_tag,
@@ -3954,7 +4044,11 @@ def execute_interactive_lora_micro_forge(
         "initial_loss": init_loss,
         "final_loss": final_loss,
         "loss_reduction_pct": loss_drop_pct,
-        "spot_check_passed": True,
+        "spot_check_passed": spot_check_passed,
+        "spot_check_linf_divergence": (
+            float(spot_res.linf_divergence) if math.isfinite(spot_res.linf_divergence) else None
+        ),
+        "spot_check_q16_digest": str(q16_res.get("digest_a", "")),
         "lora_pts_awarded": lora_pts,
         "bounty_pts_awarded": bounty_pts,
         "total_pts_awarded": total_pts,

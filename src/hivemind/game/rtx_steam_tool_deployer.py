@@ -776,6 +776,29 @@ def run_intense_rtx_stress_suite(
             metadata={"compression_ratio": comp_pkg.compression_ratio, "season": 3},
         )
         _, _, loaded_lora = cas_store.load_lora_expert_checkpoint(expert_cid)
+        expected_roundtrip = {
+            k: v.detach().cpu().to(torch.float16).to(torch.float32)
+            for k, v in dummy_lora_b.items()
+        }
+        cas_spotcheck = validator.evaluate_two_statistic_replay(
+            worker_state=loaded_lora if isinstance(loaded_lora, dict) else {},
+            validator_state=expected_roundtrip,
+        )
+        cas_roundtrip_verified = bool(
+            isinstance(loaded_lora, dict)
+            and set(loaded_lora.keys()) == set(expected_roundtrip.keys())
+            and all(
+                bool(torch.isfinite(loaded_lora[k]).all())
+                and torch.allclose(
+                    loaded_lora[k].detach().cpu().float(),
+                    expected_roundtrip[k],
+                    atol=1e-6,
+                    rtol=1e-5,
+                )
+                for k in expected_roundtrip
+            )
+            and cas_spotcheck.passed
+        )
 
         stage9_summary = {
             "season3_contracts_forged": [
@@ -788,14 +811,15 @@ def run_intense_rtx_stress_suite(
                 s3_sol_forge["domain_expert"],
                 s3_m9_forge["domain_expert"],
             ],
-            "season3_all_spotchecks_passed": (
-                s3_lean_forge["spot_check_passed"]
-                and s3_sol_forge["spot_check_passed"]
-                and s3_m9_forge["spot_check_passed"]
+            "season3_all_spotchecks_passed": bool(
+                s3_lean_forge.get("spot_check_passed")
+                and s3_sol_forge.get("spot_check_passed")
+                and s3_m9_forge.get("spot_check_passed")
+                and cas_spotcheck.passed
             ),
             "webgl_3d_georing_nodes": topo_3d["num_nodes"],
             "cas_expert_cid": expert_cid,
-            "cas_roundtrip_verified": "layers.0.lora_A" in loaded_lora,
+            "cas_roundtrip_verified": cas_roundtrip_verified,
             "lora_top5pct_fp8_compression_ratio": comp_pkg.compression_ratio,
         }
 

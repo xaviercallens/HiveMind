@@ -16,7 +16,15 @@ import torch
 from hypothesis import given, settings, strategies as st
 
 from hivemind.queenbee import ALGORITHM_NAME, PUBLIC_NAME
-from hivemind.queenbee.dance import DanceBoard, DanceRecord, recruitment_weights, wilson_interval, wilson_lower
+from hivemind.queenbee.dance import (
+    DanceBoard,
+    DanceRecord,
+    dual_scout_bounds,
+    recruitment_weights,
+    rotate_scouts,
+    wilson_interval,
+    wilson_lower,
+)
 from hivemind.queenbee.knowledge_market import (
     KnowledgeMarket,
     KnowledgeShare,
@@ -29,8 +37,13 @@ from hivemind.queenbee.strategies import (
     BanditStrategy,
     FederatedShareStrategy,
     Outcome,
+    PreferencePair,
     PreferencePairStrategy,
+    PrivacyAccountant,
     StrategyManager,
+    TaskDecompositionRouter,
+    VerifiedIDECorrectionFlow,
+    VerifiedSubtask,
     admissible_mix,
     aggregate_shared_updates,
     clip_and_noise,
@@ -325,3 +338,133 @@ def test_knowledge_bonus_leaves_the_kelly_equilibrium_unchanged() -> None:
     # a settlement that pays more than its pool must be caught
     broken = type(settlement)(1, settlement.validator_fee_hmt, 0.5, settlement.pool_hmt, {"c1": settlement.pool_hmt * 2}, {"c1": 2})
     assert not certify_knowledge_bonus(before, after, broken, fee, payment, True, True).payouts_within_pool
+
+
+# ------------------------------------------------------------------ S14 & S15 extensions (#165, #170, #171, #172, #174, #175, #176)
+
+
+@given(st.lists(st.integers(1, 500), min_size=1, max_size=10), st.floats(5.0, 200.0))
+@settings(max_examples=60)
+def test_signer_trial_budget_bounds_total_allocated_trials_hm_s15_01(ns: list[int], budget: float) -> None:
+    recs = [_rec(expert="e1", n=n, s=n, epoch=10, signer="sybil-whale") for n in ns]
+    rep = recruitment_weights(
+        recs, now_epoch=10, horizon_epochs=5, cap_per_record=1.0, secret=SECRET, max_trials_per_signer=budget
+    )
+    assert rep.signer_trials_used["sybil-whale"] <= budget + 1e-9
+    assert rep.trial_weights["c1"]["e1"] == pytest.approx(min(float(sum(ns)), budget))
+    bandit = BanditStrategy()
+    assert bandit.warm_start(rep, pseudo_trials=20.0, use_trial_budget=True) == 1
+    arm = bandit.arm("c1", "e1")
+    assert (arm.alpha + arm.beta - 2.0) <= budget + 1e-9
+
+
+def test_dual_scout_bounds_and_rotation_resist_single_corrupted_scout_hm_s15_02() -> None:
+    pool = ("scout-a", "scout-b", "scout-c", "scout-d")
+    s_ep10 = rotate_scouts(pool, epoch=10, k=2, secret=SECRET)
+    s_ep11 = rotate_scouts(pool, epoch=11, k=2, secret=SECRET)
+    assert len(s_ep10) == 2 and len(set(s_ep10)) == 2
+    assert set(s_ep10).issubset(pool) and set(s_ep11).issubset(pool)
+
+    # Scout A is honest (10/50 on e_bad); Scout B is corrupted by a Sybil (50/50 on e_bad)
+    honest_scout = _rec(expert="e_bad", cluster="c1", n=50, s=10, signer="scout-a")
+    corrupt_scout = _rec(expert="e_bad", cluster="c1", n=50, s=50, signer="scout-b")
+    bounds = dual_scout_bounds([honest_scout, corrupt_scout], ("scout-a", "scout-b"), secret=SECRET)
+    assert bounds[("c1", "e_bad")] == pytest.approx(wilson_interval(10, 50)[1])
+    assert bounds[("c1", "e_bad")] < 0.40
+
+    sybil_claim = _rec(expert="e_bad", cluster="c1", n=200, s=200, signer="sybil")
+    rep = recruitment_weights(
+        [sybil_claim], now_epoch=10, horizon_epochs=5, cap_per_record=1.0, secret=SECRET, scout_bounds=bounds
+    )
+    assert rep.rejected["exceeds_scout_bound"] == 1 and rep.accepted == 0
+
+
+def test_task_decomposition_router_and_ide_correction_flow_hm_s15_04_05() -> None:
+    subtasks = [
+        VerifiedSubtask("s1", "c_code", "unit_tests"),
+        VerifiedSubtask("s2", "c_math", "numeric"),
+    ]
+    router = TaskDecompositionRouter()
+    rng = random.Random(19)
+    for _ in range(80):
+        assigned = router.route_subtasks(subtasks, ["e_code", "e_math"], rng)
+        outcomes = {
+            "s1": (True, assigned["s1"] == "e_code"),
+            "s2": (True, assigned["s2"] == "e_math"),
+        }
+        router.observe_subtasks(subtasks, assigned, outcomes)
+    assert router.bandit.arm("c_code", "e_code").mean > router.bandit.arm("c_code", "e_math").mean
+    assert router.bandit.arm("c_math", "e_math").mean > router.bandit.arm("c_math", "e_code").mean
+
+    flow = VerifiedIDECorrectionFlow(opt_in=True, beta=0.2)
+    for i in range(7):
+        assert flow.record_ide_correction(
+            f"p{i}", "c_code", "bad()", f"good({i})", verifier_kind="unit_tests", chosen_verified=True
+        )
+    assert not flow.record_ide_correction(
+        "p_unv", "c_code", "bad()", "unv()", verifier_kind="unit_tests", chosen_verified=False
+    )
+    unv = [PreferencePair(f"u{i}", "c_code", "r", "c", "unit_tests", verified=False) for i in range(10)]
+    base_out = {f"t{i}": ("pass" if i < 15 else "fail") for i in range(30)}
+    cand_out = {f"t{i}": ("pass" if i < 25 else "fail") for i in range(30)}
+    res = flow.train_and_gate_local_adapter(unv, base_out, cand_out)
+    assert res["admissible_mix"] is True and res["unverified_rows"] == 3
+    assert res["dpo_loss_after"] < res["dpo_loss_before"] and res["gate_accepted"] is True
+
+
+def test_exact_lora_product_aggregation_and_privacy_accountant_hm_s15_06() -> None:
+    g = torch.Generator().manual_seed(11)
+    d_out, d_in, rank = 8, 6, 2
+    deltas: dict[str, dict[str, torch.Tensor]] = {}
+    for i in range(5):
+        sgn = 1.0 if i % 2 == 0 else -1.0
+        deltas[f"h{i}"] = {
+            "l0.lora_A": sgn * torch.ones(rank, d_in) + 0.05 * i * torch.randn(rank, d_in, generator=g),
+            "l0.lora_B": sgn * torch.ones(d_out, rank) + 0.05 * i * torch.randn(d_out, rank, generator=g),
+        }
+    deltas["byz"] = {
+        "l0.lora_A": -100.0 * torch.ones(rank, d_in),
+        "l0.lora_B": 100.0 * torch.ones(d_out, rank),
+    }
+    times = {k: float(idx) for idx, k in enumerate(deltas)}
+    exact = aggregate_shared_updates(
+        deltas, times, min_quorum_k=5, grace_window_s=10.0, max_byzantine_f=1, exact_lora_product=True
+    )
+    naive = aggregate_shared_updates(
+        deltas, times, min_quorum_k=5, grace_window_s=10.0, max_byzantine_f=1, exact_lora_product=False
+    )
+    assert "byz" in exact.rejected_by_krum and exact.aggregate is not None and naive.aggregate is not None
+    true_prod = torch.stack([deltas[f"h{i}"]["l0.lora_B"] @ deltas[f"h{i}"]["l0.lora_A"] for i in range(5)]).mean(dim=0)
+    recon = exact.aggregate["l0.lora_B"] @ exact.aggregate["l0.lora_A"] + exact.aggregate["l0.lora_residual"]
+    naive_prod = naive.aggregate["l0.lora_B"] @ naive.aggregate["l0.lora_A"]
+    assert float(torch.linalg.norm(recon - true_prod)) < 1e-5
+    assert float(torch.linalg.norm(naive_prod - true_prod)) > 0.5
+
+    acc = PrivacyAccountant(delta=1e-5, max_epsilon=5.0)
+    rep1 = acc.record_step(clip_norm=1.0, sigma=2.0)
+    assert rep1.within_budget and 0.0 < rep1.epsilon <= 5.0
+    with pytest.raises(ValueError, match="privacy budget exceeded"):
+        acc.record_step(clip_norm=1.0, sigma=0.2)
+
+
+def test_night_moe_paired_control_rescore_and_stars_update_gate_hm_s14_01_08() -> None:
+    from scripts.build_night_moe_report import (
+        evaluate_stars_verified_update_gate,
+        rescore_stored_night_moe_results,
+    )
+
+    root = Path(__file__).resolve().parents[1]
+    stored = json.loads((root / "artifacts" / "experiments" / "NIGHT_MOE_results.json").read_text(encoding="utf-8"))
+    rescored = rescore_stored_night_moe_results(stored)
+    assert rescored["subjects"]["exoplanet"]["legacy_verdict"] == "VOID"
+    assert rescored["subjects"]["exoplanet"]["verdict"] == "VALID"
+    assert rescored["subjects"]["exoplanet"]["b_adapter_only_aligned"] == 309
+    assert rescored["subjects"]["exoplanet"]["c_control_only_aligned"] == 17
+    assert rescored["subjects"]["stars"]["verdict"] == "VALID"
+    assert rescored["subjects"]["cyber"]["verdict"] == "NO_GAIN"
+    assert rescored["subjects"]["maths"]["verdict"] == "NO_GAIN"
+
+    stars_gate = evaluate_stars_verified_update_gate(stored)
+    assert stars_gate["own_pack_receipt"]["decision"] == "ACCEPT"
+    assert stars_gate["pooled_regression_receipt"]["decision"] == "ACCEPT"
+    assert stars_gate["may_serve_on_own_and_pooled_gate"] is True

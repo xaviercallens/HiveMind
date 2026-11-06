@@ -39,6 +39,10 @@
   "score_monotone_in_successes": [
    "propext"
   ],
+  "signer_pseudo_trials_le_budget": [
+   "propext",
+   "Quot.sound"
+  ],
   "sybil_influence_le_count_times_cap": [
    "propext",
    "Quot.sound"
@@ -52,9 +56,9 @@
   ]
  },
  "spec_file": "lean4/HiveMindSpec.lean",
- "spec_sha256": "abc8983e5cb0e1471027ad7e2278f7f6e7acf00c477e6bee65b7e46136296ebc",
+ "spec_sha256": "0fea293a4aca5c9a2dd71522c309ab98f8b0152531ea778d484e52b3d6971945",
  "theorems_failing_whitelist": [],
- "theorems_in_file": 162,
+ "theorems_in_file": 164,
  "whitelist": [
   "Classical.choice",
   "Quot.sound",

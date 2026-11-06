@@ -76,6 +76,7 @@ class GPUHardwareTelemetry:
     on_battery_power: bool = False
     battery_percent: float = 100.0
     system_ram_used_pct: float = 50.0
+    sensor_readable: bool = True
 
     @property
     def total_vram_mb(self) -> float:
@@ -129,6 +130,7 @@ def query_live_gpu_hardware_telemetry(
     vram_res_mb = 0.0
     vram_total_mb = 8192.0
     util_pct = 0.0
+    sensor_readable = True
 
     if torch.cuda.is_available():
         try:
@@ -141,27 +143,29 @@ def query_live_gpu_hardware_telemetry(
             pass
 
         # Poll nvidia-smi for die temperature and board power draw with fast 0.4s timeout
-        if not overrides:
-            try:
-                out = subprocess.check_output(
-                    [
-                        "nvidia-smi",
-                        "--query-gpu=temperature.gpu,power.draw,power.limit,utilization.gpu",
-                        "--format=csv,noheader,nounits",
-                    ],
-                    text=True,
-                    timeout=0.4,
-                    stderr=subprocess.DEVNULL,
-                ).strip()
-                first_line = out.splitlines()[0] if out else ""
-                parts = [p.strip() for p in first_line.split(",")]
-                if len(parts) >= 4:
-                    temp_c = float(parts[0])
-                    power_w = float(parts[1])
-                    power_limit_w = max(1.0, float(parts[2]))
-                    util_pct = float(parts[3])
-            except Exception:
-                pass
+        # Always poll even when overrides are present, then apply overrides per key (#473 / IP-86)
+        try:
+            out = subprocess.check_output(
+                [
+                    "nvidia-smi",
+                    "--query-gpu=temperature.gpu,power.draw,power.limit,utilization.gpu",
+                    "--format=csv,noheader,nounits",
+                ],
+                text=True,
+                timeout=0.4,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+            first_line = out.splitlines()[0] if out else ""
+            parts = [p.strip() for p in first_line.split(",")]
+            if len(parts) >= 4:
+                temp_c = float(parts[0])
+                power_w = float(parts[1])
+                power_limit_w = max(1.0, float(parts[2]))
+                util_pct = float(parts[3])
+            else:
+                sensor_readable = False
+        except Exception:
+            sensor_readable = False
 
     # Poll laptop battery / AC status via psutil
     on_battery = False
@@ -180,7 +184,10 @@ def query_live_gpu_hardware_telemetry(
     except Exception:
         pass
 
-    # Apply any deterministic test/simulation overrides
+    # Apply any deterministic test/simulation overrides per key
+    if "temperature_c" in overrides and "sensor_readable" not in overrides:
+        sensor_readable = True
+    sensor_readable = bool(overrides.get("sensor_readable", sensor_readable))
     temp_c = float(overrides.get("temperature_c", temp_c))
     power_w = float(overrides.get("power_draw_watts", power_w))
     power_limit_w = max(1.0, float(overrides.get("power_limit_watts", power_limit_w)))
@@ -205,6 +212,7 @@ def query_live_gpu_hardware_telemetry(
         on_battery_power=on_battery,
         battery_percent=round(battery_pct, 2),
         system_ram_used_pct=round(ram_pct, 2),
+        sensor_readable=sensor_readable,
     )
 
 
@@ -292,6 +300,23 @@ class GPUExecutionCircuitBreaker:
         tel = query_live_gpu_hardware_telemetry(
             simulated_overrides=merged_overrides if merged_overrides else None
         )
+
+        # 0. Fail-Closed Unreadable GPU Sensor Guard (#473 / IP-86)
+        if not tel.sensor_readable:
+            self._thermal_latch_tripped = True
+            return CircuitBreakerStatus(
+                safe_to_continue=False,
+                should_preempt_immediately=True,
+                tripped_rule_id="HW-01",
+                tripped_category="GPU_SENSOR_UNREADABLE_TRIP",
+                reason=(
+                    f"GPU temperature sensor is unreadable on CUDA device ({tel.gpu_name}) — "
+                    "refusing fail-open execution; tripping circuit breaker."
+                ),
+                recommended_cooling_sleep_ms=500,
+                thermal_latch_tripped=True,
+                telemetry=tel,
+            )
 
         # 1. Check Thermal Hysteresis Latch & Hard Overheat Trip (Rule HW-01)
         if self._thermal_latch_tripped:

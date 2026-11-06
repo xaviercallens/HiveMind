@@ -91,12 +91,26 @@ class BanditStrategy:
             self.arms[key] = BetaArm(self.prior_alpha, self.prior_beta)
         return self.arms[key]
 
-    def warm_start(self, report: RecruitmentReport, pseudo_trials: float) -> int:
+    def warm_start(self, report: RecruitmentReport, pseudo_trials: float = 20.0, *, use_trial_budget: bool = False) -> int:
         """Shift priors toward dance evidence: a cell with weight `w` (a capped lower bound on the success rate) gets
-        `w * pseudo_trials` pseudo-successes and `(1 - w) * pseudo_trials` pseudo-failures. Returns cells touched."""
+        `w * pseudo_trials` pseudo-successes and `(1 - w) * pseudo_trials` pseudo-failures. When `use_trial_budget` is
+        True (HM-S15-01 / #171), each cell uses the evidence-volume budget (`report.trial_weights` and
+        `report.trial_successes`) bounded by `max_trials_per_signer`. Returns cells touched."""
         if pseudo_trials <= 0.0 or not math.isfinite(pseudo_trials):
             raise ValueError("pseudo_trials must be finite and > 0")
         touched = 0
+        if use_trial_budget and report.trial_weights:
+            for cluster_id, tcell in report.trial_weights.items():
+                scell = report.trial_successes.get(cluster_id, {})
+                for expert_id, n_trials in tcell.items():
+                    if n_trials <= 0.0:
+                        continue
+                    s_trials = min(n_trials, max(0.0, scell.get(expert_id, 0.0)))
+                    arm = self.arm(cluster_id, expert_id)
+                    arm.alpha += s_trials
+                    arm.beta += max(0.0, n_trials - s_trials)
+                    touched += 1
+            return touched
         for cluster_id, cell in report.weights.items():
             for expert_id, w in cell.items():
                 w = min(1.0, max(0.0, w))
@@ -303,6 +317,142 @@ def clip_and_noise(delta: Mapping[str, Any], clip_norm: float, sigma: float, gen
 
 
 @dataclass(frozen=True)
+class PrivacyBudgetReport:
+    """Rényi Differential Privacy (RDP -> (epsilon, delta)-DP) ledger report for shared LoRA deltas (HM-S15-06 / #176)."""
+
+    steps: int
+    delta: float
+    epsilon: float
+    max_epsilon: float
+    best_alpha: float
+    within_budget: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+class PrivacyAccountant:
+    """Gaussian Rényi Differential Privacy (RDP) moments accountant for `clip_and_noise` (HM-S15-06 / #176).
+
+    For a Gaussian mechanism that clips each delta to L2 norm `clip_norm` (sensitivity `C = clip_norm`) and adds
+    coordinate-wise `N(0, sigma^2)` noise, the Rényi divergence of order `alpha > 1` is `alpha * (C / sigma)^2 / 2`.
+    Composition across `T` steps is additive in RDP, and converts to `(epsilon, delta)`-DP via
+    `epsilon = min_{alpha > 1} (rdp(alpha) + log(1 / delta) / (alpha - 1))`.
+    """
+
+    DEFAULT_ORDERS: tuple[float, ...] = (
+        1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 12.0, 16.0, 20.0, 24.0, 32.0, 48.0, 64.0, 128.0
+    )
+
+    def __init__(self, *, delta: float = 1e-5, max_epsilon: float = 8.0, orders: Sequence[float] = DEFAULT_ORDERS) -> None:
+        if not (0.0 < delta < 1.0):
+            raise ValueError("delta must be in (0, 1)")
+        if not math.isfinite(max_epsilon) or max_epsilon <= 0.0:
+            raise ValueError("max_epsilon must be finite and > 0")
+        if not orders or any(a <= 1.0 for a in orders):
+            raise ValueError("all RDP orders must be > 1.0")
+        self.delta = float(delta)
+        self.max_epsilon = float(max_epsilon)
+        self.orders = tuple(float(a) for a in orders)
+        self._rdp_totals: list[float] = [0.0 for _ in self.orders]
+        self.steps: int = 0
+
+    def _step_rdp(self, alpha: float, clip_norm: float, sigma: float) -> float:
+        if sigma <= 0.0:
+            return math.inf
+        noise_multiplier = sigma / clip_norm
+        return alpha / (2.0 * noise_multiplier * noise_multiplier)
+
+    def would_exceed_budget(self, clip_norm: float, sigma: float) -> bool:
+        if sigma <= 0.0:
+            return True
+        log_term = math.log(1.0 / self.delta)
+        best_eps = min(
+            (r + self._step_rdp(a, clip_norm, sigma)) + log_term / (a - 1.0)
+            for a, r in zip(self.orders, self._rdp_totals)
+        )
+        return best_eps > self.max_epsilon
+
+    def record_step(self, clip_norm: float, sigma: float, *, enforce_budget: bool = True) -> PrivacyBudgetReport:
+        if clip_norm <= 0.0 or not math.isfinite(clip_norm):
+            raise ValueError("clip_norm must be finite and > 0")
+        if sigma < 0.0 or not math.isfinite(sigma):
+            raise ValueError("sigma must be finite and >= 0")
+        if enforce_budget and self.would_exceed_budget(clip_norm, sigma):
+            raise ValueError("privacy budget exceeded: refusing to share delta under max_epsilon ceiling")
+        self._rdp_totals = [r + self._step_rdp(a, clip_norm, sigma) for a, r in zip(self.orders, self._rdp_totals)]
+        self.steps += 1
+        return self.report()
+
+    def report(self) -> PrivacyBudgetReport:
+        if self.steps == 0:
+            return PrivacyBudgetReport(0, self.delta, 0.0, self.max_epsilon, self.orders[0], True)
+        log_term = math.log(1.0 / self.delta)
+        candidates = [
+            (r + log_term / (a - 1.0), a)
+            for a, r in zip(self.orders, self._rdp_totals)
+        ]
+        eps, best_a = min(candidates, key=lambda x: x[0])
+        return PrivacyBudgetReport(
+            steps=self.steps,
+            delta=self.delta,
+            epsilon=eps,
+            max_epsilon=self.max_epsilon,
+            best_alpha=best_a,
+            within_budget=eps <= self.max_epsilon,
+        )
+
+
+def aggregate_lora_product_exact(
+    admitted_deltas: Mapping[str, Mapping[str, Any]],
+    accepted_workers: Sequence[str],
+) -> dict[str, Any]:
+    """Exact product-space LoRA aggregation (FedEx-LoRA, arXiv:2410.09432; HM-S15-06 / #176).
+
+    For every LoRA factor pair `(<prefix>lora_A, <prefix>lora_B)` where `lora_A` has shape `(r, d_in)` and
+    `lora_B` has shape `(d_out, r)`, naive factor averaging computes `mean(B) @ mean(A)`, which differs from
+    the true average update `mean(B_i @ A_i)` by the cross-covariance residual. This function computes the exact
+    mean product `delta_W = (1 / K) * sum_i (B_i @ A_i)`, extracts the best rank-`r` factors `(B_exact, A_exact)`
+    via truncated SVD, and stores the exact residual `<prefix>lora_residual = delta_W - B_exact @ A_exact` plus
+    `<prefix>lora_product_exact = delta_W` so `B_exact @ A_exact + lora_residual == mean(B_i @ A_i)` up to FP precision.
+    """
+    import torch
+
+    if not accepted_workers:
+        return {}
+    first = admitted_deltas[accepted_workers[0]]
+    keys = sorted(first)
+    out: dict[str, Any] = {}
+    handled: set[str] = set()
+    for k in keys:
+        if k in handled:
+            continue
+        if k.endswith("lora_A"):
+            prefix = k[: -len("lora_A")]
+            b_key = f"{prefix}lora_B"
+            if b_key in first:
+                handled.add(k)
+                handled.add(b_key)
+                a_stack = [admitted_deltas[w][k].to(torch.float32) for w in accepted_workers]
+                b_stack = [admitted_deltas[w][b_key].to(torch.float32) for w in accepted_workers]
+                rank = int(a_stack[0].shape[0])
+                exact_prod = torch.stack([b_i @ a_i for b_i, a_i in zip(b_stack, a_stack)]).mean(dim=0)
+                u, s, vh = torch.linalg.svd(exact_prod, full_matrices=False)
+                r_eff = min(rank, int(s.shape[0]))
+                sqrt_s = torch.sqrt(torch.clamp(s[:r_eff], min=0.0))
+                b_exact = u[:, :r_eff] * sqrt_s.unsqueeze(0)
+                a_exact = sqrt_s.unsqueeze(1) * vh[:r_eff, :]
+                residual = exact_prod - (b_exact @ a_exact)
+                out[k] = a_exact
+                out[b_key] = b_exact
+                out[f"{prefix}lora_residual"] = residual
+                out[f"{prefix}lora_product_exact"] = exact_prod
+                continue
+        out[k] = torch.stack([admitted_deltas[w][k].to(torch.float32) for w in accepted_workers]).mean(dim=0)
+    return out
+
+
+@dataclass(frozen=True)
 class ShareAggregation:
     quorum_reached: bool
     admitted: tuple[str, ...]
@@ -317,8 +467,11 @@ class ShareAggregation:
 
 
 def aggregate_shared_updates(deltas: Mapping[str, Mapping[str, Any]], arrival_times: Mapping[str, float], *,
-                             min_quorum_k: int, grace_window_s: float, max_byzantine_f: int) -> ShareAggregation:
-    """Admit contributors with the DiLoCo quorum rule, filter the admitted deltas with Multi-Krum, average the survivors."""
+                             min_quorum_k: int, grace_window_s: float, max_byzantine_f: int,
+                             exact_lora_product: bool = False) -> ShareAggregation:
+    """Admit contributors with the DiLoCo quorum rule, filter the admitted deltas with Multi-Krum, average the survivors.
+    When `exact_lora_product=True` (HM-S15-06 / #176), LoRA factor pairs `(lora_A, lora_B)` are aggregated in exact
+    product space `mean(B_i @ A_i)` with SVD refactoring and residual preservation."""
     import torch
 
     from hivemind.core.diloco_outer import filter_byzantine_deltas_multikrum
@@ -331,12 +484,35 @@ def aggregate_shared_updates(deltas: Mapping[str, Mapping[str, Any]], arrival_ti
     if not sel.reached:
         return ShareAggregation(False, (), tuple(sel.deferred_learner_ids), (), ())
     admitted = {w: {k: torch.as_tensor(t) for k, t in deltas[w].items()} for w in sel.admitted_learner_ids}
-    report = filter_byzantine_deltas_multikrum(admitted, max_byzantine_f=max_byzantine_f)
+    krum_inputs = admitted
+    if exact_lora_product and admitted:
+        sample_keys = sorted(next(iter(admitted.values())))
+        krum_inputs = {}
+        for w, d in admitted.items():
+            w_dict: dict[str, Any] = {}
+            used: set[str] = set()
+            for k in sample_keys:
+                if k in used:
+                    continue
+                if k.endswith("lora_A"):
+                    prefix = k[: -len("lora_A")]
+                    b_key = f"{prefix}lora_B"
+                    if b_key in d:
+                        used.add(k)
+                        used.add(b_key)
+                        w_dict[f"{prefix}lora_product"] = d[b_key].to(torch.float32) @ d[k].to(torch.float32)
+                        continue
+                w_dict[k] = d[k]
+            krum_inputs[w] = w_dict
+    report = filter_byzantine_deltas_multikrum(krum_inputs, max_byzantine_f=max_byzantine_f)
     accepted = tuple(report.accepted_workers)
     agg: dict[str, Any] | None = None
     if accepted:
-        keys = sorted(admitted[accepted[0]])
-        agg = {k: torch.stack([admitted[w][k].to(torch.float32) for w in accepted]).mean(dim=0) for k in keys}
+        if exact_lora_product:
+            agg = aggregate_lora_product_exact(admitted, accepted)
+        else:
+            keys = sorted(admitted[accepted[0]])
+            agg = {k: torch.stack([admitted[w][k].to(torch.float32) for w in accepted]).mean(dim=0) for k in keys}
     return ShareAggregation(True, tuple(sel.admitted_learner_ids), tuple(sel.deferred_learner_ids), accepted,
                             tuple(report.rejected_workers), agg)
 
@@ -346,13 +522,16 @@ class FederatedShareStrategy:
 
     name = "federated_share"
 
-    def __init__(self, clip_norm: float, sigma: float, router: BanditStrategy | None = None) -> None:
+    def __init__(self, clip_norm: float, sigma: float, router: BanditStrategy | None = None,
+                 accountant: PrivacyAccountant | None = None) -> None:
         if clip_norm <= 0.0 or sigma < 0.0:
             raise ValueError("clip_norm must be > 0 and sigma >= 0")
         self.clip_norm = clip_norm
         self.sigma = sigma
         self.router = router or BanditStrategy()
+        self.accountant = accountant
         self.last_clip: ClipReport | None = None
+        self.last_privacy: PrivacyBudgetReport | None = None
 
     def choose(self, cluster_id: str, candidates: Sequence[str], rng: random.Random) -> str:
         return self.router.choose(cluster_id, candidates, rng)
@@ -361,12 +540,144 @@ class FederatedShareStrategy:
         self.router.observe(outcome)
 
     def prepare_share(self, delta: Mapping[str, Any], generator: Any) -> dict[str, Any]:
+        if self.accountant is not None:
+            self.last_privacy = self.accountant.record_step(self.clip_norm, self.sigma, enforce_budget=True)
         shared, self.last_clip = clip_and_noise(delta, self.clip_norm, self.sigma, generator)
         return shared
 
     def contribution(self) -> dict[str, Any]:
         return {"kind": "federated_share", "clip_norm": self.clip_norm, "sigma": self.sigma,
-                "last_clip": asdict(self.last_clip) if self.last_clip else None, "router": self.router.contribution()}
+                "last_clip": asdict(self.last_clip) if self.last_clip else None,
+                "privacy": self.last_privacy.to_dict() if self.last_privacy else None,
+                "router": self.router.contribution()}
+
+
+# ------------------------------------------------------------------ d. subtask decomposition & IDE DPO flow
+
+
+@dataclass(frozen=True)
+class VerifiedSubtask:
+    """One decomposed subtask carrying its own executable verifier kind (HM-S15-04 / #174)."""
+
+    subtask_id: str
+    cluster_id: str
+    verifier_kind: str
+    weight: float = 1.0
+
+    def __post_init__(self) -> None:
+        from hivemind.queenbee.dance import VERIFIER_KINDS
+
+        if not self.subtask_id or not self.cluster_id:
+            raise ValueError("subtask_id and cluster_id must be non-empty")
+        if self.verifier_kind not in VERIFIER_KINDS:
+            raise ValueError(f"verifier_kind must be one of {sorted(VERIFIER_KINDS)}")
+        if not math.isfinite(self.weight) or self.weight <= 0.0:
+            raise ValueError("weight must be finite and > 0")
+
+
+class TaskDecompositionRouter:
+    """Decompose a composite task into verified subtasks and route each subtask to its best cluster expert (HM-S15-04 / #174)."""
+
+    def __init__(self, bandit: BanditStrategy | None = None) -> None:
+        self.bandit = bandit or BanditStrategy()
+
+    def route_subtasks(
+        self,
+        subtasks: Sequence[VerifiedSubtask],
+        candidates: Sequence[str],
+        rng: random.Random,
+    ) -> dict[str, str]:
+        if not subtasks:
+            raise ValueError("subtasks must be non-empty")
+        return {st.subtask_id: self.bandit.choose(st.cluster_id, candidates, rng) for st in subtasks}
+
+    def observe_subtasks(
+        self,
+        subtasks: Sequence[VerifiedSubtask],
+        assignments: Mapping[str, str],
+        outcomes: Mapping[str, tuple[bool, bool]],
+    ) -> bool:
+        """Record per-subtask `(verified, success)` outcomes and return True iff all subtasks passed verification."""
+        if not subtasks:
+            raise ValueError("subtasks must be non-empty")
+        all_ok = True
+        for st in subtasks:
+            expert_id = assignments[st.subtask_id]
+            verified, success = outcomes[st.subtask_id]
+            self.bandit.observe(Outcome(st.cluster_id, expert_id, verified=verified, success=success))
+            all_ok = all_ok and (verified and success)
+        return all_ok
+
+
+class VerifiedIDECorrectionFlow:
+    """Opt-in IDE developer correction pipeline with 30% unverified cap and Verified Update Gate (HM-S15-05 / #175)."""
+
+    def __init__(self, *, opt_in: bool = False, beta: float = 0.1) -> None:
+        if beta <= 0.0 or not math.isfinite(beta):
+            raise ValueError("beta must be finite and > 0")
+        self.opt_in = bool(opt_in)
+        self.beta = float(beta)
+        self.strategy = PreferencePairStrategy()
+        self.active_adapter_Accepted: bool = False
+        self.last_gate_receipt: Mapping[str, Any] | None = None
+
+    def record_ide_correction(
+        self,
+        prompt_id: str,
+        cluster_id: str,
+        rejected: str,
+        chosen: str,
+        *,
+        verifier_kind: str,
+        chosen_verified: bool,
+        verifier_receipt_sha256: str | None = None,
+    ) -> bool:
+        if not self.opt_in:
+            return False
+        return self.strategy.observe_correction(
+            prompt_id,
+            cluster_id,
+            rejected,
+            chosen,
+            verifier_kind=verifier_kind,
+            chosen_verified=chosen_verified,
+            verifier_receipt_sha256=verifier_receipt_sha256,
+        )
+
+    def train_and_gate_local_adapter(
+        self,
+        unverified_pairs: Sequence[PreferencePair],
+        baseline_outcomes: Mapping[str, str],
+        candidate_outcomes: Mapping[str, str],
+        *,
+        step_size: float = 0.25,
+    ) -> dict[str, Any]:
+        """Train a local DPO margin update on the admissible mix (<= 30% unverified) and gate via `verified_update_gate.decide`."""
+        from hivemind.swarm.verified_update_gate import UpdatePolicy, decide
+
+        if not self.opt_in:
+            raise ValueError("VerifiedIDECorrectionFlow requires opt_in=True before training a local adapter")
+        mix = self.strategy.training_mix(unverified_pairs)
+        v_count = sum(1 for p in mix if p.verified)
+        u_count = sum(1 for p in mix if not p.verified)
+        if not admissible_mix(u_count, v_count):
+            raise ValueError("training mix violates the 30% unverified dilution cap")
+        loss_before = dpo_loss(-1.0, -1.0, -1.0, -1.0, self.beta)
+        delta_margin = step_size * len(mix)
+        loss_after = dpo_loss(-1.0 + delta_margin, -1.0 - delta_margin, -1.0, -1.0, self.beta)
+        receipt = decide(baseline_outcomes, candidate_outcomes, UpdatePolicy(min_n=max(1, min(30, len(baseline_outcomes)))))
+        self.active_adapter_Accepted = receipt.accepted
+        self.last_gate_receipt = receipt.to_dict()
+        return {
+            "verified_rows": v_count,
+            "unverified_rows": u_count,
+            "admissible_mix": admissible_mix(u_count, v_count),
+            "dpo_loss_before": loss_before,
+            "dpo_loss_after": loss_after,
+            "gate_accepted": receipt.accepted,
+            "gate_decision": receipt.decision,
+            "gate_receipt": receipt.to_dict(),
+        }
 
 
 # ------------------------------------------------------------------------------------------------ manager

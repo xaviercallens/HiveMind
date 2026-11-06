@@ -2130,6 +2130,26 @@ theorem knowledge_bonus_payouts_never_exceed_pool (pool W : Nat) (hW : 0 < W) (w
   rw [hsum, Nat.mul_div_cancel _ hW] at h
   exact h
 
+/-- Allocate at most `budget` pseudo-trials across a signer's records (HM-S15-01 / #171). -/
+def allocatedSignerTrials : Nat → List Nat → Nat
+  | _, [] => 0
+  | budget, t :: ts =>
+    let alloc := min t budget
+    alloc + allocatedSignerTrials (budget - alloc) ts
+
+/-- Theorem 139b (Per-Signer Pseudo-Trial Budget Bound — HM-S15-01 / #171): regardless of how many records a
+    signer submits or how large the claimed trial counts `ts` are, total allocated pseudo-trials never exceed
+    `budget`. -/
+theorem signer_pseudo_trials_le_budget (budget : Nat) (ts : List Nat) :
+    allocatedSignerTrials budget ts ≤ budget := by
+  induction ts generalizing budget with
+  | nil => simp [allocatedSignerTrials]
+  | cons t ts ih =>
+    simp only [allocatedSignerTrials]
+    have h1 : min t budget ≤ budget := Nat.min_le_right t budget
+    have h2 := ih (budget - min t budget)
+    omega
+
 end ALIX_QueenBee
 
 /-!
@@ -2154,6 +2174,16 @@ theorem waggle_dance_quorum_lock_soundness (recruits extra quorumThreshold : Nat
     quorumThreshold ≤ recruits ∧ quorumLocked (recruits + extra) quorumThreshold = true := by
   unfold quorumLocked at *
   simp only [decide_eq_true_eq] at *
+  omega
+
+/-- Theorem 141b (Seeley Waggle Dance Quorum Convergence — HM-S24 / #319 Task 3): When each waggle recruitment
+    cycle adds `step ≥ 1` recruits to `initialRecruits`, after `t` cycles satisfying `quorumThreshold ≤ initialRecruits + t * step`,
+    the Seeley quorum lock `quorumLocked` is guaranteed to hold. -/
+theorem waggle_dance_quorum_convergence (initialRecruits step t quorumThreshold : Nat)
+    (h_step : 1 ≤ step) (h_conv : quorumThreshold ≤ initialRecruits + t * step) :
+    quorumLocked (initialRecruits + t * step) quorumThreshold = true := by
+  unfold quorumLocked
+  simp only [decide_eq_true_eq]
   omega
 
 /-- Theorem 142 (Swarm Nectar Cache Deduplication Strictly Reduces PCIe H2D Traffic — HM-S23 / HM-S25-02):
@@ -2594,8 +2624,10 @@ end HiveMindSpec
 #print axioms HiveMindSpec.ALIX_QueenBee.knowledge_bonus_payouts_never_exceed_pool
 #print axioms HiveMindSpec.ALIX_QueenBee.add_div_le_div_add
 #print axioms HiveMindSpec.ALIX_QueenBee.payouts_le_pool_times_weights_over_W
+#print axioms HiveMindSpec.ALIX_QueenBee.signer_pseudo_trials_le_budget
 #print axioms HiveMindSpec.Season24_25_HoneybeeQuorumAndLayerStoRmVRAM.waggle_dance_duration_monotone
 #print axioms HiveMindSpec.Season24_25_HoneybeeQuorumAndLayerStoRmVRAM.waggle_dance_quorum_lock_soundness
+#print axioms HiveMindSpec.Season24_25_HoneybeeQuorumAndLayerStoRmVRAM.waggle_dance_quorum_convergence
 #print axioms HiveMindSpec.Season24_25_HoneybeeQuorumAndLayerStoRmVRAM.swarm_nectar_cache_dedup_saves_pcie_bytes
 #print axioms HiveMindSpec.Season24_25_HoneybeeQuorumAndLayerStoRmVRAM.layerstorm_two_zone_vram_ceiling
 #print axioms HiveMindSpec.Season24_25_HoneybeeQuorumAndLayerStoRmVRAM.e18_cosine_damped_outer_momentum_bounds_iid_amplification

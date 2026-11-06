@@ -1,0 +1,43 @@
+{
+  "experiment_id": "S14_S15_QUEENBEE_NIGHT_MOE",
+  "registered_utc": "2026-11-06T16:45:00Z",
+  "issues": [165, 170, 171, 172, 174, 175, 176],
+  "seeds": 20,
+  "base_seed": 2026,
+  "rounds": 2000,
+  "controls": {
+    "positive_oracle_wiring": "In every seed, the oracle router has expected success >= every other routing arm.",
+    "negative_flat_world": "In a flat world where all experts have identical success probability 0.55, cold Thompson regret is 0.0 and mean success lies inside uniform's 95% CI.",
+    "negative_corrupted_both_scouts_fails": "Planting corruption in BOTH scouts of a 2-scout cell allows sybils through (control shows the check can fail when the 1-of-2 assumption is violated)."
+  },
+  "hypotheses": {
+    "H_S14_01": {
+      "metric": "exact_paired_mcnemar_adapter_vs_control",
+      "rule": "exoplanet and stars both beat their matched controls at p_worst < 0.05 and gain over base; cyber and maths remain NO_GAIN"
+    },
+    "H_S14_08": {
+      "metric": "verified_update_gate_stars",
+      "rule": "stars passes own-pack (require_improvement=True) and pooled transfer/interference non-regression gate"
+    },
+    "H_S15_01": {
+      "metric": "early_regret_and_last_half_expected_under_signer_trial_budget",
+      "rule": "Under use_trial_budget=True, per-signer budget (max_trials_per_signer=20) strictly lowers early regret and expected-success gap vs truly uncapped trial volume (max_trials_per_signer=None) when sybils claim n=500"
+    },
+    "H_S15_02": {
+      "metric": "early_regret_dual_scout_1_corrupted",
+      "rule": "With 2 independent scouts per cell and 1 scout corrupted to 1.0, dual_scout_bounds preserves >= 80% of the H4 early-regret reduction relative to no scout check"
+    },
+    "H_S15_04": {
+      "metric": "composite_task_success_rate",
+      "rule": "TaskDecompositionRouter routing verified subtasks independently beats whole-task single-expert planner-as-router baseline in >= 18 of 20 seeds"
+    },
+    "H_S15_05": {
+      "metric": "ide_correction_dpo_and_update_gate",
+      "rule": "VerifiedIDECorrectionFlow enforces <= 30% unverified mix, lowers DPO loss on verified pairs, accepts non-regressing candidate, and rejects regressing candidate"
+    },
+    "H_S15_06": {
+      "metric": "lora_product_frobenius_error_and_rdp_budget",
+      "rule": "Exact product-space LoRA aggregation achieves < 1e-5 Frobenius error to mean(B_i @ A_i) while naive factor averaging has error > 0.05, Multi-Krum rejects the Byzantine worker, and PrivacyAccountant blocks step exceeding max_epsilon"
+    }
+  }
+}

@@ -52,6 +52,7 @@ def test_first_gpu_csv_units_and_battery_are_preserved(hardware):
 def test_unavailable_csv_fields_keep_defaults_without_losing_vram(hardware, output):
     hardware.return_value = output
     result = gpu.query_live_gpu_hardware_telemetry()
+    assert result.sensor_readable is False
     assert result.temperature_c == 48
     assert result.power_draw_watts == 35
     assert result.power_fraction == 0.2
@@ -68,6 +69,7 @@ def test_failed_optional_probes_keep_fallback_snapshot(monkeypatch, hardware):
     monkeypatch.setattr(gpu.psutil, "virtual_memory", unavailable)
     hardware.side_effect = subprocess.TimeoutExpired("nvidia-smi", 0.4)
     result = gpu.query_live_gpu_hardware_telemetry()
+    assert result.sensor_readable is False
     assert result.gpu_name == "CPU-Fallback-Device"
     assert result.vram_allocated_mb == result.vram_reserved_mb == 0
     assert result.temperature_c == 48
@@ -79,11 +81,24 @@ def test_failed_optional_probes_keep_fallback_snapshot(monkeypatch, hardware):
 
 def test_explicit_overrides_skip_smi_and_clamp_power_limit(hardware):
     result = gpu.query_live_gpu_hardware_telemetry({"temperature_c": 80.75, "power_limit_watts": 0, "power_draw_watts": 30})
-    hardware.assert_not_called()
+    hardware.assert_called_once()
+    assert result.sensor_readable is True
     assert result.temperature_c == 80.75
     assert result.power_limit_watts == 1
     assert result.power_fraction == 30
+    assert result.gpu_utilization_pct == 87
     assert result.vram_allocated_mb == 128.5
+
+
+def test_unreadable_sensor_on_cuda_refuses_to_continue_even_with_overrides(hardware):
+    hardware.side_effect = OSError("nvidia-smi sensor read failed")
+    breaker = gpu.GPUExecutionCircuitBreaker()
+    status = breaker.evaluate(override_telemetry={"on_battery_power": False})
+    assert status.safe_to_continue is False
+    assert status.should_preempt_immediately is True
+    assert status.telemetry.sensor_readable is False
+    assert "unreadable" in status.reason.lower() and "sensor" in status.reason.lower()
+    assert breaker.thermal_latch_tripped is True
 
 
 def test_zero_reported_power_limit_is_clamped(hardware):

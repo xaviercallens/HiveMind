@@ -250,8 +250,15 @@ def project_international_launch_wave(
     mean_prosumer_tok_per_s: float = 48.0,
     prosumer_daytime_duty_cycle: float = 0.35,
     mean_consumer_active_req_per_s: float = 0.0022,
+    uncontrolled_scraping_factor: float = 2.2,
+    uncontrolled_conversion_kappa: float = 0.0,
 ) -> SocialFunnelProjection:
     """Simulate the social, queueing, and economic equilibrium of an English launch wave."""
+    if uncontrolled_scraping_factor <= 0.0 or not math.isfinite(uncontrolled_scraping_factor):
+        raise ValueError("uncontrolled_scraping_factor must be finite and positive")
+    if not (0.0 <= uncontrolled_conversion_kappa <= 1.0) or not math.isfinite(uncontrolled_conversion_kappa):
+        raise ValueError("uncontrolled_conversion_kappa must be finite in [0, 1]")
+
     new_signups = max(1, int(round(new_visitors * signup_rate)))
     init_producers = int(round(new_signups * direct_producer_fraction_alpha_p))
     initial_consumers = max(0, new_signups - init_producers)
@@ -281,10 +288,16 @@ def project_international_launch_wave(
         + (init_producers + converted_prosumers) * 18.5  # average ~18.5 FP16 TFLOPS per consumer GPU
     )
 
-    # Without controls: no progressive drip, no 2-lane QoS, low conversion (kappa=0.01), 2.2x higher scraping rate
-    uncontrolled_arrival_req_s = (baseline.consumers + initial_consumers) * (mean_consumer_active_req_per_s * 2.2)
+    # Without controls: parameterized scraping multiplier and uncontrolled conversion rate (IP-22)
+    uncontrolled_converted = int(round(initial_consumers * uncontrolled_conversion_kappa))
+    uncontrolled_pure_consumers = initial_consumers - uncontrolled_converted
+    uncontrolled_arrival_req_s = (
+        baseline.consumers + uncontrolled_pure_consumers + 0.5 * uncontrolled_converted
+    ) * (mean_consumer_active_req_per_s * uncontrolled_scraping_factor)
     uncontrolled_mu_req_s = (
-        baseline.daytime_aggregate_tok_per_s + init_producers * effective_tok_s_per_producer
+        baseline.daytime_aggregate_tok_per_s
+        + init_producers * effective_tok_s_per_producer
+        + uncontrolled_converted * effective_tok_s_per_prosumer
     ) / baseline.mean_tokens_per_request
     rho_uncontrolled = uncontrolled_arrival_req_s / max(uncontrolled_mu_req_s, 1e-6)
 

@@ -623,6 +623,8 @@ class AutoImprovementExecutionResult:
     hf_dataset: str = ""
     cluster: str = ""
     completed_utc: float = field(default_factory=time.time)
+    simulated: bool = False
+    telemetry_source: str = "observed_worker_telemetry"
 
     @property
     def delta_nll(self) -> float:
@@ -976,6 +978,9 @@ class NocturnalAutoImprovementScheduler:
                     "task_type": "banach_fixed_point_proof",
                     "source": dataset_name,
                 })
+        for pair in pairs:
+            pair["solution_source"] = "synthetic_template"
+            pair["template_solution"] = pair["verified_solution"]
         return pairs
 
     def evaluate_mcnemar_gate(
@@ -1064,6 +1069,9 @@ class NocturnalAutoImprovementScheduler:
             f"{workunit.wu_id}:{worker_id}:{steps}:{acc_adapted}:{workunit.base_model_id}".encode("utf-8")
         ).hexdigest()
 
+        is_simulated = observed_telemetry is None or bool(observed_telemetry.get("simulated", False))
+        telemetry_source = "rng_synthetic" if is_simulated else "observed_worker_telemetry"
+
         res = AutoImprovementExecutionResult(
             wu_id=workunit.wu_id,
             domain=workunit.domain,
@@ -1084,6 +1092,8 @@ class NocturnalAutoImprovementScheduler:
             hf_dataset=workunit.hf_dataset,
             cluster=workunit.cluster,
             completed_utc=time.time(),
+            simulated=is_simulated,
+            telemetry_source=telemetry_source,
         )
         self.execution_results[workunit.wu_id] = res
         return res
@@ -1103,7 +1113,9 @@ class PointsRetrofitManager:
         self.gate_bonus = gate_bonus
 
     def calculate_work_reward(self, result: AutoImprovementExecutionResult) -> float:
-        """Compute the deterministic HMT reward for a verified execution result."""
+        """Compute the deterministic HMT reward for a verified execution result (0 for simulated RNG results)."""
+        if bool(getattr(result, "simulated", False)):
+            return 0.0
         reward = self.base_wu_reward
         compute_bonus = result.steps_completed * self.step_rate
         reward += compute_bonus
@@ -1125,6 +1137,11 @@ class PointsRetrofitManager:
         total_tflops = 0.0
 
         for r in results:
+            if bool(getattr(r, "simulated", False)):
+                audit_log.append(
+                    f"SKIPPED_SIMULATED: wu_id '{r.wu_id}' uses synthetic RNG telemetry; 0 HMT credited."
+                )
+                continue
             total_tflops += r.contributed_tflops
             ref = f"pouw_auto_improve:{r.wu_id}"
 

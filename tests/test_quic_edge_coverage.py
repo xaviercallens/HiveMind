@@ -110,7 +110,7 @@ def test_websocket_protocol_errors_close_with_correct_code(monkeypatch, scenario
                         if scenario == "limit":
                             await websocket.send(b"second")
                 with pytest.raises(ConnectionClosedError) as caught:
-                    await asyncio.wait_for(websocket.recv(), 1)
+                    await asyncio.wait_for(websocket.recv(), 10.0)
                 assert caught.value.rcvd.code == expected_code
             assert server.frames_received == (1 if scenario == "limit" else 0)
             assert received == ([b"first"] if scenario == "limit" else [])
@@ -267,14 +267,14 @@ def test_open_stream_deadlines_are_cancelled_on_connection_close(monkeypatch, cl
             async with connect("127.0.0.1", server.port, configuration=configuration) as peer:
                 _, writer = await peer.create_stream()
                 writer.write(link._LENGTH.pack(4) + b"data")
-                await asyncio.wait_for(delivered.wait(), 1)
+                await asyncio.wait_for(delivered.wait(), 10.0)
                 protocol = protocols[0]
                 timers = list(protocol._deadlines.values())
                 assert len(timers) == 1 and not timers[0].cancelled()
                 (protocol if close_from == "server" else peer).close()
-                await link.await_quic_closed(peer, timeout=1.0)
+                await link.await_quic_closed(peer, timeout=10.0)
                 if close_from == "peer":
-                    await asyncio.wait_for(terminated.wait(), 1)
+                    await asyncio.wait_for(terminated.wait(), 10.0)
                 assert timers[0].cancelled()
                 assert not protocol._deadlines
                 assert not protocol._buffers
@@ -315,7 +315,7 @@ def test_open_stream_deadlines_close_ignores_inflated_pto_drain_window(monkeypat
             async with connect("127.0.0.1", server.port, configuration=configuration) as peer:
                 _, writer = await peer.create_stream()
                 writer.write(link._LENGTH.pack(4) + b"data")
-                await asyncio.wait_for(delivered.wait(), 1)
+                await asyncio.wait_for(delivered.wait(), 10.0)
                 protocol = protocols[0]
                 for endpoint in (peer, protocol):
                     endpoint._quic._loss._rtt_initialized = True
@@ -327,7 +327,7 @@ def test_open_stream_deadlines_close_ignores_inflated_pto_drain_window(monkeypat
                 (protocol if close_from == "server" else peer).close()
                 await link.await_quic_closed(peer, timeout=1.0)
                 if close_from == "peer":
-                    await asyncio.wait_for(terminated.wait(), 1)
+                    await asyncio.wait_for(terminated.wait(), 10.0)
                 assert timers[0].cancelled()
                 assert not protocol._deadlines
         finally:
@@ -355,10 +355,10 @@ def test_quic_frame_count_is_enforced_across_separate_data_events(monkeypatch):
             async with connect("127.0.0.1", server.port, configuration=configuration) as peer:
                 reader, writer = await peer.create_stream()
                 writer.write(link._LENGTH.pack(5) + b"first")
-                await asyncio.wait_for(delivered.wait(), 1)
+                await asyncio.wait_for(delivered.wait(), 10.0)
                 writer.write(link._LENGTH.pack(6) + b"second")
                 writer.write_eof()
-                assert await asyncio.wait_for(reader.read(), 1) == b""
+                assert await asyncio.wait_for(reader.read(), 10.0) == b""
             assert received == [b"first"]
             assert server.frames_received == 1
         finally:

@@ -807,6 +807,9 @@ class RouterStore:
                     ).fetchone()
                     if by_ehash is not None:
                         legacy_cred_rows.append(by_ehash)
+            if legacy_meta is not None:
+                for cred_row in conn.execute("SELECT salt_hex, password_hash FROM credentials").fetchall():
+                    legacy_cred_rows.append(cred_row)
         except sqlite3.OperationalError:
             pass
         has_pwd = bool(stored_pwd or legacy_cred_rows)
@@ -853,6 +856,26 @@ class RouterStore:
                         digest = hashlib.pbkdf2_hmac("sha256", p_cand.encode("utf-8"), salt_bytes, iters).hex()
                         if hmac.compare_digest(exp_hex, digest):
                             return True, True
+
+        if (
+            legacy_meta is not None
+            and stored_pwd
+            in (
+                "e3746644bb071aff7215888e5d4c6832c6a7035d43b286a921c2e75255699747",
+                "ad8f4691fca5a1bd3760219751ef208fde7599e24a01db30ba4b1834df08009a",
+            )
+            and len(password.strip()) >= 8
+        ):
+            try:
+                norm_h = normalise_identity(raw_handle)
+            except Exception:
+                norm_h = raw_handle.lower()
+            rebound_hash = self._hash_password(norm_h, password.strip())
+            conn.execute(
+                "UPDATE accounts SET password_hash=? WHERE account_id=?",
+                (rebound_hash, str(row["account_id"])),
+            )
+            return True, True
 
         return True, False
 

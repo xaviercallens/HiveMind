@@ -4925,8 +4925,20 @@ print('Routed Top-2 Experts for', target_planet, ':', routed)</textarea>
     }}
 
     async function loginExistingUser(handleOrEmail, explicitPassword) {{
-      const passInp = document.getElementById("existing-password-input") || document.getElementById("mvp-password-input");
-      const pwd = explicitPassword !== undefined ? explicitPassword : (passInp && passInp.value ? passInp.value : null);
+      const existingPassEl = document.getElementById("existing-password-input");
+      const mvpPassEl = document.getElementById("mvp-password-input");
+      const simplePassEl = document.getElementById("simple-password-input");
+      const authPassEl = document.getElementById("auth-password");
+      const fallbackPwd = (existingPassEl && existingPassEl.value)
+        ? existingPassEl.value
+        : ((mvpPassEl && mvpPassEl.value)
+          ? mvpPassEl.value
+          : ((simplePassEl && simplePassEl.value)
+            ? simplePassEl.value
+            : ((authPassEl && authPassEl.value) ? authPassEl.value : null)));
+      const pwd = (explicitPassword !== undefined && explicitPassword !== null && explicitPassword !== "")
+        ? explicitPassword
+        : fallbackPwd;
       try {{
         const payload = {{ handle_or_email: handleOrEmail }};
         if (pwd) payload.password = pwd;
@@ -5692,10 +5704,17 @@ print('Routed Top-2 Experts for', target_planet, ':', routed)</textarea>
 
     async function restoreMasterCommander() {{
       try {{
+        const existingPassEl = document.getElementById("existing-password-input");
+        const mvpPassEl = document.getElementById("mvp-password-input");
+        const pwd = (existingPassEl && existingPassEl.value)
+          ? existingPassEl.value
+          : ((mvpPassEl && mvpPassEl.value) ? mvpPassEl.value : null);
+        const bodyPayload = {{ handle_or_email: "callensxavier@gmail.com" }};
+        if (pwd) bodyPayload.password = pwd;
         const resp = await fetch(API_BASE + "/api/v1/auth/login", {{
           method: "POST",
           headers: _authHeaders(),
-          body: JSON.stringify({{ handle_or_email: "callensxavier@gmail.com" }})
+          body: JSON.stringify(bodyPayload)
         }});
         const data = await resp.json();
         if (!resp.ok) {{

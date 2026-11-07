@@ -67,12 +67,22 @@ class DanceRecord:
         body["schema"] = RECORD_SCHEMA
         return json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
-    def signed(self, secret: bytes) -> "DanceRecord":
-        return replace(self, signature_hex=hmac.new(secret, self.payload(), hashlib.sha256).hexdigest())
+    def signed(self, secret: bytes, *, prederived: bool = False) -> "DanceRecord":
+        key = secret if prederived else derive_signer_secret(secret, self.signer_id)
+        return replace(self, signature_hex=hmac.new(key, self.payload(), hashlib.sha256).hexdigest())
 
-    def verify(self, secret: bytes) -> bool:
-        expected = hmac.new(secret, self.payload(), hashlib.sha256).hexdigest()
-        return bool(self.signature_hex) and hmac.compare_digest(expected, self.signature_hex)
+    def verify(self, secret: bytes | Mapping[str, bytes]) -> bool:
+        if not self.signature_hex:
+            return False
+        if isinstance(secret, Mapping):
+            key = secret.get(self.signer_id)
+            if not key:
+                return False
+            expected = hmac.new(key, self.payload(), hashlib.sha256).hexdigest()
+            return hmac.compare_digest(expected, self.signature_hex)
+        derived_key = derive_signer_secret(secret, self.signer_id)
+        expected_derived = hmac.new(derived_key, self.payload(), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected_derived, self.signature_hex)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self) | {"schema": RECORD_SCHEMA}
@@ -139,13 +149,24 @@ class RecruitmentReport:
         }
 
 
+_DEFAULT_SCOUT_ROTATION_DOMAIN = "hivemind-scout-rotation-v1"
+
+
+def derive_signer_secret(master_secret: bytes, signer_id: str) -> bytes:
+    """Derive a per-signer HMAC key from `master_secret` so distinct signers cannot forge for third parties (IP-82)."""
+    if not signer_id:
+        raise ValueError("signer_id must be non-empty")
+    return hmac.new(master_secret, f"hivemind-dance-signer-v1:{signer_id}".encode("utf-8"), hashlib.sha256).digest()
+
+
 def rotate_scouts(
     pool: Sequence[str],
     epoch: int,
     k: int = 2,
-    secret: bytes = b"hivemind-scout-rotation-v1",
+    secret: bytes | None = None,
 ) -> tuple[str, ...]:
     """Deterministically select `k` distinct scouts from `pool` for `epoch` (HM-S15-02 / #172)."""
+    eff_secret = secret if secret is not None else _DEFAULT_SCOUT_ROTATION_DOMAIN.encode("utf-8")
     unique_pool = list(dict.fromkeys(s for s in pool if s))
     if k < 1 or k > len(unique_pool):
         raise ValueError(f"need 1 <= k <= len(unique_pool), got k={k} len={len(unique_pool)}")
@@ -153,7 +174,7 @@ def rotate_scouts(
         raise ValueError("epoch must be >= 0")
     ranked = sorted(
         unique_pool,
-        key=lambda sid: hmac.new(secret, f"{epoch}:{sid}".encode("utf-8"), hashlib.sha256).hexdigest(),
+        key=lambda sid: hmac.new(eff_secret, f"{epoch}:{sid}".encode("utf-8"), hashlib.sha256).hexdigest(),
     )
     return tuple(ranked[:k])
 
@@ -201,7 +222,7 @@ def recruitment_weights(
     now_epoch: int,
     horizon_epochs: int,
     cap_per_record: float,
-    secret: bytes,
+    secret: bytes | Mapping[str, bytes],
     z: float = Z95,
     scout_bounds: Mapping[tuple[str, str], float] | None = None,
     max_trials_per_signer: float | None = None,
@@ -210,8 +231,8 @@ def recruitment_weights(
 
     A record is dropped (and counted under a reason) when its signature fails, when the reporter dances for an expert it
     did not serve, or when it is older than `horizon_epochs`. Each surviving record contributes
-    `min(cap_per_record, wilson_lower(successes, n))` to its (cluster, expert) cell: the lower bound is the pessimistic
-    score of Theorems 132-133 and the cap is Theorems 130-131. The horizon follows Theorem 129.
+    `min(cap_per_record, wilson_lower(successes, n))` to its (cluster, expert) cell, capped per `(signer_id, cluster_id, expert_id)`
+    at `cap_per_record` so replaying identical or multiple records from one identity cannot exceed `cap_per_record` (IP-82).
 
     `scout_bounds` maps (cluster, expert) to the upper end of a scout's own measured interval; a record whose lower bound
     exceeds it claims more than an independent probe could see and is dropped (`exceeds_scout_bound`). Cells without a
@@ -230,6 +251,7 @@ def recruitment_weights(
     trial_weights: dict[str, dict[str, float]] = {}
     trial_successes: dict[str, dict[str, float]] = {}
     signer_used: dict[str, float] = {}
+    signer_cell_weight: dict[tuple[str, str, str], float] = {}
     rejected = {"bad_signature": 0, "not_served_by_reporter": 0, "expired": 0, "future_epoch": 0, "exceeds_scout_bound": 0}
     accepted = 0
     for r in records:
@@ -251,6 +273,11 @@ def recruitment_weights(
             rejected["exceeds_scout_bound"] += 1
             continue
         w = min(cap_per_record, lower)
+        sc_key = (r.signer_id, r.cluster_id, r.expert_id)
+        prev_w = signer_cell_weight.get(sc_key, 0.0)
+        new_w = min(cap_per_record, prev_w + w)
+        delta_w = max(0.0, new_w - prev_w)
+        signer_cell_weight[sc_key] = new_w
         used = signer_used.get(r.signer_id, 0.0)
         if max_trials_per_signer is None:
             alloc_n = float(r.n)
@@ -258,7 +285,7 @@ def recruitment_weights(
             alloc_n = min(float(r.n), max(0.0, max_trials_per_signer - used))
         signer_used[r.signer_id] = used + alloc_n
         cell = weights.setdefault(r.cluster_id, {})
-        cell[r.expert_id] = cell.get(r.expert_id, 0.0) + w
+        cell[r.expert_id] = cell.get(r.expert_id, 0.0) + delta_w
         tcell = trial_weights.setdefault(r.cluster_id, {})
         tcell[r.expert_id] = tcell.get(r.expert_id, 0.0) + alloc_n
         scell = trial_successes.setdefault(r.cluster_id, {})
@@ -277,6 +304,16 @@ class DanceBoard:
         if not record.signature_hex:
             raise ValueError("refusing to store an unsigned record")
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        if self.path.exists():
+            existing, _ = self.load()
+            for r in existing:
+                if r.signature_hex == record.signature_hex or (
+                    r.signer_id == record.signer_id
+                    and r.expert_id == record.expert_id
+                    and r.cluster_id == record.cluster_id
+                    and r.epoch == record.epoch
+                ):
+                    return
         with self.path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(record.to_dict(), sort_keys=True) + "\n")
 

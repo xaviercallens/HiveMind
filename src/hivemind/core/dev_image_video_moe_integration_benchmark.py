@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 import hashlib
 import math
-from typing import Any
+from typing import Any, Sequence
 
 
 @dataclass(frozen=True)
@@ -778,6 +778,8 @@ def attribute_end_users_to_posts_and_learn_conversion() -> dict[str, Any]:
 
     return {
         "campaign_id": "HM-S30-END-USER-ATTRIBUTION-AND-CONVERSION-LEARNING",
+        "declared_constant": True,
+        "simulated": True,
         "snapshot_timestamp_utc": "2026-10-31T08:55:00Z",
         "global_community_totals": {
             "registered_accounts_total": 55,
@@ -810,12 +812,12 @@ def attribute_end_users_to_posts_and_learn_conversion() -> dict[str, Any]:
     }
 
 
-def _simulate_concurrent_modality_stress(
+def _model_concurrent_modality_stress(
     modality: str,
     scenarios: list[ModalityGainBenchmarkScenario],
     num_requests: int = 120,
 ) -> dict[str, Any]:
-    """Run a deterministic 120-request concurrent stress simulation for a modality track."""
+    """Run a deterministic 120-request concurrent stress model for a modality track."""
     latencies: list[float] = []
     throughputs: list[float] = []
     vram_peaks: list[float] = []
@@ -841,6 +843,9 @@ def _simulate_concurrent_modality_stress(
 
     return {
         "modality": modality,
+        "simulated": True,
+        "declared_constant": True,
+        "real_requests_executed": 0,
         "requests_executed": num_requests,
         "http_200_ok": num_requests,
         "success_rate_pct": 100.0,
@@ -853,17 +858,25 @@ def _simulate_concurrent_modality_stress(
     }
 
 
-def run_intense_dev_image_video_moe_benchmark() -> dict[str, Any]:
+def run_intense_dev_image_video_moe_benchmark(
+    scenarios: Sequence[ModalityGainBenchmarkScenario] | None = None,
+    *,
+    real_requests_executed: int = 0,
+) -> dict[str, Any]:
     """Execute intensive testing and gain benchmarking across Coding-MoE, Image-MoE, and Video-MoE."""
-    dev_scenarios = [s for s in DEV_IMAGE_VIDEO_BENCHMARK_SCENARIOS if s.modality == "developer_coding_moe"]
-    img_scenarios = [s for s in DEV_IMAGE_VIDEO_BENCHMARK_SCENARIOS if s.modality == "image_generation_moe"]
-    vid_scenarios = [s for s in DEV_IMAGE_VIDEO_BENCHMARK_SCENARIOS if s.modality == "video_generation_moe"]
+    active_scenarios = list(scenarios) if scenarios is not None else list(DEV_IMAGE_VIDEO_BENCHMARK_SCENARIOS)
+    dev_scenarios = [s for s in active_scenarios if s.modality == "developer_coding_moe"]
+    img_scenarios = [s for s in active_scenarios if s.modality == "image_generation_moe"]
+    vid_scenarios = [s for s in active_scenarios if s.modality == "video_generation_moe"]
 
-    dev_stress = _simulate_concurrent_modality_stress("developer_coding_moe", dev_scenarios, num_requests=120)
-    img_stress = _simulate_concurrent_modality_stress("image_generation_moe", img_scenarios, num_requests=120)
-    vid_stress = _simulate_concurrent_modality_stress("video_generation_moe", vid_scenarios, num_requests=120)
+    dev_stress = _model_concurrent_modality_stress("developer_coding_moe", dev_scenarios, num_requests=120)
+    img_stress = _model_concurrent_modality_stress("image_generation_moe", img_scenarios, num_requests=120)
+    vid_stress = _model_concurrent_modality_stress("video_generation_moe", vid_scenarios, num_requests=120)
 
-    def _summarize_track(track_scenarios: list[ModalityGainBenchmarkScenario]) -> dict[str, Any]:
+    def _summarize_track(
+        track_scenarios: list[ModalityGainBenchmarkScenario],
+        stress: dict[str, Any],
+    ) -> dict[str, Any]:
         mean_base_q = sum(s.baseline_quality_score for s in track_scenarios) / len(track_scenarios)
         mean_moe_q = sum(s.moe_quality_score for s in track_scenarios) / len(track_scenarios)
         mean_gain_pct = sum(s.quality_gain_pct for s in track_scenarios) / len(track_scenarios)
@@ -871,6 +884,8 @@ def run_intense_dev_image_video_moe_benchmark() -> dict[str, Any]:
         mean_tps = sum(s.moe_tokens_per_sec for s in track_scenarios) / len(track_scenarios)
         max_vram = max(s.active_vram_mib for s in track_scenarios)
         return {
+            "simulated": real_requests_executed == 0,
+            "declared_constant": real_requests_executed == 0,
             "scenario_count": len(track_scenarios),
             "mean_baseline_quality_score": round(mean_base_q, 2),
             "mean_moe_quality_score": round(mean_moe_q, 2),
@@ -878,13 +893,18 @@ def run_intense_dev_image_video_moe_benchmark() -> dict[str, Any]:
             "mean_quality_gain_pct": round(mean_gain_pct, 2),
             "mean_speedup_x": round(mean_speedup, 2),
             "mean_moe_tokens_per_sec": round(mean_tps, 2),
+            "p95_latency_ms": stress["p95_latency_ms"],
             "max_active_vram_mib": round(max_vram, 1),
             "all_citizen_node_compatible": all(s.citizen_node_compatible for s in track_scenarios),
         }
 
-    dev_summary = _summarize_track(dev_scenarios)
-    img_summary = _summarize_track(img_scenarios)
-    vid_summary = _summarize_track(vid_scenarios)
+    dev_summary = _summarize_track(dev_scenarios, dev_stress)
+    img_summary = _summarize_track(img_scenarios, img_stress)
+    vid_summary = _summarize_track(vid_scenarios, vid_stress)
+    overall_p95_ms = round(
+        max(dev_stress["p95_latency_ms"], img_stress["p95_latency_ms"], vid_stress["p95_latency_ms"]),
+        2,
+    )
 
     # Energy function verification (ANSE physical invariant E < baseline_E)
     baseline_energy = 1.4820
@@ -892,10 +912,14 @@ def run_intense_dev_image_video_moe_benchmark() -> dict[str, Any]:
     assert math.isfinite(integrated_moe_energy) and integrated_moe_energy < baseline_energy
 
     attribution_report = attribute_end_users_to_posts_and_learn_conversion()
+    is_simulated = int(real_requests_executed) <= 0
 
     return {
         "campaign_id": "HM-S30-DEV-IMAGE-VIDEO-MOE-INTEGRATION-BENCHMARK",
-        "status": "COMPLETED_ALL_GATES_PASSED",
+        "status": "SIMULATED_BENCHMARK_NO_LIVE_REQUESTS" if is_simulated else "COMPLETED_ALL_GATES_PASSED",
+        "simulated": is_simulated,
+        "declared_constant": is_simulated,
+        "real_requests_executed": int(real_requests_executed),
         "executed_at_utc": "2026-10-31T08:56:00Z",
         "models_integrated_and_verified": [
             "hivemind/moe-coder-polyglot-3tome",
@@ -903,9 +927,13 @@ def run_intense_dev_image_video_moe_benchmark() -> dict[str, Any]:
             "hivemind/video-moe",
         ],
         "overall_summary": {
-            "total_scenarios": len(DEV_IMAGE_VIDEO_BENCHMARK_SCENARIOS),
+            "simulated": is_simulated,
+            "declared_constant": is_simulated,
+            "real_requests_executed": int(real_requests_executed),
+            "total_scenarios": len(active_scenarios),
             "total_stress_requests": 360,
             "stress_http_200_rate_pct": 100.0,
+            "p95_latency_ms": overall_p95_ms,
             "developer_coding_3tome_gain": {
                 **dev_summary,
                 "tome1_to_tome3_hard_loss_reduction_pct": 99.07,
@@ -934,12 +962,13 @@ def run_intense_dev_image_video_moe_benchmark() -> dict[str, Any]:
                 "stress_test": vid_stress,
             },
             "anse_energy_verification": {
+                "declared_constant": True,
                 "baseline_energy": baseline_energy,
                 "integrated_moe_energy": integrated_moe_energy,
                 "delta_energy": round(integrated_moe_energy - baseline_energy, 4),
                 "monotonic_improvement_verified": True,
             },
         },
-        "scenarios": [s.to_dict() for s in DEV_IMAGE_VIDEO_BENCHMARK_SCENARIOS],
+        "scenarios": [s.to_dict() for s in active_scenarios],
         "end_user_attribution_and_conversion": attribution_report,
     }

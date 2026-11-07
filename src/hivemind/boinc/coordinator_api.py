@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -35,7 +36,7 @@ from hivemind.boinc.workunit import (
 )
 from hivemind.config import ARTIFACTS_ROOT, HiveMindConfig
 from hivemind.core.btm_upcycle import ExpertBranchState, initialize_domain_branches
-from hivemind.core.compression import decompress_lora_delta
+from hivemind.core.compression import compress_lora_delta, decompress_lora_delta
 from hivemind.core.diloco_inner import InnerLoopResult
 from hivemind.core.diloco_outer import DiLoCoOuterOptimizer, OuterStepResult
 from hivemind.security.federated_learning_hardening import FederatedLearningSecurityGuard
@@ -298,7 +299,63 @@ class BOINCCoordinatorService:
             lr=lr,
             weight_decay=weight_decay,
             micro_batch_size=micro_batch_size,
+            expected_init_state=branch_state.lora_state if branch_state is not None else None,
         )
+        decompressed: dict[str, torch.Tensor] | None = None
+        if verdict.passed:
+            decompressed = decompress_lora_delta(submission.compressed_delta)
+            expected_pkg = compress_lora_delta(
+                delta_dict=submission.raw_delta,
+                worker_id=submission.worker_id,
+                branch_name=submission.branch_name,
+                outer_step=submission.outer_step,
+                inner_steps_completed=submission.steps_completed,
+                topk_ratio=submission.compressed_delta.topk_ratio,
+            )
+            expected_decompressed = decompress_lora_delta(expected_pkg)
+            compressed_ok = set(decompressed.keys()) == set(expected_decompressed.keys())
+            if compressed_ok:
+                if submission.error_feedback_residual_norm is None:
+                    for k, exp_t in expected_decompressed.items():
+                        dec_t = decompressed[k].detach().to(torch.float32).cpu()
+                        ref_t = exp_t.detach().to(torch.float32).cpu()
+                        raw_t = submission.raw_delta[k].detach().to(torch.float32).cpu()
+                        if not bool(torch.isfinite(dec_t).all()):
+                            compressed_ok = False
+                            break
+                        diff = float((dec_t - ref_t).abs().max().item()) if dec_t.numel() > 0 else 0.0
+                        raw_mag = float(raw_t.abs().max().item()) if raw_t.numel() > 0 else 0.0
+                        tol = max(self.validator.tolerance_eps, 1e-3 * raw_mag)
+                        if not math.isfinite(diff) or diff > tol:
+                            compressed_ok = False
+                            break
+                else:
+                    for dec_t in decompressed.values():
+                        if not bool(torch.isfinite(dec_t.detach().to(torch.float32).cpu()).all()):
+                            compressed_ok = False
+                            break
+                    if compressed_ok:
+                        raw_l2 = math.sqrt(
+                            sum(
+                                float(t.detach().to(torch.float32).cpu().pow(2).sum().item())
+                                for t in submission.raw_delta.values()
+                            )
+                        )
+                        decomp_l2 = math.sqrt(
+                            sum(
+                                float(t.detach().to(torch.float32).cpu().pow(2).sum().item())
+                                for t in decompressed.values()
+                            )
+                        )
+                        ef_norm = float(submission.error_feedback_residual_norm or 0.0)
+                        if not math.isfinite(decomp_l2) or decomp_l2 > max(1e-5, 4.0 * raw_l2 + 2.0 * ef_norm):
+                            compressed_ok = False
+            if not compressed_ok:
+                verdict.passed = False
+                verdict.steam_account_flagged = True
+                verdict.reason = "REJECTED: compressed_delta diverges from validated raw_delta (IP-77)"
+                self.validator._flag_account(steam_id64, verdict.reason)
+
         # The verdict (pass or fail) is final for this wu_id: only now cast the FL-06 vote and consume it.
         self.fl_security_guard.record_workunit_submission(
             wu_id=workunit.wu_id,
@@ -311,13 +368,12 @@ class BOINCCoordinatorService:
             steam_id64,
             NodeReputationRecord(steam_id64=steam_id64, worker_id=submission.worker_id),
         )
-        if verdict.passed:
+        if verdict.passed and decompressed is not None:
+            step_fraction = min(1.0, max(0.0, submission.steps_completed / max(1, workunit.inner_steps_H)))
             rec.validated_workunits += 1
             rec.contributed_tflops = round(rec.contributed_tflops + 0.125 * submission.steps_completed, 3)
-            rec.minted_api_credits = round(rec.minted_api_credits + 10.0, 2)
-            rec.reputation_score = min(100.0, round(rec.reputation_score + 2.5, 2))
-            # Decompress uploaded Top-k + FP8 delta package on the server
-            decompressed = decompress_lora_delta(submission.compressed_delta)
+            rec.minted_api_credits = round(rec.minted_api_credits + 10.0 * step_fraction, 2)
+            rec.reputation_score = min(100.0, round(rec.reputation_score + 2.5 * step_fraction, 2))
             self.pending_branch_deltas[workunit.branch_name][submission.worker_id] = decompressed
         else:
             rec.rejected_workunits += 1

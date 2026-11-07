@@ -38,7 +38,7 @@ DEFAULT_GATEWAY = "https://hivemind-openrouter-1003063861791.us-central1.run.app
 
 
 def detect_local_gpu() -> tuple[str, int, int]:
-    """Query ``nvidia-smi`` for GPU name, total VRAM (MiB), and free VRAM (MiB); fall back cleanly if absent."""
+    """Query ``nvidia-smi`` for GPU name, total VRAM (MiB), and free VRAM (MiB); return ``('', 0, 0)`` if absent."""
     try:
         proc = subprocess.run(
             [
@@ -55,10 +55,13 @@ def detect_local_gpu() -> tuple[str, int, int]:
             first_line = proc.stdout.strip().splitlines()[0]
             parts = [p.strip() for p in first_line.split(",")]
             if len(parts) >= 3:
-                return parts[0], max(512, int(float(parts[1]))), max(0, int(float(parts[2])))
+                total_mib = int(float(parts[1]))
+                free_mib = int(float(parts[2]))
+                if total_mib > 0 and free_mib >= 0:
+                    return parts[0], max(512, total_mib), min(max(512, total_mib), max(0, free_mib))
     except (OSError, ValueError, subprocess.SubprocessError):
         pass
-    return "NVIDIA GeForce RTX 2070", 8192, 6400
+    return "", 0, 0
 
 
 def verify_firewall_traversal(gateway: str, network_mode: str) -> dict[str, Any]:
@@ -212,7 +215,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="HiveMind OpenTrainer Agent — Firewall-Friendly Outbound GPU Co-Training (BOINC + AMCP + Kafka + Aglets)."
     )
-    parser.add_argument("--gateway", default=os.environ.get("HIVEMIND_GATEWAY_URL", DEFAULT_GATEWAY), help="OpenTrainer gateway URL")
+    parser.add_argument(
+        "--gateway",
+        "--server-url",
+        dest="gateway",
+        default=os.environ.get("HIVEMIND_GATEWAY_URL", DEFAULT_GATEWAY),
+        help="OpenTrainer gateway URL (also accepts --server-url)",
+    )
     parser.add_argument(
         "--network-mode",
         default="outbound-https-relay",
@@ -224,6 +233,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--gpu-name", default="", help="Override detected GPU model name")
     parser.add_argument("--vram-total-mib", type=int, default=0, help="Override total GPU VRAM in MiB")
     parser.add_argument("--vram-free-mib", type=int, default=0, help="Override free GPU VRAM in MiB")
+    parser.add_argument(
+        "--max-vram-gb",
+        type=float,
+        default=0.0,
+        help="Optional VRAM ceiling in GiB for training allocation (e.g. 5.5 on an 8 GB GPU)",
+    )
     parser.add_argument("--training-stack", default="qlora-moe+diloco+amcp-aglet+boinc", help="Active training stack descriptor")
     parser.add_argument("--campaign-id", default="E8-STAGE2-TINY-GRANITE-MOE-QLORA", help="Active co-training campaign ID")
     parser.add_argument("--submit-delta", action="store_true", help="Submit a measured round delta after heartbeat (requires --round-report)")
@@ -242,6 +257,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if not math.isfinite(float(args.interval_s)) or float(args.interval_s) <= 0.0:
+        print("Error: --interval-s must be a finite positive number.", file=sys.stderr)
+        return 2
+    if not math.isfinite(float(args.max_vram_gb)) or float(args.max_vram_gb) < 0.0:
+        print("Error: --max-vram-gb must be a finite non-negative number.", file=sys.stderr)
+        return 2
     round_report: dict[str, Any] | None = None
     if args.submit_delta:
         if not args.round_report:
@@ -253,9 +274,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Error: {exc}; no delta was submitted.", file=sys.stderr)
             return 2
     detected_gpu, detected_total, detected_free = detect_local_gpu()
-    gpu_name = args.gpu_name or detected_gpu
+    gpu_name = args.gpu_name or detected_gpu or ("custom-gpu" if args.vram_total_mib > 0 else "")
     vram_total = args.vram_total_mib if args.vram_total_mib > 0 else detected_total
     vram_free = args.vram_free_mib if args.vram_free_mib > 0 else min(detected_free, vram_total)
+    if float(args.max_vram_gb) > 0.0 and vram_free > 0:
+        cap_mib = max(512, int(round(float(args.max_vram_gb) * 1024.0)))
+        vram_free = min(vram_free, cap_mib)
 
     if args.check_firewall:
         try:
@@ -270,6 +294,14 @@ def main(argv: list[str] | None = None) -> int:
         if args.check_firewall and args.once:
             return 0
         print("Error: HIVEMIND_API_KEY environment variable is required for OpenTrainer heartbeats.", file=sys.stderr)
+        return 2
+
+    if vram_total <= 0 or not gpu_name:
+        print(
+            "Error: No readable NVIDIA GPU detected via nvidia-smi (and --vram-total-mib was not specified); "
+            "refusing to send fabricated GPU telemetry.",
+            file=sys.stderr,
+        )
         return 2
 
     while True:

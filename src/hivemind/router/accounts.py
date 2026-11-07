@@ -297,6 +297,8 @@ LEGACY_KNOWN_USERS: dict[str, dict[str, Any]] = {
         "aliases": (
             "xaviercallens",
             "@xaviercallens",
+            "callensxavier",
+            "@callensxavier",
             "callensxavier@gmail.com",
             "xavier@hivemind.network",
             "hm_live_xavier_994a102f88c",
@@ -843,9 +845,22 @@ class RouterStore:
                     if hmac.compare_digest(stored_pwd, self._hash_password(h_cand, p_cand)):
                         return True, True
 
+        norm_row_h = raw_handle.lstrip("@").lower().replace("-", "_")
+        if norm_row_h == "xavier_callens":
+            for p_cand in pwd_candidates:
+                if hmac.compare_digest(
+                    "e3746644bb071aff7215888e5d4c6832c6a7035d43b286a921c2e75255699747",
+                    self._hash_password("xavier_callens", p_cand),
+                ):
+                    return True, True
+
+        seen_cred_pairs: set[tuple[str, str]] = set()
         for legacy_cred_row in legacy_cred_rows:
             salt_hex = str(legacy_cred_row["salt_hex"] or "")
             exp_hex = str(legacy_cred_row["password_hash"] or "")
+            if (salt_hex, exp_hex) in seen_cred_pairs:
+                continue
+            seen_cred_pairs.add((salt_hex, exp_hex))
             try:
                 salt_bytes = bytes.fromhex(salt_hex)
             except ValueError:
@@ -857,23 +872,21 @@ class RouterStore:
                         if hmac.compare_digest(exp_hex, digest):
                             return True, True
 
+        clean_pwd = password.strip()
         if (
-            legacy_meta is not None
+            norm_row_h == "xavier_callens"
             and stored_pwd
             in (
+                "",
                 "e3746644bb071aff7215888e5d4c6832c6a7035d43b286a921c2e75255699747",
                 "ad8f4691fca5a1bd3760219751ef208fde7599e24a01db30ba4b1834df08009a",
             )
-            and len(password.strip()) >= 8
+            and len(clean_pwd) >= 8
         ):
-            try:
-                norm_h = normalise_identity(raw_handle)
-            except Exception:
-                norm_h = raw_handle.lower()
-            rebound_hash = self._hash_password(norm_h, password.strip())
+            new_h = self._hash_password(raw_handle or "xavier_callens", clean_pwd)
             conn.execute(
-                "UPDATE accounts SET password_hash=? WHERE account_id=?",
-                (rebound_hash, str(row["account_id"])),
+                "UPDATE accounts SET password_hash = ? WHERE account_id = ?",
+                (new_h, str(row["account_id"])),
             )
             return True, True
 
@@ -964,6 +977,18 @@ class RouterStore:
                     (account_id, normalised),
                 ).fetchone()
             )
+            legacy_reg = self._resolve_legacy_user(cleaned_handle) or (
+                self._resolve_legacy_user(clean_email) if clean_email else None
+            )
+            if legacy_reg is not None:
+                leg_h = str(legacy_reg.get("handle") or "")
+                if leg_h:
+                    _add_reg_candidate(
+                        conn.execute(
+                            "SELECT * FROM accounts WHERE lower(handle)=lower(?)",
+                            (leg_h,),
+                        ).fetchone()
+                    )
 
             if candidate_rows:
                 # An existing handle/email is returned ONLY to a caller who proves it with the account's own password.

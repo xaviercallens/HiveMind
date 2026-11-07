@@ -74,6 +74,18 @@ def test_no_catalog_entry_links_to_an_unpublished_repository_or_claims_training_
             assert entry.served_by, entry.public_id
 
 
+def test_no_trained_moe_status_on_an_off_the_shelf_tier() -> None:
+    """A status that names a trained MoE is only shown when a HiveMind-built artefact serves the tier; otherwise the
+    entry is exposed as planned, not trained (owner decision, 2026-11-07)."""
+    from hivemind.router.catalog import PREWIRED_PARTNER_MODELS, TRAINED_MOE_STATUSES
+
+    for entry in PREWIRED_PARTNER_MODELS:
+        if entry.status in TRAINED_MOE_STATUSES:
+            assert entry.served_by.startswith("hivemind-"), entry.public_id
+        if not entry.published:
+            assert entry.status == "UNPUBLISHED_NOT_TRAINED" and entry.tokens_trained_b == 0.0, entry.public_id
+
+
 @pytest.mark.parametrize(
     ("vram", "expected"),
     [

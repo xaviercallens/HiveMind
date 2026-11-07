@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -44,8 +45,12 @@ from hivemind.game.exoplanet_hunter_engine import (
 )
 
 CSC_PATH = Path(r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe")
-STEAM_LIBRARY_COMMON = Path(r"D:\SteamLibrary\steamapps\common")
-STEAM_USERDATA_CONFIG = Path(r"C:\Program Files (x86)\Steam\userdata\160209124\config")
+STEAM_LIBRARY_COMMON = Path(
+    os.environ.get("STEAM_LIBRARY_COMMON", str(PROJECT_ROOT / "steam_dist" / "SteamLibrary" / "steamapps" / "common"))
+)
+STEAM_USERDATA_CONFIG = Path(
+    os.environ.get("STEAM_USERDATA_CONFIG", str(PROJECT_ROOT / "steam_dist" / "Steam" / "userdata" / "0" / "config"))
+)
 
 
 NATIVE_CSHARP_FAT_CLIENT_SOURCE = r"""using System;
@@ -5066,20 +5071,24 @@ if __name__ == "__main__":
         encoding="utf-8",
     )
 
-    publish_bat_path = sdk_dir / "Publish_Steamworks_xavakal.bat"
+    steam_account_name = os.environ.get("STEAM_ACCOUNT_NAME", "hivemind_local").strip() or "hivemind_local"
+    steam_persona_name = os.environ.get("STEAM_PERSONA_NAME", "HiveMinder").strip() or "HiveMinder"
+    steam_owner_id64 = os.environ.get("STEAM_LAST_OWNER_ID64", "0").strip() or "0"
+
+    publish_bat_path = sdk_dir / f"Publish_Steamworks_{steam_account_name}.bat"
     publish_bat_path.write_text(
         f"""@echo off
-title Steamworks Release Publisher — Account: xavakal (callensxavier) — AppID {STEAM_APP_ID}
+title Steamworks Release Publisher — Account: {steam_account_name} ({steam_persona_name}) — AppID {STEAM_APP_ID}
 echo ============================================================================
 echo Publishing USS HiveMind NCC-31337 v1.0.0 First Release to Steamworks
-echo Steam Account : xavakal (SteamID64: 76561198120474852)
-echo Steam Library : D:\\SteamLibrary\\steamapps\\common\\HiveMind_Astrophysics_Exoplanet_Hunter
+echo Steam Account : {steam_account_name} (SteamID64: {steam_owner_id64})
+echo Steam Library : {STEAM_LIBRARY_COMMON / "HiveMind_Astrophysics_Exoplanet_Hunter"}
 echo ============================================================================
 where steamcmd >nul 2>nul
 if %ERRORLEVEL% EQU 0 (
-    steamcmd +login xavakal +run_app_build "%~dp0app_build_3133700_free_boinc.vdf" +quit
+    steamcmd +login {steam_account_name} +run_app_build "%~dp0app_build_3133700_free_boinc.vdf" +quit
 ) else (
-    echo [INFO] Local Steam Library deployment active at D:\\SteamLibrary\\steamapps\\common\\HiveMind_Astrophysics_Exoplanet_Hunter
+    echo [INFO] Local Steam Library deployment active at {STEAM_LIBRARY_COMMON / "HiveMind_Astrophysics_Exoplanet_Hunter"}
     start "" "steam://rungameid/{STEAM_ASTRO_DEPOT_ID}"
 )
 """,
@@ -5138,7 +5147,7 @@ start "" "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community"
 \t"SizeOnDisk"\t\t"{total_bytes}"
 \t"StagingSize"\t\t"0"
 \t"buildid"\t\t"2026102901"
-\t"LastOwner"\t\t"76561198120474852"
+\t"LastOwner"\t\t"{steam_owner_id64}"
 \t"AutoUpdateBehavior"\t\t"0"
 \t"AllowOtherDownloadsWhileRunning"\t\t"1"
 \t"ScheduledAutoUpdate"\t\t"0"
@@ -5155,8 +5164,8 @@ start "" "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community"
 \t"UserConfig"
 \t{{
 \t\t"language"\t\t"french"
-\t\t"accountname"\t\t"xavakal"
-\t\t"personaname"\t\t"callensxavier"
+\t\t"accountname"\t\t"{steam_account_name}"
+\t\t"personaname"\t\t"{steam_persona_name}"
 \t}}
 }}
 """
@@ -5217,7 +5226,7 @@ start "" "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community"
     return {
         "version": "5.2-FirstRelease-Steam-IdleGPU-BOINC-GCP-Community",
         "simulated": True,
-        "steam_account": "xavakal (callensxavier / 76561198120474852)",
+        "steam_account": f"{steam_account_name} ({steam_persona_name} / {steam_owner_id64})",
         "steam_app_id": STEAM_APP_ID,
         "steam_astro_depot_id": STEAM_ASTRO_DEPOT_ID,
         "pricing_model": "100% Free-to-Play (FreeOnDemand, isfreeapp=1, 0.00 EUR / 0.00 USD)",

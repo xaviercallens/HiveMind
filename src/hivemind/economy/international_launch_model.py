@@ -980,7 +980,12 @@ def forecast_200plus_node_international_launch(
 
     # 6. Bass / Epidemic Conversion & Kelly Congestion Price
     effective_conversion_kappa = round((c_prod + c_pros) / max(1, total_nodes), 4)
+    prosumer_conversion_kappa = round(c_pros / max(1, c_pros + c_cons), 4)
     deficit_tok_s = max(0.0, sustained_generated_tok_per_s - base_producer_tok_per_s)
+    unbacked_deficit_kappa_star = round(
+        min(1.0, deficit_tok_s / max(1.0, (c_pros + c_cons) * pros_tok_per_s_each * weighted_diurnal)),
+        4,
+    )
     critical_kappa_star = round(
         max(0.0220, deficit_tok_s / max(1.0, (c_pros + c_cons) * pros_tok_per_s_each * weighted_diurnal)),
         4,
@@ -1110,6 +1115,14 @@ def forecast_200plus_node_international_launch(
         if not n["is_current_pioneer"]:
             n["is_current_pioneer"] = True
             pioneers_assigned += 1
+            if pioneer_coordinates and (pioneers_assigned - 1) < len(pioneer_coordinates):
+                coord = pioneer_coordinates[pioneers_assigned - 1]
+                n["city"] = str(coord.get("city", n["city"]))
+                n["lat"] = round(float(coord.get("lat", n["lat"])), 4)
+                n["lon"] = round(float(coord.get("lon", n["lon"])), 4)
+                n["location_estimated"] = bool(coord.get("location_estimated", False))
+            else:
+                n["location_estimated"] = True
 
     # Great-circle Super-Peer QUIC / AMCP mesh arcs
     hub_list = list(GLOBAL_SUPER_PEER_HUBS)
@@ -1280,7 +1293,9 @@ def forecast_200plus_node_international_launch(
                 "kelly_congestion_multiplier_omega": congestion_omega,
                 "kelly_congestion_quote": congestion_quote,
                 "effective_conversion_kappa": effective_conversion_kappa,
+                "prosumer_conversion_kappa": prosumer_conversion_kappa,
                 "critical_conversion_threshold_kappa_star": critical_kappa_star,
+                "unbacked_deficit_kappa_star": unbacked_deficit_kappa_star,
                 "conversion_safety_margin_ratio": round(effective_conversion_kappa / critical_kappa_star, 2),
                 "starter_grant_policy": asdict(starter_grant),
             },
@@ -1290,6 +1305,12 @@ def forecast_200plus_node_international_launch(
             "total_plotted_nodes": len(globe_nodes),
             "current_pioneer_nodes_count": sum(1 for n in globe_nodes if n["is_current_pioneer"]),
             "forecast_expansion_nodes_count": sum(1 for n in globe_nodes if not n["is_current_pioneer"]),
+            "pioneer_location_basis": (
+                "caller_supplied_coordinates"
+                if any(n["is_current_pioneer"] for n in globe_nodes)
+                and all(not n["location_estimated"] for n in globe_nodes if n["is_current_pioneer"])
+                else "estimated_regional_distribution"
+            ),
             "super_peer_hubs": [
                 {
                     "region_id": h["region_id"],

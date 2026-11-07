@@ -101,7 +101,7 @@ def quantize_tensor_nf4_double_quant(
     orig_device = weight.device
     orig_dtype = weight.dtype
 
-    flat = weight.detach().to(torch.float32).reshape(-1)
+    flat = weight.detach().to(torch.float32).clone().reshape(-1)
     numel = flat.numel()
     pad = (block_size - (numel % block_size)) % block_size
     if pad > 0:

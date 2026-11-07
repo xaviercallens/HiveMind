@@ -309,7 +309,22 @@ def test_pouw_ledger_concurrency_idempotency_and_anti_tampering(store: RouterSto
         wu = scheduler.create_domain_workunit(
             domain=domain, num_samples=20, inner_steps=50, seed=5000 + idx
         )
-        res = scheduler.verify_workunit_execution(wu, worker_id=f"worker-{pid}", account_id=pid)
+        res = scheduler.verify_workunit_execution(
+            wu,
+            worker_id=f"worker-{pid}",
+            account_id=pid,
+            observed_telemetry={
+                "total_eval_samples": 200,
+                "base_correct": 100,
+                "adapted_correct": 168,
+                "base_only_correct": 3,
+                "adapted_only_correct": 71,
+                "loss_initial": 2.45,
+                "loss_final": 1.92,
+                "peak_vram_mb": 4200.0,
+                "duration_seconds": 95.0,
+            },
+        )
         results.append(res)
 
     assert len(results) == 20

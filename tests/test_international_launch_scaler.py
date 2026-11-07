@@ -315,10 +315,14 @@ def test_nocturnal_image_moe_evolution_monitor_and_dashboard_routes(
     assert r_evo.status_code == 200
     assert r_evo.json()["pareto_ratchet_monotone_verified"] is True
 
-    # Also verify pre-registered E20 report exists and passed all predictions
+    # Also execute E20 benchmark suite live and verify all predictions pass (IP-122)
+    import sys
+
     repo_root = Path(__file__).resolve().parents[1]
-    e20_report_path = repo_root / "artifacts" / "experiments" / "E20_international_launch_split_dct_report.json"
-    assert e20_report_path.exists()
-    e20_data = json.loads(e20_report_path.read_text(encoding="utf-8"))
+    if str(repo_root / "scripts") not in sys.path:
+        sys.path.insert(0, str(repo_root / "scripts"))
+    from run_international_launch_and_vmoe_monitor import run_e20_benchmark_suite
+
+    e20_data = run_e20_benchmark_suite()
     assert e20_data["status"] == "VERIFIED_PASS"
     assert all(e20_data["predictions_check"].values())

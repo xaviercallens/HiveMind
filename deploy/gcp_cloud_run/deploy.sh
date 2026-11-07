@@ -36,4 +36,4 @@ gcloud run deploy "$SERVICE_NAME" \
   --memory 1Gi \
   --concurrency 80 \
   --timeout 300 \
-  --set-env-vars "HIVEMIND_FINOPS_MIN_INSTANCES=0,HIVEMIND_PUBLIC_DNS_DOMAIN=hivemind.socrate-ai-lab.com,HIVEMIND_CORE_MVP_SSO_PROVIDERS=google,reddit,steam,github,HIVEMIND_PASSWORD_KDF=PBKDF2-HMAC-SHA256:200000"
+  --update-env-vars "^;^HIVEMIND_FINOPS_MIN_INSTANCES=0;HIVEMIND_PUBLIC_DNS_DOMAIN=hivemind.socrate-ai-lab.com;HIVEMIND_CORE_MVP_SSO_PROVIDERS=google,reddit,steam,github;HIVEMIND_PASSWORD_KDF=PBKDF2-HMAC-SHA256:200000"

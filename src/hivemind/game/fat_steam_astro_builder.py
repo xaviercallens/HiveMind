@@ -4871,7 +4871,7 @@ def _generate_steam_artwork_assets(assets_dir: Path) -> Dict[str, str]:
 
 
 def build_fat_steam_exoplanet_client(
-    install_to_local_steam_library: bool = True,
+    install_to_local_steam_library: bool = False,
 ) -> Dict[str, Any]:
     """Compile the v4.5 Full-Canvas native 64-bit C# fat client .exe and deploy into `steam_dist` and `D:\\SteamLibrary`."""
     service = AstroBeeMoEGPUService()
@@ -5103,16 +5103,6 @@ start "" "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community"
     grid_copied: List[str] = []
 
     if install_to_local_steam_library and STEAM_LIBRARY_COMMON.exists():
-        try:
-            subprocess.run(
-                ["taskkill", "/F", "/IM", "HiveMind_Exoplanet_Hunter.exe"],
-                capture_output=True,
-                timeout=3.0,
-                check=False,
-            )
-        except Exception:
-            pass
-
         steam_lib_target.mkdir(parents=True, exist_ok=True)
         steamcmd_src = pkg_dir.parent / "steamcmd" / "steamcmd.exe"
         if steamcmd_src.exists():
@@ -5188,9 +5178,19 @@ start "" "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community"
             start_dir_str = str(steam_lib_target)
             icon_target_str = str(steam_lib_target / "steam_assets" / "icon.ico")
             shortcuts_vdf_path = STEAM_USERDATA_CONFIG / "shortcuts.vdf"
-            vdf_bytes = (
-                b"\x00shortcuts\x00"
-                b"\x000\x00"
+            existing_vdf = b""
+            if shortcuts_vdf_path.exists():
+                existing_vdf = shortcuts_vdf_path.read_bytes()
+                shutil.copy2(shortcuts_vdf_path, shortcuts_vdf_path.with_suffix(".vdf.bak"))
+
+            entry_idx = b"0"
+            if existing_vdf.startswith(b"\x00shortcuts\x00") and existing_vdf.endswith(b"\x08\x08"):
+                # Count existing top-level shortcut entries or pick next index
+                idx_num = max(0, existing_vdf.count(b"\x01AppName\x00"))
+                entry_idx = str(idx_num).encode("ascii")
+
+            entry_body = (
+                b"\x00" + entry_idx + b"\x00"
                 b"\x02appid\x00" + int(shortcut_appid).to_bytes(4, "little", signed=False)
                 + b"\x01AppName\x00USS HiveMind: Astrophysics Exoplanet Hunter\x00"
                 + b"\x01Exe\x00\"" + exe_target_str.encode("utf-8") + b"\"\x00"
@@ -5203,8 +5203,15 @@ start "" "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community"
                 + b"\x02AllowOverlay\x00\x01\x00\x00\x00"
                 + b"\x02OpenVR\x00\x00\x00\x00\x00"
                 + b"\x00tags\x00\x010\x00Astrophysics\x00\x011\x00Favorite\x00\x08"
-                + b"\x08\x08"
+                + b"\x08"
             )
+            if existing_vdf.startswith(b"\x00shortcuts\x00") and existing_vdf.endswith(b"\x08\x08"):
+                if b"USS HiveMind: Astrophysics Exoplanet Hunter" in existing_vdf:
+                    vdf_bytes = existing_vdf
+                else:
+                    vdf_bytes = existing_vdf[:-1] + entry_body + b"\x08"
+            else:
+                vdf_bytes = b"\x00shortcuts\x00" + entry_body + b"\x08"
             shortcuts_vdf_path.write_bytes(vdf_bytes)
 
     return {

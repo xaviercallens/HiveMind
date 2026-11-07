@@ -1142,7 +1142,12 @@ def render_foundation_paper_portal_html(
     wan_t4_floor = float(wan.get("tesla_t4_min_free_vram_guard_mib", 4300.0))
 
     e20 = dict(live_exp.get("experiment_e20_international_launch") or {})
-    e20_status = str(e20.get("status") or "NOT_SOURCED")
+    bal_forecast = dict(
+        (data.get("real_vs_forecast_traffic_and_balancing") or {}).get("hivemind_balanced_265_node_forecast") or {}
+    )
+    bal_rho = float(bal_forecast.get("utilization_rho", wan_rho))
+    is_overload = wan_rho > 1.0 or bal_rho > 1.0
+    e20_status = str(e20.get("status") or ("OVERLOAD_FAIL" if is_overload else "NOT_SOURCED"))
     e20_source = str(e20.get("data_source") or "NOT_SOURCED")
     p20a = dict(e20.get("P20a_adaptive_multisplit_guard") or {})
     p20b = dict(e20.get("P20b_top1pct_2d_dct_ef21") or {})
@@ -1154,6 +1159,12 @@ def render_foundation_paper_portal_html(
     vmoe = dict(live_exp.get("nocturnal_vmoe_pareto_ratchet") or {})
     vmoe_status = str(vmoe.get("status") or "NOT_SOURCED")
     vmoe_source = str(vmoe.get("data_source") or "NOT_SOURCED")
+    balanced_card_cls = "card-red" if is_overload else "card-green"
+    balanced_card_bg = "rgba(69,10,18,0.28)" if is_overload else "rgba(6,78,59,0.24)"
+    balanced_header_color = "#fb7185" if is_overload else "#34d399"
+    balanced_verdict_label = "OVERLOAD" if is_overload else "READY FOR LAUNCH"
+    balanced_rho_cmp = "&gt; 0.78 (OVERLOAD)" if is_overload else "&le; 0.78"
+    e20_status_color = "#fb7185" if is_overload else "#34d399"
 
     wave_rows_html = []
     for w in data.get("five_wave_international_roadmap", []):
@@ -1281,7 +1292,7 @@ def render_foundation_paper_portal_html(
         <div style="font-size:0.75rem;color:#34d399;font-weight:800;letter-spacing:0.06em;">
           PROJECT HIVEMIND FOUNDATION ARTICLE &bull; VERSION 4.2.0 (70 PAGES &bull; 161 LEAN 4 LEMMAS, 0 SORRY &bull; 0.00 EUR/USD)
         </div>
-        <h1>&#x1F4DC; Foundation Paper v4.2.0: Live Experimentation (E20 &amp; 47-Node WAN) &amp; &gt;200-Node Launch Forecast</h1>
+        <h1>&#x1F4DC; Foundation Paper v4.2.0: Live Experimentation (E20 &amp; {wan_nodes}-Node WAN) &amp; &gt;200-Node Launch Forecast</h1>
       </div>
       <div>
         <a href="/" class="btn">&#x1F3E0; HiveMind Portal Home</a>
@@ -1296,7 +1307,7 @@ def render_foundation_paper_portal_html(
   <main class="wrap" style="padding:22px 24px 56px;">
     <!-- SECTION 1: REAL TRAFFIC VS FORECAST TRAFFIC & NETWORK BALANCING -->
     <section class="card card-gold">
-      <h2>01 // Real Live Swarm Traffic (47 Nodes) vs. &gt;200-Node (265-Node + 2,400 Visitors) International Launch Network Balancing</h2>
+      <h2>01 // Real Live Swarm Traffic ({wan_nodes} Nodes) vs. &gt;200-Node (265-Node + 2,400 Visitors) International Launch Network Balancing</h2>
       <p style="font-size:0.88rem;color:#cbd5e1;margin:0 0 12px;">
         Synthesizing <strong>Kleinrock (1975) &amp; Halfin&ndash;Whitt (1981) M/M/c(t) square-root staffing</strong>,
         <strong>Kingman (1961) G/G/c heavy-tail token variance</strong>,
@@ -1329,13 +1340,13 @@ def render_foundation_paper_portal_html(
           </div>
         </div>
 
-        <div class="card card-green" style="margin:0;background:rgba(6,78,59,0.24);">
-          <div style="font-size:0.75rem;color:#34d399;font-weight:800;">HIVEMIND BALANCED ROUTING (AMCP + P2C + 2-LANE QOS)</div>
-          <h3 style="margin:4px 0 8px;color:#ecfdf5;">265-Node Elastic Swarm (READY FOR LAUNCH)</h3>
+        <div class="card {balanced_card_cls}" style="margin:0;background:{balanced_card_bg};">
+          <div style="font-size:0.75rem;color:{balanced_header_color};font-weight:800;">HIVEMIND BALANCED ROUTING (AMCP + P2C + 2-LANE QOS)</div>
+          <h3 style="margin:4px 0 8px;color:#ecfdf5;">265-Node Elastic Swarm ({balanced_verdict_label})</h3>
           <div style="font-size:0.83rem;color:#d1fae5;">
             &bull; Active Server Pool: <strong>c<sub>eff</sub> = 60 &ge; c<sub>HW</sub> = 45</strong> (28 Producers + <strong>32/54 AMCP Prosumers</strong>)<br/>
-            &bull; Throughput: <strong style="color:#34d399;">3,040.7 tok/s daytime</strong> (<strong>4,026.2 tok/s burst</strong> &bull; 262.7M tok/day)<br/>
-            &bull; Balanced Utilization: <strong style="color:#fbbf24;">&rho;<sub>elastic</sub> = 0.6529 &le; 0.78</strong> (P(W<sub>q</sub>&gt;0) = 0.13%, W<sub>q,P2C</sub> = 0.2 ms)<br/>
+            &bull; Throughput: <strong style="color:{balanced_header_color};">3,040.7 tok/s daytime</strong> (<strong>4,026.2 tok/s burst</strong> &bull; 262.7M tok/day)<br/>
+            &bull; Balanced Utilization: <strong style="color:#fbbf24;">&rho;<sub>elastic</sub> = {bal_rho:.4f} {balanced_rho_cmp}</strong> (P(W<sub>q</sub>&gt;0) = 0.13%, W<sub>q,P2C</sub> = 0.2 ms)<br/>
             &bull; Response SLA: Fast-Lane TTFT = <strong>136.9 ms</strong> (p50 = 170.9 ms) &bull; Blended p50 = <strong>217.8 ms</strong><br/>
             &bull; Compute Power: <strong>2.14 PFLOPS daytime</strong> / <strong>4.18 PFLOPS nocturnal DiLoCo</strong>
           </div>
@@ -1363,21 +1374,21 @@ def render_foundation_paper_portal_html(
             <td>GTX 1650 (4G), Steam Deck OLED, RTX 2070 (8G), Apple M2</td>
             <td><strong>{p20a_vram:.1f} MiB</strong> client prelude VRAM; 48 KB wire; <strong>-94.34% to -98.29%</strong> step latency</td>
             <td>&le; 1,536 MiB &amp; &lt; 250 ms</td>
-            <td><span style="color:#34d399;font-weight:800;">{e20_status}</span></td>
+            <td><span style="color:{e20_status_color};font-weight:800;">{e20_status}</span></td>
           </tr>
           <tr>
             <td><strong>E20-P20b: Top-1% 2D-DCT + EF21</strong></td>
             <td>256&times;256 FP32 outer pseudo-gradient (262,144 B &rarr; 1,163 B)</td>
             <td><strong>{p20b_ratio:.1f}&times; compression</strong>; EF21 L2 error 1.52e-15; wire drift <strong>3.0e-8</strong></td>
             <td>&ge; 100&times; &amp; drift &le; 1e-5</td>
-            <td><span style="color:#34d399;font-weight:800;">{e20_status}</span></td>
+            <td><span style="color:{e20_status_color};font-weight:800;">{e20_status}</span></td>
           </tr>
           <tr>
             <td><strong>E20-P20c: 6-Region Super-Peer Tree</strong></td>
             <td>10,000 leaf nodes &rarr; 318 Super-Peers (558 sub-swarms of 18)</td>
             <td><strong>{p20c_red:.2f}&times; coordinator ingress reduction</strong> + <strong>62.5% SQLite write-IOPS cut</strong> (2,554 HMT exact)</td>
             <td>&ge; 25&times; &amp; 0 HMT drift</td>
-            <td><span style="color:#34d399;font-weight:800;">{e20_status}</span></td>
+            <td><span style="color:{e20_status_color};font-weight:800;">{e20_status}</span></td>
           </tr>
           <tr>
             <td><strong>Nocturnal V-MoE Pareto Evolution</strong></td>
@@ -1391,8 +1402,8 @@ def render_foundation_paper_portal_html(
     </section>
 
     <!-- SECTION 3: 6 REGIONAL SUPER-PEER HUBS & 5-WAVE INTERNATIONAL SCALABILITY -->
-    <section class="card card-green">
-      <h2>03 // 6 Regional Super-Peer Shards (265-Node Wave) &amp; 5-Wave International Roadmap (47 &rarr; 10,000+ Nodes)</h2>
+    <section class="card {balanced_card_cls}">
+      <h2>03 // 6 Regional Super-Peer Shards (265-Node Wave) &amp; 5-Wave International Roadmap ({wan_nodes} &rarr; 10,000+ Nodes)</h2>
       <table>
         <thead>
           <tr>

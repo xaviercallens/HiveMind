@@ -467,12 +467,50 @@ def run_anse_energy_reactor_mission(
         "a(x) = -k*x that conserves energy to O(dt^2)."
     )
 
+    def _verlet_test_tuple(ns: Dict[str, Any]) -> bool:
+        fn = ns.get("symplectic_verlet_step") or ns.get("step_verlet")
+        if not callable(fn):
+            return False
+        res = fn(1.0, 0.0, 2.0, 0.01)
+        return isinstance(res, tuple) and len(res) == 2
+
+    def _verlet_test_equilibrium(ns: Dict[str, Any]) -> bool:
+        fn = ns.get("symplectic_verlet_step") or ns.get("step_verlet")
+        if not callable(fn):
+            return False
+        x1, v1 = fn(0.0, 0.0, 2.0, 0.05)
+        return abs(x1) < 1e-12 and abs(v1) < 1e-12
+
+    def _verlet_test_first_order(ns: Dict[str, Any]) -> bool:
+        fn = ns.get("symplectic_verlet_step") or ns.get("step_verlet")
+        if not callable(fn):
+            return False
+        x1, v1 = fn(1.0, 0.5, 2.0, 0.01)
+        return abs(x1 - 1.005) < 1e-3 and abs(v1 - 0.48) < 1e-3
+
+    def _verlet_test_symplectic_energy(ns: Dict[str, Any]) -> bool:
+        fn = ns.get("symplectic_verlet_step") or ns.get("step_verlet")
+        if not callable(fn):
+            return False
+        x, v, k, dt = 1.0, 0.0, 4.0, 0.05
+        e0 = 0.5 * v * v + 0.5 * k * x * x
+        for _ in range(100):
+            x, v = fn(x, v, k, dt)
+        e1 = 0.5 * v * v + 0.5 * k * x * x
+        return abs(e1 - e0) / e0 < 1e-2
+
+    verlet_tests = [
+        _verlet_test_tuple,
+        _verlet_test_equilibrium,
+        _verlet_test_first_order,
+        _verlet_test_symplectic_energy,
+    ]
+
     attempt_1_stub = "def symplectic_verlet_step(x, v, k, dt):\n    pass\n"
     eval_1 = evaluate_bee_candidate_energy(
         candidate_id="attempt-1-stub",
         response_text=attempt_1_stub,
-        tests_passed=0,
-        tests_total=4,
+        test_callables=verlet_tests,
         latency_ms=12.0,
         memory_mb=18.0,
         invariant_residual=0.25,
@@ -493,8 +531,7 @@ def run_anse_energy_reactor_mission(
     eval_2 = evaluate_bee_candidate_energy(
         candidate_id="attempt-2-euler",
         response_text=attempt_2_euler,
-        tests_passed=3,
-        tests_total=4,
+        test_callables=verlet_tests,
         latency_ms=14.5,
         memory_mb=19.2,
         invariant_residual=0.012,
@@ -512,8 +549,7 @@ def run_anse_energy_reactor_mission(
     eval_3 = evaluate_bee_candidate_energy(
         candidate_id="attempt-3-symplectic-verlet",
         response_text=attempt_3_symplectic,
-        tests_passed=4,
-        tests_total=4,
+        test_callables=verlet_tests,
         latency_ms=8.4,
         memory_mb=16.0,
         invariant_residual=1.2e-6,
@@ -846,15 +882,19 @@ def ask_la_ruche_bee_copilot_live(
             )
 
     latency_ms = round((time.perf_counter() - t0) * 1000.0, 2)
+    copilot_tests = [
+        lambda ns: any(callable(v) for k, v in ns.items() if k != "__builtins__"),
+        lambda ns: all(
+            callable(fn) and isinstance(fn(1.0, 0.0, 2.0, 0.01), tuple)
+            for k, fn in ns.items()
+            if k in ("step_verlet", "symplectic_verlet_step")
+        )
+        and any(k in ns for k in ("step_verlet", "symplectic_verlet_step")),
+    ]
     energy_eval = evaluate_bee_candidate_energy(
         candidate_id=f"copilot-{model}",
-        response_text=(
-            "def copilot_verified_step(x, v, dt):\n    return x + v * dt\n"
-            if "def " not in reply_text
-            else reply_text
-        ),
-        tests_passed=4,
-        tests_total=4,
+        response_text=reply_text,
+        test_callables=copilot_tests,
         latency_ms=latency_ms,
         memory_mb=16.0,
         invariant_residual=1.2e-6,
@@ -868,6 +908,8 @@ def ask_la_ruche_bee_copilot_live(
         "latency_ms": latency_ms,
         "charged_hmt": charged_hmt,
         "hmt_ledger_after": ledger_after,
+        "tests_passed": energy_eval.tests_passed,
+        "tests_total": energy_eval.tests_total,
         "bee_energy_total": energy_eval.total_energy,
         "bee_energy_receipt_sha256": energy_eval.receipt_sha256,
         "non_monetary_charter": NON_MONETARY_CHARTER_NOTICE,

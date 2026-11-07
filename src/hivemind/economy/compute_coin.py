@@ -238,7 +238,7 @@ def kelly_equilibrium(valuations: Sequence[float], capacity: float = 1.0, tol: f
     v = [float(x) for x in valuations]
     if len(v) < 2:
         raise ValueError("the Kelly game needs at least two consumers; a single consumer faces a reserve price, not a game")
-    if any((not math.isfinite(x)) or x <= 0.0 for x in v) or capacity <= 0.0:
+    if any((not math.isfinite(x)) or x <= 0.0 for x in v) or not math.isfinite(capacity) or capacity <= 0.0:
         raise ValueError("valuations must be finite and > 0; capacity > 0")
     lo, hi = 0.0, max(v)  # at W = max v every share is 0; at W = 0 the sum is n >= 2 > 1
     for _ in range(200):
@@ -253,10 +253,10 @@ def kelly_equilibrium(valuations: Sequence[float], capacity: float = 1.0, tol: f
     x = [max(0.0, 1.0 - W / vj) for vj in v]
     s = sum(x)
     x = [xi / s for xi in x]  # remove the bisection residual so the shares sum to exactly 1
-    w = [W * xi for xi in x]
+    w = [W * xi * capacity for xi in x]
     welfare = sum(vj * xi for vj, xi in zip(v, x))
     opt = max(v)
-    return KellyEquilibrium(tuple(v), tuple(xi * capacity for xi in x), tuple(w), W, welfare * capacity, opt * capacity, welfare / opt)
+    return KellyEquilibrium(tuple(v), tuple(xi * capacity for xi in x), tuple(w), W * capacity, welfare * capacity, opt * capacity, welfare / opt)
 
 
 # ---------------------------------------------------------------------------------------------------------

@@ -167,12 +167,12 @@ def compute_erlang_c_metrics(
     prob_queue = blocking / (1.0 - rho * (1.0 - blocking)) if a > 0.0 else 0.0
 
     expected_wait_s = prob_queue / (mu_tot - arrival_rate_req_per_s)
-    service_time_s = 1.0 / mu_single if c == 1 else (1.0 / mu_tot) * min(c, 2.2)
+    service_time_s = 1.0 / mu_single
     # 95th percentile of waiting time in M/M/c queue: W_q(0.95) = max(0, -ln(0.05 / P_Q) / (mu_tot - lambda))
     if prob_queue > 0.05:
         p95_wait_s = -math.log(0.05 / prob_queue) / (mu_tot - arrival_rate_req_per_s)
     else:
-        p95_wait_s = expected_wait_s * 2.5
+        p95_wait_s = 0.0
 
     p95_total_s = base_network_overhead_s + service_time_s + p95_wait_s
     return ErlangCQueueDiagnostic(
@@ -803,6 +803,7 @@ def forecast_200plus_node_international_launch(
     arrival_cv: float = 1.10,
     utc_hour: int = 14,
     baseline: SwarmLiveBaseline = SwarmLiveBaseline(),
+    pioneer_coordinates: list[dict[str, Any]] | tuple[dict[str, Any], ...] | None = None,
 ) -> dict[str, Any]:
     """Forecast balancing, token throughput, latency, and globe topology for a >200-node launch.
 
@@ -966,7 +967,11 @@ def forecast_200plus_node_international_launch(
 
     # 6. Bass / Epidemic Conversion & Kelly Congestion Price
     effective_conversion_kappa = round((c_prod + c_pros) / max(1, total_nodes), 4)
-    critical_kappa_star = 0.0220
+    deficit_tok_s = max(0.0, sustained_generated_tok_per_s - base_producer_tok_per_s)
+    critical_kappa_star = round(
+        max(0.0220, deficit_tok_s / max(1.0, (c_pros + c_cons) * pros_tok_per_s_each * weighted_diurnal)),
+        4,
+    )
     congestion_quote = compute_congestion_price(
         base_posted_price_per_1k=0.40,
         utilization_rho=elastic_mmc_queue.utilization_rho,
@@ -1056,14 +1061,26 @@ def forecast_200plus_node_international_launch(
                 )
                 if is_pioneer:
                     pioneers_assigned += 1
+                if is_pioneer and pioneer_coordinates and (pioneers_assigned - 1) < len(pioneer_coordinates):
+                    coord = pioneer_coordinates[pioneers_assigned - 1]
+                    node_city = str(coord.get("city", city_name))
+                    node_lat = round(float(coord.get("lat", lat_jit)), 4)
+                    node_lon = round(float(coord.get("lon", lon_jit)), 4)
+                    loc_estimated = bool(coord.get("location_estimated", False))
+                else:
+                    node_city = city_name
+                    node_lat = round(lat_jit, 4)
+                    node_lon = round(lon_jit, 4)
+                    loc_estimated = True
                 globe_nodes.append(
                     {
                         "node_id": f"hm-{reg_id}-{role_name[:4]}-{node_seq:03d}",
                         "role": role_name,
                         "region_id": reg_id,
-                        "city": city_name,
-                        "lat": round(lat_jit, 4),
-                        "lon": round(lon_jit, 4),
+                        "city": node_city,
+                        "lat": node_lat,
+                        "lon": node_lon,
+                        "location_estimated": loc_estimated,
                         "is_current_pioneer": bool(is_pioneer),
                         "is_super_peer": bool(role_name == "producer" and j == 0),
                         "boinc_plan_class": plan_cls,
@@ -1138,7 +1155,7 @@ def forecast_200plus_node_international_launch(
             f"FORECAST PREDICTION (>200-Node Launch): {total_nodes} Active Nodes "
             f"({c_prod} Dedicated Producers, {c_pros} Prosumers [{promoted_prosumers} AMCP-Active], "
             f"{c_cons} Consumers, {visitors} Visitors) — "
-            f"Rho_elastic={elastic_mmc_queue.utilization_rho:.3f} <= 0.78, "
+            f"Rho_elastic={elastic_mmc_queue.utilization_rho:.3f} {'<=' if elastic_mmc_queue.utilization_rho <= 0.78 else '>'} 0.78, "
             f"Throughput={effective_daytime_tok_per_s:.1f} tok/s ({daily_token_capacity_millions:.1f}M tok/day), "
             f"Fast-Lane TTFT={fast_lane_ttft_ms:.1f} ms, P50={blended_p50_ms:.1f} ms, P95={blended_p95_ms:.1f} ms."
         ),

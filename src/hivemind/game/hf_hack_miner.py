@@ -1616,7 +1616,10 @@ def _update_preferences(
 ) -> None:
     for policy in policies:
         prior = max(1e-3, float(preferences.get(policy, 1.0)))
-        preferences[policy] = prior * math.exp(learning_rate * (reward - mean_reward))
+        if policy == chosen:
+            preferences[policy] = prior * math.exp(learning_rate * (reward - mean_reward))
+        else:
+            preferences[policy] = prior
     mean_pref = sum(preferences[p] for p in policies) / len(policies)
     for policy in policies:
         preferences[policy] = max(1e-3, min(1e4, preferences[policy] / max(1e-6, mean_pref)))
@@ -2651,6 +2654,7 @@ def build_swarm_telemetry_frame(seq: int = 0) -> Dict[str, Any]:
     return {
         "stream": "swarm-telemetry",
         "type": "swarm_telemetry_frame",
+        "synthetic": True,
         "seq": int(seq),
         "timestamp": now,
         "timestamp_iso": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
@@ -2676,7 +2680,10 @@ def build_swarm_telemetry_frame(seq: int = 0) -> Dict[str, Any]:
         "nodes": topo["nodes"],
         "ring_links": topo["ring_links"],
         "active_ring_peers": topo["num_nodes"],
-        "mean_ring_rtt_ms": round(1.42 + 0.37 * (seq % 5), 3),
+        "mean_ring_rtt_ms": round(
+            sum(float(link["hop_rtt_ms"]) for link in topo["ring_links"]) / max(1, len(topo["ring_links"])),
+            3,
+        ),
         "swarm_tokens_per_sec": round(28.5 + 1.75 * (seq % 7), 2),
         "hive_minted_total": round(SEASON_4_BOUNTY_POOL_HIVE * (seq + 1), 4),
         "guild_tournament": {
@@ -2703,7 +2710,7 @@ def build_georing_3d_topology_snapshot() -> Dict[str, Any]:
             "xyz": [0.656, 0.754, 0.027],
             "hosted_experts": ["Python_Systems_Code", "Rust_Systems_Security", "Cross_Continent_QUIC_Relay"],
             "nat_mode": "direct_udp_hole_punch_0rtt",
-            "rtt_ms": 1.42,
+            "rtt_ms": 14.2,
         },
         {
             "node_id": "seti-node-berlin-02",
@@ -2713,7 +2720,7 @@ def build_georing_3d_topology_snapshot() -> Dict[str, Any]:
             "xyz": [0.592, 0.793, 0.141],
             "hosted_experts": ["Biomedical_Clinical_QA", "CyberSecurity_Vulnerability_Recon", "ZK_SpotCheck_Byzantine_Auditor"],
             "nat_mode": "direct_udp_hole_punch_0rtt",
-            "rtt_ms": 1.68,
+            "rtt_ms": 88.4,
         },
         {
             "node_id": "seti-node-virginia-03",
@@ -2723,7 +2730,7 @@ def build_georing_3d_topology_snapshot() -> Dict[str, Any]:
             "xyz": [0.175, 0.628, -0.758],
             "hosted_experts": ["Mathematical_Reasoning", "Multilingual_FR_Synthesis", "Dynamic_16Expert_MoE_Router"],
             "nat_mode": "direct_udp_hole_punch_0rtt",
-            "rtt_ms": 2.15,
+            "rtt_ms": 148.5,
         },
         {
             "node_id": "seti-node-tokyo-04",
@@ -2733,14 +2740,14 @@ def build_georing_3d_topology_snapshot() -> Dict[str, Any]:
             "xyz": [-0.619, 0.583, 0.526],
             "hosted_experts": ["Sovereign_Swarm_DAO_Governor", "Lean4_Theorem_Prover", "Solidity_Smart_Contracts"],
             "nat_mode": "turn_allocation_relay_0rtt",
-            "rtt_ms": 3.12,
+            "rtt_ms": 136.2,
         },
     ]
     links = [
-        {"source": "seti-node-paris-01", "target": "seti-node-berlin-02", "protocol": "QUIC-0RTT", "hop_rtt_ms": 1.42},
-        {"source": "seti-node-berlin-02", "target": "seti-node-virginia-03", "protocol": "QUIC-0RTT", "hop_rtt_ms": 1.89},
-        {"source": "seti-node-virginia-03", "target": "seti-node-tokyo-04", "protocol": "QUIC-0RTT", "hop_rtt_ms": 2.44},
-        {"source": "seti-node-tokyo-04", "target": "seti-node-paris-01", "protocol": "TURN-0RTT", "hop_rtt_ms": 3.12},
+        {"source": "seti-node-paris-01", "target": "seti-node-berlin-02", "protocol": "QUIC-0RTT", "hop_rtt_ms": 14.2},
+        {"source": "seti-node-berlin-02", "target": "seti-node-virginia-03", "protocol": "QUIC-0RTT", "hop_rtt_ms": 88.4},
+        {"source": "seti-node-virginia-03", "target": "seti-node-tokyo-04", "protocol": "QUIC-0RTT", "hop_rtt_ms": 148.5},
+        {"source": "seti-node-tokyo-04", "target": "seti-node-paris-01", "protocol": "TURN-0RTT", "hop_rtt_ms": 136.2},
     ]
     return {
         "renderer": "webgl_3d_georing_globe_v3",

@@ -102,8 +102,9 @@ def evaluate_bee_candidate_energy(
     *,
     candidate_id: str,
     response_text: str,
-    tests_passed: int,
-    tests_total: int,
+    tests_passed: int = 0,
+    tests_total: int = 0,
+    test_callables: Sequence[Any] | None = None,
     latency_ms: float = 0.0,
     memory_mb: float = 0.0,
     invariant_residual: float = 0.0,
@@ -116,6 +117,27 @@ def evaluate_bee_candidate_energy(
     w_mem: float = 0.5,
 ) -> BeeEnergyEvaluation:
     """Compute the deterministic ANSE physical energy `E_Bee(x, y)` for a Bee candidate."""
+    is_stub, stub_reason = _has_ast_stub_or_syntax_error(response_text, domain=domain)
+    if test_callables is not None and not timed_out_or_crashed and not is_stub:
+        tests_total = len(test_callables)
+        passed_count = 0
+        ns: dict[str, Any] = {"__builtins__": {"abs": abs, "min": min, "max": max, "len": len, "range": range, "float": float, "int": int, "round": round, "sum": sum}}
+        try:
+            exec(compile(response_text, "<bee_candidate>", "exec"), ns, ns)  # noqa: S102
+            for tc in test_callables:
+                try:
+                    if bool(tc(ns)):
+                        passed_count += 1
+                except Exception:
+                    pass
+        except Exception as exc:
+            timed_out_or_crashed = True
+            error_message = f"CANDIDATE_EXEC_ERROR:{exc}"
+        tests_passed = passed_count
+    elif test_callables is not None and is_stub and tests_total <= 0:
+        tests_total = len(test_callables)
+        tests_passed = 0
+
     raw_digest = hashlib.sha256(
         f"{candidate_id}|{tests_passed}/{tests_total}|{latency_ms:.3f}|{memory_mb:.3f}|{invariant_residual:.6f}|{response_text}".encode(
             "utf-8"

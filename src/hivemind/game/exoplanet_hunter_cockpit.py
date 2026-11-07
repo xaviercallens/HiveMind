@@ -18,6 +18,7 @@ import hashlib
 import html
 import json
 import math
+import os
 import random
 import re
 import threading
@@ -3446,83 +3447,23 @@ def create_exoplanet_hunter_fastapi_app(
                 },
             ],
         },
-        "community_members": [
-            {
-                "handle": "@Commander_Puck_FR",
-                "role": "Steam Gamer + Idle-GPU BOINC Donor",
-                "gpu": "NVIDIA GeForce RTX 2070 (8GB CUDA:0)",
-                "exoplanets_landed": 8,
-                "candidates_vetted": 14,
-                "boinc_workunits_completed": 42,
-                "boinc_cobblestones": 6430.5,
-                "hmt_compute_points": 14850,
-                "favorite_world": "K2-18 b (Hycean Ocean)",
-            },
-            {
-                "handle": "@Dr_Elena_Vega_IAP",
-                "role": "Astrophysics Citizen Scientist (GCP)",
-                "gpu": "GCP Cloud Run + Local Apple M3 Max",
-                "exoplanets_landed": 5,
-                "candidates_vetted": 31,
-                "boinc_workunits_completed": 68,
-                "boinc_cobblestones": 9420.0,
-                "hmt_compute_points": 19200,
-                "favorite_world": "LHS 1140 b (Rocky Super-Earth)",
-            },
-            {
-                "handle": "@AstroKid_Leo_11yo",
-                "role": "Junior Space Cadet & Oolite Pilot",
-                "gpu": "Steam Deck / GeForce GTX 1660 Ti",
-                "exoplanets_landed": 10,
-                "candidates_vetted": 12,
-                "boinc_workunits_completed": 19,
-                "boinc_cobblestones": 2840.0,
-                "hmt_compute_points": 9650,
-                "favorite_world": "TRAPPIST-1e (6-Day Habitable Zone)",
-            },
-            {
-                "handle": "@Prof_Kipping_Exomoons",
-                "role": "Citizen Scientist & Lightcurve Mentor",
-                "gpu": "NVIDIA RTX 4080 (BOINC Idle Donor)",
-                "exoplanets_landed": 4,
-                "candidates_vetted": 47,
-                "boinc_workunits_completed": 115,
-                "boinc_cobblestones": 18400.0,
-                "hmt_compute_points": 28400,
-                "favorite_world": "WASP-39 b (JWST SO2/CO2 Benchmark)",
-            },
-        ],
-        "coop_discovery_feed": [
-            {
-                "timestamp": "2026-10-28T14:50:12",
-                "gamer_handle": "@Commander_Puck_FR",
-                "scientist_handle": "@Dr_Elena_Vega_IAP",
-                "target": "K2-18 b (SECTOR-02-K2-18B)",
-                "event": "CO-OP BIOSIGNATURE CONFIRMATION",
-                "summary": "Steam Gamer @Commander_Puck_FR completed Stage 3 Oolite landing on K2-18 b (2920 ppm transit, K=3.55 m/s) -> Idle RTX 2070 crunched BOINC WU-JWST-K218B-DMS-319 -> Citizen Scientist @Dr_Elena_Vega_IAP verified H2O (98.4%) + CH4/CO2 Hycean ocean model on GCP Cloud Run!",
-                "gcp_receipt_sha256": "a5f82975bf5b0d65847aca19e3c374d96c946fc1272bc623cd49844f065f1393",
-            },
-            {
-                "timestamp": "2026-10-28T14:42:05",
-                "gamer_handle": "@AstroKid_Leo_11yo",
-                "scientist_handle": "@Prof_Kipping_Exomoons",
-                "target": "KOI-Bin #02 (SECTOR-10-KOI-BIN-02)",
-                "event": "FALSE-POSITIVE ECLIPSING BINARY VETTED",
-                "summary": "Junior Cadet @AstroKid_Leo_11yo spotted the V-shaped 58,400 ppm dip & K=1,420 m/s wobble in Stage 4 and clicked REJECT -> Verified by @Prof_Kipping_Exomoons via BOINC Einstein@Home binary ephemeris!",
-                "gcp_receipt_sha256": "32f7d0f0c978bb104aac9fc6dc00bdc0a21d4feb4a4176c88810a58ba09ad880",
-            },
-        ],
+        "community_members": [],
+        "coop_discovery_feed": [],
     }
+    community_state_lock = threading.Lock()
 
-    def _load_or_init_community_state() -> Dict[str, Any]:
-        if community_state_path.exists():
-            try:
-                return json.loads(community_state_path.read_text(encoding="utf-8"))
-            except Exception:
-                pass
+    def _save_community_state_unlocked(st: Dict[str, Any]) -> None:
         community_state_path.parent.mkdir(parents=True, exist_ok=True)
-        community_state_path.write_text(json.dumps(default_community_state, indent=2, ensure_ascii=False), encoding="utf-8")
-        return json.loads(json.dumps(default_community_state))
+        tmp_path = community_state_path.with_suffix(".json.tmp")
+        tmp_path.write_text(json.dumps(st, indent=2, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp_path, community_state_path)
+
+    def _load_or_init_community_state_unlocked() -> Dict[str, Any]:
+        if community_state_path.exists():
+            return json.loads(community_state_path.read_text(encoding="utf-8"))
+        init_st = json.loads(json.dumps(default_community_state))
+        _save_community_state_unlocked(init_st)
+        return init_st
 
     @app.get("/game", response_class=HTMLResponse)
     def game_page() -> HTMLResponse:
@@ -3535,12 +3476,33 @@ def create_exoplanet_hunter_fastapi_app(
 
     @app.get("/api/v1/community/hub", response_class=JSONResponse)
     def api_get_community_hub() -> JSONResponse:
-        st = _load_or_init_community_state()
+        with community_state_lock:
+            try:
+                st = _load_or_init_community_state_unlocked()
+            except (ValueError, OSError):
+                return JSONResponse(
+                    status_code=503,
+                    content={"status": "BLOCKED", "error": "corrupt_community_state"},
+                )
         return JSONResponse(content=st)
 
     @app.post("/api/v1/community/boinc-sync", response_class=JSONResponse)
     def api_boinc_idle_gpu_sync(payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
-        st = _load_or_init_community_state()
+        raw_cobb = payload.get("cobblestones", 0.0)
+        raw_hmt = payload.get("hmt_bonus", 0)
+        try:
+            claimed_cobb = float(raw_cobb)
+            claimed_hmt = int(raw_hmt)
+        except (TypeError, ValueError):
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": "invalid_credit_payload"},
+            )
+        if not math.isfinite(claimed_cobb) or claimed_cobb < 0.0 or claimed_cobb > 100.0 or claimed_hmt < 0 or claimed_hmt > 250:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": "unverified_self_declared_credit_rejected"},
+            )
         handle = html.escape(str(payload.get("handle", "@Commander_Puck_FR"))[:64], quote=True)
         gpu_name = html.escape(
             str(payload.get("gpu_name", service.hw_info.get("gpu_name", "NVIDIA GeForce RTX 2070")))[:96],
@@ -3549,8 +3511,8 @@ def create_exoplanet_hunter_fastapi_app(
         project_id = html.escape(str(payload.get("project_id", "hivemind_tess_at_home"))[:64], quote=True)
         target_name = html.escape(str(payload.get("target_name", "K2-18 b"))[:64], quote=True)
         idle_seconds = float(payload.get("idle_seconds", 12.4))
-        cobblestones_delta = float(payload.get("cobblestones", 45.0))
-        hmt_bonus = int(payload.get("hmt_bonus", 250))
+        cobblestones_delta = 0.0
+        hmt_bonus = 0
 
         # Perform a real Box-Least-Squares (BLS) transit folding / Keplerian harmonic verification on local GPU/CPU
         t0 = time.perf_counter()
@@ -3591,44 +3553,52 @@ def create_exoplanet_hunter_fastapi_app(
         except Exception:
             pass
 
-        # Update project progress & member stats
-        for proj in st["boinc_idle_gpu_policy"]["supported_boinc_projects"]:
-            if proj["project_id"] == project_id or project_id == "all":
-                proj["progress_pct"] = round(min(100.0, (proj["progress_pct"] + 7.5) % 100.0 or 98.5), 1)
-                proj["cobblestones_awarded"] = round(proj["cobblestones_awarded"] + cobblestones_delta, 1)
+        with community_state_lock:
+            try:
+                st = _load_or_init_community_state_unlocked()
+            except (ValueError, OSError):
+                return JSONResponse(
+                    status_code=503,
+                    content={"status": "BLOCKED", "error": "corrupt_community_state"},
+                )
+            # Update project progress & member stats
+            for proj in st["boinc_idle_gpu_policy"]["supported_boinc_projects"]:
+                if proj["project_id"] == project_id or project_id == "all":
+                    proj["progress_pct"] = round(min(100.0, (proj["progress_pct"] + 7.5) % 100.0 or 98.5), 1)
+                    proj["cobblestones_awarded"] = round(proj["cobblestones_awarded"] + cobblestones_delta, 1)
 
-        found_member = False
-        for m in st["community_members"]:
-            if m["handle"].lower() == handle.lower():
-                m["boinc_workunits_completed"] += 1
-                m["boinc_cobblestones"] = round(m["boinc_cobblestones"] + cobblestones_delta, 1)
-                m["hmt_compute_points"] += hmt_bonus
-                found_member = True
-                break
-        if not found_member:
-            st["community_members"].insert(0, {
-                "handle": handle,
-                "role": "Steam Gamer + Idle-GPU BOINC Donor",
-                "gpu": gpu_name,
-                "exoplanets_landed": 3,
-                "candidates_vetted": 5,
-                "boinc_workunits_completed": 1,
-                "boinc_cobblestones": round(cobblestones_delta, 1),
-                "hmt_compute_points": 2400 + hmt_bonus,
-                "favorite_world": target_name,
+            found_member = False
+            for m in st["community_members"]:
+                if m["handle"].lower() == handle.lower():
+                    m["boinc_workunits_completed"] += 1
+                    m["boinc_cobblestones"] = round(m["boinc_cobblestones"] + cobblestones_delta, 1)
+                    m["hmt_compute_points"] += hmt_bonus
+                    found_member = True
+                    break
+            if not found_member:
+                st["community_members"].insert(0, {
+                    "handle": handle,
+                    "role": "Steam Gamer + Idle-GPU BOINC Donor",
+                    "gpu": gpu_name,
+                    "exoplanets_landed": 0,
+                    "candidates_vetted": 0,
+                    "boinc_workunits_completed": 1,
+                    "boinc_cobblestones": round(cobblestones_delta, 1),
+                    "hmt_compute_points": hmt_bonus,
+                    "favorite_world": target_name,
+                })
+
+            st["coop_discovery_feed"].insert(0, {
+                "timestamp": datetime.datetime.now().isoformat()[:19],
+                "gamer_handle": handle,
+                "scientist_handle": "@GCP_BOINC_Validator",
+                "target": target_name,
+                "event": f"IDLE-GPU BOINC WORKUNIT COMPLETED ({project_id.upper()})",
+                "summary": f"GPU idle for {idle_seconds:.1f}s on {gpu_name} -> Crunched BLS transit folding on {target_name} (Depth={bls_depth_ppm:.0f} ppm, SNR={bls_snr:.1f}σ in {compute_ms} ms) -> +{cobblestones_delta:.1f} BOINC Cobblestones & +{hmt_bonus} HMT! GCP Lease: {gcp_lease_id}",
+                "gcp_receipt_sha256": receipt_sha256,
             })
-
-        st["coop_discovery_feed"].insert(0, {
-            "timestamp": datetime.datetime.now().isoformat()[:19],
-            "gamer_handle": handle,
-            "scientist_handle": "@GCP_BOINC_Validator",
-            "target": target_name,
-            "event": f"IDLE-GPU BOINC WORKUNIT COMPLETED ({project_id.upper()})",
-            "summary": f"GPU idle for {idle_seconds:.1f}s on {gpu_name} -> Crunched BLS transit folding on {target_name} (Depth={bls_depth_ppm:.0f} ppm, SNR={bls_snr:.1f}σ in {compute_ms} ms) -> +{cobblestones_delta:.1f} BOINC Cobblestones & +{hmt_bonus} HMT! GCP Lease: {gcp_lease_id}",
-            "gcp_receipt_sha256": receipt_sha256,
-        })
-        st["coop_discovery_feed"] = st["coop_discovery_feed"][:20]
-        community_state_path.write_text(json.dumps(st, indent=2, ensure_ascii=False), encoding="utf-8")
+            st["coop_discovery_feed"] = st["coop_discovery_feed"][:20]
+            _save_community_state_unlocked(st)
 
         return JSONResponse(content={
             "ok": True,
@@ -3663,7 +3633,6 @@ def create_exoplanet_hunter_fastapi_app(
 
     @app.post("/api/v1/community/post-note", response_class=JSONResponse)
     def api_community_post_note(payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
-        st = _load_or_init_community_state()
         handle = html.escape(str(payload.get("handle", "@CitizenScientist_FR"))[:64], quote=True)
         role = html.escape(str(payload.get("role", "Astrophysics Citizen Scientist"))[:64], quote=True)
         target = html.escape(str(payload.get("target", "K2-18 b (Hycean Ocean World)"))[:64], quote=True)
@@ -3681,10 +3650,19 @@ def create_exoplanet_hunter_fastapi_app(
             "summary": note,
             "gcp_receipt_sha256": receipt,
         }
-        st["coop_discovery_feed"].insert(0, entry)
-        st["coop_discovery_feed"] = st["coop_discovery_feed"][:20]
-        community_state_path.write_text(json.dumps(st, indent=2, ensure_ascii=False), encoding="utf-8")
-        return JSONResponse(content={"ok": True, "entry": entry, "receipt_sha256": receipt, "feed": st["coop_discovery_feed"][:6]})
+        with community_state_lock:
+            try:
+                st = _load_or_init_community_state_unlocked()
+            except (ValueError, OSError):
+                return JSONResponse(
+                    status_code=503,
+                    content={"status": "BLOCKED", "error": "corrupt_community_state"},
+                )
+            st["coop_discovery_feed"].insert(0, entry)
+            st["coop_discovery_feed"] = st["coop_discovery_feed"][:20]
+            _save_community_state_unlocked(st)
+            feed_slice = list(st["coop_discovery_feed"][:6])
+        return JSONResponse(content={"ok": True, "entry": entry, "receipt_sha256": receipt, "feed": feed_slice})
 
     @app.api_route("/join", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/rejoindre", methods=["GET", "HEAD"], response_class=HTMLResponse)

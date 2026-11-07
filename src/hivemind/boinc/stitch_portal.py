@@ -320,6 +320,10 @@ def render_stitch_enhanced_portal(
 ) -> str:
     """Render the high-production Web interface for GCP Cloud Run with Stitch designs."""
     api_prefix = api_base_url.rstrip("/")
+    if api_prefix.startswith("http://") and not any(
+        h in api_prefix for h in ("localhost", "127.0.0.1", "0.0.0.0", "testserver")
+    ):
+        api_prefix = "https://" + api_prefix[len("http://") :]
     ruche = state.get("la_ruche_vault", {})
     gcp = state.get("gcp_cloud_fleet", {})
     cloud_run = gcp.get("public_cloud_run_gateway", {})
@@ -4325,9 +4329,12 @@ print('Routed Top-2 Experts for', target_planet, ':', routed)</textarea>
     const I18N_DICT = {i18n_json};
     const MESH_MESSAGES = {messages_json};
     const BEE_CARDS = {bee_cards_json};
-    const API_BASE = (window.location.protocol === "file:" || window.location.hostname.endsWith("github.io"))
-      ? (localStorage.getItem("hivemind_api_base") || "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app")
-      : (localStorage.getItem("hivemind_api_base") || "{api_prefix}");
+    const _rawApiBase = (window.location.protocol === "file:" || window.location.hostname.endsWith("github.io"))
+      ? (localStorage.getItem("hivemind_api_base") || "https://hivemind-at-home-ruche-1003063861791.us-central1.run.app")
+      : ("{api_prefix}" || window.location.origin);
+    const API_BASE = (window.location.protocol === "https:" && _rawApiBase.startsWith("http://"))
+      ? ("https://" + _rawApiBase.slice(7))
+      : _rawApiBase;
     
     let currentUser = null;
     let activePersona = 'human';

@@ -755,26 +755,54 @@ class RouterStore:
         salt = self._secret + b":pwd:" + normalised_handle.encode("utf-8")
         return hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100_000).hex()
 
-    def _verify_row_password(self, conn: sqlite3.Connection, row: sqlite3.Row, password: str) -> tuple[bool, bool]:
+    def _verify_row_password(
+        self,
+        conn: sqlite3.Connection,
+        row: sqlite3.Row,
+        password: str,
+        *,
+        email_hint: str = "",
+    ) -> tuple[bool, bool]:
         """Return ``(has_password, password_matches)`` for ``row`` across current and legacy password formats."""
         stored_pwd = str(row["password_hash"] or "") if "password_hash" in row.keys() else ""
-        legacy_cred_row = None
-        if not stored_pwd:
-            try:
-                legacy_cred_row = conn.execute(
-                    "SELECT salt_hex, password_hash FROM credentials WHERE account_id=?",
-                    (str(row["account_id"]),),
-                ).fetchone()
-            except sqlite3.OperationalError:
-                legacy_cred_row = None
-        has_pwd = bool(stored_pwd or legacy_cred_row is not None)
+        raw_handle = str(row["handle"] or "")
+        row_email = str(row["email"] or "") if "email" in row.keys() else ""
+        legacy_meta = self._resolve_legacy_user(raw_handle) or (self._resolve_legacy_user(row_email) if row_email else None)
+        email_candidates = [
+            e.strip().lower()
+            for e in (
+                row_email,
+                email_hint,
+                str(legacy_meta.get("email", "")) if legacy_meta else "",
+                *[str(a) for a in (legacy_meta.get("aliases", ()) if legacy_meta else ()) if "@" in str(a)],
+            )
+            if e and "@" in e
+        ]
+        legacy_cred_rows: list[sqlite3.Row] = []
+        try:
+            by_acct = conn.execute(
+                "SELECT salt_hex, password_hash FROM credentials WHERE account_id=?",
+                (str(row["account_id"]),),
+            ).fetchone()
+            if by_acct is not None:
+                legacy_cred_rows.append(by_acct)
+            for em in dict.fromkeys(email_candidates):
+                for ehash in (self._hmac_hex(f"email:{em}"), self._hmac_hex(em)):
+                    by_ehash = conn.execute(
+                        "SELECT salt_hex, password_hash FROM credentials WHERE email_hash=?",
+                        (ehash,),
+                    ).fetchone()
+                    if by_ehash is not None:
+                        legacy_cred_rows.append(by_ehash)
+        except sqlite3.OperationalError:
+            pass
+        has_pwd = bool(stored_pwd or legacy_cred_rows)
         if not has_pwd:
             return False, False
         pwd_candidates = [p for p in dict.fromkeys((password, password.strip())) if p]
         if not pwd_candidates:
             return True, False
 
-        raw_handle = str(row["handle"] or "")
         handle_candidates = {raw_handle, raw_handle.lower()}
         try:
             handle_candidates.add(normalise_identity(raw_handle))
@@ -790,7 +818,7 @@ class RouterStore:
                     salt_bytes = b""
                 if salt_bytes and exp_hex:
                     for p_cand in pwd_candidates:
-                        for iters in (200_000, 100_000):
+                        for iters in (200_000, 120_000, 100_000):
                             digest = hashlib.pbkdf2_hmac("sha256", p_cand.encode("utf-8"), salt_bytes, iters).hex()
                             if hmac.compare_digest(exp_hex, digest):
                                 return True, True
@@ -799,7 +827,7 @@ class RouterStore:
                     if hmac.compare_digest(stored_pwd, self._hash_password(h_cand, p_cand)):
                         return True, True
 
-        if legacy_cred_row is not None:
+        for legacy_cred_row in legacy_cred_rows:
             salt_hex = str(legacy_cred_row["salt_hex"] or "")
             exp_hex = str(legacy_cred_row["password_hash"] or "")
             try:
@@ -808,7 +836,7 @@ class RouterStore:
                 salt_bytes = b""
             if salt_bytes and exp_hex:
                 for p_cand in pwd_candidates:
-                    for iters in (200_000, 100_000):
+                    for iters in (200_000, 120_000, 100_000):
                         digest = hashlib.pbkdf2_hmac("sha256", p_cand.encode("utf-8"), salt_bytes, iters).hex()
                         if hmac.compare_digest(exp_hex, digest):
                             return True, True
@@ -872,26 +900,46 @@ class RouterStore:
 
         with self._tx() as conn:
             candidate_rows: list[sqlite3.Row] = []
+
+            def _add_reg_candidate(r: sqlite3.Row | None) -> None:
+                if r is not None and all(str(x["account_id"]) != str(r["account_id"]) for x in candidate_rows):
+                    candidate_rows.append(r)
+
             if clean_email:
-                email_row = conn.execute(
-                    "SELECT * FROM accounts WHERE lower(email)=lower(?)",
-                    (clean_email,),
+                _add_reg_candidate(
+                    conn.execute(
+                        "SELECT * FROM accounts WHERE lower(email)=lower(?)",
+                        (clean_email,),
+                    ).fetchone()
+                )
+                try:
+                    for ehash in (self._hmac_hex(f"email:{clean_email.lower()}"), self._hmac_hex(clean_email.lower())):
+                        _add_reg_candidate(
+                            conn.execute(
+                                "SELECT a.* FROM credentials c JOIN accounts a ON a.account_id = c.account_id WHERE c.email_hash=?",
+                                (ehash,),
+                            ).fetchone()
+                        )
+                except sqlite3.OperationalError:
+                    pass
+            _add_reg_candidate(
+                conn.execute(
+                    "SELECT * FROM accounts WHERE account_id=? OR lower(handle)=lower(?)",
+                    (account_id, normalised),
                 ).fetchone()
-                if email_row is not None:
-                    candidate_rows.append(email_row)
-            handle_row = conn.execute(
-                "SELECT * FROM accounts WHERE account_id=? OR lower(handle)=lower(?)",
-                (account_id, normalised),
-            ).fetchone()
-            if handle_row is not None and all(str(r["account_id"]) != str(handle_row["account_id"]) for r in candidate_rows):
-                candidate_rows.append(handle_row)
+            )
 
             if candidate_rows:
                 # An existing handle/email is returned ONLY to a caller who proves it with the account's own password.
                 if not password:
                     raise HandleTaken(f"handle already registered: {normalised}")
                 for cand in candidate_rows:
-                    has_pwd, matched_pwd = self._verify_row_password(conn, cand, password)
+                    has_pwd, matched_pwd = self._verify_row_password(
+                        conn,
+                        cand,
+                        password,
+                        email_hint=clean_email or "",
+                    )
                     if has_pwd and matched_pwd:
                         existing_id = str(cand["account_id"])
                         api_key = self._issue_or_reuse_key(conn, existing_id)
@@ -996,11 +1044,28 @@ class RouterStore:
                         (alt,),
                     ).fetchone()
                 )
+            if email_candidate or "@" in ident:
+                em_lookup = (email_candidate or ident.strip()).lower()
+                try:
+                    for ehash in (self._hmac_hex(f"email:{em_lookup}"), self._hmac_hex(em_lookup)):
+                        _add_candidate(
+                            conn.execute(
+                                "SELECT a.* FROM credentials c JOIN accounts a ON a.account_id = c.account_id WHERE c.email_hash=?",
+                                (ehash,),
+                            ).fetchone()
+                        )
+                except sqlite3.OperationalError:
+                    pass
 
             if candidate_rows:
                 any_has_pwd = False
                 for cand in candidate_rows:
-                    has_pwd, matched_pwd = self._verify_row_password(conn, cand, password)
+                    has_pwd, matched_pwd = self._verify_row_password(
+                        conn,
+                        cand,
+                        password,
+                        email_hint=email_candidate or (ident if "@" in ident else ""),
+                    )
                     if has_pwd:
                         any_has_pwd = True
                     if has_pwd and matched_pwd:

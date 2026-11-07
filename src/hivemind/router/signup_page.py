@@ -66,7 +66,7 @@ button:hover,.btn-link:hover{filter:brightness(1.08)}
 [hidden]{display:none !important}
 """
 
-_AUTH_JS = """
+_AUTH_JS = r"""
 const $ = (id) => document.getElementById(id);
 function setStatus(text, isErr) {
   const el = $('status');
@@ -74,20 +74,44 @@ function setStatus(text, isErr) {
   el.textContent = text;
   el.className = isErr ? 'err-text' : 'mut';
 }
+function persistUnifiedSession(body) {
+  try {
+    const tok = body.api_key || body.token || '';
+    const h = body.handle || '';
+    if (tok) localStorage.setItem('hivemind_api_key', tok);
+    if (h) localStorage.setItem('hivemind_user_handle', h);
+    if (tok && h) {
+      const unified = {
+        handle: h,
+        email: body.email || (h + '@hivemind.network'),
+        provider: body.provider || 'OPENROUTER_AUTH',
+        linkedProviders: body.linked_providers || [body.provider || 'OPENROUTER_AUTH'],
+        role: body.role || 'prosumer',
+        targetProfile: body.target_profile || 'developer',
+        points: typeof body.compute_points === 'number' ? body.compute_points : Math.round(Number(body.balance_hmt || body.balance || 0)),
+        token: tok,
+        nodeId: body.node_id || '0xHIVEMIND',
+        loginCount: body.login_count || 1,
+        isNewUser: Boolean(body.created),
+        isGuest: false,
+        userState: body.created ? 'NEW_USER' : 'EXISTING_USER',
+      };
+      localStorage.setItem('hivemind_user', JSON.stringify(unified));
+    }
+  } catch (e) {}
+}
 function showSessionResult(body) {
-  if ($('key')) $('key').textContent = body.api_key || '';
+  const tok = body.api_key || body.token || '';
+  if ($('key')) $('key').textContent = tok;
   if ($('acct')) $('acct').textContent = (body.account_id || '') + (body.handle ? ' (' + body.handle + ')' : '');
   if ($('role')) $('role').textContent = body.role || 'prosumer';
-  if ($('bal')) $('bal').textContent = (typeof body.balance_hmt === 'number' ? body.balance_hmt.toFixed(2) : (typeof body.balance === 'number' ? body.balance.toFixed(2) : 'n/a')) + ' HMT';
+  if ($('bal')) $('bal').textContent = (typeof body.balance_hmt === 'number' ? body.balance_hmt.toFixed(2) : (typeof body.balance === 'number' ? body.balance.toFixed(2) : (typeof body.compute_points === 'number' ? body.compute_points.toFixed(2) : 'n/a'))) + ' HMT';
   if ($('kind')) {
     $('kind').textContent = body.created
-      ? 'Account created & authenticated! Your API key is saved in this browser for the Playground.'
+      ? 'Account created & authenticated! Your API key is saved in this browser for the Playground and Unified v3.1 Portal.'
       : 'Welcome back! Your previous account & HMT balance have been restored and authenticated.';
   }
-  try {
-    if (body.api_key) localStorage.setItem('hivemind_api_key', body.api_key);
-    if (body.handle) localStorage.setItem('hivemind_user_handle', body.handle);
-  } catch (e) {}
+  persistUnifiedSession(body);
   if ($('result')) $('result').hidden = false;
   setStatus('');
 }
@@ -189,7 +213,79 @@ async function syncSignupLiveTelemetry() {
     }
   } catch (e) {}
 }
+async function checkActiveBrowserSession() {
+  try {
+    let tok = localStorage.getItem('hivemind_api_key') || '';
+    if (!tok) {
+      const rawUser = localStorage.getItem('hivemind_user');
+      if (rawUser) {
+        const parsed = JSON.parse(rawUser);
+        if (parsed && parsed.token) tok = parsed.token;
+      }
+    }
+    if ($('key') && $('key').textContent && $('key').textContent.trim()) {
+      const serverTok = $('key').textContent.trim();
+      const acctText = ($('acct') ? $('acct').textContent : '') || '';
+      const hMatch = acctText.match(/\(([^)]+)\)/);
+      persistUnifiedSession({
+        api_key: serverTok,
+        handle: hMatch ? hMatch[1] : acctText,
+        role: ($('role') ? $('role').textContent : 'prosumer'),
+      });
+      tok = serverTok;
+    }
+    if (!tok) return;
+    const res = await fetch('/api/v1/auth/session', { headers: { 'Authorization': 'Bearer ' + tok, 'Accept': 'application/json' } });
+    if (!res.ok) return;
+    const s = await res.json();
+    if (!s || !s.authenticated || !s.user) return;
+    persistUnifiedSession({
+      api_key: tok,
+      handle: s.user.handle,
+      role: s.user.role,
+      balance_hmt: s.user.balance_hmt,
+      compute_points: s.user.compute_points,
+      created: false,
+    });
+    if ($('activeSessionHandle')) $('activeSessionHandle').textContent = '@' + (s.user.handle || 'operator');
+    if ($('activeSessionBalance')) $('activeSessionBalance').textContent = (typeof s.user.balance_hmt === 'number' ? s.user.balance_hmt.toFixed(2) : String(s.user.compute_points || 0)) + ' HMT';
+    if ($('existingBrowserSessionBanner')) $('existingBrowserSessionBanner').hidden = false;
+  } catch (e) {}
+}
+if ($('rotateKeyBtn')) {
+  $('rotateKeyBtn').addEventListener('click', async () => {
+    try {
+      const tok = ($('key') && $('key').textContent.trim()) || localStorage.getItem('hivemind_api_key') || '';
+      if (!tok) return;
+      const res = await fetch('/api/v1/auth/rotate-key', { method: 'POST', headers: { 'Authorization': 'Bearer ' + tok } });
+      if (!res.ok) return;
+      const d = await res.json();
+      if (d && d.token) {
+        if ($('key')) $('key').textContent = d.token;
+        persistUnifiedSession({ api_key: d.token, handle: d.handle || localStorage.getItem('hivemind_user_handle') || 'operator' });
+        setStatus('API key rotated! Your old key is revoked and your new key is saved in this browser.', false);
+      }
+    } catch (e) {}
+  });
+}
+if ($('signOutSessionBtn')) {
+  $('signOutSessionBtn').addEventListener('click', async () => {
+    try {
+      const tok = localStorage.getItem('hivemind_api_key') || '';
+      if (tok) await fetch('/api/v1/auth/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + tok } });
+    } catch (e) {}
+    try {
+      localStorage.removeItem('hivemind_api_key');
+      localStorage.removeItem('hivemind_user_handle');
+      localStorage.removeItem('hivemind_user');
+    } catch (e) {}
+    if ($('existingBrowserSessionBanner')) $('existingBrowserSessionBanner').hidden = true;
+    if ($('result')) $('result').hidden = true;
+    setStatus('Signed out of browser session.', false);
+  });
+}
 syncSignupLiveTelemetry();
+checkActiveBrowserSession();
 """
 
 _GOOGLE_JS = """
@@ -207,7 +303,7 @@ async function onCredential(response) {
     $('acct').textContent = body.account_id;
     $('kind').textContent = body.created ? 'Your account was created.' : 'Welcome back: your previous key no longer works.';
     $('role').textContent = body.role;
-    try { if (body.api_key) localStorage.setItem('hivemind_api_key', body.api_key); } catch (e) {}
+    persistUnifiedSession({api_key: body.api_key, handle: body.handle || body.account_id, role: body.role, provider: 'GOOGLE_OIDC', created: body.created});
     $('result').hidden = false; if ($('signin')) $('signin').hidden = true; setStatus('', false);
   } catch (err) { setStatus('Could not reach the gateway. Try again.', true); }
 }
@@ -319,7 +415,8 @@ def render_signup_page(
     <p class="mut">Use open coding, scientific &amp; visual MoE models from your editor, or share your GPU and earn HMT points (0.00 EUR/USD).</p>
     <p class="mut" id="starter-grant">{starter_line}</p>
   </div>
-  <nav class="nav-links">
+  <nav class="nav-links" data-testid="signup-quick-nav">
+    <a href="/v3.1">🐝 Unified v3.1 Portal</a>
     <a href="/">⚡ AI Playground</a>
     <a href="/manifesto">📜 Manifesto</a>
     <a href="/benchmarks">📊 Benchmarks</a>
@@ -334,15 +431,27 @@ def render_signup_page(
   🟢 {telemetry_label}: {total_accts} Registered Accounts ({prosumers_cnt} prosumers, {producers_cnt} producers, {consumers_cnt} consumers, {trainers_cnt} trainers) • {live_models_cnt} Live Models • T4 Free VRAM {t4_free_mib} MiB • OpenTrainer {ot_nodes} Trainer GPU(s) / {ot_rounds} Accepted Round(s)
 </div>
 
+<section id="existingBrowserSessionBanner" data-testid="existing-browser-session-banner" class="card ok-banner" hidden>
+  <h2>🟢 Active HiveMind Session Detected</h2>
+  <p class="mut">Signed in as <strong id="activeSessionHandle">@operator</strong> · Balance <strong id="activeSessionBalance">0.00 HMT</strong></p>
+  <p>
+    <a href="/v3.1" id="bannerOpenV31Btn" data-testid="banner-open-v31-btn" class="btn-link">🐝 Continue to Unified v3.1 Portal</a>
+    <a href="/#playground" class="btn-link secondary">🚀 Open AI Playground</a>
+    <button id="signOutSessionBtn" data-testid="signup-signout-btn" type="button" class="secondary">🚪 Sign Out</button>
+  </p>
+</section>
+
 <section id="result" class="card ok-banner"{result_hidden}>
   <h2>✅ Authenticated HiveMind Account</h2>
   <p id="kind">{res_kind}</p>
-  <p>Your active API key (automatically saved in this browser for the Playground):</p>
+  <p>Your active API key (automatically saved in this browser for the Playground and Unified v3.1 Portal):</p>
   <pre><code id="key">{res_key}</code></pre>
   <p>
     <button id="copy" type="button">📋 Copy API Key</button>
+    <a href="/v3.1" id="openV31Btn" data-testid="btn-open-v31-authenticated" class="btn-link">🐝 Open Unified v3.1 Portal</a>
     <a href="/#playground" class="btn-link secondary">🚀 Open AI Playground</a>
     <a href="/webgpu" class="btn-link secondary">🌌 Open WebGPU Cockpit</a>
+    <button id="rotateKeyBtn" data-testid="signup-rotate-key-btn" type="button" class="secondary">🔄 Rotate API Key</button>
   </p>
   <p class="mut">Account <code id="acct">{res_acct}</code> · Role <code id="role">{res_role}</code> · Balance <code id="bal">{res_bal}</code></p>
   <p>Next, in a terminal or IDE (Continue / Cline / Aider / OpenCode):</p>

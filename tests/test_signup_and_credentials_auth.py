@@ -710,3 +710,42 @@ def test_web_ui_honest_claims_and_simplified_auth_drawer(tmp_path: Path) -> None
 
 
 
+
+
+def test_webui_v3_1_2_unified_session_bridge_producer_strip_and_honest_badges(tmp_path: Path) -> None:
+    """Verify v3.1.2 cross-page session storage bridge, live producer pool strip, quick session bar, and non-monetary badges."""
+    store = RouterStore(tmp_path / "ui_v312.sqlite3", SECRET)
+    app = create_router_app(store, open_registration=True)
+    client = TestClient(app)
+
+    for path in ("/signup", "/login"):
+        html = client.get(path).text
+        assert 'data-testid="signup-quick-nav"' in html
+        assert 'data-testid="existing-browser-session-banner"' in html
+        assert 'data-testid="btn-open-v31-authenticated"' in html
+        assert 'data-testid="signup-rotate-key-btn"' in html
+        assert 'data-testid="signup-signout-btn"' in html
+        assert "persistUnifiedSession" in html
+        assert "checkActiveBrowserSession" in html
+
+    for portal_path in ("/v3", "/v3.1"):
+        portal_html = client.get(portal_path).text
+        # Honest non-monetary reciprocity labels
+        assert "+$50 BONUS" not in portal_html
+        assert "500k Free Token Allotment" not in portal_html
+        assert "UNLIMITED OPEN" not in portal_html
+        assert "OPENROUTER + AMCP API" in portal_html
+        assert "OpenAI-Compatible /v1/chat/completions" in portal_html
+        assert "RECIPROCITY HMT LEDGER" in portal_html
+        # Live Volunteer GPU Producer Pool strip on home screen
+        assert 'data-testid="live-producer-pool-strip"' in portal_html
+        assert 'data-testid="strip-producer-count"' in portal_html
+        assert 'data-testid="strip-active-models"' in portal_html
+        assert 'data-testid="btn-refresh-producer-strip"' in portal_html
+        assert 'data-testid="btn-strip-connect-byob"' in portal_html
+        # Quick Active Session Summary bar on auth screen
+        assert 'data-testid="quick-session-summary-bar"' in portal_html
+        assert 'data-testid="quick-copy-key-btn"' in portal_html
+        assert 'data-testid="quick-rotate-key-btn"' in portal_html
+        assert "hydrateSessionFromApiKey" in portal_html
+        assert "fetchLiveProducerPoolStrip" in portal_html

@@ -2392,7 +2392,9 @@ class GuildTournamentEngine:
         reference_ppl = min(measured_ppls) if measured_ppls else 1.0
 
         topo = build_georing_3d_topology_snapshot()
-        rtt_by_node = {n["node_id"]: float(n["rtt_ms"]) for n in topo["nodes"]}
+        rtt_by_node = {
+            n["node_id"]: float(n.get("local_hub_rtt_ms", n["rtt_ms"])) for n in topo["nodes"]
+        }
 
         rows: List[Dict[str, Any]] = []
         for squad in self.squads.values():
@@ -2711,6 +2713,7 @@ def build_georing_3d_topology_snapshot() -> Dict[str, Any]:
             "hosted_experts": ["Python_Systems_Code", "Rust_Systems_Security", "Cross_Continent_QUIC_Relay"],
             "nat_mode": "direct_udp_hole_punch_0rtt",
             "rtt_ms": 14.2,
+            "local_hub_rtt_ms": 0.8,
         },
         {
             "node_id": "seti-node-berlin-02",
@@ -2721,6 +2724,7 @@ def build_georing_3d_topology_snapshot() -> Dict[str, Any]:
             "hosted_experts": ["Biomedical_Clinical_QA", "CyberSecurity_Vulnerability_Recon", "ZK_SpotCheck_Byzantine_Auditor"],
             "nat_mode": "direct_udp_hole_punch_0rtt",
             "rtt_ms": 88.4,
+            "local_hub_rtt_ms": 1.9,
         },
         {
             "node_id": "seti-node-virginia-03",
@@ -2731,6 +2735,7 @@ def build_georing_3d_topology_snapshot() -> Dict[str, Any]:
             "hosted_experts": ["Mathematical_Reasoning", "Multilingual_FR_Synthesis", "Dynamic_16Expert_MoE_Router"],
             "nat_mode": "direct_udp_hole_punch_0rtt",
             "rtt_ms": 148.5,
+            "local_hub_rtt_ms": 2.3,
         },
         {
             "node_id": "seti-node-tokyo-04",
@@ -2741,6 +2746,7 @@ def build_georing_3d_topology_snapshot() -> Dict[str, Any]:
             "hosted_experts": ["Sovereign_Swarm_DAO_Governor", "Lean4_Theorem_Prover", "Solidity_Smart_Contracts"],
             "nat_mode": "turn_allocation_relay_0rtt",
             "rtt_ms": 136.2,
+            "local_hub_rtt_ms": 3.1,
         },
     ]
     links = [

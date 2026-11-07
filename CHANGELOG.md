@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.1.2 — 2026-11-07 — Legacy PBKDF2-SHA256 Login Restoration, HTTPS Cloud Run Portal, OpenTrainer Campaign Gate, E8 Lattice Parity & Streaming TTFT Telemetry (PRs #692–#703)
+
+- **Legacy Email + Password Login Restoration & HTTPS Cloud Run Fixes (PR #702, deployed as `v3.1.2-https` across `hivemind-at-home`, `hivemind-at-home-ruche`, and `hivemind-openrouter`):**
+  - Preserved `LEGACY_KNOWN_USERS` (200,000-iteration PBKDF2-SHA256) and added automatic fallback verification against `credentials` table rows (`pbkdf2_sha256$120000$...` / `pbkdf2_sha256$200000$...`) keyed by `SHA256("hivemind-email-v1:" + email)` in `/api/v1/auth/login`, `/v1/hivemind/accounts/login`, and `/api/auth/credentials/login`.
+  - Fixed mixed-content browser fetch blocking behind the Cloud Run TLS proxy by deriving `https://` `base_url` from `X-Forwarded-Proto: https` (or `K_SERVICE`) and upgrading `http://` `API_BASE` references to `https://` on `https:` pages.
+  - Seeded verified legacy credential records into `/data/hivemind_router.sqlite3` on container startup in `deploy/gcp_cloud_run/Dockerfile` and `deploy/gcp_openrouter/Dockerfile`.
+- **OpenTrainer Campaign Validation, Gosset $E_8$ Lattice Parity, Producer Agent/Shield Unification & Streaming TTFT Telemetry (PR #703 — Issue #618, IP-259, IP-30, IP-38, Audit C4/C9/B10):**
+  - Enforced `is_allowed_opentrainer_campaign_id` in `/api/opentrainer/heartbeat` and `/api/opentrainer/submit_delta` (`HTTP 400 unknown_campaign` on unregistered campaigns).
+  - Unified `GossetE8LatticeQuantizer` with canonical `nearest_e8` / `nearest_dn` (`hivemind.compress.lattice_quantizer`) for bit-for-bit tie-breaking parity and grounded $16\times$ dense / $30.89\times$ sparse+E8 compression figures against `artifacts/experiments/E10_lattice_diloco.json`.
+  - Synced `scripts/hivemind_producer_{agent,shield}.py` with `src/hivemind/router/hivemind_producer_{agent,shield}.py` byte-for-byte and exposed `GET /hivemind_producer_agent.py` and `GET /hivemind_producer_shield.py`.
+  - Recorded streaming `ttft_ms` (`p50`/`p95`/`mean`) and `tokens_per_s` in `usage_telemetry` and `AccountStore.usage_capture_summary`.
+  - Marked deterministic game telemetry with `"simulated": True` (`HiveMindScientificGameEngine`) and removed fabricated OpenRouter completion IDs from `CANONICAL_5_ROADMAP_PRS`.
+- **Core, Swarm, Security, Economy & Data Hardening (PRs #692–#701 — 45+ Improvement Plan Audits):**
+  - Multi-Krum collinear outlier rejection ($>5\times$ median norm when $f$ is clamped to $0$, IP-34), NF4/DCT quantizer fidelity, eval-answer substring decontamination (`IP-40`), Lean 4 `QueenBee.lean` section SHA-256 verification (`IP-41`), pure-AST candidate energy evaluator (`SEC-01`), and T4 governor validator awareness (`IP-24`/`IP-50`).
+
 ## v3.1.1 — 2026-11-04 — Security and honesty fixes to the v3.1 web interface
 
 Fixes the review of `v3.1.0` (PR #595). `v3.1.0` should not be deployed.

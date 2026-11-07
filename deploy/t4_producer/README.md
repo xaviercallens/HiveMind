@@ -14,8 +14,8 @@ On `socreateai-agora-hermes-node1` (NVIDIA Tesla T4, `15,360 MiB` total VRAM):
    ```
 2. Install and enable the canonical T4 shield and agent units:
    ```bash
-   sudo cp deploy/t4_producer/hivemind-live-shield-coder.service /etc/systemd/system/
-   sudo cp deploy/t4_producer/hivemind-live-agent-coder.service /etc/systemd/system/
+   sudo cp deploy/t4_node/live/hivemind-live-shield-coder.service /etc/systemd/system/
+   sudo cp deploy/t4_node/live/hivemind-live-agent-coder.service /etc/systemd/system/
    sudo systemctl daemon-reload
    sudo systemctl enable --now hivemind-live-shield-coder.service hivemind-live-agent-coder.service
    ```

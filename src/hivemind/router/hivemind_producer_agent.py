@@ -196,6 +196,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--detect-vram", action="store_true", help="Read GPU memory from nvidia-smi (for --suggest)")
     parser.add_argument("--skip-preflight", action="store_true", help="Do not check that your endpoint lists the model before the first heartbeat")
     parser.add_argument("--residency", action="store_true", help="Report live GPU VRAM residency on each heartbeat")
+    parser.add_argument("--gpu-vram-mib", type=int, default=None, help="Total GPU VRAM in MiB for the producer VRAM guard")
+    parser.add_argument("--pinned-vram-mib", type=int, default=0, help="Pinned VRAM in MiB reserved on the GPU")
+    parser.add_argument("--min-free-vram-mib", type=int, default=0, help="Minimum free VRAM headroom in MiB required by the T4 guard")
     parser.add_argument("--control-state-file", metavar="PATH", help="Write remote pause/VRAM control state to this JSON file on each heartbeat")
     parser.add_argument("--sync-remote-config", action="store_true", help="Sync node_state and min_price_per_1k from /v1/hivemind/remote/config before each heartbeat")
     return parser

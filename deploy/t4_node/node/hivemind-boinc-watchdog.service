@@ -4,6 +4,8 @@ Description=HiveMind BOINC server: restart daemons that died (feeder, transition
 After=hivemind-boinc-daemons.service
 
 [Service]
+NoNewPrivileges=yes
+ProtectSystem=full
 Type=oneshot
 User=callensxavier_gmail_com
 ExecStart=/opt/hivemind/t4/bin/boinc_ensure_daemons.sh --watchdog

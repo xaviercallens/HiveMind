@@ -4,6 +4,8 @@ Description=HiveMind T4 governor (train when idle, yield to inference)
 After=hivemind-boinc-client.service nginx.service
 
 [Service]
+NoNewPrivileges=yes
+ProtectSystem=full
 User=callensxavier_gmail_com
 # Serving-first policy (owner): training needs 30 min without a request inside the night window (22:00-07:00 Europe/Paris) or 2 h otherwise, and
 # >= 4300 MiB of free VRAM. History on 2026-10-25: a 5 s / 5 s / 3800 EXPERIMENT was set by someone else at 20:05Z, the owner told the author to keep it at 20:49Z,

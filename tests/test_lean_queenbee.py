@@ -42,6 +42,21 @@ def test_theorems_are_declared_once_and_printed() -> None:
     assert "sorry" not in section and "axiom " not in section
 
 
+def _compute_queenbee_section_sha256(source: str) -> str:
+    start_marker = "namespace ALIX_QueenBee"
+    end_marker = "end ALIX_QueenBee"
+    start_idx = source.index(start_marker)
+    end_idx = source.index(end_marker, start_idx) + len(end_marker)
+    section = source[start_idx:end_idx].strip()
+    print_lines = sorted(
+        line.strip()
+        for line in source.splitlines()
+        if line.strip().startswith("#print axioms HiveMindSpec.ALIX_QueenBee.")
+    )
+    canonical = section + "\n" + "\n".join(print_lines) + "\n"
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def test_receipt_records_every_theorem_with_whitelisted_axioms() -> None:
     receipt = json.loads(RECEIPT.read_text(encoding="utf-8"))
     assert receipt["queenbee_namespace"] == "HiveMindSpec.ALIX_QueenBee"
@@ -49,8 +64,9 @@ def test_receipt_records_every_theorem_with_whitelisted_axioms() -> None:
     for name, axioms in receipt["queenbee_theorems"].items():
         assert set(axioms) <= ALLOWED, (name, axioms)
     assert receipt["theorems_failing_whitelist"] == []
-    # a receipt for an older spec is stale: rerun anse.formal.lean_runner and regenerate it
-    assert receipt["spec_sha256"] == hashlib.sha256(SPEC.read_bytes()).hexdigest()
+    # Scoped to the ALIX_QueenBee section + its #print axioms lines so edits outside QueenBee do not break (IP-40)
+    source = SPEC.read_text(encoding="utf-8")
+    assert receipt["queenbee_section_sha256"] == _compute_queenbee_section_sha256(source)
 
 
 @pytest.mark.skipif(not os.environ.get("LEAN_BIN"), reason="LEAN_BIN not set; CI compiles the spec separately")

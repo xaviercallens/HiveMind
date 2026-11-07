@@ -1,6 +1,6 @@
 # HiveMind OpenRouter gateway image.
 # Build context is a staging directory assembled by deploy.sh: src/, server.py, requirements.txt, Dockerfile.
-FROM python:3.12-slim
+FROM python:3.12-slim@sha256:9c1d9ed7593f2552a4ea47362ec0d2dde59efe12fe2cbbbe1cb8b3d17b12232c
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

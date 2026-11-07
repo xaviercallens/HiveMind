@@ -499,6 +499,21 @@ def _user_text(row: Mapping[str, Any]) -> str:
     return "\n".join(m["content"] for m in row.get("messages", []) if m.get("role") == "user")
 
 
+def _eval_answer_texts(row: Mapping[str, Any]) -> list[str]:
+    """Extract reference/answer/completion strings and assistant message turns from an eval row (IP-41)."""
+    out: list[str] = []
+    for field_name in ("completion", "answer", "reference", "target"):
+        val = row.get(field_name)
+        if isinstance(val, str) and val.strip():
+            out.append(val)
+    for m in row.get("messages", []):
+        if isinstance(m, Mapping) and m.get("role") == "assistant":
+            content = m.get("content")
+            if isinstance(content, str) and content.strip():
+                out.append(content)
+    return out
+
+
 @dataclass
 class EvalIndex:
     """Held-out eval items to decontaminate against: prompt hashes, n-gram document frequencies and entity keys."""
@@ -524,9 +539,17 @@ class EvalIndex:
         self.sources[name] = self.sources.get(name, 0) + count
 
     def add_eval_pack(self, pack_dir: Path) -> None:
-        """A night pack's ``eval.jsonl``: the user turns (system prompts are shared scaffolding) and the item keys."""
+        """A night pack's ``eval.jsonl``: the user turns, eval answers of ``>= n`` words (IP-41), and the item keys."""
         rows, _ = read_jsonl_shards([Path(pack_dir) / "eval.jsonl"])
         self.add(f"night_pack:{Path(pack_dir).name}", (_user_text(r) for r in rows), (str(r.get("key", "")) for r in rows))
+        long_answers = [
+            ans
+            for r in rows
+            for ans in _eval_answer_texts(r)
+            if len(normalize_tokens(ans)) >= self.n
+        ]
+        if long_answers:
+            self.add(f"night_pack_answers:{Path(pack_dir).name}", long_answers)
 
     @property
     def active_ngrams(self) -> set[int]:
@@ -550,10 +573,13 @@ def decontaminate(rows: Sequence[dict[str, Any]], index: EvalIndex,
     for r in rows:
         user = _user_text(r)
         toks_user = normalize_tokens(user)
+        toks_comp = normalize_tokens(str(r.get("completion", "")))
         toks_all = normalize_tokens(user + "\n" + str(r.get("completion", "")))
         if r.get("entity_key") and entity_aliases(r["entity_key"]) & index.keys:
             counts["eval_entity_key"] += 1
-        elif hashlib.sha256(" ".join(toks_user).encode()).hexdigest() in index.exact:
+        elif hashlib.sha256(" ".join(toks_user).encode()).hexdigest() in index.exact or (
+            len(toks_comp) >= index.n and hashlib.sha256(" ".join(toks_comp).encode()).hexdigest() in index.exact
+        ):
             counts["eval_exact"] += 1
         elif ngram_hashes(toks_all, index.n) & active:
             counts["eval_ngram"] += 1

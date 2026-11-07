@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.12-slim@sha256:9c1d9ed7593f2552a4ea47362ec0d2dde59efe12fe2cbbbe1cb8b3d17b12232c
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -15,6 +15,9 @@ COPY scripts /app/scripts
 COPY artifacts /app/artifacts
 COPY docs /app/docs
 COPY server.py /app/server.py
+
+RUN useradd --system --uid 10001 --no-create-home app && chown -R app /app
+USER app
 
 EXPOSE 8080
 

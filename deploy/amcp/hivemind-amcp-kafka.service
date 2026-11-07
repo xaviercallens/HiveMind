@@ -13,6 +13,8 @@ After=network.target local-fs.target
 RequiresMountsFor=/mnt/disks/disk-socrateai-local-1
 
 [Service]
+NoNewPrivileges=yes
+ProtectSystem=full
 Type=simple
 User=callensxavier_gmail_com
 Environment=JAVA_HOME=/mnt/disks/disk-socrateai-local-1/amcp/tools/jdk21

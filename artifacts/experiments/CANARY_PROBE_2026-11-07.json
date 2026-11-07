@@ -1,0 +1,634 @@
+{
+  "schema": "hivemind.canary_probe_receipt.v1",
+  "deliverable_id": "PS-05-D1",
+  "generated_at_utc": "2026-11-07T22:16:52Z",
+  "seed": 20261107,
+  "parameters": {
+    "num_honest_nodes": 40,
+    "num_planted_junk_nodes": 20,
+    "trials_per_node": 20,
+    "min_trials": 10,
+    "wilson_lb_threshold": 0.6,
+    "preregistered_min_detection_rate": 0.95,
+    "preregistered_max_false_positive_rate": 0.05
+  },
+  "summary": {
+    "planted_junk_detected": 20,
+    "planted_junk_total": 20,
+    "detection_rate": 1.0,
+    "detection_rate_ci95": [
+      0.838875,
+      1.0
+    ],
+    "honest_false_positives": 0,
+    "honest_total": 40,
+    "false_positive_rate": 0.0,
+    "false_positive_rate_ci95": [
+      0.0,
+      0.087622
+    ],
+    "passes_preregistered_thresholds": true
+  },
+  "nodes": [
+    {
+      "node_id": "node-honest-000",
+      "planted_role": "honest",
+      "successes": 19,
+      "total": 20,
+      "empirical_pass_rate": 0.95,
+      "wilson_lb": 0.763869,
+      "wilson_ub": 0.991119,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-001",
+      "planted_role": "honest",
+      "successes": 18,
+      "total": 20,
+      "empirical_pass_rate": 0.9,
+      "wilson_lb": 0.698966,
+      "wilson_ub": 0.972134,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-002",
+      "planted_role": "honest",
+      "successes": 19,
+      "total": 20,
+      "empirical_pass_rate": 0.95,
+      "wilson_lb": 0.763869,
+      "wilson_ub": 0.991119,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-003",
+      "planted_role": "honest",
+      "successes": 19,
+      "total": 20,
+      "empirical_pass_rate": 0.95,
+      "wilson_lb": 0.763869,
+      "wilson_ub": 0.991119,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-004",
+      "planted_role": "honest",
+      "successes": 20,
+      "total": 20,
+      "empirical_pass_rate": 1.0,
+      "wilson_lb": 0.838875,
+      "wilson_ub": 1.0,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-005",
+      "planted_role": "honest",
+      "successes": 20,
+      "total": 20,
+      "empirical_pass_rate": 1.0,
+      "wilson_lb": 0.838875,
+      "wilson_ub": 1.0,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-006",
+      "planted_role": "honest",
+      "successes": 19,
+      "total": 20,
+      "empirical_pass_rate": 0.95,
+      "wilson_lb": 0.763869,
+      "wilson_ub": 0.991119,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-007",
+      "planted_role": "honest",
+      "successes": 20,
+      "total": 20,
+      "empirical_pass_rate": 1.0,
+      "wilson_lb": 0.838875,
+      "wilson_ub": 1.0,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-008",
+      "planted_role": "honest",
+      "successes": 20,
+      "total": 20,
+      "empirical_pass_rate": 1.0,
+      "wilson_lb": 0.838875,
+      "wilson_ub": 1.0,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-009",
+      "planted_role": "honest",
+      "successes": 20,
+      "total": 20,
+      "empirical_pass_rate": 1.0,
+      "wilson_lb": 0.838875,
+      "wilson_ub": 1.0,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-010",
+      "planted_role": "honest",
+      "successes": 20,
+      "total": 20,
+      "empirical_pass_rate": 1.0,
+      "wilson_lb": 0.838875,
+      "wilson_ub": 1.0,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-011",
+      "planted_role": "honest",
+      "successes": 19,
+      "total": 20,
+      "empirical_pass_rate": 0.95,
+      "wilson_lb": 0.763869,
+      "wilson_ub": 0.991119,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-012",
+      "planted_role": "honest",
+      "successes": 20,
+      "total": 20,
+      "empirical_pass_rate": 1.0,
+      "wilson_lb": 0.838875,
+      "wilson_ub": 1.0,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-013",
+      "planted_role": "honest",
+      "successes": 18,
+      "total": 20,
+      "empirical_pass_rate": 0.9,
+      "wilson_lb": 0.698966,
+      "wilson_ub": 0.972134,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-014",
+      "planted_role": "honest",
+      "successes": 19,
+      "total": 20,
+      "empirical_pass_rate": 0.95,
+      "wilson_lb": 0.763869,
+      "wilson_ub": 0.991119,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-015",
+      "planted_role": "honest",
+      "successes": 19,
+      "total": 20,
+      "empirical_pass_rate": 0.95,
+      "wilson_lb": 0.763869,
+      "wilson_ub": 0.991119,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-016",
+      "planted_role": "honest",
+      "successes": 20,
+      "total": 20,
+      "empirical_pass_rate": 1.0,
+      "wilson_lb": 0.838875,
+      "wilson_ub": 1.0,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-017",
+      "planted_role": "honest",
+      "successes": 18,
+      "total": 20,
+      "empirical_pass_rate": 0.9,
+      "wilson_lb": 0.698966,
+      "wilson_ub": 0.972134,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-018",
+      "planted_role": "honest",
+      "successes": 20,
+      "total": 20,
+      "empirical_pass_rate": 1.0,
+      "wilson_lb": 0.838875,
+      "wilson_ub": 1.0,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-019",
+      "planted_role": "honest",
+      "successes": 19,
+      "total": 20,
+      "empirical_pass_rate": 0.95,
+      "wilson_lb": 0.763869,
+      "wilson_ub": 0.991119,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-020",
+      "planted_role": "honest",
+      "successes": 20,
+      "total": 20,
+      "empirical_pass_rate": 1.0,
+      "wilson_lb": 0.838875,
+      "wilson_ub": 1.0,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-021",
+      "planted_role": "honest",
+      "successes": 20,
+      "total": 20,
+      "empirical_pass_rate": 1.0,
+      "wilson_lb": 0.838875,
+      "wilson_ub": 1.0,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-022",
+      "planted_role": "honest",
+      "successes": 19,
+      "total": 20,
+      "empirical_pass_rate": 0.95,
+      "wilson_lb": 0.763869,
+      "wilson_ub": 0.991119,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-023",
+      "planted_role": "honest",
+      "successes": 19,
+      "total": 20,
+      "empirical_pass_rate": 0.95,
+      "wilson_lb": 0.763869,
+      "wilson_ub": 0.991119,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-024",
+      "planted_role": "honest",
+      "successes": 19,
+      "total": 20,
+      "empirical_pass_rate": 0.95,
+      "wilson_lb": 0.763869,
+      "wilson_ub": 0.991119,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-025",
+      "planted_role": "honest",
+      "successes": 20,
+      "total": 20,
+      "empirical_pass_rate": 1.0,
+      "wilson_lb": 0.838875,
+      "wilson_ub": 1.0,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-026",
+      "planted_role": "honest",
+      "successes": 20,
+      "total": 20,
+      "empirical_pass_rate": 1.0,
+      "wilson_lb": 0.838875,
+      "wilson_ub": 1.0,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-027",
+      "planted_role": "honest",
+      "successes": 20,
+      "total": 20,
+      "empirical_pass_rate": 1.0,
+      "wilson_lb": 0.838875,
+      "wilson_ub": 1.0,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-028",
+      "planted_role": "honest",
+      "successes": 19,
+      "total": 20,
+      "empirical_pass_rate": 0.95,
+      "wilson_lb": 0.763869,
+      "wilson_ub": 0.991119,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-029",
+      "planted_role": "honest",
+      "successes": 20,
+      "total": 20,
+      "empirical_pass_rate": 1.0,
+      "wilson_lb": 0.838875,
+      "wilson_ub": 1.0,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-030",
+      "planted_role": "honest",
+      "successes": 20,
+      "total": 20,
+      "empirical_pass_rate": 1.0,
+      "wilson_lb": 0.838875,
+      "wilson_ub": 1.0,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-031",
+      "planted_role": "honest",
+      "successes": 19,
+      "total": 20,
+      "empirical_pass_rate": 0.95,
+      "wilson_lb": 0.763869,
+      "wilson_ub": 0.991119,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-032",
+      "planted_role": "honest",
+      "successes": 20,
+      "total": 20,
+      "empirical_pass_rate": 1.0,
+      "wilson_lb": 0.838875,
+      "wilson_ub": 1.0,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-033",
+      "planted_role": "honest",
+      "successes": 19,
+      "total": 20,
+      "empirical_pass_rate": 0.95,
+      "wilson_lb": 0.763869,
+      "wilson_ub": 0.991119,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-034",
+      "planted_role": "honest",
+      "successes": 20,
+      "total": 20,
+      "empirical_pass_rate": 1.0,
+      "wilson_lb": 0.838875,
+      "wilson_ub": 1.0,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-035",
+      "planted_role": "honest",
+      "successes": 19,
+      "total": 20,
+      "empirical_pass_rate": 0.95,
+      "wilson_lb": 0.763869,
+      "wilson_ub": 0.991119,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-036",
+      "planted_role": "honest",
+      "successes": 18,
+      "total": 20,
+      "empirical_pass_rate": 0.9,
+      "wilson_lb": 0.698966,
+      "wilson_ub": 0.972134,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-037",
+      "planted_role": "honest",
+      "successes": 20,
+      "total": 20,
+      "empirical_pass_rate": 1.0,
+      "wilson_lb": 0.838875,
+      "wilson_ub": 1.0,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-038",
+      "planted_role": "honest",
+      "successes": 19,
+      "total": 20,
+      "empirical_pass_rate": 0.95,
+      "wilson_lb": 0.763869,
+      "wilson_ub": 0.991119,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-honest-039",
+      "planted_role": "honest",
+      "successes": 20,
+      "total": 20,
+      "empirical_pass_rate": 1.0,
+      "wilson_lb": 0.838875,
+      "wilson_ub": 1.0,
+      "quarantined": false
+    },
+    {
+      "node_id": "node-planted-junk-000",
+      "planted_role": "junk_constant_ok",
+      "successes": 0,
+      "total": 20,
+      "empirical_pass_rate": 0.0,
+      "wilson_lb": 0.0,
+      "wilson_ub": 0.161125,
+      "quarantined": true
+    },
+    {
+      "node_id": "node-planted-junk-001",
+      "planted_role": "junk_empty_or_whitespace",
+      "successes": 0,
+      "total": 20,
+      "empirical_pass_rate": 0.0,
+      "wilson_lb": 0.0,
+      "wilson_ub": 0.161125,
+      "quarantined": true
+    },
+    {
+      "node_id": "node-planted-junk-002",
+      "planted_role": "junk_random_number",
+      "successes": 0,
+      "total": 20,
+      "empirical_pass_rate": 0.0,
+      "wilson_lb": 0.0,
+      "wilson_ub": 0.161125,
+      "quarantined": true
+    },
+    {
+      "node_id": "node-planted-junk-003",
+      "planted_role": "junk_lazy_half_guesser",
+      "successes": 7,
+      "total": 20,
+      "empirical_pass_rate": 0.35,
+      "wilson_lb": 0.181192,
+      "wilson_ub": 0.567146,
+      "quarantined": true
+    },
+    {
+      "node_id": "node-planted-junk-004",
+      "planted_role": "junk_constant_ok",
+      "successes": 0,
+      "total": 20,
+      "empirical_pass_rate": 0.0,
+      "wilson_lb": 0.0,
+      "wilson_ub": 0.161125,
+      "quarantined": true
+    },
+    {
+      "node_id": "node-planted-junk-005",
+      "planted_role": "junk_empty_or_whitespace",
+      "successes": 0,
+      "total": 20,
+      "empirical_pass_rate": 0.0,
+      "wilson_lb": 0.0,
+      "wilson_ub": 0.161125,
+      "quarantined": true
+    },
+    {
+      "node_id": "node-planted-junk-006",
+      "planted_role": "junk_random_number",
+      "successes": 0,
+      "total": 20,
+      "empirical_pass_rate": 0.0,
+      "wilson_lb": 0.0,
+      "wilson_ub": 0.161125,
+      "quarantined": true
+    },
+    {
+      "node_id": "node-planted-junk-007",
+      "planted_role": "junk_lazy_half_guesser",
+      "successes": 5,
+      "total": 20,
+      "empirical_pass_rate": 0.25,
+      "wilson_lb": 0.111862,
+      "wilson_ub": 0.468701,
+      "quarantined": true
+    },
+    {
+      "node_id": "node-planted-junk-008",
+      "planted_role": "junk_constant_ok",
+      "successes": 0,
+      "total": 20,
+      "empirical_pass_rate": 0.0,
+      "wilson_lb": 0.0,
+      "wilson_ub": 0.161125,
+      "quarantined": true
+    },
+    {
+      "node_id": "node-planted-junk-009",
+      "planted_role": "junk_empty_or_whitespace",
+      "successes": 0,
+      "total": 20,
+      "empirical_pass_rate": 0.0,
+      "wilson_lb": 0.0,
+      "wilson_ub": 0.161125,
+      "quarantined": true
+    },
+    {
+      "node_id": "node-planted-junk-010",
+      "planted_role": "junk_random_number",
+      "successes": 0,
+      "total": 20,
+      "empirical_pass_rate": 0.0,
+      "wilson_lb": 0.0,
+      "wilson_ub": 0.161125,
+      "quarantined": true
+    },
+    {
+      "node_id": "node-planted-junk-011",
+      "planted_role": "junk_lazy_half_guesser",
+      "successes": 3,
+      "total": 20,
+      "empirical_pass_rate": 0.15,
+      "wilson_lb": 0.052369,
+      "wilson_ub": 0.360419,
+      "quarantined": true
+    },
+    {
+      "node_id": "node-planted-junk-012",
+      "planted_role": "junk_constant_ok",
+      "successes": 0,
+      "total": 20,
+      "empirical_pass_rate": 0.0,
+      "wilson_lb": 0.0,
+      "wilson_ub": 0.161125,
+      "quarantined": true
+    },
+    {
+      "node_id": "node-planted-junk-013",
+      "planted_role": "junk_empty_or_whitespace",
+      "successes": 0,
+      "total": 20,
+      "empirical_pass_rate": 0.0,
+      "wilson_lb": 0.0,
+      "wilson_ub": 0.161125,
+      "quarantined": true
+    },
+    {
+      "node_id": "node-planted-junk-014",
+      "planted_role": "junk_random_number",
+      "successes": 0,
+      "total": 20,
+      "empirical_pass_rate": 0.0,
+      "wilson_lb": 0.0,
+      "wilson_ub": 0.161125,
+      "quarantined": true
+    },
+    {
+      "node_id": "node-planted-junk-015",
+      "planted_role": "junk_lazy_half_guesser",
+      "successes": 6,
+      "total": 20,
+      "empirical_pass_rate": 0.3,
+      "wilson_lb": 0.145477,
+      "wilson_ub": 0.518973,
+      "quarantined": true
+    },
+    {
+      "node_id": "node-planted-junk-016",
+      "planted_role": "junk_constant_ok",
+      "successes": 0,
+      "total": 20,
+      "empirical_pass_rate": 0.0,
+      "wilson_lb": 0.0,
+      "wilson_ub": 0.161125,
+      "quarantined": true
+    },
+    {
+      "node_id": "node-planted-junk-017",
+      "planted_role": "junk_empty_or_whitespace",
+      "successes": 0,
+      "total": 20,
+      "empirical_pass_rate": 0.0,
+      "wilson_lb": 0.0,
+      "wilson_ub": 0.161125,
+      "quarantined": true
+    },
+    {
+      "node_id": "node-planted-junk-018",
+      "planted_role": "junk_random_number",
+      "successes": 0,
+      "total": 20,
+      "empirical_pass_rate": 0.0,
+      "wilson_lb": 0.0,
+      "wilson_ub": 0.161125,
+      "quarantined": true
+    },
+    {
+      "node_id": "node-planted-junk-019",
+      "planted_role": "junk_lazy_half_guesser",
+      "successes": 6,
+      "total": 20,
+      "empirical_pass_rate": 0.3,
+      "wilson_lb": 0.145477,
+      "wilson_ub": 0.518973,
+      "quarantined": true
+    }
+  ]
+}

@@ -356,6 +356,10 @@ def test_ip129_remote_config_endpoint_and_systemd_service_cli_flags_parse() -> N
     assert r_post.json()["remote_config"]["vram_cap_mib"] == 6144
 
     # Parse ExecStart command lines in deploy/t4_node/live/*.service and deploy/t4_node/node/*.service
+    import sys
+
+    if str(REPO_ROOT / "scripts") not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT / "scripts"))
     import hivemind_producer_shield as shield_mod
 
     agent_parser = build_agent_parser()

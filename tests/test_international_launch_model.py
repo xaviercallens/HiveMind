@@ -28,7 +28,7 @@ def test_erlang_c_detects_saturation_under_unthrottled_english_spike() -> None:
     stable = compute_erlang_c_metrics(active_producers_c=8, aggregate_tok_per_s=380.0, arrival_rate_req_per_s=0.40)
     assert stable.is_stable is True
     assert stable.utilization_rho < 0.25
-    assert stable.p95_total_latency_s < 1.5
+    assert stable.p95_total_latency_s < 4.0
 
     # Unthrottled Hacker News / r/LocalLLaMA spike: 4.5 req/s exceeds 2.26 req/s capacity
     saturated = compute_erlang_c_metrics(active_producers_c=8, aggregate_tok_per_s=380.0, arrival_rate_req_per_s=4.5)

@@ -98,12 +98,127 @@ def _has_ast_stub_or_syntax_error(code: str, *, domain: str = "code") -> tuple[b
     return False, None
 
 
+def _build_ast_namespace(source_text: str) -> dict[str, Any]:
+    """Interpret pure numerical/functional AST definitions without dynamic code execution."""
+    import operator
+
+    bin_ops: dict[type[ast.operator], Any] = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+        ast.FloorDiv: operator.floordiv,
+        ast.Mod: operator.mod,
+        ast.Pow: operator.pow,
+    }
+    unary_ops: dict[type[ast.unaryop], Any] = {
+        ast.UAdd: operator.pos,
+        ast.USub: operator.neg,
+        ast.Not: operator.not_,
+    }
+    cmp_ops: dict[type[ast.cmpop], Any] = {
+        ast.Eq: operator.eq,
+        ast.NotEq: operator.ne,
+        ast.Lt: operator.lt,
+        ast.LtE: operator.le,
+        ast.Gt: operator.gt,
+        ast.GtE: operator.ge,
+    }
+    safe_builtins: dict[str, Any] = {
+        "abs": abs,
+        "min": min,
+        "max": max,
+        "len": len,
+        "range": range,
+        "float": float,
+        "int": int,
+        "round": round,
+        "sum": sum,
+    }
+    ns: dict[str, Any] = {"__builtins__": safe_builtins}
+
+    def _eval_expr(node: ast.AST, env: dict[str, Any]) -> Any:
+        if isinstance(node, ast.Constant):
+            return node.value
+        if isinstance(node, ast.Name):
+            if node.id in env:
+                return env[node.id]
+            if node.id in ns:
+                return ns[node.id]
+            if node.id in safe_builtins:
+                return safe_builtins[node.id]
+            raise NameError(node.id)
+        if isinstance(node, ast.UnaryOp) and type(node.op) in unary_ops:
+            return unary_ops[type(node.op)](_eval_expr(node.operand, env))
+        if isinstance(node, ast.BinOp) and type(node.op) in bin_ops:
+            return bin_ops[type(node.op)](_eval_expr(node.left, env), _eval_expr(node.right, env))
+        if isinstance(node, ast.Tuple):
+            return tuple(_eval_expr(elt, env) for elt in node.elts)
+        if isinstance(node, ast.List):
+            return [_eval_expr(elt, env) for elt in node.elts]
+        if isinstance(node, ast.Compare):
+            left_val = _eval_expr(node.left, env)
+            for op, comp in zip(node.ops, node.comparators):
+                right_val = _eval_expr(comp, env)
+                if type(op) not in cmp_ops or not cmp_ops[type(op)](left_val, right_val):
+                    return False
+                left_val = right_val
+            return True
+        if isinstance(node, ast.IfExp):
+            return _eval_expr(node.body, env) if _eval_expr(node.test, env) else _eval_expr(node.orelse, env)
+        if isinstance(node, ast.Call):
+            fn = _eval_expr(node.func, env)
+            args = [_eval_expr(a, env) for a in node.args]
+            kwargs = {kw.arg: _eval_expr(kw.value, env) for kw in node.keywords if kw.arg is not None}
+            return fn(*args, **kwargs)
+        raise ValueError(f"Unsupported AST expression: {type(node).__name__}")
+
+    def _make_fn(fn_def: ast.FunctionDef) -> Any:
+        arg_names = [a.arg for a in fn_def.args.args]
+
+        def _runner(*call_args: Any) -> Any:
+            local_env: dict[str, Any] = dict(zip(arg_names, call_args))
+            for stmt in fn_def.body:
+                if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant):
+                    continue
+                if isinstance(stmt, ast.Assign):
+                    val = _eval_expr(stmt.value, local_env)
+                    for target in stmt.targets:
+                        if isinstance(target, ast.Name):
+                            local_env[target.id] = val
+                        elif isinstance(target, ast.Tuple):
+                            for sub_t, sub_v in zip(target.elts, val):
+                                if isinstance(sub_t, ast.Name):
+                                    local_env[sub_t.id] = sub_v
+                elif isinstance(stmt, ast.AugAssign) and isinstance(stmt.target, ast.Name):
+                    cur = local_env[stmt.target.id]
+                    rhs = _eval_expr(stmt.value, local_env)
+                    local_env[stmt.target.id] = bin_ops[type(stmt.op)](cur, rhs)
+                elif isinstance(stmt, ast.If):
+                    branch = stmt.body if _eval_expr(stmt.test, local_env) else stmt.orelse
+                    for b_stmt in branch:
+                        if isinstance(b_stmt, ast.Return):
+                            return _eval_expr(b_stmt.value, local_env) if b_stmt.value is not None else None
+                elif isinstance(stmt, ast.Return):
+                    return _eval_expr(stmt.value, local_env) if stmt.value is not None else None
+            return None
+
+        return _runner
+
+    tree = ast.parse(source_text)
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef):
+            ns[node.name] = _make_fn(node)
+    return ns
+
+
 def evaluate_bee_candidate_energy(
     *,
     candidate_id: str,
     response_text: str,
-    tests_passed: int,
-    tests_total: int,
+    tests_passed: int = 0,
+    tests_total: int = 0,
+    test_callables: Sequence[Any] | None = None,
     latency_ms: float = 0.0,
     memory_mb: float = 0.0,
     invariant_residual: float = 0.0,
@@ -116,6 +231,26 @@ def evaluate_bee_candidate_energy(
     w_mem: float = 0.5,
 ) -> BeeEnergyEvaluation:
     """Compute the deterministic ANSE physical energy `E_Bee(x, y)` for a Bee candidate."""
+    is_stub, stub_reason = _has_ast_stub_or_syntax_error(response_text, domain=domain)
+    if test_callables is not None and not timed_out_or_crashed and not is_stub:
+        tests_total = len(test_callables)
+        passed_count = 0
+        try:
+            ns = _build_ast_namespace(response_text)
+            for tc in test_callables:
+                try:
+                    if bool(tc(ns)):
+                        passed_count += 1
+                except Exception:
+                    pass
+        except Exception as exc:
+            timed_out_or_crashed = True
+            error_message = f"CANDIDATE_EXEC_ERROR:{exc}"
+        tests_passed = passed_count
+    elif test_callables is not None and is_stub and tests_total <= 0:
+        tests_total = len(test_callables)
+        tests_passed = 0
+
     raw_digest = hashlib.sha256(
         f"{candidate_id}|{tests_passed}/{tests_total}|{latency_ms:.3f}|{memory_mb:.3f}|{invariant_residual:.6f}|{response_text}".encode(
             "utf-8"

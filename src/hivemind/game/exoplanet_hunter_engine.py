@@ -22,6 +22,7 @@ from __future__ import annotations
 import datetime
 import hashlib
 import hmac
+import html
 import json
 import math
 import os
@@ -2092,20 +2093,24 @@ class HiveMindMultiProducerInferencePool:
         notes: str = "",
     ) -> Dict[str, Any]:
         """Register a new external producer (or switch the Tesla T4 to ONLINE_SERVING when ready)."""
-        clean_pid = str(producer_id or "").strip()[:64]
-        if not clean_pid:
+        raw_pid = str(producer_id or "").strip()[:64]
+        if not raw_pid:
             raise ValueError("producer_id must be non-empty")
         clean_status = str(status or "ONLINE_SERVING").strip().upper()[:32]
-        if clean_pid == "PRODUCER-LOCAL-RTX2070-CUDA0" and clean_status != "ONLINE_SERVING":
+        if raw_pid == "PRODUCER-LOCAL-RTX2070-CUDA0" and clean_status != "ONLINE_SERVING":
             raise ValueError("Cannot set primary anchor producer PRODUCER-LOCAL-RTX2070-CUDA0 offline")
+        clean_pid = html.escape(raw_pid, quote=True)
         if clean_pid not in self.producers and len(self.producers) >= self.MAX_REGISTERED_PRODUCERS:
             raise OverflowError(f"Producer registry capacity reached (max {self.MAX_REGISTERED_PRODUCERS})")
         now_iso = datetime.datetime.now().isoformat()[:19]
         existing = self.producers.get(clean_pid, {})
+        clean_name = html.escape(str(name or "").strip()[:128], quote=True)
+        clean_hardware = html.escape(str(hardware or "").strip()[:128], quote=True)
+        clean_notes = html.escape(str(notes or "").strip()[:512], quote=True)
         entry = {
             "producer_id": clean_pid,
-            "name": (str(name or "").strip()[:128]) or existing.get("name", clean_pid),
-            "hardware": (str(hardware or "").strip()[:128]) or existing.get("hardware", "Custom GPU/CPU Producer"),
+            "name": clean_name or existing.get("name", clean_pid),
+            "hardware": clean_hardware or existing.get("hardware", "Custom GPU/CPU Producer"),
             "device": existing.get("device", "remote:cuda:0"),
             "role": existing.get("role", "EXTERNAL_SWARM_PRODUCER"),
             "status": clean_status,
@@ -2114,7 +2119,7 @@ class HiveMindMultiProducerInferencePool:
             "priority": int(priority),
             "requests_served": existing.get("requests_served", 0),
             "last_heartbeat": now_iso,
-            "notes": (str(notes or "").strip()[:512]) or existing.get("notes", "Registered external HiveMind inference producer."),
+            "notes": clean_notes or existing.get("notes", "Registered external HiveMind inference producer."),
         }
         self.producers[clean_pid] = entry
         self._persist_registry()
@@ -2294,6 +2299,9 @@ class HiveMindMultiProducerInferencePool:
             return
         self.total_http_requests += 1
         now_iso = datetime.datetime.now().isoformat()[:19]
+        safe_method = html.escape(str(method or "GET")[:16], quote=True)
+        safe_path = html.escape(str(path or "/")[:256], quote=True)
+        safe_gamer_tag = html.escape(str(gamer_tag or "")[:64], quote=True)
 
         ua_short = "WebGL Cockpit Browser"
         if "python" in user_agent.lower():
@@ -2303,11 +2311,11 @@ class HiveMindMultiProducerInferencePool:
         elif "unity" in user_agent.lower() or "csharp" in user_agent.lower():
             ua_short = "Steam Fat Client / Unity Engine"
 
-        raw_identity = gamer_tag if gamer_tag else f"{client_ip} ({ua_short})"
+        raw_identity = safe_gamer_tag if safe_gamer_tag else f"{client_ip} ({ua_short})"
         salted_digest = hmac.new(
             self._end_user_salt, raw_identity.encode("utf-8"), hashlib.sha256
         ).hexdigest()[:10].upper()
-        user_key = f"tag:{gamer_tag}" if gamer_tag else f"anon:{salted_digest}"
+        user_key = f"tag:{safe_gamer_tag}" if safe_gamer_tag else f"anon:{salted_digest}"
         is_inference = any(k in path for k in ("/infer", "/completions", "/bee-moe-scan"))
         is_discovery = "/discover" in path
 
@@ -2361,7 +2369,7 @@ class HiveMindMultiProducerInferencePool:
             seq_num = len(self.end_users) + 1
             self.end_users[user_key] = {
                 "user_id": f"USER-{seq_num:02d}-{salted_digest}",
-                "gamer_tag": gamer_tag or f"Explorer_{seq_num}",
+                "gamer_tag": safe_gamer_tag or f"Explorer_{seq_num}",
                 "client_type": ua_short,
                 "first_seen": now_iso,
                 "last_seen": now_iso,
@@ -2380,8 +2388,8 @@ class HiveMindMultiProducerInferencePool:
 
         event = {
             "timestamp": now_iso,
-            "method": method,
-            "path": path,
+            "method": safe_method,
+            "path": safe_path,
             "client_type": ua_short,
             "latency_ms": round(latency_ms, 2),
             "served_by": resolved_served_by,

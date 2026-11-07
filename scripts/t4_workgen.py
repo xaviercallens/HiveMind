@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -49,6 +51,106 @@ def prune(ledger: Path, keep: int = 20, prefix: str = "hmq_") -> None:
         p.unlink(missing_ok=True)
 
 
+def build_training_round_table(ledger: Path, prefix: str = "hmq_") -> list[dict[str, Any]]:
+    """Build a structured table of `(round, domain, eval_by_domain_before, eval_by_domain_after)` from ledger receipts (Audit C8)."""
+    rows: list[dict[str, Any]] = []
+    if not ledger.exists():
+        return rows
+    for p in sorted(ledger.glob(f"*{prefix}*.json")):
+        if p.name.startswith("workgen_state") or p.name in ("latest_adapter.json", "latest_adapter_big.json"):
+            continue
+        try:
+            rec = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(rec, dict):
+            continue
+        wu_name = str(rec.get("wu_name") or rec.get("name") or p.stem)
+        rows.append(
+            {
+                "round": wu_name,
+                "domain": rec.get("domain", "unknown"),
+                "eval_by_domain_before": dict(rec.get("eval_by_domain_before") or {}),
+                "eval_by_domain_after": dict(rec.get("eval_by_domain_after") or {}),
+                "eval_loss_before": rec.get("eval_loss_before"),
+                "eval_loss_after": rec.get("eval_loss_after"),
+                "sha256": rec.get("sha256") or rec.get("adapter_sha256"),
+                "regressed": (
+                    rec.get("eval_loss_before") is not None
+                    and rec.get("eval_loss_after") is not None
+                    and float(rec["eval_loss_after"]) > float(rec["eval_loss_before"])
+                ),
+            }
+        )
+    return rows
+
+
+def select_round_head_with_rollback(
+    ledger: Path,
+    stem: str = "latest_adapter",
+    prefix: str = "hmq_",
+) -> dict[str, Any] | None:
+    """Enforce single-metric rollback gate (Audit C8): if `latest_adapter` regressed on mean held-out loss, roll back to the previous non-regressed checkpoint."""
+    head_json = ledger / f"{stem}.json"
+    if not head_json.exists():
+        return None
+    head: dict[str, Any] = json.loads(head_json.read_text(encoding="utf-8"))
+    loss_before = head.get("eval_loss_before")
+    loss_after = head.get("eval_loss_after")
+    regressed = (
+        loss_before is not None
+        and loss_after is not None
+        and float(loss_after) > float(loss_before)
+    )
+    if not regressed:
+        head.setdefault("rolled_back", False)
+        return head
+
+    candidates: list[tuple[float, Path, dict[str, Any]]] = []
+    for p in sorted(ledger.glob(f"*{prefix}*.json"), key=lambda f: f.stat().st_mtime, reverse=True):
+        if p.name == head_json.name or p.name.startswith("workgen_state"):
+            continue
+        try:
+            rec = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(rec, dict):
+            continue
+        rec_sha = rec.get("sha256") or rec.get("adapter_sha256")
+        if not rec_sha or rec_sha == head.get("sha256"):
+            continue
+        rb = rec.get("eval_loss_before")
+        ra = rec.get("eval_loss_after")
+        if rb is not None and ra is not None and float(ra) > float(rb):
+            continue
+        wu_name = str(rec.get("wu_name") or rec.get("name") or p.stem.replace("adapter_", ""))
+        pt_cand = ledger / f"adapter_{wu_name}.pt"
+        if not pt_cand.exists():
+            pt_alt = p.with_suffix(".pt")
+            if pt_alt.exists():
+                pt_cand = pt_alt
+            else:
+                continue
+        candidates.append((float(ra) if ra is not None else 0.0, pt_cand, rec))
+        break
+
+    if candidates:
+        _, pt_cand, prev_rec = candidates[0]
+        shutil.copyfile(pt_cand, ledger / f"{stem}.pt")
+        rolled_head = {
+            **prev_rec,
+            "sha256": prev_rec.get("sha256") or prev_rec.get("adapter_sha256"),
+            "rolled_back": True,
+            "rolled_back_from_sha256": head.get("sha256"),
+            "rolled_back_reason": f"eval_loss_after ({loss_after}) > eval_loss_before ({loss_before})",
+        }
+        head_json.write_text(json.dumps(rolled_head), encoding="utf-8")
+        return rolled_head
+
+    # No prior non-regressed checkpoint found: reset to fresh unchained init
+    return None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--stack-base", type=Path, default=Path("/mnt/disks/disk-socrateai-local-1/boinc/stack"))
@@ -75,7 +177,7 @@ def main() -> int:
             in_window = (not a.night_only) or in_european_night(_now())
             if in_window and pending(st, prof["app"], prof["prefix"]) == 0:
                 rnd = (json.loads(state_f.read_text())["round"] if state_f.exists() else 0) + 1
-                head = json.loads((ledger / f"{stem}.json").read_text()) if (ledger / f"{stem}.json").exists() else None
+                head = select_round_head_with_rollback(ledger, stem=stem, prefix=prof["prefix"])
                 name = f"{prof['prefix']}{rnd:05d}"
                 if a.mix:  # stratified rounds: every round draws from the six evaluated domains (see moe_work.MIX_DOMAINS)
                     domain, shard = MIX, (rnd - 1) % a.shards

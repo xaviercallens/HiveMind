@@ -258,6 +258,7 @@ def evaluate_7division_top1pct_compression_benchmark() -> dict[str, Any]:
 
     return {
         "task_id": "HM-S29-02",
+        "simulated": True,
         "gate_passed": (mean_ratio >= 100.0 and max_loss_deg <= 0.5 and max_cons_err < 1e-9),
         "mean_compression_ratio": mean_ratio,
         "max_held_out_loss_degradation_pct": max_loss_deg,

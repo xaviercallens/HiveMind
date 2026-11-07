@@ -928,6 +928,7 @@ def run_multi_moe_hf_campaign(
     report: dict[str, Any] = {
         "campaign_id": fixture["campaign_id"],
         "campaign_title": "Operation Polyglot-Singularity-128: Multi-MoE & 8-Domain Hugging Face GPU Validation Campaign",
+        "simulated": True,
         "contributor_handle": contributor_handle.strip(),
         "timestamp_utc": round(time.time(), 3),
         "total_elapsed_ms": total_elapsed_ms,

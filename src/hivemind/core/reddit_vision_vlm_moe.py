@@ -1171,7 +1171,7 @@ LA_RUCHE_VMOE_4_SPECIALIZATIONS: Dict[str, Dict[str, Any]] = {
 
 @dataclass(frozen=True)
 class ZKOPoITrainingReceipt:
-    """Zero-Knowledge Optimistic Proof of Inference / Training (ZK-OPoI) receipt."""
+    """Tamper-evident SHA-256 transcript commitment receipt for V-MoE training (`zero_knowledge=False`)."""
 
     bee_id: str
     specialization_id: str
@@ -1183,6 +1183,8 @@ class ZKOPoITrainingReceipt:
     dct_packet_sha256: str
     proof_commitment_hash: str
     verified: bool
+    commitment_scheme: str = "sha256_transcript_commitment"
+    zero_knowledge: bool = False
 
 
 def newton_schulz_orthogonalize_muon(
@@ -1279,6 +1281,11 @@ def verify_zk_opoi_training_receipt(
     )
     expected_proof = hashlib.sha256(transcript.encode("utf-8")).hexdigest()
     return bool(receipt.verified and expected_proof == receipt.proof_commitment_hash)
+
+
+TamperEvidentTrainingReceipt = ZKOPoITrainingReceipt
+generate_tamper_evident_training_receipt = generate_zk_opoi_training_receipt
+verify_tamper_evident_training_receipt = verify_zk_opoi_training_receipt
 
 
 def run_la_ruche_1500mb_patch_vmoe_pipeline(

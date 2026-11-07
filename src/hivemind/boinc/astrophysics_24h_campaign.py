@@ -1090,6 +1090,8 @@ def run_24h_astrophysics_gpu_campaign(
 
         work_receipts: List[WorkReceipt] = []
         cycle_worker_losses: List[float] = []
+        cycle_spot_checks_passed = 0
+        ref_honest_flat: torch.Tensor | None = None
 
         for w_idx, (w_base, steam_id, persona) in enumerate(honest_worker_specs):
             w_id = f"{w_base}-c{cycle_idx + 1:02d}"
@@ -1136,14 +1138,27 @@ def run_24h_astrophysics_gpu_campaign(
             total_gpu_inner_steps += sub_res.steps_completed
             if verdict.passed:
                 total_spot_checks_passed += 1
+                cycle_spot_checks_passed += 1
             cycle_worker_losses.append(sub_res.final_loss)
+            w_flat = torch.cat(
+                [
+                    (sub_res.theta_final[k].detach().float().cpu() - branch_state_before[k].detach().float().cpu()).reshape(-1)
+                    for k in sorted(branch_state_before)
+                ]
+            )
+            if ref_honest_flat is None:
+                ref_honest_flat = w_flat
+                cos_align = 1.0 if float(w_flat.norm().item()) > 0.0 else 0.0
+            else:
+                denom = float((w_flat.norm() * ref_honest_flat.norm()).item()) + 1e-12
+                cos_align = round(float(torch.dot(w_flat, ref_honest_flat).item() / denom), 6)
             work_receipts.append(
                 WorkReceipt(
                     node_id=w_id,
                     steam_id64=steam_id,
                     branch_name=branch_name,
                     flops_contributed=round(0.18 * sub_res.steps_completed, 3),
-                    cosine_alignment=0.985,
+                    cosine_alignment=cos_align,
                     spot_check_passed=verdict.passed,
                     multikrum_accepted=True,
                     delta_sha256=compute_state_dict_sha256(sub_res.theta_final),
@@ -1199,13 +1214,24 @@ def run_24h_astrophysics_gpu_campaign(
         )
         if not byz_verdict.passed:
             total_byzantine_caught += 1
+        byz_flat = torch.cat(
+            [
+                (byz_sub.theta_final[k].detach().float().cpu() - branch_state_before[k].detach().float().cpu()).reshape(-1)
+                for k in sorted(branch_state_before)
+            ]
+        )
+        if ref_honest_flat is not None:
+            byz_denom = float((byz_flat.norm() * ref_honest_flat.norm()).item()) + 1e-12
+            byz_cos_align = round(float(torch.dot(byz_flat, ref_honest_flat).item() / byz_denom), 6)
+        else:
+            byz_cos_align = 0.0
         work_receipts.append(
             WorkReceipt(
                 node_id=byz_id,
                 steam_id64=byz_steam,
                 branch_name=branch_name,
                 flops_contributed=round(0.18 * byz_sub.steps_completed, 3),
-                cosine_alignment=0.05,
+                cosine_alignment=byz_cos_align,
                 spot_check_passed=byz_verdict.passed,
                 multikrum_accepted=False,
                 delta_sha256=compute_state_dict_sha256(byz_sub.theta_final),
@@ -1263,7 +1289,7 @@ def run_24h_astrophysics_gpu_campaign(
                 "pre_cycle_loss": pre_cycle_loss,
                 "post_cycle_loss": post_cycle_loss,
                 "mean_worker_inner_loss": round(float(np.mean(cycle_worker_losses)), 6),
-                "spot_checks_passed": 3,
+                "spot_checks_passed": cycle_spot_checks_passed,
                 "storage_proof_verified": bool(pos_receipt.verified),
                 "byzantine_poisoner_slashed": byz_id,
                 "multikrum_rejected": outer_res.filter_report.rejected_workers,
@@ -1348,6 +1374,7 @@ def run_24h_astrophysics_gpu_campaign(
 
     report: Dict[str, Any] = {
         "campaign": "Project HiveMind — 24-Cycle Local RTX 2070 Astrophysics & Cosmology BOINC Campaign",
+        "simulated": True,
         "overall_passed": bool(all_improved and all_storage_verified and ledger_ok and cb_final.safe_to_continue),
         "execution_device": str(device),
         "gpu_hardware": hw_info,

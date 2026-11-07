@@ -39,6 +39,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 import hashlib
+import json
 import math
 from pathlib import Path
 import re
@@ -189,6 +190,10 @@ RTX2070_T4_INTEGRATION_LEDGER: Sequence[dict[str, Any]] = (
             "docs/E8_STAGE2_TINY_MOE_QLORA.md",
             "docs/OVERLAY_OPEN_SOURCE_TUNNELS.md",
         ],
+        "artifact_refs": [
+            "docs/E8_STAGE2_TINY_MOE_QLORA.md",
+            "docs/FEDERATION_V2_AMCP_AGLETS.md",
+        ],
         "measured_results": {
             "stage2_qlora_moe_loss": "4.1721 -> 1.7772 (4 rounds, NF4 + LoRA r=4, alpha=8, 0.0000 diff vs single-process baseline)",
             "stage2_negative_control_shuffled_loss": "4.1721 -> 4.2034 (stays at chance ln(64)=4.159)",
@@ -208,6 +213,10 @@ RTX2070_T4_INTEGRATION_LEDGER: Sequence[dict[str, Any]] = (
             "scripts/hivemind_producer_autostart.py",
             "scripts/hivemind_gpu_outreach_campaign.py",
         ],
+        "artifact_refs": [
+            "src/hivemind/router/accounts.py",
+            "src/hivemind/router/t4_visibility.py",
+        ],
         "measured_results": {
             "distinct_physical_gpus_metric": "Normalizes endpoint URLs by _endpoint_host_root; separates distinct_physical_gpus from shared_host_endpoints",
             "autostart_platforms": "Linux (systemd --user), Windows 10/11 (Scheduled Task), macOS (launchd)",
@@ -218,6 +227,7 @@ RTX2070_T4_INTEGRATION_LEDGER: Sequence[dict[str, Any]] = (
         "branch": "fix/idle-worker-truthful-gpu-probe",
         "title": "Idle GPU worker reports READY only when the fold ran on the gated CUDA device",
         "components": ["scripts/hivemind_boinc_idle_worker.py"],
+        "artifact_refs": ["scripts/hivemind_boinc_idle_worker.py"],
         "measured_results": {
             "truthful_cuda_probe": "Refuses READY status if PyTorch/CUDA falls back to CPU or fails the device gate",
         },
@@ -227,6 +237,7 @@ RTX2070_T4_INTEGRATION_LEDGER: Sequence[dict[str, Any]] = (
         "branch": "artifacts/e8-two-host-wan-results",
         "title": "First real two-host E8 cell between GCP Tesla T4 and Windows 11 RTX 2070 (XAVGAMSRV)",
         "components": ["artifacts/experiments/e8_real/RESULTS_T4_SIDE.md"],
+        "artifact_refs": ["artifacts/experiments/e8_real/RESULTS_T4_SIDE.md"],
         "measured_results": {
             "hosts": "Learner 0: socreateai-agora-hermes-node1 (Tesla T4, Linux) | Learner 1: XAVGAMSRV (RTX 2070, Windows 11)",
             "paired_loss_diff_vs_baseline": "+4.8e-07 +/- 8.3e-07 across seeds 1-3 (K=2, 12 rounds, 400 inner steps, RDA merge)",
@@ -242,6 +253,7 @@ RTX2070_T4_INTEGRATION_LEDGER: Sequence[dict[str, Any]] = (
             "scripts/run_experiment_E8_pilot.py",
             "tests/test_e8_pilot_network_safety.py",
         ],
+        "artifact_refs": ["docs/E8_TWO_HOST_REAL_TEST.md"],
         "measured_results": {
             "network_safety": "Syncer binds 127.0.0.1 by default and raises ValueError on 0.0.0.0 / :: wildcard addresses",
         },
@@ -251,6 +263,7 @@ RTX2070_T4_INTEGRATION_LEDGER: Sequence[dict[str, Any]] = (
         "branch": "feat/volunteer-gamer-config",
         "title": "Fail-safe gamer idle-GPU helper, stock-BOINC gamer settings & honest join page wording",
         "components": ["scripts/hivemind_volunteer_config.py", "src/hivemind/router/join_page.py"],
+        "artifact_refs": ["scripts/hivemind_volunteer_config.py"],
         "measured_results": {
             "gamer_preemption": "Unmeasurable input defaults to playing (pauses GPU); generates cc_config.xml + global_prefs_override.xml",
         },
@@ -260,11 +273,44 @@ RTX2070_T4_INTEGRATION_LEDGER: Sequence[dict[str, Any]] = (
         "branch": "fix/boinc-qlora-ratchet-and-mixed-domain-moe",
         "title": "BOINC QLoRA monotone validation-loss ratchet & mixed-domain MoE dispatch",
         "components": ["src/hivemind/boinc/real_client/assimilator.py"],
+        "artifact_refs": ["src/hivemind/boinc/real_client/assimilator.py"],
         "measured_results": {
             "monotone_ratchet": "Rejects any outer-step checkpoint where E_val(W^(t+1)) > E_val(W^(t))",
         },
     },
 )
+
+
+def build_opentrainer_training_round_table(
+    ledger_dir: Path | None = None,
+    prefix: str = "hmq_",
+) -> list[dict[str, Any]]:
+    """Build a structured table of `(round, domain, eval_by_domain_before, eval_by_domain_after)` from ledger JSON artifacts (Audit C8)."""
+    if ledger_dir is None or not ledger_dir.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    for p in sorted(ledger_dir.glob(f"*{prefix}*.json")):
+        if p.name.startswith("workgen_state") or p.name in ("latest_adapter.json", "latest_adapter_big.json"):
+            continue
+        try:
+            rec = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(rec, dict):
+            continue
+        wu_name = str(rec.get("wu_name") or rec.get("name") or p.stem)
+        rows.append(
+            {
+                "round": wu_name,
+                "domain": rec.get("domain", "unknown"),
+                "eval_by_domain_before": dict(rec.get("eval_by_domain_before") or {}),
+                "eval_by_domain_after": dict(rec.get("eval_by_domain_after") or {}),
+                "eval_loss_before": rec.get("eval_loss_before"),
+                "eval_loss_after": rec.get("eval_loss_after"),
+                "sha256": rec.get("sha256") or rec.get("adapter_sha256"),
+            }
+        )
+    return rows
 
 
 AGLET_AMCP_LIFECYCLE_SPEC: Sequence[dict[str, str]] = (

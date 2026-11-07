@@ -584,6 +584,7 @@ def run_season9_10_gpu_swarm_campaigns(
     symbolic_pts = 3500 if hw["is_gpu"] else 1750
     report: dict[str, Any] = {
         "campaign_suite": "Project HiveMind Season 9 & Season 10 GPU & Swarm Validation Campaigns",
+        "simulated": True,
         "contributor_handle": contributor_handle.strip(),
         "timestamp_utc": round(time.time(), 3),
         "elapsed_total_ms": elapsed_total_ms,

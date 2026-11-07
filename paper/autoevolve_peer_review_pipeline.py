@@ -954,6 +954,34 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
     )
 
 
+    def _tex_grouped(n: int) -> str:
+        return f"{n:,}".replace(",", "{,}")
+
+    # PROV-86, PROV-87 (live status, 2026-11-07): tokens are built from the two receipts, so the paper text must match the data
+    chain = _jl("CHAIN_STATUS_2026-11-07.json")
+    probe = _jl("NIGHT_INTENSE_1_probe_results_2026-10-28.json")
+    rg = chain.get("ranges", {})
+    k_ranges = ("hmq_00001_98", "hmq_00099_170", "hmq_00171_end")
+    dg = chain.get("diagnostic_round_187", {})
+    arms = {a["arm"]: a for a in probe.get("arms", [])}
+    _all(
+        "PROV-86",
+        "Live chain status: median per-domain held-out change per round range, share of domain changes worse, diagnostic round 187",
+        [f"{rg[k]['median_change_nats']:+.4f}" for k in k_ranges]
+        + [f"{round(rg[k]['share_worse'] * 100):d}\\%" for k in k_ranges]
+        + [f"{rg['hmq_00171_end']['rounds']}$ rounds", f"{dg.get('median_change_nats', 0):+.4f}", f"${dg.get('domain_changes')}$ evaluated domains"],
+        "artifacts/experiments/CHAIN_STATUS_2026-11-07.json",
+    )
+    _all(
+        "PROV-87",
+        "Night probes: measured allocated peaks, estimator error for Granite-1B arms, and the A2 free-VRAM floor breach",
+        [f"${_tex_grouped(arms['A0']['measured_alloc_mib'])}$\\,MiB", f"${_tex_grouped(arms['A1']['measured_alloc_mib'])}$\\,MiB",
+         f"${_tex_grouped(arms['A2']['measured_alloc_mib'])}$\\,MiB", f"${_tex_grouped(arms['A3']['measured_alloc_mib'])}$\\,MiB",
+         f"{arms['A0']['error_vs_alloc_pct']:.1f}", f"{arms['A1']['error_vs_alloc_pct']:.1f}",
+         f"${_tex_grouped(arms['A2']['free_at_peak_mib'])}$\\,MiB", "$4{,}300$\\,MiB"],
+        "artifacts/experiments/NIGHT_INTENSE_1_probe_results_2026-10-28.json",
+    )
+
 def verify_manuscript_data_consistency(
     tex_text: str,
     poc_data: Dict[str, Any],

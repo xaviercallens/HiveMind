@@ -1,0 +1,67 @@
+{
+  "arms": [
+    {
+      "agents_md_4300_floor_ok": true,
+      "arm": "A0",
+      "error_vs_alloc_pct": 19.9,
+      "estimate_alloc_mib": 2843,
+      "free_at_peak_mib": 6811,
+      "max_power_w": 68.08,
+      "max_temp_c": 77,
+      "measured_alloc_mib": 3409,
+      "model": "ibm-granite/granite-3.1-1b-a400m-base",
+      "status": "OK",
+      "total_gpu_peak_mib": 8549
+    },
+    {
+      "agents_md_4300_floor_ok": true,
+      "arm": "A1",
+      "error_vs_alloc_pct": 39.0,
+      "estimate_alloc_mib": 3285,
+      "free_at_peak_mib": 5605,
+      "max_power_w": 97.29,
+      "max_temp_c": 81,
+      "measured_alloc_mib": 4567,
+      "model": "ibm-granite/granite-3.1-1b-a400m-base",
+      "status": "OK",
+      "total_gpu_peak_mib": 9755
+    },
+    {
+      "agents_md_4300_floor_ok": false,
+      "arm": "A2",
+      "error_vs_alloc_pct": 1.8,
+      "estimate_alloc_mib": 6407,
+      "free_at_peak_mib": 3557,
+      "max_power_w": 84.41,
+      "max_temp_c": 82,
+      "measured_alloc_mib": 6523,
+      "model": "ibm-granite/granite-3.1-3b-a800m-base",
+      "status": "OK",
+      "total_gpu_peak_mib": 11803
+    },
+    {
+      "agents_md_4300_floor_ok": true,
+      "arm": "A3",
+      "error_vs_alloc_pct": -1.3,
+      "estimate_alloc_mib": 3615,
+      "free_at_peak_mib": 6375,
+      "max_power_w": 110.35,
+      "max_temp_c": 82,
+      "measured_alloc_mib": 3567,
+      "model": "Qwen/Qwen3-4B-Instruct-2507",
+      "status": "OK",
+      "total_gpu_peak_mib": 8985
+    }
+  ],
+  "not_measured": [
+    "quality (held-out loss)",
+    "sustained thermal behaviour",
+    "checkpointing through the real trainer step"
+  ],
+  "schema": "hivemind-night-probe-feasibility/1",
+  "source": [
+    "20261028T220117Z",
+    "20261028T220251Z",
+    "20261028T220509Z"
+  ]
+}

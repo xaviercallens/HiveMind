@@ -1251,12 +1251,18 @@ UNPUBLISHED_HF_REPOS: frozenset[str] = frozenset({
 })
 
 
+TRAINED_MOE_STATUSES = frozenset({"LIVE_NOCTURNAL_MOE", "LIVE_WAVE2_SCIENTIFIC_MOE"})
+
+
 def _truthful(entry: PrewiredPartnerModel) -> PrewiredPartnerModel:
     """Describe an entry by what really exists: an unpublished repository gets no link, no training claim and a status that
     says so, plus the off-the-shelf model that actually serves its tier."""
     tier = next((t for t in TIERS if t.tier_id == entry.tier_id), None)
     served = tier.ollama_tag if tier is not None else ""
-    if entry.hf_repo not in UNPUBLISHED_HF_REPOS:
+    # A status that says "trained MoE" is only true when a HiveMind-built artefact serves the tier. An off-the-shelf
+    # tag under such a status is relabelled the same way as an unpublished repository (owner decision, 2026-11-07).
+    claims_training_on_off_the_shelf = entry.status in TRAINED_MOE_STATUSES and not served.startswith("hivemind-")
+    if entry.hf_repo not in UNPUBLISHED_HF_REPOS and not claims_training_on_off_the_shelf:
         return replace(entry, served_by=served)
     return replace(
         entry,

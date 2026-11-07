@@ -56,6 +56,18 @@ The new latency is `--yield-grace-s` (default 1.0 s) plus about 0.12 s. With n =
 - **Docs disagree**: `deploy/t4_node/node/README.md` said "after 30 s of quiet" in one row and 30 min in the policy section (fixed here); ROADMAP.md:386 (daytime harvesting after 30 s) conflicts with the owner's 7200 s by-day rule and should be marked superseded by the owner.
 - **Roadmap items with no code**: `src/hivemind/core/preemption.py`, EF21 host-RAM checkpointing ("zero dropped gradients"), tensorsharp, Big GPU core, GPU pooling (per subagent read).
 
+### 3.4 Added 2026-11-07: the QLoRA rounds have stopped improving the model (and the lockout reproduced)
+
+Read-only analysis of `project/hmproj/hivemind_ledger/verdict_hmq_*.json` (186 rounds, eval loss on the fixed held-out set, `eval_loss_before` -> `eval_loss_after`):
+
+- **Only 31 of 185 rounds (17 %) lowered the held-out loss**; mean change +0.0185 (worse), median +0.0065. Early on it worked: the first rounds start from about 2.396 and the best adapter, round 164 (3 Nov), reached 2.1198. **Since round 164 every round has been worse** (rounds 165-185: +0.06 to +0.75, e.g. round 182 +0.483), and round 186 (live, 7 Nov) too: 2.1198 -> 2.2442. That is 23 consecutive non-improving rounds. `latest_adapter.json` has stayed at round 164 since 3 Nov 23:48, so every new round restarts from the same adapter and is discarded.
+- `valid: true` and a grant (cobblestones) are issued for every round: the validator replays one segment and checks it reproduces (`max_abs_divergence` 0.0). "Verified" means reproducibly computed, not that the model improved. 185 of 185 verdicts are valid.
+- By domain (one domain per round, `DOMAIN_ORDER` cycle general, french, edu_web, news, biomed, math), share of rounds that improved the held-out loss: general 45 %, french 32 %, edu_web 12 %, math 6 %, biomed 3 %, news 0 % (31 rounds each). Defaults in `moe_work.build_train_spec`: lr 2e-4, LoRA rank 8, inner steps 40 (the work generator passes 80).
+- Hypothesis, **not tested**: one single-domain shard per round at this learning rate overwrites what the other domains need (forgetting), and the greedy accept-only-if-better rule then leaves the chain at its plateau. The data show the domain dependence; they do not show the cause.
+- Cost: in the owner's current window (17:00-22:00 Paris) the lockout of §3.1 allows about one 3.5-minute round per 34 minutes, i.e. about 6 rounds before 22:00, each of which is expected to be discarded. The first round of the window ran 17:30:26-17:34Z on 7 Nov; at 17:34:27Z, 30 s after the task ended, the validator's GPU use made the governor yield (`busy_trigger: gpu`, quiet timer reset), exactly as in §3.1: a second live observation of the same mechanism.
+
+What I did not do: change the training configuration, the work generator or the governor (all owner-controlled). Options for the owner, none implemented: (a) a domain-balanced shard per round (mix all six domains), (b) a lower learning rate or fewer inner steps, (c) promote on a held-out aggregate that includes a per-domain no-regression check, (d) before any change, a small preregistered offline comparison of (a)-(c) from the round-164 adapter on three rounds each, which needs the T4 for about an hour.
+
 ## 4. Incident: research jobs on the shared T4 caused user-facing errors (disclosure)
 
 Between 17:57Z and 21:22Z on 2026-10-31 I ran OptimalEnergyAI experiments (Qwen2.5 0.5B/1.5B/3B) on this GPU. From 19:38Z to 21:21Z I also **stopped `hivemind-live-bee-llama.service`** (authorised by the owner) so that a 3B fp32 job (about 13 GiB) could fit; it was restarted automatically at 21:21Z. I did not stop or touch Ollama.

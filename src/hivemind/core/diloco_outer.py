@@ -228,11 +228,14 @@ def filter_byzantine_deltas_multikrum(
     # Multi-Krum selects the top (K - f) workers with smallest Krum distance score
     sorted_by_krum = sorted(worker_ids, key=lambda w: krum_scores[w])
     krum_survivors = set(sorted_by_krum[: max(1, K - f)])
+    median_norm = float(norms.median().item())
+    norm_by_worker = {wid: float(norms[idx].item()) for idx, wid in enumerate(worker_ids)}
 
     accepted: list[str] = []
     rejected: list[str] = list(quarantined.keys())
     for wid in worker_ids:
-        if wid in krum_survivors and mean_cos_per_worker[wid] >= cos_lower_bound:
+        norm_ok = max_byzantine_f <= 0 or norm_by_worker[wid] <= 5.0 * median_norm
+        if wid in krum_survivors and mean_cos_per_worker[wid] >= cos_lower_bound and norm_ok:
             accepted.append(wid)
         else:
             rejected.append(wid)

@@ -1,0 +1,410 @@
+{
+  "plan": "HiveMind planetary-scale plan",
+  "version": "2026-11-07",
+  "source_paper": {
+    "title": "Project HiveMind: A System Design for Decentralized Sparse Mixture-of-Experts Training with DiLoCo-Style Outer Optimization on 8 GB Consumer GPUs",
+    "version": "4.3.0",
+    "doi": "10.5281/zenodo.24043016",
+    "tex": "paper/hivemind_foundation_article.tex"
+  },
+  "end_state": {
+    "name": "Planetary scale",
+    "definition": "At least 10,000 volunteer nodes active in a 30-day window, in at least 10 languages and 6 regions, training and serving HiveMind-built experts that are measured to improve on their base models, with every node discoverable and verifiable without the project's gateway, and the project's own cloud spend still within the 150 USD/month budget.",
+    "paper_source": "Wave 5 of the five-wave table (sec:regional_super_peers_and_5wave_roadmap) and Phases 1-4 of the 18-month roadmap (sec:roadmap_exec_summary). The paper's wave numbers are forecasts from a queueing model, not measurements; here each wave is entered only on receipts.",
+    "measured_by": [
+      "accounts and node-telemetry receipt (stream PS-03): active nodes in a 30-day window, by region and language",
+      "chain status receipt (PS-01): experts that improve held-out loss against their base",
+      "discovery receipt (PS-07): share of nodes reachable without the gateway",
+      "cost receipt (PS-10): monthly GCP spend"
+    ]
+  },
+  "baseline": {
+    "date": "2026-11-07",
+    "facts": [
+      {"fact": "Training chain: 187 BOINC QLoRA-MoE rounds; median per-domain held-out change +0.1266 nats over rounds 171 onward, 99% of domain changes worse; the first diagnostic round was also worse on all 6 evaluated domains.", "receipt": "artifacts/experiments/CHAIN_STATUS_2026-11-07.json"},
+      {"fact": "Served models: no HiveMind-trained adapter is served to users; 1 of 13 serving tags is HiveMind-built (hivemind-bee-stars).", "receipt": "artifacts/experiments/CATALOG_SERVED_2026-11-07.json"},
+      {"fact": "GPUs doing the work: one Tesla T4 (GCP Spot) and one RTX 2070.", "receipt": "not re-verified (operator statement)"},
+      {"fact": "Accounts: 55 active accounts claimed in public on 30 October 2026.", "receipt": "none yet; producing one is PS-03"},
+      {"fact": "VRAM floor: one probe arm left 3,557 MiB free against the 4,300 MiB floor; the probe queue does not enforce the floor.", "receipt": "artifacts/experiments/NIGHT_INTENSE_1_probe_results_2026-10-28.json"},
+      {"fact": "Volunteer cost: about 0.05 EUR of electricity per RTX 2070 hour at the EU average, 0.39 EUR per 8-hour night.", "receipt": "artifacts/experiments/CONSUMER_GPU_ECONOMICS_2026-11-07.json"},
+      {"fact": "Older paper claims (47-node live WAN, 24 trained experts, zk-SNARK soundness, a 100x bandwidth cut) are not re-verified against receipts in v4.3 and are not used as a baseline here.", "receipt": "not re-verified"}
+    ]
+  },
+  "rules": [
+    "A wave is entered only when every entry criterion is met by a committed receipt; forecasts never count.",
+    "Every experiment is pre-registered (hypothesis, metric, controls, decision rule) before it runs; a refuted prediction is reported as refuted.",
+    "Every number in the paper enters through the provenance lock (paper/autoevolve_peer_review_pipeline.py).",
+    "AGENTS.md applies to every stream: keep at least 4,300 MiB free on the T4, never touch /opt/hivemind/t4 outside the installer, keep GCP within 150 USD/month (Spot VMs, scale-to-zero services), Lean theorems with zero sorry, uv run pytest green before a PR.",
+    "A producer sees every prompt it serves until a private path is measured end to end; every public page says so."
+  ],
+  "waves": [
+    {"id": "W0", "name": "Pioneers (today)", "nodes_target": 0, "status": "current",
+     "entry": ["Baseline facts above, each with its receipt or marked not re-verified."]},
+    {"id": "W1", "name": "First 150 volunteers (EU and North America East)", "nodes_target": 150, "status": "not entered",
+     "entry": [
+       "PS-01 done: chain non-regressing over a pre-registered window.",
+       "PS-02 done: VRAM floor and consent/pause enforced in code with tests.",
+       "PS-03 done: every public claim backed by a receipt; accounts receipt published.",
+       "PS-04 done: trainer client measured on at least 3 real volunteer GPUs of different classes.",
+       "Accounts receipt shows at least 150 nodes active in 30 days."
+     ]},
+    {"id": "W2", "name": "Global launch, 265 nodes, 6 regions", "nodes_target": 265, "status": "not entered",
+     "entry": [
+       "W1 entered.",
+       "PS-05 done: verification false-accept and false-reject rates measured with planted poisoners.",
+       "PS-08 done: BOINC and mesh share one volunteer identity and one event stream.",
+       "Measured p50 gateway latency within the pre-registered bound at the W2 node count."
+     ]},
+    {"id": "W3", "name": "500 nodes, trans-Pacific and LATAM", "nodes_target": 500, "status": "not entered",
+     "entry": [
+       "W2 entered.",
+       "PS-06 done: outer-gradient compression measured on real residential links.",
+       "PS-07 done: nodes discover each other without the gateway in a pre-registered experiment."
+     ]},
+    {"id": "W4", "name": "2,000 nodes, 10 languages", "nodes_target": 2000, "status": "not entered",
+     "entry": [
+       "W3 entered.",
+       "PS-09 done: 1,000-node heterogeneous simulation passes its pre-registered gates.",
+       "Verification cost per work unit measured at the W3 node count, with the crossover point against replay known."
+     ]},
+    {"id": "W5", "name": "Planetary scale, 10,000 nodes", "nodes_target": 10000, "status": "not entered",
+     "entry": [
+       "W4 entered.",
+       "End-state definition met, every item from a receipt.",
+       "PS-10 done for the release that reports it: Zenodo version with verified checksums and an external review on record."
+     ]}
+  ],
+  "streams": [
+    {
+      "id": "PS-01",
+      "title": "Make the training chain improve the model",
+      "objective": "Find and fix why the BOINC QLoRA-MoE chain has made held-out loss worse since round hmq_00171, and show a pre-registered window of rounds that improves or holds it.",
+      "explanation": "The chain is the only place HiveMind trains anything. Since round 171, almost every round has made the model worse on the held-out test sets, and a first diagnostic round (no stratified mixing, half the learning rate) was worse too. Nothing else on this roadmap matters while the core training loop degrades the model it trains.",
+      "directions": [
+        "Read the ledger receipt (artifacts/experiments/CHAIN_STATUS_2026-11-07.json) and the per-round eval_by_domain fields in the assimilated ledger.",
+        "Write the E24 pre-registration: three candidate causes (the ratchet's acceptance rule, single-domain work units, stratified mixing), one arm each plus a control arm that replays the round-170 adapter unchanged.",
+        "Check the evaluation itself first: same held-out shards, same seed, same base weights before and after each round (an evaluation drift would look exactly like this).",
+        "Align the outer loop with Decoupled DiLoCo's learner/synchroniser split (arXiv:2604.21428) only after the cause is known."
+      ],
+      "dependencies": [],
+      "definition_of_done": [
+        {"id": "PS-01-D1", "item": "E24 pre-registration committed before any run, with arms, metric (median per-domain held-out change) and decision rule."},
+        {"id": "PS-01-D2", "item": "Cause attributed, or each candidate refuted, in a committed E24 report."},
+        {"id": "PS-01-D3", "item": "A pre-registered window of at least 20 consecutive rounds has median per-domain held-out change <= 0 and share of domain changes worse <= 50%."},
+        {"id": "PS-01-D4", "item": "The paper's chain paragraph is updated through the provenance lock."}
+      ],
+      "validation": [
+        {"dod": "PS-01-D1", "command": "test -f artifacts/experiments/E24_chain_regression_prereg.json && git log --diff-filter=A --format=%cI -- artifacts/experiments/E24_chain_regression_prereg.json", "receipt": "artifacts/experiments/E24_chain_regression_prereg.json", "pass": "file exists and its first commit predates the first E24 round in the ledger", "exists": false},
+        {"dod": "PS-01-D2", "command": "python3 -c \"import json;r=json.load(open('artifacts/experiments/E24_chain_regression_report.json'));assert r['decision'] in ('CAUSE_ATTRIBUTED','ALL_REFUTED')\"", "receipt": "artifacts/experiments/E24_chain_regression_report.json", "pass": "decision field present and one of the two registered outcomes", "exists": false},
+        {"dod": "PS-01-D3", "command": "python3 scripts/chain_status_receipt.py --out artifacts/experiments/CHAIN_STATUS_<date>.json", "receipt": "artifacts/experiments/CHAIN_STATUS_<date>.json", "pass": "for the registered window: median_change_nats <= 0 and share_worse <= 0.50", "exists": true},
+        {"dod": "PS-01-D4", "command": "python3 paper/autoevolve_peer_review_pipeline.py", "receipt": "paper/PEER_REVIEW_REPORT.json", "pass": "all provenance checks pass, including PROV-86 rebuilt on the new receipt", "exists": true}
+      ],
+      "owner_decisions": ["Whether the chain keeps running during E24 or pauses (HOLD) until the report."],
+      "constraints": ["T4 VRAM floor 4,300 MiB", "T4 runs as Spot within the training window"],
+      "prereg_required": true,
+      "paper_refs": ["sec:directions", "sec:limitations"],
+      "roadmap_ids": ["HM-S33-06"],
+      "labels": ["research", "needs-prereg", "help wanted"],
+      "skills": "PyTorch, PEFT/QLoRA, experiment design"
+    },
+    {
+      "id": "PS-02",
+      "title": "Safety and resource guards in code",
+      "objective": "Turn the project's safety promises into enforced code with tests: the VRAM floor, consent and pause, no lateral movement between volunteers, and a per-node egress budget.",
+      "explanation": "Volunteers lend their machines on trust. A probe already breached the T4's 4,300 MiB floor because nothing enforced it, and a recent red-team study showed small models can learn to spread across cheap devices. HiveMind must be provably different: it only runs where the owner installed it, stops when told, never reaches another volunteer's machine, and moves only the data it declares.",
+      "directions": [
+        "Night probe queue: cap = free VRAM - 4,300 MiB; refuse the arm when the cap is below the estimate (scripts/night_probe_queue.py).",
+        "Apply the same floor check in every trainer entry point (BOINC client, OpenTrainer worker).",
+        "Lean: state 'no node starts without a stored owner enrolment' and 'pause implies no new work within one heartbeat' in lean4/HiveMindSpec.lean, zero sorry.",
+        "Add a repository test that fails if the producer agent, shield or BOINC client gains an outbound connection to anything other than the gateway, the bucket or loopback.",
+        "Measure egress per node type and publish the budget."
+      ],
+      "dependencies": [],
+      "definition_of_done": [
+        {"id": "PS-02-D1", "item": "Probe queue and trainers refuse to start below the VRAM floor, with unit tests."},
+        {"id": "PS-02-D2", "item": "Consent and pause invariants compiled in Lean with zero sorry, and an integration test showing a paused producer serves nothing within one heartbeat."},
+        {"id": "PS-02-D3", "item": "No-lateral-movement test in CI."},
+        {"id": "PS-02-D4", "item": "Egress receipt per node type, with the budget documented on the join page."}
+      ],
+      "validation": [
+        {"dod": "PS-02-D1", "command": "uv run pytest tests/test_vram_floor_guard.py", "receipt": "pytest output", "pass": "all pass; a simulated 4,000 MiB-free GPU is refused", "exists": false},
+        {"dod": "PS-02-D2", "command": "cd lean4 && lake env lean HiveMindSpec.lean && grep -c sorry HiveMindSpec.lean", "receipt": "Lean build log", "pass": "build succeeds and the sorry count is 0", "exists": true},
+        {"dod": "PS-02-D3", "command": "uv run pytest tests/test_no_lateral_movement.py", "receipt": "pytest output", "pass": "all pass, and the test fails when a planted outbound connection is added", "exists": false},
+        {"dod": "PS-02-D4", "command": "python3 scripts/node_egress_receipt.py", "receipt": "artifacts/experiments/NODE_EGRESS_<date>.json", "pass": "every node type has a measured egress per hour and a declared budget", "exists": false}
+      ],
+      "owner_decisions": ["Approve the floor fix as a blocker on further night runs."],
+      "constraints": ["Never modify /opt/hivemind/t4 outside the installer", "Lean zero sorry"],
+      "prereg_required": false,
+      "paper_refs": ["sec:limitations"],
+      "roadmap_ids": ["HM-S33-10", "HM-S33-11", "HM-S33-12", "HM-S33-15"],
+      "labels": ["help wanted", "agent-ready"],
+      "skills": "Python, Lean 4, networking tests"
+    },
+    {
+      "id": "PS-03",
+      "title": "Every public claim backed by a receipt",
+      "objective": "Make the portal, README and paper say only what receipts show: who is enrolled, what is served, what is trained, and that producers see prompts.",
+      "explanation": "Reviewers on Reddit found catalog entries claiming training that never happened, and the project agreed in public. Trust is the scarce resource for a volunteer project. Every number a visitor sees should link to a file that produced it, and the counter for trained rounds should never appear without the held-out trend beside it.",
+      "directions": [
+        "Accounts receipt: count accounts by kind (user/test/probe) and role (producer/trainer/consumer) and nodes active in 30 days, from the accounts store, without personal data.",
+        "Publish the chain-status and catalog receipts on the portal's benchmarks page with the paper's wording.",
+        "State the producer-sees-prompts rule on every page that offers the chat API.",
+        "README: a 10-line TL;DR at the top, session history moved to its own file."
+      ],
+      "dependencies": [],
+      "definition_of_done": [
+        {"id": "PS-03-D1", "item": "Accounts and active-node receipt generated by a script and committed without personal data."},
+        {"id": "PS-03-D2", "item": "Catalog exposes no trained status on an off-the-shelf tier (done in PR #717 once merged)."},
+        {"id": "PS-03-D3", "item": "Portal pages show the producer-sees-prompts notice and link each number to its receipt."},
+        {"id": "PS-03-D4", "item": "README starts with a TL;DR of at most 10 lines."}
+      ],
+      "validation": [
+        {"dod": "PS-03-D1", "command": "python3 scripts/accounts_receipt.py --out artifacts/experiments/ACCOUNTS_<date>.json", "receipt": "artifacts/experiments/ACCOUNTS_<date>.json", "pass": "counts by kind and role present; no email, IP or key in the file", "exists": false},
+        {"dod": "PS-03-D2", "command": "uv run pytest tests/test_router_catalog.py", "receipt": "pytest output", "pass": "test_no_trained_moe_status_on_an_off_the_shelf_tier passes", "exists": true},
+        {"dod": "PS-03-D3", "command": "uv run pytest tests/test_public_claims_have_receipts.py", "receipt": "pytest output", "pass": "every page with the chat API contains the notice; every number on the benchmarks page cites a receipt path", "exists": false},
+        {"dod": "PS-03-D4", "command": "python3 -c \"t=open('README.md').read().split('\\n## ')[0];assert len([l for l in t.splitlines() if l.strip()])<=14\"", "receipt": "README.md", "pass": "the section before the first heading has at most 10 content lines plus title and badges", "exists": true}
+      ],
+      "owner_decisions": ["Which personal fields may never appear in a receipt (default: none)."],
+      "constraints": ["No personal data in public receipts"],
+      "prereg_required": false,
+      "paper_refs": ["sec:limitations"],
+      "roadmap_ids": ["HM-S33-14", "HM-S33-16", "HM-S33-17", "HM-S33-18", "HM-S33-19"],
+      "labels": ["help wanted", "good first issue", "documentation"],
+      "skills": "Python, FastAPI templates, technical writing"
+    },
+    {
+      "id": "PS-04",
+      "title": "A trainer client volunteers can actually run",
+      "objective": "Ship the OpenTrainer worker so a volunteer with an 8-16 GB GPU can train work units overnight with outbound-only networking, and measure it on real volunteer hardware.",
+      "explanation": "Today two GPUs do all the training. Planetary scale means thousands of strangers' GPUs. The client must install in minutes, never open a port, stay under its VRAM ceiling, pause instantly for games, and report honest telemetry, including the real idle hours and power draw that the economics model currently assumes.",
+      "directions": [
+        "Start from scripts/hivemind_opentrainer_worker.py and the volunteer preflight tool (PR #255).",
+        "Measure on at least three GPU classes (for example RTX 20xx, 30xx/40xx, and an AMD card on Linux); record VRAM peak, step time, pause latency.",
+        "Replace the economics model's 18 h/day idle and 175 W assumptions with telemetry from enrolled trainers.",
+        "Answer the open community questions: AMD integrated GPUs on Linux, Windows WDDM headroom."
+      ],
+      "dependencies": ["PS-02"],
+      "definition_of_done": [
+        {"id": "PS-04-D1", "item": "Install-to-first-work-unit in under 15 minutes on a clean machine, documented step by step."},
+        {"id": "PS-04-D2", "item": "Measured on at least 3 GPU classes, with VRAM peak below the declared ceiling and pause latency below 1.5 s."},
+        {"id": "PS-04-D3", "item": "Idle-hours and power telemetry from at least 10 enrolled trainers feeds the economics receipt."}
+      ],
+      "validation": [
+        {"dod": "PS-04-D1", "command": "bash scripts/volunteer_install_smoke.sh", "receipt": "artifacts/experiments/TRAINER_INSTALL_<date>.json", "pass": "elapsed_s < 900 and first work unit accepted", "exists": false},
+        {"dod": "PS-04-D2", "command": "python3 scripts/trainer_hardware_receipt.py", "receipt": "artifacts/experiments/TRAINER_HARDWARE_<date>.json", "pass": "at least 3 distinct GPU classes; every row vram_peak_mib < ceiling_mib and pause_ms < 1500", "exists": false},
+        {"dod": "PS-04-D3", "command": "python3 scripts/consumer_gpu_economics.py", "receipt": "artifacts/experiments/CONSUMER_GPU_ECONOMICS_<date>.json", "pass": "idle_hours_per_day and board power sourced from telemetry with n >= 10", "exists": true}
+      ],
+      "owner_decisions": [],
+      "constraints": ["Outbound-only networking", "No code download or execution on the volunteer machine beyond the signed client"],
+      "prereg_required": false,
+      "paper_refs": ["sec:rtx"],
+      "roadmap_ids": ["HM-S33-17", "HM-S33-20", "HM-S33-22"],
+      "labels": ["help wanted", "agent-ready"],
+      "skills": "Python packaging, CUDA/ROCm, Windows and Linux testing"
+    },
+    {
+      "id": "PS-05",
+      "title": "Verification that scales: catching cheats and poison",
+      "objective": "Measure how well the project detects bad work (junk inference answers, poisoned or lazy training deltas) and how the cost grows with the number of nodes.",
+      "explanation": "Strangers will try to farm points or poison the model. The paper proposes Multi-Krum plus replay today and zero-knowledge proofs later, but neither has been measured with planted cheaters at scale. Before recruiting thousands of nodes we need the false-accept and false-reject rates, and the node count where replay becomes too expensive.",
+      "directions": [
+        "Inference: implement blinded canary prompts with a Wilson lower-bound score per node; plant junk-answering nodes and measure detection.",
+        "Training: plant label-flipping, noise and ALIE-style poisoners at 10-30% and measure Multi-Krum plus replay (E21 crossover).",
+        "Keep validators execution-class matched (the paper's E12 result: cross-architecture replay fails the tolerance).",
+        "Treat zk proofs of training as research; do not claim them until a prototype is measured."
+      ],
+      "dependencies": ["PS-01"],
+      "definition_of_done": [
+        {"id": "PS-05-D1", "item": "Canary probe implemented, with measured detection rate and false-positive rate on planted nodes."},
+        {"id": "PS-05-D2", "item": "E21 report: verification cost per work unit versus node count, with the crossover against replay."},
+        {"id": "PS-05-D3", "item": "Poisoner detection at 10%, 20% and 30% planted fractions reported with confidence intervals."}
+      ],
+      "validation": [
+        {"dod": "PS-05-D1", "command": "uv run pytest tests/test_canary_probe.py", "receipt": "artifacts/experiments/CANARY_PROBE_<date>.json", "pass": "detection >= pre-registered threshold and honest-node false positives <= pre-registered threshold", "exists": false},
+        {"dod": "PS-05-D2", "command": "python3 scripts/run_experiment_E21.py", "receipt": "artifacts/experiments/E21_verification_cost_report.json", "pass": "report contains cost per work unit at N in {100, 1000, 10000} and the crossover N", "exists": false},
+        {"dod": "PS-05-D3", "command": "python3 scripts/run_experiment_E21.py --poison 0.1,0.2,0.3", "receipt": "artifacts/experiments/E21_verification_cost_report.json", "pass": "detection rate with 95% interval for each planted fraction", "exists": false}
+      ],
+      "owner_decisions": ["Thresholds for the canary probe before it runs."],
+      "constraints": [],
+      "prereg_required": true,
+      "paper_refs": ["sec:byz_replay_note", "sec:e12", "sec:roadmap_phase1"],
+      "roadmap_ids": ["HM-S30-02", "HM-S33-15"],
+      "labels": ["research", "needs-prereg", "help wanted"],
+      "skills": "Byzantine-robust aggregation, statistics, security testing"
+    },
+    {
+      "id": "PS-06",
+      "title": "Bandwidth: measure compression on real home internet",
+      "objective": "Measure outer-gradient and adapter compression (Top-1% DCT with EF21, the paper's Pillar 1) on real residential links, including its effect on held-out loss.",
+      "explanation": "Home connections are slow and asymmetric. The paper claims a 100x bandwidth cut from Top-1% compression with error feedback, measured in simulation. At scale, what matters is bytes per round on real links and whether the compressed rounds still improve the model.",
+      "directions": [
+        "Use the existing compressor (compress_top1pct_dct_ef21) inside the PS-01-fixed chain, not in a toy.",
+        "Measure on at least 5 volunteer links with recorded up/down bandwidth and RTT.",
+        "Report bytes per round and the held-out loss change against an uncompressed control arm."
+      ],
+      "dependencies": ["PS-01", "PS-04"],
+      "definition_of_done": [
+        {"id": "PS-06-D1", "item": "Pre-registered experiment comparing compressed and uncompressed rounds on the same chain."},
+        {"id": "PS-06-D2", "item": "Measured bytes per round and loss change on at least 5 real residential links."}
+      ],
+      "validation": [
+        {"dod": "PS-06-D1", "command": "test -f artifacts/experiments/E26_residential_compression_prereg.json", "receipt": "artifacts/experiments/E26_residential_compression_prereg.json", "pass": "committed before the first E26 round", "exists": false},
+        {"dod": "PS-06-D2", "command": "python3 -c \"import json;r=json.load(open('artifacts/experiments/E26_residential_compression_report.json'));assert len(r['links'])>=5\"", "receipt": "artifacts/experiments/E26_residential_compression_report.json", "pass": "at least 5 links; compressed arm not worse than control beyond the registered margin", "exists": false}
+      ],
+      "owner_decisions": [],
+      "constraints": [],
+      "prereg_required": true,
+      "paper_refs": ["sec:roadmap_phase1", "sec:e20_live_experiment"],
+      "roadmap_ids": ["HM-S29-02"],
+      "labels": ["research", "needs-prereg", "help wanted"],
+      "skills": "Distributed optimisation, networking measurement"
+    },
+    {
+      "id": "PS-07",
+      "title": "No single front door: discovery and identity without the gateway",
+      "objective": "Let nodes find and verify each other without the project's Cloud Run gateway, and interoperate with KwaaiNet/Petals-style swarms (owner decision of 2026-11-07).",
+      "explanation": "A shared pool with one front door still has one company in the middle, as a Reddit reviewer put it. The repository has a Kademlia DHT and STUN/QUIC code but no measurement of nodes finding each other without the gateway. KwaaiNet already ships keypair identity, verifiable credentials and a Petals-compatible swarm; reusing their conventions is cheaper than inventing ours.",
+      "directions": [
+        "Identity bridge: a producer presents an Ed25519 key and a W3C Verifiable Credential in addition to its HMT key.",
+        "E22: advertise one bee on a Kademlia DHT using KwaaiNet's conventions; measure discovery time and false peers with the gateway switched off.",
+        "Run a weekly scripted liveness check of the public Petals swarm and record it as a receipt.",
+        "Keep the producer-sees-prompts notice in every joint document."
+      ],
+      "dependencies": ["PS-02"],
+      "definition_of_done": [
+        {"id": "PS-07-D1", "item": "Identity bridge verified against shared test vectors."},
+        {"id": "PS-07-D2", "item": "E22 report: discovery without the gateway, measured against registered thresholds."},
+        {"id": "PS-07-D3", "item": "Petals liveness receipt produced weekly for 4 weeks."}
+      ],
+      "validation": [
+        {"dod": "PS-07-D1", "command": "uv run pytest tests/test_identity_bridge.py", "receipt": "pytest output", "pass": "all shared Ed25519/VC test vectors verify; tampered vectors are rejected", "exists": false},
+        {"dod": "PS-07-D2", "command": "python3 scripts/run_experiment_E22.py", "receipt": "artifacts/experiments/E22_discovery_report.json", "pass": "discovery time and false-peer rate within the registered thresholds with the gateway off", "exists": false},
+        {"dod": "PS-07-D3", "command": "python3 scripts/petals_liveness_receipt.py", "receipt": "artifacts/experiments/PETALS_LIVENESS_<date>.json", "pass": "4 weekly receipts committed", "exists": false}
+      ],
+      "owner_decisions": ["Which bee is advertised in E22 (its prompts are visible to any peer)."],
+      "constraints": ["No paid static external IPs for internal nodes"],
+      "prereg_required": true,
+      "paper_refs": ["sec:roadmap_phase2", "sec:live_wan_deployment"],
+      "roadmap_ids": ["HM-S2-01", "HM-S2-02", "HM-S31-01", "HM-S33-07"],
+      "labels": ["research", "needs-prereg", "help wanted"],
+      "skills": "libp2p/Kademlia, cryptographic identity, Rust or Python"
+    },
+    {
+      "id": "PS-08",
+      "title": "One volunteer fabric: AMCP mesh and BOINC together",
+      "objective": "Connect the two volunteer channels: BOINC work-unit events on the AMCP mesh, one identity per volunteer across both, and measured AMCP mobility before it is used.",
+      "explanation": "HiveMind runs BOINC for training and an AMCP/Kafka mesh for serving, and they do not talk to each other. A volunteer who trains and serves has two identities and two ledgers. The AMCP whitepaper claims mobility and linear scaling but publishes no measurements, so ours are the evidence.",
+      "directions": [
+        "Publish 'assimilated' and 'validated' events from the BOINC validator onto AMCP topics, read-only on the ledger.",
+        "Reconcile BOINC credit and HMT per volunteer; resolve the known order-of-magnitude credit mismatch first.",
+        "E23: measure AMCP migrate/replicate at 100 and 1,000 simulated bees on the Kafka transport (Spot voters, stopped when idle)."
+      ],
+      "dependencies": ["PS-03"],
+      "definition_of_done": [
+        {"id": "PS-08-D1", "item": "Hosts see the newest validated adapter pointer from the mesh, equal to the ledger's."},
+        {"id": "PS-08-D2", "item": "Per-volunteer reconciliation receipt between BOINC credit and HMT."},
+        {"id": "PS-08-D3", "item": "E23 report on migration time, state loss and duplicate delivery."}
+      ],
+      "validation": [
+        {"dod": "PS-08-D1", "command": "uv run pytest tests/test_boinc_mesh_events.py", "receipt": "pytest output", "pass": "the adapter pointer seen on the mesh equals the ledger's in a paired test; no event changes credit", "exists": false},
+        {"dod": "PS-08-D2", "command": "python3 scripts/credit_reconciliation_receipt.py", "receipt": "artifacts/experiments/CREDIT_RECONCILIATION_<date>.json", "pass": "every volunteer row reconciles within the registered tolerance", "exists": false},
+        {"dod": "PS-08-D3", "command": "python3 scripts/run_experiment_E23.py", "receipt": "artifacts/experiments/E23_amcp_mobility_report.json", "pass": "results at 100 and 1,000 bees against registered thresholds", "exists": false}
+      ],
+      "owner_decisions": ["Resolution of the BOINC credit versus verified_credit mismatch."],
+      "constraints": ["Kafka voters are Spot and stopped when idle"],
+      "prereg_required": true,
+      "paper_refs": ["sec:layer1_waggle_dance", "sec:bee_mesh_foundations"],
+      "roadmap_ids": ["HM-S2-03", "HM-S2-04", "HM-S2-05", "HM-S2-06"],
+      "labels": ["help wanted", "java"],
+      "skills": "Kafka, Java 21, BOINC server, Python"
+    },
+    {
+      "id": "PS-09",
+      "title": "The 1,000-node heterogeneous testbed",
+      "objective": "Build the paper's Phase 3 simulator: 1,000 emulated nodes with CUDA, ROCm and Metal profiles on real residential network traces, with planted Byzantine nodes, and run its pre-registered gates.",
+      "explanation": "Scaling bugs appear at scale. The paper's Phase 3 plans a 1,000-node simulation with real network traces and 10-30% malicious nodes before any live rollout. The earlier MESH-SCALE-1 result reached 1,000 simulated bees on one VM, one run per size, with a thin latency margin; this extends it to training traffic and adversaries.",
+      "directions": [
+        "Start from the MESH-SCALE-1 harness and its report.",
+        "Feed real link traces from PS-06 and hardware profiles from PS-04.",
+        "Run on Spot or CPU-only infrastructure within the 150 USD/month budget; real scale comes from volunteers, not from the cloud."
+      ],
+      "dependencies": ["PS-05", "PS-06"],
+      "definition_of_done": [
+        {"id": "PS-09-D1", "item": "Pre-registration with time-to-convergence, bandwidth per epoch, prover or replay overhead and routing latency thresholds."},
+        {"id": "PS-09-D2", "item": "Report with at least 3 runs per node count (100, 300, 1,000)."}
+      ],
+      "validation": [
+        {"dod": "PS-09-D1", "command": "test -f artifacts/experiments/E27_testbed_1000_prereg.json", "receipt": "artifacts/experiments/E27_testbed_1000_prereg.json", "pass": "committed before the first E27 run", "exists": false},
+        {"dod": "PS-09-D2", "command": "python3 -c \"import json;r=json.load(open('artifacts/experiments/E27_testbed_1000_report.json'));assert all(len(r['runs'][str(n)])>=3 for n in (100,300,1000))\"", "receipt": "artifacts/experiments/E27_testbed_1000_report.json", "pass": "3 runs per size; gates decided as registered", "exists": false}
+      ],
+      "owner_decisions": ["Budget ceiling for the simulation runs within the 150 USD/month cap."],
+      "constraints": ["Spot VMs only, deleted after the run", "GCP within 150 USD/month"],
+      "prereg_required": true,
+      "paper_refs": ["sec:roadmap_phase3", "sec:literature_queueing_model"],
+      "roadmap_ids": ["HM-S31-02"],
+      "labels": ["research", "needs-prereg", "help wanted"],
+      "skills": "Distributed systems simulation, network emulation"
+    },
+    {
+      "id": "PS-10",
+      "title": "Open science, cost and resilience",
+      "objective": "Keep every release reproducible and every claim locked, keep cloud spend within budget, and protect the project against an AI-capex downturn (mirrored base weights, prosumer cards).",
+      "explanation": "A volunteer project survives on credibility and on not depending on anyone's goodwill. Each paper version goes to Zenodo with verified checksums and every number through the provenance lock. The project owns no GPUs and caps cloud spend at 150 USD/month, so a market downturn mostly threatens the supply of open base weights and the distribution channels, which this stream mirrors.",
+      "directions": [
+        "Release checklist: lock passes on the compiled PDF, Zenodo upload verified, receipt committed, GitHub release tagged.",
+        "Monthly cost receipt from scripts/d1_cost_estimate.py.",
+        "Mirror the base weights the chain depends on (Granite, Qwen, Gemma) under their licences.",
+        "Seek one external review of record (gate G4)."
+      ],
+      "dependencies": [],
+      "definition_of_done": [
+        {"id": "PS-10-D1", "item": "Each paper release has a verified Zenodo receipt and a lock pass on the compiled PDF."},
+        {"id": "PS-10-D2", "item": "Monthly cost receipt at or below 150 USD."},
+        {"id": "PS-10-D3", "item": "Base weights used by the chain mirrored with licence files and checksums."},
+        {"id": "PS-10-D4", "item": "One external review recorded in paper/review/ with a point-by-point response."}
+      ],
+      "validation": [
+        {"dod": "PS-10-D1", "command": "python3 -c \"import json;r=json.load(open('paper/ZENODO_DEPOSIT_RECEIPT.json'));assert r['verified'] and not r['checksum_mismatches']\"", "receipt": "paper/ZENODO_DEPOSIT_RECEIPT.json", "pass": "verified true and no mismatches", "exists": true},
+        {"dod": "PS-10-D2", "command": "python3 scripts/d1_cost_estimate.py", "receipt": "cost estimate output", "pass": "monthly total <= 150 USD", "exists": true},
+        {"dod": "PS-10-D3", "command": "python3 scripts/base_weights_mirror_receipt.py", "receipt": "artifacts/experiments/BASE_WEIGHTS_MIRROR_<date>.json", "pass": "every chain base model has a mirror path, licence and sha256", "exists": false},
+        {"dod": "PS-10-D4", "command": "ls paper/review/", "receipt": "paper/review/", "pass": "a new external review file and its response file", "exists": true}
+      ],
+      "owner_decisions": ["Who is asked for the external review."],
+      "constraints": ["GCP within 150 USD/month", "Zenodo publication only with the owner's explicit go"],
+      "prereg_required": false,
+      "paper_refs": ["sec:roadmap_phase4", "sec:limitations"],
+      "roadmap_ids": ["HM-S33-21", "HM-S33-22"],
+      "labels": ["help wanted", "documentation"],
+      "skills": "Reproducibility, release engineering, licensing"
+    },
+    {
+      "id": "PS-11",
+      "title": "Parked research candidates, with reopen conditions",
+      "objective": "Keep a short, honest list of ideas that were assessed and parked, each with the measured reason and the condition that would reopen it, so contributors do not redo work.",
+      "explanation": "Good ideas arrive often. Some were already measured: the paper's HN1 assessment parked H-Net chunk-level routing because H-Net's boundary bytes were 1.54x larger than a BPE split (failing a 2x reduction threshold) and both validity controls of HN1 failed. A parked list with reopen conditions saves contributors from re-running settled questions.",
+      "directions": [
+        "H-Net dynamic chunking: parked (PARK_CHUNK_LEVEL_ROUTING, paper sec:hn1_hnet). Reopen only if a chunker reaches at least 2x fewer boundary bytes than a BPE split on our domains, or a distillation path fits a 16 GB node.",
+        "Decoupled DiLoCo alignment note: write it after PS-01 explains the regression.",
+        "zk-SNARK proofs of training: research only until a prototype is measured (PS-05)."
+      ],
+      "dependencies": ["PS-01"],
+      "definition_of_done": [
+        {"id": "PS-11-D1", "item": "Each parked idea has its measured reason, its receipt and a reopen condition in docs/roadmap/PARKED.md."}
+      ],
+      "validation": [
+        {"dod": "PS-11-D1", "command": "uv run pytest tests/test_planetary_streams.py -k parked", "receipt": "pytest output", "pass": "every parked entry names a receipt that exists and a reopen condition", "exists": true}
+      ],
+      "owner_decisions": [],
+      "constraints": [],
+      "prereg_required": false,
+      "paper_refs": ["sec:hn1_hnet", "sec:decoupled"],
+      "roadmap_ids": ["HM-S10-12", "HM-S33-09", "HM-S33-23", "HM-S33-24", "HM-S33-25"],
+      "labels": ["research"],
+      "skills": "Literature review"
+    }
+  ],
+  "parked": [
+    {"idea": "H-Net dynamic chunking for chunk-level routing", "decision": "PARK_CHUNK_LEVEL_ROUTING", "reason": "HN1 failed both registered validity controls; analytic Measurement 4 gives 0.6481x boundary-byte reduction against a BPE split (H-Net sends 1.54x more bytes), below the registered 2x threshold.", "receipt": "artifacts/experiments/HNET_T4_PROBE_report.json", "paper_ref": "sec:hn1_hnet", "reopen_if": "a chunker reaches at least 2x fewer boundary bytes than a BPE split on code, Lean and French, or a distillation path fits a 16 GB node"},
+    {"idea": "Lattice KV-cache codecs (A2/E8) in the inference ring", "decision": "NOT_ADOPTED", "reason": "E11 refuted P11a on Qwen2.5-0.5B (one rate-matched cell) and on Gemma; the Coder-7B row was withdrawn as invalid.", "receipt": "artifacts/experiments/E11_kv_lattice_report.json", "paper_ref": "sec:e11", "reopen_if": "a codec beats FP8 at equal bytes with the seed interval excluding zero on two models"}
+  ]
+}

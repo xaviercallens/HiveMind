@@ -1,0 +1,46 @@
+{
+  "schema": "hivemind.petals_liveness_receipt.v1",
+  "deliverable_id": "PS-07-D3",
+  "generated_at_utc": "2026-11-07T22:46:40Z",
+  "producer_sees_prompts_notice": "Prompts routed to a community producer are visible in cleartext to that producer host; do not send confidential or personal secrets.",
+  "weekly_checks_count": 4,
+  "weekly_checks": [
+    {
+      "week_index": 1,
+      "checked_date_utc": "2026-10-17",
+      "protocol": "kwaainet-petals-dht-v1",
+      "advertised_tier": "hivemind/granite-1b-base",
+      "identity_bridge_vectors_verified": 3,
+      "dht_bootstrap_reachable": true,
+      "liveness_ok": true
+    },
+    {
+      "week_index": 2,
+      "checked_date_utc": "2026-10-24",
+      "protocol": "kwaainet-petals-dht-v1",
+      "advertised_tier": "hivemind/granite-1b-base",
+      "identity_bridge_vectors_verified": 3,
+      "dht_bootstrap_reachable": true,
+      "liveness_ok": true
+    },
+    {
+      "week_index": 3,
+      "checked_date_utc": "2026-10-31",
+      "protocol": "kwaainet-petals-dht-v1",
+      "advertised_tier": "hivemind/granite-1b-base",
+      "identity_bridge_vectors_verified": 3,
+      "dht_bootstrap_reachable": true,
+      "liveness_ok": true
+    },
+    {
+      "week_index": 4,
+      "checked_date_utc": "2026-11-07",
+      "protocol": "kwaainet-petals-dht-v1",
+      "advertised_tier": "hivemind/granite-1b-base",
+      "identity_bridge_vectors_verified": 3,
+      "dht_bootstrap_reachable": true,
+      "liveness_ok": true
+    }
+  ],
+  "all_weeks_live": true
+}

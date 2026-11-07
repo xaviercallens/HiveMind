@@ -1,0 +1,19 @@
+{
+  "schema": "hivemind.trainer_install_smoke_receipt.v1",
+  "deliverable_id": "PS-04-D1",
+  "generated_at_utc": "2026-11-07T22:46:28Z",
+  "elapsed_s": 4.6965,
+  "max_allowed_elapsed_s": 900.0,
+  "first_work_unit_accepted": true,
+  "heartbeats_sent": 1,
+  "work_units_submitted": 1,
+  "outbound_only_networking": true,
+  "inbound_listening_sockets_opened_by_worker": 0,
+  "steps_executed": [
+    "1. Verify Python environment and hivemind_opentrainer_worker entrypoint",
+    "2. Check VRAM floor guard (6144 MiB free - 1500 MiB peak >= 4300 MiB floor)",
+    "3. Verify zero_private_user_prompts_on_trainer privacy contract (--verify-privacy)",
+    "4. Send outbound heartbeat, receive workunit offer, and submit signed SHA-256 delta (--submit-delta --once)"
+  ],
+  "passes_do_d": true
+}

@@ -1,0 +1,31 @@
+{
+  "schema": "hivemind.e22_discovery_report.v1",
+  "experiment_id": "E22",
+  "deliverable_id": "PS-07-D2",
+  "generated_at_utc": "2026-11-07T22:46:34Z",
+  "gateway_online": false,
+  "advertised_bee": "hivemind/granite-1b-base",
+  "kwaainet_dht_topic": "/kwaainet/petals/hivemind/v1/tiers/hivemind/granite-1b-base",
+  "producer_sees_prompts_notice": "Prompts routed to a community producer are visible in cleartext to that producer host; do not send confidential or personal secrets.",
+  "dht_parameters": {
+    "dht_size": 64,
+    "k_bucket_replication": 8,
+    "honest_advertisers": 8,
+    "planted_sybil_advertisers": 8,
+    "lookup_trials": 32
+  },
+  "registered_thresholds": {
+    "max_discovery_p95_ms": 500.0,
+    "max_false_peer_rate": 0.0
+  },
+  "metrics": {
+    "discovery_time_ms_p50": 5.3386,
+    "discovery_time_ms_p95": 5.6131,
+    "verified_honest_discoveries": 256,
+    "sybils_evaluated": 256,
+    "sybils_rejected": 256,
+    "false_peers_accepted": 0,
+    "false_peer_rate": 0.0
+  },
+  "passes_registered_thresholds": true
+}

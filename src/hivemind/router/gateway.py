@@ -2235,19 +2235,51 @@ def create_router_app(
             "compute_points": int(round(bal)),
         }
 
+    _auth_cors_headers = {
+        "Cache-Control": "no-store",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    }
+
+    @app.options("/v1/hivemind/auth/register")
+    @app.options("/api/v1/auth/register")
+    @app.options("/v1/hivemind/auth/login")
+    @app.options("/api/v1/auth/login")
+    def auth_cors_preflight() -> JSONResponse:
+        return JSONResponse(content={}, status_code=200, headers=_auth_cors_headers)
+
     @app.post("/v1/hivemind/auth/register")
     @app.post("/api/v1/auth/register")
     async def auth_register_api(request: Request) -> JSONResponse:
         data = await _parse_auth_payload(request)
-        body = await run_in_threadpool(_execute_credential_register, request, data)
-        return JSONResponse(body, headers={"Cache-Control": "no-store"})
+        try:
+            body = await run_in_threadpool(_execute_credential_register, request, data)
+        except RouterError as exc:
+            return _error_response(
+                exc.status,
+                exc.message,
+                exc.error_type,
+                exc.code,
+                {**(exc.headers or {}), **_auth_cors_headers},
+            )
+        return JSONResponse(body, headers=_auth_cors_headers)
 
     @app.post("/v1/hivemind/auth/login")
     @app.post("/api/v1/auth/login")
     async def auth_login_api(request: Request) -> JSONResponse:
         data = await _parse_auth_payload(request)
-        body = await run_in_threadpool(_execute_credential_login, request, data)
-        return JSONResponse(body, headers={"Cache-Control": "no-store"})
+        try:
+            body = await run_in_threadpool(_execute_credential_login, request, data)
+        except RouterError as exc:
+            return _error_response(
+                exc.status,
+                exc.message,
+                exc.error_type,
+                exc.code,
+                {**(exc.headers or {}), **_auth_cors_headers},
+            )
+        return JSONResponse(body, headers=_auth_cors_headers)
 
     router_sso_states: dict[str, dict[str, Any]] = {}
     router_guests: dict[str, dict[str, Any]] = {}
@@ -4638,12 +4670,18 @@ def create_router_app(
     @app.api_route("/v3-portal", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/v3", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/v3.1", methods=["GET", "HEAD"], response_class=HTMLResponse)
-    def router_v3_1_stitch_portal() -> HTMLResponse:
+    @app.api_route("/v3.1/auth", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def router_v3_1_stitch_portal(request: Request) -> HTMLResponse:
         from hivemind.boinc.hivemind_at_home_dashboard import POC_STATUS_HEADER, build_hivemind_at_home_state, portal_csp
         from hivemind.boinc.stitch_portal import render_stitch_enhanced_portal
 
         state = build_hivemind_at_home_state()
-        html_doc = render_stitch_enhanced_portal(state, default_screen="home")
+        screen = "auth" if request.url.path.endswith("/auth") or request.query_params.get("screen") == "auth" else "home"
+        html_doc = render_stitch_enhanced_portal(
+            state,
+            api_base_url=str(request.base_url).rstrip("/"),
+            default_screen=screen,
+        )
         return HTMLResponse(
             content=html_doc,
             headers={

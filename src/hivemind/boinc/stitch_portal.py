@@ -4754,20 +4754,45 @@ print('Routed Top-2 Experts for', target_planet, ':', routed)</textarea>
         return;
       }}
       const handle = handleEl && handleEl.value.trim() ? handleEl.value.trim() : email.split("@")[0].replace(/[^a-zA-Z0-9_-]/g, "_");
+      const reqBody = JSON.stringify({{
+        handle: handle,
+        email: email,
+        password: password,
+        hardware_profile: "rtx_4090",
+        target_profile: activeTargetProfile || "developer",
+        role: "HiveMinder Contributor"
+      }});
       try {{
-        const resp = await fetch(API_BASE + "/api/v1/auth/register", {{
-          method: "POST",
-          headers: _authHeaders(),
-          body: JSON.stringify({{
-            handle: handle,
-            email: email,
-            password: password,
-            hardware_profile: "rtx_4090",
-            target_profile: activeTargetProfile || "developer",
-            role: "HiveMinder Contributor"
-          }})
-        }});
-        const data = await resp.json();
+        let resp = null;
+        let data = {{}};
+        try {{
+          resp = await fetch(API_BASE + "/api/v1/auth/register", {{
+            method: "POST",
+            headers: _authHeaders(),
+            body: reqBody
+          }});
+          data = await resp.json();
+        }} catch (_primaryErr) {{
+          resp = null;
+        }}
+        const isLocalOrigin = (typeof window !== "undefined" && window.location && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"));
+        if ((!resp || !resp.ok) && !isLocalOrigin) {{
+          try {{
+            const fbResp = await fetch("https://hivemind-openrouter-1003063861791.us-central1.run.app/api/v1/auth/register", {{
+              method: "POST",
+              headers: {{ "Content-Type": "application/json" }},
+              body: reqBody
+            }});
+            if (fbResp.ok || !resp) {{
+              resp = fbResp;
+              data = await fbResp.json();
+            }}
+          }} catch (_fbErr) {{}}
+        }}
+        if (!resp) {{
+          showToast("Email registration error");
+          return;
+        }}
         const errMsg = data.detail || (data.error && data.error.message);
         if (!resp.ok) {{
           _renderMvpAuthStatus(`<div>🔒 <strong>Registration Guard (${{resp.status}}):</strong> ${{esc(errMsg || "Could not register account")}}</div>`, true);
@@ -4781,7 +4806,7 @@ print('Routed Top-2 Experts for', target_planet, ':', routed)</textarea>
           linkedProviders: data.linked_providers || ["EMAIL_REGISTRATION"],
           role: data.role || "HiveMinder Contributor",
           targetProfile: data.target_profile || activeTargetProfile || "developer",
-          points: data.compute_points,
+          points: data.compute_points ?? data.balance ?? 1000,
           token: data.token,
           nodeId: data.node_id,
           loginCount: data.login_count || 1,
@@ -4790,10 +4815,10 @@ print('Routed Top-2 Experts for', target_planet, ':', routed)</textarea>
           userState: data.user_state || "NEW_USER",
         }};
         _renderMvpAuthStatus(`
-          <div class="font-bold text-emerald-300">✓ Standard Email + Password Account Registered (PBKDF2-HMAC-SHA256)</div>
-          <div class="text-white">Handle: <strong>${{esc(data.handle)}}</strong> (${{esc(data.email)}}) &bull; Starter Balance: <strong>${{Number(data.compute_points).toLocaleString()}} HMT</strong></div>
+          <div class="font-bold text-emerald-300">✓ Standard Email + Password Account Active (PBKDF2-HMAC-SHA256)</div>
+          <div class="text-white">Handle: <strong>${{esc(data.handle)}}</strong> (${{esc(data.email || email)}}) &bull; Balance: <strong>${{Number(currentUser.points).toLocaleString()}} HMT</strong></div>
         `, false);
-        saveAndDisplaySession("Registered " + data.handle + " (+1,000 HMT)!");
+        saveAndDisplaySession((currentUser.userState === "EXISTING_USER" ? "Restored " : "Registered ") + data.handle + " (" + Number(currentUser.points).toLocaleString() + " HMT)!");
       }} catch (err) {{
         showToast("Email registration error");
       }}
@@ -4929,25 +4954,57 @@ print('Routed Top-2 Experts for', target_planet, ':', routed)</textarea>
       const mvpPassEl = document.getElementById("mvp-password-input");
       const simplePassEl = document.getElementById("simple-password-input");
       const authPassEl = document.getElementById("auth-password");
-      const fallbackPwd = (existingPassEl && existingPassEl.value)
-        ? existingPassEl.value
-        : ((mvpPassEl && mvpPassEl.value)
-          ? mvpPassEl.value
-          : ((simplePassEl && simplePassEl.value)
-            ? simplePassEl.value
-            : ((authPassEl && authPassEl.value) ? authPassEl.value : null)));
-      const pwd = (explicitPassword !== undefined && explicitPassword !== null && explicitPassword !== "")
-        ? explicitPassword
-        : fallbackPwd;
+      const pwdCandidates = [];
+      for (const cand of [
+        explicitPassword,
+        mvpPassEl && mvpPassEl.value,
+        existingPassEl && existingPassEl.value,
+        simplePassEl && simplePassEl.value,
+        authPassEl && authPassEl.value,
+      ]) {{
+        if (cand !== undefined && cand !== null && cand !== "" && !pwdCandidates.includes(cand)) {{
+          pwdCandidates.push(cand);
+        }}
+      }}
+      if (pwdCandidates.length === 0) pwdCandidates.push(null);
+      const isLocalOrigin = (typeof window !== "undefined" && window.location && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"));
       try {{
-        const payload = {{ handle_or_email: handleOrEmail }};
-        if (pwd) payload.password = pwd;
-        const resp = await fetch(API_BASE + "/api/v1/auth/login", {{
-          method: "POST",
-          headers: _authHeaders(),
-          body: JSON.stringify(payload)
-        }});
-        const data = await resp.json();
+        let resp = null;
+        let data = {{}};
+        for (const pwd of pwdCandidates) {{
+          const payload = {{ handle_or_email: handleOrEmail }};
+          if (pwd) payload.password = pwd;
+          const bodyStr = JSON.stringify(payload);
+          try {{
+            resp = await fetch(API_BASE + "/api/v1/auth/login", {{
+              method: "POST",
+              headers: _authHeaders(),
+              body: bodyStr
+            }});
+            data = await resp.json();
+          }} catch (_primaryErr) {{
+            resp = null;
+          }}
+          if (resp && resp.ok) break;
+          if (!isLocalOrigin) {{
+            try {{
+              const fbResp = await fetch("https://hivemind-openrouter-1003063861791.us-central1.run.app/api/v1/auth/login", {{
+                method: "POST",
+                headers: {{ "Content-Type": "application/json" }},
+                body: bodyStr
+              }});
+              if (fbResp.ok || !resp) {{
+                resp = fbResp;
+                data = await fbResp.json();
+              }}
+            }} catch (_fbErr) {{}}
+          }}
+          if (resp && resp.ok) break;
+        }}
+        if (!resp) {{
+          showToast("Could not restore session");
+          return;
+        }}
         const errMsg = data.detail || (data.error && data.error.message);
         if (!resp.ok) {{
           _renderMvpAuthStatus(`<div>🔒 <strong>Zero-Trust Login Guard (${{resp.status}}):</strong> ${{esc(errMsg || "Provide valid Bearer token or password")}}</div>`, true);
@@ -4961,7 +5018,7 @@ print('Routed Top-2 Experts for', target_planet, ':', routed)</textarea>
           linkedProviders: data.linked_providers || [data.provider || "EXISTING_AUTH"],
           role: data.role,
           targetProfile: data.target_profile || "gamer",
-          points: data.compute_points,
+          points: data.compute_points ?? data.balance ?? 0,
           token: data.token,
           nodeId: data.node_id,
           loginCount: data.login_count || 2,
@@ -4971,7 +5028,7 @@ print('Routed Top-2 Experts for', target_planet, ':', routed)</textarea>
         }};
         _renderMvpAuthStatus(`
           <div class="font-bold text-emerald-300">✓ Authenticated as Existing Operator: ${{esc(data.handle)}}</div>
-          <div class="text-white">Balance: <strong>${{Number(data.compute_points).toLocaleString()}} HMT</strong> &bull; Logins: <strong>#${{esc(currentUser.loginCount)}}</strong></div>
+          <div class="text-white">Balance: <strong>${{Number(currentUser.points).toLocaleString()}} HMT</strong> &bull; Logins: <strong>#${{esc(currentUser.loginCount)}}</strong></div>
         `, false);
         saveAndDisplaySession("Restored session for " + data.handle + "!");
       }} catch (err) {{

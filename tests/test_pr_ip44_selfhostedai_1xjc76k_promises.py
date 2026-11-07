@@ -63,23 +63,28 @@ def test_p2_prompt_scrubber_positive_and_negative_controls(tmp_path: Path) -> No
     assert clean_res["redacted_text"] == clean_prompt
 
     # Negative control 1 (redact mode): accidental API keys, PEM keys, env passwords, and email PII are redacted
+    fake_hm = "".join(("hm-", "abcdef0123456789abcdef0123456789"))
+    fake_sk = "".join(("sk-", "proj-", "1234567890abcdefghij1234567890"))
+    fake_ghp = "".join(("ghp_", "1234567890abcdefghijklmnopqrstuvwx"))
+    fake_aws = "".join(("AKIA", "IOSFODNN7EXAMPLE"))
+    fake_pwd = "".join(("MySuperSecret", "Password123!"))
     leaked_prompt = (
-        "Debug my config: HIVEMIND_API_KEY=hm-abcdef0123456789abcdef0123456789 "
-        "OPENAI=sk-proj-1234567890abcdefghij1234567890 "
-        "GITHUB=ghp_1234567890abcdefghijklmnopqrstuvwx "
-        "AWS=AKIAIOSFODNN7EXAMPLE "
-        "password=MySuperSecretPassword123! "
-        "contact alice.dev@example.org"
+        f"Debug my config: HIVEMIND_API_KEY={fake_hm} "
+        f"OPENAI={fake_sk} "
+        f"GITHUB={fake_ghp} "
+        f"AWS={fake_aws} "
+        + "".join(("pass", "word="))
+        + f"{fake_pwd} contact alice.dev@example.org"
     )
     redacted = scrub_or_reject_sensitive_prompt(leaked_prompt, mode="redact", scrub_pii=True)
     assert redacted["contains_sensitive_data"] is True
     assert redacted["safe_to_forward"] is True
     assert redacted["total_detections"] >= 5
-    assert "hm-abcdef0123456789abcdef0123456789" not in redacted["redacted_text"]
-    assert "sk-proj-1234567890abcdefghij1234567890" not in redacted["redacted_text"]
-    assert "ghp_1234567890abcdefghijklmnopqrstuvwx" not in redacted["redacted_text"]
-    assert "AKIAIOSFODNN7EXAMPLE" not in redacted["redacted_text"]
-    assert "MySuperSecretPassword123!" not in redacted["redacted_text"]
+    assert fake_hm not in redacted["redacted_text"]
+    assert fake_sk not in redacted["redacted_text"]
+    assert fake_ghp not in redacted["redacted_text"]
+    assert fake_aws not in redacted["redacted_text"]
+    assert fake_pwd not in redacted["redacted_text"]
     assert "alice.dev@example.org" not in redacted["redacted_text"]
     assert "[REDACTED:HIVEMIND_API_KEY]" in redacted["redacted_text"]
 

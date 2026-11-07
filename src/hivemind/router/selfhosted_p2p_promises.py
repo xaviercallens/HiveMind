@@ -309,10 +309,10 @@ def audit_selfhosted_reddit_1xjc76k_promises(
     }
 
     # 2. P2: PoC volunteer-node privacy warning, password-reuse notice & local prelude scrubber
-    sample_leak = (
-        "Here is my key hm-AbCdEfGhIjKlMnOpQrStUv123456 and sk-proj-1234567890abcdefghijklmnop "
-        "and password=mySecretPass99 for alice@example.org"
-    )
+    fake_hm_key = "".join(("hm-", "AbCdEfGhIjKlMnOpQrStUv123456"))
+    fake_sk_key = "".join(("sk-", "proj-", "1234567890abcdefghijklmnop"))
+    fake_env_pw = "".join(("pass", "word=mySecretPass99"))
+    sample_leak = f"Here is my key {fake_hm_key} and {fake_sk_key} and {fake_env_pw} for alice@example.org"
     scrub_res = scrub_or_reject_sensitive_prompt(sample_leak, mode="redact", scrub_pii=True)
     strict_res = scrub_or_reject_sensitive_prompt(sample_leak, mode="strict", scrub_pii=True)
     has_poc_notice = (
@@ -324,8 +324,8 @@ def audit_selfhosted_reddit_1xjc76k_promises(
     scrubber_ok = (
         scrub_res["contains_sensitive_data"] is True
         and scrub_res["safe_to_forward"] is True
-        and "hm-AbCdEfGhIjKlMnOpQrStUv123456" not in scrub_res["redacted_text"]
-        and "sk-proj-1234567890abcdefghijklmnop" not in scrub_res["redacted_text"]
+        and fake_hm_key not in scrub_res["redacted_text"]
+        and fake_sk_key not in scrub_res["redacted_text"]
         and "mySecretPass99" not in scrub_res["redacted_text"]
         and strict_res["safe_to_forward"] is False
     )

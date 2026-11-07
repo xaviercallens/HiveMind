@@ -141,9 +141,13 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     assert r_health.json()["status"] == "ok"
     assert r_health.json()["cost_mode"] == "scale_to_zero_min0_max2"
 
+    from hivemind.boinc.hivemind_at_home_dashboard import _count_lean4_spec_theorems
+
+    expected_theorems = _count_lean4_spec_theorems()
+    assert expected_theorems > 0
     r_status = client.get("/api/hivemind-at-home/status")
     assert r_status.status_code == 200
-    assert r_status.json()["formal_verification"]["lean4_theorems_verified"] == 128
+    assert r_status.json()["formal_verification"]["lean4_theorems_verified"] == expected_theorems
 
     r_ruche = client.get("/api/la-ruche/manifest")
     assert r_ruche.status_code == 200
@@ -354,7 +358,7 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     def_json = r_def.json()
     assert def_json["firewall_status"] == "ACTIVE"
     assert def_json["rate_limiter"]["firewall_status"] == "ACTIVE"
-    assert def_json["formal_verification"]["lean4_theorems_verified"] == 128
+    assert def_json["formal_verification"]["lean4_theorems_verified"] == expected_theorems
     assert def_json["formal_verification"]["sorry_count"] == 0
     assert def_json["byzantine_poisoning_defense"]["attack_vectors_blocked_count"] == 49
 

@@ -4161,16 +4161,37 @@ def create_exoplanet_hunter_fastapi_app(
     def post_s34_swat_telepathy_plan(payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
         from hivemind.swarm.swat_telepathy_bridge import SwaTTelepathyBridge
 
-        sender_family = str(payload.get("sender_family") or "ibm-granite/granite-3.3-8b-instruct")
-        receiver_family = str(payload.get("receiver_family") or "HuggingFaceTB/SmolLM3-3B")
-        task_category = str(payload.get("task_category") or "code").lower()
-        input_tokens = max(1, int(payload.get("input_tokens") or 28000))
-        am_compaction_ratio = float(payload.get("am_compaction_ratio") or 5.0)
-        ocr_text_density = float(
-            payload.get("ocr_text_density")
-            if payload.get("ocr_text_density") is not None
-            else (0.75 if task_category in {"docvqa", "infovqa", "dense_ocr", "ocr"} else 0.0)
-        )
+        if not isinstance(payload, dict):
+            return JSONResponse(status_code=400, content={"error": "body must be a JSON object"})
+        sender_family = str(payload.get("sender_family") or "ibm-granite/granite-3.3-8b-instruct")[:128]
+        receiver_family = str(payload.get("receiver_family") or "HuggingFaceTB/SmolLM3-3B")[:128]
+        task_category = str(payload.get("task_category") or "code").lower()[:32]
+        raw_tokens = payload.get("input_tokens")
+        raw_ratio = payload.get("am_compaction_ratio")
+        raw_ocr = payload.get("ocr_text_density")
+        try:
+            if isinstance(raw_tokens, bool) or isinstance(raw_ratio, bool) or isinstance(raw_ocr, bool):
+                raise ValueError("numeric fields must not be booleans")
+            input_tokens = 28000 if raw_tokens is None else int(raw_tokens)
+            am_compaction_ratio = 5.0 if raw_ratio is None else float(raw_ratio)
+            ocr_text_density = (
+                (0.75 if task_category in {"docvqa", "infovqa", "dense_ocr", "ocr"} else 0.0)
+                if raw_ocr is None
+                else float(raw_ocr)
+            )
+        except (TypeError, ValueError, OverflowError):
+            return JSONResponse(status_code=400, content={"error": "numeric parameters must be valid numbers"})
+        if (
+            input_tokens < 1
+            or input_tokens > 1_000_000
+            or not math.isfinite(am_compaction_ratio)
+            or am_compaction_ratio < 1.0
+            or am_compaction_ratio > 64.0
+            or not math.isfinite(ocr_text_density)
+            or ocr_text_density < 0.0
+            or ocr_text_density > 1.0
+        ):
+            return JSONResponse(status_code=400, content={"error": "numeric parameters out of bounds"})
         sample_len = min(input_tokens, 64)
         offsets = [(i * 4, (i + 1) * 4) for i in range(sample_len)]
         bridge = SwaTTelepathyBridge()

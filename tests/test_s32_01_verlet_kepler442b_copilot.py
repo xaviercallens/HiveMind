@@ -38,7 +38,8 @@ def test_antigravity_sdk_lightweight_compat_and_config_builder() -> None:
     cfg = copilot.build_antigravity_config()
     assert cfg.model == "hivemind/bee-stars"
     assert cfg.base_url == DEFAULT_HIVEMIND_BASE_URL
-    assert copilot.authenticated_base_url.endswith(f"/k/{TEST_API_KEY}/v1")
+    assert copilot.authenticated_base_url == DEFAULT_HIVEMIND_BASE_URL
+    assert TEST_API_KEY not in copilot.authenticated_base_url
 
 
 def test_copilot_has_no_built_in_key_and_requires_the_callers_key(monkeypatch: pytest.MonkeyPatch) -> None:

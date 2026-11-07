@@ -323,7 +323,7 @@ LIFE_AS_A_BEE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         category="moe_bee",
         badge_label="🐝 MoE CODE AGENTIQUE",
         architecture="20B–30B Sparse MoE (3.3B actifs / token • Refactoring & Agents)",
-        underlying_tag="gpt-oss:20b",
+        underlying_tag="qwen3-coder:30b",
         vram_footprint_gb=14.0,
         gpu_residency="64% GPU / 36% CPU (14.0 GB Sparse MoE)",
         cold_load_s=128.55,
@@ -417,7 +417,7 @@ LIFE_AS_A_BEE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         category="specialist_bee",
         badge_label="🔬 ABEILLE EDO/EDP & RUSTY-SUNDIALS",
         architecture="7B Spécialiste Calcul Scientifique + Solveur BDF/RK45 Déterministe",
-        underlying_tag="qwen2.5-coder:7b-instruct",
+        underlying_tag="qwen2.5-coder:7b",
         vram_footprint_gb=5.6,
         gpu_residency="100% GPU (5.6 GB VRAM)",
         cold_load_s=12.53,
@@ -654,7 +654,7 @@ LIFE_AS_A_BEE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         category="core_foundation",
         badge_label="🤝 PARTENAIRE CROWDGPT (ULTRA-RAPIDE • 1.5B)",
         architecture="1B–1.5B Dense Tronc Généraliste Citoyen (1.6 GB VRAM • 100% GPU)",
-        underlying_tag="qwen2.5-coder:1.5b",
+        underlying_tag="hf.co/Vxtzq/Crowd-v1",
         vram_footprint_gb=1.6,
         gpu_residency="100% GPU (1.6 GB VRAM)",
         cold_load_s=13.93,
@@ -700,7 +700,7 @@ LIFE_AS_A_BEE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         category="dense_coding",
         badge_label="💻 PILIER CODE QUOTIDIEN (7B • RTX 2070 + T4)",
         architecture="7B Qwen 2.5 Coder Instruct Dense (Multi-Producteurs Actifs)",
-        underlying_tag="qwen2.5-coder:7b-instruct",
+        underlying_tag="qwen2.5-coder:7b",
         vram_footprint_gb=5.6,
         gpu_residency="100% GPU (5.6 GB VRAM • Servi par T4 + RTX 2070)",
         cold_load_s=12.53,
@@ -792,7 +792,7 @@ LIFE_AS_A_BEE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         category="dense_coding",
         badge_label="🏗️ DEEPSEEK-R1 14B (RAISONNEMENT DENSE)",
         architecture="14B DeepSeek-R1 Distill Dense (Chaîne de Pensée Profonde)",
-        underlying_tag="deepseek-r1:14b",
+        underlying_tag="qwen2.5-coder:14b",
         vram_footprint_gb=12.0,
         gpu_residency="75% GPU / 25% CPU (12.0 GB Dense)",
         cold_load_s=58.81,
@@ -1779,6 +1779,14 @@ def life_as_a_bee_payload(live_telemetry: dict[str, Any] | None = None) -> dict[
     mean_speed = round(sum(s.tokens_per_sec for s in LIFE_AS_A_BEE_SCENARIOS) / len(LIFE_AS_A_BEE_SCENARIOS), 2)
     gpu_100_models = [s.model_id for s in LIFE_AS_A_BEE_SCENARIOS if s.gpu_residency.startswith("100% GPU")]
     moe_models = [s.model_id for s in LIFE_AS_A_BEE_SCENARIOS if s.category == "moe_bee"]
+    moe_rows = [s for s in LIFE_AS_A_BEE_SCENARIOS if s.category == "moe_bee"]
+    dense_14b_rows = [s for s in LIFE_AS_A_BEE_SCENARIOS if "14B" in s.architecture]
+    moe_speedup = (
+        round(dense_14b_rows[0].warm_latency_ms / (sum(s.warm_latency_ms for s in moe_rows) / len(moe_rows)), 2)
+        if moe_rows and dense_14b_rows
+        else 1.0
+    )
+    fastest_scen = max(LIFE_AS_A_BEE_SCENARIOS, key=lambda sc: sc.tokens_per_sec)
     image_gallery = get_image_moe_gallery_scenarios()
     payload: dict[str, Any] = {
         "object": "hivemind.life_as_a_bee",
@@ -1792,11 +1800,11 @@ def life_as_a_bee_payload(live_telemetry: dict[str, Any] | None = None) -> dict[
             "total_tokens_processed": total_tokens,
             "mean_warm_latency_ms": mean_latency,
             "mean_tokens_per_sec": mean_speed,
-            "fastest_bee_model": "hivemind/crowd-v1",
-            "fastest_bee_tokens_per_sec": max(sc.tokens_per_sec for sc in LIFE_AS_A_BEE_SCENARIOS),
+            "fastest_bee_model": fastest_scen.model_id,
+            "fastest_bee_tokens_per_sec": fastest_scen.tokens_per_sec,
             "scenarios_with_artifact_source": sum(1 for sc in LIFE_AS_A_BEE_SCENARIOS if sc.source.startswith("artifacts/")),
             "scenarios_not_sourced": sum(1 for sc in LIFE_AS_A_BEE_SCENARIOS if sc.source.startswith("NOT_SOURCED")),
-            "moe_speedup_vs_14b_dense": 1.83,
+            "moe_speedup_vs_14b_dense": moe_speedup,
             "hundred_percent_gpu_models": gpu_100_models,
             "sparse_moe_models": moe_models,
         },

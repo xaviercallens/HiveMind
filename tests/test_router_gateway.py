@@ -1575,7 +1575,8 @@ def test_ip276_anonymous_solver_sweep_is_work_budgeted_and_fast(world: World) ->
 
 def test_ip277_bee_trade_endpoint_enforces_per_account_rate_limit(world: World) -> None:
     """IP-277: /v1/hivemind/bees/trade enforces per-account rate limiting so an account cannot flood the order book."""
-    _, key = world.consumer(10.0)
+    account_id, key = world.register("prosumer")
+    world.store.grant(account_id, 10.0, "test")
     payload = {
         "bee_id": "bee-math-01",
         "side": "OFFER",

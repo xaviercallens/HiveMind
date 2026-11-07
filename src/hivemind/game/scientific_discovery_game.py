@@ -30,6 +30,7 @@ from dataclasses import asdict, dataclass
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import time
 from typing import Any, Dict, List, Sequence, Tuple
@@ -674,14 +675,25 @@ def probe_rtx2070_hardware_and_vram(
     }
 
 
+def _default_la_ruche_session_path() -> Path:
+    """Return the user-config session file path (outside the git worktree)."""
+    env_override = os.environ.get("HIVEMIND_LA_RUCHE_SESSION_PATH", "").strip()
+    if env_override:
+        return Path(env_override)
+    xdg_config = os.environ.get("XDG_CONFIG_HOME", "").strip()
+    base_dir = Path(xdg_config) if xdg_config else (Path.home() / ".config")
+    return base_dir / "hivemind" / "rtx2070_la_ruche_game_session.json"
+
+
 def _load_or_register_la_ruche_gamer_session(
     *,
     ruche_url: str = LA_RUCHE_CLOUD_URL,
     gamer_tag: str = "CyberValkyrie_FR",
+    allow_auto_register: bool = False,
+    session_path: Path | None = None,
 ) -> Dict[str, Any]:
-    """Load cached La Ruche gamer session or register a new prosumer account on Cloud Run."""
-    cache_path = PROJECT_ROOT / "artifacts" / "rtx2070_la_ruche_game_session.json"
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    """Load cached La Ruche gamer session from user config dir; only register when explicitly requested."""
+    cache_path = Path(session_path) if session_path is not None else _default_la_ruche_session_path()
     if cache_path.is_file():
         try:
             cached = json.loads(cache_path.read_text(encoding="utf-8"))
@@ -690,6 +702,19 @@ def _load_or_register_la_ruche_gamer_session(
         except Exception as exc:
             last_cache_err = str(exc)
             _ = last_cache_err
+
+    env_key = os.environ.get("HIVEMIND_API_KEY", "").strip()
+    if env_key.startswith("hm-"):
+        return {
+            "ruche_url": ruche_url,
+            "gamer_tag": gamer_tag,
+            "handle": gamer_tag,
+            "account_id": "env-session",
+            "api_key": env_key,
+        }
+
+    if not allow_auto_register:
+        return {}
 
     tag_slug = uuid.uuid4().hex[:8]
     email = f"rtx2070.gamer.{tag_slug}@hivemind-at-home.org"
@@ -716,7 +741,9 @@ def _load_or_register_la_ruche_gamer_session(
         "api_key": reg_data.get("api_key", ""),
         "email": email,
     }
+    cache_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     cache_path.write_text(json.dumps(session_data, indent=2), encoding="utf-8")
+    os.chmod(cache_path, 0o600)
     return session_data
 
 
@@ -725,6 +752,8 @@ def sync_game_with_la_ruche_live(
     gamer_tag: str = "CyberValkyrie_FR",
     ruche_url: str = LA_RUCHE_CLOUD_URL,
     local_ollama_url: str = LOCAL_SWARM_OLLAMA_URL,
+    allow_auto_register: bool = False,
+    session_path: Path | None = None,
 ) -> Dict[str, Any]:
     """Connect the local RTX 2070 game client to live HiveMind La Ruche & local GPU swarm tunnel."""
     rtx_status = probe_rtx2070_hardware_and_vram()
@@ -739,38 +768,43 @@ def sync_game_with_la_ruche_live(
         session_info = _load_or_register_la_ruche_gamer_session(
             ruche_url=ruche_url,
             gamer_tag=gamer_tag,
+            allow_auto_register=allow_auto_register,
+            session_path=session_path,
         )
-        api_key = session_info["api_key"]
-        headers = {"Authorization": f"Bearer {api_key}"}
-        with httpx.Client(timeout=8.0) as client:
-            models_res = client.get(f"{ruche_url.rstrip('/')}/v1/models")
-            if models_res.status_code == 200:
-                la_ruche_models = [
-                    str(m.get("id")) for m in models_res.json().get("data", []) if m.get("id")
-                ]
-            hb_res = client.post(
-                f"{ruche_url.rstrip('/')}/v1/hivemind/producer/heartbeat",
-                headers=headers,
-                json={
-                    "endpoint_url": ruche_url,
-                    "models": [
-                        {"id": "hivemind/bee-stars", "local_name": "hivemind/bee-stars"},
-                        {"id": "hivemind/coder", "local_name": "hivemind/coder"},
-                    ],
-                    "cost_per_1k": 0.50,
-                    "capacity_1k": 250.0,
-                    "execution_class": "cuda-rtx2070-8gb-fp16",
-                },
-            )
-            if hb_res.status_code == 200:
-                heartbeat_status = hb_res.json()
-            pts_res = client.get(
-                f"{ruche_url.rstrip('/')}/v1/hivemind/me/points",
-                headers=headers,
-            )
-            if pts_res.status_code == 200:
-                la_ruche_points = pts_res.json()
-                la_ruche_connected = True
+        api_key = str(session_info.get("api_key") or "").strip()
+        if not api_key:
+            ruche_error = "No authenticated La Ruche session found (explicit user registration required)"
+        else:
+            headers = {"Authorization": f"Bearer {api_key}"}
+            with httpx.Client(timeout=8.0) as client:
+                models_res = client.get(f"{ruche_url.rstrip('/')}/v1/models")
+                if models_res.status_code == 200:
+                    la_ruche_models = [
+                        str(m.get("id")) for m in models_res.json().get("data", []) if m.get("id")
+                    ]
+                hb_res = client.post(
+                    f"{ruche_url.rstrip('/')}/v1/hivemind/producer/heartbeat",
+                    headers=headers,
+                    json={
+                        "endpoint_url": ruche_url,
+                        "models": [
+                            {"id": "hivemind/bee-stars", "local_name": "hivemind/bee-stars"},
+                            {"id": "hivemind/coder", "local_name": "hivemind/coder"},
+                        ],
+                        "cost_per_1k": 0.50,
+                        "capacity_1k": 250.0,
+                        "execution_class": "cuda-rtx2070-8gb-fp16",
+                    },
+                )
+                if hb_res.status_code == 200:
+                    heartbeat_status = hb_res.json()
+                pts_res = client.get(
+                    f"{ruche_url.rstrip('/')}/v1/hivemind/me/points",
+                    headers=headers,
+                )
+                if pts_res.status_code == 200:
+                    la_ruche_points = pts_res.json()
+                    la_ruche_connected = True
     except Exception as exc:
         ruche_error = str(exc)
 

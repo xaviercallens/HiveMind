@@ -992,11 +992,7 @@ def create_router_app(
         scheme, _, token = header.partition(" ")
         candidate = token.strip() if scheme.lower() == "bearer" and token.strip() else ""
         if not candidate:
-            candidate = (
-                str(request.path_params.get("api_key") or "").strip()
-                or str(request.query_params.get("api_key") or "").strip()
-                or str(request.headers.get("x-api-key") or "").strip()
-            )
+            candidate = str(request.headers.get("x-api-key") or "").strip()
         account = store.authenticate(candidate) if candidate else None
         if account is None:
             raise RouterError(401, "Invalid or missing API key. Send 'Authorization: Bearer hm-...'.", "authentication_error", "invalid_api_key")
@@ -1982,7 +1978,6 @@ def create_router_app(
         return {"object": "hivemind.partner_models", "models": items}
 
     @app.get("/v1/models")
-    @app.get("/k/{api_key}/v1/models")
     def list_models() -> dict[str, Any]:
         created = int(clock())
         _refresh_reconnected_fleet_if_needed(float(created))
@@ -2054,7 +2049,6 @@ def create_router_app(
             store.release_hold(plan.request_id)
 
     @app.post("/v1/chat/completions", response_model=None)
-    @app.post("/k/{api_key}/v1/chat/completions", response_model=None)
     async def chat_completions(request: Request) -> JSONResponse | StreamingResponse:
         # authenticate first, then read the body (already bounded by BodyLimitMiddleware): anonymous callers cost nothing
         account = await run_in_threadpool(authenticate, request)
@@ -3038,9 +3032,16 @@ def create_router_app(
     @app.post("/v1/hivemind/bees/coordinate")
     async def coordinate_bees(request: Request, payload: BeeCoordinateRequest) -> dict[str, Any]:
         """Coordinate multi-bee inference handoff (`primary_bee <-> specialist_bee`) over AMCP/Kafka (`hivemind.amcp.bee_coord.v1`)."""
+        from hivemind.swarm.amcp_collab import CollabError, check_publish
         from hivemind.swarm.amcp_kafka_campaign_bus import coordinate_inter_bee_inference
 
-        authenticate(request)
+        account = authenticate(request)
+        try:
+            check_publish(account.role, "bee_specialist", "bee_coord", "io.hivemind.amcp.bee.handoff", {}, via_gateway=True)
+        except CollabError as exc:
+            raise RouterError(403, str(exc), "permission_error", exc.code) from None
+        if not amcp_publish_limiter.allow(account.account_id, clock()):
+            raise RouterError(429, "Too many bus events from this account; try again in a minute.", "rate_limit_error", "rate_limited")
         result = await run_in_threadpool(
             coordinate_inter_bee_inference,
             primary_bee=payload.primary_bee,
@@ -3067,6 +3068,7 @@ def create_router_app(
     @app.post("/v1/hivemind/bees/trade")
     def post_bee_trade_order(request: Request, payload: BeeTradeOrderRequest) -> dict[str, Any]:
         """Submit an inter-bee or producer capacity `OFFER` or `BID` on `hivemind.amcp.bee_trading.v1` and clear the market."""
+        from hivemind.swarm.amcp_collab import CollabError, check_publish
         from hivemind.swarm.amcp_kafka_campaign_bus import (
             build_amcp_kafka_event,
             clear_bee_capacity_market,
@@ -3074,6 +3076,17 @@ def create_router_app(
         )
 
         account = authenticate(request)
+        try:
+            check_publish(
+                account.role,
+                "bee_specialist",
+                "bee_trading",
+                f"io.hivemind.amcp.trade.{payload.side.lower()}",
+                {},
+                via_gateway=True,
+            )
+        except CollabError as exc:
+            raise RouterError(403, str(exc), "permission_error", exc.code) from None
         if not is_allowed_bee_id(payload.bee_id, account.handle, account.account_id):
             raise RouterError(
                 403,
@@ -3082,7 +3095,7 @@ def create_router_app(
                 "forbidden_bee_id",
             )
         now = clock()
-        if not bee_trade_limiter.allow(account.account_id, now):
+        if not amcp_publish_limiter.allow(account.account_id, now) or not bee_trade_limiter.allow(account.account_id, now):
             raise RouterError(
                 429,
                 "Too many bee trade orders from this account; try again in a minute.",
@@ -3524,10 +3537,7 @@ def create_router_app(
     async def steam_register_or_login(request: Request) -> JSONResponse:
         """Register or sign in a Free Steam Game (AppID 3133700) player and return an active hm-... API key."""
         raw = await request.body()
-        try:
-            body = json.loads(raw) if raw else {}
-        except ValueError:
-            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+        body = _parse_json_dict(raw)
         handle = str(body.get("handle") or "Cmdr_RTX2070_Steam").strip()[:64]
         steam_id64 = str(body.get("steam_id64") or "76561198031337001").strip()[:32]
         gpu_model = str(body.get("gpu_model") or "NVIDIA GeForce RTX 2070").strip()[:96]
@@ -3576,72 +3586,67 @@ def create_router_app(
     async def steam_contribute_boinc(request: Request) -> dict[str, Any]:
         """Execute/record an idle-GPU CUDA PTX BOINC workunit from the Free Steam Game client and credit HMT points."""
         raw = await request.body()
-        try:
-            body = json.loads(raw) if raw else {}
-        except ValueError:
-            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+        body = _parse_json_dict(raw)
         target_planet = str(body.get("target_planet") or "K2-18 b").strip()[:64]
         # Always authenticated: no account is created or chosen from the body (a "handle" in the body used to create or
         # select the credited account without any key).
-        acc = authenticate(request)
+        acc = await run_in_threadpool(authenticate, request)
         account_id = acc.account_id
         handle = acc.handle
 
-        # Execute real CUDA Driver PTX BLS fold if scripts/hivemind_boinc_idle_worker.py is available
-        fold_res: dict[str, Any] = {
-            "backend": "nvidia_cuda_driver_ptx_sm50",
-            "cuda_device": "NVIDIA GeForce RTX 2070",
-            "n_points_folded": 16384,
-            "kernel_exec_ms": 0.28,
-            "recovered_transit_depth_ppm": 2789.0,
-            "result_sha256": hashlib.sha256(f"{handle}:{target_planet}:{clock()}".encode("utf-8")).hexdigest(),
-        }
-        try:
-            import importlib.util
-            from pathlib import Path as _Path
+        def _execute_steam_fold_sync() -> dict[str, Any]:
+            fold_res: dict[str, Any] = {
+                "backend": "nvidia_cuda_driver_ptx_sm50",
+                "cuda_device": "NVIDIA GeForce RTX 2070",
+                "n_points_folded": 16384,
+                "kernel_exec_ms": 0.28,
+                "recovered_transit_depth_ppm": 2789.0,
+                "result_sha256": hashlib.sha256(f"{handle}:{target_planet}:{clock()}".encode("utf-8")).hexdigest(),
+            }
+            try:
+                import importlib.util
+                from pathlib import Path as _Path
 
-            worker_path = _Path(__file__).resolve().parents[3] / "scripts" / "hivemind_boinc_idle_worker.py"
-            if worker_path.exists():
-                spec = importlib.util.spec_from_file_location("hivemind_boinc_idle_worker", worker_path)
-                if spec and spec.loader:
-                    mod = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-                    fold_res = mod.execute_cuda_ptx_bls_fold(target_planet=target_planet, n_pts=16384)
-        except Exception as exc:
-            fold_res = dict(fold_res, fallback_reason=str(exc))
+                worker_path = _Path(__file__).resolve().parents[3] / "scripts" / "hivemind_boinc_idle_worker.py"
+                if worker_path.exists():
+                    spec = importlib.util.spec_from_file_location("hivemind_boinc_idle_worker", worker_path)
+                    if spec and spec.loader:
+                        mod = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+                        fold_res = mod.execute_cuda_ptx_bls_fold(target_planet=target_planet, n_pts=16384)
+            except Exception as exc:
+                fold_res = dict(fold_res, fallback_reason=str(exc))
 
-        supplied_receipt = str(body.get("receipt_sha256") or "").strip()
-        receipt_sha256 = supplied_receipt or str(
-            fold_res.get("result_sha256") or hashlib.sha256(f"{account_id}:{clock()}".encode()).hexdigest()
-        )
-        duplicate_receipt = store.record_boinc_receipt(receipt_sha256, account_id, now_utc=clock()) or (
-            receipt_sha256 in seen_boinc_receipts
-        )
-        if len(seen_boinc_receipts) < 4096:
-            seen_boinc_receipts.add(receipt_sha256)
-        # No HMT for a client-supplied receipt: nothing in it can be checked by the server (it used to grant 250 HMT per
-        # unseen value, so credit could be minted without limit). Credit comes back once results are verified server-side.
-        hmt_awarded = 0.0
-        cobblestones_awarded = 0.0
-        return {
-            "object": "hivemind.steam_boinc_contribution",
-            "credit_status": "pending_verification",
-            "ok": True,
-            "account_id": account_id,
-            "handle": handle,
-            "app_id": 3133700,
-            "target_planet": target_planet,
-            "backend": fold_res.get("backend", "nvidia_cuda_driver_ptx_sm50"),
-            "cuda_device": fold_res.get("cuda_device", "NVIDIA GeForce RTX 2070"),
-            "n_points_folded": fold_res.get("n_points_folded", 16384),
-            "kernel_exec_ms": fold_res.get("kernel_exec_ms", 0.28),
-            "recovered_transit_depth_ppm": fold_res.get("recovered_transit_depth_ppm", 2789.0),
-            "hmt_awarded": hmt_awarded,
-            "cobblestones_awarded": cobblestones_awarded,
-            "duplicate_receipt": duplicate_receipt,
-            "balance_hmt": store.balance(account_id),
-            "receipt_sha256": receipt_sha256,
-        }
+            supplied_receipt = str(body.get("receipt_sha256") or "").strip()
+            receipt_sha256 = supplied_receipt or str(
+                fold_res.get("result_sha256") or hashlib.sha256(f"{account_id}:{clock()}".encode()).hexdigest()
+            )
+            duplicate_receipt = store.record_boinc_receipt(receipt_sha256, account_id, now_utc=clock()) or (
+                receipt_sha256 in seen_boinc_receipts
+            )
+            if len(seen_boinc_receipts) < 4096:
+                seen_boinc_receipts.add(receipt_sha256)
+            return {
+                "object": "hivemind.steam_boinc_contribution",
+                "credit_status": "pending_verification",
+                "ok": True,
+                "account_id": account_id,
+                "handle": handle,
+                "app_id": 3133700,
+                "target_planet": target_planet,
+                "backend": fold_res.get("backend", "nvidia_cuda_driver_ptx_sm50"),
+                "cuda_device": fold_res.get("cuda_device", "NVIDIA GeForce RTX 2070"),
+                "n_points_folded": fold_res.get("n_points_folded", 16384),
+                "kernel_exec_ms": fold_res.get("kernel_exec_ms", 0.28),
+                "recovered_transit_depth_ppm": fold_res.get("recovered_transit_depth_ppm", 2789.0),
+                "hmt_awarded": 0.0,
+                "cobblestones_awarded": 0.0,
+                "duplicate_receipt": duplicate_receipt,
+                "balance_hmt": store.balance(account_id),
+                "receipt_sha256": receipt_sha256,
+            }
+
+        return await run_in_threadpool(_execute_steam_fold_sync)
 
     @app.api_route("/webgpu", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/webgpu.html", methods=["GET", "HEAD"], response_class=HTMLResponse)
@@ -3726,10 +3731,7 @@ def create_router_app(
     async def webgpu_register_or_login(request: Request) -> JSONResponse:
         """Register or sign in a Zero-Install WebGPU contributor and return a Bearer hm-... API key."""
         raw = await request.body()
-        try:
-            body = json.loads(raw) if raw else {}
-        except ValueError:
-            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+        body = _parse_json_dict(raw)
         handle = str(body.get("handle") or "Cmdr_WebGPU_RTX2070").strip()[:64]
         gpu_adapter = str(body.get("gpu_adapter") or "WebGPU Hardware Adapter (WGSL @compute)").strip()[:96]
         role = str(body.get("role") or "prosumer").strip()
@@ -3774,12 +3776,9 @@ def create_router_app(
         """Record a verified browser WebGPU WGSL @compute workunit. Strictly requires registration & login (Bearer hm-...)."""
         from hivemind.game.webgpu_galaxy_cockpit import execute_server_webgpu_verification_and_sync
 
-        account = authenticate(request)
+        account = await run_in_threadpool(authenticate, request)
         raw = await request.body()
-        try:
-            body = json.loads(raw) if raw else {}
-        except ValueError:
-            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+        body = _parse_json_dict(raw)
         target_planet = str(body.get("target_planet") or "K2-18 b").strip()[:64]
         gpu_adapter = str(body.get("gpu_adapter") or "WebGPU Hardware Adapter (WGSL @compute)").strip()[:96]
         backend = str(body.get("backend") or "webgpu_wgsl_compute_shader").strip()[:64]
@@ -3790,7 +3789,8 @@ def create_router_app(
             n_points = 16384 if raw_n_points is None else raw_n_points
             kernel_ms = 0.42 if raw_kernel_ms is None else raw_kernel_ms
             depth_ppm = 2789.0 if raw_depth_ppm is None else raw_depth_ppm
-            verified = execute_server_webgpu_verification_and_sync(
+            verified = await run_in_threadpool(
+                execute_server_webgpu_verification_and_sync,
                 handle=account.handle,
                 target_planet=target_planet,
                 gpu_adapter=gpu_adapter,
@@ -4329,26 +4329,21 @@ def create_router_app(
         from hivemind.swarm.swat_telepathy_bridge import SwaTTelepathyBridge
 
         raw = await request.body()
-        try:
-            body = json.loads(raw) if raw else {}
-        except ValueError:
-            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+        body = _parse_json_dict(raw)
 
-        sender_family = str(body.get("sender_family") or "ibm-granite/granite-3.3-8b-instruct")
-        receiver_family = str(body.get("receiver_family") or "HuggingFaceTB/SmolLM3-3B")
-        task_category = str(body.get("task_category") or "code").lower()
-        input_tokens = max(1, int(body.get("input_tokens") or 28000))
-        am_compaction_ratio = float(body.get("am_compaction_ratio") or 5.0)
-        ocr_text_density = float(
-            body.get("ocr_text_density")
-            if body.get("ocr_text_density") is not None
-            else (0.75 if task_category in {"docvqa", "infovqa", "dense_ocr", "ocr"} else 0.0)
-        )
+        sender_family = str(body.get("sender_family") or "ibm-granite/granite-3.3-8b-instruct")[:128]
+        receiver_family = str(body.get("receiver_family") or "HuggingFaceTB/SmolLM3-3B")[:128]
+        task_category = str(body.get("task_category") or "code").lower()[:32]
+        input_tokens = _finite_int(body.get("input_tokens"), 28000, 1, 1_000_000, "input_tokens")
+        am_compaction_ratio = _finite_float(body.get("am_compaction_ratio"), 5.0, 1.0, 64.0, "am_compaction_ratio")
+        default_ocr = 0.75 if task_category in {"docvqa", "infovqa", "dense_ocr", "ocr"} else 0.0
+        ocr_text_density = _finite_float(body.get("ocr_text_density"), default_ocr, 0.0, 1.0, "ocr_text_density")
 
         sample_len = min(input_tokens, 64)
         offsets = [(i * 4, (i + 1) * 4) for i in range(sample_len)]
         bridge = SwaTTelepathyBridge()
-        plan = bridge.plan_transfer(
+        plan = await run_in_threadpool(
+            bridge.plan_transfer,
             sender_model_id=sender_family,
             receiver_model_id=receiver_family,
             sender_offsets=offsets,

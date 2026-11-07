@@ -17,6 +17,7 @@ build/
 .cache/
 artifacts/*
 !artifacts/*.json
+artifacts/*session*.json
 !artifacts/experiments/
 artifacts/experiments/*
 !artifacts/experiments/*.json

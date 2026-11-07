@@ -1959,12 +1959,14 @@ class AstroBeeMoEGPUService:
         top2 = sorted(range(4), key=lambda i: gate_probs[i], reverse=True)[:2]
 
         routed_bees = [ASTRO_BEE_EXPERTS[i]["bee_id"] for i in top2]
-        response_text = (
+        raw_response_text = (
             f"[HiveMind Bee-MoE • Served by Local {self.hw_info.get('gpu_name', 'NVIDIA GeForce RTX 2070')} ({self.device}) "
             f"in {latency_ms} ms | Top-2 Experts: {', '.join(routed_bees)}] "
             f"Processed query ({len(tok_ids)} tokens): '{clean_prompt[:160]}'"
         )
-        generated_token_count = min(clamped_max_new_tokens, max(1, len(response_text.split())))
+        out_tokens = raw_response_text.split()[:clamped_max_new_tokens]
+        response_text = " ".join(out_tokens)
+        generated_token_count = len(out_tokens)
         receipt_hash = hashlib.sha256(f"{clean_prompt}:{latency_ms}:{time.time()}".encode("utf-8")).hexdigest()
 
         return {
@@ -2159,13 +2161,10 @@ class HiveMindMultiProducerInferencePool:
         if is_t4_requested and not t4_online:
             self.total_t4_failovers_handled += 1
 
-        # Check if another external producer is ONLINE_SERVING and preferred
+        # IP-29: serve_inference executes locally on self.gpu_service and never calls remote endpoints,
+        # so only the producer actually invoked (PRODUCER-LOCAL-RTX2070-CUDA0) may be credited or named.
         selected_producer_id = "PRODUCER-LOCAL-RTX2070-CUDA0"
-        for pid, pinfo in sorted(self.producers.items(), key=lambda kv: kv[1].get("priority", 99)):
-            if pinfo.get("status") == "ONLINE_SERVING":
-                if pref_norm in (pid.lower(), "auto"):
-                    selected_producer_id = pid
-                    break
+        self._last_serving_producer_id = selected_producer_id
 
         # Update counter & heartbeat on the serving producer
         if selected_producer_id in self.producers:

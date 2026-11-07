@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import math
 import os
+import re
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -257,16 +258,14 @@ class AntigravityHiveMindCoPilot:
             raise ValueError("api_key must be a valid HiveMind 'hm-...' key")
         ensure_antigravity_sdk_lightweight_compat()
         self.api_key = api_key
-        self.base_url = base_url.rstrip("/")
+        cleaned_url = re.sub(r"/k/[^/]+", "", base_url.rstrip("/"))
+        self.base_url = cleaned_url
         self.model = model
 
     @property
     def authenticated_base_url(self) -> str:
-        """URL with embedded ``/k/{api_key}/v1`` path for SDKs that omit Bearer headers on local endpoints."""
-        if "/k/hm-" in self.base_url:
-            return self.base_url
-        root = self.base_url[:-3] if self.base_url.endswith("/v1") else self.base_url
-        return f"{root}/k/{self.api_key}/v1"
+        """Header-only authentication base URL (never embeds ``api_key`` in the URL path)."""
+        return self.base_url
 
     def build_antigravity_config(self, *, use_key_path: bool = False) -> Any:
         """Construct ``LocalOpenAIAgentConfig(model=..., base_url=...).lightweight()``."""

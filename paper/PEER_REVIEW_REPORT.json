@@ -5,7 +5,7 @@
   "disclosure": "This report is produced by a deterministic script. It is NOT a peer review: no language model and no human referee evaluated the manuscript. Verdicts below mean only that the listed artifact checks passed.",
   "lead_peer_review_model": "none (scripted static audit; no language-model call)",
   "co_auditor_model": "none",
-  "timestamp_utc": "2026-11-07T18:16:33Z",
+  "timestamp_utc": "2026-11-07T18:52:23Z",
   "tex_path": "paper/hivemind_foundation_article.tex",
   "pdf_path": "paper/hivemind_foundation_article.pdf",
   "pdf_exists": true,
@@ -977,8 +977,8 @@
     "tier_a_machine_checked": true
   },
   "manuscript_provenance_audit": {
-    "total_checks": 86,
-    "passed_checks": 86,
+    "total_checks": 87,
+    "passed_checks": 87,
     "failed_check_ids": [],
     "all_passed": true,
     "checks": [
@@ -1854,6 +1854,22 @@
         "passed": true
       },
       {
+        "check_id": "PROV-88",
+        "metric_name": "Catalog served vs trained: serving tiers, distinct tags, HiveMind-built tags, public ids, LIVE-but-off-the-shelf, QLoRA-claimed, unpublished-repo counts",
+        "expected_tokens": [
+          "$16$ serving tiers",
+          "$13$ distinct Ollama tags",
+          "$49$ public model ids",
+          "$35$ carry a \\texttt{LIVE} status while being served by an off-the-shelf tag",
+          "$20$ declare a QLoRA shard format",
+          "$15$ still name a Hugging Face repository under an account that has never been published",
+          "\\texttt{hivemind-bee-stars}"
+        ],
+        "source_artifact": "artifacts/experiments/CATALOG_SERVED_2026-11-07.json",
+        "match_rule": "all tokens must occur",
+        "passed": true
+      },
+      {
         "check_id": "PROV-72",
         "metric_name": "E11 Qwen-7B row invalid: negative control failed in the receipt, the control value and the words 'negative control failed' and 'withdrawn' occur, and none of its baseline NLL, FP8 or INT4 delta-NLL values occurs in the manuscript",
         "expected_tokens": [
@@ -2068,7 +2084,7 @@
   "latex_typography_and_figures_audit": {
     "figures_verified": 7,
     "missing_figures": [],
-    "bibliography_entries": 63,
+    "bibliography_entries": 64,
     "uncited_bibitems": [],
     "undefined_citations": [],
     "formal_theorem_blocks": 4,
@@ -2111,7 +2127,7 @@
       "co_auditor_model": "none",
       "gate_passed": true,
       "findings_resolved": [
-        "Programmatically verified 86/86 exact numerical metrics between the 4 JSON artifacts and paper/hivemind_foundation_article.tex.",
+        "Programmatically verified 87/87 exact numerical metrics between the 4 JSON artifacts and paper/hivemind_foundation_article.tex.",
         "Eliminated legacy hardcoded v2.9.2 strings in paper/autoevolve_peer_review_pipeline.py."
       ]
     },
@@ -2133,7 +2149,7 @@
       "co_auditor_model": "none",
       "gate_passed": true,
       "findings_resolved": [
-        "Verified 7/4 vector PDF/PNG figure pairs and 63/63 cited bibliography entries (0 uncited, 0 undefined).",
+        "Verified 7/4 vector PDF/PNG figure pairs and 64/64 cited bibliography entries (0 uncited, 0 undefined).",
         "Eliminated Overfull \\hbox (80.7pt) and fancyhdr headheight warnings via \\path{} line breaking and 21pt header height (0 Overfull \\hbox > 5pt)."
       ]
     }

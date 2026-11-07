@@ -26,16 +26,16 @@ FORBIDDEN_CALLS = frozenset({"eval", "exec", "os.system", "pickle.load", "pickle
 
 @dataclass(frozen=True)
 class RoadmapPRSpec:
-    """Specification and OpenRouter receipt for a roadmap PR."""
+    """Specification for a roadmap PR (`openrouter_completion_id` and `openrouter_request_id` are None unless populated by a live call)."""
 
     pr_order: int
     roadmap_id: str
     title: str
     module_path: str
     test_path: str
-    openrouter_completion_id: str
-    openrouter_request_id: str
-    openrouter_model: str
+    openrouter_model: str = "hivemind/coder"
+    openrouter_completion_id: str | None = None
+    openrouter_request_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -45,8 +45,8 @@ class PRVerificationReceipt:
     roadmap_id: str
     module_path: str
     test_path: str
-    openrouter_completion_id: str
-    openrouter_request_id: str
+    openrouter_completion_id: str | None
+    openrouter_request_id: str | None
     ast_security_clean: bool
     forbidden_calls_found: tuple[str, ...]
     line_count: int
@@ -63,8 +63,6 @@ CANONICAL_5_ROADMAP_PRS: tuple[RoadmapPRSpec, ...] = (
         title="Adaptive Multi-Split ML over Constrained WAN Links + /signup & /login Credential Auth",
         module_path="src/hivemind/swarm/adaptive_multi_split_wan.py",
         test_path="tests/test_adaptive_multi_split_wan.py",
-        openrouter_completion_id="chatcmpl-90",
-        openrouter_request_id="req-31d9b186a1b740839395a471eaf3f5d3",
         openrouter_model="hivemind/coder",
     ),
     RoadmapPRSpec(
@@ -73,8 +71,6 @@ CANONICAL_5_ROADMAP_PRS: tuple[RoadmapPRSpec, ...] = (
         title="Extreme Top-1% Quantized DCT + EF21 100x WAN Pseudo-Gradient Compressor",
         module_path="src/hivemind/swarm/top1pct_dct_ef21_compressor.py",
         test_path="tests/test_top1pct_dct_ef21_compressor.py",
-        openrouter_completion_id="chatcmpl-0",
-        openrouter_request_id="req-fadb4f500fd14bcfac6aa8fe9dfbdc46",
         openrouter_model="hivemind/coder",
     ),
     RoadmapPRSpec(
@@ -83,8 +79,6 @@ CANONICAL_5_ROADMAP_PRS: tuple[RoadmapPRSpec, ...] = (
         title="ZK-OPoI v5 Fixed-Point INT8/INT4 Verifiable DiLoCo Transition Circuit",
         module_path="src/hivemind/swarm/zk_opoi_v5_circuit.py",
         test_path="tests/test_zk_opoi_v5_circuit.py",
-        openrouter_completion_id="chatcmpl-35",
-        openrouter_request_id="req-f30d1a62a7b54be998ccb85eed98aa5d",
         openrouter_model="hivemind/coder",
     ),
     RoadmapPRSpec(
@@ -93,8 +87,6 @@ CANONICAL_5_ROADMAP_PRS: tuple[RoadmapPRSpec, ...] = (
         title="Empirical Scaling Benchmark: Multi-Krum + 10% Replay vs ZK-OPoI v5 (Experiment E21)",
         module_path="src/hivemind/swarm/krum_vs_zkopoi_v5_benchmark.py",
         test_path="tests/test_krum_vs_zkopoi_v5_benchmark.py",
-        openrouter_completion_id="chatcmpl-458",
-        openrouter_request_id="req-61afd9961ec048168b595568ebb5a98f",
         openrouter_model="hivemind/coder",
     ),
     RoadmapPRSpec(
@@ -103,8 +95,6 @@ CANONICAL_5_ROADMAP_PRS: tuple[RoadmapPRSpec, ...] = (
         title="Geocryptographic P2P Neural Mesh & 15–20 Node Fuzzy Sub-Swarm Consensus",
         module_path="src/hivemind/swarm/geomesh_fuzzy_consensus.py",
         test_path="tests/test_geomesh_fuzzy_consensus.py",
-        openrouter_completion_id="chatcmpl-452",
-        openrouter_request_id="req-d01adb55fa574049b945ec8e078f06b1",
         openrouter_model="hivemind/coder",
     ),
 )
@@ -146,7 +136,7 @@ class PRFirstOpenRouterCodingOrchestrator:
         all_violations = tuple(mod_violations + test_violations)
         clean = mod_clean and test_clean
         lines = len(mod_src.splitlines()) + len(test_src.splitlines())
-        ready = clean and bool(spec.openrouter_request_id.startswith("req-")) and lines >= 50
+        ready = clean and lines >= 50 and ("def test_" in test_src)
         return PRVerificationReceipt(
             roadmap_id=spec.roadmap_id,
             module_path=spec.module_path,

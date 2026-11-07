@@ -15,6 +15,10 @@ import math
 from dataclasses import asdict, dataclass
 from typing import Any, Sequence
 
+import numpy as np
+
+from hivemind.compress.lattice_quantizer import nearest_dn, nearest_e8
+
 
 @dataclass(frozen=True)
 class E8QuantizedBlock:
@@ -32,18 +36,12 @@ class E8QuantizedBlock:
 
 
 def _nearest_d8(x: Sequence[float]) -> tuple[float, ...]:
-    """Project an 8D vector onto the checkerboard lattice ``D_8 = {z in Z^8 : sum(z_i) even}``."""
+    """Project an 8D vector onto the checkerboard lattice ``D_8 = {z in Z^8 : sum(z_i) even}`` via canonical ``nearest_dn``."""
     if len(x) != 8:
         raise ValueError("D8 projection requires an 8D vector")
-    rounded = [int(math.floor(val + 0.5)) for val in x]
-    if sum(rounded) % 2 != 0:
-        # Flip the coordinate whose rounding error |x_i - r_i| is largest
-        worst_idx = max(range(8), key=lambda i: abs(x[i] - rounded[i]))
-        if x[worst_idx] >= rounded[worst_idx]:
-            rounded[worst_idx] += 1
-        else:
-            rounded[worst_idx] -= 1
-    return tuple(float(r) for r in rounded)
+    arr = np.asarray(x, dtype=np.float64).reshape(1, 8)
+    q = nearest_dn(arr)[0]
+    return tuple(float(r) for r in q.tolist())
 
 
 def is_valid_e8_lattice_point(pt: Sequence[float], tol: float = 1e-9) -> bool:
@@ -63,7 +61,10 @@ def is_valid_e8_lattice_point(pt: Sequence[float], tol: float = 1e-9) -> bool:
 
 
 class GossetE8LatticeQuantizer:
-    """Conway-Sloane O(8 log 8) Gosset E8 lattice vector quantizer for LoRA adapters."""
+    """Conway-Sloane O(8 log 8) Gosset E8 lattice vector quantizer for LoRA adapters (`artifacts/experiments/E10_lattice_diloco.json`)."""
+
+    dense_e8_compression_ratio: float = 16.0
+    reference_artifact: str = "artifacts/experiments/E10_lattice_diloco.json"
 
     def __init__(self, *, codebook_radius: float = 4.0) -> None:
         if codebook_radius <= 0.0:
@@ -72,19 +73,14 @@ class GossetE8LatticeQuantizer:
 
     @staticmethod
     def project_to_e8(x: Sequence[float]) -> tuple[tuple[float, ...], str]:
-        """Exact nearest point in ``E_8 = D_8 U (D_8 + 0.5)``."""
+        """Exact nearest point in ``E_8 = D_8 U (D_8 + 0.5)`` via canonical ``nearest_e8``."""
         if len(x) != 8:
             raise ValueError("E8 projection requires an 8D vector")
-        cand_int = _nearest_d8(x)
-        shifted = [v - 0.5 for v in x]
-        d8_half = _nearest_d8(shifted)
-        cand_half = tuple(v + 0.5 for v in d8_half)
-
-        dist_int = sum((x[i] - cand_int[i]) ** 2 for i in range(8))
-        dist_half = sum((x[i] - cand_half[i]) ** 2 for i in range(8))
-        if dist_int <= dist_half:
-            return cand_int, "D8_integer"
-        return cand_half, "D8_half_integer"
+        arr = np.asarray(x, dtype=np.float64).reshape(1, 8)
+        winner_arr = nearest_e8(arr)[0]
+        winner = tuple(float(v) for v in winner_arr.tolist())
+        is_half = abs(winner[0] - round(winner[0])) > 1e-6
+        return winner, ("D8_half_integer" if is_half else "D8_integer")
 
     def quantize_8d(self, vec: Sequence[float]) -> E8QuantizedBlock:
         """Scale and quantize an 8D parameter block onto the Gosset E8 lattice."""

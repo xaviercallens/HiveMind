@@ -1289,7 +1289,15 @@ def create_router_app(
             headers["Authorization"] = f"Bearer {record.endpoint_token}"
         return client.build_request("POST", url, json=outgoing, headers=headers)
 
-    def settle(plan: _Plan, account: Account, producer_id: str, reported: tuple[int, int], completion_bytes: int) -> dict[str, Any]:
+    def settle(
+        plan: _Plan,
+        account: Account,
+        producer_id: str,
+        reported: tuple[int, int],
+        completion_bytes: int,
+        *,
+        ttft_ms: float | None = None,
+    ) -> dict[str, Any]:
         """Settle against the escrow taken at plan time: the metered charge can never exceed it, so it is never free."""
         prompt, completion, billed = meter_usage(reported[0], reported[1], plan.prompt_bytes, completion_bytes, plan.max_tokens)
         receipt = store.settle(plan.request_id, account.account_id, producer_id, plan.model_id, prompt, completion, billed, plan.price_per_1k, fee)
@@ -1297,6 +1305,8 @@ def create_router_app(
         prompt = min(prompt, billed)
         completion = billed - prompt
         latency_ms = max(0.0, (time.monotonic() - plan.started_monotonic) * 1000.0) if plan.started_monotonic > 0.0 else 0.0
+        clean_ttft = round(max(0.0, float(ttft_ms)), 3) if ttft_ms is not None else round(latency_ms, 3)
+        tokens_per_s = round(completion / (latency_ms / 1000.0), 3) if latency_ms > 0.0 and completion > 0 else 0.0
         store.record_usage_telemetry(
             request_id=plan.request_id,
             consumer_id=account.account_id,
@@ -1310,6 +1320,8 @@ def create_router_app(
             app_title=plan.app_title,
             is_stream=plan.is_stream,
             latency_ms=latency_ms,
+            ttft_ms=clean_ttft,
+            tokens_per_s=tokens_per_s,
             prompt_tokens=prompt,
             completion_tokens=completion,
             billed_tokens=billed,
@@ -1327,6 +1339,8 @@ def create_router_app(
             "completion_tokens": completion,
             "task_domain": plan.task_domain,
             "routing_mode": plan.routing_mode,
+            "ttft_ms": clean_ttft,
+            "tokens_per_s": tokens_per_s,
         }
 
     def upstream_exhausted(
@@ -1479,6 +1493,7 @@ def create_router_app(
         settled = False
         failed = False
         produced = False
+        first_token_monotonic: float | None = None
 
         def finish() -> dict[str, Any] | None:
             nonlocal settled
@@ -1486,8 +1501,13 @@ def create_router_app(
             usage = reported if reported is not None else (estimate_tokens(plan.prompt_bytes), estimate_tokens(completion_bytes))
             if not produced:
                 usage = (0, 0)  # no choice chunk ever arrived: the producer did no work, so nothing is billed
+            stream_ttft_ms = (
+                max(0.0, (first_token_monotonic - plan.started_monotonic) * 1000.0)
+                if (first_token_monotonic is not None and plan.started_monotonic > 0.0)
+                else None
+            )
             try:
-                return settle(plan, account, producer_id, usage, completion_bytes)
+                return settle(plan, account, producer_id, usage, completion_bytes, ttft_ms=stream_ttft_ms)
             except (InsufficientBalance, DuplicateRequest, UnknownAccount):
                 LOGGER.warning("settlement failed for %s", plan.request_id)
                 return None
@@ -1508,6 +1528,8 @@ def create_router_app(
                     if not isinstance(chunk, dict):
                         continue
                     if isinstance(chunk.get("choices"), list) and chunk["choices"]:
+                        if first_token_monotonic is None:
+                            first_token_monotonic = time.monotonic()
                         produced = True
                     completion_id = str(chunk.get("id", completion_id))
                     completion_bytes += completion_byte_count(chunk, delta=True)
@@ -3319,6 +3341,7 @@ def create_router_app(
                 network_mode=payload.network_mode,
                 stacks=stacks,
                 host_label=payload.host_label,
+                active_campaign=payload.active_campaign,
                 now_utc=now,
             )
         except TooManyOpenTrainerNodes as exc:
@@ -3347,6 +3370,7 @@ def create_router_app(
         """Record a Stage-2 QLoRA / DiLoCo outer-step delta report; the figures are the client's and are not verified here."""
         from hivemind.router.opentrainer import (
             OPENTRAINER_TOPIC,
+            is_allowed_opentrainer_campaign_id,
             validate_trainer_delta_submission,
         )
 
@@ -3361,6 +3385,18 @@ def create_router_app(
         now = clock()
         if not opentrainer_delta_limiter.allow(account.account_id, now):
             raise RouterError(429, "Too many OpenTrainer delta submissions from this account; try again in a minute.", "rate_limit_error", "rate_limited")
+        active_node_campaigns = {
+            str(n.get("active_campaign") or "")
+            for n in store.list_opentrainer_nodes()
+            if str(n.get("account_id")) == account.account_id and n.get("active_campaign")
+        }
+        if not is_allowed_opentrainer_campaign_id(payload.campaign_id, registered_account_campaigns=active_node_campaigns):
+            raise RouterError(
+                400,
+                f"unknown campaign: {payload.campaign_id!r} is not in the active campaign catalog.",
+                "invalid_request_error",
+                "unknown_campaign",
+            )
         vram_reported = payload.vram_free_mib is not None or payload.vram_total_mib is not None
         req_vram_free = int(payload.vram_free_mib or 0)
         req_vram_total = int(
@@ -4369,6 +4405,22 @@ def create_router_app(
             "fits_rtx2070_wddm_ceiling": bool(plan["vram_guards"]["rtx2070_wddm_6656_ok"]),
             "transfer_sha256": plan["transfer_sha256"],
         }
+
+    @app.get("/hivemind_producer_agent.py")
+    def get_producer_agent_source() -> PlainTextResponse:
+        """Serve the canonical standalone producer heartbeat agent script (`src/hivemind/router/hivemind_producer_agent.py`)."""
+        from pathlib import Path
+
+        src_path = Path(__file__).with_name("hivemind_producer_agent.py")
+        return PlainTextResponse(src_path.read_text(encoding="utf-8"), media_type="text/x-python; charset=utf-8")
+
+    @app.get("/hivemind_producer_shield.py")
+    def get_producer_shield_source() -> PlainTextResponse:
+        """Serve the canonical standalone producer shield script (`src/hivemind/router/hivemind_producer_shield.py`)."""
+        from pathlib import Path
+
+        src_path = Path(__file__).with_name("hivemind_producer_shield.py")
+        return PlainTextResponse(src_path.read_text(encoding="utf-8"), media_type="text/x-python; charset=utf-8")
 
     from hivemind.boinc.rtx_boinc_deployer import RTXBoincServer, build_rtx_boinc_fastapi_router
 

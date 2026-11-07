@@ -138,6 +138,8 @@ CREATE TABLE IF NOT EXISTS usage_telemetry(
     app_title TEXT NOT NULL,
     is_stream INTEGER NOT NULL,
     latency_ms REAL NOT NULL,
+    ttft_ms REAL,
+    tokens_per_s REAL,
     prompt_tokens INTEGER NOT NULL,
     completion_tokens INTEGER NOT NULL,
     billed_tokens INTEGER NOT NULL,
@@ -197,6 +199,7 @@ CREATE TABLE IF NOT EXISTS opentrainer_nodes(
     network_mode TEXT NOT NULL,
     stacks_json TEXT NOT NULL,
     host_label TEXT NOT NULL,
+    active_campaign TEXT NOT NULL DEFAULT 'E8-STAGE2-TINY-GRANITE-MOE-QLORA',
     last_heartbeat_utc REAL NOT NULL,
     PRIMARY KEY(account_id, node_id)
 );
@@ -571,6 +574,16 @@ class RouterStore:
                 endpoint_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(producer_endpoints)")}
                 if "residency_json" not in endpoint_columns:
                     self._conn.execute("ALTER TABLE producer_endpoints ADD COLUMN residency_json TEXT")
+                telemetry_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(usage_telemetry)")}
+                if "ttft_ms" not in telemetry_columns:
+                    self._conn.execute("ALTER TABLE usage_telemetry ADD COLUMN ttft_ms REAL")
+                if "tokens_per_s" not in telemetry_columns:
+                    self._conn.execute("ALTER TABLE usage_telemetry ADD COLUMN tokens_per_s REAL")
+                opentrainer_node_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(opentrainer_nodes)")}
+                if "active_campaign" not in opentrainer_node_columns:
+                    self._conn.execute(
+                        "ALTER TABLE opentrainer_nodes ADD COLUMN active_campaign TEXT NOT NULL DEFAULT 'E8-STAGE2-TINY-GRANITE-MOE-QLORA'"
+                    )
                 # Databases created before the test/probe flag existed gain it in place; every existing account stays a real one.
                 account_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(accounts)")}
                 if "is_test" not in account_columns:
@@ -1634,17 +1647,30 @@ class RouterStore:
         completion_tokens: int,
         billed_tokens: int,
         charged_hmt: float,
+        ttft_ms: float | None = None,
+        tokens_per_s: float | None = None,
         now_utc: float | None = None,
     ) -> None:
         """Store privacy-preserving usage metadata for one settled request (never raw prompt text or IP)."""
         stamp = time.time() if now_utc is None else float(now_utc)
         lat = max(0.0, float(latency_ms)) if math.isfinite(latency_ms) else 0.0
+        clean_ttft = (
+            round(max(0.0, float(ttft_ms)), 3)
+            if ttft_ms is not None and math.isfinite(ttft_ms)
+            else None
+        )
+        if tokens_per_s is not None and math.isfinite(tokens_per_s):
+            clean_tps: float | None = round(max(0.0, float(tokens_per_s)), 3)
+        elif lat > 0.0 and int(completion_tokens) > 0:
+            clean_tps = round(int(completion_tokens) / (lat / 1000.0), 3)
+        else:
+            clean_tps = None
         with self._tx() as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO usage_telemetry(request_id, consumer_id, producer_id, requested_model, "
                 "routed_model, routing_mode, task_domain, language, client_sdk, app_title, is_stream, latency_ms, "
-                "prompt_tokens, completion_tokens, billed_tokens, charged_hmt, utc) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "ttft_ms, tokens_per_s, prompt_tokens, completion_tokens, billed_tokens, charged_hmt, utc) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     str(request_id),
                     str(consumer_id),
@@ -1658,6 +1684,8 @@ class RouterStore:
                     str(app_title)[:64],
                     1 if is_stream else 0,
                     lat,
+                    clean_ttft,
+                    clean_tps,
                     int(prompt_tokens),
                     int(completion_tokens),
                     int(billed_tokens),
@@ -1751,6 +1779,8 @@ class RouterStore:
         by_producer_role: dict[str, dict[str, Any]] = {}
         domain_tokens: dict[str, int] = {}
         latencies: list[float] = []
+        ttfts: list[float] = []
+        tps_samples: list[float] = []
         total_tokens = 0
         total_hmt = 0.0
         stream_count = 0
@@ -1766,12 +1796,18 @@ class RouterStore:
             tokens = int(r["billed_tokens"])
             hmt = float(r["charged_hmt"])
             lat = float(r["latency_ms"])
+            raw_ttft = r["ttft_ms"]
+            raw_tps = r["tokens_per_s"]
 
             total_tokens += tokens
             total_hmt += hmt
             if int(r["is_stream"]):
                 stream_count += 1
             latencies.append(lat)
+            if raw_ttft is not None:
+                ttfts.append(float(raw_ttft))
+            if raw_tps is not None:
+                tps_samples.append(float(raw_tps))
 
             d_entry = by_domain.setdefault(domain, {"requests": 0, "billed_tokens": 0})
             d_entry["requests"] += 1
@@ -1818,6 +1854,15 @@ class RouterStore:
         else:
             p50, p95, mean_lat = 0.0, 0.0, 0.0
 
+        ttfts.sort()
+        if ttfts:
+            ttft_p50 = ttfts[int(0.50 * (len(ttfts) - 1))]
+            ttft_p95 = ttfts[int(0.95 * (len(ttfts) - 1))]
+            ttft_mean = sum(ttfts) / len(ttfts)
+        else:
+            ttft_p50, ttft_p95, ttft_mean = 0.0, 0.0, 0.0
+        mean_tps = sum(tps_samples) / len(tps_samples) if tps_samples else 0.0
+
         thumbs_up = sum(1 for f in feedback_rows if int(f["rating"]) == 1)
         thumbs_down = sum(1 for f in feedback_rows if int(f["rating"]) == -1)
         total_fb = thumbs_up + thumbs_down
@@ -1840,6 +1885,16 @@ class RouterStore:
                 "p50": round(p50, 2),
                 "p95": round(p95, 2),
                 "mean": round(mean_lat, 2),
+            },
+            "ttft_ms": {
+                "p50": round(ttft_p50, 2),
+                "p95": round(ttft_p95, 2),
+                "mean": round(ttft_mean, 2),
+                "samples": len(ttfts),
+            },
+            "tokens_per_s": {
+                "mean": round(mean_tps, 3),
+                "samples": len(tps_samples),
             },
             "feedback": {
                 "thumbs_up": thumbs_up,
@@ -2225,6 +2280,7 @@ class RouterStore:
         network_mode: str,
         stacks: Sequence[str],
         host_label: str,
+        active_campaign: str = "E8-STAGE2-TINY-GRANITE-MOE-QLORA",
         now_utc: float | None = None,
     ) -> dict[str, Any]:
         """Register or update an OpenTrainer GPU node heartbeat.
@@ -2234,6 +2290,7 @@ class RouterStore:
         """
         stamp = time.time() if now_utc is None else float(now_utc)
         stacks_clean = [str(s) for s in stacks if str(s).strip()]
+        campaign_clean = str(active_campaign).strip()[:128] or "E8-STAGE2-TINY-GRANITE-MOE-QLORA"
         with self._tx() as conn:
             known_labels = {
                 str(r["host_label"])
@@ -2246,13 +2303,14 @@ class RouterStore:
             conn.execute(
                 "INSERT INTO opentrainer_nodes("
                 "account_id, node_id, handle, gpu_name, vram_total_mib, vram_free_mib, "
-                "network_mode, stacks_json, host_label, last_heartbeat_utc"
-                ") VALUES (?,?,?,?,?,?,?,?,?,?) "
+                "network_mode, stacks_json, host_label, active_campaign, last_heartbeat_utc"
+                ") VALUES (?,?,?,?,?,?,?,?,?,?,?) "
                 "ON CONFLICT(account_id, node_id) DO UPDATE SET "
                 "handle=excluded.handle, gpu_name=excluded.gpu_name, "
                 "vram_total_mib=excluded.vram_total_mib, vram_free_mib=excluded.vram_free_mib, "
                 "network_mode=excluded.network_mode, stacks_json=excluded.stacks_json, "
-                "host_label=excluded.host_label, last_heartbeat_utc=excluded.last_heartbeat_utc",
+                "host_label=excluded.host_label, active_campaign=excluded.active_campaign, "
+                "last_heartbeat_utc=excluded.last_heartbeat_utc",
                 (
                     account_id,
                     node_id,
@@ -2263,6 +2321,7 @@ class RouterStore:
                     network_mode,
                     json.dumps(stacks_clean),
                     host_label,
+                    campaign_clean,
                     stamp,
                 ),
             )
@@ -2276,6 +2335,7 @@ class RouterStore:
             "network_mode": network_mode,
             "stacks": stacks_clean,
             "host_label": host_label,
+            "active_campaign": campaign_clean,
             "last_heartbeat_utc": round(stamp, 3),
         }
 
@@ -2284,7 +2344,7 @@ class RouterStore:
         with self._lock:
             rows = self._conn.execute(
                 "SELECT account_id, node_id, handle, gpu_name, vram_total_mib, vram_free_mib, "
-                "network_mode, stacks_json, host_label, last_heartbeat_utc "
+                "network_mode, stacks_json, host_label, active_campaign, last_heartbeat_utc "
                 "FROM opentrainer_nodes ORDER BY last_heartbeat_utc DESC"
             ).fetchall()
         out: list[dict[str, Any]] = []
@@ -2304,6 +2364,7 @@ class RouterStore:
                     "network_mode": str(r["network_mode"]),
                     "stacks": stacks,
                     "host_label": str(r["host_label"]),
+                    "active_campaign": str(r["active_campaign"] or "E8-STAGE2-TINY-GRANITE-MOE-QLORA"),
                     "last_heartbeat_utc": float(r["last_heartbeat_utc"]),
                 }
             )

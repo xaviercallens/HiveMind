@@ -36,6 +36,7 @@ repo="$(cd "$here/../.." && pwd)"
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 cp -r "$repo/src" "$stage/src"
+cp -r "$repo/scripts" "$stage/scripts"
 mkdir -p "$stage/artifacts/mvp" "$stage/artifacts/experiments" "$stage/docs"
 cp -f "$repo/artifacts/mvp/"*.json "$stage/artifacts/mvp/" 2>/dev/null || true
 cp -f "$repo/artifacts/experiments/GRANITE_ADAPTER_"*.json "$stage/artifacts/experiments/" 2>/dev/null || true

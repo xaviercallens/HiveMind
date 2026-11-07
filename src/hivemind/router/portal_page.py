@@ -1169,13 +1169,75 @@ if (window.location.pathname === '/life-as-a-bee' && $('life-as-a-bee') && $('li
 """
 
 
+PORTAL_SUPPORTED_LANGS: tuple[str, ...] = ("fr", "en", "es", "de", "zh")
+
+PORTAL_I18N_BANNERS: dict[str, dict[str, str]] = {
+    "fr": {
+        "badge": "🇫🇷 Portail & Playground IA Citoyenne (FR)",
+        "headline": "Inférence IA Citoyenne & Décentralisée — Réciprocité Non Monétaire (+100 Points de Réflexion HMT à l'inscription)",
+        "sub": "Testez nos 15 modèles MoE en direct (Code, Maths Lean 4, Astrophysique, Vision), rejoignez La Ruche avec votre GPU au repos (< 1,5 s d'arrêt automatique dès qu'un jeu démarre) ou consultez le Manifeste Reddit.",
+        "join_href": "/rejoindre",
+        "join_label": "🤝 Rejoindre La Ruche (/rejoindre)",
+        "manifesto_href": "/manifeste",
+        "manifesto_label": "📜 Manifeste IA Citoyenne (/manifeste)",
+    },
+    "en": {
+        "badge": "🇬🇧 Citizen AI OpenRouter & Playground (EN)",
+        "headline": "Decentralized Citizen AI Inference — Non-Monetary Compute Reciprocity (+100 Free HMT Reflexion Points on Sign-Up)",
+        "sub": "Query all 15 MoE models live (Code, Formal Math Lean 4, Astrophysics, Vision), lend idle GPU compute (< 1.5s automatic game preemption), or read the Reddit Citizen AI Manifesto.",
+        "join_href": "/join?lang=en",
+        "join_label": "🤝 Join the Swarm (/join)",
+        "manifesto_href": "/manifesto?lang=en",
+        "manifesto_label": "📜 Citizen AI Manifesto (/manifesto)",
+    },
+    "es": {
+        "badge": "🇪🇸 Portal y Playground de IA Ciudadana (ES)",
+        "headline": "Inferencia de IA Ciudadana Descentralizada — Reciprocidad No Monetaria (+100 Puntos de Reflexión HMT al registrarse)",
+        "sub": "Prueba nuestros 15 modelos MoE en vivo (Código, Matemáticas Lean 4, Astrofísica, Visión) o comparte tu GPU en reposo (< 1,5 s de pausa automática al jugar).",
+        "join_href": "/join?lang=es",
+        "join_label": "🤝 Unirse a La Ruche (/join?lang=es)",
+        "manifesto_href": "/manifesto?lang=en",
+        "manifesto_label": "📜 Manifiesto IA Ciudadana (/manifesto)",
+    },
+    "de": {
+        "badge": "🇩🇪 Bürger-KI OpenRouter & Playground (DE)",
+        "headline": "Dezentrale Bürger-KI-Inferenz — Nicht-monetäre Rechenreziprozität (+100 HMT-Reflexionspunkte kostenlos)",
+        "sub": "Testen Sie alle 15 MoE-Modelle live (Code, Mathematik Lean 4, Astrophysik, Vision) oder teilen Sie Ihre GPU im Leerlauf (< 1,5 s automatische Spiel-Unterbrechung).",
+        "join_href": "/join?lang=de",
+        "join_label": "🤝 Dem Schwarm beitreten (/join?lang=de)",
+        "manifesto_href": "/manifesto?lang=en",
+        "manifesto_label": "📜 Bürger-KI-Manifest (/manifesto)",
+    },
+    "zh": {
+        "badge": "🇨🇳 公民去中心化 AI 门户与演练场 (ZH)",
+        "headline": "去中心化公民 AI 推理 — 非货币算力互惠（注册立享 +100 HMT 反思积分）",
+        "sub": "在线体验 15 个 MoE 专家模型（代码、Lean 4 形式化数学、天体物理、多模态视觉），或在闲置时共享 GPU（启动游戏 < 1.5 秒自动让出显卡）。",
+        "join_href": "/join?lang=zh",
+        "join_label": "🤝 加入蜂群网络 (/join?lang=zh)",
+        "manifesto_href": "/manifesto?lang=en",
+        "manifesto_label": "📜 公民 AI 宣言 (/manifesto)",
+    },
+}
+
+
+def normalize_portal_lang(lang: str | None) -> str:
+    """Normalize a portal language code to one of ('fr', 'en', 'es', 'de', 'zh'), defaulting to 'en'."""
+    if not lang:
+        return "en"
+    code = str(lang).strip().lower()[:2]
+    return code if code in PORTAL_SUPPORTED_LANGS else "en"
+
+
 def render_portal_page(
     client_id: str | None,
     nonce: str,
     *,
+    lang: str = "en",
     live_telemetry: dict[str, Any] | None = None,
 ) -> str:
     """Render the full OpenRouter Portal and Playground HTML page."""
+    clean_lang = normalize_portal_lang(lang)
+    i18n_banner = PORTAL_I18N_BANNERS[clean_lang]
     life_as_a_bee_html = render_life_as_a_bee_section(live_telemetry=live_telemetry)
     lt = live_telemetry or {}
     acct = lt.get("accounts") or {}
@@ -1227,17 +1289,37 @@ def render_portal_page(
         signup_cta = """<a href="/signup" class="btn btn-amber">&#x1F41D; Join &amp; Register (API Key)</a>"""
 
     return f"""<!doctype html>
-<html lang="en">
+<html lang="{clean_lang}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>HiveMind OpenRouter &bull; Decentralized AI Inference for Coders &amp; Gamers</title>
   <meta name="description" content="Decentralized OpenAI-compatible inference router. Non-monetary compute reciprocity: share idle consumer GPU compute, earn points, and query frontier coding and MoE models.">
+  <link rel="alternate" hreflang="fr" href="/fr">
+  <link rel="alternate" hreflang="en" href="/en">
+  <link rel="alternate" hreflang="es" href="/es">
+  <link rel="alternate" hreflang="de" href="/de">
+  <link rel="alternate" hreflang="zh" href="/zh">
   <style nonce="{nonce}">{_CSS}</style>
 </head>
 <body>
 <p role="note" id="poc-notice"><strong>&#9888; Proof of concept (PoC)</strong> &mdash; not a production service yet. Until HiveMind is fully secured, send only public, non-sensitive data: no secrets, passwords, API keys, personal information, or private or enterprise data. Prompts are processed by volunteer-run nodes whose operators are not verified.</p>
   <div class="container">
+    <div id="portal-i18n-bar" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;padding:0.55rem 0.9rem;margin-bottom:0.85rem;background:rgba(15,23,42,0.85);border:1px solid var(--border);border-radius:0.5rem;font-size:0.82rem;">
+      <div>
+        <strong style="color:var(--cyan);">{i18n_banner["badge"]}</strong> &bull;
+        <span>{i18n_banner["headline"]}</span>
+      </div>
+      <div style="display:flex;gap:0.55rem;align-items:center;flex-wrap:wrap;font-family:var(--font-mono);">
+        <a href="/fr" style="color:{"var(--cyan)" if clean_lang == "fr" else "var(--text-dim)"};text-decoration:none;font-weight:700;">🇫🇷 FR</a>
+        <a href="/en" style="color:{"var(--cyan)" if clean_lang == "en" else "var(--text-dim)"};text-decoration:none;font-weight:700;">🇬🇧 EN</a>
+        <a href="/es" style="color:{"var(--cyan)" if clean_lang == "es" else "var(--text-dim)"};text-decoration:none;font-weight:700;">🇪🇸 ES</a>
+        <a href="/de" style="color:{"var(--cyan)" if clean_lang == "de" else "var(--text-dim)"};text-decoration:none;font-weight:700;">🇩🇪 DE</a>
+        <a href="/zh" style="color:{"var(--cyan)" if clean_lang == "zh" else "var(--text-dim)"};text-decoration:none;font-weight:700;">🇨🇳 ZH</a>
+        <a href="{i18n_banner["join_href"]}" style="color:var(--green);text-decoration:none;font-weight:700;">{i18n_banner["join_label"]}</a>
+        <a href="{i18n_banner["manifesto_href"]}" style="color:var(--amber);text-decoration:none;font-weight:700;">{i18n_banner["manifesto_label"]}</a>
+      </div>
+    </div>
     <header>
       <div class="brand">
         <span style="font-size:1.8rem;">&#x1F41D;</span>

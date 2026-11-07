@@ -1734,11 +1734,22 @@ def create_router_app(
     @app.api_route("/portal", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/playground", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/life-as-a-bee", methods=["GET", "HEAD"], response_class=HTMLResponse)
-    def portal() -> HTMLResponse:
+    @app.api_route("/fr", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/en", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/es", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/de", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/zh", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def portal(request: Request) -> HTMLResponse:
+        from hivemind.router.portal_page import PORTAL_SUPPORTED_LANGS, normalize_portal_lang
+
+        path_lang = request.url.path.lstrip("/").lower()
+        raw_lang = path_lang if path_lang in PORTAL_SUPPORTED_LANGS else request.query_params.get("lang")
+        portal_lang = normalize_portal_lang(raw_lang)
         nonce = secrets.token_urlsafe(18)
         page = render_portal_page(
             google.client_id if google else None,
             nonce,
+            lang=portal_lang,
             live_telemetry=build_live_telemetry_snapshot(),
         )
         return HTMLResponse(
@@ -1746,6 +1757,7 @@ def create_router_app(
             headers={
                 "Content-Security-Policy": portal_content_security_policy(nonce),
                 "Cache-Control": "no-store",
+                "Content-Language": portal_lang,
                 "X-Content-Type-Options": "nosniff",
                 "Referrer-Policy": "strict-origin-when-cross-origin",
             },
@@ -4861,6 +4873,43 @@ def create_router_app(
 
         src_path = Path(__file__).with_name("hivemind_producer_shield.py")
         return PlainTextResponse(src_path.read_text(encoding="utf-8"), media_type="text/x-python; charset=utf-8")
+
+    _ALLOWED_ONBOARDING_SCRIPTS = {
+        "hivemind_boinc_idle_worker.py",
+        "hivemind_producer_agent.py",
+        "hivemind_producer_shield.py",
+        "hivemind_producer_autostart.py",
+        "hivemind_volunteer_config.py",
+        "hivemind_volunteer_preflight.py",
+        "hivemind_opentrainer_agent.py",
+    }
+
+    def _serve_onboarding_script(script_name: str) -> PlainTextResponse:
+        from pathlib import Path
+
+        if script_name not in _ALLOWED_ONBOARDING_SCRIPTS:
+            raise HTTPException(status_code=404, detail="Unknown onboarding script")
+        router_dir = Path(__file__).resolve().parent
+        repo_root = router_dir.parents[2]
+        for candidate_dir in (repo_root / "scripts", Path("/app/scripts"), router_dir):
+            sp = candidate_dir / script_name
+            if sp.exists():
+                return PlainTextResponse(
+                    sp.read_text(encoding="utf-8"),
+                    media_type="text/x-python; charset=utf-8",
+                    headers={"Content-Disposition": f'inline; filename="{script_name}"'},
+                )
+        raise HTTPException(status_code=404, detail="Script file not present on server")
+
+    @app.get("/hivemind_boinc_idle_worker.py")
+    def get_boinc_idle_worker_source() -> PlainTextResponse:
+        """Serve the canonical BOINC & Steam idle-GPU worker (`scripts/hivemind_boinc_idle_worker.py`)."""
+        return _serve_onboarding_script("hivemind_boinc_idle_worker.py")
+
+    @app.get("/scripts/{script_name}")
+    def download_onboarding_script(script_name: str) -> PlainTextResponse:
+        """Serve any allowlisted volunteer/producer/trainer onboarding script (`/scripts/hivemind_boinc_idle_worker.py`, etc.)."""
+        return _serve_onboarding_script(script_name)
 
     from hivemind.boinc.rtx_boinc_deployer import RTXBoincServer, build_rtx_boinc_fastapi_router
 

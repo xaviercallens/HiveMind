@@ -3753,11 +3753,12 @@ def create_exoplanet_hunter_fastapi_app(
             content={
                 "object": "hivemind.steam_free_game",
                 "app_id": 3133700,
+                "app_id_status": "PLACEHOLDER_NOT_REGISTERED",
                 "depot_id": 3133702,
                 "title": "USS Hivemind NCC-31337 v5.1 — Astrophysics Exoplanet Hunter & Idle-GPU BOINC Edition",
                 "pricing_model": "FreeOnDemand (100% Free-to-Play on Steam • Non-Monetary HMT Compute Reciprocity)",
                 "boinc_idle_gpu_preemption_ms": 100,
-                "portal_registration_status": "REGISTERED_AND_LIVE",
+                "portal_registration_status": "NOT_REGISTERED",
                 "endpoints": {
                     "register_login": "/v1/hivemind/steam/register-login",
                     "contribute_boinc": "/v1/hivemind/steam/contribute-boinc",

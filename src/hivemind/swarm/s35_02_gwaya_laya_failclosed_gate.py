@@ -2,11 +2,11 @@
 """HM-S35-02: GWAYA (Gwen-Laya) x ANSE Fail-Closed Selective Abstention & A3 Sample-and-Repair Gate.
 
 Integrates:
-1. GWAYA-GwenLayaOpenModel (/home/xavkal/xdev/GWAYA-GwenLayaOpenModel, Zenodo DOI 10.5281/zenodo.23123923):
+1. GWAYA-GwenLayaOpenModel (xaviercallens/GWAYA-GwenLayaOpenModel, Zenodo DOI 10.5281/zenodo.23123923):
    - Zero-Stub AST Gate rejecting placeholder implementations (`pass`, `...`, `NotImplementedError`, `mock_*`, `sorry`).
    - Laya Calibrated Selective Gate vs uncalibrated raw log-probability confidence.
    - Arm A3 Sample-and-Repair protocol (Best-of-3 candidate sampling + up to 3 repair rounds on public tests).
-2. ANSE / AutoevolveAI (/home/xavkal/xdev/AutoevolveAI):
+2. ANSE / AutoevolveAI (xaviercallens/AutoevolveAI):
    - Objective physical Energy Function E, assigning Maximum Pain E = 10^6 whenever a candidate fails
      AST stub checks, compiler verification, or sandbox assertions.
 """

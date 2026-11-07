@@ -3517,15 +3517,16 @@ def create_router_app(
 
     @app.get("/v1/hivemind/steam/status")
     def steam_free_game_status() -> dict[str, Any]:
-        """Public metadata confirming USS Hivemind NCC-31337 is registered as a Free Steam Game on the Portal."""
+        """Public metadata for USS Hivemind NCC-31337 Steam placeholder configuration (IP-31)."""
         return {
             "object": "hivemind.steam_free_game",
             "app_id": 3133700,
+            "app_id_status": "PLACEHOLDER_NOT_REGISTERED",
             "depot_id": 3133702,
             "title": "USS Hivemind NCC-31337 v5.1 — Astrophysics Exoplanet Hunter & Idle-GPU BOINC Edition",
             "pricing_model": "FreeOnDemand (100% Free-to-Play on Steam • Non-Monetary HMT Compute Reciprocity)",
             "boinc_idle_gpu_preemption_ms": 100,
-            "portal_registration_status": "REGISTERED_AND_LIVE",
+            "portal_registration_status": "NOT_REGISTERED",
             "endpoints": {
                 "register_login": "/v1/hivemind/steam/register-login",
                 "contribute_boinc": "/v1/hivemind/steam/contribute-boinc",

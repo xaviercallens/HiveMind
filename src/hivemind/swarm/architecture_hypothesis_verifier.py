@@ -489,7 +489,12 @@ class ArchitectureHypothesisVerifier:
             },
         )
 
-    def verify_h5_skip_attention_car_and_async_dma(self) -> HypothesisVerificationRecord:
+    def verify_h5_skip_attention_car_and_async_dma(
+        self,
+        *,
+        simulated_attention_compute_ms: float = 5.0,
+        min_transfer_latency_ms: float = 0.0,
+    ) -> HypothesisVerificationRecord:
         """H5: Skip-Attention Speculative Expert Prefetch, Cache-Aware Routing (CAR) & Async DMA."""
         gen = torch.Generator().manual_seed(self.seed + 5)
         num_experts = 16
@@ -506,7 +511,9 @@ class ArchitectureHypothesisVerifier:
         for name in expert_names:
             streamer.stage_expert_in_pinned_ram(name, sample_expert_tensors)
         for name in expert_names[:4]:
-            streamer.async_dma_prefetch_to_vram(name, simulated_attention_compute_ms=5.0)
+            streamer.async_dma_prefetch_to_vram(
+                name, simulated_attention_compute_ms=simulated_attention_compute_ms
+            )
 
         out = streamer.prefetch_and_route_skip_attention_car(
             post_ffn_residual=post_ffn,
@@ -518,8 +525,12 @@ class ArchitectureHypothesisVerifier:
             top_k=2,
             car_threshold=0.45,
             max_prefetch_experts=6,
-            simulated_attention_compute_ms=5.0,
+            simulated_attention_compute_ms=simulated_attention_compute_ms,
         )
+        effective_raw_dma_ms = max(float(out["total_raw_dma_ms"]), float(min_transfer_latency_ms))
+        exposed_swap_ms = round(max(0.0, effective_raw_dma_ms - float(simulated_attention_compute_ms)), 3)
+        out["total_raw_dma_ms"] = round(effective_raw_dma_ms, 3)
+        out["exposed_swap_latency_ms_simulated"] = exposed_swap_ms
 
         passed = (
             out["speculative_topk_accuracy"] >= 0.75

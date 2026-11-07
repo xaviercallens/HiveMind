@@ -508,6 +508,7 @@ class PinnedRAMExpertDMAStreamer:
             "exposed_swap_latency_ms_simulated": round(
                 max(0.0, total_raw_ms - simulated_attention_compute_ms), 3
             ),
+            "latency_basis": "simulated: raw copy time minus an assumed attention window; not a measured pipeline stall",
             **car_out,
         }
 
@@ -539,7 +540,9 @@ try:
     _HAS_TRITON = True
 
     @triton.jit
-    def _triton_fp8_quant_kernel(x_ptr, out_ptr, scale_ptr, n_cols, BLOCK_SIZE: tl.constexpr):
+    def _triton_fp8_quant_kernel(
+        x_ptr: Any, out_ptr: Any, scale_ptr: Any, n_cols: int, BLOCK_SIZE: tl.constexpr
+    ) -> None:
         row_idx = tl.program_id(0)
         col_offsets = tl.arange(0, BLOCK_SIZE)
         mask = col_offsets < n_cols
@@ -553,14 +556,14 @@ try:
 
     @triton.jit
     def _triton_fused_int4_fp8_moe_router_kernel(
-        x_ptr,
-        packed_w_ptr,
-        w_scale_ptr,
-        out_ptr,
-        n_cols,
-        half_cols,
+        x_ptr: Any,
+        packed_w_ptr: Any,
+        w_scale_ptr: Any,
+        out_ptr: Any,
+        n_cols: int,
+        half_cols: int,
         BLOCK_SIZE: tl.constexpr,
-    ):
+    ) -> None:
         row_idx = tl.program_id(0)
         half_offsets = tl.arange(0, BLOCK_SIZE)
         mask = half_offsets < half_cols

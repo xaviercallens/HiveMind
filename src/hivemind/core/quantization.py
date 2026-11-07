@@ -326,6 +326,10 @@ def stream_load_hf_causal_lm(
     hf_token: str | None = None,
     apply_nf4: bool = True,
     double_quant: bool = True,
+    *,
+    revision: str | None = None,
+    expected_sha256: str | None = None,
+    require_pinned_revision: bool = False,
 ) -> tuple[nn.Module, bool, float]:
     """Stream an open-weight HuggingFace CausalLM directly from safetensors to `device` with on-the-fly NF4.
 
@@ -338,9 +342,33 @@ def stream_load_hf_causal_lm(
     from huggingface_hub import hf_hub_download
     from transformers import AutoConfig
 
-    cfg = AutoConfig.from_pretrained(model_id, token=hf_token)
-    cfg.use_cache = False
-    ckpt_path = hf_hub_download(repo_id=model_id, filename="model.safetensors", token=hf_token)
+    if require_pinned_revision or revision is not None:
+        rev_str = (revision or "").strip()
+        if not rev_str or rev_str.lower() in {"main", "master", "latest", "head"}:
+            raise ValueError(
+                "A pinned commit revision or tag is required when loading remote HuggingFace weights (IP-42)."
+            )
+        cfg = AutoConfig.from_pretrained(model_id, token=hf_token, revision=rev_str)
+        cfg.use_cache = False
+        ckpt_path = hf_hub_download(
+            repo_id=model_id, filename="model.safetensors", token=hf_token, revision=rev_str
+        )
+    else:
+        cfg = AutoConfig.from_pretrained(model_id, token=hf_token)
+        cfg.use_cache = False
+        ckpt_path = hf_hub_download(repo_id=model_id, filename="model.safetensors", token=hf_token)
+
+    if expected_sha256 is not None:
+        expected_norm = expected_sha256.strip().lower()
+        hasher = hashlib.sha256()
+        with open(ckpt_path, "rb") as chk_fp:
+            while chunk := chk_fp.read(65536):
+                hasher.update(chunk)
+        actual_sha = hasher.hexdigest()
+        if actual_sha != expected_norm:
+            raise ValueError(
+                f"Remote weight SHA-256 mismatch for {model_id}: expected {expected_norm}, got {actual_sha} (IP-42)."
+            )
 
     with torch.device("meta"):
         if getattr(cfg, "model_type", "") == "qwen2":

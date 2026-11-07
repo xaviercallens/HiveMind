@@ -52,6 +52,7 @@ class ByzantineFilterReport:
     median_cosine: float
     cosine_threshold_lower: float
     quarantined_pre_krum: dict[str, str] = field(default_factory=dict)
+    krum_guarantee: bool = False
 
 
 @dataclass
@@ -145,8 +146,9 @@ def filter_byzantine_deltas_multikrum(
             quarantined_pre_krum=quarantined,
         )
 
-    # Clamp f so K - f - 2 >= 1
-    f = min(max_byzantine_f, max(0, K - 3))
+    # Clamp f so K >= 2*f + 3 (Multi-Krum validity condition, IP-34)
+    f = min(max_byzantine_f, max(0, (K - 3) // 2))
+    krum_guarantee = bool(max_byzantine_f > 0 and K >= 2 * max_byzantine_f + 3 and f >= max_byzantine_f)
     num_neighbors = max(1, K - f - 2)
 
     # Accumulate exact [K, K] inner-product Gram matrix parameter-by-parameter (<1 MB peak RAM)
@@ -226,11 +228,14 @@ def filter_byzantine_deltas_multikrum(
     # Multi-Krum selects the top (K - f) workers with smallest Krum distance score
     sorted_by_krum = sorted(worker_ids, key=lambda w: krum_scores[w])
     krum_survivors = set(sorted_by_krum[: max(1, K - f)])
+    median_norm = float(norms.median().item())
+    norm_by_worker = {wid: float(norms[idx].item()) for idx, wid in enumerate(worker_ids)}
 
     accepted: list[str] = []
     rejected: list[str] = list(quarantined.keys())
     for wid in worker_ids:
-        if wid in krum_survivors and mean_cos_per_worker[wid] >= cos_lower_bound:
+        norm_ok = max_byzantine_f <= 0 or norm_by_worker[wid] <= 5.0 * median_norm
+        if wid in krum_survivors and mean_cos_per_worker[wid] >= cos_lower_bound and norm_ok:
             accepted.append(wid)
         else:
             rejected.append(wid)
@@ -251,6 +256,7 @@ def filter_byzantine_deltas_multikrum(
         median_cosine=round(median_cos, 6),
         cosine_threshold_lower=round(cos_lower_bound, 6),
         quarantined_pre_krum=quarantined,
+        krum_guarantee=krum_guarantee,
     )
 
 

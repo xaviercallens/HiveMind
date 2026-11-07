@@ -24,7 +24,7 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Dict, Sequence
 
 import torch
 import torch.nn as nn
@@ -518,12 +518,12 @@ class RegionalDHTSwarmRing:
         tree_positions: list[int],
         max_prefetch_experts: int,
         sink: list[dict[str, Any]],
-    ):
+    ) -> Callable[..., None]:
         """Pre-hook on decoder layer `next_layer`: its input is the residual stream leaving layer
         `next_layer - 1`, the earliest point the next MoE layer's demand can be predicted, so the
         prefetch is issued here, before that layer's attention runs."""
 
-        def hook(_module: nn.Module, args: tuple, kwargs: dict) -> None:
+        def hook(_module: nn.Module, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
             hs = args[0] if args else kwargs["hidden_states"]
             if hs.dim() != 3 or hs.size(0) != 1:
                 raise ValueError("expert prefetch expects a single-sequence [1, T, d] residual stream")
@@ -546,10 +546,10 @@ class RegionalDHTSwarmRing:
         return hook
 
     @staticmethod
-    def _make_router_capture_hook(sink: list[dict[str, Any]], next_layer: int):
+    def _make_router_capture_hook(sink: list[dict[str, Any]], next_layer: int) -> Callable[..., None]:
         """Forward hook on the next layer's router: records the experts it really selected."""
 
-        def hook(_module: nn.Module, _inputs: tuple, output: tuple) -> None:
+        def hook(_module: nn.Module, _inputs: tuple[Any, ...], output: tuple[Any, ...]) -> None:
             for rep in sink:
                 if rep.get("prefetched_layer") == next_layer and "_router_picks" not in rep:
                     rep["_router_picks"] = output[1].detach().clone()

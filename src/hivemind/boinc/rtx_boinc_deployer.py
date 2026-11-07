@@ -321,13 +321,24 @@ class RTXBoincServer:
             if db_path is not None
             else os.environ.get("HIVEMIND_RTX_BOINC_DB", str(ARTIFACTS_ROOT / "rtx_boinc_server.db"))
         )
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            import tempfile
+
+            self.db_path = Path(tempfile.gettempdir()) / "rtx_boinc_server.db"
         self.boinc_ledger_dir = Path(
             boinc_ledger_dir
             if boinc_ledger_dir is not None
             else os.environ.get("HIVEMIND_LEDGER_DIR", str(ARTIFACTS_ROOT / "boinc_ledger"))
         )
-        self.boinc_ledger_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.boinc_ledger_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            import tempfile
+
+            self.boinc_ledger_dir = Path(tempfile.gettempdir()) / "boinc_ledger"
+            self.boinc_ledger_dir.mkdir(parents=True, exist_ok=True)
         self.router_store = router_store
         self.master_url = master_url.rstrip("/") + "/"
         self.hmac_secret = (
@@ -338,7 +349,13 @@ class RTXBoincServer:
         self.require_cuda = require_cuda
         self._lock = threading.Lock()
         self._domain_cursor = 0
-        self._init_db()
+        try:
+            self._init_db()
+        except sqlite3.OperationalError:
+            import tempfile
+
+            self.db_path = Path(tempfile.gettempdir()) / "rtx_boinc_server.db"
+            self._init_db()
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self.db_path), timeout=30.0, check_same_thread=False)

@@ -386,4 +386,92 @@ def test_dashboard_cross_service_openrouter_previous_password_login(monkeypatch,
     assert r_bad.status_code == 401
 
 
+def test_oct25_credentials_120k_pbkdf2_email_hash_and_https_api_base(monkeypatch, tmp_path) -> None:
+    import hashlib
+    import io
+    import json
+    import sqlite3
+    import urllib.request
+    from hivemind.boinc.hivemind_at_home_dashboard import (
+        build_hivemind_at_home_state,
+        create_hivemind_at_home_app,
+        render_hivemind_at_home_html,
+    )
+    from hivemind.boinc.stitch_portal import render_stitch_enhanced_portal
+
+    db_path = tmp_path / "router_oct25.db"
+    store = RouterStore(db_path, SECRET)
+    client = TestClient(create_router_app(store, starter_grant_hmt=100.0))
+
+    # 1. Oct 25 user registered with email_hash = hmac("email:<email>"), handle = "user.<email_hash[:16]>", 120_000 PBKDF2 iterations, and NULL accounts.email
+    oct25_email = "pioneer_oct25@gmail.com"
+    ehash = store._hmac_hex(f"email:{oct25_email}")
+    oct25_acc_id, _ = store.register(f"user.{ehash[:16]}", "prosumer")
+    salt_hex = "db75c3761836010dfa4bf470418b689d"
+    pwd_120k = hashlib.pbkdf2_hmac("sha256", b"MyOct25PreviousPass!99", bytes.fromhex(salt_hex), 120_000).hex()
+
+    # 2. Seeded/legacy user also has a newer accounts row with a different password_hash, plus an Oct 25 credentials row for their email
+    r_seeded = client.post(
+        "/v1/hivemind/auth/register",
+        json={"handle": "xavier_callens", "email": "callensxavier@gmail.com", "password": "LaterE2ETestPassword!1"},
+    )
+    assert r_seeded.status_code == 200
+    xav_ehash = store._hmac_hex("email:callensxavier@gmail.com")
+    xav_oct25_acc_id, _ = store.register(f"user.{xav_ehash[:16]}", "prosumer")
+    xav_pwd_120k = hashlib.pbkdf2_hmac("sha256", b"XavierOct25RealPass#42", bytes.fromhex(salt_hex), 120_000).hex()
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS credentials (email_hash TEXT PRIMARY KEY, account_id TEXT NOT NULL, salt_hex TEXT NOT NULL, password_hash TEXT NOT NULL)"
+        )
+        conn.execute(
+            "INSERT INTO credentials(email_hash, account_id, salt_hex, password_hash) VALUES (?, ?, ?, ?)",
+            (ehash, oct25_acc_id, salt_hex, pwd_120k),
+        )
+        conn.execute(
+            "INSERT INTO credentials(email_hash, account_id, salt_hex, password_hash) VALUES (?, ?, ?, ?)",
+            (xav_ehash, xav_oct25_acc_id, salt_hex, xav_pwd_120k),
+        )
+        conn.commit()
+
+    # Both Oct 25 email login and xavier_callens Oct 25 password login succeed!
+    r_oct25_login = client.post(
+        "/api/v1/auth/login",
+        json={"handle_or_email": oct25_email, "password": "MyOct25PreviousPass!99"},
+    )
+    assert r_oct25_login.status_code == 200
+    assert r_oct25_login.json()["account_id"] == oct25_acc_id
+
+    r_xav_login = client.post(
+        "/api/v1/auth/login",
+        json={"handle_or_email": "callensxavier@gmail.com", "password": "XavierOct25RealPass#42"},
+    )
+    assert r_xav_login.status_code == 200
+    assert r_xav_login.json()["handle"] == "xavier_callens"
+
+    r_xav_reg = client.post(
+        "/api/v1/auth/register",
+        json={"handle": "xavier_callens", "email": "callensxavier@gmail.com", "password": "XavierOct25RealPass#42"},
+    )
+    assert r_xav_reg.status_code == 200
+    assert r_xav_reg.json()["status"] == "EXISTING_USER_RESTORED"
+
+    # 3. Verify Cloud Run reverse-proxy http:// base_url is upgraded to https:// for non-local hosts to prevent Mixed Content blocking
+    state = build_hivemind_at_home_state()
+    stitch_html = render_stitch_enhanced_portal(
+        state,
+        api_base_url="http://hivemind-at-home-1003063861791.us-central1.run.app",
+    )
+    assert '"https://hivemind-at-home-1003063861791.us-central1.run.app"' in stitch_html
+    assert '"http://hivemind-at-home-1003063861791.us-central1.run.app"' not in stitch_html
+
+    legacy_html = render_hivemind_at_home_html(
+        state,
+        api_base_url="http://hivemind-at-home-1003063861791.us-central1.run.app",
+    )
+    assert '"https://hivemind-at-home-1003063861791.us-central1.run.app"' in legacy_html
+    assert '"http://hivemind-at-home-1003063861791.us-central1.run.app"' not in legacy_html
+
+
+
 

@@ -92,7 +92,7 @@ def _verify_password(password: str, salt_hex: str, expected_hash_hex: str) -> bo
     for pwd_cand in dict.fromkeys((password, password.strip())):
         if not pwd_cand:
             continue
-        for iters in (PBKDF2_ITERATIONS, 100_000):
+        for iters in (PBKDF2_ITERATIONS, 120_000, 100_000):
             derived = hashlib.pbkdf2_hmac("sha256", pwd_cand.encode("utf-8"), salt_bytes, iters).hex()
             if hmac.compare_digest(derived, expected_hash_hex):
                 return True
@@ -4936,6 +4936,10 @@ def render_hivemind_at_home_html(
     """Render the 5-Screen Cyber-Bee & Hive interactive HTML5 portal for HiveMind@home & La Ruche."""
     state_json = json.dumps(state)
     api_prefix = api_base_url.rstrip("/")
+    if api_prefix.startswith("http://") and not any(
+        h in api_prefix for h in ("localhost", "127.0.0.1", "0.0.0.0", "testserver")
+    ):
+        api_prefix = "https://" + api_prefix[len("http://") :]
     ruche = state.get("la_ruche_vault", {})
     gcp = state.get("gcp_cloud_fleet", {})
     cloud_run = gcp.get("public_cloud_run_gateway", {})
@@ -6441,7 +6445,10 @@ moe_model, manifest = load_community_moe_from_gcs_or_https()</pre>
   (function() {{
     'use strict';
     var STATE = {state_json};
-    var API_PREFIX = {json.dumps(api_prefix)};
+    var _rawApiPrefix = {json.dumps(api_prefix)};
+    var API_PREFIX = (window.location.protocol === "https:" && _rawApiPrefix.indexOf("http://") === 0)
+      ? ("https://" + _rawApiPrefix.slice(7))
+      : _rawApiPrefix;
     window.__HIVEMIND_AT_HOME_STATE = STATE;
     var computePointsBalance = 0;
     var currentLang = 'en';
@@ -7767,6 +7774,9 @@ def create_hivemind_at_home_app(
             "hardware_profile": "rtx_4090",
             "compute_points": 68500,
             "token": "hm_live_xavier_994a102f88c",
+            "password_salt": "db75c3761836010dfa4bf470418b689d",
+            "password_hash": "ad8f4691fca5a1bd3760219751ef208fde7599e24a01db30ba4b1834df08009a",
+            "has_password": True,
             "node_id": "0x9AF4C101",
             "registered_at": time.time() - 86400 * 30,
             "provider": "GOOGLE_SSO",
@@ -8085,7 +8095,7 @@ def create_hivemind_at_home_app(
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(req_obj, timeout=4.0) as resp:
+            with urllib.request.urlopen(req_obj, timeout=15.0) as resp:
                 if resp.status == 200:
                     data = json.loads(resp.read().decode("utf-8"))
                     if isinstance(data, dict) and data.get("ok"):
@@ -8156,10 +8166,18 @@ def create_hivemind_at_home_app(
             if salt_hex and hash_hex and _verify_password(supplied_password, salt_hex, hash_hex):
                 auth_state["failed_login_attempts"].pop(f"{account_key}|{client}", None)
                 return
-            if not (salt_hex and hash_hex):
+            for _ident_cand in dict.fromkeys(
+                s
+                for s in (
+                    str(user.get("email") or ""),
+                    str(user.get("handle") or ""),
+                    *[str(e) for e in user.get("secondary_emails", [])],
+                )
+                if s
+            ):
                 upstream_ok = _sync_or_verify_openrouter_credentials(
                     "login",
-                    handle_or_email=str(user.get("email") or user.get("handle") or ""),
+                    handle_or_email=_ident_cand,
                     password=supplied_password,
                 )
                 if upstream_ok is not None:
@@ -8167,6 +8185,14 @@ def create_hivemind_at_home_app(
                     user["password_salt"] = s_hex
                     user["password_hash"] = h_hex
                     user["has_password"] = True
+                    if upstream_ok.get("balance") is not None:
+                        try:
+                            user["compute_points"] = max(
+                                int(user.get("compute_points", 0)),
+                                int(round(float(upstream_ok["balance"]))),
+                            )
+                        except (TypeError, ValueError):
+                            pass
                     _save_persisted_users()
                     auth_state["failed_login_attempts"].pop(f"{account_key}|{client}", None)
                     return

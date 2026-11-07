@@ -1,0 +1,1586 @@
+{
+  "schema": "hivemind.e24_chain_regression_report.v1",
+  "experiment_id": "E24-CHAIN-REGRESSION",
+  "deliverable_id": "PS-01-D2",
+  "preregistration_path": "artifacts/experiments/E24_chain_regression_prereg.json",
+  "generated_at_utc": "2026-11-07T23:11:16Z",
+  "decision": "CAUSE_ATTRIBUTED",
+  "attributed_causes": [
+    "single_domain_work_units_without_pooled_multi_domain_ratchet_gate",
+    "absence_of_stratified_domain_mixing_across_80_inner_steps"
+  ],
+  "eval_sanity_gate_passed": true,
+  "max_abs_noop_delta_nats": 0.0,
+  "arms": {
+    "E24_A0_control_replay_round_170": {
+      "arm_id": "E24_A0_control_replay_round_170",
+      "rounds_evaluated": 20,
+      "initial_loss_by_domain_nats": {
+        "general": 2.41,
+        "french": 2.185,
+        "edu_web": 2.52,
+        "news": 2.09,
+        "biomed": 2.34,
+        "math": 1.98
+      },
+      "final_loss_by_domain_nats": {
+        "general": 2.41,
+        "french": 2.185,
+        "edu_web": 2.52,
+        "news": 2.09,
+        "biomed": 2.34,
+        "math": 1.98
+      },
+      "window_change_by_domain_nats": {
+        "general": 0.0,
+        "french": 0.0,
+        "edu_web": 0.0,
+        "news": 0.0,
+        "biomed": 0.0,
+        "math": 0.0
+      },
+      "median_change_nats": 0.0,
+      "share_worse": 0.0,
+      "max_abs_delta_nats": 0.0,
+      "passes_20_round_window_gate": true,
+      "per_round_summary": [
+        {
+          "round_offset": 1,
+          "active_domain": "general",
+          "delta_by_domain_nats": {
+            "general": 0.0,
+            "french": 0.0,
+            "edu_web": 0.0,
+            "news": 0.0,
+            "biomed": 0.0,
+            "math": 0.0
+          },
+          "median_change_nats": 0.0,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 2,
+          "active_domain": "french",
+          "delta_by_domain_nats": {
+            "general": 0.0,
+            "french": 0.0,
+            "edu_web": 0.0,
+            "news": 0.0,
+            "biomed": 0.0,
+            "math": 0.0
+          },
+          "median_change_nats": 0.0,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 3,
+          "active_domain": "edu_web",
+          "delta_by_domain_nats": {
+            "general": 0.0,
+            "french": 0.0,
+            "edu_web": 0.0,
+            "news": 0.0,
+            "biomed": 0.0,
+            "math": 0.0
+          },
+          "median_change_nats": 0.0,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 4,
+          "active_domain": "news",
+          "delta_by_domain_nats": {
+            "general": 0.0,
+            "french": 0.0,
+            "edu_web": 0.0,
+            "news": 0.0,
+            "biomed": 0.0,
+            "math": 0.0
+          },
+          "median_change_nats": 0.0,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 5,
+          "active_domain": "biomed",
+          "delta_by_domain_nats": {
+            "general": 0.0,
+            "french": 0.0,
+            "edu_web": 0.0,
+            "news": 0.0,
+            "biomed": 0.0,
+            "math": 0.0
+          },
+          "median_change_nats": 0.0,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 6,
+          "active_domain": "math",
+          "delta_by_domain_nats": {
+            "general": 0.0,
+            "french": 0.0,
+            "edu_web": 0.0,
+            "news": 0.0,
+            "biomed": 0.0,
+            "math": 0.0
+          },
+          "median_change_nats": 0.0,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 7,
+          "active_domain": "general",
+          "delta_by_domain_nats": {
+            "general": 0.0,
+            "french": 0.0,
+            "edu_web": 0.0,
+            "news": 0.0,
+            "biomed": 0.0,
+            "math": 0.0
+          },
+          "median_change_nats": 0.0,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 8,
+          "active_domain": "french",
+          "delta_by_domain_nats": {
+            "general": 0.0,
+            "french": 0.0,
+            "edu_web": 0.0,
+            "news": 0.0,
+            "biomed": 0.0,
+            "math": 0.0
+          },
+          "median_change_nats": 0.0,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 9,
+          "active_domain": "edu_web",
+          "delta_by_domain_nats": {
+            "general": 0.0,
+            "french": 0.0,
+            "edu_web": 0.0,
+            "news": 0.0,
+            "biomed": 0.0,
+            "math": 0.0
+          },
+          "median_change_nats": 0.0,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 10,
+          "active_domain": "news",
+          "delta_by_domain_nats": {
+            "general": 0.0,
+            "french": 0.0,
+            "edu_web": 0.0,
+            "news": 0.0,
+            "biomed": 0.0,
+            "math": 0.0
+          },
+          "median_change_nats": 0.0,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 11,
+          "active_domain": "biomed",
+          "delta_by_domain_nats": {
+            "general": 0.0,
+            "french": 0.0,
+            "edu_web": 0.0,
+            "news": 0.0,
+            "biomed": 0.0,
+            "math": 0.0
+          },
+          "median_change_nats": 0.0,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 12,
+          "active_domain": "math",
+          "delta_by_domain_nats": {
+            "general": 0.0,
+            "french": 0.0,
+            "edu_web": 0.0,
+            "news": 0.0,
+            "biomed": 0.0,
+            "math": 0.0
+          },
+          "median_change_nats": 0.0,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 13,
+          "active_domain": "general",
+          "delta_by_domain_nats": {
+            "general": 0.0,
+            "french": 0.0,
+            "edu_web": 0.0,
+            "news": 0.0,
+            "biomed": 0.0,
+            "math": 0.0
+          },
+          "median_change_nats": 0.0,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 14,
+          "active_domain": "french",
+          "delta_by_domain_nats": {
+            "general": 0.0,
+            "french": 0.0,
+            "edu_web": 0.0,
+            "news": 0.0,
+            "biomed": 0.0,
+            "math": 0.0
+          },
+          "median_change_nats": 0.0,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 15,
+          "active_domain": "edu_web",
+          "delta_by_domain_nats": {
+            "general": 0.0,
+            "french": 0.0,
+            "edu_web": 0.0,
+            "news": 0.0,
+            "biomed": 0.0,
+            "math": 0.0
+          },
+          "median_change_nats": 0.0,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 16,
+          "active_domain": "news",
+          "delta_by_domain_nats": {
+            "general": 0.0,
+            "french": 0.0,
+            "edu_web": 0.0,
+            "news": 0.0,
+            "biomed": 0.0,
+            "math": 0.0
+          },
+          "median_change_nats": 0.0,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 17,
+          "active_domain": "biomed",
+          "delta_by_domain_nats": {
+            "general": 0.0,
+            "french": 0.0,
+            "edu_web": 0.0,
+            "news": 0.0,
+            "biomed": 0.0,
+            "math": 0.0
+          },
+          "median_change_nats": 0.0,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 18,
+          "active_domain": "math",
+          "delta_by_domain_nats": {
+            "general": 0.0,
+            "french": 0.0,
+            "edu_web": 0.0,
+            "news": 0.0,
+            "biomed": 0.0,
+            "math": 0.0
+          },
+          "median_change_nats": 0.0,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 19,
+          "active_domain": "general",
+          "delta_by_domain_nats": {
+            "general": 0.0,
+            "french": 0.0,
+            "edu_web": 0.0,
+            "news": 0.0,
+            "biomed": 0.0,
+            "math": 0.0
+          },
+          "median_change_nats": 0.0,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 20,
+          "active_domain": "french",
+          "delta_by_domain_nats": {
+            "general": 0.0,
+            "french": 0.0,
+            "edu_web": 0.0,
+            "news": 0.0,
+            "biomed": 0.0,
+            "math": 0.0
+          },
+          "median_change_nats": 0.0,
+          "share_worse": 0.0
+        }
+      ]
+    },
+    "BASELINE_post_hmq_00171_unstratified_80steps": {
+      "arm_id": "BASELINE_post_hmq_00171_unstratified_80steps",
+      "rounds_evaluated": 20,
+      "initial_loss_by_domain_nats": {
+        "general": 2.41,
+        "french": 2.185,
+        "edu_web": 2.52,
+        "news": 2.09,
+        "biomed": 2.34,
+        "math": 1.98
+      },
+      "final_loss_by_domain_nats": {
+        "general": 2.497453,
+        "french": 2.259915,
+        "edu_web": 2.622588,
+        "news": 2.206723,
+        "biomed": 2.455059,
+        "math": 2.096678
+      },
+      "window_change_by_domain_nats": {
+        "general": 0.087453,
+        "french": 0.074915,
+        "edu_web": 0.102588,
+        "news": 0.116723,
+        "biomed": 0.115059,
+        "math": 0.116678
+      },
+      "median_change_nats": 0.108823,
+      "share_worse": 1.0,
+      "max_abs_delta_nats": 0.11672304,
+      "passes_20_round_window_gate": false,
+      "per_round_summary": [
+        {
+          "round_offset": 1,
+          "active_domain": "general",
+          "delta_by_domain_nats": {
+            "general": -0.028,
+            "french": 0.012439,
+            "edu_web": 0.009733,
+            "news": 0.013536,
+            "biomed": 0.009733,
+            "math": 0.009089
+          },
+          "median_change_nats": 0.009733,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 2,
+          "active_domain": "french",
+          "delta_by_domain_nats": {
+            "general": 0.013605,
+            "french": -0.028,
+            "edu_web": 0.009263,
+            "news": 0.011621,
+            "biomed": 0.013537,
+            "math": 0.01338
+          },
+          "median_change_nats": 0.012501,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 3,
+          "active_domain": "edu_web",
+          "delta_by_domain_nats": {
+            "general": 0.013458,
+            "french": 0.009271,
+            "edu_web": -0.028,
+            "news": 0.013344,
+            "biomed": 0.01324,
+            "math": 0.010123
+          },
+          "median_change_nats": 0.011681,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 4,
+          "active_domain": "news",
+          "delta_by_domain_nats": {
+            "general": 0.013332,
+            "french": 0.013039,
+            "edu_web": 0.00986,
+            "news": -0.028,
+            "biomed": 0.010481,
+            "math": 0.010421
+          },
+          "median_change_nats": 0.010451,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 5,
+          "active_domain": "biomed",
+          "delta_by_domain_nats": {
+            "general": 0.012468,
+            "french": 0.010739,
+            "edu_web": 0.009891,
+            "news": 0.009386,
+            "biomed": -0.028,
+            "math": 0.013921
+          },
+          "median_change_nats": 0.010315,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 6,
+          "active_domain": "math",
+          "delta_by_domain_nats": {
+            "general": 0.013103,
+            "french": 0.011981,
+            "edu_web": 0.010351,
+            "news": 0.01072,
+            "biomed": 0.013471,
+            "math": -0.028
+          },
+          "median_change_nats": 0.01135,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 7,
+          "active_domain": "general",
+          "delta_by_domain_nats": {
+            "general": -0.028,
+            "french": 0.010184,
+            "edu_web": 0.01023,
+            "news": 0.013229,
+            "biomed": 0.011565,
+            "math": 0.009395
+          },
+          "median_change_nats": 0.010207,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 8,
+          "active_domain": "french",
+          "delta_by_domain_nats": {
+            "general": 0.013827,
+            "french": -0.028,
+            "edu_web": 0.010657,
+            "news": 0.01126,
+            "biomed": 0.011252,
+            "math": 0.009984
+          },
+          "median_change_nats": 0.010954,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 9,
+          "active_domain": "edu_web",
+          "delta_by_domain_nats": {
+            "general": 0.013461,
+            "french": 0.009699,
+            "edu_web": -0.028,
+            "news": 0.013423,
+            "biomed": 0.011292,
+            "math": 0.011801
+          },
+          "median_change_nats": 0.011546,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 10,
+          "active_domain": "news",
+          "delta_by_domain_nats": {
+            "general": 0.01027,
+            "french": 0.011798,
+            "edu_web": 0.012903,
+            "news": -0.028,
+            "biomed": 0.01325,
+            "math": 0.012906
+          },
+          "median_change_nats": 0.012351,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 11,
+          "active_domain": "biomed",
+          "delta_by_domain_nats": {
+            "general": 0.012864,
+            "french": 0.012323,
+            "edu_web": 0.010287,
+            "news": 0.010981,
+            "biomed": -0.028,
+            "math": 0.012196
+          },
+          "median_change_nats": 0.011589,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 12,
+          "active_domain": "math",
+          "delta_by_domain_nats": {
+            "general": 0.012937,
+            "french": 0.01251,
+            "edu_web": 0.010746,
+            "news": 0.01311,
+            "biomed": 0.012613,
+            "math": -0.028
+          },
+          "median_change_nats": 0.012562,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 13,
+          "active_domain": "general",
+          "delta_by_domain_nats": {
+            "general": -0.028,
+            "french": 0.012076,
+            "edu_web": 0.013993,
+            "news": 0.010039,
+            "biomed": 0.009585,
+            "math": 0.013199
+          },
+          "median_change_nats": 0.011057,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 14,
+          "active_domain": "french",
+          "delta_by_domain_nats": {
+            "general": 0.010545,
+            "french": -0.028,
+            "edu_web": 0.00951,
+            "news": 0.010853,
+            "biomed": 0.013891,
+            "math": 0.010718
+          },
+          "median_change_nats": 0.010631,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 15,
+          "active_domain": "edu_web",
+          "delta_by_domain_nats": {
+            "general": 0.01238,
+            "french": 0.009957,
+            "edu_web": -0.028,
+            "news": 0.0138,
+            "biomed": 0.010186,
+            "math": 0.012715
+          },
+          "median_change_nats": 0.011283,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 16,
+          "active_domain": "news",
+          "delta_by_domain_nats": {
+            "general": 0.010442,
+            "french": 0.013737,
+            "edu_web": 0.011633,
+            "news": -0.028,
+            "biomed": 0.01133,
+            "math": 0.012195
+          },
+          "median_change_nats": 0.011482,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 17,
+          "active_domain": "biomed",
+          "delta_by_domain_nats": {
+            "general": 0.012336,
+            "french": 0.013867,
+            "edu_web": 0.01135,
+            "news": 0.0093,
+            "biomed": -0.028,
+            "math": 0.012866
+          },
+          "median_change_nats": 0.011843,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 18,
+          "active_domain": "math",
+          "delta_by_domain_nats": {
+            "general": 0.013852,
+            "french": 0.009378,
+            "edu_web": 0.013396,
+            "news": 0.013013,
+            "biomed": 0.010478,
+            "math": -0.028
+          },
+          "median_change_nats": 0.011745,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 19,
+          "active_domain": "general",
+          "delta_by_domain_nats": {
+            "general": -0.028,
+            "french": 0.013918,
+            "edu_web": 0.011557,
+            "news": 0.013681,
+            "biomed": 0.013198,
+            "math": 0.012691
+          },
+          "median_change_nats": 0.012945,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 20,
+          "active_domain": "french",
+          "delta_by_domain_nats": {
+            "general": 0.010572,
+            "french": -0.028,
+            "edu_web": 0.011228,
+            "news": 0.009425,
+            "biomed": 0.009958,
+            "math": 0.01308
+          },
+          "median_change_nats": 0.010265,
+          "share_worse": 0.8333
+        }
+      ]
+    },
+    "E24_A1_ratchet_acceptance_rule": {
+      "arm_id": "E24_A1_ratchet_acceptance_rule",
+      "rounds_evaluated": 20,
+      "initial_loss_by_domain_nats": {
+        "general": 2.41,
+        "french": 2.185,
+        "edu_web": 2.52,
+        "news": 2.09,
+        "biomed": 2.34,
+        "math": 1.98
+      },
+      "final_loss_by_domain_nats": {
+        "general": 2.334787,
+        "french": 2.108291,
+        "edu_web": 2.446941,
+        "news": 2.032291,
+        "biomed": 2.250767,
+        "math": 1.91091
+      },
+      "window_change_by_domain_nats": {
+        "general": -0.075213,
+        "french": -0.076709,
+        "edu_web": -0.073059,
+        "news": -0.057709,
+        "biomed": -0.089233,
+        "math": -0.06909
+      },
+      "median_change_nats": -0.074136,
+      "share_worse": 0.0,
+      "max_abs_delta_nats": 0.08923282,
+      "passes_20_round_window_gate": true,
+      "per_round_summary": [
+        {
+          "round_offset": 1,
+          "active_domain": "general",
+          "delta_by_domain_nats": {
+            "general": -0.012,
+            "french": -0.005785,
+            "edu_web": -0.001705,
+            "news": -0.003442,
+            "biomed": -0.003059,
+            "math": -0.003058
+          },
+          "median_change_nats": -0.00325,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 2,
+          "active_domain": "french",
+          "delta_by_domain_nats": {
+            "general": 0.000201,
+            "french": -0.012,
+            "edu_web": -0.005396,
+            "news": -0.001819,
+            "biomed": -0.00117,
+            "math": -0.002516
+          },
+          "median_change_nats": -0.002167,
+          "share_worse": 0.1667
+        },
+        {
+          "round_offset": 3,
+          "active_domain": "edu_web",
+          "delta_by_domain_nats": {
+            "general": -0.001916,
+            "french": -0.003558,
+            "edu_web": -0.012,
+            "news": 0.00054,
+            "biomed": 0.002305,
+            "math": -0.006075
+          },
+          "median_change_nats": -0.002737,
+          "share_worse": 0.3333
+        },
+        {
+          "round_offset": 4,
+          "active_domain": "news",
+          "delta_by_domain_nats": {
+            "general": 0.00313,
+            "french": -0.00525,
+            "edu_web": 0.000727,
+            "news": -0.012,
+            "biomed": 0.000601,
+            "math": -0.004026
+          },
+          "median_change_nats": -0.001713,
+          "share_worse": 0.5
+        },
+        {
+          "round_offset": 5,
+          "active_domain": "biomed",
+          "delta_by_domain_nats": {
+            "general": -0.005028,
+            "french": -0.005343,
+            "edu_web": -0.004741,
+            "news": 0.000218,
+            "biomed": -0.012,
+            "math": -0.000479
+          },
+          "median_change_nats": -0.004884,
+          "share_worse": 0.1667
+        },
+        {
+          "round_offset": 6,
+          "active_domain": "math",
+          "delta_by_domain_nats": {
+            "general": -0.005253,
+            "french": -0.003275,
+            "edu_web": -0.002879,
+            "news": -0.005234,
+            "biomed": -0.001591,
+            "math": -0.012
+          },
+          "median_change_nats": -0.004254,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 7,
+          "active_domain": "general",
+          "delta_by_domain_nats": {
+            "general": -0.012,
+            "french": -0.000342,
+            "edu_web": 0.002976,
+            "news": 3e-06,
+            "biomed": -0.002762,
+            "math": 0.000446
+          },
+          "median_change_nats": -0.000169,
+          "share_worse": 0.5
+        },
+        {
+          "round_offset": 8,
+          "active_domain": "french",
+          "delta_by_domain_nats": {
+            "general": -0.006337,
+            "french": -0.012,
+            "edu_web": -2e-06,
+            "news": 0.000465,
+            "biomed": -0.003108,
+            "math": 0.001509
+          },
+          "median_change_nats": -0.001555,
+          "share_worse": 0.3333
+        },
+        {
+          "round_offset": 9,
+          "active_domain": "edu_web",
+          "delta_by_domain_nats": {
+            "general": -0.001899,
+            "french": -0.002695,
+            "edu_web": -0.012,
+            "news": -0.001859,
+            "biomed": -0.006376,
+            "math": 0.000141
+          },
+          "median_change_nats": -0.002297,
+          "share_worse": 0.1667
+        },
+        {
+          "round_offset": 10,
+          "active_domain": "news",
+          "delta_by_domain_nats": {
+            "general": -0.002319,
+            "french": -0.000184,
+            "edu_web": -0.003665,
+            "news": -0.012,
+            "biomed": 0.002899,
+            "math": -0.00296
+          },
+          "median_change_nats": -0.00264,
+          "share_worse": 0.1667
+        },
+        {
+          "round_offset": 11,
+          "active_domain": "biomed",
+          "delta_by_domain_nats": {
+            "general": -0.003372,
+            "french": -0.00068,
+            "edu_web": -0.002364,
+            "news": -0.001992,
+            "biomed": -0.012,
+            "math": -0.002887
+          },
+          "median_change_nats": -0.002626,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 12,
+          "active_domain": "math",
+          "delta_by_domain_nats": {
+            "general": -0.001258,
+            "french": 0.00202,
+            "edu_web": -0.006816,
+            "news": -0.004557,
+            "biomed": -0.011666,
+            "math": -0.012
+          },
+          "median_change_nats": -0.005687,
+          "share_worse": 0.1667
+        },
+        {
+          "round_offset": 13,
+          "active_domain": "general",
+          "delta_by_domain_nats": {
+            "general": 0.0,
+            "french": 0.0,
+            "edu_web": 0.0,
+            "news": 0.0,
+            "biomed": 0.0,
+            "math": 0.0
+          },
+          "median_change_nats": 0.0,
+          "share_worse": 0.0
+        },
+        {
+          "round_offset": 14,
+          "active_domain": "french",
+          "delta_by_domain_nats": {
+            "general": -0.005482,
+            "french": -0.012,
+            "edu_web": -0.006112,
+            "news": 0.00289,
+            "biomed": -0.008123,
+            "math": 0.003178
+          },
+          "median_change_nats": -0.005797,
+          "share_worse": 0.3333
+        },
+        {
+          "round_offset": 15,
+          "active_domain": "edu_web",
+          "delta_by_domain_nats": {
+            "general": -0.000746,
+            "french": -0.004616,
+            "edu_web": -0.012,
+            "news": 0.00069,
+            "biomed": -0.005091,
+            "math": -0.006447
+          },
+          "median_change_nats": -0.004854,
+          "share_worse": 0.1667
+        },
+        {
+          "round_offset": 16,
+          "active_domain": "news",
+          "delta_by_domain_nats": {
+            "general": -0.004289,
+            "french": 0.001015,
+            "edu_web": -0.003034,
+            "news": -0.012,
+            "biomed": -0.005706,
+            "math": -0.0031
+          },
+          "median_change_nats": -0.003695,
+          "share_worse": 0.1667
+        },
+        {
+          "round_offset": 17,
+          "active_domain": "biomed",
+          "delta_by_domain_nats": {
+            "general": -0.005327,
+            "french": -0.001349,
+            "edu_web": 8.3e-05,
+            "news": -0.006067,
+            "biomed": -0.012,
+            "math": -0.003211
+          },
+          "median_change_nats": -0.004269,
+          "share_worse": 0.1667
+        },
+        {
+          "round_offset": 18,
+          "active_domain": "math",
+          "delta_by_domain_nats": {
+            "general": 0.001878,
+            "french": 0.000112,
+            "edu_web": -0.002402,
+            "news": -0.000509,
+            "biomed": -0.003597,
+            "math": -0.012
+          },
+          "median_change_nats": -0.001456,
+          "share_worse": 0.3333
+        },
+        {
+          "round_offset": 19,
+          "active_domain": "general",
+          "delta_by_domain_nats": {
+            "general": -0.012,
+            "french": 0.00122,
+            "edu_web": -0.002421,
+            "news": -0.000518,
+            "biomed": -0.006774,
+            "math": 0.000792
+          },
+          "median_change_nats": -0.00147,
+          "share_worse": 0.3333
+        },
+        {
+          "round_offset": 20,
+          "active_domain": "french",
+          "delta_by_domain_nats": {
+            "general": -0.001196,
+            "french": -0.012,
+            "edu_web": 0.000694,
+            "news": -0.000519,
+            "biomed": -1.5e-05,
+            "math": -0.004398
+          },
+          "median_change_nats": -0.000857,
+          "share_worse": 0.1667
+        }
+      ]
+    },
+    "E24_A2_single_domain_work_units": {
+      "arm_id": "E24_A2_single_domain_work_units",
+      "rounds_evaluated": 20,
+      "initial_loss_by_domain_nats": {
+        "general": 2.41,
+        "french": 2.185,
+        "edu_web": 2.52,
+        "news": 2.09,
+        "biomed": 2.34,
+        "math": 1.98
+      },
+      "final_loss_by_domain_nats": {
+        "general": 2.402362,
+        "french": 2.167332,
+        "edu_web": 2.50287,
+        "news": 2.084178,
+        "biomed": 2.332847,
+        "math": 1.974142
+      },
+      "window_change_by_domain_nats": {
+        "general": -0.007638,
+        "french": -0.017668,
+        "edu_web": -0.01713,
+        "news": -0.005822,
+        "biomed": -0.007153,
+        "math": -0.005858
+      },
+      "median_change_nats": -0.007395,
+      "share_worse": 0.0,
+      "max_abs_delta_nats": 0.01766807,
+      "passes_20_round_window_gate": true,
+      "per_round_summary": [
+        {
+          "round_offset": 1,
+          "active_domain": "general",
+          "delta_by_domain_nats": {
+            "general": -0.009,
+            "french": 0.001751,
+            "edu_web": -0.000413,
+            "news": 0.002629,
+            "biomed": -0.000414,
+            "math": -0.000929
+          },
+          "median_change_nats": -0.000414,
+          "share_worse": 0.3333
+        },
+        {
+          "round_offset": 2,
+          "active_domain": "french",
+          "delta_by_domain_nats": {
+            "general": 0.002684,
+            "french": -0.009,
+            "edu_web": -0.00079,
+            "news": 0.001097,
+            "biomed": 0.00263,
+            "math": 0.002504
+          },
+          "median_change_nats": 0.001801,
+          "share_worse": 0.6667
+        },
+        {
+          "round_offset": 3,
+          "active_domain": "edu_web",
+          "delta_by_domain_nats": {
+            "general": 0.002567,
+            "french": -0.000784,
+            "edu_web": -0.009,
+            "news": 0.002475,
+            "biomed": 0.002392,
+            "math": -0.000101
+          },
+          "median_change_nats": 0.001145,
+          "share_worse": 0.5
+        },
+        {
+          "round_offset": 4,
+          "active_domain": "news",
+          "delta_by_domain_nats": {
+            "general": 0.002465,
+            "french": 0.002231,
+            "edu_web": -0.000312,
+            "news": -0.009,
+            "biomed": 0.000185,
+            "math": 0.000137
+          },
+          "median_change_nats": 0.000161,
+          "share_worse": 0.6667
+        },
+        {
+          "round_offset": 5,
+          "active_domain": "biomed",
+          "delta_by_domain_nats": {
+            "general": 0.001774,
+            "french": 0.000391,
+            "edu_web": -0.000287,
+            "news": -0.000691,
+            "biomed": -0.009,
+            "math": 0.002936
+          },
+          "median_change_nats": 5.2e-05,
+          "share_worse": 0.5
+        },
+        {
+          "round_offset": 6,
+          "active_domain": "math",
+          "delta_by_domain_nats": {
+            "general": 0.002282,
+            "french": 0.001385,
+            "edu_web": 8.1e-05,
+            "news": 0.000376,
+            "biomed": 0.002577,
+            "math": -0.009
+          },
+          "median_change_nats": 0.00088,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 7,
+          "active_domain": "general",
+          "delta_by_domain_nats": {
+            "general": -0.009,
+            "french": -5.3e-05,
+            "edu_web": -1.6e-05,
+            "news": 0.002383,
+            "biomed": 0.001052,
+            "math": -0.000684
+          },
+          "median_change_nats": -3.4e-05,
+          "share_worse": 0.3333
+        },
+        {
+          "round_offset": 8,
+          "active_domain": "french",
+          "delta_by_domain_nats": {
+            "general": 0.002861,
+            "french": -0.009,
+            "edu_web": 0.000325,
+            "news": 0.000808,
+            "biomed": 0.000802,
+            "math": -0.000213
+          },
+          "median_change_nats": 0.000563,
+          "share_worse": 0.6667
+        },
+        {
+          "round_offset": 9,
+          "active_domain": "edu_web",
+          "delta_by_domain_nats": {
+            "general": 0.002569,
+            "french": -0.000441,
+            "edu_web": -0.009,
+            "news": 0.002538,
+            "biomed": 0.000834,
+            "math": 0.001241
+          },
+          "median_change_nats": 0.001037,
+          "share_worse": 0.6667
+        },
+        {
+          "round_offset": 10,
+          "active_domain": "news",
+          "delta_by_domain_nats": {
+            "general": 1.6e-05,
+            "french": 0.001239,
+            "edu_web": 0.002123,
+            "news": -0.009,
+            "biomed": 0.0024,
+            "math": 0.002124
+          },
+          "median_change_nats": 0.001681,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 11,
+          "active_domain": "biomed",
+          "delta_by_domain_nats": {
+            "general": 0.002091,
+            "french": 0.001658,
+            "edu_web": 2.9e-05,
+            "news": 0.000585,
+            "biomed": -0.009,
+            "math": 0.001557
+          },
+          "median_change_nats": 0.001071,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 12,
+          "active_domain": "math",
+          "delta_by_domain_nats": {
+            "general": 0.00215,
+            "french": 0.001808,
+            "edu_web": 0.000396,
+            "news": 0.002288,
+            "biomed": 0.001891,
+            "math": -0.009
+          },
+          "median_change_nats": 0.00185,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 13,
+          "active_domain": "general",
+          "delta_by_domain_nats": {
+            "general": -0.009,
+            "french": 0.001461,
+            "edu_web": 0.002994,
+            "news": -0.000169,
+            "biomed": -0.000532,
+            "math": 0.002359
+          },
+          "median_change_nats": 0.000646,
+          "share_worse": 0.5
+        },
+        {
+          "round_offset": 14,
+          "active_domain": "french",
+          "delta_by_domain_nats": {
+            "general": 0.000236,
+            "french": -0.009,
+            "edu_web": -0.000592,
+            "news": 0.000482,
+            "biomed": 0.002912,
+            "math": 0.000374
+          },
+          "median_change_nats": 0.000305,
+          "share_worse": 0.6667
+        },
+        {
+          "round_offset": 15,
+          "active_domain": "edu_web",
+          "delta_by_domain_nats": {
+            "general": 0.001704,
+            "french": -0.000234,
+            "edu_web": -0.009,
+            "news": 0.00284,
+            "biomed": -5.1e-05,
+            "math": 0.001972
+          },
+          "median_change_nats": 0.000826,
+          "share_worse": 0.5
+        },
+        {
+          "round_offset": 16,
+          "active_domain": "news",
+          "delta_by_domain_nats": {
+            "general": 0.000154,
+            "french": 0.002789,
+            "edu_web": 0.001107,
+            "news": -0.009,
+            "biomed": 0.000864,
+            "math": 0.001556
+          },
+          "median_change_nats": 0.000985,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 17,
+          "active_domain": "biomed",
+          "delta_by_domain_nats": {
+            "general": 0.001669,
+            "french": 0.002894,
+            "edu_web": 0.00088,
+            "news": -0.00076,
+            "biomed": -0.009,
+            "math": 0.002093
+          },
+          "median_change_nats": 0.001274,
+          "share_worse": 0.6667
+        },
+        {
+          "round_offset": 18,
+          "active_domain": "math",
+          "delta_by_domain_nats": {
+            "general": 0.002882,
+            "french": -0.000698,
+            "edu_web": 0.002517,
+            "news": 0.002211,
+            "biomed": 0.000182,
+            "math": -0.009
+          },
+          "median_change_nats": 0.001196,
+          "share_worse": 0.6667
+        },
+        {
+          "round_offset": 19,
+          "active_domain": "general",
+          "delta_by_domain_nats": {
+            "general": -0.009,
+            "french": 0.002934,
+            "edu_web": 0.001046,
+            "news": 0.002745,
+            "biomed": 0.002358,
+            "math": 0.001953
+          },
+          "median_change_nats": 0.002156,
+          "share_worse": 0.8333
+        },
+        {
+          "round_offset": 20,
+          "active_domain": "french",
+          "delta_by_domain_nats": {
+            "general": 0.000257,
+            "french": -0.009,
+            "edu_web": 0.000782,
+            "news": -0.00066,
+            "biomed": -0.000234,
+            "math": 0.002264
+          },
+          "median_change_nats": 1.2e-05,
+          "share_worse": 0.5
+        }
+      ]
+    },
+    "E24_A3_stratified_mixing": {
+      "arm_id": "E24_A3_stratified_mixing",
+      "rounds_evaluated": 20,
+      "initial_loss_by_domain_nats": {
+        "general": 2.41,
+        "french": 2.185,
+        "edu_web": 2.52,
+        "news": 2.09,
+        "biomed": 2.34,
+        "math": 1.98
+      },
+      "final_loss_by_domain_nats": {
+        "general": 2.385884,
+        "french": 2.153964,
+        "edu_web": 2.459596,
+        "news": 2.047054,
+        "biomed": 2.302643,
+        "math": 1.939899
+      },
+      "window_change_by_domain_nats": {
+        "general": -0.024116,
+        "french": -0.031036,
+        "edu_web": -0.060404,
+        "news": -0.042946,
+        "biomed": -0.037357,
+        "math": -0.040101
+      },
+      "median_change_nats": -0.038729,
+      "share_worse": 0.0,
+      "max_abs_delta_nats": 0.06040398,
+      "passes_20_round_window_gate": true,
+      "per_round_summary": [
+        {
+          "round_offset": 1,
+          "active_domain": "general",
+          "delta_by_domain_nats": {
+            "general": -0.000108,
+            "french": -0.000841,
+            "edu_web": -0.0049,
+            "news": 0.000804,
+            "biomed": -0.004901,
+            "math": -0.005867
+          },
+          "median_change_nats": -0.002871,
+          "share_worse": 0.1667
+        },
+        {
+          "round_offset": 2,
+          "active_domain": "french",
+          "delta_by_domain_nats": {
+            "general": 0.000908,
+            "french": 0.001076,
+            "edu_web": -0.005606,
+            "news": -0.002068,
+            "biomed": 0.000805,
+            "math": 0.00057
+          },
+          "median_change_nats": 0.000688,
+          "share_worse": 0.6667
+        },
+        {
+          "round_offset": 3,
+          "active_domain": "edu_web",
+          "delta_by_domain_nats": {
+            "general": 0.000687,
+            "french": -0.005594,
+            "edu_web": -0.004795,
+            "news": 0.000516,
+            "biomed": 0.000359,
+            "math": -0.004315
+          },
+          "median_change_nats": -0.001978,
+          "share_worse": 0.5
+        },
+        {
+          "round_offset": 4,
+          "active_domain": "news",
+          "delta_by_domain_nats": {
+            "general": 0.000498,
+            "french": 5.9e-05,
+            "edu_web": -0.00471,
+            "news": -0.00252,
+            "biomed": -0.003778,
+            "math": -0.003869
+          },
+          "median_change_nats": -0.003149,
+          "share_worse": 0.3333
+        },
+        {
+          "round_offset": 5,
+          "active_domain": "biomed",
+          "delta_by_domain_nats": {
+            "general": -0.000798,
+            "french": -0.003391,
+            "edu_web": -0.004663,
+            "news": -0.005421,
+            "biomed": -0.004185,
+            "math": 0.001381
+          },
+          "median_change_nats": -0.003788,
+          "share_worse": 0.1667
+        },
+        {
+          "round_offset": 6,
+          "active_domain": "math",
+          "delta_by_domain_nats": {
+            "general": 0.000155,
+            "french": -0.001529,
+            "edu_web": -0.003974,
+            "news": -0.00342,
+            "biomed": 0.000706,
+            "math": -0.002604
+          },
+          "median_change_nats": -0.002067,
+          "share_worse": 0.3333
+        },
+        {
+          "round_offset": 7,
+          "active_domain": "general",
+          "delta_by_domain_nats": {
+            "general": -0.003019,
+            "french": -0.004224,
+            "edu_web": -0.004155,
+            "news": 0.000344,
+            "biomed": -0.002153,
+            "math": -0.005408
+          },
+          "median_change_nats": -0.003587,
+          "share_worse": 0.1667
+        },
+        {
+          "round_offset": 8,
+          "active_domain": "french",
+          "delta_by_domain_nats": {
+            "general": 0.00124,
+            "french": 0.001221,
+            "edu_web": -0.003515,
+            "news": -0.00261,
+            "biomed": -0.002622,
+            "math": -0.004523
+          },
+          "median_change_nats": -0.002616,
+          "share_worse": 0.3333
+        },
+        {
+          "round_offset": 9,
+          "active_domain": "edu_web",
+          "delta_by_domain_nats": {
+            "general": 0.000691,
+            "french": -0.004952,
+            "edu_web": -0.000946,
+            "news": 0.000634,
+            "biomed": -0.002562,
+            "math": -0.001799
+          },
+          "median_change_nats": -0.001372,
+          "share_worse": 0.3333
+        },
+        {
+          "round_offset": 10,
+          "active_domain": "news",
+          "delta_by_domain_nats": {
+            "general": -0.004095,
+            "french": -0.001803,
+            "edu_web": -0.000145,
+            "news": -0.004019,
+            "biomed": 0.000376,
+            "math": -0.000142
+          },
+          "median_change_nats": -0.000974,
+          "share_worse": 0.1667
+        },
+        {
+          "round_offset": 11,
+          "active_domain": "biomed",
+          "delta_by_domain_nats": {
+            "general": -0.000204,
+            "french": -0.001016,
+            "edu_web": -0.00407,
+            "news": -0.003028,
+            "biomed": 0.000304,
+            "math": -0.001206
+          },
+          "median_change_nats": -0.001111,
+          "share_worse": 0.1667
+        },
+        {
+          "round_offset": 12,
+          "active_domain": "math",
+          "delta_by_domain_nats": {
+            "general": -9.4e-05,
+            "french": -0.000734,
+            "edu_web": -0.003382,
+            "news": 0.000165,
+            "biomed": -0.00058,
+            "math": -0.005364
+          },
+          "median_change_nats": -0.000657,
+          "share_worse": 0.1667
+        },
+        {
+          "round_offset": 13,
+          "active_domain": "general",
+          "delta_by_domain_nats": {
+            "general": -0.004952,
+            "french": -0.001387,
+            "edu_web": 0.00149,
+            "news": -0.004442,
+            "biomed": -0.005122,
+            "math": 0.000299
+          },
+          "median_change_nats": -0.002914,
+          "share_worse": 0.3333
+        },
+        {
+          "round_offset": 14,
+          "active_domain": "french",
+          "delta_by_domain_nats": {
+            "general": -0.003682,
+            "french": 0.001072,
+            "edu_web": -0.005235,
+            "news": -0.00322,
+            "biomed": 0.001336,
+            "math": -0.003424
+          },
+          "median_change_nats": -0.003322,
+          "share_worse": 0.3333
+        },
+        {
+          "round_offset": 15,
+          "active_domain": "edu_web",
+          "delta_by_domain_nats": {
+            "general": -0.00093,
+            "french": -0.004564,
+            "edu_web": -0.003045,
+            "news": 0.0012,
+            "biomed": -0.004221,
+            "math": -0.000428
+          },
+          "median_change_nats": -0.001988,
+          "share_worse": 0.1667
+        },
+        {
+          "round_offset": 16,
+          "active_domain": "news",
+          "delta_by_domain_nats": {
+            "general": -0.003836,
+            "french": 0.001105,
+            "edu_web": -0.00205,
+            "news": -0.005992,
+            "biomed": -0.002505,
+            "math": -0.001208
+          },
+          "median_change_nats": -0.002277,
+          "share_worse": 0.1667
+        },
+        {
+          "round_offset": 17,
+          "active_domain": "biomed",
+          "delta_by_domain_nats": {
+            "general": -0.000996,
+            "french": 0.0013,
+            "edu_web": -0.002475,
+            "news": -0.00555,
+            "biomed": -0.000564,
+            "math": -0.000201
+          },
+          "median_change_nats": -0.00078,
+          "share_worse": 0.1667
+        },
+        {
+          "round_offset": 18,
+          "active_domain": "math",
+          "delta_by_domain_nats": {
+            "general": 0.001278,
+            "french": -0.005434,
+            "edu_web": 0.000594,
+            "news": 2e-05,
+            "biomed": -0.003783,
+            "math": -0.00165
+          },
+          "median_change_nats": -0.000815,
+          "share_worse": 0.5
+        },
+        {
+          "round_offset": 19,
+          "active_domain": "general",
+          "delta_by_domain_nats": {
+            "general": -0.003216,
+            "french": 0.001377,
+            "edu_web": -0.002164,
+            "news": 0.001022,
+            "biomed": 0.000297,
+            "math": -0.000463
+          },
+          "median_change_nats": -8.3e-05,
+          "share_worse": 0.5
+        },
+        {
+          "round_offset": 20,
+          "active_domain": "french",
+          "delta_by_domain_nats": {
+            "general": -0.003643,
+            "french": -0.002778,
+            "edu_web": -0.002658,
+            "news": -0.005362,
+            "biomed": -0.004563,
+            "math": 0.00012
+          },
+          "median_change_nats": -0.00321,
+          "share_worse": 0.1667
+        }
+      ]
+    }
+  }
+}

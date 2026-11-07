@@ -56,6 +56,7 @@ TZ = "Europe/Paris"
 WINDOW_START, WINDOW_END = dt.time(23, 0), dt.time(6, 30)
 UTIL_BUSY_PCT = 10  # t4_governor.other_gpu_busy default threshold: whole-GPU utilisation >= 10 % with no task of ours means someone else is using the card
 SAFETY_MARGIN_MIB = 600
+VRAM_FLOOR_MIB = 4300
 TIER_CAP_MIB = {"N0": 3950, "N1": 9650}  # N0: governor's 4300 MiB rule minus ~350 MiB context (probe default); N1: 10000 MiB budget minus context (plan section 6, step 3)
 TIER_BUDGET_MIB = {"N0": 4300, "N1": 10000}  # prereg R1: process peak budgets by tier
 BOINC_WAIT_S = 90.0  # after our HOLD exists the governor only sets BOINC to "never"; an already-running task can take 0.8-60 s to leave (t4_governor.terminate_tree docstring)
@@ -355,16 +356,62 @@ def resident_models(env: Env, url: str) -> tuple[list[str] | None, str | None]:
         return None, f"{type(e).__name__}: {str(e)[:120]}"
 
 
+def check_vram_floor_guard(
+    free_mib: int,
+    estimated_peak_mib: int = 0,
+    floor_mib: int = VRAM_FLOOR_MIB,
+    total_mib: int = 15360,
+    min_cap_mib: int = 1500,
+    max_cap_mib: int = 9500,
+) -> dict[str, Any]:
+    """Enforce the 4,300 MiB VRAM safety floor (PS-02-D1): free - estimated_peak >= floor_mib and cap = min(max_cap, free - floor_mib)."""
+    remaining_free_mib = int(free_mib) - max(0, int(estimated_peak_mib))
+    cap_mib = min(int(max_cap_mib), max(0, int(free_mib) - int(floor_mib)))
+    memory_fraction = min(1.0, max(0.0, cap_mib / float(total_mib))) if total_mib > 0 else 0.0
+    reason = ""
+    if int(free_mib) < int(floor_mib):
+        reason = f"free VRAM {free_mib} MiB below floor {floor_mib} MiB"
+    elif remaining_free_mib < int(floor_mib):
+        reason = f"free VRAM {free_mib} MiB minus estimated peak {estimated_peak_mib} MiB leaves {remaining_free_mib} MiB < {floor_mib} MiB floor"
+    elif cap_mib < max(int(min_cap_mib), int(estimated_peak_mib)):
+        reason = f"cap {cap_mib} MiB (free {free_mib} MiB - floor {floor_mib} MiB) below required {max(int(min_cap_mib), int(estimated_peak_mib))} MiB"
+    ok = reason == ""
+    return {
+        "ok": ok,
+        "status": "READY" if ok else "BLOCKED",
+        "reason": reason,
+        "free_vram_mib": int(free_mib),
+        "estimated_peak_mib": int(estimated_peak_mib),
+        "remaining_free_mib": remaining_free_mib,
+        "floor_mib": int(floor_mib),
+        "cap_mib": cap_mib,
+        "memory_fraction": round(memory_fraction, 6),
+    }
+
+
 def preflight(env: Env, o: "Options", arm: Arm) -> dict:
     """Everything that must hold before an arm starts. Returns {ok, status, reason, cap_mib, cap_basis, snapshot, checks}. Read-only."""
     checks: dict[str, Any] = {}
     snap = env.gpu()
     free = snap["total_mib"] - snap["used_mib"]
     cap = min(o.max_cap_mib, free - SAFETY_MARGIN_MIB)
+    if o.vram_floor_mib is not None:
+        cap = min(cap, free - o.vram_floor_mib)
     if o.tier_cap:
         cap = min(cap, arm.tier_cap_mib)
     basis = {"max_cap_mib": o.max_cap_mib, "free_vram_mib": free, "safety_margin_mib": SAFETY_MARGIN_MIB, "tier_cap_applied": o.tier_cap, "tier_cap_mib": arm.tier_cap_mib}
+    if o.vram_floor_mib is not None:
+        basis["vram_floor_mib"] = o.vram_floor_mib
     out = {"ok": False, "status": "BLOCKED", "reason": "", "cap_mib": cap, "cap_basis": basis, "snapshot": snap, "checks": checks}
+    if o.vram_floor_mib is not None and free < o.vram_floor_mib:
+        out["reason"] = f"free VRAM {free} MiB below floor {o.vram_floor_mib} MiB"
+        return out
+    if o.vram_floor_mib is not None and env.estimate is not None:
+        est_info = env.estimate(arm)
+        est_peak = int(est_info.get("process_peak_mib") or est_info.get("alloc_peak_mib") or 0) if est_info.get("available") else 0
+        if est_peak > 0 and (free - est_peak < o.vram_floor_mib or cap < est_peak):
+            out["reason"] = f"cap {cap} MiB (free {free} MiB - floor {o.vram_floor_mib} MiB) below estimated peak {est_peak} MiB"
+            return out
     models, why = resident_models(env, o.ollama_url)
     checks["ollama_resident_models"] = models if models is not None else f"unreadable: {why}"
     if models is None:
@@ -555,6 +602,7 @@ class Options:
     probe: Path = PROBE
     prereg: Path = PREREG
     hub: str | None = None
+    vram_floor_mib: int | None = None
 
 
 def probe_cmd(o: Options, arm: Arm, cap: int) -> list[str]:
@@ -861,6 +909,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--ollama-url", default=OLLAMA_PS_URL)
     ap.add_argument("--python", default=sys.executable, help="interpreter for the probe (needs torch, transformers, peft, bitsandbytes)")
     ap.add_argument("--hub", help="Hugging Face hub cache for the estimator's config.json files")
+    ap.add_argument("--vram-floor-mib", type=int, default=None, help="optional free VRAM safety floor in MiB (e.g. 4300 on shared T4); caps at free - floor and refuses below estimate")
     return ap
 
 
@@ -868,7 +917,8 @@ def options_from_args(a: argparse.Namespace, env: Env) -> Options:
     out = a.out_dir or DEFAULT_OUT_ROOT / env.now().astimezone(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return Options(arms=[x.strip() for x in a.arms.split(",") if x.strip()] if a.arms else None, out_dir=out, hold_file=a.hold_file, lock_file=a.lock_file,
                    status_url=a.status_url, ollama_url=a.ollama_url, allow_gpu=a.allow_gpu or ["llama-server"], max_cap_mib=a.max_cap_mib, min_cap_mib=a.min_cap_mib,
-                   max_gpu_temp_c=a.max_gpu_temp_c, arm_timeout_s=a.arm_timeout_s, ignore_window=a.ignore_window, tier_cap=a.tier_cap, boinc_wait_s=a.boinc_wait_s, python=a.python, hub=a.hub)
+                   max_gpu_temp_c=a.max_gpu_temp_c, arm_timeout_s=a.arm_timeout_s, ignore_window=a.ignore_window, tier_cap=a.tier_cap, boinc_wait_s=a.boinc_wait_s,
+                   python=a.python, hub=a.hub, vram_floor_mib=a.vram_floor_mib)
 
 
 def main(argv: list[str] | None = None, env: Env | None = None) -> int:

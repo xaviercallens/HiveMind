@@ -125,13 +125,36 @@ def governor_busy(path: str) -> Optional[bool]:
         return None
 
 
-def gate(args: argparse.Namespace, device: str, now: Optional[datetime] = None) -> Tuple[bool, str]:
+def apply_vram_floor_fraction(
+    free_mib: float,
+    min_free_mib: float = 4300.0,
+    total_mib: float = 15360.0,
+    set_fraction_fn: Optional[Callable[[float], None]] = None,
+) -> float:
+    """Compute and apply the CUDA per-process memory fraction that keeps ``min_free_mib`` free on the GPU."""
+    cap_mib = max(0.0, float(free_mib) - float(min_free_mib))
+    fraction = min(1.0, max(0.0, cap_mib / float(total_mib))) if total_mib > 0 else 0.0
+    if set_fraction_fn is not None:
+        set_fraction_fn(fraction)
+    elif torch.cuda.is_available():
+        torch.cuda.set_per_process_memory_fraction(fraction)
+    return round(fraction, 6)
+
+
+def gate(
+    args: argparse.Namespace,
+    device: str,
+    now: Optional[datetime] = None,
+    free_fn: Callable[[], Optional[float]] = q.free_vram_mib,
+) -> Tuple[bool, str]:
     if args.night_only and not in_night_window(now):
         return False, "outside the night window"
     if args.governor_log and governor_busy(args.governor_log):
         return False, "inference in flight (governor)"
     try:
-        q.vram_guard(args.min_free_mib, args.need_mib, device)
+        free_now = q.vram_guard(args.min_free_mib, args.need_mib, device, free_fn=free_fn)
+        if device == "cuda" and free_now is not None:
+            apply_vram_floor_fraction(free_now, min_free_mib=args.min_free_mib)
     except q.GuardError as exc:
         return False, f"vram: {exc}"
     return True, "ok"

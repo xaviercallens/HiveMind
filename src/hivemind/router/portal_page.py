@@ -1174,7 +1174,7 @@ PORTAL_SUPPORTED_LANGS: tuple[str, ...] = ("fr", "en", "es", "de", "zh")
 PORTAL_I18N_BANNERS: dict[str, dict[str, str]] = {
     "fr": {
         "badge": "🇫🇷 Portail & Playground IA Citoyenne (FR)",
-        "headline": "Inférence IA Citoyenne & Décentralisée — 0 € / 0 Carte Bancaire (+100 HMT Gratuits à l'inscription)",
+        "headline": "Inférence IA Citoyenne & Décentralisée — Réciprocité Non Monétaire (+100 Points de Réflexion HMT à l'inscription)",
         "sub": "Testez nos 15 modèles MoE en direct (Code, Maths Lean 4, Astrophysique, Vision), rejoignez La Ruche avec votre GPU au repos (< 1,5 s d'arrêt automatique dès qu'un jeu démarre) ou consultez le Manifeste Reddit.",
         "join_href": "/rejoindre",
         "join_label": "🤝 Rejoindre La Ruche (/rejoindre)",
@@ -1183,7 +1183,7 @@ PORTAL_I18N_BANNERS: dict[str, dict[str, str]] = {
     },
     "en": {
         "badge": "🇬🇧 Citizen AI OpenRouter & Playground (EN)",
-        "headline": "Decentralized Citizen AI Inference — 0 EUR / 0 USD (+100 Free HMT Starter Points on Sign-Up)",
+        "headline": "Decentralized Citizen AI Inference — Non-Monetary Compute Reciprocity (+100 Free HMT Reflexion Points on Sign-Up)",
         "sub": "Query all 15 MoE models live (Code, Formal Math Lean 4, Astrophysics, Vision), lend idle GPU compute (< 1.5s automatic game preemption), or read the Reddit Citizen AI Manifesto.",
         "join_href": "/join?lang=en",
         "join_label": "🤝 Join the Swarm (/join)",
@@ -1192,7 +1192,7 @@ PORTAL_I18N_BANNERS: dict[str, dict[str, str]] = {
     },
     "es": {
         "badge": "🇪🇸 Portal y Playground de IA Ciudadana (ES)",
-        "headline": "Inferencia de IA Ciudadana Descentralizada — 0 EUR / 0 USD (+100 HMT Gratis al registrarse)",
+        "headline": "Inferencia de IA Ciudadana Descentralizada — Reciprocidad No Monetaria (+100 Puntos de Reflexión HMT al registrarse)",
         "sub": "Prueba nuestros 15 modelos MoE en vivo (Código, Matemáticas Lean 4, Astrofísica, Visión) o comparte tu GPU en reposo (< 1,5 s de pausa automática al jugar).",
         "join_href": "/join?lang=es",
         "join_label": "🤝 Unirse a La Ruche (/join?lang=es)",
@@ -1201,7 +1201,7 @@ PORTAL_I18N_BANNERS: dict[str, dict[str, str]] = {
     },
     "de": {
         "badge": "🇩🇪 Bürger-KI OpenRouter & Playground (DE)",
-        "headline": "Dezentrale Bürger-KI-Inferenz — 0 EUR / 0 USD (+100 HMT Starter-Punkte kostenlos)",
+        "headline": "Dezentrale Bürger-KI-Inferenz — Nicht-monetäre Rechenreziprozität (+100 HMT-Reflexionspunkte kostenlos)",
         "sub": "Testen Sie alle 15 MoE-Modelle live (Code, Mathematik Lean 4, Astrophysik, Vision) oder teilen Sie Ihre GPU im Leerlauf (< 1,5 s automatische Spiel-Unterbrechung).",
         "join_href": "/join?lang=de",
         "join_label": "🤝 Dem Schwarm beitreten (/join?lang=de)",
@@ -1210,7 +1210,7 @@ PORTAL_I18N_BANNERS: dict[str, dict[str, str]] = {
     },
     "zh": {
         "badge": "🇨🇳 公民去中心化 AI 门户与演练场 (ZH)",
-        "headline": "去中心化公民 AI 推理 — 0 欧元 / 0 美元（注册立享 +100 HMT 免费算力积分）",
+        "headline": "去中心化公民 AI 推理 — 非货币算力互惠（注册立享 +100 HMT 反思积分）",
         "sub": "在线体验 15 个 MoE 专家模型（代码、Lean 4 形式化数学、天体物理、多模态视觉），或在闲置时共享 GPU（启动游戏 < 1.5 秒自动让出显卡）。",
         "join_href": "/join?lang=zh",
         "join_label": "🤝 加入蜂群网络 (/join?lang=zh)",

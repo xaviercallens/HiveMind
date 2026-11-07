@@ -57,12 +57,15 @@ def test_1xctxbf_profile1_and_2_five_languages_and_manifesto_routes(tmp_path: Pa
     assert "WebGPU" in r_webgpu.text
 
     # Profile 2: 5 languages on OpenRouter (`/?lang=...` and `/fr`, `/en`, `/es`, `/de`, `/zh`)
+    from hivemind.router.points_wording import currency_leftovers
+
     for lang in ("fr", "en", "es", "de", "zh"):
         r_path = client.get(f"/{lang}")
         assert r_path.status_code == 200, f"GET /{lang} failed with {r_path.status_code}"
         assert r_path.headers.get("content-language") == lang
         assert f'<html lang="{lang}">' in r_path.text
         assert 'id="portal-i18n-bar"' in r_path.text
+        assert currency_leftovers(r_path.text) == []
 
         r_query = client.get(f"/?lang={lang}")
         assert r_query.status_code == 200

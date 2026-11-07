@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.wintypes
+import math
 import sys
 from dataclasses import dataclass
 from enum import Enum
@@ -108,9 +109,17 @@ class ZeroIntrusionDaemon:
         consumer_query_active: bool = False,
         hardware_circuit_breaker: GPUExecutionCircuitBreaker | None = None,
     ) -> None:
-        self.idle_threshold_seconds = idle_threshold_seconds
+        if not math.isfinite(float(idle_threshold_seconds)) or float(idle_threshold_seconds) <= 0.0:
+            raise ValueError("idle_threshold_seconds must be finite and > 0")
+        if simulated_idle_seconds is not None and (
+            not math.isfinite(float(simulated_idle_seconds)) or float(simulated_idle_seconds) < 0.0
+        ):
+            raise ValueError("simulated_idle_seconds must be finite and >= 0")
+        self.idle_threshold_seconds = float(idle_threshold_seconds)
         self.enforce_os_idle_hook = enforce_os_idle_hook
-        self.simulated_idle_seconds = simulated_idle_seconds
+        self.simulated_idle_seconds = (
+            float(simulated_idle_seconds) if simulated_idle_seconds is not None else None
+        )
         self.simulated_active_game = simulated_active_game
         self.consumer_query_active = consumer_query_active
         self.hardware_circuit_breaker = hardware_circuit_breaker
@@ -160,14 +169,20 @@ class ZeroIntrusionDaemon:
                 seti_agent_state=SETIAgentState.STATE_3_SWARM_CONSUMER.value,
             )
 
-        if self.enforce_os_idle_hook and idle_sec < self.idle_threshold_seconds:
+        if self.enforce_os_idle_hook and (
+            not math.isfinite(float(idle_sec))
+            or float(idle_sec) < 0.0
+            or float(idle_sec) < self.idle_threshold_seconds
+        ):
             return DaemonTelemetry(
                 os_idle_seconds=idle_sec,
                 idle_threshold_seconds=self.idle_threshold_seconds,
                 active_game_detected=None,
                 should_yield_vram=True,
                 reason=(
-                    f"User input activity detected (idle {idle_sec:.1f}s < {self.idle_threshold_seconds:.1f}s)."
+                    f"User input activity or invalid idle reading detected (idle {idle_sec}s < {self.idle_threshold_seconds:.1f}s)."
+                    if not math.isfinite(float(idle_sec)) or float(idle_sec) < 0.0
+                    else f"User input activity detected (idle {idle_sec:.1f}s < {self.idle_threshold_seconds:.1f}s)."
                 ),
                 seti_agent_state=SETIAgentState.STATE_1_GAMING_SEED_ONLY.value,
             )

@@ -473,5 +473,240 @@ def test_oct25_credentials_120k_pbkdf2_email_hash_and_https_api_base(monkeypatch
     assert '"http://hivemind-at-home-1003063861791.us-central1.run.app"' not in legacy_html
 
 
+def test_comprehensive_sso_pkce_s256_ownership_and_persistence_dashboard(tmp_path: Path, monkeypatch) -> None:
+    """Comprehensive E2E test for SSO PKCE S256, lookalike protection, token restoration, and persistence on Dashboard."""
+    import base64
+    import hashlib
+    from hivemind.boinc.hivemind_at_home_dashboard import create_hivemind_at_home_app
+
+    users_file = tmp_path / "dashboard_sso_users.json"
+    monkeypatch.setenv("HIVEMIND_DASHBOARD_USERS_FILE", str(users_file))
+
+    app = create_hivemind_at_home_app()
+    client = TestClient(app)
+
+    # 1. PKCE S256 with client-supplied code_challenge
+    verifier = "my_high_entropy_pkce_verifier_secret_1234567890"
+    challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest())
+        .rstrip(b"=")
+        .decode("ascii")
+    )
+    r_az = client.get(f"/api/v1/auth/sso/google/authorize?code_challenge={challenge}")
+    assert r_az.status_code == 200
+    az_data = r_az.json()
+    assert az_data["code_challenge"] == challenge
+    assert az_data["federation_mode"] == "LOCAL_PKCE_SANDBOX_FEDERATION"
+
+    # Cross-provider state replay (google state on github) must be rejected with 400
+    r_cross = client.post(
+        "/api/v1/auth/sso/github",
+        json={"state": az_data["state"], "code_verifier": verifier, "handle_hint": "pkce_tester"},
+    )
+    assert r_cross.status_code == 400
+
+    # Wrong code_verifier must be rejected with 400
+    r_bad_verifier = client.post(
+        "/api/v1/auth/sso/google",
+        json={"state": az_data["state"], "code_verifier": "wrong_verifier_value", "handle_hint": "pkce_tester"},
+    )
+    assert r_bad_verifier.status_code == 400
+
+    # Correct code_verifier succeeds and creates account
+    r_sso_ok = client.post(
+        "/api/v1/auth/sso/google",
+        json={"state": az_data["state"], "code_verifier": verifier, "handle_hint": "pkce_tester"},
+    )
+    assert r_sso_ok.status_code == 200
+    sso_user = r_sso_ok.json()
+    assert sso_user["status"] == "AUTHENTICATED_VIA_SSO"
+    assert sso_user["handle"] == "pkce_tester"
+    assert sso_user["provider"] == "GOOGLE_SSO"
+    sso_tok = sso_user["token"]
+
+    # 2. Lookalike handles/emails on SSO cannot hijack xavier_callens or pkce_tester
+    for lookalike in ("@xavier_callens", "Xavier_Callens", "xaviercallens", "callensxavier@gmail.com", "@pkce_tester", "PKCE_TESTER"):
+        r_hijack = client.post(
+            "/api/v1/auth/sso/reddit",
+            json={"handle_hint": lookalike, "user_mode": "auto"},
+        )
+        assert r_hijack.status_code == 401, f"Expected 401 for lookalike {lookalike}, got {r_hijack.status_code}"
+        r_force_new = client.post(
+            "/api/v1/auth/sso/reddit",
+            json={"handle_hint": lookalike, "user_mode": "force_new"},
+        )
+        assert r_force_new.status_code == 409, f"Expected 409 for force_new lookalike {lookalike}, got {r_force_new.status_code}"
+
+    # 3. Returning user with valid Bearer token can log back in via SSO even after logout and without typing handle_hint
+    client.post("/api/v1/auth/logout", headers={"Authorization": f"Bearer {sso_tok}"})
+    r_sso_return = client.post(
+        "/api/v1/auth/sso/github",
+        headers={"Authorization": f"Bearer {sso_tok}"},
+        json={"user_mode": "auto"},
+    )
+    assert r_sso_return.status_code == 200
+    ret_body = r_sso_return.json()
+    assert ret_body["handle"] == "pkce_tester"
+    assert ret_body["user_state"] == "EXISTING_USER"
+    assert "GITHUB_SSO" in ret_body["linked_providers"]
+    assert "GOOGLE_SSO" in ret_body["linked_providers"]
+
+    # 4. Restart dashboard app and verify SSO user persisted to disk
+    app2 = create_hivemind_at_home_app()
+    client2 = TestClient(app2)
+    r_sess2 = client2.get("/api/v1/auth/session", headers={"Authorization": f"Bearer {sso_tok}"})
+    assert r_sess2.status_code == 200
+    assert r_sess2.json()["authenticated"] is True
+    assert r_sess2.json()["user"]["handle"] == "pkce_tester"
+
+    # 5. Guest upgrade lookalike protection and 0 unverified bonus
+    r_guest = client2.post("/api/v1/auth/guest", json={"target_profile": "developer"})
+    assert r_guest.status_code == 200
+    g_tok = r_guest.json()["token"]
+    assert r_guest.json()["compute_points"] == 0
+
+    r_up_hijack = client2.post(
+        "/api/v1/auth/upgrade-guest",
+        headers={"Authorization": f"Bearer {g_tok}"},
+        json={"handle": "@xavier_callens", "email": "callensxavier@gmail.com", "provider": "google"},
+    )
+    assert r_up_hijack.status_code == 409
+
+    r_up_ok = client2.post(
+        "/api/v1/auth/upgrade-guest",
+        headers={"Authorization": f"Bearer {g_tok}"},
+        json={"handle": "honest_upgraded_guest", "email": "honest@example.com", "provider": "github"},
+    )
+    assert r_up_ok.status_code == 200
+    assert r_up_ok.json()["compute_points"] == 0
+    assert r_up_ok.json()["handle"] == "honest_upgraded_guest"
+
+
+def test_comprehensive_sso_guest_link_and_key_rotation_on_router_gateway(tmp_path: Path) -> None:
+    """Verify full parity of /api/v1/auth/sso/*, /guest, /upgrade-guest, /link-provider, and /rotate-key on Router Gateway."""
+    import base64
+    import hashlib
+
+    store = RouterStore(tmp_path / "router_sso_parity.sqlite3", SECRET)
+    app = create_router_app(store, open_registration=True)
+    client = TestClient(app)
+
+    # 1. Test all 4 core MVP SSO providers on Router Gateway
+    for prov in ("google", "reddit", "steam", "github"):
+        r_az = client.get(f"/api/v1/auth/sso/{prov}/authorize")
+        assert r_az.status_code == 200
+        az = r_az.json()
+        assert az["status"] == "SSO_AUTHORIZATION_READY"
+        assert az["is_core_mvp_provider"] is True
+
+        r_sso = client.post(
+            f"/api/v1/auth/sso/{prov}",
+            json={"state": az["state"], "code_verifier": az["code_verifier"], "handle_hint": f"router_{prov}_user"},
+        )
+        assert r_sso.status_code == 200
+        body = r_sso.json()
+        assert body["status"] == "AUTHENTICATED_VIA_SSO"
+        assert body["handle"] == f"router_{prov}_user"
+        assert body["token"].startswith("hm-")
+
+    # 2. Enforce PKCE S256 challenge and cross-provider state check on Router Gateway
+    verifier = "router_pkce_secret_verifier_987654321"
+    challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest())
+        .rstrip(b"=")
+        .decode("ascii")
+    )
+    az_custom = client.get(f"/api/v1/auth/sso/google/authorize?code_challenge={challenge}").json()
+    assert (
+        client.post(
+            "/api/v1/auth/sso/steam",
+            json={"state": az_custom["state"], "code_verifier": verifier},
+        ).status_code
+        == 400
+    )
+    assert (
+        client.post(
+            "/api/v1/auth/sso/google",
+            json={"state": az_custom["state"], "code_verifier": "bad_verifier"},
+        ).status_code
+        == 400
+    )
+    r_pkce_ok = client.post(
+        "/api/v1/auth/sso/google",
+        json={"state": az_custom["state"], "code_verifier": verifier, "handle_hint": "router_pkce_valid"},
+    )
+    assert r_pkce_ok.status_code == 200
+    pkce_tok = r_pkce_ok.json()["token"]
+
+    # 3. Lookalike handle protection on Router Gateway SSO
+    for lookalike in ("@xavier_callens", "callensxavier@gmail.com", "router_pkce_valid", "@router_pkce_valid"):
+        assert (
+            client.post("/api/v1/auth/sso/google", json={"handle_hint": lookalike, "user_mode": "auto"}).status_code
+            == 401
+        )
+        assert (
+            client.post("/api/v1/auth/sso/google", json={"handle_hint": lookalike, "user_mode": "force_new"}).status_code
+            == 409
+        )
+
+    # 4. Link provider & Rotate key on Router Gateway
+    r_link = client.post(
+        "/api/v1/auth/link-provider",
+        headers={"Authorization": f"Bearer {pkce_tok}"},
+        json={"provider": "github"},
+    )
+    assert r_link.status_code == 200
+    assert "GITHUB_SSO" in r_link.json()["linked_providers"]
+
+    r_rot = client.post("/api/v1/auth/rotate-key", headers={"Authorization": f"Bearer {pkce_tok}"})
+    assert r_rot.status_code == 200
+    rot_data = r_rot.json()
+    assert rot_data["old_token_revoked"] is True
+    new_tok = rot_data["token"]
+    assert new_tok != pkce_tok
+
+    # Old token is revoked, new token authenticates
+    assert client.get("/api/v1/auth/session", headers={"Authorization": f"Bearer {pkce_tok}"}).json()["authenticated"] is False
+    assert client.get("/api/v1/auth/session", headers={"Authorization": f"Bearer {new_tok}"}).json()["authenticated"] is True
+
+    # 5. Guest sandbox and upgrade on Router Gateway
+    r_guest = client.post("/api/v1/auth/guest", json={"target_profile": "gamer"})
+    assert r_guest.status_code == 200
+    g_tok = r_guest.json()["token"]
+    assert client.get("/api/v1/auth/session", headers={"Authorization": f"Bearer {g_tok}"}).json()["user"]["is_guest"] is True
+
+    r_up = client.post(
+        "/api/v1/auth/upgrade-guest",
+        headers={"Authorization": f"Bearer {g_tok}"},
+        json={"handle": "router_guest_upgraded", "email": "rg@example.com", "provider": "steam"},
+    )
+    assert r_up.status_code == 200
+    assert r_up.json()["compute_points"] == 0
+    assert r_up.json()["token"].startswith("hm-")
+
+
+def test_web_ui_honest_claims_and_simplified_auth_drawer(tmp_path: Path) -> None:
+    """Verify Web UI pages contain only real claims and simplified auth layout."""
+    store = RouterStore(tmp_path / "ui_honesty.sqlite3", SECRET)
+    app = create_router_app(store, open_registration=True)
+    client = TestClient(app)
+
+    for path in ("/signup", "/login"):
+        html = client.get(path).text
+        assert "sets password on first login" not in html
+        assert "optional if using API key or legacy handle" not in html
+        assert "required for password accounts" in html
+
+    portal_html = client.get("/v3.1").text
+    assert "ENTER AS GUEST (2,500 HMT)" not in portal_html
+    assert "(+2,500 HMT BONUS)" not in portal_html
+    assert "PASSWORDLESS QUANTUM MAGIC LINK" not in portal_html
+    assert "ENTER AS GUEST (0 HMT SANDBOX)" in portal_html
+    assert "(0 UNVERIFIED BONUS)" in portal_html
+    assert "LOCAL EMAIL TOKEN HANDSHAKE (NO OUTBOUND EMAIL SENT)" in portal_html
+    assert 'data-testid="advanced-legacy-auth-drawer"' in portal_html
+
+
+
 
 

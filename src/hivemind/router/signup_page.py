@@ -360,8 +360,8 @@ python hivemind_connect.py snippet continue --model coder</code></pre>
     <form id="loginForm" method="post" action="/login">
       <label for="loginIdentifier">Username, Handle, Email, or API Key</label>
       <input id="loginIdentifier" name="identifier" type="text" required autocomplete="username" placeholder="e.g. xavier_callens, @Vxtzq, email, or hm-..." />
-      <label for="loginPassword">Password (optional if using API key or legacy handle)</label>
-      <input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="Your password (sets password on first login)" />
+      <label for="loginPassword">Password (required for password accounts; omit if pasting an <code>hm-...</code> API key)</label>
+      <input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="Your account password" />
       <p style="margin-top:.65rem"><button id="loginSubmitBtn" type="submit">Sign In &amp; Restore Account · Se connecter</button></p>
     </form>
   </section>

@@ -180,16 +180,21 @@ def test_ip38_e8_gosset_lattice_tie_breaking_parity_across_all_call_sites() -> N
 
 
 def test_audit_c4_single_source_for_producer_agent_and_shield(tmp_path: Path) -> None:
-    """MVP Audit C4: scripts/hivemind_producer_{agent,shield}.py re-export src/hivemind/router/... and gateway serves them."""
-    agent_path = REPO_ROOT / "scripts" / "hivemind_producer_agent.py"
-    shield_path = REPO_ROOT / "scripts" / "hivemind_producer_shield.py"
+    """MVP Audit C4: scripts/hivemind_producer_{agent,shield}.py and src/hivemind/router/... are byte-identical and gateway serves them."""
+    agent_script_path = REPO_ROOT / "scripts" / "hivemind_producer_agent.py"
+    shield_script_path = REPO_ROOT / "scripts" / "hivemind_producer_shield.py"
+    agent_src_path = REPO_ROOT / "src" / "hivemind" / "router" / "hivemind_producer_agent.py"
+    shield_src_path = REPO_ROOT / "src" / "hivemind" / "router" / "hivemind_producer_shield.py"
 
-    spec_a = importlib.util.spec_from_file_location("scripts_agent_check", agent_path)
+    assert agent_script_path.read_text(encoding="utf-8") == agent_src_path.read_text(encoding="utf-8")
+    assert shield_script_path.read_text(encoding="utf-8") == shield_src_path.read_text(encoding="utf-8")
+
+    spec_a = importlib.util.spec_from_file_location("scripts_agent_check", agent_script_path)
     assert spec_a is not None and spec_a.loader is not None
     mod_a = importlib.util.module_from_spec(spec_a)
     spec_a.loader.exec_module(mod_a)
 
-    spec_s = importlib.util.spec_from_file_location("scripts_shield_check", shield_path)
+    spec_s = importlib.util.spec_from_file_location("scripts_shield_check", shield_script_path)
     assert spec_s is not None and spec_s.loader is not None
     mod_s = importlib.util.module_from_spec(spec_s)
     spec_s.loader.exec_module(mod_s)
@@ -205,10 +210,10 @@ def test_audit_c4_single_source_for_producer_agent_and_shield(tmp_path: Path) ->
         "apply_control",
         "fetch_remote_config",
     ):
-        assert getattr(mod_a, attr) is getattr(src_agent, attr), f"diverged attr on agent: {attr}"
+        assert hasattr(mod_a, attr) and hasattr(src_agent, attr), f"missing attr on agent: {attr}"
 
     for attr in ("main", "build_parser", "create_shield_app", "POC_NOTICE"):
-        assert getattr(mod_s, attr) is getattr(src_shield, attr), f"diverged attr on shield: {attr}"
+        assert hasattr(mod_s, attr) and hasattr(src_shield, attr), f"missing attr on shield: {attr}"
 
     store = RouterStore(tmp_path / "router.sqlite3", secret=b"s" * 32)
     client = TestClient(create_router_app(store))
@@ -216,8 +221,8 @@ def test_audit_c4_single_source_for_producer_agent_and_shield(tmp_path: Path) ->
     r_shield = client.get("/hivemind_producer_shield.py")
     assert r_agent.status_code == 200
     assert r_shield.status_code == 200
-    assert r_agent.text == (REPO_ROOT / "src" / "hivemind" / "router" / "hivemind_producer_agent.py").read_text(encoding="utf-8")
-    assert r_shield.text == (REPO_ROOT / "src" / "hivemind" / "router" / "hivemind_producer_shield.py").read_text(encoding="utf-8")
+    assert r_agent.text == agent_src_path.read_text(encoding="utf-8")
+    assert r_shield.text == shield_src_path.read_text(encoding="utf-8")
 
 
 def test_audit_c9_streaming_ttft_ms_and_tokens_per_s_recorded_in_settle(tmp_path: Path) -> None:

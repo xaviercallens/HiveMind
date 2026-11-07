@@ -1,0 +1,37 @@
+{
+  "schema": "hivemind.e23_amcp_mobility_report.v1",
+  "experiment_id": "E23",
+  "deliverable_id": "PS-08-D3",
+  "generated_at_utc": "2026-11-07T22:46:41Z",
+  "transport": "AMCP partitioned event log (Spot Kafka voters stopped when idle; local deterministic harness)",
+  "registered_thresholds": {
+    "max_migration_p95_ms": 250.0,
+    "max_state_loss_rate": 0.0,
+    "max_post_dedup_duplicates": 0
+  },
+  "scales": {
+    "100": {
+      "bee_count": 100,
+      "migration_time_ms_p50": 0.0353,
+      "migration_time_ms_p95": 0.0431,
+      "raw_wire_frames_sent": 110,
+      "unique_bees_restored": 100,
+      "state_loss_count": 0,
+      "state_loss_rate": 0.0,
+      "post_dedup_duplicate_deliveries": 0,
+      "passes_registered_thresholds": true
+    },
+    "1000": {
+      "bee_count": 1000,
+      "migration_time_ms_p50": 0.0352,
+      "migration_time_ms_p95": 0.0475,
+      "raw_wire_frames_sent": 1100,
+      "unique_bees_restored": 1000,
+      "state_loss_count": 0,
+      "state_loss_rate": 0.0,
+      "post_dedup_duplicate_deliveries": 0,
+      "passes_registered_thresholds": true
+    }
+  },
+  "passes_all_scales": true
+}

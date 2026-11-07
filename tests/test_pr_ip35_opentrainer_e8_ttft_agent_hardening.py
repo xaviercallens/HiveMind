@@ -314,3 +314,225 @@ def test_audit_b10_pr_first_openrouter_orchestrator_has_no_fabricated_ids() -> N
         assert rec.openrouter_request_id is None
         assert rec.ast_security_clean is True
         assert rec.ready_to_merge is True
+        assert rec.to_dict()["roadmap_id"] == rec.roadmap_id
+
+
+def test_pr_ip35_comprehensive_branch_coverage(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Exercise edge cases in E8 quantizer, PR-first orchestrator, OpenTrainer validator, producer shield/agent, and solverbee families."""
+    from hivemind.router.opentrainer import (
+        is_allowed_opentrainer_campaign_id,
+        validate_trainer_delta_submission,
+    )
+    from hivemind.solverbee.families import FamilyError, compile_slot_spec
+    from hivemind.swarm.pr_first_openrouter_orchestrator import RoadmapPRSpec, scan_python_ast_security
+    from hivemind.swarm.s34_03_gosset_e8_lattice_quantizer import (
+        _nearest_d8,
+        is_valid_e8_lattice_point,
+    )
+
+    # 1. GossetE8LatticeQuantizer edge cases
+    with pytest.raises(ValueError):
+        GossetE8LatticeQuantizer(codebook_radius=0.0)
+    with pytest.raises(ValueError):
+        GossetE8LatticeQuantizer.project_to_e8([1.0, 2.0])
+    with pytest.raises(ValueError):
+        _nearest_d8([1.0, 2.0])
+    q_e8 = GossetE8LatticeQuantizer(codebook_radius=4.0)
+    with pytest.raises(ValueError):
+        q_e8.quantize_8d([1.0, 2.0])
+    zero_block = q_e8.quantize_8d([0.0] * 8)
+    assert zero_block.scale == 0.0 and zero_block.to_dict()["coset"] == "D8_integer"
+    nz_block = q_e8.quantize_8d([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
+    assert nz_block.is_valid_e8_point is True
+    assert is_valid_e8_lattice_point([0.0, 0.0, 0.0]) is False
+    assert is_valid_e8_lattice_point([2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]) is True
+    assert is_valid_e8_lattice_point([0.5] * 8) is True
+    assert is_valid_e8_lattice_point([0.3] * 8) is False
+
+    # 2. PRFirstOpenRouterCodingOrchestrator edge cases
+    clean, violations = scan_python_ast_security("x = eval('1')\ny = pickle.loads(b'')\n")
+    assert clean is False and "eval" in violations and "pickle.loads" in violations
+    orch = PRFirstOpenRouterCodingOrchestrator(repo_root=tmp_path)
+    with pytest.raises(FileNotFoundError):
+        orch.verify_spec(
+            RoadmapPRSpec(1, "HM-X", "T", "missing.py", "test_missing.py")
+        )
+    (tmp_path / "mod_ok.py").write_text("x = 1\n", encoding="utf-8")
+    with pytest.raises(FileNotFoundError):
+        orch.verify_spec(
+            RoadmapPRSpec(1, "HM-X", "T", "mod_ok.py", "test_missing.py")
+        )
+
+    # 3. OpenTrainer validator edge cases
+    assert is_allowed_opentrainer_campaign_id("   ") is False
+    for bad_kwargs in (
+        {"run_id": "", "round_index": 0, "delta_l2": 0.1, "eval_loss": 1.0, "tokens_trained": 100, "vram_free_mib": 2000, "vram_total_mib": 8192},
+        {"run_id": "r1", "round_index": -1, "delta_l2": 0.1, "eval_loss": 1.0, "tokens_trained": 100, "vram_free_mib": 2000, "vram_total_mib": 8192},
+        {"run_id": "r1", "round_index": 0, "delta_l2": -0.1, "eval_loss": 1.0, "tokens_trained": 100, "vram_free_mib": 2000, "vram_total_mib": 8192},
+        {"run_id": "r1", "round_index": 0, "delta_l2": 999.0, "eval_loss": 1.0, "tokens_trained": 100, "vram_free_mib": 2000, "vram_total_mib": 8192},
+        {"run_id": "r1", "round_index": 0, "delta_l2": 0.1, "eval_loss": -1.0, "tokens_trained": 100, "vram_free_mib": 2000, "vram_total_mib": 8192},
+        {"run_id": "r1", "round_index": 0, "delta_l2": 0.1, "eval_loss": 1.0, "tokens_trained": 0, "vram_free_mib": 2000, "vram_total_mib": 8192},
+        {"run_id": "r1", "round_index": 0, "delta_l2": 0.1, "eval_loss": 1.0, "tokens_trained": 100, "vram_free_mib": 100, "vram_total_mib": 8192},
+    ):
+        with pytest.raises(ValueError):
+            validate_trainer_delta_submission(**bad_kwargs)
+
+    # 4. Producer shield CLI main() & parser
+    import uvicorn
+
+    monkeypatch.setattr(uvicorn, "run", lambda *a, **kw: None)
+    monkeypatch.setenv("HIVEMIND_ENDPOINT_TOKEN", "s" * 24)
+    assert src_shield.main(["--port", "8789", "--route", "m1=http://127.0.0.1:8100"]) == 0
+    with pytest.raises(SystemExit):
+        src_shield.main(["--route", "badroute"])
+    monkeypatch.setenv("HIVEMIND_ENDPOINT_TOKEN", "short")
+    with pytest.raises(SystemExit):
+        src_shield.main([])
+
+    # 5. Producer agent VRAM guard & CLI validation branches
+    monkeypatch.setenv("HIVEMIND_API_KEY", "hm-key")
+    monkeypatch.setenv("HIVEMIND_ENDPOINT_TOKEN", "s" * 24)
+    for bad_argv in (
+        ["--gateway", "https://gw.example.com", "--endpoint", "http://remote.example.com"],
+        ["--gateway", "https://gw.example.com", "--endpoint", "https://node.example.com"],
+        ["--gateway", "https://gw.example.com", "--endpoint", "https://node.example.com", "--model", "c=q:7b"],
+        ["--gateway", "https://gw.example.com", "--endpoint", "https://node.example.com", "--model", "c=q:7b", "--cost-per-1k", "-1", "--capacity-1k", "10"],
+        ["--gateway", "https://gw.example.com", "--endpoint", "https://node.example.com", "--model", "c=q:7b", "--cost-per-1k", "0.1", "--capacity-1k", "0"],
+        ["--gateway", "https://gw.example.com", "--endpoint", "https://node.example.com", "--model", "c=q:7b", "--cost-per-1k", "0.1", "--capacity-1k", "10", "--interval-s", "0"],
+        ["--gateway", "https://gw.example.com", "--endpoint", "https://node.example.com", "--model", "c=q:7b", "--cost-per-1k", "0.1", "--capacity-1k", "10", "--skip-preflight", "--cold-start-s", "999"],
+    ):
+        with pytest.raises(SystemExit):
+            src_agent.main(bad_argv)
+
+    res_transport = httpx.MockTransport(
+        lambda req: httpx.Response(
+            200,
+            json={"models": [{"name": "small:1b", "size": 1000 * 1024 * 1024, "size_vram": 1000 * 1024 * 1024}, {"name": "huge:70b", "size": 40000 * 1024 * 1024}]},
+        )
+    )
+    gw_transport = httpx.MockTransport(lambda req: httpx.Response(200, json={"ok": True}))
+    rc_drop_one = src_agent.main(
+        [
+            "--gateway", "https://gw.example.com",
+            "--endpoint", "https://node.example.com",
+            "--model", "s=small:1b",
+            "--model", "h=huge:70b",
+            "--cost-per-1k", "0.2",
+            "--capacity-1k", "50",
+            "--skip-preflight",
+            "--gpu-vram-mib", "15360",
+            "--min-free-vram-mib", "2048",
+            "--once",
+        ],
+        transport=gw_transport,
+        residency_transport=res_transport,
+    )
+    assert rc_drop_one == 0
+    rc_drop_all = src_agent.main(
+        [
+            "--gateway", "https://gw.example.com",
+            "--endpoint", "https://node.example.com",
+            "--model", "h=huge:70b",
+            "--cost-per-1k", "0.2",
+            "--capacity-1k", "50",
+            "--skip-preflight",
+            "--gpu-vram-mib", "8192",
+            "--min-free-vram-mib", "2048",
+            "--once",
+        ],
+        transport=gw_transport,
+        residency_transport=res_transport,
+    )
+    assert rc_drop_all == 1
+
+    # 6. solverbee/families.py compile_slot_spec branches
+    t_grid = [0.2, 0.5, 1.0]
+    for slot_case in (
+        {"family": "pendulum", "t_out": t_grid, "period_ms": 1000.0, "theta0_deg": 15.0},
+        {"family": "pendulum", "t_out": t_grid, "L": 2.0, "theta0": 0.2},
+        {"family": "pendulum", "t_out": t_grid, "l": 1.5, "theta0": 0.2},
+        {"family": "pendulum", "t_out": t_grid, "length_cm": 50.0, "theta0": 0.2},
+        {"family": "pendulum", "t_out": t_grid, "theta0": 0.2},
+        {"family": "projectile", "t_out": t_grid, "vx0": 3.0, "vy0": 4.0},
+        {"family": "projectile", "t_out": t_grid, "v0": 10.0, "angle_rad": 0.5},
+        {"family": "projectile", "t_out": t_grid, "speed_kmh": 36.0, "angle_deg": 30.0},
+        {"family": "kepler", "t_out": t_grid, "x0": 1.0, "y0": 0.0, "vx0": 0.0, "vy0": 1.0},
+        {"family": "logistic", "t_out": t_grid, "r": 0.5, "n0": 0.2},
+        {"family": "logistic", "t_out": t_grid, "r_per_min": 6.0, "n0": 0.2},
+        {"family": "logistic", "t_out": t_grid, "r_percent": 15.0, "n0": 0.2},
+        {"family": "logistic", "t_out": t_grid, "n0": 0.2},
+        {"family": "sir", "t_out": t_grid, "gamma": 0.1, "beta": 0.3, "i0": 0.01, "r0": 0.0, "s0": 0.99},
+        {"family": "sir", "t_out": t_grid, "infectious_period": 5.0, "R0": 2.5, "i0_percent": 1.0, "r0_percent": 2.0, "s0_percent": 97.0},
+        {"family": "seir", "t_out": t_grid, "gamma": 0.1, "sigma": 0.2, "beta": 0.3, "e0": 0.01, "i0": 0.01, "r0": 0.0, "s0": 0.98},
+        {"family": "seir", "t_out": t_grid, "infectious_period": 5.0, "incubation_period": 4.0, "R0": 2.0, "e0_percent": 1.0, "i0_percent": 1.0, "r0_percent": 1.0, "s0_percent": 97.0},
+        {"family": "series_rlc", "t_out": t_grid, "L": 0.1, "C": 0.01},
+        {"family": "series_rlc", "t_out": t_grid, "L_mH": 10.0, "C_mF": 1.0},
+        {"family": "series_rlc", "t_out": t_grid, "L": 0.1, "C_uF": 100.0},
+        {"family": "spring_mass_damper", "t_out": t_grid, "k": 2.0},
+        {"family": "spring_mass_damper", "t_out": t_grid, "m_g": 500.0, "damper_force": 2.0, "damper_speed": 4.0, "x0_cm": 10.0, "k": 2.0},
+        {"family": "decay_chain", "t_out": t_grid, "rates": [0.1, 0.2], "y0": [1.0, 0.0, 0.0]},
+        {"family": "decay_chain", "t_out": t_grid, "rates_per_min": [6.0, 12.0]},
+        {"family": "decay_chain", "t_out": t_grid, "time_constants_s": [10.0, 5.0]},
+        {"family": "yukawa_crystal", "t_out": t_grid, "kappa": 1.0},
+        {"family": "gpe_vortex", "t_out": t_grid, "g_int": 2.0},
+        {"family": "art_exo_genetics", "t_out": t_grid, "k_pol": 0.5},
+        {"family": "bao_cosmology", "t_out": t_grid, "hubble": 0.1},
+        {"family": "projectile", "t_out": t_grid, "speed": 10.0, "slope_rise": 3.0, "slope_run": 4.0},
+        {"family": "projectile", "t_out": t_grid, "speed": 10.0},
+        {"family": "kepler", "t_out": t_grid, "circular_radius": 1.0},
+        {"family": "logistic", "t_out": t_grid, "r_percent_per_min": 12.0, "n0": 0.2},
+        {"family": "logistic", "t_out": t_grid, "doubling_time": 2.0, "n0": 0.2},
+        {"family": "harmonic", "t_out": t_grid, "k": 4.0, "m": 1.0, "x0": 1.0},
+    ):
+        spec, trace = compile_slot_spec(slot_case, return_trace=True)
+        assert spec["y0"] and trace["slot_family"]
+
+    for bad_slot in (
+        {"family": "pendulum", "t_out": t_grid},
+        {"family": "projectile", "t_out": t_grid},
+        {"family": "sir", "t_out": t_grid, "beta": 0.2, "i0": 0.1},
+        {"family": "sir", "t_out": t_grid, "gamma": 0.2, "i0": 0.1},
+        {"family": "sir", "t_out": t_grid, "gamma": 0.2, "beta": 0.3},
+        {"family": "seir", "t_out": t_grid, "sigma": 0.2, "beta": 0.3, "e0": 0.1, "i0": 0.1},
+        {"family": "seir", "t_out": t_grid, "gamma": 0.2, "beta": 0.3, "e0": 0.1, "i0": 0.1},
+        {"family": "seir", "t_out": t_grid, "gamma": 0.2, "sigma": 0.2, "e0": 0.1, "i0": 0.1},
+        {"family": "seir", "t_out": t_grid, "gamma": 0.2, "sigma": 0.2, "beta": 0.3, "i0": 0.1},
+        {"family": "seir", "t_out": t_grid, "gamma": 0.2, "sigma": 0.2, "beta": 0.3, "e0": 0.1},
+        {"family": "series_rlc", "t_out": t_grid, "C": 0.01},
+        {"family": "series_rlc", "t_out": t_grid, "L": 0.1},
+        {"family": "decay_chain", "t_out": t_grid},
+        {"family": "van_der_pol", "t_out": t_grid, "mu": 1.0},
+    ):
+        with pytest.raises(FamilyError):
+            compile_slot_spec(bad_slot)
+
+    # 7. verification/bee_energy.py AST evaluator & test_callables branches
+    from hivemind.verification.bee_energy import evaluate_bee_candidate_energy
+
+    code_src = (
+        "def helper(z):\n"
+        "    return abs(z)\n\n"
+        "def solve(x):\n"
+        "    '''Docstring.'''\n"
+        "    a, b = (x, 2)\n"
+        "    arr = [a, b]\n"
+        "    a += sum(arr)\n"
+        "    val = helper(a) if (0 < x < 10) else -1\n"
+        "    if val > 0:\n"
+        "        return val\n"
+        "    return 0\n"
+    )
+    ev = evaluate_bee_candidate_energy(
+        candidate_id="c1",
+        response_text=code_src,
+        test_callables=[
+            lambda ns: ns["solve"](3) == 8,
+            lambda ns: ns["solve"](20) == 0,
+        ],
+        latency_ms=5.0,
+        memory_mb=10.0,
+    )
+    assert ev.passed_all_tests is True and ev.total_energy < 10.0
+

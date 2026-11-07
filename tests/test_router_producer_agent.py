@@ -13,11 +13,19 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-_AGENT_PATH: Path = Path(__file__).resolve().parents[1] / "scripts" / "hivemind_producer_agent.py"
+_AGENT_PATH: Path = (
+    Path(__file__).resolve().parents[1]
+    / "src"
+    / "hivemind"
+    / "router"
+    / "hivemind_producer_agent.py"
+)
 
 
 def _load_agent() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("hivemind_producer_agent", _AGENT_PATH)
+    spec = importlib.util.spec_from_file_location(
+        "hivemind.router.hivemind_producer_agent", _AGENT_PATH
+    )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

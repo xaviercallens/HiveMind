@@ -15,8 +15,16 @@ from hivemind.router.t4_visibility import build_t4_visibility_payload
 
 
 def _load_producer_agent():
-    script_path = Path(__file__).resolve().parents[1] / "scripts" / "hivemind_producer_agent.py"
-    spec = importlib.util.spec_from_file_location("hivemind_producer_agent_vram_test", script_path)
+    script_path = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "hivemind"
+        / "router"
+        / "hivemind_producer_agent.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "hivemind.router.hivemind_producer_agent", script_path
+    )
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)  # type: ignore[union-attr]

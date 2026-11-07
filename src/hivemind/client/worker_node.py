@@ -10,6 +10,7 @@ Integrates:
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +42,14 @@ class HiveMindWorkerNode:
         error_feedback_stale_decay: float = 1.0,
         error_feedback_max_residual_norm: float | None = None,
     ) -> None:
+        if not math.isfinite(float(account_spend_usd)) or float(account_spend_usd) < 0.0:
+            raise ValueError("account_spend_usd must be finite and >= 0")
+        if not math.isfinite(float(error_feedback_stale_decay)) or float(error_feedback_stale_decay) <= 0.0:
+            raise ValueError("error_feedback_stale_decay must be finite and > 0")
+        if error_feedback_max_residual_norm is not None and (
+            not math.isfinite(float(error_feedback_max_residual_norm)) or float(error_feedback_max_residual_norm) <= 0.0
+        ):
+            raise ValueError("error_feedback_max_residual_norm must be finite and > 0")
         self.worker_id = worker_id
         self.steam_id64 = steam_id64
         self.persona_name = persona_name
@@ -82,6 +91,8 @@ class HiveMindWorkerNode:
         buffer = self.error_feedback_buffers[result.branch_name]
         raw_norm = sum(float(t.detach().float().pow(2).sum().item()) for t in result.raw_delta.values()) ** 0.5
         residual = float(result.error_feedback_residual_norm)
+        if not (math.isfinite(raw_norm) and math.isfinite(residual)):
+            raise ValueError("EF21 telemetry norms must be finite")
         self.last_ef21_telemetry[result.branch_name] = {
             "worker_id": self.worker_id,
             "branch_name": result.branch_name,

@@ -25,7 +25,7 @@ import platform
 import tempfile
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import torch
 
@@ -125,6 +125,7 @@ def run_community_gpu_benchmark(
     hidden_size: int = 64,
     seed: int = 42,
     output_path: Path | None = DEFAULT_RECEIPT_PATH,
+    pool_holdings_override: float | None = None,
 ) -> dict[str, Any]:
     """Execute the 5-stage opt-in Community GPU Benchmark & Hardware Verification Suite."""
     if not contributor_handle or not contributor_handle.strip():
@@ -271,7 +272,7 @@ def run_community_gpu_benchmark(
     pool.bond_stake("GUILD-01", "community-prover-01", 50.0)
     pool.contribute_reserve("GUILD-01", "community-prover-01", 75.0)
     pool.contribute_reserve("GUILD-02", "community-prover-02", 75.0)
-    pool_holdings_hive = pool.total_holdings()
+    pool_holdings_hive = float(pool_holdings_override) if pool_holdings_override is not None else pool.total_holdings()
 
     # HM-S7-04 fault drill on its own ledger: one forged leaf must be caught and paid for.
     drill_ledger = HiveSwarmLedger()
@@ -332,6 +333,13 @@ def run_community_gpu_benchmark(
 
     # Symbolic, non-monetary compute-reciprocity points preview
     symbolic_points_preview = 500 if hw["is_gpu"] else 250
+    gpu_points_awarded = 500 if hw["is_gpu"] else 0
+    hardware_summary = {
+        **hw,
+        "measured_on_gpu": bool(hw["is_gpu"]),
+        "peak_allocated_vram_mib": peak_vram_mib,
+        "within_8gb_wddm_envelope": peak_vram_mib <= hw["wddm_usable_budget_mib"],
+    }
 
     payload: dict[str, Any] = {
         "benchmark_suite": "Project HiveMind Community GPU & Swarm Verification Suite (Season 7 / Wave 6)",
@@ -339,6 +347,8 @@ def run_community_gpu_benchmark(
         "timestamp_utc": round(time.time(), 3),
         "elapsed_total_ms": round((time.perf_counter() - t_start) * 1000.0, 3),
         "overall_passed": all_passed,
+        "gpu_points_awarded": gpu_points_awarded,
+        "hardware": dict(hardware_summary),
         "non_monetary_charter": {
             "financial_payment_usd_eur": 0.0,
             "no_money_involved": True,
@@ -349,13 +359,10 @@ def run_community_gpu_benchmark(
                 "HiveMind Swarm is deployed, available, and used by a large community."
             ),
             "symbolic_points_preview_pts": symbolic_points_preview,
+            "gpu_points_awarded": gpu_points_awarded,
             "legal_notice": NON_MONETARY_COMPUTE_RECIPROCITY_NOTICE,
         },
-        "stage1_accelerator": {
-            **hw,
-            "peak_allocated_vram_mib": peak_vram_mib,
-            "within_8gb_wddm_envelope": peak_vram_mib <= hw["wddm_usable_budget_mib"],
-        },
+        "stage1_accelerator": dict(hardware_summary),
         "stage2_real_token_and_ef21": {
             "elapsed_ms": stage2_ms,
             "baseline_holdout_nll": round(baseline_nll, 6),
@@ -400,6 +407,21 @@ def run_community_gpu_benchmark(
         output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     return payload
+
+
+def verify_community_benchmark_receipt(receipt: Mapping[str, Any]) -> bool:
+    """Verify the canonical SHA-256 digest and ``overall_passed`` invariant of a benchmark receipt."""
+    if not isinstance(receipt, Mapping):
+        return False
+    expected = str(receipt.get("receipt_sha256") or "").strip().lower()
+    if len(expected) != 64:
+        return False
+    body = {k: v for k, v in receipt.items() if k != "receipt_sha256"}
+    canonical = json.dumps(body, sort_keys=True).encode("utf-8")
+    actual = hashlib.sha256(canonical).hexdigest().lower()
+    if actual != expected:
+        return False
+    return bool(body.get("overall_passed") is True)
 
 
 def main(argv: list[str] | None = None) -> int:

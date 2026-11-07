@@ -243,37 +243,8 @@ _DEFAULT_COMMUNITY_STATE: dict[str, Any] = {
             },
         ],
     },
-    "community_members": [
-        {
-            "handle": "pioneer-prosumer-01",
-            "role": "Pioneer Prosumer & BOINC Contributor",
-            "gpu": "NVIDIA Tesla T4 (16 GB)",
-            "boinc_workunits_completed": 42,
-            "boinc_cobblestones": 1890.0,
-            "hmt_compute_points": 840,
-            "favorite_world": "K2-18 b",
-        },
-        {
-            "handle": "rtx2070-boinc-fr",
-            "role": "Steam Gamer + Idle-GPU BOINC Donor",
-            "gpu": "NVIDIA GeForce RTX 2070 (8 GB)",
-            "boinc_workunits_completed": 19,
-            "boinc_cobblestones": 855.0,
-            "hmt_compute_points": 475,
-            "favorite_world": "LHS 1140 b",
-        },
-    ],
-    "coop_discovery_feed": [
-        {
-            "timestamp": "2026-10-29T09:30:00Z",
-            "gamer_handle": "rtx2070-boinc-fr",
-            "scientist_handle": "@GCP_BOINC_Validator",
-            "target": "K2-18 b",
-            "event": "IDLE-GPU BOINC WORKUNIT COMPLETED (HIVEMIND_TESS_AT_HOME)",
-            "summary": "GPU idle on NVIDIA GeForce RTX 2070 -> Crunched BLS transit folding on K2-18 b (Depth=2789 ppm) -> +45.0 BOINC Cobblestones & +250 HMT!",
-            "gcp_receipt_sha256": "4a651ffce95b484a747748502c4bf093a1bc8f0ffa34400bad0b3c0a24bafd28",
-        },
-    ],
+    "community_members": [],
+    "coop_discovery_feed": [],
 }
 
 
@@ -289,9 +260,31 @@ def _load_community_state() -> dict[str, Any]:
             if fcntl is not None:
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_SH)
             if _COMMUNITY_STATE_PATH.exists():
-                return json.loads(_COMMUNITY_STATE_PATH.read_text(encoding="utf-8"))
+                raw = _COMMUNITY_STATE_PATH.read_text(encoding="utf-8")
+                try:
+                    loaded = json.loads(raw)
+                except ValueError:
+                    return {
+                        "status": "BLOCKED",
+                        "error": "community_state_corrupt",
+                        "community_members": [],
+                        "coop_discovery_feed": [],
+                    }
+                if not isinstance(loaded, dict):
+                    return {
+                        "status": "BLOCKED",
+                        "error": "community_state_corrupt",
+                        "community_members": [],
+                        "coop_discovery_feed": [],
+                    }
+                return loaded
     except Exception:
-        _ = None
+        return {
+            "status": "BLOCKED",
+            "error": "community_state_io_error",
+            "community_members": [],
+            "coop_discovery_feed": [],
+        }
     _save_community_state(_DEFAULT_COMMUNITY_STATE)
     return json.loads(json.dumps(_DEFAULT_COMMUNITY_STATE))
 
@@ -379,7 +372,10 @@ def community_hub_page() -> HTMLResponse:
 
 @app.get("/api/v1/community/hub", response_class=JSONResponse)
 def api_get_community_hub() -> JSONResponse:
-    return JSONResponse(content=_load_community_state())
+    st = _load_community_state()
+    if st.get("status") == "BLOCKED":
+        return JSONResponse(status_code=503, content=st)
+    return JSONResponse(content=st)
 
 
 _MAX_SYNC_COBBLESTONES_PER_WU = 100.0

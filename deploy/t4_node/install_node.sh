@@ -14,12 +14,19 @@ OPT=/opt/hivemind/t4
 USER_NAME=callensxavier_gmail_com
 GIT=(git -C "$REPO" -c "safe.directory=$REPO")
 
-committed() {  # print the committed content of a repo-relative path; warn if the working copy differs from it
-  local rel="$1"
+committed_to() {  # atomically write the committed content of a repo-relative path to dst; refuse untracked files without truncating dst
+  local rel="$1" dst="$2" mode="${3:-0644}"
+  if ! "${GIT[@]}" cat-file -e "HEAD:$rel" 2>/dev/null; then
+    echo "WARNING: $rel is untracked in git HEAD; skipping without truncating $dst." >&2
+    return 1
+  fi
   if ! "${GIT[@]}" diff --quiet HEAD -- "$rel" 2>/dev/null; then
     echo "WARNING: $rel has uncommitted changes; deploying the COMMITTED version (git HEAD). Commit and review the change to deploy it." >&2
   fi
-  "${GIT[@]}" show "HEAD:$rel"
+  local tmp="${dst}.tmp.$$"
+  "${GIT[@]}" show "HEAD:$rel" > "$tmp"
+  chmod "$mode" "$tmp"
+  mv -f "$tmp" "$dst"
 }
 
 # Make a silent rewrite FAIL LOUDLY: the control-plane files are immutable (chattr +i) between installs. Root can clear the flag on purpose (chattr -i), which then shows
@@ -31,41 +38,39 @@ PROTECT_DIRS=(/etc/systemd/system/hivemind-t4-governor.service.d /etc/systemd/sy
 unlock() { for f in "${PROTECT_FILES[@]}" "${PROTECT_DIRS[@]}" "$OPT"/bin/*.sh; do if [ -e "$f" ]; then chattr -i "$f" 2>/dev/null || true; fi; done; }
 lock() { for f in "${PROTECT_FILES[@]}" "${PROTECT_DIRS[@]}" "$OPT"/bin/*.sh; do if [ -e "$f" ]; then chattr +i "$f" 2>/dev/null || echo "NOTE: could not make $f immutable" >&2; fi; done; }
 unlock
+trap lock EXIT
 
-install -d -o "$USER_NAME" -g "$USER_NAME" "$OPT" "$OPT/bin" "$OPT/scripts" "$OPT/src"
+install -d -m 0755 -o root -g root "$OPT" "$OPT/bin" "$OPT/scripts" "$OPT/src"
 rsync -a --delete --exclude '__pycache__' "$REPO/src/hivemind/" "$OPT/src/hivemind/"
 if [ -n "$("${GIT[@]}" status --porcelain -- src 2>/dev/null)" ]; then
   echo "NOTE: src/ is copied from the working tree and has uncommitted changes (deployed as they are):" >&2
   "${GIT[@]}" status --porcelain -- src >&2
 fi
 for s in t4_governor.py t4_monitor.py t4_workgen.py; do
-  committed "scripts/$s" > "$OPT/scripts/$s"
-  chmod 0755 "$OPT/scripts/$s"
+  committed_to "scripts/$s" "$OPT/scripts/$s" 0755
 done
-for b in "$REPO"/deploy/t4_node/node/bin/*.sh; do
-  committed "deploy/t4_node/node/bin/$(basename "$b")" > "$OPT/bin/$(basename "$b")"
-  chmod 0755 "$OPT/bin/$(basename "$b")"
+for b in $("${GIT[@]}" ls-tree --name-only HEAD deploy/t4_node/node/bin/ 2>/dev/null || true); do
+  committed_to "$b" "$OPT/bin/$(basename "$b")" 0755
 done
-chown -R "$USER_NAME:$USER_NAME" "$OPT"
+chown -R root:root "$OPT"
 
-for u in "$REPO"/deploy/t4_node/node/*.service; do
-  committed "deploy/t4_node/node/$(basename "$u")" > "/etc/systemd/system/$(basename "$u")"
-  chmod 0644 "/etc/systemd/system/$(basename "$u")"
-done
-for t in "$REPO"/deploy/t4_node/node/*.timer; do
-  committed "deploy/t4_node/node/$(basename "$t")" > "/etc/systemd/system/$(basename "$t")"
-  chmod 0644 "/etc/systemd/system/$(basename "$t")"
+# Install committed node/*.service and node/*.timer units directly from HEAD
+for u in $("${GIT[@]}" ls-tree --name-only HEAD deploy/t4_node/node/ 2>/dev/null || true); do
+  case "$(basename "$u")" in
+    *.service|*.timer)
+      committed_to "$u" "/etc/systemd/system/$(basename "$u")" 0644
+      ;;
+  esac
 done
 # the older bee/coder producers' units (mirroring the running processes); installed and enabled so a reboot brings them back
 for u in hivemind-live-bee-llama hivemind-live-shield-bee hivemind-live-agent-bee hivemind-live-shield-coder hivemind-live-agent-coder; do
-  committed "deploy/t4_node/live/$u.service" > "/etc/systemd/system/$u.service"
-  chmod 0644 "/etc/systemd/system/$u.service"
+  committed_to "deploy/t4_node/live/$u.service" "/etc/systemd/system/$u.service" 0644
 done
 # Governance: record (1) the arguments the governor template defines, (2) the hash of every control-plane file installed, so the monitor can flag any
 # difference (a changed argument, a drop-in, or an edited script), and warn about drop-in overrides, which silently beat the unit files written above.
 "${GIT[@]}" show "HEAD:deploy/t4_node/node/hivemind-t4-governor.service" | grep -m1 '^ExecStart=' | sed -E 's/.*t4_governor\.py //' > "$OPT/expected_governor_args.txt"
 ( cd "$OPT" && sha256sum scripts/*.py bin/*.sh ) > "$OPT/expected_code_hashes.txt"
-chown "$USER_NAME:$USER_NAME" "$OPT/expected_governor_args.txt" "$OPT/expected_code_hashes.txt"
+chown root:root "$OPT/expected_governor_args.txt" "$OPT/expected_code_hashes.txt"
 cat > "$OPT/POLICY_READ_ME.txt" <<'POLICY'
 HiveMind T4 node: the control-plane files here are protected ON PURPOSE.
 
@@ -78,7 +83,7 @@ The "intense-moe" mode (5-10 s) is not wanted. Earlier unauthorised edits (a sys
 These files are immutable (chattr +i) so that an edit fails loudly instead of silently changing the policy. The installer clears and restores the
 flag. If you need a different policy, ask the owner and propose the change in the repo; do not remove the flag by hand.
 POLICY
-chown "$USER_NAME:$USER_NAME" "$OPT/POLICY_READ_ME.txt"
+chown root:root "$OPT/POLICY_READ_ME.txt"
 for d in "${PROTECT_DIRS[@]}"; do install -d -m 0755 "$d"; done
 # real drop-in files only (the protected, empty directories are expected)
 overrides="$(find /etc/systemd/system -path '*/hivemind-*.service.d/*' -type f 2>/dev/null || true)"

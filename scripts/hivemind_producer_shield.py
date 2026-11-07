@@ -193,7 +193,8 @@ def create_shield_app(
     return app
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """Build the command-line parser for the authenticating producer shield."""
     parser = argparse.ArgumentParser(description="Authenticating proxy in front of a local OpenAI-compatible model server.")
     parser.add_argument("--upstream", default="http://127.0.0.1:11434", help="Your model server (default: Ollama on this machine)")
     parser.add_argument("--host", default="127.0.0.1", help="Interface to listen on; keep 127.0.0.1 and point your tunnel at it")
@@ -205,6 +206,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--route", action="append", default=[], metavar="MODEL=URL",
                         help="Send this model to another local server (repeat), e.g. hivemind-bee-stars=http://127.0.0.1:8294. Implies --allow-model for it.")
     parser.add_argument("--control-state-file", metavar="PATH", help="State file written by the producer agent (--control-state-file); while it says paused, chat requests get 503 producer_paused")
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = build_parser()
     args = parser.parse_args(argv)
     routes: dict[str, str] = {}
     for item in args.route:

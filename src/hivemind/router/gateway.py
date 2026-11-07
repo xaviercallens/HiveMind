@@ -51,6 +51,7 @@ from hivemind.router.accounts import (
     HandleTaken,
     InsufficientBalance,
     InvalidCredentials,
+    LEGACY_KNOWN_USERS,
     ProducerRecord,
     ReservedHandle,
     RouterStore,
@@ -654,6 +655,8 @@ class OpenTrainerDeltaSubmitRequest(BaseModel):
     delta_sha256: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-fA-F]{64}$")
     code_pin: str = Field(default="", max_length=128)
     network_mode: Literal["outbound-https-relay", "amcp-kafka-aglet", "wireguard-t4-hub", "ssh-loopback-tunnel", "boinc-night-workunit"] = "outbound-https-relay"
+    vram_free_mib: int | None = Field(default=None, ge=0, le=MAX_GPU_VRAM_MIB)
+    vram_total_mib: int | None = Field(default=None, ge=512, le=MAX_GPU_VRAM_MIB)
 
 
 @dataclass(frozen=True)
@@ -1435,7 +1438,13 @@ def create_router_app(
                 "completion_tokens": info["completion_tokens"],
                 "total_tokens": info["billed_tokens"],
             }
-            payload["hivemind"] = {k: info[k] for k in ("price_per_1k", "charged_hmt", "producer_id", "mechanism", "request_id")}
+            payload["hivemind"] = {
+                **{k: info[k] for k in ("price_per_1k", "charged_hmt", "producer_id", "mechanism", "request_id")},
+                "served_model": _public_model(plan.model_id),
+                "requested_model": _public_model(plan.requested_model or plan.model_id),
+                "routing_mode": plan.routing_mode,
+                "local_model": record.local_name(plan.model_id) or plan.model_id,
+            }
             return JSONResponse(payload)
         raise upstream_exhausted(plan, timed_out, account=account, reasons=failure_reasons)
 
@@ -1871,12 +1880,15 @@ def create_router_app(
         from hivemind.swarm.amcp_eda_traffic_sustainer import plan_100_producer_mesh_scaling
 
         live_status = store.producer_fleet_scale_status(clock(), PRODUCER_TTL_S, target_producers=100)
+        live_accounts = int(live_status.get("live_producer_accounts", 0))
+        fleet_plan = dict(build_100_producer_international_fleet_plan(active_producers=max(1, live_accounts)))
+        fleet_plan["live_producer_accounts"] = live_accounts
         return {
             "object": "hivemind.producer_scale_100_status",
             "live_store_scale_status": live_status,
-            "hundred_producer_fleet_plan": build_100_producer_international_fleet_plan(active_producers=100),
+            "hundred_producer_fleet_plan": fleet_plan,
             "amcp_mesh_scaling": plan_100_producer_mesh_scaling(
-                active_producers=int(live_status.get("live_producer_accounts", 0)),
+                active_producers=live_accounts,
                 live_endpoints=int(live_status.get("live_endpoints", 0)),
             ),
         }
@@ -2383,8 +2395,8 @@ def create_router_app(
         now = clock()
         models = store.live_models(now, PRODUCER_TTL_S)
         scale = store.producer_fleet_scale_status(now, PRODUCER_TTL_S)
-        producers = max(1, int(scale["live_producer_accounts"]))
-        distinct_gpus = max(1, int(scale["distinct_physical_gpus"]))
+        producers = max(0, int(scale["live_producer_accounts"]))
+        distinct_gpus = max(0, int(scale["distinct_physical_gpus"]))
         return build_t4_visibility_payload(
             now_utc=now,
             live_models=models,
@@ -2451,6 +2463,20 @@ def create_router_app(
         problem = producer_url_problem(payload.endpoint_url, allow_private=allow_private_producers, resolver=resolve)
         if problem is not None:
             raise RouterError(400, problem, "invalid_request_error", "invalid_endpoint")
+        if request.headers.get("x-admin-key") is None:
+            norm_url = str(payload.endpoint_url).rstrip("/")
+            known_tokens = store.existing_endpoint_tokens()
+            expected_url_token = known_tokens.get(norm_url)
+            owner_token = known_tokens.get(account.account_id)
+            if expected_url_token and expected_url_token != owner_token:
+                supplied_tok = (payload.endpoint_token or "").strip()
+                if not supplied_tok or not hmac.compare_digest(supplied_tok, expected_url_token):
+                    raise RouterError(
+                        403,
+                        "Endpoint URL is already registered with an ownership token; matching endpoint_token required.",
+                        "permission_error",
+                        "endpoint_ownership_required",
+                    )
         models: list[dict[str, str]] = []
         for entry in payload.models:
             public = _strip_prefix(entry.id)
@@ -2496,14 +2522,79 @@ def create_router_app(
             ack["residency"] = {"loaded": sorted(m for m, v in residency["models"].items() if v["loaded"] is True), "effective_capacity_1k": capacity, "capacity_note": residency["capacity_note"]}
         return ack
 
+    @app.get("/v1/hivemind/remote/config")
+    def get_remote_producer_config(request: Request) -> dict[str, Any]:
+        """Authenticated remote producer control endpoint polled by ``hivemind_producer_agent.py``."""
+        account = authenticate(request)
+        ctrl = store.producer_control(account.account_id)
+        paused = bool(ctrl and ctrl.get("paused"))
+        vram_cap = ctrl.get("vram_cap_mib") if ctrl else None
+        version = int(ctrl.get("version", 1)) if ctrl else 1
+        remote_cfg = {
+            "node_state": "paused" if paused else "active",
+            "paused": paused,
+            "vram_cap_mib": vram_cap,
+            "min_price_per_1k": 0.0,
+            "version": version,
+        }
+        return {
+            "ok": True,
+            "account_id": account.account_id,
+            "handle": account.handle,
+            "control": ctrl or {"paused": False, "vram_cap_mib": None, "version": 1},
+            "remote_config": remote_cfg,
+        }
+
+    @app.post("/v1/hivemind/remote/config")
+    async def set_remote_producer_config(request: Request) -> dict[str, Any]:
+        """Update remote producer control state (`node_state` / `paused` / `vram_cap_mib`) for the authenticated producer."""
+        account = authenticate(request)
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw else {}
+        except ValueError:
+            raise RouterError(400, "invalid JSON body", "invalid_request_error", "invalid_request") from None
+        if not isinstance(body, dict):
+            raise RouterError(400, "payload must be a JSON object", "invalid_request_error", "invalid_request")
+        current = store.producer_control(account.account_id) or {"paused": False, "vram_cap_mib": None}
+        if "node_state" in body:
+            paused = str(body["node_state"]).strip().lower() == "paused"
+        elif "paused" in body:
+            paused = bool(body["paused"])
+        else:
+            paused = bool(current.get("paused"))
+        vram_cap = body.get("vram_cap_mib", current.get("vram_cap_mib"))
+        if vram_cap is not None:
+            vram_cap = _finite_int(vram_cap, 8192, 512, MAX_GPU_VRAM_MIB, "vram_cap_mib")
+        ctrl = store.set_producer_control(account.account_id, paused, vram_cap, now_utc=clock())
+        return {
+            "ok": True,
+            "account_id": account.account_id,
+            "handle": account.handle,
+            "control": ctrl,
+            "remote_config": {
+                "node_state": "paused" if ctrl["paused"] else "active",
+                "paused": bool(ctrl["paused"]),
+                "vram_cap_mib": ctrl["vram_cap_mib"],
+                "min_price_per_1k": 0.0,
+                "version": ctrl["version"],
+            },
+        }
+
     @app.get("/v1/hivemind/producers/fleet")
-    def list_producers_fleet() -> dict[str, Any]:
+    def list_producers_fleet(request: Request) -> dict[str, Any]:
         """Public HiveMinder fleet connectivity summary across all registered producer and prosumer accounts."""
         now = clock()
         _refresh_reconnected_fleet_if_needed(now)
         fleet = store.list_hiveminder_accounts(now_utc=now, ttl_s=PRODUCER_TTL_S)
         scale = store.producer_fleet_scale_status(now_utc=now, ttl_s=PRODUCER_TTL_S)
         live_rows = [r for r in fleet if r["status"] == "live"]
+        supplied_admin = request.headers.get("x-admin-key", "").strip()
+        is_admin = bool(
+            admin_key_hash is not None
+            and supplied_admin
+            and hmac.compare_digest(store.key_digest(supplied_admin), admin_key_hash)
+        )
         return {
             "object": "hivemind.producer_fleet",
             "ttl_s": PRODUCER_TTL_S,
@@ -2516,12 +2607,11 @@ def create_router_app(
             "live_models": store.live_models(now, PRODUCER_TTL_S),
             "hiveminders": [
                 {
-                    "account_id": r["account_id"],
+                    **({"account_id": r["account_id"], "host_root": r.get("host_root")} if is_admin else {}),
                     "handle": r["handle"],
                     "role": r["role"],
                     "status": r["status"],
                     "live_endpoints": r["live_endpoints"],
-                    "host_root": r.get("host_root"),
                     "shared_host": r.get("shared_host", False),
                     "execution_class": r["execution_class"],
                     "capacity_1k": r["capacity_1k"],
@@ -2607,14 +2697,24 @@ def create_router_app(
 
         fleet_before = store.list_hiveminder_accounts(now_utc=now, ttl_s=PRODUCER_TTL_S)
         wanted_handles = {h.strip().lower() for h in payload.handles} if payload.handles else None
+        known_owner_handles = (
+            {str(meta.get("handle", "")).strip().lower() for meta in LEGACY_KNOWN_USERS.values()}
+            | {k.strip().lower() for k in LEGACY_KNOWN_USERS}
+            | {"cybervalkyrie-fr-5ecb"}
+        )
         reconnected_ids: list[str] = []
         new_keepalive_entries: dict[str, dict[str, Any]] = {}
 
         for item in fleet_before:
             aid = str(item["account_id"])
             handle = str(item["handle"])
-            if wanted_handles is not None and handle.lower() not in wanted_handles and aid.lower() not in wanted_handles:
-                continue
+            h_low = handle.lower()
+            if wanted_handles is not None:
+                if h_low not in wanted_handles and aid.lower() not in wanted_handles:
+                    continue
+            else:
+                if h_low not in known_owner_handles and not h_low.startswith(("gcp-t4-", "xavgamsrv", "rtx2070", "rtx-2070")):
+                    continue
             ctrl = store.producer_control(aid)
             if ctrl is not None and ctrl.get("paused"):
                 store.set_producer_control(aid, False, ctrl.get("vram_cap_mib"), now_utc=now)
@@ -2675,6 +2775,7 @@ def create_router_app(
             "object": "hivemind.admin_producers_reconnected",
             "ok": True,
             "reconnected_count": len(reconnected_ids),
+            "reconnected_account_ids": list(reconnected_ids),
             "total_hiveminders": len(fleet_after),
             "live_hiveminders": len(live_rows),
             "live_endpoints": sum(int(r["live_endpoints"]) for r in live_rows),
@@ -3247,6 +3348,11 @@ def create_router_app(
         now = clock()
         if not opentrainer_delta_limiter.allow(account.account_id, now):
             raise RouterError(429, "Too many OpenTrainer delta submissions from this account; try again in a minute.", "rate_limit_error", "rate_limited")
+        vram_reported = payload.vram_free_mib is not None or payload.vram_total_mib is not None
+        req_vram_free = int(payload.vram_free_mib or 0)
+        req_vram_total = int(
+            payload.vram_total_mib if payload.vram_total_mib is not None else (8192 if vram_reported else 0)
+        )
         try:
             check = validate_trainer_delta_submission(
                 run_id=payload.campaign_id,
@@ -3254,8 +3360,8 @@ def create_router_app(
                 delta_l2=payload.delta_norm,
                 eval_loss=payload.loss_after,
                 tokens_trained=max(1, payload.inner_steps * 512),
-                vram_free_mib=0,  # 0 = not reported: the request carries no hardware reading
-                vram_total_mib=0,
+                vram_free_mib=req_vram_free,
+                vram_total_mib=req_vram_total,
             )
         except ValueError as exc:
             raise RouterError(
@@ -3265,7 +3371,7 @@ def create_router_app(
                 "delta_rejected",
             ) from None
         check["verification"] = "CLIENT_REPORTED_UNVERIFIED"
-        check["vram_values_reported_by_client"] = False  # no hardware reading was sent: 0 MiB is recorded as "not reported"
+        check["vram_values_reported_by_client"] = vram_reported
         check["tokens_trained_is_estimate"] = True  # inner_steps * 512, not a count the client measured
         try:
             saved = store.record_opentrainer_round_submission(
@@ -3278,8 +3384,8 @@ def create_router_app(
                 delta_l2=payload.delta_norm,
                 eval_loss=payload.loss_after,
                 tokens_trained=max(1, payload.inner_steps * 512),
-                vram_free_mib=0,
-                vram_total_mib=0,
+                vram_free_mib=req_vram_free if vram_reported else 0,
+                vram_total_mib=int(payload.vram_total_mib or 0),
                 now_utc=now,
             )
         except DuplicateOpenTrainerRound as exc:
@@ -3508,8 +3614,11 @@ def create_router_app(
         receipt_sha256 = supplied_receipt or str(
             fold_res.get("result_sha256") or hashlib.sha256(f"{account_id}:{clock()}".encode()).hexdigest()
         )
-        duplicate_receipt = receipt_sha256 in seen_boinc_receipts
-        seen_boinc_receipts.add(receipt_sha256)
+        duplicate_receipt = store.record_boinc_receipt(receipt_sha256, account_id, now_utc=clock()) or (
+            receipt_sha256 in seen_boinc_receipts
+        )
+        if len(seen_boinc_receipts) < 4096:
+            seen_boinc_receipts.add(receipt_sha256)
         # No HMT for a client-supplied receipt: nothing in it can be checked by the server (it used to grant 250 HMT per
         # unseen value, so credit could be minted without limit). Credit comes back once results are verified server-side.
         hmt_awarded = 0.0
@@ -3698,8 +3807,11 @@ def create_router_app(
                 "invalid_parameter",
             ) from None
         receipt_sha256 = str(body.get("receipt_sha256") or verified["receipt_sha256"]).strip()
-        duplicate_receipt = receipt_sha256 in seen_boinc_receipts
-        seen_boinc_receipts.add(receipt_sha256)
+        duplicate_receipt = store.record_boinc_receipt(receipt_sha256, account.account_id, now_utc=clock()) or (
+            receipt_sha256 in seen_boinc_receipts
+        )
+        if len(seen_boinc_receipts) < 4096:
+            seen_boinc_receipts.add(receipt_sha256)
         # No HMT: the "verification" hashes client-supplied figures, so a receipt proves no work (it used to grant 250 HMT
         # per unseen receipt). Credit comes back once results are verified server-side.
         hmt_awarded = 0.0
@@ -3829,7 +3941,10 @@ def create_router_app(
 
         def _run_sweep() -> dict[str, Any]:
             import sys as _sys
-            from hivemind.swarm.rusty_sundials_scientific_bee import run_wave2_parameter_sweep_quorum
+            from hivemind.swarm.rusty_sundials_scientific_bee import (
+                run_wave2_parameter_sweep_quorum,
+                verify_wave2_quorum_replicas,
+            )
 
             sweep_bundle = run_wave2_parameter_sweep_quorum(
                 family=family,
@@ -3852,13 +3967,21 @@ def create_router_app(
                     q_credit = verdict.credit
                     q_pflops = verdict.pflops_seconds
                 except (ImportError, ValueError):
-                    q_valid = sweep_bundle["replica_a"].get("sha256_digest") == sweep_bundle["replica_b"].get("sha256_digest")
+                    q_valid = verify_wave2_quorum_replicas(
+                        sweep_bundle["spec"],
+                        sweep_bundle["replica_a"],
+                        sweep_bundle["replica_b"],
+                    )
                     q_reason = "s1_cross_cpu_quorum_verified_stdlib" if q_valid else "quorum_mismatch"
                     q_credit = round(len(param_grid) * steps * 0.125, 4) if q_valid else 0.0
                     q_pflops = round(len(param_grid) * steps * 1.28e-4, 6)
             else:
                 # Avoid cold-importing torch inside the HTTP router: verify S-1 cross-CPU quorum directly in stdlib
-                q_valid = sweep_bundle["replica_a"].get("sha256_digest") == sweep_bundle["replica_b"].get("sha256_digest")
+                q_valid = verify_wave2_quorum_replicas(
+                    sweep_bundle["spec"],
+                    sweep_bundle["replica_a"],
+                    sweep_bundle["replica_b"],
+                )
                 q_reason = "s1_cross_cpu_quorum_verified_stdlib" if q_valid else "quorum_mismatch"
                 q_credit = round(len(param_grid) * steps * 0.125, 4) if q_valid else 0.0
                 q_pflops = round(len(param_grid) * steps * 1.28e-4, 6)

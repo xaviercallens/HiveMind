@@ -95,6 +95,10 @@ def fetch_hf_domain_subset(
     hf_token: str | None = None,
 ) -> list[str]:
     """Pull a real domain dataset subset from Hugging Face Hub (`sahil2801/CodeAlpaca-20k` or `qiaojin/PubMedQA`)."""
+    if not isinstance(dataset_id, str) or not dataset_id.strip():
+        raise ValueError("dataset_id must be a non-empty string")
+    if isinstance(num_samples, bool) or int(num_samples) < 1:
+        raise ValueError("num_samples must be a positive integer")
     from huggingface_hub import hf_hub_download
 
     samples: list[str] = []
@@ -154,6 +158,14 @@ def _create_tokenized_parquet_shard(
     rng_seed: int = 42,
 ) -> tuple[Path, str, str]:
     """Tokenize real domain strings with the Hugging Face tokenizer and write a signed Parquet shard."""
+    if not isinstance(domain, str) or not domain.strip():
+        raise ValueError("domain must be a non-empty string")
+    if not texts or not any(isinstance(t, str) and t.strip() for t in texts):
+        raise ValueError("texts must contain at least one non-empty string")
+    if isinstance(seq_len, bool) or int(seq_len) < 1:
+        raise ValueError("seq_len must be a positive integer")
+    if isinstance(num_sequences, bool) or int(num_sequences) < 1:
+        raise ValueError("num_sequences must be a positive integer")
     shard_path.parent.mkdir(parents=True, exist_ok=True)
     joined = "\n".join(texts * 4)
     token_ids = tokenizer.encode(joined, add_special_tokens=False)
@@ -219,6 +231,20 @@ def run_huggingface_rtx2070_poc(
     spot_check_interval_s: int = 6,
 ) -> dict[str, Any]:
     """Execute the real Hugging Face Open-Weight PoC on the local NVIDIA GeForce RTX 2070."""
+    if not isinstance(model_id, str) or not model_id.strip():
+        raise ValueError("model_id must be a non-empty string")
+    if not isinstance(hf_dataset_id, str) or not hf_dataset_id.strip():
+        raise ValueError("hf_dataset_id must be a non-empty string")
+    if isinstance(hf_subset_size, bool) or int(hf_subset_size) < 1:
+        raise ValueError("hf_subset_size must be a positive integer")
+    if isinstance(lora_rank_r, bool) or int(lora_rank_r) < 1:
+        raise ValueError("lora_rank_r must be a positive integer")
+    if isinstance(lora_alpha, bool) or int(lora_alpha) < 1:
+        raise ValueError("lora_alpha must be a positive integer")
+    if isinstance(inner_steps_H, bool) or int(inner_steps_H) < 1:
+        raise ValueError("inner_steps_H must be a positive integer")
+    if isinstance(spot_check_interval_s, bool) or int(spot_check_interval_s) < 1:
+        raise ValueError("spot_check_interval_s must be a positive integer")
     t0 = time.perf_counter()
     cfg = HiveMindConfig.from_yaml()
     hw_info = detect_local_hardware()

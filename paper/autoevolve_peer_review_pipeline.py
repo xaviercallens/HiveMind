@@ -982,14 +982,15 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
         "artifacts/experiments/NIGHT_INTENSE_1_probe_results_2026-10-28.json",
     )
     cat = _jl("CATALOG_SERVED_2026-11-07.json")
-    cs, cp = cat["serving_tiers"], cat["public_ids"]
+    cs, cp, rt = cat["serving_tiers"], cat["public_ids"], cat["runtime"]
     _all(
         "PROV-88",
-        "Catalog served vs trained: serving tiers, distinct tags, HiveMind-built tags, public ids, LIVE-but-off-the-shelf, QLoRA-claimed, unpublished-repo counts",
+        "Catalog served vs trained, at runtime: tiers, tags, HiveMind-built tag, public ids, planned-relabelled, LIVE-but-off-the-shelf, trained-MoE status, tokens-trained claims",
         [f"${cs['count']}$ serving tiers", f"${len(cs['distinct_ollama_tags'])}$ distinct Ollama tags", f"${cp['count']}$ public model ids",
-         f"${cp['live_status_served_by_off_the_shelf_tag']['count']}$ carry a \\texttt{{LIVE}} status while being served by an off-the-shelf tag",
-         f"${cp['qlora_shard_format_claimed']['count']}$ declare a QLoRA shard format",
-         f"${cp['hf_repo_under_unpublished_account']['count']}$ still name a Hugging Face repository under an account that has never been published"]
+         f"${rt['relabelled_planned_not_trained']}$ of the ${cp['count']}$ ids are exposed as ``Planned, not trained yet''",
+         f"${rt['live_status_served_by_off_the_shelf_tag']['count']}$ carry a \\texttt{{LIVE}} status while being served by an off-the-shelf tag",
+         f"${rt['moe_trained_status_served_by_off_the_shelf_tag']['count']}$ of them with a status that names a trained MoE",
+         f"${rt['live_status_with_tokens_trained_claim_off_the_shelf']['count']}$ with a tokens-trained figure"]
         + [f"\\texttt{{{x}}}" for x in cs["hivemind_built_tags"]],
         "artifacts/experiments/CATALOG_SERVED_2026-11-07.json",
     )

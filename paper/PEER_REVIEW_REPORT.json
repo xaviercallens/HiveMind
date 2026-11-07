@@ -5,7 +5,7 @@
   "disclosure": "This report is produced by a deterministic script. It is NOT a peer review: no language model and no human referee evaluated the manuscript. Verdicts below mean only that the listed artifact checks passed.",
   "lead_peer_review_model": "none (scripted static audit; no language-model call)",
   "co_auditor_model": "none",
-  "timestamp_utc": "2026-11-07T18:52:23Z",
+  "timestamp_utc": "2026-11-07T19:15:33Z",
   "tex_path": "paper/hivemind_foundation_article.tex",
   "pdf_path": "paper/hivemind_foundation_article.pdf",
   "pdf_exists": true,
@@ -1855,14 +1855,15 @@
       },
       {
         "check_id": "PROV-88",
-        "metric_name": "Catalog served vs trained: serving tiers, distinct tags, HiveMind-built tags, public ids, LIVE-but-off-the-shelf, QLoRA-claimed, unpublished-repo counts",
+        "metric_name": "Catalog served vs trained, at runtime: tiers, tags, HiveMind-built tag, public ids, planned-relabelled, LIVE-but-off-the-shelf, trained-MoE status, tokens-trained claims",
         "expected_tokens": [
           "$16$ serving tiers",
           "$13$ distinct Ollama tags",
           "$49$ public model ids",
-          "$35$ carry a \\texttt{LIVE} status while being served by an off-the-shelf tag",
-          "$20$ declare a QLoRA shard format",
-          "$15$ still name a Hugging Face repository under an account that has never been published",
+          "$26$ of the $49$ ids are exposed as ``Planned, not trained yet''",
+          "$13$ carry a \\texttt{LIVE} status while being served by an off-the-shelf tag",
+          "$8$ of them with a status that names a trained MoE",
+          "$13$ with a tokens-trained figure",
           "\\texttt{hivemind-bee-stars}"
         ],
         "source_artifact": "artifacts/experiments/CATALOG_SERVED_2026-11-07.json",

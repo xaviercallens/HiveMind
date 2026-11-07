@@ -1,0 +1,261 @@
+{
+  "receipt": "CONSUMER_GPU_ECONOMICS",
+  "date": "2026-11-07",
+  "nature": "arithmetic on sourced parameters; not a measurement, not a forecast",
+  "parameters": {
+    "steam_peak_concurrent_users": {
+      "value": 43505724,
+      "unit": "accounts logged in",
+      "source": "SteamDB record, 11 October 2026 (press reports)",
+      "note": "logged-in accounts, not GPUs; 14.5M in-game at the time"
+    },
+    "steam_mau_stale": {
+      "value": 132000000,
+      "unit": "monthly active accounts",
+      "source": "Valve, 2021 (last published MAU)",
+      "note": "stale by five years; upper bound only"
+    },
+    "steam_vram_share_16gb": {
+      "value": 0.2721,
+      "unit": "share of surveyed GPUs",
+      "source": "Steam Hardware Survey, September 2026 (press reports)"
+    },
+    "steam_vram_share_8gb": {
+      "value": 0.2671,
+      "unit": "share",
+      "source": "Steam Hardware Survey, September 2026 (press reports)"
+    },
+    "steam_vram_share_12gb": {
+      "value": 0.1301,
+      "unit": "share",
+      "source": "Steam Hardware Survey, June 2026 (press report; later months not found)"
+    },
+    "jpr_q1_2026_discrete_shipments": {
+      "value": 11800000,
+      "unit": "add-in boards per quarter",
+      "source": "Jon Peddie Research, Q1 2026",
+      "note": "sell-in to channel, not sell-through"
+    },
+    "jpr_discrete_installed_base_forecast": {
+      "value": 183000000,
+      "unit": "discrete GPUs",
+      "source": "JPR long-term forecast, cited by secondary aggregators; verify against JPR",
+      "note": "end-of-forecast-period figure, not today's"
+    },
+    "idle_hours_per_day": {
+      "value": 18.0,
+      "unit": "h/day",
+      "source": "project's own claim in the r/SelfHostedAI post (0% nearly 18 hours a day)",
+      "note": "unmeasured; treated as a parameter"
+    },
+    "eu_household_electricity_eur_kwh": {
+      "value": 0.28,
+      "unit": "EUR/kWh",
+      "source": "Eurostat, first half 2026 (released 30 October 2026), EU average"
+    },
+    "de_household_electricity_eur_kwh": {
+      "value": 0.36,
+      "unit": "EUR/kWh",
+      "source": "Eurostat H1 2026, Germany"
+    },
+    "hu_household_electricity_eur_kwh": {
+      "value": 0.11,
+      "unit": "EUR/kWh",
+      "source": "Eurostat H1 2026, Hungary (EU minimum)"
+    },
+    "rtx2070_board_power_w": {
+      "value": 175.0,
+      "unit": "W",
+      "source": "NVIDIA reference specification (TGP); sustained draw under QLoRA is at or below this"
+    },
+    "rtx2070_tokens_per_s_inference": {
+      "value": 72.0,
+      "unit": "tok/s",
+      "source": "project's own figure posted on r/TechnologieFrance (7B-class bee, 'around 72 tokens/s'); unmeasured here"
+    },
+    "t4_board_power_w": {
+      "value": 70.0,
+      "unit": "W",
+      "source": "NVIDIA reference specification"
+    },
+    "h100_on_demand_usd_h_oct2026": {
+      "value": 3.81,
+      "unit": "USD/GPU-h",
+      "source": "median on-demand price, tracker, mid-October 2026"
+    },
+    "h100_q2_2026_low_usd_h": {
+      "value": 1.8,
+      "unit": "USD/GPU-h",
+      "source": "Q2 2026 low end, market summary (64-75% below the 2024 peak of 8-10 USD/h)"
+    },
+    "h100_1y_contract_mar2026_usd_h": {
+      "value": 2.35,
+      "unit": "USD/GPU-h",
+      "source": "SemiAnalysis-based report, March 2026 (up from 1.70 in October 2025)"
+    },
+    "t4_gcp_on_demand_usd_h": {
+      "value": 0.35,
+      "unit": "USD/GPU-h",
+      "source": "GCP list price as known to the project (us-central1); verify on the pricing page"
+    },
+    "rtx2070_vs_h100_throughput_ratio": {
+      "value": 0.02,
+      "unit": "fraction",
+      "source": "rough order of magnitude for mixed-precision training throughput (not a benchmark)",
+      "note": "sensitivity shown at 0.01 and 0.04"
+    },
+    "hyperscaler_capex_2026_guidance_usd_b": {
+      "value": 732.5,
+      "unit": "USD billion",
+      "source": "combined guidance of the four largest hyperscalers, mid-October 2026 report (720-745)"
+    },
+    "severe_unwind_probability_one_analyst": {
+      "value": 0.2,
+      "unit": "probability",
+      "source": "one industry analysis's own estimate; an opinion, not data"
+    },
+    "project_gcp_budget_usd_month": {
+      "value": 150.0,
+      "unit": "USD/month",
+      "source": "AGENTS.md owner decision, 2026-11-04"
+    },
+    "project_gpu_capex_usd": {
+      "value": 0.0,
+      "unit": "USD",
+      "source": "no GPUs purchased; the T4 is a Spot VM, the RTX 2070 pre-exists"
+    },
+    "usd_per_eur": {
+      "value": 1.0,
+      "unit": "USD/EUR",
+      "source": "not converted; costs are compared in their own currency, differences of order 10% are below the model's precision"
+    }
+  },
+  "supply": {
+    "55": {
+      "idle_gpu_hours_per_day": 990.0,
+      "h100_equivalent": {
+        "ratio_0.01": {
+          "h100_equivalent_gpus_24h": 0.41
+        },
+        "ratio_0.02": {
+          "h100_equivalent_gpus_24h": 0.83
+        },
+        "ratio_0.04": {
+          "h100_equivalent_gpus_24h": 1.65
+        }
+      },
+      "note": "55 = active accounts claimed in the r/TechnologieFrance post (accounts, not GPUs)"
+    },
+    "1000": {
+      "idle_gpu_hours_per_day": 18000.0,
+      "h100_equivalent": {
+        "ratio_0.01": {
+          "h100_equivalent_gpus_24h": 7.5
+        },
+        "ratio_0.02": {
+          "h100_equivalent_gpus_24h": 15.0
+        },
+        "ratio_0.04": {
+          "h100_equivalent_gpus_24h": 30.0
+        }
+      },
+      "note": "55 = active accounts claimed in the r/TechnologieFrance post (accounts, not GPUs)"
+    },
+    "10000": {
+      "idle_gpu_hours_per_day": 180000.0,
+      "h100_equivalent": {
+        "ratio_0.01": {
+          "h100_equivalent_gpus_24h": 75.0
+        },
+        "ratio_0.02": {
+          "h100_equivalent_gpus_24h": 150.0
+        },
+        "ratio_0.04": {
+          "h100_equivalent_gpus_24h": 300.0
+        }
+      },
+      "note": "55 = active accounts claimed in the r/TechnologieFrance post (accounts, not GPUs)"
+    },
+    "100000": {
+      "idle_gpu_hours_per_day": 1800000.0,
+      "h100_equivalent": {
+        "ratio_0.01": {
+          "h100_equivalent_gpus_24h": 750.0
+        },
+        "ratio_0.02": {
+          "h100_equivalent_gpus_24h": 1500.0
+        },
+        "ratio_0.04": {
+          "h100_equivalent_gpus_24h": 3000.0
+        }
+      },
+      "note": "55 = active accounts claimed in the r/TechnologieFrance post (accounts, not GPUs)"
+    },
+    "1000000": {
+      "idle_gpu_hours_per_day": 18000000.0,
+      "h100_equivalent": {
+        "ratio_0.01": {
+          "h100_equivalent_gpus_24h": 7500.0
+        },
+        "ratio_0.02": {
+          "h100_equivalent_gpus_24h": 15000.0
+        },
+        "ratio_0.04": {
+          "h100_equivalent_gpus_24h": 30000.0
+        }
+      },
+      "note": "55 = active accounts claimed in the r/TechnologieFrance post (accounts, not GPUs)"
+    },
+    "steam_share_8_12_16gb": 0.6693,
+    "steam_peak_concurrent_times_share": 29118381,
+    "reading": "'Millions of consumer GPUs' is right as an installed base (JPR ships ~12M discrete boards a quarter) and wrong as a volunteer base: the project has 55 claimed accounts. The gap is recruitment and trust, not silicon. Even 100,000 volunteers at an 18 h/day idle assumption are ~1,500 H100-equivalents at the 0.02 ratio, before validation overhead and churn."
+  },
+  "cost": {
+    "eu_avg": {
+      "electricity_eur_per_gpu_hour": 0.049,
+      "electricity_eur_per_million_tokens_inference": 0.189,
+      "electricity_eur_per_8h_night_training": 0.392
+    },
+    "de": {
+      "electricity_eur_per_gpu_hour": 0.063,
+      "electricity_eur_per_million_tokens_inference": 0.243,
+      "electricity_eur_per_8h_night_training": 0.504
+    },
+    "hu": {
+      "electricity_eur_per_gpu_hour": 0.0192,
+      "electricity_eur_per_million_tokens_inference": 0.074,
+      "electricity_eur_per_8h_night_training": 0.154
+    },
+    "cloud": {
+      "t4_gcp_on_demand_usd_per_gpu_hour": 0.35,
+      "h100_on_demand_usd_per_gpu_hour_oct2026": 3.81,
+      "h100_q2_2026_low_usd_per_gpu_hour": 1.8
+    },
+    "hours_per_million_tokens_at_72_tok_s": 3.86,
+    "reading": "A volunteer pays about 5 euro cents of electricity per RTX 2070 hour at the EU average (3 in Hungary, 6 in Germany); an 8-hour night costs them roughly 0.4 EUR. Hardware depreciation, the volunteer's time, and the project's validation cost are not in this number. The non-monetary reciprocity charter means the project never pays this; it must be worth 0.4 EUR a night to the volunteer in API access or purpose."
+  },
+  "bubble": {
+    "exposure_of_the_project": {
+      "gpu_capex_usd": 0.0,
+      "monthly_cloud_budget_usd": 150.0,
+      "debt": 0.0,
+      "reading": "The project owns no GPUs, carries no debt, and caps cloud spend at 150 USD a month. Its financial exposure to a downturn is close to nil. Its real exposures are elsewhere: volunteer attention, the supply of open-weight models, and dependence on Ollama and Hugging Face as distribution channels."
+    },
+    "S1_cloud_price_collapse": {
+      "assumption": "H100 rents fall toward or below 1 USD/h as capacity outruns demand",
+      "effect_on_volunteer_compute": "For inference, cheap cloud narrows the gap; electricity-only cost at home (~0.05 EUR/h for a 2070) still undercuts any rented H100 per hour, but per token the H100 wins on throughput. For training small adapters, the home GPU stays viable only where the data must stay local (BYOM) or where purpose, not price, drives participation.",
+      "what_to_do": "Keep the pitch on sovereignty, locality and reciprocity, not on cost; stop citing cloud prices as the advantage."
+    },
+    "S2_capex_retrenchment": {
+      "assumption": "Hyperscalers cut the 2026 guidance of ~730 USD billion; free tiers and subsidised APIs shrink; some labs stop releasing open weights",
+      "effect_on_volunteer_compute": "Demand for non-commercial compute rises; second-hand datacenter GPUs (A100, H100) reach the secondary market at low prices, and a 'consumer' swarm becomes a prosumer swarm. The binding risk is model supply: a QLoRA swarm needs open base weights.",
+      "what_to_do": "Pin and mirror the base weights the chain depends on (Granite, Qwen, Gemma) under their licences; support 24-40 GB prosumer cards in the trainer; keep the catalog honest so the project is credible when attention arrives."
+    },
+    "S3_no_burst": {
+      "assumption": "Capex and rents stay roughly where they are into 2027",
+      "effect_on_volunteer_compute": "Status quo: volunteer compute competes on locality and purpose; the project's bottleneck remains the chain's quality (currently regressing) and recruitment, not the macro cycle.",
+      "what_to_do": "Fix the chain (HM-S33-06) before scaling recruitment."
+    },
+    "probability_note": "One analyst puts a severe credit unwind at 20%. That is an opinion; the project should plan for all three scenarios rather than bet on one."
+  }
+}

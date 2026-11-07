@@ -89,12 +89,48 @@ def build_receipt(catalog_path: pathlib.Path) -> dict:
     }
 
 
+def runtime_receipt() -> dict:
+    """Import the catalog and measure what the gateway serves after ``_truthful()`` has rewritten the unpublished entries."""
+    import importlib
+    import sys
+
+    sys.path.insert(0, str(ROOT / "src"))
+    cat = importlib.import_module("hivemind.router.catalog")
+    tags = {t.tier_id: t.ollama_tag for t in cat.TIERS}
+    rows = []
+    for m in cat.PREWIRED_PARTNER_MODELS:
+        tag = getattr(m, "served_by", "") or tags.get(m.tier_id, "")
+        rows.append({"public_id": m.public_id, "status": m.status, "served_by": tag, "hivemind_built_tag": str(tag).startswith("hivemind-"),
+                     "hf_repo": m.hf_repo, "tokens_trained_b": m.tokens_trained_b, "title_planned": str(m.title).startswith("Planned, not trained yet")})
+    status_counts = Counter(r["status"] for r in rows)
+    live_off = [r["public_id"] for r in rows if str(r["status"]).startswith("LIVE") and not r["hivemind_built_tag"]]
+    trained_claim = [r["public_id"] for r in rows if (r["tokens_trained_b"] or 0) > 0 and not r["hivemind_built_tag"] and str(r["status"]).startswith("LIVE")]
+    moe_status_off = [r["public_id"] for r in rows if r["status"] in ("LIVE_NOCTURNAL_MOE", "LIVE_WAVE2_SCIENTIFIC_MOE") and not r["hivemind_built_tag"]]
+    unpublished_rt = [r["public_id"] for r in rows if str(r["hf_repo"] or "").startswith(UNPUBLISHED_HF_ACCOUNT)]
+    return {
+        "note": "measured after import: _truthful() in catalog.py rewrites entries whose hf_repo is in UNPUBLISHED_HF_REPOS",
+        "count": len(rows),
+        "status_counts": dict(sorted(status_counts.items(), key=lambda kv: str(kv[0]))),
+        "live_status_served_by_off_the_shelf_tag": {"count": len(live_off), "ids": sorted(live_off)},
+        "live_status_with_tokens_trained_claim_off_the_shelf": {"count": len(trained_claim), "ids": sorted(trained_claim)},
+        "moe_trained_status_served_by_off_the_shelf_tag": {"count": len(moe_status_off), "ids": sorted(moe_status_off)},
+        "hf_repo_under_unpublished_account_at_runtime": {"count": len(unpublished_rt), "ids": sorted(unpublished_rt)},
+        "relabelled_planned_not_trained": sum(1 for r in rows if r["title_planned"]),
+        "entries": rows,
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--catalog", default=str(ROOT / "src/hivemind/router/catalog.py"))
     ap.add_argument("--out", default=str(ROOT / "artifacts/experiments/CATALOG_SERVED_2026-11-07.json"))
     a = ap.parse_args()
     receipt = build_receipt(pathlib.Path(a.catalog))
+    receipt["source_literals_note"] = "serving_tiers and public_ids above are read from the source text; the runtime section below is what the gateway exposes"
+    try:
+        receipt["runtime"] = runtime_receipt()
+    except Exception as exc:  # the receipt still records the static view
+        receipt["runtime"] = {"error": f"{type(exc).__name__}: {exc}"}
     out = pathlib.Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(receipt, indent=2, sort_keys=False) + "\n", encoding="utf-8")
@@ -104,6 +140,13 @@ def main() -> int:
     print(f"LIVE status served by off-the-shelf tag: {p['live_status_served_by_off_the_shelf_tag']['count']}")
     print(f"qlora shard format claimed: {p['qlora_shard_format_claimed']['count']}")
     print(f"hf_repo under unpublished account: {p['hf_repo_under_unpublished_account']['count']} {p['hf_repo_under_unpublished_account']['ids']}")
+    r = receipt["runtime"]
+    if "error" in r:
+        print("runtime: ERROR", r["error"])
+    else:
+        print(f"runtime: {r['count']} entries; statuses {r['status_counts']}; LIVE off-the-shelf {r['live_status_served_by_off_the_shelf_tag']['count']}; "
+              f"MoE-trained status off-the-shelf {r['moe_trained_status_served_by_off_the_shelf_tag']['count']}; tokens-trained claim {r['live_status_with_tokens_trained_claim_off_the_shelf']['count']}; "
+              f"unpublished at runtime {r['hf_repo_under_unpublished_account_at_runtime']['count']}; relabelled planned {r['relabelled_planned_not_trained']}")
     print(f"wrote {out}")
     return 0
 

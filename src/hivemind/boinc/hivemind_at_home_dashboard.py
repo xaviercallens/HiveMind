@@ -89,13 +89,13 @@ def _verify_password(password: str, salt_hex: str, expected_hash_hex: str) -> bo
         salt_bytes = bytes.fromhex(salt_hex)
     except ValueError:
         return False
-    for pwd_cand in dict.fromkeys((password, password.strip())):
-        if not pwd_cand:
-            continue
-        for iters in (PBKDF2_ITERATIONS, 120_000, 100_000):
-            derived = hashlib.pbkdf2_hmac("sha256", pwd_cand.encode("utf-8"), salt_bytes, iters).hex()
-            if hmac.compare_digest(derived, expected_hash_hex):
-                return True
+    _, computed_hex = _hash_password(password, salt=salt_bytes)
+    if hmac.compare_digest(computed_hex, expected_hash_hex):
+        return True
+    stripped = password.strip()
+    if stripped and stripped != password:
+        _, stripped_hex = _hash_password(stripped, salt=salt_bytes)
+        return hmac.compare_digest(stripped_hex, expected_hash_hex)
     return False
 
 try:
@@ -664,6 +664,8 @@ class AuthLoginRequest(BaseModel):
 class AuthSSORequest(BaseModel):
     id_token: Optional[str] = None
     code: Optional[str] = None
+    state: Optional[str] = None
+    code_verifier: Optional[str] = None
     ticket: Optional[str] = None
     cpid: Optional[str] = None
     handle_hint: Optional[str] = None
@@ -8027,7 +8029,10 @@ def create_hivemind_at_home_app(
     }
 
     _explicit_vault_dir = Path(vault_dir) != Path("artifacts/la_ruche_vault")
-    _auth_persist_env = os.environ.get("HIVEMIND_RUCHE_AUTH_FILE", "").strip()
+    _auth_persist_env = (
+        os.environ.get("HIVEMIND_RUCHE_AUTH_FILE", "").strip()
+        or os.environ.get("HIVEMIND_DASHBOARD_USERS_FILE", "").strip()
+    )
     _users_auth_file: Optional[Path] = (
         Path(_auth_persist_env)
         if _auth_persist_env
@@ -8555,9 +8560,15 @@ def create_hivemind_at_home_app(
         carried_points = int(old_guest.get("compute_points", 0))
 
         clean_handle = sanitize_handle(req.handle)
+        clean_email = sanitize_prompt_text(req.email)
+        norm_h = clean_handle.lstrip("@").lower().replace("-", "_")
         if clean_handle in auth_state["users"] or clean_handle.lstrip("@").lower() in auth_state["users"]:
             raise HTTPException(status_code=409, detail="That handle is already registered.")
-        clean_email = sanitize_prompt_text(req.email)
+        for k_u, u in auth_state["users"].items():
+            u_h = str(u.get("handle", "")).lstrip("@").lower().replace("-", "_")
+            emails = [u.get("email", "").lower()] + [e.lower() for e in u.get("secondary_emails", [])]
+            if (clean_email and clean_email.lower() in emails) or norm_h in (k_u.lower(), u_h, "xaviercallens" if k_u == "xavier_callens" else ""):
+                raise HTTPException(status_code=409, detail="That handle is already registered.")
         prov = req.provider.lower() if req.provider else "google"
         prov_badge = f"{prov.upper()}_SSO" if prov != "email" else "EMAIL_PASSKEY"
         new_token = "hm_live_" + secrets.token_hex(16)
@@ -8585,6 +8596,7 @@ def create_hivemind_at_home_app(
         }
         auth_state["users"][clean_handle] = user_record
         auth_state["api_keys"][new_token] = user_record
+        _save_persisted_users()
         return JSONResponse(content={
             "status": "GUEST_UPGRADED",
             **user_record,
@@ -8791,26 +8803,35 @@ def create_hivemind_at_home_app(
         raise HTTPException(status_code=404, detail="No such account: register first.")
 
     @app.get("/api/v1/auth/sso/{provider}/authorize", response_class=JSONResponse)
-    def api_auth_sso_authorize(provider: str) -> JSONResponse:
+    def api_auth_sso_authorize(
+        provider: str,
+        code_challenge: Optional[str] = None,
+        redirect_uri: Optional[str] = None,
+    ) -> JSONResponse:
         prov = provider.lower()
         if prov not in SUPPORTED_SSO_PROVIDERS:
             raise HTTPException(status_code=400, detail=f"Unsupported SSO provider '{provider}'")
 
-        code_verifier = secrets.token_urlsafe(32)
-        code_challenge = (
-            base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode("ascii")).digest())
-            .rstrip(b"=")
-            .decode("ascii")
-        )
+        client_supplied_challenge = bool(code_challenge and code_challenge.strip())
+        if client_supplied_challenge:
+            code_verifier = ""
+            resolved_challenge = code_challenge.strip()
+        else:
+            code_verifier = secrets.token_urlsafe(32)
+            resolved_challenge = (
+                base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode("ascii")).digest())
+                .rstrip(b"=")
+                .decode("ascii")
+            )
         state_token = secrets.token_urlsafe(24)
-        redirect_uri = f"{PUBLIC_DNS_PORTAL_URL}/api/v1/auth/sso/{prov}/callback"
+        resolved_redirect = (redirect_uri or "").strip() or f"{PUBLIC_DNS_PORTAL_URL}/api/v1/auth/sso/{prov}/callback"
         base_auth_url = SSO_PROVIDER_AUTHORIZE_URLS.get(prov, f"{PUBLIC_DNS_PORTAL_URL}/api/v1/auth/sso/{prov}")
 
         if prov == "steam":
             params = {
                 "openid.ns": "http://specs.openid.net/auth/2.0",
                 "openid.mode": "checkid_setup",
-                "openid.return_to": f"{redirect_uri}?state={state_token}",
+                "openid.return_to": f"{resolved_redirect}?state={state_token}",
                 "openid.realm": PUBLIC_DNS_PORTAL_URL,
                 "openid.identity": "http://specs.openid.net/auth/2.0/identifier_select",
                 "openid.claimed_id": "http://specs.openid.net/auth/2.0/identifier_select",
@@ -8824,10 +8845,10 @@ def create_hivemind_at_home_app(
             params = {
                 "client_id": f"hivemind-{prov}-mvp-client",
                 "response_type": "code",
-                "redirect_uri": redirect_uri,
+                "redirect_uri": resolved_redirect,
                 "scope": scopes,
                 "state": state_token,
-                "code_challenge": code_challenge,
+                "code_challenge": resolved_challenge,
                 "code_challenge_method": "S256",
             }
 
@@ -8835,9 +8856,10 @@ def create_hivemind_at_home_app(
         auth_state["sso_states"][state_token] = {
             "provider": prov,
             "state": state_token,
-            "code_challenge": code_challenge,
+            "code_challenge": resolved_challenge,
             "code_challenge_method": "S256",
-            "redirect_uri": redirect_uri,
+            "client_supplied_challenge": client_supplied_challenge,
+            "redirect_uri": resolved_redirect,
             "created_at": time.time(),
         }
         return JSONResponse(
@@ -8845,10 +8867,12 @@ def create_hivemind_at_home_app(
                 "status": "SSO_AUTHORIZATION_READY",
                 "provider": prov,
                 "is_core_mvp_provider": prov in CORE_MVP_SSO_PROVIDERS,
+                "federation_mode": "LOCAL_PKCE_SANDBOX_FEDERATION",
                 "state": state_token,
-                "code_challenge": code_challenge,
+                "code_challenge": resolved_challenge,
                 "code_challenge_method": "S256",
-                "redirect_uri": redirect_uri,
+                "code_verifier": code_verifier,
+                "redirect_uri": resolved_redirect,
                 "authorize_url": authorize_url,
                 "public_dns_domain": "hivemind.socrate-ai-lab.com",
                 "public_dns_portal": PUBLIC_DNS_PORTAL_URL,
@@ -8861,11 +8885,45 @@ def create_hivemind_at_home_app(
         if prov not in SUPPORTED_SSO_PROVIDERS:
             raise HTTPException(status_code=400, detail=f"Unsupported SSO provider '{provider}'")
 
-        prov_badge = f"{prov.upper()}_SSO"
-        hint = req.handle_hint or f"contributor_{prov}_{hashlib.sha256(str(time.time()).encode()).hexdigest()[:6]}"
-        clean_handle = sanitize_handle(hint)
+        if req.state and req.state in auth_state["sso_states"]:
+            stored_state = auth_state["sso_states"][req.state]
+            if stored_state.get("provider") != prov:
+                raise HTTPException(status_code=400, detail=f"SSO state token belongs to provider '{stored_state.get('provider')}', not '{prov}'")
+            if stored_state.get("client_supplied_challenge"):
+                if not req.code_verifier:
+                    raise HTTPException(status_code=400, detail="PKCE S256 code_verifier is required for this SSO state")
+                computed_challenge = (
+                    base64.urlsafe_b64encode(hashlib.sha256(req.code_verifier.encode("ascii")).digest())
+                    .rstrip(b"=")
+                    .decode("ascii")
+                )
+                if not hmac.compare_digest(computed_challenge, str(stored_state.get("code_challenge", ""))):
+                    raise HTTPException(status_code=400, detail="PKCE S256 code_verifier does not match code_challenge")
+            auth_state["sso_states"].pop(req.state, None)
 
-        existing = auth_state["users"].get(clean_handle)
+        prov_badge = f"{prov.upper()}_SSO"
+        raw_hint = (req.handle_hint or "").strip()
+        bearer_tok = request.headers.get("Authorization", "").replace("Bearer ", "").strip()
+
+        existing = None
+        if raw_hint:
+            clean_handle = sanitize_handle(raw_hint)
+            existing = auth_state["users"].get(clean_handle) or auth_state["users"].get(clean_handle.lstrip("@").lower())
+            if not existing:
+                norm_h = clean_handle.lstrip("@").lower().replace("-", "_")
+                for k_u, u in auth_state["users"].items():
+                    u_h = str(u.get("handle", "")).lstrip("@").lower().replace("-", "_")
+                    emails = [u.get("email", "").lower()] + [e.lower() for e in u.get("secondary_emails", [])]
+                    if raw_hint.lower() in emails or norm_h in (k_u.lower(), u_h, "xaviercallens" if k_u == "xavier_callens" else ""):
+                        existing = u
+                        break
+        else:
+            if bearer_tok:
+                by_tok = _lookup_user_by_token(bearer_tok)
+                if by_tok and not by_tok.get("is_guest"):
+                    existing = by_tok
+            clean_handle = sanitize_handle(f"contributor_{prov}_{hashlib.sha256(f'{prov}:{time.time()}:{secrets.token_hex(4)}'.encode()).hexdigest()[:6]}")
+
         if existing and req.user_mode == "force_new":
             # "force_new" on a taken handle used to skip the ownership check and overwrite the account
             raise HTTPException(status_code=409, detail="That handle is already registered.")
@@ -8876,20 +8934,24 @@ def create_hivemind_at_home_app(
             existing["is_new_user"] = False
             existing["is_guest"] = False
             existing["user_state"] = "EXISTING_USER"
+            existing.pop("logged_out", None)
             existing["provider"] = prov_badge
             linked = existing.setdefault("linked_providers", [])
             if prov_badge not in linked:
                 linked.append(prov_badge)
             auth_state["api_keys"][existing["token"]] = existing
+            _save_persisted_users()
             return JSONResponse(content={
                 "status": "AUTHENTICATED_VIA_SSO",
                 "provider": existing["provider"],
                 "linked_providers": linked,
                 "handle": existing["handle"],
-                "email": existing.get("email", f"{clean_handle}@{prov}.federation.hivemind"),
+                "email": existing.get("email", f"{existing['handle']}@{prov}.federation.hivemind"),
                 "token": existing["token"],
                 "compute_points": existing["compute_points"],
                 "role": existing["role"],
+                "is_mastercommander": existing.get("is_mastercommander", False),
+                "groups": existing.get("groups", []),
                 "target_profile": existing.get("target_profile", req.target_profile or "gamer"),
                 "node_id": existing["node_id"],
                 "login_count": existing["login_count"],
@@ -8917,6 +8979,7 @@ def create_hivemind_at_home_app(
         }
         auth_state["users"][clean_handle] = user_record
         auth_state["api_keys"][token] = user_record
+        _save_persisted_users()
         return JSONResponse(content={
             "status": "AUTHENTICATED_VIA_SSO",
             "provider": user_record["provider"],
@@ -8953,6 +9016,7 @@ def create_hivemind_at_home_app(
             linked.append(prov_badge)
             bonus_awarded = 1500
             user["compute_points"] = int(user.get("compute_points", 2500)) + bonus_awarded
+            _save_persisted_users()
 
         return JSONResponse(content={
             "status": "PROVIDER_LINKED",
@@ -8993,10 +9057,13 @@ def create_hivemind_at_home_app(
         clean_email = sanitize_prompt_text(req.email)
         local_part = clean_email.split("@")[0] if "@" in clean_email else clean_email
         clean_handle = sanitize_handle(local_part)
-        existing = auth_state["users"].get(clean_handle)
+        existing = auth_state["users"].get(clean_handle) or auth_state["users"].get(clean_handle.lstrip("@").lower())
         if not existing:
-            for u in auth_state["users"].values():
-                if u.get("email", "").lower() == clean_email.lower():
+            norm_h = clean_handle.lstrip("@").lower().replace("-", "_")
+            for k_u, u in auth_state["users"].items():
+                u_h = str(u.get("handle", "")).lstrip("@").lower().replace("-", "_")
+                emails = [u.get("email", "").lower()] + [e.lower() for e in u.get("secondary_emails", [])]
+                if clean_email.lower() in emails or norm_h in (k_u.lower(), u_h, "xaviercallens" if k_u == "xavier_callens" else ""):
                     existing = u
                     break
 
@@ -9006,8 +9073,10 @@ def create_hivemind_at_home_app(
             existing["login_count"] = int(existing.get("login_count", 1)) + 1
             existing["is_new_user"] = False
             existing["user_state"] = "EXISTING_USER"
+            existing.pop("logged_out", None)
             auth_state["api_keys"][existing["token"]] = existing
             user_record = existing
+            _save_persisted_users()
         else:
             token = "hm_live_" + secrets.token_hex(16)
             user_record = {
@@ -9028,6 +9097,7 @@ def create_hivemind_at_home_app(
             }
             auth_state["users"][clean_handle] = user_record
             auth_state["api_keys"][token] = user_record
+            _save_persisted_users()
 
         return JSONResponse(content={
             "status": "MAGIC_LINK_VERIFIED",

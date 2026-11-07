@@ -1729,11 +1729,11 @@ def render_stitch_enhanced_portal(
       <div id="guest-status-banner" data-testid="guest-status-banner" class="glass-panel p-4 rounded-xl border border-outline/40 flex flex-wrap items-center justify-between gap-3 font-mono text-xs">
         <div class="flex items-center gap-2.5">
           <span class="px-2 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-bold text-[10px]" id="visitor-mode-badge" data-testid="visitor-mode-badge">VISITOR / ANONYMOUS MODE</span>
-          <span class="text-on-surface-variant">Browsing public swarm telemetry. Launch a 1-Click Guest Sandbox, register as a New User, or sign in to an Existing Account.</span>
+          <span class="text-on-surface-variant">Browsing public swarm telemetry. Launch a 1-Click Guest Sandbox (0 HMT unverified sandbox), register as a New User, or sign in to an Existing Account.</span>
         </div>
         <div class="flex items-center gap-2">
           <button type="button" onclick="quickDemoLogin()" class="px-3 py-1.5 rounded-lg bg-primary-container/20 border border-primary/50 text-primary font-bold hover:bg-primary-container hover:text-on-primary-container transition-all text-[11px]">
-            ⚡ ENTER AS GUEST (2,500 HMT)
+            ⚡ ENTER AS GUEST (0 HMT SANDBOX)
           </button>
         </div>
       </div>
@@ -1796,8 +1796,8 @@ def render_stitch_enhanced_portal(
         <!-- Guest-Only Upgrade Banner: Convert Guest Sandbox to Permanent Registered Account -->
         <div id="upgrade-guest-panel" data-testid="upgrade-guest-panel" class="p-4 rounded-xl bg-surface-container-lowest border border-primary/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-mono text-xs hidden">
           <div>
-            <div class="text-primary font-bold">🚀 UPGRADE GUEST SANDBOX TO PERMANENT ACCOUNT (+2,500 HMT BONUS)</div>
-            <div class="text-[11px] text-on-surface-variant">Keep your 2,500 Guest HMT and unlock +2,500 HMT permanent operator grant (5,000 HMT total).</div>
+            <div class="text-primary font-bold">🚀 UPGRADE GUEST SANDBOX TO PERMANENT ACCOUNT (0 UNVERIFIED BONUS)</div>
+            <div class="text-[11px] text-on-surface-variant">Convert your guest sandbox into a permanent operator handle (unverified guest upgrades mint 0 HMT; earn HMT via verified workunits).</div>
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <input type="text" id="upgrade-handle-input" data-testid="upgrade-handle-input" placeholder="new_operator_handle" class="bg-surface-container border border-outline/50 rounded-lg px-2.5 py-1.5 text-white text-xs focus:outline-none focus:border-primary"/>
@@ -1974,52 +1974,12 @@ def render_stitch_enhanced_portal(
             <div class="p-4 rounded-xl bg-surface-container/30 border border-primary/30 flex items-center justify-between gap-3 font-mono text-xs">
               <div>
                 <span class="text-primary font-bold">⚡ QUICK GUEST / EVALUATION MODE:</span>
-                <span class="text-on-surface-variant text-[11px] block">Enter immediately as `guest_hiveminder` (2,500 HMT sandbox) without external credentials.</span>
+                <span class="text-on-surface-variant text-[11px] block">Enter immediately as `guest_hiveminder` (0 HMT unverified sandbox) without external credentials.</span>
               </div>
               <button type="button" data-testid="demo-login-btn" onclick="quickDemoLogin()" class="px-4 py-2 rounded-lg bg-primary-container text-on-primary-container font-bold hover:glow-gold transition-all whitespace-nowrap">
                 ONE-CLICK DEMO LOGIN
               </button>
             </div>
-          </div>
-
-          <!-- Simple Email Registration Card (Zero friction, 1-click registration) -->
-          <div class="glass-panel p-6 rounded-2xl border border-primary/50 bg-surface-container/40 space-y-4 font-mono text-xs" data-testid="simple-email-card">
-            <div class="flex items-center justify-between">
-              <h3 class="font-bold text-base text-white flex items-center gap-2">
-                <span class="material-symbols-outlined text-primary text-[22px]">mail</span>
-                SIMPLE EMAIL REGISTRATION
-              </h3>
-              <span class="px-2 py-0.5 rounded bg-primary/20 text-primary font-bold text-[10px]">+1,000 HMT STARTER GRANT</span>
-            </div>
-            <p class="text-[11px] text-on-surface-variant">
-              Frictionless email registration. Enter your email to immediately receive your cryptographic API token, starter compute balance, and instant access to the new HiveMind v2 Web User Interface. Existing operators automatically have their profile and points restored.
-            </p>
-            <form id="simple-email-form" onsubmit="handleSimpleEmailAuth(event)" class="space-y-3 font-mono text-xs">
-              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label class="block text-on-surface-variant mb-1 font-bold">EMAIL ADDRESS <span class="text-primary">*</span></label>
-                  <input type="email" id="simple-email-input" data-testid="simple-email-input" required placeholder="operator@hivemind.network" class="w-full bg-surface-container-lowest border border-outline/50 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary"/>
-                </div>
-                <div>
-                  <label class="block text-on-surface-variant mb-1 font-bold">PASSWORD <span class="text-[9px] text-cyan-300 font-normal">(PBKDF2-SHA256)</span></label>
-                  <input type="password" id="simple-password-input" data-testid="simple-password-input" placeholder="Min 8 chars (optional)" class="w-full bg-surface-container-lowest border border-outline/50 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary"/>
-                </div>
-                <div>
-                  <label class="block text-on-surface-variant mb-1 font-bold">CONTRIBUTOR HANDLE <span class="text-[9px] text-on-surface-variant font-normal">(OPTIONAL)</span></label>
-                  <input type="text" id="simple-handle-input" data-testid="simple-handle-input" placeholder="Auto-generated if empty" class="w-full bg-surface-container-lowest border border-outline/50 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary"/>
-                </div>
-              </div>
-              <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
-                <span class="text-[10px] text-secondary flex items-center gap-1">
-                  <span class="material-symbols-outlined text-[14px]">bolt</span>
-                  Instant CSPRNG token &bull; PBKDF2-HMAC-SHA256 &bull; Full v2 access
-                </span>
-                <button type="submit" data-testid="simple-email-submit-btn" class="px-5 py-2.5 rounded-lg bg-primary text-on-primary-container font-bold hover:glow-gold transition-all flex items-center gap-1.5 whitespace-nowrap">
-                  <span class="material-symbols-outlined text-[16px]">how_to_reg</span>
-                  REGISTER &amp; ACCESS V2
-                </button>
-              </div>
-            </form>
           </div>
 
           <!-- Existing Operator Returning Login Card -->
@@ -2032,17 +1992,17 @@ def render_stitch_enhanced_portal(
               <span class="text-[10px] text-secondary">PERSISTENT VAULT</span>
             </div>
             <p class="text-[11px] text-on-surface-variant">
-              Sign in with your active <code>hm_live_*</code> bearer token, or with your registered handle/email + password:
+              Sign in with your active <code>hm_live_*</code> / <code>hm-*</code> bearer token, or with your registered handle/email + password (existing accounts require token or password ownership):
             </p>
             <div class="flex flex-wrap items-center gap-2">
-              <span class="text-[10px] text-on-surface-variant">Quick Returning Profiles:</span>
+              <span class="text-[10px] text-on-surface-variant">Quick Returning Profiles (requires active session token or password):</span>
               <button type="button" data-testid="quick-existing-xavier" onclick="loginExistingUser('xavier_callens')" class="px-2.5 py-1 rounded bg-surface-container hover:bg-surface-container-high border border-primary/40 text-primary text-[10px] font-bold">xavier_callens (Google+GitHub &bull; 68.5k HMT)</button>
               <button type="button" data-testid="quick-existing-reddit" onclick="loginExistingUser('reddit_llama_king')" class="px-2.5 py-1 rounded bg-surface-container hover:bg-surface-container-high border border-[#FF4500]/50 text-[#FF4500] text-[10px] font-bold">reddit_llama_king (Reddit+GitHub &bull; 34.2k HMT)</button>
               <button type="button" data-testid="quick-existing-steam" onclick="loginExistingUser('steam_rtx4090_pro')" class="px-2.5 py-1 rounded bg-surface-container hover:bg-surface-container-high border border-[#66c0f4]/50 text-[#66c0f4] text-[10px] font-bold">steam_rtx4090_pro (Steam &bull; 77.5k HMT)</button>
               <button type="button" data-testid="quick-existing-epic" onclick="loginExistingUser('epic_unreal_dev')" class="px-2.5 py-1 rounded bg-surface-container hover:bg-surface-container-high border border-outline text-white text-[10px] font-bold">epic_unreal_dev (Epic &bull; 49.8k HMT)</button>
             </div>
             <form onsubmit="handleExistingLoginForm(event)" class="flex flex-col sm:flex-row gap-2 pt-1">
-              <input type="text" id="existing-login-input" data-testid="existing-login-input" required placeholder="Enter hm_live_* token, handle, or email" class="flex-1 bg-surface-container border border-outline/50 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-secondary"/>
+              <input type="text" id="existing-login-input" data-testid="existing-login-input" required placeholder="Enter hm_live_* / hm-* token, handle, or email" class="flex-1 bg-surface-container border border-outline/50 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-secondary"/>
               <input type="password" id="existing-password-input" data-testid="existing-password-input" placeholder="Password (if email/handle)" class="sm:w-44 bg-surface-container border border-outline/50 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-secondary"/>
               <button type="submit" data-testid="existing-login-btn" class="px-5 py-2 rounded-lg bg-secondary text-on-secondary-container font-bold hover:glow-cyan transition-all whitespace-nowrap">
                 RESTORE EXISTING SESSION
@@ -2050,86 +2010,134 @@ def render_stitch_enhanced_portal(
             </form>
           </div>
 
-          <!-- New User Email Registration & Passkey (WebAuthn) Form -->
-          <div class="glass-panel p-6 rounded-2xl border border-outline/40 space-y-4">
-            <div class="flex items-center justify-between font-mono">
-              <h3 class="font-bold text-base text-white flex items-center gap-2">
-                <span class="material-symbols-outlined text-primary text-[20px]">person_add</span>
-                NEW OPERATOR EMAIL &amp; BIOMETRIC PASSKEY REGISTRATION
-              </h3>
-              <span class="text-[10px] text-primary">ZK PASSKEY READY</span>
-            </div>
-            
-            <form id="email-reg-form" onsubmit="handleEmailAuth(event)" class="space-y-4 font-mono text-xs">
-              <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label class="block text-on-surface-variant mb-1">CONTRIBUTOR HANDLE</label>
-                  <input type="text" id="auth-handle" data-testid="auth-handle-input" required placeholder="e.g. quantum_hiveminder" class="w-full bg-surface-container border border-outline/50 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary"/>
-                </div>
-                <div>
-                  <label class="block text-on-surface-variant mb-1">EMAIL ADDRESS</label>
-                  <input type="email" id="auth-email" data-testid="auth-email-input" required placeholder="operator@swarm-node.net" class="w-full bg-surface-container border border-outline/50 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary"/>
-                </div>
-                <div>
-                  <label class="block text-on-surface-variant mb-1">PASSWORD (OPTIONAL)</label>
-                  <input type="password" id="auth-password" data-testid="auth-password-input" placeholder="Min 8 chars (PBKDF2)" class="w-full bg-surface-container border border-outline/50 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary"/>
-                </div>
-              </div>
+          <!-- Simplified Collapsible Drawer for Legacy v2 Registration & Sandbox Compatibility Forms -->
+          <details class="glass-panel p-5 rounded-2xl border border-outline/40 space-y-5 font-mono text-xs" data-testid="advanced-legacy-auth-drawer">
+            <summary class="cursor-pointer font-bold text-on-surface-variant hover:text-white flex items-center justify-between">
+              <span>⚙️ Additional &amp; Legacy v2 Compatibility Forms (Simple Email, Hardware Profile &amp; Local Email Handshake)</span>
+              <span class="text-[10px] text-primary">CLICK TO EXPAND</span>
+            </summary>
 
-              <div>
-                <label class="block text-on-surface-variant mb-1">OPTIONAL HARDWARE PROFILE</label>
-                <select id="auth-hardware" class="w-full bg-surface-container border border-outline/50 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary">
-                  <option value="rtx_4090">NVIDIA GeForce RTX 4090 / 5090 (24GB-32GB VRAM)</option>
-                  <option value="apple_m_series">Apple Silicon (M1/M2/M3/M4 Max / Ultra)</option>
-                  <option value="cloud_tpu">GCP Cloud TPU v5e / v5p / A100</option>
-                  <option value="cpu_general">Consumer Multi-Core CPU (x86_64)</option>
-                </select>
+            <!-- Simple Email Registration Card (Zero friction, 1-click registration) -->
+            <div class="glass-panel p-6 rounded-2xl border border-primary/50 bg-surface-container/40 space-y-4 font-mono text-xs mt-4" data-testid="simple-email-card">
+              <div class="flex items-center justify-between">
+                <h3 class="font-bold text-base text-white flex items-center gap-2">
+                  <span class="material-symbols-outlined text-primary text-[22px]">mail</span>
+                  SIMPLE EMAIL REGISTRATION
+                </h3>
+                <span class="px-2 py-0.5 rounded bg-primary/20 text-primary font-bold text-[10px]">+1,000 HMT STARTER GRANT</span>
               </div>
-
-              <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
-                <button type="button" data-testid="passkey-btn" onclick="triggerWebAuthnPasskey()" class="px-4 py-2.5 rounded-lg bg-surface-container border border-secondary/50 text-secondary hover:bg-secondary/20 transition-all flex items-center gap-1.5 font-bold">
-                  <span class="material-symbols-outlined text-[16px]">fingerprint</span>
-                  REGISTER WITH PASSKEY
-                </button>
-                <button type="submit" data-testid="auth-submit-btn" class="px-5 py-2.5 rounded-lg bg-primary-container text-on-primary-container font-bold hover:glow-gold transition-all">
-                  CREATE ACCOUNT &amp; GET API KEY
-                </button>
-              </div>
-            </form>
-
-            <!-- Passwordless Magic Link & Cryptographic Enclave (Stitch 5f7b2f6dd646443fbdaa519ef40836cc) -->
-            <div class="pt-4 border-t border-outline/30 space-y-3 font-mono text-xs">
-              <div class="text-[11px] text-secondary font-bold uppercase flex items-center gap-1.5">
-                <span class="material-symbols-outlined text-[16px]">mark_email_read</span>
-                PASSWORDLESS QUANTUM MAGIC LINK &amp; HARDWARE ENCLAVE
-              </div>
-              <form onsubmit="handleMagicLinkAuth(event)" class="flex flex-col sm:flex-row gap-2">
-                <input type="email" id="magic-email-input" data-testid="magic-email-input" required placeholder="operator@swarm-node.net" class="flex-1 bg-surface-container-lowest border border-outline/50 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-secondary"/>
-                <button type="submit" data-testid="magic-send-btn" class="px-4 py-2 rounded-lg bg-surface-container-high border border-primary/50 text-primary font-bold hover:bg-primary-container hover:text-on-primary-container transition-all whitespace-nowrap">
-                  SEND MAGIC LINK
-                </button>
+              <p class="text-[11px] text-on-surface-variant">
+                Frictionless email registration. Enter your email to immediately receive your cryptographic API token, starter compute balance, and instant access to the HiveMind Web User Interface. Existing operators with a valid password or token have their profile restored.
+              </p>
+              <form id="simple-email-form" onsubmit="handleSimpleEmailAuth(event)" class="space-y-3 font-mono text-xs">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label class="block text-on-surface-variant mb-1 font-bold">EMAIL ADDRESS <span class="text-primary">*</span></label>
+                    <input type="email" id="simple-email-input" data-testid="simple-email-input" required placeholder="operator@hivemind.network" class="w-full bg-surface-container-lowest border border-outline/50 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary"/>
+                  </div>
+                  <div>
+                    <label class="block text-on-surface-variant mb-1 font-bold">PASSWORD <span class="text-[9px] text-cyan-300 font-normal">(PBKDF2-SHA256)</span></label>
+                    <input type="password" id="simple-password-input" data-testid="simple-password-input" placeholder="Min 8 chars (optional)" class="w-full bg-surface-container-lowest border border-outline/50 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary"/>
+                  </div>
+                  <div>
+                    <label class="block text-on-surface-variant mb-1 font-bold">CONTRIBUTOR HANDLE <span class="text-[9px] text-on-surface-variant font-normal">(OPTIONAL)</span></label>
+                    <input type="text" id="simple-handle-input" data-testid="simple-handle-input" placeholder="Auto-generated if empty" class="w-full bg-surface-container-lowest border border-outline/50 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary"/>
+                  </div>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
+                  <span class="text-[10px] text-secondary flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[14px]">bolt</span>
+                    Instant CSPRNG token &bull; PBKDF2-HMAC-SHA256 &bull; Full v2/v3 access
+                  </span>
+                  <button type="submit" data-testid="simple-email-submit-btn" class="px-5 py-2.5 rounded-lg bg-primary text-on-primary-container font-bold hover:glow-gold transition-all flex items-center gap-1.5 whitespace-nowrap">
+                    <span class="material-symbols-outlined text-[16px]">how_to_reg</span>
+                    REGISTER &amp; ACCESS V2
+                  </button>
+                </div>
               </form>
-              <div id="magic-status" data-testid="magic-status" class="hidden p-2.5 rounded-lg bg-surface-container-lowest border border-primary/40 text-primary text-[11px]">
-                ✓ Encrypted quantum token dispatched &amp; ephemeral handshake verified.
+            </div>
+
+            <!-- New User Email Registration & Passkey (WebAuthn) Form -->
+            <div class="glass-panel p-6 rounded-2xl border border-outline/40 space-y-4 mt-4">
+              <div class="flex items-center justify-between font-mono">
+                <h3 class="font-bold text-base text-white flex items-center gap-2">
+                  <span class="material-symbols-outlined text-primary text-[20px]">person_add</span>
+                  HARDWARE PROFILE &amp; LOCAL PASSKEY REGISTRATION
+                </h3>
+                <span class="text-[10px] text-primary">PBKDF2-SHA256 + WEBAUTHN SANDBOX</span>
               </div>
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                <button type="button" data-testid="sso-web3-btn" onclick="triggerSSO('web3')" class="p-2.5 rounded-lg bg-surface-container hover:bg-surface-container-high border border-outline/40 flex items-center gap-2 text-left">
-                  <span class="material-symbols-outlined text-primary text-lg">token</span>
+              
+              <form id="email-reg-form" onsubmit="handleEmailAuth(event)" class="space-y-4 font-mono text-xs">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
-                    <div class="font-bold text-white text-[11px]">Web3 Key Vault</div>
-                    <div class="text-[9px] text-on-surface-variant">MetaMask / Phantom / WalletConnect</div>
+                    <label class="block text-on-surface-variant mb-1">CONTRIBUTOR HANDLE</label>
+                    <input type="text" id="auth-handle" data-testid="auth-handle-input" required placeholder="e.g. quantum_hiveminder" class="w-full bg-surface-container border border-outline/50 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary"/>
                   </div>
-                </button>
-                <button type="button" onclick="triggerWebAuthnPasskey()" class="p-2.5 rounded-lg bg-surface-container hover:bg-surface-container-high border border-outline/40 flex items-center gap-2 text-left">
-                  <span class="material-symbols-outlined text-secondary text-lg">security</span>
                   <div>
-                    <div class="font-bold text-white text-[11px]">Hardware Key / Enclave</div>
-                    <div class="text-[9px] text-on-surface-variant">YubiKey, Nitrokey, Secure Enclave</div>
+                    <label class="block text-on-surface-variant mb-1">EMAIL ADDRESS</label>
+                    <input type="email" id="auth-email" data-testid="auth-email-input" required placeholder="operator@swarm-node.net" class="w-full bg-surface-container border border-outline/50 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary"/>
                   </div>
-                </button>
+                  <div>
+                    <label class="block text-on-surface-variant mb-1">PASSWORD (OPTIONAL)</label>
+                    <input type="password" id="auth-password" data-testid="auth-password-input" placeholder="Min 8 chars (PBKDF2)" class="w-full bg-surface-container border border-outline/50 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary"/>
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-on-surface-variant mb-1">OPTIONAL HARDWARE PROFILE</label>
+                  <select id="auth-hardware" class="w-full bg-surface-container border border-outline/50 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary">
+                    <option value="rtx_4090">NVIDIA GeForce RTX 4090 / 5090 (24GB-32GB VRAM)</option>
+                    <option value="apple_m_series">Apple Silicon (M1/M2/M3/M4 Max / Ultra)</option>
+                    <option value="cloud_tpu">GCP Cloud TPU v5e / v5p / A100</option>
+                    <option value="cpu_general">Consumer Multi-Core CPU (x86_64)</option>
+                  </select>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+                  <button type="button" data-testid="passkey-btn" onclick="triggerWebAuthnPasskey()" class="px-4 py-2.5 rounded-lg bg-surface-container border border-secondary/50 text-secondary hover:bg-secondary/20 transition-all flex items-center gap-1.5 font-bold">
+                    <span class="material-symbols-outlined text-[16px]">fingerprint</span>
+                    REGISTER WITH PASSKEY
+                  </button>
+                  <button type="submit" data-testid="auth-submit-btn" class="px-5 py-2.5 rounded-lg bg-primary-container text-on-primary-container font-bold hover:glow-gold transition-all">
+                    CREATE ACCOUNT &amp; GET API KEY
+                  </button>
+                </div>
+              </form>
+
+              <!-- Local Email Token Handshake (Honest Label: No Outbound Email Sent) -->
+              <div class="pt-4 border-t border-outline/30 space-y-3 font-mono text-xs">
+                <div class="text-[11px] text-secondary font-bold uppercase flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[16px]">mark_email_read</span>
+                  LOCAL EMAIL TOKEN HANDSHAKE (NO OUTBOUND EMAIL SENT)
+                </div>
+                <form onsubmit="handleMagicLinkAuth(event)" class="flex flex-col sm:flex-row gap-2">
+                  <input type="email" id="magic-email-input" data-testid="magic-email-input" required placeholder="operator@swarm-node.net" class="flex-1 bg-surface-container-lowest border border-outline/50 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-secondary"/>
+                  <button type="submit" data-testid="magic-send-btn" class="px-4 py-2 rounded-lg bg-surface-container-high border border-primary/50 text-primary font-bold hover:bg-primary-container hover:text-on-primary-container transition-all whitespace-nowrap">
+                    ISSUE LOCAL TOKEN
+                  </button>
+                </form>
+                <div id="magic-status" data-testid="magic-status" class="hidden p-2.5 rounded-lg bg-surface-container-lowest border border-primary/40 text-primary text-[11px]">
+                  ✓ Local CSPRNG session token issued (existing accounts require Bearer token ownership).
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                  <button type="button" data-testid="sso-web3-btn" onclick="triggerSSO('web3')" class="p-2.5 rounded-lg bg-surface-container hover:bg-surface-container-high border border-outline/40 flex items-center gap-2 text-left">
+                    <span class="material-symbols-outlined text-primary text-lg">token</span>
+                    <div>
+                      <div class="font-bold text-white text-[11px]">Web3 Key Vault (Sandbox)</div>
+                      <div class="text-[9px] text-on-surface-variant">MetaMask / Phantom / WalletConnect</div>
+                    </div>
+                  </button>
+                  <button type="button" onclick="triggerWebAuthnPasskey()" class="p-2.5 rounded-lg bg-surface-container hover:bg-surface-container-high border border-outline/40 flex items-center gap-2 text-left">
+                    <span class="material-symbols-outlined text-secondary text-lg">security</span>
+                    <div>
+                      <div class="font-bold text-white text-[11px]">Hardware Key / Enclave (Sandbox)</div>
+                      <div class="text-[9px] text-on-surface-variant">YubiKey, Nitrokey, Secure Enclave</div>
+                    </div>
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          </details>
 
         </div>
 
@@ -4624,7 +4632,7 @@ print('Routed Top-2 Experts for', target_planet, ':', routed)</textarea>
             role: activePersona === 'agent' ? "Developer Agent" : (activePersona === 'node' ? "Worker Bee" : "HiveMinder Human"),
             target_profile: activeTargetProfile,
             state: authzData.state || null,
-            code_verifier: "pkce_s256_verifier_" + provider
+            code_verifier: authzData.code_verifier || ("pkce_s256_verifier_" + provider)
           }})
         }});
         const data = await resp.json();
@@ -4835,7 +4843,7 @@ print('Routed Top-2 Experts for', target_planet, ':', routed)</textarea>
           isGuest: false,
           userState: "NEW_USER",
         }};
-        saveAndDisplaySession("Guest upgraded to " + data.handle + " (+2,500 HMT bonus)!");
+        saveAndDisplaySession("Guest upgraded to " + data.handle + " (0 unverified bonus)!");
       }} catch (err) {{
         showToast("Upgrade failed");
       }}
@@ -4948,7 +4956,7 @@ print('Routed Top-2 Experts for', target_planet, ':', routed)</textarea>
           isGuest: false,
           userState: data.user_state || "NEW_USER",
         }};
-        saveAndDisplaySession("Authenticated via Quantum Magic Link!");
+        saveAndDisplaySession("Authenticated via Local Email Token!");
       }} catch (err) {{}}
     }}
 

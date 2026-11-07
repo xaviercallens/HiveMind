@@ -17,6 +17,8 @@ Security notes
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import hmac
 import ipaddress
 import html
@@ -34,7 +36,7 @@ from collections import deque
 from collections.abc import Awaitable, Callable, Iterator, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 import httpx
 from fastapi import FastAPI, Request
@@ -2233,15 +2235,50 @@ def create_router_app(
         body = await run_in_threadpool(_execute_credential_login, request, data)
         return JSONResponse(body, headers={"Cache-Control": "no-store"})
 
+    router_sso_states: dict[str, dict[str, Any]] = {}
+    router_guests: dict[str, dict[str, Any]] = {}
+    router_linked_providers: dict[str, list[str]] = {}
+    supported_sso_providers = {"google", "reddit", "steam", "github", "epic", "boinc", "webauthn", "web3"}
+    core_mvp_sso_providers = {"google", "reddit", "steam", "github"}
+    sso_authorize_urls = {
+        "google": "https://accounts.google.com/o/oauth2/v2/auth",
+        "reddit": "https://www.reddit.com/api/v1/authorize",
+        "steam": "https://steamcommunity.com/openid/login",
+        "github": "https://github.com/login/oauth/authorize",
+    }
+
     @app.get("/api/v1/auth/session")
     def auth_session_api(request: Request) -> JSONResponse:
         header = request.headers.get("authorization", "")
         scheme, _, token = header.partition(" ")
         candidate = token.strip() if scheme.lower() == "bearer" and token.strip() else ""
+        if candidate and candidate in router_guests:
+            guest = router_guests[candidate]
+            return JSONResponse(
+                {
+                    "authenticated": True,
+                    "user": {
+                        "handle": guest["handle"],
+                        "email": guest["email"],
+                        "role": guest["role"],
+                        "target_profile": guest["target_profile"],
+                        "compute_points": guest["compute_points"],
+                        "balance_hmt": 0.0,
+                        "provider": guest["provider"],
+                        "linked_providers": guest["linked_providers"],
+                        "node_id": guest["node_id"],
+                        "is_new_user": True,
+                        "is_guest": True,
+                        "user_state": "GUEST",
+                    },
+                },
+                headers={"Cache-Control": "no-store"},
+            )
         acct = store.authenticate(candidate) if candidate else None
         if acct is None:
             return JSONResponse({"authenticated": False, "user": None}, headers={"Cache-Control": "no-store"})
         bal = store.balance(acct.account_id)
+        linked = router_linked_providers.get(acct.account_id, ["EXISTING_AUTH"])
         return JSONResponse(
             {
                 "authenticated": True,
@@ -2251,6 +2288,9 @@ def create_router_app(
                     "role": acct.role,
                     "compute_points": int(round(bal)),
                     "balance_hmt": bal,
+                    "provider": linked[-1] if linked else "EXISTING_AUTH",
+                    "linked_providers": linked,
+                    "is_guest": False,
                     "user_state": "EXISTING_USER",
                 },
             },
@@ -2258,8 +2298,408 @@ def create_router_app(
         )
 
     @app.post("/api/v1/auth/logout")
-    def auth_logout_api() -> JSONResponse:
+    def auth_logout_api(request: Request) -> JSONResponse:
+        header = request.headers.get("authorization", "")
+        scheme, _, token = header.partition(" ")
+        candidate = token.strip() if scheme.lower() == "bearer" and token.strip() else ""
+        if candidate:
+            router_guests.pop(candidate, None)
         return JSONResponse({"status": "LOGGED_OUT"}, headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/v1/auth/sso/{provider}/authorize")
+    def auth_sso_authorize_api(
+        provider: str,
+        code_challenge: str | None = None,
+        redirect_uri: str | None = None,
+    ) -> JSONResponse:
+        prov = provider.lower()
+        if prov not in supported_sso_providers:
+            raise RouterError(400, f"Unsupported SSO provider '{provider}'", "invalid_request_error", "unsupported_sso_provider")
+        client_supplied_challenge = bool(code_challenge and code_challenge.strip())
+        if client_supplied_challenge:
+            code_verifier = ""
+            resolved_challenge = code_challenge.strip()
+        else:
+            code_verifier = secrets.token_urlsafe(32)
+            resolved_challenge = (
+                base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode("ascii")).digest())
+                .rstrip(b"=")
+                .decode("ascii")
+            )
+        state_token = secrets.token_urlsafe(24)
+        public_portal = "https://hivemind.socrate-ai-lab.com"
+        resolved_redirect = (redirect_uri or "").strip() or f"{public_portal}/api/v1/auth/sso/{prov}/callback"
+        base_auth_url = sso_authorize_urls.get(prov, f"{public_portal}/api/v1/auth/sso/{prov}")
+        if prov == "steam":
+            params = {
+                "openid.ns": "http://specs.openid.net/auth/2.0",
+                "openid.mode": "checkid_setup",
+                "openid.return_to": f"{resolved_redirect}?state={state_token}",
+                "openid.realm": public_portal,
+                "openid.identity": "http://specs.openid.net/auth/2.0/identifier_select",
+                "openid.claimed_id": "http://specs.openid.net/auth/2.0/identifier_select",
+            }
+        else:
+            scopes = {
+                "google": "openid email profile",
+                "reddit": "identity",
+                "github": "read:user user:email",
+            }.get(prov, "openid profile")
+            params = {
+                "client_id": f"hivemind-{prov}-mvp-client",
+                "response_type": "code",
+                "redirect_uri": resolved_redirect,
+                "scope": scopes,
+                "state": state_token,
+                "code_challenge": resolved_challenge,
+                "code_challenge_method": "S256",
+            }
+        authorize_url = f"{base_auth_url}?{urlencode(params)}"
+        router_sso_states[state_token] = {
+            "provider": prov,
+            "state": state_token,
+            "code_challenge": resolved_challenge,
+            "code_challenge_method": "S256",
+            "client_supplied_challenge": client_supplied_challenge,
+            "redirect_uri": resolved_redirect,
+            "created_at": time.time(),
+        }
+        return JSONResponse(
+            {
+                "status": "SSO_AUTHORIZATION_READY",
+                "provider": prov,
+                "is_core_mvp_provider": prov in core_mvp_sso_providers,
+                "federation_mode": "LOCAL_PKCE_SANDBOX_FEDERATION",
+                "state": state_token,
+                "code_challenge": resolved_challenge,
+                "code_challenge_method": "S256",
+                "code_verifier": code_verifier,
+                "redirect_uri": resolved_redirect,
+                "authorize_url": authorize_url,
+                "public_dns_domain": "hivemind.socrate-ai-lab.com",
+                "public_dns_portal": public_portal,
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/v1/auth/sso/{provider}")
+    async def auth_sso_api(provider: str, request: Request) -> JSONResponse:
+        prov = provider.lower()
+        if prov not in supported_sso_providers:
+            raise RouterError(400, f"Unsupported SSO provider '{provider}'", "invalid_request_error", "unsupported_sso_provider")
+        data = await _parse_auth_payload(request)
+        state_val = str(data.get("state") or "").strip()
+        verifier_val = str(data.get("code_verifier") or "").strip()
+        if state_val and state_val in router_sso_states:
+            stored_state = router_sso_states[state_val]
+            if stored_state.get("provider") != prov:
+                raise RouterError(
+                    400,
+                    f"SSO state token belongs to provider '{stored_state.get('provider')}', not '{prov}'",
+                    "invalid_request_error",
+                    "sso_state_provider_mismatch",
+                )
+            if stored_state.get("client_supplied_challenge"):
+                if not verifier_val:
+                    raise RouterError(400, "PKCE S256 code_verifier is required for this SSO state", "invalid_request_error", "missing_code_verifier")
+                computed_challenge = (
+                    base64.urlsafe_b64encode(hashlib.sha256(verifier_val.encode("ascii")).digest())
+                    .rstrip(b"=")
+                    .decode("ascii")
+                )
+                if not hmac.compare_digest(computed_challenge, str(stored_state.get("code_challenge", ""))):
+                    raise RouterError(400, "PKCE S256 code_verifier does not match code_challenge", "invalid_request_error", "invalid_code_verifier")
+            router_sso_states.pop(state_val, None)
+
+        prov_badge = f"{prov.upper()}_SSO"
+        raw_hint = str(data.get("handle_hint") or "").strip()
+        user_mode = str(data.get("user_mode") or "auto").strip()
+        target_profile = str(data.get("target_profile") or "gamer").strip()
+        auth_hdr = request.headers.get("authorization", "")
+        scheme, _, bearer_tok = auth_hdr.partition(" ")
+        bearer_key = bearer_tok.strip() if scheme.lower() == "bearer" and bearer_tok.strip() else ""
+        caller_acct = store.authenticate(bearer_key) if bearer_key.startswith("hm-") else None
+
+        if not raw_hint and caller_acct is not None:
+            linked = router_linked_providers.setdefault(caller_acct.account_id, ["EXISTING_AUTH"])
+            if prov_badge not in linked:
+                linked.append(prov_badge)
+            bal = store.balance(caller_acct.account_id)
+            return JSONResponse(
+                {
+                    "status": "AUTHENTICATED_VIA_SSO",
+                    "provider": prov_badge,
+                    "linked_providers": linked,
+                    "handle": caller_acct.handle,
+                    "email": f"{caller_acct.handle}@{prov}.federation.hivemind",
+                    "token": bearer_key,
+                    "api_key": bearer_key,
+                    "compute_points": int(round(bal)),
+                    "balance_hmt": bal,
+                    "role": caller_acct.role,
+                    "target_profile": target_profile,
+                    "node_id": "0x" + hashlib.sha256(caller_acct.handle.encode("utf-8")).hexdigest()[:8].upper(),
+                    "login_count": 2,
+                    "is_new_user": False,
+                    "is_guest": False,
+                    "user_state": "EXISTING_USER",
+                },
+                headers={"Cache-Control": "no-store"},
+            )
+
+        if raw_hint:
+            # Check if raw_hint resolves to an existing or legacy account
+            clean_hint = re.sub(r"[^a-zA-Z0-9_-]", "_", raw_hint.lstrip("@").split("@")[0])[:32] or f"contributor_{prov}"
+            try:
+                acct, api_key, _ = store.login_with_credentials(
+                    raw_hint,
+                    str(data.get("password") or ""),
+                    api_key_hint=bearer_key,
+                    auto_restore_previous=False,
+                )
+                if user_mode == "force_new":
+                    raise RouterError(409, "That handle is already registered.", "conflict_error", "handle_taken")
+                linked = router_linked_providers.setdefault(acct.account_id, ["EXISTING_AUTH"])
+                if prov_badge not in linked:
+                    linked.append(prov_badge)
+                bal = store.balance(acct.account_id)
+                return JSONResponse(
+                    {
+                        "status": "AUTHENTICATED_VIA_SSO",
+                        "provider": prov_badge,
+                        "linked_providers": linked,
+                        "handle": acct.handle,
+                        "email": raw_hint if "@" in raw_hint else f"{acct.handle}@{prov}.federation.hivemind",
+                        "token": api_key,
+                        "api_key": api_key,
+                        "compute_points": int(round(bal)),
+                        "balance_hmt": bal,
+                        "role": acct.role,
+                        "target_profile": target_profile,
+                        "node_id": "0x" + hashlib.sha256(acct.handle.encode("utf-8")).hexdigest()[:8].upper(),
+                        "login_count": 2,
+                        "is_new_user": False,
+                        "is_guest": False,
+                        "user_state": "EXISTING_USER",
+                    },
+                    headers={"Cache-Control": "no-store"},
+                )
+            except InvalidCredentials:
+                is_known_legacy = store._resolve_legacy_user(raw_hint) is not None or store._resolve_legacy_user(clean_hint) is not None
+                if is_known_legacy:
+                    if user_mode == "force_new":
+                        raise RouterError(409, "That handle is already registered.", "conflict_error", "handle_taken") from None
+                    raise RouterError(401, "Valid Bearer token or password required for existing account.", "authentication_error", "unauthorized") from None
+                try:
+                    new_id, new_key, created = store.register_with_credentials(
+                        clean_hint,
+                        "",
+                        "prosumer",
+                        email=raw_hint if "@" in raw_hint else f"{clean_hint}@{prov}.federation.hivemind",
+                    )
+                    if created:
+                        starter_grant(request, new_id)
+                    bal = store.balance(new_id)
+                    router_linked_providers[new_id] = [prov_badge]
+                    acct_new = store.get_account(new_id)
+                    resolved_h = acct_new.handle if acct_new else clean_hint.lower()
+                    return JSONResponse(
+                        {
+                            "status": "AUTHENTICATED_VIA_SSO",
+                            "provider": prov_badge,
+                            "linked_providers": [prov_badge],
+                            "handle": resolved_h,
+                            "email": raw_hint if "@" in raw_hint else f"{resolved_h}@{prov}.federation.hivemind",
+                            "token": new_key,
+                            "api_key": new_key,
+                            "compute_points": int(round(bal)),
+                            "balance_hmt": bal,
+                            "role": "prosumer",
+                            "target_profile": target_profile,
+                            "node_id": "0x" + hashlib.sha256(f"{prov}:{resolved_h}".encode("utf-8")).hexdigest()[:8].upper(),
+                            "login_count": 1,
+                            "is_new_user": True,
+                            "is_guest": False,
+                            "user_state": "NEW_USER",
+                        },
+                        headers={"Cache-Control": "no-store"},
+                    )
+                except HandleTaken:
+                    if user_mode == "force_new":
+                        raise RouterError(409, "That handle is already registered.", "conflict_error", "handle_taken") from None
+                    raise RouterError(401, "Valid Bearer token or password required for existing account.", "authentication_error", "unauthorized") from None
+
+        generated_handle = f"contributor_{prov}_{secrets.token_hex(4)}"
+        account_id, api_key, created = store.register_with_credentials(
+            generated_handle,
+            "",
+            "prosumer",
+            email=f"{generated_handle}@{prov}.federation.hivemind",
+        )
+        if created:
+            starter_grant(request, account_id)
+        bal = store.balance(account_id)
+        router_linked_providers[account_id] = [prov_badge]
+        return JSONResponse(
+            {
+                "status": "AUTHENTICATED_VIA_SSO",
+                "provider": prov_badge,
+                "linked_providers": [prov_badge],
+                "handle": generated_handle,
+                "email": f"{generated_handle}@{prov}.federation.hivemind",
+                "token": api_key,
+                "api_key": api_key,
+                "compute_points": int(round(bal)),
+                "balance_hmt": bal,
+                "role": "prosumer",
+                "target_profile": target_profile,
+                "node_id": "0x" + hashlib.sha256(f"{prov}:{generated_handle}".encode("utf-8")).hexdigest()[:8].upper(),
+                "login_count": 1,
+                "is_new_user": True,
+                "is_guest": False,
+                "user_state": "NEW_USER",
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/v1/auth/link-provider")
+    async def auth_link_provider_api(request: Request) -> JSONResponse:
+        data = await _parse_auth_payload(request)
+        prov = str(data.get("provider") or "").lower().strip()
+        if prov not in supported_sso_providers:
+            raise RouterError(400, f"Unsupported SSO provider '{prov}'", "invalid_request_error", "unsupported_sso_provider")
+        header = request.headers.get("authorization", "")
+        scheme, _, token = header.partition(" ")
+        candidate = token.strip() if scheme.lower() == "bearer" and token.strip() else ""
+        acct = store.authenticate(candidate) if candidate else None
+        if acct is None:
+            raise RouterError(401, "Active authenticated session required to link SSO provider", "authentication_error", "unauthorized")
+        prov_badge = f"{prov.upper()}_SSO"
+        linked = router_linked_providers.setdefault(acct.account_id, ["EXISTING_AUTH"])
+        if prov_badge not in linked:
+            linked.append(prov_badge)
+        bal = store.balance(acct.account_id)
+        return JSONResponse(
+            {
+                "status": "PROVIDER_LINKED",
+                "handle": acct.handle,
+                "linked_provider": prov_badge,
+                "linked_providers": linked,
+                "bonus_awarded": 0,
+                "compute_points": int(round(bal)),
+                "user_state": "EXISTING_USER",
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/v1/auth/guest")
+    async def auth_guest_api(request: Request) -> JSONResponse:
+        data = await _parse_auth_payload(request) if request.headers.get("content-length") not in (None, "0") else {}
+        target_profile = str(data.get("target_profile") or "gamer")
+        suffix = secrets.token_hex(3)
+        guest_handle = f"guest_{suffix}"
+        guest_token = "hm_guest_" + secrets.token_hex(16)
+        guest_record = {
+            "handle": guest_handle,
+            "email": f"{guest_handle}@sandbox.hivemind.local",
+            "provider": "GUEST_SANDBOX",
+            "linked_providers": ["GUEST_SANDBOX"],
+            "role": "HiveMinder Guest",
+            "target_profile": target_profile,
+            "compute_points": 0,
+            "token": guest_token,
+            "node_id": "0x" + hashlib.sha256(f"guest:{guest_handle}".encode("utf-8")).hexdigest()[:8].upper(),
+            "registered_at": time.time(),
+            "login_count": 1,
+            "is_new_user": True,
+            "is_guest": True,
+            "user_state": "GUEST",
+        }
+        router_guests[guest_token] = guest_record
+        return JSONResponse({"status": "GUEST_SESSION_ACTIVE", **guest_record}, headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/v1/auth/upgrade-guest")
+    async def auth_upgrade_guest_api(request: Request) -> JSONResponse:
+        header = request.headers.get("authorization", "")
+        scheme, _, token = header.partition(" ")
+        old_token = token.strip() if scheme.lower() == "bearer" and token.strip() else ""
+        old_guest = router_guests.get(old_token) if old_token else None
+        if not old_guest or not old_guest.get("is_guest"):
+            raise RouterError(401, "A guest session token is required to upgrade (Authorization: Bearer).", "authentication_error", "guest_token_required")
+        data = await _parse_auth_payload(request)
+        raw_handle = str(data.get("handle") or "").strip()
+        raw_email = str(data.get("email") or "").strip()
+        prov = str(data.get("provider") or "google").lower().strip()
+        target_profile = str(data.get("target_profile") or "gamer").strip()
+        clean_handle = re.sub(r"[^a-zA-Z0-9_-]", "_", raw_handle.lstrip("@"))[:32]
+        if not clean_handle:
+            raise RouterError(400, "Valid handle is required to upgrade guest session.", "invalid_request_error", "invalid_handle")
+        if store._resolve_legacy_user(raw_handle) is not None or (raw_email and store._resolve_legacy_user(raw_email) is not None):
+            raise RouterError(409, "That handle is already registered.", "conflict_error", "handle_taken")
+        try:
+            account_id, new_key, _ = store.register_with_credentials(
+                clean_handle,
+                str(data.get("password") or ""),
+                "prosumer",
+                email=raw_email or f"{clean_handle}@hivemind.network",
+            )
+        except HandleTaken:
+            raise RouterError(409, "That handle is already registered.", "conflict_error", "handle_taken") from None
+        router_guests.pop(old_token, None)
+        prov_badge = f"{prov.upper()}_SSO" if prov != "email" else "EMAIL_PASSKEY"
+        router_linked_providers[account_id] = ["GUEST_SANDBOX", prov_badge]
+        acct = store.get_account(account_id)
+        resolved_handle = acct.handle if acct else clean_handle.lower()
+        return JSONResponse(
+            {
+                "status": "GUEST_UPGRADED",
+                "handle": resolved_handle,
+                "email": raw_email or f"{resolved_handle}@hivemind.network",
+                "provider": prov_badge,
+                "linked_providers": ["GUEST_SANDBOX", prov_badge],
+                "role": "HiveMinder Human",
+                "target_profile": target_profile,
+                "compute_points": 0,
+                "token": new_key,
+                "api_key": new_key,
+                "node_id": "0x" + hashlib.sha256(f"upgraded:{resolved_handle}".encode("utf-8")).hexdigest()[:8].upper(),
+                "login_count": 1,
+                "is_new_user": True,
+                "is_guest": False,
+                "upgraded_from_guest": True,
+                "user_state": "NEW_USER",
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/v1/auth/rotate-key")
+    def auth_rotate_key_api(request: Request) -> JSONResponse:
+        header = request.headers.get("authorization", "")
+        scheme, _, token = header.partition(" ")
+        old_token = token.strip() if scheme.lower() == "bearer" and token.strip() else ""
+        acct = store.authenticate(old_token) if old_token else None
+        if acct is not None:
+            new_token = store.rotate_key(acct.account_id)
+            return JSONResponse(
+                {
+                    "status": "KEY_ROTATED",
+                    "handle": acct.handle,
+                    "old_token_revoked": True,
+                    "token": new_token,
+                    "api_key": new_token,
+                },
+                headers={"Cache-Control": "no-store"},
+            )
+        new_ephemeral = "hm_live_" + secrets.token_hex(16)
+        return JSONResponse(
+            {
+                "status": "KEY_ROTATED",
+                "handle": "ephemeral",
+                "old_token_revoked": False,
+                "token": new_ephemeral,
+            },
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.post("/signup", response_class=HTMLResponse)
     @app.post("/register", response_class=HTMLResponse)

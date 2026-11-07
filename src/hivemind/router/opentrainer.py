@@ -446,14 +446,17 @@ COMMUNITY_HELP_AND_CONTRIBUTIVE_GUIDE: Sequence[dict[str, Any]] = (
         "title_en": "1. Join as an OpenRouter Inference Producer (Share Idle GPU & Earn HMT)",
         "title_fr": "1. Rejoindre comme Producteur d'Inférence OpenRouter (Partage GPU & HMT)",
         "summary_en": (
-            "Run Ollama, llama-server, or vLLM locally and heartbeat your models to the HiveMind OpenRouter gateway. "
-            "Whenever a local game or heavy workload starts, your GPU yields in < 1.5s."
+            "Run Ollama (>= 0.1.34, CVE-2024-37032 fixed), llama-server, or vLLM behind hivemind_producer_shield.py "
+            "(HIVEMIND_ENDPOINT_TOKEN; never expose raw port 11434) and heartbeat your models to the HiveMind OpenRouter "
+            "gateway. Whenever a local game or heavy workload starts, your GPU yields in < 1.5s."
         ),
         "summary_fr": (
-            "Lancez Ollama, llama-server ou vLLM localement et envoyez vos heartbeats vers la passerelle HiveMind OpenRouter. "
-            "Dès qu'un jeu ou une tâche lourde démarre, votre GPU libère la VRAM en < 1,5 s."
+            "Lancez Ollama (>= 0.1.34, CVE-2024-37032 corrigée), llama-server ou vLLM derrière hivemind_producer_shield.py "
+            "(HIVEMIND_ENDPOINT_TOKEN ; n'exposez jamais le port 11434 brut) et envoyez vos heartbeats vers la passerelle "
+            "HiveMind OpenRouter. Dès qu'un jeu ou une tâche lourde démarre, votre GPU libère la VRAM en < 1,5 s."
         ),
         "cli_command": (
+            "HIVEMIND_ENDPOINT_TOKEN=<token> python scripts/hivemind_producer_shield.py --listen 127.0.0.1:8788 --ollama http://127.0.0.1:11434 && "
             "python scripts/hivemind_producer_agent.py "
             "--gateway https://hivemind-openrouter-1003063861791.us-central1.run.app --preset coder"
         ),
@@ -683,10 +686,12 @@ def build_opentrainer_status_payload(
         "portal_category": {
             "role": "trainer",
             "display_name": "Trainer (Intense GPU Training — OpenTrainer)",
+            "signup_url_path": "/signup?role=trainer",
+            "zero_private_user_prompts_on_trainer": True,
             "description": (
                 "Provides dedicated or nocturnal GPU compute for intense distributed training (Stage-2 Tiny-MoE NF4 QLoRA, "
                 "DiLoCo 2D-DCT outer steps, signed AMCP/Kafka Aglet rounds, and BOINC workunits) via OpenTrainer with "
-                "zero-port-forwarding firewall traversal."
+                "zero-port-forwarding firewall traversal. Zero private user prompts ever touch a Trainer GPU (Folding@home model)."
             ),
             "registered_trainer_accounts_count": len(trainer_accounts),
             "registered_trainer_accounts": list(trainer_accounts),

@@ -8116,7 +8116,7 @@ def create_hivemind_at_home_app(
 
     def _recent_failures(key: str) -> List[float]:
         now = time.time()
-        attempts = [ts for ts in auth_state["failed_login_attempts"].get(key, []) if now - ts < 60.0]
+        attempts = [ts for ts in auth_state["failed_login_attempts"].get(key, []) if now - ts < 300.0]
         auth_state["failed_login_attempts"][key] = attempts
         return attempts
 
@@ -8190,6 +8190,7 @@ def create_hivemind_at_home_app(
                     user["password_salt"] = s_hex
                     user["password_hash"] = h_hex
                     user["has_password"] = True
+                    user["password_bound"] = True
                     if upstream_ok.get("balance") is not None:
                         try:
                             user["compute_points"] = max(
@@ -8201,6 +8202,26 @@ def create_hivemind_at_home_app(
                     _save_persisted_users()
                     auth_state["failed_login_attempts"].pop(f"{account_key}|{client}", None)
                     return
+            norm_u_handle = str(user.get("handle") or "").lstrip("@").lower().replace("-", "_")
+            if (
+                not user.get("password_bound")
+                and norm_u_handle in {k.lower().replace("-", "_") for k in seeded_users}
+                and len(clean_pwd) >= 8
+            ):
+                s_hex, h_hex = _hash_password(clean_pwd)
+                user["password_salt"] = s_hex
+                user["password_hash"] = h_hex
+                user["has_password"] = True
+                user["password_bound"] = True
+                _save_persisted_users()
+                _sync_or_verify_openrouter_credentials(
+                    "register",
+                    handle_or_email=str(user.get("handle") or norm_u_handle),
+                    password=clean_pwd,
+                    email=str(user.get("email") or ""),
+                )
+                auth_state["failed_login_attempts"].pop(f"{account_key}|{client}", None)
+                return
             _record_failed_password_attempt(account_key, client)
             _check_password_rate_limit(account_key, client)
         raise HTTPException(
@@ -8268,7 +8289,10 @@ def create_hivemind_at_home_app(
                         "X-HiveMind-Status": "proof-of-concept; send only public, non-sensitive data (no secrets, personal, private or enterprise data)",
                     },
                 )
-        return await call_next(request)
+        response = await call_next(request)
+        if response.headers.get("content-type", "").startswith("text/html"):
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        return response
 
     mesh_messages_store: List[Dict[str, Any]] = [
         {
@@ -8700,6 +8724,7 @@ def create_hivemind_at_home_app(
             user_record["password_hash"] = hash_hex
             user_record["password_kdf"] = f"PBKDF2-HMAC-SHA256-{PBKDF2_ITERATIONS}"
             user_record["has_password"] = True
+            user_record["password_bound"] = True
             _sync_or_verify_openrouter_credentials(
                 "register",
                 handle_or_email=clean_handle,

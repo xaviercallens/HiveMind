@@ -2097,13 +2097,15 @@ def create_router_app(
     @app.api_route("/login", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/register", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/connexion", methods=["GET", "HEAD"], response_class=HTMLResponse)
-    def signup() -> HTMLResponse:
+    def signup(request: Request) -> HTMLResponse:
         nonce = secrets.token_urlsafe(18)
+        default_role = str(request.query_params.get("role") or "prosumer").strip().lower()
         page = render_signup_page(
             google.client_id if google else None,
             nonce,
             live_telemetry=build_live_telemetry_snapshot(),
             starter_grant_hmt=starter_grant_hmt,
+            default_role=default_role,
         )
         return HTMLResponse(page, headers={"Content-Security-Policy": content_security_policy(nonce), "Cache-Control": "no-store",
                                            "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})
@@ -4910,6 +4912,37 @@ def create_router_app(
     def download_onboarding_script(script_name: str) -> PlainTextResponse:
         """Serve any allowlisted volunteer/producer/trainer onboarding script (`/scripts/hivemind_boinc_idle_worker.py`, etc.)."""
         return _serve_onboarding_script(script_name)
+
+    @app.get("/v1/hivemind/selfhosted-p2p/audit")
+    def get_selfhosted_p2p_promises_audit(request: Request) -> dict[str, Any]:
+        """Run and return the live SHA-256-verified audit for all 6 promises in r/SelfHostedAI thread 1xjc76k."""
+        from hivemind.router.selfhosted_p2p_promises import audit_selfhosted_reddit_1xjc76k_promises
+
+        fleet_payload = list_producers_fleet(request)
+        return audit_selfhosted_reddit_1xjc76k_promises(public_fleet_payload=fleet_payload)
+
+    @app.post("/v1/hivemind/selfhosted-p2p/scrub-prompt")
+    async def post_selfhosted_p2p_scrub_prompt(request: Request) -> JSONResponse:
+        """Scrub or reject accidental API keys, tokens, private keys, or PII before P2P volunteer dispatch."""
+        from hivemind.router.selfhosted_p2p_promises import scrub_or_reject_sensitive_prompt
+
+        raw = await request.body()
+        body = _parse_json_dict(raw)
+        prompt_text = str(body.get("prompt") or body.get("content") or "")
+        mode = str(body.get("mode") or "redact").strip().lower()
+        scrub_pii = bool(body.get("scrub_pii", True))
+        try:
+            res = scrub_or_reject_sensitive_prompt(prompt_text, mode=mode, scrub_pii=scrub_pii)
+        except ValueError as exc:
+            raise RouterError(400, str(exc), "invalid_request_error", "sensitive_prompt_rejected") from None
+        if mode == "strict" and not res.get("safe_to_forward", True):
+            raise RouterError(
+                400,
+                "Refusing to dispatch prompt to volunteer P2P node: sensitive credentials or PII detected.",
+                "invalid_request_error",
+                "sensitive_prompt_rejected",
+            )
+        return JSONResponse(res, headers={"Cache-Control": "no-store"})
 
     from hivemind.boinc.rtx_boinc_deployer import RTXBoincServer, build_rtx_boinc_fastapi_router
 

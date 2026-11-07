@@ -95,6 +95,13 @@ function chosenRegRole() {
   const checked = document.querySelector('input[name=role]:checked');
   return checked ? checked.value : 'prosumer';
 }
+try {
+  const qRole = (new URLSearchParams(window.location.search).get('role') || '').trim().toLowerCase();
+  if (['prosumer', 'consumer', 'producer', 'trainer'].includes(qRole)) {
+    const radio = document.querySelector('input[name=role][value="' + qRole + '"]');
+    if (radio) radio.checked = true;
+  }
+} catch (e) {}
 if ($('loginForm')) {
   $('loginForm').addEventListener('submit', async (ev) => {
     ev.preventDefault();
@@ -236,10 +243,17 @@ def render_signup_page(
     error_message: str | None = None,
     live_telemetry: dict[str, Any] | None = None,
     starter_grant_hmt: float = 0.0,
+    default_role: str = "prosumer",
 ) -> str:
     """Render the unified Login & Registration page at ``/signup`` and ``/login``."""
     if client_id is not None and not CLIENT_ID_RE.match(client_id):
         raise ValueError("invalid Google client id")
+    role_norm = str(default_role or "prosumer").strip().lower()
+    selected_role = role_norm if role_norm in ("prosumer", "consumer", "producer", "trainer") else "prosumer"
+    chk_prosumer = " checked" if selected_role == "prosumer" else ""
+    chk_consumer = " checked" if selected_role == "consumer" else ""
+    chk_producer = " checked" if selected_role == "producer" else ""
+    chk_trainer = " checked" if selected_role == "trainer" else ""
     lt = live_telemetry or {}
     acct_summary = lt.get("accounts") or {}
     by_role = acct_summary.get("by_role") or {}
@@ -312,7 +326,7 @@ def render_signup_page(
         )
 
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Join &amp; Sign In — HiveMind OpenRouter</title><style nonce="{nonce}">{_CSS}</style></head><body><p role="note" id="poc-notice"><strong>&#9888; Proof of concept (PoC)</strong> &mdash; not a production service yet. Until HiveMind is fully secured, send only public, non-sensitive data: no secrets, passwords, API keys, personal information, or private or enterprise data. Prompts are processed by volunteer-run nodes whose operators are not verified.</p><main>
+<title>Join &amp; Sign In — HiveMind OpenRouter</title><style nonce="{nonce}">{_CSS}</style></head><body><p role="note" id="poc-notice"><strong>&#9888; Proof of concept (PoC)</strong> &mdash; not a production service yet. Until HiveMind is fully secured, send only public, non-sensitive data: no secrets, passwords, API keys, personal information, or private or enterprise data. Prompts are processed by volunteer-run nodes whose operators are not verified. Do not reuse a password from another site; if you reused a password here, change it everywhere you used it.</p><main>
 <header>
   <div>
     <h1>🐝 Join or Sign In to HiveMind</h1>
@@ -377,10 +391,10 @@ python hivemind_connect.py snippet continue --model coder</code></pre>
       <label for="regPassword">Password</label>
       <input id="regPassword" name="password" type="password" autocomplete="new-password" placeholder="Choose a password" />
       <fieldset><legend>What do you want to do?</legend>
-        <label class="radio-label"><input type="radio" name="role" value="prosumer" checked> Both: use models and share my GPU (Prosumer)</label>
-        <label class="radio-label"><input type="radio" name="role" value="consumer"> Use models in my editor / Playground (Consumer)</label>
-        <label class="radio-label"><input type="radio" name="role" value="producer"> Share my GPU with the swarm (Producer)</label>
-        <label class="radio-label"><input type="radio" name="role" value="trainer"> Provide my GPU for intense training via OpenTrainer — BOINC, AMCP, Kafka &amp; Aglets (Trainer)</label>
+        <label class="radio-label"><input type="radio" name="role" value="prosumer"{chk_prosumer}> Both: use models and share my GPU (Prosumer)</label>
+        <label class="radio-label"><input type="radio" name="role" value="consumer"{chk_consumer}> Use models in my editor / Playground (Consumer)</label>
+        <label class="radio-label"><input type="radio" name="role" value="producer"{chk_producer}> Share my GPU with the swarm (Producer)</label>
+        <label class="radio-label"><input type="radio" name="role" value="trainer"{chk_trainer}> Provide my GPU for intense training via OpenTrainer — BOINC, AMCP, Kafka &amp; Aglets (Trainer)</label>
       </fieldset>
       <p><button id="regSubmitBtn" type="submit">Create Account &amp; Get API Key · S'inscrire</button></p>
     </form>
@@ -390,6 +404,7 @@ python hivemind_connect.py snippet continue --model coder</code></pre>
 <section id="opentrainerCard" class="card">
   <h2>🔥 OpenTrainer — Intense GPU Co-Training (BOINC + AMCP + Kafka + Signed Aglets, Firewall-Friendly)</h2>
   <p class="mut">Choosing the <strong>Trainer (<code>trainer</code>)</strong> role registers your GPU for intense distributed training across the <strong>RTX 2070 (<code>XAVGAMSRV</code>, 8 GB, Windows 11) ↔ GCP Tesla T4 (<code>socreateai-agora-hermes-node1</code>, 16 GB, Linux)</strong> federation cell: Stage-2 Tiny Granite-MoE NF4 QLoRA, DiLoCo 2D-DCT outer steps, signed AMCP/Kafka Task Agents (IBM Aglet life cycle without mobile code), and BOINC nocturnal workunits.</p>
+  <p class="mut"><strong>Folding@home Privacy Guarantee (Zero Private Prompts on Trainers):</strong> Zero private user prompts ever touch a Trainer GPU &mdash; your node only pulls signed 4-bit NF4 training micro-batches from curated public scientific and coding datasets over outbound HTTPS (<code>TCP/443</code>), capped under 5.5 GB VRAM and 68&deg;C with &lt; 1.5s Steam auto-pause.</p>
   <p class="mut"><strong>Easy Network Integration Despite Firewalls:</strong> <code>OpenTrainer</code> uses outbound HTTPS (<code>TCP/443</code>) via <code>/v1/hivemind/opentrainer/heartbeat</code> and <code>/v1/hivemind/opentrainer/submit-delta</code> (zero inbound ports, zero <code>0.0.0.0</code> listeners, works behind residential NAT, CGNAT, and Windows Firewall):</p>
   <pre><code>export HIVEMIND_API_KEY=&lt;your hm-... trainer key&gt;
 python scripts/hivemind_opentrainer_agent.py --gateway https://hivemind-openrouter-1003063861791.us-central1.run.app --network-mode outbound-https-relay --check-firewall --once</code></pre>

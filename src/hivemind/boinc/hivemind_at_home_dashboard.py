@@ -8329,15 +8329,28 @@ def create_hivemind_at_home_app(
     ]
 
     @app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/fr", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/en", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/es", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/de", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/zh", methods=["GET", "HEAD"], response_class=HTMLResponse)
     def index_portal(request: Request, view: Optional[str] = None) -> HTMLResponse:
         state = build_hivemind_at_home_state(
             gpu_campaigns_report_path=gpu_campaigns_report_path,
             mining_ruche_report_path=mining_ruche_report_path,
         )
         api_base = str(request.base_url).rstrip("/")
+        path_lang = request.url.path.lstrip("/").lower()
+        req_lang = path_lang if path_lang in ("fr", "en", "es", "de", "zh") else (request.query_params.get("lang") or "en").lower()[:2]
+        if req_lang not in ("fr", "en", "es", "de", "zh"):
+            req_lang = "en"
         if view in ("legacy", "telemetry"):
-            return HTMLResponse(content=render_hivemind_at_home_html(state, api_base_url=api_base))
-        return HTMLResponse(content=render_stitch_enhanced_portal(state, api_base_url=api_base, default_screen="home"))
+            html_out = render_hivemind_at_home_html(state, api_base_url=api_base)
+        else:
+            html_out = render_stitch_enhanced_portal(state, api_base_url=api_base, default_screen="home")
+        if req_lang != "en":
+            html_out = html_out.replace('lang="en"', f'lang="{req_lang}"', 1)
+        return HTMLResponse(content=html_out, headers={"Content-Language": req_lang})
 
     @app.get("/v2", response_class=HTMLResponse)
     @app.get("/v2/", response_class=HTMLResponse)
@@ -11384,12 +11397,15 @@ def create_hivemind_at_home_app(
             "hivemind_boinc_idle_worker.py",
             "hivemind_producer_agent.py",
             "hivemind_producer_shield.py",
+            "hivemind_producer_autostart.py",
+            "hivemind_volunteer_config.py",
             "hivemind_volunteer_preflight.py",
+            "hivemind_opentrainer_agent.py",
         }
         if script_name not in allowed_scripts:
             raise HTTPException(status_code=404, detail="Unknown onboarding script")
         repo_root = Path(__file__).resolve().parents[3]
-        for candidate_dir in (repo_root / "scripts", Path("/app/scripts")):
+        for candidate_dir in (repo_root / "scripts", Path("/app/scripts"), repo_root / "src" / "hivemind" / "router"):
             sp = candidate_dir / script_name
             if sp.exists():
                 return Response(
@@ -11398,6 +11414,10 @@ def create_hivemind_at_home_app(
                     headers={"Content-Disposition": f'inline; filename="{script_name}"'},
                 )
         raise HTTPException(status_code=404, detail="Script file not present on server")
+
+    @app.get("/hivemind_boinc_idle_worker.py")
+    def download_root_boinc_idle_worker() -> Response:
+        return download_onboarding_script("hivemind_boinc_idle_worker.py")
 
 
 

@@ -1,6 +1,14 @@
 # HiveMind Improvement Plan (2026-11-05 update)
 
 > Successor to [`IMPROVEMENT_PLAN_2026-11-04.md`](IMPROVEMENT_PLAN_2026-11-04.md). Daily read-only audit of `main` at `816badd` (2026-11-05, about 10:30 CET): five parallel area audits for **new findings only** (IP-1 to IP-269, `docs/MVP_REALITY_AUDIT.md` and the open owner decisions excluded by brief). Nothing is implemented here; the items are for others to claim. **R** = re-checked by the author in this run (executed or read against the code); **A** = agent-reported with the quoted or executed evidence the agent gave, not re-run by the author.
+>
+> **Status on `main` (2026-11-07):** Every non-protected item in this plan (`IP-270..IP-281`, `IP-283..IP-292`) is closed on `main` (only `IP-282` in `src/hivemind/security/hivemind_firewall.py` is an owner-only protected path under `scripts/pr_gatekeeper.py`):
+> - `IP-270`, `IP-271` (PoUW validator pool tied to verified work/storage/spot-check receipts; cumulative minted supply cap across slashing): closed in `#702`.
+> - `IP-272`, `IP-273`, `IP-274`, `IP-275` (GWAYA multi-statement stub detection, DHT lease NaN time guards, DHT chunk CID digest verification on path load, DARL finite positive `alpha`): closed in `#699`.
+> - `IP-276`, `IP-277`, `IP-278`, `IP-279` (threadpool + work budget + per-IP limiters on compute routes, `bees/trade` sliding-window limiter & open-order cap, 400 validation on malformed anonymous input, Cloud Run `--min-instances 0 --max-instances 1` doc alignment): closed in `#703`.
+> - `IP-280`, `IP-281`, `IP-283`, `IP-284`, `IP-285` (`KnowledgeMarket` stateful per-epoch dedupe/cap, `LatticeQuantizer` finite guard, `FP8E4M3PageCodec` finite/underflow guard, `write_kv_page` encode-before-evict, `compress_tensor_topk_fp8` finite guard): closed in `#704`.
+> - `IP-286`, `IP-287`, `IP-288`, `IP-289`, `IP-290` (decoupled exoplanet discovery dedupe set + tag cap, `planet-forecast` `mean_tokens_per_req` 422 validation, `compute_coin` finite & workunit dedupe guards, `swarm_lab` finite scenario validation, generated token counting & authenticated producer registration): closed in `#700` and `#701`.
+> - `IP-291`, `IP-292` (`rtx2070_failover_orchestrator.py` live GPU probe without hardcoded telemetry literals, fail-closed `opentrainer_heartbeat_ok`): closed in `#705`.
 
 ## 1. Closed or narrowed since the 2026-11-04 plan
 

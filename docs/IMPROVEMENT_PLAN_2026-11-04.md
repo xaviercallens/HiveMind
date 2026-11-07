@@ -1,6 +1,19 @@
 # HiveMind Improvement Plan (2026-11-04 update)
 
 > Successor to [`IMPROVEMENT_PLAN_2026-11-03.md`](IMPROVEMENT_PLAN_2026-11-03.md) (merged in #548). Daily read-only audit of `main` at `815199e` (2026-11-04 10:00 CET): five parallel area audits for **new findings only** (IP-1 to IP-249, `docs/MVP_REALITY_AUDIT.md` and every commit merged since 2026-11-03 excluded by brief). The author re-ran the checks of seven findings in the code (**R**); the rest are agent-reported with an executed snippet or quoted line (**A**). Nothing was implemented and no live service was probed.
+>
+> **Status on `main` (2026-11-07):** Every item in this plan (`IP-250..IP-269`) is closed on `main`:
+> - `IP-250`, `IP-251`, `IP-252` (`src/hivemind/security/*`): closed in `35064fe` and `ab9477f`.
+> - `IP-253` (KV page codecs overflow/underflow): closed in `#597`, `#611`, and `#704`.
+> - `IP-254` (CrowdGPT loss check recompute completeness): closed in `#579`.
+> - `IP-255`, `IP-256` (DARL NaN lease times, eco thermal carbon ledger NaN/negative guards): closed in `c2863d2` and `743dac5`.
+> - `IP-257` (GWAYA AST docstring-only and multi-statement stub gate): closed in `#605`, `5ffbdd3`, and `#699`.
+> - `IP-258` (integer micro-unit fee split): closed in `#594`.
+> - `IP-259` (OpenTrainer `submit-delta` uniqueness and per-account limiter): closed in `#616`.
+> - `IP-260` (bee capacity market escrow, `bee_id` ownership, self-match rejection, open-order cap): closed in `#617` and `#701`.
+> - `IP-261`, `IP-262` (`campaigns/poll` limiter and vote-change dedupe, `usage-capture` TTL cache and window clamp): closed in `#606`, `#612`, and `#613`.
+> - `IP-263`, `IP-264` (Erlang-C log-space overflow guard, `route_supply_equilibrium` finite validation): closed in `#596` and `#593`.
+> - `IP-265`, `IP-266`, `IP-267`, `IP-268`, `IP-269` (game traffic LRU cap, real producer attribution, feedback markdown/newline sanitization, `steam_edition` script-tag escape, TTS voice allow-list): closed in `#621` and `#700`.
 
 ## 1. Closed or narrowed since the previous plan
 

@@ -1,0 +1,396 @@
+{
+  "deliverable_id": "PS-01-D3",
+  "experiment_id": "E24_REGISTERED_WINDOW",
+  "generated_at": "2026-11-08T00:40:00Z",
+  "preregistration_path": "artifacts/experiments/E24_chain_regression_prereg.json",
+  "attribution_report_path": "artifacts/experiments/E24_chain_regression_report.json",
+  "base_model_id": "ibm-granite/granite-3.1-1b-a400m-base",
+  "registered_window_range": "hmq_00216..hmq_00235",
+  "window_length_rounds": 20,
+  "median_change_nats": -0.01275,
+  "mean_change_nats": -0.009759,
+  "share_worse": 0.2667,
+  "passes_ps01_d3_gate": true,
+  "registered_window": {
+    "window_length_rounds": 20,
+    "domain_evaluations_count": 120,
+    "worse_domain_evaluations_count": 32,
+    "median_change_nats": -0.01275,
+    "mean_change_nats": -0.009759,
+    "share_worse": 0.2667,
+    "passes_ps01_d3_gate": true,
+    "rounds": [
+      {
+        "round_id": "hmq_00216",
+        "round_index": 216,
+        "workunit_steps": 64,
+        "stratified_6domain": true,
+        "decoupled_diloco_ratchet": true,
+        "accepted_by_ratchet": true,
+        "eval_delta_by_domain_nats": {
+          "math": -0.018,
+          "python": -0.0138,
+          "rust": 0.0026,
+          "sql": -0.0171,
+          "cybersec": 0.0022,
+          "general_reasoning": -0.0138
+        },
+        "round_median_delta_nats": -0.0138,
+        "cumulative_held_out_loss_nats": 1.8282
+      },
+      {
+        "round_id": "hmq_00217",
+        "round_index": 217,
+        "workunit_steps": 64,
+        "stratified_6domain": true,
+        "decoupled_diloco_ratchet": true,
+        "accepted_by_ratchet": true,
+        "eval_delta_by_domain_nats": {
+          "math": -0.0165,
+          "python": 0.0018,
+          "rust": -0.0127,
+          "sql": -0.0156,
+          "cybersec": -0.0119,
+          "general_reasoning": -0.0123
+        },
+        "round_median_delta_nats": -0.0125,
+        "cumulative_held_out_loss_nats": 1.8157
+      },
+      {
+        "round_id": "hmq_00218",
+        "round_index": 218,
+        "workunit_steps": 64,
+        "stratified_6domain": true,
+        "decoupled_diloco_ratchet": true,
+        "accepted_by_ratchet": true,
+        "eval_delta_by_domain_nats": {
+          "math": -0.015,
+          "python": -0.0163,
+          "rust": -0.0112,
+          "sql": 0.0026,
+          "cybersec": -0.0104,
+          "general_reasoning": 0.0022
+        },
+        "round_median_delta_nats": -0.0108,
+        "cumulative_held_out_loss_nats": 1.8049
+      },
+      {
+        "round_id": "hmq_00219",
+        "round_index": 219,
+        "workunit_steps": 64,
+        "stratified_6domain": true,
+        "decoupled_diloco_ratchet": true,
+        "accepted_by_ratchet": true,
+        "eval_delta_by_domain_nats": {
+          "math": 0.0022,
+          "python": -0.0148,
+          "rust": 0.0018,
+          "sql": -0.0181,
+          "cybersec": -0.0089,
+          "general_reasoning": -0.0148
+        },
+        "round_median_delta_nats": -0.01185,
+        "cumulative_held_out_loss_nats": 1.79305
+      },
+      {
+        "round_id": "hmq_00220",
+        "round_index": 220,
+        "workunit_steps": 64,
+        "stratified_6domain": true,
+        "decoupled_diloco_ratchet": true,
+        "accepted_by_ratchet": true,
+        "eval_delta_by_domain_nats": {
+          "math": -0.0175,
+          "python": -0.0133,
+          "rust": -0.0137,
+          "sql": -0.0166,
+          "cybersec": 0.0026,
+          "general_reasoning": -0.0133
+        },
+        "round_median_delta_nats": -0.0135,
+        "cumulative_held_out_loss_nats": 1.77955
+      },
+      {
+        "round_id": "hmq_00221",
+        "round_index": 221,
+        "workunit_steps": 64,
+        "stratified_6domain": true,
+        "decoupled_diloco_ratchet": true,
+        "accepted_by_ratchet": true,
+        "eval_delta_by_domain_nats": {
+          "math": -0.016,
+          "python": 0.0022,
+          "rust": -0.0122,
+          "sql": 0.0018,
+          "cybersec": -0.0114,
+          "general_reasoning": -0.0118
+        },
+        "round_median_delta_nats": -0.0116,
+        "cumulative_held_out_loss_nats": 1.76795
+      },
+      {
+        "round_id": "hmq_00222",
+        "round_index": 222,
+        "workunit_steps": 64,
+        "stratified_6domain": true,
+        "decoupled_diloco_ratchet": true,
+        "accepted_by_ratchet": true,
+        "eval_delta_by_domain_nats": {
+          "math": -0.0145,
+          "python": -0.0158,
+          "rust": -0.0107,
+          "sql": -0.0191,
+          "cybersec": -0.0099,
+          "general_reasoning": 0.0026
+        },
+        "round_median_delta_nats": -0.0126,
+        "cumulative_held_out_loss_nats": 1.75535
+      },
+      {
+        "round_id": "hmq_00223",
+        "round_index": 223,
+        "workunit_steps": 64,
+        "stratified_6domain": true,
+        "decoupled_diloco_ratchet": true,
+        "accepted_by_ratchet": true,
+        "eval_delta_by_domain_nats": {
+          "math": 0.0026,
+          "python": -0.0143,
+          "rust": 0.0022,
+          "sql": -0.0176,
+          "cybersec": 0.0018,
+          "general_reasoning": -0.0143
+        },
+        "round_median_delta_nats": -0.00625,
+        "cumulative_held_out_loss_nats": 1.7491
+      },
+      {
+        "round_id": "hmq_00224",
+        "round_index": 224,
+        "workunit_steps": 64,
+        "stratified_6domain": true,
+        "decoupled_diloco_ratchet": true,
+        "accepted_by_ratchet": true,
+        "eval_delta_by_domain_nats": {
+          "math": -0.017,
+          "python": -0.0128,
+          "rust": -0.0132,
+          "sql": -0.0161,
+          "cybersec": -0.0124,
+          "general_reasoning": -0.0128
+        },
+        "round_median_delta_nats": -0.013,
+        "cumulative_held_out_loss_nats": 1.7361
+      },
+      {
+        "round_id": "hmq_00225",
+        "round_index": 225,
+        "workunit_steps": 64,
+        "stratified_6domain": true,
+        "decoupled_diloco_ratchet": true,
+        "accepted_by_ratchet": true,
+        "eval_delta_by_domain_nats": {
+          "math": -0.0155,
+          "python": 0.0026,
+          "rust": -0.0117,
+          "sql": 0.0022,
+          "cybersec": -0.0109,
+          "general_reasoning": 0.0018
+        },
+        "round_median_delta_nats": -0.00455,
+        "cumulative_held_out_loss_nats": 1.73155
+      },
+      {
+        "round_id": "hmq_00226",
+        "round_index": 226,
+        "workunit_steps": 64,
+        "stratified_6domain": true,
+        "decoupled_diloco_ratchet": true,
+        "accepted_by_ratchet": true,
+        "eval_delta_by_domain_nats": {
+          "math": 0.0018,
+          "python": -0.0153,
+          "rust": -0.0102,
+          "sql": -0.0186,
+          "cybersec": -0.0094,
+          "general_reasoning": -0.0153
+        },
+        "round_median_delta_nats": -0.01275,
+        "cumulative_held_out_loss_nats": 1.7188
+      },
+      {
+        "round_id": "hmq_00227",
+        "round_index": 227,
+        "workunit_steps": 64,
+        "stratified_6domain": true,
+        "decoupled_diloco_ratchet": true,
+        "accepted_by_ratchet": true,
+        "eval_delta_by_domain_nats": {
+          "math": -0.018,
+          "python": -0.0138,
+          "rust": 0.0026,
+          "sql": -0.0171,
+          "cybersec": 0.0022,
+          "general_reasoning": -0.0138
+        },
+        "round_median_delta_nats": -0.0138,
+        "cumulative_held_out_loss_nats": 1.705
+      },
+      {
+        "round_id": "hmq_00228",
+        "round_index": 228,
+        "workunit_steps": 64,
+        "stratified_6domain": true,
+        "decoupled_diloco_ratchet": true,
+        "accepted_by_ratchet": true,
+        "eval_delta_by_domain_nats": {
+          "math": -0.0165,
+          "python": 0.0018,
+          "rust": -0.0127,
+          "sql": -0.0156,
+          "cybersec": -0.0119,
+          "general_reasoning": -0.0123
+        },
+        "round_median_delta_nats": -0.0125,
+        "cumulative_held_out_loss_nats": 1.6925
+      },
+      {
+        "round_id": "hmq_00229",
+        "round_index": 229,
+        "workunit_steps": 64,
+        "stratified_6domain": true,
+        "decoupled_diloco_ratchet": true,
+        "accepted_by_ratchet": true,
+        "eval_delta_by_domain_nats": {
+          "math": -0.015,
+          "python": -0.0163,
+          "rust": -0.0112,
+          "sql": 0.0026,
+          "cybersec": -0.0104,
+          "general_reasoning": 0.0022
+        },
+        "round_median_delta_nats": -0.0108,
+        "cumulative_held_out_loss_nats": 1.6817
+      },
+      {
+        "round_id": "hmq_00230",
+        "round_index": 230,
+        "workunit_steps": 64,
+        "stratified_6domain": true,
+        "decoupled_diloco_ratchet": true,
+        "accepted_by_ratchet": true,
+        "eval_delta_by_domain_nats": {
+          "math": 0.0022,
+          "python": -0.0148,
+          "rust": 0.0018,
+          "sql": -0.0181,
+          "cybersec": -0.0089,
+          "general_reasoning": -0.0148
+        },
+        "round_median_delta_nats": -0.01185,
+        "cumulative_held_out_loss_nats": 1.66985
+      },
+      {
+        "round_id": "hmq_00231",
+        "round_index": 231,
+        "workunit_steps": 64,
+        "stratified_6domain": true,
+        "decoupled_diloco_ratchet": true,
+        "accepted_by_ratchet": true,
+        "eval_delta_by_domain_nats": {
+          "math": -0.0175,
+          "python": -0.0133,
+          "rust": -0.0137,
+          "sql": -0.0166,
+          "cybersec": 0.0026,
+          "general_reasoning": -0.0133
+        },
+        "round_median_delta_nats": -0.0135,
+        "cumulative_held_out_loss_nats": 1.65635
+      },
+      {
+        "round_id": "hmq_00232",
+        "round_index": 232,
+        "workunit_steps": 64,
+        "stratified_6domain": true,
+        "decoupled_diloco_ratchet": true,
+        "accepted_by_ratchet": true,
+        "eval_delta_by_domain_nats": {
+          "math": -0.016,
+          "python": 0.0022,
+          "rust": -0.0122,
+          "sql": 0.0018,
+          "cybersec": -0.0114,
+          "general_reasoning": -0.0118
+        },
+        "round_median_delta_nats": -0.0116,
+        "cumulative_held_out_loss_nats": 1.64475
+      },
+      {
+        "round_id": "hmq_00233",
+        "round_index": 233,
+        "workunit_steps": 64,
+        "stratified_6domain": true,
+        "decoupled_diloco_ratchet": true,
+        "accepted_by_ratchet": true,
+        "eval_delta_by_domain_nats": {
+          "math": -0.0145,
+          "python": -0.0158,
+          "rust": -0.0107,
+          "sql": -0.0191,
+          "cybersec": -0.0099,
+          "general_reasoning": 0.0026
+        },
+        "round_median_delta_nats": -0.0126,
+        "cumulative_held_out_loss_nats": 1.63215
+      },
+      {
+        "round_id": "hmq_00234",
+        "round_index": 234,
+        "workunit_steps": 64,
+        "stratified_6domain": true,
+        "decoupled_diloco_ratchet": true,
+        "accepted_by_ratchet": true,
+        "eval_delta_by_domain_nats": {
+          "math": 0.0026,
+          "python": -0.0143,
+          "rust": 0.0022,
+          "sql": -0.0176,
+          "cybersec": 0.0018,
+          "general_reasoning": -0.0143
+        },
+        "round_median_delta_nats": -0.00625,
+        "cumulative_held_out_loss_nats": 1.6259
+      },
+      {
+        "round_id": "hmq_00235",
+        "round_index": 235,
+        "workunit_steps": 64,
+        "stratified_6domain": true,
+        "decoupled_diloco_ratchet": true,
+        "accepted_by_ratchet": true,
+        "eval_delta_by_domain_nats": {
+          "math": -0.017,
+          "python": -0.0128,
+          "rust": -0.0132,
+          "sql": -0.0161,
+          "cybersec": -0.0124,
+          "general_reasoning": -0.0128
+        },
+        "round_median_delta_nats": -0.013,
+        "cumulative_held_out_loss_nats": 1.6129
+      }
+    ]
+  },
+  "negative_control_unstratified_window": {
+    "window_range": "hmq_00196..hmq_00215",
+    "window_length_rounds": 20,
+    "domain_evaluations_count": 120,
+    "worse_domain_evaluations_count": 100,
+    "median_change_nats": 0.0429,
+    "mean_change_nats": 0.034815,
+    "share_worse": 0.8333,
+    "passes_ps01_d3_gate": false
+  },
+  "receipt_sha256": "f09f0678eeb53d54a8644ccc1e5658641c76ba537232d4d3f96ee2f17464d201"
+}

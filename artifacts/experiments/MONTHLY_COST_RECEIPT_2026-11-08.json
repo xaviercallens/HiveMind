@@ -1,0 +1,110 @@
+{
+  "criterion": "D1",
+  "prices": {
+    "date": "2026-11 (approximate, from memory, not from a billing export)",
+    "hours_per_month": 730.0,
+    "cloud_run_active_fraction": 0.05,
+    "cloud_run_basis": "measured billable_instance_time (7 days, scaled to a month)"
+  },
+  "budget_usd_month": 150.0,
+  "estimate_usd_month": 120.62,
+  "within_budget": true,
+  "by_kind": {
+    "disk": 54.0,
+    "snapshots": 2.08,
+    "vm": 20.18,
+    "gpu": 15.06,
+    "ip": 4.33,
+    "cloud_run": 24.97
+  },
+  "top_lines": [
+    {
+      "kind": "disk",
+      "name": "disk-socrateai-local-800gb",
+      "usd_month": 32.0,
+      "note": "800 GB pd-standard, socreateai-agora-hermes-node1"
+    },
+    {
+      "kind": "cloud_run",
+      "name": "hivemind-openrouter",
+      "usd_month": 21.3,
+      "note": "measured 185000 billable s in 7 days (30.6% of the month)"
+    },
+    {
+      "kind": "gpu",
+      "name": "socreateai-agora-hermes-node1/nvidia-tesla-t4",
+      "usd_month": 15.06,
+      "note": "1x nvidia-tesla-t4 spot, 137 h"
+    },
+    {
+      "kind": "disk",
+      "name": "socreateai-agora-hermes-node1",
+      "usd_month": 15.0,
+      "note": "150 GB pd-balanced, socreateai-agora-hermes-node1"
+    },
+    {
+      "kind": "vm",
+      "name": "socreateai-agora-hermes-node1",
+      "usd_month": 10.4,
+      "note": "n1-standard-8 spot, 137 h"
+    },
+    {
+      "kind": "vm",
+      "name": "hm-fed-master",
+      "usd_month": 9.78,
+      "note": "e2-medium spot, 730 h"
+    },
+    {
+      "kind": "disk",
+      "name": "xavuntu-desktop-1791007070-data-100gb",
+      "usd_month": 4.0,
+      "note": "100 GB pd-standard, socreateai-agora-hermes-node1"
+    },
+    {
+      "kind": "ip",
+      "name": "hm-fed-master",
+      "usd_month": 3.65,
+      "note": "ephemeral external IPv4"
+    },
+    {
+      "kind": "disk",
+      "name": "hm-fed-master",
+      "usd_month": 3.0,
+      "note": "30 GB pd-balanced, hm-fed-master"
+    },
+    {
+      "kind": "cloud_run",
+      "name": "hivemind-at-home-ruche",
+      "usd_month": 2.11,
+      "note": "measured 19262 billable s in 7 days (3.2% of the month)"
+    },
+    {
+      "kind": "snapshots",
+      "name": "1 snapshots",
+      "usd_month": 2.08,
+      "note": "80 GB stored"
+    },
+    {
+      "kind": "cloud_run",
+      "name": "hivemind-at-home",
+      "usd_month": 1.56,
+      "note": "measured 14200 billable s in 7 days (2.3% of the month)"
+    }
+  ],
+  "unpriced": [],
+  "agents_md_rules": {
+    "no_idle_tpu": true,
+    "no_unused_static_ip": true,
+    "running_vms_are_spot": true
+  },
+  "levers_largest_first": [
+    {
+      "action": "run socreateai-agora-hermes-node1 (GPU Spot) 12 h/day instead of 24 h/day",
+      "saves_usd_month": 67.89,
+      "why": "the biggest compute line"
+    }
+  ],
+  "savings_if_all_levers_taken_usd_month": 67.89,
+  "passed": true,
+  "reason": ""
+}

@@ -1,0 +1,778 @@
+{
+  "receipt": "CATALOG_SERVED",
+  "catalog_path": "src/hivemind/router/catalog.py",
+  "catalog_sha256": "ad4f3311da9f4e69799b433ad44143778252073419012626a2a9f37bea336c06",
+  "serving_tiers": {
+    "count": 16,
+    "distinct_ollama_tags": [
+      "gemma3:4b",
+      "gpt-oss:20b",
+      "granite-3.1-1b-a400m-base",
+      "granite3.1-moe:3b",
+      "hf.co/Vxtzq/Crowd-v1",
+      "hf.co/mradermacher/Goedel-Prover-V2-8B-GGUF:Q6_K",
+      "hivemind-bee-stars",
+      "mistral:7b-instruct",
+      "qwen2.5-coder:14b",
+      "qwen2.5-coder:3b",
+      "qwen2.5-coder:7b",
+      "qwen3-coder:30b",
+      "qwen3:8b"
+    ],
+    "hivemind_built_tags": [
+      "hivemind-bee-stars"
+    ],
+    "tiers": [
+      {
+        "tier_id": "granite-1b-base",
+        "ollama_tag": "granite-3.1-1b-a400m-base",
+        "title": "Granite 3.1 1B-A400M base (CPU, text completion)",
+        "moe": true,
+        "hivemind_built_tag": false
+      },
+      {
+        "tier_id": "crowd-v1",
+        "ollama_tag": "hf.co/Vxtzq/Crowd-v1",
+        "title": "CrowdGPT Crowd-v1 (1B Generalist Trunk)",
+        "moe": false,
+        "hivemind_built_tag": false
+      },
+      {
+        "tier_id": "granite-moe",
+        "ollama_tag": "granite3.1-moe:3b",
+        "title": "IBM Granite 3.1 MoE (3B, 800M active)",
+        "moe": true,
+        "hivemind_built_tag": false
+      },
+      {
+        "tier_id": "coder-lite",
+        "ollama_tag": "qwen2.5-coder:3b",
+        "title": "Coder Lite (3B)",
+        "moe": false,
+        "hivemind_built_tag": false
+      },
+      {
+        "tier_id": "gemma-core",
+        "ollama_tag": "gemma3:4b",
+        "title": "Google Gemma 3 Core (4B Multimodal & Multilingual)",
+        "moe": false,
+        "hivemind_built_tag": false
+      },
+      {
+        "tier_id": "bee-stars",
+        "ollama_tag": "hivemind-bee-stars",
+        "title": "Bee-Stars Astrophysics & Symplectic QLoRA Expert (7B)",
+        "moe": false,
+        "hivemind_built_tag": true
+      },
+      {
+        "tier_id": "mistral-core",
+        "ollama_tag": "mistral:7b-instruct",
+        "title": "Mistral 7B Instruct v0.3 Core (European Bilingual)",
+        "moe": false,
+        "hivemind_built_tag": false
+      },
+      {
+        "tier_id": "qwen35-core",
+        "ollama_tag": "qwen3:8b",
+        "title": "Qwen 3.5 / Qwen 3 Hybrid Reasoning & Coding Core (8B)",
+        "moe": false,
+        "hivemind_built_tag": false
+      },
+      {
+        "tier_id": "bee-rusty-sundials",
+        "ollama_tag": "qwen2.5-coder:7b",
+        "title": "Rusty-SUNDIALS Scientific & Numeric Rescue Bee (7B)",
+        "moe": false,
+        "hivemind_built_tag": false
+      },
+      {
+        "tier_id": "coder",
+        "ollama_tag": "qwen2.5-coder:7b",
+        "title": "Coder (7B)",
+        "moe": false,
+        "hivemind_built_tag": false
+      },
+      {
+        "tier_id": "bee-lean-prover",
+        "ollama_tag": "hf.co/mradermacher/Goedel-Prover-V2-8B-GGUF:Q6_K",
+        "title": "Goedel-Prover-V2 & DeepSeek-Prover-V2 Formal Lean 4 Bee (8B)",
+        "moe": false,
+        "hivemind_built_tag": false
+      },
+      {
+        "tier_id": "bee-ruche-moe",
+        "ollama_tag": "gpt-oss:20b",
+        "title": "La Ruche community tier (served by gpt-oss 20B MoE; HiveMind-trained experts not published yet)",
+        "moe": true,
+        "hivemind_built_tag": false
+      },
+      {
+        "tier_id": "coder-plus",
+        "ollama_tag": "qwen2.5-coder:14b",
+        "title": "Coder Plus (14B)",
+        "moe": false,
+        "hivemind_built_tag": false
+      },
+      {
+        "tier_id": "moe-qwen35-bee",
+        "ollama_tag": "gpt-oss:20b",
+        "title": "Polyglot MoE tier (served by gpt-oss 20B MoE, 3.6B active)",
+        "moe": true,
+        "hivemind_built_tag": false
+      },
+      {
+        "tier_id": "moe-general",
+        "ollama_tag": "gpt-oss:20b",
+        "title": "General MoE (gpt-oss 20B, 3.6B active)",
+        "moe": true,
+        "hivemind_built_tag": false
+      },
+      {
+        "tier_id": "moe-coder",
+        "ollama_tag": "qwen3-coder:30b",
+        "title": "Coder MoE (Qwen3-Coder 30B, 3.3B active)",
+        "moe": true,
+        "hivemind_built_tag": false
+      }
+    ]
+  },
+  "public_ids": {
+    "count": 49,
+    "status_counts": {
+      "LIVE_NOCTURNAL_MOE": 27,
+      "LIVE_ON_BIG_GPU": 6,
+      "LIVE_ON_SMALL_GPU": 1,
+      "LIVE_WAVE2_SCIENTIFIC_MOE": 5,
+      "PREWIRED_READY": 10
+    },
+    "live_status_served_by_off_the_shelf_tag": {
+      "count": 35,
+      "ids": [
+        "hivemind/bee-lean-prover",
+        "hivemind/bee-ruche-moe",
+        "hivemind/gemma-core",
+        "hivemind/mistral-core",
+        "hivemind/moe-bio-clinical",
+        "hivemind/moe-bio-genomics",
+        "hivemind/moe-chem-docking",
+        "hivemind/moe-climate-earth",
+        "hivemind/moe-coder-polyglot-3tome",
+        "hivemind/moe-crypto-zkp",
+        "hivemind/moe-cuda-opt",
+        "hivemind/moe-cyber-crypto",
+        "hivemind/moe-cyber-cti",
+        "hivemind/moe-cyber-cve",
+        "hivemind/moe-dist-p2p",
+        "hivemind/moe-feedback-debug",
+        "hivemind/moe-frontier-science",
+        "hivemind/moe-genetics-hopfield",
+        "hivemind/moe-image-gen",
+        "hivemind/moe-maths-formal",
+        "hivemind/moe-maths-olympiad",
+        "hivemind/moe-pde-fluid-quantum",
+        "hivemind/moe-python-perf",
+        "hivemind/moe-quantum-lattice",
+        "hivemind/moe-qwen35-bee",
+        "hivemind/moe-reasoning-bio",
+        "hivemind/moe-reverse-eng",
+        "hivemind/moe-rust-kernel",
+        "hivemind/moe-science-bee-v2",
+        "hivemind/moe-scientific-wave2",
+        "hivemind/moe-smart-contracts",
+        "hivemind/moe-surrogate-sundials",
+        "hivemind/moe-systems-formal",
+        "hivemind/qwen35-core",
+        "hivemind/video-moe"
+      ]
+    },
+    "qlora_shard_format_claimed": {
+      "count": 20,
+      "ids": [
+        "hivemind/moe-astro-atmosphere",
+        "hivemind/moe-astro-spectra",
+        "hivemind/moe-astro-transits",
+        "hivemind/moe-bio-clinical",
+        "hivemind/moe-bio-genomics",
+        "hivemind/moe-chem-docking",
+        "hivemind/moe-climate-earth",
+        "hivemind/moe-crypto-zkp",
+        "hivemind/moe-cuda-opt",
+        "hivemind/moe-cyber-cti",
+        "hivemind/moe-cyber-cve",
+        "hivemind/moe-dist-p2p",
+        "hivemind/moe-feedback-debug",
+        "hivemind/moe-maths-formal",
+        "hivemind/moe-maths-olympiad",
+        "hivemind/moe-python-perf",
+        "hivemind/moe-quantum-lattice",
+        "hivemind/moe-reverse-eng",
+        "hivemind/moe-rust-kernel",
+        "hivemind/moe-smart-contracts"
+      ]
+    },
+    "hf_repo_under_unpublished_account": {
+      "account_prefix": "xaviercallens/",
+      "count": 15,
+      "ids": [
+        "hivemind/bee-ruche-moe",
+        "hivemind/bee-rusty-sundials",
+        "hivemind/moe-coder-polyglot-3tome",
+        "hivemind/moe-cosmology-dualscale",
+        "hivemind/moe-cyber-crypto",
+        "hivemind/moe-frontier-science",
+        "hivemind/moe-genetics-hopfield",
+        "hivemind/moe-image-gen",
+        "hivemind/moe-pde-fluid-quantum",
+        "hivemind/moe-reasoning-bio",
+        "hivemind/moe-science-bee-v2",
+        "hivemind/moe-scientific-wave2",
+        "hivemind/moe-surrogate-sundials",
+        "hivemind/moe-systems-formal",
+        "hivemind/video-moe"
+      ]
+    },
+    "entries": [
+      {
+        "public_id": "hivemind/crowd-v1",
+        "status": "PREWIRED_READY",
+        "tier_id": "crowd-v1",
+        "served_by_tag": "hf.co/Vxtzq/Crowd-v1",
+        "hivemind_built_tag": false,
+        "hf_repo": "Vxtzq/Crowd-v1",
+        "tokens_trained_b": 7.0,
+        "shard_format": "uint16_1mb_bin",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/bee-rusty-sundials",
+        "status": "PREWIRED_READY",
+        "tier_id": "bee-rusty-sundials",
+        "served_by_tag": "qwen2.5-coder:7b",
+        "hivemind_built_tag": false,
+        "hf_repo": "xaviercallens/rusty-SUNDIALS",
+        "tokens_trained_b": 18.0,
+        "shard_format": "safetensors_lora_r16",
+        "hf_repo_under_unpublished_account": true
+      },
+      {
+        "public_id": "hivemind/gemma-core",
+        "status": "LIVE_ON_BIG_GPU",
+        "tier_id": "gemma-core",
+        "served_by_tag": "gemma3:4b",
+        "hivemind_built_tag": false,
+        "hf_repo": "google/gemma-3-4b-it",
+        "tokens_trained_b": 4000.0,
+        "shard_format": "gguf_q4_k_m",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/qwen35-core",
+        "status": "LIVE_ON_BIG_GPU",
+        "tier_id": "qwen35-core",
+        "served_by_tag": "qwen3:8b",
+        "hivemind_built_tag": false,
+        "hf_repo": "Qwen/Qwen3-8B",
+        "tokens_trained_b": 36000.0,
+        "shard_format": "gguf_q4_k_m",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/mistral-core",
+        "status": "LIVE_ON_BIG_GPU",
+        "tier_id": "mistral-core",
+        "served_by_tag": "mistral:7b-instruct",
+        "hivemind_built_tag": false,
+        "hf_repo": "mistralai/Mistral-7B-Instruct-v0.3",
+        "tokens_trained_b": 8000.0,
+        "shard_format": "gguf_q4_k_m",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/bee-lean-prover",
+        "status": "LIVE_ON_BIG_GPU",
+        "tier_id": "bee-lean-prover",
+        "served_by_tag": "hf.co/mradermacher/Goedel-Prover-V2-8B-GGUF:Q6_K",
+        "hivemind_built_tag": false,
+        "hf_repo": "Goedel-LM/Goedel-Prover-V2-8B",
+        "tokens_trained_b": 200.0,
+        "shard_format": "gguf_q6_k",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/bee-ruche-moe",
+        "status": "LIVE_ON_BIG_GPU",
+        "tier_id": "bee-ruche-moe",
+        "served_by_tag": "gpt-oss:20b",
+        "hivemind_built_tag": false,
+        "hf_repo": "xaviercallens/hivemind-la-ruche-moe",
+        "tokens_trained_b": 150.0,
+        "shard_format": "safetensors_moe_top2",
+        "hf_repo_under_unpublished_account": true
+      },
+      {
+        "public_id": "hivemind/moe-qwen35-bee",
+        "status": "LIVE_ON_BIG_GPU",
+        "tier_id": "moe-qwen35-bee",
+        "served_by_tag": "gpt-oss:20b",
+        "hivemind_built_tag": false,
+        "hf_repo": "Qwen/Qwen3-30B-A3B",
+        "tokens_trained_b": 36000.0,
+        "shard_format": "gguf_mxfp4_moe",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-maths-formal",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "bee-lean-prover",
+        "served_by_tag": "hf.co/mradermacher/Goedel-Prover-V2-8B-GGUF:Q6_K",
+        "hivemind_built_tag": false,
+        "hf_repo": "hoskinson-center/proofnet",
+        "tokens_trained_b": 25.0,
+        "shard_format": "safetensors_qlora_moe_top2",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-rust-kernel",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "coder",
+        "served_by_tag": "qwen2.5-coder:7b",
+        "hivemind_built_tag": false,
+        "hf_repo": "bigcode/the-stack-v2-dedup",
+        "tokens_trained_b": 35.0,
+        "shard_format": "safetensors_qlora_moe_top2",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-python-perf",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "coder",
+        "served_by_tag": "qwen2.5-coder:7b",
+        "hivemind_built_tag": false,
+        "hf_repo": "HuggingFaceH4/CodeAlpaca_20K",
+        "tokens_trained_b": 20.0,
+        "shard_format": "safetensors_qlora_moe_top2",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-feedback-debug",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "coder",
+        "served_by_tag": "qwen2.5-coder:7b",
+        "hivemind_built_tag": false,
+        "hf_repo": "m-a-p/CodeFeedback-Filtered-Instruction",
+        "tokens_trained_b": 50.0,
+        "shard_format": "safetensors_qlora_moe_top2",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-dist-p2p",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "moe-coder",
+        "served_by_tag": "qwen3-coder:30b",
+        "hivemind_built_tag": false,
+        "hf_repo": "bigcode/santacoder",
+        "tokens_trained_b": 15.0,
+        "shard_format": "safetensors_qlora_moe_top2",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-cuda-opt",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "moe-coder",
+        "served_by_tag": "qwen3-coder:30b",
+        "hivemind_built_tag": false,
+        "hf_repo": "neuralmagic/LLM_Compression_Code",
+        "tokens_trained_b": 18.0,
+        "shard_format": "safetensors_qlora_moe_top2",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-cyber-cti",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "moe-general",
+        "served_by_tag": "gpt-oss:20b",
+        "hivemind_built_tag": false,
+        "hf_repo": "giskard_cti/cti-bench",
+        "tokens_trained_b": 22.0,
+        "shard_format": "safetensors_qlora_moe_top2",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-cyber-cve",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "moe-coder",
+        "served_by_tag": "qwen3-coder:30b",
+        "hivemind_built_tag": false,
+        "hf_repo": "SWE-bench/SWE-bench_Verified",
+        "tokens_trained_b": 30.0,
+        "shard_format": "safetensors_qlora_moe_top2",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-smart-contracts",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "moe-coder",
+        "served_by_tag": "qwen3-coder:30b",
+        "hivemind_built_tag": false,
+        "hf_repo": "ASSERT-KTH/DISL-Solidity-Smart-Contracts",
+        "tokens_trained_b": 20.0,
+        "shard_format": "safetensors_qlora_moe_top2",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-crypto-zkp",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "moe-general",
+        "served_by_tag": "gpt-oss:20b",
+        "hivemind_built_tag": false,
+        "hf_repo": "0xPARC/zk-bench",
+        "tokens_trained_b": 40.0,
+        "shard_format": "safetensors_qlora_moe_top2",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-reverse-eng",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "moe-coder",
+        "served_by_tag": "qwen3-coder:30b",
+        "hivemind_built_tag": false,
+        "hf_repo": "vxunderground/malware-analysis-prompts",
+        "tokens_trained_b": 16.0,
+        "shard_format": "safetensors_qlora_moe_top2",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-astro-transits",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "bee-stars",
+        "served_by_tag": "hivemind-bee-stars",
+        "hivemind_built_tag": true,
+        "hf_repo": "mzrk36/exoplanets-unified-dataset",
+        "tokens_trained_b": 20.0,
+        "shard_format": "safetensors_qlora_moe_top2",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-astro-spectra",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "bee-stars",
+        "served_by_tag": "hivemind-bee-stars",
+        "hivemind_built_tag": true,
+        "hf_repo": "BrunoBarreto/sdss_dr12_stars_regression",
+        "tokens_trained_b": 25.0,
+        "shard_format": "safetensors_qlora_moe_top2",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-astro-atmosphere",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "bee-stars",
+        "served_by_tag": "hivemind-bee-stars",
+        "hivemind_built_tag": true,
+        "hf_repo": "Shoriful025/exoplanet_atmospheric_spectroscopy_results",
+        "tokens_trained_b": 28.0,
+        "shard_format": "safetensors_qlora_moe_top2",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-quantum-lattice",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "bee-rusty-sundials",
+        "served_by_tag": "qwen2.5-coder:7b",
+        "hivemind_built_tag": false,
+        "hf_repo": "MultimodalUniverse/multimodal_universe",
+        "tokens_trained_b": 24.0,
+        "shard_format": "safetensors_qlora_moe_top2",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-chem-docking",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "moe-qwen35-bee",
+        "served_by_tag": "gpt-oss:20b",
+        "hivemind_built_tag": false,
+        "hf_repo": "chainer/zinc250k",
+        "tokens_trained_b": 45.0,
+        "shard_format": "safetensors_qlora_moe_top2",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-climate-earth",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "moe-qwen35-bee",
+        "served_by_tag": "gpt-oss:20b",
+        "hivemind_built_tag": false,
+        "hf_repo": "nasa-impact/hls-foundation",
+        "tokens_trained_b": 18.0,
+        "shard_format": "safetensors_qlora_moe_top2",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-maths-olympiad",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "moe-general",
+        "served_by_tag": "gpt-oss:20b",
+        "hivemind_built_tag": false,
+        "hf_repo": "openai/gsm8k",
+        "tokens_trained_b": 22.0,
+        "shard_format": "safetensors_qlora_moe_top2",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-bio-genomics",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "moe-general",
+        "served_by_tag": "gpt-oss:20b",
+        "hivemind_built_tag": false,
+        "hf_repo": "qiaojin/PubMedQA",
+        "tokens_trained_b": 26.0,
+        "shard_format": "safetensors_qlora_moe_top2",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-bio-clinical",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "moe-general",
+        "served_by_tag": "gpt-oss:20b",
+        "hivemind_built_tag": false,
+        "hf_repo": "epfl-llm/guidance-biomedical",
+        "tokens_trained_b": 32.0,
+        "shard_format": "safetensors_qlora_moe_top2",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-systems-formal",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "moe-coder",
+        "served_by_tag": "qwen3-coder:30b",
+        "hivemind_built_tag": false,
+        "hf_repo": "xaviercallens/hivemind-moe-systems-formal",
+        "tokens_trained_b": 120.0,
+        "shard_format": "safetensors_moe_top2",
+        "hf_repo_under_unpublished_account": true
+      },
+      {
+        "public_id": "hivemind/moe-cyber-crypto",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "moe-coder",
+        "served_by_tag": "qwen3-coder:30b",
+        "hivemind_built_tag": false,
+        "hf_repo": "xaviercallens/hivemind-moe-cyber-crypto",
+        "tokens_trained_b": 110.0,
+        "shard_format": "safetensors_moe_top2",
+        "hf_repo_under_unpublished_account": true
+      },
+      {
+        "public_id": "hivemind/moe-frontier-science",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "moe-qwen35-bee",
+        "served_by_tag": "gpt-oss:20b",
+        "hivemind_built_tag": false,
+        "hf_repo": "xaviercallens/hivemind-moe-frontier-science",
+        "tokens_trained_b": 135.0,
+        "shard_format": "safetensors_moe_top2",
+        "hf_repo_under_unpublished_account": true
+      },
+      {
+        "public_id": "hivemind/moe-reasoning-bio",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "moe-general",
+        "served_by_tag": "gpt-oss:20b",
+        "hivemind_built_tag": false,
+        "hf_repo": "xaviercallens/hivemind-moe-reasoning-bio",
+        "tokens_trained_b": 140.0,
+        "shard_format": "safetensors_moe_top2",
+        "hf_repo_under_unpublished_account": true
+      },
+      {
+        "public_id": "hivemind/qwen35-4b",
+        "status": "PREWIRED_READY",
+        "tier_id": "coder-lite",
+        "served_by_tag": "qwen2.5-coder:3b",
+        "hivemind_built_tag": false,
+        "hf_repo": "Qwen/Qwen3.5-4B-Instruct",
+        "tokens_trained_b": 18000.0,
+        "shard_format": "gguf_q4_k_m",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/phi4-mini",
+        "status": "PREWIRED_READY",
+        "tier_id": "coder-lite",
+        "served_by_tag": "qwen2.5-coder:3b",
+        "hivemind_built_tag": false,
+        "hf_repo": "microsoft/Phi-4-mini-instruct",
+        "tokens_trained_b": 5000.0,
+        "shard_format": "gguf_q4_k_m",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/gemma4-e4b",
+        "status": "PREWIRED_READY",
+        "tier_id": "gemma-core",
+        "served_by_tag": "gemma3:4b",
+        "hivemind_built_tag": false,
+        "hf_repo": "google/gemma-4-e4b-it",
+        "tokens_trained_b": 6000.0,
+        "shard_format": "gguf_q4_k_m",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/qwen35-sub2b",
+        "status": "PREWIRED_READY",
+        "tier_id": "crowd-v1",
+        "served_by_tag": "hf.co/Vxtzq/Crowd-v1",
+        "hivemind_built_tag": false,
+        "hf_repo": "Qwen/Qwen3.5-2B-Instruct",
+        "tokens_trained_b": 18000.0,
+        "shard_format": "gguf_q4_k_m",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/layerstorm-frontier-moe",
+        "status": "PREWIRED_READY",
+        "tier_id": "moe-general",
+        "served_by_tag": "gpt-oss:20b",
+        "hivemind_built_tag": false,
+        "hf_repo": "Qwen/Qwen3-30B-A3B-Instruct-2507",
+        "tokens_trained_b": 36000.0,
+        "shard_format": "safetensors_pcie_two_zone_q4",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-scientific-wave2",
+        "status": "LIVE_WAVE2_SCIENTIFIC_MOE",
+        "tier_id": "bee-rusty-sundials",
+        "served_by_tag": "qwen2.5-coder:7b",
+        "hivemind_built_tag": false,
+        "hf_repo": "xaviercallens/hivemind-moe-scientific-wave2",
+        "tokens_trained_b": 240.0,
+        "shard_format": "safetensors_moe_top2_solver_verified",
+        "hf_repo_under_unpublished_account": true
+      },
+      {
+        "public_id": "hivemind/moe-surrogate-sundials",
+        "status": "LIVE_WAVE2_SCIENTIFIC_MOE",
+        "tier_id": "bee-rusty-sundials",
+        "served_by_tag": "qwen2.5-coder:7b",
+        "hivemind_built_tag": false,
+        "hf_repo": "xaviercallens/hivemind-moe-surrogate-sundials",
+        "tokens_trained_b": 95.0,
+        "shard_format": "safetensors_surrogate_rk4_bdf",
+        "hf_repo_under_unpublished_account": true
+      },
+      {
+        "public_id": "hivemind/moe-pde-fluid-quantum",
+        "status": "LIVE_WAVE2_SCIENTIFIC_MOE",
+        "tier_id": "moe-qwen35-bee",
+        "served_by_tag": "gpt-oss:20b",
+        "hivemind_built_tag": false,
+        "hf_repo": "xaviercallens/hivemind-moe-pde-fluid-quantum",
+        "tokens_trained_b": 320.0,
+        "shard_format": "safetensors_moe_top2_mol_pde",
+        "hf_repo_under_unpublished_account": true
+      },
+      {
+        "public_id": "hivemind/moe-cosmology-dualscale",
+        "status": "LIVE_WAVE2_SCIENTIFIC_MOE",
+        "tier_id": "bee-stars",
+        "served_by_tag": "hivemind-bee-stars",
+        "hivemind_built_tag": true,
+        "hf_repo": "xaviercallens/hivemind-moe-cosmology-dualscale",
+        "tokens_trained_b": 210.0,
+        "shard_format": "safetensors_moe_top2_symplectic",
+        "hf_repo_under_unpublished_account": true
+      },
+      {
+        "public_id": "hivemind/moe-genetics-hopfield",
+        "status": "LIVE_WAVE2_SCIENTIFIC_MOE",
+        "tier_id": "bee-rusty-sundials",
+        "served_by_tag": "qwen2.5-coder:7b",
+        "hivemind_built_tag": false,
+        "hf_repo": "xaviercallens/hivemind-moe-genetics-hopfield",
+        "tokens_trained_b": 180.0,
+        "shard_format": "safetensors_moe_top2_cvode",
+        "hf_repo_under_unpublished_account": true
+      },
+      {
+        "public_id": "hivemind/moe-deepseek-prover-v2",
+        "status": "PREWIRED_READY",
+        "tier_id": "bee-lean-prover",
+        "served_by_tag": "hf.co/mradermacher/Goedel-Prover-V2-8B-GGUF:Q6_K",
+        "hivemind_built_tag": false,
+        "hf_repo": "deepseek-ai/DeepSeek-Prover-V2-7B",
+        "tokens_trained_b": 8500.0,
+        "shard_format": "gguf_q4_k_m",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-qwen3-coder-next",
+        "status": "PREWIRED_READY",
+        "tier_id": "moe-coder",
+        "served_by_tag": "qwen3-coder:30b",
+        "hivemind_built_tag": false,
+        "hf_repo": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+        "tokens_trained_b": 36000.0,
+        "shard_format": "gguf_q4_k_m_moe",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-glm45-air-science",
+        "status": "PREWIRED_READY",
+        "tier_id": "moe-general",
+        "served_by_tag": "gpt-oss:20b",
+        "hivemind_built_tag": false,
+        "hf_repo": "zai-org/GLM-4.5-Air",
+        "tokens_trained_b": 23000.0,
+        "shard_format": "safetensors_moe_top2_pcie",
+        "hf_repo_under_unpublished_account": false
+      },
+      {
+        "public_id": "hivemind/moe-science-bee-v2",
+        "status": "LIVE_ON_SMALL_GPU",
+        "tier_id": "bee-rusty-sundials",
+        "served_by_tag": "qwen2.5-coder:7b",
+        "hivemind_built_tag": false,
+        "hf_repo": "xaviercallens/hivemind-moe-science-bee-v2",
+        "tokens_trained_b": 18.0,
+        "shard_format": "gguf_q4_k_m_plus_hivemind_solver_slots",
+        "hf_repo_under_unpublished_account": true
+      },
+      {
+        "public_id": "hivemind/moe-coder-polyglot-3tome",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "moe-coder",
+        "served_by_tag": "qwen3-coder:30b",
+        "hivemind_built_tag": false,
+        "hf_repo": "xaviercallens/hivemind-moe-coder-polyglot-3tome",
+        "tokens_trained_b": 420.0,
+        "shard_format": "safetensors_moe_top2_3tome_pie",
+        "hf_repo_under_unpublished_account": true
+      },
+      {
+        "public_id": "hivemind/moe-image-gen",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "bee-ruche-moe",
+        "served_by_tag": "gpt-oss:20b",
+        "hivemind_built_tag": false,
+        "hf_repo": "xaviercallens/hivemind-vision-image-moe",
+        "tokens_trained_b": 380.0,
+        "shard_format": "safetensors_fomoe_top2_2d_dct",
+        "hf_repo_under_unpublished_account": true
+      },
+      {
+        "public_id": "hivemind/video-moe",
+        "status": "LIVE_NOCTURNAL_MOE",
+        "tier_id": "moe-general",
+        "served_by_tag": "gpt-oss:20b",
+        "hivemind_built_tag": false,
+        "hf_repo": "xaviercallens/hivemind-spatiotemporal-video-moe",
+        "tokens_trained_b": 310.0,
+        "shard_format": "safetensors_moe_top2_3d_dct",
+        "hf_repo_under_unpublished_account": true
+      }
+    ]
+  },
+  "reading": "A public id with a LIVE status is served by the Ollama tag of its tier_id. Only tags starting with 'hivemind-' name a HiveMind-built artefact. tokens_trained_b and shard_format are catalog metadata, not evidence of training; the BOINC chain receipt (CHAIN_STATUS) is the only training evidence in this repository."
+}

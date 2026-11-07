@@ -981,6 +981,18 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
          f"${_tex_grouped(arms['A2']['free_at_peak_mib'])}$\\,MiB", "$4{,}300$\\,MiB"],
         "artifacts/experiments/NIGHT_INTENSE_1_probe_results_2026-10-28.json",
     )
+    cat = _jl("CATALOG_SERVED_2026-11-07.json")
+    cs, cp = cat["serving_tiers"], cat["public_ids"]
+    _all(
+        "PROV-88",
+        "Catalog served vs trained: serving tiers, distinct tags, HiveMind-built tags, public ids, LIVE-but-off-the-shelf, QLoRA-claimed, unpublished-repo counts",
+        [f"${cs['count']}$ serving tiers", f"${len(cs['distinct_ollama_tags'])}$ distinct Ollama tags", f"${cp['count']}$ public model ids",
+         f"${cp['live_status_served_by_off_the_shelf_tag']['count']}$ carry a \\texttt{{LIVE}} status while being served by an off-the-shelf tag",
+         f"${cp['qlora_shard_format_claimed']['count']}$ declare a QLoRA shard format",
+         f"${cp['hf_repo_under_unpublished_account']['count']}$ still name a Hugging Face repository under an account that has never been published"]
+        + [f"\\texttt{{{x}}}" for x in cs["hivemind_built_tags"]],
+        "artifacts/experiments/CATALOG_SERVED_2026-11-07.json",
+    )
 
 def verify_manuscript_data_consistency(
     tex_text: str,

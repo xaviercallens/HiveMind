@@ -27,11 +27,43 @@ from hivemind.router.t4_visibility import (  # noqa: E402
 )
 
 
-def build_live_wan_swarm_report() -> dict[str, Any]:
-    artifacts_dir = PROJECT_ROOT / "artifacts"
+def build_live_wan_swarm_report(
+    artifacts_dir: Path | None = None,
+    *,
+    write_output: bool = True,
+) -> dict[str, Any]:
+    artifacts_dir = Path(artifacts_dir) if artifacts_dir is not None else (PROJECT_ROOT / "artifacts")
 
     rtx_report = json.loads((artifacts_dir / "rtx_intense_stress_and_steam_deploy_report.json").read_text(encoding="utf-8"))
     nocturnal_report = json.loads((artifacts_dir / "nocturnal_moe_auto_improvement_report.json").read_text(encoding="utf-8"))
+    e2e_paths = (
+        artifacts_dir / "boinc_prod_server" / "e2e_report.json",
+        artifacts_dir / "boinc_core_node" / "e2e_report.json",
+        artifacts_dir / "boinc_real" / "e2e_report.json",
+    )
+    boinc_faults_injected = 0
+    boinc_faults_rejected = 0
+    honest_e2e_total = 0
+    honest_validator_rejected = 0
+    for e2e_path in e2e_paths:
+        if not e2e_path.exists():
+            continue
+        e2e_data = json.loads(e2e_path.read_text(encoding="utf-8"))
+        for v_key, verdict in (e2e_data.get("verdicts") or {}).items():
+            if not isinstance(verdict, dict):
+                continue
+            wu_id = str(verdict.get("wu_id") or v_key)
+            is_valid = bool(verdict.get("valid", False))
+            capped_by = str((verdict.get("grant") or {}).get("capped_by", ""))
+            is_rejected = (not is_valid) or (capped_by == "rejected")
+            if "lazy" in wu_id or "fault" in wu_id:
+                boinc_faults_injected += 1
+                if is_rejected:
+                    boinc_faults_rejected += 1
+            else:
+                honest_e2e_total += 1
+                if is_rejected:
+                    honest_validator_rejected += 1
 
     qlora_prog = _LATEST_T4_SNAPSHOT["qlora_progress"]
     gpu_snap = _LATEST_T4_SNAPSHOT["gpu"]
@@ -65,18 +97,22 @@ def build_live_wan_swarm_report() -> dict[str, Any]:
     nocturnal_wus = len(nocturnal_report["results"])  # 24
     total_production_wus = assimilated_boinc_wus + nocturnal_wus  # 124
 
-    # Validator false-rejection vs adversarial catch accounting
-    honest_validator_rejected = 0
-    honest_validator_false_rejection_pct = 0.0
+    # Validator false-rejection vs adversarial catch accounting (derived from e2e_report.json + RTX stage3, IP-121)
+    honest_validator_false_rejection_pct = round(
+        100.0 * honest_validator_rejected / max(1, assimilated_boinc_wus + honest_e2e_total), 2
+    )
     ratchet_hold_pct = round(100.0 * ratchet_held / chained_qlora_rounds, 1)  # 79.6%
     ratchet_accept_pct = round(100.0 * ratchet_accepted / chained_qlora_rounds, 1)  # 20.4%
 
     # Adversarial / fault rejections in BOINC E2E + RTX Stage 3
-    boinc_faults_rejected = 3  # hmp_lazy_001, hm_moe_lazy_001, hm_fault_001
-    stage3_byzantine_rejected = int(rtx_report["stage3_byzantine_and_spotcheck"]["byzantine_attackers_count"])  # 3
-    total_adversarial_injected = boinc_faults_rejected + stage3_byzantine_rejected  # 6
-    total_adversarial_rejected = 6
-    adversarial_catch_rate_pct = 100.0
+    stage3_block = rtx_report["stage3_byzantine_and_spotcheck"]
+    stage3_byzantine_injected = int(stage3_block["byzantine_attackers_count"])
+    stage3_byzantine_rejected = len(stage3_block.get("rejected_workers", []))
+    total_adversarial_injected = boinc_faults_injected + stage3_byzantine_injected
+    total_adversarial_rejected = boinc_faults_rejected + stage3_byzantine_rejected
+    adversarial_catch_rate_pct = round(
+        100.0 * total_adversarial_rejected / max(1, total_adversarial_injected), 1
+    )
 
     # Cross-architecture unmatched divergence from E12
     unmatched_gpu_cpu_reject_rate_pct = 100.0  # 9/9 in E12
@@ -256,9 +292,10 @@ def build_live_wan_swarm_report() -> dict[str, Any]:
     canonical = json.dumps(report, sort_keys=True).encode("utf-8")
     report["receipt_sha256"] = hashlib.sha256(canonical).hexdigest()
 
-    out_path = artifacts_dir / "live_wan_swarm_production_report.json"
-    out_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    print(f"Wrote {out_path} (receipt_sha256={report['receipt_sha256'][:16]}...)")
+    if write_output:
+        out_path = artifacts_dir / "live_wan_swarm_production_report.json"
+        out_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        print(f"Wrote {out_path} (receipt_sha256={report['receipt_sha256'][:16]}...)")
     return report
 
 

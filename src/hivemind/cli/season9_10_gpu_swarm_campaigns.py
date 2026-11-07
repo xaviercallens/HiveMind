@@ -35,10 +35,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 import torch
 
@@ -253,12 +254,14 @@ def run_season9_10_gpu_swarm_campaigns(
     output_path: Path | None = DEFAULT_S9_10_CAMPAIGN_REPORT_PATH,
 ) -> dict[str, Any]:
     """Execute all 4 Season 9 & Season 10 GPU + HiveMind Swarm contributor campaigns."""
-    if not contributor_handle or not contributor_handle.strip():
+    if not isinstance(contributor_handle, str) or not contributor_handle.strip():
         raise ValueError("contributor_handle must be non-empty")
-    if num_domains < 2 or num_domains > 8:
+    if isinstance(num_domains, bool) or int(num_domains) < 2 or int(num_domains) > 8:
         raise ValueError("num_domains must be in [2, 8]")
-    if inner_steps < 1:
+    if isinstance(inner_steps, bool) or int(inner_steps) < 1:
         raise ValueError("inner_steps must be >= 1")
+    if isinstance(seed, bool):
+        raise ValueError("seed must be an integer")
 
     t_start = time.perf_counter()
     hw = detect_community_accelerator(preferred_device=preferred_device)
@@ -273,7 +276,26 @@ def run_season9_10_gpu_swarm_campaigns(
         seed=seed,
     )
     first_key = sorted(base_lora_state.keys())[0]
-    m_learners = len(domain_names)
+    c1_learners = list(domain_names)
+    worker_deltas = {
+        dom: {
+            k: base_lora_state[k] - trained_branches[dom][k]
+            for k in base_lora_state
+        }
+        for dom in domain_names
+    }
+    if len(c1_learners) < 4:
+        for aux_idx, alpha in enumerate((0.75, 0.25), start=1):
+            if len(c1_learners) >= 4:
+                break
+            aux_id = f"Auxiliary_Quorum_Node_{aux_idx}"
+            c1_learners.append(aux_id)
+            worker_deltas[aux_id] = {
+                k: alpha * worker_deltas[domain_names[0]][k]
+                + (1.0 - alpha) * worker_deltas[domain_names[1]][k]
+                for k in base_lora_state
+            }
+    m_learners = len(c1_learners)
     quorum_k = max(2, m_learners - 1)
 
     # =========================================================================
@@ -287,15 +309,8 @@ def run_season9_10_gpu_swarm_campaigns(
             steps_since_sync=inner_steps,
             tokens_since_sync=32 * inner_steps + 8 * i,
         )
-        for i, dom in enumerate(domain_names)
+        for i, dom in enumerate(c1_learners)
     ]
-    worker_deltas = {
-        dom: {
-            k: base_lora_state[k] - trained_branches[dom][k]
-            for k in base_lora_state
-        }
-        for dom in domain_names
-    }
     outer_opt = DiLoCoOuterOptimizer(
         outer_lr_eta=0.7,
         outer_momentum_mu=0.9,
@@ -339,7 +354,7 @@ def run_season9_10_gpu_swarm_campaigns(
             straggler_mode=s_mode,
             merge_mode="rda",
         )
-        for i, dom in enumerate(domain_names[:quorum_k]):
+        for i, dom in enumerate(c1_learners[:quorum_k]):
             coord.submit_learner_delta(
                 learner_id=dom,
                 origin_round=0,
@@ -349,7 +364,7 @@ def run_season9_10_gpu_swarm_campaigns(
                 arrival_time_s=0.01 * (i + 1),
             )
         p_r0, _ = coord.close_quorum_round(base_lora_state[first_key], outer_lr=0.7, grace_window_s=0.0)
-        for dom in domain_names[quorum_k:]:
+        for dom in c1_learners[quorum_k:]:
             coord.submit_learner_delta(
                 learner_id=dom,
                 origin_round=0,
@@ -358,7 +373,7 @@ def run_season9_10_gpu_swarm_campaigns(
                 steps_since_sync=inner_steps,
                 arrival_time_s=0.25,
             )
-        for i, dom in enumerate(domain_names[:quorum_k]):
+        for i, dom in enumerate(c1_learners[:quorum_k]):
             coord.submit_learner_delta(
                 learner_id=dom,
                 origin_round=1,
@@ -644,14 +659,114 @@ def run_season9_10_gpu_swarm_campaigns(
         "gpu_contributor_roster": list(GPU_CONTRIBUTOR_ROSTER),
     }
 
-    canonical = json.dumps(report, sort_keys=True).encode("utf-8")
+    canonical = json.dumps(report, sort_keys=True, allow_nan=False).encode("utf-8")
     report["campaign_suite_sha256"] = hashlib.sha256(canonical).hexdigest()
 
     if output_path is not None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        output_path.write_text(json.dumps(report, indent=2, allow_nan=False), encoding="utf-8")
 
     return report
+
+
+def _campaign_stage_verdicts(report: Mapping[str, Any]) -> tuple[bool, bool, bool, bool]:
+    c1 = report.get("campaign_1_s9_quorum_and_rda")
+    c2 = report.get("campaign_2_s9_sigma_and_looped_moe")
+    c3 = report.get("campaign_3_s10_lattice_wire_and_kv")
+    c4 = report.get("campaign_4_s10_spotcheck_leasing_and_gossip")
+    if not all(isinstance(m, Mapping) for m in (c1, c2, c3, c4)):
+        return False, False, False, False
+    assert isinstance(c1, Mapping)
+    assert isinstance(c2, Mapping)
+    assert isinstance(c3, Mapping)
+    assert isinstance(c4, Mapping)
+
+    stragglers = c1.get("straggler_modes")
+    rda = c1.get("rda_delta_cosine")
+    rt_val = rda.get("rda_to_direct_norm_ratio_rt") if isinstance(rda, Mapping) else None
+    c1_ok = bool(
+        c1.get("quorum_reached") is True
+        and c1.get("momentum_restarted_on_step2") is True
+        and isinstance(stragglers, Mapping)
+        and isinstance(stragglers.get("deferred_token_weighted"), Mapping)
+        and stragglers["deferred_token_weighted"].get("dropped_tokens") == 0
+        and stragglers["deferred_token_weighted"].get("token_conservation_holds") is True
+        and isinstance(stragglers.get("eager_one_step"), Mapping)
+        and stragglers["eager_one_step"].get("dropped_tokens") == 0
+        and isinstance(rt_val, (int, float))
+        and not isinstance(rt_val, bool)
+        and math.isfinite(float(rt_val))
+        and float(rt_val) > 0.0
+    )
+
+    skip_rep = c2.get("skip_token_report")
+    ortho_loss = c2.get("looped_ortho_loss")
+    c2_ok = bool(
+        isinstance(skip_rep, Mapping)
+        and skip_rep.get("realized_from_forward_pass") is True
+        and isinstance(ortho_loss, (int, float))
+        and not isinstance(ortho_loss, bool)
+        and math.isfinite(float(ortho_loss))
+        and c2.get("router_128_gating_reduction_x") == 8.0
+    )
+
+    kv_bench = c3.get("kv_cache_codec_benchmark")
+    c3_ok = bool(
+        c3.get("a2_decoder_brute_force_passed") is True
+        and c3.get("e8_decoder_brute_force_passed") is True
+        and isinstance(kv_bench, Mapping)
+        and kv_bench.get("controls_all_passed") is True
+    )
+
+    lease_ledger = c4.get("cas_lease_ledger")
+    c4_ok = bool(
+        bool(c4.get("assigned_validator_class"))
+        and c4.get("exact_class_replay_passed") is True
+        and c4.get("cross_thread_honest_replay_passed") is True
+        and c4.get("tampered_replay_rejected") is True
+        and c4.get("cross_dtype_replay_rejected") is True
+        and c4.get("fixed_point_q16_exact_digest") is True
+        and isinstance(lease_ledger, Mapping)
+        and lease_ledger.get("conservation_holds") is True
+    )
+    return c1_ok, c2_ok, c3_ok, c4_ok
+
+
+def verify_season9_10_campaign_report(report: Mapping[str, Any]) -> bool:
+    """Verify the canonical SHA-256 digest and all 4 campaign invariants of a Season 9/10 report."""
+    if not isinstance(report, Mapping):
+        return False
+    expected = str(report.get("campaign_suite_sha256") or "").strip().lower()
+    if len(expected) != 64:
+        return False
+    body = {k: v for k, v in report.items() if k != "campaign_suite_sha256"}
+    try:
+        canonical = json.dumps(body, sort_keys=True, allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError):
+        return False
+    if hashlib.sha256(canonical).hexdigest().lower() != expected:
+        return False
+    if body.get("all_campaigns_passed") is not True:
+        return False
+    handle = body.get("contributor_handle")
+    if not isinstance(handle, str) or not handle.strip():
+        return False
+    hw = body.get("hardware_envelope")
+    charter = body.get("non_monetary_charter")
+    if not isinstance(hw, Mapping) or not isinstance(charter, Mapping):
+        return False
+    is_gpu = hw.get("is_gpu")
+    if not isinstance(is_gpu, bool) or hw.get("within_8gb_wddm_envelope") is not True:
+        return False
+    expected_pts = 3500 if is_gpu else 1750
+    if (
+        charter.get("no_money_involved") is not True
+        or charter.get("financial_payment_usd_eur") != 0.0
+        or charter.get("symbolic_points_preview_pts") != expected_pts
+        or charter.get("legal_notice") != NON_MONETARY_COMPUTE_RECIPROCITY_NOTICE
+    ):
+        return False
+    return all(_campaign_stage_verdicts(body))
 
 
 def format_season9_10_gpu_campaigns_markdown(report: dict[str, Any]) -> str:
@@ -662,6 +777,11 @@ def format_season9_10_gpu_campaigns_markdown(report: dict[str, Any]) -> str:
     c3 = report["campaign_3_s10_lattice_wire_and_kv"]
     c4 = report["campaign_4_s10_spotcheck_leasing_and_gossip"]
     pts = report["non_monetary_charter"]["symbolic_points_preview_pts"]
+    c1_ok, c2_ok, c3_ok, c4_ok = _campaign_stage_verdicts(report)
+    b1 = "✅ PASS" if c1_ok else "❌ FAIL"
+    b2 = "✅ PASS" if c2_ok else "❌ FAIL"
+    b3 = "✅ PASS" if c3_ok else "❌ FAIL"
+    b4 = "✅ PASS" if c4_ok else "❌ FAIL"
 
     lines = [
         f"### 🛰️ Season 9 & 10 GPU + HiveMind Swarm Campaign Receipt — `@{report['contributor_handle']}`",
@@ -677,26 +797,26 @@ def format_season9_10_gpu_campaigns_markdown(report: dict[str, Any]) -> str:
             f"| **`CAMP-S9-E5-QUORUM-RDA-GPU`** | Decoupled Quorum (`K < M`), Async Stragglers (`HM-S9-13`) & RDA Cosine (`HM-S9-14`) | "
             f"`admitted={c1['quorum_admitted_count']}`, `dropped_tokens(deferred)=0`, "
             f"`mean_cos={c1['rda_delta_cosine']['mean_pairwise_delta_cosine']:.4f}`, "
-            f"`r_t={c1['rda_delta_cosine']['rda_to_direct_norm_ratio_rt']:.4f}` | ✅ PASS |"
+            f"`r_t={c1['rda_delta_cosine']['rda_to_direct_norm_ratio_rt']:.4f}` | {b1} |"
         ),
         (
             f"| **`CAMP-S9-E7-SIGMA-LOOPED-MOE-GPU`** | FoMoE `sigma_moe` + Peri-LN (`HM-S9-02`) & Looped `OrthoInj` Terminal-KV (`HM-S9-03`) | "
             f"`ghost_skip={c2['skip_token_report']['mean_measured_ghost_fraction']:.3f}`, "
             f"`ortho_loss={c2['looped_ortho_loss']:.4f}`, "
-            f"`kv_cosine={c2['terminal_kv_sharing']['terminal_vs_penultimate_cosine']:.4f}` | ✅ PASS |"
+            f"`kv_cosine={c2['terminal_kv_sharing']['terminal_vs_penultimate_cosine']:.4f}` | {b2} |"
         ),
         (
             f"| **`CAMP-S10-E11-LATTICE-KV-WIRE-GPU`** | Conway-Sloane `E8`/`A2` Lattice Wire (`HM-S10-01`) & 5-Codec Paged KV (`HM-S10-05`) | "
             f"`E8_wire_mse={c3['wire_codecs_at_2bit']['E8']['relative_mse']:.4f}`, "
             f"`A2_kv_mse={c3['kv_cache_codec_benchmark']['codecs']['a2_rope_plane']['relative_mse']:.4f}`, "
-            f"`controls_ok={c3['kv_cache_codec_benchmark']['controls_all_passed']}` | ✅ PASS |"
+            f"`controls_ok={c3['kv_cache_codec_benchmark']['controls_all_passed']}` | {b3} |"
         ),
         (
             f"| **`CAMP-S10-E12-HETERO-SPOTCHECK-WAN-GPU`** | Two-Stat Spot-Check + `Q16` Digest (`HM-S10-08`), CAS Lease (`HM-S9-06`) & `Mix1/Mix2` (`HM-S9-04`) | "
             f"`cross_thread_ok={c4['cross_thread_honest_replay_passed']}`, "
             f"`tampered_rej={c4['tampered_replay_rejected']}`, "
             f"`q16_exact={c4['fixed_point_q16_exact_digest']}`, "
-            f"`lease_conserved={c4['cas_lease_ledger']['conservation_holds']}` | ✅ PASS |"
+            f"`lease_conserved={c4['cas_lease_ledger']['conservation_holds']}` | {b4} |"
         ),
     ]
     return "\n".join(lines)

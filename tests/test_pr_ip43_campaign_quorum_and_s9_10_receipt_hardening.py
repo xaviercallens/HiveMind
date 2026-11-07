@@ -133,7 +133,7 @@ def test_multi_moe_hf_campaign_parameter_and_receipt_verification() -> None:
         {"learning_rate": float("nan")},
         {"learning_rate": 0.0},
         {"sequence_length": True},
-        {"sequence_length": 4},
+        {"sequence_length": 1},
         {"seed": True},
         {"min_quorum_k": True},
         {"min_quorum_k": 0},

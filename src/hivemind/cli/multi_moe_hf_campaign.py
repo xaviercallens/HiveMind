@@ -183,8 +183,8 @@ def run_multi_moe_hf_campaign(
         raise ValueError("domain_limit must be between 2 and 8")
     if isinstance(learning_rate, bool) or not math.isfinite(float(learning_rate)) or float(learning_rate) <= 0.0:
         raise ValueError("learning_rate must be a finite positive float")
-    if isinstance(sequence_length, bool) or int(sequence_length) < 8:
-        raise ValueError("sequence_length must be >= 8")
+    if isinstance(sequence_length, bool):
+        raise ValueError("sequence_length must be between 2 and 128")
     if isinstance(seed, bool):
         raise ValueError("seed must be an integer")
     if min_quorum_k is not None:

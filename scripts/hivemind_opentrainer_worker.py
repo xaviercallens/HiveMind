@@ -22,9 +22,56 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
-from typing import Any
+from typing import Any, Callable
 import urllib.error
 import urllib.request
+
+DEFAULT_VRAM_FLOOR_MIB = 4300
+
+
+def check_vram_floor_guard(
+    free_vram_mib: int,
+    estimated_peak_mib: int = 0,
+    floor_mib: int = DEFAULT_VRAM_FLOOR_MIB,
+    total_vram_mib: int = 15360,
+    apply_torch_cap: bool = True,
+    set_fraction_fn: Callable[[float], None] | None = None,
+) -> dict[str, Any]:
+    """Check ``free_vram_mib - estimated_peak_mib >= floor_mib`` and cap CUDA per-process memory fraction (PS-02-D1)."""
+    remaining_free_mib = int(free_vram_mib) - max(0, int(estimated_peak_mib))
+    cap_mib = max(0, int(free_vram_mib) - int(floor_mib))
+    total_eff = max(int(total_vram_mib), int(free_vram_mib), 1)
+    fraction = min(1.0, max(0.0, cap_mib / float(total_eff)))
+    reason = ""
+    if int(free_vram_mib) < int(floor_mib):
+        reason = f"free VRAM {free_vram_mib} MiB below floor {floor_mib} MiB"
+    elif remaining_free_mib < int(floor_mib):
+        reason = (
+            f"free VRAM {free_vram_mib} MiB minus estimated peak {estimated_peak_mib} MiB "
+            f"leaves {remaining_free_mib} MiB < {floor_mib} MiB floor"
+        )
+    ok = reason == ""
+    if ok and apply_torch_cap:
+        if set_fraction_fn is not None:
+            set_fraction_fn(fraction)
+        else:
+            try:
+                import torch
+
+                if torch.cuda.is_available():
+                    torch.cuda.set_per_process_memory_fraction(fraction)
+            except Exception:  # noqa: BLE001
+                pass
+    return {
+        "ok": ok,
+        "free_vram_mib": int(free_vram_mib),
+        "estimated_peak_mib": int(estimated_peak_mib),
+        "remaining_free_mib": remaining_free_mib,
+        "floor_mib": int(floor_mib),
+        "cap_mib": cap_mib,
+        "memory_fraction": round(fraction, 6),
+        "reason": reason,
+    }
 
 
 def _load_opentrainer_agent() -> Any:
@@ -62,18 +109,47 @@ def verify_trainer_privacy_contract(server_url: str) -> dict[str, Any]:
 def main(argv: list[str] | None = None) -> int:
     raw_args = list(sys.argv[1:] if argv is None else argv)
     verify_privacy = False
+    min_free_vram_mib = DEFAULT_VRAM_FLOOR_MIB
+    estimated_peak_mib = 0
     filtered_args: list[str] = []
-    for arg in raw_args:
+    i = 0
+    while i < len(raw_args):
+        arg = raw_args[i]
         if arg == "--verify-privacy":
             verify_privacy = True
+        elif arg == "--min-free-vram-mib" and i + 1 < len(raw_args):
+            min_free_vram_mib = int(float(raw_args[i + 1]))
+            i += 1
+        elif arg.startswith("--min-free-vram-mib="):
+            min_free_vram_mib = int(float(arg.split("=", 1)[1]))
+        elif arg == "--estimated-peak-mib" and i + 1 < len(raw_args):
+            estimated_peak_mib = int(float(raw_args[i + 1]))
+            i += 1
+        elif arg.startswith("--estimated-peak-mib="):
+            estimated_peak_mib = int(float(arg.split("=", 1)[1]))
         else:
             filtered_args.append(arg)
+        i += 1
 
     if "--max-vram-gb" not in filtered_args and not any(a.startswith("--max-vram-gb=") for a in filtered_args):
         filtered_args.extend(["--max-vram-gb", "5.5"])
 
     agent = _load_opentrainer_agent()
     parsed = agent.build_parser().parse_args(filtered_args)
+    _, detected_total, detected_free = agent.detect_local_gpu()
+    raw_total_mib = parsed.vram_total_mib if parsed.vram_total_mib > 0 else detected_total
+    raw_free_mib = parsed.vram_free_mib if parsed.vram_free_mib > 0 else detected_free
+    if raw_free_mib > 0:
+        floor_check = check_vram_floor_guard(
+            free_vram_mib=raw_free_mib,
+            estimated_peak_mib=estimated_peak_mib,
+            floor_mib=min_free_vram_mib,
+            total_vram_mib=raw_total_mib or 15360,
+        )
+        if not floor_check["ok"]:
+            print(json.dumps({"ok": False, "error": f"VRAM floor guard refused launch: {floor_check['reason']}", "guard": floor_check}), file=sys.stderr)
+            return 2
+
     if verify_privacy:
         try:
             report = verify_trainer_privacy_contract(parsed.gateway)

@@ -1,0 +1,49 @@
+{
+  "schema": "hivemind.accounts_receipt.v1",
+  "roadmap_deliverable": "PS-03-D1",
+  "generated_at_utc": "2026-11-07T20:19:36Z",
+  "source_status": "absent",
+  "personal_data_included": false,
+  "total_accounts": 0,
+  "counts_by_kind": {
+    "user": 0,
+    "test": 0,
+    "probe": 0
+  },
+  "counts_by_role": {
+    "consumer": 0,
+    "producer": 0,
+    "prosumer": 0,
+    "trainer": 0,
+    "admin": 0
+  },
+  "by_kind_and_role": {
+    "user": {
+      "consumer": 0,
+      "producer": 0,
+      "prosumer": 0,
+      "trainer": 0,
+      "admin": 0
+    },
+    "test": {
+      "consumer": 0,
+      "producer": 0,
+      "prosumer": 0,
+      "trainer": 0,
+      "admin": 0
+    },
+    "probe": {
+      "consumer": 0,
+      "producer": 0,
+      "prosumer": 0,
+      "trainer": 0,
+      "admin": 0
+    }
+  },
+  "active_nodes_30d": {
+    "window_days": 30,
+    "producer_endpoints_active_30d": 0,
+    "opentrainer_nodes_active_30d": 0,
+    "total_active_nodes_30d": 0
+  }
+}

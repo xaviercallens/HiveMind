@@ -221,6 +221,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     print(f"NOTICE: {POC_NOTICE}", file=sys.stderr)
+    if not args.upstream.startswith(("http://127.0.0.1", "http://localhost")):
+        parser.error(f"--upstream expects a local loopback URL (http://127.0.0.1:PORT or http://localhost:PORT), got {args.upstream!r}")
     routes: dict[str, str] = {}
     for item in args.route:
         model, sep, url = item.partition("=")

@@ -20,10 +20,13 @@ from __future__ import annotations
 from pathlib import Path
 import secrets
 import subprocess
+import sys
 from unittest.mock import patch
 
 import pytest
 import torch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from hivemind.core.auto_improvement import (
     NocturnalAutoImprovementScheduler,

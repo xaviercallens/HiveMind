@@ -63,6 +63,7 @@ class UnifiedEcosystemExecutionReceipt:
     layer4_sundials_tier_x_accepted: bool
     all_layers_passed: bool
     merkle_root_sha256: str
+    simulated: bool = True
 
 
 def classify_repo_origin(repo_name: str) -> str:

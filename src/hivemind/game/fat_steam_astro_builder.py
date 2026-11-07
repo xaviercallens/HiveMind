@@ -5216,6 +5216,7 @@ start "" "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community"
 
     return {
         "version": "5.2-FirstRelease-Steam-IdleGPU-BOINC-GCP-Community",
+        "simulated": True,
         "steam_account": "xavakal (callensxavier / 76561198120474852)",
         "steam_app_id": STEAM_APP_ID,
         "steam_astro_depot_id": STEAM_ASTRO_DEPOT_ID,

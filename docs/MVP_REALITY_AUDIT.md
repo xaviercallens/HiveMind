@@ -20,13 +20,15 @@ agent findings: re-check a line reference before acting on it.
 | B14. OpenTrainer stored 6400/8192 MiB and an RTX 2070 as readings | **Done**: stored as "not reported", token count flagged as an estimate |
 | C3. Catalog `kind` (base / adapter / alias) | **Done**: computed from the tags, exposed in `/v1/hivemind/catalog` |
 | Honest catalog entries (26 unpublished Hugging Face repos) | **Done** earlier (PR #532 / v2.16.1) |
-| B2, B4, B5, B7-B13, B15 and the "lower priority" list | Open (see below) |
-| C4. One source for agent and shield (`scripts/` vs `src/` copies differ) | Open |
-| C5. Gateway canary prompt and tokenizer cross-check of reported usage | Open |
-| C8. Training-round table and rollback ratchet | Open |
-| C9. Time-to-first-token and tokens/s in settlement | Open |
+| B2, B4, B5, B7-B13, B15 and the "lower priority" list | **Done** (PRs #699-#705): simulated/relabeled flags, real Lean theorem & sorry count, ephemeral HMAC secret, no unverified HMT grants |
+| C2. Static-number guard on `portal_page.py` and `life_as_a_bee.py` | **Done** (PR #706): `shown_figure()` over `live_telemetry`, CI guard test in `tests/test_pr_ip37_static_figure_guard_and_archive_simflags.py` |
+| C4. One source for agent and shield (`scripts/` vs `src/` copies differ) | **Done** (PR #703): `scripts/` re-exports `src/hivemind/router/...` with parity test |
+| C5. Gateway canary prompt and tokenizer cross-check of reported usage | **Done** (PR #702): `probe_producer_canary` & `cross_check_reported_usage` |
+| C8. Training-round table and rollback ratchet | **Done** (PR #705): `build_training_round_table` & `select_round_head_with_rollback` in `scripts/t4_workgen.py`, `artifact_refs` in `router/opentrainer.py` |
+| C9. Time-to-first-token and tokens/s in settlement | **Done** (PR #703): `ttft_ms` and `tokens_per_s` persisted in `usage_events` via `accounts.settle` |
 | C10. Close the train-to-serve loop (BOINC adapter -> GGUF -> evaluated -> served tier) | **Pipeline done** (`scripts/adapter_to_served.py`, `docs/TRAIN_TO_SERVE_GATE.md`); the current adapter **fails the gate** (no measurable gain on the served files), so nothing is served from it |
 | C11. Run the smoke test nightly in CI | Open: needs a tiny GGUF in CI |
+| D. Archive as simulation / validator fixture & fix `scripts/e8_qlora_moe_round.py` refs | **Done** (PR #706): `simulated: True` / `validator_fixture: True` on all listed modules; `scripts/e8_qlora_moe_round.py` present and SHA-256-pinned |
 
 ## The plan, as produced by the audit
 

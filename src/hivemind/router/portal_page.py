@@ -1519,7 +1519,7 @@ def render_portal_page(
           <div>
             <div class="tier-badge">DUAL-GPU INFERENCE FLEET</div>
             <div class="tier-name">Tesla T4 (16 GB) + RTX 2070 (8 GB)</div>
-            <div class="tier-vram">4 Active Producers &bull; 7 Live Models</div>
+            <div class="tier-vram">{live_hiveminders} Active Producers &bull; {live_models_cnt} Live Models</div>
             <div class="tier-desc">Serving <code>hivemind/coder</code>, <code>coder-lite</code>, <code>bee-stars</code>, <code>coder-plus</code>, <code>moe-general</code>, <code>moe-coder</code>, and <code>auto</code> (with <code>hivemind/crowd-v1</code> pre-wired).</div>
           </div>
           <div><span class="tier-tag">100% Uptime Overnight</span></div>

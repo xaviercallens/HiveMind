@@ -1911,6 +1911,11 @@ def render_life_as_a_bee_section(live_telemetry: dict[str, Any] | None = None) -
         """)
 
     image_gallery = get_image_moe_gallery_scenarios()
+    img_gal_p50 = shown_figure(usage_live.get("p50_latency_ms"), decimals=1)
+    img_gal_max_vram = shown_figure(
+        max((g.active_vram_mib for g in image_gallery), default=None),
+        decimals=0,
+    )
     image_gallery_cards: list[str] = []
     for g_scen in image_gallery:
         image_gallery_cards.append(f"""
@@ -2158,7 +2163,7 @@ def render_life_as_a_bee_section(live_telemetry: dict[str, Any] | None = None) -
             &#x1F5BC;&#xFE0F; Galerie d'Inférence Image-MoE &amp; Scénarios Visuels Publics ({len(image_gallery)} Scénarios &bull; 7 Divisions &bull; 100% Top-1 Routing)
           </h4>
           <span class="pill" style="border-color:var(--green);color:var(--green);margin:0;">
-            240 Reqs Stress Burst &bull; p50 139.0 ms &bull; Micro-VRAM &lt;= 1 410 MiB (&lt; 1,5 Go)
+            {reqs_24h} Reqs (24h) &bull; p50 {img_gal_p50} ms &bull; Micro-VRAM &lt;= {img_gal_max_vram} MiB (&lt; 1,5 Go)
           </span>
         </div>
         <p style="color:var(--text-dim);font-size:0.84rem;margin-bottom:1rem;line-height:1.5;">

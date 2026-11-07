@@ -52,6 +52,7 @@ class TierXR64InstrumentReceipt:
     accepted_by_elenchus_bridge: bool
     mass_conservation_drift: float
     provenance_sha256: str
+    simulated: bool = True
 
 
 def strip_lean4_comments(lean_source: str) -> str:

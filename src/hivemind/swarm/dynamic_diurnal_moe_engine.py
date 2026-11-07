@@ -411,4 +411,5 @@ class DiurnalMoETrainingScheduler:
         quorum_state["operational_mode_breakdown"] = mode_counts
         quorum_state["system_load_ratio"] = round(float(system_load_ratio), 3)
         quorum_state["evaluated_at_utc"] = round(ts, 3)
+        quorum_state["simulated"] = True
         return quorum_state

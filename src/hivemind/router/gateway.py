@@ -4634,6 +4634,7 @@ def create_router_app(
     # -------------------------------------------------------------------------
     @app.api_route("/stitch-portal", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/v3-portal", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/v3", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/v3.1", methods=["GET", "HEAD"], response_class=HTMLResponse)
     def router_v3_1_stitch_portal() -> HTMLResponse:
         from hivemind.boinc.hivemind_at_home_dashboard import POC_STATUS_HEADER, build_hivemind_at_home_state, portal_csp

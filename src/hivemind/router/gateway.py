@@ -2246,8 +2246,8 @@ def create_router_app(
     @app.options("/api/v1/auth/register")
     @app.options("/v1/hivemind/auth/login")
     @app.options("/api/v1/auth/login")
-    def auth_cors_preflight() -> Response:
-        return Response(status_code=204, headers=_auth_cors_headers)
+    def auth_cors_preflight() -> JSONResponse:
+        return JSONResponse(content={}, status_code=200, headers=_auth_cors_headers)
 
     @app.post("/v1/hivemind/auth/register")
     @app.post("/api/v1/auth/register")

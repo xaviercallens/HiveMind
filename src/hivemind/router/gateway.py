@@ -632,7 +632,16 @@ class OpenTrainerHeartbeatRequest(BaseModel):
     gpu_name: str | None = Field(default=None, min_length=1, max_length=128)
     vram_total_mib: int | None = Field(default=None, ge=512, le=MAX_GPU_VRAM_MIB)
     vram_free_mib: int | None = Field(default=None, ge=0, le=MAX_GPU_VRAM_MIB)
-    network_mode: Literal["outbound-https-relay", "amcp-kafka-aglet", "wireguard-t4-hub", "ssh-loopback-tunnel", "boinc-night-workunit"] = "outbound-https-relay"
+    network_mode: Literal[
+        "outbound-https-relay",
+        "amcp-kafka-aglet",
+        "wireguard-t4-hub",
+        "ssh-loopback-tunnel",
+        "wstunnel-https-wg",
+        "headscale-tailscale",
+        "nebula-mesh",
+        "boinc-night-workunit",
+    ] = "outbound-https-relay"
     training_stack: str = Field(default="qlora-moe+diloco+amcp-aglet+boinc", min_length=1, max_length=128)
     active_campaign: str = Field(default="E8-STAGE2-TINY-GRANITE-MOE-QLORA", min_length=1, max_length=128)
     account_id: str | None = Field(default=None, max_length=128)  # admin only
@@ -656,9 +665,37 @@ class OpenTrainerDeltaSubmitRequest(BaseModel):
     delta_norm: float = Field(gt=0.0, le=100.0, allow_inf_nan=False)
     delta_sha256: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-fA-F]{64}$")
     code_pin: str = Field(default="", max_length=128)
-    network_mode: Literal["outbound-https-relay", "amcp-kafka-aglet", "wireguard-t4-hub", "ssh-loopback-tunnel", "boinc-night-workunit"] = "outbound-https-relay"
+    network_mode: Literal[
+        "outbound-https-relay",
+        "amcp-kafka-aglet",
+        "wireguard-t4-hub",
+        "ssh-loopback-tunnel",
+        "wstunnel-https-wg",
+        "headscale-tailscale",
+        "nebula-mesh",
+        "boinc-night-workunit",
+    ] = "outbound-https-relay"
     vram_free_mib: int | None = Field(default=None, ge=0, le=MAX_GPU_VRAM_MIB)
     vram_total_mib: int | None = Field(default=None, ge=512, le=MAX_GPU_VRAM_MIB)
+
+
+class OpenTrainerFederationTrainerRegisterRequest(BaseModel):
+    """Federation v2 Section 9 Trainer registration request (`docs/FEDERATION_V2_AMCP_AGLETS.md` §9)."""
+
+    model_config = ConfigDict(extra="forbid")
+    learner_id: str = Field(min_length=1, max_length=64)
+    gpu_model: str = Field(min_length=1, max_length=128)
+    vram_free_mib: int = Field(ge=0, le=MAX_GPU_VRAM_MIB)
+    vram_total_mib: int = Field(default=0, ge=0, le=MAX_GPU_VRAM_MIB)
+    night_only_consent: bool = Field(default=False)
+    shard_index: int = Field(default=0, ge=0, le=1024)
+    run_id: str = Field(default="opentrainer-rtx2070-t4-co-train-v1", min_length=1, max_length=64)
+    pinned_commit: str = Field(default="HEAD", min_length=1, max_length=64)
+    network_mode: str = Field(default="outbound-https-relay", min_length=1, max_length=64)
+    wireguard_public_key: str | None = Field(default=None, max_length=128)
+    wireguard_private_key: str | None = Field(default=None, max_length=128)
+    amcp_hmac_keys: str | None = Field(default=None, max_length=256)
+    overlay_slot_ip: str = Field(default="10.77.0.10/32", min_length=7, max_length=32)
 
 
 @dataclass(frozen=True)
@@ -3849,6 +3886,70 @@ def create_router_app(
             "aglet_lifecycle_spec": list(AGLET_AMCP_LIFECYCLE_SPEC),
             "active_task_offer": offer,
         }
+
+    @app.post("/v1/hivemind/opentrainer/register-trainer")
+    @app.post("/v1/opentrainer/register-trainer")
+    def post_opentrainer_register_trainer(
+        request: Request, payload: OpenTrainerFederationTrainerRegisterRequest
+    ) -> dict[str, Any]:
+        """Validate and register a Federation v2 Trainer per docs/FEDERATION_V2_AMCP_AGLETS.md Section 9."""
+        from hivemind.router.opentrainer import (
+            SUPPORTED_STACKS,
+            validate_federation_v2_trainer_registration,
+        )
+
+        account = authenticate(request)
+        if account.role not in ("trainer", "prosumer", "producer", "admin"):
+            raise RouterError(
+                403,
+                "Only trainer, prosumer, or producer accounts may register a Federation v2 trainer.",
+                "permission_error",
+                "role_forbidden",
+            )
+        try:
+            manifest = validate_federation_v2_trainer_registration(
+                learner_id=payload.learner_id,
+                gpu_model=payload.gpu_model,
+                vram_free_mib=payload.vram_free_mib,
+                vram_total_mib=payload.vram_total_mib,
+                night_only_consent=payload.night_only_consent,
+                shard_index=payload.shard_index,
+                run_id=payload.run_id,
+                pinned_commit=payload.pinned_commit,
+                network_mode=payload.network_mode,
+                wireguard_public_key=payload.wireguard_public_key,
+                wireguard_private_key=payload.wireguard_private_key,
+                amcp_hmac_keys=payload.amcp_hmac_keys,
+                overlay_slot_ip=payload.overlay_slot_ip,
+            )
+        except ValueError as exc:
+            raise RouterError(
+                400,
+                f"Federation v2 trainer registration rejected: {exc}",
+                "invalid_request_error",
+                "trainer_registration_rejected",
+            ) from None
+        now = clock()
+        try:
+            node = store.upsert_opentrainer_node(
+                account_id=account.account_id,
+                handle=account.handle,
+                node_id=f"{account.handle}:{manifest['learner_id']}",
+                gpu_name=manifest["gpu_model"],
+                vram_total_mib=max(manifest["vram_total_mib"], manifest["vram_free_mib"]),
+                vram_free_mib=manifest["vram_free_mib"],
+                network_mode=manifest["network_mode"],
+                stacks=list(SUPPORTED_STACKS),
+                host_label=manifest["learner_id"],
+                active_campaign=manifest["run_id"],
+                now_utc=now,
+            )
+        except TooManyOpenTrainerNodes as exc:
+            raise RouterError(400, str(exc), "invalid_request_error", "too_many_nodes") from None
+        manifest["account_id"] = account.account_id
+        manifest["handle"] = account.handle
+        manifest["node_id"] = node["node_id"]
+        return manifest
 
     @app.post("/v1/hivemind/opentrainer/submit-delta")
     @app.post("/v1/opentrainer/submit-delta")

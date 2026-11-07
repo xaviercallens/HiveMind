@@ -5,6 +5,8 @@ After=hivemind-boinc-daemons.service
 Requires=hivemind-boinc-db.service
 
 [Service]
+NoNewPrivileges=yes
+ProtectSystem=full
 User=callensxavier_gmail_com
 Environment=HF_HUB_OFFLINE=1
 Environment=PYTHONPATH=/opt/hivemind/t4/src

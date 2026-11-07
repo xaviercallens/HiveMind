@@ -6,6 +6,8 @@ After=hivemind-boinc-daemons.service
 Wants=hivemind-boinc-daemons.service
 
 [Service]
+NoNewPrivileges=yes
+ProtectSystem=full
 User=callensxavier_gmail_com
 Environment=LD_LIBRARY_PATH=/mnt/disks/disk-socrateai-local-1/boinc/root/usr/lib/x86_64-linux-gnu
 ExecStart=/mnt/disks/disk-socrateai-local-1/boinc/root/usr/bin/boinc --dir /mnt/disks/disk-socrateai-local-1/boinc/node/client --gui_rpc_port 31420 --allow_multiple_clients

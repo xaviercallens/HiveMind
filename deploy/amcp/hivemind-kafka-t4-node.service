@@ -7,6 +7,8 @@ After=network-online.target wg-quick@wg-hivemind.service
 Wants=network-online.target wg-quick@wg-hivemind.service
 
 [Service]
+NoNewPrivileges=yes
+ProtectSystem=full
 Type=simple
 User=callensxavier_gmail_com
 Environment=JAVA_HOME=/mnt/disks/disk-socrateai-local-1/amcp/tools/jdk21

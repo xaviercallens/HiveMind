@@ -844,7 +844,8 @@ def run_intense_rtx_stress_suite(
                 and "rfc9001_0rtt_monotonic_nonce_anti_replay" in lean_audit["theorems"]
             ),
             "formal_spec_verified": (
-                lean_audit["theorem_count"] >= 27
+                bool(lean_audit.get("tier_a_machine_checked"))
+                and lean_audit["theorem_count"] >= 27
                 and lean_audit["sorry_count"] == 0
                 and lean_audit["user_axiom_count"] == 0
             ),

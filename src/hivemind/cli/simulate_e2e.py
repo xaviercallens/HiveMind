@@ -55,9 +55,15 @@ def estimate_workunit_tflops(
     micro_batch_size: int = 2,
 ) -> float:
     """Estimate training TFLOPs executed for a BOINC workunit from its step and token counts (IP-178)."""
-    steps = max(1, int(workunit.inner_steps_H))
-    seq_len = max(1, int(workunit.seq_len))
-    batch_tokens = max(1, int(micro_batch_size)) * seq_len
+    if isinstance(total_params, bool) or int(total_params) < 0:
+        raise ValueError("total_params must be a non-negative integer")
+    if isinstance(micro_batch_size, bool) or int(micro_batch_size) < 1:
+        raise ValueError("micro_batch_size must be a positive integer")
+    steps = int(workunit.inner_steps_H)
+    seq_len = int(workunit.seq_len)
+    if steps < 1 or seq_len < 1:
+        raise ValueError("workunit inner_steps_H and seq_len must be positive integers")
+    batch_tokens = int(micro_batch_size) * seq_len
     effective_params = max(int(total_params), 100_000_000)
     flops = 6.0 * float(effective_params) * float(steps) * float(batch_tokens)
     return round(flops / 1e12, 6)
@@ -70,6 +76,12 @@ def run_end_to_end_simulation(
     spot_check_interval_s: int = 10,
 ) -> dict[str, Any]:
     """Run the complete Project HiveMind pipeline on the local RTX GPU and save telemetry."""
+    if not isinstance(profile_name, str) or not profile_name.strip():
+        raise ValueError("profile_name must be a non-empty string")
+    if isinstance(inner_steps_H, bool) or int(inner_steps_H) < 1:
+        raise ValueError("inner_steps_H must be a positive integer")
+    if isinstance(spot_check_interval_s, bool) or int(spot_check_interval_s) < 1:
+        raise ValueError("spot_check_interval_s must be a positive integer")
     t_pipeline_start = time.perf_counter()
     cfg = HiveMindConfig.from_yaml()
     profile = cfg.profiles.get(profile_name) or next(iter(cfg.profiles.values()))

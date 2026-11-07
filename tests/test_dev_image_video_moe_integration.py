@@ -119,7 +119,9 @@ def test_life_as_a_bee_includes_dev_image_and_video_moe_scenarios() -> None:
 
 def test_intense_dev_image_video_moe_benchmark_and_webgpu_endpoint(tmp_path: Path) -> None:
     report = run_intense_dev_image_video_moe_benchmark()
-    assert report["status"] == "COMPLETED_ALL_GATES_PASSED"
+    assert report["status"] == "SIMULATED_BENCHMARK_NO_LIVE_REQUESTS"
+    assert report["simulated"] is True
+    assert report["declared_constant"] is True
     assert len(DEV_IMAGE_VIDEO_BENCHMARK_SCENARIOS) == 18
 
     summary = report["overall_summary"]

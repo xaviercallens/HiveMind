@@ -193,6 +193,7 @@ class DeterministicSpotCheckValidator:
         validator_rng_seed: int | None = None,
         worker_fingerprint: object | None = None,
         validator_fingerprint: object | None = None,
+        expected_init_state: dict[str, torch.Tensor] | None = None,
     ) -> SpotCheckVerdict:
         """Select one micro-checkpoint segment and verify worker determinism within eps = 1e-4."""
         if hasattr(workunit, "shard_sha256") and (
@@ -257,55 +258,119 @@ class DeterministicSpotCheckValidator:
                 reason="Submission missing required step-0 micro-checkpoint.",
             )
 
-        # Select the first 50-step segment [0, s_1] for stateless deterministic verification
-        # (or a randomly selected segment when optimizer state is checkpointed)
+        # Select a micro-checkpoint segment [selected_start, selected_end] via validator RNG (IP-76)
         rng = random.Random(validator_rng_seed if validator_rng_seed is not None else workunit.rng_seed)
-        selected_end = ckpt_steps[0] if len(ckpt_steps) == 1 else rng.choice(ckpt_steps[:1])
-        selected_start = 0
+        seg_idx = 0 if len(ckpt_steps) == 1 else rng.randrange(len(ckpt_steps))
+        selected_end = ckpt_steps[seg_idx]
+        selected_start = 0 if seg_idx == 0 else ckpt_steps[seg_idx - 1]
 
         overhead_pct = round(100.0 * (selected_end - selected_start) / max(1, workunit.inner_steps_H), 2)
 
         step0_record = submission.micro_checkpoints[0]
         step0_sha = compute_state_dict_sha256(step0_record.state_snapshot)
-        expected_State = replay_inner_segment(
-            model=validator_model,
-            start_lora_state=step0_record.state_snapshot,
-            token_sequences=token_sequences,
-            start_step=selected_start,
-            end_step=selected_end,
-            lr=lr,
-            weight_decay=weight_decay,
-            rng_seed=workunit.rng_seed,
-            micro_batch_size=micro_batch_size,
-            use_muon_lora_preconditioner=getattr(
-                submission, "use_muon_lora_preconditioner", False
-            ),
-            muon_ns_steps=getattr(submission, "muon_ns_steps", 5),
-            use_paged_8bit_adamw=getattr(submission, "use_paged_8bit_adamw", False),
-        )
-
-        worker_record = submission.micro_checkpoints[selected_end]
-        worker_state = worker_record.state_snapshot
-
+        theta_init_sha = compute_state_dict_sha256(submission.theta_init)
         max_diff = 0.0
-        for name, exp_tensor in expected_State.items():
-            if name not in worker_state:
-                max_diff = float("inf")
-                break
-            diff = float(
-                (exp_tensor.to(torch.float32).cpu() - worker_state[name].to(torch.float32).cpu())
-                .abs()
-                .max()
-                .item()
-            )
-            # A NaN or infinite tensor must fail, not slip through: NaN compares False against every threshold.
-            if not math.isfinite(diff):
-                max_diff = float("inf")
-                break
-            if diff > max_diff:
-                max_diff = diff
 
-        # Also inspect final delta consistency if worker tampered with theta_final after step s_1
+        # Verify step-0 micro-checkpoint matches theta_init (and coordinator expected_init_state if supplied)
+        if set(step0_record.state_snapshot.keys()) != set(submission.theta_init.keys()):
+            max_diff = float("inf")
+        else:
+            for name, init_t in submission.theta_init.items():
+                s0_diff = float(
+                    (init_t.to(torch.float32).cpu() - step0_record.state_snapshot[name].to(torch.float32).cpu())
+                    .abs()
+                    .max()
+                    .item()
+                )
+                if not math.isfinite(s0_diff):
+                    max_diff = float("inf")
+                    break
+                if s0_diff > max_diff:
+                    max_diff = s0_diff
+        if expected_init_state is not None:
+            if set(expected_init_state.keys()) != set(step0_record.state_snapshot.keys()):
+                max_diff = float("inf")
+            else:
+                for name, coord_t in expected_init_state.items():
+                    c_diff = float(
+                        (coord_t.to(torch.float32).cpu() - step0_record.state_snapshot[name].to(torch.float32).cpu())
+                        .abs()
+                        .max()
+                        .item()
+                    )
+                    if not math.isfinite(c_diff):
+                        max_diff = float("inf")
+                        break
+                    if c_diff > max_diff:
+                        max_diff = c_diff
+
+        steps_to_verify = sorted({ckpt_steps[0], selected_end, ckpt_steps[-1]})
+        all_ckpt_hashes_ok = step0_sha == step0_record.lora_sha256 and step0_sha == theta_init_sha
+        expected_sha = ""
+        worker_record = submission.micro_checkpoints[selected_end]
+
+        for target_end in steps_to_verify:
+            expected_state = replay_inner_segment(
+                model=validator_model,
+                start_lora_state=step0_record.state_snapshot,
+                token_sequences=token_sequences,
+                start_step=0,
+                end_step=target_end,
+                lr=lr,
+                weight_decay=weight_decay,
+                rng_seed=workunit.rng_seed,
+                micro_batch_size=micro_batch_size,
+                initial_step_state=step0_record.state_snapshot,
+                use_muon_lora_preconditioner=getattr(
+                    submission, "use_muon_lora_preconditioner", False
+                ),
+                muon_ns_steps=getattr(submission, "muon_ns_steps", 5),
+                use_paged_8bit_adamw=getattr(submission, "use_paged_8bit_adamw", False),
+            )
+            rec_target = submission.micro_checkpoints[target_end]
+            w_state = rec_target.state_snapshot
+            for name, exp_tensor in expected_state.items():
+                if name not in w_state:
+                    max_diff = float("inf")
+                    break
+                diff = float(
+                    (exp_tensor.to(torch.float32).cpu() - w_state[name].to(torch.float32).cpu())
+                    .abs()
+                    .max()
+                    .item()
+                )
+                # A NaN or infinite tensor must fail, not slip through: NaN compares False against every threshold.
+                if not math.isfinite(diff):
+                    max_diff = float("inf")
+                    break
+                if diff > max_diff:
+                    max_diff = diff
+            target_sha = compute_state_dict_sha256(expected_state)
+            if target_end == selected_end:
+                expected_sha = target_sha
+            if target_sha != rec_target.lora_sha256:
+                all_ckpt_hashes_ok = False
+            expected_state.clear()
+            del expected_state
+
+        # Verify theta_final matches the terminal micro-checkpoint and raw_delta matches theta_init - theta_final
+        final_ckpt_state = submission.micro_checkpoints[ckpt_steps[-1]].state_snapshot
+        if set(submission.theta_final.keys()) != set(final_ckpt_state.keys()):
+            max_diff = float("inf")
+        else:
+            for name, fin_ckpt_t in final_ckpt_state.items():
+                fin_diff = float(
+                    (fin_ckpt_t.to(torch.float32).cpu() - submission.theta_final[name].to(torch.float32).cpu())
+                    .abs()
+                    .max()
+                    .item()
+                )
+                if not math.isfinite(fin_diff):
+                    max_diff = float("inf")
+                    break
+                if fin_diff > max_diff:
+                    max_diff = fin_diff
+
         for name, init_t in submission.theta_init.items():
             reconstructed_delta = init_t.to(torch.float32).cpu() - submission.theta_final[name].to(torch.float32).cpu()
             submitted_raw = submission.raw_delta[name].to(torch.float32).cpu()
@@ -316,13 +381,7 @@ class DeterministicSpotCheckValidator:
             if delta_mismatch > max_diff:
                 max_diff = delta_mismatch
 
-        expected_sha = compute_state_dict_sha256(expected_State)
-        expected_State.clear()
-        del expected_State
-        hash_matched = (
-            expected_sha == worker_record.lora_sha256
-            and step0_sha == step0_record.lora_sha256
-        )
+        hash_matched = all_ckpt_hashes_ok
         passed = (max_diff <= self.tolerance_eps) and hash_matched
 
         flagged = not passed

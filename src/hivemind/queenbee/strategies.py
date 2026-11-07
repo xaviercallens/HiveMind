@@ -65,6 +65,7 @@ class BetaArm:
     alpha: float
     beta: float
     verified_n: int = 0
+    verified_successes: int = 0
     ignored_unverified: int = 0
 
     @property
@@ -138,6 +139,7 @@ class BanditStrategy:
             return
         arm.verified_n += 1
         if outcome.success:
+            arm.verified_successes += 1
             arm.alpha += 1.0
         else:
             arm.beta += 1.0
@@ -151,8 +153,7 @@ class BanditStrategy:
         for (cluster_id, expert_id), arm in sorted(self.arms.items()):
             if arm.verified_n == 0:
                 continue
-            successes = int(round(arm.alpha - self.prior_alpha))
-            successes = max(0, min(arm.verified_n, successes))
+            successes = max(0, min(arm.verified_n, int(arm.verified_successes)))
             out.append(DanceRecord(expert_id, served_by.get(expert_id, expert_id), cluster_id, arm.verified_n, successes,
                                    float(cost_per_1k.get(expert_id, 0.0)), epoch, verifier_kind, signer_id).signed(secret))
         return out

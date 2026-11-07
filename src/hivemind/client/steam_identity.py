@@ -86,12 +86,27 @@ class SteamOpenIDVerifier:
     """Verifies the assertion Steam appends to ``return_to`` after the user signs in; returns the SteamID64 or raises :class:`IdentityError`."""
 
     def __init__(self, return_to: str, *, http: Http = default_http, clock: Callable[[], float] = time.time,
-                 nonce_ttl_s: float = 300.0, max_nonces: int = 4096) -> None:
+                 nonce_ttl_s: float = 300.0, max_nonces: int = 4096, max_attempts_per_ip: int = 64) -> None:
         if not return_to.startswith("https://") and not return_to.startswith("http://127.0.0.1") and not return_to.startswith("http://localhost"):
             raise ValueError("return_to must be https (or loopback http for development)")
         self.return_to, self._http, self._clock, self._ttl, self._max = return_to, http, clock, nonce_ttl_s, max_nonces
+        self._max_attempts_per_ip = max(1, int(max_attempts_per_ip))
         self._seen: dict[str, float] = {}
+        self._ip_attempts: dict[str, list[float]] = {}
         self._lock = threading.Lock()
+
+    def _check_ip_rate_limit(self, client_ip: str | None) -> None:
+        if not client_ip:
+            return
+        now = self._clock()
+        cutoff = now - self._ttl
+        with self._lock:
+            recent = [ts for ts in self._ip_attempts.get(client_ip, []) if ts >= cutoff]
+            if len(recent) >= self._max_attempts_per_ip:
+                self._ip_attempts[client_ip] = recent
+                raise IdentityError("too many sign-in attempts from this IP; try again shortly")
+            recent.append(now)
+            self._ip_attempts[client_ip] = recent
 
     def _check_fresh_unused_nonce(self, nonce: str) -> None:
         match = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z[\x21-\x7e]{0,64}", nonce)
@@ -120,7 +135,8 @@ class SteamOpenIDVerifier:
                 raise IdentityError("too many sign-ins in flight; try again shortly")
             self._seen[nonce] = now + self._ttl + 60.0
 
-    def verify_assertion(self, params: Mapping[str, str]) -> str:
+    def verify_assertion(self, params: Mapping[str, str], *, client_ip: str | None = None) -> str:
+        self._check_ip_rate_limit(client_ip)
         if params.get("openid.ns") != OPENID_NS or params.get("openid.mode") != "id_res":
             raise IdentityError("not an OpenID 2.0 positive assertion")
         if params.get("openid.op_endpoint") != OPENID_ENDPOINT:
@@ -216,9 +232,13 @@ class SteamIdentityGate:
         parts = urllib.parse.urlsplit(self.return_to)
         return login_url(self.return_to, f"{parts.scheme}://{parts.netloc}")
 
-    def complete_login(self, params: Mapping[str, str]) -> tuple[str, str]:
+    def complete_login(self, params: Mapping[str, str], *, client_ip: str | None = None) -> tuple[str, str]:
         """Returns ``(steam_id64, token)`` for an account Steam vouches for and the policy accepts; raises :class:`IdentityError` otherwise."""
-        steam_id64 = self.verifier.verify_assertion(params)
+        steam_id64 = (
+            self.verifier.verify_assertion(params, client_ip=client_ip)
+            if client_ip is not None
+            else self.verifier.verify_assertion(params)
+        )
         facts = fetch_account_facts(steam_id64, self._http)
         if facts.vac_banned:
             raise IdentityError("this Steam account has an active VAC/game ban")

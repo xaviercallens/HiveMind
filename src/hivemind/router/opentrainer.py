@@ -439,6 +439,115 @@ def validate_trainer_delta_submission(
     }
 
 
+_FED_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+_WG_PUBKEY_RE = re.compile(r"^[A-Za-z0-9+/]{43}=$")
+
+
+def validate_federation_v2_trainer_registration(
+    *,
+    learner_id: str,
+    gpu_model: str,
+    vram_free_mib: int,
+    vram_total_mib: int = 0,
+    night_only_consent: bool = False,
+    shard_index: int = 0,
+    run_id: str = "opentrainer-rtx2070-t4-co-train-v1",
+    pinned_commit: str = "HEAD",
+    network_mode: str = "outbound-https-relay",
+    wireguard_public_key: str | None = None,
+    wireguard_private_key: str | None = None,
+    amcp_hmac_keys: str | None = None,
+    overlay_slot_ip: str = "10.77.0.10/32",
+) -> dict[str, Any]:
+    """Validate a Federation v2 Trainer registration against docs/FEDERATION_V2_AMCP_AGLETS.md Section 9.
+
+    Enforces:
+      - Valid learner_id (`^[A-Za-z0-9._-]{1,64}$`) and run_id (`^[A-Za-z0-9._-]{1,64}$`)
+      - Truthful non-empty gpu_model and vram_free_mib >= safety floor (4,300 MiB on T4 / >=14 GB GPUs; 1,536 MiB on 8 GB GPUs)
+      - Explicit night_only_consent=True (22:00-07:00 Europe/Paris window)
+      - Rejects any WireGuard private key or shared HIVEMIND_AMCP_HMAC_KEYS secret
+      - Validates WireGuard public key format (`^[A-Za-z0-9+/]{43}=$`) when provided or when network_mode == 'wireguard-t4-hub'
+      - Never promises points or HMT payment and never includes shared signing keys in the response
+    """
+    if wireguard_private_key is not None and str(wireguard_private_key).strip():
+        raise ValueError(
+            "wireguard_private_key must never be submitted or leaves the trainer machine; provide only wireguard_public_key"
+        )
+    if amcp_hmac_keys is not None and str(amcp_hmac_keys).strip():
+        raise ValueError(
+            "HIVEMIND_AMCP_HMAC_KEYS must never be submitted, stored, or echoed in web registration; keys are exchanged out of band"
+        )
+    lid = str(learner_id or "").strip()
+    if not _FED_ID_RE.match(lid):
+        raise ValueError("learner_id must match ^[A-Za-z0-9._-]{1,64}$")
+    rid = str(run_id or "").strip()
+    if not _FED_ID_RE.match(rid):
+        raise ValueError("run_id must match ^[A-Za-z0-9._-]{1,64}$")
+    if isinstance(shard_index, bool) or not isinstance(shard_index, int) or shard_index < 0:
+        raise ValueError("shard_index must be a non-negative integer")
+    gpu_clean = str(gpu_model or "").strip()
+    if not gpu_clean or gpu_clean.lower() in ("unknown", "not reported", "none"):
+        raise ValueError("gpu_model must be explicitly reported")
+    if night_only_consent is not True:
+        raise ValueError("night_only_consent must be True (22:00-07:00 Europe/Paris window required)")
+    if network_mode not in NETWORK_MODES:
+        raise ValueError(f"network_mode must be one of {NETWORK_MODES}, got {network_mode!r}")
+    if isinstance(vram_free_mib, bool) or not isinstance(vram_free_mib, int):
+        raise ValueError("vram_free_mib must be an integer")
+    is_t4_class = int(vram_total_mib or 0) >= 14000 or "t4" in gpu_clean.lower()
+    min_floor = DEFAULT_MIN_FREE_VRAM_MIB_T4 if is_t4_class else DEFAULT_MIN_FREE_VRAM_MIB_8GB
+    if vram_free_mib < min_floor:
+        raise ValueError(
+            f"vram_free_mib ({vram_free_mib} MiB) is below the required safety floor ({min_floor} MiB) for {gpu_clean}"
+        )
+
+    wg_pub_clean: str | None = None
+    operator_wg_cmd: str | None = None
+    if wireguard_public_key is not None and str(wireguard_public_key).strip():
+        wg_pub_clean = str(wireguard_public_key).strip()
+        if not _WG_PUBKEY_RE.match(wg_pub_clean):
+            raise ValueError("wireguard_public_key must be a 44-character base64 Curve25519 public key")
+        if wg_pub_clean == "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=":
+            raise ValueError("wireguard_public_key cannot be an all-zero key")
+        operator_wg_cmd = f"hm-wg-hub add-member {overlay_slot_ip} {wg_pub_clean}"
+    elif network_mode == "wireguard-t4-hub":
+        raise ValueError("wireguard_public_key is required when network_mode is 'wireguard-t4-hub'")
+
+    pin = compute_default_code_pin()
+    commit_str = str(pinned_commit or "HEAD").strip() or "HEAD"
+    return {
+        "object": "hivemind.opentrainer.federation_v2_trainer_registration",
+        "accepted": True,
+        "learner_id": lid,
+        "shard_index": int(shard_index),
+        "run_id": rid,
+        "pinned_commit": commit_str,
+        "code_pin": pin,
+        "gpu_model": gpu_clean,
+        "vram_free_mib": int(vram_free_mib),
+        "vram_total_mib": int(vram_total_mib or 0),
+        "vram_floor_required_mib": min_floor,
+        "night_only_consent": True,
+        "night_window": "22:00-07:00 Europe/Paris",
+        "network_mode": network_mode,
+        "wireguard_public_key": wg_pub_clean,
+        "operator_wg_hub_command": operator_wg_cmd,
+        "operator_coordinator_flag": f"--learners {lid}",
+        "cli_check_command": "python scripts/hivemind_amcp.py --dev-keyring check",
+        "cli_join_command": (
+            f"python scripts/e8_amcp_round.py learner --run-id {rid} "
+            f"--learner-id {lid} --index {int(shard_index)} --quant nf4 --device cuda --night-only"
+        ),
+        "points_or_payment_promised": False,
+        "points_policy": (
+            "No points or HMT are earned for Federation v2 rounds: a delta is not verified work until "
+            "at least five independent learners and a Byzantine filter are active."
+        ),
+        "shared_signing_key_included": False,
+        "auto_starts_training": False,
+    }
+
+
 COMMUNITY_HELP_AND_CONTRIBUTIVE_GUIDE: Sequence[dict[str, Any]] = (
     {
         "topic_id": "producer-openrouter-join",

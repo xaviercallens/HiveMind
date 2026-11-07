@@ -28,3 +28,17 @@ def test_real_model_end_to_end_through_shield_gateway_and_ledger(tmp_path: Path)
     report = tmp_path / "report.json"
     code = smoke.main(["--gguf", GGUF, "--llama-server", LLAMA, "--report", str(report)])
     assert code == 0, report.read_text(encoding="utf-8") if report.exists() else "no report"
+
+
+def test_pytorch_tiny_lm_end_to_end_through_shield_gateway_and_ledger_ci(tmp_path: Path) -> None:
+    """Audit C11: run all 15 E2E smoke checks in CI using a CPU PyTorch causal Transformer LM."""
+    import json
+
+    report = tmp_path / "ci_smoke_report.json"
+    code = smoke.main(["--pytorch-tiny-lm", "--report", str(report)])
+    assert code == 0, report.read_text(encoding="utf-8") if report.exists() else "no report"
+    data = json.loads(report.read_text(encoding="utf-8"))
+    assert data["passed"] is True
+    assert len(data["checks"]) == 15
+    assert all(data["checks"].values()), data["checks"]
+    assert data["ledger"]["consumer_spent_hmt"] > data["ledger"]["producer_earned_hmt"] > 0.0

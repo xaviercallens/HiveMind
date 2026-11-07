@@ -116,7 +116,13 @@ def test_1xctxbf_profile3_and_4_onboarding_scripts_and_idle_worker_cli(tmp_path:
 
     # Verify exact CLI invocation promised in docs/MANIFESTE_IA_CITOYENNE_SETI_AT_HOME.md line 154:
     # python3 hivemind_boinc_idle_worker.py --coordinator https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app --handle votre-pseudo --domain physics_sim --once
-    import hivemind_boinc_idle_worker as worker
+    import importlib.util
+
+    worker_path = Path(__file__).resolve().parents[1] / "scripts" / "hivemind_boinc_idle_worker.py"
+    spec = importlib.util.spec_from_file_location("hivemind_boinc_idle_worker", worker_path)
+    assert spec is not None and spec.loader is not None
+    worker = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(worker)
 
     rc_pause = worker.main(["--pause-now"])
     assert rc_pause == 0

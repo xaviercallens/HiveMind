@@ -14,12 +14,20 @@ import math
 import random
 from dataclasses import dataclass
 from typing import Any, Sequence
-import torch
-import torch.nn as nn
 
-from hivemind.boinc.workunit import BOINCWorkunit
-from hivemind.core.diloco_inner import InnerLoopResult, replay_inner_segment
-from hivemind.core.quantization import compute_state_dict_sha256
+try:
+    import torch
+    import torch.nn as nn
+    from hivemind.boinc.workunit import BOINCWorkunit
+    from hivemind.core.diloco_inner import InnerLoopResult, replay_inner_segment
+    from hivemind.core.quantization import compute_state_dict_sha256
+except ImportError:  # pragma: no cover - lightweight router container without torch
+    torch = None  # type: ignore[assignment]
+    nn = None  # type: ignore[assignment]
+    BOINCWorkunit = Any  # type: ignore[assignment,misc]
+    InnerLoopResult = Any  # type: ignore[assignment,misc]
+    replay_inner_segment = None  # type: ignore[assignment]
+    compute_state_dict_sha256 = None  # type: ignore[assignment]
 
 VALID_EXECUTION_DTYPES = ("fp32", "bf16", "fp16", "fixed_point_q16")
 NON_FINITE_TENSOR = "NON_FINITE_TENSOR"

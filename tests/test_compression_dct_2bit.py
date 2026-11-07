@@ -59,9 +59,11 @@ def test_2bit_centroid_lut_handles_empty_bins_and_constant_values() -> None:
     assert lookup.dtype == torch.float16
     assert shift == pytest.approx(0.25)
     assert scale > 0.0
-    # Centered values are [-0.25, -0.25, -0.25, 0.75]: only bins 2 and 3 are populated.
-    assert lookup[0].item() == pytest.approx(-1.0)
-    assert lookup[1].item() == pytest.approx(-0.5)
+    # Centered values are [-0.25, -0.25, -0.25, 0.75]: bins 1 and 3 are populated; empty bins 0 and 2 get symmetric centers.
+    assert lookup[0].item() == pytest.approx(-0.75)
+    assert lookup[1].item() == pytest.approx(-0.25)
+    assert lookup[2].item() == pytest.approx(0.25)
+    assert lookup[3].item() == pytest.approx(0.75)
 
     constant_codes, constant_lookup, constant_shift, constant_scale = _quantize_2bit_centroids(
         torch.full((5,), 3.5), n_bins=4, range_in_sigmas=4.0

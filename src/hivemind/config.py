@@ -54,11 +54,19 @@ def ensure_local_drive_caches() -> dict[str, str]:
     }
     for env_key, dir_path in cache_dirs.items():
         if env_key not in ("CUBLAS_WORKSPACE_CONFIG", "HF_HUB_DISABLE_SYMLINKS_WARNING"):
-            Path(dir_path).mkdir(parents=True, exist_ok=True)
-            os.environ[env_key] = dir_path
+            try:
+                Path(dir_path).mkdir(parents=True, exist_ok=True)
+                os.environ[env_key] = dir_path
+            except OSError:
+                fallback = Path("/tmp/hivemind_cache") / Path(dir_path).name
+                fallback.mkdir(parents=True, exist_ok=True)
+                os.environ[env_key] = str(fallback)
         else:
             os.environ.setdefault(env_key, dir_path)
-    ARTIFACTS_ROOT.mkdir(parents=True, exist_ok=True)
+    try:
+        ARTIFACTS_ROOT.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
     return cache_dirs
 
 

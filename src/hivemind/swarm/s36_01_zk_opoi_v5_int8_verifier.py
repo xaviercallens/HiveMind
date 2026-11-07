@@ -69,6 +69,8 @@ class ZKOPoIV5ProofReceipt:
     bilinear_rhs_mod_p: int
     quantized_sketch_int8: tuple[int, ...]
     commitment_hmac: str
+    commitment_scheme: str = "fiat_shamir_horner_hmac_sha256"
+    zero_knowledge: bool = False
 
     @property
     def serialized_bytes(self) -> int:
@@ -78,7 +80,7 @@ class ZKOPoIV5ProofReceipt:
 
 @dataclass(frozen=True)
 class ZKOPoIV5VerificationReport:
-    """Verification outcome for a ZK-OPoI v5 proof receipt."""
+    """Verification outcome for a tamper-evident commitment receipt."""
 
     workunit_id: str
     verified: bool
@@ -87,6 +89,8 @@ class ZKOPoIV5VerificationReport:
     within_5ms_sla: bool
     within_32kb_bound: bool
     rejection_reason: str | None = None
+    commitment_scheme: str = "fiat_shamir_horner_hmac_sha256"
+    zero_knowledge: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -298,3 +302,8 @@ class ZKOPoIV5Int8TransitionVerifier:
             within_32kb_bound=proof_bytes < MAX_PROOF_BYTES,
             rejection_reason=None,
         )
+
+
+TamperEvidentInt8ProofReceipt = ZKOPoIV5ProofReceipt
+TamperEvidentInt8VerificationReport = ZKOPoIV5VerificationReport
+TamperEvidentInt8TransitionVerifier = ZKOPoIV5Int8TransitionVerifier

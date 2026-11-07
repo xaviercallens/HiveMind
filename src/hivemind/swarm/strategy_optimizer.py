@@ -1230,6 +1230,7 @@ class StrategyOptimizerTelemetryEngine:
 
         snapshot = {
             "schema_version": STRATEGY_OPTIMIZER_SCHEMA_VERSION,
+            "simulated": True,
             "milestone": "HM-S6-04",
             "season": 6,
             "sequence": self.revision,

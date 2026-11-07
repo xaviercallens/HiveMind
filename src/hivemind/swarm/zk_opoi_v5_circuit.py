@@ -72,6 +72,8 @@ class ZKOPoIV5ProofReceipt:
     witness_merkle_root: str
     proof_size_bytes: int
     witness_commitment_hmac: str = ""
+    commitment_scheme: str = "fiat_shamir_horner_hmac_sha256"
+    zero_knowledge: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -79,7 +81,7 @@ class ZKOPoIV5ProofReceipt:
 
 @dataclass(frozen=True)
 class ZKOPoIV5VerificationResult:
-    """Verification verdict returned by O(1) CPU verifier."""
+    """Verification verdict returned by O(1) CPU tamper-evident commitment verifier."""
 
     valid: bool
     reason: str
@@ -88,6 +90,8 @@ class ZKOPoIV5VerificationResult:
     shard_commitment_ok: bool
     r1cs_transition_ok: bool
     norm_bounds_ok: bool
+    commitment_scheme: str = "fiat_shamir_horner_hmac_sha256"
+    zero_knowledge: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -330,3 +334,8 @@ class ZKOPoIV5FixedPointCircuit:
             r1cs_transition_ok=r1cs_ok,
             norm_bounds_ok=norm_ok,
         )
+
+
+TamperEvidentV5ProofReceipt = ZKOPoIV5ProofReceipt
+TamperEvidentV5VerificationResult = ZKOPoIV5VerificationResult
+TamperEvidentV5FixedPointCircuit = ZKOPoIV5FixedPointCircuit

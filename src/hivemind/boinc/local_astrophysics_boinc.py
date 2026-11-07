@@ -654,6 +654,7 @@ def run_local_boinc_astrophysics_campaign(
             validator_node_ids=["boinc-spotcheck-validator-01"],
         )
 
+        padded_count = sum(1 for s in sample_texts if "[ObsSeq #" in s)
         branch_campaign_reports[branch_name] = {
             "branch_name": branch_name,
             "hf_dataset_id": dataset_id,
@@ -664,6 +665,7 @@ def run_local_boinc_astrophysics_campaign(
             "shard_hmac_signature": shard_sig,
             "storage_proof_verified": bool(storage_receipt.verified),
             "sample_astrophysics_observation": sample_texts[0],
+            "padded_synthetic_samples": padded_count,
             "phase_s2_shard_verdict": shard_verdict,
             "pre_boinc_shard_loss": pre_boinc_loss,
             "post_boinc_shard_loss": post_boinc_loss,
@@ -736,6 +738,7 @@ def run_local_boinc_astrophysics_campaign(
 
     summary_report = {
         "campaign": "Project HiveMind — Local GPU BOINC Astrophysics Validation Campaign",
+        "simulated": True,
         "overall_passed": bool(all_branches_improved and ledger_valid and cb_status.safe_to_continue),
         "execution_device": str(device),
         "gpu_hardware": hw_info,
@@ -798,7 +801,7 @@ def _render_boinc_astro_tables(report: Dict[str, Any], out_path: Path) -> None:
             dom,
             b["hf_dataset_id"],
             f"{b['pre_boinc_shard_loss']:.4f} -> {b['post_boinc_shard_loss']:.4f} ({b['loss_delta']:+.4f})",
-            f"3 Honest PASS / {len(b['slashed_byzantine_nodes'])} Byz Slashed",
+            f"{len(b['honest_workers_accepted'])} Honest PASS / {len(b['slashed_byzantine_nodes'])} Byz Slashed",
             b["cas_expert_cid"][:34] + "...",
         )
     console.print(t1)

@@ -28,7 +28,7 @@ import struct
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from urllib.parse import urlsplit
 
 from aioquic.asyncio import serve
@@ -746,7 +746,7 @@ class WebSocketHiddenStateServer:
         host = f"[{self.host}]" if ":" in self.host else self.host
         return f"{'wss' if self.ssl_context is not None else 'ws'}://{host}:{self.port}"
 
-    async def _handle(self, websocket) -> None:
+    async def _handle(self, websocket: Any) -> None:
         try:
             async with asyncio.timeout(self.timeout):
                 if _parse_multistream(await websocket.recv()) != MULTISTREAM:

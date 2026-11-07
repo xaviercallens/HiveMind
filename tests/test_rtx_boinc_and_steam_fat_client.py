@@ -180,7 +180,7 @@ def test_portal_free_steam_game_registration_login_and_boinc_contribution(tmp_pa
     # 2. Verify /v1/hivemind/steam/status
     st = client.get("/v1/hivemind/steam/status").json()
     assert st["app_id"] == 3133700
-    assert st["portal_registration_status"] == "REGISTERED_AND_LIVE"
+    assert st["portal_registration_status"] == "NOT_REGISTERED"
 
     # 3. Simulate first-time Registration of Free Steam Game player
     reg = client.post(

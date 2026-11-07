@@ -452,8 +452,8 @@ def rocm_supports_native_bf16(gcn_arch: str | None) -> bool:
     return False
 
 
-def configure_deterministic_runtime(seed: int = 42, warn_only: bool = True) -> None:
-    """Enforce deterministic CUDA/CPU kernels for BOINC Spot-Check Verification."""
+def configure_deterministic_runtime(seed: int = 42, warn_only: bool = False) -> None:
+    """Enforce deterministic CUDA/CPU kernels for BOINC Spot-Check Verification (IP-43)."""
     import torch
 
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"

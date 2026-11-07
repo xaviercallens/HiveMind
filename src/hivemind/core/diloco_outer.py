@@ -52,6 +52,7 @@ class ByzantineFilterReport:
     median_cosine: float
     cosine_threshold_lower: float
     quarantined_pre_krum: dict[str, str] = field(default_factory=dict)
+    krum_guarantee: bool = False
 
 
 @dataclass
@@ -145,8 +146,9 @@ def filter_byzantine_deltas_multikrum(
             quarantined_pre_krum=quarantined,
         )
 
-    # Clamp f so K - f - 2 >= 1
-    f = min(max_byzantine_f, max(0, K - 3))
+    # Clamp f so K >= 2*f + 3 (Multi-Krum validity condition, IP-34)
+    f = min(max_byzantine_f, max(0, (K - 3) // 2))
+    krum_guarantee = bool(max_byzantine_f > 0 and K >= 2 * max_byzantine_f + 3 and f >= max_byzantine_f)
     num_neighbors = max(1, K - f - 2)
 
     # Accumulate exact [K, K] inner-product Gram matrix parameter-by-parameter (<1 MB peak RAM)
@@ -251,6 +253,7 @@ def filter_byzantine_deltas_multikrum(
         median_cosine=round(median_cos, 6),
         cosine_threshold_lower=round(cos_lower_bound, 6),
         quarantined_pre_krum=quarantined,
+        krum_guarantee=krum_guarantee,
     )
 
 

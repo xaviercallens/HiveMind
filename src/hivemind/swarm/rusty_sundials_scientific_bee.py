@@ -33,35 +33,50 @@ from typing import Any, Mapping, Sequence
 BEE_RUSTY_SUNDIALS_ID = "bee-rusty-sundials"
 BEE_RUSTY_SUNDIALS_PUBLIC_ID = "hivemind/bee-rusty-sundials"
 
+
+def _default_xdev_root() -> str:
+    """Resolve XDEV_ROOT from environment or relative to repository root without hardcoding user paths (IP-67)."""
+    import os
+    from pathlib import Path
+
+    env_val = os.environ.get("XDEV_ROOT", "").strip()
+    if env_val:
+        return str(Path(env_val))
+    parents = Path(__file__).resolve().parents
+    return str(parents[7] if len(parents) > 7 else Path.cwd())
+
+
+_XDEV_ROOT = _default_xdev_root()
+
 LINKED_REPOSITORIES: dict[str, dict[str, str]] = {
     "core_solver": {
         "name": "rusty-SUNDIALS",
         "github_url": "https://github.com/xaviercallens/rusty-SUNDIALS",
-        "local_path": "/home/xavkal/xdev/rusty-SUNDIALS",
+        "local_path": f"{_XDEV_ROOT}/rusty-SUNDIALS",
         "role": "Pure-Rust CVODE (BDF/Adams), ARKode (IMEX ARS(2,2,2) & Dual-RRK), IDA (DAE), KINSOL, Hyper-Dual AD & qf-pgpe",
     },
     "astronomy": {
         "name": "SocrateAI-Scientific-AutoEvolve-K3xT2 & SocrateAI-Scientific-DualScaleSimulator",
         "github_url": "https://github.com/xaviercallens/SocrateAI-Scientific-AutoEvolve-K3xT2",
-        "local_path": "/home/xavkal/xdev/SocrateAI-Scientific-DualScaleSimulator",
+        "local_path": f"{_XDEV_ROOT}/SocrateAI-Scientific-DualScaleSimulator",
         "role": "Kepler/Post-Newtonian Dual-RRK Hamiltonian relaxation, Stellar Lane-Emden/TOV & stiff nucleosynthesis",
     },
     "fluid_mechanics": {
         "name": "SocrateAI-Scientific-MechanicaFluidorum",
         "github_url": "https://github.com/xaviercallens/SocrateAI-Scientific-MechanicaFluidorum",
-        "local_path": "/home/xavkal/xdev/SocrateAI-Scientific-MechanicaFluidorum",
+        "local_path": f"{_XDEV_ROOT}/SocrateAI-Scientific-MechanicaFluidorum",
         "role": "3D/Dyadic Navier-Stokes Hypothesis U, Enstrophy bound S_N^2 <= 2 Omega_N^3 (52 Lean 4 theorems) & IMEX ARS(2,2,2)",
     },
     "quantum_fluid": {
         "name": "SocrateAI-Scientific-QuantumFluids",
         "github_url": "https://github.com/xaviercallens/SocrateAI-Scientific-QuantumFluids",
-        "local_path": "/home/xavkal/xdev/SocrateAI-Scientific-QuantumFluids",
+        "local_path": f"{_XDEV_ROOT}/SocrateAI-Scientific-QuantumFluids",
         "role": "Projected Gross-Pitaevskii (PGPE) IF-RK4 with k_cut=k_max/2, VortexWinding & QuantizedCirculation (257 Lean 4 theorems)",
     },
     "genetics": {
         "name": "SocrateAI-Scientific-Genetic",
         "github_url": "https://github.com/xaviercallens/SocrateAI-Scientific-Genetic",
-        "local_path": "/home/xavkal/xdev/rusty-SUNDIALS",
+        "local_path": f"{_XDEV_ROOT}/rusty-SUNDIALS",
         "role": "Hopfield-Ninio kinetic proofreading & ART reverse-transcription BDF solver, DNA linking number Lk=Tw+Wr & KJMA replication",
     },
 }
@@ -1247,28 +1262,61 @@ def solve_wave2_method_of_lines_pde(
     step_dt = max(1e-5, min(float(dt), 0.05))
 
     if pde_family == "lane_emden_stellar":
-        poly_n = 1.0 if param is None else max(0.0, min(float(param), 4.5))
-        # Desingularized Taylor startup at xi -> 0+ followed by 4th-order symplectic/RK4 radial march
+        if param is not None:
+            if isinstance(param, bool) or not math.isfinite(float(param)) or float(param) < 0.0 or float(param) > 4.5:
+                raise ValueError(f"polytropic index n must be finite in [0.0, 4.5], got {param!r} (IP-48)")
+        poly_n = 1.0 if param is None else float(param)
         xi_max = math.pi
         d_xi = xi_max / n_pts
+
+        def _lane_emden_rhs(xi_val: float, th_val: float, dth_val: float) -> tuple[float, float]:
+            if xi_val <= 1e-7:
+                # Removable coordinate singularity at xi -> 0+: lim_{xi->0} (2/xi)*theta' = 2*theta''
+                # => 3*theta'' + theta^n = 0 => theta''(0) = -1/3
+                return 0.0, -1.0 / 3.0
+            pos_th = max(0.0, th_val)
+            th_pow = 1.0 if poly_n == 0.0 else (pos_th**poly_n if pos_th > 0.0 else 0.0)
+            return dth_val, -(2.0 / xi_val) * dth_val - th_pow
+
+        def _integrate_lane_emden_rk4(substeps_per_cell: int) -> list[tuple[float, float, float]]:
+            h = d_xi / float(substeps_per_cell)
+            th = 1.0
+            dth = 0.0
+            out: list[tuple[float, float, float]] = [(0.0, th, dth)]
+            for cell_idx in range(n_pts):
+                for sub_idx in range(substeps_per_cell):
+                    xi_curr = cell_idx * d_xi + sub_idx * h
+                    if xi_curr == 0.0:
+                        # Desingularized 6th-order series step across the coordinate singularity at xi = 0
+                        xi_next = h
+                        th = 1.0 - (xi_next**2) / 6.0 + poly_n * (xi_next**4) / 120.0 - poly_n * (8.0 * poly_n - 5.0) * (xi_next**6) / 15120.0
+                        dth = -xi_next / 3.0 + poly_n * (xi_next**3) / 30.0 - poly_n * (8.0 * poly_n - 5.0) * (xi_next**5) / 2520.0
+                    else:
+                        k1_th, k1_dth = _lane_emden_rhs(xi_curr, th, dth)
+                        k2_th, k2_dth = _lane_emden_rhs(xi_curr + 0.5 * h, th + 0.5 * h * k1_th, dth + 0.5 * h * k1_dth)
+                        k3_th, k3_dth = _lane_emden_rhs(xi_curr + 0.5 * h, th + 0.5 * h * k2_th, dth + 0.5 * h * k2_dth)
+                        k4_th, k4_dth = _lane_emden_rhs(xi_curr + h, th + h * k3_th, dth + h * k3_dth)
+                        th += (h / 6.0) * (k1_th + 2.0 * k2_th + 2.0 * k3_th + k4_th)
+                        dth += (h / 6.0) * (k1_dth + 2.0 * k2_dth + 2.0 * k3_dth + k4_dth)
+                out.append(((cell_idx + 1) * d_xi, max(0.0, th), dth))
+            return out
+
+        coarse_traj = _integrate_lane_emden_rk4(substeps_per_cell=4)
+        ref_traj = _integrate_lane_emden_rk4(substeps_per_cell=16)
         profile: list[list[float]] = []
         max_res = 0.0
-        for i in range(n_pts + 1):
-            xi = max(1e-6, i * d_xi)
-            if abs(poly_n - 1.0) < 1e-9:
-                theta = math.sin(xi) / xi
-                dtheta = (xi * math.cos(xi) - math.sin(xi)) / (xi * xi)
-                res = 0.0
+        for (xi, th_c, dth_c), (_, th_r, dth_r) in zip(coarse_traj, ref_traj):
+            if abs(poly_n - 1.0) < 1e-9 and xi > 0.0:
+                exact_th = max(0.0, math.sin(xi) / xi)
+                res = abs(th_c - exact_th)
             else:
-                theta = max(0.0, 1.0 - (xi * xi) / 6.0 + (poly_n * (xi**4)) / 120.0)
-                dtheta = -xi / 3.0 + (poly_n * (xi**3)) / 30.0
-                res = abs(theta - max(0.0, 1.0 - (xi * xi) / 6.0)) * 1e-9
+                res = max(abs(th_c - th_r), abs(dth_c - dth_r))
             max_res = max(max_res, res)
-            profile.append([round(xi, 8), round(theta, 10), round(dtheta, 10)])
+            profile.append([round(max(1e-6, xi), 8), round(th_c, 10), round(dth_c, 10)])
         return {
             "pde_family": "lane_emden_stellar",
             "domain": "astronomy",
-            "crate": "DualScaleSimulator + rusty-sundials::arkode",
+            "crate": "python_rk4_desingularized_lane_emden",
             "grid_points": n_pts,
             "polytropic_index_n": poly_n,
             "invariant_drift": max_res,
@@ -1278,6 +1326,7 @@ def solve_wave2_method_of_lines_pde(
                 "hydrostatic_positivity": True,
             },
             "state_snapshots": profile[:8],
+            "full_profile": profile,
         }
 
     if pde_family == "pgpe_vortex_lattice":

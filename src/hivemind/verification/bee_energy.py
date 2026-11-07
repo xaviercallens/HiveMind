@@ -53,12 +53,29 @@ class BeeEnergyEvaluation:
         )
 
 
+def _strip_lean4_comments(source: str) -> str:
+    """Strip Lean 4 block comments (`/- ... -/`) and line comments (`-- ...`)."""
+    import re
+
+    no_block = re.sub(r"/-[\s\S]*?-/", " ", source)
+    return "\n".join(line.split("--", 1)[0] for line in no_block.splitlines())
+
+
 def _has_ast_stub_or_syntax_error(code: str, *, domain: str = "code") -> tuple[bool, str | None]:
+    import re
+
     stripped = code.strip()
     if not stripped:
         return True, "EMPTY_RESPONSE"
-    if domain in ("lean4", "math_lean4") and "sorry" in stripped:
-        return True, "LEAN4_SORRY_DETECTED"
+    if domain in ("lean4", "math_lean4"):
+        cleaned_lean = _strip_lean4_comments(stripped)
+        if not cleaned_lean.strip():
+            return True, "EMPTY_RESPONSE"
+        if re.search(r"\b(sorry|admit)\b", cleaned_lean):
+            return True, "LEAN4_SORRY_DETECTED"
+        m_ax = re.search(r"\b(axiom|constant|unsafe|implemented_by|extern)\b", cleaned_lean)
+        if m_ax is not None:
+            return True, f"LEAN4_AXIOM_DETECTED:{m_ax.group(1)}"
     if domain not in ("code", "code_python", "python"):
         return False, None
     try:

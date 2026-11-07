@@ -2,7 +2,7 @@
 """HM-S35-01: OptimalEnergyAI x AMCP x XSwaT Latent KV-Cache Mesh Codec (A2-RoPE + KLT-E8).
 
 Integrates:
-1. OptimalEnergyAI (/home/xavkal/xdev/OptimalEnergyAI):
+1. OptimalEnergyAI (xaviercallens/OptimalEnergyAI):
    - Planar universal optimality of the triangular/hexagonal lattice A2 (Zenodo 10.5281/zenodo.23295142,
      Fejes Toth 3.775% second-moment gain G(A2) = 5/(36*sqrt(3)) vs G(Z2) = 1/12) applied directly to
      2D RoPE planes (H1.6: A2 per RoPE plane beats Z2 with zero transform).

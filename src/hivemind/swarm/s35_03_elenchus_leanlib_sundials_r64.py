@@ -2,17 +2,17 @@
 """HM-S35-03: Elenchus x SocrateAI-Lean-Lib x rusty-SUNDIALS Tier-X Provenance (R-64) Verifier.
 
 Integrates:
-1. elenchus-solvers-mcp (/home/xavkal/xdev/elenchus-solvers-mcp) & SocrateAI-Scientific-Elenchus:
+1. elenchus-solvers-mcp (xaviercallens/elenchus-solvers-mcp) & SocrateAI-Scientific-Elenchus:
    - Tier-X instrument contract (`tier: "X"`, `claim_licence: false`, `ran: bool`, `stub: bool`).
    - Finding #4 from elenchus-solvers-mcp README: raw grep counts docstrings like
      `**Kernel Certified:** 0 sorry, 0 admit.` — Elenchus strips comments (`-- ...` and `/- ... -/`)
      before scanning for `sorry`, `admit`, and `native_decide`.
    - Rule R-64 Provenance: binds producer, version, tool, exact arguments as received, toolchain,
      and git revision into a deterministic SHA-256 receipt; refuses any `stub: true` or `ran: false`.
-2. SocrateAI-Lean-Lib (/home/xavkal/xdev/SocrateAI-Lean-Lib):
+2. SocrateAI-Lean-Lib (xaviercallens/SocrateAI-Lean-Lib):
    - 14-domain Lean 4 formal library with explicit axiom quarantine (`PROVEN_INVARIANT`,
      `QUARANTINED_AXIOM`, `UNVERIFIED_SORRY`).
-3. rusty-SUNDIALS (/home/xavkal/xdev/rusty-SUNDIALS):
+3. rusty-SUNDIALS (xaviercallens/rusty-SUNDIALS):
    - Robertson chemical kinetics stiff ODE conservation check (y1 + y2 + y3 = 1, |Delta m| < 1e-12).
 """
 

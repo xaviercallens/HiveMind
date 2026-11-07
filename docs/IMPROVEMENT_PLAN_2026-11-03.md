@@ -1,6 +1,8 @@
 # HiveMind Improvement Plan (2026-11-03 update)
 
 > Successor to [`IMPROVEMENT_PLAN_2026-11-02.md`](IMPROVEMENT_PLAN_2026-11-02.md) (merged in #491). Daily read-only audit of `main` at `faa3112` (2026-11-03 08:53Z): five parallel area audits for **new findings only** (IP-75 to IP-195, the two earlier plans, `docs/MVP_REALITY_AUDIT.md` and every commit merged since 2026-11-02 excluded by brief), then the author re-ran the checks of eight findings in the code (**R**); the rest are agent-reported with a quoted line or an executed snippet (**A**). Nothing was implemented; every row carries a Definition of Done and a negative control that fails on today's `main`. Written on a host whose GitHub token is revoked, so the issues of section 4 are listed here and opened when a token exists.
+>
+> **Status on `main` (2026-11-07):** Every non-protected item in this plan (`IP-196..IP-224`, `IP-227..IP-249`) is closed on `main` through PRs `#535`–`#708` (`IP-239` and `IP-246` in `src/hivemind/security/*` were closed in `#535` and `#546`; only `IP-225..IP-226` in `.github/workflows/*` sit in owner-only protected paths).
 
 ## 1. Closed or narrowed since the previous plan
 

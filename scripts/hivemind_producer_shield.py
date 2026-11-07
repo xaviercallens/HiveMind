@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """HiveMind producer shield: a small authenticating proxy in front of your local model server.
 
 Why: to earn points your model server must be reachable from the internet (through a tunnel or a port forward), and
@@ -22,9 +23,9 @@ from __future__ import annotations
 
 import argparse
 import hmac
+import itertools
 import json
 import os
-import itertools
 import sys
 import time
 from collections.abc import AsyncIterator, Mapping, Sequence
@@ -193,6 +194,13 @@ def create_shield_app(
     return app
 
 
+POC_NOTICE = (
+    "Proof of concept (PoC): not a production service. Until HiveMind is fully secured, prompts you serve and requests you make "
+    "must contain only public, non-sensitive data (no secrets, personal, private or enterprise data); the people using your node "
+    "are anonymous, and nothing yet verifies producers or their output."
+)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the command-line parser for the authenticating producer shield."""
     parser = argparse.ArgumentParser(description="Authenticating proxy in front of a local OpenAI-compatible model server.")
@@ -212,6 +220,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    print(f"NOTICE: {POC_NOTICE}", file=sys.stderr)
     routes: dict[str, str] = {}
     for item in args.route:
         model, sep, url = item.partition("=")

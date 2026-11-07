@@ -37,14 +37,54 @@ the ``trainer`` (or ``prosumer`` / ``producer``) role:
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 import hashlib
 import math
 from pathlib import Path
+import re
 import time
 from typing import Any, Mapping, Sequence
 
 OPENTRAINER_VERSION = "1.0.0-s36"
 OPENTRAINER_TOPIC = "hivemind.amcp.federation.v1"
+
+VALID_OPENTRAINER_CAMPAIGN_IDS: frozenset[str] = frozenset(
+    {
+        "E8-STAGE2-TINY-GRANITE-MOE-QLORA",
+        "opentrainer-rtx2070-t4-co-train-v1",
+        "NIGHT-REDDIT-VISION-MOE-V1",
+        "MASSIVE-SWARM-IMAGE-MOE-V1",
+        "BOINC-MOE-GRANITE-6DOMAIN",
+        "NIGHT-MOE-1-BEE-STARS",
+        "NIGHT-MOE-2-EXOPLANET",
+        "NIGHT-MOE-2-VERIFIED-MATHS",
+        "NIGHT-MOE-2-CODE-AND-CYBER",
+        "NIGHT-SCI-WAVE3-2026",
+        "SUBJ-01-QWEN35-CODER-POLYGLOT",
+        "SUBJ-02-RUSTY-SUNDIALS-NUMERIC",
+        "SUBJ-03-ASTROPHYSICS-EXOPLANET",
+        "SUBJ-04-LEAN4-FORMAL-PROOFS",
+        "SUBJ-05-CYBER-DEFENSE-FIREWALL",
+        "SUBJ-06-CHEM-BIO-MED-DISCOVERY",
+    }
+)
+_BYOM_CAMPAIGN_RE = re.compile(r"^byom-[A-Za-z0-9._-]{1,100}$")
+
+
+def is_allowed_opentrainer_campaign_id(
+    campaign_id: str,
+    registered_account_campaigns: Iterable[str] = (),
+) -> bool:
+    """Return True if ``campaign_id`` is in the canonical allow-list, matches ``byom-<name>``, or was registered in a heartbeat of that account (Issue #618 / IP-259)."""
+    cid = str(campaign_id or "").strip()
+    if not cid:
+        return False
+    if cid in VALID_OPENTRAINER_CAMPAIGN_IDS:
+        return True
+    if _BYOM_CAMPAIGN_RE.match(cid) is not None:
+        return True
+    acct_set = {str(c).strip() for c in registered_account_campaigns if c and str(c).strip()}
+    return cid in acct_set
 
 NETWORK_MODES: tuple[str, ...] = (
     "outbound-https-relay",

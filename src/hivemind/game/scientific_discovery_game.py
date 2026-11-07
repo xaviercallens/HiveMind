@@ -373,21 +373,11 @@ def fold_exoplanet_transit_lightcurve(
 
 
 def _quantize_e8_vector(vec8: np.ndarray) -> np.ndarray:
-    """Exact Conway-Sloane Gosset E8 lattice rounding (D8 union (D8 + 0.5))."""
+    """Exact Conway-Sloane Gosset E8 lattice rounding (D8 union (D8 + 0.5)) via canonical `nearest_e8`."""
+    from hivemind.compress.lattice_quantizer import nearest_e8
 
-    def _round_d8(x: np.ndarray) -> np.ndarray:
-        r = np.round(x)
-        if int(np.sum(r)) % 2 != 0:
-            diffs = np.abs(x - r)
-            idx = int(np.argmax(diffs))
-            r[idx] += 1.0 if x[idx] > r[idx] else -1.0
-        return r
-
-    cand_a = _round_d8(vec8)
-    cand_b = _round_d8(vec8 - 0.5) + 0.5
-    if float(np.sum((vec8 - cand_a) ** 2)) <= float(np.sum((vec8 - cand_b) ** 2)):
-        return cand_a
-    return cand_b
+    arr = np.asarray(vec8, dtype=np.float64).reshape(1, 8)
+    return nearest_e8(arr)[0]
 
 
 def run_e8_lattice_multikrum_mission(
@@ -1097,6 +1087,7 @@ class HiveMindScientificGameEngine:
         return {
             "game_title": "HiveMind: Dyson & Exoplanet Odyssey (Unity + Steamworks.NET + Google Antigravity)",
             "measurement_kind": "deterministic_physics_sandbox",
+            "simulated": True,
             "non_monetary_charter": NON_MONETARY_CHARTER_NOTICE,
             "all_missions_verified": all_verified,
             "total_scientific_pts": total_pts,
@@ -1239,6 +1230,7 @@ class HiveMindScientificGameEngine:
                 {
                     "gamer_tag": tag,
                     "steam_id64": sid,
+                    "simulated": True,
                     "hardware_rig": spec["hardware_rig"],
                     "foreground_game": spec["foreground_game"],
                     "steam_sybil_verified": sybil_verified,
@@ -1254,6 +1246,7 @@ class HiveMindScientificGameEngine:
             leaderboard.append(
                 {
                     "gamer_tag": tag,
+                    "simulated": True,
                     "hardware_rig": spec["hardware_rig"],
                     "missions_completed": sum(1 for m in mission_results if m["verified"] and m["local_sybil_rule_passed"]),
                     "total_scientific_pts": player_pts,
@@ -1271,6 +1264,7 @@ class HiveMindScientificGameEngine:
         return {
             "cohort_id": "COHORT-S19-MULTIPLAYER-ODYSSEY-5P",
             "cohort_basis": "scripted_local_rule_simulation",
+            "simulated": True,
             "total_players": len(sessions),
             "honest_players_verified": sum(1 for s in sessions if s["steam_sybil_verified"]),
             "scripted_honest_profiles_passed_local_rule": sum(

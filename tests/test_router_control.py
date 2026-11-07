@@ -19,11 +19,13 @@ from hivemind.router.accounts import RouterStore
 from tests.test_router_gateway import ADMIN_KEY, COST, FakeProducer, World, _build_world
 
 MODEL = "qwen"
-ROOT = Path(__file__).resolve().parents[1] / "scripts"
+ROOT = Path(__file__).resolve().parents[1] / "src" / "hivemind" / "router"
 
 
 def _load(name: str) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(name, ROOT / f"{name}.py")
+    spec = importlib.util.spec_from_file_location(
+        f"hivemind.router.{name}", ROOT / f"{name}.py"
+    )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

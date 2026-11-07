@@ -267,7 +267,7 @@ def build_welcome_email_content(
         Across the world, millions of gamers, students, and researchers own capable consumer GPUs (4 GB to 24 GB VRAM) that sit idle 80% of the day. Like neighborhood rooftop solar panels feeding a shared smart grid:
       </p>
       <ul style="margin:8px 0 0;padding-left:18px;font-size:13px;color:#cbd5e1;">
-        <li><strong>When your PC is idle:</strong> Your Worker Bee serves coding/scientific prompts or trains compact QLoRA adapters compressed <strong>30.89&times;</strong> via 8D Gosset $E_8$ lattice geometry.</li>
+        <li><strong>When your PC is idle:</strong> Your Worker Bee serves coding/scientific prompts or trains compact QLoRA adapters compressed via 8D Gosset $E_8$ lattice geometry (<strong>16&times;</strong> dense at 2 bits/dim; <strong>30.89&times;</strong> with top-k sparsity, ref: <code>artifacts/experiments/E10_lattice_diloco.json</code>).</li>
         <li><strong>Instant &lt;1.5s Game Preemption:</strong> Launch any game (Steam, Cyberpunk, Blender) and the hardware circuit-breaker frees 100% of your GPU in under 1.5 seconds.</li>
         <li><strong>Kelly-Tullock Nash Equilibrium:</strong> Producers earn <strong>85%</strong> of settled HMT points directly to their hash-chained ledger; Consumers get instant access to 5 capability tiers and 8 specialist Honeycomb Bees.</li>
       </ul>

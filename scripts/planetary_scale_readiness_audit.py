@@ -105,6 +105,7 @@ def audit_planetary_streams(repo_root: Path = REPO_ROOT) -> dict[str, Any]:
             "artifacts/experiments/E24_chain_regression_prereg.json",
             "artifacts/experiments/E24_chain_regression_report.json",
             "artifacts/experiments/CHAIN_STATUS_2026-11-08.json",
+            "artifacts/experiments/PROV86_CHAIN_PROVENANCE_LOCK_2026-11-08.json",
         ],
         "PS-02": [
             "tests/test_vram_floor_guard.py",

@@ -85,6 +85,8 @@ def _lease_clock(now_s: Optional[float]) -> float:
     comparison False, so a lease granted at 0.0 would commit (and never be reclaimed) at any later time."""
     if now_s is None:
         return time.time()
+    if isinstance(now_s, bool) or not isinstance(now_s, (int, float)):
+        raise ValueError("now_s must be finite")
     now = float(now_s)
     if not math.isfinite(now):
         raise ValueError("now_s must be finite")
@@ -93,11 +95,11 @@ def _lease_clock(now_s: Optional[float]) -> float:
 
 def compute_lease_ttl_s(alpha: float, t_step_s: float, rtt_s: float) -> float:
     """HM-S9-06: Compute heartbeat data-lease TTL `tau_lease = alpha * t_step_s + rtt_s`."""
-    if alpha <= 0.0 or not (alpha < float("inf")):
+    if isinstance(alpha, bool) or not isinstance(alpha, (int, float)) or alpha <= 0.0 or not (alpha < float("inf")):
         raise ValueError("alpha must be > 0 and finite")
-    if t_step_s <= 0.0 or not (t_step_s < float("inf")):
+    if isinstance(t_step_s, bool) or not isinstance(t_step_s, (int, float)) or t_step_s <= 0.0 or not (t_step_s < float("inf")):
         raise ValueError("t_step_s must be > 0 and finite")
-    if rtt_s < 0.0 or not (rtt_s < float("inf")):
+    if isinstance(rtt_s, bool) or not isinstance(rtt_s, (int, float)) or rtt_s < 0.0 or not (rtt_s < float("inf")):
         raise ValueError("rtt_s must be >= 0 and finite")
     return float(alpha) * float(t_step_s) + float(rtt_s)
 
@@ -136,6 +138,8 @@ class ContentAddressedSwarmStore:
         node_id: Optional[str] = None,
         security_guard: Optional[SwarmTrainingAndStoreGuard] = None,
     ) -> None:
+        if isinstance(replication_factor, bool) or not isinstance(replication_factor, int) or replication_factor < 1:
+            raise ValueError("replication_factor must be an integer >= 1")
         self.root_dir = Path(root_dir)
         self.replication_factor = replication_factor
         self.shards_dir = self.root_dir / "dataset_shards"
@@ -210,6 +214,8 @@ class ContentAddressedSwarmStore:
         chunk_size: int = 256,
         expected_sha256: Optional[str] = None,
     ) -> StorageProofReceipt:
+        if isinstance(chunk_size, bool) or not isinstance(chunk_size, int) or chunk_size <= 0:
+            raise ValueError("chunk_size must be a positive integer")
         p = Path(shard_path)
         if not p.is_file():
             return StorageProofReceipt(
@@ -420,7 +426,7 @@ class ContentAddressedSwarmStore:
         bundle_path = Path(bundle_dir)
         if not bundle_path.is_dir():
             raise FileNotFoundError(f"Bundle directory '{bundle_path}' does not exist.")
-        if chunk_size <= 0 or chunk_size > MAX_CHUNK_BYTES:
+        if isinstance(chunk_size, bool) or not isinstance(chunk_size, int) or chunk_size <= 0 or chunk_size > MAX_CHUNK_BYTES:
             raise ValueError(f"chunk_size must be in (0, {MAX_CHUNK_BYTES}].")
 
         entries: List[ChunkedFileEntry] = []
@@ -728,8 +734,8 @@ class ContentAddressedSwarmStore:
         now_s: Optional[float] = None,
     ) -> DataShardLease:
         """Grant an exclusive heartbeat-backed lease on `shard_cid` with TTL `alpha * t_step_s + rtt_s`."""
-        cid = str(shard_cid)
-        wid = str(worker_id)
+        cid = shard_cid.strip() if isinstance(shard_cid, str) else ""
+        wid = worker_id.strip() if isinstance(worker_id, str) else ""
         if not cid or not wid:
             raise ValueError("shard_cid and worker_id must be non-empty")
         if cid in self._committed_shards:

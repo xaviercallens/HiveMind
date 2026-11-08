@@ -459,6 +459,8 @@ class SteamworksSDKBridge:
         achievements: list[str],
     ) -> str:
         """Sign and upload a gamer's Hack-Miner score to ISteamLeaderboards (KeepBest)."""
+        if not steam_id64 or not str(steam_id64).strip():
+            raise ValueError("steam_id64 must be non-empty")
         if (
             not math.isfinite(float(hive_balance))
             or float(hive_balance) < 0.0
@@ -470,9 +472,9 @@ class SteamworksSDKBridge:
             steam_id64,
             SteamUserTelemetry(steam_id64=steam_id64, persona_name=persona_name),
         )
-        entry.hack_miner_total_pts = max(entry.hack_miner_total_pts, total_points)
-        entry.swarm_contribution_pts = max(entry.swarm_contribution_pts, swarm_contribution_points)
-        entry.api_credits_balance = round(hive_balance, 4)
+        entry.hack_miner_total_pts = max(entry.hack_miner_total_pts, int(total_points))
+        entry.swarm_contribution_pts = max(entry.swarm_contribution_pts, int(swarm_contribution_points))
+        entry.api_credits_balance = round(max(float(entry.api_credits_balance), float(hive_balance)), 4)
         for ach in achievements:
             if ach not in entry.unlocked_achievements:
                 entry.unlocked_achievements.append(ach)

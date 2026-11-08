@@ -193,6 +193,8 @@ def _verify_and_measure_adapter_svd(
     canonical_rank_r: int = 4,
 ) -> Tuple[int, float]:
     """Validate finite non-zero adapter tensors and compute SVD spectral energy retention."""
+    if isinstance(canonical_rank_r, bool) or not isinstance(canonical_rank_r, int) or canonical_rank_r < 1:
+        raise ValueError("canonical_rank_r must be a positive integer")
     if not adapter_tensors:
         raise ValueError("adapter_tensors cannot be empty")
 
@@ -231,6 +233,17 @@ class LaRucheModelVault:
         vocab_size: int = 259,
         canonical_rank_r: int = 4,
     ) -> None:
+        if (
+            isinstance(hidden_size, bool)
+            or not isinstance(hidden_size, int)
+            or hidden_size < 4
+            or hidden_size % 4 != 0
+        ):
+            raise ValueError("hidden_size must be an integer >= 4 divisible by 4")
+        if isinstance(vocab_size, bool) or not isinstance(vocab_size, int) or vocab_size < 2:
+            raise ValueError("vocab_size must be an integer >= 2")
+        if isinstance(canonical_rank_r, bool) or not isinstance(canonical_rank_r, int) or canonical_rank_r < 1:
+            raise ValueError("canonical_rank_r must be a positive integer")
         self.vault_dir = Path(vault_dir)
         self.cells_dir = self.vault_dir / "cells"
         self.release_dir = self.vault_dir / "community_moe_release"
@@ -268,6 +281,14 @@ class LaRucheModelVault:
             raise ValueError(
                 f"Unknown La Ruche domain '{domain_name}'. Expected one of {sorted(self._layout_by_domain)}"
             )
+        for field_name, field_val in (
+            ("contributor_handle", contributor_handle),
+            ("hardware_device", hardware_device),
+            ("dataset_shard_cid", dataset_shard_cid),
+            ("wire_codec", wire_codec),
+        ):
+            if not isinstance(field_val, str) or not field_val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
         # NaN compares False against everything, so `after >= before` let a NaN loss through the gate (IP-163):
         # every reported figure must be a finite, positive number before any comparison.
         for figure_name, figure in (
@@ -359,6 +380,12 @@ class LaRucheModelVault:
         seed: int = 20261024,
     ) -> Tuple[UpcycledSparseMoEModel, RucheCommunityMoERelease]:
         """Merge all deposited Honeycomb Cells into a Community BTM Sparse MoE Model & export bundle."""
+        if not isinstance(release_version, str) or not release_version.strip():
+            raise ValueError("release_version must be a non-empty string")
+        if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+            raise ValueError("top_k must be a positive integer")
+        if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+            raise ValueError("seed must be a non-negative integer")
         if not self.cells:
             raise ValueError("Cannot assemble Community MoE: La Ruche has no deposited cells")
 
@@ -515,13 +542,21 @@ def load_community_moe_from_ruche(
     seed: int = 20261024,
 ) -> Tuple[UpcycledSparseMoEModel, Dict[str, Any]]:
     """Load the merged Community BTM Sparse MoE model and manifest from a La Ruche vault directory."""
-    vault_path = Path(vault_dir)
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
+    vault_path = Path(vault_dir).resolve()
     manifest_path = vault_path / "community_moe_release" / "ruche_manifest.json"
     if not manifest_path.exists():
         raise FileNotFoundError(f"La Ruche manifest not found at {manifest_path}")
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    safetensors_path = vault_path / str(manifest["combined_safetensors_path"])
+    rel_st_path = str(manifest["combined_safetensors_path"])
+    rel_candidate = Path(rel_st_path)
+    if rel_candidate.is_absolute() or ".." in rel_candidate.parts:
+        raise ValueError(f"Unsafe combined_safetensors_path in manifest: {rel_st_path!r}")
+    safetensors_path = (vault_path / rel_candidate).resolve()
+    if not safetensors_path.is_relative_to(vault_path) or safetensors_path == vault_path:
+        raise ValueError(f"combined_safetensors_path escapes vault_dir: {rel_st_path!r}")
     raw_bytes = safetensors_path.read_bytes()
     actual_sha256 = hashlib.sha256(raw_bytes).hexdigest()
     if actual_sha256 != manifest["combined_safetensors_sha256"]:

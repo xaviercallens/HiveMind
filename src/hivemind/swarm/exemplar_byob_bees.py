@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import time
 from dataclasses import asdict, dataclass
 from typing import Any, Sequence
@@ -62,6 +63,34 @@ class ExemplarBYOBBee:
     mcnemar_p_value: float
     benchmark_prompt: str
     sample_completion: str
+
+    def __post_init__(self) -> None:
+        for attr in (
+            "bee_id",
+            "public_id",
+            "title",
+            "domain",
+            "base_hf_repo",
+            "base_tier_id",
+            "hf_repo_id",
+            "revision",
+            "author_handle",
+            "description",
+            "license",
+            "benchmark_prompt",
+            "sample_completion",
+        ):
+            val = getattr(self, attr)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{attr} must be a non-empty string")
+        for num_attr in ("parameters_b", "test_accuracy_gain", "mcnemar_p_value"):
+            nval = getattr(self, num_attr)
+            if isinstance(nval, bool) or not isinstance(nval, (int, float)) or not math.isfinite(float(nval)):
+                raise ValueError(f"{num_attr} must be a finite numeric value")
+        if self.parameters_b <= 0.0:
+            raise ValueError("parameters_b must be positive")
+        if not (0.0 <= self.mcnemar_p_value <= 1.0):
+            raise ValueError("mcnemar_p_value must be in [0.0, 1.0]")
 
     def to_manifest(self) -> BeeManifest:
         """Generate the signed BeeManifest for this bee."""
@@ -201,6 +230,8 @@ class ExemplarBYOBRegistryManager:
         self._attestation_hashes: dict[str, str] = {}
 
     def get_bee(self, bee_id: str) -> ExemplarBYOBBee | None:
+        if not isinstance(bee_id, str) or not bee_id.strip():
+            raise ValueError("bee_id must be a non-empty string")
         return self._live_exemplars.get(bee_id)
 
     def list_live_bees(self) -> list[ExemplarBYOBBee]:
@@ -217,6 +248,8 @@ class ExemplarBYOBRegistryManager:
         """Perform static validation, paired McNemar gate verification, and register into ExpertRegistry."""
         import math as _math
 
+        if not isinstance(bee, ExemplarBYOBBee):
+            raise TypeError("bee must be an ExemplarBYOBBee instance")
         manifest = bee.to_manifest()
 
         # Deterministic attestation hash of the manifest
@@ -226,6 +259,8 @@ class ExemplarBYOBRegistryManager:
 
         # Compute adapter weights SHA-256 (distinct from the manifest JSON digest)
         if adapter_weights_bytes is not None:
+            if not isinstance(adapter_weights_bytes, (bytes, bytearray)) or len(adapter_weights_bytes) == 0:
+                raise ValueError("adapter_weights_bytes must be non-empty bytes")
             weights_sha = hashlib.sha256(adapter_weights_bytes).hexdigest()
         elif adapter_sha256 is not None:
             cleaned_sha = str(adapter_sha256).strip().lower()
@@ -240,6 +275,14 @@ class ExemplarBYOBRegistryManager:
         if paired_outcomes is not None:
             if not paired_outcomes:
                 raise ValueError("paired_outcomes must not be empty when provided")
+            for pair in paired_outcomes:
+                if (
+                    not isinstance(pair, (tuple, list))
+                    or len(pair) != 2
+                    or not isinstance(pair[0], bool)
+                    or not isinstance(pair[1], bool)
+                ):
+                    raise ValueError("paired_outcomes must contain pairs of booleans")
             n01 = sum(1 for base_ok, bee_ok in paired_outcomes if (not base_ok) and bee_ok)
             n10 = sum(1 for base_ok, bee_ok in paired_outcomes if base_ok and (not bee_ok))
             n_total = len(paired_outcomes)

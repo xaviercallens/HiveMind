@@ -40,6 +40,8 @@ _BASE58_INDEX = {ch: idx for idx, ch in enumerate(_BASE58_ALPHABET)}
 
 
 def _b58encode(raw: bytes) -> str:
+    if not isinstance(raw, (bytes, bytearray)) or len(raw) == 0:
+        raise ValueError("raw must be non-empty bytes")
     num = int.from_bytes(raw, "big")
     chars: list[str] = []
     while num > 0:
@@ -50,7 +52,7 @@ def _b58encode(raw: bytes) -> str:
 
 
 def _b58decode(encoded: str) -> bytes:
-    if not encoded:
+    if not isinstance(encoded, str) or not encoded:
         raise ValueError("Empty base58 string")
     num = 0
     for ch in encoded:
@@ -82,9 +84,9 @@ def ed25519_public_bytes_from_did_key(did: str) -> bytes:
 
 def hash_hmt_key_commitment(hmt_key: str) -> str:
     """Compute a domain-separated SHA-256 commitment to an HMT key without revealing the secret key."""
-    cleaned = str(hmt_key or "").strip()
-    if not cleaned:
+    if not isinstance(hmt_key, str) or not hmt_key.strip():
         raise ValueError("hmt_key must be non-empty")
+    cleaned = hmt_key.strip()
     return hashlib.sha256(f"hivemind.identity_bridge.hmt.v1:{cleaned}".encode("utf-8")).hexdigest()
 
 
@@ -94,6 +96,8 @@ def _canonical_vc_bytes_without_proof(vc: dict[str, Any]) -> bytes:
 
 
 def _parse_iso_utc(ts: str) -> datetime:
+    if not isinstance(ts, str) or not ts.strip():
+        raise ValueError("timestamp must be a non-empty ISO-8601 string")
     cleaned = ts.strip()
     if cleaned.endswith("Z"):
         cleaned = cleaned[:-1] + "+00:00"
@@ -116,12 +120,18 @@ def issue_producer_verifiable_credential(
     """Issue a signed W3C Verifiable Credential binding an Ed25519 ``did:key``, ``node_id``, and ``hmt_key``."""
     if not isinstance(private_key_seed, (bytes, bytearray)) or len(private_key_seed) != 32:
         raise ValueError("private_key_seed must be exactly 32 bytes")
-    node_id_clean = str(node_id or "").strip()
-    peer_id_clean = str(kwaainet_peer_id or "").strip()
+    if not isinstance(node_id, str) or not isinstance(kwaainet_peer_id, str):
+        raise ValueError("node_id and kwaainet_peer_id must be strings")
+    node_id_clean = node_id.strip()
+    peer_id_clean = kwaainet_peer_id.strip()
     if not node_id_clean or not peer_id_clean:
         raise ValueError("node_id and kwaainet_peer_id must be non-empty")
     if not isinstance(tiers, list) or not tiers or not all(isinstance(t, str) and t.strip() for t in tiers):
         raise ValueError("tiers must be a non-empty list of tier IDs")
+    issued_dt = _parse_iso_utc(issuance_date)
+    expires_dt = _parse_iso_utc(expiration_date)
+    if expires_dt <= issued_dt:
+        raise ValueError("expiration_date must be strictly after issuance_date")
 
     priv = Ed25519PrivateKey.from_private_bytes(bytes(private_key_seed))
     pub_bytes = priv.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)

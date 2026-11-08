@@ -23,6 +23,7 @@ Implements `HM-S19-CAMPAIGNS`:
 from __future__ import annotations
 
 import json
+import math
 import os
 import threading
 import time
@@ -218,6 +219,8 @@ CANONICAL_BEE_IDS: frozenset[str] = frozenset(
 
 def is_allowed_bee_id(bee_id: str, account_handle: str, account_id: str = "") -> bool:
     """Return True iff ``bee_id`` is in the canonical HiveMind bee allow-list or owned by ``account_handle`` (IP-260)."""
+    if not isinstance(bee_id, str) or not isinstance(account_handle, str) or not isinstance(account_id, str):
+        raise ValueError("bee_id, account_handle, and account_id must be strings")
     candidate = bee_id.strip()
     if not candidate:
         return False
@@ -270,8 +273,25 @@ def build_amcp_kafka_event(
     payload: Mapping[str, Any] | None = None,
     now_utc: float | None = None,
 ) -> AMCPKafkaEvent:
+    for name, val in (
+        ("topic_key", topic_key),
+        ("event_type", event_type),
+        ("sender_id", sender_id),
+        ("sender_kind", sender_kind),
+        ("recipient_id", recipient_id),
+        ("subject_id", subject_id),
+    ):
+        if not isinstance(val, str) or not val.strip():
+            raise ValueError(f"{name} must be a non-empty string")
+    if correlation_id is not None and (not isinstance(correlation_id, str) or not correlation_id.strip()):
+        raise ValueError("correlation_id must be a non-empty string when provided")
+    if now_utc is not None:
+        if isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc)) or now_utc <= 0.0:
+            raise ValueError("now_utc must be a positive finite timestamp")
+        stamp = float(now_utc)
+    else:
+        stamp = time.time()
     topic = KAFKA_TOPICS.get(topic_key, topic_key)
-    stamp = time.time() if now_utc is None else float(now_utc)
     ev_id = "amcp-" + uuid.uuid4().hex[:16]
     corr = correlation_id or ("corr-" + uuid.uuid4().hex[:12])
     return AMCPKafkaEvent(
@@ -292,6 +312,8 @@ def compute_campaign_poll_summary(
     votes: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
     """Aggregate community poll registrations per subject and compute dynamic nocturnal BOINC/QLoRA weights."""
+    if not isinstance(votes, (list, tuple)):
+        raise ValueError("votes must be a sequence of vote mappings")
     counts_by_subject: dict[str, dict[str, Any]] = {}
     for camp in JOINT_SUBJECT_CAMPAIGNS:
         counts_by_subject[camp.subject_id] = {
@@ -312,6 +334,8 @@ def compute_campaign_poll_summary(
         }
 
     for v in votes:
+        if not isinstance(v, Mapping):
+            raise ValueError("each vote must be a mapping")
         sid = str(v.get("subject_id", ""))
         if sid not in counts_by_subject:
             continue
@@ -326,8 +350,14 @@ def compute_campaign_poll_summary(
             entry["agent_votes"] += 1
         elif kind == "bee_specialist":
             entry["bee_votes"] += 1
-        vram = float(v.get("pledged_vram_gb", 0.0) or 0.0)
-        entry["pledged_vram_gb"] = round(entry["pledged_vram_gb"] + max(0.0, vram), 2)
+        raw_vram = v.get("pledged_vram_gb", 0.0)
+        if raw_vram is not None:
+            if isinstance(raw_vram, bool) or not isinstance(raw_vram, (int, float)) or not math.isfinite(float(raw_vram)) or raw_vram < 0.0:
+                raise ValueError("pledged_vram_gb must be a finite non-negative number")
+            vram = float(raw_vram)
+        else:
+            vram = 0.0
+        entry["pledged_vram_gb"] = round(entry["pledged_vram_gb"] + vram, 2)
         slot = str(v.get("availability_slot", "eu_evening_cet"))
         slots = entry["availability_slots"]
         slots[slot] = slots.get(slot, 0) + 1
@@ -386,6 +416,14 @@ def coordinate_inter_bee_inference(
         rescue_numeric_calculation,
     )
 
+    if not isinstance(primary_bee, str) or not primary_bee.strip():
+        raise ValueError("primary_bee must be a non-empty string")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("prompt must be a non-empty string")
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps <= 0:
+        raise ValueError("steps must be a positive integer")
+    if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or dt <= 0.0:
+        raise ValueError("dt must be a positive finite number")
     intent = classify_prompt_intent_and_language([{"role": "user", "content": prompt}])
     specialist_bee = intent.preferred_tier or "bee-rusty-sundials"
     if not specialist_bee.startswith("hivemind/"):
@@ -487,6 +525,16 @@ def clear_bee_capacity_market(
     Allows a high-demand Bee (e.g. `hivemind/coder` during Subject 1) to bid for idle GPU capacity or nocturnal
     QLoRA slots offered by another Bee/Producer (`hivemind/bee-stars` or `rtx-2070-producer`), maximizing utilization.
     """
+    if not isinstance(orders, (list, tuple)):
+        raise ValueError("orders must be a sequence of order mappings")
+    for o in orders:
+        if not isinstance(o, Mapping):
+            raise ValueError("each order must be a mapping")
+        for key in ("capacity_1k", "price_per_1k"):
+            if key in o and o[key] is not None:
+                val = o[key]
+                if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or val < 0.0:
+                    raise ValueError(f"{key} must be a finite non-negative number")
     offers = [
         dict(o)
         for o in orders
@@ -607,6 +655,8 @@ class InMemoryKafkaBridge:
     """Thread-safe Kafka topic ring buffer with optional `KAFKA_BOOTSTRAP_SERVERS` metadata export."""
 
     def __init__(self, maxlen_per_topic: int = 256) -> None:
+        if isinstance(maxlen_per_topic, bool) or not isinstance(maxlen_per_topic, int) or maxlen_per_topic <= 0:
+            raise ValueError("maxlen_per_topic must be a positive integer")
         self._lock = threading.Lock()
         self._maxlen = maxlen_per_topic
         self._topics: dict[str, deque[dict[str, Any]]] = {
@@ -615,6 +665,8 @@ class InMemoryKafkaBridge:
         self.bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "in-memory-amcp-broker:9092")
 
     def publish(self, event: AMCPKafkaEvent) -> dict[str, Any]:
+        if not isinstance(event, AMCPKafkaEvent):
+            raise TypeError("event must be an AMCPKafkaEvent instance")
         record = event.to_dict()
         with self._lock:
             bucket = self._topics.setdefault(event.topic, deque(maxlen=self._maxlen))
@@ -623,6 +675,8 @@ class InMemoryKafkaBridge:
         return {"topic": event.topic, "partition": 0, "offset": offset, "event_id": event.event_id}
 
     def recent(self, topic: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+            raise ValueError("limit must be a positive integer")
         with self._lock:
             if topic:
                 resolved = KAFKA_TOPICS.get(topic, topic)

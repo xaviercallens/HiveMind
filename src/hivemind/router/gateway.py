@@ -17,7 +17,6 @@ Security notes
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import hmac
 import ipaddress
@@ -36,7 +35,7 @@ from collections import deque
 from collections.abc import Awaitable, Callable, Iterator, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import urlsplit
 
 import httpx
 from fastapi import FastAPI, Request
@@ -2406,255 +2405,15 @@ def create_router_app(
         code_challenge: str | None = None,
         redirect_uri: str | None = None,
     ) -> JSONResponse:
-        prov = provider.lower()
-        if prov not in supported_sso_providers:
-            raise RouterError(400, f"Unsupported SSO provider '{provider}'", "invalid_request_error", "unsupported_sso_provider")
-        client_supplied_challenge = bool(code_challenge and code_challenge.strip())
-        if client_supplied_challenge:
-            code_verifier = ""
-            resolved_challenge = code_challenge.strip()
-        else:
-            code_verifier = secrets.token_urlsafe(32)
-            resolved_challenge = (
-                base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode("ascii")).digest())
-                .rstrip(b"=")
-                .decode("ascii")
-            )
-        state_token = secrets.token_urlsafe(24)
-        public_portal = "https://hivemind.socrate-ai-lab.com"
-        resolved_redirect = (redirect_uri or "").strip() or f"{public_portal}/api/v1/auth/sso/{prov}/callback"
-        base_auth_url = sso_authorize_urls.get(prov, f"{public_portal}/api/v1/auth/sso/{prov}")
-        if prov == "steam":
-            params = {
-                "openid.ns": "http://specs.openid.net/auth/2.0",
-                "openid.mode": "checkid_setup",
-                "openid.return_to": f"{resolved_redirect}?state={state_token}",
-                "openid.realm": public_portal,
-                "openid.identity": "http://specs.openid.net/auth/2.0/identifier_select",
-                "openid.claimed_id": "http://specs.openid.net/auth/2.0/identifier_select",
-            }
-        else:
-            scopes = {
-                "google": "openid email profile",
-                "reddit": "identity",
-                "github": "read:user user:email",
-            }.get(prov, "openid profile")
-            params = {
-                "client_id": f"hivemind-{prov}-mvp-client",
-                "response_type": "code",
-                "redirect_uri": resolved_redirect,
-                "scope": scopes,
-                "state": state_token,
-                "code_challenge": resolved_challenge,
-                "code_challenge_method": "S256",
-            }
-        authorize_url = f"{base_auth_url}?{urlencode(params)}"
-        router_sso_states[state_token] = {
-            "provider": prov,
-            "state": state_token,
-            "code_challenge": resolved_challenge,
-            "code_challenge_method": "S256",
-            "client_supplied_challenge": client_supplied_challenge,
-            "redirect_uri": resolved_redirect,
-            "created_at": time.time(),
-        }
-        return JSONResponse(
-            {
-                "status": "SSO_AUTHORIZATION_READY",
-                "provider": prov,
-                "is_core_mvp_provider": prov in core_mvp_sso_providers,
-                "federation_mode": "LOCAL_PKCE_SANDBOX_FEDERATION",
-                "state": state_token,
-                "code_challenge": resolved_challenge,
-                "code_challenge_method": "S256",
-                "code_verifier": code_verifier,
-                "redirect_uri": resolved_redirect,
-                "authorize_url": authorize_url,
-                "public_dns_domain": "hivemind.socrate-ai-lab.com",
-                "public_dns_portal": public_portal,
-            },
-            headers={"Cache-Control": "no-store"},
-        )
+        # Deleted in v3.3: no identity provider verified anything here (accounts were created under a provider label for
+        # any caller). Google sign-in is /v1/hivemind/register/google with a verified ID token.
+        raise RouterError(410, "This sign-in flow is retired. Use Sign in with Google on the portal.", "invalid_request_error", "sso_retired")
 
     @app.post("/api/v1/auth/sso/{provider}")
     async def auth_sso_api(provider: str, request: Request) -> JSONResponse:
-        prov = provider.lower()
-        if prov not in supported_sso_providers:
-            raise RouterError(400, f"Unsupported SSO provider '{provider}'", "invalid_request_error", "unsupported_sso_provider")
-        data = await _parse_auth_payload(request)
-        state_val = str(data.get("state") or "").strip()
-        verifier_val = str(data.get("code_verifier") or "").strip()
-        if state_val and state_val in router_sso_states:
-            stored_state = router_sso_states[state_val]
-            if stored_state.get("provider") != prov:
-                raise RouterError(
-                    400,
-                    f"SSO state token belongs to provider '{stored_state.get('provider')}', not '{prov}'",
-                    "invalid_request_error",
-                    "sso_state_provider_mismatch",
-                )
-            if stored_state.get("client_supplied_challenge"):
-                if not verifier_val:
-                    raise RouterError(400, "PKCE S256 code_verifier is required for this SSO state", "invalid_request_error", "missing_code_verifier")
-                computed_challenge = (
-                    base64.urlsafe_b64encode(hashlib.sha256(verifier_val.encode("ascii")).digest())
-                    .rstrip(b"=")
-                    .decode("ascii")
-                )
-                if not hmac.compare_digest(computed_challenge, str(stored_state.get("code_challenge", ""))):
-                    raise RouterError(400, "PKCE S256 code_verifier does not match code_challenge", "invalid_request_error", "invalid_code_verifier")
-            router_sso_states.pop(state_val, None)
-
-        prov_badge = f"{prov.upper()}_SSO"
-        raw_hint = str(data.get("handle_hint") or "").strip()
-        user_mode = str(data.get("user_mode") or "auto").strip()
-        target_profile = str(data.get("target_profile") or "gamer").strip()
-        auth_hdr = request.headers.get("authorization", "")
-        scheme, _, bearer_tok = auth_hdr.partition(" ")
-        bearer_key = bearer_tok.strip() if scheme.lower() == "bearer" and bearer_tok.strip() else ""
-        caller_acct = store.authenticate(bearer_key) if bearer_key.startswith("hm-") else None
-
-        if not raw_hint and caller_acct is not None:
-            linked = router_linked_providers.setdefault(caller_acct.account_id, ["EXISTING_AUTH"])
-            if prov_badge not in linked:
-                linked.append(prov_badge)
-            bal = store.balance(caller_acct.account_id)
-            return JSONResponse(
-                {
-                    "status": "AUTHENTICATED_VIA_SSO",
-                    "provider": prov_badge,
-                    "linked_providers": linked,
-                    "handle": caller_acct.handle,
-                    "email": f"{caller_acct.handle}@{prov}.federation.hivemind",
-                    "token": bearer_key,
-                    "api_key": bearer_key,
-                    "compute_points": int(round(bal)),
-                    "balance_hmt": bal,
-                    "role": caller_acct.role,
-                    "target_profile": target_profile,
-                    "node_id": "0x" + hashlib.sha256(caller_acct.handle.encode("utf-8")).hexdigest()[:8].upper(),
-                    "login_count": 2,
-                    "is_new_user": False,
-                    "is_guest": False,
-                    "user_state": "EXISTING_USER",
-                },
-                headers={"Cache-Control": "no-store"},
-            )
-
-        if raw_hint:
-            # Check if raw_hint resolves to an existing or legacy account
-            clean_hint = re.sub(r"[^a-zA-Z0-9_-]", "_", raw_hint.lstrip("@").split("@")[0])[:32] or f"contributor_{prov}"
-            try:
-                acct, api_key, _ = store.login_with_credentials(
-                    raw_hint,
-                    str(data.get("password") or ""),
-                    api_key_hint=bearer_key,
-                    auto_restore_previous=False,
-                )
-                if user_mode == "force_new":
-                    raise RouterError(409, "That handle is already registered.", "conflict_error", "handle_taken")
-                linked = router_linked_providers.setdefault(acct.account_id, ["EXISTING_AUTH"])
-                if prov_badge not in linked:
-                    linked.append(prov_badge)
-                bal = store.balance(acct.account_id)
-                return JSONResponse(
-                    {
-                        "status": "AUTHENTICATED_VIA_SSO",
-                        "provider": prov_badge,
-                        "linked_providers": linked,
-                        "handle": acct.handle,
-                        "email": raw_hint if "@" in raw_hint else f"{acct.handle}@{prov}.federation.hivemind",
-                        "token": api_key,
-                        "api_key": api_key,
-                        "compute_points": int(round(bal)),
-                        "balance_hmt": bal,
-                        "role": acct.role,
-                        "target_profile": target_profile,
-                        "node_id": "0x" + hashlib.sha256(acct.handle.encode("utf-8")).hexdigest()[:8].upper(),
-                        "login_count": 2,
-                        "is_new_user": False,
-                        "is_guest": False,
-                        "user_state": "EXISTING_USER",
-                    },
-                    headers={"Cache-Control": "no-store"},
-                )
-            except InvalidCredentials:
-                is_known_legacy = store._resolve_legacy_user(raw_hint) is not None or store._resolve_legacy_user(clean_hint) is not None
-                if is_known_legacy:
-                    if user_mode == "force_new":
-                        raise RouterError(409, "That handle is already registered.", "conflict_error", "handle_taken") from None
-                    raise RouterError(401, "Valid Bearer token or password required for existing account.", "authentication_error", "unauthorized") from None
-                try:
-                    new_id, new_key, created = store.register_with_credentials(
-                        clean_hint,
-                        "",
-                        "prosumer",
-                        email=raw_hint if "@" in raw_hint else f"{clean_hint}@{prov}.federation.hivemind",
-                    )
-                    if created:
-                        starter_grant(request, new_id)
-                    bal = store.balance(new_id)
-                    router_linked_providers[new_id] = [prov_badge]
-                    acct_new = store.get_account(new_id)
-                    resolved_h = acct_new.handle if acct_new else clean_hint.lower()
-                    return JSONResponse(
-                        {
-                            "status": "AUTHENTICATED_VIA_SSO",
-                            "provider": prov_badge,
-                            "linked_providers": [prov_badge],
-                            "handle": resolved_h,
-                            "email": raw_hint if "@" in raw_hint else f"{resolved_h}@{prov}.federation.hivemind",
-                            "token": new_key,
-                            "api_key": new_key,
-                            "compute_points": int(round(bal)),
-                            "balance_hmt": bal,
-                            "role": "prosumer",
-                            "target_profile": target_profile,
-                            "node_id": "0x" + hashlib.sha256(f"{prov}:{resolved_h}".encode("utf-8")).hexdigest()[:8].upper(),
-                            "login_count": 1,
-                            "is_new_user": True,
-                            "is_guest": False,
-                            "user_state": "NEW_USER",
-                        },
-                        headers={"Cache-Control": "no-store"},
-                    )
-                except HandleTaken:
-                    if user_mode == "force_new":
-                        raise RouterError(409, "That handle is already registered.", "conflict_error", "handle_taken") from None
-                    raise RouterError(401, "Valid Bearer token or password required for existing account.", "authentication_error", "unauthorized") from None
-
-        generated_handle = f"contributor_{prov}_{secrets.token_hex(4)}"
-        account_id, api_key, created = store.register_with_credentials(
-            generated_handle,
-            "",
-            "prosumer",
-            email=f"{generated_handle}@{prov}.federation.hivemind",
-        )
-        if created:
-            starter_grant(request, account_id)
-        bal = store.balance(account_id)
-        router_linked_providers[account_id] = [prov_badge]
-        return JSONResponse(
-            {
-                "status": "AUTHENTICATED_VIA_SSO",
-                "provider": prov_badge,
-                "linked_providers": [prov_badge],
-                "handle": generated_handle,
-                "email": f"{generated_handle}@{prov}.federation.hivemind",
-                "token": api_key,
-                "api_key": api_key,
-                "compute_points": int(round(bal)),
-                "balance_hmt": bal,
-                "role": "prosumer",
-                "target_profile": target_profile,
-                "node_id": "0x" + hashlib.sha256(f"{prov}:{generated_handle}".encode("utf-8")).hexdigest()[:8].upper(),
-                "login_count": 1,
-                "is_new_user": True,
-                "is_guest": False,
-                "user_state": "NEW_USER",
-            },
-            headers={"Cache-Control": "no-store"},
-        )
+        # Deleted in v3.3: no identity provider verified anything here (accounts were created under a provider label for
+        # any caller). Google sign-in is /v1/hivemind/register/google with a verified ID token.
+        raise RouterError(410, "This sign-in flow is retired. Use Sign in with Google on the portal.", "invalid_request_error", "sso_retired")
 
     @app.post("/api/v1/auth/link-provider")
     async def auth_link_provider_api(request: Request) -> JSONResponse:
@@ -2815,7 +2574,12 @@ def create_router_app(
             await run_in_threadpool(store.set_password, acct.account_id, new_password)
         except ValueError:
             return _error_response(400, "The new password must be 12 to 256 characters.", "invalid_request_error", "weak_password")
-        return JSONResponse({"status": "PASSWORD_SET", "handle": acct.handle}, headers={"Cache-Control": "no-store"})
+        # v3.3: a password change also replaces the API key, so a stolen key or session does not survive it
+        new_key = await run_in_threadpool(store.rotate_key, acct.account_id)
+        return JSONResponse(
+            {"status": "PASSWORD_SET", "handle": acct.handle, "api_key": new_key, "old_key_revoked": True},
+            headers={"Cache-Control": "no-store"},
+        )
 
     # ---- v3.2: capabilities, password reset by e-mail, linking a Google identity to an existing account ---------------
     from hivemind.router.password_reset_email import reset_email_configured, send_reset_email

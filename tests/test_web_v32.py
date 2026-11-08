@@ -38,7 +38,14 @@ class FakeGateway:
     def _by_key(self, key: str | None):
         return next((a for a in self.accounts.values() if a["key"] == key), None)
 
-    def get(self, path: str):
+    def get(self, path: str, bearer: str | None = None):
+        if path == "/v1/hivemind/me":
+            acct = self._by_key(bearer)
+            if acct is None:
+                return 401, {}
+            return 200, {"account_id": "acc-" + acct["handle"], "handle": acct["handle"], "role": acct["role"], "balance": 1234.5,
+                         "recent_usage": [{"model_id": "qwen2.5-coder:7b", "billed_tokens": 321, "charge": 0.42, "utc": 1.8e9,
+                                           "consumer_id": "acc-" + acct["handle"], "producer_id": "p1"}]}
         if path == "/v1/hivemind/live-telemetry":
             return (200, self.telemetry) if self.telemetry is not None else (502, {})
         if path == "/api/v1/auth/capabilities":
@@ -66,7 +73,8 @@ class FakeGateway:
             if len(payload["new_password"]) < 12:
                 return 400, {}
             acct["password"] = payload["new_password"]
-            return 200, {"status": "PASSWORD_SET"}
+            acct["key"] = acct["key"] + "p"
+            return 200, {"status": "PASSWORD_SET", "api_key": acct["key"], "old_key_revoked": True}
         if path == "/api/v1/auth/rotate-key":
             acct = self._by_key(bearer)
             if acct is None:
@@ -218,9 +226,11 @@ def test_change_password_and_rotate_key_use_the_session_key_server_side() -> Non
     client, gw, _ = _client()
     h = _csrf(client)
     client.post("/v32/api/login", json={"identifier": "alice@example.org", "password": "AlicePassword#2026"}, headers=h)
-    assert client.post("/v32/api/change-password", json={"new_password": "AliceNewPassword#1"}, headers=h).status_code == 200
+    cp = client.post("/v32/api/change-password", json={"new_password": "AliceNewPassword#1"}, headers=h)
+    assert cp.status_code == 200 and cp.json()["api_key_once"].endswith("p"), "a password change replaces the key"
     assert gw.calls[-1][2] == "hm-alice-key-0000000000000000"
     rot = client.post("/v32/api/rotate-key", json={}, headers=h)
+    assert gw.calls[-1][2].endswith("p"), "the session followed the key replaced by the password change"
     assert rot.status_code == 200 and rot.json()["api_key_once"].endswith("x")
     assert client.post("/v32/api/change-password", json={"new_password": "AnotherNewPass#2"}, headers=h).status_code == 200
     assert gw.calls[-1][2].endswith("x"), "the session follows the rotated key"
@@ -331,7 +341,6 @@ def test_google_link_needs_a_session_and_uses_its_key() -> None:
 # ---- legacy sandbox SSO is retired ---------------------------------------------------------------------------------
 
 def test_legacy_sandbox_sso_endpoints_are_retired(monkeypatch) -> None:
-    monkeypatch.delenv("HIVEMIND_LEGACY_SANDBOX_SSO", raising=False)
     from hivemind.boinc.hivemind_at_home_dashboard import create_hivemind_at_home_app
 
     client = TestClient(create_hivemind_at_home_app())

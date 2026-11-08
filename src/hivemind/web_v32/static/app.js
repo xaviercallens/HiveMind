@@ -1,9 +1,34 @@
-// HiveMind web portal v3.2. No inline code; every value from the server is written with textContent, never as HTML.
+// HiveMind web portal v3.3. No inline code; every value from the server is written with textContent, never as HTML.
 "use strict";
 (function () {
   const $ = (id) => document.getElementById(id);
   const show = (el, on) => { if (el) el.hidden = !on; };
+  const TOKEN_RE = /token=([A-Za-z0-9_-]{20,128})/;
+  let strings = {};
+  let lang = document.documentElement.dataset.lang === "fr" ? "fr" : "en";
+  let caps = {};
 
+  // ---- i18n -----------------------------------------------------------------------------------------------------------
+  const t = (key, fallback) => (strings[lang] && strings[lang][key]) || (strings.en && strings.en[key]) || fallback || key;
+
+  function applyLanguage() {
+    document.documentElement.lang = lang;
+    document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n, el.textContent); });
+  }
+
+  async function loadStrings() {
+    try { const r = await fetch("/v32/static/i18n.json", { credentials: "same-origin" }); strings = await r.json(); } catch (e) { strings = {}; }
+  }
+
+  function setLanguage(next) {
+    lang = next;
+    document.cookie = "hm_lang=" + lang + "; Path=/; Max-Age=31536000; SameSite=Lax; Secure";
+    applyLanguage();
+    loadFacts();
+    refresh();
+  }
+
+  // ---- HTTP -----------------------------------------------------------------------------------------------------------
   function csrf() {
     const m = document.cookie.match(/(?:^|; )hm_csrf=([^;]+)/);
     return m ? decodeURIComponent(m[1]) : "";
@@ -17,15 +42,19 @@
       opts.body = JSON.stringify(body);
     }
     let res, data = {};
-    try { res = await fetch(path, opts); data = await res.json(); } catch (e) { return { ok: false, status: 0, data: { error: "Network error. Try again." } }; }
+    try { res = await fetch(path, opts); data = await res.json(); } catch (e) { return { ok: false, status: 0, data: { code: "network" } }; }
     return { ok: res.ok, status: res.status, data: data || {} };
   }
+
+  const errorText = (data, fallbackKey) =>
+    data && data.code === "network" ? t("msg_network") : (data && data.code ? t("err_" + data.code, data.error) : t(fallbackKey));
 
   function say(text, kind) {
     const m = $("msg");
     m.textContent = text;
     m.className = "msg " + (kind || "");
     show(m, !!text);
+    if (text) m.focus();
   }
 
   function formData(form) {
@@ -34,26 +63,28 @@
     return out;
   }
 
-  // ---- facts -------------------------------------------------------------------------------------------------------
+  // ---- facts ----------------------------------------------------------------------------------------------------------
+  function link(href, key) {
+    const a = document.createElement("a");
+    a.className = "src"; a.href = href; a.rel = "noopener"; a.textContent = " " + t(key);
+    return a;
+  }
+
   async function loadFacts() {
     const r = await api("/v32/api/facts");
     const list = $("facts-list");
     list.textContent = "";
-    if (!r.ok) { const li = document.createElement("li"); li.className = "muted"; li.textContent = "Facts are unavailable right now."; list.appendChild(li); return; }
+    if (!r.ok) { const li = document.createElement("li"); li.className = "muted"; li.textContent = t("facts_down"); list.appendChild(li); return; }
     for (const f of r.data.facts || []) {
       const li = document.createElement("li");
       const left = document.createElement("span");
-      left.textContent = f.label + (f.note ? " (" + f.note + ")" : "");
+      const note = f.note ? t("fact_" + f.key + "_note", f.note) : "";
+      left.textContent = t("fact_" + f.key, f.label) + (note ? " (" + note + ")" : "");
       const right = document.createElement("span");
       const v = document.createElement("span");
       v.className = "value";
-      v.textContent = f.available ? Number(f.value).toLocaleString("en-US") : "unavailable";
-      const src = document.createElement("a");
-      src.className = "src";
-      src.href = f.source;
-      src.rel = "noopener";
-      src.textContent = " source";
-      right.append(v, src);
+      v.textContent = f.available ? Number(f.value).toLocaleString(lang === "fr" ? "fr-FR" : "en-US") : t("unavailable");
+      right.append(v, link(f.source, "source"));
       li.append(left, right);
       list.appendChild(li);
     }
@@ -61,21 +92,35 @@
     st.textContent = "";
     for (const s of r.data.statements || []) {
       const li = document.createElement("li");
-      li.textContent = s.text + " ";
-      const a = document.createElement("a");
-      a.className = "src"; a.href = s.source; a.rel = "noopener"; a.textContent = "source";
-      li.appendChild(a);
+      li.textContent = t("stmt_" + s.key, s.text);
+      li.appendChild(link(s.source, "source"));
       st.appendChild(li);
     }
   }
 
-  // ---- account -----------------------------------------------------------------------------------------------------
-  let caps = {};
+  // ---- account --------------------------------------------------------------------------------------------------------
+  const tabs = () => Array.from(document.querySelectorAll(".tabs [role=tab]"));
 
-  function selectTab(name) {
-    document.querySelectorAll(".tabs [role=tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
+  function selectTab(name, focus) {
+    tabs().forEach((b) => {
+      const on = b.dataset.tab === name;
+      b.setAttribute("aria-selected", String(on));
+      b.tabIndex = on ? 0 : -1;
+      if (on && focus) b.focus();
+    });
     document.querySelectorAll("[data-panel]").forEach((p) => show(p, p.dataset.panel === name));
     show($("forgot-unavailable"), name === "forgot" && !caps.password_reset_email);
+  }
+
+  function onTabKey(ev) {
+    const list = tabs();
+    const i = list.indexOf(ev.target);
+    let next = -1;
+    if (ev.key === "ArrowRight") next = (i + 1) % list.length;
+    else if (ev.key === "ArrowLeft") next = (i - 1 + list.length) % list.length;
+    else if (ev.key === "Home") next = 0;
+    else if (ev.key === "End") next = list.length - 1;
+    if (next >= 0) { ev.preventDefault(); selectTab(list[next].dataset.tab, true); }
   }
 
   function showKeyOnce(key) {
@@ -84,65 +129,104 @@
     show($("keybox"), true);
   }
 
+  async function loadAccount() {
+    const r = await api("/v32/api/account");
+    if (!r.ok) { show($("balance-line"), false); show($("usage-table"), false); return; }
+    const bal = r.data.balance;
+    show($("balance-line"), bal !== null && bal !== undefined);
+    if (bal !== null && bal !== undefined) {
+      $("balance").textContent = Number(bal).toLocaleString(lang === "fr" ? "fr-FR" : "en-US", { maximumFractionDigits: 2 });
+      $("account-source").href = r.data.source;
+    }
+    const rows = $("usage-rows");
+    rows.textContent = "";
+    const usage = r.data.usage || [];
+    show($("usage-table"), usage.length > 0);
+    show($("usage-none"), usage.length === 0);
+    for (const u of usage) {
+      const tr = document.createElement("tr");
+      const when = u.utc ? new Date(u.utc * 1000).toLocaleString(lang === "fr" ? "fr-FR" : "en-US") : "";
+      const cells = [when, u.model, u.tokens, u.charge !== null && u.charge !== undefined ? Number(u.charge).toFixed(3) : "", t(u.as === "producer" ? "as_producer" : "as_consumer")];
+      cells.forEach((c, j) => { const td = document.createElement("td"); td.textContent = c === undefined || c === null ? "" : String(c); if (j === 2 || j === 3) td.className = "num"; tr.appendChild(td); });
+      rows.appendChild(tr);
+    }
+  }
+
   async function refresh() {
     const s = await api("/v32/api/session");
     const signedIn = s.ok && s.data.authenticated;
-    const resetToken = (location.hash.match(/token=([A-Za-z0-9_-]{20,128})/) || [])[1];
+    const resetToken = (location.hash.match(TOKEN_RE) || [])[1];
     show($("unavailable"), !caps.sessions);
     show($("signed-out"), caps.sessions && !signedIn && !resetToken);
     show($("form-reset"), caps.sessions && !!resetToken);
     show($("signed-in"), signedIn);
     show($("sso"), !!caps.google);
     show($("link-google"), signedIn && !!caps.google);
-    $("nav-account").textContent = signedIn ? "Account" : "Sign in";
-    if (signedIn) { $("who").textContent = s.data.handle || "your account"; $("role").textContent = s.data.role ? "(" + s.data.role + ")" : ""; }
+    const nav = $("nav-account");
+    nav.dataset.i18n = signedIn ? "nav_account" : "nav_signin";
+    nav.textContent = t(nav.dataset.i18n);
+    if (signedIn) {
+      $("who").textContent = s.data.handle || "";
+      $("role").textContent = s.data.role ? "(" + s.data.role + ")" : "";
+      loadAccount();
+    }
   }
 
   function bind(id, handler) {
     const f = $(id);
-    if (f) f.addEventListener("submit", async (ev) => { ev.preventDefault(); const b = f.querySelector("button[type=submit]"); if (b) b.disabled = true; try { await handler(formData(f), f); } finally { if (b) b.disabled = false; } });
+    if (f) f.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const b = f.querySelector("button[type=submit]");
+      if (b) b.disabled = true;
+      try { await handler(formData(f), f); } finally { if (b) b.disabled = false; }
+    });
   }
 
   async function init() {
+    await loadStrings();
+    applyLanguage();
     const c = await api("/v32/api/capabilities");
     caps = c.ok ? c.data : {};
-    document.querySelectorAll(".tabs [role=tab]").forEach((b) => b.addEventListener("click", () => selectTab(b.dataset.tab)));
+    tabs().forEach((b) => { b.addEventListener("click", () => selectTab(b.dataset.tab, false)); b.addEventListener("keydown", onTabKey); });
+    $("lang-toggle").addEventListener("click", () => setLanguage(lang === "fr" ? "en" : "fr"));
     if (!caps.password_reset_email) { const b = $("form-forgot").querySelector("button"); if (b) b.disabled = true; }
 
     bind("form-login", async (d) => {
       const r = await api("/v32/api/login", d);
-      if (r.ok) { say("Signed in.", "ok"); await refresh(); } else say(r.data.error || "Sign-in failed.", "err");
+      if (r.ok) { say(t("msg_signed_in"), "ok"); await refresh(); } else say(errorText(r.data, "err_bad_login"), "err");
     });
     bind("form-register", async (d) => {
       const r = await api("/v32/api/register", d);
-      if (r.ok) { say("Account ready.", "ok"); await refresh(); showKeyOnce(r.data.api_key_once); } else say(r.data.error || "Registration failed.", "err");
+      if (r.ok) { say(t("msg_account_ready"), "ok"); await refresh(); showKeyOnce(r.data.api_key_once); } else say(errorText(r.data, "err_register_refused"), "err");
     });
     bind("form-forgot", async (d) => {
       const r = await api("/v32/api/password-reset/request", d);
-      say(r.data.message || r.data.error || "Request sent.", r.ok ? "ok" : "err");
+      say(r.ok ? t("msg_reset_sent") : errorText(r.data, "err_reset_unavailable"), r.ok ? "ok" : "err");
     });
     bind("form-reset", async (d) => {
-      const token = (location.hash.match(/token=([A-Za-z0-9_-]{20,128})/) || [])[1] || "";
+      const token = (location.hash.match(TOKEN_RE) || [])[1] || "";
       const r = await api("/v32/api/password-reset/confirm", { token: token, new_password: d.new_password });
-      if (r.ok) { history.replaceState(null, "", location.pathname + "#account"); say(r.data.message, "ok"); await refresh(); selectTab("login"); }
-      else say(r.data.error || "The reset failed.", "err");
+      if (r.ok) { history.replaceState(null, "", location.pathname + "#account"); say(t("msg_reset_done"), "ok"); await refresh(); selectTab("login", false); }
+      else say(errorText(r.data, "err_reset_invalid"), "err");
     });
     bind("form-change", async (d, f) => {
       const r = await api("/v32/api/change-password", d);
-      if (r.ok) { f.reset(); say("Password changed.", "ok"); } else say(r.data.error || "The change failed.", "err");
+      if (r.ok) { f.reset(); showKeyOnce(r.data.api_key_once); say(t("msg_password_changed"), "ok"); } else say(errorText(r.data, "err_weak_password"), "err");
     });
     $("rotate").addEventListener("click", async () => {
       const r = await api("/v32/api/rotate-key", {});
-      if (r.ok) { showKeyOnce(r.data.api_key_once); say("New API key issued; the previous one no longer works.", "ok"); } else say(r.data.error || "Failed.", "err");
+      if (r.ok) { showKeyOnce(r.data.api_key_once); say(t("msg_key_rotated"), "ok"); } else say(errorText(r.data, "err_session_expired"), "err");
     });
-    $("logout").addEventListener("click", async () => { await api("/v32/api/logout", {}); show($("keybox"), false); say("Signed out.", "ok"); await refresh(); });
-    $("copy-key").addEventListener("click", async () => { try { await navigator.clipboard.writeText($("key-once").textContent); say("Copied.", "ok"); } catch (e) { say("Select the key and copy it.", "err"); } });
+    $("logout").addEventListener("click", async () => { await api("/v32/api/logout", {}); show($("keybox"), false); say(t("msg_signed_out"), "ok"); await refresh(); });
+    $("copy-key").addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText($("key-once").textContent); say(t("msg_copied"), "ok"); } catch (e) { say(t("msg_copy_failed"), "err"); }
+    });
 
     const h = location.hash;
-    if (h.indexOf("signin-error") >= 0) say("Google sign-in did not complete. Try again.", "err");
-    if (h === "#linked") say("Your Google account is linked.", "ok");
+    if (h.indexOf("signin-error") >= 0) say(t("msg_google_failed"), "err");
+    if (h === "#linked") say(t("msg_google_linked"), "ok");
     await refresh();
-    selectTab("login");
+    selectTab("login", false);
     loadFacts();
   }
 

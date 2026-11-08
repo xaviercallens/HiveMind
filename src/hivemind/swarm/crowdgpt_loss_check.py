@@ -178,8 +178,21 @@ def tokens_sha256(tokens: np.ndarray) -> str:
 
 def heldout_windows(n_tokens: int, window: int, n: int, seed: int) -> list[int]:
     """`n` distinct, non-overlapping window starts in a held-out token array, chosen by `seed` (same on both sides)."""
+    if (
+        isinstance(n_tokens, bool)
+        or not isinstance(n_tokens, int)
+        or isinstance(window, bool)
+        or not isinstance(window, int)
+        or isinstance(n, bool)
+        or not isinstance(n, int)
+        or isinstance(seed, bool)
+        or not isinstance(seed, int)
+    ):
+        raise ValueError("n_tokens, window, n, and seed must be integers")
+    if window < 2 or n < 1 or n_tokens < 0:
+        raise ValueError(f"need window >= 2, n >= 1 and at least n={n} windows of {window} tokens")
     slots = n_tokens // window
-    if window < 2 or n < 1 or slots < n:
+    if slots < n:
         raise ValueError(f"need window >= 2, n >= 1 and at least n={n} windows of {window} tokens (have {slots})")
     rng = np.random.default_rng(seed)
     return sorted(int(s) * window for s in rng.choice(slots, size=n, replace=False))
@@ -235,6 +248,21 @@ class LossCheckReceipt:
     schema: str = field(default=RECEIPT_SCHEMA)
 
     def __post_init__(self) -> None:
+        if not isinstance(self.evaluator_id, str) or not self.evaluator_id.strip():
+            raise ValueError("evaluator_id must be a non-empty string")
+        if (
+            not isinstance(self.base_sha256, str)
+            or not self.base_sha256.strip()
+            or not isinstance(self.candidate_sha256, str)
+            or not self.candidate_sha256.strip()
+            or not isinstance(self.heldout_sha256, str)
+            or not self.heldout_sha256.strip()
+        ):
+            raise ValueError("base_sha256, candidate_sha256, and heldout_sha256 must be non-empty strings")
+        if isinstance(self.window, bool) or not isinstance(self.window, int) or self.window < 2:
+            raise ValueError("window must be an integer >= 2")
+        if isinstance(self.seed, bool) or not isinstance(self.seed, int):
+            raise ValueError("seed must be an integer")
         if not (len(self.starts) == len(self.losses_before) == len(self.losses_after)) or not self.starts:
             raise ValueError("starts, losses_before and losses_after must be non-empty and of equal length")
 
@@ -303,15 +331,34 @@ def make_receipt(*, evaluator_id: str, key: bytes, base: torch.Tensor, candidate
 def spot_check_picks(commitment: str, server_secret: bytes, n_windows: int, k: int) -> list[tuple[str, int]]:
     """k distinct (which, window index) pairs, which in {"before", "after"}, derived from HMAC(server_secret, commitment).
     The evaluator never holds `server_secret`, so it cannot predict the picks when it computes the losses."""
+    if not isinstance(commitment, str) or not commitment.strip():
+        raise ValueError("commitment must be a non-empty string")
+    if not isinstance(server_secret, (bytes, bytearray)) or not server_secret:
+        raise ValueError("server_secret must be non-empty bytes")
+    if isinstance(n_windows, bool) or not isinstance(n_windows, int) or n_windows < 1:
+        raise ValueError("n_windows must be an integer >= 1")
+    if isinstance(k, bool) or not isinstance(k, int) or k < 0:
+        raise ValueError("k must be a non-negative integer")
     total = 2 * n_windows
     k = max(0, min(k, total))
-    seed = int.from_bytes(hmac.new(server_secret, commitment.encode(), hashlib.sha256).digest()[:8], "big")
+    seed = int.from_bytes(hmac.new(bytes(server_secret), commitment.encode(), hashlib.sha256).digest()[:8], "big")
     flat = np.random.default_rng(seed).choice(total, size=k, replace=False)
     return [("before" if int(j) < n_windows else "after", int(j) % n_windows) for j in sorted(int(x) for x in flat)]
 
 
 def detection_probability(n_numbers: int, falsified: int, k: int) -> float:
     """P(at least one of `falsified` wrong numbers among the k spot-checked of `n_numbers`), sampling without replacement."""
+    if (
+        isinstance(n_numbers, bool)
+        or not isinstance(n_numbers, int)
+        or n_numbers < 1
+        or isinstance(falsified, bool)
+        or not isinstance(falsified, int)
+        or isinstance(k, bool)
+        or not isinstance(k, int)
+        or falsified > n_numbers
+    ):
+        raise ValueError("n_numbers >= 1, falsified <= n_numbers, and k must be integers")
     if falsified <= 0 or k <= 0:
         return 0.0
     if falsified + k > n_numbers:
@@ -388,6 +435,8 @@ def verify_receipt(receipt: LossCheckReceipt, *, evaluator_keys: Mapping[str, by
 
 def receipts_agree(a: LossCheckReceipt, b: LossCheckReceipt, tol: float = 2e-3) -> tuple[bool, str]:
     """Two independent evaluators on the same weights, data and windows: every number within `tol`."""
+    if isinstance(tol, bool) or not isinstance(tol, (int, float)) or not math.isfinite(float(tol)) or float(tol) < 0.0:
+        raise ValueError("tol must be a finite non-negative number")
     if a.evaluator_id == b.evaluator_id:
         return False, "same evaluator"
     same = (a.base_sha256, a.candidate_sha256, a.heldout_sha256, a.starts) == (b.base_sha256, b.candidate_sha256, b.heldout_sha256, b.starts)

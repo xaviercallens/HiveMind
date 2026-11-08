@@ -82,10 +82,50 @@ class LossCheckCoordinator:
                  model_factory: Callable[[], Any] | None = None, k: int = 2, tol: float = 2e-3, max_regression_tolerance: float = 0.0,
                  min_windows: int = 8, required_receipts: int = 1, agreement_tol: float = 2e-3, job_ttl_s: float = 3600.0,
                  clock: Callable[[], float] = time.time) -> None:
-        if required_receipts < 1 or not evaluator_keys:
+        if (
+            isinstance(required_receipts, bool)
+            or not isinstance(required_receipts, int)
+            or required_receipts < 1
+            or not evaluator_keys
+        ):
             raise ValueError("need at least one evaluator key and required_receipts >= 1")
         if required_receipts > len(evaluator_keys):
             raise ValueError("required_receipts cannot exceed the number of known evaluators")
+        if not isinstance(server_secret, (bytes, bytearray)) or not server_secret:
+            raise ValueError("server_secret must be non-empty bytes")
+        if (
+            isinstance(k, bool)
+            or not isinstance(k, int)
+            or k < 1
+            or isinstance(min_windows, bool)
+            or not isinstance(min_windows, int)
+            or min_windows < 1
+        ):
+            raise ValueError("k and min_windows must be integers >= 1")
+        if (
+            isinstance(tol, bool)
+            or not isinstance(tol, (int, float))
+            or not math.isfinite(float(tol))
+            or float(tol) < 0.0
+            or isinstance(agreement_tol, bool)
+            or not isinstance(agreement_tol, (int, float))
+            or not math.isfinite(float(agreement_tol))
+            or float(agreement_tol) < 0.0
+        ):
+            raise ValueError("tol and agreement_tol must be finite non-negative numbers")
+        if (
+            isinstance(max_regression_tolerance, bool)
+            or not isinstance(max_regression_tolerance, (int, float))
+            or not math.isfinite(float(max_regression_tolerance))
+        ):
+            raise ValueError("max_regression_tolerance must be a finite number")
+        if (
+            isinstance(job_ttl_s, bool)
+            or not isinstance(job_ttl_s, (int, float))
+            or not math.isfinite(float(job_ttl_s))
+            or float(job_ttl_s) <= 0.0
+        ):
+            raise ValueError("job_ttl_s must be a finite number > 0")
         self.keys, self.secret, self.loader = dict(evaluator_keys), server_secret, loader
         self.model_factory = model_factory or lc.CrowdV1
         self.k, self.tol, self.max_regression, self.min_windows = k, tol, max_regression_tolerance, min_windows
@@ -114,7 +154,9 @@ class LossCheckCoordinator:
     def open_job(self, *, base_url: str, base_sha256: str, candidate_url: str, candidate_sha256: str, heldout_url: str,
                  heldout_sha256: str, window: int = 2048, n: int = 32, heldout_range: str = "", job_id: str | None = None) -> LossCheckJob:
         """One job per candidate. The seed is drawn here, after the candidate is fixed."""
-        if n < self.min_windows:
+        if isinstance(window, bool) or not isinstance(window, int) or window < 2:
+            raise ValueError("window must be an integer >= 2")
+        if isinstance(n, bool) or not isinstance(n, int) or n < self.min_windows:
             raise ValueError(f"n={n} is below min_windows={self.min_windows}: every receipt would be rejected")
         now = self.clock()
         job = LossCheckJob(job_id=job_id or secrets.token_hex(8), base_url=base_url, base_sha256=base_sha256, candidate_url=candidate_url,

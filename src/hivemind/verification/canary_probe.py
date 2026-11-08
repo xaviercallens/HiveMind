@@ -29,17 +29,27 @@ def wilson_confidence_interval(
     z: float = Z_95,
 ) -> tuple[float, float]:
     """Compute the exact Wilson score confidence interval ``(lower, upper)`` in ``[0, 1]``."""
+    if (
+        isinstance(successes, bool)
+        or not isinstance(successes, int)
+        or isinstance(total, bool)
+        or not isinstance(total, int)
+    ):
+        raise ValueError("successes and total must be integers")
+    if isinstance(z, bool) or not isinstance(z, (int, float)) or not math.isfinite(float(z)) or float(z) <= 0.0:
+        raise ValueError("z must be a finite number > 0")
     if total <= 0:
         return 0.0, 0.0
     if successes < 0 or successes > total:
         raise ValueError(f"successes ({successes}) must be in [0, total ({total})]")
     n = float(total)
     p_hat = float(successes) / n
-    z2 = z * z
+    zf = float(z)
+    z2 = zf * zf
     denom = 1.0 + z2 / n
     center = (p_hat + z2 / (2.0 * n)) / denom
     radicand = max(0.0, (p_hat * (1.0 - p_hat) + z2 / (4.0 * n)) / n)
-    half_width = (z * math.sqrt(radicand)) / denom
+    half_width = (zf * math.sqrt(radicand)) / denom
     low = max(0.0, min(1.0, center - half_width))
     high = max(0.0, min(1.0, center + half_width))
     return low, high
@@ -138,6 +148,30 @@ class NodeCanaryState:
     min_trials: int = DEFAULT_MIN_TRIALS
     wilson_lb_threshold: float = DEFAULT_WILSON_LB_THRESHOLD
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.node_id, str) or not self.node_id.strip():
+            raise ValueError("node_id must be a non-empty string")
+        if not isinstance(self.planted_role, str) or not self.planted_role.strip():
+            raise ValueError("planted_role must be a non-empty string")
+        if (
+            isinstance(self.successes, bool)
+            or not isinstance(self.successes, int)
+            or isinstance(self.total, bool)
+            or not isinstance(self.total, int)
+            or self.successes < 0
+            or self.total < 0
+            or self.successes > self.total
+        ):
+            raise ValueError("successes and total must be non-negative integers with successes <= total")
+        if isinstance(self.min_trials, bool) or not isinstance(self.min_trials, int) or self.min_trials < 1:
+            raise ValueError("min_trials must be an integer >= 1")
+        if (
+            isinstance(self.wilson_lb_threshold, bool)
+            or not isinstance(self.wilson_lb_threshold, (int, float))
+            or not (0.0 < float(self.wilson_lb_threshold) < 1.0)
+        ):
+            raise ValueError("wilson_lb_threshold must be in (0.0, 1.0)")
+
     @property
     def empirical_pass_rate(self) -> float:
         return float(self.successes) / float(self.total) if self.total > 0 else 0.0
@@ -180,6 +214,35 @@ def run_planted_canary_evaluation(
     wilson_lb_threshold: float = DEFAULT_WILSON_LB_THRESHOLD,
 ) -> dict[str, Any]:
     """Run a blinded canary campaign over honest nodes and 4 classes of planted junk nodes."""
+    if (
+        isinstance(num_honest_nodes, bool)
+        or not isinstance(num_honest_nodes, int)
+        or num_honest_nodes < 1
+        or isinstance(num_planted_junk_nodes, bool)
+        or not isinstance(num_planted_junk_nodes, int)
+        or num_planted_junk_nodes < 1
+        or isinstance(trials_per_node, bool)
+        or not isinstance(trials_per_node, int)
+        or trials_per_node < 1
+        or isinstance(min_trials, bool)
+        or not isinstance(min_trials, int)
+        or min_trials < 1
+        or isinstance(seed, bool)
+        or not isinstance(seed, int)
+    ):
+        raise ValueError("node counts, trials_per_node, min_trials, and seed must be valid integers")
+    if (
+        isinstance(honest_pass_prob, bool)
+        or not isinstance(honest_pass_prob, (int, float))
+        or not (0.0 < float(honest_pass_prob) <= 1.0)
+    ):
+        raise ValueError("honest_pass_prob must be in (0.0, 1.0]")
+    if (
+        isinstance(wilson_lb_threshold, bool)
+        or not isinstance(wilson_lb_threshold, (int, float))
+        or not (0.0 < float(wilson_lb_threshold) < 1.0)
+    ):
+        raise ValueError("wilson_lb_threshold must be in (0.0, 1.0)")
     rng = random.Random(seed)
     canonical_answers = {
         "canary-arith-17x19": "323",

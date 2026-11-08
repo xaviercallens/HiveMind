@@ -26,6 +26,25 @@ import numpy as np
 from hivemind.swarm.zk_opoi_v5_circuit import ZKOPoIV5FixedPointCircuit
 
 
+VALID_DEFENSE_MODES = frozenset({
+    "multi_krum_plus_10pct_replay",
+    "zk_opoi_v5_int8_full",
+    "hierarchical_subswarm_krum_zk_hybrid",
+})
+
+
+def _require_int(value: object, name: str, *, min_value: int = 0) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < min_value:
+        raise ValueError(f"{name} must be an integer >= {min_value}")
+    return value
+
+
+def _require_finite_float(value: object, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+        raise ValueError(f"{name} must be a finite number")
+    return float(value)
+
+
 @dataclass(frozen=True)
 class ScalingRegimePoint:
     """Single benchmark measurement at swarm size N for a defense regime."""
@@ -40,6 +59,25 @@ class ScalingRegimePoint:
     honest_cosine_fidelity: float
     memory_mb: float
 
+    def __post_init__(self) -> None:
+        _require_int(self.n_workers, "n_workers", min_value=5)
+        _require_int(self.byzantine_workers, "byzantine_workers", min_value=0)
+        if self.byzantine_workers >= self.n_workers:
+            raise ValueError("byzantine_workers must be < n_workers")
+        _require_int(self.grad_dim, "grad_dim", min_value=1)
+        if self.mode not in VALID_DEFENSE_MODES:
+            raise ValueError(f"Unsupported defense mode: {self.mode}")
+        for metric_name in ("wall_clock_ms", "verifier_ms", "memory_mb"):
+            val = _require_finite_float(getattr(self, metric_name), metric_name)
+            if val < 0.0:
+                raise ValueError(f"{metric_name} must be >= 0.0")
+        rej = _require_finite_float(self.byzantine_rejection_rate, "byzantine_rejection_rate")
+        if not 0.0 <= rej <= 1.0:
+            raise ValueError("byzantine_rejection_rate must be in [0.0, 1.0]")
+        cos = _require_finite_float(self.honest_cosine_fidelity, "honest_cosine_fidelity")
+        if not -1.0 - 1e-6 <= cos <= 1.0 + 1e-6:
+            raise ValueError("honest_cosine_fidelity must be in [-1.0, 1.0]")
+
 
 @dataclass(frozen=True)
 class ScalingBenchmarkReport:
@@ -51,6 +89,24 @@ class ScalingBenchmarkReport:
     pareto_winner_by_n: dict[int, str]
     crossover_swarm_size_n: int
     all_invariants_passed: bool
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.experiment_id, str) or not self.experiment_id.strip():
+            raise ValueError("experiment_id must be a non-empty string")
+        if not isinstance(self.roadmap_id, str) or not self.roadmap_id.strip():
+            raise ValueError("roadmap_id must be a non-empty string")
+        if not isinstance(self.points, tuple) or not self.points or not all(
+            isinstance(p, ScalingRegimePoint) for p in self.points
+        ):
+            raise ValueError("points must be a non-empty tuple of ScalingRegimePoint")
+        if not isinstance(self.pareto_winner_by_n, dict) or not self.pareto_winner_by_n or not all(
+            not isinstance(k, bool) and isinstance(k, int) and k >= 5 and v in VALID_DEFENSE_MODES
+            for k, v in self.pareto_winner_by_n.items()
+        ):
+            raise ValueError("pareto_winner_by_n must map swarm sizes >= 5 to valid defense modes")
+        _require_int(self.crossover_swarm_size_n, "crossover_swarm_size_n", min_value=5)
+        if not isinstance(self.all_invariants_passed, bool):
+            raise ValueError("all_invariants_passed must be a boolean")
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -72,11 +128,20 @@ def multi_krum_select(
 
      satisfies the classic Blanchard et al. (2017) condition ``n >= 2f + 3``.
     """
+    if not isinstance(gradients, np.ndarray) or gradients.ndim != 2 or gradients.shape[0] < 3 or gradients.shape[1] < 1:
+        raise ValueError("gradients must be a 2D numpy array with shape (n >= 3, d >= 1)")
+    if not np.all(np.isfinite(gradients)):
+        raise ValueError("gradients must contain only finite numbers")
+    _require_int(num_byzantine, "num_byzantine", min_value=0)
     n, _ = gradients.shape
     f = max(0, min(int(num_byzantine), (n - 3) // 2))
     k_neighbors = max(1, n - f - 2)
     if m_select is None:
         m_select = max(1, n - f)
+    else:
+        _require_int(m_select, "m_select", min_value=1)
+        if m_select > n:
+            raise ValueError("m_select cannot exceed number of workers")
 
     # Fast vectorized Gram-matrix pairwise squared Euclidean distance O(N^2 d)
     norms_sq = np.sum(gradients * gradients, axis=1, keepdims=True)
@@ -98,13 +163,13 @@ def evaluate_defense_regime(
     seed: int = 42,
 ) -> ScalingRegimePoint:
     """Benchmark a single Byzantine defense regime at swarm size ``n_workers``."""
-    if n_workers < 5:
-        raise ValueError("n_workers must be >= 5")
-    if mode not in {
-        "multi_krum_plus_10pct_replay",
-        "zk_opoi_v5_int8_full",
-        "hierarchical_subswarm_krum_zk_hybrid",
-    }:
+    _require_int(n_workers, "n_workers", min_value=5)
+    _require_int(grad_dim, "grad_dim", min_value=1)
+    _require_int(seed, "seed", min_value=0)
+    byzantine_ratio = _require_finite_float(byzantine_ratio, "byzantine_ratio")
+    if not 0.0 < byzantine_ratio < 0.5:
+        raise ValueError("byzantine_ratio must be in (0.0, 0.5)")
+    if mode not in VALID_DEFENSE_MODES:
         raise ValueError(f"Unsupported defense mode: {mode}")
 
     rng = np.random.default_rng(seed + n_workers)
@@ -249,6 +314,14 @@ def run_e21_scaling_benchmark(
     byzantine_ratio: float = 0.20,
 ) -> ScalingBenchmarkReport:
     """Execute the full Experiment E21 benchmark across ``swarm_sizes``."""
+    if isinstance(swarm_sizes, (str, bytes)) or not isinstance(swarm_sizes, Sequence) or len(swarm_sizes) == 0:
+        raise ValueError("swarm_sizes must be a non-empty sequence of integers >= 5")
+    for n in swarm_sizes:
+        _require_int(n, "swarm_size", min_value=5)
+    _require_int(grad_dim, "grad_dim", min_value=1)
+    byzantine_ratio = _require_finite_float(byzantine_ratio, "byzantine_ratio")
+    if not 0.0 < byzantine_ratio < 0.5:
+        raise ValueError("byzantine_ratio must be in (0.0, 0.5)")
     modes = (
         "multi_krum_plus_10pct_replay",
         "zk_opoi_v5_int8_full",

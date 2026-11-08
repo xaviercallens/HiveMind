@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import platform
 import sys
@@ -43,7 +44,7 @@ from hivemind.swarm.amcp_kafka_transport import (
     EnvelopeVerifier,
     HMACKeyring,
     TransportRecord,
-     VerifiedEvent,
+    VerifiedEvent,
     sign_envelope,
 )
 
@@ -60,6 +61,8 @@ FEDERATION_TOPIC = KAFKA_TOPICS["federation"]
 def resolve_opentrainer_keyring(keyring: HMACKeyring | None = None) -> HMACKeyring:
     """Resolve the AMCP HMAC keyring from environment or deterministic local fallback."""
     if keyring is not None:
+        if not isinstance(keyring, HMACKeyring):
+            raise TypeError("keyring must be an HMACKeyring instance or None")
         return keyring
     if os.environ.get("HIVEMIND_AMCP_HMAC_KEYS", "").strip():
         return HMACKeyring.from_env()
@@ -72,6 +75,10 @@ def resolve_opentrainer_keyring(keyring: HMACKeyring | None = None) -> HMACKeyri
 
 def verify_federation_envelope(verifier: EnvelopeVerifier, envelope: Mapping[str, Any]) -> VerifiedEvent:
     """Verify a CloudEvents 1.0 JSON envelope dict on the federation topic using EnvelopeVerifier."""
+    if not isinstance(verifier, EnvelopeVerifier):
+        raise TypeError("verifier must be an EnvelopeVerifier")
+    if not isinstance(envelope, Mapping):
+        raise TypeError("envelope must be a Mapping")
     raw = json.dumps(dict(envelope), sort_keys=True, separators=(",", ":")).encode("utf-8")
     rec = TransportRecord(
         topic=FEDERATION_TOPIC,
@@ -113,6 +120,42 @@ class LowCostVMProfile:
     keepalive_cron: str = "*/5 * * * *"
     systemd_unit: str = "hivemind-opentrainer.service"
 
+    def __post_init__(self) -> None:
+        for str_field in (
+            "vm_name",
+            "project_id",
+            "zone",
+            "machine_type",
+            "provisioning_model",
+            "termination_action",
+            "vpc_private_ip",
+            "wireguard_overlay_ip",
+            "boot_disk_type",
+            "keepalive_scheduler_job",
+            "keepalive_cron",
+            "systemd_unit",
+        ):
+            val = getattr(self, str_field)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{str_field} must be a non-empty string")
+        if isinstance(self.vcpus, bool) or not isinstance(self.vcpus, int) or self.vcpus < 1:
+            raise ValueError("vcpus must be an integer >= 1")
+        if isinstance(self.memory_mib, bool) or not isinstance(self.memory_mib, int) or self.memory_mib < 256:
+            raise ValueError("memory_mib must be an integer >= 256")
+        if isinstance(self.accelerators_count, bool) or not isinstance(self.accelerators_count, int) or self.accelerators_count < 0:
+            raise ValueError("accelerators_count must be an integer >= 0")
+        if isinstance(self.boot_disk_gb, bool) or not isinstance(self.boot_disk_gb, int) or self.boot_disk_gb < 1:
+            raise ValueError("boot_disk_gb must be an integer >= 1")
+        if not isinstance(self.requires_t4_gpu, bool) or not isinstance(self.static_external_ip_reserved, bool):
+            raise ValueError("requires_t4_gpu and static_external_ip_reserved must be booleans")
+        if (
+            isinstance(self.estimated_monthly_cost_usd, bool)
+            or not isinstance(self.estimated_monthly_cost_usd, (int, float))
+            or not math.isfinite(float(self.estimated_monthly_cost_usd))
+            or float(self.estimated_monthly_cost_usd) < 0.0
+        ):
+            raise ValueError("estimated_monthly_cost_usd must be a finite non-negative number")
+
     def validate_governance(self) -> dict[str, Any]:
         """Verify strict compliance with AGENTS.md GCP cost governance rules."""
         checks = {
@@ -152,6 +195,38 @@ class OpenTrainerConfig:
     cpu_sentinel_inner_steps: int = 10
     checkpoint_path: Path | None = None
     report_path: Path | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.run_id, str) or not self.run_id.strip():
+            raise ValueError("run_id must be a non-empty string")
+        if not isinstance(self.cpu_sentinel_learner_id, str) or not self.cpu_sentinel_learner_id.strip():
+            raise ValueError("cpu_sentinel_learner_id must be a non-empty string")
+        if isinstance(self.learners, (str, bytes)) or not isinstance(self.learners, Sequence) or len(self.learners) == 0:
+            raise ValueError("learners must be a non-empty sequence of learner IDs")
+        self.learners = tuple(self.learners)
+        if not all(isinstance(lid, str) and bool(lid.strip()) for lid in self.learners) or len(set(self.learners)) != len(self.learners):
+            raise ValueError("learners must be unique non-empty strings")
+        if isinstance(self.quorum, bool) or not isinstance(self.quorum, int) or not 1 <= self.quorum <= len(self.learners):
+            raise ValueError(f"quorum must be an integer in [1, {len(self.learners)}]")
+        for int_field, min_val in (
+            ("rounds", 1),
+            ("seed", 0),
+            ("inner_steps", 1),
+            ("batch_size", 1),
+            ("shard_size", 1),
+            ("cpu_sentinel_inner_steps", 1),
+        ):
+            val = getattr(self, int_field)
+            if isinstance(val, bool) or not isinstance(val, int) or val < min_val:
+                raise ValueError(f"{int_field} must be an integer >= {min_val}")
+        for pos_float_field in ("inner_lr", "outer_lr", "max_delta_l2", "round_deadline_s"):
+            fval = getattr(self, pos_float_field)
+            if isinstance(fval, bool) or not isinstance(fval, (int, float)) or not math.isfinite(float(fval)) or float(fval) <= 0.0:
+                raise ValueError(f"{pos_float_field} must be a finite number > 0")
+        if isinstance(self.outer_mu, bool) or not isinstance(self.outer_mu, (int, float)) or not math.isfinite(float(self.outer_mu)) or not 0.0 <= float(self.outer_mu) < 1.0:
+            raise ValueError("outer_mu must be in [0.0, 1.0)")
+        if not isinstance(self.cpu_sentinel_when_t4_offline, bool):
+            raise ValueError("cpu_sentinel_when_t4_offline must be a boolean")
 
 
 def _atomic_write_bytes(target: Path, data: bytes) -> None:
@@ -288,6 +363,8 @@ class PermanentOpenTrainerOrchestrator:
 
     def get_signed_offer_envelope(self, ttl_s: float = 900.0) -> dict[str, Any]:
         """Return the current round's task_offer wrapped in an HMAC-signed AMCP envelope."""
+        if isinstance(ttl_s, bool) or not isinstance(ttl_s, (int, float)) or not math.isfinite(float(ttl_s)) or float(ttl_s) <= 0.0:
+            raise ValueError("ttl_s must be a finite number > 0")
         with self._lock:
             if self.is_completed:
                 abort_ev = fed.build_abort(
@@ -568,6 +645,19 @@ def execute_http_learner_round(
 ) -> dict[str, Any]:
     """Pull one signed task_offer from an OpenTrainer HTTP endpoint, train QLoRA inner steps, and push task_result."""
     import urllib.request
+
+    if not isinstance(orchestrator_url, str) or not (orchestrator_url.startswith("http://") or orchestrator_url.startswith("https://")):
+        raise ValueError("orchestrator_url must start with http:// or https://")
+    if not isinstance(learner_id, str) or not learner_id.strip():
+        raise ValueError("learner_id must be a non-empty string")
+    if isinstance(learner_index, bool) or not isinstance(learner_index, int) or learner_index < 0:
+        raise ValueError("learner_index must be a non-negative integer")
+    if not isinstance(keyring, HMACKeyring):
+        raise TypeError("keyring must be an HMACKeyring")
+    if isinstance(min_free_mib, bool) or not isinstance(min_free_mib, (int, float)) or not math.isfinite(float(min_free_mib)) or float(min_free_mib) <= 0.0:
+        raise ValueError("min_free_mib must be a finite number > 0")
+    if isinstance(need_mib, bool) or not isinstance(need_mib, (int, float)) or not math.isfinite(float(need_mib)) or float(need_mib) <= 0.0:
+        raise ValueError("need_mib must be a finite number > 0")
 
     verifier = EnvelopeVerifier(keyring)
     pin = fed.code_pin(PIN_FILES)

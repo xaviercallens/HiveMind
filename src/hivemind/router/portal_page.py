@@ -16,6 +16,8 @@ strictly enforces nonce-pinned scripts and styles.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+import re
 from typing import Any
 
 from hivemind.router.catalog import TIERS
@@ -23,9 +25,13 @@ from hivemind.router.google_auth import CLIENT_ID_RE
 from hivemind.router.life_as_a_bee import render_life_as_a_bee_section
 from hivemind.router.telemetry_figures import shown_figure
 
+_PORTAL_NONCE_RE = re.compile(r"^[A-Za-z0-9+/=_-]{1,128}$")
+
 
 def portal_content_security_policy(nonce: str) -> str:
     """Strict Content-Security-Policy for the OpenRouter portal and playground."""
+    if isinstance(nonce, bool) or not isinstance(nonce, str) or not _PORTAL_NONCE_RE.fullmatch(nonce):
+        raise ValueError("nonce must be a 1-128 char URL/base64-safe token")
     return "; ".join([
         "default-src 'none'",
         f"script-src 'nonce-{nonce}'",
@@ -1222,9 +1228,11 @@ PORTAL_I18N_BANNERS: dict[str, dict[str, str]] = {
 
 def normalize_portal_lang(lang: str | None) -> str:
     """Normalize a portal language code to one of ('fr', 'en', 'es', 'de', 'zh'), defaulting to 'en'."""
+    if lang is not None and (isinstance(lang, bool) or not isinstance(lang, str)):
+        raise ValueError("lang must be a string or None")
     if not lang:
         return "en"
-    code = str(lang).strip().lower()[:2]
+    code = lang.strip().lower()[:2]
     return code if code in PORTAL_SUPPORTED_LANGS else "en"
 
 
@@ -1236,6 +1244,16 @@ def render_portal_page(
     live_telemetry: dict[str, Any] | None = None,
 ) -> str:
     """Render the full OpenRouter Portal and Playground HTML page."""
+    portal_content_security_policy(nonce)
+    if client_id is not None:
+        if isinstance(client_id, bool) or not isinstance(client_id, str):
+            raise ValueError("client_id must be a string or None")
+        if client_id == "":
+            client_id = None
+        elif not CLIENT_ID_RE.match(client_id):
+            raise ValueError("invalid Google client id")
+    if live_telemetry is not None and not isinstance(live_telemetry, Mapping):
+        raise ValueError("live_telemetry must be a mapping or None")
     clean_lang = normalize_portal_lang(lang)
     i18n_banner = PORTAL_I18N_BANNERS[clean_lang]
     life_as_a_bee_html = render_life_as_a_bee_section(live_telemetry=live_telemetry)

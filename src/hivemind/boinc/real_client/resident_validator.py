@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import math
 import os
 import signal
 import socket
@@ -59,8 +60,12 @@ class ModelCache:
         sizer: Callable[[Any], int] = lambda obj: 0,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
-        if max_entries < 1:
+        if isinstance(max_entries, bool) or not isinstance(max_entries, int) or max_entries < 1:
             raise ValueError("max_entries must be >= 1")
+        if max_bytes is not None and (isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 1):
+            raise ValueError("max_bytes must be a positive integer when provided")
+        if not callable(loader) or not callable(unloader) or not callable(sizer) or not callable(clock):
+            raise ValueError("loader, unloader, sizer, and clock must be callable")
         self._loader, self._unloader, self._sizer, self._clock = loader, unloader, sizer, clock
         self.max_entries, self.max_bytes = max_entries, max_bytes
         self._lock = threading.RLock()
@@ -193,6 +198,12 @@ class ModelCache:
 # ----------------------------------------------------------------------------------------------------- real model hooks
 def model_key(spec: dict[str, Any], device: str = "cuda:0") -> tuple[str, str, str]:
     """Cache key of the validator's base model: model id, quantisation + LoRA-init signature, device."""
+    if not isinstance(spec, dict) or not all(k in spec for k in ("model_id", "rank", "alpha", "init_seed")):
+        raise ValueError("spec must be a dict containing model_id, rank, alpha, and init_seed")
+    if not isinstance(spec["model_id"], str) or not spec["model_id"].strip():
+        raise ValueError("spec['model_id'] must be a non-empty string")
+    if not isinstance(device, str) or not device.strip():
+        raise ValueError("device must be a non-empty string")
     sig = f"nf4-dq-fp16|r{spec['rank']}|a{spec['alpha']}|s{spec['init_seed']}"
     return (str(spec["model_id"]), sig, device)
 
@@ -335,6 +346,12 @@ class ResidentValidatorServer:
         io_timeout_s: float = 30.0,
         max_message_bytes: int = MAX_MESSAGE_BYTES,
     ) -> None:
+        if isinstance(request_timeout_s, bool) or not isinstance(request_timeout_s, (int, float)) or not math.isfinite(float(request_timeout_s)) or float(request_timeout_s) <= 0.0:
+            raise ValueError("request_timeout_s must be a finite positive number")
+        if isinstance(io_timeout_s, bool) or not isinstance(io_timeout_s, (int, float)) or not math.isfinite(float(io_timeout_s)) or float(io_timeout_s) <= 0.0:
+            raise ValueError("io_timeout_s must be a finite positive number")
+        if isinstance(max_message_bytes, bool) or not isinstance(max_message_bytes, int) or max_message_bytes < 1:
+            raise ValueError("max_message_bytes must be a positive integer")
         self.socket_path = Path(socket_path)
         self.work_root = Path(work_root).resolve()
         self.cache = cache
@@ -466,6 +483,12 @@ class ResidentValidatorServer:
 # -------------------------------------------------------------------------------------------------------------- client
 class ResidentValidatorClient:
     def __init__(self, socket_path: str | os.PathLike[str], timeout_s: float = DEFAULT_REQUEST_TIMEOUT_S + 60.0, max_message_bytes: int = MAX_MESSAGE_BYTES) -> None:
+        if not str(socket_path).strip():
+            raise ValueError("socket_path must be non-empty")
+        if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not math.isfinite(float(timeout_s)) or float(timeout_s) <= 0.0:
+            raise ValueError("timeout_s must be a finite positive number")
+        if isinstance(max_message_bytes, bool) or not isinstance(max_message_bytes, int) or max_message_bytes < 1:
+            raise ValueError("max_message_bytes must be a positive integer")
         self.socket_path, self.timeout_s, self.max_message_bytes = str(socket_path), timeout_s, max_message_bytes
 
     def _call(self, req: dict[str, Any]) -> dict[str, Any]:

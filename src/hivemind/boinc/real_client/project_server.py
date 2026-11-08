@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import threading
 import time
@@ -44,6 +45,10 @@ class ProjectServer:
     def __init__(self, workdir: Path, port: int = 0, host: str = "127.0.0.1", validate=validate_result) -> None:
         if host not in ("127.0.0.1", "localhost"):
             raise ValueError("the local BOINC project server only binds to the loopback interface")
+        if isinstance(port, bool) or not isinstance(port, int) or not (0 <= port <= 65535):
+            raise ValueError("port must be an integer in [0, 65535]")
+        if not callable(validate):
+            raise ValueError("validate must be callable")
         self.dir = Path(workdir)
         for sub in ("download", "upload"):
             (self.dir / sub).mkdir(parents=True, exist_ok=True)
@@ -88,16 +93,20 @@ class ProjectServer:
                 self.send_error(404)
 
         self.httpd = ThreadingHTTPServer((host, port), Handler)
+        self._started = False
         self.port = self.httpd.server_address[1]
         self.url = f"http://{host}:{self.port}"
         self.master_url = f"{self.url}/hivemind/"
 
     # ------------------------------------------------------------------ lifecycle
     def start(self) -> None:
+        self._started = True
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
 
     def stop(self) -> None:
-        self.httpd.shutdown()
+        if self._started:
+            self.httpd.shutdown()
+            self._started = False
         self.httpd.server_close()
         for t in self._threads:
             t.join(timeout=120)
@@ -115,6 +124,14 @@ class ProjectServer:
         max_nbytes: int = 5_000_000,
     ) -> str:
         """Register a workunit: ``spec`` is the ``in.json`` input; ``extra_inputs`` maps an open name to bytes."""
+        if not isinstance(spec, dict) or not isinstance(spec.get("wu_id"), str) or not spec["wu_id"].strip():
+            raise ValueError("spec must contain a non-empty string wu_id")
+        if not isinstance(app, str) or not app.strip():
+            raise ValueError("app must be a non-empty string")
+        if isinstance(max_nbytes, bool) or not isinstance(max_nbytes, int) or max_nbytes <= 0:
+            raise ValueError("max_nbytes must be a positive integer")
+        if not outputs or not all(isinstance(o, str) and o.strip() and "/" not in o and ".." not in o for o in outputs):
+            raise ValueError("outputs must be a non-empty sequence of safe file names")
         wu = spec["wu_id"]
         volunteer_spec = {k: v for k, v in spec.items() if k != "reference_trajectories"}
         inputs = {"in.json": json.dumps(volunteer_spec, sort_keys=True).encode(), **(extra_inputs or {})}
@@ -140,7 +157,11 @@ class ProjectServer:
         return wu
 
     def output_path(self, wu_id: str, open_name: str) -> Path:
+        if wu_id not in self.workunits:
+            raise KeyError(f"unknown wu_id {wu_id!r}")
         wu = self.workunits[wu_id]
+        if open_name not in wu["outputs"]:
+            raise ValueError(f"unknown output open_name {open_name!r} for workunit {wu_id!r}")
         return self.dir / "upload" / f"{wu['result_name']}_{wu['outputs'].index(open_name)}"
 
     # ------------------------------------------------------------------ scheduler RPC
@@ -300,6 +321,8 @@ class ProjectServer:
             (self.dir / "ledger.json").write_text(json.dumps({k: v.to_dict() for k, v in self.verdicts.items()}, indent=2, sort_keys=True))
 
     def wait_all(self, timeout: float) -> bool:
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(float(timeout)) or float(timeout) < 0.0:
+            raise ValueError("timeout must be a finite non-negative number")
         end = time.time() + timeout
         while time.time() < end:
             with self.lock:

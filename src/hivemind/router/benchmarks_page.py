@@ -125,6 +125,8 @@ def _fmt_result(r: dict[str, Any]) -> str:
 
 def benchmarks_payload(live_telemetry: dict[str, Any] | None = None) -> dict[str, Any]:
     """JSON for ``GET /v1/hivemind/benchmarks``: measured results and the list of unmeasured tiers; no comparison with other vendors."""
+    if live_telemetry is not None and not isinstance(live_telemetry, dict):
+        raise ValueError("live_telemetry must be a dict or None")
     measured = load_measured_results()
     return {
         "object": "hivemind.benchmarks",
@@ -149,6 +151,10 @@ def _live_line(live_telemetry: dict[str, Any] | None, t: dict[str, str]) -> str:
 
 def render_benchmarks_page(lang: str = "en", nonce: str = "", live_telemetry: dict[str, Any] | None = None) -> str:
     """The HTML page. Every number on it comes from ``measured_results.json`` or from the live telemetry argument."""
+    if not isinstance(lang, str) or not isinstance(nonce, str):
+        raise ValueError("lang and nonce must be strings")
+    if live_telemetry is not None and not isinstance(live_telemetry, dict):
+        raise ValueError("live_telemetry must be a dict or None")
     lang = lang if lang in SUPPORTED_BENCHMARK_LANGS else "en"
     t = _TEXT[lang]
     measured = load_measured_results()

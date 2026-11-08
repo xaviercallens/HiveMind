@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import math
 import os
 import smtplib
 import time
@@ -53,6 +54,8 @@ GITHUB_REPO_URL: str = "https://github.com/xaviercallens/HiveMind"
 
 def build_install_producer_shell_script(gateway_url: str = PUBLIC_RUCHE_URL) -> str:
     """Return a standalone 1-command bash onboarding script for GPU Producers."""
+    if not isinstance(gateway_url, str) or not gateway_url.strip() or not gateway_url.startswith(("https://", "http://")):
+        raise ValueError("gateway_url must be a non-empty http(s) URL")
     gw = gateway_url.rstrip("/")
     return f"""#!/usr/bin/env bash
 # ==============================================================================
@@ -133,6 +136,16 @@ def build_welcome_email_content(
     is_pioneer_first_user: bool = False,
 ) -> dict[str, Any]:
     """Generate the bilingual (EN + FR) subject, plain-text body, and HTML body for a user."""
+    if not isinstance(account_id, str) or not account_id.strip():
+        raise ValueError("account_id must be a non-empty string")
+    if not isinstance(handle, str):
+        raise ValueError("handle must be a string")
+    if not isinstance(role, str) or not role.strip():
+        raise ValueError("role must be a non-empty string")
+    if isinstance(balance_hmt, bool) or not isinstance(balance_hmt, (int, float)) or not math.isfinite(float(balance_hmt)) or float(balance_hmt) < 0.0:
+        raise ValueError("balance_hmt must be a finite non-negative float")
+    if not isinstance(is_pioneer_first_user, bool):
+        raise ValueError("is_pioneer_first_user must be a boolean")
     safe_handle = html.escape(handle or account_id[:12])
     safe_account = html.escape(account_id)
     safe_role = html.escape(role)

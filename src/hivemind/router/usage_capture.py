@@ -218,6 +218,8 @@ def _count_keyword_hits(lower_text: str, keywords: Sequence[str]) -> int:
 
 def classify_prompt_intent_and_language(messages: Sequence[Mapping[str, Any]]) -> PromptIntent:
     """Classify the task domain, natural language (`fr`/`en`/`code_heavy`), and specialist tier without storing the prompt."""
+    if isinstance(messages, (str, bytes)) or not isinstance(messages, Sequence):
+        raise ValueError("messages must be a sequence of message mappings")
     text = _extract_messages_text(messages).strip()
     if not text:
         return PromptIntent(task_domain="general_chat", language="en", preferred_tier=None)
@@ -263,6 +265,8 @@ def classify_prompt_intent_and_language(messages: Sequence[Mapping[str, Any]]) -
 
 def detect_client_sdk(headers: Mapping[str, str]) -> ClientAttribution:
     """Identify the calling IDE, agent framework, or SDK from `User-Agent`, `X-Title`, and `HTTP-Referer`."""
+    if not isinstance(headers, Mapping):
+        raise ValueError("headers must be a mapping")
     ua = str(headers.get("user-agent", "") or "").lower()
     raw_title = str(headers.get("x-title", "") or headers.get("x-app-title", "") or "").strip()
     referer = str(headers.get("http-referer", "") or headers.get("referer", "") or "").lower()
@@ -301,6 +305,11 @@ def detect_client_sdk(headers: Mapping[str, str]) -> ClientAttribution:
 
 def compute_nocturnal_moe_workunit_weights(domain_token_totals: Mapping[str, int]) -> dict[str, float]:
     """Translate observed daytime domain token demand into nocturnal BOINC / QLoRA workunit weights."""
+    if not isinstance(domain_token_totals, Mapping):
+        raise ValueError("domain_token_totals must be a mapping")
+    for k, v in domain_token_totals.items():
+        if isinstance(v, bool) or not isinstance(v, int) or v < 0:
+            raise ValueError(f"domain token count for {k!r} must be a non-negative integer")
     coder_tokens = sum(
         int(domain_token_totals.get(d, 0))
         for d in ("coding_python", "coding_rust", "coding_web_ts", "coding_general")

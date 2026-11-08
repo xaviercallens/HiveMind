@@ -213,7 +213,7 @@ def test_default_google_verifier_and_token_exchange_are_used_when_not_injected(m
         def json():
             return {"id_token": ""}
 
-    def fake_post(url, data, timeout):
+    def fake_post(url, data, timeout, headers=None):
         calls["url"] = url
         return _Resp()
 
@@ -227,7 +227,7 @@ def test_default_google_verifier_and_token_exchange_are_used_when_not_injected(m
     cb = client.get(f"/auth/google/callback?state={q['state'][0]}&code=c", follow_redirects=False)
     assert calls["url"] == appmod.GOOGLE_TOKEN_URL and "signin-error=exchange" in cb.headers["location"]
 
-    def failing_post(url, data, timeout):
+    def failing_post(url, data, timeout, headers=None):
         raise httpx.ConnectError("down")
 
     monkeypatch.setattr(appmod.httpx, "post", failing_post)

@@ -48,6 +48,7 @@ OIDC_COOKIE = "hm_oidc"
 SESSION_TTL_S = 12 * 3600
 OIDC_TTL_S = 600
 GOOGLE_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 PAPER_DOI = "10.5281/zenodo.24043016"
 UI_HEADER = "X-HiveMind-UI"
@@ -171,6 +172,7 @@ def mount_web_v32(
     google_verifier: Any | None = None,
     token_exchanger: Callable[[Mapping[str, str]], dict[str, Any]] | None = None,
     clock: Callable[[], float] = time.time,
+    oidc_verifiers: Mapping[str, Any] | None = None,
 ) -> None:
     """Register the v3.2 routes on ``app``. Call it before the legacy routes so that, with ``HIVEMIND_WEB_V32=1``, the
     v3.2 page answers ``/``, ``/auth``, ``/login`` and ``/signup``. ``/v32`` always serves it (for a canary)."""
@@ -185,26 +187,68 @@ def mount_web_v32(
         clock=clock,
     )
     public_host = urlsplit(public_url).netloc.lower() if public_url else ""
+    take_over_root = e.get("HIVEMIND_WEB_V32", "").strip() == "1"
+    log = logging.getLogger("hivemind.web_v32")
+    https_site = public_url.startswith("https://")
+
+    # ---- sign-in providers: each appears only when fully configured -------------------------------------------------
+    # kind "oidc": an ID token is verified here (signature, issuer, audience, expiry, nonce, e-mail rule) and again by the
+    # gateway. kind "github": GitHub has no ID token; the gateway exchanges the code itself with its own client secret.
+    providers: dict[str, dict[str, Any]] = {}
     google_id = e.get("HIVEMIND_GOOGLE_CLIENT_ID", "").strip()
     google_secret = e.get("HIVEMIND_GOOGLE_CLIENT_SECRET", "").strip()
-    google_enabled = bool(google_id and google_secret and public_url.startswith("https://"))
-    take_over_root = e.get("HIVEMIND_WEB_V32", "").strip() == "1"
+    if google_id and google_secret and https_site:
+        if google_verifier is None:
+            from hivemind.router.google_auth import GoogleIdTokenVerifier
 
-    if google_enabled and google_verifier is None:
-        from hivemind.router.google_auth import GoogleIdTokenVerifier
-
+            try:
+                google_verifier = GoogleIdTokenVerifier(google_id)
+            except ValueError:
+                # a malformed client id disables Google sign-in only; it must not take the whole portal down
+                log.warning("HIVEMIND_GOOGLE_CLIENT_ID is malformed: Google sign-in disabled")
+        if google_verifier is not None:
+            providers["google"] = {
+                "kind": "oidc", "label": "Google", "client_id": google_id, "client_secret": google_secret,
+                "authorize_url": GOOGLE_AUTHORIZE_URL, "token_url": GOOGLE_TOKEN_URL, "scope": "openid email profile",
+                "verifier": google_verifier, "register": "/v1/hivemind/register/google", "link": "/api/v1/auth/link/google",
+                "extra": {"prompt": "select_account"},
+            }
+    oidc_text = e.get("HIVEMIND_OIDC_PROVIDERS", "").strip()
+    if oidc_text and https_site:
         try:
-            google_verifier = GoogleIdTokenVerifier(google_id)
-        except ValueError:
-            # a malformed client id disables Google sign-in only; it must not take the whole portal down
-            logging.getLogger("hivemind.web_v32").warning("HIVEMIND_GOOGLE_CLIENT_ID is malformed: Google sign-in disabled")
-            google_enabled = False
+            entries = json.loads(oidc_text)
+            verifiers = dict(oidc_verifiers) if oidc_verifiers is not None else {}
+            if oidc_verifiers is None:
+                from hivemind.router.oidc_auth import providers_from_json
 
-    def _exchange(form: Mapping[str, str]) -> dict[str, Any]:
+                verifiers = dict(providers_from_json(oidc_text))
+            for entry in entries if isinstance(entries, list) else []:
+                name = str(entry.get("name", ""))
+                secret_value = e.get(f"HIVEMIND_OIDC_{name.upper()}_CLIENT_SECRET", "").strip()
+                auth_url, token_url = str(entry.get("authorization_endpoint", "")), str(entry.get("token_endpoint", ""))
+                if name in verifiers and name not in providers and secret_value and auth_url.startswith("https://") and token_url.startswith("https://"):
+                    providers[name] = {
+                        "kind": "oidc", "label": str(entry.get("label") or name.capitalize())[:40], "client_id": str(entry.get("client_id", "")),
+                        "client_secret": secret_value, "authorize_url": auth_url, "token_url": token_url, "scope": "openid email profile",
+                        "verifier": verifiers[name], "register": f"/v1/hivemind/register/oidc/{name}", "link": f"/api/v1/auth/link/{name}",
+                        "extra": {},
+                    }
+        except (ValueError, TypeError, AttributeError) as exc:
+            # a broken provider list disables those providers only; it must not take the portal down
+            log.warning("HIVEMIND_OIDC_PROVIDERS ignored: %s", type(exc).__name__)
+    github_id = e.get("HIVEMIND_GITHUB_CLIENT_ID", "").strip()
+    if github_id and https_site:
+        providers["github"] = {
+            "kind": "github", "label": "GitHub", "client_id": github_id, "authorize_url": GITHUB_AUTHORIZE_URL,
+            "scope": "read:user user:email", "register": "/v1/hivemind/register/github", "link": "/api/v1/auth/link/github", "extra": {},
+        }
+    google_enabled = "google" in providers
+
+    def _exchange(form: Mapping[str, str], token_url: str = GOOGLE_TOKEN_URL) -> dict[str, Any]:
         if token_exchanger is not None:
             return token_exchanger(form)
         try:
-            r = httpx.post(GOOGLE_TOKEN_URL, data=dict(form), timeout=10.0)
+            r = httpx.post(token_url, data=dict(form), headers={"Accept": "application/json"}, timeout=10.0)
             return r.json() if r.status_code == 200 else {}
         except (httpx.HTTPError, ValueError):
             return {}
@@ -308,7 +352,7 @@ def mount_web_v32(
             _cookie(resp, CSRF_COOKIE, secrets.token_urlsafe(24), SESSION_TTL_S, http_only=False, same_site="strict")
         return resp
 
-    v32_prefixes = ("/v32", "/auth/reset", "/auth/google/")
+    v32_prefixes = ("/v32", "/auth/")  # every /auth/<provider>/... path is the portal's, configured or not
     root_pages = ("/", "/auth", "/login", "/signup") if take_over_root else ()
 
     @app.middleware("http")
@@ -383,6 +427,7 @@ def mount_web_v32(
             "password_login": fernet is not None,
             "password_reset_email": reset_email and fernet is not None,
             "google": google_enabled and fernet is not None,
+            "providers": [{"name": n, "label": c["label"]} for n, c in providers.items()] if fernet is not None else [],
         })
 
     @app.get("/v32/api/account")
@@ -534,71 +579,87 @@ def mount_web_v32(
             return _err("reset_invalid", 400)
         return _json({"status": "PASSWORD_RESET", "message": "Your password is changed. Sign in with it."})
 
-    # ---- Google sign-in (authorization code + PKCE + nonce, server side) ----------------------------------------------
-    @app.get("/auth/google/start", include_in_schema=False)
-    def google_start(request: Request, link: int = 0) -> Response:
-        if not google_enabled or fernet is None:
+    # ---- single sign-on (authorization code + PKCE S256 + state, and nonce for OpenID Connect; server side) -------------
+    @app.get("/auth/{provider}/start", include_in_schema=False)
+    def sso_start(provider: str, request: Request, link: int = 0) -> Response:
+        cfg = providers.get(provider)
+        if cfg is None or fernet is None:
             return _security(Response(status_code=404))
         state, nonce = secrets.token_urlsafe(24), secrets.token_urlsafe(24)
         verifier = secrets.token_urlsafe(48)
         challenge = _b64url(hashlib.sha256(verifier.encode("ascii")).digest())
         want_link = bool(link) and _read_session(request) is not None
         params = {
-            "client_id": google_id,
-            "redirect_uri": f"{public_url}/auth/google/callback",
+            "client_id": cfg["client_id"],
+            "redirect_uri": f"{public_url}/auth/{provider}/callback",
             "response_type": "code",
-            "scope": "openid email profile",
+            "scope": cfg["scope"],
             "state": state,
-            "nonce": nonce,
             "code_challenge": challenge,
             "code_challenge_method": "S256",
-            "prompt": "select_account",
+            **cfg["extra"],
         }
-        resp = _security(RedirectResponse(f"{GOOGLE_AUTHORIZE_URL}?{urlencode(params)}", status_code=302))
-        sealed = fernet.encrypt_at_time(json.dumps({"s": state, "n": nonce, "v": verifier, "l": want_link}).encode("utf-8"), int(clock())).decode("ascii")
-        _cookie(resp, OIDC_COOKIE, sealed, OIDC_TTL_S, path="/auth/google")
+        if cfg["kind"] == "oidc":
+            params["nonce"] = nonce
+        resp = _security(RedirectResponse(f"{cfg['authorize_url']}?{urlencode(params)}", status_code=302))
+        sealed = fernet.encrypt_at_time(
+            json.dumps({"p": provider, "s": state, "n": nonce, "v": verifier, "l": want_link}).encode("utf-8"), int(clock())
+        ).decode("ascii")
+        _cookie(resp, OIDC_COOKIE, sealed, OIDC_TTL_S, path=f"/auth/{provider}")
         return resp
 
-    @app.get("/auth/google/callback", include_in_schema=False)
-    def google_callback(request: Request, state: str = "", code: str = "", error: str = "") -> Response:
+    @app.get("/auth/{provider}/callback", include_in_schema=False)
+    def sso_callback(provider: str, request: Request, state: str = "", code: str = "", error: str = "") -> Response:
+        cfg = providers.get(provider)
+
         def done(fragment: str) -> Response:
             resp = _security(RedirectResponse(f"/v32#{fragment}", status_code=302))
-            resp.delete_cookie(OIDC_COOKIE, path="/auth/google", secure=True, httponly=True, samesite="lax")
+            resp.delete_cookie(OIDC_COOKIE, path=f"/auth/{provider}", secure=True, httponly=True, samesite="lax")
             return resp
 
-        if not google_enabled or fernet is None:
+        if cfg is None or fernet is None:
             return _security(Response(status_code=404))
         try:
             sealed = json.loads(fernet.decrypt_at_time(request.cookies.get(OIDC_COOKIE, "").encode("ascii"), OIDC_TTL_S, int(clock())))
         except (InvalidToken, ValueError):
             return done("signin-error=expired")
+        if str(sealed.get("p", provider)) != provider:
+            return done("signin-error=state")
         if error or not code or not state or not _eq(state, str(sealed.get("s", ""))):
             return done("signin-error=state")
-        tokens = _exchange({
-            "code": code,
-            "client_id": google_id,
-            "client_secret": google_secret,
-            "redirect_uri": f"{public_url}/auth/google/callback",
-            "grant_type": "authorization_code",
-            "code_verifier": str(sealed.get("v", "")),
-        })
-        id_token = str(tokens.get("id_token") or "")
-        if not id_token:
-            return done("signin-error=exchange")
-        try:
-            google_verifier.verify(id_token)  # signature, issuer, audience, expiry, email_verified
-        except Exception:
-            return done("signin-error=token")
-        if not _eq(str(_jwt_claims_unverified(id_token).get("nonce", "")), str(sealed.get("n", ""))):
-            return done("signin-error=nonce")
+        redirect_uri = f"{public_url}/auth/{provider}/callback"
         session = _read_session(request)
-        if sealed.get("l") and session is not None:
-            status, _ = _gw_post(request, "/api/v1/auth/link/google", {"id_token": id_token}, bearer=str(session["k"]))
+        want_link = bool(sealed.get("l")) and session is not None
+
+        if cfg["kind"] == "github":
+            payload = {"code": code[:200], "code_verifier": str(sealed.get("v", "")), "redirect_uri": redirect_uri}
+        else:
+            tokens = _exchange({
+                "code": code,
+                "client_id": cfg["client_id"],
+                "client_secret": cfg["client_secret"],
+                "redirect_uri": redirect_uri,
+                "grant_type": "authorization_code",
+                "code_verifier": str(sealed.get("v", "")),
+            }, cfg["token_url"])
+            id_token = str(tokens.get("id_token") or "")
+            if not id_token:
+                return done("signin-error=exchange")
+            try:
+                cfg["verifier"].verify(id_token)  # signature, issuer, audience, expiry, e-mail rule
+            except Exception:
+                return done("signin-error=token")
+            if not _eq(str(_jwt_claims_unverified(id_token).get("nonce", "")), str(sealed.get("n", ""))):
+                return done("signin-error=nonce")
+            payload = {"id_token": id_token}
+
+        if want_link:
+            status, _ = _gw_post(request, cfg["link"], payload, bearer=str(session["k"]))
             return done("linked" if status == 200 else "signin-error=link")
-        status, body = _gw_post(request, "/v1/hivemind/register/google", {"id_token": id_token})
+        status, body = _gw_post(request, cfg["register"], payload)
         key = str(body.get("api_key") or "")
         if status != 200 or not key.startswith("hm-"):
             return done("signin-error=gateway")
         resp = done("account")
-        _write_session(resp, key=key, handle="Google account", role=str(body.get("role", "")))
+        _write_session(resp, key=key, handle=f"{cfg['label']} account", role=str(body.get("role", "")))
         return resp

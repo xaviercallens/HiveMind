@@ -1003,7 +1003,7 @@ class RouterStore:
         provider opens that account. The caller must have proved ``account_id`` (its hm-... key).
 
         ``HandleTaken`` if the identity is linked to another account or already owns a provider account of its own."""
-        if provider not in self._identity_providers and provider != "google":
+        if provider not in self._identity_providers:
             raise ValueError(f"unknown identity provider {provider!r}")
         subject_hmac = self._hmac_hex(f"{provider}:{subject}")
         own_handle = f"{provider}.{subject_hmac[:32]}"

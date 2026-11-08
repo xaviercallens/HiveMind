@@ -922,6 +922,7 @@ def create_router_app(
     maintenance_notice: str | None = None,
     reset_email_sender: Callable[[str, str], bool] | None = None,
     reset_email_enabled: Callable[[], bool] | None = None,
+    github_verifier: Any | None = None,
 ) -> FastAPI:
     """Build the gateway app. ``resolver`` (host -> IP strings) is injectable for tests of the SSRF guard.
 
@@ -2603,6 +2604,8 @@ def create_router_app(
                 "password_reset_email": bool(_reset_enabled()),
                 "google": bool(google),
                 "google_client_id": google.client_id if google else None,
+                "github": github_verifier is not None,
+                "oidc": sorted(oidc),
                 "change_password": True,
             },
             headers={"Cache-Control": "no-store"},
@@ -2770,6 +2773,68 @@ def create_router_app(
         if created:
             body.update(starter_grant(request, account_id))
         return JSONResponse(body, headers={"Cache-Control": "no-store"})
+
+    if github_verifier is not None:
+        store.allow_identity_provider("github")
+
+    def _github_identity(data: Mapping[str, Any]):
+        from hivemind.router.github_auth import GitHubAuthError
+
+        try:
+            return github_verifier.verify_code(str(data.get("code") or ""), str(data.get("code_verifier") or ""), str(data.get("redirect_uri") or ""))
+        except GitHubAuthError as exc:
+            if exc.code == "github_unreachable":
+                raise RouterError(503, "Could not reach GitHub to check the sign-in; try again.", "service_unavailable", "github_unreachable") from None
+            LOGGER.info("github sign-in refused: %s", exc.code)  # reason code only: never a code or token
+            raise RouterError(401, "GitHub sign-in failed. Sign in again.", "authentication_error", f"github_{exc.code}") from None
+
+    @app.post("/v1/hivemind/register/github")
+    async def register_github(request: Request) -> JSONResponse:
+        """Sign in with GitHub: the gateway exchanges the authorization code itself (never accepts a bare access token)."""
+        if github_verifier is None:
+            raise RouterError(503, "Sign in with GitHub is not enabled on this gateway.", "service_unavailable", "github_signin_disabled")
+        if not register_limiter.allow(client_key(request), clock()):
+            raise RouterError(429, "Too many sign-ins; try again in a minute.", "rate_limit_error", "rate_limited")
+        data = await _parse_auth_payload(request)
+        identity = await run_in_threadpool(_github_identity, data)
+        account_id, api_key, created = store.sign_in_with_identity("github", identity.subject, "prosumer")
+        account = store.get_account(account_id)
+        body: dict[str, Any] = {"account_id": account_id, "api_key": api_key, "role": account.role if account else "prosumer", "created": created}
+        if created:
+            body.update(starter_grant(request, account_id))
+        return JSONResponse(body, headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/v1/auth/link/{provider}")
+    async def auth_link_provider_identity(provider: str, request: Request) -> JSONResponse:
+        """Link an OpenID Connect or GitHub identity to the account whose hm-... key is presented (Google has its own route)."""
+        if provider != "github" and provider not in oidc:
+            return _error_response(404, "Unknown sign-in provider.", "invalid_request_error", "unknown_provider")
+        if provider == "github" and github_verifier is None:
+            return _error_response(503, "Sign in with GitHub is not enabled on this gateway.", "service_unavailable", "github_signin_disabled")
+        if not register_limiter.allow(client_key(request), clock()):
+            return _error_response(429, "Too many attempts; try again in a minute.", "rate_limit_error", "rate_limited")
+        scheme, _, token = request.headers.get("authorization", "").partition(" ")
+        key = token.strip() if scheme.lower() == "bearer" else ""
+        acct = store.authenticate(key) if key.startswith("hm-") else None
+        if acct is None:
+            return _error_response(401, "A valid hm-... API key is required.", "authentication_error", "invalid_api_key")
+        data = await _parse_auth_payload(request)
+        try:
+            if provider == "github":
+                subject = (await run_in_threadpool(_github_identity, data)).subject
+            else:
+                try:
+                    subject = oidc[provider].verify(str(data.get("id_token") or "")).subject
+                except OidcAuthError as exc:
+                    LOGGER.info("%s link refused: %s", provider, exc.code)
+                    return _error_response(401, "Sign-in failed. Sign in again.", "authentication_error", f"{provider}_{exc.code}")
+        except RouterError as exc:
+            return _error_response(exc.status, exc.message, exc.error_type, exc.code)
+        try:
+            store.link_identity(acct.account_id, provider, subject)
+        except HandleTaken as exc:
+            return _error_response(409, str(exc), "invalid_request_error", "identity_taken")
+        return JSONResponse({"status": f"{provider.upper()}_LINKED", "handle": acct.handle}, headers={"Cache-Control": "no-store"})
 
     @app.post("/v1/hivemind/register")
     def register(request: Request, payload: RegisterRequest) -> dict[str, Any]:

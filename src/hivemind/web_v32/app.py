@@ -244,7 +244,6 @@ def mount_web_v32(
             "kind": "github", "label": "GitHub", "client_id": github_id, "authorize_url": GITHUB_AUTHORIZE_URL,
             "scope": "read:user user:email", "register": "/v1/hivemind/register/github", "link": "/api/v1/auth/link/github", "extra": {},
         }
-    google_enabled = "google" in providers
 
     def _exchange(form: Mapping[str, str], token_url: str = GOOGLE_TOKEN_URL) -> dict[str, Any]:
         if token_exchanger is not None:

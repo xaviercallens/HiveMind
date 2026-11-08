@@ -76,9 +76,13 @@ DECODERS_T = {"Z": nearest_zn_t, "E8": nearest_e8_t, "A2": nearest_a2_t}
 
 def is_a2_point(c: torch.Tensor, tol: float = 1e-9) -> torch.Tensor:
     """Membership in A₂ (rows): integer coordinates in the basis (1, 0), (½, √3/2)."""
+    if isinstance(tol, bool) or not isinstance(tol, (int, float)) or not math.isfinite(float(tol)) or float(tol) <= 0.0:
+        raise ValueError("tol must be a strictly positive finite float")
+    if c.numel() == 0 or c.shape[-1] != 2:
+        raise ValueError("A2 points must have last dimension 2 and be non-empty")
     b = c[..., 1] / (0.5 * SQRT3)
     a = c[..., 0] - 0.5 * b
-    return ((a - torch.round(a)).abs() < tol) & ((b - torch.round(b)).abs() < tol)
+    return ((a - torch.round(a)).abs() < float(tol)) & ((b - torch.round(b)).abs() < float(tol))
 
 
 def _entropy_bits(key: torch.Tensor) -> float:
@@ -177,8 +181,10 @@ def lattice_quantize(kind: str, x: torch.Tensor, scale: float, measure_rate: boo
     """Quantise ``x`` (last axis = head_dim, already normalised) on ``scale · L``; return (x̂ float64, rate or nan)."""
     if kind not in DECODERS_T:
         raise KeyError(kind)
-    if not math.isfinite(float(scale)) or float(scale) <= 0.0:
+    if isinstance(scale, bool) or not isinstance(scale, (int, float)) or not math.isfinite(float(scale)) or float(scale) <= 0.0:
         raise ValueError("scale must be positive and finite")
+    if not isinstance(measure_rate, bool):
+        raise ValueError("measure_rate must be a boolean")
     if not bool(torch.isfinite(x).all()):
         raise ValueError("x contains NaN or inf; refusing to quantise it")
     rows, ctx = to_rows(kind, x.to(torch.float64))

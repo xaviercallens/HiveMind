@@ -267,15 +267,29 @@ def evaluate_bee_candidate_energy(
     w_mem: float = 0.5,
 ) -> BeeEnergyEvaluation:
     """Compute the deterministic ANSE physical energy `E_Bee(x, y)` for a Bee candidate."""
-    if not (
-        math.isfinite(float(w_fail))
-        and float(w_fail) > 0.0
-        and math.isfinite(float(w_inv))
-        and float(w_inv) >= 0.0
-        and math.isfinite(float(w_lat))
-        and float(w_lat) >= 0.0
-        and math.isfinite(float(w_mem))
-        and float(w_mem) >= 0.0
+    if not isinstance(candidate_id, str) or not candidate_id.strip():
+        raise ValueError("candidate_id must be a non-empty string.")
+    if not isinstance(timed_out_or_crashed, bool):
+        raise ValueError("timed_out_or_crashed must be a boolean.")
+    if isinstance(tests_passed, bool) or isinstance(tests_total, bool):
+        raise ValueError("tests_passed and tests_total must be integers, not booleans.")
+    if isinstance(latency_ms, bool) or isinstance(memory_mb, bool) or isinstance(invariant_residual, bool):
+        raise ValueError("latency_ms, memory_mb, and invariant_residual must be numeric, not booleans.")
+    if (
+        isinstance(w_fail, bool)
+        or isinstance(w_inv, bool)
+        or isinstance(w_lat, bool)
+        or isinstance(w_mem, bool)
+        or not (
+            math.isfinite(float(w_fail))
+            and float(w_fail) > 0.0
+            and math.isfinite(float(w_inv))
+            and float(w_inv) >= 0.0
+            and math.isfinite(float(w_lat))
+            and float(w_lat) >= 0.0
+            and math.isfinite(float(w_mem))
+            and float(w_mem) >= 0.0
+        )
     ):
         raise ValueError("energy weights w_fail (> 0) and w_inv, w_lat, w_mem (>= 0) must be finite.")
     is_stub, stub_reason = _has_ast_stub_or_syntax_error(response_text, domain=domain)
@@ -383,6 +397,8 @@ def compress_error_trace_d1(
     max_chars: int = 200,
 ) -> str:
     """Directive D1: Compress failing code + stderr to `< max_chars` to prevent small-Bee attention dilution."""
+    if isinstance(max_chars, bool) or not isinstance(max_chars, int) or max_chars < 1:
+        raise ValueError("max_chars must be a positive integer.")
     budget = max(32, int(max_chars))
     err_clean = " ".join((stderr_or_reason or "test_failed").strip().split())
     code_clean = " ".join((failing_code or "").strip().split())
@@ -404,9 +420,9 @@ def select_best_so_far_d3(
     """
     if not attempts:
         raise ValueError("attempts must be non-empty.")
-    if not math.isfinite(float(early_stop_energy_ceiling)) or float(early_stop_energy_ceiling) <= 0.0:
+    if isinstance(early_stop_energy_ceiling, bool) or not isinstance(early_stop_energy_ceiling, (int, float)) or not math.isfinite(float(early_stop_energy_ceiling)) or float(early_stop_energy_ceiling) <= 0.0:
         raise ValueError("early_stop_energy_ceiling must be a strictly positive finite float.")
-    if any(not math.isfinite(float(a.total_energy)) for a in attempts):
+    if any(isinstance(a.total_energy, bool) or not math.isfinite(float(a.total_energy)) for a in attempts):
         raise ValueError("all attempt energies must be finite.")
     best = min(attempts, key=lambda a: a.total_energy)
     if best.passed_all_tests:
@@ -425,9 +441,11 @@ def harvest_energy_gap_dpo_pair_d6(
     min_delta_energy: float = 10.0,
 ) -> dict[str, Any] | None:
     """Directive D6: Export a verified `(chosen_low_E, rejected_high_E)` pair when `Delta E >= min_delta_energy`."""
-    if not math.isfinite(float(min_delta_energy)) or float(min_delta_energy) <= 0.0:
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("prompt must be a non-empty string.")
+    if isinstance(min_delta_energy, bool) or not isinstance(min_delta_energy, (int, float)) or not math.isfinite(float(min_delta_energy)) or float(min_delta_energy) <= 0.0:
         raise ValueError("min_delta_energy must be a strictly positive finite float.")
-    if any(not math.isfinite(float(a.total_energy)) for a in attempts):
+    if any(isinstance(a.total_energy, bool) or not math.isfinite(float(a.total_energy)) for a in attempts):
         raise ValueError("all attempt energies must be finite.")
     if len(attempts) < 2:
         return None
@@ -460,11 +478,19 @@ def detect_boinc_loss_plateau(
     max_tail_std: float = 0.006,
 ) -> dict[str, Any]:
     """Detect the 30-round BOINC QLoRA loss plateau (`HM-S18-AE-02`) to trigger curriculum rotation."""
-    if int(block_size) < 1:
+    if isinstance(block_size, bool) or not isinstance(block_size, int) or int(block_size) < 1:
         raise ValueError("block_size must be >= 1.")
-    if not math.isfinite(float(min_block_gain)) or not math.isfinite(float(max_tail_std)) or float(max_tail_std) < 0.0:
+    if (
+        isinstance(min_block_gain, bool)
+        or isinstance(max_tail_std, bool)
+        or not isinstance(min_block_gain, (int, float))
+        or not isinstance(max_tail_std, (int, float))
+        or not math.isfinite(float(min_block_gain))
+        or not math.isfinite(float(max_tail_std))
+        or float(max_tail_std) < 0.0
+    ):
         raise ValueError("min_block_gain and max_tail_std (>= 0) must be finite floats.")
-    if any(not math.isfinite(float(x)) for x in round_losses):
+    if any(isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(float(x)) for x in round_losses):
         raise ValueError("round_losses must contain only finite floats.")
     n = len(round_losses)
     if n < 2 * block_size:
@@ -492,6 +518,8 @@ def detect_boinc_loss_plateau(
 
 def exact_mcnemar_p(only_child_right: int, only_parent_right: int) -> float:
     """Two-sided exact McNemar p-value on the discordant pairs (binomial, p = 0.5)."""
+    if isinstance(only_child_right, bool) or isinstance(only_parent_right, bool) or not isinstance(only_child_right, int) or not isinstance(only_parent_right, int):
+        raise ValueError("discordant counts must be non-negative integers.")
     b, c = int(only_child_right), int(only_parent_right)
     if b < 0 or c < 0:
         raise ValueError("discordant counts must be non-negative.")
@@ -509,7 +537,7 @@ def calibrate_noise_margin(aa_median_deltas: Sequence[float]) -> float:
     """
     if len(aa_median_deltas) < 3:
         raise ValueError("at least 3 A/A runs are needed to calibrate the noise margin.")
-    if any(not math.isfinite(float(d)) for d in aa_median_deltas):
+    if any(isinstance(d, bool) or not isinstance(d, (int, float)) or not math.isfinite(float(d)) for d in aa_median_deltas):
         raise ValueError("aa_median_deltas must contain only finite floats.")
     return float(max(abs(float(d)) for d in aa_median_deltas))
 
@@ -546,13 +574,23 @@ def evaluate_child_bee_promotion(
     """
     if len(parent_energies) == 0 or len(parent_energies) != len(child_energies):
         raise ValueError("parent_energies and child_energies must be non-empty and equal length.")
-    if int(parent_regressions_failed) < 0:
+    if isinstance(parent_regressions_failed, bool) or not isinstance(parent_regressions_failed, int) or int(parent_regressions_failed) < 0:
         raise ValueError("parent_regressions_failed must be >= 0.")
-    if not math.isfinite(float(alpha)) or not (0.0 < float(alpha) < 1.0):
+    if not isinstance(shuffled_control_gained, bool):
+        raise ValueError("shuffled_control_gained must be a boolean.")
+    if isinstance(alpha, bool) or not isinstance(alpha, (int, float)) or not math.isfinite(float(alpha)) or not (0.0 < float(alpha) < 1.0):
         raise ValueError("alpha must be a finite float in (0.0, 1.0).")
-    if not math.isfinite(float(noise_margin)) or float(noise_margin) <= 0.0:
+    if isinstance(noise_margin, bool) or not isinstance(noise_margin, (int, float)) or not math.isfinite(float(noise_margin)) or float(noise_margin) <= 0.0:
         raise ValueError("noise_margin must be a strictly positive finite float from calibrate_noise_margin.")
-    if not all(math.isfinite(float(p)) and math.isfinite(float(c)) for p, c in zip(parent_energies, child_energies)):
+    if not all(
+        not isinstance(p, bool)
+        and not isinstance(c, bool)
+        and isinstance(p, (int, float))
+        and isinstance(c, (int, float))
+        and math.isfinite(float(p))
+        and math.isfinite(float(c))
+        for p, c in zip(parent_energies, child_energies)
+    ):
         raise ValueError("parent_energies and child_energies must contain only finite floats.")
     deltas = [float(c - p) for p, c in zip(parent_energies, child_energies)]
     med_delta = float(statistics.median(deltas))

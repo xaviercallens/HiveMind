@@ -25,6 +25,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import math
 import os
 import shutil
 import signal
@@ -55,6 +56,18 @@ class Limits:
     tmpfs_mb: int = 64  # room for the binary copy is added on top
     allow_unsandboxed: bool = False
     force_none: bool = False  # run WITHOUT namespaces even when they are available (the MCP server's --allow-unsandboxed mode); every outcome says 'none'
+
+    def __post_init__(self) -> None:
+        if isinstance(self.timeout_s, bool) or not isinstance(self.timeout_s, (int, float)) or not math.isfinite(float(self.timeout_s)) or float(self.timeout_s) <= 0.0:
+            raise ValueError("timeout_s must be a strictly positive finite float")
+        for attr in ("mem_mb", "nproc", "fsize_bytes", "nofile", "stdout_limit", "stderr_tail", "tmpfs_mb"):
+            val = getattr(self, attr)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{attr} must be an integer >= 1")
+        if isinstance(self.stdin_limit, bool) or not isinstance(self.stdin_limit, int) or self.stdin_limit < 0:
+            raise ValueError("stdin_limit must be an integer >= 0")
+        if not isinstance(self.allow_unsandboxed, bool) or not isinstance(self.force_none, bool):
+            raise ValueError("allow_unsandboxed and force_none must be booleans")
 
 
 @dataclass
@@ -263,6 +276,8 @@ def _unshare_cmd(unshare: str) -> List[str]:
 
 def namespace_available(refresh: bool = False) -> bool:
     """True if a user+mount+net+pid namespace can be created here (probed once)."""
+    if not isinstance(refresh, bool):
+        raise ValueError("refresh must be a boolean")
     global _NS_CACHE, _NS_WHY
     with _NS_LOCK:
         if _NS_CACHE is not None and not refresh:
@@ -285,6 +300,8 @@ def availability_reason() -> str:
 
 
 def file_sha256(path: str) -> str:
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError("path must be a non-empty string")
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):

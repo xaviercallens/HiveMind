@@ -99,6 +99,8 @@ LATTICE_DIM = {"Z": 8, "A2": 2, "E8": 8}
 
 def is_lattice_point(kind: str, c: np.ndarray, tol: float = 1e-9) -> np.ndarray:
     """Membership test (per row): ℤⁿ integer; A₂ rectangular cosets; E₈ integer or half-integer with even sum."""
+    if isinstance(tol, bool) or not isinstance(tol, (int, float)) or not math.isfinite(float(tol)) or float(tol) <= 0.0:
+        raise ValueError("tol must be a strictly positive finite float")
     c = np.atleast_2d(np.asarray(c, dtype=float))
     if kind == "Z":
         return np.all(np.abs(c - np.rint(c)) < tol, axis=1)
@@ -183,8 +185,12 @@ class LatticeDeltaQuantizer:
     def __init__(self, kind: str, scale: float, block: Optional[int] = None, error_feedback: bool = False) -> None:
         if kind not in DECODERS:
             raise KeyError(kind)
-        if scale <= 0.0 or not math.isfinite(scale):
+        if isinstance(scale, bool) or not isinstance(scale, (int, float)) or scale <= 0.0 or not math.isfinite(float(scale)):
             raise ValueError("scale must be positive and finite")
+        if block is not None and (isinstance(block, bool) or not isinstance(block, int)):
+            raise ValueError("block must be an integer or None")
+        if not isinstance(error_feedback, bool):
+            raise ValueError("error_feedback must be a boolean")
         eff_block = int(block) if block is not None else LATTICE_DIM[kind]
         if eff_block < 1:
             raise ValueError("block must be >= 1")
@@ -220,6 +226,8 @@ class SignDeltaQuantizer:
     """1-bit sign compressor: Q(v) = mean|v| · sign(v) (signSGD scale rule); optional error feedback."""
 
     def __init__(self, error_feedback: bool = False) -> None:
+        if not isinstance(error_feedback, bool):
+            raise ValueError("error_feedback must be a boolean")
         self.error_feedback = bool(error_feedback)
         self._carry: Optional[torch.Tensor] = None
 
@@ -245,9 +253,13 @@ def calibrate_scale_for_rate(kind: str, sample: torch.Tensor, target_bits_per_di
     """Bisection on log-scale so that the measured factorised rate of ``sample`` hits ``target`` (rate falls as scale grows)."""
     if kind not in DECODERS:
         raise KeyError(kind)
-    if not math.isfinite(float(tol)) or float(tol) < 0.0:
+    if isinstance(target_bits_per_dim, bool) or not isinstance(target_bits_per_dim, (int, float)) or not math.isfinite(float(target_bits_per_dim)):
+        raise ValueError("target_bits_per_dim must be a finite float")
+    if block is not None and (isinstance(block, bool) or not isinstance(block, int)):
+        raise ValueError("block must be an integer or None")
+    if isinstance(tol, bool) or not isinstance(tol, (int, float)) or not math.isfinite(float(tol)) or float(tol) < 0.0:
         raise ValueError("tol must be non-negative and finite")
-    if int(iters) < 0:
+    if isinstance(iters, bool) or not isinstance(iters, int) or int(iters) < 0:
         raise ValueError("iters must be >= 0")
     eff_block = int(block) if block is not None else LATTICE_DIM.get(kind, 8)
     if eff_block < 1 or (kind in ("A2", "E8") and eff_block != LATTICE_DIM[kind]):
@@ -307,6 +319,14 @@ def brute_force_decoder_check(kind: str, n_queries: int, seed: int, radius: floa
 
     Queries are uniform in the cube [-1/2, 1/2]^d; the covering radius of all supported lattices is
     <= sqrt 2, so every nearest point has norm <= 2 sqrt 2 < 3 and the ball of radius 3 contains the answer."""
+    if kind not in DECODERS:
+        raise KeyError(kind)
+    if isinstance(n_queries, bool) or not isinstance(n_queries, int) or n_queries < 1:
+        raise ValueError("n_queries must be an integer >= 1")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
+    if isinstance(radius, bool) or not isinstance(radius, (int, float)) or not math.isfinite(float(radius)) or float(radius) <= 0.0:
+        raise ValueError("radius must be a strictly positive finite float")
     rng = np.random.default_rng(seed)
     dim = LATTICE_DIM.get(kind, 8)
     q = rng.uniform(-0.5, 0.5, size=(n_queries, dim))

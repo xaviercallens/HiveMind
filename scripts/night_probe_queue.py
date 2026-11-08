@@ -602,7 +602,7 @@ class Options:
     probe: Path = PROBE
     prereg: Path = PREREG
     hub: str | None = None
-    vram_floor_mib: int | None = None
+    vram_floor_mib: int | None = VRAM_FLOOR_MIB  # AGENTS.md: always keep >= 4,300 MiB free on the T4 (on by default since 2026-11-08)
 
 
 def probe_cmd(o: Options, arm: Arm, cap: int) -> list[str]:
@@ -889,6 +889,14 @@ def dry_run(env: Env, o: Options, arms: list[Arm], estimator: Callable[[Arm], di
     return 0 if ok_all else 3
 
 
+def _floor_arg(text: str) -> int:
+    """A floor below the AGENTS.md minimum is refused: the rule protects the T4's inference services and is not a tuning knob."""
+    value = int(text)
+    if value < VRAM_FLOOR_MIB:
+        raise argparse.ArgumentTypeError(f"--vram-floor-mib must be >= {VRAM_FLOOR_MIB} (AGENTS.md); got {value}")
+    return value
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--arms", help="comma-separated arm ids, e.g. A0,A1 (default: all, in pre-registered order)")
@@ -909,7 +917,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--ollama-url", default=OLLAMA_PS_URL)
     ap.add_argument("--python", default=sys.executable, help="interpreter for the probe (needs torch, transformers, peft, bitsandbytes)")
     ap.add_argument("--hub", help="Hugging Face hub cache for the estimator's config.json files")
-    ap.add_argument("--vram-floor-mib", type=int, default=None, help="optional free VRAM safety floor in MiB (e.g. 4300 on shared T4); caps at free - floor and refuses below estimate")
+    ap.add_argument("--vram-floor-mib", type=_floor_arg, default=VRAM_FLOOR_MIB,
+                    help=f"free VRAM safety floor in MiB (default {VRAM_FLOOR_MIB}, the AGENTS.md minimum; may be raised, never lowered); "
+                         "caps each arm at free - floor and refuses an arm whose estimate would breach it")
     return ap
 
 

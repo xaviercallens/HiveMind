@@ -1088,7 +1088,7 @@ class LearnedDepthPrior(nn.Module):
             or not math.isfinite(float(budget_coef))
             or float(budget_coef) < 0.0
         ):
-            raise ValueError("entropy_coef and budget_coef must be finite and >= 0")
+            raise ValueError("entropy_coef and budget_coef must be >= 0")
         if target_budget_steps is not None and (
             isinstance(target_budget_steps, bool)
             or not isinstance(target_budget_steps, (int, float))

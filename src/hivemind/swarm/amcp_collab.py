@@ -52,6 +52,10 @@ class CollabError(ValueError):
     """A publish refused by policy; ``code`` is stable and safe to show, ``str(exc)`` says why."""
 
     def __init__(self, code: str, message: str) -> None:
+        if not isinstance(code, str) or not code.strip():
+            raise ValueError("code must be a non-empty string")
+        if not isinstance(message, str) or not message.strip():
+            raise ValueError("message must be a non-empty string")
         super().__init__(message)
         self.code = code
 
@@ -65,7 +69,23 @@ class Field:
     lo: int = 0
     hi: int = 1_000_000
 
+    def __post_init__(self) -> None:
+        if self.kind not in {"str", "refs", "choice", "int"}:
+            raise ValueError(f"Unsupported Field kind: {self.kind!r}")
+        if isinstance(self.max_len, bool) or not isinstance(self.max_len, int) or self.max_len < 1:
+            raise ValueError("max_len must be a positive integer")
+        if not isinstance(self.required, bool):
+            raise ValueError("required must be a boolean")
+        if isinstance(self.lo, bool) or not isinstance(self.lo, int) or isinstance(self.hi, bool) or not isinstance(self.hi, int) or self.lo > self.hi:
+            raise ValueError("lo and hi must be integers with lo <= hi")
+        if not isinstance(self.choices, tuple) or not all(isinstance(c, str) and bool(c.strip()) for c in self.choices):
+            raise ValueError("choices must be a tuple of non-empty strings")
+        if self.kind == "choice" and not self.choices:
+            raise ValueError("choice fields must specify at least one choice")
+
     def check(self, name: str, value: Any) -> None:
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("field name must be a non-empty string")
         if self.kind == "str" or self.kind == "choice":
             if not isinstance(value, str) or (self.required and not value.strip()):
                 raise CollabError("payload_invalid", f"{name} must be a non-empty string")
@@ -88,6 +108,14 @@ class EventRule:
     fields: Mapping[str, Field]
     kinds: frozenset[str]
     direct_only: bool = False  # never accepted through the gateway: only trusted components publish it
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.fields, Mapping) or not all(isinstance(k, str) and bool(k.strip()) and isinstance(v, Field) for k, v in self.fields.items()):
+            raise ValueError("fields must be a mapping of non-empty string names to Field specs")
+        if not isinstance(self.kinds, (set, frozenset)) or not self.kinds or not set(self.kinds) <= ALL_KINDS:
+            raise ValueError("kinds must be a non-empty subset of ALL_KINDS")
+        if not isinstance(self.direct_only, bool):
+            raise ValueError("direct_only must be a boolean")
 
 
 _REVIEW = ("approve", "changes", "comment")
@@ -146,6 +174,8 @@ def dev_keyring(path: Any = None, *, create: bool = False) -> Any:
 
     from hivemind.swarm.amcp_kafka_transport import HMACKeyring, KafkaConfigError
 
+    if not isinstance(create, bool):
+        raise ValueError("create must be a boolean")
     p = Path(path) if path else Path(os.environ.get("HIVEMIND_AMCP_DEV_KEYRING") or Path.home() / ".hivemind-amcp" / "dev_keyring")
     if not p.exists():
         if not create:
@@ -165,19 +195,25 @@ def check_publish(role: str | None, sender_kind: str, topic_key: str, event_type
     ``role`` is the authenticated account's role for the gateway path; direct publishers pass ``None`` (their trust comes from holding the keyring).
     Collaboration event types are validated field by field; other event types are left to the topic schema in ``amcp_kafka_transport``.
     """
-    if sender_kind not in ALL_KINDS:
+    if not isinstance(via_gateway, bool):
+        raise CollabError("payload_invalid", "via_gateway must be a boolean")
+    if not isinstance(sender_kind, str) or sender_kind not in ALL_KINDS:
         raise CollabError("unknown_kind", f"unknown sender kind {sender_kind!r}")
     if via_gateway:
-        allowed_kinds = ROLE_KINDS.get(role or "")
+        allowed_kinds = ROLE_KINDS.get(role or "") if (role is None or isinstance(role, str)) else None
         if allowed_kinds is None:
             raise CollabError("unknown_role", "this account's role may not publish on the bus")
         if sender_kind not in allowed_kinds:
             raise CollabError("kind_not_allowed_for_role", f"a {role} account may not publish as {sender_kind}; allowed: {sorted(allowed_kinds)}")
-    writers = TOPIC_WRITERS.get(topic_key)
+    writers = TOPIC_WRITERS.get(topic_key) if isinstance(topic_key, str) else None
     if writers is None:
         raise CollabError("unknown_topic", f"unknown topic {topic_key!r}")
     if sender_kind not in writers:
         raise CollabError("topic_not_allowed_for_kind", f"{sender_kind} may not write on {topic_key}; allowed: {sorted(writers)}")
+    if not isinstance(event_type, str) or not event_type.strip() or _CTRL.search(event_type):
+        raise CollabError("payload_invalid", "event_type must be a non-empty string without control characters")
+    if not isinstance(payload, Mapping):
+        raise CollabError("payload_invalid", "payload must be a mapping")
     rule = COLLAB_EVENTS.get(event_type)
     if rule is None:
         return
@@ -187,7 +223,7 @@ def check_publish(role: str | None, sender_kind: str, topic_key: str, event_type
         raise CollabError("direct_only", f"{event_type} is published by trusted components only")
     if sender_kind not in rule.kinds:
         raise CollabError("event_type_not_allowed_for_kind", f"{sender_kind} may not publish {event_type}; allowed: {sorted(rule.kinds)}")
-    extra = sorted(set(payload) - set(rule.fields))
+    extra = sorted(str(k) for k in set(payload) - set(rule.fields))
     if extra:
         raise CollabError("payload_invalid", f"unexpected payload fields {extra}")
     for name, spec in rule.fields.items():

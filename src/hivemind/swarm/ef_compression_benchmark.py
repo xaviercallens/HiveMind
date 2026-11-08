@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -22,6 +23,22 @@ from hivemind.swarm.strategy_optimizer import EF21DiLoCoErrorFeedbackBuffer
 
 PARAM_NAME = "proj.weight"
 SCHEMES = ("dense", "top5_fp16", "top1_fp8", "top1_fp8_ef")
+
+
+def _require_pos_int(value: Any, name: str, *, min_value: int = 1) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < min_value:
+        raise ValueError(f"{name} must be an integer >= {min_value}")
+    return value
+
+
+def _require_finite_float(value: Any, name: str, *, allow_zero: bool = False) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+        raise ValueError(f"{name} must be a finite number")
+    val = float(value)
+    if (allow_zero and val < 0.0) or (not allow_zero and val <= 0.0):
+        op = ">=" if allow_zero else ">"
+        raise ValueError(f"{name} must be {op} 0.0")
+    return val
 
 
 @dataclass(frozen=True)
@@ -42,6 +59,12 @@ def build_problem(
     noise_std: float = 0.1,
 ) -> SyntheticSwarmProblem:
     """Shared linear target; each worker sees inputs with its own feature scaling (non-IID)."""
+    _require_pos_int(seed, "seed", min_value=0)
+    _require_pos_int(num_workers, "num_workers", min_value=1)
+    _require_pos_int(samples_per_worker, "samples_per_worker", min_value=1)
+    _require_pos_int(d_in, "d_in", min_value=1)
+    _require_pos_int(d_out, "d_out", min_value=1)
+    noise_std = _require_finite_float(noise_std, "noise_std", allow_zero=True)
     gen = torch.Generator().manual_seed(seed)
     w_true = torch.randn(d_out, d_in, generator=gen) / d_in**0.5
     worker_x: List[torch.Tensor] = []
@@ -58,10 +81,22 @@ def build_problem(
 
 
 def _mse(w: torch.Tensor, x: torch.Tensor, y: torch.Tensor) -> float:
+    if not isinstance(w, torch.Tensor) or not isinstance(x, torch.Tensor) or not isinstance(y, torch.Tensor):
+        raise TypeError("w, x, and y must be torch.Tensors")
+    if w.ndim != 2 or x.ndim != 2 or y.ndim != 2 or x.shape[0] == 0 or x.shape[0] != y.shape[0] or x.shape[1] != w.shape[1] or y.shape[1] != w.shape[0]:
+        raise ValueError("Incompatible tensor shapes for _mse")
+    if not (torch.isfinite(w).all() and torch.isfinite(x).all() and torch.isfinite(y).all()):
+        raise ValueError("w, x, and y must contain finite values")
     return float(((x @ w.T - y) ** 2).mean().item())
 
 
 def _local_steps(w: torch.Tensor, x: torch.Tensor, y: torch.Tensor, steps: int, lr: float) -> torch.Tensor:
+    _require_pos_int(steps, "steps", min_value=1)
+    lr = _require_finite_float(lr, "lr", allow_zero=False)
+    if not isinstance(w, torch.Tensor) or not isinstance(x, torch.Tensor) or not isinstance(y, torch.Tensor):
+        raise TypeError("w, x, and y must be torch.Tensors")
+    if w.ndim != 2 or x.ndim != 2 or y.ndim != 2 or x.shape[0] == 0 or y.shape[1] == 0 or x.shape[0] != y.shape[0] or x.shape[1] != w.shape[1] or y.shape[1] != w.shape[0]:
+        raise ValueError("Incompatible tensor shapes for _local_steps")
     w = w.clone()
     n = x.shape[0]
     for _ in range(steps):
@@ -72,6 +107,11 @@ def _local_steps(w: torch.Tensor, x: torch.Tensor, y: torch.Tensor, steps: int, 
 
 def _topk_fp16(tensor: torch.Tensor, topk_ratio: float) -> tuple[torch.Tensor, int]:
     """Top-k sparsification with FP16 values and uint16 indices (no FP8, no error feedback)."""
+    if not isinstance(tensor, torch.Tensor) or tensor.numel() == 0 or not torch.isfinite(tensor).all():
+        raise ValueError("tensor must be a non-empty finite torch.Tensor")
+    topk_ratio = _require_finite_float(topk_ratio, "topk_ratio", allow_zero=False)
+    if topk_ratio > 1.0:
+        raise ValueError("topk_ratio must be in (0.0, 1.0]")
     flat = tensor.reshape(-1)
     k = max(1, int(round(flat.numel() * topk_ratio)))
     _, idx = torch.topk(flat.abs(), k=k, largest=True, sorted=True)
@@ -91,6 +131,17 @@ def run_benchmark(
     log_every: int = 25,
 ) -> Dict[str, Any]:
     """Run every scheme on the same problem and starting point; return losses and wire bytes."""
+    _require_pos_int(seed, "seed", min_value=0)
+    _require_pos_int(num_workers, "num_workers", min_value=1)
+    _require_pos_int(outer_rounds, "outer_rounds", min_value=1)
+    _require_pos_int(inner_steps, "inner_steps", min_value=1)
+    _require_pos_int(log_every, "log_every", min_value=1)
+    inner_lr = _require_finite_float(inner_lr, "inner_lr", allow_zero=False)
+    outer_lr = _require_finite_float(outer_lr, "outer_lr", allow_zero=False)
+    if isinstance(schemes, (str, bytes)) or not isinstance(schemes, Sequence) or len(schemes) == 0:
+        raise ValueError("schemes must be a non-empty sequence of scheme names")
+    if not all(isinstance(s, str) for s in schemes):
+        raise ValueError("each scheme must be a string")
     unknown = set(schemes) - set(SCHEMES)
     if unknown:
         raise ValueError(f"unknown schemes: {sorted(unknown)}")

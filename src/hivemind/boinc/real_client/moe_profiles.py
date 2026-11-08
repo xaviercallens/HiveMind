@@ -31,6 +31,8 @@ TRAIN_APPS: tuple[str, ...] = tuple(p["app"] for p in PROFILES.values())
 
 
 def profile_for_app(app: str) -> dict[str, Any]:
+    if not isinstance(app, str) or not app.strip():
+        raise ValueError("app must be a non-empty string")
     for p in PROFILES.values():
         if p["app"] == app:
             return p
@@ -39,11 +41,15 @@ def profile_for_app(app: str) -> dict[str, Any]:
 
 def flops_estimate(profile: str) -> float:
     """Scaled from the project's reference estimate by tokens per round, so a bigger round is not under-budgeted."""
+    if not isinstance(profile, str) or not profile.strip():
+        raise ValueError("profile must be a non-empty string")
     p = PROFILES[profile]
     return FLOPS_REFERENCE * (p["inner_steps"] * p["micro_batch"] * p["seq_len"]) / TOKENS_PER_ROUND_REFERENCE
 
 
 def profiles_for_gpu(total_mib: int) -> list[str]:
     """Profiles a GPU with this much memory may run, biggest first (empty when it is below even the standard floor)."""
+    if isinstance(total_mib, bool) or not isinstance(total_mib, int) or total_mib < 0:
+        raise ValueError("total_mib must be a non-negative integer")
     ranked = sorted(PROFILES, key=lambda n: -PROFILES[n]["min_gpu_ram_mb"])
     return [n for n in ranked if total_mib >= PROFILES[n]["min_gpu_ram_mb"]]

@@ -47,8 +47,10 @@ class Outcome:
     cost_tokens: int = 0
 
     def __post_init__(self) -> None:
-        if self.cost_tokens < 0:
-            raise ValueError("cost_tokens must be >= 0")
+        if not str(self.cluster_id).strip() or not str(self.expert_id).strip():
+            raise ValueError("cluster_id and expert_id must be non-empty")
+        if isinstance(self.cost_tokens, bool) or self.cost_tokens < 0:
+            raise ValueError("cost_tokens must be an integer >= 0")
         if self.success and not self.verified:
             raise ValueError("an unverified outcome cannot be a success; the verifier is the only judge")
 
@@ -79,8 +81,13 @@ class BanditStrategy:
     name = "bandit"
 
     def __init__(self, prior_alpha: float = 1.0, prior_beta: float = 1.0, exploit_only: bool = False) -> None:
-        if prior_alpha <= 0.0 or prior_beta <= 0.0:
-            raise ValueError("Beta prior parameters must be > 0")
+        if (
+            not math.isfinite(float(prior_alpha))
+            or prior_alpha <= 0.0
+            or not math.isfinite(float(prior_beta))
+            or prior_beta <= 0.0
+        ):
+            raise ValueError("Beta prior parameters must be finite and > 0")
         self.prior_alpha = prior_alpha
         self.prior_beta = prior_beta
         self.exploit_only = exploit_only
@@ -178,6 +185,12 @@ class PreferencePair:
     verifier_receipt_sha256: str = ""
 
     def __post_init__(self) -> None:
+        from hivemind.queenbee.dance import VERIFIER_KINDS
+
+        if not str(self.prompt_id).strip() or not str(self.cluster_id).strip():
+            raise ValueError("prompt_id and cluster_id must be non-empty")
+        if self.verifier_kind not in VERIFIER_KINDS:
+            raise ValueError(f"verifier_kind must be one of {sorted(VERIFIER_KINDS)}")
         if self.verified and (
             len(self.verifier_receipt_sha256) != 64
             or any(c not in "0123456789abcdef" for c in self.verifier_receipt_sha256.lower())
@@ -304,7 +317,10 @@ def clip_and_noise(delta: Mapping[str, Any], clip_norm: float, sigma: float, gen
         raise ValueError("delta must be non-empty")
     sq = 0.0
     for t in delta.values():
-        sq += float(torch.sum(t.detach().to(torch.float64) ** 2))
+        td = t.detach().to(torch.float64)
+        if not bool(torch.isfinite(td).all()):
+            raise ValueError("delta tensor contains NaN or inf; refusing to clip and noise it")
+        sq += float(torch.sum(td ** 2))
     pre = math.sqrt(sq)
     factor = min(1.0, clip_norm / pre) if pre > 0.0 else 1.0
     out: dict[str, Any] = {}
@@ -346,12 +362,12 @@ class PrivacyAccountant:
     )
 
     def __init__(self, *, delta: float = 1e-5, max_epsilon: float = 8.0, orders: Sequence[float] = DEFAULT_ORDERS) -> None:
-        if not (0.0 < delta < 1.0):
+        if not math.isfinite(float(delta)) or not (0.0 < delta < 1.0):
             raise ValueError("delta must be in (0, 1)")
         if not math.isfinite(max_epsilon) or max_epsilon <= 0.0:
             raise ValueError("max_epsilon must be finite and > 0")
-        if not orders or any(a <= 1.0 for a in orders):
-            raise ValueError("all RDP orders must be > 1.0")
+        if not orders or any(not math.isfinite(float(a)) or a <= 1.0 for a in orders):
+            raise ValueError("all RDP orders must be finite and > 1.0")
         self.delta = float(delta)
         self.max_epsilon = float(max_epsilon)
         self.orders = tuple(float(a) for a in orders)
@@ -365,6 +381,10 @@ class PrivacyAccountant:
         return alpha / (2.0 * noise_multiplier * noise_multiplier)
 
     def would_exceed_budget(self, clip_norm: float, sigma: float) -> bool:
+        if clip_norm <= 0.0 or not math.isfinite(clip_norm):
+            raise ValueError("clip_norm must be finite and > 0")
+        if sigma < 0.0 or not math.isfinite(sigma):
+            raise ValueError("sigma must be finite and >= 0")
         if sigma <= 0.0:
             return True
         log_term = math.log(1.0 / self.delta)
@@ -525,8 +545,8 @@ class FederatedShareStrategy:
 
     def __init__(self, clip_norm: float, sigma: float, router: BanditStrategy | None = None,
                  accountant: PrivacyAccountant | None = None) -> None:
-        if clip_norm <= 0.0 or sigma < 0.0:
-            raise ValueError("clip_norm must be > 0 and sigma >= 0")
+        if not math.isfinite(float(clip_norm)) or clip_norm <= 0.0 or not math.isfinite(float(sigma)) or sigma < 0.0:
+            raise ValueError("clip_norm (> 0) and sigma (>= 0) must be finite")
         self.clip_norm = clip_norm
         self.sigma = sigma
         self.router = router or BanditStrategy()
@@ -861,10 +881,17 @@ def evaluate_served_expert_bandit_routing(
 
     if not tasks:
         raise ValueError("tasks must be non-empty")
+    if not seeds:
+        raise ValueError("seeds must be non-empty")
+    if int(rounds) < 2:
+        raise ValueError("rounds must be >= 2")
     eff_secret = secret if secret is not None else hashlib.sha256(str(tuple(seeds)).encode("utf-8")).digest()
     experts = sorted(tasks[0].expert_candidates.keys())
     if not experts:
         raise ValueError("tasks must name at least one served expert")
+    for t in tasks:
+        if set(t.expert_candidates.keys()) != set(experts):
+            raise ValueError(f"task {t.task_id!r} expert_candidates keys do not match {experts}")
 
     # 1. Execute every (task, expert) candidate through the real isolated Python unit-test verifier once
     verified_matrix: dict[str, dict[str, bool]] = {}

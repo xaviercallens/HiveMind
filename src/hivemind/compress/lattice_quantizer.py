@@ -186,13 +186,21 @@ class LatticeDeltaQuantizer:
         if scale <= 0.0 or not math.isfinite(scale):
             raise ValueError("scale must be positive and finite")
         eff_block = int(block) if block is not None else LATTICE_DIM[kind]
+        if eff_block < 1:
+            raise ValueError("block must be >= 1")
+        if kind in ("A2", "E8") and eff_block != LATTICE_DIM[kind]:
+            raise ValueError(f"{kind} requires block == {LATTICE_DIM[kind]}")
         self.kind, self.scale, self.block, self.error_feedback = kind, float(scale), eff_block, bool(error_feedback)
         self._carry: Optional[torch.Tensor] = None
 
     def quantize(self, vec: torch.Tensor) -> QuantizedDelta:
         v = vec.detach().to(torch.float32).reshape(-1)
+        if v.numel() == 0:
+            raise ValueError("delta must be non-empty")
         _require_finite_delta(v)
         if self.error_feedback and self._carry is not None:
+            if self._carry.numel() != v.numel():
+                raise ValueError("delta length must match error-feedback carry length")
             v = v + self._carry
         n = v.numel()
         pad = (-n) % self.block
@@ -217,8 +225,12 @@ class SignDeltaQuantizer:
 
     def quantize(self, vec: torch.Tensor) -> QuantizedDelta:
         v = vec.detach().to(torch.float32).reshape(-1)
+        if v.numel() == 0:
+            raise ValueError("delta must be non-empty")
         _require_finite_delta(v)
         if self.error_feedback and self._carry is not None:
+            if self._carry.numel() != v.numel():
+                raise ValueError("delta length must match error-feedback carry length")
             v = v + self._carry
         deq = v.abs().mean() * torch.sign(v)
         residual = v - deq
@@ -231,8 +243,21 @@ class SignDeltaQuantizer:
 
 def calibrate_scale_for_rate(kind: str, sample: torch.Tensor, target_bits_per_dim: float, block: Optional[int] = None, tol: float = 0.02, iters: int = 60) -> Tuple[float, float]:
     """Bisection on log-scale so that the measured factorised rate of ``sample`` hits ``target`` (rate falls as scale grows)."""
+    if kind not in DECODERS:
+        raise KeyError(kind)
+    if not math.isfinite(float(target_bits_per_dim)) or float(target_bits_per_dim) < 0.0:
+        raise ValueError("target_bits_per_dim must be finite and >= 0")
+    if not math.isfinite(float(tol)) or float(tol) <= 0.0:
+        raise ValueError("tol must be positive and finite")
+    if int(iters) < 1:
+        raise ValueError("iters must be >= 1")
     eff_block = int(block) if block is not None else LATTICE_DIM.get(kind, 8)
+    if eff_block < 1 or (kind in ("A2", "E8") and eff_block != LATTICE_DIM[kind]):
+        raise ValueError(f"invalid block {eff_block} for lattice {kind}")
     v = sample.detach().to(torch.float32).reshape(-1)
+    if v.numel() == 0:
+        raise ValueError("sample must be non-empty")
+    _require_finite_delta(v)
     n = v.numel()
     pad = (-n) % eff_block
     x = (torch.cat([v, torch.zeros(pad)]) if pad else v).numpy().astype(float).reshape(-1, eff_block)

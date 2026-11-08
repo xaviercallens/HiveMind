@@ -36,14 +36,16 @@ class KnowledgeShare:
     verifier_receipt_sha256: str = ""
 
     def __post_init__(self) -> None:
-        if not self.account_id:
+        if not str(self.account_id).strip():
             raise ValueError("account_id must be non-empty")
+        if not isinstance(self.verified, bool):
+            raise ValueError("verified must be a bool")
         if self.kind not in SHARE_KINDS:
             raise ValueError(f"kind must be one of {sorted(SHARE_KINDS)}")
-        if self.epoch < 0:
+        if isinstance(self.epoch, bool) or self.epoch < 0:
             raise ValueError("epoch must be >= 0")
-        if len(self.text_sha256) != 64:
-            raise ValueError("text_sha256 must be a hex sha256")
+        if len(self.text_sha256) != 64 or any(c not in "0123456789abcdef" for c in self.text_sha256.lower()):
+            raise ValueError("text_sha256 must be a 64-char hex sha256")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -81,6 +83,8 @@ def admit_share(
     """Admit or refuse a share. The hash in the share must match the text, so the record cannot be swapped later."""
     if cap_per_identity_per_epoch < 1:
         raise ValueError("cap_per_identity_per_epoch must be >= 1")
+    if prior_points_this_epoch < 0:
+        raise ValueError("prior_points_this_epoch must be >= 0")
     if expected_epoch is not None and share.epoch != expected_epoch:
         return Admission(False, "epoch_mismatch", share)
     if not share.verified:
@@ -203,11 +207,13 @@ class KnowledgeSettlement:
 def settle_knowledge_bonus(epoch: int, validator_fee_hmt: float, bonus_share: float, points: Mapping[str, int]) -> KnowledgeSettlement:
     """Split `bonus_share` of the validator fee in proportion to points. Accounts with zero points get nothing; with no
     points at all the pool is not paid (it stays with the validators)."""
+    if isinstance(epoch, bool) or epoch < 0:
+        raise ValueError("epoch must be >= 0")
     if not math.isfinite(validator_fee_hmt) or validator_fee_hmt < 0.0:
         raise ValueError("validator_fee_hmt must be finite and >= 0")
-    if not (0.0 <= bonus_share <= 1.0):
+    if not math.isfinite(bonus_share) or not (0.0 <= bonus_share <= 1.0):
         raise ValueError("bonus_share must be in [0, 1]")
-    if any(p < 0 for p in points.values()):
+    if any(isinstance(p, bool) or p < 0 for p in points.values()):
         raise ValueError("points must be >= 0")
     pool = validator_fee_hmt * bonus_share
     total = sum(points.values())
@@ -240,12 +246,35 @@ def certify_knowledge_bonus(before: MarketEquilibrium, after: MarketEquilibrium,
     equilibria because the bonus is a lump sum paid outside the bidding game. `epoch_payment_hmt` is the total paid by
     consumers in the epoch, from which the validator fee is `fee.validator_share * epoch_payment_hmt`.
     """
+    if not math.isfinite(float(epoch_payment_hmt)) or float(epoch_payment_hmt) < 0.0:
+        raise ValueError("epoch_payment_hmt must be finite and >= 0")
     tol = 1e-9 * max(1.0, abs(before.price_per_1k), abs(before.supply_1k))
-    price_same = abs(before.price_per_1k - after.price_per_1k) <= tol and before.mechanism == after.mechanism
-    supply_same = abs(before.supply_1k - after.supply_1k) <= tol and before.active_producers == after.active_producers
-    paid = sum(settlement.payouts_hmt.values())
-    within_pool = paid <= settlement.pool_hmt + 1e-9 * max(1.0, settlement.pool_hmt)
+    price_same = (
+        math.isfinite(before.price_per_1k)
+        and math.isfinite(after.price_per_1k)
+        and abs(before.price_per_1k - after.price_per_1k) <= tol
+        and before.mechanism == after.mechanism
+    )
+    supply_same = (
+        math.isfinite(before.supply_1k)
+        and math.isfinite(after.supply_1k)
+        and abs(before.supply_1k - after.supply_1k) <= tol
+        and before.active_producers == after.active_producers
+    )
+    payouts_nonneg_finite = all(
+        math.isfinite(float(v)) and float(v) >= 0.0 for v in settlement.payouts_hmt.values()
+    )
+    pool_nonneg_finite = math.isfinite(float(settlement.pool_hmt)) and float(settlement.pool_hmt) >= 0.0
+    paid = sum(settlement.payouts_hmt.values()) if payouts_nonneg_finite else float("inf")
+    within_pool = (
+        payouts_nonneg_finite
+        and pool_nonneg_finite
+        and paid <= settlement.pool_hmt + 1e-9 * max(1.0, settlement.pool_hmt)
+    )
     validator_fee = fee.validator_share * epoch_payment_hmt
-    pool_ok = settlement.pool_hmt <= validator_fee + 1e-9 * max(1.0, validator_fee)
-    nobody = all(settlement.points.get(a, 0) > 0 for a in settlement.payouts_hmt)
+    pool_ok = (
+        pool_nonneg_finite
+        and settlement.pool_hmt <= validator_fee + 1e-9 * max(1.0, validator_fee)
+    )
+    nobody = payouts_nonneg_finite and all(settlement.points.get(a, 0) > 0 for a in settlement.payouts_hmt)
     return KnowledgeCertificate(price_same, supply_same, within_pool, pool_ok, nobody, win_win_before == win_win_after)

@@ -89,6 +89,8 @@ def _entropy_bits(key: torch.Tensor) -> float:
 
 def _joint_key(*cols: torch.Tensor) -> torch.Tensor:
     """Injective int64 key of several integer columns (mixed radix on their observed ranges)."""
+    if not cols or any(c.numel() == 0 for c in cols):
+        raise ValueError("cols must be non-empty tensors")
     key = torch.zeros_like(cols[0], dtype=torch.int64)
     for c in cols:
         c = c.to(torch.int64)
@@ -121,6 +123,10 @@ def integer_coordinates(kind: str, c: torch.Tensor) -> Tuple[torch.Tensor, torch
 
 def factorised_rate_t(kind: str, codewords: torch.Tensor, context: torch.Tensor) -> float:
     """Bits per dimension of unscaled codewords (rows, shape (N, n)) given an integer context per row (N,)."""
+    if codewords.ndim != 2 or codewords.shape[0] == 0 or codewords.shape[1] == 0:
+        raise ValueError("codewords must be a non-empty 2D tensor")
+    if context.ndim != 1 or context.shape[0] != codewords.shape[0]:
+        raise ValueError("context must be a 1D tensor matching codewords.shape[0]")
     n = codewords.shape[-1]
     coset, z = integer_coordinates(kind, codewords)
     ctx = context.to(torch.int64)
@@ -138,6 +144,10 @@ def to_rows(kind: str, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     """Group the last axis (head_dim d) into lattice rows; return rows (N, n) and the in-head group index (N,).
 
     ℤ and E₈: consecutive blocks of 8 channels. A₂: RoPE planes (i, i + d/2), i < d/2."""
+    if kind not in DECODERS_T:
+        raise KeyError(kind)
+    if x.numel() == 0:
+        raise ValueError("x must be non-empty")
     d = x.shape[-1]
     if kind == "A2":
         if d % 2:
@@ -155,6 +165,8 @@ def to_rows(kind: str, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
 
 
 def from_rows(kind: str, rows: torch.Tensor, shape: torch.Size) -> torch.Tensor:
+    if kind not in DECODERS_T:
+        raise KeyError(kind)
     if kind == "A2":
         r = rows.reshape(*shape[:-1], shape[-1] // 2, 2)
         return torch.cat([r[..., 0], r[..., 1]], dim=-1)
@@ -163,7 +175,13 @@ def from_rows(kind: str, rows: torch.Tensor, shape: torch.Size) -> torch.Tensor:
 
 def lattice_quantize(kind: str, x: torch.Tensor, scale: float, measure_rate: bool = False) -> Tuple[torch.Tensor, float]:
     """Quantise ``x`` (last axis = head_dim, already normalised) on ``scale · L``; return (x̂ float64, rate or nan)."""
+    if kind not in DECODERS_T:
+        raise KeyError(kind)
+    if not math.isfinite(float(scale)) or float(scale) <= 0.0:
+        raise ValueError("scale must be positive and finite")
+    if not bool(torch.isfinite(x).all()):
+        raise ValueError("x contains NaN or inf; refusing to quantise it")
     rows, ctx = to_rows(kind, x.to(torch.float64))
-    c = DECODERS_T[kind](rows / scale)
+    c = DECODERS_T[kind](rows / float(scale))
     rate = factorised_rate_t(kind, c, ctx) if measure_rate else float("nan")
-    return from_rows(kind, c * scale, x.shape), rate
+    return from_rows(kind, c * float(scale), x.shape), rate

@@ -14,15 +14,20 @@ All dynamic DOM updates use ``textContent`` (never ``innerHTML``), and the Conte
 from __future__ import annotations
 
 import html
+import math
+import re
 from typing import Any, Mapping
 
 from hivemind.router.google_auth import CLIENT_ID_RE
 
 # Origins Google documents for the Identity Services button (script, frame, connect, style).
 GSI = "https://accounts.google.com/gsi/"
+_NONCE_RE = re.compile(r"^[A-Za-z0-9+/=_-]{1,128}$")
 
 
 def content_security_policy(nonce: str) -> str:
+    if not isinstance(nonce, str) or not _NONCE_RE.fullmatch(nonce):
+        raise ValueError("nonce must be a 1-128 char URL/base64-safe token")
     return "; ".join([
         "default-src 'none'",
         f"script-src 'nonce-{nonce}' {GSI}client",
@@ -342,8 +347,16 @@ def render_signup_page(
     default_role: str = "prosumer",
 ) -> str:
     """Render the unified Login & Registration page at ``/signup`` and ``/login``."""
-    if client_id is not None and not CLIENT_ID_RE.match(client_id):
+    if not isinstance(nonce, str) or not nonce.strip():
+        raise ValueError("nonce must be a non-empty string")
+    if client_id is not None and (not isinstance(client_id, str) or not CLIENT_ID_RE.match(client_id)):
         raise ValueError("invalid Google client id")
+    if isinstance(starter_grant_hmt, bool) or not isinstance(starter_grant_hmt, (int, float)) or not math.isfinite(float(starter_grant_hmt)) or float(starter_grant_hmt) < 0.0:
+        raise ValueError("starter_grant_hmt must be a finite non-negative float")
+    if auth_result is not None and not isinstance(auth_result, Mapping):
+        raise ValueError("auth_result must be a mapping or None")
+    if live_telemetry is not None and not isinstance(live_telemetry, Mapping):
+        raise ValueError("live_telemetry must be a mapping or None")
     role_norm = str(default_role or "prosumer").strip().lower()
     selected_role = role_norm if role_norm in ("prosumer", "consumer", "producer", "trainer") else "prosumer"
     chk_prosumer = " checked" if selected_role == "prosumer" else ""

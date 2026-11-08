@@ -568,6 +568,8 @@ GUILD_RAID_ARC_PALETTE: Dict[str, Tuple[float, float, float]] = {
 
 def guild_raid_arc_color(guild_id: str) -> List[float]:
     """Return the deterministic RGB color used to draw a guild's raid arcs."""
+    if not isinstance(guild_id, str) or not guild_id.strip():
+        raise ValueError("guild_id must be a non-empty string")
     if guild_id in GUILD_RAID_ARC_PALETTE:
         return [round(c, 4) for c in GUILD_RAID_ARC_PALETTE[guild_id]]
     h = 0
@@ -582,12 +584,28 @@ def guild_raid_arc_color(guild_id: str) -> List[float]:
 
 def lat_lon_to_xyz(lat: float, lon: float, radius: float = 1.0) -> List[float]:
     """Convert lat/lon (degrees) into the WebGL globe's Cartesian coordinates."""
-    la = math.radians(lat)
-    lo = math.radians(lon)
+    if (
+        isinstance(lat, bool)
+        or isinstance(lon, bool)
+        or isinstance(radius, bool)
+        or not isinstance(lat, (int, float))
+        or not isinstance(lon, (int, float))
+        or not isinstance(radius, (int, float))
+        or not math.isfinite(float(lat))
+        or not math.isfinite(float(lon))
+        or not math.isfinite(float(radius))
+    ):
+        raise ValueError("lat, lon, and radius must be finite floats")
+    if float(radius) <= 0.0:
+        raise ValueError("radius must be > 0")
+    if abs(float(lat)) > 90.0 or abs(float(lon)) > 180.0:
+        raise ValueError("lat must be in [-90, 90] and lon in [-180, 180]")
+    la = math.radians(float(lat))
+    lo = math.radians(float(lon))
     return [
-        radius * math.cos(la) * math.sin(lo),
-        radius * math.sin(la),
-        radius * math.cos(la) * math.cos(lo),
+        float(radius) * math.cos(la) * math.sin(lo),
+        float(radius) * math.sin(la),
+        float(radius) * math.cos(la) * math.cos(lo),
     ]
 
 
@@ -602,6 +620,15 @@ def great_circle_arc_points(
     Mirrors the renderer's `arcPoints()` JavaScript helper so that the
     server-published geometry is byte-for-byte the geometry drawn on the HUD.
     """
+    if isinstance(lift, bool) or not isinstance(lift, (int, float)) or not math.isfinite(float(lift)) or float(lift) < 0.0:
+        raise ValueError("lift must be a finite non-negative float")
+    if isinstance(steps, bool) or not isinstance(steps, int):
+        raise ValueError("steps must be an integer")
+    for pt_name, pt in (("a", a), ("b", b)):
+        if isinstance(pt, (str, bytes)) or not isinstance(pt, Sequence) or len(pt) != 3:
+            raise ValueError(f"{pt_name} must be a 3-element coordinate sequence")
+        if any(isinstance(c, bool) or not isinstance(c, (int, float)) or not math.isfinite(float(c)) for c in pt):
+            raise ValueError(f"{pt_name} coordinates must be finite floats")
     if steps < 1:
         steps = 1
     da = math.sqrt(a[0] ** 2 + a[1] ** 2 + a[2] ** 2) or 1.0
@@ -639,6 +666,8 @@ def build_guild_raid_arc_geometry(
     plus the derived metrics (polyline length, peak radius) used by the
     tournament scorer and asserted by the unit tests.
     """
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps must be a positive integer")
     geometry: List[Dict[str, Any]] = []
     for arc in arcs:
         source_lat = float(arc.get("source_lat", arc.get("lat", 0.0)))

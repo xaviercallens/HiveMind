@@ -57,6 +57,8 @@ def pick_language(query_lang: str | None, accept_language: str | None, default: 
 
 
 def join_content_security_policy(nonce: str) -> str:
+    if not isinstance(nonce, str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", nonce):
+        raise ValueError("nonce must be 8-64 URL-safe characters")
     return "; ".join([
         "default-src 'none'", f"style-src 'nonce-{nonce}'", "img-src 'self' data:", "base-uri 'none'", "form-action 'none'", "frame-ancestors 'none'",
     ])
@@ -104,6 +106,10 @@ class Flags:
 
     google: bool = False  # "Sign in with Google" (or another provider) is enabled
     handles: bool = True  # registering with a handle through the API is open
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.google, bool) or not isinstance(self.handles, bool):
+            raise ValueError("google and handles flags must be booleans")
 
 
 _HANDLE_RULE: Pair = (
@@ -905,6 +911,8 @@ def render_join_page(lang: str = "fr", nonce: str = "abcdefgh12345678", *, tiers
                      live_telemetry: Mapping[str, Any] | None = None) -> str:
     """The complete multilingual page (FR default, EN, ES, DE, ZH). ``tiers`` is the ``tiers`` list of ``/v1/hivemind/catalog``."""
     flags = Flags(google=google_enabled, handles=handle_registration)
+    if live_telemetry is not None and not isinstance(live_telemetry, Mapping):
+        raise ValueError("live_telemetry must be a mapping or None")
     if lang not in LANGS:
         raise ValueError("lang must be one of 'fr', 'en', 'es', 'de', 'zh'")
     if not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", nonce):

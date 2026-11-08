@@ -53,6 +53,24 @@ PAPER_DOI = "10.5281/zenodo.24043016"
 UI_HEADER = "X-HiveMind-UI"
 UI_VERSION = "v3.2"
 GENERIC_LOGIN_ERROR = "Wrong e-mail, username or password."
+# Every error has a stable code; the page shows it in the visitor's language (static/i18n.json, keys "err_<code>"),
+# API clients get the English text. tests/test_web_v33_i18n.py checks both languages cover every code.
+ERRORS: dict[str, str] = {
+    "not_configured": "Sign-in is not configured on this deployment (missing session secret).",
+    "csrf": "Request refused (CSRF check). Reload the page and try again.",
+    "wrong_host": "Use the official address of this site.",
+    "bad_login": GENERIC_LOGIN_ERROR,
+    "rate_limited": "Too many attempts; wait a minute.",
+    "unavailable": "Sign-in is temporarily unavailable. Try again in a minute.",
+    "register_input": "Enter a valid e-mail and a password of at least 12 characters.",
+    "register_refused": "This e-mail or username cannot be registered. If it is yours, sign in or reset the password.",
+    "sign_in_first": "Sign in first.",
+    "weak_password": "The new password must be 12 to 256 characters.",
+    "session_expired": "Your session has expired. Sign in again.",
+    "reset_unavailable": "Password reset by e-mail is not available yet on this deployment.",
+    "reset_invalid": "This reset link is invalid or has expired. Ask for a new one.",
+}
+LANGUAGES = ("en", "fr")
 
 
 class GatewayClient:
@@ -91,9 +109,12 @@ class GatewayClient:
             body = {}
         return r.status_code, body if isinstance(body, dict) else {}
 
-    def get(self, path: str) -> tuple[int, dict[str, Any]]:
+    def get(self, path: str, bearer: str | None = None) -> tuple[int, dict[str, Any]]:
+        headers = {"Accept": "application/json"}
+        if bearer:
+            headers["Authorization"] = f"Bearer {bearer}"
         try:
-            r = self._client.get(f"{self.base_url}{path}", headers={"Accept": "application/json"})
+            r = self._client.get(f"{self.base_url}{path}", headers=headers)
         except httpx.HTTPError:
             return 502, {}
         try:
@@ -119,6 +140,12 @@ def _jwt_claims_unverified(token: str) -> dict[str, Any]:
         return json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
     except Exception:
         return {}
+
+
+def _eq(a: str, b: str) -> bool:
+    """Constant-time equality for strings that may contain any character (``hmac.compare_digest`` raises on non-ASCII
+    ``str``, which turned a crafted ``state`` or header into a server error)."""
+    return hmac.compare_digest(str(a).encode("utf-8", "surrogatepass"), str(b).encode("utf-8", "surrogatepass"))
 
 
 def page_csp(nonce: str) -> str:
@@ -228,20 +255,23 @@ def mount_web_v32(
     def _json(body: Mapping[str, Any], status: int = 200) -> Response:
         return _security(JSONResponse(dict(body), status_code=status))
 
+    def _err(code: str, status: int) -> Response:
+        return _json({"error": ERRORS[code], "code": code}, status)
+
     def _not_configured() -> Response:
-        return _json({"error": "Sign-in is not configured on this deployment (missing session secret)."}, 503)
+        return _err("not_configured", 503)
 
     def _csrf_ok(request: Request) -> bool:
         cookie = request.cookies.get(CSRF_COOKIE, "")
         header = request.headers.get("x-csrf-token", "")
-        if not cookie or not header or not hmac.compare_digest(cookie, header):
+        if not cookie or not header or not _eq(cookie, header):
             return False
         origin = request.headers.get("origin") or ""
         if not origin:
             ref = request.headers.get("referer") or ""
             parts = urlsplit(ref)
             origin = f"{parts.scheme}://{parts.netloc}" if parts.scheme and parts.netloc else ""
-        return hmac.compare_digest(origin.rstrip("/"), _origin(request))
+        return _eq(origin.rstrip("/"), _origin(request))
 
     async def _body(request: Request) -> dict[str, Any]:
         try:
@@ -254,15 +284,25 @@ def mount_web_v32(
         if fernet is None:
             return _not_configured()
         if not _csrf_ok(request):
-            return _json({"error": "Request refused (CSRF check). Reload the page and try again."}, 403)
+            return _err("csrf", 403)
         return None
 
     # ---- page and static files ---------------------------------------------------------------------------------------
     template = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
 
+    def _language(request: Request) -> str:
+        asked = (request.query_params.get("lang") or request.cookies.get("hm_lang") or "").lower()[:2]
+        if asked in LANGUAGES:
+            return asked
+        for part in (request.headers.get("accept-language") or "").split(","):
+            code = part.split(";")[0].strip().lower()[:2]
+            if code in LANGUAGES:
+                return code
+        return "en"
+
     def _page(request: Request) -> Response:
         nonce = secrets.token_urlsafe(18)
-        html = template.replace("{{NONCE}}", nonce).replace("{{PAPER_DOI}}", PAPER_DOI)
+        html = template.replace("{{NONCE}}", nonce).replace("{{PAPER_DOI}}", PAPER_DOI).replace("{{LANG}}", _language(request))
         resp = _security(HTMLResponse(html), nonce=nonce)
         if not request.cookies.get(CSRF_COOKIE):
             _cookie(resp, CSRF_COOKIE, secrets.token_urlsafe(24), SESSION_TTL_S, http_only=False, same_site="strict")
@@ -281,8 +321,12 @@ def mount_web_v32(
             if request.method in ("GET", "HEAD"):
                 target = public_url + path + (f"?{request.url.query}" if request.url.query else "")
                 return _security(RedirectResponse(target, status_code=301))
-            return _json({"error": f"Use {public_url}."}, 421)
-        return await call_next(request)
+            return _json({"error": f"Use {public_url}.", "code": "wrong_host"}, 421)
+        response = await call_next(request)
+        if mine and response.headers.get(UI_HEADER) != UI_VERSION:
+            # responses produced by the framework itself (404, 405, 422, 500) on a v3 path get the strict policy too
+            _security(response)
+        return response
 
     page_paths = ["/v32", "/v32/", "/auth/reset"] + (["/", "/auth", "/login", "/signup"] if take_over_root else [])
     for p in page_paths:
@@ -290,11 +334,12 @@ def mount_web_v32(
 
     @app.get("/v32/static/{name}", include_in_schema=False)
     def v32_static(name: str) -> Response:
-        allowed = {"app.js": "text/javascript", "app.css": "text/css"}
+        allowed = {"app.js": "text/javascript", "app.css": "text/css", "i18n.json": "application/json"}
         if name not in allowed:
             return _security(Response(status_code=404))
         resp = FileResponse(STATIC_DIR / name, media_type=allowed[name])
         resp.headers[UI_HEADER] = UI_VERSION
+        resp.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
         resp.headers["X-Content-Type-Options"] = "nosniff"
         resp.headers["Cache-Control"] = "public, max-age=300"
         return resp
@@ -310,20 +355,20 @@ def mount_web_v32(
         prod = tel.get("producers", {}) if status == 200 else {}
         models = tel.get("models", {}) if status == 200 else {}
 
-        def fact(label: str, value: Any, source: str, note: str = "") -> None:
+        def fact(key: str, label: str, value: Any, source: str, note: str = "") -> None:
             ok = isinstance(value, (int, float)) and not isinstance(value, bool)
-            facts.append({"label": label, "value": value if ok else None, "available": ok, "source": source, "read_at": read_at, "note": note})
+            facts.append({"key": key, "label": label, "value": value if ok else None, "available": ok, "source": source, "read_at": read_at, "note": note})
 
-        fact("Registered accounts", acc.get("total_registered_accounts"), src, "includes test and probe accounts")
-        fact("Accounts active in the last 24 h", acc.get("active_accounts_24h"), src)
-        fact("Volunteer GPUs serving now", prod.get("distinct_physical_gpus"), src)
-        fact("Models served now", models.get("live_models_count"), src, "open-weight models run by volunteers; none is trained by HiveMind yet")
+        fact("accounts", "Registered accounts", acc.get("total_registered_accounts"), src, "includes test and probe accounts")
+        fact("active_24h", "Accounts active in the last 24 h", acc.get("active_accounts_24h"), src)
+        fact("gpus", "Volunteer GPUs serving now", prod.get("distinct_physical_gpus"), src)
+        fact("models", "Models served now", models.get("live_models_count"), src, "open-weight models run by volunteers; none is trained by HiveMind yet")
         return _json({
             "facts": facts,
             "statements": [
-                {"text": "HiveMind is a proof of concept, not a production service.", "source": "https://github.com/xaviercallens/HiveMind"},
-                {"text": "A volunteer who serves a request sees its full prompt. Send only public, non-sensitive text.", "source": "https://github.com/xaviercallens/HiveMind/blob/main/docs/HIVEMIND_OPENROUTER.md"},
-                {"text": "The training chain has made held-out loss worse since round 171; the cause is being investigated.", "source": f"https://doi.org/{PAPER_DOI}"},
+                {"key": "poc", "text": "HiveMind is a proof of concept, not a production service.", "source": "https://github.com/xaviercallens/HiveMind"},
+                {"key": "prompts", "text": "A volunteer who serves a request sees its full prompt. Send only public, non-sensitive text.", "source": "https://github.com/xaviercallens/HiveMind/blob/main/docs/HIVEMIND_OPENROUTER.md"},
+                {"key": "chain", "text": "The training chain has made held-out loss worse since round 171; the cause is being investigated.", "source": f"https://doi.org/{PAPER_DOI}"},
             ],
             "paper_doi": PAPER_DOI,
         })
@@ -338,6 +383,31 @@ def mount_web_v32(
             "password_login": fernet is not None,
             "password_reset_email": reset_email and fernet is not None,
             "google": google_enabled and fernet is not None,
+        })
+
+    @app.get("/v32/api/account")
+    def v32_account(request: Request) -> Response:
+        s = _read_session(request)
+        if s is None:
+            return _err("sign_in_first", 401)
+        status, me = gw.get("/v1/hivemind/me", bearer=str(s["k"]))
+        if status == 401:
+            return _err("session_expired", 401)
+        if status != 200:
+            return _err("unavailable", 503)
+        balance = me.get("balance")
+        usage = []
+        for row in (me.get("recent_usage") or [])[:10]:
+            if isinstance(row, dict):
+                usage.append({
+                    "utc": row.get("utc"), "model": str(row.get("model_id", ""))[:80],
+                    "tokens": row.get("billed_tokens"), "charge": row.get("charge"),
+                    "as": "consumer" if row.get("consumer_id") == me.get("account_id") else "producer",
+                })
+        return _json({
+            "handle": me.get("handle", s.get("h", "")), "role": me.get("role", ""),
+            "balance": balance if isinstance(balance, (int, float)) and not isinstance(balance, bool) else None,
+            "usage": usage, "source": f"{gw.base_url}/v1/hivemind/me",
         })
 
     @app.get("/v32/api/session")
@@ -356,15 +426,15 @@ def mount_web_v32(
         ident = str(data.get("identifier") or "").strip()[:254]
         password = str(data.get("password") or "")[:256]
         if not ident or not password:
-            return _json({"error": GENERIC_LOGIN_ERROR}, 401)
+            return _err("bad_login", 401)
         status, body = _gw_post(request, "/api/v1/auth/login", {"handle_or_email": ident, "password": password})
         if status == 429:
-            return _json({"error": "Too many attempts; wait a minute."}, 429)
+            return _err("rate_limited", 429)
         if status >= 500:
-            return _json({"error": "Sign-in is temporarily unavailable. Try again in a minute."}, 503)
+            return _err("unavailable", 503)
         key = str(body.get("api_key") or body.get("token") or "")
         if status != 200 or not key.startswith("hm-"):
-            return _json({"error": GENERIC_LOGIN_ERROR}, 401)
+            return _err("bad_login", 401)
         resp = _json({"authenticated": True, "handle": body.get("handle", ""), "role": body.get("role", "")})
         _write_session(resp, key=key, handle=str(body.get("handle", "")), role=str(body.get("role", "")))
         return resp
@@ -378,13 +448,13 @@ def mount_web_v32(
         handle = str(data.get("handle") or "").strip()[:64] or email.split("@")[0]
         password = str(data.get("password") or "")
         if "@" not in email or len(password) < 12 or len(password) > 256:
-            return _json({"error": "Enter a valid e-mail and a password of at least 12 characters."}, 400)
+            return _err("register_input", 400)
         status, body = _gw_post(request, "/api/v1/auth/register", {"handle": handle, "email": email, "password": password})
         key = str(body.get("api_key") or body.get("token") or "")
         if status == 429:
-            return _json({"error": "Too many attempts; wait a minute."}, 429)
+            return _err("rate_limited", 429)
         if status != 200 or not key.startswith("hm-"):
-            return _json({"error": "This e-mail or username cannot be registered. If it is yours, sign in or reset the password."}, 409)
+            return _err("register_refused", 409)
         created = body.get("created") is True
         out: dict[str, Any] = {"authenticated": True, "handle": body.get("handle", handle), "role": body.get("role", "")}
         if created:
@@ -408,14 +478,20 @@ def mount_web_v32(
             return bad
         s = _read_session(request)
         if s is None:
-            return _json({"error": "Sign in first."}, 401)
+            return _err("sign_in_first", 401)
         data = await _body(request)
-        status, _ = _gw_post(request, "/api/v1/auth/change-password", {"new_password": str(data.get("new_password") or "")}, bearer=str(s["k"]))
+        status, body = _gw_post(request, "/api/v1/auth/change-password", {"new_password": str(data.get("new_password") or "")}, bearer=str(s["k"]))
         if status == 400:
-            return _json({"error": "The new password must be 12 to 256 characters."}, 400)
+            return _err("weak_password", 400)
         if status != 200:
-            return _json({"error": "Your session has expired. Sign in again."}, 401)
-        return _json({"status": "PASSWORD_SET"})
+            return _err("session_expired", 401)
+        new_key = str(body.get("api_key") or "")
+        if not new_key.startswith("hm-"):
+            return _json({"status": "PASSWORD_SET"})
+        # the gateway replaced the API key: this session follows it, every other session and copy of the old key stops
+        resp = _json({"status": "PASSWORD_SET", "api_key_once": new_key})
+        _write_session(resp, key=new_key, handle=str(s.get("h", "")), role=str(s.get("r", "")))
+        return resp
 
     @app.post("/v32/api/rotate-key")
     async def v32_rotate_key(request: Request) -> Response:
@@ -423,11 +499,11 @@ def mount_web_v32(
             return bad
         s = _read_session(request)
         if s is None:
-            return _json({"error": "Sign in first."}, 401)
+            return _err("sign_in_first", 401)
         status, body = _gw_post(request, "/api/v1/auth/rotate-key", {}, bearer=str(s["k"]))
         key = str(body.get("api_key") or body.get("token") or "")
         if status != 200 or not body.get("old_token_revoked") or not key.startswith("hm-"):
-            return _json({"error": "Your session has expired. Sign in again."}, 401)
+            return _err("session_expired", 401)
         resp = _json({"status": "KEY_ROTATED", "api_key_once": key})
         _write_session(resp, key=key, handle=str(s.get("h", "")), role=str(s.get("r", "")))
         return resp
@@ -440,9 +516,9 @@ def mount_web_v32(
         data = await _body(request)
         status, body = _gw_post(request, "/api/v1/auth/password-reset/request", {"email": str(data.get("email") or "")[:254]})
         if status == 503:
-            return _json({"error": "Password reset by e-mail is not available yet on this deployment."}, 503)
+            return _err("reset_unavailable", 503)
         if status == 429:
-            return _json({"error": "Too many requests; try again later."}, 429)
+            return _err("rate_limited", 429)
         return _json({"message": "If an account uses this e-mail address, a reset link is on its way. It is valid for 30 minutes."}, 202)
 
     @app.post("/v32/api/password-reset/confirm")
@@ -455,8 +531,7 @@ def mount_web_v32(
             {"token": str(data.get("token") or "")[:128], "new_password": str(data.get("new_password") or "")[:256]},
         )
         if status != 200:
-            err = (body.get("error") or {}).get("message") if isinstance(body.get("error"), dict) else None
-            return _json({"error": err or "This reset link is invalid or has expired. Ask for a new one."}, 400)
+            return _err("reset_invalid", 400)
         return _json({"status": "PASSWORD_RESET", "message": "Your password is changed. Sign in with it."})
 
     # ---- Google sign-in (authorization code + PKCE + nonce, server side) ----------------------------------------------
@@ -497,7 +572,7 @@ def mount_web_v32(
             sealed = json.loads(fernet.decrypt_at_time(request.cookies.get(OIDC_COOKIE, "").encode("ascii"), OIDC_TTL_S, int(clock())))
         except (InvalidToken, ValueError):
             return done("signin-error=expired")
-        if error or not code or not state or not hmac.compare_digest(state, str(sealed.get("s", ""))):
+        if error or not code or not state or not _eq(state, str(sealed.get("s", ""))):
             return done("signin-error=state")
         tokens = _exchange({
             "code": code,
@@ -514,7 +589,7 @@ def mount_web_v32(
             google_verifier.verify(id_token)  # signature, issuer, audience, expiry, email_verified
         except Exception:
             return done("signin-error=token")
-        if not hmac.compare_digest(str(_jwt_claims_unverified(id_token).get("nonce", "")), str(sealed.get("n", ""))):
+        if not _eq(str(_jwt_claims_unverified(id_token).get("nonce", "")), str(sealed.get("n", ""))):
             return done("signin-error=nonce")
         session = _read_session(request)
         if sealed.get("l") and session is not None:

@@ -50,3 +50,9 @@ button, .button { font: inherit; padding: .55rem .9rem; border-radius: 6px; bord
 code { background: var(--code-bg); padding: .1rem .3rem; border-radius: 4px; word-break: break-all; }
 .foot { border-top: 1px solid var(--line); margin-top: 2.5rem; padding: 1rem 16px 2rem; color: var(--muted); font-size: .875rem; }
 [hidden] { display: none !important; }
+.skip { position: absolute; left: -9999px; top: 0; background: var(--accent); color: var(--accent-fg); padding: .5rem .8rem; border-radius: 0 0 6px 0; }
+.skip:focus { left: 0; z-index: 10; }
+button.link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; }
+.usage { width: 100%; border-collapse: collapse; font-size: .875rem; }
+.usage th, .usage td { text-align: left; padding: .35rem .4rem; border-bottom: 1px solid var(--line); }
+.usage td.num { text-align: right; font-variant-numeric: tabular-nums; }

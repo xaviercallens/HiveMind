@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{LANG}}" data-lang="{{LANG}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,100 +9,113 @@
 <script src="/v32/static/app.js" nonce="{{NONCE}}" defer></script>
 </head>
 <body>
+<a class="skip" href="#main" data-i18n="skip">Skip to content</a>
 <header class="bar">
   <div class="wrap bar-in">
     <a class="brand" href="/v32">HiveMind</a>
-    <span class="badge">Proof of concept</span>
-    <nav><a href="#facts">Facts</a><a href="#account" id="nav-account">Sign in</a></nav>
+    <span class="badge" data-i18n="badge">Proof of concept</span>
+    <nav aria-label="Main">
+      <a href="#facts" data-i18n="nav_facts">Facts</a>
+      <a href="#account" id="nav-account" data-i18n="nav_signin">Sign in</a>
+      <button type="button" class="link" id="lang-toggle" data-i18n="lang_toggle">Français</button>
+    </nav>
   </div>
 </header>
 
-<main class="wrap">
+<main class="wrap" id="main" tabindex="-1">
   <section class="intro">
-    <h1>Shared computing for open AI, run by volunteers</h1>
-    <p>Volunteers lend their idle GPUs to serve open-weight models through an OpenAI-compatible gateway, and an open research
+    <h1 data-i18n="intro_h">Shared computing for open AI, run by volunteers</h1>
+    <p data-i18n="intro_p">Volunteers lend their idle GPUs to serve open-weight models through an OpenAI-compatible gateway, and an open research
       project studies how to train small expert models together. Everything here is a proof of concept.</p>
-    <p class="notice" role="note"><strong>Privacy:</strong> the volunteer who serves a request sees its full prompt. Send only
-      public, non-sensitive text: no secrets, personal or company data.</p>
+    <p class="notice" role="note"><strong data-i18n="privacy_label">Privacy:</strong> <span data-i18n="privacy_text">the volunteer who serves a request sees its full prompt. Send only
+      public, non-sensitive text: no secrets, personal or company data.</span></p>
   </section>
 
   <section id="facts" aria-labelledby="facts-h">
-    <h2 id="facts-h">What is real today</h2>
-    <p class="muted">Each number is read live from its source when the page loads. If a source does not answer, the number is shown as unavailable.</p>
-    <ul class="facts" id="facts-list"><li class="muted">Loading…</li></ul>
+    <h2 id="facts-h" data-i18n="facts_h">What is real today</h2>
+    <p class="muted" data-i18n="facts_note">Each number is read live from its source when the page loads. If a source does not answer, the number is shown as unavailable.</p>
+    <ul class="facts" id="facts-list"><li class="muted" data-i18n="loading">Loading…</li></ul>
     <ul class="statements" id="statements-list"></ul>
   </section>
 
   <section id="account" aria-labelledby="account-h">
-    <h2 id="account-h">Account</h2>
-    <p class="msg" id="msg" role="status" aria-live="polite" hidden></p>
+    <h2 id="account-h" data-i18n="account_h">Account</h2>
+    <p class="msg" id="msg" role="status" aria-live="polite" tabindex="-1" hidden></p>
 
-    <div id="unavailable" hidden><p>Sign-in is not available on this deployment yet.</p></div>
+    <div id="unavailable" hidden><p data-i18n="signin_unavailable">Sign-in is not available on this deployment yet.</p></div>
 
     <div id="signed-out" hidden>
-      <div class="tabs" role="tablist">
-        <button role="tab" data-tab="login" aria-selected="true">Sign in</button>
-        <button role="tab" data-tab="register" aria-selected="false">Create account</button>
-        <button role="tab" data-tab="forgot" aria-selected="false">Forgot password</button>
+      <div class="tabs" role="tablist" aria-label="Account">
+        <button role="tab" id="tab-login" data-tab="login" aria-controls="form-login" aria-selected="true" tabindex="0" data-i18n="tab_login">Sign in</button>
+        <button role="tab" id="tab-register" data-tab="register" aria-controls="form-register" aria-selected="false" tabindex="-1" data-i18n="tab_register">Create account</button>
+        <button role="tab" id="tab-forgot" data-tab="forgot" aria-controls="form-forgot" aria-selected="false" tabindex="-1" data-i18n="tab_forgot">Forgot password</button>
       </div>
 
-      <form id="form-login" class="panel" data-panel="login" autocomplete="on">
-        <label>E-mail or username <input name="identifier" type="text" autocomplete="username" required maxlength="254"></label>
-        <label>Password <input name="password" type="password" autocomplete="current-password" required maxlength="256"></label>
-        <button type="submit" class="primary">Sign in</button>
-        <p class="muted small">Accounts created before this version keep their e-mail and password.</p>
+      <form id="form-login" class="panel" data-panel="login" role="tabpanel" aria-labelledby="tab-login" autocomplete="on">
+        <label><span data-i18n="f_identifier">E-mail or username</span> <input name="identifier" type="text" autocomplete="username" required maxlength="254"></label>
+        <label><span data-i18n="f_password">Password</span> <input name="password" type="password" autocomplete="current-password" required maxlength="256"></label>
+        <button type="submit" class="primary" data-i18n="b_login">Sign in</button>
+        <p class="muted small" data-i18n="previous_users">Accounts created before this version keep their e-mail and password.</p>
       </form>
 
-      <form id="form-register" class="panel" data-panel="register" hidden autocomplete="on">
-        <label>E-mail <input name="email" type="email" autocomplete="email" required maxlength="254"></label>
-        <label>Username (optional) <input name="handle" type="text" autocomplete="nickname" maxlength="64"></label>
-        <label>Password (12 characters or more) <input name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="256"></label>
-        <button type="submit" class="primary">Create account</button>
+      <form id="form-register" class="panel" data-panel="register" role="tabpanel" aria-labelledby="tab-register" hidden autocomplete="on">
+        <label><span data-i18n="f_email">E-mail</span> <input name="email" type="email" autocomplete="email" required maxlength="254"></label>
+        <label><span data-i18n="f_handle">Username (optional)</span> <input name="handle" type="text" autocomplete="nickname" maxlength="64"></label>
+        <label><span data-i18n="f_new_password">Password (12 characters or more)</span> <input name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="256"></label>
+        <button type="submit" class="primary" data-i18n="b_register">Create account</button>
       </form>
 
-      <form id="form-forgot" class="panel" data-panel="forgot" hidden>
-        <label>E-mail of your account <input name="email" type="email" autocomplete="email" required maxlength="254"></label>
-        <button type="submit" class="primary">Send a reset link</button>
-        <p class="muted small" id="forgot-unavailable" hidden>Reset by e-mail is not available yet on this deployment.</p>
+      <form id="form-forgot" class="panel" data-panel="forgot" role="tabpanel" aria-labelledby="tab-forgot" hidden>
+        <label><span data-i18n="f_reset_email">E-mail of your account</span> <input name="email" type="email" autocomplete="email" required maxlength="254"></label>
+        <button type="submit" class="primary" data-i18n="b_forgot">Send a reset link</button>
+        <p class="muted small" id="forgot-unavailable" hidden data-i18n="reset_not_available">Reset by e-mail is not available yet on this deployment.</p>
       </form>
 
       <div id="sso" hidden>
-        <p class="or">or</p>
-        <a class="button" id="google-btn" href="/auth/google/start">Sign in with Google</a>
-        <p class="muted small">Already have an account with a password? Sign in with it first, then link Google from your account page; otherwise Google opens a new, separate account.</p>
+        <p class="or" data-i18n="or">or</p>
+        <a class="button" id="google-btn" href="/auth/google/start" data-i18n="b_google">Sign in with Google</a>
+        <p class="muted small" data-i18n="google_hint">Already have an account with a password? Sign in with it first, then link Google from your account page; otherwise Google opens a new, separate account.</p>
       </div>
     </div>
 
     <form id="form-reset" class="panel" hidden>
-      <h3>Choose a new password</h3>
-      <label>New password (12 characters or more) <input name="new_password" type="password" autocomplete="new-password" required minlength="12" maxlength="256"></label>
-      <button type="submit" class="primary">Set the new password</button>
+      <h3 data-i18n="reset_h">Choose a new password</h3>
+      <label><span data-i18n="f_change_password">New password (12 characters or more)</span> <input name="new_password" type="password" autocomplete="new-password" required minlength="12" maxlength="256"></label>
+      <button type="submit" class="primary" data-i18n="b_reset">Set the new password</button>
     </form>
 
     <div id="signed-in" hidden>
-      <p>Signed in as <strong id="who"></strong> <span class="muted" id="role"></span></p>
+      <p><span data-i18n="signed_in_as">Signed in as</span> <strong id="who"></strong> <span class="muted" id="role"></span></p>
+      <p id="balance-line" hidden><span data-i18n="balance">Balance</span>: <strong id="balance"></strong> <span data-i18n="points">points</span>
+        <a class="src" id="account-source" rel="noopener" data-i18n="source">source</a></p>
       <div class="keybox" id="keybox" hidden>
-        <p><strong>Your API key.</strong> Copy it now: it is shown only once. Use it as <code>Authorization: Bearer …</code>.</p>
+        <p><strong data-i18n="key_once_title">Your API key.</strong> <span data-i18n="key_once_text">Copy it now: it is shown only once. Use it as</span> <code>Authorization: Bearer …</code></p>
         <code id="key-once"></code>
-        <button type="button" id="copy-key">Copy</button>
+        <button type="button" id="copy-key" data-i18n="b_copy">Copy</button>
       </div>
       <form id="form-change" class="panel">
-        <label>New password (12 characters or more) <input name="new_password" type="password" autocomplete="new-password" required minlength="12" maxlength="256"></label>
-        <button type="submit">Change password</button>
+        <label><span data-i18n="f_change_password">New password (12 characters or more)</span> <input name="new_password" type="password" autocomplete="new-password" required minlength="12" maxlength="256"></label>
+        <button type="submit" data-i18n="b_change">Change password</button>
       </form>
       <div class="row">
-        <button type="button" id="rotate">New API key</button>
-        <a class="button" id="link-google" href="/auth/google/start?link=1" hidden>Link my Google account</a>
-        <button type="button" id="logout">Sign out</button>
+        <button type="button" id="rotate" data-i18n="b_rotate">New API key</button>
+        <a class="button" id="link-google" href="/auth/google/start?link=1" hidden data-i18n="b_link_google">Link my Google account</a>
+        <button type="button" id="logout" data-i18n="b_logout">Sign out</button>
       </div>
+      <h3 data-i18n="usage_h">Recent usage</h3>
+      <table class="usage" id="usage-table" hidden>
+        <thead><tr><th scope="col" data-i18n="usage_when">When</th><th scope="col" data-i18n="usage_model">Model</th><th scope="col" data-i18n="usage_tokens">Tokens</th><th scope="col" data-i18n="usage_charge">Points</th><th scope="col" data-i18n="usage_as">As</th></tr></thead>
+        <tbody id="usage-rows"></tbody>
+      </table>
+      <p class="muted small" id="usage-none" hidden data-i18n="usage_none">No usage yet.</p>
     </div>
   </section>
 </main>
 
 <footer class="wrap foot">
-  <p>Research paper: <a href="https://doi.org/{{PAPER_DOI}}" rel="noopener">doi:{{PAPER_DOI}}</a> ·
-     Source: <a href="https://github.com/xaviercallens/HiveMind" rel="noopener">github.com/xaviercallens/HiveMind</a> ·
-     No payment of any kind; points only buy computing on HiveMind.</p>
+  <p><span data-i18n="footer_paper">Research paper:</span> <a href="https://doi.org/{{PAPER_DOI}}" rel="noopener">doi:{{PAPER_DOI}}</a> ·
+     <span data-i18n="footer_source">Source:</span> <a href="https://github.com/xaviercallens/HiveMind" rel="noopener">github.com/xaviercallens/HiveMind</a> ·
+     <span data-i18n="footer_points">No payment of any kind; points only buy computing on HiveMind.</span></p>
 </footer>
 </body>
 </html>

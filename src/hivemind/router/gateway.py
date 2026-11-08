@@ -2815,7 +2815,12 @@ def create_router_app(
             await run_in_threadpool(store.set_password, acct.account_id, new_password)
         except ValueError:
             return _error_response(400, "The new password must be 12 to 256 characters.", "invalid_request_error", "weak_password")
-        return JSONResponse({"status": "PASSWORD_SET", "handle": acct.handle}, headers={"Cache-Control": "no-store"})
+        # v3.3: a password change also replaces the API key, so a stolen key or session does not survive it
+        new_key = await run_in_threadpool(store.rotate_key, acct.account_id)
+        return JSONResponse(
+            {"status": "PASSWORD_SET", "handle": acct.handle, "api_key": new_key, "old_key_revoked": True},
+            headers={"Cache-Control": "no-store"},
+        )
 
     # ---- v3.2: capabilities, password reset by e-mail, linking a Google identity to an existing account ---------------
     from hivemind.router.password_reset_email import reset_email_configured, send_reset_email

@@ -272,6 +272,33 @@ class ReservedHandle(ValueError):
     """The handle belongs to an identity provider and cannot be registered by hand."""
 
 
+MODERN_HASH_PREFIX = "pbkdf2_sha256$"
+MODERN_HASH_ITERATIONS = 600_000  # OWASP 2023 recommendation for PBKDF2-HMAC-SHA256
+
+
+def modern_password_hash(password: str, iterations: int | None = None) -> str:
+    """``pbkdf2_sha256$<iterations>$<salt hex>$<digest hex>`` with a fresh 16-byte salt (``MODERN_HASH_ITERATIONS`` by default,
+    read at call time)."""
+    iterations = MODERN_HASH_ITERATIONS if iterations is None else iterations
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations).hex()
+    return f"{MODERN_HASH_PREFIX}{iterations}${salt.hex()}${digest}"
+
+
+def verify_modern_password_hash(stored: str, password: str) -> bool:
+    """Constant-time check of a modern hash; iteration counts outside 100k-5M are refused (no cheap or abusive hashes)."""
+    try:
+        _algo, iters_text, salt_hex, digest_hex = stored.split("$")
+        iterations = int(iters_text)
+        salt = bytes.fromhex(salt_hex)
+    except ValueError:
+        return False
+    if not (100_000 <= iterations <= 5_000_000) or not salt or not digest_hex:
+        return False
+    computed = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations).hex()
+    return hmac.compare_digest(computed, digest_hex)
+
+
 class HandleTaken(ValueError):
     """Raised when registering a handle (after normalisation) that already exists."""
 
@@ -840,7 +867,11 @@ class RouterStore:
         except Exception:
             pass
 
-        if stored_pwd:
+        if stored_pwd.startswith(MODERN_HASH_PREFIX):
+            for p_cand in pwd_candidates:
+                if verify_modern_password_hash(stored_pwd, p_cand):
+                    return True, True
+        elif stored_pwd:
             if ":" in stored_pwd:
                 salt_hex, _, exp_hex = stored_pwd.partition(":")
                 try:
@@ -993,18 +1024,27 @@ class RouterStore:
             )
 
     def set_password(self, account_id: str, password: str) -> None:
-        """Set the password of ``account_id`` (salted PBKDF2-HMAC-SHA256, 200,000 iterations, ``salt:hash``).
+        """Set the password of ``account_id`` in the modern format (PBKDF2-HMAC-SHA256, 600,000 iterations).
 
         The caller must already have proved the account (its own API key); this method does not authorise.
         ``UnknownAccount`` if absent, ``ValueError`` if the password is shorter than 12 characters."""
         if not isinstance(password, str) or len(password) < 12 or len(password) > 256:
             raise ValueError("password must be 12 to 256 characters")
-        salt = secrets.token_bytes(16)
-        digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 200_000).hex()
+        stored = modern_password_hash(password)
         with self._tx() as conn:
             if conn.execute("SELECT 1 FROM accounts WHERE account_id=?", (account_id,)).fetchone() is None:
                 raise UnknownAccount(account_id)
-            conn.execute("UPDATE accounts SET password_hash=? WHERE account_id=?", (f"{salt.hex()}:{digest}", account_id))
+            conn.execute("UPDATE accounts SET password_hash=? WHERE account_id=?", (stored, account_id))
+
+    def _upgrade_password_hash(self, conn: sqlite3.Connection, row: sqlite3.Row, password: str) -> None:
+        """After a successful check, store the password in the modern format if it is not already (legacy users migrate
+        silently on their next sign-in). Only ever called with a password that has just been verified for ``row``."""
+        if "password_hash" not in row.keys() or not password:
+            return
+        current = str(row["password_hash"] or "")
+        if current.startswith(MODERN_HASH_PREFIX):
+            return
+        conn.execute("UPDATE accounts SET password_hash=? WHERE account_id=?", (modern_password_hash(password), str(row["account_id"])))
 
     @staticmethod
     def _resolve_legacy_user(identifier: str) -> dict[str, Any] | None:
@@ -1059,7 +1099,7 @@ class RouterStore:
         if normalised.startswith(tuple(f"{provider}." for provider in sorted(self._identity_providers))):
             raise ReservedHandle(f"handle prefix is reserved: {normalised}")
         account_id = self._hmac_hex(normalised)[:32]
-        pwd_hash = self._hash_password(normalised, password) if password else None
+        pwd_hash = modern_password_hash(password) if password else None
 
         with self._tx() as conn:
             candidate_rows: list[sqlite3.Row] = []
@@ -1116,6 +1156,7 @@ class RouterStore:
                         email_hint=clean_email or "",
                     )
                     if has_pwd and matched_pwd:
+                        self._upgrade_password_hash(conn, cand, password)
                         existing_id = str(cand["account_id"])
                         api_key = self._issue_or_reuse_key(conn, existing_id)
                         return existing_id, api_key, False
@@ -1244,6 +1285,7 @@ class RouterStore:
                     if has_pwd:
                         any_has_pwd = True
                     if has_pwd and matched_pwd:
+                        self._upgrade_password_hash(conn, cand, password)
                         acct_obj = self._row_account(cand)
                         api_key = self._issue_or_reuse_key(conn, acct_obj.account_id)
                         return acct_obj, api_key, False

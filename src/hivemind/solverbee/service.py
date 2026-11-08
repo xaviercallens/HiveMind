@@ -178,15 +178,15 @@ def validate_spec_bytes(raw: bytes) -> Dict[str, Any]:
         if not t > prev:
             raise SpecError("t_out must be strictly increasing and greater than t0")
         prev = t
-    if "rtol" in spec and not (_is_num(spec["rtol"]) and spec["rtol"] > 0):
+    if "rtol" in spec and not (_is_num(spec["rtol"]) and 0 < spec["rtol"] <= 1):
         raise SpecError("rtol must be a positive number")
     if "atol" in spec:
         at = spec["atol"]
         if isinstance(at, list):
             _num_list(at, "atol", 20)
-            if len(at) != n or not all(v > 0 for v in at):
+            if len(at) != n or not all(0 < v <= 1 for v in at):
                 raise SpecError("atol array must have n positive entries")
-        elif not (_is_num(at) and at > 0):
+        elif not (_is_num(at) and 0 < at <= 1):
             raise SpecError("atol must be a positive number or an array")
     if "method" in spec and spec["method"] not in ("bdf", "adams"):
         raise SpecError("method must be bdf or adams")
@@ -288,6 +288,14 @@ class SolverBeeService:
     def __init__(self, binary: str, *, problems_dir: Optional[str] = None, verifier: Any = None, max_concurrent: int = 2, timeout_s: float = 30.0,
                  allow_unsandboxed: bool = False, api_key: Optional[str] = None, loopback_only: bool = True, mem_mb: int = 2048,
                  log: Callable[[str], None] = lambda m: None) -> None:
+        if not isinstance(binary, str) or not binary.strip():
+            raise ValueError("binary must be a non-empty string")
+        if isinstance(max_concurrent, bool) or not isinstance(max_concurrent, int) or max_concurrent < 1:
+            raise ValueError("max_concurrent must be an integer >= 1")
+        if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not math.isfinite(timeout_s) or timeout_s <= 0:
+            raise ValueError("timeout_s must be a finite positive number")
+        if isinstance(mem_mb, bool) or not isinstance(mem_mb, int) or mem_mb < 1:
+            raise ValueError("mem_mb must be an integer >= 1")
         self.binary = binary
         self.library = load_problem_library(problems_dir)
         self._verifier = verifier

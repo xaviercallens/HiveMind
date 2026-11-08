@@ -35,6 +35,8 @@ SWARM_TELEMETRY_INTERVAL_SECONDS = 1.0
 
 def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
     """Generate a self-contained interactive Cyberpunk HTML5 HUD v2 preloaded with live RTX 2070 game data."""
+    if not isinstance(game_report, dict):
+        raise ValueError("game_report must be a dict")
     from hivemind.game.hf_hack_miner import build_georing_3d_topology_snapshot
 
     embedded_json = json.dumps(game_report, indent=2).replace("</", "<\\/")
@@ -1064,6 +1066,10 @@ def build_free_steam_edition_package(
     output_root: Path | None = None,
 ) -> Dict[str, Any]:
     """Build the Free-to-Play Steam Edition package (`steam_dist/HiveMind_Steam_FreeEdition`)."""
+    if game_report is not None and not isinstance(game_report, dict):
+        raise ValueError("game_report must be a dict or None")
+    if output_root is not None and (isinstance(output_root, bool) or not isinstance(output_root, (str, Path))):
+        raise ValueError("output_root must be a Path, string, or None")
     if game_report is None:
         report_file = ARTIFACTS_ROOT / "hf_hack_miner_game_report.json"
         if report_file.exists():
@@ -1071,7 +1077,7 @@ def build_free_steam_edition_package(
         else:
             game_report = {"game_title": "HiveMind: Neural Breach", "leaderboard": [], "missions": []}
 
-    pkg_dir = output_root or (PROJECT_ROOT / "steam_dist" / "HiveMind_Steam_FreeEdition")
+    pkg_dir = Path(output_root) if output_root is not None else (PROJECT_ROOT / "steam_dist" / "HiveMind_Steam_FreeEdition")
     sdk_dir = pkg_dir / "steamworks_sdk"
     cloud_dir = pkg_dir / "steam_cloud"
     web_dir = pkg_dir / "web_ui"
@@ -1253,6 +1259,8 @@ pause
 
 def bearer_token_from_header(authorization: str | None) -> str:
     """Return the token of an ``Authorization: Bearer <token>`` header, or ``""`` if absent or malformed."""
+    if authorization is not None and (isinstance(authorization, bool) or not isinstance(authorization, str)):
+        raise ValueError("authorization must be a string or None")
     if not authorization:
         return ""
     scheme, _, token = authorization.strip().partition(" ")
@@ -1267,6 +1275,10 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None, *, 
     ``worker_token`` (default: the ``HIVEMIND_STRATEGY_WORKER_TOKEN`` environment variable) is the bearer that trainer
     workers present to feed the shared strategy optimizer; without one the telemetry is read-only (IP-198).
     """
+    if game_report is not None and not isinstance(game_report, dict):
+        raise ValueError("game_report must be a dict or None")
+    if worker_token is not None and (isinstance(worker_token, bool) or not isinstance(worker_token, str)):
+        raise ValueError("worker_token must be a string or None")
     import hmac
     import os
     import torch

@@ -82,6 +82,14 @@ class ScientificMissionSpec:
     base_scientific_pts: int
     description: str
 
+    def __post_init__(self) -> None:
+        if isinstance(self.base_scientific_pts, bool) or not isinstance(self.base_scientific_pts, int) or self.base_scientific_pts <= 0:
+            raise ValueError("base_scientific_pts must be a positive integer")
+        for attr in ("mission_id", "title", "specialist_bee"):
+            val = getattr(self, attr)
+            if isinstance(val, bool) or not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{attr} must be a non-empty string")
+
 
 SCIENTIFIC_MISSIONS_CATALOG: List[ScientificMissionSpec] = [
     ScientificMissionSpec(
@@ -222,6 +230,13 @@ def build_antigravity_game_copilot_config(
     specialist_bee: str = "hivemind/bee-stars",
 ) -> Dict[str, Any]:
     """Generate the Google Antigravity SDK (`google-antigravity`) configuration for the Unity/Steam game."""
+    for field_name, val in (
+        ("gateway_url", gateway_url),
+        ("local_shield_url", local_shield_url),
+        ("specialist_bee", specialist_bee),
+    ):
+        if isinstance(val, bool) or not isinstance(val, str) or not val.strip():
+            raise ValueError(f"{field_name} must be a non-empty string")
     python_sdk_snippet = (
         "import asyncio\n"
         "from google.antigravity import Agent, LocalOpenAIAgentConfig\n\n"
@@ -267,6 +282,13 @@ def integrate_orbital_symplectic_comparison(
     eccentricity: float = 0.25,
 ) -> Dict[str, Any]:
     """Compare SebLague's semi-implicit Euler vs 2nd-order Symplectic Velocity-Verlet."""
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps <= 0:
+        raise ValueError("steps must be a positive integer")
+    for field_name, val in (("dt", dt), ("mu", mu)):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+            raise ValueError(f"{field_name} must be a positive finite number")
+    if isinstance(eccentricity, bool) or not isinstance(eccentricity, (int, float)) or not math.isfinite(float(eccentricity)) or not (0.0 <= float(eccentricity) < 1.0):
+        raise ValueError("eccentricity must be in [0.0, 1.0)")
     # Start at periapsis of an elliptical orbit with semi-major axis a = 1.0
     r0 = 1.0 - eccentricity
     v0 = math.sqrt(mu * (1.0 + eccentricity) / (1.0 - eccentricity))
@@ -329,6 +351,17 @@ def fold_exoplanet_transit_lightcurve(
     seed: int = 20261026,
 ) -> Dict[str, Any]:
     """Synthesize and phase-fold a Kepler/TESS exoplanet transit light curve via Box-Least-Squares (BLS)."""
+    for field_name, val in (
+        ("true_period_days", true_period_days),
+        ("trial_period_days", trial_period_days),
+        ("transit_depth_ppm", transit_depth_ppm),
+    ):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+            raise ValueError(f"{field_name} must be a positive finite number")
+    if isinstance(num_cadences, bool) or not isinstance(num_cadences, int) or num_cadences <= 0:
+        raise ValueError("num_cadences must be a positive integer")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
     rng = np.random.default_rng(seed)
     t_days = np.linspace(0.0, 45.0, num_cadences)
     depth_frac = transit_depth_ppm * 1e-6
@@ -388,6 +421,14 @@ def run_e8_lattice_multikrum_mission(
     seed: int = 42,
 ) -> Dict[str, Any]:
     """Execute Mission 2: 8D Gosset E8 Lattice Quantization + Multi-Krum (n=7, f=2) Defense."""
+    if isinstance(num_honest, bool) or not isinstance(num_honest, int) or num_honest <= 0:
+        raise ValueError("num_honest must be a positive integer")
+    if isinstance(num_byzantine, bool) or not isinstance(num_byzantine, int) or num_byzantine < 0:
+        raise ValueError("num_byzantine must be a non-negative integer")
+    if isinstance(scale, bool) or not isinstance(scale, (int, float)) or not math.isfinite(float(scale)) or float(scale) <= 0.0:
+        raise ValueError("scale must be a positive finite number")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
     rng = np.random.default_rng(seed)
     true_gradient = np.array([0.42, -0.31, 0.18, 0.55, -0.27, 0.39, -0.14, 0.48], dtype=np.float64)
 
@@ -847,8 +888,12 @@ def ask_la_ruche_bee_copilot_live(
     The La Ruche call is made with the caller's own router key only; the server-held cached
     session key is never used for caller prompts (IP-201).
     """
-    if not router_api_key.strip():
+    if isinstance(router_api_key, bool) or not isinstance(router_api_key, str) or not router_api_key.strip():
         raise ValueError("router_api_key is required: caller prompts never use the server-held key")
+    if isinstance(prompt, bool) or not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("prompt must be a non-empty string")
+    if isinstance(model, bool) or not isinstance(model, str) or not model.strip():
+        raise ValueError("model must be a non-empty string")
     t0 = time.perf_counter()
     reply_text = ""
     provider_used = "la_ruche_cloud"
@@ -962,6 +1007,20 @@ class HiveMindScientificGameEngine:
         steam_api_verified: bool = False,
     ) -> Dict[str, Any]:
         """Run and verify a single Scientific Discovery Mission (`MISSION-SCI-01..03`)."""
+        for attr_name, val in (("mission_id", mission_id), ("gamer_tag", gamer_tag), ("steam_id64", steam_id64)):
+            if isinstance(val, bool) or not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{attr_name} must be a non-empty string")
+        if isinstance(steps, bool) or not isinstance(steps, int) or steps <= 0:
+            raise ValueError("steps must be a positive integer")
+        if isinstance(num_byzantine, bool) or not isinstance(num_byzantine, int) or num_byzantine < 0:
+            raise ValueError("num_byzantine must be a non-negative integer")
+        for attr_name, val in (("trial_period_days", trial_period_days), ("dt", dt)):
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{attr_name} must be a positive finite number")
+        if isinstance(account_spend_usd, bool) or not isinstance(account_spend_usd, (int, float)) or not math.isfinite(float(account_spend_usd)) or float(account_spend_usd) < 0.0:
+            raise ValueError("account_spend_usd must be a non-negative finite number")
+        if not isinstance(is_vac_banned, bool) or not isinstance(steam_api_verified, bool):
+            raise ValueError("is_vac_banned and steam_api_verified must be booleans")
         spec = next(
             (m for m in SCIENTIFIC_MISSIONS_CATALOG if m.mission_id == mission_id),
             SCIENTIFIC_MISSIONS_CATALOG[0],
@@ -1291,6 +1350,8 @@ def render_scientific_discovery_game_html(initial_report: Dict[str, Any] | None 
     Design System `assets/a3653ca2e0a1411081b38c8c351992f7` "Cyber-Honeycomb Supercluster") and
     Project `projects/8287079345201329243` (`ExoElenchus TIC 4206066 Astrophysics Discovery`).
     """
+    if initial_report is not None and not isinstance(initial_report, dict):
+        raise ValueError("initial_report must be a dict or None")
     engine = HiveMindScientificGameEngine()
     report = initial_report or engine.run_full_scientific_odyssey()
     embedded_json = json.dumps(report, indent=2).replace("</", "<\\/")

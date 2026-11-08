@@ -17,8 +17,10 @@ Exposes:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import functools
 import html
+import math
 from dataclasses import asdict, dataclass
 from typing import Any
 from hivemind.router.telemetry_figures import shown_figure
@@ -49,6 +51,14 @@ class BeeLifecyclePhase:
     summary_en: str
     protocol_endpoints: tuple[str, ...]
     source: str  # where each figure in time_window/key_metric comes from, or NOT_MEASURED
+
+    def __post_init__(self) -> None:
+        if isinstance(self.step_number, bool) or not isinstance(self.step_number, int) or self.step_number <= 0:
+            raise ValueError("step_number must be a positive integer")
+        for attr in ("phase_id", "title_fr", "title_en", "source"):
+            val = getattr(self, attr)
+            if isinstance(val, bool) or not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{attr} must be a non-empty string")
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -88,6 +98,27 @@ class BeeScenarioResult:
     recommended_max_tokens: int
     suggested_cost_per_1k: float
     source: str = "NOT_SOURCED: no artifact in the repository holds this figure"  # where tokens_per_sec comes from
+
+    def __post_init__(self) -> None:
+        for attr in ("scenario_id", "model_id", "source"):
+            val = getattr(self, attr)
+            if isinstance(val, bool) or not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{attr} must be a non-empty string")
+        for attr in (
+            "vram_footprint_gb",
+            "cold_load_s",
+            "warm_latency_ms",
+            "tokens_per_sec",
+            "recommended_temperature",
+            "suggested_cost_per_1k",
+        ):
+            val = getattr(self, attr)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{attr} must be a non-negative finite number")
+        for attr in ("prompt_tokens", "completion_tokens", "total_tokens", "recommended_max_tokens", "http_status"):
+            val = getattr(self, attr)
+            if isinstance(val, bool) or not isinstance(val, int) or val <= 0:
+                raise ValueError(f"{attr} must be a positive integer")
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -1774,6 +1805,8 @@ BEE_DECISION_MATRIX: tuple[dict[str, Any], ...] = (
 
 def life_as_a_bee_payload(live_telemetry: dict[str, Any] | None = None) -> dict[str, Any]:
     """Return the complete JSON representation of the Life as a Bee dashboard and benchmark."""
+    if live_telemetry is not None and not isinstance(live_telemetry, Mapping):
+        raise ValueError("live_telemetry must be a mapping or None")
     total_tokens = sum(s.total_tokens for s in LIFE_AS_A_BEE_SCENARIOS)
     mean_latency = round(sum(s.warm_latency_ms for s in LIFE_AS_A_BEE_SCENARIOS) / len(LIFE_AS_A_BEE_SCENARIOS), 1)
     mean_speed = round(sum(s.tokens_per_sec for s in LIFE_AS_A_BEE_SCENARIOS) / len(LIFE_AS_A_BEE_SCENARIOS), 2)
@@ -1867,6 +1900,8 @@ def life_as_a_bee_payload(live_telemetry: dict[str, Any] | None = None) -> dict[
 
 def render_life_as_a_bee_section(live_telemetry: dict[str, Any] | None = None) -> str:
     """Render the interactive ``#life-as-a-bee`` HTML section for embedding in ``portal_page.py``."""
+    if live_telemetry is not None and not isinstance(live_telemetry, Mapping):
+        raise ValueError("live_telemetry must be a mapping or None")
     lt = live_telemetry or {}
     acct = lt.get("accounts") or {}
     models_live = lt.get("models") or {}

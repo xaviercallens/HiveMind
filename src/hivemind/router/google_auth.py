@@ -7,6 +7,7 @@ tests are described in ``oidc_auth``. Nothing about the user except the opaque `
 
 from __future__ import annotations
 
+import math
 import re
 import time
 from collections.abc import Callable
@@ -49,7 +50,15 @@ class GoogleIdTokenVerifier(OidcIdTokenVerifier):
         max_age_s: float = DEFAULT_MAX_AGE_S,
         leeway_s: float = DEFAULT_LEEWAY_S,
     ) -> None:
-        if not CLIENT_ID_RE.match(client_id):
+        if not isinstance(client_id, str) or not CLIENT_ID_RE.match(client_id):
             raise ValueError("client_id must look like 123456789-abc.apps.googleusercontent.com")
+        if not callable(jwks_fetcher):
+            raise ValueError("jwks_fetcher must be callable")
+        if not callable(clock):
+            raise ValueError("clock must be callable")
+        if isinstance(max_age_s, bool) or not isinstance(max_age_s, (int, float)) or not math.isfinite(max_age_s) or max_age_s <= 0:
+            raise ValueError("max_age_s must be a positive finite number")
+        if isinstance(leeway_s, bool) or not isinstance(leeway_s, (int, float)) or not math.isfinite(leeway_s) or leeway_s < 0:
+            raise ValueError("leeway_s must be a non-negative finite number")
         provider = OidcProvider("google", GOOGLE_ISSUERS, GOOGLE_JWKS_URL, client_id)
         super().__init__(provider, jwks_fetcher=jwks_fetcher, clock=clock, max_age_s=max_age_s, leeway_s=leeway_s)

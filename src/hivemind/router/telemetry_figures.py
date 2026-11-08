@@ -15,6 +15,8 @@ NOT_AVAILABLE = "n/a"
 
 def shown_figure(value: Any, decimals: int | None = None) -> str:
     """Format a telemetry figure for a page: thousands separators, ``decimals`` places for floats, ``n/a`` when absent."""
+    if decimals is not None and (isinstance(decimals, bool) or not isinstance(decimals, int) or decimals < 0 or decimals > 12):
+        raise ValueError("decimals must be None or an integer in [0, 12]")
     if value is None or isinstance(value, bool):
         return NOT_AVAILABLE
     if isinstance(value, str):

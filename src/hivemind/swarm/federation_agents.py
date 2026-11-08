@@ -60,6 +60,8 @@ def code_pin(paths: Sequence[Path | str]) -> str:
 
     Line endings are normalised first: a Windows checkout (CRLF) of the same commit must pin the same as a Linux one, or every task would be refused for a reason nobody can see.
     """
+    if not paths:
+        raise FederationError("paths must be non-empty")
     h = hashlib.sha256()
     for p in paths:
         p = Path(p)
@@ -69,6 +71,8 @@ def code_pin(paths: Sequence[Path | str]) -> str:
 
 def tensors_sha256(state: Mapping[str, Any]) -> str:
     """Canonical hash of a dict of tensors (names, shapes, dtypes, bytes), independent of insertion order."""
+    if not state:
+        raise FederationError("state must be non-empty")
     h = hashlib.sha256()
     for k in sorted(state):
         t = state[k].detach().cpu().contiguous()
@@ -79,6 +83,8 @@ def tensors_sha256(state: Mapping[str, Any]) -> str:
 def encode_tensors(state: Mapping[str, Any]) -> str:
     import torch
 
+    if not state:
+        raise FederationError("state must be non-empty")
     buf = io.BytesIO()
     torch.save({k: v.detach().cpu().contiguous() for k, v in state.items()}, buf)
     return base64.b64encode(buf.getvalue()).decode("ascii")
@@ -88,6 +94,8 @@ def decode_tensors(b64: str) -> dict[str, Any]:
     """Weights-only: a payload can carry tensors and plain containers, never code."""
     import torch
 
+    if not isinstance(b64, str) or not b64.strip():
+        raise ValueError("b64 must be a non-empty base64 string")
     raw = base64.b64decode(b64, validate=True)  # strict: anything that is not base64 is refused before torch sees it
     return torch.load(io.BytesIO(raw), map_location="cpu", weights_only=True)
 
@@ -106,28 +114,78 @@ def _check_size(event: AMCPKafkaEvent) -> AMCPKafkaEvent:
 
 def build_offer(*, run_id: str, rnd: int, sender_id: str, global_state: Mapping[str, Any], base_sha256: str, pin: str, inner_steps: int, deadline_unix: float,
                 quorum: int, params: Mapping[str, Any] | None = None) -> AMCPKafkaEvent:
-    if not _ID_RE.match(run_id):
+    if not isinstance(run_id, str) or not _ID_RE.match(run_id):
         raise FederationError("run_id must be 1-64 characters of letters, digits . _ -")
+    if isinstance(rnd, bool) or not isinstance(rnd, int) or rnd < 0:
+        raise FederationError("rnd must be a non-negative integer")
+    if not isinstance(sender_id, str) or not sender_id.strip():
+        raise FederationError("sender_id must be a non-empty string")
+    if not isinstance(base_sha256, str) or not base_sha256.strip():
+        raise FederationError("base_sha256 must be a non-empty string")
+    if not isinstance(pin, str) or not pin.strip():
+        raise FederationError("pin must be a non-empty string")
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps <= 0:
+        raise FederationError("inner_steps must be a positive integer")
+    if isinstance(quorum, bool) or not isinstance(quorum, int) or quorum <= 0:
+        raise FederationError("quorum must be a positive integer")
+    if isinstance(deadline_unix, bool) or not isinstance(deadline_unix, (int, float)) or not math.isfinite(float(deadline_unix)) or deadline_unix <= 0:
+        raise FederationError("deadline_unix must be a positive finite number")
     payload = {"run_id": run_id, "round": rnd, "algo": ALGO, "script_sha256": pin, "base_sha256": base_sha256, "global_sha256": tensors_sha256(global_state),
                "inner_steps": inner_steps, "deadline_unix": deadline_unix, "quorum": quorum, "params": dict(params or {}), "global_b64": encode_tensors(global_state)}
     return _check_size(build_amcp_kafka_event(topic_key="federation", event_type=OFFER, sender_id=sender_id, sender_kind="ai_agent", subject_id=run_id, payload=payload))
 
 
 def build_claim(*, run_id: str, rnd: int, learner_id: str, host: str) -> AMCPKafkaEvent:
+    if not isinstance(run_id, str) or not _ID_RE.match(run_id):
+        raise FederationError("run_id must be 1-64 characters of letters, digits . _ -")
+    if isinstance(rnd, bool) or not isinstance(rnd, int) or rnd < 0:
+        raise FederationError("rnd must be a non-negative integer")
+    if not isinstance(learner_id, str) or not learner_id.strip():
+        raise FederationError("learner_id must be a non-empty string")
+    if not isinstance(host, str) or not host.strip():
+        raise FederationError("host must be a non-empty string")
     return build_amcp_kafka_event(topic_key="federation", event_type=CLAIM, sender_id=learner_id, sender_kind="gpu_producer", subject_id=run_id,
                                   payload={"run_id": run_id, "round": rnd, "learner_id": learner_id, "host": host})
 
 
 def build_result(*, run_id: str, rnd: int, learner_id: str, host: str, tokens: int, delta: Mapping[str, Any], delta_l2: float, eval_loss_global: float, pin: str,
                  global_sha256: str, vram_peak_mib: float | None = None) -> AMCPKafkaEvent:
+    if not isinstance(run_id, str) or not _ID_RE.match(run_id):
+        raise FederationError("run_id must be 1-64 characters of letters, digits . _ -")
+    if isinstance(rnd, bool) or not isinstance(rnd, int) or rnd < 0:
+        raise FederationError("rnd must be a non-negative integer")
+    if not isinstance(learner_id, str) or not learner_id.strip():
+        raise FederationError("learner_id must be a non-empty string")
+    if not isinstance(host, str) or not host.strip():
+        raise FederationError("host must be a non-empty string")
+    if isinstance(tokens, bool) or not isinstance(tokens, int) or tokens < 0:
+        raise FederationError("tokens must be a non-negative integer")
+    if isinstance(delta_l2, bool) or not isinstance(delta_l2, (int, float)) or not math.isfinite(float(delta_l2)) or delta_l2 < 0.0:
+        raise FederationError("delta_l2 must be a finite non-negative number")
+    if isinstance(eval_loss_global, bool) or not isinstance(eval_loss_global, (int, float)) or not math.isfinite(float(eval_loss_global)):
+        raise FederationError("eval_loss_global must be a finite number")
+    if not isinstance(pin, str) or not pin.strip():
+        raise FederationError("pin must be a non-empty string")
+    if not isinstance(global_sha256, str) or not global_sha256.strip():
+        raise FederationError("global_sha256 must be a non-empty string")
     payload = {"run_id": run_id, "round": rnd, "learner_id": learner_id, "host": host, "tokens": tokens, "delta_l2": delta_l2, "eval_loss_global": eval_loss_global,
                "script_sha256": pin, "global_sha256": global_sha256, "delta_b64": encode_tensors(delta)}
     if vram_peak_mib is not None:
+        if isinstance(vram_peak_mib, bool) or not isinstance(vram_peak_mib, (int, float)) or not math.isfinite(float(vram_peak_mib)) or vram_peak_mib < 0.0:
+            raise FederationError("vram_peak_mib must be a finite non-negative number")
         payload["vram_peak_mib"] = float(vram_peak_mib)
     return _check_size(build_amcp_kafka_event(topic_key="federation", event_type=RESULT, sender_id=learner_id, sender_kind="gpu_producer", subject_id=run_id, payload=payload))
 
 
 def build_abort(*, run_id: str, rnd: int, sender_id: str, reason: str) -> AMCPKafkaEvent:
+    if not isinstance(run_id, str) or not _ID_RE.match(run_id):
+        raise FederationError("run_id must be 1-64 characters of letters, digits . _ -")
+    if isinstance(rnd, bool) or not isinstance(rnd, int) or rnd < 0:
+        raise FederationError("rnd must be a non-negative integer")
+    if not isinstance(sender_id, str) or not sender_id.strip():
+        raise FederationError("sender_id must be a non-empty string")
+    if not isinstance(reason, str) or not reason.strip():
+        raise FederationError("reason must be a non-empty string")
     return build_amcp_kafka_event(topic_key="federation", event_type=ABORT, sender_id=sender_id, sender_kind="ai_agent", subject_id=run_id,
                                   payload={"run_id": run_id, "round": rnd, "reason": reason[:128]})
 
@@ -138,6 +196,8 @@ def build_abort(*, run_id: str, rnd: int, sender_id: str, reason: str) -> AMCPKa
 def check_offer(payload: Mapping[str, Any], *, my_pin: str, my_base_sha256: str, now: float | None = None, run_id: str | None = None) -> dict[str, Any]:
     """Learner side. Verify BEFORE running anything; returns the decoded global state, or raises ``OfferRefused`` with the reason."""
     now = time.time() if now is None else now
+    if isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(float(now)):
+        raise OfferRefused("now must be a finite timestamp")
     if run_id is not None and payload.get("run_id") != run_id:
         raise OfferRefused(f"offer is for run {payload.get('run_id')!r}, this host joined {run_id!r}")
     if payload.get("algo") != ALGO:
@@ -146,7 +206,8 @@ def check_offer(payload: Mapping[str, Any], *, my_pin: str, my_base_sha256: str,
         raise OfferRefused("the offer pins a different code version than the one on this host: update the checkout (code never travels in a message)")
     if payload.get("base_sha256") != my_base_sha256:
         raise OfferRefused("the base model on this host hashes differently from the offer's: refusing to train a different model")
-    if float(payload.get("deadline_unix", 0)) <= now:
+    dl = payload.get("deadline_unix", 0)
+    if isinstance(dl, bool) or not isinstance(dl, (int, float)) or not math.isfinite(float(dl)) or float(dl) <= now:
         raise OfferRefused("the offer's deadline has passed")
     state = decode_tensors(str(payload.get("global_b64", "")))
     if tensors_sha256(state) != payload.get("global_sha256"):
@@ -156,6 +217,8 @@ def check_offer(payload: Mapping[str, Any], *, my_pin: str, my_base_sha256: str,
 
 def check_delta(delta: Mapping[str, Any], template: Mapping[str, Any], max_l2: float) -> float:
     """Same names and shapes as the global state, all values finite, and a bounded size. Returns the delta's L2 norm."""
+    if isinstance(max_l2, bool) or not isinstance(max_l2, (int, float)) or not math.isfinite(float(max_l2)) or max_l2 < 0.0:
+        raise ResultRejected("max_l2 must be a finite non-negative number")
     if set(delta) != set(template):
         raise ResultRejected("delta names differ from the global state")
     total = 0.0
@@ -176,15 +239,17 @@ def check_result(payload: Mapping[str, Any], *, run_id: str, rnd: int, global_sh
     """Coordinator side, on the signed payload (the delta itself is checked with ``check_delta``)."""
     if payload.get("run_id") != run_id:
         raise ResultRejected("result is for another run")
-    if int(payload.get("round", -1)) != rnd:
-        raise ResultRejected(f"result is for round {payload.get('round')}, the open round is {rnd}")
+    raw_rnd = payload.get("round", -1)
+    if isinstance(raw_rnd, bool) or not isinstance(raw_rnd, int) or raw_rnd != rnd:
+        raise ResultRejected(f"result is for round {raw_rnd}, the open round is {rnd}")
     if payload.get("learner_id") not in allowed:
         raise ResultRejected(f"learner {payload.get('learner_id')!r} is not on the allowed list")
     if payload.get("global_sha256") != global_sha256:
         raise ResultRejected("the learner trained from a different global state than the one offered")
     if payload.get("script_sha256") != pin:
         raise ResultRejected("the learner ran a different code version")
-    if not (float(payload.get("tokens", 0)) > 0):
+    raw_tokens = payload.get("tokens", 0)
+    if isinstance(raw_tokens, bool) or not isinstance(raw_tokens, (int, float)) or not math.isfinite(float(raw_tokens)) or not (float(raw_tokens) > 0):
         raise ResultRejected("no tokens trained")
 
 
@@ -208,8 +273,31 @@ class RoundBook:
     rejected: list[tuple[str, str]] = field(default_factory=list)
     claims: set[str] = field(default_factory=set)
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.run_id, str) or not _ID_RE.match(self.run_id):
+            raise FederationError("run_id must be 1-64 characters of letters, digits . _ -")
+        if isinstance(self.rnd, bool) or not isinstance(self.rnd, int) or self.rnd < 0:
+            raise FederationError("rnd must be a non-negative integer")
+        if not self.allowed:
+            raise FederationError("allowed must be non-empty")
+        if isinstance(self.quorum, bool) or not isinstance(self.quorum, int) or self.quorum < 1 or self.quorum > len(self.allowed):
+            raise FederationError("quorum must be an integer in [1, len(allowed)]")
+        if isinstance(self.deadline_unix, bool) or not isinstance(self.deadline_unix, (int, float)) or not math.isfinite(float(self.deadline_unix)) or self.deadline_unix <= 0:
+            raise FederationError("deadline_unix must be a positive finite number")
+        if isinstance(self.max_delta_l2, bool) or not isinstance(self.max_delta_l2, (int, float)) or not math.isfinite(float(self.max_delta_l2)) or self.max_delta_l2 < 0.0:
+            raise FederationError("max_delta_l2 must be a finite non-negative number")
+        if not self.template:
+            raise FederationError("template must be non-empty")
+
     def claim(self, payload: Mapping[str, Any]) -> None:
-        if payload.get("run_id") == self.run_id and int(payload.get("round", -1)) == self.rnd and payload.get("learner_id") in self.allowed:
+        raw_rnd = payload.get("round", -1)
+        if (
+            payload.get("run_id") == self.run_id
+            and not isinstance(raw_rnd, bool)
+            and isinstance(raw_rnd, int)
+            and raw_rnd == self.rnd
+            and payload.get("learner_id") in self.allowed
+        ):
             self.claims.add(str(payload["learner_id"]))
 
     def offer_result(self, payload: Mapping[str, Any]) -> bool:

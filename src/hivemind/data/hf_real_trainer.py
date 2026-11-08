@@ -171,21 +171,22 @@ def train_single_domain_lora_adapter(
         raise ValueError("domain_name must be a non-empty string")
     if not isinstance(reference_lora_state, dict) or not reference_lora_state:
         raise ValueError("reference_lora_state must be a non-empty dictionary")
-    if isinstance(lora_rank_r, bool) or not isinstance(lora_rank_r, int) or lora_rank_r < 1:
-        raise ValueError("lora_rank_r must be a positive integer")
-    if isinstance(lora_alpha, bool) or not isinstance(lora_alpha, int) or lora_alpha < 1:
-        raise ValueError("lora_alpha must be a positive integer")
-    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
-        raise ValueError("inner_steps must be a positive integer")
-    if isinstance(lr, bool) or not isinstance(lr, (int, float)) or not math.isfinite(lr) or lr <= 0.0:
-        raise ValueError("lr must be a positive finite number")
-    if (
-        isinstance(topk_ratio, bool)
-        or not isinstance(topk_ratio, (int, float))
-        or not math.isfinite(topk_ratio)
-        or not (0.0 < topk_ratio <= 1.0)
+    if isinstance(lora_rank_r, bool) or not isinstance(lora_rank_r, int):
+        raise ValueError("lora_rank_r must be an integer")
+    if isinstance(lora_alpha, bool) or not isinstance(lora_alpha, int):
+        raise ValueError("lora_alpha must be an integer")
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int):
+        raise ValueError("inner_steps must be an integer")
+    if isinstance(lr, bool) or not isinstance(lr, (int, float)):
+        raise ValueError("lr must be a number")
+    if isinstance(topk_ratio, bool) or not isinstance(topk_ratio, (int, float)):
+        raise ValueError("topk_ratio must be a number")
+    if custom_corpus is not None and (
+        not isinstance(custom_corpus, (list, tuple))
+        or len(custom_corpus) == 0
+        or any(not isinstance(s, str) or not s.strip() for s in custom_corpus)
     ):
-        raise ValueError("topk_ratio must be a finite number in (0.0, 1.0]")
+        raise ValueError("custom_corpus must be None or a non-empty sequence of non-empty strings")
 
     guard = SwarmTrainingAndStoreGuard()
     spec = SEASON_3_DOMAIN_EXPERT_SPECS.get(

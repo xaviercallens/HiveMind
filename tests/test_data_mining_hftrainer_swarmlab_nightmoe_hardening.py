@@ -119,15 +119,17 @@ def test_hf_real_trainer_validation() -> None:
     with pytest.raises(ValueError, match="reference_lora_state"):
         train_single_domain_lora_adapter("Rust_Systems_Security", {})
     with pytest.raises(ValueError, match="lora_rank_r"):
-        train_single_domain_lora_adapter("Rust_Systems_Security", ref_state, lora_rank_r=0)
+        train_single_domain_lora_adapter("Rust_Systems_Security", ref_state, lora_rank_r=True)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="lora_alpha"):
-        train_single_domain_lora_adapter("Rust_Systems_Security", ref_state, lora_alpha=0)
+        train_single_domain_lora_adapter("Rust_Systems_Security", ref_state, lora_alpha=True)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="inner_steps"):
-        train_single_domain_lora_adapter("Rust_Systems_Security", ref_state, inner_steps=0)
+        train_single_domain_lora_adapter("Rust_Systems_Security", ref_state, inner_steps=True)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="lr"):
-        train_single_domain_lora_adapter("Rust_Systems_Security", ref_state, lr=0.0)
+        train_single_domain_lora_adapter("Rust_Systems_Security", ref_state, lr=True)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="topk_ratio"):
-        train_single_domain_lora_adapter("Rust_Systems_Security", ref_state, topk_ratio=1.5)
+        train_single_domain_lora_adapter("Rust_Systems_Security", ref_state, topk_ratio=True)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="custom_corpus"):
+        train_single_domain_lora_adapter("Rust_Systems_Security", ref_state, custom_corpus=[""])
 
     with pytest.raises(ValueError, match="store"):
         train_and_publish_season3_domain_experts("not-a-store", ref_state)  # type: ignore[arg-type]

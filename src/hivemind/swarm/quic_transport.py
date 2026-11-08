@@ -220,7 +220,21 @@ class ContinentalSuperRingRouter:
             self.bridge_peers = list(max_regional_rtt_ms)
             self.max_regional_rtt_ms = 20.0
         else:
+            if (
+                isinstance(max_regional_rtt_ms, bool)
+                or not isinstance(max_regional_rtt_ms, (int, float))
+                or not math.isfinite(float(max_regional_rtt_ms))
+                or float(max_regional_rtt_ms) <= 0.0
+            ):
+                raise ValueError("max_regional_rtt_ms must be a finite number > 0")
             self.max_regional_rtt_ms = float(max_regional_rtt_ms)
+        if (
+            isinstance(max_bridge_jitter_ms, bool)
+            or not isinstance(max_bridge_jitter_ms, (int, float))
+            or not math.isfinite(float(max_bridge_jitter_ms))
+            or float(max_bridge_jitter_ms) < 0.0
+        ):
+            raise ValueError("max_bridge_jitter_ms must be a finite number >= 0")
         self.max_bridge_jitter_ms = float(max_bridge_jitter_ms)
         self.inter_continent_rtt_table: Dict[str, Dict[str, float]] = (
             dict(inter_continent_rtt_ms)
@@ -265,9 +279,22 @@ class ContinentalSuperRingRouter:
     @staticmethod
     def bbr_window(base_window: int, jitter_ms: float, loss: float) -> int:
         """Shrink the burst window when RTT jitter or loss rises. Floor is 1 packet (`HM-S4-02`)."""
-        if base_window < 1:
+        if isinstance(base_window, bool) or not isinstance(base_window, int) or base_window < 1:
             raise ValueError("base_window must be positive")
-        if loss < 0.0 or loss > 1.0:
+        if (
+            isinstance(jitter_ms, bool)
+            or not isinstance(jitter_ms, (int, float))
+            or not math.isfinite(float(jitter_ms))
+            or float(jitter_ms) < 0.0
+        ):
+            raise ValueError("jitter_ms must be finite and >= 0")
+        if (
+            isinstance(loss, bool)
+            or not isinstance(loss, (int, float))
+            or not math.isfinite(float(loss))
+            or loss < 0.0
+            or loss > 1.0
+        ):
             raise ValueError("loss must be in [0, 1]")
         scale = 1.0
         if jitter_ms > 5.0:
@@ -282,7 +309,14 @@ class ContinentalSuperRingRouter:
     # ------------------------------------------------------------------
     def register_peer(self, node: SuperRingPeerNode) -> bool:
         """Admit `node` into its Tier-1 Regional Geo-Ring (only if the `<20 ms` SLA holds)."""
-        if not math.isfinite(node.rtt_ms):
+        if not isinstance(node.peer_id, str) or not node.peer_id.strip():
+            return False
+        if (
+            isinstance(node.rtt_ms, bool)
+            or not isinstance(node.rtt_ms, (int, float))
+            or not math.isfinite(float(node.rtt_ms))
+            or float(node.rtt_ms) <= 0.0
+        ):
             return False
         if node.rtt_ms > self.max_regional_rtt_ms:
             return False
@@ -372,6 +406,20 @@ class ContinentalSuperRingRouter:
         self, source_continent: str, target_continent: str, rtt_ms: float
     ) -> None:
         """Store a freshly measured WAN RTT between two continental bridge rings."""
+        if (
+            not isinstance(source_continent, str)
+            or not source_continent.strip()
+            or not isinstance(target_continent, str)
+            or not target_continent.strip()
+        ):
+            raise ValueError("source_continent and target_continent must be non-empty strings")
+        if (
+            isinstance(rtt_ms, bool)
+            or not isinstance(rtt_ms, (int, float))
+            or not math.isfinite(float(rtt_ms))
+            or float(rtt_ms) <= 0.0
+        ):
+            raise ValueError("rtt_ms must be a finite number > 0")
         self.inter_continent_rtt_table.setdefault(source_continent, {})[target_continent] = float(
             rtt_ms
         )
@@ -812,6 +860,8 @@ class AsyncQUICGeoRingTransport(RegionalGeoRingTransport):
         The TLS 1.3 session ticket that actually enables 0-RTT is issued by the QUIC server in
         `quic_link`; this record carries the swarm-side nonce window and NAT metadata.
         """
+        if not isinstance(peer_id, str) or not peer_id.strip():
+            raise ValueError("peer_id must be a non-empty string")
         with self._nonce_lock:
             previous = self.zero_rtt_tickets.get(peer_id)
             # A new ticket refreshes its lifetime, never the peer's strike register.
@@ -854,9 +904,13 @@ class AsyncQUICGeoRingTransport(RegionalGeoRingTransport):
                 return False, "invalid_0rtt_nonce"
             now = timestamp if timestamp is not None else time.time()
             if (
-                not math.isfinite(now)
+                isinstance(timestamp, bool)
+                or isinstance(max_age_sec, bool)
+                or not isinstance(now, (int, float))
+                or not isinstance(max_age_sec, (int, float))
+                or not math.isfinite(float(now))
                 or not math.isfinite(ticket.issued_at)
-                or not math.isfinite(max_age_sec)
+                or not math.isfinite(float(max_age_sec))
                 or max_age_sec < 0
             ):
                 return False, "invalid_0rtt_ticket_time"

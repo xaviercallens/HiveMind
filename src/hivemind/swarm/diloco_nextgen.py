@@ -173,16 +173,46 @@ class CosineGatedAdamDecayOuterOptimizer:
         weight_decay: float = 0.0,
         momentum_restart_period: Optional[int] = None,
     ) -> None:
-        if lr <= 0.0:
+        if isinstance(lr, bool) or not isinstance(lr, (int, float)) or not math.isfinite(float(lr)) or float(lr) <= 0.0:
             raise ValueError("lr must be > 0")
-        if alpha <= 0.0:
+        if (
+            isinstance(alpha, bool)
+            or not isinstance(alpha, (int, float))
+            or not math.isfinite(float(alpha))
+            or float(alpha) <= 0.0
+        ):
             raise ValueError("alpha must be > 0")
-        if tau_cut <= 0.0:
+        if (
+            isinstance(tau_cut, bool)
+            or not isinstance(tau_cut, (int, float))
+            or not math.isfinite(float(tau_cut))
+            or float(tau_cut) <= 0.0
+        ):
             raise ValueError("tau_cut must be > 0")
-        if weight_decay < 0.0:
+        if (
+            isinstance(eps, bool)
+            or not isinstance(eps, (int, float))
+            or not math.isfinite(float(eps))
+            or float(eps) <= 0.0
+        ):
+            raise ValueError("eps must be > 0")
+        if isinstance(weight_decay, bool) or not isinstance(weight_decay, (int, float)) or weight_decay < 0.0:
             raise ValueError("weight_decay must be >= 0")
-        if momentum_restart_period is not None and int(momentum_restart_period) < 1:
+        if momentum_restart_period is not None and (
+            isinstance(momentum_restart_period, bool)
+            or not isinstance(momentum_restart_period, int)
+            or momentum_restart_period < 1
+        ):
             raise ValueError("momentum_restart_period must be >= 1 when specified")
+        if (
+            not isinstance(betas, (tuple, list))
+            or len(betas) != 2
+            or isinstance(betas[0], bool)
+            or isinstance(betas[1], bool)
+            or not isinstance(betas[0], (int, float))
+            or not isinstance(betas[1], (int, float))
+        ):
+            raise ValueError("betas must be in [0, 1)")
         b1, b2 = float(betas[0]), float(betas[1])
         if not (0.0 <= b1 < 1.0 and 0.0 <= b2 < 1.0):
             raise ValueError("betas must be in [0, 1)")
@@ -335,10 +365,25 @@ class ReputationWeightedIsoCTSMerger:
         trim_density: float = 0.35,
         scaling_lambda: float = 1.10,
     ) -> None:
-        if not (0.1 <= common_space_fraction <= 1.0):
+        if (
+            isinstance(common_space_fraction, bool)
+            or not isinstance(common_space_fraction, (int, float))
+            or not (0.1 <= float(common_space_fraction) <= 1.0)
+        ):
             raise ValueError("common_space_fraction must be in [0.1, 1.0]")
-        if not (0.0 < trim_density <= 1.0):
+        if (
+            isinstance(trim_density, bool)
+            or not isinstance(trim_density, (int, float))
+            or not (0.0 < float(trim_density) <= 1.0)
+        ):
             raise ValueError("trim_density must be in (0, 1.0]")
+        if (
+            isinstance(scaling_lambda, bool)
+            or not isinstance(scaling_lambda, (int, float))
+            or not math.isfinite(float(scaling_lambda))
+            or float(scaling_lambda) <= 0.0
+        ):
+            raise ValueError("scaling_lambda must be finite and > 0")
         self.common_space_fraction = float(common_space_fraction)
         self.trim_density = float(trim_density)
         self.scaling_lambda = float(scaling_lambda)
@@ -484,7 +529,11 @@ class HeLoCoDirectionCorrector:
     """
 
     def __init__(self, conflict_damping: float = 0.25) -> None:
-        if not (0.0 <= conflict_damping <= 1.0):
+        if (
+            isinstance(conflict_damping, bool)
+            or not isinstance(conflict_damping, (int, float))
+            or not (0.0 <= float(conflict_damping) <= 1.0)
+        ):
             raise ValueError("conflict_damping must be in [0, 1]")
         self.conflict_damping = float(conflict_damping)
 
@@ -544,8 +593,29 @@ class AutoLoCoIntervalCorrector:
         base_outer_lr: float = 0.7,
         base_outer_momentum: float = 0.9,
     ) -> None:
-        if reference_inner_steps_h < 1 or reference_inner_lr <= 0.0:
+        if (
+            isinstance(reference_inner_steps_h, bool)
+            or not isinstance(reference_inner_steps_h, int)
+            or reference_inner_steps_h < 1
+            or isinstance(reference_inner_lr, bool)
+            or not isinstance(reference_inner_lr, (int, float))
+            or not math.isfinite(float(reference_inner_lr))
+            or float(reference_inner_lr) <= 0.0
+        ):
             raise ValueError("reference_inner_steps_h >= 1 and reference_inner_lr > 0 required")
+        if (
+            isinstance(base_outer_lr, bool)
+            or not isinstance(base_outer_lr, (int, float))
+            or not math.isfinite(float(base_outer_lr))
+            or float(base_outer_lr) <= 0.0
+        ):
+            raise ValueError("base_outer_lr must be finite and > 0")
+        if (
+            isinstance(base_outer_momentum, bool)
+            or not isinstance(base_outer_momentum, (int, float))
+            or not (0.0 <= float(base_outer_momentum) < 1.0)
+        ):
+            raise ValueError("base_outer_momentum must be in [0, 1)")
         self.reference_accumulated_lr = float(reference_inner_steps_h) * float(reference_inner_lr)
         self.base_outer_lr = float(base_outer_lr)
         self.base_outer_momentum = float(base_outer_momentum)
@@ -556,7 +626,15 @@ class AutoLoCoIntervalCorrector:
         actual_inner_lr: float,
     ) -> Dict[str, float]:
         """Compute corrected `(outer_lr, outer_momentum)` for the realized inner interval."""
-        if actual_inner_steps_h < 1 or actual_inner_lr <= 0.0:
+        if (
+            isinstance(actual_inner_steps_h, bool)
+            or not isinstance(actual_inner_steps_h, int)
+            or actual_inner_steps_h < 1
+            or isinstance(actual_inner_lr, bool)
+            or not isinstance(actual_inner_lr, (int, float))
+            or not math.isfinite(float(actual_inner_lr))
+            or float(actual_inner_lr) <= 0.0
+        ):
             raise ValueError("actual_inner_steps_h >= 1 and actual_inner_lr > 0 required")
         accum_lr = float(actual_inner_steps_h) * float(actual_inner_lr)
         ratio = accum_lr / self.reference_accumulated_lr
@@ -580,7 +658,15 @@ class FoMoEPartialReplicaPlanner:
     """
 
     def __init__(self, total_experts: int = 128, active_top_k: int = 2) -> None:
-        if total_experts < 2 or active_top_k < 1:
+        if (
+            isinstance(total_experts, bool)
+            or not isinstance(total_experts, int)
+            or total_experts < 2
+            or isinstance(active_top_k, bool)
+            or not isinstance(active_top_k, int)
+            or active_top_k < 1
+            or active_top_k > total_experts
+        ):
             raise ValueError("total_experts >= 2 and active_top_k >= 1 required")
         self.total_experts = int(total_experts)
         self.active_top_k = int(active_top_k)
@@ -594,11 +680,19 @@ class FoMoEPartialReplicaPlanner:
         single_expert_bytes: int = 2 * 1024 * 1024,
     ) -> Dict[str, Any]:
         """Return memory, communication, and Skip-Token FLOP metrics for `(M, O_e, gamma)`."""
-        if num_workers_m < 1:
+        if isinstance(num_workers_m, bool) or not isinstance(num_workers_m, int) or num_workers_m < 1:
             raise ValueError("num_workers_m must be >= 1")
-        if not (1 <= overlap_factor_oe <= num_workers_m):
+        if (
+            isinstance(overlap_factor_oe, bool)
+            or not isinstance(overlap_factor_oe, int)
+            or not (1 <= overlap_factor_oe <= num_workers_m)
+        ):
             raise ValueError("overlap_factor_oe must be in [1, num_workers_m]")
-        if not (0.0 <= reshuffle_frequency_gamma <= 1.0):
+        if (
+            isinstance(reshuffle_frequency_gamma, bool)
+            or not isinstance(reshuffle_frequency_gamma, (int, float))
+            or not (0.0 <= float(reshuffle_frequency_gamma) <= 1.0)
+        ):
             raise ValueError("reshuffle_frequency_gamma must be in [0, 1]")
 
         m = float(num_workers_m)

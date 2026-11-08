@@ -66,6 +66,15 @@ def prefix_trie_branch_probabilities(
             raise ValueError("each draft branch needs exactly one step probability per token")
         product = 1.0
         for i, p in enumerate(steps):
+            if (
+                isinstance(p, bool)
+                or not isinstance(p, (int, float))
+                or not math.isfinite(float(p))
+                or not (0.0 <= float(p) <= 1.0)
+            ):
+                raise ValueError(
+                    "draft step probabilities must be finite numbers in [0.0, 1.0] to give the trie positive total weight"
+                )
             product *= float(p)
             raw.setdefault(tuple(branch[: i + 1]), product)
     total = sum(raw[n] for n in nodes)
@@ -155,8 +164,17 @@ class RegionalDHTSwarmRing:
     """Petals-style DHT Swarm coordinator grouping low-latency (<25ms) peers into regional rings."""
 
     def __init__(self, region: str = "EU-West-Paris", max_ping_ms: float = 25.0) -> None:
-        self.region = region
-        self.max_ping_ms = max_ping_ms
+        if not isinstance(region, str) or not region.strip():
+            raise ValueError("region must be a non-empty string")
+        if (
+            isinstance(max_ping_ms, bool)
+            or not isinstance(max_ping_ms, (int, float))
+            or not math.isfinite(float(max_ping_ms))
+            or float(max_ping_ms) <= 0.0
+        ):
+            raise ValueError("max_ping_ms must be a finite number > 0")
+        self.region = region.strip()
+        self.max_ping_ms = float(max_ping_ms)
         self.peers: list[SwarmPeerNode] = []
         self.super_ring_router: "ContinentalSuperRingRouter | None" = None
         self.hierarchical_routes: list[Dict[str, Any]] = []
@@ -276,18 +294,36 @@ class RegionalDHTSwarmRing:
         verified path that were among them. Default off: the generated tokens are unchanged.
         """
         # Rule RING-02: Enforce speculative decoding bounds to prevent unbounded forward-pass DoS
-        if int(draft_gamma) < 1 or int(draft_gamma) > 16:
+        if isinstance(draft_gamma, bool) or not isinstance(draft_gamma, int) or draft_gamma < 1 or draft_gamma > 16:
             raise SwarmSecurityViolationError(
                 "RING-02",
                 "SPECULATIVE_GAMMA_OUT_OF_BOUNDS",
                 f"draft_gamma ({draft_gamma}) must be within [1, 16].",
             )
-        if int(max_new_tokens) < 1 or int(max_new_tokens) > 512:
+        if (
+            isinstance(max_new_tokens, bool)
+            or not isinstance(max_new_tokens, int)
+            or max_new_tokens < 1
+            or max_new_tokens > 512
+        ):
             raise SwarmSecurityViolationError(
                 "RING-02",
                 "MAX_NEW_TOKENS_OUT_OF_BOUNDS",
                 f"max_new_tokens ({max_new_tokens}) must be within [1, 512].",
             )
+        if (
+            isinstance(simulated_network_rtt_ms, bool)
+            or not isinstance(simulated_network_rtt_ms, (int, float))
+            or not math.isfinite(float(simulated_network_rtt_ms))
+            or float(simulated_network_rtt_ms) < 0.0
+        ):
+            raise ValueError("simulated_network_rtt_ms must be a finite number >= 0")
+        if (
+            isinstance(max_prefetch_experts, bool)
+            or not isinstance(max_prefetch_experts, int)
+            or max_prefetch_experts < 1
+        ):
+            raise ValueError("max_prefetch_experts must be an integer >= 1")
         if prompt_ids.numel() == 0:
             raise SwarmSecurityViolationError(
                 "RING-02",

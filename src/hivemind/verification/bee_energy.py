@@ -100,18 +100,37 @@ def _has_ast_stub_or_syntax_error(code: str, *, domain: str = "code") -> tuple[b
         ]
         if not body:
             return True, f"AST_STUB_EMPTY_FUNC:{fn.name}"
-        if len(body) == 1:
-            stmt = body[0]
-            if isinstance(stmt, ast.Pass):
-                return True, f"AST_STUB_PASS:{fn.name}"
-            if (
+        if all(
+            isinstance(stmt, ast.Pass)
+            or (
                 isinstance(stmt, ast.Expr)
                 and isinstance(stmt.value, ast.Constant)
                 and stmt.value.value is Ellipsis
-            ):
-                return True, f"AST_STUB_ELLIPSIS:{fn.name}"
-            if isinstance(stmt, ast.Raise):
+            )
+            for stmt in body
+        ):
+            first = body[0]
+            if isinstance(first, ast.Pass):
+                return True, f"AST_STUB_PASS:{fn.name}"
+            return True, f"AST_STUB_ELLIPSIS:{fn.name}"
+        last_stmt = body[-1]
+        if isinstance(last_stmt, ast.Raise):
+            if len(body) == 1:
                 return True, f"AST_STUB_RAISE_ONLY:{fn.name}"
+            exc_node = last_stmt.exc
+            exc_name = None
+            if isinstance(exc_node, ast.Name):
+                exc_name = exc_node.id
+            elif isinstance(exc_node, ast.Call) and isinstance(exc_node.func, ast.Name):
+                exc_name = exc_node.func.id
+            if exc_name == "NotImplementedError":
+                return True, f"AST_STUB_RAISE_ONLY:{fn.name}"
+        if (
+            isinstance(last_stmt, ast.Return)
+            and isinstance(last_stmt.value, ast.Name)
+            and last_stmt.value.id == "NotImplemented"
+        ):
+            return True, f"AST_STUB_RETURN_NOT_IMPLEMENTED:{fn.name}"
     return False, None
 
 
@@ -248,6 +267,17 @@ def evaluate_bee_candidate_energy(
     w_mem: float = 0.5,
 ) -> BeeEnergyEvaluation:
     """Compute the deterministic ANSE physical energy `E_Bee(x, y)` for a Bee candidate."""
+    if not (
+        math.isfinite(float(w_fail))
+        and float(w_fail) > 0.0
+        and math.isfinite(float(w_inv))
+        and float(w_inv) >= 0.0
+        and math.isfinite(float(w_lat))
+        and float(w_lat) >= 0.0
+        and math.isfinite(float(w_mem))
+        and float(w_mem) >= 0.0
+    ):
+        raise ValueError("energy weights w_fail (> 0) and w_inv, w_lat, w_mem (>= 0) must be finite.")
     is_stub, stub_reason = _has_ast_stub_or_syntax_error(response_text, domain=domain)
     if test_callables is not None and not timed_out_or_crashed and not is_stub:
         tests_total = len(test_callables)
@@ -374,6 +404,10 @@ def select_best_so_far_d3(
     """
     if not attempts:
         raise ValueError("attempts must be non-empty.")
+    if not math.isfinite(float(early_stop_energy_ceiling)) or float(early_stop_energy_ceiling) <= 0.0:
+        raise ValueError("early_stop_energy_ceiling must be a strictly positive finite float.")
+    if any(not math.isfinite(float(a.total_energy)) for a in attempts):
+        raise ValueError("all attempt energies must be finite.")
     best = min(attempts, key=lambda a: a.total_energy)
     if best.passed_all_tests:
         return best, True
@@ -391,6 +425,10 @@ def harvest_energy_gap_dpo_pair_d6(
     min_delta_energy: float = 10.0,
 ) -> dict[str, Any] | None:
     """Directive D6: Export a verified `(chosen_low_E, rejected_high_E)` pair when `Delta E >= min_delta_energy`."""
+    if not math.isfinite(float(min_delta_energy)) or float(min_delta_energy) <= 0.0:
+        raise ValueError("min_delta_energy must be a strictly positive finite float.")
+    if any(not math.isfinite(float(a.total_energy)) for a in attempts):
+        raise ValueError("all attempt energies must be finite.")
     if len(attempts) < 2:
         return None
     best = min(attempts, key=lambda a: a.total_energy)
@@ -422,6 +460,12 @@ def detect_boinc_loss_plateau(
     max_tail_std: float = 0.006,
 ) -> dict[str, Any]:
     """Detect the 30-round BOINC QLoRA loss plateau (`HM-S18-AE-02`) to trigger curriculum rotation."""
+    if int(block_size) < 1:
+        raise ValueError("block_size must be >= 1.")
+    if not math.isfinite(float(min_block_gain)) or not math.isfinite(float(max_tail_std)) or float(max_tail_std) < 0.0:
+        raise ValueError("min_block_gain and max_tail_std (>= 0) must be finite floats.")
+    if any(not math.isfinite(float(x)) for x in round_losses):
+        raise ValueError("round_losses must contain only finite floats.")
     n = len(round_losses)
     if n < 2 * block_size:
         return {
@@ -465,6 +509,8 @@ def calibrate_noise_margin(aa_median_deltas: Sequence[float]) -> float:
     """
     if len(aa_median_deltas) < 3:
         raise ValueError("at least 3 A/A runs are needed to calibrate the noise margin.")
+    if any(not math.isfinite(float(d)) for d in aa_median_deltas):
+        raise ValueError("aa_median_deltas must contain only finite floats.")
     return float(max(abs(float(d)) for d in aa_median_deltas))
 
 
@@ -500,6 +546,10 @@ def evaluate_child_bee_promotion(
     """
     if len(parent_energies) == 0 or len(parent_energies) != len(child_energies):
         raise ValueError("parent_energies and child_energies must be non-empty and equal length.")
+    if int(parent_regressions_failed) < 0:
+        raise ValueError("parent_regressions_failed must be >= 0.")
+    if not math.isfinite(float(alpha)) or not (0.0 < float(alpha) < 1.0):
+        raise ValueError("alpha must be a finite float in (0.0, 1.0).")
     if not math.isfinite(float(noise_margin)) or float(noise_margin) <= 0.0:
         raise ValueError("noise_margin must be a strictly positive finite float from calibrate_noise_margin.")
     if not all(math.isfinite(float(p)) and math.isfinite(float(c)) for p, c in zip(parent_energies, child_energies)):

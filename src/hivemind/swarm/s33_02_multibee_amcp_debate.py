@@ -29,6 +29,20 @@ class BeeDebateTurn:
     residual_error: float
     evidence_summary: str
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.bee_id, str) or not self.bee_id.strip():
+            raise ValueError("bee_id must be a non-empty string")
+        if not isinstance(self.role, str) or not self.role.strip():
+            raise ValueError("role must be a non-empty string")
+        if not isinstance(self.passed_invariants, bool):
+            raise ValueError("passed_invariants must be a boolean")
+        for num_field in ("confidence", "residual_error"):
+            val = getattr(self, num_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)):
+                raise ValueError(f"{num_field} must be a number")
+        if not isinstance(self.evidence_summary, str):
+            raise ValueError("evidence_summary must be a string")
+
 
 @dataclass(frozen=True)
 class MultiBeeDebateVerdict:
@@ -53,6 +67,20 @@ class MultiBeeAMCPDebateArena:
     AMCP_TOPIC = "hivemind.amcp.bee_coord.v1"
 
     def __init__(self, *, residual_ceiling: float = 1e-4, min_posterior: float = 0.80) -> None:
+        if (
+            isinstance(residual_ceiling, bool)
+            or not isinstance(residual_ceiling, (int, float))
+            or not math.isfinite(residual_ceiling)
+            or residual_ceiling < 0.0
+        ):
+            raise ValueError("residual_ceiling must be a non-negative finite number")
+        if (
+            isinstance(min_posterior, bool)
+            or not isinstance(min_posterior, (int, float))
+            or not math.isfinite(min_posterior)
+            or not (0.0 < float(min_posterior) <= 1.0)
+        ):
+            raise ValueError("min_posterior must be a finite number in (0.0, 1.0]")
         self.residual_ceiling = float(residual_ceiling)
         self.min_posterior = float(min_posterior)
 
@@ -77,8 +105,12 @@ class MultiBeeAMCPDebateArena:
         turns: Sequence[BeeDebateTurn],
     ) -> MultiBeeDebateVerdict:
         """Adjudicate a multi-bee debate with strict fail-closed solver/prover veto."""
-        if len(turns) < 2:
+        if not isinstance(subject_id, str) or not subject_id.strip():
+            raise ValueError("subject_id must be a non-empty string")
+        if not isinstance(turns, (list, tuple)) or len(turns) < 2:
             raise ValueError("at least 2 specialist bees must participate in the AMCP debate")
+        if any(not isinstance(t, BeeDebateTurn) for t in turns):
+            raise ValueError("all turns must be BeeDebateTurn instances")
 
         vetoes: list[str] = []
         finite_residuals: list[float] = []

@@ -67,6 +67,28 @@ def sign_bee_manifest(
     signing_secret: bytes,
 ) -> SignedBeeManifest:
     """Create and HMAC-SHA256 sign a marketplace Bee manifest."""
+    if not isinstance(signing_secret, (bytes, bytearray)) or len(signing_secret) < 16:
+        raise ValueError("signing_secret must be at least 16 bytes")
+    for field_name, val in (
+        ("bee_id", bee_id),
+        ("owner_handle", owner_handle),
+        ("domain", domain),
+        ("base_backbone", base_backbone),
+        ("weights_sha256", weights_sha256),
+    ):
+        if not isinstance(val, str) or not val.strip():
+            raise ValueError(f"{field_name} must be a non-empty string")
+    if isinstance(lora_rank, bool) or not isinstance(lora_rank, int) or lora_rank < 1:
+        raise ValueError("lora_rank must be a positive integer")
+    if isinstance(vram_required_mib, bool) or not isinstance(vram_required_mib, int) or vram_required_mib < 1:
+        raise ValueError("vram_required_mib must be a positive integer")
+    if (
+        isinstance(benchmark_score, bool)
+        or not isinstance(benchmark_score, (int, float))
+        or not math.isfinite(benchmark_score)
+        or not (0.0 <= float(benchmark_score) <= 1.0)
+    ):
+        raise ValueError("benchmark_score must be a finite number in [0.0, 1.0]")
     unsigned = SignedBeeManifest(
         bee_id=bee_id,
         owner_handle=owner_handle,
@@ -96,14 +118,23 @@ class OpenBeeMarketplaceRegistry:
     """Fail-closed self-service registry for community-contributed specialized Bees."""
 
     def __init__(self, signing_secret: bytes, *, min_benchmark_score: float = 0.70) -> None:
-        if len(signing_secret) < 16:
+        if not isinstance(signing_secret, (bytes, bytearray)) or len(signing_secret) < 16:
             raise ValueError("signing_secret must be at least 16 bytes")
+        if (
+            isinstance(min_benchmark_score, bool)
+            or not isinstance(min_benchmark_score, (int, float))
+            or not math.isfinite(min_benchmark_score)
+            or not (0.0 <= float(min_benchmark_score) <= 1.0)
+        ):
+            raise ValueError("min_benchmark_score must be a finite number in [0.0, 1.0]")
         self._secret = bytes(signing_secret)
         self.min_benchmark_score = float(min_benchmark_score)
         self._bees: dict[str, SignedBeeManifest] = {}
 
     def verify_and_register(self, manifest: SignedBeeManifest) -> dict[str, Any]:
         """Verify cryptographic signature, 8 GB VRAM ceiling, and benchmark threshold before admitting a Bee."""
+        if not isinstance(manifest, SignedBeeManifest):
+            raise ValueError("manifest must be a SignedBeeManifest")
         if not manifest.bee_id.startswith("hivemind/bee-"):
             return {"accepted": False, "reason": "INVALID_BEE_ID_PREFIX"}
         if not str(manifest.owner_handle).strip():
@@ -140,6 +171,8 @@ class OpenBeeMarketplaceRegistry:
         }
 
     def match_best_bee_for_domain(self, domain: str) -> SignedBeeManifest | None:
+        if not isinstance(domain, str) or not domain.strip():
+            raise ValueError("domain must be a non-empty string")
         candidates = [b for b in self._bees.values() if b.domain.lower() == domain.lower()]
         if not candidates:
             return None

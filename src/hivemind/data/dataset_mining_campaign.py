@@ -176,8 +176,55 @@ class MinedDatasetShardReport:
     cross_split_jaccard_max: float
     dedup_clean: bool
 
+    def __post_init__(self) -> None:
+        for field_name in (
+            "domain_name",
+            "shard_id",
+            "shard_cas_cid",
+            "shard_sha256",
+            "assigned_contributor",
+            "lease_worker_id",
+        ):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for int_field in (
+            "lease_version_tag",
+            "train_documents",
+            "holdout_documents",
+            "total_utf8_bytes",
+        ):
+            val = getattr(self, int_field)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{int_field} must be a positive integer")
+        if (
+            isinstance(self.lease_ttl_s, bool)
+            or not isinstance(self.lease_ttl_s, (int, float))
+            or not math.isfinite(self.lease_ttl_s)
+            or self.lease_ttl_s <= 0.0
+        ):
+            raise ValueError("lease_ttl_s must be a positive finite number")
+        if (
+            isinstance(self.shannon_entropy_bits_per_byte, bool)
+            or not isinstance(self.shannon_entropy_bits_per_byte, (int, float))
+            or not math.isfinite(self.shannon_entropy_bits_per_byte)
+            or self.shannon_entropy_bits_per_byte < 0.0
+        ):
+            raise ValueError("shannon_entropy_bits_per_byte must be a non-negative finite number")
+        if (
+            isinstance(self.cross_split_jaccard_max, bool)
+            or not isinstance(self.cross_split_jaccard_max, (int, float))
+            or not math.isfinite(self.cross_split_jaccard_max)
+            or not (0.0 <= self.cross_split_jaccard_max <= 1.0)
+        ):
+            raise ValueError("cross_split_jaccard_max must be a finite number in [0.0, 1.0]")
+        if not isinstance(self.dedup_clean, bool):
+            raise ValueError("dedup_clean must be a boolean")
+
 
 def _compute_shannon_entropy_bits(texts: Sequence[str]) -> float:
+    if not isinstance(texts, (list, tuple)) or any(not isinstance(t, str) for t in texts):
+        raise ValueError("texts must be a sequence of strings")
     raw = "\n".join(texts).encode("utf-8")
     if not raw:
         return 0.0
@@ -196,6 +243,10 @@ def _compute_max_cross_split_4gram_jaccard(
     train_texts: Sequence[str],
     holdout_texts: Sequence[str],
 ) -> float:
+    if not isinstance(train_texts, (list, tuple)) or any(not isinstance(t, str) for t in train_texts):
+        raise ValueError("train_texts must be a sequence of strings")
+    if not isinstance(holdout_texts, (list, tuple)) or any(not isinstance(t, str) for t in holdout_texts):
+        raise ValueError("holdout_texts must be a sequence of strings")
     def _shingles(text: str) -> set[str]:
         words = " ".join(text.lower().split()).split(" ")
         if len(words) < 4:
@@ -221,6 +272,21 @@ def run_dataset_mining_and_ruche_campaign(
     base_seed: int = 20261024,
 ) -> Dict[str, Any]:
     """Execute the 8-domain Dataset Mining Campaign, train QLoRA/LoRA experts, and populate La Ruche."""
+    if not isinstance(vault_dir, (Path, str)) or not str(vault_dir).strip():
+        raise ValueError("vault_dir must be a non-empty Path or string")
+    if not isinstance(report_json_path, (Path, str)) or not str(report_json_path).strip():
+        raise ValueError("report_json_path must be a non-empty Path or string")
+    if isinstance(training_steps, bool) or not isinstance(training_steps, int) or training_steps < 1:
+        raise ValueError("training_steps must be a positive integer")
+    if (
+        isinstance(learning_rate, bool)
+        or not isinstance(learning_rate, (int, float))
+        or not math.isfinite(learning_rate)
+        or learning_rate <= 0.0
+    ):
+        raise ValueError("learning_rate must be a positive finite number")
+    if isinstance(base_seed, bool) or not isinstance(base_seed, int) or base_seed < 0:
+        raise ValueError("base_seed must be a non-negative integer")
     t_start = time.perf_counter()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     device_label = (

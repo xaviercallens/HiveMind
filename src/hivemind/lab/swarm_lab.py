@@ -69,6 +69,8 @@ class Rng:
     """mulberry32 with uniform and Box-Muller gaussian (see the module docstring for the exact algorithm)."""
 
     def __init__(self, seed: int) -> None:
+        if isinstance(seed, bool) or not isinstance(seed, int):
+            raise ValueError("seed must be an integer")
         self.state = int(seed) & MASK
 
     def uniform(self) -> float:
@@ -110,10 +112,15 @@ class Scenario:
     outer_momentum: float = 0.9
 
     def validate(self) -> "Scenario":
+        for int_name in ("M", "K", "rounds", "H", "dim", "seed", "straggle_every", "churn_start", "churn_end"):
+            val = getattr(self, int_name)
+            if isinstance(val, bool) or not isinstance(val, int):
+                raise ValueError(f"{int_name} must be an integer, got {val!r}")
         # NaN fails every comparison below, so range checks alone would accept it and the run would report final_loss nan.
         for name in ("eta", "sigma", "spread", "offset", "penalty", "grace", "outer_lr", "outer_momentum"):
-            if not math.isfinite(getattr(self, name)):
-                raise ValueError(f"{name} must be finite, got {getattr(self, name)!r}")
+            val = getattr(self, name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(val):
+                raise ValueError(f"{name} must be finite, got {val!r}")
         if not 1 <= self.M <= 6:
             raise ValueError("M must be in 1..6")
         if not 1 <= self.K <= self.M:
@@ -327,6 +334,12 @@ def compare_policies(base: "Scenario | dict[str, Any] | None" = None, policies: 
 # ------------------------------------------------------------------------------------------------ CLI
 def sparkline(values: list[float], width: int = 48) -> str:
     """ASCII sparkline (' .:-=+*#%@', high = large) of a series, resampled to at most ``width`` points."""
+    if not isinstance(values, list) or len(values) == 0:
+        raise ValueError("values must be a non-empty list of finite numbers")
+    if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in values):
+        raise ValueError("values must contain only finite numbers")
+    if isinstance(width, bool) or not isinstance(width, int) or width < 1:
+        raise ValueError("width must be a positive integer")
     chars = " .:-=+*#%@"
     step = max(1, math.ceil(len(values) / width))
     vs = values[::step]

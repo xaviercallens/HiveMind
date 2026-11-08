@@ -21,11 +21,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import platform
 import tempfile
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import torch
 
@@ -125,16 +126,25 @@ def run_community_gpu_benchmark(
     hidden_size: int = 64,
     seed: int = 42,
     output_path: Path | None = DEFAULT_RECEIPT_PATH,
+    pool_holdings_override: float | None = None,
 ) -> dict[str, Any]:
     """Execute the 5-stage opt-in Community GPU Benchmark & Hardware Verification Suite."""
-    if not contributor_handle or not contributor_handle.strip():
+    if not isinstance(contributor_handle, str) or not contributor_handle.strip():
         raise ValueError("contributor_handle must be non-empty")
-    if token_steps < 1:
+    if isinstance(token_steps, bool) or int(token_steps) < 1:
         raise ValueError("token_steps must be >= 1")
-    if router_tokens < 4:
+    if isinstance(router_tokens, bool) or int(router_tokens) < 4:
         raise ValueError("router_tokens must be >= 4")
-    if hidden_size < 16 or hidden_size % 8 != 0:
+    if isinstance(hidden_size, bool) or int(hidden_size) < 16 or int(hidden_size) % 8 != 0:
         raise ValueError("hidden_size must be a multiple of 8 and >= 16")
+    if isinstance(seed, bool):
+        raise ValueError("seed must be an integer")
+    if pool_holdings_override is not None:
+        if isinstance(pool_holdings_override, bool):
+            raise ValueError("pool_holdings_override must be a finite non-negative float")
+        pool_override_val = float(pool_holdings_override)
+        if not math.isfinite(pool_override_val) or pool_override_val < 0.0:
+            raise ValueError("pool_holdings_override must be a finite non-negative float")
 
     t_start = time.perf_counter()
     torch.manual_seed(seed)
@@ -271,7 +281,7 @@ def run_community_gpu_benchmark(
     pool.bond_stake("GUILD-01", "community-prover-01", 50.0)
     pool.contribute_reserve("GUILD-01", "community-prover-01", 75.0)
     pool.contribute_reserve("GUILD-02", "community-prover-02", 75.0)
-    pool_holdings_hive = pool.total_holdings()
+    pool_holdings_hive = float(pool_holdings_override) if pool_holdings_override is not None else pool.total_holdings()
 
     # HM-S7-04 fault drill on its own ledger: one forged leaf must be caught and paid for.
     drill_ledger = HiveSwarmLedger()
@@ -332,6 +342,13 @@ def run_community_gpu_benchmark(
 
     # Symbolic, non-monetary compute-reciprocity points preview
     symbolic_points_preview = 500 if hw["is_gpu"] else 250
+    gpu_points_awarded = 500 if hw["is_gpu"] else 0
+    hardware_summary = {
+        **hw,
+        "measured_on_gpu": bool(hw["is_gpu"]),
+        "peak_allocated_vram_mib": peak_vram_mib,
+        "within_8gb_wddm_envelope": peak_vram_mib <= hw["wddm_usable_budget_mib"],
+    }
 
     payload: dict[str, Any] = {
         "benchmark_suite": "Project HiveMind Community GPU & Swarm Verification Suite (Season 7 / Wave 6)",
@@ -339,6 +356,8 @@ def run_community_gpu_benchmark(
         "timestamp_utc": round(time.time(), 3),
         "elapsed_total_ms": round((time.perf_counter() - t_start) * 1000.0, 3),
         "overall_passed": all_passed,
+        "gpu_points_awarded": gpu_points_awarded,
+        "hardware": dict(hardware_summary),
         "non_monetary_charter": {
             "financial_payment_usd_eur": 0.0,
             "no_money_involved": True,
@@ -349,13 +368,10 @@ def run_community_gpu_benchmark(
                 "HiveMind Swarm is deployed, available, and used by a large community."
             ),
             "symbolic_points_preview_pts": symbolic_points_preview,
+            "gpu_points_awarded": gpu_points_awarded,
             "legal_notice": NON_MONETARY_COMPUTE_RECIPROCITY_NOTICE,
         },
-        "stage1_accelerator": {
-            **hw,
-            "peak_allocated_vram_mib": peak_vram_mib,
-            "within_8gb_wddm_envelope": peak_vram_mib <= hw["wddm_usable_budget_mib"],
-        },
+        "stage1_accelerator": dict(hardware_summary),
         "stage2_real_token_and_ef21": {
             "elapsed_ms": stage2_ms,
             "baseline_holdout_nll": round(baseline_nll, 6),
@@ -392,14 +408,128 @@ def run_community_gpu_benchmark(
         },
     }
 
-    canonical = json.dumps(payload, sort_keys=True).encode("utf-8")
+    canonical = json.dumps(payload, sort_keys=True, allow_nan=False).encode("utf-8")
     payload["receipt_sha256"] = hashlib.sha256(canonical).hexdigest()
 
     if output_path is not None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        output_path.write_text(json.dumps(payload, indent=2, allow_nan=False), encoding="utf-8")
 
     return payload
+
+
+def _is_finite_number(val: Any) -> bool:
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        return False
+    return math.isfinite(float(val))
+
+
+def verify_community_benchmark_receipt(receipt: Mapping[str, Any]) -> bool:
+    """Verify the canonical SHA-256 digest and internal stage invariants of a benchmark receipt."""
+    if not isinstance(receipt, Mapping):
+        return False
+    expected = str(receipt.get("receipt_sha256") or "").strip().lower()
+    if len(expected) != 64:
+        return False
+    body = {k: v for k, v in receipt.items() if k != "receipt_sha256"}
+    try:
+        canonical = json.dumps(body, sort_keys=True, allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError):
+        return False
+    actual = hashlib.sha256(canonical).hexdigest().lower()
+    if actual != expected:
+        return False
+    if body.get("overall_passed") is not True:
+        return False
+
+    handle = body.get("contributor_handle")
+    if not isinstance(handle, str) or not handle.strip():
+        return False
+
+    hw = body.get("hardware")
+    stage1 = body.get("stage1_accelerator")
+    charter = body.get("non_monetary_charter")
+    stage2 = body.get("stage2_real_token_and_ef21")
+    stage3 = body.get("stage3_three_tier_128_moe_and_prefetch")
+    stage4 = body.get("stage4_zk_opoi_v4_and_insurance")
+    if not all(
+        isinstance(m, Mapping)
+        for m in (hw, stage1, charter, stage2, stage3, stage4)
+    ):
+        return False
+
+    assert isinstance(hw, Mapping)
+    assert isinstance(stage1, Mapping)
+    assert isinstance(charter, Mapping)
+    assert isinstance(stage2, Mapping)
+    assert isinstance(stage3, Mapping)
+    assert isinstance(stage4, Mapping)
+
+    is_gpu = hw.get("is_gpu")
+    if not isinstance(is_gpu, bool) or hw.get("measured_on_gpu") is not is_gpu:
+        return False
+    if stage1.get("is_gpu") is not is_gpu:
+        return False
+    peak_vram = hw.get("peak_allocated_vram_mib")
+    budget_vram = hw.get("wddm_usable_budget_mib")
+    if not (_is_finite_number(peak_vram) and _is_finite_number(budget_vram)):
+        return False
+    if float(peak_vram) < 0.0 or float(peak_vram) > float(budget_vram):
+        return False
+    if hw.get("within_8gb_wddm_envelope") is not True:
+        return False
+
+    expected_gpu_pts = 500 if is_gpu else 0
+    expected_preview_pts = 500 if is_gpu else 250
+    if body.get("gpu_points_awarded") != expected_gpu_pts:
+        return False
+    if (
+        charter.get("no_money_involved") is not True
+        or charter.get("financial_payment_usd_eur") != 0.0
+        or charter.get("reward_nature") != "non_monetary_compute_reciprocity_points_only"
+        or charter.get("gpu_points_awarded") != expected_gpu_pts
+        or charter.get("symbolic_points_preview_pts") != expected_preview_pts
+        or charter.get("legal_notice") != NON_MONETARY_COMPUTE_RECIPROCITY_NOTICE
+    ):
+        return False
+
+    base_nll = stage2.get("baseline_holdout_nll")
+    trained_nll = stage2.get("trained_holdout_nll")
+    contraction = stage2.get("ef21_contraction_factor")
+    cons_err = stage2.get("ef21_conservation_error_l2")
+    if not all(_is_finite_number(x) for x in (base_nll, trained_nll, contraction, cons_err)):
+        return False
+    if not (
+        float(trained_nll) < float(base_nll)
+        and 0.0 <= float(contraction) < 1.0
+        and 0.0 <= float(cons_err) < 1e-4
+    ):
+        return False
+
+    prefetch_calls = stage3.get("prefetch_calls")
+    if (
+        stage3.get("num_experts") != 128
+        or stage3.get("gating_reduction_factor") != 8.0
+        or isinstance(prefetch_calls, bool)
+        or not isinstance(prefetch_calls, int)
+        or prefetch_calls <= 0
+    ):
+        return False
+
+    drill = stage4.get("fault_drill")
+    if not isinstance(drill, Mapping):
+        return False
+    if (
+        stage4.get("batch_passed") is not True
+        or stage4.get("insurance_pool_reserve_hive") != 200.0
+        or drill.get("passed") is not True
+        or drill.get("supply_conserved") is not True
+        or drill.get("indemnified_hive") != 20.0
+        or drill.get("faults_found") != [[2, 1]]
+    ):
+        return False
+
+    return True
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -5,10 +5,12 @@ After=hivemind-boinc-daemons.service
 Requires=hivemind-boinc-db.service
 
 [Service]
+NoNewPrivileges=yes
+ProtectSystem=full
 User=callensxavier_gmail_com
 Environment=HF_HUB_OFFLINE=1
 Environment=PYTHONPATH=/opt/hivemind/t4/src
-ExecStart=/mnt/disks/disk-socrateai-local-1/boinc/venv/bin/python -W ignore /opt/hivemind/t4/scripts/t4_workgen.py
+ExecStart=/mnt/disks/disk-socrateai-local-1/boinc/venv/bin/python -W ignore /opt/hivemind/t4/scripts/t4_workgen.py --mix
 Restart=always
 RestartSec=20
 

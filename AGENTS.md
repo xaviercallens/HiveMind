@@ -7,12 +7,14 @@
 ## 2. GCP Cost & Autoscaler Governance (`gen-lang-client-0625573011`)
 Whenever deploying, scaling, or auditing GCP infrastructure, strictly enforce the following cost and autoscaler rules (and activate the `gcp-cost-autoscaler-ops` skill in [.agents/skills/gcp-cost-autoscaler-ops/SKILL.md](file:///home/callensxavier_gmail_com/HiveMind/.agents/skills/gcp-cost-autoscaler-ops/SKILL.md)):
 
+**Monthly budget target: 150 USD** (owner decision 2026-11-04; check with `scripts/d1_cost_estimate.py`). HiveMinders contribute as trainers, producers and consumers, so GCP is the low-cost orchestrator: inference runs on the free RTX 2070 and volunteer GPUs, the T4 VM runs as Spot a few hours a day or night for training only, and the Kafka voters are Spot and stopped when idle (`scripts/kafka_voters.sh`).
+
 1. **Zero Idle Cloud TPUs**:
    - Never provision On-Demand Cloud TPUs (`v5litepod-*`, `v6e-*`) for persistent daemons.
    - Always use `--spot` (`provisioningModel: SPOT`) for batch training or XLA benchmarking and delete the TPU VM immediately when the run completes.
 
 2. **Cloud Run Knative Autoscaler Defaults**:
-   - **Single-Writer Stateful Litestream SQLite (`hivemind-openrouter`)**: Must use `--cpu=1 --memory=1Gi --min-instances=1 --max-instances=1 --no-cpu-throttling --cpu-boost --concurrency=80` ([deploy/gcp_openrouter/deploy.sh](file:///home/callensxavier_gmail_com/HiveMind/deploy/gcp_openrouter/deploy.sh)). Never over-allocate `>1 vCPU` to a single-worker (`--workers 1`) Python Uvicorn process.
+   - **Single-Writer Stateful Litestream SQLite (`hivemind-openrouter`)**: Must use `--cpu=1 --memory=1Gi --min-instances=0 --max-instances=1 --no-cpu-throttling --cpu-boost --concurrency=80` (owner decision 2026-11-04: scale to zero and autoscale when used; `--max-instances=1` keeps the single writer, a cold start restores the ledger from Litestream) ([deploy/gcp_openrouter/deploy.sh](file:///home/callensxavier_gmail_com/HiveMind/deploy/gcp_openrouter/deploy.sh)). Never over-allocate `>1 vCPU` to a single-worker (`--workers 1`) Python Uvicorn process.
    - **Stateless Control Plane & HTTP Services (`hivemind-at-home-ruche`, `symbrain-v4-edge`, `runux-math-kernel-service`, etc.)**: Must use `--min-instances=0`, `--cpu-throttling` (request-based CPU billing), and `--cpu-boost`.
    - **Cloud Run L4 GPU Services (`deepseek-prover-v2`, `personashield-api-gpu`, `symbrain-v4-cloud32`)**: Must cap `--min-instances=0 --max-instances=1` and offload sustained/burst traffic to the zero-GCP-cost **100-Producer Community GPU Swarm** (`hivemind-at-home-ruche` + AMCP v1.5 EDA traffic sustainer).
 

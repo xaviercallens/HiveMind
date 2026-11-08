@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -44,8 +45,12 @@ from hivemind.game.exoplanet_hunter_engine import (
 )
 
 CSC_PATH = Path(r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe")
-STEAM_LIBRARY_COMMON = Path(r"D:\SteamLibrary\steamapps\common")
-STEAM_USERDATA_CONFIG = Path(r"C:\Program Files (x86)\Steam\userdata\160209124\config")
+STEAM_LIBRARY_COMMON = Path(
+    os.environ.get("STEAM_LIBRARY_COMMON", str(PROJECT_ROOT / "steam_dist" / "SteamLibrary" / "steamapps" / "common"))
+)
+STEAM_USERDATA_CONFIG = Path(
+    os.environ.get("STEAM_USERDATA_CONFIG", str(PROJECT_ROOT / "steam_dist" / "Steam" / "userdata" / "0" / "config"))
+)
 
 
 NATIVE_CSHARP_FAT_CLIENT_SOURCE = r"""using System;
@@ -1117,13 +1122,14 @@ namespace HiveMind.ExoplanetHunterClient
                 {
                     try
                     {
-                        string url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=" + Uri.EscapeDataString(apiKey);
+                        string url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent";
                         string escapedText = (text ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", " ").Replace("\n", " ");
                         string jsonBody = "{\"contents\":[{\"parts\":[{\"text\":\"" + escapedText + "\"}]}],\"generationConfig\":{\"responseModalities\":[\"AUDIO\"],\"speechConfig\":{\"voiceConfig\":{\"prebuiltVoiceConfig\":{\"voiceName\":\"" + voiceName + "\"}}}}}";
 
                         HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
                         req.Method = "POST";
                         req.ContentType = "application/json; charset=utf-8";
+                        req.Headers["x-goog-api-key"] = apiKey;
                         req.Timeout = 5500;
                         byte[] bodyBytes = Encoding.UTF8.GetBytes(jsonBody);
                         req.ContentLength = bodyBytes.Length;
@@ -4870,7 +4876,7 @@ def _generate_steam_artwork_assets(assets_dir: Path) -> Dict[str, str]:
 
 
 def build_fat_steam_exoplanet_client(
-    install_to_local_steam_library: bool = True,
+    install_to_local_steam_library: bool = False,
 ) -> Dict[str, Any]:
     """Compile the v4.5 Full-Canvas native 64-bit C# fat client .exe and deploy into `steam_dist` and `D:\\SteamLibrary`."""
     service = AstroBeeMoEGPUService()
@@ -5065,20 +5071,24 @@ if __name__ == "__main__":
         encoding="utf-8",
     )
 
-    publish_bat_path = sdk_dir / "Publish_Steamworks_xavakal.bat"
+    steam_account_name = os.environ.get("STEAM_ACCOUNT_NAME", "hivemind_local").strip() or "hivemind_local"
+    steam_persona_name = os.environ.get("STEAM_PERSONA_NAME", "HiveMinder").strip() or "HiveMinder"
+    steam_owner_id64 = os.environ.get("STEAM_LAST_OWNER_ID64", "0").strip() or "0"
+
+    publish_bat_path = sdk_dir / f"Publish_Steamworks_{steam_account_name}.bat"
     publish_bat_path.write_text(
         f"""@echo off
-title Steamworks Release Publisher — Account: xavakal (callensxavier) — AppID {STEAM_APP_ID}
+title Steamworks Release Publisher — Account: {steam_account_name} ({steam_persona_name}) — AppID {STEAM_APP_ID}
 echo ============================================================================
 echo Publishing USS HiveMind NCC-31337 v1.0.0 First Release to Steamworks
-echo Steam Account : xavakal (SteamID64: 76561198120474852)
-echo Steam Library : D:\\SteamLibrary\\steamapps\\common\\HiveMind_Astrophysics_Exoplanet_Hunter
+echo Steam Account : {steam_account_name} (SteamID64: {steam_owner_id64})
+echo Steam Library : {STEAM_LIBRARY_COMMON / "HiveMind_Astrophysics_Exoplanet_Hunter"}
 echo ============================================================================
 where steamcmd >nul 2>nul
 if %ERRORLEVEL% EQU 0 (
-    steamcmd +login xavakal +run_app_build "%~dp0app_build_3133700_free_boinc.vdf" +quit
+    steamcmd +login {steam_account_name} +run_app_build "%~dp0app_build_3133700_free_boinc.vdf" +quit
 ) else (
-    echo [INFO] Local Steam Library deployment active at D:\\SteamLibrary\\steamapps\\common\\HiveMind_Astrophysics_Exoplanet_Hunter
+    echo [INFO] Local Steam Library deployment active at {STEAM_LIBRARY_COMMON / "HiveMind_Astrophysics_Exoplanet_Hunter"}
     start "" "steam://rungameid/{STEAM_ASTRO_DEPOT_ID}"
 )
 """,
@@ -5102,16 +5112,6 @@ start "" "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community"
     grid_copied: List[str] = []
 
     if install_to_local_steam_library and STEAM_LIBRARY_COMMON.exists():
-        try:
-            subprocess.run(
-                ["taskkill", "/F", "/IM", "HiveMind_Exoplanet_Hunter.exe"],
-                capture_output=True,
-                timeout=3.0,
-                check=False,
-            )
-        except Exception:
-            pass
-
         steam_lib_target.mkdir(parents=True, exist_ok=True)
         steamcmd_src = pkg_dir.parent / "steamcmd" / "steamcmd.exe"
         if steamcmd_src.exists():
@@ -5147,7 +5147,7 @@ start "" "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community"
 \t"SizeOnDisk"\t\t"{total_bytes}"
 \t"StagingSize"\t\t"0"
 \t"buildid"\t\t"2026102901"
-\t"LastOwner"\t\t"76561198120474852"
+\t"LastOwner"\t\t"{steam_owner_id64}"
 \t"AutoUpdateBehavior"\t\t"0"
 \t"AllowOtherDownloadsWhileRunning"\t\t"1"
 \t"ScheduledAutoUpdate"\t\t"0"
@@ -5164,8 +5164,8 @@ start "" "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community"
 \t"UserConfig"
 \t{{
 \t\t"language"\t\t"french"
-\t\t"accountname"\t\t"xavakal"
-\t\t"personaname"\t\t"callensxavier"
+\t\t"accountname"\t\t"{steam_account_name}"
+\t\t"personaname"\t\t"{steam_persona_name}"
 \t}}
 }}
 """
@@ -5187,9 +5187,19 @@ start "" "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community"
             start_dir_str = str(steam_lib_target)
             icon_target_str = str(steam_lib_target / "steam_assets" / "icon.ico")
             shortcuts_vdf_path = STEAM_USERDATA_CONFIG / "shortcuts.vdf"
-            vdf_bytes = (
-                b"\x00shortcuts\x00"
-                b"\x000\x00"
+            existing_vdf = b""
+            if shortcuts_vdf_path.exists():
+                existing_vdf = shortcuts_vdf_path.read_bytes()
+                shutil.copy2(shortcuts_vdf_path, shortcuts_vdf_path.with_suffix(".vdf.bak"))
+
+            entry_idx = b"0"
+            if existing_vdf.startswith(b"\x00shortcuts\x00") and existing_vdf.endswith(b"\x08\x08"):
+                # Count existing top-level shortcut entries or pick next index
+                idx_num = max(0, existing_vdf.count(b"\x01AppName\x00"))
+                entry_idx = str(idx_num).encode("ascii")
+
+            entry_body = (
+                b"\x00" + entry_idx + b"\x00"
                 b"\x02appid\x00" + int(shortcut_appid).to_bytes(4, "little", signed=False)
                 + b"\x01AppName\x00USS HiveMind: Astrophysics Exoplanet Hunter\x00"
                 + b"\x01Exe\x00\"" + exe_target_str.encode("utf-8") + b"\"\x00"
@@ -5202,13 +5212,21 @@ start "" "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community"
                 + b"\x02AllowOverlay\x00\x01\x00\x00\x00"
                 + b"\x02OpenVR\x00\x00\x00\x00\x00"
                 + b"\x00tags\x00\x010\x00Astrophysics\x00\x011\x00Favorite\x00\x08"
-                + b"\x08\x08"
+                + b"\x08"
             )
+            if existing_vdf.startswith(b"\x00shortcuts\x00") and existing_vdf.endswith(b"\x08\x08"):
+                if b"USS HiveMind: Astrophysics Exoplanet Hunter" in existing_vdf:
+                    vdf_bytes = existing_vdf
+                else:
+                    vdf_bytes = existing_vdf[:-1] + entry_body + b"\x08"
+            else:
+                vdf_bytes = b"\x00shortcuts\x00" + entry_body + b"\x08"
             shortcuts_vdf_path.write_bytes(vdf_bytes)
 
     return {
         "version": "5.2-FirstRelease-Steam-IdleGPU-BOINC-GCP-Community",
-        "steam_account": "xavakal (callensxavier / 76561198120474852)",
+        "simulated": True,
+        "steam_account": f"{steam_account_name} ({steam_persona_name} / {steam_owner_id64})",
         "steam_app_id": STEAM_APP_ID,
         "steam_astro_depot_id": STEAM_ASTRO_DEPOT_ID,
         "pricing_model": "100% Free-to-Play (FreeOnDemand, isfreeapp=1, 0.00 EUR / 0.00 USD)",

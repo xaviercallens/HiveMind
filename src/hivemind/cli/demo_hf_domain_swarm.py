@@ -772,15 +772,19 @@ def _execute_single_domain_on_loaded_model(
         )
         worker_losses[node_id] = (inner_res.initial_loss, inner_res.final_loss)
 
+        from hivemind.boinc.workunit import sign_shard_bytes
+
+        shard_disk_path = Path(store.cid_to_path[agent_shard_cids[node_id]])
+        shard_sha256, shard_hmac_sig = sign_shard_bytes(shard_disk_path.read_bytes(), seed_i)
         dummy_wu = BOINCWorkunit(
             wu_id=f"wu-seti-{domain_name.lower()}-s{idx}-t{exp_index}",
             branch_name=domain_name,
             outer_step=exp_index,
             base_model_id=base_model_sha256,
             lora_checkpoint_url=agent_shard_cids[node_id],
-            data_shard_parquet=str(store.cid_to_path[agent_shard_cids[node_id]]),
-            shard_sha256="",
-            shard_hmac_signature="",
+            data_shard_parquet=str(shard_disk_path),
+            shard_sha256=shard_sha256,
+            shard_hmac_signature=shard_hmac_sig,
             rng_seed=seed_i,
             inner_steps_H=inner_steps,
             spot_check_interval_s=spot_interval,
@@ -906,15 +910,17 @@ def _execute_single_domain_on_loaded_model(
             do_sample=False,
             pad_token_id=tokenizer.pad_token_id,
         )
+    generated_token_ids = gen_ids[0][inp["input_ids"].shape[1] :]
+    billed_generated_tokens = int(generated_token_ids.numel())
     generated_text = tokenizer.decode(
-        gen_ids[0][inp["input_ids"].shape[1] :], skip_special_tokens=True
+        generated_token_ids, skip_special_tokens=True
     )
 
     settlement = ledger.settle_swarm_inference(
         consumer_node_id=consumer_node_id,
         provider_node_ids=provider_node_ids,
         domain_expert=domain_name,
-        verified_tokens=45,
+        verified_tokens=billed_generated_tokens,
         rtt_speedup=None,
         rate_per_token=0.005,
     )

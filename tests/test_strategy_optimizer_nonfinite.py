@@ -13,7 +13,7 @@ DOMAIN = list(StrategyOptimizerTelemetryEngine(seed=2026).domains)[0]
 
 @pytest.fixture(scope="module")
 def client() -> TestClient:
-    return TestClient(create_hack_miner_fastapi_app(), raise_server_exceptions=False)
+    return TestClient(create_hack_miner_fastapi_app(worker_token="test-worker-token-not-a-secret"), raise_server_exceptions=False)
 
 
 @pytest.mark.parametrize(
@@ -34,7 +34,7 @@ def test_bad_observation_is_rejected_and_leaves_the_tab_working(client, payload)
     before = client.get("/api/strategy-optimizer")
     assert before.status_code == 200
 
-    rejected = client.post("/api/strategy-optimizer", json=payload)
+    rejected = client.post("/api/strategy-optimizer", headers={"Authorization": "Bearer test-worker-token-not-a-secret"}, json=payload)
     assert rejected.status_code == 400
 
     after = client.get("/api/strategy-optimizer")

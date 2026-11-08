@@ -110,6 +110,10 @@ class Scenario:
     outer_momentum: float = 0.9
 
     def validate(self) -> "Scenario":
+        # NaN fails every comparison below, so range checks alone would accept it and the run would report final_loss nan.
+        for name in ("eta", "sigma", "spread", "offset", "penalty", "grace", "outer_lr", "outer_momentum"):
+            if not math.isfinite(getattr(self, name)):
+                raise ValueError(f"{name} must be finite, got {getattr(self, name)!r}")
         if not 1 <= self.M <= 6:
             raise ValueError("M must be in 1..6")
         if not 1 <= self.K <= self.M:
@@ -263,10 +267,15 @@ def _run(sc: Scenario) -> dict[str, Any]:
         items = [(deltas[i], 1.0) for i in admitted]
         n_carried = dropped = 0
         if sc.policy == "deferred":
-            usable, dropped = carried_weights(queue, rnd)
+            ready_entries = [e for e in queue if rnd >= int(e.get("ready_round", e["base"] + 1))]
+            still_in_flight = [e for e in queue if rnd < int(e.get("ready_round", e["base"] + 1))]
+            usable, dropped = carried_weights(ready_entries, rnd)
             items += [(e["delta"], e["w"]) for e in usable]
             n_carried = len(usable)
-            queue = [{"delta": deltas[i], "base": rnd, "worker": i} for i in late]
+            delay_rounds = max(1, int(round(sc.penalty)) - 1) if sc.penalty > 2.5 else 1
+            queue = still_in_flight + [
+                {"delta": deltas[i], "base": rnd, "ready_round": rnd + delay_rounds, "worker": i} for i in late
+            ]
         for i in range(M):
             excl[i] = 0 if (i in admitted or i not in alive) else excl[i] + 1
         g = merge_deltas(items, sc.merge)

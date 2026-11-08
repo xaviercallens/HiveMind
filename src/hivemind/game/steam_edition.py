@@ -37,7 +37,7 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
     """Generate a self-contained interactive Cyberpunk HTML5 HUD v2 preloaded with live RTX 2070 game data."""
     from hivemind.game.hf_hack_miner import build_georing_3d_topology_snapshot
 
-    embedded_json = json.dumps(game_report, indent=2)
+    embedded_json = json.dumps(game_report, indent=2).replace("</", "<\\/")
     georing_snapshot_json = json.dumps(
         {"nodes": build_georing_3d_topology_snapshot()["nodes"]}
     ).replace("</", "<\\/")
@@ -360,6 +360,15 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
   <script>
     let GAME_DATA = {embedded_json};
 
+    function escHtml(v) {{
+      return String(v == null ? '' : v)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }}
+
     function renderLeaderboard() {{
       if (GAME_DATA.hardware) {{
         document.getElementById('gpu-name').textContent = GAME_DATA.hardware.gpu_name + ' (' + GAME_DATA.hardware.vram_total_gb + ' GB VRAM)';
@@ -373,21 +382,23 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
       }}
       const tbody = document.querySelector('#leaderboard-table tbody');
       tbody.innerHTML = '';
+      const fmtN = (v) => (v === null || v === undefined ? 'n/a' : Number(v).toLocaleString());
+      const fmtFixed = (v, d) => (v === null || v === undefined ? 'n/a' : Number(v).toFixed(d));
       (GAME_DATA.leaderboard || []).forEach((g, idx) => {{
         const tr = document.createElement('tr');
-        const achHtml = (g.achievements_unlocked || []).map(a => `<span class="pill">${{a}}</span>`).join(' ');
-        const rpHtml = g.rich_presence_status ? `<div style="color:#00ff9d;font-size:0.74rem;margin-top:4px;">RP: ${{g.rich_presence_status}}</div>` : '';
-        const receipt = g.steam_leaderboard_receipt ? `<div style="color:#64748b;font-size:0.72rem;margin-top:2px;">HMAC: ${{g.steam_leaderboard_receipt}}</div>` : '';
-        const bossPts = g.boss_raid_points || 0;
+        const achHtml = (g.achievements_unlocked || []).map(a => `<span class="pill">${{escHtml(a)}}</span>`).join(' ');
+        const rpHtml = g.rich_presence_status ? `<div style="color:#00ff9d;font-size:0.74rem;margin-top:4px;">RP: ${{escHtml(g.rich_presence_status)}}</div>` : '';
+        const receipt = g.steam_leaderboard_receipt ? `<div style="color:#64748b;font-size:0.72rem;margin-top:2px;">HMAC: ${{escHtml(g.steam_leaderboard_receipt)}}</div>` : '';
+        const bossPts = g.boss_raid_points ?? 'n/a';
         tr.innerHTML = `
           <td class="${{idx === 0 ? 'crown' : ''}}">${{idx === 0 ? '#1 CHAMPION' : '#' + (idx + 1)}}</td>
-          <td><strong>${{g.gamer_tag}}</strong><br/><span style="color:#38bdf8;font-size:0.8rem;">${{g.rank_title}}</span></td>
-          <td>${{g.data_discovery_points.toLocaleString()}} PTS<br/><span style="color:#94a3b8;font-size:0.76rem;">${{g.shards_mined}} Shards</span></td>
-          <td>${{g.lora_training_points.toLocaleString()}} PTS<br/><span style="color:#00ff9d;font-size:0.78rem;">-${{g.best_loss_reduction_pct}}% Loss</span></td>
-          <td>${{g.solution_bounty_points.toLocaleString()}} PTS<br/><span style="color:#fcee09;font-size:0.78rem;">${{g.bounties_solved}} Solved</span></td>
-          <td>${{g.swarm_contribution_points.toLocaleString()}} PTS<br/><span style="color:#c084fc;font-size:0.78rem;">${{g.swarm_tokens_served}} Toks (+${{bossPts}} Boss)</span></td>
-          <td class="crown">${{g.total_points.toLocaleString()}} PTS</td>
-          <td style="color:#00ff9d;font-weight:bold;">${{Number(g.hive_balance).toFixed(4)}} $HIVE</td>
+          <td><strong>${{escHtml(g.gamer_tag)}}</strong><br/><span style="color:#38bdf8;font-size:0.8rem;">${{escHtml(g.rank_title)}}</span></td>
+          <td>${{fmtN(g.data_discovery_points)}} PTS<br/><span style="color:#94a3b8;font-size:0.76rem;">${{g.shards_mined ?? 'n/a'}} Shards</span></td>
+          <td>${{fmtN(g.lora_training_points)}} PTS<br/><span style="color:#00ff9d;font-size:0.78rem;">-${{escHtml(g.best_loss_reduction_pct)}}% Loss</span></td>
+          <td>${{fmtN(g.solution_bounty_points)}} PTS<br/><span style="color:#fcee09;font-size:0.78rem;">${{g.bounties_solved ?? 'n/a'}} Solved</span></td>
+          <td>${{fmtN(g.swarm_contribution_points)}} PTS<br/><span style="color:#c084fc;font-size:0.78rem;">${{g.swarm_tokens_served ?? 'n/a'}} Toks (+${{bossPts}} Boss)</span></td>
+          <td class="crown">${{fmtN(g.total_points)}} PTS</td>
+          <td style="color:#00ff9d;font-weight:bold;">${{fmtFixed(g.hive_balance, 4)}} $HIVE</td>
           <td>${{achHtml}}${{rpHtml}}${{receipt}}</td>
         `;
         tbody.appendChild(tr);
@@ -401,7 +412,7 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
       const bc = m.bounty_challenge;
       const term = document.getElementById('mission-terminal');
       term.textContent =
-        `[SEASON ${{m.season || 1}} CONTRACT] ${{m.contract_id}} // ${{m.mission_codename}}\\n` +
+        `[SEASON ${{m.season ?? 'n/a'}} CONTRACT] ${{m.contract_id}} // ${{m.mission_codename}}\\n` +
         `[HF DATASET NODE] ${{m.dataset_id}} -> Expert: ${{m.domain_expert}}\\n` +
         `[PUBLISHED CAS CID] ${{m.expert_cid}}\\n` +
         `[SOLUTION PERPLEXITY] Pre-LoRA: ${{bc.pre_lora_eval.solution_perplexity}} -> Post-LoRA: ${{bc.post_lora_eval.solution_perplexity}} (-${{bc.perplexity_improvement_pct}}%)\\n\\n` +
@@ -415,11 +426,13 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
       const raid = moe.speculative_boss_raid || {{}};
       const tree = moe.token_tree_speculation_gamma6 || {{}};
       const term = document.getElementById('mission-terminal');
+      const initLossTxt = moe.router_initial_loss != null ? Number(moe.router_initial_loss).toFixed(4) : 'n/a';
+      const finalLossTxt = moe.router_final_loss != null ? Number(moe.router_final_loss).toFixed(4) : 'n/a';
       term.textContent =
-        `[OMEGA FINAL BOSS STAGE] ${{moe.num_experts || 6}}-EXPERT SPARSE MoE MULTI-DOMAIN SPECULATIVE RAID\\n` +
-        `[REGIONAL RING] ${{raid.region_ring || 'EU-West-Swarm-Ring'}} (${{raid.active_ring_peers || 3}} Peers | Mean Ping: ${{raid.mean_ring_ping_ms || 14.1}} ms)\\n` +
-        `[SPECULATIVE DECODING] Ring gamma=${{raid.draft_gamma || 5}} (${{raid.latency_reduction_factor ?? 'n/a'}} tokens/pass, simulated RTT) | Token-Tree gamma=${{tree.tree_depth_gamma || 6}} (Accepted: ${{tree.accepted_length || 7}} toks)\\n` +
-        `[TOP-2 ROUTER CALIBRATION] Loss: ${{Number(moe.router_initial_loss || 2.45).toFixed(4)}} -> ${{Number(moe.router_final_loss || 1.71).toFixed(4)}}\\n\\n` +
+        `[OMEGA FINAL BOSS STAGE] ${{moe.num_experts ?? 'n/a'}}-EXPERT SPARSE MoE MULTI-DOMAIN SPECULATIVE RAID\\n` +
+        `[REGIONAL RING] ${{raid.region_ring || 'EU-West-Swarm-Ring'}} (${{raid.active_ring_peers ?? 'n/a'}} Peers | Mean Ping: ${{raid.mean_ring_ping_ms ?? 'n/a'}} ms)\\n` +
+        `[SPECULATIVE DECODING] Ring gamma=${{raid.draft_gamma ?? 'n/a'}} (${{raid.latency_reduction_factor ?? 'n/a'}} tokens/pass, simulated RTT) | Token-Tree gamma=${{tree.tree_depth_gamma ?? 'n/a'}} (Accepted: ${{tree.accepted_length ?? 'n/a'}} toks)\\n` +
+        `[TOP-2 ROUTER CALIBRATION] Loss: ${{initLossTxt}} -> ${{finalLossTxt}}\\n\\n` +
         `--- MULTI-DOMAIN BOSS PROMPT ---\\n${{raid.prompt || 'Write a memory-safe function atp_hive_yield(cells, blocks)...'}}\\n` +
         `--- MULTI-EXPERT SPARSE MoE SPECULATIVE OUTPUT ---\\n${{raid.generated_boss_solution || 'def atp_hive_yield(cells, blocks): return cells * blocks * 50'}}`;
     }}
@@ -431,17 +444,19 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
       const dma = moe.double_buffered_dma_lookahead || [];
       const el = document.getElementById('moe-panel');
       const util = moe.expert_utilization || {{}};
+      const initLossTxt = moe.router_initial_loss != null ? Number(moe.router_initial_loss).toFixed(4) : 'n/a';
+      const finalLossTxt = moe.router_final_loss != null ? Number(moe.router_final_loss).toFixed(4) : 'n/a';
       el.innerHTML = `
-        <p><strong>Active Hot-Plugged Experts:</strong> ${{moe.num_experts || 6}} (${{(moe.expert_domains || []).join(', ')}})</p>
-        <p><strong>Top-2 Router Calibration Loss:</strong> ${{Number(moe.router_initial_loss || 0).toFixed(4)}} &rarr; <span style="color:#00ff9d;font-weight:bold;">${{Number(moe.router_final_loss || 0).toFixed(4)}}</span></p>
+        <p><strong>Active Hot-Plugged Experts:</strong> ${{moe.num_experts ?? 'n/a'}} (${{(moe.expert_domains || []).join(', ')}})</p>
+        <p><strong>Top-2 Router Calibration Loss:</strong> ${{initLossTxt}} &rarr; <span style="color:#00ff9d;font-weight:bold;">${{finalLossTxt}}</span></p>
         <p><strong>Swarm Expert Routing Utilization:</strong></p>
         <ul>
           ${{Object.entries(util).map(([k, v]) => `<li>${{k}}: <strong>${{(v * 100).toFixed(1)}}%</strong></li>`).join('')}}
         </ul>
-        <p><strong>2-Slot Double-Buffered Pinned RAM DMA (HM-M2-01):</strong> <span style="color:#00ff9d;">${{dma.length || 6}} Experts Staged (simulated swap latency, not measured)</span></p>
-        <p><strong>Speculative Swarm Ring (&gamma;=${{raid.draft_gamma || 5}} / Tree &gamma;=6):</strong> <span style="color:#00f0ff;">${{raid.latency_reduction_factor ?? 'n/a'}} tokens/pass (simulated RTT, not a measured speedup)</span> (${{raid.effective_tokens_per_sec || 28.5}} tok/s)</p>
+        <p><strong>2-Slot Double-Buffered Pinned RAM DMA (HM-M2-01):</strong> <span style="color:#00ff9d;">${{dma.length}} Experts Staged (simulated swap latency, not measured)</span></p>
+        <p><strong>Speculative Swarm Ring (&gamma;=${{raid.draft_gamma ?? 'n/a'}} / Tree &gamma;=6):</strong> <span style="color:#00f0ff;">${{raid.latency_reduction_factor ?? 'n/a'}} tokens/pass (simulated RTT, not a measured speedup)</span> (${{raid.effective_tokens_per_sec ?? 'n/a'}} tok/s)</p>
         <p><strong>Steamworks Anti-Cheat Firewall:</strong> <span style="color:#ff007f;">Sybil_Bot_Limited_00 Blocked ($0 &lt; $5)</span> | <span style="color:#ff007f;">DarkNet_Spoofer_99 Slashed (Multi-Krum 2&sigma;)</span></p>
-        <p><strong>Peak RTX 2070 VRAM:</strong> ${{vram.peak_allocated_mb || 1192.6}} MiB (${{vram.free_vram_gb || 5.62}} GiB Free)</p>
+        <p><strong>Peak RTX 2070 VRAM:</strong> ${{vram.peak_allocated_mb ?? 'n/a'}} MiB (${{vram.free_vram_gb ?? 'n/a'}} GiB Free)</p>
       `;
     }}
 
@@ -657,10 +672,11 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
       const m = SEASON4_MISSIONS[idx];
       if (!m) return;
       const term = document.getElementById('season4-terminal');
+      const skulls4 = m.difficulty_skulls != null ? Number(m.difficulty_skulls) : 5;
       term.textContent =
         `[SEASON 4 CONTRACT] ${{m.contract_id}} // ${{m.mission_codename}}\\n` +
         `[HF DATASET NODE] ${{m.dataset_id}} -> Expert: ${{m.domain_expert}}\\n` +
-        `[DIFFICULTY] ${{'*'.repeat(m.difficulty_skulls || 5)}} | [BASE BOUNTY] ${{m.base_bounty_pts}} PTS\\n` +
+        `[DIFFICULTY] ${{'*'.repeat(skulls4)}} | [BASE BOUNTY] ${{m.base_bounty_pts}} PTS\\n` +
         `[TELEMETRY] Live frame stream on /ws/swarm-telemetry (Season 4: 4 contracts, 1,800 $HIVE pool)`;
     }}
 
@@ -669,12 +685,13 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
       if (!term || !f) return;
       const m = f.active_mission || {{}};
       const lb = (f.leaderboard || [])[0] || {{}};
+      const lbBalTxt = lb.hive_balance != null ? Number(lb.hive_balance).toFixed(4) : 'n/a';
       term.textContent =
         `[LIVE TELEMETRY] seq ${{f.seq}} | ${{f.timestamp_iso}} | stream=${{f.stream}}\\n` +
         `[SEASON 4] ${{f.season4_missions}} contracts | active: ${{m.contract_id}} (${{m.domain_expert}})\\n` +
         `[SWARM RING] ${{f.num_nodes}} nodes | ${{f.active_ring_peers}} peers | mean RTT ${{f.mean_ring_rtt_ms}} ms\\n` +
         `[THROUGHPUT] ${{f.swarm_tokens_per_sec}} tok/s | mined ${{f.hive_minted_total}} $HIVE\\n` +
-        `[LEADER] ${{lb.gamer_tag || 'n/a'}} | ${{lb.total_points || 0}} PTS | ${{Number(lb.hive_balance || 0).toFixed(4)}} $HIVE`;
+        `[LEADER] ${{lb.gamer_tag || 'n/a'}} | ${{lb.total_points ?? 'n/a'}} PTS | ${{lbBalTxt}} $HIVE`;
     }}
 
     function connectSwarmTelemetry() {{
@@ -736,10 +753,11 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
       const m = SEASON5_MISSIONS[idx];
       if (!m) return;
       const term = document.getElementById('season5-terminal');
+      const skulls5 = m.difficulty_skulls != null ? Number(m.difficulty_skulls) : 5;
       term.textContent =
         `[SEASON 5 CONTRACT] ${{m.contract_id}} // ${{m.mission_codename}}\\n` +
         `[HF DATASET NODE] ${{m.dataset_id}} -> Expert: ${{m.domain_expert}}\\n` +
-        `[DIFFICULTY] ${{'*'.repeat(m.difficulty_skulls || 5)}} | [BASE BOUNTY] ${{m.base_bounty_pts}} PTS\\n` +
+        `[DIFFICULTY] ${{'*'.repeat(skulls5)}} | [BASE BOUNTY] ${{m.base_bounty_pts}} PTS\\n` +
         `[GUILD WARS] This mission feeds the multi-domain holdout of the cross-guild tournament (raid arcs on the 3D globe).`;
     }}
 
@@ -815,10 +833,11 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
       const m = SEASON6_MISSIONS[idx];
       if (!m) return;
       const term = document.getElementById('season6-terminal');
+      const skulls6 = m.difficulty_skulls != null ? Number(m.difficulty_skulls) : 5;
       term.textContent =
         `[SEASON 6 CONTRACT] ${{m.contract_id}} // ${{m.mission_codename}}\\n` +
         `[ARENA DATASET NODE] ${{m.dataset_id}} -> Expert: ${{m.domain_expert}}\\n` +
-        `[DIFFICULTY] ${{'*'.repeat(m.difficulty_skulls || 5)}} | [BASE BOUNTY] ${{m.base_bounty_pts}} PTS\\n` +
+        `[DIFFICULTY] ${{'*'.repeat(skulls6)}} | [BASE BOUNTY] ${{m.base_bounty_pts}} PTS\\n` +
         `[ENDPOINTS] /api/agent-arena | /api/strategy-optimizer | /api/forge-lora-mission`;
     }}
 
@@ -890,11 +909,12 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
         `  ${{p.strategy_profile}} - loss ${{p.holdout_loss}} | ${{p.parallel_speedup_x}}x | ${{p.hive_per_gpu_hour}} HIVE/GPU-hr | overhead ${{p.comm_overhead_pct}}% | pareto=${{p.pareto_optimal}}`).join('\\n');
       const ef21 = ((s.ef21_live_telemetry || {{}}).workers || []).map(w =>
         `  ${{w.worker_id}}/${{w.branch_name}} step ${{w.outer_step}} | residual ${{w.residual_norm}} | raw ${{w.raw_delta_norm}} | contraction ${{w.contraction_factor}} | clips ${{w.clip_events}}`).join('\\n') || '  (no worker has posted EF21 telemetry yet)';
+      const commRatioPct = link.communication_overhead_ratio != null ? (Number(link.communication_overhead_ratio) * 100).toFixed(2) : 'n/a';
       term.textContent =
         `[STRATEGY OPTIMIZER] ${{s.schema_version}} | seq ${{s.sequence}} | ${{s.strategy_ids.join(' ')}}\\n` +
         `[SI-01 FISHER RANKS] ${{JSON.stringify(si01.allocated_ranks_by_domain || {{}})}} | budget conserved=${{si01.vram_budget_conserved}}\\n` +
         `[SI-02 UCB1] top2 ${{(si02.top2_prioritized_domains || []).join(', ')}} | scores ${{JSON.stringify(si02.ucb1_scores || {{}})}}\\n` +
-        `[SI-03 CADENCE] H=${{link.recommended_inner_steps_H}} | top-k ${{link.recommended_topk_ratio}} | overhead ${{(Number(link.communication_overhead_ratio || 0) * 100).toFixed(2)}}% | SLA=${{link.sla_8pct_satisfied}}\\n` +
+        `[SI-03 CADENCE] H=${{link.recommended_inner_steps_H}} | top-k ${{link.recommended_topk_ratio}} | overhead ${{commRatioPct}}% | SLA=${{link.sla_8pct_satisfied}}\\n` +
         `[SI-04 REPUTATION TIES] uniform ${{si04.uniform_ties_holdout_loss}} -> weighted ${{si04.reputation_weighted_ties_holdout_loss}} (improved=${{si04.reputation_weighted_beats_uniform}})\\n` +
         `[SI-05 PARETO FRONTIER]\\n${{frontier}}\\n` +
         `[EF21 RESIDUALS] self-reported by workers\\n${{ef21}}\\n` +
@@ -1231,10 +1251,26 @@ pause
     }
 
 
-def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> Any:
-    """Create a FastAPI server serving the Interactive Cyberpunk Hack-Miner HUD and Live REST API."""
+def bearer_token_from_header(authorization: str | None) -> str:
+    """Return the token of an ``Authorization: Bearer <token>`` header, or ``""`` if absent or malformed."""
+    if not authorization:
+        return ""
+    scheme, _, token = authorization.strip().partition(" ")
+    if scheme.lower() != "bearer":
+        return ""
+    return token.strip()
+
+
+def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None, *, worker_token: str | None = None) -> Any:
+    """Create a FastAPI server serving the Interactive Cyberpunk Hack-Miner HUD and Live REST API.
+
+    ``worker_token`` (default: the ``HIVEMIND_STRATEGY_WORKER_TOKEN`` environment variable) is the bearer that trainer
+    workers present to feed the shared strategy optimizer; without one the telemetry is read-only (IP-198).
+    """
+    import hmac
+    import os
     import torch
-    from fastapi import Body, FastAPI, HTTPException, WebSocket
+    from fastapi import Body, FastAPI, Header, HTTPException, WebSocket
     import hivemind.game.steam_edition as _steam_mod
 
     _steam_mod.WebSocket = WebSocket
@@ -1285,6 +1321,15 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> 
     tournament_engine = GuildTournamentEngine()
     # Season 6 (`HM-S6-04`) live SI-01..SI-05 Pareto strategy telemetry.
     strategy_engine = StrategyOptimizerTelemetryEngine()
+    # The engine is process-wide: every viewer of the HUD sees what the last writer posted, so writing needs an identity.
+    strategy_worker_token = (worker_token if worker_token is not None else os.environ.get("HIVEMIND_STRATEGY_WORKER_TOKEN", "")).strip()
+
+    def _require_strategy_worker(authorization: str | None) -> None:
+        presented = bearer_token_from_header(authorization)
+        if not strategy_worker_token:
+            raise HTTPException(status_code=401, detail="strategy telemetry is read-only: no worker token is configured on this server")
+        if not presented or not hmac.compare_digest(presented, strategy_worker_token):
+            raise HTTPException(status_code=401, detail="worker token required (Authorization: Bearer)")
     # Season 19 Unity + Steamworks.NET + Google Antigravity Scientific Discovery Game engine.
     scientific_game_engine = HiveMindScientificGameEngine()
 
@@ -1406,8 +1451,9 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> 
         return snapshot
 
     @app.post("/api/strategy-optimizer", response_class=JSONResponse)
-    def post_strategy_optimizer(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
-        """Feed live link/curriculum observations into SI-02/SI-03 and refresh the frontier."""
+    def post_strategy_optimizer(payload: Dict[str, Any] = Body(default={}), authorization: str | None = Header(default=None)) -> Dict[str, Any]:
+        """Feed live link/curriculum observations into SI-02/SI-03 and refresh the frontier (worker bearer required, IP-198)."""
+        _require_strategy_worker(authorization)
         try:
             snapshot = strategy_engine.update(payload)
         except ValueError as exc:
@@ -1520,6 +1566,14 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> 
             },
         }
 
+    def _is_verified_worker(authorization: str | None) -> bool:
+        presented = bearer_token_from_header(authorization)
+        return bool(
+            strategy_worker_token
+            and presented
+            and hmac.compare_digest(presented, strategy_worker_token)
+        )
+
     @app.get("/api/guild-tournament", response_class=JSONResponse)
     def get_guild_tournament() -> Dict[str, Any]:
         """Serve the live cross-guild Co-Op tournament & WebGL raid-arc geometry."""
@@ -1528,14 +1582,22 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> 
         return state
 
     @app.post("/api/guild-tournament", response_class=JSONResponse)
-    def post_guild_tournament(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
-        """Register a guild squad's self-reported metrics and re-run the matchmaking."""
+    def post_guild_tournament(
+        payload: Dict[str, Any] = Body(default={}),
+        authorization: str | None = Header(default=None),
+    ) -> Dict[str, Any]:
+        """Register a guild squad's self-reported metrics and re-run the matchmaking.
+
+        Unauthenticated callers cannot override measured holdout perplexity or speculative
+        throughput to re-rank the tournament champion (IP-153).
+        """
         try:
             state = tournament_engine.register_squad_update(
                 guild_id=str(payload.get("guild_id", "")),
                 multi_domain_holdout_perplexity=payload.get("multi_domain_holdout_perplexity"),
                 speculative_tokens_per_sec=payload.get("speculative_tokens_per_sec"),
                 gamer_tag=payload.get("gamer_tag"),
+                verified_worker=_is_verified_worker(authorization),
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc))
@@ -1634,13 +1696,21 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> 
         profile_name = str(payload.get("profile", "rtx2070_7b_worker"))
         cfg = HiveMindConfig.from_yaml()
         prof = cfg.profiles.get(profile_name) or cfg.profiles["rtx2070_7b_worker"]
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        cuda_ok = bool(torch.cuda.is_available())
+        device = torch.device("cuda:0" if cuda_ok else "cpu")
         vram = measure_vram_footprint(device)
+        allocated_gb = float(vram.get("allocated_mb", 0.0) or 0.0) / 1024.0
+        diagnostic_passed = bool(
+            cuda_ok
+            and prof.vram_budget.total_peak_vram_gb < 8.0
+            and allocated_gb < 8.0
+        )
         return {
             "steam_app_id": STEAM_APP_ID,
             "profile_tested": prof.name,
             "device": str(device),
-            "cuda_available": torch.cuda.is_available(),
+            "cuda_available": cuda_ok,
+            "status": "VERIFIED_CUDA" if diagnostic_passed else ("BLOCKED_NO_CUDA" if not cuda_ok else "FAILED_VRAM_BUDGET"),
             "live_vram_telemetry": vram,
             "vram_budget_gb": {
                 "frozen_base_nf4_gb": prof.vram_budget.frozen_base_nf4_gb,
@@ -1648,7 +1718,7 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> 
                 "paged_adamw_8bit_gb": prof.vram_budget.paged_adamw_8bit_gb,
                 "total_peak_vram_gb": prof.vram_budget.total_peak_vram_gb,
             },
-            "diagnostic_passed": True,
+            "diagnostic_passed": diagnostic_passed,
         }
 
     @app.get("/api/steam-manifest", response_class=JSONResponse)
@@ -1660,26 +1730,43 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> 
         return json.loads(cloud_path.read_text(encoding="utf-8"))
 
     @app.post("/api/scan-hf-shard", response_class=JSONResponse)
-    def post_scan_hf_shard(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    def post_scan_hf_shard(payload: Dict[str, Any] = Body(default={})) -> Any:
         gamer_tag = str(payload.get("gamer_tag", "CyberValkyrie_FR"))
         dataset_id = str(payload.get("dataset_id", "sahil2801/CodeAlpaca-20k"))
         custom_rows = payload.get("custom_rows")
         target_keywords = payload.get("target_keywords")
-        return execute_interactive_hf_shard_scan(
+        res = execute_interactive_hf_shard_scan(
             gamer_tag=gamer_tag,
             dataset_id=dataset_id,
             custom_rows=custom_rows,
             target_keywords=target_keywords,
         )
+        if res.get("status") == "BLOCKED":
+            return JSONResponse(status_code=400, content=res)
+        return res
 
     @app.post("/api/forge-lora-mission", response_class=JSONResponse)
-    def post_forge_lora_mission(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    def post_forge_lora_mission(
+        payload: Dict[str, Any] = Body(default={}),
+        authorization: str | None = Header(default=None),
+    ) -> Dict[str, Any]:
         gamer_tag = str(payload.get("gamer_tag", "CyberValkyrie_FR"))
         contract_id = str(payload.get("contract_id", "CONTRACT-HF-04-RUST-SYSTEMS"))
-        return execute_interactive_lora_micro_forge(gamer_tag=gamer_tag, contract_id=contract_id)
+        corpus_override = payload.get("corpus") if isinstance(payload.get("corpus"), list) else None
+        require_cuda = bool(payload.get("require_cuda", True))
+        return execute_interactive_lora_micro_forge(
+            gamer_tag=gamer_tag,
+            contract_id=contract_id,
+            corpus_override=corpus_override,
+            require_cuda=require_cuda,
+            persist_leaderboard=_is_verified_worker(authorization),
+        )
 
     @app.post("/api/solve-bounty", response_class=JSONResponse)
-    def post_solve_bounty(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    def post_solve_bounty(
+        payload: Dict[str, Any] = Body(default={}),
+        authorization: str | None = Header(default=None),
+    ) -> Dict[str, Any]:
         gamer_tag = str(payload.get("gamer_tag", "CyberValkyrie_FR"))
         prompt = str(
             payload.get(
@@ -1687,7 +1774,11 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> 
                 "Write a Python function to calculate total cellular ATP and HIVE minted across 3 blocks.",
             )
         )
-        return execute_interactive_bounty_probe(gamer_tag=gamer_tag, prompt=prompt)
+        return execute_interactive_bounty_probe(
+            gamer_tag=gamer_tag,
+            prompt=prompt,
+            persist_leaderboard=_is_verified_worker(authorization),
+        )
 
     @app.post("/api/joined-campaign", response_class=JSONResponse)
     def post_joined_campaign(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
@@ -1748,8 +1839,20 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> 
     @app.post("/api/scientific-game/la-ruche-copilot", response_class=JSONResponse)
     def post_scientific_game_la_ruche_copilot(
         payload: Dict[str, Any] = Body(default={}),
+        authorization: str | None = Header(default=None),
     ) -> Dict[str, Any]:
-        """Query a live Specialist Bee on La Ruche or local GPU swarm and score ANSE Bee Energy."""
+        """Query a live Specialist Bee on La Ruche or local GPU swarm and score ANSE Bee Energy.
+
+        The caller must present their own router key (IP-201); it is forwarded to La Ruche and the
+        server-held key is never used for caller prompts. Anonymous calls get 401.
+        """
+        router_api_key = bearer_token_from_header(authorization)
+        if not router_api_key:
+            raise HTTPException(
+                status_code=401,
+                detail="caller router API key required (Authorization: Bearer)",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         prompt = str(
             payload.get(
                 "prompt",
@@ -1760,6 +1863,7 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> 
         gamer_tag = str(payload.get("gamer_tag", "CyberValkyrie_FR"))
         return ask_la_ruche_bee_copilot_live(
             prompt=prompt,
+            router_api_key=router_api_key,
             model=model,
             gamer_tag=gamer_tag,
         )
@@ -1777,7 +1881,7 @@ def create_hack_miner_fastapi_app(game_report: Dict[str, Any] | None = None) -> 
             simulated_active_game=game_exe if foreground_active else None,
         )
         should_preempt = daemon.should_preempt()
-        eviction_ms = round((time.perf_counter() - t0) * 1000.0 + 14.2, 2)
+        eviction_ms = round((time.perf_counter() - t0) * 1000.0, 3)
         return {
             "steam_app_id": STEAM_APP_ID,
             "gamer_tag": str(payload.get("gamer_tag", "CyberValkyrie_FR")),

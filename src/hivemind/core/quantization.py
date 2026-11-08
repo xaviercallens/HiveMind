@@ -9,6 +9,7 @@ Windows pagefile exhaustion on low-space C: drives while executing 100% on the l
 from __future__ import annotations
 
 import hashlib
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -97,11 +98,17 @@ def quantize_tensor_nf4_double_quant(
     Returns both the compact packed 4-bit `NF4QuantState` (0.515 bytes/param) and the
     reconstructed NF4 weight tensor for fast PEFT Linear forward passes on Turing/Ampere GPUs.
     """
+    if isinstance(block_size, bool) or not isinstance(block_size, int) or block_size < 1:
+        raise ValueError(f"block_size must be an integer >= 1, got {block_size!r}")
+    if weight.numel() == 0:
+        raise ValueError("weight must be non-empty")
+    if not bool(torch.isfinite(weight).all().item()):
+        raise ValueError("weight must contain only finite values")
     orig_shape = tuple(weight.shape)
     orig_device = weight.device
     orig_dtype = weight.dtype
 
-    flat = weight.detach().to(torch.float32).reshape(-1)
+    flat = weight.detach().to(torch.float32).clone().reshape(-1)
     numel = flat.numel()
     pad = (block_size - (numel % block_size)) % block_size
     if pad > 0:
@@ -163,9 +170,6 @@ def compute_state_dict_sha256(state_dict: dict[str, torch.Tensor]) -> str:
     hasher = hashlib.sha256()
     for key in sorted(state_dict.keys()):
         t = state_dict[key].detach()
-        # Full exact hash for all LoRA adapter matrices; strided slice for frozen base weights
-        if "lora_" not in key and t.numel() > 4096:
-            t = t.reshape(-1)[::256]
         tensor = t.to(device="cpu", dtype=torch.float32).contiguous()
         hasher.update(key.encode("utf-8"))
         hasher.update(tensor.numpy().tobytes())
@@ -180,6 +184,12 @@ def create_lora_config(
     lora_dropout: float = 0.0,
 ) -> LoraConfig:
     """Create Rank-r LoRA configuration targeting all 7 Transformer linear projections."""
+    if isinstance(rank_r, bool) or not isinstance(rank_r, int) or rank_r < 1:
+        raise ValueError(f"rank_r must be an integer >= 1, got {rank_r!r}")
+    if isinstance(lora_alpha, bool) or not isinstance(lora_alpha, (int, float)) or not math.isfinite(float(lora_alpha)) or lora_alpha <= 0:
+        raise ValueError(f"lora_alpha must be finite and > 0, got {lora_alpha!r}")
+    if isinstance(lora_dropout, bool) or not isinstance(lora_dropout, (int, float)) or not math.isfinite(float(lora_dropout)) or not (0.0 <= float(lora_dropout) < 1.0):
+        raise ValueError(f"lora_dropout must be finite in [0, 1), got {lora_dropout!r}")
     from peft import LoraConfig, TaskType
 
     return LoraConfig(
@@ -329,6 +339,10 @@ def stream_load_hf_causal_lm(
     hf_token: str | None = None,
     apply_nf4: bool = True,
     double_quant: bool = True,
+    *,
+    revision: str | None = None,
+    expected_sha256: str | None = None,
+    require_pinned_revision: bool = False,
 ) -> tuple[nn.Module, bool, float]:
     """Stream an open-weight HuggingFace CausalLM directly from safetensors to `device` with on-the-fly NF4.
 
@@ -341,9 +355,33 @@ def stream_load_hf_causal_lm(
     from huggingface_hub import hf_hub_download
     from transformers import AutoConfig
 
-    cfg = AutoConfig.from_pretrained(model_id, token=hf_token)
-    cfg.use_cache = False
-    ckpt_path = hf_hub_download(repo_id=model_id, filename="model.safetensors", token=hf_token)
+    if require_pinned_revision or revision is not None:
+        rev_str = (revision or "").strip()
+        if not rev_str or rev_str.lower() in {"main", "master", "latest", "head"}:
+            raise ValueError(
+                "A pinned commit revision or tag is required when loading remote HuggingFace weights (IP-42)."
+            )
+        cfg = AutoConfig.from_pretrained(model_id, token=hf_token, revision=rev_str)
+        cfg.use_cache = False
+        ckpt_path = hf_hub_download(
+            repo_id=model_id, filename="model.safetensors", token=hf_token, revision=rev_str
+        )
+    else:
+        cfg = AutoConfig.from_pretrained(model_id, token=hf_token)
+        cfg.use_cache = False
+        ckpt_path = hf_hub_download(repo_id=model_id, filename="model.safetensors", token=hf_token)
+
+    if expected_sha256 is not None:
+        expected_norm = expected_sha256.strip().lower()
+        hasher = hashlib.sha256()
+        with open(ckpt_path, "rb") as chk_fp:
+            while chunk := chk_fp.read(65536):
+                hasher.update(chunk)
+        actual_sha = hasher.hexdigest()
+        if actual_sha != expected_norm:
+            raise ValueError(
+                f"Remote weight SHA-256 mismatch for {model_id}: expected {expected_norm}, got {actual_sha} (IP-42)."
+            )
 
     with torch.device("meta"):
         if getattr(cfg, "model_type", "") == "qwen2":
@@ -481,9 +519,16 @@ def extract_lora_state_dict(model: nn.Module) -> dict[str, torch.Tensor]:
 
 def load_lora_state_dict(model: nn.Module, lora_state: dict[str, torch.Tensor]) -> None:
     """In-place load of LoRA parameter dictionary into the active model."""
+    for name, tensor in lora_state.items():
+        if not isinstance(tensor, torch.Tensor) or not bool(torch.isfinite(tensor).all().item()):
+            raise ValueError(f"lora_state[{name!r}] must be a finite torch.Tensor")
     with torch.no_grad():
         for name, param in model.named_parameters():
             if name in lora_state:
+                if lora_state[name].shape != param.shape:
+                    raise ValueError(
+                        f"Shape mismatch loading {name!r}: {tuple(lora_state[name].shape)} vs {tuple(param.shape)}"
+                    )
                 param.copy_(lora_state[name].to(device=param.device, dtype=param.dtype))
 
 

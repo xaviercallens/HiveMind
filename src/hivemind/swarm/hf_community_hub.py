@@ -346,22 +346,33 @@ print(import_report["status"], import_report["royalties_settled_hive"])
         target_repo_id = repo_id or manifest["hf_repo_id"]
         hf_token = token or os.environ.get("HF_TOKEN")
 
+        # The record says what happened: "pushed" only when the Hub accepted the upload; a failed upload is
+        # UPLOAD_FAILED with the error, never "pushed" with a silent fallback to the local mirror (IP-165).
         mode = "mock_hf_hub_offline"
+        status = "mirrored_locally_not_pushed"
+        pushed_to_hub = False
+        hub_commit: Optional[str] = None
+        upload_error: Optional[str] = None
         if hf_token and not offline_fallback:
             try:
                 from huggingface_hub import HfApi  # type: ignore
 
                 api = HfApi(token=hf_token)
                 api.create_repo(repo_id=target_repo_id, repo_type="model", exist_ok=True)
-                api.upload_folder(
+                commit_info = api.upload_folder(
                     folder_path=str(bundle_path),
                     repo_id=target_repo_id,
                     repo_type="model",
                     commit_message=f"Publish HiveMind bundle {manifest['bundle_id']}",
                 )
                 mode = "huggingface_hub_live"
-            except Exception:
-                mode = "mock_hf_hub_offline"
+                status = "pushed"
+                pushed_to_hub = True
+                hub_commit = str(getattr(commit_info, "commit_url", None) or getattr(commit_info, "oid", None) or commit_info or "")[:200]
+            except Exception as exc:
+                mode = "huggingface_hub_upload_failed"
+                status = "UPLOAD_FAILED"
+                upload_error = f"{type(exc).__name__}: {exc}"[:200]
 
         repo_slug = target_repo_id.replace("/", "__")
         mirror_dir = self.mock_hub_root / repo_slug
@@ -373,7 +384,11 @@ print(import_report["status"], import_report["royalties_settled_hive"])
                 copied_files.append(fpath.name)
 
         record = {
-            "status": "pushed",
+            "status": status,
+            "pushed_to_hub": pushed_to_hub,
+            "hub_commit": hub_commit,
+            "upload_error": upload_error,
+            "local_mirror_only": not pushed_to_hub,
             "mode": mode,
             "repo_id": target_repo_id,
             "bundle_id": manifest["bundle_id"],
@@ -448,6 +463,7 @@ class CommunityAdapterBundleManager:
         self.royalty_pts_per_import = int(royalty_pts_per_import)
         self.exporter = HFCommunityModelCardExporter()
         self.published_bundles: Dict[str, CommunityAdapterBundle] = {}
+        self._settled_bundle_imports: set[tuple[str, str]] = set()
         self.import_history: List[Dict[str, Any]] = []
         self.miner_royalty_pts: Dict[str, int] = {}
 
@@ -586,6 +602,8 @@ class CommunityAdapterBundleManager:
 
         for entry in manifest["entries"]:
             dom = entry["domain_name"]
+            if dom not in loaded_states:
+                raise ValueError(f"Missing tensor state for community expert '{dom}'")
             state = loaded_states[dom]
             actual_sha = _compute_state_dict_sha256(state)
             if actual_sha != entry["tensor_sha256"]:
@@ -595,6 +613,20 @@ class CommunityAdapterBundleManager:
                 )
             verified_entries.append(dom)
 
+        recomputed_bundle_sha = hashlib.sha256(
+            "|".join(
+                f"{e['domain_name']}:{e['tensor_sha256']}" for e in manifest["entries"]
+            ).encode("utf-8")
+        ).hexdigest()
+        if recomputed_bundle_sha != manifest["bundle_sha256"]:
+            raise ValueError("Bundle manifest SHA-256 integrity check failed.")
+
+        import_key = (recomputed_bundle_sha, str(importer_agent_id))
+        already_imported = import_key in self._settled_bundle_imports
+
+        for entry in manifest["entries"]:
+            dom = entry["domain_name"]
+            state = loaded_states[dom]
             if moe_model is not None and dom not in moe_model.expert_domains:
                 moe_model.hotplug_domain_expert(
                     domain_name=dom,
@@ -604,6 +636,10 @@ class CommunityAdapterBundleManager:
                 )
 
             author_tag = entry["author_gamer_tag"]
+            author_handle = entry.get("author_contributor_handle", "")
+            if already_imported or str(importer_agent_id) in (str(author_tag), str(author_handle)):
+                continue
+
             self.ledger.credit_reward(
                 node_id=author_tag,
                 amount_hive=self.royalty_hive_per_import,
@@ -616,19 +652,13 @@ class CommunityAdapterBundleManager:
                 {
                     "domain_name": dom,
                     "author_gamer_tag": author_tag,
-                    "author_contributor_handle": entry["author_contributor_handle"],
+                    "author_contributor_handle": author_handle,
                     "royalty_hive": self.royalty_hive_per_import,
                     "royalty_pts": self.royalty_pts_per_import,
                 }
             )
 
-        recomputed_bundle_sha = hashlib.sha256(
-            "|".join(
-                f"{e['domain_name']}:{e['tensor_sha256']}" for e in manifest["entries"]
-            ).encode("utf-8")
-        ).hexdigest()
-        if recomputed_bundle_sha != manifest["bundle_sha256"]:
-            raise ValueError("Bundle manifest SHA-256 integrity check failed.")
+        self._settled_bundle_imports.add(import_key)
 
         final_experts = moe_model.num_experts if moe_model is not None else len(verified_entries)
         receipt = {

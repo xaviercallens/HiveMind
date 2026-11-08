@@ -119,12 +119,29 @@ def decide(checks: dict[str, dict], *, usable: bool, has_problem: bool) -> tuple
 
 # ------------------------------------------------------------------- the checks
 
+def _reject_constant(name: str) -> Any:
+    raise _CheckError(f"non-finite number literal {name} is not allowed")
+
+
+def _no_dup_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    d: dict[str, Any] = {}
+    for k, v in pairs:
+        if k in d:
+            raise _CheckError("duplicate key in JSON object")
+        d[k] = v
+    return d
+
+
 def _parse_spec(spec_bytes: bytes) -> dict:
     if not isinstance(spec_bytes, (bytes, bytearray)):
         raise _CheckError("spec_bytes must be bytes")
     if len(spec_bytes) > MAX_SPEC_BYTES:
         raise _CheckError(f"spec larger than {MAX_SPEC_BYTES} bytes")
-    spec = json.loads(bytes(spec_bytes).decode("utf-8"))
+    spec = json.loads(
+        bytes(spec_bytes).decode("utf-8"),
+        parse_constant=_reject_constant,
+        object_pairs_hook=_no_dup_pairs,
+    )
     if not isinstance(spec, dict) or spec.get("schema") != SPEC_SCHEMA:
         raise _CheckError("spec schema is not hivemind-solver-spec/1")
     return spec
@@ -190,7 +207,7 @@ DEFAULT_ATOL = 1e-10
 def _tolerances(spec: dict, n: int) -> tuple[float, list[float]]:
     rtol = spec.get("rtol", DEFAULT_RTOL)
     atol = spec.get("atol", DEFAULT_ATOL)
-    if not _finite(rtol) or rtol <= 0:
+    if not _finite(rtol) or rtol <= 0 or float(rtol) > 1.0:
         raise _CheckError("rtol must be a positive finite number")
     if _is_num(atol):
         atols = [float(atol)] * n
@@ -198,7 +215,7 @@ def _tolerances(spec: dict, n: int) -> tuple[float, list[float]]:
         atols = [float(a) for a in atol]
     else:
         raise _CheckError("atol must be a number or a list of n numbers")
-    if any(a < 0 for a in atols):
+    if any(a <= 0 or a > 1.0 for a in atols):
         raise _CheckError("atol must be non-negative")
     return float(rtol), atols
 
@@ -504,6 +521,8 @@ def certify_achieved_accuracy(
     rtol, atols = _tolerances(spec, n)
     _validate_trajectory(loose_result, spec, "loose result")
     _validate_trajectory(tight_result, spec, "tight result")
+    if problem is not None and not isinstance(problem, dict):
+        raise ValueError("problem must be a dict or None")
     if tightening_factor <= 1.0 or not _finite(tightening_factor):
         raise ValueError("tightening_factor must be a finite number > 1")
 

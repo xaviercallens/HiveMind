@@ -173,15 +173,17 @@ class AdaptiveMultiSplitWANController:
 
         effective_bw_mbps = max(1.0, min(link.uplink_mbps, link.downlink_mbps) * (1.0 - 0.5 * link.packet_loss_rate))
         serialization_ms = (boundary_payload_kb * 8.0 / 1024.0) / effective_bw_mbps * 1000.0
-        wan_transfer_ms = round(link.rtt_ms + 1.5 * link.jitter_ms + serialization_ms, 2)
+        # Split step crosses WAN twice (forward cut activations + backward cut gradients)
+        wan_transfer_ms = round(2.0 * link.rtt_ms + 1.5 * link.jitter_ms + serialization_ms, 2)
 
         prelude_compute_ms = round((prof["prelude_flops_g"] / max(1.0, hw.local_tflops)) * 12.0, 2)
         edge_core_compute_ms = round((prof["edge_core_flops_g"] / max(5.0, self.edge_core_tflops)) * 12.0, 2)
         total_step_ms = round(prelude_compute_ms + wan_transfer_ms + edge_core_compute_ms, 2)
 
-        # Monolithic baseline: client computes entire branch and uploads compressed/full delta over WAN
+        # Monolithic baseline: client computes entire branch and amortizes outer DiLoCo delta upload across H=12 inner steps
+        amortized_delta_mb = self.monolithic_delta_mb / 12.0
         mono_compute_ms = round(((prof["prelude_flops_g"] + prof["edge_core_flops_g"]) / max(1.0, hw.local_tflops)) * 12.0, 2)
-        mono_wan_ms = round(link.rtt_ms + (self.monolithic_delta_mb * 8.0 / effective_bw_mbps) * 1000.0, 2)
+        mono_wan_ms = round(link.rtt_ms + (amortized_delta_mb * 8.0 / effective_bw_mbps) * 1000.0, 2)
         monolithic_step_ms = round(mono_compute_ms + mono_wan_ms, 2)
 
         reduction_pct = round(
@@ -246,29 +248,38 @@ class AdaptiveMultiSplitWANController:
         }
 
 
-def run_e20_adaptive_multi_split_experiment() -> dict[str, Any]:
-    """Run Pre-Registered Experiment E20 across constrained (20 Mbps / 60 ms) and fiber WAN profiles."""
+def run_e20_adaptive_multi_split_experiment(
+    link: WANLinkTelemetry | None = None,
+    hardware_profiles: Sequence[CitizenHardwareProfile] | None = None,
+) -> dict[str, Any]:
+    """Run Pre-Registered Experiment E20 across supplied or default WAN and hardware profiles."""
     controller = AdaptiveMultiSplitWANController()
-    constrained_link = WANLinkTelemetry(uplink_mbps=20.0, downlink_mbps=50.0, rtt_ms=60.0, jitter_ms=6.0)
+    target_link = link if link is not None else WANLinkTelemetry(
+        uplink_mbps=20.0, downlink_mbps=50.0, rtt_ms=60.0, jitter_ms=6.0
+    )
     fiber_link = WANLinkTelemetry(uplink_mbps=300.0, downlink_mbps=500.0, rtt_ms=14.0, jitter_ms=1.2)
 
-    pascal_node = CitizenHardwareProfile(
-        node_id="node-gtx1080ti-pascal",
-        gpu_name="NVIDIA GeForce GTX 1080 Ti",
-        compute_capability_sm=6.1,
-        vram_budget_mib=1500.0,
-        local_tflops=11.3,
-    )
-    ampere_node = CitizenHardwareProfile(
-        node_id="node-rtx3060-ampere",
-        gpu_name="NVIDIA GeForce RTX 3060",
-        compute_capability_sm=8.6,
-        vram_budget_mib=1500.0,
-        local_tflops=12.7,
-    )
+    if hardware_profiles is not None and len(hardware_profiles) >= 2:
+        pascal_node = hardware_profiles[0]
+        ampere_node = hardware_profiles[1]
+    else:
+        pascal_node = CitizenHardwareProfile(
+            node_id="node-gtx1080ti-pascal",
+            gpu_name="NVIDIA GeForce GTX 1080 Ti",
+            compute_capability_sm=6.1,
+            vram_budget_mib=1500.0,
+            local_tflops=11.3,
+        )
+        ampere_node = CitizenHardwareProfile(
+            node_id="node-rtx3060-ampere",
+            gpu_name="NVIDIA GeForce RTX 3060",
+            compute_capability_sm=8.6,
+            vram_budget_mib=1500.0,
+            local_tflops=12.7,
+        )
 
-    constrained_pascal = controller.select_optimal_cut_layer(constrained_link, pascal_node)
-    constrained_ampere = controller.select_optimal_cut_layer(constrained_link, ampere_node)
+    constrained_pascal = controller.select_optimal_cut_layer(target_link, pascal_node)
+    constrained_ampere = controller.select_optimal_cut_layer(target_link, ampere_node)
     fiber_ampere = controller.select_optimal_cut_layer(fiber_link, ampere_node)
 
     sample_act = [math.sin(i * 0.17) * 2.4 for i in range(64)]
@@ -290,6 +301,7 @@ def run_e20_adaptive_multi_split_experiment() -> dict[str, Any]:
     return {
         "experiment_id": "E20",
         "task_id": "HM-S29-01",
+        "measurement_kind": "closed_form_model",
         "e20_gate_passed": e20_gate_passed,
         "mean_step_time_reduction_pct_at_20mbps_60ms": mean_reduction_20mbps,
         "constrained_20mbps_pascal": constrained_pascal.to_dict(),

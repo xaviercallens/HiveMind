@@ -1,0 +1,155 @@
+{
+  "schema": "hivemind.e21_verification_cost_report.v1",
+  "experiment_id": "E21",
+  "deliverable_ids": [
+    "PS-05-D2",
+    "PS-05-D3"
+  ],
+  "generated_at_utc": "2026-11-07T22:16:52Z",
+  "seed": 20261107,
+  "execution_class_matched_validators": true,
+  "execution_class_note": "Per E12 (paper sec:e12), cross-architecture replay fails fp16/NF4 bit tolerance; all spot-replay validators are matched by GPU execution class (e.g. Turing sm_75, Ampere sm_86).",
+  "zk_proofs_of_training_claimed": false,
+  "zk_note": "zk-SNARK proofs of training remain parked research (PS-05 / PS-11) until a prototype is measured.",
+  "cost_per_work_unit": {
+    "100": {
+      "node_count": 100.0,
+      "full_replay_cost_per_wu_s": 152.0045,
+      "multi_krum_plus_spot_replay_cost_per_wu_s": 2.3772,
+      "unsharded_krum_overhead_per_wu_s": 0.004455,
+      "cohort_krum_overhead_per_wu_s": 0.002205,
+      "speedup_factor_vs_full_replay": 63.943,
+      "single_coordinator_night_utilization_ratio": 0.0088
+    },
+    "1000": {
+      "node_count": 1000.0,
+      "full_replay_cost_per_wu_s": 152.045,
+      "multi_krum_plus_spot_replay_cost_per_wu_s": 2.3772,
+      "unsharded_krum_overhead_per_wu_s": 0.044955,
+      "cohort_krum_overhead_per_wu_s": 0.002205,
+      "speedup_factor_vs_full_replay": 63.96,
+      "single_coordinator_night_utilization_ratio": 0.088
+    },
+    "10000": {
+      "node_count": 10000.0,
+      "full_replay_cost_per_wu_s": 152.45,
+      "multi_krum_plus_spot_replay_cost_per_wu_s": 2.3772,
+      "unsharded_krum_overhead_per_wu_s": 0.449955,
+      "cohort_krum_overhead_per_wu_s": 0.002205,
+      "speedup_factor_vs_full_replay": 64.13,
+      "single_coordinator_night_utilization_ratio": 0.8804
+    }
+  },
+  "crossover_n": 11358,
+  "crossover_definition": "Node count N where a single coordinator GPU night window (27,000 s = 7.5 h) is 100% saturated by 1/8-segment spot replay, requiring execution-class-matched volunteer peer replay.",
+  "poisoner_detection": {
+    "0.1": {
+      "planted_fraction": 0.1,
+      "cohort_size": 30,
+      "rounds": 20,
+      "poisoners_planted": 60,
+      "poisoners_detected": 60,
+      "detection_rate": 1.0,
+      "confidence_interval_95": [
+        0.939828,
+        1.0
+      ],
+      "honest_evaluated": 540,
+      "honest_false_positives": 0,
+      "honest_false_positive_rate": 0.0,
+      "honest_false_positive_ci95": [
+        0.0,
+        0.007064
+      ],
+      "by_attack_type": {
+        "label_flip": {
+          "planted": 20,
+          "detected": 20,
+          "detection_rate": 1.0
+        },
+        "gaussian_noise": {
+          "planted": 20,
+          "detected": 20,
+          "detection_rate": 1.0
+        },
+        "alie": {
+          "planted": 20,
+          "detected": 20,
+          "detection_rate": 1.0
+        }
+      }
+    },
+    "0.2": {
+      "planted_fraction": 0.2,
+      "cohort_size": 30,
+      "rounds": 20,
+      "poisoners_planted": 120,
+      "poisoners_detected": 120,
+      "detection_rate": 1.0,
+      "confidence_interval_95": [
+        0.968981,
+        1.0
+      ],
+      "honest_evaluated": 480,
+      "honest_false_positives": 0,
+      "honest_false_positive_rate": 0.0,
+      "honest_false_positive_ci95": [
+        0.0,
+        0.007939
+      ],
+      "by_attack_type": {
+        "label_flip": {
+          "planted": 40,
+          "detected": 40,
+          "detection_rate": 1.0
+        },
+        "gaussian_noise": {
+          "planted": 40,
+          "detected": 40,
+          "detection_rate": 1.0
+        },
+        "alie": {
+          "planted": 40,
+          "detected": 40,
+          "detection_rate": 1.0
+        }
+      }
+    },
+    "0.3": {
+      "planted_fraction": 0.3,
+      "cohort_size": 30,
+      "rounds": 20,
+      "poisoners_planted": 180,
+      "poisoners_detected": 180,
+      "detection_rate": 1.0,
+      "confidence_interval_95": [
+        0.979105,
+        1.0
+      ],
+      "honest_evaluated": 420,
+      "honest_false_positives": 0,
+      "honest_false_positive_rate": 0.0,
+      "honest_false_positive_ci95": [
+        0.0,
+        0.009063
+      ],
+      "by_attack_type": {
+        "label_flip": {
+          "planted": 60,
+          "detected": 60,
+          "detection_rate": 1.0
+        },
+        "gaussian_noise": {
+          "planted": 60,
+          "detected": 60,
+          "detection_rate": 1.0
+        },
+        "alie": {
+          "planted": 60,
+          "detected": 60,
+          "detection_rate": 1.0
+        }
+      }
+    }
+  }
+}

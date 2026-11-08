@@ -75,5 +75,12 @@ def test_int8_cut_boundary_quantization_and_e20_gate() -> None:
     report = run_e20_adaptive_multi_split_experiment()
     assert report["experiment_id"] == "E20"
     assert report["task_id"] == "HM-S29-01"
+    assert report["measurement_kind"] == "closed_form_model"
     assert report["e20_gate_passed"] is True
     assert report["mean_step_time_reduction_pct_at_20mbps_60ms"] >= 55.0
+
+    # IP-228 negative control: a fast 300 Mbps / 14 ms fiber link does not need or pass the >=55% constrained-WAN split gate
+    fiber_link = WANLinkTelemetry(uplink_mbps=300.0, downlink_mbps=500.0, rtt_ms=14.0, jitter_ms=1.2)
+    fiber_report = run_e20_adaptive_multi_split_experiment(link=fiber_link)
+    assert fiber_report["measurement_kind"] == "closed_form_model"
+    assert fiber_report["e20_gate_passed"] is False

@@ -54,11 +54,19 @@ def ensure_local_drive_caches() -> dict[str, str]:
     }
     for env_key, dir_path in cache_dirs.items():
         if env_key not in ("CUBLAS_WORKSPACE_CONFIG", "HF_HUB_DISABLE_SYMLINKS_WARNING"):
-            Path(dir_path).mkdir(parents=True, exist_ok=True)
-            os.environ[env_key] = dir_path
+            try:
+                Path(dir_path).mkdir(parents=True, exist_ok=True)
+                os.environ[env_key] = dir_path
+            except OSError:
+                fallback = Path("/tmp/hivemind_cache") / Path(dir_path).name
+                fallback.mkdir(parents=True, exist_ok=True)
+                os.environ[env_key] = str(fallback)
         else:
             os.environ.setdefault(env_key, dir_path)
-    ARTIFACTS_ROOT.mkdir(parents=True, exist_ok=True)
+    try:
+        ARTIFACTS_ROOT.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
     return cache_dirs
 
 
@@ -452,8 +460,8 @@ def rocm_supports_native_bf16(gcn_arch: str | None) -> bool:
     return False
 
 
-def configure_deterministic_runtime(seed: int = 42, warn_only: bool = True) -> None:
-    """Enforce deterministic CUDA/CPU kernels for BOINC Spot-Check Verification."""
+def configure_deterministic_runtime(seed: int = 42, warn_only: bool = False) -> None:
+    """Enforce deterministic CUDA/CPU kernels for BOINC Spot-Check Verification (IP-43)."""
     import torch
 
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"

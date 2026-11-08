@@ -1,3 +1,9 @@
+> [!WARNING]
+> **Proof of concept (PoC): not a production service yet.** Until HiveMind is fully secured, send only **public, non-sensitive data**:
+> no secrets, passwords, API keys, personal information, or private or enterprise data. Prompts are processed by
+> volunteer-run nodes whose operators are not verified, and the security of the gateway and dashboard is still being
+> hardened (see [SECURITY.md](SECURITY.md)).
+
 <div align="center">
 
 <img src="docs/assets/hivemind_hero_banner.svg" alt="Project HiveMind — Decentralized Sparse MoE Training & Inference on Consumer Gaming GPUs" width="100%"/>
@@ -69,6 +75,7 @@ Instead of requiring datacenter InfiniBand, each node trains specialized **4-bit
   - 💻 [**1. For Developers — Query 15+ Specialized MoE Bees (`Antigravity SDK` • `OpenAI` • `Claude Code` • `Cursor`)**](#-1-for-developers--query-15-specialized-moe-bees-in-60-seconds)
   - 🛠️ [**2. For Contributors — Co-Develop Features, Propose Bees & Pass Zero-Stub Gates (`Seasons 1–35`)**](#️-2-for-contributors--co-develop-features-propose-bees--pass-zero-stub-gates)
   - ⛏️ [**3. For HiveMiners — Provide Your Idle GPU (`8–24 GB VRAM`), Keep `<1.5s` Game Priority & Earn `HMT`**](#️-3-for-hiveminers--provide-your-idle-gpu-824-gb-vram--earn-hmt-compute-credits)
+  - 🔥 [**3b. For Trainers (`role="trainer"`) — Intense GPU Co-Training via `OpenTrainer` (`BOINC` + `AMCP` + `Kafka` + `Signed Aglets`, Firewall-Friendly Outbound HTTPS)**](docs/OPENTRAINER_BOINC_AMCP_KAFKA_ARCHITECTURE.md)
   - 👑 [**4. For HiveMaster (Swarm Admin) — Operate, Govern, Monitor & Harden the Federation**](#-4-for-hivemaster-swarm-admin--operate-govern-monitor--harden-the-federation)
 - 🚀 [**00. Architecture Evolution (Seasons 1–35), Live Retour d'Expérience (REX), Multi-Season Roadmap & Call for Community / GPU Gamers**](#-00-architecture-evolution-seasons-125-live-retour-dexprience-rex-multi-season-roadmap--call-for-community--gpu-gamers)
 - ⚡ [**0A. Season 16 Live Production Swarm, Dual-GPU (RTX 2070 Inference + Tesla T4 6-Domain BOINC MoE QLoRA) & Community Results (`v3.8.0`)**](#-0a-season-16-live-production-swarm-dual-gpu-rtx-2070-inference--tesla-t4-6-domain-boinc-moe-qlora--community-results-v380)
@@ -101,7 +108,7 @@ flowchart LR
 
 | Your Role | Who You Are | What You Do in `< 60 Seconds` | Primary Entry Point |
 | :--- | :--- | :--- | :--- |
-| **💻 Developer** | AI app builder, IDE coder (`Claude Code`, `Cursor`, `Continue`, `Antigravity SDK`), scientist | Register a free account (`+100 HMT` starter grant) and call `15+` live specialized MoE models (`hivemind/coder`, `hivemind/bee-stars`, `hivemind/bee-lean-prover`, `hivemind/bee-rusty-sundials`) | 👉 **[Sign Up & Login (`/signup`)](https://hivemind-openrouter-1003063861791.us-central1.run.app/signup)** |
+| **💻 Developer** | AI app builder, IDE coder (`Claude Code`, `Cursor`, `Continue`, `Antigravity SDK`), scientist | Register a free account (any starter grant is set by the operator and shown on `/signup`; 0 HMT unless configured) and call `15+` live specialized MoE models (`hivemind/coder`, `hivemind/bee-stars`, `hivemind/bee-lean-prover`, `hivemind/bee-rusty-sundials`) | 👉 **[Sign Up & Login (`/signup`)](https://hivemind-openrouter-1003063861791.us-central1.run.app/signup)** |
 | **🛠️ Contributor** | Python/Rust/CUDA engineer, ML researcher, Lean 4 formal prover | Fork & clone, pick an open task or propose a new Bee (`[Bee-Proposal]`), co-develop with `hivemind/coder`, and submit a PR verified by the 5-Layer Security & GWAYA Zero-Stub gates | 👉 **[Collaboration Hub (`HiveMind × AMCP`)](https://github.com/xaviercallens/HiveMind-AMCP-Collaboration)** & **[`CONTRIBUTOR_TASKS_AND_BOUNTIES.md`](docs/CONTRIBUTOR_TASKS_AND_BOUNTIES.md)** |
 | **⛏️ HiveMiner** | PC gamer (`RTX 2060–4090`), homelabber, Mac `M1–M4` or AMD `ROCm`/`DirectML` owner | Run a 1-command producer or nocturnal BOINC worker; your GPU yields in `< 150 ms` when a game launches and earns prorated `HMT` compute credits | 👉 **[Join as a HiveMiner (`/rejoindre`)](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/rejoindre?lang=fr)** & **[La Ruche Portal](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/)** |
 | **👑 HiveMaster** | Swarm administrator (`role="admin"`), cluster coordinator, security operator | Operate the OpenRouter & BOINC coordinators, enforce the Thermodynamic Monotonic Ratchet ($\Delta \mathcal{L}_{\text{eval}} \le 0$), Multi-Krum & 24/7 Cyber Protection sweeps | 👉 **[HiveMaster Admin Runbook (Below)](#-4-for-hivemaster-swarm-admin--operate-govern-monitor--harden-the-federation)** |
@@ -110,7 +117,7 @@ flowchart LR
 
 ### 💻 1. For Developers — Query 15+ Specialized MoE Bees in 60 Seconds
 
-#### Step 1: Register or Log In (Free `+100.0 HMT` Starter Credits)
+#### Step 1: Register or Log In (the starter grant, if any, is shown on `/signup`)
 - **Web Portal (Register & Returning User Login with Handle / Password / API Key):**
   👉 **[`https://hivemind-openrouter-1003063861791.us-central1.run.app/signup`](https://hivemind-openrouter-1003063861791.us-central1.run.app/signup)** *(also linked from [La Ruche](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/))*
 - **Or via CLI in 1 command:**
@@ -214,6 +221,10 @@ python3 hivemind_producer_agent.py \
   --gateway https://hivemind-openrouter-1003063861791.us-central1.run.app \
   --handle your-miner-tag
 
+# Mode A2 — Auto-Start Background Service across Reboots (Linux systemd, Windows 10/11 Scheduled Task, macOS launchd):
+python3 scripts/hivemind_producer_autostart.py windows --model coder=qwen2.5-coder:7b --apply ./producer-autostart
+python3 scripts/hivemind_producer_autostart.py linux   --model coder=qwen2.5-coder:7b --apply ~/.local/share/hivemind
+
 # Mode B — Nocturnal BOINC / DiLoCo QLoRA Trainer (train specialized MoE Bees during idle/night windows):
 curl -sSLO https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/scripts/hivemind_boinc_idle_worker.py
 python3 hivemind_boinc_idle_worker.py \
@@ -228,7 +239,7 @@ Every night between **22:00 and 07:00 CET/CEST** (when interactive chat/coding t
 
 | Participant | Daytime Role (`07:00–22:00 CET`) | Night Training Role (`22:00–07:00 CET`) | Reward & Verification |
 | :--- | :--- | :--- | :--- |
-| **🧑‍💻 End-Users (Volunteers, Developers & Gamers)** | Query `15+` OpenRouter Bees (`hivemind/coder`, `hivemind/bee-stars`, etc.) or play games (`0%` GPU overhead via `< 4s` idle preemption) | Leave PC/laptop running `scripts/hivemind_boinc_idle_worker.py` (or native `boinccmd`) to fold `16,384`-point TESS/JWST exoplanet light curves and compute **rank-4 QLoRA inner-loop updates** (`cuda_hivemind`, `cuda_hivemind_big`, or `cpu_hivemind_solver`) | **`+250 HMT Reflexion Points`** & **`+45.0 Cobblestones`** per verified workunit (spendable the next day on all models; receipts at [`/api/v1/federated/ledger`](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/ledger)) |
+| **🧑‍💻 End-Users (Volunteers, Developers & Gamers)** | Query `15+` OpenRouter Bees (`hivemind/coder`, `hivemind/bee-stars`, etc.) or play games (`0%` GPU overhead via `< 4s` idle preemption) | Leave PC/laptop running `scripts/hivemind_boinc_idle_worker.py` (or native `boinccmd`) to run a local `16,384`-point CUDA PTX BLS self-check fold on a synthetic light curve while the GPU is idle (it reports BLOCKED when no GPU can be read or the fold would fall back to the CPU). It does not lease workunits or train: QLoRA training is BLOCKED (`no_trainer_wired`) | No reward today: the worker submits nothing, so it earns no HMT points or cobblestones |
 | **🐝 HiveMind Nodes (Dedicated GPU Producers, HiveMiners & Owner Fleet — `RTX 2070 8 GB` + `GCP Tesla T4 16 GB`)** | Serve low-latency OpenRouter chat, coding, Lean 4 proof & scientific ODE/PDE requests (`p50 ~180–230 ms`) | Automatically switch to **Nocturnal DiLoCo Outer-Step Aggregation**, **$2\sigma$-Clipped Multi-Krum Byzantine Verification**, **SVD Spectral Ratchet** ($\ge 95\%$ spectral energy retained, $\Delta \mathcal{L}_{\text{eval}} < 0$), and **500-Step Teacher-to-Student Distillation** (`Tesla T4 16 GB` $\to$ `RTX 2070 8 GB`) | Hot-swaps improved Honeycomb Alveoli (`ALVEOLE-01..06` & 24 Sparse Bee-MoE experts) before morning traffic resumes (live node telemetry at [`/v1/hivemind/bees/owner-fleet-status`](https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/hivemind/bees/owner-fleet-status)) |
 
 ---
@@ -411,7 +422,7 @@ Project HiveMind is live in continuous production across **Google Cloud Run**, a
 
 | Portal / Service | Live URL | Key Capabilities & Endpoints |
 | :--- | :--- | :--- |
-| **⚡ HiveMind OpenRouter Gateway** | **[`https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app)** | OpenAI-compatible `POST /v1/chat/completions`, [`/signup`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/signup) (`+100.0 HMT` starter grant), [`/v1/models`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/v1/models) (**7 live models**), [`/v1/hivemind/t4/status`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/v1/hivemind/t4/status) |
+| **⚡ HiveMind OpenRouter Gateway** | **[`https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app)** | OpenAI-compatible `POST /v1/chat/completions`, [`/signup`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/signup) (starter grant set by the operator, shown on `/signup`), [`/v1/models`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/v1/models) (**7 live models**), [`/v1/hivemind/t4/status`](https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app/v1/hivemind/t4/status) |
 | **🍯 La Ruche Honeycomb MoE Portal** | **[`https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app`](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app)** | Interactive 8-Alvéole Sparse MoE Vault, [`/night-moe`](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/night-moe) McNemar benchmark report, and live T4/RTX 2070 GPU telemetry banner |
 | **🛰️ HiveMind@home Tribute Node** | **[`https://hivemind-at-home-cfhmhmvv5a-uc.a.run.app`](https://hivemind-at-home-cfhmhmvv5a-uc.a.run.app)** | Tribute to `SETI@home`, `Folding@home`, and `BOINC` with live Spectrum & $E_8$ Lattice Waterfall |
 | **🐝 HiveMind@home 5-Language Web Site** | **[`https://hivemindathome.github.io/`](https://hivemindathome.github.io/)** | 5-Screen Interactive Cyber-Bee Portal in `EN • FR • 中文 • ES • DE` ([`HiveMindatHome/hivemindathome.github.io`](https://github.com/HiveMindatHome/hivemindathome.github.io)) |

@@ -143,54 +143,80 @@ class GeocryptographicNeuralMeshRouter:
             adapter_verified=True,
         )
 
-    def evaluate_multi_region_p95_reduction(self) -> dict[str, object]:
-        """Benchmark p95 RTT reduction across 6 regional client clusters."""
+    def evaluate_multi_region_p95_reduction(
+        self,
+        *,
+        central_gateway_coord: VivaldiCoord3D | None = None,
+        regional_coords: Sequence[tuple[str, VivaldiCoord3D]] | None = None,
+        client_coord: VivaldiCoord3D | None = None,
+    ) -> dict[str, object]:
+        """Benchmark p95 RTT reduction across regional client clusters."""
         domain = "astrophysics_transits"
         digest = hashlib.sha256(b"canonical-bee-stars-v36").hexdigest()
         self.register_canonical_adapter(domain, digest)
 
-        regional_coords = [
-            ("eu-west", VivaldiCoord3D(10.0, 12.0, 2.0, 1.5)),
-            ("eu-central", VivaldiCoord3D(14.0, 15.0, 2.5, 1.5)),
-            ("us-east", VivaldiCoord3D(-45.0, 20.0, 5.0, 2.0)),
-            ("us-west", VivaldiCoord3D(-75.0, 35.0, 6.0, 2.0)),
-            ("ap-northeast", VivaldiCoord3D(110.0, -40.0, 8.0, 2.5)),
-            ("sa-east", VivaldiCoord3D(-30.0, -65.0, 7.0, 2.5)),
-        ]
-        for reg, coord in regional_coords:
-            self.register_node(
-                GeoMeshExpertNode(
-                    node_id=f"bee-{reg}-01",
-                    region=reg,
-                    coord=coord,
-                    expert_domain=domain,
-                    semantic_vector=(0.8, 0.5, 0.3, 0.1),
-                    adapter_sha256=digest,
-                )
-            )
-            # Also inject a tampered node in each region to verify it is never selected
-            self.register_node(
-                GeoMeshExpertNode(
-                    node_id=f"tampered-{reg}-99",
-                    region=reg,
-                    coord=coord,
-                    expert_domain=domain,
-                    semantic_vector=(0.99, 0.99, 0.99, 0.99),
-                    adapter_sha256="00" * 32,
-                )
-            )
+        saved_gateway = self.central_gateway_coord
+        if central_gateway_coord is not None:
+            self.central_gateway_coord = central_gateway_coord
 
-        p2p_rtts: list[float] = []
-        central_rtts: list[float] = []
-        for reg, base_coord in regional_coords:
-            client = VivaldiCoord3D(base_coord.x_ms + 2.5, base_coord.y_ms - 1.8, base_coord.z_ms + 0.5, 1.2)
-            dec = self.route_query(
-                client_coord=client,
-                expert_domain=domain,
-                query_semantic_vector=(0.78, 0.52, 0.28, 0.12),
+        effective_regions = list(
+            regional_coords
+            if regional_coords is not None
+            else (
+                ("eu-west", VivaldiCoord3D(10.0, 12.0, 2.0, 1.5)),
+                ("eu-central", VivaldiCoord3D(14.0, 15.0, 2.5, 1.5)),
+                ("us-east", VivaldiCoord3D(-45.0, 20.0, 5.0, 2.0)),
+                ("us-west", VivaldiCoord3D(-75.0, 35.0, 6.0, 2.0)),
+                ("ap-northeast", VivaldiCoord3D(110.0, -40.0, 8.0, 2.5)),
+                ("sa-east", VivaldiCoord3D(-30.0, -65.0, 7.0, 2.5)),
             )
-            p2p_rtts.append(dec.predicted_rtt_ms)
-            central_rtts.append(dec.central_gateway_rtt_ms)
+        )
+        try:
+            for reg, coord in effective_regions:
+                self.register_node(
+                    GeoMeshExpertNode(
+                        node_id=f"bee-{reg}-01",
+                        region=reg,
+                        coord=coord,
+                        expert_domain=domain,
+                        semantic_vector=(0.8, 0.5, 0.3, 0.1),
+                        adapter_sha256=digest,
+                    )
+                )
+                # Also inject a tampered node in each region to verify it is never selected
+                self.register_node(
+                    GeoMeshExpertNode(
+                        node_id=f"tampered-{reg}-99",
+                        region=reg,
+                        coord=coord,
+                        expert_domain=domain,
+                        semantic_vector=(0.99, 0.99, 0.99, 0.99),
+                        adapter_sha256="00" * 32,
+                    )
+                )
+
+            p2p_rtts: list[float] = []
+            central_rtts: list[float] = []
+            per_region_reductions: list[float] = []
+            for _reg, base_coord in effective_regions:
+                client = (
+                    client_coord
+                    if client_coord is not None
+                    else VivaldiCoord3D(base_coord.x_ms + 2.5, base_coord.y_ms - 1.8, base_coord.z_ms + 0.5, 1.2)
+                )
+                dec = self.route_query(
+                    client_coord=client,
+                    expert_domain=domain,
+                    query_semantic_vector=(0.78, 0.52, 0.28, 0.12),
+                )
+                p2p_rtts.append(dec.predicted_rtt_ms)
+                central_rtts.append(dec.central_gateway_rtt_ms)
+                reg_red = (1.0 - (dec.predicted_rtt_ms / max(dec.central_gateway_rtt_ms, 1e-6))) * 100.0
+                per_region_reductions.append(reg_red)
+                if client_coord is not None:
+                    break
+        finally:
+            self.central_gateway_coord = saved_gateway
 
         p2p_sorted = sorted(p2p_rtts)
         central_sorted = sorted(central_rtts)
@@ -198,9 +224,12 @@ class GeocryptographicNeuralMeshRouter:
         p95_p2p = p2p_sorted[idx95]
         p95_central = central_sorted[idx95]
         reduction_pct = (1.0 - (p95_p2p / max(p95_central, 1e-6))) * 100.0
+        min_reg_reduction = min(per_region_reductions) if per_region_reductions else 0.0
         return {
+            "measurement_kind": "closed_form_vivaldi_model",
             "p95_p2p_rtt_ms": round(p95_p2p, 3),
             "p95_central_rtt_ms": round(p95_central, 3),
             "p95_reduction_pct": round(reduction_pct, 2),
-            "meets_40pct_reduction_gate": reduction_pct >= 40.0,
+            "min_region_reduction_pct": round(min_reg_reduction, 2),
+            "meets_40pct_reduction_gate": reduction_pct >= 40.0 and min_reg_reduction >= 40.0,
         }

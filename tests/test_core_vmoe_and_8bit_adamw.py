@@ -21,7 +21,7 @@ from hivemind.core.exoplanet_astro_vmoe_poc import (
     UpcycledAstroSparseVisionMoE,
     generate_phase_folded_cwt_scalogram,
     project_cwt_scalogram_to_visual_patches,
-    simulate_exoplanet_transit_and_router_response,
+    synthesize_exoplanet_transit_and_router_response,
 )
 from hivemind.core.quantization import compute_state_dict_sha256
 
@@ -116,7 +116,7 @@ def test_diloco_inner_loop_and_replay_with_paged_8bit_adamw() -> None:
 
 
 def test_exoplanet_simulator_routes_cwt_patches_through_vmoe() -> None:
-    """Verify simulate_exoplanet_transit_and_router_response routes CWT patches through V-MoE."""
+    """Verify synthesize_exoplanet_transit_and_router_response routes CWT patches through V-MoE."""
     flux, scalogram = generate_phase_folded_cwt_scalogram(
         transit_depth_ppm=2100.0,
         instrumental_noise_ppm=100.0,
@@ -133,7 +133,7 @@ def test_exoplanet_simulator_routes_cwt_patches_through_vmoe() -> None:
     deltas = {b_id: np.zeros((64, 64), dtype=np.float32) for b_id in EXOPLANET_ASTRO_EXPERT_BRANCHES}
     vmoe = UpcycledAstroSparseVisionMoE(backbone=backbone, branch_deltas=deltas)
 
-    sim_a = simulate_exoplanet_transit_and_router_response(
+    sim_a = synthesize_exoplanet_transit_and_router_response(
         1.0, 0.2, instrumental_noise_ppm=100.0, seed=42, vmoe=vmoe
     )
     assert sim_a["visual_patch_shape"] == [1, 4, 48]
@@ -144,7 +144,7 @@ def test_exoplanet_simulator_routes_cwt_patches_through_vmoe() -> None:
     # Perturbing router weights must change neural_router_logits
     with torch.no_grad():
         vmoe.router.bias.add_(torch.tensor([0.5, -0.2, 0.1, -0.4]))
-    sim_b = simulate_exoplanet_transit_and_router_response(
+    sim_b = synthesize_exoplanet_transit_and_router_response(
         1.0, 0.2, instrumental_noise_ppm=100.0, seed=42, vmoe=vmoe
     )
     assert sim_a["neural_router_logits"] != sim_b["neural_router_logits"]

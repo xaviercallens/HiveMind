@@ -30,6 +30,7 @@ from dataclasses import asdict, dataclass
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import time
 from typing import Any, Dict, List, Sequence, Tuple
@@ -372,21 +373,11 @@ def fold_exoplanet_transit_lightcurve(
 
 
 def _quantize_e8_vector(vec8: np.ndarray) -> np.ndarray:
-    """Exact Conway-Sloane Gosset E8 lattice rounding (D8 union (D8 + 0.5))."""
+    """Exact Conway-Sloane Gosset E8 lattice rounding (D8 union (D8 + 0.5)) via canonical `nearest_e8`."""
+    from hivemind.compress.lattice_quantizer import nearest_e8
 
-    def _round_d8(x: np.ndarray) -> np.ndarray:
-        r = np.round(x)
-        if int(np.sum(r)) % 2 != 0:
-            diffs = np.abs(x - r)
-            idx = int(np.argmax(diffs))
-            r[idx] += 1.0 if x[idx] > r[idx] else -1.0
-        return r
-
-    cand_a = _round_d8(vec8)
-    cand_b = _round_d8(vec8 - 0.5) + 0.5
-    if float(np.sum((vec8 - cand_a) ** 2)) <= float(np.sum((vec8 - cand_b) ** 2)):
-        return cand_a
-    return cand_b
+    arr = np.asarray(vec8, dtype=np.float64).reshape(1, 8)
+    return nearest_e8(arr)[0]
 
 
 def run_e8_lattice_multikrum_mission(
@@ -467,12 +458,50 @@ def run_anse_energy_reactor_mission(
         "a(x) = -k*x that conserves energy to O(dt^2)."
     )
 
+    def _verlet_test_tuple(ns: Dict[str, Any]) -> bool:
+        fn = ns.get("symplectic_verlet_step") or ns.get("step_verlet")
+        if not callable(fn):
+            return False
+        res = fn(1.0, 0.0, 2.0, 0.01)
+        return isinstance(res, tuple) and len(res) == 2
+
+    def _verlet_test_equilibrium(ns: Dict[str, Any]) -> bool:
+        fn = ns.get("symplectic_verlet_step") or ns.get("step_verlet")
+        if not callable(fn):
+            return False
+        x1, v1 = fn(0.0, 0.0, 2.0, 0.05)
+        return abs(x1) < 1e-12 and abs(v1) < 1e-12
+
+    def _verlet_test_first_order(ns: Dict[str, Any]) -> bool:
+        fn = ns.get("symplectic_verlet_step") or ns.get("step_verlet")
+        if not callable(fn):
+            return False
+        x1, v1 = fn(1.0, 0.5, 2.0, 0.01)
+        return abs(x1 - 1.005) < 1e-3 and abs(v1 - 0.48) < 1e-3
+
+    def _verlet_test_symplectic_energy(ns: Dict[str, Any]) -> bool:
+        fn = ns.get("symplectic_verlet_step") or ns.get("step_verlet")
+        if not callable(fn):
+            return False
+        x, v, k, dt = 1.0, 0.0, 4.0, 0.05
+        e0 = 0.5 * v * v + 0.5 * k * x * x
+        for _ in range(100):
+            x, v = fn(x, v, k, dt)
+        e1 = 0.5 * v * v + 0.5 * k * x * x
+        return abs(e1 - e0) / e0 < 1e-2
+
+    verlet_tests = [
+        _verlet_test_tuple,
+        _verlet_test_equilibrium,
+        _verlet_test_first_order,
+        _verlet_test_symplectic_energy,
+    ]
+
     attempt_1_stub = "def symplectic_verlet_step(x, v, k, dt):\n    pass\n"
     eval_1 = evaluate_bee_candidate_energy(
         candidate_id="attempt-1-stub",
         response_text=attempt_1_stub,
-        tests_passed=0,
-        tests_total=4,
+        test_callables=verlet_tests,
         latency_ms=12.0,
         memory_mb=18.0,
         invariant_residual=0.25,
@@ -493,8 +522,7 @@ def run_anse_energy_reactor_mission(
     eval_2 = evaluate_bee_candidate_energy(
         candidate_id="attempt-2-euler",
         response_text=attempt_2_euler,
-        tests_passed=3,
-        tests_total=4,
+        test_callables=verlet_tests,
         latency_ms=14.5,
         memory_mb=19.2,
         invariant_residual=0.012,
@@ -512,8 +540,7 @@ def run_anse_energy_reactor_mission(
     eval_3 = evaluate_bee_candidate_energy(
         candidate_id="attempt-3-symplectic-verlet",
         response_text=attempt_3_symplectic,
-        tests_passed=4,
-        tests_total=4,
+        test_callables=verlet_tests,
         latency_ms=8.4,
         memory_mb=16.0,
         invariant_residual=1.2e-6,
@@ -597,13 +624,18 @@ def probe_rtx2070_hardware_and_vram(
     flops = 2.0 * (384.0 ** 3)
     gflops = round((flops / max(kernel_ms * 1e-3, 1e-6)) / 1e9, 2)
 
-    allocated_mb = (
+    measured_vram_mb = (
         round(torch.cuda.memory_allocated(0) / (1024.0 * 1024.0), 2)
         if cuda_ok
+        else None
+    )
+    allocated_mb = (
+        measured_vram_mb
+        if measured_vram_mb is not None
         else round(prof.vram_budget.total_peak_vram_gb * 1024.0, 1)
     )
     ceiling_mb = 8192.0
-    headroom_mb = round(ceiling_mb - (prof.vram_budget.total_peak_vram_gb * 1024.0), 1)
+    headroom_mb = round(ceiling_mb - allocated_mb, 1)
 
     return {
         "profile_name": prof.name,
@@ -612,9 +644,15 @@ def probe_rtx2070_hardware_and_vram(
         "detected_device_name": device_name,
         "cuda_available": cuda_ok,
         "vram_ceiling_mb": ceiling_mb,
+        "measured_vram_allocated_mb": measured_vram_mb,
+        "measured_vram_within_8gb": (measured_vram_mb < ceiling_mb) if measured_vram_mb is not None else None,
         "vram_allocated_or_budget_mb": allocated_mb,
         "wddm_game_headroom_mb": headroom_mb,
-        "within_8gb_golden_invariant": prof.vram_budget.total_peak_vram_gb < 8.0,
+        "within_8gb_golden_invariant": (
+            bool(measured_vram_mb < ceiling_mb and prof.vram_budget.total_peak_vram_gb < 8.0)
+            if measured_vram_mb is not None
+            else prof.vram_budget.total_peak_vram_gb < 8.0
+        ),
         "vram_budget_gb": {
             "frozen_base_nf4_gb": prof.vram_budget.frozen_base_nf4_gb,
             "lora_trainable_r64_gb": prof.vram_budget.lora_trainable_r64_gb,
@@ -627,14 +665,25 @@ def probe_rtx2070_hardware_and_vram(
     }
 
 
+def _default_la_ruche_session_path() -> Path:
+    """Return the user-config session file path (outside the git worktree)."""
+    env_override = os.environ.get("HIVEMIND_LA_RUCHE_SESSION_PATH", "").strip()
+    if env_override:
+        return Path(env_override)
+    xdg_config = os.environ.get("XDG_CONFIG_HOME", "").strip()
+    base_dir = Path(xdg_config) if xdg_config else (Path.home() / ".config")
+    return base_dir / "hivemind" / "rtx2070_la_ruche_game_session.json"
+
+
 def _load_or_register_la_ruche_gamer_session(
     *,
     ruche_url: str = LA_RUCHE_CLOUD_URL,
     gamer_tag: str = "CyberValkyrie_FR",
+    allow_auto_register: bool = False,
+    session_path: Path | None = None,
 ) -> Dict[str, Any]:
-    """Load cached La Ruche gamer session or register a new prosumer account on Cloud Run."""
-    cache_path = PROJECT_ROOT / "artifacts" / "rtx2070_la_ruche_game_session.json"
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    """Load cached La Ruche gamer session from user config dir; only register when explicitly requested."""
+    cache_path = Path(session_path) if session_path is not None else _default_la_ruche_session_path()
     if cache_path.is_file():
         try:
             cached = json.loads(cache_path.read_text(encoding="utf-8"))
@@ -643,6 +692,19 @@ def _load_or_register_la_ruche_gamer_session(
         except Exception as exc:
             last_cache_err = str(exc)
             _ = last_cache_err
+
+    env_key = os.environ.get("HIVEMIND_API_KEY", "").strip()
+    if env_key.startswith("hm-"):
+        return {
+            "ruche_url": ruche_url,
+            "gamer_tag": gamer_tag,
+            "handle": gamer_tag,
+            "account_id": "env-session",
+            "api_key": env_key,
+        }
+
+    if not allow_auto_register:
+        return {}
 
     tag_slug = uuid.uuid4().hex[:8]
     email = f"rtx2070.gamer.{tag_slug}@hivemind-at-home.org"
@@ -669,7 +731,9 @@ def _load_or_register_la_ruche_gamer_session(
         "api_key": reg_data.get("api_key", ""),
         "email": email,
     }
+    cache_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     cache_path.write_text(json.dumps(session_data, indent=2), encoding="utf-8")
+    os.chmod(cache_path, 0o600)
     return session_data
 
 
@@ -678,6 +742,8 @@ def sync_game_with_la_ruche_live(
     gamer_tag: str = "CyberValkyrie_FR",
     ruche_url: str = LA_RUCHE_CLOUD_URL,
     local_ollama_url: str = LOCAL_SWARM_OLLAMA_URL,
+    allow_auto_register: bool = False,
+    session_path: Path | None = None,
 ) -> Dict[str, Any]:
     """Connect the local RTX 2070 game client to live HiveMind La Ruche & local GPU swarm tunnel."""
     rtx_status = probe_rtx2070_hardware_and_vram()
@@ -692,38 +758,43 @@ def sync_game_with_la_ruche_live(
         session_info = _load_or_register_la_ruche_gamer_session(
             ruche_url=ruche_url,
             gamer_tag=gamer_tag,
+            allow_auto_register=allow_auto_register,
+            session_path=session_path,
         )
-        api_key = session_info["api_key"]
-        headers = {"Authorization": f"Bearer {api_key}"}
-        with httpx.Client(timeout=8.0) as client:
-            models_res = client.get(f"{ruche_url.rstrip('/')}/v1/models")
-            if models_res.status_code == 200:
-                la_ruche_models = [
-                    str(m.get("id")) for m in models_res.json().get("data", []) if m.get("id")
-                ]
-            hb_res = client.post(
-                f"{ruche_url.rstrip('/')}/v1/hivemind/producer/heartbeat",
-                headers=headers,
-                json={
-                    "endpoint_url": ruche_url,
-                    "models": [
-                        {"id": "hivemind/bee-stars", "local_name": "hivemind/bee-stars"},
-                        {"id": "hivemind/coder", "local_name": "hivemind/coder"},
-                    ],
-                    "cost_per_1k": 0.50,
-                    "capacity_1k": 250.0,
-                    "execution_class": "cuda-rtx2070-8gb-fp16",
-                },
-            )
-            if hb_res.status_code == 200:
-                heartbeat_status = hb_res.json()
-            pts_res = client.get(
-                f"{ruche_url.rstrip('/')}/v1/hivemind/me/points",
-                headers=headers,
-            )
-            if pts_res.status_code == 200:
-                la_ruche_points = pts_res.json()
-                la_ruche_connected = True
+        api_key = str(session_info.get("api_key") or "").strip()
+        if not api_key:
+            ruche_error = "No authenticated La Ruche session found (explicit user registration required)"
+        else:
+            headers = {"Authorization": f"Bearer {api_key}"}
+            with httpx.Client(timeout=8.0) as client:
+                models_res = client.get(f"{ruche_url.rstrip('/')}/v1/models")
+                if models_res.status_code == 200:
+                    la_ruche_models = [
+                        str(m.get("id")) for m in models_res.json().get("data", []) if m.get("id")
+                    ]
+                hb_res = client.post(
+                    f"{ruche_url.rstrip('/')}/v1/hivemind/producer/heartbeat",
+                    headers=headers,
+                    json={
+                        "endpoint_url": ruche_url,
+                        "models": [
+                            {"id": "hivemind/bee-stars", "local_name": "hivemind/bee-stars"},
+                            {"id": "hivemind/coder", "local_name": "hivemind/coder"},
+                        ],
+                        "cost_per_1k": 0.50,
+                        "capacity_1k": 250.0,
+                        "execution_class": "cuda-rtx2070-8gb-fp16",
+                    },
+                )
+                if hb_res.status_code == 200:
+                    heartbeat_status = hb_res.json()
+                pts_res = client.get(
+                    f"{ruche_url.rstrip('/')}/v1/hivemind/me/points",
+                    headers=headers,
+                )
+                if pts_res.status_code == 200:
+                    la_ruche_points = pts_res.json()
+                    la_ruche_connected = True
     except Exception as exc:
         ruche_error = str(exc)
 
@@ -765,12 +836,19 @@ def sync_game_with_la_ruche_live(
 def ask_la_ruche_bee_copilot_live(
     *,
     prompt: str,
+    router_api_key: str,
     model: str = "hivemind/bee-stars",
     gamer_tag: str = "CyberValkyrie_FR",
     ruche_url: str = LA_RUCHE_CLOUD_URL,
     local_ollama_url: str = LOCAL_SWARM_OLLAMA_URL,
 ) -> Dict[str, Any]:
-    """Query a live Specialist Bee on La Ruche (or local GPU swarm tunnel) and score its ANSE Energy."""
+    """Query a live Specialist Bee on La Ruche (or local GPU swarm tunnel) and score its ANSE Energy.
+
+    The La Ruche call is made with the caller's own router key only; the server-held cached
+    session key is never used for caller prompts (IP-201).
+    """
+    if not router_api_key.strip():
+        raise ValueError("router_api_key is required: caller prompts never use the server-held key")
     t0 = time.perf_counter()
     reply_text = ""
     provider_used = "la_ruche_cloud"
@@ -778,11 +856,7 @@ def ask_la_ruche_bee_copilot_live(
     ledger_after: Dict[str, Any] = {}
 
     try:
-        session_info = _load_or_register_la_ruche_gamer_session(
-            ruche_url=ruche_url,
-            gamer_tag=gamer_tag,
-        )
-        headers = {"Authorization": f"Bearer {session_info['api_key']}"}
+        headers = {"Authorization": f"Bearer {router_api_key.strip()}"}
         with httpx.Client(timeout=10.0) as client:
             chat_res = client.post(
                 f"{ruche_url.rstrip('/')}/v1/chat/completions",
@@ -832,15 +906,19 @@ def ask_la_ruche_bee_copilot_live(
             )
 
     latency_ms = round((time.perf_counter() - t0) * 1000.0, 2)
+    copilot_tests = [
+        lambda ns: any(callable(v) for k, v in ns.items() if k != "__builtins__"),
+        lambda ns: all(
+            callable(fn) and isinstance(fn(1.0, 0.0, 2.0, 0.01), tuple)
+            for k, fn in ns.items()
+            if k in ("step_verlet", "symplectic_verlet_step")
+        )
+        and any(k in ns for k in ("step_verlet", "symplectic_verlet_step")),
+    ]
     energy_eval = evaluate_bee_candidate_energy(
         candidate_id=f"copilot-{model}",
-        response_text=(
-            "def copilot_verified_step(x, v, dt):\n    return x + v * dt\n"
-            if "def " not in reply_text
-            else reply_text
-        ),
-        tests_passed=4,
-        tests_total=4,
+        response_text=reply_text,
+        test_callables=copilot_tests,
         latency_ms=latency_ms,
         memory_mb=16.0,
         invariant_residual=1.2e-6,
@@ -854,6 +932,8 @@ def ask_la_ruche_bee_copilot_live(
         "latency_ms": latency_ms,
         "charged_hmt": charged_hmt,
         "hmt_ledger_after": ledger_after,
+        "tests_passed": energy_eval.tests_passed,
+        "tests_total": energy_eval.tests_total,
         "bee_energy_total": energy_eval.total_energy,
         "bee_energy_receipt_sha256": energy_eval.receipt_sha256,
         "non_monetary_charter": NON_MONETARY_CHARTER_NOTICE,
@@ -879,6 +959,7 @@ class HiveMindScientificGameEngine:
         num_byzantine: int = 2,
         account_spend_usd: float = 25.0,
         is_vac_banned: bool = False,
+        steam_api_verified: bool = False,
     ) -> Dict[str, Any]:
         """Run and verify a single Scientific Discovery Mission (`MISSION-SCI-01..03`)."""
         spec = next(
@@ -890,7 +971,13 @@ class HiveMindScientificGameEngine:
             account_spend_usd=account_spend_usd,
             is_vac_banned=is_vac_banned,
         )
-        sybil_ok, sybil_msg = self.steam_bridge.verify_sybil_resistance(ticket)
+        local_sybil_rule_passed, sybil_msg = self.steam_bridge.verify_sybil_resistance(ticket)
+        steam_sybil_verified = bool(steam_api_verified and local_sybil_rule_passed)
+        if not steam_api_verified and local_sybil_rule_passed:
+            sybil_msg = (
+                "Local spend/VAC rule passed on caller-supplied values; "
+                "unverified (no upstream Steam Web API check performed)."
+            )
 
         if spec.mission_id == "MISSION-SCI-01-SYMPLECTIC-EXOPLANET":
             orbit_res = integrate_orbital_symplectic_comparison(steps=steps, dt=dt)
@@ -939,7 +1026,7 @@ class HiveMindScientificGameEngine:
             )
             telemetry = {"anse_energy_reactor": reactor_res}
 
-        pts_awarded = spec.base_scientific_pts if (verified and sybil_ok) else 0
+        pts_awarded = spec.base_scientific_pts if (verified and local_sybil_rule_passed) else 0
         rp_state = self.steam_bridge.set_rich_presence(
             steam_id64=steam_id64,
             persona_name=gamer_tag,
@@ -964,7 +1051,11 @@ class HiveMindScientificGameEngine:
             "gamer_tag": gamer_tag,
             "steam_id64": steam_id64,
             "steam_app_id": STEAMWORKS_APP_ID,
-            "steam_sybil_verified": sybil_ok,
+            "steam_sybil_verified": steam_sybil_verified,
+            "local_sybil_rule_passed": local_sybil_rule_passed,
+            "sybil_verification_source": (
+                "steam_web_api_verified" if steam_api_verified else "caller_supplied_unverified"
+            ),
             "steam_sybil_message": sybil_msg,
             "verified": verified,
             "scientific_pts_awarded": pts_awarded,
@@ -996,6 +1087,7 @@ class HiveMindScientificGameEngine:
         return {
             "game_title": "HiveMind: Dyson & Exoplanet Odyssey (Unity + Steamworks.NET + Google Antigravity)",
             "measurement_kind": "deterministic_physics_sandbox",
+            "simulated": True,
             "non_monetary_charter": NON_MONETARY_CHARTER_NOTICE,
             "all_missions_verified": all_verified,
             "total_scientific_pts": total_pts,
@@ -1101,7 +1193,8 @@ class HiveMindScientificGameEngine:
             player_pts = 0
             best_energy = 1e6
             last_hmac = ""
-            sybil_verified = True
+            sybil_verified = False
+            local_rule_passed = True
             sybil_reason = ""
 
             for m_id, p_days, f_byz in spec["missions_to_play"]:
@@ -1113,17 +1206,20 @@ class HiveMindScientificGameEngine:
                     num_byzantine=int(f_byz),
                     account_spend_usd=spend,
                     is_vac_banned=vac,
+                    steam_api_verified=False,
                 )
                 player_pts += int(res["scientific_pts_awarded"])
                 best_energy = min(best_energy, float(res["bee_energy_total"]))
                 last_hmac = str(res["steam_leaderboard_hmac"])
                 sybil_verified = bool(res["steam_sybil_verified"])
+                local_rule_passed = bool(res["local_sybil_rule_passed"])
                 sybil_reason = str(res["steam_sybil_message"])
                 mission_results.append(
                     {
                         "mission_id": m_id,
                         "verified": res["verified"],
                         "steam_sybil_verified": sybil_verified,
+                        "local_sybil_rule_passed": local_rule_passed,
                         "pts_awarded": res["scientific_pts_awarded"],
                         "bee_energy_total": res["bee_energy_total"],
                         "receipt_sha256": res["bee_energy_receipt_sha256"],
@@ -1134,9 +1230,11 @@ class HiveMindScientificGameEngine:
                 {
                     "gamer_tag": tag,
                     "steam_id64": sid,
+                    "simulated": True,
                     "hardware_rig": spec["hardware_rig"],
                     "foreground_game": spec["foreground_game"],
                     "steam_sybil_verified": sybil_verified,
+                    "local_sybil_rule_passed": local_rule_passed,
                     "steam_sybil_message": sybil_reason,
                     "period_sweep_trace": sweep_trace,
                     "missions_played": mission_results,
@@ -1148,11 +1246,13 @@ class HiveMindScientificGameEngine:
             leaderboard.append(
                 {
                     "gamer_tag": tag,
+                    "simulated": True,
                     "hardware_rig": spec["hardware_rig"],
-                    "missions_completed": sum(1 for m in mission_results if m["verified"] and m["steam_sybil_verified"]),
+                    "missions_completed": sum(1 for m in mission_results if m["verified"] and m["local_sybil_rule_passed"]),
                     "total_scientific_pts": player_pts,
                     "best_bee_energy": round(best_energy, 6),
                     "steam_sybil_verified": sybil_verified,
+                    "local_sybil_rule_passed": local_rule_passed,
                     "leaderboard_hmac": last_hmac[:16],
                 }
             )
@@ -1163,9 +1263,14 @@ class HiveMindScientificGameEngine:
 
         return {
             "cohort_id": "COHORT-S19-MULTIPLAYER-ODYSSEY-5P",
+            "cohort_basis": "scripted_local_rule_simulation",
+            "simulated": True,
             "total_players": len(sessions),
             "honest_players_verified": sum(1 for s in sessions if s["steam_sybil_verified"]),
-            "sybil_attackers_blocked": sum(1 for s in sessions if not s["steam_sybil_verified"]),
+            "scripted_honest_profiles_passed_local_rule": sum(
+                1 for s in sessions if s["local_sybil_rule_passed"]
+            ),
+            "sybil_attackers_blocked": sum(1 for s in sessions if not s["local_sybil_rule_passed"]),
             "total_cohort_scientific_pts": sum(s["total_scientific_pts"] for s in sessions),
             "non_monetary_charter": NON_MONETARY_CHARTER_NOTICE,
             "leaderboard": leaderboard,

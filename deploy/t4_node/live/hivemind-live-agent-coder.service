@@ -11,10 +11,12 @@ After=hivemind-live-shield-coder.service network-online.target
 Requires=hivemind-live-shield-coder.service
 
 [Service]
+NoNewPrivileges=yes
+ProtectSystem=full
 User=callensxavier_gmail_com
 WorkingDirectory=/home/callensxavier_gmail_com/hivemind-producer
 EnvironmentFile=/etc/hivemind/t4-coder.env
-ExecStart=/usr/bin/python3 hivemind_producer_agent.py --gateway https://hivemind-openrouter-1003063861791.us-central1.run.app --endpoint https://34-48-48-154.sslip.io --model coder=qwen2.5-coder:7b-instruct --cost-per-1k 0.4 --capacity-1k 60 --execution-class t4
+ExecStart=/usr/bin/python3 hivemind_producer_agent.py --gateway https://hivemind-openrouter-1003063861791.us-central1.run.app --endpoint https://34-48-48-154.sslip.io --model coder=qwen2.5-coder:7b-instruct --cost-per-1k 0.4 --capacity-1k 60 --execution-class t4 --min-free-vram-mib 4300
 Restart=always
 RestartSec=10
 

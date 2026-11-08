@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """HiveMind producer shield: a small authenticating proxy in front of your local model server.
 
 Why: to earn points your model server must be reachable from the internet (through a tunnel or a port forward), and
@@ -22,9 +23,9 @@ from __future__ import annotations
 
 import argparse
 import hmac
+import itertools
 import json
 import os
-import itertools
 import sys
 import time
 from collections.abc import AsyncIterator, Mapping, Sequence
@@ -44,6 +45,9 @@ UPSTREAM_TIMEOUT_S: float = 300.0
 
 def _error(status: int, message: str, code: str) -> JSONResponse:
     return JSONResponse({"error": {"message": message, "type": "shield_error", "code": code}}, status_code=status)
+
+
+MAX_TOKENS_CAP = 16384  # per-request ceiling for max_tokens / max_completion_tokens
 
 
 def create_shield_app(
@@ -147,7 +151,18 @@ def create_shield_app(
             return _error(400, "Body must be JSON.", "invalid_json")
         if not isinstance(body, dict):
             return _error(400, "Body must be a JSON object.", "invalid_json")
-        if allowed and body.get("model") not in allowed:
+        model = body.get("model")
+        if not isinstance(model, str):  # a list or object would raise TypeError in the set/dict lookups below (a 500)
+            return _error(400, "model must be a string.", "invalid_request")
+        clamped = False
+        for limit_key in ("max_tokens", "max_completion_tokens"):  # a consumer can not make one request run for ever
+            limit = body.get(limit_key)
+            if isinstance(limit, (int, float)) and not isinstance(limit, bool) and limit > MAX_TOKENS_CAP:
+                body[limit_key] = MAX_TOKENS_CAP
+                clamped = True
+        if clamped:
+            raw = json.dumps(body).encode("utf-8")
+        if allowed and model not in allowed:
             return _error(403, "This model is not offered by this producer.", "model_not_allowed")
         now = time.monotonic()
         for stale in [n for n, started in inflight.items() if now - started > UPSTREAM_TIMEOUT_S + 30.0]:
@@ -158,7 +173,7 @@ def create_shield_app(
         inflight[number] = now
         try:
             upstream_request = client.build_request(
-                "POST", route_base.get(body.get("model"), base) + "/v1/chat/completions", content=raw, headers={"Content-Type": "application/json"}
+                "POST", route_base.get(model, base) + "/v1/chat/completions", content=raw, headers={"Content-Type": "application/json"}
             )
             upstream_response = await client.send(upstream_request, stream=True)
         except httpx.HTTPError:
@@ -179,7 +194,15 @@ def create_shield_app(
     return app
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+POC_NOTICE = (
+    "Proof of concept (PoC): not a production service. Until HiveMind is fully secured, prompts you serve and requests you make "
+    "must contain only public, non-sensitive data (no secrets, personal, private or enterprise data); the people using your node "
+    "are anonymous, and nothing yet verifies producers or their output."
+)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build the command-line parser for the authenticating producer shield."""
     parser = argparse.ArgumentParser(description="Authenticating proxy in front of a local OpenAI-compatible model server.")
     parser.add_argument("--upstream", default="http://127.0.0.1:11434", help="Your model server (default: Ollama on this machine)")
     parser.add_argument("--host", default="127.0.0.1", help="Interface to listen on; keep 127.0.0.1 and point your tunnel at it")
@@ -191,7 +214,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--route", action="append", default=[], metavar="MODEL=URL",
                         help="Send this model to another local server (repeat), e.g. hivemind-bee-stars=http://127.0.0.1:8294. Implies --allow-model for it.")
     parser.add_argument("--control-state-file", metavar="PATH", help="State file written by the producer agent (--control-state-file); while it says paused, chat requests get 503 producer_paused")
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = build_parser()
     args = parser.parse_args(argv)
+    print(f"NOTICE: {POC_NOTICE}", file=sys.stderr)
+    if not args.upstream.startswith(("http://127.0.0.1", "http://localhost")):
+        parser.error(f"--upstream expects a local loopback URL (http://127.0.0.1:PORT or http://localhost:PORT), got {args.upstream!r}")
     routes: dict[str, str] = {}
     for item in args.route:
         model, sep, url = item.partition("=")

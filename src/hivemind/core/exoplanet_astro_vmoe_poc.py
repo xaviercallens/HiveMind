@@ -506,18 +506,21 @@ class UpcycledAstroSparseVisionMoE(nn.Module):
         pooled = self.backbone.post_norm((h + base_ffn + moe_delta).mean(dim=1))
         logits = self.backbone.classifier(pooled)
 
-        # Load-balancing auxiliary loss L_aux (alpha = 0.01)
+        # Switch Transformer load-balancing auxiliary loss L_aux (alpha = 0.01)
+        # Pure Switch Transformers formulation: N * sum(f_i * P_i) with detached dispatch_fraction f_i.
         mean_prob = router_probs.mean(dim=(0, 1))
-        l_aux_raw = float((self.num_experts * torch.sum(mean_prob * mean_prob)).item())
-        l_aux_weighted = self.load_balance_alpha * l_aux_raw
+        one_hot_topk = F.one_hot(topk_indices, num_classes=self.num_experts).to(router_probs.dtype)
+        dispatch_fraction = one_hot_topk.mean(dim=(0, 1, 2)).detach()
+        l_aux_raw_tensor = self.num_experts * torch.sum(dispatch_fraction * mean_prob)
+        l_aux_weighted_tensor = self.load_balance_alpha * l_aux_raw_tensor
 
         return {
             "logits": logits,
             "router_probs": router_probs,
             "topk_indices": topk_indices,
             "topk_weights": topk_weights,
-            "load_balance_loss_raw": round(l_aux_raw, 5),
-            "load_balance_loss_weighted": round(l_aux_weighted, 6),
+            "load_balance_loss_raw": round(float(l_aux_raw_tensor.detach().item()), 5),
+            "load_balance_loss_weighted": l_aux_weighted_tensor,
         }
 
 
@@ -606,7 +609,7 @@ def project_cwt_scalogram_to_visual_patches(
     return torch.from_numpy(patches.astype(np.float32)).unsqueeze(0)
 
 
-def simulate_exoplanet_transit_and_router_response(
+def synthesize_exoplanet_transit_and_router_response(
     planet_radius_earth: float,
     star_radius_solar: float,
     instrumental_noise_ppm: float = 100.0,
@@ -864,9 +867,13 @@ def run_exoplanet_astro_vmoe_poc(
         load_balance_alpha=DEFAULT_LOAD_BALANCE_ALPHA,
     )
 
-    eval_patches_list: List[torch.Tensor] = []
-    eval_labels_list: List[torch.Tensor] = []
+    cal_patches_list: List[torch.Tensor] = []
+    cal_labels_list: List[torch.Tensor] = []
+    cal_expected_branch_idx: List[int] = []
+    holdout_patches_list: List[torch.Tensor] = []
+    holdout_labels_list: List[torch.Tensor] = []
     expected_branch_idx: List[int] = []
+    holdout_seed_base = int(seed) + 99991
     for b_id, meta in EXOPLANET_ASTRO_EXPERT_BRANCHES.items():
         b_idx = int(meta["expert_index"])
         p_t, y_t = build_astrophysics_visual_shard(
@@ -875,12 +882,24 @@ def run_exoplanet_astro_vmoe_poc(
             patch_dim=backbone.patch_dim,
             seed=9200 + b_idx,
         )
-        eval_patches_list.append(p_t)
-        eval_labels_list.append(y_t)
-        expected_branch_idx.extend([b_idx] * p_t.shape[0])
+        cal_patches_list.append(p_t)
+        cal_labels_list.append(y_t)
+        cal_expected_branch_idx.extend([b_idx] * p_t.shape[0])
 
-    eval_x = torch.cat(eval_patches_list, dim=0)
-    eval_y = torch.cat(eval_labels_list, dim=0)
+        hp_t, hy_t = build_astrophysics_visual_shard(
+            branch_id=b_id,
+            num_samples=20,
+            patch_dim=backbone.patch_dim,
+            seed=holdout_seed_base + b_idx,
+        )
+        holdout_patches_list.append(hp_t)
+        holdout_labels_list.append(hy_t)
+        expected_branch_idx.extend([b_idx] * hp_t.shape[0])
+
+    cal_x = torch.cat(cal_patches_list, dim=0)
+    cal_y = torch.cat(cal_labels_list, dim=0)
+    eval_x = torch.cat(holdout_patches_list, dim=0)
+    eval_y = torch.cat(holdout_labels_list, dim=0)
 
     with torch.no_grad():
         h_base = backbone.encode_patches(eval_x)
@@ -890,7 +909,7 @@ def run_exoplanet_astro_vmoe_poc(
             asymmetric_focal_loss(base_logits, eval_y, gamma=focal_gamma).item()
         )
 
-    # Calibrate Linear Top-2 Softmax Router + classifier head with L_aux (alpha=0.01)
+    # Calibrate Linear Top-2 Softmax Router + classifier head with L_aux (alpha=0.01) on calibration shard only
     for p in backbone.classifier.parameters():
         p.requires_grad = True
     cal_opt = torch.optim.AdamW(
@@ -899,15 +918,25 @@ def run_exoplanet_astro_vmoe_poc(
     )
     for _ in range(45):
         cal_opt.zero_grad()
-        out = vmoe(eval_x)
-        f_loss = asymmetric_focal_loss(out["logits"], eval_y, gamma=focal_gamma)
+        out = vmoe(cal_x)
+        f_loss = asymmetric_focal_loss(out["logits"], cal_y, gamma=focal_gamma)
         total_loss = f_loss + out["load_balance_loss_weighted"]
         total_loss.backward()
         cal_opt.step()
     for p in backbone.classifier.parameters():
         p.requires_grad = False
 
+    # Evaluate routing accuracy and focal loss strictly on the held-out shard (IP-36)
     with torch.no_grad():
+        cal_out = vmoe(cal_x)
+        cal_top2 = cal_out["topk_indices"][:, 0, :].cpu().numpy()
+        cal_hits = sum(
+            1
+            for i, exp_b in enumerate(cal_expected_branch_idx)
+            if exp_b in cal_top2[i]
+        )
+        cal_routing_acc = float(cal_hits) / float(len(cal_expected_branch_idx))
+
         final_out = vmoe(eval_x)
         vmoe_focal_loss = float(
             asymmetric_focal_loss(final_out["logits"], eval_y, gamma=focal_gamma).item()
@@ -921,21 +950,21 @@ def run_exoplanet_astro_vmoe_poc(
         routing_acc = float(hits) / float(len(expected_branch_idx))
 
     # Stage 5: Run Physical Transit & Router Simulator across the 3 canonical astronomical scenarios
-    sim_earth_sun = simulate_exoplanet_transit_and_router_response(
+    sim_earth_sun = synthesize_exoplanet_transit_and_router_response(
         planet_radius_earth=1.0,
         star_radius_solar=1.0,
         instrumental_noise_ppm=100.0,
         seed=seed,
         vmoe=vmoe,
     )
-    sim_earth_red_dwarf = simulate_exoplanet_transit_and_router_response(
+    sim_earth_red_dwarf = synthesize_exoplanet_transit_and_router_response(
         planet_radius_earth=1.0,
         star_radius_solar=0.2,
         instrumental_noise_ppm=100.0,
         seed=seed + 1,
         vmoe=vmoe,
     )
-    sim_eclipsing_binary = simulate_exoplanet_transit_and_router_response(
+    sim_eclipsing_binary = synthesize_exoplanet_transit_and_router_response(
         planet_radius_earth=2.5,
         star_radius_solar=1.0,
         instrumental_noise_ppm=100.0,
@@ -967,10 +996,16 @@ def run_exoplanet_astro_vmoe_poc(
         "stage3_all_zk_opoi_verified": all(b["zk_opoi_verified"] for b in branch_reports),
         "stage4_router_type": "Linear Top-2 Softmax with Load-Balancing Auxiliary Loss (alpha=0.01)",
         "stage4_routing_accuracy": round(routing_acc, 4),
+        "stage4_holdout_routing_accuracy": round(routing_acc, 4),
+        "stage4_calibration_routing_accuracy": round(cal_routing_acc, 4),
+        "stage4_calibration_seed_base": 9200,
+        "stage4_holdout_seed_base": holdout_seed_base,
         "stage4_single_baseline_focal_loss": round(single_baseline_focal_loss, 5),
         "stage4_upcycled_vmoe_focal_loss": round(vmoe_focal_loss, 5),
         "stage4_vmoe_gain_pct": round(moe_gain_pct, 2),
-        "stage4_load_balance_loss_weighted": final_out["load_balance_loss_weighted"],
+        "stage4_load_balance_loss_weighted": round(
+            float(final_out["load_balance_loss_weighted"].detach().item()), 6
+        ),
         "interactive_simulator_scenarios": {
             "earth_around_sun_1Rearth_1Rsun": sim_earth_sun,
             "earth_around_red_dwarf_1Rearth_02Rsun": sim_earth_red_dwarf,

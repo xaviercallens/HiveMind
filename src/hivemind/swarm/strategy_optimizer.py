@@ -1230,6 +1230,7 @@ class StrategyOptimizerTelemetryEngine:
 
         snapshot = {
             "schema_version": STRATEGY_OPTIMIZER_SCHEMA_VERSION,
+            "simulated": True,
             "milestone": "HM-S6-04",
             "season": 6,
             "sequence": self.revision,
@@ -1252,10 +1253,10 @@ class StrategyOptimizerTelemetryEngine:
                 "measured": [
                     "SI-01 spectral energy and rank allocation (SVD of seeded adapters)",
                     "SI-02 UCB1 scores (recorded holdout-loss observations)",
-                    "SI-03 communication overhead (posted link profile, closed-form model)",
                     "SI-04 holdout loss (seeded adapter probe on the curated Rust suite)",
                 ],
                 "modeled": [
+                    "SI-03 communication overhead (posted link profile, closed-form model)",
                     "SI-05 parallel_speedup_x, hive_per_gpu_hour and the v1.5/v1.6 baselines",
                 ],
                 "note": (

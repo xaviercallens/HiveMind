@@ -26,8 +26,8 @@ _LATEST_T4_SNAPSHOT: dict[str, Any] = {
     "node_name": "socreateai-agora-hermes-node1",
     "zone": "us-east4-b",
     "gpu_model": "NVIDIA Tesla T4 (16 GB GDDR6)",
-    "sole_active_gpu": False,
-    "secondary_induction_gpu": "NVIDIA GeForce RTX 2070 (8 GB GDDR6 Turing — Live Producer 58fd3df19d2b5ef8c10031e1389aac6a)",
+    "sole_active_gpu": True,
+    "secondary_induction_gpu": None,
     "gpu": {
         "used_mib": 4841,
         "live_with_ollama_used_mib": 11817,
@@ -48,7 +48,7 @@ _LATEST_T4_SNAPSHOT: dict[str, Any] = {
                 "mib": 4838,
             },
             {
-                "name": "hivemind-rtx2070-agent (hivemind/coder • Qwen2.5-Coder-7B-Instruct & coder-lite on RTX 2070)",
+                "name": "ollama (hivemind/coder • Qwen2.5-Coder-7B-Instruct on Tesla T4)",
                 "mib": 5462,
             },
         ],
@@ -73,6 +73,8 @@ _LATEST_T4_SNAPSHOT: dict[str, Any] = {
     "qlora_progress": {
         "boinc_app": "hivemind_qlora_moe (BOINC 7.18.1 / 7.24 Core Node)",
         "workgen_daemon": "hivemind-t4-workgen.service",
+        "schedule": "NIGHT_ONLY",
+        "daytime_policy": "SERVING_PRIORITY_NIGHT_TRAINING_22_07_PARIS",
         "assimilated_workunits": 147,
         "qlora_rounds_assimilated": 145,
         "verification_workunits_assimilated": 2,
@@ -81,6 +83,12 @@ _LATEST_T4_SNAPSHOT: dict[str, Any] = {
         "latest_eval_loss_after": 2.1277,
         "ratchet_accepted_rounds": 20,
         "ratchet_held_rounds": 125,
+        "progress_label": "assimilated, no held-out gain",
+        "eval_basis": "6-domain MIX_DOMAINS (8x128 held-out tokens/domain, baseline 2.12; basis changed at hmq_00171)",
+        "assimilator_policy": (
+            "Units with eval_loss_after > eval_loss_before + tolerance are logged in assimilated.jsonl with "
+            "progress_label='assimilated, no held-out gain' and do not advance the chain head."
+        ),
         "chain_head_workunit": "hmq_00092",
         "chain_head_sha256": "e91e0ec338b92e52b13bf4abdc2c2d95999b56c3568cb85de5b306a8d3c9f5f8",
         "queued_workunit": "hmq_00146 (chained from hmq_00092 latest_adapter.pt SHA-256)",
@@ -120,7 +128,9 @@ _LATEST_T4_SNAPSHOT: dict[str, Any] = {
             "and granite-3.1-1b-a400m-base + LoRA is evaluated offline (not yet served by the router)."
         ),
     },
-    "updated_epoch": time.time(),
+    # None until the governor pushes a reading: the defaults above are a recorded snapshot, not live telemetry.
+    "updated_epoch": None,
+    "telemetry_source": "DEFAULT_SNAPSHOT_NO_TELEMETRY_RECEIVED",
 }
 
 QLORA_MOE_MULTI_DATASET_CURRICULUM: list[dict[str, Any]] = [
@@ -180,21 +190,110 @@ QLORA_MOE_MULTI_DATASET_CURRICULUM: list[dict[str, Any]] = [
 ]
 
 
+TELEMETRY_FRESH_WINDOW_S = 900.0
+_NUMERIC_GPU_FIELDS = ("used_mib", "total_mib", "free_mib", "temp_c", "util_pct", "power_w")
+
+
+def _require_finite_numbers(section: str, values: dict[str, Any], fields: tuple[str, ...]) -> None:
+    """Refuse a telemetry update whose numeric fields are not finite numbers (a poisoned or malformed push)."""
+    for key in fields:
+        if key in values:
+            v = values[key]
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or v in (float("inf"), float("-inf")):
+                raise ValueError(f"{section}.{key} must be a finite number, got {v!r}")
+
+
+MAX_TELEMETRY_STRING = 256
+MAX_TELEMETRY_LIST = 64
+
+
+def _is_finite_number(v: Any) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and v == v and v not in (float("inf"), float("-inf"))
+
+
+def _validated_section(section: str, current: dict[str, Any], update: dict[str, Any]) -> dict[str, Any]:
+    """Return the validated new values for a telemetry section, or raise ValueError.
+
+    Only keys already present in the snapshot are accepted (the snapshot is the whitelist), and each value must keep the
+    type class of the value it replaces: finite numbers stay finite numbers, strings stay bounded strings, booleans stay
+    booleans, lists stay bounded lists of finite numbers or bounded strings, dicts stay dicts of the same. A push that
+    fails any rule changes nothing.
+    """
+    out: dict[str, Any] = {}
+    for key, value in update.items():
+        if key not in current:
+            raise ValueError(f"{section}.{key} is not a known telemetry field")
+        _check_like(f"{section}.{key}", current[key], value)
+        out[key] = value
+    return out
+
+
+def _check_like(path: str, template: Any, value: Any) -> None:
+    if isinstance(template, bool):
+        if not isinstance(value, bool):
+            raise ValueError(f"{path} must be a boolean, got {value!r}")
+    elif isinstance(template, (int, float)):
+        if not _is_finite_number(value):
+            raise ValueError(f"{path} must be a finite number, got {value!r}")
+    elif isinstance(template, str):
+        if not isinstance(value, str) or len(value) > MAX_TELEMETRY_STRING:
+            raise ValueError(f"{path} must be a string of at most {MAX_TELEMETRY_STRING} characters")
+    elif isinstance(template, list):
+        if not isinstance(value, list) or len(value) > MAX_TELEMETRY_LIST:
+            raise ValueError(f"{path} must be a list of at most {MAX_TELEMETRY_LIST} items")
+        for i, item in enumerate(value):
+            if isinstance(item, dict):
+                for k, v in item.items():
+                    if not isinstance(k, str) or not (_is_finite_number(v) or (isinstance(v, str) and len(v) <= MAX_TELEMETRY_STRING)):
+                        raise ValueError(f"{path}[{i}].{k} must be a finite number or a bounded string")
+            elif not (_is_finite_number(item) or (isinstance(item, str) and len(item) <= MAX_TELEMETRY_STRING)):
+                raise ValueError(f"{path}[{i}] must be a finite number or a bounded string")
+    elif isinstance(template, dict):
+        if not isinstance(value, dict):
+            raise ValueError(f"{path} must be an object")
+        for k, v in value.items():
+            if k in template:
+                _check_like(f"{path}.{k}", template[k], v)
+            elif not (_is_finite_number(v) or (isinstance(v, str) and len(v) <= MAX_TELEMETRY_STRING)):
+                raise ValueError(f"{path}.{k} must be a finite number or a bounded string")
+    elif template is None:
+        if not (value is None or _is_finite_number(value) or (isinstance(value, str) and len(value) <= MAX_TELEMETRY_STRING)):
+            raise ValueError(f"{path} must be null, a finite number or a bounded string")
+
+
+def format_workunit_counter_label(record: dict[str, Any], *, tolerance: float = 1e-6, baseline_nll: float = 2.12) -> str:
+    """Format a workunit counter label; units with eval_loss_after > eval_loss_before + tolerance are 'assimilated, no held-out gain'."""
+    before = record.get("eval_loss_before", record.get("held_out_eval_loss_before"))
+    after = record.get("eval_loss_after", record.get("held_out_eval_loss_after"))
+    if _is_finite_number(before) and _is_finite_number(after):
+        if float(after) > float(before) + float(tolerance) or float(after) >= float(baseline_nll):
+            return "assimilated, no held-out gain"
+        if float(after) < float(before) - float(tolerance):
+            return "assimilated, held-out gain"
+    return str(record.get("progress_label") or "assimilated, no held-out gain")
+
+
 def update_t4_telemetry_snapshot(update: dict[str, Any]) -> dict[str, Any]:
-    """Update the in-memory T4 telemetry snapshot from the monitor or T4 node."""
+    """Update the in-memory T4 telemetry snapshot from the monitor or T4 node; a malformed push changes nothing."""
     with _SNAPSHOT_LOCK:
+        staged: dict[str, dict[str, Any]] = {}
         if "gpu" in update and isinstance(update["gpu"], dict):
-            _LATEST_T4_SNAPSHOT["gpu"].update(update["gpu"])
+            _require_finite_numbers("gpu", update["gpu"], _NUMERIC_GPU_FIELDS)
+            staged["gpu"] = _validated_section("gpu", _LATEST_T4_SNAPSHOT["gpu"], update["gpu"])
+        if "governor" in update and isinstance(update["governor"], dict):
+            staged["governor"] = _validated_section("governor", _LATEST_T4_SNAPSHOT["governor"], update["governor"])
+        if "qlora_progress" in update and isinstance(update["qlora_progress"], dict):
+            staged["qlora_progress"] = _validated_section("qlora_progress", _LATEST_T4_SNAPSHOT["qlora_progress"], update["qlora_progress"])
+        for section, values in staged.items():
+            _LATEST_T4_SNAPSHOT[section].update(values)
+        if "gpu" in staged:
             used = int(_LATEST_T4_SNAPSHOT["gpu"].get("used_mib", 10303))
             total = int(_LATEST_T4_SNAPSHOT["gpu"].get("total_mib", 15360))
             _LATEST_T4_SNAPSHOT["gpu"]["free_mib"] = max(0, total - used)
-        if "governor" in update and isinstance(update["governor"], dict):
-            _LATEST_T4_SNAPSHOT["governor"].update(update["governor"])
-        if "qlora_progress" in update and isinstance(update["qlora_progress"], dict):
-            _LATEST_T4_SNAPSHOT["qlora_progress"].update(update["qlora_progress"])
         if "sole_active_gpu" in update:
             _LATEST_T4_SNAPSHOT["sole_active_gpu"] = bool(update["sole_active_gpu"])
         _LATEST_T4_SNAPSHOT["updated_epoch"] = time.time()
+        _LATEST_T4_SNAPSHOT["telemetry_source"] = "LIVE_UPDATE"
         return dict(_LATEST_T4_SNAPSHOT)
 
 
@@ -202,7 +301,9 @@ def build_t4_visibility_payload(
     *,
     now_utc: float | None = None,
     live_models: list[str] | None = None,
-    active_producers_count: int = 1,
+    active_producers_count: int = 0,
+    distinct_physical_gpus: int | None = None,
+    secondary_gpu: str | None = None,
 ) -> dict[str, Any]:
     """Build the complete JSON visibility payload for the Web UI and /v1/hivemind/t4/status."""
     ts = now_utc if now_utc is not None else time.time()
@@ -210,20 +311,33 @@ def build_t4_visibility_payload(
     dt_paris = dt_utc.astimezone(EUROPE_TZ)
     hour_cet = dt_paris.hour
     is_eu_night = hour_cet >= NIGHT_START_HOUR_CET or hour_cet < NIGHT_END_HOUR_CET
+    physical_gpus = max(0, int(distinct_physical_gpus if distinct_physical_gpus is not None else active_producers_count))
 
     with _SNAPSHOT_LOCK:
+        evidenced_secondary = secondary_gpu if secondary_gpu else (
+            _LATEST_T4_SNAPSHOT["secondary_induction_gpu"] if physical_gpus > 1 else None
+        )
         snap = {
             "node_name": _LATEST_T4_SNAPSHOT["node_name"],
             "zone": _LATEST_T4_SNAPSHOT["zone"],
             "gpu_model": _LATEST_T4_SNAPSHOT["gpu_model"],
-            "sole_active_gpu": active_producers_count <= 1 and bool(_LATEST_T4_SNAPSHOT["sole_active_gpu"]),
-            "active_producers_count": max(1, int(active_producers_count)),
-            "secondary_induction_gpu": _LATEST_T4_SNAPSHOT["secondary_induction_gpu"],
+            "sole_active_gpu": physical_gpus <= 1 and bool(_LATEST_T4_SNAPSHOT["sole_active_gpu"]) and not evidenced_secondary,
+            "active_producers_count": max(0, int(active_producers_count)),
+            "distinct_physical_gpus": physical_gpus,
+            "secondary_induction_gpu": evidenced_secondary,
             "gpu": dict(_LATEST_T4_SNAPSHOT["gpu"]),
             "governor": dict(_LATEST_T4_SNAPSHOT["governor"]),
             "qlora_progress": dict(_LATEST_T4_SNAPSHOT["qlora_progress"]),
             "updated_epoch": _LATEST_T4_SNAPSHOT["updated_epoch"],
+            "telemetry_source": _LATEST_T4_SNAPSHOT["telemetry_source"],
         }
+
+    if snap["updated_epoch"] is None:
+        telemetry_age_s: float | None = None
+        telemetry_status = "NO_TELEMETRY_RECEIVED"
+    else:
+        telemetry_age_s = round(max(0.0, ts - float(snap["updated_epoch"])), 1)
+        telemetry_status = "FRESH" if telemetry_age_s <= TELEMETRY_FRESH_WINDOW_S else "STALE"
 
     gov = snap["governor"]
     boinc_mode = str(gov.get("boinc_gpu_mode", "never"))
@@ -263,25 +377,32 @@ def build_t4_visibility_payload(
         "hivemind/coder-lite",
     ]
 
+    hardware_block: dict[str, Any] = {
+        "primary_gpu": snap["gpu_model"],
+        "node_host": f"{snap['node_name']} ({snap['zone']})",
+        "vram_used_mib": snap["gpu"]["used_mib"],
+        "vram_total_mib": snap["gpu"]["total_mib"],
+        "vram_free_mib": snap["gpu"]["free_mib"],
+        "vram_utilization_pct": round(100.0 * snap["gpu"]["used_mib"] / max(1, snap["gpu"]["total_mib"]), 1),
+        "temp_c": snap["gpu"]["temp_c"],
+        "power_w": snap["gpu"]["power_w"],
+        "resident_processes": snap["gpu"]["resident_processes"],
+    }
+    if snap["secondary_induction_gpu"]:
+        hardware_block["secondary_gpu"] = snap["secondary_induction_gpu"]
+
     return {
         "status": "ok",
+        "telemetry_status": telemetry_status,
+        "telemetry_age_s": telemetry_age_s,
+        "telemetry_source": snap["telemetry_source"],
         "operational_mode": operational_mode,
         "mode_badge": mode_badge,
         "inference_availability": inference_availability,
         "sole_active_gpu": snap["sole_active_gpu"],
         "active_producers_count": snap["active_producers_count"],
-        "hardware": {
-            "primary_gpu": snap["gpu_model"],
-            "node_host": f"{snap['node_name']} ({snap['zone']})",
-            "secondary_gpu": snap["secondary_induction_gpu"],
-            "vram_used_mib": snap["gpu"]["used_mib"],
-            "vram_total_mib": snap["gpu"]["total_mib"],
-            "vram_free_mib": snap["gpu"]["free_mib"],
-            "vram_utilization_pct": round(100.0 * snap["gpu"]["used_mib"] / max(1, snap["gpu"]["total_mib"]), 1),
-            "temp_c": snap["gpu"]["temp_c"],
-            "power_w": snap["gpu"]["power_w"],
-            "resident_processes": snap["gpu"]["resident_processes"],
-        },
+        "distinct_physical_gpus": snap["distinct_physical_gpus"],
+        "hardware": hardware_block,
         "european_schedule": {
             "timezone": "Europe/Paris (CET/CEST)",
             "current_utc_iso": dt_utc.isoformat(timespec="seconds"),

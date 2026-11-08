@@ -49,8 +49,12 @@ class Stack:
         self.master_url = f"{self.url}/{name}/"
         self.dbname, self.dbuser = name, "hmboinc"
         self.pwfile = base / "db_password"
+        self.account_seed_file = base / "account_password_seed"
         for d in ("log", "run", "project"):
             (base / d).mkdir(parents=True, exist_ok=True)
+        if not self.account_seed_file.exists():
+            self.account_seed_file.write_text(secrets.token_hex(16))
+            self.account_seed_file.chmod(0o600)
 
     # ------------------------------------------------------------------ database
     def sql(self, statement: str) -> str:
@@ -122,7 +126,8 @@ class Stack:
         text = re.sub(r"<host>[^<]*</host>", f"<host>{socket.gethostname().split('.')[0]}</host>", text, count=1)
         daemons = ["<daemons>", "<daemon><cmd>feeder -d 3</cmd></daemon>", "<daemon><cmd>transitioner -d 3</cmd></daemon>", "<daemon><cmd>file_deleter -d 3</cmd></daemon>"]
         for app in apps:  # same executable twice needs distinct output/pid files, or the start script skips the second
-            daemons.append(f"<daemon><cmd>script_validator -d 3 --app {app} --init_script \"{validator_shim} files result_id\"</cmd>"
+            compare_arg = f' --compare_script "{validator_shim} compare files2"' if app == "hivemind_solver_sweep" else ""
+            daemons.append(f"<daemon><cmd>script_validator -d 3 --app {app} --init_script \"{validator_shim} files result_id\"{compare_arg}</cmd>"
                            f"<output>validator_{app}.log</output><pid_file>validator_{app}.pid</pid_file></daemon>")
             daemons.append(f"<daemon><cmd>script_assimilator -d 3 --app {app} --script \"{assimilator_shim} wu_id files\"</cmd>"
                            f"<output>assimilator_{app}.log</output><pid_file>assimilator_{app}.pid</pid_file></daemon>")
@@ -267,8 +272,15 @@ class Stack:
         sh(["bin/stop"], cwd=self.root, env=self.project_env(), check=False)
 
     # ------------------------------------------------------------------ accounts (through the real web stack)
+    def account_passwd_hash(self, email: str = "node@local.invalid") -> str:
+        if not self.account_seed_file.exists():
+            self.account_seed_file.write_text(secrets.token_hex(16))
+            self.account_seed_file.chmod(0o600)
+        seed = self.account_seed_file.read_text().strip()
+        return hashlib.md5((seed + email).encode()).hexdigest()
+
     def create_account(self, email: str = "node@local.invalid", name: str = "hivemind-t4") -> str:
-        pw_hash = hashlib.md5(("local-secret" + email).encode()).hexdigest()
+        pw_hash = self.account_passwd_hash(email)
         q = urllib.parse.urlencode({"email_addr": email, "passwd_hash": pw_hash, "user_name": name})
         body = urllib.request.urlopen(f"{self.master_url}create_account.php?{q}", timeout=30).read().decode()
         m = re.search(r"<authenticator>(.*?)</authenticator>", body)

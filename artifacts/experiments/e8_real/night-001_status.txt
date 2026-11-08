@@ -1,0 +1,2 @@
+coordinator rc=2 at 2026-11-01T01:22:17Z
+night run night-001 finished at 2026-11-01T01:22:37Z

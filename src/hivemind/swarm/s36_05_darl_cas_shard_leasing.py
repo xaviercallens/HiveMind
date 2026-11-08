@@ -11,6 +11,7 @@ Implements Dynamic Asynchronous Lease-Backed Data Sharding (``arXiv:2610.03457``
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass
 
 
@@ -43,12 +44,23 @@ class DARLLedgerSnapshot:
         return asdict(self)
 
 
+def _finite(name: str, value: float) -> float:
+    """Every lease decision compares times; with NaN each comparison is False, so a lease would never expire or be reclaimed."""
+    v = float(value)
+    if not math.isfinite(v):
+        raise ValueError(f"{name} must be finite, got {value!r}")
+    return v
+
+
 class DARLShardLeaseCoordinator:
     """Heartbeat-backed CAS shard lease manager guaranteeing zero duplicate training under churn."""
 
     def __init__(self, shard_ids: list[str], *, alpha: float = 4.0) -> None:
         if not shard_ids or len(set(shard_ids)) != len(shard_ids):
             raise ValueError("shard_ids must be a non-empty list of unique shard identifiers")
+        # alpha=inf would make every lease immortal; NaN or a non-positive alpha was silently clamped to a 1 s TTL.
+        if not (math.isfinite(float(alpha)) and float(alpha) > 0.0):
+            raise ValueError(f"alpha must be finite and > 0, got {alpha!r}")
         self.alpha = float(alpha)
         self._pending_shards: list[str] = list(shard_ids)
         self._total_shards = len(shard_ids)
@@ -62,7 +74,7 @@ class DARLShardLeaseCoordinator:
         self.duplicate_commits_blocked = 0
 
     def compute_ttl_s(self, *, t_step_s: float, rtt_s: float) -> float:
-        return max(1.0, self.alpha * float(t_step_s) + float(rtt_s))
+        return max(1.0, self.alpha * _finite("t_step_s", t_step_s) + _finite("rtt_s", rtt_s))
 
     def grant_lease(
         self,
@@ -73,6 +85,7 @@ class DARLShardLeaseCoordinator:
         rtt_s: float = 0.08,
     ) -> ShardLeaseRecord | None:
         """Grant the next available unassigned shard to ``worker_id``."""
+        now_s = _finite("now_s", now_s)
         self.reclaim_expired(now_s=now_s)
         while self._pending_shards:
             shard_id = self._pending_shards.pop(0)
@@ -104,6 +117,7 @@ class DARLShardLeaseCoordinator:
         t_step_s: float = 2.0,
         rtt_s: float = 0.08,
     ) -> bool:
+        now_s = _finite("now_s", now_s)
         rec = self._leases.get(lease_id)
         if rec is None or rec.status != "ACTIVE" or rec.worker_id != worker_id:
             return False
@@ -115,6 +129,7 @@ class DARLShardLeaseCoordinator:
 
     def reclaim_expired(self, *, now_s: float) -> int:
         """Reclaim all active leases whose TTL has expired at ``now_s``."""
+        now_s = _finite("now_s", now_s)
         reclaimed_now = 0
         for rec in list(self._leases.values()):
             if rec.status == "ACTIVE" and now_s > rec.expires_at_s:
@@ -128,6 +143,7 @@ class DARLShardLeaseCoordinator:
 
     def commit_lease(self, lease_id: int, worker_id: str, *, now_s: float) -> bool:
         """Commit a completed shard lease; rejects expired or stale/duplicate commits."""
+        now_s = _finite("now_s", now_s)
         self.reclaim_expired(now_s=now_s)
         rec = self._leases.get(lease_id)
         if rec is None or rec.worker_id != worker_id or rec.status != "ACTIVE":

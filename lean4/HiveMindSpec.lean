@@ -14,7 +14,7 @@
                Async DMA Zero-Stall Overlap, Token Tree Speculation (γ = 6) RTT Speedup,
                and Layer-2 State Channel Escrow Safety.
 
-  Epistemic Standard: Tier A Machine-Checked (0 `sorry`, 0 user `axiom`).
+  Epistemic Standard: Tier A Machine-Checked (0 unproven stubs, 0 user `axiom`).
 -/
 
 namespace HiveMindSpec
@@ -1847,7 +1847,7 @@ theorem decoupled_token_weight_monotone
     `K = 0` degenerate counterexample. -/
 theorem decoupled_quorum_admitted_count_bounds
     (M K extra : Nat)
-    (h_K : 1 <= K)
+    (_h_K : 1 <= K)
     (h_KM : K <= M)
     (h_extra : extra <= M - K) :
     K <= admittedCount K extra ∧
@@ -2130,6 +2130,26 @@ theorem knowledge_bonus_payouts_never_exceed_pool (pool W : Nat) (hW : 0 < W) (w
   rw [hsum, Nat.mul_div_cancel _ hW] at h
   exact h
 
+/-- Allocate at most `budget` pseudo-trials across a signer's records (HM-S15-01 / #171). -/
+def allocatedSignerTrials : Nat → List Nat → Nat
+  | _, [] => 0
+  | budget, t :: ts =>
+    let alloc := min t budget
+    alloc + allocatedSignerTrials (budget - alloc) ts
+
+/-- Theorem 139b (Per-Signer Pseudo-Trial Budget Bound — HM-S15-01 / #171): regardless of how many records a
+    signer submits or how large the claimed trial counts `ts` are, total allocated pseudo-trials never exceed
+    `budget`. -/
+theorem signer_pseudo_trials_le_budget (budget : Nat) (ts : List Nat) :
+    allocatedSignerTrials budget ts ≤ budget := by
+  induction ts generalizing budget with
+  | nil => simp [allocatedSignerTrials]
+  | cons t ts ih =>
+    simp only [allocatedSignerTrials]
+    have h1 : min t budget ≤ budget := Nat.min_le_right t budget
+    have h2 := ih (budget - min t budget)
+    omega
+
 end ALIX_QueenBee
 
 /-!
@@ -2156,6 +2176,16 @@ theorem waggle_dance_quorum_lock_soundness (recruits extra quorumThreshold : Nat
   simp only [decide_eq_true_eq] at *
   omega
 
+/-- Theorem 141b (Seeley Waggle Dance Quorum Convergence — HM-S24 / #319 Task 3): When each waggle recruitment
+    cycle adds `step ≥ 1` recruits to `initialRecruits`, after `t` cycles satisfying `quorumThreshold ≤ initialRecruits + t * step`,
+    the Seeley quorum lock `quorumLocked` is guaranteed to hold. -/
+theorem waggle_dance_quorum_convergence (initialRecruits step t quorumThreshold : Nat)
+    (_h_step : 1 ≤ step) (h_conv : quorumThreshold ≤ initialRecruits + t * step) :
+    quorumLocked (initialRecruits + t * step) quorumThreshold = true := by
+  unfold quorumLocked
+  simp only [decide_eq_true_eq]
+  omega
+
 /-- Theorem 142 (Swarm Nectar Cache Deduplication Strictly Reduces PCIe H2D Traffic — HM-S23 / HM-S25-02):
     When `cachedHits > 0` recurring queries are served from the P2P SwarmNectarCache (avoiding `bytesPerQuery > 0`
     of LayerStoRm expert H2D streaming per hit), total PCIe H2D traffic is strictly below the uncached baseline. -/
@@ -2178,15 +2208,26 @@ theorem layerstorm_two_zone_vram_ceiling (denseMiB kvMiB zoneA zoneB expertMiB v
     Nat.add_mul zoneA zoneB expertMiB
   omega
 
-/-- Theorem 144 (Cosine-Damped Outer Momentum Bounds IID Overshoot — Issue #308 / E18b):
-    When peer deltas are aligned with integer-scaled cosine `c ∈ [0, scale]`, damping outer momentum by
-    `mu_eff = mu_base * (scale - c)` ensures `mu_eff ≤ mu_base * scale` for all `c` and `mu_eff = 0` (exact FedAvg
-    zero-momentum regime) when `c = scale` (perfect IID alignment), preventing Nesterov carryover overshoot. -/
+/-- Arithmetic Lemma 144 (Linear Damping Monotonicity and Zero-At-Cap — Issue #308 / E18b):
+    Arithmetic property of the integer linear damping function `dampedMu muBase scale c := muBase * (scale - c)`
+    for `c ∈ [0, scale]`: `dampedMu muBase scale c ≤ muBase * scale`, `dampedMu muBase scale scale = 0`, and
+    higher alignment `c1 ≤ c2` never increases the damped factor (`dampedMu muBase scale c2 ≤ dampedMu muBase scale c1`). -/
+def dampedMu (muBase scale c : Nat) : Nat :=
+  muBase * (scale - c)
+
 theorem e18_cosine_damped_outer_momentum_bounds_iid_amplification (muBase scale c : Nat)
     (hc : c ≤ scale) :
-    muBase * (scale - c) ≤ muBase * scale ∧ muBase * (scale - scale) = 0 := by
+    dampedMu muBase scale c ≤ muBase * scale ∧ dampedMu muBase scale scale = 0 := by
+  unfold dampedMu
   have h_sub : scale - c ≤ scale := by omega
   exact ⟨Nat.mul_le_mul_left muBase h_sub, by simp⟩
+
+theorem e18_damped_mu_antitone (muBase scale c1 c2 : Nat)
+    (h12 : c1 ≤ c2) :
+    dampedMu muBase scale c2 ≤ dampedMu muBase scale c1 := by
+  unfold dampedMu
+  have h_sub : scale - c2 ≤ scale - c1 := by omega
+  exact Nat.mul_le_mul_left muBase h_sub
 
 end Season24_25_HoneybeeQuorumAndLayerStoRmVRAM
 
@@ -2435,6 +2476,52 @@ theorem nocturnal_vlm_moe_pareto_ratchet_monotone
 
 end Season29_InternationalLaunchAndEvolutionMonitor
 
+-- ============================================================================
+-- SEASON 30 (PS-02-D2): VOLUNTEER OWNER CONSENT & ONE-HEARTBEAT PAUSE INVARIANTS
+-- ============================================================================
+
+namespace Season30_VolunteerConsentAndPauseInvariants
+
+/-- A volunteer node is permitted to start iff a stored owner enrolment record exists
+    (`ownerEnrolled = true`) and explicit owner consent is recorded (`ownerConsent = true`). -/
+def nodeStartPermitted (ownerEnrolled ownerConsent : Bool) : Bool :=
+  ownerEnrolled && ownerConsent
+
+/-- Theorem 162 (PS-02-D2 — No Node Starts Without Stored Owner Enrolment):
+    Without a stored owner enrolment (`ownerEnrolled = false`), `nodeStartPermitted` is
+    unconditionally `false`, and whenever `nodeStartPermitted ownerEnrolled ownerConsent = true`,
+    both `ownerEnrolled = true` and `ownerConsent = true` hold. -/
+theorem no_node_starts_without_stored_owner_enrolment
+    (ownerEnrolled ownerConsent : Bool) :
+    nodeStartPermitted false ownerConsent = false ∧
+    (nodeStartPermitted ownerEnrolled ownerConsent = true →
+      ownerEnrolled = true ∧ ownerConsent = true) := by
+  cases ownerEnrolled <;> cases ownerConsent <;> decide
+
+/-- Work units or completion requests served by a node when its synchronized pause flag is `paused`. -/
+def newWorkServed (paused : Bool) (requestedWork : Nat) : Nat :=
+  if paused then 0 else requestedWork
+
+/-- Whether the producer agent's local control state has synchronized the owner's pause command
+    issued at `t_pause` after elapsed time `t_now` under heartbeat interval `hb_interval`. -/
+def pauseSyncedWithinHeartbeat (t_pause hb_interval t_now : Nat) : Bool :=
+  decide (t_pause + hb_interval ≤ t_now)
+
+/-- Theorem 163 (PS-02-D2 — Pause Implies No New Work Within One Heartbeat):
+    Once an owner issues a pause command at `t_pause`, for every timestamp `t_now` at or after
+    one heartbeat (`t_pause + hb_interval ≤ t_now`), the synchronized pause state is active
+    (`pauseSyncedWithinHeartbeat t_pause hb_interval t_now = true`) and the node serves zero
+    new work (`newWorkServed true requestedWork = 0`) for any `requestedWork`. -/
+theorem pause_implies_no_new_work_within_one_heartbeat
+    (t_pause hb_interval t_now requestedWork : Nat)
+    (h_elapsed : t_pause + hb_interval ≤ t_now) :
+    pauseSyncedWithinHeartbeat t_pause hb_interval t_now = true ∧
+    newWorkServed (pauseSyncedWithinHeartbeat t_pause hb_interval t_now) requestedWork = 0 := by
+  unfold pauseSyncedWithinHeartbeat newWorkServed
+  simp [h_elapsed]
+
+end Season30_VolunteerConsentAndPauseInvariants
+
 end HiveMindSpec
 
 -- Verify that all theorems depend on zero user axioms (`#print axioms` check)
@@ -2583,11 +2670,14 @@ end HiveMindSpec
 #print axioms HiveMindSpec.ALIX_QueenBee.knowledge_bonus_payouts_never_exceed_pool
 #print axioms HiveMindSpec.ALIX_QueenBee.add_div_le_div_add
 #print axioms HiveMindSpec.ALIX_QueenBee.payouts_le_pool_times_weights_over_W
+#print axioms HiveMindSpec.ALIX_QueenBee.signer_pseudo_trials_le_budget
 #print axioms HiveMindSpec.Season24_25_HoneybeeQuorumAndLayerStoRmVRAM.waggle_dance_duration_monotone
 #print axioms HiveMindSpec.Season24_25_HoneybeeQuorumAndLayerStoRmVRAM.waggle_dance_quorum_lock_soundness
+#print axioms HiveMindSpec.Season24_25_HoneybeeQuorumAndLayerStoRmVRAM.waggle_dance_quorum_convergence
 #print axioms HiveMindSpec.Season24_25_HoneybeeQuorumAndLayerStoRmVRAM.swarm_nectar_cache_dedup_saves_pcie_bytes
 #print axioms HiveMindSpec.Season24_25_HoneybeeQuorumAndLayerStoRmVRAM.layerstorm_two_zone_vram_ceiling
 #print axioms HiveMindSpec.Season24_25_HoneybeeQuorumAndLayerStoRmVRAM.e18_cosine_damped_outer_momentum_bounds_iid_amplification
+#print axioms HiveMindSpec.Season24_25_HoneybeeQuorumAndLayerStoRmVRAM.e18_damped_mu_antitone
 #print axioms HiveMindSpec.Season25_Wave2ScientificMoEAndProducerQuorum.solver_surrogate_verifier_soundness
 #print axioms HiveMindSpec.Season25_Wave2ScientificMoEAndProducerQuorum.producer_quorum_moe_activation_monotone
 #print axioms HiveMindSpec.Season25_Wave2ScientificMoEAndProducerQuorum.s1_cross_cpu_quorum2_agreement_triangle_bound
@@ -2603,3 +2693,5 @@ end HiveMindSpec
 #print axioms HiveMindSpec.Season29_InternationalLaunchAndEvolutionMonitor.super_peer_fanout_reduces_coordinator_load
 #print axioms HiveMindSpec.Season29_InternationalLaunchAndEvolutionMonitor.sqlite_write_coalescing_conserves_hmt
 #print axioms HiveMindSpec.Season29_InternationalLaunchAndEvolutionMonitor.nocturnal_vlm_moe_pareto_ratchet_monotone
+#print axioms HiveMindSpec.Season30_VolunteerConsentAndPauseInvariants.no_node_starts_without_stored_owner_enrolment
+#print axioms HiveMindSpec.Season30_VolunteerConsentAndPauseInvariants.pause_implies_no_new_work_within_one_heartbeat

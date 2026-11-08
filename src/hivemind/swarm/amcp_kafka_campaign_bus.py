@@ -37,6 +37,7 @@ KAFKA_TOPICS: dict[str, str] = {
     "human_agent": "hivemind.amcp.human_agent.v1",
     "bee_coord": "hivemind.amcp.bee_coord.v1",
     "bee_trading": "hivemind.amcp.bee_trading.v1",
+    "federation": "hivemind.amcp.federation.v1",  # signed task offers, claims, results and aborts for co-training rounds (see docs/FEDERATION_V2_AMCP_AGLETS.md)
 }
 
 ParticipantKind = Literal["human_researcher", "gpu_producer", "ai_agent", "bee_specialist"]
@@ -180,6 +181,60 @@ JOINT_SUBJECT_CAMPAIGNS: tuple[SubjectCampaign, ...] = (
 )
 
 SUBJECT_BY_ID: dict[str, SubjectCampaign] = {c.subject_id: c for c in JOINT_SUBJECT_CAMPAIGNS}
+
+CANONICAL_BEE_IDS: frozenset[str] = frozenset(
+    {
+        *(c.lead_bee for c in JOINT_SUBJECT_CAMPAIGNS),
+        *(b for c in JOINT_SUBJECT_CAMPAIGNS for b in c.co_bees),
+        "hivemind/granite-1b-base",
+        "hivemind/crowd-v1",
+        "hivemind/granite-moe",
+        "hivemind/coder-lite",
+        "hivemind/gemma-core",
+        "hivemind/bee-stars",
+        "hivemind/mistral-core",
+        "hivemind/qwen35-core",
+        "hivemind/bee-rusty-sundials",
+        "hivemind/coder",
+        "hivemind/bee-lean-prover",
+        "hivemind/bee-ruche-moe",
+        "hivemind/coder-plus",
+        "hivemind/moe-qwen35-bee",
+        "hivemind/moe-general",
+        "hivemind/moe-coder",
+        "hivemind/moe-science",
+        "hivemind/moe-science-bee-v2",
+        "hivemind/moe-vision",
+        "hivemind/math-prover",
+        "hivemind/fast",
+        "hivemind/general",
+        "hivemind/reasoning",
+        "hivemind/french",
+        "hivemind/auto",
+        "bee-math-01",
+    }
+)
+
+
+def is_allowed_bee_id(bee_id: str, account_handle: str, account_id: str = "") -> bool:
+    """Return True iff ``bee_id`` is in the canonical HiveMind bee allow-list or owned by ``account_handle`` (IP-260)."""
+    candidate = bee_id.strip()
+    if not candidate:
+        return False
+    if candidate in CANONICAL_BEE_IDS:
+        return True
+    handle = account_handle.strip().lower()
+    if handle and candidate.lower() in {
+        handle,
+        f"hivemind/{handle}",
+        f"bee-{handle}",
+        f"hivemind/bee-{handle}",
+    }:
+        return True
+    if account_id and candidate == account_id.strip():
+        return True
+    return False
+
 
 
 @dataclass(frozen=True)
@@ -447,39 +502,40 @@ def clear_bee_capacity_market(
     offers.sort(key=lambda o: (float(o.get("price_per_1k", 0.0)), float(o.get("utc", 0.0))))
     bids.sort(key=lambda b: (-float(b.get("price_per_1k", 0.0)), float(b.get("utc", 0.0))))
 
+    # Best bid first against the cheapest offers. An order never trades with another order of the same account: one account
+    # posting both sides would otherwise print a "settled" price against itself (wash trade) with no counterparty.
     matches: list[dict[str, Any]] = []
-    i, j = 0, 0
-    rem_offer = float(offers[0]["capacity_1k"]) if offers else 0.0
-    rem_bid = float(bids[0]["capacity_1k"]) if bids else 0.0
-
-    while i < len(offers) and j < len(bids):
-        ask = float(offers[i]["price_per_1k"])
-        bid = float(bids[j]["price_per_1k"])
-        if bid < ask:
-            break
-        traded_cap = min(rem_offer, rem_bid)
-        clearing_price = round(0.5 * (ask + bid), 6)
-        if traded_cap > 0.0:
+    remaining = [float(o["capacity_1k"]) for o in offers]
+    for j, bid_order in enumerate(bids):
+        rem_bid = float(bid_order["capacity_1k"])
+        bid = float(bid_order["price_per_1k"])
+        for i, offer_order in enumerate(offers):
+            if rem_bid <= 1e-9:
+                break
+            ask = float(offer_order["price_per_1k"])
+            if bid < ask:
+                break  # offers are ascending: no later offer is cheaper
+            if remaining[i] <= 1e-9:
+                continue
+            owner = str(offer_order.get("account_id") or "")
+            if owner and owner == str(bid_order.get("account_id") or ""):
+                continue
+            traded_cap = min(remaining[i], rem_bid)
+            clearing_price = round(0.5 * (ask + bid), 6)
             matches.append(
                 {
-                    "offer_id": str(offers[i].get("order_id", f"off-{i}")),
-                    "bid_id": str(bids[j].get("order_id", f"bid-{j}")),
-                    "seller_bee": str(offers[i].get("bee_id", "hivemind/bee-stars")),
-                    "buyer_bee": str(bids[j].get("bee_id", "hivemind/coder")),
-                    "subject_id": str(bids[j].get("subject_id", offers[i].get("subject_id", "SUBJ-01-PYTHON-RUST-CODER"))),
+                    "offer_id": str(offer_order.get("order_id", f"off-{i}")),
+                    "bid_id": str(bid_order.get("order_id", f"bid-{j}")),
+                    "seller_bee": str(offer_order.get("bee_id", "hivemind/bee-stars")),
+                    "buyer_bee": str(bid_order.get("bee_id", "hivemind/coder")),
+                    "subject_id": str(bid_order.get("subject_id", offer_order.get("subject_id", "SUBJ-01-PYTHON-RUST-CODER"))),
                     "traded_capacity_1k": round(traded_cap, 4),
                     "clearing_price_per_1k": clearing_price,
                     "settled_hmt_per_1k_window": round(traded_cap * clearing_price, 6),
                 }
             )
-        rem_offer -= traded_cap
-        rem_bid -= traded_cap
-        if rem_offer <= 1e-9:
-            i += 1
-            rem_offer = float(offers[i]["capacity_1k"]) if i < len(offers) else 0.0
-        if rem_bid <= 1e-9:
-            j += 1
-            rem_bid = float(bids[j]["capacity_1k"]) if j < len(bids) else 0.0
+            remaining[i] -= traded_cap
+            rem_bid -= traded_cap
 
     total_traded = round(sum(m["traded_capacity_1k"] for m in matches), 4)
     mean_price = (

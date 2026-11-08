@@ -53,9 +53,16 @@ def test_figure_detection_catches_percentages_and_multipliers_only() -> None:
     assert not _states_a_figure("Lean%204-0%20sorry")
 
 
+def _strip_lean_comments(src: str) -> str:
+    """Strip block comments (/- ... -/) and single-line comments (-- ...) without DOTALL eating the file (IP-120)."""
+    no_blocks = re.sub(r"/-.*?-/", "", src, flags=re.S)
+    return re.sub(r"--[^\n]*", "", no_blocks)
+
+
 def test_lean_spec_still_meets_the_ci_minimum_the_badge_relies_on() -> None:
     assert len(re.findall(r"^theorem ", SPEC, flags=re.M)) >= 48
-    assert "sorry" not in re.sub(r"--.*|/-.*?-/", "", SPEC, flags=re.S).split("#print axioms")[0]
+    assert "sorry" not in _strip_lean_comments(SPEC)
+    assert "sorry" in _strip_lean_comments(SPEC + "\ntheorem t : False := by sorry\n")
 
 
 def test_diloco_cadence_claim_matches_the_default_config() -> None:

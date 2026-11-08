@@ -11,6 +11,7 @@ NaN/diverged loss early abort).
 from __future__ import annotations
 
 import gc
+import math
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -84,6 +85,12 @@ def quantize_tensor_blockwise_8bit(
     signed: bool = True,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Size]:
     """Quantize a tensor into 8-bit blocks (`int8` if signed else `uint8`) with per-block `absmax`."""
+    if isinstance(block_size, bool) or not isinstance(block_size, int) or block_size < 1:
+        raise ValueError(f"block_size must be an integer >= 1, got {block_size!r}")
+    if tensor.numel() == 0:
+        raise ValueError("tensor must be non-empty")
+    if not bool(torch.isfinite(tensor).all().item()):
+        raise ValueError("tensor must contain only finite values")
     orig_shape = tensor.shape
     flat = tensor.detach().to(torch.float32).reshape(-1)
     numel = flat.numel()
@@ -113,11 +120,19 @@ def dequantize_tensor_blockwise_8bit(
     dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
     """Dequantize blockwise 8-bit tensor back to `orig_shape`."""
+    if q.ndim != 2 or absmax.ndim != 1 or q.shape[0] != absmax.shape[0]:
+        raise ValueError("q must be 2-D [num_blocks, block_size] matching 1-D absmax [num_blocks]")
+    if not bool(torch.isfinite(absmax).all().item()) or bool((absmax <= 0.0).any().item()):
+        raise ValueError("absmax must contain positive finite values")
     scale = 127.0 if signed else 255.0
     deq_blocks = (q.to(torch.float32) / scale) * absmax[:, None]
     numel = 1
     for d in orig_shape:
+        if d < 1:
+            raise ValueError(f"orig_shape dimensions must be >= 1, got {orig_shape!r}")
         numel *= d
+    if numel > deq_blocks.numel():
+        raise ValueError(f"orig_shape requires {numel} elements, but quantized blocks have {deq_blocks.numel()}")
     return deq_blocks.reshape(-1)[:numel].reshape(orig_shape).to(dtype=dtype)
 
 
@@ -257,6 +272,10 @@ def get_deterministic_batch(
     device: torch.device,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Deterministically index a micro-batch for step `step` given `rng_seed`."""
+    if token_sequences.ndim < 2 or token_sequences.numel() == 0:
+        raise ValueError("token_sequences must be a non-empty tensor with ndim >= 2")
+    if isinstance(micro_batch_size, bool) or not isinstance(micro_batch_size, int) or micro_batch_size < 1:
+        raise ValueError(f"micro_batch_size must be an integer >= 1, got {micro_batch_size!r}")
     num_samples = token_sequences.size(0)
     gen = torch.Generator(device="cpu")
     gen.manual_seed(int(rng_seed) + int(step) * 10007)
@@ -308,12 +327,32 @@ def run_diloco_inner_loop(
     `raw_delta`, `theta_final` and the micro-checkpoints are unaffected, so spot-check replay
     sees the same trajectory either way.
     """
+    if not isinstance(worker_id, str) or not worker_id.strip():
+        raise ValueError("worker_id must be a non-empty string")
+    if not isinstance(branch_name, str) or not branch_name.strip():
+        raise ValueError("branch_name must be a non-empty string")
+    if isinstance(outer_step, bool) or not isinstance(outer_step, int) or outer_step < 0:
+        raise ValueError(f"outer_step must be an integer >= 0, got {outer_step!r}")
+    if isinstance(inner_steps_H, bool) or not isinstance(inner_steps_H, int) or inner_steps_H < 1:
+        raise ValueError(f"inner_steps_H must be an integer >= 1, got {inner_steps_H!r}")
+    if (
+        isinstance(checkpoint_interval_s, bool)
+        or not isinstance(checkpoint_interval_s, int)
+        or checkpoint_interval_s < 1
+    ):
+        raise ValueError(f"checkpoint_interval_s must be an integer >= 1, got {checkpoint_interval_s!r}")
+    if not math.isfinite(lr) or lr <= 0.0:
+        raise ValueError(f"lr must be finite and > 0, got {lr!r}")
+    if not math.isfinite(weight_decay) or weight_decay < 0.0:
+        raise ValueError(f"weight_decay must be finite and >= 0, got {weight_decay!r}")
+    if not math.isfinite(topk_ratio) or not (0.0 < topk_ratio <= 1.0):
+        raise ValueError(f"topk_ratio must be finite in (0, 1], got {topk_ratio!r}")
     if error_feedback is not None and error_feedback.topk_ratio != topk_ratio:
         raise ValueError(
             f"topk_ratio={topk_ratio} differs from the error-feedback buffer's "
             f"topk_ratio={error_feedback.topk_ratio}"
         )
-    if muon_ns_steps < 1:
+    if isinstance(muon_ns_steps, bool) or not isinstance(muon_ns_steps, int) or muon_ns_steps < 1:
         raise ValueError(f"muon_ns_steps must be >= 1, got {muon_ns_steps}")
     muon_preconditioner: object | None = None
     if use_muon_lora_preconditioner:
@@ -538,7 +577,15 @@ def replay_inner_segment(
     use_paged_8bit_adamw: bool = False,
 ) -> dict[str, torch.Tensor]:
     """Deterministically replay a segment of inner steps for BOINC Validator spot-checking."""
-    if muon_ns_steps < 1:
+    if isinstance(start_step, bool) or not isinstance(start_step, int) or start_step < 0:
+        raise ValueError(f"start_step must be an integer >= 0, got {start_step!r}")
+    if isinstance(end_step, bool) or not isinstance(end_step, int) or end_step <= start_step:
+        raise ValueError(f"end_step must be an integer > start_step, got {end_step!r} vs {start_step!r}")
+    if not math.isfinite(lr) or lr <= 0.0:
+        raise ValueError(f"lr must be finite and > 0, got {lr!r}")
+    if not math.isfinite(weight_decay) or weight_decay < 0.0:
+        raise ValueError(f"weight_decay must be finite and >= 0, got {weight_decay!r}")
+    if isinstance(muon_ns_steps, bool) or not isinstance(muon_ns_steps, int) or muon_ns_steps < 1:
         raise ValueError(f"muon_ns_steps must be >= 1, got {muon_ns_steps}")
     muon_preconditioner: object | None = None
     if use_muon_lora_preconditioner:

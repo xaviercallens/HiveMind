@@ -46,7 +46,7 @@ def test_the_validator_replay_is_part_of_the_pipeline_and_not_a_foreign_gpu_user
 
     pmon = ("# gpu   pid  type    sm   mem\n    0   111     C    30     5   python\n    0   222     C     -     -   llama-server\n")
     monkeypatch.setattr(tg, "boinc_gpu_pids", lambda procs: [])  # the training task has finished
-    monkeypatch.setattr(tg, "boinc_pipeline_gpu_pids", lambda procs: ["111"])  # the validator replay is running
+    monkeypatch.setattr(tg, "pipeline_gpu_pids", lambda procs: ["111"])  # the validator replay is running
     monkeypatch.setattr(tg.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout=pmon))
     g = {"procs": [("111", "python", "2500"), ("222", "llama-server", "4818")], "util_pct": 30}
     assert tg.other_gpu_busy(g) == (False, 0)  # before the fix: (True, 30) from the whole-GPU utilisation
@@ -55,15 +55,15 @@ def test_the_validator_replay_is_part_of_the_pipeline_and_not_a_foreign_gpu_user
     monkeypatch.setattr(tg.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout=pmon2))
     assert tg.other_gpu_busy(g) == (True, 40)
     # no pipeline process at all: the old rule (whole-GPU utilisation) is unchanged
-    monkeypatch.setattr(tg, "boinc_pipeline_gpu_pids", lambda procs: [])
+    monkeypatch.setattr(tg, "pipeline_gpu_pids", lambda procs: [])
     assert tg.other_gpu_busy({"procs": [], "util_pct": 30}) == (True, 30)
 
 
 def test_pipeline_pid_detection_reads_the_command_line() -> None:
     import t4_governor as tg
 
-    assert tg.boinc_pipeline_gpu_pids([(str(os.getpid()), "python", "1")]) == []  # this test process is not a BOINC server script
-    assert tg.boinc_pipeline_gpu_pids([("999999", "ghost", "1")]) == []  # vanished process: skipped, not an error
+    assert tg.pipeline_gpu_pids([(str(os.getpid()), "python", "1")]) == []  # this test process is not a BOINC server script
+    assert tg.pipeline_gpu_pids([("999999", "ghost", "1")]) == []  # vanished process: skipped, not an error
 
 
 def _jl(tmp_path: Path, events: list[dict]) -> Path:

@@ -8,7 +8,7 @@ Integrates:
 2. xensorSharp Fork Bridge (https://github.com/xaviercallens/xensorSharp):
    - Cross-platform native .NET / Windows / macOS / iOS / Linux GGUF worker manifest with zero WSL2
      or Python dependency overhead for gamer/homelab onboarding.
-3. runux-ai-runtime (/home/xavkal/xdev/runux-ai-runtime):
+3. runux-ai-runtime (xaviercallens/runux-ai-runtime):
    - TurboQuant polar/radial KV-cache compression reducing resident KV memory by 4.8x.
 """
 
@@ -49,6 +49,7 @@ class NativeCrossPlatformWorkerSpec:
     active_vram_cap_mib: float
     steam_preemption_ms: float
     openai_compatible_endpoint: str
+    basis: str = "planning_targets"
 
 
 def compute_xlayerstorm_turboquant_schedule(

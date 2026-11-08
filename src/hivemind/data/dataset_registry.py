@@ -129,13 +129,21 @@ class SourceSpec:
         missing = [k for k in ("id", "domain", "config", "split", "mapping", "verified_signal", "signal_basis") if k not in d]
         if missing:
             raise ValueError(f"candidate {d.get('id', '?')} lacks {missing}")
+        for k in ("id", "domain", "config", "split", "signal_basis"):
+            if not isinstance(d[k], str) or not d[k].strip():
+                raise ValueError(f"candidate {d.get('id', '?')}: {k} must be a non-empty string")
         if not isinstance(d["verified_signal"], bool):
             raise TypeError(f"candidate {d['id']}: verified_signal must be a boolean")
+        if not isinstance(d["mapping"], Mapping):
+            raise TypeError(f"candidate {d['id']}: mapping must be a mapping")
         kind = d["mapping"].get("kind")
         if kind not in MAPPERS:
             raise ValueError(f"candidate {d['id']}: unknown mapping kind {kind!r}")
-        return cls(str(d["id"]), str(d["domain"]), str(d["config"]), str(d["split"]), dict(d["mapping"]),
-                   bool(d["verified_signal"]), str(d["signal_basis"]), int(d.get("slice_rows", 300)))
+        raw_slice_rows = d.get("slice_rows", 300)
+        if isinstance(raw_slice_rows, bool) or not isinstance(raw_slice_rows, int) or raw_slice_rows <= 0:
+            raise ValueError(f"candidate {d['id']}: slice_rows must be a positive integer")
+        return cls(d["id"].strip(), d["domain"].strip(), d["config"].strip(), d["split"].strip(), dict(d["mapping"]),
+                   bool(d["verified_signal"]), d["signal_basis"].strip(), raw_slice_rows)
 
 
 def load_candidates(path: Path) -> tuple[dict[str, Any], list[SourceSpec]]:
@@ -252,7 +260,13 @@ class SliceResult:
 
 def slice_rows(spec: SourceSpec, fetch: Fetch, n_rows: int | None = None, page: int = 100) -> SliceResult:
     """Stream the first ``n_rows`` rows of the split through datasets-server ``/rows`` (no full download)."""
+    if n_rows is not None and (isinstance(n_rows, bool) or not isinstance(n_rows, int) or n_rows <= 0):
+        raise ValueError("n_rows must be a positive integer")
+    if isinstance(page, bool) or not isinstance(page, int) or page <= 0:
+        raise ValueError("page must be a positive integer")
     want = spec.slice_rows if n_rows is None else n_rows
+    if isinstance(want, bool) or not isinstance(want, int) or want <= 0:
+        raise ValueError("slice_rows must be a positive integer")
     out = SliceResult(PASSED)
     offset = 0
     while offset < want:
@@ -440,6 +454,13 @@ def map_row(spec: SourceSpec, row: Mapping[str, Any], system_prompt: str, index:
 def validate_slice(spec: SourceSpec, rows: Sequence[Mapping[str, Any]], system_prompt: str,
                    max_unmappable_fraction: float = 0.10) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Map a streamed slice; PASSED iff at least one row maps and at most ``max_unmappable_fraction`` of unfiltered rows fail."""
+    if (
+        isinstance(max_unmappable_fraction, bool)
+        or not isinstance(max_unmappable_fraction, (int, float))
+        or not math.isfinite(max_unmappable_fraction)
+        or not 0.0 <= float(max_unmappable_fraction) <= 1.0
+    ):
+        raise ValueError("max_unmappable_fraction must be in [0, 1]")
     mapped: list[dict[str, Any]] = []
     positions: list[int] = []
     filtered = 0
@@ -499,6 +520,21 @@ def _user_text(row: Mapping[str, Any]) -> str:
     return "\n".join(m["content"] for m in row.get("messages", []) if m.get("role") == "user")
 
 
+def _eval_answer_texts(row: Mapping[str, Any]) -> list[str]:
+    """Extract reference/answer/completion strings and assistant message turns from an eval row (IP-41)."""
+    out: list[str] = []
+    for field_name in ("completion", "answer", "reference", "target"):
+        val = row.get(field_name)
+        if isinstance(val, str) and val.strip():
+            out.append(val)
+    for m in row.get("messages", []):
+        if isinstance(m, Mapping) and m.get("role") == "assistant":
+            content = m.get("content")
+            if isinstance(content, str) and content.strip():
+                out.append(content)
+    return out
+
+
 @dataclass
 class EvalIndex:
     """Held-out eval items to decontaminate against: prompt hashes, n-gram document frequencies and entity keys."""
@@ -509,6 +545,12 @@ class EvalIndex:
     ngram_df: dict[int, int] = field(default_factory=dict)
     keys: set[str] = field(default_factory=set)
     sources: dict[str, int] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if isinstance(self.n, bool) or not isinstance(self.n, int) or self.n < 1:
+            raise ValueError("n must be an integer >= 1")
+        if isinstance(self.max_doc_freq, bool) or not isinstance(self.max_doc_freq, int) or self.max_doc_freq < 1:
+            raise ValueError("max_doc_freq must be an integer >= 1")
 
     def add(self, name: str, texts: Iterable[str], keys: Iterable[str] = ()) -> None:
         count = 0
@@ -524,9 +566,17 @@ class EvalIndex:
         self.sources[name] = self.sources.get(name, 0) + count
 
     def add_eval_pack(self, pack_dir: Path) -> None:
-        """A night pack's ``eval.jsonl``: the user turns (system prompts are shared scaffolding) and the item keys."""
+        """A night pack's ``eval.jsonl``: the user turns, eval answers of ``>= n`` words (IP-41), and the item keys."""
         rows, _ = read_jsonl_shards([Path(pack_dir) / "eval.jsonl"])
         self.add(f"night_pack:{Path(pack_dir).name}", (_user_text(r) for r in rows), (str(r.get("key", "")) for r in rows))
+        long_answers = [
+            ans
+            for r in rows
+            for ans in _eval_answer_texts(r)
+            if len(normalize_tokens(ans)) >= self.n
+        ]
+        if long_answers:
+            self.add(f"night_pack_answers:{Path(pack_dir).name}", long_answers)
 
     @property
     def active_ngrams(self) -> set[int]:
@@ -550,10 +600,13 @@ def decontaminate(rows: Sequence[dict[str, Any]], index: EvalIndex,
     for r in rows:
         user = _user_text(r)
         toks_user = normalize_tokens(user)
+        toks_comp = normalize_tokens(str(r.get("completion", "")))
         toks_all = normalize_tokens(user + "\n" + str(r.get("completion", "")))
         if r.get("entity_key") and entity_aliases(r["entity_key"]) & index.keys:
             counts["eval_entity_key"] += 1
-        elif hashlib.sha256(" ".join(toks_user).encode()).hexdigest() in index.exact:
+        elif hashlib.sha256(" ".join(toks_user).encode()).hexdigest() in index.exact or (
+            len(toks_comp) >= index.n and hashlib.sha256(" ".join(toks_comp).encode()).hexdigest() in index.exact
+        ):
             counts["eval_exact"] += 1
         elif ngram_hashes(toks_all, index.n) & active:
             counts["eval_ngram"] += 1
@@ -578,13 +631,27 @@ class MixtureConfig:
     seed: int = 20261028
 
     def __post_init__(self) -> None:
-        if self.total_rows <= 0:
+        if isinstance(self.total_rows, bool) or not isinstance(self.total_rows, int) or self.total_rows <= 0:
             raise ValueError("total_rows must be positive")
-        if not self.domain_weights or any(w < 0 for w in self.domain_weights.values()) or sum(self.domain_weights.values()) <= 0:
+        if isinstance(self.seed, bool) or not isinstance(self.seed, int):
+            raise ValueError("seed must be an integer")
+        if (
+            not self.domain_weights
+            or any(
+                not isinstance(k, str)
+                or not k.strip()
+                or isinstance(w, bool)
+                or not isinstance(w, (int, float))
+                or not math.isfinite(w)
+                or w < 0
+                for k, w in self.domain_weights.items()
+            )
+            or sum(self.domain_weights.values()) <= 0
+        ):
             raise ValueError("domain_weights must be non-negative with a positive sum")
-        if not 0 < self.per_source_cap <= 1:
+        if isinstance(self.per_source_cap, bool) or not isinstance(self.per_source_cap, (int, float)) or not math.isfinite(self.per_source_cap) or not 0 < self.per_source_cap <= 1:
             raise ValueError("per_source_cap must be in (0, 1]")
-        if not 0 <= self.unverified_cap < 1:
+        if isinstance(self.unverified_cap, bool) or not isinstance(self.unverified_cap, (int, float)) or not math.isfinite(self.unverified_cap) or not 0 <= self.unverified_cap < 1:
             raise ValueError("unverified_cap must be in [0, 1)")
 
 

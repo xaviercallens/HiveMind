@@ -21,6 +21,7 @@ import functools
 import html
 from dataclasses import asdict, dataclass
 from typing import Any
+from hivemind.router.telemetry_figures import shown_figure
 
 from hivemind.core.image_moe_inference_gallery_benchmark import (
     PublicImageScenarioSpec,
@@ -47,6 +48,7 @@ class BeeLifecyclePhase:
     summary_fr: str
     summary_en: str
     protocol_endpoints: tuple[str, ...]
+    source: str  # where each figure in time_window/key_metric comes from, or NOT_MEASURED
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -85,6 +87,7 @@ class BeeScenarioResult:
     recommended_temperature: float
     recommended_max_tokens: int
     suggested_cost_per_1k: float
+    source: str = "NOT_SOURCED: no artifact in the repository holds this figure"  # where tokens_per_sec comes from
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -98,8 +101,8 @@ BEE_LIFECYCLE_PHASES: tuple[BeeLifecyclePhase, ...] = (
         step_number=1,
         title_fr="1. Butinage d'Intention & Routage de Liquidité (Pollen Classifier)",
         title_en="1. Pollen Intent Classification & Liquidity Routing",
-        time_window="0 – 35 ms (Temps réel)",
-        key_metric="15 Modèles Actifs • 0 HTTP 402/5xx",
+        time_window="Classification côté routeur (latence non mesurée sur cette page)",
+        key_metric="15 modèles au catalogue • 402/5xx : lire le moniteur, pas ce texte",
         summary_fr=(
             "Lorsqu'un développeur ou un IDE (VS Code Continue, OpenCode, Cline, Python SDK) envoie une requête, "
             "hivemind/auto analyse l'intention (code Python/Rust, EDO raide, astrophysique, preuve Lean 4, synthèse FR) "
@@ -110,24 +113,26 @@ BEE_LIFECYCLE_PHASES: tuple[BeeLifecyclePhase, ...] = (
             "already warm in producer VRAM with optimal HMT double-auction liquidity."
         ),
         protocol_endpoints=("/v1/chat/completions", "/v1/models", "/v1/hivemind/market"),
+        source="catalog: hivemind.router.catalog.TIERS (15 entries); routing latency and 402/5xx counts: NOT_MEASURED on this page",
     ),
     BeeLifecyclePhase(
         phase_id="PHASE-2-DAYTIME-NECTAR",
         step_number=2,
-        title_fr="2. Récolte de Nectar Diurne & Préemption Jeu < 1,5 s",
-        title_en="2. Daytime Nectar Foraging & < 1.5s Game Preemption",
+        title_fr="2. Récolte de Nectar Diurne & Préemption Jeu (objectif < 1,5 s)",
+        title_en="2. Daytime Nectar Foraging & Game Preemption (target < 1.5s)",
         time_window="07:00 – 22:00 CET (Journée)",
-        key_metric="16,5 à 71,9 tok/s (100% GPU) • Yield 1,13 s",
+        key_metric="16,5 à 71,9 tok/s (100% GPU) • Délai de cession sous charge : non mesuré",
         summary_fr=(
             "Les GPU citoyens (RTX 2070 8 Go) et les gros producteurs (Tesla T4 16 Go) servent les modèles 1.5B–8B "
             "à 100% en VRAM (jusqu'à 71,9 tok/s) et les abeilles MoE 20B (2,4B–3,6B actifs) à 6,3–7,2 tok/s. "
-            "Si un joueur lance un jeu Steam/3D, le bouclier local libère 100% de la VRAM en moins de 1,5 seconde."
+            "Si un joueur lance un jeu Steam/3D, le bouclier local vise à libérer la VRAM en moins de 1,5 seconde (objectif ; délai non encore mesuré avec une tâche BOINC en cours)."
         ),
         summary_en=(
             "Citizen GPUs (RTX 2070 8 GB) and big-GPU producers (Tesla T4 16 GB) serve 1.5B–8B bees 100% in VRAM "
-            "(up to 71.9 tok/s) and 20B Sparse MoE bees at 6.3–7.2 tok/s. Launching any game preempts in < 1.5s."
+            "(up to 71.9 tok/s) and 20B Sparse MoE bees at 6.3–7.2 tok/s. Launching a game is designed to preempt in < 1.5s (a target; the delay under a running BOINC task has not been measured yet)."
         ),
         protocol_endpoints=("/v1/hivemind/producer/heartbeat", "/v1/hivemind/t4/status"),
+        source="tok/s: snapshot artifacts/all_bees_e2e_and_llm_comparison_report.json (executed_at_utc 2026-10-31T09:35:00Z), not live; yield under a BOINC task: NOT_MEASURED",
     ),
     BeeLifecyclePhase(
         phase_id="PHASE-3-AMCP-WAGGLE-DANCE",
@@ -146,6 +151,7 @@ BEE_LIFECYCLE_PHASES: tuple[BeeLifecyclePhase, ...] = (
             "to specialist bees (bee-rusty-sundials, bee-stars) and clear capacity on hivemind.amcp.bee_trading.v1."
         ),
         protocol_endpoints=("/v1/hivemind/bees/coordinate", "/v1/hivemind/bees/trade", "/v1/hivemind/amcp/events"),
+        source="design description (topic count from docs/OPENTRAINER_BOINC_AMCP_KAFKA_ARCHITECTURE.md); no measurement shown",
     ),
     BeeLifecyclePhase(
         phase_id="PHASE-4-NOCTURNAL-ROYAL-JELLY",
@@ -153,7 +159,7 @@ BEE_LIFECYCLE_PHASES: tuple[BeeLifecyclePhase, ...] = (
         title_fr="4. Gelée Royale Nocturne (Distillation BOINC QLoRA-MoE)",
         title_en="4. Nocturnal Royal Jelly (BOINC Chained QLoRA-MoE Distillation)",
         time_window="22:00 – 07:00 CET (Nuit Européenne)",
-        key_metric="-5,8% NLL Global • -15,1% Math",
+        key_metric="Gains de nuit : voir docs/NIGHT_MOE_RESULTS.md (aucun chiffre non sourcé ici)",
         summary_fr=(
             "La nuit, les gros producteurs GPU basculent sur des workunits BOINC QLoRA 4-bit NF4 chaînées (hmq_*). "
             "Les retours positifs du jour (+1 feedback) et les campagnes votées par la communauté affinent les experts "
@@ -164,6 +170,7 @@ BEE_LIFECYCLE_PHASES: tuple[BeeLifecyclePhase, ...] = (
             "thumbs-up traces and community-voted subject sprints under a strict monotone loss ratchet."
         ),
         protocol_endpoints=("/v1/hivemind/campaigns/poll", "/v1/hivemind/feedback", "/v1/hivemind/usage-capture"),
+        source="measured results: docs/NIGHT_MOE_RESULTS.md; the former -5.8 % NLL / -15.1 % math figures had no artifact and were removed",
     ),
 )
 
@@ -184,6 +191,7 @@ LIFE_AS_A_BEE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=128.55,
         warm_latency_ms=16205.4,
         tokens_per_sec=6.79,
+        source="artifacts/all_bees_e2e_and_llm_comparison_report.json (executed_at_utc 2026-10-31T09:35:00Z), snapshot not live",
         prompt_tokens=80,
         completion_tokens=110,
         total_tokens=190,
@@ -232,6 +240,7 @@ LIFE_AS_A_BEE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=128.55,
         warm_latency_ms=17564.7,
         tokens_per_sec=6.26,
+        source="artifacts/all_bees_e2e_and_llm_comparison_report.json (executed_at_utc 2026-10-31T09:35:00Z), snapshot not live",
         prompt_tokens=54,
         completion_tokens=110,
         total_tokens=164,
@@ -276,6 +285,7 @@ LIFE_AS_A_BEE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=128.55,
         warm_latency_ms=15276.1,
         tokens_per_sec=7.20,
+        source="NOT_SOURCED: no artifact in the repository holds this figure",
         prompt_tokens=62,
         completion_tokens=110,
         total_tokens=172,
@@ -313,12 +323,13 @@ LIFE_AS_A_BEE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         category="moe_bee",
         badge_label="🐝 MoE CODE AGENTIQUE",
         architecture="20B–30B Sparse MoE (3.3B actifs / token • Refactoring & Agents)",
-        underlying_tag="gpt-oss:20b",
+        underlying_tag="qwen3-coder:30b",
         vram_footprint_gb=14.0,
         gpu_residency="64% GPU / 36% CPU (14.0 GB Sparse MoE)",
         cold_load_s=128.55,
         warm_latency_ms=15848.3,
         tokens_per_sec=6.94,
+        source="NOT_SOURCED: no artifact in the repository holds this figure",
         prompt_tokens=56,
         completion_tokens=110,
         total_tokens=166,
@@ -363,6 +374,7 @@ LIFE_AS_A_BEE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=0.0,
         warm_latency_ms=3442.2,
         tokens_per_sec=27.89,
+        source="artifacts/all_bees_e2e_and_llm_comparison_report.json (executed_at_utc 2026-10-31T09:35:00Z), snapshot not live",
         prompt_tokens=67,
         completion_tokens=96,
         total_tokens=163,
@@ -405,12 +417,13 @@ LIFE_AS_A_BEE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         category="specialist_bee",
         badge_label="🔬 ABEILLE EDO/EDP & RUSTY-SUNDIALS",
         architecture="7B Spécialiste Calcul Scientifique + Solveur BDF/RK45 Déterministe",
-        underlying_tag="qwen2.5-coder:7b-instruct",
+        underlying_tag="qwen2.5-coder:7b",
         vram_footprint_gb=5.6,
         gpu_residency="100% GPU (5.6 GB VRAM)",
         cold_load_s=12.53,
         warm_latency_ms=2887.2,
         tokens_per_sec=33.25,
+        source="artifacts/all_bees_e2e_and_llm_comparison_report.json (executed_at_utc 2026-10-31T09:35:00Z), snapshot not live",
         prompt_tokens=83,
         completion_tokens=96,
         total_tokens=179,
@@ -459,6 +472,7 @@ LIFE_AS_A_BEE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=42.27,
         warm_latency_ms=4840.2,
         tokens_per_sec=16.53,
+        source="artifacts/all_bees_e2e_and_llm_comparison_report.json (executed_at_utc 2026-10-31T09:35:00Z), snapshot not live",
         prompt_tokens=57,
         completion_tokens=80,
         total_tokens=137,
@@ -506,6 +520,7 @@ LIFE_AS_A_BEE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=32.10,
         warm_latency_ms=2082.0,
         tokens_per_sec=36.98,
+        source="artifacts/all_bees_e2e_and_llm_comparison_report.json (executed_at_utc 2026-10-31T09:35:00Z), snapshot not live",
         prompt_tokens=42,
         completion_tokens=77,
         total_tokens=119,
@@ -550,6 +565,7 @@ LIFE_AS_A_BEE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=29.95,
         warm_latency_ms=3663.9,
         tokens_per_sec=30.02,
+        source="artifacts/all_bees_e2e_and_llm_comparison_report.json (executed_at_utc 2026-10-31T09:35:00Z), snapshot not live",
         prompt_tokens=64,
         completion_tokens=110,
         total_tokens=174,
@@ -597,6 +613,7 @@ LIFE_AS_A_BEE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=30.29,
         warm_latency_ms=2869.4,
         tokens_per_sec=33.46,
+        source="NOT_SOURCED: no artifact in the repository holds this figure",
         prompt_tokens=56,
         completion_tokens=96,
         total_tokens=152,
@@ -637,12 +654,13 @@ LIFE_AS_A_BEE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         category="core_foundation",
         badge_label="🤝 PARTENAIRE CROWDGPT (ULTRA-RAPIDE • 1.5B)",
         architecture="1B–1.5B Dense Tronc Généraliste Citoyen (1.6 GB VRAM • 100% GPU)",
-        underlying_tag="qwen2.5-coder:1.5b",
+        underlying_tag="hf.co/Vxtzq/Crowd-v1",
         vram_footprint_gb=1.6,
         gpu_residency="100% GPU (1.6 GB VRAM)",
         cold_load_s=13.93,
         warm_latency_ms=1001.7,
         tokens_per_sec=71.87,
+        source="artifacts/all_bees_e2e_and_llm_comparison_report.json (executed_at_utc 2026-10-31T09:35:00Z), snapshot not live",
         prompt_tokens=44,
         completion_tokens=72,
         total_tokens=116,
@@ -682,12 +700,13 @@ LIFE_AS_A_BEE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         category="dense_coding",
         badge_label="💻 PILIER CODE QUOTIDIEN (7B • RTX 2070 + T4)",
         architecture="7B Qwen 2.5 Coder Instruct Dense (Multi-Producteurs Actifs)",
-        underlying_tag="qwen2.5-coder:7b-instruct",
+        underlying_tag="qwen2.5-coder:7b",
         vram_footprint_gb=5.6,
         gpu_residency="100% GPU (5.6 GB VRAM • Servi par T4 + RTX 2070)",
         cold_load_s=12.53,
         warm_latency_ms=2929.7,
         tokens_per_sec=32.77,
+        source="artifacts/all_bees_e2e_and_llm_comparison_report.json (executed_at_utc 2026-10-31T09:35:00Z), snapshot not live",
         prompt_tokens=68,
         completion_tokens=96,
         total_tokens=164,
@@ -735,6 +754,7 @@ LIFE_AS_A_BEE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=20.32,
         warm_latency_ms=1508.7,
         tokens_per_sec=53.03,
+        source="artifacts/all_bees_e2e_and_llm_comparison_report.json (executed_at_utc 2026-10-31T09:35:00Z), snapshot not live",
         prompt_tokens=60,
         completion_tokens=80,
         total_tokens=140,
@@ -772,12 +792,13 @@ LIFE_AS_A_BEE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         category="dense_coding",
         badge_label="🏗️ DEEPSEEK-R1 14B (RAISONNEMENT DENSE)",
         architecture="14B DeepSeek-R1 Distill Dense (Chaîne de Pensée Profonde)",
-        underlying_tag="deepseek-r1:14b",
+        underlying_tag="qwen2.5-coder:14b",
         vram_footprint_gb=12.0,
         gpu_residency="75% GPU / 25% CPU (12.0 GB Dense)",
         cold_load_s=58.81,
         warm_latency_ms=27992.6,
         tokens_per_sec=3.93,
+        source="artifacts/all_bees_e2e_and_llm_comparison_report.json (executed_at_utc 2026-10-31T09:35:00Z), snapshot not live",
         prompt_tokens=34,
         completion_tokens=110,
         total_tokens=144,
@@ -822,6 +843,7 @@ LIFE_AS_A_BEE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=0.0,
         warm_latency_ms=3056.0,
         tokens_per_sec=17.67,
+        source="NOT_SOURCED: no artifact in the repository holds this figure",
         prompt_tokens=57,
         completion_tokens=54,
         total_tokens=111,
@@ -874,6 +896,7 @@ SECTORAL_MOE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=18.2,
         warm_latency_ms=3420.5,
         tokens_per_sec=28.4,
+        source="NOT_SOURCED: no artifact in the repository holds this figure",
         prompt_tokens=72,
         completion_tokens=120,
         total_tokens=192,
@@ -925,6 +948,7 @@ SECTORAL_MOE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=22.4,
         warm_latency_ms=3890.1,
         tokens_per_sec=26.8,
+        source="NOT_SOURCED: no artifact in the repository holds this figure",
         prompt_tokens=65,
         completion_tokens=135,
         total_tokens=200,
@@ -984,6 +1008,7 @@ SECTORAL_MOE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=12.1,
         warm_latency_ms=2890.3,
         tokens_per_sec=34.2,
+        source="NOT_SOURCED: no artifact in the repository holds this figure",
         prompt_tokens=75,
         completion_tokens=140,
         total_tokens=215,
@@ -1037,6 +1062,7 @@ SECTORAL_MOE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=21.8,
         warm_latency_ms=3650.0,
         tokens_per_sec=27.5,
+        source="NOT_SOURCED: no artifact in the repository holds this figure",
         prompt_tokens=82,
         completion_tokens=130,
         total_tokens=212,
@@ -1085,6 +1111,7 @@ SECTORAL_MOE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=45.2,
         warm_latency_ms=5120.4,
         tokens_per_sec=19.8,
+        source="artifacts/all_bees_e2e_and_llm_comparison_report.json (executed_at_utc 2026-10-31T09:35:00Z), snapshot not live",
         prompt_tokens=68,
         completion_tokens=130,
         total_tokens=198,
@@ -1140,6 +1167,7 @@ SECTORAL_MOE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=21.5,
         warm_latency_ms=3720.0,
         tokens_per_sec=27.2,
+        source="NOT_SOURCED: no artifact in the repository holds this figure",
         prompt_tokens=70,
         completion_tokens=125,
         total_tokens=195,
@@ -1188,6 +1216,7 @@ SECTORAL_MOE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=18.0,
         warm_latency_ms=3350.2,
         tokens_per_sec=30.1,
+        source="NOT_SOURCED: no artifact in the repository holds this figure",
         prompt_tokens=66,
         completion_tokens=120,
         total_tokens=186,
@@ -1237,6 +1266,7 @@ SECTORAL_MOE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=18.5,
         warm_latency_ms=3450.0,
         tokens_per_sec=28.5,
+        source="NOT_SOURCED: no artifact in the repository holds this figure",
         prompt_tokens=68,
         completion_tokens=125,
         total_tokens=193,
@@ -1285,6 +1315,7 @@ SECTORAL_MOE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=12.5,
         warm_latency_ms=2750.3,
         tokens_per_sec=35.8,
+        source="NOT_SOURCED: no artifact in the repository holds this figure",
         prompt_tokens=62,
         completion_tokens=130,
         total_tokens=192,
@@ -1336,6 +1367,7 @@ SECTORAL_MOE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=115.0,
         warm_latency_ms=14200.0,
         tokens_per_sec=7.8,
+        source="artifacts/all_bees_e2e_and_llm_comparison_report.json (executed_at_utc 2026-10-31T09:35:00Z), snapshot not live",
         prompt_tokens=85,
         completion_tokens=145,
         total_tokens=230,
@@ -1383,6 +1415,7 @@ SECTORAL_MOE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=118.0,
         warm_latency_ms=14800.0,
         tokens_per_sec=7.5,
+        source="artifacts/all_bees_e2e_and_llm_comparison_report.json (executed_at_utc 2026-10-31T09:35:00Z), snapshot not live",
         prompt_tokens=80,
         completion_tokens=140,
         total_tokens=220,
@@ -1430,6 +1463,7 @@ SECTORAL_MOE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=120.0,
         warm_latency_ms=15100.0,
         tokens_per_sec=7.3,
+        source="artifacts/all_bees_e2e_and_llm_comparison_report.json (executed_at_utc 2026-10-31T09:35:00Z), snapshot not live",
         prompt_tokens=88,
         completion_tokens=140,
         total_tokens=228,
@@ -1477,6 +1511,7 @@ SECTORAL_MOE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=119.0,
         warm_latency_ms=14500.0,
         tokens_per_sec=7.6,
+        source="artifacts/all_bees_e2e_and_llm_comparison_report.json (executed_at_utc 2026-10-31T09:35:00Z), snapshot not live",
         prompt_tokens=82,
         completion_tokens=145,
         total_tokens=227,
@@ -1525,6 +1560,7 @@ SECTORAL_MOE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=0.0,
         warm_latency_ms=1840.2,
         tokens_per_sec=44.6,
+        source="artifacts/all_bees_e2e_and_llm_comparison_report.json (executed_at_utc 2026-10-31T09:35:00Z), snapshot not live",
         prompt_tokens=96,
         completion_tokens=164,
         total_tokens=260,
@@ -1574,6 +1610,7 @@ SECTORAL_MOE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=0.0,
         warm_latency_ms=138.4,
         tokens_per_sec=114.2,
+        source="artifacts/all_bees_e2e_and_llm_comparison_report.json (executed_at_utc 2026-10-31T09:35:00Z), snapshot not live",
         prompt_tokens=64,
         completion_tokens=128,
         total_tokens=192,
@@ -1621,6 +1658,7 @@ SECTORAL_MOE_SCENARIOS: tuple[BeeScenarioResult, ...] = (
         cold_load_s=4.2,
         warm_latency_ms=2640.0,
         tokens_per_sec=38.4,
+        source="artifacts/all_bees_e2e_and_llm_comparison_report.json (executed_at_utc 2026-10-31T09:35:00Z), snapshot not live",
         prompt_tokens=78,
         completion_tokens=142,
         total_tokens=220,
@@ -1734,28 +1772,39 @@ BEE_DECISION_MATRIX: tuple[dict[str, Any], ...] = (
 )
 
 
-def life_as_a_bee_payload() -> dict[str, Any]:
+def life_as_a_bee_payload(live_telemetry: dict[str, Any] | None = None) -> dict[str, Any]:
     """Return the complete JSON representation of the Life as a Bee dashboard and benchmark."""
     total_tokens = sum(s.total_tokens for s in LIFE_AS_A_BEE_SCENARIOS)
     mean_latency = round(sum(s.warm_latency_ms for s in LIFE_AS_A_BEE_SCENARIOS) / len(LIFE_AS_A_BEE_SCENARIOS), 1)
     mean_speed = round(sum(s.tokens_per_sec for s in LIFE_AS_A_BEE_SCENARIOS) / len(LIFE_AS_A_BEE_SCENARIOS), 2)
     gpu_100_models = [s.model_id for s in LIFE_AS_A_BEE_SCENARIOS if s.gpu_residency.startswith("100% GPU")]
     moe_models = [s.model_id for s in LIFE_AS_A_BEE_SCENARIOS if s.category == "moe_bee"]
+    moe_rows = [s for s in LIFE_AS_A_BEE_SCENARIOS if s.category == "moe_bee"]
+    dense_14b_rows = [s for s in LIFE_AS_A_BEE_SCENARIOS if "14B" in s.architecture]
+    moe_speedup = (
+        round(dense_14b_rows[0].warm_latency_ms / (sum(s.warm_latency_ms for s in moe_rows) / len(moe_rows)), 2)
+        if moe_rows and dense_14b_rows
+        else 1.0
+    )
+    fastest_scen = max(LIFE_AS_A_BEE_SCENARIOS, key=lambda sc: sc.tokens_per_sec)
     image_gallery = get_image_moe_gallery_scenarios()
-    return {
+    payload: dict[str, Any] = {
         "object": "hivemind.life_as_a_bee",
         "campaign_id": "HM-S19-LIFE-AS-A-BEE-BENCHMARK",
         "executed_at_utc": "2026-10-30T05:10:00Z",
         "dashboard_url": "/life-as-a-bee",
+        "live_telemetry": dict(live_telemetry) if live_telemetry else {},
         "summary": {
             "total_scenarios_executed": len(LIFE_AS_A_BEE_SCENARIOS),
             "all_passed_200_ok": all(s.http_status == 200 for s in LIFE_AS_A_BEE_SCENARIOS),
             "total_tokens_processed": total_tokens,
             "mean_warm_latency_ms": mean_latency,
             "mean_tokens_per_sec": mean_speed,
-            "fastest_bee_model": "hivemind/crowd-v1",
-            "fastest_bee_tokens_per_sec": 71.87,
-            "moe_speedup_vs_14b_dense": 1.83,
+            "fastest_bee_model": fastest_scen.model_id,
+            "fastest_bee_tokens_per_sec": fastest_scen.tokens_per_sec,
+            "scenarios_with_artifact_source": sum(1 for sc in LIFE_AS_A_BEE_SCENARIOS if sc.source.startswith("artifacts/")),
+            "scenarios_not_sourced": sum(1 for sc in LIFE_AS_A_BEE_SCENARIOS if sc.source.startswith("NOT_SOURCED")),
+            "moe_speedup_vs_14b_dense": moe_speedup,
             "hundred_percent_gpu_models": gpu_100_models,
             "sparse_moe_models": moe_models,
         },
@@ -1813,10 +1862,25 @@ def life_as_a_bee_payload() -> dict[str, Any]:
         "sectoral_moe_scenarios": [s.to_dict() for s in SECTORAL_MOE_SCENARIOS],
         "image_moe_gallery_scenarios": [g.to_dict() for g in image_gallery],
     }
+    return payload
 
 
-def render_life_as_a_bee_section() -> str:
+def render_life_as_a_bee_section(live_telemetry: dict[str, Any] | None = None) -> str:
     """Render the interactive ``#life-as-a-bee`` HTML section for embedding in ``portal_page.py``."""
+    lt = live_telemetry or {}
+    acct = lt.get("accounts") or {}
+    models_live = lt.get("models") or {}
+    usage_live = lt.get("usage_24h") or {}
+    t4_live = lt.get("t4_boinc") or {}
+    ot_live = lt.get("opentrainer") or {}
+    total_accts = shown_figure(acct.get("total_registered_accounts"))
+    live_models_cnt = shown_figure(models_live.get("live_models_count"))
+    reqs_24h = shown_figure(usage_live.get("total_requests"))
+    tokens_24h = shown_figure(usage_live.get("total_billed_tokens"))
+    t4_free_mib = shown_figure(t4_live.get("vram_free_mib"))
+    wus_cnt = shown_figure(t4_live.get("assimilated_workunits"))
+    ot_nodes = shown_figure(ot_live.get("total_registered_nodes"))
+    ot_rounds = shown_figure(ot_live.get("accepted_rounds_count"))
     lifecycle_cards: list[str] = []
     for phase in BEE_LIFECYCLE_PHASES:
         endpoints_html = " &bull; ".join(f"<code>{html.escape(ep)}</code>" for ep in phase.protocol_endpoints)
@@ -1826,6 +1890,7 @@ def render_life_as_a_bee_section() -> str:
             <div class="tier-badge">{html.escape(phase.time_window)}</div>
             <div class="tier-name">{html.escape(phase.title_fr)}</div>
             <div class="tier-vram">{html.escape(phase.key_metric)}</div>
+            <div class="tier-desc" style="font-size:0.7rem;color:var(--text-dim);">Source : {html.escape(phase.source)}</div>
             <div class="tier-desc">{html.escape(phase.summary_fr)}</div>
           </div>
           <div style="font-size:0.7rem;color:var(--text-dim);margin-top:0.4rem;">{endpoints_html}</div>
@@ -1846,6 +1911,11 @@ def render_life_as_a_bee_section() -> str:
         """)
 
     image_gallery = get_image_moe_gallery_scenarios()
+    img_gal_p50 = shown_figure(usage_live.get("p50_latency_ms"), decimals=1)
+    img_gal_max_vram = shown_figure(
+        max((g.active_vram_mib for g in image_gallery), default=None),
+        decimals=0,
+    )
     image_gallery_cards: list[str] = []
     for g_scen in image_gallery:
         image_gallery_cards.append(f"""
@@ -1930,6 +2000,7 @@ def render_life_as_a_bee_section() -> str:
             <div><span style="color:var(--text-dim);">Vitesse:</span><br><strong style="color:var(--green);">{scen.tokens_per_sec:.2f} tok/s</strong></div>
             <div><span style="color:var(--text-dim);">Latence chaude:</span><br><strong style="color:var(--cyan);">{scen.warm_latency_ms:.0f} ms</strong></div>
             <div><span style="color:var(--text-dim);">Cold load:</span><br><strong style="color:var(--amber);">{scen.cold_load_s:.1f} s</strong></div>
+            <div style="grid-column:1/-1;font-size:0.68rem;color:var(--text-dim);">Source : {html.escape(scen.source)}</div>
           </div>
           <div style="font-family:var(--font-mono);font-size:0.71rem;color:{residency_color};margin-bottom:0.35rem;">
             &#x1F5A5;&#xFE0F; {html.escape(scen.gpu_residency)} &bull; {scen.total_tokens} tokens ({scen.prompt_tokens}&rarr;{scen.completion_tokens}) &bull; {scen.suggested_cost_per_1k:.1f} HMT/1k
@@ -1964,6 +2035,34 @@ def render_life_as_a_bee_section() -> str:
         </div>
         """)
 
+    def _fr(value: float, digits: int = 1) -> str:
+        return f"{value:.{digits}f}".replace(".", ",")
+
+    speeds = [sc.tokens_per_sec for sc in LIFE_AS_A_BEE_SCENARIOS]
+    gpu_100 = [sc for sc in LIFE_AS_A_BEE_SCENARIOS if sc.gpu_residency.startswith("100% GPU")]
+    summary_mean_speed = _fr(sum(speeds) / len(speeds), 2)
+    gpu_100_speed_range = f"{_fr(min(sc.tokens_per_sec for sc in gpu_100))} à {_fr(max(sc.tokens_per_sec for sc in gpu_100))} tok/s"
+    gpu_100_latency_range = f"{_fr(min(sc.warm_latency_ms for sc in gpu_100) / 1000)}s – {_fr(max(sc.warm_latency_ms for sc in gpu_100) / 1000)}s"
+    gpu_100_count = len(gpu_100)
+    sourced_count = sum(1 for sc in LIFE_AS_A_BEE_SCENARIOS if sc.source.startswith("artifacts/"))
+    gpu_100_list = ", ".join(
+        f"<code>{html.escape(sc.model_id.split('/')[-1])}</code> ({_fr(sc.tokens_per_sec)} tok/s)"
+        for sc in sorted(gpu_100, key=lambda sc: sc.tokens_per_sec, reverse=True)
+    )
+    moe = [sc for sc in LIFE_AS_A_BEE_SCENARIOS if sc.category == "moe_bee"]
+    dense_14b = [sc for sc in LIFE_AS_A_BEE_SCENARIOS if "14B" in sc.architecture]
+    moe_speed_range = f"{_fr(min(sc.tokens_per_sec for sc in moe), 2)} à {_fr(max(sc.tokens_per_sec for sc in moe), 2)} tok/s"
+    moe_mean_warm_s = sum(sc.warm_latency_ms for sc in moe) / len(moe) / 1000
+    if dense_14b:
+        dense_warm_s = dense_14b[0].warm_latency_ms / 1000
+        moe_ratio_line = f"{_fr(dense_warm_s / moe_mean_warm_s, 2)}x plus rapide (moyenne des {len(moe)} MoE) que le 14B dense"
+        moe_ratio_desc = (
+            f"Même avec un partage GPU/CPU (64 %/36 % sur T4 16 Go), nos {len(moe)} abeilles MoE 20B répondent en {_fr(moe_mean_warm_s)} s en moyenne "
+            f"contre {_fr(dense_warm_s)} s ({_fr(dense_14b[0].tokens_per_sec, 2)} tok/s) pour le modèle 14B dense ; instantané du tableau des scénarios, pas en direct."
+        )
+    else:
+        moe_ratio_line = "Comparaison au 14B dense : NOT_SOURCED (aucun scénario 14B dans le tableau)"
+        moe_ratio_desc = f"Nos {len(moe)} abeilles MoE 20B répondent en {_fr(moe_mean_warm_s)} s en moyenne ; instantané du tableau des scénarios, pas en direct."
     return f"""
     <!-- Life as a Bee Dashboard: Real End-User Scenarios & MoE Bee Usage Guide -->
     <section id="life-as-a-bee" class="card" style="margin-bottom:3rem;border-color:rgba(251,191,36,0.45);">
@@ -1977,9 +2076,15 @@ def render_life_as_a_bee_section() -> str:
         </div>
       </div>
 
-      <p style="color:var(--text-dim);font-size:0.9rem;margin-bottom:1.1rem;line-height:1.55;">
+      <p style="color:var(--text-dim);font-size:0.9rem;margin-bottom:0.85rem;line-height:1.55;">
         Comment vit une abeille spécialisée ou Mixture-of-Experts (MoE) dans <strong>La Ruche HiveMind</strong>, quels sont ses résultats réels mesurés de bout en bout sur <code>POST /v1/chat/completions</code> (campagne <code>HM-S19-LIFE-AS-A-BEE-BENCHMARK</code>), et <strong>quelle abeille choisir pour chaque tâche</strong> ?
       </p>
+
+      <!-- Real-Time Production Swarm Pulse (auto-synced with /v1/hivemind/live-telemetry) -->
+      <div id="laab-live-telemetry" style="margin-bottom:1.1rem;padding:0.65rem 0.9rem;border:1px solid rgba(52,211,153,0.45);border-radius:0.45rem;background:rgba(16,185,129,0.08);font-family:var(--font-mono);font-size:0.78rem;color:var(--green);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
+        <span id="laab-live-telemetry-text">&#x1F7E2; Télémétrie GCP Temps Réel : <strong>{total_accts} comptes inscrits</strong> &bull; <strong>{live_models_cnt} abeilles en ligne</strong> &bull; <strong>{reqs_24h} requêtes 24h ({tokens_24h} tokens)</strong> &bull; T4 VRAM libre <strong>{t4_free_mib} MiB</strong> &bull; <strong>{wus_cnt} WUs BOINC</strong> &bull; OpenTrainer <strong>{ot_nodes} nœud(s) / {ot_rounds} round(s)</strong></span>
+        <a href="/v1/hivemind/live-telemetry" style="color:var(--cyan);text-decoration:underline;font-size:0.74rem;">/v1/hivemind/live-telemetry</a>
+      </div>
 
       <!-- Top Summary KPIs -->
       <div class="tiers-grid" style="margin-bottom:1.5rem;">
@@ -1990,23 +2095,23 @@ def render_life_as_a_bee_section() -> str:
             <div class="tier-vram">2 291 Tokens Générés &bull; 0 Erreur</div>
             <div class="tier-desc">Toutes les 15 abeilles et modèles fondationnels (Gemma 3, Qwen 3.5, Mistral, Crowd-v1, 4 MoE, 3 Spécialistes) ont été validés en conditions réelles.</div>
           </div>
-          <div><span class="tier-tag">Moyenne: 25,64 tok/s</span></div>
+          <div><span class="tier-tag">Moyenne : {summary_mean_speed} tok/s (calculée sur {len(LIFE_AS_A_BEE_SCENARIOS)} scénarios ; {sourced_count} chiffres sourcés, instantané, pas en direct)</span></div>
         </div>
         <div class="tier-card" style="border-color:rgba(0,238,252,0.4);">
           <div>
             <div class="tier-badge">PALIER 100% GPU (1.5B–8B)</div>
-            <div class="tier-name">16,5 à 71,9 tok/s (1,0s – 4,8s)</div>
-            <div class="tier-vram">10 Modèles Logés 100% en VRAM</div>
-            <div class="tier-desc"><code>crowd-v1</code> (71,9 tok/s), <code>coder-lite</code> (53,0 tok/s), <code>gemma-core</code> (37,0 tok/s), <code>mistral-core</code> (33,5 tok/s), <code>bee-rusty-sundials</code> (33,3 tok/s), <code>coder</code> (32,8 tok/s), <code>qwen35-core</code> (30,0 tok/s), <code>bee-stars</code> (27,9 tok/s).</div>
+            <div class="tier-name">{gpu_100_speed_range} ({gpu_100_latency_range})</div>
+            <div class="tier-vram">{gpu_100_count} Modèles Logés 100% en VRAM</div>
+            <div class="tier-desc">{gpu_100_list}</div>
           </div>
           <div><span class="tier-tag">Read-Ahead Disque 16 Mo Actif</span></div>
         </div>
         <div class="tier-card" style="border-color:rgba(192,132,252,0.4);">
           <div>
             <div class="tier-badge">AVANTAGE SPARSE MoE 20B</div>
-            <div class="tier-name">1,83x Plus Rapide que le 14B Dense</div>
-            <div class="tier-vram">6,26 à 7,20 tok/s (2,4B–3,6B Actifs)</div>
-            <div class="tier-desc">Même avec un partage GPU/CPU (64%/36% sur T4 16 Go), nos 4 abeilles MoE 20B répondent en ~15,3s contre 28,0s (3,93 tok/s) pour le modèle 14B dense.</div>
+            <div class="tier-name">{moe_ratio_line}</div>
+            <div class="tier-vram">{moe_speed_range} (2,4B–3,6B Actifs)</div>
+            <div class="tier-desc">{moe_ratio_desc}</div>
           </div>
           <div><span class="tier-tag">Top-2 Gating Parcimonieux</span></div>
         </div>
@@ -2058,7 +2163,7 @@ def render_life_as_a_bee_section() -> str:
             &#x1F5BC;&#xFE0F; Galerie d'Inférence Image-MoE &amp; Scénarios Visuels Publics ({len(image_gallery)} Scénarios &bull; 7 Divisions &bull; 100% Top-1 Routing)
           </h4>
           <span class="pill" style="border-color:var(--green);color:var(--green);margin:0;">
-            240 Reqs Stress Burst &bull; p50 139.0 ms &bull; Micro-VRAM &lt;= 1 410 MiB (&lt; 1,5 Go)
+            {reqs_24h} Reqs (24h) &bull; p50 {img_gal_p50} ms &bull; Micro-VRAM &lt;= {img_gal_max_vram} MiB (&lt; 1,5 Go)
           </span>
         </div>
         <p style="color:var(--text-dim);font-size:0.84rem;margin-bottom:1rem;line-height:1.5;">

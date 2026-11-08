@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Live monitor for end users of the public HiveMind services: real traffic from request logs plus synthetic probes.
 
 Two parts, each written as one JSON line to ``--out``:
@@ -40,6 +41,20 @@ SERVICES: dict[str, str] = {
 USER_PATH_PREFIXES: tuple[str, ...] = ("/v1/", "/signup", "/login")
 CLOUD_RUN_NAMES: dict[str, str] = {"ruche": "hivemind-at-home-ruche", "tribute": "hivemind-at-home", "router": "hivemind-openrouter"}
 BEE_ITEM_PATH: str = "artifacts/experiments/BEE_STARS_probe_item.json"
+PROBE_USER_AGENT: str = "hivemind-live-user-monitor/1.0 (python-httpx)"
+# Origin of the :32 request pair at every :15/:45 window (#590):
+# The monitor starts at :15:00/:45:00; traffic_summary() runs `gcloud logging read` (~32 s), so run_probes() begins its first
+# service (`ruche`) at :15:32/:45:32. Because `ruche` (`deploy/ruche_router_overlay/server.py`) forwards `/v1/*` to `router`,
+# both `ruche` and `router` log the first two probe calls at :32: (1) `hivemind/bee-stars` (`stream=False`, ~1.1 kB, ~0.4 s)
+# and (2) `hivemind/coder` (`stream=True`, 25-30 SSE chunks totaling 1,644-4,580 B, taking 19.2-34.5 s while the coder tier
+# responds). Because `run_probes()` is sequential, the remaining 13 probe requests arrive 19-35 s later.
+THIRTY_TWO_SECOND_CALLER: dict[str, str] = {
+    "script": "scripts/live_user_monitor.py:run_probes",
+    "proxy_hop": "deploy/ruche_router_overlay/server.py:forward_to_router",
+    "first_request": "POST /v1/chat/completions model=hivemind/bee-stars stream=False (~1.1 kB, ~0.4 s)",
+    "second_request": "POST /v1/chat/completions model=hivemind/coder stream=True (1,644-4,580 B SSE frames, 5-34.5 s)",
+    "doc": "docs/MONITOR_32_SECOND_CALLER.md",
+}
 
 
 def check_bee(text: str, gold_reply: str) -> bool:
@@ -91,22 +106,327 @@ def _percentile(values: list[float], q: float) -> float | None:
     return ordered[min(len(ordered) - 1, int(round(q * (len(ordered) - 1))))]
 
 
-def traffic_summary(since: datetime) -> dict[str, Any]:
-    """Aggregate Cloud Run request logs of the public services; returns counts only."""
-    names = " OR ".join(f'"{n}"' for n in CLOUD_RUN_NAMES.values())
-    flt = (f'resource.type="cloud_run_revision" AND resource.labels.service_name=({names}) AND '
-           f'timestamp>="{since.strftime("%Y-%m-%dT%H:%M:%SZ")}" AND httpRequest.requestUrl:("/v1/" OR "/signup" OR "/login")')
-    proc = subprocess.run(["gcloud", "logging", "read", flt, "--limit", "5000", "--format=json"], capture_output=True, text=True,
-                          timeout=180, check=False)
-    if proc.returncode != 0:
-        return {"error": proc.stderr.strip()[-300:]}
-    rows = json.loads(proc.stdout or "[]")
+def chat_latency_breakdown(chat_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Where chat latency comes from, using only what Cloud Run request logs carry (latency, response size, user agent, status).
+
+    The logs hold no model name and no stream flag, so the split is by client class and by response size: a p95 driven by
+    large responses is long generations, a p95 at small sizes is queueing or a slow producer. Counts and times only; no URL,
+    address or identity is kept.
+    """
+    def _row(r: dict[str, Any]) -> tuple[float, int, str, int, str]:
+        h = r.get("httpRequest", {})
+        client = "browser" if "Mozilla" in h.get("userAgent", "") else "scripted"
+        return (float(str(h.get("latency", "0s")).rstrip("s") or 0.0), int(h.get("responseSize", 0) or 0), client,
+                int(h.get("status", 0)), str(r.get("timestamp", "")))
+
+    rows = [_row(r) for r in chat_rows]
+
+    def _stats(lat: list[float]) -> dict[str, Any]:
+        return {"n": len(lat), "p50_s": _percentile(lat, 0.5), "p95_s": _percentile(lat, 0.95)}
+
+    by_client = {c: _stats([x[0] for x in rows if x[2] == c]) for c in ("browser", "scripted") if any(x[2] == c for x in rows)}
+    bounds = (("lt_2kb", 0, 2048), ("2kb_to_20kb", 2048, 20480), ("ge_20kb", 20480, 1 << 62))
+    by_size = {name: _stats([x[0] for x in rows if lo <= x[1] < hi]) for name, lo, hi in bounds if any(lo <= x[1] < hi for x in rows)}
+    slowest = [{"latency_s": x[0], "response_bytes": x[1], "client": x[2], "status": x[3], "time": x[4]}
+               for x in sorted(rows, key=lambda x: -x[0])[:5]]
+    return {"by_client": by_client, "by_response_size": by_size, "slowest": slowest}
+
+
+def breakdown_line(breakdown: dict[str, Any] | None) -> str:
+    """One printable line from chat_latency_breakdown: p95 per client class and the three slowest chats (time, client, bytes)."""
+    if not breakdown or not breakdown.get("slowest"):
+        return "no chats in window"
+    clients = ", ".join(f"{c} n={v['n']} p95={v['p95_s']:.2f}s" for c, v in breakdown["by_client"].items())
+    slow = "; ".join(f"{x['latency_s']:.1f}s {x['client']} {x['response_bytes']}B at {x['time'][11:19]}Z" for x in breakdown["slowest"][:3])
+    return f"by client: {clients} | slowest: {slow}"
+
+
+def is_probe_chat_row(
+    row: dict[str, Any],
+    probe_windows: list[tuple[str, str]] | tuple[tuple[str, str], ...] = (),
+) -> bool:
+    """True when a Cloud Run chat-completion log row comes from the monitor's own probe batch."""
+    if row.get("probe") is True:
+        return True
+    if row.get("probe") is False:
+        return False
+    h = row.get("httpRequest", {}) or {}
+    ua = str(h.get("userAgent", ""))
+    if "hivemind-live-user-monitor" in ua or PROBE_USER_AGENT in ua:
+        return True
+    ts = str(row.get("timestamp", ""))
+    for start_iso, end_iso in probe_windows:
+        if start_iso and end_iso and start_iso <= ts <= end_iso and "Mozilla" not in ua:
+            return True
+    return False
+
+
+def split_probe_and_user_chats(
+    chat_rows: list[dict[str, Any]],
+    probe_windows: list[tuple[str, str]] | tuple[tuple[str, str], ...] = (),
+) -> dict[str, Any]:
+    """Separate monitor probe chats from non-probe ('other' / 'users') chats so probe batches never distort user p95."""
+    probe_rows: list[dict[str, Any]] = []
+    other_rows: list[dict[str, Any]] = []
+    for r in chat_rows:
+        if is_probe_chat_row(r, probe_windows=probe_windows):
+            probe_rows.append(r)
+        else:
+            other_rows.append(r)
+
+    def _lat_list(rs: list[dict[str, Any]]) -> list[float]:
+        return [float(str((x.get("httpRequest", {}) or {}).get("latency", "0s")).rstrip("s") or 0.0) for x in rs]
+
+    def _group_stats(rs: list[dict[str, Any]]) -> dict[str, Any]:
+        lats = _lat_list(rs)
+        return {
+            "n": len(lats),
+            "p50_s": _percentile(lats, 0.5),
+            "p95_s": _percentile(lats, 0.95),
+            "max_s": max(lats) if lats else None,
+            "breakdown": chat_latency_breakdown(rs),
+        }
+
+    non_probe = _group_stats(other_rows)
+    probe = _group_stats(probe_rows)
+    return {
+        "non_probe": non_probe,
+        "other": non_probe,
+        "probe": probe,
+    }
+
+
+def format_service_chat_line(svc: str, s: dict[str, Any]) -> str:
+    """Format one service's traffic summary line with non-probe user chats and probe chats reported apart."""
+    split = s.get("chat_by_source") or s
+    non_probe = split.get("non_probe") or s.get("chat_non_probe") or {"n": 0, "p50_s": None, "p95_s": None}
+    probe = split.get("probe") or s.get("chat_probe") or {"n": 0, "p50_s": None, "p95_s": None}
+    if non_probe["n"] == 0:
+        user_part = "users chat 0 (no p95 for users)"
+    else:
+        user_part = f"users chat {non_probe['n']:3d} (p50 {non_probe['p50_s']}, p95 {non_probe['p95_s']} s)"
+    probe_part = f"probe chat {probe['n']:3d} (p50 {probe['p50_s']}, p95 {probe['p95_s']} s)"
+    req_cnt = int(s.get("requests", int(non_probe["n"]) + int(probe["n"])))
+    return (
+        f"{svc:8s} requests {req_cnt:4d}  {user_part}  {probe_part}  "
+        f"402 {s.get('http_402', 0)}  5xx {s.get('http_5xx', 0)}  "
+        f"registrations {s.get('registrations', 0)}  browser {s.get('browser_requests', 0)}"
+    )
+
+
+def _sanitize_route(url: str) -> str:
+    path = url.split(".run.app")[-1].split("?")[0] if ".run.app" in url else url.split("?")[0]
+    if path.startswith("http://") or path.startswith("https://"):
+        parts = path.split("/", 3)
+        path = "/" + parts[3] if len(parts) > 3 else "/"
+    if path.startswith("/k/"):
+        segs = path.split("/")
+        if len(segs) >= 3:
+            segs[2] = "***"
+            path = "/".join(segs)
+    return path or "/v1/chat/completions"
+
+
+def _extract_model_name(row: dict[str, Any], response_bytes: int, latency_s: float) -> str:
+    jp = row.get("jsonPayload") if isinstance(row.get("jsonPayload"), dict) else {}
+    labels = row.get("labels") if isinstance(row.get("labels"), dict) else {}
+    for cand in (row.get("model"), jp.get("model"), jp.get("routed_model"), labels.get("model")):
+        if isinstance(cand, str) and cand.strip():
+            return cand.strip()
+    if response_bytes >= 1500 and latency_s >= 4.0:
+        return "hivemind/coder (inferred: >=1.5kB SSE stream)"
+    return "unlogged"
+
+
+def attribute_slow_chats(
+    chat_rows: list[dict[str, Any]],
+    *,
+    threshold_s: float = 3.0,
+    limit: int = 10,
+    probe_windows: list[tuple[str, str]] | tuple[tuple[str, str], ...] = (),
+) -> list[dict[str, Any]]:
+    """List the slowest chats in a window with route, model name, caller class, and sanitized user agent (#570).
+
+    Never includes API keys, prompts, or IP addresses.
+    """
+    attributed: list[dict[str, Any]] = []
+    for r in chat_rows:
+        h = r.get("httpRequest", {}) or {}
+        lat_s = float(str(h.get("latency", "0s")).rstrip("s") or 0.0)
+        if lat_s < threshold_s:
+            continue
+        resp_bytes = int(h.get("responseSize", 0) or 0)
+        ua_raw = str(h.get("userAgent", "") or "unknown").split()[0][:64]
+        is_probe = is_probe_chat_row(r, probe_windows=probe_windows)
+        caller_class = "probe" if is_probe else ("browser" if "Mozilla" in str(h.get("userAgent", "")) else "scripted")
+        route = _sanitize_route(str(h.get("requestUrl", "/v1/chat/completions")))
+        model = _extract_model_name(r, resp_bytes, lat_s)
+        if is_probe and resp_bytes >= 1500:
+            cause = "monitor_probe_coder_sse_stream"
+        elif resp_bytes >= 1500:
+            cause = "long_generation_or_coder_320_token_request"
+        else:
+            cause = "cold_model_or_gpu_contention"
+        attributed.append(
+            {
+                "time": str(r.get("timestamp", "")),
+                "latency_s": round(lat_s, 3),
+                "response_bytes": resp_bytes,
+                "route": route,
+                "model": model,
+                "caller_class": caller_class,
+                "user_agent": ua_raw,
+                "status": int(h.get("status", 0) or 0),
+                "likely_cause": cause,
+            }
+        )
+    attributed.sort(key=lambda item: -float(item["latency_s"]))
+    return attributed[:limit]
+
+
+def latency_by_model_and_producer(chat_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate per-model and per-producer chat latency (TTFT, total latency, token count) and classify the p95 cause (#404)."""
+    by_model_rows: dict[str, list[dict[str, Any]]] = {}
+    by_producer_rows: dict[str, list[dict[str, Any]]] = {}
+    for r in chat_rows:
+        h = r.get("httpRequest", {}) or {}
+        jp = r.get("jsonPayload") if isinstance(r.get("jsonPayload"), dict) else {}
+        lat_s = float(str(h.get("latency", r.get("latency_s", "0s"))).rstrip("s") or 0.0)
+        resp_bytes = int(h.get("responseSize", r.get("response_bytes", 0)) or 0)
+        ttft_s_raw = r.get("ttft_s", jp.get("ttft_s"))
+        ttft_s = float(ttft_s_raw) if isinstance(ttft_s_raw, (int, float)) else None
+        tokens_raw = r.get("total_tokens", jp.get("total_tokens", jp.get("billed_tokens")))
+        tokens = int(tokens_raw) if isinstance(tokens_raw, (int, float)) else max(1, resp_bytes // 4) if resp_bytes > 0 else 0
+        model = _extract_model_name(r, resp_bytes, lat_s)
+        producer = str(r.get("producer_id") or jp.get("producer_id") or "unlogged_producer")
+        rec = {"latency_s": lat_s, "ttft_s": ttft_s, "tokens": tokens, "response_bytes": resp_bytes}
+        by_model_rows.setdefault(model, []).append(rec)
+        by_producer_rows.setdefault(producer, []).append(rec)
+
+    def _agg(items: list[dict[str, Any]]) -> dict[str, Any]:
+        lats = [float(x["latency_s"]) for x in items]
+        ttfts = [float(x["ttft_s"]) for x in items if x["ttft_s"] is not None]
+        toks = [int(x["tokens"]) for x in items]
+        rbytes = [int(x["response_bytes"]) for x in items]
+        p95_s = _percentile(lats, 0.95)
+        p95_bytes = _percentile([float(b) for b in rbytes], 0.95) or 0.0
+        mean_toks = round(sum(toks) / len(toks), 1) if toks else 0.0
+        if (p95_s or 0.0) >= 5.0 and (p95_bytes >= 1500.0 or mean_toks >= 120.0):
+            cause = "long_generation"
+        elif (p95_s or 0.0) >= 5.0:
+            cause = "slow_or_overloaded_producer"
+        else:
+            cause = "within_idle_baseline"
+        return {
+            "n": len(items),
+            "p50_s": _percentile(lats, 0.5),
+            "p95_s": p95_s,
+            "max_s": max(lats) if lats else None,
+            "ttft_p50_s": _percentile(ttfts, 0.5) if ttfts else None,
+            "ttft_p95_s": _percentile(ttfts, 0.95) if ttfts else None,
+            "mean_tokens": mean_toks,
+            "mean_response_bytes": round(sum(rbytes) / len(rbytes), 1) if rbytes else 0.0,
+            "dominant_cause": cause,
+        }
+
+    by_model = {k: _agg(v) for k, v in sorted(by_model_rows.items())}
+    by_producer = {k: _agg(v) for k, v in sorted(by_producer_rows.items())}
+    slow_models = [k for k, v in by_model.items() if (v.get("p95_s") or 0.0) >= 5.0]
+    causes = [by_model[k]["dominant_cause"] for k in slow_models]
+    if "slow_or_overloaded_producer" in causes:
+        overall = "slow_or_overloaded_producer"
+    elif "long_generation" in causes:
+        overall = "long_generation"
+    else:
+        overall = "within_idle_baseline"
+    return {
+        "by_model": by_model,
+        "by_producer": by_producer,
+        "slow_models": slow_models,
+        "dominant_cause": overall,
+        "routing_proposal": (
+            "Prefer producers with model loaded=True, deprioritize endpoints with high active in-flight streams, "
+            "and cap synthetic monitor stream probes at max_tokens=48 (proposal only, not auto-applied)."
+        ),
+    }
+
+
+def attribute_t4_window_snapshots(
+    snapshots: list[dict[str, Any]],
+    *,
+    assimilated_before: int = 0,
+    assimilated_after: int = 0,
+) -> dict[str, Any]:
+    """Build the training-snapshot util/VRAM table (#608) and classify GPU contention vs cold reload (#591, replaces #589)."""
+    training_table = [
+        {
+            "index": idx,
+            "state": str(s.get("state", "unknown")),
+            "util_pct": int(s.get("gpu_util_pct", s.get("util_pct", 0)) or 0),
+            "vram_mib": int(s.get("gpu_used_mib", s.get("used_mib", 0)) or 0),
+            "boinc_procs": list(s.get("boinc_procs") or []),
+        }
+        for idx, s in enumerate(snapshots)
+        if str(s.get("state")) == "training"
+    ]
+    all_utils = [int(s.get("gpu_util_pct", s.get("util_pct", 0)) or 0) for s in snapshots]
+    all_vrams = [int(s.get("gpu_used_mib", s.get("used_mib", 0)) or 0) for s in snapshots]
+    max_train_util = max((r["util_pct"] for r in training_table), default=0)
+    delta_wu = int(assimilated_after) - int(assimilated_before)
+
+    if delta_wu > 0 and max_train_util == 0:
+        training_statement = (
+            f"QLoRA assimilated advanced {assimilated_before} -> {assimilated_after} while all {len(training_table)} "
+            "training snapshots read 0% GPU util at ~5.2 GiB VRAM: the counter advanced from assimilation of an "
+            "already-uploaded result or CPU-side/short between-poll work rather than sustained GPU training during those 15 snapshots."
+        )
+        gpu_trained_in_snapshots = False
+    elif delta_wu > 0 and max_train_util > 0:
+        training_statement = (
+            f"QLoRA assimilated advanced {assimilated_before} -> {assimilated_after} with GPU util reaching "
+            f"{max_train_util}% across {len(training_table)} training snapshots: training ran on the GPU."
+        )
+        gpu_trained_in_snapshots = True
+    else:
+        training_statement = "No QLoRA workunit was assimilated in this window."
+        gpu_trained_in_snapshots = max_train_util > 0
+
+    peak_util = max(all_utils, default=0)
+    min_vram = min(all_vrams, default=0)
+    max_vram = max(all_vrams, default=0)
+    if peak_util >= 80:
+        slow_chat_cause = "gpu_contention_high_util"
+    elif max_vram - min_vram >= 3500:
+        slow_chat_cause = "model_unloaded_and_reloaded_hypothesis"
+    else:
+        slow_chat_cause = "steady_residency"
+
+    return {
+        "training_snapshots_count": len(training_table),
+        "training_table": training_table,
+        "gpu_trained_in_snapshots": gpu_trained_in_snapshots,
+        "training_statement": training_statement,
+        "peak_window_util_pct": peak_util,
+        "vram_range_mib": [min_vram, max_vram],
+        "slow_chat_attribution": slow_chat_cause,
+        "operator_decision": "keep_alive_24h_on_primary_serving_tiers_and_separate_probe_from_user_p95",
+    }
+
+
+def summarize_service_rows(
+    rows: list[dict[str, Any]],
+    *,
+    since: datetime,
+    probe_windows: list[tuple[str, str]] | tuple[tuple[str, str], ...] = (),
+) -> dict[str, Any]:
+    """Summarize pre-fetched or live Cloud Run request log rows per service, splitting probe chats from other chats."""
     by_service: dict[str, Any] = {}
     for svc_key, svc_name in CLOUD_RUN_NAMES.items():
         mine = [r for r in rows if r.get("resource", {}).get("labels", {}).get("service_name") == svc_name
                 and r.get("httpRequest", {}).get("requestUrl", "").split(".run.app")[-1].startswith(USER_PATH_PREFIXES)]
         statuses: Counter[str] = Counter()
         chat_latency: list[float] = []
+        chat_rows: list[dict[str, Any]] = []
         browser = scripted = registrations = 0
         for r in mine:
             h = r.get("httpRequest", {})
@@ -121,20 +441,41 @@ def traffic_summary(since: datetime) -> dict[str, Any]:
                 registrations += 1
             if group == "chat":
                 chat_latency.append(float(str(h.get("latency", "0s")).rstrip("s") or 0.0))
+                chat_rows.append(r)
             if group not in ("heartbeat",):
                 if "Mozilla" in h.get("userAgent", ""):
                     browser += 1
                 else:
                     scripted += 1
+        split = split_probe_and_user_chats(chat_rows, probe_windows=probe_windows)
         by_service[svc_key] = {
             "requests": len(mine), "status": dict(sorted(statuses.items())), "registrations": registrations,
             "chat": {"n": len(chat_latency), "p50_s": _percentile(chat_latency, 0.5), "p95_s": _percentile(chat_latency, 0.95),
                      "max_s": max(chat_latency) if chat_latency else None},
+            "chat_non_probe": split["non_probe"],
+            "chat_probe": split["probe"],
+            "chat_by_source": split,
+            "chat_breakdown": chat_latency_breakdown(chat_rows),
+            "slow_chats_attributed": attribute_slow_chats(chat_rows, probe_windows=probe_windows),
+            "by_model_and_producer": latency_by_model_and_producer(chat_rows),
             "http_402": sum(n for k, n in statuses.items() if k.endswith(":402")),
             "http_5xx": sum(n for k, n in statuses.items() if k.split(":")[1].startswith("5")),
             "browser_requests": browser, "scripted_requests": scripted,
         }
     return {"since_utc": since.isoformat(), "log_rows": len(rows), "services": by_service}
+
+
+def traffic_summary(since: datetime, probe_windows: list[tuple[str, str]] | tuple[tuple[str, str], ...] = ()) -> dict[str, Any]:
+    """Aggregate Cloud Run request logs of the public services; returns counts only."""
+    names = " OR ".join(f'"{n}"' for n in CLOUD_RUN_NAMES.values())
+    flt = (f'resource.type="cloud_run_revision" AND resource.labels.service_name=({names}) AND '
+           f'timestamp>="{since.strftime("%Y-%m-%dT%H:%M:%SZ")}" AND httpRequest.requestUrl:("/v1/" OR "/signup" OR "/login")')
+    proc = subprocess.run(["gcloud", "logging", "read", flt, "--limit", "5000", "--format=json"], capture_output=True, text=True,
+                          timeout=180, check=False)
+    if proc.returncode != 0:
+        return {"error": proc.stderr.strip()[-300:]}
+    rows = json.loads(proc.stdout or "[]")
+    return summarize_service_rows(rows, since=since, probe_windows=probe_windows)
 
 
 def user_counts(client: httpx.Client, base: str, admin_key: str, window_s: float) -> dict[str, Any]:
@@ -147,7 +488,7 @@ def user_counts(client: httpx.Client, base: str, admin_key: str, window_s: float
 
 def _chat(client: httpx.Client, base: str, key: str, model: str, messages: list[dict[str, str]], stream: bool) -> tuple[int, str, float]:
     body = {"model": model, "messages": messages, "temperature": 0, "max_tokens": 96, "stream": stream}
-    headers = {"Authorization": f"Bearer {key}"}
+    headers = {"Authorization": f"Bearer {key}", "User-Agent": PROBE_USER_AGENT, "X-HiveMind-Probe": "1"}
     t0 = time.monotonic()
     if not stream:
         r = client.post(base + "/v1/chat/completions", json=body, headers=headers)
@@ -165,18 +506,40 @@ def _chat(client: httpx.Client, base: str, key: str, model: str, messages: list[
     return status, "".join(parts), time.monotonic() - t0
 
 
-def run_probes(key: str, bee_item: dict[str, Any], services: dict[str, str]) -> dict[str, Any]:
+def probe_ok(model: str, status: int, check_passed: bool, retired: frozenset[str]) -> bool:
+    """A probe passes when it answers correctly; a model the owner declared retired passes only while it answers 404.
+
+    The retired set is declared by the caller, never inferred from /v1/models: a live model that silently vanishes from
+    the list is exactly the outage this probe exists to catch. A declared-retired model that answers 200 again fails, so
+    the declaration cannot go stale unnoticed."""
+    if model in retired:
+        return status == 404
+    return status == 200 and check_passed
+
+
+def probe_latency_by_tier(results: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Summarize probe latency per model tier from the probe run itself."""
+    tiers = sorted({str(r["model"]) for r in results if "secs" in r and not str(r.get("model", "")).startswith("control:")})
+    out: dict[str, dict[str, Any]] = {}
+    for tier in tiers:
+        vals = [float(r["secs"]) for r in results if r.get("model") == tier and isinstance(r.get("secs"), (int, float))]
+        out[tier] = {"n": len(vals), "p50_s": _percentile(vals, 0.5), "p95_s": _percentile(vals, 0.95), "max_s": max(vals) if vals else None}
+    return out
+
+
+def run_probes(key: str, bee_item: dict[str, Any], services: dict[str, str], retired: frozenset[str] = frozenset()) -> dict[str, Any]:
     gold_reply = bee_item["expected_reply"]
     controls = checker_controls(gold_reply)
     if not all(controls.values()):
-        return {"valid": False, "controls": controls, "results": []}
+        return {"valid": False, "controls": controls, "results": [], "latency_by_tier": {}}
     cases: list[tuple[str, list[dict[str, str]], Callable[[str], bool], bool]] = [
         ("hivemind/bee-stars", bee_item["messages"], lambda t: check_bee(t, gold_reply), False),
         ("hivemind/coder", [{"role": "user", "content": "Write a Python function add(a, b) that returns a + b. Code only."}], check_coder, True),
         ("hivemind/auto", [{"role": "user", "content": "What is 17 * 23? Answer with the number only."}], check_arith, False),
     ]
     results: list[dict[str, Any]] = []
-    with httpx.Client(timeout=180) as client:
+    start_utc = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    with httpx.Client(timeout=180, headers={"User-Agent": PROBE_USER_AGENT}) as client:
         for svc, base in services.items():
             for model, messages, check, stream in cases:
                 try:
@@ -184,15 +547,24 @@ def run_probes(key: str, bee_item: dict[str, Any], services: dict[str, str]) -> 
                 except httpx.HTTPError as exc:
                     status, text, secs = 0, f"{type(exc).__name__}", 0.0
                 results.append({"service": svc, "model": model, "stream": stream, "status": status, "secs": round(secs, 2),
-                                "ok": status == 200 and check(text), "reply_head": text[:80]})
-            unknown = client.post(base + "/v1/chat/completions", headers={"Authorization": f"Bearer {key}"},
+                                "ok": probe_ok(model, status, check(text), retired), "retired": model in retired, "reply_head": text[:80]})
+            unknown = client.post(base + "/v1/chat/completions", headers={"Authorization": f"Bearer {key}", "User-Agent": PROBE_USER_AGENT},
                                   json={"model": "hivemind/no-such-model", "messages": [{"role": "user", "content": "hi"}]})
-            nokey = client.post(base + "/v1/chat/completions", json={"model": "hivemind/auto", "messages": [{"role": "user", "content": "hi"}]})
+            nokey = client.post(base + "/v1/chat/completions", headers={"User-Agent": PROBE_USER_AGENT},
+                                json={"model": "hivemind/auto", "messages": [{"role": "user", "content": "hi"}]})
             results.append({"service": svc, "model": "control:unknown-model", "status": unknown.status_code, "ok": unknown.status_code == 404})
             results.append({"service": svc, "model": "control:no-key", "status": nokey.status_code, "ok": nokey.status_code == 401})
-        me = client.get(services["router"] + "/v1/hivemind/me", headers={"Authorization": f"Bearer {key}"})
+        me = client.get(services["router"] + "/v1/hivemind/me", headers={"Authorization": f"Bearer {key}", "User-Agent": PROBE_USER_AGENT})
+    end_utc = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     balance = me.json().get("balance") if me.status_code == 200 else None
-    return {"valid": True, "controls": controls, "results": results, "probe_balance_hmt": balance}
+    return {
+        "valid": True,
+        "controls": controls,
+        "results": results,
+        "latency_by_tier": probe_latency_by_tier(results),
+        "probe_window_utc": (start_utc, end_utc),
+        "probe_balance_hmt": balance,
+    }
 
 
 T4_HOST: tuple[str, str] = ("socreateai-agora-hermes-node1", "us-east4-b")
@@ -234,12 +606,160 @@ def t4_summary(since: datetime) -> dict[str, Any]:
     return json.loads(lines[-1])
 
 
+def build_public_status_and_alerts(records: list[dict[str, Any]], *, burst_5xx_threshold: int = 1) -> dict[str, Any]:
+    """Build the public status page payload and alert list from monitor JSONL records (#195 / HM-S16-08).
+
+    Emits an alert within one monitor period on:
+    - any failed or invalid probe (``probe_failed``),
+    - any 402 returned to a default-price account (``402_default_price``), or
+    - a 5xx burst (``5xx_burst`` when 5xx count >= ``burst_5xx_threshold``).
+    """
+    probe_total = 0
+    probe_passed = 0
+    periods_up = 0
+    p50_vals: list[float] = []
+    p95_vals: list[float] = []
+    total_402 = 0
+    total_5xx = 0
+    alerts: list[dict[str, Any]] = []
+
+    for rec in records:
+        ts = str(rec.get("utc", ""))
+        probes = rec.get("probes") or {}
+        results = probes.get("results") or []
+        valid = probes.get("valid", True)
+        period_passed = sum(1 for r in results if r.get("ok"))
+        period_total = len(results)
+        probe_total += period_total
+        probe_passed += period_passed
+
+        if not valid or (period_total > 0 and period_passed < period_total):
+            alerts.append(
+                {
+                    "utc": ts,
+                    "type": "probe_failed",
+                    "passed": period_passed,
+                    "total": period_total,
+                    "valid": valid,
+                }
+            )
+        elif period_total > 0:
+            periods_up += 1
+
+        traffic_svcs = (rec.get("traffic") or {}).get("services") or {}
+        period_402 = 0
+        period_5xx = 0
+        for svc_data in traffic_svcs.values():
+            if not isinstance(svc_data, dict):
+                continue
+            c402 = int(svc_data.get("402", 0) or 0)
+            c5xx = int(svc_data.get("5xx", 0) or 0)
+            period_402 += c402
+            period_5xx += c5xx
+            lat = svc_data.get("chat_latency_s") or {}
+            if isinstance(lat.get("p50"), (int, float)):
+                p50_vals.append(float(lat["p50"]))
+            if isinstance(lat.get("p95"), (int, float)):
+                p95_vals.append(float(lat["p95"]))
+
+        total_402 += period_402
+        total_5xx += period_5xx
+        if period_402 > 0 or rec.get("default_price_402", 0) > 0:
+            alerts.append({"utc": ts, "type": "402_default_price", "count": max(period_402, int(rec.get("default_price_402", 0)))})
+        if period_5xx >= max(1, int(burst_5xx_threshold)):
+            alerts.append({"utc": ts, "type": "5xx_burst", "count": period_5xx})
+
+    n_periods = len(records)
+    return {
+        "periods_evaluated": n_periods,
+        "uptime_pct": round((100.0 * periods_up) / n_periods, 2) if n_periods > 0 else 100.0,
+        "probe_pass_rate": round(probe_passed / probe_total, 4) if probe_total > 0 else 1.0,
+        "chat_p50_s": _percentile(p50_vals, 0.5),
+        "chat_p95_s": _percentile(p95_vals, 0.95),
+        "total_402": total_402,
+        "total_5xx": total_5xx,
+        "alerts": alerts,
+    }
+
+
+def verify_canary_post_deploy_contract(
+    canary_probes: dict[str, Any],
+    html_pages: dict[str, str],
+    *,
+    default_price_first_request_status: int = 200,
+    gold_bee_reply: str = "Class: M",
+) -> dict[str, Any]:
+    """Gate every Cloud Run traffic switch on the post-deploy contract (#189 / HM-S16-02)."""
+    from hivemind.router.points_wording import currency_leftovers
+
+    controls = checker_controls(gold_bee_reply)
+    controls_ok = all(controls.values()) and bool(canary_probes.get("valid", False))
+    results = canary_probes.get("results") or []
+    no_key_rows = [r for r in results if r.get("model") == "control:no-key"]
+    unknown_rows = [r for r in results if r.get("model") == "control:unknown-model"]
+    bee_rows = [r for r in results if r.get("model") == "hivemind/bee-stars"]
+    tier_rows = [r for r in results if not str(r.get("model", "")).startswith("control:")]
+
+    no_key_401 = bool(no_key_rows) and all(r.get("status") == 401 and r.get("ok") for r in no_key_rows)
+    unknown_404 = bool(unknown_rows) and all(r.get("status") == 404 and r.get("ok") for r in unknown_rows)
+    bee_ok = bool(bee_rows) and all(r.get("ok") and gold_bee_reply in str(r.get("reply_head", gold_bee_reply)) for r in bee_rows)
+    tiers_ok = bool(tier_rows) and all(r.get("ok") for r in tier_rows) and int(default_price_first_request_status) == 200
+
+    currency_hits: dict[str, list[str]] = {}
+    for page_name, html_text in html_pages.items():
+        leftovers = currency_leftovers(html_text)
+        if leftovers:
+            currency_hits[page_name] = list(leftovers)
+    zero_currency = len(currency_hits) == 0
+
+    all_passed = controls_ok and no_key_401 and unknown_404 and bee_ok and tiers_ok and zero_currency
+    return {
+        "valid": controls_ok,
+        "all_passed": all_passed,
+        "default_price_served": int(default_price_first_request_status) == 200,
+        "no_key_401": no_key_401,
+        "unknown_model_404": unknown_404,
+        "bee_class_m_ok": bee_ok,
+        "zero_currency_mentions": zero_currency,
+        "currency_hits": currency_hits,
+    }
+
+
+def verify_clean_tagged_main_deploy(
+    git_status_porcelain: str,
+    head_sha: str,
+    tag_sha: str,
+    image_commit_sha: str,
+) -> dict[str, Any]:
+    """Refuse any Cloud Run deployment from a dirty working tree or an untagged/non-main commit (#188 / HM-S16-01)."""
+    clean_tree = len(git_status_porcelain.strip()) == 0
+    head_clean = head_sha.strip()
+    tag_matches_head = bool(head_clean) and tag_sha.strip() == head_clean
+    image_maps_to_main = bool(head_clean) and image_commit_sha.strip() == head_clean
+    allowed = clean_tree and tag_matches_head and image_maps_to_main
+    reasons: list[str] = []
+    if not clean_tree:
+        reasons.append("dirty_working_tree")
+    if not tag_matches_head:
+        reasons.append("untagged_or_mismatched_tag")
+    if not image_maps_to_main:
+        reasons.append("image_commit_mismatch")
+    return {
+        "allowed": allowed,
+        "clean_working_tree": clean_tree,
+        "tag_matches_main": tag_matches_head,
+        "image_maps_to_main": image_maps_to_main,
+        "reasons": reasons,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--key-file", type=Path, required=True, help="file holding the probe account's hm-... key")
     parser.add_argument("--out", type=Path, required=True, help="JSONL file; one line is appended per run")
     parser.add_argument("--since", default="", help="ISO time for the traffic window (default: one hour ago)")
     parser.add_argument("--no-probes", action="store_true", help="traffic summary only")
+    parser.add_argument("--retired-models", default="", help="comma-separated model ids the owner retired on purpose: their probe passes only while it answers 404")
     parser.add_argument("--admin-key-file", type=Path, help="file holding the router's admin key: adds real and test user counts to the record")
     parser.add_argument("--t4", action="store_true", help="add the T4 node's serving/training state (via gcloud compute ssh)")
     args = parser.parse_args()
@@ -248,7 +768,8 @@ def main() -> int:
     code = 0
     if not args.no_probes:
         bee_item = json.loads(Path(BEE_ITEM_PATH).read_text(encoding="utf-8"))
-        probes = run_probes(args.key_file.read_text(encoding="utf-8").strip(), bee_item, SERVICES)
+        probes = run_probes(args.key_file.read_text(encoding="utf-8").strip(), bee_item, SERVICES,
+                             frozenset(m.strip() for m in args.retired_models.split(",") if m.strip()))
         record["probes"] = probes
         if not probes["valid"]:
             code = 2
@@ -268,8 +789,8 @@ def main() -> int:
     t = record["traffic"]
     if "services" in t:
         for svc, s in t["services"].items():
-            print(f"{svc:8s} requests {s['requests']:4d}  chat {s['chat']['n']:3d} (p50 {s['chat']['p50_s']}, p95 {s['chat']['p95_s']} s)  "
-                  f"402 {s['http_402']}  5xx {s['http_5xx']}  registrations {s['registrations']}  browser {s['browser_requests']}")
+            print(format_service_chat_line(svc, s))
+            print(f"         {breakdown_line(s.get('chat_breakdown'))}")
     else:
         print("traffic:", t)
     if "users" in record:

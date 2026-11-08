@@ -7,9 +7,11 @@ After=network-online.target wg-quick@wg-hivemind.service
 Wants=network-online.target
 
 [Service]
+NoNewPrivileges=yes
+ProtectSystem=full
 Type=simple
 User=kafka
-Environment=JAVA_HOME=/usr/lib/jvm/default-java
+Environment=JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 Environment="KAFKA_HEAP_OPTS=-Xms256m -Xmx512m"
 Environment=LOG_DIR=/var/log/hivemind-kafka
 ExecStart=/opt/kafka/bin/kafka-server-start.sh /etc/hivemind-kafka/server.properties

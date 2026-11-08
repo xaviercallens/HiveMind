@@ -1,0 +1,62 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: hivemind-at-home-ruche
+  namespace: gen-lang-client-0625573011
+  labels:
+    cloud.googleapis.com/location: us-central1
+    app.kubernetes.io/part-of: hivemind-swarm
+    finops.hivemind.io/scale-to-zero: "true"
+    portal.hivemind.io/stage: "STAGED_READY_NOT_DEPLOYED"
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/description: "HiveMind@home & La Ruche Public DNS Portal (hivemind.socrate-ai-lab.com | STAGED - DO NOT DEPLOY YET)"
+spec:
+  template:
+    metadata:
+      annotations:
+        # FinOps Guarantee: Scale down to 0 replicas when no activity ($0.00/hr idle cost)
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "2"
+        # Request-based billing: CPU is throttled to 0 when no HTTP request is active
+        run.googleapis.com/cpu-throttling: "true"
+        # Gen2 Startup CPU Boost for fast <450ms wakeup from 0 -> 1 replica
+        run.googleapis.com/startup-cpu-boost: "true"
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      containers:
+        - image: gcr.io/gen-lang-client-0625573011/hivemind-at-home-ruche:latest
+          ports:
+            - name: http1
+              containerPort: 8080
+          env:
+            - name: HIVEMIND_FINOPS_MIN_INSTANCES
+              value: "0"
+            - name: HIVEMIND_IDLE_TIMEOUT_SECONDS
+              value: "300"
+            - name: HIVEMIND_PUBLIC_DNS_DOMAIN
+              value: "hivemind.socrate-ai-lab.com"
+            - name: HIVEMIND_PORTAL_STAGE
+              value: "STAGED_READY_NOT_DEPLOYED"
+            - name: HIVEMIND_CORE_MVP_SSO_PROVIDERS
+              value: "google,reddit,steam,github"
+            - name: HIVEMIND_PASSWORD_KDF
+              value: "PBKDF2-HMAC-SHA256:200000"
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 0
+            periodSeconds: 2
+            failureThreshold: 15
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 30

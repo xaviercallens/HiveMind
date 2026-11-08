@@ -1,0 +1,61 @@
+{
+  "experiment_id": "E26-RESIDENTIAL-COMPRESSION",
+  "deliverable_id": "PS-06-D1",
+  "registered_utc": "2026-11-07T21:40:00Z",
+  "registered_before_run": true,
+  "status": "REGISTERED, NOT RUN. Committed before the first E26 residential-link round per PS-06-D1.",
+  "title": "Does Top-1% DCT + EF21 outer-gradient and adapter compression inside the PS-01-fixed BOINC MoE chain reduce wire bytes per round across at least 5 residential links without degrading held-out bits-per-byte beyond the registered non-inferiority margin?",
+  "plan_document": "docs/roadmap/PLANETARY_SCALE_PLAN.md",
+  "paper_sections": [
+    "sec:roadmap_phase1",
+    "sec:e20_live_experiment"
+  ],
+  "roadmap_ids": [
+    "HM-S29-02"
+  ],
+  "design": {
+    "unit_of_comparison": "Paired outer rounds on the same PS-01-fixed Granite-1B-A400M base chain and deterministic domain sequence (general, french, edu_web, news, biomed, math), measured across at least 5 distinct residential internet links with recorded upload/download Mbps and RTT ms.",
+    "minimum_residential_links": 5,
+    "arms": {
+      "C0_uncompressed_control": {
+        "compressor": "none (raw fp16/bf16 LoRA adapter delta safetensors)",
+        "error_feedback": "none",
+        "chain": "PS-01-fixed BOINC MoE chain (ibm-granite/granite-3.1-1b-a400m-base, rank 8, alpha 16, seq 128, micro-batch 2)"
+      },
+      "C1_top1pct_dct_ef21": {
+        "compressor": "hivemind.compress.dct_ef21.compress_top1pct_dct_ef21 (Top-1% DCT coefficients with EF21 residual buffer)",
+        "error_feedback": "EF21 per-worker state persisted across consecutive rounds",
+        "chain": "PS-01-fixed BOINC MoE chain (identical data shards, seeds, and hyperparameters as C0_uncompressed_control)"
+      }
+    }
+  },
+  "metrics": {
+    "M1_wire_bytes_per_round": "Total serialized payload bytes uploaded and downloaded per round on each residential link.",
+    "M2_compression_ratio": "bytes(C0_uncompressed_control) / bytes(C1_top1pct_dct_ef21) per round.",
+    "M3_upload_wall_time_s": "Measured upload wall-clock duration in seconds on each residential link (with link up_mbps, down_mbps, and rtt_ms recorded).",
+    "M4_held_out_bpb_delta": "Held-out bits-per-byte change over the 384 fixed evaluation spans (64 spans x 6 domains): bpb_end(C1) - bpb_end(C0)."
+  },
+  "hypotheses": {
+    "H1_bandwidth_reduction": "Median wire-byte compression ratio M2 >= 50.0x across the registered rounds.",
+    "H2_loss_non_inferiority": "Pooled held-out bits-per-byte of C1_top1pct_dct_ef21 is not worse than C0_uncompressed_control by more than the registered margin delta_bpb_max = +0.010 bpb, andhivemind.swarm.verified_update_gate.decide returns ACCEPT under UpdatePolicy(alpha=0.05, min_n=30, tolerated_net_loss=0, require_improvement=False)."
+  },
+  "acceptance_rules_fixed_now": {
+    "R1_link_diversity": "At least 5 distinct residential links with recorded up_mbps, down_mbps, rtt_ms, and zero inbound ports.",
+    "R2_bandwidth": "H1_bandwidth_reduction holds (compression_ratio >= 50.0).",
+    "R3_quality": "H2_loss_non_inferiority holds (bpb_end(C1) - bpb_end(C0) <= 0.010 bpb).",
+    "verdicts": {
+      "PASS": "R1 and R2 and R3",
+      "QUALITY_REGRESSION": "R1 and R2 hold, R3 fails",
+      "INSUFFICIENT_COMPRESSION": "R1 holds, R2 fails",
+      "INVALID": "R1 fails (fewer than 5 links or missing link telemetry)"
+    }
+  },
+  "controls": {
+    "positive_control": "C0_uncompressed_control run on the exact same shard sequence and RNG seeds.",
+    "negative_control": "Zeroed or random-index 1% sparse payload without EF21 error feedback must fail R3_quality on the same shard sequence."
+  },
+  "not_claimed": [
+    "No E26 residential link round has been executed in this pre-registration file.",
+    "Simulation compression ratios from earlier paper sections are not substituted for residential link measurements."
+  ]
+}

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import hashlib
+import math
 import json
 import time
 from pathlib import Path
@@ -142,6 +143,9 @@ class RucheHoneycombCell:
     wire_codec: str
     deposited_at_epoch: float
     verified: bool = True
+    # The NLL and perplexity figures are what the contributor reported; the vault re-runs none of them. `verified`
+    # covers the adapter checks made here (finite tensors, non-silent, SVD rank/energy), not these figures.
+    nll_source: str = "CALLER_REPORTED_UNVERIFIED"
 
 
 @dataclass
@@ -264,6 +268,17 @@ class LaRucheModelVault:
             raise ValueError(
                 f"Unknown La Ruche domain '{domain_name}'. Expected one of {sorted(self._layout_by_domain)}"
             )
+        # NaN compares False against everything, so `after >= before` let a NaN loss through the gate (IP-163):
+        # every reported figure must be a finite, positive number before any comparison.
+        for figure_name, figure in (
+            ("train_nll_before", train_nll_before), ("train_nll_after", train_nll_after),
+            ("holdout_nll_before", holdout_nll_before), ("holdout_nll_after", holdout_nll_after),
+            ("holdout_perplexity_before", holdout_perplexity_before), ("holdout_perplexity_after", holdout_perplexity_after),
+        ):
+            if not isinstance(figure, (int, float)) or isinstance(figure, bool) or not math.isfinite(figure) or figure <= 0.0:
+                raise ValueError(
+                    f"La Ruche quality gate rejected expert for '{domain_name}': {figure_name} must be a finite positive number, got {figure!r}"
+                )
         if holdout_nll_after >= holdout_nll_before:
             raise ValueError(
                 f"La Ruche quality gate rejected expert for '{domain_name}': "
@@ -581,11 +596,14 @@ def load_community_moe_from_gcs_or_https(
     cache_dir: Path | str = Path("/tmp/hivemind_la_ruche_gcs_cache"),
     gcs_public_base_url: str = SOCRATEAI_GCS_PUBLIC_BASE_URL,
     seed: int = 20261024,
+    *,
+    expected_safetensors_sha256: str | None = None,
 ) -> Tuple[UpcycledSparseMoEModel, Dict[str, Any]]:
     """Download the Community BTM Sparse MoE model from SocrateAI GCP Cloud Storage (`La Ruche`) and instantiate it."""
+    import re
     import urllib.request
 
-    cache_path = Path(cache_dir)
+    cache_path = Path(cache_dir).resolve()
     release_dir = cache_path / "community_moe_release"
     release_dir.mkdir(parents=True, exist_ok=True)
 
@@ -598,8 +616,6 @@ def load_community_moe_from_gcs_or_https(
         manifest_bytes = resp_m.read()
 
     manifest = json.loads(manifest_bytes.decode("utf-8"))
-    manifest_file = release_dir / "ruche_manifest.json"
-    manifest_file.write_bytes(manifest_bytes)
 
     rel_st_path = str(
         manifest.get(
@@ -607,10 +623,27 @@ def load_community_moe_from_gcs_or_https(
             "community_moe_release/hivemind_la_ruche_community_moe.safetensors",
         )
     )
-    st_file = cache_path / rel_st_path
-    st_file.parent.mkdir(parents=True, exist_ok=True)
+    rel_candidate = Path(rel_st_path)
+    if rel_candidate.is_absolute() or ".." in rel_candidate.parts:
+        raise ValueError(f"Unsafe combined_safetensors_path in manifest: {rel_st_path!r}")
+    st_file = (cache_path / rel_candidate).resolve()
+    if not st_file.is_relative_to(cache_path) or st_file == cache_path:
+        raise ValueError(f"combined_safetensors_path escapes cache_dir: {rel_st_path!r}")
 
-    expected_sha256 = str(manifest["combined_safetensors_sha256"])
+    expected_sha256 = str(manifest.get("combined_safetensors_sha256", "")).strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
+        raise ValueError(f"Invalid combined_safetensors_sha256 in manifest: {expected_sha256!r}")
+    if (
+        expected_safetensors_sha256 is not None
+        and expected_sha256 != expected_safetensors_sha256.strip().lower()
+    ):
+        raise ValueError(
+            f"Manifest safetensors SHA-256 ({expected_sha256}) does not match pinned digest ({expected_safetensors_sha256})"
+        )
+
+    manifest_file = release_dir / "ruche_manifest.json"
+    manifest_file.write_bytes(manifest_bytes)
+    st_file.parent.mkdir(parents=True, exist_ok=True)
     need_download = True
     if st_file.exists():
         existing_sha256 = hashlib.sha256(st_file.read_bytes()).hexdigest()

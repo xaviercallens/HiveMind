@@ -15,11 +15,16 @@ from __future__ import annotations
 import base64
 import datetime
 import hashlib
+import html
 import json
 import math
+import os
 import random
+import re
+import threading
 import time
 import urllib.request
+from collections import deque
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -72,6 +77,34 @@ class PlanetDiscoveryRequest(BaseModel):
     gamer_tag: str = Field(default="Commandant_Starfleet_FR")
     player_classification: str = Field(default="PLANET")
     notes: str = Field(default="")
+
+
+FEEDBACK_MAX_FIELD_CHARS = 2048
+FEEDBACK_RATE_LIMIT_MAX = 5
+FEEDBACK_RATE_WINDOW_S = 600.0
+FEEDBACK_MAX_FILE_BYTES = 256 * 1024
+BENCHMARK_COOLDOWN_S = 300.0
+TAP_REFRESH_INTERVAL_S = 6 * 3600.0
+
+
+def _sanitise_display_tag(raw: Any) -> str:
+    """Reduce a free-text gamer tag to letters, digits, spaces and `._-@`, max 64 chars.
+
+    Markdown and line-break characters are removed so a tag cannot start a heading or a new line
+    in the feedback log.
+    """
+    cleaned = re.sub(r"[^\w ._\-@]", "", str(raw))
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()[:64]
+    return cleaned or "Anonyme"
+
+
+def _sanitise_feedback_field(raw: Any) -> str:
+    """Collapse newlines/whitespace and neutralise markdown heading/HTML characters (IP-267)."""
+    collapsed = re.sub(r"[\r\n\t]+", " ", str(raw))
+    collapsed = re.sub(r"#+\s*", "", collapsed)
+    collapsed = collapsed.replace("<", "&lt;").replace(">", "&gt;").replace("`", "'")
+    collapsed = re.sub(r"\s+", " ", collapsed).strip()
+    return collapsed[:FEEDBACK_MAX_FIELD_CHARS]
 
 
 def _get_asset_data_uri(filename: str, mime: str = "image/jpeg") -> str:
@@ -1249,8 +1282,8 @@ def render_exoplanet_hunter_cockpit_html(service: AstroBeeMoEGPUService, classic
       try {{
         const r = await fetch('/api/astro/nasa-tap-sync');
         const d = await r.json();
-        document.getElementById('telemetry-counter').textContent = `TAP:${{d.row_count || 8}}/6000+`;
-        speakWithSubtitles(`Synchronisation NASA Exoplanet Archive TAP ADQL réussie : ${{d.row_count || 8}} systèmes de référence vérifiés.`);
+        document.getElementById('telemetry-counter').textContent = `TAP:${{d.row_count ?? 'n/a'}}/6000+`;
+        speakWithSubtitles(`Synchronisation NASA Exoplanet Archive TAP ADQL réussie : ${{d.row_count ?? 'n/a'}} systèmes de référence vérifiés.`);
       }} catch (e) {{}}
     }}
 
@@ -1880,10 +1913,15 @@ def render_exoplanet_hunter_cockpit_html(service: AstroBeeMoEGPUService, classic
           }})
         }});
         const boincData = await boincRes.json();
-        const newBalance = Math.round(Number(boincData.balance_hmt || regData.balance_hmt || 2650));
-        scoreHmt = Math.max(scoreHmt, newBalance);
+        const rawBalance = boincData.balance_hmt ?? regData.balance_hmt;
         const scoreEl = document.getElementById('score-hmt');
-        if (scoreEl) scoreEl.textContent = scoreHmt.toLocaleString('en-US');
+        if (rawBalance != null && !Number.isNaN(Number(rawBalance))) {{
+          const newBalance = Math.round(Number(rawBalance));
+          scoreHmt = Math.max(scoreHmt, newBalance);
+          if (scoreEl) scoreEl.textContent = scoreHmt.toLocaleString('en-US');
+        }} else if (scoreEl) {{
+          scoreEl.textContent = 'n/a';
+        }}
         if (badge) {{
           badge.textContent = `🟢 STEAM FREE GAME (AppID 3133700) • ${{regData.handle}} • AUTH (${{regData.steam_session_ticket}}) • +${{boincData.hmt_awarded}} HMT & +${{boincData.cobblestones_awarded}} BOINC`;
         }}
@@ -1899,6 +1937,13 @@ def render_exoplanet_hunter_cockpit_html(service: AstroBeeMoEGPUService, classic
 </body>
 </html>
 """
+
+
+MAX_TTS_TEXT_CHARS = 2000  # longest text the public text-to-speech route accepts; longer answers 413
+# voice and lang are interpolated into a cache file name, so a 300-character voice raised OSError (File name too long) and the route answered 500.
+# Shapes only (not an allow-list of names, which Google may extend): a short token of letters, digits, '_' and '-'.
+_TTS_VOICE_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
+_TTS_LANG_RE = re.compile(r"^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$")
 
 
 def render_traffic_and_tflops_monitor_html() -> str:
@@ -2131,6 +2176,14 @@ def render_traffic_and_tflops_monitor_html() -> str:
 
   <script>
     const tflopsHistory = [52.4, 53.1, 53.8, 53.5, 53.9, 53.82];
+    function escHtml(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
 
     async function refreshTelemetry() {
       try {
@@ -2141,53 +2194,59 @@ def render_traffic_and_tflops_monitor_html() -> str:
         const eu = d.end_users_summary || {};
         const pool = d.producer_pool || {};
 
-        const effTflops = tf.effective_sparse_moe_nf4_tflops || 53.82;
-        tflopsHistory.push(effTflops);
-        if (tflopsHistory.length > 30) tflopsHistory.shift();
-
-        document.getElementById('kpi-moe-tflops').textContent = effTflops.toFixed(2) + ' TFLOPS';
+        const effTflops = tf.effective_sparse_moe_nf4_tflops != null ? Number(tf.effective_sparse_moe_nf4_tflops) : null;
+        if (effTflops !== null && !Number.isNaN(effTflops)) {
+          tflopsHistory.push(effTflops);
+          if (tflopsHistory.length > 30) tflopsHistory.shift();
+          document.getElementById('kpi-moe-tflops').textContent = effTflops.toFixed(2) + ' TFLOPS';
+        } else {
+          document.getElementById('kpi-moe-tflops').textContent = 'n/a TFLOPS';
+        }
+        const fp16Txt = tf.measured_fp16_tensor_tflops != null ? Number(tf.measured_fp16_tensor_tflops).toFixed(2) : 'n/a';
+        const fp32Txt = tf.measured_fp32_tflops != null ? Number(tf.measured_fp32_tflops).toFixed(2) : 'n/a';
         document.getElementById('kpi-fp16-tflops').textContent =
-          `FP16 Tensor : ${(tf.measured_fp16_tensor_tflops || 29.09).toFixed(2)} TFLOPS | FP32 : ${(tf.measured_fp32_tflops || 6.10).toFixed(2)} TFLOPS`;
+          `FP16 Tensor : ${fp16Txt} TFLOPS | FP32 : ${fp32Txt} TFLOPS`;
 
-        document.getElementById('kpi-users-count').textContent = String(eu.total_unique_end_users || 0);
-        document.getElementById('kpi-http-reqs').textContent = `${tr.total_http_requests || 0} reqs (${tr.requests_per_minute_rpm || 0} RPM)`;
+        document.getElementById('kpi-users-count').textContent = String(eu.total_unique_end_users ?? 'n/a');
+        document.getElementById('kpi-http-reqs').textContent = `${tr.total_http_requests ?? 'n/a'} reqs (${tr.requests_per_minute_rpm ?? 'n/a'} RPM)`;
+        const tokTxt = tr.total_tokens_processed != null ? Number(tr.total_tokens_processed).toLocaleString() : 'n/a';
         document.getElementById('kpi-infer-stats').textContent =
-          `${tr.total_gpu_inferences_served || 0} Inférences CUDA:0 • ${(tr.total_tokens_processed || 0).toLocaleString()} Tokens`;
+          `${tr.total_gpu_inferences_served ?? 'n/a'} Inférences CUDA:0 • ${tokTxt} Tokens`;
         document.getElementById('kpi-t4-failover').textContent =
-          `Tesla T4 : En Travaux (Bascules vers RTX 2070 : ${tr.total_t4_failovers_to_rtx2070 || 0})`;
+          `Tesla T4 : En Travaux (Bascules vers RTX 2070 : ${tr.total_t4_failovers_to_rtx2070 ?? 'n/a'})`;
         document.getElementById('last-updated-lbl').textContent = `Mis à jour : ${d.timestamp} (Uptime : ${d.uptime_seconds}s)`;
 
         const users = eu.active_end_users || [];
         document.getElementById('users-tbody').innerHTML = users.map(u => `
           <tr>
-            <td style="color:var(--gold);font-weight:700;">👤 ${u.gamer_tag}</td>
-            <td>${u.client_type}</td>
-            <td>${u.http_requests}</td>
-            <td style="color:var(--cyan);font-weight:700;">${u.inference_calls}</td>
-            <td style="color:var(--emerald);font-weight:700;">🪐 ${u.discoveries_approved}</td>
-            <td>${u.last_seen}</td>
+            <td style="color:var(--gold);font-weight:700;">👤 ${escHtml(u.gamer_tag)}</td>
+            <td>${escHtml(u.client_type)}</td>
+            <td>${escHtml(u.http_requests)}</td>
+            <td style="color:var(--cyan);font-weight:700;">${escHtml(u.inference_calls)}</td>
+            <td style="color:var(--emerald);font-weight:700;">🪐 ${escHtml(u.discoveries_approved)}</td>
+            <td>${escHtml(u.last_seen)}</td>
           </tr>
         `).join('');
 
         const prods = pool.producers || [];
         document.getElementById('producers-tbody').innerHTML = prods.map(p => `
           <tr>
-            <td style="font-weight:700;color:#fff;">${p.producer_id}</td>
-            <td>${p.hardware}</td>
-            <td><span class="badge ${p.status === 'ONLINE_SERVING' ? 'badge-ok' : 'badge-warn'}">${p.status}</span></td>
-            <td style="color:var(--gold);font-weight:700;">${p.requests_served || 0}</td>
+            <td style="font-weight:700;color:#fff;">${escHtml(p.producer_id)}</td>
+            <td>${escHtml(p.hardware)}</td>
+            <td><span class="badge ${p.status === 'ONLINE_SERVING' ? 'badge-ok' : 'badge-warn'}">${escHtml(p.status)}</span></td>
+            <td style="color:var(--gold);font-weight:700;">${escHtml(p.requests_served ?? 'n/a')}</td>
           </tr>
         `).join('');
 
         const stream = d.recent_traffic_stream || [];
         document.getElementById('traffic-tbody').innerHTML = stream.map(ev => `
           <tr>
-            <td>${ev.timestamp}</td>
-            <td style="color:var(--amber);font-weight:700;">${ev.method}</td>
-            <td style="color:var(--cyan);">${ev.path}</td>
-            <td>${ev.client_type} (${ev.client_ip})</td>
-            <td><span class="badge badge-ok">${ev.served_by}</span></td>
-            <td style="color:var(--emerald);font-weight:700;">${ev.latency_ms} ms</td>
+            <td>${escHtml(ev.timestamp)}</td>
+            <td style="color:var(--amber);font-weight:700;">${escHtml(ev.method)}</td>
+            <td style="color:var(--cyan);">${escHtml(ev.path)}</td>
+            <td>${escHtml(ev.client_type)}</td>
+            <td><span class="badge badge-ok">${escHtml(ev.served_by)}</span></td>
+            <td style="color:var(--emerald);font-weight:700;">${escHtml(ev.latency_ms)} ms</td>
           </tr>
         `).join('');
 
@@ -2663,6 +2722,14 @@ def render_citizen_scientist_community_hub_html() -> str:
     let idleSeconds = 4.2;
     let autoIdleEnabled = true;
     let crunchInFlight = false;
+    function escHtml(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
 
     function resetIdleTimer() {
       idleSeconds = 0.0;
@@ -2699,52 +2766,68 @@ def render_citizen_scientist_community_hub_html() -> str:
         const res = await fetch('/api/v1/community/hub');
         const data = await res.json();
         const stats = data.community_stats || {};
-        document.getElementById('kpi-members').textContent = (stats.total_registered_citizen_scientists || 1428).toLocaleString();
-        document.getElementById('kpi-split').textContent = `${stats.active_steam_gamers || 912} Steam Gamers | ${stats.active_astrophysicists || 516} Astrophysicists`;
-        document.getElementById('kpi-cobblestones').textContent = Number(stats.total_boinc_cobblestones || 184920.5).toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1});
-        document.getElementById('kpi-wus').textContent = `${(stats.total_idle_gpu_workunits_completed || 6842).toLocaleString()} Workunits Folded on Idle GPUs`;
-        document.getElementById('kpi-candidates').textContent = stats.confirmed_exoplanet_candidates_coop || 39;
+        document.getElementById('kpi-members').textContent =
+          stats.total_registered_citizen_scientists != null
+            ? Number(stats.total_registered_citizen_scientists).toLocaleString()
+            : 'n/a';
+        document.getElementById('kpi-split').textContent =
+          `${stats.active_steam_gamers ?? 'n/a'} Steam Gamers | ${stats.active_astrophysicists ?? 'n/a'} Astrophysicists`;
+        document.getElementById('kpi-cobblestones').textContent =
+          stats.total_boinc_cobblestones != null
+            ? Number(stats.total_boinc_cobblestones).toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})
+            : 'n/a';
+        const wusFoldedTxt =
+          stats.total_idle_gpu_workunits_completed != null
+            ? Number(stats.total_idle_gpu_workunits_completed).toLocaleString()
+            : 'n/a';
+        document.getElementById('kpi-wus').textContent = `${wusFoldedTxt} Workunits Folded on Idle GPUs`;
+        document.getElementById('kpi-candidates').textContent = stats.confirmed_exoplanet_candidates_coop ?? 'n/a';
 
         const projs = (data.boinc_idle_gpu_policy && data.boinc_idle_gpu_policy.supported_boinc_projects) || [];
         const projHtml = projs.map(p => `
           <div class="proj-item">
             <div class="proj-head">
-              <strong>${p.name}</strong>
+              <strong>${escHtml(p.name)}</strong>
               <span style="color:var(--emerald);">${Number(p.progress_pct).toFixed(1)}%</span>
             </div>
             <div class="progress-track">
               <div class="progress-fill" style="width:${Math.min(100, Number(p.progress_pct))}%;"></div>
             </div>
             <div class="proj-meta">
-              <span>Workunit: <code>${p.active_workunit}</code></span>
+              <span>Workunit: <code>${escHtml(p.active_workunit)}</code></span>
               <span>Cobblestones: <strong style="color:var(--amber);">${Number(p.cobblestones_awarded).toFixed(1)}</strong></span>
-              <a href="#" onclick="triggerBoincCrunch('${p.project_id}');return false;" style="color:var(--cyan);">[⚡ Fold Now]</a>
+              <a href="#" onclick="triggerBoincCrunch('${escHtml(p.project_id)}');return false;" style="color:var(--cyan);">[⚡ Fold Now]</a>
             </div>
           </div>
         `).join('');
         document.getElementById('boinc-projects-list').innerHTML = projHtml;
 
         const leaders = data.community_members || data.leaderboard || [];
-        document.getElementById('leaderboard-tbody').innerHTML = leaders.map((r, idx) => `
+        document.getElementById('leaderboard-tbody').innerHTML = leaders.map((r, idx) => {
+          const ptsRaw = r.hmt_compute_points ?? r.game_score;
+          const ptsTxt = ptsRaw != null ? Number(ptsRaw).toLocaleString() : 'n/a';
+          const cobTxt = r.boinc_cobblestones != null ? Number(r.boinc_cobblestones).toLocaleString(undefined, {minimumFractionDigits:1}) : 'n/a';
+          return `
           <tr>
-            <td style="color:var(--amber);font-weight:700;">#${r.rank || (idx + 1)}</td>
-            <td><strong>${r.handle || r.commander}</strong><div style="font-size:0.68rem;color:var(--steel);">${r.gpu}</div></td>
-            <td><span class="badge-role">${r.role}</span></td>
-            <td style="color:var(--cyan);font-weight:700;">${Number(r.hmt_compute_points || r.game_score || 0).toLocaleString()}</td>
-            <td style="color:var(--emerald);font-weight:700;">${Number(r.boinc_cobblestones || 0).toLocaleString(undefined, {minimumFractionDigits:1})}</td>
-            <td>${r.boinc_workunits_completed || r.idle_gpu_workunits || 0}</td>
-            <td style="color:var(--amber);">${r.candidates_vetted || r.verified_transits || 0}</td>
+            <td style="color:var(--amber);font-weight:700;">#${escHtml(r.rank || (idx + 1))}</td>
+            <td><strong>${escHtml(r.handle || r.commander)}</strong><div style="font-size:0.68rem;color:var(--steel);">${escHtml(r.gpu)}</div></td>
+            <td><span class="badge-role">${escHtml(r.role)}</span></td>
+            <td style="color:var(--cyan);font-weight:700;">${escHtml(ptsTxt)}</td>
+            <td style="color:var(--emerald);font-weight:700;">${escHtml(cobTxt)}</td>
+            <td>${escHtml(r.boinc_workunits_completed ?? r.idle_gpu_workunits ?? 'n/a')}</td>
+            <td style="color:var(--amber);">${escHtml(r.candidates_vetted ?? r.verified_transits ?? 'n/a')}</td>
           </tr>
-        `).join('');
+        `;
+        }).join('');
 
         const feed = data.coop_discovery_feed || [];
         document.getElementById('discovery-feed-list').innerHTML = feed.slice(0, 6).map(f => `
           <div class="feed-item">
             <div class="feed-head">
-              <span><strong>${f.gamer_handle || f.author || '@Cmdr'}</strong> + <strong>${f.scientist_handle || f.role || 'Astrophysicist'}</strong> • <em>${f.target}</em></span>
-              <span>${f.timestamp || f.timestamp_utc || ''} | ${(f.gcp_receipt_sha256 || f.boinc_workunit || '').slice(0, 12)}</span>
+              <span><strong>${escHtml(f.gamer_handle || f.author || '@Cmdr')}</strong> + <strong>${escHtml(f.scientist_handle || f.role || 'Astrophysicist')}</strong> • <em>${escHtml(f.target)}</em></span>
+              <span>${escHtml(f.timestamp || f.timestamp_utc || '')} | ${escHtml((f.gcp_receipt_sha256 || f.boinc_workunit || '').slice(0, 12))}</span>
             </div>
-            <div class="feed-body">${f.summary || f.note || ''}</div>
+            <div class="feed-body">${escHtml(f.summary || f.note || '')}</div>
           </div>
         `).join('');
       } catch (e) {
@@ -2776,9 +2859,9 @@ def render_citizen_scientist_community_hub_html() -> str:
         const bls = rec.bls_transit_metrics || {};
         box.innerHTML = `
           <strong>✅ VERIFIED IDLE-GPU BOINC WORKUNIT COMPLETED &amp; SYNCED TO GCP:</strong><br/>
-          • <strong>Receipt ID:</strong> <code>${rec.receipt_id}</code> | <strong>SHA-256:</strong> <code>${(rec.result_sha256 || '').slice(0, 24)}...</code><br/>
-          • <strong>Target:</strong> ${rec.target_planet} | <strong>Best Period:</strong> ${bls.best_period_days} d | <strong>Transit Depth:</strong> ${bls.transit_depth_ppm} ppm | <strong>SNR:</strong> ${bls.snr}<br/>
-          • <strong>GCP Cloud Run Lease:</strong> <code>${rec.gcp_cloud_run_lease_id}</code> (${rec.gcp_federated_sync}) | <strong>Reward:</strong> +${rec.cobblestones_earned} Cobblestones &amp; +${rec.game_points_earned} Game PTS
+          • <strong>Receipt ID:</strong> <code>${escHtml(rec.receipt_id)}</code> | <strong>SHA-256:</strong> <code>${escHtml((rec.result_sha256 || '').slice(0, 24))}...</code><br/>
+          • <strong>Target:</strong> ${escHtml(rec.target_planet)} | <strong>Best Period:</strong> ${escHtml(bls.best_period_days)} d | <strong>Transit Depth:</strong> ${escHtml(bls.transit_depth_ppm)} ppm | <strong>SNR:</strong> ${escHtml(bls.snr)}<br/>
+          • <strong>GCP Cloud Run Lease:</strong> <code>${escHtml(rec.gcp_cloud_run_lease_id)}</code> (${escHtml(rec.gcp_federated_sync)}) | <strong>Reward:</strong> +${escHtml(rec.cobblestones_earned)} Cobblestones &amp; +${escHtml(rec.game_points_earned)} Game PTS
         `;
         await loadCommunityHub();
       } catch (e) {
@@ -2826,7 +2909,10 @@ def render_citizen_scientist_community_hub_html() -> str:
 """
 
 
-def create_exoplanet_hunter_fastapi_app() -> FastAPI:
+def create_exoplanet_hunter_fastapi_app(
+    portal_secret: bytes | str | None = None,
+    require_portal_secret: bool = False,
+) -> FastAPI:
     """Create the FastAPI server for the v4.0 Star Trek Curved Console Game + Multi-Producer Router."""
     service = AstroBeeMoEGPUService()
     producer_pool = HiveMindMultiProducerInferencePool(service)
@@ -2834,16 +2920,37 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         title="USS HiveMind NCC-31337 v4.0 — Star Trek Curved Console & 5-Language Voice/Subtitles + Multi-Producer GPU Server",
         version="4.0.0",
     )
+    _allowed_cockpit_origins = [
+        "http://127.0.0.1",
+        "http://localhost",
+        "http://127.0.0.1:8788",
+        "http://localhost:8788",
+        "http://127.0.0.1:8080",
+        "http://localhost:8080",
+        "http://127.0.0.1:8095",
+        "http://localhost:8095",
+    ]
+    _allowed_cockpit_hosts = {"127.0.0.1", "localhost", "::1", "[::1]", "testserver"}
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
+        allow_origins=_allowed_cockpit_origins,
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
     @app.middleware("http")
     async def traffic_monitor_middleware(request: Request, call_next):
+        raw_host = request.headers.get("host", "127.0.0.1").strip().lower()
+        if raw_host.startswith("["):
+            host_only = raw_host.split("]")[0] + "]" if "]" in raw_host else raw_host
+        else:
+            host_only = raw_host.partition(":")[0]
+        if host_only and host_only not in _allowed_cockpit_hosts:
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"Invalid Host header '{raw_host}' for local cockpit"},
+            )
         t0 = time.perf_counter()
         response = await call_next(request)
         elapsed_ms = (time.perf_counter() - t0) * 1000.0
@@ -2874,14 +2981,54 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
     def api_monitor_telemetry() -> JSONResponse:
         return JSONResponse(content=producer_pool.get_live_traffic_and_tflops_report())
 
+    benchmark_gate: Dict[str, Any] = {"lock": threading.Lock(), "last_done": None, "last_result": None}
+
     @app.post("/api/v1/monitor/benchmark-tflops", response_class=JSONResponse)
     def api_benchmark_tflops() -> JSONResponse:
-        metrics = producer_pool.benchmark_live_tflops(matrix_dim=3072)
-        return JSONResponse(content=metrics)
+        gate = benchmark_gate
+        if not gate["lock"].acquire(blocking=False):
+            return JSONResponse(
+                status_code=409,
+                content={"status": "BUSY", "message": "A TFLOPS benchmark is already running; retry later."},
+            )
+        try:
+            now = time.monotonic()
+            if gate["last_done"] is not None and now - gate["last_done"] < BENCHMARK_COOLDOWN_S:
+                remaining = BENCHMARK_COOLDOWN_S - (now - gate["last_done"])
+                return JSONResponse(
+                    status_code=429,
+                    content={
+                        "status": "COOLDOWN",
+                        "retry_after_s": round(remaining, 1),
+                        "last_result": gate["last_result"],
+                    },
+                )
+            metrics = producer_pool.benchmark_live_tflops(matrix_dim=3072)
+            gate["last_done"] = time.monotonic()
+            gate["last_result"] = metrics
+            return JSONResponse(content={**metrics, "benchmark_status": "MEASURED_NOW"})
+        finally:
+            gate["lock"].release()
+
+    tap_cache: Dict[str, Any] = {"lock": threading.Lock(), "fetched_at": None, "payload": None}
 
     @app.get("/api/astro/nasa-tap-sync", response_class=JSONResponse)
     def api_nasa_tap_sync() -> JSONResponse:
-        return JSONResponse(content=query_nasa_exoplanet_archive_tap(live_network=True))
+        cache = tap_cache
+        with cache["lock"]:
+            now = time.monotonic()
+            fresh = cache["fetched_at"] is not None and now - cache["fetched_at"] < TAP_REFRESH_INTERVAL_S
+            if not fresh:
+                cache["payload"] = query_nasa_exoplanet_archive_tap(live_network=True)
+                cache["fetched_at"] = now
+                served_from = "UPSTREAM_REFRESH"
+            else:
+                served_from = "MEMORY_CACHE"
+            body = dict(cache["payload"])
+            body["served_from"] = served_from
+            body["refresh_interval_s"] = TAP_REFRESH_INTERVAL_S
+            body["age_s"] = round(now - cache["fetched_at"], 1)
+        return JSONResponse(content=body)
 
     @app.get("/api/astro/stitch_project", response_class=JSONResponse)
     def api_stitch_project() -> JSONResponse:
@@ -3000,9 +3147,10 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         return JSONResponse(
             content={
                 "app_id": STEAM_APP_ID,
-                "depot_id": 3133702,
-                "executable": "HiveMind_Exoplanet_Hunter.exe",
-                "status": "READY",
+                "depot_id": None,
+                "executable": None,
+                "status": "NOT_BUILT",
+                "manifest_present": False,
             }
         )
 
@@ -3012,7 +3160,19 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         lang: str = "en",
         voice: str = "Puck",
     ) -> Response:
-        res = synthesize_gemini_or_gcp_free_tts(text=text, lang=lang, voice_name=voice)
+        if len(text) > MAX_TTS_TEXT_CHARS:
+            # Refused before any outbound request or cache write: this route is public, and each distinct text used to be
+            # forwarded to a third party and cached on disk without a bound.
+            return JSONResponse(
+                status_code=413,
+                content={"ok": False, "error": f"text is limited to {MAX_TTS_TEXT_CHARS} characters", "length": len(text)},
+            )
+        if not _TTS_VOICE_RE.fullmatch(voice) or not _TTS_LANG_RE.fullmatch(lang) or len(lang) > 12:
+            return JSONResponse(status_code=400, content={"ok": False, "error": "voice must be 1-32 letters, digits, '_' or '-'; lang a language code such as en or zh-CN"})
+        try:
+            res = synthesize_gemini_or_gcp_free_tts(text=text, lang=lang, voice_name=voice)
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={"ok": False, "error": str(exc)})
         if res.get("ok") and res.get("audio_bytes"):
             return Response(
                 content=res["audio_bytes"],
@@ -3047,16 +3207,35 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         return JSONResponse(content=producer_pool.get_pool_status())
 
     @app.post("/api/v1/producers/register", response_class=JSONResponse)
-    def api_producers_register(req: ProducerRegistrationRequest) -> JSONResponse:
-        updated = producer_pool.register_or_update_producer(
-            producer_id=req.producer_id,
-            name=req.name,
-            hardware=req.hardware,
-            status=req.status,
-            endpoint_url=req.endpoint_url,
-            priority=req.priority,
-            notes=req.notes,
-        )
+    def api_producers_register(req: ProducerRegistrationRequest, request: Request) -> JSONResponse:
+        import os
+
+        expected_tok = os.environ.get("HIVEMIND_PRODUCER_REGISTER_TOKEN", "").strip()
+        if expected_tok:
+            auth_hdr = request.headers.get("authorization", "").strip()
+            if auth_hdr != f"Bearer {expected_tok}":
+                return JSONResponse(status_code=401, content={"status": "rejected", "error": "unauthorized"})
+        if (
+            len(req.producer_id) > 64
+            or len(req.name) > 128
+            or len(req.hardware) > 128
+            or len(req.notes) > 512
+        ):
+            return JSONResponse(status_code=413, content={"status": "rejected", "error": "field_too_large"})
+        try:
+            updated = producer_pool.register_or_update_producer(
+                producer_id=req.producer_id,
+                name=req.name,
+                hardware=req.hardware,
+                status=req.status,
+                endpoint_url=req.endpoint_url,
+                priority=req.priority,
+                notes=req.notes,
+            )
+        except OverflowError as exc:
+            return JSONResponse(status_code=413, content={"status": "rejected", "error": str(exc)})
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={"status": "rejected", "error": str(exc)})
         return JSONResponse(
             content={
                 "status": "registered",
@@ -3088,12 +3267,13 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         if "prompt" in payload:
             prompt = str(payload["prompt"])
         pref = str(payload.get("preferred_producer", payload.get("producer", "auto")))
-        max_toks = int(payload.get("max_tokens", 64))
+        max_toks = max(1, min(512, int(payload.get("max_tokens", 64))))
         inf = producer_pool.serve_inference(
             prompt=prompt,
             max_new_tokens=max_toks,
             preferred_producer=pref,
         )
+        comp_toks = int(inf.get("generated_token_count", max_toks))
         return JSONResponse(
             content={
                 "id": f"chatcmpl-hivemind-{inf['inference_receipt_sha256'][:12]}",
@@ -3112,8 +3292,8 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                 ],
                 "usage": {
                     "prompt_tokens": inf["input_token_count"],
-                    "completion_tokens": max_toks,
-                    "total_tokens": inf["input_token_count"] + max_toks,
+                    "completion_tokens": comp_toks,
+                    "total_tokens": inf["input_token_count"] + comp_toks,
                 },
                 "bee_moe_routing": {
                     "routed_experts": inf["routed_experts"],
@@ -3161,21 +3341,63 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         choice = random.choice(service.catalog[8:] if len(service.catalog) > 8 else service.catalog)
         return JSONResponse(content=choice)
 
+    feedback_hits: Dict[str, deque] = {}
+    feedback_lock = threading.Lock()
+
     @app.post("/api/v1/son/feedback", response_class=JSONResponse)
-    def api_son_feedback(payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
-        tag = str(payload.get("gamer_tag", "AstroGamer_FR"))[:64]
-        rating = max(1, min(5, int(payload.get("overall_rating", 5))))
-        comments = str(payload.get("review_text", ""))[:2048]
-        ideas = str(payload.get("feature_suggestions", ""))[:2048]
+    def api_son_feedback(request: Request, payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
+        if not isinstance(payload, dict):
+            return JSONResponse(status_code=400, content={"status": "rejected", "message": "JSON object expected."})
+        comments_raw = str(payload.get("review_text", ""))
+        ideas_raw = str(payload.get("feature_suggestions", ""))
+        if len(comments_raw) > FEEDBACK_MAX_FIELD_CHARS or len(ideas_raw) > FEEDBACK_MAX_FIELD_CHARS:
+            return JSONResponse(
+                status_code=413,
+                content={"status": "rejected", "message": f"Each text field is capped at {FEEDBACK_MAX_FIELD_CHARS} characters."},
+            )
+        try:
+            rating = max(1, min(5, int(payload.get("overall_rating", 5))))
+        except (TypeError, ValueError):
+            return JSONResponse(status_code=400, content={"status": "rejected", "message": "overall_rating must be an integer."})
+        client_key = request.client.host if request.client else "unknown"
+        now_mono = time.monotonic()
+        with feedback_lock:
+            hits = feedback_hits.setdefault(client_key, deque())
+            while hits and now_mono - hits[0] > FEEDBACK_RATE_WINDOW_S:
+                hits.popleft()
+            for stale_key in [
+                k for k, q in feedback_hits.items() if k != client_key and (not q or now_mono - q[-1] > FEEDBACK_RATE_WINDOW_S)
+            ]:
+                del feedback_hits[stale_key]
+            if len(hits) >= FEEDBACK_RATE_LIMIT_MAX:
+                return JSONResponse(
+                    status_code=429,
+                    content={"status": "rate_limited", "message": "Too many feedback submissions; try again later."},
+                )
+            hits.append(now_mono)
+        tag = _sanitise_display_tag(payload.get("gamer_tag", "AstroGamer_FR"))
+        comments = _sanitise_feedback_field(comments_raw)
+        ideas = _sanitise_feedback_field(ideas_raw)
         now_iso = datetime.datetime.now().isoformat()[:19]
         stars = "⭐" * rating
         md_path = ARTIFACTS_ROOT / "SON_FEEDBACK.md"
+        md_path.parent.mkdir(parents=True, exist_ok=True)
+        if md_path.exists() and md_path.stat().st_size >= FEEDBACK_MAX_FILE_BYTES:
+            os.replace(md_path, md_path.with_suffix(".md.1"))
         with open(md_path, "a", encoding="utf-8") as fp:
             fp.write(
                 f"\n## 🖖 Avis Star Trek Exoplanet Hunter v4.0 de {tag} ({stars}) — {now_iso}\n"
                 f"- **Commentaires :** {comments}\n- **Idées :** {ideas}\n---\n"
             )
-        return JSONResponse(content={"status": "success", "message": f"Merci {tag} ! (+500 HMT)"})
+        return JSONResponse(
+            content={
+                "status": "success",
+                "message": f"Merci {tag} !",
+                "hmt_credited": False,
+                "hmt_awarded": 0,
+                "note": "This endpoint issues no HMT credit; feedback is stored for review.",
+            }
+        )
 
     # Shared In-Memory + Persistent State for the GCP Gamer & Citizen-Scientist Community Hub + BOINC Idle-GPU Coordinator
     community_state_path = ARTIFACTS_ROOT / "astro_boinc_community_hub_state.json"
@@ -3225,83 +3447,23 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                 },
             ],
         },
-        "community_members": [
-            {
-                "handle": "@Commander_Puck_FR",
-                "role": "Steam Gamer + Idle-GPU BOINC Donor",
-                "gpu": "NVIDIA GeForce RTX 2070 (8GB CUDA:0)",
-                "exoplanets_landed": 8,
-                "candidates_vetted": 14,
-                "boinc_workunits_completed": 42,
-                "boinc_cobblestones": 6430.5,
-                "hmt_compute_points": 14850,
-                "favorite_world": "K2-18 b (Hycean Ocean)",
-            },
-            {
-                "handle": "@Dr_Elena_Vega_IAP",
-                "role": "Astrophysics Citizen Scientist (GCP)",
-                "gpu": "GCP Cloud Run + Local Apple M3 Max",
-                "exoplanets_landed": 5,
-                "candidates_vetted": 31,
-                "boinc_workunits_completed": 68,
-                "boinc_cobblestones": 9420.0,
-                "hmt_compute_points": 19200,
-                "favorite_world": "LHS 1140 b (Rocky Super-Earth)",
-            },
-            {
-                "handle": "@AstroKid_Leo_11yo",
-                "role": "Junior Space Cadet & Oolite Pilot",
-                "gpu": "Steam Deck / GeForce GTX 1660 Ti",
-                "exoplanets_landed": 10,
-                "candidates_vetted": 12,
-                "boinc_workunits_completed": 19,
-                "boinc_cobblestones": 2840.0,
-                "hmt_compute_points": 9650,
-                "favorite_world": "TRAPPIST-1e (6-Day Habitable Zone)",
-            },
-            {
-                "handle": "@Prof_Kipping_Exomoons",
-                "role": "Citizen Scientist & Lightcurve Mentor",
-                "gpu": "NVIDIA RTX 4080 (BOINC Idle Donor)",
-                "exoplanets_landed": 4,
-                "candidates_vetted": 47,
-                "boinc_workunits_completed": 115,
-                "boinc_cobblestones": 18400.0,
-                "hmt_compute_points": 28400,
-                "favorite_world": "WASP-39 b (JWST SO2/CO2 Benchmark)",
-            },
-        ],
-        "coop_discovery_feed": [
-            {
-                "timestamp": "2026-10-28T14:50:12",
-                "gamer_handle": "@Commander_Puck_FR",
-                "scientist_handle": "@Dr_Elena_Vega_IAP",
-                "target": "K2-18 b (SECTOR-02-K2-18B)",
-                "event": "CO-OP BIOSIGNATURE CONFIRMATION",
-                "summary": "Steam Gamer @Commander_Puck_FR completed Stage 3 Oolite landing on K2-18 b (2920 ppm transit, K=3.55 m/s) -> Idle RTX 2070 crunched BOINC WU-JWST-K218B-DMS-319 -> Citizen Scientist @Dr_Elena_Vega_IAP verified H2O (98.4%) + CH4/CO2 Hycean ocean model on GCP Cloud Run!",
-                "gcp_receipt_sha256": "a5f82975bf5b0d65847aca19e3c374d96c946fc1272bc623cd49844f065f1393",
-            },
-            {
-                "timestamp": "2026-10-28T14:42:05",
-                "gamer_handle": "@AstroKid_Leo_11yo",
-                "scientist_handle": "@Prof_Kipping_Exomoons",
-                "target": "KOI-Bin #02 (SECTOR-10-KOI-BIN-02)",
-                "event": "FALSE-POSITIVE ECLIPSING BINARY VETTED",
-                "summary": "Junior Cadet @AstroKid_Leo_11yo spotted the V-shaped 58,400 ppm dip & K=1,420 m/s wobble in Stage 4 and clicked REJECT -> Verified by @Prof_Kipping_Exomoons via BOINC Einstein@Home binary ephemeris!",
-                "gcp_receipt_sha256": "32f7d0f0c978bb104aac9fc6dc00bdc0a21d4feb4a4176c88810a58ba09ad880",
-            },
-        ],
+        "community_members": [],
+        "coop_discovery_feed": [],
     }
+    community_state_lock = threading.Lock()
 
-    def _load_or_init_community_state() -> Dict[str, Any]:
-        if community_state_path.exists():
-            try:
-                return json.loads(community_state_path.read_text(encoding="utf-8"))
-            except Exception:
-                pass
+    def _save_community_state_unlocked(st: Dict[str, Any]) -> None:
         community_state_path.parent.mkdir(parents=True, exist_ok=True)
-        community_state_path.write_text(json.dumps(default_community_state, indent=2, ensure_ascii=False), encoding="utf-8")
-        return json.loads(json.dumps(default_community_state))
+        tmp_path = community_state_path.with_suffix(".json.tmp")
+        tmp_path.write_text(json.dumps(st, indent=2, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp_path, community_state_path)
+
+    def _load_or_init_community_state_unlocked() -> Dict[str, Any]:
+        if community_state_path.exists():
+            return json.loads(community_state_path.read_text(encoding="utf-8"))
+        init_st = json.loads(json.dumps(default_community_state))
+        _save_community_state_unlocked(init_st)
+        return init_st
 
     @app.get("/game", response_class=HTMLResponse)
     def game_page() -> HTMLResponse:
@@ -3314,19 +3476,43 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
 
     @app.get("/api/v1/community/hub", response_class=JSONResponse)
     def api_get_community_hub() -> JSONResponse:
-        st = _load_or_init_community_state()
+        with community_state_lock:
+            try:
+                st = _load_or_init_community_state_unlocked()
+            except (ValueError, OSError):
+                return JSONResponse(
+                    status_code=503,
+                    content={"status": "BLOCKED", "error": "corrupt_community_state"},
+                )
         return JSONResponse(content=st)
 
     @app.post("/api/v1/community/boinc-sync", response_class=JSONResponse)
     def api_boinc_idle_gpu_sync(payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
-        st = _load_or_init_community_state()
-        handle = str(payload.get("handle", "@Commander_Puck_FR"))[:64]
-        gpu_name = str(payload.get("gpu_name", service.hw_info.get("gpu_name", "NVIDIA GeForce RTX 2070")))[:96]
-        project_id = str(payload.get("project_id", "hivemind_tess_at_home"))
-        target_name = str(payload.get("target_name", "K2-18 b"))
+        raw_cobb = payload.get("cobblestones", 0.0)
+        raw_hmt = payload.get("hmt_bonus", 0)
+        try:
+            claimed_cobb = float(raw_cobb)
+            claimed_hmt = int(raw_hmt)
+        except (TypeError, ValueError):
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": "invalid_credit_payload"},
+            )
+        if not math.isfinite(claimed_cobb) or claimed_cobb < 0.0 or claimed_cobb > 100.0 or claimed_hmt < 0 or claimed_hmt > 250:
+            return JSONResponse(
+                status_code=400,
+                content={"ok": False, "error": "unverified_self_declared_credit_rejected"},
+            )
+        handle = html.escape(str(payload.get("handle", "@Commander_Puck_FR"))[:64], quote=True)
+        gpu_name = html.escape(
+            str(payload.get("gpu_name", service.hw_info.get("gpu_name", "NVIDIA GeForce RTX 2070")))[:96],
+            quote=True,
+        )
+        project_id = html.escape(str(payload.get("project_id", "hivemind_tess_at_home"))[:64], quote=True)
+        target_name = html.escape(str(payload.get("target_name", "K2-18 b"))[:64], quote=True)
         idle_seconds = float(payload.get("idle_seconds", 12.4))
-        cobblestones_delta = float(payload.get("cobblestones", 45.0))
-        hmt_bonus = int(payload.get("hmt_bonus", 250))
+        cobblestones_delta = 0.0
+        hmt_bonus = 0
 
         # Perform a real Box-Least-Squares (BLS) transit folding / Keplerian harmonic verification on local GPU/CPU
         t0 = time.perf_counter()
@@ -3367,44 +3553,52 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         except Exception:
             pass
 
-        # Update project progress & member stats
-        for proj in st["boinc_idle_gpu_policy"]["supported_boinc_projects"]:
-            if proj["project_id"] == project_id or project_id == "all":
-                proj["progress_pct"] = round(min(100.0, (proj["progress_pct"] + 7.5) % 100.0 or 98.5), 1)
-                proj["cobblestones_awarded"] = round(proj["cobblestones_awarded"] + cobblestones_delta, 1)
+        with community_state_lock:
+            try:
+                st = _load_or_init_community_state_unlocked()
+            except (ValueError, OSError):
+                return JSONResponse(
+                    status_code=503,
+                    content={"status": "BLOCKED", "error": "corrupt_community_state"},
+                )
+            # Update project progress & member stats
+            for proj in st["boinc_idle_gpu_policy"]["supported_boinc_projects"]:
+                if proj["project_id"] == project_id or project_id == "all":
+                    proj["progress_pct"] = round(min(100.0, (proj["progress_pct"] + 7.5) % 100.0 or 98.5), 1)
+                    proj["cobblestones_awarded"] = round(proj["cobblestones_awarded"] + cobblestones_delta, 1)
 
-        found_member = False
-        for m in st["community_members"]:
-            if m["handle"].lower() == handle.lower():
-                m["boinc_workunits_completed"] += 1
-                m["boinc_cobblestones"] = round(m["boinc_cobblestones"] + cobblestones_delta, 1)
-                m["hmt_compute_points"] += hmt_bonus
-                found_member = True
-                break
-        if not found_member:
-            st["community_members"].insert(0, {
-                "handle": handle,
-                "role": "Steam Gamer + Idle-GPU BOINC Donor",
-                "gpu": gpu_name,
-                "exoplanets_landed": 3,
-                "candidates_vetted": 5,
-                "boinc_workunits_completed": 1,
-                "boinc_cobblestones": round(cobblestones_delta, 1),
-                "hmt_compute_points": 2400 + hmt_bonus,
-                "favorite_world": target_name,
+            found_member = False
+            for m in st["community_members"]:
+                if m["handle"].lower() == handle.lower():
+                    m["boinc_workunits_completed"] += 1
+                    m["boinc_cobblestones"] = round(m["boinc_cobblestones"] + cobblestones_delta, 1)
+                    m["hmt_compute_points"] += hmt_bonus
+                    found_member = True
+                    break
+            if not found_member:
+                st["community_members"].insert(0, {
+                    "handle": handle,
+                    "role": "Steam Gamer + Idle-GPU BOINC Donor",
+                    "gpu": gpu_name,
+                    "exoplanets_landed": 0,
+                    "candidates_vetted": 0,
+                    "boinc_workunits_completed": 1,
+                    "boinc_cobblestones": round(cobblestones_delta, 1),
+                    "hmt_compute_points": hmt_bonus,
+                    "favorite_world": target_name,
+                })
+
+            st["coop_discovery_feed"].insert(0, {
+                "timestamp": datetime.datetime.now().isoformat()[:19],
+                "gamer_handle": handle,
+                "scientist_handle": "@GCP_BOINC_Validator",
+                "target": target_name,
+                "event": f"IDLE-GPU BOINC WORKUNIT COMPLETED ({project_id.upper()})",
+                "summary": f"GPU idle for {idle_seconds:.1f}s on {gpu_name} -> Crunched BLS transit folding on {target_name} (Depth={bls_depth_ppm:.0f} ppm, SNR={bls_snr:.1f}σ in {compute_ms} ms) -> +{cobblestones_delta:.1f} BOINC Cobblestones & +{hmt_bonus} HMT! GCP Lease: {gcp_lease_id}",
+                "gcp_receipt_sha256": receipt_sha256,
             })
-
-        st["coop_discovery_feed"].insert(0, {
-            "timestamp": datetime.datetime.now().isoformat()[:19],
-            "gamer_handle": handle,
-            "scientist_handle": "@GCP_BOINC_Validator",
-            "target": target_name,
-            "event": f"IDLE-GPU BOINC WORKUNIT COMPLETED ({project_id.upper()})",
-            "summary": f"GPU idle for {idle_seconds:.1f}s on {gpu_name} -> Crunched BLS transit folding on {target_name} (Depth={bls_depth_ppm:.0f} ppm, SNR={bls_snr:.1f}σ in {compute_ms} ms) -> +{cobblestones_delta:.1f} BOINC Cobblestones & +{hmt_bonus} HMT! GCP Lease: {gcp_lease_id}",
-            "gcp_receipt_sha256": receipt_sha256,
-        })
-        st["coop_discovery_feed"] = st["coop_discovery_feed"][:20]
-        community_state_path.write_text(json.dumps(st, indent=2, ensure_ascii=False), encoding="utf-8")
+            st["coop_discovery_feed"] = st["coop_discovery_feed"][:20]
+            _save_community_state_unlocked(st)
 
         return JSONResponse(content={
             "ok": True,
@@ -3439,13 +3633,15 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
 
     @app.post("/api/v1/community/post-note", response_class=JSONResponse)
     def api_community_post_note(payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
-        st = _load_or_init_community_state()
-        handle = str(payload.get("handle", "@CitizenScientist_FR"))[:64]
-        role = str(payload.get("role", "Astrophysics Citizen Scientist"))[:64]
-        target = str(payload.get("target", "K2-18 b (Hycean Ocean World)"))[:64]
-        note = str(payload.get("note", "Confirmed U-shaped transit and JWST CH4/CO2 absorption peak at 4.3 um!"))[:500]
+        handle = html.escape(str(payload.get("handle", "@CitizenScientist_FR"))[:64], quote=True)
+        role = html.escape(str(payload.get("role", "Astrophysics Citizen Scientist"))[:64], quote=True)
+        target = html.escape(str(payload.get("target", "K2-18 b (Hycean Ocean World)"))[:64], quote=True)
+        note = html.escape(
+            str(payload.get("note", "Confirmed U-shaped transit and JWST CH4/CO2 absorption peak at 4.3 um!"))[:500],
+            quote=True,
+        )
         receipt = hashlib.sha256(f"{handle}:{target}:{note}:{time.time()}".encode("utf-8")).hexdigest()
-        st["coop_discovery_feed"].insert(0, {
+        entry = {
             "timestamp": datetime.datetime.now().isoformat()[:19],
             "gamer_handle": handle,
             "scientist_handle": role,
@@ -3453,10 +3649,20 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
             "event": "CITIZEN SCIENTIST & GAMER CO-OP OBSERVATION",
             "summary": note,
             "gcp_receipt_sha256": receipt,
-        })
-        st["coop_discovery_feed"] = st["coop_discovery_feed"][:20]
-        community_state_path.write_text(json.dumps(st, indent=2, ensure_ascii=False), encoding="utf-8")
-        return JSONResponse(content={"ok": True, "receipt_sha256": receipt, "feed": st["coop_discovery_feed"][:6]})
+        }
+        with community_state_lock:
+            try:
+                st = _load_or_init_community_state_unlocked()
+            except (ValueError, OSError):
+                return JSONResponse(
+                    status_code=503,
+                    content={"status": "BLOCKED", "error": "corrupt_community_state"},
+                )
+            st["coop_discovery_feed"].insert(0, entry)
+            st["coop_discovery_feed"] = st["coop_discovery_feed"][:20]
+            _save_community_state_unlocked(st)
+            feed_slice = list(st["coop_discovery_feed"][:6])
+        return JSONResponse(content={"ok": True, "entry": entry, "receipt_sha256": receipt, "feed": feed_slice})
 
     @app.api_route("/join", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/rejoindre", methods=["GET", "HEAD"], response_class=HTMLResponse)
@@ -3495,14 +3701,36 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         return JSONResponse(content={"schema": "hivemind.exoplanet_mcp.catalog/1", "targets": []})
 
     # Mount the OpenRouter Portal (/portal, /playground) & Free Steam Game Registration/Login/Contribution API
+    import os as _os
     import secrets as _secrets
     from hivemind.router.accounts import HandleTaken, ReservedHandle, RouterStore
     from hivemind.router.portal_page import portal_content_security_policy, render_portal_page
     from hivemind.security.hivemind_firewall import SwarmSecurityViolationError
 
     ARTIFACTS_ROOT.mkdir(parents=True, exist_ok=True)
-    _portal_store = RouterStore(ARTIFACTS_ROOT / "local_portal_router.db", b"hivemind-local-steam-portal-secret-32b")
-    _steam_key_cache: Dict[str, str] = {}
+    if portal_secret is not None:
+        _portal_secret_bytes = (
+            portal_secret.encode("utf-8") if isinstance(portal_secret, str) else bytes(portal_secret)
+        )
+        if len(_portal_secret_bytes) < 32:
+            raise RuntimeError("HIVEMIND_PORTAL_SECRET must be at least 32 bytes")
+    elif "HIVEMIND_PORTAL_SECRET" in _os.environ:
+        _portal_secret_bytes = _os.environ["HIVEMIND_PORTAL_SECRET"].encode("utf-8")
+        if len(_portal_secret_bytes) < 32:
+            raise RuntimeError("HIVEMIND_PORTAL_SECRET must be at least 32 bytes")
+    elif require_portal_secret or _os.environ.get("HIVEMIND_REQUIRE_PORTAL_SECRET", "").strip().lower() in ("1", "true", "yes"):
+        raise RuntimeError("HIVEMIND_PORTAL_SECRET (>= 32 bytes) is required")
+    else:
+        _portal_secret_bytes = _secrets.token_bytes(32)
+    _portal_store = RouterStore(ARTIFACTS_ROOT / "local_portal_router.db", _portal_secret_bytes)
+
+    def _extract_bearer_token(request: Request, payload: Dict[str, Any] | None = None) -> str:
+        auth = request.headers.get("authorization", "")
+        if auth.lower().startswith("bearer "):
+            return auth.split(" ", 1)[1].strip()
+        if payload:
+            return str(payload.get("api_key") or "").strip()
+        return ""
 
     @app.api_route("/portal", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/playground", methods=["GET", "HEAD"], response_class=HTMLResponse)
@@ -3525,11 +3753,12 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
             content={
                 "object": "hivemind.steam_free_game",
                 "app_id": 3133700,
+                "app_id_status": "PLACEHOLDER_NOT_REGISTERED",
                 "depot_id": 3133702,
                 "title": "USS Hivemind NCC-31337 v5.1 — Astrophysics Exoplanet Hunter & Idle-GPU BOINC Edition",
                 "pricing_model": "FreeOnDemand (100% Free-to-Play on Steam • Non-Monetary HMT Compute Reciprocity)",
                 "boinc_idle_gpu_preemption_ms": 100,
-                "portal_registration_status": "REGISTERED_AND_LIVE",
+                "portal_registration_status": "NOT_REGISTERED",
                 "endpoints": {
                     "register_login": "/v1/hivemind/steam/register-login",
                     "contribute_boinc": "/v1/hivemind/steam/contribute-boinc",
@@ -3539,7 +3768,7 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         )
 
     @app.post("/v1/hivemind/steam/register-login", response_class=JSONResponse)
-    def post_steam_register_or_login(payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
+    def post_steam_register_or_login(request: Request, payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
         handle = str(payload.get("handle") or "Cmdr_RTX2070_Steam").strip()[:64]
         steam_id64 = str(payload.get("steam_id64") or "76561198031337001").strip()[:32]
         gpu_model = str(payload.get("gpu_name") or payload.get("gpu_model") or "NVIDIA GeForce RTX 2070 (8 GB VRAM)").strip()[:96]
@@ -3547,22 +3776,26 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         if role not in ("consumer", "producer", "prosumer"):
             role = "prosumer"
         created = False
+        api_key: str | None
         try:
             account_id, api_key = _portal_store.register(handle, role)
             created = True
-            _steam_key_cache[account_id] = api_key
-            _portal_store.grant(account_id, 2400.0, "starter:steam_free_game_3133700")
         except HandleTaken:
             account_id = _portal_store.account_id_for(handle)
-            api_key = _steam_key_cache.get(account_id, "")
-            if not api_key:
-                api_key = "hm-" + _secrets.token_urlsafe(32)
-                with _portal_store._tx() as conn:
-                    conn.execute(
-                        "UPDATE accounts SET key_hash=? WHERE account_id=?",
-                        (_portal_store._hmac_hex(api_key), account_id),
-                    )
-                _steam_key_cache[account_id] = api_key
+            candidate = _extract_bearer_token(request, payload)
+            authed = _portal_store.authenticate(candidate) if candidate else None
+            if authed is None or authed.account_id != account_id:
+                return JSONResponse(
+                    status_code=401,
+                    content={
+                        "error": {
+                            "message": f"handle '{handle}' is already registered; supply its Bearer hm-... key to resume the session",
+                            "type": "authentication_error",
+                            "code": "handle_taken",
+                        }
+                    },
+                )
+            api_key = None
         except (SwarmSecurityViolationError, ReservedHandle):
             return JSONResponse(status_code=400, content={"error": {"message": "Invalid handle format."}})
 
@@ -3583,7 +3816,8 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                 "api_key": api_key,
                 "steam_session_ticket": f"STEAM-3133700-{ticket_hash}",
                 "balance_hmt": _portal_store.balance(account_id),
-            }
+            },
+            headers={"Cache-Control": "no-store"},
         )
 
     @app.get("/v1/hivemind/me", response_class=JSONResponse)
@@ -3610,22 +3844,21 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
 
     @app.post("/v1/hivemind/steam/contribute-boinc", response_class=JSONResponse)
     def post_steam_contribute_boinc(request: Request, payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
+        token = _extract_bearer_token(request)
+        if not token:
+            return JSONResponse(
+                status_code=401,
+                content={"error": {"message": "Missing Authorization: Bearer hm-... header.", "type": "authentication_error"}},
+            )
+        acc = _portal_store.authenticate(token)
+        if acc is None:
+            return JSONResponse(
+                status_code=401,
+                content={"error": {"message": "Invalid API key.", "type": "authentication_error"}},
+            )
+        account_id = acc.account_id
+        handle = acc.handle
         target_planet = str(payload.get("target_planet") or "K2-18 b").strip()[:64]
-        handle = str(payload.get("handle") or "Cmdr_RTX2070_Steam").strip()[:64]
-        account_id: str | None = None
-        auth = request.headers.get("authorization", "")
-        if auth.lower().startswith("bearer "):
-            acc = _portal_store.authenticate(auth.split(" ", 1)[1].strip())
-            if acc is not None:
-                account_id = acc.account_id
-                handle = acc.handle
-        if account_id is None:
-            try:
-                account_id, api_key = _portal_store.register(handle, "prosumer")
-                _steam_key_cache[account_id] = api_key
-                _portal_store.grant(account_id, 2400.0, "starter:steam_free_game_3133700")
-            except HandleTaken:
-                account_id = _portal_store.account_id_for(handle)
 
         # Execute real CUDA Driver PTX BLS fold on local RTX 2070
         fold_res: Dict[str, Any] = {
@@ -3649,10 +3882,9 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         except Exception:
             pass
 
-        hmt_awarded = 250.0
-        cobblestones_awarded = 45.0
+        hmt_awarded = 0.0
+        cobblestones_awarded = 0.0
         receipt_sha256 = str(fold_res.get("result_sha256") or "")
-        _portal_store.grant(account_id, hmt_awarded, f"boinc:steam3133700:{receipt_sha256[:16]}")
 
         # Also record into the Community Hub state so both views stay synchronized
         api_boinc_idle_gpu_sync(
@@ -3670,6 +3902,7 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         return JSONResponse(
             content={
                 "object": "hivemind.steam_boinc_contribution",
+                "credit_status": "pending_verification",
                 "ok": True,
                 "account_id": account_id,
                 "handle": handle,
@@ -3684,7 +3917,8 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                 "cobblestones_awarded": cobblestones_awarded,
                 "balance_hmt": _portal_store.balance(account_id),
                 "receipt_sha256": receipt_sha256,
-            }
+            },
+            headers={"Cache-Control": "no-store"},
         )
 
     @app.api_route("/webgpu", methods=["GET", "HEAD"], response_class=HTMLResponse)
@@ -3732,29 +3966,33 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         )
 
     @app.post("/v1/hivemind/webgpu/register-login", response_class=JSONResponse)
-    def post_webgpu_register_or_login(payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
+    def post_webgpu_register_or_login(request: Request, payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
         handle = str(payload.get("handle") or "Cmdr_WebGPU_RTX2070").strip()[:64]
         gpu_adapter = str(payload.get("gpu_adapter") or "WebGPU Hardware Adapter (WGSL @compute)").strip()[:96]
         role = str(payload.get("role") or "prosumer").strip()
         if role not in ("consumer", "producer", "prosumer"):
             role = "prosumer"
         created = False
+        api_key: str | None
         try:
             account_id, api_key = _portal_store.register(handle, role)
             created = True
-            _steam_key_cache[account_id] = api_key
-            _portal_store.grant(account_id, 2400.0, "starter:webgpu_zero_install")
         except HandleTaken:
             account_id = _portal_store.account_id_for(handle)
-            api_key = _steam_key_cache.get(account_id, "")
-            if not api_key:
-                api_key = "hm-" + _secrets.token_urlsafe(32)
-                with _portal_store._tx() as conn:
-                    conn.execute(
-                        "UPDATE accounts SET key_hash=? WHERE account_id=?",
-                        (_portal_store._hmac_hex(api_key), account_id),
-                    )
-                _steam_key_cache[account_id] = api_key
+            candidate = _extract_bearer_token(request, payload)
+            authed = _portal_store.authenticate(candidate) if candidate else None
+            if authed is None or authed.account_id != account_id:
+                return JSONResponse(
+                    status_code=401,
+                    content={
+                        "error": {
+                            "message": f"handle '{handle}' is already registered; supply its Bearer hm-... key to resume the session",
+                            "type": "authentication_error",
+                            "code": "handle_taken",
+                        }
+                    },
+                )
+            api_key = None
         except (SwarmSecurityViolationError, ReservedHandle):
             return JSONResponse(status_code=400, content={"error": {"message": "Invalid handle format."}})
 
@@ -3771,7 +4009,8 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                 "api_key": api_key,
                 "webgpu_session_ticket": f"WEBGPU-{ticket_hash}",
                 "balance_hmt": _portal_store.balance(account_id),
-            }
+            },
+            headers={"Cache-Control": "no-store"},
         )
 
     @app.post("/v1/hivemind/webgpu/contribute", response_class=JSONResponse)
@@ -3795,22 +4034,29 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         target_planet = str(payload.get("target_planet") or "K2-18 b").strip()[:64]
         gpu_adapter = str(payload.get("gpu_adapter") or "WebGPU Hardware Adapter (WGSL @compute)").strip()[:96]
         backend = str(payload.get("backend") or "webgpu_wgsl_compute_shader").strip()[:64]
-        n_points = int(payload.get("n_points_folded") or 16384)
-        kernel_ms = float(payload.get("kernel_exec_ms") or 0.42)
-        depth_ppm = float(payload.get("recovered_transit_depth_ppm") or 2789.0)
-
-        verified = execute_server_webgpu_verification_and_sync(
-            handle=acc.handle,
-            target_planet=target_planet,
-            gpu_adapter=gpu_adapter,
-            backend=backend,
-            n_points_folded=n_points,
-            kernel_exec_ms=kernel_ms,
-            recovered_transit_depth_ppm=depth_ppm,
-        )
-        hmt_awarded = 250.0
-        cobblestones_awarded = 45.0
-        _portal_store.grant(acc.account_id, hmt_awarded, f"webgpu:wgsl:{verified['receipt_sha256'][:16]}")
+        raw_n_points = payload.get("n_points_folded")
+        raw_kernel_ms = payload.get("kernel_exec_ms")
+        raw_depth_ppm = payload.get("recovered_transit_depth_ppm")
+        try:
+            n_points = 16384 if raw_n_points is None else raw_n_points
+            kernel_ms = 0.42 if raw_kernel_ms is None else raw_kernel_ms
+            depth_ppm = 2789.0 if raw_depth_ppm is None else raw_depth_ppm
+            verified = execute_server_webgpu_verification_and_sync(
+                handle=acc.handle,
+                target_planet=target_planet,
+                gpu_adapter=gpu_adapter,
+                backend=backend,
+                n_points_folded=n_points,
+                kernel_exec_ms=kernel_ms,
+                recovered_transit_depth_ppm=depth_ppm,
+            )
+        except (TypeError, ValueError) as exc:
+            return JSONResponse(
+                status_code=400,
+                content={"error": {"message": f"Invalid WebGPU contribution parameters: {exc}", "type": "invalid_request_error"}},
+            )
+        hmt_awarded = 0.0
+        cobblestones_awarded = 0.0
 
         # Sync with Community Hub state as well
         api_boinc_idle_gpu_sync(
@@ -3828,6 +4074,7 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
         return JSONResponse(
             content={
                 "object": "hivemind.webgpu_contribution",
+                "credit_status": "pending_verification",
                 "ok": True,
                 "account_id": acc.account_id,
                 "handle": acc.handle,
@@ -3836,7 +4083,8 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
                 "hmt_awarded": hmt_awarded,
                 "cobblestones_awarded": cobblestones_awarded,
                 "balance_hmt": _portal_store.balance(acc.account_id),
-            }
+            },
+            headers={"Cache-Control": "no-store"},
         )
 
 
@@ -3869,5 +4117,116 @@ def create_exoplanet_hunter_fastapi_app() -> FastAPI:
             url="https://github.com/xaviercallens/HiveMind/releases/download/v2.12.0/HiveMind_Astrophysics_Exoplanet_Hunter_v2.11.0_Steam_Win64.zip",
             status_code=307,
         )
+
+    @app.get("/api/v1/monitor/swat-telepathy", response_class=JSONResponse)
+    @app.get("/v1/hivemind/bees/swat-telepathy/status", response_class=JSONResponse)
+    def get_s34_swat_telepathy_status() -> JSONResponse:
+        from hivemind.swarm.swat_telepathy_bridge import (
+            SwaTTelepathyBridge,
+            UniversalHiveLatentHub,
+            compute_cms_chunk_periods,
+        )
+
+        hub = UniversalHiveLatentHub()
+        bridge = SwaTTelepathyBridge(hub=hub)
+        rep = hub.complexity_report()
+        night_path = ARTIFACTS_ROOT / "night_moe_training_ledger.json"
+        sleep_report: Dict[str, Any] = {}
+        if night_path.exists():
+            try:
+                sleep_report = json.loads(night_path.read_text(encoding="utf-8")).get("s34_sleep_consolidation_report", {})
+            except Exception:
+                sleep_report = {}
+        return JSONResponse(
+            content={
+                "object": "hivemind.s34_swat_telepathy.status",
+                "season": "S34",
+                "hub_summary": {
+                    **rep,
+                    "strictly_fewer_than_pairwise": rep["strictly_fewer_mappers"],
+                },
+                "n_blocks": bridge.n_blocks,
+                "cms_chunk_periods": compute_cms_chunk_periods([10.0, 2.0, 1.0], max_chunk_tokens=10000),
+                "latest_s34_sleep_consolidation": sleep_report,
+                "lean4_theorems": [
+                    "Season34_SwaTTelepathyAndNocturnalSleep.swat_identical_tokenizer_rope_identity",
+                    "Season34_SwaTTelepathyAndNocturnalSleep.swat_cross_causal_prefix_no_future_leakage",
+                    "Season34_SwaTTelepathyAndNocturnalSleep.swat_universal_hub_2n_strictly_below_pairwise",
+                    "Season34_SwaTTelepathyAndNocturnalSleep.swat_am_compacted_vram_fits_rtx2070_wddm",
+                ],
+            }
+        )
+
+    @app.post("/api/v1/monitor/swat-telepathy/plan", response_class=JSONResponse)
+    @app.post("/v1/hivemind/bees/swat-telepathy/plan", response_class=JSONResponse)
+    def post_s34_swat_telepathy_plan(payload: Dict[str, Any] = Body(default={})) -> JSONResponse:
+        from hivemind.swarm.swat_telepathy_bridge import SwaTTelepathyBridge
+
+        if not isinstance(payload, dict):
+            return JSONResponse(status_code=400, content={"error": "body must be a JSON object"})
+        sender_family = str(payload.get("sender_family") or "ibm-granite/granite-3.3-8b-instruct")[:128]
+        receiver_family = str(payload.get("receiver_family") or "HuggingFaceTB/SmolLM3-3B")[:128]
+        task_category = str(payload.get("task_category") or "code").lower()[:32]
+        raw_tokens = payload.get("input_tokens")
+        raw_ratio = payload.get("am_compaction_ratio")
+        raw_ocr = payload.get("ocr_text_density")
+        try:
+            if isinstance(raw_tokens, bool) or isinstance(raw_ratio, bool) or isinstance(raw_ocr, bool):
+                raise ValueError("numeric fields must not be booleans")
+            input_tokens = 28000 if raw_tokens is None else int(raw_tokens)
+            am_compaction_ratio = 5.0 if raw_ratio is None else float(raw_ratio)
+            ocr_text_density = (
+                (0.75 if task_category in {"docvqa", "infovqa", "dense_ocr", "ocr"} else 0.0)
+                if raw_ocr is None
+                else float(raw_ocr)
+            )
+        except (TypeError, ValueError, OverflowError):
+            return JSONResponse(status_code=400, content={"error": "numeric parameters must be valid numbers"})
+        if (
+            input_tokens < 1
+            or input_tokens > 1_000_000
+            or not math.isfinite(am_compaction_ratio)
+            or am_compaction_ratio < 1.0
+            or am_compaction_ratio > 64.0
+            or not math.isfinite(ocr_text_density)
+            or ocr_text_density < 0.0
+            or ocr_text_density > 1.0
+        ):
+            return JSONResponse(status_code=400, content={"error": "numeric parameters out of bounds"})
+        sample_len = min(input_tokens, 64)
+        offsets = [(i * 4, (i + 1) * 4) for i in range(sample_len)]
+        bridge = SwaTTelepathyBridge()
+        plan = bridge.plan_transfer(
+            sender_model_id=sender_family,
+            receiver_model_id=receiver_family,
+            sender_offsets=offsets,
+            receiver_offsets=offsets,
+            am_compaction_ratio=am_compaction_ratio,
+            ocr_text_density=ocr_text_density,
+        )
+        compacted_tokens = max(1, int(round(input_tokens / am_compaction_ratio)))
+        use_swat = bool(plan["vlm_routing_gate"]["use_swat_kv_transfer"])
+        return JSONResponse(
+            content={
+                "object": "hivemind.s34_swat_telepathy.plan",
+                "mode": "swat_kv_telepathy" if use_swat else "native_vlm_fallback",
+                "reason": plan["vlm_routing_gate"]["reason"],
+                "sender_family": sender_family,
+                "receiver_family": receiver_family,
+                "input_tokens": input_tokens,
+                "compacted_tokens": compacted_tokens,
+                "am_compaction_ratio": am_compaction_ratio,
+                "sender_slices": [list(s) for s in plan["sender_layer_slices"]],
+                "receiver_slices": [list(s) for s in plan["receiver_layer_slices"]],
+                "vram_guards": plan["vram_guards"],
+                "fits_rtx2070_wddm_ceiling": bool(plan["vram_guards"]["rtx2070_wddm_6656_ok"]),
+                "transfer_sha256": plan["transfer_sha256"],
+            }
+        )
+
+    from hivemind.boinc.rtx_boinc_deployer import RTXBoincServer, build_rtx_boinc_fastapi_router
+
+    _cockpit_rtx_boinc_server = RTXBoincServer(router_store=_portal_store)
+    app.include_router(build_rtx_boinc_fastapi_router(_cockpit_rtx_boinc_server))
 
     return app

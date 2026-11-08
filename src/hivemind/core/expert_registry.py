@@ -52,6 +52,7 @@ from typing import (
 REGISTRY_SCHEMA = "hivemind-expert-registry/v1"
 
 CANDIDATE, SHADOW, LIVE, RETIRED = "candidate", "shadow", "live", "retired"
+_GATE_REASON_PREFIX = "train-to-serve gate passed:"
 LIFECYCLE_STATES: Tuple[str, ...] = (CANDIDATE, SHADOW, LIVE, RETIRED)
 # shadow -> candidate sends an adapter back for another evaluation round; live -> shadow demotes without retiring.
 LEGAL_TRANSITIONS: Dict[str, frozenset[str]] = {
@@ -217,6 +218,19 @@ def evaluate_wave3_promotion_gates(
     max_p_value: float = 0.01,
 ) -> Dict[str, Any]:
     """Evaluate Wave 3 Scientific MoE Bee promotion Gates G1-G3 (`candidate -> shadow`)."""
+    for name, val in (
+        ("in_domain_acc", in_domain_acc),
+        ("base_acc", base_acc),
+        ("cross_domain_acc", cross_domain_acc),
+        ("mcnemar_p_value", mcnemar_p_value),
+    ):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or not (0.0 <= float(val) <= 1.0):
+            raise ValueError(f"{name} must be finite in [0, 1], got {val!r}")
+    for name, val in (("min_lift", min_lift), ("max_p_value", max_p_value)):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or not (0.0 < float(val) <= 1.0):
+            raise ValueError(f"{name} must be finite in (0, 1], got {val!r}")
+    if isinstance(wrong_verified_count, bool) or not isinstance(wrong_verified_count, int) or wrong_verified_count < 0:
+        raise ValueError(f"wrong_verified_count must be an integer >= 0, got {wrong_verified_count!r}")
     in_margin = float(in_domain_acc) - float(base_acc)
     cross_margin = float(in_domain_acc) - float(cross_domain_acc)
     p_val = float(mcnemar_p_value)
@@ -254,9 +268,19 @@ _TOKEN_RE = re.compile(r"[a-z0-9_]+")
 class IllegalTransitionError(ValueError):
     """A lifecycle change that :data:`LEGAL_TRANSITIONS` does not allow."""
 
+    error_code: str = "ILLEGAL_TRANSITION"
+
 
 class AdapterBaseMismatchError(ValueError):
     """An adapter offered to a base model other than the one it was trained on."""
+
+    error_code: str = "ADAPTER_BASE_MISMATCH"
+
+
+class GateNotPassedError(ValueError):
+    """An adapter was offered for LIVE without a passing train-to-serve gate for exactly its bytes."""
+
+    error_code: str = "GATE_NOT_PASSED"
 
 
 @dataclass(frozen=True)
@@ -275,7 +299,7 @@ class ExpertRecord:
     history: Tuple[Tuple[str, str, str], ...] = ()
 
     def __post_init__(self) -> None:
-        if not self.expert_id or not self.cluster_id or not self.base_model_id:
+        if not self.expert_id.strip() or not self.cluster_id.strip() or not self.base_model_id.strip():
             raise ValueError("expert_id, cluster_id and base_model_id must be non-empty")
         if self.kind not in EXPERT_KINDS:
             raise ValueError(f"unknown expert kind {self.kind!r}; expected one of {sorted(EXPERT_KINDS)}")
@@ -335,7 +359,9 @@ def replay_history(history: Sequence[Tuple[str, str, str]], final_state: str) ->
 class ExpertRegistry:
     """Experts indexed by id, state, cluster and adapter content hash."""
 
-    def __init__(self) -> None:
+    def __init__(self, strict: bool = False) -> None:
+        # strict: an adapter expert can reach LIVE only through promote_with_gate (the train-to-serve gate, docs/TRAIN_TO_SERVE_GATE.md)
+        self.strict = strict
         self._experts: Dict[str, ExpertRecord] = {}
         self._by_state: Dict[str, set[str]] = {s: set() for s in LIFECYCLE_STATES}
         self._by_cluster: Dict[str, set[str]] = {}
@@ -375,11 +401,13 @@ class ExpertRegistry:
     def get(self, expert_id: str) -> ExpertRecord:
         return self._experts[expert_id]
 
-    def transition(self, expert_id: str, to_state: str, reason: str) -> ExpertRecord:
+    def transition(self, expert_id: str, to_state: str, reason: str, *, _gate_verified: bool = False) -> ExpertRecord:
         """Move an expert along the lifecycle; raises :class:`IllegalTransitionError` for anything not allowed."""
         rec = self._experts[expert_id]
         if to_state not in LEGAL_TRANSITIONS[rec.state]:
             raise IllegalTransitionError(f"{expert_id!r}: {rec.state!r} -> {to_state!r} is not a legal transition")
+        if self.strict and to_state == LIVE and rec.has_adapter and not _gate_verified:
+            raise GateNotPassedError(f"{expert_id!r}: a strict registry promotes adapters to LIVE only through promote_with_gate")
         if not reason.strip():
             raise ValueError("a transition needs a reason")
         new = replace(rec, state=to_state, history=rec.history + ((rec.state, to_state, reason.strip()),))
@@ -387,6 +415,24 @@ class ExpertRegistry:
         self._by_state[to_state].add(expert_id)
         self._experts[expert_id] = new
         return new
+
+    def promote_with_gate(self, expert_id: str, gate: Mapping[str, Any]) -> ExpertRecord:
+        """SHADOW -> LIVE for an adapter, only if ``gate`` (the JSON written by ``scripts/adapter_to_served.py evaluate``) says ``servable`` for exactly this
+        adapter's bytes (``adapter.lora_gguf_sha256`` equals the registered ``adapter_sha256``) and this base model. Anything else raises and changes nothing."""
+        rec = self._experts[expert_id]
+        if not rec.has_adapter:
+            raise GateNotPassedError(f"{expert_id!r} is a serving expert: there is no adapter to gate")
+        if gate.get("servable") is not True:
+            raise GateNotPassedError(f"{expert_id!r}: the gate did not pass (servable={gate.get('servable')!r})")
+        tested = (gate.get("adapter") or {}).get("lora_gguf_sha256")
+        if tested != rec.adapter_sha256:
+            raise GateNotPassedError(f"{expert_id!r}: the gate tested adapter {str(tested)[:12]!r}, not the registered {str(rec.adapter_sha256)[:12]!r}")
+        base = str(gate.get("base", ""))
+        if base and base != rec.base_model_id:
+            raise GateNotPassedError(f"{expert_id!r}: the gate tested base {base!r}, the expert is for {rec.base_model_id!r}")
+        pooled = gate.get("pooled") or {}
+        reason = f"{_GATE_REASON_PREFIX} pooled gain {pooled.get('mean_nll_gain_nats')} nats, ci {pooled.get('bootstrap95')}, worst domain {gate.get('worst_domain_regression')}"
+        return self.transition(expert_id, LIVE, reason, _gate_verified=True)
 
     def ids_in_state(self, state: str) -> List[str]:
         if state not in LIFECYCLE_STATES:
@@ -489,32 +535,61 @@ class ExpertRegistry:
         *,
         promote_to_shadow: bool = False,
         promotion_reason: str = "Wave 3 pre-registered Gates G1-G3 passed",
+        gate_report_id: Optional[str] = None,
+        gate_report_ids: Optional[Mapping[str, str]] = None,
     ) -> List[str]:
-        """Register the 5 Wave 3 Scientific MoE Bees (`WAVE3_SCIENTIFIC_EXPERT_SPECS`) as `lora_domain` experts."""
+        """Register the 5 Wave 3 Scientific MoE Bees (`WAVE3_SCIENTIFIC_EXPERT_SPECS`) as `lora_domain` experts.
+
+        Every adapter expert requires its real content-addressed SHA-256 in ``adapter_hashes``; label hashes
+        derived from ``wave3:<base>:<name>`` are refused (IP-245). When ``promote_to_shadow=True``, a gate
+        report identifier must be recorded via ``gate_report_id``, ``gate_report_ids``, or ``promotion_reason``.
+        """
         if base_model_id not in WAVE3_SUPPORTED_BASE_MODELS:
             raise ValueError(
                 f"base_model_id {base_model_id!r} not in WAVE3_SUPPORTED_BASE_MODELS {WAVE3_SUPPORTED_BASE_MODELS}"
             )
+        if not adapter_hashes:
+            raise ValueError(
+                "adapter_hashes is required for Wave 3 adapter experts; label hashes are not permitted (IP-245)"
+            )
+        hashes = dict(adapter_hashes)
+        report_ids = dict(gate_report_ids or {})
         added: List[str] = []
-        hashes = dict(adapter_hashes or {})
         for name, spec in sorted(WAVE3_SCIENTIFIC_EXPERT_SPECS.items()):
             if name in self._experts:
                 continue
-            sha = hashes.get(name) or hashlib.sha256(f"wave3:{base_model_id}:{name}".encode("utf-8")).hexdigest()
+            sha = hashes.get(name)
+            if not sha or not _SHA256_RE.match(str(sha)):
+                raise ValueError(
+                    f"missing or invalid adapter_sha256 for Wave 3 expert {name!r}; a 64-hex content hash is required"
+                )
+            label_sha = hashlib.sha256(f"wave3:{base_model_id}:{name}".encode("utf-8")).hexdigest()
+            if str(sha) == label_sha:
+                raise ValueError(
+                    f"adapter_sha256 for {name!r} equals the synthetic label hash sha256('wave3:{base_model_id}:{name}')"
+                )
             self.register(
                 ExpertRecord(
                     expert_id=name,
                     kind=LORA_DOMAIN,
                     cluster_id=str(spec["cluster_id"]),
                     base_model_id=base_model_id,
-                    adapter_sha256=sha,
+                    adapter_sha256=str(sha),
                     adapter_size_mib=int(spec["adapter_size_mib"]),
                     keywords=tuple(spec["keywords"]),
                     source="expert_registry.WAVE3_SCIENTIFIC_EXPERT_SPECS",
                 )
             )
             if promote_to_shadow:
-                self.transition(name, SHADOW, promotion_reason)
+                gid = report_ids.get(name) or gate_report_id
+                reason_text = promotion_reason.strip()
+                if gid:
+                    reason_text = f"{reason_text} (gate_report_id={gid})"
+                elif "gate_report_id=" not in reason_text and "gate-" not in reason_text:
+                    raise ValueError(
+                        f"promoting {name!r} to SHADOW requires a gate_report_id in gate_report_id/gate_report_ids or promotion_reason"
+                    )
+                self.transition(name, SHADOW, reason_text)
             added.append(name)
         return added
 
@@ -536,7 +611,7 @@ class AdapterFootprint:
     def __post_init__(self) -> None:
         if isinstance(self.size_mib, bool) or not isinstance(self.size_mib, int) or self.size_mib <= 0:
             raise ValueError("size_mib must be an integer > 0")
-        if not self.base_model_id:
+        if not self.base_model_id.strip():
             raise ValueError("base_model_id must be non-empty")
 
 
@@ -554,7 +629,7 @@ class ServingNode:
     max_lora_slots: int
 
     def __post_init__(self) -> None:
-        if not self.node_id or not self.base_model_id:
+        if not self.node_id.strip() or not self.base_model_id.strip():
             raise ValueError("node_id and base_model_id must be non-empty")
         for name in ("vram_mib", "base_resident_mib", "max_lora_slots"):
             value = getattr(self, name)

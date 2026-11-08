@@ -7,7 +7,7 @@ fixed-point arithmetic transition receipt (``ZK-OPoI v5``):
 2. Evaluates a deterministic Schwartz-Zippel / Freivalds linear-combination check over Mersenne field
    ``GF(2^61 - 1)`` on quantized ``INT8`` / ``INT4`` LoRA transition matrices.
 3. Enforces spectral/norm safety bounds (``L2 <= max_l2_norm``, ``L_inf <= max_linf_norm``).
-4. Verifies on CPU in ``< 5.0 ms`` with proof payload ``< 32,768 bytes`` and ``100%`` tampering rejection.
+4. Verifies on CPU in ``< 5.0 ms`` with proof payload ``< 32,768 bytes`` and deterministic tampering rejection.
 """
 
 from __future__ import annotations
@@ -16,6 +16,8 @@ import hashlib
 import hmac
 import json
 import math
+import os
+import secrets
 import time
 from dataclasses import asdict, dataclass
 from typing import Sequence
@@ -67,6 +69,8 @@ class ZKOPoIV5ProofReceipt:
     bilinear_rhs_mod_p: int
     quantized_sketch_int8: tuple[int, ...]
     commitment_hmac: str
+    commitment_scheme: str = "fiat_shamir_horner_hmac_sha256"
+    zero_knowledge: bool = False
 
     @property
     def serialized_bytes(self) -> int:
@@ -76,7 +80,7 @@ class ZKOPoIV5ProofReceipt:
 
 @dataclass(frozen=True)
 class ZKOPoIV5VerificationReport:
-    """Verification outcome for a ZK-OPoI v5 proof receipt."""
+    """Verification outcome for a tamper-evident commitment receipt."""
 
     workunit_id: str
     verified: bool
@@ -85,6 +89,8 @@ class ZKOPoIV5VerificationReport:
     within_5ms_sla: bool
     within_32kb_bound: bool
     rejection_reason: str | None = None
+    commitment_scheme: str = "fiat_shamir_horner_hmac_sha256"
+    zero_knowledge: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -96,12 +102,17 @@ class ZKOPoIV5Int8TransitionVerifier:
     def __init__(
         self,
         *,
-        coordinator_secret: str = "hivemind-s36-zk-opoi-v5-secret",
+        coordinator_secret: str | None = None,
         max_l2_norm: float = 15.0,
         max_linf_norm: float = 2.5,
         scale_q: int = 127,
     ) -> None:
-        self._secret_bytes = coordinator_secret.encode("utf-8")
+        effective_secret = (
+            coordinator_secret
+            if coordinator_secret is not None
+            else (os.environ.get("HIVEMIND_ZK_OPOI_SECRET") or secrets.token_hex(32))
+        )
+        self._secret_bytes = effective_secret.encode("utf-8")
         self.max_l2_norm = float(max_l2_norm)
         self.max_linf_norm = float(max_linf_norm)
         self.scale_q = int(scale_q)
@@ -113,7 +124,10 @@ class ZKOPoIV5Int8TransitionVerifier:
         clip_bound = 7 if quant_bits == 4 else 127
         out: list[int] = []
         for v in values:
-            q = int(round(float(v) * self.scale_q))
+            fv = float(v)
+            if not math.isfinite(fv):
+                raise ValueError("Cannot quantize non-finite float value in ZK-OPoI v5")
+            q = int(round(fv * self.scale_q))
             q = max(-clip_bound, min(clip_bound, q))
             out.append(q)
         return tuple(out)
@@ -132,9 +146,13 @@ class ZKOPoIV5Int8TransitionVerifier:
         """Generate a succinct Fiat-Shamir fixed-point transition proof receipt."""
         if len(theta0) != len(delta_weights) or not theta0:
             raise ValueError("theta0 and delta_weights must have equal non-zero length")
+        if int(inner_steps_h) <= 0:
+            raise ValueError("inner_steps_h must be strictly positive")
 
         q_theta0 = self.quantize_to_int8(theta0, quant_bits=quant_bits)
         q_delta = self.quantize_to_int8(delta_weights, quant_bits=quant_bits)
+        if not any(d != 0 for d in q_delta):
+            raise ValueError("delta_weights quantized to an all-zero transition")
         q_final = tuple(a + b for a, b in zip(q_theta0, q_delta))
 
         theta0_sha256 = hashlib.sha256(
@@ -163,10 +181,14 @@ class ZKOPoIV5Int8TransitionVerifier:
 
         sketch_len = min(32, len(q_delta))
         sketch = q_delta[:sketch_len]
+        sketch_dot_mod_p = _mod_mersenne61(sum(r * int(d) for r, d in zip(challenges[:sketch_len], sketch)))
+        norm_l2_rounded = round(l2_norm, 8)
+        norm_linf_rounded = round(linf_norm, 8)
 
         msg = (
             f"{worker_id}|{workunit_id}|{shard_sha256}|{theta0_sha256}|{theta_final_sha256}|"
             f"{inner_steps_h}|{quant_bits}|{self.scale_q}|{lhs}|{rhs}|"
+            f"{norm_l2_rounded:.8f}|{norm_linf_rounded:.8f}|{sketch_dot_mod_p}|"
             f"{','.join(str(x) for x in sketch)}"
         ).encode("utf-8")
         commitment_hmac = hmac.new(self._secret_bytes, msg, hashlib.sha256).hexdigest()
@@ -180,8 +202,8 @@ class ZKOPoIV5Int8TransitionVerifier:
             inner_steps_h=int(inner_steps_h),
             quant_bits=int(quant_bits),
             scale_q=self.scale_q,
-            delta_l2_norm=round(l2_norm, 8),
-            delta_linf_norm=round(linf_norm, 8),
+            delta_l2_norm=norm_l2_rounded,
+            delta_linf_norm=norm_linf_rounded,
             fiat_shamir_challenge_hex=fs_seed.hex(),
             bilinear_lhs_mod_p=lhs,
             bilinear_rhs_mod_p=rhs,
@@ -198,6 +220,19 @@ class ZKOPoIV5Int8TransitionVerifier:
     ) -> ZKOPoIV5VerificationReport:
         """Verify a ZK-OPoI v5 proof receipt on CPU in O(1) (<5 ms)."""
         t0 = time.perf_counter()
+        if not math.isfinite(receipt.delta_l2_norm) or not math.isfinite(receipt.delta_linf_norm):
+            elapsed_ms = (time.perf_counter() - t0) * 1000.0
+            return ZKOPoIV5VerificationReport(
+                workunit_id=receipt.workunit_id,
+                verified=False,
+                verify_cpu_ms=round(elapsed_ms, 4),
+                proof_bytes=0,
+                within_5ms_sla=elapsed_ms < MAX_VERIFY_CPU_MS,
+                within_32kb_bound=False,
+                rejection_reason="delta_l2_norm_out_of_bounds"
+                if not math.isfinite(receipt.delta_l2_norm)
+                else "delta_linf_norm_out_of_bounds",
+            )
         proof_bytes = receipt.serialized_bytes
 
         def _reject(reason: str) -> ZKOPoIV5VerificationReport:
@@ -218,6 +253,10 @@ class ZKOPoIV5Int8TransitionVerifier:
             return _reject("shard_sha256_mismatch")
         if receipt.theta0_sha256 != expected_theta0_sha256:
             return _reject("theta0_sha256_mismatch")
+        if receipt.theta_final_sha256 == receipt.theta0_sha256:
+            return _reject("zero_transition_detected")
+        if int(receipt.inner_steps_h) <= 0:
+            return _reject("inner_steps_h_invalid")
         if receipt.delta_l2_norm > self.max_l2_norm or receipt.delta_l2_norm <= 0.0:
             return _reject("delta_l2_norm_out_of_bounds")
         if receipt.delta_linf_norm > self.max_linf_norm or receipt.delta_linf_norm <= 0.0:
@@ -233,11 +272,20 @@ class ZKOPoIV5Int8TransitionVerifier:
         if _mod_mersenne61(receipt.bilinear_lhs_mod_p) != _mod_mersenne61(receipt.bilinear_rhs_mod_p):
             return _reject("bilinear_freivalds_equation_failed")
 
+        sketch_challenges = _derive_field_challenges(
+            bytes.fromhex(expected_fs_seed),
+            len(receipt.quantized_sketch_int8),
+        )
+        sketch_dot_mod_p = _mod_mersenne61(
+            sum(r * int(d) for r, d in zip(sketch_challenges, receipt.quantized_sketch_int8))
+        )
+
         msg = (
             f"{receipt.worker_id}|{receipt.workunit_id}|{receipt.shard_sha256}|"
             f"{receipt.theta0_sha256}|{receipt.theta_final_sha256}|"
             f"{receipt.inner_steps_h}|{receipt.quant_bits}|{receipt.scale_q}|"
             f"{receipt.bilinear_lhs_mod_p}|{receipt.bilinear_rhs_mod_p}|"
+            f"{float(receipt.delta_l2_norm):.8f}|{float(receipt.delta_linf_norm):.8f}|{sketch_dot_mod_p}|"
             f"{','.join(str(x) for x in receipt.quantized_sketch_int8)}"
         ).encode("utf-8")
         expected_mac = hmac.new(self._secret_bytes, msg, hashlib.sha256).hexdigest()
@@ -254,3 +302,8 @@ class ZKOPoIV5Int8TransitionVerifier:
             within_32kb_bound=proof_bytes < MAX_PROOF_BYTES,
             rejection_reason=None,
         )
+
+
+TamperEvidentInt8ProofReceipt = ZKOPoIV5ProofReceipt
+TamperEvidentInt8VerificationReport = ZKOPoIV5VerificationReport
+TamperEvidentInt8TransitionVerifier = ZKOPoIV5Int8TransitionVerifier

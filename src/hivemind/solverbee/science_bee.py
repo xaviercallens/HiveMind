@@ -50,7 +50,7 @@ class Backend:
     name = "backend"
 
     def complete(self, messages: List[Dict[str, str]]) -> str:  # pragma: no cover - interface
-        raise NotImplementedError
+        raise BackendError(f"{self.name}: no language model backend configured")
 
 
 class FakeBackend(Backend):
@@ -104,7 +104,12 @@ def check_loopback_url(url: str) -> str:
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, *a: Any, **k: Any) -> None:  # type: ignore[override]
+    last_refused_url: str = ""
+    last_refused_code: int = 0
+
+    def redirect_request(self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> None:  # type: ignore[override]
+        self.last_refused_url = str(newurl) if newurl is not None else ""
+        self.last_refused_code = int(code) if isinstance(code, int) else 0
         return None
 
 
@@ -122,6 +127,16 @@ class OllamaBackend(Backend):
             raise BackendError("model name has unexpected characters")
         if isinstance(num_gpu, bool) or not isinstance(num_gpu, int) or num_gpu < 0:
             raise BackendError("num_gpu must be an integer >= 0")
+        if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not math.isfinite(timeout_s) or timeout_s <= 0:
+            raise BackendError("timeout_s must be a finite positive number")
+        if isinstance(temperature, bool) or not isinstance(temperature, (int, float)) or not math.isfinite(temperature) or temperature < 0:
+            raise BackendError("temperature must be a finite number >= 0")
+        if isinstance(seed, bool) or not isinstance(seed, int):
+            raise BackendError("seed must be an integer")
+        if isinstance(num_predict, bool) or not isinstance(num_predict, int) or num_predict < 1:
+            raise BackendError("num_predict must be an integer >= 1")
+        if isinstance(max_response_bytes, bool) or not isinstance(max_response_bytes, int) or max_response_bytes < 1:
+            raise BackendError("max_response_bytes must be an integer >= 1")
         self.base_url = check_loopback_url(base_url)
         self.model, self.num_gpu, self.timeout_s = model, num_gpu, float(timeout_s)
         self.temperature, self.seed, self.num_predict, self.think = float(temperature), int(seed), int(num_predict), think
@@ -333,9 +348,9 @@ def validate_spec(obj: Any) -> Dict[str, Any]:
         at = obj["atol"]
         if isinstance(at, list):
             _numlist(at, "atol", 20)
-            if len(at) != n or not all(v > 0 for v in at):
+            if len(at) != n or not all(0 < v <= 1 for v in at):
                 raise SpecInvalid('"atol" array must have one positive entry per state variable')
-        elif not (_is_num(at) and at > 0):
+        elif not (_is_num(at) and 0 < at <= 1):
             raise SpecInvalid('"atol" must be a positive number')
     if "method" in obj and obj["method"] not in ("bdf", "adams"):
         raise SpecInvalid('"method" must be "bdf" or "adams"')
@@ -466,6 +481,8 @@ def formulate(messages: List[Dict[str, str]], backend: Backend, *, max_retries: 
 
     Returns {ok, spec, spec_bytes, attempts, retries, errors, raw_outputs, reason}. Never guesses: after the last failure ok is False.
     """
+    if isinstance(max_retries, bool) or not isinstance(max_retries, int) or max_retries < 0:
+        raise ValueError("max_retries must be an integer >= 0")
     msgs = [dict(m) for m in messages]
     errors: List[str] = []
     raws: List[str] = []

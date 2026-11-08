@@ -33,6 +33,7 @@ from hivemind.boinc.workunit import (
     sign_shard_bytes,
     verify_and_load_parquet_shard,
 )
+from hivemind.cli.simulate_e2e import estimate_workunit_tflops
 from hivemind.client.daemon import ZeroIntrusionDaemon
 from hivemind.client.steamworks import SteamworksSDKBridge
 from hivemind.config import (
@@ -94,6 +95,10 @@ def fetch_hf_domain_subset(
     hf_token: str | None = None,
 ) -> list[str]:
     """Pull a real domain dataset subset from Hugging Face Hub (`sahil2801/CodeAlpaca-20k` or `qiaojin/PubMedQA`)."""
+    if not isinstance(dataset_id, str) or not dataset_id.strip():
+        raise ValueError("dataset_id must be a non-empty string")
+    if isinstance(num_samples, bool) or int(num_samples) < 1:
+        raise ValueError("num_samples must be a positive integer")
     from huggingface_hub import hf_hub_download
 
     samples: list[str] = []
@@ -153,6 +158,14 @@ def _create_tokenized_parquet_shard(
     rng_seed: int = 42,
 ) -> tuple[Path, str, str]:
     """Tokenize real domain strings with the Hugging Face tokenizer and write a signed Parquet shard."""
+    if not isinstance(domain, str) or not domain.strip():
+        raise ValueError("domain must be a non-empty string")
+    if not texts or not any(isinstance(t, str) and t.strip() for t in texts):
+        raise ValueError("texts must contain at least one non-empty string")
+    if isinstance(seq_len, bool) or int(seq_len) < 1:
+        raise ValueError("seq_len must be a positive integer")
+    if isinstance(num_sequences, bool) or int(num_sequences) < 1:
+        raise ValueError("num_sequences must be a positive integer")
     shard_path.parent.mkdir(parents=True, exist_ok=True)
     joined = "\n".join(texts * 4)
     token_ids = tokenizer.encode(joined, add_special_tokens=False)
@@ -218,6 +231,20 @@ def run_huggingface_rtx2070_poc(
     spot_check_interval_s: int = 6,
 ) -> dict[str, Any]:
     """Execute the real Hugging Face Open-Weight PoC on the local NVIDIA GeForce RTX 2070."""
+    if not isinstance(model_id, str) or not model_id.strip():
+        raise ValueError("model_id must be a non-empty string")
+    if not isinstance(hf_dataset_id, str) or not hf_dataset_id.strip():
+        raise ValueError("hf_dataset_id must be a non-empty string")
+    if isinstance(hf_subset_size, bool) or int(hf_subset_size) < 1:
+        raise ValueError("hf_subset_size must be a positive integer")
+    if isinstance(lora_rank_r, bool) or int(lora_rank_r) < 1:
+        raise ValueError("lora_rank_r must be a positive integer")
+    if isinstance(lora_alpha, bool) or int(lora_alpha) < 1:
+        raise ValueError("lora_alpha must be a positive integer")
+    if isinstance(inner_steps_H, bool) or int(inner_steps_H) < 1:
+        raise ValueError("inner_steps_H must be a positive integer")
+    if isinstance(spot_check_interval_s, bool) or int(spot_check_interval_s) < 1:
+        raise ValueError("spot_check_interval_s must be a positive integer")
     t0 = time.perf_counter()
     cfg = HiveMindConfig.from_yaml()
     hw_info = detect_local_hardware()
@@ -384,11 +411,16 @@ def run_huggingface_rtx2070_poc(
                     weight_decay=0.01,
                     micro_batch_size=2,
                 )
-                steamworks.record_validated_workunit(
+                tflops_wu = estimate_workunit_tflops(
+                    workunit=wu,
+                    total_params=bundle.total_params,
+                    micro_batch_size=2,
+                )
+                steam_entry = steamworks.record_validated_workunit(
                     steam_id64=steam_id,
                     persona_name=f"HF_Swarm_Miner_{w_idx + 1}",
                     wu_id=wu.wu_id,
-                    tflops_contributed=4.2,
+                    tflops_contributed=tflops_wu,
                     credits_minted=15.0,
                 )
                 hf_worker_trajectories[w_id] = {
@@ -398,6 +430,7 @@ def run_huggingface_rtx2070_poc(
                     "final_loss": inner_res.final_loss,
                     "spot_check_passed": verdict.passed,
                     "spot_check_max_diff": verdict.max_abs_divergence,
+                    "verified_tflops": steam_entry.verified_tflops,
                 }
                 inner_res.micro_checkpoints.clear()
                 inner_res.theta_init.clear()
@@ -449,6 +482,7 @@ def run_huggingface_rtx2070_poc(
                 "outer_delta_norm": outer_res.aggregated_delta_norm,
                 "shared_expert_cid": shared_expert_cid,
                 "shared_expert_path": str(shared_expert_path),
+                "verified_tflops": hf_worker_trajectories[worker_names[0]]["verified_tflops"],
             }
             del first_inner_res, ref_delta, worker_pool_deltas, outer_res
             gc.collect()
@@ -513,11 +547,16 @@ def run_huggingface_rtx2070_poc(
             weight_decay=0.01,
             micro_batch_size=2,
         )
-        steamworks.record_validated_workunit(
+        tflops_wu = estimate_workunit_tflops(
+            workunit=wu,
+            total_params=bundle.total_params,
+            micro_batch_size=2,
+        )
+        steam_entry = steamworks.record_validated_workunit(
             steam_id64=steam_id,
             persona_name=f"RTX2070_Gamer_{domain}",
             wu_id=wu.wu_id,
-            tflops_contributed=4.2,
+            tflops_contributed=tflops_wu,
             credits_minted=15.0,
         )
 
@@ -566,6 +605,7 @@ def run_huggingface_rtx2070_poc(
             "multikrum_accepted": outer_res.filter_report.accepted_workers,
             "multikrum_rejected": outer_res.filter_report.rejected_workers,
             "outer_delta_norm": outer_res.aggregated_delta_norm,
+            "verified_tflops": steam_entry.verified_tflops,
         }
 
         del inner_res, decompressed_honest, worker_pool_deltas, outer_res

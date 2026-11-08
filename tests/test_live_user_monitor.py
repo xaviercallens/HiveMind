@@ -100,3 +100,124 @@ def test_monitor_reads_real_and_test_users_from_the_router_admin_endpoint() -> N
     assert counts["real"]["total"] == 1 and counts["test"]["total"] == 1
     assert counts["real"]["created"] == 1 and counts["test"]["created"] == 1
     assert refused == {"error": "HTTP 403"}
+
+
+def _chat_row(latency: str, size: int, ua: str = "python-httpx/0.27", status: int = 200) -> dict[str, object]:
+    return {"timestamp": "2026-11-01T01:00:00Z",
+            "httpRequest": {"latency": latency, "responseSize": str(size), "userAgent": ua, "status": status, "requestUrl": "https://x/v1/chat/completions"}}
+
+
+def test_breakdown_separates_long_generations_from_slow_small_responses() -> None:
+    """Positive control: slow requests with big responses and slow requests with tiny ones land in different buckets."""
+    rows = [_chat_row("30.0s", 90_000), _chat_row("28.0s", 80_000), _chat_row("1.0s", 500), _chat_row("0.8s", 400),
+            _chat_row("25.0s", 600, ua="Mozilla/5.0")]
+    out = monitor.chat_latency_breakdown(rows)
+    assert out["by_response_size"]["ge_20kb"]["n"] == 2
+    assert out["by_response_size"]["ge_20kb"]["p50_s"] == 28.0  # _percentile rounds the middle index of two values down
+    assert out["by_response_size"]["lt_2kb"]["n"] == 3
+    assert out["by_response_size"]["lt_2kb"]["p95_s"] == 25.0  # the slow small response is visible, not averaged away
+    assert out["by_client"]["browser"]["n"] == 1 and out["by_client"]["scripted"]["n"] == 4
+    assert [s["latency_s"] for s in out["slowest"]] == [30.0, 28.0, 25.0, 1.0, 0.8]
+    assert out["slowest"][2]["client"] == "browser" and out["slowest"][2]["response_bytes"] == 600
+
+
+def test_breakdown_negative_control_uniform_traffic_has_no_spread_and_empty_input_is_empty() -> None:
+    """Negative control: identical rows give one bucket with equal p50 and p95; no rows give no buckets and no slowest."""
+    same = monitor.chat_latency_breakdown([_chat_row("2.0s", 1000) for _ in range(6)])
+    assert list(same["by_response_size"]) == ["lt_2kb"] and list(same["by_client"]) == ["scripted"]
+    assert same["by_response_size"]["lt_2kb"]["p50_s"] == same["by_response_size"]["lt_2kb"]["p95_s"] == 2.0
+    empty = monitor.chat_latency_breakdown([])
+    assert empty == {"by_client": {}, "by_response_size": {}, "slowest": []}
+
+
+def test_breakdown_keeps_no_url_address_or_identity() -> None:
+    row = _chat_row("3.0s", 100)
+    row["httpRequest"]["remoteIp"] = "203.0.113.9"  # type: ignore[index]
+    text = str(monitor.chat_latency_breakdown([row]))
+    assert "203.0.113.9" not in text and "v1/chat" not in text and "python-httpx" not in text
+
+
+def test_breakdown_line_names_the_slowest_chats_and_the_client_class() -> None:
+    rows = [_chat_row("0.2s", 900) for _ in range(5)] + [_chat_row("6.0s", 1900)]
+    line = monitor.breakdown_line(monitor.chat_latency_breakdown(rows))
+    assert "scripted n=6" in line and "p95=" in line
+    assert "6.0s scripted 1900B" in line
+    assert monitor.breakdown_line(monitor.chat_latency_breakdown([])) == "no chats in window"
+    assert monitor.breakdown_line(None) == "no chats in window"
+
+
+def test_declared_retired_model_passes_only_while_it_answers_404() -> None:
+    retired = frozenset({"hivemind/coder"})
+    assert monitor.probe_ok("hivemind/coder", 404, False, retired)
+    assert not monitor.probe_ok("hivemind/coder", 200, True, retired)  # it came back: the declaration is stale
+    assert not monitor.probe_ok("hivemind/coder", 502, False, retired)
+
+
+def test_an_undeclared_model_that_vanishes_still_fails_and_a_live_one_passes() -> None:
+    retired = frozenset({"hivemind/coder"})
+    assert not monitor.probe_ok("hivemind/bee-stars", 404, False, retired)  # not declared retired: a real outage
+    assert not monitor.probe_ok("hivemind/auto", 200, False, retired)  # wrong answer
+    assert monitor.probe_ok("hivemind/auto", 200, True, retired)
+    assert monitor.probe_ok("hivemind/auto", 200, True, frozenset())
+
+
+def test_split_probe_and_user_chats_separates_15_probes_from_2_non_probe_chats() -> None:
+    """Issue #588/#590: 15 probe chats and 2 non-probe chats yield non_probe n == 2 and probe n == 15."""
+    probe_rows = [
+        _chat_row("0.5s", 1100, ua="hivemind-live-user-monitor/1.0")
+        for _ in range(15)
+    ]
+    user_rows = [
+        _chat_row("1.2s", 900, ua="Mozilla/5.0"),
+        _chat_row("2.4s", 1400, ua="curl/8.5.0"),
+    ]
+    split = monitor.split_probe_and_user_chats(probe_rows + user_rows)
+    assert split["non_probe"]["n"] == 2
+    assert split["probe"]["n"] == 15
+    assert split["non_probe"]["p50_s"] == 1.2
+    assert split["non_probe"]["p95_s"] == 2.4
+    line = monitor.format_service_chat_line("ruche", split)
+    assert "users chat   2 (p50 1.2, p95 2.4 s)" in line
+    assert "probe chat  15" in line
+
+
+def test_split_probe_and_user_chats_reports_none_p95_when_zero_non_probe_chats() -> None:
+    """Issue #588: With 0 non-probe chats, non_probe p95 is None and the summary line says so."""
+    probe_rows = [
+        _chat_row("0.4s", 1126, ua="python-httpx/0.28.1"),
+        _chat_row("20.5s", 4580, ua="python-httpx/0.28.1"),
+    ] + [
+        _chat_row("1.1s", 1100, ua="python-httpx/0.28.1")
+        for _ in range(13)
+    ]
+    split = monitor.split_probe_and_user_chats(
+        probe_rows,
+        probe_windows=[("2026-11-01T00:59:59Z", "2026-11-01T01:00:35Z")],
+    )
+    assert split["non_probe"]["n"] == 0
+    assert split["non_probe"]["p50_s"] is None
+    assert split["non_probe"]["p95_s"] is None
+    assert split["probe"]["n"] == 15
+    line = monitor.format_service_chat_line("router", split)
+    assert "users chat 0 (no p95 for users)" in line
+    assert "probe chat  15" in line
+
+
+def test_thirty_two_second_caller_and_per_tier_probe_latency_breakdown() -> None:
+    """Issue #590: The :32 caller is identified and per-tier probe latency is reported."""
+    caller = monitor.THIRTY_TWO_SECOND_CALLER
+    assert "scripts/live_user_monitor.py" in caller["script"]
+    assert "hivemind/coder" in caller["second_request"]
+    assert caller["doc"] == "docs/MONITOR_32_SECOND_CALLER.md"
+    doc = Path(__file__).resolve().parents[1] / "docs/MONITOR_32_SECOND_CALLER.md"
+    assert doc.exists() and "hivemind/coder" in doc.read_text(encoding="utf-8")
+
+    sample_cases = [
+        {"service": "ruche", "model": "hivemind/bee-stars", "stream": False, "secs": 0.4, "ok": True},
+        {"service": "ruche", "model": "hivemind/coder", "stream": True, "secs": 20.5, "ok": True},
+        {"service": "router", "model": "hivemind/coder", "stream": True, "secs": 18.2, "ok": True},
+    ]
+    by_tier = monitor.probe_latency_by_tier(sample_cases)
+    assert by_tier["hivemind/coder"]["max_s"] == 20.5
+    assert by_tier["hivemind/coder"]["n"] == 2
+    assert by_tier["hivemind/bee-stars"]["p50_s"] == 0.4

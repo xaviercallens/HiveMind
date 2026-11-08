@@ -1,0 +1,59 @@
+{
+  "schema": "hivemind.credit_reconciliation_receipt.v1",
+  "deliverable_id": "PS-08-D2",
+  "generated_at_utc": "2026-11-07T22:16:52Z",
+  "unit_bridge_specification": {
+    "flops_reference_standard_round": 480000000000000.0,
+    "cobblestones_per_standard_round": 1111.111111,
+    "verified_credit_per_standard_round": 100.0,
+    "hmt_per_standard_round": 10.0,
+    "verified_credit_per_cobblestone": 0.09,
+    "hmt_per_cobblestone": 0.009000000000000001,
+    "order_of_magnitude_mismatch_resolution": "Raw BOINC Cobblestones award 1,111.111111 units per 4.8e14-FLOP standard round (200 * 4.8e14 / 8.64e13), whereas validator verified_credit awards 100.0 units (11.111111x ratio) and HMT awards 10.0 units (111.111111x ratio). Multiplying BOINC Cobblestones by VERIFIED_CREDIT_PER_COBBLESTONE = 0.09 and HMT_PER_COBBLESTONE = 0.009 reconciles both ledgers exactly across all FLOP-scaled profiles (standard and big)."
+  },
+  "registered_relative_tolerance": 1e-06,
+  "volunteer_count": 3,
+  "volunteers": [
+    {
+      "volunteer_id": "vol-7b048af53f3c",
+      "standard_rounds_validated": 171,
+      "big_rounds_validated": 0,
+      "total_validated_rounds": 171,
+      "total_flops": 8.208e+16,
+      "boinc_cobblestones": 190000.0,
+      "verified_credit": 17100.0,
+      "expected_hmt": 1710.0,
+      "ledger_hmt": 1710.0,
+      "relative_discrepancy": 0.0,
+      "within_tolerance": true
+    },
+    {
+      "volunteer_id": "vol-151b8f90ac72",
+      "standard_rounds_validated": 27,
+      "big_rounds_validated": 0,
+      "total_validated_rounds": 27,
+      "total_flops": 1.296e+16,
+      "boinc_cobblestones": 30000.0,
+      "verified_credit": 2700.0,
+      "expected_hmt": 270.0,
+      "ledger_hmt": 270.0,
+      "relative_discrepancy": 0.0,
+      "within_tolerance": true
+    },
+    {
+      "volunteer_id": "vol-180b3abac1ff",
+      "standard_rounds_validated": 12,
+      "big_rounds_validated": 2,
+      "total_validated_rounds": 14,
+      "total_flops": 1.344e+16,
+      "boinc_cobblestones": 31111.111111,
+      "verified_credit": 2800.0,
+      "expected_hmt": 280.0,
+      "ledger_hmt": 280.0,
+      "relative_discrepancy": 0.0,
+      "within_tolerance": true
+    }
+  ],
+  "all_reconciled": true,
+  "violations": []
+}

@@ -11,6 +11,7 @@ compared to hyperscale cooling-tower datacenters:
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -54,6 +55,12 @@ class EcoThermalCarbonLedger:
     SAFE_TEMP_CEILING_C = 76.0
 
     def evaluate_sample(self, sample: EcoComputeTelemetrySample) -> EcoComputeValorizationReceipt:
+        # `x <= 0.0` is False for NaN, so the old guard let NaN telemetry through to a "safe" receipt: check finiteness first.
+        for name in ("gpu_power_watts", "gpu_temp_celsius", "outdoor_temp_celsius", "grid_carbon_intensity_g_per_kwh", "duration_seconds"):
+            if not math.isfinite(getattr(sample, name)):
+                raise ValueError(f"{name} must be finite")
+        if sample.grid_carbon_intensity_g_per_kwh < 0.0:
+            raise ValueError("grid_carbon_intensity_g_per_kwh must not be negative")
         if sample.gpu_power_watts <= 0.0 or sample.duration_seconds <= 0.0 or sample.tokens_generated <= 0:
             raise ValueError("power, duration, and tokens_generated must be positive")
 

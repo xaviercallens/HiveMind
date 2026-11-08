@@ -29,6 +29,7 @@ Season 5 (`HM-S5-02`) adds the **64-Expert 2-Level Hierarchical Sparse MoE**:
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Sequence, Tuple
@@ -111,6 +112,10 @@ def keyword_route(
     keyword hit at all abstains (``([], {})``) instead of returning the first dict entries on a tie. Ties are broken by
     domain name. ``min_weight`` drops secondary experts whose normalised weight is below it (the best expert is kept).
     """
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+        raise ValueError(f"top_k must be an integer >= 1, got {top_k!r}")
+    if isinstance(min_weight, bool) or not isinstance(min_weight, (int, float)) or not math.isfinite(float(min_weight)) or not (0.0 <= float(min_weight) <= 1.0):
+        raise ValueError(f"min_weight must be finite in [0, 1], got {min_weight!r}")
     low = prompt.lower()
     raw: Dict[str, float] = {}
     any_hit = False
@@ -397,6 +402,10 @@ class HierarchicalMoERouter(nn.Module):
     ) -> None:
         super().__init__()
         _ = dtype
+        if isinstance(hidden_size, bool) or not isinstance(hidden_size, int) or hidden_size < 1:
+            raise ValueError("hidden_size must be >= 1")
+        if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+            raise ValueError("top_k must be >= 1")
         if num_macro_domains < 1 or experts_per_domain < 1:
             raise ValueError("num_macro_domains and experts_per_domain must be >= 1")
         sizes = (
@@ -515,6 +524,10 @@ class ThreeTierHierarchicalMoERouter(nn.Module):
         micro_cluster_sizes: List[int] | None = None,
     ) -> None:
         super().__init__()
+        if isinstance(hidden_size, bool) or not isinstance(hidden_size, int) or hidden_size < 1:
+            raise ValueError("hidden_size must be >= 1")
+        if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+            raise ValueError("top_k must be >= 1")
         if num_super_clusters < 1 or macro_per_super < 1 or micro_per_macro < 1:
             raise ValueError("num_super_clusters, macro_per_super and micro_per_macro must be >= 1")
         self.hidden_size = int(hidden_size)
@@ -670,8 +683,22 @@ class FP8PagedKVCache:
     ) -> None:
         if codec not in self.VALID_CODECS:
             raise ValueError(f"codec must be one of {self.VALID_CODECS}, got {codec!r}")
-        if target_bits_per_dim <= 0.0:
+        if (
+            isinstance(target_bits_per_dim, bool)
+            or not isinstance(target_bits_per_dim, (int, float))
+            or not math.isfinite(float(target_bits_per_dim))
+            or target_bits_per_dim <= 0.0
+        ):
             raise ValueError("target_bits_per_dim must be > 0")
+        for name, val in (
+            ("num_layers", num_layers),
+            ("num_kv_heads", num_kv_heads),
+            ("head_dim", head_dim),
+            ("page_size_tokens", page_size_tokens),
+            ("max_pages", max_pages),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{name} must be an integer >= 1, got {val!r}")
         self.num_layers = int(num_layers)
         self.num_kv_heads = int(num_kv_heads)
         self.head_dim = int(head_dim)
@@ -760,6 +787,14 @@ class FP8PagedKVCache:
         self, layer_idx: int, page_idx: int, k_tensor: torch.Tensor, v_tensor: torch.Tensor
     ) -> Dict[str, Any]:
         """Quantize and store a `(K, V)` page using the configured `self.codec`."""
+        if isinstance(layer_idx, bool) or not isinstance(layer_idx, int) or layer_idx < 0:
+            raise ValueError(f"layer_idx must be an integer >= 0, got {layer_idx!r}")
+        if isinstance(page_idx, bool) or not isinstance(page_idx, int) or page_idx < 0:
+            raise ValueError(f"page_idx must be an integer >= 0, got {page_idx!r}")
+        if k_tensor.numel() == 0 or v_tensor.numel() == 0:
+            raise ValueError("k_tensor and v_tensor must be non-empty")
+        if not bool(torch.isfinite(k_tensor).all().item()) or not bool(torch.isfinite(v_tensor).all().item()):
+            raise ValueError("k_tensor and v_tensor must contain only finite values")
         if len(self._pages_k) >= self.max_pages and (layer_idx, page_idx) not in self._pages_k:
             oldest_key = next(iter(self._pages_k))
             self._pages_k.pop(oldest_key, None)

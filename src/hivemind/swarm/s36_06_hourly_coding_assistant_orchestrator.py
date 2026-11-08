@@ -10,9 +10,11 @@ co-generation, supervised by the ``GWAYA`` Zero-Stub AST gate (`E = 10^6` fail-c
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import os
 import time
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -95,12 +97,16 @@ class HourlyImprovementCycleReport:
     task_receipts: tuple[CodingAssistantTaskReceipt, ...]
     merkle_root_sha256: str
     all_gates_passed: bool
+    status: str = "VERIFIED"
+    blocked_reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "timestamp_utc": self.timestamp_utc,
             "antigravity_sdk_compat": self.antigravity_sdk_compat,
             "live_openrouter_called": self.live_openrouter_called,
+            "status": self.status,
+            "blocked_reason": self.blocked_reason,
             "tasks_verified": self.tasks_verified,
             "tasks_total": self.tasks_total,
             "s36_01_zk_verify_ms": self.s36_01_zk_verify_ms,
@@ -164,7 +170,12 @@ class HourlyHiveMindCodingAssistantOrchestrator:
             "excerpt": "deterministic local supervision check",
         }
 
-    def run_hourly_improvement_cycle(self, *, call_live_openrouter: bool = False) -> HourlyImprovementCycleReport:
+    def run_hourly_improvement_cycle(
+        self,
+        *,
+        call_live_openrouter: bool = False,
+        task_assertions: Mapping[str, Callable[[Any], bool]] | None = None,
+    ) -> HourlyImprovementCycleReport:
         """Execute and verify all Season 36 & Improvement-Plan checks with HiveMind coding assistant."""
         repo_root = Path(__file__).resolve().parents[3]
         swarm_dir = repo_root / "src" / "hivemind" / "swarm"
@@ -300,6 +311,16 @@ class HourlyHiveMindCodingAssistantOrchestrator:
             src_code = module_path.read_text(encoding="utf-8")
             violations = inspect_python_ast_anti_stub(src_code)
             ast_clean = len(violations) == 0
+            effective_unit_ok = bool(unit_ok)
+            if task_assertions and (task_id in task_assertions or "*" in task_assertions):
+                checker = task_assertions.get(task_id) or task_assertions.get("*")
+                if checker is not None:
+                    try:
+                        mod = importlib.import_module(f"hivemind.swarm.{module_path.stem}")
+                        if not bool(checker(mod)):
+                            effective_unit_ok = False
+                    except Exception:
+                        effective_unit_ok = False
             bee_res = self._query_coding_bee(
                 model=model,
                 prompt=prompt,
@@ -307,7 +328,7 @@ class HourlyHiveMindCodingAssistantOrchestrator:
             )
             if bee_res["live"]:
                 any_live = True
-            energy = 0.0 if (ast_clean and unit_ok) else MAXIMUM_PAIN_ENERGY
+            energy = 0.0 if (ast_clean and effective_unit_ok) else MAXIMUM_PAIN_ENERGY
             receipts.append(
                 CodingAssistantTaskReceipt(
                     task_id=task_id,
@@ -317,7 +338,7 @@ class HourlyHiveMindCodingAssistantOrchestrator:
                     live_routed_model=bee_res["routed_model"],
                     assistant_excerpt=bee_res["excerpt"],
                     gwaya_zero_stub_passed=ast_clean,
-                    unit_verification_passed=unit_ok,
+                    unit_verification_passed=effective_unit_ok,
                     anse_energy=energy,
                 )
             )
@@ -325,7 +346,9 @@ class HourlyHiveMindCodingAssistantOrchestrator:
         verified_cnt = sum(
             1 for r in receipts if r.gwaya_zero_stub_passed and r.unit_verification_passed and r.anse_energy < 1_000_000.0
         )
-        all_passed = verified_cnt == len(receipts) and self.sdk_compat
+        status = "VERIFIED" if any_live else "BLOCKED"
+        blocked_reason = None if any_live else "model not called"
+        all_passed = verified_cnt == len(receipts) and self.sdk_compat and (any_live or not call_live_openrouter)
         merkle_payload = json.dumps([r.to_dict() for r in receipts], sort_keys=True).encode("utf-8")
         merkle_root = hashlib.sha256(merkle_payload).hexdigest()
 
@@ -345,4 +368,6 @@ class HourlyHiveMindCodingAssistantOrchestrator:
             task_receipts=tuple(receipts),
             merkle_root_sha256=merkle_root,
             all_gates_passed=all_passed,
+            status=status,
+            blocked_reason=blocked_reason,
         )

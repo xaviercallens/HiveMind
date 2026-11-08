@@ -71,14 +71,14 @@ def main() -> int:
 
     def val_infer(wu: dict, host: str):
         w = wu["spec"]["wu_id"]
-        adapter = torch.load(srv.dir / "download" / f"{w}_adapter_pt", map_location="cpu")["state"]
+        adapter = torch.load(srv.dir / "download" / f"{w}_adapter_pt", map_location="cpu", weights_only=True)["state"]
         return mv.validate_infer(wu["spec"], srv.output_path(w, "out.json"), adapter, host)
 
     def assimilate(wu: dict, verdict) -> None:
         from hivemind.boinc.real_client.moe_app import state_sha
 
         w = wu["spec"]["wu_id"]
-        state = torch.load(srv.output_path(w, "out.pt"), map_location="cpu")["states"][-1]
+        state = torch.load(srv.output_path(w, "out.pt"), map_location="cpu", weights_only=True)["states"][-1]
         torch.save({"state": state, "sha256": state_sha(state), "wu_id": w, "verdict": verdict.to_dict()}, srv.dir / "assimilated" / f"{w}.pt")
 
     srv.app_validators = {"hivemind_qlora_moe": val_train, "hivemind_moe_infer": val_infer}

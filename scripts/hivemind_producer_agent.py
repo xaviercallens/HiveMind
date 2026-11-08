@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """HiveMind producer agent: heartbeats a local OpenAI-compatible server into the OpenRouter gateway.
 
 The agent does not run inference. It advertises an endpoint you already run (Ollama, vLLM or llama.cpp server), the
@@ -41,6 +42,7 @@ import httpx
 
 HEARTBEAT_PATH: str = "/v1/hivemind/producer/heartbeat"
 CATALOG_PATH: str = "/v1/hivemind/catalog"
+REMOTE_CONFIG_PATH: str = "/v1/hivemind/remote/config"
 API_KEY_ENV: str = "HIVEMIND_API_KEY"
 ENDPOINT_TOKEN_ENV: str = "HIVEMIND_ENDPOINT_TOKEN"
 DEFAULT_EXECUTION_CLASS: str = "gpu"
@@ -293,6 +295,19 @@ def fetch_catalog(client: httpx.Client, gateway: str) -> list[dict[str, Any]]:
     return [tier for tier in tiers if isinstance(tier, dict)]
 
 
+def fetch_remote_config(client: httpx.Client, gateway: str, api_key: str) -> dict[str, Any]:
+    """Fetch the producer's remote control configuration from GET /v1/hivemind/remote/config."""
+    response = client.get(
+        gateway.rstrip("/") + REMOTE_CONFIG_PATH,
+        headers={"Authorization": f"Bearer {api_key}"},
+    )
+    response.raise_for_status()
+    rc = response.json().get("remote_config")
+    if not isinstance(rc, dict) or not rc:
+        raise ValueError("remote config response has no remote_config object")
+    return dict(rc)
+
+
 def recommend(tiers: Sequence[dict[str, Any]], vram_gb: float) -> dict[str, Any] | None:
     """The biggest tier whose recommended minimum memory fits ``vram_gb``, or ``None``."""
     fitting = [tier for tier in tiers if float(tier["min_vram_gb"]) <= vram_gb]
@@ -338,6 +353,13 @@ def preflight(client: httpx.Client, endpoint: str, token: str | None, local_name
     return [name for name in local_names if name not in served and f"{name}:latest" not in served]
 
 
+POC_NOTICE = (
+    "Proof of concept (PoC): not a production service. Until HiveMind is fully secured, prompts you serve and requests you make "
+    "must contain only public, non-sensitive data (no secrets, personal, private or enterprise data); the people using your node "
+    "are anonymous, and nothing yet verifies producers or their output."
+)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the command-line parser."""
     parser = argparse.ArgumentParser(
@@ -359,6 +381,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--suggest", action="store_true", help="Print the best tier for --vram-gb / --detect-vram and exit (no key needed)")
     parser.add_argument("--vram-gb", type=float, help="Your GPU memory in GB (for --suggest)")
     parser.add_argument("--detect-vram", action="store_true", help="Read GPU memory from nvidia-smi (for --suggest)")
+    parser.add_argument("--residency", action="store_true", help="Report live GPU VRAM residency on each heartbeat (enabled by default unless --no-residency)")
     parser.add_argument("--no-residency", action="store_true", help="Do not ask the local model server which models are loaded; heartbeats then carry no residency data")
     parser.add_argument("--local-endpoint", default=DEFAULT_LOCAL_ENDPOINT, help=f"Local Ollama base URL for the read-only GET /api/ps residency probe (default {DEFAULT_LOCAL_ENDPOINT})")
     parser.add_argument("--cold-start-s", type=float, default=DEFAULT_COLD_START_S, help=f"Your estimate of the seconds needed to load a model that is not resident (default {DEFAULT_COLD_START_S:g}, max 600)")
@@ -366,6 +389,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pinned-vram-mib", type=int, default=0, help="VRAM in MiB reserved by pinned daemons such as llama-server (default 0)")
     parser.add_argument("--min-free-vram-mib", type=int, default=0, help="Minimum free VRAM headroom in MiB to preserve when filtering models (e.g. 4300 on Tesla T4)")
     parser.add_argument("--control-state-file", metavar="PATH", help="Where to publish the remote pause/VRAM-cap state (owner-only file, mode 0600) for the producer shield's --control-state-file; omit to not write it")
+    parser.add_argument("--sync-remote-config", action="store_true", help="Sync node_state and min_price_per_1k from /v1/hivemind/remote/config before each heartbeat")
     parser.add_argument("--skip-preflight", action="store_true", help="Do not check that your endpoint lists the model before the first heartbeat")
     return parser
 
@@ -404,6 +428,7 @@ def main(
     """Run the producer agent. Returns a process exit code."""
     parser = build_parser()
     args = parser.parse_args(argv)
+    print(f"NOTICE: {POC_NOTICE}", file=sys.stderr)
     gateway_url = urlsplit(args.gateway)
     if gateway_url.scheme != "https" and not (gateway_url.scheme == "http" and gateway_url.hostname in ("localhost", "127.0.0.1", "::1")):
         parser.error("--gateway must be https (plain http is allowed only for localhost): your API key is sent in every heartbeat")
@@ -417,6 +442,9 @@ def main(
             parser.error(f"set the {API_KEY_ENV} environment variable to your producer API key")
         if not args.endpoint:
             parser.error("--endpoint is required")
+        endpoint_url = urlsplit(args.endpoint)
+        if endpoint_url.scheme != "https" and not (endpoint_url.scheme == "http" and endpoint_url.hostname in ("localhost", "127.0.0.1", "::1")):
+            parser.error("--endpoint must be https (plain http is allowed only for localhost): the gateway sends your endpoint token with every request")
         models: list[dict[str, str]] = list(args.model)
         cost, capacity = args.cost_per_1k, args.capacity_1k
         if args.preset:
@@ -504,7 +532,13 @@ def main(
 
         def beat() -> dict[str, Any]:
             nonlocal control, warned
-            body = send_heartbeat(client, args.gateway, api_key, apply_control(make_payload(), control))
+            current_payload = make_payload()
+            if args.sync_remote_config:
+                rc = fetch_remote_config(client, args.gateway, api_key)
+                if rc.get("node_state") == "paused":
+                    return {"status": "paused_by_remote_control", "remote_config": rc}
+                current_payload["cost_per_1k"] = max(float(current_payload["cost_per_1k"]), float(rc.get("min_price_per_1k", current_payload["cost_per_1k"])))
+            body = send_heartbeat(client, args.gateway, api_key, apply_control(current_payload, control))
             if "control" in body:
                 try:
                     received = parse_control(body["control"])
@@ -534,7 +568,10 @@ def main(
             while True:
                 try:
                     body = beat()
-                    print(f"heartbeat ok: {json.dumps(body, sort_keys=True)}", flush=True)
+                    if body.get("status") == "paused_by_remote_control":
+                        print("remote control: node_state is paused, skipping heartbeat", flush=True)
+                    else:
+                        print(f"heartbeat ok: {json.dumps(body, sort_keys=True)}", flush=True)
                 except (httpx.HTTPError, ValueError) as exc:
                     print(f"heartbeat failed, retrying: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
                 time.sleep(args.interval_s)

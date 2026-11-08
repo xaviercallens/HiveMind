@@ -9,6 +9,7 @@ across swarm sizes ``N in {100, 250, 500, 1000, 2500, 5000, 10000}``.
 
 from __future__ import annotations
 
+import time
 from dataclasses import asdict, dataclass
 from typing import Sequence
 
@@ -39,6 +40,8 @@ class E21CrossoverBenchmarkReport:
     """Full E21 crossover benchmark report across N = 100 .. 10,000 nodes."""
 
     experiment_id: str
+    estimation_mode: str
+    measured_flop_ms_coeff: float
     measured_single_zk_verify_ms: float
     measured_proof_bytes: int
     crossover_node_count_n: int
@@ -49,6 +52,8 @@ class E21CrossoverBenchmarkReport:
     def to_dict(self) -> dict[str, object]:
         return {
             "experiment_id": self.experiment_id,
+            "estimation_mode": self.estimation_mode,
+            "measured_flop_ms_coeff": self.measured_flop_ms_coeff,
             "measured_single_zk_verify_ms": self.measured_single_zk_verify_ms,
             "measured_proof_bytes": self.measured_proof_bytes,
             "crossover_node_count_n": self.crossover_node_count_n,
@@ -58,14 +63,36 @@ class E21CrossoverBenchmarkReport:
         }
 
 
+def _measure_pairwise_l2_flop_ms_coeff(k_calib: int = 8, d_calib: int = 256) -> float:
+    """Measure pairwise squared-L2 distance cost per coordinate on the current CPU (IP-116 / IP-137)."""
+    vecs = [[0.01 * ((i + j) % 11 - 5) for j in range(d_calib)] for i in range(k_calib)]
+    t0 = time.perf_counter()
+    acc = 0.0
+    pairs = 0
+    for i in range(k_calib):
+        vi = vecs[i]
+        for j in range(i + 1, k_calib):
+            vj = vecs[j]
+            acc += sum((a - b) * (a - b) for a, b in zip(vi, vj))
+            pairs += 1
+    elapsed_ms = (time.perf_counter() - t0) * 1000.0
+    if acc < 0.0:
+        elapsed_ms += 0.0
+    total_coord_ops = max(1, pairs * d_calib)
+    return max(1e-10, elapsed_ms / float(total_coord_ops))
+
+
 def run_e21_multikrum_vs_zk_crossover(
     swarm_sizes: Sequence[int] = DEFAULT_SWARM_SIZES,
     *,
     lora_dim_d: int = 1_376_256,
     gpu_step_replay_ms_per_wu: float = 420.0,
     spot_check_ratio: float = 0.10,
+    single_zk_verify_ms_override: float | None = None,
+    flop_ms_coeff_override: float | None = None,
+    forged_proof_control: bool = False,
 ) -> E21CrossoverBenchmarkReport:
-    """Execute the E21 validation cost crossover benchmark."""
+    """Execute the E21 validation cost crossover benchmark (model-based estimate calibrated by measured CPU timings)."""
     verifier = ZKOPoIV5Int8TransitionVerifier()
     theta0 = [0.02 * ((i % 13) - 6) for i in range(256)]
     delta = [0.005 * ((i % 7) - 3) for i in range(256)]
@@ -77,17 +104,26 @@ def run_e21_multikrum_vs_zk_crossover(
         theta0=theta0,
         delta_weights=delta,
     )
+    expected_shard = "e21_forged_shard_digest" if forged_proof_control else shard_hash
     ver = verifier.verify_proof(
         receipt,
-        expected_shard_sha256=shard_hash,
+        expected_shard_sha256=expected_shard,
         expected_theta0_sha256=receipt.theta0_sha256,
     )
-    single_zk_ms = max(0.02, ver.verify_cpu_ms)
+    single_zk_ms = (
+        float(single_zk_verify_ms_override)
+        if single_zk_verify_ms_override is not None
+        else max(0.02, ver.verify_cpu_ms)
+    )
+    within_5ms_sla = single_zk_ms < 5.0 and ver.within_5ms_sla
 
-    # Pairwise L2 distance cost in Multi-Krum: N*(N-1)/2 * d * 1.2e-9 ms/flop
-    flop_ms_coeff = 1.2e-9
+    flop_ms_coeff = (
+        float(flop_ms_coeff_override)
+        if flop_ms_coeff_override is not None
+        else _measure_pairwise_l2_flop_ms_coeff()
+    )
     rows: list[E21CrossoverRow] = []
-    crossover_n = swarm_sizes[0]
+    crossover_n = swarm_sizes[0] if swarm_sizes else 0
     found_crossover = False
 
     for n in swarm_sizes:
@@ -122,12 +158,14 @@ def run_e21_multikrum_vs_zk_crossover(
     energy_10k = rows[-1].energy_reduction_pct if rows else 0.0
     gate_passed = (
         ver.verified
-        and ver.within_5ms_sla
+        and within_5ms_sla
         and ver.within_32kb_bound
         and energy_10k >= 99.0
     )
     return E21CrossoverBenchmarkReport(
         experiment_id="E21-MULTIKRUM-VS-ZK-OPOI-V5",
+        estimation_mode="model-based estimate",
+        measured_flop_ms_coeff=round(flop_ms_coeff, 12),
         measured_single_zk_verify_ms=round(single_zk_ms, 4),
         measured_proof_bytes=ver.proof_bytes,
         crossover_node_count_n=crossover_n,

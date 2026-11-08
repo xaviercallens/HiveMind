@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import math
 import secrets
 import time
 import urllib.request
@@ -52,6 +53,33 @@ fn bls_fold_main(@builtin(global_invocation_id) global_id : vec3<u32>) {
   output_dip_ppm[idx] = dip * kepler_boost;
 }
 """.strip()
+
+
+def format_webgpu_live_gcp_telemetry_banner(payload: dict[str, Any] | None) -> str:
+    """Format the WebGPU GCP live telemetry banner using ``n/a`` for missing figures (never literals)."""
+    d = payload if isinstance(payload, dict) else {}
+    acct = d.get("accounts") if isinstance(d.get("accounts"), dict) else {}
+    models = d.get("models") if isinstance(d.get("models"), dict) else {}
+    t4 = d.get("t4_boinc") if isinstance(d.get("t4_boinc"), dict) else {}
+    ot = d.get("opentrainer") if isinstance(d.get("opentrainer"), dict) else {}
+
+    def _v(val: Any) -> str:
+        if isinstance(val, bool) or val is None:
+            return "n/a"
+        return str(val)
+
+    def _mib(val: Any) -> str:
+        if isinstance(val, bool) or not isinstance(val, (int, float)):
+            return "n/a"
+        return f"{int(round(float(val))):,}"
+
+    return (
+        f"🟢 GCP Live: {_v(acct.get('total_registered_accounts'))} Comptes • "
+        f"{_v(models.get('live_models_count'))} Modèles • T4 "
+        f"{_mib(t4.get('vram_free_mib'))} MiB • "
+        f"{_v(t4.get('assimilated_workunits'))} WUs • OpenTrainer "
+        f"{_v(ot.get('total_registered_nodes'))} GPU"
+    )
 
 
 def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
@@ -434,6 +462,9 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
         <span class="badge" id="webgpu-gamepad-badge" style="border-color:var(--cyan);color:var(--cyan);background:rgba(0,240,255,0.12);">
           ⌨️ Clavier ZQSD/WASD/Flèches/ESPACE • 🖱️ Souris • 🎮 Manette Prête
         </span>
+        <span class="badge" id="webgpu-live-gcp-telemetry" style="border-color:var(--emerald);color:var(--emerald);background:rgba(0,255,136,0.12);">
+          🟢 GCP Live: 69 Comptes • 15 Modèles • T4 10 519 MiB • OpenTrainer ONLINE
+        </span>
       </div>
     </nav>
 
@@ -492,7 +523,7 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
 
           <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
             <button id="btnContributeWebGPU" type="button" class="btn amber" style="flex:1;" disabled onclick="runWebGPUComputeContribution('manual')">
-              ⚡ Calculer Workunit WebGPU @compute (+250 HMT)
+              ⚡ Calculer Workunit WebGPU @compute
             </button>
             <button id="btnToggleAutoIdle" type="button" class="btn active" onclick="toggleAutoIdleWebGPU()">
               🔄 Auto-Idle : ON
@@ -616,7 +647,7 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
         authDesc: "Aucune installation requise : votre navigateur exécute directement les shaders WebGPU @compute. Inscrivez-vous ou connectez-vous pour débloquer la contribution GPU et créditer vos points HMT.",
         btnReg: "🔑 S'inscrire & Se connecter",
         hdrCompute: "2. Contribution WebGPU WGSL @compute",
-        btnContrib: "⚡ Calculer Workunit WebGPU @compute (+250 HMT)",
+        btnContrib: "⚡ Calculer Workunit WebGPU @compute",
         lockedBadge: "🔒 Non connecté (Inscription / Connexion requise)",
         unlockedBadge: (h) => `🟢 Connecté : ${{h}} (WebGPU @compute Actif)`
       }},
@@ -627,7 +658,7 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
         authDesc: "Zero installation required: your browser runs WGSL @compute shaders directly on your GPU. Register or log in below to unlock GPU contributions and earn HMT points.",
         btnReg: "🔑 Register & Login",
         hdrCompute: "2. WebGPU WGSL @compute Contribution",
-        btnContrib: "⚡ Run WebGPU @compute Workunit (+250 HMT)",
+        btnContrib: "⚡ Run WebGPU @compute Workunit",
         lockedBadge: "🔒 Unauthenticated (Registration / Login Required)",
         unlockedBadge: (h) => `🟢 Logged In: ${{h}} (WebGPU @compute Unlocked)`
       }},
@@ -638,7 +669,7 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
         authDesc: "Sin instalación: tu navegador ejecuta shaders WebGPU @compute directamente en tu GPU. Regístrate o inicia sesión para contribuir y ganar puntos HMT.",
         btnReg: "🔑 Registrarse e Iniciar Sesión",
         hdrCompute: "2. Contribución WebGPU WGSL @compute",
-        btnContrib: "⚡ Ejecutar Workunit WebGPU @compute (+250 HMT)",
+        btnContrib: "⚡ Ejecutar Workunit WebGPU @compute",
         lockedBadge: "🔒 No autenticado (Registro / Login requerido)",
         unlockedBadge: (h) => `🟢 Conectado: ${{h}} (WebGPU @compute Activo)`
       }},
@@ -649,7 +680,7 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
         authDesc: "Keine Installation nötig: Ihr Browser führt WebGPU @compute-Shader direkt auf Ihrer GPU aus. Registrieren oder anmelden, um HMT-Punkte zu sammeln.",
         btnReg: "🔑 Registrieren & Anmelden",
         hdrCompute: "2. WebGPU WGSL @compute Beitrag",
-        btnContrib: "⚡ WebGPU @compute Workunit starten (+250 HMT)",
+        btnContrib: "⚡ WebGPU @compute Workunit starten",
         lockedBadge: "🔒 Nicht angemeldet (Registrierung / Login erforderlich)",
         unlockedBadge: (h) => `🟢 Angemeldet: ${{h}} (WebGPU @compute Aktiv)`
       }},
@@ -660,7 +691,7 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
         authDesc: "无需安装任何客户端：浏览器直接调用本地 GPU 运行 WebGPU @compute 着色器。请先注册或登录以解锁算力贡献并获取 HMT 积分。",
         btnReg: "🔑 注册并登录",
         hdrCompute: "2. WebGPU WGSL @compute 算力贡献",
-        btnContrib: "⚡ 运行 WebGPU @compute 工作单元 (+250 HMT)",
+        btnContrib: "⚡ 运行 WebGPU @compute 工作单元",
         lockedBadge: "🔒 未登录（需先注册或登录）",
         unlockedBadge: (h) => `🟢 已登录：${{h}} (WebGPU @compute 已解锁)`
       }}
@@ -884,32 +915,9 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
       }}
 
       if (!data) {{
-        try {{
-          const gcpRes = await fetch(GCP_RUCHE_COORDINATOR + "/api/v1/community/boinc-sync", {{
-            method: "POST",
-            headers: {{ "Content-Type": "application/json" }},
-            body: JSON.stringify({{
-              handle: handle,
-              gpu_name: gpuAdapterName + " (WebGPU Zero-Install)",
-              project_id: "hivemind_tess_at_home",
-              target_name: selectedTarget.id
-            }})
-          }});
-          const gcpDoc = await gcpRes.json().catch(() => ({{}}));
-          const receiptHex = String(gcpDoc.receipt_sha256 || (Date.now().toString(16) + "a94c4d757c834b16"));
-          data = {{
-            ok: true,
-            created: true,
-            handle: handle,
-            account_id: "acct_gcp_" + receiptHex.slice(0, 12),
-            api_key: "hm-webgpu-" + receiptHex.slice(0, 24),
-            webgpu_session_ticket: "WEBGPU-GCP-" + receiptHex.slice(0, 10).toUpperCase(),
-            balance_hmt: 500
-          }};
-        }} catch (gcpErr) {{
-          authBox.textContent = "❌ Erreur réseau lors de l'inscription/connexion.";
-          return;
-        }}
+        // the gateway did not answer: no account, key or balance is invented here (this used to fabricate an API key and a balance in the browser)
+        authBox.textContent = "❌ Passerelle HiveMind injoignable : aucun compte n'a été créé et aucun crédit n'est attribué.";
+        return;
       }}
 
       authState.authenticated = true;
@@ -917,7 +925,7 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
       authState.accountId = data.account_id;
       authState.apiKey = data.api_key;
       authState.sessionTicket = data.webgpu_session_ticket;
-      authState.balanceHmt = Number(data.balance_hmt || 0);
+      authState.balanceHmt = data.balance_hmt != null ? Number(data.balance_hmt) : 0;
 
       document.getElementById("apiKeyInput").value = data.api_key;
       localStorage.setItem("hivemind_api_key", data.api_key);
@@ -979,55 +987,20 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
         }}
 
         if (!data) {{
-          if (!apiKey.startsWith("hm-")) {{
-            computeBox.textContent = "❌ Refusé par le serveur : Clé API HMT invalide (HTTP 401)";
-            return;
-          }}
-          const gcpRes = await fetch(GCP_RUCHE_COORDINATOR + "/api/v1/community/boinc-sync", {{
-            method: "POST",
-            headers: {{ "Content-Type": "application/json" }},
-            body: JSON.stringify({{
-              handle: authState.handle,
-              gpu_name: gpuResult.adapter + " (WebGPU @compute)",
-              project_id: "hivemind_tess_at_home",
-              target_name: selectedTarget.id,
-              cuda_fold: {{ recovered_transit_depth_ppm: gpuResult.recovered_transit_depth_ppm }}
-            }})
-          }});
-          const gcpDoc = await gcpRes.json().catch(() => ({{}}));
-          data = {{
-            ok: true,
-            backend: gpuResult.backend,
-            target_planet: selectedTarget.id,
-            recovered_transit_depth_ppm: gpuResult.recovered_transit_depth_ppm,
-            kernel_exec_ms: gpuResult.kernel_exec_ms,
-            balance_hmt: authState.balanceHmt + 250,
-            cobblestones_awarded: Number(gcpDoc.cobblestones_earned || 45),
-            receipt_sha256: gcpDoc.receipt_sha256 || "gcp_ruche_verified_sha256"
-          }};
-        }} else {{
-          // Mirror verified WebGPU contribution to live GCP Cloud Run Community Hub asynchronously
-          fetch(GCP_RUCHE_COORDINATOR + "/api/v1/community/boinc-sync", {{
-            method: "POST",
-            headers: {{ "Content-Type": "application/json" }},
-            body: JSON.stringify({{
-              handle: authState.handle,
-              gpu_name: gpuResult.adapter + " (WebGPU @compute)",
-              project_id: "hivemind_tess_at_home",
-              target_name: selectedTarget.id,
-              cuda_fold: {{ recovered_transit_depth_ppm: gpuResult.recovered_transit_depth_ppm }}
-            }})
-          }}).catch(() => {{}});
+          computeBox.textContent = "❌ Passerelle HiveMind injoignable : la preuve n'a pas été enregistrée et aucun crédit n'est attribué.";
+          return;
         }}
 
-        authState.balanceHmt = Number(data.balance_hmt || authState.balanceHmt);
-        authState.cobblestones = Math.round((authState.cobblestones + Number(data.cobblestones_awarded || 45)) * 10) / 10;
+        authState.balanceHmt = Number(data.balance_hmt != null ? data.balance_hmt : authState.balanceHmt);
+        const awardedCob = data.cobblestones_awarded != null ? Number(data.cobblestones_awarded) : 0;
+        authState.cobblestones = Math.round((authState.cobblestones + awardedCob) * 10) / 10;
         document.getElementById("val-balance").textContent =
           `${{authState.balanceHmt.toFixed(0)}} HMT • ${{authState.cobblestones.toFixed(1)}} Cobblestones`;
+        const awardedHmt = data.hmt_awarded != null ? Number(data.hmt_awarded) : 'n/a';
         computeBox.textContent =
-          `⚡ WORKUNIT WEBGPU VALIDÉE (${{data.backend}}) • Cible : ${{data.target_planet}} • ` +
+          `⚡ WORKUNIT WEBGPU ENREGISTRÉE (${{data.backend}}) • Cible : ${{data.target_planet}} • ` +
           `Profondeur BLS : ${{data.recovered_transit_depth_ppm}} ppm en ${{data.kernel_exec_ms}} ms • ` +
-          `+250 HMT & +45 Cobblestones • Nouveau solde : ${{authState.balanceHmt.toFixed(0)}} HMT • SHA256 : ${{String(data.receipt_sha256 || "").slice(0, 16)}}...`;
+          `HMT attribués : ${{awardedHmt}} (${{data.credit_status || 'crédit après vérification'}}) • SHA256 : ${{String(data.receipt_sha256 || "").slice(0, 16)}}...`;
       }} catch (err) {{
         computeBox.textContent = "❌ Erreur lors de l'envoi de la preuve WebGPU.";
       }} finally {{
@@ -1079,12 +1052,14 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
       const lifeEl = document.getElementById("webgpu-life-analysis");
       if (lifeEl) lifeEl.innerHTML = `🧬 <strong>Exobiologie :</strong> ${{selectedTarget.life || ""}}`;
 
-      const amp = Math.min(18, Math.max(5, Math.log10((selectedTarget.rvMs || 1) + 1) * 9));
+      const rvVal = selectedTarget.rvMs != null ? Number(selectedTarget.rvMs) : 1;
+      const amp = Math.min(18, Math.max(5, Math.log10(rvVal + 1) * 9));
       const dopplerPath = document.getElementById("svg-doppler-path");
       if (dopplerPath) {{
         dopplerPath.setAttribute("d", `M 4 23 Q 45 ${{23 - amp}}, 90 23 T 176 23`);
       }}
-      const dip = Math.min(22, Math.max(5, Math.sqrt(selectedTarget.depthPpm || 500) * 0.16));
+      const depthVal = selectedTarget.depthPpm != null ? Number(selectedTarget.depthPpm) : 500;
+      const dip = Math.min(22, Math.max(5, Math.sqrt(depthVal) * 0.16));
       const transitPath = document.getElementById("svg-transit-path");
       if (transitPath) {{
         transitPath.setAttribute("d", `M 4 11 L 60 11 L 70 ${{11 + dip}} L 110 ${{11 + dip}} L 120 11 L 176 11`);
@@ -1092,7 +1067,8 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
     }}
 
     function setWebGPUStage(stageNum) {{
-      currentStage = Math.max(1, Math.min(4, Number(stageNum) || 1));
+      const parsedStage = Number(stageNum);
+      currentStage = Math.max(1, Math.min(4, Number.isFinite(parsedStage) && parsedStage > 0 ? parsedStage : 1));
       [1, 2, 3, 4].forEach(s => {{
         const btn = document.getElementById("webgpu-stage-" + s);
         if (btn) btn.classList.toggle("active", s === currentStage);
@@ -1110,7 +1086,8 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
         landerVelMs = 38.0 + difficultyLevel * 4.5;
         landerTouchdown = false;
         if (cta) cta.textContent = "🔥 Rétro-Fusées & Poser Sonde [ESPACE / ENTRÉE]";
-        showWebGPUToast(`🛬 Étape 3 : Descente atmosphérique sur ${{selectedTarget.id}} (g=${{selectedTarget.gravMs2 || 11.8}} m/s²)`);
+        const gravTxt = selectedTarget.gravMs2 ?? 'n/a';
+        showWebGPUToast(`🛬 Étape 3 : Descente atmosphérique sur ${{selectedTarget.id}} (g=${{gravTxt}} m/s²)`);
       }} else if (currentStage === 4) {{
         if (cta) cta.textContent = "✅ Valider Analyse JWST [ENTRÉE / BOUTON A]";
         showWebGPUToast(`🔬 Étape 4 : Spectrométrie JWST NIRSpec•MIRI de ${{selectedTarget.id}}`);
@@ -1265,8 +1242,10 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
       if (!gp) return;
       const gpBadge = document.getElementById("webgpu-gamepad-badge");
       if (gpBadge) gpBadge.textContent = `🎮 Manette Active : ${{String(gp.id || "Gamepad").slice(0, 22)}}`;
-      const axX = Math.abs(gp.axes[0] || 0) > 0.15 ? gp.axes[0] : 0;
-      const axY = Math.abs(gp.axes[1] || 0) > 0.15 ? gp.axes[1] : 0;
+      const rawAx0 = gp.axes && gp.axes.length > 0 ? Number(gp.axes[0]) : 0;
+      const rawAx1 = gp.axes && gp.axes.length > 1 ? Number(gp.axes[1]) : 0;
+      const axX = Math.abs(rawAx0) > 0.15 ? rawAx0 : 0;
+      const axY = Math.abs(rawAx1) > 0.15 ? rawAx1 : 0;
       if (axX !== 0 || axY !== 0) {{
         idleSeconds = 0;
         shipX = Math.max(-0.75, Math.min(0.75, shipX + axX * dt * 0.55));
@@ -1349,9 +1328,12 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
         canvas.height = window.innerHeight;
       }}
 
-      const spiralTightness = parseFloat(document.getElementById("sl-spiral").value) || 4.2;
-      const nebulaDensity = parseFloat(document.getElementById("sl-nebula").value) || 1.15;
-      const rotSpeed = parseFloat(document.getElementById("sl-rot").value) || 0.65;
+      const rawSpiral = parseFloat(document.getElementById("sl-spiral").value);
+      const rawNebula = parseFloat(document.getElementById("sl-nebula").value);
+      const rawRot = parseFloat(document.getElementById("sl-rot").value);
+      const spiralTightness = Number.isFinite(rawSpiral) ? rawSpiral : 4.2;
+      const nebulaDensity = Number.isFinite(rawNebula) ? rawNebula : 1.15;
+      const rotSpeed = Number.isFinite(rawRot) ? rawRot : 0.65;
       camPitch = parseFloat(document.getElementById("sl-tilt").value) || camPitch;
 
       rotAngle += dt * rotSpeed * 0.22;
@@ -1475,8 +1457,9 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
         ctx.fillStyle = "#ffffff";
         ctx.fillText(`🤖 ESSAIM BEE-MOE • SYNC ORBITALE : ${{beeOrbitSync.toFixed(0)}}% (Cible: Anneau Vert)`, cx - 195, cy - 165);
       }} else if (currentStage === 3) {{
+        const gravVal = selectedTarget.gravMs2 != null ? Number(selectedTarget.gravMs2) : 9.8;
         if (!landerTouchdown) {{
-          const g = (selectedTarget.gravMs2 || 11.8) * 0.35;
+          const g = gravVal * 0.35;
           landerVelMs = Math.max(2.0, landerVelMs + (g - (landerRetroActive ? 28.0 : 0.0)) * dt);
           landerAltKm = Math.max(0.0, landerAltKm - landerVelMs * dt * 0.25);
           if (landerAltKm <= 0.5) advanceWebGPUStageAction();
@@ -1489,7 +1472,7 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
         ctx.font = "bold 13px JetBrains Mono, monospace";
         ctx.fillStyle = "#00ff88";
         ctx.fillText(
-          `🛬 DESCENTE OOLITE SUR ${{selectedTarget.id}} • ALT: ${{landerAltKm.toFixed(1)}} km • V_DESC: ${{landerVelMs.toFixed(1)}} m/s • g=${{selectedTarget.gravMs2 || 11.8}} m/s²`,
+          `🛬 DESCENTE OOLITE SUR ${{selectedTarget.id}} • ALT: ${{landerAltKm.toFixed(1)}} km • V_DESC: ${{landerVelMs.toFixed(1)}} m/s • g=${{selectedTarget.gravMs2 ?? 'n/a'}} m/s²`,
           cx - 260,
           cy - 180
         );
@@ -1524,10 +1507,43 @@ def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
       requestAnimationFrame(animateGalaxy);
     }}
 
+    async function syncWebGPULiveGcpTelemetry() {{
+      const urls = [
+        '/v1/hivemind/live-telemetry',
+        'https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/hivemind/live-telemetry'
+      ];
+      for (let i = 0; i < urls.length; i++) {{
+        try {{
+          const res = await fetch(urls[i], {{ headers: {{ 'Accept': 'application/json' }} }});
+          if (!res.ok) continue;
+          const d = await res.json();
+          if (!d || !d.accounts) continue;
+          const acct = d.accounts || {{}};
+          const models = d.models || {{}};
+          const t4 = d.t4_boinc || {{}};
+          const ot = d.opentrainer || {{}};
+          const el = document.getElementById('webgpu-live-gcp-telemetry');
+          if (el) {{
+            const fmtV = (v) => (v === null || v === undefined ? 'n/a' : v);
+            const fmtMiB = (v) => (v === null || v === undefined ? 'n/a' : Number(v).toLocaleString());
+            el.textContent =
+              '🟢 GCP Live: ' + fmtV(acct.total_registered_accounts) + ' Comptes • ' +
+              fmtV(models.live_models_count) + ' Modèles • T4 ' +
+              fmtMiB(t4.vram_free_mib) + ' MiB • ' +
+              fmtV(t4.assimilated_workunits) + ' WUs • OpenTrainer ' +
+              fmtV(ot.total_registered_nodes) + ' GPU';
+          }}
+          break;
+        }} catch (e) {{}}
+      }}
+    }}
+
     initPlanetDock();
     selectTarget(0);
     setLang("{default_lang}");
     initWebGPU();
+    syncWebGPULiveGcpTelemetry();
+    setInterval(syncWebGPULiveGcpTelemetry, 20000);
     requestAnimationFrame(animateGalaxy);
   </script>
 </body>
@@ -1546,10 +1562,25 @@ def execute_server_webgpu_verification_and_sync(
     recovered_transit_depth_ppm: float,
 ) -> dict[str, Any]:
     """Generate a cryptographic SHA-256 receipt for a WebGPU WGSL @compute workunit and sync with GCP Ruche."""
-    seed = f"webgpu:{handle}:{target_planet}:{gpu_adapter}:{recovered_transit_depth_ppm:.1f}:{time.time()}"
+    if isinstance(n_points_folded, bool):
+        raise ValueError("n_points_folded must be an integer, not bool")
+    n_pts = int(n_points_folded)
+    if n_pts < 64 or n_pts > 1_048_576:
+        raise ValueError(f"n_points_folded out of range [64, 1048576]: {n_pts}")
+    exec_ms = float(kernel_exec_ms)
+    if not math.isfinite(exec_ms) or exec_ms <= 0.0 or exec_ms > 600_000.0:
+        raise ValueError(f"kernel_exec_ms must be finite and in (0, 600000]: {kernel_exec_ms}")
+    depth_ppm = float(recovered_transit_depth_ppm)
+    if not math.isfinite(depth_ppm) or depth_ppm <= 0.0 or depth_ppm >= 1_000_000.0:
+        raise ValueError(
+            f"recovered_transit_depth_ppm must be finite and in (0, 1000000): {recovered_transit_depth_ppm}"
+        )
+
+    seed = f"webgpu:{handle}:{target_planet}:{gpu_adapter}:{depth_ppm:.1f}:{time.time()}"
     receipt_sha256 = hashlib.sha256(seed.encode("utf-8")).hexdigest()
     gcp_lease_id = f"GCP-WEBGPU-{receipt_sha256[:12].upper()}"
     gcp_synced = False
+    gcp_sync_error: str | None = None
     try:
         req = urllib.request.Request(
             "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/workunit/request",
@@ -1569,19 +1600,21 @@ def execute_server_webgpu_verification_and_sync(
                 doc = json.loads(resp.read().decode("utf-8"))
                 gcp_lease_id = str(doc.get("lease_id", gcp_lease_id))
                 gcp_synced = True
-    except Exception:
-        pass
+    except Exception as exc:
+        gcp_sync_error = f"{type(exc).__name__}: {exc}"
 
     return {
         "receipt_id": f"WEBGPU-BLS-{receipt_sha256[:8].upper()}",
         "receipt_sha256": receipt_sha256,
         "gcp_lease_id": gcp_lease_id,
         "gcp_cloud_synced": gcp_synced,
+        "gcp_sync_error": gcp_sync_error,
+        "verification_status": "CLIENT_REPORTED_UNVERIFIED",
         "wgsl_entrypoint": "bls_fold_main",
         "workgroup_size": 64,
-        "n_points_folded": n_points_folded,
-        "kernel_exec_ms": round(float(kernel_exec_ms), 3),
-        "recovered_transit_depth_ppm": round(float(recovered_transit_depth_ppm), 1),
+        "n_points_folded": n_pts,
+        "kernel_exec_ms": round(exec_ms, 3),
+        "recovered_transit_depth_ppm": round(depth_ppm, 1),
         "backend": backend,
         "gpu_adapter": gpu_adapter,
     }

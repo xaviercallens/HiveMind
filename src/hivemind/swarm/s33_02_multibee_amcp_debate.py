@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import asdict, dataclass
 from typing import Any, Sequence
 
@@ -58,15 +59,14 @@ class MultiBeeAMCPDebateArena:
     @staticmethod
     def compute_bayesian_posterior(confidences: Sequence[float]) -> float:
         """Combine independent Bee confidences via log-odds Bayesian update with uniform prior."""
-        log_odds = 0.0
-        for c in confidences:
-            p = min(max(float(c), 1e-4), 1.0 - 1e-4)
-            log_odds += (p / (1.0 - p))
-        # Normalize log-odds product: P = prod(p_i) / (prod(p_i) + prod(1 - p_i))
         prod_p = 1.0
         prod_q = 1.0
         for c in confidences:
-            p = min(max(float(c), 1e-4), 1.0 - 1e-4)
+            val = float(c)
+            if not math.isfinite(val):
+                p = 1e-4
+            else:
+                p = min(max(val, 1e-4), 1.0 - 1e-4)
             prod_p *= p
             prod_q *= (1.0 - p)
         return prod_p / max(prod_p + prod_q, 1e-15)
@@ -81,12 +81,28 @@ class MultiBeeAMCPDebateArena:
             raise ValueError("at least 2 specialist bees must participate in the AMCP debate")
 
         vetoes: list[str] = []
+        finite_residuals: list[float] = []
+        has_nonfinite_residual = False
         for t in turns:
-            if not t.passed_invariants or t.residual_error > self.residual_ceiling:
+            res = float(t.residual_error)
+            conf = float(t.confidence)
+            if (
+                not t.passed_invariants
+                or not math.isfinite(res)
+                or res < 0.0
+                or res > self.residual_ceiling
+                or not math.isfinite(conf)
+                or conf < 0.0
+                or conf > 1.0
+            ):
                 vetoes.append(t.bee_id)
+            if math.isfinite(res):
+                finite_residuals.append(res)
+            else:
+                has_nonfinite_residual = True
 
         posterior = self.compute_bayesian_posterior([t.confidence for t in turns])
-        max_res = max(t.residual_error for t in turns)
+        max_res = float("inf") if has_nonfinite_residual else max(finite_residuals, default=0.0)
         accepted = (len(vetoes) == 0) and (posterior >= self.min_posterior)
 
         canonical = json.dumps(

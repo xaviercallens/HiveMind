@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
+import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -34,7 +36,7 @@ from hivemind.boinc.workunit import (
 )
 from hivemind.config import ARTIFACTS_ROOT, HiveMindConfig
 from hivemind.core.btm_upcycle import ExpertBranchState, initialize_domain_branches
-from hivemind.core.compression import decompress_lora_delta
+from hivemind.core.compression import compress_lora_delta, decompress_lora_delta
 from hivemind.core.diloco_inner import InnerLoopResult
 from hivemind.core.diloco_outer import DiLoCoOuterOptimizer, OuterStepResult
 from hivemind.security.federated_learning_hardening import FederatedLearningSecurityGuard
@@ -76,6 +78,9 @@ class BOINCCoordinatorService:
         base_model_sha256: str,
         shards_dir: Path | None = None,
         vocab_size: int = 4096,
+        max_active_workunits_per_node: int = 8,
+        max_total_active_workunits: int = 512,
+        workunit_ttl_s: float = 3600.0,
     ) -> None:
         self.config = config
         self.base_model_sha256 = base_model_sha256
@@ -84,6 +89,9 @@ class BOINCCoordinatorService:
         self.checkpoints_dir = ARTIFACTS_ROOT / "checkpoints"
         self.shards_dir.mkdir(parents=True, exist_ok=True)
         self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
+        self.max_active_workunits_per_node = max(1, int(max_active_workunits_per_node))
+        self.max_total_active_workunits = max(1, int(max_total_active_workunits))
+        self.workunit_ttl_s = max(1.0, float(workunit_ttl_s))
 
         # Phase A: Initialize E=8 independent domain branches from identical W_0
         self.branches: dict[str, ExpertBranchState] = initialize_domain_branches(
@@ -101,11 +109,34 @@ class BOINCCoordinatorService:
         )
         self.fl_security_guard = FederatedLearningSecurityGuard()
         self.active_workunits: dict[str, BOINCWorkunit] = {}
+        self._workunit_meta: dict[str, tuple[str, float]] = {}
+        self._shard_cache: dict[tuple[str, int, int, int, int], tuple[Path, str, str]] = {}
         self.pending_branch_deltas: dict[str, dict[str, dict[str, torch.Tensor]]] = {
             dom: {} for dom in self.branches
         }
         self.reputation_ledger: dict[str, NodeReputationRecord] = {}
         self._rr_branch_idx = 0
+
+    def prune_active_workunits(self, now_s: float | None = None) -> int:
+        """Evict consumed, stale-outer-step, or TTL-expired entries from ``active_workunits`` (IP-249)."""
+        now = time.monotonic() if now_s is None else float(now_s)
+        consumed = self.fl_security_guard.consumed_workunit_ids
+        to_remove: list[str] = []
+        for wu_id, wu in list(self.active_workunits.items()):
+            branch_state = self.branches.get(wu.branch_name)
+            expected_step = (branch_state.outer_step + 1) if branch_state is not None else wu.outer_step
+            meta = self._workunit_meta.get(wu_id)
+            assigned_at = meta[1] if meta is not None else now
+            if (
+                wu_id in consumed
+                or wu.outer_step != expected_step
+                or (now - assigned_at) > self.workunit_ttl_s
+            ):
+                to_remove.append(wu_id)
+        for wu_id in to_remove:
+            self.active_workunits.pop(wu_id, None)
+            self._workunit_meta.pop(wu_id, None)
+        return len(to_remove)
 
     def register_or_get_node(
         self,
@@ -166,15 +197,46 @@ class BOINCCoordinatorService:
         wu_id = f"wu-{branch_name.lower()}-t{outer_step}-{uuid.uuid4().hex[:6]}"
         seed = rng_seed if rng_seed is not None else (1000 + outer_step * 137 + branch_state.branch_id * 17)
 
-        shard_file = self.shards_dir / f"{wu_id}.parquet"
-        shard_path, shard_sha256, shard_sig = create_signed_parquet_shard(
-            shard_path=shard_file,
-            branch_name=branch_name,
-            rng_seed=seed,
-            num_sequences=num_sequences,
-            seq_len=seq_len,
-            vocab_size=self.vocab_size,
-        )
+        now = time.monotonic()
+        self.prune_active_workunits(now_s=now)
+
+        node_wus = [
+            (wid, meta[1])
+            for wid, meta in self._workunit_meta.items()
+            if meta[0] == steam_id64 and wid in self.active_workunits
+        ]
+        if len(node_wus) >= self.max_active_workunits_per_node:
+            node_wus.sort(key=lambda item: item[1])
+            for stale_wid, _ in node_wus[: len(node_wus) - self.max_active_workunits_per_node + 1]:
+                self.active_workunits.pop(stale_wid, None)
+                self._workunit_meta.pop(stale_wid, None)
+
+        if len(self.active_workunits) >= self.max_total_active_workunits:
+            all_wus = sorted(
+                ((wid, self._workunit_meta.get(wid, ("", 0.0))[1]) for wid in self.active_workunits),
+                key=lambda item: item[1],
+            )
+            for stale_wid, _ in all_wus[: len(all_wus) - self.max_total_active_workunits + 1]:
+                self.active_workunits.pop(stale_wid, None)
+                self._workunit_meta.pop(stale_wid, None)
+
+        shard_key = (branch_name, outer_step, int(seed), int(num_sequences), int(seq_len))
+        cached_shard = self._shard_cache.get(shard_key)
+        if cached_shard is not None and cached_shard[0].exists():
+            shard_path, shard_sha256, shard_sig = cached_shard
+        else:
+            shard_file = self.shards_dir / (
+                f"shard-{branch_name.lower()}-t{outer_step}-s{seed}-n{num_sequences}-l{seq_len}.parquet"
+            )
+            shard_path, shard_sha256, shard_sig = create_signed_parquet_shard(
+                shard_path=shard_file,
+                branch_name=branch_name,
+                rng_seed=seed,
+                num_sequences=num_sequences,
+                seq_len=seq_len,
+                vocab_size=self.vocab_size,
+            )
+            self._shard_cache[shard_key] = (shard_path, shard_sha256, shard_sig)
 
         ckpt_path = self.checkpoints_dir / f"lora_{branch_name}_t{branch_state.outer_step}.pt"
         wu = BOINCWorkunit(
@@ -193,6 +255,7 @@ class BOINCCoordinatorService:
             num_sequences=num_sequences,
         )
         self.active_workunits[wu_id] = wu
+        self._workunit_meta[wu_id] = (steam_id64, now)
         self.fl_security_guard.register_workunit_assignment(wu_id, worker_id=worker_id, steam_id64=steam_id64)
         return wu, {k: v.clone() for k, v in branch_state.lora_state.items()}
 
@@ -236,7 +299,63 @@ class BOINCCoordinatorService:
             lr=lr,
             weight_decay=weight_decay,
             micro_batch_size=micro_batch_size,
+            expected_init_state=branch_state.lora_state if branch_state is not None else None,
         )
+        decompressed: dict[str, torch.Tensor] | None = None
+        if verdict.passed:
+            decompressed = decompress_lora_delta(submission.compressed_delta)
+            expected_pkg = compress_lora_delta(
+                delta_dict=submission.raw_delta,
+                worker_id=submission.worker_id,
+                branch_name=submission.branch_name,
+                outer_step=submission.outer_step,
+                inner_steps_completed=submission.steps_completed,
+                topk_ratio=submission.compressed_delta.topk_ratio,
+            )
+            expected_decompressed = decompress_lora_delta(expected_pkg)
+            compressed_ok = set(decompressed.keys()) == set(expected_decompressed.keys())
+            if compressed_ok:
+                if submission.error_feedback_residual_norm is None:
+                    for k, exp_t in expected_decompressed.items():
+                        dec_t = decompressed[k].detach().to(torch.float32).cpu()
+                        ref_t = exp_t.detach().to(torch.float32).cpu()
+                        raw_t = submission.raw_delta[k].detach().to(torch.float32).cpu()
+                        if not bool(torch.isfinite(dec_t).all()):
+                            compressed_ok = False
+                            break
+                        diff = float((dec_t - ref_t).abs().max().item()) if dec_t.numel() > 0 else 0.0
+                        raw_mag = float(raw_t.abs().max().item()) if raw_t.numel() > 0 else 0.0
+                        tol = max(self.validator.tolerance_eps, 1e-3 * raw_mag)
+                        if not math.isfinite(diff) or diff > tol:
+                            compressed_ok = False
+                            break
+                else:
+                    for dec_t in decompressed.values():
+                        if not bool(torch.isfinite(dec_t.detach().to(torch.float32).cpu()).all()):
+                            compressed_ok = False
+                            break
+                    if compressed_ok:
+                        raw_l2 = math.sqrt(
+                            sum(
+                                float(t.detach().to(torch.float32).cpu().pow(2).sum().item())
+                                for t in submission.raw_delta.values()
+                            )
+                        )
+                        decomp_l2 = math.sqrt(
+                            sum(
+                                float(t.detach().to(torch.float32).cpu().pow(2).sum().item())
+                                for t in decompressed.values()
+                            )
+                        )
+                        ef_norm = float(submission.error_feedback_residual_norm or 0.0)
+                        if not math.isfinite(decomp_l2) or decomp_l2 > max(1e-5, 4.0 * raw_l2 + 2.0 * ef_norm):
+                            compressed_ok = False
+            if not compressed_ok:
+                verdict.passed = False
+                verdict.steam_account_flagged = True
+                verdict.reason = "REJECTED: compressed_delta diverges from validated raw_delta (IP-77)"
+                self.validator._flag_account(steam_id64, verdict.reason)
+
         # The verdict (pass or fail) is final for this wu_id: only now cast the FL-06 vote and consume it.
         self.fl_security_guard.record_workunit_submission(
             wu_id=workunit.wu_id,
@@ -249,19 +368,19 @@ class BOINCCoordinatorService:
             steam_id64,
             NodeReputationRecord(steam_id64=steam_id64, worker_id=submission.worker_id),
         )
-        if verdict.passed:
+        if verdict.passed and decompressed is not None:
+            step_fraction = min(1.0, max(0.0, submission.steps_completed / max(1, workunit.inner_steps_H)))
             rec.validated_workunits += 1
             rec.contributed_tflops = round(rec.contributed_tflops + 0.125 * submission.steps_completed, 3)
-            rec.minted_api_credits = round(rec.minted_api_credits + 10.0, 2)
-            rec.reputation_score = min(100.0, round(rec.reputation_score + 2.5, 2))
-            # Decompress uploaded Top-k + FP8 delta package on the server
-            decompressed = decompress_lora_delta(submission.compressed_delta)
+            rec.minted_api_credits = round(rec.minted_api_credits + 10.0 * step_fraction, 2)
+            rec.reputation_score = min(100.0, round(rec.reputation_score + 2.5 * step_fraction, 2))
             self.pending_branch_deltas[workunit.branch_name][submission.worker_id] = decompressed
         else:
             rec.rejected_workunits += 1
             rec.reputation_score = 0.0
             rec.flagged_byzantine = True
 
+        self.prune_active_workunits()
         return verdict
 
     def inject_raw_delta_for_aggregation(
@@ -290,6 +409,7 @@ class BOINCCoordinatorService:
         branch.lora_state = res.theta_updated
         branch.outer_step = next_step
         self.pending_branch_deltas[branch_name] = {}
+        self.prune_active_workunits()
         return res
 
 
@@ -440,9 +560,15 @@ def create_coordinator_fastapi_app(coordinator: BOINCCoordinatorService, identit
             consumer_id="seti-node-paris-01",
             provider_ids=["seti-node-lyon-02", "seti-node-nice-03"],
         )
-        auditor = OptimisticProofOfInferenceAuditor(audit_probability=0.05)
-        ref_act = torch.ones(1, 8, 64, dtype=torch.float16)
-        opoi = auditor.verify_activation_commitment("seti-node-lyon-02", ref_act, ref_act)
+        # No producer activation commitment reaches this endpoint, so no OPoI audit can be performed here. The previous
+        # code compared a reference tensor with itself and reported the inevitable pass as an audit result.
+        opoi = {
+            "status": "NOT_PERFORMED",
+            "reason": "no producer activation commitment is available on this endpoint; nothing was audited",
+            "opoi_passed": None,
+            "slashed": False,
+            "auditor": OptimisticProofOfInferenceAuditor.__name__,
+        }
         completion_id = f"chatcmpl-hivemind-{uuid.uuid4().hex[:10]}"
         created_ts = int(time.time())
         prompt_tokens = max(1, len(user_prompt.split()))

@@ -1,0 +1,32 @@
+{
+  "criterion": "A2",
+  "model_file": "base-q4km.gguf",
+  "hosts": [
+    "socreateai-agora-hermes-node1",
+    "hm-a2-rpc-tmp (GCE n1-standard-4 Spot)"
+  ],
+  "ngl_on_rpc": 12,
+  "rpc_layers_in_log": 12,
+  "prompts": 20,
+  "n_predict": 32,
+  "comparison": {
+    "compared": 20,
+    "identical": 8,
+    "all_identical": false,
+    "first_mismatch": {
+      "prompt_index": 4,
+      "token_position": 23,
+      "single": " Albert Einstein in 1915. It is a theory of gravitation that describes how massi",
+      "split": " Albert Einstein in 1915. It is a theory of gravitation that describes how mass "
+    },
+    "reason": ""
+  },
+  "tokens_per_s": {
+    "single_host": 74.64,
+    "split": 44.09
+  },
+  "setup": "CPU on both hosts (llama.cpp RPC backend over an SSH tunnel): shows the model split and the token identity, not GPU speed.",
+  "passed": false,
+  "reason": "8/20 prompts token-identical (need 20/20)",
+  "logs": "/mnt/disks/disk-socrateai-local-1/hivemind_work/tmp/a2_ph1hdaez"
+}

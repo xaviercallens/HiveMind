@@ -185,3 +185,133 @@ def test_in_memory_kafka_bridge_and_double_auction_edge_cases() -> None:
         ]
     )
     assert no_trade["matched_trades_count"] == 0
+
+
+def test_campaign_poll_votes_are_rate_limited_and_stop_growing_the_event_log() -> None:
+    from hivemind.router.gateway import CAMPAIGN_POLL_LIMIT
+
+    store = RouterStore(":memory:", SECRET)
+    client = TestClient(create_router_app(store, starter_grant_hmt=50.0))
+    user = client.post("/v1/hivemind/register", json={"handle": "poll-spammer", "role": "prosumer"}).json()
+    body = {"subject_id": "SUBJ-02-RUSTY-SUNDIALS-FLUID-ODE", "participant_kind": "human_researcher", "pledged_vram_gb": 8.0, "availability_slot": "eu_evening_cet"}
+    headers = {"Authorization": f"Bearer {user['api_key']}"}
+    codes = [client.post("/v1/hivemind/campaigns/poll", headers=headers, json=body).status_code for _ in range(CAMPAIGN_POLL_LIMIT + 5)]
+    assert codes[:CAMPAIGN_POLL_LIMIT] == [200] * CAMPAIGN_POLL_LIMIT
+    assert codes[CAMPAIGN_POLL_LIMIT:] == [429] * 5
+    events = len(store.list_amcp_kafka_events(limit=1000))
+    assert client.post("/v1/hivemind/campaigns/poll", headers=headers, json=body).status_code == 429
+    assert len(store.list_amcp_kafka_events(limit=1000)) == events
+
+
+def test_identical_re_vote_writes_no_new_bus_event_but_a_changed_vote_does() -> None:
+    store = RouterStore(":memory:", SECRET)
+    client = TestClient(create_router_app(store, starter_grant_hmt=50.0))
+    user = client.post("/v1/hivemind/register", json={"handle": "poll-reposter", "role": "prosumer"}).json()
+    headers = {"Authorization": f"Bearer {user['api_key']}"}
+    body = {"subject_id": "SUBJ-02-RUSTY-SUNDIALS-FLUID-ODE", "participant_kind": "human_researcher", "pledged_vram_gb": 8.0, "availability_slot": "eu_evening_cet"}
+
+    def events() -> int:
+        return len(store.list_amcp_kafka_events(limit=1000))
+
+    before = events()
+    first = client.post("/v1/hivemind/campaigns/poll", headers=headers, json=body)
+    assert first.status_code == 200 and first.json()["amcp_event"] is not None
+    assert events() == before + 1
+    again = client.post("/v1/hivemind/campaigns/poll", headers=headers, json=body)
+    assert again.status_code == 200 and again.json()["amcp_event"] is None
+    assert again.json()["registration"]["subject_id"] == body["subject_id"]
+    assert events() == before + 1  # an identical vote did not grow the never-pruned log
+    changed = client.post("/v1/hivemind/campaigns/poll", headers=headers, json={**body, "pledged_vram_gb": 16.0})
+    assert changed.status_code == 200 and changed.json()["amcp_event"] is not None
+    assert events() == before + 2
+
+
+def test_an_account_never_trades_with_itself_but_two_accounts_still_match() -> None:
+    from hivemind.swarm.amcp_kafka_campaign_bus import clear_bee_capacity_market
+
+    wash = [
+        {"order_id": "o1", "account_id": "acct-a", "bee_id": "hivemind/bee-stars", "side": "OFFER", "capacity_1k": 10.0, "price_per_1k": 100.0, "utc": 1.0},
+        {"order_id": "b1", "account_id": "acct-a", "bee_id": "hivemind/coder", "side": "BID", "capacity_1k": 10.0, "price_per_1k": 200.0, "utc": 2.0},
+    ]
+    assert clear_bee_capacity_market(wash)["matched_trades_count"] == 0
+    # a different account's offer is still matched, and the self-pair is skipped rather than blocking it
+    book = wash + [{"order_id": "o2", "account_id": "acct-b", "bee_id": "hivemind/bee-stars", "side": "OFFER", "capacity_1k": 4.0, "price_per_1k": 150.0, "utc": 3.0}]
+    out = clear_bee_capacity_market(book)
+    assert out["matched_trades_count"] == 1 and out["matches"][0]["offer_id"] == "o2"
+    assert out["total_traded_capacity_1k"] == 4.0 and out["matches"][0]["clearing_price_per_1k"] == 175.0
+    # orders without an account id (legacy rows) keep the old behaviour
+    legacy = [{k: v for k, v in o.items() if k != "account_id"} for o in wash]
+    assert clear_bee_capacity_market(legacy)["matched_trades_count"] == 1
+
+
+def test_ip260_bee_trade_bid_requires_escrow_balance_and_rejects_foreign_bee_id() -> None:
+    """IP-260 (#577): zero-balance BID returns 402, foreign bee_id returns 403, funded BID places an escrow hold."""
+    store = RouterStore(":memory:", SECRET)
+    app = create_router_app(store, starter_grant_hmt=0.0)
+    client = TestClient(app)
+
+    broke = client.post("/v1/hivemind/register", json={"handle": "broke-trader", "role": "prosumer"}).json()
+    funded = client.post("/v1/hivemind/register", json={"handle": "funded-trader", "role": "prosumer"}).json()
+    store.grant(funded["account_id"], 25.0, "test-grant")
+
+    # 1. Zero-balance BID must fail with 402 and record no order
+    res_unfunded = client.post(
+        "/v1/hivemind/bees/trade",
+        headers={"Authorization": f"Bearer {broke['api_key']}"},
+        json={
+            "bee_id": "hivemind/coder",
+            "side": "BID",
+            "subject_id": "SUBJ-01-PYTHON-RUST-CODER",
+            "capacity_1k": 10.0,
+            "price_per_1k": 1.50,
+        },
+    )
+    assert res_unfunded.status_code == 402
+    assert store.list_bee_trade_orders(window_s=86_400.0) == []
+
+    # 2. Foreign bee_id not in canonical allow-list or owned by the caller must fail with 403
+    res_foreign = client.post(
+        "/v1/hivemind/bees/trade",
+        headers={"Authorization": f"Bearer {funded['api_key']}"},
+        json={
+            "bee_id": "hivemind/impersonated-foreign-bee",
+            "side": "OFFER",
+            "subject_id": "SUBJ-01-PYTHON-RUST-CODER",
+            "capacity_1k": 10.0,
+            "price_per_1k": 0.50,
+        },
+    )
+    assert res_foreign.status_code == 403
+
+    # 3. Account-owned bee_id ("bee-<handle>") is accepted for OFFER, and funded BID places an escrow hold
+    res_own_offer = client.post(
+        "/v1/hivemind/bees/trade",
+        headers={"Authorization": f"Bearer {broke['api_key']}"},
+        json={
+            "bee_id": "bee-broke-trader",
+            "side": "OFFER",
+            "subject_id": "SUBJ-01-PYTHON-RUST-CODER",
+            "capacity_1k": 10.0,
+            "price_per_1k": 1.00,
+        },
+    )
+    assert res_own_offer.status_code == 200
+
+    res_funded_bid = client.post(
+        "/v1/hivemind/bees/trade",
+        headers={"Authorization": f"Bearer {funded['api_key']}"},
+        json={
+            "bee_id": "hivemind/coder",
+            "side": "BID",
+            "subject_id": "SUBJ-01-PYTHON-RUST-CODER",
+            "capacity_1k": 10.0,
+            "price_per_1k": 1.50,
+        },
+    )
+    assert res_funded_bid.status_code == 200
+    body = res_funded_bid.json()
+    assert body["escrow_hold_hmt"] == 15.0
+    assert store.balance(funded["account_id"]) == 10.0
+    assert store.active_hold_count(funded["account_id"]) == 1
+    assert body["market_clearing"]["matched_trades_count"] == 1
+

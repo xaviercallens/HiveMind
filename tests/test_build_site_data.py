@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import math
+import os
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +15,14 @@ REPO = Path(__file__).resolve().parent.parent
 _spec = importlib.util.spec_from_file_location("build_site_data", REPO / "scripts" / "build_site_data.py")
 assert _spec is not None and _spec.loader is not None
 bsd = importlib.util.module_from_spec(_spec)
+# The script under test sets CUDA_VISIBLE_DEVICES when it is imported; put the value back right after loading it so
+# collecting this module does not hide the GPU from the modules collected after it (IP-179).
+_CUDA_VISIBLE_DEVICES_BEFORE = os.environ.get("CUDA_VISIBLE_DEVICES")
 _spec.loader.exec_module(bsd)
+if _CUDA_VISIBLE_DEVICES_BEFORE is None:
+    os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+else:
+    os.environ["CUDA_VISIBLE_DEVICES"] = _CUDA_VISIBLE_DEVICES_BEFORE
 
 UTC = "2026-01-02T03:04:05Z"
 RECEIPT = "abcdef0123456789" * 4

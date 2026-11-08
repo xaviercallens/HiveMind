@@ -19,6 +19,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
+from hivemind.router.telemetry_figures import shown_figure
 
 REPO_URL = "https://github.com/xaviercallens/HiveMind"
 DEFAULT_API_URL = "https://hivemind-openrouter-1003063861791.us-central1.run.app"
@@ -88,13 +89,13 @@ PATHS: Sequence[tuple[str, Pair, str, Pair, Pair]] = (
      ("Serve a model from your own machine and earn points when people use it.",
       "Servez un modèle depuis votre propre ordinateur et gagnez des points quand on l'utilise.")),
     ("train", ("Train models at night (BOINC)", "Entraîner des modèles la nuit (BOINC)"), "ok",
-     ("Available now · night MoE & astrophysics workunits", "Disponible maintenant · unités MoE nocturnes et astrophysique"),
-     ("Lend your GPU to night QLoRA training and BOINC astrophysics workunits on Linux, Windows or macOS.",
-      "Prêtez votre GPU aux tâches d'entraînement QLoRA nocturnes et aux unités BOINC d'astrophysique sous Linux, Windows ou macOS.")),
-    ("play", ("Gamers and Steam", "Joueurs et Steam"), "ok",
-     ("Available now · Free-to-Play Steam & automatic idle-GPU pause", "Disponible maintenant · jeu Steam gratuit et pause GPU automatique"),
-     ("Give GPU time only while you are not playing. The automatic idle-GPU pause and the Free-to-Play Steam game (AppID 3133700) are available today.",
-      "Donnez du temps de GPU seulement quand vous ne jouez pas. La pause GPU automatique et le jeu Steam gratuit (AppID 3133700) sont disponibles dès aujourd'hui.")),
+     ("Available now · night training workunits (BOINC)", "Disponible maintenant · unités d'entraînement nocturnes (BOINC)"),
+     ("Lend your GPU to night training workunits through the BOINC client on Linux, Windows or macOS.",
+      "Prêtez votre GPU aux unités d'entraînement nocturnes avec le client BOINC sous Linux, Windows ou macOS.")),
+    ("play", ("Gamers and Steam", "Joueurs et Steam"), "dev",
+     ("Helper script only · no Steam game yet", "Script d'aide seulement · pas encore de jeu Steam"),
+     ("Give GPU time only while you are not playing. A helper script pauses the BOINC GPU queue while you play; there is no HiveMind game on Steam yet.",
+      "Donnez du temps de GPU seulement quand vous ne jouez pas. Un script d'aide met en pause la file GPU de BOINC pendant que vous jouez ; il n'y a pas encore de jeu HiveMind sur Steam.")),
 )
 
 @dataclass(frozen=True)
@@ -144,12 +145,12 @@ def _producer_account(flags: Flags) -> list[Pair]:
         return [_CLOSED]
     items: list[Pair] = []
     if flags.handles:
-        items.append(("Create a producer account the same way, with `\"role\":\"producer\"` (or `\"prosumer\"` if you also want to use models), and keep the key.",
-                      "Créez un compte producteur de la même façon, avec `\"role\":\"producer\"` (ou `\"prosumer\"` si vous voulez aussi utiliser les modèles), "
+        items.append(("Create a producer account the same way, with `\"role\":\"producer\"` (or `\"prosumer\"` if you also want to use models, or `\"trainer\"` for intense GPU training via OpenTrainer), and keep the key.",
+                      "Créez un compte producteur de la même façon, avec `\"role\":\"producer\"` (ou `\"prosumer\"` si vous voulez aussi utiliser les modèles, ou `\"trainer\"` pour l'entraînement GPU intensif via OpenTrainer), "
                       "et gardez la clé."))
     if flags.google:
-        items.append(("On the [sign-up page](/signup) with Google, choose “Share my GPU” or “Both”.",
-                      "Sur la [page d'inscription](/signup) avec Google, choisissez « Share my GPU » ou « Both »."))
+        items.append(("On the [sign-up page](/signup) with Google, choose “Share my GPU”, “Both”, or “Trainer (OpenTrainer)”.",
+                      "Sur la [page d'inscription](/signup) avec Google, choisissez « Share my GPU », « Both » ou « Trainer (OpenTrainer) »."))
     return items
 
 
@@ -214,6 +215,12 @@ SECTIONS: Sequence[tuple[str, Pair, Sequence[tuple[str, Any]]]] = (
         ("note", ("On Windows (PowerShell) set variables with `$env:NAME=\"value\"` instead of `export`. Remove `--once` to keep the agent running.",
                   "Sous Windows (PowerShell), définissez les variables avec `$env:NOM=\"valeur\"` au lieu de `export`. Retirez `--once` pour laisser l'agent "
                   "en marche.")),
+        ("ol", [
+            ("Optional — keep your GPU connected across reboots with an auto-start background service (`systemd` on Linux, Scheduled Task on Windows 10/11, `launchd` on macOS):",
+             "Optionnel — gardez votre GPU connecté après un redémarrage grâce au service automatique en arrière-plan (`systemd` sous Linux, tâche planifiée sous Windows 10/11, `launchd` sous macOS) :"),
+        ]),
+        ("code", "python scripts/hivemind_producer_autostart.py linux --model coder=qwen2.5-coder:7b --apply ./producer-autostart\n"
+                 "python scripts/hivemind_producer_autostart.py windows --model coder=qwen2.5-coder:7b --apply ./producer-autostart"),
         ("p", ("You can stop at any time: after about two minutes without a heartbeat the gateway stops sending you requests.",
                "Vous pouvez arrêter en tout temps : après environ deux minutes sans signal de vie, la passerelle cesse de vous envoyer des requêtes.")),
         ("tiers", None),
@@ -243,8 +250,10 @@ SECTIONS: Sequence[tuple[str, Pair, Sequence[tuple[str, Any]]]] = (
         ]),
         ("code", "python3 scripts/hivemind_volunteer_preflight.py --project-url https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app"),
         ("ol", [
-            ("Run a complete local dry-run test (`--dry-run`) to verify 16,384-point TESS/JWST light-curve folding, rank-4 QLoRA outer-delta SVD verification, and coordinator reachability:",
-             "Exécutez un test à blanc complet sur votre machine (`--dry-run`) pour vérifier le pliage de courbe de lumière TESS/JWST (16 384 points), la validation SVD QLoRA de rang 4 et la connexion au coordinateur :"),
+            ("Run a complete local dry-run test (`--dry-run`). It checks that this machine can run a small GPU kernel on a built-in test pattern (a dip injected into a synthetic "
+             "16,384-point curve: a self-check, not real TESS or JWST data) and that the coordinator answers. It does not train a model:",
+             "Exécutez un test à blanc complet sur votre machine (`--dry-run`). Il vérifie que cette machine peut exécuter un petit noyau GPU sur un motif de test intégré (un creux "
+             "injecté dans une courbe synthétique de 16 384 points : un auto-test, pas de vraies données TESS ou JWST) et que le coordinateur répond. Il n'entraîne aucun modèle :"),
         ]),
         ("code", "python3 scripts/hivemind_boinc_idle_worker.py --coordinator https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app --handle your-handle --domain physics_sim --dry-run"),
         ("ol", [
@@ -260,22 +269,88 @@ SECTIONS: Sequence[tuple[str, Pair, Sequence[tuple[str, Any]]]] = (
         ]),
         ("code", "boinccmd --get_project_config https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app\n"
                  "boinccmd --project_attach https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app YOUR_ACCOUNT_KEY"),
-        ("note", ("Night training for end-users and HiveMind nodes (22:00–07:00 Paris time): End-users (volunteers, developers and gamers) leave their PC or laptop running overnight to fold exoplanet transits and compute rank-4 QLoRA inner-loop updates, earning 250 HMT and 45 Cobblestones per workunit to spend the next day on all models. Dedicated HiveMind nodes (GPU producers, HiveMiners and the owner fleet) switch from daytime OpenRouter inference (07:00–22:00) to nocturnal DiLoCo outer-step aggregation, Multi-Krum verification and SVD teacher-to-student distillation (live node telemetry at [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).",
-                  "Entraînement nocturne pour les utilisateurs finaux et les nœuds HiveMind (22 h – 7 h, heure de Paris) : Les utilisateurs finaux (bénévoles, développeurs et joueurs) laissent leur PC ou portable calculer la nuit des transits d'exoplanètes et des mises à jour QLoRA de rang 4, gagnant 250 HMT et 45 Cobblestones par unité pour interroger tous les modèles le lendemain. Les nœuds dédiés HiveMind (producteurs GPU, HiveMiners et flotte principale) passent de l'inférence OpenRouter diurne (7 h – 22 h) à l'agrégation nocturne DiLoCo, la vérification Multi-Krum et la distillation SVD enseignant-étudiant (télémétrie des nœuds en direct sur [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).")),
+        ("p", ("Honest status of the helper script (`hivemind_boinc_idle_worker.py`): the result it submits is a deterministic placeholder computed from the workunit id, not a trained "
+               "model, so treat any points shown for it as provisional. Real training workunits run only through the BOINC client attached above.",
+               "État réel du script d'aide (`hivemind_boinc_idle_worker.py`) : le résultat qu'il soumet est un substitut déterministe calculé à partir de l'identifiant de l'unité, "
+               "pas un modèle entraîné ; considérez donc tout point affiché pour lui comme provisoire. Les vraies unités d'entraînement ne passent que par le client BOINC attaché ci-dessus.")),
+        ("p", ("On a PC you also play on, ask the BOINC client itself to step aside. This prints two small settings files (nothing is installed or changed "
+               "until you add `--apply` with your BOINC data folder; your old files are kept as backups):",
+               "Sur un PC où vous jouez aussi, demandez au client BOINC lui-même de s'effacer. Cette commande affiche deux petits fichiers de réglages "
+               "(rien n'est installé ni modifié tant que vous n'ajoutez pas `--apply` avec votre dossier de données BOINC ; vos anciens fichiers sont "
+               "gardés en copie) :")),
+        ("code", "python3 scripts/hivemind_volunteer_config.py gamer --game YourGame.exe"),
+        ("p", ("With these settings the BOINC client does no GPU work while you are using the computer, gives back the video memory of a paused task, and stops "
+               "GPU work at once while a program you name with `--game` is running. Tested with the real BOINC client on Linux. Not tested on Windows. "
+               "A game you do not name, played with a controller only, is not detected: name your games.",
+               "Avec ces réglages, le client BOINC ne fait aucun calcul GPU pendant que vous utilisez l'ordinateur, rend la mémoire vidéo d'une tâche en "
+               "pause, et arrête le calcul GPU aussitôt qu'un programme que vous nommez avec `--game` tourne. Testé avec le vrai client BOINC sous Linux. "
+               "Non testé sous Windows. Un jeu que vous ne nommez pas, joué à la manette seulement, n'est pas détecté : nommez vos jeux.")),
+        ("note", ("Night training for end-users and HiveMind nodes (22:00–07:00 Paris time): End-users (volunteers, developers and gamers) leave their PC or laptop running overnight to fold exoplanet transits and compute rank-4 QLoRA inner-loop updates, earning verified HMT points and BOINC Cobblestones for server-validated workunits to spend the next day on all models. Dedicated HiveMind nodes (GPU producers, HiveMiners and the owner fleet) switch from daytime OpenRouter inference (07:00–22:00) to nocturnal DiLoCo outer-step aggregation, Multi-Krum verification and SVD teacher-to-student distillation (live node telemetry at [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).",
+                  "Entraînement nocturne pour les utilisateurs finaux et les nœuds HiveMind (22 h – 7 h, heure de Paris) : Les utilisateurs finaux (bénévoles, développeurs et joueurs) laissent leur PC ou portable calculer la nuit des transits d'exoplanètes et des mises à jour QLoRA de rang 4, gagnant des points HMT vérifiés et des Cobblestones BOINC pour les unités validées côté serveur afin d'interroger tous les modèles le lendemain. Les nœuds dédiés HiveMind (producteurs GPU, HiveMiners et flotte principale) passent de l'inférence OpenRouter diurne (7 h – 22 h) à l'agrégation nocturne DiLoCo, la vérification Multi-Krum et la distillation SVD enseignant-étudiant (télémétrie des nœuds en direct sur [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).")),
+    )),
+    ("opentrainer", ("3b. OpenTrainer — Intense GPU Co-Training (BOINC + AMCP + Kafka + Aglets, Firewall-Friendly)", "3b. OpenTrainer — Co-entraînement GPU intensif (BOINC + AMCP + Kafka + Aglets, compatible pare-feu)"), (
+        ("p", ("Registering with the `\"trainer\"` role on [/signup](/signup) connects your GPU to `OpenTrainer` ([/v1/hivemind/opentrainer/status](/v1/hivemind/opentrainer/status)), the central coordinator integrating BOINC, AMCP v1.5, Kafka (`hivemind.amcp.federation.v1`), and Signed Task Agents (IBM Aglet life cycle without mobile code) built between the RTX 2070 (`XAVGAMSRV`, 8 GB, Windows 11) and the GCP Tesla T4 (`socreateai-agora-hermes-node1`, 16 GB, Linux) across PRs `#366`, `#399`, `#401`, `#407`, `#408`, `#409`, and `#410` (see the [OpenTrainer architecture guide]({REPO}/blob/main/docs/OPENTRAINER_BOINC_AMCP_KAFKA_ARCHITECTURE.md)).",
+               "L'inscription avec le rôle `\"trainer\"` sur [/signup](/signup) connecte votre GPU à `OpenTrainer` ([/v1/hivemind/opentrainer/status](/v1/hivemind/opentrainer/status)), le composant central intégrant BOINC, AMCP v1.5, Kafka (`hivemind.amcp.federation.v1`) et les agents de tâche signés (cycle de vie IBM Aglet sans code mobile) construits entre la RTX 2070 (`XAVGAMSRV`, 8 Go, Windows 11) et la Tesla T4 GCP (`socreateai-agora-hermes-node1`, 16 Go, Linux) dans les PR `#366`, `#399`, `#401`, `#407`, `#408`, `#409` et `#410` (voir le [guide d'architecture OpenTrainer]({REPO}/blob/main/docs/OPENTRAINER_BOINC_AMCP_KAFKA_ARCHITECTURE.md)).")),
+        ("ul", [
+            ("Tier B Outbound HTTPS Relay (`outbound-https-relay`): Your trainer GPU initiates outbound-only HTTPS (`TCP/443`) calls to `/v1/hivemind/opentrainer/heartbeat` and `/v1/hivemind/opentrainer/submit-delta` — zero inbound firewall ports, zero `0.0.0.0` listeners, works behind residential NAT, CGNAT, and Windows Firewall",
+             "Relais HTTPS sortant Tier B (`outbound-https-relay`) : Votre GPU d'entraînement émet uniquement des requêtes HTTPS sortantes (`TCP/443`) vers `/v1/hivemind/opentrainer/heartbeat` et `/v1/hivemind/opentrainer/submit-delta` — zéro port entrant, zéro écoute `0.0.0.0`, fonctionne derrière un NAT résidentiel, CGNAT et le pare-feu Windows"),
+            ("Tier A Signed Task Agents over AMCP & Kafka (`amcp-kafka-aglet` / `wireguard-t4-hub` / `ssh-loopback-tunnel`): Implements IBM's Aglet life cycle (`dispatch` `task_offer` -> `arrival` `check_offer` -> `clone` `task_claim` -> `result` `task_result` -> `retract` `task_abort`) without mobile code (`weights_only=True`, CRLF-normalized `code_pin`) for Stage-2 Tiny Granite-MoE NF4 QLoRA and DiLoCo 2D-DCT outer steps",
+             "Agents de tâche signés Tier A sur AMCP et Kafka (`amcp-kafka-aglet` / `wireguard-t4-hub` / `ssh-loopback-tunnel`) : Implémente le cycle de vie IBM Aglet (`dispatch` `task_offer` -> `arrival` `check_offer` -> `clone` `task_claim` -> `result` `task_result` -> `retract` `task_abort`) sans code mobile (`weights_only=True`, `code_pin` normalisé CRLF) pour le QLoRA NF4 Tiny Granite-MoE Stage-2 et les pas externes DiLoCo 2D-DCT"),
+            ("Tier C BOINC Night Workunits (`boinc-night-workunit`): Asynchronous night workunits over standard HTTPS (`TCP/443`) when the GPU is idle between 22:00 and 07:00",
+             "Unités nocturnes BOINC Tier C (`boinc-night-workunit`) : Unités de travail nocturnes asynchrones via HTTPS standard (`TCP/443`) lorsque le GPU est inactif entre 22 h et 7 h"),
+        ]),
+        ("ol", [
+            ("Verify outbound firewall traversal, register your trainer GPU on `OpenTrainer`, and submit a verified Aglet round receipt (remove `--once` to run continuously):",
+             "Vérifiez la traversée sortante du pare-feu, enregistrez votre GPU entraîneur sur `OpenTrainer` et soumettez un reçu de ronde Aglet vérifié (retirez `--once` pour tourner en continu) :"),
+        ]),
+        ("code", "export HIVEMIND_API_KEY=hm-YOUR_TRAINER_KEY\n"
+                 "python scripts/hivemind_opentrainer_agent.py --gateway {API} --network-mode outbound-https-relay --check-firewall --submit-delta --once"),
+        ("p", ('Newcomers are welcome at the co-training nights. Night 3 runs Monday 2 November 22:00 to Tuesday 07:00 Paris. You need no account to ask for a slot, and producers need no migration: producer, prosumer and trainer keys share the training role. Short guide: [docs/TRAINER_JOIN.md]({REPO}/blob/main/docs/TRAINER_JOIN.md).',
+               "Les nouveaux venus sont bienvenus aux nuits de co-entraînement. La nuit 3 va du lundi 2 novembre 22 h au mardi 7 h, heure de Paris. Aucun compte n'est nécessaire pour demander une place, et les producteurs n'ont rien à migrer : les clés producteur, prosumer et entraîneur partagent le rôle d'entraînement. Guide court : [docs/TRAINER_JOIN.md]({REPO}/blob/main/docs/TRAINER_JOIN.md).")),
+        ("ol", [
+            ('Create a WireGuard key pair and keep the private key to yourself; only the public key is ever shared:',
+             'Créez une paire de clés WireGuard et gardez la clé privée pour vous ; seule la clé publique est partagée :'),
+        ]),
+        ("code", "wg genkey | tee hivemind-wg-private.key | wg pubkey > hivemind-wg-public.key"),
+        ("ol", [
+            ("Print this machine's federation plan (read-only: it installs nothing and contacts nothing; exit code 2 means no GPU was read):",
+             "Affichez le plan de fédération de cette machine (lecture seule : il n'installe rien et ne contacte rien ; le code de sortie 2 signifie qu'aucun GPU n'a été lu) :"),
+        ]),
+        ("code", "PYTHONPATH=src python3 scripts/hivemind_federate_node.py --handle your-handle --coordinator https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app --json"),
+        ("ul", [
+            ("Federation plan stage `preflight` (status `READY`, or `BLOCKED` if GPU free memory is below 3500 MB): runs `scripts/hivemind_volunteer_preflight.py --json`.",
+             "Phase du plan de fédération `preflight` (état `READY`, ou `BLOCKED` si la mémoire GPU libre est sous 3500 Mo) : exécute `scripts/hivemind_volunteer_preflight.py --json`."),
+            ("Federation plan stage `register` (status `READY`): creates a `trainer` handle (`api_key` shown once, as in section 1).",
+             "Phase du plan de fédération `register` (état `READY`) : crée un identifiant `trainer` (`api_key` affichée une seule fois, comme en section 1)."),
+            ("Federation plan stage `idle_gate_dry_run` (status `READY`, or `BLOCKED` without a ready GPU): verifies the idle-GPU gate with `scripts/hivemind_boinc_idle_worker.py --once --dry-run`.",
+             "Phase du plan de fédération `idle_gate_dry_run` (état `READY`, ou `BLOCKED` sans GPU prêt) : vérifie la barrière d'inactivité GPU avec `scripts/hivemind_boinc_idle_worker.py --once --dry-run`."),
+            ("Federation plan stage `qlora_training` (status `READY`, or `BLOCKED` without 3500 MB free VRAM): trains one rank-4 QLoRA round in `hivemind.boinc.real_client.worker`.",
+             "Phase du plan de fédération `qlora_training` (état `READY`, ou `BLOCKED` sans 3500 Mo de VRAM libre) : entraîne une ronde QLoRA de rang 4 dans `hivemind.boinc.real_client.worker`."),
+            ("Federation plan stage `cross_host_pilot` (status `MANUAL`): replies on issue #431 with the WireGuard public key and JSON plan so the operator assigns the learner id, overlay IP, pinned commit and signing secret.",
+             "Phase du plan de fédération `cross_host_pilot` (état `MANUAL`) : répond sur le billet #431 avec la clé publique WireGuard et le plan JSON pour que l'opérateur attribue l'identifiant d'apprenant, l'adresse privée, le commit épinglé et le secret de signature."),
+        ]),
+        ("ol", [
+            ('Reply on [issue #431]({REPO}/issues/431) before 18:00 Paris on the day of the night with your public key, GPU model, free video memory and operating system (attach the JSON plan; it holds no key). The operator answers with a learner id, an overlay address, the commit to check out and the shared signing key, out of band. Points: submissions are recorded as unverified and credit 0 until server-side verification exists.',
+             "Répondez sur le [billet #431]({REPO}/issues/431) avant 18 h, heure de Paris, le jour de la nuit, avec votre clé publique, le modèle de GPU, la mémoire vidéo libre et le système d'exploitation (joignez le plan JSON ; il ne contient aucune clé). L'opérateur répond avec un identifiant d'apprenant, une adresse de réseau privé, le commit à utiliser et la clé de signature partagée, hors ligne. Points : les soumissions sont enregistrées comme non vérifiées et créditent 0 tant qu'une vérification côté serveur n'existe pas."),
+        ]),
     )),
     ("play", ("4. Gamers and Steam", "4. Joueurs et Steam"), (
-        ("p", ("Your GPU folds astrophysics and AI workunits only while you are not playing. Both the Free-to-Play Steam Edition "
-               "(`USS HiveMind NCC-31337: Astrophysics Exoplanet Hunter`, Steam `AppID 3133700`) and the automatic idle-GPU pause worker are available today, "
-               "connecting gamers and citizen scientists on the [live community hub](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community).",
-               "Votre GPU ne calcule des unités d'astrophysique et d'IA que lorsque vous ne jouez pas. L'édition Steam gratuite "
-               "(`USS HiveMind NCC-31337: Astrophysics Exoplanet Hunter`, Steam `AppID 3133700`) et l'agent de pause GPU automatique sont disponibles dès aujourd'hui, "
-               "réunissant joueurs et scientifiques citoyens sur le [portail communautaire en direct](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community).")),
-        ("p", ("While you play (`idle < 4 s` of keyboard/mouse input or GPU load above 45%), BOINC GPU compute pauses automatically (`boinccmd --set_gpu_mode never`, "
-               "0% GPU overhead) so your game keeps 100% of your graphics card at 60 FPS. After 4 seconds of inactivity (with GPU load below 45% and temperature below 78 °C), "
-               "it automatically resumes folding TESS/JWST Box-Least-Squares (BLS) exoplanet transits.",
-               "Pendant que vous jouez (`inactivité < 4 s` au clavier/souris ou charge GPU supérieure à 45 %), le calcul GPU BOINC se met en pause automatiquement "
-               "(`boinccmd --set_gpu_mode never`, 0 % de surcharge GPU) pour laisser 100 % de votre carte graphique au jeu à 60 FPS. Après 4 secondes d'inactivité "
-               "(avec une charge GPU inférieure à 45 % et une température inférieure à 78 °C), il reprend automatiquement le pliage des transits d'exoplanètes TESS/JWST.")),
+        ("p", ("Your GPU should work for HiveMind only while you are not playing. There is no HiveMind game on Steam yet: the Steam ID `3133700` that appears in this repository "
+               "belongs to an unrelated game add-on (Fantasy Grounds), so do not look for us there. What exists today is a helper script that pauses the BOINC GPU queue while you play "
+               "(below), and the BOINC client’s own settings (section 3). Citizen-science standings are on the [community page](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community).",
+               "Votre GPU ne devrait travailler pour HiveMind que lorsque vous ne jouez pas. Il n'existe pas encore de jeu HiveMind sur Steam : l'identifiant Steam `3133700` qui "
+               "apparaît dans ce dépôt appartient à un autre jeu (un ajout de Fantasy Grounds), ne le cherchez donc pas là. Ce qui existe aujourd'hui, c'est un script d'aide qui met "
+               "en pause la file GPU de BOINC pendant que vous jouez (ci-dessous), et les réglages propres du client BOINC (section 3). Le classement de science participative est "
+               "sur la [page communautaire](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/community).")),
+        ("p", ("The helper pauses the BOINC GPU queue (`boinccmd --set_gpu_mode never`) when it sees keyboard or mouse input in the last 4 seconds, GPU load above 45%, or a GPU "
+               "temperature above 78 °C, and sets it back to `auto` otherwise. On Linux it needs `xprintidle` (X11 only); where it cannot measure your input it assumes you are playing "
+               "and does nothing. It changes the BOINC GPU mode itself, so it overrides a mode you set by hand. We have not measured its effect on frame rate. "
+               "What it computes while you are away is a built-in self-check pattern, not real telescope data (see section 3).",
+               "L'agent met en pause la file GPU de BOINC (`boinccmd --set_gpu_mode never`) quand il voit une action au clavier ou à la souris dans les 4 dernières secondes, une "
+               "charge GPU supérieure à 45 % ou une température GPU supérieure à 78 °C, et la remet en `auto` sinon. Sous Linux il a besoin de `xprintidle` (X11 seulement) ; là où "
+               "il ne peut pas mesurer votre activité, il suppose que vous jouez et ne fait rien. Il change lui-même le mode GPU de BOINC : il écrase donc un mode que vous avez "
+               "réglé à la main. Nous n'avons pas mesuré son effet sur le taux d'images. Ce qu'il calcule en votre absence est un motif d'auto-test intégré, pas de vraies données "
+               "de télescope (voir la section 3).")),
         ("ol", [
             ("Start the automatic idle-GPU worker (remove `--once` to leave the automatic pause/resume daemon running in the background while you play):",
              "Démarrez l'agent de pause GPU automatique (retirez `--once` pour laisser le démon de pause/reprise automatique tourner en arrière-plan pendant vos sessions de jeu) :"),
@@ -420,15 +495,15 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "de": "Sie können sich auch auf der [Registrierungsseite](/signup) mit Google anmelden; wir speichern dann nur einen anonymen Hash Ihrer Google-ID, nicht Ihre E-Mail-Adresse.",
         "zh": "您也可以在[注册页面](/signup)使用 Google 登录；我们仅保存您 Google ID 的匿名哈希值，绝不存储您的电子邮箱。",
     },
-    "Create a producer account the same way, with `\"role\":\"producer\"` (or `\"prosumer\"` if you also want to use models), and keep the key.": {
-        "es": "Crea una cuenta de productor del mismo modo, con `\"role\":\"producer\"` (o `\"prosumer\"` si también quieres usar modelos), y guarda la clave.",
-        "de": "Erstellen Sie auf dieselbe Weise ein Produzentenkonto mit `\"role\":\"producer\"` (oder `\"prosumer\"`, wenn Sie auch Modelle nutzen möchten), und bewahren Sie den Schlüssel auf.",
-        "zh": "以相同方式创建生产者账户，设置 `\"role\":\"producer\"`（若同时想调用模型可设为 `\"prosumer\"`），并妥善保存密钥。",
+    "Create a producer account the same way, with `\"role\":\"producer\"` (or `\"prosumer\"` if you also want to use models, or `\"trainer\"` for intense GPU training via OpenTrainer), and keep the key.": {
+        "es": "Crea una cuenta de productor del mismo modo, con `\"role\":\"producer\"` (o `\"prosumer\"` si también quieres usar modelos, o `\"trainer\"` para entrenamiento GPU intensivo vía OpenTrainer), y guarda la clave.",
+        "de": "Erstellen Sie auf dieselbe Weise ein Produzentenkonto mit `\"role\":\"producer\"` (oder `\"prosumer\"`, wenn Sie auch Modelle nutzen möchten, oder `\"trainer\"` für intensives GPU-Training über OpenTrainer), und bewahren Sie den Schlüssel auf.",
+        "zh": "以相同方式创建生产者账户，设置 `\"role\":\"producer\"`（若同时想调用模型可设为 `\"prosumer\"`，若用于 OpenTrainer 高强度 GPU 训练可设为 `\"trainer\"`），并妥善保存密钥。",
     },
-    "On the [sign-up page](/signup) with Google, choose “Share my GPU” or “Both”.": {
-        "es": "En la [página de registro](/signup) con Google, elige «Share my GPU» o «Both».",
-        "de": "Wählen Sie auf der [Registrierungsseite](/signup) mit Google „Share my GPU“ oder „Both“.",
-        "zh": "在 Google [注册页面](/signup)上，选择“Share my GPU”或“Both”。",
+    "On the [sign-up page](/signup) with Google, choose “Share my GPU”, “Both”, or “Trainer (OpenTrainer)”.": {
+        "es": "En la [página de registro](/signup) con Google, elige «Share my GPU», «Both» o «Trainer (OpenTrainer)».",
+        "de": "Wählen Sie auf der [Registrierungsseite](/signup) mit Google „Share my GPU“, „Both“ oder „Trainer (OpenTrainer)“.",
+        "zh": "在 Google [注册页面](/signup)上，选择“Share my GPU”、“Both”或“Trainer (OpenTrainer)”。",
     },
     "1. Use the models": {"es": "1. Usar los modelos", "de": "1. Modelle nutzen", "zh": "1. 使用 AI 模型"},
     "The reply holds your API key (`api_key`). It is shown once and cannot be recovered: store it somewhere safe. If you lose it, register a new handle.": {
@@ -486,6 +561,11 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "es": "En Windows (PowerShell), define las variables con `$env:NAME=\"value\"` en lugar de `export`. Quita `--once` para mantener el agente en ejecución.",
         "de": "Unter Windows (PowerShell) setzen Sie Variablen mit `$env:NAME=\"value\"` statt `export`. Entfernen Sie `--once`, damit der Agent dauerhaft läuft.",
         "zh": "在 Windows (PowerShell) 中，请使用 `$env:NAME=\"value\"` 代替 `export` 设置环境变量。移除 `--once` 即可保持代理持续运行。",
+    },
+    "Optional — keep your GPU connected across reboots with an auto-start background service (`systemd` on Linux, Scheduled Task on Windows 10/11, `launchd` on macOS):": {
+        "es": "Opcional — mantén tu GPU conectada tras reiniciar mediante un servicio automático en segundo plano (`systemd` en Linux, tarea programada en Windows 10/11, `launchd` en macOS):",
+        "de": "Optional — halten Sie Ihre GPU auch nach einem Neustart über einen automatischen Hintergrunddienst verbunden (`systemd` unter Linux, geplante Aufgabe unter Windows 10/11, `launchd` unter macOS):",
+        "zh": "可选 — 配置后台自启动服务（Linux 使用 `systemd`，Windows 10/11 使用计划任务，macOS 使用 `launchd`），让您的 GPU 在重启后自动保持连接：",
     },
     "You can stop at any time: after about two minutes without a heartbeat the gateway stops sending you requests.": {
         "es": "Puedes detenerlo en cualquier momento: tras unos dos minutos sin señal de vida, la pasarela deja de enviarte peticiones.",
@@ -547,10 +627,65 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "de": "Oder verbinden Sie einen Standard-BOINC-Client (`boinccmd`) direkt mit der öffentlichen Projekt-URL und prüfen Sie verifizierte Quittungen unter [/api/v1/federated/ledger](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/ledger):",
         "zh": "或者使用标准 BOINC 客户端（`boinccmd`）直接挂载公共项目 URL，并在 [/api/v1/federated/ledger](https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/api/v1/federated/ledger) 查看经验证的计算回执：",
     },
-    "Night training for end-users and HiveMind nodes (22:00–07:00 Paris time): End-users (volunteers, developers and gamers) leave their PC or laptop running overnight to fold exoplanet transits and compute rank-4 QLoRA inner-loop updates, earning 250 HMT and 45 Cobblestones per workunit to spend the next day on all models. Dedicated HiveMind nodes (GPU producers, HiveMiners and the owner fleet) switch from daytime OpenRouter inference (07:00–22:00) to nocturnal DiLoCo outer-step aggregation, Multi-Krum verification and SVD teacher-to-student distillation (live node telemetry at [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).": {
-        "es": "Entrenamiento nocturno para usuarios finales y nodos de HiveMind (22:00–07:00, hora de París): Los usuarios finales (voluntarios, desarrolladores y jugadores) dejan su PC o portátil calculando por la noche tránsitos de exoplanetas y actualizaciones QLoRA de rango 4, ganando 250 HMT y 45 Cobblestones por unidad para usar todos los modelos al día siguiente. Los nodos dedicados de HiveMind (productores GPU, HiveMiners y la flota principal) pasan de la inferencia diurna de OpenRouter (07:00–22:00) a la agregación nocturna DiLoCo, la verificación Multi-Krum y la destilación SVD profesor-estudiante (telemetría de nodos en vivo en [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).",
-        "de": "Nachttraining für Endnutzer und HiveMind-Knoten (22:00–07:00 Uhr Pariser Zeit): Endnutzer (Frewillige, Entwickler und Gamer) lassen ihren PC oder Laptop über Nacht Exoplaneten-Transits und Rang-4-QLoRA-Updates berechnen und erhalten 250 HMT sowie 45 Cobblestones pro Aufgabe, um am nächsten Tag alle Modelle zu nutzen. Dedizierte HiveMind-Knoten (GPU-Produzenten, HiveMiners und die Hauptflotte) wechseln von der OpenRouter-Tagesinferenz (07:00–22:00 Uhr) zur nächtlichen DiLoCo-Aggregation, Multi-Krum-Prüfung und SVD-Lehrer-Schüler-Destillation (Live-Knotentelemetrie unter [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).",
-        "zh": "终端用户与 HiveMind 节点的夜间协同训练（巴黎时间 22:00–07:00）：终端用户（志愿者、开发者与游戏玩家）在夜间让个人电脑或笔记本自动折叠系外行星凌星光变曲线并计算 4 秩 QLoRA 内层更新，每完成一个任务即可获得 250 HMT 与 45 Cobblestones，次日可用于调用全部模型。专用 HiveMind 节点（GPU 生产者、HiveMiners 与核心集群节点）则从日间 OpenRouter 低延迟推理（07:00–22:00）自动切换至夜间 DiLoCo 外层聚合、Multi-Krum 拜占庭校验与 SVD 师生蒸馏（节点实时遥测见 [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)）。",
+    "Night training for end-users and HiveMind nodes (22:00–07:00 Paris time): End-users (volunteers, developers and gamers) leave their PC or laptop running overnight to fold exoplanet transits and compute rank-4 QLoRA inner-loop updates, earning verified HMT points and BOINC Cobblestones for server-validated workunits to spend the next day on all models. Dedicated HiveMind nodes (GPU producers, HiveMiners and the owner fleet) switch from daytime OpenRouter inference (07:00–22:00) to nocturnal DiLoCo outer-step aggregation, Multi-Krum verification and SVD teacher-to-student distillation (live node telemetry at [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).": {
+        "es": "Entrenamiento nocturno para usuarios finales y nodos de HiveMind (22:00–07:00, hora de París): Los usuarios finales (voluntarios, desarrolladores y jugadores) dejan su PC o portátil calculando por la noche tránsitos de exoplanetas y actualizaciones QLoRA de rango 4, ganando puntos HMT verificados y Cobblestones de BOINC por unidades validadas en el servidor para usar todos los modelos al día siguiente. Los nodos dedicados de HiveMind (productores GPU, HiveMiners y la flota principal) pasan de la inferencia diurna de OpenRouter (07:00–22:00) a la agregación nocturna DiLoCo, la verificación Multi-Krum y la destilación SVD profesor-estudiante (telemetría de nodos en vivo en [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).",
+        "de": "Nachttraining für Endnutzer und HiveMind-Knoten (22:00–07:00 Uhr Pariser Zeit): Endnutzer (Freiwillige, Entwickler und Gamer) lassen ihren PC oder Laptop über Nacht Exoplaneten-Transits und Rang-4-QLoRA-Updates berechnen und erhalten verifizierte HMT-Punkte sowie BOINC-Cobblestones für serverseitig validierte Aufgaben, um am nächsten Tag alle Modelle zu nutzen. Dedizierte HiveMind-Knoten (GPU-Produzenten, HiveMiners und die Hauptflotte) wechseln von der OpenRouter-Tagesinferenz (07:00–22:00 Uhr) zur nächtlichen DiLoCo-Aggregation, Multi-Krum-Prüfung und SVD-Lehrer-Schüler-Destillation (Live-Knotentelemetrie unter [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)).",
+        "zh": "终端用户与 HiveMind 节点的夜间协同训练（巴黎时间 22:00–07:00）：终端用户（志愿者、开发者与游戏玩家）在夜间让个人电脑或笔记本自动折叠系外行星凌星光变曲线并计算 4 秩 QLoRA 内层更新，按服务端验证通过的任务获得经过校验的 HMT 积分与 BOINC Cobblestones，次日可用于调用全部模型。专用 HiveMind 节点（GPU 生产者、HiveMiners 与核心集群节点）则从日间 OpenRouter 低延迟推理（07:00–22:00）自动切换至夜间 DiLoCo 外层聚合、Multi-Krum 拜占庭校验与 SVD 师生蒸馏（节点实时遥测见 [/v1/hivemind/bees/owner-fleet-status](/v1/hivemind/bees/owner-fleet-status)）。",
+    },
+    "Federation plan stage `preflight` (status `READY`, or `BLOCKED` if GPU free memory is below 3500 MB): runs `scripts/hivemind_volunteer_preflight.py --json`.": {
+        "es": "Fase del plan de federación `preflight` (estado `READY`, o `BLOCKED` si la memoria libre de GPU es inferior a 3500 MB): ejecuta `scripts/hivemind_volunteer_preflight.py --json`.",
+        "de": "Föderationsplan-Phase `preflight` (Status `READY`, oder `BLOCKED`, wenn der freie GPU-Speicher unter 3500 MB liegt): führt `scripts/hivemind_volunteer_preflight.py --json` aus.",
+        "zh": "联邦计划阶段 `preflight`（状态 `READY`，若 GPU 空闲显存低于 3500 MB 则为 `BLOCKED`）：运行 `scripts/hivemind_volunteer_preflight.py --json`。",
+    },
+    "Federation plan stage `register` (status `READY`): creates a `trainer` handle (`api_key` shown once, as in section 1).": {
+        "es": "Fase del plan de federación `register` (estado `READY`): crea un identificador `trainer` (`api_key` mostrada una vez, como en la sección 1).",
+        "de": "Föderationsplan-Phase `register` (Status `READY`): erstellt eine `trainer`-Kennung (`api_key` einmalig angezeigt, wie in Abschnitt 1).",
+        "zh": "联邦计划阶段 `register`（状态 `READY`）：创建 `trainer` 标识（`api_key` 仅显示一次，见第 1 节）。",
+    },
+    "Federation plan stage `idle_gate_dry_run` (status `READY`, or `BLOCKED` without a ready GPU): verifies the idle-GPU gate with `scripts/hivemind_boinc_idle_worker.py --once --dry-run`.": {
+        "es": "Fase del plan de federación `idle_gate_dry_run` (estado `READY`, o `BLOCKED` sin GPU lista): verifica la barrera de inactividad con `scripts/hivemind_boinc_idle_worker.py --once --dry-run`.",
+        "de": "Föderationsplan-Phase `idle_gate_dry_run` (Status `READY`, oder `BLOCKED` ohne bereite GPU): prüft die Idle-GPU-Schranke mit `scripts/hivemind_boinc_idle_worker.py --once --dry-run`.",
+        "zh": "联邦计划阶段 `idle_gate_dry_run`（状态 `READY`，无就绪 GPU 时为 `BLOCKED`）：使用 `scripts/hivemind_boinc_idle_worker.py --once --dry-run` 验证空闲 GPU 门控。",
+    },
+    "Federation plan stage `qlora_training` (status `READY`, or `BLOCKED` without 3500 MB free VRAM): trains one rank-4 QLoRA round in `hivemind.boinc.real_client.worker`.": {
+        "es": "Fase del plan de federación `qlora_training` (estado `READY`, o `BLOCKED` sin 3500 MB de VRAM libre): entrena una ronda QLoRA de rango 4 en `hivemind.boinc.real_client.worker`.",
+        "de": "Föderationsplan-Phase `qlora_training` (Status `READY`, oder `BLOCKED` ohne 3500 MB freien VRAM): trainiert eine Rang-4-QLoRA-Runde in `hivemind.boinc.real_client.worker`.",
+        "zh": "联邦计划阶段 `qlora_training`（状态 `READY`，不足 3500 MB 空闲显存时为 `BLOCKED`）：在 `hivemind.boinc.real_client.worker` 中训练一轮 4 秩 QLoRA。",
+    },
+    "Federation plan stage `cross_host_pilot` (status `MANUAL`): replies on issue #431 with the WireGuard public key and JSON plan so the operator assigns the learner id, overlay IP, pinned commit and signing secret.": {
+        "es": "Fase del plan de federación `cross_host_pilot` (estado `MANUAL`): responde en la incidencia #431 con la clave pública WireGuard y el plan JSON para que el operador asigne el id de aprendiz, la IP privada, el commit fijado y el secreto de firma.",
+        "de": "Föderationsplan-Phase `cross_host_pilot` (Status `MANUAL`): antwortet in Issue #431 mit dem öffentlichen WireGuard-Schlüssel und dem JSON-Plan, damit der Betreiber Lerner-Id, Overlay-IP, Commit und Signaturgeheimnis zuweist.",
+        "zh": "联邦计划阶段 `cross_host_pilot`（状态 `MANUAL`）：在 issue #431 回复 WireGuard 公钥与 JSON 计划，由运营者分配学习者编号、内网地址、固定提交与签名密钥。",
+    },
+    "3b. OpenTrainer — Intense GPU Co-Training (BOINC + AMCP + Kafka + Aglets, Firewall-Friendly)": {
+        "es": "3b. OpenTrainer — Co-entrenamiento GPU intensivo (BOINC + AMCP + Kafka + Aglets, compatible con cortafuegos)",
+        "de": "3b. OpenTrainer — Intensives GPU-Co-Training (BOINC + AMCP + Kafka + Aglets, Firewall-freundlich)",
+        "zh": "3b. OpenTrainer — 高强度 GPU 协同训练（BOINC + AMCP + Kafka + Aglets，穿透防火墙）",
+    },
+    "Registering with the `\"trainer\"` role on [/signup](/signup) connects your GPU to `OpenTrainer` ([/v1/hivemind/opentrainer/status](/v1/hivemind/opentrainer/status)), the central coordinator integrating BOINC, AMCP v1.5, Kafka (`hivemind.amcp.federation.v1`), and Signed Task Agents (IBM Aglet life cycle without mobile code) built between the RTX 2070 (`XAVGAMSRV`, 8 GB, Windows 11) and the GCP Tesla T4 (`socreateai-agora-hermes-node1`, 16 GB, Linux) across PRs `#366`, `#399`, `#401`, `#407`, `#408`, `#409`, and `#410` (see the [OpenTrainer architecture guide]({REPO}/blob/main/docs/OPENTRAINER_BOINC_AMCP_KAFKA_ARCHITECTURE.md)).": {
+        "es": "Registrarse con el rol `\"trainer\"` en [/signup](/signup) conecta tu GPU a `OpenTrainer` ([/v1/hivemind/opentrainer/status](/v1/hivemind/opentrainer/status)), el coordinador central que integra BOINC, AMCP v1.5, Kafka (`hivemind.amcp.federation.v1`) y agentes de tarea firmados (ciclo de vida IBM Aglet sin código móvil) construido entre la RTX 2070 (`XAVGAMSRV`, 8 GB, Windows 11) y la Tesla T4 de GCP (`socreateai-agora-hermes-node1`, 16 GB, Linux) en los PR `#366`, `#399`, `#401`, `#407`, `#408`, `#409` y `#410` (consulta la [guía de arquitectura OpenTrainer]({REPO}/blob/main/docs/OPENTRAINER_BOINC_AMCP_KAFKA_ARCHITECTURE.md)).",
+        "de": "Die Registrierung mit der Rolle `\"trainer\"` unter [/signup](/signup) verbindet Ihre GPU mit `OpenTrainer` ([/v1/hivemind/opentrainer/status](/v1/hivemind/opentrainer/status)), dem zentralen Koordinator für BOINC, AMCP v1.5, Kafka (`hivemind.amcp.federation.v1`) und signierte Task-Agenten (IBM-Aglet-Lebenszyklus ohne mobilen Code) zwischen der RTX 2070 (`XAVGAMSRV`, 8 GB, Windows 11) und der GCP Tesla T4 (`socreateai-agora-hermes-node1`, 16 GB, Linux) aus den PRs `#366`, `#399`, `#401`, `#407`, `#408`, `#409` und `#410` (siehe [OpenTrainer-Architekturleitfaden]({REPO}/blob/main/docs/OPENTRAINER_BOINC_AMCP_KAFKA_ARCHITECTURE.md)).",
+        "zh": "选择 `\"trainer\"` 角色在 [/signup](/signup) 注册，即可将您的 GPU 接入核心协调器 `OpenTrainer`（[/v1/hivemind/opentrainer/status](/v1/hivemind/opentrainer/status)）。该组件集成了在 RTX 2070（`XAVGAMSRV`，8 GB，Windows 11）与 GCP Tesla T4（`socreateai-agora-hermes-node1`，16 GB，Linux）之间通过 PR `#366`、`#399`、`#401`、`#407`、`#408`、`#409` 和 `#410` 构建的 BOINC、AMCP v1.5、Kafka（`hivemind.amcp.federation.v1`）以及签名任务代理（无移动代码的 IBM Aglet 生命周期，详见 [OpenTrainer 架构指南]({REPO}/blob/main/docs/OPENTRAINER_BOINC_AMCP_KAFKA_ARCHITECTURE.md)）。",
+    },
+    "Tier B Outbound HTTPS Relay (`outbound-https-relay`): Your trainer GPU initiates outbound-only HTTPS (`TCP/443`) calls to `/v1/hivemind/opentrainer/heartbeat` and `/v1/hivemind/opentrainer/submit-delta` — zero inbound firewall ports, zero `0.0.0.0` listeners, works behind residential NAT, CGNAT, and Windows Firewall": {
+        "es": "Relé HTTPS saliente Tier B (`outbound-https-relay`): Tu GPU de entrenamiento realiza únicamente llamadas HTTPS salientes (`TCP/443`) a `/v1/hivemind/opentrainer/heartbeat` y `/v1/hivemind/opentrainer/submit-delta` — cero puertos entrantes, cero escuchas `0.0.0.0`, funciona tras NAT residencial, CGNAT y el cortafuegos de Windows",
+        "de": "Ausgehendes HTTPS-Relay Tier B (`outbound-https-relay`): Ihre Trainer-GPU baut ausschließlich ausgehende HTTPS-Verbindungen (`TCP/443`) zu `/v1/hivemind/opentrainer/heartbeat` und `/v1/hivemind/opentrainer/submit-delta` auf — null eingehende Ports, null `0.0.0.0`-Listener, funktioniert hinter Heim-NAT, CGNAT und der Windows-Firewall",
+        "zh": "Tier B 出站 HTTPS 中继（`outbound-https-relay`）：您的训练 GPU 仅通过出站 HTTPS（`TCP/443`）调用 `/v1/hivemind/opentrainer/heartbeat` 与 `/v1/hivemind/opentrainer/submit-delta` —— 零入站防火墙端口、零 `0.0.0.0` 监听，完美穿透家庭 NAT、CGNAT 与 Windows 防火墙",
+    },
+    "Tier A Signed Task Agents over AMCP & Kafka (`amcp-kafka-aglet` / `wireguard-t4-hub` / `ssh-loopback-tunnel`): Implements IBM's Aglet life cycle (`dispatch` `task_offer` -> `arrival` `check_offer` -> `clone` `task_claim` -> `result` `task_result` -> `retract` `task_abort`) without mobile code (`weights_only=True`, CRLF-normalized `code_pin`) for Stage-2 Tiny Granite-MoE NF4 QLoRA and DiLoCo 2D-DCT outer steps": {
+        "es": "Agentes de tarea firmados Tier A sobre AMCP y Kafka (`amcp-kafka-aglet` / `wireguard-t4-hub` / `ssh-loopback-tunnel`): Implementa el ciclo de vida IBM Aglet (`dispatch` `task_offer` -> `arrival` `check_offer` -> `clone` `task_claim` -> `result` `task_result` -> `retract` `task_abort`) sin código móvil (`weights_only=True`, `code_pin` normalizado CRLF) para QLoRA NF4 Tiny Granite-MoE Stage-2 y pasos externos DiLoCo 2D-DCT",
+        "de": "Signierte Tier-A-Task-Agenten über AMCP & Kafka (`amcp-kafka-aglet` / `wireguard-t4-hub` / `ssh-loopback-tunnel`): Implementiert den IBM-Aglet-Lebenszyklus (`dispatch` `task_offer` -> `arrival` `check_offer` -> `clone` `task_claim` -> `result` `task_result` -> `retract` `task_abort`) ohne mobilen Code (`weights_only=True`, CRLF-normalisierter `code_pin`) für Stage-2 Tiny Granite-MoE NF4 QLoRA und äußere DiLoCo-2D-DCT-Schritte",
+        "zh": "Tier A 基于 AMCP 与 Kafka 的签名任务代理（`amcp-kafka-aglet` / `wireguard-t4-hub` / `ssh-loopback-tunnel`）：实现无移动代码的 IBM Aglet 生命周期（`dispatch` `task_offer` -> `arrival` `check_offer` -> `clone` `task_claim` -> `result` `task_result` -> `retract` `task_abort`，强制 `weights_only=True` 与 CRLF 归一化 `code_pin`），用于 Stage-2 Tiny Granite-MoE NF4 QLoRA 与 DiLoCo 2D-DCT 外层步更新",
+    },
+    "Tier C BOINC Night Workunits (`boinc-night-workunit`): Asynchronous night workunits over standard HTTPS (`TCP/443`) when the GPU is idle between 22:00 and 07:00": {
+        "es": "Unidades nocturnas BOINC Tier C (`boinc-night-workunit`): Unidades nocturnas asíncronas sobre HTTPS estándar (`TCP/443`) cuando la GPU está inactiva entre las 22:00 y las 07:00",
+        "de": "Nächtliche Tier-C-BOINC-Aufgaben (`boinc-night-workunit`): Asynchrone Nacht-Aufgaben über Standard-HTTPS (`TCP/443`), wenn die GPU zwischen 22:00 und 07:00 Uhr im Leerlauf ist",
+        "zh": "Tier C BOINC 夜间计算单元（`boinc-night-workunit`）：在 22:00 至 07:00 GPU 空闲期间通过标准 HTTPS（`TCP/443`）运行异步夜间工作单元",
+    },
+    "Verify outbound firewall traversal, register your trainer GPU on `OpenTrainer`, and submit a verified Aglet round receipt (remove `--once` to run continuously):": {
+        "es": "Verifica el paso saliente del cortafuegos, registra tu GPU entrenadora en `OpenTrainer` y envía un recibo de ronda Aglet verificado (quita `--once` para ejecución continua):",
+        "de": "Prüfen Sie die ausgehende Firewall-Passage, registrieren Sie Ihre Trainer-GPU bei `OpenTrainer` und senden Sie eine verifizierte Aglet-Rundenquittung (entfernen Sie `--once` für den Dauerbetrieb):",
+        "zh": "验证出站防火墙穿透，将您的训练 GPU 注册到 `OpenTrainer` 并提交经验证的 Aglet 轮次回执（移除 `--once` 可持续运行）：",
     },
     "4. Gamers and Steam": {
         "es": "4. Jugadores y Steam",
@@ -647,6 +782,26 @@ TRANSLATIONS: Mapping[str, Mapping[str, str]] = {
         "zh": "HiveMind La Ruche · 开源软件 (AGPL-3.0) · 积分没有任何货币价值",
     },
     LABELS["status_prefix"][0]: {"es": "Estado: ", "de": "Status: ", "zh": "状态："},
+    'Newcomers are welcome at the co-training nights. Night 3 runs Monday 2 November 22:00 to Tuesday 07:00 Paris. You need no account to ask for a slot, and producers need no migration: producer, prosumer and trainer keys share the training role. Short guide: [docs/TRAINER_JOIN.md]({REPO}/blob/main/docs/TRAINER_JOIN.md).': {
+        "es": 'Los recién llegados son bienvenidos en las noches de co-entrenamiento. La noche 3 va del lunes 2 de noviembre a las 22:00 al martes a las 07:00, hora de París. No hace falta cuenta para pedir una plaza, y los productores no tienen que migrar: las claves de productor, prosumer y entrenador comparten el rol de entrenamiento. Guía corta: [docs/TRAINER_JOIN.md]({REPO}/blob/main/docs/TRAINER_JOIN.md).',
+        "de": 'Neulinge sind bei den Co-Training-Nächten willkommen. Nacht 3 läuft von Montag, 2. November, 22:00 bis Dienstag 07:00 Uhr Pariser Zeit. Für einen Platz braucht es kein Konto, und Produzenten müssen nichts migrieren: Produzenten-, Prosumer- und Trainer-Schlüssel teilen die Trainingsrolle. Kurzanleitung: [docs/TRAINER_JOIN.md]({REPO}/blob/main/docs/TRAINER_JOIN.md).',
+        "zh": '欢迎新人参加联合训练之夜。第 3 夜为巴黎时间 11 月 2 日（周一）22:00 至周二 07:00。申请名额无需账户，生产者也无需迁移：生产者、prosumer 和训练者密钥共享训练角色。简短指南：[docs/TRAINER_JOIN.md]({REPO}/blob/main/docs/TRAINER_JOIN.md)。',
+    },
+    'Create a WireGuard key pair and keep the private key to yourself; only the public key is ever shared:': {
+        "es": 'Crea un par de claves WireGuard y guarda la clave privada para ti; solo se comparte la clave pública:',
+        "de": 'Erstellen Sie ein WireGuard-Schlüsselpaar und behalten Sie den privaten Schlüssel für sich; nur der öffentliche Schlüssel wird je geteilt:',
+        "zh": '生成一对 WireGuard 密钥，私钥自己保管；只分享公钥：',
+    },
+    "Print this machine's federation plan (read-only: it installs nothing and contacts nothing; exit code 2 means no GPU was read):": {
+        "es": 'Imprime el plan de federación de esta máquina (solo lectura: no instala nada ni contacta con nada; el código de salida 2 significa que no se leyó ninguna GPU):',
+        "de": 'Geben Sie den Föderationsplan dieser Maschine aus (nur lesend: installiert nichts und kontaktiert nichts; Exit-Code 2 bedeutet, dass keine GPU gelesen wurde):',
+        "zh": '打印本机的联邦计划（只读：不安装、不联网；退出码 2 表示未读到 GPU）：',
+    },
+    'Reply on [issue #431]({REPO}/issues/431) before 18:00 Paris on the day of the night with your public key, GPU model, free video memory and operating system (attach the JSON plan; it holds no key). The operator answers with a learner id, an overlay address, the commit to check out and the shared signing key, out of band. Points: submissions are recorded as unverified and credit 0 until server-side verification exists.': {
+        "es": 'Responde en la [incidencia #431]({REPO}/issues/431) antes de las 18:00 de París el día de la noche con tu clave pública, modelo de GPU, memoria de vídeo libre y sistema operativo (adjunta el plan JSON; no contiene ninguna clave). El operador responde con un id de aprendiz, una dirección de red privada, el commit a usar y la clave de firma compartida, por un canal aparte. Puntos: los envíos se registran como no verificados y acreditan 0 hasta que exista verificación en el servidor.',
+        "de": 'Antworten Sie im [Issue #431]({REPO}/issues/431) vor 18:00 Uhr Pariser Zeit am Tag der Nacht mit Ihrem öffentlichen Schlüssel, GPU-Modell, freiem Videospeicher und Betriebssystem (JSON-Plan anhängen; er enthält keinen Schlüssel). Der Betreiber antwortet mit einer Lerner-Id, einer Overlay-Adresse, dem zu verwendenden Commit und dem gemeinsamen Signaturschlüssel, auf einem separaten Kanal. Punkte: Einreichungen werden als unverifiziert erfasst und bringen 0, bis eine serverseitige Prüfung existiert.',
+        "zh": '在当夜巴黎时间 18:00 前于 [issue #431]({REPO}/issues/431) 回复：公钥、GPU 型号、空闲显存和操作系统（附上 JSON 计划，其中不含任何密钥）。运营者会通过另一渠道回复学习者编号、内网地址、要检出的提交以及共享签名密钥。积分：在服务器端验证存在之前，提交记录为未验证且计 0 分。',
+    },
 }
 
 _CSS = """
@@ -746,7 +901,8 @@ def _block(kind: str, payload: Any, lang: str, subs: Mapping[str, str], tiers: S
 
 def render_join_page(lang: str = "fr", nonce: str = "abcdefgh12345678", *, tiers: Sequence[Mapping[str, Any]] | None = None,
                      api_url: str = DEFAULT_API_URL, repo_url: str = REPO_URL, path: str = "/join",
-                     google_enabled: bool = False, handle_registration: bool = True) -> str:
+                     google_enabled: bool = False, handle_registration: bool = True,
+                     live_telemetry: Mapping[str, Any] | None = None) -> str:
     """The complete multilingual page (FR default, EN, ES, DE, ZH). ``tiers`` is the ``tiers`` list of ``/v1/hivemind/catalog``."""
     flags = Flags(google=google_enabled, handles=handle_registration)
     if lang not in LANGS:
@@ -757,6 +913,52 @@ def render_join_page(lang: str = "fr", nonce: str = "abcdefgh12345678", *, tiers
         raise ValueError("api_url and repo_url must be plain https URLs and path a simple absolute path")
     subs = {"API": api_url.rstrip("/"), "REPO": repo_url.rstrip("/")}
     esc = html.escape
+    live_banner_html = ""
+    if live_telemetry is not None:
+        acct = live_telemetry.get("accounts") or {}
+        by_role = acct.get("by_role") or {}
+        models_live = live_telemetry.get("models") or {}
+        t4_live = live_telemetry.get("t4_boinc") or {}
+        ot_live = live_telemetry.get("opentrainer") or {}
+        total_accts = shown_figure(acct.get("total_registered_accounts"))
+        prosumers_cnt = shown_figure(by_role.get("prosumer"))
+        producers_cnt = shown_figure(by_role.get("producer"))
+        consumers_cnt = shown_figure(by_role.get("consumer"))
+        trainers_cnt = shown_figure(by_role.get("trainer"))
+        live_models_cnt = shown_figure(models_live.get("live_models_count"))
+        wus_cnt = shown_figure(t4_live.get("assimilated_workunits"))
+        ot_nodes = shown_figure(ot_live.get("total_registered_nodes"))
+        ot_rounds = shown_figure(ot_live.get("accepted_rounds_count"))
+        live_texts = {
+            "fr": (
+                f"🟢 État temps réel de La Ruche GCP : {total_accts} comptes inscrits "
+                f"({prosumers_cnt} prosumers, {producers_cnt} producteurs, {consumers_cnt} consommateurs, {trainers_cnt} trainers) · "
+                f"{live_models_cnt} modèles en ligne · {wus_cnt} workunits BOINC assimilées · "
+                f"OpenTrainer : {ot_nodes} GPU trainer actif(s) / {ot_rounds} round(s) validé(s)."
+            ),
+            "en": (
+                f"🟢 Live GCP Swarm Status: {total_accts} registered accounts "
+                f"({prosumers_cnt} prosumers, {producers_cnt} producers, {consumers_cnt} consumers, {trainers_cnt} trainers) · "
+                f"{live_models_cnt} live models online · {wus_cnt} assimilated BOINC workunits · "
+                f"OpenTrainer: {ot_nodes} active trainer GPU(s) / {ot_rounds} accepted round(s)."
+            ),
+            "es": (
+                f"🟢 Estado en vivo de La Ruche GCP: {total_accts} cuentas registradas · "
+                f"{live_models_cnt} modelos activos · {wus_cnt} unidades BOINC · "
+                f"OpenTrainer: {ot_nodes} GPU(s) / {ot_rounds} ronda(s)."
+            ),
+            "de": (
+                f"🟢 Live-GCP-Status: {total_accts} registrierte Konten · "
+                f"{live_models_cnt} aktive Modelle · {wus_cnt} BOINC-Workunits · "
+                f"OpenTrainer: {ot_nodes} GPU(s) / {ot_rounds} Runde(n)."
+            ),
+            "zh": (
+                f"🟢 GCP 蜂群实时状态：{total_accts} 个注册账户 · "
+                f"{live_models_cnt} 个在线模型 · {wus_cnt} 个 BOINC 任务 · "
+                f"OpenTrainer：{ot_nodes} 个训练节点 / {ot_rounds} 轮已验证。"
+            ),
+        }
+        live_banner_html = f'<p id="join-live-telemetry" class="note">{esc(live_texts.get(lang, live_texts["en"]))}</p>'
     cards = "".join(
         f'<li class="card"><h3>{esc(_t(title, lang))}</h3><span class="badge {cls}"><span class="visually">{esc(_t(LABELS["status_prefix"], lang))}</span>'
         f'{esc(_t(status, lang))}</span><p>{esc(_t(summary, lang))}</p><a class="more" href="#{anchor}">→ {esc(_t(title, lang))}</a></li>'
@@ -786,10 +988,10 @@ def render_join_page(lang: str = "fr", nonce: str = "abcdefgh12345678", *, tiers
         f"<title>{esc(_t(TITLE, lang))}</title><meta name=\"description\" content=\"{esc(_t(DESCRIPTION, lang), quote=True)}\">"
         f'<link rel="canonical" href="{path}?lang={lang}">{alternates}'
         f'<link rel="alternate" hreflang="x-default" href="{path}?lang=fr">'
-        f'<style nonce="{nonce}">{_CSS}.visually{{position:absolute;left:-999px}}</style></head><body>'
+        f'<style nonce="{nonce}">{_CSS}.visually{{position:absolute;left:-999px}}</style></head><body><p role="note" id="poc-notice"><strong>&#9888; Proof of concept (PoC)</strong> &mdash; not a production service yet. Until HiveMind is fully secured, send only public, non-sensitive data: no secrets, passwords, API keys, personal information, or private or enterprise data. Prompts are processed by volunteer-run nodes whose operators are not verified.</p>'
         f'<a class="skip" href="#main">{esc(_t(LABELS["skip"], lang))}</a>'
-        f'<header><nav class="lang" aria-label="Language / Langue">{lang_links}</nav>'
-        f'<h1>{esc(_t(TITLE, lang))}</h1><p class="lead">{esc(_t(LEAD, lang))}</p></header>'
+        f'<header><nav class="lang" aria-label="Language / Langue">{lang_links} · <a href="/manifesto">📜 Manifeste / Manifesto</a> · <a href="/portal">⚡ GCP Portal</a></nav>'
+        f'<h1>{esc(_t(TITLE, lang))}</h1><p class="lead">{esc(_t(LEAD, lang))}</p>{live_banner_html}</header>'
         f'<main id="main"><h2>{esc(_t(LABELS["choose"], lang))}</h2><ul class="cards">{cards}</ul>{body}</main>'
         f'<footer><p>{esc(_t(LABELS["footer"], lang))}</p></footer></body></html>'
     )

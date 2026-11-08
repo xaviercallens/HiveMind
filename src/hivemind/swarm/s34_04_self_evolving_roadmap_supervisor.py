@@ -4,7 +4,7 @@
 Orchestrates and audits the 10-PR self-evolving roadmap (``HM-S32-01`` through ``HM-S34-04``):
 1. Executes all 9 preceding roadmap modules deterministically and verifies their mathematical/physical invariants.
 2. Records live OpenRouter & Google Antigravity SDK completion receipts under founder key
-   ``hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E``.
+   the caller's own key (``HIVEMIND_API_KEY``).
 3. Computes a hash-chained ``SHA-256`` supervisor attestation across all 10 PRs before merge.
 """
 
@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import secrets
 from dataclasses import asdict, dataclass
 from typing import Any, Sequence
 
@@ -83,9 +84,16 @@ class SelfEvolvingRoadmapSupervisor:
         *,
         openrouter_request_ids: Sequence[str] | None = None,
     ) -> dict[str, Any]:
-        req_ids = list(openrouter_request_ids or [f"req-s32-s34-{i:02d}" for i in range(1, 11)])
-        while len(req_ids) < 10:
-            req_ids.append(f"req-s32-s34-{len(req_ids) + 1:02d}")
+        provided_ids = [
+            str(r).strip()
+            for r in (openrouter_request_ids or ())
+            if isinstance(r, str) and str(r).strip()
+        ]
+        has_all_request_receipts = len(provided_ids) >= len(ROADMAP_10_PR_TICKETS)
+        req_ids = [
+            provided_ids[i] if i < len(provided_ids) else ""
+            for i in range(len(ROADMAP_10_PR_TICKETS))
+        ]
 
         # 1. HM-S32-01 Velocity-Verlet KEPLER-HM-442b
         r1 = SymplecticVelocityVerletIntegrator().benchmark_kepler442b_orbit(steps=1000, dt_yr=0.00015)
@@ -98,7 +106,7 @@ class SelfEvolvingRoadmapSupervisor:
         )
 
         # 3. HM-S32-03 Open Bee Marketplace
-        sec = b"supervisor-marketplace-secret-key"
+        sec = secrets.token_bytes(32)
         reg = OpenBeeMarketplaceRegistry(sec)
         m3 = sign_bee_manifest(
             bee_id="hivemind/bee-exoplanet- transit",
@@ -169,7 +177,7 @@ class SelfEvolvingRoadmapSupervisor:
             (r9.is_valid_e8_point, "l2_distortion", r9.l2_distortion),
         ]
 
-        all_nine_ok = all(item[0] for item in raw_checks)
+        all_nine_ok = all(item[0] for item in raw_checks) and has_all_request_receipts
         raw_checks.append((all_nine_ok, "verified_pr_count", 10.0 if all_nine_ok else 0.0))
 
         entries: list[RoadmapPRVerificationEntry] = []
@@ -177,11 +185,12 @@ class SelfEvolvingRoadmapSupervisor:
         for idx, ((ticket_id, title), (passed, m_name, m_val)) in enumerate(
             zip(ROADMAP_10_PR_TICKETS, raw_checks), start=1
         ):
+            entry_passed = bool(passed and req_ids[idx - 1])
             payload = json.dumps(
                 {
                     "order": idx,
                     "ticket_id": ticket_id,
-                    "passed": passed,
+                    "passed": entry_passed,
                     "metric": m_name,
                     "value": round(float(m_val), 8),
                     "request_id": req_ids[idx - 1],
@@ -195,7 +204,7 @@ class SelfEvolvingRoadmapSupervisor:
                     order=idx,
                     ticket_id=ticket_id,
                     title=title,
-                    invariant_passed=passed,
+                    invariant_passed=entry_passed,
                     key_metric_name=m_name,
                     key_metric_value=float(m_val),
                     openrouter_request_id=req_ids[idx - 1],
@@ -204,10 +213,13 @@ class SelfEvolvingRoadmapSupervisor:
             )
             prev_hash = entry_hash
 
+        verified_cnt = sum(1 for e in entries if e.invariant_passed)
+        all_ok = verified_cnt == len(entries) and has_all_request_receipts
         return {
             "season_range": "HM-S32-01..HM-S34-04",
-            "total_prs_verified": len(entries),
-            "all_invariants_passed": all(e.invariant_passed for e in entries),
+            "status": "VERIFIED" if all_ok else "BLOCKED_MISSING_REQUEST_RECEIPTS",
+            "total_prs_verified": verified_cnt,
+            "all_invariants_passed": all_ok,
             "merkle_head_sha256": prev_hash,
             "entries": [e.to_dict() for e in entries],
         }

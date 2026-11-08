@@ -24,7 +24,7 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Dict, Sequence
 
 import torch
 import torch.nn as nn
@@ -66,6 +66,15 @@ def prefix_trie_branch_probabilities(
             raise ValueError("each draft branch needs exactly one step probability per token")
         product = 1.0
         for i, p in enumerate(steps):
+            if (
+                isinstance(p, bool)
+                or not isinstance(p, (int, float))
+                or not math.isfinite(float(p))
+                or not (0.0 <= float(p) <= 1.0)
+            ):
+                raise ValueError(
+                    "draft step probabilities must be finite numbers in [0.0, 1.0] to give the trie positive total weight"
+                )
             product *= float(p)
             raw.setdefault(tuple(branch[: i + 1]), product)
     total = sum(raw[n] for n in nodes)
@@ -155,8 +164,17 @@ class RegionalDHTSwarmRing:
     """Petals-style DHT Swarm coordinator grouping low-latency (<25ms) peers into regional rings."""
 
     def __init__(self, region: str = "EU-West-Paris", max_ping_ms: float = 25.0) -> None:
-        self.region = region
-        self.max_ping_ms = max_ping_ms
+        if not isinstance(region, str) or not region.strip():
+            raise ValueError("region must be a non-empty string")
+        if (
+            isinstance(max_ping_ms, bool)
+            or not isinstance(max_ping_ms, (int, float))
+            or not math.isfinite(float(max_ping_ms))
+            or float(max_ping_ms) <= 0.0
+        ):
+            raise ValueError("max_ping_ms must be a finite number > 0")
+        self.region = region.strip()
+        self.max_ping_ms = float(max_ping_ms)
         self.peers: list[SwarmPeerNode] = []
         self.super_ring_router: "ContinentalSuperRingRouter | None" = None
         self.hierarchical_routes: list[Dict[str, Any]] = []
@@ -276,18 +294,36 @@ class RegionalDHTSwarmRing:
         verified path that were among them. Default off: the generated tokens are unchanged.
         """
         # Rule RING-02: Enforce speculative decoding bounds to prevent unbounded forward-pass DoS
-        if int(draft_gamma) < 1 or int(draft_gamma) > 16:
+        if isinstance(draft_gamma, bool) or not isinstance(draft_gamma, int) or draft_gamma < 1 or draft_gamma > 16:
             raise SwarmSecurityViolationError(
                 "RING-02",
                 "SPECULATIVE_GAMMA_OUT_OF_BOUNDS",
                 f"draft_gamma ({draft_gamma}) must be within [1, 16].",
             )
-        if int(max_new_tokens) < 1 or int(max_new_tokens) > 512:
+        if (
+            isinstance(max_new_tokens, bool)
+            or not isinstance(max_new_tokens, int)
+            or max_new_tokens < 1
+            or max_new_tokens > 512
+        ):
             raise SwarmSecurityViolationError(
                 "RING-02",
                 "MAX_NEW_TOKENS_OUT_OF_BOUNDS",
                 f"max_new_tokens ({max_new_tokens}) must be within [1, 512].",
             )
+        if (
+            isinstance(simulated_network_rtt_ms, bool)
+            or not isinstance(simulated_network_rtt_ms, (int, float))
+            or not math.isfinite(float(simulated_network_rtt_ms))
+            or float(simulated_network_rtt_ms) < 0.0
+        ):
+            raise ValueError("simulated_network_rtt_ms must be a finite number >= 0")
+        if (
+            isinstance(max_prefetch_experts, bool)
+            or not isinstance(max_prefetch_experts, int)
+            or max_prefetch_experts < 1
+        ):
+            raise ValueError("max_prefetch_experts must be an integer >= 1")
         if prompt_ids.numel() == 0:
             raise SwarmSecurityViolationError(
                 "RING-02",
@@ -410,7 +446,8 @@ class RegionalDHTSwarmRing:
                 target_probs = torch.softmax(target_logits.to(torch.float32), dim=-1)
                 target_preds = torch.argmax(target_probs, dim=-1)
 
-                accepted_in_pass = 0
+                draft_accepted_in_pass = 0
+                emitted_before_bonus = 0
                 for i, d_tok in enumerate(draft_tokens):
                     proposed_total += 1
                     t_tok = int(target_preds[i].item())
@@ -420,19 +457,19 @@ class RegionalDHTSwarmRing:
                     if d_tok == t_tok or (max_p > 0 and (draft_p / max_p) >= 0.65):
                         generated.append(d_tok)
                         accepted_total += 1
-                        accepted_in_pass += 1
+                        draft_accepted_in_pass += 1
+                        emitted_before_bonus += 1
                         if len(generated) >= max_new_tokens:
                             break
                     else:
-                        # Accept the target MoE correction token and resync draft sequence
+                        # Accept the target MoE correction token and resync draft sequence;
+                        # rejected draft tokens do not count as accepted draft proposals (IP-114).
                         generated.append(t_tok)
-                        accepted_total += 1
-                        accepted_in_pass += 1
+                        emitted_before_bonus += 1
                         break
 
-                # If all gamma draft tokens matched, we also get 1 bonus token from the final position
-                emitted_before_bonus = accepted_in_pass
-                if accepted_in_pass == draft_gamma and len(generated) < max_new_tokens:
+                # Only if all gamma draft tokens were genuinely accepted do we emit a bonus token at draft_gamma (IP-114)
+                if draft_accepted_in_pass == draft_gamma and len(generated) < max_new_tokens:
                     bonus_tok = int(target_preds[draft_gamma].item())
                     generated.append(bonus_tok)
                     emitted_before_bonus += 1
@@ -517,12 +554,12 @@ class RegionalDHTSwarmRing:
         tree_positions: list[int],
         max_prefetch_experts: int,
         sink: list[dict[str, Any]],
-    ):
+    ) -> Callable[..., None]:
         """Pre-hook on decoder layer `next_layer`: its input is the residual stream leaving layer
         `next_layer - 1`, the earliest point the next MoE layer's demand can be predicted, so the
         prefetch is issued here, before that layer's attention runs."""
 
-        def hook(_module: nn.Module, args: tuple, kwargs: dict) -> None:
+        def hook(_module: nn.Module, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
             hs = args[0] if args else kwargs["hidden_states"]
             if hs.dim() != 3 or hs.size(0) != 1:
                 raise ValueError("expert prefetch expects a single-sequence [1, T, d] residual stream")
@@ -545,10 +582,10 @@ class RegionalDHTSwarmRing:
         return hook
 
     @staticmethod
-    def _make_router_capture_hook(sink: list[dict[str, Any]], next_layer: int):
+    def _make_router_capture_hook(sink: list[dict[str, Any]], next_layer: int) -> Callable[..., None]:
         """Forward hook on the next layer's router: records the experts it really selected."""
 
-        def hook(_module: nn.Module, _inputs: tuple, output: tuple) -> None:
+        def hook(_module: nn.Module, _inputs: tuple[Any, ...], output: tuple[Any, ...]) -> None:
             for rep in sink:
                 if rep.get("prefetched_layer") == next_layer and "_router_picks" not in rep:
                     rep["_router_picks"] = output[1].detach().clone()

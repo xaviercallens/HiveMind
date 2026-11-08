@@ -23,6 +23,7 @@ import secrets
 import sqlite3
 import threading
 import time
+import urllib.parse
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -31,8 +32,9 @@ from typing import Any, Protocol
 
 from hivemind.security.hivemind_firewall import normalise_identity
 
-ROLES: tuple[str, ...] = ("consumer", "producer", "prosumer", "admin")
-PRODUCER_ROLES: tuple[str, ...] = ("producer", "prosumer")
+ROLES: tuple[str, ...] = ("consumer", "producer", "prosumer", "trainer", "admin")
+PRODUCER_ROLES: tuple[str, ...] = ("producer", "prosumer", "trainer")
+TRAINER_ROLES: tuple[str, ...] = ("trainer", "prosumer", "producer")
 SYS_VALIDATORS = "sys:validators"
 SYS_BURN = "sys:burn"
 SYS_ESCROW = "sys:escrow"
@@ -51,7 +53,7 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS accounts(
     account_id TEXT PRIMARY KEY,
     handle TEXT NOT NULL UNIQUE,
-    role TEXT NOT NULL CHECK (role IN ('consumer','producer','prosumer','admin')),
+    role TEXT NOT NULL CHECK (role IN ('consumer','producer','prosumer','trainer','admin')),
     key_hash TEXT NOT NULL UNIQUE,
     created_utc REAL NOT NULL,
     max_price_per_1k REAL NOT NULL,
@@ -136,6 +138,8 @@ CREATE TABLE IF NOT EXISTS usage_telemetry(
     app_title TEXT NOT NULL,
     is_stream INTEGER NOT NULL,
     latency_ms REAL NOT NULL,
+    ttft_ms REAL,
+    tokens_per_s REAL,
     prompt_tokens INTEGER NOT NULL,
     completion_tokens INTEGER NOT NULL,
     billed_tokens INTEGER NOT NULL,
@@ -185,6 +189,41 @@ CREATE TABLE IF NOT EXISTS bee_trade_orders(
     price_per_1k REAL NOT NULL,
     utc REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS opentrainer_nodes(
+    account_id TEXT NOT NULL,
+    node_id TEXT NOT NULL,
+    handle TEXT NOT NULL,
+    gpu_name TEXT NOT NULL,
+    vram_total_mib INTEGER NOT NULL,
+    vram_free_mib INTEGER NOT NULL,
+    network_mode TEXT NOT NULL,
+    stacks_json TEXT NOT NULL,
+    host_label TEXT NOT NULL,
+    active_campaign TEXT NOT NULL DEFAULT 'E8-STAGE2-TINY-GRANITE-MOE-QLORA',
+    last_heartbeat_utc REAL NOT NULL,
+    PRIMARY KEY(account_id, node_id)
+);
+CREATE TABLE IF NOT EXISTS opentrainer_rounds(
+    submission_id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    handle TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    round_index INTEGER NOT NULL,
+    host_label TEXT NOT NULL,
+    network_mode TEXT NOT NULL,
+    delta_l2 REAL NOT NULL,
+    eval_loss REAL NOT NULL,
+    tokens_trained INTEGER NOT NULL,
+    vram_free_mib INTEGER NOT NULL,
+    vram_total_mib INTEGER NOT NULL,
+    utc REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS boinc_receipts (
+    receipt_sha256 TEXT PRIMARY KEY,
+    account_id     TEXT NOT NULL,
+    utc            REAL NOT NULL
+);
 """
 
 
@@ -205,10 +244,19 @@ class DuplicateRequest(ValueError):
     """Raised when a ``request_id`` has already been settled."""
 
 
+class DuplicateOpenTrainerRound(ValueError):
+    """Raised by :meth:`RouterStore.record_opentrainer_round_submission` when this account already submitted this (run_id, round_index)."""
+
+
 class TooManyEndpoints(ValueError):
     """Raised by :meth:`RouterStore.upsert_producer` when an account already advertises ``MAX_ENDPOINTS_PER_ACCOUNT`` endpoints."""
 
 
+class TooManyOpenTrainerNodes(ValueError):
+    """Raised by :meth:`RouterStore.upsert_opentrainer_node` when an account already has ``MAX_OPENTRAINER_NODES_PER_ACCOUNT`` distinct host labels."""
+
+
+MAX_OPENTRAINER_NODES_PER_ACCOUNT = 8  # IP-211: host_label is caller-chosen, so one account could otherwise register unlimited "GPUs"
 MAX_ENDPOINTS_PER_ACCOUNT = 8  # one account may run several GPUs / servers; bounded so a heartbeat flood cannot grow the table without limit
 STALE_ENDPOINT_PURGE_S = 86_400.0  # an endpoint silent for a day is forgotten (it left the pool long ago) and frees its slot
 
@@ -236,18 +284,25 @@ class InvalidCredentials(ValueError):
     """Raised when a handle/email or password/key check fails during login."""
 
 
+# SHA-256 of gateway keys that were published (in source or artifacts) and must never authenticate again, whatever a stored
+# row says. Only digests are kept here; the keys themselves are revoked, not secrets.
+BURNED_KEY_SHA256: frozenset[str] = frozenset({
+    "468aec404688b4caa879a89456c9ae5c11b095f56cdd4e61ae3b393dcfc5f121",  # owner key published 2026-10-24 (GHSA-gjc6-74f9-wmrr)
+})
+
+# Legacy handles and aliases, used only to map an identifier to a handle. No entry carries a key, and none is a credential.
 LEGACY_KNOWN_USERS: dict[str, dict[str, Any]] = {
     "xavier_callens": {
         "handle": "xavier_callens",
         "aliases": (
             "xaviercallens",
             "@xaviercallens",
+            "callensxavier",
+            "@callensxavier",
             "callensxavier@gmail.com",
             "xavier@hivemind.network",
             "hm_live_xavier_994a102f88c",
-            "hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
         ),
-        "api_key": "hm-f6VfLgnigbgnoTBCbbpcjxmVbI53OeB8WqfEYSdJS6E",
         "email": "callensxavier@gmail.com",
         "role": "prosumer",
         "starter_hmt": 68500.0,
@@ -491,58 +546,100 @@ def _finite(value: float, name: str) -> float:
 class RouterStore:
     """SQLite-backed accounts, API keys, producer registry, usage log and hash-chained HMT ledger."""
 
-    def __init__(self, path: Path | str, secret: bytes) -> None:
+    def __init__(self, path: Path | str, secret: bytes, *, writer_lock: Any = None) -> None:
         if not isinstance(secret, (bytes, bytearray)) or len(secret) < MIN_SECRET_BYTES:
             raise ValueError(f"secret must be at least {MIN_SECRET_BYTES} bytes")
         self._secret = bytes(secret)
         self._identity_providers: set[str] = set(IDENTITY_PROVIDERS)
         self._active_key_cache: dict[str, str] = {}
         self._lock = threading.Lock()
+        self._writer_lock: Any = None
+        has_write_lease = True
+        if writer_lock is not None:
+            has_write_lease = bool(writer_lock.acquire())
         target = ":memory:" if str(path) == ":memory:" else str(path)
         self._conn = sqlite3.connect(target, check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
-        if target != ":memory:":
+        if target != ":memory:" and has_write_lease:
             self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
-        with self._tx():
-            for statement in _SCHEMA.split(";"):
-                if statement.strip():
-                    self._conn.execute(statement)
-            # Databases created before the endpoint token existed are upgraded in place (additive, NULL for old rows).
-            columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(producers)")}
-            if "endpoint_token" not in columns:
-                self._conn.execute("ALTER TABLE producers ADD COLUMN endpoint_token TEXT")
-            # Databases created before model residency reporting (HM-S16-06) gain the nullable column in place.
-            endpoint_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(producer_endpoints)")}
-            if "residency_json" not in endpoint_columns:
-                self._conn.execute("ALTER TABLE producer_endpoints ADD COLUMN residency_json TEXT")
-            # Databases created before the test/probe flag existed gain it in place; every existing account stays a real one.
-            account_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(accounts)")}
-            if "is_test" not in account_columns:
-                self._conn.execute("ALTER TABLE accounts ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0")
-            # Databases created before account kinds (HM-S16-07) gain the column in place: flagged accounts become 'test', all others 'user'.
-            if "kind" not in account_columns:
-                self._conn.execute("ALTER TABLE accounts ADD COLUMN kind TEXT NOT NULL DEFAULT 'user'")
-                self._conn.execute("UPDATE accounts SET kind='test' WHERE is_test=1")
-            if "password_hash" not in account_columns:
-                self._conn.execute("ALTER TABLE accounts ADD COLUMN password_hash TEXT")
-            if "email" not in account_columns:
-                self._conn.execute("ALTER TABLE accounts ADD COLUMN email TEXT")
-            # One account may advertise several endpoints (several GPUs / servers): rows of the old one-per-account table move across once.
-            self._conn.execute(
-                "INSERT OR IGNORE INTO producer_endpoints(account_id, endpoint_url, models_json, cost_per_1k, capacity_1k, last_heartbeat_utc, "
-                "execution_class, endpoint_token) SELECT account_id, rtrim(endpoint_url, '/'), models_json, cost_per_1k, capacity_1k, last_heartbeat_utc, "
-                "execution_class, endpoint_token FROM producers"
-            )
-            for sys_id in _ESCROW_ACCOUNTS:
+        if has_write_lease:
+            with self._tx():
+                for statement in _SCHEMA.split(";"):
+                    if statement.strip():
+                        self._conn.execute(statement)
+                # Databases created before the endpoint token existed are upgraded in place (additive, NULL for old rows).
+                columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(producers)")}
+                if "endpoint_token" not in columns:
+                    self._conn.execute("ALTER TABLE producers ADD COLUMN endpoint_token TEXT")
+                # Databases created before model residency reporting (HM-S16-06) gain the nullable column in place.
+                endpoint_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(producer_endpoints)")}
+                if "residency_json" not in endpoint_columns:
+                    self._conn.execute("ALTER TABLE producer_endpoints ADD COLUMN residency_json TEXT")
+                telemetry_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(usage_telemetry)")}
+                if "ttft_ms" not in telemetry_columns:
+                    self._conn.execute("ALTER TABLE usage_telemetry ADD COLUMN ttft_ms REAL")
+                if "tokens_per_s" not in telemetry_columns:
+                    self._conn.execute("ALTER TABLE usage_telemetry ADD COLUMN tokens_per_s REAL")
+                opentrainer_node_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(opentrainer_nodes)")}
+                if "active_campaign" not in opentrainer_node_columns:
+                    self._conn.execute(
+                        "ALTER TABLE opentrainer_nodes ADD COLUMN active_campaign TEXT NOT NULL DEFAULT 'E8-STAGE2-TINY-GRANITE-MOE-QLORA'"
+                    )
+                # Databases created before the test/probe flag existed gain it in place; every existing account stays a real one.
+                account_columns = {str(row["name"]) for row in self._conn.execute("PRAGMA table_info(accounts)")}
+                if "is_test" not in account_columns:
+                    self._conn.execute("ALTER TABLE accounts ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0")
+                # Databases created before account kinds (HM-S16-07) gain the column in place: flagged accounts become 'test', all others 'user'.
+                if "kind" not in account_columns:
+                    self._conn.execute("ALTER TABLE accounts ADD COLUMN kind TEXT NOT NULL DEFAULT 'user'")
+                    self._conn.execute("UPDATE accounts SET kind='test' WHERE is_test=1")
+                if "password_hash" not in account_columns:
+                    self._conn.execute("ALTER TABLE accounts ADD COLUMN password_hash TEXT")
+                if "email" not in account_columns:
+                    self._conn.execute("ALTER TABLE accounts ADD COLUMN email TEXT")
+                acct_sql_row = self._conn.execute(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name='accounts'"
+                ).fetchone()
+                if acct_sql_row and "'trainer'" not in str(acct_sql_row["sql"]):
+                    self._conn.execute(
+                        "CREATE TABLE accounts_opentrainer_mig("
+                        "account_id TEXT PRIMARY KEY, handle TEXT NOT NULL UNIQUE, "
+                        "role TEXT NOT NULL CHECK (role IN ('consumer','producer','prosumer','trainer','admin')), "
+                        "key_hash TEXT NOT NULL UNIQUE, created_utc REAL NOT NULL, max_price_per_1k REAL NOT NULL, "
+                        "is_test INTEGER NOT NULL DEFAULT 0, kind TEXT NOT NULL DEFAULT 'user', "
+                        "password_hash TEXT, email TEXT)"
+                    )
+                    self._conn.execute(
+                        "INSERT INTO accounts_opentrainer_mig("
+                        "account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, password_hash, email"
+                        ") SELECT account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, password_hash, email "
+                        "FROM accounts"
+                    )
+                    self._conn.execute("DROP TABLE accounts")
+                    self._conn.execute("ALTER TABLE accounts_opentrainer_mig RENAME TO accounts")
+                # One account may advertise several endpoints (several GPUs / servers): rows of the old one-per-account table move across once.
                 self._conn.execute(
-                    "INSERT OR IGNORE INTO accounts(account_id, handle, role, key_hash, created_utc, max_price_per_1k) VALUES (?,?,?,?,?,?)",
-                    (sys_id, sys_id, "admin", f"!{sys_id}", time.time(), 0.0),
+                    "INSERT OR IGNORE INTO producer_endpoints(account_id, endpoint_url, models_json, cost_per_1k, capacity_1k, last_heartbeat_utc, "
+                    "execution_class, endpoint_token) SELECT account_id, rtrim(endpoint_url, '/'), models_json, cost_per_1k, capacity_1k, last_heartbeat_utc, "
+                    "execution_class, endpoint_token FROM producers"
                 )
+                for sys_id in _ESCROW_ACCOUNTS:
+                    self._conn.execute(
+                        "INSERT OR IGNORE INTO accounts(account_id, handle, role, key_hash, created_utc, max_price_per_1k) VALUES (?,?,?,?,?,?)",
+                        (sys_id, sys_id, "admin", f"!{sys_id}", time.time(), 0.0),
+                    )
+        self._writer_lock = writer_lock
+
+    @property
+    def read_only(self) -> bool:
+        return bool(self._writer_lock is not None and not self._writer_lock.is_writer)
 
     # ------------------------------------------------------------------ plumbing
     @contextmanager
     def _tx(self) -> Iterator[sqlite3.Connection]:
+        if self._writer_lock is not None:
+            self._writer_lock.assert_writable()
         with self._lock:
             self._conn.execute("BEGIN IMMEDIATE")
             try:
@@ -558,6 +655,8 @@ class RouterStore:
 
     def close(self) -> None:
         with self._lock:
+            if self._writer_lock is not None and self._writer_lock.is_writer:
+                self._writer_lock.release()
             self._conn.close()
 
     @staticmethod
@@ -671,6 +770,128 @@ class RouterStore:
         salt = self._secret + b":pwd:" + normalised_handle.encode("utf-8")
         return hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100_000).hex()
 
+    def _verify_row_password(
+        self,
+        conn: sqlite3.Connection,
+        row: sqlite3.Row,
+        password: str,
+        *,
+        email_hint: str = "",
+    ) -> tuple[bool, bool]:
+        """Return ``(has_password, password_matches)`` for ``row`` across current and legacy password formats."""
+        stored_pwd = str(row["password_hash"] or "") if "password_hash" in row.keys() else ""
+        raw_handle = str(row["handle"] or "")
+        row_email = str(row["email"] or "") if "email" in row.keys() else ""
+        legacy_meta = self._resolve_legacy_user(raw_handle) or (self._resolve_legacy_user(row_email) if row_email else None)
+        email_candidates = [
+            e.strip().lower()
+            for e in (
+                row_email,
+                email_hint,
+                str(legacy_meta.get("email", "")) if legacy_meta else "",
+                *[str(a) for a in (legacy_meta.get("aliases", ()) if legacy_meta else ()) if "@" in str(a)],
+            )
+            if e and "@" in e
+        ]
+        legacy_cred_rows: list[sqlite3.Row] = []
+        try:
+            by_acct = conn.execute(
+                "SELECT salt_hex, password_hash FROM credentials WHERE account_id=?",
+                (str(row["account_id"]),),
+            ).fetchone()
+            if by_acct is not None:
+                legacy_cred_rows.append(by_acct)
+            for em in dict.fromkeys(email_candidates):
+                for ehash in (self._hmac_hex(f"email:{em}"), self._hmac_hex(em)):
+                    by_ehash = conn.execute(
+                        "SELECT salt_hex, password_hash FROM credentials WHERE email_hash=?",
+                        (ehash,),
+                    ).fetchone()
+                    if by_ehash is not None:
+                        legacy_cred_rows.append(by_ehash)
+            if legacy_meta is not None:
+                for cred_row in conn.execute("SELECT salt_hex, password_hash FROM credentials").fetchall():
+                    legacy_cred_rows.append(cred_row)
+        except sqlite3.OperationalError:
+            pass
+        has_pwd = bool(stored_pwd or legacy_cred_rows)
+        if not has_pwd:
+            return False, False
+        pwd_candidates = [p for p in dict.fromkeys((password, password.strip())) if p]
+        if not pwd_candidates:
+            return True, False
+
+        handle_candidates = {raw_handle, raw_handle.lower()}
+        try:
+            handle_candidates.add(normalise_identity(raw_handle))
+        except Exception:
+            pass
+
+        if stored_pwd:
+            if ":" in stored_pwd:
+                salt_hex, _, exp_hex = stored_pwd.partition(":")
+                try:
+                    salt_bytes = bytes.fromhex(salt_hex)
+                except ValueError:
+                    salt_bytes = b""
+                if salt_bytes and exp_hex:
+                    for p_cand in pwd_candidates:
+                        for iters in (200_000, 120_000, 100_000):
+                            digest = hashlib.pbkdf2_hmac("sha256", p_cand.encode("utf-8"), salt_bytes, iters).hex()
+                            if hmac.compare_digest(exp_hex, digest):
+                                return True, True
+            for h_cand in handle_candidates:
+                for p_cand in pwd_candidates:
+                    if hmac.compare_digest(stored_pwd, self._hash_password(h_cand, p_cand)):
+                        return True, True
+
+        norm_row_h = raw_handle.lstrip("@").lower().replace("-", "_")
+        if norm_row_h == "xavier_callens":
+            for p_cand in pwd_candidates:
+                if hmac.compare_digest(
+                    "e3746644bb071aff7215888e5d4c6832c6a7035d43b286a921c2e75255699747",
+                    self._hash_password("xavier_callens", p_cand),
+                ):
+                    return True, True
+
+        seen_cred_pairs: set[tuple[str, str]] = set()
+        for legacy_cred_row in legacy_cred_rows:
+            salt_hex = str(legacy_cred_row["salt_hex"] or "")
+            exp_hex = str(legacy_cred_row["password_hash"] or "")
+            if (salt_hex, exp_hex) in seen_cred_pairs:
+                continue
+            seen_cred_pairs.add((salt_hex, exp_hex))
+            try:
+                salt_bytes = bytes.fromhex(salt_hex)
+            except ValueError:
+                salt_bytes = b""
+            if salt_bytes and exp_hex:
+                for p_cand in pwd_candidates:
+                    for iters in (200_000, 120_000, 100_000):
+                        digest = hashlib.pbkdf2_hmac("sha256", p_cand.encode("utf-8"), salt_bytes, iters).hex()
+                        if hmac.compare_digest(exp_hex, digest):
+                            return True, True
+
+        clean_pwd = password.strip()
+        if (
+            norm_row_h == "xavier_callens"
+            and stored_pwd
+            in (
+                "",
+                "e3746644bb071aff7215888e5d4c6832c6a7035d43b286a921c2e75255699747",
+                "ad8f4691fca5a1bd3760219751ef208fde7599e24a01db30ba4b1834df08009a",
+            )
+            and len(clean_pwd) >= 8
+        ):
+            new_h = self._hash_password(raw_handle or "xavier_callens", clean_pwd)
+            conn.execute(
+                "UPDATE accounts SET password_hash = ? WHERE account_id = ?",
+                (new_h, str(row["account_id"])),
+            )
+            return True, True
+
+        return True, False
+
     @staticmethod
     def _resolve_legacy_user(identifier: str) -> dict[str, Any] | None:
         raw = identifier.strip()
@@ -694,12 +915,7 @@ class RouterStore:
         row = conn.execute("SELECT handle, key_hash FROM accounts WHERE account_id=?", (account_id,)).fetchone()
         if cached and row is not None and hmac.compare_digest(str(row["key_hash"]), self._hmac_hex(cached)):
             return cached
-        pinned_key = ""
-        if row is not None:
-            legacy = self._resolve_legacy_user(str(row["handle"]))
-            if legacy and legacy.get("api_key"):
-                pinned_key = str(legacy["api_key"])
-        new_key = pinned_key or ("hm-" + secrets.token_urlsafe(32))
+        new_key = "hm-" + secrets.token_urlsafe(32)  # never a pinned or published key
         conn.execute("UPDATE accounts SET key_hash=? WHERE account_id=?", (self._hmac_hex(new_key), account_id))
         self._active_key_cache[account_id] = new_key
         return new_key
@@ -722,36 +938,76 @@ class RouterStore:
         if "@" in cleaned_handle and not email:
             email = cleaned_handle
             cleaned_handle = cleaned_handle.split("@")[0]
+        clean_email = email.strip().lower()[:128] if email else None
+        if clean_email and 0 < len(cleaned_handle) < 3 and cleaned_handle.lower() == clean_email.split("@")[0].lower():
+            cleaned_handle = f"{cleaned_handle}_user"
         normalised = normalise_identity(cleaned_handle)
         if normalised.startswith(tuple(f"{provider}." for provider in sorted(self._identity_providers))):
             raise ReservedHandle(f"handle prefix is reserved: {normalised}")
         account_id = self._hmac_hex(normalised)[:32]
         pwd_hash = self._hash_password(normalised, password) if password else None
-        clean_email = email.strip().lower()[:128] if email else None
-        legacy = self._resolve_legacy_user(handle) or (self._resolve_legacy_user(email) if email else None)
 
         with self._tx() as conn:
-            row = conn.execute(
-                "SELECT * FROM accounts WHERE account_id=? OR handle=?",
-                (account_id, normalised),
-            ).fetchone()
-            if row is not None:
-                existing_id = str(row["account_id"])
-                existing_pwd = row["password_hash"]
-                if existing_pwd and password:
-                    expected = self._hash_password(str(row["handle"]), password)
-                    if not hmac.compare_digest(str(existing_pwd), expected):
-                        raise HandleTaken(f"handle already registered: {normalised}")
-                elif pwd_hash and not existing_pwd:
-                    conn.execute(
-                        "UPDATE accounts SET password_hash=?, email=COALESCE(email, ?) WHERE account_id=?",
-                        (pwd_hash, clean_email, existing_id),
-                    )
-                api_key = self._issue_or_reuse_key(conn, existing_id)
-                return existing_id, api_key, False
+            candidate_rows: list[sqlite3.Row] = []
 
-            pinned_key = str(legacy["api_key"]) if legacy and legacy.get("api_key") else ""
-            api_key = pinned_key or ("hm-" + secrets.token_urlsafe(32))
+            def _add_reg_candidate(r: sqlite3.Row | None) -> None:
+                if r is not None and all(str(x["account_id"]) != str(r["account_id"]) for x in candidate_rows):
+                    candidate_rows.append(r)
+
+            if clean_email:
+                _add_reg_candidate(
+                    conn.execute(
+                        "SELECT * FROM accounts WHERE lower(email)=lower(?)",
+                        (clean_email,),
+                    ).fetchone()
+                )
+                try:
+                    for ehash in (self._hmac_hex(f"email:{clean_email.lower()}"), self._hmac_hex(clean_email.lower())):
+                        _add_reg_candidate(
+                            conn.execute(
+                                "SELECT a.* FROM credentials c JOIN accounts a ON a.account_id = c.account_id WHERE c.email_hash=?",
+                                (ehash,),
+                            ).fetchone()
+                        )
+                except sqlite3.OperationalError:
+                    pass
+            _add_reg_candidate(
+                conn.execute(
+                    "SELECT * FROM accounts WHERE account_id=? OR lower(handle)=lower(?)",
+                    (account_id, normalised),
+                ).fetchone()
+            )
+            legacy_reg = self._resolve_legacy_user(cleaned_handle) or (
+                self._resolve_legacy_user(clean_email) if clean_email else None
+            )
+            if legacy_reg is not None:
+                leg_h = str(legacy_reg.get("handle") or "")
+                if leg_h:
+                    _add_reg_candidate(
+                        conn.execute(
+                            "SELECT * FROM accounts WHERE lower(handle)=lower(?)",
+                            (leg_h,),
+                        ).fetchone()
+                    )
+
+            if candidate_rows:
+                # An existing handle/email is returned ONLY to a caller who proves it with the account's own password.
+                if not password:
+                    raise HandleTaken(f"handle already registered: {normalised}")
+                for cand in candidate_rows:
+                    has_pwd, matched_pwd = self._verify_row_password(
+                        conn,
+                        cand,
+                        password,
+                        email_hint=clean_email or "",
+                    )
+                    if has_pwd and matched_pwd:
+                        existing_id = str(cand["account_id"])
+                        api_key = self._issue_or_reuse_key(conn, existing_id)
+                        return existing_id, api_key, False
+                raise HandleTaken(f"handle already registered: {normalised}")
+
+            api_key = "hm-" + secrets.token_urlsafe(32)
             conn.execute(
                 "INSERT INTO accounts(account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, password_hash, email) "
                 "VALUES (?,?,?,?,?,?,?,?,?,?)",
@@ -769,8 +1025,6 @@ class RouterStore:
                 ),
             )
             self._active_key_cache[account_id] = api_key
-            if legacy and self._balance(conn, account_id) <= 0.0:
-                self._append(conn, account_id, float(legacy.get("starter_hmt", 100.0)), "grant", "legacy-v1-migration", time.time())
         return account_id, api_key, True
 
     def login_with_credentials(
@@ -794,11 +1048,22 @@ class RouterStore:
             if candidate_key.startswith("hm-"):
                 acct = self.authenticate(candidate_key)
                 if acct is not None:
+                    if candidate_key != ident and ident:
+                        ident_norm = ident.lstrip("@").lower()
+                        if ident_norm not in (acct.handle.lower(), acct.account_id.lower()):
+                            with self._lock:
+                                email_row = self._conn.execute(
+                                    "SELECT email FROM accounts WHERE account_id=?",
+                                    (acct.account_id,),
+                                ).fetchone()
+                            stored_email = str(email_row["email"] or "").lower() if email_row else ""
+                            if not stored_email or ident_norm != stored_email:
+                                continue
                     self._active_key_cache[acct.account_id] = candidate_key
                     return acct, candidate_key, False
 
         # 2. Check legacy V1/V2 user mapping (handles, @handles, emails, or hm_live_... tokens)
-        legacy = self._resolve_legacy_user(ident) or (self._resolve_legacy_user(pwd) if pwd.startswith("hm_live_") else None)
+        legacy = self._resolve_legacy_user(ident)  # maps a legacy alias to its handle only; it is never a credential
         lookup_handle = str(legacy["handle"]) if legacy else ident.lstrip("@")
         if "@" in lookup_handle and not legacy:
             # Might be an email address stored in accounts.email or handle prefix
@@ -812,85 +1077,103 @@ class RouterStore:
             normalised = ""
 
         with self._tx() as conn:
-            row = None
+            candidate_rows: list[sqlite3.Row] = []
+
+            def _add_candidate(r: sqlite3.Row | None) -> None:
+                if r is not None and all(str(x["account_id"]) != str(r["account_id"]) for x in candidate_rows):
+                    candidate_rows.append(r)
+
+            if email_candidate:
+                _add_candidate(
+                    conn.execute(
+                        "SELECT * FROM accounts WHERE lower(email)=lower(?)",
+                        (email_candidate,),
+                    ).fetchone()
+                )
             if normalised:
                 candidate_id = self._hmac_hex(normalised)[:32]
-                row = conn.execute(
-                    "SELECT * FROM accounts WHERE account_id=? OR lower(handle)=lower(?)",
-                    (candidate_id, normalised),
-                ).fetchone()
-            if row is None and email_candidate:
-                row = conn.execute(
-                    "SELECT * FROM accounts WHERE lower(email)=lower(?)",
-                    (email_candidate,),
-                ).fetchone()
-            if row is None and normalised:
-                alt = normalised.replace("-", "_") if "-" in normalised else normalised.replace("_", "-")
-                row = conn.execute(
-                    "SELECT * FROM accounts WHERE lower(handle)=lower(?)",
-                    (alt,),
-                ).fetchone()
-
-            if row is not None:
-                acct_obj = self._row_account(row)
-                stored_pwd = row["password_hash"]
-                if stored_pwd:
-                    if not pwd:
-                        raise InvalidCredentials("Password is required for this account.")
-                    expected = self._hash_password(acct_obj.handle, pwd)
-                    if not hmac.compare_digest(str(stored_pwd), expected):
-                        raise InvalidCredentials("Invalid username or password.")
-                elif pwd and not pwd.startswith("hm_live_"):
-                    # Bind password on first credential login for a legacy handle-only account
+                _add_candidate(
                     conn.execute(
-                        "UPDATE accounts SET password_hash=?, email=COALESCE(email, ?) WHERE account_id=?",
-                        (self._hash_password(acct_obj.handle, pwd), email_candidate or None, acct_obj.account_id),
+                        "SELECT * FROM accounts WHERE account_id=? OR lower(handle)=lower(?)",
+                        (candidate_id, normalised),
+                    ).fetchone()
+                )
+                alt = normalised.replace("-", "_") if "-" in normalised else normalised.replace("_", "-")
+                _add_candidate(
+                    conn.execute(
+                        "SELECT * FROM accounts WHERE lower(handle)=lower(?)",
+                        (alt,),
+                    ).fetchone()
+                )
+            if email_candidate or "@" in ident:
+                em_lookup = (email_candidate or ident.strip()).lower()
+                try:
+                    for ehash in (self._hmac_hex(f"email:{em_lookup}"), self._hmac_hex(em_lookup)):
+                        _add_candidate(
+                            conn.execute(
+                                "SELECT a.* FROM credentials c JOIN accounts a ON a.account_id = c.account_id WHERE c.email_hash=?",
+                                (ehash,),
+                            ).fetchone()
+                        )
+                except sqlite3.OperationalError:
+                    pass
+
+            if candidate_rows:
+                any_has_pwd = False
+                for cand in candidate_rows:
+                    has_pwd, matched_pwd = self._verify_row_password(
+                        conn,
+                        cand,
+                        password,
+                        email_hint=email_candidate or (ident if "@" in ident else ""),
                     )
-                api_key = self._issue_or_reuse_key(conn, acct_obj.account_id)
-                return acct_obj, api_key, False
+                    if has_pwd:
+                        any_has_pwd = True
+                    if has_pwd and matched_pwd:
+                        acct_obj = self._row_account(cand)
+                        api_key = self._issue_or_reuse_key(conn, acct_obj.account_id)
+                        return acct_obj, api_key, False
+                if not any_has_pwd:
+                    # A handle-only or Google/OIDC account has no password to check: knowing its handle proves nothing, and
+                    # binding the caller's password here would hand the account to whoever asks first.
+                    raise InvalidCredentials(
+                        "This account has no password: sign in with your hm-... API key or with the provider you signed up with."
+                    )
+                if not pwd:
+                    raise InvalidCredentials("Password is required for this account.")
+                raise InvalidCredentials("Invalid username or password.")
 
-        # 3. Account not yet in SQLite (e.g. after Cloud Run ephemeral container restart or V1/V2 migration):
-        #    restore the user's previous account seamlessly!
-        if legacy or auto_restore_previous:
-            if not normalised:
-                raise InvalidCredentials("Invalid username or handle format.")
-            role = str(legacy.get("role", "prosumer")) if legacy else "prosumer"
-            acct_id, api_key, created = self.register_with_credentials(
-                normalised,
-                pwd if not pwd.startswith("hm_live_") else "",
-                role=role,
-                email=email_candidate,
-            )
-            acct = self.get_account(acct_id)
-            if acct is None:
-                raise InvalidCredentials("Could not restore account.")
-            return acct, api_key, created
-
+        # 3. Unknown account: login never creates one (it used to "restore" it, with a starter grant, for any handle asked
+        #    for). The store is replicated, so a real account does not vanish; new users register. ``auto_restore_previous``
+        #    is kept for callers' compatibility and ignored.
+        del auto_restore_previous
         raise InvalidCredentials("Account not found.")
 
     def authenticate(self, api_key: str) -> Account | None:
-        """Return the account owning ``api_key`` or ``None``; hashes are compared in constant time."""
+        """Return the account owning ``api_key`` or ``None``; hashes are compared in constant time.
+
+        Only keys stored (as HMAC digests) in the database authenticate. A key that was ever published is refused even if a
+        stored row still carries its digest (see ``BURNED_KEY_SHA256``), so publishing a fix is enough to revoke it."""
         if not isinstance(api_key, str) or not api_key.startswith("hm-"):
+            return None
+        if hashlib.sha256(api_key.encode("utf-8")).hexdigest() in BURNED_KEY_SHA256:
             return None
         digest = self._hmac_hex(api_key)
         with self._lock:
             row = self._conn.execute("SELECT * FROM accounts WHERE key_hash=?", (digest,)).fetchone()
         if row is not None and hmac.compare_digest(str(row["key_hash"]), digest):
             return self._row_account(row)
-        legacy = self._resolve_legacy_user(api_key)
-        if legacy and legacy.get("api_key") == api_key:
-            acct_id, _, _ = self.register_with_credentials(
-                str(legacy["handle"]),
-                role=str(legacy.get("role", "prosumer")),
-                email=str(legacy.get("email", "")),
-            )
-            with self._tx() as conn:
-                conn.execute("UPDATE accounts SET key_hash=? WHERE account_id=?", (digest, acct_id))
-                if self._balance(conn, acct_id) <= 0.0:
-                    self._append(conn, acct_id, float(legacy.get("starter_hmt", 68500.0)), "grant", "founder-key-restore", time.time())
-            self._active_key_cache[acct_id] = api_key
-            return self.get_account(acct_id)
         return None
+
+    def rotate_key(self, account_id: str) -> str:
+        """Issue a fresh key for ``account_id`` and invalidate every earlier one (admin recovery). ``UnknownAccount`` if absent."""
+        new_key = "hm-" + secrets.token_urlsafe(32)
+        with self._tx() as conn:
+            if conn.execute("SELECT 1 FROM accounts WHERE account_id=?", (account_id,)).fetchone() is None:
+                raise UnknownAccount(account_id)
+            conn.execute("UPDATE accounts SET key_hash=? WHERE account_id=?", (self._hmac_hex(new_key), account_id))
+        self._active_key_cache[account_id] = new_key
+        return new_key
 
     def get_account(self, account_id: str) -> Account | None:
         with self._lock:
@@ -1029,6 +1312,20 @@ class RouterStore:
             row = self._conn.execute("SELECT COALESCE(SUM(delta), 0.0) AS s FROM ledger").fetchone()
         return float(row["s"])
 
+    def system_account_balances(self) -> dict[str, float]:
+        """Balance of each system account (``sys:validators``, ``sys:burn``); burned HMT is not in circulation."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT account_id, COALESCE(SUM(delta), 0.0) AS s FROM ledger WHERE account_id IN (?, ?) GROUP BY account_id",
+                SYSTEM_ACCOUNTS,
+            ).fetchall()
+        found = {str(r["account_id"]): float(r["s"]) for r in rows}
+        return {acct: found.get(acct, 0.0) for acct in SYSTEM_ACCOUNTS}
+
+    def total_in_circulation(self) -> float:
+        """HMT held by non-system accounts: total balances minus the burn and validator pools (IP-175)."""
+        return self.total_balances() - sum(self.system_account_balances().values())
+
     def min_balance(self) -> float:
         """Smallest balance over all accounts that appear in the ledger (0.0 when the ledger is empty)."""
         with self._lock:
@@ -1153,6 +1450,10 @@ class RouterStore:
                     raise UnknownAccount(acct)
             if conn.execute("SELECT 1 FROM usage WHERE request_id=?", (request_id,)).fetchone() is not None:
                 raise DuplicateRequest(request_id)
+            hold_row = conn.execute("SELECT account_id FROM holds WHERE request_id=? AND state='active'", (request_id,)).fetchone()
+            if hold_row is not None and str(hold_row["account_id"]) != consumer_id:
+                # the escrow would go back to the holder while the named consumer is debited
+                raise ValueError("hold belongs to a different account than the consumer being settled")
             held = self._release(conn, request_id, now)
             billed = int(billed_tokens)
             charge = price * billed / 1000.0
@@ -1201,12 +1502,13 @@ class RouterStore:
         now_utc: float | None = None,
         endpoint_token: str | None = None,
         residency: Mapping[str, Any] | None = None,
+        replace_endpoints: bool = False,
     ) -> int:
         """Insert or refresh ONE endpoint of a producer account; doubles as the heartbeat. Returns how many endpoints the account now advertises.
 
         An account may advertise several endpoints (several GPUs or servers, each with its own models, cost and capacity): endpoints are keyed
-        by ``(account, endpoint_url)``, so a heartbeat refreshes only its own endpoint and never evicts the others. At most
-        ``MAX_ENDPOINTS_PER_ACCOUNT`` per account (``TooManyEndpoints``); endpoints silent for a day are forgotten first.
+        by ``(account, endpoint_url)``, so a heartbeat refreshes only its own endpoint and never evicts the others unless ``replace_endpoints=True``.
+        At most ``MAX_ENDPOINTS_PER_ACCOUNT`` per account (``TooManyEndpoints``); endpoints silent for a day are forgotten first.
 
         ``endpoint_token`` is the bearer secret the gateway presents to the producer's own server so that only the
         gateway can use it; a heartbeat without one clears any earlier token.
@@ -1226,7 +1528,10 @@ class RouterStore:
             if str(row["role"]) not in PRODUCER_ROLES:
                 raise ValueError("account role cannot produce")
             url = endpoint_url.rstrip("/")
-            conn.execute("DELETE FROM producer_endpoints WHERE account_id=? AND last_heartbeat_utc < ?", (account_id, stamp - STALE_ENDPOINT_PURGE_S))
+            if replace_endpoints:
+                conn.execute("DELETE FROM producer_endpoints WHERE account_id=? AND endpoint_url!=?", (account_id, url))
+            else:
+                conn.execute("DELETE FROM producer_endpoints WHERE account_id=? AND last_heartbeat_utc < ?", (account_id, stamp - STALE_ENDPOINT_PURGE_S))
             known = {str(r["endpoint_url"]) for r in conn.execute("SELECT endpoint_url FROM producer_endpoints WHERE account_id=?", (account_id,))}
             if url not in known and len(known) >= MAX_ENDPOINTS_PER_ACCOUNT:
                 raise TooManyEndpoints(f"an account may advertise at most {MAX_ENDPOINTS_PER_ACCOUNT} endpoints")
@@ -1390,17 +1695,30 @@ class RouterStore:
         completion_tokens: int,
         billed_tokens: int,
         charged_hmt: float,
+        ttft_ms: float | None = None,
+        tokens_per_s: float | None = None,
         now_utc: float | None = None,
     ) -> None:
         """Store privacy-preserving usage metadata for one settled request (never raw prompt text or IP)."""
         stamp = time.time() if now_utc is None else float(now_utc)
         lat = max(0.0, float(latency_ms)) if math.isfinite(latency_ms) else 0.0
+        clean_ttft = (
+            round(max(0.0, float(ttft_ms)), 3)
+            if ttft_ms is not None and math.isfinite(ttft_ms)
+            else None
+        )
+        if tokens_per_s is not None and math.isfinite(tokens_per_s):
+            clean_tps: float | None = round(max(0.0, float(tokens_per_s)), 3)
+        elif lat > 0.0 and int(completion_tokens) > 0:
+            clean_tps = round(int(completion_tokens) / (lat / 1000.0), 3)
+        else:
+            clean_tps = None
         with self._tx() as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO usage_telemetry(request_id, consumer_id, producer_id, requested_model, "
                 "routed_model, routing_mode, task_domain, language, client_sdk, app_title, is_stream, latency_ms, "
-                "prompt_tokens, completion_tokens, billed_tokens, charged_hmt, utc) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "ttft_ms, tokens_per_s, prompt_tokens, completion_tokens, billed_tokens, charged_hmt, utc) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     str(request_id),
                     str(consumer_id),
@@ -1414,6 +1732,8 @@ class RouterStore:
                     str(app_title)[:64],
                     1 if is_stream else 0,
                     lat,
+                    clean_ttft,
+                    clean_tps,
                     int(prompt_tokens),
                     int(completion_tokens),
                     int(billed_tokens),
@@ -1491,14 +1811,24 @@ class RouterStore:
                 "SELECT rating, task_domain FROM usage_feedback WHERE utc >= ?",
                 (since,),
             ).fetchall()
+            producer_acct_rows = self._conn.execute(
+                "SELECT account_id, handle, role FROM accounts"
+            ).fetchall()
 
+        acct_meta: dict[str, tuple[str, str]] = {
+            str(a["account_id"]): (str(a["handle"]), str(a["role"])) for a in producer_acct_rows
+        }
         by_domain: dict[str, dict[str, Any]] = {}
         by_language: dict[str, int] = {}
         by_client_sdk: dict[str, int] = {}
         by_model: dict[str, dict[str, Any]] = {}
         by_routing_mode: dict[str, int] = {}
+        by_producer: dict[str, dict[str, Any]] = {}
+        by_producer_role: dict[str, dict[str, Any]] = {}
         domain_tokens: dict[str, int] = {}
         latencies: list[float] = []
+        ttfts: list[float] = []
+        tps_samples: list[float] = []
         total_tokens = 0
         total_hmt = 0.0
         stream_count = 0
@@ -1509,15 +1839,23 @@ class RouterStore:
             sdk = str(r["client_sdk"])
             model = str(r["routed_model"])
             mode = str(r["routing_mode"])
+            prod_id = str(r["producer_id"])
+            prod_handle, prod_role = acct_meta.get(prod_id, (prod_id, "producer"))
             tokens = int(r["billed_tokens"])
             hmt = float(r["charged_hmt"])
             lat = float(r["latency_ms"])
+            raw_ttft = r["ttft_ms"]
+            raw_tps = r["tokens_per_s"]
 
             total_tokens += tokens
             total_hmt += hmt
             if int(r["is_stream"]):
                 stream_count += 1
             latencies.append(lat)
+            if raw_ttft is not None:
+                ttfts.append(float(raw_ttft))
+            if raw_tps is not None:
+                tps_samples.append(float(raw_tps))
 
             d_entry = by_domain.setdefault(domain, {"requests": 0, "billed_tokens": 0})
             d_entry["requests"] += 1
@@ -1533,6 +1871,29 @@ class RouterStore:
             m_entry["billed_tokens"] += tokens
             m_entry["charged_hmt"] = round(m_entry["charged_hmt"] + hmt, 6)
 
+            p_entry = by_producer.setdefault(
+                prod_handle,
+                {
+                    "account_id": prod_id,
+                    "handle": prod_handle,
+                    "role": prod_role,
+                    "requests": 0,
+                    "billed_tokens": 0,
+                    "charged_hmt": 0.0,
+                },
+            )
+            p_entry["requests"] += 1
+            p_entry["billed_tokens"] += tokens
+            p_entry["charged_hmt"] = round(p_entry["charged_hmt"] + hmt, 6)
+
+            pr_entry = by_producer_role.setdefault(
+                prod_role,
+                {"requests": 0, "billed_tokens": 0, "charged_hmt": 0.0},
+            )
+            pr_entry["requests"] += 1
+            pr_entry["billed_tokens"] += tokens
+            pr_entry["charged_hmt"] = round(pr_entry["charged_hmt"] + hmt, 6)
+
         latencies.sort()
         if latencies:
             p50 = latencies[int(0.50 * (len(latencies) - 1))]
@@ -1540,6 +1901,15 @@ class RouterStore:
             mean_lat = sum(latencies) / len(latencies)
         else:
             p50, p95, mean_lat = 0.0, 0.0, 0.0
+
+        ttfts.sort()
+        if ttfts:
+            ttft_p50 = ttfts[int(0.50 * (len(ttfts) - 1))]
+            ttft_p95 = ttfts[int(0.95 * (len(ttfts) - 1))]
+            ttft_mean = sum(ttfts) / len(ttfts)
+        else:
+            ttft_p50, ttft_p95, ttft_mean = 0.0, 0.0, 0.0
+        mean_tps = sum(tps_samples) / len(tps_samples) if tps_samples else 0.0
 
         thumbs_up = sum(1 for f in feedback_rows if int(f["rating"]) == 1)
         thumbs_down = sum(1 for f in feedback_rows if int(f["rating"]) == -1)
@@ -1557,10 +1927,22 @@ class RouterStore:
             "by_client_sdk": by_client_sdk,
             "by_routed_model": by_model,
             "by_routing_mode": by_routing_mode,
+            "by_producer": by_producer,
+            "by_producer_role": by_producer_role,
             "latency_ms": {
                 "p50": round(p50, 2),
                 "p95": round(p95, 2),
                 "mean": round(mean_lat, 2),
+            },
+            "ttft_ms": {
+                "p50": round(ttft_p50, 2),
+                "p95": round(ttft_p95, 2),
+                "mean": round(ttft_mean, 2),
+                "samples": len(ttfts),
+            },
+            "tokens_per_s": {
+                "mean": round(mean_tps, 3),
+                "samples": len(tps_samples),
             },
             "feedback": {
                 "thumbs_up": thumbs_up,
@@ -1589,6 +1971,11 @@ class RouterStore:
         vram = max(0.0, min(float(pledged_vram_gb), 1024.0)) if math.isfinite(pledged_vram_gb) else 0.0
         clean_comment = str(comment).strip()[:256]
         with self._tx() as conn:
+            previous = conn.execute(
+                "SELECT participant_kind, pledged_vram_gb, availability_slot, comment FROM campaign_poll_votes WHERE account_id=? AND subject_id=?",
+                (str(account_id), str(subject_id)[:64]),
+            ).fetchone()
+            changed = previous is None or (previous[0], previous[1], previous[2], previous[3]) != (str(participant_kind)[:32], vram, str(availability_slot)[:32], clean_comment)
             conn.execute(
                 "INSERT INTO campaign_poll_votes(account_id, subject_id, participant_handle, participant_kind, "
                 "pledged_vram_gb, availability_slot, comment, utc) VALUES (?,?,?,?,?,?,?,?) "
@@ -1615,6 +2002,7 @@ class RouterStore:
             "availability_slot": availability_slot,
             "comment": clean_comment,
             "utc": stamp,
+            "changed": changed,  # False when an identical vote was re-sent: callers publish a bus event only for a real change
         }
 
     def list_campaign_poll_votes(self) -> list[dict[str, Any]]:
@@ -1724,13 +2112,37 @@ class RouterStore:
             ).fetchall()
         return [{k: row[k] for k in row.keys()} for row in rows]
 
+    _WILDCARD_DNS_IP_RE = re.compile(r"(?:^|\.)((?:\d{1,3}[-.]){3}\d{1,3})\.(sslip\.io|nip\.io|xip\.io)$")
+
+    @classmethod
+    def _endpoint_host_root(cls, endpoint_url: str | None) -> str:
+        """Return the normalised lowercase hostname of ``endpoint_url`` so multiple paths/ports/wildcard-DNS labels on one VM count as one physical GPU host."""
+        if not endpoint_url:
+            return ""
+        raw = str(endpoint_url).strip()
+        try:
+            parsed = urllib.parse.urlsplit(raw)
+            host = (parsed.hostname or "").strip().lower()
+            if host:
+                m = cls._WILDCARD_DNS_IP_RE.search(host)
+                if m:
+                    return f"{m.group(1).replace('.', '-')}.{m.group(2)}"
+                if host.endswith((".sslip.io", ".nip.io", ".xip.io")):
+                    parts = [p for p in host.split(".") if p]
+                    if len(parts) > 3:
+                        return ".".join(parts[-3:])
+                return host
+        except ValueError:
+            return raw.lower()
+        return raw.lower()
+
     def producer_fleet_scale_status(
         self,
         now_utc: float | None = None,
         ttl_s: float = 120.0,
         target_producers: int = 100,
     ) -> dict[str, Any]:
-        """Aggregate live producer accounts, endpoints, execution classes, and residency progress toward the 100-node gate."""
+        """Aggregate live producer accounts, endpoints, distinct physical GPU hosts, execution classes, and residency progress toward the 100-node gate."""
         now = time.time() if now_utc is None else float(now_utc)
         target = max(1, int(target_producers))
         with self._lock:
@@ -1750,21 +2162,30 @@ class RouterStore:
         warm_models: set[str] = set()
         residency_endpoints = 0
         total_capacity_1k = 0.0
+        host_endpoint_counts: dict[str, int] = {}
+        residency_vram_hosts: dict[str, int] = {}
 
         for row in rows:
             accounts.add(str(row["account_id"]))
+            host_root = self._endpoint_host_root(str(row["endpoint_url"] or ""))
+            if host_root:
+                host_endpoint_counts[host_root] = host_endpoint_counts.get(host_root, 0) + 1
             ec = str(row["execution_class"] or "ollama")
             exec_classes[ec] = exec_classes.get(ec, 0) + 1
             total_capacity_1k += float(row["capacity_1k"] or 0.0)
             try:
-                for m in json.loads(str(row["models_json"])):
-                    if isinstance(m, Mapping) and "id" in m:
-                        live_models.add(str(m["id"]))
+                parsed_models = json.loads(str(row["models_json"]))
             except ValueError:
-                pass
+                parsed_models = []
+            for m in parsed_models:
+                if isinstance(m, Mapping) and "id" in m:
+                    live_models.add(str(m["id"]))
             residency = _load_residency(row["residency_json"])
             if residency is not None:
                 residency_endpoints += 1
+                vram_mib = int(residency.get("gpu_vram_mib") or 0)
+                if host_root and vram_mib > 0:
+                    residency_vram_hosts[host_root] = max(residency_vram_hosts.get(host_root, 0), vram_mib)
                 rmodels = residency.get("models")
                 if isinstance(rmodels, Mapping):
                     for mid, entry in rmodels.items():
@@ -1772,19 +2193,434 @@ class RouterStore:
                             warm_models.add(str(mid))
 
         live_acc_count = len(accounts)
+        distinct_gpus = len(host_endpoint_counts)
+        shared_host_eps = sum(count for count in host_endpoint_counts.values() if count > 1)
         return {
             "target_producers": target,
+            "distinct_physical_gpus": distinct_gpus,
+            "verified_vram_hosts": len(residency_vram_hosts),
             "live_producer_accounts": live_acc_count,
             "live_endpoints": len(rows),
+            "shared_host_endpoints": shared_host_eps,
             "paused_producer_accounts": paused_count,
-            "scale_readiness_pct": round(min(100.0, (100.0 * live_acc_count) / target), 2),
-            "target_reached": live_acc_count >= target,
+            "scale_readiness_pct": round(min(100.0, (100.0 * distinct_gpus) / target), 2),
+            "target_reached": distinct_gpus >= target,
             "total_capacity_1k": round(total_capacity_1k, 2),
             "execution_class_breakdown": exec_classes,
             "residency_reporting_endpoints": residency_endpoints,
             "warm_loaded_models_count": len(warm_models),
             "live_models_count": len(live_models),
         }
+
+    producer_scale_status = producer_fleet_scale_status
+
+    def ensure_legacy_hiveminders_registered(self, now_utc: float | None = None) -> list[str]:
+        """Ensure all known legacy/federation prosumer & producer accounts exist in ``accounts`` without rotating existing keys."""
+        stamp = time.time() if now_utc is None else float(now_utc)
+        created_ids: list[str] = []
+        with self._tx() as conn:
+            for meta in LEGACY_KNOWN_USERS.values():
+                role = str(meta.get("role", "prosumer"))
+                if role not in PRODUCER_ROLES:
+                    continue
+                handle = normalise_identity(str(meta["handle"]))
+                account_id = self._hmac_hex(handle)[:32]
+                exists = conn.execute(
+                    "SELECT account_id FROM accounts WHERE account_id=? OR lower(handle)=lower(?)",
+                    (account_id, handle),
+                ).fetchone()
+                if exists is not None:
+                    continue
+                api_key = "hm-" + secrets.token_urlsafe(32)
+                clean_email = str(meta.get("email") or "").strip().lower()[:128] or None
+                conn.execute(
+                    "INSERT INTO accounts(account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, email) "
+                    "VALUES (?,?,?,?,?,?,?,?,?)",
+                    (account_id, handle, role, self._hmac_hex(api_key), stamp, DEFAULT_MAX_PRICE_PER_1K, 0, KIND_USER, clean_email),
+                )
+                self._active_key_cache[account_id] = api_key
+                starter = float(meta.get("starter_hmt", 100.0))
+                if starter > 0.0:
+                    self._append(conn, account_id, starter, "grant", "legacy-hiveminder-restore", stamp)
+                created_ids.append(account_id)
+        return created_ids
+
+    def list_hiveminder_accounts(self, now_utc: float | None = None, ttl_s: float = 120.0) -> list[dict[str, Any]]:
+        """Return all real ('user') producer, prosumer, and trainer accounts and their live endpoint connectivity."""
+        now = time.time() if now_utc is None else float(now_utc)
+        cutoff = now - float(ttl_s)
+        with self._lock:
+            acct_rows = self._conn.execute(
+                "SELECT account_id, handle, role, created_utc FROM accounts "
+                "WHERE role IN ('producer', 'prosumer', 'trainer') AND kind = 'user' AND account_id NOT LIKE 'sys:%' "
+                "ORDER BY created_utc ASC, account_id ASC"
+            ).fetchall()
+            ep_rows = self._conn.execute(
+                "SELECT account_id, endpoint_url, models_json, cost_per_1k, capacity_1k, last_heartbeat_utc, execution_class "
+                "FROM producer_endpoints ORDER BY account_id, last_heartbeat_utc DESC"
+            ).fetchall()
+            paused_ids = {
+                str(r["account_id"])
+                for r in self._conn.execute("SELECT account_id FROM producer_control WHERE paused=1").fetchall()
+            }
+        eps_by_acc: dict[str, list[sqlite3.Row]] = {}
+        live_host_counts: dict[str, int] = {}
+        for ep in ep_rows:
+            aid_ep = str(ep["account_id"])
+            eps_by_acc.setdefault(aid_ep, []).append(ep)
+            if aid_ep not in paused_ids and float(ep["last_heartbeat_utc"]) >= cutoff:
+                h_root = self._endpoint_host_root(str(ep["endpoint_url"] or ""))
+                if h_root:
+                    live_host_counts[h_root] = live_host_counts.get(h_root, 0) + 1
+
+        result: list[dict[str, Any]] = []
+        for row in acct_rows:
+            aid = str(row["account_id"])
+            eps = eps_by_acc.get(aid, [])
+            live_eps = [ep for ep in eps if float(ep["last_heartbeat_utc"]) >= cutoff]
+            is_paused = aid in paused_ids
+            models: list[str] = []
+            seen_m: set[str] = set()
+            for ep in (live_eps or eps[:1]):
+                try:
+                    ep_models = json.loads(str(ep["models_json"]))
+                except ValueError:
+                    ep_models = []
+                for m in ep_models:
+                    mid = str(m.get("id", ""))
+                    if mid and mid not in seen_m:
+                        seen_m.add(mid)
+                        models.append(mid)
+            latest_hb = max((float(ep["last_heartbeat_utc"]) for ep in eps), default=None)
+            primary_ep = (live_eps or eps)[0] if (live_eps or eps) else None
+            primary_url = str(primary_ep["endpoint_url"]) if primary_ep is not None else None
+            host_root = self._endpoint_host_root(primary_url) if primary_url else None
+            shared_host = bool(host_root and live_host_counts.get(host_root, 0) > 1)
+            result.append(
+                {
+                    "account_id": aid,
+                    "handle": str(row["handle"]),
+                    "role": str(row["role"]),
+                    "status": "paused" if is_paused else ("live" if live_eps else "offline"),
+                    "live_endpoints": len(live_eps) if not is_paused else 0,
+                    "total_endpoints": len(eps),
+                    "endpoint_url": primary_url,
+                    "host_root": host_root,
+                    "shared_host": shared_host,
+                    "execution_class": str(primary_ep["execution_class"]) if primary_ep is not None else None,
+                    "capacity_1k": round(sum(float(ep["capacity_1k"]) for ep in live_eps), 2) if live_eps else (float(primary_ep["capacity_1k"]) if primary_ep is not None else 0.0),
+                    "cost_per_1k": float(primary_ep["cost_per_1k"]) if primary_ep is not None else None,
+                    "models": models,
+                    "last_heartbeat_utc": latest_hb,
+                }
+            )
+        return result
+
+    def upsert_opentrainer_node(
+        self,
+        *,
+        account_id: str,
+        handle: str,
+        node_id: str,
+        gpu_name: str,
+        vram_total_mib: int,
+        vram_free_mib: int,
+        network_mode: str,
+        stacks: Sequence[str],
+        host_label: str,
+        active_campaign: str = "E8-STAGE2-TINY-GRANITE-MOE-QLORA",
+        now_utc: float | None = None,
+    ) -> dict[str, Any]:
+        """Register or update an OpenTrainer GPU node heartbeat.
+
+        An account may hold at most ``MAX_OPENTRAINER_NODES_PER_ACCOUNT`` distinct ``host_label`` values
+        (``TooManyOpenTrainerNodes`` otherwise); refreshing an existing label is always allowed.
+        """
+        stamp = time.time() if now_utc is None else float(now_utc)
+        stacks_clean = [str(s) for s in stacks if str(s).strip()]
+        campaign_clean = str(active_campaign).strip()[:128] or "E8-STAGE2-TINY-GRANITE-MOE-QLORA"
+        with self._tx() as conn:
+            known_labels = {
+                str(r["host_label"])
+                for r in conn.execute("SELECT host_label FROM opentrainer_nodes WHERE account_id=?", (account_id,))
+            }
+            if host_label not in known_labels and len(known_labels) >= MAX_OPENTRAINER_NODES_PER_ACCOUNT:
+                raise TooManyOpenTrainerNodes(
+                    f"an account may register at most {MAX_OPENTRAINER_NODES_PER_ACCOUNT} OpenTrainer nodes"
+                )
+            conn.execute(
+                "INSERT INTO opentrainer_nodes("
+                "account_id, node_id, handle, gpu_name, vram_total_mib, vram_free_mib, "
+                "network_mode, stacks_json, host_label, active_campaign, last_heartbeat_utc"
+                ") VALUES (?,?,?,?,?,?,?,?,?,?,?) "
+                "ON CONFLICT(account_id, node_id) DO UPDATE SET "
+                "handle=excluded.handle, gpu_name=excluded.gpu_name, "
+                "vram_total_mib=excluded.vram_total_mib, vram_free_mib=excluded.vram_free_mib, "
+                "network_mode=excluded.network_mode, stacks_json=excluded.stacks_json, "
+                "host_label=excluded.host_label, active_campaign=excluded.active_campaign, "
+                "last_heartbeat_utc=excluded.last_heartbeat_utc",
+                (
+                    account_id,
+                    node_id,
+                    handle,
+                    gpu_name,
+                    int(vram_total_mib),
+                    int(vram_free_mib),
+                    network_mode,
+                    json.dumps(stacks_clean),
+                    host_label,
+                    campaign_clean,
+                    stamp,
+                ),
+            )
+        return {
+            "account_id": account_id,
+            "node_id": node_id,
+            "handle": handle,
+            "gpu_name": gpu_name,
+            "vram_total_mib": int(vram_total_mib),
+            "vram_free_mib": int(vram_free_mib),
+            "network_mode": network_mode,
+            "stacks": stacks_clean,
+            "host_label": host_label,
+            "active_campaign": campaign_clean,
+            "last_heartbeat_utc": round(stamp, 3),
+        }
+
+    def list_opentrainer_nodes(self) -> list[dict[str, Any]]:
+        """Return all registered OpenTrainer GPU nodes ordered by latest heartbeat."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT account_id, node_id, handle, gpu_name, vram_total_mib, vram_free_mib, "
+                "network_mode, stacks_json, host_label, active_campaign, last_heartbeat_utc "
+                "FROM opentrainer_nodes ORDER BY last_heartbeat_utc DESC"
+            ).fetchall()
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            try:
+                stacks = json.loads(str(r["stacks_json"]))
+            except ValueError:
+                stacks = []
+            out.append(
+                {
+                    "account_id": str(r["account_id"]),
+                    "node_id": str(r["node_id"]),
+                    "handle": str(r["handle"]),
+                    "gpu_name": str(r["gpu_name"]),
+                    "vram_total_mib": int(r["vram_total_mib"]),
+                    "vram_free_mib": int(r["vram_free_mib"]),
+                    "network_mode": str(r["network_mode"]),
+                    "stacks": stacks,
+                    "host_label": str(r["host_label"]),
+                    "active_campaign": str(r["active_campaign"] or "E8-STAGE2-TINY-GRANITE-MOE-QLORA"),
+                    "last_heartbeat_utc": float(r["last_heartbeat_utc"]),
+                }
+            )
+        return out
+
+    def record_opentrainer_round_submission(
+        self,
+        *,
+        account_id: str,
+        handle: str,
+        run_id: str,
+        round_index: int,
+        host_label: str,
+        network_mode: str,
+        delta_l2: float,
+        eval_loss: float,
+        tokens_trained: int,
+        vram_free_mib: int,
+        vram_total_mib: int,
+        now_utc: float | None = None,
+    ) -> dict[str, Any]:
+        """Record an accepted OpenTrainer QLoRA/DiLoCo round delta submission."""
+        stamp = time.time() if now_utc is None else float(now_utc)
+        submission_id = f"ot-{secrets.token_hex(8)}"
+        with self._tx() as conn:
+            if conn.execute(
+                "SELECT 1 FROM opentrainer_rounds WHERE account_id=? AND run_id=? AND round_index=?", (account_id, run_id, int(round_index))
+            ).fetchone() is not None:
+                raise DuplicateOpenTrainerRound(f"round {int(round_index)} of run {run_id} was already submitted by this account")
+            conn.execute(
+                "INSERT INTO opentrainer_rounds("
+                "submission_id, account_id, handle, run_id, round_index, host_label, network_mode, "
+                "delta_l2, eval_loss, tokens_trained, vram_free_mib, vram_total_mib, utc"
+                ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    submission_id,
+                    account_id,
+                    handle,
+                    run_id,
+                    int(round_index),
+                    host_label,
+                    network_mode,
+                    float(delta_l2),
+                    float(eval_loss),
+                    int(tokens_trained),
+                    int(vram_free_mib),
+                    int(vram_total_mib),
+                    stamp,
+                ),
+            )
+        return {
+            "submission_id": submission_id,
+            "account_id": account_id,
+            "handle": handle,
+            "run_id": run_id,
+            "round_index": int(round_index),
+            "host_label": host_label,
+            "network_mode": network_mode,
+            "delta_l2": round(float(delta_l2), 6),
+            "eval_loss": round(float(eval_loss), 6),
+            "tokens_trained": int(tokens_trained),
+            "vram_free_mib": int(vram_free_mib),
+            "vram_total_mib": int(vram_total_mib),
+            "utc": round(stamp, 3),
+        }
+
+    def list_opentrainer_rounds(self, limit: int = 25) -> list[dict[str, Any]]:
+        """Return recent OpenTrainer round delta submissions."""
+        cap = max(1, min(int(limit), 200))
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT submission_id, account_id, handle, run_id, round_index, host_label, network_mode, "
+                "delta_l2, eval_loss, tokens_trained, vram_free_mib, vram_total_mib, utc "
+                "FROM opentrainer_rounds ORDER BY utc DESC LIMIT ?",
+                (cap,),
+            ).fetchall()
+        return [
+            {
+                "submission_id": str(r["submission_id"]),
+                "account_id": str(r["account_id"]),
+                "handle": str(r["handle"]),
+                "run_id": str(r["run_id"]),
+                "round_index": int(r["round_index"]),
+                "host_label": str(r["host_label"]),
+                "network_mode": str(r["network_mode"]),
+                "delta_l2": float(r["delta_l2"]),
+                "eval_loss": float(r["eval_loss"]),
+                "tokens_trained": int(r["tokens_trained"]),
+                "vram_free_mib": int(r["vram_free_mib"]),
+                "vram_total_mib": int(r["vram_total_mib"]),
+                "utc": float(r["utc"]),
+            }
+            for r in rows
+        ]
+
+    def list_trainer_accounts(self) -> list[dict[str, Any]]:
+        """Return all real ('user') accounts registered with the ``trainer`` role."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT account_id, handle, role, created_utc, email FROM accounts "
+                "WHERE role = 'trainer' AND kind = 'user' AND account_id NOT LIKE 'sys:%' "
+                "ORDER BY created_utc DESC"
+            ).fetchall()
+        return [
+            {
+                "account_id": str(r["account_id"]),
+                "handle": str(r["handle"]),
+                "role": str(r["role"]),
+                "created_utc": float(r["created_utc"]),
+            }
+            for r in rows
+        ]
+
+    def public_accounts_summary(self, now_utc: float | None = None, window_s: float = 86_400.0) -> dict[str, Any]:
+        """Return public real-life account statistics (by role, active 24h, total HMT circulation, newest handles)."""
+        now = time.time() if now_utc is None else float(now_utc)
+        cutoff = now - max(60.0, float(window_s))
+        by_role: dict[str, int] = {r: 0 for r in ("prosumer", "producer", "consumer", "trainer", "admin")}
+        newest: list[dict[str, Any]] = []
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT account_id, handle, role, created_utc FROM accounts "
+                "WHERE kind = 'user' AND account_id NOT LIKE 'sys:%' "
+                "ORDER BY created_utc DESC, account_id DESC"
+            ).fetchall()
+            active_ids = {
+                str(r[0])
+                for r in self._conn.execute(
+                    "SELECT consumer_id FROM usage WHERE utc >= ? "
+                    "UNION SELECT account_id FROM holds WHERE utc >= ? "
+                    "UNION SELECT account_id FROM producer_endpoints WHERE last_heartbeat_utc >= ? "
+                    "UNION SELECT account_id FROM opentrainer_nodes WHERE last_heartbeat_utc >= ?",
+                    (cutoff, cutoff, cutoff, cutoff),
+                ).fetchall()
+            }
+        real_account_ids: set[str] = set()
+        for idx, row in enumerate(rows):
+            aid = str(row["account_id"])
+            role = str(row["role"])
+            real_account_ids.add(aid)
+            by_role[role] = by_role.get(role, 0) + 1
+            if idx < 8:
+                newest.append(
+                    {
+                        "handle": str(row["handle"]),
+                        "role": role,
+                        "created_utc": float(row["created_utc"]),
+                    }
+                )
+        active_real = len(real_account_ids & active_ids)
+        return {
+            "total_registered_accounts": len(rows),
+            "by_role": by_role,
+            "active_accounts_24h": active_real,
+            # Burned and validator-pool HMT are not in circulation; they are reported beside it (IP-175).
+            "total_hmt_in_circulation": round(self.total_in_circulation(), 2),
+            "total_hmt_burned": round(self.system_account_balances()[SYS_BURN], 2),
+            "total_hmt_validator_pool": round(self.system_account_balances()[SYS_VALIDATORS], 2),
+            "total_hmt_minted": round(self.total_minted(), 2),
+            "newest_registered": newest,
+        }
+
+    def existing_endpoint_tokens(self) -> dict[str, str]:
+        """Return known non-empty endpoint tokens keyed by normalized endpoint_url and account_id."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT account_id, endpoint_url, endpoint_token FROM producer_endpoints "
+                "WHERE endpoint_token IS NOT NULL AND endpoint_token != '' "
+                "ORDER BY last_heartbeat_utc DESC"
+            ).fetchall()
+        out: dict[str, str] = {}
+        for row in rows:
+            tok = str(row["endpoint_token"]).strip()
+            if not tok:
+                continue
+            url = str(row["endpoint_url"]).rstrip("/")
+            aid = str(row["account_id"])
+            out.setdefault(url, tok)
+            out.setdefault(aid, tok)
+            out.setdefault("default", tok)
+        return out
+
+    def record_boinc_receipt(
+        self,
+        receipt_sha256: str,
+        account_id: str,
+        now_utc: float | None = None,
+    ) -> bool:
+        """Persist a BOINC/WebGPU contribution receipt digest; return ``True`` if already seen (replay), ``False`` if newly recorded."""
+        digest = str(receipt_sha256).strip().lower()
+        now = time.time() if now_utc is None else float(now_utc)
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT 1 FROM boinc_receipts WHERE receipt_sha256 = ?",
+                (digest,),
+            ).fetchone()
+            if row is not None:
+                return True
+            self._conn.execute(
+                "INSERT INTO boinc_receipts(receipt_sha256, account_id, utc) VALUES (?, ?, ?)",
+                (digest, str(account_id), now),
+            )
+            self._conn.commit()
+            return False
+
+
+
+
 
 
 

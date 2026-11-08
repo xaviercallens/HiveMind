@@ -1,0 +1,31 @@
+{
+  "schema_version": "hivemind-experiment-E8-pilot-baseline/v1.0",
+  "experiment_id": "E8-pilot-baseline",
+  "config": {
+    "learners": 2,
+    "merge": "rda",
+    "rounds": 12,
+    "seed": 3,
+    "inner_steps": 400,
+    "admission": "all, single process, no network"
+  },
+  "loss_curve": [
+    3.7072176933288574,
+    3.6811087131500244,
+    3.38753604888916,
+    2.765350103378296,
+    2.396390676498413,
+    2.025841474533081,
+    1.8524384498596191,
+    1.883470058441162,
+    1.9173345565795898,
+    2.0563628673553467,
+    2.1903345584869385,
+    2.4769747257232666,
+    2.757014274597168
+  ],
+  "final_loss": 2.757014274597168,
+  "wall_seconds": 11.838441200001398,
+  "host": "XAVGAMSRV",
+  "receipt_sha256": "850356727cb6686034dbfd6114f317276080da5a128f6aba0d3b7e9638c223a5"
+}

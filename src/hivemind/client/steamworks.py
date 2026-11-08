@@ -14,6 +14,7 @@ from __future__ import annotations
 import ctypes
 import hashlib
 import hmac
+import math
 import os
 import platform
 import re
@@ -52,7 +53,11 @@ class SteamAuthSessionTicket:
 
     @property
     def is_non_limited(self) -> bool:
-        return self.account_spend_usd >= MIN_STEAM_SPEND_USD and not self.is_vac_banned
+        return (
+            math.isfinite(float(self.account_spend_usd))
+            and self.account_spend_usd >= MIN_STEAM_SPEND_USD
+            and not self.is_vac_banned
+        )
 
 
 class SteamRichPresenceState(str):
@@ -140,6 +145,7 @@ class SteamworksSDKBridge:
         # comes from hivemind.client.steam_identity. The old default secret was a constant published in this repository, so anyone could forge them.
         self.signing_secret = signing_secret if signing_secret is not None else _default_signing_secret()
         self.leaderboard: dict[str, SteamUserTelemetry] = {}
+        self._recorded_workunits: set[tuple[str, str]] = set()
         self.sybil_rejection_log: list[dict[str, str]] = []
         self.rich_presence_store: dict[str, SteamRichPresenceState] = {}
         self.rich_presence_log: dict[str, str] = {}
@@ -241,6 +247,10 @@ class SteamworksSDKBridge:
             gpu_name = gpu_model
         if hive_earned is not None:
             hive_balance = hive_earned
+        if not math.isfinite(float(hive_balance)) or float(hive_balance) < 0.0:
+            raise ValueError("hive_balance must be finite and >= 0")
+        if int(total_points) < 0:
+            raise ValueError("total_points must be >= 0")
 
         status_str = (
             f"Hack-Mining {active_mission} on {gpu_name} | "
@@ -317,6 +327,16 @@ class SteamworksSDKBridge:
         hive_mined: float = 0.0,
     ) -> dict[str, float | int]:
         """Update `ISteamUserStats::SetStat` progression counters for a Steam gamer."""
+        if not (math.isfinite(float(best_loss_drop_pct)) and math.isfinite(float(hive_mined))):
+            raise ValueError("best_loss_drop_pct and hive_mined must be finite")
+        if (
+            int(shards_mined) < 0
+            or int(bounties_cracked) < 0
+            or int(boss_raids_cleared) < 0
+            or float(best_loss_drop_pct) < 0.0
+            or float(hive_mined) < 0.0
+        ):
+            raise ValueError("Steam user stats must be non-negative")
         entry = self.leaderboard.setdefault(
             steam_id64,
             SteamUserTelemetry(steam_id64=steam_id64, persona_name=persona_name),
@@ -339,6 +359,10 @@ class SteamworksSDKBridge:
         is_vac_banned: bool = False,
     ) -> SteamAuthSessionTicket:
         """Generate an ISteamUser::GetAuthSessionTicket for BOINC Coordinator Sybil verification."""
+        if not steam_id64 or not str(steam_id64).strip():
+            raise ValueError("steam_id64 must be non-empty")
+        if not math.isfinite(float(account_spend_usd)) or float(account_spend_usd) < 0.0:
+            raise ValueError("account_spend_usd must be finite and >= 0")
         payload = f"{steam_id64}:{STEAMWORKS_APP_ID}:{account_spend_usd:.2f}:{int(is_vac_banned)}"
         sig = hmac.new(self.signing_secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
         return SteamAuthSessionTicket(
@@ -351,6 +375,15 @@ class SteamworksSDKBridge:
 
     def verify_sybil_resistance(self, ticket: SteamAuthSessionTicket) -> tuple[bool, str]:
         """Verify ticket authenticity and enforce Steam Non-Limited ($5+) Sybil requirement."""
+        if (
+            not ticket.steam_id64
+            or not str(ticket.steam_id64).strip()
+            or not math.isfinite(float(ticket.account_spend_usd))
+            or float(ticket.account_spend_usd) < 0.0
+        ):
+            reason = "Invalid or non-finite ISteamUser::GetAuthSessionTicket parameters."
+            self.sybil_rejection_log.append({"steam_id64": str(ticket.steam_id64), "reason": reason})
+            return False, reason
         payload = (
             f"{ticket.steam_id64}:{ticket.app_id}:"
             f"{ticket.account_spend_usd:.2f}:{int(ticket.is_vac_banned)}"
@@ -383,10 +416,22 @@ class SteamworksSDKBridge:
         credits_minted: float = 10.0,
     ) -> SteamUserTelemetry:
         """Update ISteamLeaderboards FLOPs, unlock Steam Achievements, and mint API credits."""
+        if not steam_id64 or not str(steam_id64).strip() or not wu_id or not str(wu_id).strip():
+            raise ValueError("steam_id64 and wu_id must be non-empty")
+        if (
+            not (math.isfinite(float(tflops_contributed)) and math.isfinite(float(credits_minted)))
+            or float(tflops_contributed) < 0.0
+            or float(credits_minted) < 0.0
+        ):
+            raise ValueError("tflops_contributed and credits_minted must be finite and >= 0")
         entry = self.leaderboard.setdefault(
             steam_id64,
             SteamUserTelemetry(steam_id64=steam_id64, persona_name=persona_name),
         )
+        dedupe_key = (str(steam_id64), str(wu_id))
+        if dedupe_key in self._recorded_workunits:
+            return entry
+        self._recorded_workunits.add(dedupe_key)
         entry.verified_tflops = round(entry.verified_tflops + tflops_contributed, 3)
         entry.workunits_completed += 1
         entry.api_credits_balance = round(entry.api_credits_balance + credits_minted, 2)
@@ -414,13 +459,22 @@ class SteamworksSDKBridge:
         achievements: list[str],
     ) -> str:
         """Sign and upload a gamer's Hack-Miner score to ISteamLeaderboards (KeepBest)."""
+        if not steam_id64 or not str(steam_id64).strip():
+            raise ValueError("steam_id64 must be non-empty")
+        if (
+            not math.isfinite(float(hive_balance))
+            or float(hive_balance) < 0.0
+            or int(total_points) < 0
+            or int(swarm_contribution_points) < 0
+        ):
+            raise ValueError("leaderboard score inputs must be finite and >= 0")
         entry = self.leaderboard.setdefault(
             steam_id64,
             SteamUserTelemetry(steam_id64=steam_id64, persona_name=persona_name),
         )
-        entry.hack_miner_total_pts = max(entry.hack_miner_total_pts, total_points)
-        entry.swarm_contribution_pts = max(entry.swarm_contribution_pts, swarm_contribution_points)
-        entry.api_credits_balance = round(hive_balance, 4)
+        entry.hack_miner_total_pts = max(entry.hack_miner_total_pts, int(total_points))
+        entry.swarm_contribution_pts = max(entry.swarm_contribution_pts, int(swarm_contribution_points))
+        entry.api_credits_balance = round(max(float(entry.api_credits_balance), float(hive_balance)), 4)
         for ach in achievements:
             if ach not in entry.unlocked_achievements:
                 entry.unlocked_achievements.append(ach)

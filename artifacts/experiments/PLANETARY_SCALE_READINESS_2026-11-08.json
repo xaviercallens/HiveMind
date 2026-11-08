@@ -1,0 +1,273 @@
+{
+  "deliverable_id": "PS-11-D1",
+  "generated_at": "2026-11-08T01:10:00Z",
+  "streams_verified_count": 11,
+  "all_streams_verified": true,
+  "streams": {
+    "PS-01": {
+      "status": "VERIFIED",
+      "artifacts": [
+        {
+          "path": "artifacts/experiments/E24_chain_regression_prereg.json",
+          "sha256": "13f1d10c79688a631b3a3a0d8d78e6b5f506c2984e246514ecd14d7eef12e52e"
+        },
+        {
+          "path": "artifacts/experiments/E24_chain_regression_report.json",
+          "sha256": "ae1211df08322d6e43cdff0bb5ea9e42bd598dc58a9486283bc6b7c684d338c1"
+        },
+        {
+          "path": "artifacts/experiments/CHAIN_STATUS_2026-11-08.json",
+          "sha256": "bd68a18ddcbbe6470b54fbd0181196550fb35ef8b8391c3f8fc2233c076868eb"
+        },
+        {
+          "path": "artifacts/experiments/PROV86_CHAIN_PROVENANCE_LOCK_2026-11-08.json",
+          "sha256": "5198377434c6cd6760ff7990fa3e589b2662da781b9a8b01accb5a22d539e6c0"
+        }
+      ]
+    },
+    "PS-02": {
+      "status": "VERIFIED",
+      "artifacts": [
+        {
+          "path": "tests/test_vram_floor_guard.py",
+          "sha256": "597eaa0478b2f7fef895de771d3b3c841c4c69b2cdabfcf2d4c57f76eda97380"
+        },
+        {
+          "path": "lean4/HiveMindSpec.lean",
+          "sha256": "e03b3916f86c27244af7271968dd9bf93b37af5ed68a0c43d80f68b812641abf"
+        },
+        {
+          "path": "tests/test_no_lateral_movement.py",
+          "sha256": "6aea37b50e14da5f784e20b01ff2c88f3b3806a9cacf4feed947836d64fca88c"
+        },
+        {
+          "path": "artifacts/experiments/NODE_EGRESS_2026-11-07.json",
+          "sha256": "c7c6f7af10b10875efaeaf778becbfc76d0d21bd268066b469822388b1d790eb"
+        }
+      ]
+    },
+    "PS-03": {
+      "status": "VERIFIED",
+      "artifacts": [
+        {
+          "path": "artifacts/experiments/ACCOUNTS_2026-11-07.json",
+          "sha256": "bce788058f1df53ef43c7e6046e1ac4c7f44a8a44b4bcfc9fbd6e0d9ba1607d5"
+        },
+        {
+          "path": "tests/test_router_catalog.py",
+          "sha256": "5da1842e53c294027626c6e7bc6fe391754289e97c62ecec3b12619f4b1413c3"
+        },
+        {
+          "path": "tests/test_public_claims_have_receipts.py",
+          "sha256": "14a09e4e6d7a481620f4df00dfb38809aae48e16b18cb690a320e632507d6a65"
+        },
+        {
+          "path": "README.md",
+          "sha256": "4aca12c7e5cac61008d7ef296df37a6a89356250c65b5122304eced1ca608026"
+        }
+      ]
+    },
+    "PS-04": {
+      "status": "VERIFIED",
+      "artifacts": [
+        {
+          "path": "artifacts/experiments/TRAINER_INSTALL_2026-11-07.json",
+          "sha256": "500c857ac146927a0c9e8d9763914731539ede524865fb5e20c9432a6a156f6a"
+        },
+        {
+          "path": "artifacts/experiments/TRAINER_HARDWARE_2026-11-07.json",
+          "sha256": "08cbfb8d7253d23d98af5723505c4ff21d138c4a8fbe679685f4f045a7545b2e"
+        },
+        {
+          "path": "artifacts/experiments/CONSUMER_GPU_ECONOMICS_2026-11-08.json",
+          "sha256": "346b0884b7d937cb706cee604ed2f96c18bda27cd9c6f9e1373e1080cf3bbac2"
+        }
+      ]
+    },
+    "PS-05": {
+      "status": "VERIFIED",
+      "artifacts": [
+        {
+          "path": "src/hivemind/verification/canary_probe.py",
+          "sha256": "b891359fff85e8b18caa32668793b1adb6214ffff3c78c79d648f97aecac5ed8"
+        },
+        {
+          "path": "tests/test_canary_probe.py",
+          "sha256": "b6217a8a6295d2c22693de23e8fd746e1ec1196990afd83e4d31244bec6ce71d"
+        },
+        {
+          "path": "artifacts/experiments/CANARY_PROBE_2026-11-07.json",
+          "sha256": "15eb86e30ad2223cb0bf491d7679b093550c2dcc9a32c4ad1be04a631147a529"
+        },
+        {
+          "path": "scripts/run_experiment_E21.py",
+          "sha256": "d64827fd6706852af294b4336ec54e73f605d01eb2b08857f04288e215fc55da"
+        },
+        {
+          "path": "artifacts/experiments/E21_verification_cost_report.json",
+          "sha256": "3da06226eec42311ce1aba4e115b5fc6adc02d7516d0874642b7771c6d143885"
+        }
+      ]
+    },
+    "PS-06": {
+      "status": "VERIFIED",
+      "artifacts": [
+        {
+          "path": "artifacts/experiments/E26_residential_compression_prereg.json",
+          "sha256": "f9ff5f4b25cef3f118e734c66c7f0b3390d4f7a24f24ee17401b88651427ce11"
+        },
+        {
+          "path": "artifacts/experiments/E26_residential_compression_report.json",
+          "sha256": "dfb6e649017f8b9edb41c2515bf58adb42241ac930d9182d410b42ec1efbfd59"
+        }
+      ]
+    },
+    "PS-07": {
+      "status": "VERIFIED",
+      "artifacts": [
+        {
+          "path": "src/hivemind/swarm/identity_bridge.py",
+          "sha256": "a8b6fa1d1a5c6bd0efef769613577252f35de4cbce9be721b5d506a285902d18"
+        },
+        {
+          "path": "artifacts/experiments/E22_discovery_report.json",
+          "sha256": "358eb0e5b9f1c3c91afd671099339abec9a71b74ccbb5a7f92e1f1c4fece63bf"
+        },
+        {
+          "path": "artifacts/experiments/PETALS_LIVENESS_2026-11-07.json",
+          "sha256": "a630c771f45cbc8b435559437da42dd24f5d02f1f0feb1e855b3accb7c539e94"
+        }
+      ]
+    },
+    "PS-08": {
+      "status": "VERIFIED",
+      "artifacts": [
+        {
+          "path": "src/hivemind/boinc/mesh_events.py",
+          "sha256": "573627a2c91c78fac3fba0bf065992fa9ad7602a357c11ec2b00eed69982bec4"
+        },
+        {
+          "path": "artifacts/experiments/CREDIT_RECONCILIATION_2026-11-07.json",
+          "sha256": "c69ba27dae3ab09ad8268151f8aad1e157f6f44423414fbf4bcb90d8f124e9b5"
+        },
+        {
+          "path": "artifacts/experiments/E23_amcp_mobility_report.json",
+          "sha256": "f33fe233094c8d0d51f1759adbfd22355d2afdbbf414857c43fbb4a9767528a6"
+        }
+      ]
+    },
+    "PS-09": {
+      "status": "VERIFIED",
+      "artifacts": [
+        {
+          "path": "artifacts/experiments/E27_testbed_1000_prereg.json",
+          "sha256": "724f0102e461dc2d0dc79a66bf8c5fd8c9c542f579211a88d50a44193388dec1"
+        },
+        {
+          "path": "artifacts/experiments/E27_testbed_1000_report.json",
+          "sha256": "3bfdb9e2576257eebef501135f85a72294f735ffaae7aab60be4a903df27e9b0"
+        }
+      ]
+    },
+    "PS-10": {
+      "status": "VERIFIED",
+      "artifacts": [
+        {
+          "path": "paper/ZENODO_DEPOSIT_RECEIPT.json",
+          "sha256": "777bcd3885b4d21740f931ae3fedd44b83bb49d69d69c72d93f5b2eff88a3b84"
+        },
+        {
+          "path": "artifacts/experiments/MONTHLY_COST_RECEIPT_2026-11-08.json",
+          "sha256": "56ebb60d60dda8feca42048603a28e65f828ee2cfe5f1fbc8a63ea034499b428"
+        },
+        {
+          "path": "artifacts/experiments/BASE_WEIGHTS_MIRROR_2026-11-07.json",
+          "sha256": "782512dd8275d6895130b29a2f30c68dad34576bd281527d1ddb31bed91b394e"
+        },
+        {
+          "path": "paper/review/external_review_v4.3.0_planetary_scale_2026-11-07.md",
+          "sha256": "18a955cf1e8e1c1c1f0c843459195e6d7fcb93adaad76384342edf18997aa417"
+        },
+        {
+          "path": "paper/review/response_to_external_review_v4.3.0_2026-11-08.md",
+          "sha256": "423edded7ae56a77e6c2a710a6ed8baf00d6d042d02d27979dbd0a62a02ff77c"
+        }
+      ]
+    },
+    "PS-11": {
+      "status": "VERIFIED",
+      "parked_candidates_count": 3,
+      "parked_candidates": [
+        {
+          "parked_id": "PARK_CHUNK_LEVEL_ROUTING",
+          "title": "H-Net Dynamic Byte-Chunk Routing (HN1)",
+          "roadmap_ids": "HM-S10-12, HM-S33-09",
+          "paper_section": "sec:hn1_hnet",
+          "receipt_path": "artifacts/experiments/HN1_boundary_signal_report.json",
+          "measured_reason": "H-Net boundary bytes were 1.54x larger than a standard BPE split (failing the >= 2.0x reduction threshold) and both validity controls of HN1 failed.",
+          "reopen_condition": "Reopen only if a dynamic chunker achieves >= 2.0x fewer boundary bytes than BPE across the 6 HiveMind evaluation domains or a distilled chunker fits inside a 16 GB consumer node budget.",
+          "receipt_exists": true,
+          "receipt_sha256": "2b3227b58201ea286882dab8654aa91e54b791ae9cf3a36757980294493e286f"
+        },
+        {
+          "parked_id": "PARK_UNSTRATIFIED_SINGLE_DOMAIN_DILOCO",
+          "title": "Unstratified Single-Domain 80-Step Inner Loop without Outer Ratchet",
+          "roadmap_ids": "HM-S33-06, HM-S33-23",
+          "paper_section": "sec:decoupled",
+          "receipt_path": "artifacts/experiments/E24_chain_regression_report.json",
+          "measured_reason": "E24 2x2 factorial attribution proved that unstratified single-domain 80-step inner loops caused 89.63% of domain evaluations to degrade (+0.0412 nats median drift) due to cross-domain forgetting.",
+          "reopen_condition": "Reopen single-domain workunit routing only with orthogonal subspace projection (LoRA-FA / O-LoRA) demonstrating median_change_nats <= 0.0 and share_worse <= 0.30 over >= 20 consecutive rounds.",
+          "receipt_exists": true,
+          "receipt_sha256": "ae1211df08322d6e43cdff0bb5ea9e42bd598dc58a9486283bc6b7c684d338c1"
+        },
+        {
+          "parked_id": "PARK_FULL_CIRCUIT_ZKSNARK_TRAINING_PROOFS",
+          "title": "Full-Circuit zk-SNARK Proofs for Every QLoRA Backward Pass",
+          "roadmap_ids": "HM-S33-24, HM-S33-25",
+          "paper_section": "sec:limitations",
+          "receipt_path": "artifacts/experiments/E21_verification_cost_report.json",
+          "measured_reason": "Full-circuit zk-SNARK proving overhead exceeds 100x training FLOPs on 8 GB consumer GPUs, whereas deterministic canary probes + stratified p=0.10 spot replay achieve 100% fault detection at 0.0977 verification-to-training FLOP ratio.",
+          "reopen_condition": "Reopen only when folding-scheme / lookup-argument prover overhead for 4-bit NF4 QLoRA falls below 0.25x training FLOPs and <= 6,500 MiB VRAM on an 8 GB Turing/Ampere GPU.",
+          "receipt_exists": true,
+          "receipt_sha256": "3da06226eec42311ce1aba4e115b5fc6adc02d7516d0874642b7771c6d143885"
+        }
+      ]
+    }
+  },
+  "parked_candidates": [
+    {
+      "parked_id": "PARK_CHUNK_LEVEL_ROUTING",
+      "title": "H-Net Dynamic Byte-Chunk Routing (HN1)",
+      "roadmap_ids": "HM-S10-12, HM-S33-09",
+      "paper_section": "sec:hn1_hnet",
+      "receipt_path": "artifacts/experiments/HN1_boundary_signal_report.json",
+      "measured_reason": "H-Net boundary bytes were 1.54x larger than a standard BPE split (failing the >= 2.0x reduction threshold) and both validity controls of HN1 failed.",
+      "reopen_condition": "Reopen only if a dynamic chunker achieves >= 2.0x fewer boundary bytes than BPE across the 6 HiveMind evaluation domains or a distilled chunker fits inside a 16 GB consumer node budget.",
+      "receipt_exists": true,
+      "receipt_sha256": "2b3227b58201ea286882dab8654aa91e54b791ae9cf3a36757980294493e286f"
+    },
+    {
+      "parked_id": "PARK_UNSTRATIFIED_SINGLE_DOMAIN_DILOCO",
+      "title": "Unstratified Single-Domain 80-Step Inner Loop without Outer Ratchet",
+      "roadmap_ids": "HM-S33-06, HM-S33-23",
+      "paper_section": "sec:decoupled",
+      "receipt_path": "artifacts/experiments/E24_chain_regression_report.json",
+      "measured_reason": "E24 2x2 factorial attribution proved that unstratified single-domain 80-step inner loops caused 89.63% of domain evaluations to degrade (+0.0412 nats median drift) due to cross-domain forgetting.",
+      "reopen_condition": "Reopen single-domain workunit routing only with orthogonal subspace projection (LoRA-FA / O-LoRA) demonstrating median_change_nats <= 0.0 and share_worse <= 0.30 over >= 20 consecutive rounds.",
+      "receipt_exists": true,
+      "receipt_sha256": "ae1211df08322d6e43cdff0bb5ea9e42bd598dc58a9486283bc6b7c684d338c1"
+    },
+    {
+      "parked_id": "PARK_FULL_CIRCUIT_ZKSNARK_TRAINING_PROOFS",
+      "title": "Full-Circuit zk-SNARK Proofs for Every QLoRA Backward Pass",
+      "roadmap_ids": "HM-S33-24, HM-S33-25",
+      "paper_section": "sec:limitations",
+      "receipt_path": "artifacts/experiments/E21_verification_cost_report.json",
+      "measured_reason": "Full-circuit zk-SNARK proving overhead exceeds 100x training FLOPs on 8 GB consumer GPUs, whereas deterministic canary probes + stratified p=0.10 spot replay achieve 100% fault detection at 0.0977 verification-to-training FLOP ratio.",
+      "reopen_condition": "Reopen only when folding-scheme / lookup-argument prover overhead for 4-bit NF4 QLoRA falls below 0.25x training FLOPs and <= 6,500 MiB VRAM on an 8 GB Turing/Ampere GPU.",
+      "receipt_exists": true,
+      "receipt_sha256": "3da06226eec42311ce1aba4e115b5fc6adc02d7516d0874642b7771c6d143885"
+    }
+  ],
+  "receipt_sha256": "1c6997e1f5f07b0b282d62429b7be88eb047acb0f94dca099ac8d08e8f668556"
+}

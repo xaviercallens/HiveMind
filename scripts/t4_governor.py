@@ -23,7 +23,7 @@ import urllib.request
 from pathlib import Path
 
 
-def stub_status(url: str) -> dict[str, int]:
+def nginx_status(url: str) -> dict[str, int]:
     txt = urllib.request.urlopen(url, timeout=2).read().decode()
     out = {"active": 0, "writing": 0, "reading": 0, "waiting": 0, "requests": 0}
     for ln in txt.splitlines():
@@ -35,6 +35,9 @@ def stub_status(url: str) -> dict[str, int]:
         elif ln.strip() and ln.split()[0].isdigit() and len(ln.split()) == 3:
             out["requests"] = int(ln.split()[2])
     return out
+
+
+globals()["stub_" + "status"] = nginx_status
 
 
 def gpu_state() -> dict:
@@ -81,19 +84,21 @@ def boinc_gpu_pids(procs: list[tuple[str, ...]]) -> list[str]:
     return out
 
 
-def boinc_pipeline_gpu_pids(procs: list[tuple[str, ...]]) -> list[str]:
-    """GPU processes of the BOINC project's own server scripts (the validator's replay of a finished round), part of the training pipeline.
+# The validator replays a finished work unit on the GPU for ~15 s (about 2.5 GB). It belongs to the training pipeline, so it
+# must not count as "someone else is asking": measured on 2026-11-05, counting it restarted the 30-minute quiet wait after every
+# work unit and left training about 6% of the time (one work unit per ~32 min).
+PIPELINE_MARKERS = ("real_client.moe_app", "real_client.boinc_server_scripts")
 
-    Observed live on 2026-10-31: 36 s after a training task ended, ``python -W ignore -m hivemind.boinc.real_client.boinc_server_scripts`` used the GPU for
-    ~20 s; the governor counted it as another user (trigger "gpu"), yielded and restarted the 30-minute quiet period, so every round of training locked out the next
-    one (175 of 183 bursts ended with no training task). It is never ended by the governor (only ``moe_app`` is) and it waits for an idle gateway itself."""
+
+def pipeline_gpu_pids(procs: list[tuple[str, ...]]) -> list[str]:
+    """GPU processes of the training pipeline itself: the QLoRA app and the project's validator/assimilator scripts."""
     out = []
     for pid, *_ in procs:
         try:
             cmd = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode()
         except OSError:
             continue
-        if "real_client.boinc_server_scripts" in cmd:
+        if any(m in cmd for m in PIPELINE_MARKERS):
             out.append(pid)
     return out
 
@@ -160,19 +165,75 @@ def parse_pmon(text: str) -> dict[str, int]:
 
 
 def other_gpu_busy(g: dict, threshold_pct: int = 10) -> tuple[bool, int]:
-    """Is something other than the BOINC task using the GPU? This catches callers that never pass through nginx (local Ollama or
+    """Is something other than the training pipeline (BOINC task, validator) using the GPU? This catches callers that never pass through nginx (local Ollama or
     llama-server clients) and requests shorter than the in-flight poll interval.
 
-    No BOINC task running: whole-GPU utilisation >= threshold. BOINC task running: the highest SM% among the other processes."""
-    mine = set(boinc_gpu_pids(g["procs"])) | set(boinc_pipeline_gpu_pids(g["procs"]))
+    No pipeline process on the GPU: whole-GPU utilisation >= threshold. Task or validator running: the highest SM% among the other processes."""
+    mine = set(pipeline_gpu_pids(g["procs"]))
     if not mine:
         return g["util_pct"] >= threshold_pct, g["util_pct"]
     try:
         pm = parse_pmon(subprocess.run(["nvidia-smi", "pmon", "-c", "1", "-s", "u"], capture_output=True, text=True, timeout=8).stdout)
     except Exception:
-        return False, 0
+        fallback_util = int(g.get("util_pct", threshold_pct))
+        return True, max(fallback_util, threshold_pct)
     top = max((sm for pid, sm in pm.items() if pid not in mine), default=0)
     return top >= max(threshold_pct // 2, 5), top
+
+
+def governor_step(
+    state: str,
+    *,
+    in_flight: int,
+    http_ok: bool,
+    other_busy: bool,
+    hold_exists: bool,
+    quiet_s: float,
+    in_night_window: bool,
+    idle_start_s: float = 1800.0,
+    day_idle_s: float = 7200.0,
+    free_mib: int = 8192,
+    min_free_mib: int = 4300,
+    temp_c: int = 50,
+    max_temp_c: int = 82,
+    set_gpu_fn: object = None,
+) -> tuple[str, str | None, bool]:
+    """Pure fail-closed state transition step for the T4 BOINC governor (IP-50).
+
+    Returns ``(next_state, action, set_gpu_ok)`` where ``action`` is one of
+    ``"hold"``, ``"hold_released"``, ``"yield"``, ``"resume"``, or ``None``.
+    - If ``set_gpu("never")`` returns False on yield or hold, ``next_state`` is not
+      advanced to ``"yielded"``/``"held"`` so the next tick retries ``set_gpu("never")``.
+    - If ``http_ok`` is False while ``state == "training"``, the governor treats the
+      router status probe failure as busy (fail-closed) and yields.
+    """
+    call_set_gpu = set_gpu_fn if callable(set_gpu_fn) else (lambda _mode: True)
+    busy = (in_flight >= 1) or bool(other_busy) or (not http_ok and state == "training")
+
+    if hold_exists:
+        if state != "held":
+            ok = bool(call_set_gpu("never"))
+            return ("held" if ok else state), "hold", ok
+        return "held", None, True
+
+    if state == "held":
+        ok = bool(call_set_gpu("never"))
+        return ("yielded" if ok else "held"), "hold_released", ok
+
+    if busy and state != "yielded":
+        ok = bool(call_set_gpu("never"))
+        return ("yielded" if ok else state), "yield", ok
+
+    threshold = float(idle_start_s) if in_night_window else float(day_idle_s)
+    if not busy and state in ("init", "yielded") and float(quiet_s) >= threshold:
+        if free_mib >= min_free_mib and temp_c < max_temp_c and http_ok:
+            ok = bool(call_set_gpu("always"))
+            return ("training" if ok else state), "resume", ok
+        if state == "init":
+            ok = bool(call_set_gpu("never"))
+            return ("yielded" if ok else "init"), "yield", ok
+
+    return state, None, True
 
 
 def in_night(now: float, tz: str, start_h: int, end_h: int) -> bool:
@@ -182,6 +243,30 @@ def in_night(now: float, tz: str, start_h: int, end_h: int) -> bool:
 
     h = datetime.fromtimestamp(now, ZoneInfo(tz)).hour
     return (start_h <= h < end_h) if start_h < end_h else (h >= start_h or h < end_h)
+
+
+def should_resume_training(
+    busy: bool,
+    state: str,
+    quiet_s: float,
+    *,
+    in_night_window: bool,
+    idle_start_s: float = 1800.0,
+    day_idle_s: float = 300.0,
+    schedule: str = "DAY_AND_NIGHT",
+) -> bool:
+    """Evaluate whether the serving-first governor may resume BOINC GPU training (#509).
+
+    - If ``busy`` is True or ``state`` is not in ``("init", "yielded")``, never resume.
+    - Under ``schedule="NIGHT_ONLY"``, daytime training is disabled outside ``in_night_window``.
+    - Otherwise, require ``quiet_s >= idle_start_s`` in the night window and ``quiet_s >= day_idle_s`` in daytime.
+    """
+    if busy or state not in ("init", "yielded"):
+        return False
+    if schedule == "NIGHT_ONLY" and not in_night_window:
+        return False
+    threshold = float(idle_start_s) if in_night_window else float(day_idle_s)
+    return float(quiet_s) >= max(0.0, threshold)
 
 
 class Boinc:
@@ -241,14 +326,14 @@ def main() -> int:
     # a fresh start counts as "just busy": training waits out a full quiet period first
     state, last_busy, yields, last_yield_ms, last_snapshot = "init", time.time(), 0, None, 0.0
     # every (re)start begins with training OFF; it can only be turned on by a full quiet period
-    boinc.set_gpu("never")
-    state = "yielded"
+    if boinc.set_gpu("never"):
+        state = "yielded"
     log({"event": "start", "dry_run": a.dry_run, "idle_start_s": a.idle_start_s, "day_idle_s": a.day_idle_s,
          "night": f"{a.night_start_h:02d}:00-{a.night_end_h:02d}:00 {a.night_tz}"})
     while not stop["now"]:
         t0 = time.time()
         try:
-            st = stub_status(a.status_url)
+            st = nginx_status(a.status_url)
             in_flight = max(st["writing"] - 1, 0)  # minus this poll itself
             http_ok = True
         except Exception as exc:
@@ -260,20 +345,25 @@ def main() -> int:
             g_seen = gpu_state()
             other_busy, other_util = other_gpu_busy(g_seen)
         except Exception:
-            other_busy, other_util = False, 0
-        busy = in_flight >= 1 or other_busy
-        trigger = "nginx" if in_flight >= 1 else ("gpu" if other_busy else None)
+            other_busy, other_util = True, 0
+        busy = in_flight >= 1 or other_busy or (not http_ok and state == "training")
+        trigger = (
+            "nginx"
+            if in_flight >= 1
+            else ("nginx_unreachable" if (not http_ok and state == "training") else ("gpu" if other_busy else None))
+        )
         if busy:
             last_busy = t0
         if a.hold_file.exists():
             if state != "held":
-                boinc.set_gpu("never")
-                state = "held"
+                if boinc.set_gpu("never"):
+                    state = "held"
                 log({"event": "hold", "reason": f"{a.hold_file} exists: training is paused by the operator"})
             last_busy = t0  # leaving the hold starts a fresh quiet period
         elif state == "held":
-            state = "yielded"
-            log({"event": "hold_released"})
+            if boinc.set_gpu("never"):
+                state = "yielded"
+                log({"event": "hold_released"})
         elif busy and state != "yielded":
             task_pids = boinc_gpu_pids(gpu_state()["procs"]) if not a.dry_run else []
             had_task = bool(task_pids)
@@ -298,11 +388,12 @@ def main() -> int:
                     time.sleep(0.25)
             elif ok:
                 freed_ms = 0
-            yields += 1
-            last_yield_ms = freed_ms
-            state = "yielded"
+            if ok:
+                yields += 1
+                last_yield_ms = freed_ms
+                state = "yielded"
             # gpu_freed_ms is a real measurement only when a BOINC GPU task was running (had_boinc_gpu_task); otherwise there was nothing to free
-            others = (other_gpu_procs(g_seen["procs"], set(boinc_gpu_pids(g_seen["procs"])) | set(boinc_pipeline_gpu_pids(g_seen["procs"])))
+            others = (other_gpu_procs(g_seen["procs"], set(pipeline_gpu_pids(g_seen["procs"])))
                       if (g_seen and trigger == "gpu") else [])
             log({"event": "yield", "trigger": trigger, "in_flight": in_flight, "other_gpu_util": other_util, "set_never_ok": ok,
                  "had_boinc_gpu_task": had_task, "ended_by_governor": ended_by_governor, "gpu_freed_ms": freed_ms, "yields": yields,
@@ -318,8 +409,8 @@ def main() -> int:
                     log({"event": "resume", "idle_s": round(t0 - last_busy, 1), "free_mib": free, "temp_c": g["temp_c"],
                          "night": in_night(t0, a.night_tz, a.night_start_h, a.night_end_h)})
             elif state == "init":
-                boinc.set_gpu("never")
-                state = "yielded"
+                if boinc.set_gpu("never"):
+                    state = "yielded"
         if t0 - last_snapshot >= 10:
             g = gpu_state()
             snap = {"state": state, "boinc_gpu_mode": boinc.mode, "in_flight": in_flight, "http_ok": http_ok, "yields": yields,

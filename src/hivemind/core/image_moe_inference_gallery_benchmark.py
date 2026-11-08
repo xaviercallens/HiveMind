@@ -794,6 +794,7 @@ def run_intensive_image_moe_inference_stress_campaign(
     total_burst_reqs = sum(n["requests_executed"] for n in node_stress_reports)
     payload: Dict[str, Any] = {
         "campaign_id": "HM-S29-IMAGE-MOE-INFERENCE-GALLERY-BENCHMARK",
+        "simulated": True,
         "title": "Intensive 7-Division Image-MoE Live Inference Benchmark & 12-Scenario Public Gallery",
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "total_gallery_scenarios": len(scenarios),

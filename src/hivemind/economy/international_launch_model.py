@@ -25,14 +25,23 @@ This module implements the 4-Mechanism Self-Balancing International Launch Model
 
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
+
+
+COBBLESTONES_PER_GFLOPS_DAY: float = 200.0  # BOINC definition: one cobblestone is 1/200 day of one GFLOPS
 
 
 @dataclass(frozen=True)
 class SwarmLiveBaseline:
-    """Empirical live situation measured on hivemind-openrouter and hivemind-at-home-ruche (2026-10-31)."""
+    """Hard-coded snapshot of the live situation as recorded on 2026-10-31. These defaults are constants, not a live read.
+
+    The router's owner endpoint reported 58 real accounts on 2026-11-01, so a payload built from the defaults must say
+    it is an assumed baseline (see ``baseline_source``); a caller that reads the live router passes its own values.
+    """
 
     total_accounts: int = 59
     producers: int = 10
@@ -103,6 +112,10 @@ class SocialFunnelProjection:
     is_self_sustaining: bool
 
 
+MAX_FORECAST_NODES = 10_000  # upper bound for any node count reachable from a public request
+MAX_FORECAST_VISITORS = 1_000_000
+
+
 def compute_erlang_c_metrics(
     active_producers_c: int,
     aggregate_tok_per_s: float,
@@ -112,10 +125,32 @@ def compute_erlang_c_metrics(
     safe_rho_ceiling: float = 0.78,
 ) -> ErlangCQueueDiagnostic:
     """Compute exact M/M/c Erlang-C waiting probability and latency under consumer demand."""
+    if isinstance(active_producers_c, bool) or not isinstance(active_producers_c, int):
+        raise ValueError("active_producers_c must be an integer")
     if active_producers_c < 1 or aggregate_tok_per_s <= 0.0 or mean_tokens_per_req <= 0.0:
         raise ValueError("active_producers_c >= 1, aggregate_tok_per_s > 0, and mean_tokens_per_req > 0 required")
     if arrival_rate_req_per_s < 0.0:
         raise ValueError("arrival_rate_req_per_s must be >= 0")
+    if not all(
+        math.isfinite(x)
+        for x in (
+            aggregate_tok_per_s,
+            arrival_rate_req_per_s,
+            mean_tokens_per_req,
+            base_network_overhead_s,
+            safe_rho_ceiling,
+        )
+    ):
+        raise ValueError(
+            "aggregate_tok_per_s, arrival_rate_req_per_s, mean_tokens_per_req, base_network_overhead_s, and safe_rho_ceiling must be finite"
+        )
+    if base_network_overhead_s < 0.0:
+        raise ValueError("base_network_overhead_s must be >= 0")
+    if not (0.0 < safe_rho_ceiling < 1.0):
+        raise ValueError("safe_rho_ceiling must be in (0, 1)")
+    if active_producers_c > MAX_FORECAST_NODES:
+        # the Erlang-C sum is O(c): an unbounded c from a public query string held a worker for minutes to hours
+        raise ValueError(f"active_producers_c must be <= {MAX_FORECAST_NODES}")
 
     c = int(active_producers_c)
     mu_tot = aggregate_tok_per_s / mean_tokens_per_req
@@ -141,22 +176,20 @@ def compute_erlang_c_metrics(
         )
 
     a = c * rho  # offered load in Erlangs
-    # Compute sum_{k=0}^{c-1} a^k / k! using log-space or iterative terms for numerical stability
-    sum_terms = 1.0
-    term = 1.0
-    for k in range(1, c):
-        term *= a / k
-        sum_terms += term
-    last_term = (term * (a / c)) / (1.0 - rho)
-    prob_queue = last_term / (sum_terms + last_term) if a > 0.0 else 0.0
+    # Erlang-B by the stable recursion B(k) = a*B(k-1) / (k + a*B(k-1)), then Erlang-C = B / (1 - rho*(1 - B)).
+    # The direct sum of a^k/k! overflows a float near c = 925-1450 and returned NaN with is_stable True.
+    blocking = 1.0
+    for k in range(1, c + 1):
+        blocking = a * blocking / (k + a * blocking)
+    prob_queue = blocking / (1.0 - rho * (1.0 - blocking)) if a > 0.0 else 0.0
 
     expected_wait_s = prob_queue / (mu_tot - arrival_rate_req_per_s)
-    service_time_s = 1.0 / mu_single if c == 1 else (1.0 / mu_tot) * min(c, 2.2)
+    service_time_s = 1.0 / mu_single
     # 95th percentile of waiting time in M/M/c queue: W_q(0.95) = max(0, -ln(0.05 / P_Q) / (mu_tot - lambda))
     if prob_queue > 0.05:
         p95_wait_s = -math.log(0.05 / prob_queue) / (mu_tot - arrival_rate_req_per_s)
     else:
-        p95_wait_s = expected_wait_s * 2.5
+        p95_wait_s = 0.0
 
     p95_total_s = base_network_overhead_s + service_time_s + p95_wait_s
     return ErlangCQueueDiagnostic(
@@ -182,6 +215,24 @@ def compute_progressive_starter_grant(
     base_daily_drip_hmt: float = 5.0,
 ) -> ProgressiveGrantQuote:
     """Compute the Supply-Pegged Progressive Starter Grant (`15 HMT` instant + `85 HMT` Prosumer GPU unlock)."""
+    for name, val in (
+        ("epoch_supply_1k_tokens", epoch_supply_1k_tokens),
+        ("epoch_consumer_demand_1k_tokens", epoch_consumer_demand_1k_tokens),
+        ("legacy_lump_sum_hmt", legacy_lump_sum_hmt),
+        ("instant_grant_hmt", instant_grant_hmt),
+        ("base_daily_drip_hmt", base_daily_drip_hmt),
+    ):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+            raise ValueError(f"{name} must be finite, got {val!r}")
+    if (
+        epoch_supply_1k_tokens < 0.0
+        or epoch_consumer_demand_1k_tokens < 0.0
+        or instant_grant_hmt < 0.0
+        or base_daily_drip_hmt < 0.0
+    ):
+        raise ValueError("starter grant parameters must be >= 0")
+    if legacy_lump_sum_hmt <= 0.0 or instant_grant_hmt > legacy_lump_sum_hmt:
+        raise ValueError("legacy_lump_sum_hmt must be > 0 and >= instant_grant_hmt")
     ratio = epoch_supply_1k_tokens / max(epoch_consumer_demand_1k_tokens, 1e-6)
     clamped_ratio = min(1.0, max(0.0, ratio))
     drip = round(base_daily_drip_hmt * clamped_ratio, 4)
@@ -205,8 +256,26 @@ def compute_congestion_price(
     validator_plus_burn_fee: float = 0.15,
 ) -> dict[str, float]:
     """Compute congestion-adjusted price omega(rho) and producer reward per 1k tokens."""
+    for name, val in (
+        ("base_posted_price_per_1k", base_posted_price_per_1k),
+        ("utilization_rho", utilization_rho),
+        ("rho_threshold", rho_threshold),
+        ("rho_cap", rho_cap),
+        ("surge_gamma", surge_gamma),
+        ("validator_plus_burn_fee", validator_plus_burn_fee),
+    ):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+            raise ValueError(f"{name} must be finite, got {val!r}")
     if base_posted_price_per_1k <= 0.0:
         raise ValueError("base_posted_price_per_1k must be > 0")
+    if utilization_rho < 0.0:
+        raise ValueError("utilization_rho must be >= 0")
+    if not (0.0 <= rho_threshold < rho_cap <= 1.0):
+        raise ValueError("0 <= rho_threshold < rho_cap <= 1 required")
+    if surge_gamma < 0.0:
+        raise ValueError("surge_gamma must be >= 0")
+    if not (0.0 <= validator_plus_burn_fee < 1.0):
+        raise ValueError("validator_plus_burn_fee must be in [0, 1)")
     clamped_rho = min(max(utilization_rho, 0.0), rho_cap)
     if clamped_rho <= rho_threshold:
         multiplier = 1.0
@@ -234,8 +303,31 @@ def project_international_launch_wave(
     mean_prosumer_tok_per_s: float = 48.0,
     prosumer_daytime_duty_cycle: float = 0.35,
     mean_consumer_active_req_per_s: float = 0.0022,
+    uncontrolled_scraping_factor: float = 2.2,
+    uncontrolled_conversion_kappa: float = 0.0,
 ) -> SocialFunnelProjection:
     """Simulate the social, queueing, and economic equilibrium of an English launch wave."""
+    if not isinstance(wave_name, str) or not wave_name.strip():
+        raise ValueError("wave_name must be a non-empty string")
+    if isinstance(new_visitors, bool) or not isinstance(new_visitors, int) or new_visitors < 1 or new_visitors > MAX_FORECAST_VISITORS:
+        raise ValueError(f"new_visitors must be an integer in 1..{MAX_FORECAST_VISITORS}")
+    if not math.isfinite(signup_rate) or not (0.0 < signup_rate <= 1.0):
+        raise ValueError("signup_rate must be finite in (0, 1]")
+    if not math.isfinite(direct_producer_fraction_alpha_p) or not (0.0 <= direct_producer_fraction_alpha_p < 1.0):
+        raise ValueError("direct_producer_fraction_alpha_p must be finite in [0, 1)")
+    if not math.isfinite(consumer_to_prosumer_conversion_kappa) or not (0.0 <= consumer_to_prosumer_conversion_kappa <= 1.0):
+        raise ValueError("consumer_to_prosumer_conversion_kappa must be finite in [0, 1]")
+    if not math.isfinite(mean_prosumer_tok_per_s) or mean_prosumer_tok_per_s <= 0.0:
+        raise ValueError("mean_prosumer_tok_per_s must be finite and > 0")
+    if not math.isfinite(prosumer_daytime_duty_cycle) or not (0.0 < prosumer_daytime_duty_cycle <= 1.0):
+        raise ValueError("prosumer_daytime_duty_cycle must be finite in (0, 1]")
+    if not math.isfinite(mean_consumer_active_req_per_s) or mean_consumer_active_req_per_s <= 0.0:
+        raise ValueError("mean_consumer_active_req_per_s must be finite and > 0")
+    if uncontrolled_scraping_factor <= 0.0 or not math.isfinite(uncontrolled_scraping_factor):
+        raise ValueError("uncontrolled_scraping_factor must be finite and positive")
+    if not (0.0 <= uncontrolled_conversion_kappa <= 1.0) or not math.isfinite(uncontrolled_conversion_kappa):
+        raise ValueError("uncontrolled_conversion_kappa must be finite in [0, 1]")
+
     new_signups = max(1, int(round(new_visitors * signup_rate)))
     init_producers = int(round(new_signups * direct_producer_fraction_alpha_p))
     initial_consumers = max(0, new_signups - init_producers)
@@ -265,10 +357,16 @@ def project_international_launch_wave(
         + (init_producers + converted_prosumers) * 18.5  # average ~18.5 FP16 TFLOPS per consumer GPU
     )
 
-    # Without controls: no progressive drip, no 2-lane QoS, low conversion (kappa=0.01), 2.2x higher scraping rate
-    uncontrolled_arrival_req_s = (baseline.consumers + initial_consumers) * (mean_consumer_active_req_per_s * 2.2)
+    # Without controls: parameterized scraping multiplier and uncontrolled conversion rate (IP-22)
+    uncontrolled_converted = int(round(initial_consumers * uncontrolled_conversion_kappa))
+    uncontrolled_pure_consumers = initial_consumers - uncontrolled_converted
+    uncontrolled_arrival_req_s = (
+        baseline.consumers + uncontrolled_pure_consumers + 0.5 * uncontrolled_converted
+    ) * (mean_consumer_active_req_per_s * uncontrolled_scraping_factor)
     uncontrolled_mu_req_s = (
-        baseline.daytime_aggregate_tok_per_s + init_producers * effective_tok_s_per_producer
+        baseline.daytime_aggregate_tok_per_s
+        + init_producers * effective_tok_s_per_producer
+        + uncontrolled_converted * effective_tok_s_per_prosumer
     ) / baseline.mean_tokens_per_request
     rho_uncontrolled = uncontrolled_arrival_req_s / max(uncontrolled_mu_req_s, 1e-6)
 
@@ -787,6 +885,7 @@ def forecast_200plus_node_international_launch(
     arrival_cv: float = 1.10,
     utc_hour: int = 14,
     baseline: SwarmLiveBaseline = SwarmLiveBaseline(),
+    pioneer_coordinates: list[dict[str, Any]] | tuple[dict[str, Any], ...] | None = None,
 ) -> dict[str, Any]:
     """Forecast balancing, token throughput, latency, and globe topology for a >200-node launch.
 
@@ -797,9 +896,19 @@ def forecast_200plus_node_international_launch(
     - Minority **Dedicated Producers** (`dedicated_producers`, default `28`, ~11% of active nodes)
     - Total active nodes `>= 200` (default `265` active nodes vs. `47` current baseline nodes).
     """
-    total_nodes = max(200, int(target_total_nodes))
-    visitors = max(total_nodes * 2, int(visitor_count))
+    # public inputs are clamped: the Erlang-C model is O(nodes) per call (10^7 nodes took 44 s)
+    if isinstance(mean_tokens_per_req, bool) or not (
+        math.isfinite(float(mean_tokens_per_req)) and 1.0 <= float(mean_tokens_per_req) <= 100_000.0
+    ):
+        raise ValueError("mean_tokens_per_req must be finite and between 1 and 100000")
+    if not (math.isfinite(float(token_length_cv)) and math.isfinite(float(arrival_cv))):
+        raise ValueError("token_length_cv and arrival_cv must be finite")
+    total_nodes = min(max(200, int(target_total_nodes)), MAX_FORECAST_NODES)
+    visitors = min(max(total_nodes * 2, int(visitor_count)), MAX_FORECAST_VISITORS)
     utc_h = int(utc_hour) % 24
+    dedicated_producers = None if dedicated_producers is None else min(max(0, int(dedicated_producers)), MAX_FORECAST_NODES)
+    prosumer_nodes = None if prosumer_nodes is None else min(max(0, int(prosumer_nodes)), MAX_FORECAST_NODES)
+    consumer_nodes = None if consumer_nodes is None else min(max(0, int(consumer_nodes)), MAX_FORECAST_NODES)
 
     if (
         dedicated_producers is not None
@@ -933,11 +1042,23 @@ def forecast_200plus_node_international_launch(
         c_prod * 54.0 + c_pros * 42.0 + c_cons * 2.2,
         1,
     )
-    daily_boinc_cobblestones = round((daytime_tflops_fp16 * 0.45 + nocturnal_diloco_tflops_fp16 * 0.55) * 200.0, 1)
+    # BOINC credit: 1 cobblestone = 1/200 of a day of 1 GFLOPS, so 200 cobblestones per GFLOPS-day; the figures above are
+    # TFLOPS, hence the factor 1000. This is a model of assumed capacity, not a verified credit.
+    blended_tflops_fp16 = daytime_tflops_fp16 * 0.45 + nocturnal_diloco_tflops_fp16 * 0.55
+    daily_modelled_boinc_cobblestones = round(blended_tflops_fp16 * 1000.0 * COBBLESTONES_PER_GFLOPS_DAY, 1)
 
     # 6. Bass / Epidemic Conversion & Kelly Congestion Price
     effective_conversion_kappa = round((c_prod + c_pros) / max(1, total_nodes), 4)
-    critical_kappa_star = 0.0220
+    prosumer_conversion_kappa = round(c_pros / max(1, c_pros + c_cons), 4)
+    deficit_tok_s = max(0.0, sustained_generated_tok_per_s - base_producer_tok_per_s)
+    unbacked_deficit_kappa_star = round(
+        min(1.0, deficit_tok_s / max(1.0, (c_pros + c_cons) * pros_tok_per_s_each * weighted_diurnal)),
+        4,
+    )
+    critical_kappa_star = round(
+        max(0.0220, deficit_tok_s / max(1.0, (c_pros + c_cons) * pros_tok_per_s_each * weighted_diurnal)),
+        4,
+    )
     congestion_quote = compute_congestion_price(
         base_posted_price_per_1k=0.40,
         utilization_rho=elastic_mmc_queue.utilization_rho,
@@ -1027,14 +1148,26 @@ def forecast_200plus_node_international_launch(
                 )
                 if is_pioneer:
                     pioneers_assigned += 1
+                if is_pioneer and pioneer_coordinates and (pioneers_assigned - 1) < len(pioneer_coordinates):
+                    coord = pioneer_coordinates[pioneers_assigned - 1]
+                    node_city = str(coord.get("city", city_name))
+                    node_lat = round(float(coord.get("lat", lat_jit)), 4)
+                    node_lon = round(float(coord.get("lon", lon_jit)), 4)
+                    loc_estimated = bool(coord.get("location_estimated", False))
+                else:
+                    node_city = city_name
+                    node_lat = round(lat_jit, 4)
+                    node_lon = round(lon_jit, 4)
+                    loc_estimated = True
                 globe_nodes.append(
                     {
                         "node_id": f"hm-{reg_id}-{role_name[:4]}-{node_seq:03d}",
                         "role": role_name,
                         "region_id": reg_id,
-                        "city": city_name,
-                        "lat": round(lat_jit, 4),
-                        "lon": round(lon_jit, 4),
+                        "city": node_city,
+                        "lat": node_lat,
+                        "lon": node_lon,
+                        "location_estimated": loc_estimated,
                         "is_current_pioneer": bool(is_pioneer),
                         "is_super_peer": bool(role_name == "producer" and j == 0),
                         "boinc_plan_class": plan_cls,
@@ -1051,6 +1184,14 @@ def forecast_200plus_node_international_launch(
         if not n["is_current_pioneer"]:
             n["is_current_pioneer"] = True
             pioneers_assigned += 1
+            if pioneer_coordinates and (pioneers_assigned - 1) < len(pioneer_coordinates):
+                coord = pioneer_coordinates[pioneers_assigned - 1]
+                n["city"] = str(coord.get("city", n["city"]))
+                n["lat"] = round(float(coord.get("lat", n["lat"])), 4)
+                n["lon"] = round(float(coord.get("lon", n["lon"])), 4)
+                n["location_estimated"] = bool(coord.get("location_estimated", False))
+            else:
+                n["location_estimated"] = True
 
     # Great-circle Super-Peer QUIC / AMCP mesh arcs
     hub_list = list(GLOBAL_SUPER_PEER_HUBS)
@@ -1109,7 +1250,7 @@ def forecast_200plus_node_international_launch(
             f"FORECAST PREDICTION (>200-Node Launch): {total_nodes} Active Nodes "
             f"({c_prod} Dedicated Producers, {c_pros} Prosumers [{promoted_prosumers} AMCP-Active], "
             f"{c_cons} Consumers, {visitors} Visitors) — "
-            f"Rho_elastic={elastic_mmc_queue.utilization_rho:.3f} <= 0.78, "
+            f"Rho_elastic={elastic_mmc_queue.utilization_rho:.3f} {'<=' if elastic_mmc_queue.utilization_rho <= 0.78 else '>'} 0.78, "
             f"Throughput={effective_daytime_tok_per_s:.1f} tok/s ({daily_token_capacity_millions:.1f}M tok/day), "
             f"Fast-Lane TTFT={fast_lane_ttft_ms:.1f} ms, P50={blended_p50_ms:.1f} ms, P95={blended_p95_ms:.1f} ms."
         ),
@@ -1120,7 +1261,10 @@ def forecast_200plus_node_international_launch(
         },
         "current_live_baseline": {
             "snapshot_date_utc": "2026-10-31",
-            "data_source": "REAL_LIVE_CLOUD_RUN_TELEMETRY",
+            "data_source": (
+                "ASSUMED_BASELINE_SNAPSHOT_NOT_LIVE" if baseline == SwarmLiveBaseline() else "CALLER_SUPPLIED_BASELINE"
+            ),
+            "baseline_source": "module_default" if baseline == SwarmLiveBaseline() else "caller_supplied",
             "total_nodes": baseline.total_accounts,
             "producers": baseline.producers,
             "online_quorum_producers": baseline.online_quorum_producers,
@@ -1171,7 +1315,8 @@ def forecast_200plus_node_international_launch(
             "daytime_inference_pflops_fp16": round(daytime_tflops_fp16 / 1000.0, 3),
             "nocturnal_diloco_tflops_fp16": nocturnal_diloco_tflops_fp16,
             "nocturnal_diloco_pflops_fp16": round(nocturnal_diloco_tflops_fp16 / 1000.0, 3),
-            "daily_verified_boinc_cobblestones": daily_boinc_cobblestones,
+            "daily_modelled_boinc_cobblestones": daily_modelled_boinc_cobblestones,
+            "cobblestones_basis": "modelled from the assumed TFLOPS mix at 200 cobblestones per GFLOPS-day; not a verified BOINC credit",
         },
         "balancing_and_latency_sla": {
             "uncontrolled_naive_routing": {
@@ -1217,7 +1362,9 @@ def forecast_200plus_node_international_launch(
                 "kelly_congestion_multiplier_omega": congestion_omega,
                 "kelly_congestion_quote": congestion_quote,
                 "effective_conversion_kappa": effective_conversion_kappa,
+                "prosumer_conversion_kappa": prosumer_conversion_kappa,
                 "critical_conversion_threshold_kappa_star": critical_kappa_star,
+                "unbacked_deficit_kappa_star": unbacked_deficit_kappa_star,
                 "conversion_safety_margin_ratio": round(effective_conversion_kappa / critical_kappa_star, 2),
                 "starter_grant_policy": asdict(starter_grant),
             },
@@ -1227,6 +1374,12 @@ def forecast_200plus_node_international_launch(
             "total_plotted_nodes": len(globe_nodes),
             "current_pioneer_nodes_count": sum(1 for n in globe_nodes if n["is_current_pioneer"]),
             "forecast_expansion_nodes_count": sum(1 for n in globe_nodes if not n["is_current_pioneer"]),
+            "pioneer_location_basis": (
+                "caller_supplied_coordinates"
+                if any(n["is_current_pioneer"] for n in globe_nodes)
+                and all(not n["location_estimated"] for n in globe_nodes if n["is_current_pioneer"])
+                else "estimated_regional_distribution"
+            ),
             "super_peer_hubs": [
                 {
                     "region_id": h["region_id"],
@@ -1246,6 +1399,7 @@ def forecast_200plus_node_international_launch(
 
 def build_foundation_paper_v42_portal_payload(
     base_gcp_url: str = "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app",
+    e20_artifact_path: str | Path | None = None,
 ) -> Dict[str, Any]:
     """Return the Foundation Paper v4.2.0 metadata, live E20/47-node experiments,
     real vs. forecast traffic comparison, and 5-wave international scalability roadmap.
@@ -1255,6 +1409,36 @@ def build_foundation_paper_v42_portal_payload(
         target_total_nodes=265,
         visitor_count=2400,
     )
+    default_e20_path = (
+        Path(__file__).resolve().parents[3]
+        / "artifacts"
+        / "experiments"
+        / "E20_international_launch_split_dct_report.json"
+    )
+    e20_path = Path(e20_artifact_path) if e20_artifact_path is not None else default_e20_path
+    e20_doc: Dict[str, Any] = {}
+    if e20_path.is_file():
+        try:
+            loaded_e20 = json.loads(e20_path.read_text(encoding="utf-8"))
+            if isinstance(loaded_e20, dict):
+                e20_doc = loaded_e20
+        except (OSError, ValueError):
+            e20_doc = {}
+    if e20_doc:
+        e20_preds = dict(e20_doc.get("predictions_check") or {})
+        e20_executed_at = str(e20_doc.get("executed_at_utc") or "2026-11-01T09:15:25Z")
+        e20_artifact_rel = "artifacts/experiments/E20_international_launch_split_dct_report.json"
+        e20_data_source = f"{e20_artifact_rel} ({e20_executed_at})"
+        e20_status = (
+            "VERIFIED_PASS"
+            if (e20_preds and all(bool(v) for v in e20_preds.values()))
+            else str(e20_doc.get("status") or "NOT_SOURCED")
+        )
+    else:
+        e20_executed_at = "NOT_SOURCED"
+        e20_artifact_rel = "NOT_SOURCED"
+        e20_data_source = "NOT_SOURCED"
+        e20_status = "NOT_SOURCED"
     return {
         "schema_version": "4.2.0",
         "paper_version": "4.2.0",
@@ -1287,6 +1471,11 @@ def build_foundation_paper_v42_portal_payload(
         },
         "live_experimentation_v42": {
             "live_47_node_wan_baseline": {
+                # Constants recorded on 2026-10-31. Nothing in this block is read live; the key name is kept for
+                # consumers, the labels below say what it is.
+                "data_source": "SNAPSHOT_2026-10-31_NOT_LIVE",
+                "snapshot_date_utc": "2026-10-31",
+                "live_readings_at": ["/boinc/status", "/v1/hivemind/bees/owner-fleet-status"],
                 "active_nodes": 59,
                 "role_breakdown": {
                     "producers": 10,
@@ -1298,8 +1487,8 @@ def build_foundation_paper_v42_portal_payload(
                 },
                 "live_models_served": 15,
                 "assimilated_boinc_workunits": 100,
-                "verified_boinc_cobblestones": 5632.11,
-                "attested_compute_pflops": 2.433,
+                "boinc_cobblestones_snapshot": 5632.11,
+                "compute_pflops_snapshot": 2.433,
                 "cumulative_tflops_hours": 4802.1,
                 "openrouter_completions_served": 2455,
                 "human_prosumer_completions": 160,
@@ -1315,8 +1504,14 @@ def build_foundation_paper_v42_portal_payload(
             "experiment_e20_international_launch": {
                 "experiment_id": "E20",
                 "roadmap_refs": ["HM-S29-01", "HM-S29-02", "HM-S31-02"],
-                "status": "VERIFIED_PASS",
+                "status": e20_status,
+                "data_source": e20_data_source,
+                "artifact_path": e20_artifact_rel,
+                "executed_at_utc": e20_executed_at,
                 "P20a_adaptive_multisplit_guard": {
+                    "data_source": e20_data_source,
+                    "artifact_path": e20_artifact_rel,
+                    "executed_at_utc": e20_executed_at,
                     "selected_cut_name": "patch_stem_int4_bottleneck",
                     "client_prelude_vram_mib": 680.0,
                     "ceiling_mib": 1536.0,
@@ -1330,6 +1525,9 @@ def build_foundation_paper_v42_portal_payload(
                     ],
                 },
                 "P20b_top1pct_2d_dct_ef21": {
+                    "data_source": e20_data_source,
+                    "artifact_path": e20_artifact_rel,
+                    "executed_at_utc": e20_executed_at,
                     "tensor_shape": [256, 256],
                     "uncompressed_fp32_bytes": 262144,
                     "compressed_wire_bytes": 1163,
@@ -1338,6 +1536,9 @@ def build_foundation_paper_v42_portal_payload(
                     "wire_vs_direct_drift": 3.0e-8,
                 },
                 "P20c_super_peer_fanout_and_sqlite_coalescer": {
+                    "data_source": e20_data_source,
+                    "artifact_path": e20_artifact_rel,
+                    "executed_at_utc": e20_executed_at,
                     "leaf_nodes": 10000,
                     "regions_active": 6,
                     "super_peers": 318,
@@ -1348,7 +1549,8 @@ def build_foundation_paper_v42_portal_payload(
                 },
             },
             "nocturnal_vmoe_pareto_ratchet": {
-                "status": "ACTIVE_EVOLVING_GREEN",
+                "status": "NOT_SOURCED",
+                "data_source": "NOT_SOURCED (constants from paper v4.2.0 section 02, not read from a live artifact)",
                 "reddit_vision_vlm_moe_loss": 0.0003,
                 "reddit_vision_loss_reduction_pct": 94.42,
                 "exoplanet_astro_vmoe_focal_loss": 0.0,
@@ -1361,6 +1563,8 @@ def build_foundation_paper_v42_portal_payload(
         },
         "real_vs_forecast_traffic_and_balancing": {
             "real_live_47_node_traffic": {
+                "data_source": "SNAPSHOT_2026-10-31_NOT_LIVE",
+                "snapshot_date_utc": "2026-10-31",
                 "nodes": 59,
                 "producers": 10,
                 "online_quorum_producers": 4,

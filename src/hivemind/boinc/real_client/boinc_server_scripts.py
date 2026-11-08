@@ -26,7 +26,7 @@ from hivemind.boinc.real_client.bridge import Verdict
 from hivemind.boinc.real_client.contributor_policy import BoincHostDirectory, replay_all_for_result
 from hivemind.boinc.real_client.moe_bridge import MoEValidator, _reject
 from hivemind.boinc.real_client.moe_profiles import TRAIN_APPS, profile_for_app
-from hivemind.economy.compute_coin import CreditClaim, verified_credit
+from hivemind.economy.compute_coin import CreditClaim, claim_figures_are_finite_and_positive, verified_credit
 
 SPEC_DIR = Path(os.environ.get("HIVEMIND_SPEC_DIR", "hivemind_specs"))
 LEDGER_DIR = Path(os.environ.get("HIVEMIND_LEDGER_DIR", "hivemind_ledger"))
@@ -46,34 +46,60 @@ def _host_directory() -> BoincHostDirectory | None:
     return BoincHostDirectory(Stack(Path(base), Path(src), sys.executable, Path(__file__).resolve().parents[3]).sql)
 
 
+def _parse_wu_args(files: list[str]) -> tuple[str | None, list[str]]:
+    expected_wu: str | None = os.environ.get("HIVEMIND_EXPECTED_WU_ID") or None
+    cleaned: list[str] = []
+    i = 0
+    while i < len(files):
+        tok = files[i]
+        if tok == "--wu-name" and i + 1 < len(files):
+            expected_wu = files[i + 1]
+            i += 2
+            continue
+        if tok.startswith("--wu-name="):
+            expected_wu = tok.partition("=")[2] or expected_wu
+            i += 1
+            continue
+        cleaned.append(tok)
+        i += 1
+    return expected_wu, cleaned
+
+
 def _meta(files: list[str]) -> tuple[dict, list[Path]]:
-    paths = [Path(f) for f in files if not f.isdigit()]
+    _, cleaned = _parse_wu_args(files)
+    paths = [Path(f) for f in cleaned if not f.isdigit()]
     meta = json.loads(paths[0].read_text())
     return meta, paths
 
 
-def wait_for_idle(quiet_s: float = 5.0, max_wait_s: float | None = None) -> float:
+def wait_for_idle(
+    quiet_s: float = 5.0,
+    max_wait_s: float | None = None,
+    *,
+    clock: Callable[[], float] = time.time,
+    sleep_fn: Callable[[float], None] = time.sleep,
+) -> float:
     """Block until nginx shows no in-flight inference request for ``quiet_s`` seconds, so the validator's GPU replay never competes
     with end users. Gives up after ``max_wait_s`` (default 30 min) so validation cannot starve forever. Returns seconds waited."""
     import urllib.request
 
     url = os.environ.get("HIVEMIND_IDLE_URL", "http://127.0.0.1:8091/nginx_status")
     limit = float(os.environ.get("HIVEMIND_IDLE_WAIT_S", 1800)) if max_wait_s is None else max_wait_s
-    t0, quiet_since = time.time(), None
-    while time.time() - t0 < limit:
+    t0, quiet_since = clock(), None
+    while clock() - t0 < limit:
         try:
             txt = urllib.request.urlopen(url, timeout=2).read().decode()
             writing = int(txt.split("Writing:")[1].split()[0]) - 1  # minus this poll
         except Exception:
-            return time.time() - t0  # no status endpoint (e.g. a test box): do not block
+            return clock() - t0  # no status endpoint (e.g. a test box): do not block
         if writing <= 0:
-            quiet_since = quiet_since or time.time()
-            if time.time() - quiet_since >= quiet_s:
+            quiet_since = quiet_since or clock()
+            if clock() - quiet_since >= quiet_s:
                 break
         else:
             quiet_since = None
-        time.sleep(1)
-    return time.time() - t0
+        sleep_fn(1)
+    return clock() - t0
 
 
 def _log_stderr(line: str) -> None:
@@ -112,6 +138,7 @@ def validate_solver_sweep(
     meta: dict[str, Any],
     host: str,
     peer_meta: dict[str, Any] | None = None,
+    server_elapsed_seconds: float | None = None,
 ) -> Verdict:
     """Validate a Wave 2 CPU solver or parameter-sweep workunit (``hivemind_solver_sweep`` / ``hivemind_solver``).
 
@@ -153,6 +180,32 @@ def validate_solver_sweep(
     worst_abs_diff = 0.0
 
     ref_trajs = spec.get("reference_trajectories")
+    if (
+        not isinstance(ref_trajs, list)
+        and spec.get("family") == "van_der_pol"
+        and isinstance(expected_grid, list)
+        and isinstance(expected_t_out, list)
+        and len(expected_t_out) >= 1
+    ):
+        step_dt = float(expected_t_out[0])
+        n_steps = len(expected_t_out)
+        computed_refs: list[list[list[float]]] = []
+        for g_val in expected_grid:
+            mu = float(g_val)
+            x, v = 1.0, 0.0
+            rows: list[list[float]] = []
+            for _ in range(n_steps):
+                ax1 = v
+                av1 = mu * (1.0 - x * x) * v - x
+                x_mid = x + 0.5 * step_dt * ax1
+                v_mid = v + 0.5 * step_dt * av1
+                ax2 = v_mid
+                av2 = mu * (1.0 - x_mid * x_mid) * v_mid - x_mid
+                x = x + step_dt * ax2
+                v = v + step_dt * av2
+                rows.append([round(x, 12), round(v, 12)])
+            computed_refs.append(rows)
+        ref_trajs = computed_refs
     peer_sweeps = peer_meta.get("sweep_results") if isinstance(peer_meta, dict) else None
     if isinstance(peer_sweeps, list) and len(peer_sweeps) != len(sweep_results):
         return _reject(wu, host, "quorum peer sweep_results length mismatch")
@@ -179,7 +232,15 @@ def validate_solver_sweep(
                 isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in row
             ):
                 return _reject(wu, host, f"sweep point {idx} contains non-finite state values")
-        drift = float(item.get("invariant_drift", 0.0))
+        raw_drift = item.get("invariant_drift")
+        if (
+            "invariant_drift" not in item
+            or raw_drift is None
+            or isinstance(raw_drift, bool)
+            or not isinstance(raw_drift, (int, float))
+        ):
+            return _reject(wu, host, f"sweep point {idx} missing or non-numeric invariant_drift")
+        drift = float(raw_drift)
         if not math.isfinite(drift) or drift < 0.0 or drift > max_allowed_drift:
             return _reject(
                 wu,
@@ -217,9 +278,23 @@ def validate_solver_sweep(
                     {"sweep_index": idx, "max_abs_diff": abs_d, "s1_ratio": ratio},
                 )
 
-    flops_claimed = float(meta.get("flops_claimed", len(sweep_results) * 2.5e9))
-    wall_s = max(float(meta.get("wall_seconds", 1.0)), 1e-6)
-    claim = CreditClaim(host, wu, flops_claimed, wall_s, CPU_SOLVER_PEAK_GFLOPS, True, True)
+    try:
+        raw_flops = float(meta.get("flops_claimed", len(sweep_results) * 2.5e9))
+        raw_wall = float(meta.get("wall_seconds", 1.0))
+    except (TypeError, ValueError) as exc:
+        return _reject(wu, host, f"invalid credit figures: {exc}")
+    # Checked on the raw figures: a floor such as max(wall, 1e-6) keeps NaN and silently credits a negative wall time.
+    raw_claim = CreditClaim(host, wu, raw_flops, raw_wall, CPU_SOLVER_PEAK_GFLOPS, True, True)
+    if not claim_figures_are_finite_and_positive(raw_claim):
+        return _reject(wu, host, f"wall_seconds/flops_claimed not finite and positive: {meta.get('wall_seconds')!r}, {meta.get('flops_claimed')!r}")
+    spec_flops_bound = float(spec.get("flops_bound") or spec.get("rsc_fpops_est") or (len(sweep_results) * 2.5e9))
+    srv_elapsed = server_elapsed_seconds if server_elapsed_seconds is not None else spec.get("server_elapsed_seconds")
+    eff_wall = (
+        min(raw_wall, float(srv_elapsed))
+        if isinstance(srv_elapsed, (int, float)) and not isinstance(srv_elapsed, bool) and math.isfinite(srv_elapsed) and float(srv_elapsed) > 0.0
+        else raw_wall
+    )
+    claim = CreditClaim(host, wu, min(raw_flops, spec_flops_bound), eff_wall, CPU_SOLVER_PEAK_GFLOPS, True, True)
     detail = {
         "sweep_points": len(sweep_results),
         "worst_invariant_drift": worst_drift,
@@ -241,21 +316,44 @@ def validate_solver_sweep(
     )
 
 
-def run_validation(args: list[str], mv: Any = None, log: Callable[[str], None] = _log_stderr) -> int:
+def run_validation(
+    args: list[str],
+    mv: Any = None,
+    log: Callable[[str], None] = _log_stderr,
+    directory: Any = None,
+) -> int:
     """The validation itself, shared by the one-shot ``hivemind_validate`` and the optional resident validator
     (``resident_validator.py``): both run exactly this function, so their verdicts cannot differ. ``mv`` is the validator
     object (default: a fresh ``MoEValidator``; the resident server passes one whose base model comes from a cache)."""
-    meta, paths = _meta(args)
-    wu = meta.get("wu_id", "")
+    cli_wu, cleaned_args = _parse_wu_args(args)
+    meta, paths = _meta(cleaned_args)
+    result_id = cleaned_args[-1] if cleaned_args and cleaned_args[-1].isdigit() else None
+    host_dir = directory if directory is not None else _host_directory()
+    db_wu: str | None = None
+    server_elapsed_s: float | None = None
+    if result_id is not None and host_dir is not None and hasattr(host_dir, "result_workunit_and_elapsed"):
+        db_wu, server_elapsed_s = host_dir.result_workunit_and_elapsed(result_id)
+    expected_wu = cli_wu or db_wu
+    wu = expected_wu or meta.get("wu_id", "")
     spec_path = SPEC_DIR / f"{wu}.json"
     if not wu or not spec_path.is_file() or "/" in wu or ".." in wu:
         log(f"unknown workunit {wu!r}")
         return 2
     spec = json.loads(spec_path.read_text())
-    host = f"result-{args[-1]}" if args and args[-1].isdigit() else "host"
-    if meta.get("app") in SOLVER_SWEEP_APPS:
-        peer_meta = json.loads(paths[1].read_text()) if len(paths) >= 2 and paths[1].suffix == ".json" else None
-        verdict = validate_solver_sweep(spec, meta, host, peer_meta=peer_meta)
+    host = f"result-{result_id}" if result_id is not None else "host"
+    if expected_wu and meta.get("wu_id") != expected_wu:
+        verdict = _reject(
+            expected_wu,
+            host,
+            f"result workunit mismatch: upload claims {meta.get('wu_id')!r}, expected {expected_wu!r}",
+        )
+    elif meta.get("app") in SOLVER_SWEEP_APPS:
+        peer_meta = (
+            json.loads(paths[1].read_text())
+            if len(paths) >= 2 and paths[1].suffix == ".json" and paths[1].resolve() != paths[0].resolve()
+            else None
+        )
+        verdict = validate_solver_sweep(spec, meta, host, peer_meta=peer_meta, server_elapsed_seconds=server_elapsed_s)
     else:
         import torch
 
@@ -263,10 +361,21 @@ def run_validation(args: list[str], mv: Any = None, log: Callable[[str], None] =
         if mv is None:
             mv = MoEValidator()
         if meta.get("app") in TRAIN_APPS and len(paths) >= 2:
-            verdict = mv.validate_train(spec, paths[0], paths[1], host, replay_all=replay_all_for_result(args[-1] if args and args[-1].isdigit() else None, _host_directory()))
+            replay_all = replay_all_for_result(result_id, host_dir)
+            try:
+                verdict = mv.validate_train(
+                    spec, paths[0], paths[1], host, replay_all=replay_all, server_elapsed_seconds=server_elapsed_s
+                )
+            except TypeError:
+                verdict = mv.validate_train(spec, paths[0], paths[1], host, replay_all=replay_all)
         elif meta.get("app") == "hivemind_moe_infer":
-            adapter = torch.load(SPEC_DIR / f"{wu}.adapter.pt", map_location="cpu")["state"]
-            verdict = mv.validate_infer(spec, paths[0], adapter, host)
+            adapter = torch.load(SPEC_DIR / f"{wu}.adapter.pt", map_location="cpu", weights_only=True)["state"]
+            try:
+                verdict = mv.validate_infer(
+                    spec, paths[0], adapter, host, server_elapsed_seconds=server_elapsed_s
+                )
+            except TypeError:
+                verdict = mv.validate_infer(spec, paths[0], adapter, host)
         else:
             log("unknown app in result")
             return 3
@@ -295,34 +404,206 @@ def validate(args: list[str]) -> int:
     return run_validation(args)
 
 
-def assimilate(args: list[str]) -> int:
+SIX_EVAL_DOMAINS: tuple[str, ...] = ("general", "french", "edu_web", "news", "biomed", "math")
+HELD_OUT_BASELINE_NLL: float = 2.12
+DEFAULT_EVAL_GAIN_TOLERANCE: float = 1e-6
+
+
+def _is_positive_finite(val: Any) -> bool:
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        return False
+    f = float(val)
+    return math.isfinite(f) and f > 0.0
+
+
+def classify_workunit_eval_gain(
+    record: dict[str, Any],
+    *,
+    tolerance: float = DEFAULT_EVAL_GAIN_TOLERANCE,
+    baseline_nll: float = HELD_OUT_BASELINE_NLL,
+) -> dict[str, Any]:
+    """Classify a training workunit's held-out evaluation basis and whether it achieved a held-out gain.
+
+    A workunit with ``eval_loss_after > eval_loss_before + tolerance`` is never reported as an improvement:
+    its ``progress_label`` is ``"assimilated, no held-out gain"`` and ``improved`` is ``False``.
+    Records whether the evaluation basis changed at ``hmq_00171`` (6-domain ``MIX_DOMAINS`` vs 16-domain
+    ``DOMAIN_ORDER``, ``8x128`` held-out tokens/domain, baseline ``2.12``).
+    """
+    wu_id = str(record.get("wu_id") or "")
+    by_dom_before = record.get("eval_by_domain_before") if isinstance(record.get("eval_by_domain_before"), dict) else {}
+    by_dom_after = record.get("eval_by_domain_after") if isinstance(record.get("eval_by_domain_after"), dict) else {}
+    domains = sorted(by_dom_after.keys()) or sorted(by_dom_before.keys())
+    if not domains and record.get("domain"):
+        dom_str = str(record["domain"])
+        domains = list(SIX_EVAL_DOMAINS) if dom_str == "mix" else [dom_str]
+
+    six_present_before = all(d in by_dom_before and _is_positive_finite(by_dom_before[d]) for d in SIX_EVAL_DOMAINS)
+    six_present_after = all(d in by_dom_after and _is_positive_finite(by_dom_after[d]) for d in SIX_EVAL_DOMAINS)
+    six_mean_before = (
+        round(sum(float(by_dom_before[d]) for d in SIX_EVAL_DOMAINS) / len(SIX_EVAL_DOMAINS), 6)
+        if six_present_before
+        else None
+    )
+    six_mean_after = (
+        round(sum(float(by_dom_after[d]) for d in SIX_EVAL_DOMAINS) / len(SIX_EVAL_DOMAINS), 6)
+        if six_present_after
+        else None
+    )
+
+    raw_before = record.get("eval_loss_before")
+    raw_after = record.get("eval_loss_after")
+    loss_before = float(raw_before) if _is_positive_finite(raw_before) else six_mean_before
+    loss_after = float(raw_after) if _is_positive_finite(raw_after) else six_mean_after
+
+    wu_num = int(wu_id.split("_")[-1]) if wu_id.startswith("hmq_") and wu_id.split("_")[-1].isdigit() else 0
+    basis_changed = (wu_num >= 171) or (len(domains) not in (0, 6)) or (str(record.get("domain") or "") == "mix")
+    basis_id = (
+        "6_domain_mix_stratified"
+        if str(record.get("domain") or "") == "mix" or set(domains) == set(SIX_EVAL_DOMAINS)
+        else (f"{len(domains)}_domain_extended" if len(domains) > 6 else "single_or_partial_domain")
+    )
+    eval_basis = {
+        "basis_id": basis_id,
+        "domains": domains,
+        "domain_count": len(domains),
+        "held_out_set": "8x128_tokens_per_domain",
+        "baseline_nll": float(baseline_nll),
+        "basis_changed_at_hmq_00171": bool(basis_changed),
+        "six_domain_rescored_before": six_mean_before,
+        "six_domain_rescored_after": six_mean_after,
+    }
+
+    if loss_before is not None and loss_after is not None:
+        gain = round(loss_before - loss_after, 6)
+        no_regression = loss_after <= (loss_before + float(tolerance))
+        strictly_improved = (loss_after < (loss_before - float(tolerance))) and (loss_after < float(baseline_nll))
+    else:
+        gain = None
+        no_regression = True
+        strictly_improved = False
+
+    if loss_before is not None and loss_after is not None and loss_after > (loss_before + float(tolerance)):
+        progress_label = "assimilated, no held-out gain"
+        assimilator_action = "counted_in_ledger_not_improvement_chain_head_held"
+        chain_head_ratchet_pass = False
+    elif not strictly_improved:
+        progress_label = "assimilated, no held-out gain"
+        assimilator_action = "counted_in_ledger_not_improvement"
+        chain_head_ratchet_pass = bool(no_regression)
+    else:
+        progress_label = "assimilated, held-out gain"
+        assimilator_action = "chain_head_advanced"
+        chain_head_ratchet_pass = True
+
+    return {
+        "eval_basis": eval_basis,
+        "held_out_gain": gain,
+        "improved": bool(strictly_improved),
+        "progress_label": progress_label,
+        "assimilator_action": assimilator_action,
+        "chain_head_ratchet_pass": chain_head_ratchet_pass,
+    }
+
+
+def assimilate(args: list[str], directory: Any = None) -> int:
     LEDGER_DIR.mkdir(parents=True, exist_ok=True)
     if args and args[0] == "--error":
         (LEDGER_DIR / f"assimilate_error_{int(time.time())}.json").write_text(json.dumps({"error_mask": args[1], "wu_db_id": args[2]}))
         return 0
-    meta, paths = _meta(args)
+    cli_wu, cleaned_args = _parse_wu_args(args)
+    wu_db_id: str | None = None
+    if cleaned_args and cleaned_args[0].isdigit():
+        wu_db_id = cleaned_args[0]
+        cleaned_args = cleaned_args[1:]
+    host_dir = directory if directory is not None else _host_directory()
+    db_wu = (
+        host_dir.workunit_name(wu_db_id)
+        if wu_db_id is not None and host_dir is not None and hasattr(host_dir, "workunit_name")
+        else None
+    )
+    expected_wu = cli_wu or db_wu
+    meta, paths = _meta(cleaned_args)
     wu = meta["wu_id"]
+    if expected_wu and wu != expected_wu:
+        _log_stderr(f"assimilate workunit mismatch: upload claims {wu!r}, expected {expected_wu!r}")
+        return 1
     entry: dict[str, Any] = {"wu_id": wu, "app": meta["app"], "t": time.time()}
+    if wu_db_id is not None:
+        entry["wu_db_id"] = int(wu_db_id)
     if meta["app"] in TRAIN_APPS:
         import torch
 
         from hivemind.boinc.real_client.moe_app import state_sha
 
         stem = profile_for_app(meta["app"])["chain_stem"]  # each app has its own chain: a rank-16 adapter cannot continue a rank-8 one
-        state = torch.load(paths[1], map_location="cpu")["states"][-1]
         out = LEDGER_DIR / f"adapter_{wu}.pt"
+        if out.exists():
+            _log_stderr(f"assimilate: workunit {wu!r} already assimilated; refusing replay")
+            return 1
+        loaded_states = torch.load(paths[1], map_location="cpu", weights_only=True)["states"]
+        state = loaded_states[-1]
         sha = state_sha(state)
+        head_json = LEDGER_DIR / f"{stem}.json"
+        best_loss: float | None = None
+        if head_json.exists():
+            current_head = json.loads(head_json.read_text())
+            prev_loss = current_head.get("eval_loss_after")
+            if isinstance(prev_loss, (int, float)) and not isinstance(prev_loss, bool) and math.isfinite(prev_loss):
+                best_loss = float(prev_loss)
+            if current_head.get("wu_id") == wu:
+                _log_stderr(f"assimilate: {wu!r} is already the chain head")
+                return 1
+            spec_file = SPEC_DIR / f"{wu}.json"
+            parent_sha = (
+                json.loads(spec_file.read_text()).get("start_adapter_sha256")
+                if spec_file.is_file()
+                else (state_sha(loaded_states[0]) if len(loaded_states) >= 2 else None)
+            )
+            if parent_sha is not None and parent_sha != current_head.get("sha256"):
+                _log_stderr(
+                    f"assimilate: refusing rollback of {stem} from {current_head.get('wu_id')!r} to {wu!r}"
+                )
+                return 1
         torch.save({"state": state, "sha256": sha, "wu_id": wu}, out)
         entry["adapter"], entry["adapter_sha256"] = out.name, sha
         entry["eval_loss_before"], entry["eval_loss_after"] = meta.get("eval_loss_before"), meta.get("eval_loss_after")
         entry["domain"] = meta.get("domain")
         entry["eval_by_domain_before"], entry["eval_by_domain_after"] = meta.get("eval_by_domain_before"), meta.get("eval_by_domain_after")
-        # publish the chain head: the work generator starts the next workunit from this adapter
-        tmp = LEDGER_DIR / f"{stem}.pt.tmp"
-        torch.save({"state": state, "sha256": sha, "wu_id": wu}, tmp)
-        tmp.replace(LEDGER_DIR / f"{stem}.pt")
-        (LEDGER_DIR / f"{stem}.json").write_text(json.dumps(
-            {"wu_id": wu, "sha256": sha, "eval_loss_before": meta.get("eval_loss_before"), "eval_loss_after": meta.get("eval_loss_after"), "t": time.time()}))
+        eval_gain_info = classify_workunit_eval_gain(entry)
+        entry.update(eval_gain_info)
+        curr_loss = meta.get("eval_loss_after")
+        has_curr_loss = isinstance(curr_loss, (int, float)) and not isinstance(curr_loss, bool) and math.isfinite(curr_loss)
+        ratchet_vs_head = best_loss is None or not has_curr_loss or float(curr_loss) <= (best_loss + DEFAULT_EVAL_GAIN_TOLERANCE)
+        # Advance the chain head when no head exists yet or when held-out loss did not regress beyond tolerance
+        advance_head = ((not head_json.exists()) or bool(eval_gain_info["chain_head_ratchet_pass"])) and ratchet_vs_head
+        entry["chain_head_advanced"] = advance_head
+        entry["ratchet_accepted"] = advance_head
+        entry["ratchet_best_loss_before_wu"] = best_loss
+        if advance_head:
+            tmp = LEDGER_DIR / f"{stem}.pt.tmp"
+            torch.save({"state": state, "sha256": sha, "wu_id": wu}, tmp)
+            tmp.replace(LEDGER_DIR / f"{stem}.pt")
+            head_json.write_text(json.dumps(
+                {"wu_id": wu, "sha256": sha, "eval_loss_before": meta.get("eval_loss_before"), "eval_loss_after": meta.get("eval_loss_after"),
+                 "ratchet_accepted": True, "progress_label": eval_gain_info["progress_label"], "eval_basis": eval_gain_info["eval_basis"], "t": time.time()}))
+        domain = meta.get("domain")
+        if isinstance(domain, str) and domain and meta.get("domain_isolated_adapter"):
+            dom_tmp = LEDGER_DIR / f"{stem}_{domain}.pt.tmp"
+            torch.save({"state": state, "sha256": sha, "wu_id": wu, "domain": domain}, dom_tmp)
+            dom_tmp.replace(LEDGER_DIR / f"{stem}_{domain}.pt")
+            (LEDGER_DIR / f"{stem}_{domain}.json").write_text(
+                json.dumps(
+                    {
+                        "wu_id": wu,
+                        "domain": domain,
+                        "sha256": sha,
+                        "eval_loss_before": meta.get("eval_loss_before"),
+                        "eval_loss_after": meta.get("eval_loss_after"),
+                        "t": time.time(),
+                    }
+                ),
+                encoding="utf-8",
+            )
     elif meta["app"] in SOLVER_SWEEP_APPS:
         sweep_results = meta.get("sweep_results", [])
         cert_bytes = json.dumps(sweep_results, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -356,13 +637,39 @@ def assimilate(args: list[str]) -> int:
     return 0
 
 
+VERDICT_DIR = Path(os.environ.get("HIVEMIND_VERDICT_DIR", str(LEDGER_DIR / "verdicts")))
+RETRY_LATER = 75  # EX_TEMPFAIL; deploy/boinc_always_on/script_validator_retry.patch maps it to BOINC's transient path (retry in 6 h)
+
+
+def lookup_verdict(args: list[str], log: Callable[[str], None] = _log_stderr) -> int:
+    """Validator hook for a server without a GPU: the replay ran on a GPU host, which left ``<result_id>.json`` in ``VERDICT_DIR``.
+    Only a well-formed verdict decides: anything else means "not decided yet", so an honest result is never rejected because that host was off."""
+    result_id = args[-1] if args else ""
+    if not result_id.isdigit():
+        log(f"no usable result id in {args!r}")
+        return RETRY_LATER
+    try:
+        verdict = json.loads((VERDICT_DIR / f"{result_id}.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return RETRY_LATER
+    if not isinstance(verdict, dict) or not isinstance(verdict.get("valid"), bool):
+        log(f"verdict for result {result_id} is malformed")
+        return RETRY_LATER
+    wu = str(verdict.get("wu_id", result_id)).replace("/", "_")
+    LEDGER_DIR.mkdir(parents=True, exist_ok=True)
+    (LEDGER_DIR / f"verdict_{wu}_{int(time.time())}.json").write_text(json.dumps(verdict, indent=2, sort_keys=True), encoding="utf-8")
+    log(f"{wu}: valid={verdict['valid']} {verdict.get('reason', '')}")
+    return 0 if verdict["valid"] else 1
+
+
 def main() -> int:
     cmd, rest = sys.argv[1], sys.argv[2:]
     if cmd == "validate":
         return validate(rest)
+    if cmd == "verdict-lookup":
+        return lookup_verdict(rest)
     if cmd == "assimilate":
-        # script_assimilator passes: <wu_db_id> <files...> ; the helper wants the files only
-        return assimilate(rest[1:] if rest and rest[0].isdigit() else rest)
+        return assimilate(rest)
     return 64
 
 

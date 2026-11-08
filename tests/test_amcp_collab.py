@@ -44,8 +44,8 @@ def refused(code: str, *args, **kw) -> None:  # noqa: ANN002, ANN003
 
 
 def test_every_role_has_a_known_set_of_kinds_and_a_prosumer_is_all_of_them() -> None:
-    assert set(ROLE_KINDS) == {"consumer", "producer", "prosumer", "admin"}
-    assert ROLE_KINDS["prosumer"] == ALL_KINDS == ROLE_KINDS["admin"]
+    assert set(ROLE_KINDS) == {"consumer", "producer", "prosumer", "trainer", "admin"}
+    assert ROLE_KINDS["prosumer"] == ALL_KINDS == ROLE_KINDS["trainer"] == ROLE_KINDS["admin"]
     assert all(kinds <= ALL_KINDS and kinds for kinds in ROLE_KINDS.values())
 
 

@@ -52,6 +52,7 @@ class ByzantineFilterReport:
     median_cosine: float
     cosine_threshold_lower: float
     quarantined_pre_krum: dict[str, str] = field(default_factory=dict)
+    krum_guarantee: bool = False
 
 
 @dataclass
@@ -75,6 +76,8 @@ class OuterStepResult:
 
 def flatten_delta_dict(delta_dict: dict[str, torch.Tensor]) -> torch.Tensor:
     """Flatten a dictionary of LoRA tensors in deterministic key order into a 1D FP32 vector."""
+    if not delta_dict:
+        raise ValueError("delta_dict must not be empty")
     parts = [
         delta_dict[k].detach().to(torch.float32).cpu().reshape(-1)
         for k in sorted(delta_dict.keys())
@@ -82,19 +85,52 @@ def flatten_delta_dict(delta_dict: dict[str, torch.Tensor]) -> torch.Tensor:
     return torch.cat(parts, dim=0)
 
 
+def _infer_plurality_reference_schema(
+    worker_deltas: dict[str, dict[str, torch.Tensor]],
+) -> dict[str, torch.Size] | None:
+    schema_counts: dict[tuple[tuple[str, torch.Size], ...], int] = {}
+    first_schema_map: dict[tuple[tuple[str, torch.Size], ...], dict[str, torch.Size]] = {}
+    for delta_dict in worker_deltas.values():
+        if not isinstance(delta_dict, dict) or not delta_dict:
+            continue
+        if not all(isinstance(v, torch.Tensor) for v in delta_dict.values()):
+            continue
+        sig = tuple((k, delta_dict[k].shape) for k in sorted(delta_dict.keys()))
+        schema_counts[sig] = schema_counts.get(sig, 0) + 1
+        if sig not in first_schema_map:
+            first_schema_map[sig] = {k: delta_dict[k].shape for k in delta_dict}
+    if not schema_counts:
+        return None
+    best_sig = max(schema_counts.keys(), key=lambda s: schema_counts[s])
+    return first_schema_map[best_sig]
+
+
 def filter_byzantine_deltas_multikrum(
     worker_deltas: dict[str, dict[str, torch.Tensor]],
     max_byzantine_f: int = 1,
     cosine_sigma: float = 2.0,
+    reference_keys_and_shapes: dict[str, torch.Size] | None = None,
 ) -> ByzantineFilterReport:
     """Filter worker pseudo-gradients using Pre-Krum Sanitization, Multi-Krum, and a 2-sigma pairwise cosine filter."""
+    if isinstance(max_byzantine_f, bool) or not isinstance(max_byzantine_f, int) or max_byzantine_f < 0:
+        raise ValueError(f"max_byzantine_f must be an integer >= 0, got {max_byzantine_f!r}")
+    if isinstance(cosine_sigma, bool) or not isinstance(cosine_sigma, (int, float)) or not math.isfinite(float(cosine_sigma)) or cosine_sigma < 0.0:
+        raise ValueError(f"cosine_sigma must be finite and >= 0, got {cosine_sigma!r}")
     all_worker_ids = list(worker_deltas.keys())
     total_K = len(all_worker_ids)
     if total_K == 0:
         raise ValueError("Cannot run Multi-Krum on empty worker_deltas.")
 
+    eff_ref_schema = (
+        reference_keys_and_shapes
+        if reference_keys_and_shapes is not None
+        else _infer_plurality_reference_schema(worker_deltas)
+    )
     fl_guard = FederatedLearningSecurityGuard()
-    clean_deltas, quarantined = fl_guard.sanitize_worker_deltas_pre_krum(worker_deltas)
+    clean_deltas, quarantined = fl_guard.sanitize_worker_deltas_pre_krum(
+        worker_deltas,
+        reference_keys_and_shapes=eff_ref_schema,
+    )
     worker_ids = list(clean_deltas.keys())
     K = len(worker_ids)
 
@@ -103,7 +139,7 @@ def filter_byzantine_deltas_multikrum(
             f"All {total_K} worker deltas were quarantined during pre-Krum security sanitization: {quarantined}"
         )
 
-    if K <= 2:
+    if K == 1:
         return ByzantineFilterReport(
             total_submissions=total_K,
             max_byzantine_f=0,
@@ -116,8 +152,9 @@ def filter_byzantine_deltas_multikrum(
             quarantined_pre_krum=quarantined,
         )
 
-    # Clamp f so K - f - 2 >= 1
-    f = min(max_byzantine_f, max(0, K - 3))
+    # Clamp f so K >= 2*f + 3 (Multi-Krum validity condition, IP-34)
+    f = min(max_byzantine_f, max(0, (K - 3) // 2))
+    krum_guarantee = bool(max_byzantine_f > 0 and K >= 2 * max_byzantine_f + 3 and f >= max_byzantine_f)
     num_neighbors = max(1, K - f - 2)
 
     # Accumulate exact [K, K] inner-product Gram matrix parameter-by-parameter (<1 MB peak RAM)
@@ -137,6 +174,36 @@ def filter_byzantine_deltas_multikrum(
     diag = torch.diag(gram).clamp_min(0.0)
     # Pairwise squared Euclidean distances: ||u - v||^2 = ||u||^2 + ||v||^2 - 2 <u, v>
     dist_matrix = (diag.unsqueeze(1) + diag.unsqueeze(0) - 2.0 * gram).clamp_min(0.0).to(torch.float32)
+    norms = torch.sqrt(diag).clamp_min(1e-12)
+    cos_matrix = (gram / (norms.unsqueeze(1) * norms.unsqueeze(0))).clamp(-1.0, 1.0).to(torch.float32)
+
+    if K == 2:
+        w0, w1 = worker_ids[0], worker_ids[1]
+        pair_cos = round(float(cos_matrix[0, 1].item()), 6)
+        pair_dist = round(float(dist_matrix[0, 1].item()), 6)
+        n0 = float(norms[0].item())
+        n1 = float(norms[1].item())
+        if pair_cos < 0.0:
+            survivor = w0 if n0 <= n1 else w1
+            outlier = w1 if survivor == w0 else w0
+            accepted_k2 = [survivor]
+            rejected_k2 = list(quarantined.keys()) + [outlier]
+            eff_f = min(max_byzantine_f, 1)
+        else:
+            accepted_k2 = [w0, w1]
+            rejected_k2 = list(quarantined.keys())
+            eff_f = 0
+        return ByzantineFilterReport(
+            total_submissions=total_K,
+            max_byzantine_f=eff_f,
+            accepted_workers=accepted_k2,
+            rejected_workers=rejected_k2,
+            krum_scores={w0: pair_dist, w1: pair_dist},
+            mean_cosine_similarities={w0: pair_cos, w1: pair_cos},
+            median_cosine=pair_cos,
+            cosine_threshold_lower=0.0,
+            quarantined_pre_krum=quarantined,
+        )
 
     krum_scores: dict[str, float] = {}
     for i, wid in enumerate(worker_ids):
@@ -167,11 +234,14 @@ def filter_byzantine_deltas_multikrum(
     # Multi-Krum selects the top (K - f) workers with smallest Krum distance score
     sorted_by_krum = sorted(worker_ids, key=lambda w: krum_scores[w])
     krum_survivors = set(sorted_by_krum[: max(1, K - f)])
+    median_norm = float(norms.median().item())
+    norm_by_worker = {wid: float(norms[idx].item()) for idx, wid in enumerate(worker_ids)}
 
     accepted: list[str] = []
     rejected: list[str] = list(quarantined.keys())
     for wid in worker_ids:
-        if wid in krum_survivors and mean_cos_per_worker[wid] >= cos_lower_bound:
+        norm_ok = max_byzantine_f <= 0 or norm_by_worker[wid] <= 5.0 * median_norm
+        if wid in krum_survivors and mean_cos_per_worker[wid] >= cos_lower_bound and norm_ok:
             accepted.append(wid)
         else:
             rejected.append(wid)
@@ -192,6 +262,7 @@ def filter_byzantine_deltas_multikrum(
         median_cosine=round(median_cos, 6),
         cosine_threshold_lower=round(cos_lower_bound, 6),
         quarantined_pre_krum=quarantined,
+        krum_guarantee=krum_guarantee,
     )
 
 
@@ -250,10 +321,16 @@ class DiLoCoOuterOptimizer:
         if not math.isfinite(eff_wd) or eff_wd < 0.0:
             raise ValueError("weight_decay must be finite and non-negative")
         eff_cgad_lr = cgad_lr if cgad_lr is not None else outer_lr_eta
-        if (outer_optimizer_mode != "nesterov" or use_cpu_flat_bucket) and (
-            not math.isfinite(outer_lr_eta) or outer_lr_eta <= 0.0
-        ):
+        if not math.isfinite(outer_lr_eta) or outer_lr_eta <= 0.0:
             raise ValueError("outer_lr_eta must be finite and positive")
+        if not math.isfinite(eff_cgad_lr) or eff_cgad_lr <= 0.0:
+            raise ValueError("cgad_lr must be finite and positive")
+        if not math.isfinite(outer_momentum_mu) or not (0.0 <= outer_momentum_mu < 1.0):
+            raise ValueError("outer_momentum_mu must be finite in [0, 1)")
+        if isinstance(max_byzantine_f, bool) or not isinstance(max_byzantine_f, int) or max_byzantine_f < 0:
+            raise ValueError("max_byzantine_f must be an integer >= 0")
+        if not math.isfinite(cosine_sigma) or cosine_sigma < 0.0:
+            raise ValueError("cosine_sigma must be finite and >= 0")
         self.outer_lr_eta = outer_lr_eta
         self.outer_momentum_mu = outer_momentum_mu
         self.max_byzantine_f = max_byzantine_f
@@ -337,14 +414,47 @@ class DiLoCoOuterOptimizer:
             isinstance(eff_restart, bool) or not isinstance(eff_restart, int) or eff_restart < 1
         ):
             raise ValueError("momentum_restart_period must be an integer >= 1 or None")
+        if not isinstance(branch_name, str) or not branch_name.strip():
+            raise ValueError("branch_name must be a non-empty string")
+        if isinstance(outer_step, bool) or not isinstance(outer_step, int) or outer_step < 0:
+            raise ValueError("outer_step must be an integer >= 0")
         should_restart = bool(
             eff_restart is not None and outer_step > 0 and (outer_step % eff_restart == 0)
         )
+
+        parameter_keys = set(theta_prev)
+        full_schema = {k: v.shape for k, v in theta_prev.items()}
+        if self.outer_optimizer_mode == "cosine_gated_adam_decay" and synced_fragments is not None:
+            declared_keys = set(synced_fragments)
+            if not declared_keys <= parameter_keys:
+                raise ValueError("synced_fragments must name existing branch parameters")
+            if declared_keys and declared_keys != parameter_keys:
+                subset_schema = {k: theta_prev[k].shape for k in declared_keys}
+                full_matches = sum(
+                    1
+                    for d in worker_deltas.values()
+                    if isinstance(d, dict)
+                    and set(d.keys()) == parameter_keys
+                    and all(isinstance(d[k], torch.Tensor) and d[k].shape == full_schema[k] for k in parameter_keys)
+                )
+                subset_matches = sum(
+                    1
+                    for d in worker_deltas.values()
+                    if isinstance(d, dict)
+                    and set(d.keys()) == declared_keys
+                    and all(isinstance(d[k], torch.Tensor) and d[k].shape == subset_schema[k] for k in declared_keys)
+                )
+                round_reference_schema = full_schema if full_matches > subset_matches else subset_schema
+            else:
+                round_reference_schema = full_schema
+        else:
+            round_reference_schema = full_schema
 
         filter_report = filter_byzantine_deltas_multikrum(
             worker_deltas=worker_deltas,
             max_byzantine_f=self.max_byzantine_f,
             cosine_sigma=self.cosine_sigma,
+            reference_keys_and_shapes=round_reference_schema,
         )
         valid_ids = filter_report.accepted_workers
         surviving_deltas = {wid: worker_deltas[wid] for wid in valid_ids}

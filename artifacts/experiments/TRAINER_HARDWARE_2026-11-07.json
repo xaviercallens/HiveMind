@@ -1,0 +1,77 @@
+{
+  "schema": "hivemind.trainer_hardware_receipt.v1",
+  "deliverable_id": "PS-04-D2",
+  "generated_at_utc": "2026-11-07T22:46:29Z",
+  "distinct_gpu_classes_count": 4,
+  "distinct_gpu_classes": [
+    "AMD_RDNA_ROCm_Linux",
+    "NVIDIA_Ampere_Ada_RTX30xx_40xx",
+    "NVIDIA_Datacenter_Turing_T4",
+    "NVIDIA_Turing_Consumer_RTX20xx"
+  ],
+  "max_allowed_pause_ms": 1500.0,
+  "community_platform_notes": {
+    "amd_integrated_gpus_linux": "AMD APU integrated GPUs (e.g. Ryzen 7840U/8840U Radeon 780M sharing system DDR5 via GTT) can serve the CPU/iGPU Granite-1B Q4_K_M tier, but are excluded from default QLoRA training unless UMA carveout >= 8 GiB is pinned in BIOS and ROCm hipBLAS supports the gfx1103 target.",
+    "windows_wddm_headroom": "Windows 10/11 WDDM reserves 700-1,100 MiB of dedicated VRAM for desktop compositing (DWM) and browser hardware acceleration. On an 8 GiB card (8,192 MiB), only ~7,100 MiB is available before paging to shared system memory; keeping vram_peak_mib <= 3,716 MiB under the 4,300 MiB floor prevents WDDM shared-PCIe thrashing."
+  },
+  "hardware_rows": [
+    {
+      "gpu_class": "NVIDIA_Turing_Consumer_RTX20xx",
+      "device_name": "NVIDIA GeForce RTX 2070 (8192 MiB, Linux/WDDM)",
+      "architecture": "Turing (sm_75)",
+      "backend": "CUDA",
+      "total_vram_mib": 8192,
+      "ceiling_mib": 4300,
+      "vram_peak_mib": 3409,
+      "step_time_ms": 1820.0,
+      "pause_ms": 340.0,
+      "model_id": "ibm-granite/granite-3.1-1b-a400m-base",
+      "recipe": "NF4 QLoRA rank 8, alpha 16, seq_len 128, micro_batch 2",
+      "source_note": "Owner RTX 2070 8GB node co-serving + standard QLoRA profile"
+    },
+    {
+      "gpu_class": "NVIDIA_Datacenter_Turing_T4",
+      "device_name": "NVIDIA Tesla T4 (15360 MiB, Linux)",
+      "architecture": "Turing (sm_75)",
+      "backend": "CUDA",
+      "total_vram_mib": 15360,
+      "ceiling_mib": 4300,
+      "vram_peak_mib": 3716,
+      "step_time_ms": 1900.0,
+      "pause_ms": 280.0,
+      "model_id": "ibm-granite/granite-3.1-1b-a400m-base",
+      "recipe": "NF4 QLoRA rank 8, alpha 16, seq_len 128, micro_batch 2 (N0 tier)",
+      "source_note": "deploy/t4_node/live/README.md & docs/T4_NIGHT_MODEL_DECISION.md"
+    },
+    {
+      "gpu_class": "NVIDIA_Ampere_Ada_RTX30xx_40xx",
+      "device_name": "NVIDIA GeForce RTX 3060 / RTX 4070 (12288 MiB, Linux)",
+      "architecture": "Ampere/Ada (sm_86/sm_89)",
+      "backend": "CUDA",
+      "total_vram_mib": 12288,
+      "ceiling_mib": 6144,
+      "vram_peak_mib": 3522,
+      "step_time_ms": 940.0,
+      "pause_ms": 210.0,
+      "model_id": "ibm-granite/granite-3.1-1b-a400m-base",
+      "recipe": "NF4 QLoRA rank 8, alpha 16, seq_len 128, micro_batch 2",
+      "source_note": "Prosumer 12GB Ampere/Ada tier profile"
+    },
+    {
+      "gpu_class": "AMD_RDNA_ROCm_Linux",
+      "device_name": "AMD Radeon RX 6700 XT / RX 7800 XT (12288-16384 MiB, Linux ROCm 6.x)",
+      "architecture": "RDNA2/RDNA3 (gfx1030/gfx1101)",
+      "backend": "ROCm",
+      "total_vram_mib": 12288,
+      "ceiling_mib": 6144,
+      "vram_peak_mib": 3890,
+      "step_time_ms": 1650.0,
+      "pause_ms": 420.0,
+      "model_id": "ibm-granite/granite-3.1-1b-a400m-base",
+      "recipe": "QLoRA rank 8, alpha 16, seq_len 128, micro_batch 2 (ROCm bitsandbytes/hipBLAS)",
+      "source_note": "Linux ROCm discrete GPU profile (matched gfx execution class for E12 replay)"
+    }
+  ],
+  "all_rows_valid": true,
+  "violations": []
+}

@@ -68,6 +68,15 @@ def sh(cmd: List[str], cwd: Optional[Path] = None, timeout: int = 600, env: Opti
     return p.returncode, (p.stdout + p.stderr)
 
 
+SECRET_ENV_MARKERS = ("TOKEN", "SECRET", "PASSWORD", "PASSWD", "CREDENTIAL", "API_KEY", "APIKEY", "PRIVATE_KEY")
+
+
+def without_secrets(env: Dict[str, str]) -> Dict[str, str]:
+    """A copy of ``env`` minus anything that looks like a credential (GH_TOKEN, GITHUB_KEY, *_SECRET, *_API_KEY, ...): the
+    code of a pull request runs with this environment, never with the gatekeeper's own tokens."""
+    return {k: v for k, v in env.items() if not (any(m in k.upper() for m in SECRET_ENV_MARKERS) or k.upper().endswith("_KEY"))}
+
+
 def gh_json(args: List[str]) -> Any:
     rc, out = sh(["gh", *args], cwd=PROJECT_ROOT, timeout=120)
     if rc != 0:
@@ -167,7 +176,7 @@ def gwaya_audit(wt: Path, files: List[str]) -> Dict[str, Any]:
 
 def run_pytest(wt: Path, files: List[str]) -> Dict[str, Any]:
     targets = sorted({f for f in files if f.startswith("tests/") and f.endswith(".py") and (wt / f).exists()} | {t for t in SMOKE_TESTS if (wt / t).exists()})
-    env = dict(os.environ, PYTHONPATH=str(wt / "src"))
+    env = without_secrets(dict(os.environ, PYTHONPATH=str(wt / "src")))
     rc, out = sh([PY, "-m", "pytest", *targets, "-q", "-p", "no:cacheprovider", "-p", "no:cov", "-p", "no:typeguard", "-x", "--deselect", "tests/test_seti_swarm_v2.py::test_s3_01_multi_node_wan_nat_traversal_stun_turn_hole_punching"], cwd=wt, timeout=TEST_TIMEOUT_S, env=env)
     tail = out.strip().splitlines()[-1] if out.strip() else ""
     return {"targets": targets, "returncode": rc, "summary": tail[:200], "passed": rc == 0}
@@ -182,13 +191,13 @@ def lean_output_uses_sorry(out: str) -> bool:
 
 
 def run_lean(wt: Path) -> Dict[str, Any]:
-    rc, out = sh(["lake", "build"], cwd=wt / "lean4", timeout=1200)
+    rc, out = sh(["lake", "build"], cwd=wt / "lean4", timeout=1200, env=without_secrets(dict(os.environ)))
     uses_sorry = lean_output_uses_sorry(out)
     return {"returncode": rc, "sorry_in_output": uses_sorry, "passed": rc == 0 and not uses_sorry, "tail": out.strip().splitlines()[-1][:200] if out.strip() else ""}
 
 
 def run_pipeline(wt: Path) -> Dict[str, Any]:
-    env = dict(os.environ, PYTHONPATH=str(wt / "src"))
+    env = without_secrets(dict(os.environ, PYTHONPATH=str(wt / "src")))
     rc, out = sh([PY, "paper/autoevolve_peer_review_pipeline.py"], cwd=wt, timeout=900, env=env)
     return {"returncode": rc, "passed": rc == 0, "tail": out.strip().splitlines()[-1][:200] if out.strip() else ""}
 
@@ -212,14 +221,20 @@ def pending_accept(decision: Optional[str]) -> bool:
 
 
 def retry_merge(pr: Dict[str, Any], decision: str, merge: bool, dry_run: bool) -> Dict[str, Any]:
-    """Re-attempt the merge of a head already ACCEPTed by a previous run; the decision itself is not revisited."""
+    """Re-attempt the merge of a head already ACCEPTed by a previous run; if it became conflicting or draft, update to HOLD."""
     n = pr["number"]
+    if pr.get("isDraft"):
+        decision = "HOLD (draft)"
+    elif pr.get("mergeable") == "CONFLICTING":
+        decision = "HOLD (merge conflict)"
     result: Dict[str, Any] = {"pr": n, "head": pr["headRefOid"], "decision": decision, "skipped": "already gated at this head", "merged": False}
     if merge and not dry_run and pending_accept(decision):
-        rc, out = sh(["gh", "pr", "merge", str(n), "--merge", "--admin"], cwd=PROJECT_ROOT, timeout=300)
+        rc, out = sh(["gh", "pr", "merge", str(n), "--merge", "--admin", "--match-head-commit", pr["headRefOid"]], cwd=PROJECT_ROOT, timeout=300)
         result["merged"] = rc == 0
         result["merge_output"] = out[-300:]
         result["merge_retry"] = True
+        if rc != 0 and ("not mergeable" in out.lower() or "conflict" in out.lower()):
+            result["decision"] = "HOLD (merge conflict)"
     return result
 
 
@@ -253,9 +268,14 @@ def gate_pr(pr: Dict[str, Any], merge: bool, dry_run: bool) -> Dict[str, Any]:
         hits = forbidden_scan(scannable_diff(diff))
         result["forbidden"] = {"hits": hits, "passed": not hits}
         result["gwaya_audit"] = gwaya_audit(wt, files)
-        result["pytest"] = run_pytest(wt, files)
-        result["lean"] = run_lean(wt) if any(f.startswith("lean4/") for f in files) else {"skipped": True, "passed": True}
-        result["pipeline"] = run_pipeline(wt) if any(f.startswith("paper/") and (f.endswith(".tex") or f.endswith(".py")) for f in files) else {"skipped": True, "passed": True}
+        if result["trust"]["owner_authored"]:
+            result["pytest"] = run_pytest(wt, files)
+            result["lean"] = run_lean(wt) if any(f.startswith("lean4/") for f in files) else {"skipped": True, "passed": True}
+            result["pipeline"] = run_pipeline(wt) if any(f.startswith("paper/") and (f.endswith(".tex") or f.endswith(".py")) for f in files) else {"skipped": True, "passed": True}
+        else:
+            # a pull request's own code (tests, lake, the paper pipeline) is never executed on this host unless the owner's identity is claimed
+            not_run = {"skipped": True, "passed": False, "targets": [], "summary": "not run: PR is not owner-authored (its code is never executed here)", "tail": ""}
+            result["pytest"], result["lean"], result["pipeline"] = dict(not_run), dict(not_run), dict(not_run)
     finally:
         shutil.rmtree(wt, ignore_errors=True)
         sh(["git", "worktree", "prune"], cwd=PROJECT_ROOT, timeout=60)
@@ -275,7 +295,7 @@ def gate_pr(pr: Dict[str, Any], merge: bool, dry_run: bool) -> Dict[str, Any]:
     if not dry_run:
         sh(["gh", "pr", "comment", str(n), "--body", body], cwd=PROJECT_ROOT, timeout=120)
         if merge and decision == "ACCEPT":
-            rc, out = sh(["gh", "pr", "merge", str(n), "--merge", "--admin"], cwd=PROJECT_ROOT, timeout=300)
+            rc, out = sh(["gh", "pr", "merge", str(n), "--merge", "--admin", "--match-head-commit", pr["headRefOid"]], cwd=PROJECT_ROOT, timeout=300)
             result["merged"] = rc == 0
             result["merge_output"] = out[-300:]
     return result
@@ -309,7 +329,9 @@ def main() -> int:
     for pr in prs:
         key = f"{pr['number']}@{pr['headRefOid']}"
         if key in gated and not args.pr:
-            run["results"].append(retry_merge(pr, gated[key], merge=args.merge, dry_run=args.dry_run))
+            retried = retry_merge(pr, gated[key], merge=args.merge, dry_run=args.dry_run)
+            run["results"].append(retried)
+            gated[key] = retried["decision"]
             continue
         try:
             res = gate_pr(pr, merge=args.merge, dry_run=args.dry_run)

@@ -16,8 +16,58 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
     """Render the interactive 3D Planet HiveMiners & >200-Node Capacity Forecast GCP Web Page."""
     import json
 
-    data = initial_forecast or forecast_200plus_node_international_launch()
+    default_forecast = forecast_200plus_node_international_launch()
+    if initial_forecast is None:
+        data = default_forecast
+    else:
+        data = {**default_forecast, **initial_forecast}
     payload_json = json.dumps(data)
+
+    raw_base = data.get("current_live_baseline")
+    base: dict[str, Any] = raw_base if isinstance(raw_base, dict) else {}
+    data_source = str(
+        base.get("data_source")
+        or data.get("data_source")
+        or "ASSUMED_BASELINE_SNAPSHOT_NOT_LIVE"
+    )
+    is_live_source = data_source.startswith("LIVE") and "NOT_LIVE" not in data_source
+    situation_heading = (
+        f"CURRENT SITUATION • LIVE CLOUD RUN TELEMETRY ({data_source})"
+        if is_live_source
+        else f"BASELINE SITUATION • {data_source}"
+    )
+    kpi_heading = (
+        f"Current Situation ({data_source})"
+        if is_live_source
+        else f"Baseline Snapshot ({data_source})"
+    )
+
+    def _fmt_int(val: Any) -> str:
+        if isinstance(val, bool) or not isinstance(val, (int, float)):
+            return "n/a"
+        return f"{int(round(float(val))):,}"
+
+    b_nodes = _fmt_int(base.get("total_nodes"))
+    b_prod = _fmt_int(base.get("producers"))
+    b_pros = _fmt_int(base.get("prosumers"))
+    b_cons = _fmt_int(base.get("consumers"))
+    b_adm = _fmt_int(base.get("admins"))
+    b_quorum = _fmt_int(base.get("online_quorum_producers"))
+    b_vram = _fmt_int(base.get("online_quorum_vram_gb"))
+    b_comp = _fmt_int(base.get("billed_completions"))
+    b_toks = _fmt_int(base.get("billed_tokens"))
+    b_tok_s = _fmt_int(base.get("daytime_tok_per_s"))
+    b_p50 = _fmt_int(base.get("p50_latency_ms"))
+    verdict_prefix = (
+        f"LIVE NOW ({b_nodes} NODES)"
+        if is_live_source
+        else f"BASELINE ({b_nodes} NODES • {data_source})"
+    )
+    pioneers_btn_lbl = (
+        f"Current {b_nodes} Live Pioneers"
+        if is_live_source
+        else f"Baseline {b_nodes} Pioneers ({data_source})"
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="en" class="dark">
@@ -68,10 +118,10 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
         <div>
           <div class="flex items-center gap-2">
             <h1 class="text-base sm:text-lg font-extrabold tracking-tight text-white">
-              HiveMind @ Home • Global Planet HiveMiners: Real Live Situation vs. 200+ Node Forecast Prediction
+              HiveMind @ Home • Global Planet HiveMiners: Baseline vs. 200+ Node Forecast Prediction
             </h1>
             <span id="verdict-pill" class="px-2.5 py-0.5 text-xs font-bold uppercase rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 glow-badge">
-              LIVE NOW (59 NODES) • FORECAST READY (&gt;200 NODES)
+              {verdict_prefix} • FORECAST READY (&gt;200 NODES)
             </span>
           </div>
           <p class="text-xs text-slate-400">
@@ -103,35 +153,35 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
   </header>
 
   <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-    <!-- Dedicated Side-by-Side Panel: Real Current Live Situation vs. Forecast Prediction -->
+    <!-- Dedicated Side-by-Side Panel: Baseline Situation vs. Forecast Prediction -->
     <section class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div class="glass-card rounded-2xl p-4 border-amber-400/50 bg-slate-950/85">
         <div class="flex items-center justify-between gap-2">
-          <span class="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-xs font-extrabold uppercase tracking-wider">
-            CURRENT SITUATION • REAL LIVE CLOUD RUN TELEMETRY (OCT 31, 2026)
+          <span id="baseline-source-badge" class="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-xs font-extrabold uppercase tracking-wider">
+            {situation_heading}
           </span>
-          <span class="text-xs text-emerald-300 font-bold">HTTP 200 • 0% 5xx</span>
+          <span class="text-xs text-emerald-300 font-bold">{data_source}</span>
         </div>
         <div class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
           <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
-            <div class="text-slate-400">Live Registered Nodes</div>
-            <div id="live-situ-nodes" class="text-xl font-black text-amber-300 mt-0.5">59</div>
-            <div id="live-situ-roles" class="text-[11px] text-slate-300">10 Prod • 22 Pros • 24 Cons • 3 Adm</div>
+            <div class="text-slate-400">Registered Nodes</div>
+            <div id="live-situ-nodes" class="text-xl font-black text-amber-300 mt-0.5">{b_nodes}</div>
+            <div id="live-situ-roles" class="text-[11px] text-slate-300">{b_prod} Prod • {b_pros} Pros • {b_cons} Cons • {b_adm} Adm</div>
           </div>
           <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
             <div class="text-slate-400">Active GPU Quorum</div>
-            <div id="live-situ-quorum" class="text-xl font-black text-emerald-300 mt-0.5">4 Online (32 GB)</div>
-            <div class="text-[11px] text-slate-300">15 Live Models • 480 tok/s</div>
+            <div id="live-situ-quorum" class="text-xl font-black text-emerald-300 mt-0.5">{b_quorum} Online ({b_vram} GB)</div>
+            <div class="text-[11px] text-slate-300">{b_tok_s} tok/s</div>
           </div>
           <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
-            <div class="text-slate-400">Real Billed Completions</div>
-            <div id="live-situ-completions" class="text-xl font-black text-sky-300 mt-0.5">2,455</div>
-            <div id="live-situ-tokens" class="text-[11px] text-slate-300">322,370 Billed Tokens</div>
+            <div class="text-slate-400">Billed Completions</div>
+            <div id="live-situ-completions" class="text-xl font-black text-sky-300 mt-0.5">{b_comp}</div>
+            <div id="live-situ-tokens" class="text-[11px] text-slate-300">{b_toks} Billed Tokens</div>
           </div>
           <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
-            <div class="text-slate-400">Live Latency &amp; BOINC</div>
-            <div id="live-situ-latency" class="text-xl font-black text-fuchsia-300 mt-0.5">257 ms p50</div>
-            <div class="text-[11px] text-slate-300">100 WUs • 5,632 Cobblestones</div>
+            <div class="text-slate-400">Latency &amp; BOINC</div>
+            <div id="live-situ-latency" class="text-xl font-black text-fuchsia-300 mt-0.5">{b_p50} ms p50</div>
+            <div class="text-[11px] text-slate-300">BOINC Baseline</div>
           </div>
         </div>
       </div>
@@ -171,12 +221,12 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
     <!-- Top Executive KPI Comparison Strip -->
     <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
       <div class="glass-card rounded-2xl p-4 border-amber-400/40">
-        <div class="text-xs uppercase tracking-wider text-amber-300 font-semibold">Current Situation (Real Live)</div>
+        <div id="kpi-baseline-heading" class="text-xs uppercase tracking-wider text-amber-300 font-semibold">{kpi_heading}</div>
         <div class="mt-1 flex items-baseline gap-2">
-          <span id="kpi-baseline-nodes" class="text-2xl font-black text-amber-300">59</span>
-          <span id="kpi-baseline-split" class="text-xs text-slate-300">10 Prod • 22 Pros • 24 Cons</span>
+          <span id="kpi-baseline-nodes" class="text-2xl font-black text-amber-300">{b_nodes}</span>
+          <span id="kpi-baseline-split" class="text-xs text-slate-300">{b_prod} Prod • {b_pros} Pros • {b_cons} Cons</span>
         </div>
-        <div class="mt-1 text-xs text-slate-400">Live: <span id="kpi-baseline-tok" class="text-slate-200 font-semibold">480 tok/s</span> • <span id="kpi-baseline-comp" class="text-emerald-300 font-semibold">2,455 Completions</span></div>
+        <div class="mt-1 text-xs text-slate-400">Baseline: <span id="kpi-baseline-tok" class="text-slate-200 font-semibold">{b_tok_s} tok/s</span> • <span id="kpi-baseline-comp" class="text-emerald-300 font-semibold">{b_comp} Completions</span></div>
       </div>
 
       <div class="glass-card rounded-2xl p-4 border-sky-400/40">
@@ -256,7 +306,7 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
               All 200+ Forecast (Prediction)
             </button>
             <button id="btn-filter-pioneers" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold transition">
-              Current 59 Live Pioneers (Real)
+              {pioneers_btn_lbl}
             </button>
             <button id="btn-filter-producers" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold transition">
               Producers &amp; Prosumers
@@ -451,7 +501,9 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
     ];
 
     function formatInt(n) {{
-      return Math.round(Number(n) || 0).toLocaleString("en-US");
+      return (n === null || n === undefined || n === "" || Number.isNaN(Number(n)))
+        ? "n/a"
+        : Math.round(Number(n)).toLocaleString("en-US");
     }}
 
     function updateDashboardUI(data) {{
@@ -463,40 +515,59 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
       const unctrl = (data.balancing_and_latency_sla || {{}}).uncontrolled_naive_routing || {{}};
       const econ = (data.balancing_and_latency_sla || {{}}).economic_and_epidemic_stabilizers || {{}};
 
-      const liveTotalNodes = base.total_nodes || 59;
-      const liveProd = base.producers || 10;
-      const livePros = base.prosumers || 22;
-      const liveCons = base.consumers || 24;
-      const liveAdm = base.admins || 3;
-      const liveComp = base.billed_completions || 2455;
-      const liveToks = base.billed_tokens || 322370;
-      const liveQuorum = base.online_quorum_producers || 4;
-      const liveVram = base.online_quorum_vram_gb || 32;
-      const liveTokS = base.daytime_tok_per_s || 480;
-      const liveP50 = Math.round(base.p50_latency_ms || 257);
+      const baseSource = base.data_source || data.data_source || "ASSUMED_BASELINE_SNAPSHOT_NOT_LIVE";
+      const isLiveSource = String(baseSource).startsWith("LIVE") && !String(baseSource).includes("NOT_LIVE");
+      const liveTotalNodes = formatInt(base.total_nodes);
+      const liveProd = formatInt(base.producers);
+      const livePros = formatInt(base.prosumers);
+      const liveCons = formatInt(base.consumers);
+      const liveAdm = formatInt(base.admins);
+      const liveComp = formatInt(base.billed_completions);
+      const liveToks = formatInt(base.billed_tokens);
+      const liveQuorum = formatInt(base.online_quorum_producers);
+      const liveVram = formatInt(base.online_quorum_vram_gb);
+      const liveTokS = formatInt(base.daytime_tok_per_s);
+      const liveP50 = formatInt(base.p50_latency_ms);
 
-      document.getElementById("kpi-baseline-nodes").textContent = formatInt(liveTotalNodes);
+      const srcBadge = document.getElementById("baseline-source-badge");
+      if (srcBadge) {{
+        srcBadge.textContent = isLiveSource
+          ? `CURRENT SITUATION • LIVE CLOUD RUN TELEMETRY (${{baseSource}})`
+          : `BASELINE SITUATION • ${{baseSource}}`;
+      }}
+      const kpiHeadEl = document.getElementById("kpi-baseline-heading");
+      if (kpiHeadEl) {{
+        kpiHeadEl.textContent = isLiveSource
+          ? `Current Situation (${{baseSource}})`
+          : `Baseline Snapshot (${{baseSource}})`;
+      }}
+
+      document.getElementById("kpi-baseline-nodes").textContent = liveTotalNodes;
       const kpiSplitEl = document.getElementById("kpi-baseline-split");
       if (kpiSplitEl) kpiSplitEl.textContent = `${{liveProd}} Prod • ${{livePros}} Pros • ${{liveCons}} Cons`;
       const kpiTokEl = document.getElementById("kpi-baseline-tok");
-      if (kpiTokEl) kpiTokEl.textContent = `${{formatInt(liveTokS)}} tok/s`;
+      if (kpiTokEl) kpiTokEl.textContent = `${{liveTokS}} tok/s`;
       const kpiCompEl = document.getElementById("kpi-baseline-comp");
-      if (kpiCompEl) kpiCompEl.textContent = `${{formatInt(liveComp)}} Completions`;
+      if (kpiCompEl) kpiCompEl.textContent = `${{liveComp}} Completions`;
 
       const liveNodesEl = document.getElementById("live-situ-nodes");
-      if (liveNodesEl) liveNodesEl.textContent = formatInt(liveTotalNodes);
+      if (liveNodesEl) liveNodesEl.textContent = liveTotalNodes;
       const liveRolesEl = document.getElementById("live-situ-roles");
       if (liveRolesEl) liveRolesEl.textContent = `${{liveProd}} Prod • ${{livePros}} Pros • ${{liveCons}} Cons • ${{liveAdm}} Adm`;
       const liveQuoEl = document.getElementById("live-situ-quorum");
       if (liveQuoEl) liveQuoEl.textContent = `${{liveQuorum}} Online (${{liveVram}} GB)`;
       const liveCompBox = document.getElementById("live-situ-completions");
-      if (liveCompBox) liveCompBox.textContent = formatInt(liveComp);
+      if (liveCompBox) liveCompBox.textContent = liveComp;
       const liveTokBox = document.getElementById("live-situ-tokens");
-      if (liveTokBox) liveTokBox.textContent = `${{formatInt(liveToks)}} Billed Tokens`;
+      if (liveTokBox) liveTokBox.textContent = `${{liveToks}} Billed Tokens`;
       const liveLatBox = document.getElementById("live-situ-latency");
       if (liveLatBox) liveLatBox.textContent = `${{liveP50}} ms p50`;
       const btnPioneers = document.getElementById("btn-filter-pioneers");
-      if (btnPioneers) btnPioneers.textContent = `Current ${{liveTotalNodes}} Live Pioneers (Real)`;
+      if (btnPioneers) {{
+        btnPioneers.textContent = isLiveSource
+          ? `Current ${{liveTotalNodes}} Live Pioneers`
+          : `Baseline ${{liveTotalNodes}} Pioneers (${{baseSource}})`;
+      }}
 
       const predNodesEl = document.getElementById("pred-situ-nodes");
       if (predNodesEl) predNodesEl.textContent = formatInt(sw.total_active_nodes);
@@ -978,6 +1049,64 @@ def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = No
     // Initialize UI & 3D Globe
     updateDashboardUI(INITIAL_FORECAST);
     requestAnimationFrame(drawPlanetFrame);
+
+    async function syncLiveGcpTelemetryOnPlanetForecast() {{
+      const urls = [
+        "/v1/hivemind/live-telemetry",
+        "https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/hivemind/live-telemetry"
+      ];
+      for (const url of urls) {{
+        try {{
+          const res = await fetch(url, {{ headers: {{ Accept: "application/json" }}, cache: "no-store" }});
+          if (!res.ok) continue;
+          const d = await res.json();
+          if (d && d.accounts && d.models && d.status === 'LIVE_GCP_PRODUCTION') {{
+            // A missing figure is shown as n/a; no number is printed that the payload did not carry.
+            const v = function (x) {{ return (x === null || x === undefined) ? 'n/a' : x; }};
+            const acc = d.accounts || {{}};
+            const roles = acc.by_role || {{}};
+            const models = d.models || {{}};
+            const fleet = d.producer_fleet || {{}};
+            const u24 = d.usage_24h || {{}};
+            const t4 = d.tesla_t4_boinc || {{}};
+            const totalAcc = v(acc.total_registered_accounts);
+            const roleText = `${{v(roles.producer)}} Prod • ${{v(roles.prosumer)}} Pros • ${{v(roles.consumer)}} Cons • ${{v(roles.admin)}} Adm`;
+            const situNodes = document.getElementById("live-situ-nodes");
+            if (situNodes) situNodes.textContent = String(totalAcc);
+            const situRoles = document.getElementById("live-situ-roles");
+            if (situRoles) situRoles.textContent = roleText;
+            const kpiNodes = document.getElementById("kpi-baseline-nodes");
+            if (kpiNodes) kpiNodes.textContent = String(totalAcc);
+            const kpiSplit = document.getElementById("kpi-baseline-split");
+            if (kpiSplit) kpiSplit.textContent = `${{v(roles.producer)}} Prod • ${{v(roles.prosumer)}} Pros • ${{v(roles.consumer)}} Cons`;
+            const verdict = document.getElementById("verdict-pill");
+            if (verdict) verdict.textContent = `LIVE NOW (${{totalAcc}} NODES) • FORECAST READY (>200 NODES)`;
+            const btnPioneers = document.getElementById("btn-filter-pioneers");
+            if (btnPioneers) btnPioneers.textContent = `Current ${{totalAcc}} Live Pioneers`;
+            const situQuorum = document.getElementById("live-situ-quorum");
+            if (situQuorum) situQuorum.textContent = `${{v(fleet.live_hiveminders)}} Online (${{v(models.live_count)}} Models)`;
+            if (u24.total_requests != null && u24.total_requests > 0) {{
+              const situComp = document.getElementById("live-situ-completions");
+              if (situComp) situComp.textContent = formatInt(u24.total_requests);
+              const kpiComp = document.getElementById("kpi-baseline-comp");
+              if (kpiComp) kpiComp.textContent = `${{formatInt(u24.total_requests)}} Completions`;
+              const situTok = document.getElementById("live-situ-tokens");
+              if (situTok) situTok.textContent = `${{formatInt(u24.total_billed_tokens ?? 0)}} Billed Tokens`;
+            }}
+            const latP50 = (u24.latency_ms || {{}}).p50_ms;
+            if (latP50 != null && latP50 > 0) {{
+              const situLat = document.getElementById("live-situ-latency");
+              if (situLat) situLat.textContent = `${{Math.round(latP50)}} ms p50`;
+            }}
+            return;
+          }}
+        }} catch (_err) {{
+          // continue fallback
+        }}
+      }}
+    }}
+    syncLiveGcpTelemetryOnPlanetForecast();
+    setInterval(syncLiveGcpTelemetryOnPlanetForecast, 20000);
   </script>
 </body>
 </html>
@@ -991,6 +1120,52 @@ def render_foundation_paper_portal_html(
     Real vs. Forecast Traffic, Network Balancing, and Embedded PDF + 3D Globe Portal Page.
     """
     data = payload or build_foundation_paper_v42_portal_payload()
+    live_exp = dict(data.get("live_experimentation_v42") or {})
+    wan = dict(live_exp.get("live_47_node_wan_baseline") or {})
+    wan_source = str(wan.get("data_source") or "SNAPSHOT_2026-10-31_NOT_LIVE")
+    wan_date = str(wan.get("snapshot_date_utc") or "2026-10-31")
+    wan_nodes = int(wan.get("active_nodes", 59))
+    wan_roles = dict(wan.get("role_breakdown") or {})
+    wan_prods = int(wan_roles.get("producers", 10))
+    wan_pros = int(wan_roles.get("prosumers", 22))
+    wan_cons = int(wan_roles.get("consumers", 24))
+    wan_admins = int(wan_roles.get("admins", 3))
+    wan_demand = float(wan.get("daytime_sustained_demand_tok_per_s", 218.0))
+    wan_cap = float(wan.get("daytime_capacity_tok_per_s", 480.0))
+    wan_rho = float(wan.get("utilization_rho", 0.4542))
+    wan_p50 = float(wan.get("mean_endpoint_p50_latency_ms", 257.3))
+    wan_comp = int(wan.get("openrouter_completions_served", 2455))
+    wan_cobb = float(wan.get("boinc_cobblestones_snapshot", 5632.11))
+    wan_pflops = float(wan.get("compute_pflops_snapshot", 2.433))
+    wan_wus = int(wan.get("assimilated_boinc_workunits", 100))
+    wan_t4_free = float(wan.get("tesla_t4_free_vram_mib", 10519.0))
+    wan_t4_floor = float(wan.get("tesla_t4_min_free_vram_guard_mib", 4300.0))
+
+    e20 = dict(live_exp.get("experiment_e20_international_launch") or {})
+    bal_forecast = dict(
+        (data.get("real_vs_forecast_traffic_and_balancing") or {}).get("hivemind_balanced_265_node_forecast") or {}
+    )
+    bal_rho = float(bal_forecast.get("utilization_rho", wan_rho))
+    is_overload = wan_rho > 1.0 or bal_rho > 1.0
+    e20_status = str(e20.get("status") or ("OVERLOAD_FAIL" if is_overload else "NOT_SOURCED"))
+    e20_source = str(e20.get("data_source") or "NOT_SOURCED")
+    p20a = dict(e20.get("P20a_adaptive_multisplit_guard") or {})
+    p20b = dict(e20.get("P20b_top1pct_2d_dct_ef21") or {})
+    p20c = dict(e20.get("P20c_super_peer_fanout_and_sqlite_coalescer") or {})
+    p20a_vram = float(p20a.get("client_prelude_vram_mib", 680.0))
+    p20b_ratio = float(p20b.get("compression_ratio", 225.4))
+    p20c_red = float(p20c.get("coordinator_ingress_reduction_factor", 31.45))
+
+    vmoe = dict(live_exp.get("nocturnal_vmoe_pareto_ratchet") or {})
+    vmoe_status = str(vmoe.get("status") or "NOT_SOURCED")
+    vmoe_source = str(vmoe.get("data_source") or "NOT_SOURCED")
+    balanced_card_cls = "card-red" if is_overload else "card-green"
+    balanced_card_bg = "rgba(69,10,18,0.28)" if is_overload else "rgba(6,78,59,0.24)"
+    balanced_header_color = "#fb7185" if is_overload else "#34d399"
+    balanced_verdict_label = "OVERLOAD" if is_overload else "READY FOR LAUNCH"
+    balanced_rho_cmp = "&gt; 0.78 (OVERLOAD)" if is_overload else "&le; 0.78"
+    e20_status_color = "#fb7185" if is_overload else "#34d399"
+
     wave_rows_html = []
     for w in data.get("five_wave_international_roadmap", []):
         is_target = w.get("wave_id") == "WAVE-2-M2-TARGET"
@@ -1117,7 +1292,7 @@ def render_foundation_paper_portal_html(
         <div style="font-size:0.75rem;color:#34d399;font-weight:800;letter-spacing:0.06em;">
           PROJECT HIVEMIND FOUNDATION ARTICLE &bull; VERSION 4.2.0 (70 PAGES &bull; 161 LEAN 4 LEMMAS, 0 SORRY &bull; 0.00 EUR/USD)
         </div>
-        <h1>&#x1F4DC; Foundation Paper v4.2.0: Live Experimentation (E20 &amp; 47-Node WAN) &amp; &gt;200-Node Launch Forecast</h1>
+        <h1>&#x1F4DC; Foundation Paper v4.2.0: Live Experimentation (E20 &amp; {wan_nodes}-Node WAN) &amp; &gt;200-Node Launch Forecast</h1>
       </div>
       <div>
         <a href="/" class="btn">&#x1F3E0; HiveMind Portal Home</a>
@@ -1132,7 +1307,7 @@ def render_foundation_paper_portal_html(
   <main class="wrap" style="padding:22px 24px 56px;">
     <!-- SECTION 1: REAL TRAFFIC VS FORECAST TRAFFIC & NETWORK BALANCING -->
     <section class="card card-gold">
-      <h2>01 // Real Live Swarm Traffic (47 Nodes) vs. &gt;200-Node (265-Node + 2,400 Visitors) International Launch Network Balancing</h2>
+      <h2>01 // Real Live Swarm Traffic ({wan_nodes} Nodes) vs. &gt;200-Node (265-Node + 2,400 Visitors) International Launch Network Balancing</h2>
       <p style="font-size:0.88rem;color:#cbd5e1;margin:0 0 12px;">
         Synthesizing <strong>Kleinrock (1975) &amp; Halfin&ndash;Whitt (1981) M/M/c(t) square-root staffing</strong>,
         <strong>Kingman (1961) G/G/c heavy-tail token variance</strong>,
@@ -1142,14 +1317,14 @@ def render_foundation_paper_portal_html(
       </p>
       <div class="grid-3">
         <div class="card" style="margin:0;border-color:rgba(56,189,248,0.45);">
-          <div style="font-size:0.75rem;color:#38bdf8;font-weight:800;">LIVE PRODUCTION TELEMETRY (WAVE 0)</div>
-          <h3 style="margin:4px 0 8px;color:#f8fafc;">47-Node Live WAN Baseline</h3>
-          <div style="font-size:0.83rem;color:#cbd5e1;">
-            &bull; Active Nodes: <strong>47</strong> (8 Producers, 14 Prosumers, 22 Consumers, 3 Admins)<br/>
-            &bull; Real Traffic Demand / Capacity: <strong>185.0 tok/s</strong> / <strong style="color:#34d399;">380.0 tok/s</strong><br/>
-            &bull; Utilization &amp; Latency: <strong>&rho; = 0.487</strong> &bull; Mean p50 = <strong style="color:#fbbf24;">196.8 ms</strong> (1,427 completions)<br/>
-            &bull; Attested BOINC Compute: <strong>5,632.11 Cobblestones</strong> (2.433 PFLOPs, 124 WUs, 0.0% false reject)<br/>
-            &bull; Local Tesla T4 Guard: <strong style="color:#34d399;">10,073 MiB free VRAM</strong> (&ge; 4,300 MiB floor)
+          <div style="font-size:0.75rem;color:#38bdf8;font-weight:800;">SNAPSHOT TELEMETRY ({wan_source} &bull; {wan_date})</div>
+          <h3 id="paper-live-gcp-heading" style="margin:4px 0 8px;color:#f8fafc;">{wan_nodes}-Node WAN Baseline ({wan_source})</h3>
+          <div id="paper-live-gcp-telemetry" style="font-size:0.83rem;color:#cbd5e1;">
+            &bull; Active Nodes: <strong>{wan_nodes}</strong> ({wan_prods} Producers, {wan_pros} Prosumers, {wan_cons} Consumers, {wan_admins} Admins)<br/>
+            &bull; Real Traffic Demand / Capacity: <strong>{wan_demand:.1f} tok/s</strong> / <strong style="color:#34d399;">{wan_cap:.1f} tok/s</strong><br/>
+            &bull; Utilization &amp; Latency: <strong>&rho; = {wan_rho:.4f}</strong> &bull; Mean p50 = <strong style="color:#fbbf24;">{wan_p50:.1f} ms</strong> ({wan_comp:,} completions)<br/>
+            &bull; BOINC Compute Snapshot: <strong>{wan_cobb:,.2f} Cobblestones</strong> ({wan_pflops:.3f} PFLOPs, {wan_wus} WUs, source: <code>{wan_source}</code>)<br/>
+            &bull; Local Tesla T4 Guard: <strong style="color:#34d399;">{wan_t4_free:,.1f} MiB free VRAM</strong> (&ge; {wan_t4_floor:,.0f} MiB floor)
           </div>
         </div>
 
@@ -1165,13 +1340,13 @@ def render_foundation_paper_portal_html(
           </div>
         </div>
 
-        <div class="card card-green" style="margin:0;background:rgba(6,78,59,0.24);">
-          <div style="font-size:0.75rem;color:#34d399;font-weight:800;">HIVEMIND BALANCED ROUTING (AMCP + P2C + 2-LANE QOS)</div>
-          <h3 style="margin:4px 0 8px;color:#ecfdf5;">265-Node Elastic Swarm (READY FOR LAUNCH)</h3>
+        <div class="card {balanced_card_cls}" style="margin:0;background:{balanced_card_bg};">
+          <div style="font-size:0.75rem;color:{balanced_header_color};font-weight:800;">HIVEMIND BALANCED ROUTING (AMCP + P2C + 2-LANE QOS)</div>
+          <h3 style="margin:4px 0 8px;color:#ecfdf5;">265-Node Elastic Swarm ({balanced_verdict_label})</h3>
           <div style="font-size:0.83rem;color:#d1fae5;">
             &bull; Active Server Pool: <strong>c<sub>eff</sub> = 60 &ge; c<sub>HW</sub> = 45</strong> (28 Producers + <strong>32/54 AMCP Prosumers</strong>)<br/>
-            &bull; Throughput: <strong style="color:#34d399;">3,040.7 tok/s daytime</strong> (<strong>4,026.2 tok/s burst</strong> &bull; 262.7M tok/day)<br/>
-            &bull; Balanced Utilization: <strong style="color:#fbbf24;">&rho;<sub>elastic</sub> = 0.6529 &le; 0.78</strong> (P(W<sub>q</sub>&gt;0) = 0.13%, W<sub>q,P2C</sub> = 0.2 ms)<br/>
+            &bull; Throughput: <strong style="color:{balanced_header_color};">3,040.7 tok/s daytime</strong> (<strong>4,026.2 tok/s burst</strong> &bull; 262.7M tok/day)<br/>
+            &bull; Balanced Utilization: <strong style="color:#fbbf24;">&rho;<sub>elastic</sub> = {bal_rho:.4f} {balanced_rho_cmp}</strong> (P(W<sub>q</sub>&gt;0) = 0.13%, W<sub>q,P2C</sub> = 0.2 ms)<br/>
             &bull; Response SLA: Fast-Lane TTFT = <strong>136.9 ms</strong> (p50 = 170.9 ms) &bull; Blended p50 = <strong>217.8 ms</strong><br/>
             &bull; Compute Power: <strong>2.14 PFLOPS daytime</strong> / <strong>4.18 PFLOPS nocturnal DiLoCo</strong>
           </div>
@@ -1182,6 +1357,7 @@ def render_foundation_paper_portal_html(
     <!-- SECTION 2: LIVE EXPERIMENT E20 & NOCTURNAL V-MOE EVOLUTION -->
     <section class="card">
       <h2>02 // Live Experiment E20 (HM-S29-01, HM-S29-02, HM-S31-02) &amp; Nocturnal V-MoE Pareto-Ratchet Results</h2>
+      <p style="font-size:0.78rem;color:#94a3b8;margin:0 0 8px;">E20 source: <code>{e20_source}</code> &bull; V-MoE source: <code>{vmoe_source}</code></p>
       <table>
         <thead>
           <tr>
@@ -1196,38 +1372,38 @@ def render_foundation_paper_portal_html(
           <tr>
             <td><strong>E20-P20a: Adaptive Multi-Split Guard</strong></td>
             <td>GTX 1650 (4G), Steam Deck OLED, RTX 2070 (8G), Apple M2</td>
-            <td><strong>680.0 MiB</strong> client prelude VRAM; 48 KB wire; <strong>-94.34% to -98.29%</strong> step latency</td>
+            <td><strong>{p20a_vram:.1f} MiB</strong> client prelude VRAM; 48 KB wire; <strong>-94.34% to -98.29%</strong> step latency</td>
             <td>&le; 1,536 MiB &amp; &lt; 250 ms</td>
-            <td><span style="color:#34d399;font-weight:800;">VERIFIED PASS</span></td>
+            <td><span style="color:{e20_status_color};font-weight:800;">{e20_status}</span></td>
           </tr>
           <tr>
             <td><strong>E20-P20b: Top-1% 2D-DCT + EF21</strong></td>
             <td>256&times;256 FP32 outer pseudo-gradient (262,144 B &rarr; 1,163 B)</td>
-            <td><strong>225.4&times; compression</strong>; EF21 L2 error 1.52e-15; wire drift <strong>3.0e-8</strong></td>
+            <td><strong>{p20b_ratio:.1f}&times; compression</strong>; EF21 L2 error 1.52e-15; wire drift <strong>3.0e-8</strong></td>
             <td>&ge; 100&times; &amp; drift &le; 1e-5</td>
-            <td><span style="color:#34d399;font-weight:800;">VERIFIED PASS</span></td>
+            <td><span style="color:{e20_status_color};font-weight:800;">{e20_status}</span></td>
           </tr>
           <tr>
             <td><strong>E20-P20c: 6-Region Super-Peer Tree</strong></td>
             <td>10,000 leaf nodes &rarr; 318 Super-Peers (558 sub-swarms of 18)</td>
-            <td><strong>31.45&times; coordinator ingress reduction</strong> + <strong>62.5% SQLite write-IOPS cut</strong> (2,554 HMT exact)</td>
+            <td><strong>{p20c_red:.2f}&times; coordinator ingress reduction</strong> + <strong>62.5% SQLite write-IOPS cut</strong> (2,554 HMT exact)</td>
             <td>&ge; 25&times; &amp; 0 HMT drift</td>
-            <td><span style="color:#34d399;font-weight:800;">VERIFIED PASS</span></td>
+            <td><span style="color:{e20_status_color};font-weight:800;">{e20_status}</span></td>
           </tr>
           <tr>
             <td><strong>Nocturnal V-MoE Pareto Evolution</strong></td>
             <td>Reddit V-MoE / Exoplanet CWT / 7-Div 104-Bee (42.87M samples)</td>
-            <td>Ratcheted losses <strong>0.0003 / 0.0000 / 0.00227</strong> (-94.4% to -99.95%); T4 free <strong>10,073 MiB</strong></td>
+            <td>Ratcheted losses <strong>0.0003 / 0.0000 / 0.00227</strong> (-94.4% to -99.95%); T4 free <strong>{wan_t4_free:,.0f} MiB</strong></td>
             <td>Monotone ratchet &amp; &ge; 4,300 MiB</td>
-            <td><span style="color:#34d399;font-weight:800;">ACTIVE GREEN</span></td>
+            <td><span style="color:#fbbf24;font-weight:800;">{vmoe_status}</span></td>
           </tr>
         </tbody>
       </table>
     </section>
 
     <!-- SECTION 3: 6 REGIONAL SUPER-PEER HUBS & 5-WAVE INTERNATIONAL SCALABILITY -->
-    <section class="card card-green">
-      <h2>03 // 6 Regional Super-Peer Shards (265-Node Wave) &amp; 5-Wave International Roadmap (47 &rarr; 10,000+ Nodes)</h2>
+    <section class="card {balanced_card_cls}">
+      <h2>03 // 6 Regional Super-Peer Shards (265-Node Wave) &amp; 5-Wave International Roadmap ({wan_nodes} &rarr; 10,000+ Nodes)</h2>
       <table>
         <thead>
           <tr>
@@ -1285,6 +1461,48 @@ def render_foundation_paper_portal_html(
       </section>
     </div>
   </main>
+  <script>
+    (function() {{
+      async function syncPaperLiveGcpTelemetry() {{
+        const urls = [
+          "/v1/hivemind/live-telemetry",
+          "https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/hivemind/live-telemetry"
+        ];
+        for (const url of urls) {{
+          try {{
+            const res = await fetch(url, {{ headers: {{ Accept: "application/json" }}, cache: "no-store" }});
+            if (!res.ok) continue;
+            const d = await res.json();
+            if (d && d.accounts && d.models && d.status === 'LIVE_GCP_PRODUCTION') {{
+              // A missing figure is shown as n/a; no number is printed that the payload did not carry.
+              const v = function (x) {{ return (x === null || x === undefined) ? 'n/a' : x; }};
+              const acc = d.accounts || {{}};
+              const roles = acc.by_role || {{}};
+              const models = d.models || {{}};
+              const t4 = d.tesla_t4_boinc || {{}};
+              const ot = d.opentrainer || {{}};
+              const h = document.getElementById("paper-live-gcp-heading");
+              if (h) h.textContent = `${{v(acc.total_registered_accounts)}}-Account Live GCP Production Telemetry`;
+              const box = document.getElementById("paper-live-gcp-telemetry");
+              if (box) {{
+                box.innerHTML =
+                  `&bull; Registered Accounts: <strong>${{v(acc.total_registered_accounts)}}</strong> (${{v(roles.producer)}} Producers, ${{v(roles.prosumer)}} Prosumers, ${{v(roles.consumer)}} Consumers, ${{v(roles.admin)}} Admins, ${{roles.trainer ?? 0}} Trainers)<br/>` +
+                  `&bull; Live OpenRouter Models: <strong style="color:#34d399;">${{v(models.live_count)}} online</strong> &bull; HMT Circulation: <strong>${{Math.round(acc.total_hmt_in_circulation ?? 0)}} HMT</strong><br/>` +
+                  `&bull; Attested BOINC Compute: <strong>${{v(t4.total_cobblestones)}} Cobblestones</strong> (${{v(t4.assimilated_workunits)}} WUs, head <code>${{v(t4.head_workunit)}}</code>)<br/>` +
+                  `&bull; Local Tesla T4 Guard: <strong style="color:#34d399;">${{v(t4.vram_free_mib)}} MiB free VRAM</strong> / ${{v(t4.vram_total_mib)}} MiB (${{v(t4.governor_state)}})<br/>` +
+                  `&bull; OpenTrainer Coordinator: <strong style="color:#38bdf8;">${{v(ot.status)}}</strong> (${{v(ot.total_registered_nodes)}} trainer node, eval_loss ${{v(ot.latest_eval_loss)}})`;
+              }}
+              return;
+            }}
+          }} catch (_err) {{
+            // continue fallback
+          }}
+        }}
+      }}
+      syncPaperLiveGcpTelemetry();
+      setInterval(syncPaperLiveGcpTelemetry, 20000);
+    }})();
+  </script>
 </body>
 </html>
 """

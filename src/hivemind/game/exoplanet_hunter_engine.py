@@ -21,10 +21,14 @@ from __future__ import annotations
 
 import datetime
 import hashlib
+import hmac
+import html
 import json
 import math
 import os
 import random
+import secrets
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -820,6 +824,60 @@ def _split_text_for_gcp_tts(text: str, max_chars: int = 180) -> List[str]:
     return chunks
 
 
+import re
+
+VOICE_CACHE_MAX_FILES = 500  # most cached speech files kept on disk
+VOICE_CACHE_MAX_BYTES = 256 * 1024 * 1024  # most bytes of cached speech kept on disk
+ALLOWED_GEMINI_VOICES: frozenset[str] = frozenset(
+    {
+        "Puck",
+        "Aoede",
+        "Kore",
+        "Charon",
+        "Fenrir",
+        "Zephyr",
+        "Leda",
+        "Orus",
+        "Callirrhoe",
+        "Autonoe",
+        "Enceladus",
+        "Iapetus",
+        "Umbriel",
+        "Algieba",
+        "Despina",
+    }
+)
+_TTS_VOICE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
+_TTS_LANG_CODE_RE = re.compile(r"^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$")
+
+
+def _prune_voice_cache(cache_dir: Path) -> None:
+    """Delete the oldest cached speech files until the cache fits the file-count and byte limits.
+
+    Only the files this module writes (gemini_*.wav and gcp_*.mp3) are considered, so nothing else in the directory is touched.
+    """
+    entries: List[Tuple[float, int, Path]] = []
+    for pattern in ("gemini_*.wav", "gcp_*.mp3"):
+        for f in cache_dir.glob(pattern):
+            try:
+                st = f.stat()
+            except OSError:
+                continue
+            entries.append((st.st_mtime, st.st_size, f))
+    entries.sort(key=lambda e: e[0])  # oldest first
+    total = sum(e[1] for e in entries)
+    count = len(entries)
+    for _mtime, size, f in entries:
+        if count <= VOICE_CACHE_MAX_FILES and total <= VOICE_CACHE_MAX_BYTES:
+            break
+        try:
+            f.unlink()
+        except OSError:
+            continue
+        count -= 1
+        total -= size
+
+
 def synthesize_gemini_or_gcp_free_tts(
     text: str,
     lang: str = "en",
@@ -834,8 +892,24 @@ def synthesize_gemini_or_gcp_free_tts(
          (`en`, `fr`, `es`, `de`, `zh-CN`) with zero API key required and local disk caching.
     """
     import base64
+    import urllib.error
     import urllib.parse
     import urllib.request
+
+    if (
+        not isinstance(voice_name, str)
+        or not _TTS_VOICE_NAME_RE.fullmatch(voice_name)
+        or voice_name not in ALLOWED_GEMINI_VOICES
+    ):
+        raise ValueError(
+            f"voice_name must be one of {sorted(ALLOWED_GEMINI_VOICES)}; got {voice_name!r}"
+        )
+    if (
+        not isinstance(lang, str)
+        or len(lang) > 12
+        or not _TTS_LANG_CODE_RE.fullmatch(lang)
+    ):
+        raise ValueError(f"lang must be a valid language code (<= 12 chars); got {lang!r}")
 
     if cache_dir is None:
         cache_dir = (
@@ -868,10 +942,8 @@ def synthesize_gemini_or_gcp_free_tts(
     api_key = _load_gemini_api_key_from_env()
     if api_key:
         try:
-            url = (
-                "https://generativelanguage.googleapis.com/v1beta/models/"
-                f"gemini-2.5-flash-preview-tts:generateContent?key={api_key}"
-            )
+            # The key travels in a header: a key in the query string ends up in proxy and server logs.
+            url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent"
             payload = {
                 "contents": [
                     {
@@ -897,7 +969,7 @@ def synthesize_gemini_or_gcp_free_tts(
             req = urllib.request.Request(
                 url,
                 data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
+                headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
             )
             with urllib.request.urlopen(req, timeout=12.0) as resp:
                 body = json.loads(resp.read().decode("utf-8"))
@@ -905,6 +977,7 @@ def synthesize_gemini_or_gcp_free_tts(
                 pcm_bytes = base64.b64decode(inline_data["data"])
                 wav_bytes = _wrap_pcm16_to_wav(pcm_bytes, sample_rate=24000)
                 wav_cache.write_bytes(wav_bytes)
+                _prune_voice_cache(cache_dir)
                 return {
                     "ok": True,
                     "engine": f"Gemini-2.5-Flash-TTS ({voice_name})",
@@ -929,16 +1002,21 @@ def synthesize_gemini_or_gcp_free_tts(
     # Tier 2: Google Cloud Free-Tier Neural TTS (`translate.googleapis.com/translate_tts`)
     chunks = _split_text_for_gcp_tts(text, max_chars=180)
     combined_mp3 = bytearray()
-    for chunk in chunks:
-        q = urllib.parse.quote(chunk)
-        tts_url = f"https://translate.googleapis.com/translate_tts?ie=UTF-8&client=tw-ob&tl={tl}&q={q}"
-        req = urllib.request.Request(tts_url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=8.0) as resp:
-            combined_mp3.extend(resp.read())
+    try:
+        for chunk in chunks:
+            q = urllib.parse.quote(chunk)
+            tts_url = f"https://translate.googleapis.com/translate_tts?ie=UTF-8&client=tw-ob&tl={tl}&q={q}"
+            req = urllib.request.Request(tts_url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=8.0) as resp:
+                combined_mp3.extend(resp.read())
+    except (urllib.error.URLError, OSError, TimeoutError) as exc:
+        # No network (or the service refused): answer ok=False so the caller falls back to browser speech; nothing is cached.
+        return {"ok": False, "engine": "none", "error": type(exc).__name__}
 
     mp3_bytes = bytes(combined_mp3)
     if len(mp3_bytes) > 200:
         mp3_cache.write_bytes(mp3_bytes)
+        _prune_voice_cache(cache_dir)
     return {
         "ok": True,
         "engine": f"GCP-Cloud-Neural-TTS ({tl})",
@@ -1512,6 +1590,8 @@ def load_real_hf_exoplanet_catalog(max_extra_per_category: int = 12) -> List[Dic
     return enriched_catalog
 
 
+_DISCOVERY_LOCK = threading.Lock()
+
 class AstroBeeMoEGPUService:
     """Live RTX 2070 (`cuda:0`) 4-Expert Sparse MoE Inference Service for Exoplanet Discovery."""
 
@@ -1525,6 +1605,7 @@ class AstroBeeMoEGPUService:
         self.init_elapsed_ms = 0.0
         self.catalog = load_real_hf_exoplanet_catalog(max_extra_per_category=10)
         self.discoveries_path = ARTIFACTS_ROOT / "exoplanet_discoveries_ledger.json"
+        self._awarded_discoveries: set[tuple[str, str]] = set()
 
     def ensure_gpu_moe_ready(self) -> None:
         """Lazily initialize the 4-Expert Astrophysics Sparse MoE on `cuda:0`."""
@@ -1740,9 +1821,13 @@ class AstroBeeMoEGPUService:
         gamer_tag: str,
         player_classification: str,
         notes: str = "",
+        account_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Log a player's confirmed exoplanet discovery or false-positive bust into the Galactic Passport."""
+        """Log a player's discovery once per (account, target); replays earn 0 and are not recorded."""
         target = self.resolve_target(target_id)
+        clean_tag = str(gamer_tag or "").strip()[:64] or "Anonyme"
+        clean_notes = str(notes or "")[:512]
+        account_key = str(account_id or clean_tag).strip().casefold()[:128]
         true_disp = target["disposition"]
         vetting_type = str(target.get("vetting_anomaly_type", "NONE")).upper()
         is_correct = (
@@ -1750,7 +1835,66 @@ class AstroBeeMoEGPUService:
             or (player_classification.upper() in ("PLANET", "HABITABLE_PLANET") and true_disp in ("CONFIRMED", "CANDIDATE"))
         )
         bonus_pts = 600 if is_correct else 150
+        dedup_path = self.discoveries_path.with_suffix(".dedup.json")
 
+        with _DISCOVERY_LOCK:
+            ledger_entries: List[Dict[str, Any]] = []
+            if self.discoveries_path.exists():
+                try:
+                    ledger_entries = json.loads(self.discoveries_path.read_text(encoding="utf-8"))
+                except Exception:
+                    ledger_entries = []
+            dedup_keys: set[tuple[str, str]] = set(self._awarded_discoveries)
+            if dedup_path.exists():
+                try:
+                    for pair in json.loads(dedup_path.read_text(encoding="utf-8")):
+                        if isinstance(pair, list) and len(pair) == 2:
+                            dedup_keys.add((str(pair[0]), str(pair[1])))
+                except Exception:
+                    pass
+            for prior in ledger_entries:
+                prior_acct = str(prior.get("account_id") or prior.get("gamer_tag", "")).strip().casefold()[:128]
+                prior_tid = str(prior.get("target_id", ""))
+                if prior_acct and prior_tid:
+                    dedup_keys.add((prior_acct, prior_tid))
+            key = (account_key, str(target["target_id"]))
+            if key in dedup_keys:
+                self._awarded_discoveries = dedup_keys
+                return {
+                    "status": "duplicate_no_award",
+                    "accurate": is_correct,
+                    "points_earned": 0,
+                    "award_granted": False,
+                    "discovery_entry": None,
+                    "total_discoveries_logged": len(ledger_entries),
+                }
+            dedup_keys.add(key)
+            self._awarded_discoveries = dedup_keys
+            try:
+                dedup_path.parent.mkdir(parents=True, exist_ok=True)
+                dedup_path.write_text(
+                    json.dumps([list(k) for k in sorted(dedup_keys)], ensure_ascii=False),
+                    encoding="utf-8",
+                )
+            except Exception:
+                pass
+            return self._append_discovery(
+                target, target_id, clean_tag, player_classification, clean_notes, is_correct, bonus_pts, ledger_entries
+            )
+
+    def _append_discovery(
+        self,
+        target: Dict[str, Any],
+        target_id: str,
+        gamer_tag: str,
+        player_classification: str,
+        notes: str,
+        is_correct: bool,
+        bonus_pts: int,
+        ledger_entries: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Append one first-time award to the ledger (caller holds `_DISCOVERY_LOCK`)."""
+        true_disp = target["disposition"]
         entry = {
             "discovery_id": f"DISC-{hashlib.sha256(f'{target_id}:{gamer_tag}:{time.time()}'.encode()).hexdigest()[:10].upper()}",
             "timestamp": datetime.datetime.now().isoformat()[:19],
@@ -1770,12 +1914,6 @@ class AstroBeeMoEGPUService:
             "notes": notes,
         }
 
-        ledger_entries: List[Dict[str, Any]] = []
-        if self.discoveries_path.exists():
-            try:
-                ledger_entries = json.loads(self.discoveries_path.read_text(encoding="utf-8"))
-            except Exception:
-                ledger_entries = []
         ledger_entries.insert(0, entry)
         self.discoveries_path.parent.mkdir(parents=True, exist_ok=True)
         self.discoveries_path.write_text(json.dumps(ledger_entries[:200], indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -1784,6 +1922,7 @@ class AstroBeeMoEGPUService:
             "status": "recorded",
             "accurate": is_correct,
             "points_earned": bonus_pts,
+            "award_granted": True,
             "discovery_entry": entry,
             "total_discoveries_logged": len(ledger_entries),
         }
@@ -1797,6 +1936,7 @@ class AstroBeeMoEGPUService:
         """Serve general HiveMind Bee-MoE inference on Local RTX 2070 (`cuda:0`) or failover from T4/other producers."""
         self.ensure_gpu_moe_ready()
         t0 = time.perf_counter()
+        clamped_max_new_tokens = max(1, min(512, int(max_new_tokens)))
 
         clean_prompt = (prompt or "HiveMind Bee MoE inference check").strip()[:2048]
         raw_bytes = clean_prompt.encode("utf-8")
@@ -1819,11 +1959,14 @@ class AstroBeeMoEGPUService:
         top2 = sorted(range(4), key=lambda i: gate_probs[i], reverse=True)[:2]
 
         routed_bees = [ASTRO_BEE_EXPERTS[i]["bee_id"] for i in top2]
-        response_text = (
+        raw_response_text = (
             f"[HiveMind Bee-MoE • Served by Local {self.hw_info.get('gpu_name', 'NVIDIA GeForce RTX 2070')} ({self.device}) "
             f"in {latency_ms} ms | Top-2 Experts: {', '.join(routed_bees)}] "
             f"Processed query ({len(tok_ids)} tokens): '{clean_prompt[:160]}'"
         )
+        out_tokens = raw_response_text.split()[:clamped_max_new_tokens]
+        response_text = " ".join(out_tokens)
+        generated_token_count = len(out_tokens)
         receipt_hash = hashlib.sha256(f"{clean_prompt}:{latency_ms}:{time.time()}".encode("utf-8")).hexdigest()
 
         return {
@@ -1840,7 +1983,8 @@ class AstroBeeMoEGPUService:
             "routed_experts": routed_bees,
             "expert_gating_weights": {ASTRO_BEE_EXPERTS[i]["bee_id"]: gate_probs[i] for i in range(4)},
             "input_token_count": len(tok_ids),
-            "max_new_tokens": max_new_tokens,
+            "generated_token_count": generated_token_count,
+            "max_new_tokens": clamped_max_new_tokens,
             "generated_text": response_text,
             "inference_receipt_sha256": receipt_hash,
         }
@@ -1860,6 +2004,9 @@ class HiveMindMultiProducerInferencePool:
          dynamically register, send heartbeats, or serve requests via `/api/v1/producers/*`.
     """
 
+    MAX_TRACKED_END_USERS = 256
+    MONITOR_WRITE_MIN_INTERVAL_S = 2.0
+
     def __init__(self, gpu_service: AstroBeeMoEGPUService) -> None:
         self.gpu_service = gpu_service
         self.registry_path = ARTIFACTS_ROOT / "hivemind_inference_producers.json"
@@ -1872,10 +2019,13 @@ class HiveMindMultiProducerInferencePool:
         self.total_tokens_processed = 0
         self.producers: Dict[str, Dict[str, Any]] = {}
         self.end_users: Dict[str, Dict[str, Any]] = {}
+        self._end_user_salt = os.environ.get("HIVEMIND_END_USER_HASH_SALT", secrets.token_hex(16)).encode("utf-8")
+        self._last_serving_producer_id: Optional[str] = None
+        self._last_monitor_write_mono: float = 0.0
         self.recent_traffic: List[Dict[str, Any]] = []
         self.tflops_metrics: Dict[str, Any] = {}
         self._init_default_producers()
-        self._init_baseline_end_users()
+        # No sample users and no pre-set counters: a fresh pool has served nobody, and every figure here is counted from real requests.
         self.benchmark_live_tflops(matrix_dim=2048)
 
     def _init_default_producers(self) -> None:
@@ -1932,6 +2082,8 @@ class HiveMindMultiProducerInferencePool:
         except Exception:
             pass
 
+    MAX_REGISTERED_PRODUCERS = 64
+
     def register_or_update_producer(
         self,
         producer_id: str,
@@ -1943,23 +2095,35 @@ class HiveMindMultiProducerInferencePool:
         notes: str = "",
     ) -> Dict[str, Any]:
         """Register a new external producer (or switch the Tesla T4 to ONLINE_SERVING when ready)."""
+        raw_pid = str(producer_id or "").strip()[:64]
+        if not raw_pid:
+            raise ValueError("producer_id must be non-empty")
+        clean_status = str(status or "ONLINE_SERVING").strip().upper()[:32]
+        if raw_pid == "PRODUCER-LOCAL-RTX2070-CUDA0" and clean_status != "ONLINE_SERVING":
+            raise ValueError("Cannot set primary anchor producer PRODUCER-LOCAL-RTX2070-CUDA0 offline")
+        clean_pid = html.escape(raw_pid, quote=True)
+        if clean_pid not in self.producers and len(self.producers) >= self.MAX_REGISTERED_PRODUCERS:
+            raise OverflowError(f"Producer registry capacity reached (max {self.MAX_REGISTERED_PRODUCERS})")
         now_iso = datetime.datetime.now().isoformat()[:19]
-        existing = self.producers.get(producer_id, {})
+        existing = self.producers.get(clean_pid, {})
+        clean_name = html.escape(str(name or "").strip()[:128], quote=True)
+        clean_hardware = html.escape(str(hardware or "").strip()[:128], quote=True)
+        clean_notes = html.escape(str(notes or "").strip()[:512], quote=True)
         entry = {
-            "producer_id": producer_id,
-            "name": name or existing.get("name", producer_id),
-            "hardware": hardware or existing.get("hardware", "Custom GPU/CPU Producer"),
+            "producer_id": clean_pid,
+            "name": clean_name or existing.get("name", clean_pid),
+            "hardware": clean_hardware or existing.get("hardware", "Custom GPU/CPU Producer"),
             "device": existing.get("device", "remote:cuda:0"),
             "role": existing.get("role", "EXTERNAL_SWARM_PRODUCER"),
-            "status": status.upper(),
-            "endpoint_url": endpoint_url if endpoint_url else existing.get("endpoint_url", ""),
+            "status": clean_status,
+            "endpoint_url": (str(endpoint_url or "").strip()[:256]) if endpoint_url else existing.get("endpoint_url", ""),
             "failover_target_id": "PRODUCER-LOCAL-RTX2070-CUDA0",
-            "priority": priority,
+            "priority": int(priority),
             "requests_served": existing.get("requests_served", 0),
             "last_heartbeat": now_iso,
-            "notes": notes or existing.get("notes", "Registered external HiveMind inference producer."),
+            "notes": clean_notes or existing.get("notes", "Registered external HiveMind inference producer."),
         }
-        self.producers[producer_id] = entry
+        self.producers[clean_pid] = entry
         self._persist_registry()
         return entry
 
@@ -1997,13 +2161,10 @@ class HiveMindMultiProducerInferencePool:
         if is_t4_requested and not t4_online:
             self.total_t4_failovers_handled += 1
 
-        # Check if another external producer is ONLINE_SERVING and preferred
+        # IP-29: serve_inference executes locally on self.gpu_service and never calls remote endpoints,
+        # so only the producer actually invoked (PRODUCER-LOCAL-RTX2070-CUDA0) may be credited or named.
         selected_producer_id = "PRODUCER-LOCAL-RTX2070-CUDA0"
-        for pid, pinfo in sorted(self.producers.items(), key=lambda kv: kv[1].get("priority", 99)):
-            if pinfo.get("status") == "ONLINE_SERVING":
-                if pref_norm in (pid.lower(), "auto"):
-                    selected_producer_id = pid
-                    break
+        self._last_serving_producer_id = selected_producer_id
 
         # Update counter & heartbeat on the serving producer
         if selected_producer_id in self.producers:
@@ -2028,9 +2189,10 @@ class HiveMindMultiProducerInferencePool:
             self._persist_registry()
             return astro_res
 
+        clamped_max_new_tokens = max(1, min(512, int(max_new_tokens)))
         gen_res = self.gpu_service.run_general_hivemind_moe_inference(
             prompt=prompt,
-            max_new_tokens=max_new_tokens,
+            max_new_tokens=clamped_max_new_tokens,
             preferred_producer=preferred_producer,
         )
         gen_res["producer_pool_summary"] = {
@@ -2041,53 +2203,11 @@ class HiveMindMultiProducerInferencePool:
                 [p for p in self.producers.values() if p.get("status") == "ONLINE_SERVING"]
             ),
         }
-        self.total_tokens_processed += int(gen_res.get("input_token_count", 48)) + int(max_new_tokens)
+        self.total_tokens_processed += int(gen_res.get("input_token_count", 48)) + int(
+            gen_res.get("generated_token_count", min(clamped_max_new_tokens, 64))
+        )
         self._persist_registry()
         return gen_res
-
-    def _init_baseline_end_users(self) -> None:
-        now_iso = datetime.datetime.now().isoformat()[:19]
-        self.end_users = {
-            "Commandant_Starfleet_FR (Steam Fat Client v3.0)": {
-                "user_id": "USER-01-STEAM-FAT-CLIENT",
-                "gamer_tag": "Commandant_Starfleet_FR",
-                "client_type": "Native 64-Bit Steam Client (HiveMind_Exoplanet_Hunter.exe v3.0)",
-                "ip_address": "127.0.0.1",
-                "first_seen": self.started_at_iso,
-                "last_seen": now_iso,
-                "http_requests": 14,
-                "inference_calls": 6,
-                "discoveries_approved": 3,
-                "status": "ACTIVE_GAMING",
-            },
-            "AstroGamer_Fils_FR (WebGL 3D Cockpit)": {
-                "user_id": "USER-02-WEBGL-COCKPIT",
-                "gamer_tag": "AstroGamer_Fils_FR",
-                "client_type": "WebGL 3D Star Trek Cockpit (Port 8095 • Manette/Clavier)",
-                "ip_address": "127.0.0.1",
-                "first_seen": self.started_at_iso,
-                "last_seen": now_iso,
-                "http_requests": 22,
-                "inference_calls": 9,
-                "discoveries_approved": 4,
-                "status": "ACTIVE_GAMING",
-            },
-            "HiveMind_At_Home_Swarm_Relay (Port 8092)": {
-                "user_id": "USER-03-LA-RUCHE-RELAY",
-                "gamer_tag": "LaRuche_Federation_Relay",
-                "client_type": "HiveMind@home & La Ruche Federated Gateway",
-                "ip_address": "127.0.0.1",
-                "first_seen": self.started_at_iso,
-                "last_seen": now_iso,
-                "http_requests": 18,
-                "inference_calls": 5,
-                "discoveries_approved": 0,
-                "status": "ONLINE_SYNCED",
-            },
-        }
-        self.total_http_requests = 54
-        self.total_requests_served = 20
-        self.total_tokens_processed = 2480
 
     def benchmark_live_tflops(self, matrix_dim: int = 3072) -> Dict[str, Any]:
         """Measure live sustained FP32, FP16 Tensor Core, and Effective 4-Bit NF4 Sparse MoE TFLOPS on `cuda:0`."""
@@ -2129,7 +2249,7 @@ class HiveMindMultiProducerInferencePool:
 
                 del a32, b32, a16, b16
 
-            # 4-bit NF4 Sparse Top-2/4 Bee-MoE Effective TFLOPS (2x active expert sparsity + NF4 dequant throughput)
+            # 4-bit NF4 Sparse Top-2/4 Bee-MoE Effective TFLOPS (estimated 1.85x active expert sparsity + NF4 dequant throughput)
             effective_moe_tflops = round(fp16_tflops * 1.85, 2)
             vram = measure_vram_footprint(dev)
             self.tflops_metrics = {
@@ -2144,20 +2264,22 @@ class HiveMindMultiProducerInferencePool:
                 "measured_fp32_tflops": round(fp32_tflops, 2),
                 "measured_fp16_tensor_tflops": round(fp16_tflops, 2),
                 "effective_sparse_moe_nf4_tflops": effective_moe_tflops,
+                "effective_sparse_moe_nf4_basis": "estimated_from_fp16_times_1.85",
                 "theoretical_fp32_peak_tflops": 7.47,
                 "theoretical_fp16_tensor_peak_tflops": 59.70,
-                "t4_standby_capacity_fp16_tflops": 65.00,
+                "t4_standby_capacity_fp16_tflops": None,
                 "t4_current_active_tflops": 0.00,
                 "total_active_node_tflops": effective_moe_tflops,
-                "total_cluster_capacity_with_t4_tflops": round(effective_moe_tflops + 65.00, 2),
+                "total_cluster_capacity_with_t4_tflops": effective_moe_tflops,
             }
         else:
             self.tflops_metrics = {
                 "timestamp": now_iso,
                 "primary_gpu": "CPU Fallback",
-                "measured_fp32_tflops": 0.45,
-                "measured_fp16_tensor_tflops": 0.90,
-                "effective_sparse_moe_nf4_tflops": 1.65,
+                "status": "CUDA_UNAVAILABLE",
+                "measured_fp32_tflops": None,
+                "measured_fp16_tensor_tflops": None,
+                "effective_sparse_moe_nf4_tflops": None,
             }
         return self.tflops_metrics
 
@@ -2169,12 +2291,16 @@ class HiveMindMultiProducerInferencePool:
         user_agent: str = "Browser",
         latency_ms: float = 1.2,
         gamer_tag: str = "",
+        served_by: Optional[str] = None,
     ) -> None:
         """Record an incoming HTTP or inference request and track new/active end-users."""
         if path.startswith("/api/v1/monitor/telemetry"):
             return
         self.total_http_requests += 1
         now_iso = datetime.datetime.now().isoformat()[:19]
+        safe_method = html.escape(str(method or "GET")[:16], quote=True)
+        safe_path = html.escape(str(path or "/")[:256], quote=True)
+        safe_gamer_tag = html.escape(str(gamer_tag or "")[:64], quote=True)
 
         ua_short = "WebGL Cockpit Browser"
         if "python" in user_agent.lower():
@@ -2184,16 +2310,66 @@ class HiveMindMultiProducerInferencePool:
         elif "unity" in user_agent.lower() or "csharp" in user_agent.lower():
             ua_short = "Steam Fat Client / Unity Engine"
 
-        user_key = gamer_tag if gamer_tag else f"{client_ip} ({ua_short})"
+        raw_identity = safe_gamer_tag if safe_gamer_tag else f"{client_ip} ({ua_short})"
+        salted_digest = hmac.new(
+            self._end_user_salt, raw_identity.encode("utf-8"), hashlib.sha256
+        ).hexdigest()[:10].upper()
+        user_key = f"tag:{safe_gamer_tag}" if safe_gamer_tag else f"anon:{salted_digest}"
         is_inference = any(k in path for k in ("/infer", "/completions", "/bee-moe-scan"))
         is_discovery = "/discover" in path
 
-        if user_key not in self.end_users:
+        if user_key in self.end_users:
+            u = self.end_users.pop(user_key)
+            u["last_seen"] = now_iso
+            u["http_requests"] = int(u.get("http_requests", 0)) + 1
+            if is_inference:
+                u["inference_calls"] = int(u.get("inference_calls", 0)) + 1
+            if is_discovery:
+                u["discoveries_approved"] = int(u.get("discoveries_approved", 0)) + 1
+            self.end_users[user_key] = u
+        else:
+            if len(self.end_users) >= self.MAX_TRACKED_END_USERS:
+                other = self.end_users.get("other")
+                oldest_key = next((k for k in self.end_users if k != "other"), None)
+                evicted = self.end_users.pop(oldest_key) if oldest_key is not None else None
+                if other is None:
+                    other = {
+                        "user_id": "USER-OTHER-OVERFLOW",
+                        "gamer_tag": "other",
+                        "client_type": "Aggregated Overflow Bucket",
+                        "first_seen": evicted["first_seen"] if evicted else now_iso,
+                        "last_seen": now_iso,
+                        "http_requests": int(evicted.get("http_requests", 0)) if evicted else 0,
+                        "inference_calls": int(evicted.get("inference_calls", 0)) if evicted else 0,
+                        "discoveries_approved": int(evicted.get("discoveries_approved", 0)) if evicted else 0,
+                        "aggregated_users": 1 if evicted else 0,
+                        "status": "AGGREGATED_OVERFLOW",
+                    }
+                    self.end_users["other"] = other
+                elif evicted is not None:
+                    other["last_seen"] = now_iso
+                    other["http_requests"] = int(other.get("http_requests", 0)) + int(evicted.get("http_requests", 0))
+                    other["inference_calls"] = int(other.get("inference_calls", 0)) + int(evicted.get("inference_calls", 0))
+                    other["discoveries_approved"] = int(other.get("discoveries_approved", 0)) + int(
+                        evicted.get("discoveries_approved", 0)
+                    )
+                    other["aggregated_users"] = int(other.get("aggregated_users", 0)) + 1
+                if len(self.end_users) >= self.MAX_TRACKED_END_USERS:
+                    oldest_key2 = next((k for k in self.end_users if k != "other"), None)
+                    if oldest_key2 is not None:
+                        ev2 = self.end_users.pop(oldest_key2)
+                        other["http_requests"] = int(other.get("http_requests", 0)) + int(ev2.get("http_requests", 0))
+                        other["inference_calls"] = int(other.get("inference_calls", 0)) + int(ev2.get("inference_calls", 0))
+                        other["discoveries_approved"] = int(other.get("discoveries_approved", 0)) + int(
+                            ev2.get("discoveries_approved", 0)
+                        )
+                        other["aggregated_users"] = int(other.get("aggregated_users", 0)) + 1
+
+            seq_num = len(self.end_users) + 1
             self.end_users[user_key] = {
-                "user_id": f"USER-{len(self.end_users) + 1:02d}-{hashlib.sha256(user_key.encode()).hexdigest()[:6].upper()}",
-                "gamer_tag": gamer_tag or f"Explorer_{len(self.end_users) + 1}",
+                "user_id": f"USER-{seq_num:02d}-{salted_digest}",
+                "gamer_tag": safe_gamer_tag or f"Explorer_{seq_num}",
                 "client_type": ua_short,
-                "ip_address": client_ip,
                 "first_seen": now_iso,
                 "last_seen": now_iso,
                 "http_requests": 1,
@@ -2201,23 +2377,21 @@ class HiveMindMultiProducerInferencePool:
                 "discoveries_approved": 1 if is_discovery else 0,
                 "status": "NEW_END_USER_ACTIVE",
             }
-        else:
-            u = self.end_users[user_key]
-            u["last_seen"] = now_iso
-            u["http_requests"] = int(u.get("http_requests", 0)) + 1
-            if is_inference:
-                u["inference_calls"] = int(u.get("inference_calls", 0)) + 1
-            if is_discovery:
-                u["discoveries_approved"] = int(u.get("discoveries_approved", 0)) + 1
+
+        resolved_served_by: Optional[str] = served_by
+        if resolved_served_by is None and is_inference:
+            if self._last_serving_producer_id:
+                resolved_served_by = self._last_serving_producer_id
+            elif torch.cuda.is_available():
+                resolved_served_by = "PRODUCER-LOCAL-RTX2070-CUDA0"
 
         event = {
             "timestamp": now_iso,
-            "method": method,
-            "path": path,
-            "client_ip": client_ip,
+            "method": safe_method,
+            "path": safe_path,
             "client_type": ua_short,
             "latency_ms": round(latency_ms, 2),
-            "served_by": "PRODUCER-LOCAL-RTX2070-CUDA0",
+            "served_by": resolved_served_by,
         }
         self.recent_traffic.insert(0, event)
         if len(self.recent_traffic) > 40:
@@ -2245,11 +2419,16 @@ class HiveMindMultiProducerInferencePool:
             "producer_pool": self.get_pool_status(),
             "recent_traffic_stream": self.recent_traffic[:20],
         }
-        try:
-            self.monitor_path.parent.mkdir(parents=True, exist_ok=True)
-            self.monitor_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        except Exception:
-            pass
+        now_mono = time.monotonic()
+        if not self.monitor_path.exists() or (now_mono - self._last_monitor_write_mono) >= self.MONITOR_WRITE_MIN_INTERVAL_S:
+            try:
+                self.monitor_path.parent.mkdir(parents=True, exist_ok=True)
+                tmp_path = self.monitor_path.with_suffix(".json.tmp")
+                tmp_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+                os.replace(tmp_path, self.monitor_path)
+                self._last_monitor_write_mono = now_mono
+            except OSError:
+                self._last_monitor_write_mono = now_mono
         return report
 
 

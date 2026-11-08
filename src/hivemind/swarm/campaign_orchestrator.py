@@ -125,6 +125,8 @@ def sign_campaign_request(request: CampaignRequest, secret: bytes) -> CampaignRe
 
 
 def verify_campaign_request_signature(request: CampaignRequest, secret: bytes) -> bool:
+    if not isinstance(request.signature, str) or not request.signature.isascii():
+        return False
     expected = hmac.new(secret, request.canonical_bytes(), hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, request.signature)
 
@@ -345,6 +347,7 @@ class CampaignOrchestrator:
         self.state["nonces"] = {n: v for n, v in self.state["nonces"].items() if now_utc - float(v["utc"]) <= horizon}
 
     def _emit(self, d: JoinDecision, now_utc: float, nonce: str | None) -> JoinDecision:
+        corr_id = nonce if (isinstance(nonce, str) and nonce.strip()) else f"expire-{d.campaign_id}-{int(now_utc)}"
         event = build_amcp_kafka_event(
             topic_key="campaigns",
             event_type=f"io.hivemind.amcp.campaign.{d.decision.lower()}",
@@ -352,7 +355,7 @@ class CampaignOrchestrator:
             sender_kind="orchestrator",
             recipient_id=d.participant_id,
             subject_id=d.campaign_id,
-            correlation_id=nonce,
+            correlation_id=corr_id,
             payload={"decision": d.decision, "reason": d.reason, "campaign_id": d.campaign_id, "participant_id": d.participant_id},
             now_utc=now_utc,
         )

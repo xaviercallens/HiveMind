@@ -10,7 +10,7 @@ from hivemind.game.steam_edition import STEAM_APP_ID, create_hack_miner_fastapi_
 
 @pytest.fixture(scope="module")
 def client() -> TestClient:
-    return TestClient(create_hack_miner_fastapi_app(), raise_server_exceptions=False)
+    return TestClient(create_hack_miner_fastapi_app(worker_token="test-worker-token-not-a-secret"), raise_server_exceptions=False)
 
 
 def test_diloco_nextgen_endpoint_exposes_season8_telemetry(client: TestClient) -> None:
@@ -77,6 +77,7 @@ def test_diloco_nextgen_telemetry_is_deterministic_and_tracks_strategy_updates(
     before_sequence = first["sequence"]
     updated = client.post(
         "/api/strategy-optimizer",
+        headers={"Authorization": "Bearer test-worker-token-not-a-secret"},
         json={
             "ring_rtt_ms": 250.0,
             "bbr_pacing_mbps": 8.0,

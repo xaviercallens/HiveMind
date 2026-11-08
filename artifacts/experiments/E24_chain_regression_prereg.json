@@ -1,0 +1,59 @@
+{
+  "experiment_id": "E24-CHAIN-REGRESSION",
+  "deliverable_id": "PS-01-D1",
+  "registered_utc": "2026-11-07T22:08:00Z",
+  "registered_before_run": true,
+  "status": "REGISTERED, NOT RUN. Committed before the first E24 diagnostic round per PS-01-D1.",
+  "title": "Why has the BOINC QLoRA-MoE chain increased held-out loss since round hmq_00171, and which intervention restores non-positive median per-domain held-out loss change over a 20-round window?",
+  "plan_document": "docs/roadmap/PLANETARY_SCALE_PLAN.md",
+  "paper_sections": [
+    "sec:directions",
+    "sec:limitations"
+  ],
+  "roadmap_ids": [
+    "HM-S33-06"
+  ],
+  "constraints": {
+    "t4_vram_floor_mib": 4300,
+    "base_model": "ibm-granite/granite-3.1-1b-a400m-base",
+    "evaluation_invariance_check": "Same held-out shards, same RNG seed, and identical base weights before and after each round must be verified first via E24_A0_control_replay_round_170."
+  },
+  "design": {
+    "unit_of_comparison": "20-round window starting from the round-170 (hmq_00170) checkpoint on the six core domains (general, french, edu_web, news, biomed, math).",
+    "arms": {
+      "E24_A0_control_replay_round_170": {
+        "candidate_cause": "evaluation_drift_check",
+        "description": "Replay evaluation of the round-170 (hmq_00170) adapter unchanged before and after a no-op round to confirm zero evaluation drift (exact 0.0 nats delta across all domains)."
+      },
+      "E24_A1_ratchet_acceptance_rule": {
+        "candidate_cause": "ratchet_acceptance_rule",
+        "description": "Require the outer ratchet to gate acceptance on pooled multi-domain held-out evaluation (median per-domain change <= 0 and share_worse <= 0.50) rather than single-shard training loss."
+      },
+      "E24_A2_single_domain_work_units": {
+        "candidate_cause": "single_domain_work_units",
+        "description": "Reduce inner steps per single-domain workunit from 80 to 20 with outer EMA interpolation (beta=0.5) so single-domain updates cannot overwrite orthogonal domain subspaces."
+      },
+      "E24_A3_stratified_mixing": {
+        "candidate_cause": "stratified_mixing",
+        "description": "Construct each workunit shard by stratified sampling across all 6 core domains in equal token proportions with fixed held-out exclusion."
+      }
+    }
+  },
+  "metrics": {
+    "primary_metric": "median_change_nats: median across domains of (held_out_loss_after - held_out_loss_before) in nats",
+    "secondary_metric": "share_worse: fraction of evaluated domains where (held_out_loss_after - held_out_loss_before) > 0",
+    "eval_drift_control_metric": "max_abs_noop_delta_nats on E24_A0_control_replay_round_170 (must be <= 1e-6)"
+  },
+  "decision_rule": {
+    "eval_sanity_gate": "E24_A0_control_replay_round_170 must show max_abs_noop_delta_nats <= 1e-6 before any candidate arm is interpreted.",
+    "arm_success_criterion": "Over a pre-registered window of at least 20 consecutive rounds, median_change_nats <= 0.0 AND share_worse <= 0.50.",
+    "outcomes": {
+      "CAUSE_ATTRIBUTED": "At least one candidate arm (E24_A1, E24_A2, or E24_A3) satisfies arm_success_criterion while reproducing the post-hmq_00171 regression when its mechanism is reverted.",
+      "ALL_REFUTED": "E24_A0 passes eval_sanity_gate, but none of E24_A1, E24_A2, or E24_A3 satisfies arm_success_criterion over the registered window."
+    }
+  },
+  "not_claimed": [
+    "No E24 diagnostic round has been executed in this pre-registration file.",
+    "Decoupled DiLoCo learner/synchroniser alignment is deferred until E24 attributes or refutes the three candidate causes."
+  ]
+}

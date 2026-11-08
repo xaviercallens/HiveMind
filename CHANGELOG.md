@@ -1,5 +1,55 @@
 # Changelog
 
+## v3.1.2 — 2026-11-07 — Legacy PBKDF2-SHA256 Login Restoration, HTTPS Cloud Run Portal, OpenTrainer Campaign Gate, E8 Lattice Parity & Streaming TTFT Telemetry (PRs #692–#703)
+
+- **Legacy Email + Password Login Restoration & HTTPS Cloud Run Fixes (PR #702, deployed as `v3.1.2-https` across `hivemind-at-home`, `hivemind-at-home-ruche`, and `hivemind-openrouter`):**
+  - Preserved `LEGACY_KNOWN_USERS` (200,000-iteration PBKDF2-SHA256) and added automatic fallback verification against `credentials` table rows (`pbkdf2_sha256$120000$...` / `pbkdf2_sha256$200000$...`) keyed by `SHA256("hivemind-email-v1:" + email)` in `/api/v1/auth/login`, `/v1/hivemind/accounts/login`, and `/api/auth/credentials/login`.
+  - Fixed mixed-content browser fetch blocking behind the Cloud Run TLS proxy by deriving `https://` `base_url` from `X-Forwarded-Proto: https` (or `K_SERVICE`) and upgrading `http://` `API_BASE` references to `https://` on `https:` pages.
+  - Seeded verified legacy credential records into `/data/hivemind_router.sqlite3` on container startup in `deploy/gcp_cloud_run/Dockerfile` and `deploy/gcp_openrouter/Dockerfile`.
+- **OpenTrainer Campaign Validation, Gosset $E_8$ Lattice Parity, Producer Agent/Shield Unification & Streaming TTFT Telemetry (PR #703 — Issue #618, IP-259, IP-30, IP-38, Audit C4/C9/B10):**
+  - Enforced `is_allowed_opentrainer_campaign_id` in `/api/opentrainer/heartbeat` and `/api/opentrainer/submit_delta` (`HTTP 400 unknown_campaign` on unregistered campaigns).
+  - Unified `GossetE8LatticeQuantizer` with canonical `nearest_e8` / `nearest_dn` (`hivemind.compress.lattice_quantizer`) for bit-for-bit tie-breaking parity and grounded $16\times$ dense / $30.89\times$ sparse+E8 compression figures against `artifacts/experiments/E10_lattice_diloco.json`.
+  - Synced `scripts/hivemind_producer_{agent,shield}.py` with `src/hivemind/router/hivemind_producer_{agent,shield}.py` byte-for-byte and exposed `GET /hivemind_producer_agent.py` and `GET /hivemind_producer_shield.py`.
+  - Recorded streaming `ttft_ms` (`p50`/`p95`/`mean`) and `tokens_per_s` in `usage_telemetry` and `AccountStore.usage_capture_summary`.
+  - Marked deterministic game telemetry with `"simulated": True` (`HiveMindScientificGameEngine`) and removed fabricated OpenRouter completion IDs from `CANONICAL_5_ROADMAP_PRS`.
+- **Core, Swarm, Security, Economy & Data Hardening (PRs #692–#701 — 45+ Improvement Plan Audits):**
+  - Multi-Krum collinear outlier rejection ($>5\times$ median norm when $f$ is clamped to $0$, IP-34), NF4/DCT quantizer fidelity, eval-answer substring decontamination (`IP-40`), Lean 4 `QueenBee.lean` section SHA-256 verification (`IP-41`), pure-AST candidate energy evaluator (`SEC-01`), and T4 governor validator awareness (`IP-24`/`IP-50`).
+
+## v3.1.1 — 2026-11-04 — Security and honesty fixes to the v3.1 web interface
+
+Fixes the review of `v3.1.0` (PR #595). `v3.1.0` should not be deployed.
+
+- **Writes need a caller.** On the router and the dashboard, Kafka publish, training proposals and GPU pledges need a signed-in account, and the handle comes from that account rather than the request body. T4 schedule, maintenance toggle and portal review are owner-only. Router writes share the AMCP per-account rate limit; malformed bodies return 400.
+- **No more made-up success.** Kafka publish reports `RECORDED_IN_MEMORY_NOT_KAFKA` with no invented broker or acknowledgement; the schedule reports `SCHEDULE_SAVED_NOT_APPLIED`; the globe reports `DEMO_DATA_NOT_LIVE`; the overview reports `RELEASE_V3_MVP_IN_PROGRESS`; PR auto-merge reports `STATIC_LIST_NO_ACTION_TAKEN`; the maintenance acknowledgement and PR auto-merge credit 0 HMT; the red-team route reports `SELF_REPORTED_NOT_INDEPENDENTLY_VERIFIED`.
+- **Accounts.** No default password in the page; login no longer creates an account for an unknown handle; the page no longer shows a locally invented key or demo token when a call fails; the failed-password limit is per account and client (8 per minute), with a per-account ceiling of 200, so a stranger cannot lock an owner out.
+- **Script injection.** Fields from the server or the user are HTML-escaped before they reach `innerHTML`; `/v3.1` on the router now sends the portal's CSP and HSTS. That CSP still allows inline scripts because the page's handlers need them.
+- **Secret scan.** Removed the placeholder `hm_live_` value that failed SEC-05 (it never authenticated).
+- **Tests.** The Playwright module skips when Playwright is not installed; the Steam status test no longer assumes an RTX GPU.
+
+Known limits: portal `hm_live_` keys do not work on the gateway, so router writes from the portal are refused until the two are joined; portal accounts and the calendar live in memory and vanish on a restart or scale to zero; the globe's numbers are still example data.
+
+## v3.1.0 — 2026-11-04 — Unified GCP Web Interface (v3.1) on HiveMind v3.0.0 Core Engine, Real-Claim Scorecard Binding & Red Team GHSA-gjc6-74f9-wmrr Verification
+
+- **Deployable on HiveMind `v3.0.0` Core Engine (`https://github.com/xaviercallens/HiveMind/releases/tag/v3.0.0`):**
+  - Mounted the Stitch V3.1 GCP Unified Web Interface (`/stitch-portal`, `/v3-portal`, `/v3.1`) and all V3.1 API endpoints (`/api/v1/v3-mvp/overview`, `/api/v1/v3.1/overview`, `/api/v1/amcp/kafka/*`, `/api/v1/training/*`, `/api/v1/dashboard/*`, `/api/v1/security/*`, `/api/v1/portal/gcp-staged-release`) onto both `create_router_app` (`src/hivemind/router/gateway.py` / `deploy/gcp_openrouter/deploy.sh`) and `create_hivemind_at_home_app` (`src/hivemind/boinc/hivemind_at_home_dashboard.py` / `deploy/gcp_cloud_run/`).
+  - Made `numpy` and `safetensors` optional imports in `hivemind_at_home_dashboard.py` and staged `artifacts/mvp/*.json` + `artifacts/experiments/GRANITE_ADAPTER_hmq_00147_gate_f16_independent_chunks.json` + `docs/MVP_SCORECARD.md` in `deploy/gcp_openrouter/deploy.sh` & `Dockerfile`.
+- **Real-Claim Binding to `v3.0.0` Core Engine & Scorecard (`2/11 PASS • 1 WAIVED • B3 Gate Enforced`):**
+  - Bound `ReleaseV3MVPManager` directly to `src/hivemind/router/measured_results.json` (`hivemind.measured.v1` `results` array: `hivemind/bee-stars` 283/317 = 89.27%, `hivemind/coder-lite` 15/15 smoke checks, `hivemind/granite-1b-base` CPU tier 68 tok/s), `artifacts/mvp/A2_split_moe.json` (20/20 token-identical 2-host split MoE at 41.75 tok/s vs 68.95 tok/s single host), `artifacts/mvp/B1_custom_shards.json` (1,044 docs -> 2,082 train + 304 held-out signed chunks), and `artifacts/experiments/GRANITE_ADAPTER_hmq_00147_gate_f16_independent_chunks.json` (`hmq_00147` held back by `scripts/adapter_to_served.py` with `servable=False`, `mean_nll_gain_nats=-0.00403`).
+  - Wired `/api/v1/dashboard/nash-equilibrium` to execute live checks against `v3.0.0` core economy & ledger functions: `route_supply_equilibrium` (`ff394be`), `erlang_c_delay_probability` (`176a32d`), and `settle_swarm_inference` (`37f5ede` integer micro-unit fee split conservation).
+- **Red Team Security Verification (`GHSA-gjc6-74f9-wmrr` — 6/6 Controls Active):**
+  - Enforced `Authorization: Bearer` / `PBKDF2-HMAC-SHA256` (200k iterations + 8/60s rate limit) across all auth & Steam routes, persistent unverified-volunteer prompt privacy notice (`#poc-notice`), mandatory `hivemind_producer_shield.py` + Ollama `>= 0.5.0` (`CVE-2024-37032`) preflight validator, zero public node IP/URL exposure, and honest `served_by` off-the-shelf model catalog disclosure.
+
+## v3.0.0 — 2026-11-04 — Honest MVP baseline: measured results, a scorecard, and the train-to-serve gate (proof of concept)
+
+**Proof of concept, not a production service: send only public, non-sensitive data.** This is not the finished MVP: the scorecard (`docs/MVP_SCORECARD.md`) reads **2 of 11 criteria passing** (B1 custom shards, A2 split inference), 1 waived by the owner (F1), and the rest failing or not run, each with its reason.
+
+- **Target and measure:** `docs/MVP_TARGET.md` (11 machine-checkable criteria), `scripts/mvp_scorecard.py`, `docs/MVP_OWNER_DECISIONS.md`.
+- **Reality audit:** `docs/MVP_REALITY_AUDIT.md` classifies all 191 source files; hard-coded benchmark claims, fabricated browser credit, invented training and hardware records are removed; the benchmarks page shows measured results only.
+- **Inference:** real-model smoke test (`scripts/mvp_e2e_smoke.py`); failed endpoints cool down for 10 s; one MoE split across two hosts over llama.cpp RPC is token-identical to a single host on 20/20 prompts with `--no-repack` (CPU on both hosts; 8/20 with the default repacked kernels); `granite-1b-base` CPU tier; catalog tiers state base, adapter or alias.
+- **Training:** `scripts/adapter_to_served.py` gates a trained adapter on the served files. **The BOINC adapter `hmq_00147` fails it**, so no HiveMind-trained adapter from the chain is served. `make_custom_shards.py` builds signed shards from your own JSONL; stratified rounds (`t4_workgen.py --mix`) are implemented, not yet run.
+- **Security:** live BOINC verdicts verify an honest workunit and reject a lazy worker; Multi-Krum rejects poisoned deltas offline only; billing inflation is bounded loosely (about 4x). Round-4 hardening. Gated expert promotion.
+- **Operations:** maintenance mode (`HIVEMIND_MAINTENANCE_NOTICE`); budget target 150 USD a month, `hivemind-openrouter` scale-to-zero (AGENTS.md changed); `scripts/d1_cost_estimate.py` (currently over budget), `scripts/kafka_voters.sh`, `scripts/t4_training_window.sh` (not applied).
+
 ## v2.15.0 — 2026-10-29 — Season 29 International Launch Weekend Scaler (`HM-S29-01`, `HM-S29-02`, `HM-S31-02`), Human & Agent Calendar, Nocturnal Image-MoE Evolution Monitor & 161 Lean 4 Theorems
 
 - **Pre-Registered Experiment `E20` & Large-Audience Scalability (`src/hivemind/swarm/international_launch_scaler.py`):**
@@ -38,6 +88,13 @@
 - **RTX 2070 CUDA PTX BLS Worker, Free Steam Fat Client v5.1 (AppID `3133700`) & Stitch MCP v4.6 Cockpit (`#314`):**
   - Real `cupy.RawKernel` CUDA PTX Box-Least-Squares (BLS) transit periodogram worker (`scripts/hivemind_boinc_idle_worker.py`) enforcing the `<= 6.5 GB` VRAM ceiling (`I1`) and `< 1.5s` game preemption (`I4`).
   - Zero-install WebGPU Spiral Galaxy & WGSL `@compute` citizen science cockpit (`/webgpu-galaxy`) and Stitch v4.6 12-screen Tactical Bridge (`src/hivemind/game/exoplanet_hunter_cockpit.py`, `tests/test_game_and_agent_coverage_gate.py`).
+
+## v2.16.1 — 2026-11-02 — security hardening (GHSA-gjc6-74f9-wmrr) and a truthful model catalog
+
+- **Security:** account ownership is now verified before any key or token is returned on the OpenRouter gateway and the La Ruche dashboard; a previously published gateway key is revoked; contribution routes no longer award HMT for client-supplied receipts; sign-in tokens are single-use in every spelling; dashboard admin routes need an admin key; several public routes got input caps and rate limits. Details are in the advisory once it is published; upgrading is recommended.
+- **Behaviour changes:** BOINC/Steam/WebGPU contributions are recorded but earn 0 HMT until results are verified server-side; handle-only accounts sign in with their API key; the dashboard admin needs `HIVEMIND_DASHBOARD_ADMIN_KEY`; `/api/v1/community/boinc-sync` needs `HIVEMIND_BOINC_SYNC_KEY`; `POST /v1/hivemind/admin/accounts/rotate-key` (admin) re-issues an account's key.
+- **Catalog:** 26 partner entries that named Hugging Face repositories which do not exist are now shown as "Planned, not trained yet" (no link, no parameter or token claims) with the off-the-shelf model that actually serves each tier; new real small-MoE tier `granite-moe` (IBM Granite 3.1 MoE 3B, 800M active, Apache-2.0).
+- **Notice:** HiveMind is a proof of concept: send only public, non-sensitive data (README, SECURITY.md and the sign-up, join, portal and dashboard pages).
 
 ## Unreleased
 

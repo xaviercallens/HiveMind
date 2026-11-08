@@ -24,6 +24,7 @@ from typing import Any
 
 APP_NAME = "hivemind_inner_loop"
 APP_VERSION = 100
+VALIDATOR_FIXTURE_ONLY = True
 
 
 def resolve_filename(logical: str, base: Path | None = None) -> Path:
@@ -100,7 +101,7 @@ def run(
     micro: dict[str, str] = {}
     start, losses = 0, []
     if ckpt.exists():
-        c = torch.load(ckpt, map_location=device)
+        c = torch.load(ckpt, map_location=device, weights_only=True)
         a.data.copy_(c["a"])
         b.data.copy_(c["b"])
         start, losses, micro = int(c["step"]), list(c["losses"]), dict(c["micro"])
@@ -133,6 +134,7 @@ def run(
     return {
         "app": APP_NAME,
         "app_version": APP_VERSION,
+        "validator_fixture": True,
         "wu_id": spec["wu_id"],
         "device": device,
         "device_name": torch.cuda.get_device_name(0) if device == "cuda" else "cpu",

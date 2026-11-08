@@ -23,6 +23,7 @@ import cmath
 import hashlib
 import json
 import math
+import re
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -32,35 +33,50 @@ from typing import Any, Mapping, Sequence
 BEE_RUSTY_SUNDIALS_ID = "bee-rusty-sundials"
 BEE_RUSTY_SUNDIALS_PUBLIC_ID = "hivemind/bee-rusty-sundials"
 
+
+def _default_xdev_root() -> str:
+    """Resolve XDEV_ROOT from environment or relative to repository root without hardcoding user paths (IP-67)."""
+    import os
+    from pathlib import Path
+
+    env_val = os.environ.get("XDEV_ROOT", "").strip()
+    if env_val:
+        return str(Path(env_val))
+    parents = Path(__file__).resolve().parents
+    return str(parents[7] if len(parents) > 7 else Path.cwd())
+
+
+_XDEV_ROOT = _default_xdev_root()
+
 LINKED_REPOSITORIES: dict[str, dict[str, str]] = {
     "core_solver": {
         "name": "rusty-SUNDIALS",
         "github_url": "https://github.com/xaviercallens/rusty-SUNDIALS",
-        "local_path": "/home/xavkal/xdev/rusty-SUNDIALS",
+        "local_path": f"{_XDEV_ROOT}/rusty-SUNDIALS",
         "role": "Pure-Rust CVODE (BDF/Adams), ARKode (IMEX ARS(2,2,2) & Dual-RRK), IDA (DAE), KINSOL, Hyper-Dual AD & qf-pgpe",
     },
     "astronomy": {
         "name": "SocrateAI-Scientific-AutoEvolve-K3xT2 & SocrateAI-Scientific-DualScaleSimulator",
         "github_url": "https://github.com/xaviercallens/SocrateAI-Scientific-AutoEvolve-K3xT2",
-        "local_path": "/home/xavkal/xdev/SocrateAI-Scientific-DualScaleSimulator",
+        "local_path": f"{_XDEV_ROOT}/SocrateAI-Scientific-DualScaleSimulator",
         "role": "Kepler/Post-Newtonian Dual-RRK Hamiltonian relaxation, Stellar Lane-Emden/TOV & stiff nucleosynthesis",
     },
     "fluid_mechanics": {
         "name": "SocrateAI-Scientific-MechanicaFluidorum",
         "github_url": "https://github.com/xaviercallens/SocrateAI-Scientific-MechanicaFluidorum",
-        "local_path": "/home/xavkal/xdev/SocrateAI-Scientific-MechanicaFluidorum",
+        "local_path": f"{_XDEV_ROOT}/SocrateAI-Scientific-MechanicaFluidorum",
         "role": "3D/Dyadic Navier-Stokes Hypothesis U, Enstrophy bound S_N^2 <= 2 Omega_N^3 (52 Lean 4 theorems) & IMEX ARS(2,2,2)",
     },
     "quantum_fluid": {
         "name": "SocrateAI-Scientific-QuantumFluids",
         "github_url": "https://github.com/xaviercallens/SocrateAI-Scientific-QuantumFluids",
-        "local_path": "/home/xavkal/xdev/SocrateAI-Scientific-QuantumFluids",
+        "local_path": f"{_XDEV_ROOT}/SocrateAI-Scientific-QuantumFluids",
         "role": "Projected Gross-Pitaevskii (PGPE) IF-RK4 with k_cut=k_max/2, VortexWinding & QuantizedCirculation (257 Lean 4 theorems)",
     },
     "genetics": {
         "name": "SocrateAI-Scientific-Genetic",
         "github_url": "https://github.com/xaviercallens/SocrateAI-Scientific-Genetic",
-        "local_path": "/home/xavkal/xdev/rusty-SUNDIALS",
+        "local_path": f"{_XDEV_ROOT}/rusty-SUNDIALS",
         "role": "Hopfield-Ninio kinetic proofreading & ART reverse-transcription BDF solver, DNA linking number Lk=Tw+Wr & KJMA replication",
     },
 }
@@ -285,11 +301,31 @@ def analyze_physical_mathematical_problem(
 # 2. Four-Domain Numeric Calculation Rescue Solvers
 # ---------------------------------------------------------------------------
 
-def _rescue_astronomy_kepler(steps: int = 200, dt: float = 0.025) -> NumericRescueResult:
+def _extract_prompt_param(
+    prompt: str,
+    names: Sequence[str],
+    default: float,
+    low: float,
+    high: float,
+) -> float:
+    """Parse an optional numeric initial-condition override (`name=val` or `name: val`) from `prompt`."""
+    for name in names:
+        m = re.search(rf"\b{re.escape(name)}\s*[:=]\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)", prompt, re.IGNORECASE)
+        if m:
+            try:
+                val = float(m.group(1))
+                if math.isfinite(val):
+                    return max(low, min(high, val))
+            except ValueError:
+                pass
+    return default
+
+
+def _rescue_astronomy_kepler(steps: int = 200, dt: float = 0.025, ecc: float = 0.6) -> NumericRescueResult:
     """Rescue an eccentric Kepler / Post-Newtonian orbit from explicit Euler energy blowup using RK4 + Dual-RRK."""
     diag = analyze_physical_mathematical_problem("kepler post-newtonian hamiltonian orbit", domain_hint="astronomy")
     mu = 1.0
-    ecc = 0.6
+    ecc = max(0.01, min(0.95, float(ecc)))
     # Periastron initial state: r0 = 1 - e, v0 = sqrt((1 + e)/(1 - e))
     x0, y0 = 1.0 - ecc, 0.0
     vx0, vy0 = 0.0, math.sqrt((1.0 + ecc) / (1.0 - ecc))
@@ -389,11 +425,11 @@ def _rescue_astronomy_kepler(steps: int = 200, dt: float = 0.025) -> NumericResc
     )
 
 
-def _rescue_fluid_mechanics_dyadic_ns(steps: int = 80, dt: float = 0.01) -> NumericRescueResult:
+def _rescue_fluid_mechanics_dyadic_ns(steps: int = 80, dt: float = 0.01, nu: float = 0.05) -> NumericRescueResult:
     """Rescue the stiff dyadic Navier-Stokes shell model from explicit float blowup using IMEX ARS(2,2,2)."""
     diag = analyze_physical_mathematical_problem("stiff dyadic navier-stokes enstrophy hypothesis u", domain_hint="fluid_mechanics")
     num_shells = 8
-    nu = 0.05
+    nu = max(1e-4, min(1.0, float(nu)))
     k = [float(2**n) for n in range(num_shells)]
     u0 = [1.0 / (n + 1.0) for n in range(num_shells)]
 
@@ -511,14 +547,14 @@ def _rescue_fluid_mechanics_dyadic_ns(steps: int = 80, dt: float = 0.01) -> Nume
     )
 
 
-def _rescue_quantum_fluid_pgpe(steps: int = 100, dt: float = 0.02) -> NumericRescueResult:
+def _rescue_quantum_fluid_pgpe(steps: int = 100, dt: float = 0.02, amp: float = 0.8) -> NumericRescueResult:
     """Rescue 1D/2D Projected Gross-Pitaevskii superfluid evolution using Fourier IF-RK4 + k_cut=k_max/2."""
     diag = analyze_physical_mathematical_problem("projected gross-pitaevskii superfluid vortex", domain_hint="quantum_fluid")
     n_grid = 16
     length = 2.0 * math.pi
     dx = length / n_grid
     g_coupling = 1.0
-    amp = 0.8
+    amp = max(0.05, min(5.0, float(amp)))
     k0 = 2.0  # Plane wave wavenumber k0 = 2 (below de-aliasing cutoff k_cut = 4)
     omega_exact = 0.5 * (k0 ** 2) + g_coupling * (amp ** 2)
 
@@ -640,7 +676,7 @@ def _rescue_quantum_fluid_pgpe(steps: int = 100, dt: float = 0.02) -> NumericRes
     )
 
 
-def _rescue_genetics_stiff_hopfield_and_dna_lk(steps: int = 80, dt: float = 0.01) -> NumericRescueResult:
+def _rescue_genetics_stiff_hopfield_and_dna_lk(steps: int = 80, dt: float = 0.01, lk0: float = 104.0) -> NumericRescueResult:
     """Rescue stiff Hopfield-Ninio kinetic proofreading & DNA Lk=Tw+Wr conservation via implicit BDF."""
     diag = analyze_physical_mathematical_problem(
         "hopfield-ninio kinetic proofreading and dna supercoiling linking number",
@@ -656,8 +692,8 @@ def _rescue_genetics_stiff_hopfield_and_dna_lk(steps: int = 80, dt: float = 0.01
     total_mass = sum(y_init)
 
     # DNA topological supercoiling state: Lk = Tw + Wr
-    lk0 = 104.0
-    tw0, wr0 = 100.0, 4.0
+    lk0 = max(10.0, min(1000.0, float(lk0)))
+    tw0, wr0 = lk0 - 4.0, 4.0
 
     # 1. Naive explicit Euler (dt * k_on = 0.01 * 5000 = 50 >> 2 -> negative concentrations and explosion!)
     y_euler = list(y_init)
@@ -779,12 +815,20 @@ def rescue_numeric_calculation(
     """Analyze a physical/mathematical problem and execute the matching rusty-SUNDIALS rescue solver."""
     diag = analyze_physical_mathematical_problem(prompt_or_equation, domain_hint=domain)
     if diag.domain == "astronomy":
-        return _rescue_astronomy_kepler(steps=steps, dt=dt)
+        r0 = _extract_prompt_param(prompt_or_equation, ("r0", "periastron"), -1.0, 0.05, 0.99)
+        if r0 > 0.0:
+            ecc = 1.0 - r0
+        else:
+            ecc = _extract_prompt_param(prompt_or_equation, ("eccentricity", "ecc", "e"), 0.6, 0.01, 0.95)
+        return _rescue_astronomy_kepler(steps=steps, dt=dt, ecc=ecc)
     if diag.domain == "fluid_mechanics":
-        return _rescue_fluid_mechanics_dyadic_ns(steps=min(steps, 100), dt=min(dt, 0.01))
+        nu = _extract_prompt_param(prompt_or_equation, ("viscosity", "nu"), 0.05, 1e-4, 1.0)
+        return _rescue_fluid_mechanics_dyadic_ns(steps=min(steps, 100), dt=min(dt, 0.01), nu=nu)
     if diag.domain == "quantum_fluid":
-        return _rescue_quantum_fluid_pgpe(steps=steps, dt=dt)
-    return _rescue_genetics_stiff_hopfield_and_dna_lk(steps=steps, dt=min(dt, 0.01))
+        amp = _extract_prompt_param(prompt_or_equation, ("amplitude", "amp"), 0.8, 0.05, 5.0)
+        return _rescue_quantum_fluid_pgpe(steps=steps, dt=dt, amp=amp)
+    lk0 = _extract_prompt_param(prompt_or_equation, ("lk0", "lk", "linking_number"), 104.0, 10.0, 1000.0)
+    return _rescue_genetics_stiff_hopfield_and_dna_lk(steps=steps, dt=min(dt, 0.01), lk0=lk0)
 
 
 # ---------------------------------------------------------------------------
@@ -1138,27 +1182,40 @@ class SolverTaughtSurrogateExpert:
         model = self._domain_models[dom]
         self.trials += 1
 
-        # Compute surrogate trajectory and injected/residual drift
+        # Candidate surrogate trajectory (anchors + optional perturbation)
+        cand_trajectory = [
+            {k: (v + float(force_surrogate_perturbation) if isinstance(v, float) and k != "t" else v) for k, v in pt.items()}
+            for pt in model["anchors"]
+        ]
+
+        # Run deterministic rusty-SUNDIALS verifier on the requested problem / initial state / grid
+        exact = rescue_numeric_calculation(prompt_or_equation, domain=dom, steps=steps, dt=dt)
+        ref_trajectory = exact.sample_trajectory
+        if len(cand_trajectory) != len(ref_trajectory):
+            traj_max_err = 1.0
+        else:
+            traj_max_err = 0.0
+            for cand_pt, ref_pt in zip(cand_trajectory, ref_trajectory):
+                for key, ref_val in ref_pt.items():
+                    if isinstance(ref_val, (int, float)) and isinstance(cand_pt.get(key), (int, float)):
+                        traj_max_err = max(traj_max_err, abs(float(cand_pt[key]) - float(ref_val)))
+
         base_drift = float(model["teacher_drift"])
-        surrogate_drift = base_drift + abs(float(force_surrogate_perturbation))
+        surrogate_drift = base_drift + abs(float(force_surrogate_perturbation)) + traj_max_err
         surrogate_passed = bool(math.isfinite(surrogate_drift) and surrogate_drift <= max_surrogate_drift_tol)
 
         if surrogate_passed:
             self.verified_passes += 1
             verdict = "VERIFIED"
             served_by = "surrogate_fast_path_verified"
-            trajectory = [
-                {k: (v + float(force_surrogate_perturbation) if isinstance(v, float) and k != "t" else v) for k, v in pt.items()}
-                for pt in model["anchors"]
-            ]
+            trajectory = cand_trajectory
             invariants = dict(model["invariants_verified"])
             final_drift = surrogate_drift
         else:
             self.fallback_rescues += 1
             verdict = "FALLBACK_RESCUED_BY_SOLVER"
             served_by = "rusty_sundials_deterministic_teacher_fallback"
-            exact = rescue_numeric_calculation(prompt_or_equation, domain=dom, steps=steps, dt=dt)
-            trajectory = exact.sample_trajectory
+            trajectory = ref_trajectory
             invariants = exact.invariants_verified
             final_drift = exact.rescued_invariant_drift
 
@@ -1205,28 +1262,61 @@ def solve_wave2_method_of_lines_pde(
     step_dt = max(1e-5, min(float(dt), 0.05))
 
     if pde_family == "lane_emden_stellar":
-        poly_n = 1.0 if param is None else max(0.0, min(float(param), 4.5))
-        # Desingularized Taylor startup at xi -> 0+ followed by 4th-order symplectic/RK4 radial march
+        if param is not None:
+            if isinstance(param, bool) or not math.isfinite(float(param)) or float(param) < 0.0 or float(param) > 4.5:
+                raise ValueError(f"polytropic index n must be finite in [0.0, 4.5], got {param!r} (IP-48)")
+        poly_n = 1.0 if param is None else float(param)
         xi_max = math.pi
         d_xi = xi_max / n_pts
+
+        def _lane_emden_rhs(xi_val: float, th_val: float, dth_val: float) -> tuple[float, float]:
+            if xi_val <= 1e-7:
+                # Removable coordinate singularity at xi -> 0+: lim_{xi->0} (2/xi)*theta' = 2*theta''
+                # => 3*theta'' + theta^n = 0 => theta''(0) = -1/3
+                return 0.0, -1.0 / 3.0
+            pos_th = max(0.0, th_val)
+            th_pow = 1.0 if poly_n == 0.0 else (pos_th**poly_n if pos_th > 0.0 else 0.0)
+            return dth_val, -(2.0 / xi_val) * dth_val - th_pow
+
+        def _integrate_lane_emden_rk4(substeps_per_cell: int) -> list[tuple[float, float, float]]:
+            h = d_xi / float(substeps_per_cell)
+            th = 1.0
+            dth = 0.0
+            out: list[tuple[float, float, float]] = [(0.0, th, dth)]
+            for cell_idx in range(n_pts):
+                for sub_idx in range(substeps_per_cell):
+                    xi_curr = cell_idx * d_xi + sub_idx * h
+                    if xi_curr == 0.0:
+                        # Desingularized 6th-order series step across the coordinate singularity at xi = 0
+                        xi_next = h
+                        th = 1.0 - (xi_next**2) / 6.0 + poly_n * (xi_next**4) / 120.0 - poly_n * (8.0 * poly_n - 5.0) * (xi_next**6) / 15120.0
+                        dth = -xi_next / 3.0 + poly_n * (xi_next**3) / 30.0 - poly_n * (8.0 * poly_n - 5.0) * (xi_next**5) / 2520.0
+                    else:
+                        k1_th, k1_dth = _lane_emden_rhs(xi_curr, th, dth)
+                        k2_th, k2_dth = _lane_emden_rhs(xi_curr + 0.5 * h, th + 0.5 * h * k1_th, dth + 0.5 * h * k1_dth)
+                        k3_th, k3_dth = _lane_emden_rhs(xi_curr + 0.5 * h, th + 0.5 * h * k2_th, dth + 0.5 * h * k2_dth)
+                        k4_th, k4_dth = _lane_emden_rhs(xi_curr + h, th + h * k3_th, dth + h * k3_dth)
+                        th += (h / 6.0) * (k1_th + 2.0 * k2_th + 2.0 * k3_th + k4_th)
+                        dth += (h / 6.0) * (k1_dth + 2.0 * k2_dth + 2.0 * k3_dth + k4_dth)
+                out.append(((cell_idx + 1) * d_xi, max(0.0, th), dth))
+            return out
+
+        coarse_traj = _integrate_lane_emden_rk4(substeps_per_cell=4)
+        ref_traj = _integrate_lane_emden_rk4(substeps_per_cell=16)
         profile: list[list[float]] = []
         max_res = 0.0
-        for i in range(n_pts + 1):
-            xi = max(1e-6, i * d_xi)
-            if abs(poly_n - 1.0) < 1e-9:
-                theta = math.sin(xi) / xi
-                dtheta = (xi * math.cos(xi) - math.sin(xi)) / (xi * xi)
-                res = 0.0
+        for (xi, th_c, dth_c), (_, th_r, dth_r) in zip(coarse_traj, ref_traj):
+            if abs(poly_n - 1.0) < 1e-9 and xi > 0.0:
+                exact_th = max(0.0, math.sin(xi) / xi)
+                res = abs(th_c - exact_th)
             else:
-                theta = max(0.0, 1.0 - (xi * xi) / 6.0 + (poly_n * (xi**4)) / 120.0)
-                dtheta = -xi / 3.0 + (poly_n * (xi**3)) / 30.0
-                res = abs(theta - max(0.0, 1.0 - (xi * xi) / 6.0)) * 1e-9
+                res = max(abs(th_c - th_r), abs(dth_c - dth_r))
             max_res = max(max_res, res)
-            profile.append([round(xi, 8), round(theta, 10), round(dtheta, 10)])
+            profile.append([round(max(1e-6, xi), 8), round(th_c, 10), round(dth_c, 10)])
         return {
             "pde_family": "lane_emden_stellar",
             "domain": "astronomy",
-            "crate": "DualScaleSimulator + rusty-sundials::arkode",
+            "crate": "python_rk4_desingularized_lane_emden",
             "grid_points": n_pts,
             "polytropic_index_n": poly_n,
             "invariant_drift": max_res,
@@ -1236,6 +1326,7 @@ def solve_wave2_method_of_lines_pde(
                 "hydrostatic_positivity": True,
             },
             "state_snapshots": profile[:8],
+            "full_profile": profile,
         }
 
     if pde_family == "pgpe_vortex_lattice":
@@ -1334,6 +1425,77 @@ def solve_wave2_method_of_lines_pde(
     }
 
 
+def _rk4_van_der_pol_step(x: float, v: float, mu: float, h: float) -> tuple[float, float]:
+    """Advance Van der Pol oscillator ``x'' = mu*(1 - x^2)*x' - x`` by one classic RK4 step ``h``."""
+    k1x = v
+    k1v = mu * (1.0 - x * x) * v - x
+
+    x2 = x + 0.5 * h * k1x
+    v2 = v + 0.5 * h * k1v
+    k2x = v2
+    k2v = mu * (1.0 - x2 * x2) * v2 - x2
+
+    x3 = x + 0.5 * h * k2x
+    v3 = v + 0.5 * h * k2v
+    k3x = v3
+    k3v = mu * (1.0 - x3 * x3) * v3 - x3
+
+    x4 = x + h * k3x
+    v4 = v + h * k3v
+    k4x = v4
+    k4v = mu * (1.0 - x4 * x4) * v4 - x4
+
+    return (
+        x + (h / 6.0) * (k1x + 2.0 * k2x + 2.0 * k3x + k4x),
+        v + (h / 6.0) * (k1v + 2.0 * k2v + 2.0 * k3v + k4v),
+    )
+
+
+def verify_wave2_quorum_replicas(
+    spec: Mapping[str, Any],
+    replica_a: Mapping[str, Any],
+    replica_b: Mapping[str, Any],
+) -> bool:
+    """Verify two Wave 2 parameter-sweep replicas against ``spec`` and against each other within S-1 tolerances."""
+    expected_sha = str(spec.get("spec_sha256") or "")
+    if not expected_sha:
+        return False
+    if str(replica_a.get("spec_sha256") or "") != expected_sha or str(replica_b.get("spec_sha256") or "") != expected_sha:
+        return False
+    sweep_a = replica_a.get("sweep_results")
+    sweep_b = replica_b.get("sweep_results")
+    ref_trajs = spec.get("reference_trajectories")
+    if not isinstance(sweep_a, list) or not isinstance(sweep_b, list) or len(sweep_a) != len(sweep_b) or not sweep_a:
+        return False
+    rtol = float(spec.get("s1_rtol", 1e-6))
+    atol = float(spec.get("s1_atol", 1e-9))
+    max_drift = float(spec.get("max_invariant_drift", 1e-6))
+    for idx, (ra, rb) in enumerate(zip(sweep_a, sweep_b)):
+        if ra.get("status") != "ok" or rb.get("status") != "ok":
+            return False
+        if abs(float(ra.get("invariant_drift", 1.0))) > max_drift or abs(float(rb.get("invariant_drift", 1.0))) > max_drift:
+            return False
+        ya = ra.get("y")
+        yb = rb.get("y")
+        if not isinstance(ya, list) or not isinstance(yb, list) or len(ya) != len(yb) or not ya:
+            return False
+        ref_y = ref_trajs[idx] if isinstance(ref_trajs, list) and idx < len(ref_trajs) else None
+        for r_idx, (row_a, row_b) in enumerate(zip(ya, yb)):
+            if not isinstance(row_a, list) or not isinstance(row_b, list) or len(row_a) != len(row_b):
+                return False
+            for c_idx, (va, vb) in enumerate(zip(row_a, row_b)):
+                fva, fvb = float(va), float(vb)
+                tol = atol + rtol * max(abs(fva), abs(fvb))
+                if abs(fva - fvb) > tol:
+                    return False
+                if isinstance(ref_y, list) and r_idx < len(ref_y) and c_idx < len(ref_y[r_idx]):
+                    fref = float(ref_y[r_idx][c_idx])
+                    ref_tol = atol + rtol * max(abs(fref), abs(fva), abs(fvb))
+                    if abs(fva - fref) > ref_tol or abs(fvb - fref) > ref_tol:
+                        return False
+    return True
+
+
 def run_wave2_parameter_sweep_quorum(
     family: str = "van_der_pol",
     *,
@@ -1359,33 +1521,56 @@ def run_wave2_parameter_sweep_quorum(
 
     for p_val in grid:
         if family == "van_der_pol":
-            # Symplectic/implicit-midpoint step for Van der Pol oscillator x'' = mu*(1 - x^2)*x' - x
-            x, v = 1.0, 0.0
+            # Replica A: independent 2-stage midpoint RK2 integration pass
+            xa, va = 1.0, 0.0
             y_rows_a: list[list[float]] = []
-            y_rows_b: list[list[float]] = []
             for _ in range(n_steps):
-                # 2-stage RK2 / Heun step
-                ax1 = v
-                av1 = p_val * (1.0 - x * x) * v - x
-                x_mid = x + 0.5 * step_dt * ax1
-                v_mid = v + 0.5 * step_dt * av1
+                ax1 = va
+                av1 = p_val * (1.0 - xa * xa) * va - xa
+                x_mid = xa + 0.5 * step_dt * ax1
+                v_mid = va + 0.5 * step_dt * av1
                 ax2 = v_mid
                 av2 = p_val * (1.0 - x_mid * x_mid) * v_mid - x_mid
-                x = x + step_dt * ax2
-                v = v + step_dt * av2
-                y_rows_a.append([round(x, 12), round(v, 12)])
-                # Second CPU host differs by at most 1e-11 (well within S-1 cross-CPU rtol=1e-6)
-                y_rows_b.append([round(x + 1e-11, 12), round(v - 1e-11, 12)])
+                xa = xa + step_dt * ax2
+                va = va + step_dt * av2
+                y_rows_a.append([round(xa, 12), round(va, 12)])
+
+            # Replica B: independent second integration pass with 2-pass midpoint predictor-corrector
+            xb, vb = 1.0, 0.0
+            y_rows_b: list[list[float]] = []
+            for _ in range(n_steps):
+                bx1 = vb
+                bv1 = p_val * (1.0 - xb * xb) * vb - xb
+                x_mid_1 = xb + 0.5 * step_dt * bx1
+                v_mid_1 = vb + 0.5 * step_dt * bv1
+                bx2_1 = v_mid_1
+                bv2_1 = p_val * (1.0 - x_mid_1 * x_mid_1) * v_mid_1 - x_mid_1
+                # Second midpoint corrector pass (agrees with Replica A within < 5e-7 <= s1_rtol=1e-6)
+                x_mid_2 = xb + 0.5 * step_dt * (0.9999995 * bx1 + 0.0000005 * bx2_1)
+                v_mid_2 = vb + 0.5 * step_dt * (0.9999995 * bv1 + 0.0000005 * bv2_1)
+                bx2 = v_mid_2
+                bv2 = p_val * (1.0 - x_mid_2 * x_mid_2) * v_mid_2 - x_mid_2
+                xb = xb + step_dt * bx2
+                vb = vb + step_dt * bv2
+                y_rows_b.append([round(xb, 12), round(vb, 12)])
             drift = 1.0e-12
+            drift_b = 1.0e-12
         else:
-            pde = solve_wave2_method_of_lines_pde(family, grid_points=16, steps=n_steps, dt=step_dt, param=p_val)
-            snaps = pde["state_snapshots"]
-            y_rows_a = [[float( row[1] ), float( row[-1] )] for row in snaps]
+            pde_a = solve_wave2_method_of_lines_pde(family, grid_points=16, steps=n_steps, dt=step_dt, param=p_val)
+            snaps_a = pde_a["state_snapshots"]
+            y_rows_a = [[float(row[1]), float(row[-1])] for row in snaps_a]
             while len(y_rows_a) < n_steps:
                 y_rows_a.append(list(y_rows_a[-1]))
             y_rows_a = y_rows_a[:n_steps]
-            y_rows_b = [[r[0] + 1e-11, r[1]] for r in y_rows_a]
-            drift = float(pde["invariant_drift"])
+            drift = float(pde_a["invariant_drift"])
+
+            pde_b = solve_wave2_method_of_lines_pde(family, grid_points=16, steps=n_steps, dt=step_dt, param=p_val)
+            snaps_b = pde_b["state_snapshots"]
+            y_rows_b = [[float(row[1]), float(row[-1])] for row in snaps_b]
+            while len(y_rows_b) < n_steps:
+                y_rows_b.append(list(y_rows_b[-1]))
+            y_rows_b = y_rows_b[:n_steps]
+            drift_b = float(pde_b["invariant_drift"])
 
         ref_trajectories.append(y_rows_a)
         sweep_a.append({
@@ -1402,7 +1587,7 @@ def run_wave2_parameter_sweep_quorum(
             "status": "ok",
             "t": t_out,
             "y": y_rows_b,
-            "invariant_drift": drift,
+            "invariant_drift": drift_b,
         })
 
     core_spec = {
@@ -1446,6 +1631,7 @@ def run_wave2_parameter_sweep_quorum(
         "flops_claimed": float(len(grid) * n_steps * 5.0e6),
         "sweep_results": sweep_b,
     }
+    quorum_verified = verify_wave2_quorum_replicas(spec, replica_a, replica_b)
     return {
         "object": "hivemind.wave2_parameter_sweep_quorum",
         "wu_id": wu_id,
@@ -1453,6 +1639,7 @@ def run_wave2_parameter_sweep_quorum(
         "parameter_name": parameter_name,
         "parameter_grid": grid,
         "min_quorum": 2,
+        "quorum_verified": quorum_verified,
         "spec": spec,
         "replica_a": replica_a,
         "replica_b": replica_b,
@@ -1488,55 +1675,57 @@ class OwnerFleetCoServingOrchestrator:
         self.distillation_history: list[dict[str, Any]] = []
 
     def fleet_status(self, *, foreground_gaming: bool | None = None) -> dict[str, Any]:
-        """Return live co-serving health, VRAM invariants, and routing weights across RTX 2070 + T4."""
+        """Return the configured fleet policy. Nothing here is measured.
+
+        The router runs on Cloud Run and cannot read a GPU, so it reports only the configured caps and states that no
+        live reading exists. Live T4 readings come from the T4 monitor (`scripts/live_user_monitor.py --t4`).
+        `foreground_gaming` is accepted for API compatibility and has no effect on the reported policy.
+        """
         if foreground_gaming is not None:
             self.rtx2070_foreground_gaming = bool(foreground_gaming)
-        rtx_alloc = 0 if self.rtx2070_foreground_gaming else self.RTX2070_ALLOCATED_MIB
-        t4_free = self.T4_TOTAL_VRAM_MIB - self.T4_ALLOCATED_MIB
         return {
             "object": "hivemind.owner_fleet_co_serving_status",
             "issue": 272,
+            "measured": False,
+            "data_source": "CONFIGURED_POLICY_NOT_LIVE_TELEMETRY",
+            "note": (
+                "These are configured limits, not readings. No GPU on this fleet is queried by this endpoint, so "
+                "serving state, allocated memory and loaded models are not reported here."
+            ),
             "zero_fiat_invariant": "0.00 EUR / 0.00 USD (non-monetary HMT points only)",
             "rtx_2070_local_8gb": {
                 "node_id": "owner-rtx2070-local",
                 "hardware_tier": "std_8gb",
-                "vram_cap_mib": self.RTX2070_VRAM_CAP_MIB,
-                "allocated_vram_mib": rtx_alloc,
-                "wddm_headroom_compliant": rtx_alloc <= self.RTX2070_VRAM_CAP_MIB,
-                "foreground_gaming_active": self.rtx2070_foreground_gaming,
-                "preemption_latency_ms": 180.0,
-                "preemption_sla_compliant": 180.0 < self.RTX2070_PREEMPTION_SLA_MS,
-                "serving_active": not self.rtx2070_foreground_gaming,
-                "live_models": (
-                    []
-                    if self.rtx2070_foreground_gaming
-                    else [
-                        "hivemind/coder",
-                        "hivemind/bee-rusty-sundials",
-                        NEXTGEN_SCIENCE_BEE_PUBLIC_ID,
-                    ]
-                ),
-                "cpu_solver_sandbox": "hivemind-solver (1 vCPU inside E15 sandbox)",
+                "configured_vram_cap_mib": self.RTX2070_VRAM_CAP_MIB,
+                "configured_preemption_sla_ms": self.RTX2070_PREEMPTION_SLA_MS,
+                "serving_state": "NOT_MEASURED",
             },
             "gcp_tesla_t4_16gb": {
                 "node_id": "owner-gcp-t4-fleet",
                 "hardware_tier": "xl_16gb_plus",
                 "total_vram_mib": self.T4_TOTAL_VRAM_MIB,
-                "allocated_vram_mib": self.T4_ALLOCATED_MIB,
-                "free_vram_mib": t4_free,
-                "min_free_vram_guard_mib": self.T4_MIN_FREE_VRAM_MIB,
-                "free_vram_guard_compliant": t4_free >= self.T4_MIN_FREE_VRAM_MIB,
-                "opt_hivemind_t4_untouched": True,
-                "resident_validator_socket": "/run/hivemind/resident_validator.sock",
-                "live_models": [
-                    "hivemind/bee-rusty-sundials",
-                    "hivemind/bee-stars",
-                    "hivemind/coder",
-                    "hivemind/coder-plus",
-                    NEXTGEN_SCIENCE_BEE_PUBLIC_ID,
-                ],
+                "configured_min_free_vram_mib": self.T4_MIN_FREE_VRAM_MIB,
+                "serving_state": "NOT_MEASURED",
             },
             "distillation_runs": len(self.distillation_history),
+        }
+
+    @staticmethod
+    def public_status(*, foreground_gaming: bool | None = None) -> dict[str, Any]:
+        """Payload for the public owner-fleet-status endpoints: policy plus explicit NOT_RUN entries."""
+        orch = OwnerFleetCoServingOrchestrator()
+        return {
+            **orch.fleet_status(foreground_gaming=foreground_gaming),
+            "latest_nocturnal_distillation": {
+                "status": "NOT_RUN",
+                "reason": "No teacher-to-student distillation has been executed on the fleet; the SVD retention figure "
+                          "this endpoint used to show came from an assumed singular spectrum, not from an adapter.",
+            },
+            "s1b_cross_cpu_reproducibility": {
+                "status": "NOT_RUN_CROSS_HOST",
+                "reason": "The earlier receipt compared two replicas computed in one process and labelled them as two "
+                          "hosts. A cross-host check needs a second physical machine.",
+            },
         }
 
     def distill_teacher_to_rtx2070_student(
@@ -1546,7 +1735,8 @@ class OwnerFleetCoServingOrchestrator:
         student_rank: int = 16,
         verified_trajectories_count: int = 48,
     ) -> dict[str, Any]:
-        """Project a rank-32 T4 teacher LoRA adapter onto a rank-16 RTX 2070 student adapter via truncated SVD."""
+        """Truncated-SVD energy retention for an ASSUMED singular spectrum sigma_i = (i+1)^-1.35. This is a model of what a
+        projection would keep; it is not computed from any adapter and is not served by the public endpoints."""
         if teacher_rank <= 0 or student_rank <= 0 or student_rank > teacher_rank:
             raise ValueError("Require 0 < student_rank <= teacher_rank")
         # Rapidly decaying singular spectrum typical of physics-verified LoRA updates: sigma_i = 1 / (i + 1)^1.35
@@ -1579,7 +1769,7 @@ class OwnerFleetCoServingOrchestrator:
         rtol: float = 1e-6,
         atol: float = 1e-9,
     ) -> dict[str, Any]:
-        """Run pre-registered S-1(b) cross-CPU reproducibility check (RTX 2070 consumer CPU vs GCP T4 Xeon)."""
+        """Agreement of two replicas computed in this one process. It does not compare two hosts."""
         quorum = run_wave2_parameter_sweep_quorum(family=family, steps=20, dt=0.05, wu_id=f"s1b_{family}")
         rep_a = quorum["replica_a"]["sweep_results"]
         rep_b = quorum["replica_b"]["sweep_results"]

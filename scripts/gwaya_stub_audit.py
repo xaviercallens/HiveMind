@@ -17,6 +17,9 @@ import time
 from typing import Any, Dict, List
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+THIRD_PARTY = PROJECT_ROOT / "third_party"
+if THIRD_PARTY.is_dir() and str(THIRD_PARTY) not in sys.path:
+    sys.path.insert(0, str(THIRD_PARTY))
 OUT = PROJECT_ROOT / "artifacts" / "gwaya_stub_audit.json"
 
 

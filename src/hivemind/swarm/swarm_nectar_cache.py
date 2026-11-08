@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from pathlib import Path
 import time
 from collections.abc import Mapping
@@ -21,6 +22,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 TOPIC_FOOD_SOURCES = "hivemind.mesh.food_sources.v1"
+TOPIC_TELEPATHY_KV = "hivemind.mesh.telepathy_kv.v1"
 DEFAULT_NECTAR_TTL_S = 86400.0  # 24 hours
 MICRO_ROYALTY_HMT = 0.005  # 0.005 HMT awarded to discoverer per peer hit
 
@@ -39,7 +41,7 @@ def canonical_query_hash(tool_name: str, query: str | Mapping[str, Any]) -> str:
 
 @dataclass
 class NectarEntry:
-    """One verified, reusable piece of information (food source / tool result)."""
+    """One reusable piece of information (food source / tool result)."""
 
     nectar_id: str
     tool_name: str
@@ -56,10 +58,11 @@ class NectarEntry:
     def is_expired(self) -> bool:
         return (time.time() - self.created_utc) > self.ttl_s
 
-    def record_access(self) -> float:
-        """Increment access count and distribute micro-royalty."""
+    def record_access(self, *, credit_royalty: bool = True) -> float:
+        """Increment access count and distribute micro-royalty for peer hits."""
         self.access_count += 1
-        self.hmt_royalties_earned = round(self.hmt_royalties_earned + MICRO_ROYALTY_HMT, 6)
+        if credit_royalty:
+            self.hmt_royalties_earned = round(self.hmt_royalties_earned + MICRO_ROYALTY_HMT, 6)
         return self.hmt_royalties_earned
 
     def to_dict(self) -> dict[str, Any]:
@@ -213,7 +216,13 @@ class SwarmNectarCache:
         nectar_richness: float = 0.90,
         ttl_s: float | None = None,
     ) -> NectarEntry:
-        """Store verified tool result in the nectar cache and format Kafka food source event."""
+        """Store tool result in the nectar cache and format Kafka food source event."""
+        richness_val = float(nectar_richness)
+        if not math.isfinite(richness_val):
+            raise ValueError(f"nectar_richness must be finite, got {nectar_richness!r}")
+        eff_ttl = float(ttl_s if ttl_s is not None else self.default_ttl_s)
+        if not math.isfinite(eff_ttl) or eff_ttl <= 0.0:
+            raise ValueError(f"ttl_s must be finite and positive, got {ttl_s!r}")
         q_hash = canonical_query_hash(tool_name, query)
         entry_id = f"nectar-{q_hash[:16]}"
         entry = NectarEntry(
@@ -221,10 +230,10 @@ class SwarmNectarCache:
             tool_name=tool_name.strip().lower(),
             query_hash=q_hash,
             content=content,
-            nectar_richness=max(0.0, min(1.0, float(nectar_richness))),
+            nectar_richness=max(0.0, min(1.0, richness_val)),
             discovered_by_bee=discovered_by_bee.strip(),
             created_utc=time.time(),
-            ttl_s=ttl_s if ttl_s is not None else self.default_ttl_s,
+            ttl_s=eff_ttl,
         )
         self._cache[q_hash] = entry
         if self._sync_backend is not None:
@@ -264,10 +273,12 @@ class SwarmNectarCache:
             self._last_lookup_latency_ms = round((time.perf_counter() - t0) * 1000.0, 4)
             return None
 
-        # Cache Hit!
+        # Cache Hit! Self-hits do not accrue royalties.
         self._cache_hits += 1
-        self._tokens_saved_estimate += 450  # Average tokens per tool generation avoided
-        entry.record_access()
+        self._tokens_saved_estimate += 450  # Modeled average tokens per tool generation avoided
+        req_bee = requesting_bee.strip()
+        is_self_hit = bool(req_bee and req_bee == entry.discovered_by_bee)
+        entry.record_access(credit_royalty=not is_self_hit)
         if self._sync_backend is not None:
             self._sync_backend.put_entry(entry)
         self.flush_to_disk()
@@ -289,6 +300,79 @@ class SwarmNectarCache:
             "created_utc": entry.created_utc,
         }
 
+    def put_telepathy_kv(
+        self,
+        *,
+        sender_model_id: str,
+        receiver_model_id: str,
+        context_key: str,
+        compacted_kv_manifest: Mapping[str, Any],
+        discovered_by_bee: str,
+        nectar_richness: float = 0.95,
+        ttl_s: float | None = None,
+    ) -> NectarEntry:
+        """Store a content-addressed `SwaT + AM_U` compacted KV state (`HM-S34-02`) in `SwarmNectarCache`."""
+        query_spec = {
+            "sender_model_id": sender_model_id,
+            "receiver_model_id": receiver_model_id,
+            "context_key": context_key,
+        }
+        payload = {
+            "schema": TOPIC_TELEPATHY_KV,
+            "sender_model_id": sender_model_id,
+            "receiver_model_id": receiver_model_id,
+            "context_key": context_key,
+            "payload_sha256": str(compacted_kv_manifest.get("payload_sha256", "")),
+            "original_seq_len": int(compacted_kv_manifest.get("original_seq_len", 0)),
+            "compacted_seq_len": int(compacted_kv_manifest.get("compacted_seq_len", 0)),
+            "target_ratio": float(compacted_kv_manifest.get("target_ratio", 1.0)),
+            "compacted_wire_bytes": int(compacted_kv_manifest.get("compacted_wire_bytes", 0)),
+            "compacted_wire_mib": float(compacted_kv_manifest.get("compacted_wire_mib", 0.0)),
+            "wan_2mib_budget_ok": bool(compacted_kv_manifest.get("wan_2mib_budget_ok", True)),
+            "nnls_beta_bias": list(compacted_kv_manifest.get("nnls_beta_bias", [])),
+        }
+        return self.put(
+            tool_name="swat_telepathy_kv",
+            query=query_spec,
+            content=payload,
+            discovered_by_bee=discovered_by_bee,
+            nectar_richness=nectar_richness,
+            ttl_s=ttl_s,
+        )
+
+    def get_telepathy_kv(
+        self,
+        *,
+        sender_model_id: str,
+        receiver_model_id: str,
+        context_key: str,
+        requesting_bee: str = "anonymous",
+    ) -> NectarEntry | None:
+        """Retrieve a cached `SwaT + AM_U` compacted KV state (`HM-S34-02`) and award PoUW HMT royalties."""
+        query_spec = {
+            "sender_model_id": sender_model_id,
+            "receiver_model_id": receiver_model_id,
+            "context_key": context_key,
+        }
+        return self.get("swat_telepathy_kv", query_spec, requesting_bee=requesting_bee)
+
+    def build_kafka_telepathy_kv_event(self, entry: NectarEntry) -> dict[str, Any]:
+        """Construct canonical CloudEvent dict for publishing compacted KV states on `hivemind.mesh.telepathy_kv.v1`."""
+        return {
+            "topic": TOPIC_TELEPATHY_KV,
+            "event_type": "io.hivemind.mesh.telepathy_kv_published",
+            "nectar_id": entry.nectar_id,
+            "query_hash": entry.query_hash,
+            "discovered_by_bee": entry.discovered_by_bee,
+            "payload_sha256": entry.content.get("payload_sha256", ""),
+            "sender_model_id": entry.content.get("sender_model_id", ""),
+            "receiver_model_id": entry.content.get("receiver_model_id", ""),
+            "compacted_seq_len": entry.content.get("compacted_seq_len", 0),
+            "compacted_wire_mib": entry.content.get("compacted_wire_mib", 0.0),
+            "hmt_royalties": entry.hmt_royalties_earned,
+            "created_utc": entry.created_utc,
+        }
+
     def stats(self) -> dict[str, Any]:
         """Return cache health, hit rate, and economic royalties distribution."""
         active_entries = sum(1 for e in self._cache.values() if not e.is_expired)
@@ -301,6 +385,7 @@ class SwarmNectarCache:
             "cache_hits": self._cache_hits,
             "hit_rate_pct": hit_rate,
             "tokens_saved_estimate": self._tokens_saved_estimate,
+            "tokens_saved_basis": "modeled_450_tokens_per_hit",
             "total_hmt_royalties_distributed": total_royalties,
             "last_lookup_latency_ms": self._last_lookup_latency_ms,
             "sync_backend_enabled": self._sync_backend is not None,

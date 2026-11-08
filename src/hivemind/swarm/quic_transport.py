@@ -282,6 +282,8 @@ class ContinentalSuperRingRouter:
     # ------------------------------------------------------------------
     def register_peer(self, node: SuperRingPeerNode) -> bool:
         """Admit `node` into its Tier-1 Regional Geo-Ring (only if the `<20 ms` SLA holds)."""
+        if not math.isfinite(node.rtt_ms):
+            return False
         if node.rtt_ms > self.max_regional_rtt_ms:
             return False
         existing = self.peers.get(node.peer_id)
@@ -885,11 +887,22 @@ class AsyncQUICGeoRingTransport(RegionalGeoRingTransport):
         """Run both sides of a simultaneous-open hole punch at once (B on a worker thread)."""
         session = secrets.token_bytes(8)
         result_b: List[PunchResult] = []
-        worker = threading.Thread(
-            target=lambda: result_b.append(udp_hole_punch(sock_b, candidates_a, session, timeout))
-        )
+        start_barrier = threading.Barrier(2, timeout=max(0.5, timeout))
+
+        def _run_b() -> None:
+            try:
+                start_barrier.wait()
+            except threading.BrokenBarrierError:
+                pass
+            result_b.append(udp_hole_punch(sock_b, candidates_a, session, timeout))
+
+        worker = threading.Thread(target=_run_b)
         worker.start()
         try:
+            try:
+                start_barrier.wait()
+            except threading.BrokenBarrierError:
+                pass
             result_a = udp_hole_punch(sock_a, candidates_b, session, timeout)
         finally:
             worker.join()
@@ -1351,7 +1364,7 @@ class AsyncQUICGeoRingTransport(RegionalGeoRingTransport):
             from_a, data_at_b = client_b.recv_from(timeout)
             client_b.send_to(relay_a, probe[::-1])
             from_b, data_at_a = client_a.recv_from(timeout)
-            elapsed_ms = (time.perf_counter() - t0) * 1000.0
+            elapsed_ms = ((time.perf_counter() - t0) * 1000.0) / 2.0
             verified = (
                 data_at_b == probe and data_at_a == probe[::-1] and from_a == relay_a and from_b == relay_b
             )

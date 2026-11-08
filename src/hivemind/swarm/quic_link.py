@@ -28,7 +28,7 @@ import struct
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from urllib.parse import urlsplit
 
 from aioquic.asyncio import serve
@@ -236,23 +236,32 @@ class _ServerProtocol(QuicConnectionProtocol):
         self._deadlines: Dict[int, asyncio.TimerHandle] = {}
         self._failed = False
 
-    def close(self, *args, **kwargs) -> None:
+    def _clear_stream_state(self) -> None:
         for timer in self._deadlines.values():
             timer.cancel()
         self._deadlines.clear()
         self._buffers.clear()
         self._counts.clear()
         self._totals.clear()
+
+    def _finish_close_if_pending(self) -> None:
+        if self._quic._close_event is not None:
+            self._clear_stream_state()
+            if self._quic._close_at is not None and self._timer is not None:
+                self._handle_timer()
+
+    def datagram_received(self, data: bytes, addr: Tuple[str, int]) -> None:
+        super().datagram_received(data, addr)
+        self._finish_close_if_pending()
+
+    def close(self, *args, **kwargs) -> None:
+        self._clear_stream_state()
         super().close(*args, **kwargs)
+        self._finish_close_if_pending()
 
     def _fail(self, reason: str) -> None:
         self._failed = True
-        for timer in self._deadlines.values():
-            timer.cancel()
-        self._deadlines.clear()
-        self._buffers.clear()
-        self._counts.clear()
-        self._totals.clear()
+        self._clear_stream_state()
         self.close(error_code=0x100, reason_phrase=reason)
 
     def quic_event_received(self, event: QuicEvent) -> None:
@@ -305,12 +314,26 @@ class _ServerProtocol(QuicConnectionProtocol):
                 self._quic.send_stream_data(event.stream_id, _LENGTH.pack(count), end_stream=True)
                 self.transmit()
         elif isinstance(event, ConnectionTerminated):
-            for timer in self._deadlines.values():
-                timer.cancel()
-            self._deadlines.clear()
-            self._buffers.clear()
-            self._counts.clear()
-            self._totals.clear()
+            self._clear_stream_state()
+
+
+async def await_quic_closed(protocol: QuicConnectionProtocol, timeout: float = 1.0) -> None:
+    """Wait for a QUIC protocol to send or receive CONNECTION_CLOSE and finish its drain timer immediately."""
+    deadline = time.monotonic() + timeout
+    while not protocol._closed.is_set():
+        if getattr(protocol._quic, "_close_event", None) is not None:
+            if getattr(protocol._quic, "_close_at", None) is not None and getattr(protocol, "_timer", None) is not None:
+                protocol._handle_timer()
+            if protocol._closed.is_set():
+                return
+        remaining = deadline - time.monotonic()
+        if remaining <= 0.0:
+            raise TimeoutError("Timed out waiting for QUIC CONNECTION_CLOSE completion")
+        try:
+            await asyncio.wait_for(protocol.wait_closed(), min(0.01, remaining))
+            return
+        except TimeoutError:
+            continue
 
 
 class QuicHiddenStateServer:
@@ -723,7 +746,7 @@ class WebSocketHiddenStateServer:
         host = f"[{self.host}]" if ":" in self.host else self.host
         return f"{'wss' if self.ssl_context is not None else 'ws'}://{host}:{self.port}"
 
-    async def _handle(self, websocket) -> None:
+    async def _handle(self, websocket: Any) -> None:
         try:
             async with asyncio.timeout(self.timeout):
                 if _parse_multistream(await websocket.recv()) != MULTISTREAM:

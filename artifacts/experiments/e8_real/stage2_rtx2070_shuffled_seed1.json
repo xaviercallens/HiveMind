@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "experiment_id": "E8-stage2-tiny-moe-qlora",
+  "mode": "baseline",
+  "completed": true,
+  "syncer_host": "XAVGAMSRV",
+  "hosts": {
+    "0": "XAVGAMSRV",
+    "1": "XAVGAMSRV"
+  },
+  "config": {
+    "learners": 2,
+    "rounds": 4,
+    "seed": 1,
+    "inner_steps": 40,
+    "inner_lr": 0.02,
+    "batch": 16,
+    "outer_lr": 0.7,
+    "outer_mu": 0.65,
+    "model": "GraniteMoE tiny (hidden 64, 2 layers, 4 experts, top-2), LoRA r=4 on q_proj,v_proj"
+  },
+  "rounds": [
+    {
+      "round": 0,
+      "latency_s": 2.807156801223755,
+      "eval_loss_global": {
+        "0": 4.172107696533203,
+        "1": 4.172107696533203
+      },
+      "delta_l2": {
+        "0": 8.242037716629977,
+        "1": 7.9653824216677185
+      },
+      "arrivals_s": {
+        "0": 1.7268342971801758,
+        "1": 2.806157350540161
+      },
+      "vram_peak_mib": {
+        "0": null,
+        "1": null
+      }
+    },
+    {
+      "round": 1,
+      "latency_s": 1.9361941814422607,
+      "eval_loss_global": {
+        "0": 4.198604583740234,
+        "1": 4.198604583740234
+      },
+      "delta_l2": {
+        "0": 7.547418041712975,
+        "1": 7.364505218854168
+      },
+      "arrivals_s": {
+        "0": 0.9604721069335938,
+        "1": 1.9351935386657715
+      },
+      "vram_peak_mib": {
+        "0": null,
+        "1": null
+      }
+    },
+    {
+      "round": 2,
+      "latency_s": 2.0139033794403076,
+      "eval_loss_global": {
+        "0": 4.225796699523926,
+        "1": 4.225796699523926
+      },
+      "delta_l2": {
+        "0": 7.3211885495999445,
+        "1": 7.104897466157281
+      },
+      "arrivals_s": {
+        "0": 1.017777681350708,
+        "1": 2.0129036903381348
+      },
+      "vram_peak_mib": {
+        "0": null,
+        "1": null
+      }
+    },
+    {
+      "round": 3,
+      "latency_s": 2.0044307708740234,
+      "eval_loss_global": {
+        "0": 4.193557262420654,
+        "1": 4.193557262420654
+      },
+      "delta_l2": {
+        "0": 7.36979860411049,
+        "1": 7.870184803771766
+      },
+      "arrivals_s": {
+        "0": 0.9912126064300537,
+        "1": 2.0034244060516357
+      },
+      "vram_peak_mib": {
+        "0": null,
+        "1": null
+      }
+    }
+  ],
+  "initial_eval_loss": {
+    "0": 4.172107696533203,
+    "1": 4.172107696533203
+  },
+  "final_eval_loss": {
+    "0": 4.185390949249268,
+    "1": 4.185390949249268
+  },
+  "final_eval_loss_mean": 4.185390949249268,
+  "wall_seconds": 8.789042949676514,
+  "receipt_sha256": "01c1a300c0952f917c6fb690b7dae6f7a319bcfa9ced3bd32ba21440faf4fb78"
+}

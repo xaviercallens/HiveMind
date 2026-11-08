@@ -77,3 +77,95 @@ def test_zk_opoi_v5_rejects_tampered_shard_bilinear_or_norm_bounds() -> None:
 
     with pytest.raises(ValueError, match="quant_bits"):
         verifier.quantize_to_int8([0.1, 0.2], quant_bits=6)
+
+    # 4. IP-149: In-bounds tampered delta_l2_norm (1.0 <= max_l2_norm=5.0) must fail HMAC check
+    tampered_inbounds_norm = replace(receipt, delta_l2_norm=1.0)
+    rep_inbounds = verifier.verify_proof(
+        tampered_inbounds_norm,
+        expected_shard_sha256="shard_abc",
+        expected_theta0_sha256=receipt.theta0_sha256,
+    )
+    assert rep_inbounds.verified is False
+    assert rep_inbounds.rejection_reason == "commitment_hmac_invalid"
+
+    # 5. IP-149: NaN delta_l2_norm or delta_linf_norm must fail closed
+    nan_l2 = replace(receipt, delta_l2_norm=float("nan"))
+    rep_nan_l2 = verifier.verify_proof(
+        nan_l2,
+        expected_shard_sha256="shard_abc",
+        expected_theta0_sha256=receipt.theta0_sha256,
+    )
+    assert rep_nan_l2.verified is False
+    assert rep_nan_l2.rejection_reason == "delta_l2_norm_out_of_bounds"
+
+    nan_linf = replace(receipt, delta_linf_norm=float("nan"))
+    rep_nan_linf = verifier.verify_proof(
+        nan_linf,
+        expected_shard_sha256="shard_abc",
+        expected_theta0_sha256=receipt.theta0_sha256,
+    )
+    assert rep_nan_linf.verified is False
+    assert rep_nan_linf.rejection_reason == "delta_linf_norm_out_of_bounds"
+
+    # 6. IP-149: Independent verifier without shared secret must not share a static default literal secret
+    other_verifier = ZKOPoIV5Int8TransitionVerifier(max_l2_norm=5.0, max_linf_norm=1.0)
+    rep_other = other_verifier.verify_proof(
+        receipt,
+        expected_shard_sha256="shard_abc",
+        expected_theta0_sha256=receipt.theta0_sha256,
+    )
+    assert rep_other.verified is False
+    assert rep_other.rejection_reason == "commitment_hmac_invalid"
+    assert rep_other.to_dict()["verified"] is False
+
+    # Additional rejection paths: theta0 mismatch, zero transition, linf norm out of bounds, fiat-shamir tampered
+    assert (
+        verifier.verify_proof(
+            receipt,
+            expected_shard_sha256="shard_abc",
+            expected_theta0_sha256="wrong_theta0",
+        ).rejection_reason
+        == "theta0_sha256_mismatch"
+    )
+    assert (
+        verifier.verify_proof(
+            replace(receipt, theta_final_sha256=receipt.theta0_sha256),
+            expected_shard_sha256="shard_abc",
+            expected_theta0_sha256=receipt.theta0_sha256,
+        ).rejection_reason
+        == "zero_transition_detected"
+    )
+    assert (
+        verifier.verify_proof(
+            replace(receipt, delta_linf_norm=99.0),
+            expected_shard_sha256="shard_abc",
+            expected_theta0_sha256=receipt.theta0_sha256,
+        ).rejection_reason
+        == "delta_linf_norm_out_of_bounds"
+    )
+    assert (
+        verifier.verify_proof(
+            replace(receipt, fiat_shamir_challenge_hex="0" * 64),
+            expected_shard_sha256="shard_abc",
+            expected_theta0_sha256=receipt.theta0_sha256,
+        ).rejection_reason
+        == "fiat_shamir_challenge_tampered"
+    )
+    with pytest.raises(ValueError, match="non-finite"):
+        verifier.quantize_to_int8([float("nan")])
+    with pytest.raises(ValueError, match="equal non-zero"):
+        verifier.generate_proof(
+            worker_id="w",
+            workunit_id="wu",
+            shard_sha256="s",
+            theta0=[0.1],
+            delta_weights=[],
+        )
+    with pytest.raises(ValueError, match="all-zero"):
+        verifier.generate_proof(
+            worker_id="w",
+            workunit_id="wu",
+            shard_sha256="s",
+            theta0=[0.1, 0.2],
+            delta_weights=[0.0, 0.0],
+        )

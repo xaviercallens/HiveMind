@@ -16,9 +16,12 @@ strictly enforces nonce-pinned scripts and styles.
 
 from __future__ import annotations
 
+from typing import Any
+
 from hivemind.router.catalog import TIERS
 from hivemind.router.google_auth import CLIENT_ID_RE
 from hivemind.router.life_as_a_bee import render_life_as_a_bee_section
+from hivemind.router.telemetry_figures import shown_figure
 
 
 def portal_content_security_policy(nonce: str) -> str:
@@ -27,7 +30,7 @@ def portal_content_security_policy(nonce: str) -> str:
         "default-src 'none'",
         f"script-src 'nonce-{nonce}'",
         f"style-src 'nonce-{nonce}'",
-        "connect-src 'self'",
+        "connect-src 'self' https://hivemind-openrouter-1003063861791.us-central1.run.app https://hivemind-openrouter-cfhmhmvv5a-uc.a.run.app",
         "img-src 'self' data:",
         "font-src 'self' data:",
         "base-uri 'none'",
@@ -910,12 +913,360 @@ if ($('steamContributeBtn')) {
     }
   });
 }
+
+if ($('opentrainerStatusBtn')) {
+  $('opentrainerStatusBtn').addEventListener('click', async () => {
+    $('opentrainerPortalStatus').textContent = 'Querying OpenTrainer central coordinator (/v1/hivemind/opentrainer/status)...';
+    try {
+      const res = await fetch('/v1/hivemind/opentrainer/status');
+      const data = await res.json();
+      if (!res.ok) {
+        $('opentrainerPortalStatus').textContent = 'Error querying OpenTrainer status.';
+        return;
+      }
+      const fl = data.live_opentrainer_fleet || {};
+      const cat = data.portal_category || {};
+      const rounds = data.recent_training_rounds || [];
+      const offer = data.active_task_offer || {};
+      $('opentrainerPortalStatus').textContent =
+        (data.status || 'n/a') + ' (' + (data.version || 'n/a') + ') • Topic: ' + (offer.topic || 'n/a') +
+        ' • Registered Trainers: ' + (cat.registered_trainer_accounts_count ?? 'n/a') +
+        ' • Live Nodes: ' + (fl.active_trainer_nodes ?? 'n/a') +
+        ' • Accepted Rounds: ' + rounds.length +
+        ' • Firewall Traversal: Outbound HTTPS Relay (0 inbound ports)';
+    } catch (err) {
+      $('opentrainerPortalStatus').textContent = 'Network error querying OpenTrainer coordinator.';
+    }
+  });
+}
+
+if ($('opentrainerHeartbeatBtn')) {
+  $('opentrainerHeartbeatBtn').addEventListener('click', async () => {
+    const apiKey = ($('apiKey') && $('apiKey').value.trim()) || localStorage.getItem('hivemind_api_key') || '';
+    if (!apiKey) {
+      $('opentrainerPortalStatus').textContent = 'Paste your hm-... trainer/prosumer API key above (or register with role="trainer" at /signup) first.';
+      return;
+    }
+    const hostLabel = ($('otHostInput') && $('otHostInput').value.trim()) || '';
+    const gpuName = ($('otGpuInput') && $('otGpuInput').value.trim()) || '';
+    const vramTotal = ($('otVramTotalInput') && $('otVramTotalInput').value.trim()) || '';
+    const vramFree = ($('otVramFreeInput') && $('otVramFreeInput').value.trim()) || '';
+    const netMode = ($('otNetModeSelect') && $('otNetModeSelect').value) || 'outbound-https-relay';
+    // Only fields the user typed are sent; a field left out is stored by the server as "not reported".
+    const payload = { network_mode: netMode };
+    if (hostLabel) payload.host_label = hostLabel;
+    if (gpuName) payload.gpu_name = gpuName;
+    if (vramTotal !== '') payload.vram_total_mib = Number(vramTotal);
+    if (vramFree !== '') payload.vram_free_mib = Number(vramFree);
+    $('opentrainerPortalStatus').textContent = 'Sending outbound HTTPS heartbeat to OpenTrainer (' + netMode + ')...';
+    try {
+      const res = await fetch('/v1/hivemind/opentrainer/heartbeat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + apiKey,
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        $('opentrainerPortalStatus').textContent = 'Error: ' + ((data.error && data.error.message) || 'Heartbeat rejected');
+        return;
+      }
+      const offer = data.active_task_offer || {};
+      $('opentrainerPortalStatus').textContent =
+        'OPENTRAINER NODE LIVE • Host: ' + (data.node && data.node.host_label) +
+        ' • GPU: ' + (data.node && data.node.gpu_name) +
+        ' • Mode: ' + (data.node && data.node.network_mode) +
+        ' • Aglet Phase: ' + data.aglet_lifecycle_phase +
+        ' • Active Offer Round: ' + (offer.round_id || 1) + ' (' + (offer.base_model || '') + ')';
+    } catch (err) {
+      $('opentrainerPortalStatus').textContent = 'Network error sending OpenTrainer heartbeat.';
+    }
+  });
+}
+
+// Contributive & Community Help Hub interactive controls
+const COMMUNITY_HELP_TOPICS = {
+  'producer-openrouter-join': {
+    title: 'FR/EN — 1. Rejoindre comme Producteur OpenRouter / Join as an OpenRouter Inference Producer',
+    body: 'FR : Lancez Ollama ou llama-server et envoyez vos heartbeats (libération GPU < 1,5 s dès qu un jeu démarre). | EN: Run Ollama or llama-server and heartbeat your models (< 1.5s game preemption).',
+    cmd: 'python scripts/hivemind_producer_agent.py --gateway https://hivemind-openrouter-1003063861791.us-central1.run.app --preset coder',
+  },
+  'trainer-opentrainer-moe': {
+    title: 'FR/EN — 2. Contribuer à l Auto-Entraînement MoE (OpenTrainer) / Join OpenTrainer Self-Training MoE',
+    body: 'FR : Entraînement Stage-2 Tiny Granite-MoE NF4 QLoRA & DiLoCo 2D-DCT via HTTPS sortant (0 port entrant) avec cliquet monotone. | EN: Stage-2 Tiny Granite-MoE NF4 QLoRA & DiLoCo 2D-DCT over outbound HTTPS (0 inbound ports) with monotone loss ratchet.',
+    cmd: 'python scripts/hivemind_opentrainer_agent.py --gateway https://hivemind-openrouter-1003063861791.us-central1.run.app --network-mode outbound-https-relay --check-firewall --submit-delta --once',
+  },
+  'dual-role-failover-orchestrator': {
+    title: 'FR/EN — 3. Cycle 3 Heures Producteur + Entraîneur MoE / 3-Hour Producer + Trainer MoE Integration',
+    body: 'FR : Toutes les 3h, vérifie hivemind/coder, hivemind/bee-stars (NIGHT-MOE-1 LoRA) et hivemind/auto, rafraîchit les producteurs et soumet des rondes QLoRA. | EN: Every 3h, verifies live inference, refreshes producer + trainer heartbeats, and executes QLoRA self-training rounds.',
+    cmd: 'PYTHONPATH=src:scripts python scripts/run_3h_producer_trainer_moe_integration.py',
+  },
+  'community-troubleshooting-help': {
+    title: 'FR/EN — 4. Entraide Communautaire & Diagnostic Pare-Feu / Community Help & Adapter Integrity',
+    body: 'FR : Derrière NAT/CGNAT ? Utilisez outbound-https-relay (TCP/443). Note : hivemind/bee-stars requiert llama-server avec NIGHT-MOE-1 LoRA (/bee). | EN: Behind NAT/CGNAT? Use outbound-https-relay. Note: hivemind/bee-stars requires llama-server with NIGHT-MOE-1 LoRA (/bee).',
+    cmd: 'curl -sS https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/hivemind/contributive-hub',
+  },
+  'byom-2-to-4-local-gpus': {
+    title: 'FR/EN — 5. Co-Entraîner de Nouveaux Modèles ou Vos Propres Modèles (BYOM) avec 2 à 4 GPUs Locaux',
+    body: 'FR : Lancez 1 processus OpenTrainer par GPU (CUDA_VISIBLE_DEVICES=0..3 sur 1 machine ou 2–4 PC séparés) avec --campaign-id byom-<votre-modele> pour entraîner ensemble un nouveau modèle ou votre propre LoRA/MoE. | EN: Pin 1 OpenTrainer worker per GPU (CUDA_VISIBLE_DEVICES=0..3 on 1 rig or 2–4 PCs) with --campaign-id byom-<your-model> to co-train shared or custom models.',
+    cmd: 'for gpu in 0 1 2 3; do CUDA_VISIBLE_DEVICES=$gpu python scripts/hivemind_opentrainer_agent.py --gateway https://hivemind-openrouter-1003063861791.us-central1.run.app --host-label RIG-GPU$gpu --learner-index $gpu --campaign-id byom-custom-moe-v1 --network-mode outbound-https-relay --submit-delta --once & done; wait',
+  },
+};
+
+if ($('communityHelpTopicSelect')) {
+  $('communityHelpTopicSelect').addEventListener('change', (ev) => {
+    const t = COMMUNITY_HELP_TOPICS[ev.target.value] || COMMUNITY_HELP_TOPICS['producer-openrouter-join'];
+    if ($('communityHelpTopicTitle')) $('communityHelpTopicTitle').textContent = t.title;
+    if ($('communityHelpTopicBody')) $('communityHelpTopicBody').textContent = t.body;
+    if ($('communityHelpTopicCmd')) $('communityHelpTopicCmd').textContent = t.cmd;
+  });
+}
+
+if ($('contributiveHubBtn')) {
+  $('contributiveHubBtn').addEventListener('click', async () => {
+    if (!$('contributiveHubStatus')) return;
+    $('contributiveHubStatus').textContent = 'Querying /v1/hivemind/contributive-hub (OpenRouter Fleet + OpenTrainer Self-Training MoE)...';
+    try {
+      const res = await fetch('/v1/hivemind/contributive-hub');
+      const data = await res.json();
+      if (!res.ok) {
+        $('contributiveHubStatus').textContent = 'Error querying /v1/hivemind/contributive-hub.';
+        return;
+      }
+      const fl = data.openrouter_producer_fleet || {};
+      const moe = data.opentrainer_moe_self_training || {};
+      $('contributiveHubStatus').textContent =
+        'CONTRIBUTIVE HUB LIVE • Producers: ' + (fl.live_producers_count || 0) + '/' + (fl.total_hiveminders || 0) +
+        ' (' + (fl.distinct_physical_gpus || 0) + ' GPUs, ' + (fl.live_models_count || 0) + ' live models) • ' +
+        'MoE Self-Training Rounds: ' + (moe.rounds_recorded || 0) +
+        ' • Latest Eval Loss: ' + (moe.latest_eval_loss !== null && moe.latest_eval_loss !== undefined ? moe.latest_eval_loss : 'N/A') +
+        ' • Best Ratcheted Loss: ' + (moe.best_ratcheted_eval_loss !== null && moe.best_ratcheted_eval_loss !== undefined ? moe.best_ratcheted_eval_loss : 'N/A') +
+        ' • Tokens Trained: ' + Number(moe.total_tokens_trained || 0).toLocaleString();
+    } catch (err) {
+      $('contributiveHubStatus').textContent = 'Network error querying /v1/hivemind/contributive-hub.';
+    }
+  });
+}
+
+// Automatic Real-Life GCP Production Telemetry Sync (/v1/hivemind/live-telemetry)
+async function refreshLivePortalTelemetry() {
+  const urls = [
+    '/v1/hivemind/live-telemetry',
+    'https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/hivemind/live-telemetry',
+  ];
+  for (let i = 0; i < urls.length; i++) {
+    try {
+      const res = await fetch(urls[i], { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) continue;
+      const d = await res.json();
+      if (!d || !d.accounts) continue;
+      const acct = d.accounts || {};
+      const byRole = acct.by_role || {};
+      const models = d.models || {};
+      const prod = d.producers || {};
+      const t4 = d.t4_boinc || {};
+      const ot = d.opentrainer || {};
+      const usage = d.usage_24h || {};
+      // A missing figure is shown as n/a; the page never prints a number the payload did not carry.
+      const v = function (x) { return (x === null || x === undefined) ? 'n/a' : (typeof x === 'number' ? x.toLocaleString() : x); };
+      if ($('liveGcpAccountsCount')) {
+        $('liveGcpAccountsCount').textContent = v(acct.total_registered_accounts) + ' Registered Accounts';
+      }
+      if ($('liveGcpAccountsRoles')) {
+        $('liveGcpAccountsRoles').textContent =
+          v(byRole.prosumer) + ' prosumers • ' +
+          v(byRole.producer) + ' producers • ' +
+          v(byRole.consumer) + ' consumers • ' +
+          v(byRole.trainer) + ' trainers • ' +
+          v(byRole.admin) + ' admins';
+      }
+      if ($('liveGcpModelsCount')) {
+        $('liveGcpModelsCount').textContent = v(models.live_models_count) + ' Live Models Online';
+      }
+      if ($('liveGcpProducersCount')) {
+        $('liveGcpProducersCount').textContent =
+          v(prod.total_hiveminders) + ' Hiveminders • ' +
+          v(prod.live_hiveminders) + ' Active (' + v(prod.total_capacity_1k) + ' ktok/min)';
+      }
+      if ($('liveGcpT4Vram')) {
+        $('liveGcpT4Vram').textContent =
+          'Free: ' + v(t4.vram_free_mib) + ' MiB / ' +
+          v(t4.vram_total_mib) + ' MiB';
+      }
+      if ($('liveGcpWusCount')) {
+        $('liveGcpWusCount').textContent =
+          v(t4.assimilated_workunits) + ' Assimilated WUs • ' +
+          v(t4.total_cobblestones) + ' Cobblestones';
+      }
+      if ($('liveGcpReqs24h')) {
+        $('liveGcpReqs24h').textContent =
+          v(usage.total_requests) + ' Reqs • ' +
+          v(usage.total_billed_tokens) + ' Tokens (24h)';
+      }
+      if ($('liveGcpOpenTrainerStatus')) {
+        $('liveGcpOpenTrainerStatus').textContent =
+          v(ot.status) + ' • ' +
+          v(ot.total_registered_nodes) + ' Trainer GPU(s) • ' +
+          v(ot.accepted_rounds_count) + ' Accepted Round(s)';
+      }
+      if ($('liveGcpUpdatedUtc')) {
+        $('liveGcpUpdatedUtc').textContent = 'Live GCP Snapshot: ' + v(d.generated_at_iso);
+      }
+      if ($('laab-live-telemetry-text')) {
+        $('laab-live-telemetry-text').textContent =
+          '🟢 Télémétrie GCP Temps Réel : ' + v(acct.total_registered_accounts) + ' comptes inscrits • ' +
+          v(models.live_models_count) + ' abeilles en ligne • ' +
+          v(usage.total_requests) + ' requêtes 24h (' +
+          v(usage.total_billed_tokens) + ' tokens) • T4 VRAM libre ' +
+          v(t4.vram_free_mib) + ' MiB • ' +
+          v(t4.assimilated_workunits) + ' WUs BOINC • OpenTrainer ' +
+          v(ot.total_registered_nodes) + ' nœud(s) / ' + v(ot.accepted_rounds_count) + ' round(s)';
+      }
+      if ($('nightLiveBannerText')) {
+        $('nightLiveBannerText').textContent =
+          '🟢 LIVE NOW (' + v(d.generated_at_iso) + '): ' +
+          v(t4.assimilated_workunits) + ' Assimilated BOINC WUs • T4 Free VRAM ' +
+          v(t4.vram_free_mib) + ' MiB / ' +
+          v(t4.vram_total_mib) + ' MiB • Governor ' +
+          v(t4.governor_state) + ' • OpenTrainer ' +
+          v(ot.accepted_rounds_count) + ' accepted round(s) (eval_loss ' + v(ot.latest_eval_loss) + ')';
+      }
+      if ($('opentrainerPortalStatus') && !$('opentrainerPortalStatus').dataset.userClicked) {
+        $('opentrainerPortalStatus').textContent =
+          v(ot.status) + ' (' + v(ot.version) + ') • Topic: ' + v(ot.topic) +
+          ' • Registered Trainers: ' + v(ot.registered_trainer_accounts_count) +
+          ' • Live Trainer GPUs: ' + v(ot.total_registered_nodes) +
+          ' • Accepted Rounds: ' + v(ot.accepted_rounds_count) +
+          ' (latest eval_loss: ' + v(ot.latest_eval_loss) + ')';
+      }
+      const moeProg = ot.moe_self_training || {};
+      if ($('contribProducersStat')) {
+        $('contribProducersStat').textContent =
+          v(prod.live_hiveminders) + ' Live Producers / ' + v(prod.total_hiveminders) +
+          ' Hiveminders (' + v(models.live_models_count) + ' Live Models)';
+      }
+      if ($('contribMoeRoundsStat')) {
+        $('contribMoeRoundsStat').textContent =
+          v(moeProg.rounds_recorded ?? ot.accepted_rounds_count) + ' Self-Training Round(s) • ' +
+          v(moeProg.total_tokens_trained) + ' Tokens';
+      }
+      if ($('contribMoeLossStat')) {
+        $('contribMoeLossStat').textContent =
+          'Eval Loss: ' + v(moeProg.latest_eval_loss ?? ot.latest_eval_loss) +
+          ' (Best Ratchet: ' + v(moeProg.best_ratcheted_eval_loss ?? ot.latest_eval_loss) + ')';
+      }
+      break;
+    } catch (err) {}
+  }
+}
+refreshLivePortalTelemetry();
+setInterval(refreshLivePortalTelemetry, 15000);
+if (window.location.pathname === '/life-as-a-bee' && $('life-as-a-bee') && $('life-as-a-bee').scrollIntoView) {
+  setTimeout(() => { $('life-as-a-bee').scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 150);
+}
 """
 
 
-def render_portal_page(client_id: str | None, nonce: str) -> str:
+PORTAL_SUPPORTED_LANGS: tuple[str, ...] = ("fr", "en", "es", "de", "zh")
+
+PORTAL_I18N_BANNERS: dict[str, dict[str, str]] = {
+    "fr": {
+        "badge": "🇫🇷 Portail & Playground IA Citoyenne (FR)",
+        "headline": "Inférence IA Citoyenne & Décentralisée — Réciprocité Non Monétaire (+100 Points de Réflexion HMT à l'inscription)",
+        "sub": "Testez nos 15 modèles MoE en direct (Code, Maths Lean 4, Astrophysique, Vision), rejoignez La Ruche avec votre GPU au repos (< 1,5 s d'arrêt automatique dès qu'un jeu démarre) ou consultez le Manifeste Reddit.",
+        "join_href": "/rejoindre",
+        "join_label": "🤝 Rejoindre La Ruche (/rejoindre)",
+        "manifesto_href": "/manifeste",
+        "manifesto_label": "📜 Manifeste IA Citoyenne (/manifeste)",
+    },
+    "en": {
+        "badge": "🇬🇧 Citizen AI OpenRouter & Playground (EN)",
+        "headline": "Decentralized Citizen AI Inference — Non-Monetary Compute Reciprocity (+100 Free HMT Reflexion Points on Sign-Up)",
+        "sub": "Query all 15 MoE models live (Code, Formal Math Lean 4, Astrophysics, Vision), lend idle GPU compute (< 1.5s automatic game preemption), or read the Reddit Citizen AI Manifesto.",
+        "join_href": "/join?lang=en",
+        "join_label": "🤝 Join the Swarm (/join)",
+        "manifesto_href": "/manifesto?lang=en",
+        "manifesto_label": "📜 Citizen AI Manifesto (/manifesto)",
+    },
+    "es": {
+        "badge": "🇪🇸 Portal y Playground de IA Ciudadana (ES)",
+        "headline": "Inferencia de IA Ciudadana Descentralizada — Reciprocidad No Monetaria (+100 Puntos de Reflexión HMT al registrarse)",
+        "sub": "Prueba nuestros 15 modelos MoE en vivo (Código, Matemáticas Lean 4, Astrofísica, Visión) o comparte tu GPU en reposo (< 1,5 s de pausa automática al jugar).",
+        "join_href": "/join?lang=es",
+        "join_label": "🤝 Unirse a La Ruche (/join?lang=es)",
+        "manifesto_href": "/manifesto?lang=en",
+        "manifesto_label": "📜 Manifiesto IA Ciudadana (/manifesto)",
+    },
+    "de": {
+        "badge": "🇩🇪 Bürger-KI OpenRouter & Playground (DE)",
+        "headline": "Dezentrale Bürger-KI-Inferenz — Nicht-monetäre Rechenreziprozität (+100 HMT-Reflexionspunkte kostenlos)",
+        "sub": "Testen Sie alle 15 MoE-Modelle live (Code, Mathematik Lean 4, Astrophysik, Vision) oder teilen Sie Ihre GPU im Leerlauf (< 1,5 s automatische Spiel-Unterbrechung).",
+        "join_href": "/join?lang=de",
+        "join_label": "🤝 Dem Schwarm beitreten (/join?lang=de)",
+        "manifesto_href": "/manifesto?lang=en",
+        "manifesto_label": "📜 Bürger-KI-Manifest (/manifesto)",
+    },
+    "zh": {
+        "badge": "🇨🇳 公民去中心化 AI 门户与演练场 (ZH)",
+        "headline": "去中心化公民 AI 推理 — 非货币算力互惠（注册立享 +100 HMT 反思积分）",
+        "sub": "在线体验 15 个 MoE 专家模型（代码、Lean 4 形式化数学、天体物理、多模态视觉），或在闲置时共享 GPU（启动游戏 < 1.5 秒自动让出显卡）。",
+        "join_href": "/join?lang=zh",
+        "join_label": "🤝 加入蜂群网络 (/join?lang=zh)",
+        "manifesto_href": "/manifesto?lang=en",
+        "manifesto_label": "📜 公民 AI 宣言 (/manifesto)",
+    },
+}
+
+
+def normalize_portal_lang(lang: str | None) -> str:
+    """Normalize a portal language code to one of ('fr', 'en', 'es', 'de', 'zh'), defaulting to 'en'."""
+    if not lang:
+        return "en"
+    code = str(lang).strip().lower()[:2]
+    return code if code in PORTAL_SUPPORTED_LANGS else "en"
+
+
+def render_portal_page(
+    client_id: str | None,
+    nonce: str,
+    *,
+    lang: str = "en",
+    live_telemetry: dict[str, Any] | None = None,
+) -> str:
     """Render the full OpenRouter Portal and Playground HTML page."""
-    life_as_a_bee_html = render_life_as_a_bee_section()
+    clean_lang = normalize_portal_lang(lang)
+    i18n_banner = PORTAL_I18N_BANNERS[clean_lang]
+    life_as_a_bee_html = render_life_as_a_bee_section(live_telemetry=live_telemetry)
+    lt = live_telemetry or {}
+    acct = lt.get("accounts") or {}
+    by_role = acct.get("by_role") or {}
+    models_live = lt.get("models") or {}
+    prod_live = lt.get("producers") or {}
+    t4_live = lt.get("t4_boinc") or {}
+    ot_live = lt.get("opentrainer") or {}
+    usage_live = lt.get("usage_24h") or {}
+    total_accts = shown_figure(acct.get("total_registered_accounts"))
+    prosumers_cnt = shown_figure(by_role.get("prosumer"))
+    producers_cnt = shown_figure(by_role.get("producer"))
+    consumers_cnt = shown_figure(by_role.get("consumer"))
+    trainers_cnt = shown_figure(by_role.get("trainer"))
+    admins_cnt = shown_figure(by_role.get("admin"))
+    live_models_cnt = shown_figure(models_live.get("live_models_count"))
+    total_hiveminders = shown_figure(prod_live.get("total_hiveminders"))
+    live_hiveminders = shown_figure(prod_live.get("live_hiveminders"))
+    total_cap_1k = shown_figure(prod_live.get("total_capacity_1k"), decimals=0)
+    t4_free_mib = shown_figure(t4_live.get("vram_free_mib"))
+    t4_total_mib = shown_figure(t4_live.get("vram_total_mib"))
+    wus_cnt = shown_figure(t4_live.get("assimilated_workunits"))
+    cobbles = shown_figure(t4_live.get("total_cobblestones"), decimals=2)
+    reqs_24h = shown_figure(usage_live.get("total_requests"))
+    tokens_24h = shown_figure(usage_live.get("total_billed_tokens"))
+    ot_nodes = shown_figure(ot_live.get("total_registered_nodes"))
+    ot_rounds = shown_figure(ot_live.get("accepted_rounds_count"))
+    ot_eval = shown_figure(ot_live.get("latest_eval_loss"), decimals=4)
+    gen_iso = str(lt.get("generated_at_iso", "live"))
     tier_cards = []
     for tier in TIERS:
         tier_cards.append(f"""
@@ -938,27 +1289,50 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
         signup_cta = """<a href="/signup" class="btn btn-amber">&#x1F41D; Join &amp; Register (API Key)</a>"""
 
     return f"""<!doctype html>
-<html lang="en">
+<html lang="{clean_lang}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>HiveMind OpenRouter &bull; Decentralized AI Inference for Coders &amp; Gamers</title>
   <meta name="description" content="Decentralized OpenAI-compatible inference router. Non-monetary compute reciprocity: share idle consumer GPU compute, earn points, and query frontier coding and MoE models.">
+  <link rel="alternate" hreflang="fr" href="/fr">
+  <link rel="alternate" hreflang="en" href="/en">
+  <link rel="alternate" hreflang="es" href="/es">
+  <link rel="alternate" hreflang="de" href="/de">
+  <link rel="alternate" hreflang="zh" href="/zh">
   <style nonce="{nonce}">{_CSS}</style>
 </head>
 <body>
+<p role="note" id="poc-notice"><strong>&#9888; Proof of concept (PoC)</strong> &mdash; not a production service yet. Until HiveMind is fully secured, send only public, non-sensitive data: no secrets, passwords, API keys, personal information, or private or enterprise data. Prompts are processed by volunteer-run nodes whose operators are not verified.</p>
   <div class="container">
+    <div id="portal-i18n-bar" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;padding:0.55rem 0.9rem;margin-bottom:0.85rem;background:rgba(15,23,42,0.85);border:1px solid var(--border);border-radius:0.5rem;font-size:0.82rem;">
+      <div>
+        <strong style="color:var(--cyan);">{i18n_banner["badge"]}</strong> &bull;
+        <span>{i18n_banner["headline"]}</span>
+      </div>
+      <div style="display:flex;gap:0.55rem;align-items:center;flex-wrap:wrap;font-family:var(--font-mono);">
+        <a href="/fr" style="color:{"var(--cyan)" if clean_lang == "fr" else "var(--text-dim)"};text-decoration:none;font-weight:700;">🇫🇷 FR</a>
+        <a href="/en" style="color:{"var(--cyan)" if clean_lang == "en" else "var(--text-dim)"};text-decoration:none;font-weight:700;">🇬🇧 EN</a>
+        <a href="/es" style="color:{"var(--cyan)" if clean_lang == "es" else "var(--text-dim)"};text-decoration:none;font-weight:700;">🇪🇸 ES</a>
+        <a href="/de" style="color:{"var(--cyan)" if clean_lang == "de" else "var(--text-dim)"};text-decoration:none;font-weight:700;">🇩🇪 DE</a>
+        <a href="/zh" style="color:{"var(--cyan)" if clean_lang == "zh" else "var(--text-dim)"};text-decoration:none;font-weight:700;">🇨🇳 ZH</a>
+        <a href="{i18n_banner["join_href"]}" style="color:var(--green);text-decoration:none;font-weight:700;">{i18n_banner["join_label"]}</a>
+        <a href="{i18n_banner["manifesto_href"]}" style="color:var(--amber);text-decoration:none;font-weight:700;">{i18n_banner["manifesto_label"]}</a>
+      </div>
+    </div>
     <header>
       <div class="brand">
         <span style="font-size:1.8rem;">&#x1F41D;</span>
         <div>
           <h1>HiveMind OpenRouter</h1>
-          <div style="font-size:0.75rem;color:var(--text-dim);">Decentralized AI Inference Gateway &bull; v2.10.1</div>
+          <div style="font-size:0.75rem;color:var(--text-dim);">Decentralized AI Inference Gateway &bull; v3.1.1 (v3.0.0 Core Engine)</div>
         </div>
         <span class="badge-live">Gateway Live</span>
       </div>
       <nav>
         <a href="#playground" class="nav-link active">Playground</a>
+        <a href="/stitch-portal" class="nav-link" style="color:var(--cyan);font-weight:700;">&#x1F310; V3.1 GCP Unified Portal</a>
+        <a href="/manifesto" class="nav-link" style="color:var(--green);font-weight:700;">&#x1F4DC; Manifesto (Reddit)</a>
         <a href="/benchmarks" class="nav-link" style="color:var(--amber);font-weight:700;">&#x1F4CA; Benchmarks &amp; LLM Comparison</a>
         <a href="#life-as-a-bee" class="nav-link">&#x1F41D; Life as a Bee</a>
         <a href="#campaigns" class="nav-link">Joint Campaigns</a>
@@ -966,6 +1340,8 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
         <a href="#tiers" class="nav-link">Model Tiers</a>
         <a href="#integrations" class="nav-link">Editor Config</a>
         <a href="#steam-free-game" class="nav-link">&#x1F3AE; Free Steam Game</a>
+        <a href="#contributive-community-hub" class="nav-link" style="color:var(--green);font-weight:700;">&#x1F91D; Contributive &amp; Help</a>
+        <a href="#opentrainer" class="nav-link" style="color:var(--cyan);font-weight:700;">&#x1F525; Trainer (OpenTrainer)</a>
         <a href="#producers" class="nav-link">Share GPU</a>
         <a href="/signup" class="nav-link">&#x1F511; Sign In</a>
       </nav>
@@ -980,11 +1356,48 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
       </p>
       <div class="cta-group">
         <a href="#playground" class="btn btn-primary">&#x26A1; Try In-Browser Playground</a>
+        <a href="/stitch-portal" class="btn btn-outline" style="border-color:var(--cyan);color:var(--cyan);">&#x1F310; Launch V3.1 GCP Unified Portal &amp; 4 Dashboards</a>
+        <a href="/manifesto" class="btn btn-outline" style="border-color:var(--green);color:var(--green);">&#x1F4DC; Citizen AI Manifesto (Reddit Synthesis)</a>
         <a href="/benchmarks" class="btn btn-outline" style="border-color:var(--purple);color:var(--purple);">&#x1F4CA; All-Bees Benchmarks &amp; LLM Comparison (5 Langs)</a>
         <a href="#steam-free-game" class="btn btn-outline" style="border-color:var(--green);color:var(--green);">&#x1F3AE; Free Steam Game (AppID 3133700)</a>
         <a href="#life-as-a-bee" class="btn btn-outline" style="border-color:var(--amber);color:var(--amber);">&#x1F41D; Life as a Bee (15 Scenarios)</a>
         {signup_cta}
         <a href="https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/" target="_blank" rel="noopener" class="btn btn-outline">&#x1F36F; HiveMind@home Portal</a>
+      </div>
+    </section>
+
+    <!-- Live Real-Life GCP Production Telemetry Strip (Auto-Synced every 15s from /v1/hivemind/live-telemetry) -->
+    <section id="live-gcp-telemetry" class="card" style="margin-bottom:2.25rem;border-color:rgba(52,211,153,0.45);background:linear-gradient(180deg, rgba(16,185,129,0.08), rgba(13,19,38,0.95));">
+      <div class="card-header" style="margin-bottom:0.85rem;padding-bottom:0.55rem;">
+        <div class="card-title" style="color:var(--green);font-size:1rem;">
+          &#x1F7E2; Live Real-Life GCP Production Telemetry &bull; Auto-Synced from <code>/v1/hivemind/live-telemetry</code>
+        </div>
+        <div style="display:flex;gap:0.65rem;align-items:center;flex-wrap:wrap;">
+          <span id="liveGcpUpdatedUtc" style="font-family:var(--font-mono);font-size:0.72rem;color:var(--text-dim);">Live GCP Snapshot: {gen_iso}</span>
+          <a href="/v1/hivemind/live-telemetry" class="pill" style="border-color:var(--green);color:var(--green);text-decoration:none;margin:0;">JSON /v1/hivemind/live-telemetry</a>
+        </div>
+      </div>
+      <div class="tiers-grid" style="margin-bottom:0;grid-template-columns:repeat(auto-fit, minmax(195px, 1fr));gap:0.75rem;">
+        <div class="tier-card" style="padding:0.75rem;border-color:rgba(52,211,153,0.35);">
+          <div class="tier-badge">COMMUNITY ACCOUNTS</div>
+          <div id="liveGcpAccountsCount" class="tier-name" style="margin-bottom:0.25rem;">{total_accts} Registered Accounts</div>
+          <div id="liveGcpAccountsRoles" class="tier-vram" style="margin-bottom:0;">{prosumers_cnt} prosumers &bull; {producers_cnt} producers &bull; {consumers_cnt} consumers &bull; {trainers_cnt} trainers &bull; {admins_cnt} admins</div>
+        </div>
+        <div class="tier-card" style="padding:0.75rem;border-color:rgba(0,238,252,0.35);">
+          <div class="tier-badge">LIVE MODELS &amp; HIVEMINDERS</div>
+          <div id="liveGcpModelsCount" class="tier-name" style="margin-bottom:0.25rem;">{live_models_cnt} Live Models Online</div>
+          <div id="liveGcpProducersCount" class="tier-vram" style="margin-bottom:0;">{total_hiveminders} Hiveminders &bull; {live_hiveminders} Active ({total_cap_1k} ktok/min)</div>
+        </div>
+        <div class="tier-card" style="padding:0.75rem;border-color:rgba(251,191,36,0.35);">
+          <div class="tier-badge">TESLA T4 (16 GB) &amp; BOINC</div>
+          <div id="liveGcpT4Vram" class="tier-name" style="margin-bottom:0.25rem;">Free: {t4_free_mib} MiB / {t4_total_mib} MiB</div>
+          <div id="liveGcpWusCount" class="tier-vram" style="margin-bottom:0;">{wus_cnt} Assimilated WUs &bull; {cobbles} Cobblestones</div>
+        </div>
+        <div class="tier-card" style="padding:0.75rem;border-color:rgba(192,132,252,0.35);">
+          <div class="tier-badge">24H USAGE &amp; OPENTRAINER</div>
+          <div id="liveGcpReqs24h" class="tier-name" style="margin-bottom:0.25rem;">{reqs_24h} Reqs &bull; {tokens_24h} Tokens (24h)</div>
+          <div id="liveGcpOpenTrainerStatus" class="tier-vram" style="margin-bottom:0;">ONLINE &bull; {ot_nodes} Trainer GPU(s) &bull; {ot_rounds} Accepted Round(s)</div>
+        </div>
       </div>
     </section>
 
@@ -1173,15 +1586,22 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
         <div class="card-title" style="color:var(--green);">&#x1F319; European Night Real-Life Telemetry &amp; BOINC QLoRA-MoE Progress (25&ndash;26 Oct 2026)</div>
         <span class="pill" style="border-color:var(--green);color:var(--green);">15/15 Live Probes PASS &bull; 0 HTTP 402/5xx</span>
       </div>
-      <p style="color:var(--text-dim);font-size:0.88rem;margin-bottom:1rem;line-height:1.5;">
+      <p style="color:var(--text-dim);font-size:0.88rem;margin-bottom:0.75rem;line-height:1.5;">
         Measured production telemetry from the European Night window (<code>2026-10-25 20:00Z &rarr; 2026-10-26 08:00Z</code>) across our three Cloud Run gateways, dual-GPU inference fleet (<strong>NVIDIA Tesla T4 16 GB + NVIDIA GeForce RTX 2070 8 GB</strong>), and the BOINC 7.24 chained QLoRA-MoE coordinator (<code>scripts/t4_training_report.py</code>).
       </p>
+      <p style="color:var(--amber);font-size:0.8rem;margin-bottom:0.75rem;line-height:1.5;" id="night-report-static-note">
+        This section is a <strong>dated report</strong> typed in after that night; the figures in the cards below are not updated live. Later BOINC rounds have not improved on it, and the best adapter so far
+        failed the train-to-serve gate on the served files (<code>docs/TRAIN_TO_SERVE_GATE.md</code>), so no HiveMind-trained model is served. Current numbers: the live line below and <code>/v1/hivemind/benchmarks</code>.
+      </p>
+      <div id="nightLiveBannerText" style="margin-bottom:1rem;padding:0.55rem 0.85rem;border:1px solid rgba(52,211,153,0.4);border-radius:0.4rem;background:rgba(16,185,129,0.08);font-family:var(--font-mono);font-size:0.76rem;color:var(--green);">
+        &#x1F7E2; LIVE NOW ({gen_iso}): {wus_cnt} Assimilated BOINC WUs &bull; T4 Free VRAM {t4_free_mib} MiB / {t4_total_mib} MiB &bull; OpenTrainer {ot_rounds} accepted round(s) (eval_loss {ot_eval})
+      </div>
       <div class="tiers-grid" style="margin-bottom:1.25rem;">
         <div class="tier-card">
           <div>
             <div class="tier-badge">DUAL-GPU INFERENCE FLEET</div>
             <div class="tier-name">Tesla T4 (16 GB) + RTX 2070 (8 GB)</div>
-            <div class="tier-vram">4 Active Producers &bull; 7 Live Models</div>
+            <div class="tier-vram">{live_hiveminders} Active Producers &bull; {live_models_cnt} Live Models</div>
             <div class="tier-desc">Serving <code>hivemind/coder</code>, <code>coder-lite</code>, <code>bee-stars</code>, <code>coder-plus</code>, <code>moe-general</code>, <code>moe-coder</code>, and <code>auto</code> (with <code>hivemind/crowd-v1</code> pre-wired).</div>
           </div>
           <div><span class="tier-tag">100% Uptime Overnight</span></div>
@@ -1306,6 +1726,118 @@ def render_portal_page(client_id: str | None, nonce: str) -> str:
       </div>
       <div id="steamPortalStatus" style="font-size:0.78rem;font-family:var(--font-mono);color:var(--green);background:#040711;border:1px solid var(--border);border-radius:0.375rem;padding:0.65rem;">
         Free Steam Game Registry: <code>AppID 3133700</code> (USS Hivemind: Exoplanet Hunter &mdash; Free BOINC Edition) &bull; Status: <strong>REGISTERED &amp; LIVE ON PORTAL</strong> &bull; Click &lsquo;Register &amp; Login Free Steam Game Account&rsquo; to authenticate.
+      </div>
+    </section>
+
+    <!-- Thème Contributif & Entraide Communautaire: OpenRouter Producer + OpenTrainer Self-Training MoE Hub -->
+    <section id="contributive-community-hub" class="card" style="border-color:rgba(52,211,153,0.5);margin-bottom:3rem;background:linear-gradient(180deg, rgba(16,185,129,0.07), rgba(13,19,38,0.96));">
+      <div class="card-header">
+        <div class="card-title" style="color:var(--green);">
+          &#x1F91D; Th&egrave;me Contributif &amp; Entraide Communautaire &mdash; OpenRouter Producer + OpenTrainer Self-Training MoE Hub
+        </div>
+        <span class="pill" style="border-color:var(--green);color:var(--green);">3-Hour Producer+Trainer Cycle (<code>0 */3 * * *</code>) &bull; Monotone MoE Ratchet</span>
+      </div>
+      <p style="color:var(--text-dim);font-size:0.9rem;margin-bottom:1rem;line-height:1.55;">
+        <strong>Esprit Contributif &amp; Entraide (FR/EN) :</strong> Chaque GPU citoyen renforce &agrave; la fois le <strong>service d&rsquo;inf&eacute;rence OpenRouter</strong> (<code>/v1/chat/completions</code>, continuit&eacute; garantie sur <code>hivemind/coder</code>, <code>hivemind/bee-stars</code> et <code>hivemind/auto</code>) et <strong>l&rsquo;auto-entra&icirc;nement du MoE propos&eacute; via OpenTrainer</strong> (Stage-2 Tiny Granite-MoE NF4 QLoRA + DiLoCo 2D-DCT). Toutes les <strong>3 heures</strong>, notre cycle d&rsquo;int&eacute;gration f&eacute;d&egrave;re les producteurs et entra&icirc;neurs actifs, ex&eacute;cute des rondes d&rsquo;auto-entra&icirc;nement v&eacute;rifi&eacute;es par cliquet monotone, et maintient le basculement automatique entre le <strong>Tesla T4 GCP</strong> et la <strong>RTX 2070 (<code>XAVGAMSRV</code>)</strong>.
+      </p>
+      <div class="tiers-grid" style="margin-bottom:1rem;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:0.75rem;">
+        <div class="tier-card" style="padding:0.8rem;border-color:rgba(0,238,252,0.35);">
+          <div class="tier-badge">OPENROUTER PRODUCER FLEET</div>
+          <div id="contribProducersStat" class="tier-name" style="margin-bottom:0.25rem;">{live_hiveminders} Live Producers / {total_hiveminders} Hiveminders ({live_models_cnt} Live Models)</div>
+          <div class="tier-vram" style="margin-bottom:0;">Continuit&eacute; d&rsquo;inf&eacute;rence temps r&eacute;el &bull; Pr&eacute;emption jeu &lt; 1,5 s</div>
+        </div>
+        <div class="tier-card" style="padding:0.8rem;border-color:rgba(192,132,252,0.35);">
+          <div class="tier-badge">OPENTRAINER SELF-TRAINING MOE</div>
+          <div id="contribMoeRoundsStat" class="tier-name" style="margin-bottom:0.25rem;">{ot_rounds} Self-Training Round(s) &bull; {ot_nodes} Active Trainer GPU(s)</div>
+          <div id="contribMoeLossStat" class="tier-vram" style="margin-bottom:0;">Stage-2 Tiny Granite-MoE NF4 QLoRA &bull; Cliquet Monotone Actif</div>
+        </div>
+        <div class="tier-card" style="padding:0.8rem;border-color:rgba(52,211,153,0.35);">
+          <div class="tier-badge">3-HOUR INTEGRATION CYCLE</div>
+          <div class="tier-name" style="margin-bottom:0.25rem;">Every 3h (<code>0 */3 * * *</code>) + 45s Guard</div>
+          <div class="tier-vram" style="margin-bottom:0;"><code>run_3h_producer_trainer_moe_integration.py</code> &bull; T4 &harr; RTX 2070 Failover</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:0.85rem;">
+        <div style="flex:2;min-width:260px;">
+          <label for="communityHelpTopicSelect">Guide d&rsquo;Entraide Communautaire &amp; Diagnostic (FR / EN)</label>
+          <select id="communityHelpTopicSelect" style="margin-bottom:0;">
+            <option value="producer-openrouter-join">1. Rejoindre comme Producteur OpenRouter / Join as an Inference Producer</option>
+            <option value="trainer-opentrainer-moe">2. Auto-Entra&icirc;nement MoE via OpenTrainer (0 Port Entrant) / Self-Training MoE</option>
+            <option value="dual-role-failover-orchestrator">3. Cycle 3 Heures Producteur + Entra&icirc;neur &amp; Bascule T4/RTX 2070</option>
+            <option value="community-troubleshooting-help">4. Diagnostic Pare-Feu NAT/CGNAT &amp; Int&eacute;grit&eacute; Adaptateur LoRA (bee-stars)</option>
+            <option value="byom-2-to-4-local-gpus">5. Co-Entra&icirc;ner Vos Propres Mod&egrave;les (BYOM) avec 2 &agrave; 4 GPUs Locaux</option>
+          </select>
+        </div>
+        <button id="contributiveHubBtn" type="button" class="btn btn-primary">&#x1F91D; Sync Contributive &amp; MoE Hub</button>
+        <a href="/v1/hivemind/contributive-hub" class="btn btn-outline" style="border-color:var(--green);color:var(--green);">JSON /v1/hivemind/contributive-hub</a>
+        <a href="/v1/hivemind/opentrainer/moe-self-training" class="btn btn-outline" style="border-color:var(--cyan);color:var(--cyan);">JSON /v1/opentrainer/moe-self-training</a>
+      </div>
+      <div style="background:#040711;border:1px solid var(--border);border-radius:0.375rem;padding:0.75rem;margin-bottom:0.65rem;">
+        <div id="communityHelpTopicTitle" style="font-weight:700;color:var(--amber);font-size:0.85rem;margin-bottom:0.3rem;">
+          FR/EN &mdash; 1. Rejoindre comme Producteur OpenRouter / Join as an OpenRouter Inference Producer
+        </div>
+        <div id="communityHelpTopicBody" style="color:var(--text-dim);font-size:0.82rem;margin-bottom:0.45rem;line-height:1.45;">
+          FR : Lancez Ollama ou llama-server et envoyez vos heartbeats (lib&eacute;ration GPU &lt; 1,5 s d&egrave;s qu&rsquo;un jeu d&eacute;marre). | EN: Run Ollama or llama-server and heartbeat your models (&lt; 1.5s game preemption).
+        </div>
+        <pre id="communityHelpTopicCmd" class="code-box" style="margin:0;padding:0.5rem;font-size:0.76rem;">python scripts/hivemind_producer_agent.py --gateway https://hivemind-openrouter-1003063861791.us-central1.run.app --preset coder</pre>
+      </div>
+      <div id="contributiveHubStatus" style="font-size:0.78rem;font-family:var(--font-mono);color:var(--green);background:#040711;border:1px solid var(--border);border-radius:0.375rem;padding:0.65rem;">
+        Contributive Hub Endpoint: <code>/v1/hivemind/contributive-hub</code> &bull; MoE Self-Training Endpoint: <code>/v1/hivemind/opentrainer/moe-self-training</code> &bull; Click &lsquo;Sync Contributive &amp; MoE Hub&rsquo; to inspect live metrics.
+      </div>
+    </section>
+
+    <!-- OpenTrainer: Intense GPU Training Category (BOINC + AMCP + Kafka + Signed Aglets, Firewall-Friendly) -->
+    <section id="opentrainer" class="card" style="border-color:rgba(0,238,252,0.45);margin-bottom:3rem;">
+      <div class="card-header">
+        <div class="card-title" style="color:var(--cyan);">&#x1F525; Portal Category: Trainer (<code>role=&quot;trainer&quot;</code>) &amp; Central Component <code>OpenTrainer</code></div>
+        <span class="pill" style="border-color:var(--cyan);color:var(--cyan);">BOINC + AMCP + Kafka + Aglets &bull; Outbound HTTPS Relay (0 Inbound Ports)</span>
+      </div>
+      <p style="color:var(--text-dim);font-size:0.9rem;margin-bottom:1rem;line-height:1.5;">
+        The <strong>Trainer (<code>trainer</code>)</strong> portal category is dedicated to participants who provide a GPU for <strong>intense distributed training</strong> across our
+        <strong>RTX 2070 (<code>XAVGAMSRV</code>, 8 GB, Windows 11) &harr; GCP Tesla T4 (<code>socreateai-agora-hermes-node1</code>, 16 GB, Linux)</strong> federation cell (PRs <code>#366</code>, <code>#399</code>, <code>#401</code>, <code>#407</code>, <code>#408</code>, <code>#409</code>, <code>#410</code>):
+        Stage-2 Tiny Granite-MoE NF4 QLoRA (<code>loss 4.1721 &rarr; 1.7772</code>, 70-round Kafka churn soak), DiLoCo 2D-DCT outer steps, Signed Task Agents over AMCP &amp; Kafka (<code>hivemind.amcp.federation.v1</code>, IBM Aglet life cycle <code>dispatch &rarr; arrival &rarr; clone &rarr; result &rarr; retract</code> without mobile code), and BOINC nocturnal workunits.
+      </p>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:0.85rem;">
+        <div style="flex:1.2;min-width:190px;">
+          <label for="otHostInput">Trainer Host Label</label>
+          <input id="otHostInput" type="text" placeholder="your host label (optional)" style="margin-bottom:0;" />
+        </div>
+        <div style="flex:1.3;min-width:200px;">
+          <label for="otGpuInput">Trainer GPU Hardware</label>
+          <input id="otGpuInput" type="text" placeholder="your GPU model (optional)" style="margin-bottom:0;" />
+        </div>
+        <div style="flex:1;min-width:150px;">
+          <label for="otVramTotalInput">VRAM Total (MiB, optional)</label>
+          <input id="otVramTotalInput" type="number" min="512" placeholder="not reported" style="margin-bottom:0;" />
+        </div>
+        <div style="flex:1;min-width:150px;">
+          <label for="otVramFreeInput">VRAM Free (MiB, optional)</label>
+          <input id="otVramFreeInput" type="number" min="0" placeholder="not reported" style="margin-bottom:0;" />
+        </div>
+        <div style="flex:1.4;min-width:220px;">
+          <label for="otNetModeSelect">Firewall-Friendly Network Mode</label>
+          <select id="otNetModeSelect" style="margin-bottom:0;">
+            <option value="outbound-https-relay">Tier B: outbound-https-relay (TCP/443 Outbound Only, 0 Inbound Ports)</option>
+            <option value="amcp-kafka-aglet">Tier A: amcp-kafka-aglet (Signed Aglets on hivemind.amcp.federation.v1)</option>
+            <option value="wireguard-t4-hub">Tier A: wireguard-t4-hub (UDP/51820 to T4 Hub 10.77.0.1)</option>
+            <option value="ssh-loopback-tunnel">Tier A: ssh-loopback-tunnel (127.0.0.1:18766 -> 127.0.0.1:8765)</option>
+            <option value="boinc-night-workunit">Tier C: boinc-night-workunit (Async Night Workunits TCP/443)</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.85rem;">
+        <button id="opentrainerStatusBtn" type="button" class="btn btn-primary">&#x1F50D; Inspect Live OpenTrainer Coordinator</button>
+        <button id="opentrainerHeartbeatBtn" type="button" class="btn btn-amber">&#x1F525; Register / Heartbeat Trainer GPU (Outbound HTTPS)</button>
+        <a href="/signup" class="btn btn-outline">&#x1F41D; Register as Trainer (/signup)</a>
+        <a href="/join#opentrainer" class="btn btn-outline">&#x1F4D6; OpenTrainer &amp; Aglet Guide (/join#opentrainer)</a>
+      </div>
+      <div class="code-box" style="margin-bottom:0.65rem;">
+# Connect any firewalled GPU (Windows 10/11, Linux, macOS) to OpenTrainer over outbound HTTPS (0 inbound ports):
+export HIVEMIND_API_KEY=hm-YOUR_TRAINER_KEY
+python scripts/hivemind_opentrainer_agent.py --gateway https://hivemind-openrouter-1003063861791.us-central1.run.app --network-mode outbound-https-relay --check-firewall --submit-delta --once
+      </div>
+      <div id="opentrainerPortalStatus" style="font-size:0.78rem;font-family:var(--font-mono);color:var(--cyan);background:#040711;border:1px solid var(--border);border-radius:0.375rem;padding:0.65rem;">
+        OpenTrainer Central Component: <code>/v1/hivemind/opentrainer/status</code> &bull; Topic: <code>hivemind.amcp.federation.v1</code> &bull; Click &lsquo;Inspect Live OpenTrainer Coordinator&rsquo; or run <code>scripts/hivemind_opentrainer_agent.py</code>.
       </div>
     </section>
 

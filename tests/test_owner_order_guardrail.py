@@ -313,13 +313,18 @@ def test_local_git_owner_identity_and_audit(
     assert git_id["git_config_email"] == git_email
     assert git_id["head_author_email"] == git_email
     assert git_id["head_committer_email"] == git_email
-    assert git_id["owner_identity_verified"] is expected_owner
-    assert len(git_id["attestation_sha256"]) == 64
+    assert git_id["git_config_email_matches_owner"] is expected_owner
+    assert git_id["signature_verified"] is False
+    assert git_id["signature_check"] == "NOT_PERFORMED"
+    assert "owner_identity_verified" not in git_id
+    assert "attestation_sha256" not in git_id
 
     audit = run_hourly_quality_and_experiment_audit(repo_root)
     assert audit["owner_order_guardrail_active"] is True
     assert audit["authorized_owner_email"] == "callensxavier@gmail.com"
-    assert audit["local_git_owner_verified"] is expected_owner
+    assert audit["local_git_config_email_matches_owner"] is expected_owner
+    assert audit["local_git_owner_signature_verified"] is False
+    assert "local_git_owner_verified" not in audit
 
 
 def test_local_git_owner_identity_without_repository(
@@ -330,8 +335,9 @@ def test_local_git_owner_identity_without_repository(
     git_id = verify_local_git_owner_identity(repo_root)
     assert git_id["git_config_email"] == ""
     assert git_id["head_author_email"] == ""
-    assert git_id["owner_identity_verified"] is False
-    assert len(git_id["attestation_sha256"]) == 64
+    assert git_id["git_config_email_matches_owner"] is False
+    assert git_id["signature_verified"] is False
+    assert "attestation_sha256" not in git_id
 
 
 def test_owner_order_guardrail_simulator() -> None:

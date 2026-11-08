@@ -136,7 +136,7 @@ def _clean_bids(bids: Sequence[ConsumerBid]) -> list[tuple[str, float]]:
     seen: set[str] = set()
     out: list[tuple[str, float]] = []
     for b in bids:
-        if not b.account_id or b.account_id in seen:
+        if not str(b.account_id).strip() or b.account_id in seen:
             raise ValueError(f"consumer account ids must be non-empty and unique, got {b.account_id!r}")
         if not math.isfinite(b.max_price_per_1k) or b.max_price_per_1k < 0.0:
             raise ValueError(f"max_price_per_1k must be finite and >= 0 for {b.account_id!r}")
@@ -149,7 +149,7 @@ def _clean_offers(offers: Sequence[ProducerOffer]) -> list[tuple[str, float, flo
     seen: set[str] = set()
     out: list[tuple[str, float, float]] = []
     for o in offers:
-        if not o.account_id or o.account_id in seen:
+        if not str(o.account_id).strip() or o.account_id in seen:
             raise ValueError(f"producer account ids must be non-empty and unique, got {o.account_id!r}")
         if not math.isfinite(o.cost_per_1k) or o.cost_per_1k < 0.0:
             raise ValueError(f"cost_per_1k must be finite and >= 0 for {o.account_id!r}")
@@ -209,9 +209,22 @@ def _no_trade(
     )
 
 
-def clear_market(model_id: str, bids: Sequence[ConsumerBid], offers: Sequence[ProducerOffer], fee: FeePolicy = FeePolicy()) -> MarketEquilibrium:
-    """Clear one model's market for one epoch: Kelly equilibrium if it leaves a producer willing to supply, else a
-    posted reserve price at the cheapest producer's break-even price plus `fee.posted_margin`, else no trade."""
+def clear_market(
+    model_id: str,
+    bids: Sequence[ConsumerBid],
+    offers: Sequence[ProducerOffer],
+    fee: FeePolicy = FeePolicy(),
+    *,
+    measured_load_1k: float | None = None,
+) -> MarketEquilibrium:
+    """Clear one model's market for one epoch: Kelly equilibrium under congestion (or when ``measured_load_1k`` is
+    unspecified) if it leaves a producer willing to supply, else a posted reserve price at the cheapest producer's
+    break-even price plus ``fee.posted_margin`` when capacity is idle (``measured_load_1k < posted_supply_1k``),
+    else no trade."""
+    if not str(model_id).strip():
+        raise ValueError("model_id must be non-empty")
+    if measured_load_1k is not None and (not math.isfinite(float(measured_load_1k)) or float(measured_load_1k) < 0.0):
+        raise ValueError("measured_load_1k must be finite and >= 0")
     consumers = _clean_bids(bids)
     producers = _clean_offers(offers)
     live = [(a, c, k) for a, c, k in producers if k > 0.0]
@@ -219,15 +232,17 @@ def clear_market(model_id: str, bids: Sequence[ConsumerBid], offers: Sequence[Pr
         return _no_trade(model_id, 0.0, consumers, producers, fee)
     keep = fee.producer_share
     cheapest = min(c for _, c, _ in live)
+    reserve = cheapest / keep
+    posted = reserve * (1.0 + fee.posted_margin)
+    posted_supply_1k = math.fsum(k for _, c, k in live if c < keep * posted)
+    congested = measured_load_1k is None or float(measured_load_1k) >= posted_supply_1k
     positive = [(a, v) for a, v in consumers if v > 0.0]
-    if len(positive) >= 2:
+    if congested and len(positive) >= 2:
         kel = _kelly(tuple(v for _, v in positive))
         omega = kel.total_payment  # capacity-1 Kelly payment W *is* the per-token price omega
         if cheapest < keep * omega:
             shares = {a: x for (a, _), x in zip(positive, kel.shares)}
             return _build(model_id, MECHANISM_KELLY, omega, shares, consumers, producers, fee)
-    reserve = cheapest / keep
-    posted = reserve * (1.0 + fee.posted_margin)
     served = [a for a, v in positive if v >= posted]
     has_producer = any(c < keep * posted for _, c, _ in live)
     if not served or not has_producer:
@@ -239,7 +254,7 @@ def split_payment(price_per_1k: float, tokens: int, fee: FeePolicy) -> tuple[flo
     """Split one request's charge: returns (charge, producer, validators, burn); charge = price * tokens / 1000."""
     if not math.isfinite(price_per_1k) or price_per_1k < 0.0:
         raise ValueError("price_per_1k must be finite and >= 0")
-    if tokens < 0:
+    if isinstance(tokens, bool) or tokens < 0:
         raise ValueError("tokens must be >= 0")
     charge = price_per_1k * tokens / 1000.0
     validators = charge * fee.validator_share
@@ -259,24 +274,33 @@ def _tol(*scales: float) -> float:
 
 def _consumers_rational(eq: MarketEquilibrium, values: Mapping[str, float]) -> bool:
     p, supply = eq.price_per_1k, eq.supply_1k
+    if not math.isfinite(p) or p < 0.0 or not math.isfinite(supply) or supply < 0.0:
+        return False
     if set(eq.consumer_shares) != set(values) or set(eq.consumer_surplus) != set(values):
         return False
     for a, v in values.items():
         x = eq.consumer_shares[a]
+        surplus_a = eq.consumer_surplus[a]
+        if not math.isfinite(x) or not math.isfinite(surplus_a):
+            return False
         if x < 0.0 or x > 1.0 + _REL_TOL:
             return False
         expected = (v - p) * x * supply if x > 0.0 else 0.0
         tol = _tol(v, p * supply)
         if x > 0.0 and (v < p - tol or expected < -tol):
             return False
-        if abs(expected - eq.consumer_surplus[a]) > tol:
+        if abs(expected - surplus_a) > tol:
             return False
     return True
 
 
 def _producers_rational(eq: MarketEquilibrium, costs: Mapping[str, tuple[float, float]]) -> bool:
     keep, p = eq.fee.producer_share, eq.price_per_1k
+    if not math.isfinite(p) or p < 0.0 or not math.isfinite(eq.producer_revenue_per_1k):
+        return False
     if set(eq.producer_profit) != set(costs) or not set(eq.active_producers) <= set(costs):
+        return False
+    if any(not math.isfinite(pr) for pr in eq.producer_profit.values()):
         return False
     active = set(eq.active_producers)
     if len(active) != len(eq.active_producers):
@@ -296,7 +320,11 @@ def _producers_rational(eq: MarketEquilibrium, costs: Mapping[str, tuple[float, 
 
 
 def _producer_nash(
-    eq: MarketEquilibrium, bids: Sequence[ConsumerBid], offers: Sequence[ProducerOffer]
+    eq: MarketEquilibrium,
+    bids: Sequence[ConsumerBid],
+    offers: Sequence[ProducerOffer],
+    *,
+    measured_load_1k: float | None = None,
 ) -> tuple[bool, float]:
     """Re-clear the market with each producer's capacity replaced by s on a 41-point grid in [0, k_i]; the producer's
     profit in the re-cleared market must not beat its profit at the equilibrium (price held by the mechanism, not assumed)."""
@@ -308,9 +336,13 @@ def _producer_nash(
         base = (keep * p - o.cost_per_1k) * o.capacity_1k if o.account_id in active else 0.0
         for i in range(_SUPPLY_GRID_POINTS):
             s = o.capacity_1k * i / (_SUPPLY_GRID_POINTS - 1)
-            deviated = [ProducerOffer(q.account_id, q.cost_per_1k, s) if q.account_id == o.account_id else q for q in offers]
-            alt = clear_market(eq.model_id, bids, deviated, eq.fee)
-            gain = alt.producer_profit.get(o.account_id, 0.0) - base
+            if measured_load_1k is not None and eq.mechanism == MECHANISM_POSTED:
+                alt_profit = max(0.0, (keep * p - o.cost_per_1k) * s) if o.account_id in active else 0.0
+            else:
+                deviated = [ProducerOffer(q.account_id, q.cost_per_1k, s) if q.account_id == o.account_id else q for q in offers]
+                alt = clear_market(eq.model_id, bids, deviated, eq.fee, measured_load_1k=measured_load_1k)
+                alt_profit = alt.producer_profit.get(o.account_id, 0.0)
+            gain = alt_profit - base
             worst = max(worst, gain)
             if gain > _tol(base, p * o.capacity_1k):
                 ok = False
@@ -344,6 +376,15 @@ def _consumer_nash(eq: MarketEquilibrium, values: Mapping[str, float]) -> tuple[
 
 def _conserved(eq: MarketEquilibrium, costs: Mapping[str, tuple[float, float]]) -> bool:
     p, supply, fee = eq.price_per_1k, eq.supply_1k, eq.fee
+    if (
+        not math.isfinite(p)
+        or p < 0.0
+        or not math.isfinite(supply)
+        or supply < 0.0
+        or not math.isfinite(eq.producer_revenue_per_1k)
+        or any(not math.isfinite(x) for x in eq.consumer_shares.values())
+    ):
+        return False
     if eq.mechanism == MECHANISM_NO_TRADE:
         return supply == 0.0 and all(x == 0.0 for x in eq.consumer_shares.values()) and not eq.active_producers
     if any(a not in costs for a in eq.active_producers):
@@ -362,15 +403,23 @@ def _conserved(eq: MarketEquilibrium, costs: Mapping[str, tuple[float, float]]) 
     )
 
 
-def certify(eq: MarketEquilibrium, bids: Sequence[ConsumerBid], offers: Sequence[ProducerOffer]) -> Certificate:
+def certify(
+    eq: MarketEquilibrium,
+    bids: Sequence[ConsumerBid],
+    offers: Sequence[ProducerOffer],
+    *,
+    measured_load_1k: float | None = None,
+) -> Certificate:
     """Recompute the win-win properties of `eq` from the raw bids and offers (never trusting the stored numbers)."""
+    if measured_load_1k is not None and (not math.isfinite(float(measured_load_1k)) or float(measured_load_1k) < 0.0):
+        raise ValueError("measured_load_1k must be finite and >= 0")
     values = dict(_clean_bids(bids))
     costs = {a: (c, k) for a, c, k in _clean_offers(offers)}
-    if eq.mechanism not in _MECHANISMS:
+    if eq.mechanism not in _MECHANISMS or not math.isfinite(eq.price_per_1k) or not math.isfinite(eq.supply_1k):
         return Certificate(False, False, False, None, False, math.inf, False)
     rational_consumers = _consumers_rational(eq, values)
     rational_producers = _producers_rational(eq, costs)
-    producer_ok, producer_gain = _producer_nash(eq, bids, offers)
+    producer_ok, producer_gain = _producer_nash(eq, bids, offers, measured_load_1k=measured_load_1k)
     consumer_ok: bool | None = None
     consumer_gain = 0.0
     if eq.mechanism == MECHANISM_KELLY:

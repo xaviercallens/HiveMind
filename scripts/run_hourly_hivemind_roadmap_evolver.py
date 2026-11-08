@@ -39,6 +39,23 @@ def main() -> int:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report.to_dict(), indent=2) + "\n", encoding="utf-8")
 
+    # Automatically record all Coding Bee responses into AutoevolveAI Long-Term Memory & RL/DPO stores
+    ltm_recorded = False
+    autoevolve_root = Path(__file__).resolve().parents[4]
+    ltm_script = autoevolve_root / "scripts" / "record_coding_bees_ltm_and_rl.py"
+    if ltm_script.exists():
+        import sys as _sys
+
+        if str(autoevolve_root) not in _sys.path:
+            _sys.path.insert(0, str(autoevolve_root))
+        try:
+            from scripts.record_coding_bees_ltm_and_rl import record_all_coding_bee_responses
+
+            ltm_res = record_all_coding_bee_responses()
+            ltm_recorded = ltm_res.get("status") == "VERIFIED"
+        except Exception:
+            ltm_recorded = False
+
     print("========================================================================================")
     print("  HIVEMIND HOURLY IMPROVEMENT PLAN & ROADMAP CO-PILOT (SEASON 36 + IP-21/IP-67)")
     print("========================================================================================")
@@ -51,6 +68,7 @@ def main() -> int:
     print(f"  • HM-S36-04 Sub-Swarm Fuzzy Quorum   : {report.s36_04_subswarm_agreement:.4f}")
     print(f"  • HM-S36-05 DARL Lease Conservation  : {report.s36_05_darl_conservation_holds}")
     print(f"  • IP-21 Residual Sampling & IP-67    : {report.ip21_residual_sampling_verified} / {report.ip67_no_hardcoded_xdev_verified}")
+    print(f"  • AutoevolveAI LTM & RL Recorded     : {ltm_recorded}")
     print(f"  • Merkle Root SHA-256                : {report.merkle_root_sha256}")
     print(f"  • All Quality & Zero-Stub Gates      : {report.all_gates_passed}")
     print("========================================================================================")

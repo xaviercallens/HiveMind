@@ -1,0 +1,111 @@
+{
+  "schema": "hivemind.base_weights_mirror_receipt.v1",
+  "deliverable_id": "PS-10-D3",
+  "generated_at_utc": "2026-11-07T21:12:28Z",
+  "gcs_mirror_root": "gs://hivemind-boinc-verify-0625573011/mirrors/base_weights",
+  "local_mirror_root": "/mnt/disks/disk-socrateai-local-1/mirrors/base_weights",
+  "required_chain_base_models": [
+    "Qwen/Qwen3-4B-Instruct-2507",
+    "google/gemma-2-2b-it",
+    "ibm-granite/granite-3.1-1b-a400m-base",
+    "ibm-granite/granite-3.1-3b-a800m-base"
+  ],
+  "total_mirrored_models": 5,
+  "base_models": [
+    {
+      "model_id": "ibm-granite/granite-3.1-1b-a400m-base",
+      "family": "Granite",
+      "mirror_path": "gs://hivemind-boinc-verify-0625573011/mirrors/base_weights/ibm-granite--granite-3.1-1b-a400m-base/",
+      "local_mirror_path": "/mnt/disks/disk-socrateai-local-1/mirrors/base_weights/ibm-granite--granite-3.1-1b-a400m-base/",
+      "licence": "Apache-2.0",
+      "licence_file": "gs://hivemind-boinc-verify-0625573011/mirrors/base_weights/ibm-granite--granite-3.1-1b-a400m-base/LICENSE",
+      "licence_sha256": "c72537e3ebda9f5d6a298534453dd1edd1a6f780b029213aa801d530010cac74",
+      "licence_redistribution_permitted": true,
+      "pinned_revision": "main-granite-3.1-1b-a400m-base-v1",
+      "weights_format": "safetensors+gguf-q4_k_m",
+      "sha256": "48d80e72991bc8c1c90351bd9b6e9d06a9cefac5ce53ee59482364e37071787d",
+      "checksum_source": "hf_cache_snapshot_tree",
+      "chain_roles": [
+        "boinc_moe_work_default_base",
+        "night_intense_1_A0_control",
+        "night_intense_1_A1_higher_rank_same_base",
+        "granite_1b_base_tier"
+      ]
+    },
+    {
+      "model_id": "ibm-granite/granite-3.1-3b-a800m-base",
+      "family": "Granite",
+      "mirror_path": "gs://hivemind-boinc-verify-0625573011/mirrors/base_weights/ibm-granite--granite-3.1-3b-a800m-base/",
+      "local_mirror_path": "/mnt/disks/disk-socrateai-local-1/mirrors/base_weights/ibm-granite--granite-3.1-3b-a800m-base/",
+      "licence": "Apache-2.0",
+      "licence_file": "gs://hivemind-boinc-verify-0625573011/mirrors/base_weights/ibm-granite--granite-3.1-3b-a800m-base/LICENSE",
+      "licence_sha256": "c1b225164dadf1d7ea87db2a4ac55f690e42dd19f28bfc40ce028111c9c77ac0",
+      "licence_redistribution_permitted": true,
+      "pinned_revision": "main-granite-3.1-3b-a800m-base-v1",
+      "weights_format": "safetensors",
+      "sha256": "dbd64e2f0f9a474f3f7f5e1e1f981f4585a4426ba75e19d4ef292c8c92e88d09",
+      "checksum_source": "pinned_manifest_spec",
+      "chain_roles": [
+        "night_intense_1_A2_larger_moe",
+        "granite_moe_3b_tier"
+      ]
+    },
+    {
+      "model_id": "Qwen/Qwen3-4B-Instruct-2507",
+      "family": "Qwen",
+      "mirror_path": "gs://hivemind-boinc-verify-0625573011/mirrors/base_weights/Qwen--Qwen3-4B-Instruct-2507/",
+      "local_mirror_path": "/mnt/disks/disk-socrateai-local-1/mirrors/base_weights/Qwen--Qwen3-4B-Instruct-2507/",
+      "licence": "Apache-2.0",
+      "licence_file": "gs://hivemind-boinc-verify-0625573011/mirrors/base_weights/Qwen--Qwen3-4B-Instruct-2507/LICENSE",
+      "licence_sha256": "38de68930ca329e676d3fd559cc83c9f2fc55d1a881426bd60f06901fd2de8a4",
+      "licence_redistribution_permitted": true,
+      "pinned_revision": "main-qwen3-4b-instruct-2507-v1",
+      "weights_format": "safetensors",
+      "sha256": "04876a0f1fec727b96b56686ab48783fa5390418243c24d1b8cb759b9fedcbdd",
+      "checksum_source": "pinned_manifest_spec",
+      "chain_roles": [
+        "night_intense_1_A3_larger_dense",
+        "t4_night_alternative_dense_4b"
+      ]
+    },
+    {
+      "model_id": "Qwen/Qwen2.5-Coder-7B-Instruct",
+      "family": "Qwen",
+      "mirror_path": "gs://hivemind-boinc-verify-0625573011/mirrors/base_weights/Qwen--Qwen2.5-Coder-7B-Instruct/",
+      "local_mirror_path": "/mnt/disks/disk-socrateai-local-1/mirrors/base_weights/Qwen--Qwen2.5-Coder-7B-Instruct/",
+      "licence": "Apache-2.0",
+      "licence_file": "gs://hivemind-boinc-verify-0625573011/mirrors/base_weights/Qwen--Qwen2.5-Coder-7B-Instruct/LICENSE",
+      "licence_sha256": "503c22802bcabd7a9c519517ec8b1963bebc09f29574558d30aa8498ec642084",
+      "licence_redistribution_permitted": true,
+      "pinned_revision": "main-qwen2.5-coder-7b-instruct-v1",
+      "weights_format": "safetensors+gguf-q4_k_m",
+      "sha256": "edc5110ef1e38048fe943219e2de96d785d31e41f3dd8f7891992e0c2082c2f6",
+      "checksum_source": "pinned_manifest_spec",
+      "chain_roles": [
+        "coder_7b_serving_and_bee_adapter_base",
+        "bee_stars_7b_adapter_base",
+        "bee_rusty_sundials_7b_adapter_base"
+      ]
+    },
+    {
+      "model_id": "google/gemma-2-2b-it",
+      "family": "Gemma",
+      "mirror_path": "gs://hivemind-boinc-verify-0625573011/mirrors/base_weights/google--gemma-2-2b-it/",
+      "local_mirror_path": "/mnt/disks/disk-socrateai-local-1/mirrors/base_weights/google--gemma-2-2b-it/",
+      "licence": "Gemma-Terms-of-Use",
+      "licence_file": "gs://hivemind-boinc-verify-0625573011/mirrors/base_weights/google--gemma-2-2b-it/LICENSE",
+      "licence_sha256": "2664a69f5fd25ad2c2fb2c3c116711c88b65aa7dad284f57da60159ad206bcd7",
+      "licence_redistribution_permitted": true,
+      "pinned_revision": "main-gemma-2-2b-it-v1",
+      "weights_format": "safetensors",
+      "sha256": "c9f22fd460b29e9edb40ec270848d5e795bc5f810d72bcf11a9f92f4aca42266",
+      "checksum_source": "pinned_manifest_spec",
+      "chain_roles": [
+        "opentrainer_worker_default_base",
+        "gemma_core_serving_lineage"
+      ]
+    }
+  ],
+  "all_chain_models_mirrored": true,
+  "violations": []
+}

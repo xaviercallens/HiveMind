@@ -20,6 +20,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 import hashlib
 import json
+import math
 from pathlib import Path
 import shutil
 import time
@@ -79,13 +80,26 @@ class BundleSeedManifest:
     seeders: List[str] = field(default_factory=list)
 
 
+def _lease_clock(now_s: Optional[float]) -> float:
+    """The lease clock: wall time, or a finite caller-supplied time. A NaN `now_s` makes every `now > expires_at_s`
+    comparison False, so a lease granted at 0.0 would commit (and never be reclaimed) at any later time."""
+    if now_s is None:
+        return time.time()
+    if isinstance(now_s, bool) or not isinstance(now_s, (int, float)):
+        raise ValueError("now_s must be finite")
+    now = float(now_s)
+    if not math.isfinite(now):
+        raise ValueError("now_s must be finite")
+    return now
+
+
 def compute_lease_ttl_s(alpha: float, t_step_s: float, rtt_s: float) -> float:
     """HM-S9-06: Compute heartbeat data-lease TTL `tau_lease = alpha * t_step_s + rtt_s`."""
-    if alpha <= 0.0 or not (alpha < float("inf")):
+    if isinstance(alpha, bool) or not isinstance(alpha, (int, float)) or alpha <= 0.0 or not (alpha < float("inf")):
         raise ValueError("alpha must be > 0 and finite")
-    if t_step_s <= 0.0 or not (t_step_s < float("inf")):
+    if isinstance(t_step_s, bool) or not isinstance(t_step_s, (int, float)) or t_step_s <= 0.0 or not (t_step_s < float("inf")):
         raise ValueError("t_step_s must be > 0 and finite")
-    if rtt_s < 0.0 or not (rtt_s < float("inf")):
+    if isinstance(rtt_s, bool) or not isinstance(rtt_s, (int, float)) or rtt_s < 0.0 or not (rtt_s < float("inf")):
         raise ValueError("rtt_s must be >= 0 and finite")
     return float(alpha) * float(t_step_s) + float(rtt_s)
 
@@ -124,6 +138,8 @@ class ContentAddressedSwarmStore:
         node_id: Optional[str] = None,
         security_guard: Optional[SwarmTrainingAndStoreGuard] = None,
     ) -> None:
+        if isinstance(replication_factor, bool) or not isinstance(replication_factor, int) or replication_factor < 1:
+            raise ValueError("replication_factor must be an integer >= 1")
         self.root_dir = Path(root_dir)
         self.replication_factor = replication_factor
         self.shards_dir = self.root_dir / "dataset_shards"
@@ -196,8 +212,29 @@ class ContentAddressedSwarmStore:
         shard_path: Path,
         prev_block_hash: str,
         chunk_size: int = 256,
+        expected_sha256: Optional[str] = None,
     ) -> StorageProofReceipt:
-        raw_bytes = Path(shard_path).read_bytes()
+        if isinstance(chunk_size, bool) or not isinstance(chunk_size, int) or chunk_size <= 0:
+            raise ValueError("chunk_size must be a positive integer")
+        p = Path(shard_path)
+        if not p.is_file():
+            return StorageProofReceipt(
+                node_id=node_id,
+                shard_cid=shard_cid,
+                challenged_chunk_index=0,
+                merkle_proof_hash="",
+                bytes_stored=0,
+                verified=False,
+            )
+        raw_bytes = p.read_bytes()
+        actual_digest = hashlib.sha256(raw_bytes).hexdigest()
+        cid_hex = shard_cid.removeprefix("cid://sha256/") if str(shard_cid).startswith("cid://sha256/") else ""
+        cid_matches = bool(len(cid_hex) >= 16 and actual_digest.startswith(cid_hex))
+        sha_matches = True if expected_sha256 is None else (actual_digest == expected_sha256)
+        pinned = (shard_cid in self.node_pins.get(node_id, [])) or (
+            expected_sha256 is not None and sha_matches
+        )
+        is_verified = bool(pinned and cid_matches and sha_matches)
         chunks = [
             raw_bytes[i : i + chunk_size]
             for i in range(0, max(1, len(raw_bytes)), chunk_size)
@@ -217,8 +254,8 @@ class ContentAddressedSwarmStore:
             shard_cid=shard_cid,
             challenged_chunk_index=challenged_idx,
             merkle_proof_hash=merkle_proof,
-            bytes_stored=len(raw_bytes),
-            verified=shard_cid in self.node_pins.get(node_id, []),
+            bytes_stored=len(raw_bytes) if is_verified else 0,
+            verified=is_verified,
         )
 
     def publish_lora_expert_checkpoint(
@@ -289,18 +326,20 @@ class ContentAddressedSwarmStore:
         meta = dict(payload.get("metadata", {}))
         raw_state: Dict[str, torch.Tensor] = payload.get("lora_state", {})
 
-        # Verify cryptographic CID digest against metadata + tensor bytes
-        if cid.startswith("cid://sha256/expert-"):
-            serializable_meta = json.dumps(meta, sort_keys=True).encode("utf-8")
-            hasher = hashlib.sha256(serializable_meta)
-            for k in sorted(raw_state.keys()):
-                t_fp16 = raw_state[k].detach().cpu().to(torch.float16).contiguous()
-                hasher.update(t_fp16.numpy().tobytes())
-            recomputed_prefix = hasher.hexdigest()[:24]
-            if not cid.endswith(f"-{recomputed_prefix}"):
-                raise ChunkIntegrityError(
-                    f"Cryptographic CID digest mismatch for '{cid}' (expected suffix '-{recomputed_prefix}')."
-                )
+        # Verify cryptographic CID digest against metadata + tensor bytes. A payload whose cid is not an expert cid has
+        # nothing to verify against, so it is refused instead of loaded unchecked.
+        if not cid.startswith("cid://sha256/expert-"):
+            raise ChunkIntegrityError(f"Checkpoint cid '{cid}' is not a content-addressed expert cid.")
+        serializable_meta = json.dumps(meta, sort_keys=True).encode("utf-8")
+        hasher = hashlib.sha256(serializable_meta)
+        for k in sorted(raw_state.keys()):
+            t_fp16 = raw_state[k].detach().cpu().to(torch.float16).contiguous()
+            hasher.update(t_fp16.numpy().tobytes())
+        recomputed_prefix = hasher.hexdigest()[:24]
+        if not cid.endswith(f"-{recomputed_prefix}"):
+            raise ChunkIntegrityError(
+                f"Cryptographic CID digest mismatch for '{cid}' (expected suffix '-{recomputed_prefix}')."
+            )
 
         lora_state = {k: v.to(dtype=dtype) for k, v in raw_state.items()}
         self._guard.validate_lora_tensors(
@@ -387,7 +426,7 @@ class ContentAddressedSwarmStore:
         bundle_path = Path(bundle_dir)
         if not bundle_path.is_dir():
             raise FileNotFoundError(f"Bundle directory '{bundle_path}' does not exist.")
-        if chunk_size <= 0 or chunk_size > MAX_CHUNK_BYTES:
+        if isinstance(chunk_size, bool) or not isinstance(chunk_size, int) or chunk_size <= 0 or chunk_size > MAX_CHUNK_BYTES:
             raise ValueError(f"chunk_size must be in (0, {MAX_CHUNK_BYTES}].")
 
         entries: List[ChunkedFileEntry] = []
@@ -695,8 +734,8 @@ class ContentAddressedSwarmStore:
         now_s: Optional[float] = None,
     ) -> DataShardLease:
         """Grant an exclusive heartbeat-backed lease on `shard_cid` with TTL `alpha * t_step_s + rtt_s`."""
-        cid = str(shard_cid)
-        wid = str(worker_id)
+        cid = shard_cid.strip() if isinstance(shard_cid, str) else ""
+        wid = worker_id.strip() if isinstance(worker_id, str) else ""
         if not cid or not wid:
             raise ValueError("shard_cid and worker_id must be non-empty")
         if cid in self._committed_shards:
@@ -705,7 +744,7 @@ class ContentAddressedSwarmStore:
             active_id = self._active_shard_lease_by_cid[cid]
             raise ValueError(f"Shard {cid!r} already has an active lease ({active_id!r})")
 
-        now = float(now_s) if now_s is not None else time.time()
+        now = _lease_clock(now_s)
         ttl = compute_lease_ttl_s(alpha=alpha, t_step_s=t_step_s, rtt_s=rtt_s)
         self._lease_seq += 1
         lease_id = f"lease-{self._lease_seq:06d}-{hashlib.sha256(f'{cid}:{wid}:{self._lease_seq}'.encode('utf-8')).hexdigest()[:10]}"
@@ -735,7 +774,7 @@ class ContentAddressedSwarmStore:
         lease = self._shard_leases[lease_id]
         if lease.status != "active":
             raise ValueError(f"Cannot heartbeat lease {lease_id!r} in status {lease.status!r}")
-        now = float(now_s) if now_s is not None else time.time()
+        now = _lease_clock(now_s)
         if now > lease.expires_at_s:
             raise ValueError(f"Lease {lease_id!r} expired at {lease.expires_at_s:.3f}s (now={now:.3f}s)")
         lease.expires_at_s = now + lease.ttl_s
@@ -758,7 +797,7 @@ class ContentAddressedSwarmStore:
             raise ValueError(
                 f"Worker {worker_id!r} does not own lease {lease_id!r} (owner={lease.worker_id!r})"
             )
-        now = float(now_s) if now_s is not None else time.time()
+        now = _lease_clock(now_s)
         if now > lease.expires_at_s:
             raise ValueError(f"Cannot commit expired lease {lease_id!r} (now={now:.3f}s > {lease.expires_at_s:.3f}s)")
         if lease.shard_cid in self._committed_shards:
@@ -775,7 +814,7 @@ class ContentAddressedSwarmStore:
         now_s: Optional[float] = None,
     ) -> List[DataShardLease]:
         """Reclaim all active leases whose `expires_at_s < now` and return them to the reclaim queue."""
-        now = float(now_s) if now_s is not None else time.time()
+        now = _lease_clock(now_s)
         reclaimed: List[DataShardLease] = []
         for lease in self._shard_leases.values():
             if lease.status == "active" and now > lease.expires_at_s:

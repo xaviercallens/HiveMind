@@ -345,8 +345,16 @@ def test_exoplanet_cockpit_routes(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     reg_steam = client.post("/v1/hivemind/steam/register-login", json={"handle": "steam_pioneer_1", "role": "prosumer"})
     assert reg_steam.status_code == 200
     steam_key = reg_steam.json()["api_key"]
-    # Second call exercises HandleTaken branch
-    assert client.post("/v1/hivemind/steam/register-login", json={"handle": "steam_pioneer_1"}).status_code == 200
+    # Second call exercises HandleTaken branch (401 without key, 200 with valid Bearer key)
+    assert client.post("/v1/hivemind/steam/register-login", json={"handle": "steam_pioneer_1"}).status_code == 401
+    assert (
+        client.post(
+            "/v1/hivemind/steam/register-login",
+            json={"handle": "steam_pioneer_1"},
+            headers={"Authorization": f"Bearer {steam_key}"},
+        ).status_code
+        == 200
+    )
     assert client.get("/v1/hivemind/me").status_code == 401
     assert client.get("/v1/hivemind/me", headers={"Authorization": f"Bearer {steam_key}"}).status_code == 200
     with patch("urllib.request.urlopen", side_effect=OSError("offline")):
@@ -361,7 +369,15 @@ def test_exoplanet_cockpit_routes(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     reg_wgpu = client.post("/v1/hivemind/webgpu/register-login", json={"handle": "webgpu_pioneer_1"})
     assert reg_wgpu.status_code == 200
     wgpu_key = reg_wgpu.json()["api_key"]
-    assert client.post("/v1/hivemind/webgpu/register-login", json={"handle": "webgpu_pioneer_1"}).status_code == 200
+    assert client.post("/v1/hivemind/webgpu/register-login", json={"handle": "webgpu_pioneer_1"}).status_code == 401
+    assert (
+        client.post(
+            "/v1/hivemind/webgpu/register-login",
+            json={"handle": "webgpu_pioneer_1"},
+            headers={"Authorization": f"Bearer {wgpu_key}"},
+        ).status_code
+        == 200
+    )
     assert client.post("/v1/hivemind/webgpu/contribute", json={}).status_code == 401
     with patch("urllib.request.urlopen", side_effect=OSError("offline")):
         assert client.post(

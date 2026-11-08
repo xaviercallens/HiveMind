@@ -117,3 +117,71 @@ def test_eviction_mirrors_fp8_paged_cache():
         cache.read_kv_page(0, 2)
     assert list(ref._pages_k) == list(new._pages_k)
     assert ref.total_kv_cache_bytes() == new.total_kv_cache_bytes()
+
+
+@pytest.mark.parametrize("codec", [IntMinMaxPageCodec(8), LatticePageCodec("Z", 1.0), LatticePageCodec("A2", 1.0), LatticePageCodec("E8", 1.0)])
+def test_encode_refuses_nan_and_fp16_overflow_but_accepts_a_normal_page(codec) -> None:
+    g = torch.Generator().manual_seed(0)
+    ok = torch.randn(4, 16, generator=g)
+    assert torch.isfinite(codec.decode(codec.encode(ok), torch.float32)).all()
+    nan_page = ok.clone()
+    nan_page[0, 0] = float("nan")
+    with pytest.raises(ValueError):
+        codec.encode(nan_page)
+    with pytest.raises(ValueError):
+        codec.encode(ok * 1e6)  # RMS / min / max above fp16's 65504 overflow the stored side information
+
+
+@pytest.mark.parametrize("codec", [IntMinMaxPageCodec(8), LatticePageCodec("Z", 1.0), LatticePageCodec("A2", 1.0), LatticePageCodec("E8", 1.0)])
+def test_encode_refuses_a_page_that_would_decode_to_zeros_but_keeps_an_all_zero_page(codec) -> None:
+    g = torch.Generator().manual_seed(1)
+    with pytest.raises(ValueError):
+        codec.encode(torch.randn(4, 16, generator=g) * 1e-8)
+    zero = codec.decode(codec.encode(torch.zeros(4, 16)), torch.float32)  # an all-zero page is legitimate and round-trips
+    assert torch.count_nonzero(zero) == 0
+    ok = torch.randn(4, 16, generator=g)
+    assert torch.count_nonzero(codec.decode(codec.encode(ok), torch.float32)) > 0
+
+
+def test_fp8_codec_refuses_nan_fp16_scale_overflow_and_underflow_but_keeps_normal_and_zero_pages() -> None:
+    codec = FP8E4M3PageCodec()
+    g = torch.Generator().manual_seed(3)
+    ok = torch.randn(4, 16, generator=g)
+    assert torch.isfinite(codec.decode(codec.encode(ok), torch.float32)).all()
+    assert torch.count_nonzero(codec.decode(codec.encode(ok), torch.float32)) > 0
+    nan_page = ok.clone()
+    nan_page[1, 2] = float("nan")
+    with pytest.raises(ValueError):
+        codec.encode(nan_page)
+    inf_page = ok.clone()
+    inf_page[0, 0] = float("inf")
+    with pytest.raises(ValueError):
+        codec.encode(inf_page)
+    with pytest.raises(ValueError):
+        codec.encode(ok * 1e9)  # the per-row scale (absmax / 448) is above fp16's 65504
+    with pytest.raises(ValueError):
+        codec.encode(ok * 1e-9)  # the per-row scale rounds to 0 in fp16: the page would decode to zeros
+    zero = codec.decode(codec.encode(torch.zeros(4, 16)), torch.float32)
+    assert torch.isfinite(zero).all() and torch.count_nonzero(zero) == 0  # was NaN: scale 0 in fp16 gave 0/0
+    mixed = ok.clone()
+    mixed[2] = 0.0
+    dec = codec.decode(codec.encode(mixed), torch.float32)
+    assert torch.isfinite(dec).all() and torch.count_nonzero(dec[2]) == 0 and torch.count_nonzero(dec[0]) > 0
+
+
+def test_a_refused_write_does_not_evict_a_cached_page() -> None:
+    cache = PluggableKVPageCache(max_pages=1, codec=IntMinMaxPageCodec(8))
+    g = torch.Generator().manual_seed(4)
+    good_k, good_v = torch.randn(4, 16, generator=g), torch.randn(4, 16, generator=g)
+    cache.write_kv_page(0, 0, good_k, good_v)
+    bad = good_k.clone()
+    bad[0, 0] = float("nan")
+    with pytest.raises(ValueError):
+        cache.write_kv_page(0, 1, bad, good_v)
+    with pytest.raises(ValueError):
+        cache.write_kv_page(0, 1, good_k, bad)  # the V half is refused after K encoded: still nothing may change
+    assert list(cache._pages_k) == [(0, 0)] and list(cache._pages_v) == [(0, 0)]
+    k, v = cache.read_kv_page(0, 0, torch.float32)
+    assert torch.isfinite(k).all() and torch.isfinite(v).all()
+    cache.write_kv_page(0, 1, good_v, good_k)  # a good write still evicts the oldest page
+    assert list(cache._pages_k) == [(0, 1)]

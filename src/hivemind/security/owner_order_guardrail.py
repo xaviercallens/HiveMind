@@ -621,7 +621,12 @@ def filter_authorized_owner_orders(
 
 
 def verify_local_git_owner_identity(repo_root: Path | None = None) -> dict[str, Any]:
-    """Verify that the local Git configuration and HEAD commit belong to `callensxavier@gmail.com`."""
+    """Report whether local Git config and HEAD e-mail fields equal `callensxavier@gmail.com`.
+
+    This is an UNSIGNED string comparison: `git -c user.email=...` sets the config value, and
+    author e-mails are set by whoever made the commit. It does not establish identity. The
+    key is named `git_config_email_matches_owner` so no caller reads it as verification (IP-246).
+    """
     cwd = str(repo_root) if repo_root is not None else None
     cfg_res = subprocess.run(
         ["git", "config", "user.email"],
@@ -660,12 +665,12 @@ def verify_local_git_owner_identity(repo_root: Path | None = None) -> dict[str, 
     author_verify = normalize_and_verify_owner_email(author_email)
     committer_verify = normalize_and_verify_owner_email(committer_email)
 
-    verified = bool(
+    matches_owner = bool(
         cfg_verify.is_authorized_owner
         or author_verify.is_authorized_owner
         or recent_author_verified
     )
-    payload = {
+    return {
         "authorized_owner_email": AUTHORIZED_OWNER_EMAIL,
         "git_config_email": git_config_email,
         "head_author_email": author_email,
@@ -673,9 +678,7 @@ def verify_local_git_owner_identity(repo_root: Path | None = None) -> dict[str, 
         "git_config_verified": cfg_verify.is_authorized_owner,
         "head_author_verified": author_verify.is_authorized_owner,
         "head_committer_verified": committer_verify.is_authorized_owner,
-        "owner_identity_verified": verified,
+        "git_config_email_matches_owner": matches_owner,
+        "signature_verified": False,
+        "signature_check": "NOT_PERFORMED",
     }
-    payload["attestation_sha256"] = hashlib.sha256(
-        json.dumps(payload, sort_keys=True).encode("utf-8")
-    ).hexdigest()
-    return payload

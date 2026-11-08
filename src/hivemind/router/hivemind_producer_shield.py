@@ -23,12 +23,12 @@ from __future__ import annotations
 
 import argparse
 import hmac
+import itertools
 import json
 import os
-import itertools
 import sys
 import time
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -47,6 +47,9 @@ def _error(status: int, message: str, code: str) -> JSONResponse:
     return JSONResponse({"error": {"message": message, "type": "shield_error", "code": code}}, status_code=status)
 
 
+MAX_TOKENS_CAP = 16384  # per-request ceiling for max_tokens / max_completion_tokens
+
+
 def create_shield_app(
     upstream: str,
     token: str,
@@ -55,14 +58,24 @@ def create_shield_app(
     max_body_bytes: int = DEFAULT_MAX_BODY_BYTES,
     allowed_models: Sequence[str] = (),
     transport: httpx.AsyncBaseTransport | None = None,
+    routes: Mapping[str, str] | None = None,
+    control_state_file: str | None = None,
 ) -> FastAPI:
-    """Build the proxy app. ``transport`` lets tests stand in for the model server."""
+    """Build the proxy app. ``transport`` lets tests stand in for the model server.
+
+    ``routes`` maps a model name to the base URL of the server that runs it, for a producer account that advertises models from two servers behind ONE
+    endpoint (the gateway keeps one endpoint per account). Models not listed go to ``upstream``; routed models are allowed implicitly and are listed in
+    ``/v1/models`` only while their server answers.
+    """
+    # ``control_state_file`` is the small JSON file the producer agent writes (``--control-state-file``): while it says ``"paused": true`` chat requests get
+    # 503 ``producer_paused``. A missing or unreadable file means "not paused" (the behaviour without remote control); ``/v1/models`` is never affected.
     if len(token) < MIN_TOKEN_CHARS:
         raise ValueError(f"the endpoint token must be at least {MIN_TOKEN_CHARS} characters")
     if max_concurrent < 1 or max_body_bytes < 1:
         raise ValueError("max_concurrent and max_body_bytes must be >= 1")
     base = upstream.rstrip("/")
-    allowed = frozenset(allowed_models)
+    route_base = {m: u.rstrip("/") for m, u in (routes or {}).items()}
+    allowed = frozenset(allowed_models) | (frozenset(route_base) if allowed_models else frozenset())
     expected = f"Bearer {token}".encode()
     inflight: dict[int, float] = {}  # request number -> monotonic start; entries expire so a lost disconnect cannot jam the shield
     numbers = itertools.count()
@@ -75,6 +88,15 @@ def create_shield_app(
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 
+    def paused() -> bool:
+        if not control_state_file:
+            return False
+        try:
+            with open(control_state_file, encoding="utf-8") as handle:
+                return json.loads(handle.read(4096)).get("paused") is True
+        except (OSError, ValueError, AttributeError):
+            return False
+
     def authorised(request: Request) -> bool:
         supplied = request.headers.get("authorization", "").encode()
         return hmac.compare_digest(supplied, expected)
@@ -86,7 +108,14 @@ def create_shield_app(
         try:
             upstream_response = await client.get(base + "/v1/models")
             if upstream_response.status_code == 200:
-                return JSONResponse(upstream_response.json())
+                listing = upstream_response.json()
+                for routed, target in route_base.items():
+                    try:
+                        if (await client.get(target + "/v1/models", timeout=3.0)).status_code == 200:
+                            listing.setdefault("data", []).append({"id": routed, "object": "model", "owned_by": "local"})
+                    except httpx.HTTPError:
+                        pass  # that server is down: do not advertise its model
+                return JSONResponse(listing)
             # Older Ollama releases have no /v1/models; present their own model list in the OpenAI shape.
             tags = await client.get(base + "/api/tags")
         except (httpx.HTTPError, ValueError):
@@ -103,6 +132,8 @@ def create_shield_app(
     async def chat(request: Request) -> Any:
         if not authorised(request):
             return _error(401, "Missing or wrong endpoint token.", "unauthorized")
+        if paused():
+            return _error(503, "This producer is paused by its owner.", "producer_paused")
         declared = request.headers.get("content-length")
         if declared is not None and declared.isdigit() and int(declared) > max_body_bytes:
             return _error(413, "Request body too large.", "body_too_large")
@@ -120,7 +151,18 @@ def create_shield_app(
             return _error(400, "Body must be JSON.", "invalid_json")
         if not isinstance(body, dict):
             return _error(400, "Body must be a JSON object.", "invalid_json")
-        if allowed and body.get("model") not in allowed:
+        model = body.get("model")
+        if not isinstance(model, str):  # a list or object would raise TypeError in the set/dict lookups below (a 500)
+            return _error(400, "model must be a string.", "invalid_request")
+        clamped = False
+        for limit_key in ("max_tokens", "max_completion_tokens"):  # a consumer can not make one request run for ever
+            limit = body.get(limit_key)
+            if isinstance(limit, (int, float)) and not isinstance(limit, bool) and limit > MAX_TOKENS_CAP:
+                body[limit_key] = MAX_TOKENS_CAP
+                clamped = True
+        if clamped:
+            raw = json.dumps(body).encode("utf-8")
+        if allowed and model not in allowed:
             return _error(403, "This model is not offered by this producer.", "model_not_allowed")
         now = time.monotonic()
         for stale in [n for n, started in inflight.items() if now - started > UPSTREAM_TIMEOUT_S + 30.0]:
@@ -131,7 +173,7 @@ def create_shield_app(
         inflight[number] = now
         try:
             upstream_request = client.build_request(
-                "POST", base + "/v1/chat/completions", content=raw, headers={"Content-Type": "application/json"}
+                "POST", route_base.get(model, base) + "/v1/chat/completions", content=raw, headers={"Content-Type": "application/json"}
             )
             upstream_response = await client.send(upstream_request, stream=True)
         except httpx.HTTPError:
@@ -152,7 +194,15 @@ def create_shield_app(
     return app
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+POC_NOTICE = (
+    "Proof of concept (PoC): not a production service. Until HiveMind is fully secured, prompts you serve and requests you make "
+    "must contain only public, non-sensitive data (no secrets, personal, private or enterprise data); the people using your node "
+    "are anonymous, and nothing yet verifies producers or their output."
+)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build the command-line parser for the authenticating producer shield."""
     parser = argparse.ArgumentParser(description="Authenticating proxy in front of a local OpenAI-compatible model server.")
     parser.add_argument("--upstream", default="http://127.0.0.1:11434", help="Your model server (default: Ollama on this machine)")
     parser.add_argument("--host", default="127.0.0.1", help="Interface to listen on; keep 127.0.0.1 and point your tunnel at it")
@@ -161,14 +211,32 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--max-body-bytes", type=int, default=DEFAULT_MAX_BODY_BYTES)
     parser.add_argument("--allow-model", action="append", default=[], metavar="NAME",
                         help="Only run this local model name (repeat). Recommended: it keeps your GPU for the model you advertise.")
+    parser.add_argument("--route", action="append", default=[], metavar="MODEL=URL",
+                        help="Send this model to another local server (repeat), e.g. hivemind-bee-stars=http://127.0.0.1:8294. Implies --allow-model for it.")
+    parser.add_argument("--control-state-file", metavar="PATH", help="State file written by the producer agent (--control-state-file); while it says paused, chat requests get 503 producer_paused")
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = build_parser()
     args = parser.parse_args(argv)
+    print(f"NOTICE: {POC_NOTICE}", file=sys.stderr)
+    if not args.upstream.startswith(("http://127.0.0.1", "http://localhost")):
+        parser.error(f"--upstream expects a local loopback URL (http://127.0.0.1:PORT or http://localhost:PORT), got {args.upstream!r}")
+    routes: dict[str, str] = {}
+    for item in args.route:
+        model, sep, url = item.partition("=")
+        if not sep or not model.strip() or not url.startswith(("http://127.0.0.1", "http://localhost")):
+            parser.error(f"--route expects MODEL=http://127.0.0.1:PORT, got {item!r}")
+        routes[model.strip()] = url.strip()
     token = os.environ.get(ENDPOINT_TOKEN_ENV, "")
     if len(token) < MIN_TOKEN_CHARS:
         parser.error(f"set {ENDPOINT_TOKEN_ENV} to a random secret of at least {MIN_TOKEN_CHARS} characters")
     import uvicorn  # imported late so the module can be imported (and tested) without a server
 
     app = create_shield_app(args.upstream, token, max_concurrent=args.max_concurrent,
-                            max_body_bytes=args.max_body_bytes, allowed_models=args.allow_model)
+                            max_body_bytes=args.max_body_bytes, allowed_models=args.allow_model, routes=routes,
+                            control_state_file=args.control_state_file)
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
     return 0
 

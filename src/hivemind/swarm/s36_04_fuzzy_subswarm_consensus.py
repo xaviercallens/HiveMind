@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import math
 import time
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from typing import Sequence
 
@@ -72,8 +73,20 @@ def hypergeometric_collusion_probability(
 class LocalizedFuzzySubSwarmConsensus:
     """15–20 node localized fuzzy sub-swarm consensus engine."""
 
-    def __init__(self, *, min_fuzzy_quorum: float = 0.67) -> None:
+    def __init__(
+        self,
+        *,
+        min_fuzzy_quorum: float = 0.67,
+        reputation_registry: Mapping[str, float] | None = None,
+        default_unregistered_reputation: float = 0.05,
+    ) -> None:
         self.min_fuzzy_quorum = float(min_fuzzy_quorum)
+        self.reputation_registry: dict[str, float] | None = (
+            {str(k): float(v) for k, v in reputation_registry.items()}
+            if reputation_registry is not None
+            else None
+        )
+        self.default_unregistered_reputation = float(default_unregistered_reputation)
 
     def evaluate_subswarm(
         self,
@@ -81,18 +94,36 @@ class LocalizedFuzzySubSwarmConsensus:
         *,
         total_network_nodes_n: int = 10_000,
         assumed_byzantine_fraction: float = 0.15,
+        reputation_registry: Mapping[str, float] | None = None,
     ) -> FuzzySubSwarmConsensusReport:
-        """Compute waggle-dance weighted fuzzy agreement across 15–20 neighboring nodes."""
+        """Compute waggle-dance weighted fuzzy agreement across 15–20 distinct neighboring nodes."""
         k = len(votes)
         if not (MIN_SUBSWARM_NODES <= k <= MAX_SUBSWARM_NODES):
             raise ValueError(f"Sub-swarm size must be in [{MIN_SUBSWARM_NODES}, {MAX_SUBSWARM_NODES}], got {k}")
+
+        seen_nodes: set[str] = set()
+        for v in votes:
+            nid = str(v.node_id).strip()
+            if not nid:
+                raise ValueError("Vote node_id must be non-empty")
+            if nid in seen_nodes:
+                raise ValueError(f"Duplicate node_id {nid!r} in sub-swarm votes")
+            seen_nodes.add(nid)
+
+        reg = reputation_registry if reputation_registry is not None else self.reputation_registry
 
         t0 = time.perf_counter()
         bucket_weights: dict[str, float] = {}
         total_weight = 0.0
         for v in votes:
-            conf = max(0.0, min(1.0, float(v.semantic_confidence)))
-            rep = max(0.01, min(1.0, float(v.observer_reputation)))
+            raw_conf = float(v.semantic_confidence)
+            conf = max(0.0, min(1.0, raw_conf)) if math.isfinite(raw_conf) else 0.0
+            if reg is not None:
+                raw_rep = float(reg.get(v.node_id, self.default_unregistered_reputation))
+                rep = max(0.01, min(1.0, raw_rep)) if math.isfinite(raw_rep) else 0.01
+            else:
+                # Never trust voter-supplied reputation without a registry (IP-118)
+                rep = 1.0
             # Fuzzy triangular t-norm weight = confidence * reputation
             w = conf * rep
             bucket_weights[v.answer_digest] = bucket_weights.get(v.answer_digest, 0.0) + w

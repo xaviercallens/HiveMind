@@ -59,6 +59,7 @@ def test_la_ruche_rejects_degraded_expert_and_accepts_improved_expert(
 
 def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     tmp_path: Path,
+    monkeypatch,  # noqa: ANN001
 ) -> None:
     """Verify end-to-end 8-domain Dataset Mining Campaign, La Ruche MoE export, and HiveMind@home FastAPI portal."""
     assert len(RUCHE_ALVEOLE_HEX_LAYOUT) == 8
@@ -124,11 +125,13 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     )
     assert node_res.returncode == 0, f"JS Syntax Error: {node_res.stderr.decode()}"
 
+    monkeypatch.setenv("HIVEMIND_DASHBOARD_ADMIN_KEY", "test-dashboard-admin-key")  # admin routes need it (GHSA-gjc6-74f9-wmrr)
     app = create_hivemind_at_home_app(
         mining_ruche_report_path=mining_report_path,
         vault_dir=vault_dir,
     )
     client = TestClient(app)
+    ADMIN = {"x-admin-key": "test-dashboard-admin-key"}
     r_index = client.get("/")
     assert r_index.status_code == 200
     assert "la-ruche-svg" in r_index.text
@@ -138,9 +141,13 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     assert r_health.json()["status"] == "ok"
     assert r_health.json()["cost_mode"] == "scale_to_zero_min0_max2"
 
+    from hivemind.boinc.hivemind_at_home_dashboard import _count_lean4_spec_theorems
+
+    expected_theorems = _count_lean4_spec_theorems()
+    assert expected_theorems > 0
     r_status = client.get("/api/hivemind-at-home/status")
     assert r_status.status_code == 200
-    assert r_status.json()["formal_verification"]["lean4_theorems_verified"] == 128
+    assert r_status.json()["formal_verification"]["lean4_theorems_verified"] == expected_theorems
 
     r_ruche = client.get("/api/la-ruche/manifest")
     assert r_ruche.status_code == 200
@@ -216,7 +223,16 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     )
     assert r_sub.status_code == 200
     sub_json = r_sub.json()
-    assert sub_json["status"] == "ADMITTED_TO_LA_RUCHE_QUORUM"
+    assert sub_json["status"] == "RECEIVED_CLIENT_CLAIMS_UNVERIFIED"
+    assert sub_json["reciprocity_points_awarded"] == 0
+    assert sub_json["spotcheck_verified"] is False
+    # Negative control: the same lease cannot be submitted twice, and an invented lease is refused.
+    replay = client.post("/api/v1/federated/workunit/submit", json={
+        "workunit_id": wu_json["workunit_id"], "lease_id": wu_json["lease_id"],
+        "lease_version_tag": wu_json["lease_version_tag"], "contributor_handle": "@test-gpu-node",
+        "domain_name": "code_python", "train_nll_before": 5.55, "train_nll_after": 5.12,
+        "holdout_nll_before": 5.50, "holdout_nll_after": 5.32})
+    assert replay.status_code == 422
     assert sub_json["monetary_payout_eur_usd"] == 0.0
 
     r_ledger = client.get("/api/v1/federated/ledger")
@@ -240,13 +256,13 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     assert "Gwen-Qwen2.5-MoE-Bee-v2.6" in r_index.text
     assert "Astro-Exoplanet-SETI-Bee-v2.6" in r_index.text
     assert len(state["community_results_carousel"]) == 6
-    assert len(state["contributor_leaderboard"]) >= 4
+    assert all(row.get("ledger_receipt_sha256") for row in state["contributor_leaderboard"])  # no invented rows
 
     # Verify Compute Points redemption endpoint across GWAYA Python coding & Astrophysics
     r_redeem = client.post(
         "/api/v1/compute-points/redeem",
         json={
-            "contributor_handle": "@test-gpu-node",
+            "contributor_handle": "@Vxtzq",
             "service_id": "python_coding_gwaya",
             "prompt": "Write a vectorized E8 lattice quantizer in Python.",
             "points_balance_before": 1250,
@@ -255,10 +271,23 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     assert r_redeem.status_code == 200
     redeem_json = r_redeem.json()
     assert redeem_json["status"] == "COMPUTE_POINTS_REDEEMED"
+    assert redeem_json["points_balance_before"] == 30000
     assert redeem_json["points_spent"] == 50
-    assert redeem_json["points_balance_after"] == 1200
+    assert redeem_json["points_balance_after"] == 29950
     assert redeem_json["monetary_cost_eur_usd"] == 0.0
-    assert "quantize_e8_coset_2bit" in redeem_json["domain_output"]
+    assert "La Ruche Top-2 Sparse MoE Routing" in redeem_json["domain_output"]
+
+    # Negative control (IP-242): unknown handle with client-supplied points_balance_before=999999 is refused
+    r_unknown_redeem = client.post(
+        "/api/v1/compute-points/redeem",
+        json={
+            "contributor_handle": "@test-gpu-node",
+            "service_id": "python_coding_gwaya",
+            "prompt": "Write a vectorized E8 lattice quantizer in Python.",
+            "points_balance_before": 999999,
+        },
+    )
+    assert r_unknown_redeem.status_code == 422
 
     # Verify 5-Language Support (English, French, Chinese, Spanish, German)
     r_i18n_all = client.get("/api/v1/i18n")
@@ -275,7 +304,7 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
         r_red_lang = client.post(
             "/api/v1/compute-points/redeem",
             json={
-                "contributor_handle": "@test-gpu-node",
+                "contributor_handle": "@Vxtzq",
                 "service_id": "astrophysics_exoplanet",
                 "prompt": "Detect Kepler-186f exoplanet transit dip.",
                 "points_balance_before": 1250,
@@ -329,7 +358,7 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     def_json = r_def.json()
     assert def_json["firewall_status"] == "ACTIVE"
     assert def_json["rate_limiter"]["firewall_status"] == "ACTIVE"
-    assert def_json["formal_verification"]["lean4_theorems_verified"] == 128
+    assert def_json["formal_verification"]["lean4_theorems_verified"] == expected_theorems
     assert def_json["formal_verification"]["sorry_count"] == 0
     assert def_json["byzantine_poisoning_defense"]["attack_vectors_blocked_count"] == 49
 
@@ -431,16 +460,17 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     )
     assert r_up.status_code == 200
 
+    r_reg = client.post("/api/v1/auth/register", json={"handle": "reg-user-01", "email": "reg01@hivemind.ai"})
+    assert r_reg.status_code == 200
+    reg_token = r_reg.json()["token"]
+    # GHSA-gjc6-74f9-wmrr: an existing account is only returned to the caller holding its token
+    r_again = client.post("/api/v1/auth/register", json={"handle": "reg-user-01", "email": "reg01@hivemind.ai"})
+    assert r_again.status_code == 401
+    assert reg_token not in r_again.text
     assert (
         client.post(
             "/api/v1/auth/register",
-            json={"handle": "reg-user-01", "email": "reg01@hivemind.ai"},
-        ).status_code
-        == 200
-    )
-    assert (
-        client.post(
-            "/api/v1/auth/register",
+            headers={"Authorization": f"Bearer {reg_token}"},
             json={"handle": "reg-user-01", "email": "reg01@hivemind.ai"},
         ).status_code
         == 200
@@ -453,8 +483,9 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
         == 409
     )
 
-    assert client.post("/api/v1/auth/login", json={"handle_or_email": "reg-user-01"}).status_code == 200
-    assert client.post("/api/v1/auth/login", json={"handle_or_email": "login-created-01"}).status_code == 200
+    assert client.post("/api/v1/auth/login", json={"handle_or_email": "reg-user-01"}).status_code == 401
+    assert client.post("/api/v1/auth/login", json={"handle_or_email": reg_token}).status_code == 200
+    assert client.post("/api/v1/auth/login", json={"handle_or_email": "login-created-01"}).status_code == 404
     assert (
         client.post(
             "/api/v1/auth/login",
@@ -463,27 +494,45 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
         == 404
     )
 
+    r_sso = client.post("/api/v1/auth/sso/google", json={"handle_hint": "sso-user-01"})
+    assert r_sso.status_code == 200
+    sso_token = r_sso.json()["token"]
+    # an unverified handle hint must not reopen an existing account; its token does
+    assert client.post("/api/v1/auth/sso/google", json={"handle_hint": "sso-user-01"}).status_code == 401
     assert (
-        client.post("/api/v1/auth/sso/google", json={"handle_hint": "sso-user-01"}).status_code
+        client.post(
+            "/api/v1/auth/sso/google", headers={"Authorization": f"Bearer {sso_token}"}, json={"handle_hint": "sso-user-01"}
+        ).status_code
         == 200
     )
-    assert client.post("/api/v1/auth/sso/google", json={"handle_hint": "sso-user-01"}).status_code == 200
     assert client.post("/api/v1/auth/sso/unsupported_idp", json={"handle_hint": "sso-user-01"}).status_code == 400
 
+    # linking a provider needs the account's token; a handle in the body is not enough (GHSA-gjc6-74f9-wmrr)
+    assert client.post("/api/v1/auth/link-provider", json={"handle": "sso-user-01", "provider": "github"}).status_code == 401
     assert (
-        client.post("/api/v1/auth/link-provider", json={"handle": "sso-user-01", "provider": "github"}).status_code
+        client.post(
+            "/api/v1/auth/link-provider", headers={"Authorization": f"Bearer {sso_token}"}, json={"provider": "github"}
+        ).status_code
         == 200
     )
     assert client.post("/api/v1/auth/rotate-key", headers={"Authorization": f"Bearer {r_up.json()['token']}"}).status_code == 200
-    assert client.post("/api/v1/auth/magic-link", json={"email": "magic@hivemind.ai"}).status_code == 200
-    assert client.post("/api/v1/auth/magic-link", json={"email": "magic@hivemind.ai"}).status_code == 200
-    assert client.get("/api/v1/auth/users").status_code == 200
+    r_magic = client.post("/api/v1/auth/magic-link", json={"email": "magic@hivemind.ai"})
+    assert r_magic.status_code == 200
+    assert client.post("/api/v1/auth/magic-link", json={"email": "magic@hivemind.ai"}).status_code == 401  # no e-mail is sent
+    assert (
+        client.post(
+            "/api/v1/auth/magic-link", headers={"Authorization": f"Bearer {r_magic.json()['token']}"}, json={"email": "magic@hivemind.ai"}
+        ).status_code
+        == 200
+    )
+    assert client.get("/api/v1/auth/users").status_code == 403  # admin only
     assert client.get("/api/v1/auth/session", headers={"Authorization": f"Bearer {r_up.json()['token']}"}).status_code == 200
     assert client.get("/api/v1/auth/session").status_code == 200
     assert client.post("/api/v1/auth/logout").status_code == 200
 
-    assert client.get("/api/v1/auth/migration/status").status_code == 200
-    assert client.post("/api/v1/auth/v1-migrate", json={"handle_or_email": "callensxavier@gmail.com"}).status_code == 200
+    assert client.get("/api/v1/auth/migration/status").status_code == 403  # lists every account: admin only
+    assert client.get("/api/v1/auth/migration/status", headers=ADMIN).status_code == 200
+    assert client.post("/api/v1/auth/v1-migrate", json={"handle_or_email": "callensxavier@gmail.com"}).status_code == 401
     assert client.post("/api/v1/auth/v1-migrate", json={"handle_or_email": "migrated-v1-custom"}).status_code == 200
 
     # 3. AMCP Mesh & OpenRouter Models
@@ -514,36 +563,38 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     assert client.post("/api/v1/night-moe/start", json={}).status_code == 200
     assert client.get("/api/v1/hardware/rtx2070/shield").status_code == 200
     assert client.post("/api/v1/hardware/rtx2070/shield/lock").status_code == 200
-    assert client.get("/api/v1/admin/dashboard").status_code == 200
-    assert client.get("/api/v1/admin/masterminders").status_code == 200
+    assert client.get("/api/v1/admin/dashboard").status_code == 403
+    assert client.get("/api/v1/admin/dashboard", headers=ADMIN).status_code == 200
+    assert client.get("/api/v1/admin/masterminders", headers=ADMIN).status_code == 200
     assert (
         client.post(
             "/api/v1/admin/campaigns/create",
+            headers=ADMIN,
             json={"name": "Test Campaign", "domain": "code_python"},
         ).status_code
         == 200
     )
-    assert (
-        client.post(
+    # the training endpoint only records a request: no trainer is attached, so it is 202 with no metrics (it used to return
+    # fixed losses and TRAINING_COMPLETED_VERIFIED)
+    for hardware in ("cuda:0 RTX 2070", "cloud-a10g"):
+        queued = client.post(
             "/api/v1/admin/moe/train-expert",
-            json={"domain_name": "physics_sim", "hardware_override": "cuda:0 RTX 2070"},
-        ).status_code
-        == 200
+            headers=ADMIN,
+            json={"domain_name": "physics_sim", "hardware_override": hardware},
+        )
+        assert queued.status_code == 202
+        receipt = queued.json()["training_receipt"]
+        assert queued.json()["status"] == "QUEUED_NOT_STARTED" and receipt["status"] == "QUEUED_NOT_STARTED"
+        assert receipt["metrics"] is None and "train_nll_after" not in receipt and "perplexity_reduction_pct" not in receipt
+    selected = client.post(
+        "/api/v1/admin/moe/models/select",
+        headers=ADMIN,
+        json={"model_id": "hivemind/moe-queenbee-256b"},
     )
-    assert (
-        client.post(
-            "/api/v1/admin/moe/train-expert",
-            json={"domain_name": "physics_sim", "hardware_override": "cloud-a10g"},
-        ).status_code
-        == 200
-    )
-    assert (
-        client.post(
-            "/api/v1/admin/moe/models/select",
-            json={"model_id": "hivemind/moe-queenbee-256b"},
-        ).status_code
-        == 200
-    )
+    assert selected.status_code == 200
+    assert selected.json()["status"] == "SELECTION_RECORDED" and "not deployed" in selected.json()["message"]
+    assert selected.json()["active_model"]["deployed"] is False and selected.json()["active_model"]["status"] == "SELECTED_IN_MEMORY"
+    assert client.get("/api/v1/admin/dashboard", headers=ADMIN).json()["active_model"]["deployed"] is False
     assert (
         client.post(
             "/api/v1/son/feedback",
@@ -594,11 +645,12 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
         )
     assert client.post("/api/v1/finops/simulate-idle").status_code == 200
 
-    assert client.get("/api/v1/admin/deployment-review/status").status_code == 200
+    assert client.get("/api/v1/admin/deployment-review/status", headers=ADMIN).status_code == 200
     for action in ("request_review", "approve", "reset"):
         assert (
             client.post(
                 "/api/v1/admin/deployment-review/request",
+                headers=ADMIN,
                 json={"action": action, "reviewer": "@Vxtzq", "comment": "Reviewed"},
             ).status_code
             == 200
@@ -687,3 +739,25 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
             == 200
         )
 
+
+
+def test_la_ruche_gate_rejects_non_finite_or_non_positive_figures_and_labels_figures_as_caller_reported(tmp_path: Path) -> None:
+    """IP-163: `after >= before` is False for NaN, so a NaN holdout loss used to be deposited with perplexity_reduction_pct=nan."""
+    import math
+
+    vault = LaRucheModelVault(vault_dir=tmp_path / "ruche_nan", hidden_size=32, vocab_size=259, canonical_rank_r=4)
+    tensors = {
+        "base_model.model.model.layers.0.self_attn.q_proj.lora_A.default.weight": torch.randn(4, 32),
+        "base_model.model.model.layers.0.self_attn.q_proj.lora_B.default.weight": torch.randn(32, 4),
+    }
+    good = dict(domain_name="code_python", adapter_tensors=tensors, contributor_handle="@tester", hardware_device="cpu",
+                dataset_shard_cid="cid://sha256/test", train_nll_before=5.5, train_nll_after=5.0, holdout_nll_before=5.5,
+                holdout_nll_after=5.1, holdout_perplexity_before=244.69, holdout_perplexity_after=164.02)
+    for field, bad in (("holdout_nll_after", math.nan), ("holdout_nll_after", math.inf), ("holdout_nll_before", -1.0),
+                       ("holdout_perplexity_after", math.nan), ("train_nll_after", 0.0)):
+        with pytest.raises(ValueError, match="finite positive number"):
+            vault.deposit_qlora_expert(**{**good, field: bad})
+    assert vault.cells == {}
+    cell = vault.deposit_qlora_expert(**good)
+    assert math.isfinite(cell.perplexity_reduction_pct) and cell.perplexity_reduction_pct > 0.0
+    assert cell.nll_source == "CALLER_REPORTED_UNVERIFIED"

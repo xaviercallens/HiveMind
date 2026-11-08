@@ -2,17 +2,17 @@
 """HM-S35-03: Elenchus x SocrateAI-Lean-Lib x rusty-SUNDIALS Tier-X Provenance (R-64) Verifier.
 
 Integrates:
-1. elenchus-solvers-mcp (/home/xavkal/xdev/elenchus-solvers-mcp) & SocrateAI-Scientific-Elenchus:
+1. elenchus-solvers-mcp (xaviercallens/elenchus-solvers-mcp) & SocrateAI-Scientific-Elenchus:
    - Tier-X instrument contract (`tier: "X"`, `claim_licence: false`, `ran: bool`, `stub: bool`).
    - Finding #4 from elenchus-solvers-mcp README: raw grep counts docstrings like
      `**Kernel Certified:** 0 sorry, 0 admit.` — Elenchus strips comments (`-- ...` and `/- ... -/`)
      before scanning for `sorry`, `admit`, and `native_decide`.
    - Rule R-64 Provenance: binds producer, version, tool, exact arguments as received, toolchain,
      and git revision into a deterministic SHA-256 receipt; refuses any `stub: true` or `ran: false`.
-2. SocrateAI-Lean-Lib (/home/xavkal/xdev/SocrateAI-Lean-Lib):
+2. SocrateAI-Lean-Lib (xaviercallens/SocrateAI-Lean-Lib):
    - 14-domain Lean 4 formal library with explicit axiom quarantine (`PROVEN_INVARIANT`,
      `QUARANTINED_AXIOM`, `UNVERIFIED_SORRY`).
-3. rusty-SUNDIALS (/home/xavkal/xdev/rusty-SUNDIALS):
+3. rusty-SUNDIALS (xaviercallens/rusty-SUNDIALS):
    - Robertson chemical kinetics stiff ODE conservation check (y1 + y2 + y3 = 1, |Delta m| < 1e-12).
 """
 
@@ -21,6 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import math
 import re
 from typing import Any, Mapping
 
@@ -51,6 +52,7 @@ class TierXR64InstrumentReceipt:
     accepted_by_elenchus_bridge: bool
     mass_conservation_drift: float
     provenance_sha256: str
+    simulated: bool = True
 
 
 def strip_lean4_comments(lean_source: str) -> str:
@@ -79,8 +81,9 @@ def audit_lean4_source_elenchus(lean_source: str) -> LeanCommentStrippedAudit:
     axiom_cnt = len(re.findall(r"\baxiom\s+\w+", stripped))
     thm_cnt = len(re.findall(r"\b(?:theorem|lemma)\s+\w+", stripped))
 
-    is_clean = (sorry_cnt == 0) and (admit_cnt == 0) and (native_decide_cnt == 0)
-    if not is_clean:
+    has_sorry = (sorry_cnt > 0) or (admit_cnt > 0) or (native_decide_cnt > 0)
+    is_clean = (not has_sorry) and (axiom_cnt == 0)
+    if has_sorry:
         classification = "UNVERIFIED_SORRY"
     elif axiom_cnt > 0:
         classification = "QUARANTINED_AXIOM"
@@ -103,7 +106,7 @@ def verify_robertson_sundials_tier_x(
     sent_arguments: Mapping[str, Any],
     received_arguments: Mapping[str, Any],
     y_initial: tuple[float, float, float] = (1.0, 0.0, 0.0),
-    y_final: tuple[float, float, float] = (0.2083340149701255, 0.0000008333360770, 0.7916651516937975),
+    y_final: tuple[float, float, float] | None = None,
     ran: bool = True,
     stub: bool = False,
     producer: str = "elenchus-solvers-mcp/rusty-SUNDIALS",
@@ -111,9 +114,24 @@ def verify_robertson_sundials_tier_x(
 ) -> TierXR64InstrumentReceipt:
     """Verify a rusty-SUNDIALS Robertson stiff ODE reading under Elenchus Tier-X and R-64 rules."""
     args_match = dict(sent_arguments) == dict(received_arguments)
-    mass_init = sum(y_initial)
-    mass_final = sum(y_final)
-    mass_drift = abs(mass_final - mass_init)
+    effective_y_final = y_final
+    if effective_y_final is None and "y_final" in received_arguments:
+        raw_yf = received_arguments["y_final"]
+        if isinstance(raw_yf, (list, tuple)) and len(raw_yf) == 3:
+            effective_y_final = (float(raw_yf[0]), float(raw_yf[1]), float(raw_yf[2]))
+
+    has_valid_output = (
+        effective_y_final is not None
+        and len(effective_y_final) == 3
+        and all(math.isfinite(float(v)) for v in effective_y_final)
+        and all(math.isfinite(float(v)) for v in y_initial)
+    )
+    if has_valid_output and effective_y_final is not None:
+        mass_init = sum(float(v) for v in y_initial)
+        mass_final = sum(float(v) for v in effective_y_final)
+        mass_drift = abs(mass_final - mass_init)
+    else:
+        mass_drift = float("inf")
 
     payload = json.dumps(
         {
@@ -122,13 +140,14 @@ def verify_robertson_sundials_tier_x(
             "received_arguments": dict(received_arguments),
             "ran": ran,
             "stub": stub,
-            "mass_drift": round(mass_drift, 16),
+            "has_solver_output": has_valid_output,
+            "mass_drift": round(mass_drift, 16) if math.isfinite(mass_drift) else None,
         },
         sort_keys=True,
     )
     prov_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
-    if stub or not ran or not args_match or mass_drift > 1e-12:
+    if stub or not ran or not args_match or not has_valid_output or mass_drift > 1e-12:
         evidentiary = "none"
         accepted = False
     else:

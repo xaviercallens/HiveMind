@@ -19,7 +19,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_ICS_PATH = (
@@ -236,9 +236,15 @@ def evaluate_quorum_readiness(
     covered_domains: Sequence[str],
 ) -> dict[str, Any]:
     """Compute Byzantine quorum (`n >= 2f + 3`) and 8-domain MoE coverage status."""
-    humans = sorted(set(h.strip() for h in human_participants if h and h.strip()))
-    agents = sorted(set(a.strip() for a in ai_agent_participants if a and a.strip()))
-    domains = sorted(set(d.strip() for d in covered_domains if d and d.strip()))
+    humans = sorted(set(h.strip() for h in human_participants if isinstance(h, str) and h.strip()))
+    agents = sorted(set(a.strip() for a in ai_agent_participants if isinstance(a, str) and a.strip()))
+    domains = sorted(set(d.strip() for d in covered_domains if isinstance(d, str) and d.strip()))
+
+    overlap = sorted(set(humans) & set(agents))
+    if overlap:
+        raise ValueError(
+            f"Participant handles cannot be double-counted as both human and ai_agent: {overlap}"
+        )
 
     total_nodes = len(humans) + len(agents)
     max_byzantine_faults_tolerated = max(0, (total_nodes - 3) // 2) if total_nodes >= 3 else 0
@@ -262,6 +268,22 @@ def evaluate_quorum_readiness(
     else:
         active_tier = "PRE_QUORUM_GATHERING"
 
+    nodes_needed_tier1 = max(
+        0,
+        5 - total_nodes,
+        max(0, 3 - len(humans)) + max(0, 2 - len(agents)),
+    )
+    nodes_needed_tier2 = max(
+        0,
+        8 - total_nodes,
+        max(0, 5 - len(humans)) + max(0, 3 - len(agents)),
+    )
+    nodes_needed_tier3 = max(
+        0,
+        16 - total_nodes,
+        max(0, 10 - len(humans)) + max(0, 6 - len(agents)),
+    )
+
     return {
         "human_count": len(humans),
         "ai_agent_count": len(agents),
@@ -273,9 +295,9 @@ def evaluate_quorum_readiness(
         "tier2_reached": tier2_reached,
         "tier3_reached": tier3_reached,
         "active_quorum_tier": active_tier,
-        "nodes_needed_for_tier1": max(0, 5 - total_nodes),
-        "nodes_needed_for_tier2": max(0, 8 - total_nodes),
-        "nodes_needed_for_tier3": max(0, 16 - total_nodes),
+        "nodes_needed_for_tier1": nodes_needed_tier1,
+        "nodes_needed_for_tier2": nodes_needed_tier2,
+        "nodes_needed_for_tier3": nodes_needed_tier3,
         "humans": humans,
         "ai_agents": agents,
         "covered_domains": domains,
@@ -380,13 +402,47 @@ def build_campaign_quorum_schedule_report(
         "current_baseline_quorum_status": current_quorum,
     }
     report["schedule_sha256"] = hashlib.sha256(
-        json.dumps(report, sort_keys=True).encode("utf-8")
+        json.dumps(report, sort_keys=True, allow_nan=False).encode("utf-8")
     ).hexdigest()
 
     if output_path is not None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        output_path.write_text(json.dumps(report, indent=2, allow_nan=False), encoding="utf-8")
     return report
+
+
+def verify_campaign_quorum_schedule_report(report: Mapping[str, Any]) -> bool:
+    """Verify the canonical SHA-256 digest and quorum invariants of a schedule report."""
+    if not isinstance(report, Mapping):
+        return False
+    expected = str(report.get("schedule_sha256") or "").strip().lower()
+    if len(expected) != 64:
+        return False
+    body = {k: v for k, v in report.items() if k != "schedule_sha256"}
+    try:
+        canonical = json.dumps(body, sort_keys=True, allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError):
+        return False
+    if hashlib.sha256(canonical).hexdigest().lower() != expected:
+        return False
+    if body.get("non_monetary_charter") != NON_MONETARY_COMPUTE_RECIPROCITY_NOTICE:
+        return False
+    ics_sha = str(body.get("ics_sha256") or "").strip().lower()
+    if len(ics_sha) != 64:
+        return False
+    quorum = body.get("current_baseline_quorum_status")
+    if not isinstance(quorum, Mapping):
+        return False
+    humans = quorum.get("humans")
+    agents = quorum.get("ai_agents")
+    domains = quorum.get("covered_domains")
+    if not all(isinstance(seq, list) for seq in (humans, agents, domains)):
+        return False
+    try:
+        recomputed = evaluate_quorum_readiness(humans, agents, domains)  # type: ignore[arg-type]
+    except ValueError:
+        return False
+    return dict(quorum) == recomputed
 
 
 def main(argv: Sequence[str] | None = None) -> int:

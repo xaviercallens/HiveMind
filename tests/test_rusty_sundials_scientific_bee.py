@@ -237,6 +237,35 @@ def test_wave2_method_of_lines_pdes_and_quorum2_parameter_sweep() -> None:
     assert "quorum" in bad_verdict.reason or "divergence" in bad_verdict.reason or "trajectory" in bad_verdict.reason
 
 
+def test_solver_sweep_with_nan_wall_time_and_huge_flop_claim_is_rejected_not_credited() -> None:
+    # IP-159 (#500): json.loads accepts NaN; max(nan, 1e-6) is nan; the class-peak cap then kept a 1e30 FLOP claim.
+    bundle = run_wave2_parameter_sweep_quorum(family="van_der_pol", parameter_grid=[0.1, 0.25], steps=12, dt=0.01)
+    honest = validate_solver_sweep(bundle["spec"], bundle["replica_a"], host="cpu-a", peer_meta=bundle["replica_b"])
+    assert honest.valid is True and 0.0 < honest.credit < 1e6
+    for wall in (float("nan"), float("inf"), -5.0):
+        forged = {**bundle["replica_a"], "wall_seconds": wall, "flops_claimed": 1e30}
+        verdict = validate_solver_sweep(bundle["spec"], forged, host="cpu-a", peer_meta=bundle["replica_b"])
+        assert verdict.valid is False and verdict.credit == 0.0, (wall, verdict)
+        assert "wall_seconds" in verdict.reason
+
+    # IP-173: omitting invariant_drift even when y is copied from reference must be rejected
+    missing_drift = {
+        **bundle["replica_a"],
+        "sweep_results": [
+            {k: v for k, v in item.items() if k != "invariant_drift"}
+            for item in bundle["replica_a"]["sweep_results"]
+        ],
+    }
+    v_no_drift = validate_solver_sweep(bundle["spec"], missing_drift, host="cpu-a", peer_meta=bundle["replica_b"])
+    assert v_no_drift.valid is False and v_no_drift.credit == 0.0
+    assert "invariant_drift" in v_no_drift.reason
+
+    # IP-173: validator computes reference trajectory even when reference_trajectories is stripped from spec
+    spec_without_ref = {k: v for k, v in bundle["spec"].items() if k != "reference_trajectories"}
+    v_noref = validate_solver_sweep(spec_without_ref, bundle["replica_a"], host="cpu-a", peer_meta=bundle["replica_b"])
+    assert v_noref.valid is True and v_noref.credit > 0.0
+
+
 def test_wave2_gateway_surrogate_sweep_and_producer_quorum_scaling(tmp_path: Path) -> None:
     store = RouterStore(tmp_path / "router_wave2.db", b"w" * 32)
     app = create_router_app(store, allow_private_producers=True)
@@ -439,9 +468,9 @@ def test_nextgen_moe_science_bee_and_owner_fleet_gateway(tmp_path: Path) -> None
 
     # Owner RTX 2070 + T4 fleet status & S-1b cross-CPU reproducibility
     fleet = bee.fleet_orchestrator.fleet_status()
-    assert fleet["gcp_tesla_t4_16gb"]["free_vram_guard_compliant"] is True
-    assert fleet["gcp_tesla_t4_16gb"]["opt_hivemind_t4_untouched"] is True
-    assert fleet["rtx_2070_local_8gb"]["wddm_headroom_compliant"] is True
+    assert fleet["measured"] is False
+    assert fleet["gcp_tesla_t4_16gb"]["serving_state"] == "NOT_MEASURED"
+    assert fleet["rtx_2070_local_8gb"]["configured_vram_cap_mib"] == 6656
     distill = bee.fleet_orchestrator.distill_teacher_to_rtx2070_student(
         teacher_rank=32,
         student_rank=16,
@@ -496,7 +525,13 @@ def test_nextgen_moe_science_bee_and_owner_fleet_gateway(tmp_path: Path) -> None
     fleet_resp = client.get("/v1/hivemind/bees/owner-fleet-status")
     assert fleet_resp.status_code == 200
     fleet_json = fleet_resp.json()
-    assert fleet_json["gcp_tesla_t4_16gb"]["free_vram_guard_compliant"] is True
-    assert fleet_json["latest_nocturnal_distillation"]["wddm_compliant"] is True
-    assert fleet_json["s1b_cross_cpu_reproducibility"]["passed"] is True
+    assert fleet_json["measured"] is False
+    assert fleet_json["data_source"] == "CONFIGURED_POLICY_NOT_LIVE_TELEMETRY"
+    assert fleet_json["latest_nocturnal_distillation"]["status"] == "NOT_RUN"
+    assert fleet_json["s1b_cross_cpu_reproducibility"]["status"] == "NOT_RUN_CROSS_HOST"
+    # Negative control: fields that only a real reading could supply must be absent.
+    for node in ("rtx_2070_local_8gb", "gcp_tesla_t4_16gb"):
+        for fabricated in ("live_models", "serving_active", "allocated_vram_mib", "free_vram_mib"):
+            assert fabricated not in fleet_json[node]
+    assert "spectral_energy_retention" not in fleet_json["latest_nocturnal_distillation"]
 

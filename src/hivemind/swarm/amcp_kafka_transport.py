@@ -67,7 +67,9 @@ DEFAULT_EVENT_TTL_S = 300.0
 MAX_EVENT_TTL_S = 3600.0
 MAX_CLOCK_SKEW_S = 30.0
 DLQ_VALUE_CAP_BYTES = 64 * 1024
-SENDER_KINDS: frozenset[str] = frozenset({"human_researcher", "gpu_producer", "ai_agent", "bee_specialist"})
+SENDER_KINDS: frozenset[str] = frozenset(
+    {"human_researcher", "gpu_producer", "ai_agent", "bee_specialist", "orchestrator"}
+)
 AVAILABILITY_SLOTS: tuple[str, ...] = ("eu_evening_cet", "us_evening_est", "apac_evening_jst", "24x7_autonomous")
 _KID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 _SIG_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -591,6 +593,17 @@ _TRADE_FIELDS: dict[str, FieldRule] = {
     "price_per_1k": FieldRule("number", gt=0.0, le=1_000.0),
 }
 
+_CAMPAIGN_DECISION_FIELDS: dict[str, FieldRule] = {
+    "decision": FieldRule(
+        "str",
+        choices=("ADMITTED", "ALREADY_MEMBER", "LEFT", "NOT_MEMBER", "REJECTED", "EXPIRED"),
+        max_len=32,
+    ),
+    "reason": FieldRule("str", max_len=256),
+    "campaign_id": FieldRule("str", max_len=64),
+    "participant_id": FieldRule("str", max_len=64),
+}
+
 TOPIC_SCHEMAS: dict[str, TopicSchema] = {
     KAFKA_TOPICS["campaigns"]: TopicSchema(
         topic_key="campaigns",
@@ -600,6 +613,12 @@ TOPIC_SCHEMAS: dict[str, TopicSchema] = {
                 "availability_slot": FieldRule("str", choices=AVAILABILITY_SLOTS),
                 "comment": FieldRule("str", max_len=256),
             },
+            "io.hivemind.amcp.campaign.admitted": _CAMPAIGN_DECISION_FIELDS,
+            "io.hivemind.amcp.campaign.already_member": _CAMPAIGN_DECISION_FIELDS,
+            "io.hivemind.amcp.campaign.left": _CAMPAIGN_DECISION_FIELDS,
+            "io.hivemind.amcp.campaign.not_member": _CAMPAIGN_DECISION_FIELDS,
+            "io.hivemind.amcp.campaign.rejected": _CAMPAIGN_DECISION_FIELDS,
+            "io.hivemind.amcp.campaign.expired": _CAMPAIGN_DECISION_FIELDS,
         },
         require_known_subject=True,
     ),
@@ -619,6 +638,45 @@ TOPIC_SCHEMAS: dict[str, TopicSchema] = {
                 "relative_invariant_drift": FieldRule("number", ge=0.0),
                 "improvement_factor": FieldRule("number"),
                 "verdict": FieldRule("str", choices=("PASS", "FAIL")),
+            },
+        },
+    ),
+    KAFKA_TOPICS["federation"]: TopicSchema(
+        topic_key="federation",
+        payloads={
+            # A task offer carries a hash of the model state and of the script a host must already have: hosts never execute code that arrives in a message.
+            "io.hivemind.amcp.fed.task_offer": {
+                "run_id": FieldRule("str", max_len=64),
+                "round": FieldRule("number", ge=0.0, le=1_000_000.0),
+                "algo": FieldRule("str", choices=("e8_qlora_moe_v1",)),
+                "script_sha256": FieldRule("str", max_len=64),
+                "base_sha256": FieldRule("str", max_len=64),
+                "global_sha256": FieldRule("str", max_len=64),
+                "inner_steps": FieldRule("number", gt=0.0, le=100_000.0),
+                "deadline_unix": FieldRule("number", gt=0.0),
+                "quorum": FieldRule("number", ge=1.0, le=1024.0),
+            },
+            "io.hivemind.amcp.fed.task_claim": {
+                "run_id": FieldRule("str", max_len=64),
+                "round": FieldRule("number", ge=0.0, le=1_000_000.0),
+                "learner_id": FieldRule("str", max_len=64),
+                "host": FieldRule("str", max_len=64),
+            },
+            "io.hivemind.amcp.fed.task_result": {
+                "run_id": FieldRule("str", max_len=64),
+                "round": FieldRule("number", ge=0.0, le=1_000_000.0),
+                "learner_id": FieldRule("str", max_len=64),
+                "host": FieldRule("str", max_len=64),
+                "tokens": FieldRule("number", gt=0.0),
+                "delta_l2": FieldRule("number", ge=0.0),
+                "eval_loss_global": FieldRule("number", ge=0.0),
+                "script_sha256": FieldRule("str", max_len=64),
+                "global_sha256": FieldRule("str", max_len=64),
+            },
+            "io.hivemind.amcp.fed.task_abort": {
+                "run_id": FieldRule("str", max_len=64),
+                "round": FieldRule("number", ge=0.0, le=1_000_000.0),
+                "reason": FieldRule("str", max_len=128),
             },
         },
     ),
@@ -675,7 +733,11 @@ def validate_event_dict(data: Any, topic: str) -> AMCPKafkaEvent:
     event_type = data["event_type"]
     if not event_type.startswith(EVENT_TYPE_PREFIX):
         raise SchemaError(f"event_type must start with {EVENT_TYPE_PREFIX}")
-    if schema.require_known_subject and data["subject_id"] not in SUBJECT_BY_ID:
+    if (
+        schema.require_known_subject
+        and event_type != "io.hivemind.amcp.campaign.rejected"
+        and data["subject_id"] not in SUBJECT_BY_ID
+    ):
         raise SchemaError(f"unknown campaign subject {data['subject_id']!r}")
     rules = schema.payloads.get(event_type)
     if rules is None:

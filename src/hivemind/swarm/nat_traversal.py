@@ -223,6 +223,10 @@ def decode_channel_data(data: bytes) -> Tuple[int, bytes]:
 
 
 def encode_error_code(code: int, reason: str) -> bytes:
+    if isinstance(code, bool) or not isinstance(code, int) or not (300 <= code <= 699):
+        raise ValueError("STUN error code must be an integer in 300..699")
+    if not isinstance(reason, str):
+        raise TypeError("STUN error reason must be a string")
     return struct.pack("!HBB", 0, code // 100, code % 100) + reason.encode("utf-8")
 
 
@@ -417,7 +421,16 @@ def stun_transaction(
     sent = StunMessage.decode(request)
     if sent.cls != REQUEST or sent.transaction_id != transaction_id:
         raise StunError("transaction does not match its STUN request")
-    if timeout <= 0 or initial_rto <= 0:
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or isinstance(initial_rto, bool)
+        or not isinstance(initial_rto, (int, float))
+        or not math.isfinite(timeout)
+        or not math.isfinite(initial_rto)
+        or timeout <= 0
+        or initial_rto <= 0
+    ):
         raise ValueError("STUN timeout and initial RTO must be positive")
     deadline = time.monotonic() + timeout
     rto = initial_rto
@@ -624,12 +637,19 @@ class TurnClient:
         sock: Optional[socket.socket] = None,
         timeout: float = 3.0,
     ) -> None:
+        if (
+            isinstance(timeout, bool)
+            or not isinstance(timeout, (int, float))
+            or not math.isfinite(timeout)
+            or timeout <= 0
+        ):
+            raise ValueError("TURN timeout must be a positive finite number")
         self.server = resolve(server)
         self.username = username
         self.password = password
         self.sock = sock if sock is not None else udp_socket()
         self._owns_socket = sock is None
-        self.timeout = timeout
+        self.timeout = float(timeout)
         self.realm: Optional[str] = None
         self.nonce: Optional[bytes] = None
         self.key: Optional[bytes] = None
@@ -742,6 +762,8 @@ class TurnClient:
             raise StunError(f"TURN request {method:#05x} failed: {code} {reason}", code)
 
     def allocate(self, lifetime: int = 600) -> Address:
+        if isinstance(lifetime, bool) or not isinstance(lifetime, int) or not (0 <= lifetime <= 0xFFFFFFFF):
+            raise ValueError("TURN lifetime must be an integer in 0..4294967295")
         message = self._request(
             ALLOCATE,
             [
@@ -767,6 +789,8 @@ class TurnClient:
         )
 
     def refresh(self, lifetime: int = 600) -> int:
+        if isinstance(lifetime, bool) or not isinstance(lifetime, int) or not (0 <= lifetime <= 0xFFFFFFFF):
+            raise ValueError("TURN lifetime must be an integer in 0..4294967295")
         message = self._request(REFRESH, [(LIFETIME, lambda _t: struct.pack("!I", lifetime))])
         granted = message.get(LIFETIME)
         self.lifetime = struct.unpack("!I", granted)[0] if granted else lifetime

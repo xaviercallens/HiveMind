@@ -427,14 +427,26 @@ class HiveSwarmLedger:
         rtt_speedup: Optional[float],
         rate_per_token: float = 0.005,
     ) -> InferenceSettlementReceipt:
+        if not isinstance(consumer_node_id, str) or not consumer_node_id.strip():
+            raise SwarmSecurityViolationError(
+                "LEDGER-01",
+                "EMPTY_CONSUMER_NODE_ID",
+                "consumer_node_id must be a non-empty string.",
+            )
         # Rule LEDGER-01: Prevent negative token / negative rate balance minting exploit
-        if int(verified_tokens) <= 0:
+        if isinstance(verified_tokens, bool) or not isinstance(verified_tokens, int) or verified_tokens <= 0:
             raise SwarmSecurityViolationError(
                 "LEDGER-01",
                 "NEGATIVE_OR_ZERO_INFERENCE_TOKENS",
                 f"verified_tokens ({verified_tokens}) must be a positive integer >= 1.",
             )
-        if not math.isfinite(float(rate_per_token)) or float(rate_per_token) <= 0.0 or float(rate_per_token) > 10.0:
+        if (
+            isinstance(rate_per_token, bool)
+            or not isinstance(rate_per_token, (int, float))
+            or not math.isfinite(float(rate_per_token))
+            or float(rate_per_token) <= 0.0
+            or float(rate_per_token) > 10.0
+        ):
             raise SwarmSecurityViolationError(
                 "LEDGER-01",
                 "INVALID_INFERENCE_FEE_RATE",
@@ -447,6 +459,12 @@ class HiveSwarmLedger:
                 "provider_node_ids must contain at least one active expert provider node.",
             )
         for pid in provider_node_ids:
+            if not isinstance(pid, str) or not pid.strip():
+                raise SwarmSecurityViolationError(
+                    "LEDGER-01",
+                    "EMPTY_PROVIDER_NODE_ID",
+                    "Every provider_node_id must be a non-empty string.",
+                )
             if pid in self.slashed_registry:
                 raise SwarmSecurityViolationError(
                     "LEDGER-01",
@@ -507,7 +525,12 @@ class HiveSwarmLedger:
                 "SLASHED_NODE_REWARD_BLOCKED",
                 f"Node '{node_id}' is in the Byzantine slashed_registry and cannot receive rewards.",
             )
-        if not math.isfinite(float(amount_hive)) or float(amount_hive) <= 0.0:
+        if (
+            isinstance(amount_hive, bool)
+            or not isinstance(amount_hive, (int, float))
+            or not math.isfinite(float(amount_hive))
+            or float(amount_hive) <= 0.0
+        ):
             raise SwarmSecurityViolationError(
                 "LEDGER-02",
                 "NON_POSITIVE_OR_NON_FINITE_REWARD",
@@ -527,9 +550,16 @@ class HiveSwarmLedger:
 
     def slash(self, node_id: str, fraction: float = 1.0, *, persist: bool = True) -> float:
         """Slash a dishonest node's balance and reputation, record it in `slashed_registry`, and persist."""
-        if not node_id or not str(node_id).strip():
+        if not isinstance(node_id, str) or not node_id.strip():
             raise ValueError("node_id must be non-empty")
-        frac = min(1.0, max(0.0, float(fraction)))
+        if (
+            isinstance(fraction, bool)
+            or not isinstance(fraction, (int, float))
+            or not math.isfinite(float(fraction))
+            or not (0.0 <= float(fraction) <= 1.0)
+        ):
+            raise ValueError("fraction must be a finite number in [0.0, 1.0]")
+        frac = float(fraction)
         if node_id not in self.slashed_registry:
             self.slashed_registry.append(node_id)
         if frac >= 1.0:
@@ -655,10 +685,13 @@ class GuildSlashingInsurancePool:
 
     @staticmethod
     def _require_amount(amount_hive: float, category: str) -> float:
-        try:
-            value = float(amount_hive)
-        except (TypeError, ValueError):
+        if isinstance(amount_hive, bool):
             value = float("nan")
+        else:
+            try:
+                value = float(amount_hive)
+            except (TypeError, ValueError):
+                value = float("nan")
         if not math.isfinite(value) or value <= 0.0:
             raise SwarmSecurityViolationError(
                 "LEDGER-05", category, f"amount ({amount_hive}) must be finite and > 0.0"

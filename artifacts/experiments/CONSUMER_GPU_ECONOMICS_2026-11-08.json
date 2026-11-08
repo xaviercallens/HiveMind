@@ -1,0 +1,184 @@
+{
+  "deliverable_id": "PS-04-D3",
+  "generated_at": "2026-11-08T00:42:00Z",
+  "source_mode": "enrolled_trainer_telemetry",
+  "replaces_static_assumptions": {
+    "previous_assumed_idle_hours_per_day": 18.0,
+    "previous_assumed_board_power_watts": 175.0
+  },
+  "telemetry_sample_count": 14,
+  "n": 14,
+  "idle_hours_per_day": {
+    "source": "enrolled_trainer_telemetry",
+    "n": 14,
+    "mean": 18.68,
+    "median": 18.75,
+    "min": 15.9,
+    "max": 21.0,
+    "stdev": 1.49
+  },
+  "board_power_watts": {
+    "source": "enrolled_trainer_telemetry",
+    "n": 14,
+    "mean": 128.54,
+    "median": 139.75,
+    "min": 34.8,
+    "max": 178.4,
+    "stdev": 46.37
+  },
+  "economics_summary": {
+    "median_daily_kwh": 2.664,
+    "median_monthly_electricity_usd": 14.16,
+    "mean_monthly_electricity_usd": 13.66,
+    "median_kwh_tariff_usd": 0.195,
+    "median_workunits_per_day": 2081.6
+  },
+  "community_hardware_notes": {
+    "amd_igpu_linux": "Supported via ROCm 6.1+ (HSA_OVERRIDE_GFX_VERSION=10.3.0 / 11.0.0) when system RAM >= 16 GB and UMA/GTT aperture >= 6.5 GB.",
+    "windows_wddm_headroom": "Enforces 1.5 GB WDDM display driver reserve on 8 GB cards (6,656 MiB ceiling; measured peak 4,838..5,462 MiB)."
+  },
+  "trainers": [
+    {
+      "trainer_slot": "trainer-01",
+      "gpu_class": "NVIDIA GeForce RTX 2070 (8 GB Turing)",
+      "backend": "cuda",
+      "vram_mib": 8192,
+      "idle_hours_per_day": 19.4,
+      "board_power_watts": 158.2,
+      "step_time_s": 0.342,
+      "kwh_tariff_usd": 0.19
+    },
+    {
+      "trainer_slot": "trainer-02",
+      "gpu_class": "NVIDIA GeForce RTX 2070 Super (8 GB Turing)",
+      "backend": "cuda",
+      "vram_mib": 8192,
+      "idle_hours_per_day": 17.8,
+      "board_power_watts": 169.5,
+      "step_time_s": 0.318,
+      "kwh_tariff_usd": 0.21
+    },
+    {
+      "trainer_slot": "trainer-03",
+      "gpu_class": "NVIDIA GeForce RTX 3060 (12 GB Ampere)",
+      "backend": "cuda",
+      "vram_mib": 12288,
+      "idle_hours_per_day": 20.1,
+      "board_power_watts": 142.8,
+      "step_time_s": 0.289,
+      "kwh_tariff_usd": 0.16
+    },
+    {
+      "trainer_slot": "trainer-04",
+      "gpu_class": "NVIDIA GeForce RTX 3060 Ti (8 GB Ampere)",
+      "backend": "cuda",
+      "vram_mib": 8192,
+      "idle_hours_per_day": 16.5,
+      "board_power_watts": 164.0,
+      "step_time_s": 0.254,
+      "kwh_tariff_usd": 0.18
+    },
+    {
+      "trainer_slot": "trainer-05",
+      "gpu_class": "NVIDIA GeForce RTX 3070 (8 GB Ampere)",
+      "backend": "cuda",
+      "vram_mib": 8192,
+      "idle_hours_per_day": 18.2,
+      "board_power_watts": 178.4,
+      "step_time_s": 0.231,
+      "kwh_tariff_usd": 0.22
+    },
+    {
+      "trainer_slot": "trainer-06",
+      "gpu_class": "NVIDIA GeForce RTX 4060 (8 GB Ada)",
+      "backend": "cuda",
+      "vram_mib": 8192,
+      "idle_hours_per_day": 21.0,
+      "board_power_watts": 108.6,
+      "step_time_s": 0.246,
+      "kwh_tariff_usd": 0.2
+    },
+    {
+      "trainer_slot": "trainer-07",
+      "gpu_class": "NVIDIA GeForce RTX 4060 Ti (16 GB Ada)",
+      "backend": "cuda",
+      "vram_mib": 16384,
+      "idle_hours_per_day": 19.8,
+      "board_power_watts": 134.2,
+      "step_time_s": 0.212,
+      "kwh_tariff_usd": 0.19
+    },
+    {
+      "trainer_slot": "trainer-08",
+      "gpu_class": "NVIDIA GeForce RTX 4070 (12 GB Ada)",
+      "backend": "cuda",
+      "vram_mib": 12288,
+      "idle_hours_per_day": 17.2,
+      "board_power_watts": 162.1,
+      "step_time_s": 0.184,
+      "kwh_tariff_usd": 0.17
+    },
+    {
+      "trainer_slot": "trainer-09",
+      "gpu_class": "NVIDIA Tesla T4 (16 GB Turing)",
+      "backend": "cuda",
+      "vram_mib": 15360,
+      "idle_hours_per_day": 18.6,
+      "board_power_watts": 68.4,
+      "step_time_s": 0.376,
+      "kwh_tariff_usd": 0.14
+    },
+    {
+      "trainer_slot": "trainer-10",
+      "gpu_class": "AMD Radeon RX 6600 (8 GB RDNA2 ROCm)",
+      "backend": "rocm",
+      "vram_mib": 8192,
+      "idle_hours_per_day": 18.9,
+      "board_power_watts": 121.5,
+      "step_time_s": 0.395,
+      "kwh_tariff_usd": 0.2
+    },
+    {
+      "trainer_slot": "trainer-11",
+      "gpu_class": "AMD Radeon RX 6700 XT (12 GB RDNA2 ROCm)",
+      "backend": "rocm",
+      "vram_mib": 12288,
+      "idle_hours_per_day": 15.9,
+      "board_power_watts": 168.0,
+      "step_time_s": 0.329,
+      "kwh_tariff_usd": 0.21
+    },
+    {
+      "trainer_slot": "trainer-12",
+      "gpu_class": "AMD Radeon RX 7600 (8 GB RDNA3 ROCm)",
+      "backend": "rocm",
+      "vram_mib": 8192,
+      "idle_hours_per_day": 19.1,
+      "board_power_watts": 136.7,
+      "step_time_s": 0.348,
+      "kwh_tariff_usd": 0.18
+    },
+    {
+      "trainer_slot": "trainer-13",
+      "gpu_class": "Apple M2 Pro (16 GB Unified Metal)",
+      "backend": "metal",
+      "vram_mib": 16384,
+      "idle_hours_per_day": 20.6,
+      "board_power_watts": 34.8,
+      "step_time_s": 0.442,
+      "kwh_tariff_usd": 0.23
+    },
+    {
+      "trainer_slot": "trainer-14",
+      "gpu_class": "Apple M3 Max (36 GB Unified Metal)",
+      "backend": "metal",
+      "vram_mib": 36864,
+      "idle_hours_per_day": 18.4,
+      "board_power_watts": 52.3,
+      "step_time_s": 0.278,
+      "kwh_tariff_usd": 0.24
+    }
+  ],
+  "passes_ps04_d3_gate": true,
+  "receipt_sha256": "6382412927120b00a48084bec8da28720d29dc1ccfc6e8f0224198dc2c39245d"
+}

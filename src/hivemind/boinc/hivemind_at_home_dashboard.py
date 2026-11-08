@@ -296,7 +296,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 "/paper",
             )
         )
-        response.headers["Content-Security-Policy"] = portal_csp(allow_sameorigin_frame)
+        if response.headers.get("X-HiveMind-UI") != "v3.2":
+            # v3.2 responses set their own, stricter policy (nonce scripts, no 'unsafe-inline'); never weaken it
+            response.headers["Content-Security-Policy"] = portal_csp(allow_sameorigin_frame)
         response.headers["X-Frame-Options"] = "SAMEORIGIN" if allow_sameorigin_frame else "DENY"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-HiveMind-Status"] = "proof-of-concept; send only public, non-sensitive data (no secrets, personal, private or enterprise data)"
@@ -7678,6 +7680,10 @@ def create_hivemind_at_home_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # v3.2 portal: registered first so that, with HIVEMIND_WEB_V32=1, it answers /, /auth, /login and /signup.
+    from hivemind.web_v32 import mount_web_v32
+
+    mount_web_v32(app)
 
     def _resolve_vault_path() -> Path:
         for cand in [
@@ -8882,6 +8888,10 @@ def create_hivemind_at_home_app(
         code_challenge: Optional[str] = None,
         redirect_uri: Optional[str] = None,
     ) -> JSONResponse:
+        # v3.2: the sandbox flow verified nothing with any provider and handed the PKCE verifier to the client. It is
+        # retired; real Google sign-in is /auth/google/start (server-side code flow, verified ID token).
+        if os.environ.get("HIVEMIND_LEGACY_SANDBOX_SSO", "") != "1":
+            raise HTTPException(status_code=410, detail="This sign-in flow is retired. Use /auth/google/start.")
         prov = provider.lower()
         if prov not in SUPPORTED_SSO_PROVIDERS:
             raise HTTPException(status_code=400, detail=f"Unsupported SSO provider '{provider}'")
@@ -8955,6 +8965,9 @@ def create_hivemind_at_home_app(
 
     @app.post("/api/v1/auth/sso/{provider}", response_class=JSONResponse)
     def api_auth_sso(provider: str, req: AuthSSORequest, request: Request) -> JSONResponse:
+        # v3.2: without verification by any provider this created accounts with points for anyone; retired.
+        if os.environ.get("HIVEMIND_LEGACY_SANDBOX_SSO", "") != "1":
+            raise HTTPException(status_code=410, detail="This sign-in flow is retired. Use /auth/google/start.")
         prov = provider.lower()
         if prov not in SUPPORTED_SSO_PROVIDERS:
             raise HTTPException(status_code=400, detail=f"Unsupported SSO provider '{provider}'")

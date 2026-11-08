@@ -101,8 +101,9 @@ def test_guest_user_lifecycle_and_upgrade() -> None:
     assert r_new.json()["authenticated"] is True
 
 
-def test_new_and_existing_users_across_all_sso_providers() -> None:
+def test_new_and_existing_users_across_all_sso_providers(monkeypatch) -> None:  # noqa: ANN001
     """Intensive Test: New User vs Existing User across Google, Reddit, GitHub, Steam, Epic Games, BOINC, Email & Magic Link."""
+    monkeypatch.setenv("HIVEMIND_LEGACY_SANDBOX_SSO", "1")  # exercises the retired sandbox SSO, off by default since v3.2
     app = create_hivemind_at_home_app()
     client = TestClient(app)
 
@@ -1437,8 +1438,9 @@ def test_intense_mvp_maintenance_mode_and_hiveminer_notification() -> None:
     assert tog_on.json()["active"] is True
 
 
-def test_core_mvp_4_sso_providers_pkce_s256_and_login_flow() -> None:
+def test_core_mvp_4_sso_providers_pkce_s256_and_login_flow(monkeypatch) -> None:  # noqa: ANN001
     """Verify Core MVP 4-SSO providers (Google, Reddit, Steam, GitHub) OAuth2 PKCE S256 authorize + login."""
+    monkeypatch.setenv("HIVEMIND_LEGACY_SANDBOX_SSO", "1")  # exercises the retired sandbox SSO, off by default since v3.2
     app = create_hivemind_at_home_app()
     client = TestClient(app)
 

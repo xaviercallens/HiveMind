@@ -740,6 +740,14 @@ class RouterStore:
         account_id = self._hmac_hex(handle)[:32]
         new_key = "hm-" + secrets.token_urlsafe(32)
         with self._tx() as conn:
+            self._ensure_auth_v32_tables(conn)
+            linked = conn.execute(
+                "SELECT account_id FROM identity_links WHERE subject_hmac=?", (self._hmac_hex(f"{provider}:{subject}"),)
+            ).fetchone()
+            if linked is not None:
+                # the provider identity was linked to an existing (e.g. e-mail/password) account by its owner
+                conn.execute("UPDATE accounts SET key_hash=? WHERE account_id=?", (self._hmac_hex(new_key), str(linked["account_id"])))
+                return str(linked["account_id"]), new_key, False
             row = conn.execute("SELECT role FROM accounts WHERE account_id=?", (account_id,)).fetchone()
             if row is not None:
                 conn.execute("UPDATE accounts SET key_hash=? WHERE account_id=?", (self._hmac_hex(new_key), account_id))
@@ -871,6 +879,118 @@ class RouterStore:
         # No account accepts an arbitrary password, and no failed check ever writes a new hash: a placeholder or missing
         # hash means the owner proves the account with its hm-... key and sets a password with ``set_password``.
         return True, False
+
+    # ---- v3.2: password reset and identity linking -------------------------------------------------------------------
+
+    PASSWORD_RESET_TTL_S: float = 1800.0
+
+    @staticmethod
+    def _ensure_auth_v32_tables(conn: sqlite3.Connection) -> None:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS password_resets(token_hmac TEXT PRIMARY KEY, account_id TEXT NOT NULL, "
+            "created_utc REAL NOT NULL, expires_utc REAL NOT NULL, used_utc REAL)"
+        )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS identity_links(subject_hmac TEXT PRIMARY KEY, provider TEXT NOT NULL, "
+            "account_id TEXT NOT NULL, linked_utc REAL NOT NULL)"
+        )
+
+    def account_id_for_email(self, email: str) -> str | None:
+        """The account whose stored e-mail is ``email`` (case-insensitive), or ``None``. Used only to address a reset
+        e-mail; the caller must answer identically whether or not an account exists."""
+        clean = (email or "").strip().lower()
+        if "@" not in clean or len(clean) > 254:
+            return None
+        with self._lock:
+            row = self._conn.execute("SELECT account_id FROM accounts WHERE lower(email)=? LIMIT 1", (clean,)).fetchone()
+            if row is not None:
+                return str(row["account_id"])
+            # previous users whose e-mail is only in the legacy credentials table (as either hash form)
+            try:
+                for ehash in (self._hmac_hex(f"email:{clean}"), self._hmac_hex(clean)):
+                    cred = self._conn.execute(
+                        "SELECT c.account_id FROM credentials c JOIN accounts a ON a.account_id = c.account_id WHERE c.email_hash=? LIMIT 1",
+                        (ehash,),
+                    ).fetchone()
+                    if cred is not None:
+                        return str(cred["account_id"])
+            except sqlite3.OperationalError:
+                pass
+            # previous users known by their legacy identity (the e-mail is recorded in LEGACY_KNOWN_USERS)
+            legacy = self._resolve_legacy_user(clean)
+            if legacy is not None and str(legacy.get("email", "")).lower() == clean:
+                by_handle = self._conn.execute(
+                    "SELECT account_id FROM accounts WHERE lower(handle)=lower(?) LIMIT 1", (str(legacy.get("handle", "")),)
+                ).fetchone()
+                if by_handle is not None:
+                    return str(by_handle["account_id"])
+        return None
+
+    def create_password_reset(self, account_id: str, now: float | None = None) -> str:
+        """Issue a single-use reset token for ``account_id`` (256 bits, stored only as an HMAC, valid 30 minutes).
+        Earlier unused tokens of the account are revoked."""
+        now = time.time() if now is None else now
+        token = secrets.token_urlsafe(32)
+        with self._tx() as conn:
+            self._ensure_auth_v32_tables(conn)
+            if conn.execute("SELECT 1 FROM accounts WHERE account_id=?", (account_id,)).fetchone() is None:
+                raise UnknownAccount(account_id)
+            conn.execute("DELETE FROM password_resets WHERE account_id=? AND used_utc IS NULL", (account_id,))
+            conn.execute(
+                "INSERT INTO password_resets(token_hmac, account_id, created_utc, expires_utc) VALUES (?,?,?,?)",
+                (self._hmac_hex(f"reset:{token}"), account_id, now, now + self.PASSWORD_RESET_TTL_S),
+            )
+        return token
+
+    def consume_password_reset(self, token: str, new_password: str, now: float | None = None) -> str:
+        """Set ``new_password`` for the account that owns a valid, unused, unexpired ``token``; mark it used and rotate the
+        account's API key so every earlier session and key stops working. Returns the account id.
+
+        ``InvalidCredentials`` for an unknown, used or expired token; ``ValueError`` for a weak password (the token is then
+        left unused)."""
+        now = time.time() if now is None else now
+        if not isinstance(new_password, str) or len(new_password) < 12 or len(new_password) > 256:
+            raise ValueError("password must be 12 to 256 characters")
+        if not isinstance(token, str) or not (20 <= len(token) <= 128):
+            raise InvalidCredentials("This reset link is invalid or has expired.")
+        token_hmac = self._hmac_hex(f"reset:{token}")
+        with self._tx() as conn:
+            self._ensure_auth_v32_tables(conn)
+            row = conn.execute(
+                "SELECT account_id, expires_utc, used_utc FROM password_resets WHERE token_hmac=?", (token_hmac,)
+            ).fetchone()
+            if row is None or row["used_utc"] is not None or float(row["expires_utc"]) < now:
+                raise InvalidCredentials("This reset link is invalid or has expired.")
+            account_id = str(row["account_id"])
+            conn.execute("UPDATE password_resets SET used_utc=? WHERE token_hmac=?", (now, token_hmac))
+        self.set_password(account_id, new_password)
+        self.rotate_key(account_id)
+        return account_id
+
+    def link_identity(self, account_id: str, provider: str, subject: str) -> None:
+        """Link a provider identity (already verified by the caller) to ``account_id`` so that signing in with the
+        provider opens that account. The caller must have proved ``account_id`` (its hm-... key).
+
+        ``HandleTaken`` if the identity is linked to another account or already owns a provider account of its own."""
+        if provider not in self._identity_providers and provider != "google":
+            raise ValueError(f"unknown identity provider {provider!r}")
+        subject_hmac = self._hmac_hex(f"{provider}:{subject}")
+        own_handle = f"{provider}.{subject_hmac[:32]}"
+        with self._tx() as conn:
+            self._ensure_auth_v32_tables(conn)
+            if conn.execute("SELECT 1 FROM accounts WHERE account_id=?", (account_id,)).fetchone() is None:
+                raise UnknownAccount(account_id)
+            existing = conn.execute("SELECT account_id FROM identity_links WHERE subject_hmac=?", (subject_hmac,)).fetchone()
+            if existing is not None:
+                if str(existing["account_id"]) == account_id:
+                    return
+                raise HandleTaken("this identity is already linked to another account")
+            if conn.execute("SELECT 1 FROM accounts WHERE handle=?", (own_handle,)).fetchone() is not None:
+                raise HandleTaken("this identity already has its own account; sign in with it")
+            conn.execute(
+                "INSERT INTO identity_links(subject_hmac, provider, account_id, linked_utc) VALUES (?,?,?,?)",
+                (subject_hmac, provider, account_id, time.time()),
+            )
 
     def set_password(self, account_id: str, password: str) -> None:
         """Set the password of ``account_id`` (salted PBKDF2-HMAC-SHA256, 200,000 iterations, ``salt:hash``).

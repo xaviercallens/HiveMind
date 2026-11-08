@@ -62,6 +62,7 @@ def test_dataset_mining_campaign_populates_la_ruche_and_dashboard(
     monkeypatch,  # noqa: ANN001
 ) -> None:
     """Verify end-to-end 8-domain Dataset Mining Campaign, La Ruche MoE export, and HiveMind@home FastAPI portal."""
+    monkeypatch.setenv("HIVEMIND_LEGACY_SANDBOX_SSO", "1")  # exercises the retired sandbox SSO, off by default since v3.2
     assert len(RUCHE_ALVEOLE_HEX_LAYOUT) == 8
     assert len(SCIENTIFIC_MINING_DOMAIN_CORPORA) == 8
 

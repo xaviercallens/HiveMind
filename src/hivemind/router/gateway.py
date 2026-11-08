@@ -63,6 +63,7 @@ from hivemind.router.accounts import (
     UnknownAccount,
     fit_loaded_models,
 )
+from hivemind.router import forwarded_client as _forwarded_client
 from hivemind.router.catalog import PREWIRED_PARTNER_MODELS, catalog_payload, normalize_model_alias
 from hivemind.router.google_auth import GoogleAuthError, GoogleIdTokenVerifier
 from hivemind.router.join_page import join_content_security_policy, pick_language, render_join_page
@@ -920,6 +921,8 @@ def create_router_app(
     starter_grants_per_ip_24h: int = 3,
     trusted_proxies: Sequence[str] = (),
     maintenance_notice: str | None = None,
+    reset_email_sender: Callable[[str, str], bool] | None = None,
+    reset_email_enabled: Callable[[], bool] | None = None,
 ) -> FastAPI:
     """Build the gateway app. ``resolver`` (host -> IP strings) is injectable for tests of the SSRF guard.
 
@@ -1069,7 +1072,15 @@ def create_router_app(
         return [ConsumerBid(a, p) for a, p in prices.items()]
 
     def client_key(request: Request) -> str:
-        """Rate-limit key: the TCP peer, or the XFF entry ``trusted_proxy_hops`` from the right when behind proxies."""
+        """Rate-limit key: the TCP peer, or the XFF entry ``trusted_proxy_hops`` from the right when behind proxies.
+
+        A request relayed by the web portal carries the end user's address in a header signed with the shared secret
+        (``forwarded_client``); when it verifies, each visitor gets their own bucket instead of sharing the portal's."""
+        forwarded = request.headers.get(_forwarded_client.HEADER, "")
+        if forwarded:
+            ip = _forwarded_client.verify(store._secret, forwarded, clock())
+            if ip is not None:
+                return f"portal:{ip}"
         if trusted_proxy_hops > 0:
             hops = [h.strip() for h in request.headers.get("x-forwarded-for", "").split(",") if h.strip()]
             if len(hops) >= trusted_proxy_hops:
@@ -2805,6 +2816,91 @@ def create_router_app(
         except ValueError:
             return _error_response(400, "The new password must be 12 to 256 characters.", "invalid_request_error", "weak_password")
         return JSONResponse({"status": "PASSWORD_SET", "handle": acct.handle}, headers={"Cache-Control": "no-store"})
+
+    # ---- v3.2: capabilities, password reset by e-mail, linking a Google identity to an existing account ---------------
+    from hivemind.router.password_reset_email import reset_email_configured, send_reset_email
+
+    _send_reset = reset_email_sender or send_reset_email
+    _reset_enabled = reset_email_enabled or reset_email_configured
+    reset_ip_limiter = SlidingWindowLimiter(5, 3600.0)
+    reset_email_limiter = SlidingWindowLimiter(3, 3600.0)
+    _RESET_ACCEPTED = {
+        "status": "RESET_REQUESTED",
+        "message": "If an account uses this e-mail address, a reset link is on its way. It is valid for 30 minutes.",
+    }
+
+    @app.get("/api/v1/auth/capabilities")
+    def auth_capabilities() -> JSONResponse:
+        """Sign-in methods that really work on this deployment; a client shows nothing else."""
+        return JSONResponse(
+            {
+                "object": "hivemind.auth_capabilities",
+                "password_login": True,
+                "password_reset_email": bool(_reset_enabled()),
+                "google": bool(google),
+                "google_client_id": google.client_id if google else None,
+                "change_password": True,
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/v1/auth/password-reset/request")
+    async def auth_password_reset_request(request: Request) -> JSONResponse:
+        """Always answers the same way, whether or not an account uses the e-mail, so it cannot be used to find accounts."""
+        data = await _parse_auth_payload(request)
+        email = str(data.get("email") or "").strip().lower()[:254]
+        now = clock()
+        if not reset_ip_limiter.allow(client_key(request), now):
+            return _error_response(429, "Too many reset requests; try again later.", "rate_limit_error", "rate_limited")
+        if not _reset_enabled():
+            return _error_response(503, "Password reset by e-mail is not available on this deployment yet.", "service_unavailable", "reset_email_not_configured")
+        if "@" in email and reset_email_limiter.allow(hashlib.sha256(email.encode("utf-8")).hexdigest(), now):
+            account_id = await run_in_threadpool(store.account_id_for_email, email)
+            if account_id is not None:
+                token = await run_in_threadpool(store.create_password_reset, account_id, now)
+                await run_in_threadpool(_send_reset, email, token)
+        return JSONResponse(_RESET_ACCEPTED, status_code=202, headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/v1/auth/password-reset/confirm")
+    async def auth_password_reset_confirm(request: Request) -> JSONResponse:
+        if not login_limiter.allow(client_key(request), clock()):
+            return _error_response(429, "Too many attempts; try again in a minute.", "rate_limit_error", "rate_limited")
+        data = await _parse_auth_payload(request)
+        token = str(data.get("token") or "")
+        new_password = str(data.get("new_password") or "")
+        try:
+            await run_in_threadpool(store.consume_password_reset, token, new_password, clock())
+        except InvalidCredentials:
+            return _error_response(400, "This reset link is invalid or has expired. Ask for a new one.", "invalid_request_error", "invalid_reset_token")
+        except ValueError:
+            return _error_response(400, "The new password must be 12 to 256 characters.", "invalid_request_error", "weak_password")
+        return JSONResponse(
+            {"status": "PASSWORD_RESET", "message": "Your password is changed. Sign in with it; your previous API key no longer works."},
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/api/v1/auth/link/google")
+    def auth_link_google(request: Request, payload: GoogleRegisterRequest) -> JSONResponse:
+        """Link a Google identity to the account whose hm-... key is presented, so 'Sign in with Google' opens it."""
+        if google is None:
+            return _error_response(503, "Sign in with Google is not enabled on this gateway.", "service_unavailable", "google_signin_disabled")
+        if not register_limiter.allow(client_key(request), clock()):
+            return _error_response(429, "Too many attempts; try again in a minute.", "rate_limit_error", "rate_limited")
+        scheme, _, token = request.headers.get("authorization", "").partition(" ")
+        key = token.strip() if scheme.lower() == "bearer" else ""
+        acct = store.authenticate(key) if key.startswith("hm-") else None
+        if acct is None:
+            return _error_response(401, "A valid hm-... API key is required.", "authentication_error", "invalid_api_key")
+        try:
+            identity = google.verify(payload.id_token)
+        except GoogleAuthError as exc:
+            LOGGER.info("google link refused: %s", exc.code)  # reason code only: never the token
+            return _error_response(401, "Google sign-in failed. Sign in again.", "authentication_error", f"google_{exc.code}")
+        try:
+            store.link_identity(acct.account_id, "google", identity.subject)
+        except HandleTaken as exc:
+            return _error_response(409, str(exc), "invalid_request_error", "identity_taken")
+        return JSONResponse({"status": "GOOGLE_LINKED", "handle": acct.handle}, headers={"Cache-Control": "no-store"})
 
     @app.post("/signup", response_class=HTMLResponse)
     @app.post("/register", response_class=HTMLResponse)

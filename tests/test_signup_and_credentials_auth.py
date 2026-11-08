@@ -475,6 +475,7 @@ def test_oct25_credentials_120k_pbkdf2_email_hash_and_https_api_base(monkeypatch
 
 def test_comprehensive_sso_pkce_s256_ownership_and_persistence_dashboard(tmp_path: Path, monkeypatch) -> None:
     """Comprehensive E2E test for SSO PKCE S256, lookalike protection, token restoration, and persistence on Dashboard."""
+    monkeypatch.setenv("HIVEMIND_LEGACY_SANDBOX_SSO", "1")  # exercises the retired sandbox SSO, off by default since v3.2
     import base64
     import hashlib
     from hivemind.boinc.hivemind_at_home_dashboard import create_hivemind_at_home_app

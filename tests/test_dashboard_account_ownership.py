@@ -26,7 +26,7 @@ def test_owner_account_cannot_be_opened_by_handle_or_email(tmp_path: Path, ident
         ("/api/v1/auth/v1-migrate", {"handle_or_email": ident}),
     ):
         r = client.post(route, json=body)
-        assert r.status_code in (401, 404, 422), (route, r.status_code)
+        assert r.status_code in (401, 404, 410, 422), (route, r.status_code)  # 410: the sandbox SSO is retired in v3.2
         assert "MasterCommander" not in r.text and "admin:all" not in r.text, route
 
 
@@ -79,7 +79,8 @@ def test_upgrade_guest_cannot_take_an_existing_handle_or_mint_points(tmp_path: P
     assert again.status_code == 401
 
 
-def test_sso_force_new_cannot_overwrite_an_existing_handle(tmp_path: Path) -> None:
+def test_sso_force_new_cannot_overwrite_an_existing_handle(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setenv("HIVEMIND_LEGACY_SANDBOX_SSO", "1")  # the legacy flow must stay safe even when re-enabled
     client = _client(tmp_path)
     client.post("/api/v1/auth/register", json={"handle": "victim02", "email": "v2@example.org"})
     for handle in ("victim02", "clark719664"):

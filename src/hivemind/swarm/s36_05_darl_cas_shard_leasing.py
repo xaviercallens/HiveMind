@@ -46,20 +46,40 @@ class DARLLedgerSnapshot:
 
 def _finite(name: str, value: float) -> float:
     """Every lease decision compares times; with NaN each comparison is False, so a lease would never expire or be reclaimed."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be a finite real number, got {value!r}")
     v = float(value)
     if not math.isfinite(v):
         raise ValueError(f"{name} must be finite, got {value!r}")
     return v
 
 
+def _validate_darl_id(val: object, name: str) -> str:
+    if not isinstance(val, str) or not val.strip():
+        raise ValueError(f"{name} must be a non-empty string")
+    if any(ord(c) < 32 or ord(c) == 127 for c in val):
+        raise ValueError(f"{name} contains forbidden control characters")
+    return val
+
+
 class DARLShardLeaseCoordinator:
     """Heartbeat-backed CAS shard lease manager guaranteeing zero duplicate training under churn."""
 
     def __init__(self, shard_ids: list[str], *, alpha: float = 4.0) -> None:
-        if not shard_ids or len(set(shard_ids)) != len(shard_ids):
+        if (
+            isinstance(shard_ids, (str, bytes))
+            or not isinstance(shard_ids, (list, tuple))
+            or not shard_ids
+            or any(not isinstance(s, str) or not s.strip() or any(ord(c) < 32 or ord(c) == 127 for c in s) for s in shard_ids)
+            or len(set(shard_ids)) != len(shard_ids)
+        ):
             raise ValueError("shard_ids must be a non-empty list of unique shard identifiers")
         # alpha=inf would make every lease immortal; NaN or a non-positive alpha was silently clamped to a 1 s TTL.
-        if not (math.isfinite(float(alpha)) and float(alpha) > 0.0):
+        if (
+            isinstance(alpha, bool)
+            or not isinstance(alpha, (int, float))
+            or not (math.isfinite(float(alpha)) and float(alpha) > 0.0)
+        ):
             raise ValueError(f"alpha must be finite and > 0, got {alpha!r}")
         self.alpha = float(alpha)
         self._pending_shards: list[str] = list(shard_ids)
@@ -74,7 +94,13 @@ class DARLShardLeaseCoordinator:
         self.duplicate_commits_blocked = 0
 
     def compute_ttl_s(self, *, t_step_s: float, rtt_s: float) -> float:
-        return max(1.0, self.alpha * _finite("t_step_s", t_step_s) + _finite("rtt_s", rtt_s))
+        t_step = _finite("t_step_s", t_step_s)
+        rtt = _finite("rtt_s", rtt_s)
+        if t_step <= 0.0:
+            raise ValueError("t_step_s must be positive")
+        if rtt < 0.0:
+            raise ValueError("rtt_s must be non-negative")
+        return max(1.0, self.alpha * t_step + rtt)
 
     def grant_lease(
         self,
@@ -85,6 +111,7 @@ class DARLShardLeaseCoordinator:
         rtt_s: float = 0.08,
     ) -> ShardLeaseRecord | None:
         """Grant the next available unassigned shard to ``worker_id``."""
+        _validate_darl_id(worker_id, "worker_id")
         now_s = _finite("now_s", now_s)
         self.reclaim_expired(now_s=now_s)
         while self._pending_shards:
@@ -117,6 +144,9 @@ class DARLShardLeaseCoordinator:
         t_step_s: float = 2.0,
         rtt_s: float = 0.08,
     ) -> bool:
+        if isinstance(lease_id, bool) or not isinstance(lease_id, int) or lease_id < 1:
+            raise ValueError("lease_id must be a positive integer")
+        _validate_darl_id(worker_id, "worker_id")
         now_s = _finite("now_s", now_s)
         rec = self._leases.get(lease_id)
         if rec is None or rec.status != "ACTIVE" or rec.worker_id != worker_id:
@@ -143,6 +173,9 @@ class DARLShardLeaseCoordinator:
 
     def commit_lease(self, lease_id: int, worker_id: str, *, now_s: float) -> bool:
         """Commit a completed shard lease; rejects expired or stale/duplicate commits."""
+        if isinstance(lease_id, bool) or not isinstance(lease_id, int) or lease_id < 1:
+            raise ValueError("lease_id must be a positive integer")
+        _validate_darl_id(worker_id, "worker_id")
         now_s = _finite("now_s", now_s)
         self.reclaim_expired(now_s=now_s)
         rec = self._leases.get(lease_id)

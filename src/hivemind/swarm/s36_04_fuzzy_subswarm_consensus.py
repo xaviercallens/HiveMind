@@ -55,7 +55,23 @@ def hypergeometric_collusion_probability(
     supermajority_m: int,
 ) -> float:
     """Compute exact probability that >= m out of k sampled nodes are Byzantine without replacement."""
-    if total_nodes_n <= 0 or subswarm_size_k <= 0 or subswarm_size_k > total_nodes_n:
+    for name, val in (
+        ("total_nodes_n", total_nodes_n),
+        ("byzantine_nodes_b", byzantine_nodes_b),
+        ("subswarm_size_k", subswarm_size_k),
+        ("supermajority_m", supermajority_m),
+    ):
+        if isinstance(val, bool) or not isinstance(val, int):
+            raise ValueError(f"{name} must be an integer")
+    if (
+        total_nodes_n <= 0
+        or subswarm_size_k <= 0
+        or subswarm_size_k > total_nodes_n
+        or byzantine_nodes_b < 0
+        or byzantine_nodes_b > total_nodes_n
+        or supermajority_m <= 0
+        or supermajority_m > subswarm_size_k
+    ):
         raise ValueError("Invalid population or sample size")
     if byzantine_nodes_b < supermajority_m:
         return 0.0
@@ -80,6 +96,20 @@ class LocalizedFuzzySubSwarmConsensus:
         reputation_registry: Mapping[str, float] | None = None,
         default_unregistered_reputation: float = 0.05,
     ) -> None:
+        if (
+            isinstance(min_fuzzy_quorum, bool)
+            or not isinstance(min_fuzzy_quorum, (int, float))
+            or not (0.0 < float(min_fuzzy_quorum) <= 1.0)
+        ):
+            raise ValueError("min_fuzzy_quorum must be a finite number in (0, 1]")
+        if (
+            isinstance(default_unregistered_reputation, bool)
+            or not isinstance(default_unregistered_reputation, (int, float))
+            or not (0.0 < float(default_unregistered_reputation) <= 1.0)
+        ):
+            raise ValueError("default_unregistered_reputation must be a finite number in (0, 1]")
+        if reputation_registry is not None and not isinstance(reputation_registry, Mapping):
+            raise ValueError("reputation_registry must be a mapping or None")
         self.min_fuzzy_quorum = float(min_fuzzy_quorum)
         self.reputation_registry: dict[str, float] | None = (
             {str(k): float(v) for k, v in reputation_registry.items()}
@@ -97,17 +127,43 @@ class LocalizedFuzzySubSwarmConsensus:
         reputation_registry: Mapping[str, float] | None = None,
     ) -> FuzzySubSwarmConsensusReport:
         """Compute waggle-dance weighted fuzzy agreement across 15–20 distinct neighboring nodes."""
+        if isinstance(votes, (str, bytes)) or not isinstance(votes, Sequence):
+            raise ValueError("votes must be a sequence of SubSwarmVote")
         k = len(votes)
         if not (MIN_SUBSWARM_NODES <= k <= MAX_SUBSWARM_NODES):
             raise ValueError(f"Sub-swarm size must be in [{MIN_SUBSWARM_NODES}, {MAX_SUBSWARM_NODES}], got {k}")
+        if isinstance(total_network_nodes_n, bool) or not isinstance(total_network_nodes_n, int) or total_network_nodes_n < k:
+            raise ValueError("total_network_nodes_n must be an integer >= len(votes)")
+        if (
+            isinstance(assumed_byzantine_fraction, bool)
+            or not isinstance(assumed_byzantine_fraction, (int, float))
+            or not (0.0 <= float(assumed_byzantine_fraction) <= 1.0)
+        ):
+            raise ValueError("assumed_byzantine_fraction must be a finite number in [0, 1]")
+        if reputation_registry is not None and not isinstance(reputation_registry, Mapping):
+            raise ValueError("reputation_registry must be a mapping or None")
 
         seen_nodes: set[str] = set()
         for v in votes:
-            nid = str(v.node_id).strip()
+            if not isinstance(v, SubSwarmVote):
+                raise ValueError("Each vote must be a SubSwarmVote instance")
+            if not isinstance(v.node_id, str) or any(ord(c) < 32 or ord(c) == 127 for c in v.node_id):
+                raise ValueError("Vote node_id must be a clean string")
+            nid = v.node_id.strip()
             if not nid:
                 raise ValueError("Vote node_id must be non-empty")
             if nid in seen_nodes:
                 raise ValueError(f"Duplicate node_id {nid!r} in sub-swarm votes")
+            if (
+                not isinstance(v.answer_digest, str)
+                or not v.answer_digest.strip()
+                or any(ord(c) < 32 or ord(c) == 127 for c in v.answer_digest)
+            ):
+                raise ValueError("Vote answer_digest must be a non-empty clean string")
+            if isinstance(v.semantic_confidence, bool) or not isinstance(v.semantic_confidence, (int, float)):
+                raise ValueError("Vote semantic_confidence must be a real number")
+            if isinstance(v.observer_reputation, bool) or not isinstance(v.observer_reputation, (int, float)):
+                raise ValueError("Vote observer_reputation must be a real number")
             seen_nodes.add(nid)
 
         reg = reputation_registry if reputation_registry is not None else self.reputation_registry

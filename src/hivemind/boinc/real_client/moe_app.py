@@ -37,6 +37,8 @@ LORA_TARGETS = ("q_proj", "k_proj", "v_proj", "o_proj")
 
 
 def tokens_sha(tokens: list[list[int]]) -> str:
+    if isinstance(tokens, (str, bytes)) or not isinstance(tokens, list):
+        raise ValueError("tokens must be a list of token-id lists")
     return hashlib.sha256(json.dumps(tokens, separators=(",", ":")).encode()).hexdigest()
 
 
@@ -53,6 +55,14 @@ def build_mixed_domain_train_tokens(
     Replaces ``round(len(target_tokens) * replay_ratio)`` sequences at deterministic indices with sequences sampled
     uniformly across non-target domains in ``replay_pools_by_domain``.
     """
+    if isinstance(target_tokens, (str, bytes)) or not isinstance(target_tokens, list):
+        raise ValueError("target_tokens must be a list of token-id sequences")
+    if not isinstance(target_domain, str) or not target_domain.strip():
+        raise ValueError("target_domain must be a non-empty string")
+    if isinstance(replay_ratio, bool) or not isinstance(replay_ratio, (int, float)) or not math.isfinite(float(replay_ratio)):
+        raise ValueError("replay_ratio must be a finite number")
+    if isinstance(rng_seed, bool) or not isinstance(rng_seed, int):
+        raise ValueError("rng_seed must be an integer")
     if not target_tokens or not replay_pools_by_domain or replay_ratio <= 0.0:
         return [list(seq) for seq in target_tokens]
     other_domains = sorted(d for d, pool in replay_pools_by_domain.items() if d != target_domain and pool)
@@ -82,6 +92,23 @@ def cosine_segment_lr(
     min_lr_scale: float = 0.2,
 ) -> float:
     """Cosine learning-rate schedule across chained BOINC QLoRA rounds and inner segments."""
+    if isinstance(base_lr, bool) or not isinstance(base_lr, (int, float)) or not math.isfinite(float(base_lr)) or float(base_lr) <= 0.0:
+        raise ValueError("base_lr must be a positive finite number")
+    for iname, ival, min_v in (
+        ("segment_idx", segment_idx, 0),
+        ("total_segments", total_segments, 1),
+        ("round_idx", round_idx, 0),
+        ("total_rounds", total_rounds, 1),
+    ):
+        if isinstance(ival, bool) or not isinstance(ival, int) or ival < min_v:
+            raise ValueError(f"{iname} must be an integer >= {min_v}")
+    if (
+        isinstance(min_lr_scale, bool)
+        or not isinstance(min_lr_scale, (int, float))
+        or not math.isfinite(float(min_lr_scale))
+        or not (0.0 <= float(min_lr_scale) <= 1.0)
+    ):
+        raise ValueError("min_lr_scale must be a finite number in [0.0, 1.0]")
     tot_steps = max(1, int(total_rounds) * max(1, int(total_segments)))
     cur_step = min(tot_steps, max(0, int(round_idx) * max(1, int(total_segments)) + int(segment_idx)))
     cosine = 0.5 * (1.0 + math.cos(math.pi * cur_step / tot_steps))
@@ -256,6 +283,12 @@ def infer(spec: dict[str, Any], adapter_state: dict[str, Any]) -> dict[str, Any]
 def gpu_gate(spec: dict[str, Any], mode: str, have_mb: int) -> str | None:
     """Why this host must not run the workunit, or None. The scheduler should never send a big workunit to a small GPU, but a
     mis-registered host must fail loudly rather than run out of memory halfway through."""
+    if not isinstance(spec, dict):
+        raise TypeError("spec must be a dict")
+    if not isinstance(mode, str) or not mode.strip():
+        raise ValueError("mode must be a non-empty string")
+    if isinstance(have_mb, bool) or not isinstance(have_mb, int) or have_mb < 0:
+        raise ValueError("have_mb must be a non-negative integer")
     if mode != "train":
         return None
     if spec.get("app", TRAIN_APP) not in TRAIN_APPS:

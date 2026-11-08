@@ -30,11 +30,18 @@ EPS = DeterministicSpotCheckValidator().tolerance_eps
 
 
 def _reject(wu: str, host: str, reason: str, detail: dict[str, Any] | None = None) -> Verdict:
+    for fname, fval in (("wu", wu), ("host", host), ("reason", reason)):
+        if not isinstance(fval, str) or not fval.strip():
+            raise ValueError(f"{fname} must be a non-empty string")
+    if detail is not None and not isinstance(detail, dict):
+        raise TypeError("detail must be a dict or None")
     g = verified_credit(CreditClaim(host, wu, 0.0, 1.0, 1.0, False, False)).to_dict()
     return Verdict(wu, host, False, reason, None, None, g, detail or {})
 
 
 def _spec_flops_bound_train(spec: dict[str, Any]) -> float:
+    if not isinstance(spec, dict):
+        raise TypeError("spec must be a dict")
     for key in ("flops_bound", "rsc_fpops_est", "max_flops"):
         val = spec.get(key)
         if isinstance(val, (int, float)) and not isinstance(val, bool) and math.isfinite(val) and float(val) > 0.0:
@@ -50,6 +57,10 @@ def _spec_flops_bound_train(spec: dict[str, Any]) -> float:
 
 
 def _spec_flops_bound_infer(spec: dict[str, Any], completions: list[dict[str, Any]]) -> float:
+    if not isinstance(spec, dict):
+        raise TypeError("spec must be a dict")
+    if not isinstance(completions, list):
+        raise TypeError("completions must be a list of completion dicts")
     for key in ("flops_bound", "rsc_fpops_est", "max_flops"):
         val = spec.get(key)
         if isinstance(val, (int, float)) and not isinstance(val, bool) and math.isfinite(val) and float(val) > 0.0:
@@ -59,6 +70,8 @@ def _spec_flops_bound_infer(spec: dict[str, Any], completions: list[dict[str, An
 
 
 def _resolve_server_elapsed(spec: dict[str, Any], server_elapsed_seconds: float | None) -> float | None:
+    if not isinstance(spec, dict):
+        raise TypeError("spec must be a dict")
     cand = server_elapsed_seconds if server_elapsed_seconds is not None else spec.get("server_elapsed_seconds")
     if isinstance(cand, (int, float)) and not isinstance(cand, bool) and math.isfinite(cand) and float(cand) > 0.0:
         return float(cand)

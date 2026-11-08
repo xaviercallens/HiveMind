@@ -7,6 +7,7 @@ Nothing here touches a system BOINC install: the client binary is run by the cur
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import secrets
@@ -24,17 +25,25 @@ APP_FILE = f"{APP_NAME}_{APP_VERSION}_{PLATFORM}"
 
 def project_dir_name(master_url: str) -> str:
     """``escape_project_url`` from ``lib/url.cpp``: drop the scheme, non-[alnum . - _] -> ``_``, drop one trailing ``_``."""
+    if not isinstance(master_url, str) or not master_url.strip():
+        raise ValueError("master_url must be a non-empty string")
     rest = master_url.split("://", 1)[-1]
     out = re.sub(r"[^A-Za-z0-9._-]", "_", rest)
     return out[:-1] if out.endswith("_") else out
 
 
 def toy_app(python: str = "python3") -> dict[str, Any]:
+    if not isinstance(python, str) or not python.strip():
+        raise ValueError("python must be a non-empty string")
     return {"name": APP_NAME, "version": APP_VERSION, "python": python, "module": "hivemind.boinc.real_client.app", "args": [], "env": {}, "gpu_ram_mb": 1000}
 
 
 def moe_apps(venv_python: str, gpu_ram_mb: int = 3600) -> list[dict[str, Any]]:
     """The QLoRA MoE training and batch-inference apps; they need the venv with peft + bitsandbytes."""
+    if not isinstance(venv_python, str) or not venv_python.strip():
+        raise ValueError("venv_python must be a non-empty string")
+    if isinstance(gpu_ram_mb, bool) or not isinstance(gpu_ram_mb, int) or gpu_ram_mb < 1:
+        raise ValueError("gpu_ram_mb must be an integer >= 1")
     env = {"HF_HUB_OFFLINE": "1"}
     return [
         {"name": "hivemind_qlora_moe", "version": 100, "python": venv_python, "module": "hivemind.boinc.real_client.moe_app", "args": ["--mode", "train"], "env": env, "gpu_ram_mb": gpu_ram_mb},
@@ -54,6 +63,14 @@ def prepare_data_dir(
 ) -> dict[str, Any]:
     """Client data dir. ``install_apps=False`` writes no ``app_info.xml``: the client then fetches the project's
     signed app versions itself (use with a real server and the ``authenticator`` its web stack returned)."""
+    if not isinstance(master_url, str) or not master_url.strip():
+        raise ValueError("master_url must be a non-empty string")
+    if not isinstance(python, str) or not python.strip():
+        raise ValueError("python must be a non-empty string")
+    if isinstance(gpu_flops, bool) or not isinstance(gpu_flops, (int, float)) or not math.isfinite(float(gpu_flops)) or float(gpu_flops) <= 0.0:
+        raise ValueError("gpu_flops must be a positive finite number")
+    if not isinstance(install_apps, bool):
+        raise ValueError("install_apps must be a bool")
     data_dir.mkdir(parents=True, exist_ok=True)
     pdir = data_dir / "projects" / project_dir_name(master_url)
     pdir.mkdir(parents=True, exist_ok=True)
@@ -107,6 +124,8 @@ def prepare_data_dir(
 
 class Client:
     def __init__(self, boinc_bin: Path, lib_dir: Path, data_dir: Path, rpc_port: int) -> None:
+        if isinstance(rpc_port, bool) or not isinstance(rpc_port, int) or not (1 <= rpc_port <= 65535):
+            raise ValueError("rpc_port must be an integer in [1, 65535]")
         self.bin, self.lib, self.dir, self.port = boinc_bin, lib_dir, data_dir, rpc_port
         self.proc: subprocess.Popen | None = None
         self.log_path = data_dir / "client_stdout.log"

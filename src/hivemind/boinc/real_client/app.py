@@ -15,6 +15,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import math
 import os
 import re
 import sys
@@ -29,6 +30,8 @@ VALIDATOR_FIXTURE_ONLY = True
 
 def resolve_filename(logical: str, base: Path | None = None) -> Path:
     """Equivalent of ``boinc_resolve_filename``: follow a symlink or a ``<soft_link>`` file."""
+    if not isinstance(logical, str) or not logical.strip() or "\x00" in logical or ".." in Path(logical).parts:
+        raise ValueError("logical must be a safe non-empty filename without '..' traversal")
     p = (base or Path.cwd()) / logical
     if p.is_symlink():
         return Path(os.path.realpath(p))
@@ -40,6 +43,10 @@ def resolve_filename(logical: str, base: Path | None = None) -> Path:
 
 
 def class_fingerprint(device: str, dtype: str = "fp32") -> dict[str, Any]:
+    if device not in ("cuda", "cpu"):
+        raise ValueError(f"device must be 'cuda' or 'cpu', got {device!r}")
+    if not isinstance(dtype, str) or not dtype.strip():
+        raise ValueError("dtype must be a non-empty string")
     import torch
 
     name = torch.cuda.get_device_name(0).replace(" ", "_") if device == "cuda" else "cpu_x86_64"
@@ -53,6 +60,17 @@ def class_fingerprint(device: str, dtype: str = "fp32") -> dict[str, Any]:
 
 
 def _build(spec: dict[str, Any], device: str):
+    if not isinstance(spec, dict):
+        raise TypeError("spec must be a dict")
+    if device not in ("cuda", "cpu"):
+        raise ValueError(f"device must be 'cuda' or 'cpu', got {device!r}")
+    for iname in ("d_in", "d_out", "rank", "batch", "steps"):
+        ival = spec.get(iname)
+        if isinstance(ival, bool) or not isinstance(ival, int) or ival < 1:
+            raise ValueError(f"spec[{iname!r}] must be an integer >= 1")
+    seed_val = spec.get("seed")
+    if isinstance(seed_val, bool) or not isinstance(seed_val, int):
+        raise ValueError("spec['seed'] must be an integer")
     import torch
 
     g = torch.Generator(device="cpu").manual_seed(int(spec["seed"]))
@@ -89,6 +107,20 @@ def run(
     ``crash_after_step`` simulates preemption; ``inject_fault`` adds that much noise to the reported adapter, a
     red-team control standing in for a cheating volunteer (the server must refuse such a result).
     """
+    if not isinstance(spec, dict):
+        raise TypeError("spec must be a dict")
+    if crash_after_step is not None and (
+        isinstance(crash_after_step, bool) or not isinstance(crash_after_step, int) or crash_after_step < 1
+    ):
+        raise ValueError("crash_after_step must be an integer >= 1 or None")
+    if isinstance(inject_fault, bool) or not isinstance(inject_fault, (int, float)) or not math.isfinite(float(inject_fault)):
+        raise ValueError("inject_fault must be a finite number")
+    lr_val = spec.get("lr")
+    if isinstance(lr_val, bool) or not isinstance(lr_val, (int, float)) or not math.isfinite(float(lr_val)) or float(lr_val) <= 0.0:
+        raise ValueError("spec['lr'] must be a positive finite number")
+    every_val = spec.get("spot_check_interval")
+    if isinstance(every_val, bool) or not isinstance(every_val, int) or every_val < 1:
+        raise ValueError("spec['spot_check_interval'] must be an integer >= 1")
     import torch
 
     torch.use_deterministic_algorithms(True)
@@ -158,6 +190,8 @@ def boinc_finish(status: int, cwd: Path | None = None) -> None:
     Without this file the client treats an exit as premature and restarts the task, so every BOINC app, API
     linked or not, must leave it behind.
     """
+    if isinstance(status, bool) or not isinstance(status, int):
+        raise ValueError("status must be an integer")
     (cwd or Path.cwd()).joinpath("boinc_finish_called").write_text(f"{status}\n")
 
 

@@ -218,6 +218,19 @@ def evaluate_wave3_promotion_gates(
     max_p_value: float = 0.01,
 ) -> Dict[str, Any]:
     """Evaluate Wave 3 Scientific MoE Bee promotion Gates G1-G3 (`candidate -> shadow`)."""
+    for name, val in (
+        ("in_domain_acc", in_domain_acc),
+        ("base_acc", base_acc),
+        ("cross_domain_acc", cross_domain_acc),
+        ("mcnemar_p_value", mcnemar_p_value),
+    ):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or not (0.0 <= float(val) <= 1.0):
+            raise ValueError(f"{name} must be finite in [0, 1], got {val!r}")
+    for name, val in (("min_lift", min_lift), ("max_p_value", max_p_value)):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or not (0.0 < float(val) <= 1.0):
+            raise ValueError(f"{name} must be finite in (0, 1], got {val!r}")
+    if isinstance(wrong_verified_count, bool) or not isinstance(wrong_verified_count, int) or wrong_verified_count < 0:
+        raise ValueError(f"wrong_verified_count must be an integer >= 0, got {wrong_verified_count!r}")
     in_margin = float(in_domain_acc) - float(base_acc)
     cross_margin = float(in_domain_acc) - float(cross_domain_acc)
     p_val = float(mcnemar_p_value)
@@ -286,7 +299,7 @@ class ExpertRecord:
     history: Tuple[Tuple[str, str, str], ...] = ()
 
     def __post_init__(self) -> None:
-        if not self.expert_id or not self.cluster_id or not self.base_model_id:
+        if not self.expert_id.strip() or not self.cluster_id.strip() or not self.base_model_id.strip():
             raise ValueError("expert_id, cluster_id and base_model_id must be non-empty")
         if self.kind not in EXPERT_KINDS:
             raise ValueError(f"unknown expert kind {self.kind!r}; expected one of {sorted(EXPERT_KINDS)}")
@@ -598,7 +611,7 @@ class AdapterFootprint:
     def __post_init__(self) -> None:
         if isinstance(self.size_mib, bool) or not isinstance(self.size_mib, int) or self.size_mib <= 0:
             raise ValueError("size_mib must be an integer > 0")
-        if not self.base_model_id:
+        if not self.base_model_id.strip():
             raise ValueError("base_model_id must be non-empty")
 
 
@@ -616,7 +629,7 @@ class ServingNode:
     max_lora_slots: int
 
     def __post_init__(self) -> None:
-        if not self.node_id or not self.base_model_id:
+        if not self.node_id.strip() or not self.base_model_id.strip():
             raise ValueError("node_id and base_model_id must be non-empty")
         for name in ("vram_mib", "base_resident_mib", "max_lora_slots"):
             value = getattr(self, name)

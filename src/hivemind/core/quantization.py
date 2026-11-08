@@ -9,6 +9,7 @@ Windows pagefile exhaustion on low-space C: drives while executing 100% on the l
 from __future__ import annotations
 
 import hashlib
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -97,6 +98,12 @@ def quantize_tensor_nf4_double_quant(
     Returns both the compact packed 4-bit `NF4QuantState` (0.515 bytes/param) and the
     reconstructed NF4 weight tensor for fast PEFT Linear forward passes on Turing/Ampere GPUs.
     """
+    if isinstance(block_size, bool) or not isinstance(block_size, int) or block_size < 1:
+        raise ValueError(f"block_size must be an integer >= 1, got {block_size!r}")
+    if weight.numel() == 0:
+        raise ValueError("weight must be non-empty")
+    if not bool(torch.isfinite(weight).all().item()):
+        raise ValueError("weight must contain only finite values")
     orig_shape = tuple(weight.shape)
     orig_device = weight.device
     orig_dtype = weight.dtype
@@ -177,6 +184,12 @@ def create_lora_config(
     lora_dropout: float = 0.0,
 ) -> LoraConfig:
     """Create Rank-r LoRA configuration targeting all 7 Transformer linear projections."""
+    if isinstance(rank_r, bool) or not isinstance(rank_r, int) or rank_r < 1:
+        raise ValueError(f"rank_r must be an integer >= 1, got {rank_r!r}")
+    if isinstance(lora_alpha, bool) or not isinstance(lora_alpha, (int, float)) or not math.isfinite(float(lora_alpha)) or lora_alpha <= 0:
+        raise ValueError(f"lora_alpha must be finite and > 0, got {lora_alpha!r}")
+    if isinstance(lora_dropout, bool) or not isinstance(lora_dropout, (int, float)) or not math.isfinite(float(lora_dropout)) or not (0.0 <= float(lora_dropout) < 1.0):
+        raise ValueError(f"lora_dropout must be finite in [0, 1), got {lora_dropout!r}")
     from peft import LoraConfig, TaskType
 
     return LoraConfig(
@@ -506,9 +519,16 @@ def extract_lora_state_dict(model: nn.Module) -> dict[str, torch.Tensor]:
 
 def load_lora_state_dict(model: nn.Module, lora_state: dict[str, torch.Tensor]) -> None:
     """In-place load of LoRA parameter dictionary into the active model."""
+    for name, tensor in lora_state.items():
+        if not isinstance(tensor, torch.Tensor) or not bool(torch.isfinite(tensor).all().item()):
+            raise ValueError(f"lora_state[{name!r}] must be a finite torch.Tensor")
     with torch.no_grad():
         for name, param in model.named_parameters():
             if name in lora_state:
+                if lora_state[name].shape != param.shape:
+                    raise ValueError(
+                        f"Shape mismatch loading {name!r}: {tuple(lora_state[name].shape)} vs {tuple(param.shape)}"
+                    )
                 param.copy_(lora_state[name].to(device=param.device, dtype=param.dtype))
 
 

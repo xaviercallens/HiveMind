@@ -42,12 +42,23 @@ class HiveMindWorkerNode:
         error_feedback_stale_decay: float = 1.0,
         error_feedback_max_residual_norm: float | None = None,
     ) -> None:
-        if not math.isfinite(float(account_spend_usd)) or float(account_spend_usd) < 0.0:
+        if not isinstance(worker_id, str) or not worker_id.strip():
+            raise ValueError("worker_id must be a non-empty string")
+        if not isinstance(steam_id64, str) or not steam_id64.strip():
+            raise ValueError("steam_id64 must be a non-empty string")
+        if not isinstance(persona_name, str) or not persona_name.strip():
+            raise ValueError("persona_name must be a non-empty string")
+        if not isinstance(enable_error_feedback, bool):
+            raise ValueError("enable_error_feedback must be a boolean")
+        if isinstance(account_spend_usd, bool) or not isinstance(account_spend_usd, (int, float)) or not math.isfinite(float(account_spend_usd)) or float(account_spend_usd) < 0.0:
             raise ValueError("account_spend_usd must be finite and >= 0")
-        if not math.isfinite(float(error_feedback_stale_decay)) or float(error_feedback_stale_decay) <= 0.0:
+        if isinstance(error_feedback_stale_decay, bool) or not isinstance(error_feedback_stale_decay, (int, float)) or not math.isfinite(float(error_feedback_stale_decay)) or float(error_feedback_stale_decay) <= 0.0:
             raise ValueError("error_feedback_stale_decay must be finite and > 0")
         if error_feedback_max_residual_norm is not None and (
-            not math.isfinite(float(error_feedback_max_residual_norm)) or float(error_feedback_max_residual_norm) <= 0.0
+            isinstance(error_feedback_max_residual_norm, bool)
+            or not isinstance(error_feedback_max_residual_norm, (int, float))
+            or not math.isfinite(float(error_feedback_max_residual_norm))
+            or float(error_feedback_max_residual_norm) <= 0.0
         ):
             raise ValueError("error_feedback_max_residual_norm must be finite and > 0")
         self.worker_id = worker_id
@@ -119,17 +130,21 @@ class HiveMindWorkerNode:
         muon_ns_steps: int,
         byzantine_poison_scale: float | None = None,
     ) -> None:
-        if not math.isfinite(float(lr)) or float(lr) <= 0.0:
+        if isinstance(lr, bool) or not isinstance(lr, (int, float)) or not math.isfinite(float(lr)) or float(lr) <= 0.0:
             raise ValueError("lr must be finite and > 0")
-        if not math.isfinite(float(weight_decay)) or float(weight_decay) < 0.0:
+        if isinstance(weight_decay, bool) or not isinstance(weight_decay, (int, float)) or not math.isfinite(float(weight_decay)) or float(weight_decay) < 0.0:
             raise ValueError("weight_decay must be finite and >= 0")
-        if int(micro_batch_size) <= 0:
+        if isinstance(micro_batch_size, bool) or not isinstance(micro_batch_size, int) or int(micro_batch_size) <= 0:
             raise ValueError("micro_batch_size must be > 0")
-        if not math.isfinite(float(topk_ratio)) or not (0.0 < float(topk_ratio) <= 1.0):
+        if isinstance(topk_ratio, bool) or not isinstance(topk_ratio, (int, float)) or not math.isfinite(float(topk_ratio)) or not (0.0 < float(topk_ratio) <= 1.0):
             raise ValueError("topk_ratio must be finite and in (0, 1]")
-        if int(muon_ns_steps) <= 0:
+        if isinstance(muon_ns_steps, bool) or not isinstance(muon_ns_steps, int) or int(muon_ns_steps) <= 0:
             raise ValueError("muon_ns_steps must be > 0")
-        if byzantine_poison_scale is not None and not math.isfinite(float(byzantine_poison_scale)):
+        if byzantine_poison_scale is not None and (
+            isinstance(byzantine_poison_scale, bool)
+            or not isinstance(byzantine_poison_scale, (int, float))
+            or not math.isfinite(float(byzantine_poison_scale))
+        ):
             raise ValueError("byzantine_poison_scale must be finite when provided")
 
     def execute_workunit(

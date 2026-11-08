@@ -109,12 +109,21 @@ class ZeroIntrusionDaemon:
         consumer_query_active: bool = False,
         hardware_circuit_breaker: GPUExecutionCircuitBreaker | None = None,
     ) -> None:
-        if not math.isfinite(float(idle_threshold_seconds)) or float(idle_threshold_seconds) <= 0.0:
+        if isinstance(idle_threshold_seconds, bool) or not isinstance(idle_threshold_seconds, (int, float)) or not math.isfinite(float(idle_threshold_seconds)) or float(idle_threshold_seconds) <= 0.0:
             raise ValueError("idle_threshold_seconds must be finite and > 0")
+        if not isinstance(enforce_os_idle_hook, bool):
+            raise ValueError("enforce_os_idle_hook must be a boolean")
+        if not isinstance(consumer_query_active, bool):
+            raise ValueError("consumer_query_active must be a boolean")
         if simulated_idle_seconds is not None and (
-            not math.isfinite(float(simulated_idle_seconds)) or float(simulated_idle_seconds) < 0.0
+            isinstance(simulated_idle_seconds, bool)
+            or not isinstance(simulated_idle_seconds, (int, float))
+            or not math.isfinite(float(simulated_idle_seconds))
+            or float(simulated_idle_seconds) < 0.0
         ):
             raise ValueError("simulated_idle_seconds must be finite and >= 0")
+        if simulated_active_game is not None and (not isinstance(simulated_active_game, str) or not simulated_active_game.strip()):
+            raise ValueError("simulated_active_game must be a non-empty string when provided")
         self.idle_threshold_seconds = float(idle_threshold_seconds)
         self.enforce_os_idle_hook = enforce_os_idle_hook
         self.simulated_idle_seconds = (
@@ -199,6 +208,8 @@ class ZeroIntrusionDaemon:
     def resolve_seti_agent_state(self, consumer_query_active: bool | None = None) -> SETIAgentState:
         """Resolve the current 3-state SETI-Swarm lifecycle state."""
         if consumer_query_active is not None:
+            if not isinstance(consumer_query_active, bool):
+                raise ValueError("consumer_query_active must be a boolean")
             self.consumer_query_active = consumer_query_active
         telemetry = self.poll()
         return SETIAgentState(telemetry.seti_agent_state)

@@ -76,6 +76,8 @@ def default_http(method: str, url: str, form: Mapping[str, str] | None = None) -
 
 def login_url(return_to: str, realm: str) -> str:
     """Where to send the user's browser to sign in with Steam."""
+    if not isinstance(return_to, str) or not return_to.strip() or not isinstance(realm, str) or not realm.strip():
+        raise ValueError("return_to and realm must be non-empty strings")
     query = {
         "openid.ns": OPENID_NS, "openid.mode": "checkid_setup", "openid.return_to": return_to, "openid.realm": realm,
         "openid.identity": f"{OPENID_NS}/identifier_select", "openid.claimed_id": f"{OPENID_NS}/identifier_select",
@@ -88,13 +90,13 @@ class SteamOpenIDVerifier:
 
     def __init__(self, return_to: str, *, http: Http = default_http, clock: Callable[[], float] = time.time,
                  nonce_ttl_s: float = 300.0, max_nonces: int = 4096, max_attempts_per_ip: int = 64) -> None:
-        if not return_to.startswith("https://") and not return_to.startswith("http://127.0.0.1") and not return_to.startswith("http://localhost"):
+        if not isinstance(return_to, str) or (not return_to.startswith("https://") and not return_to.startswith("http://127.0.0.1") and not return_to.startswith("http://localhost")):
             raise ValueError("return_to must be https (or loopback http for development)")
-        if not math.isfinite(float(nonce_ttl_s)) or float(nonce_ttl_s) <= 0.0:
+        if isinstance(nonce_ttl_s, bool) or not isinstance(nonce_ttl_s, (int, float)) or not math.isfinite(float(nonce_ttl_s)) or float(nonce_ttl_s) <= 0.0:
             raise ValueError("nonce_ttl_s must be finite and > 0")
-        if int(max_nonces) <= 0:
+        if isinstance(max_nonces, bool) or not isinstance(max_nonces, int) or int(max_nonces) <= 0:
             raise ValueError("max_nonces must be > 0")
-        if int(max_attempts_per_ip) <= 0:
+        if isinstance(max_attempts_per_ip, bool) or not isinstance(max_attempts_per_ip, int) or int(max_attempts_per_ip) <= 0:
             raise ValueError("max_attempts_per_ip must be > 0")
         self.return_to, self._http, self._clock, self._ttl, self._max = return_to, http, clock, float(nonce_ttl_s), int(max_nonces)
         self._max_attempts_per_ip = int(max_attempts_per_ip)
@@ -206,11 +208,13 @@ class IdentityTokens:
     """``v1.<steam_id64>.<expiry>.<hmac>``: proof that this process verified the identity recently. The secret never leaves the process unless configured."""
 
     def __init__(self, secret: bytes | None = None, ttl_s: float = 3600.0, clock: Callable[[], float] = time.time) -> None:
+        if secret is not None and not isinstance(secret, (bytes, bytearray)):
+            raise ValueError("identity secret must be bytes")
         env = os.environ.get("HIVEMIND_IDENTITY_SECRET", "")
-        self._secret = secret or (bytes.fromhex(env) if re.fullmatch(r"[0-9a-fA-F]{64,}", env or "") else secrets.token_bytes(32))
+        self._secret = bytes(secret) if secret else (bytes.fromhex(env) if re.fullmatch(r"[0-9a-fA-F]{64,}", env or "") else secrets.token_bytes(32))
         if len(self._secret) < 32:
             raise ValueError("identity secret must be at least 32 bytes")
-        if not math.isfinite(float(ttl_s)) or float(ttl_s) <= 0.0:
+        if isinstance(ttl_s, bool) or not isinstance(ttl_s, (int, float)) or not math.isfinite(float(ttl_s)) or float(ttl_s) <= 0.0:
             raise ValueError("ttl_s must be finite and > 0")
         self.ttl_s, self._clock = float(ttl_s), clock
 
@@ -245,6 +249,8 @@ class SteamIdentityGate:
 
     def __init__(self, return_to: str, *, http: Http = default_http, tokens: IdentityTokens | None = None,
                  verifier: SteamOpenIDVerifier | None = None, allow_limited: bool = False) -> None:
+        if not isinstance(allow_limited, bool):
+            raise ValueError("allow_limited must be a boolean")
         self.return_to, self._http, self.allow_limited = return_to, http, allow_limited
         self.verifier = verifier or SteamOpenIDVerifier(return_to, http=http)
         self.tokens = tokens or IdentityTokens()

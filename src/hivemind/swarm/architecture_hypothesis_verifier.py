@@ -107,6 +107,12 @@ class TinyLoRALinear(nn.Module):
     """Deterministic LoRA-wrapped linear projection for fast inner-loop replay tests."""
 
     def __init__(self, in_features: int, out_features: int, rank_r: int = 8) -> None:
+        if isinstance(in_features, bool) or not isinstance(in_features, int) or in_features <= 0:
+            raise ValueError("in_features must be a positive integer")
+        if isinstance(out_features, bool) or not isinstance(out_features, int) or out_features <= 0:
+            raise ValueError("out_features must be a positive integer")
+        if isinstance(rank_r, bool) or not isinstance(rank_r, int) or rank_r <= 0:
+            raise ValueError("rank_r must be a positive integer")
         super().__init__()
         self.base_layer = nn.Linear(in_features, out_features, bias=False)
         self.base_layer.weight.requires_grad_(False)
@@ -122,6 +128,12 @@ class TinyDeterministicLoRALM(nn.Module):
     """Compact deterministic CausalLM with trainable 2D LoRA parameters."""
 
     def __init__(self, vocab_size: int = 128, hidden_size: int = 32, rank_r: int = 8) -> None:
+        if isinstance(vocab_size, bool) or not isinstance(vocab_size, int) or vocab_size < 2:
+            raise ValueError("vocab_size must be an integer >= 2")
+        if isinstance(hidden_size, bool) or not isinstance(hidden_size, int) or hidden_size < 4:
+            raise ValueError("hidden_size must be an integer >= 4")
+        if isinstance(rank_r, bool) or not isinstance(rank_r, int) or rank_r <= 0:
+            raise ValueError("rank_r must be a positive integer")
         super().__init__()
         self.embed = nn.Embedding(vocab_size, hidden_size)
         self.embed.weight.requires_grad_(False)
@@ -158,6 +170,23 @@ def _build_tiny_qwen_and_branches(
     lora_rank_r: int = 8,
 ) -> tuple[nn.Module, Dict[str, Dict[str, torch.Tensor]]]:
     """Construct a deterministic Qwen2 QLoRA bundle and specialized domain LoRA branches."""
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
+    if isinstance(num_branches, bool) or not isinstance(num_branches, int) or not (1 <= num_branches <= 4):
+        raise ValueError("num_branches must be an integer in 1..4")
+    if isinstance(num_layers, bool) or not isinstance(num_layers, int) or num_layers < 1:
+        raise ValueError("num_layers must be a positive integer")
+    if (
+        isinstance(hidden_size, bool)
+        or not isinstance(hidden_size, int)
+        or hidden_size < 4
+        or hidden_size % 4 != 0
+    ):
+        raise ValueError("hidden_size must be an integer >= 4 divisible by 4")
+    if isinstance(intermediate_size, bool) or not isinstance(intermediate_size, int) or intermediate_size < 4:
+        raise ValueError("intermediate_size must be an integer >= 4")
+    if isinstance(lora_rank_r, bool) or not isinstance(lora_rank_r, int) or lora_rank_r < 1:
+        raise ValueError("lora_rank_r must be a positive integer")
     torch.manual_seed(seed)
     base_model, _, _ = build_local_qwen2_backbone(
         seed=seed,
@@ -201,6 +230,8 @@ class ArchitectureHypothesisVerifier:
     """Executes all 10 architecture hypothesis verifications (`H1`..`H10`) deterministically."""
 
     def __init__(self, seed: int = 2026) -> None:
+        if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+            raise ValueError("seed must be a non-negative integer")
         self.seed = int(seed)
 
     def verify_h1_opendiloco_cpu_flat_bucket(self) -> HypothesisVerificationRecord:

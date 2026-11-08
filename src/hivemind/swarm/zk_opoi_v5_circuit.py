@@ -111,8 +111,37 @@ class ZKOPoIV5FixedPointCircuit:
         max_spectral_bound: float = 8.0,
         coordinator_secret: str | None = None,
     ) -> None:
-        if quantization_bits not in (4, 8):
+        if isinstance(quantization_bits, bool) or quantization_bits not in (4, 8):
             raise ValueError("quantization_bits must be 4 or 8")
+        if isinstance(fixed_point_scale, bool) or not isinstance(fixed_point_scale, int) or fixed_point_scale < 1:
+            raise ValueError("fixed_point_scale must be an integer >= 1")
+        if (
+            isinstance(lr_num, bool)
+            or not isinstance(lr_num, int)
+            or lr_num < 1
+            or isinstance(lr_den, bool)
+            or not isinstance(lr_den, int)
+            or lr_den < 1
+        ):
+            raise ValueError("lr_num and lr_den must be integers >= 1")
+        if (
+            isinstance(max_delta_l2_norm, bool)
+            or not isinstance(max_delta_l2_norm, (int, float))
+            or not math.isfinite(float(max_delta_l2_norm))
+            or float(max_delta_l2_norm) <= 0.0
+        ):
+            raise ValueError("max_delta_l2_norm must be a finite number > 0")
+        if (
+            isinstance(max_spectral_bound, bool)
+            or not isinstance(max_spectral_bound, (int, float))
+            or not math.isfinite(float(max_spectral_bound))
+            or float(max_spectral_bound) <= 0.0
+        ):
+            raise ValueError("max_spectral_bound must be a finite number > 0")
+        if coordinator_secret is not None and (
+            not isinstance(coordinator_secret, str) or not coordinator_secret.strip()
+        ):
+            raise ValueError("coordinator_secret must be a non-empty string when provided")
         self.fixed_point_scale = int(fixed_point_scale)
         self.quantization_bits = int(quantization_bits)
         self.lr_num = int(lr_num)
@@ -159,6 +188,8 @@ class ZKOPoIV5FixedPointCircuit:
         scale_step = max(1, self.fixed_point_scale // max(1, qmax))
         out: list[int] = []
         for v in values:
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                raise ValueError("Cannot quantize non-finite float value in ZK-OPoI v5 circuit")
             fv = float(v)
             if not math.isfinite(fv):
                 raise ValueError("Cannot quantize non-finite float value in ZK-OPoI v5 circuit")
@@ -175,6 +206,10 @@ class ZKOPoIV5FixedPointCircuit:
         step_gradients_float: Sequence[Sequence[float]],
     ) -> tuple[ZKOPoIV5ProofReceipt, list[int]]:
         """Execute H quantized local steps and emit a succinct ZK-OPoI v5 proof receipt."""
+        if not isinstance(node_id, str) or not node_id.strip():
+            raise ValueError("node_id must be a non-empty string")
+        if not isinstance(assigned_shard_sha256, str) or not assigned_shard_sha256.strip():
+            raise ValueError("assigned_shard_sha256 must be a non-empty string")
         if not theta0_float or not step_gradients_float:
             raise ValueError("theta0_float and step_gradients_float must be non-empty")
         d = len(theta0_float)

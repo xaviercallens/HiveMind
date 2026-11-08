@@ -72,7 +72,12 @@ class DeliveryUncertainError(ConnectionError):
 
 
 def _validate_timeout(timeout: float) -> None:
-    if not math.isfinite(timeout) or timeout <= 0:
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(float(timeout))
+        or float(timeout) <= 0
+    ):
         raise ValueError("link timeout must be finite and positive")
 
 
@@ -125,6 +130,10 @@ class LinkIdentity:
 
     @classmethod
     def generate(cls, server_name: str = SERVER_NAME, days: int = 7) -> "LinkIdentity":
+        if not isinstance(server_name, str) or not server_name.strip():
+            raise ValueError("server_name must be a non-empty string")
+        if isinstance(days, bool) or not isinstance(days, int) or days < 1:
+            raise ValueError("days must be a positive integer >= 1")
         now = datetime.datetime.now(datetime.timezone.utc)
         ca_key = ec.generate_private_key(ec.SECP256R1())
         ca_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "HiveMind link CA")])
@@ -208,9 +217,16 @@ class FrameEnvelope:
         """Serialise the envelope."""
         if isinstance(self.sequence, bool) or not isinstance(self.sequence, int) or self.sequence < 0:
             raise ValueError("frame sequence number must be a non-negative integer")
-        if not math.isfinite(self.sent_at):
+        if (
+            isinstance(self.sent_at, bool)
+            or not isinstance(self.sent_at, (int, float))
+            or not math.isfinite(float(self.sent_at))
+            or float(self.sent_at) <= 0.0
+        ):
             raise ValueError("frame send timestamp must be finite")
-        return ENVELOPE_HEADER.pack(self.sent_at, self.sequence) + self.payload
+        if not isinstance(self.payload, (bytes, bytearray)):
+            raise TypeError("hidden-state frames must be bytes")
+        return ENVELOPE_HEADER.pack(float(self.sent_at), self.sequence) + bytes(self.payload)
 
     @classmethod
     def decode(cls, frame: bytes) -> "FrameEnvelope":
@@ -673,7 +689,7 @@ async def quic_0rtt_resumption_probe(
 
 
 def _uvarint(value: int) -> bytes:
-    if not isinstance(value, int) or not 0 <= value <= 0xFFFFFFFF:
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 0xFFFFFFFF:
         raise ValueError("multistream length must be an unsigned 32-bit integer")
     out = bytearray()
     while True:
@@ -862,7 +878,14 @@ class LinkEndpoint:
     websocket_url: Optional[str] = None
 
     def __post_init__(self) -> None:
-        if not self.host or not self.server_name or not self.ca_pem:
+        if (
+            not isinstance(self.host, str)
+            or not self.host.strip()
+            or not isinstance(self.server_name, str)
+            or not self.server_name.strip()
+            or not isinstance(self.ca_pem, str)
+            or not self.ca_pem.strip()
+        ):
             raise ValueError("endpoint host, server name and trusted CA are required")
         if isinstance(self.port, bool) or not isinstance(self.port, int) or not 1 <= self.port <= 65535:
             raise ValueError("endpoint port must be between 1 and 65535")

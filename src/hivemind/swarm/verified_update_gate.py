@@ -47,14 +47,28 @@ class UpdatePolicy:
     require_improvement: bool = False
 
     def __post_init__(self) -> None:
-        if not 0.0 < self.alpha < 1.0:
+        if (
+            isinstance(self.alpha, bool)
+            or not isinstance(self.alpha, (int, float))
+            or not 0.0 < float(self.alpha) < 1.0
+        ):
             raise ValueError("alpha must be in (0, 1)")
-        if self.min_n < 1:
+        if isinstance(self.min_n, bool) or not isinstance(self.min_n, int) or self.min_n < 1:
             raise ValueError("min_n must be >= 1")
-        if not 0.0 <= self.max_unverified_fraction <= 1.0:
+        if (
+            isinstance(self.max_unverified_fraction, bool)
+            or not isinstance(self.max_unverified_fraction, (int, float))
+            or not 0.0 <= float(self.max_unverified_fraction) <= 1.0
+        ):
             raise ValueError("max_unverified_fraction must be in [0, 1]")
-        if self.tolerated_net_loss < 0:
+        if (
+            isinstance(self.tolerated_net_loss, bool)
+            or not isinstance(self.tolerated_net_loss, int)
+            or self.tolerated_net_loss < 0
+        ):
             raise ValueError("tolerated_net_loss must be >= 0")
+        if not isinstance(self.require_improvement, bool):
+            raise ValueError("require_improvement must be a bool")
 
 
 @dataclass(frozen=True)
@@ -101,6 +115,15 @@ def _lower_tail(k: int, n: int) -> float:
 
 def exact_paired_p(b: int, c: int) -> float:
     """Two-sided exact McNemar p from the discordant counts (same value as ``scripts/e15_lib.mcnemar_exact``)."""
+    if (
+        isinstance(b, bool)
+        or not isinstance(b, int)
+        or b < 0
+        or isinstance(c, bool)
+        or not isinstance(c, int)
+        or c < 0
+    ):
+        raise ValueError("b and c must be non-negative integers")
     n = b + c
     return 1.0 if n == 0 else min(1.0, 2 * _lower_tail(min(b, c), n))
 
@@ -169,12 +192,24 @@ class HeldOutTask:
     tests: Sequence[str]
     setup: str = ""
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.key, str) or not self.key.strip():
+            raise ValueError("key must be a non-empty string")
+        if not isinstance(self.prompt, str):
+            raise ValueError("prompt must be a string")
+        if isinstance(self.tests, (str, bytes)) or not isinstance(self.tests, Sequence) or not self.tests:
+            raise ValueError("tests must be a non-empty sequence of strings")
+        if not isinstance(self.setup, str):
+            raise ValueError("setup must be a string")
+
 
 _FENCE = re.compile(r"```(?:python|py)?\s*\n(.*?)```", re.S | re.I)
 
 
 def extract_code(text: str) -> str:
     """The last fenced code block of a model reply, or the whole reply when it has none."""
+    if not isinstance(text, str):
+        raise TypeError("text must be a string")
     blocks = _FENCE.findall(text)
     return (blocks[-1] if blocks else text).strip()
 

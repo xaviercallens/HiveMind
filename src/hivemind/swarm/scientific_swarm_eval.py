@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import torch
 import torch.nn as nn
@@ -150,6 +151,26 @@ class JoinedCampaignProposal:
     scientific_rationale: str
     evidence_status: str = "unvalidated_design_hypothesis_not_measurement"
 
+    def __post_init__(self) -> None:
+        for str_field in ("campaign_id", "codename", "strategy_mode", "scientific_rationale", "evidence_status"):
+            val = getattr(self, str_field)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{str_field} must be a non-empty string")
+        if isinstance(self.target_domains, (str, bytes)) or not isinstance(self.target_domains, Sequence) or not self.target_domains or not all(
+            isinstance(d, str) and bool(d.strip()) for d in self.target_domains
+        ):
+            raise ValueError("target_domains must be a non-empty sequence of non-empty strings")
+        if isinstance(self.min_participating_agents, bool) or not isinstance(self.min_participating_agents, int) or self.min_participating_agents < 1:
+            raise ValueError("min_participating_agents must be an integer >= 1")
+        if isinstance(self.reward_pool_pts, bool) or not isinstance(self.reward_pool_pts, int) or self.reward_pool_pts < 0:
+            raise ValueError("reward_pool_pts must be an integer >= 0")
+        if isinstance(self.expected_speedup_factor, bool) or not isinstance(self.expected_speedup_factor, (int, float)) or not math.isfinite(float(self.expected_speedup_factor)) or float(self.expected_speedup_factor) <= 0.0:
+            raise ValueError("expected_speedup_factor must be a finite number > 0")
+        for nonneg_f in ("expected_quality_synergy_pct", "reward_pool_hive"):
+            fval = getattr(self, nonneg_f)
+            if isinstance(fval, bool) or not isinstance(fval, (int, float)) or not math.isfinite(float(fval)) or float(fval) < 0.0:
+                raise ValueError(f"{nonneg_f} must be a finite number >= 0")
+
 
 PROPOSED_JOINED_CAMPAIGNS: List[JoinedCampaignProposal] = [
     JoinedCampaignProposal(
@@ -243,6 +264,14 @@ def _evaluate_lora_on_scientific_holdout(
     The historical function name does not make this a scientific text benchmark.
     Perplexity is undefined here: exponentiating MSE is not token perplexity.
     """
+    if not isinstance(domain_name, str) or not domain_name.strip():
+        raise ValueError("domain_name must be a non-empty string")
+    if not isinstance(lora_state, Mapping) or len(lora_state) == 0:
+        raise ValueError("lora_state must be a non-empty mapping")
+    if isinstance(lora_rank_r, bool) or not isinstance(lora_rank_r, int) or lora_rank_r < 1:
+        raise ValueError("lora_rank_r must be an integer >= 1")
+    if isinstance(lora_alpha, bool) or not isinstance(lora_alpha, int) or lora_alpha < 1:
+        raise ValueError("lora_alpha must be an integer >= 1")
     from hivemind.data.hf_real_trainer import _encode_synthetic_regression_batch
 
     target_device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -326,6 +355,14 @@ def ties_merge_lora_adapters(
     Merges multiple peer-trained LoRA state dicts using TIES-Merging (Trim, Elect Sign, Disjoint Merge)
     so cooperative miners combine their training efforts without destructive gradient interference.
     """
+    if not isinstance(base_lora_state, Mapping) or len(base_lora_state) == 0:
+        raise ValueError("base_lora_state must be a non-empty mapping")
+    if isinstance(worker_lora_states, (str, bytes)) or not isinstance(worker_lora_states, Sequence):
+        raise ValueError("worker_lora_states must be a sequence of state dicts")
+    if isinstance(trim_density, bool) or not isinstance(trim_density, (int, float)) or not math.isfinite(float(trim_density)) or not 0.0 < float(trim_density) <= 1.0:
+        raise ValueError("trim_density must be in (0.0, 1.0]")
+    if isinstance(scaling_lambda, bool) or not isinstance(scaling_lambda, (int, float)) or not math.isfinite(float(scaling_lambda)) or float(scaling_lambda) <= 0.0:
+        raise ValueError("scaling_lambda must be a finite number > 0")
     if not worker_lora_states:
         return {k: v.clone() for k, v in base_lora_state.items()}
 
@@ -371,6 +408,13 @@ class SwarmKnowledgeTransferEngine:
         peer_agent_ids: Optional[Sequence[str]] = None,
         device: Optional[torch.device] = None,
     ) -> None:
+        if not isinstance(store, ContentAddressedSwarmStore):
+            raise TypeError("store must be a ContentAddressedSwarmStore instance")
+        if peer_agent_ids is not None:
+            if isinstance(peer_agent_ids, (str, bytes)) or not isinstance(peer_agent_ids, Sequence) or len(peer_agent_ids) == 0:
+                raise ValueError("peer_agent_ids must be a non-empty sequence of strings")
+            if not all(isinstance(a, str) and bool(a.strip()) for a in peer_agent_ids) or len(set(peer_agent_ids)) != len(peer_agent_ids):
+                raise ValueError("peer_agent_ids must contain unique non-empty strings")
         self.store = store
         self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.peer_agent_ids = list(
@@ -408,6 +452,16 @@ class SwarmKnowledgeTransferEngine:
         Royalties and avoided-step counts are game accounting, not payments or
         measured GPU savings. Real safe-byte verification is in token_training_eval.
         """
+        if not isinstance(domain_name, str) or not domain_name.strip():
+            raise ValueError("domain_name must be a non-empty string")
+        if not isinstance(reference_lora_state, Mapping) or len(reference_lora_state) == 0:
+            raise ValueError("reference_lora_state must be a non-empty mapping")
+        if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
+            raise ValueError("inner_steps must be an integer >= 1")
+        if isinstance(topk_ratio, bool) or not isinstance(topk_ratio, (int, float)) or not math.isfinite(float(topk_ratio)) or not 0.0 < float(topk_ratio) <= 1.0:
+            raise ValueError("topk_ratio must be in (0.0, 1.0]")
+        if isinstance(royalty_per_peer_hive, bool) or not isinstance(royalty_per_peer_hive, (int, float)) or not math.isfinite(float(royalty_per_peer_hive)) or float(royalty_per_peer_hive) < 0.0:
+            raise ValueError("royalty_per_peer_hive must be a finite number >= 0.0")
         bench_meta = SCIENTIFIC_BENCHMARK_SUITES.get(
             domain_name,
             SCIENTIFIC_BENCHMARK_SUITES["Rust_Systems_Security"],
@@ -576,6 +630,8 @@ class JoinedSwarmCampaignEngine:
         transfer_engine: SwarmKnowledgeTransferEngine,
         device: Optional[torch.device] = None,
     ) -> None:
+        if not isinstance(transfer_engine, SwarmKnowledgeTransferEngine):
+            raise TypeError("transfer_engine must be a SwarmKnowledgeTransferEngine instance")
         self.transfer_engine = transfer_engine
         self.store = transfer_engine.store
         self.device = device or transfer_engine.device
@@ -595,6 +651,18 @@ class JoinedSwarmCampaignEngine:
         than the solo baseline. Neither equal-time quality nor parallel speedup
         can be inferred from this comparison.
         """
+        if not isinstance(domain_name, str) or not domain_name.strip():
+            raise ValueError("domain_name must be a non-empty string")
+        if not isinstance(reference_lora_state, Mapping) or len(reference_lora_state) == 0:
+            raise ValueError("reference_lora_state must be a non-empty mapping")
+        if isinstance(participating_agents, (str, bytes)) or not isinstance(participating_agents, Sequence) or len(participating_agents) == 0 or not all(
+            isinstance(a, str) and bool(a.strip()) for a in participating_agents
+        ):
+            raise ValueError("participating_agents must be a non-empty sequence of non-empty strings")
+        if isinstance(total_inner_steps, bool) or not isinstance(total_inner_steps, int) or total_inner_steps < 1:
+            raise ValueError("total_inner_steps must be an integer >= 1")
+        if isinstance(topk_ratio, bool) or not isinstance(topk_ratio, (int, float)) or not math.isfinite(float(topk_ratio)) or not 0.0 < float(topk_ratio) <= 1.0:
+            raise ValueError("topk_ratio must be in (0.0, 1.0]")
         num_agents = max(1, len(participating_agents))
         steps_per_agent = max(4, total_inner_steps // num_agents)
 
@@ -700,6 +768,10 @@ class JoinedSwarmCampaignEngine:
         verifies that every agent leverages every other agent's retraining effort (`4/4` domains),
         and builds the Unified Dual Leaderboard (Best Miner + Best Contributor).
         """
+        if not isinstance(reference_lora_state, Mapping) or len(reference_lora_state) == 0:
+            raise ValueError("reference_lora_state must be a non-empty mapping")
+        if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
+            raise ValueError("inner_steps must be an integer >= 1")
         t_start = time.perf_counter()
         domains = list(SCIENTIFIC_BENCHMARK_SUITES.keys())
         agents = self.transfer_engine.peer_agent_ids

@@ -32,6 +32,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import math
 import os
 import re
 import tempfile
@@ -144,6 +145,16 @@ class CampaignPolicy:
     max_active_campaigns_per_participant: int = 2
     request_max_skew_s: float = 900.0
     join_lead_s: float = 0.0
+
+    def __post_init__(self) -> None:
+        if isinstance(self.max_members_per_campaign, bool) or not isinstance(self.max_members_per_campaign, int) or self.max_members_per_campaign < 1:
+            raise ValueError("max_members_per_campaign must be an integer >= 1")
+        if isinstance(self.max_active_campaigns_per_participant, bool) or not isinstance(self.max_active_campaigns_per_participant, int) or self.max_active_campaigns_per_participant < 1:
+            raise ValueError("max_active_campaigns_per_participant must be an integer >= 1")
+        if isinstance(self.request_max_skew_s, bool) or not isinstance(self.request_max_skew_s, (int, float)) or not math.isfinite(float(self.request_max_skew_s)) or float(self.request_max_skew_s) <= 0.0:
+            raise ValueError("request_max_skew_s must be a finite number > 0")
+        if isinstance(self.join_lead_s, bool) or not isinstance(self.join_lead_s, (int, float)) or not math.isfinite(float(self.join_lead_s)) or float(self.join_lead_s) < 0.0:
+            raise ValueError("join_lead_s must be a finite number >= 0")
 
 
 @dataclass(frozen=True)
@@ -278,18 +289,27 @@ class CampaignOrchestrator:
     def _validate(self, r: CampaignRequest, now_utc: float) -> str:
         if r.action not in ACTIONS:
             return f"unknown action {r.action!r}"
-        if not _PARTICIPANT_ID_RE.match(r.participant_id):
+        if not isinstance(r.participant_id, str) or not _PARTICIPANT_ID_RE.match(r.participant_id):
             return "participant_id is not a valid identifier"
         if r.participant_kind not in PARTICIPANT_KINDS:
             return f"unknown participant_kind {r.participant_kind!r}"
         if r.availability not in AVAILABILITY_SLOTS:
             return f"unknown availability slot {r.availability!r}"
-        if not 0 <= r.declared_vram_mib <= MAX_DECLARED_VRAM_MIB:
+        if (
+            isinstance(r.declared_vram_mib, bool)
+            or not isinstance(r.declared_vram_mib, int)
+            or not 0 <= r.declared_vram_mib <= MAX_DECLARED_VRAM_MIB
+        ):
             return f"declared_vram_mib {r.declared_vram_mib} outside [0, {MAX_DECLARED_VRAM_MIB}]"
-        if not _NONCE_RE.match(r.nonce):
+        if not isinstance(r.nonce, str) or not _NONCE_RE.match(r.nonce):
             return "nonce must be 8-64 characters of [A-Za-z0-9_-]"
-        if abs(now_utc - r.issued_at_utc) > self.policy.request_max_skew_s:
-            return f"request issued {now_utc - r.issued_at_utc:.0f} s from now; allowed skew is {self.policy.request_max_skew_s:.0f} s"
+        if (
+            isinstance(r.issued_at_utc, bool)
+            or not isinstance(r.issued_at_utc, (int, float))
+            or not math.isfinite(float(r.issued_at_utc))
+            or abs(now_utc - float(r.issued_at_utc)) > self.policy.request_max_skew_s
+        ):
+            return f"request issued {now_utc - float(r.issued_at_utc):.0f} s from now; allowed skew is {self.policy.request_max_skew_s:.0f} s"
         key = self._secret if isinstance(self._secret, bytes) else self._secret.get(r.participant_id)
         if key is None:
             return "invalid signature"  # no key on file for this participant: same answer as a bad signature
@@ -480,7 +500,16 @@ def load_episode_ledger(path: Path | str) -> list[DomainEvidence]:
 
 def max_unverified_rows(verified_rows: int, num: int = MAX_UNVERIFIED_NUM, den: int = MAX_UNVERIFIED_DEN) -> int:
     """Largest ``u`` with ``u / (verified_rows + u) <= num / den``, in exact integer arithmetic."""
-    if verified_rows < 0 or not 0 <= num < den:
+    if (
+        isinstance(verified_rows, bool)
+        or not isinstance(verified_rows, int)
+        or isinstance(num, bool)
+        or not isinstance(num, int)
+        or isinstance(den, bool)
+        or not isinstance(den, int)
+        or verified_rows < 0
+        or not 0 <= num < den
+    ):
         raise ValueError("need verified_rows >= 0 and 0 <= num < den")
     return (num * verified_rows) // (den - num)
 
@@ -503,7 +532,34 @@ class DreamPolicy:
     start_h: int = NIGHT_START_H
     end_h: int = NIGHT_END_H
 
+    def __post_init__(self) -> None:
+        for int_name in ("min_new_verified", "min_heldout_eval_items", "max_jobs"):
+            ival = getattr(self, int_name)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 1:
+                raise ValueError(f"{int_name} must be an integer >= 1")
+        for pos_f in ("train_cap_h", "eval_cap_h", "governor_max_age_s"):
+            fval = getattr(self, pos_f)
+            if isinstance(fval, bool) or not isinstance(fval, (int, float)) or not math.isfinite(float(fval)) or float(fval) <= 0.0:
+                raise ValueError(f"{pos_f} must be a finite number > 0")
+        for nonneg_f in ("control_cap_h", "governor_max_future_s"):
+            fval = getattr(self, nonneg_f)
+            if isinstance(fval, bool) or not isinstance(fval, (int, float)) or not math.isfinite(float(fval)) or float(fval) < 0.0:
+                raise ValueError(f"{nonneg_f} must be a finite number >= 0")
+        if not isinstance(self.eligible_availability, (set, frozenset)) or not self.eligible_availability or not set(self.eligible_availability) <= AVAILABILITY_SLOTS:
+            raise ValueError("eligible_availability must be a non-empty subset of AVAILABILITY_SLOTS")
+        if (
+            isinstance(self.start_h, bool)
+            or not isinstance(self.start_h, int)
+            or isinstance(self.end_h, bool)
+            or not isinstance(self.end_h, int)
+            or self.start_h == self.end_h
+            or not (0 <= self.start_h <= 23 and 0 <= self.end_h <= 23)
+        ):
+            raise ValueError("start_h and end_h must be distinct hours in 0..23")
+
     def job_budget_h(self, n_controls: int) -> float:
+        if isinstance(n_controls, bool) or not isinstance(n_controls, int) or n_controls < 0:
+            raise ValueError("n_controls must be a non-negative integer")
         return self.train_cap_h + n_controls * self.control_cap_h + (1 + n_controls) * self.eval_cap_h
 
 
@@ -687,6 +743,10 @@ def plan_dream_phase(
 
 def select_dream_teacher_for_job(domain: str, vram_mib: int) -> dict[str, Any]:
     """Select the low-bit (1.58-bit / 2-bit / 3-bit) Dream Phase teacher for a job's domain and producer VRAM."""
+    if not isinstance(domain, str) or not domain.strip():
+        raise ValueError("domain must be a non-empty string")
+    if isinstance(vram_mib, bool) or not isinstance(vram_mib, int) or vram_mib < 0:
+        raise ValueError("vram_mib must be a non-negative integer")
     dom = domain.strip().lower()
     is_code = any(k in dom for k in ("code", "coding", "swe", "rust", "python", "cyber", "formal", "lean", "sys"))
     if is_code and vram_mib >= 14500:

@@ -30,6 +30,26 @@ from hivemind.core.quantization import (
 console = Console()
 
 
+def _positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid int value: {value!r}") from exc
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("value must be >= 1")
+    return parsed
+
+
+def _port_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid int value: {value!r}") from exc
+    if parsed < 1 or parsed > 65535:
+        raise argparse.ArgumentTypeError("port must be in 1..65535")
+    return parsed
+
+
 def cmd_hardware_check() -> int:
     """Display local RTX GPU telemetry, Win32 idle state, and VRAM allocation budgets."""
     cfg = HiveMindConfig.from_yaml()
@@ -154,12 +174,25 @@ def cmd_serve_coordinator(host: str, port: int, public_url: str | None = None, i
     from hivemind.boinc.coordinator_api import BOINCCoordinatorService, create_coordinator_fastapi_app
     from hivemind.client.steam_identity import SteamIdentityGate
 
+    host_clean = str(host).strip()
+    if not host_clean:
+        raise ValueError("host must be a non-empty string.")
+    if int(port) < 1 or int(port) > 65535:
+        raise ValueError("port must be in 1..65535.")
+    is_loopback = host_clean in ("127.0.0.1", "localhost", "::1")
+    pub_clean = public_url.strip() if public_url is not None else ""
     identity = None
-    if public_url:
-        identity = SteamIdentityGate(return_to=public_url.rstrip("/") + "/identity/steam/callback")
-    elif host not in ("127.0.0.1", "localhost", "::1") and not insecure_dev_identities:
+    if pub_clean:
+        if not is_loopback and not pub_clean.startswith("https://"):
+            print(
+                f"refusing to listen on {host_clean}: non-loopback bind requires an https:// --public-url (got {pub_clean!r}).",
+                file=sys.stderr,
+            )
+            return 2
+        identity = SteamIdentityGate(return_to=pub_clean.rstrip("/") + "/identity/steam/callback")
+    elif not is_loopback and not insecure_dev_identities:
         print(
-            f"refusing to listen on {host}: nodes' SteamID64 would be unverified. Give --public-url https://... to require Sign in with Steam, "
+            f"refusing to listen on {host_clean}: nodes' SteamID64 would be unverified. Give --public-url https://... to require Sign in with Steam, "
             "or --insecure-dev-identities if this really is a throwaway test network.",
             file=sys.stderr,
         )
@@ -186,7 +219,7 @@ def cmd_serve_coordinator(host: str, port: int, public_url: str | None = None, i
         vocab_size=2048,
     )
     app = create_coordinator_fastapi_app(coord, identity=identity)
-    uvicorn.run(app, host=host, port=port)
+    uvicorn.run(app, host=host_clean, port=int(port))
     return 0
 
 
@@ -202,15 +235,15 @@ def main(argv: list[str] | None = None) -> int:
     p_sim = sub.add_parser("simulate-e2e", help="Run full Phase A -> B -> C -> Phase 2 pipeline locally")
     p_sim.add_argument("--profile", default="rtx2070_moe_e2e", help="Hardware profile name")
     p_sim.add_argument("--use-hf-hub", action="store_true", help="Download weights from HuggingFace Hub")
-    p_sim.add_argument("--inner-steps", type=int, default=20, help="Inner AdamW steps per branch")
-    p_sim.add_argument("--spot-check-interval", type=int, default=10, help="Micro-checkpoint interval s")
+    p_sim.add_argument("--inner-steps", type=_positive_int, default=20, help="Inner AdamW steps per branch")
+    p_sim.add_argument("--spot-check-interval", type=_positive_int, default=10, help="Micro-checkpoint interval s")
 
     p_bench = sub.add_parser("benchmark-vram", help="Benchmark 4-bit NF4 + QLoRA r=64 + PagedAdamW8bit VRAM")
     p_bench.add_argument("--profile", default="rtx2070_7b_worker", help="Hardware profile to benchmark")
 
     p_serve = sub.add_parser("serve-coordinator", help="Launch Modified BOINC Coordinator FastAPI Server")
     p_serve.add_argument("--host", default="127.0.0.1")
-    p_serve.add_argument("--port", type=int, default=8080)
+    p_serve.add_argument("--port", type=_port_int, default=8080)
     p_serve.add_argument("--public-url", default=None, help="https URL of this coordinator; turns on Sign in with Steam (required for non-loopback --host)")
     p_serve.add_argument("--insecure-dev-identities", action="store_true", help="allow a non-loopback --host without identity verification (throwaway networks only)")
 
@@ -221,9 +254,9 @@ def main(argv: list[str] | None = None) -> int:
         default="sahil2801/CodeAlpaca-20k",
         help="Hugging Face dataset ID for decentralized subset training (e.g., sahil2801/CodeAlpaca-20k or qiaojin/PubMedQA)",
     )
-    p_poc.add_argument("--subset-size", type=int, default=24, help="Number of HF rows partitioned across worker shards")
-    p_poc.add_argument("--lora-rank", type=int, default=16, help="LoRA rank r")
-    p_poc.add_argument("--inner-steps", type=int, default=12, help="DiLoCo inner steps per branch")
+    p_poc.add_argument("--subset-size", type=_positive_int, default=24, help="Number of HF rows partitioned across worker shards")
+    p_poc.add_argument("--lora-rank", type=_positive_int, default=16, help="LoRA rank r")
+    p_poc.add_argument("--inner-steps", type=_positive_int, default=12, help="DiLoCo inner steps per branch")
 
     p_swarm = sub.add_parser(
         "run-seti-swarm",
@@ -232,32 +265,32 @@ def main(argv: list[str] | None = None) -> int:
     p_swarm.add_argument("--model-id", default="Qwen/Qwen2.5-0.5B", help="Hugging Face model ID")
     p_swarm.add_argument("--dataset-id", default="sahil2801/CodeAlpaca-20k", help="Hugging Face dataset ID")
     p_swarm.add_argument("--domain-name", default="Python_Systems_Code", help="Domain expert name")
-    p_swarm.add_argument("--lora-rank", type=int, default=16, help="LoRA rank r")
-    p_swarm.add_argument("--inner-steps", type=int, default=12, help="DiLoCo inner steps per worker")
+    p_swarm.add_argument("--lora-rank", type=_positive_int, default=16, help="LoRA rank r")
+    p_swarm.add_argument("--inner-steps", type=_positive_int, default=12, help="DiLoCo inner steps per worker")
 
     p_exp3 = sub.add_parser(
         "run-3-experiments",
         help="Execute 3 sequential SETI-Swarm experiments on real Hugging Face datasets (CodeAlpaca-20k, PubMedQA, GSM8K) + Dynamic MoE Hot-Plug",
     )
     p_exp3.add_argument("--model-id", default="Qwen/Qwen2.5-0.5B", help="Hugging Face model ID")
-    p_exp3.add_argument("--lora-rank", type=int, default=8, help="LoRA rank r")
-    p_exp3.add_argument("--inner-steps", type=int, default=12, help="DiLoCo inner steps per worker")
+    p_exp3.add_argument("--lora-rank", type=_positive_int, default=8, help="LoRA rank r")
+    p_exp3.add_argument("--inner-steps", type=_positive_int, default=12, help="DiLoCo inner steps per worker")
 
     p_astro = sub.add_parser(
         "run-astro-experiments",
         help="Run 4 sequential single-process astrophysics QLoRA swarm demos (HF rows when reachable, curated fallback text otherwise) + 4-expert MoE hot-plug; reports training-row perplexity, not classification accuracy",
     )
     p_astro.add_argument("--model-id", default="Qwen/Qwen2.5-0.5B", help="Hugging Face model ID")
-    p_astro.add_argument("--lora-rank", type=int, default=8, help="LoRA rank r")
-    p_astro.add_argument("--inner-steps", type=int, default=12, help="DiLoCo inner steps per worker")
+    p_astro.add_argument("--lora-rank", type=_positive_int, default=8, help="LoRA rank r")
+    p_astro.add_argument("--inner-steps", type=_positive_int, default=12, help="DiLoCo inner steps per worker")
 
     p_game = sub.add_parser(
         "play-hack-game",
         help="Play HiveMind: Neural Breach (Free Steam Edition) Hugging Face Hack-Miner Game & build Steam package",
     )
     p_game.add_argument("--model-id", default="Qwen/Qwen2.5-0.5B", help="Hugging Face model ID")
-    p_game.add_argument("--lora-rank", type=int, default=8, help="LoRA rank r")
-    p_game.add_argument("--inner-steps", type=int, default=8, help="DiLoCo inner steps per gamer")
+    p_game.add_argument("--lora-rank", type=_positive_int, default=8, help="LoRA rank r")
+    p_game.add_argument("--inner-steps", type=_positive_int, default=8, help="DiLoCo inner steps per gamer")
     p_game.add_argument(
         "--season",
         default="all",
@@ -285,7 +318,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Launch the interactive Cyberpunk Free Steam Edition Web HUD & Leaderboard server",
     )
     p_hud.add_argument("--host", default="127.0.0.1")
-    p_hud.add_argument("--port", type=int, default=8090)
+    p_hud.add_argument("--port", type=_port_int, default=8090)
     p_hud.add_argument("--allow-network", action="store_true", help="listen on a non-loopback --host (the HUD has no login and can start GPU work: trusted LAN only)")
 
     p_probe = sub.add_parser(
@@ -304,9 +337,9 @@ def main(argv: list[str] | None = None) -> int:
         "deploy-steam-tool",
         help="Run the 6-Stage Intense RTX GPU Stress Suite and deploy v1.0.0 Free Steam Tool (AppID: 3133700)",
     )
-    p_deploy.add_argument("--vram-cycles", type=int, default=3, help="Number of NF4+QLoRA+Preemption torture cycles")
-    p_deploy.add_argument("--udp-packets", type=int, default=100, help="Number of UDP 0-RTT hidden-state packets")
-    p_deploy.add_argument("--hotplug-experts", type=int, default=12, help="Number of Sparse MoE experts to hot-plug")
+    p_deploy.add_argument("--vram-cycles", type=_positive_int, default=3, help="Number of NF4+QLoRA+Preemption torture cycles")
+    p_deploy.add_argument("--udp-packets", type=_positive_int, default=100, help="Number of UDP 0-RTT hidden-state packets")
+    p_deploy.add_argument("--hotplug-experts", type=_positive_int, default=12, help="Number of Sparse MoE experts to hot-plug")
 
     p_sec = sub.add_parser(
         "scan-pr-security",
@@ -330,9 +363,9 @@ def main(argv: list[str] | None = None) -> int:
         "run-boinc-astro",
         help="Run a full Modified BOINC Astrophysics Campaign on the local GPU across 4 Hugging Face datasets",
     )
-    p_boinc_astro.add_argument("--inner-steps", type=int, default=16, help="DiLoCo inner steps H per BOINC workunit")
-    p_boinc_astro.add_argument("--spot-check-interval", type=int, default=8, help="Micro-checkpoint interval s")
-    p_boinc_astro.add_argument("--lora-rank", type=int, default=16, help="QLoRA rank r")
+    p_boinc_astro.add_argument("--inner-steps", type=_positive_int, default=16, help="DiLoCo inner steps H per BOINC workunit")
+    p_boinc_astro.add_argument("--spot-check-interval", type=_positive_int, default=8, help="Micro-checkpoint interval s")
+    p_boinc_astro.add_argument("--lora-rank", type=_positive_int, default=16, help="QLoRA rank r")
     p_boinc_astro.add_argument(
         "--output-json",
         default="artifacts/boinc_local_astrophysics_gpu_report.json",
@@ -343,10 +376,10 @@ def main(argv: list[str] | None = None) -> int:
         "run-astro-24h",
         help="Run a 24-Cycle Intensive GPU Astrophysics & Cosmology Campaign and render PNG dashboards",
     )
-    p_astro_24h.add_argument("--cycles", type=int, default=24, help="Number of BOINC outer cycles (default: 24)")
-    p_astro_24h.add_argument("--inner-steps", type=int, default=12, help="DiLoCo inner steps H per worker per cycle")
-    p_astro_24h.add_argument("--spot-check-interval", type=int, default=6, help="Micro-checkpoint interval s")
-    p_astro_24h.add_argument("--lora-rank", type=int, default=16, help="QLoRA rank r")
+    p_astro_24h.add_argument("--cycles", type=_positive_int, default=24, help="Number of BOINC outer cycles (default: 24)")
+    p_astro_24h.add_argument("--inner-steps", type=_positive_int, default=12, help="DiLoCo inner steps H per worker per cycle")
+    p_astro_24h.add_argument("--spot-check-interval", type=_positive_int, default=6, help="Micro-checkpoint interval s")
+    p_astro_24h.add_argument("--lora-rank", type=_positive_int, default=16, help="QLoRA rank r")
     p_astro_24h.add_argument(
         "--output-json",
         default="artifacts/astrophysics_24h_gpu_campaign_report.json",
@@ -449,13 +482,16 @@ def main(argv: list[str] | None = None) -> int:
         import uvicorn
         from hivemind.game.steam_edition import create_hack_miner_fastapi_app
 
-        if args.host not in ("127.0.0.1", "localhost", "::1") and not args.allow_network:
+        host_clean = str(args.host).strip()
+        if not host_clean:
+            raise ValueError("host must be a non-empty string.")
+        if host_clean not in ("127.0.0.1", "localhost", "::1") and not args.allow_network:
             # The HUD is a single-player UI with no login whose POST routes run GPU diagnostics, LoRA forging and Hugging Face downloads.
-            print(f"refusing to listen on {args.host}: the HUD has no login. Use --allow-network only on a network you trust.", file=sys.stderr)
+            print(f"refusing to listen on {host_clean}: the HUD has no login. Use --allow-network only on a network you trust.", file=sys.stderr)
             return 2
 
         app = create_hack_miner_fastapi_app()
-        uvicorn.run(app, host=args.host, port=args.port)
+        uvicorn.run(app, host=host_clean, port=args.port)
         return 0
     if args.command == "hack-probe":
         from hivemind.game.hf_hack_miner import (

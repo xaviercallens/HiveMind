@@ -15,6 +15,7 @@ Integrates:
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 CITIZEN_VRAM_CAP_MIB: float = 1536.0
 
@@ -52,6 +53,20 @@ class NativeCrossPlatformWorkerSpec:
     basis: str = "planning_targets"
 
 
+def _validate_positive_float(val: object, name: str, *, allow_zero: bool = False) -> float:
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        raise ValueError(f"{name} must be a finite real number")
+    fval = float(val)
+    if not math.isfinite(fval):
+        raise ValueError(f"{name} must be a finite real number")
+    if allow_zero:
+        if fval < 0.0:
+            raise ValueError(f"{name} must be non-negative")
+    elif fval <= 0.0:
+        raise ValueError(f"{name} must be positive")
+    return fval
+
+
 def compute_xlayerstorm_turboquant_schedule(
     total_experts: int = 32,
     active_top_k_experts: int = 2,
@@ -64,35 +79,50 @@ def compute_xlayerstorm_turboquant_schedule(
     layer_compute_ms: float = 11.5,
 ) -> PCIeMoEStreamingPlan:
     """Compute resident VRAM and overlapped PCIe streaming latency for a sparse MoE on a citizen GPU."""
-    if active_top_k_experts < 1 or active_top_k_experts > total_experts:
+    if isinstance(total_experts, bool) or not isinstance(total_experts, int) or total_experts < 1 or total_experts > 10_000:
+        raise ValueError("Invalid total_experts")
+    if (
+        isinstance(active_top_k_experts, bool)
+        or not isinstance(active_top_k_experts, int)
+        or active_top_k_experts < 1
+        or active_top_k_experts > total_experts
+    ):
         raise ValueError("Invalid active_top_k_experts")
 
-    quant_expert_mib = single_expert_fp16_mib / e8_quant_compression
+    single_fp16 = _validate_positive_float(single_expert_fp16_mib, "single_expert_fp16_mib")
+    e8_comp = _validate_positive_float(e8_quant_compression, "e8_quant_compression")
+    prelude = _validate_positive_float(shared_prelude_mib, "shared_prelude_mib", allow_zero=True)
+    raw_kv = _validate_positive_float(raw_kv_cache_mib, "raw_kv_cache_mib", allow_zero=True)
+    tq_ratio = _validate_positive_float(turboquant_ratio, "turboquant_ratio")
+    pcie_bw = _validate_positive_float(pcie_bandwidth_gbps, "pcie_bandwidth_gbps")
+    compute_ms = _validate_positive_float(layer_compute_ms, "layer_compute_ms", allow_zero=True)
+
+    quant_expert_mib = single_fp16 / e8_comp
     active_experts_mib = active_top_k_experts * quant_expert_mib
     # Double-buffer staging slot holds the next layer's Top-K experts in pinned VRAM ring
     staging_mib = active_experts_mib
-    turboquant_kv_mib = raw_kv_cache_mib / turboquant_ratio
+    turboquant_kv_mib = raw_kv / tq_ratio
 
-    peak_vram = shared_prelude_mib + active_experts_mib + staging_mib + turboquant_kv_mib
+    peak_vram = prelude + active_experts_mib + staging_mib + turboquant_kv_mib
     headroom = CITIZEN_VRAM_CAP_MIB - peak_vram
 
     transfer_mib = active_experts_mib
-    raw_transfer_ms = (transfer_mib / 1024.0) / max(0.1, pcie_bandwidth_gbps) * 1000.0
-    effective_stall_ms = max(0.0, raw_transfer_ms - layer_compute_ms)
-    hidden_ms = min(raw_transfer_ms, layer_compute_ms)
+    raw_transfer_ms = (transfer_mib / 1024.0) / max(0.1, pcie_bw) * 1000.0
+    effective_stall_ms = max(0.0, raw_transfer_ms - compute_ms)
+    hidden_ms = min(raw_transfer_ms, compute_ms)
     overlap_pct = 100.0 * (hidden_ms / max(1e-9, raw_transfer_ms))
 
     return PCIeMoEStreamingPlan(
         total_experts=total_experts,
         active_top_k_experts=active_top_k_experts,
         single_expert_mib=round(quant_expert_mib, 2),
-        shared_prelude_mib=round(shared_prelude_mib, 2),
+        shared_prelude_mib=round(prelude, 2),
         turboquant_kv_cache_mib=round(turboquant_kv_mib, 2),
         double_buffer_staging_mib=round(staging_mib, 2),
         peak_active_vram_mib=round(peak_vram, 2),
         vram_headroom_mib=round(headroom, 2),
-        pcie_bandwidth_gbps=pcie_bandwidth_gbps,
-        overlapped_compute_ms=layer_compute_ms,
+        pcie_bandwidth_gbps=pcie_bw,
+        overlapped_compute_ms=compute_ms,
         raw_pcie_transfer_ms=round(raw_transfer_ms, 4),
         effective_stall_ms=round(effective_stall_ms, 4),
         overlap_efficiency_pct=round(overlap_pct, 2),

@@ -58,6 +58,25 @@ class AMCPLatentKVCacheEnvelope:
     payload_sha256: str
 
 
+def _validate_finite_float(val: object, name: str, *, positive: bool = False) -> float:
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        raise ValueError(f"{name} must be a finite real number")
+    fval = float(val)
+    if not math.isfinite(fval):
+        raise ValueError(f"{name} must be a finite real number")
+    if positive and fval <= 0.0:
+        raise ValueError(f"{name} must be positive")
+    return fval
+
+
+def _validate_agent_id(agent_id: object, name: str) -> str:
+    if not isinstance(agent_id, str) or not agent_id.strip():
+        raise ValueError(f"{name} must be a non-empty string")
+    if "|" in agent_id or any(ord(c) < 32 or ord(c) == 127 for c in agent_id):
+        raise ValueError(f"{name} contains forbidden control or delimiter characters")
+    return agent_id
+
+
 def quantize_a2_point(u: float, v: float, scale: float = 1.0) -> tuple[float, float]:
     """Project a 2D point (u, v) onto the unit-covolume hexagonal lattice A2 scaled by `scale`.
 
@@ -68,24 +87,25 @@ def quantize_a2_point(u: float, v: float, scale: float = 1.0) -> tuple[float, fl
       L0 = { c * (m, n * sqrt(3)) : m, n in Z }
       L1 = { c * (m + 0.5, (n + 0.5) * sqrt(3)) : m, n in Z }
     """
-    if scale <= 0.0:
-        raise ValueError("scale must be positive")
-    c = math.sqrt(2.0 / math.sqrt(3.0)) * scale
+    u_val = _validate_finite_float(u, "u")
+    v_val = _validate_finite_float(v, "v")
+    scale_val = _validate_finite_float(scale, "scale", positive=True)
+    c = math.sqrt(2.0 / math.sqrt(3.0)) * scale_val
     rt3 = math.sqrt(3.0)
 
     # Candidate 0 on rectangular sublattice L0
-    m0 = round(u / c)
-    n0 = round(v / (c * rt3))
+    m0 = round(u_val / c)
+    n0 = round(v_val / (c * rt3))
     x0 = c * m0
     y0 = c * rt3 * n0
-    d0 = (u - x0) ** 2 + (v - y0) ** 2
+    d0 = (u_val - x0) ** 2 + (v_val - y0) ** 2
 
     # Candidate 1 on shifted rectangular sublattice L1
-    m1 = round(u / c - 0.5)
-    n1 = round(v / (c * rt3) - 0.5)
+    m1 = round(u_val / c - 0.5)
+    n1 = round(v_val / (c * rt3) - 0.5)
     x1 = c * (m1 + 0.5)
     y1 = c * rt3 * (n1 + 0.5)
-    d1 = (u - x1) ** 2 + (v - y1) ** 2
+    d1 = (u_val - x1) ** 2 + (v_val - y1) ** 2
 
     return (x0, y0) if d0 <= d1 else (x1, y1)
 
@@ -95,18 +115,23 @@ def benchmark_a2_rope_plane_quantizer(
     scale: float = 0.25,
 ) -> A2RoPEQuantizationReport:
     """Compare unit-covolume A2 vs unit-covolume Z2 quantization on 2D RoPE key/query planes."""
-    if not pairs_2d:
+    if isinstance(pairs_2d, (str, bytes)) or not isinstance(pairs_2d, Sequence) or len(pairs_2d) == 0:
         raise ValueError("pairs_2d must not be empty")
+    scale_val = _validate_finite_float(scale, "scale", positive=True)
     sq_err_z2 = 0.0
     sq_err_a2 = 0.0
-    for u, v in pairs_2d:
+    for idx, pair in enumerate(pairs_2d):
+        if isinstance(pair, (str, bytes)) or not isinstance(pair, Sequence) or len(pair) != 2:
+            raise ValueError(f"pairs_2d[{idx}] must be a 2-element sequence")
+        u_val = _validate_finite_float(pair[0], f"pairs_2d[{idx}][0]")
+        v_val = _validate_finite_float(pair[1], f"pairs_2d[{idx}][1]")
         # Unit-covolume Z2 scaled by `scale`
-        qz_u = round(u / scale) * scale
-        qz_v = round(v / scale) * scale
-        sq_err_z2 += (u - qz_u) ** 2 + (v - qz_v) ** 2
+        qz_u = round(u_val / scale_val) * scale_val
+        qz_v = round(v_val / scale_val) * scale_val
+        sq_err_z2 += (u_val - qz_u) ** 2 + (v_val - qz_v) ** 2
 
-        qa_u, qa_v = quantize_a2_point(u, v, scale=scale)
-        sq_err_a2 += (u - qa_u) ** 2 + (v - qa_v) ** 2
+        qa_u, qa_v = quantize_a2_point(u_val, v_val, scale=scale_val)
+        sq_err_a2 += (u_val - qa_u) ** 2 + (v_val - qa_v) ** 2
 
     n_dims = 2 * len(pairs_2d)
     mse_z2 = sq_err_z2 / n_dims
@@ -130,39 +155,46 @@ def pack_amcp_xswat_latent_kv_envelope(
     bits_per_dim: float = 2.5,
 ) -> AMCPLatentKVCacheEnvelope:
     """Pack 8D KV-cache blocks into an AMCP + XSwaT latent envelope using OptimalEnergyAI E8 quantization."""
-    if not kv_vectors_8d:
+    sender_id = _validate_agent_id(sender_agent_id, "sender_agent_id")
+    receiver_id = _validate_agent_id(receiver_agent_id, "receiver_agent_id")
+    if isinstance(kv_vectors_8d, (str, bytes)) or not isinstance(kv_vectors_8d, Sequence) or len(kv_vectors_8d) == 0:
         raise ValueError("kv_vectors_8d must not be empty")
+    scale_val = _validate_finite_float(scale, "scale", positive=True)
+    bpd_val = _validate_finite_float(bits_per_dim, "bits_per_dim", positive=True)
+    if bpd_val > 16.0:
+        raise ValueError("bits_per_dim must be in (0, 16]")
 
     err_e8 = 0.0
     err_z8 = 0.0
     hasher = hashlib.sha256()
-    hasher.update(f"{sender_agent_id}->{receiver_agent_id}|b={bits_per_dim}".encode("utf-8"))
+    hasher.update(f"{sender_id}->{receiver_id}|b={bpd_val}".encode("utf-8"))
 
-    for block in kv_vectors_8d:
-        if len(block) != 8:
+    for idx, block in enumerate(kv_vectors_8d):
+        if isinstance(block, (str, bytes)) or not isinstance(block, Sequence) or len(block) != 8:
             raise ValueError("Each KV block must have length 8")
-        scaled = [x / scale for x in block]
+        clean_block = [_validate_finite_float(x, f"kv_vectors_8d[{idx}][{d}]") for d, x in enumerate(block)]
+        scaled = [x / scale_val for x in clean_block]
         q_e8_unit, _coset = GossetE8LatticeQuantizer.project_to_e8(scaled)
-        q_e8 = [y * scale for y in q_e8_unit]
-        q_z8 = [round(x / scale) * scale for x in block]
+        q_e8 = [y * scale_val for y in q_e8_unit]
+        q_z8 = [round(x / scale_val) * scale_val for x in clean_block]
 
-        err_e8 += sum((a - b) ** 2 for a, b in zip(block, q_e8))
-        err_z8 += sum((a - b) ** 2 for a, b in zip(block, q_z8))
+        err_e8 += sum((a - b) ** 2 for a, b in zip(clean_block, q_e8))
+        err_z8 += sum((a - b) ** 2 for a, b in zip(clean_block, q_z8))
         hasher.update(",".join(f"{v:.4f}" for v in q_e8).encode("utf-8"))
 
     total_dims = 8 * len(kv_vectors_8d)
     raw_fp16_bytes = total_dims * 2
-    compressed_bytes = max(1, int(math.ceil(total_dims * bits_per_dim / 8.0)))
+    compressed_bytes = max(1, int(math.ceil(total_dims * bpd_val / 8.0)))
     mse_e8 = err_e8 / total_dims
     mse_z8 = err_z8 / total_dims
     e8_gain_pct = 100.0 * (1.0 - mse_e8 / max(1e-15, mse_z8))
 
     return AMCPLatentKVCacheEnvelope(
-        sender_agent_id=sender_agent_id,
-        receiver_agent_id=receiver_agent_id,
+        sender_agent_id=sender_id,
+        receiver_agent_id=receiver_id,
         num_tokens=len(kv_vectors_8d),
         head_dim=8,
-        bits_per_dim=bits_per_dim,
+        bits_per_dim=bpd_val,
         raw_fp16_bytes=raw_fp16_bytes,
         compressed_latent_bytes=compressed_bytes,
         compression_ratio=round(raw_fp16_bytes / compressed_bytes, 4),

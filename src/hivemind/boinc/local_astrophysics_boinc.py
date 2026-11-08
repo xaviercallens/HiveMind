@@ -102,6 +102,12 @@ def _load_astrophysics_examples(
     num_samples: int = 24,
 ) -> List[str]:
     """Load real Hugging Face Astrophysics examples from local cache with curated corpus synthesis."""
+    if not isinstance(branch_name, str) or not branch_name.strip():
+        raise ValueError("branch_name must be a non-empty string")
+    if not isinstance(dataset_id, str) or not dataset_id.strip():
+        raise ValueError("dataset_id must be a non-empty string")
+    if isinstance(num_samples, bool) or not isinstance(num_samples, int) or num_samples <= 0:
+        raise ValueError("num_samples must be a positive integer")
     ds_lower = dataset_id.lower()
     samples: List[str] = []
 
@@ -245,6 +251,16 @@ def create_signed_astrophysics_parquet_shard(
     secret_key: bytes = DEFAULT_COORDINATOR_SECRET,
 ) -> Tuple[Path, str, str, List[str], Dict[str, Any]]:
     """Fetch real Hugging Face Astrophysics examples, screen via Phase S-2 guard, tokenize into Parquet, and sign."""
+    if isinstance(rng_seed, bool) or not isinstance(rng_seed, int) or rng_seed < 0:
+        raise ValueError("rng_seed must be a non-negative integer")
+    if isinstance(num_sequences, bool) or not isinstance(num_sequences, int) or num_sequences <= 0:
+        raise ValueError("num_sequences must be a positive integer")
+    if isinstance(seq_len, bool) or not isinstance(seq_len, int) or seq_len < 4:
+        raise ValueError("seq_len must be an integer >= 4")
+    if isinstance(vocab_size, bool) or not isinstance(vocab_size, int) or vocab_size < 64:
+        raise ValueError("vocab_size must be an integer >= 64")
+    if not isinstance(secret_key, (bytes, bytearray)) or len(secret_key) < 8:
+        raise ValueError("secret_key must be bytes of length >= 8")
     path = Path(shard_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -321,6 +337,18 @@ def run_local_boinc_astrophysics_campaign(
     output_json_path: str | Path | None = None,
 ) -> Dict[str, Any]:
     """Execute a complete BOINC Astrophysics Campaign on the local GPU across 4 Hugging Face datasets."""
+    for name, val in (
+        ("inner_steps_H", inner_steps_H),
+        ("spot_check_interval_s", spot_check_interval_s),
+        ("lora_rank_r", lora_rank_r),
+        ("num_sequences", num_sequences),
+        ("seq_len", seq_len),
+        ("vocab_size", vocab_size),
+    ):
+        if isinstance(val, bool) or not isinstance(val, int) or val <= 0:
+            raise ValueError(f"{name} must be a positive integer")
+    if spot_check_interval_s > inner_steps_H:
+        raise ValueError("spot_check_interval_s must be <= inner_steps_H")
     t_start = time.perf_counter()
     configure_deterministic_runtime(42)
     hw_info = detect_local_hardware()

@@ -77,23 +77,47 @@ ENVELOPE_OVERHEAD = 12
 # ---------------------------------------------------------------------------
 def percentile(values: Sequence[float], fraction: float) -> float:
     """Nearest-rank percentile of `values` (deterministic, without interpolation)."""
+    if isinstance(values, (str, bytes)):
+        raise ValueError("values must be a sequence of numbers, not str/bytes")
+    if (
+        isinstance(fraction, bool)
+        or not isinstance(fraction, (int, float))
+        or not math.isfinite(float(fraction))
+        or not (0.0 < float(fraction) <= 1.0)
+    ):
+        raise ValueError("percentile fraction must be a finite number in (0, 1]")
     if not values:
         return 0.0
-    if not 0.0 < fraction <= 1.0:
-        raise ValueError("percentile fraction must be in (0, 1]")
-    ordered = sorted(values)
-    index = max(0, min(len(ordered) - 1, math.ceil(fraction * len(ordered)) - 1))
+    clean: List[float] = []
+    for v in values:
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)):
+            raise ValueError(f"values must contain only finite numbers, got {v!r}")
+        clean.append(float(v))
+    ordered = sorted(clean)
+    index = max(0, min(len(ordered) - 1, math.ceil(float(fraction) * len(ordered)) - 1))
     return ordered[index]
 
 
 def latency_summary(values: Sequence[float]) -> Dict[str, float]:
     """Summarise a latency sample with the p50/p95/p99 the report has to carry."""
+    if isinstance(values, (str, bytes)):
+        raise ValueError("values must be a sequence of numbers, not str/bytes")
     if not values:
         return {
             "count": 0, "p50_ms": 0.0, "p95_ms": 0.0, "p99_ms": 0.0,
             "min_ms": 0.0, "max_ms": 0.0, "mean_ms": 0.0,
         }
-    ordered = sorted(values)
+    clean: List[float] = []
+    for v in values:
+        if (
+            isinstance(v, bool)
+            or not isinstance(v, (int, float))
+            or not math.isfinite(float(v))
+            or float(v) < 0.0
+        ):
+            raise ValueError(f"latencies must be finite and >= 0, got {v!r}")
+        clean.append(float(v))
+    ordered = sorted(clean)
     return {
         "count": len(ordered),
         "p50_ms": round(percentile(ordered, 0.50), 3),
@@ -107,6 +131,14 @@ def latency_summary(values: Sequence[float]) -> Dict[str, float]:
 
 def _throughput_mbps(payload_bytes: int, elapsed_s: float) -> float:
     """Payload throughput of a transfer in Mbit/s."""
+    if isinstance(payload_bytes, bool) or not isinstance(payload_bytes, int) or payload_bytes < 0:
+        raise ValueError("payload_bytes must be a non-negative integer")
+    if (
+        isinstance(elapsed_s, bool)
+        or not isinstance(elapsed_s, (int, float))
+        or not math.isfinite(float(elapsed_s))
+    ):
+        raise ValueError("elapsed_s must be a finite number")
     if elapsed_s <= 0:
         return 0.0
     return round((payload_bytes * 8.0) / elapsed_s / 1_000_000.0, 4)
@@ -131,6 +163,18 @@ class FaultScenario:
     nat_rebinds: int = 1
     frames: int = DEFAULT_FRAMES
     frame_bytes: int = DEFAULT_FRAME_BYTES
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.scenario_id, str) or not self.scenario_id.strip():
+            raise ValueError("scenario_id must be a non-empty string")
+        if not isinstance(self.profile, FaultProfile):
+            raise ValueError("profile must be a FaultProfile instance")
+        if isinstance(self.nat_rebinds, bool) or not isinstance(self.nat_rebinds, int) or self.nat_rebinds < 0:
+            raise ValueError("nat_rebinds must be an integer >= 0")
+        if isinstance(self.frames, bool) or not isinstance(self.frames, int) or self.frames < 1:
+            raise ValueError("frames must be an integer >= 1")
+        if isinstance(self.frame_bytes, bool) or not isinstance(self.frame_bytes, int) or self.frame_bytes < 1:
+            raise ValueError("frame_bytes must be an integer >= 1")
 
     def to_dict(self) -> Dict[str, Any]:
         """Plain-dict view of the scenario (JSON friendly)."""
@@ -220,8 +264,24 @@ def default_scenarios(
     frame_bytes: int = DEFAULT_FRAME_BYTES,
 ) -> List[FaultScenario]:
     """The `0%`, `1%`, `3%` and `5%` packet-loss profiles the bounty asks for."""
+    if isinstance(loss_rates, (str, bytes)) or not loss_rates:
+        raise ValueError("loss_rates must be a non-empty sequence of floats in [0.0, 1.0)")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be an integer >= 0")
+    if isinstance(frames, bool) or not isinstance(frames, int) or frames < 1:
+        raise ValueError("frames must be an integer >= 1")
+    if isinstance(frame_bytes, bool) or not isinstance(frame_bytes, int) or frame_bytes < 1:
+        raise ValueError("frame_bytes must be an integer >= 1")
     scenarios = []
     for index, loss in enumerate(loss_rates):
+        if (
+            isinstance(loss, bool)
+            or not isinstance(loss, (int, float))
+            or not math.isfinite(float(loss))
+            or float(loss) < 0.0
+            or float(loss) >= 1.0
+        ):
+            raise ValueError(f"loss_rate must be a finite number in [0.0, 1.0), got {loss!r}")
         scenarios.append(
             FaultScenario(
                 scenario_id=f"loss_{int(round(loss * 100))}pct",
@@ -251,6 +311,8 @@ class StrikeRegister:
     """
 
     def __init__(self, peer_id: str = STRIKE_PEER_ID) -> None:
+        if not isinstance(peer_id, str) or not peer_id.strip():
+            raise ValueError("peer_id must be a non-empty string")
         from hivemind.swarm.quic_transport import AsyncQUICGeoRingTransport
 
         self.peer_id = peer_id
@@ -270,6 +332,8 @@ class StrikeRegister:
 
     def register(self, nonce: int) -> bool:
         """Offer `nonce` to the strike register and record the outcome."""
+        if isinstance(nonce, bool) or not isinstance(nonce, int) or nonce < 1:
+            raise ValueError("nonce must be an integer >= 1")
         self.attempts += 1
         accepted, reason = self._transport.verify_0rtt_ticket_anti_replay(self.peer_id, nonce)
         if accepted:
@@ -281,6 +345,8 @@ class StrikeRegister:
 
     def replay(self, nonce: int) -> bool:
         """Offer a nonce that was already used: the register has to reject it."""
+        if isinstance(nonce, bool) or not isinstance(nonce, int) or nonce < 1:
+            raise ValueError("nonce must be an integer >= 1")
         self.replay_probes += 1
         return self.register(nonce)
 
@@ -308,6 +374,10 @@ class StrikeRegister:
 # ---------------------------------------------------------------------------
 def _envelope_frames(count: int, payload_bytes: int) -> List[bytes]:
     """Build `count` timestamped frames; the timestamp is taken when the batch is built."""
+    if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+        raise ValueError("count must be a non-negative integer")
+    if isinstance(payload_bytes, bool) or not isinstance(payload_bytes, int) or payload_bytes < 1:
+        raise ValueError("payload_bytes must be an integer >= 1")
     now = time.time()
     return [
         FrameEnvelope(index, now, b"\x5a" * max(1, payload_bytes)).encode()

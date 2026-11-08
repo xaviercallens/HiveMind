@@ -133,6 +133,18 @@ class TransportRecord:
     key: bytes | None
     value: bytes
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.topic, str) or not self.topic.strip():
+            raise ValueError("topic must be a non-empty string")
+        if isinstance(self.partition, bool) or not isinstance(self.partition, int) or self.partition < 0:
+            raise ValueError("partition must be an integer >= 0")
+        if isinstance(self.offset, bool) or not isinstance(self.offset, int) or self.offset < 0:
+            raise ValueError("offset must be an integer >= 0")
+        if self.key is not None and not isinstance(self.key, bytes):
+            raise ValueError("key must be bytes or None")
+        if not isinstance(self.value, bytes):
+            raise ValueError("value must be bytes")
+
 
 class Transport(Protocol):
     """Minimal broker surface used by the AMCP publisher and consumer (structural; any object with these works).
@@ -162,10 +174,14 @@ class InMemoryTransport:
     """
 
     def __init__(self, num_partitions: int = 4, retention_per_partition: int = 10_000) -> None:
-        if num_partitions < 1:
-            raise ValueError("num_partitions must be >= 1")
-        if retention_per_partition < 1:
-            raise ValueError("retention_per_partition must be >= 1")
+        if isinstance(num_partitions, bool) or not isinstance(num_partitions, int) or num_partitions < 1:
+            raise ValueError("num_partitions must be an integer >= 1")
+        if (
+            isinstance(retention_per_partition, bool)
+            or not isinstance(retention_per_partition, int)
+            or retention_per_partition < 1
+        ):
+            raise ValueError("retention_per_partition must be an integer >= 1")
         self.num_partitions = num_partitions
         self._retention = retention_per_partition
         self._lock = threading.Lock()
@@ -177,13 +193,19 @@ class InMemoryTransport:
         self._closed = False
 
     def partition_for(self, key: bytes) -> int:
+        if not isinstance(key, (bytes, bytearray)):
+            raise ValueError("key must be bytes")
         return zlib.crc32(key) % self.num_partitions
 
     def publish(self, topic: str, key: bytes, value: bytes) -> dict[str, Any]:
+        if not isinstance(topic, str) or not topic.strip():
+            raise ValueError("topic must be a non-empty string")
+        if not isinstance(key, (bytes, bytearray)) or not isinstance(value, (bytes, bytearray)):
+            raise ValueError("key and value must be bytes")
         with self._lock:
             if self._closed:
                 raise TransportError("transport is closed")
-            partition = self.partition_for(key)
+            partition = self.partition_for(bytes(key))
             tp = (topic, partition)
             offset = self._next_offset.get(tp, 0)
             log = self._logs.setdefault(tp, deque())
@@ -198,6 +220,15 @@ class InMemoryTransport:
             self._subscribed = tuple(dict.fromkeys(topics))
 
     def poll(self, max_records: int, timeout_s: float) -> list[TransportRecord]:
+        if isinstance(max_records, bool) or not isinstance(max_records, int) or max_records < 1:
+            raise ValueError("max_records must be an integer >= 1")
+        if (
+            isinstance(timeout_s, bool)
+            or not isinstance(timeout_s, (int, float))
+            or not math.isfinite(float(timeout_s))
+            or float(timeout_s) < 0.0
+        ):
+            raise ValueError("timeout_s must be a finite number >= 0")
         out: list[TransportRecord] = []
         with self._lock:
             if self._closed:
@@ -219,10 +250,18 @@ class InMemoryTransport:
         return out
 
     def commit(self, record: TransportRecord) -> None:
+        if not isinstance(record, TransportRecord):
+            raise ValueError("record must be a TransportRecord")
         with self._lock:
             self._committed[(record.topic, record.partition)] = record.offset + 1
 
     def seek(self, topic: str, partition: int, offset: int) -> None:
+        if not isinstance(topic, str) or not topic.strip():
+            raise ValueError("topic must be a non-empty string")
+        if isinstance(partition, bool) or not isinstance(partition, int) or partition < 0:
+            raise ValueError("partition must be an integer >= 0")
+        if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+            raise ValueError("offset must be an integer >= 0")
         with self._lock:
             self._position[(topic, partition)] = offset
 
@@ -523,7 +562,12 @@ def _rfc3339(utc: float) -> str:
 
 def sign_envelope(event: AMCPKafkaEvent, keyring: HMACKeyring, ttl_s: float = DEFAULT_EVENT_TTL_S) -> dict[str, Any]:
     """Wrap ``event`` in a CloudEvents 1.0 envelope signed with the keyring's active key."""
-    if not (0.0 < ttl_s <= MAX_EVENT_TTL_S):
+    if (
+        isinstance(ttl_s, bool)
+        or not isinstance(ttl_s, (int, float))
+        or not math.isfinite(float(ttl_s))
+        or not (0.0 < float(ttl_s) <= MAX_EVENT_TTL_S)
+    ):
         raise ValueError(f"ttl_s must be in (0, {MAX_EVENT_TTL_S}]")
     envelope: dict[str, Any] = {
         "specversion": "1.0",
@@ -535,7 +579,7 @@ def sign_envelope(event: AMCPKafkaEvent, keyring: HMACKeyring, ttl_s: float = DE
         "datacontenttype": "application/json",
         "data": event.to_dict(),
         "hmkeyid": keyring.active_kid,
-        "hmexpiry": round(event.utc + ttl_s, 6),
+        "hmexpiry": round(event.utc + float(ttl_s), 6),
     }
     envelope["hmsig"] = keyring.sign(canonical_json(envelope))
     return envelope
@@ -556,6 +600,21 @@ class FieldRule:
     gt: float | None = None
     le: float | None = None
     max_len: int = 256
+
+    def __post_init__(self) -> None:
+        if self.kind not in ("str", "number"):
+            raise ValueError(f"FieldRule.kind must be 'str' or 'number', got {self.kind!r}")
+        if isinstance(self.max_len, bool) or not isinstance(self.max_len, int) or self.max_len < 1:
+            raise ValueError("FieldRule.max_len must be an integer >= 1")
+        for bname, bval in (("ge", self.ge), ("gt", self.gt), ("le", self.le)):
+            if bval is not None and (
+                isinstance(bval, bool) or not isinstance(bval, (int, float)) or not math.isfinite(float(bval))
+            ):
+                raise ValueError(f"FieldRule.{bname} must be a finite number or None")
+        if self.ge is not None and self.le is not None and float(self.ge) > float(self.le):
+            raise ValueError("FieldRule.ge cannot exceed FieldRule.le")
+        if self.gt is not None and self.le is not None and float(self.gt) >= float(self.le):
+            raise ValueError("FieldRule.gt must be strictly less than FieldRule.le")
 
     def check(self, name: str, value: Any) -> None:
         if self.kind == "str":
@@ -584,6 +643,16 @@ class TopicSchema:
     payloads: Mapping[str, Mapping[str, FieldRule]]
     open_event_types: bool = False
     require_known_subject: bool = False
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.topic_key, str) or not self.topic_key.strip():
+            raise ValueError("topic_key must be a non-empty string")
+        if not isinstance(self.payloads, Mapping):
+            raise ValueError("payloads must be a Mapping")
+        if not isinstance(self.open_event_types, bool):
+            raise ValueError("open_event_types must be a bool")
+        if not isinstance(self.require_known_subject, bool):
+            raise ValueError("require_known_subject must be a bool")
 
 
 _TRADE_FIELDS: dict[str, FieldRule] = {
@@ -788,8 +857,19 @@ class EnvelopeVerifier:
         max_skew_s: float = MAX_CLOCK_SKEW_S,
         clock: Callable[[], float] = time.time,
     ) -> None:
-        if max_ttl_s <= 0 or max_skew_s < 0:
+        if (
+            isinstance(max_ttl_s, bool)
+            or not isinstance(max_ttl_s, (int, float))
+            or not math.isfinite(float(max_ttl_s))
+            or float(max_ttl_s) <= 0
+            or isinstance(max_skew_s, bool)
+            or not isinstance(max_skew_s, (int, float))
+            or not math.isfinite(float(max_skew_s))
+            or float(max_skew_s) < 0
+        ):
             raise ValueError("max_ttl_s must be > 0 and max_skew_s >= 0")
+        if not callable(clock):
+            raise ValueError("clock must be callable")
         self.keyring = keyring
         self.max_ttl_s = float(max_ttl_s)
         self.max_skew_s = float(max_skew_s)
@@ -863,7 +943,12 @@ class AMCPPublisher:
         ttl_s: float = DEFAULT_EVENT_TTL_S,
         mirror: InMemoryKafkaBridge | None = None,
     ) -> None:
-        if not (0.0 < ttl_s <= MAX_EVENT_TTL_S):
+        if (
+            isinstance(ttl_s, bool)
+            or not isinstance(ttl_s, (int, float))
+            or not math.isfinite(float(ttl_s))
+            or not (0.0 < float(ttl_s) <= MAX_EVENT_TTL_S)
+        ):
             raise ValueError(f"ttl_s must be in (0, {MAX_EVENT_TTL_S}]")
         self.transport = transport
         self.keyring = keyring
@@ -906,7 +991,15 @@ class ReplayWindow:
     """Bounded set of handled event ids with a TTL; oldest entries are evicted first when full."""
 
     def __init__(self, capacity: int = 100_000, ttl_s: float = MAX_EVENT_TTL_S + MAX_CLOCK_SKEW_S) -> None:
-        if capacity < 1 or ttl_s <= 0:
+        if (
+            isinstance(capacity, bool)
+            or not isinstance(capacity, int)
+            or capacity < 1
+            or isinstance(ttl_s, bool)
+            or not isinstance(ttl_s, (int, float))
+            or not math.isfinite(float(ttl_s))
+            or float(ttl_s) <= 0
+        ):
             raise ValueError("capacity must be >= 1 and ttl_s > 0")
         self.capacity = capacity
         self.ttl_s = float(ttl_s)
@@ -921,11 +1014,19 @@ class ReplayWindow:
             del self._seen[oldest_id]
 
     def seen(self, event_id: str, now: float) -> bool:
-        self._prune(now)
+        if not isinstance(event_id, str) or not event_id.strip():
+            raise ValueError("event_id must be a non-empty string")
+        if isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(float(now)):
+            raise ValueError("now must be a finite number")
+        self._prune(float(now))
         return event_id in self._seen
 
     def mark(self, event_id: str, now: float) -> None:
-        self._seen[event_id] = now
+        if not isinstance(event_id, str) or not event_id.strip():
+            raise ValueError("event_id must be a non-empty string")
+        if isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(float(now)):
+            raise ValueError("now must be a finite number")
+        self._seen[event_id] = float(now)
         self._seen.move_to_end(event_id)
         while len(self._seen) > self.capacity:
             self._seen.popitem(last=False)
@@ -986,10 +1087,19 @@ class AMCPConsumer:
         dlq_topic: str = DLQ_TOPIC,
         clock: Callable[[], float] = time.time,
     ) -> None:
-        if not 1 <= max_batch <= 10_000:
+        if isinstance(max_batch, bool) or not isinstance(max_batch, int) or not 1 <= max_batch <= 10_000:
             raise ValueError("max_batch must be in [1, 10000]")
-        if max_attempts < 1:
+        if isinstance(max_attempts, bool) or not isinstance(max_attempts, int) or max_attempts < 1:
             raise ValueError("max_attempts must be >= 1")
+        if (
+            isinstance(poll_timeout_s, bool)
+            or not isinstance(poll_timeout_s, (int, float))
+            or not math.isfinite(float(poll_timeout_s))
+            or float(poll_timeout_s) < 0.0
+        ):
+            raise ValueError("poll_timeout_s must be a finite number >= 0")
+        if not callable(clock):
+            raise ValueError("clock must be callable")
         window = replay_window if replay_window is not None else ReplayWindow()
         if window.ttl_s < verifier.max_ttl_s + verifier.max_skew_s:
             raise ValueError("replay window TTL must cover max event lifetime + clock skew, or replays can slip through")
@@ -1017,14 +1127,18 @@ class AMCPConsumer:
 
     def register(self, event_type: str, handler: Handler) -> None:
         """Route one event type to ``handler``; registering the same type twice is an error."""
-        if not event_type.startswith(EVENT_TYPE_PREFIX):
+        if not isinstance(event_type, str) or not event_type.startswith(EVENT_TYPE_PREFIX):
             raise ValueError(f"event_type must start with {EVENT_TYPE_PREFIX}")
+        if not callable(handler):
+            raise ValueError("handler must be callable")
         if event_type in self._handlers:
             raise ValueError(f"handler already registered for {event_type}")
         self._handlers[event_type] = handler
 
     def register_topic(self, topic: str, handler: Handler) -> None:
         """Fallback handler for every event type on ``topic`` (key or full name) without an exact handler."""
+        if not callable(handler):
+            raise ValueError("handler must be callable")
         name = KAFKA_TOPICS.get(topic, topic)
         if name not in self.topics:
             raise ValueError(f"{name} is not one of this consumer's topics")
@@ -1128,6 +1242,17 @@ class AMCPConsumer:
 
     def run(self, max_batches: int | None = None, idle_sleep_s: float = 0.0) -> ConsumerStats:
         """Loop until ``stop()`` (or ``max_batches`` polls); sleep ``idle_sleep_s`` after an empty poll."""
+        if max_batches is not None and (
+            isinstance(max_batches, bool) or not isinstance(max_batches, int) or max_batches < 1
+        ):
+            raise ValueError("max_batches must be an integer >= 1 or None")
+        if (
+            isinstance(idle_sleep_s, bool)
+            or not isinstance(idle_sleep_s, (int, float))
+            or not math.isfinite(float(idle_sleep_s))
+            or float(idle_sleep_s) < 0.0
+        ):
+            raise ValueError("idle_sleep_s must be a finite number >= 0")
         batches = 0
         while not self._stop.is_set() and (max_batches is None or batches < max_batches):
             got = self.run_once()

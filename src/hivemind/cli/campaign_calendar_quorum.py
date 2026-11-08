@@ -236,6 +236,13 @@ def evaluate_quorum_readiness(
     covered_domains: Sequence[str],
 ) -> dict[str, Any]:
     """Compute Byzantine quorum (`n >= 2f + 3`) and 8-domain MoE coverage status."""
+    for name, seq in (
+        ("human_participants", human_participants),
+        ("ai_agent_participants", ai_agent_participants),
+        ("covered_domains", covered_domains),
+    ):
+        if isinstance(seq, (str, bytes)) or not isinstance(seq, Sequence):
+            raise ValueError(f"{name} must be a sequence of strings, not {type(seq).__name__}")
     humans = sorted(set(h.strip() for h in human_participants if isinstance(h, str) and h.strip()))
     agents = sorted(set(a.strip() for a in ai_agent_participants if isinstance(a, str) and a.strip()))
     domains = sorted(set(d.strip() for d in covered_domains if isinstance(d, str) and d.strip()))

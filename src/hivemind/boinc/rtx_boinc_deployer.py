@@ -26,6 +26,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import math
 import os
 import platform
 import re
@@ -120,6 +121,12 @@ def detect_rtx_boinc_profile(
     sys_platform: str | None = None,
 ) -> RTXBoincHardwareProfile:
     """Auto-detect NVIDIA RTX GPU capabilities and select the matching BOINC profile & VRAM guards."""
+    if override_vram_total_mib is not None and (isinstance(override_vram_total_mib, bool) or not isinstance(override_vram_total_mib, int) or override_vram_total_mib < 0):
+        raise ValueError("override_vram_total_mib must be a non-negative integer")
+    if override_vram_free_mib is not None and (isinstance(override_vram_free_mib, bool) or not isinstance(override_vram_free_mib, int) or override_vram_free_mib < 0):
+        raise ValueError("override_vram_free_mib must be a non-negative integer")
+    if override_vram_total_mib is not None and override_vram_free_mib is not None and override_vram_free_mib > override_vram_total_mib:
+        raise ValueError("override_vram_free_mib cannot exceed override_vram_total_mib")
     boinc_plat = current_boinc_platform(sys_platform)
     gpu_name = override_gpu_name or "CPU-Fallback"
     vram_total = int(override_vram_total_mib or 0)
@@ -427,6 +434,12 @@ class RTXBoincServer:
             )
 
     def sign_workunit(self, wu_id: str, domain: str, rng_seed: int) -> str:
+        if not isinstance(wu_id, str) or not wu_id.strip():
+            raise ValueError("wu_id must be a non-empty string")
+        if not isinstance(domain, str) or not domain.strip():
+            raise ValueError("domain must be a non-empty string")
+        if isinstance(rng_seed, bool) or not isinstance(rng_seed, int):
+            raise ValueError("rng_seed must be an integer")
         msg = f"{wu_id}:{domain}:{rng_seed}".encode("utf-8")
         return hmac.new(self.hmac_secret.encode("utf-8"), msg, hashlib.sha256).hexdigest()
 
@@ -667,11 +680,15 @@ class RTXBoincServer:
                 reasons.append("HMAC signature mismatch")
             if self.require_cuda and not sub.cuda_verified:
                 reasons.append("CUDA hardware verification required (CPU fallback rejected)")
-            if sub.eval_loss_after > sub.eval_loss_before:
+            if not math.isfinite(sub.eval_loss_before) or not math.isfinite(sub.eval_loss_after) or sub.eval_loss_before <= 0.0 or sub.eval_loss_after < 0.0:
+                reasons.append("eval_loss_before (> 0) and eval_loss_after (>= 0) must be finite")
+            elif sub.eval_loss_after > sub.eval_loss_before:
                 reasons.append(
                     f"Monotone validation ratchet failed: eval_loss_after ({sub.eval_loss_after:.6f}) "
                     f"> eval_loss_before ({sub.eval_loss_before:.6f})"
                 )
+            if not math.isfinite(sub.flops_claimed) or sub.flops_claimed <= 0.0:
+                reasons.append("flops_claimed must be a positive finite float")
             if not sub.state_sha256 and not sub.ptx_sha256:
                 reasons.append("Missing cryptographic state_sha256 or ptx_sha256 digest")
 
@@ -684,6 +701,8 @@ class RTXBoincServer:
             )
             cobblestones = round(max(1.0, float(sub.flops_claimed) / 1.0e11), 2) if valid else 0.0
             hmt_awarded = int(DEFAULT_POINTS_PER_ACCEPTED_ROUND) if valid else 0
+            safe_loss_before = float(sub.eval_loss_before) if math.isfinite(sub.eval_loss_before) else 0.0
+            safe_loss_after = float(sub.eval_loss_after) if math.isfinite(sub.eval_loss_after) else 0.0
 
             conn.execute(
                 """
@@ -701,11 +720,11 @@ class RTXBoincServer:
                 """,
                 (
                     "validated" if valid else "invalid",
-                    json.dumps(sub.model_dump(), sort_keys=True),
+                    json.dumps(sub.model_dump(), sort_keys=True, allow_nan=False) if (math.isfinite(sub.eval_loss_before) and math.isfinite(sub.eval_loss_after) and math.isfinite(sub.flops_claimed)) else "{}",
                     1 if valid else 0,
                     reason,
-                    float(sub.eval_loss_before),
-                    float(sub.eval_loss_after),
+                    safe_loss_before,
+                    safe_loss_after,
                     cobblestones,
                     hmt_awarded,
                     now,
@@ -809,6 +828,8 @@ class RTXBoincServer:
 
     def status_summary(self, limit: int = 20) -> dict[str, Any]:
         """Return live SQLite telemetry for the RTX BOINC Server."""
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0 or limit > 1000:
+            raise ValueError("limit must be an integer in [1, 1000]")
         with self._connect() as conn:
             counts = conn.execute(
                 """

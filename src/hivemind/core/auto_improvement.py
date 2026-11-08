@@ -324,6 +324,11 @@ def select_dream_phase_teacher_for_vram(
 
     Enforces Golden Invariant I1 (<= 6.5 GB resident VRAM on 8 GB consumer GPUs).
     """
+    for field_name, val in (("vram_gb", vram_gb), ("system_ram_gb", system_ram_gb)):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or val <= 0:
+            raise ValueError(f"{field_name} must be a positive finite number")
+    if not isinstance(domain_or_cluster, str) or not domain_or_cluster.strip() or any(ord(c) < 32 for c in domain_or_cluster):
+        raise ValueError("domain_or_cluster must be a non-empty printable string")
     dom = domain_or_cluster.strip().lower()
     is_code_or_formal = any(
         k in dom for k in ("code", "coding", "swe", "rust", "python", "cyber", "formal", "lean", "systems", "cluster_00", "cluster_01")
@@ -551,6 +556,8 @@ NOCTURNAL_20_MOE_TARGETS: tuple[str, ...] = (
 
 def resolve_domain_canonical(domain: str) -> str:
     """Resolve a domain alias or name to its canonical HF_EXPERT_CATALOG key."""
+    if not isinstance(domain, str) or not domain.strip() or any(ord(c) < 32 for c in domain):
+        raise ValueError("domain must be a non-empty printable string")
     canonical = DOMAIN_ALIASES.get(domain, domain)
     if canonical not in HF_EXPERT_CATALOG:
         raise ValueError(
@@ -581,6 +588,25 @@ class AutoImprovementWorkunit:
     sha256_digest: str = ""
 
     def __post_init__(self) -> None:
+        for field_name, val in (
+            ("wu_id", self.wu_id),
+            ("base_model_id", self.base_model_id),
+            ("target_adapter_name", self.target_adapter_name),
+        ):
+            if not isinstance(val, str) or not val.strip() or any(ord(c) < 32 for c in val):
+                raise ValueError(f"{field_name} must be a non-empty printable string")
+        for field_name, val in (("rank", self.rank), ("num_samples", self.num_samples), ("inner_steps", self.inner_steps)):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+        if isinstance(self.seed, bool) or not isinstance(self.seed, int) or self.seed < 0:
+            raise ValueError("seed must be a non-negative integer")
+        for field_name, val in (
+            ("min_vram_gb", self.min_vram_gb),
+            ("time_budget_minutes", self.time_budget_minutes),
+            ("created_utc", self.created_utc),
+        ):
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or val <= 0:
+                raise ValueError(f"{field_name} must be a positive finite number")
         canonical = resolve_domain_canonical(self.domain)
         meta = HF_EXPERT_CATALOG[canonical]
         if not self.hf_dataset:
@@ -668,6 +694,17 @@ class NocturnalAutoImprovementScheduler:
         default_rank: int = 16,
         target_vram_ceiling_gb: float = 8.0,
     ) -> None:
+        if not isinstance(base_model_id, str) or not base_model_id.strip() or any(ord(c) < 32 for c in base_model_id):
+            raise ValueError("base_model_id must be a non-empty printable string")
+        if isinstance(default_rank, bool) or not isinstance(default_rank, int) or default_rank < 1:
+            raise ValueError("default_rank must be an integer >= 1")
+        if (
+            isinstance(target_vram_ceiling_gb, bool)
+            or not isinstance(target_vram_ceiling_gb, (int, float))
+            or not math.isfinite(float(target_vram_ceiling_gb))
+            or target_vram_ceiling_gb <= 0
+        ):
+            raise ValueError("target_vram_ceiling_gb must be a positive finite number")
         self.base_model_id = self._canonical_base_model(base_model_id)
         self.default_rank = default_rank
         self.target_vram_ceiling_gb = target_vram_ceiling_gb
@@ -753,6 +790,18 @@ class NocturnalAutoImprovementScheduler:
         base_model_id: str | None = None,
     ) -> AutoImprovementWorkunit:
         """Create a deterministic, authenticated auto-improvement workunit for a given domain and base model."""
+        for field_name, val in (("num_samples", num_samples), ("inner_steps", inner_steps)):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+        if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int) or seed < 0):
+            raise ValueError("seed must be a non-negative integer")
+        if (
+            isinstance(time_budget_minutes, bool)
+            or not isinstance(time_budget_minutes, (int, float))
+            or not math.isfinite(float(time_budget_minutes))
+            or time_budget_minutes <= 0
+        ):
+            raise ValueError("time_budget_minutes must be a positive finite number")
         canonical_domain = resolve_domain_canonical(domain)
         meta = HF_EXPERT_CATALOG[canonical_domain]
 
@@ -993,6 +1042,23 @@ class NocturnalAutoImprovementScheduler:
         significance_alpha: float = 0.05,
     ) -> tuple[bool, float]:
         """Compute exact Paired McNemar Test to assert significant model improvement without regression."""
+        for field_name, val in (
+            ("base_correct", base_correct),
+            ("adapted_correct", adapted_correct),
+            ("base_only_correct", base_only_correct),
+            ("adapted_only_correct", adapted_only_correct),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
+        if isinstance(total_eval_samples, bool) or not isinstance(total_eval_samples, int) or total_eval_samples < 1:
+            raise ValueError("total_eval_samples must be an integer >= 1")
+        if (
+            isinstance(significance_alpha, bool)
+            or not isinstance(significance_alpha, (int, float))
+            or not math.isfinite(float(significance_alpha))
+            or not (0.0 < float(significance_alpha) < 1.0)
+        ):
+            raise ValueError("significance_alpha must be in (0.0, 1.0)")
         b = base_only_correct
         c = adapted_only_correct
 
@@ -1108,6 +1174,13 @@ class PointsRetrofitManager:
         step_rate: float = DEFAULT_TFLOPS_STEP_RATE_HMT,
         gate_bonus: float = DEFAULT_GATE_PASS_BONUS_HMT,
     ) -> None:
+        for field_name, val in (
+            ("base_wu_reward", base_wu_reward),
+            ("step_rate", step_rate),
+            ("gate_bonus", gate_bonus),
+        ):
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or val < 0:
+                raise ValueError(f"{field_name} must be a non-negative finite number")
         self.base_wu_reward = base_wu_reward
         self.step_rate = step_rate
         self.gate_bonus = gate_bonus

@@ -88,7 +88,7 @@ class WaggleDanceMessage(BaseModel):
 
     def sign(self, secret_key: str = DEFAULT_HMAC_SECRET) -> WaggleDanceMessage:
         """Sign canonical message content with HMAC-SHA256."""
-        if not secret_key:
+        if not isinstance(secret_key, str) or not secret_key.strip():
             raise ValueError("secret_key must be non-empty for WaggleDanceMessage HMAC signing")
         payload = (
             f"{self.dance_id}:{self.task_id}:{self.scout_bee_id}:{self.confidence_score}:"
@@ -100,7 +100,7 @@ class WaggleDanceMessage(BaseModel):
 
     def verify_signature(self, secret_key: str = DEFAULT_HMAC_SECRET) -> bool:
         """Verify HMAC-SHA256 signature."""
-        if not self.signature_hmac or not secret_key:
+        if not self.signature_hmac or not isinstance(secret_key, str) or not secret_key.strip():
             return False
         payload = (
             f"{self.dance_id}:{self.task_id}:{self.scout_bee_id}:{self.confidence_score}:"
@@ -148,6 +148,23 @@ class FoodSource:
     timestamp_utc: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat(timespec="milliseconds")
     )
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.source_id, str) or not self.source_id.strip():
+            raise ValueError("source_id must be a non-empty string")
+        if (
+            isinstance(self.nectar_richness, bool)
+            or not isinstance(self.nectar_richness, (int, float))
+            or not math.isfinite(self.nectar_richness)
+            or not (0.0 <= float(self.nectar_richness) <= 1.0)
+        ):
+            raise ValueError("nectar_richness must be a finite number in [0.0, 1.0]")
+        if not isinstance(self.exhausted, bool):
+            raise ValueError("exhausted must be a boolean")
+        if isinstance(self.trial_count, bool) or not isinstance(self.trial_count, int) or self.trial_count < 0:
+            raise ValueError("trial_count must be a non-negative integer")
+        if not isinstance(self.discovered_by, str) or not self.discovered_by.strip():
+            raise ValueError("discovered_by must be a non-empty string")
 
     def increment_trial(self) -> int:
         self.trial_count += 1
@@ -197,6 +214,10 @@ class WaggleDanceScrutinyProtocol:
         tau_0_ms: int = 1000,
         secret_key: str = DEFAULT_HMAC_SECRET,
     ) -> None:
+        if isinstance(tau_0_ms, bool) or not isinstance(tau_0_ms, int) or tau_0_ms <= 0:
+            raise ValueError("tau_0_ms must be a positive integer")
+        if not isinstance(secret_key, str) or not secret_key.strip():
+            raise ValueError("secret_key must be a non-empty string")
         self.tau_0_ms = tau_0_ms
         self.secret_key = secret_key
 
@@ -212,6 +233,23 @@ class WaggleDanceScrutinyProtocol:
         quorum_threshold: int = 2,
     ) -> WaggleDanceMessage:
         """Calculate dance duration proportional to site quality (tau_0 * Q) and broadcast."""
+        for field_name, val in (
+            ("task_id", task_id),
+            ("scout_bee_id", scout_bee_id),
+            ("task_domain", task_domain),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if (
+            isinstance(confidence_score, bool)
+            or not isinstance(confidence_score, (int, float))
+            or not math.isfinite(confidence_score)
+        ):
+            raise ValueError("confidence_score must be a finite number")
+        if isinstance(estimated_tokens, bool) or not isinstance(estimated_tokens, int) or estimated_tokens < 0:
+            raise ValueError("estimated_tokens must be a non-negative integer")
+        if isinstance(quorum_threshold, bool) or not isinstance(quorum_threshold, int) or quorum_threshold < 1:
+            raise ValueError("quorum_threshold must be a positive integer")
         clamped_q = max(0.0, min(1.0, float(confidence_score)))
         duration_ms = int(round(self.tau_0_ms * clamped_q))
 
@@ -351,6 +389,17 @@ class ABCMoEAgent:
         web_search_fn: Callable[[str], list[dict[str, str]]] | None = None,
         nectar_cache: SwarmNectarCache | None = None,
     ) -> None:
+        if not isinstance(agent_id, str) or not agent_id.strip():
+            raise ValueError("agent_id must be a non-empty string")
+        if isinstance(abandonment_limit, bool) or not isinstance(abandonment_limit, int) or abandonment_limit < 1:
+            raise ValueError("abandonment_limit must be a positive integer")
+        if (
+            isinstance(quality_threshold, bool)
+            or not isinstance(quality_threshold, (int, float))
+            or not math.isfinite(quality_threshold)
+            or not (0.0 < float(quality_threshold) <= 1.0)
+        ):
+            raise ValueError("quality_threshold must be a finite number in (0.0, 1.0]")
         self.agent_id = agent_id
         self.abandonment_limit = abandonment_limit
         self.quality_threshold = quality_threshold
@@ -610,6 +659,8 @@ class AgentMeshOrchestrator:
         available_peers: list[dict[str, Any]] | None = None,
         nectar_cache: SwarmNectarCache | None = None,
     ) -> None:
+        if not isinstance(lead_bee_id, str) or not lead_bee_id.strip():
+            raise ValueError("lead_bee_id must be a non-empty string")
         self.lead_bee_id = lead_bee_id
         self.protocol = WaggleDanceScrutinyProtocol(tau_0_ms=1000)
         self.available_peers = available_peers or [
@@ -629,6 +680,17 @@ class AgentMeshOrchestrator:
         required_tools: list[str] | None = None,
     ) -> dict[str, Any]:
         """Runs the complete two-layer workflow from Waggle Dance consensus to ABC deliverable."""
+        if not isinstance(task_id, str) or not task_id.strip():
+            raise ValueError("task_id must be a non-empty string")
+        if not isinstance(user_query, str) or not user_query.strip():
+            raise ValueError("user_query must be a non-empty string")
+        if (
+            isinstance(confidence_prior, bool)
+            or not isinstance(confidence_prior, (int, float))
+            or not math.isfinite(confidence_prior)
+            or not (0.0 <= float(confidence_prior) <= 1.0)
+        ):
+            raise ValueError("confidence_prior must be a finite number in [0.0, 1.0]")
         tools = required_tools or ["web_search", "json_extractor"]
 
         # Step 1: Couche 1 - Émission de la Danse Frétillante (Waggle Dance)

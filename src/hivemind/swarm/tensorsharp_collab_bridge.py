@@ -363,6 +363,14 @@ def plan_tensorsharp_moe_offload(
     """Compute an estimated `--n-cpu-moe` offload depth for a target GPU and VRAM headroom policy."""
     if model_id not in TENSORSHARP_BENCHMARK_CATALOG:
         raise KeyError(f"Unknown TensorSharp model_id: {model_id!r}")
+    if isinstance(total_vram_mib, bool) or not isinstance(total_vram_mib, int) or total_vram_mib <= 0:
+        raise ValueError("total_vram_mib must be a positive integer")
+    if isinstance(reserved_free_vram_mib, bool) or not isinstance(reserved_free_vram_mib, int) or reserved_free_vram_mib < 0:
+        raise ValueError("reserved_free_vram_mib must be a non-negative integer")
+    if not isinstance(gpu_name, str) or not gpu_name.strip():
+        raise ValueError("gpu_name must be a non-empty string")
+    if not isinstance(compute_capability, str) or not compute_capability.strip():
+        raise ValueError("compute_capability must be a non-empty string")
     prof = TENSORSHARP_BENCHMARK_CATALOG[model_id]
     usable_vram_mib = max(0, total_vram_mib - max(0, reserved_free_vram_mib))
 
@@ -457,6 +465,10 @@ class TensorSharpSingleModelProducerSpec:
     router_url: str = "https://hivemind-openrouter-1003063861791.us-central1.run.app"
 
     def validate(self) -> None:
+        if not isinstance(self.model_path, str) or not self.model_path.strip():
+            raise ValueError("model_path must be a non-empty string")
+        if not isinstance(self.public_tier_id, str) or not self.public_tier_id.strip():
+            raise ValueError("public_tier_id must be a non-empty string")
         if self.server_host != "127.0.0.1" and self.server_host != "localhost":
             raise ValueError(
                 "TensorSharp.Server.Host must bind to loopback (--host 127.0.0.1) so unauthenticated "
@@ -475,6 +487,20 @@ class TensorSharpSingleModelProducerSpec:
                 "v1_models_id must be the exact ID returned by GET /v1/models (GGUF stem), "
                 "not an unmapped Ollama-style alias."
             )
+        for port_name, port_val in (("server_port", self.server_port), ("shield_port", self.shield_port)):
+            if isinstance(port_val, bool) or not isinstance(port_val, int) or not (1 <= port_val <= 65535):
+                raise ValueError(f"{port_name} must be an integer in 1..65535")
+        for field_name, val in (
+            ("max_context", self.max_context),
+            ("max_concurrent", self.max_concurrent),
+            ("gpu_vram_mib", self.gpu_vram_mib),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val <= 0:
+                raise ValueError(f"{field_name} must be a positive integer")
+        if self.n_cpu_moe is not None and (
+            isinstance(self.n_cpu_moe, bool) or not isinstance(self.n_cpu_moe, int) or self.n_cpu_moe < 0
+        ):
+            raise ValueError("n_cpu_moe must be a non-negative integer when provided")
 
     def build_credentials_env(self) -> dict[str, str]:
         self.validate()
@@ -559,16 +585,24 @@ class TensorSharpDistributedClusterSpec:
     http_port: int = 8080
 
     def validate(self) -> None:
-        if self.local_degree < 1:
+        if not isinstance(self.model_path, str) or not self.model_path.strip():
+            raise ValueError("model_path must be a non-empty string")
+        if isinstance(self.local_degree, bool) or not isinstance(self.local_degree, int) or self.local_degree < 1:
             raise ValueError("local_degree must be >= 1")
         if not self.peer_endpoints:
             raise ValueError("peer_endpoints must contain at least one host:port endpoint")
-        if not (0 <= self.node_id < len(self.peer_endpoints)):
+        if isinstance(self.node_id, bool) or not isinstance(self.node_id, int) or not (0 <= self.node_id < len(self.peer_endpoints)):
             raise ValueError(f"node_id {self.node_id} out of range for {len(self.peer_endpoints)} peers")
         if self.server_host_mode and self.node_id != 0:
             raise ValueError("TensorSharp.Server.Host only runs on node_id 0; worker nodes must use TensorSharp.Cli")
         if self.server_host_mode and self.http_host not in ("127.0.0.1", "localhost"):
             raise ValueError("TensorSharp.Server.Host must bind to loopback (--host 127.0.0.1)")
+        if isinstance(self.http_port, bool) or not isinstance(self.http_port, int) or not (1 <= self.http_port <= 65535):
+            raise ValueError("http_port must be an integer in 1..65535")
+        if isinstance(self.max_context, bool) or not isinstance(self.max_context, int) or self.max_context <= 0:
+            raise ValueError("max_context must be a positive integer")
+        if isinstance(self.symmetric_inline_bytes, bool) or not isinstance(self.symmetric_inline_bytes, int) or self.symmetric_inline_bytes <= 0:
+            raise ValueError("symmetric_inline_bytes must be a positive integer")
 
     def build_env(self) -> dict[str, str]:
         self.validate()
@@ -682,6 +716,21 @@ class TensorSharpBeeLoRARouter:
     ) -> dict[str, Any]:
         """Build an OpenAI-compatible `/v1/chat/completions` payload using `"lora": "<adapter_name>"`."""
         self.validate_lora_contract()
+        if not isinstance(public_model_id, str) or not public_model_id.strip():
+            raise ValueError("public_model_id must be a non-empty string")
+        if not messages:
+            raise ValueError("messages must be non-empty")
+        if isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens <= 0:
+            raise ValueError("max_tokens must be a positive integer")
+        if (
+            isinstance(temperature, bool)
+            or not isinstance(temperature, (int, float))
+            or not math.isfinite(temperature)
+            or temperature < 0.0
+        ):
+            raise ValueError("temperature must be a finite non-negative number")
+        if not isinstance(stream, bool):
+            raise ValueError("stream must be a boolean")
         adapter_name = self.registered_bee_adapters.get(public_model_id)
         payload: dict[str, Any] = {
             "model": self.v1_models_id,
@@ -705,8 +754,26 @@ class TensorSharpBeeLoRARouter:
     ) -> dict[str, Any]:
         """Build the `POST /v1/hivemind/producer/heartbeat` payload using the exact `/v1/models` ID."""
         self.validate_lora_contract()
-        if not public_endpoint_url.startswith("https://"):
+        if not isinstance(public_endpoint_url, str) or not public_endpoint_url.startswith("https://"):
             raise ValueError("public_endpoint_url must be an encrypted https:// shield endpoint.")
+        if not isinstance(execution_class, str) or not execution_class.strip():
+            raise ValueError("execution_class must be a non-empty string")
+        if isinstance(gpu_vram_mib, bool) or not isinstance(gpu_vram_mib, int) or gpu_vram_mib <= 0:
+            raise ValueError("gpu_vram_mib must be a positive integer")
+        if (
+            isinstance(cost_per_1k, bool)
+            or not isinstance(cost_per_1k, (int, float))
+            or not math.isfinite(cost_per_1k)
+            or cost_per_1k < 0.0
+        ):
+            raise ValueError("cost_per_1k must be a finite non-negative number")
+        if (
+            isinstance(capacity_1k, bool)
+            or not isinstance(capacity_1k, (int, float))
+            or not math.isfinite(capacity_1k)
+            or capacity_1k <= 0.0
+        ):
+            raise ValueError("capacity_1k must be a finite positive number")
         models = [
             {
                 "id": f"hivemind/{self.base_model_id}",

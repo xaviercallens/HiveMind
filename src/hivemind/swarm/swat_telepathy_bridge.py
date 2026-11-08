@@ -39,6 +39,30 @@ class ModelKVSpec:
     max_context_tokens: int = 8192
     is_vlm: bool = False
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.model_id, str) or not self.model_id.strip():
+            raise ValueError("model_id must be a non-empty string")
+        if not isinstance(self.family, str) or not self.family.strip():
+            raise ValueError("family must be a non-empty string")
+        for field_name, val in (
+            ("num_layers", self.num_layers),
+            ("num_kv_heads", self.num_kv_heads),
+            ("head_dim", self.head_dim),
+            ("hidden_size", self.hidden_size),
+            ("max_context_tokens", self.max_context_tokens),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val <= 0:
+                raise ValueError(f"{field_name} must be a positive integer")
+        if (
+            isinstance(self.rope_theta, bool)
+            or not isinstance(self.rope_theta, (int, float))
+            or not math.isfinite(self.rope_theta)
+            or self.rope_theta <= 0.0
+        ):
+            raise ValueError("rope_theta must be finite and > 0")
+        if not isinstance(self.is_vlm, bool):
+            raise ValueError("is_vlm must be a boolean")
+
     @property
     def flat_layer_dim(self) -> int:
         return 2 * self.num_kv_heads * self.head_dim
@@ -48,6 +72,10 @@ class ModelKVSpec:
         return self.num_layers * self.flat_layer_dim
 
     def kv_cache_mib(self, seq_len: int, bytes_per_elem: int = 2) -> float:
+        if isinstance(seq_len, bool) or not isinstance(seq_len, int) or seq_len < 0:
+            raise ValueError("seq_len must be a non-negative integer")
+        if isinstance(bytes_per_elem, bool) or not isinstance(bytes_per_elem, int) or bytes_per_elem <= 0:
+            raise ValueError("bytes_per_elem must be a positive integer")
         total_bytes = seq_len * self.flat_total_dim * bytes_per_elem
         return float(total_bytes) / float(1024 * 1024)
 
@@ -65,9 +93,9 @@ S34_BEE_MODEL_SPECS: Mapping[str, ModelKVSpec] = {
 
 def compute_layer_group_slices(total_layers: int, n_blocks: int = 8) -> list[tuple[int, int]]:
     """Partition `total_layers` into `n_blocks` contiguous groups matching `CacheRendererV2`."""
-    if n_blocks <= 0:
+    if isinstance(n_blocks, bool) or not isinstance(n_blocks, int) or n_blocks <= 0:
         raise ValueError("n_blocks must be positive")
-    if total_layers < n_blocks:
+    if isinstance(total_layers, bool) or not isinstance(total_layers, int) or total_layers < n_blocks:
         raise ValueError(f"total_layers ({total_layers}) must be at least n_blocks ({n_blocks})")
     return [
         (total_layers * b // n_blocks, total_layers * (b + 1) // n_blocks)
@@ -326,8 +354,26 @@ class SwaTTelepathyBridge:
             raise KeyError(f"Unknown sender_model_id: {sender_model_id!r}")
         if receiver_model_id not in self.hub.registered_models:
             raise KeyError(f"Unknown receiver_model_id: {receiver_model_id!r}")
-        if am_compaction_ratio < 1.0:
+        if (
+            isinstance(am_compaction_ratio, bool)
+            or not isinstance(am_compaction_ratio, (int, float))
+            or not math.isfinite(am_compaction_ratio)
+            or am_compaction_ratio < 1.0
+        ):
             raise ValueError("am_compaction_ratio must be >= 1.0")
+        for field_name, val in (
+            ("rtx2070_used_vram_mib", rtx2070_used_vram_mib),
+            ("t4_free_vram_mib", t4_free_vram_mib),
+        ):
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(val) or val < 0.0:
+                raise ValueError(f"{field_name} must be a finite non-negative number")
+        if (
+            isinstance(ocr_text_density, bool)
+            or not isinstance(ocr_text_density, (int, float))
+            or not math.isfinite(ocr_text_density)
+            or not (0.0 <= float(ocr_text_density) <= 1.0)
+        ):
+            raise ValueError("ocr_text_density must be a finite number in [0.0, 1.0]")
 
         sender_spec = self.hub.registered_models[sender_model_id]
         receiver_spec = self.hub.registered_models[receiver_model_id]
@@ -395,11 +441,13 @@ def compute_cms_chunk_periods(
     """
     if not frequencies:
         raise ValueError("frequencies must be non-empty")
-    if max_chunk_tokens <= 0:
+    if isinstance(max_chunk_tokens, bool) or not isinstance(max_chunk_tokens, int) or max_chunk_tokens <= 0:
         raise ValueError("max_chunk_tokens must be positive")
     periods: list[int] = []
     prev_f = float("inf")
     for f in frequencies:
+        if isinstance(f, bool) or not isinstance(f, (int, float)) or not math.isfinite(float(f)):
+            raise ValueError(f"CMS frequency must be positive, got {f}")
         fv = float(f)
         if fv <= 0.0:
             raise ValueError(f"CMS frequency must be positive, got {fv}")
@@ -490,8 +538,21 @@ def select_rem_dreams_by_gradient_norm(
     m = len(dream_ids)
     if m == 0 or len(sft_gradient_norms) != m or len(injected_random_experts) != m:
         raise ValueError("dream_ids, sft_gradient_norms, and injected_random_experts must have equal non-empty length")
-    if top_k < 0 or random_b < 0 or (top_k + random_b) == 0:
+    if (
+        isinstance(top_k, bool)
+        or not isinstance(top_k, int)
+        or isinstance(random_b, bool)
+        or not isinstance(random_b, int)
+        or top_k < 0
+        or random_b < 0
+        or (top_k + random_b) == 0
+    ):
         raise ValueError("top_k + random_b must be positive")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
+    for norm_v in sft_gradient_norms:
+        if isinstance(norm_v, bool) or not isinstance(norm_v, (int, float)) or not math.isfinite(float(norm_v)) or float(norm_v) < 0.0:
+            raise ValueError("sft_gradient_norms must contain finite non-negative numbers")
 
     norms = np.asarray(sft_gradient_norms, dtype=np.float64)
     ranked_indices = np.argsort(-norms, kind="mergesort").tolist()
@@ -533,9 +594,14 @@ def compact_kv_with_attention_matching(
     to 1-byte symmetric int8/FP8 with per-layer, per-head scales.
     """
     arr = np.asarray(pred_kv, dtype=np.float64)
-    if arr.ndim != 6 or arr.shape[3] != 2:
+    if arr.ndim != 6 or arr.shape[3] != 2 or arr.size == 0 or not np.all(np.isfinite(arr)):
         raise ValueError("pred_kv must have shape (batch, seq_len, num_layers, 2, num_kv_heads, head_dim)")
-    if target_ratio < 1.0:
+    if (
+        isinstance(target_ratio, bool)
+        or not isinstance(target_ratio, (int, float))
+        or not math.isfinite(target_ratio)
+        or target_ratio < 1.0
+    ):
         raise ValueError("target_ratio must be >= 1.0")
 
     batch, seq_len, num_layers, _, num_kv_heads, head_dim = arr.shape

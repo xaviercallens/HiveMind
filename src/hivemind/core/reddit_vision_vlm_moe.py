@@ -286,7 +286,12 @@ REDDIT_VISION_EXPERT_CLUSTERS: Dict[str, Dict[str, Any]] = {
 
 def quantize_nf4_blockwise(weight: np.ndarray, block_size: int = 64) -> Tuple[np.ndarray, np.ndarray]:
     """Quantize a 2D float32 weight matrix into 4-bit NormalFloat (NF4) indices and absmax scales."""
-    flat = weight.astype(np.float32).reshape(-1)
+    if isinstance(block_size, bool) or not isinstance(block_size, int) or block_size < 1:
+        raise ValueError("block_size must be a positive integer")
+    arr = np.asarray(weight, dtype=np.float32)
+    if arr.size == 0 or not np.all(np.isfinite(arr)):
+        raise ValueError("weight must be a non-empty finite array")
+    flat = arr.reshape(-1)
     pad_len = (block_size - (flat.size % block_size)) % block_size
     if pad_len > 0:
         flat = np.pad(flat, (0, pad_len), mode="constant")
@@ -370,7 +375,19 @@ def quantize_sparseloco_dct_2bit(
     3. Quantize DCT coefficients into a 2-bit symmetric 4-level codebook {-1.5, -0.45, +0.45, +1.5}
        scaled per row, packing 4 coefficients per byte.
     """
-    mat = delta_matrix.astype(np.float32)
+    for name, val in (("bee_id", bee_id), ("cluster_id", cluster_id), ("backbone_id", backbone_id)):
+        if not isinstance(val, str) or not val.strip() or any(ord(c) < 32 for c in val):
+            raise ValueError(f"{name} must be a non-empty printable string")
+    if (
+        isinstance(sparse_topk_ratio, bool)
+        or not isinstance(sparse_topk_ratio, (int, float))
+        or not math.isfinite(float(sparse_topk_ratio))
+        or not (0.0 < float(sparse_topk_ratio) <= 1.0)
+    ):
+        raise ValueError("sparse_topk_ratio must be in (0.0, 1.0]")
+    mat = np.asarray(delta_matrix, dtype=np.float32)
+    if mat.ndim != 2 or mat.size == 0 or not np.all(np.isfinite(mat)):
+        raise ValueError("delta_matrix must be a non-empty finite 2D array")
     rows, cols = mat.shape
     raw_bytes = int(mat.size * 4)
 
@@ -856,9 +873,30 @@ class ByzantineMultiKrumAggregator:
         min_cosine_sim: float = 0.95,
         max_l2_drift: float = 0.05,
     ) -> None:
-        self.replay_fraction = replay_fraction
-        self.min_cosine_sim = min_cosine_sim
-        self.max_l2_drift = max_l2_drift
+        if (
+            isinstance(replay_fraction, bool)
+            or not isinstance(replay_fraction, (int, float))
+            or not math.isfinite(float(replay_fraction))
+            or not (0.0 < float(replay_fraction) <= 1.0)
+        ):
+            raise ValueError("replay_fraction must be in (0.0, 1.0]")
+        if (
+            isinstance(min_cosine_sim, bool)
+            or not isinstance(min_cosine_sim, (int, float))
+            or not math.isfinite(float(min_cosine_sim))
+            or not (-1.0 <= float(min_cosine_sim) <= 1.0)
+        ):
+            raise ValueError("min_cosine_sim must be in [-1.0, 1.0]")
+        if (
+            isinstance(max_l2_drift, bool)
+            or not isinstance(max_l2_drift, (int, float))
+            or not math.isfinite(float(max_l2_drift))
+            or float(max_l2_drift) < 0.0
+        ):
+            raise ValueError("max_l2_drift must be a finite non-negative number")
+        self.replay_fraction = float(replay_fraction)
+        self.min_cosine_sim = float(min_cosine_sim)
+        self.max_l2_drift = float(max_l2_drift)
 
     def aggregate_cluster_deltas(
         self,
@@ -1193,7 +1231,13 @@ def newton_schulz_orthogonalize_muon(
     eps: float = 1e-7,
 ) -> np.ndarray:
     """Compute Newton-Schulz 5-step matrix orthogonalization for local Muon DiLoCo updates."""
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps must be a positive integer")
+    if isinstance(eps, bool) or not isinstance(eps, (int, float)) or not math.isfinite(float(eps)) or float(eps) <= 0.0:
+        raise ValueError("eps must be a finite positive number")
     g = np.asarray(grad, dtype=np.float32)
+    if g.size == 0 or not np.all(np.isfinite(g)):
+        raise ValueError("grad must be a non-empty finite array")
     orig_shape = g.shape
     if g.ndim != 2:
         g = g.reshape(g.shape[0], -1)
@@ -1416,6 +1460,14 @@ def run_nocturnal_reddit_vision_moe_campaign(
     seed: int = 20261029,
 ) -> NocturnalRedditVisionCampaignReport:
     """Execute all 5 stages of the Reddit-Vision HiveMind Nocturnal V-MoE training pipeline."""
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
+        raise ValueError("inner_steps must be a positive integer")
+    if isinstance(lora_rank, bool) or not isinstance(lora_rank, int) or lora_rank < 1:
+        raise ValueError("lora_rank must be a positive integer")
+    if isinstance(lora_alpha, bool) or not isinstance(lora_alpha, (int, float)) or not math.isfinite(float(lora_alpha)) or float(lora_alpha) <= 0.0:
+        raise ValueError("lora_alpha must be a finite positive number")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
     backbone = FrozenVisionLanguageBackbone(
         vision_dim=48,
         hidden_dim=64,

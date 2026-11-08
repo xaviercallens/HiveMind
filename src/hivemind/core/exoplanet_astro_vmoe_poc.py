@@ -184,10 +184,20 @@ def compute_physical_transit_depth_ppm(
     Formula:
         Delta F / F (ppm) = 84.0 * (R_p / R_earth)^2 / (R_* / R_sun)^2
     """
-    if planet_radius_earth <= 0.0:
-        raise ValueError("planet_radius_earth must be strictly positive")
-    if star_radius_solar <= 0.0:
-        raise ValueError("star_radius_solar must be strictly positive")
+    if (
+        isinstance(planet_radius_earth, bool)
+        or not isinstance(planet_radius_earth, (int, float))
+        or not math.isfinite(float(planet_radius_earth))
+        or float(planet_radius_earth) <= 0.0
+    ):
+        raise ValueError("planet_radius_earth must be a finite positive number")
+    if (
+        isinstance(star_radius_solar, bool)
+        or not isinstance(star_radius_solar, (int, float))
+        or not math.isfinite(float(star_radius_solar))
+        or float(star_radius_solar) <= 0.0
+    ):
+        raise ValueError("star_radius_solar must be a finite positive number")
     ratio_p = float(planet_radius_earth)
     ratio_s = float(star_radius_solar)
     return float(EARTH_SUN_TRANSIT_DEPTH_PPM * (ratio_p * ratio_p) / (ratio_s * ratio_s))
@@ -206,6 +216,24 @@ def generate_phase_folded_cwt_scalogram(
     Uses a Ricker (Mexican Hat) continuous wavelet family across `num_scales` scales to
     transform the 1D phase-folded light curve into a 2D visual tensor suitable for ViT patch encoding.
     """
+    for name, val in (
+        ("transit_depth_ppm", transit_depth_ppm),
+        ("instrumental_noise_ppm", instrumental_noise_ppm),
+        ("odd_even_asymmetry_ratio", odd_even_asymmetry_ratio),
+    ):
+        if (
+            isinstance(val, bool)
+            or not isinstance(val, (int, float))
+            or not math.isfinite(float(val))
+            or float(val) < 0.0
+        ):
+            raise ValueError(f"{name} must be a finite non-negative number")
+    if isinstance(num_phase_bins, bool) or not isinstance(num_phase_bins, int) or num_phase_bins < 1:
+        raise ValueError("num_phase_bins must be a positive integer")
+    if isinstance(num_scales, bool) or not isinstance(num_scales, int) or num_scales < 1:
+        raise ValueError("num_scales must be a positive integer")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
     rng = np.random.default_rng(seed)
     phase = np.linspace(-0.5, 0.5, num_phase_bins, dtype=np.float32)
 
@@ -244,6 +272,15 @@ def asymmetric_focal_loss(
 
     L_Focal = - alpha_t * (1 - p_t)^gamma * log(p_t)
     """
+    if isinstance(gamma, bool) or not isinstance(gamma, (int, float)) or not math.isfinite(float(gamma)) or float(gamma) < 0.0:
+        raise ValueError("gamma must be a finite non-negative number")
+    if (
+        isinstance(rare_transit_weight, bool)
+        or not isinstance(rare_transit_weight, (int, float))
+        or not math.isfinite(float(rare_transit_weight))
+        or float(rare_transit_weight) <= 0.0
+    ):
+        raise ValueError("rare_transit_weight must be a finite positive number")
     log_probs = F.log_softmax(logits, dim=-1)
     probs = torch.exp(log_probs)
     target_log_p = log_probs.gather(dim=-1, index=targets.unsqueeze(-1)).squeeze(-1)
@@ -270,6 +307,20 @@ def compute_citizen_science_entropy_weights(
       - `ambiguous_indices`: indices of maximum-entropy light curves surfaced to the UI.
       - `mean_entropy_nats`: average prediction entropy across the batch.
     """
+    if (
+        isinstance(top_ambiguous_fraction, bool)
+        or not isinstance(top_ambiguous_fraction, (int, float))
+        or not math.isfinite(float(top_ambiguous_fraction))
+        or not (0.0 < float(top_ambiguous_fraction) <= 1.0)
+    ):
+        raise ValueError("top_ambiguous_fraction must be in (0.0, 1.0]")
+    if (
+        isinstance(citizen_boost, bool)
+        or not isinstance(citizen_boost, (int, float))
+        or not math.isfinite(float(citizen_boost))
+        or float(citizen_boost) <= 0.0
+    ):
+        raise ValueError("citizen_boost must be a finite positive number")
     with torch.no_grad():
         probs = F.softmax(logits, dim=-1)
         log_probs = torch.log(torch.clamp(probs, min=1e-8))
@@ -293,11 +344,18 @@ class SwarmFFNAdapter(nn.Module):
         seed: int = 42,
     ) -> None:
         super().__init__()
+        for name, val in (("hidden_dim", hidden_dim), ("intermediate_dim", intermediate_dim), ("rank", rank)):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{name} must be a positive integer")
+        if isinstance(alpha, bool) or not isinstance(alpha, (int, float)) or not math.isfinite(float(alpha)) or float(alpha) <= 0.0:
+            raise ValueError("alpha must be a finite positive number")
+        if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+            raise ValueError("seed must be a non-negative integer")
         self.hidden_dim = hidden_dim
         self.intermediate_dim = intermediate_dim
         self.rank = rank
-        self.alpha = alpha
-        self.scaling = alpha / float(rank)
+        self.alpha = float(alpha)
+        self.scaling = float(alpha) / float(rank)
 
         gen = torch.Generator()
         gen.manual_seed(seed)
@@ -342,6 +400,16 @@ class FrozenAstroVisionBackbone(nn.Module):
         seed: int = 101,
     ) -> None:
         super().__init__()
+        for name, val in (
+            ("patch_dim", patch_dim),
+            ("hidden_dim", hidden_dim),
+            ("intermediate_dim", intermediate_dim),
+            ("num_classes", num_classes),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{name} must be a positive integer")
+        if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+            raise ValueError("seed must be a non-negative integer")
         torch.manual_seed(seed)
         self.patch_dim = patch_dim
         self.hidden_dim = hidden_dim
@@ -710,6 +778,12 @@ def run_exoplanet_astro_vmoe_poc(
     seed: int = 20261029,
 ) -> Dict[str, Any]:
     """Execute the full 4-Stage Exoplanet & Astrophysics Vision-MoE PoC + Physical Simulator."""
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
+        raise ValueError("inner_steps must be a positive integer")
+    if isinstance(focal_gamma, bool) or not isinstance(focal_gamma, (int, float)) or not math.isfinite(float(focal_gamma)) or float(focal_gamma) < 0.0:
+        raise ValueError("focal_gamma must be a finite non-negative number")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
     backbone = FrozenAstroVisionBackbone(
         patch_dim=48,
         hidden_dim=64,

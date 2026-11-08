@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -369,8 +370,14 @@ def execute_large_gpu_producer_training(
     """Execute DiLoCo-QLoRA + Muon inner training on a Large-GPU Producer (`16-24 GB`)."""
     if node.pool_role != "LARGE_GPU_DEDICATED_TRAINER":
         raise ValueError(f"Node {node.node_id} is not a LARGE_GPU_DEDICATED_TRAINER")
-    if inner_steps < 1:
+    if isinstance(assigned_shards, bool) or not isinstance(assigned_shards, int) or assigned_shards < 1:
+        raise ValueError("assigned_shards must be a positive integer")
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
         raise ValueError("inner_steps must be >= 1")
+    if isinstance(focal_gamma, bool) or not isinstance(focal_gamma, (int, float)) or not math.isfinite(float(focal_gamma)) or float(focal_gamma) < 0.0:
+        raise ValueError("focal_gamma must be a finite non-negative number")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
 
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -502,6 +509,13 @@ def execute_hybrid_node_inference_and_micro_training(
     """Execute Dual-Duty Hybrid Inference Serving + Preemptible `< 1.5 GB` Micro-Training."""
     if node.pool_role != "HYBRID_INFERENCE_AND_MICRO_TRAINER":
         raise ValueError(f"Node {node.node_id} is not a HYBRID_INFERENCE_AND_MICRO_TRAINER")
+    for name, val in (
+        ("incoming_inference_requests", incoming_inference_requests),
+        ("hot_swapped_adapters_count", hot_swapped_adapters_count),
+        ("seed", seed),
+    ):
+        if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+            raise ValueError(f"{name} must be a non-negative integer")
 
     rng = np.random.default_rng(seed)
     latencies_ms = rng.normal(loc=142.0, scale=18.0, size=max(1, incoming_inference_requests))
@@ -569,6 +583,8 @@ def run_hybrid_inference_and_large_gpu_image_moe_campaign(
     update_producer_registry_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """Orchestrate the full Asymmetric Large-GPU Image Training + Hybrid Inference campaign."""
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
+        raise ValueError("inner_steps must be a positive integer")
     plans = partition_swarm_shards_between_large_and_hybrid()
     large_nodes = [n for n in PRODUCER_AND_HYBRID_FLEET if n.pool_role == "LARGE_GPU_DEDICATED_TRAINER"]
     hybrid_nodes = [n for n in PRODUCER_AND_HYBRID_FLEET if n.pool_role == "HYBRID_INFERENCE_AND_MICRO_TRAINER"]

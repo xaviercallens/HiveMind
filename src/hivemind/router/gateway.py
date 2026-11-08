@@ -2784,6 +2784,28 @@ def create_router_app(
             headers={"Cache-Control": "no-store"},
         )
 
+    @app.post("/api/v1/auth/change-password")
+    @app.post("/v1/hivemind/auth/change-password")
+    async def auth_change_password_api(request: Request) -> JSONResponse:
+        """Set a new password for the account that owns the presented hm-... key (Authorization: Bearer).
+
+        This is how an account whose stored password is missing or a placeholder gets a real one: prove the account with
+        its key (an admin can issue a fresh key with the admin rotate-key route), then set the password here."""
+        if not login_limiter.allow(client_key(request), clock()):
+            return _error_response(429, "Too many attempts; try again in a minute.", "rate_limit_error", "rate_limited")
+        scheme, _, token = request.headers.get("authorization", "").partition(" ")
+        key = token.strip() if scheme.lower() == "bearer" else ""
+        acct = store.authenticate(key) if key.startswith("hm-") else None
+        if acct is None:
+            return _error_response(401, "A valid hm-... API key is required.", "authentication_error", "invalid_api_key")
+        data = await _parse_auth_payload(request)
+        new_password = str(data.get("new_password") or data.get("password") or "")
+        try:
+            await run_in_threadpool(store.set_password, acct.account_id, new_password)
+        except ValueError:
+            return _error_response(400, "The new password must be 12 to 256 characters.", "invalid_request_error", "weak_password")
+        return JSONResponse({"status": "PASSWORD_SET", "handle": acct.handle}, headers={"Cache-Control": "no-store"})
+
     @app.post("/signup", response_class=HTMLResponse)
     @app.post("/register", response_class=HTMLResponse)
     async def signup_form_submit(request: Request) -> HTMLResponse:

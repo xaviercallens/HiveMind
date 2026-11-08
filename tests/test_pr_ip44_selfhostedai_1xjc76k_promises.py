@@ -342,11 +342,12 @@ def test_xavier_v2_auth_password_login_and_restore_on_portal_and_router(tmp_path
     assert r_reg.json()["status"] == "EXISTING_USER_RESTORED"
     assert r_reg.json()["handle"] == "xavier_callens"
 
-    # 5. Router gateway: if xavier_callens has the Oct 31 smoke-test placeholder hash, user's 15-char password re-binds and authenticates
+    # 5. Router gateway: a placeholder hash on xavier_callens no longer re-binds to whatever password is typed (that was an
+    #    account takeover); the owner proves the account with its key and sets a password with /api/v1/auth/change-password.
     db_path = tmp_path / "router_xav.sqlite3"
     store = RouterStore(db_path, b"0123456789abcdef0123456789abcdef")
     router_client = TestClient(create_router_app(store, starter_grant_hmt=100.0))
-    acc_id, _ = store.register("xavier_callens", "prosumer")
+    acc_id, acc_key = store.register("xavier_callens", "prosumer")
     with sqlite3.connect(db_path) as conn:
         conn.execute(
             "UPDATE accounts SET email=?, password_hash=? WHERE account_id=?",
@@ -358,6 +359,18 @@ def test_xavier_v2_auth_password_login_and_restore_on_portal_and_router(tmp_path
         )
         conn.commit()
 
+    r_router_placeholder = router_client.post(
+        "/api/v1/auth/login",
+        json={"handle_or_email": "callensxavier@gmail.com", "password": user_pwd_15},
+    )
+    assert r_router_placeholder.status_code == 401
+
+    r_set = router_client.post(
+        "/api/v1/auth/change-password",
+        json={"new_password": user_pwd_15},
+        headers={"Authorization": f"Bearer {acc_key}"},
+    )
+    assert r_set.status_code == 200
     r_router_login = router_client.post(
         "/api/v1/auth/login",
         json={"handle_or_email": "callensxavier@gmail.com", "password": user_pwd_15},

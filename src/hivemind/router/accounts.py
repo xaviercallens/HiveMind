@@ -778,7 +778,15 @@ class RouterStore:
         *,
         email_hint: str = "",
     ) -> tuple[bool, bool]:
-        """Return ``(has_password, password_matches)`` for ``row`` across current and legacy password formats."""
+        """Return ``(has_password, password_matches)`` for ``row`` across current and legacy password formats.
+
+        Only evidence bound to this row counts: its own ``password_hash``, legacy ``credentials`` rows tied to its
+        ``account_id``, and legacy rows found through e-mail addresses that belong to this account (its stored e-mail and
+        the e-mails of the legacy identity its handle or e-mail resolves to). ``email_hint`` comes from the caller and is
+        therefore never used to find credentials: a caller could otherwise pair someone else's account with their own
+        e-mail and password. It is kept in the signature for callers' compatibility.
+        """
+        del email_hint
         stored_pwd = str(row["password_hash"] or "") if "password_hash" in row.keys() else ""
         raw_handle = str(row["handle"] or "")
         row_email = str(row["email"] or "") if "email" in row.keys() else ""
@@ -787,7 +795,6 @@ class RouterStore:
             e.strip().lower()
             for e in (
                 row_email,
-                email_hint,
                 str(legacy_meta.get("email", "")) if legacy_meta else "",
                 *[str(a) for a in (legacy_meta.get("aliases", ()) if legacy_meta else ()) if "@" in str(a)],
             )
@@ -809,9 +816,7 @@ class RouterStore:
                     ).fetchone()
                     if by_ehash is not None:
                         legacy_cred_rows.append(by_ehash)
-            if legacy_meta is not None:
-                for cred_row in conn.execute("SELECT salt_hex, password_hash FROM credentials").fetchall():
-                    legacy_cred_rows.append(cred_row)
+            # No table-wide fallback: trying every stored credential let any legacy user's password open another account.
         except sqlite3.OperationalError:
             pass
         has_pwd = bool(stored_pwd or legacy_cred_rows)
@@ -845,15 +850,6 @@ class RouterStore:
                     if hmac.compare_digest(stored_pwd, self._hash_password(h_cand, p_cand)):
                         return True, True
 
-        norm_row_h = raw_handle.lstrip("@").lower().replace("-", "_")
-        if norm_row_h == "xavier_callens":
-            for p_cand in pwd_candidates:
-                if hmac.compare_digest(
-                    "e3746644bb071aff7215888e5d4c6832c6a7035d43b286a921c2e75255699747",
-                    self._hash_password("xavier_callens", p_cand),
-                ):
-                    return True, True
-
         seen_cred_pairs: set[tuple[str, str]] = set()
         for legacy_cred_row in legacy_cred_rows:
             salt_hex = str(legacy_cred_row["salt_hex"] or "")
@@ -872,25 +868,23 @@ class RouterStore:
                         if hmac.compare_digest(exp_hex, digest):
                             return True, True
 
-        clean_pwd = password.strip()
-        if (
-            norm_row_h == "xavier_callens"
-            and stored_pwd
-            in (
-                "",
-                "e3746644bb071aff7215888e5d4c6832c6a7035d43b286a921c2e75255699747",
-                "ad8f4691fca5a1bd3760219751ef208fde7599e24a01db30ba4b1834df08009a",
-            )
-            and len(clean_pwd) >= 8
-        ):
-            new_h = self._hash_password(raw_handle or "xavier_callens", clean_pwd)
-            conn.execute(
-                "UPDATE accounts SET password_hash = ? WHERE account_id = ?",
-                (new_h, str(row["account_id"])),
-            )
-            return True, True
-
+        # No account accepts an arbitrary password, and no failed check ever writes a new hash: a placeholder or missing
+        # hash means the owner proves the account with its hm-... key and sets a password with ``set_password``.
         return True, False
+
+    def set_password(self, account_id: str, password: str) -> None:
+        """Set the password of ``account_id`` (salted PBKDF2-HMAC-SHA256, 200,000 iterations, ``salt:hash``).
+
+        The caller must already have proved the account (its own API key); this method does not authorise.
+        ``UnknownAccount`` if absent, ``ValueError`` if the password is shorter than 12 characters."""
+        if not isinstance(password, str) or len(password) < 12 or len(password) > 256:
+            raise ValueError("password must be 12 to 256 characters")
+        salt = secrets.token_bytes(16)
+        digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 200_000).hex()
+        with self._tx() as conn:
+            if conn.execute("SELECT 1 FROM accounts WHERE account_id=?", (account_id,)).fetchone() is None:
+                raise UnknownAccount(account_id)
+            conn.execute("UPDATE accounts SET password_hash=? WHERE account_id=?", (f"{salt.hex()}:{digest}", account_id))
 
     @staticmethod
     def _resolve_legacy_user(identifier: str) -> dict[str, Any] | None:

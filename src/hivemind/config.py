@@ -12,6 +12,7 @@ unified memory, exposing a single `detect_gpu_backend()` contract for the rest o
 
 from __future__ import annotations
 
+import math
 import os
 import random
 from dataclasses import dataclass, field
@@ -128,6 +129,19 @@ class VRAMBudget:
     paged_adamw_8bit_gb: float
     activations_kv_cache_gb: float
     cuda_context_overhead_gb: float
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "frozen_base_nf4_gb",
+            "lora_trainable_r64_gb",
+            "paged_adamw_8bit_gb",
+            "activations_kv_cache_gb",
+            "cuda_context_overhead_gb",
+        ):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{field_name} must be a non-negative finite number")
+            setattr(self, field_name, float(val))
 
     @property
     def total_peak_vram_gb(self) -> float:
@@ -406,6 +420,8 @@ def detect_gpu_backend(device: Any | None = None) -> str:
 
 def detect_gpu_vendor(backend: str) -> str:
     """Map a resolved GPU backend onto its silicon vendor."""
+    if isinstance(backend, bool) or not isinstance(backend, str):
+        raise ValueError("backend must be a string")
     if backend == GPU_BACKEND_CUDA:
         return GPU_VENDOR_NVIDIA
     if backend == GPU_BACKEND_ROCM:
@@ -462,6 +478,10 @@ def rocm_supports_native_bf16(gcn_arch: str | None) -> bool:
 
 def configure_deterministic_runtime(seed: int = 42, warn_only: bool = False) -> None:
     """Enforce deterministic CUDA/CPU kernels for BOINC Spot-Check Verification (IP-43)."""
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
+    if not isinstance(warn_only, bool):
+        raise ValueError("warn_only must be a boolean")
     import torch
 
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"

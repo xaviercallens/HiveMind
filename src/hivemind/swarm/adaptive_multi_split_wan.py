@@ -39,15 +39,40 @@ class WANLinkTelemetry:
     packet_loss_rate: float = 0.0
 
     def __post_init__(self) -> None:
-        if self.uplink_mbps <= 0.0 or not math.isfinite(self.uplink_mbps):
+        if (
+            isinstance(self.uplink_mbps, bool)
+            or not isinstance(self.uplink_mbps, (int, float))
+            or self.uplink_mbps <= 0.0
+            or not math.isfinite(self.uplink_mbps)
+        ):
             raise ValueError("uplink_mbps must be finite and > 0")
-        if self.downlink_mbps <= 0.0 or not math.isfinite(self.downlink_mbps):
+        if (
+            isinstance(self.downlink_mbps, bool)
+            or not isinstance(self.downlink_mbps, (int, float))
+            or self.downlink_mbps <= 0.0
+            or not math.isfinite(self.downlink_mbps)
+        ):
             raise ValueError("downlink_mbps must be finite and > 0")
-        if self.rtt_ms < 0.0 or not math.isfinite(self.rtt_ms):
+        if (
+            isinstance(self.rtt_ms, bool)
+            or not isinstance(self.rtt_ms, (int, float))
+            or self.rtt_ms < 0.0
+            or not math.isfinite(self.rtt_ms)
+        ):
             raise ValueError("rtt_ms must be finite and >= 0")
-        if self.jitter_ms < 0.0 or not math.isfinite(self.jitter_ms):
+        if (
+            isinstance(self.jitter_ms, bool)
+            or not isinstance(self.jitter_ms, (int, float))
+            or self.jitter_ms < 0.0
+            or not math.isfinite(self.jitter_ms)
+        ):
             raise ValueError("jitter_ms must be finite and >= 0")
-        if not (0.0 <= self.packet_loss_rate < 1.0):
+        if (
+            isinstance(self.packet_loss_rate, bool)
+            or not isinstance(self.packet_loss_rate, (int, float))
+            or not math.isfinite(self.packet_loss_rate)
+            or not (0.0 <= self.packet_loss_rate < 1.0)
+        ):
             raise ValueError("packet_loss_rate must be in [0.0, 1.0)")
 
 
@@ -61,6 +86,35 @@ class CitizenHardwareProfile:
     vram_budget_mib: float = 1410.0
     local_tflops: float = 11.3
     foreground_game_active: bool = False
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.node_id, str) or not self.node_id.strip():
+            raise ValueError("node_id must be a non-empty string")
+        if not isinstance(self.gpu_name, str) or not self.gpu_name.strip():
+            raise ValueError("gpu_name must be a non-empty string")
+        if (
+            isinstance(self.compute_capability_sm, bool)
+            or not isinstance(self.compute_capability_sm, (int, float))
+            or not math.isfinite(self.compute_capability_sm)
+            or self.compute_capability_sm <= 0.0
+        ):
+            raise ValueError("compute_capability_sm must be finite and > 0")
+        if (
+            isinstance(self.vram_budget_mib, bool)
+            or not isinstance(self.vram_budget_mib, (int, float))
+            or not math.isfinite(self.vram_budget_mib)
+            or self.vram_budget_mib <= 0.0
+        ):
+            raise ValueError("vram_budget_mib must be finite and > 0")
+        if (
+            isinstance(self.local_tflops, bool)
+            or not isinstance(self.local_tflops, (int, float))
+            or not math.isfinite(self.local_tflops)
+            or self.local_tflops <= 0.0
+        ):
+            raise ValueError("local_tflops must be finite and > 0")
+        if not isinstance(self.foreground_game_active, bool):
+            raise ValueError("foreground_game_active must be a boolean")
 
     @property
     def precision_cohort(self) -> str:
@@ -139,8 +193,36 @@ class AdaptiveMultiSplitWANController:
         monolithic_delta_mb: float = 48.0,
         max_client_vram_mib: float = MAX_PRELUDE_CLIENT_VRAM_MIB,
     ) -> None:
-        if sequence_length <= 0 or micro_batch_size <= 0:
+        if (
+            isinstance(sequence_length, bool)
+            or not isinstance(sequence_length, int)
+            or isinstance(micro_batch_size, bool)
+            or not isinstance(micro_batch_size, int)
+            or sequence_length <= 0
+            or micro_batch_size <= 0
+        ):
             raise ValueError("sequence_length and micro_batch_size must be positive")
+        if (
+            isinstance(edge_core_tflops, bool)
+            or not isinstance(edge_core_tflops, (int, float))
+            or not math.isfinite(edge_core_tflops)
+            or edge_core_tflops <= 0.0
+        ):
+            raise ValueError("edge_core_tflops must be finite and > 0")
+        if (
+            isinstance(monolithic_delta_mb, bool)
+            or not isinstance(monolithic_delta_mb, (int, float))
+            or not math.isfinite(monolithic_delta_mb)
+            or monolithic_delta_mb <= 0.0
+        ):
+            raise ValueError("monolithic_delta_mb must be finite and > 0")
+        if (
+            isinstance(max_client_vram_mib, bool)
+            or not isinstance(max_client_vram_mib, (int, float))
+            or not math.isfinite(max_client_vram_mib)
+            or max_client_vram_mib <= 0.0
+        ):
+            raise ValueError("max_client_vram_mib must be finite and > 0")
         self.sequence_length = int(sequence_length)
         self.micro_batch_size = int(micro_batch_size)
         self.edge_core_tflops = float(edge_core_tflops)
@@ -156,8 +238,12 @@ class AdaptiveMultiSplitWANController:
         activation_bits: int | None = None,
     ) -> CutLayerDecision:
         """Compute exact VRAM, wire payload, and step latency for a candidate cut-layer `L_c`."""
-        if cut_layer not in CUT_LAYER_PROFILES:
+        if isinstance(cut_layer, bool) or cut_layer not in CUT_LAYER_PROFILES:
             raise ValueError(f"Unsupported cut_layer={cut_layer}; expected one of {VALID_CUT_LAYERS}")
+        if activation_bits is not None and (
+            isinstance(activation_bits, bool) or activation_bits not in (8, 16)
+        ):
+            raise ValueError("activation_bits must be 8 or 16")
         prof = CUT_LAYER_PROFILES[cut_layer]
 
         # When foreground gaming is active, force minimal VRAM footprint and fast preemption
@@ -228,7 +314,11 @@ class AdaptiveMultiSplitWANController:
 
     def quantize_cut_activations_int8(self, activations: Sequence[float]) -> dict[str, Any]:
         """Symmetric per-tensor INT8 quantization at the Prelude -> Edge Core cut boundary."""
-        vals = [float(x) for x in activations]
+        vals: list[float] = []
+        for x in activations:
+            if isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(float(x)):
+                raise ValueError("activations must contain finite numbers")
+            vals.append(float(x))
         if not vals:
             return {"q_int8": [], "scale": 1.0, "dequantized": [], "relative_l2_error": 0.0, "sha256": ""}
         max_abs = max(abs(x) for x in vals)

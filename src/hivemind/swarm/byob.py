@@ -44,6 +44,7 @@ import hashlib
 import hmac
 import ipaddress
 import json
+import math
 import re
 import socket
 import time
@@ -530,6 +531,8 @@ def has_remote_code(config: Mapping[str, Any] | None) -> bool:
 
 def estimate_resident_gb(manifest: BeeManifest, weight_bytes: int) -> float | None:
     """Planning estimate of GPU residency in GB, or ``None`` when it cannot be computed (adapter on an unserved base)."""
+    if isinstance(weight_bytes, bool) or not isinstance(weight_bytes, int) or weight_bytes < 0:
+        raise ValueError("weight_bytes must be a non-negative integer")
     weights_gb = weight_bytes / 1e9
     if manifest.kind == "lora_adapter":
         base = served_base(manifest.base_model)
@@ -554,8 +557,17 @@ class HfHttpHubClient:
 
     def __init__(self, endpoint: str = "https://huggingface.co", timeout_s: float = 20.0,
                  opener: Callable[..., Any] | None = None) -> None:
-        self.endpoint = endpoint.rstrip("/")
-        self.timeout_s = timeout_s
+        if not isinstance(endpoint, str) or not endpoint.strip().rstrip("/"):
+            raise ValueError("endpoint must be a non-empty URL string")
+        if (
+            isinstance(timeout_s, bool)
+            or not isinstance(timeout_s, (int, float))
+            or not math.isfinite(timeout_s)
+            or timeout_s <= 0
+        ):
+            raise ValueError("timeout_s must be a positive finite number")
+        self.endpoint = endpoint.strip().rstrip("/")
+        self.timeout_s = float(timeout_s)
         self._opener = opener
 
     def _open(self, request: urllib.request.Request, timeout: float) -> Any:
@@ -631,11 +643,19 @@ class SubmissionLedger:
 
     def __init__(self, path: Path | None = None, max_per_window: int = DEFAULT_RATE_LIMIT,
                  window_s: float = DEFAULT_RATE_WINDOW_S) -> None:
-        if max_per_window < 1 or window_s <= 0:
+        if (
+            isinstance(max_per_window, bool)
+            or not isinstance(max_per_window, int)
+            or isinstance(window_s, bool)
+            or not isinstance(window_s, (int, float))
+            or not math.isfinite(window_s)
+            or max_per_window < 1
+            or window_s <= 0
+        ):
             raise ValueError("max_per_window must be >= 1 and window_s > 0")
         self.path = path
         self.max_per_window = max_per_window
-        self.window_s = window_s
+        self.window_s = float(window_s)
         self._events: list[tuple[str, float]] = []
         if path is not None and path.exists():
             for line in path.read_text(encoding="utf-8").splitlines():
@@ -915,6 +935,20 @@ def evaluate(manifest: BeeManifest, static: StaticReport, *, pack: HeldOutPack |
     ``prober`` with ``timeout_s`` per item; nothing of the contributor's runs on hive hardware. The pack's own positive and
     negative controls run before any answer is scored.
     """
+    if (
+        isinstance(min_pass_rate, bool)
+        or not isinstance(min_pass_rate, (int, float))
+        or not math.isfinite(min_pass_rate)
+        or not (0.0 <= min_pass_rate <= 1.0)
+    ):
+        raise ValueError("min_pass_rate must be a finite number in [0.0, 1.0]")
+    if (
+        isinstance(timeout_s, bool)
+        or not isinstance(timeout_s, (int, float))
+        or not math.isfinite(timeout_s)
+        or timeout_s <= 0
+    ):
+        raise ValueError("timeout_s must be a positive finite number")
     if static.verdict is not Verdict.ACCEPT:
         return EvaluationReport(Verdict.REJECT if static.verdict is Verdict.REJECT else Verdict.BLOCKED,
                                 [Reason(ReasonCode.STATIC_NOT_PASSED, f"static verdict {static.verdict.value}")])

@@ -95,11 +95,19 @@ class Top1PctQuantizedDCTEF21Compressor:
         quantization_bits: int = 4,
         dampening_gamma: float = 1.0,
     ) -> None:
-        if not (0.001 <= top_k_fraction <= 0.10):
+        if (
+            isinstance(top_k_fraction, bool)
+            or not isinstance(top_k_fraction, (int, float))
+            or not (0.001 <= top_k_fraction <= 0.10)
+        ):
             raise ValueError("top_k_fraction must be in [0.001, 0.10]")
-        if quantization_bits not in (2, 4):
+        if isinstance(quantization_bits, bool) or quantization_bits not in (2, 4):
             raise ValueError("quantization_bits must be 2 or 4")
-        if not (0.0 < dampening_gamma <= 1.0):
+        if (
+            isinstance(dampening_gamma, bool)
+            or not isinstance(dampening_gamma, (int, float))
+            or not (0.0 < dampening_gamma <= 1.0)
+        ):
             raise ValueError("dampening_gamma must be in (0.0, 1.0]")
         self.top_k_fraction = float(top_k_fraction)
         self.quantization_bits = int(quantization_bits)
@@ -112,6 +120,10 @@ class Top1PctQuantizedDCTEF21Compressor:
         return 0.0
 
     def get_residual(self, division_id: str, length: int) -> list[float]:
+        if not isinstance(division_id, str) or not division_id.strip():
+            raise ValueError("division_id must be a non-empty string")
+        if isinstance(length, bool) or not isinstance(length, int) or length < 1:
+            raise ValueError("length must be a positive integer")
         buf = self._host_ram_residuals.get(division_id)
         if buf is None or len(buf) != length:
             buf = [0.0] * length
@@ -126,7 +138,15 @@ class Top1PctQuantizedDCTEF21Compressor:
         step_index: int = 0,
     ) -> tuple[Top1PctDCTPacket, list[float]]:
         """Apply EF21 accumulation, orthonormal DCT, Top-1% selection, and 2/4-bit quantization."""
-        delta = [float(x) for x in raw_delta]
+        if not isinstance(division_id, str) or not division_id.strip():
+            raise ValueError("division_id must be a non-empty string")
+        if isinstance(step_index, bool) or not isinstance(step_index, int) or step_index < 0:
+            raise ValueError("step_index must be a non-negative integer")
+        delta: list[float] = []
+        for x in raw_delta:
+            if isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(float(x)):
+                raise ValueError("raw_delta elements must be finite numbers")
+            delta.append(float(x))
         n = len(delta)
         if n == 0:
             raise ValueError("raw_delta must be non-empty")

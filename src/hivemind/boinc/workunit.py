@@ -42,6 +42,31 @@ class BOINCWorkunit:
     seq_len: int = 2048
     num_sequences: int = 2048
 
+    def __post_init__(self) -> None:
+        for name, val in (
+            ("wu_id", self.wu_id),
+            ("branch_name", self.branch_name),
+            ("base_model_id", self.base_model_id),
+            ("lora_checkpoint_url", self.lora_checkpoint_url),
+            ("data_shard_parquet", self.data_shard_parquet),
+            ("shard_sha256", self.shard_sha256),
+            ("shard_hmac_signature", self.shard_hmac_signature),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{name} must be a non-empty string")
+        if isinstance(self.outer_step, bool) or not isinstance(self.outer_step, int) or self.outer_step < 0:
+            raise ValueError("outer_step must be a non-negative integer")
+        if isinstance(self.rng_seed, bool) or not isinstance(self.rng_seed, int):
+            raise ValueError("rng_seed must be an integer")
+        for name, val in (
+            ("inner_steps_H", self.inner_steps_H),
+            ("spot_check_interval_s", self.spot_check_interval_s),
+            ("seq_len", self.seq_len),
+            ("num_sequences", self.num_sequences),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{name} must be a positive integer")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -52,7 +77,11 @@ def sign_shard_bytes(
     secret_key: bytes = DEFAULT_COORDINATOR_SECRET,
 ) -> tuple[str, str]:
     """Compute SHA-256 digest and HMAC-SHA256 cryptographic signature over a Parquet shard."""
-    if not secret_key:
+    if not isinstance(parquet_bytes, (bytes, bytearray)):
+        raise ValueError("parquet_bytes must be bytes")
+    if isinstance(rng_seed, bool) or not isinstance(rng_seed, int):
+        raise ValueError("rng_seed must be an integer")
+    if not isinstance(secret_key, (bytes, bytearray)) or not secret_key:
         raise ValueError("secret_key must be non-empty bytes for BOINC shard HMAC signing")
     shard_sha256 = hashlib.sha256(parquet_bytes).hexdigest()
     msg = parquet_bytes + f":seed={rng_seed}".encode("utf-8")
@@ -70,6 +99,16 @@ def create_signed_parquet_shard(
     secret_key: bytes = DEFAULT_COORDINATOR_SECRET,
 ) -> tuple[Path, str, str]:
     """Generate a deterministic, pre-tokenized domain training shard in Parquet format and sign it."""
+    if not isinstance(branch_name, str) or not branch_name.strip():
+        raise ValueError("branch_name must be a non-empty string")
+    if isinstance(rng_seed, bool) or not isinstance(rng_seed, int):
+        raise ValueError("rng_seed must be an integer")
+    if isinstance(num_sequences, bool) or not isinstance(num_sequences, int) or num_sequences < 1:
+        raise ValueError("num_sequences must be a positive integer")
+    if isinstance(seq_len, bool) or not isinstance(seq_len, int) or seq_len < 1:
+        raise ValueError("seq_len must be a positive integer")
+    if isinstance(vocab_size, bool) or not isinstance(vocab_size, int) or vocab_size < 33:
+        raise ValueError("vocab_size must be an integer >= 33")
     path = Path(shard_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 

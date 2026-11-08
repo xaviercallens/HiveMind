@@ -8,6 +8,7 @@ every answer carries the URL probed, the time and the latency, or the reason it 
 
 from __future__ import annotations
 
+import math
 import threading
 import time
 from typing import Any
@@ -22,6 +23,12 @@ _LOCK = threading.Lock()
 
 def probe_remote_status(url: str, *, timeout_s: float = PROBE_TIMEOUT_S, now_utc: float | None = None) -> dict[str, Any]:
     """GET ``url`` once; ONLINE on a 2xx answer, HTTP_<code> otherwise, UNREACHABLE on a transport error or timeout."""
+    if not isinstance(url, str) or not url.strip().startswith(("http://", "https://")):
+        raise ValueError("url must be a non-empty http/https URL")
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not math.isfinite(float(timeout_s)) or float(timeout_s) <= 0.0:
+        raise ValueError("timeout_s must be a finite positive number")
+    if now_utc is not None and (isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc))):
+        raise ValueError("now_utc must be a finite number when provided")
     now = time.time() if now_utc is None else float(now_utc)
     with _LOCK:
         hit = _CACHE.get(url)

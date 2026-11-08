@@ -11,6 +11,7 @@ so only the lock holder can mutate the ledger.
 from __future__ import annotations
 
 import json
+import math
 import os
 import threading
 import time
@@ -47,6 +48,12 @@ class InMemoryGenerationStore:
         *,
         if_generation_match: int,
     ) -> int:
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("key must be a non-empty string")
+        if not isinstance(payload, dict):
+            raise ValueError("payload must be a dict")
+        if isinstance(if_generation_match, bool) or not isinstance(if_generation_match, int) or if_generation_match < 0:
+            raise ValueError("if_generation_match must be a non-negative integer")
         with self._lock:
             current = self._objects.get(key)
             current_gen = 0 if current is None else current[0]
@@ -67,6 +74,10 @@ class InMemoryGenerationStore:
             return entry[0], dict(entry[1])
 
     def delete_if_generation_match(self, key: str, *, if_generation_match: int) -> bool:
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("key must be a non-empty string")
+        if isinstance(if_generation_match, bool) or not isinstance(if_generation_match, int) or if_generation_match < 0:
+            raise ValueError("if_generation_match must be a non-negative integer")
         with self._lock:
             current = self._objects.get(key)
             current_gen = 0 if current is None else current[0]
@@ -99,6 +110,12 @@ class FileGenerationStore:
         *,
         if_generation_match: int,
     ) -> int:
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("key must be a non-empty string")
+        if not isinstance(payload, dict):
+            raise ValueError("payload must be a dict")
+        if isinstance(if_generation_match, bool) or not isinstance(if_generation_match, int) or if_generation_match < 0:
+            raise ValueError("if_generation_match must be a non-negative integer")
         path = self._path_for(key)
         with self._lock:
             if path.exists():
@@ -126,6 +143,10 @@ class FileGenerationStore:
             return int(data["generation"]), dict(data.get("payload") or {})
 
     def delete_if_generation_match(self, key: str, *, if_generation_match: int) -> bool:
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("key must be a non-empty string")
+        if isinstance(if_generation_match, bool) or not isinstance(if_generation_match, int) or if_generation_match < 0:
+            raise ValueError("if_generation_match must be a non-negative integer")
         path = self._path_for(key)
         with self._lock:
             if not path.exists():
@@ -158,8 +179,12 @@ class LitestreamWriterLock:
         lease_ttl_s: float = 300.0,
         fail_closed: bool = False,
     ) -> None:
+        if not isinstance(owner_id, str) or not owner_id.strip():
+            raise ValueError("owner_id must be a non-empty string")
+        if isinstance(lease_ttl_s, bool) or not isinstance(lease_ttl_s, (int, float)) or not math.isfinite(float(lease_ttl_s)) or float(lease_ttl_s) <= 0.0:
+            raise ValueError("lease_ttl_s must be a finite positive number")
         self.replica_url = str(replica_url).strip()
-        self.owner_id = str(owner_id).strip()
+        self.owner_id = owner_id.strip()
         self._backend = backend
         self.lease_ttl_s = max(1.0, float(lease_ttl_s))
         self.fail_closed = bool(fail_closed)
@@ -184,6 +209,8 @@ class LitestreamWriterLock:
 
     def acquire(self, now_utc: float | None = None) -> bool:
         """Attempt to claim single-writer ownership via ``if_generation_match=0`` (or expired lease takeover)."""
+        if now_utc is not None and (isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc))):
+            raise ValueError("now_utc must be a finite number when provided")
         if not self.replica_url:
             # Ephemeral canary with empty replica URL does not contend on a shared replica
             self._generation = 0

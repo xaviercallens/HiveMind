@@ -9,6 +9,7 @@ router recruits experts per task cluster; only the expert's outer delta crosses 
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass
 from typing import Any, Final, Literal
 
@@ -52,6 +53,8 @@ class FederationPlan:
 
 def classify_plan_class(total_mib: float | None) -> PlanClass:
     """Coordinator plan class for a card; no GPU reading falls to the CPU solver class."""
+    if total_mib is not None and (isinstance(total_mib, bool) or not isinstance(total_mib, (int, float)) or not math.isfinite(float(total_mib)) or float(total_mib) < 0.0):
+        raise ValueError("total_mib must be None or a finite non-negative number")
     if total_mib is None or total_mib < CUDA_MIN_VRAM_MIB:
         return "cpu_hivemind_solver"
     return "cuda_hivemind_big" if total_mib >= CUDA_BIG_MIN_VRAM_MIB else "cuda_hivemind"
@@ -59,6 +62,8 @@ def classify_plan_class(total_mib: float | None) -> PlanClass:
 
 def pick_bee(usable_mib: int) -> ModelTier | None:
     """Largest specialist bee (`bee-*`, dense) whose recommended memory fits the usable VRAM, else None."""
+    if isinstance(usable_mib, bool) or not isinstance(usable_mib, int) or usable_mib < 0:
+        raise ValueError("usable_mib must be a non-negative integer")
     fitting = [t for t in tiers_for_vram(usable_mib / 1024.0) if t.tier_id.startswith("bee-") and not t.moe]
     return max(fitting, key=lambda t: t.min_vram_gb) if fitting else None
 
@@ -72,6 +77,12 @@ def build_plan(
     overlay_ip: str | None = None,
 ) -> FederationPlan:
     """Build the plan from a measured reading (`None` for both when no GPU could be read)."""
+    if not isinstance(coordinator, str) or not coordinator.strip().startswith(("http://", "https://")):
+        raise ValueError("coordinator must be a non-empty http/https URL")
+    if not isinstance(handle, str) or not handle.strip():
+        raise ValueError("handle must be a non-empty string")
+    if overlay_ip is not None and (not isinstance(overlay_ip, str) or not overlay_ip.strip()):
+        raise ValueError("overlay_ip must be None or a non-empty string")
     plan_class = classify_plan_class(total_mib)
     measured = total_mib is not None
     usable = int(total_mib * DESKTOP_USABLE_FRACTION) if measured and total_mib is not None else 0

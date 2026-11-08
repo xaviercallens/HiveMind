@@ -2741,6 +2741,9 @@ def create_router_app(
     for name in oidc:
         if name == "google":
             raise ValueError("configure Google with google_client_id; 'google' is not an extra OIDC provider")
+        if name == "github":
+            # GitHub identities are stored as ("github", numeric id); an OIDC provider under the same name would share them
+            raise ValueError("'github' is reserved for Sign in with GitHub; it is not an extra OIDC provider")
         store.allow_identity_provider(name)
 
     @app.get("/v1/hivemind/signin/providers")
@@ -2797,8 +2800,8 @@ def create_router_app(
             raise RouterError(429, "Too many sign-ins; try again in a minute.", "rate_limit_error", "rate_limited")
         data = await _parse_auth_payload(request)
         identity = await run_in_threadpool(_github_identity, data)
-        account_id, api_key, created = store.sign_in_with_identity("github", identity.subject, "prosumer")
-        account = store.get_account(account_id)
+        account_id, api_key, created = await run_in_threadpool(store.sign_in_with_identity, "github", identity.subject, "prosumer")
+        account = await run_in_threadpool(store.get_account, account_id)
         body: dict[str, Any] = {"account_id": account_id, "api_key": api_key, "role": account.role if account else "prosumer", "created": created}
         if created:
             body.update(starter_grant(request, account_id))
@@ -2815,7 +2818,7 @@ def create_router_app(
             return _error_response(429, "Too many attempts; try again in a minute.", "rate_limit_error", "rate_limited")
         scheme, _, token = request.headers.get("authorization", "").partition(" ")
         key = token.strip() if scheme.lower() == "bearer" else ""
-        acct = store.authenticate(key) if key.startswith("hm-") else None
+        acct = await run_in_threadpool(store.authenticate, key) if key.startswith("hm-") else None
         if acct is None:
             return _error_response(401, "A valid hm-... API key is required.", "authentication_error", "invalid_api_key")
         data = await _parse_auth_payload(request)
@@ -2824,14 +2827,15 @@ def create_router_app(
                 subject = (await run_in_threadpool(_github_identity, data)).subject
             else:
                 try:
-                    subject = oidc[provider].verify(str(data.get("id_token") or "")).subject
+                    # verify() may fetch the provider's keys over the network: keep it off the event loop
+                    subject = (await run_in_threadpool(oidc[provider].verify, str(data.get("id_token") or ""))).subject
                 except OidcAuthError as exc:
                     LOGGER.info("%s link refused: %s", provider, exc.code)
                     return _error_response(401, "Sign-in failed. Sign in again.", "authentication_error", f"{provider}_{exc.code}")
         except RouterError as exc:
             return _error_response(exc.status, exc.message, exc.error_type, exc.code)
         try:
-            store.link_identity(acct.account_id, provider, subject)
+            await run_in_threadpool(store.link_identity, acct.account_id, provider, subject)
         except HandleTaken as exc:
             return _error_response(409, str(exc), "invalid_request_error", "identity_taken")
         return JSONResponse({"status": f"{provider.upper()}_LINKED", "handle": acct.handle}, headers={"Cache-Control": "no-store"})

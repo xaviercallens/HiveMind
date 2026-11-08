@@ -224,6 +224,8 @@ def mount_web_v32(
                 verifiers = dict(providers_from_json(oidc_text))
             for entry in entries if isinstance(entries, list) else []:
                 name = str(entry.get("name", ""))
+                if name in ("google", "github"):
+                    continue  # reserved: those providers have their own configuration and identity namespace
                 secret_value = e.get(f"HIVEMIND_OIDC_{name.upper()}_CLIENT_SECRET", "").strip()
                 auth_url, token_url = str(entry.get("authorization_endpoint", "")), str(entry.get("token_endpoint", ""))
                 if name in verifiers and name not in providers and secret_value and auth_url.startswith("https://") and token_url.startswith("https://"):
@@ -421,13 +423,21 @@ def mount_web_v32(
     @app.get("/v32/api/capabilities")
     def v32_capabilities() -> Response:
         status, caps = gw.get("/api/v1/auth/capabilities")
-        reset_email = bool(caps.get("password_reset_email")) if status == 200 else False
+        caps = caps if status == 200 and isinstance(caps, dict) else {}
+        reset_email = bool(caps.get("password_reset_email"))
+        gateway_oidc = caps.get("oidc") if isinstance(caps.get("oidc"), list) else []
+
+        def gateway_accepts(name: str) -> bool:
+            # show only buttons the gateway can complete: a provider configured here but not there always fails
+            return bool(caps.get(name)) if name in ("google", "github") else name in gateway_oidc
+
+        offered = [{"name": n, "label": c["label"]} for n, c in providers.items() if gateway_accepts(n)] if fernet is not None else []
         return _json({
             "sessions": fernet is not None,
             "password_login": fernet is not None,
             "password_reset_email": reset_email and fernet is not None,
-            "google": google_enabled and fernet is not None,
-            "providers": [{"name": n, "label": c["label"]} for n, c in providers.items()] if fernet is not None else [],
+            "google": any(p["name"] == "google" for p in offered),
+            "providers": offered,
         })
 
     @app.get("/v32/api/account")

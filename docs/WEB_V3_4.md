@@ -1,7 +1,10 @@
 # Web portal v3.4: Google sign-in and single sign-on
 
 v3.4 replaces the Google-only sign-in flow with one flow for every provider. A provider button appears only when that
-provider is fully configured; with no configuration the portal behaves exactly like v3.3 (password sign-in only).
+provider is fully configured on the portal **and** the gateway reports it in `/api/v1/auth/capabilities`, so the page
+never offers a sign-in that would fail. With no configuration the portal behaves exactly like v3.3 (password sign-in
+only). The names `google` and `github` are reserved: an OpenID Connect entry using either is refused by the gateway and
+ignored by the portal.
 
 | Provider | How it is verified | Configured with |
 |---|---|---|

@@ -365,3 +365,41 @@ def test_gateway_link_route_refuses_unknown_providers_and_missing_keys(tmp_path)
     _a, key, _c = store.register_with_credentials("someone", "SomeonePassword#2026", email="s@example.org")
     bad = client.post("/api/v1/auth/link/acme", json={"id_token": "x.y.z"}, headers={"Authorization": f"Bearer {key}"})
     assert bad.status_code == 401
+
+
+# ---- reserved names and buttons the gateway cannot complete -----------------------------------------------------------
+
+@pytest.mark.parametrize("name", ["google", "github"])
+def test_gateway_refuses_an_oidc_provider_named_like_a_builtin_provider(tmp_path, name: str) -> None:
+    store = RouterStore(tmp_path / "g.sqlite3", SECRET)
+    with pytest.raises(ValueError):
+        create_router_app(store, oidc_verifiers={name: _verifier()})
+
+
+def _portal(env_extra: dict, gateway_caps: dict) -> TestClient:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=gateway_caps if request.url.path == "/api/v1/auth/capabilities" else {})
+
+    app = FastAPI()
+    env = {"HIVEMIND_WEB_SESSION_SECRET": "w" * 48, "HIVEMIND_PUBLIC_WEB_URL": ORIGIN, **env_extra}
+    mount_web_v32(app, env=env, gateway=GatewayClient("http://gw", client=httpx.Client(transport=httpx.MockTransport(handler))),
+                  oidc_verifiers={"acme": _verifier(), "github": _verifier()})
+    return TestClient(app, base_url=ORIGIN)
+
+
+def test_portal_skips_oidc_entries_that_use_a_reserved_name() -> None:
+    entry = {"issuer": ISSUER, "jwks_url": "https://k.example/k", "client_id": CLIENT,
+             "authorization_endpoint": "https://a.example/a", "token_endpoint": "https://a.example/t"}
+    env = {"HIVEMIND_OIDC_PROVIDERS": json.dumps([{"name": "github", **entry}]), "HIVEMIND_OIDC_GITHUB_CLIENT_SECRET": "s"}
+    client = _portal(env, {"github": True, "oidc": ["github"]})
+    assert client.get("/v32/api/capabilities").json()["providers"] == []
+    assert client.get("/auth/github/start", follow_redirects=False).status_code == 404
+
+
+def test_portal_hides_providers_the_gateway_cannot_complete() -> None:
+    entry = {"name": "acme", "issuer": ISSUER, "jwks_url": "https://k.example/k", "client_id": CLIENT, "label": "Acme SSO",
+             "authorization_endpoint": "https://a.example/a", "token_endpoint": "https://a.example/t"}
+    env = {"HIVEMIND_OIDC_PROVIDERS": json.dumps([entry]), "HIVEMIND_OIDC_ACME_CLIENT_SECRET": "s", "HIVEMIND_GITHUB_CLIENT_ID": "gh"}
+    assert _portal(env, {"github": False, "oidc": []}).get("/v32/api/capabilities").json()["providers"] == []
+    both = _portal(env, {"github": True, "oidc": ["acme"]}).get("/v32/api/capabilities").json()["providers"]
+    assert {p["name"] for p in both} == {"acme", "github"}

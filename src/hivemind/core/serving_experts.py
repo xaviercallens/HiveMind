@@ -51,6 +51,18 @@ def load_gwaya_code_expert(large_url: str, large_model: str = "qwen2.5-coder:7b"
     The 7B tier alone is the default: GWAYA's T4 measurement (MBPP-sanitized, n=257) found a 3B-first cascade no better
     (83.3% against 82.9%). Raises ``ImportError`` with an install hint when a GWAYA release with the Code expert is absent.
     """
+    if not isinstance(large_url, str) or not large_url.strip():
+        raise ValueError("large_url must be a non-empty string")
+    if not isinstance(large_model, str) or not large_model.strip():
+        raise ValueError("large_model must be a non-empty string")
+    if small_url is not None and (not isinstance(small_url, str) or not small_url.strip()):
+        raise ValueError("small_url must be a non-empty string when provided")
+    if not isinstance(small_model, str) or not small_model.strip():
+        raise ValueError("small_model must be a non-empty string")
+    if not isinstance(small_first, bool):
+        raise ValueError("small_first must be a bool")
+    if isinstance(max_rounds, bool) or not isinstance(max_rounds, int) or max_rounds < 1:
+        raise ValueError("max_rounds must be an integer >= 1")
     try:
         from gwaya.hivemind_expert import GwayaCodeExpert
         from gwaya.llama_tier import LlamaServerClient

@@ -125,12 +125,29 @@ def compute_erlang_c_metrics(
     safe_rho_ceiling: float = 0.78,
 ) -> ErlangCQueueDiagnostic:
     """Compute exact M/M/c Erlang-C waiting probability and latency under consumer demand."""
+    if isinstance(active_producers_c, bool) or not isinstance(active_producers_c, int):
+        raise ValueError("active_producers_c must be an integer")
     if active_producers_c < 1 or aggregate_tok_per_s <= 0.0 or mean_tokens_per_req <= 0.0:
         raise ValueError("active_producers_c >= 1, aggregate_tok_per_s > 0, and mean_tokens_per_req > 0 required")
     if arrival_rate_req_per_s < 0.0:
         raise ValueError("arrival_rate_req_per_s must be >= 0")
-    if not all(math.isfinite(x) for x in (aggregate_tok_per_s, arrival_rate_req_per_s, mean_tokens_per_req)):
-        raise ValueError("aggregate_tok_per_s, arrival_rate_req_per_s and mean_tokens_per_req must be finite")
+    if not all(
+        math.isfinite(x)
+        for x in (
+            aggregate_tok_per_s,
+            arrival_rate_req_per_s,
+            mean_tokens_per_req,
+            base_network_overhead_s,
+            safe_rho_ceiling,
+        )
+    ):
+        raise ValueError(
+            "aggregate_tok_per_s, arrival_rate_req_per_s, mean_tokens_per_req, base_network_overhead_s, and safe_rho_ceiling must be finite"
+        )
+    if base_network_overhead_s < 0.0:
+        raise ValueError("base_network_overhead_s must be >= 0")
+    if not (0.0 < safe_rho_ceiling < 1.0):
+        raise ValueError("safe_rho_ceiling must be in (0, 1)")
     if active_producers_c > MAX_FORECAST_NODES:
         # the Erlang-C sum is O(c): an unbounded c from a public query string held a worker for minutes to hours
         raise ValueError(f"active_producers_c must be <= {MAX_FORECAST_NODES}")
@@ -198,6 +215,24 @@ def compute_progressive_starter_grant(
     base_daily_drip_hmt: float = 5.0,
 ) -> ProgressiveGrantQuote:
     """Compute the Supply-Pegged Progressive Starter Grant (`15 HMT` instant + `85 HMT` Prosumer GPU unlock)."""
+    for name, val in (
+        ("epoch_supply_1k_tokens", epoch_supply_1k_tokens),
+        ("epoch_consumer_demand_1k_tokens", epoch_consumer_demand_1k_tokens),
+        ("legacy_lump_sum_hmt", legacy_lump_sum_hmt),
+        ("instant_grant_hmt", instant_grant_hmt),
+        ("base_daily_drip_hmt", base_daily_drip_hmt),
+    ):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+            raise ValueError(f"{name} must be finite, got {val!r}")
+    if (
+        epoch_supply_1k_tokens < 0.0
+        or epoch_consumer_demand_1k_tokens < 0.0
+        or instant_grant_hmt < 0.0
+        or base_daily_drip_hmt < 0.0
+    ):
+        raise ValueError("starter grant parameters must be >= 0")
+    if legacy_lump_sum_hmt <= 0.0 or instant_grant_hmt > legacy_lump_sum_hmt:
+        raise ValueError("legacy_lump_sum_hmt must be > 0 and >= instant_grant_hmt")
     ratio = epoch_supply_1k_tokens / max(epoch_consumer_demand_1k_tokens, 1e-6)
     clamped_ratio = min(1.0, max(0.0, ratio))
     drip = round(base_daily_drip_hmt * clamped_ratio, 4)
@@ -221,8 +256,26 @@ def compute_congestion_price(
     validator_plus_burn_fee: float = 0.15,
 ) -> dict[str, float]:
     """Compute congestion-adjusted price omega(rho) and producer reward per 1k tokens."""
+    for name, val in (
+        ("base_posted_price_per_1k", base_posted_price_per_1k),
+        ("utilization_rho", utilization_rho),
+        ("rho_threshold", rho_threshold),
+        ("rho_cap", rho_cap),
+        ("surge_gamma", surge_gamma),
+        ("validator_plus_burn_fee", validator_plus_burn_fee),
+    ):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+            raise ValueError(f"{name} must be finite, got {val!r}")
     if base_posted_price_per_1k <= 0.0:
         raise ValueError("base_posted_price_per_1k must be > 0")
+    if utilization_rho < 0.0:
+        raise ValueError("utilization_rho must be >= 0")
+    if not (0.0 <= rho_threshold < rho_cap <= 1.0):
+        raise ValueError("0 <= rho_threshold < rho_cap <= 1 required")
+    if surge_gamma < 0.0:
+        raise ValueError("surge_gamma must be >= 0")
+    if not (0.0 <= validator_plus_burn_fee < 1.0):
+        raise ValueError("validator_plus_burn_fee must be in [0, 1)")
     clamped_rho = min(max(utilization_rho, 0.0), rho_cap)
     if clamped_rho <= rho_threshold:
         multiplier = 1.0
@@ -254,6 +307,22 @@ def project_international_launch_wave(
     uncontrolled_conversion_kappa: float = 0.0,
 ) -> SocialFunnelProjection:
     """Simulate the social, queueing, and economic equilibrium of an English launch wave."""
+    if not isinstance(wave_name, str) or not wave_name.strip():
+        raise ValueError("wave_name must be a non-empty string")
+    if isinstance(new_visitors, bool) or not isinstance(new_visitors, int) or new_visitors < 1 or new_visitors > MAX_FORECAST_VISITORS:
+        raise ValueError(f"new_visitors must be an integer in 1..{MAX_FORECAST_VISITORS}")
+    if not math.isfinite(signup_rate) or not (0.0 < signup_rate <= 1.0):
+        raise ValueError("signup_rate must be finite in (0, 1]")
+    if not math.isfinite(direct_producer_fraction_alpha_p) or not (0.0 <= direct_producer_fraction_alpha_p < 1.0):
+        raise ValueError("direct_producer_fraction_alpha_p must be finite in [0, 1)")
+    if not math.isfinite(consumer_to_prosumer_conversion_kappa) or not (0.0 <= consumer_to_prosumer_conversion_kappa <= 1.0):
+        raise ValueError("consumer_to_prosumer_conversion_kappa must be finite in [0, 1]")
+    if not math.isfinite(mean_prosumer_tok_per_s) or mean_prosumer_tok_per_s <= 0.0:
+        raise ValueError("mean_prosumer_tok_per_s must be finite and > 0")
+    if not math.isfinite(prosumer_daytime_duty_cycle) or not (0.0 < prosumer_daytime_duty_cycle <= 1.0):
+        raise ValueError("prosumer_daytime_duty_cycle must be finite in (0, 1]")
+    if not math.isfinite(mean_consumer_active_req_per_s) or mean_consumer_active_req_per_s <= 0.0:
+        raise ValueError("mean_consumer_active_req_per_s must be finite and > 0")
     if uncontrolled_scraping_factor <= 0.0 or not math.isfinite(uncontrolled_scraping_factor):
         raise ValueError("uncontrolled_scraping_factor must be finite and positive")
     if not (0.0 <= uncontrolled_conversion_kappa <= 1.0) or not math.isfinite(uncontrolled_conversion_kappa):

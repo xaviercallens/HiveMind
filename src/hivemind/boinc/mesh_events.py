@@ -13,11 +13,13 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 import hashlib
 import json
+import math
 from typing import Any, Callable, Mapping
 
 TOPIC_VALIDATED = "hivemind.boinc.workunit.validated"
 TOPIC_ASSIMILATED = "hivemind.boinc.workunit.assimilated"
 ALLOWED_EVENT_TYPES = frozenset({"validated", "assimilated"})
+_HEX_CHARS = frozenset("0123456789abcdefABCDEF")
 FORBIDDEN_CREDIT_FIELDS = frozenset(
     {
         "credit",
@@ -30,6 +32,10 @@ FORBIDDEN_CREDIT_FIELDS = frozenset(
         "mint_hmt",
     }
 )
+
+
+def _is_sha256_hex(val: object) -> bool:
+    return isinstance(val, str) and len(val) == 64 and all(c in _HEX_CHARS for c in val)
 
 
 class ReadOnlyLedgerViolationError(ValueError):
@@ -47,6 +53,16 @@ class AdapterPointer:
     wu_name: str
     domain: str
     timestamp_utc: str
+
+    def __post_init__(self) -> None:
+        for fname in ("chain_stem", "adapter_rel_path", "wu_name", "domain", "timestamp_utc"):
+            val = getattr(self, fname)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{fname} must be a non-empty string")
+        if isinstance(self.round_index, bool) or not isinstance(self.round_index, int) or self.round_index < 0:
+            raise ValueError("round_index must be a non-negative integer")
+        if not _is_sha256_hex(self.adapter_sha256):
+            raise ValueError("adapter_sha256 must be a 64-character hex string")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -69,6 +85,20 @@ class BOINCMeshEvent:
     timestamp_utc: str
     payload_sha256: str
 
+    def __post_init__(self) -> None:
+        for fname in ("event_id", "topic", "wu_name", "host_id", "chain_stem", "adapter_rel_path", "domain", "timestamp_utc"):
+            val = getattr(self, fname)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{fname} must be a non-empty string")
+        if self.event_type not in ALLOWED_EVENT_TYPES:
+            raise ValueError(f"event_type must be one of {sorted(ALLOWED_EVENT_TYPES)}")
+        if isinstance(self.round_index, bool) or not isinstance(self.round_index, int) or self.round_index < 0:
+            raise ValueError("round_index must be a non-negative integer")
+        if not _is_sha256_hex(self.adapter_sha256):
+            raise ValueError("adapter_sha256 must be a 64-character hex string")
+        if not _is_sha256_hex(self.payload_sha256):
+            raise ValueError("payload_sha256 must be a 64-character hex string")
+
     def to_AdapterPointer(self) -> AdapterPointer:
         return AdapterPointer(
             chain_stem=self.chain_stem,
@@ -88,9 +118,15 @@ class BOINCChainLedger:
     """Authoritative BOINC chain state and volunteer credit ledger."""
 
     def __init__(self, initial_credits: Mapping[str, float] | None = None) -> None:
-        self._credits: dict[str, float] = {
-            str(k): float(v) for k, v in (initial_credits or {}).items()
-        }
+        if initial_credits is not None and not isinstance(initial_credits, Mapping):
+            raise TypeError("initial_credits must be a Mapping or None")
+        self._credits: dict[str, float] = {}
+        for k, v in (initial_credits or {}).items():
+            if not isinstance(k, str) or not k.strip():
+                raise ValueError("credit account key must be a non-empty string")
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) or float(v) < 0.0:
+                raise ValueError("credit balance must be a non-negative finite number")
+            self._credits[k] = float(v)
         self._validated_wus: dict[str, AdapterPointer] = {}
         self._latest_pointers: dict[str, AdapterPointer] = {}
 
@@ -105,10 +141,14 @@ class BOINCChainLedger:
 
     def record_validated_workunit(self, pointer: AdapterPointer) -> None:
         """Record that a workunit passed replay validation (does not advance assimilated chain tip yet)."""
+        if not isinstance(pointer, AdapterPointer):
+            raise TypeError("pointer must be an AdapterPointer")
         self._validated_wus[pointer.wu_name] = pointer
 
     def record_assimilated_workunit(self, pointer: AdapterPointer) -> None:
         """Advance the chain's assimilated adapter pointer once validated."""
+        if not isinstance(pointer, AdapterPointer):
+            raise TypeError("pointer must be an AdapterPointer")
         if pointer.wu_name not in self._validated_wus:
             raise ValueError(f"Cannot assimilate unvalidated workunit {pointer.wu_name!r}")
         current = self._latest_pointers.get(pointer.chain_stem)
@@ -116,6 +156,8 @@ class BOINCChainLedger:
             self._latest_pointers[pointer.chain_stem] = pointer
 
     def latest_adapter_pointer(self, chain_stem: str = "latest_adapter") -> AdapterPointer | None:
+        if not isinstance(chain_stem, str) or not chain_stem.strip():
+            raise ValueError("chain_stem must be a non-empty string")
         return self._latest_pointers.get(chain_stem)
 
 
@@ -123,6 +165,8 @@ class AMCPMeshEventBus:
     """In-memory / topic-routed AMCP event bus enforcing read-only credit invariants."""
 
     def __init__(self, ledger: BOINCChainLedger) -> None:
+        if not isinstance(ledger, BOINCChainLedger):
+            raise TypeError("ledger must be a BOINCChainLedger")
         self._ledger = ledger
         self._subscribers: dict[str, list[Callable[[BOINCMeshEvent], None]]] = {
             TOPIC_VALIDATED: [],
@@ -137,6 +181,8 @@ class AMCPMeshEventBus:
     def subscribe(self, topic: str, handler: Callable[[BOINCMeshEvent], None]) -> None:
         if topic not in self._subscribers:
             raise ValueError(f"Unsupported AMCP BOINC topic: {topic!r}")
+        if not callable(handler):
+            raise TypeError("handler must be callable")
         self._subscribers[topic].append(handler)
 
     def publish_raw_dict(self, raw: Mapping[str, Any]) -> BOINCMeshEvent:
@@ -157,7 +203,10 @@ class AMCPMeshEventBus:
         wu_name = str(raw.get("wu_name") or "").strip()
         host_id = str(raw.get("host_id") or "").strip()
         chain_stem = str(raw.get("chain_stem") or "latest_adapter").strip()
-        round_index = int(raw.get("round_index", -1))
+        raw_round = raw.get("round_index", -1)
+        if isinstance(raw_round, bool) or not isinstance(raw_round, int):
+            raise ValueError("wu_name, host_id, chain_stem, and non-negative round_index are required")
+        round_index = int(raw_round)
         adapter_rel_path = str(raw.get("adapter_rel_path") or "").strip()
         adapter_sha256 = str(raw.get("adapter_sha256") or "").strip()
         domain = str(raw.get("domain") or "general").strip()
@@ -165,7 +214,7 @@ class AMCPMeshEventBus:
 
         if not wu_name or not host_id or not chain_stem or round_index < 0:
             raise ValueError("wu_name, host_id, chain_stem, and non-negative round_index are required")
-        if not adapter_rel_path or len(adapter_sha256) != 64:
+        if not adapter_rel_path or not _is_sha256_hex(adapter_sha256):
             raise ValueError("adapter_rel_path and 64-hex adapter_sha256 are required")
 
         body_for_hash = {
@@ -216,16 +265,22 @@ class AMCPMeshHostView:
     """Host-side subscriber view tracking validated and assimilated adapter pointers from the AMCP mesh."""
 
     def __init__(self, host_id: str) -> None:
+        if not isinstance(host_id, str) or not host_id.strip():
+            raise ValueError("host_id must be a non-empty string")
         self.host_id = host_id
         self._validated_by_wu: dict[str, AdapterPointer] = {}
         self._latest_by_chain: dict[str, AdapterPointer] = {}
         self.events_received: int = 0
 
     def attach(self, bus: AMCPMeshEventBus) -> None:
+        if not isinstance(bus, AMCPMeshEventBus):
+            raise TypeError("bus must be an AMCPMeshEventBus")
         bus.subscribe(TOPIC_VALIDATED, self.on_event)
         bus.subscribe(TOPIC_ASSIMILATED, self.on_event)
 
     def on_event(self, event: BOINCMeshEvent) -> None:
+        if not isinstance(event, BOINCMeshEvent):
+            raise TypeError("event must be a BOINCMeshEvent")
         self.events_received += 1
         pointer = event.to_AdapterPointer()
         if event.event_type == "validated":
@@ -242,6 +297,8 @@ class AMCPMeshHostView:
                 self._latest_by_chain[pointer.chain_stem] = pointer
 
     def latest_adapter_pointer(self, chain_stem: str = "latest_adapter") -> AdapterPointer | None:
+        if not isinstance(chain_stem, str) or not chain_stem.strip():
+            raise ValueError("chain_stem must be a non-empty string")
         return self._latest_by_chain.get(chain_stem)
 
 

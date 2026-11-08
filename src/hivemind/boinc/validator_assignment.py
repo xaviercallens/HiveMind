@@ -12,6 +12,7 @@ those numbers beside eps and NEVER changes eps itself. Cross-class eps is None (
 from __future__ import annotations
 
 import json
+import math
 import random
 from dataclasses import dataclass
 from enum import Enum
@@ -26,6 +27,8 @@ ClassKey = tuple[str, "str | None", str, str]
 
 def _major_minor(version: str) -> str:
     """'2.4.1+cu121' -> '2.4'."""
+    if not isinstance(version, str) or not version.strip():
+        raise ValueError("version must be a non-empty string")
     parts = version.split("+")[0].split(".")
     return ".".join(parts[:2])
 
@@ -44,6 +47,14 @@ class AcceleratorFingerprint:
     def __post_init__(self) -> None:
         if self.device_class not in DEVICE_CLASSES:
             raise ValueError(f"device_class must be one of {sorted(DEVICE_CLASSES)}, got {self.device_class!r}")
+        for fname in ("device_name", "torch_version", "dtype"):
+            val = getattr(self, fname)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{fname} must be a non-empty string")
+        for opt_name in ("compute_capability", "accel_runtime"):
+            val = getattr(self, opt_name)
+            if val is not None and (not isinstance(val, str) or not val.strip()):
+                raise ValueError(f"{opt_name} must be a non-empty string or None")
 
     def class_key(self) -> ClassKey:
         return (self.device_class, self.compute_capability, self.torch_version, self.dtype)
@@ -51,6 +62,8 @@ class AcceleratorFingerprint:
     @classmethod
     def from_local(cls, dtype: str = "float32") -> "AcceleratorFingerprint":
         """Fingerprint of this host; torch is imported lazily and optional."""
+        if not isinstance(dtype, str) or not dtype.strip():
+            raise ValueError("dtype must be a non-empty string")
         try:
             import torch
         except ImportError:
@@ -85,10 +98,16 @@ class ValidatorRegistry:
     """Registered validators by fingerprint; deterministic matched assignment."""
 
     def __init__(self, default_fallback: FallbackPolicy = FallbackPolicy.REJECT_UNMATCHED) -> None:
+        if not isinstance(default_fallback, FallbackPolicy):
+            raise ValueError("default_fallback must be a FallbackPolicy")
         self.default_fallback = default_fallback
         self._validators: dict[str, AcceleratorFingerprint] = {}
 
     def register(self, validator_id: str, fingerprint: AcceleratorFingerprint) -> None:
+        if not isinstance(validator_id, str) or not validator_id.strip():
+            raise ValueError("validator_id must be a non-empty string")
+        if not isinstance(fingerprint, AcceleratorFingerprint):
+            raise TypeError("fingerprint must be an AcceleratorFingerprint")
         self._validators[validator_id] = fingerprint
 
     def assign(
@@ -98,6 +117,12 @@ class ValidatorRegistry:
         exclude: Iterable[str] = (),
     ) -> tuple[str | None, FallbackPolicy | None, str]:
         """Return (validator_id, policy, reason). policy is None on an exact match."""
+        if not isinstance(worker_fp, AcceleratorFingerprint):
+            raise TypeError("worker_fp must be an AcceleratorFingerprint")
+        if isinstance(rng_seed, bool) or not isinstance(rng_seed, int):
+            raise ValueError("rng_seed must be an integer")
+        if isinstance(exclude, (str, bytes)):
+            raise ValueError("exclude must be an iterable of validator_id strings, not str/bytes")
         key = worker_fp.class_key()
         skip = set(exclude)
         matches = sorted(v for v, fp in self._validators.items() if fp.class_key() == key and v not in skip)
@@ -111,13 +136,27 @@ class EpsilonTable:
     """Per class-pair eps. Same class: 1e-4 default; cross class: None (not comparable)."""
 
     def __init__(self, same_class_eps: float = DEFAULT_EPS) -> None:
-        self.same_class_eps = same_class_eps
+        if (
+            isinstance(same_class_eps, bool)
+            or not isinstance(same_class_eps, (int, float))
+            or not math.isfinite(float(same_class_eps))
+            or float(same_class_eps) <= 0.0
+        ):
+            raise ValueError("same_class_eps must be a positive finite number")
+        self.same_class_eps = float(same_class_eps)
         self._overrides: dict[tuple[ClassKey, ClassKey], float | None] = {}
         self.measured: dict[str, dict[str, Any]] = {}  # E12 cell -> measurement, stored beside eps
         self.flags: list[str] = []
 
     def set_eps(self, a: ClassKey, b: ClassKey, eps: float | None) -> None:
-        self._overrides[tuple(sorted((a, b), key=repr))] = eps  # type: ignore[assignment]
+        if eps is not None and (
+            isinstance(eps, bool)
+            or not isinstance(eps, (int, float))
+            or not math.isfinite(float(eps))
+            or float(eps) <= 0.0
+        ):
+            raise ValueError("eps must be None or a positive finite number")
+        self._overrides[tuple(sorted((a, b), key=repr))] = float(eps) if eps is not None else None  # type: ignore[assignment]
 
     def eps_for(self, a: ClassKey, b: ClassKey) -> float | None:
         pair = tuple(sorted((a, b), key=repr))

@@ -82,6 +82,22 @@ class BOINCCoordinatorService:
         max_total_active_workunits: int = 512,
         workunit_ttl_s: float = 3600.0,
     ) -> None:
+        if not isinstance(base_model_sha256, str) or not base_model_sha256.strip():
+            raise ValueError("base_model_sha256 must be a non-empty string")
+        for iname, ival in (
+            ("vocab_size", vocab_size),
+            ("max_active_workunits_per_node", max_active_workunits_per_node),
+            ("max_total_active_workunits", max_total_active_workunits),
+        ):
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 1:
+                raise ValueError(f"{iname} must be an integer >= 1")
+        if (
+            isinstance(workunit_ttl_s, bool)
+            or not isinstance(workunit_ttl_s, (int, float))
+            or not math.isfinite(float(workunit_ttl_s))
+            or float(workunit_ttl_s) <= 0.0
+        ):
+            raise ValueError("workunit_ttl_s must be a positive finite number")
         self.config = config
         self.base_model_sha256 = base_model_sha256
         self.vocab_size = vocab_size
@@ -119,6 +135,10 @@ class BOINCCoordinatorService:
 
     def prune_active_workunits(self, now_s: float | None = None) -> int:
         """Evict consumed, stale-outer-step, or TTL-expired entries from ``active_workunits`` (IP-249)."""
+        if now_s is not None and (
+            isinstance(now_s, bool) or not isinstance(now_s, (int, float)) or not math.isfinite(float(now_s))
+        ):
+            raise ValueError("now_s must be a finite number or None")
         now = time.monotonic() if now_s is None else float(now_s)
         consumed = self.fl_security_guard.consumed_workunit_ids
         to_remove: list[str] = []
@@ -185,6 +205,20 @@ class BOINCCoordinatorService:
         rng_seed: int | None = None,
     ) -> tuple[BOINCWorkunit, dict[str, torch.Tensor]]:
         """Schedule a BOINC Workunit and generate a signed Parquet training shard."""
+        if isinstance(num_sequences, bool) or not isinstance(num_sequences, int) or num_sequences < 1:
+            raise ValueError("num_sequences must be an integer >= 1")
+        if isinstance(seq_len, bool) or not isinstance(seq_len, int) or seq_len < 1:
+            raise ValueError("seq_len must be an integer >= 1")
+        if inner_steps_H is not None and (
+            isinstance(inner_steps_H, bool) or not isinstance(inner_steps_H, int) or inner_steps_H < 1
+        ):
+            raise ValueError("inner_steps_H must be an integer >= 1 or None")
+        if spot_check_interval_s is not None and (
+            isinstance(spot_check_interval_s, bool) or not isinstance(spot_check_interval_s, int) or spot_check_interval_s < 1
+        ):
+            raise ValueError("spot_check_interval_s must be an integer >= 1 or None")
+        if rng_seed is not None and (isinstance(rng_seed, bool) or not isinstance(rng_seed, int)):
+            raise ValueError("rng_seed must be an integer or None")
         self.register_or_get_node(steam_id64=steam_id64, worker_id=worker_id)
 
         domains = list(self.branches.keys())
@@ -390,10 +424,18 @@ class BOINCCoordinatorService:
         delta_dict: dict[str, torch.Tensor],
     ) -> None:
         """Directly queue a worker pseudo-gradient into the pending branch pool (for Multi-Krum tests)."""
+        if branch_name not in self.branches:
+            raise ValueError(f"Unknown branch_name {branch_name!r}")
+        if not isinstance(worker_id, str) or not worker_id.strip():
+            raise ValueError("worker_id must be a non-empty string")
+        if not isinstance(delta_dict, dict) or not delta_dict:
+            raise ValueError("delta_dict must be a non-empty dict of tensors")
         self.pending_branch_deltas[branch_name][worker_id] = delta_dict
 
     def step_branch_outer_loop(self, branch_name: str) -> OuterStepResult:
         """Execute Multi-Krum filtering + Nesterov outer update for `branch_name`."""
+        if branch_name not in self.branches:
+            raise ValueError(f"Unknown branch_name {branch_name!r}")
         branch = self.branches[branch_name]
         worker_deltas = self.pending_branch_deltas[branch_name]
         if not worker_deltas:
@@ -418,6 +460,8 @@ LOGGER = logging.getLogger(__name__)
 
 def _anonymous_id(steam_id64: str) -> str:
     """Stable, non-reversible label for a node in public listings (the raw SteamID64 stays inside the coordinator)."""
+    if not isinstance(steam_id64, str) or not steam_id64.strip():
+        raise ValueError("steam_id64 must be a non-empty string")
     return hashlib.sha256(b"hivemind-node:" + steam_id64.encode()).hexdigest()[:16]
 
 

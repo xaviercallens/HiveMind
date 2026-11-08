@@ -96,6 +96,14 @@ class ZKOPoIV5VerificationReport:
         return asdict(self)
 
 
+def _validate_token_str(val: object, name: str) -> str:
+    if not isinstance(val, str) or not val.strip():
+        raise ValueError(f"{name} must be a non-empty string")
+    if "|" in val or any(ord(c) < 32 or ord(c) == 127 for c in val):
+        raise ValueError(f"{name} contains forbidden control or delimiter characters")
+    return val
+
+
 class ZKOPoIV5Int8TransitionVerifier:
     """Prover and <5ms O(1) CPU verifier for fixed-point INT8/INT4 DiLoCo-QLoRA transitions."""
 
@@ -107,6 +115,25 @@ class ZKOPoIV5Int8TransitionVerifier:
         max_linf_norm: float = 2.5,
         scale_q: int = 127,
     ) -> None:
+        if coordinator_secret is not None:
+            if not isinstance(coordinator_secret, str) or not coordinator_secret.strip() or "\x00" in coordinator_secret:
+                raise ValueError("coordinator_secret must be a non-empty string without NUL bytes")
+        if (
+            isinstance(max_l2_norm, bool)
+            or not isinstance(max_l2_norm, (int, float))
+            or not math.isfinite(float(max_l2_norm))
+            or float(max_l2_norm) <= 0.0
+        ):
+            raise ValueError("max_l2_norm must be a finite positive number")
+        if (
+            isinstance(max_linf_norm, bool)
+            or not isinstance(max_linf_norm, (int, float))
+            or not math.isfinite(float(max_linf_norm))
+            or float(max_linf_norm) <= 0.0
+        ):
+            raise ValueError("max_linf_norm must be a finite positive number")
+        if isinstance(scale_q, bool) or not isinstance(scale_q, int) or scale_q <= 0:
+            raise ValueError("scale_q must be a positive integer")
         effective_secret = (
             coordinator_secret
             if coordinator_secret is not None
@@ -115,15 +142,19 @@ class ZKOPoIV5Int8TransitionVerifier:
         self._secret_bytes = effective_secret.encode("utf-8")
         self.max_l2_norm = float(max_l2_norm)
         self.max_linf_norm = float(max_linf_norm)
-        self.scale_q = int(scale_q)
+        self.scale_q = scale_q
 
     def quantize_to_int8(self, values: Sequence[float], *, quant_bits: int = 8) -> tuple[int, ...]:
         """Quantize floating-point parameter/delta values into symmetric fixed-point integers."""
-        if quant_bits not in (4, 8):
+        if isinstance(quant_bits, bool) or quant_bits not in (4, 8):
             raise ValueError("quant_bits must be 4 or 8")
+        if isinstance(values, (str, bytes)) or not isinstance(values, Sequence) or not values:
+            raise ValueError("values must be a non-empty sequence of numbers")
         clip_bound = 7 if quant_bits == 4 else 127
         out: list[int] = []
         for v in values:
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                raise ValueError("Cannot quantize non-numeric or boolean value in ZK-OPoI v5")
             fv = float(v)
             if not math.isfinite(fv):
                 raise ValueError("Cannot quantize non-finite float value in ZK-OPoI v5")
@@ -144,9 +175,19 @@ class ZKOPoIV5Int8TransitionVerifier:
         quant_bits: int = 8,
     ) -> ZKOPoIV5ProofReceipt:
         """Generate a succinct Fiat-Shamir fixed-point transition proof receipt."""
-        if len(theta0) != len(delta_weights) or not theta0:
+        clean_worker_id = _validate_token_str(worker_id, "worker_id")
+        clean_workunit_id = _validate_token_str(workunit_id, "workunit_id")
+        clean_shard_sha256 = _validate_token_str(shard_sha256, "shard_sha256")
+        if (
+            isinstance(theta0, (str, bytes))
+            or isinstance(delta_weights, (str, bytes))
+            or not isinstance(theta0, Sequence)
+            or not isinstance(delta_weights, Sequence)
+            or len(theta0) != len(delta_weights)
+            or not theta0
+        ):
             raise ValueError("theta0 and delta_weights must have equal non-zero length")
-        if int(inner_steps_h) <= 0:
+        if isinstance(inner_steps_h, bool) or not isinstance(inner_steps_h, int) or inner_steps_h <= 0:
             raise ValueError("inner_steps_h must be strictly positive")
 
         q_theta0 = self.quantize_to_int8(theta0, quant_bits=quant_bits)
@@ -166,7 +207,7 @@ class ZKOPoIV5Int8TransitionVerifier:
         linf_norm = max(abs(float(d)) for d in delta_weights)
 
         fs_seed = hashlib.sha256(
-            f"{worker_id}|{workunit_id}|{shard_sha256}|{theta0_sha256}|{theta_final_sha256}|{inner_steps_h}".encode(
+            f"{clean_worker_id}|{clean_workunit_id}|{clean_shard_sha256}|{theta0_sha256}|{theta_final_sha256}|{inner_steps_h}".encode(
                 "utf-8"
             )
         ).digest()
@@ -186,7 +227,7 @@ class ZKOPoIV5Int8TransitionVerifier:
         norm_linf_rounded = round(linf_norm, 8)
 
         msg = (
-            f"{worker_id}|{workunit_id}|{shard_sha256}|{theta0_sha256}|{theta_final_sha256}|"
+            f"{clean_worker_id}|{clean_workunit_id}|{clean_shard_sha256}|{theta0_sha256}|{theta_final_sha256}|"
             f"{inner_steps_h}|{quant_bits}|{self.scale_q}|{lhs}|{rhs}|"
             f"{norm_l2_rounded:.8f}|{norm_linf_rounded:.8f}|{sketch_dot_mod_p}|"
             f"{','.join(str(x) for x in sketch)}"
@@ -194,13 +235,13 @@ class ZKOPoIV5Int8TransitionVerifier:
         commitment_hmac = hmac.new(self._secret_bytes, msg, hashlib.sha256).hexdigest()
 
         return ZKOPoIV5ProofReceipt(
-            worker_id=worker_id,
-            workunit_id=workunit_id,
-            shard_sha256=shard_sha256,
+            worker_id=clean_worker_id,
+            workunit_id=clean_workunit_id,
+            shard_sha256=clean_shard_sha256,
             theta0_sha256=theta0_sha256,
             theta_final_sha256=theta_final_sha256,
-            inner_steps_h=int(inner_steps_h),
-            quant_bits=int(quant_bits),
+            inner_steps_h=inner_steps_h,
+            quant_bits=quant_bits,
             scale_q=self.scale_q,
             delta_l2_norm=norm_l2_rounded,
             delta_linf_norm=norm_linf_rounded,
@@ -219,8 +260,22 @@ class ZKOPoIV5Int8TransitionVerifier:
         expected_theta0_sha256: str,
     ) -> ZKOPoIV5VerificationReport:
         """Verify a ZK-OPoI v5 proof receipt on CPU in O(1) (<5 ms)."""
+        if not isinstance(receipt, ZKOPoIV5ProofReceipt):
+            raise ValueError("receipt must be a ZKOPoIV5ProofReceipt")
+        _validate_token_str(expected_shard_sha256, "expected_shard_sha256")
+        _validate_token_str(expected_theta0_sha256, "expected_theta0_sha256")
         t0 = time.perf_counter()
-        if not math.isfinite(receipt.delta_l2_norm) or not math.isfinite(receipt.delta_linf_norm):
+        l2_bad = (
+            isinstance(receipt.delta_l2_norm, bool)
+            or not isinstance(receipt.delta_l2_norm, (int, float))
+            or not math.isfinite(float(receipt.delta_l2_norm))
+        )
+        linf_bad = (
+            isinstance(receipt.delta_linf_norm, bool)
+            or not isinstance(receipt.delta_linf_norm, (int, float))
+            or not math.isfinite(float(receipt.delta_linf_norm))
+        )
+        if l2_bad or linf_bad:
             elapsed_ms = (time.perf_counter() - t0) * 1000.0
             return ZKOPoIV5VerificationReport(
                 workunit_id=receipt.workunit_id,
@@ -229,9 +284,7 @@ class ZKOPoIV5Int8TransitionVerifier:
                 proof_bytes=0,
                 within_5ms_sla=elapsed_ms < MAX_VERIFY_CPU_MS,
                 within_32kb_bound=False,
-                rejection_reason="delta_l2_norm_out_of_bounds"
-                if not math.isfinite(receipt.delta_l2_norm)
-                else "delta_linf_norm_out_of_bounds",
+                rejection_reason="delta_l2_norm_out_of_bounds" if l2_bad else "delta_linf_norm_out_of_bounds",
             )
         proof_bytes = receipt.serialized_bytes
 
@@ -249,14 +302,36 @@ class ZKOPoIV5Int8TransitionVerifier:
 
         if proof_bytes >= MAX_PROOF_BYTES:
             return _reject("proof_bytes_exceeds_32kb")
+        for field_val in (
+            receipt.worker_id,
+            receipt.workunit_id,
+            receipt.shard_sha256,
+            receipt.theta0_sha256,
+            receipt.theta_final_sha256,
+        ):
+            if (
+                not isinstance(field_val, str)
+                or not field_val.strip()
+                or "|" in field_val
+                or any(ord(c) < 32 or ord(c) == 127 for c in field_val)
+            ):
+                return _reject("invalid_identifier")
         if receipt.shard_sha256 != expected_shard_sha256:
             return _reject("shard_sha256_mismatch")
         if receipt.theta0_sha256 != expected_theta0_sha256:
             return _reject("theta0_sha256_mismatch")
         if receipt.theta_final_sha256 == receipt.theta0_sha256:
             return _reject("zero_transition_detected")
-        if int(receipt.inner_steps_h) <= 0:
+        if isinstance(receipt.inner_steps_h, bool) or not isinstance(receipt.inner_steps_h, int) or receipt.inner_steps_h <= 0:
             return _reject("inner_steps_h_invalid")
+        if isinstance(receipt.quant_bits, bool) or receipt.quant_bits not in (4, 8):
+            return _reject("quant_bits_invalid")
+        if isinstance(receipt.scale_q, bool) or receipt.scale_q != self.scale_q:
+            return _reject("scale_q_mismatch")
+        if not receipt.quantized_sketch_int8 or any(
+            isinstance(x, bool) or not isinstance(x, int) for x in receipt.quantized_sketch_int8
+        ):
+            return _reject("sketch_invalid")
         if receipt.delta_l2_norm > self.max_l2_norm or receipt.delta_l2_norm <= 0.0:
             return _reject("delta_l2_norm_out_of_bounds")
         if receipt.delta_linf_norm > self.max_linf_norm or receipt.delta_linf_norm <= 0.0:
@@ -266,10 +341,20 @@ class ZKOPoIV5Int8TransitionVerifier:
             f"{receipt.worker_id}|{receipt.workunit_id}|{receipt.shard_sha256}|"
             f"{receipt.theta0_sha256}|{receipt.theta_final_sha256}|{receipt.inner_steps_h}".encode("utf-8")
         ).hexdigest()
-        if not hmac.compare_digest(receipt.fiat_shamir_challenge_hex, expected_fs_seed):
+        if (
+            not isinstance(receipt.fiat_shamir_challenge_hex, str)
+            or not receipt.fiat_shamir_challenge_hex.isascii()
+            or not hmac.compare_digest(receipt.fiat_shamir_challenge_hex, expected_fs_seed)
+        ):
             return _reject("fiat_shamir_challenge_tampered")
 
-        if _mod_mersenne61(receipt.bilinear_lhs_mod_p) != _mod_mersenne61(receipt.bilinear_rhs_mod_p):
+        if (
+            isinstance(receipt.bilinear_lhs_mod_p, bool)
+            or isinstance(receipt.bilinear_rhs_mod_p, bool)
+            or not isinstance(receipt.bilinear_lhs_mod_p, int)
+            or not isinstance(receipt.bilinear_rhs_mod_p, int)
+            or _mod_mersenne61(receipt.bilinear_lhs_mod_p) != _mod_mersenne61(receipt.bilinear_rhs_mod_p)
+        ):
             return _reject("bilinear_freivalds_equation_failed")
 
         sketch_challenges = _derive_field_challenges(
@@ -289,7 +374,11 @@ class ZKOPoIV5Int8TransitionVerifier:
             f"{','.join(str(x) for x in receipt.quantized_sketch_int8)}"
         ).encode("utf-8")
         expected_mac = hmac.new(self._secret_bytes, msg, hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(receipt.commitment_hmac, expected_mac):
+        if (
+            not isinstance(receipt.commitment_hmac, str)
+            or not receipt.commitment_hmac.isascii()
+            or not hmac.compare_digest(receipt.commitment_hmac, expected_mac)
+        ):
             return _reject("commitment_hmac_invalid")
 
         elapsed_ms = (time.perf_counter() - t0) * 1000.0

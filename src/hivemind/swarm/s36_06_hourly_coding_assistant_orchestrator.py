@@ -42,8 +42,11 @@ from hivemind.swarm.s36_05_darl_cas_shard_leasing import DARLShardLeaseCoordinat
 
 def resolve_hivemind_api_key(explicit_key: str | None = None) -> str | None:
     """Resolve the HiveMind API key from argument, environment, or user config without source literals."""
-    if explicit_key and explicit_key.strip():
-        return explicit_key.strip()
+    if explicit_key is not None:
+        if not isinstance(explicit_key, str) or any(ord(c) < 32 or ord(c) == 127 for c in explicit_key):
+            raise ValueError("explicit_key must be a string without control characters")
+        if explicit_key.strip():
+            return explicit_key.strip()
     for env_var in ("HIVEMIND_API_KEY", "OPENAI_API_KEY"):
         val = os.environ.get(env_var, "").strip()
         if val:
@@ -131,6 +134,13 @@ class HourlyHiveMindCodingAssistantOrchestrator:
         api_key: str | None = None,
         base_url: str = DEFAULT_HIVEMIND_BASE_URL,
     ) -> None:
+        if (
+            not isinstance(base_url, str)
+            or not base_url.strip()
+            or not base_url.startswith(("http://", "https://"))
+            or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in base_url)
+        ):
+            raise ValueError("base_url must be a valid http(s) URL without whitespace or control characters")
         self.api_key = resolve_hivemind_api_key(api_key)
         self.base_url = base_url
         self.sdk_compat = ensure_antigravity_sdk_lightweight_compat()
@@ -177,6 +187,13 @@ class HourlyHiveMindCodingAssistantOrchestrator:
         task_assertions: Mapping[str, Callable[[Any], bool]] | None = None,
     ) -> HourlyImprovementCycleReport:
         """Execute and verify all Season 36 & Improvement-Plan checks with HiveMind coding assistant."""
+        if not isinstance(call_live_openrouter, bool):
+            raise ValueError("call_live_openrouter must be a boolean")
+        if task_assertions is not None:
+            if not isinstance(task_assertions, Mapping) or any(
+                not isinstance(k, str) or not k.strip() or not callable(v) for k, v in task_assertions.items()
+            ):
+                raise ValueError("task_assertions must map non-empty task_id strings to callable predicates")
         repo_root = Path(__file__).resolve().parents[3]
         swarm_dir = repo_root / "src" / "hivemind" / "swarm"
 

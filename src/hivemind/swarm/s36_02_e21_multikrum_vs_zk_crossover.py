@@ -9,6 +9,7 @@ across swarm sizes ``N in {100, 250, 500, 1000, 2500, 5000, 10000}``.
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import asdict, dataclass
 from typing import Sequence
@@ -65,6 +66,10 @@ class E21CrossoverBenchmarkReport:
 
 def _measure_pairwise_l2_flop_ms_coeff(k_calib: int = 8, d_calib: int = 256) -> float:
     """Measure pairwise squared-L2 distance cost per coordinate on the current CPU (IP-116 / IP-137)."""
+    if isinstance(k_calib, bool) or not isinstance(k_calib, int) or k_calib < 2:
+        raise ValueError("k_calib must be an integer >= 2")
+    if isinstance(d_calib, bool) or not isinstance(d_calib, int) or d_calib < 1:
+        raise ValueError("d_calib must be a positive integer")
     vecs = [[0.01 * ((i + j) % 11 - 5) for j in range(d_calib)] for i in range(k_calib)]
     t0 = time.perf_counter()
     acc = 0.0
@@ -93,6 +98,46 @@ def run_e21_multikrum_vs_zk_crossover(
     forged_proof_control: bool = False,
 ) -> E21CrossoverBenchmarkReport:
     """Execute the E21 validation cost crossover benchmark (model-based estimate calibrated by measured CPU timings)."""
+    if (
+        isinstance(swarm_sizes, (str, bytes))
+        or not isinstance(swarm_sizes, Sequence)
+        or not swarm_sizes
+        or any(isinstance(n, bool) or not isinstance(n, int) or n < 2 for n in swarm_sizes)
+    ):
+        raise ValueError("swarm_sizes must be a non-empty sequence of integers >= 2")
+    if isinstance(lora_dim_d, bool) or not isinstance(lora_dim_d, int) or lora_dim_d < 1:
+        raise ValueError("lora_dim_d must be a positive integer")
+    if (
+        isinstance(gpu_step_replay_ms_per_wu, bool)
+        or not isinstance(gpu_step_replay_ms_per_wu, (int, float))
+        or not math.isfinite(float(gpu_step_replay_ms_per_wu))
+        or float(gpu_step_replay_ms_per_wu) <= 0.0
+    ):
+        raise ValueError("gpu_step_replay_ms_per_wu must be a finite positive number")
+    if (
+        isinstance(spot_check_ratio, bool)
+        or not isinstance(spot_check_ratio, (int, float))
+        or not (0.0 < float(spot_check_ratio) <= 1.0)
+    ):
+        raise ValueError("spot_check_ratio must be a finite number in (0, 1]")
+    if single_zk_verify_ms_override is not None:
+        if (
+            isinstance(single_zk_verify_ms_override, bool)
+            or not isinstance(single_zk_verify_ms_override, (int, float))
+            or not math.isfinite(float(single_zk_verify_ms_override))
+            or float(single_zk_verify_ms_override) <= 0.0
+        ):
+            raise ValueError("single_zk_verify_ms_override must be a finite positive number")
+    if flop_ms_coeff_override is not None:
+        if (
+            isinstance(flop_ms_coeff_override, bool)
+            or not isinstance(flop_ms_coeff_override, (int, float))
+            or not math.isfinite(float(flop_ms_coeff_override))
+            or float(flop_ms_coeff_override) <= 0.0
+        ):
+            raise ValueError("flop_ms_coeff_override must be a finite positive number")
+    if not isinstance(forged_proof_control, bool):
+        raise ValueError("forged_proof_control must be a boolean")
     verifier = ZKOPoIV5Int8TransitionVerifier()
     theta0 = [0.02 * ((i % 13) - 6) for i in range(256)]
     delta = [0.005 * ((i % 7) - 3) for i in range(256)]

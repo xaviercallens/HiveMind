@@ -18,6 +18,27 @@ from dataclasses import asdict, dataclass
 from typing import Sequence
 
 
+def _validate_finite_num(val: object, name: str, *, non_negative: bool = False, positive: bool = False) -> float:
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        raise ValueError(f"{name} must be a finite real number")
+    fval = float(val)
+    if not math.isfinite(fval):
+        raise ValueError(f"{name} must be a finite real number")
+    if positive and fval <= 0.0:
+        raise ValueError(f"{name} must be positive")
+    if non_negative and fval < 0.0:
+        raise ValueError(f"{name} must be non-negative")
+    return fval
+
+
+def _validate_mesh_str(val: object, name: str) -> str:
+    if not isinstance(val, str) or not val.strip():
+        raise ValueError(f"{name} must be a non-empty string")
+    if any(ord(c) < 32 or ord(c) == 127 for c in val):
+        raise ValueError(f"{name} contains forbidden control characters")
+    return val
+
+
 @dataclass(frozen=True)
 class VivaldiCoord3D:
     """3D Euclidean network latency coordinates (in ms) + height offset."""
@@ -27,7 +48,15 @@ class VivaldiCoord3D:
     z_ms: float
     height_ms: float = 1.0
 
+    def __post_init__(self) -> None:
+        _validate_finite_num(self.x_ms, "x_ms")
+        _validate_finite_num(self.y_ms, "y_ms")
+        _validate_finite_num(self.z_ms, "z_ms")
+        _validate_finite_num(self.height_ms, "height_ms", non_negative=True)
+
     def estimate_rtt_ms(self, other: VivaldiCoord3D) -> float:
+        if not isinstance(other, VivaldiCoord3D):
+            raise ValueError("other must be a VivaldiCoord3D")
         euclid = math.sqrt(
             (self.x_ms - other.x_ms) ** 2
             + (self.y_ms - other.y_ms) ** 2
@@ -48,6 +77,23 @@ class GeoMeshExpertNode:
     adapter_sha256: str
     vram_free_mib: float = 2048.0
 
+    def __post_init__(self) -> None:
+        _validate_mesh_str(self.node_id, "node_id")
+        _validate_mesh_str(self.region, "region")
+        if not isinstance(self.coord, VivaldiCoord3D):
+            raise ValueError("coord must be a VivaldiCoord3D")
+        _validate_mesh_str(self.expert_domain, "expert_domain")
+        if (
+            isinstance(self.semantic_vector, (str, bytes))
+            or not isinstance(self.semantic_vector, Sequence)
+            or not self.semantic_vector
+        ):
+            raise ValueError("semantic_vector must be a non-empty sequence of numbers")
+        for idx, v in enumerate(self.semantic_vector):
+            _validate_finite_num(v, f"semantic_vector[{idx}]")
+        _validate_mesh_str(self.adapter_sha256, "adapter_sha256")
+        _validate_finite_num(self.vram_free_mib, "vram_free_mib", non_negative=True)
+
 
 @dataclass(frozen=True)
 class GeoMeshRouteDecision:
@@ -66,8 +112,18 @@ class GeoMeshRouteDecision:
 
 
 def _cosine_sim(a: Sequence[float], b: Sequence[float]) -> float:
-    if len(a) != len(b) or not a:
+    if (
+        isinstance(a, (str, bytes))
+        or isinstance(b, (str, bytes))
+        or not isinstance(a, Sequence)
+        or not isinstance(b, Sequence)
+        or len(a) != len(b)
+        or not a
+    ):
         return 0.0
+    for idx, (x, y) in enumerate(zip(a, b)):
+        _validate_finite_num(x, f"a[{idx}]")
+        _validate_finite_num(y, f"b[{idx}]")
     dot = sum(float(x) * float(y) for x, y in zip(a, b))
     na = math.sqrt(sum(float(x) * float(x) for x in a))
     nb = math.sqrt(sum(float(y) * float(y) for y in b))
@@ -85,17 +141,26 @@ class GeocryptographicNeuralMeshRouter:
         central_gateway_coord: VivaldiCoord3D | None = None,
         min_vram_free_mib: float = 512.0,
     ) -> None:
+        if central_gateway_coord is not None and not isinstance(central_gateway_coord, VivaldiCoord3D):
+            raise ValueError("central_gateway_coord must be a VivaldiCoord3D or None")
         self.central_gateway_coord = central_gateway_coord or VivaldiCoord3D(85.0, -60.0, 25.0, 8.0)
-        self.min_vram_free_mib = float(min_vram_free_mib)
+        self.min_vram_free_mib = _validate_finite_num(min_vram_free_mib, "min_vram_free_mib", positive=True)
         self._canonical_digests: dict[str, str] = {}
         self._nodes: list[GeoMeshExpertNode] = []
 
     def register_canonical_adapter(self, expert_domain: str, adapter_sha256: str) -> None:
-        if not adapter_sha256 or len(adapter_sha256) < 16:
+        _validate_mesh_str(expert_domain, "expert_domain")
+        if (
+            not isinstance(adapter_sha256, str)
+            or len(adapter_sha256.strip()) < 16
+            or any(ord(c) < 32 or ord(c) == 127 for c in adapter_sha256)
+        ):
             raise ValueError("adapter_sha256 must be a valid hex digest")
         self._canonical_digests[expert_domain] = adapter_sha256
 
     def register_node(self, node: GeoMeshExpertNode) -> None:
+        if not isinstance(node, GeoMeshExpertNode):
+            raise ValueError("node must be a GeoMeshExpertNode")
         self._nodes.append(node)
 
     def route_query(
@@ -106,6 +171,17 @@ class GeocryptographicNeuralMeshRouter:
         query_semantic_vector: Sequence[float],
     ) -> GeoMeshRouteDecision:
         """Select the nearest cryptographically verified MoE Bee node."""
+        if not isinstance(client_coord, VivaldiCoord3D):
+            raise ValueError("client_coord must be a VivaldiCoord3D")
+        _validate_mesh_str(expert_domain, "expert_domain")
+        if (
+            isinstance(query_semantic_vector, (str, bytes))
+            or not isinstance(query_semantic_vector, Sequence)
+            or not query_semantic_vector
+        ):
+            raise ValueError("query_semantic_vector must be a non-empty sequence of numbers")
+        for idx, v in enumerate(query_semantic_vector):
+            _validate_finite_num(v, f"query_semantic_vector[{idx}]")
         expected_sha = self._canonical_digests.get(expert_domain)
         if not expected_sha:
             raise KeyError(f"Unknown canonical digest for expert_domain={expert_domain!r}")

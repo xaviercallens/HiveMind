@@ -1323,7 +1323,7 @@ def solve_wave2_method_of_lines_pde(
         raise ValueError("steps must be an integer >= 1")
     if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0:
         raise ValueError("dt must be a positive finite number")
-    if param is not None:
+    if param is not None and pde_family != "lane_emden_stellar":
         if isinstance(param, bool) or not isinstance(param, (int, float)) or not math.isfinite(float(param)):
             raise ValueError("param must be a finite number when provided")
     n_pts = max(8, min(int(grid_points), 128))
@@ -1332,7 +1332,13 @@ def solve_wave2_method_of_lines_pde(
 
     if pde_family == "lane_emden_stellar":
         if param is not None:
-            if isinstance(param, bool) or not math.isfinite(float(param)) or float(param) < 0.0 or float(param) > 4.5:
+            if (
+                isinstance(param, bool)
+                or not isinstance(param, (int, float))
+                or not math.isfinite(float(param))
+                or float(param) < 0.0
+                or float(param) > 4.5
+            ):
                 raise ValueError(f"polytropic index n must be finite in [0.0, 4.5], got {param!r} (IP-48)")
         poly_n = 1.0 if param is None else float(param)
         xi_max = math.pi

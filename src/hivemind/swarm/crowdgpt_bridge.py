@@ -97,6 +97,8 @@ def unpack_crowdgpt_delta_stream(
     engram_row_dim: int = 1536,
 ) -> CrowdGPTDeltaPayload:
     """Unpack a gzipped CrowdGPT client delta stream and verify its structure."""
+    if isinstance(engram_row_dim, bool) or not isinstance(engram_row_dim, int) or engram_row_dim < 1:
+        raise ValueError("engram_row_dim must be an integer >= 1.")
     payload_sha256 = hashlib.sha256(compressed_data).hexdigest()
     raw = gzip.decompress(compressed_data)
     if len(raw) < 4:
@@ -112,6 +114,8 @@ def unpack_crowdgpt_delta_stream(
 
     has_engram = bool(metadata.get("hasEngram", False))
     sparse_count = int(metadata.get("engramSparseCount", 0)) if has_engram else 0
+    if sparse_count < 0:
+        raise ValueError("engramSparseCount cannot be negative.")
     engram_idx_bytes = sparse_count * 4
     engram_val_bytes = sparse_count * engram_row_dim * 2
     engram_total_bytes = engram_idx_bytes + engram_val_bytes
@@ -164,6 +168,8 @@ def chunked_pairwise_sq_l2(
     chunk_elements: int = 1_048_576,
 ) -> torch.Tensor:
     """Compute the N x N pairwise squared L2 distance matrix in memory-bounded chunks."""
+    if isinstance(chunk_elements, bool) or not isinstance(chunk_elements, int) or chunk_elements < 1:
+        raise ValueError("chunk_elements must be an integer >= 1.")
     n = len(deltas)
     if n == 0:
         raise ValueError("deltas must be non-empty.")
@@ -211,6 +217,8 @@ def _validate_and_clamp_token_weights(
         raise ValueError("token_weights length must match deltas length.")
     parsed: list[float] = []
     for w in token_weights:
+        if isinstance(w, bool) or not isinstance(w, (int, float)):
+            raise ValueError(f"token_weights must be finite and positive, got {w!r}")
         fw = float(w)
         if not math.isfinite(fw) or fw <= 0.0:
             raise ValueError(f"token_weights must be finite and positive, got {w!r}")
@@ -333,6 +341,12 @@ class LossRatchetGate:
     """Monotonic held-out validation gate for outer DiLoCo / CrowdGPT merges."""
 
     def __init__(self, *, max_regression_tolerance: float = 0.0) -> None:
+        if (
+            isinstance(max_regression_tolerance, bool)
+            or not isinstance(max_regression_tolerance, (int, float))
+            or not math.isfinite(float(max_regression_tolerance))
+        ):
+            raise ValueError("max_regression_tolerance must be a finite number.")
         self.max_regression_tolerance = float(max_regression_tolerance)
 
     def evaluate(
@@ -403,6 +417,21 @@ def check_weight_rms_collapse_guard(
     halving_residual_tol: float = 1e-3,
 ) -> WeightRmsGuardDecision:
     """Reject aggregated checkpoints whose global RMS norm collapses, explodes, or halves (`0.5 * old`)."""
+    if (
+        isinstance(min_rms_ratio, bool)
+        or not isinstance(min_rms_ratio, (int, float))
+        or not math.isfinite(float(min_rms_ratio))
+        or float(min_rms_ratio) <= 0.0
+        or isinstance(max_rms_ratio, bool)
+        or not isinstance(max_rms_ratio, (int, float))
+        or not math.isfinite(float(max_rms_ratio))
+        or float(max_rms_ratio) < float(min_rms_ratio)
+        or isinstance(halving_residual_tol, bool)
+        or not isinstance(halving_residual_tol, (int, float))
+        or not math.isfinite(float(halving_residual_tol))
+        or float(halving_residual_tol) < 0.0
+    ):
+        raise ValueError("min_rms_ratio, max_rms_ratio, and halving_residual_tol must be valid finite bounds.")
     flat_old = _flatten_delta(old_weights)
     flat_new = _flatten_delta(new_weights)
     if flat_old.numel() == 0 or flat_old.numel() != flat_new.numel():
@@ -590,13 +619,28 @@ def resolve_forming_pool_starvation(
 def evaluate_client_resilience_policy(
     *,
     batch_size: int,
-     encountered_oom: bool = False,
+    encountered_oom: bool = False,
     http_status: int | None = None,
     retry_attempt: int = 0,
     base_backoff_s: float = 2.0,
     max_backoff_s: float = 60.0,
 ) -> dict[str, Any]:
     """Client circuit-breaker for OOM at `batch_size=1` (`#52`) and HTTP 502/503 retry backoff (`#50`)."""
+    if isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size < 1:
+        raise ValueError("batch_size must be an integer >= 1.")
+    if isinstance(retry_attempt, bool) or not isinstance(retry_attempt, int) or retry_attempt < 0:
+        raise ValueError("retry_attempt must be a non-negative integer.")
+    if (
+        isinstance(base_backoff_s, bool)
+        or not isinstance(base_backoff_s, (int, float))
+        or not math.isfinite(float(base_backoff_s))
+        or float(base_backoff_s) <= 0.0
+        or isinstance(max_backoff_s, bool)
+        or not isinstance(max_backoff_s, (int, float))
+        or not math.isfinite(float(max_backoff_s))
+        or float(max_backoff_s) < float(base_backoff_s)
+    ):
+        raise ValueError("base_backoff_s and max_backoff_s must be finite positive numbers with max >= base.")
     if encountered_oom:
         if batch_size <= 1:
             return {

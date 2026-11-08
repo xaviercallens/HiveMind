@@ -83,10 +83,19 @@ class DynamicFisherSVDSelector:
         avg_rank_budget_r: int = 16,
         allowed_ranks: Sequence[int] = ALLOWED_DYNAMIC_RANKS,
     ) -> None:
-        if avg_rank_budget_r < 4:
-            raise ValueError("avg_rank_budget_r must be >= 4")
+        if isinstance(avg_rank_budget_r, bool) or not isinstance(avg_rank_budget_r, int) or avg_rank_budget_r < 4:
+            raise ValueError("avg_rank_budget_r must be an integer >= 4")
+        if not allowed_ranks:
+            raise ValueError("allowed_ranks must be non-empty")
+        cleaned_ranks: list[int] = []
+        for r in allowed_ranks:
+            if isinstance(r, bool) or not isinstance(r, int) or r <= 0:
+                raise ValueError("allowed_ranks must contain positive integers")
+            cleaned_ranks.append(int(r))
         self.avg_rank_budget_r = int(avg_rank_budget_r)
-        self.allowed_ranks = tuple(sorted(set(int(r) for r in allowed_ranks if r > 0)))
+        self.allowed_ranks = tuple(sorted(set(cleaned_ranks)))
+        if min(self.allowed_ranks) > self.avg_rank_budget_r:
+            raise ValueError("min(allowed_ranks) must be <= avg_rank_budget_r")
 
     @staticmethod
     def compute_singular_spectrum(lora_state_dict: Dict[str, torch.Tensor]) -> torch.Tensor:
@@ -119,6 +128,8 @@ class DynamicFisherSVDSelector:
 
     @classmethod
     def retained_energy_at_rank(cls, spectrum: torch.Tensor, rank_r: int) -> float:
+        if isinstance(rank_r, bool) or not isinstance(rank_r, int) or rank_r < 1:
+            raise ValueError("rank_r must be a positive integer")
         sq = spectrum.pow(2)
         total = float(sq.sum().item())
         if total <= 1e-12:
@@ -265,6 +276,16 @@ class UCB1CurriculumShardScheduler:
     ) -> None:
         if not domains:
             raise ValueError("domains must be non-empty")
+        for d in domains:
+            if not isinstance(d, str) or not d.strip():
+                raise ValueError("domains must contain non-empty strings")
+        if (
+            isinstance(exploration_c, bool)
+            or not isinstance(exploration_c, (int, float))
+            or not math.isfinite(float(exploration_c))
+            or exploration_c < 0.0
+        ):
+            raise ValueError("exploration_c must be a finite non-negative number")
         self.domains = list(domains)
         self.exploration_c = float(exploration_c)
         self.pull_counts: Dict[str, int] = {d: 0 for d in self.domains}
@@ -281,6 +302,17 @@ class UCB1CurriculumShardScheduler:
         gpu_seconds: float = 1.0,
     ) -> None:
         """Record the holdout loss improvement from a completed DiLoCo inner round."""
+        if not isinstance(domain_name, str) or not domain_name.strip():
+            raise ValueError("domain_name must be a non-empty string")
+        for name, val in (
+            ("loss_before", loss_before),
+            ("loss_after", loss_after),
+            ("gpu_seconds", gpu_seconds),
+        ):
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{name} must be a finite numeric value")
+        if gpu_seconds <= 0.0:
+            raise ValueError("gpu_seconds must be positive")
         if domain_name not in self.pull_counts:
             self.domains.append(domain_name)
             self.pull_counts[domain_name] = 0
@@ -312,13 +344,15 @@ class UCB1CurriculumShardScheduler:
 
     def select_next_domains(self, k: int = 1) -> List[str]:
         """Select the Top-`k` domains with highest Perplexity-Velocity UCB1 score."""
+        if isinstance(k, bool) or not isinstance(k, int) or k < 1:
+            raise ValueError("k must be a positive integer")
         scores = self.compute_ucb1_scores()
         ranked = sorted(
             self.domains,
             key=lambda d: (scores[d], self.current_loss_estimate[d]),
             reverse=True,
         )
-        return ranked[: max(1, int(k))]
+        return ranked[: k]
 
 
 class AdaptiveDiLoCoCadenceController:
@@ -335,6 +369,18 @@ class AdaptiveDiLoCoCadenceController:
         min_inner_steps: int = 4,
         max_inner_steps: int = 500,
     ) -> None:
+        if (
+            isinstance(max_comm_overhead_ratio, bool)
+            or not isinstance(max_comm_overhead_ratio, (int, float))
+            or not math.isfinite(float(max_comm_overhead_ratio))
+            or not (0.0 < max_comm_overhead_ratio < 1.0)
+        ):
+            raise ValueError("max_comm_overhead_ratio must be a finite number in (0, 1)")
+        for name, val in (("min_inner_steps", min_inner_steps), ("max_inner_steps", max_inner_steps)):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{name} must be a positive integer")
+        if max_inner_steps < min_inner_steps:
+            raise ValueError("max_inner_steps must be >= min_inner_steps")
         self.max_comm_overhead_ratio = float(max_comm_overhead_ratio)
         self.min_inner_steps = int(min_inner_steps)
         self.max_inner_steps = int(max_inner_steps)
@@ -349,6 +395,26 @@ class AdaptiveDiLoCoCadenceController:
         compute_step_ms: float = 45.0,
     ) -> Dict[str, Any]:
         """Compute the optimal `(inner_steps_H, topk_ratio)` for the measured link profile."""
+        for name, val in (
+            ("rtt_ms", rtt_ms),
+            ("bbr_pacing_mbps", bbr_pacing_mbps),
+            ("packet_loss_rate", packet_loss_rate),
+            ("compute_step_ms", compute_step_ms),
+        ):
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{name} must be a finite numeric value")
+        if rtt_ms <= 0.0:
+            raise ValueError("rtt_ms must be positive")
+        if bbr_pacing_mbps <= 0.0:
+            raise ValueError("bbr_pacing_mbps must be positive")
+        if not (0.0 <= packet_loss_rate < 1.0):
+            raise ValueError("packet_loss_rate must be in [0.0, 1.0)")
+        if compute_step_ms <= 0.0:
+            raise ValueError("compute_step_ms must be positive")
+        if not isinstance(turn_relay_active, bool):
+            raise ValueError("turn_relay_active must be a boolean")
+        if isinstance(raw_lora_bytes, bool) or not isinstance(raw_lora_bytes, int) or raw_lora_bytes <= 0:
+            raise ValueError("raw_lora_bytes must be a positive integer")
         eff_bw_bps = max(
             1e5, float(bbr_pacing_mbps) * 1e6 * max(0.1, 1.0 - 2.5 * float(packet_loss_rate))
         )
@@ -457,6 +523,24 @@ def reputation_weighted_ties_merge_lora(
     honesty pass-rate and holdout loss reduction), preventing low-reputation or noisy nodes from
     overturning the sign consensus of high-precision guild miners.
     """
+    if (
+        isinstance(trim_density, bool)
+        or not isinstance(trim_density, (int, float))
+        or not math.isfinite(float(trim_density))
+        or not (0.0 < trim_density <= 1.0)
+    ):
+        raise ValueError("trim_density must be a finite number in (0.0, 1.0]")
+    if (
+        isinstance(scaling_lambda, bool)
+        or not isinstance(scaling_lambda, (int, float))
+        or not math.isfinite(float(scaling_lambda))
+        or scaling_lambda <= 0.0
+    ):
+        raise ValueError("scaling_lambda must be a positive finite number")
+    if worker_reputation_weights is not None:
+        for w in worker_reputation_weights:
+            if isinstance(w, bool) or not isinstance(w, (int, float)) or not math.isfinite(float(w)) or w < 0.0:
+                raise ValueError("worker_reputation_weights must contain finite non-negative numbers")
     if not worker_lora_states:
         return {k: v.clone() for k, v in base_lora_state.items()}
 
@@ -533,12 +617,28 @@ class EF21DiLoCoErrorFeedbackBuffer:
         stale_decay: float = 1.0,
         max_residual_norm: Optional[float] = None,
     ) -> None:
-        if not (0.0 < topk_ratio <= 1.0):
+        if (
+            isinstance(topk_ratio, bool)
+            or not isinstance(topk_ratio, (int, float))
+            or not math.isfinite(float(topk_ratio))
+            or not (0.0 < topk_ratio <= 1.0)
+        ):
             raise ValueError(f"topk_ratio must be in (0, 1], got {topk_ratio}")
-        if not (0.0 < stale_decay <= 1.0):
+        if (
+            isinstance(stale_decay, bool)
+            or not isinstance(stale_decay, (int, float))
+            or not math.isfinite(float(stale_decay))
+            or not (0.0 < stale_decay <= 1.0)
+        ):
             raise ValueError(f"stale_decay must be in (0, 1], got {stale_decay}")
-        if max_residual_norm is not None and max_residual_norm <= 0.0:
-            raise ValueError(f"max_residual_norm must be positive, got {max_residual_norm}")
+        if max_residual_norm is not None:
+            if (
+                isinstance(max_residual_norm, bool)
+                or not isinstance(max_residual_norm, (int, float))
+                or not math.isfinite(float(max_residual_norm))
+                or max_residual_norm <= 0.0
+            ):
+                raise ValueError(f"max_residual_norm must be positive, got {max_residual_norm}")
         self.topk_ratio = float(topk_ratio)
         self.stale_decay = float(stale_decay)
         self.max_residual_norm = None if max_residual_norm is None else float(max_residual_norm)
@@ -566,6 +666,18 @@ class EF21DiLoCoErrorFeedbackBuffer:
         inner_steps_completed: int = 500,
     ) -> CompressedDeltaPackage:
         """Compress `delta_dict` plus the carried residual and update the residual."""
+        if not isinstance(worker_id, str) or not worker_id.strip():
+            raise ValueError("worker_id must be a non-empty string")
+        if not isinstance(branch_name, str) or not branch_name.strip():
+            raise ValueError("branch_name must be a non-empty string")
+        if isinstance(outer_step, bool) or not isinstance(outer_step, int) or outer_step < 0:
+            raise ValueError("outer_step must be a non-negative integer")
+        if (
+            isinstance(inner_steps_completed, bool)
+            or not isinstance(inner_steps_completed, int)
+            or inner_steps_completed <= 0
+        ):
+            raise ValueError("inner_steps_completed must be a positive integer")
         if self.residuals and set(delta_dict) != set(self.residuals):
             raise KeyError(
                 "delta_dict keys differ from the buffered residual keys; call reset() first"
@@ -627,6 +739,10 @@ class EF21DiLoCoErrorFeedbackBuffer:
         """
         from hivemind.swarm.diloco_nextgen import ComputeVisibleSparseLoCoCompressor
 
+        if isinstance(outer_step, bool) or not isinstance(outer_step, int) or outer_step < 0:
+            raise ValueError("outer_step must be a non-negative integer")
+        if isinstance(n_bins, bool) or not isinstance(n_bins, int) or n_bins < 2:
+            raise ValueError("n_bins must be an integer >= 2")
         if self.residuals and set(delta_dict) != set(self.residuals):
             raise KeyError(
                 "delta_dict keys differ from the buffered residual keys; call reset() first"
@@ -968,6 +1084,8 @@ def _ef21_entry(raw: Any) -> Dict[str, Any]:
 
 
 def _finite_float(value: Any, name: str) -> float:
+    if isinstance(value, bool):
+        raise ValueError(f"{name} must be numeric")
     try:
         number = float(value)
     except (TypeError, ValueError) as exc:
@@ -999,6 +1117,15 @@ class StrategyOptimizerTelemetryEngine:
         link_profile: Optional[Dict[str, Any]] = None,
         cache_ttl_seconds: float = 1.0,
     ) -> None:
+        if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+            raise ValueError("seed must be a non-negative integer")
+        if (
+            isinstance(cache_ttl_seconds, bool)
+            or not isinstance(cache_ttl_seconds, (int, float))
+            or not math.isfinite(float(cache_ttl_seconds))
+            or cache_ttl_seconds < 0.0
+        ):
+            raise ValueError("cache_ttl_seconds must be a finite non-negative number")
         self.seed = int(seed)
         self.domains: List[str] = list(SEASON6_STRATEGY_DOMAINS)
         self.adapters: Dict[str, Dict[str, torch.Tensor]] = {

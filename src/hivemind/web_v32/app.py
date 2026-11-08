@@ -27,6 +27,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 import time
@@ -165,7 +166,12 @@ def mount_web_v32(
     if google_enabled and google_verifier is None:
         from hivemind.router.google_auth import GoogleIdTokenVerifier
 
-        google_verifier = GoogleIdTokenVerifier(google_id)
+        try:
+            google_verifier = GoogleIdTokenVerifier(google_id)
+        except ValueError:
+            # a malformed client id disables Google sign-in only; it must not take the whole portal down
+            logging.getLogger("hivemind.web_v32").warning("HIVEMIND_GOOGLE_CLIENT_ID is malformed: Google sign-in disabled")
+            google_enabled = False
 
     def _exchange(form: Mapping[str, str]) -> dict[str, Any]:
         if token_exchanger is not None:
@@ -209,14 +215,14 @@ def mount_web_v32(
         if not raw or fernet is None:
             return None
         try:
-            data = json.loads(fernet.decrypt(raw.encode("ascii"), ttl=SESSION_TTL_S))
+            data = json.loads(fernet.decrypt_at_time(raw.encode("ascii"), SESSION_TTL_S, int(clock())))
         except (InvalidToken, ValueError):
             return None
         return data if isinstance(data, dict) and str(data.get("k", "")).startswith("hm-") else None
 
     def _write_session(resp: Response, *, key: str, handle: str, role: str) -> None:
         assert fernet is not None
-        token = fernet.encrypt(json.dumps({"k": key, "h": handle, "r": role, "iat": int(clock())}).encode("utf-8")).decode("ascii")
+        token = fernet.encrypt_at_time(json.dumps({"k": key, "h": handle, "r": role, "iat": int(clock())}).encode("utf-8"), int(clock())).decode("ascii")
         _cookie(resp, SESSION_COOKIE, token, SESSION_TTL_S)
 
     def _json(body: Mapping[str, Any], status: int = 200) -> Response:
@@ -474,7 +480,7 @@ def mount_web_v32(
             "prompt": "select_account",
         }
         resp = _security(RedirectResponse(f"{GOOGLE_AUTHORIZE_URL}?{urlencode(params)}", status_code=302))
-        sealed = fernet.encrypt(json.dumps({"s": state, "n": nonce, "v": verifier, "l": want_link}).encode("utf-8")).decode("ascii")
+        sealed = fernet.encrypt_at_time(json.dumps({"s": state, "n": nonce, "v": verifier, "l": want_link}).encode("utf-8"), int(clock())).decode("ascii")
         _cookie(resp, OIDC_COOKIE, sealed, OIDC_TTL_S, path="/auth/google")
         return resp
 
@@ -488,7 +494,7 @@ def mount_web_v32(
         if not google_enabled or fernet is None:
             return _security(Response(status_code=404))
         try:
-            sealed = json.loads(fernet.decrypt(request.cookies.get(OIDC_COOKIE, "").encode("ascii"), ttl=OIDC_TTL_S))
+            sealed = json.loads(fernet.decrypt_at_time(request.cookies.get(OIDC_COOKIE, "").encode("ascii"), OIDC_TTL_S, int(clock())))
         except (InvalidToken, ValueError):
             return done("signin-error=expired")
         if error or not code or not state or not hmac.compare_digest(state, str(sealed.get("s", ""))):

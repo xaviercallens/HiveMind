@@ -818,6 +818,12 @@ def _model_concurrent_modality_stress(
     num_requests: int = 120,
 ) -> dict[str, Any]:
     """Run a deterministic 120-request concurrent stress model for a modality track."""
+    if not isinstance(modality, str) or not modality.strip() or any(ord(c) < 32 for c in modality):
+        raise ValueError("modality must be a non-empty printable string")
+    if not isinstance(scenarios, Sequence) or len(scenarios) == 0:
+        raise ValueError("scenarios must be a non-empty sequence")
+    if isinstance(num_requests, bool) or not isinstance(num_requests, int) or num_requests < 1:
+        raise ValueError("num_requests must be a positive integer")
     latencies: list[float] = []
     throughputs: list[float] = []
     vram_peaks: list[float] = []
@@ -864,10 +870,22 @@ def run_intense_dev_image_video_moe_benchmark(
     real_requests_executed: int = 0,
 ) -> dict[str, Any]:
     """Execute intensive testing and gain benchmarking across Coding-MoE, Image-MoE, and Video-MoE."""
+    if (
+        isinstance(real_requests_executed, bool)
+        or not isinstance(real_requests_executed, int)
+        or real_requests_executed < 0
+    ):
+        raise ValueError("real_requests_executed must be a non-negative integer")
     active_scenarios = list(scenarios) if scenarios is not None else list(DEV_IMAGE_VIDEO_BENCHMARK_SCENARIOS)
+    if not active_scenarios:
+        raise ValueError("scenarios must be non-empty")
     dev_scenarios = [s for s in active_scenarios if s.modality == "developer_coding_moe"]
     img_scenarios = [s for s in active_scenarios if s.modality == "image_generation_moe"]
     vid_scenarios = [s for s in active_scenarios if s.modality == "video_generation_moe"]
+    if not dev_scenarios or not img_scenarios or not vid_scenarios:
+        raise ValueError(
+            "scenarios must include developer_coding_moe, image_generation_moe, and video_generation_moe"
+        )
 
     dev_stress = _model_concurrent_modality_stress("developer_coding_moe", dev_scenarios, num_requests=120)
     img_stress = _model_concurrent_modality_stress("image_generation_moe", img_scenarios, num_requests=120)

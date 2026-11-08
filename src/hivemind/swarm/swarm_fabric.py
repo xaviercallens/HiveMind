@@ -59,8 +59,17 @@ class RegionalGeoRingTransport:
     """M1: Kademlia XOR routing table, GossipSub live expert table & <25ms regional failover."""
 
     def __init__(self, region: str = "EU-West-Paris", max_rtt_ms: float = 20.0) -> None:
-        self.region = region
-        self.max_rtt_ms = max_rtt_ms
+        if not isinstance(region, str) or not region.strip() or any(ord(c) < 32 for c in region):
+            raise ValueError("region must be a non-empty printable string")
+        if (
+            isinstance(max_rtt_ms, bool)
+            or not isinstance(max_rtt_ms, (int, float))
+            or not math.isfinite(float(max_rtt_ms))
+            or float(max_rtt_ms) <= 0.0
+        ):
+            raise ValueError("max_rtt_ms must be a finite positive number")
+        self.region = region.strip()
+        self.max_rtt_ms = float(max_rtt_ms)
         self.peers: Dict[str, GeoRingPeer] = {}
         self.gossip_log: List[Dict[str, Any]] = []
 
@@ -80,6 +89,10 @@ class RegionalGeoRingTransport:
 
     def find_closest_peers(self, target_key: str, k: int = 3) -> List[GeoRingPeer]:
         """Lookup top-k closest Geo-Ring peers by Kademlia XOR distance."""
+        if not isinstance(target_key, str) or not target_key.strip():
+            raise ValueError("target_key must be a non-empty string")
+        if isinstance(k, bool) or not isinstance(k, int) or k < 1:
+            raise ValueError("k must be a positive integer")
         target_hex = hashlib.sha1(target_key.encode("utf-8")).hexdigest()
         ranked = sorted(
             self.peers.values(),
@@ -129,6 +142,12 @@ class TwoLevelMacroMicroRouter(nn.Module):
         top_k_micro: int = 2,
     ) -> None:
         super().__init__()
+        if isinstance(hidden_size, bool) or not isinstance(hidden_size, int) or hidden_size < 1:
+            raise ValueError("hidden_size must be a positive integer")
+        if isinstance(top_k_micro, bool) or not isinstance(top_k_micro, int) or top_k_micro < 1:
+            raise ValueError("top_k_micro must be a positive integer")
+        if not isinstance(macro_clusters, dict) or not macro_clusters or any(not v for v in macro_clusters.values()):
+            raise ValueError("macro_clusters must be a non-empty dict of non-empty expert lists")
         self.hidden_size = hidden_size
         self.macro_clusters = macro_clusters
         self.macro_names = list(macro_clusters.keys())
@@ -184,6 +203,12 @@ class PinnedRAMExpertDMAStreamer:
         device: torch.device | None = None,
         max_pinned_ram_bytes: int = 4 * 1024 * 1024 * 1024,
     ) -> None:
+        if (
+            isinstance(max_pinned_ram_bytes, bool)
+            or not isinstance(max_pinned_ram_bytes, int)
+            or max_pinned_ram_bytes < 1
+        ):
+            raise ValueError("max_pinned_ram_bytes must be a positive integer")
         self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.max_pinned_ram_bytes = max_pinned_ram_bytes
         self.current_pinned_bytes = 0
@@ -211,6 +236,10 @@ class PinnedRAMExpertDMAStreamer:
         lora_state_dict: Dict[str, torch.Tensor],
     ) -> int:
         """Stage a LoRA expert in page-locked Host RAM (`pin_memory`) with LRU eviction (`HM-M2-02`)."""
+        if not isinstance(expert_name, str) or not expert_name.strip():
+            raise ValueError("expert_name must be a non-empty string")
+        if not isinstance(lora_state_dict, dict) or not lora_state_dict:
+            raise ValueError("lora_state_dict must be a non-empty dict")
         pinned_dict: Dict[str, torch.Tensor] = {}
         total_bytes = 0
         for k, v in lora_state_dict.items():
@@ -807,6 +836,10 @@ class TokenTreeSpeculativeVerifier:
     """M3: Eagle/Medusa-style Token Tree Speculative Verifier (`gamma = 6..8`) & Prefix-Trie 2D Tree-Attention Mask (`HM-M3-01`)."""
 
     def __init__(self, gamma: int = 6, branching_factor: int = 2) -> None:
+        if isinstance(gamma, bool) or not isinstance(gamma, int) or gamma < 1:
+            raise ValueError("gamma must be a positive integer")
+        if isinstance(branching_factor, bool) or not isinstance(branching_factor, int) or branching_factor < 1:
+            raise ValueError("branching_factor must be a positive integer")
         self.gamma = max(6, min(8, gamma))
         self.branching_factor = branching_factor
 
@@ -1054,9 +1087,30 @@ class OptimisticProofOfInferenceAuditor:
         min_cosine_sim: float = 0.99,
         max_normalized_linf: float = 0.25,
     ) -> None:
-        self.audit_probability = audit_probability
-        self.min_cosine_sim = min_cosine_sim
-        self.max_normalized_linf = max_normalized_linf
+        if (
+            isinstance(audit_probability, bool)
+            or not isinstance(audit_probability, (int, float))
+            or not math.isfinite(float(audit_probability))
+            or not (0.0 <= float(audit_probability) <= 1.0)
+        ):
+            raise ValueError("audit_probability must be in [0.0, 1.0]")
+        if (
+            isinstance(min_cosine_sim, bool)
+            or not isinstance(min_cosine_sim, (int, float))
+            or not math.isfinite(float(min_cosine_sim))
+            or not (-1.0 <= float(min_cosine_sim) <= 1.0)
+        ):
+            raise ValueError("min_cosine_sim must be in [-1.0, 1.0]")
+        if (
+            isinstance(max_normalized_linf, bool)
+            or not isinstance(max_normalized_linf, (int, float))
+            or not math.isfinite(float(max_normalized_linf))
+            or float(max_normalized_linf) < 0.0
+        ):
+            raise ValueError("max_normalized_linf must be a finite non-negative number")
+        self.audit_probability = float(audit_probability)
+        self.min_cosine_sim = float(min_cosine_sim)
+        self.max_normalized_linf = float(max_normalized_linf)
         # HM-S4-03: layer-wise quantized activation commitment (Merkle) state
         self._merkle_leaves: List[str] = []
         self._merkle_levels: List[List[str]] = []
@@ -1850,9 +1904,23 @@ class HiveLayer2StateChannel:
         secret_key: Optional[bytes] = None,
         ledger: Optional[HiveSwarmLedger] = None,
     ) -> None:
-        if not math.isfinite(float(escrow_hive)) or float(escrow_hive) <= 0.0:
+        if not isinstance(consumer_id, str) or not consumer_id.strip():
+            raise ValueError("consumer_id must be a non-empty string")
+        if not isinstance(provider_ids, Sequence) or len(provider_ids) == 0:
+            raise ValueError("provider_ids must be a non-empty sequence")
+        if (
+            isinstance(escrow_hive, bool)
+            or not isinstance(escrow_hive, (int, float))
+            or not math.isfinite(float(escrow_hive))
+            or float(escrow_hive) <= 0.0
+        ):
             raise ValueError("escrow_hive must be a finite positive number")
-        if not math.isfinite(float(rate_per_token)) or float(rate_per_token) <= 0.0:
+        if (
+            isinstance(rate_per_token, bool)
+            or not isinstance(rate_per_token, (int, float))
+            or not math.isfinite(float(rate_per_token))
+            or float(rate_per_token) <= 0.0
+        ):
             raise ValueError("rate_per_token must be a finite positive number")
         if secret_key is not None:
             if not isinstance(secret_key, (bytes, bytearray)) or len(secret_key) < self.MIN_SECRET_KEY_BYTES:
@@ -1921,7 +1989,7 @@ class HiveLayer2StateChannel:
 
     def sign_micro_voucher(self, tokens_generated: int) -> StateChannelVoucher:
         """Issue an instant 0-latency off-chain `$HIVE` micro-voucher for `tokens_generated`."""
-        if int(tokens_generated) <= 0:
+        if isinstance(tokens_generated, bool) or not isinstance(tokens_generated, int) or tokens_generated <= 0:
             raise ValueError("tokens_generated must be a positive integer")
         fee = round(tokens_generated * self.rate_per_token, 6)
         if self.cumulative_hive_spent + fee > self.escrow_hive:

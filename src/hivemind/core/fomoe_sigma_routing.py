@@ -26,6 +26,7 @@ over whatever logits they are given.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Dict, List, Optional, Sequence
 
 import torch
@@ -63,8 +64,10 @@ def sigmoid_independent_topk_routing(
     tokens, num_experts = router_logits.shape
     if tokens < 1 or num_experts < 1:
         raise ValueError("router_logits must be non-empty")
-    if not (1 <= top_k <= num_experts):
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or not (1 <= top_k <= num_experts):
         raise ValueError("top_k must satisfy 1 <= k <= experts")
+    if not bool(torch.isfinite(router_logits).all().item()):
+        raise ValueError("router_logits must be finite")
     if resident_mask is None:
         resident = torch.ones(num_experts, dtype=torch.bool, device=router_logits.device)
     else:
@@ -126,20 +129,32 @@ def skip_token_flops_per_token(
             raise ValueError(f"{name} must have one entry per layer")
     if empirical_ghost_fraction_per_layer is not None and len(empirical_ghost_fraction_per_layer) != layers:
         raise ValueError("empirical_ghost_fraction_per_layer must have one entry per layer")
-    if dense_flops < 0.0 or top_k < 1:
+    if (
+        isinstance(dense_flops, bool)
+        or not isinstance(dense_flops, (int, float))
+        or not math.isfinite(float(dense_flops))
+        or dense_flops < 0.0
+        or isinstance(top_k, bool)
+        or not isinstance(top_k, int)
+        or top_k < 1
+    ):
         raise ValueError("dense_flops must be >= 0 and top_k >= 1")
 
     partial_total = float(dense_flops)
     full_total = float(dense_flops)
     per_layer: List[Dict[str, float]] = []
     for layer in range(layers):
-        n_le = int(local_experts_per_layer[layer])
-        n_e = int(total_experts_per_layer[layer])
+        raw_le = local_experts_per_layer[layer]
+        raw_e = total_experts_per_layer[layer]
+        if isinstance(raw_le, bool) or isinstance(raw_e, bool) or not isinstance(raw_le, int) or not isinstance(raw_e, int):
+            raise ValueError("local experts must satisfy 1 <= N_le <= N_e")
+        n_le = int(raw_le)
+        n_e = int(raw_e)
         if n_e < 1 or not (1 <= n_le <= n_e):
             raise ValueError("local experts must satisfy 1 <= N_le <= N_e")
         f_ffn = float(ffn_flops_per_layer[layer])
         f_gate = float(gate_flops_per_layer[layer])
-        if f_ffn < 0.0 or f_gate < 0.0:
+        if not math.isfinite(f_ffn) or not math.isfinite(f_gate) or f_ffn < 0.0 or f_gate < 0.0:
             raise ValueError("FLOP counts must be >= 0")
         ideal_sigma = n_le / n_e
         if empirical_ghost_fraction_per_layer is None:

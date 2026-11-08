@@ -111,7 +111,15 @@ def compute_pseudo_gradient_delta(
         if name not in theta_final:
             raise KeyError(f"Missing LoRA parameter '{name}' in final worker state.")
         fin_t = theta_final[name]
-        delta[name] = (init_t.detach().to(torch.float32).cpu() - fin_t.detach().to(torch.float32).cpu())
+        if init_t.shape != fin_t.shape:
+            raise ValueError(
+                f"Shape mismatch for parameter '{name}': {tuple(init_t.shape)} vs {tuple(fin_t.shape)}"
+            )
+        init_f = init_t.detach().to(torch.float32).cpu()
+        fin_f = fin_t.detach().to(torch.float32).cpu()
+        _require_finite_delta(f"theta_init[{name}]", init_f)
+        _require_finite_delta(f"theta_final[{name}]", fin_f)
+        delta[name] = init_f - fin_f
     return delta
 
 
@@ -126,8 +134,10 @@ def compress_tensor_topk_fp8(
     topk_ratio: float = 0.20,
 ) -> CompressedTensorPayload:
     """Compress a 1D/2D LoRA delta tensor using Top-k sparsification and FP8 E4M3 quantization."""
-    if not (0.0 < topk_ratio <= 1.0):
-        raise ValueError(f"topk_ratio must be in (0, 1], got {topk_ratio}")
+    if isinstance(topk_ratio, bool) or not isinstance(topk_ratio, (int, float)) or not math.isfinite(float(topk_ratio)) or not (0.0 < float(topk_ratio) <= 1.0):
+        raise ValueError(f"topk_ratio must be in (0, 1], got {topk_ratio!r}")
+    if tensor.numel() == 0:
+        raise ValueError("cannot compress an empty tensor")
 
     flat = tensor.detach().to(torch.float32).cpu().reshape(-1)
     _require_finite_delta("compress_tensor_topk_fp8", flat)
@@ -173,6 +183,17 @@ def decompress_tensor_topk_fp8(
     device: torch.device | str = "cpu",
 ) -> torch.Tensor:
     """Decompress a Top-k + FP8 payload back into a dense tensor of original_shape."""
+    if payload.original_numel < 1:
+        raise ValueError(f"original_numel must be >= 1, got {payload.original_numel!r}")
+    if not math.isfinite(payload.scale) or payload.scale <= 0.0:
+        raise ValueError(f"payload.scale must be finite and > 0, got {payload.scale!r}")
+    if payload.indices.numel() != payload.fp8_values.numel():
+        raise ValueError("payload.indices and payload.fp8_values must have the same number of elements")
+    if payload.indices.numel() > 0:
+        min_idx = int(payload.indices.min().item())
+        max_idx = int(payload.indices.max().item())
+        if min_idx < 0 or max_idx >= payload.original_numel:
+            raise ValueError(f"payload.indices out of bounds [0, {payload.original_numel}): min={min_idx}, max={max_idx}")
     out = torch.zeros(payload.original_numel, dtype=torch.float32, device="cpu")
     if hasattr(torch, "float8_e4m3fn") and payload.fp8_values.dtype == torch.float8_e4m3fn:
         dequant = payload.fp8_values.to(torch.float32) * payload.scale
@@ -269,10 +290,10 @@ def _quantize_2bit_centroids(
     range_in_sigmas: float,
 ) -> tuple[torch.Tensor, torch.Tensor, float, float]:
     """Quantize values with a `4`-bin empirical statistical-centroid LUT (2 bits/value)."""
-    if n_bins != 4:
-        raise ValueError(f"2-bit compression requires exactly 4 bins, got {n_bins}")
-    if range_in_sigmas <= 0.0:
-        raise ValueError("range_in_sigmas must be positive")
+    if isinstance(n_bins, bool) or n_bins != 4:
+        raise ValueError(f"2-bit compression requires exactly 4 bins, got {n_bins!r}")
+    if isinstance(range_in_sigmas, bool) or not isinstance(range_in_sigmas, (int, float)) or not math.isfinite(float(range_in_sigmas)) or range_in_sigmas <= 0.0:
+        raise ValueError("range_in_sigmas must be finite and positive")
 
     count = int(values.numel())
     shift = float(values.mean().item())
@@ -310,12 +331,14 @@ def compress_tensor_dct_sparse_2bit(
     range_in_sigmas: float = 4.0,
 ) -> DCTSparse2BitTensorPayload:
     """Compress one LoRA delta tensor via chunked orthonormal DCT + 2-bit centroid sparsity."""
-    if not (0.0 < topk_ratio <= 1.0):
-        raise ValueError(f"topk_ratio must be in (0, 1], got {topk_ratio}")
-    if chunk_size < 2:
+    if isinstance(topk_ratio, bool) or not isinstance(topk_ratio, (int, float)) or not math.isfinite(float(topk_ratio)) or not (0.0 < float(topk_ratio) <= 1.0):
+        raise ValueError(f"topk_ratio must be in (0, 1], got {topk_ratio!r}")
+    if isinstance(chunk_size, bool) or not isinstance(chunk_size, int) or chunk_size < 2:
         raise ValueError("chunk_size must be >= 2")
-    if n_bins != 4:
+    if isinstance(n_bins, bool) or n_bins != 4:
         raise ValueError(f"2-bit compression requires exactly 4 bins, got {n_bins}")
+    if isinstance(range_in_sigmas, bool) or not isinstance(range_in_sigmas, (int, float)) or not math.isfinite(float(range_in_sigmas)) or range_in_sigmas <= 0.0:
+        raise ValueError("range_in_sigmas must be finite and positive")
 
     delta = tensor.detach().to(torch.float32).cpu()
     _require_finite_delta("compress_tensor_dct_sparse_2bit", delta)
@@ -363,6 +386,16 @@ def decompress_tensor_dct_sparse_2bit(
         raise TypeError("payload must be a DCTSparse2BitTensorPayload")
     if payload.n_coefficients != int(payload.indices.numel()):
         raise ValueError("DCT payload coefficient count does not match its index tensor")
+    if not math.isfinite(payload.shift) or not math.isfinite(payload.scale) or payload.scale <= 0.0:
+        raise ValueError("DCT payload shift and scale must be finite, with scale > 0")
+    if not bool(torch.isfinite(payload.lookup).all().item()):
+        raise ValueError("DCT payload lookup must contain only finite values")
+    padded_total = int(payload.padded_shape[0]) * int(payload.padded_shape[1])
+    if payload.indices.numel() > 0:
+        min_idx = int(payload.indices.min().item())
+        max_idx = int(payload.indices.max().item())
+        if min_idx < 0 or max_idx >= padded_total:
+            raise ValueError(f"DCT payload indices out of bounds [0, {padded_total}): min={min_idx}, max={max_idx}")
 
     codes = _unpack_2bit_codes(payload.packed_2bit, payload.n_coefficients)
     values = payload.lookup.to(torch.float32)[codes] + float(payload.shift)
@@ -404,13 +437,21 @@ def compress_lora_delta(
     is required to clear the `16x` BF16 wire-reduction target once sparse indices and
     the per-tensor LUT are counted honestly.
     """
+    if not isinstance(worker_id, str) or not worker_id.strip():
+        raise ValueError("worker_id must be a non-empty string")
+    if not isinstance(branch_name, str) or not branch_name.strip():
+        raise ValueError("branch_name must be a non-empty string")
+    if isinstance(outer_step, bool) or not isinstance(outer_step, int) or outer_step < 0:
+        raise ValueError(f"outer_step must be an integer >= 0, got {outer_step!r}")
+    if isinstance(inner_steps_completed, bool) or not isinstance(inner_steps_completed, int) or inner_steps_completed < 0:
+        raise ValueError(f"inner_steps_completed must be an integer >= 0, got {inner_steps_completed!r}")
     if compression_mode not in COMPRESSION_MODES:
         raise ValueError(
             f"compression_mode must be one of {COMPRESSION_MODES}, got {compression_mode!r}"
         )
     if topk_ratio is None:
         topk_ratio = 0.02 if compression_mode == "dct_sparse_2bit" else 0.20
-    if not (0.0 < topk_ratio <= 1.0):
+    if isinstance(topk_ratio, bool) or not isinstance(topk_ratio, (int, float)) or not math.isfinite(float(topk_ratio)) or not (0.0 < float(topk_ratio) <= 1.0):
         raise ValueError(f"topk_ratio must be in (0, 1], got {topk_ratio}")
 
     if compression_mode == "dct_sparse_2bit":
@@ -460,7 +501,15 @@ def compress_lora_delta_dct_sparse_2bit(
     n_bins: int = 4,
 ) -> CompressedDeltaPackage:
     """Compress LoRA pseudo-gradients via chunked orthonormal DCT + 2-bit centroid sparsity."""
-    if not (0.0 < topk_ratio <= 1.0):
+    if not isinstance(worker_id, str) or not worker_id.strip():
+        raise ValueError("worker_id must be a non-empty string")
+    if not isinstance(branch_name, str) or not branch_name.strip():
+        raise ValueError("branch_name must be a non-empty string")
+    if isinstance(outer_step, bool) or not isinstance(outer_step, int) or outer_step < 0:
+        raise ValueError(f"outer_step must be an integer >= 0, got {outer_step!r}")
+    if isinstance(inner_steps_completed, bool) or not isinstance(inner_steps_completed, int) or inner_steps_completed < 0:
+        raise ValueError(f"inner_steps_completed must be an integer >= 0, got {inner_steps_completed!r}")
+    if isinstance(topk_ratio, bool) or not isinstance(topk_ratio, (int, float)) or not math.isfinite(float(topk_ratio)) or not (0.0 < float(topk_ratio) <= 1.0):
         raise ValueError(f"topk_ratio must be in (0, 1], got {topk_ratio}")
 
     tensors: dict[str, DCTSparse2BitTensorPayload] = {}

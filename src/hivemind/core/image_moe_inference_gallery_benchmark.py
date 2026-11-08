@@ -294,6 +294,14 @@ def _build_scenario_svg_assets() -> Dict[str, str]:
 
 def _svg_to_rgb_tensor(svg_markup: str, division_index: int, height: int = 64, width: int = 64) -> torch.Tensor:
     """Convert an SVG visual asset into a deterministic `(3, H, W)` normalized RGB tensor."""
+    if not isinstance(svg_markup, str) or not svg_markup.strip():
+        raise ValueError("svg_markup must be a non-empty string")
+    if isinstance(division_index, bool) or not isinstance(division_index, int) or division_index < 0:
+        raise ValueError("division_index must be a non-negative integer")
+    if isinstance(height, bool) or not isinstance(height, int) or height < 1:
+        raise ValueError("height must be a positive integer")
+    if isinstance(width, bool) or not isinstance(width, int) or width < 1:
+        raise ValueError("width must be a positive integer")
     digest = hashlib.sha256(svg_markup.encode("utf-8")).digest()
     seed = int.from_bytes(digest[:4], "little") + division_index * 97
     rng = np.random.default_rng(seed)
@@ -318,6 +326,10 @@ def _svg_to_rgb_tensor(svg_markup: str, division_index: int, height: int = 64, w
 
 def build_trained_7division_image_moe(seed: int = 20261030, inner_steps: int = 180) -> MassiveSwarmSparseImageMoE:
     """Train and upcycle the 7-Division `MassiveSwarmSparseImageMoE` for live scenario inference."""
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
+        raise ValueError("inner_steps must be a positive integer")
     torch.manual_seed(seed)
     np.random.seed(seed)
 
@@ -750,7 +762,11 @@ def run_intensive_image_moe_inference_stress_campaign(
     save_report_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """Run intensive real-image Vision-MoE inference tests + 240-request stress burst."""
-    if concurrent_requests_per_node < 1:
+    if (
+        isinstance(concurrent_requests_per_node, bool)
+        or not isinstance(concurrent_requests_per_node, int)
+        or concurrent_requests_per_node < 1
+    ):
         raise ValueError("concurrent_requests_per_node must be >= 1")
 
     scenarios = build_public_image_moe_gallery_scenarios(output_gallery_dir=output_gallery_dir)

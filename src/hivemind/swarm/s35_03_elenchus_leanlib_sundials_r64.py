@@ -57,6 +57,8 @@ class TierXR64InstrumentReceipt:
 
 def strip_lean4_comments(lean_source: str) -> str:
     """Strip nested/block `/- ... -/` comments and single-line `-- ...` comments from Lean 4 code."""
+    if not isinstance(lean_source, str) or "\x00" in lean_source:
+        raise ValueError("lean_source must be a valid string without NUL bytes")
     # Iteratively remove innermost /- ... -/ blocks to handle nested block comments
     cleaned = lean_source
     pattern_block = re.compile(r"/-(?:(?!/\-|\-/).)*?-/", re.DOTALL)
@@ -72,6 +74,8 @@ def strip_lean4_comments(lean_source: str) -> str:
 
 def audit_lean4_source_elenchus(lean_source: str) -> LeanCommentStrippedAudit:
     """Audit Lean 4 source after stripping comments (avoiding false positives/negatives in docstrings)."""
+    if not isinstance(lean_source, str) or "\x00" in lean_source:
+        raise ValueError("lean_source must be a valid string without NUL bytes")
     raw_hits = len(re.findall(r"\bsorry\b", lean_source))
     stripped = strip_lean4_comments(lean_source)
 
@@ -102,6 +106,17 @@ def audit_lean4_source_elenchus(lean_source: str) -> LeanCommentStrippedAudit:
     )
 
 
+def _validate_triple(vec: object, name: str) -> tuple[float, float, float]:
+    if not isinstance(vec, (list, tuple)) or len(vec) != 3:
+        raise ValueError(f"{name} must be a 3-element tuple or list of numbers")
+    out: list[float] = []
+    for idx, v in enumerate(vec):
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            raise ValueError(f"{name}[{idx}] must be a real number, not bool or {type(v).__name__}")
+        out.append(float(v))
+    return (out[0], out[1], out[2])
+
+
 def verify_robertson_sundials_tier_x(
     sent_arguments: Mapping[str, Any],
     received_arguments: Mapping[str, Any],
@@ -113,22 +128,38 @@ def verify_robertson_sundials_tier_x(
     git_rev: str = "bsd3-cvode-r64-verified",
 ) -> TierXR64InstrumentReceipt:
     """Verify a rusty-SUNDIALS Robertson stiff ODE reading under Elenchus Tier-X and R-64 rules."""
+    if not isinstance(sent_arguments, Mapping) or not isinstance(received_arguments, Mapping):
+        raise ValueError("sent_arguments and received_arguments must be mappings")
+    if not isinstance(ran, bool) or not isinstance(stub, bool):
+        raise ValueError("ran and stub must be booleans")
+    if not isinstance(producer, str) or not producer.strip() or any(ord(c) < 32 or ord(c) == 127 for c in producer):
+        raise ValueError("producer must be a non-empty string without control characters")
+    if not isinstance(git_rev, str) or not git_rev.strip() or any(ord(c) < 32 or ord(c) == 127 for c in git_rev):
+        raise ValueError("git_rev must be a non-empty string without control characters")
+
+    clean_y_init = _validate_triple(y_initial, "y_initial")
     args_match = dict(sent_arguments) == dict(received_arguments)
-    effective_y_final = y_final
+    effective_y_final: tuple[float, float, float] | None = (
+        _validate_triple(y_final, "y_final") if y_final is not None else None
+    )
     if effective_y_final is None and "y_final" in received_arguments:
         raw_yf = received_arguments["y_final"]
-        if isinstance(raw_yf, (list, tuple)) and len(raw_yf) == 3:
+        if (
+            isinstance(raw_yf, (list, tuple))
+            and len(raw_yf) == 3
+            and all(not isinstance(x, bool) and isinstance(x, (int, float)) for x in raw_yf)
+        ):
             effective_y_final = (float(raw_yf[0]), float(raw_yf[1]), float(raw_yf[2]))
 
     has_valid_output = (
         effective_y_final is not None
         and len(effective_y_final) == 3
-        and all(math.isfinite(float(v)) for v in effective_y_final)
-        and all(math.isfinite(float(v)) for v in y_initial)
+        and all(math.isfinite(v) for v in effective_y_final)
+        and all(math.isfinite(v) for v in clean_y_init)
     )
     if has_valid_output and effective_y_final is not None:
-        mass_init = sum(float(v) for v in y_initial)
-        mass_final = sum(float(v) for v in effective_y_final)
+        mass_init = sum(clean_y_init)
+        mass_final = sum(effective_y_final)
         mass_drift = abs(mass_final - mass_init)
     else:
         mass_drift = float("inf")

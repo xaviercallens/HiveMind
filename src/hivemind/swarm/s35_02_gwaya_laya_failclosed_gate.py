@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass
+import math
 import re
 from typing import Callable, Sequence
 
@@ -103,6 +104,8 @@ def _strip_leading_docstring(body: Sequence[ast.stmt]) -> tuple[list[ast.stmt], 
 
 def inspect_python_ast_anti_stub(source_code: str) -> list[str]:
     """Return all fail-closed AST stub or forbidden placeholder violations in Python code."""
+    if not isinstance(source_code, str):
+        raise ValueError("source_code must be a string")
     violations: list[str] = []
     if not source_code or not source_code.strip():
         return ["Empty candidate source code"]
@@ -186,9 +189,35 @@ def audit_candidate_gwaya_anse(
     laya_threshold: float = 0.75,
 ) -> GWAYACandidateAudit:
     """Evaluate a code candidate with GWAYA fail-closed AST/test checks and Laya calibrated scoring."""
+    if not callable(public_test_fn) or not callable(hidden_test_fn):
+        raise ValueError("public_test_fn and hidden_test_fn must be callable")
     # NaN passed `min(0.99, 0.55 + 0.45 * nan)` and scored VERIFIED; a confidence outside [0, 1] is not a probability.
-    if not (isinstance(raw_logprob_confidence, (int, float)) and 0.0 <= raw_logprob_confidence <= 1.0):
+    if (
+        isinstance(raw_logprob_confidence, bool)
+        or not isinstance(raw_logprob_confidence, (int, float))
+        or not (0.0 <= float(raw_logprob_confidence) <= 1.0)
+    ):
         raise ValueError(f"raw_logprob_confidence must be a number in [0, 1], got {raw_logprob_confidence!r}")
+    if (
+        isinstance(latency_ms, bool)
+        or not isinstance(latency_ms, (int, float))
+        or not math.isfinite(float(latency_ms))
+        or float(latency_ms) < 0.0
+    ):
+        raise ValueError("latency_ms must be a finite non-negative number")
+    if (
+        isinstance(memory_mib, bool)
+        or not isinstance(memory_mib, (int, float))
+        or not math.isfinite(float(memory_mib))
+        or float(memory_mib) < 0.0
+    ):
+        raise ValueError("memory_mib must be a finite non-negative number")
+    if (
+        isinstance(laya_threshold, bool)
+        or not isinstance(laya_threshold, (int, float))
+        or not (0.0 < float(laya_threshold) <= 1.0)
+    ):
+        raise ValueError("laya_threshold must be a finite number in (0, 1]")
     violations = inspect_python_ast_anti_stub(source_code)
     is_ast_clean = len(violations) == 0
 
@@ -241,8 +270,12 @@ def run_gwaya_a3_sample_and_repair(
     hidden_test_fn: Callable[[str], bool],
 ) -> GWAYAA3RepairReport:
     """Execute GWAYA Arm A3 protocol across sequential candidate/repair proposals."""
-    if not candidates:
-        raise ValueError("candidates must not be empty")
+    if isinstance(candidates, (str, bytes)) or not isinstance(candidates, Sequence) or not candidates:
+        raise ValueError("candidates must be a non-empty sequence of strings")
+    if any(not isinstance(c, str) for c in candidates):
+        raise ValueError("Every candidate in candidates must be a string")
+    if not callable(public_test_fn) or not callable(hidden_test_fn):
+        raise ValueError("public_test_fn and hidden_test_fn must be callable")
 
     audits: list[GWAYACandidateAudit] = []
     selected_code = candidates[0]

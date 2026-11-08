@@ -109,6 +109,29 @@ class HiveMindWorkerNode:
         """Measured error-feedback state per branch, as of this worker's last compressed upload."""
         return [dict(entry) for entry in self.last_ef21_telemetry.values()]
 
+    @staticmethod
+    def _validate_inner_hyperparams(
+        *,
+        lr: float,
+        weight_decay: float,
+        micro_batch_size: int,
+        topk_ratio: float,
+        muon_ns_steps: int,
+        byzantine_poison_scale: float | None = None,
+    ) -> None:
+        if not math.isfinite(float(lr)) or float(lr) <= 0.0:
+            raise ValueError("lr must be finite and > 0")
+        if not math.isfinite(float(weight_decay)) or float(weight_decay) < 0.0:
+            raise ValueError("weight_decay must be finite and >= 0")
+        if int(micro_batch_size) <= 0:
+            raise ValueError("micro_batch_size must be > 0")
+        if not math.isfinite(float(topk_ratio)) or not (0.0 < float(topk_ratio) <= 1.0):
+            raise ValueError("topk_ratio must be finite and in (0, 1]")
+        if int(muon_ns_steps) <= 0:
+            raise ValueError("muon_ns_steps must be > 0")
+        if byzantine_poison_scale is not None and not math.isfinite(float(byzantine_poison_scale)):
+            raise ValueError("byzantine_poison_scale must be finite when provided")
+
     def execute_workunit(
         self,
         workunit: BOINCWorkunit,
@@ -123,6 +146,14 @@ class HiveMindWorkerNode:
         muon_ns_steps: int = 5,
     ) -> InnerLoopResult:
         """Verify Steam ticket & Parquet shard, execute H local AdamW steps, and emit compressed delta."""
+        self._validate_inner_hyperparams(
+            lr=lr,
+            weight_decay=weight_decay,
+            micro_batch_size=micro_batch_size,
+            topk_ratio=topk_ratio,
+            muon_ns_steps=muon_ns_steps,
+            byzantine_poison_scale=byzantine_poison_scale,
+        )
         ok, msg = self.steamworks.verify_sybil_resistance(self.auth_ticket)
         if not ok:
             raise PermissionError(f"Worker {self.worker_id} blocked by Steam Sybil guard: {msg}")
@@ -188,6 +219,13 @@ class HiveMindWorkerNode:
         muon_ns_steps: int = 5,
     ) -> InnerLoopResult:
         """Execute a decentralized SETI-Swarm inner loop on a Content-Addressed Hugging Face shard."""
+        self._validate_inner_hyperparams(
+            lr=lr,
+            weight_decay=weight_decay,
+            micro_batch_size=micro_batch_size,
+            topk_ratio=topk_ratio,
+            muon_ns_steps=muon_ns_steps,
+        )
         ok, msg = self.steamworks.verify_sybil_resistance(self.auth_ticket)
         if not ok:
             raise PermissionError(f"Worker {self.worker_id} blocked by Steam Sybil guard: {msg}")

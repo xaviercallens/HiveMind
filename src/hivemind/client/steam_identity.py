@@ -20,6 +20,7 @@ from __future__ import annotations
 import calendar
 import hashlib
 import hmac
+import math
 import os
 import re
 import secrets
@@ -89,16 +90,28 @@ class SteamOpenIDVerifier:
                  nonce_ttl_s: float = 300.0, max_nonces: int = 4096, max_attempts_per_ip: int = 64) -> None:
         if not return_to.startswith("https://") and not return_to.startswith("http://127.0.0.1") and not return_to.startswith("http://localhost"):
             raise ValueError("return_to must be https (or loopback http for development)")
-        self.return_to, self._http, self._clock, self._ttl, self._max = return_to, http, clock, nonce_ttl_s, max_nonces
-        self._max_attempts_per_ip = max(1, int(max_attempts_per_ip))
+        if not math.isfinite(float(nonce_ttl_s)) or float(nonce_ttl_s) <= 0.0:
+            raise ValueError("nonce_ttl_s must be finite and > 0")
+        if int(max_nonces) <= 0:
+            raise ValueError("max_nonces must be > 0")
+        if int(max_attempts_per_ip) <= 0:
+            raise ValueError("max_attempts_per_ip must be > 0")
+        self.return_to, self._http, self._clock, self._ttl, self._max = return_to, http, clock, float(nonce_ttl_s), int(max_nonces)
+        self._max_attempts_per_ip = int(max_attempts_per_ip)
         self._seen: dict[str, float] = {}
         self._ip_attempts: dict[str, list[float]] = {}
         self._lock = threading.Lock()
 
+    def _now(self) -> float:
+        now = float(self._clock())
+        if not math.isfinite(now):
+            raise IdentityError("system clock reading is non-finite")
+        return now
+
     def _check_ip_rate_limit(self, client_ip: str | None) -> None:
         if not client_ip:
             return
-        now = self._clock()
+        now = self._now()
         cutoff = now - self._ttl
         with self._lock:
             recent = [ts for ts in self._ip_attempts.get(client_ip, []) if ts >= cutoff]
@@ -113,7 +126,7 @@ class SteamOpenIDVerifier:
         if not match:
             raise IdentityError("malformed response nonce")
         stamp = calendar.timegm(tuple(int(g) for g in match.groups()))  # the nonce time is UTC
-        now = self._clock()
+        now = self._now()
         if stamp < now - self._ttl or stamp > now + 60.0:
             raise IdentityError("stale or future response nonce")
         with self._lock:
@@ -125,7 +138,7 @@ class SteamOpenIDVerifier:
                 raise IdentityError("too many sign-ins in flight; try again shortly")
 
     def _commit_nonce(self, nonce: str) -> None:
-        now = self._clock()
+        now = self._now()
         with self._lock:
             for key in [k for k, until in self._seen.items() if until < now]:
                 del self._seen[key]
@@ -197,7 +210,15 @@ class IdentityTokens:
         self._secret = secret or (bytes.fromhex(env) if re.fullmatch(r"[0-9a-fA-F]{64,}", env or "") else secrets.token_bytes(32))
         if len(self._secret) < 32:
             raise ValueError("identity secret must be at least 32 bytes")
-        self.ttl_s, self._clock = ttl_s, clock
+        if not math.isfinite(float(ttl_s)) or float(ttl_s) <= 0.0:
+            raise ValueError("ttl_s must be finite and > 0")
+        self.ttl_s, self._clock = float(ttl_s), clock
+
+    def _now(self) -> float:
+        now = float(self._clock())
+        if not math.isfinite(now):
+            raise IdentityError("system clock reading is non-finite")
+        return now
 
     def _mac(self, body: str) -> str:
         return hmac.new(self._secret, body.encode(), hashlib.sha256).hexdigest()
@@ -205,7 +226,7 @@ class IdentityTokens:
     def issue(self, steam_id64: str) -> str:
         if not is_valid_steamid64(steam_id64):
             raise IdentityError("not a SteamID64")
-        body = f"v1.{steam_id64}.{int(self._clock() + self.ttl_s)}"
+        body = f"v1.{steam_id64}.{int(self._now() + self.ttl_s)}"
         return f"{body}.{self._mac(body)}"
 
     def verify(self, token: str) -> str:
@@ -214,7 +235,7 @@ class IdentityTokens:
             raise IdentityError("malformed identity token")
         if not hmac.compare_digest(parts[3], self._mac(".".join(parts[:3]))):
             raise IdentityError("identity token signature is invalid")
-        if int(parts[2]) < self._clock():
+        if int(parts[2]) < self._now():
             raise IdentityError("identity token expired; sign in with Steam again")
         return parts[1]
 

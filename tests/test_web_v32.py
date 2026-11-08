@@ -341,7 +341,6 @@ def test_google_link_needs_a_session_and_uses_its_key() -> None:
 # ---- legacy sandbox SSO is retired ---------------------------------------------------------------------------------
 
 def test_legacy_sandbox_sso_endpoints_are_retired(monkeypatch) -> None:
-    monkeypatch.delenv("HIVEMIND_LEGACY_SANDBOX_SSO", raising=False)
     from hivemind.boinc.hivemind_at_home_dashboard import create_hivemind_at_home_app
 
     client = TestClient(create_hivemind_at_home_app())

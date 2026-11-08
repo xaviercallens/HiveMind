@@ -33,7 +33,6 @@ Provides:
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import hmac
 import html
@@ -44,7 +43,6 @@ import secrets
 import time
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Optional, Tuple
-from urllib.parse import urlencode
 
 POC_STATUS_HEADER = (
     "proof-of-concept; send only public, non-sensitive data "
@@ -8890,199 +8888,16 @@ def create_hivemind_at_home_app(
     ) -> JSONResponse:
         # v3.2: the sandbox flow verified nothing with any provider and handed the PKCE verifier to the client. It is
         # retired; real Google sign-in is /auth/google/start (server-side code flow, verified ID token).
-        if os.environ.get("HIVEMIND_LEGACY_SANDBOX_SSO", "") != "1":
-            raise HTTPException(status_code=410, detail="This sign-in flow is retired. Use /auth/google/start.")
-        prov = provider.lower()
-        if prov not in SUPPORTED_SSO_PROVIDERS:
-            raise HTTPException(status_code=400, detail=f"Unsupported SSO provider '{provider}'")
-
-        client_supplied_challenge = bool(code_challenge and code_challenge.strip())
-        if client_supplied_challenge:
-            code_verifier = ""
-            resolved_challenge = code_challenge.strip()
-        else:
-            code_verifier = secrets.token_urlsafe(32)
-            resolved_challenge = (
-                base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode("ascii")).digest())
-                .rstrip(b"=")
-                .decode("ascii")
-            )
-        state_token = secrets.token_urlsafe(24)
-        resolved_redirect = (redirect_uri or "").strip() or f"{PUBLIC_DNS_PORTAL_URL}/api/v1/auth/sso/{prov}/callback"
-        base_auth_url = SSO_PROVIDER_AUTHORIZE_URLS.get(prov, f"{PUBLIC_DNS_PORTAL_URL}/api/v1/auth/sso/{prov}")
-
-        if prov == "steam":
-            params = {
-                "openid.ns": "http://specs.openid.net/auth/2.0",
-                "openid.mode": "checkid_setup",
-                "openid.return_to": f"{resolved_redirect}?state={state_token}",
-                "openid.realm": PUBLIC_DNS_PORTAL_URL,
-                "openid.identity": "http://specs.openid.net/auth/2.0/identifier_select",
-                "openid.claimed_id": "http://specs.openid.net/auth/2.0/identifier_select",
-            }
-        else:
-            scopes = {
-                "google": "openid email profile",
-                "reddit": "identity",
-                "github": "read:user user:email",
-            }.get(prov, "openid profile")
-            params = {
-                "client_id": f"hivemind-{prov}-mvp-client",
-                "response_type": "code",
-                "redirect_uri": resolved_redirect,
-                "scope": scopes,
-                "state": state_token,
-                "code_challenge": resolved_challenge,
-                "code_challenge_method": "S256",
-            }
-
-        authorize_url = f"{base_auth_url}?{urlencode(params)}"
-        auth_state["sso_states"][state_token] = {
-            "provider": prov,
-            "state": state_token,
-            "code_challenge": resolved_challenge,
-            "code_challenge_method": "S256",
-            "client_supplied_challenge": client_supplied_challenge,
-            "redirect_uri": resolved_redirect,
-            "created_at": time.time(),
-        }
-        return JSONResponse(
-            content={
-                "status": "SSO_AUTHORIZATION_READY",
-                "provider": prov,
-                "is_core_mvp_provider": prov in CORE_MVP_SSO_PROVIDERS,
-                "federation_mode": "LOCAL_PKCE_SANDBOX_FEDERATION",
-                "state": state_token,
-                "code_challenge": resolved_challenge,
-                "code_challenge_method": "S256",
-                "code_verifier": code_verifier,
-                "redirect_uri": resolved_redirect,
-                "authorize_url": authorize_url,
-                "public_dns_domain": "hivemind.socrate-ai-lab.com",
-                "public_dns_portal": PUBLIC_DNS_PORTAL_URL,
-            }
-        )
+        # Deleted in v3.3: this sandbox verified nothing with any provider, returned the PKCE verifier to the browser and
+        # created accounts with points for anyone. Real Google sign-in is /auth/google/start (verified ID token).
+        raise HTTPException(status_code=410, detail="This sign-in flow is retired. Use /auth/google/start.")
 
     @app.post("/api/v1/auth/sso/{provider}", response_class=JSONResponse)
     def api_auth_sso(provider: str, req: AuthSSORequest, request: Request) -> JSONResponse:
         # v3.2: without verification by any provider this created accounts with points for anyone; retired.
-        if os.environ.get("HIVEMIND_LEGACY_SANDBOX_SSO", "") != "1":
-            raise HTTPException(status_code=410, detail="This sign-in flow is retired. Use /auth/google/start.")
-        prov = provider.lower()
-        if prov not in SUPPORTED_SSO_PROVIDERS:
-            raise HTTPException(status_code=400, detail=f"Unsupported SSO provider '{provider}'")
-
-        if req.state and req.state in auth_state["sso_states"]:
-            stored_state = auth_state["sso_states"][req.state]
-            if stored_state.get("provider") != prov:
-                raise HTTPException(status_code=400, detail=f"SSO state token belongs to provider '{stored_state.get('provider')}', not '{prov}'")
-            if stored_state.get("client_supplied_challenge"):
-                if not req.code_verifier:
-                    raise HTTPException(status_code=400, detail="PKCE S256 code_verifier is required for this SSO state")
-                computed_challenge = (
-                    base64.urlsafe_b64encode(hashlib.sha256(req.code_verifier.encode("ascii")).digest())
-                    .rstrip(b"=")
-                    .decode("ascii")
-                )
-                if not hmac.compare_digest(computed_challenge, str(stored_state.get("code_challenge", ""))):
-                    raise HTTPException(status_code=400, detail="PKCE S256 code_verifier does not match code_challenge")
-            auth_state["sso_states"].pop(req.state, None)
-
-        prov_badge = f"{prov.upper()}_SSO"
-        raw_hint = (req.handle_hint or "").strip()
-        bearer_tok = request.headers.get("Authorization", "").replace("Bearer ", "").strip()
-
-        existing = None
-        if raw_hint:
-            clean_handle = sanitize_handle(raw_hint)
-            existing = auth_state["users"].get(clean_handle) or auth_state["users"].get(clean_handle.lstrip("@").lower())
-            if not existing:
-                norm_h = clean_handle.lstrip("@").lower().replace("-", "_")
-                for k_u, u in auth_state["users"].items():
-                    u_h = str(u.get("handle", "")).lstrip("@").lower().replace("-", "_")
-                    emails = [u.get("email", "").lower()] + [e.lower() for e in u.get("secondary_emails", [])]
-                    if raw_hint.lower() in emails or norm_h in (k_u.lower(), u_h, "xaviercallens" if k_u == "xavier_callens" else ""):
-                        existing = u
-                        break
-        else:
-            if bearer_tok:
-                by_tok = _lookup_user_by_token(bearer_tok)
-                if by_tok and not by_tok.get("is_guest"):
-                    existing = by_tok
-            clean_handle = sanitize_handle(f"contributor_{prov}_{hashlib.sha256(f'{prov}:{time.time()}:{secrets.token_hex(4)}'.encode()).hexdigest()[:6]}")
-
-        if existing and req.user_mode == "force_new":
-            # "force_new" on a taken handle used to skip the ownership check and overwrite the account
-            raise HTTPException(status_code=409, detail="That handle is already registered.")
-        if existing:
-            # the provider token is not verified here, so a handle hint must not open an existing account
-            _require_token_owner(request, existing)
-            existing["login_count"] = int(existing.get("login_count", 1)) + 1
-            existing["is_new_user"] = False
-            existing["is_guest"] = False
-            existing["user_state"] = "EXISTING_USER"
-            existing.pop("logged_out", None)
-            existing["provider"] = prov_badge
-            linked = existing.setdefault("linked_providers", [])
-            if prov_badge not in linked:
-                linked.append(prov_badge)
-            auth_state["api_keys"][existing["token"]] = existing
-            _save_persisted_users()
-            return JSONResponse(content={
-                "status": "AUTHENTICATED_VIA_SSO",
-                "provider": existing["provider"],
-                "linked_providers": linked,
-                "handle": existing["handle"],
-                "email": existing.get("email", f"{existing['handle']}@{prov}.federation.hivemind"),
-                "token": existing["token"],
-                "compute_points": existing["compute_points"],
-                "role": existing["role"],
-                "is_mastercommander": existing.get("is_mastercommander", False),
-                "groups": existing.get("groups", []),
-                "target_profile": existing.get("target_profile", req.target_profile or "gamer"),
-                "node_id": existing["node_id"],
-                "login_count": existing["login_count"],
-                "is_new_user": False,
-                "is_guest": False,
-                "user_state": "EXISTING_USER",
-            })
-
-        token = "hm_live_" + secrets.token_hex(16)
-        user_record = {
-            "handle": clean_handle,
-            "email": f"{clean_handle}@{prov}.federation.hivemind",
-            "provider": prov_badge,
-            "linked_providers": [prov_badge],
-            "role": req.role,
-            "target_profile": req.target_profile or "gamer",
-            "compute_points": 2500,
-            "token": token,
-            "node_id": "0x" + hashlib.sha256(f"{prov}:{clean_handle}".encode()).hexdigest()[:8].upper(),
-            "registered_at": time.time(),
-            "login_count": 1,
-            "is_new_user": True,
-            "is_guest": False,
-            "user_state": "NEW_USER",
-        }
-        auth_state["users"][clean_handle] = user_record
-        auth_state["api_keys"][token] = user_record
-        _save_persisted_users()
-        return JSONResponse(content={
-            "status": "AUTHENTICATED_VIA_SSO",
-            "provider": user_record["provider"],
-            "linked_providers": user_record["linked_providers"],
-            "handle": user_record["handle"],
-            "email": user_record["email"],
-            "token": token,
-            "compute_points": user_record["compute_points"],
-            "role": user_record["role"],
-            "target_profile": user_record["target_profile"],
-            "node_id": user_record["node_id"],
-            "login_count": 1,
-            "is_new_user": True,
-            "is_guest": False,
-            "user_state": "NEW_USER",
-        })
+        # Deleted in v3.3: this sandbox verified nothing with any provider, returned the PKCE verifier to the browser and
+        # created accounts with points for anyone. Real Google sign-in is /auth/google/start (verified ID token).
+        raise HTTPException(status_code=410, detail="This sign-in flow is retired. Use /auth/google/start.")
 
     @app.post("/api/v1/auth/link-provider", response_class=JSONResponse)
     def api_auth_link_provider(req: AuthLinkProviderRequest, request: Request) -> JSONResponse:

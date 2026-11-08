@@ -79,15 +79,6 @@ def test_upgrade_guest_cannot_take_an_existing_handle_or_mint_points(tmp_path: P
     assert again.status_code == 401
 
 
-def test_sso_force_new_cannot_overwrite_an_existing_handle(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
-    monkeypatch.setenv("HIVEMIND_LEGACY_SANDBOX_SSO", "1")  # the legacy flow must stay safe even when re-enabled
-    client = _client(tmp_path)
-    client.post("/api/v1/auth/register", json={"handle": "victim02", "email": "v2@example.org"})
-    for handle in ("victim02", "clark719664"):
-        r = client.post("/api/v1/auth/sso/google", json={"handle_hint": handle, "user_mode": "force_new"})
-        assert r.status_code == 409, handle
-
-
 def test_migration_status_is_admin_only(tmp_path: Path) -> None:
     r = _client(tmp_path).get("/api/v1/auth/migration/status")
     assert r.status_code == 403

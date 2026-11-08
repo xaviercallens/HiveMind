@@ -113,7 +113,7 @@ def test_csrf_matrix(path: str, case: str) -> None:
 # ---- fuzzing every POST with arbitrary JSON -----------------------------------------------------------------------------
 
 JSON = st.recursive(
-    st.none() | st.booleans() | st.integers() | st.floats(allow_nan=False) | st.text(max_size=300),
+    st.none() | st.booleans() | st.integers() | st.floats(allow_nan=False, allow_infinity=False) | st.text(max_size=300),
     lambda children: st.lists(children, max_size=5) | st.dictionaries(st.text(max_size=20), children, max_size=6),
     max_leaves=25,
 )

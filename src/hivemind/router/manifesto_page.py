@@ -161,6 +161,8 @@ def pick_manifesto_language(query_lang: str | None, accept_language: str | None,
 
 def manifesto_payload(live_telemetry: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Return the structured JSON payload for GET /v1/hivemind/manifesto."""
+    if live_telemetry is not None and not isinstance(live_telemetry, Mapping):
+        raise ValueError("live_telemetry must be a mapping or None")
     return {
         "object": "hivemind.manifesto",
         "version": "1.0.0-s36",
@@ -207,6 +209,12 @@ def render_manifesto_page(
     live_telemetry: Mapping[str, Any] | None = None,
 ) -> str:
     """Render the bilingual (FR/EN) Citizen AI Manifesto & Reddit Evolution HTML page."""
+    if not isinstance(lang, str) or not isinstance(nonce, str):
+        raise ValueError("lang and nonce must be strings")
+    if not isinstance(api_url, str) or not api_url.strip() or not isinstance(ruche_url, str) or not ruche_url.strip():
+        raise ValueError("api_url and ruche_url must be non-empty strings")
+    if live_telemetry is not None and not isinstance(live_telemetry, Mapping):
+        raise ValueError("live_telemetry must be a mapping or None")
     clean_lang = "en" if str(lang).lower().startswith("en") else "fr"
     is_fr = clean_lang == "fr"
     telem = dict(live_telemetry) if isinstance(live_telemetry, Mapping) else {}

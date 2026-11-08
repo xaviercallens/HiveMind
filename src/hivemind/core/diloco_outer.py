@@ -76,6 +76,8 @@ class OuterStepResult:
 
 def flatten_delta_dict(delta_dict: dict[str, torch.Tensor]) -> torch.Tensor:
     """Flatten a dictionary of LoRA tensors in deterministic key order into a 1D FP32 vector."""
+    if not delta_dict:
+        raise ValueError("delta_dict must not be empty")
     parts = [
         delta_dict[k].detach().to(torch.float32).cpu().reshape(-1)
         for k in sorted(delta_dict.keys())
@@ -110,6 +112,10 @@ def filter_byzantine_deltas_multikrum(
     reference_keys_and_shapes: dict[str, torch.Size] | None = None,
 ) -> ByzantineFilterReport:
     """Filter worker pseudo-gradients using Pre-Krum Sanitization, Multi-Krum, and a 2-sigma pairwise cosine filter."""
+    if isinstance(max_byzantine_f, bool) or not isinstance(max_byzantine_f, int) or max_byzantine_f < 0:
+        raise ValueError(f"max_byzantine_f must be an integer >= 0, got {max_byzantine_f!r}")
+    if isinstance(cosine_sigma, bool) or not isinstance(cosine_sigma, (int, float)) or not math.isfinite(float(cosine_sigma)) or cosine_sigma < 0.0:
+        raise ValueError(f"cosine_sigma must be finite and >= 0, got {cosine_sigma!r}")
     all_worker_ids = list(worker_deltas.keys())
     total_K = len(all_worker_ids)
     if total_K == 0:
@@ -315,10 +321,16 @@ class DiLoCoOuterOptimizer:
         if not math.isfinite(eff_wd) or eff_wd < 0.0:
             raise ValueError("weight_decay must be finite and non-negative")
         eff_cgad_lr = cgad_lr if cgad_lr is not None else outer_lr_eta
-        if (outer_optimizer_mode != "nesterov" or use_cpu_flat_bucket) and (
-            not math.isfinite(outer_lr_eta) or outer_lr_eta <= 0.0
-        ):
+        if not math.isfinite(outer_lr_eta) or outer_lr_eta <= 0.0:
             raise ValueError("outer_lr_eta must be finite and positive")
+        if not math.isfinite(eff_cgad_lr) or eff_cgad_lr <= 0.0:
+            raise ValueError("cgad_lr must be finite and positive")
+        if not math.isfinite(outer_momentum_mu) or not (0.0 <= outer_momentum_mu < 1.0):
+            raise ValueError("outer_momentum_mu must be finite in [0, 1)")
+        if isinstance(max_byzantine_f, bool) or not isinstance(max_byzantine_f, int) or max_byzantine_f < 0:
+            raise ValueError("max_byzantine_f must be an integer >= 0")
+        if not math.isfinite(cosine_sigma) or cosine_sigma < 0.0:
+            raise ValueError("cosine_sigma must be finite and >= 0")
         self.outer_lr_eta = outer_lr_eta
         self.outer_momentum_mu = outer_momentum_mu
         self.max_byzantine_f = max_byzantine_f
@@ -402,6 +414,10 @@ class DiLoCoOuterOptimizer:
             isinstance(eff_restart, bool) or not isinstance(eff_restart, int) or eff_restart < 1
         ):
             raise ValueError("momentum_restart_period must be an integer >= 1 or None")
+        if not isinstance(branch_name, str) or not branch_name.strip():
+            raise ValueError("branch_name must be a non-empty string")
+        if isinstance(outer_step, bool) or not isinstance(outer_step, int) or outer_step < 0:
+            raise ValueError("outer_step must be an integer >= 0")
         should_restart = bool(
             eff_restart is not None and outer_step > 0 and (outer_step % eff_restart == 0)
         )

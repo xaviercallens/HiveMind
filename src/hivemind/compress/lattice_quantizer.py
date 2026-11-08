@@ -245,12 +245,10 @@ def calibrate_scale_for_rate(kind: str, sample: torch.Tensor, target_bits_per_di
     """Bisection on log-scale so that the measured factorised rate of ``sample`` hits ``target`` (rate falls as scale grows)."""
     if kind not in DECODERS:
         raise KeyError(kind)
-    if not math.isfinite(float(target_bits_per_dim)) or float(target_bits_per_dim) < 0.0:
-        raise ValueError("target_bits_per_dim must be finite and >= 0")
-    if not math.isfinite(float(tol)) or float(tol) <= 0.0:
-        raise ValueError("tol must be positive and finite")
-    if int(iters) < 1:
-        raise ValueError("iters must be >= 1")
+    if not math.isfinite(float(tol)) or float(tol) < 0.0:
+        raise ValueError("tol must be non-negative and finite")
+    if int(iters) < 0:
+        raise ValueError("iters must be >= 0")
     eff_block = int(block) if block is not None else LATTICE_DIM.get(kind, 8)
     if eff_block < 1 or (kind in ("A2", "E8") and eff_block != LATTICE_DIM[kind]):
         raise ValueError(f"invalid block {eff_block} for lattice {kind}")

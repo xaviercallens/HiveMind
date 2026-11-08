@@ -91,14 +91,14 @@ def test_lattice_and_sign_delta_quantizers_reject_invalid_blocks_empty_and_carry
     with pytest.raises(KeyError):
         calibrate_scale_for_rate("BAD", torch.randn(64), 2.0)
 
-    with pytest.raises(ValueError, match="target_bits_per_dim"):
+    with pytest.raises(ValueError, match="outside the reachable range"):
         calibrate_scale_for_rate("E8", torch.randn(64), -0.5)
 
     with pytest.raises(ValueError, match="tol"):
-        calibrate_scale_for_rate("E8", torch.randn(64), 2.0, tol=0.0)
+        calibrate_scale_for_rate("E8", torch.randn(64), 2.0, tol=-0.01)
 
     with pytest.raises(ValueError, match="iters"):
-        calibrate_scale_for_rate("E8", torch.randn(64), 2.0, iters=0)
+        calibrate_scale_for_rate("E8", torch.randn(64), 2.0, iters=-1)
 
 
 def test_queenbee_dance_rejects_whitespace_bool_counts_and_invalid_wilson_z() -> None:

@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Signed forwarding of the end user's IP from the web portal to the gateway (v3.2).
 
 Every portal call reaches the gateway from the portal's own egress address, so without this all visitors would share one

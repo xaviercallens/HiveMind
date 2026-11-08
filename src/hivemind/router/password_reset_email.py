@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """Password-reset e-mail delivery (v3.2).
 
 Delivery uses SMTP with TLS only: implicit TLS on port 465, STARTTLS on any other port (refused if the server does not

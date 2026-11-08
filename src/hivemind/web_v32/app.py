@@ -1,3 +1,4 @@
+# Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
 """HiveMind web portal v3.2.
 
 Design rules (see docs/WEB_V3_2.md):

@@ -215,10 +215,38 @@ def check_params(family: str, params: Dict[str, Any]) -> Dict[str, Any]:
             continue
         if family == "pendulum" and k == "damping" and val < 0:
             raise FamilyError("params.damping must be >= 0")
-        if (family, k) in {("pendulum", "g_over_l"), ("projectile_drag", "g"), ("kepler", "mu"), ("logistic", "K"), ("harmonic", "omega")} and not val > 0:
+        if (
+            (family, k)
+            in {
+                ("pendulum", "g_over_l"),
+                ("projectile_drag", "g"),
+                ("kepler", "mu"),
+                ("logistic", "K"),
+                ("harmonic", "omega"),
+                ("lotka_volterra", "alpha"),
+                ("lotka_volterra", "beta"),
+                ("lotka_volterra", "delta"),
+                ("lotka_volterra", "gamma"),
+            }
+            and not val > 0
+        ):
             raise FamilyError(f"params.{k} must be > 0")
-        if (family, k) in {("projectile_drag", "k")} and val < 0:
-            raise FamilyError("params.k must be >= 0")
+        if (
+            (family, k)
+            in {
+                ("projectile_drag", "k"),
+                ("harmonic", "zeta"),
+                ("robertson", "k1"),
+                ("robertson", "k2"),
+                ("robertson", "k3"),
+                ("stiff_chain", "k"),
+                ("brusselator", "a"),
+                ("brusselator", "b"),
+                ("van_der_pol", "mu"),
+            }
+            and val < 0
+        ):
+            raise FamilyError(f"params.{k} must be >= 0")
         out[k] = val
     return out
 
@@ -344,6 +372,8 @@ def spring_mass_damper_spec(m: float, c: float, k: float, F: float, x0: float, v
 
 # ------------------------------------------------------------------ catalogue text for prompts and explanations
 def describe_family(name: str) -> str:
+    if name not in FAMILIES:
+        raise FamilyError(f"unknown family {name!r}")
     e = FAMILIES[name]
     params = ", ".join(f"{k} (default {d:g}: {m})" for k, (d, m) in e["params"].items())
     state = ", ".join(f"{s['name']} = {s['meaning']} [{s['unit']}]" for s in e["state"]) or "n cells, each an amount"
@@ -843,18 +873,26 @@ def compile_slot_spec(
 
     elif slot_family in ("decay_chain", "chain", "stiff"):
         if "rates" in slots and slots["rates"] is not None:
+            if not isinstance(slots["rates"], (list, tuple)) or not slots["rates"]:
+                raise FamilyError("rates must be a list of 1..10 numbers")
             rates = [_num(r, f"rates[{i}]", nonneg=True) for i, r in enumerate(slots["rates"])]
         elif "rates_per_min" in slots and slots["rates_per_min"] is not None:
+            if not isinstance(slots["rates_per_min"], (list, tuple)) or not slots["rates_per_min"]:
+                raise FamilyError("rates_per_min must be a list of 1..10 numbers")
             rpm = [_num(r, f"rates_per_min[{i}]", nonneg=True) for i, r in enumerate(slots["rates_per_min"])]
             rates = [r / 60.0 for r in rpm]
             conversions.append(f"rates_per_min={rpm} /min -> rates={rates} /s")
         elif "time_constants_s" in slots and slots["time_constants_s"] is not None:
+            if not isinstance(slots["time_constants_s"], (list, tuple)) or not slots["time_constants_s"]:
+                raise FamilyError("time_constants_s must be a list of 1..10 numbers")
             taus = [_num(t_c, f"time_constants_s[{i}]", positive=True) for i, t_c in enumerate(slots["time_constants_s"])]
             rates = [1.0 / t_c for t_c in taus]
             derived.append(f"rates = [1/tau for tau in {taus}] = {rates} /s")
         else:
             raise FamilyError("decay_chain slot requires rates, rates_per_min, or time_constants_s")
         if "y0" in slots and slots["y0"] is not None:
+            if not isinstance(slots["y0"], (list, tuple)):
+                raise FamilyError("y0 must be a list of numbers")
             y0_vec = [_num(v, f"y0[{i}]") for i, v in enumerate(slots["y0"])]
         else:
             a0 = _num(slots.get("a0", 1.0), "a0")

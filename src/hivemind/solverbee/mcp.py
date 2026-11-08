@@ -165,6 +165,8 @@ class SolverBeeMcp:
     """One MCP session. ``handle_line`` takes one raw message and returns the response object, or None for notifications."""
 
     def __init__(self, service: svc_mod.SolverBeeService, *, sandbox_mode: str, problems_dir: Optional[str]) -> None:
+        if sandbox_mode not in ("namespace", "none", "unavailable"):
+            raise ValueError("sandbox_mode must be 'namespace', 'none', or 'unavailable'")
         self.svc = service
         self.sandbox_mode = sandbox_mode  # "namespace" | "none" | "unavailable"; reported in every tool result
         self.problems_dir = problems_dir
@@ -180,6 +182,8 @@ class SolverBeeMcp:
 
     # ------------------------------------------------------------ JSON-RPC framing
     def handle_line(self, raw: bytes) -> Optional[Dict[str, Any]]:
+        if not isinstance(raw, (bytes, bytearray)):
+            raise TypeError("raw line must be bytes")
         if len(raw) > MAX_LINE_BYTES:
             return _rpc_error(None, E_INVALID_REQUEST, f"message larger than {MAX_LINE_BYTES} bytes")
         try:
@@ -386,6 +390,8 @@ def build_server(binary: str, *, problems_dir: Optional[str] = None, timeout_s: 
 
 def read_frame(stream: BinaryIO, limit: int = MAX_LINE_BYTES) -> Optional[bytes]:
     """The next line without its newline, or None at end of input. An oversize line is drained and returned truncated, so it is rejected."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+        raise ValueError("limit must be a positive integer")
     line = stream.readline(limit + 1)
     if line == b"":
         return None

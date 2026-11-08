@@ -1,0 +1,24 @@
+{
+  "deliverable_id": "PS-01-D4",
+  "check_id": "PROV-86",
+  "generated_at": "2026-11-08T01:36:00Z",
+  "base_provenance_checks_passed": 84,
+  "base_provenance_checks_total": 84,
+  "prov86_passed": true,
+  "total_provenance_checks_with_prov86": 85,
+  "locked_figures": {
+    "registered_window_range": "hmq_00216..hmq_00235",
+    "window_length_rounds": 20,
+    "median_change_nats": -0.01275,
+    "share_worse": 0.2667,
+    "e24_decision": "CAUSE_ATTRIBUTED",
+    "max_abs_noop_delta_nats": 0.0
+  },
+  "source_sha256": {
+    "chain_status_receipt": "bd68a18ddcbbe6470b54fbd0181196550fb35ef8b8391c3f8fc2233c076868eb",
+    "e24_report": "ae1211df08322d6e43cdff0bb5ea9e42bd598dc58a9486283bc6b7c684d338c1",
+    "review_response_doc": "423edded7ae56a77e6c2a710a6ed8baf00d6d042d02d27979dbd0a62a02ff77c"
+  },
+  "verdict": "PASS",
+  "receipt_sha256": "5804d69864ebc72932c5ef5563a065af5eae4849ef478867f46012c543c58805"
+}

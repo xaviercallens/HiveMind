@@ -18,6 +18,10 @@
         {
           "path": "artifacts/experiments/CHAIN_STATUS_2026-11-08.json",
           "sha256": "bd68a18ddcbbe6470b54fbd0181196550fb35ef8b8391c3f8fc2233c076868eb"
+        },
+        {
+          "path": "artifacts/experiments/PROV86_CHAIN_PROVENANCE_LOCK_2026-11-08.json",
+          "sha256": "5198377434c6cd6760ff7990fa3e589b2662da781b9a8b01accb5a22d539e6c0"
         }
       ]
     },
@@ -265,5 +269,5 @@
       "receipt_sha256": "3da06226eec42311ce1aba4e115b5fc6adc02d7516d0874642b7771c6d143885"
     }
   ],
-  "receipt_sha256": "2c1048fa5115a1e38caf66efae8d262455cfc2af3d9655780e4b8be3f8465822"
+  "receipt_sha256": "1c6997e1f5f07b0b282d62429b7be88eb047acb0f94dca099ac8d08e8f668556"
 }

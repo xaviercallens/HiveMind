@@ -355,8 +355,21 @@ class SwarmDataShardOrchestrator:
         preferred_division_id: Optional[str] = None,
     ) -> SwarmShardAssignment:
         """Assign a deterministic Hugging Face streaming shard & NF4 backbone to a Bee worker."""
-        if available_vram_mib <= 0.0:
-            raise ValueError("available_vram_mib must be strictly positive")
+        if not isinstance(bee_id, str) or not bee_id.strip() or any(ord(c) < 32 for c in bee_id):
+            raise ValueError("bee_id must be a non-empty printable string")
+        if not isinstance(backend, str) or not backend.strip() or any(ord(c) < 32 for c in backend):
+            raise ValueError("backend must be a non-empty printable string")
+        if (
+            isinstance(available_vram_mib, bool)
+            or not isinstance(available_vram_mib, (int, float))
+            or not math.isfinite(float(available_vram_mib))
+            or float(available_vram_mib) <= 0.0
+        ):
+            raise ValueError("available_vram_mib must be a finite positive number")
+        if isinstance(round_idx, bool) or not isinstance(round_idx, int) or round_idx < 0:
+            raise ValueError("round_idx must be a non-negative integer")
+        bee_id = bee_id.strip()
+        backend = backend.strip()
 
         digest = hashlib.sha256(f"{bee_id}:{round_idx}".encode("utf-8")).digest()
         ring_val = int.from_bytes(digest[:8], "big")
@@ -415,6 +428,13 @@ def build_massive_division_visual_shard(
     seed: int = 2026,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Generate a deterministic visual-token shard for one of the 7 massive Image-MoE divisions."""
+    if not isinstance(division_id, str) or division_id not in MASSIVE_IMAGE_MOE_DIVISIONS:
+        raise ValueError(f"Unknown division_id: {division_id!r}")
+    for name, val in (("num_samples", num_samples), ("num_patches", num_patches), ("patch_dim", patch_dim)):
+        if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+            raise ValueError(f"{name} must be a positive integer")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
     rng = np.random.default_rng(seed)
     div_meta = MASSIVE_IMAGE_MOE_DIVISIONS[division_id]
     d_idx = int(div_meta["division_index"])
@@ -451,6 +471,17 @@ class MassiveSwarmSparseImageMoE(nn.Module):
         load_balance_alpha: float = DEFAULT_LOAD_BALANCE_ALPHA,
     ) -> None:
         super().__init__()
+        if not isinstance(division_deltas, Mapping) or len(division_deltas) == 0:
+            raise ValueError("division_deltas must be a non-empty mapping")
+        if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+            raise ValueError("top_k must be a positive integer")
+        if (
+            isinstance(load_balance_alpha, bool)
+            or not isinstance(load_balance_alpha, (int, float))
+            or not math.isfinite(float(load_balance_alpha))
+            or float(load_balance_alpha) < 0.0
+        ):
+            raise ValueError("load_balance_alpha must be a finite non-negative number")
         self.backbone = backbone
         self.division_ids = list(division_deltas.keys())
         self.num_experts = len(self.division_ids)
@@ -527,6 +558,12 @@ def run_massive_swarm_image_moe_campaign(
     seed: int = 20261029,
 ) -> Dict[str, Any]:
     """Execute the massive 7-Division, 14-Dataset (42.87M pairs), 104-Bee Swarm Image-MoE campaign."""
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
+        raise ValueError("inner_steps must be a positive integer")
+    if isinstance(focal_gamma, bool) or not isinstance(focal_gamma, (int, float)) or not math.isfinite(float(focal_gamma)) or float(focal_gamma) < 0.0:
+        raise ValueError("focal_gamma must be a finite non-negative number")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
     orchestrator = SwarmDataShardOrchestrator()
     dht_registry = DHTDeltaRegistry()
     backbone = FrozenAstroVisionBackbone(

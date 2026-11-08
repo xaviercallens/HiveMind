@@ -86,7 +86,7 @@ def tokenize_documents(samples: Sequence[str], sequence_length: int = 128) -> di
     Context resets at each window. BOS is context only, EOS is scored, padding
     is never scored. There is no text-dependent fitting on the holdout.
     """
-    if not 2 <= sequence_length <= MODEL_CONFIG["max_position_embeddings"]:
+    if isinstance(sequence_length, bool) or not isinstance(sequence_length, int) or not 2 <= sequence_length <= MODEL_CONFIG["max_position_embeddings"]:
         raise ValueError("sequence_length must be between 2 and 128")
     windows = []
     for text in samples:
@@ -138,6 +138,8 @@ def evaluate_tokens(model: torch.nn.Module, batch: dict[str, torch.Tensor]) -> d
 
 def build_model(seed: int, base_bytes: bytes | None = None) -> tuple[torch.nn.Module, bytes]:
     """Pin the base via saved tensor bytes; no from_pretrained/network path exists."""
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
     with torch.random.fork_rng(devices=[]):
         torch.manual_seed(seed)
         config = Qwen2Config(**MODEL_CONFIG)
@@ -181,8 +183,18 @@ def import_adapter(model: torch.nn.Module, payload: bytes, expected_sha256: str)
 def run_token_training_evaluation(output_dir: Path, *, steps: int = 24, seed: int = 42,
                                   learning_rate: float = 0.01) -> dict[str, Any]:
     """Measure baseline/trained/imported on identical holdout; report regressions too."""
-    if steps < 0 or not math.isfinite(learning_rate) or learning_rate <= 0:
+    if (
+        isinstance(steps, bool)
+        or not isinstance(steps, int)
+        or steps < 0
+        or isinstance(learning_rate, bool)
+        or not isinstance(learning_rate, (int, float))
+        or not math.isfinite(learning_rate)
+        or learning_rate <= 0
+    ):
         raise ValueError("steps must be nonnegative and learning_rate finite and positive")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
     output_dir = Path(output_dir)
     if output_dir.exists() and any(output_dir.iterdir()):
         raise ValueError("output directory must be empty; use a new directory for each run")

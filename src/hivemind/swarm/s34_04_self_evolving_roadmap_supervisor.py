@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import secrets
 from dataclasses import asdict, dataclass
 from typing import Any, Sequence
@@ -72,6 +73,26 @@ class RoadmapPRVerificationEntry:
     openrouter_request_id: str
     entry_hash_sha256: str
 
+    def __post_init__(self) -> None:
+        if isinstance(self.order, bool) or not isinstance(self.order, int) or self.order < 1:
+            raise ValueError("order must be a positive integer")
+        for str_field in ("ticket_id", "title", "key_metric_name"):
+            val = getattr(self, str_field)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{str_field} must be a non-empty string")
+        if not isinstance(self.invariant_passed, bool):
+            raise ValueError("invariant_passed must be a boolean")
+        if (
+            isinstance(self.key_metric_value, bool)
+            or not isinstance(self.key_metric_value, (int, float))
+            or not math.isfinite(self.key_metric_value)
+        ):
+            raise ValueError("key_metric_value must be a finite number")
+        if not isinstance(self.openrouter_request_id, str):
+            raise ValueError("openrouter_request_id must be a string")
+        if not isinstance(self.entry_hash_sha256, str) or len(self.entry_hash_sha256) != 64:
+            raise ValueError("entry_hash_sha256 must be a 64-character hex string")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -84,6 +105,11 @@ class SelfEvolvingRoadmapSupervisor:
         *,
         openrouter_request_ids: Sequence[str] | None = None,
     ) -> dict[str, Any]:
+        if openrouter_request_ids is not None and (
+            not isinstance(openrouter_request_ids, (list, tuple))
+            or any(not isinstance(r, str) for r in openrouter_request_ids)
+        ):
+            raise ValueError("openrouter_request_ids must be None or a sequence of strings")
         provided_ids = [
             str(r).strip()
             for r in (openrouter_request_ids or ())

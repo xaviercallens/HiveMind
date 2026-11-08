@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import asdict, dataclass
 from typing import Any, Sequence
 
@@ -41,9 +42,19 @@ class GamePreemptionEF21CircuitBreaker:
     """Sub-1.5s GPU eviction circuit-breaker with exact EF21 error-feedback preservation in Host RAM."""
 
     def __init__(self, *, pcie_dma_bandwidth_gbps: float = 12.8, top_k_ratio: float = 0.25) -> None:
-        if pcie_dma_bandwidth_gbps <= 0.0:
+        if (
+            isinstance(pcie_dma_bandwidth_gbps, bool)
+            or not isinstance(pcie_dma_bandwidth_gbps, (int, float))
+            or not math.isfinite(pcie_dma_bandwidth_gbps)
+            or pcie_dma_bandwidth_gbps <= 0.0
+        ):
             raise ValueError("pcie_dma_bandwidth_gbps must be > 0")
-        if not (0.0 < top_k_ratio <= 1.0):
+        if (
+            isinstance(top_k_ratio, bool)
+            or not isinstance(top_k_ratio, (int, float))
+            or not math.isfinite(top_k_ratio)
+            or not (0.0 < top_k_ratio <= 1.0)
+        ):
             raise ValueError("top_k_ratio must be in (0, 1]")
         self.pcie_dma_bandwidth_gbps = float(pcie_dma_bandwidth_gbps)
         self.top_k_ratio = float(top_k_ratio)
@@ -54,8 +65,16 @@ class GamePreemptionEF21CircuitBreaker:
         prev_error_buffer: Sequence[float],
     ) -> tuple[tuple[float, ...], tuple[float, ...], float]:
         """Apply Top-K sparsification with EF21 error feedback: ``u = g + e_prev``, ``c = TopK(u)``, ``e_next = u - c``."""
-        if len(gradient) != len(prev_error_buffer) or not gradient:
+        if (
+            not isinstance(gradient, (list, tuple))
+            or not isinstance(prev_error_buffer, (list, tuple))
+            or len(gradient) != len(prev_error_buffer)
+            or not gradient
+        ):
             raise ValueError("gradient and prev_error_buffer must have identical non-zero length")
+        for seq_name, seq in (("gradient", gradient), ("prev_error_buffer", prev_error_buffer)):
+            if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in seq):
+                raise ValueError(f"{seq_name} must contain only finite numbers")
         n = len(gradient)
         k = max(1, int(round(n * self.top_k_ratio)))
         combined = [float(g) + float(e) for g, e in zip(gradient, prev_error_buffer)]
@@ -80,8 +99,24 @@ class GamePreemptionEF21CircuitBreaker:
         cuda_device_available: bool | None = None,
     ) -> GamePreemptionFlushReceipt:
         """Evict all GPU tensors to Host RAM under 1.5s and preserve EF21 state."""
-        if allocated_vram_mib < 0 or allocated_vram_mib > 8192:
+        if not isinstance(trigger_process, str) or not trigger_process.strip():
+            raise ValueError("trigger_process must be a non-empty string")
+        if (
+            isinstance(allocated_vram_mib, bool)
+            or not isinstance(allocated_vram_mib, int)
+            or allocated_vram_mib < 0
+            or allocated_vram_mib > 8192
+        ):
             raise ValueError("allocated_vram_mib must be within [0, 8192] MiB")
+        if (
+            isinstance(kernel_drain_ms, bool)
+            or not isinstance(kernel_drain_ms, (int, float))
+            or not math.isfinite(kernel_drain_ms)
+            or kernel_drain_ms < 0.0
+        ):
+            raise ValueError("kernel_drain_ms must be a non-negative finite number")
+        if cuda_device_available is not None and not isinstance(cuda_device_available, bool):
+            raise ValueError("cuda_device_available must be None or a boolean")
 
         if cuda_device_available is None:
             try:

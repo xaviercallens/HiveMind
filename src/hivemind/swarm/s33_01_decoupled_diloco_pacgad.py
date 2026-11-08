@@ -27,6 +27,18 @@ class WorkerPseudoGradient:
     inner_steps: int
     pseudo_gradient: tuple[float, ...]
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.worker_id, str) or not self.worker_id.strip():
+            raise ValueError("worker_id must be a non-empty string")
+        if isinstance(self.staleness_steps, bool) or not isinstance(self.staleness_steps, int):
+            raise ValueError("staleness_steps must be an integer")
+        if isinstance(self.inner_steps, bool) or not isinstance(self.inner_steps, int) or self.inner_steps < 1:
+            raise ValueError("inner_steps must be a positive integer")
+        if not isinstance(self.pseudo_gradient, (tuple, list)) or len(self.pseudo_gradient) == 0:
+            raise ValueError("pseudo_gradient must be a non-empty sequence of numbers")
+        if any(isinstance(x, bool) or not isinstance(x, (int, float)) for x in self.pseudo_gradient):
+            raise ValueError("pseudo_gradient elements must be numbers")
+
 
 @dataclass(frozen=True)
 class DecoupledDiLoCoStepResult:
@@ -58,17 +70,29 @@ class StragglerFreeDecoupledDiLoCoAggregator:
         outer_lr: float = 0.7,
         max_staleness_steps: int = 16,
     ) -> None:
-        if staleness_alpha < 0.0:
-            raise ValueError("staleness_alpha must be >= 0")
-        if outer_lr <= 0.0:
-            raise ValueError("outer_lr must be > 0")
-        if max_staleness_steps < 0:
-            raise ValueError("max_staleness_steps must be >= 0")
+        if (
+            isinstance(staleness_alpha, bool)
+            or not isinstance(staleness_alpha, (int, float))
+            or not math.isfinite(staleness_alpha)
+            or staleness_alpha < 0.0
+        ):
+            raise ValueError("staleness_alpha must be >= 0 and finite")
+        if (
+            isinstance(outer_lr, bool)
+            or not isinstance(outer_lr, (int, float))
+            or not math.isfinite(outer_lr)
+            or outer_lr <= 0.0
+        ):
+            raise ValueError("outer_lr must be > 0 and finite")
+        if isinstance(max_staleness_steps, bool) or not isinstance(max_staleness_steps, int) or max_staleness_steps < 0:
+            raise ValueError("max_staleness_steps must be an integer >= 0")
         self.staleness_alpha = float(staleness_alpha)
         self.outer_lr = float(outer_lr)
         self.max_staleness_steps = int(max_staleness_steps)
 
     def staleness_weight(self, staleness_steps: int) -> float:
+        if isinstance(staleness_steps, bool) or not isinstance(staleness_steps, int):
+            raise ValueError("staleness_steps must be an integer")
         if staleness_steps < 0 or staleness_steps > self.max_staleness_steps:
             return 0.0
         return (1.0 + float(staleness_steps)) ** (-self.staleness_alpha)
@@ -79,9 +103,11 @@ class StragglerFreeDecoupledDiLoCoAggregator:
         contributions: Sequence[WorkerPseudoGradient],
     ) -> DecoupledDiLoCoStepResult:
         """Aggregate delayed worker pseudo-gradients via PA-CGAD radial-directional decoupling."""
-        dim = len(current_params)
-        if dim == 0:
+        if not isinstance(current_params, (list, tuple)) or len(current_params) == 0:
             raise ValueError("current_params must be non-empty")
+        if any(isinstance(p, bool) or not isinstance(p, (int, float)) or not math.isfinite(p) for p in current_params):
+            raise ValueError("current_params must contain only finite numbers")
+        dim = len(current_params)
         valid = [
             c
             for c in contributions

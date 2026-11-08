@@ -39,6 +39,14 @@ class FallbackLocalOpenAIAgentConfig:
     base_url: str
     is_lightweight: bool = False
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.model, str) or not self.model.strip():
+            raise ValueError("model must be a non-empty string")
+        if not isinstance(self.base_url, str) or not self.base_url.strip():
+            raise ValueError("base_url must be a non-empty string")
+        if not isinstance(self.is_lightweight, bool):
+            raise ValueError("is_lightweight must be a boolean")
+
     def lightweight(self) -> FallbackLocalOpenAIAgentConfig:
         self.is_lightweight = True
         return self
@@ -81,6 +89,14 @@ class Kepler442bOrbitalState:
     vy_au_yr: float
     t_yr: float = 0.0
 
+    def __post_init__(self) -> None:
+        for field_name in ("x_au", "y_au", "vx_au_yr", "vy_au_yr", "t_yr"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(val):
+                raise ValueError(f"{field_name} must be a finite number")
+        if math.hypot(self.x_au, self.y_au) <= 0.0:
+            raise ValueError("orbital radius must be positive")
+
     @property
     def radius_au(self) -> float:
         return math.hypot(self.x_au, self.y_au)
@@ -121,12 +137,27 @@ class SymplecticVelocityVerletIntegrator:
         semi_major_axis_au: float = KEPLER_442B_SEMI_MAJOR_AXIS_AU,
         eccentricity: float = KEPLER_442B_ECCENTRICITY,
     ) -> None:
-        if star_mass_solar <= 0.0:
-            raise ValueError("star_mass_solar must be positive")
-        if semi_major_axis_au <= 0.0:
-            raise ValueError("semi_major_axis_au must be positive")
-        if not (0.0 <= eccentricity < 1.0):
-            raise ValueError("eccentricity must be in [0, 1)")
+        if (
+            isinstance(star_mass_solar, bool)
+            or not isinstance(star_mass_solar, (int, float))
+            or not math.isfinite(star_mass_solar)
+            or star_mass_solar <= 0.0
+        ):
+            raise ValueError("star_mass_solar must be a positive finite number")
+        if (
+            isinstance(semi_major_axis_au, bool)
+            or not isinstance(semi_major_axis_au, (int, float))
+            or not math.isfinite(semi_major_axis_au)
+            or semi_major_axis_au <= 0.0
+        ):
+            raise ValueError("semi_major_axis_au must be a positive finite number")
+        if (
+            isinstance(eccentricity, bool)
+            or not isinstance(eccentricity, (int, float))
+            or not math.isfinite(eccentricity)
+            or not (0.0 <= eccentricity < 1.0)
+        ):
+            raise ValueError("eccentricity must be a finite number in [0, 1)")
         self.star_mass_solar = float(star_mass_solar)
         self.semi_major_axis_au = float(semi_major_axis_au)
         self.eccentricity = float(eccentricity)
@@ -157,6 +188,10 @@ class SymplecticVelocityVerletIntegrator:
 
     def step_velocity_verlet(self, state: Kepler442bOrbitalState, dt_yr: float) -> Kepler442bOrbitalState:
         """Execute one symplectic Kick-Drift-Kick Velocity-Verlet orbital step."""
+        if not isinstance(state, Kepler442bOrbitalState):
+            raise ValueError("state must be a Kepler442bOrbitalState")
+        if isinstance(dt_yr, bool) or not isinstance(dt_yr, (int, float)) or not math.isfinite(dt_yr) or dt_yr <= 0.0:
+            raise ValueError("dt_yr must be a positive finite number")
         ax0, ay0 = self.acceleration(state.x_au, state.y_au)
         half_dt = 0.5 * dt_yr
         vx_half = state.vx_au_yr + half_dt * ax0
@@ -178,6 +213,10 @@ class SymplecticVelocityVerletIntegrator:
 
     def step_forward_euler(self, state: Kepler442bOrbitalState, dt_yr: float) -> Kepler442bOrbitalState:
         """Non-symplectic 1st-order Forward Euler step used as baseline comparison."""
+        if not isinstance(state, Kepler442bOrbitalState):
+            raise ValueError("state must be a Kepler442bOrbitalState")
+        if isinstance(dt_yr, bool) or not isinstance(dt_yr, (int, float)) or not math.isfinite(dt_yr) or dt_yr <= 0.0:
+            raise ValueError("dt_yr must be a positive finite number")
         ax0, ay0 = self.acceleration(state.x_au, state.y_au)
         return Kepler442bOrbitalState(
             x_au=state.x_au + dt_yr * state.vx_au_yr,
@@ -193,7 +232,15 @@ class SymplecticVelocityVerletIntegrator:
         dt_yr: float = 0.00015,
     ) -> SymplecticBenchmarkReport:
         """Integrate KEPLER-HM-442b and verify symplectic energy & angular momentum invariants."""
-        if steps < 10 or dt_yr <= 0.0:
+        if (
+            isinstance(steps, bool)
+            or not isinstance(steps, int)
+            or steps < 10
+            or isinstance(dt_yr, bool)
+            or not isinstance(dt_yr, (int, float))
+            or not math.isfinite(dt_yr)
+            or dt_yr <= 0.0
+        ):
             raise ValueError("steps must be >= 10 and dt_yr > 0")
         s_verlet = self.periapsis_initial_state()
         s_euler = s_verlet
@@ -251,6 +298,12 @@ class AntigravityHiveMindCoPilot:
         model: str = DEFAULT_BEE_STARS_MODEL,
     ) -> None:
         # The key is the caller's: an explicit argument or the HIVEMIND_API_KEY variable. There is no built-in key.
+        if api_key is not None and not isinstance(api_key, str):
+            raise ValueError("api_key must be None or a string")
+        if not isinstance(base_url, str) or not base_url.strip():
+            raise ValueError("base_url must be a non-empty string")
+        if not isinstance(model, str) or not model.strip():
+            raise ValueError("model must be a non-empty string")
         api_key = (api_key or os.environ.get(HIVEMIND_API_KEY_ENV, "")).strip()
         if not api_key:
             raise ValueError(f"api_key is required: pass api_key= or set {HIVEMIND_API_KEY_ENV}; no key is built in")

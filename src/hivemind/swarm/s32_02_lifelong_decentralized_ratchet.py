@@ -32,6 +32,16 @@ class AnchorEvalSample:
     candidate_nll: float
     weight: float = 1.0
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.sample_id, str) or not self.sample_id.strip():
+            raise ValueError("sample_id must be a non-empty string")
+        if not isinstance(self.domain, str) or not self.domain.strip():
+            raise ValueError("domain must be a non-empty string")
+        for field_name in ("baseline_nll", "candidate_nll", "weight"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)):
+                raise ValueError(f"{field_name} must be a number")
+
 
 @dataclass(frozen=True)
 class DailyCorpusIngestionBatch:
@@ -42,6 +52,18 @@ class DailyCorpusIngestionBatch:
     document_count: int
     baseline_domain_nll: float
     candidate_domain_nll: float
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.batch_id, str) or not self.batch_id.strip():
+            raise ValueError("batch_id must be a non-empty string")
+        if not isinstance(self.source, str) or not self.source.strip():
+            raise ValueError("source must be a non-empty string")
+        if isinstance(self.document_count, bool) or not isinstance(self.document_count, int) or self.document_count < 1:
+            raise ValueError("document_count must be a positive integer")
+        for field_name in ("baseline_domain_nll", "candidate_domain_nll"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)):
+                raise ValueError(f"{field_name} must be a number")
 
 
 @dataclass(frozen=True)
@@ -72,9 +94,19 @@ class LifelongDecentralizedRatchet:
         max_anchor_drift_ratio: float = MAX_ANCHOR_PERPLEXITY_DRIFT_RATIO,
         ewc_lambda: float = 0.15,
     ) -> None:
-        if max_anchor_drift_ratio < 0.0 or not math.isfinite(max_anchor_drift_ratio):
+        if (
+            isinstance(max_anchor_drift_ratio, bool)
+            or not isinstance(max_anchor_drift_ratio, (int, float))
+            or max_anchor_drift_ratio < 0.0
+            or not math.isfinite(max_anchor_drift_ratio)
+        ):
             raise ValueError("max_anchor_drift_ratio must be finite and non-negative")
-        if ewc_lambda < 0.0 or not math.isfinite(ewc_lambda):
+        if (
+            isinstance(ewc_lambda, bool)
+            or not isinstance(ewc_lambda, (int, float))
+            or ewc_lambda < 0.0
+            or not math.isfinite(ewc_lambda)
+        ):
             raise ValueError("ewc_lambda must be finite and non-negative")
         self.max_anchor_drift_ratio = float(max_anchor_drift_ratio)
         self.ewc_lambda = float(ewc_lambda)
@@ -127,6 +159,10 @@ class LifelongDecentralizedRatchet:
         supplied; when all three are absent it is ``None`` and the domain delta is the raw NLL change. No parameter
         vector is invented. Supplying only some of them raises ``ValueError``.
         """
+        if not isinstance(checkpoint_id, str) or not checkpoint_id.strip():
+            raise ValueError("checkpoint_id must be a non-empty string")
+        if not isinstance(daily_batch, DailyCorpusIngestionBatch):
+            raise ValueError("daily_batch must be a DailyCorpusIngestionBatch")
         for name, value in (
             ("candidate_domain_nll", daily_batch.candidate_domain_nll),
             ("baseline_domain_nll", daily_batch.baseline_domain_nll),

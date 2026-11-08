@@ -28,6 +28,12 @@ class EcoComputeTelemetrySample:
     duration_seconds: float
     tokens_generated: int
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.node_id, str) or not self.node_id.strip():
+            raise ValueError("node_id must be a non-empty string")
+        if isinstance(self.tokens_generated, bool) or not isinstance(self.tokens_generated, int):
+            raise ValueError("tokens_generated must be an integer")
+
 
 @dataclass(frozen=True)
 class EcoComputeValorizationReceipt:
@@ -55,9 +61,12 @@ class EcoThermalCarbonLedger:
     SAFE_TEMP_CEILING_C = 76.0
 
     def evaluate_sample(self, sample: EcoComputeTelemetrySample) -> EcoComputeValorizationReceipt:
+        if not isinstance(sample, EcoComputeTelemetrySample):
+            raise ValueError("sample must be an EcoComputeTelemetrySample")
         # `x <= 0.0` is False for NaN, so the old guard let NaN telemetry through to a "safe" receipt: check finiteness first.
         for name in ("gpu_power_watts", "gpu_temp_celsius", "outdoor_temp_celsius", "grid_carbon_intensity_g_per_kwh", "duration_seconds"):
-            if not math.isfinite(getattr(sample, name)):
+            val = getattr(sample, name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(val):
                 raise ValueError(f"{name} must be finite")
         if sample.grid_carbon_intensity_g_per_kwh < 0.0:
             raise ValueError("grid_carbon_intensity_g_per_kwh must not be negative")

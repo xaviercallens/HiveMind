@@ -22,12 +22,12 @@ from hivemind.router.google_auth import CLIENT_ID_RE
 
 # Origins Google documents for the Identity Services button (script, frame, connect, style).
 GSI = "https://accounts.google.com/gsi/"
-_NONCE_RE = re.compile(r"^[A-Za-z0-9+/=_-]{8,128}$")
+_NONCE_RE = re.compile(r"^[A-Za-z0-9+/=_-]{1,128}$")
 
 
 def content_security_policy(nonce: str) -> str:
     if not isinstance(nonce, str) or not _NONCE_RE.fullmatch(nonce):
-        raise ValueError("nonce must be an 8-128 char URL/base64-safe token")
+        raise ValueError("nonce must be a 1-128 char URL/base64-safe token")
     return "; ".join([
         "default-src 'none'",
         f"script-src 'nonce-{nonce}' {GSI}client",

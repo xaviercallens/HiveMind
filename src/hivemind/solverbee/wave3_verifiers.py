@@ -93,6 +93,14 @@ def verify_quantum_fluid_relaxation(
     }
     if not all(_is_finite_num(v) for v in (energy_init, energy_final, max_free_force, v_prime_scale, kappa)):
         return _cert(spec_id, "science_quantum_fluid", [], ["non-finite quantum fluid parameters"], payload, unverified=True)
+    if not _is_finite_num(force_rel_tol) or float(force_rel_tol) <= 0.0 or float(force_rel_tol) > 1e-2:
+        return _cert(
+            spec_id,
+            "science_quantum_fluid",
+            [{"name": "tolerance_bounds", "status": "fail"}],
+            ["force_rel_tol must be a finite number in (0, 1e-2]"],
+            payload,
+        )
     if reported_defect_charge_sum is not None and (
         isinstance(reported_defect_charge_sum, bool) or not isinstance(reported_defect_charge_sum, int)
     ):
@@ -167,14 +175,30 @@ def verify_astrophysics_transit_and_orbit(
     if not all(_is_finite_num(v) for v in (r_planet_earth, r_star_sun, reported_depth_ppm)):
         return _cert(spec_id, "science_astrophysics", [], ["non-finite transit parameters"], payload, unverified=True)
     if (
+        not _is_finite_num(depth_rel_tol)
+        or not _is_finite_num(conservation_rel_tol)
+        or float(depth_rel_tol) <= 0.0
+        or float(depth_rel_tol) > 0.5
+        or float(conservation_rel_tol) <= 0.0
+        or float(conservation_rel_tol) > 1e-2
+    ):
+        return _cert(
+            spec_id,
+            "science_astrophysics",
+            [{"name": "tolerance_bounds", "status": "fail"}],
+            ["depth_rel_tol must be in (0, 0.5] and conservation_rel_tol in (0, 1e-2]"],
+            payload,
+        )
+    if (
         not isinstance(energy_series, (list, tuple))
         or not isinstance(ang_mom_series, (list, tuple))
         or len(energy_series) < 2
         or len(ang_mom_series) < 2
+        or len(energy_series) != len(ang_mom_series)
         or not all(_is_finite_num(v) for v in energy_series)
         or not all(_is_finite_num(v) for v in ang_mom_series)
     ):
-        return _cert(spec_id, "science_astrophysics", [], ["energy_series and ang_mom_series require >= 2 finite numbers"], payload, unverified=True)
+        return _cert(spec_id, "science_astrophysics", [], ["energy_series and ang_mom_series require >= 2 finite numbers of matching length"], payload, unverified=True)
 
     rp, rs, depth = float(r_planet_earth), float(r_star_sun), float(reported_depth_ppm)
     if rp <= 0.0 or rs <= 0.0 or depth <= 0.0:
@@ -250,6 +274,14 @@ def verify_genetic_elenchus_thermodynamics(
         or not all(_is_finite_num(x) for x in dicodon_vec_8d)
     ):
         return _cert(spec_id, "science_genetics", [], ["malformed genetic thermodynamic inputs"], payload, unverified=True)
+    if not _is_finite_num(prob_tol) or float(prob_tol) < 0.0 or float(prob_tol) > 1e-2:
+        return _cert(
+            spec_id,
+            "science_genetics",
+            [{"name": "tolerance_bounds", "status": "fail"}],
+            ["prob_tol must be a finite number in [0, 1e-2]"],
+            payload,
+        )
 
     checks: List[Dict[str, Any]] = []
     reasons: List[str] = []
@@ -341,6 +373,9 @@ def verify_topology_tda_and_lattice(
         or any(isinstance(b, bool) or not isinstance(b, int) for b in betti_numbers)
         or isinstance(reported_euler_char, bool)
         or not isinstance(reported_euler_char, int)
+        or isinstance(spatial_dim, bool)
+        or not isinstance(spatial_dim, int)
+        or spatial_dim < 1
         or not isinstance(point, (list, tuple))
         or len(point) == 0
         or not all(_is_finite_num(v) for v in point)

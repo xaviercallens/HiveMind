@@ -49,8 +49,15 @@ class DanceRecord:
     signature_hex: str = ""
 
     def __post_init__(self) -> None:
-        if not self.expert_id or not self.cluster_id or not self.signer_id:
-            raise ValueError("expert_id, cluster_id and signer_id must be non-empty")
+        if (
+            not str(self.expert_id).strip()
+            or not str(self.served_by).strip()
+            or not str(self.cluster_id).strip()
+            or not str(self.signer_id).strip()
+        ):
+            raise ValueError("expert_id, served_by, cluster_id and signer_id must be non-empty")
+        if isinstance(self.n, bool) or isinstance(self.successes, bool) or isinstance(self.epoch, bool):
+            raise ValueError("n, successes and epoch must be integers, not bool")
         if self.n < 0 or self.successes < 0 or self.successes > self.n:
             raise ValueError(f"need 0 <= successes <= n, got successes={self.successes} n={self.n}")
         if not math.isfinite(self.cost_per_1k) or self.cost_per_1k < 0.0:
@@ -96,8 +103,10 @@ class DanceRecord:
 
 def wilson_interval(successes: int, n: int, z: float = Z95) -> tuple[float, float]:
     """Wilson's score interval; (0.0, 1.0) when there are no trials."""
-    if n < 0 or successes < 0 or successes > n:
+    if isinstance(n, bool) or isinstance(successes, bool) or n < 0 or successes < 0 or successes > n:
         raise ValueError("need 0 <= successes <= n")
+    if not math.isfinite(float(z)) or float(z) <= 0.0:
+        raise ValueError("z must be a strictly positive finite float")
     if n == 0:
         return 0.0, 1.0
     p = successes / n
@@ -154,7 +163,9 @@ _DEFAULT_SCOUT_ROTATION_DOMAIN = "hivemind-scout-rotation-v1"
 
 def derive_signer_secret(master_secret: bytes, signer_id: str) -> bytes:
     """Derive a per-signer HMAC key from `master_secret` so distinct signers cannot forge for third parties (IP-82)."""
-    if not signer_id:
+    if not master_secret:
+        raise ValueError("master_secret must be non-empty")
+    if not str(signer_id).strip():
         raise ValueError("signer_id must be non-empty")
     return hmac.new(master_secret, f"hivemind-dance-signer-v1:{signer_id}".encode("utf-8"), hashlib.sha256).digest()
 

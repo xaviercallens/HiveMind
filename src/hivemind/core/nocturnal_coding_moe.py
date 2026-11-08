@@ -54,9 +54,17 @@ def multi_krum_select(
     num_select: int,
 ) -> list[int]:
     """Byzantine-resilient Multi-Krum selection over flat delta vectors."""
+    if not vectors:
+        raise ValueError("vectors must be non-empty")
     n = len(vectors)
+    if isinstance(num_byzantine, bool) or not isinstance(num_byzantine, int) or num_byzantine < 0:
+        raise ValueError("num_byzantine must be a non-negative integer")
+    if isinstance(num_select, bool) or not isinstance(num_select, int) or num_select < 1 or num_select > n:
+        raise ValueError(f"num_select must be an integer in [1, {n}]")
     k_neighbors = max(1, n - num_byzantine - 2)
     mat = np.stack(vectors, axis=0).astype(np.float64)
+    if not np.all(np.isfinite(mat)):
+        raise ValueError("vectors must contain finite values")
     scores: list[tuple[float, int]] = []
     for i in range(n):
         dists = np.sum((mat - mat[i]) ** 2, axis=1)
@@ -623,6 +631,8 @@ def decompose_engineering_epic_to_dag(
     target_languages: tuple[str, ...] = SUPPORTED_CODING_LANGUAGES,
 ) -> list[CodingSubtaskNode]:
     """Deterministically split a polyglot software engineering epic across the 8 MoE specialist roles."""
+    if not isinstance(epic_title, str) or not epic_title.strip() or any(ord(c) < 32 for c in epic_title):
+        raise ValueError("epic_title must be a non-empty printable string")
     langs = list(target_languages) if target_languages else list(SUPPORTED_CODING_LANGUAGES)
     lang_arch = "Rust" if "Rust" in langs else langs[0]
     lang_orch = "Python" if "Python" in langs else langs[0]
@@ -717,6 +727,18 @@ class PolyglotCodingBeeAdapter(nn.Module):
         seed: int = 42,
     ) -> None:
         super().__init__()
+        for field_name, val in (
+            ("d_model", d_model),
+            ("d_ff", d_ff),
+            ("num_classes", num_classes),
+            ("lora_rank", lora_rank),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+        if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+            raise ValueError("seed must be a non-negative integer")
+        if isinstance(lora_alpha, bool) or not isinstance(lora_alpha, (int, float)) or not math.isfinite(float(lora_alpha)) or lora_alpha <= 0:
+            raise ValueError("lora_alpha must be a positive finite number")
         gen = torch.Generator().manual_seed(seed)
         self.d_model = d_model
         self.d_ff = d_ff
@@ -997,8 +1019,15 @@ def run_nocturnal_coding_moe_campaign(
     output_json_path: str | Path | None = None,
 ) -> NocturnalCodingMoEReport:
     """Execute the Distributed Big-GPU 3-Loop Nocturnal Polyglot Coding MoE Training Campaign."""
-    if num_quality_loops < 1:
-        raise ValueError("num_quality_loops must be >= 1")
+    for field_name, val in (
+        ("inner_steps", inner_steps),
+        ("lora_rank", lora_rank),
+        ("num_quality_loops", num_quality_loops),
+    ):
+        if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+            raise ValueError(f"{field_name} must be >= 1")
+    if isinstance(lora_alpha, bool) or not isinstance(lora_alpha, (int, float)) or not math.isfinite(float(lora_alpha)) or lora_alpha <= 0:
+        raise ValueError("lora_alpha must be a positive finite number")
 
     torch.manual_seed(20261030)
     np.random.seed(20261030)

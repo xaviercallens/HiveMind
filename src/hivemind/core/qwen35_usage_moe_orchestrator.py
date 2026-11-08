@@ -255,6 +255,24 @@ class ProducerNodeCapability:
     is_european_night: bool
     active_inference_requests: int = 0
 
+    def __post_init__(self) -> None:
+        for field_name, val in (("node_id", self.node_id), ("gpu_model", self.gpu_model)):
+            if not isinstance(val, str) or not val.strip() or any(ord(c) < 32 for c in val):
+                raise ValueError(f"{field_name} must be a non-empty printable string")
+        if isinstance(self.vram_mib, bool) or not isinstance(self.vram_mib, int) or self.vram_mib < 0:
+            raise ValueError("vram_mib must be a non-negative integer")
+        for field_name, val in (("fp16_tflops", self.fp16_tflops), ("idle_seconds", self.idle_seconds)):
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or val < 0:
+                raise ValueError(f"{field_name} must be a non-negative finite number")
+        if not isinstance(self.is_european_night, bool):
+            raise ValueError("is_european_night must be a boolean")
+        if (
+            isinstance(self.active_inference_requests, bool)
+            or not isinstance(self.active_inference_requests, int)
+            or self.active_inference_requests < 0
+        ):
+            raise ValueError("active_inference_requests must be a non-negative integer")
+
     @property
     def hardware_tier(self) -> str:
         if self.vram_mib >= QWEN35_HARDWARE_TIERS["xl_16gb_plus"]["min_vram_mib"]:
@@ -307,11 +325,21 @@ class UsageDrivenQwen35MoEOrchestrator:
         energy_failure_rate_by_bee: Mapping[str, float] | None = None,
     ) -> None:
         # Default to live v3.9.0 OpenRouter telemetry (873 coding, 551 science, 3 multilingual/general)
-        self.observed_completions = dict(
+        raw_obs = dict(
             observed_completions_by_cluster
-            or {"coding": 873, "science": 551, "multilingual_byob": 3}
+            if observed_completions_by_cluster is not None
+            else {"coding": 873, "science": 551, "multilingual_byob": 3}
         )
-        self.energy_failure_rate_by_bee = dict(energy_failure_rate_by_bee or {})
+        for k, v in raw_obs.items():
+            if isinstance(v, bool) or not isinstance(v, int) or v < 0:
+                raise ValueError(f"observed_completions_by_cluster[{k!r}] must be a non-negative integer")
+        self.observed_completions = raw_obs
+
+        raw_fail = dict(energy_failure_rate_by_bee or {})
+        for k, v in raw_fail.items():
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) or v < 0.0 or v > 1.0:
+                raise ValueError(f"energy_failure_rate_by_bee[{k!r}] must be a finite number in [0.0, 1.0]")
+        self.energy_failure_rate_by_bee = raw_fail
 
     def compute_cluster_target_shares(self) -> dict[str, float]:
         """Blend live OpenRouter usage (70% weight) with a 10% strategic multilingual/BYOB floor."""
@@ -357,6 +385,8 @@ class UsageDrivenQwen35MoEOrchestrator:
         round_index: int = 1,
     ) -> list[ScheduledMoEWorkunit]:
         """Assign usage-prioritized Qwen 3.5 QLoRA workunits to eligible idle and nocturnal producers."""
+        if isinstance(round_index, bool) or not isinstance(round_index, int) or round_index < 1:
+            raise ValueError("round_index must be an integer >= 1")
         scores = self.compute_bee_priority_scores()
         tier_rank = {"std_8gb": 1, "big_12gb": 2, "xl_16gb_plus": 3}
         ordered_bees = sorted(
@@ -433,8 +463,10 @@ def project_lora_rank_svd(
         raise ValueError("lora_a and lora_b must be 2D matrices")
     if lora_b.shape[1] != lora_a.shape[0]:
         raise ValueError(f"Inner rank mismatch: lora_b {lora_b.shape} vs lora_a {lora_a.shape}")
-    if target_rank <= 0 or target_rank > lora_a.shape[0]:
+    if isinstance(target_rank, bool) or not isinstance(target_rank, int) or target_rank <= 0 or target_rank > lora_a.shape[0]:
         raise ValueError(f"target_rank {target_rank} must be in [1, {lora_a.shape[0]}]")
+    if not torch.isfinite(lora_a).all() or not torch.isfinite(lora_b).all():
+        raise ValueError("lora_a and lora_b must contain finite values")
 
     delta_w = (lora_b.to(torch.float32)) @ (lora_a.to(torch.float32))
     u, s, vh = torch.linalg.svd(delta_w, full_matrices=False)

@@ -361,13 +361,16 @@ class TrainRecipe:
     load_aux_towers: bool = True  # vision + MTP weights loaded at 16-bit (conservative: a text-only loader may drop them)
 
     def __post_init__(self) -> None:
-        if self.seq_len < 1 or self.micro_batch < 1 or self.lora_rank < 1:
-            raise ValueError("seq_len, micro_batch and lora_rank must be >= 1")
+        for name, val in (("seq_len", self.seq_len), ("micro_batch", self.micro_batch), ("lora_rank", self.lora_rank)):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError("seq_len, micro_batch and lora_rank must be >= 1")
+        if not isinstance(self.gradient_checkpointing, bool) or not isinstance(self.load_aux_towers, bool):
+            raise ValueError("gradient_checkpointing and load_aux_towers must be bool")
         if self.targets not in ("all_linear", "mlp"):
             raise ValueError("targets must be 'all_linear' or 'mlp'")
         if self.optimizer not in OPTIMIZER_BYTES:
             raise ValueError(f"optimizer must be one of {sorted(OPTIMIZER_BYTES)}")
-        if self.act_scale <= 0:
+        if isinstance(self.act_scale, bool) or not isinstance(self.act_scale, (int, float)) or not math.isfinite(float(self.act_scale)) or self.act_scale <= 0:
             raise ValueError("act_scale must be > 0")
 
     @property
@@ -384,8 +387,9 @@ class ServeConfig:
 
     def __post_init__(self) -> None:
         gguf_bytes_per_weight(self.quant)
-        if self.context_len < 1 or self.n_parallel < 1:
-            raise ValueError("context_len and n_parallel must be >= 1")
+        for val in (self.context_len, self.n_parallel):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError("context_len and n_parallel must be >= 1")
 
     @property
     def label(self) -> str:
@@ -459,6 +463,9 @@ class FitVerdict:
 
 def fit_verdict(estimate_mib: float, budget_mib: float, margin: float = DEFAULT_MARGIN) -> FitVerdict:
     """FITS when estimate x (1 + margin) <= budget; MARGINAL when only the bare estimate fits; else DOES_NOT_FIT."""
+    for val in (estimate_mib, budget_mib, margin):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+            raise ValueError("margin >= 0, budget > 0 and estimate >= 0 are required")
     if margin < 0 or budget_mib <= 0 or estimate_mib < 0:
         raise ValueError("margin >= 0, budget > 0 and estimate >= 0 are required")
     need = estimate_mib * (1.0 + margin)
@@ -495,11 +502,13 @@ def calibrate_from_measurement(estimate: VramEstimate, measured_peak_mib: float,
     ``torch_max_allocated`` excludes the CUDA context, so it is compared against the estimate minus the context allowance.
     ``within_margin`` is False when the measurement exceeds the estimate by more than the margin: the estimator undershot.
     """
-    if measured_peak_mib <= 0 or not math.isfinite(measured_peak_mib):
+    if isinstance(measured_peak_mib, bool) or not isinstance(measured_peak_mib, (int, float)) or measured_peak_mib <= 0 or not math.isfinite(float(measured_peak_mib)):
         raise ValueError("measured_peak_mib must be a positive finite number")
+    if isinstance(margin, bool) or not isinstance(margin, (int, float)) or not math.isfinite(float(margin)) or margin < 0:
+        raise ValueError("margin must be a non-negative finite number")
     if measured_kind not in MEASURED_KINDS:
         raise ValueError(f"measured_kind must be one of {MEASURED_KINDS}")
-    if not source.strip() or not gpu.strip():
+    if not isinstance(source, str) or not isinstance(gpu, str) or not source.strip() or not gpu.strip():
         raise ValueError("a calibration needs the GPU and the source of the measurement")
     est = estimate.total_mib
     if measured_kind == "torch_max_allocated":
@@ -532,6 +541,8 @@ PROMOTE, HOLD, INSUFFICIENT = "PROMOTE", "HOLD", "INSUFFICIENT"
 
 def binom_half_lower_tail(k: int, n: int) -> float:
     """P(X <= k) for X ~ Binomial(n, 1/2), exact (integer arithmetic until the final division)."""
+    if isinstance(k, bool) or not isinstance(k, int) or isinstance(n, bool) or not isinstance(n, int) or n < 0:
+        raise ValueError("k and n must be integers with n >= 0")
     if k < 0:
         return 0.0
     if k >= n:
@@ -541,7 +552,7 @@ def binom_half_lower_tail(k: int, n: int) -> float:
 
 def mcnemar_exact_p(losses: int, wins: int) -> float:
     """Two-sided exact McNemar p from the discordant counts (same definition as ``swarm.verified_update_gate.exact_paired_p``)."""
-    if losses < 0 or wins < 0:
+    if isinstance(losses, bool) or not isinstance(losses, int) or isinstance(wins, bool) or not isinstance(wins, int) or losses < 0 or wins < 0:
         raise ValueError("discordant counts must be >= 0")
     n = losses + wins
     return 1.0 if n == 0 else min(1.0, 2 * binom_half_lower_tail(min(losses, wins), n))
@@ -555,8 +566,11 @@ class PromotionPolicy:
     tolerated_guard_net_loss: int = 0  # guard losses minus guard wins allowed
 
     def __post_init__(self) -> None:
-        if not 0.0 < self.alpha < 1.0:
+        if isinstance(self.alpha, bool) or not isinstance(self.alpha, (int, float)) or not math.isfinite(float(self.alpha)) or not 0.0 < self.alpha < 1.0:
             raise ValueError("alpha must be in (0, 1)")
+        for val in (self.min_items, self.min_guard_items, self.tolerated_guard_net_loss):
+            if isinstance(val, bool) or not isinstance(val, int):
+                raise ValueError("min_items, min_guard_items >= 1 and tolerated_guard_net_loss >= 0 are required")
         if self.min_items < 1 or self.min_guard_items < 1 or self.tolerated_guard_net_loss < 0:
             raise ValueError("min_items, min_guard_items >= 1 and tolerated_guard_net_loss >= 0 are required")
 

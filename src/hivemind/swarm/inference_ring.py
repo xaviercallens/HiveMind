@@ -259,6 +259,10 @@ class RegionalDHTSwarmRing:
         self, source_peer_id: str, target_peer_id: str
     ) -> Dict[str, Any]:
         """Resolve the 2-Tier path (`Continental Bridge -> Regional Geo-Ring`) between two peers."""
+        if not isinstance(source_peer_id, str) or not source_peer_id.strip():
+            raise ValueError("source_peer_id must be a non-empty string")
+        if not isinstance(target_peer_id, str) or not target_peer_id.strip():
+            raise ValueError("target_peer_id must be a non-empty string")
         router = self._ensure_super_ring()
         route = router.route(source_peer_id, target_peer_id)
         self.hierarchical_routes.append(route)
@@ -266,6 +270,10 @@ class RegionalDHTSwarmRing:
 
     def route_to_region(self, source_peer_id: str, target_region: str) -> Dict[str, Any]:
         """Route towards the lowest-RTT peer of `target_region` via the Super-Ring."""
+        if not isinstance(source_peer_id, str) or not source_peer_id.strip():
+            raise ValueError("source_peer_id must be a non-empty string")
+        if not isinstance(target_region, str) or not target_region.strip():
+            raise ValueError("target_region must be a non-empty string")
         router = self._ensure_super_ring()
         target = router.find_peer_in_region(target_region)
         if target is None:

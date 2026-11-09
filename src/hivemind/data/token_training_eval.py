@@ -44,16 +44,25 @@ LORA_CONFIG = {"r": 4, "lora_alpha": 8, "lora_dropout": 0.0,
 
 
 def sha256(data: bytes) -> str:
+    if not isinstance(data, (bytes, bytearray)):
+        raise ValueError("data must be bytes or bytearray")
     return hashlib.sha256(data).hexdigest()
 
 
 def tensor_bytes(state: dict[str, torch.Tensor]) -> bytes:
     """Safe, full-precision serialization; header overhead is included in len()."""
+    if not isinstance(state, dict) or not state:
+        raise ValueError("state must be a non-empty dict of tensors")
+    for k, v in state.items():
+        if not isinstance(k, str) or not k.strip() or not isinstance(v, torch.Tensor):
+            raise ValueError("state must map non-empty string keys to torch.Tensor values")
     return save({k: v.detach().cpu().contiguous() for k, v in sorted(state.items())})
 
 
 def validate_splits(fixture: dict[str, Any]) -> None:
     """Reject empty/duplicate examples and exact normalized cross-split leakage."""
+    if not isinstance(fixture, dict):
+        raise ValueError("fixture must be a dict")
     seen_ids: set[str] = set()
     seen_text: set[str] = set()
     for split in ("train", "holdout"):
@@ -109,6 +118,10 @@ def tokenize_documents(samples: Sequence[str], sequence_length: int = 128) -> di
 
 def token_nll(logits: torch.Tensor, labels: torch.Tensor) -> tuple[torch.Tensor, int]:
     """Sum next-token cross-entropy in nats and count scored non-padding tokens."""
+    if not isinstance(logits, torch.Tensor) or logits.ndim != 3:
+        raise ValueError("logits must be a 3D torch.Tensor")
+    if not isinstance(labels, torch.Tensor) or labels.ndim != 2:
+        raise ValueError("labels must be a 2D torch.Tensor")
     targets = labels[:, 1:].contiguous()
     count = int((targets != -100).sum().item())
     if not count:
@@ -163,6 +176,12 @@ def frozen_state(model: torch.nn.Module) -> dict[str, torch.Tensor]:
 
 def import_adapter(model: torch.nn.Module, payload: bytes, expected_sha256: str) -> None:
     """Verify the serialized bytes before safe decoding, then require exact shapes."""
+    if not isinstance(model, torch.nn.Module):
+        raise ValueError("model must be a torch.nn.Module")
+    if not isinstance(payload, (bytes, bytearray)) or len(payload) == 0:
+        raise ValueError("payload must be non-empty bytes")
+    if not isinstance(expected_sha256, str) or not expected_sha256.strip():
+        raise ValueError("expected_sha256 must be a non-empty string")
     if sha256(payload) != expected_sha256:
         raise ValueError("adapter SHA-256 mismatch")
     incoming = load(payload)

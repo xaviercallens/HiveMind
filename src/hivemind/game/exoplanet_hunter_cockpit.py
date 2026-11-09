@@ -109,6 +109,16 @@ def _sanitise_feedback_field(raw: Any) -> str:
 
 def _get_asset_data_uri(filename: str, mime: str = "image/jpeg") -> str:
     """Return base64 data URI for an image in steam_assets so HTML works offline & online."""
+    if (
+        not isinstance(filename, str)
+        or not filename.strip()
+        or "/" in filename
+        or "\\" in filename
+        or ".." in filename
+    ):
+        raise ValueError("filename must be a safe non-empty basename")
+    if not isinstance(mime, str) or not mime.strip():
+        raise ValueError("mime must be a non-empty string")
     p = (
         PROJECT_ROOT
         / "steam_dist"
@@ -124,6 +134,10 @@ def _get_asset_data_uri(filename: str, mime: str = "image/jpeg") -> str:
 
 def render_exoplanet_hunter_cockpit_html(service: AstroBeeMoEGPUService, classic_v40: bool = False) -> str:
     """Render the USS HiveMind NCC-31337 v4.6 Complete Tactical Command Bridge & Oolite Planetfall Suite from Stitch MCP."""
+    if not isinstance(service, AstroBeeMoEGPUService):
+        raise ValueError("service must be an AstroBeeMoEGPUService")
+    if not isinstance(classic_v40, bool):
+        raise ValueError("classic_v40 must be a boolean")
     initial_target = service.catalog[5] if len(service.catalog) > 5 else service.catalog[0]
     initial_lc = synthesize_transit_light_curve_and_bls(
         period_days=initial_target["period_days"],

@@ -49,7 +49,9 @@ class Outcome:
     def __post_init__(self) -> None:
         if not str(self.cluster_id).strip() or not str(self.expert_id).strip():
             raise ValueError("cluster_id and expert_id must be non-empty")
-        if isinstance(self.cost_tokens, bool) or self.cost_tokens < 0:
+        if not isinstance(self.verified, bool) or not isinstance(self.success, bool):
+            raise ValueError("verified and success must be booleans")
+        if isinstance(self.cost_tokens, bool) or not isinstance(self.cost_tokens, int) or self.cost_tokens < 0:
             raise ValueError("cost_tokens must be an integer >= 0")
         if self.success and not self.verified:
             raise ValueError("an unverified outcome cannot be a success; the verifier is the only judge")
@@ -82,12 +84,18 @@ class BanditStrategy:
 
     def __init__(self, prior_alpha: float = 1.0, prior_beta: float = 1.0, exploit_only: bool = False) -> None:
         if (
-            not math.isfinite(float(prior_alpha))
+            isinstance(prior_alpha, bool)
+            or not isinstance(prior_alpha, (int, float))
+            or not math.isfinite(float(prior_alpha))
             or prior_alpha <= 0.0
+            or isinstance(prior_beta, bool)
+            or not isinstance(prior_beta, (int, float))
             or not math.isfinite(float(prior_beta))
             or prior_beta <= 0.0
         ):
             raise ValueError("Beta prior parameters must be finite and > 0")
+        if not isinstance(exploit_only, bool):
+            raise ValueError("exploit_only must be a boolean")
         self.prior_alpha = prior_alpha
         self.prior_beta = prior_beta
         self.exploit_only = exploit_only
@@ -203,14 +211,21 @@ class PreferencePair:
 
 def admissible_mix(unverified_rows: int, verified_rows: int) -> bool:
     """The repository rule: unverified rows are at most 30% of the mix, `10 * u <= 3 * (u + v)` (Theorem 135)."""
-    if unverified_rows < 0 or verified_rows < 0:
+    if (
+        isinstance(unverified_rows, bool)
+        or not isinstance(unverified_rows, int)
+        or isinstance(verified_rows, bool)
+        or not isinstance(verified_rows, int)
+        or unverified_rows < 0
+        or verified_rows < 0
+    ):
         raise ValueError("row counts must be >= 0")
     return UNVERIFIED_CAP_DEN * unverified_rows <= UNVERIFIED_CAP_NUM * (unverified_rows + verified_rows)
 
 
 def max_unverified_rows(verified_rows: int) -> int:
     """Largest `u` with `admissible_mix(u, verified_rows)`: `u <= 3 v / 7` (Theorem 136)."""
-    if verified_rows < 0:
+    if isinstance(verified_rows, bool) or not isinstance(verified_rows, int) or verified_rows < 0:
         raise ValueError("verified_rows must be >= 0")
     return (UNVERIFIED_CAP_NUM * verified_rows) // (UNVERIFIED_CAP_DEN - UNVERIFIED_CAP_NUM)
 
@@ -218,10 +233,10 @@ def max_unverified_rows(verified_rows: int) -> int:
 def dpo_loss(policy_chosen: float, policy_rejected: float, ref_chosen: float, ref_rejected: float, beta: float) -> float:
     """Direct preference optimisation loss for one pair from summed log-probabilities:
     `-log sigmoid(beta * ((pi_c - ref_c) - (pi_r - ref_r)))`."""
-    if beta <= 0.0 or not math.isfinite(beta):
+    if isinstance(beta, bool) or not isinstance(beta, (int, float)) or beta <= 0.0 or not math.isfinite(beta):
         raise ValueError("beta must be finite and > 0")
     for v in (policy_chosen, policy_rejected, ref_chosen, ref_rejected):
-        if not math.isfinite(v):
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
             raise ValueError("log-probabilities must be finite")
     margin = beta * ((policy_chosen - ref_chosen) - (policy_rejected - ref_rejected))
     # -log(sigmoid(m)) = log(1 + exp(-m)), computed stably
@@ -592,7 +607,7 @@ class VerifiedSubtask:
             raise ValueError("subtask_id and cluster_id must be non-empty")
         if self.verifier_kind not in VERIFIER_KINDS:
             raise ValueError(f"verifier_kind must be one of {sorted(VERIFIER_KINDS)}")
-        if not math.isfinite(self.weight) or self.weight <= 0.0:
+        if isinstance(self.weight, bool) or not isinstance(self.weight, (int, float)) or not math.isfinite(self.weight) or self.weight <= 0.0:
             raise ValueError("weight must be finite and > 0")
 
 

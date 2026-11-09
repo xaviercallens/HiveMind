@@ -361,6 +361,12 @@ def train_and_publish_season3_domain_experts(
         raise ValueError("store must be a ContentAddressedSwarmStore")
     if not isinstance(reference_lora_state, dict) or not reference_lora_state:
         raise ValueError("reference_lora_state must be a non-empty dictionary")
+    if moe_model is not None and not isinstance(moe_model, UpcycledSparseMoEModel):
+        raise ValueError("moe_model must be None or an UpcycledSparseMoEModel")
+    if isinstance(topk_ratio, bool) or not isinstance(topk_ratio, (int, float)) or not (0.0 < float(topk_ratio) <= 1.0):
+        raise ValueError("topk_ratio must be in (0.0, 1.0]")
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
+        raise ValueError("inner_steps must be a positive integer")
     if domains is not None and (
         not isinstance(domains, (list, tuple))
         or len(domains) == 0
@@ -442,6 +448,12 @@ def train_and_publish_astrophysics_domain_experts(
     planet or star classification accuracy is measured. The optional hot-plug
     exercises model wiring, not domain capability.
     """
+    if domains is not None and (
+        not isinstance(domains, (list, tuple))
+        or len(domains) == 0
+        or any(not isinstance(d, str) or not d.strip() for d in domains)
+    ):
+        raise ValueError("domains must be None or a non-empty sequence of non-empty strings")
     target_domains = (
         list(domains) if domains is not None else list(ASTROPHYSICS_DOMAIN_EXPERT_SPECS.keys())
     )

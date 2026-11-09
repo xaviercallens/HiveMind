@@ -98,6 +98,10 @@ ASTRO_BEE_EXPERTS: List[Dict[str, Any]] = [
 
 def _find_cached_parquet(repo_id: str, suffix: str) -> Optional[Path]:
     """Locate a cached Hugging Face Parquet file without network calls."""
+    if not isinstance(repo_id, str) or not repo_id.strip():
+        raise ValueError("repo_id must be a non-empty string")
+    if not isinstance(suffix, str) or not suffix.strip():
+        raise ValueError("suffix must be a non-empty string")
     repo_folder = "datasets--" + repo_id.replace("/", "--")
     roots = [
         CACHE_ROOT / "huggingface" / "hub" / repo_folder / "snapshots",
@@ -822,6 +826,10 @@ def _load_gemini_api_key_from_env() -> Optional[str]:
 def _wrap_pcm16_to_wav(pcm_bytes: bytes, sample_rate: int = 24000) -> bytes:
     """Wrap raw 16-bit mono signed PCM from Gemini 2.5 Flash TTS into a standard 44-byte RIFF WAV container."""
     import struct
+    if not isinstance(pcm_bytes, (bytes, bytearray)):
+        raise ValueError("pcm_bytes must be bytes or bytearray")
+    if isinstance(sample_rate, bool) or not isinstance(sample_rate, int) or sample_rate <= 0:
+        raise ValueError("sample_rate must be a positive integer")
     data_len = len(pcm_bytes)
     header = struct.pack(
         "<4sI4s4sIHHIIHH4sI",
@@ -845,6 +853,10 @@ def _wrap_pcm16_to_wav(pcm_bytes: bytes, sample_rate: int = 24000) -> bytes:
 def _split_text_for_gcp_tts(text: str, max_chars: int = 180) -> List[str]:
     """Split a paragraph into natural sentence/clause chunks <= max_chars for Google Cloud TTS."""
     import re
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
+    if isinstance(max_chars, bool) or not isinstance(max_chars, int) or max_chars <= 0:
+        raise ValueError("max_chars must be a positive integer")
     clean = re.sub(r"\s+", " ", text).strip()
     if not clean:
         return []

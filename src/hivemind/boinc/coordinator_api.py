@@ -164,8 +164,10 @@ class BOINCCoordinatorService:
         worker_id: str,
         is_non_limited: bool = True,
     ) -> NodeReputationRecord:
-        clean_sid = str(steam_id64).strip()
-        clean_wid = str(worker_id).strip()
+        if not isinstance(is_non_limited, bool):
+            raise ValueError("is_non_limited must be a bool")
+        clean_sid = steam_id64.strip() if isinstance(steam_id64, str) else ""
+        clean_wid = worker_id.strip() if isinstance(worker_id, str) else ""
         if (
             not clean_sid
             or not clean_wid
@@ -304,6 +306,19 @@ class BOINCCoordinatorService:
         micro_batch_size: int = 1,
     ) -> SpotCheckVerdict:
         """Run Phase S-3 federated envelope verification + 50-step segment spot-check validation, update reputation, and queue delta for Multi-Krum."""
+        if not isinstance(steam_id64, str) or not steam_id64.strip():
+            raise ValueError("steam_id64 must be a non-empty string")
+        if isinstance(lr, bool) or not isinstance(lr, (int, float)) or not math.isfinite(float(lr)) or float(lr) <= 0.0:
+            raise ValueError("lr must be a positive finite float")
+        if (
+            isinstance(weight_decay, bool)
+            or not isinstance(weight_decay, (int, float))
+            or not math.isfinite(float(weight_decay))
+            or float(weight_decay) < 0.0
+        ):
+            raise ValueError("weight_decay must be a non-negative finite float")
+        if isinstance(micro_batch_size, bool) or not isinstance(micro_batch_size, int) or micro_batch_size < 1:
+            raise ValueError("micro_batch_size must be a positive integer")
         branch_state = self.branches.get(workunit.branch_name)
         coord_outer_step = (branch_state.outer_step + 1) if branch_state is not None else workunit.outer_step
         self.fl_security_guard.check_workunit_submission_envelope(

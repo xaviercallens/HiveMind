@@ -91,7 +91,7 @@ def test_nocturnal_coding_moe_rejects_malformed_inputs() -> None:
         replace(base_node, lora_rank=0)
 
 
-def test_quantization_rejects_malformed_inputs() -> None:
+def test_quantization_rejects_malformed_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
     w = torch.randn(8, 16)
     state, recon = quantize_tensor_nf4_double_quant(w, block_size=8)
     assert recon.shape == (8, 16)
@@ -100,9 +100,13 @@ def test_quantization_rejects_malformed_inputs() -> None:
     with pytest.raises(ValueError, match="weight"):
         quantize_tensor_nf4_double_quant([[1.0, 2.0]], block_size=8)  # type: ignore[arg-type]
 
-    assert resolve_compute_dtype("float16", torch.device("cpu")) == torch.float32
+    cpu_dev = torch.device("cpu")
+    assert resolve_compute_dtype("float16", cpu_dev) == torch.float32
+    with monkeypatch.context() as mp:
+        mp.setattr(torch, "device", lambda *a, **kw: cpu_dev)
+        assert resolve_compute_dtype("float16", cpu_dev) == torch.float32
     with pytest.raises(ValueError, match="dtype_name"):
-        resolve_compute_dtype(" ", torch.device("cpu"))
+        resolve_compute_dtype(" ", cpu_dev)
     with pytest.raises(ValueError, match="device"):
         resolve_compute_dtype("float16", "cpu")  # type: ignore[arg-type]
 

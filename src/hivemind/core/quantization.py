@@ -157,7 +157,7 @@ def resolve_compute_dtype(dtype_name: str, device: torch.device) -> torch.dtype:
     """Resolve optimal compute dtype for the target GPU (FP16 on RTX 2070 Turing, BF16 on Ampere+)."""
     if not isinstance(dtype_name, str) or not dtype_name.strip():
         raise ValueError("dtype_name must be a non-empty string")
-    if not isinstance(device, torch.device):
+    if not hasattr(device, "type") or not isinstance(getattr(device, "type", None), str):
         raise ValueError("device must be a torch.device")
     if device.type != "cuda":
         return torch.float32

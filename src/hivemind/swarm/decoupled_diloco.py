@@ -351,6 +351,8 @@ def radial_directional_average(
     learners contributed. If the weighted mean direction vanishes (perfectly cancelling
     directions) the zero vector is returned; the all-zero input also yields zero.
     """
+    if isinstance(eps, bool) or not isinstance(eps, (int, float)) or not math.isfinite(float(eps)) or float(eps) <= 0.0:
+        raise ValueError("eps must be a positive finite number")
     stacked, w = _validate_vectors_and_weights(vectors, weights)
     norms = stacked.norm(dim=1)
     units = stacked / norms.clamp_min(eps).unsqueeze(1)
@@ -402,6 +404,12 @@ class DecoupledDiLoCoQuorumSyncer:
         `Delta_p = Merge({theta_m, w_m}, Theta_prev)` aggregates per-learner outer gradients
         `Delta_m = Theta_prev - theta_m` with weights `w_m = Weight(c_tokens, c_steps)`.
         """
+        if not isinstance(fragment_name, str) or not fragment_name.strip():
+            raise ValueError("fragment_name must be a non-empty string")
+        if not isinstance(global_prev, torch.Tensor):
+            raise TypeError("global_prev must be a torch.Tensor")
+        if not isinstance(learner_fragments, dict):
+            raise TypeError("learner_fragments must be a dict")
         if len(arrivals) > self.num_learners_m:
             raise ValueError("more arrivals than learners in the swarm")
         if grace_window_s is None:
@@ -550,6 +558,12 @@ class ContinuousAsyncLearnerCoordinator:
         Future rounds and a second pending fresh update from the same learner
         are rejected before changing queued work or token accounting.
         """
+        if not isinstance(learner_id, str) or not learner_id.strip():
+            raise ValueError("learner_id must be a non-empty string")
+        if isinstance(origin_round, bool) or not isinstance(origin_round, int) or origin_round < 0:
+            raise ValueError("origin_round must be a non-negative integer")
+        if not isinstance(delta, torch.Tensor) or delta.numel() == 0:
+            raise ValueError("delta must be a non-empty torch.Tensor")
         if tokens_since_sync < 0 or steps_since_sync < 0:
             raise ValueError("tokens_since_sync and steps_since_sync must be >= 0")
         lid = str(learner_id)

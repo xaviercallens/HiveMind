@@ -245,6 +245,8 @@ class CosineGatedAdamDecayOuterOptimizer:
 
     def compute_gate(self, effective_tau: float) -> Tuple[float, float]:
         """Return `(gamma(tau), sigma(tau))` for effective staleness `effective_tau >= 0`."""
+        if isinstance(effective_tau, bool) or not isinstance(effective_tau, (int, float)) or not math.isfinite(float(effective_tau)):
+            raise ValueError("effective_tau must be a finite number")
         tau = max(0.0, float(effective_tau))
         if tau >= self.tau_cut:
             return 0.0, 0.0
@@ -392,6 +394,8 @@ class ReputationWeightedIsoCTSMerger:
     @torch.no_grad()
     def apply_isoc_2d(matrix: torch.Tensor) -> Tuple[torch.Tensor, float, float]:
         """Flatten the singular value spectrum of a 2D delta matrix to its isotropic mean."""
+        if not isinstance(matrix, torch.Tensor):
+            raise TypeError("matrix must be a torch.Tensor")
         if matrix.ndim != 2:
             return matrix.clone(), 1.0, 1.0
         mat_fp32 = matrix.detach().to(torch.float32).cpu()
@@ -544,6 +548,10 @@ class HeLoCoDirectionCorrector:
         outer_momentum_ref: torch.Tensor,
     ) -> Tuple[torch.Tensor, Dict[str, float]]:
         """Align a stale worker pseudo-gradient against `outer_momentum_ref`."""
+        if not isinstance(pseudo_grad, torch.Tensor) or not isinstance(outer_momentum_ref, torch.Tensor):
+            raise TypeError("pseudo_grad and outer_momentum_ref must be torch.Tensor instances")
+        if pseudo_grad.shape != outer_momentum_ref.shape:
+            raise ValueError("pseudo_grad and outer_momentum_ref must have the same shape")
         g = pseudo_grad.detach().to(torch.float32)
         m = outer_momentum_ref.detach().to(torch.float32)
         g_flat = g.reshape(-1)

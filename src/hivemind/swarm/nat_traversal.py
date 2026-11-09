@@ -161,6 +161,8 @@ def encode_xor_address(addr: Address, transaction_id: bytes) -> bytes:
 
 
 def decode_xor_address(value: bytes, transaction_id: bytes) -> Address:
+    if not isinstance(value, (bytes, bytearray)) or not isinstance(transaction_id, (bytes, bytearray)):
+        raise TypeError("value and transaction_id must be bytes")
     family = _address_family(value)
     if len(transaction_id) != 12:
         raise StunError("invalid STUN transaction ID length")
@@ -178,6 +180,8 @@ def decode_xor_address(value: bytes, transaction_id: bytes) -> Address:
 
 
 def decode_plain_address(value: bytes) -> Address:
+    if not isinstance(value, (bytes, bytearray)):
+        raise TypeError("value must be bytes")
     family = _address_family(value)
     port = struct.unpack("!H", value[2:4])[0]
     if family == 0x01:
@@ -188,6 +192,8 @@ def decode_plain_address(value: bytes) -> Address:
 
 
 def _address_family(value: bytes) -> int:
+    if not isinstance(value, (bytes, bytearray)):
+        raise TypeError("value must be bytes")
     if len(value) < 4:
         raise StunError("truncated STUN address")
     family = value[1]
@@ -199,6 +205,8 @@ def _address_family(value: bytes) -> int:
 
 def is_channel_data(data: bytes) -> bool:
     """True when `data` is a ChannelData message rather than a STUN message (RFC 5766 §11.4)."""
+    if not isinstance(data, (bytes, bytearray)):
+        raise TypeError("data must be bytes")
     return len(data) >= CHANNEL_HEADER.size and bool(data[0] & CHANNEL_DATA_FLAG) and not data[0] & 0x80
 
 
@@ -224,6 +232,8 @@ def encode_channel_number(number: int) -> bytes:
 
 def decode_channel_number(value: bytes) -> int:
     """Decode a CHANNEL-NUMBER attribute; the RFFU field is ignored on reception (§14.1)."""
+    if not isinstance(value, (bytes, bytearray)):
+        raise TypeError("value must be bytes")
     if len(value) != 4:
         raise StunError("CHANNEL-NUMBER must be 4 bytes long")
     number = struct.unpack("!H", value[:2])[0]
@@ -234,6 +244,8 @@ def decode_channel_number(value: bytes) -> int:
 
 def decode_channel_data(data: bytes) -> Tuple[int, bytes]:
     """Parse a ChannelData message into `(channel_number, payload)`."""
+    if not isinstance(data, (bytes, bytearray)):
+        raise TypeError("data must be bytes")
     if not is_channel_data(data):
         raise StunError("not a ChannelData message")
     channel_number, length = CHANNEL_HEADER.unpack_from(data, 0)
@@ -366,6 +378,8 @@ class StunMessage:
 
 def verify_message_integrity(raw: bytes, key: bytes) -> bool:
     """Check MESSAGE-INTEGRITY per RFC 5389 §15.4 (length field covers up to the MAC)."""
+    if not isinstance(raw, (bytes, bytearray)) or not isinstance(key, (bytes, bytearray)) or len(key) == 0:
+        raise ValueError("raw must be bytes and key must be non-empty bytes")
     try:
         StunMessage.decode(raw)
         entries = _wire_attributes(raw)
@@ -382,6 +396,8 @@ def verify_message_integrity(raw: bytes, key: bytes) -> bool:
 
 def verify_fingerprint(raw: bytes) -> bool:
     """Check the trailing FINGERPRINT attribute (CRC-32 XOR 0x5354554E, RFC 5389 §15.5)."""
+    if not isinstance(raw, (bytes, bytearray)):
+        raise ValueError("raw must be bytes")
     try:
         entries = _wire_attributes(raw)
     except StunError:
@@ -404,10 +420,29 @@ def udp_socket(bind: Address = ("0.0.0.0", 0)) -> socket.socket:
 def resolve(server: ServerSpec) -> Address:
     """Resolve `"host:port"` (or a `(host, port)` tuple) to an IPv4 transport address."""
     if isinstance(server, tuple):
-        host, port = server[0], int(server[1])
-    else:
+        if (
+            len(server) != 2
+            or not isinstance(server[0], str)
+            or not server[0].strip()
+            or isinstance(server[1], bool)
+            or not isinstance(server[1], int)
+            or not (1 <= server[1] <= 65535)
+        ):
+            raise ValueError("server tuple must be (non-empty host, port in 1..65535)")
+        host, port = server[0].strip(), int(server[1])
+    elif isinstance(server, str):
+        if ":" not in server:
+            raise ValueError("server string must be 'host:port'")
         host, _, port_text = server.rpartition(":")
-        host, port = host.strip("[]"), int(port_text)
+        host = host.strip("[]").strip()
+        try:
+            port = int(port_text)
+        except ValueError as exc:
+            raise ValueError("server port must be an integer") from exc
+        if not host or not (1 <= port <= 65535):
+            raise ValueError("server string must have non-empty host and port in 1..65535")
+    else:
+        raise TypeError("server must be a (host, port) tuple or 'host:port' string")
     info = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_DGRAM)
     return info[0][4][0], info[0][4][1]
 

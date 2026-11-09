@@ -64,6 +64,28 @@ class DaemonTelemetry:
     seti_agent_state: str = SETIAgentState.STATE_2_IDLE_SETI_MINER.value
     hardware_circuit_breaker_tripped: bool = False
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.should_yield_vram, bool):
+            raise ValueError("should_yield_vram must be a boolean")
+        if isinstance(self.os_idle_seconds, bool) or not isinstance(self.os_idle_seconds, (int, float)):
+            raise ValueError("os_idle_seconds must be a numeric value")
+        if (
+            not math.isfinite(float(self.os_idle_seconds))
+            or float(self.os_idle_seconds) < 0.0
+        ) and not self.should_yield_vram:
+            raise ValueError("os_idle_seconds must be finite and >= 0 when should_yield_vram is False")
+        if (
+            isinstance(self.idle_threshold_seconds, bool)
+            or not isinstance(self.idle_threshold_seconds, (int, float))
+            or not math.isfinite(float(self.idle_threshold_seconds))
+            or float(self.idle_threshold_seconds) <= 0.0
+        ):
+            raise ValueError("idle_threshold_seconds must be finite and > 0")
+        if not isinstance(self.hardware_circuit_breaker_tripped, bool):
+            raise ValueError("hardware_circuit_breaker_tripped must be a boolean")
+        if isinstance(self.reason, bool) or not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("reason must be a non-empty string")
+
 
 def get_windows_idle_seconds() -> float:
     """Query Win32 user32.GetLastInputInfo to return seconds since last mouse/keyboard event."""
@@ -83,6 +105,12 @@ def get_windows_idle_seconds() -> float:
 
 def detect_running_game_process(extra_watchlist: set[str] | None = None) -> str | None:
     """Scan process table for active Steam games that require 100% of GPU VRAM."""
+    if extra_watchlist is not None and (
+        isinstance(extra_watchlist, (str, bytes))
+        or not isinstance(extra_watchlist, (set, list, tuple, frozenset))
+        or any(not isinstance(item, str) or not item.strip() for item in extra_watchlist)
+    ):
+        raise ValueError("extra_watchlist must be a collection of non-empty strings or None")
     watchlist = set(KNOWN_GAME_EXECUTABLES)
     if extra_watchlist:
         watchlist.update(n.lower() for n in extra_watchlist)

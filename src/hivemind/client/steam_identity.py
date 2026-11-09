@@ -55,6 +55,12 @@ def is_valid_steamid64(value: object) -> bool:
 
 def default_http(method: str, url: str, form: Mapping[str, str] | None = None) -> tuple[int, str]:
     """HTTPS to steamcommunity.com only, bounded time and size, no redirects followed."""
+    if isinstance(method, bool) or not isinstance(method, str) or method not in ("GET", "POST"):
+        raise ValueError("method must be 'GET' or 'POST'")
+    if isinstance(url, bool) or not isinstance(url, str) or not url.strip():
+        raise ValueError("url must be a non-empty string")
+    if form is not None and not isinstance(form, Mapping):
+        raise ValueError("form must be a Mapping or None")
     parts = urllib.parse.urlsplit(url)
     if parts.scheme != "https" or parts.hostname != "steamcommunity.com":
         raise IdentityError("refusing to contact anything but https://steamcommunity.com")
@@ -186,6 +192,12 @@ class AccountFacts:
     steam_id64: str
     limited: bool  # Steam's own flag: the account has spent less than the minimum (USD 5)
     vac_banned: bool
+
+    def __post_init__(self) -> None:
+        if not is_valid_steamid64(self.steam_id64):
+            raise ValueError("steam_id64 must be a valid SteamID64")
+        if not isinstance(self.limited, bool) or not isinstance(self.vac_banned, bool):
+            raise ValueError("limited and vac_banned must be booleans")
 
 
 def fetch_account_facts(steam_id64: str, http: Http = default_http) -> AccountFacts:

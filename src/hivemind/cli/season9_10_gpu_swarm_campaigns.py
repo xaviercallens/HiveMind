@@ -260,8 +260,10 @@ def run_season9_10_gpu_swarm_campaigns(
         raise ValueError("num_domains must be in [2, 8]")
     if isinstance(inner_steps, bool) or int(inner_steps) < 1:
         raise ValueError("inner_steps must be >= 1")
-    if isinstance(seed, bool):
-        raise ValueError("seed must be an integer")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
+    if output_path is not None and (isinstance(output_path, bool) or not isinstance(output_path, Path)):
+        raise ValueError("output_path must be a Path or None")
 
     t_start = time.perf_counter()
     hw = detect_community_accelerator(preferred_device=preferred_device)
@@ -771,6 +773,8 @@ def verify_season9_10_campaign_report(report: Mapping[str, Any]) -> bool:
 
 def format_season9_10_gpu_campaigns_markdown(report: dict[str, Any]) -> str:
     """Format a Markdown receipt table for pasting into GitHub Discussions or Issues."""
+    if not isinstance(report, dict) or not report:
+        raise ValueError("report must be a non-empty dict")
     hw = report["hardware_envelope"]
     c1 = report["campaign_1_s9_quorum_and_rda"]
     c2 = report["campaign_2_s9_sigma_and_looped_moe"]

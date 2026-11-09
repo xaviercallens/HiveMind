@@ -100,7 +100,7 @@ def quantize_tensor_nf4_double_quant(
     """
     if isinstance(block_size, bool) or not isinstance(block_size, int) or block_size < 1:
         raise ValueError(f"block_size must be an integer >= 1, got {block_size!r}")
-    if weight.numel() == 0:
+    if not isinstance(weight, torch.Tensor) or weight.numel() == 0:
         raise ValueError("weight must be non-empty")
     if not bool(torch.isfinite(weight).all().item()):
         raise ValueError("weight must contain only finite values")
@@ -155,6 +155,10 @@ def quantize_tensor_nf4_double_quant(
 
 def resolve_compute_dtype(dtype_name: str, device: torch.device) -> torch.dtype:
     """Resolve optimal compute dtype for the target GPU (FP16 on RTX 2070 Turing, BF16 on Ampere+)."""
+    if not isinstance(dtype_name, str) or not dtype_name.strip():
+        raise ValueError("dtype_name must be a non-empty string")
+    if not hasattr(device, "type") or not isinstance(getattr(device, "type", None), str):
+        raise ValueError("device must be a torch.device")
     if device.type != "cuda":
         return torch.float32
     if dtype_name.lower() in ("bfloat16", "bf16"):
@@ -167,8 +171,12 @@ def resolve_compute_dtype(dtype_name: str, device: torch.device) -> torch.dtype:
 
 def compute_state_dict_sha256(state_dict: dict[str, torch.Tensor]) -> str:
     """Compute a deterministic SHA-256 digest over a model or adapter state dict."""
+    if not isinstance(state_dict, dict) or not state_dict:
+        raise ValueError("state_dict must be a non-empty dict")
     hasher = hashlib.sha256()
     for key in sorted(state_dict.keys()):
+        if not isinstance(key, str) or not isinstance(state_dict[key], torch.Tensor):
+            raise ValueError("state_dict must map string keys to torch.Tensor values")
         t = state_dict[key].detach()
         tensor = t.to(device="cpu", dtype=torch.float32).contiguous()
         hasher.update(key.encode("utf-8"))
@@ -519,6 +527,10 @@ def extract_lora_state_dict(model: nn.Module) -> dict[str, torch.Tensor]:
 
 def load_lora_state_dict(model: nn.Module, lora_state: dict[str, torch.Tensor]) -> None:
     """In-place load of LoRA parameter dictionary into the active model."""
+    if not isinstance(model, nn.Module):
+        raise ValueError("model must be an nn.Module")
+    if not isinstance(lora_state, dict) or not lora_state:
+        raise ValueError("lora_state must be a non-empty dict")
     for name, tensor in lora_state.items():
         if not isinstance(tensor, torch.Tensor) or not bool(torch.isfinite(tensor).all().item()):
             raise ValueError(f"lora_state[{name!r}] must be a finite torch.Tensor")

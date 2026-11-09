@@ -309,6 +309,40 @@ class SwarmShardAssignment:
     optimizer: str
     transport_codec: str
 
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("bee_id", self.bee_id),
+            ("hardware_tier", self.hardware_tier),
+            ("backend", self.backend),
+            ("division_id", self.division_id),
+            ("assigned_backbone", self.assigned_backbone),
+            ("hf_dataset_id", self.hf_dataset_id),
+            ("shard_uri", self.shard_uri),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name, val in (
+            ("available_vram_mib", self.available_vram_mib),
+            ("allocated_vram_mib", self.allocated_vram_mib),
+            ("lora_alpha_ffn", self.lora_alpha_ffn),
+        ):
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or float(val) <= 0.0
+            ):
+                raise ValueError(f"{field_name} must be a positive finite number")
+        if isinstance(self.shard_index, bool) or not isinstance(self.shard_index, int) or self.shard_index < 0:
+            raise ValueError("shard_index must be a non-negative integer")
+        for field_name, val in (
+            ("samples_in_shard", self.samples_in_shard),
+            ("inner_diloco_steps", self.inner_diloco_steps),
+            ("lora_rank_ffn", self.lora_rank_ffn),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+
 
 class SwarmDataShardOrchestrator:
     """Consistent-hashing Swarm Data Orchestrator for massive zero-pooling dataset sharding."""
@@ -471,6 +505,8 @@ class MassiveSwarmSparseImageMoE(nn.Module):
         load_balance_alpha: float = DEFAULT_LOAD_BALANCE_ALPHA,
     ) -> None:
         super().__init__()
+        if not isinstance(backbone, FrozenAstroVisionBackbone):
+            raise ValueError("backbone must be a FrozenAstroVisionBackbone")
         if not isinstance(division_deltas, Mapping) or len(division_deltas) == 0:
             raise ValueError("division_deltas must be a non-empty mapping")
         if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
@@ -519,6 +555,8 @@ class MassiveSwarmSparseImageMoE(nn.Module):
                     self.router.weight[idx].copy_(h_unit * 4.5)
 
     def forward(self, visual_patches: torch.Tensor) -> Dict[str, Any]:
+        if not isinstance(visual_patches, torch.Tensor) or visual_patches.ndim != 3 or visual_patches.numel() == 0:
+            raise ValueError("visual_patches must be a non-empty 3D tensor [batch, patches, patch_dim]")
         h = self.backbone.encode_patches(visual_patches)
         base_ffn = self.backbone.base_swiglu_ffn(h)
 

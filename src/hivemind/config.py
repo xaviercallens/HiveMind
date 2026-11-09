@@ -197,6 +197,24 @@ class HardwareProfile:
         )
     )
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, str) or not self.name.strip():
+            raise ValueError("name must be a non-empty string")
+        if not isinstance(self.hf_model_id, str) or not self.hf_model_id.strip():
+            raise ValueError("hf_model_id must be a non-empty string")
+        for field_name in ("target_vram_gb", "available_vram_budget_gb"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{field_name} must be a positive finite number")
+        for field_name in ("lora_rank_r", "lora_alpha", "micro_batch_size", "seq_len"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+        for field_name in ("double_quantization", "gradient_checkpointing"):
+            val = getattr(self, field_name)
+            if not isinstance(val, bool):
+                raise ValueError(f"{field_name} must be a boolean")
+
 
 @dataclass
 class HiveMindConfig:
@@ -459,6 +477,8 @@ def rocm_supports_native_bf16(gcn_arch: str | None) -> bool:
     RDNA3 (`gfx11xx`, Radeon RX 7000) and CDNA2+ (`gfx9xx`) do; RDNA2 (`gfx10xx`, Radeon RX 6000)
     only exposes FP16 matrix paths and therefore falls back to `float16` compute.
     """
+    if gcn_arch is not None and not isinstance(gcn_arch, str):
+        raise ValueError("gcn_arch must be a string or None")
     if not gcn_arch:
         return False  # Unknown target: stay on the universally supported FP16 path.
     arch = str(gcn_arch).lower()

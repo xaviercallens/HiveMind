@@ -269,6 +269,10 @@ def evaluate_bee_candidate_energy(
     """Compute the deterministic ANSE physical energy `E_Bee(x, y)` for a Bee candidate."""
     if not isinstance(candidate_id, str) or not candidate_id.strip():
         raise ValueError("candidate_id must be a non-empty string.")
+    if not isinstance(response_text, str):
+        raise ValueError("response_text must be a string.")
+    if not isinstance(domain, str) or not domain.strip():
+        raise ValueError("domain must be a non-empty string.")
     if not isinstance(timed_out_or_crashed, bool):
         raise ValueError("timed_out_or_crashed must be a boolean.")
     if isinstance(tests_passed, bool) or isinstance(tests_total, bool):
@@ -397,6 +401,8 @@ def compress_error_trace_d1(
     max_chars: int = 200,
 ) -> str:
     """Directive D1: Compress failing code + stderr to `< max_chars` to prevent small-Bee attention dilution."""
+    if not isinstance(failing_code, str) or not isinstance(stderr_or_reason, str):
+        raise ValueError("failing_code and stderr_or_reason must be strings.")
     if isinstance(max_chars, bool) or not isinstance(max_chars, int) or max_chars < 1:
         raise ValueError("max_chars must be a positive integer.")
     budget = max(32, int(max_chars))

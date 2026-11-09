@@ -483,6 +483,8 @@ def verify_numeric_solver_trajectory(
         "invariant_drift": invariant_drift,
     }
     try:
+        if not isinstance(spec, dict):
+            raise SpecInvalid("spec must be a dict")
         validated = validate_spec(dict(spec))
     except (SpecInvalid, TypeError, ValueError) as exc:
         return _cert(sid, "science_numeric_solver", [{"name": "spec_grammar", "status": "fail"}], [str(exc)], payload)

@@ -285,6 +285,8 @@ def logistic_spec(n0: float, t_out: Sequence[float], *, r: float = 1.0, K: float
 def mass_action_spec(species: Sequence[str], reactions: Sequence[Dict[str, Any]], y0: Sequence[float], t_out: Sequence[float], *, spec_id: str = "science-bee",
                      t0: float = 0.0, rtol: Optional[float] = None, atol: Optional[float] = None, method: Optional[str] = None) -> Dict[str, Any]:
     """Generic mass-action spec (<= 20 species, <= 50 reactions, small positive integer stoichiometry, k >= 0)."""
+    if not isinstance(species, (list, tuple)) or not isinstance(reactions, (list, tuple)) or not isinstance(y0, (list, tuple)):
+        raise FamilyError("species, reactions and y0 must be lists or tuples")
     sp = list(species)
     if not 1 <= len(sp) <= 20 or len(set(sp)) != len(sp) or not all(isinstance(s, str) and 1 <= len(s) <= 64 for s in sp):
         raise FamilyError("species must be 1..20 distinct strings")
@@ -349,8 +351,10 @@ def decay_chain_spec(rates: Sequence[float], y0: Sequence[float], t_out: Sequenc
 # ------------------------------------------------------------------ linear presets
 def linear_spec(A: Sequence[Sequence[float]], b: Sequence[float], y0: Sequence[float], t_out: Sequence[float], *, spec_id: str = "science-bee", t0: float = 0.0,  # noqa: N803
                 rtol: Optional[float] = None, atol: Optional[float] = None, method: Optional[str] = None) -> Dict[str, Any]:
+    if not isinstance(A, (list, tuple)) or not isinstance(b, (list, tuple)) or not isinstance(y0, (list, tuple)):
+        raise FamilyError("A, b and y0 must be lists or tuples")
     n = len(A)
-    if not 1 <= n <= 20 or any(len(row) != n for row in A) or len(b) != n or len(y0) != n:
+    if not 1 <= n <= 20 or any(not isinstance(row, (list, tuple)) or len(row) != n for row in A) or len(b) != n or len(y0) != n:
         raise FamilyError("A must be n x n (n <= 20) and b, y0 of length n")
     mat = [[_num(v, f"A[{i}][{j}]") for j, v in enumerate(row)] for i, row in enumerate(A)]
     bb = [_num(v, f"b[{i}]") for i, v in enumerate(b)]
@@ -382,6 +386,8 @@ def describe_family(name: str) -> str:
 
 
 def catalogue_text(only_new: bool = False) -> str:
+    if not isinstance(only_new, bool):
+        raise FamilyError("only_new must be a boolean")
     names = [n for n in FAMILIES if (n in NEW_FAMILIES or not only_new)]
     return "\n".join(describe_family(n) for n in names)
 
@@ -542,6 +548,8 @@ def compile_slot_spec(
     orbit speed, damper force/speed) so the LLM only fills named slots instead of doing
     mental arithmetic.
     """
+    if not isinstance(return_trace, bool):
+        raise FamilyError("return_trace must be a boolean")
     if not isinstance(slot_obj, Mapping):
         raise FamilyError("slot_obj must be a JSON object")
     schema = slot_obj.get("schema")

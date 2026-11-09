@@ -1728,6 +1728,17 @@ class AstroBeeMoEGPUService:
         gamer_tag: str = "CyberExplorer_FR",
     ) -> Dict[str, Any]:
         """Run a live CUDA forward pass across the 4 Astro-Bees on `cuda:0` and return the discovery analysis."""
+        if not isinstance(target, dict) or not target:
+            raise ValueError("target must be a non-empty dict")
+        if trial_period_days is not None and (
+            isinstance(trial_period_days, bool)
+            or not isinstance(trial_period_days, (int, float))
+            or not math.isfinite(float(trial_period_days))
+            or float(trial_period_days) <= 0.0
+        ):
+            raise ValueError("trial_period_days must be a finite positive number or None")
+        if not isinstance(gamer_tag, str) or not gamer_tag.strip():
+            raise ValueError("gamer_tag must be a non-empty string")
         self.ensure_gpu_moe_ready()
         t0 = time.perf_counter()
 
@@ -1858,6 +1869,8 @@ class AstroBeeMoEGPUService:
 
     def resolve_target(self, target_id: str) -> Dict[str, Any]:
         """Resolve a catalog target by target_id, Stitch v4.6 planet key, or planet name."""
+        if not isinstance(target_id, str):
+            raise ValueError("target_id must be a string")
         key = str(target_id or "").strip()
         stitch_key_map = {
             "trappist1e": "SECTOR-01-TRAPPIST-1E",
@@ -1891,6 +1904,16 @@ class AstroBeeMoEGPUService:
         account_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Log a player's discovery once per (account, target); replays earn 0 and are not recorded."""
+        if not isinstance(target_id, str) or not target_id.strip():
+            raise ValueError("target_id must be a non-empty string")
+        if not isinstance(gamer_tag, str):
+            raise ValueError("gamer_tag must be a string")
+        if not isinstance(player_classification, str) or not player_classification.strip():
+            raise ValueError("player_classification must be a non-empty string")
+        if not isinstance(notes, str):
+            raise ValueError("notes must be a string")
+        if account_id is not None and not isinstance(account_id, str):
+            raise ValueError("account_id must be a string or None")
         target = self.resolve_target(target_id)
         clean_tag = str(gamer_tag or "").strip()[:64] or "Anonyme"
         clean_notes = str(notes or "")[:512]
@@ -2001,6 +2024,12 @@ class AstroBeeMoEGPUService:
         preferred_producer: str = "auto",
     ) -> Dict[str, Any]:
         """Serve general HiveMind Bee-MoE inference on Local RTX 2070 (`cuda:0`) or failover from T4/other producers."""
+        if not isinstance(prompt, str):
+            raise ValueError("prompt must be a string")
+        if isinstance(max_new_tokens, bool) or not isinstance(max_new_tokens, int) or max_new_tokens < 1:
+            raise ValueError("max_new_tokens must be a positive integer")
+        if not isinstance(preferred_producer, str) or not preferred_producer.strip():
+            raise ValueError("preferred_producer must be a non-empty string")
         self.ensure_gpu_moe_ready()
         t0 = time.perf_counter()
         clamped_max_new_tokens = max(1, min(512, int(max_new_tokens)))
@@ -2075,6 +2104,8 @@ class HiveMindMultiProducerInferencePool:
     MONITOR_WRITE_MIN_INTERVAL_S = 2.0
 
     def __init__(self, gpu_service: AstroBeeMoEGPUService) -> None:
+        if not isinstance(gpu_service, AstroBeeMoEGPUService):
+            raise ValueError("gpu_service must be an AstroBeeMoEGPUService")
         self.gpu_service = gpu_service
         self.registry_path = ARTIFACTS_ROOT / "hivemind_inference_producers.json"
         self.monitor_path = ARTIFACTS_ROOT / "hivemind_traffic_tflops_monitor.json"
@@ -2217,6 +2248,14 @@ class HiveMindMultiProducerInferencePool:
         target_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Route and execute inference across the producer pool with automatic failover to Local RTX 2070."""
+        if not isinstance(prompt, str):
+            raise ValueError("prompt must be a string")
+        if isinstance(max_new_tokens, bool) or not isinstance(max_new_tokens, int) or max_new_tokens < 1:
+            raise ValueError("max_new_tokens must be a positive integer")
+        if not isinstance(preferred_producer, str):
+            raise ValueError("preferred_producer must be a string")
+        if target_id is not None and not isinstance(target_id, str):
+            raise ValueError("target_id must be a string or None")
         self.total_requests_served += 1
         pref_norm = (preferred_producer or "auto").strip().lower()
 
@@ -2278,6 +2317,8 @@ class HiveMindMultiProducerInferencePool:
 
     def benchmark_live_tflops(self, matrix_dim: int = 3072) -> Dict[str, Any]:
         """Measure live sustained FP32, FP16 Tensor Core, and Effective 4-Bit NF4 Sparse MoE TFLOPS on `cuda:0`."""
+        if isinstance(matrix_dim, bool) or not isinstance(matrix_dim, int) or matrix_dim < 1:
+            raise ValueError("matrix_dim must be a positive integer")
         now_iso = datetime.datetime.now().isoformat()[:19]
         if torch.cuda.is_available():
             dev = self.gpu_service.device
@@ -2361,6 +2402,19 @@ class HiveMindMultiProducerInferencePool:
         served_by: Optional[str] = None,
     ) -> None:
         """Record an incoming HTTP or inference request and track new/active end-users."""
+        if not isinstance(method, str) or not method.strip() or not isinstance(path, str) or not path.strip():
+            raise ValueError("method and path must be non-empty strings")
+        if not isinstance(client_ip, str) or not isinstance(user_agent, str) or not isinstance(gamer_tag, str):
+            raise ValueError("client_ip, user_agent, and gamer_tag must be strings")
+        if (
+            isinstance(latency_ms, bool)
+            or not isinstance(latency_ms, (int, float))
+            or not math.isfinite(float(latency_ms))
+            or float(latency_ms) < 0.0
+        ):
+            raise ValueError("latency_ms must be a finite non-negative number")
+        if served_by is not None and not isinstance(served_by, str):
+            raise ValueError("served_by must be a string or None")
         if path.startswith("/api/v1/monitor/telemetry"):
             return
         self.total_http_requests += 1

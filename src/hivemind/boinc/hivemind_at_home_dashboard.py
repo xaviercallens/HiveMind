@@ -214,6 +214,10 @@ def scan_and_sanitize_waf_payload(raw_text: str) -> Dict[str, Any]:
 
 def _flag(report: Dict[str, Any], *keys: str) -> Optional[bool]:
     """Pass flag from a campaign report: None (NOT_MEASURED) unless every named key is present."""
+    if not isinstance(report, dict):
+        raise ValueError("report must be a dict")
+    if not keys or any(not isinstance(k, str) or not k.strip() for k in keys):
+        raise ValueError("keys must be non-empty strings")
     if any(k not in report for k in keys):
         return None
     return all(bool(report[k]) for k in keys)
@@ -4091,6 +4095,17 @@ def build_hivemind_at_home_state(
     gcp_accelerator_type: str = "v5litepod-1",
 ) -> Dict[str, Any]:
     """Assemble the unified HiveMind@home + GCP Cloud + La Ruche telemetry state."""
+    if not isinstance(gpu_campaigns_report_path, (Path, str)) or not str(gpu_campaigns_report_path).strip():
+        raise ValueError("gpu_campaigns_report_path must be a non-empty path")
+    if not isinstance(mining_ruche_report_path, (Path, str)) or not str(mining_ruche_report_path).strip():
+        raise ValueError("mining_ruche_report_path must be a non-empty path")
+    for fname, fval in (
+        ("gcp_tpu_node_id", gcp_tpu_node_id),
+        ("gcp_zone", gcp_zone),
+        ("gcp_accelerator_type", gcp_accelerator_type),
+    ):
+        if not isinstance(fval, str) or not fval.strip():
+            raise ValueError(f"{fname} must be a non-empty string")
     gpu_report_p = Path(gpu_campaigns_report_path)
     mining_report_p = Path(mining_ruche_report_path)
 
@@ -4555,15 +4570,23 @@ def build_hivemind_at_home_state(
 
 
 def _rms_norm_np(x: np.ndarray, weight: np.ndarray, eps: float = 1e-6) -> np.ndarray:
+    if not isinstance(x, np.ndarray) or not isinstance(weight, np.ndarray) or x.size == 0 or weight.size == 0:
+        raise ValueError("x and weight must be non-empty numpy arrays")
+    if isinstance(eps, bool) or not isinstance(eps, (int, float)) or not math.isfinite(float(eps)) or float(eps) <= 0.0:
+        raise ValueError("eps must be a finite positive number")
     rms = np.sqrt(np.mean(np.square(x), axis=-1, keepdims=True) + eps)
     return (x / rms) * weight
 
 
 def _silu_np(x: np.ndarray) -> np.ndarray:
+    if isinstance(x, (bool, str, bytes)) or not isinstance(x, (np.ndarray, np.number, int, float)):
+        raise ValueError("x must be a numeric array or scalar")
     return x / (1.0 + np.exp(-np.clip(x, -20.0, 20.0)))
 
 
 def _sigmoid_np(x: np.ndarray) -> np.ndarray:
+    if isinstance(x, (bool, str, bytes)) or not isinstance(x, (np.ndarray, np.number, int, float)):
+        raise ValueError("x must be a numeric array or scalar")
     return 1.0 / (1.0 + np.exp(-np.clip(x, -20.0, 20.0)))
 
 
@@ -4574,6 +4597,14 @@ def run_la_ruche_moe_inference(
     max_new_tokens: int = 32,
 ) -> Dict[str, Any]:
     """Execute forward Sparse MoE inference using the real `.safetensors` weights in `La Ruche`."""
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("prompt must be a non-empty string")
+    if not isinstance(vault_dir, (Path, str)) or not str(vault_dir).strip():
+        raise ValueError("vault_dir must be a non-empty path")
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+        raise ValueError("top_k must be a positive integer")
+    if isinstance(max_new_tokens, bool) or not isinstance(max_new_tokens, int) or max_new_tokens < 1:
+        raise ValueError("max_new_tokens must be a positive integer")
     t0 = time.perf_counter()
     vault_p = Path(vault_dir)
     manifest_p = vault_p / "community_moe_release" / "ruche_manifest.json"
@@ -4944,6 +4975,10 @@ def render_hivemind_at_home_html(
     api_base_url: str = "",
 ) -> str:
     """Render the 5-Screen Cyber-Bee & Hive interactive HTML5 portal for HiveMind@home & La Ruche."""
+    if not isinstance(state, dict):
+        raise ValueError("state must be a dict")
+    if not isinstance(api_base_url, str):
+        raise ValueError("api_base_url must be a string")
     state_json = json.dumps(state)
     api_prefix = api_base_url.rstrip("/")
     if api_prefix.startswith("http://") and not any(

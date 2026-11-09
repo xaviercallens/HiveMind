@@ -85,6 +85,10 @@ def quantize_tensor_blockwise_8bit(
     signed: bool = True,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Size]:
     """Quantize a tensor into 8-bit blocks (`int8` if signed else `uint8`) with per-block `absmax`."""
+    if not isinstance(tensor, torch.Tensor):
+        raise ValueError("tensor must be a torch.Tensor")
+    if not isinstance(signed, bool):
+        raise ValueError("signed must be a bool")
     if isinstance(block_size, bool) or not isinstance(block_size, int) or block_size < 1:
         raise ValueError(f"block_size must be an integer >= 1, got {block_size!r}")
     if tensor.numel() == 0:
@@ -120,6 +124,10 @@ def dequantize_tensor_blockwise_8bit(
     dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
     """Dequantize blockwise 8-bit tensor back to `orig_shape`."""
+    if not isinstance(q, torch.Tensor) or not isinstance(absmax, torch.Tensor):
+        raise ValueError("q and absmax must be torch.Tensor instances")
+    if not isinstance(signed, bool):
+        raise ValueError("signed must be a bool")
     if q.ndim != 2 or absmax.ndim != 1 or q.shape[0] != absmax.shape[0]:
         raise ValueError("q must be 2-D [num_blocks, block_size] matching 1-D absmax [num_blocks]")
     if not bool(torch.isfinite(absmax).all().item()) or bool((absmax <= 0.0).any().item()):

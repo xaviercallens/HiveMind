@@ -78,6 +78,11 @@ def flatten_delta_dict(delta_dict: dict[str, torch.Tensor]) -> torch.Tensor:
     """Flatten a dictionary of LoRA tensors in deterministic key order into a 1D FP32 vector."""
     if not isinstance(delta_dict, dict) or not delta_dict:
         raise ValueError("delta_dict must not be empty")
+    for k, v in delta_dict.items():
+        if not isinstance(v, torch.Tensor) or v.numel() == 0:
+            raise ValueError(f"delta_dict[{k!r}] must be a non-empty torch.Tensor")
+        if not bool(torch.isfinite(v).all().item()):
+            raise ValueError(f"delta_dict[{k!r}] must contain only finite values")
     parts = [
         delta_dict[k].detach().to(torch.float32).cpu().reshape(-1)
         for k in sorted(delta_dict.keys())
@@ -316,22 +321,29 @@ class DiLoCoOuterOptimizer:
             or momentum_restart_period < 1
         ):
             raise ValueError("momentum_restart_period must be an integer >= 1 or None")
+        if not isinstance(use_cpu_flat_bucket, bool):
+            raise ValueError("use_cpu_flat_bucket must be a bool")
         eff_betas = cgad_betas if cgad_betas is not None else (beta1, beta2)
-        if not (0.0 <= eff_betas[0] < 1.0 and 0.0 <= eff_betas[1] < 1.0):
+        if (
+            not isinstance(eff_betas, tuple)
+            or len(eff_betas) != 2
+            or any(isinstance(b, bool) or not isinstance(b, (int, float)) or not math.isfinite(float(b)) for b in eff_betas)
+            or not (0.0 <= float(eff_betas[0]) < 1.0 and 0.0 <= float(eff_betas[1]) < 1.0)
+        ):
             raise ValueError("beta1 and beta2 must be in [0, 1)")
         eff_wd = cgad_weight_decay if cgad_weight_decay is not None else weight_decay
-        if not math.isfinite(eff_wd) or eff_wd < 0.0:
+        if isinstance(eff_wd, bool) or not isinstance(eff_wd, (int, float)) or not math.isfinite(float(eff_wd)) or eff_wd < 0.0:
             raise ValueError("weight_decay must be finite and non-negative")
         eff_cgad_lr = cgad_lr if cgad_lr is not None else outer_lr_eta
-        if not math.isfinite(outer_lr_eta) or outer_lr_eta <= 0.0:
+        if isinstance(outer_lr_eta, bool) or not isinstance(outer_lr_eta, (int, float)) or not math.isfinite(float(outer_lr_eta)) or outer_lr_eta <= 0.0:
             raise ValueError("outer_lr_eta must be finite and positive")
-        if not math.isfinite(eff_cgad_lr) or eff_cgad_lr <= 0.0:
+        if isinstance(eff_cgad_lr, bool) or not isinstance(eff_cgad_lr, (int, float)) or not math.isfinite(float(eff_cgad_lr)) or eff_cgad_lr <= 0.0:
             raise ValueError("cgad_lr must be finite and positive")
-        if not math.isfinite(outer_momentum_mu) or not (0.0 <= outer_momentum_mu < 1.0):
+        if isinstance(outer_momentum_mu, bool) or not isinstance(outer_momentum_mu, (int, float)) or not math.isfinite(float(outer_momentum_mu)) or not (0.0 <= outer_momentum_mu < 1.0):
             raise ValueError("outer_momentum_mu must be finite in [0, 1)")
         if isinstance(max_byzantine_f, bool) or not isinstance(max_byzantine_f, int) or max_byzantine_f < 0:
             raise ValueError("max_byzantine_f must be an integer >= 0")
-        if not math.isfinite(cosine_sigma) or cosine_sigma < 0.0:
+        if isinstance(cosine_sigma, bool) or not isinstance(cosine_sigma, (int, float)) or not math.isfinite(float(cosine_sigma)) or cosine_sigma < 0.0:
             raise ValueError("cosine_sigma must be finite and >= 0")
         self.outer_lr_eta = outer_lr_eta
         self.outer_momentum_mu = outer_momentum_mu

@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import ipaddress
+import math
 
 HEADER = "x-hivemind-forwarded-client"
 MAX_SKEW_S = 60.0
@@ -23,12 +24,23 @@ def _mac(secret: bytes, ip: str, ts: int) -> str:
 
 
 def sign(secret: bytes, ip: str, now: float) -> str:
+    if not isinstance(secret, bytes) or not secret:
+        raise ValueError("secret must be non-empty bytes")
+    if not isinstance(ip, str) or not ip.strip() or "|" in ip:
+        raise ValueError("ip must be a non-empty string without '|'")
+    ip_clean = ip.strip()
+    if isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(float(now)) or float(now) < 0.0:
+        raise ValueError("now must be a finite non-negative number")
     ts = int(now)
-    return f"{ip}|{ts}|{_mac(secret, ip, ts)}"
+    return f"{ip_clean}|{ts}|{_mac(secret, ip_clean, ts)}"
 
 
 def verify(secret: bytes, header: str, now: float) -> str | None:
     """The forwarded IP if ``header`` is authentic and fresh, else ``None``."""
+    if not isinstance(secret, bytes) or not secret or not isinstance(header, str):
+        return None
+    if isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(float(now)):
+        return None
     try:
         ip, ts_text, mac = header.strip().split("|")
         ipaddress.ip_address(ip)

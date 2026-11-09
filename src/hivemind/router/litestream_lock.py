@@ -67,6 +67,8 @@ class InMemoryGenerationStore:
             return new_gen
 
     def get_record(self, key: str) -> tuple[int, dict[str, Any]] | None:
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("key must be a non-empty string")
         with self._lock:
             entry = self._objects.get(key)
             if entry is None:
@@ -135,6 +137,8 @@ class FileGenerationStore:
             return new_gen
 
     def get_record(self, key: str) -> tuple[int, dict[str, Any]] | None:
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("key must be a non-empty string")
         path = self._path_for(key)
         with self._lock:
             if not path.exists():
@@ -179,10 +183,14 @@ class LitestreamWriterLock:
         lease_ttl_s: float = 300.0,
         fail_closed: bool = False,
     ) -> None:
+        if not isinstance(replica_url, str):
+            raise ValueError("replica_url must be a string")
         if not isinstance(owner_id, str) or not owner_id.strip():
             raise ValueError("owner_id must be a non-empty string")
         if isinstance(lease_ttl_s, bool) or not isinstance(lease_ttl_s, (int, float)) or not math.isfinite(float(lease_ttl_s)) or float(lease_ttl_s) <= 0.0:
             raise ValueError("lease_ttl_s must be a finite positive number")
+        if not isinstance(fail_closed, bool):
+            raise ValueError("fail_closed must be a boolean")
         self.replica_url = str(replica_url).strip()
         self.owner_id = owner_id.strip()
         self._backend = backend

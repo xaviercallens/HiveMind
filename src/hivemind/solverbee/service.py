@@ -204,6 +204,8 @@ def canonical_sha256(obj: Any) -> str:
 
 def _clean(text: Any, limit: int = 200) -> str:
     """Printable, single-line, bounded: for reasons derived from stderr or exceptions."""
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+        raise ValueError("limit must be a positive integer")
     s = "".join(ch if ch.isprintable() else " " for ch in str(text))
     return " ".join(s.split())[:limit]
 
@@ -235,6 +237,8 @@ def extract_spec_block(text: str) -> bytes:
 
 
 def _is_loopback_host(h: str) -> bool:
+    if not isinstance(h, str):
+        raise ValueError("h must be a string")
     h = h.strip("[]").lower()
     if h == "localhost":
         return True
@@ -245,6 +249,8 @@ def _is_loopback_host(h: str) -> bool:
 
 
 def _hostname_of(host_header: str) -> str:
+    if not isinstance(host_header, str):
+        raise ValueError("host_header must be a string")
     h = host_header.strip()
     if h.startswith("["):
         return h[1:].split("]")[0]
@@ -376,6 +382,12 @@ class SolverBeeService:
         return res
 
     def _unverified(self, spec_id: str, input_sha: str, reasons: List[str], result: Optional[Dict[str, Any]], bin_sha: Optional[str]) -> Dict[str, Any]:
+        if not isinstance(spec_id, str) or not spec_id.strip():
+            raise ValueError("spec_id must be a non-empty string")
+        if not isinstance(input_sha, str) or not input_sha.strip():
+            raise ValueError("input_sha must be a non-empty string")
+        if not isinstance(reasons, list):
+            raise ValueError("reasons must be a list")
         return {"schema": CERT_SCHEMA, "id": spec_id, "verdict": "UNVERIFIED", "checks": [], "reasons": [_clean(r) for r in reasons], "input_sha256": input_sha,
                 "result_sha256": canonical_sha256(result) if result is not None else None, "binary_sha256": bin_sha,
                 "solver_rev": ((result or {}).get("solver") or {}).get("rev") if isinstance(result, dict) else None, "verifier_version": None, "caveat": CAVEAT}
@@ -432,6 +444,8 @@ class SolverBeeService:
 
     def _library_problem(self, spec: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """The library entry for this spec id, but only when the submitted problem/y0/t0/t_out equal the library spec's (otherwise the reference does not apply)."""
+        if not isinstance(spec, dict) or not isinstance(spec.get("id"), str):
+            raise ValueError("spec must be a dict with a string id")
         p = self.library.get(spec["id"])
         if p is None:
             return None
@@ -451,6 +465,14 @@ class SolverBeeService:
 
     @staticmethod
     def _summary(spec_id: str, cert: Dict[str, Any], sandbox: str, wall_ms: int) -> str:
+        if not isinstance(spec_id, str) or not spec_id.strip():
+            raise ValueError("spec_id must be a non-empty string")
+        if not isinstance(cert, dict) or "verdict" not in cert:
+            raise ValueError("cert must be a dict with verdict")
+        if not isinstance(sandbox, str) or not sandbox.strip():
+            raise ValueError("sandbox must be a non-empty string")
+        if isinstance(wall_ms, bool) or not isinstance(wall_ms, int) or wall_ms < 0:
+            raise ValueError("wall_ms must be a non-negative integer")
         checks = ", ".join("%s %s" % (_clean(c.get("name"), 30), _clean(c.get("status"), 10)) for c in (cert.get("checks") or [])[:8] if isinstance(c, dict))
         reasons = "; ".join(_clean(r, 160) for r in (cert.get("reasons") or [])[:4])
         out = f"Solver Bee verdict for spec {spec_id}: {cert['verdict']} (sandbox: {sandbox}, {wall_ms} ms)."

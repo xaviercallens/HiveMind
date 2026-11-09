@@ -204,6 +204,8 @@ def _loads(text: str) -> Any:
 
 def _balanced_objects(text: str) -> List[str]:
     """Top-level balanced {...} slices (string-aware), in order."""
+    if not isinstance(text, str):
+        raise SpecInvalid("text must be a string")
     out: List[str] = []
     i, n = 0, len(text)
     while i < n:
@@ -540,6 +542,12 @@ def formulate(messages: List[Dict[str, str]], backend: Backend, *, max_retries: 
 
 
 def _fail(errors: List[str], raws: List[str], attempts: int, reason: str) -> Dict[str, Any]:
+    if not isinstance(errors, list) or not isinstance(raws, list):
+        raise ValueError("errors and raws must be lists")
+    if isinstance(attempts, bool) or not isinstance(attempts, int) or attempts < 0:
+        raise ValueError("attempts must be an integer >= 0")
+    if not isinstance(reason, str):
+        raise ValueError("reason must be a string")
     return {"ok": False, "spec": None, "spec_bytes": None, "slot_trace": None, "attempts": attempts, "retries": max(0, attempts - 1),
             "errors": errors, "raw_outputs": raws, "reason": reason}
 
@@ -654,6 +662,10 @@ def _g(x: Any) -> str:
 
 
 def _describe_setup(spec: Dict[str, Any], lang: str) -> List[str]:
+    if not isinstance(spec, dict) or not isinstance(spec.get("problem"), dict) or not isinstance(spec.get("y0"), list):
+        raise ValueError("spec must be a validated spec dict")
+    if not isinstance(lang, str) or lang not in ("en", "fr"):
+        raise ValueError("lang must be 'en' or 'fr'")
     prob, y0 = spec["problem"], spec["y0"]
     lines: List[str] = []
     fr = lang == "fr"
@@ -694,6 +706,8 @@ def _describe_setup(spec: Dict[str, Any], lang: str) -> List[str]:
 
 
 def _state_names(spec: Dict[str, Any]) -> List[str]:
+    if not isinstance(spec, dict) or not isinstance(spec.get("problem"), dict) or not isinstance(spec.get("y0"), list):
+        raise ValueError("spec must be a validated spec dict")
     prob = spec["problem"]
     if prob["kind"] == "named":
         names = [s["name"] for s in fam.FAMILIES[prob["family"]]["state"]]
@@ -880,6 +894,8 @@ def _canon_num(x: float) -> float:
 
 
 def _canon_problem(spec: Dict[str, Any]) -> Tuple[Any, ...]:
+    if not isinstance(spec, dict) or not isinstance(spec.get("problem"), dict):
+        raise ValueError("spec must be a dict with a problem object")
     prob = spec["problem"]
     if prob["kind"] == "named":
         e = fam.FAMILIES[prob["family"]]
@@ -921,10 +937,16 @@ _SEP = r"\s*(?:=|:|of|is|at|equals|de|à|a|vaut|égal à|egal a)?\s*"
 
 
 def _fr_decimals(text: str) -> str:
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
     return re.sub(r"(?<=\d),(?=\d)", ".", text)
 
 
 def _find(text: str, synonyms: Sequence[str]) -> Optional[float]:
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
+    if not isinstance(synonyms, (list, tuple)) or not synonyms or not all(isinstance(s, str) and s.strip() for s in synonyms):
+        raise ValueError("synonyms must be a non-empty sequence of strings")
     for syn in synonyms:
         m = re.search(r"(?<![\w])(?:" + syn + r")" + _SEP + "(" + _NUM + ")", text, re.IGNORECASE)
         if m:
@@ -1044,6 +1066,10 @@ class BaselineBackend(Backend):
 
 # ======================================================================== named-slot formulator (pre-converting unit & derived-parameter slots)
 def _find_with_unit(text: str, synonyms: Sequence[str], unit_re: str) -> Optional[float]:
+    if not isinstance(text, str) or not isinstance(unit_re, str) or not unit_re.strip():
+        raise ValueError("text and unit_re must be strings")
+    if not isinstance(synonyms, (list, tuple)) or not synonyms or not all(isinstance(s, str) and s.strip() for s in synonyms):
+        raise ValueError("synonyms must be a non-empty sequence of strings")
     for syn in synonyms:
         m = re.search(r"(?<![\w])(?:" + syn + r")" + _SEP + "(" + _NUM + r")\s*(?:" + unit_re + r")(?![\w])", text, re.IGNORECASE)
         if m:
@@ -1052,6 +1078,10 @@ def _find_with_unit(text: str, synonyms: Sequence[str], unit_re: str) -> Optiona
 
 
 def _find_before_unit(text: str, unit_re: str, noun_re: Optional[str] = None) -> Optional[float]:
+    if not isinstance(text, str) or not isinstance(unit_re, str) or not unit_re.strip():
+        raise ValueError("text and unit_re must be strings")
+    if noun_re is not None and (not isinstance(noun_re, str) or not noun_re.strip()):
+        raise ValueError("noun_re must be a non-empty string or None")
     tail = (r"\s+(?:" + noun_re + r")") if noun_re else ""
     m = re.search(r"(" + _NUM + r")\s*(?:" + unit_re + r")(?![\w])" + tail, text, re.IGNORECASE)
     return float(m.group(1)) if m else None

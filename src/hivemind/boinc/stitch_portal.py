@@ -319,6 +319,16 @@ def render_stitch_enhanced_portal(
     default_screen: str = "home",
 ) -> str:
     """Render the high-production Web interface for GCP Cloud Run with Stitch designs."""
+    if not isinstance(state, dict):
+        raise ValueError("state must be a dict")
+    if isinstance(api_base_url, bool) or not isinstance(api_base_url, str):
+        raise ValueError("api_base_url must be a str")
+    if (
+        isinstance(default_screen, bool)
+        or not isinstance(default_screen, str)
+        or not default_screen.strip()
+    ):
+        raise ValueError("default_screen must be a non-empty string")
     api_prefix = api_base_url.rstrip("/")
     if api_prefix.startswith("http://") and not any(
         h in api_prefix for h in ("localhost", "127.0.0.1", "0.0.0.0", "testserver")

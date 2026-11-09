@@ -14,6 +14,7 @@ Synthesizes all 12 screens and high-resolution assets from Google Stitch MCP pro
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 try:
@@ -834,6 +835,14 @@ STAGE_5_DUAL_ENGINE_ARCHI_HTML = """<!-- STAGE 5 VIEW: DUAL-ENGINE ARCHITECTURE 
 
 def build_stitch_v46_cockpit_html(state_json: str) -> str:
     """Build the upgraded USS Hivemind NCC-31337 v4.6 Cockpit HTML from all 12 Stitch screens in project 10018415280079892710."""
+    if isinstance(state_json, bool) or not isinstance(state_json, str) or not state_json.strip():
+        raise ValueError("state_json must be a non-empty JSON string")
+    try:
+        parsed_state = json.loads(state_json)
+    except Exception as exc:
+        raise ValueError("state_json must be valid JSON") from exc
+    if not isinstance(parsed_state, dict):
+        raise ValueError("state_json must decode to a JSON object")
     v2_file = (
         PROJECT_ROOT
         / "steam_dist"

@@ -41,6 +41,12 @@ def route_with_serving_experts(
     A serving expert is therefore chosen only when its keywords outscore the other domains for this prompt. A prompt with
     no keyword hit returns ``([], {})`` (use the base model).
     """
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("prompt must be a non-empty string")
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+        raise ValueError("top_k must be an integer >= 1")
+    if isinstance(min_weight, bool) or not isinstance(min_weight, (int, float)) or not (0.0 <= float(min_weight) <= 1.0):
+        raise ValueError("min_weight must be a number in [0.0, 1.0]")
     return keyword_route(prompt, (SEASON_3_DOMAIN_EXPERT_SPECS, SERVING_EXPERT_SPECS), top_k=top_k, min_weight=min_weight)
 
 

@@ -85,6 +85,12 @@ class LicenseDecision:
     reason: str
     conditions: str | None = None
 
+    def __post_init__(self) -> None:
+        if self.status not in (ACCEPTED, REJECTED):
+            raise ValueError(f"status must be {ACCEPTED!r} or {REJECTED!r}")
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("reason must be a non-empty string")
+
 
 def classify_license(raw: object) -> LicenseDecision:
     """Classify a ``cardData.license`` value (a string, a list of strings or missing) against the allowlist.
@@ -176,6 +182,17 @@ def retrying_fetch(fetch: Fetch, retries: int = 5, base_delay_s: float = 10.0,
 
     A 404 or any other client error is not retried: it is a real answer and is reported as such.
     """
+    if not callable(fetch):
+        raise ValueError("fetch must be callable")
+    if isinstance(retries, bool) or not isinstance(retries, int) or retries < 0:
+        raise ValueError("retries must be a non-negative integer")
+    if (
+        isinstance(base_delay_s, bool)
+        or not isinstance(base_delay_s, (int, float))
+        or not math.isfinite(float(base_delay_s))
+        or float(base_delay_s) < 0.0
+    ):
+        raise ValueError("base_delay_s must be a non-negative finite number")
     def wrapped(url: str) -> bytes:
         for attempt in range(retries + 1):
             try:
@@ -245,6 +262,15 @@ class Shard:
     sha256: str
     n_bytes: int
     n_rows: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.uri, str) or not self.uri.strip():
+            raise ValueError("uri must be a non-empty string")
+        if not isinstance(self.sha256, str) or len(self.sha256.strip()) != 64:
+            raise ValueError("sha256 must be a 64-character hex digest")
+        for field_name, val in (("n_bytes", self.n_bytes), ("n_rows", self.n_rows)):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
 
     def to_dict(self) -> dict[str, Any]:
         return {"uri": self.uri, "sha256": self.sha256, "bytes": self.n_bytes, "rows": self.n_rows}

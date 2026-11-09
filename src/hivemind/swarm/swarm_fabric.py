@@ -51,6 +51,17 @@ class GeoRingPeer:
     kademlia_id_hex: str = ""
 
     def __post_init__(self) -> None:
+        if not isinstance(self.peer_id, str) or not self.peer_id.strip():
+            raise ValueError("peer_id must be a non-empty string")
+        if not isinstance(self.region, str) or not self.region.strip():
+            raise ValueError("region must be a non-empty string")
+        if (
+            isinstance(self.rtt_ms, bool)
+            or not isinstance(self.rtt_ms, (int, float))
+            or not math.isfinite(float(self.rtt_ms))
+            or float(self.rtt_ms) < 0.0
+        ):
+            raise ValueError("rtt_ms must be a finite non-negative number")
         if not self.kademlia_id_hex:
             self.kademlia_id_hex = hashlib.sha1(self.peer_id.encode("utf-8")).hexdigest()
 
@@ -76,6 +87,8 @@ class RegionalGeoRingTransport:
     @staticmethod
     def xor_distance(id_hex_a: str, id_hex_b: str) -> int:
         """Compute 160-bit Kademlia XOR distance between two peer/content IDs."""
+        if not isinstance(id_hex_a, str) or not id_hex_a.strip() or not isinstance(id_hex_b, str) or not id_hex_b.strip():
+            raise ValueError("id_hex_a and id_hex_b must be non-empty hex strings")
         a = int(id_hex_a[:40], 16)
         b = int(id_hex_b[:40], 16)
         return a ^ b
@@ -277,6 +290,15 @@ class PinnedRAMExpertDMAStreamer:
         target_slot: str | None = None,
     ) -> Dict[str, Any]:
         """Stream an expert from Pinned Host RAM into a 2-slot double buffer (`slot_A`/`slot_B`) (`HM-M2-01`)."""
+        if (
+            isinstance(simulated_attention_compute_ms, bool)
+            or not isinstance(simulated_attention_compute_ms, (int, float))
+            or not math.isfinite(float(simulated_attention_compute_ms))
+            or float(simulated_attention_compute_ms) < 0.0
+        ):
+            raise ValueError("simulated_attention_compute_ms must be a finite non-negative number")
+        if layer_idx is not None and (isinstance(layer_idx, bool) or not isinstance(layer_idx, int) or layer_idx < 0):
+            raise ValueError("layer_idx must be a non-negative integer when provided")
         if expert_name not in self.pinned_host_cache:
             raise KeyError(f"Expert '{expert_name}' not staged in Pinned Host RAM.")
 

@@ -137,6 +137,10 @@ def _seal(receipt: UpdateReceipt) -> UpdateReceipt:
 
 def decide(baseline: Mapping[str, str], candidate: Mapping[str, str], policy: UpdatePolicy = UpdatePolicy()) -> UpdateReceipt:
     """Accept or refuse a candidate update from per-task sandbox outcomes on the same held-out tasks (see module docstring)."""
+    if not isinstance(baseline, Mapping) or not isinstance(candidate, Mapping):
+        raise ValueError("baseline and candidate must be Mapping instances")
+    if not isinstance(policy, UpdatePolicy):
+        raise ValueError("policy must be an UpdatePolicy instance")
     for name, outcomes in (("baseline", baseline), ("candidate", candidate)):
         bad = sorted({v for v in outcomes.values() if v not in OUTCOMES})
         if bad:
@@ -221,6 +225,10 @@ def evaluate_tasks(tasks: Sequence[HeldOutTask], generate: Callable[[HeldOutTask
     ``gate`` must return an object with a ``verdict`` string: ``ACCEPTED`` is a pass, ``UNVERIFIED`` is unverified, every other
     verdict is a fail. A generator that raises, an empty extraction, or a gate that raises is ``unverified`` and never a pass.
     """
+    if isinstance(tasks, (str, bytes)) or not isinstance(tasks, Sequence) or any(not isinstance(t, HeldOutTask) for t in tasks):
+        raise ValueError("tasks must be a sequence of HeldOutTask instances")
+    if not callable(generate) or not callable(gate) or not callable(extract):
+        raise ValueError("generate, gate, and extract must be callable")
     keys = [t.key for t in tasks]
     if len(set(keys)) != len(keys):
         raise ValueError("duplicate task keys")

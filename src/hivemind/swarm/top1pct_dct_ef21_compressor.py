@@ -47,7 +47,13 @@ class Top1PctDCTPacket:
 
 def _ortho_dct1d(vec: Sequence[float]) -> list[float]:
     """Deterministic Type-II orthonormal DCT over blocks of size B=16 for stdlib/GPU parity."""
-    vals = [float(x) for x in vec]
+    if isinstance(vec, (str, bytes)) or not isinstance(vec, Sequence):
+        raise ValueError("vec must be a sequence of finite numbers")
+    vals: list[float] = []
+    for x in vec:
+        if isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(float(x)):
+            raise ValueError("vec elements must be finite numbers")
+        vals.append(float(x))
     n = len(vals)
     if n == 0:
         return []
@@ -67,7 +73,13 @@ def _ortho_dct1d(vec: Sequence[float]) -> list[float]:
 
 def _ortho_idct1d(coeffs: Sequence[float]) -> list[float]:
     """Deterministic Type-III orthonormal inverse DCT over blocks of size B=16."""
-    vals = [float(c) for c in coeffs]
+    if isinstance(coeffs, (str, bytes)) or not isinstance(coeffs, Sequence):
+        raise ValueError("coeffs must be a sequence of finite numbers")
+    vals: list[float] = []
+    for c in coeffs:
+        if isinstance(c, bool) or not isinstance(c, (int, float)) or not math.isfinite(float(c)):
+            raise ValueError("coeffs elements must be finite numbers")
+        vals.append(float(c))
     n = len(vals)
     if n == 0:
         return []

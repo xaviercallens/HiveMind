@@ -147,6 +147,12 @@ MANIFESTO_PILLARS: tuple[dict[str, str], ...] = (
 
 def pick_manifesto_language(query_lang: str | None, accept_language: str | None, default: str = "fr") -> str:
     """Select 'fr' or 'en' from query param or Accept-Language header."""
+    if query_lang is not None and (isinstance(query_lang, bool) or not isinstance(query_lang, str)):
+        raise ValueError("query_lang must be a string or None")
+    if accept_language is not None and (isinstance(accept_language, bool) or not isinstance(accept_language, str)):
+        raise ValueError("accept_language must be a string or None")
+    if isinstance(default, bool) or not isinstance(default, str):
+        raise ValueError("default must be a string")
     if query_lang:
         code = query_lang.strip().lower()[:2]
         if code in SUPPORTED_MANIFESTO_LANGS:

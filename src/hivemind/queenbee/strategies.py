@@ -112,8 +112,12 @@ class BanditStrategy:
         `w * pseudo_trials` pseudo-successes and `(1 - w) * pseudo_trials` pseudo-failures. When `use_trial_budget` is
         True (HM-S15-01 / #171), each cell uses the evidence-volume budget (`report.trial_weights` and
         `report.trial_successes`) bounded by `max_trials_per_signer`. Returns cells touched."""
-        if pseudo_trials <= 0.0 or not math.isfinite(pseudo_trials):
+        if not isinstance(report, RecruitmentReport):
+            raise ValueError("report must be a RecruitmentReport")
+        if isinstance(pseudo_trials, bool) or not isinstance(pseudo_trials, (int, float)) or pseudo_trials <= 0.0 or not math.isfinite(pseudo_trials):
             raise ValueError("pseudo_trials must be finite and > 0")
+        if not isinstance(use_trial_budget, bool):
+            raise ValueError("use_trial_budget must be a boolean")
         touched = 0
         if use_trial_budget and report.trial_weights:
             for cluster_id, tcell in report.trial_weights.items():
@@ -137,7 +141,7 @@ class BanditStrategy:
         return touched
 
     def choose(self, cluster_id: str, candidates: Sequence[str], rng: random.Random) -> str:
-        if not candidates:
+        if isinstance(candidates, (str, bytes)) or not candidates or any(not isinstance(c, str) or not c.strip() for c in candidates):
             raise ValueError("candidates must be non-empty")
         best, best_score = candidates[0], -1.0
         for c in candidates:
@@ -377,11 +381,11 @@ class PrivacyAccountant:
     )
 
     def __init__(self, *, delta: float = 1e-5, max_epsilon: float = 8.0, orders: Sequence[float] = DEFAULT_ORDERS) -> None:
-        if not math.isfinite(float(delta)) or not (0.0 < delta < 1.0):
+        if isinstance(delta, bool) or not isinstance(delta, (int, float)) or not math.isfinite(float(delta)) or not (0.0 < delta < 1.0):
             raise ValueError("delta must be in (0, 1)")
-        if not math.isfinite(max_epsilon) or max_epsilon <= 0.0:
+        if isinstance(max_epsilon, bool) or not isinstance(max_epsilon, (int, float)) or not math.isfinite(max_epsilon) or max_epsilon <= 0.0:
             raise ValueError("max_epsilon must be finite and > 0")
-        if not orders or any(not math.isfinite(float(a)) or a <= 1.0 for a in orders):
+        if isinstance(orders, (str, bytes)) or not orders or any(isinstance(a, bool) or not isinstance(a, (int, float)) or not math.isfinite(float(a)) or a <= 1.0 for a in orders):
             raise ValueError("all RDP orders must be finite and > 1.0")
         self.delta = float(delta)
         self.max_epsilon = float(max_epsilon)
@@ -396,9 +400,9 @@ class PrivacyAccountant:
         return alpha / (2.0 * noise_multiplier * noise_multiplier)
 
     def would_exceed_budget(self, clip_norm: float, sigma: float) -> bool:
-        if clip_norm <= 0.0 or not math.isfinite(clip_norm):
+        if isinstance(clip_norm, bool) or not isinstance(clip_norm, (int, float)) or clip_norm <= 0.0 or not math.isfinite(clip_norm):
             raise ValueError("clip_norm must be finite and > 0")
-        if sigma < 0.0 or not math.isfinite(sigma):
+        if isinstance(sigma, bool) or not isinstance(sigma, (int, float)) or sigma < 0.0 or not math.isfinite(sigma):
             raise ValueError("sigma must be finite and >= 0")
         if sigma <= 0.0:
             return True
@@ -410,10 +414,12 @@ class PrivacyAccountant:
         return best_eps > self.max_epsilon
 
     def record_step(self, clip_norm: float, sigma: float, *, enforce_budget: bool = True) -> PrivacyBudgetReport:
-        if clip_norm <= 0.0 or not math.isfinite(clip_norm):
+        if isinstance(clip_norm, bool) or not isinstance(clip_norm, (int, float)) or clip_norm <= 0.0 or not math.isfinite(clip_norm):
             raise ValueError("clip_norm must be finite and > 0")
-        if sigma < 0.0 or not math.isfinite(sigma):
+        if isinstance(sigma, bool) or not isinstance(sigma, (int, float)) or sigma < 0.0 or not math.isfinite(sigma):
             raise ValueError("sigma must be finite and >= 0")
+        if not isinstance(enforce_budget, bool):
+            raise ValueError("enforce_budget must be a boolean")
         if enforce_budget and self.would_exceed_budget(clip_norm, sigma):
             raise ValueError("privacy budget exceeded: refusing to share delta under max_epsilon ceiling")
         self._rdp_totals = [r + self._step_rdp(a, clip_norm, sigma) for a, r in zip(self.orders, self._rdp_totals)]
@@ -560,7 +566,7 @@ class FederatedShareStrategy:
 
     def __init__(self, clip_norm: float, sigma: float, router: BanditStrategy | None = None,
                  accountant: PrivacyAccountant | None = None) -> None:
-        if not math.isfinite(float(clip_norm)) or clip_norm <= 0.0 or not math.isfinite(float(sigma)) or sigma < 0.0:
+        if isinstance(clip_norm, bool) or not isinstance(clip_norm, (int, float)) or not math.isfinite(float(clip_norm)) or clip_norm <= 0.0 or isinstance(sigma, bool) or not isinstance(sigma, (int, float)) or not math.isfinite(float(sigma)) or sigma < 0.0:
             raise ValueError("clip_norm (> 0) and sigma (>= 0) must be finite")
         self.clip_norm = clip_norm
         self.sigma = sigma
@@ -649,7 +655,9 @@ class VerifiedIDECorrectionFlow:
     """Opt-in IDE developer correction pipeline with 30% unverified cap and Verified Update Gate (HM-S15-05 / #175)."""
 
     def __init__(self, *, opt_in: bool = False, beta: float = 0.1) -> None:
-        if beta <= 0.0 or not math.isfinite(beta):
+        if not isinstance(opt_in, bool):
+            raise ValueError("opt_in must be a boolean")
+        if isinstance(beta, bool) or not isinstance(beta, (int, float)) or beta <= 0.0 or not math.isfinite(beta):
             raise ValueError("beta must be finite and > 0")
         self.opt_in = bool(opt_in)
         self.beta = float(beta)
@@ -849,6 +857,13 @@ def verify_python_candidate_isolated(code: str, tests: Sequence[str], *, timeout
     import subprocess
     import sys
 
+    if not isinstance(code, str):
+        raise ValueError("code must be a string")
+    if not isinstance(tests, Sequence) or isinstance(tests, (str, bytes)) or any(not isinstance(t, str) for t in tests):
+        raise ValueError("tests must be a sequence of strings")
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not math.isfinite(float(timeout_s)) or float(timeout_s) <= 0.0:
+        raise ValueError("timeout_s must be a finite positive number")
+
     stripped = code.strip()
     if stripped.startswith("```"):
         blocks = re.findall(r"```(?:python)?\s*\n(.*?)```", stripped, re.S)
@@ -894,12 +909,14 @@ def evaluate_served_expert_bandit_routing(
     """
     from hivemind.queenbee.dance import recruitment_weights
 
-    if not tasks:
+    if not isinstance(tasks, Sequence) or isinstance(tasks, (str, bytes)) or not tasks:
         raise ValueError("tasks must be non-empty")
-    if not seeds:
+    if not isinstance(seeds, Sequence) or isinstance(seeds, (str, bytes)) or not seeds or any(isinstance(s, bool) or not isinstance(s, int) for s in seeds):
         raise ValueError("seeds must be non-empty")
-    if int(rounds) < 2:
+    if isinstance(rounds, bool) or not isinstance(rounds, int) or rounds < 2:
         raise ValueError("rounds must be >= 2")
+    if isinstance(max_trials_per_signer, bool) or not isinstance(max_trials_per_signer, (int, float)) or not math.isfinite(float(max_trials_per_signer)) or float(max_trials_per_signer) <= 0.0:
+        raise ValueError("max_trials_per_signer must be finite and > 0")
     eff_secret = secret if secret is not None else hashlib.sha256(str(tuple(seeds)).encode("utf-8")).digest()
     experts = sorted(tasks[0].expert_candidates.keys())
     if not experts:

@@ -75,10 +75,12 @@ def initialize_domain_branches(
     expert_domains: list[str] | None = None,
 ) -> dict[str, ExpertBranchState]:
     """Phase A: Initialize E=8 independent expert branches from identical base checkpoint W_0."""
+    if not isinstance(initial_lora_state, dict) or not initial_lora_state:
+        raise ValueError("initial_lora_state must be a non-empty dictionary of tensors")
     if expert_domains is None:
         domains = list(DEFAULT_EXPERT_DOMAINS)
     else:
-        if not expert_domains:
+        if isinstance(expert_domains, (str, bytes)) or not expert_domains:
             raise ValueError("expert_domains must not be empty when provided")
         if any(not isinstance(d, str) or not d.strip() for d in expert_domains):
             raise ValueError("expert_domains must contain non-empty string domain names")
@@ -86,6 +88,8 @@ def initialize_domain_branches(
             raise ValueError("expert_domains must not contain duplicate domain names")
         domains = list(expert_domains)
     for k, v in initial_lora_state.items():
+        if not isinstance(v, torch.Tensor):
+            raise ValueError(f"initial_lora_state[{k!r}] must be a torch.Tensor")
         if not torch.isfinite(v).all():
             raise ValueError(f"initial_lora_state[{k!r}] contains non-finite values")
     branches: dict[str, ExpertBranchState] = {}
@@ -656,6 +660,14 @@ class SparseMoEMLPBlock(nn.Module):
         peri_ln: bool = False,
     ) -> None:
         super().__init__()
+        if isinstance(hidden_size, bool) or not isinstance(hidden_size, int) or hidden_size < 1:
+            raise ValueError("hidden_size must be a positive integer")
+        if not experts:
+            raise ValueError("experts must be non-empty")
+        if isinstance(expert_domains, (str, bytes)) or len(expert_domains) != len(experts):
+            raise ValueError("expert_domains length must match experts")
+        if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+            raise ValueError("top_k must be a positive integer")
         if routing_mode not in ("softmax", "sigma_moe"):
             raise ValueError(f"routing_mode must be 'softmax' or 'sigma_moe', got {routing_mode!r}")
         self.hidden_size = hidden_size
@@ -946,6 +958,14 @@ class UpcycledSparseMoEModel(nn.Module):
         Returns:
             The new total number of experts `E+1`.
         """
+        if not isinstance(domain_name, str) or not domain_name.strip():
+            raise ValueError("domain_name must be a non-empty string")
+        if not isinstance(lora_state_dict, dict) or not lora_state_dict:
+            raise ValueError("lora_state_dict must be a non-empty dictionary")
+        if isinstance(lora_rank_r, bool) or not isinstance(lora_rank_r, int) or lora_rank_r < 1:
+            raise ValueError("lora_rank_r must be a positive integer")
+        if isinstance(lora_alpha, bool) or not isinstance(lora_alpha, (int, float)) or not math.isfinite(float(lora_alpha)) or float(lora_alpha) <= 0.0:
+            raise ValueError("lora_alpha must be a finite positive number")
         scaling = float(lora_alpha) / float(lora_rank_r)
         device = next(self.backbone.parameters()).device
         dtype = next(self.backbone.parameters()).dtype
@@ -1652,8 +1672,12 @@ def hotplug_rank_adaptive_experts(
         Telemetry dictionary with the expert counts, per-expert projection reports
         and the VRAM footprint measured before and after the hot-plug.
     """
-    if target_rank_r < 1:
+    if isinstance(target_rank_r, bool) or not isinstance(target_rank_r, int) or target_rank_r < 1:
         raise ValueError(f"target_rank_r must be >= 1, got {target_rank_r}.")
+    if isinstance(vram_budget_gb, bool) or not isinstance(vram_budget_gb, (int, float)) or not math.isfinite(float(vram_budget_gb)) or float(vram_budget_gb) <= 0.0:
+        raise ValueError("vram_budget_gb must be a finite positive number")
+    if lora_alpha is not None and (isinstance(lora_alpha, bool) or not isinstance(lora_alpha, (int, float)) or not math.isfinite(float(lora_alpha)) or float(lora_alpha) <= 0.0):
+        raise ValueError("lora_alpha must be a finite positive number when provided")
 
     dst_alpha = float(lora_alpha) if lora_alpha is not None else 2.0 * float(target_rank_r)
     footprint_before = measure_moe_vram_footprint_gb(moe_model)

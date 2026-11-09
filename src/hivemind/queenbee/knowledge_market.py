@@ -81,10 +81,16 @@ def admit_share(
     verifier_receipt_sha256: str | None = None,
 ) -> Admission:
     """Admit or refuse a share. The hash in the share must match the text, so the record cannot be swapped later."""
+    if not isinstance(share, KnowledgeShare):
+        raise ValueError("share must be a KnowledgeShare")
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
     if isinstance(cap_per_identity_per_epoch, bool) or not isinstance(cap_per_identity_per_epoch, int) or cap_per_identity_per_epoch < 1:
         raise ValueError("cap_per_identity_per_epoch must be >= 1")
     if isinstance(prior_points_this_epoch, bool) or not isinstance(prior_points_this_epoch, int) or prior_points_this_epoch < 0:
         raise ValueError("prior_points_this_epoch must be >= 0")
+    if expected_epoch is not None and (isinstance(expected_epoch, bool) or not isinstance(expected_epoch, int) or expected_epoch < 0):
+        raise ValueError("expected_epoch must be a non-negative integer when provided")
     if expected_epoch is not None and share.epoch != expected_epoch:
         return Admission(False, "epoch_mismatch", share)
     if not share.verified:
@@ -118,8 +124,10 @@ def knowledge_points(
     cap_per_identity_per_epoch: int = 20,
 ) -> dict[str, int]:
     """One point per unique admitted (account_id, text_sha256) share in the epoch, capped per identity."""
-    if cap_per_identity_per_epoch < 1:
+    if isinstance(cap_per_identity_per_epoch, bool) or not isinstance(cap_per_identity_per_epoch, int) or cap_per_identity_per_epoch < 1:
         raise ValueError("cap_per_identity_per_epoch must be >= 1")
+    if expected_epoch is not None and (isinstance(expected_epoch, bool) or not isinstance(expected_epoch, int) or expected_epoch < 0):
+        raise ValueError("expected_epoch must be a non-negative integer when provided")
     out: dict[str, int] = {}
     seen: set[tuple[str, str]] = set()
     active_epoch = expected_epoch
@@ -246,8 +254,10 @@ def certify_knowledge_bonus(before: MarketEquilibrium, after: MarketEquilibrium,
     equilibria because the bonus is a lump sum paid outside the bidding game. `epoch_payment_hmt` is the total paid by
     consumers in the epoch, from which the validator fee is `fee.validator_share * epoch_payment_hmt`.
     """
-    if not math.isfinite(float(epoch_payment_hmt)) or float(epoch_payment_hmt) < 0.0:
+    if isinstance(epoch_payment_hmt, bool) or not isinstance(epoch_payment_hmt, (int, float)) or not math.isfinite(float(epoch_payment_hmt)) or float(epoch_payment_hmt) < 0.0:
         raise ValueError("epoch_payment_hmt must be finite and >= 0")
+    if not isinstance(win_win_before, bool) or not isinstance(win_win_after, bool):
+        raise ValueError("win_win_before and win_win_after must be booleans")
     tol = 1e-9 * max(1.0, abs(before.price_per_1k), abs(before.supply_1k))
     price_same = (
         math.isfinite(before.price_per_1k)

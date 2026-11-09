@@ -142,10 +142,12 @@ class RecruitmentReport:
     def probabilities(self, cluster_id: str, candidates: Iterable[str], floor: float = 0.0) -> dict[str, float]:
         """Recruitment probabilities over `candidates`: weight plus `floor` (exploration mass), normalised. A cluster or
         candidate with no record gets only the floor; with every weight zero the distribution is uniform."""
-        if floor < 0.0 or not math.isfinite(floor):
+        if isinstance(floor, bool) or not isinstance(floor, (int, float)) or floor < 0.0 or not math.isfinite(floor):
             raise ValueError("floor must be finite and >= 0")
+        if isinstance(candidates, (str, bytes)):
+            raise ValueError("candidates must be an iterable of expert ID strings, not str/bytes")
         names = list(dict.fromkeys(candidates))
-        if not names:
+        if not names or any(not isinstance(c, str) or not c.strip() for c in names):
             raise ValueError("candidates must be non-empty")
         per = self.weights.get(cluster_id, {})
         raw = {c: per.get(c, 0.0) + floor for c in names}
@@ -186,8 +188,12 @@ def rotate_scouts(
     """Deterministically select `k` distinct scouts from `pool` for `epoch` (HM-S15-02 / #172)."""
     if isinstance(epoch, bool) or not isinstance(epoch, int) or isinstance(k, bool) or not isinstance(k, int):
         raise ValueError("epoch and k must be integers, not bool")
-    eff_secret = secret if secret is not None else _DEFAULT_SCOUT_ROTATION_DOMAIN.encode("utf-8")
-    unique_pool = list(dict.fromkeys(s for s in pool if s))
+    if isinstance(pool, (str, bytes)):
+        raise ValueError("pool must be a sequence of scout ID strings, not str/bytes")
+    if secret is not None and (not isinstance(secret, (bytes, bytearray)) or len(secret) == 0):
+        raise ValueError("secret must be non-empty bytes when provided")
+    eff_secret = bytes(secret) if secret is not None else _DEFAULT_SCOUT_ROTATION_DOMAIN.encode("utf-8")
+    unique_pool = list(dict.fromkeys(s for s in pool if isinstance(s, str) and s.strip()))
     if k < 1 or k > len(unique_pool):
         raise ValueError(f"need 1 <= k <= len(unique_pool), got k={k} len={len(unique_pool)}")
     if epoch < 0:
@@ -214,8 +220,12 @@ def dual_scout_bounds(
     independent scouts so a single corrupted scout inflating its claim to `1.0` cannot raise the bound above
     the honest scout's upper interval.
     """
-    if min_independent_scouts < 1:
+    if isinstance(min_independent_scouts, bool) or not isinstance(min_independent_scouts, int) or min_independent_scouts < 1:
         raise ValueError("min_independent_scouts must be >= 1")
+    if isinstance(scout_ids, (str, bytes)):
+        raise ValueError("scout_ids must be an iterable of scout ID strings, not str/bytes")
+    if isinstance(z, bool) or not isinstance(z, (int, float)) or not math.isfinite(float(z)) or float(z) <= 0.0:
+        raise ValueError("z must be finite and > 0")
     allowed = set(scout_ids)
     per_cell: dict[tuple[str, str], dict[str, float]] = {}
     for r in records:

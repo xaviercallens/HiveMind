@@ -112,6 +112,10 @@ def keyword_route(
     keyword hit at all abstains (``([], {})``) instead of returning the first dict entries on a tie. Ties are broken by
     domain name. ``min_weight`` drops secondary experts whose normalised weight is below it (the best expert is kept).
     """
+    if not isinstance(prompt, str):
+        raise ValueError("prompt must be a string")
+    if not isinstance(spec_tables, Sequence) or isinstance(spec_tables, (str, bytes)):
+        raise ValueError("spec_tables must be a Sequence of mapping tables")
     if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
         raise ValueError(f"top_k must be an integer >= 1, got {top_k!r}")
     if isinstance(min_weight, bool) or not isinstance(min_weight, (int, float)) or not math.isfinite(float(min_weight)) or not (0.0 <= float(min_weight) <= 1.0):
@@ -184,7 +188,9 @@ def project_lora_rank_svd(
     as a tensor `state_dict` while also exposing `["state_dict"]`, `["factors"]`,
     `["target_rank"]`, and `["parameter_bytes"]`.
     """
-    if target_rank_r < 1:
+    if not isinstance(lora_state_dict, dict):
+        raise ValueError("lora_state_dict must be a dict")
+    if isinstance(target_rank_r, bool) or not isinstance(target_rank_r, int) or target_rank_r < 1:
         raise ValueError("target_rank_r must be positive")
 
     pairs = pair_lora_ab_keys(lora_state_dict)
@@ -406,8 +412,21 @@ class HierarchicalMoERouter(nn.Module):
             raise ValueError("hidden_size must be >= 1")
         if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
             raise ValueError("top_k must be >= 1")
-        if num_macro_domains < 1 or experts_per_domain < 1:
+        if (
+            isinstance(num_macro_domains, bool)
+            or not isinstance(num_macro_domains, int)
+            or num_macro_domains < 1
+            or isinstance(experts_per_domain, bool)
+            or not isinstance(experts_per_domain, int)
+            or experts_per_domain < 1
+        ):
             raise ValueError("num_macro_domains and experts_per_domain must be >= 1")
+        if cluster_sizes is not None:
+            if not isinstance(cluster_sizes, Sequence) or isinstance(cluster_sizes, (str, bytes)):
+                raise ValueError("cluster_sizes must be a Sequence of positive integers")
+            for s in cluster_sizes:
+                if isinstance(s, bool) or not isinstance(s, int):
+                    raise ValueError("every macro cluster needs at least one expert")
         sizes = (
             [int(s) for s in cluster_sizes]
             if cluster_sizes is not None
@@ -528,12 +547,30 @@ class ThreeTierHierarchicalMoERouter(nn.Module):
             raise ValueError("hidden_size must be >= 1")
         if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
             raise ValueError("top_k must be >= 1")
-        if num_super_clusters < 1 or macro_per_super < 1 or micro_per_macro < 1:
+        if (
+            isinstance(num_super_clusters, bool)
+            or not isinstance(num_super_clusters, int)
+            or num_super_clusters < 1
+            or isinstance(macro_per_super, bool)
+            or not isinstance(macro_per_super, int)
+            or macro_per_super < 1
+            or isinstance(micro_per_macro, bool)
+            or not isinstance(micro_per_macro, int)
+            or micro_per_macro < 1
+        ):
             raise ValueError("num_super_clusters, macro_per_super and micro_per_macro must be >= 1")
         self.hidden_size = int(hidden_size)
         self.num_super_clusters = int(num_super_clusters)
         self.macro_per_super = int(macro_per_super)
         num_micro_clusters = self.num_super_clusters * self.macro_per_super
+        if micro_cluster_sizes is not None:
+            if not isinstance(micro_cluster_sizes, Sequence) or isinstance(micro_cluster_sizes, (str, bytes)):
+                raise ValueError("micro_cluster_sizes must be a Sequence of positive integers")
+            for s in micro_cluster_sizes:
+                if isinstance(s, bool) or not isinstance(s, int):
+                    raise ValueError(
+                        f"micro_cluster_sizes must have {num_micro_clusters} entries, each >= 1"
+                    )
         sizes = (
             [int(s) for s in micro_cluster_sizes]
             if micro_cluster_sizes is not None

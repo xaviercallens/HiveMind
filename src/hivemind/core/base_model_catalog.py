@@ -418,6 +418,10 @@ class VramEstimate:
 
 def estimate_qlora_training(g: ModelGeometry, r: TrainRecipe) -> VramEstimate:
     """Peak-VRAM ESTIMATE for NF4 QLoRA training of ``g`` with recipe ``r`` (process level, context allowance included)."""
+    if not isinstance(g, ModelGeometry):
+        raise ValueError("g must be a ModelGeometry")
+    if not isinstance(r, TrainRecipe):
+        raise ValueError("r must be a TrainRecipe")
     lora_params = r.lora_rank * (g.lora_in_plus_out_all_linear if r.targets == "all_linear" else g.lora_in_plus_out_mlp)
     tokens = r.seq_len * r.micro_batch
     per_layer = tokens * (ATTN_ELEMS * g.hidden + MLP_ELEMS * g.intermediate) * FP16_BYTES / MIB
@@ -440,6 +444,10 @@ def estimate_qlora_training(g: ModelGeometry, r: TrainRecipe) -> VramEstimate:
 
 def estimate_gguf_serving(g: ModelGeometry, s: ServeConfig) -> VramEstimate:
     """VRAM ESTIMATE for serving the text model as a GGUF of type ``s.quant`` (vision projector not loaded)."""
+    if not isinstance(g, ModelGeometry):
+        raise ValueError("g must be a ModelGeometry")
+    if not isinstance(s, ServeConfig):
+        raise ValueError("s must be a ServeConfig")
     bpw = gguf_bytes_per_weight(s.quant)
     seqs = s.n_parallel
     kv = seqs * s.context_len * 2 * g.n_full_attention_layers * g.n_kv_heads * g.head_dim * FP16_BYTES / MIB
@@ -608,6 +616,8 @@ class PromotionReceipt:
 
 def _discordant(candidate: Mapping[str, bool], incumbent: Mapping[str, bool]) -> tuple[int, int, int, bool]:
     for name, m in (("candidate", candidate), ("incumbent", incumbent)):
+        if not isinstance(m, Mapping):
+            raise ValueError(f"{name} must be a Mapping of item_id -> bool")
         bad = [k for k, v in m.items() if not isinstance(v, bool)]
         if bad:
             raise ValueError(f"{name} outcomes must be booleans (first offending item: {bad[0]!r})")
@@ -626,6 +636,8 @@ def promotion_gate(candidate: Mapping[str, bool], incumbent: Mapping[str, bool],
     (3) candidate wins > losses there, and (4) on the guard pack losses - wins <= tolerated and no one-sided significant
     regression. A pairing or size failure is INSUFFICIENT; anything else that is not a promotion is HOLD.
     """
+    if not isinstance(policy, PromotionPolicy):
+        raise ValueError("policy must be a PromotionPolicy")
     n, wins, losses, paired = _discordant(candidate, incumbent)
     gn, gwins, glosses, gpaired = _discordant(guard_candidate, guard_incumbent)
     p = mcnemar_exact_p(losses, wins)

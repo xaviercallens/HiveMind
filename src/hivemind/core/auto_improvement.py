@@ -1101,6 +1101,8 @@ class NocturnalAutoImprovementScheduler:
         ):
             if not isinstance(val, str) or not val.strip() or any(ord(c) < 32 for c in val):
                 raise ValueError(f"{field_name} must be a non-empty printable string")
+        if observed_telemetry is not None and not isinstance(observed_telemetry, Mapping):
+            raise ValueError("observed_telemetry must be a Mapping when provided")
         rng = np.random.default_rng(workunit.seed)
 
         if observed_telemetry is not None:
@@ -1209,6 +1211,8 @@ class PointsRetrofitManager:
 
     def calculate_work_reward(self, result: AutoImprovementExecutionResult) -> float:
         """Compute the deterministic HMT reward for a verified execution result (0 for simulated RNG results)."""
+        if not isinstance(result, AutoImprovementExecutionResult):
+            raise ValueError("result must be an AutoImprovementExecutionResult")
         if bool(getattr(result, "simulated", False)):
             return 0.0
         reward = self.base_wu_reward
@@ -1224,6 +1228,11 @@ class PointsRetrofitManager:
         results: Sequence[AutoImprovementExecutionResult],
     ) -> RetrofitReport:
         """Audit past and present work results and credit HMT points idempotently to worker accounts."""
+        if not isinstance(results, Sequence) or isinstance(results, (str, bytes)):
+            raise ValueError("results must be a Sequence of AutoImprovementExecutionResult")
+        for r in results:
+            if not isinstance(r, AutoImprovementExecutionResult):
+                raise ValueError("results must contain only AutoImprovementExecutionResult instances")
         credited_accounts: dict[str, float] = {}
         audit_log: list[str] = []
         newly_credited = 0

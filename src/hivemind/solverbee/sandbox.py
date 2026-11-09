@@ -316,8 +316,12 @@ def _refuse(msg: str) -> SandboxOutcome:
 def run_binary(argv_binary: Sequence[str], stdin_bytes: bytes, *, limits: Limits = Limits(), expected_sha256: Optional[str] = None) -> SandboxOutcome:
     """Run ``argv_binary[0]`` with arguments ``argv_binary[1:]`` and ``stdin_bytes`` under the limits. Never raises for runtime problems; see SandboxOutcome."""
     t0 = time.monotonic()
-    if not argv_binary or not isinstance(argv_binary[0], str):
+    if not isinstance(limits, Limits):
+        raise ValueError("limits must be a Limits instance")
+    if isinstance(argv_binary, (str, bytes)) or not isinstance(argv_binary, Sequence) or not argv_binary or not isinstance(argv_binary[0], str):
         return _refuse("empty command")
+    if not isinstance(stdin_bytes, (bytes, bytearray)):
+        return _refuse("stdin_bytes must be bytes")
     if len(stdin_bytes) > limits.stdin_limit:
         return _refuse(f"stdin of {len(stdin_bytes)} bytes exceeds the {limits.stdin_limit}-byte limit")
     binary = os.path.realpath(argv_binary[0])

@@ -218,6 +218,8 @@ def _content_text(content: Any) -> str:
 
 def extract_spec_block(text: str) -> bytes:
     """The bytes of the single ```ode-spec fenced block (content verbatim, minus the newline before the closing fence)."""
+    if not isinstance(text, str):
+        raise SpecError("text must be a string")
     blocks = SPEC_BLOCK_RE.findall(text)
     opens = len(SPEC_OPEN_RE.findall(text))
     if not blocks:
@@ -255,6 +257,10 @@ class ServiceError(Exception):
 
 def check_bind(host: str, allow_nonlocal: bool, api_key_file: Optional[str]) -> Optional[str]:
     """Returns the API key to enforce (or None). Refuses a non-loopback bind unless BOTH allow_nonlocal and an api key file are given (as gwaya_lite does)."""
+    if not isinstance(host, str) or not host.strip():
+        raise ServiceError("host must be a non-empty string")
+    if not isinstance(allow_nonlocal, bool):
+        raise ServiceError("allow_nonlocal must be a boolean")
     key = None
     if api_key_file:
         try:
@@ -290,6 +296,8 @@ class SolverBeeService:
                  log: Callable[[str], None] = lambda m: None) -> None:
         if not isinstance(binary, str) or not binary.strip():
             raise ValueError("binary must be a non-empty string")
+        if not isinstance(allow_unsandboxed, bool) or not isinstance(loopback_only, bool):
+            raise ValueError("allow_unsandboxed and loopback_only must be booleans")
         if isinstance(max_concurrent, bool) or not isinstance(max_concurrent, int) or max_concurrent < 1:
             raise ValueError("max_concurrent must be an integer >= 1")
         if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not math.isfinite(timeout_s) or timeout_s <= 0:

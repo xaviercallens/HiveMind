@@ -34,18 +34,26 @@ def reset_email_configured(env: Mapping[str, str] | None = None) -> bool:
 
 
 def reset_link(token: str, env: Mapping[str, str] | None = None) -> str:
+    if not isinstance(token, str) or not token.strip():
+        raise ValueError("token must be a non-empty string")
     base = _env(env).get("HIVEMIND_PUBLIC_WEB_URL", "").strip().rstrip("/")
-    return f"{base}/auth/reset#token={token}"
+    return f"{base}/auth/reset#token={token.strip()}"
 
 
 def build_reset_message(recipient: str, link: str, sender: str) -> EmailMessage:
+    if not isinstance(recipient, str) or "@" not in recipient.strip():
+        raise ValueError("recipient must be a valid email address")
+    if not isinstance(link, str) or not link.strip().startswith(("https://", "http://", "/")):
+        raise ValueError("link must be a non-empty URL or path")
+    if not isinstance(sender, str) or "@" not in sender.strip():
+        raise ValueError("sender must be a valid email address")
     msg = EmailMessage()
     msg["Subject"] = SUBJECT
-    msg["From"] = sender
-    msg["To"] = recipient
+    msg["From"] = sender.strip()
+    msg["To"] = recipient.strip()
     msg.set_content(
         "Someone asked to reset the password of the HiveMind account that uses this e-mail address.\n\n"
-        f"To choose a new password, open this link within 30 minutes:\n{link}\n\n"
+        f"To choose a new password, open this link within 30 minutes:\n{link.strip()}\n\n"
         "The link works once. Using it signs out every session and replaces your API key.\n"
         "If you did not ask for this, ignore this message: your password stays as it is.\n"
     )
@@ -56,7 +64,13 @@ def send_reset_email(recipient: str, token: str, env: Mapping[str, str] | None =
     """Send the reset link to ``recipient``. Returns True when the SMTP server accepted the message. Never raises and
     never logs the token or the link."""
     e = _env(env)
-    if not reset_email_configured(e) or "@" not in (recipient or ""):
+    if (
+        not reset_email_configured(e)
+        or not isinstance(recipient, str)
+        or "@" not in recipient
+        or not isinstance(token, str)
+        or not token.strip()
+    ):
         return False
     host = e["HIVEMIND_SMTP_HOST"].strip()
     port = int(e.get("HIVEMIND_SMTP_PORT", "587") or "587")

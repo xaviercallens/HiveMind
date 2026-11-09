@@ -69,9 +69,18 @@ def create_shield_app(
     """
     # ``control_state_file`` is the small JSON file the producer agent writes (``--control-state-file``): while it says ``"paused": true`` chat requests get
     # 503 ``producer_paused``. A missing or unreadable file means "not paused" (the behaviour without remote control); ``/v1/models`` is never affected.
-    if len(token) < MIN_TOKEN_CHARS:
+    if not isinstance(upstream, str) or not upstream.strip().startswith(("http://", "https://")):
+        raise ValueError("upstream must be an http:// or https:// URL")
+    if not isinstance(token, str) or len(token) < MIN_TOKEN_CHARS:
         raise ValueError(f"the endpoint token must be at least {MIN_TOKEN_CHARS} characters")
-    if max_concurrent < 1 or max_body_bytes < 1:
+    if (
+        isinstance(max_concurrent, bool)
+        or not isinstance(max_concurrent, int)
+        or isinstance(max_body_bytes, bool)
+        or not isinstance(max_body_bytes, int)
+        or max_concurrent < 1
+        or max_body_bytes < 1
+    ):
         raise ValueError("max_concurrent and max_body_bytes must be >= 1")
     base = upstream.rstrip("/")
     route_base = {m: u.rstrip("/") for m, u in (routes or {}).items()}

@@ -17,6 +17,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import math
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -114,6 +115,37 @@ class PublicImageScenarioSpec:
     svg_markup: str
     source_url: str = "https://commons.wikimedia.org"
     jpg_filename: str = ""
+
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("scenario_id", self.scenario_id),
+            ("division_id", self.division_id),
+            ("model_id", self.model_id),
+            ("svg_markup", self.svg_markup),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name, val in (
+            ("warm_latency_ms", self.warm_latency_ms),
+            ("tokens_per_sec", self.tokens_per_sec),
+            ("active_vram_mib", self.active_vram_mib),
+        ):
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or float(val) <= 0.0
+            ):
+                raise ValueError(f"{field_name} must be a positive finite number")
+        if (
+            isinstance(self.grounding_confidence, bool)
+            or not isinstance(self.grounding_confidence, (int, float))
+            or not math.isfinite(float(self.grounding_confidence))
+            or not (0.0 <= float(self.grounding_confidence) <= 1.0)
+        ):
+            raise ValueError("grounding_confidence must be a finite number in [0.0, 1.0]")
+        if isinstance(self.http_status, bool) or not isinstance(self.http_status, int) or self.http_status < 100:
+            raise ValueError("http_status must be a valid HTTP status code integer")
 
     def svg_data_uri(self) -> str:
         """Return a CSP-safe `data:image/svg+xml;base64,...` URI for embedding in HTML."""

@@ -47,6 +47,8 @@ class FP8E4M3PageCodec:
     name = "fp8_e4m3"
 
     def encode(self, page: Tensor) -> Tuple[Tensor, Tensor]:
+        if not isinstance(page, torch.Tensor):
+            raise ValueError(f"{self.name}: page must be a torch.Tensor")
         x = page.detach().to(torch.float32)
         _require_encodable(self.name, x)
         q, scale = FP8PagedKVCache._quantize_page_fp8(page)
@@ -99,6 +101,8 @@ class IntMinMaxPageCodec:
         self.name = f"int{self.bits}_minmax"
 
     def encode(self, page: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
+        if not isinstance(page, torch.Tensor):
+            raise ValueError(f"{self.name}: page must be a torch.Tensor")
         x = page.detach().to(torch.float32)
         mn = x.amin(dim=-1, keepdim=True).to(torch.float16)
         mx = x.amax(dim=-1, keepdim=True).to(torch.float16)
@@ -138,7 +142,7 @@ class LatticePageCodec:
         self.name = f"lattice_{kind}_s{self.scale:g}"
 
     def encode(self, page: Tensor) -> Dict[str, Any]:
-        if page.dim() < 1 or page.numel() == 0:
+        if not isinstance(page, torch.Tensor) or page.dim() < 1 or page.numel() == 0:
             raise ValueError(f"{self.name}: page must be a non-empty tensor with at least 1 dimension")
         x = page.detach().to(torch.float64)
         true_rms = x.pow(2).mean(dim=-1, keepdim=True).sqrt()
@@ -197,7 +201,13 @@ class PluggableKVPageCache:
             raise ValueError(f"layer_idx must be an integer >= 0, got {layer_idx!r}")
         if isinstance(page_idx, bool) or not isinstance(page_idx, int) or page_idx < 0:
             raise ValueError(f"page_idx must be an integer >= 0, got {page_idx!r}")
-        if k_tensor.numel() == 0 or v_tensor.numel() == 0 or k_tensor.shape != v_tensor.shape:
+        if (
+            not isinstance(k_tensor, torch.Tensor)
+            or not isinstance(v_tensor, torch.Tensor)
+            or k_tensor.numel() == 0
+            or v_tensor.numel() == 0
+            or k_tensor.shape != v_tensor.shape
+        ):
             raise ValueError("k_tensor and v_tensor must be non-empty tensors with matching shapes")
         # Encode both halves first: a codec that refuses the page (NaN, overflow, underflow) must not have evicted a good page already.
         pk = self.codec.encode(k_tensor.to(self.device))

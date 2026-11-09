@@ -89,6 +89,35 @@ class GPUProducerNodeSpec:
     throughput_weight: int
     region: str
 
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("node_id", self.node_id),
+            ("handle", self.handle),
+            ("hardware_name", self.hardware_name),
+            ("pool_role", self.pool_role),
+            ("region", self.region),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name, val in (
+            ("total_vram_mib", self.total_vram_mib),
+            ("training_budget_vram_mib", self.training_budget_vram_mib),
+            ("lora_alpha", self.lora_alpha),
+        ):
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or float(val) <= 0.0
+            ):
+                raise ValueError(f"{field_name} must be a positive finite number")
+        for field_name, val in (
+            ("lora_rank", self.lora_rank),
+            ("throughput_weight", self.throughput_weight),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+
 
 @dataclass(frozen=True)
 class ShardAllocationPlan:
@@ -322,6 +351,10 @@ def partition_swarm_shards_between_large_and_hybrid(
     strictly `< 1.5 GB` micro-backbones (`ViT-Base`, `DINOv2-Base`, `SigLIP-Base`) so
     their primary VRAM remains dedicated to low-latency inference.
     """
+    if not isinstance(fleet, Sequence) or isinstance(fleet, (str, bytes)):
+        raise ValueError("fleet must be a sequence of GPUProducerNodeSpec")
+    if not isinstance(divisions, Mapping) or not divisions:
+        raise ValueError("divisions must be a non-empty mapping")
     large_nodes = [n for n in fleet if n.pool_role == "LARGE_GPU_DEDICATED_TRAINER"]
     hybrid_nodes = [n for n in fleet if n.pool_role == "HYBRID_INFERENCE_AND_MICRO_TRAINER"]
     if not large_nodes or not hybrid_nodes:

@@ -315,6 +315,37 @@ class ScheduledMoEWorkunit:
     verification_oracle: str
     prorated_reward_hmt: float
 
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("workunit_id", self.workunit_id),
+            ("node_id", self.node_id),
+            ("hardware_tier", self.hardware_tier),
+            ("training_mode", self.training_mode),
+            ("backbone_model", self.backbone_model),
+            ("bee_id", self.bee_id),
+            ("cluster", self.cluster),
+            ("hf_dataset", self.hf_dataset),
+            ("verification_oracle", self.verification_oracle),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name, val in (
+            ("lora_rank", self.lora_rank),
+            ("lora_alpha", self.lora_alpha),
+            ("seq_len", self.seq_len),
+            ("inner_steps", self.inner_steps),
+            ("estimated_vram_mib", self.estimated_vram_mib),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+        if (
+            isinstance(self.prorated_reward_hmt, bool)
+            or not isinstance(self.prorated_reward_hmt, (int, float))
+            or not math.isfinite(float(self.prorated_reward_hmt))
+            or float(self.prorated_reward_hmt) <= 0.0
+        ):
+            raise ValueError("prorated_reward_hmt must be a positive finite number")
+
 
 class UsageDrivenQwen35MoEOrchestrator:
     """Computes usage-proportional MoE training allocations and schedules idle/nocturnal producers."""
@@ -387,6 +418,11 @@ class UsageDrivenQwen35MoEOrchestrator:
         """Assign usage-prioritized Qwen 3.5 QLoRA workunits to eligible idle and nocturnal producers."""
         if isinstance(round_index, bool) or not isinstance(round_index, int) or round_index < 1:
             raise ValueError("round_index must be an integer >= 1")
+        if not isinstance(producers, Sequence) or isinstance(producers, (str, bytes)):
+            raise ValueError("producers must be a sequence of ProducerNodeCapability")
+        for node in producers:
+            if not isinstance(node, ProducerNodeCapability):
+                raise ValueError("producers must contain ProducerNodeCapability instances")
         scores = self.compute_bee_priority_scores()
         tier_rank = {"std_8gb": 1, "big_12gb": 2, "xl_16gb_plus": 3}
         ordered_bees = sorted(
@@ -459,6 +495,8 @@ def project_lora_rank_svd(
     Computes the best rank-`target_rank` Frobenius approximation of `delta_W = lora_b @ lora_a`
     via truncated SVD and returns `(student_a, student_b, retained_energy_ratio)`.
     """
+    if not isinstance(lora_a, torch.Tensor) or not isinstance(lora_b, torch.Tensor):
+        raise ValueError("lora_a and lora_b must be 2D matrices")
     if lora_a.ndim != 2 or lora_b.ndim != 2:
         raise ValueError("lora_a and lora_b must be 2D matrices")
     if lora_b.shape[1] != lora_a.shape[0]:

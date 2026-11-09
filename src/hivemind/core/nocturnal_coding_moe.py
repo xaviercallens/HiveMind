@@ -54,7 +54,7 @@ def multi_krum_select(
     num_select: int,
 ) -> list[int]:
     """Byzantine-resilient Multi-Krum selection over flat delta vectors."""
-    if not vectors:
+    if not isinstance(vectors, (list, tuple)) or not vectors:
         raise ValueError("vectors must be non-empty")
     n = len(vectors)
     if isinstance(num_byzantine, bool) or not isinstance(num_byzantine, int) or num_byzantine < 0:
@@ -397,6 +397,22 @@ class CodingSubtaskNode:
     depends_on: list[str]
     verification_benchmark: str
 
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("subtask_id", self.subtask_id),
+            ("role_slug", self.role_slug),
+            ("assigned_cluster_id", self.assigned_cluster_id),
+            ("target_language", self.target_language),
+            ("description", self.description),
+            ("verification_benchmark", self.verification_benchmark),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(self.depends_on, list) or not all(
+            isinstance(d, str) and d.strip() for d in self.depends_on
+        ):
+            raise ValueError("depends_on must be a list of non-empty strings")
+
 
 @dataclass(frozen=True)
 class BigGPUNodeCodingSpec:
@@ -415,6 +431,35 @@ class BigGPUNodeCodingSpec:
     lora_alpha: float
     throughput_weight: int
     region: str
+
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("node_id", self.node_id),
+            ("handle", self.handle),
+            ("hardware_name", self.hardware_name),
+            ("pool_role", self.pool_role),
+            ("region", self.region),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name, val in (
+            ("total_vram_mib", self.total_vram_mib),
+            ("training_budget_vram_mib", self.training_budget_vram_mib),
+            ("lora_alpha", self.lora_alpha),
+        ):
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or float(val) <= 0.0
+            ):
+                raise ValueError(f"{field_name} must be a positive finite number")
+        for field_name, val in (
+            ("lora_rank", self.lora_rank),
+            ("throughput_weight", self.throughput_weight),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
 
 
 BIG_GPU_CODING_FLEET: tuple[BigGPUNodeCodingSpec, ...] = (

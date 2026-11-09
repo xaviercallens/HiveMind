@@ -84,6 +84,8 @@ def format_webgpu_live_gcp_telemetry_banner(payload: dict[str, Any] | None) -> s
 
 def render_webgpu_galaxy_html(default_lang: str = "fr") -> str:
     """Render the standalone Zero-Install WebGPU 3D Galaxy & WGSL @compute Contribution App."""
+    if isinstance(default_lang, bool) or not isinstance(default_lang, str):
+        raise ValueError("default_lang must be a string")
     if default_lang not in ("fr", "en", "es", "de", "zh"):
         default_lang = "fr"
     return f"""<!DOCTYPE html>
@@ -1562,8 +1564,20 @@ def execute_server_webgpu_verification_and_sync(
     recovered_transit_depth_ppm: float,
 ) -> dict[str, Any]:
     """Generate a cryptographic SHA-256 receipt for a WebGPU WGSL @compute workunit and sync with GCP Ruche."""
-    if isinstance(n_points_folded, bool):
+    for fname, fval in (
+        ("handle", handle),
+        ("target_planet", target_planet),
+        ("gpu_adapter", gpu_adapter),
+        ("backend", backend),
+    ):
+        if isinstance(fval, bool) or not isinstance(fval, str) or not fval.strip():
+            raise ValueError(f"{fname} must be a non-empty string")
+    if isinstance(n_points_folded, bool) or not isinstance(n_points_folded, int):
         raise ValueError("n_points_folded must be an integer, not bool")
+    if isinstance(kernel_exec_ms, bool) or not isinstance(kernel_exec_ms, (int, float)):
+        raise ValueError("kernel_exec_ms must be a finite number")
+    if isinstance(recovered_transit_depth_ppm, bool) or not isinstance(recovered_transit_depth_ppm, (int, float)):
+        raise ValueError("recovered_transit_depth_ppm must be a finite number")
     n_pts = int(n_points_folded)
     if n_pts < 64 or n_pts > 1_048_576:
         raise ValueError(f"n_points_folded out of range [64, 1048576]: {n_pts}")

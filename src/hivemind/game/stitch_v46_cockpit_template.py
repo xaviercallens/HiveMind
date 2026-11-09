@@ -2705,5 +2705,7 @@ def build_stitch_v46_cockpit_html(state_json: str) -> str:
 
 def render_stitch_v46_cockpit_html(state_json: str = "{}") -> str:
     """Render the USS Hivemind NCC-31337 v4.6 Complete Tactical Cockpit HTML."""
+    if isinstance(state_json, bool) or not isinstance(state_json, str) or not state_json.strip():
+        raise ValueError("state_json must be a non-empty JSON string")
     return build_stitch_v46_cockpit_html(state_json=state_json)
 

@@ -977,6 +977,8 @@ def _generate_cyberpunk_hud_html(game_report: Dict[str, Any]) -> str:
 
 def _generate_free_steam_readme_md(game_report: Dict[str, Any]) -> str:
     """Generate the Player Manual & Custom HF Dataset Modding Guide for the Free Steam Edition (with PR #11 Steam status)."""
+    if not isinstance(game_report, dict):
+        raise ValueError("game_report must be a dict")
     champ = game_report.get("best_miner_champion", {})
     champ_tag = champ.get("gamer_tag", "CyberValkyrie_FR")
     champ_pts = champ.get("total_points", 19500)

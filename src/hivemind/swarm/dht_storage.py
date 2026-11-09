@@ -214,6 +214,12 @@ class ContentAddressedSwarmStore:
         chunk_size: int = 256,
         expected_sha256: Optional[str] = None,
     ) -> StorageProofReceipt:
+        if not isinstance(node_id, str) or not node_id.strip():
+            raise ValueError("node_id must be a non-empty string")
+        if not isinstance(shard_cid, str) or not shard_cid.strip():
+            raise ValueError("shard_cid must be a non-empty string")
+        if not isinstance(prev_block_hash, str) or not prev_block_hash.strip():
+            raise ValueError("prev_block_hash must be a non-empty string")
         if isinstance(chunk_size, bool) or not isinstance(chunk_size, int) or chunk_size <= 0:
             raise ValueError("chunk_size must be a positive integer")
         p = Path(shard_path)
@@ -511,6 +517,8 @@ class ContentAddressedSwarmStore:
 
     def load_seed_manifest(self, bundle_id: str) -> BundleSeedManifest:
         """Load a previously advertised bundle seed manifest from the local CAS vault."""
+        if not isinstance(bundle_id, str) or not bundle_id.strip():
+            raise ValueError("bundle_id must be a non-empty string")
         manifest_path = self.bundle_seeds_dir / f"{self._safe_bundle_id(bundle_id)}.seed_manifest.json"
         if not manifest_path.exists():
             raise FileNotFoundError(

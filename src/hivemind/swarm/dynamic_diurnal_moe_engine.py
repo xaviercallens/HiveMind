@@ -331,9 +331,13 @@ class DiurnalMoETrainingScheduler:
 
     def register_producer_profile(self, profile: DiurnalProducerProfile) -> None:
         """Register or update a producer's diurnal profile (timezone, VRAM, hardware)."""
+        if not isinstance(profile, DiurnalProducerProfile):
+            raise TypeError("profile must be a DiurnalProducerProfile")
         self._producers[profile.account_id] = profile
 
     def get_producer_profile(self, account_id: str) -> DiurnalProducerProfile | None:
+        if not isinstance(account_id, str) or not account_id.strip():
+            raise ValueError("account_id must be a non-empty string")
         return self._producers.get(account_id)
 
     def schedule_diurnal_batch(

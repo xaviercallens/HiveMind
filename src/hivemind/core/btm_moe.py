@@ -372,8 +372,10 @@ class Season3DomainExpertRegistry:
 
 def _even_cluster_sizes(total: int, num_clusters: int) -> List[int]:
     """Split `total` experts into `num_clusters` groups whose sizes differ by at most one."""
-    if isinstance(total, bool) or not isinstance(total, int) or total < 1 or isinstance(num_clusters, bool) or not isinstance(num_clusters, int) or num_clusters < 1:
-        raise ValueError("total and num_clusters must be integers >= 1")
+    if isinstance(num_clusters, bool) or not isinstance(num_clusters, int) or num_clusters < 1:
+        raise ValueError("num_clusters must be >= 1")
+    if isinstance(total, bool) or not isinstance(total, int) or total < 1:
+        raise ValueError("total must be >= 1")
     base, extra = divmod(int(total), int(num_clusters))
     return [base + (1 if i < extra else 0) for i in range(int(num_clusters))]
 

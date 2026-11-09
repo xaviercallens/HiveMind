@@ -186,7 +186,7 @@ def test_btm_moe_keyword_registry_and_router_validation() -> None:
         reg.register_expert("not-expert")  # type: ignore[arg-type]
 
     for bad_args in ((0, 4), (4, 0), (True, 4), (4, False)):
-        with pytest.raises(ValueError, match="total and num_clusters must be integers >= 1"):
+        with pytest.raises(ValueError, match="must be >= 1"):
             bm._even_cluster_sizes(*bad_args)  # type: ignore[arg-type]
 
     with pytest.raises(ValueError, match="gate must be an nn.Linear"):

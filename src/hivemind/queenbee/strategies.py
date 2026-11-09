@@ -194,6 +194,14 @@ class BanditStrategy:
         """One signed record per (cluster, expert) with at least one verified trial, from this client's own counts.
         `served_by[expert]` names the producer that served the expert; a mismatch with the expert id is left in the record
         for the aggregator to reject, never silently fixed."""
+        if not isinstance(served_by, Mapping) or not isinstance(cost_per_1k, Mapping):
+            raise TypeError("served_by and cost_per_1k must be Mappings")
+        if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 0:
+            raise ValueError("epoch must be a non-negative integer")
+        if not isinstance(verifier_kind, str) or not verifier_kind.strip() or not isinstance(signer_id, str) or not signer_id.strip():
+            raise ValueError("verifier_kind and signer_id must be non-empty strings")
+        if not isinstance(secret, (bytes, bytearray)) or not secret:
+            raise ValueError("secret must be non-empty bytes")
         out: list[DanceRecord] = []
         for (cluster_id, expert_id), arm in sorted(self.arms.items()):
             if arm.verified_n == 0:
@@ -340,6 +348,8 @@ class PreferencePairStrategy:
         return list(self.pairs) + extra
 
     def export_jsonl(self, path: Path | str, unverified_pairs: Sequence[PreferencePair] = ()) -> int:
+        if not isinstance(path, (Path, str)) or not str(path).strip():
+            raise ValueError("path must be a non-empty Path or string")
         mix = self.training_mix(unverified_pairs)
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -434,6 +444,12 @@ class PrivacyAccountant:
         self.steps: int = 0
 
     def _step_rdp(self, alpha: float, clip_norm: float, sigma: float) -> float:
+        if isinstance(alpha, bool) or not isinstance(alpha, (int, float)) or not math.isfinite(float(alpha)) or float(alpha) <= 1.0:
+            raise ValueError("alpha must be a finite number > 1.0")
+        if isinstance(clip_norm, bool) or not isinstance(clip_norm, (int, float)) or not math.isfinite(float(clip_norm)) or float(clip_norm) <= 0.0:
+            raise ValueError("clip_norm must be finite and > 0")
+        if isinstance(sigma, bool) or not isinstance(sigma, (int, float)) or not math.isfinite(float(sigma)) or float(sigma) < 0.0:
+            raise ValueError("sigma must be finite and >= 0")
         if sigma <= 0.0:
             return math.inf
         noise_multiplier = sigma / clip_norm
@@ -626,6 +642,8 @@ class FederatedShareStrategy:
         self.router.observe(outcome)
 
     def prepare_share(self, delta: Mapping[str, Any], generator: Any) -> dict[str, Any]:
+        if not isinstance(delta, Mapping) or not delta:
+            raise ValueError("delta must be a non-empty Mapping")
         if self.accountant is not None:
             self.last_privacy = self.accountant.record_step(self.clip_norm, self.sigma, enforce_budget=True)
         shared, self.last_clip = clip_and_noise(delta, self.clip_norm, self.sigma, generator)
@@ -720,6 +738,12 @@ class VerifiedIDECorrectionFlow:
         chosen_verified: bool,
         verifier_receipt_sha256: str | None = None,
     ) -> bool:
+        if not isinstance(prompt_id, str) or not prompt_id.strip() or not isinstance(cluster_id, str) or not cluster_id.strip():
+            raise ValueError("prompt_id and cluster_id must be non-empty strings")
+        if not isinstance(rejected, str) or not isinstance(chosen, str):
+            raise ValueError("rejected and chosen must be strings")
+        if not isinstance(chosen_verified, bool):
+            raise ValueError("chosen_verified must be a boolean")
         if not self.opt_in:
             return False
         return self.strategy.observe_correction(

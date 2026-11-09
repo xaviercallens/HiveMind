@@ -382,16 +382,24 @@ def fmt_number(v: float) -> str:
 
 
 def _passes_filters(row: Mapping[str, Any], mapping: Mapping[str, Any]) -> bool:
+    if not isinstance(row, Mapping) or not isinstance(mapping, Mapping):
+        raise TypeError("row and mapping must be Mappings")
     return all(row.get(k) in allowed for k, allowed in (mapping.get("filter_in") or {}).items())
 
 
 def _excluded(prompt: str, completion: str, mapping: Mapping[str, Any]) -> bool:
     """``exclude_pattern`` is matched against the text that would be trained on (prompt and completion), not unused columns."""
+    if not isinstance(prompt, str) or not isinstance(completion, str):
+        raise TypeError("prompt and completion must be strings")
+    if not isinstance(mapping, Mapping):
+        raise TypeError("mapping must be a Mapping")
     pat = mapping.get("exclude_pattern")
     return bool(pat and (re.search(pat, prompt, re.IGNORECASE) or re.search(pat, completion, re.IGNORECASE)))
 
 
 def _map_fields(row: Mapping[str, Any], m: Mapping[str, Any]) -> tuple[str, str]:
+    if not isinstance(row, Mapping) or not isinstance(m, Mapping):
+        raise TypeError("row and m must be Mappings")
     parts = [_text(row, f) for f in m["prompt_fields"][:1]]
     parts += [str(row[f]).strip() for f in m["prompt_fields"][1:] if isinstance(row.get(f), str) and row[f].strip()]
     return "\n\n".join(parts), m.get("completion_prefix", "") + _text(row, m["completion_field"])
@@ -447,6 +455,8 @@ def _map_label(row: Mapping[str, Any], m: Mapping[str, Any]) -> tuple[str, str]:
 
 def _label_filtered(row: Mapping[str, Any], m: Mapping[str, Any]) -> bool:
     """A label outside ``label_map`` (e.g. NO_SIGNAL, or a class the pack does not use) is a filter, not a schema error."""
+    if not isinstance(row, Mapping) or not isinstance(m, Mapping):
+        raise TypeError("row and m must be Mappings")
     if m.get("kind") != "label":
         return False
     raw = row.get(m["label_field"])
@@ -462,6 +472,8 @@ MAPPERS: dict[str, Callable[[Mapping[str, Any], Mapping[str, Any]], tuple[str, s
 
 def normalize_entity_key(value: Any, style: str) -> str | None:
     """Canonical entity id used to match train rows with eval keys: ``koi`` turns '5218.01' and 'K05218.01' into one id."""
+    if not isinstance(style, str) or style not in ("koi", "star", "raw"):
+        raise ValueError("style must be one of 'koi', 'star', or 'raw'")
     if not isinstance(value, str) or not value.strip():
         return None
     v = value.strip()
@@ -480,6 +492,8 @@ def entity_aliases(key: str) -> set[str]:
     """The ids an entity key matches on. A KOI also matches every other KOI of the same host star (``K05218.01`` and
     ``K05218.02`` share star features): the night exoplanet pack splits whole stars between train and eval, so a sibling
     KOI of an eval item is contamination too."""
+    if not isinstance(key, str) or not key.strip():
+        raise ValueError("key must be a non-empty string")
     mm = _KOI_KEY.fullmatch(key)
     return {key, f"koi-host-K{mm.group(1)}"} if mm else {key}
 
@@ -491,6 +505,14 @@ def map_row(spec: SourceSpec, row: Mapping[str, Any], system_prompt: str, index:
 
     Raises ``Unmappable`` when the row lacks the fields the mapping needs.
     """
+    if not isinstance(spec, SourceSpec):
+        raise TypeError("spec must be a SourceSpec")
+    if not isinstance(row, Mapping):
+        raise TypeError("row must be a Mapping")
+    if not isinstance(system_prompt, str):
+        raise TypeError("system_prompt must be a string")
+    if isinstance(index, bool) or not isinstance(index, int) or index < 0:
+        raise ValueError("index must be a non-negative integer")
     m = spec.mapping
     if not _passes_filters(row, m) or _label_filtered(row, m):
         return None
@@ -560,11 +582,15 @@ def validate_slice(spec: SourceSpec, rows: Sequence[Mapping[str, Any]], system_p
 # ---------------------------------------------------------------- decontamination
 def normalize_tokens(text: str) -> list[str]:
     """NFKC, case-folded, alphanumeric word tokens: punctuation and whitespace differences do not hide a duplicate."""
+    if not isinstance(text, str):
+        raise TypeError("text must be a string")
     folded = unicodedata.normalize("NFKC", unicodedata.normalize("NFKC", text).upper().casefold())  # upper first: 'ı' and 'i' meet
     return re.findall(r"[^\W_]+", folded)
 
 
 def text_hash(text: str) -> str:
+    if not isinstance(text, str):
+        raise TypeError("text must be a string")
     return hashlib.sha256(" ".join(normalize_tokens(text)).encode()).hexdigest()
 
 

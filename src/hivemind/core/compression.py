@@ -106,6 +106,10 @@ def compute_pseudo_gradient_delta(
     theta_final: dict[str, torch.Tensor],
 ) -> dict[str, torch.Tensor]:
     """Compute the DiLoCo pseudo-gradient: Delta_k^(t) = theta^(t-1) - theta_k^(t, H)."""
+    if not isinstance(theta_init, dict) or not theta_init:
+        raise ValueError("theta_init must be a non-empty dict")
+    if not isinstance(theta_final, dict):
+        raise ValueError("theta_final must be a dict")
     delta: dict[str, torch.Tensor] = {}
     for name, init_t in theta_init.items():
         if name not in theta_final:
@@ -437,6 +441,8 @@ def compress_lora_delta(
     is required to clear the `16x` BF16 wire-reduction target once sparse indices and
     the per-tensor LUT are counted honestly.
     """
+    if not isinstance(delta_dict, dict) or not delta_dict:
+        raise ValueError("delta_dict must be a non-empty dict")
     if not isinstance(worker_id, str) or not worker_id.strip():
         raise ValueError("worker_id must be a non-empty string")
     if not isinstance(branch_name, str) or not branch_name.strip():
@@ -501,6 +507,8 @@ def compress_lora_delta_dct_sparse_2bit(
     n_bins: int = 4,
 ) -> CompressedDeltaPackage:
     """Compress LoRA pseudo-gradients via chunked orthonormal DCT + 2-bit centroid sparsity."""
+    if not isinstance(delta_dict, dict) or not delta_dict:
+        raise ValueError("delta_dict must be a non-empty dict")
     if not isinstance(worker_id, str) or not worker_id.strip():
         raise ValueError("worker_id must be a non-empty string")
     if not isinstance(branch_name, str) or not branch_name.strip():
@@ -547,6 +555,8 @@ def decompress_lora_delta(
     device: torch.device | str = "cpu",
 ) -> dict[str, torch.Tensor]:
     """Reconstruct dense LoRA pseudo-gradient dictionary from a CompressedDeltaPackage."""
+    if not isinstance(package, CompressedDeltaPackage):
+        raise ValueError("package must be a CompressedDeltaPackage")
     if package.compression_mode == "topk_fp8":
         return {
             name: decompress_tensor_topk_fp8(payload, dtype=dtype, device=device)
@@ -566,6 +576,8 @@ def decompress_lora_delta_dct_sparse_2bit(
     device: torch.device | str = "cpu",
 ) -> dict[str, torch.Tensor]:
     """Reconstruct a chunked-DCT + 2-bit compressed LoRA pseudo-gradient package."""
+    if not isinstance(package, CompressedDeltaPackage):
+        raise ValueError("package must be a CompressedDeltaPackage")
     if package.compression_mode != "dct_sparse_2bit":
         raise ValueError(
             "decompress_lora_delta_dct_sparse_2bit requires "

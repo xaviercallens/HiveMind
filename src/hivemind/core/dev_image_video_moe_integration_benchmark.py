@@ -35,6 +35,26 @@ class EndUserPostAttribution:
     observed_behavior: str
     conversion_lesson: str
 
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("user_handle", self.user_handle),
+            ("role", self.role),
+            ("attributed_post_id", self.attributed_post_id),
+            ("subreddit", self.subreddit),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name, val in (("declared_capacity_1k", self.declared_capacity_1k), ("hmt_balance", self.hmt_balance)):
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{field_name} must be a non-negative finite number")
+        if (
+            isinstance(self.attribution_confidence, bool)
+            or not isinstance(self.attribution_confidence, (int, float))
+            or not math.isfinite(float(self.attribution_confidence))
+            or not (0.0 <= float(self.attribution_confidence) <= 1.0)
+        ):
+            raise ValueError("attribution_confidence must be in [0.0, 1.0]")
+
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["attribution_signals"] = list(self.attribution_signals)
@@ -60,6 +80,25 @@ class RedditPostCohortFunnel:
     top_converting_hook: str
     primary_friction_point: str
     remediation_applied: str
+
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("post_id", self.post_id),
+            ("subreddit", self.subreddit),
+            ("language", self.language),
+            ("title_summary", self.title_summary),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name, val in (
+            ("unique_browser_visitors", self.unique_browser_visitors),
+            ("join_page_views", self.join_page_views),
+            ("life_as_a_bee_views", self.life_as_a_bee_views),
+            ("registered_accounts", self.registered_accounts),
+            ("active_api_or_gpu_users", self.active_api_or_gpu_users),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -87,6 +126,26 @@ class ModalityGainBenchmarkScenario:
     active_vram_mib: float
     citizen_node_compatible: bool
     key_artifact_or_output: str
+
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("scenario_id", self.scenario_id),
+            ("modality", self.modality),
+            ("model_id", self.model_id),
+            ("title", self.title),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name, val in (
+            ("baseline_latency_ms", self.baseline_latency_ms),
+            ("moe_latency_ms", self.moe_latency_ms),
+            ("speedup_x", self.speedup_x),
+            ("active_vram_mib", self.active_vram_mib),
+        ):
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{field_name} must be a positive finite number")
+        if not isinstance(self.citizen_node_compatible, bool):
+            raise ValueError("citizen_node_compatible must be a bool")
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)

@@ -45,7 +45,10 @@ _SQRT3 = math.sqrt(3.0)
 
 def nearest_zn(x: np.ndarray) -> np.ndarray:
     """Nearest point of ℤⁿ (round half to even)."""
-    return np.rint(np.asarray(x, dtype=float))
+    arr = np.asarray(x, dtype=float)
+    if arr.size == 0 or not bool(np.all(np.isfinite(arr))):
+        raise ValueError("x must be a non-empty finite array")
+    return np.rint(arr)
 
 
 def nearest_a2(x: np.ndarray) -> np.ndarray:
@@ -66,6 +69,8 @@ def nearest_a2(x: np.ndarray) -> np.ndarray:
 def nearest_dn(x: np.ndarray) -> np.ndarray:
     """Nearest point of Dₙ (integer vectors with even coordinate sum); rows of ``x``."""
     x = np.atleast_2d(np.asarray(x, dtype=float))
+    if x.size == 0 or not bool(np.all(np.isfinite(x))):
+        raise ValueError("x must be a non-empty finite array")
     f = np.rint(x)
     odd = np.mod(f.sum(axis=-1), 2.0) != 0
     if not odd.any():
@@ -139,6 +144,8 @@ def _cond_entropy_bits(x: np.ndarray, *cond: np.ndarray) -> float:
 def factorised_rate_bits_per_dim(kind: str, codewords: np.ndarray) -> float:
     """Achievable bits per dimension of unscaled codewords (rows): ℤⁿ Σ H(xᵢ); A₂ H(coset)+H(z₀|coset)+H(z₁|coset); E₈ H(coset)+Σ H(zᵢ|coset)+H(z₈|coset,parity)."""
     c = np.atleast_2d(np.asarray(codewords, dtype=float))
+    if c.size == 0 or not bool(np.all(np.isfinite(c))):
+        raise ValueError("codewords must be a non-empty finite array")
     n = c.shape[1]
     if kind == "Z":
         return sum(_entropy_bits([np.rint(c[:, i])]) for i in range(n)) / n

@@ -35,10 +35,14 @@ BLOCK: Dict[str, int] = {"Z": 8, "A2": 2, "E8": 8}
 
 
 def nearest_zn_t(x: torch.Tensor) -> torch.Tensor:
+    if not isinstance(x, torch.Tensor) or x.numel() == 0 or not bool(torch.isfinite(x).all()):
+        raise ValueError("x must be a non-empty finite torch.Tensor")
     return torch.round(x)
 
 
 def nearest_dn_t(x: torch.Tensor) -> torch.Tensor:
+    if not isinstance(x, torch.Tensor) or x.numel() == 0 or not bool(torch.isfinite(x).all()):
+        raise ValueError("x must be a non-empty finite torch.Tensor")
     f = torch.round(x)
     odd = torch.remainder(f.sum(dim=-1), 2.0) != 0
     d = x - f
@@ -112,6 +116,8 @@ def _cond_entropy_bits(x: torch.Tensor, *cond: torch.Tensor) -> float:
 
 def integer_coordinates(kind: str, c: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     """(coset index per row, integer coordinates per row) of unscaled codewords."""
+    if not isinstance(c, torch.Tensor) or c.numel() == 0 or not bool(torch.isfinite(c).all()):
+        raise ValueError("c must be a non-empty finite torch.Tensor")
     if kind == "Z":
         return torch.zeros(c.shape[:-1], dtype=torch.int64, device=c.device), torch.round(c).to(torch.int64)
     if kind == "E8":
@@ -171,6 +177,8 @@ def to_rows(kind: str, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
 def from_rows(kind: str, rows: torch.Tensor, shape: torch.Size) -> torch.Tensor:
     if kind not in DECODERS_T:
         raise KeyError(kind)
+    if not isinstance(rows, torch.Tensor) or rows.numel() == 0:
+        raise ValueError("rows must be a non-empty torch.Tensor")
     if kind == "A2":
         r = rows.reshape(*shape[:-1], shape[-1] // 2, 2)
         return torch.cat([r[..., 0], r[..., 1]], dim=-1)

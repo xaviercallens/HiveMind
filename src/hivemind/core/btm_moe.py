@@ -935,6 +935,19 @@ def hotplug_hierarchical_experts(
     The router is sized to the model's actual expert count (ragged clusters), so every global
     index it emits names a real expert.
     """
+    if not isinstance(community_adapters, dict):
+        raise ValueError("community_adapters must be a dict")
+    if isinstance(canonical_rank_r, bool) or not isinstance(canonical_rank_r, int) or canonical_rank_r < 1:
+        raise ValueError("canonical_rank_r must be a positive integer")
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+        raise ValueError("top_k must be a positive integer")
+    if (
+        isinstance(vram_ceiling_gb, bool)
+        or not isinstance(vram_ceiling_gb, (int, float))
+        or not math.isfinite(float(vram_ceiling_gb))
+        or float(vram_ceiling_gb) <= 0.0
+    ):
+        raise ValueError("vram_ceiling_gb must be a positive finite float")
     hotplug_report = hotplug_rank_adaptive_experts(
         moe_model=moe_model,
         expert_lora_states=community_adapters,
@@ -987,6 +1000,19 @@ def hotplug_three_tier_experts(
     products per token instead of 128 (`8.0x`). The report states what was counted and what
     was measured; VRAM is only reported as measured when the model lives on CUDA.
     """
+    if not isinstance(community_adapters, dict):
+        raise ValueError("community_adapters must be a dict")
+    if isinstance(canonical_rank_r, bool) or not isinstance(canonical_rank_r, int) or canonical_rank_r < 1:
+        raise ValueError("canonical_rank_r must be a positive integer")
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+        raise ValueError("top_k must be a positive integer")
+    if (
+        isinstance(vram_ceiling_gb, bool)
+        or not isinstance(vram_ceiling_gb, (int, float))
+        or not math.isfinite(float(vram_ceiling_gb))
+        or float(vram_ceiling_gb) <= 0.0
+    ):
+        raise ValueError("vram_ceiling_gb must be a positive finite float")
     hotplug_report = hotplug_rank_adaptive_experts(
         moe_model=moe_model,
         expert_lora_states=community_adapters,

@@ -193,9 +193,11 @@ def _orient_lora_pair(
 
 def pair_lora_ab_keys(lora_state_dict: dict[str, torch.Tensor]) -> list[tuple[str, str]]:
     """Pair every `lora_A` key of a LoRA state dict with its matching `lora_B` key."""
+    if not isinstance(lora_state_dict, dict):
+        raise ValueError("lora_state_dict must be a dict")
     pairs: list[tuple[str, str]] = []
     for key in lora_state_dict:
-        if "lora_A" not in key:
+        if not isinstance(key, str) or "lora_A" not in key:
             continue
         b_key = key.replace("lora_A", "lora_B")
         if b_key in lora_state_dict:
@@ -210,6 +212,8 @@ def detect_lora_rank(lora_state_dict: dict[str, torch.Tensor]) -> int | None:
     factor pair is nonetheless projected independently by
     `project_lora_state_dict_to_rank`.
     """
+    if not isinstance(lora_state_dict, dict):
+        raise ValueError("lora_state_dict must be a dict")
     ranks: set[int] = set()
     for a_key, b_key in pair_lora_ab_keys(lora_state_dict):
         a_t = lora_state_dict[a_key]
@@ -1992,6 +1996,12 @@ def train_moe_router_gating(
     lr: float = 3e-3,
 ) -> tuple[float, float, dict[str, float]]:
     """Train only the lightweight Top-2 gating network W_g while freezing upcycled experts."""
+    if not isinstance(domain_token_batches, dict) or not domain_token_batches:
+        raise ValueError("domain_token_batches must be a non-empty dict")
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps must be a positive integer")
+    if isinstance(lr, bool) or not isinstance(lr, (int, float)) or not math.isfinite(float(lr)) or float(lr) <= 0.0:
+        raise ValueError("lr must be a positive finite float")
     device = next(moe_model.parameters()).device
     moe_model.train()
     moe_model.reset_routing_telemetry()

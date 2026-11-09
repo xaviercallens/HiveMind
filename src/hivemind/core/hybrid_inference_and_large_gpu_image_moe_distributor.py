@@ -401,6 +401,8 @@ def execute_large_gpu_producer_training(
     seed: int = 42,
 ) -> LargeGPUProducerTrainingReport:
     """Execute DiLoCo-QLoRA + Muon inner training on a Large-GPU Producer (`16-24 GB`)."""
+    if not isinstance(node, GPUProducerNodeSpec):
+        raise ValueError("node must be a GPUProducerNodeSpec")
     if node.pool_role != "LARGE_GPU_DEDICATED_TRAINER":
         raise ValueError(f"Node {node.node_id} is not a LARGE_GPU_DEDICATED_TRAINER")
     if isinstance(assigned_shards, bool) or not isinstance(assigned_shards, int) or assigned_shards < 1:
@@ -411,6 +413,11 @@ def execute_large_gpu_producer_training(
         raise ValueError("focal_gamma must be a finite non-negative number")
     if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
         raise ValueError("seed must be a non-negative integer")
+    if not isinstance(assigned_divisions, Sequence) or isinstance(assigned_divisions, (str, bytes)):
+        raise ValueError("assigned_divisions must be a sequence of division ID strings")
+    for d_id in assigned_divisions:
+        if not isinstance(d_id, str) or d_id not in MASSIVE_IMAGE_MOE_DIVISIONS:
+            raise ValueError(f"Unknown division ID in assigned_divisions: {d_id!r}")
 
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -540,6 +547,8 @@ def execute_hybrid_node_inference_and_micro_training(
     seed: int = 108,
 ) -> HybridInferenceServiceReport:
     """Execute Dual-Duty Hybrid Inference Serving + Preemptible `< 1.5 GB` Micro-Training."""
+    if not isinstance(node, GPUProducerNodeSpec):
+        raise ValueError("node must be a GPUProducerNodeSpec")
     if node.pool_role != "HYBRID_INFERENCE_AND_MICRO_TRAINER":
         raise ValueError(f"Node {node.node_id} is not a HYBRID_INFERENCE_AND_MICRO_TRAINER")
     for name, val in (

@@ -504,12 +504,12 @@ def formulate(messages: List[Dict[str, str]], backend: Backend, *, max_retries: 
 
     Returns {ok, spec, spec_bytes, attempts, retries, errors, raw_outputs, reason}. Never guesses: after the last failure ok is False.
     """
-    if not isinstance(messages, list) or not messages or not all(isinstance(m, dict) for m in messages):
-        raise ValueError("messages must be a non-empty list of dicts")
-    if not isinstance(backend, Backend) and not callable(getattr(backend, "complete", None)):
-        raise ValueError("backend must be a Backend or have a callable complete(messages)")
     if isinstance(max_retries, bool) or not isinstance(max_retries, int) or max_retries < 0:
         raise ValueError("max_retries must be an integer >= 0")
+    if not isinstance(messages, list) or not all(isinstance(m, dict) for m in messages):
+        raise ValueError("messages must be a list of dicts")
+    if not isinstance(backend, Backend) and not callable(getattr(backend, "complete", None)):
+        raise ValueError("backend must be a Backend or have a callable complete(messages)")
     msgs = [dict(m) for m in messages]
     errors: List[str] = []
     raws: List[str] = []

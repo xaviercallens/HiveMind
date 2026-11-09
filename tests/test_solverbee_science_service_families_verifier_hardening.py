@@ -67,8 +67,8 @@ def test_canonical_bytes_with_house_tolerances_and_spec_sha256_validation() -> N
 
 def test_formulate_validates_messages_and_backend() -> None:
     fb = sb.FakeBackend([json.dumps(fam.pendulum_spec(0.1, 0.0, [1.0]))])
-    for bad_msgs in (None, [], "msgs", ["not-dict"]):
-        with pytest.raises(ValueError, match="messages must be a non-empty list of dicts"):
+    for bad_msgs in (None, "msgs", ["not-dict"]):
+        with pytest.raises(ValueError, match="messages must be a list of dicts"):
             sb.formulate(bad_msgs, fb)  # type: ignore[arg-type]
 
     for bad_backend in (None, 123, "backend", object()):

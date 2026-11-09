@@ -329,6 +329,12 @@ window.onGoogleLibraryLoad = init;
 
 def _reading(source: Mapping[str, Any], key: str, *, thousands: bool = False) -> str:
     """The integer reading at ``key`` as text, or "n/a" when the live snapshot has none."""
+    if not isinstance(source, Mapping):
+        raise ValueError("source must be a mapping")
+    if not isinstance(key, str) or not key:
+        raise ValueError("key must be a non-empty string")
+    if not isinstance(thousands, bool):
+        raise ValueError("thousands must be a bool")
     value = source.get(key)
     if value is None:
         return "n/a"
@@ -355,8 +361,12 @@ def render_signup_page(
         raise ValueError("starter_grant_hmt must be a finite non-negative float")
     if auth_result is not None and not isinstance(auth_result, Mapping):
         raise ValueError("auth_result must be a mapping or None")
+    if error_message is not None and not isinstance(error_message, str):
+        raise ValueError("error_message must be a string or None")
     if live_telemetry is not None and not isinstance(live_telemetry, Mapping):
         raise ValueError("live_telemetry must be a mapping or None")
+    if not isinstance(default_role, str):
+        raise ValueError("default_role must be a string")
     role_norm = str(default_role or "prosumer").strip().lower()
     selected_role = role_norm if role_norm in ("prosumer", "consumer", "producer", "trainer") else "prosumer"
     chk_prosumer = " checked" if selected_role == "prosumer" else ""

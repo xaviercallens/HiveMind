@@ -39,6 +39,12 @@ _URL_OK = re.compile(r"^https://[a-z0-9.-]+(?::\d+)?(?:/[A-Za-z0-9._~%/-]*)?$")
 
 def pick_language(query_lang: str | None, accept_language: str | None, default: str = "fr") -> str:
     """``?lang=fr|en|es|de|zh`` wins; otherwise the first supported language in ``Accept-Language`` by quality; otherwise ``default`` (``fr``)."""
+    if query_lang is not None and (isinstance(query_lang, bool) or not isinstance(query_lang, str)):
+        raise ValueError("query_lang must be a string or None")
+    if accept_language is not None and (isinstance(accept_language, bool) or not isinstance(accept_language, str)):
+        raise ValueError("accept_language must be a string or None")
+    if isinstance(default, bool) or not isinstance(default, str) or default not in LANGS:
+        raise ValueError("default must be one of 'fr', 'en', 'es', 'de', 'zh'")
     if query_lang in LANGS:
         return str(query_lang)
     best: tuple[float, int, str] | None = None
@@ -911,13 +917,22 @@ def render_join_page(lang: str = "fr", nonce: str = "abcdefgh12345678", *, tiers
                      live_telemetry: Mapping[str, Any] | None = None) -> str:
     """The complete multilingual page (FR default, EN, ES, DE, ZH). ``tiers`` is the ``tiers`` list of ``/v1/hivemind/catalog``."""
     flags = Flags(google=google_enabled, handles=handle_registration)
+    if tiers is not None and (isinstance(tiers, (str, bytes)) or not isinstance(tiers, Sequence)):
+        raise ValueError("tiers must be a sequence of mappings or None")
     if live_telemetry is not None and not isinstance(live_telemetry, Mapping):
         raise ValueError("live_telemetry must be a mapping or None")
     if lang not in LANGS:
         raise ValueError("lang must be one of 'fr', 'en', 'es', 'de', 'zh'")
-    if not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", nonce):
+    if not isinstance(nonce, str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", nonce):
         raise ValueError("nonce must be 8-64 URL-safe characters")
-    if not _URL_OK.match(api_url) or not _URL_OK.match(repo_url) or not re.fullmatch(r"/[a-z-]*", path):
+    if (
+        not isinstance(api_url, str)
+        or not isinstance(repo_url, str)
+        or not isinstance(path, str)
+        or not _URL_OK.match(api_url)
+        or not _URL_OK.match(repo_url)
+        or not re.fullmatch(r"/[a-z-]*", path)
+    ):
         raise ValueError("api_url and repo_url must be plain https URLs and path a simple absolute path")
     subs = {"API": api_url.rstrip("/"), "REPO": repo_url.rstrip("/")}
     esc = html.escape

@@ -272,6 +272,10 @@ def asymmetric_focal_loss(
 
     L_Focal = - alpha_t * (1 - p_t)^gamma * log(p_t)
     """
+    if not isinstance(logits, torch.Tensor) or logits.numel() == 0:
+        raise ValueError("logits must be a non-empty torch.Tensor")
+    if not isinstance(targets, torch.Tensor) or targets.numel() == 0:
+        raise ValueError("targets must be a non-empty torch.Tensor")
     if isinstance(gamma, bool) or not isinstance(gamma, (int, float)) or not math.isfinite(float(gamma)) or float(gamma) < 0.0:
         raise ValueError("gamma must be a finite non-negative number")
     if (
@@ -307,6 +311,8 @@ def compute_citizen_science_entropy_weights(
       - `ambiguous_indices`: indices of maximum-entropy light curves surfaced to the UI.
       - `mean_entropy_nats`: average prediction entropy across the batch.
     """
+    if not isinstance(logits, torch.Tensor) or logits.ndim < 2 or logits.numel() == 0:
+        raise ValueError("logits must be a non-empty 2D+ torch.Tensor")
     if (
         isinstance(top_ambiguous_fraction, bool)
         or not isinstance(top_ambiguous_fraction, (int, float))
@@ -697,6 +703,13 @@ def synthesize_exoplanet_transit_and_router_response(
     - Eclipsing binary (odd_even_asymmetry_ratio > 0.25 or centroid_shift_arcsec > 0.5):
       triggers immediate activation of Expert 2 (False Positives & Eclipsing Binaries).
     """
+    if (
+        isinstance(centroid_shift_arcsec, bool)
+        or not isinstance(centroid_shift_arcsec, (int, float))
+        or not math.isfinite(float(centroid_shift_arcsec))
+        or float(centroid_shift_arcsec) < 0.0
+    ):
+        raise ValueError("centroid_shift_arcsec must be a finite non-negative number")
     depth_ppm = compute_physical_transit_depth_ppm(planet_radius_earth, star_radius_solar)
     snr_single_transit = depth_ppm / max(instrumental_noise_ppm, 1e-6)
     flux_ppm, scalogram = generate_phase_folded_cwt_scalogram(

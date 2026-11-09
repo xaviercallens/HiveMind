@@ -405,6 +405,8 @@ def read_frame(stream: BinaryIO, limit: int = MAX_LINE_BYTES) -> Optional[bytes]
 
 def encode(resp: Dict[str, Any]) -> bytes:
     """One protocol line: ASCII only (no U+2028 or other line separators), compact, no raw newlines."""
+    if not isinstance(resp, dict):
+        raise ValueError("resp must be a dict")
     try:
         text = json.dumps(resp, ensure_ascii=True, separators=(",", ":"), allow_nan=False)
     except (TypeError, ValueError):

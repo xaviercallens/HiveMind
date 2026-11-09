@@ -97,6 +97,8 @@ def decide(checks: dict[str, dict], *, usable: bool, has_problem: bool) -> tuple
     4. otherwise (a required check skipped, e.g. no rerun) -> UNVERIFIED
     """
     reasons: list[str] = []
+    if not isinstance(usable, bool) or not isinstance(has_problem, bool):
+        raise ValueError("usable and has_problem must be booleans")
     if not usable:
         return "UNVERIFIED", ["result could not be obtained or checked (fail closed)"]
     failed = [n for n in _CHECK_NAMES if checks[n]["status"] == "fail"]
@@ -519,6 +521,8 @@ def certify_achieved_accuracy(
     spec = _parse_spec(spec_bytes)
     n = _dimension(spec)
     rtol, atols = _tolerances(spec, n)
+    if not isinstance(loose_result, dict) or not isinstance(tight_result, dict):
+        raise ValueError("loose_result and tight_result must be dicts")
     _validate_trajectory(loose_result, spec, "loose result")
     _validate_trajectory(tight_result, spec, "tight result")
     if problem is not None and not isinstance(problem, dict):

@@ -176,6 +176,26 @@ class HFBountyChallenge:
     base_bounty_pts: int = 600
     season: int = 1
 
+    def __post_init__(self) -> None:
+        for fname, fval in (
+            ("contract_id", self.contract_id),
+            ("mission_codename", self.mission_codename),
+            ("dataset_id", self.dataset_id),
+            ("domain_expert", self.domain_expert),
+            ("bounty_question_prompt", self.bounty_question_prompt),
+            ("reference_solution", self.reference_solution),
+        ):
+            if not isinstance(fval, str) or not fval.strip():
+                raise ValueError(f"{fname} must be a non-empty string")
+        if isinstance(self.difficulty_skulls, bool) or not isinstance(self.difficulty_skulls, int) or self.difficulty_skulls < 1:
+            raise ValueError("difficulty_skulls must be a positive integer")
+        if isinstance(self.base_bounty_pts, bool) or not isinstance(self.base_bounty_pts, int) or self.base_bounty_pts <= 0:
+            raise ValueError("base_bounty_pts must be a positive integer")
+        if isinstance(self.season, bool) or not isinstance(self.season, int) or self.season < 1:
+            raise ValueError("season must be a positive integer")
+        if not isinstance(self.target_keywords, list) or len(self.target_keywords) == 0:
+            raise ValueError("target_keywords must be a non-empty list of strings")
+
 
 @dataclass
 class MinerScoreBreakdown:
@@ -230,6 +250,10 @@ class GamerMinerProfile:
     achievements_unlocked: List[str] = field(default_factory=list)
 
     def update_rank_and_achievements(self, is_top_miner: bool = False, num_moe_experts: int = 3) -> None:
+        if not isinstance(is_top_miner, bool):
+            raise ValueError("is_top_miner must be a boolean")
+        if isinstance(num_moe_experts, bool) or not isinstance(num_moe_experts, int) or num_moe_experts < 1:
+            raise ValueError("num_moe_experts must be a positive integer")
         for threshold, title in RANK_LADDER:
             if self.total_points >= threshold:
                 self.rank_title = title
@@ -295,6 +319,14 @@ class HFDataReconScanner:
         target_keywords: List[str],
     ) -> Tuple[List[str], float]:
         """Scan candidate Hugging Face rows, score their training signal quality, and assign shard."""
+        if not isinstance(raw_samples, list) or len(raw_samples) == 0 or any(not isinstance(s, str) for s in raw_samples):
+            raise ValueError("raw_samples must be a non-empty list of strings")
+        if isinstance(gamer_idx, bool) or not isinstance(gamer_idx, int) or gamer_idx < 0:
+            raise ValueError("gamer_idx must be a non-negative integer")
+        if isinstance(num_gamers, bool) or not isinstance(num_gamers, int) or num_gamers < 1:
+            raise ValueError("num_gamers must be a positive integer")
+        if not isinstance(target_keywords, list) or any(not isinstance(k, str) for k in target_keywords):
+            raise ValueError("target_keywords must be a list of strings")
         shard_size = max(1, len(raw_samples) // max(1, num_gamers))
         candidate_slice = raw_samples[gamer_idx * shard_size : (gamer_idx + 1) * shard_size]
 

@@ -668,15 +668,25 @@ def build_guild_raid_arc_geometry(
     """
     if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
         raise ValueError("steps must be a positive integer")
+    if arcs is None or isinstance(arcs, (str, bytes)) or not isinstance(arcs, Iterable):
+        raise ValueError("arcs must be an iterable of dicts")
     geometry: List[Dict[str, Any]] = []
     for arc in arcs:
+        if not isinstance(arc, dict):
+            raise ValueError("each arc spec must be a dict")
         source_lat = float(arc.get("source_lat", arc.get("lat", 0.0)))
         source_lon = float(arc.get("source_lon", arc.get("lon", 0.0)))
         target_lat = float(arc.get("target_lat", arc.get("lat", 0.0)))
         target_lon = float(arc.get("target_lon", arc.get("lon", 0.0)))
         lift = float(arc.get("lift", GUILD_RAID_ARC_LIFT))
         raw_points = arc.get("points")
-        if raw_points:
+        if raw_points is not None:
+            if (
+                not isinstance(raw_points, (list, tuple))
+                or len(raw_points) < 2
+                or any(not isinstance(p, (list, tuple)) or len(p) != 3 for p in raw_points)
+            ):
+                raise ValueError("points must be a sequence of at least two 3D coordinates")
             points = [[float(p[0]), float(p[1]), float(p[2])] for p in raw_points]
         else:
             points = great_circle_arc_points(

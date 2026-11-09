@@ -984,8 +984,15 @@ def deploy_free_steam_rtx_tool_v1(
     output_root: Path | None = None,
 ) -> Dict[str, Any]:
     """Run (or attach) the RTX Stress Certification and deploy v1.0.0 of the Free Steam Tool."""
-    if stress_report is not None and (not isinstance(stress_report, dict) or "all_stages_passed" not in stress_report or "certification_hmac" not in stress_report):
-        raise ValueError("stress_report must be a dict containing all_stages_passed and certification_hmac")
+    if output_root is not None and (isinstance(output_root, bool) or not isinstance(output_root, Path)):
+        raise ValueError("output_root must be a Path or None")
+    if stress_report is not None and (
+        not isinstance(stress_report, dict)
+        or not isinstance(stress_report.get("all_stages_passed"), bool)
+        or not isinstance(stress_report.get("certification_hmac"), str)
+        or not stress_report["certification_hmac"].strip()
+    ):
+        raise ValueError("stress_report must be a dict containing boolean all_stages_passed and non-empty certification_hmac")
     if stress_report is None:
         stress_report = run_intense_rtx_stress_suite()
 

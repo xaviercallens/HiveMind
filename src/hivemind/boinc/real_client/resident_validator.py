@@ -274,6 +274,10 @@ class ProtocolError(Exception):
 
 
 def send_msg(sock: socket.socket, obj: dict[str, Any], limit: int = MAX_MESSAGE_BYTES) -> None:
+    if not isinstance(obj, dict):
+        raise ProtocolError("message must be a dict")
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+        raise ValueError("limit must be a positive integer")
     data = json.dumps(obj, sort_keys=True).encode()
     if len(data) > limit:
         raise ProtocolError(f"message of {len(data)} bytes exceeds the limit of {limit}")
@@ -281,6 +285,8 @@ def send_msg(sock: socket.socket, obj: dict[str, Any], limit: int = MAX_MESSAGE_
 
 
 def _recv_exact(sock: socket.socket, n: int) -> bytes:
+    if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+        raise ValueError("n must be a non-negative integer")
     buf = bytearray()
     while len(buf) < n:
         chunk = sock.recv(min(65536, n - len(buf)))
@@ -291,6 +297,8 @@ def _recv_exact(sock: socket.socket, n: int) -> bytes:
 
 
 def recv_msg(sock: socket.socket, limit: int = MAX_MESSAGE_BYTES) -> dict[str, Any]:
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+        raise ValueError("limit must be a positive integer")
     (n,) = struct.unpack(">I", _recv_exact(sock, 4))
     if n > limit:
         raise ProtocolError(f"message of {n} bytes exceeds the limit of {limit}")  # body is never read
@@ -352,6 +360,14 @@ class ResidentValidatorServer:
             raise ValueError("io_timeout_s must be a finite positive number")
         if isinstance(max_message_bytes, bool) or not isinstance(max_message_bytes, int) or max_message_bytes < 1:
             raise ValueError("max_message_bytes must be a positive integer")
+        if not isinstance(socket_path, (str, os.PathLike)) or not str(socket_path).strip():
+            raise ValueError("socket_path must be a non-empty path")
+        if not isinstance(work_root, (str, os.PathLike)) or not str(work_root).strip():
+            raise ValueError("work_root must be a non-empty path")
+        if cache is not None and not isinstance(cache, ModelCache):
+            raise ValueError("cache must be a ModelCache or None")
+        if validate_fn is not None and not callable(validate_fn):
+            raise ValueError("validate_fn must be callable or None")
         self.socket_path = Path(socket_path)
         self.work_root = Path(work_root).resolve()
         self.cache = cache
@@ -432,6 +448,8 @@ class ResidentValidatorServer:
         return files
 
     def dispatch(self, req: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(req, dict):
+            raise ValueError("req must be a dict")
         op = req.get("op")
         if op == "ping":
             return {"ok": True, "pong": True, "pid": os.getpid()}

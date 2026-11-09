@@ -92,6 +92,8 @@ SEASON_3_DOMAIN_EXPERT_SPECS: Dict[str, Dict[str, Any]] = {
 
 def _keyword_hit(keyword: str, text_lower: str) -> bool:
     """True when ``keyword`` occurs in ``text_lower`` as a whole word or phrase (no match inside a longer word)."""
+    if not isinstance(keyword, str) or not isinstance(text_lower, str):
+        raise ValueError("keyword and text_lower must be strings")
     kw = keyword.strip().lower()
     if not kw:
         return False
@@ -156,6 +158,21 @@ class RegisteredDomainExpert:
     compression_ratio: float
     compressed_bytes: int
     lora_state_dict: Dict[str, torch.Tensor] = field(repr=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.domain_name, str) or not self.domain_name.strip() or not isinstance(self.dataset_id, str) or not self.dataset_id.strip():
+            raise ValueError("domain_name and dataset_id must be non-empty strings")
+        if (
+            isinstance(self.lora_rank_r, bool)
+            or not isinstance(self.lora_rank_r, int)
+            or self.lora_rank_r < 1
+            or isinstance(self.lora_alpha, bool)
+            or not isinstance(self.lora_alpha, int)
+            or self.lora_alpha < 1
+        ):
+            raise ValueError("lora_rank_r and lora_alpha must be positive integers")
+        if not isinstance(self.lora_state_dict, dict):
+            raise ValueError("lora_state_dict must be a dict")
 
 
 class ProjectedLoRAStateDict(dict):
@@ -296,6 +313,8 @@ class Season3DomainExpertRegistry:
         self.experts: Dict[str, RegisteredDomainExpert] = {}
 
     def register_expert(self, expert: RegisteredDomainExpert) -> None:
+        if not isinstance(expert, RegisteredDomainExpert):
+            raise ValueError("expert must be a RegisteredDomainExpert")
         self.experts[expert.domain_name] = expert
 
     def list_domains(self) -> List[str]:
@@ -353,8 +372,10 @@ class Season3DomainExpertRegistry:
 
 def _even_cluster_sizes(total: int, num_clusters: int) -> List[int]:
     """Split `total` experts into `num_clusters` groups whose sizes differ by at most one."""
-    if num_clusters < 1:
+    if isinstance(num_clusters, bool) or not isinstance(num_clusters, int) or num_clusters < 1:
         raise ValueError("num_clusters must be >= 1")
+    if isinstance(total, bool) or not isinstance(total, int) or total < 1:
+        raise ValueError("total must be >= 1")
     base, extra = divmod(int(total), int(num_clusters))
     return [base + (1 if i < extra else 0) for i in range(int(num_clusters))]
 
@@ -375,6 +396,8 @@ def _stack_ragged_gates(
 
 def _grow_gate(gate: nn.Linear) -> nn.Linear:
     """Return a copy of `gate` with one extra output row initialised to the mean row."""
+    if not isinstance(gate, nn.Linear):
+        raise ValueError("gate must be an nn.Linear")
     old_out = gate.out_features
     new_gate = nn.Linear(
         gate.in_features, old_out + 1, bias=False, dtype=torch.float32, device=gate.weight.device
@@ -479,6 +502,14 @@ class HierarchicalMoERouter(nn.Module):
         self, hidden_states: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Compute hierarchical Top-k routing weights, global expert indices `[0..E-1]`, and aux loss."""
+        if (
+            not isinstance(hidden_states, torch.Tensor)
+            or hidden_states.ndim != 2
+            or hidden_states.shape[0] < 1
+            or hidden_states.shape[1] != self.hidden_size
+            or not bool(torch.isfinite(hidden_states).all().item())
+        ):
+            raise ValueError("hidden_states must be a finite 2D tensor of shape [N, hidden_size]")
         hs_fp32 = hidden_states.to(torch.float32)
         device = hs_fp32.device
 
@@ -645,6 +676,14 @@ class ThreeTierHierarchicalMoERouter(nn.Module):
         self, hidden_states: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Compute 3-tier Top-k routing weights, global expert indices `[0..E-1]`, and aux loss."""
+        if (
+            not isinstance(hidden_states, torch.Tensor)
+            or hidden_states.ndim != 2
+            or hidden_states.shape[0] < 1
+            or hidden_states.shape[1] != self.hidden_size
+            or not bool(torch.isfinite(hidden_states).all().item())
+        ):
+            raise ValueError("hidden_states must be a finite 2D tensor of shape [N, hidden_size]")
         hs_fp32 = hidden_states.to(torch.float32)
         super_probs, super_prob, macro_probs, macro_prob, cluster_idx, micro_logits = self._route_path(hs_fp32)
 

@@ -72,6 +72,28 @@ class BetaArm:
     verified_successes: int = 0
     ignored_unverified: int = 0
 
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.alpha, bool)
+            or not isinstance(self.alpha, (int, float))
+            or not math.isfinite(float(self.alpha))
+            or float(self.alpha) <= 0.0
+            or isinstance(self.beta, bool)
+            or not isinstance(self.beta, (int, float))
+            or not math.isfinite(float(self.beta))
+            or float(self.beta) <= 0.0
+        ):
+            raise ValueError("alpha and beta must be finite and > 0")
+        for name, val in (
+            ("verified_n", self.verified_n),
+            ("verified_successes", self.verified_successes),
+            ("ignored_unverified", self.ignored_unverified),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{name} must be an integer >= 0")
+        if self.verified_successes > self.verified_n:
+            raise ValueError("verified_successes cannot exceed verified_n")
+
     @property
     def mean(self) -> float:
         return self.alpha / (self.alpha + self.beta)
@@ -102,6 +124,8 @@ class BanditStrategy:
         self.arms: dict[tuple[str, str], BetaArm] = {}
 
     def arm(self, cluster_id: str, expert_id: str) -> BetaArm:
+        if not isinstance(cluster_id, str) or not cluster_id.strip() or not isinstance(expert_id, str) or not expert_id.strip():
+            raise ValueError("cluster_id and expert_id must be non-empty strings")
         key = (cluster_id, expert_id)
         if key not in self.arms:
             self.arms[key] = BetaArm(self.prior_alpha, self.prior_beta)
@@ -152,6 +176,8 @@ class BanditStrategy:
         return best
 
     def observe(self, outcome: Outcome) -> None:
+        if not isinstance(outcome, Outcome):
+            raise ValueError("outcome must be an Outcome")
         arm = self.arm(outcome.cluster_id, outcome.expert_id)
         if not outcome.verified:
             arm.ignored_unverified += 1
@@ -253,6 +279,8 @@ class PreferencePairStrategy:
     name = "preference_pairs"
 
     def __init__(self, router: BanditStrategy | None = None) -> None:
+        if router is not None and not isinstance(router, BanditStrategy):
+            raise ValueError("router must be a BanditStrategy or None")
         self.router = router or BanditStrategy()
         self.pairs: list[PreferencePair] = []
         self.rejected_unverified = 0
@@ -266,6 +294,12 @@ class PreferencePairStrategy:
     def observe_correction(self, prompt_id: str, cluster_id: str, rejected: str, chosen: str, *, verifier_kind: str,
                            chosen_verified: bool, verifier_receipt_sha256: str | None = None) -> bool:
         """Keep the pair only when the verifier accepted the corrected candidate. Returns whether it was kept."""
+        if not isinstance(prompt_id, str) or not prompt_id.strip() or not isinstance(cluster_id, str) or not cluster_id.strip():
+            raise ValueError("prompt_id and cluster_id must be non-empty strings")
+        if not isinstance(rejected, str) or not isinstance(chosen, str):
+            raise ValueError("rejected and chosen must be strings")
+        if not isinstance(chosen_verified, bool):
+            raise ValueError("chosen_verified must be a boolean")
         if not chosen_verified:
             self.rejected_unverified += 1
             return False
@@ -294,6 +328,12 @@ class PreferencePairStrategy:
 
     def training_mix(self, unverified_pairs: Sequence[PreferencePair]) -> list[PreferencePair]:
         """Verified pairs plus at most `max_unverified_rows(len(verified))` unverified ones, in the order given."""
+        if (
+            not isinstance(unverified_pairs, Sequence)
+            or isinstance(unverified_pairs, (str, bytes))
+            or any(not isinstance(p, PreferencePair) for p in unverified_pairs)
+        ):
+            raise ValueError("unverified_pairs must be a sequence of PreferencePair")
         allowed = max_unverified_rows(len(self.pairs))
         extra = [PreferencePair(p.prompt_id, p.cluster_id, p.rejected, p.chosen, p.verifier_kind, verified=False)
                  for p in unverified_pairs[:allowed]]
@@ -460,6 +500,10 @@ def aggregate_lora_product_exact(
     """
     import torch
 
+    if not isinstance(admitted_deltas, Mapping):
+        raise ValueError("admitted_deltas must be a Mapping")
+    if not isinstance(accepted_workers, Sequence) or isinstance(accepted_workers, (str, bytes)):
+        raise ValueError("accepted_workers must be a Sequence of worker ids")
     if not accepted_workers:
         return {}
     first = admitted_deltas[accepted_workers[0]]

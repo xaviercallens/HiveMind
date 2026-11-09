@@ -199,6 +199,8 @@ class HFCommunityModelCardExporter:
 
     def generate_model_card_markdown(self, bundle: CommunityAdapterBundle) -> str:
         """Render a Hugging Face Hub `README.md` with YAML frontmatter and evaluation metrics."""
+        if not isinstance(bundle, CommunityAdapterBundle):
+            raise TypeError("bundle must be a CommunityAdapterBundle")
         domains_yaml = "\n".join(f"- {e.domain_name.lower().replace('_', '-')}" for e in bundle.entries)
         datasets_yaml = "\n".join(
             f"- {e.dataset_id}" for e in bundle.entries if "/" in e.dataset_id
@@ -289,6 +291,10 @@ print(import_report["status"], import_report["royalties_settled_hive"])
         output_dir: Path,
     ) -> Dict[str, Any]:
         """Write a complete Hugging Face Hub / P2P shareable bundle directory to disk."""
+        if not isinstance(bundle, CommunityAdapterBundle):
+            raise TypeError("bundle must be a CommunityAdapterBundle")
+        if not isinstance(expert_states, dict) or not expert_states:
+            raise ValueError("expert_states must be a non-empty dict")
         output_dir.mkdir(parents=True, exist_ok=True)
         readme_path = output_dir / "README.md"
         readme_md = self.generate_model_card_markdown(bundle)
@@ -347,6 +353,8 @@ print(import_report["status"], import_report["royalties_settled_hive"])
         """Season 5 (`HM-S5-01`): Push an exported bundle directory to the Hugging Face Hub
         (or to the deterministic offline `mock_hub_root` mirror when offline / no token).
         """
+        if not isinstance(offline_fallback, bool):
+            raise ValueError("offline_fallback must be a boolean")
         bundle_path = Path(bundle_dir)
         manifest_path = bundle_path / "hivemind_swarm_manifest.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))

@@ -181,6 +181,8 @@ class RucheCommunityMoERelease:
 
 
 def _serialize_tensors_safetensors(tensors: Dict[str, torch.Tensor]) -> bytes:
+    if not isinstance(tensors, dict) or not tensors:
+        raise ValueError("tensors must be a non-empty dict")
     clean = {
         str(k): v.detach().cpu().to(dtype=torch.float32).contiguous().clone()
         for k, v in sorted(tensors.items())
@@ -638,6 +640,10 @@ def load_community_moe_from_gcs_or_https(
     import re
     import urllib.request
 
+    if not isinstance(gcs_public_base_url, str) or not gcs_public_base_url.strip():
+        raise ValueError("gcs_public_base_url must be a non-empty string")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
     cache_path = Path(cache_dir).resolve()
     release_dir = cache_path / "community_moe_release"
     release_dir.mkdir(parents=True, exist_ok=True)

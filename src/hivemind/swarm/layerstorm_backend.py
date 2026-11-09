@@ -460,6 +460,13 @@ class RealCUDAPCIeExpertStreamer:
         overlap_dma_with_attention: bool = True,
     ) -> dict[str, Any]:
         """Execute one dense-attention + streamed-MoE step and return measured telemetry."""
+        if (
+            not isinstance(hidden_state, torch.Tensor)
+            or hidden_state.ndim != 2
+            or hidden_state.shape[0] < 1
+            or hidden_state.shape[1] != self.expert_rows
+        ):
+            raise ValueError(f"hidden_state must be a 2D tensor with shape (>=1, {self.expert_rows})")
         if not isinstance(overlap_dma_with_attention, bool):
             raise ValueError("overlap_dma_with_attention must be a boolean")
         for e in activated_experts:
@@ -874,6 +881,10 @@ class HybridHiSparseE8KVCache:
         """Select hot VRAM token indices using HiSparse (sink + window + heavy hitters) or random control."""
         import torch
 
+        if not isinstance(random_control, bool):
+            raise ValueError("random_control must be a boolean")
+        if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+            raise ValueError("seed must be a non-negative integer")
         seq_len = int(attn_weights.shape[-1])
         budget = min(seq_len, self.max_hot_vram_tokens)
         if seq_len <= budget:
@@ -916,6 +927,8 @@ class HybridHiSparseE8KVCache:
         import math
         import torch
 
+        if not isinstance(random_control, bool):
+            raise ValueError("random_control must be a boolean")
         q = query.detach().to(dtype=torch.float32)
         k = key.detach().to(dtype=torch.float32)
         v = value.detach().to(dtype=torch.float32)

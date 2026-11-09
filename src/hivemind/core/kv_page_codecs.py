@@ -63,10 +63,14 @@ class FP8E4M3PageCodec:
         return q, scale
 
     def decode(self, payload: Tuple[Tensor, Tensor], dtype: torch.dtype = torch.float16) -> Tensor:
+        if not isinstance(payload, tuple) or len(payload) != 2 or not all(isinstance(t, torch.Tensor) for t in payload):
+            raise ValueError(f"{self.name}: payload must be a 2-tuple of torch.Tensor")
         q, scale = payload
         return FP8PagedKVCache._dequantize_page_fp8(q, scale, target_dtype=dtype)
 
     def payload_bits(self, payload: Tuple[Tensor, Tensor]) -> float:
+        if not isinstance(payload, tuple) or len(payload) != 2 or not all(isinstance(t, torch.Tensor) for t in payload):
+            raise ValueError(f"{self.name}: payload must be a 2-tuple of torch.Tensor")
         q, scale = payload
         return float(q.numel() * q.element_size() * 8 + scale.numel() * scale.element_size() * 8)
 
@@ -113,12 +117,16 @@ class IntMinMaxPageCodec:
         return codes.to(torch.int32), mn, mx
 
     def decode(self, payload: Tuple[Tensor, Tensor, Tensor], dtype: torch.dtype = torch.float16) -> Tensor:
+        if not isinstance(payload, tuple) or len(payload) != 3 or not all(isinstance(t, torch.Tensor) for t in payload):
+            raise ValueError(f"{self.name}: payload must be a 3-tuple of torch.Tensor")
         codes, mn, mx = payload
         mn32, mx32 = mn.to(torch.float32), mx.to(torch.float32)
         step = ((mx32 - mn32) / float((1 << self.bits) - 1)).clamp_min(1e-12)
         return (mn32 + codes.to(torch.float32) * step).to(dtype)
 
     def payload_bits(self, payload: Tuple[Tensor, Tensor, Tensor]) -> float:
+        if not isinstance(payload, tuple) or len(payload) != 3 or not all(isinstance(t, torch.Tensor) for t in payload):
+            raise ValueError(f"{self.name}: payload must be a 3-tuple of torch.Tensor")
         codes, mn, mx = payload
         return float(codes.numel() * self.bits + (mn.numel() + mx.numel()) * 16)
 
@@ -191,6 +199,8 @@ class PluggableKVPageCache:
         self.page_size_tokens = int(page_size_tokens)
         self.max_pages = int(max_pages)
         self.device = torch.device(device)
+        if codec is not None and not isinstance(codec, KVPageCodec):
+            raise ValueError("codec must implement KVPageCodec")
         self.codec: KVPageCodec = codec if codec is not None else FP8E4M3PageCodec()
         self._pages_k: Dict[Tuple[int, int], Any] = {}
         self._pages_v: Dict[Tuple[int, int], Any] = {}

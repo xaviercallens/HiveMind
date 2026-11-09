@@ -27,7 +27,7 @@ import math
 import subprocess
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 import torch
@@ -57,6 +57,14 @@ def multi_krum_select(
     if not isinstance(vectors, (list, tuple)) or not vectors:
         raise ValueError("vectors must be non-empty")
     n = len(vectors)
+    first_shape: tuple[int, ...] | None = None
+    for idx, vec in enumerate(vectors):
+        if not isinstance(vec, np.ndarray) or vec.ndim != 1 or vec.size == 0:
+            raise ValueError(f"vectors[{idx}] must be a non-empty 1D numpy ndarray")
+        if first_shape is None:
+            first_shape = vec.shape
+        elif vec.shape != first_shape:
+            raise ValueError(f"vectors[{idx}] shape {vec.shape} does not match {first_shape}")
     if isinstance(num_byzantine, bool) or not isinstance(num_byzantine, int) or num_byzantine < 0:
         raise ValueError("num_byzantine must be a non-negative integer")
     if isinstance(num_select, bool) or not isinstance(num_select, int) or num_select < 1 or num_select > n:
@@ -678,6 +686,11 @@ def decompose_engineering_epic_to_dag(
     """Deterministically split a polyglot software engineering epic across the 8 MoE specialist roles."""
     if not isinstance(epic_title, str) or not epic_title.strip() or any(ord(c) < 32 for c in epic_title):
         raise ValueError("epic_title must be a non-empty printable string")
+    if not isinstance(target_languages, Sequence) or isinstance(target_languages, (str, bytes)):
+        raise ValueError("target_languages must be a sequence of language strings")
+    for lang in target_languages:
+        if not isinstance(lang, str) or not lang.strip() or any(ord(c) < 32 for c in lang):
+            raise ValueError("target_languages must contain non-empty printable strings")
     langs = list(target_languages) if target_languages else list(SUPPORTED_CODING_LANGUAGES)
     lang_arch = "Rust" if "Rust" in langs else langs[0]
     lang_orch = "Python" if "Python" in langs else langs[0]

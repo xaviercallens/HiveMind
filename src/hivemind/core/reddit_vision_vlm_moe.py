@@ -499,6 +499,8 @@ def quantize_sparseloco_dct_2bit(
 
 def dequantize_sparseloco_dct_2bit(packet: SparseLoCoDCT2BitPacket) -> np.ndarray:
     """Reconstruct the float32 outer-delta matrix from a 2-bit SparseLoCo-DCT DHT packet."""
+    if not isinstance(packet, SparseLoCoDCT2BitPacket):
+        raise ValueError("packet must be a SparseLoCoDCT2BitPacket")
     rows, cols = packet.shape
     total_elems = rows * cols
     packed = np.frombuffer(packet.packed_2bit_codes, dtype=np.uint8)
@@ -686,6 +688,14 @@ class QLoRAVisionAdapter(nn.Module):
 
     def load_effective_delta(self, delta_matrix: np.ndarray) -> None:
         """Factorize an aggregated $(D, D)$ delta matrix back into Rank-r (`lora_B`, `lora_A`) via SVD."""
+        if (
+            not isinstance(delta_matrix, np.ndarray)
+            or delta_matrix.shape != (self.hidden_dim, self.hidden_dim)
+            or not np.all(np.isfinite(delta_matrix))
+        ):
+            raise ValueError(
+                f"delta_matrix must be a finite ({self.hidden_dim}, {self.hidden_dim}) numpy ndarray"
+            )
         u, s, vt = np.linalg.svd(delta_matrix.astype(np.float32) / self.scaling, full_matrices=False)
         r = self.rank
         sqrt_s = np.sqrt(np.maximum(s[:r], 0.0)).astype(np.float32)
@@ -698,6 +708,10 @@ class QLoRAVisionAdapter(nn.Module):
 
 def quantize_adamw_state_8bit(tensor: torch.Tensor) -> Tuple[np.ndarray, float]:
     """Simulate bitsandbytes 8-bit blockwise AdamW moment quantization (saves 75% optimizer VRAM)."""
+    if not isinstance(tensor, torch.Tensor) or tensor.numel() == 0:
+        raise ValueError("tensor must be a non-empty torch.Tensor")
+    if not bool(torch.isfinite(tensor).all().item()):
+        raise ValueError("tensor must contain only finite values")
     arr = tensor.detach().cpu().numpy().astype(np.float32)
     scale = float(max(np.max(np.abs(arr)), 1e-8)) / 127.0
     q8 = np.clip(np.round(arr / scale), -127, 127).astype(np.int8)
@@ -1323,12 +1337,27 @@ def merge_btm_attention_weights(
     attention_state_dicts: Sequence[Mapping[str, torch.Tensor]],
 ) -> Dict[str, torch.Tensor]:
     """Branch-Train-Mix (BTM): uniform weight averaging of self-attention layers across Bees."""
-    if not attention_state_dicts:
+    if not isinstance(attention_state_dicts, Sequence) or isinstance(attention_state_dicts, (str, bytes)) or not attention_state_dicts:
         raise ValueError("attention_state_dicts must contain at least one branch state dict")
+    if not all(isinstance(sd, Mapping) and len(sd) > 0 for sd in attention_state_dicts):
+        raise ValueError("every element of attention_state_dicts must be a non-empty Mapping")
     keys = list(attention_state_dicts[0].keys())
+    key_set = set(keys)
+    for idx, sd in enumerate(attention_state_dicts):
+        if set(sd.keys()) != key_set:
+            raise ValueError(f"attention_state_dicts[{idx}] keys do not match branch 0")
     merged: Dict[str, torch.Tensor] = {}
     n_branches = float(len(attention_state_dicts))
     for k in keys:
+        first_shape: tuple[int, ...] | None = None
+        for idx, sd in enumerate(attention_state_dicts):
+            val = sd[k]
+            if not isinstance(val, torch.Tensor) or val.numel() == 0 or not bool(torch.isfinite(val).all().item()):
+                raise ValueError(f"attention_state_dicts[{idx}][{k!r}] must be a non-empty finite torch.Tensor")
+            if first_shape is None:
+                first_shape = tuple(val.shape)
+            elif tuple(val.shape) != first_shape:
+                raise ValueError(f"attention_state_dicts[{idx}][{k!r}] shape {tuple(val.shape)} != {first_shape}")
         stacked = torch.stack([sd[k].detach().float() for sd in attention_state_dicts], dim=0)
         merged[k] = torch.sum(stacked, dim=0) / n_branches
     return merged

@@ -85,7 +85,15 @@ class ScientificMissionSpec:
     def __post_init__(self) -> None:
         if isinstance(self.base_scientific_pts, bool) or not isinstance(self.base_scientific_pts, int) or self.base_scientific_pts <= 0:
             raise ValueError("base_scientific_pts must be a positive integer")
-        for attr in ("mission_id", "title", "specialist_bee"):
+        for attr in (
+            "mission_id",
+            "title",
+            "scientific_domain",
+            "specialist_bee",
+            "unity_scene_script",
+            "invariant_gate",
+            "description",
+        ):
             val = getattr(self, attr)
             if isinstance(val, bool) or not isinstance(val, str) or not val.strip():
                 raise ValueError(f"{attr} must be a non-empty string")
@@ -139,6 +147,8 @@ SCIENTIFIC_MISSIONS_CATALOG: List[ScientificMissionSpec] = [
 
 def inspect_unity_steam_stack(project_root: Path | None = None) -> Dict[str, Any]:
     """Verify and hash the downloaded Unity + Steamworks.NET + Solar-System + Unity-MCP stack."""
+    if project_root is not None and (isinstance(project_root, bool) or not isinstance(project_root, Path)):
+        raise ValueError("project_root must be a Path or None")
     root = project_root or PROJECT_ROOT
     unity_dir = root / "unity_steam_client"
     expected_files = [

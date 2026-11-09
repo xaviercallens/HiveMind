@@ -335,6 +335,7 @@ class _ServerProtocol(QuicConnectionProtocol):
 
 async def await_quic_closed(protocol: QuicConnectionProtocol, timeout: float = 1.0) -> None:
     """Wait for a QUIC protocol to send or receive CONNECTION_CLOSE and finish its drain timer immediately."""
+    _validate_timeout(timeout)
     deadline = time.monotonic() + timeout
     while not protocol._closed.is_set():
         if getattr(protocol._quic, "_close_event", None) is not None:
@@ -362,6 +363,12 @@ class QuicHiddenStateServer:
         port: int = 0,
         on_frame: Optional[FrameHandler] = None,
     ) -> None:
+        if not isinstance(identity, LinkIdentity):
+            raise TypeError("identity must be a LinkIdentity")
+        if not isinstance(host, str) or not host.strip():
+            raise ValueError("host must be a non-empty string")
+        if isinstance(port, bool) or not isinstance(port, int) or not 0 <= port <= 65535:
+            raise ValueError("port must be an integer in [0, 65535]")
         self.identity = identity
         self.host = host
         self.port = port
@@ -736,6 +743,10 @@ class WebSocketHiddenStateServer:
         *, ssl_context: Optional[ssl.SSLContext] = None, timeout: float = STREAM_TIMEOUT_S,
     ) -> None:
         _validate_timeout(timeout)
+        if not isinstance(host, str) or not host.strip():
+            raise ValueError("host must be a non-empty string")
+        if isinstance(port, bool) or not isinstance(port, int) or not 0 <= port <= 65535:
+            raise ValueError("port must be an integer in [0, 65535]")
         if ssl_context is None and not _is_loopback_ip(host):
             raise ValueError("non-loopback WebSocket listeners require TLS")
         self.host = host
@@ -909,6 +920,8 @@ class RemoteHiddenStateLink:
     """
 
     def __init__(self, endpoint: LinkEndpoint, timeout: float = 3.0) -> None:
+        if not isinstance(endpoint, LinkEndpoint):
+            raise TypeError("endpoint must be a LinkEndpoint")
         _validate_timeout(timeout)
         self.endpoint = endpoint
         self.timeout = timeout

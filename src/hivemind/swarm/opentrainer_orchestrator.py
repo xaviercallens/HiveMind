@@ -231,6 +231,9 @@ class OpenTrainerConfig:
 
 def _atomic_write_bytes(target: Path, data: bytes) -> None:
     """Write bytes atomically via a sibling temporary file + fsync + os.replace (IP-08)."""
+    if not isinstance(data, (bytes, bytearray)):
+        raise TypeError("data must be bytes or bytearray")
+    target = Path(target)
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = target.with_suffix(target.suffix + f".tmp.{os.getpid()}.{threading.get_ident()}")
     with open(tmp_path, "wb") as fh:
@@ -242,6 +245,8 @@ def _atomic_write_bytes(target: Path, data: bytes) -> None:
 
 def _atomic_write_json(target: Path, payload: Mapping[str, Any]) -> None:
     """Serialize JSON and persist atomically."""
+    if not isinstance(payload, Mapping):
+        raise TypeError("payload must be a Mapping")
     raw = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
     _atomic_write_bytes(target, raw)
 
@@ -257,6 +262,8 @@ class PermanentOpenTrainerOrchestrator:
         vm_profile: LowCostVMProfile | None = None,
         bus: Any | None = None,
     ) -> None:
+        if not isinstance(config, OpenTrainerConfig):
+            raise TypeError("config must be an OpenTrainerConfig")
         if config.quorum < 1 or config.quorum > len(config.learners):
             raise ValueError(f"quorum must be in [1, {len(config.learners)}], got {config.quorum}")
         self.config = config
@@ -324,6 +331,13 @@ class PermanentOpenTrainerOrchestrator:
         _atomic_write_bytes(ckpt, buf.getvalue())
 
     def _open_new_round_offer(self, now: float | None = None) -> AMCPKafkaEvent:
+        if now is not None and (
+            isinstance(now, bool)
+            or not isinstance(now, (int, float))
+            or not math.isfinite(float(now))
+            or float(now) <= 0.0
+        ):
+            raise ValueError("now must be a finite positive timestamp")
         now_ts = time.time() if now is None else float(now)
         deadline = now_ts + self.config.round_deadline_s
         offer = fed.build_offer(

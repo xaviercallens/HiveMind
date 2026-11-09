@@ -288,6 +288,10 @@ class HiveSwarmLedger:
         storage_receipts: List[StorageProofReceipt],
         validator_node_ids: List[str],
     ) -> HivePoUWBlock:
+        if isinstance(outer_step, bool) or not isinstance(outer_step, int) or outer_step < 0:
+            raise ValueError("outer_step must be a non-negative integer")
+        if not isinstance(expert_cid, str) or not expert_cid.strip():
+            raise ValueError("expert_cid must be a non-empty string")
         height = len(self.chain)
         reward = self.block_reward_at_height(height)
         allocations: Dict[str, float] = {}
@@ -297,11 +301,26 @@ class HiveSwarmLedger:
         dedup_work: List[WorkReceipt] = []
         seen_workers: set[str] = set()
         for w in work_receipts:
-            if not math.isfinite(float(w.flops_contributed)) or float(w.flops_contributed) < 0.0:
+            if (
+                isinstance(w.flops_contributed, bool)
+                or not isinstance(w.flops_contributed, (int, float))
+                or not math.isfinite(float(w.flops_contributed))
+                or float(w.flops_contributed) < 0.0
+            ):
                 raise SwarmSecurityViolationError(
                     "LEDGER-03",
                     "INVALID_NEGATIVE_OR_NAN_FLOPS_RECEIPT",
                     f"Worker '{w.node_id}' submitted invalid flops_contributed={w.flops_contributed}.",
+                )
+            if (
+                isinstance(w.cosine_alignment, bool)
+                or not isinstance(w.cosine_alignment, (int, float))
+                or not math.isfinite(float(w.cosine_alignment))
+            ):
+                raise SwarmSecurityViolationError(
+                    "LEDGER-03",
+                    "INVALID_NAN_OR_INF_COSINE_ALIGNMENT",
+                    f"Worker '{w.node_id}' submitted non-finite cosine_alignment={w.cosine_alignment}.",
                 )
             if w.node_id in seen_workers:
                 raise SwarmSecurityViolationError(
@@ -577,6 +596,8 @@ class HiveSwarmLedger:
 
     def get_balance(self, node_id: str) -> float:
         """Return the current `$HIVE` balance for `node_id`."""
+        if not isinstance(node_id, str) or not node_id.strip():
+            raise ValueError("node_id must be a non-empty string")
         return round(self.balances.get(node_id, 0.0), 6)
 
     def verify_chain_integrity(self) -> bool:

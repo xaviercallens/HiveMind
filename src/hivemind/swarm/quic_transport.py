@@ -678,6 +678,28 @@ class AdaptiveCongestionController:
         rtt_window: int = 10,
         startup_packets: int = 20,
     ) -> None:
+        for int_name, int_val in (
+            ("mtu_bytes", mtu_bytes),
+            ("initial_cwnd_packets", initial_cwnd_packets),
+            ("min_cwnd_packets", min_cwnd_packets),
+            ("max_cwnd_packets", max_cwnd_packets),
+            ("bandwidth_window", bandwidth_window),
+            ("rtt_window", rtt_window),
+            ("startup_packets", startup_packets),
+        ):
+            if isinstance(int_val, bool) or not isinstance(int_val, int) or int_val < 1:
+                raise ValueError(f"{int_name} must be a positive integer >= 1")
+        if max_cwnd_packets < min_cwnd_packets:
+            raise ValueError("max_cwnd_packets must be >= min_cwnd_packets")
+        for flt_name, flt_val in (
+            ("startup_gain", startup_gain),
+            ("steady_gain", steady_gain),
+            ("loss_sensitivity", loss_sensitivity),
+        ):
+            if isinstance(flt_val, bool) or not isinstance(flt_val, (int, float)) or not math.isfinite(float(flt_val)) or float(flt_val) <= 0.0:
+                raise ValueError(f"{flt_name} must be a finite number > 0")
+        if isinstance(loss_beta, bool) or not isinstance(loss_beta, (int, float)) or not math.isfinite(float(loss_beta)) or not (0.0 < float(loss_beta) <= 1.0):
+            raise ValueError("loss_beta must be in (0.0, 1.0]")
         self.mtu_bytes = int(mtu_bytes)
         self.initial_cwnd_packets = int(initial_cwnd_packets)
         self.startup_gain = float(startup_gain)
@@ -705,6 +727,8 @@ class AdaptiveCongestionController:
     # ------------------------------------------------------------------
     def record_rtt_sample(self, rtt_ms: float) -> None:
         """Feed an RTT sample into the `RTprop` min-filter and the jitter estimator."""
+        if isinstance(rtt_ms, bool) or not isinstance(rtt_ms, (int, float)) or not math.isfinite(float(rtt_ms)):
+            raise ValueError("rtt_ms must be a finite number")
         rtt = float(rtt_ms)
         if rtt <= 0.0:
             return
@@ -718,6 +742,15 @@ class AdaptiveCongestionController:
 
     def record_delivery(self, bytes_delivered: int, elapsed_ms: float) -> None:
         """Record a delivery-rate sample (`bytes / elapsed`) for the `BTlBw` max-filter."""
+        if (
+            isinstance(bytes_delivered, bool)
+            or not isinstance(bytes_delivered, (int, float))
+            or not math.isfinite(float(bytes_delivered))
+            or isinstance(elapsed_ms, bool)
+            or not isinstance(elapsed_ms, (int, float))
+            or not math.isfinite(float(elapsed_ms))
+        ):
+            raise ValueError("bytes_delivered and elapsed_ms must be finite numbers")
         if bytes_delivered <= 0 or elapsed_ms <= 0:
             return
         self.delivery_samples.append((float(bytes_delivered), float(elapsed_ms)))
@@ -1258,6 +1291,8 @@ class AsyncQUICGeoRingTransport(RegionalGeoRingTransport):
         `simulate_udp_blocked` aims the QUIC client at a UDP port nothing listens on, so the
         handshake genuinely times out and the libp2p WebSocket fallback carries the frames.
         """
+        if isinstance(num_frames, bool) or not isinstance(num_frames, int) or num_frames < 1:
+            raise ValueError("num_frames must be a positive integer >= 1")
         pkt = compress_hidden_states_fp8(hidden_states)
         peer_id = "peer-paris-01"
         self.issue_0rtt_ticket(peer_id)

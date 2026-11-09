@@ -727,6 +727,12 @@ def plan_adapter_residency(
     per MiB, and the one serving more demand is kept (ties keep the demand order). Adapters with zero demand stay cold.
     A node whose base alone exceeds its VRAM is listed in ``blocked_nodes`` and receives nothing.
     """
+    if not isinstance(nodes, Sequence) or isinstance(nodes, (str, bytes)) or not all(isinstance(n, ServingNode) for n in nodes):
+        raise ValueError("nodes must be a Sequence of ServingNode")
+    if not isinstance(adapters, Mapping) or not all(isinstance(v, AdapterFootprint) for v in adapters.values()):
+        raise ValueError("adapters must be a Mapping of AdapterFootprint")
+    if not isinstance(demand, Mapping):
+        raise ValueError("demand must be a Mapping")
     node_ids = [n.node_id for n in nodes]
     if len(set(node_ids)) != len(node_ids):
         raise ValueError("node ids must be unique")
@@ -759,6 +765,12 @@ def validate_residency_plan(
     plan: ResidencyPlan, nodes: Sequence[ServingNode], adapters: Mapping[str, AdapterFootprint]
 ) -> List[str]:
     """Independent check of a plan's hard constraints; returns the violations (empty when the plan is sound)."""
+    if not isinstance(plan, ResidencyPlan):
+        raise ValueError("plan must be a ResidencyPlan")
+    if not isinstance(nodes, Sequence) or isinstance(nodes, (str, bytes)) or not all(isinstance(n, ServingNode) for n in nodes):
+        raise ValueError("nodes must be a Sequence of ServingNode")
+    if not isinstance(adapters, Mapping) or not all(isinstance(v, AdapterFootprint) for v in adapters.values()):
+        raise ValueError("adapters must be a Mapping of AdapterFootprint")
     violations: List[str] = []
     by_id = {n.node_id: n for n in nodes}
     seen: Dict[str, str] = {}
@@ -857,8 +869,12 @@ class HierarchicalExpertRouter:
         resident: Optional[Collection[str]] = None,
         allow_cold_load: bool = False,
     ) -> None:
-        if not base_model_id:
+        if not isinstance(registry, ExpertRegistry):
+            raise ValueError("registry must be an ExpertRegistry")
+        if not isinstance(base_model_id, str) or not base_model_id.strip():
             raise ValueError("base_model_id must be non-empty")
+        if not isinstance(allow_cold_load, bool):
+            raise ValueError("allow_cold_load must be a bool")
         self.base_model_id = base_model_id
         self.allow_cold_load = allow_cold_load
         self._live: Dict[str, List[ExpertRecord]] = {}

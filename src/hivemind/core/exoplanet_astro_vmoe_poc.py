@@ -472,6 +472,13 @@ def build_astrophysics_visual_shard(
     seed: int = 2026,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Generate standardized visual patch tensors for one of the 4 astrophysics branches."""
+    if not isinstance(branch_id, str) or branch_id not in EXOPLANET_ASTRO_EXPERT_BRANCHES:
+        raise ValueError(f"branch_id must be one of {sorted(EXOPLANET_ASTRO_EXPERT_BRANCHES)}")
+    for name, val in (("num_samples", num_samples), ("num_patches", num_patches), ("patch_dim", patch_dim)):
+        if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+            raise ValueError(f"{name} must be a positive integer")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
     rng = np.random.default_rng(seed)
     meta = EXOPLANET_ASTRO_EXPERT_BRANCHES[branch_id]
     b_idx = int(meta["expert_index"])
@@ -504,6 +511,29 @@ def apply_nesterov_outer_momentum(
     outer_lr: float = DEFAULT_NESTEROV_OUTER_LR,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Stage 3: Outer Nesterov Momentum update on the branch master weights."""
+    for name, arr in (
+        ("master_delta", master_delta),
+        ("velocity", velocity),
+        ("krum_pseudo_gradient", krum_pseudo_gradient),
+    ):
+        if not isinstance(arr, np.ndarray) or arr.size == 0 or not bool(np.isfinite(arr).all()):
+            raise ValueError(f"{name} must be a non-empty finite numpy.ndarray")
+    if master_delta.shape != velocity.shape or master_delta.shape != krum_pseudo_gradient.shape:
+        raise ValueError("master_delta, velocity, and krum_pseudo_gradient must have identical shapes")
+    if (
+        isinstance(momentum, bool)
+        or not isinstance(momentum, (int, float))
+        or not math.isfinite(float(momentum))
+        or not (0.0 <= float(momentum) < 1.0)
+    ):
+        raise ValueError("momentum must be finite in [0.0, 1.0)")
+    if (
+        isinstance(outer_lr, bool)
+        or not isinstance(outer_lr, (int, float))
+        or not math.isfinite(float(outer_lr))
+        or float(outer_lr) <= 0.0
+    ):
+        raise ValueError("outer_lr must be a finite positive number")
     new_velocity = (momentum * velocity + krum_pseudo_gradient).astype(np.float32)
     updated_master = (
         master_delta - outer_lr * (momentum * new_velocity + krum_pseudo_gradient)

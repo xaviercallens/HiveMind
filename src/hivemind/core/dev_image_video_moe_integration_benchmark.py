@@ -879,7 +879,12 @@ def _model_concurrent_modality_stress(
     """Run a deterministic 120-request concurrent stress model for a modality track."""
     if not isinstance(modality, str) or not modality.strip() or any(ord(c) < 32 for c in modality):
         raise ValueError("modality must be a non-empty printable string")
-    if not isinstance(scenarios, Sequence) or len(scenarios) == 0:
+    if (
+        not isinstance(scenarios, Sequence)
+        or isinstance(scenarios, (str, bytes))
+        or len(scenarios) == 0
+        or not all(isinstance(s, ModalityGainBenchmarkScenario) for s in scenarios)
+    ):
         raise ValueError("scenarios must be a non-empty sequence")
     if isinstance(num_requests, bool) or not isinstance(num_requests, int) or num_requests < 1:
         raise ValueError("num_requests must be a positive integer")
@@ -935,8 +940,10 @@ def run_intense_dev_image_video_moe_benchmark(
         or real_requests_executed < 0
     ):
         raise ValueError("real_requests_executed must be a non-negative integer")
+    if scenarios is not None and (not isinstance(scenarios, Sequence) or isinstance(scenarios, (str, bytes))):
+        raise ValueError("scenarios must be a sequence of ModalityGainBenchmarkScenario")
     active_scenarios = list(scenarios) if scenarios is not None else list(DEV_IMAGE_VIDEO_BENCHMARK_SCENARIOS)
-    if not active_scenarios:
+    if not active_scenarios or not all(isinstance(s, ModalityGainBenchmarkScenario) for s in active_scenarios):
         raise ValueError("scenarios must be non-empty")
     dev_scenarios = [s for s in active_scenarios if s.modality == "developer_coding_moe"]
     img_scenarios = [s for s in active_scenarios if s.modality == "image_generation_moe"]

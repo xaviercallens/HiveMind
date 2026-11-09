@@ -162,6 +162,8 @@ def _as_scenario(sc: "Scenario | dict[str, Any]") -> Scenario:
 
 
 def _norm(v: list[float]) -> float:
+    if not isinstance(v, (list, tuple)) or any(isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x) for x in v):
+        raise ValueError("v must be a sequence of finite numbers")
     acc = 0.0
     for x in v:
         acc += x * x
@@ -170,6 +172,8 @@ def _norm(v: list[float]) -> float:
 
 def build_domains(sc: Scenario) -> tuple[list[list[float]], list[list[float]], list[float]]:
     """Return (a, c, c_shared): per-domain curvatures and optima plus the shared structure, drawn from Rng(seed) in the documented order."""
+    if not isinstance(sc, Scenario):
+        raise ValueError("sc must be a Scenario")
     rng, d = Rng(sc.seed), sc.dim
     shared = [rng.gauss() for _ in range(d)]
     a_all, c_all = [], []
@@ -187,6 +191,15 @@ def build_domains(sc: Scenario) -> tuple[list[list[float]], list[list[float]], l
 
 
 def domain_loss(theta: list[float], a: list[float], c: list[float]) -> float:
+    if (
+        not isinstance(theta, list)
+        or not isinstance(a, list)
+        or not isinstance(c, list)
+        or not theta
+        or len(theta) != len(a)
+        or len(theta) != len(c)
+    ):
+        raise ValueError("theta, a, and c must be equal-length non-empty lists")
     acc = 0.0
     for k in range(len(theta)):
         e = theta[k] - c[k]
@@ -195,6 +208,8 @@ def domain_loss(theta: list[float], a: list[float], c: list[float]) -> float:
 
 
 def losses(theta: list[float], a_all: list[list[float]], c_all: list[list[float]]) -> tuple[float, list[float]]:
+    if not isinstance(a_all, list) or not isinstance(c_all, list) or not a_all or len(a_all) != len(c_all):
+        raise ValueError("a_all and c_all must be equal-length non-empty lists")
     per = [domain_loss(theta, a_all[i], c_all[i]) for i in range(len(a_all))]
     tot = 0.0
     for x in per:
@@ -225,6 +240,10 @@ def merge_deltas(items: list[tuple[list[float], float]], mode: str) -> list[floa
 
 def carried_weights(queue: list[dict[str, Any]], rnd: int) -> tuple[list[dict[str, Any]], int]:
     """Queue entries usable in round ``rnd`` as (entry with weight, n dropped as too stale), ordered by (base round, worker)."""
+    if not isinstance(queue, list):
+        raise ValueError("queue must be a list")
+    if isinstance(rnd, bool) or not isinstance(rnd, int) or rnd < 1:
+        raise ValueError("rnd must be an integer >= 1")
     keep, dropped = [], 0
     for e in sorted(queue, key=lambda e: (e["base"], e["worker"])):
         s = rnd - e["base"]
@@ -329,6 +348,10 @@ def simulate(scenario: "Scenario | dict[str, Any]") -> dict[str, Any]:
 def compare_policies(base: "Scenario | dict[str, Any] | None" = None, policies: tuple[str, ...] = POLICIES,
                      straggles: tuple[str, ...] = STRAGGLES) -> list[dict[str, Any]]:
     """Table rows (policy x straggle mode) with retention, final loss, total simulated time and late/carried counts; other fields from ``base``."""
+    if not isinstance(policies, (list, tuple)) or not policies or any(p not in POLICIES for p in policies):
+        raise ValueError(f"policies must be a non-empty subset of {POLICIES}")
+    if not isinstance(straggles, (list, tuple)) or not straggles or any(s not in STRAGGLES for s in straggles):
+        raise ValueError(f"straggles must be a non-empty subset of {STRAGGLES}")
     sc = _as_scenario(base if base is not None else Scenario())
     rows = []
     for st in straggles:

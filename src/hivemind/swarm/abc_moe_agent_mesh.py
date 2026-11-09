@@ -274,12 +274,26 @@ class WaggleDanceScrutinyProtocol:
         available_peers: list[dict[str, Any]],
     ) -> tuple[WaggleDanceMessage, QuorumConsensusVerdict | None]:
         """Simulate blind recruitment imitation: peers join if peer affinity matches required tools."""
+        if not isinstance(dance, WaggleDanceMessage):
+            raise TypeError("dance must be a WaggleDanceMessage")
+        if not isinstance(available_peers, list):
+            raise TypeError("available_peers must be a list of peer dicts")
         recruits = list(dance.current_recruits)
         for peer in available_peers:
+            if not isinstance(peer, Mapping):
+                raise TypeError("each peer must be a mapping")
             pid = str(peer.get("bee_id", "peer-bee"))
             if pid in recruits:
                 continue
-            affinity = float(peer.get("affinity", 0.5))
+            raw_aff = peer.get("affinity", 0.5)
+            if (
+                isinstance(raw_aff, bool)
+                or not isinstance(raw_aff, (int, float))
+                or not math.isfinite(float(raw_aff))
+                or not (0.0 <= float(raw_aff) <= 1.0)
+            ):
+                raise ValueError("peer affinity must be a finite number in [0.0, 1.0]")
+            affinity = float(raw_aff)
             # Probability of recruitment proportional to dance confidence Q and peer affinity
             prob_recruit = dance.confidence_score * affinity
             if prob_recruit >= 0.35:
@@ -331,6 +345,8 @@ def parse_scientific_scout_record(record: Mapping[str, Any]) -> dict[str, Any]:
     `chembl`, and `materials_science` records so Employed Bees can populate strict schemas
     without hallucinating citations or bioactivity values.
     """
+    if not isinstance(record, Mapping):
+        raise TypeError("record must be a Mapping")
     title = str(record.get("title", ""))
     snippet = str(record.get("snippet", ""))
     source = str(record.get("source", ""))
@@ -684,6 +700,8 @@ class AgentMeshOrchestrator:
             raise ValueError("task_id must be a non-empty string")
         if not isinstance(user_query, str) or not user_query.strip():
             raise ValueError("user_query must be a non-empty string")
+        if not isinstance(target_schema, dict) or not target_schema:
+            raise ValueError("target_schema must be a non-empty dict")
         if (
             isinstance(confidence_prior, bool)
             or not isinstance(confidence_prior, (int, float))

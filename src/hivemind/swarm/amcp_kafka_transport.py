@@ -216,8 +216,14 @@ class InMemoryTransport:
         return {"topic": topic, "partition": partition, "offset": offset}
 
     def subscribe(self, topics: Iterable[str]) -> None:
+        if isinstance(topics, (str, bytes)) or not isinstance(topics, Iterable):
+            raise TypeError("topics must be an Iterable of topic strings")
+        topic_list = list(topics)
+        for t in topic_list:
+            if not isinstance(t, str) or not t.strip():
+                raise ValueError("each topic must be a non-empty string")
         with self._lock:
-            self._subscribed = tuple(dict.fromkeys(topics))
+            self._subscribed = tuple(dict.fromkeys(topic_list))
 
     def poll(self, max_records: int, timeout_s: float) -> list[TransportRecord]:
         if isinstance(max_records, bool) or not isinstance(max_records, int) or max_records < 1:
@@ -267,11 +273,17 @@ class InMemoryTransport:
 
     def committed_offset(self, topic: str, partition: int) -> int | None:
         """Next offset the group would resume from on this partition, or None if nothing was committed."""
+        if not isinstance(topic, str) or not topic.strip():
+            raise ValueError("topic must be a non-empty string")
+        if isinstance(partition, bool) or not isinstance(partition, int) or partition < 0:
+            raise ValueError("partition must be an integer >= 0")
         with self._lock:
             return self._committed.get((topic, partition))
 
     def records(self, topic: str) -> list[TransportRecord]:
         """All retained records of ``topic`` across partitions (inspection helper, e.g. for the DLQ)."""
+        if not isinstance(topic, str) or not topic.strip():
+            raise ValueError("topic must be a non-empty string")
         with self._lock:
             return [r for (t, _p), log in sorted(self._logs.items()) if t == topic for r in log]
 

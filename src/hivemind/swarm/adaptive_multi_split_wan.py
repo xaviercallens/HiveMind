@@ -240,6 +240,10 @@ class AdaptiveMultiSplitWANController:
         """Compute exact VRAM, wire payload, and step latency for a candidate cut-layer `L_c`."""
         if isinstance(cut_layer, bool) or cut_layer not in CUT_LAYER_PROFILES:
             raise ValueError(f"Unsupported cut_layer={cut_layer}; expected one of {VALID_CUT_LAYERS}")
+        if not isinstance(link, WANLinkTelemetry):
+            raise TypeError("link must be a WANLinkTelemetry")
+        if not isinstance(hw, CitizenHardwareProfile):
+            raise TypeError("hw must be a CitizenHardwareProfile")
         if activation_bits is not None and (
             isinstance(activation_bits, bool) or activation_bits not in (8, 16)
         ):
@@ -303,6 +307,10 @@ class AdaptiveMultiSplitWANController:
         hw: CitizenHardwareProfile,
     ) -> CutLayerDecision:
         """Select the cut layer `L_c in {1..4}` minimizing total step time under VRAM and preemption ceilings."""
+        if not isinstance(link, WANLinkTelemetry):
+            raise TypeError("link must be a WANLinkTelemetry")
+        if not isinstance(hw, CitizenHardwareProfile):
+            raise TypeError("hw must be a CitizenHardwareProfile")
         if hw.foreground_game_active:
             # Immediate gamer-safe shallowest cut layer L_c = 1 with INT8 boundary
             return self.estimate_cut_layer_cost(1, link, hw, activation_bits=8)
@@ -314,6 +322,8 @@ class AdaptiveMultiSplitWANController:
 
     def quantize_cut_activations_int8(self, activations: Sequence[float]) -> dict[str, Any]:
         """Symmetric per-tensor INT8 quantization at the Prelude -> Edge Core cut boundary."""
+        if isinstance(activations, (str, bytes)) or not isinstance(activations, Sequence):
+            raise TypeError("activations must be a Sequence of finite numbers")
         vals: list[float] = []
         for x in activations:
             if isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(float(x)):
@@ -343,6 +353,14 @@ def run_e20_adaptive_multi_split_experiment(
     hardware_profiles: Sequence[CitizenHardwareProfile] | None = None,
 ) -> dict[str, Any]:
     """Run Pre-Registered Experiment E20 across supplied or default WAN and hardware profiles."""
+    if link is not None and not isinstance(link, WANLinkTelemetry):
+        raise TypeError("link must be a WANLinkTelemetry or None")
+    if hardware_profiles is not None and (
+        isinstance(hardware_profiles, (str, bytes))
+        or not isinstance(hardware_profiles, Sequence)
+        or not all(isinstance(h, CitizenHardwareProfile) for h in hardware_profiles)
+    ):
+        raise TypeError("hardware_profiles must be a Sequence of CitizenHardwareProfile or None")
     controller = AdaptiveMultiSplitWANController()
     target_link = link if link is not None else WANLinkTelemetry(
         uplink_mbps=20.0, downlink_mbps=50.0, rtt_ms=60.0, jitter_ms=6.0

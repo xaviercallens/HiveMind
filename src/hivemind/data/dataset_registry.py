@@ -154,6 +154,8 @@ class SourceSpec:
 
 def load_candidates(path: Path) -> tuple[dict[str, Any], list[SourceSpec]]:
     """Read the candidates file; returns (the raw document, parsed specs). Domains used by a source must be declared."""
+    if not isinstance(path, (Path, str)) or not str(path).strip():
+        raise ValueError("path must be a non-empty Path or string")
     doc = json.loads(Path(path).read_text(encoding="utf-8"))
     specs = [SourceSpec.from_dict(c) for c in doc["candidates"]]
     undeclared = sorted({s.domain for s in specs} - set(doc["domains"]))
@@ -168,6 +170,15 @@ def load_candidates(path: Path) -> tuple[dict[str, Any], list[SourceSpec]]:
 # ---------------------------------------------------------------- Hub API
 def default_fetch(url: str, timeout_s: float = 120.0) -> bytes:
     """HTTP GET with a project user agent. Errors propagate; callers turn them into REJECTED/BLOCKED records."""
+    if not isinstance(url, str) or not url.strip():
+        raise ValueError("url must be a non-empty string")
+    if (
+        isinstance(timeout_s, bool)
+        or not isinstance(timeout_s, (int, float))
+        or not math.isfinite(float(timeout_s))
+        or float(timeout_s) <= 0.0
+    ):
+        raise ValueError("timeout_s must be a finite positive number")
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=timeout_s) as resp:
         return bytes(resp.read())
@@ -214,11 +225,19 @@ def utc_now() -> str:
 
 
 def _err(exc: BaseException) -> str:
+    if not isinstance(exc, BaseException):
+        raise TypeError("exc must be a BaseException")
     return f"{type(exc).__name__}: {exc}"[:240]
 
 
 def registry_entry(spec: SourceSpec, fetch: Fetch, retrieved_utc: str) -> dict[str, Any]:
     """Look one candidate up on the Hub and decide ACCEPTED / REJECTED. Every field but the spec comes from the API."""
+    if not isinstance(spec, SourceSpec):
+        raise TypeError("spec must be a SourceSpec")
+    if not callable(fetch):
+        raise TypeError("fetch must be callable")
+    if not isinstance(retrieved_utc, str) or not retrieved_utc.strip():
+        raise ValueError("retrieved_utc must be a non-empty string")
     entry: dict[str, Any] = {"id": spec.dataset_id, "domain": spec.domain, "config": spec.config, "split": spec.split,
                              "verified_signal": spec.verified_signal, "signal_basis": spec.signal_basis,
                              "retrieved_utc": retrieved_utc, "metadata_source": HUB_API + spec.dataset_id}
@@ -243,6 +262,10 @@ def registry_entry(spec: SourceSpec, fetch: Fetch, retrieved_utc: str) -> dict[s
 
 def split_size(spec: SourceSpec, fetch: Fetch) -> dict[str, Any]:
     """Row and byte counts for the configured split from datasets-server ``/size``; an error is returned, not raised."""
+    if not isinstance(spec, SourceSpec):
+        raise TypeError("spec must be a SourceSpec")
+    if not callable(fetch):
+        raise TypeError("fetch must be callable")
     url = f"{DATASETS_SERVER}/size?" + urllib.parse.urlencode({"dataset": spec.dataset_id, "config": spec.config})
     try:
         doc = json.loads(fetch(url))
@@ -316,6 +339,13 @@ def slice_rows(spec: SourceSpec, fetch: Fetch, n_rows: int | None = None, page: 
 
 def read_jsonl_shards(paths: Sequence[Path]) -> tuple[list[dict[str, Any]], list[Shard]]:
     """Read local JSONL shards; each file's sha256 is taken over the exact bytes parsed."""
+    if (
+        not isinstance(paths, Sequence)
+        or isinstance(paths, (str, bytes))
+        or len(paths) == 0
+        or any(not isinstance(p, (Path, str)) or not str(p).strip() for p in paths)
+    ):
+        raise ValueError("paths must be a non-empty sequence of Paths")
     rows: list[dict[str, Any]] = []
     shards: list[Shard] = []
     for p in paths:
@@ -340,6 +370,8 @@ def _text(row: Mapping[str, Any], name: str) -> str:
 
 def fmt_number(v: float) -> str:
     """Plain decimal text, the same convention as the night packs: 6360, 2.48, 0.0123, 1.2e-05."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)):
+        raise ValueError("v must be a finite number")
     if v == 0:
         return "0"
     if abs(v) >= 1e7:

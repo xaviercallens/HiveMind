@@ -95,6 +95,8 @@ class RegionalGeoRingTransport:
 
     def register_peer(self, peer: GeoRingPeer) -> bool:
         """Admit peer into the Regional Geo-Ring only if RTT <= max_rtt_ms."""
+        if not isinstance(peer, GeoRingPeer):
+            raise TypeError("peer must be a GeoRingPeer")
         if peer.region == self.region and peer.rtt_ms <= self.max_rtt_ms:
             self.peers[peer.peer_id] = peer
             return True
@@ -182,6 +184,14 @@ class TwoLevelMacroMicroRouter(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> Dict[str, Any]:
         """Route token representations through G_macro first, then G_micro within the winning cluster."""
+        if (
+            not isinstance(hidden_states, torch.Tensor)
+            or hidden_states.ndim not in (2, 3)
+            or hidden_states.numel() == 0
+            or hidden_states.shape[-1] != self.hidden_size
+            or not bool(torch.isfinite(hidden_states).all().item())
+        ):
+            raise ValueError("hidden_states must be a finite 2D or 3D tensor ending in hidden_size")
         x_fp32 = hidden_states.detach().to(torch.float32)
         if x_fp32.dim() == 3:
             pooled = x_fp32.mean(dim=(0, 1))
@@ -364,6 +374,19 @@ class PinnedRAMExpertDMAStreamer:
         simulated_attention_compute_ms: float = 5.0,
     ) -> Dict[str, Any]:
         """HM-M2-01 (PR #7): Use `TwoLevelMacroMicroRouter` predictions at layer `L` to prefetch layer `L+1` into the alternating lookahead slot."""
+        if not isinstance(router, TwoLevelMacroMicroRouter):
+            raise TypeError("router must be a TwoLevelMacroMicroRouter")
+        if not isinstance(hidden_states, torch.Tensor):
+            raise TypeError("hidden_states must be a torch.Tensor")
+        if isinstance(layer_idx, bool) or not isinstance(layer_idx, int) or layer_idx < 0:
+            raise ValueError("layer_idx must be a non-negative integer")
+        if (
+            isinstance(simulated_attention_compute_ms, bool)
+            or not isinstance(simulated_attention_compute_ms, (int, float))
+            or not math.isfinite(float(simulated_attention_compute_ms))
+            or float(simulated_attention_compute_ms) < 0.0
+        ):
+            raise ValueError("simulated_attention_compute_ms must be a finite non-negative number")
         route_info = router(hidden_states)
         active_slot = "slot_A" if layer_idx % 2 == 0 else "slot_B"
         lookahead_slot = "slot_B" if active_slot == "slot_A" else "slot_A"
@@ -1025,6 +1048,17 @@ _BATCH_DOMAIN = b"hivemind/opoi-batch/v1"
 
 
 def _batch_leaf_digest(step: int, layer: int, layer_leaf_hex: str) -> bytes:
+    if (
+        isinstance(step, bool)
+        or not isinstance(step, int)
+        or step < 0
+        or isinstance(layer, bool)
+        or not isinstance(layer, int)
+        or layer < 0
+    ):
+        raise ValueError("step and layer must be non-negative integers")
+    if not isinstance(layer_leaf_hex, str) or len(layer_leaf_hex) != 64:
+        raise ValueError("layer_leaf_hex must be a 64-character hex string")
     return hashlib.sha256(
         b"\x00"
         + _BATCH_DOMAIN
@@ -1035,10 +1069,30 @@ def _batch_leaf_digest(step: int, layer: int, layer_leaf_hex: str) -> bytes:
 
 
 def _batch_node_digest(left: bytes, right: bytes) -> bytes:
+    if (
+        not isinstance(left, (bytes, bytearray))
+        or len(left) != 32
+        or not isinstance(right, (bytes, bytearray))
+        or len(right) != 32
+    ):
+        raise ValueError("left and right must be 32-byte digests")
     return hashlib.sha256(b"\x01" + left + right).digest()
 
 
 def _batch_root_hex(peer_id: str, num_steps: int, num_layers: int, top: bytes) -> str:
+    if not isinstance(peer_id, str) or not peer_id.strip():
+        raise ValueError("peer_id must be a non-empty string")
+    if (
+        isinstance(num_steps, bool)
+        or not isinstance(num_steps, int)
+        or num_steps < 1
+        or isinstance(num_layers, bool)
+        or not isinstance(num_layers, int)
+        or num_layers < 1
+    ):
+        raise ValueError("num_steps and num_layers must be positive integers")
+    if not isinstance(top, (bytes, bytearray)) or len(top) != 32:
+        raise ValueError("top must be a 32-byte digest")
     peer = peer_id.encode("utf-8")
     return hashlib.sha256(
         b"\x02"
@@ -1052,6 +1106,8 @@ def _batch_root_hex(peer_id: str, num_steps: int, num_layers: int, top: bytes) -
 
 
 def _batch_level_sizes(leaf_count: int) -> List[int]:
+    if isinstance(leaf_count, bool) or not isinstance(leaf_count, int) or leaf_count < 1:
+        raise ValueError("leaf_count must be a positive integer")
     sizes = [leaf_count]
     while sizes[-1] > 1:
         sizes.append((sizes[-1] + 1) // 2)

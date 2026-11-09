@@ -317,6 +317,8 @@ def verify_signature(manifest: BeeManifest, keyring: Mapping[str, bytes]) -> lis
 
 
 def _bad(field_name: str, value: Any, rule: str) -> Reason:
+    if not isinstance(field_name, str) or not field_name.strip() or not isinstance(rule, str) or not rule.strip():
+        raise ValueError("field_name and rule must be non-empty strings")
     return Reason(ReasonCode.MANIFEST_FIELD_INVALID, f"{field_name}={value!r}: {rule}")
 
 
@@ -347,6 +349,8 @@ def check_endpoint_url(url: str) -> list[Reason]:
 
 def check_manifest_fields(manifest: BeeManifest) -> list[Reason]:
     """Grammar and allowlist checks that need no network. Returns every failure, not just the first."""
+    if not isinstance(manifest, BeeManifest):
+        raise TypeError("manifest must be a BeeManifest")
     m = manifest
     reasons: list[Reason] = []
     if m.schema != MANIFEST_SCHEMA:
@@ -392,6 +396,8 @@ def check_manifest_fields(manifest: BeeManifest) -> list[Reason]:
 
 def normalised_name_key(name: str) -> str:
     """Collision key: lower-case alphanumerics with a leading ``hivemind`` and ``bee`` stripped (``bee-coder`` == ``coder``)."""
+    if not isinstance(name, str):
+        raise TypeError("name must be a string")
     key = re.sub(r"[^a-z0-9]", "", normalize_model_alias(name).lower())
     key = key.removeprefix("hivemind")
     return key.removeprefix("bee")
@@ -417,6 +423,10 @@ def existing_bee_names(extra: Iterable[str] = ()) -> frozenset[str]:
 
 
 def check_name_collision(bee_name: str, taken: Iterable[str]) -> list[Reason]:
+    if not isinstance(bee_name, str) or not bee_name.strip():
+        raise ValueError("bee_name must be a non-empty string")
+    if isinstance(taken, (str, bytes)) or not isinstance(taken, Iterable):
+        raise TypeError("taken must be an iterable of strings")
     key = normalised_name_key(bee_name)
     clashes = sorted(name for name in taken if normalised_name_key(name) == key)
     if clashes:
@@ -425,6 +435,8 @@ def check_name_collision(bee_name: str, taken: Iterable[str]) -> list[Reason]:
 
 
 def served_base(base_model: str) -> ServedBase | None:
+    if not isinstance(base_model, str):
+        raise TypeError("base_model must be a string")
     return next((b for b in HIVE_SERVED_BASES if b.hf_repo_id.lower() == base_model.lower()), None)
 
 
@@ -444,6 +456,8 @@ class RepoFile:
 
 
 def _extension(path: str) -> str:
+    if not isinstance(path, str):
+        raise TypeError("path must be a string")
     name = path.rsplit("/", 1)[-1]
     if name.startswith(".") and name.count(".") == 1:
         return name  # ".gitattributes"
@@ -451,6 +465,12 @@ def _extension(path: str) -> str:
 
 
 def parse_tree(entries: Sequence[Mapping[str, Any]]) -> list[RepoFile]:
+    if (
+        not isinstance(entries, Sequence)
+        or isinstance(entries, (str, bytes))
+        or any(not isinstance(e, Mapping) for e in entries)
+    ):
+        raise TypeError("entries must be a sequence of mappings")
     files: list[RepoFile] = []
     for entry in entries:
         if entry.get("type") != "file":

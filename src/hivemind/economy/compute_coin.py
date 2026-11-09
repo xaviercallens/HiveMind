@@ -53,7 +53,7 @@ SPOT_CHECK_FRACTION: Final[float] = 0.10  # HiveMind replays 10 % of segments in
 
 def cobblestones_from_flops(flops: float) -> float:
     """BOINC credit for a FLOP count; negative or non-finite input is an error, never silently zero."""
-    if not math.isfinite(flops) or flops < 0.0:
+    if isinstance(flops, bool) or not isinstance(flops, (int, float)) or not math.isfinite(flops) or flops < 0.0:
         raise ValueError(f"flops must be finite and >= 0, got {flops!r}")
     return flops / COBBLESTONE_FLOP
 
@@ -256,6 +256,10 @@ def kelly_equilibrium(valuations: Sequence[float], capacity: float = 1.0, tol: f
 
     Solves `sum_j max(0, 1 - W / v_j) = 1` for W by bisection (the left side is strictly decreasing in W), then
     `x_j = max(0, 1 - W / v_j)` and `w_j = W x_j`. Shares are reported for a queue of `capacity` units."""
+    if any(isinstance(x, bool) or not isinstance(x, (int, float)) for x in valuations):
+        raise ValueError("valuations must be finite and > 0; capacity > 0")
+    if isinstance(capacity, bool) or not isinstance(capacity, (int, float)) or isinstance(tol, bool) or not isinstance(tol, (int, float)):
+        raise ValueError("capacity and tol must be finite numeric values")
     v = [float(x) for x in valuations]
     if len(v) < 2:
         raise ValueError("the Kelly game needs at least two consumers; a single consumer faces a reserve price, not a game")
@@ -308,6 +312,8 @@ def tullock_equilibrium(pool_hive: float, costs: Sequence[float]) -> TullockEqui
     `S = (n - 1) P / sum c` and `s_i = S (1 - (n - 1) c_i / sum c)`; a worker whose implied supply is not positive
     is inactive, and the active set is found by dropping the most expensive worker until all implied supplies are
     positive (the standard iterative argument; the fixed point is unique)."""
+    if isinstance(pool_hive, bool) or not isinstance(pool_hive, (int, float)) or any(isinstance(x, bool) or not isinstance(x, (int, float)) for x in costs):
+        raise ValueError("costs must be finite and > 0; pool > 0")
     c = [float(x) for x in costs]
     if len(c) < 2:
         raise ValueError("a contest needs at least two workers; with one worker the pool must be priced by reserve, not by competition")

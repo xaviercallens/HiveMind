@@ -59,6 +59,8 @@ def _closer_t(a: torch.Tensor, b: torch.Tensor, x: torch.Tensor) -> torch.Tensor
 
 
 def nearest_e8_t(x: torch.Tensor) -> torch.Tensor:
+    if not isinstance(x, torch.Tensor) or x.numel() == 0 or not bool(torch.isfinite(x).all()):
+        raise ValueError("x must be a non-empty finite torch.Tensor")
     if x.shape[-1] != 8:
         raise ValueError("E8 lives in dimension 8")
     return _closer_t(nearest_dn_t(x), nearest_dn_t(x - 0.5) + 0.5, x)
@@ -66,6 +68,8 @@ def nearest_e8_t(x: torch.Tensor) -> torch.Tensor:
 
 def nearest_a2_t(x: torch.Tensor) -> torch.Tensor:
     """Nearest point of A₂ = R ∪ (R + (½, √3/2)), R = ℤ × √3ℤ; rows of ``x`` have 2 columns."""
+    if not isinstance(x, torch.Tensor) or x.numel() == 0 or not bool(torch.isfinite(x).all()):
+        raise ValueError("x must be a non-empty finite torch.Tensor")
     if x.shape[-1] != 2:
         raise ValueError("A2 lives in dimension 2")
     scale = torch.tensor([1.0, SQRT3], dtype=x.dtype, device=x.device)
@@ -82,7 +86,7 @@ def is_a2_point(c: torch.Tensor, tol: float = 1e-9) -> torch.Tensor:
     """Membership in A₂ (rows): integer coordinates in the basis (1, 0), (½, √3/2)."""
     if isinstance(tol, bool) or not isinstance(tol, (int, float)) or not math.isfinite(float(tol)) or float(tol) <= 0.0:
         raise ValueError("tol must be a strictly positive finite float")
-    if c.numel() == 0 or c.shape[-1] != 2:
+    if not isinstance(c, torch.Tensor) or c.numel() == 0 or c.shape[-1] != 2 or not bool(torch.isfinite(c).all()):
         raise ValueError("A2 points must have last dimension 2 and be non-empty")
     b = c[..., 1] / (0.5 * SQRT3)
     a = c[..., 0] - 0.5 * b
@@ -133,9 +137,9 @@ def integer_coordinates(kind: str, c: torch.Tensor) -> Tuple[torch.Tensor, torch
 
 def factorised_rate_t(kind: str, codewords: torch.Tensor, context: torch.Tensor) -> float:
     """Bits per dimension of unscaled codewords (rows, shape (N, n)) given an integer context per row (N,)."""
-    if codewords.ndim != 2 or codewords.shape[0] == 0 or codewords.shape[1] == 0:
+    if not isinstance(codewords, torch.Tensor) or codewords.ndim != 2 or codewords.shape[0] == 0 or codewords.shape[1] == 0:
         raise ValueError("codewords must be a non-empty 2D tensor")
-    if context.ndim != 1 or context.shape[0] != codewords.shape[0]:
+    if not isinstance(context, torch.Tensor) or context.ndim != 1 or context.shape[0] != codewords.shape[0] or not bool(torch.isfinite(context).all()):
         raise ValueError("context must be a 1D tensor matching codewords.shape[0]")
     n = codewords.shape[-1]
     coset, z = integer_coordinates(kind, codewords)
@@ -156,7 +160,7 @@ def to_rows(kind: str, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     ℤ and E₈: consecutive blocks of 8 channels. A₂: RoPE planes (i, i + d/2), i < d/2."""
     if kind not in DECODERS_T:
         raise KeyError(kind)
-    if x.numel() == 0:
+    if not isinstance(x, torch.Tensor) or x.numel() == 0 or not bool(torch.isfinite(x).all()):
         raise ValueError("x must be non-empty")
     d = x.shape[-1]
     if kind == "A2":

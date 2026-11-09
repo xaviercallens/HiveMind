@@ -185,10 +185,14 @@ def run_multi_moe_hf_campaign(
         raise ValueError("domain_limit must be between 2 and 8")
     if isinstance(learning_rate, bool) or not math.isfinite(float(learning_rate)) or float(learning_rate) <= 0.0:
         raise ValueError("learning_rate must be a finite positive float")
-    if isinstance(sequence_length, bool):
+    if isinstance(sequence_length, bool) or not isinstance(sequence_length, int):
         raise ValueError("sequence_length must be between 2 and 128")
-    if isinstance(seed, bool):
-        raise ValueError("seed must be an integer")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
+    if not isinstance(live_hf_stream, bool):
+        raise ValueError("live_hf_stream must be a boolean")
+    if output_path is not None and (isinstance(output_path, bool) or not isinstance(output_path, Path)):
+        raise ValueError("output_path must be a Path or None")
     if min_quorum_k is not None:
         if isinstance(min_quorum_k, bool) or int(min_quorum_k) < 1 or int(min_quorum_k) > int(domain_limit):
             raise ValueError("min_quorum_k must be an integer in [1, domain_limit]")

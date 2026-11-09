@@ -55,6 +55,10 @@ def estimate_workunit_tflops(
     micro_batch_size: int = 2,
 ) -> float:
     """Estimate training TFLOPs executed for a BOINC workunit from its step and token counts (IP-178)."""
+    if workunit is None or not hasattr(workunit, "inner_steps_H") or not hasattr(workunit, "seq_len"):
+        raise ValueError("workunit must provide inner_steps_H and seq_len")
+    if isinstance(workunit.inner_steps_H, bool) or isinstance(workunit.seq_len, bool):
+        raise ValueError("workunit inner_steps_H and seq_len must be positive integers")
     if isinstance(total_params, bool) or int(total_params) < 0:
         raise ValueError("total_params must be a non-negative integer")
     if isinstance(micro_batch_size, bool) or int(micro_batch_size) < 1:
@@ -78,6 +82,8 @@ def run_end_to_end_simulation(
     """Run the complete Project HiveMind pipeline on the local RTX GPU and save telemetry."""
     if not isinstance(profile_name, str) or not profile_name.strip():
         raise ValueError("profile_name must be a non-empty string")
+    if not isinstance(use_hf_hub, bool):
+        raise ValueError("use_hf_hub must be a boolean")
     if isinstance(inner_steps_H, bool) or int(inner_steps_H) < 1:
         raise ValueError("inner_steps_H must be a positive integer")
     if isinstance(spot_check_interval_s, bool) or int(spot_check_interval_s) < 1:

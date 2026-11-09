@@ -678,6 +678,15 @@ def _evaluate_batch_perplexity(
     """
     import math
 
+    if not isinstance(model, torch.nn.Module):
+        raise ValueError("model must be a torch.nn.Module")
+    if not isinstance(token_batch, torch.Tensor) or token_batch.numel() == 0:
+        raise ValueError("token_batch must be a non-empty torch.Tensor")
+    if pad_token_id is not None and (
+        isinstance(pad_token_id, bool) or not isinstance(pad_token_id, int) or pad_token_id < 0
+    ):
+        raise ValueError("pad_token_id must be a non-negative integer or None")
+
     device = next(model.parameters()).device
     ids = token_batch.to(device)
     labels = ids.clone()

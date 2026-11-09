@@ -166,6 +166,10 @@ def _create_tokenized_parquet_shard(
         raise ValueError("seq_len must be a positive integer")
     if isinstance(num_sequences, bool) or int(num_sequences) < 1:
         raise ValueError("num_sequences must be a positive integer")
+    if isinstance(shard_path, bool) or not isinstance(shard_path, Path):
+        raise ValueError("shard_path must be a Path")
+    if isinstance(rng_seed, bool) or not isinstance(rng_seed, int) or rng_seed < 0:
+        raise ValueError("rng_seed must be a non-negative integer")
     shard_path.parent.mkdir(parents=True, exist_ok=True)
     joined = "\n".join(texts * 4)
     token_ids = tokenizer.encode(joined, add_special_tokens=False)
@@ -197,6 +201,14 @@ def _export_shared_swarm_expert(
     worker_trajectories: dict[str, dict[str, Any]],
 ) -> tuple[str, Path]:
     """Export converged domain QLoRA adapter to disk so distributed swarm peers can share it for inference."""
+    if not isinstance(domain_name, str) or not domain_name.strip():
+        raise ValueError("domain_name must be a non-empty string")
+    if not isinstance(dataset_id, str) or not dataset_id.strip():
+        raise ValueError("dataset_id must be a non-empty string")
+    if not isinstance(lora_state, dict) or not lora_state:
+        raise ValueError("lora_state must be a non-empty dict")
+    if not isinstance(worker_trajectories, dict):
+        raise ValueError("worker_trajectories must be a dict")
     export_dir = ARTIFACTS_ROOT / "shared_experts"
     export_dir.mkdir(parents=True, exist_ok=True)
     hasher = hashlib.sha256(f"{domain_name}:{dataset_id}".encode("utf-8"))

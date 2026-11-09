@@ -137,6 +137,8 @@ class OllamaBackend(Backend):
             raise BackendError("num_predict must be an integer >= 1")
         if isinstance(max_response_bytes, bool) or not isinstance(max_response_bytes, int) or max_response_bytes < 1:
             raise BackendError("max_response_bytes must be an integer >= 1")
+        if think is not None and not isinstance(think, bool):
+            raise BackendError("think must be a boolean or None")
         self.base_url = check_loopback_url(base_url)
         self.model, self.num_gpu, self.timeout_s = model, num_gpu, float(timeout_s)
         self.temperature, self.seed, self.num_predict, self.think = float(temperature), int(seed), int(num_predict), think
@@ -456,6 +458,8 @@ Allowed slot_family values:
 
 def build_system_prompt(*, prefer_slots: bool = False) -> str:
     """The allowed grammar and families, generated from families.py."""
+    if not isinstance(prefer_slots, bool):
+        raise ValueError("prefer_slots must be a boolean")
     base = SYSTEM_PROMPT_HEAD + fam.catalogue_text() + "\n" + SYSTEM_PROMPT_TAIL.format(presets=fam.presets_text())
     if prefer_slots:
         return base + SLOT_SYSTEM_PROMPT_TAIL
@@ -463,11 +467,17 @@ def build_system_prompt(*, prefer_slots: bool = False) -> str:
 
 
 def build_first_messages(question: str, *, prefer_slots: bool = False) -> List[Dict[str, str]]:
+    if not isinstance(question, str) or not question.strip():
+        raise ValueError("question must be a non-empty string")
     return [{"role": "system", "content": build_system_prompt(prefer_slots=prefer_slots)},
             {"role": "user", "content": "Question (between the markers):\n<<<\n" + question.strip() + "\n>>>\nReply with ONE JSON object."}]
 
 
 def build_followup_messages(question: str, previous_spec: Dict[str, Any], previous_question: Optional[str], *, prefer_slots: bool = False) -> List[Dict[str, str]]:
+    if not isinstance(question, str) or not question.strip():
+        raise ValueError("question must be a non-empty string")
+    if not isinstance(previous_spec, dict):
+        raise ValueError("previous_spec must be a dict")
     prev_q = (previous_question or "").strip()
     return [{"role": "system", "content": build_system_prompt(prefer_slots=prefer_slots)},
             {"role": "user", "content": ("The previous question was:\n<<<\n" + prev_q + "\n>>>\nIts VALIDATED specification was:\n" + json.dumps(previous_spec, separators=(",", ":"), ensure_ascii=False)
@@ -522,6 +532,14 @@ class SolverPipeline:
     """spec bytes -> sandboxed solver -> verifier -> certificate. sandbox, verifier and service helpers are imported lazily; any failure gives UNVERIFIED."""
 
     def __init__(self, binary: str, *, problems_dir: Optional[str] = None, timeout_s: float = 30.0, mem_mb: int = 2048, allow_unsandboxed: bool = False) -> None:
+        if not isinstance(binary, str) or not binary.strip():
+            raise ValueError("binary must be a non-empty string")
+        if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not math.isfinite(timeout_s) or timeout_s <= 0:
+            raise ValueError("timeout_s must be a finite positive number")
+        if isinstance(mem_mb, bool) or not isinstance(mem_mb, int) or mem_mb < 1:
+            raise ValueError("mem_mb must be an integer >= 1")
+        if not isinstance(allow_unsandboxed, bool):
+            raise ValueError("allow_unsandboxed must be a boolean")
         self.binary, self.problems_dir = binary, problems_dir
         self.timeout_s, self.mem_mb, self.allow_unsandboxed = float(timeout_s), int(mem_mb), bool(allow_unsandboxed)
         self._library: Optional[Dict[str, Dict[str, Any]]] = None
@@ -781,6 +799,12 @@ class ScienceBee:
     """One conversation: remembers the last VALIDATED spec so that a follow-up modifies it through the same validation loop."""
 
     def __init__(self, backend: Backend, pipeline: Any, *, max_retries: int = MAX_RETRIES, prefer_slots: bool = False) -> None:
+        if not isinstance(backend, Backend):
+            raise ValueError("backend must be a Backend instance")
+        if isinstance(max_retries, bool) or not isinstance(max_retries, int) or max_retries < 0:
+            raise ValueError("max_retries must be an integer >= 0")
+        if not isinstance(prefer_slots, bool):
+            raise ValueError("prefer_slots must be a boolean")
         self.backend, self.pipeline, self.max_retries = backend, pipeline, int(max_retries)
         self.prefer_slots = bool(prefer_slots)
         self.last_spec: Optional[Dict[str, Any]] = None

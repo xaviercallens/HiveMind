@@ -70,8 +70,16 @@ class CanaryPrompt:
     expected_pattern: str
     category: str
 
+    def __post_init__(self) -> None:
+        for field_name in ("canary_id", "prompt", "expected_pattern", "category"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+
     def to_chat_request(self, model: str = "hivemind/coder") -> dict[str, Any]:
         """Format as an ordinary OpenAI-compatible chat request (blinded: no canary header)."""
+        if not isinstance(model, str) or not model.strip():
+            raise ValueError("model must be a non-empty string")
         return {
             "model": model,
             "messages": [{"role": "user", "content": self.prompt}],
@@ -185,6 +193,8 @@ class NodeCanaryState:
         return self.total >= self.min_trials and self.wilson_lb < self.wilson_lb_threshold
 
     def record(self, passed: bool) -> None:
+        if not isinstance(passed, bool):
+            raise ValueError("passed must be a boolean")
         self.total += 1
         if passed:
             self.successes += 1

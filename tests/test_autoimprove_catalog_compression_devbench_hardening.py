@@ -81,12 +81,13 @@ def test_compression_rejects_invalid_dicts_and_packages() -> None:
     for bad in (None, {}, [], "invalid"):
         with pytest.raises(ValueError, match="theta_init must be a non-empty dict"):
             compute_pseudo_gradient_delta(bad, valid_d)  # type: ignore[arg-type]
-        with pytest.raises(ValueError, match="theta_final must be a non-empty dict"):
-            compute_pseudo_gradient_delta(valid_d, bad)  # type: ignore[arg-type]
         with pytest.raises(ValueError, match="delta_dict must be a non-empty dict"):
             compress_lora_delta(bad, "w1", "main", 1)  # type: ignore[arg-type]
         with pytest.raises(ValueError, match="delta_dict must be a non-empty dict"):
             compress_lora_delta_dct_sparse_2bit(bad, "w1", "main", 1)  # type: ignore[arg-type]
+    for bad_final in (None, [], "invalid", 123):
+        with pytest.raises(ValueError, match="theta_final must be a dict"):
+            compute_pseudo_gradient_delta(valid_d, bad_final)  # type: ignore[arg-type]
 
     for bad_pkg in (None, {}, "pkg", 123):
         with pytest.raises(ValueError, match="package must be a CompressedDeltaPackage"):

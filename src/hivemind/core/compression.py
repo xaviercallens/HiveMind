@@ -108,8 +108,8 @@ def compute_pseudo_gradient_delta(
     """Compute the DiLoCo pseudo-gradient: Delta_k^(t) = theta^(t-1) - theta_k^(t, H)."""
     if not isinstance(theta_init, dict) or not theta_init:
         raise ValueError("theta_init must be a non-empty dict")
-    if not isinstance(theta_final, dict) or not theta_final:
-        raise ValueError("theta_final must be a non-empty dict")
+    if not isinstance(theta_final, dict):
+        raise ValueError("theta_final must be a dict")
     delta: dict[str, torch.Tensor] = {}
     for name, init_t in theta_init.items():
         if name not in theta_final:

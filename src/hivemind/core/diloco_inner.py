@@ -245,6 +245,14 @@ def build_inner_optimizer(
     use_paged_8bit_adamw: bool = False,
 ) -> torch.optim.Optimizer:
     """Instantiate deterministic AdamW (or 8-bit blockwise AdamW) optimizer for DiLoCo inner loop."""
+    if not isinstance(trainable_params, list) or not trainable_params:
+        raise ValueError("trainable_params must be a non-empty list")
+    if isinstance(lr, bool) or not isinstance(lr, (int, float)) or not math.isfinite(float(lr)) or float(lr) <= 0.0:
+        raise ValueError("lr must be a positive finite float")
+    if isinstance(weight_decay, bool) or not isinstance(weight_decay, (int, float)) or not math.isfinite(float(weight_decay)) or float(weight_decay) < 0.0:
+        raise ValueError("weight_decay must be a non-negative finite float")
+    if not isinstance(use_paged_8bit_adamw, bool):
+        raise ValueError("use_paged_8bit_adamw must be a bool")
     if use_paged_8bit_adamw:
         return Blockwise8BitAdamW(
             trainable_params,
@@ -272,8 +280,12 @@ def get_deterministic_batch(
     device: torch.device,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Deterministically index a micro-batch for step `step` given `rng_seed`."""
-    if token_sequences.ndim < 2 or token_sequences.numel() == 0:
+    if not isinstance(token_sequences, torch.Tensor) or token_sequences.ndim < 2 or token_sequences.numel() == 0:
         raise ValueError("token_sequences must be a non-empty tensor with ndim >= 2")
+    if isinstance(step, bool) or not isinstance(step, int) or step < 0:
+        raise ValueError("step must be a non-negative integer")
+    if isinstance(rng_seed, bool) or not isinstance(rng_seed, int) or rng_seed < 0:
+        raise ValueError("rng_seed must be a non-negative integer")
     if isinstance(micro_batch_size, bool) or not isinstance(micro_batch_size, int) or micro_batch_size < 1:
         raise ValueError(f"micro_batch_size must be an integer >= 1, got {micro_batch_size!r}")
     num_samples = token_sequences.size(0)
@@ -577,6 +589,8 @@ def replay_inner_segment(
     use_paged_8bit_adamw: bool = False,
 ) -> dict[str, torch.Tensor]:
     """Deterministically replay a segment of inner steps for BOINC Validator spot-checking."""
+    if not isinstance(start_lora_state, dict):
+        raise ValueError("start_lora_state must be a dict")
     if isinstance(start_step, bool) or not isinstance(start_step, int) or start_step < 0:
         raise ValueError(f"start_step must be an integer >= 0, got {start_step!r}")
     if isinstance(end_step, bool) or not isinstance(end_step, int) or end_step <= start_step:

@@ -76,7 +76,7 @@ class OuterStepResult:
 
 def flatten_delta_dict(delta_dict: dict[str, torch.Tensor]) -> torch.Tensor:
     """Flatten a dictionary of LoRA tensors in deterministic key order into a 1D FP32 vector."""
-    if not delta_dict:
+    if not isinstance(delta_dict, dict) or not delta_dict:
         raise ValueError("delta_dict must not be empty")
     parts = [
         delta_dict[k].detach().to(torch.float32).cpu().reshape(-1)
@@ -112,6 +112,8 @@ def filter_byzantine_deltas_multikrum(
     reference_keys_and_shapes: dict[str, torch.Size] | None = None,
 ) -> ByzantineFilterReport:
     """Filter worker pseudo-gradients using Pre-Krum Sanitization, Multi-Krum, and a 2-sigma pairwise cosine filter."""
+    if not isinstance(worker_deltas, dict):
+        raise ValueError("worker_deltas must be a dict")
     if isinstance(max_byzantine_f, bool) or not isinstance(max_byzantine_f, int) or max_byzantine_f < 0:
         raise ValueError(f"max_byzantine_f must be an integer >= 0, got {max_byzantine_f!r}")
     if isinstance(cosine_sigma, bool) or not isinstance(cosine_sigma, (int, float)) or not math.isfinite(float(cosine_sigma)) or cosine_sigma < 0.0:
@@ -418,6 +420,12 @@ class DiLoCoOuterOptimizer:
             raise ValueError("branch_name must be a non-empty string")
         if isinstance(outer_step, bool) or not isinstance(outer_step, int) or outer_step < 0:
             raise ValueError("outer_step must be an integer >= 0")
+        if not isinstance(theta_prev, dict) or not theta_prev:
+            raise ValueError("theta_prev must be a non-empty dict")
+        if not isinstance(worker_deltas, dict) or not worker_deltas:
+            raise ValueError("worker_deltas must be a non-empty dict")
+        if isinstance(grace_window_s, bool) or not isinstance(grace_window_s, (int, float)) or not math.isfinite(float(grace_window_s)) or float(grace_window_s) < 0.0:
+            raise ValueError("grace_window_s must be a non-negative finite number")
         should_restart = bool(
             eff_restart is not None and outer_step > 0 and (outer_step % eff_restart == 0)
         )

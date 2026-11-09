@@ -361,6 +361,8 @@ class ExpertRegistry:
 
     def __init__(self, strict: bool = False) -> None:
         # strict: an adapter expert can reach LIVE only through promote_with_gate (the train-to-serve gate, docs/TRAIN_TO_SERVE_GATE.md)
+        if not isinstance(strict, bool):
+            raise ValueError("strict must be a bool")
         self.strict = strict
         self._experts: Dict[str, ExpertRecord] = {}
         self._by_state: Dict[str, set[str]] = {s: set() for s in LIFECYCLE_STATES}
@@ -394,6 +396,8 @@ class ExpertRegistry:
 
     def register(self, record: ExpertRecord) -> ExpertRecord:
         """Add a new expert. It always enters as ``candidate`` with an empty history (a promoted record is reset)."""
+        if not isinstance(record, ExpertRecord):
+            raise ValueError("record must be an ExpertRecord")
         rec = replace(record, state=CANDIDATE, history=())
         self._admit(rec)
         return rec
@@ -466,6 +470,8 @@ class ExpertRegistry:
 
     def verify_adapter_bytes(self, expert_id: str, data: bytes) -> bool:
         """True when ``data`` hashes to the sha256 the expert was registered with."""
+        if not isinstance(data, (bytes, bytearray)):
+            raise ValueError("data must be bytes or bytearray")
         rec = self._experts[expert_id]
         return rec.adapter_sha256 is not None and hashlib.sha256(data).hexdigest() == rec.adapter_sha256
 
@@ -879,6 +885,8 @@ class HierarchicalExpertRouter:
 
     def prompt_hits(self, prompt: str) -> frozenset[str]:
         """Keywords of live experts that ``prompt`` hits; equal to ``keyword_hits`` over all of them, but indexed."""
+        if not isinstance(prompt, str):
+            raise ValueError("prompt must be a str")
         low = prompt.lower()
         hits = set(_TOKEN_RE.findall(low)) & self._simple_keywords
         hits.update(k for k, pat in self._phrase_patterns if pat.search(low) is not None)

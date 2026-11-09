@@ -187,6 +187,8 @@ def decompress_tensor_topk_fp8(
     device: torch.device | str = "cpu",
 ) -> torch.Tensor:
     """Decompress a Top-k + FP8 payload back into a dense tensor of original_shape."""
+    if not isinstance(payload, CompressedTensorPayload):
+        raise ValueError("payload must be a CompressedTensorPayload")
     if payload.original_numel < 1:
         raise ValueError(f"original_numel must be >= 1, got {payload.original_numel!r}")
     if not math.isfinite(payload.scale) or payload.scale <= 0.0:
@@ -283,6 +285,12 @@ def _pack_2bit_codes(codes: torch.Tensor) -> torch.Tensor:
 
 def _unpack_2bit_codes(packed: torch.Tensor, count: int) -> torch.Tensor:
     """Unpack `count` 2-bit codes from four-codes-per-byte `uint8` payloads."""
+    if not isinstance(packed, torch.Tensor):
+        raise ValueError("packed must be a torch.Tensor")
+    if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+        raise ValueError("count must be a non-negative integer")
+    if count > packed.numel() * 4:
+        raise ValueError("count exceeds capacity of packed 2-bit tensor")
     shifts = torch.tensor([0, 2, 4, 6], dtype=torch.int16)
     codes = (packed.detach().to(torch.int16).reshape(-1, 1) >> shifts) & 0x03
     return codes.reshape(-1)[:count].to(torch.long)

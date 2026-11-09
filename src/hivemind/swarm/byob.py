@@ -86,6 +86,12 @@ class ServedBase:
     hf_repo_id: str
     tier_id: str  # must exist in ``hivemind.router.catalog.TIERS`` (checked by a test)
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.hf_repo_id, str) or not self.hf_repo_id.strip():
+            raise ValueError("hf_repo_id must be a non-empty string")
+        if not isinstance(self.tier_id, str) or not self.tier_id.strip():
+            raise ValueError("tier_id must be a non-empty string")
+
 
 # Base checkpoints of the dense catalog tiers whose Ollama tag is the instruct model of that Hugging Face repo. Repackaged
 # copies (``unsloth/...``, ``*-bnb-4bit``) are deliberately absent: identical weights would be a claim we do not verify.
@@ -190,6 +196,12 @@ class Reason:
     code: ReasonCode
     detail: str
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.code, ReasonCode):
+            raise TypeError("code must be a ReasonCode")
+        if not isinstance(self.detail, str) or not self.detail.strip():
+            raise ValueError("detail must be a non-empty string")
+
     def to_dict(self) -> dict[str, str]:
         return {"code": self.code.value, "detail": self.detail}
 
@@ -276,12 +288,18 @@ class BeeManifest:
 
 
 def hmac_hex(key: bytes, payload: bytes) -> str:
-    if len(key) < MIN_KEY_BYTES:
+    if not isinstance(key, (bytes, bytearray)) or len(key) < MIN_KEY_BYTES:
         raise ValueError(f"HMAC key must be at least {MIN_KEY_BYTES} bytes")
-    return hmac.new(key, payload, hashlib.sha256).hexdigest()
+    if not isinstance(payload, (bytes, bytearray)):
+        raise TypeError("payload must be bytes")
+    return hmac.new(bytes(key), bytes(payload), hashlib.sha256).hexdigest()
 
 
 def verify_signature(manifest: BeeManifest, keyring: Mapping[str, bytes]) -> list[Reason]:
+    if not isinstance(manifest, BeeManifest):
+        raise TypeError("manifest must be a BeeManifest")
+    if not isinstance(keyring, Mapping):
+        raise TypeError("keyring must be a Mapping")
     if not manifest.signature:
         return [Reason(ReasonCode.SIGNATURE_MISSING, "manifest carries no signature")]
     key = keyring.get(manifest.contributor_id)
@@ -304,6 +322,8 @@ def _bad(field_name: str, value: Any, rule: str) -> Reason:
 
 def check_endpoint_url(url: str) -> list[Reason]:
     """https only, no credentials, no localhost and no literal private, loopback, link-local or reserved address."""
+    if not isinstance(url, str):
+        raise TypeError("url must be a string")
     parsed = urllib.parse.urlsplit(url)
     host = (parsed.hostname or "").rstrip(".")  # "localhost." and "svc.internal." resolve like their dotless forms
     if parsed.scheme != "https" or not host:

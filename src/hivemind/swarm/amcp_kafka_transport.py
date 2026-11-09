@@ -439,6 +439,15 @@ class KafkaBrokerTransport:
         client_module: ModuleType | None = None,
         flush_timeout_s: float = 10.0,
     ) -> None:
+        if not isinstance(settings, KafkaSettings):
+            raise TypeError("settings must be a KafkaSettings")
+        if (
+            isinstance(flush_timeout_s, bool)
+            or not isinstance(flush_timeout_s, (int, float))
+            or not math.isfinite(float(flush_timeout_s))
+            or float(flush_timeout_s) <= 0.0
+        ):
+            raise ValueError("flush_timeout_s must be a positive finite number")
         self.settings = settings
         self._mod = client_module if client_module is not None else load_kafka_client()
         self._flush_timeout_s = float(flush_timeout_s)
@@ -564,8 +573,12 @@ class HMACKeyring:
         return cls(keys=keys, active_kid=active)
 
     def sign(self, message: bytes, kid: str | None = None) -> str:
+        if not isinstance(message, (bytes, bytearray)):
+            raise TypeError("message must be bytes")
+        if kid is not None and (not isinstance(kid, str) or kid not in self.keys):
+            raise KeyError(f"unknown key id {kid!r}")
         key = self.keys[kid or self.active_kid]
-        return hmac.new(key, message, hashlib.sha256).hexdigest()
+        return hmac.new(key, bytes(message), hashlib.sha256).hexdigest()
 
 
 def _rfc3339(utc: float) -> str:
@@ -836,6 +849,8 @@ def validate_event_dict(data: Any, topic: str) -> AMCPKafkaEvent:
 
 def partition_key_for(event: AMCPKafkaEvent) -> str:
     """Kafka record key: the campaign (subject) or bee identity whose events must stay ordered."""
+    if not isinstance(event, AMCPKafkaEvent):
+        raise TypeError("event must be an AMCPKafkaEvent")
     topic_key = TOPIC_KEY_BY_NAME.get(event.topic)
     if topic_key == "bee_coord":
         return event.correlation_id
@@ -981,6 +996,14 @@ class AMCPPublisher:
 
 def build_dead_letter(record: TransportRecord, reason: str, detail: str, now_utc: float) -> bytes:
     """DLQ record: reason, detail, source coordinates and the raw key/value (base64, value capped at 64 KiB)."""
+    if not isinstance(record, TransportRecord):
+        raise TypeError("record must be a TransportRecord")
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValueError("reason must be a non-empty string")
+    if not isinstance(detail, str):
+        raise TypeError("detail must be a string")
+    if isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc)):
+        raise ValueError("now_utc must be a finite number")
     value = record.value[:DLQ_VALUE_CAP_BYTES]
     return canonical_json(
         {

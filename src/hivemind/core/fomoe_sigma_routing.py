@@ -59,7 +59,7 @@ def sigmoid_independent_topk_routing(
     expert is not resident are marked skipped and their gate is zeroed; the realised
     ghost-assignment fraction is `skipped_slots / (tokens * k)`.
     """
-    if router_logits.dim() != 2:
+    if not isinstance(router_logits, torch.Tensor) or router_logits.dim() != 2:
         raise ValueError("router_logits must be [tokens, experts]")
     tokens, num_experts = router_logits.shape
     if tokens < 1 or num_experts < 1:
@@ -71,7 +71,11 @@ def sigmoid_independent_topk_routing(
     if resident_mask is None:
         resident = torch.ones(num_experts, dtype=torch.bool, device=router_logits.device)
     else:
-        if resident_mask.shape != (num_experts,) or resident_mask.dtype != torch.bool:
+        if (
+            not isinstance(resident_mask, torch.Tensor)
+            or resident_mask.shape != (num_experts,)
+            or resident_mask.dtype != torch.bool
+        ):
             raise ValueError("resident_mask must be a bool tensor of shape [experts]")
         resident = resident_mask.to(router_logits.device)
     resident_count = int(resident.sum().item())
@@ -117,6 +121,10 @@ def skip_token_flops_per_token(
     `N_le,l / N_e,l` for a partitioned router or `1` for FoMoE's unpartitioned ghost-expert
     router. Returns both the full-replica and partial-replica estimates.
     """
+    if not isinstance(router_partitioned, bool):
+        raise ValueError("router_partitioned must be a bool")
+    if not isinstance(ffn_flops_per_layer, Sequence) or isinstance(ffn_flops_per_layer, (str, bytes)):
+        raise ValueError("ffn_flops_per_layer must be a sequence")
     layers = len(ffn_flops_per_layer)
     if layers == 0:
         raise ValueError("at least one layer is required")
@@ -125,10 +133,15 @@ def skip_token_flops_per_token(
         ("local_experts_per_layer", local_experts_per_layer),
         ("total_experts_per_layer", total_experts_per_layer),
     ):
-        if len(seq) != layers:
+        if not isinstance(seq, Sequence) or isinstance(seq, (str, bytes)) or len(seq) != layers:
             raise ValueError(f"{name} must have one entry per layer")
-    if empirical_ghost_fraction_per_layer is not None and len(empirical_ghost_fraction_per_layer) != layers:
-        raise ValueError("empirical_ghost_fraction_per_layer must have one entry per layer")
+    if empirical_ghost_fraction_per_layer is not None:
+        if (
+            not isinstance(empirical_ghost_fraction_per_layer, Sequence)
+            or isinstance(empirical_ghost_fraction_per_layer, (str, bytes))
+            or len(empirical_ghost_fraction_per_layer) != layers
+        ):
+            raise ValueError("empirical_ghost_fraction_per_layer must have one entry per layer")
     if (
         isinstance(dense_flops, bool)
         or not isinstance(dense_flops, (int, float))

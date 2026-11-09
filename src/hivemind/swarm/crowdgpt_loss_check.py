@@ -165,11 +165,15 @@ def load_flat_safetensors(path: Path | str) -> torch.Tensor:
 
 def weights_sha256(flat: torch.Tensor) -> str:
     """SHA-256 of the weights as bf16 bytes: the identity both sides agree on, whatever dtype each computes in."""
+    if not isinstance(flat, torch.Tensor) or flat.numel() == 0:
+        raise ValueError("flat must be a non-empty torch.Tensor")
     b = flat.detach().to("cpu", dtype=torch.bfloat16).contiguous().view(torch.int16).numpy().tobytes()
     return hashlib.sha256(b).hexdigest()
 
 
 def tokens_sha256(tokens: np.ndarray) -> str:
+    if not isinstance(tokens, np.ndarray) or tokens.size == 0:
+        raise ValueError("tokens must be a non-empty numpy ndarray")
     return hashlib.sha256(np.ascontiguousarray(tokens, dtype=TOKEN_DTYPE).tobytes()).hexdigest()
 
 
@@ -275,10 +279,14 @@ class LossCheckReceipt:
         return hashlib.sha256(self.payload()).hexdigest()
 
     def signed(self, key: bytes) -> "LossCheckReceipt":
-        return _replace(self, signature_hex=hmac.new(key, self.payload(), hashlib.sha256).hexdigest())
+        if not isinstance(key, (bytes, bytearray)) or not key:
+            raise ValueError("key must be non-empty bytes")
+        return _replace(self, signature_hex=hmac.new(bytes(key), self.payload(), hashlib.sha256).hexdigest())
 
     def verify_signature(self, key: bytes) -> bool:
-        return bool(self.signature_hex) and hmac.compare_digest(hmac.new(key, self.payload(), hashlib.sha256).hexdigest(), self.signature_hex)
+        if not isinstance(key, (bytes, bytearray)) or not key:
+            raise ValueError("key must be non-empty bytes")
+        return bool(self.signature_hex) and hmac.compare_digest(hmac.new(bytes(key), self.payload(), hashlib.sha256).hexdigest(), self.signature_hex)
 
     @property
     def mean_before(self) -> float:
@@ -435,6 +443,8 @@ def verify_receipt(receipt: LossCheckReceipt, *, evaluator_keys: Mapping[str, by
 
 def receipts_agree(a: LossCheckReceipt, b: LossCheckReceipt, tol: float = 2e-3) -> tuple[bool, str]:
     """Two independent evaluators on the same weights, data and windows: every number within `tol`."""
+    if not isinstance(a, LossCheckReceipt) or not isinstance(b, LossCheckReceipt):
+        raise TypeError("a and b must be LossCheckReceipt instances")
     if isinstance(tol, bool) or not isinstance(tol, (int, float)) or not math.isfinite(float(tol)) or float(tol) < 0.0:
         raise ValueError("tol must be a finite non-negative number")
     if a.evaluator_id == b.evaluator_id:

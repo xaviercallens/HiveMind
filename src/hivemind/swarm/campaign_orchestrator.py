@@ -121,19 +121,29 @@ class CampaignRequest:
 
 def sign_campaign_request(request: CampaignRequest, secret: bytes) -> CampaignRequest:
     """Return a copy of ``request`` carrying a valid HMAC-SHA256 signature under ``secret``."""
-    sig = hmac.new(secret, request.canonical_bytes(), hashlib.sha256).hexdigest()
+    if not isinstance(request, CampaignRequest):
+        raise TypeError("request must be a CampaignRequest")
+    if not isinstance(secret, (bytes, bytearray)) or len(secret) < MIN_SECRET_BYTES:
+        raise ValueError(f"secret must be bytes of length >= {MIN_SECRET_BYTES}")
+    sig = hmac.new(bytes(secret), request.canonical_bytes(), hashlib.sha256).hexdigest()
     return CampaignRequest(**{**asdict(request), "signature": sig})
 
 
 def verify_campaign_request_signature(request: CampaignRequest, secret: bytes) -> bool:
+    if not isinstance(request, CampaignRequest):
+        raise TypeError("request must be a CampaignRequest")
+    if not isinstance(secret, (bytes, bytearray)) or len(secret) < MIN_SECRET_BYTES:
+        raise ValueError(f"secret must be bytes of length >= {MIN_SECRET_BYTES}")
     if not isinstance(request.signature, str) or not request.signature.isascii():
         return False
-    expected = hmac.new(secret, request.canonical_bytes(), hashlib.sha256).hexdigest()
+    expected = hmac.new(bytes(secret), request.canonical_bytes(), hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, request.signature)
 
 
 def parse_campaign_utc(stamp: str) -> float:
     """``20261028T180000Z`` (the iCalendar UTC form used by ``SubjectCampaign``) -> POSIX seconds."""
+    if not isinstance(stamp, str) or not stamp.strip():
+        raise ValueError("stamp must be a non-empty string")
     return datetime.strptime(stamp, "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC).timestamp()
 
 
@@ -180,6 +190,11 @@ def _membership_key(campaign_id: str, participant_id: str) -> str:
 
 def atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
     """Write JSON so a reader sees either the old file or the new one, never a torn write."""
+    if not isinstance(path, (Path, str)) or not str(path).strip():
+        raise ValueError("path must be a non-empty Path or string")
+    if not isinstance(payload, Mapping):
+        raise TypeError("payload must be a Mapping")
+    path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent))
     try:

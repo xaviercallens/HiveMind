@@ -51,6 +51,12 @@ def pack_crowdgpt_delta_stream(
     compresslevel: int = 6,
 ) -> bytes:
     """Pack a CrowdGPT delta in the exact wire format produced by `client.py`."""
+    if not isinstance(metadata, Mapping):
+        raise TypeError("metadata must be a Mapping.")
+    if not isinstance(base_delta_bf16, torch.Tensor):
+        raise TypeError("base_delta_bf16 must be a torch.Tensor.")
+    if isinstance(compresslevel, bool) or not isinstance(compresslevel, int) or not (0 <= compresslevel <= 9):
+        raise ValueError("compresslevel must be an integer in [0, 9].")
     if base_delta_bf16.dtype != torch.bfloat16:
         base_delta_bf16 = base_delta_bf16.to(torch.bfloat16)
     flat_uint16 = (
@@ -97,6 +103,8 @@ def unpack_crowdgpt_delta_stream(
     engram_row_dim: int = 1536,
 ) -> CrowdGPTDeltaPayload:
     """Unpack a gzipped CrowdGPT client delta stream and verify its structure."""
+    if not isinstance(compressed_data, (bytes, bytearray)) or not compressed_data:
+        raise ValueError("compressed_data must be non-empty bytes.")
     if isinstance(engram_row_dim, bool) or not isinstance(engram_row_dim, int) or engram_row_dim < 1:
         raise ValueError("engram_row_dim must be an integer >= 1.")
     payload_sha256 = hashlib.sha256(compressed_data).hexdigest()
@@ -519,6 +527,14 @@ def classify_gpu_precision_cohort(
     optimizer_family: str = "adamw_8bit",
 ) -> GpuPrecisionCohort:
     """Assign a volunteer GPU to a homogeneous numerical cohort and enforce `fp32` on pre-Ampere CUDA (`sm < 80`)."""
+    if not isinstance(vendor, str) or not vendor.strip():
+        raise ValueError("vendor must be a non-empty string.")
+    if (
+        not isinstance(compute_capability, tuple)
+        or len(compute_capability) != 2
+        or any(isinstance(x, bool) or not isinstance(x, int) or x < 0 for x in compute_capability)
+    ):
+        raise ValueError("compute_capability must be a 2-tuple of non-negative integers.")
     norm_vendor = vendor.strip().lower()
     major, minor = int(compute_capability[0]), int(compute_capability[1])
     req = requested_dtype.strip().lower()
@@ -579,6 +595,24 @@ def resolve_forming_pool_starvation(
     cohort_key: str = "nvidia:sm75_pre_ampere:fp32:adamw",
 ) -> PoolDispatchDecision:
     """Prevent `1/3` or `2/3` forming pools from starving minority `fp32` / ROCm cohorts after timeout."""
+    if isinstance(current_members, bool) or not isinstance(current_members, int):
+        raise ValueError("current_members must be an integer.")
+    if isinstance(target_pool_size, bool) or not isinstance(target_pool_size, int) or target_pool_size < 1:
+        raise ValueError("target_pool_size must be a positive integer.")
+    if (
+        isinstance(waited_seconds, bool)
+        or not isinstance(waited_seconds, (int, float))
+        or not math.isfinite(float(waited_seconds))
+        or float(waited_seconds) < 0.0
+    ):
+        raise ValueError("waited_seconds must be a finite non-negative number.")
+    if (
+        isinstance(forming_timeout_s, bool)
+        or not isinstance(forming_timeout_s, (int, float))
+        or not math.isfinite(float(forming_timeout_s))
+        or float(forming_timeout_s) <= 0.0
+    ):
+        raise ValueError("forming_timeout_s must be a positive finite number.")
     if current_members <= 0:
         return PoolDispatchDecision(
             mode="IDLE_EMPTY_POOL",

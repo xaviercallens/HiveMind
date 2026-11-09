@@ -103,6 +103,8 @@ def load_polyglot_8domain_fixture(
     fixture_path: Path = CAMPAIGN_FIXTURE_PATH,
 ) -> tuple[dict[str, Any], str]:
     """Load and validate the 8-domain UTF-8 token campaign fixture with zero train/holdout leakage."""
+    if isinstance(fixture_path, bool) or not isinstance(fixture_path, Path):
+        raise ValueError("fixture_path must be a Path")
     raw = fixture_path.read_bytes()
     digest = hashlib.sha256(raw).hexdigest()
     payload = json.loads(raw.decode("utf-8"))
@@ -1153,6 +1155,8 @@ def verify_multi_moe_hf_campaign_report(report: Mapping[str, Any]) -> bool:
 
 def format_campaign_markdown_summary(report: dict[str, Any]) -> str:
     """Render a clean Markdown summary table for sharing in GitHub Discussions."""
+    if not isinstance(report, dict) or not report:
+        raise ValueError("report must be a non-empty dict")
     hw = report["stage1_hardware_and_corpus"]
     s23 = report["stage2_and_3_multi_moe_lora"] if "stage2_and_3_multi_moe_lora" in report else report["stage2_and_3_multi_domain_lora_and_ef21_cas"]
     s4 = report["stage4_byzantine_ties_merge_vs_naive"]

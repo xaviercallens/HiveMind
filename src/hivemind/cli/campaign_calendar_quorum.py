@@ -313,6 +313,8 @@ def evaluate_quorum_readiness(
 
 def generate_campaign_ics_calendar(output_path: Path | None = DEFAULT_ICS_PATH) -> str:
     """Generate a standard RFC 5545 `.ics` calendar file for all Campaign Quorum Events."""
+    if output_path is not None and (isinstance(output_path, bool) or not isinstance(output_path, Path)):
+        raise ValueError("output_path must be a Path or None")
     lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
@@ -375,6 +377,10 @@ def build_campaign_quorum_schedule_report(
     ics_output_path: Path | None = DEFAULT_ICS_PATH,
 ) -> dict[str, Any]:
     """Build the complete Campaign Calendar & Quorum Readiness JSON report and export `.ics`."""
+    if output_path is not None and (isinstance(output_path, bool) or not isinstance(output_path, Path)):
+        raise ValueError("output_path must be a Path or None")
+    if ics_output_path is not None and (isinstance(ics_output_path, bool) or not isinstance(ics_output_path, Path)):
+        raise ValueError("ics_output_path must be a Path or None")
     ics_content = generate_campaign_ics_calendar(output_path=ics_output_path)
 
     # Current baseline quorum roster (core contributors + active AI agents)

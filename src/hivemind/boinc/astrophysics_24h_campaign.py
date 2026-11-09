@@ -502,6 +502,10 @@ def render_astrophysics_24h_dashboard_png(
     output_path: Path,
 ) -> Path:
     """Render a 1920x1240 6-panel dark-mode scientific dashboard PNG directly from GPU campaign data."""
+    if not isinstance(report, dict) or not report:
+        raise ValueError("report must be a non-empty dict")
+    if isinstance(output_path, bool) or not isinstance(output_path, Path):
+        raise ValueError("output_path must be a Path")
     Image, ImageDraw, ImageFilter, ImageFont = _require_pil()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     W, H = 1920, 1240
@@ -756,6 +760,10 @@ def render_cosmology_deep_field_discovery_png(
     output_path: Path,
 ) -> Path:
     """Render a 1920x1240 4-panel Deep Cosmology & JWST Spectroscopy Discovery Figure."""
+    if not isinstance(report, dict) or not report:
+        raise ValueError("report must be a non-empty dict")
+    if isinstance(output_path, bool) or not isinstance(output_path, Path):
+        raise ValueError("output_path must be a Path")
     Image, ImageDraw, ImageFilter, ImageFont = _require_pil()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     W, H = 1920, 1240

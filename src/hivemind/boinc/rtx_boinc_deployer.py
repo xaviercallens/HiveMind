@@ -76,6 +76,12 @@ DEFAULT_RTX_DOMAINS: tuple[str, ...] = (
 
 def current_boinc_platform(sys_platform: str | None = None) -> str:
     """Return the canonical BOINC platform string for the current OS."""
+    if sys_platform is not None and (
+        isinstance(sys_platform, bool)
+        or not isinstance(sys_platform, str)
+        or not sys_platform.strip()
+    ):
+        raise ValueError("sys_platform must be a non-empty string or None")
     plat = (sys_platform or sys.platform).lower()
     if plat.startswith("win"):
         return PLATFORM_WINDOWS
@@ -890,6 +896,8 @@ class RTXBoincServer:
 
 def build_rtx_boinc_fastapi_router(server: RTXBoincServer) -> APIRouter:
     """Create a FastAPI `APIRouter` exposing both BOINC XML RPC and RTX JSON endpoints."""
+    if not isinstance(server, RTXBoincServer):
+        raise ValueError("server must be an RTXBoincServer instance")
     router = APIRouter(tags=["rtx-boinc"])
 
     @router.get("/get_project_config.php")
@@ -942,6 +950,10 @@ def execute_rtx_boinc_workunit(
     device: str = "auto",
 ) -> dict[str, Any]:
     """Execute a leased RTX BOINC workunit on the local NVIDIA RTX GPU (real CUDA QLoRA + PTX fold)."""
+    if not isinstance(spec, dict) or not str(spec.get("wu_id") or "").strip():
+        raise ValueError("spec must be a dict with a non-empty wu_id")
+    if isinstance(device, bool) or not isinstance(device, str) or device not in ("auto", "cuda", "cpu"):
+        raise ValueError("device must be one of ('auto', 'cuda', 'cpu')")
     import torch
     import torch.nn as nn
 
@@ -1065,6 +1077,14 @@ def deploy_rtx_boinc_client_files(
     profile: RTXBoincHardwareProfile | None = None,
 ) -> dict[str, Any]:
     """Generate cross-platform BOINC client XML files, anonymous-platform `app_info.xml`, and service manifests."""
+    if isinstance(install_dir, bool) or not isinstance(install_dir, (Path, str)) or not str(install_dir).strip():
+        raise ValueError("install_dir must be a non-empty Path or str")
+    if isinstance(server_url, bool) or not isinstance(server_url, str) or not server_url.strip():
+        raise ValueError("server_url must be a non-empty string")
+    if isinstance(handle, bool) or not isinstance(handle, str) or not handle.strip():
+        raise ValueError("handle must be a non-empty string")
+    if isinstance(authenticator, bool) or not isinstance(authenticator, str) or not authenticator.strip():
+        raise ValueError("authenticator must be a non-empty string")
     install_dir = Path(install_dir)
     install_dir.mkdir(parents=True, exist_ok=True)
     prof = profile or detect_rtx_boinc_profile()

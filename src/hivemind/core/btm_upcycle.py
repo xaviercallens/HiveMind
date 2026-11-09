@@ -52,6 +52,16 @@ class ExpertBranchState:
     outer_step: int
     lora_state: dict[str, torch.Tensor] = field(repr=False)
 
+    def __post_init__(self) -> None:
+        if isinstance(self.branch_id, bool) or not isinstance(self.branch_id, int) or self.branch_id < 0:
+            raise ValueError("branch_id must be a non-negative integer")
+        if not isinstance(self.domain_name, str) or not self.domain_name.strip():
+            raise ValueError("domain_name must be a non-empty string")
+        if isinstance(self.outer_step, bool) or not isinstance(self.outer_step, int) or self.outer_step < 0:
+            raise ValueError("outer_step must be a non-negative integer")
+        if not isinstance(self.lora_state, dict):
+            raise ValueError("lora_state must be a dict")
+
 
 @dataclass
 class MoEUpcycleReport:
@@ -120,6 +130,12 @@ def _extract_ab_pair(
     subpath: str,
 ) -> tuple[torch.Tensor, torch.Tensor] | None:
     """Locate (lora_A, lora_B) tensors for a specific decoder layer and projection."""
+    if not isinstance(lora_state, dict):
+        raise ValueError("lora_state must be a dict")
+    if isinstance(layer_idx, bool) or not isinstance(layer_idx, int) or layer_idx < 0:
+        raise ValueError("layer_idx must be a non-negative integer")
+    if not isinstance(subpath, str) or not subpath.strip():
+        raise ValueError("subpath must be a non-empty string")
     prefix = f"layers.{layer_idx}.{subpath}."
     a_tensor: torch.Tensor | None = None
     b_tensor: torch.Tensor | None = None
@@ -1217,6 +1233,10 @@ class LoopStepLoRAAdapter(nn.Module):
 
     def __init__(self, hidden_size: int, rank: int, dtype: torch.dtype, device: torch.device) -> None:
         super().__init__()
+        if isinstance(hidden_size, bool) or not isinstance(hidden_size, int) or hidden_size < 1:
+            raise ValueError("hidden_size must be a positive integer")
+        if isinstance(rank, bool) or not isinstance(rank, int) or rank < 1:
+            raise ValueError("rank must be a positive integer")
         self.down = nn.Linear(hidden_size, rank, bias=False, dtype=dtype, device=device)
         self.up = nn.Linear(rank, hidden_size, bias=False, dtype=dtype, device=device)
         nn.init.normal_(self.down.weight, std=1.0 / hidden_size)
@@ -1619,6 +1639,8 @@ def measure_moe_vram_footprint_gb(
         Dictionary with the weight/buffer breakdown (MiB & GiB) and, when running
         on CUDA, the live and peak allocated VRAM.
     """
+    if not isinstance(moe_model, nn.Module) or not hasattr(moe_model, "num_experts"):
+        raise TypeError("moe_model must be an UpcycledSparseMoEModel / nn.Module with num_experts")
     param_bytes = sum(p.numel() * p.element_size() for p in moe_model.parameters())
     buffer_bytes = sum(b.numel() * b.element_size() for b in moe_model.buffers())
     total_bytes = param_bytes + buffer_bytes

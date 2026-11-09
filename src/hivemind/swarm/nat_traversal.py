@@ -105,6 +105,10 @@ class StunError(Exception):
 
 def message_type(method: int, cls: int) -> int:
     """Interleave the 12-bit method and 2-bit class into the 14-bit STUN message type."""
+    if isinstance(method, bool) or not isinstance(method, int) or not (0 <= method <= 0x0FFF):
+        raise ValueError("method must be an integer in 0..0x0FFF")
+    if isinstance(cls, bool) or not isinstance(cls, int) or not (0 <= cls <= 0b11):
+        raise ValueError("cls must be an integer in 0..3")
     return (
         ((method & 0x0F80) << 2)
         | ((method & 0x0070) << 1)
@@ -115,6 +119,8 @@ def message_type(method: int, cls: int) -> int:
 
 
 def split_message_type(msg_type: int) -> Tuple[int, int]:
+    if isinstance(msg_type, bool) or not isinstance(msg_type, int) or not (0 <= msg_type <= 0x3FFF):
+        raise ValueError("msg_type must be an integer in 0..0x3FFF")
     method = (msg_type & 0x000F) | ((msg_type & 0x00E0) >> 1) | ((msg_type & 0x3E00) >> 2)
     cls = ((msg_type & 0x0100) >> 7) | ((msg_type & 0x0010) >> 4)
     return method, cls
@@ -122,15 +128,30 @@ def split_message_type(msg_type: int) -> Tuple[int, int]:
 
 def long_term_key(username: str, realm: str, password: str) -> bytes:
     """RFC 5389 §15.4 long-term credential key: MD5(username ":" realm ":" password)."""
+    if not isinstance(username, str) or not isinstance(realm, str) or not isinstance(password, str):
+        raise TypeError("username, realm, and password must be strings")
     return hashlib.md5(f"{username}:{realm}:{password}".encode("utf-8")).digest()
 
 
 def short_term_key(password: str) -> bytes:
     """RFC 5389 §15.4 short-term credential key: the password itself."""
+    if not isinstance(password, str):
+        raise TypeError("password must be a string")
     return password.encode("utf-8")
 
 
 def encode_xor_address(addr: Address, transaction_id: bytes) -> bytes:
+    if (
+        not isinstance(addr, tuple)
+        or len(addr) != 2
+        or not isinstance(addr[0], str)
+        or isinstance(addr[1], bool)
+        or not isinstance(addr[1], int)
+        or not (0 <= addr[1] <= 65535)
+    ):
+        raise ValueError("addr must be a (host, port) tuple with port in 0..65535")
+    if not isinstance(transaction_id, (bytes, bytearray)) or len(transaction_id) != 12:
+        raise ValueError("transaction_id must be 12 bytes")
     ip = ipaddress.ip_address(addr[0])
     port = addr[1] ^ (MAGIC_COOKIE >> 16)
     if ip.version == 4:

@@ -107,6 +107,10 @@ def read_safetensors_header(http_get: HttpGet, url: str) -> dict[str, tuple[list
 
 def classify_tensor(name: str, shape: Sequence[int]) -> str:
     """Component of a checkpoint tensor: vision / mtp / embedding / linear (an nn.Linear weight NF4 would quantise) / other."""
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("name must be a non-empty string")
+    if not isinstance(shape, Sequence) or isinstance(shape, (str, bytes)):
+        raise ValueError("shape must be a sequence of integers")
     if ".visual." in name or name.startswith(("visual.", "vision_tower.", "model.vision")):
         return "vision"
     if name.startswith("mtp.") or ".mtp." in name:
@@ -120,6 +124,8 @@ def classify_tensor(name: str, shape: Sequence[int]) -> str:
 
 def summarize_header(tensors: Mapping[str, tuple[Sequence[int], str]]) -> dict[str, int]:
     """Parameter split per component plus the LoRA geometry (sum of in+out over the text linear layers) from header shapes."""
+    if not isinstance(tensors, Mapping):
+        raise ValueError("tensors must be a Mapping")
     acc = {"params_total": 0, "params_text_linear": 0, "params_embedding": 0, "params_text_other": 0, "params_vision": 0,
            "params_mtp": 0, "lora_in_plus_out_all_linear": 0, "lora_in_plus_out_mlp": 0, "max_linear_elements": 0,
            "n_tensors": 0}
@@ -660,6 +666,14 @@ class GpuTier:
     tier_id: str
     budget_mib: int
     source: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.tier_id, str) or not self.tier_id.strip():
+            raise ValueError("tier_id must be a non-empty string")
+        if isinstance(self.budget_mib, bool) or not isinstance(self.budget_mib, int) or self.budget_mib < 1:
+            raise ValueError("budget_mib must be a positive integer")
+        if not isinstance(self.source, str) or not self.source.strip():
+            raise ValueError("source must be a non-empty string")
 
 
 # Budgets with their origin. The std/big/xl values equal QWEN35_HARDWARE_TIERS[*]["max_wddm_safe_mib"] (a test asserts it).

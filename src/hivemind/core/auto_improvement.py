@@ -726,7 +726,11 @@ class NocturnalAutoImprovementScheduler:
     @staticmethod
     def is_european_night(now_utc: float | None = None) -> bool:
         """Return True if current time is within European night window (22:00 - 07:00 CET)."""
-        ts = now_utc if now_utc is not None else time.time()
+        if now_utc is not None and (
+            isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc)) or float(now_utc) < 0
+        ):
+            raise ValueError("now_utc must be a non-negative finite number")
+        ts = float(now_utc) if now_utc is not None else time.time()
         cet_hour = (datetime.fromtimestamp(ts, tz=timezone.utc).hour + 1) % 24
         return cet_hour >= NIGHT_START_HOUR_CET or cet_hour < NIGHT_END_HOUR_CET
 
@@ -738,7 +742,16 @@ class NocturnalAutoImprovementScheduler:
         now_utc: float | None = None,
     ) -> list[dict[str, Any]]:
         """Identify producers with sufficient VRAM and fresh heartbeats to replace preempted cloud VMs."""
-        now = now_utc if now_utc is not None else time.time()
+        if not isinstance(connected_producers, Sequence) or isinstance(connected_producers, (str, bytes)):
+            raise ValueError("connected_producers must be a sequence of mappings")
+        for field_name, val in (("min_vram_gb", min_vram_gb), ("max_heartbeat_age_s", max_heartbeat_age_s)):
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0:
+                raise ValueError(f"{field_name} must be a positive finite number")
+        if now_utc is not None and (
+            isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc)) or float(now_utc) < 0
+        ):
+            raise ValueError("now_utc must be a non-negative finite number")
+        now = float(now_utc) if now_utc is not None else time.time()
         eligible: list[dict[str, Any]] = []
 
         for p in connected_producers:
@@ -1079,6 +1092,15 @@ class NocturnalAutoImprovementScheduler:
         observed_telemetry: Mapping[str, Any] | None = None,
     ) -> AutoImprovementExecutionResult:
         """Verify or evaluate the execution of an auto-improvement workunit by a worker node."""
+        if not isinstance(workunit, AutoImprovementWorkunit):
+            raise ValueError("workunit must be an AutoImprovementWorkunit")
+        for field_name, val in (
+            ("worker_id", worker_id),
+            ("account_id", account_id),
+            ("execution_class", execution_class),
+        ):
+            if not isinstance(val, str) or not val.strip() or any(ord(c) < 32 for c in val):
+                raise ValueError(f"{field_name} must be a non-empty printable string")
         rng = np.random.default_rng(workunit.seed)
 
         if observed_telemetry is not None:

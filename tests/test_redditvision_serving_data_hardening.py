@@ -80,9 +80,10 @@ def test_serving_experts_route_rejects_malformed_inputs() -> None:
     doms, weights = route_with_serving_experts("def foo(): import pytest", top_k=2)
     assert len(doms) >= 1
     assert sum(weights.values()) > 0.0
+    assert route_with_serving_experts("", top_k=1) == ([], {})
 
     with pytest.raises(ValueError, match="prompt"):
-        route_with_serving_experts("   ")
+        route_with_serving_experts(None)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="top_k"):
         route_with_serving_experts("def foo(): pass", top_k=0)
     with pytest.raises(ValueError, match="min_weight"):

@@ -79,6 +79,10 @@ def _finite(x: Any) -> bool:
 
 def _safe(name: str, fn: Callable[[], dict]) -> dict:
     """Run one check; any exception becomes a failing check (fail closed)."""
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("name must be a non-empty string")
+    if not callable(fn):
+        raise ValueError("fn must be callable")
     try:
         return fn()
     except _CheckError as exc:
@@ -162,6 +166,8 @@ def _parse_spec(spec_bytes: bytes) -> dict:
 
 
 def _dimension(spec: dict) -> int:
+    if not isinstance(spec, dict) or not isinstance(spec.get("y0"), list):
+        raise _CheckError("spec must contain a y0 list")
     n = len(spec["y0"])
     if n < 1:
         raise _CheckError("empty y0")
@@ -200,6 +206,8 @@ def _check_shape(spec: dict, result: dict) -> dict:
 
 
 def _check_hashes(spec_bytes: bytes, result: dict) -> tuple[dict, str | None]:
+    if not isinstance(spec_bytes, (bytes, bytearray)) or not isinstance(result, dict):
+        raise _CheckError("spec_bytes must be bytes and result must be a dict")
     got = result.get("input_sha256")
     want = sha256_hex(bytes(spec_bytes))
     try:
@@ -235,6 +243,12 @@ def _tolerances(spec: dict, n: int) -> tuple[float, list[float]]:
 
 
 def _worst_ratio(y, y_ref, rtol, atols, factor) -> float:
+    if not isinstance(y, list) or not isinstance(y_ref, list) or len(y) != len(y_ref):
+        raise _CheckError("y and y_ref must be lists of equal length")
+    if not _finite(rtol) or rtol <= 0 or not _finite(factor) or factor <= 0:
+        raise _CheckError("rtol and factor must be positive finite numbers")
+    if not isinstance(atols, list) or not atols or any(not _finite(a) or a <= 0 for a in atols):
+        raise _CheckError("atols must be a non-empty list of positive finite numbers")
     worst = 0.0
     for row, ref in zip(y, y_ref):
         for j, (a, b) in enumerate(zip(row, ref)):
@@ -299,6 +313,8 @@ def _mat(inv: dict, n: int) -> list[list[float]]:
 
 
 def _quad(m, x) -> float:
+    if not isinstance(m, list) or not isinstance(x, list) or len(m) != len(x) or len(x) == 0:
+        raise _CheckError("m and x must be non-empty lists of matching dimension")
     return sum(x[i] * m[i][j] * x[j] for i in range(len(x)) for j in range(len(x)))
 
 

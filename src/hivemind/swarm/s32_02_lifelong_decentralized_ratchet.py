@@ -113,9 +113,13 @@ class LifelongDecentralizedRatchet:
 
     @staticmethod
     def weighted_perplexity(samples: Sequence[AnchorEvalSample], *, use_candidate: bool) -> float:
-        if not samples:
+        if isinstance(samples, (str, bytes)) or not isinstance(samples, Sequence) or not samples:
             raise ValueError("samples must be non-empty")
         for s in samples:
+            if not isinstance(s, AnchorEvalSample):
+                raise TypeError("each sample must be an AnchorEvalSample")
+            if not math.isfinite(float(s.weight)):
+                raise ValueError(f"non-finite weight for anchor sample {s.sample_id!r}: {s.weight!r}")
             value = s.candidate_nll if use_candidate else s.baseline_nll
             if not math.isfinite(value):
                 raise ValueError(f"non-finite NLL for anchor sample {s.sample_id!r}: {value!r}")
@@ -137,6 +141,13 @@ class LifelongDecentralizedRatchet:
         """Compute Elastic Weight Consolidation (EWC) quadratic penalty ``(lambda/2) * sum(F_i * (theta_i - theta*_i)^2)``."""
         if not (len(fisher_diag) == len(anchor_params) == len(candidate_params)):
             raise ValueError("fisher_diag, anchor_params, and candidate_params must have equal length")
+        for seq_name, seq in (
+            ("fisher_diag", fisher_diag),
+            ("anchor_params", anchor_params),
+            ("candidate_params", candidate_params),
+        ):
+            if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) for v in seq):
+                raise ValueError(f"{seq_name} must contain only finite numbers")
         quad = sum(
             max(0.0, float(f)) * ((float(c) - float(a)) ** 2)
             for f, a, c in zip(fisher_diag, anchor_params, candidate_params)

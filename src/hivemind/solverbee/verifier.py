@@ -54,10 +54,18 @@ def canonical_json(obj: Any) -> bytes:
 
 
 def sha256_hex(data: bytes) -> str:
+    if not isinstance(data, (bytes, bytearray)):
+        raise ValueError("data must be bytes")
     return hashlib.sha256(data).hexdigest()
 
 
 def _chk(name: str, status: str, detail: str, value=None, bound=None) -> dict:
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("name must be a non-empty string")
+    if status not in ("pass", "fail", "skip"):
+        raise ValueError("status must be 'pass', 'fail', or 'skip'")
+    if not isinstance(detail, str):
+        raise ValueError("detail must be a string")
     return {"name": name, "status": status, "value": value, "bound": bound, "detail": detail}
 
 
@@ -99,8 +107,12 @@ def decide(checks: dict[str, dict], *, usable: bool, has_problem: bool) -> tuple
     reasons: list[str] = []
     if not isinstance(usable, bool) or not isinstance(has_problem, bool):
         raise ValueError("usable and has_problem must be booleans")
+    if not isinstance(checks, dict):
+        raise ValueError("checks must be a dict")
     if not usable:
         return "UNVERIFIED", ["result could not be obtained or checked (fail closed)"]
+    if not all(isinstance(checks.get(n), dict) and checks[n].get("status") in ("pass", "fail", "skip") for n in _CHECK_NAMES):
+        raise ValueError("checks must contain valid status dicts for all check names")
     failed = [n for n in _CHECK_NAMES if checks[n]["status"] == "fail"]
     if failed:
         return "FAILED", [f"{n}: {checks[n]['detail']}" for n in failed]
@@ -405,6 +417,8 @@ def _check_invariants(spec: dict, result: dict, problem: dict | None) -> dict:
 def _check_tightening(spec_bytes: bytes, spec: dict, result: dict, rerun) -> dict:
     if rerun is None:
         return _chk("tightening", "skip", "no rerun callable supplied")
+    if not callable(rerun):
+        raise _CheckError("rerun must be callable")
     n = _dimension(spec)
     rtol, atols = _tolerances(spec, n)
     tight = dict(spec)

@@ -31,6 +31,8 @@ DEFAULT_ATOL = 1e-10
 
 
 def _state(name: str, meaning: str, unit: str) -> Dict[str, str]:
+    if not isinstance(name, str) or not name.strip() or not isinstance(meaning, str) or not meaning.strip() or not isinstance(unit, str) or not unit.strip():
+        raise ValueError("name, meaning, and unit must be non-empty strings")
     return {"name": name, "meaning": meaning, "unit": unit}
 
 
@@ -187,9 +189,11 @@ def list_families() -> List[str]:
 
 def family_dim(family: str, params: Optional[Dict[str, Any]] = None) -> Optional[int]:
     """State dimension of a named family (stiff_chain: the n parameter, default 10)."""
-    entry = FAMILIES.get(family)
-    if entry is None:
+    if not isinstance(family, str) or family not in FAMILIES:
         raise FamilyError(f"unknown family {family!r}")
+    if params is not None and not isinstance(params, Mapping):
+        raise FamilyError("params must be an object or None")
+    entry = FAMILIES[family]
     if entry["dim"] is not None:
         return int(entry["dim"])
     n = (params or {}).get("n", entry["params"]["n"][0])
@@ -254,6 +258,8 @@ def check_params(family: str, params: Dict[str, Any]) -> Dict[str, Any]:
 def named_spec(family: str, params: Optional[Dict[str, Any]], y0: Sequence[float], t_out: Sequence[float], *, spec_id: str = "science-bee", t0: float = 0.0,
                rtol: Optional[float] = None, atol: Optional[float] = None, method: Optional[str] = None) -> Dict[str, Any]:
     """A named-family spec after checking parameter names, values and the length of y0."""
+    if params is not None and not isinstance(params, Mapping):
+        raise FamilyError("params must be an object or None")
     clean = check_params(family, dict(params or {}))
     dim = family_dim(family, clean)
     if not isinstance(y0, (list, tuple)) or (dim is not None and len(y0) != dim):
@@ -376,7 +382,7 @@ def spring_mass_damper_spec(m: float, c: float, k: float, F: float, x0: float, v
 
 # ------------------------------------------------------------------ catalogue text for prompts and explanations
 def describe_family(name: str) -> str:
-    if name not in FAMILIES:
+    if not isinstance(name, str) or name not in FAMILIES:
         raise FamilyError(f"unknown family {name!r}")
     e = FAMILIES[name]
     params = ", ".join(f"{k} (default {d:g}: {m})" for k, (d, m) in e["params"].items())

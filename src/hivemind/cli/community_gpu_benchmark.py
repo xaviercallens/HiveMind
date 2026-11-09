@@ -137,8 +137,10 @@ def run_community_gpu_benchmark(
         raise ValueError("router_tokens must be >= 4")
     if isinstance(hidden_size, bool) or int(hidden_size) < 16 or int(hidden_size) % 8 != 0:
         raise ValueError("hidden_size must be a multiple of 8 and >= 16")
-    if isinstance(seed, bool):
-        raise ValueError("seed must be an integer")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
+    if output_path is not None and (isinstance(output_path, bool) or not isinstance(output_path, Path)):
+        raise ValueError("output_path must be a Path or None")
     if pool_holdings_override is not None:
         if isinstance(pool_holdings_override, bool):
             raise ValueError("pool_holdings_override must be a finite non-negative float")

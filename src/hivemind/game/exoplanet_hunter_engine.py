@@ -118,6 +118,13 @@ def compute_earth_similarity_index(
     insolation_earth: float,
 ) -> float:
     """Compute the astrophysical Earth Similarity Index (ESI in [0.0, 1.0])."""
+    for field_name, val in (
+        ("radius_rearth", radius_rearth),
+        ("teq_k", teq_k),
+        ("insolation_earth", insolation_earth),
+    ):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+            raise ValueError(f"{field_name} must be a positive finite number")
     r = max(0.1, float(radius_rearth))
     t = max(30.0, float(teq_k))
     s = max(0.001, float(insolation_earth))
@@ -132,6 +139,9 @@ def compute_earth_similarity_index(
 
 def compute_habitable_zone_au(st_teff_k: float, st_rad_rsun: float) -> Dict[str, float]:
     """Compute circumstellar Habitable Zone bounds (Kopparapu et al. 2014) in AU."""
+    for field_name, val in (("st_teff_k", st_teff_k), ("st_rad_rsun", st_rad_rsun)):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+            raise ValueError(f"{field_name} must be a positive finite number")
     teff = max(2500.0, min(10000.0, float(st_teff_k)))
     r_sun = max(0.08, float(st_rad_rsun))
     l_star = (r_sun ** 2) * ((teff / 5778.0) ** 4)
@@ -162,6 +172,13 @@ def classify_planet_taxonomy(
     transit_depth_ppm: float,
 ) -> Dict[str, str]:
     """Return bilingual French/English planetary taxonomy and habitability status."""
+    for field_name, val in (("radius_rearth", radius_rearth), ("teq_k", teq_k)):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+            raise ValueError(f"{field_name} must be a positive finite number")
+    if isinstance(transit_depth_ppm, bool) or not isinstance(transit_depth_ppm, (int, float)) or not math.isfinite(float(transit_depth_ppm)) or float(transit_depth_ppm) < 0.0:
+        raise ValueError("transit_depth_ppm must be a non-negative finite number")
+    if isinstance(disposition, bool) or not isinstance(disposition, str) or not disposition.strip():
+        raise ValueError("disposition must be a non-empty string")
     disp = disposition.upper()
     if disp == "FALSE POSITIVE" or radius_rearth > 28.0 or transit_depth_ppm > 50000.0:
         return {
@@ -249,6 +266,25 @@ def synthesize_transit_light_curve_and_bls(
     seed: int = 42,
 ) -> Dict[str, Any]:
     """Synthesize realistic Kepler/TESS photometric time-series, phase-folded curve & BLS periodogram."""
+    for field_name, val in (
+        ("period_days", period_days),
+        ("transit_depth_ppm", transit_depth_ppm),
+        ("duration_hours", duration_hours),
+        ("model_snr", model_snr),
+    ):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+            raise ValueError(f"{field_name} must be a positive finite number")
+    if trial_period_days is not None and (
+        isinstance(trial_period_days, bool)
+        or not isinstance(trial_period_days, (int, float))
+        or not math.isfinite(float(trial_period_days))
+        or float(trial_period_days) <= 0.0
+    ):
+        raise ValueError("trial_period_days must be a positive finite number or None")
+    if isinstance(disposition, bool) or not isinstance(disposition, str) or not disposition.strip():
+        raise ValueError("disposition must be a non-empty string")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
     rng = random.Random(seed)
     p_true = max(0.4, float(period_days))
     p_trial = float(trial_period_days) if trial_period_days is not None else p_true
@@ -358,6 +394,15 @@ def synthesize_jwst_transmission_spectrum(
     disposition: str,
 ) -> Dict[str, Any]:
     """Synthesize a JWST NIRSpec Prism (0.6 - 5.3 um) transmission spectrum & molecular biosignatures."""
+    for field_name, val in (
+        ("radius_rearth", radius_rearth),
+        ("teq_k", teq_k),
+        ("transit_depth_ppm", transit_depth_ppm),
+    ):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+            raise ValueError(f"{field_name} must be a positive finite number")
+    if isinstance(disposition, bool) or not isinstance(disposition, str) or not disposition.strip():
+        raise ValueError("disposition must be a non-empty string")
     if disposition.upper() == "FALSE POSITIVE" or radius_rearth > 28.0:
         return {
             "instrument": "JWST NIRSpec Prism (0.6 - 5.3 um)",
@@ -449,6 +494,8 @@ def synthesize_jwst_transmission_spectrum(
 
 def compute_four_astrophysical_laws(target: Dict[str, Any]) -> Dict[str, Any]:
     """Compute the 4 Core Astrophysical Rules (Transit Depth, Doppler RV K & Bulk Density, HZ Teq, False-Positive Vetting)."""
+    if not isinstance(target, dict):
+        raise ValueError("target must be a dict")
     r_p_rearth = max(0.1, float(target.get("planet_radius_rearth", 1.0)))
     m_p_mearth = max(0.01, float(target.get("planet_mass_mearth", 1.0)))
     p_days = max(0.2, float(target.get("period_days", 10.0)))
@@ -611,6 +658,8 @@ def compute_four_astrophysical_laws(target: Dict[str, Any]) -> Dict[str, Any]:
 
 def synthesize_jwst_coronagraph_4bands(target: Dict[str, Any]) -> Dict[str, Any]:
     """Synthesize 4-Band JWST Direct Imaging Coronagraphy (HIP 65426 b style: NIRCam F300M/F444W + MIRI F1140C/F1550C)."""
+    if not isinstance(target, dict):
+        raise ValueError("target must be a dict")
     a_au = max(0.01, float(target.get("semi_major_axis_au", 0.1)))
     d_pc = max(1.0, float(target.get("distance_pc", 25.0)))
     teq_k = max(60.0, float(target.get("equilibrium_temp_k", 260.0)))
@@ -678,6 +727,8 @@ def synthesize_jwst_coronagraph_4bands(target: Dict[str, Any]) -> Dict[str, Any]
 
 def compute_oolite_planetfall_parameters(target: Dict[str, Any]) -> Dict[str, Any]:
     """Compute Oolite (oolite.space) + Planetfall OXP (wiki.alioth.net/index.php/Planetfall_OXP) landing physics."""
+    if not isinstance(target, dict):
+        raise ValueError("target must be a dict")
     rp_re = max(0.4, float(target.get("planet_radius_rearth", 1.0)))
     mp_me = max(0.1, float(target.get("planet_mass_mearth", max(0.2, rp_re ** 2.06))))
     teq_k = max(50.0, float(target.get("equilibrium_temp_k", 255.0)))
@@ -1029,6 +1080,8 @@ def synthesize_gemini_or_gcp_free_tts(
 
 def query_nasa_exoplanet_archive_tap(live_network: bool = False) -> Dict[str, Any]:
     """Query the NASA Exoplanet Archive TAP REST API (pscomppars ADQL) with local cache fallback."""
+    if not isinstance(live_network, bool):
+        raise ValueError("live_network must be a boolean")
     adql_query = (
         "SELECT pl_name, hostname, sy_dist, pl_orbper, pl_rade, pl_bmasse, "
         "pl_orbeccen, pl_insol, pl_eqt, rv_flag, tran_flag "
@@ -1097,6 +1150,8 @@ def query_nasa_exoplanet_archive_tap(live_network: bool = False) -> Dict[str, An
 
 def load_real_hf_exoplanet_catalog(max_extra_per_category: int = 12) -> List[Dict[str, Any]]:
     """Build the playable exoplanet discovery catalog from real cached Hugging Face Parquet datasets & NASA TAP."""
+    if isinstance(max_extra_per_category, bool) or not isinstance(max_extra_per_category, int) or max_extra_per_category < 0:
+        raise ValueError("max_extra_per_category must be a non-negative integer")
     featured_targets: List[Dict[str, Any]] = [
         {
             "target_id": "SECTOR-01-TRAPPIST-1E",

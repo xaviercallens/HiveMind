@@ -249,14 +249,24 @@ class CampaignOrchestrator:
 
     # -- queries -------------------------------------------------------------------------------------------------------
     def campaign_window(self, campaign_id: str) -> tuple[float, float]:
+        if not isinstance(campaign_id, str) or not campaign_id.strip():
+            raise ValueError("campaign_id must be a non-empty string")
         c = self.campaigns[campaign_id]
         return parse_campaign_utc(c.dtstart_utc), parse_campaign_utc(c.dtend_utc)
 
     def is_open(self, campaign_id: str, now_utc: float) -> bool:
+        if not isinstance(campaign_id, str) or not campaign_id.strip():
+            raise ValueError("campaign_id must be a non-empty string")
+        if isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc)):
+            raise ValueError("now_utc must be a finite number")
         start, end = self.campaign_window(campaign_id)
         return start - self.policy.join_lead_s <= now_utc < end
 
     def active_members(self, now_utc: float, campaign_id: str | None = None) -> list[dict[str, Any]]:
+        if isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc)):
+            raise ValueError("now_utc must be a finite number")
+        if campaign_id is not None and (not isinstance(campaign_id, str) or not campaign_id.strip()):
+            raise ValueError("campaign_id must be a non-empty string when provided")
         out = [
             dict(m)
             for m in self.state["memberships"].values()
@@ -267,6 +277,8 @@ class CampaignOrchestrator:
     # -- transitions ---------------------------------------------------------------------------------------------------
     def expire(self, now_utc: float) -> list[JoinDecision]:
         """Mark memberships whose campaign has ended as expired and emit one event each."""
+        if isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc)):
+            raise ValueError("now_utc must be a finite number")
         decisions: list[JoinDecision] = []
         for m in self.state["memberships"].values():
             if m["status"] == "active" and m["expires_at_utc"] <= now_utc:
@@ -441,7 +453,18 @@ class NightWindow:
 
 def night_window(now_utc: float, tz: str = NIGHT_TZ, start_h: int = NIGHT_START_H, end_h: int = NIGHT_END_H) -> NightWindow:
     """The night window containing ``now_utc``, or else the next one. Wraps past midnight when ``start_h > end_h``."""
-    if start_h == end_h or not (0 <= start_h <= 23 and 0 <= end_h <= 23):
+    if isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc)):
+        raise ValueError("now_utc must be a finite number")
+    if not isinstance(tz, str) or not tz.strip():
+        raise ValueError("tz must be a non-empty string")
+    if (
+        isinstance(start_h, bool)
+        or not isinstance(start_h, int)
+        or isinstance(end_h, bool)
+        or not isinstance(end_h, int)
+        or start_h == end_h
+        or not (0 <= start_h <= 23 and 0 <= end_h <= 23)
+    ):
         raise ValueError(f"invalid night window {start_h}:00-{end_h}:00")
     zone = ZoneInfo(tz)
     local_day = datetime.fromtimestamp(now_utc, zone).date()

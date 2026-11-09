@@ -313,6 +313,20 @@ def _extract_prompt_param(
     high: float,
 ) -> float:
     """Parse an optional numeric initial-condition override (`name=val` or `name: val`) from `prompt`."""
+    if not isinstance(prompt, str):
+        raise ValueError("prompt must be a string")
+    if (
+        not isinstance(names, Sequence)
+        or isinstance(names, (str, bytes))
+        or len(names) == 0
+        or any(not isinstance(n, str) or not n.strip() for n in names)
+    ):
+        raise ValueError("names must be a non-empty sequence of non-empty strings")
+    for pname, pval in (("default", default), ("low", low), ("high", high)):
+        if isinstance(pval, bool) or not isinstance(pval, (int, float)) or not math.isfinite(float(pval)):
+            raise ValueError(f"{pname} must be a finite number")
+    if float(low) > float(high):
+        raise ValueError("low must be <= high")
     for name in names:
         m = re.search(rf"\b{re.escape(name)}\s*[:=]\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)", prompt, re.IGNORECASE)
         if m:
@@ -327,6 +341,12 @@ def _extract_prompt_param(
 
 def _rescue_astronomy_kepler(steps: int = 200, dt: float = 0.025, ecc: float = 0.6) -> NumericRescueResult:
     """Rescue an eccentric Kepler / Post-Newtonian orbit from explicit Euler energy blowup using RK4 + Dual-RRK."""
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps must be a positive integer")
+    if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0.0:
+        raise ValueError("dt must be a positive finite number")
+    if isinstance(ecc, bool) or not isinstance(ecc, (int, float)) or not math.isfinite(float(ecc)):
+        raise ValueError("ecc must be a finite number")
     diag = analyze_physical_mathematical_problem("kepler post-newtonian hamiltonian orbit", domain_hint="astronomy")
     mu = 1.0
     ecc = max(0.01, min(0.95, float(ecc)))
@@ -431,6 +451,12 @@ def _rescue_astronomy_kepler(steps: int = 200, dt: float = 0.025, ecc: float = 0
 
 def _rescue_fluid_mechanics_dyadic_ns(steps: int = 80, dt: float = 0.01, nu: float = 0.05) -> NumericRescueResult:
     """Rescue the stiff dyadic Navier-Stokes shell model from explicit float blowup using IMEX ARS(2,2,2)."""
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps must be a positive integer")
+    if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0.0:
+        raise ValueError("dt must be a positive finite number")
+    if isinstance(nu, bool) or not isinstance(nu, (int, float)) or not math.isfinite(float(nu)) or float(nu) <= 0.0:
+        raise ValueError("nu must be a positive finite number")
     diag = analyze_physical_mathematical_problem("stiff dyadic navier-stokes enstrophy hypothesis u", domain_hint="fluid_mechanics")
     num_shells = 8
     nu = max(1e-4, min(1.0, float(nu)))
@@ -553,6 +579,12 @@ def _rescue_fluid_mechanics_dyadic_ns(steps: int = 80, dt: float = 0.01, nu: flo
 
 def _rescue_quantum_fluid_pgpe(steps: int = 100, dt: float = 0.02, amp: float = 0.8) -> NumericRescueResult:
     """Rescue 1D/2D Projected Gross-Pitaevskii superfluid evolution using Fourier IF-RK4 + k_cut=k_max/2."""
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps must be a positive integer")
+    if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0.0:
+        raise ValueError("dt must be a positive finite number")
+    if isinstance(amp, bool) or not isinstance(amp, (int, float)) or not math.isfinite(float(amp)) or float(amp) <= 0.0:
+        raise ValueError("amp must be a positive finite number")
     diag = analyze_physical_mathematical_problem("projected gross-pitaevskii superfluid vortex", domain_hint="quantum_fluid")
     n_grid = 16
     length = 2.0 * math.pi
@@ -682,6 +714,12 @@ def _rescue_quantum_fluid_pgpe(steps: int = 100, dt: float = 0.02, amp: float = 
 
 def _rescue_genetics_stiff_hopfield_and_dna_lk(steps: int = 80, dt: float = 0.01, lk0: float = 104.0) -> NumericRescueResult:
     """Rescue stiff Hopfield-Ninio kinetic proofreading & DNA Lk=Tw+Wr conservation via implicit BDF."""
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        raise ValueError("steps must be a positive integer")
+    if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(float(dt)) or float(dt) <= 0.0:
+        raise ValueError("dt must be a positive finite number")
+    if isinstance(lk0, bool) or not isinstance(lk0, (int, float)) or not math.isfinite(float(lk0)) or float(lk0) <= 0.0:
+        raise ValueError("lk0 must be a positive finite number")
     diag = analyze_physical_mathematical_problem(
         "hopfield-ninio kinetic proofreading and dna supercoiling linking number",
         domain_hint="genetics",
@@ -849,6 +887,10 @@ def build_rusty_sundials_rescue_dataset(
     """Generate a curated, physics-verified SFT + DPO dataset across Astronomy, Fluid Mechanics,
     Quantum Fluids, and Genetics so producer machines can train and retain `hivemind/bee-rusty-sundials`.
     """
+    if output_jsonl_path is not None:
+        if not isinstance(output_jsonl_path, (Path, str)) or not str(output_jsonl_path).strip():
+            raise ValueError("output_jsonl_path must be a non-empty Path or string when provided")
+        output_jsonl_path = Path(output_jsonl_path)
     scenarios: list[tuple[str, str]] = [
         ("astronomy", "Rescue an eccentric Kepler binary inspiral (e=0.6) from explicit Euler Hamiltonian energy drift using rusty-SUNDIALS ARKode Dual-RRK relaxation."),
         ("astronomy", "Desingularize the stellar hydrostatic Lane-Emden equation theta'' + (2/xi)theta' + theta^n = 0 at xi -> 0+ and integrate to the stellar surface root xi_1."),

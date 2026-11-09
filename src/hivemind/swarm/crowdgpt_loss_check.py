@@ -52,6 +52,10 @@ TOKEN_DTYPE = np.uint32  # the shards on Vxtzq/CrowdGPT hold uint32 tokens (clie
 
 
 def _rope(head_dim: int, seq_len: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+    if isinstance(head_dim, bool) or not isinstance(head_dim, int) or head_dim < 2 or head_dim % 2 != 0:
+        raise ValueError("head_dim must be an even integer >= 2")
+    if isinstance(seq_len, bool) or not isinstance(seq_len, int) or seq_len < 1:
+        raise ValueError("seq_len must be a positive integer")
     inv = 1.0 / (10000.0 ** (torch.arange(0, head_dim, 2, dtype=torch.float32) / head_dim))
     f = torch.einsum("i,j->ij", torch.arange(seq_len, dtype=torch.float32), inv)
     e = torch.cat((f, f), -1)
@@ -59,6 +63,8 @@ def _rope(head_dim: int, seq_len: int, device: torch.device) -> tuple[torch.Tens
 
 
 def _rotate_half(x: torch.Tensor) -> torch.Tensor:
+    if not isinstance(x, torch.Tensor) or x.ndim < 1 or x.shape[-1] < 2 or x.shape[-1] % 2 != 0:
+        raise ValueError("x must be a Tensor with an even last dimension >= 2")
     return torch.cat((-x[..., x.shape[-1] // 2:], x[..., : x.shape[-1] // 2]), -1)
 
 
@@ -310,6 +316,8 @@ class LossCheckReceipt:
 
 
 def _replace(r: LossCheckReceipt, **kw: object) -> LossCheckReceipt:
+    if not isinstance(r, LossCheckReceipt):
+        raise TypeError("r must be a LossCheckReceipt")
     d = asdict(r) | kw
     return LossCheckReceipt(**d)
 
@@ -318,6 +326,10 @@ def make_receipt(*, evaluator_id: str, key: bytes, base: torch.Tensor, candidate
                  seed: int, model_factory: Callable[[], nn.Module], device: torch.device | str, dtype: torch.dtype = torch.float32,
                  round_id: str = "", batch: int = 1, stop: Callable[[], bool] | None = None) -> LossCheckReceipt:
     """Evaluator side: losses of the base and the candidate on the same n windows, signed."""
+    if not callable(model_factory):
+        raise TypeError("model_factory must be callable")
+    if isinstance(batch, bool) or not isinstance(batch, int) or batch < 1:
+        raise ValueError("batch must be an integer >= 1")
     starts = heldout_windows(len(heldout), window, n, seed)
     losses = []
     for flat in (base, candidate):
@@ -395,6 +407,22 @@ def verify_receipt(receipt: LossCheckReceipt, *, evaluator_keys: Mapping[str, by
     and the backend's own held-out data; the windows are the ones the seed selects; every claimed loss is finite and in
     [0, ln(vocab) + 5]; every spot-checked number agrees within `tol`; and mean(after) - mean(before) <= the tolerance
     (the same rule as `LossRatchetGate`)."""
+    if not isinstance(receipt, LossCheckReceipt):
+        raise TypeError("receipt must be a LossCheckReceipt")
+    if not isinstance(evaluator_keys, Mapping):
+        raise TypeError("evaluator_keys must be a Mapping")
+    if not callable(recompute):
+        raise TypeError("recompute must be callable")
+    if isinstance(min_windows, bool) or not isinstance(min_windows, int) or min_windows < 1:
+        raise ValueError("min_windows must be an integer >= 1")
+    if isinstance(tol, bool) or not isinstance(tol, (int, float)) or not math.isfinite(float(tol)) or float(tol) < 0.0:
+        raise ValueError("tol must be a finite non-negative number")
+    if (
+        isinstance(max_regression_tolerance, bool)
+        or not isinstance(max_regression_tolerance, (int, float))
+        or not math.isfinite(float(max_regression_tolerance))
+    ):
+        raise ValueError("max_regression_tolerance must be a finite number")
     key = evaluator_keys.get(receipt.evaluator_id)
     if key is None:
         return LossCheckVerdict(False, "REJECTED_UNKNOWN_EVALUATOR")
@@ -459,8 +487,16 @@ def receipts_agree(a: LossCheckReceipt, b: LossCheckReceipt, tol: float = 2e-3) 
 def cpu_recompute_fn(model_factory: Callable[[], nn.Module], base: torch.Tensor, candidate: torch.Tensor, heldout: np.ndarray, window: int,
                      dtype: torch.dtype = torch.float32) -> Callable[[str, list[int]], list[float]]:
     """A `recompute` for `verify_receipt` that loads the base or candidate weights on CPU only when a pick needs them."""
+    if not callable(model_factory):
+        raise TypeError("model_factory must be callable")
+    if not isinstance(base, torch.Tensor) or not isinstance(candidate, torch.Tensor):
+        raise TypeError("base and candidate must be torch.Tensor instances")
+    if isinstance(window, bool) or not isinstance(window, int) or window < 2:
+        raise ValueError("window must be an integer >= 2")
 
     def run(which: str, starts: list[int]) -> list[float]:
+        if which not in ("before", "after"):
+            raise ValueError("which must be 'before' or 'after'")
         m = model_factory()
         m.load_flat(base if which == "before" else candidate)
         return window_losses(m, heldout, starts, window, device="cpu", dtype=dtype)

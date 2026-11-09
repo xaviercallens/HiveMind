@@ -1544,6 +1544,11 @@ def solve_wave2_method_of_lines_pde(
 
 def _rk4_van_der_pol_step(x: float, v: float, mu: float, h: float) -> tuple[float, float]:
     """Advance Van der Pol oscillator ``x'' = mu*(1 - x^2)*x' - x`` by one classic RK4 step ``h``."""
+    for val in (x, v, mu, h):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+            raise ValueError("x, v, mu, and h must be finite numbers")
+    if float(h) <= 0.0 or float(mu) < 0.0:
+        raise ValueError("h must be > 0 and mu must be >= 0")
     k1x = v
     k1v = mu * (1.0 - x * x) * v - x
 

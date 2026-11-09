@@ -156,6 +156,8 @@ PRESETS: dict[str, dict[str, Any]] = {
 
 
 def _as_scenario(sc: "Scenario | dict[str, Any]") -> Scenario:
+    if not isinstance(sc, (Scenario, dict)):
+        raise ValueError("scenario must be a Scenario or dict")
     return (sc if isinstance(sc, Scenario) else Scenario(**sc)).validate()
 
 
@@ -202,6 +204,10 @@ def losses(theta: list[float], a_all: list[list[float]], c_all: list[list[float]
 
 def merge_deltas(items: list[tuple[list[float], float]], mode: str) -> list[float]:
     """Weighted merge of (delta, weight) items in the given order; 'rda' multiplies the weighted mean by r = sum w|D| / |sum w D| (>= 1)."""
+    if not items:
+        raise ValueError("items must be non-empty")
+    if mode not in ("direct", "rda"):
+        raise ValueError("mode must be 'direct' or 'rda'")
     d = len(items[0][0])
     wsum, s, num = 0.0, [0.0] * d, 0.0
     for delta, w in items:
@@ -239,6 +245,8 @@ def _penalised(sc: Scenario, rnd: int) -> int:
 
 def retention(l0: float, l_final: float, l_sync: float) -> float | None:
     """E13's rho = (L0 - L_cell) / (L0 - L_sync); None when the synchronous reference did not improve on L0."""
+    if any(isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x) for x in (l0, l_final, l_sync)):
+        raise ValueError("l0, l_final, and l_sync must be finite numeric values")
     den = l0 - l_sync
     return None if abs(den) <= 1e-12 else (l0 - l_final) / den
 

@@ -56,11 +56,18 @@ class DanceRecord:
             or not str(self.signer_id).strip()
         ):
             raise ValueError("expert_id, served_by, cluster_id and signer_id must be non-empty")
-        if isinstance(self.n, bool) or isinstance(self.successes, bool) or isinstance(self.epoch, bool):
+        if (
+            isinstance(self.n, bool)
+            or not isinstance(self.n, int)
+            or isinstance(self.successes, bool)
+            or not isinstance(self.successes, int)
+            or isinstance(self.epoch, bool)
+            or not isinstance(self.epoch, int)
+        ):
             raise ValueError("n, successes and epoch must be integers, not bool")
         if self.n < 0 or self.successes < 0 or self.successes > self.n:
             raise ValueError(f"need 0 <= successes <= n, got successes={self.successes} n={self.n}")
-        if not math.isfinite(self.cost_per_1k) or self.cost_per_1k < 0.0:
+        if isinstance(self.cost_per_1k, bool) or not isinstance(self.cost_per_1k, (int, float)) or not math.isfinite(self.cost_per_1k) or self.cost_per_1k < 0.0:
             raise ValueError("cost_per_1k must be finite and >= 0")
         if self.epoch < 0:
             raise ValueError("epoch must be >= 0")
@@ -103,9 +110,9 @@ class DanceRecord:
 
 def wilson_interval(successes: int, n: int, z: float = Z95) -> tuple[float, float]:
     """Wilson's score interval; (0.0, 1.0) when there are no trials."""
-    if isinstance(n, bool) or isinstance(successes, bool) or n < 0 or successes < 0 or successes > n:
+    if isinstance(n, bool) or not isinstance(n, int) or isinstance(successes, bool) or not isinstance(successes, int) or n < 0 or successes < 0 or successes > n:
         raise ValueError("need 0 <= successes <= n")
-    if not math.isfinite(float(z)) or float(z) <= 0.0:
+    if isinstance(z, bool) or not isinstance(z, (int, float)) or not math.isfinite(float(z)) or float(z) <= 0.0:
         raise ValueError("z must be a strictly positive finite float")
     if n == 0:
         return 0.0, 1.0
@@ -177,6 +184,8 @@ def rotate_scouts(
     secret: bytes | None = None,
 ) -> tuple[str, ...]:
     """Deterministically select `k` distinct scouts from `pool` for `epoch` (HM-S15-02 / #172)."""
+    if isinstance(epoch, bool) or not isinstance(epoch, int) or isinstance(k, bool) or not isinstance(k, int):
+        raise ValueError("epoch and k must be integers, not bool")
     eff_secret = secret if secret is not None else _DEFAULT_SCOUT_ROTATION_DOMAIN.encode("utf-8")
     unique_pool = list(dict.fromkeys(s for s in pool if s))
     if k < 1 or k > len(unique_pool):
@@ -252,9 +261,16 @@ def recruitment_weights(
     `max_trials_per_signer` (HM-S15-01 / #171) bounds the total evidence volume (pseudo-trials) any single `signer_id`
     can contribute across all records they sign, without clipping the honest Wilson lower bound of high-performing experts.
     """
-    if horizon_epochs < 0 or now_epoch < 0:
+    if (
+        isinstance(horizon_epochs, bool)
+        or not isinstance(horizon_epochs, int)
+        or isinstance(now_epoch, bool)
+        or not isinstance(now_epoch, int)
+        or horizon_epochs < 0
+        or now_epoch < 0
+    ):
         raise ValueError("now_epoch and horizon_epochs must be >= 0")
-    if not math.isfinite(cap_per_record) or cap_per_record <= 0.0:
+    if isinstance(cap_per_record, bool) or not isinstance(cap_per_record, (int, float)) or not math.isfinite(cap_per_record) or cap_per_record <= 0.0:
         raise ValueError("cap_per_record must be finite and > 0")
     if max_trials_per_signer is not None and (not math.isfinite(max_trials_per_signer) or max_trials_per_signer <= 0.0):
         raise ValueError("max_trials_per_signer must be finite and > 0")

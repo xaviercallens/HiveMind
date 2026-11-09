@@ -310,6 +310,16 @@ def dequantize_nf4_blockwise(
     original_shape: Tuple[int, ...],
 ) -> np.ndarray:
     """Dequantize 4-bit NF4 indices + blockwise absmax scales back to float32."""
+    if not isinstance(indices, np.ndarray) or indices.size == 0:
+        raise ValueError("indices must be a non-empty numpy ndarray")
+    if not isinstance(absmax, np.ndarray) or absmax.size == 0:
+        raise ValueError("absmax must be a non-empty numpy ndarray")
+    if (
+        not isinstance(original_shape, tuple)
+        or not original_shape
+        or not all(isinstance(d, int) and not isinstance(d, bool) and d >= 1 for d in original_shape)
+    ):
+        raise ValueError("original_shape must be a non-empty tuple of positive integers")
     recon_blocks = NF4_CODEBOOK[indices] * absmax[:, None]
     total_elems = int(np.prod(original_shape))
     return recon_blocks.reshape(-1)[:total_elems].reshape(original_shape).astype(np.float32)
@@ -358,6 +368,35 @@ class SparseLoCoDCT2BitPacket:
     compression_ratio: float
     sqnr_db: float
     sha256_digest: str
+
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("dht_key", self.dht_key),
+            ("bee_id", self.bee_id),
+            ("cluster_id", self.cluster_id),
+            ("backbone_id", self.backbone_id),
+            ("sha256_digest", self.sha256_digest),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(self.packed_2bit_codes, bytes) or len(self.packed_2bit_codes) == 0:
+            raise ValueError("packed_2bit_codes must be non-empty bytes")
+        for field_name, val in (("raw_fp32_bytes", self.raw_fp32_bytes), ("wire_bytes", self.wire_bytes)):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+        if (
+            isinstance(self.compression_ratio, bool)
+            or not isinstance(self.compression_ratio, (int, float))
+            or not math.isfinite(float(self.compression_ratio))
+            or float(self.compression_ratio) <= 0.0
+        ):
+            raise ValueError("compression_ratio must be a positive finite number")
+        if (
+            isinstance(self.sqnr_db, bool)
+            or not isinstance(self.sqnr_db, (int, float))
+            or not math.isfinite(float(self.sqnr_db))
+        ):
+            raise ValueError("sqnr_db must be a finite number")
 
 
 def quantize_sparseloco_dct_2bit(
@@ -488,10 +527,14 @@ class DHTDeltaRegistry:
         self._table: Dict[str, SparseLoCoDCT2BitPacket] = {}
 
     def publish(self, packet: SparseLoCoDCT2BitPacket) -> str:
+        if not isinstance(packet, SparseLoCoDCT2BitPacket):
+            raise ValueError("packet must be a SparseLoCoDCT2BitPacket")
         self._table[packet.dht_key] = packet
         return packet.dht_key
 
     def fetch(self, dht_key: str) -> SparseLoCoDCT2BitPacket:
+        if not isinstance(dht_key, str) or not dht_key.strip():
+            raise ValueError("dht_key must be a non-empty string")
         if dht_key not in self._table:
             raise KeyError(f"DHT key not found: {dht_key}")
         return self._table[dht_key]
@@ -516,6 +559,16 @@ class FrozenVisionLanguageBackbone(nn.Module):
         seed: int = 42,
     ) -> None:
         super().__init__()
+        for field_name, val in (
+            ("vision_dim", vision_dim),
+            ("hidden_dim", hidden_dim),
+            ("intermediate_dim", intermediate_dim),
+            ("num_classes", num_classes),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+        if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+            raise ValueError("seed must be a non-negative integer")
         torch.manual_seed(seed)
         self.vision_dim = vision_dim
         self.hidden_dim = hidden_dim
@@ -604,6 +657,13 @@ class QLoRAVisionAdapter(nn.Module):
         seed: int = 101,
     ) -> None:
         super().__init__()
+        for field_name, val in (("hidden_dim", hidden_dim), ("rank", rank)):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+        if isinstance(alpha, bool) or not isinstance(alpha, (int, float)) or not math.isfinite(float(alpha)) or float(alpha) <= 0.0:
+            raise ValueError("alpha must be a positive finite number")
+        if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+            raise ValueError("seed must be a non-negative integer")
         torch.manual_seed(seed)
         self.hidden_dim = hidden_dim
         self.rank = rank

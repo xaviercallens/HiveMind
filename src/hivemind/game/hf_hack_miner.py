@@ -741,6 +741,10 @@ SEASON_4_OFFLINE_CURATED_CORPUS: Dict[str, List[str]] = {
 
 def fetch_season4_curated_corpus(dataset_id: str, num_samples: int = 12) -> List[str]:
     """Return the curated offline Season 4 corpus for a mission dataset (no network required)."""
+    if isinstance(dataset_id, bool) or not isinstance(dataset_id, str) or not dataset_id.strip():
+        raise ValueError("dataset_id must be a non-empty string")
+    if isinstance(num_samples, bool) or not isinstance(num_samples, int) or num_samples <= 0 or num_samples > 10_000:
+        raise ValueError("num_samples must be an int in [1, 10000]")
     bank = SEASON_4_OFFLINE_CURATED_CORPUS.get(dataset_id, [])
     if not bank:
         return []
@@ -956,6 +960,10 @@ SEASON_5_OFFLINE_CURATED_CORPUS: Dict[str, List[str]] = {
 
 def fetch_season5_curated_corpus(dataset_id: str, num_samples: int = 12) -> List[str]:
     """Return the curated offline Season 5 corpus for a mission dataset (no network required)."""
+    if isinstance(dataset_id, bool) or not isinstance(dataset_id, str) or not dataset_id.strip():
+        raise ValueError("dataset_id must be a non-empty string")
+    if isinstance(num_samples, bool) or not isinstance(num_samples, int) or num_samples <= 0 or num_samples > 10_000:
+        raise ValueError("num_samples must be an int in [1, 10000]")
     bank = SEASON_5_OFFLINE_CURATED_CORPUS.get(dataset_id, [])
     if not bank:
         return []
@@ -964,6 +972,10 @@ def fetch_season5_curated_corpus(dataset_id: str, num_samples: int = 12) -> List
 
 def fetch_offline_curated_corpus(dataset_id: str, num_samples: int = 12) -> List[str]:
     """Return the curated offline corpus of any shipped season (Season 4, 5 or 6)."""
+    if isinstance(dataset_id, bool) or not isinstance(dataset_id, str) or not dataset_id.strip():
+        raise ValueError("dataset_id must be a non-empty string")
+    if isinstance(num_samples, bool) or not isinstance(num_samples, int) or num_samples <= 0 or num_samples > 10_000:
+        raise ValueError("num_samples must be an int in [1, 10000]")
     rows = fetch_season4_curated_corpus(dataset_id, num_samples=num_samples)
     if rows:
         return rows
@@ -1186,6 +1198,10 @@ SEASON_6_OFFLINE_CURATED_CORPUS: Dict[str, List[str]] = {
 
 def fetch_season6_curated_corpus(dataset_id: str, num_samples: int = 12) -> List[str]:
     """Return the curated offline Season 6 corpus for a mission dataset (no network required)."""
+    if isinstance(dataset_id, bool) or not isinstance(dataset_id, str) or not dataset_id.strip():
+        raise ValueError("dataset_id must be a non-empty string")
+    if isinstance(num_samples, bool) or not isinstance(num_samples, int) or num_samples <= 0 or num_samples > 10_000:
+        raise ValueError("num_samples must be an int in [1, 10000]")
     bank = SEASON_6_OFFLINE_CURATED_CORPUS.get(dataset_id, [])
     if not bank:
         return []
@@ -1826,7 +1842,9 @@ class Lean4ProofTask:
 
 def audit_lean4_proof(proof: str) -> Dict[str, Any]:
     """Structurally audit a Lean 4 proof script (not a substitute for `lake build`)."""
-    text = str(proof or "").strip()
+    if isinstance(proof, bool) or not isinstance(proof, str):
+        raise ValueError("proof must be a str")
+    text = proof.strip()
     checks = {
         "declares_theorem": bool(re.search(r"\btheorem\s+[A-Za-z_][A-Za-z0-9_']*", text)),
         "has_by_proof": ":= by" in text,
@@ -2084,6 +2102,10 @@ class Lean4AutoformalizerArena:
 
 def build_agent_arena_state(seed: int = 42, rounds: int = 12) -> Dict[str, Any]:
     """Run both Season 6 arenas and return the `/api/agent-arena` payload."""
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative int")
+    if isinstance(rounds, bool) or not isinstance(rounds, int) or rounds <= 0 or rounds > 1000:
+        raise ValueError("rounds must be an int in [1, 1000]")
     code_repair = SelfPlayCodeRepairArena(seed=seed).run(rounds=rounds)
     lean4 = Lean4AutoformalizerArena(seed=seed + 1).run(rounds=max(6, rounds // 2))
     return {
@@ -2641,11 +2663,15 @@ def build_guild_tournament_state(
     engine: GuildTournamentEngine | None = None,
 ) -> Dict[str, Any]:
     """Build the `/api/guild-tournament` payload (default: the shipped guild squads)."""
+    if engine is not None and not isinstance(engine, GuildTournamentEngine):
+        raise ValueError("engine must be a GuildTournamentEngine or None")
     return (engine or _DEFAULT_GUILD_TOURNAMENT_ENGINE).build_state()
 
 
 def build_swarm_telemetry_frame(seq: int = 0) -> Dict[str, Any]:
     """Build one live swarm telemetry frame streamed by the `/ws/swarm-telemetry` HUD socket."""
+    if isinstance(seq, bool) or not isinstance(seq, int) or seq < 0:
+        raise ValueError("seq must be a non-negative int")
     topo = build_georing_3d_topology_snapshot()
     contracts = SEASON_4_HF_BOUNTY_CONTRACTS
     active = contracts[seq % len(contracts)]

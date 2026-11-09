@@ -4762,6 +4762,10 @@ def _draw_robotic_satellite_glyph(draw: ImageDraw.ImageDraw, cx: int, cy: int, s
 
 def _generate_godot4_professional_engine_project(pkg_dir: Path, catalog: List[Dict[str, Any]]) -> Path:
     """Generate a complete Godot 4.x Open-Source Professional Game Engine project with 5-language TTS & Subtitles."""
+    if isinstance(pkg_dir, bool) or not isinstance(pkg_dir, Path):
+        raise ValueError("pkg_dir must be a Path")
+    if not isinstance(catalog, list) or any(not isinstance(item, dict) for item in catalog):
+        raise ValueError("catalog must be a list of dicts")
     godot_dir = pkg_dir / "godot4_project"
     scenes_dir = godot_dir / "scenes"
     scripts_dir = godot_dir / "scripts"
@@ -4830,6 +4834,8 @@ func speak_and_subtitle(lang_code: String) -> void:
 
 def _generate_steam_artwork_assets(assets_dir: Path) -> Dict[str, str]:
     """Generate Steam Library Capsule, Hero Banner, Header, Logo, and Windows .ico files using the v4.5 Star Trek UI."""
+    if isinstance(assets_dir, bool) or not isinstance(assets_dir, Path):
+        raise ValueError("assets_dir must be a Path")
     _generate_3d_planets_and_galaxy_assets(assets_dir)
     v4_ref_path = assets_dir / "startrek_main_ui_v4_ref.jpg"
     backdrop_path = v4_ref_path if v4_ref_path.exists() else (assets_dir / "spiral_galaxy_v4_hd.png")
@@ -4879,6 +4885,8 @@ def build_fat_steam_exoplanet_client(
     install_to_local_steam_library: bool = False,
 ) -> Dict[str, Any]:
     """Compile the v4.5 Full-Canvas native 64-bit C# fat client .exe and deploy into `steam_dist` and `D:\\SteamLibrary`."""
+    if not isinstance(install_to_local_steam_library, bool):
+        raise ValueError("install_to_local_steam_library must be a bool")
     service = AstroBeeMoEGPUService()
     pkg_dir = PROJECT_ROOT / "steam_dist" / "HiveMind_Astrophysics_Exoplanet_Hunter"
     data_dir = pkg_dir / "data"

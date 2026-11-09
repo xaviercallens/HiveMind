@@ -108,6 +108,32 @@ class ZeroRTTSessionTicket:
     turn_relay_endpoint: Optional[str] = None
     last_accepted_nonce: int = 0
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.peer_id, str) or not self.peer_id.strip():
+            raise ValueError("peer_id must be a non-empty string")
+        if not isinstance(self.session_token, (bytes, bytearray)) or len(self.session_token) == 0:
+            raise ValueError("session_token must be non-empty bytes")
+        if (
+            isinstance(self.issued_at, bool)
+            or not isinstance(self.issued_at, (int, float))
+            or not math.isfinite(float(self.issued_at))
+        ):
+            raise ValueError("issued_at must be a finite number")
+        if isinstance(self.resumed_count, bool) or not isinstance(self.resumed_count, int) or self.resumed_count < 0:
+            raise ValueError("resumed_count must be a non-negative integer")
+        if (
+            isinstance(self.reflexive_port, bool)
+            or not isinstance(self.reflexive_port, int)
+            or not (0 <= self.reflexive_port <= 65535)
+        ):
+            raise ValueError("reflexive_port must be an integer in [0, 65535]")
+        if (
+            isinstance(self.last_accepted_nonce, bool)
+            or not isinstance(self.last_accepted_nonce, int)
+            or self.last_accepted_nonce < 0
+        ):
+            raise ValueError("last_accepted_nonce must be a non-negative integer")
+
 
 # ============================================================================
 # HM-S4-02: 2-Tier Kademlia Continental Super-Ring & BBR-Inspired Congestion Control
@@ -331,6 +357,8 @@ class ContinentalSuperRingRouter:
 
     def remove_peer(self, peer_id: str) -> bool:
         """Evict a peer (e.g. after a failed STUN re-probe) and re-elect the bridges."""
+        if not isinstance(peer_id, str) or not peer_id.strip():
+            raise ValueError("peer_id must be a non-empty string")
         node = self.peers.pop(peer_id, None)
         if node is None:
             return False
@@ -344,10 +372,14 @@ class ContinentalSuperRingRouter:
 
     def peers_in_region(self, region: str) -> List[SuperRingPeerNode]:
         """All Tier-1 peers currently registered in `region`."""
+        if not isinstance(region, str) or not region.strip():
+            raise ValueError("region must be a non-empty string")
         return list(self.rings.get(region, []))
 
     def find_peer_in_region(self, region: str) -> Optional[SuperRingPeerNode]:
         """Lowest-RTT peer of `region` (used as the default regional entry point)."""
+        if not isinstance(region, str) or not region.strip():
+            raise ValueError("region must be a non-empty string")
         members = self.peers_in_region(region)
         if not members:
             return None
@@ -564,6 +596,10 @@ class ContinentalSuperRingRouter:
         self, target_key: str, k: int = 2
     ) -> List[SuperRingPeerNode]:
         """Kademlia XOR lookup over the Tier-2 Continental Bridge ring."""
+        if not isinstance(target_key, str) or not target_key.strip():
+            raise ValueError("target_key must be a non-empty string")
+        if isinstance(k, bool) or not isinstance(k, int) or k < 1:
+            raise ValueError("k must be a positive integer")
         self.refresh_bridges()
         target_hex = hashlib.sha1(target_key.encode("utf-8")).hexdigest()
         bridges = [
@@ -766,6 +802,10 @@ class AdaptiveCongestionController:
 
     def record_loss(self, lost_packets: int, sent_packets: int) -> float:
         """Fold a loss report into the loss EWMA and apply a multiplicative decrease."""
+        if isinstance(lost_packets, bool) or not isinstance(lost_packets, int) or lost_packets < 0:
+            raise ValueError("lost_packets must be a non-negative integer")
+        if isinstance(sent_packets, bool) or not isinstance(sent_packets, int) or sent_packets < 0:
+            raise ValueError("sent_packets must be a non-negative integer")
         if sent_packets <= 0:
             return self.loss_ratio
         ratio = max(0.0, min(1.0, float(lost_packets) / float(sent_packets)))
@@ -830,6 +870,10 @@ class AdaptiveCongestionController:
         total_packets: int = 1,
     ) -> Dict[str, Any]:
         """Size the in-flight burst of `CompressedHiddenStatePacket` frames allowed by the window."""
+        if not isinstance(packet, CompressedHiddenStatePacket):
+            raise TypeError("packet must be a CompressedHiddenStatePacket")
+        if isinstance(total_packets, bool) or not isinstance(total_packets, int) or total_packets < 1:
+            raise ValueError("total_packets must be a positive integer")
         window = self.compute_target_window(
             rtt_ms=rtt_ms, jitter_ms=jitter_ms, loss_ratio=loss_ratio
         )

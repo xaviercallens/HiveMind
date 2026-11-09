@@ -120,6 +120,12 @@ class RegionalGeoRingTransport:
         active_game_exe: str = "cyberpunk2077.exe",
     ) -> Dict[str, Any]:
         """HM-M1-02: Broadcast `PREEMPTING_FOR_GAME` GossipSub frame & promote hot-standby peer in <25ms."""
+        if not isinstance(preempting_peer_id, str) or not preempting_peer_id.strip():
+            raise ValueError("preempting_peer_id must be a non-empty string")
+        if not isinstance(expert_domain, str) or not expert_domain.strip():
+            raise ValueError("expert_domain must be a non-empty string")
+        if not isinstance(active_game_exe, str) or not active_game_exe.strip():
+            raise ValueError("active_game_exe must be a non-empty string")
         t0 = time.perf_counter()
         self.peers.pop(preempting_peer_id, None)
         standby_candidates = self.find_closest_peers(expert_domain, k=2)
@@ -638,6 +644,11 @@ except Exception:
 
 def compress_hidden_states_fp8(hidden_states: torch.Tensor) -> CompressedHiddenStatePacket:
     """Quantize FP16/FP32 hidden states to `float8_e4m3fn` (`HM-M3-01` Triton kernel with PyTorch fallback)."""
+    if isinstance(hidden_states, torch.Tensor):
+        if hidden_states.numel() == 0 or not torch.isfinite(hidden_states).all():
+            raise ValueError("hidden_states must be a non-empty finite torch.Tensor")
+    elif not (hasattr(hidden_states, "detach") and hasattr(hidden_states, "numel")) or hidden_states.numel() == 0:
+        raise ValueError("hidden_states must be a non-empty finite torch.Tensor")
     orig_shape = tuple(hidden_states.shape)
     orig_bytes = hidden_states.numel() * hidden_states.element_size()
     x_fp32 = hidden_states.detach().to(torch.float32)
@@ -679,6 +690,10 @@ def decompress_hidden_states_fp8(
     target_dtype: torch.dtype = torch.float16,
 ) -> torch.Tensor:
     """Restore FP16/FP32 hidden states from an FP8 wire packet."""
+    if not isinstance(packet, CompressedHiddenStatePacket):
+        raise TypeError("packet must be a CompressedHiddenStatePacket")
+    if not isinstance(target_dtype, torch.dtype):
+        raise TypeError("target_dtype must be a torch.dtype")
     restored = packet.fp8_data.to(torch.float32) * packet.absmax_scale.to(torch.float32)
     return restored.reshape(packet.original_shape).to(target_dtype)
 
@@ -688,6 +703,8 @@ def pack_int4_nf4_weights(weight: torch.Tensor) -> Tuple[torch.Tensor, torch.Ten
     Packs a 2D expert weight tensor `(out_features, in_features)` into 4-bit signed
     nibbles stored two-per-byte (`uint8`) with per-row FP16 absmax scales (`HM-S3-02`).
     """
+    if not isinstance(weight, torch.Tensor) or weight.ndim != 2 or weight.numel() == 0 or not torch.isfinite(weight).all():
+        raise ValueError("weight must be a non-empty 2D finite torch.Tensor")
     w_fp32 = weight.detach().to(torch.float32)
     out_dim, in_dim = w_fp32.shape
     if in_dim % 2 != 0:
@@ -712,6 +729,12 @@ def unpack_int4_nf4_weights(
     Dequantizes packed `uint8` 2x4-bit expert weights and per-row FP16 scales
     on the fly back to floating-point representation (`HM-S3-02`).
     """
+    if not isinstance(packed_uint8, torch.Tensor) or packed_uint8.ndim != 2 or packed_uint8.numel() == 0:
+        raise ValueError("packed_uint8 must be a non-empty 2D torch.Tensor")
+    if not isinstance(scale_fp16, torch.Tensor) or scale_fp16.numel() == 0:
+        raise ValueError("scale_fp16 must be a non-empty torch.Tensor")
+    if original_in_dim is not None and (isinstance(original_in_dim, bool) or not isinstance(original_in_dim, int) or original_in_dim < 1):
+        raise ValueError("original_in_dim must be a positive integer when provided")
     packed_i16 = packed_uint8.to(torch.int16)
     even_q = (packed_i16 & 0x0F) - 8
     odd_q = ((packed_i16 >> 4) & 0x0F) - 8
@@ -735,6 +758,18 @@ def fused_int4_fp8_moe_route_and_project(
     Season 3 Milestone `HM-S3-02`: Fused Top-2 Sparse MoE Router + On-the-Fly INT4 Weight
     Dequantization + FP8 (`float8_e4m3fn`) Hidden-State Activation Projection.
     """
+    if not isinstance(hidden_states, torch.Tensor) or hidden_states.numel() == 0 or not torch.isfinite(hidden_states).all():
+        raise ValueError("hidden_states must be a non-empty finite torch.Tensor")
+    if not isinstance(router_weight, torch.Tensor) or router_weight.ndim != 2 or router_weight.numel() == 0 or not torch.isfinite(router_weight).all():
+        raise ValueError("router_weight must be a non-empty 2D finite torch.Tensor")
+    if (
+        not isinstance(expert_weights, Sequence)
+        or len(expert_weights) == 0
+        or any(not isinstance(w, torch.Tensor) or w.ndim != 2 or w.numel() == 0 for w in expert_weights)
+    ):
+        raise ValueError("expert_weights must be a non-empty sequence of 2D torch.Tensor")
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+        raise ValueError("top_k must be a positive integer")
     t0 = time.perf_counter()
     orig_shape = hidden_states.shape
     hidden_dim = int(orig_shape[-1])
@@ -814,6 +849,14 @@ def benchmark_fused_int4_fp8_moe_kernel(
     Benchmarks the Season 3 `HM-S3-02` INT4 + FP8 fused MoE router projection
     against full-precision reference execution and verifies `cosine_similarity >= 0.99`.
     """
+    for name, val in (
+        ("batch_tokens", batch_tokens),
+        ("hidden_dim", hidden_dim),
+        ("num_experts", num_experts),
+        ("top_k", top_k),
+    ):
+        if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+            raise ValueError(f"{name} must be a positive integer")
     torch.manual_seed(42)
     dev = torch.device(device) if device is not None else torch.device("cpu")
     x = torch.randn(batch_tokens, hidden_dim, dtype=torch.float32, device=dev)
@@ -2115,6 +2158,28 @@ def fused_top2_moe_fp8_dispatch(
 ) -> Dict[str, Any]:
     """HM-S3-02: Fused FP32 Top-2 Sparse MoE Gating + FP8 (`E4M3`) Activation Quantization + Expert Dispatch."""
     import math
+
+    if isinstance(hidden_states, torch.Tensor):
+        if hidden_states.numel() == 0 or not torch.isfinite(hidden_states).all():
+            raise ValueError("hidden_states must be a non-empty finite torch.Tensor")
+    elif not hasattr(hidden_states, "to"):
+        raise ValueError("hidden_states must be a non-empty finite torch.Tensor")
+    if isinstance(router_weight, torch.Tensor):
+        if router_weight.ndim != 2 or router_weight.numel() == 0 or not torch.isfinite(router_weight).all():
+            raise ValueError("router_weight must be a non-empty 2D finite torch.Tensor")
+    elif not hasattr(router_weight, "to"):
+        raise ValueError("router_weight must be a non-empty 2D finite torch.Tensor")
+    if (
+        not isinstance(expert_down_weights, Sequence)
+        or len(expert_down_weights) == 0
+        or any(
+            (w.ndim != 2 or w.numel() == 0) if isinstance(w, torch.Tensor) else not hasattr(w, "to")
+            for w in expert_down_weights
+        )
+    ):
+        raise ValueError("expert_down_weights must be a non-empty sequence of 2D torch.Tensor")
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+        raise ValueError("top_k must be a positive integer")
 
     device = hidden_states.device
     orig_dtype = hidden_states.dtype

@@ -4588,6 +4588,8 @@ namespace HiveMind.ExoplanetHunterClient
 
 def _generate_3d_planets_and_galaxy_assets(assets_dir: Path) -> None:
     """Generate the 10 3D raycast-shaded planet spheres (`planet_3d_0..9.png`) and `spiral_galaxy_v4_hd.png`."""
+    if isinstance(assets_dir, bool) or not isinstance(assets_dir, Path):
+        raise ValueError("assets_dir must be a Path")
     assets_dir.mkdir(parents=True, exist_ok=True)
     palettes = [
         ((30, 195, 135), (16, 110, 85), (180, 255, 220)),
@@ -4752,6 +4754,10 @@ def _generate_3d_planets_and_galaxy_assets(assets_dir: Path) -> None:
 
 def _draw_robotic_satellite_glyph(draw: ImageDraw.ImageDraw, cx: int, cy: int, scale: float = 1.0) -> None:
     """Draw a miniature robotic explorer satellite (solar wings + gold chassis + dish) onto PIL artwork."""
+    if isinstance(cx, bool) or not isinstance(cx, int) or isinstance(cy, bool) or not isinstance(cy, int):
+        raise ValueError("cx and cy must be integers")
+    if isinstance(scale, bool) or not isinstance(scale, (int, float)) or not math.isfinite(float(scale)) or float(scale) <= 0.0:
+        raise ValueError("scale must be a positive finite number")
     w_span = int(22 * scale)
     w_h = int(6 * scale)
     draw.rectangle([cx - w_span, cy - w_h, cx - int(6 * scale), cy + w_h], fill=(29, 78, 216, 255), outline=(96, 165, 253, 255))

@@ -96,6 +96,8 @@ _TEXT: dict[str, dict[str, str]] = {
 
 def load_measured_results(path: Path | None = None) -> list[dict[str, Any]]:
     """The measured results shipped with the gateway (empty if the file is missing or malformed: nothing is invented)."""
+    if path is not None and (isinstance(path, bool) or not isinstance(path, Path)):
+        raise ValueError("path must be a Path or None")
     try:
         data = json.loads((path or MEASURED_RESULTS_PATH).read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -206,6 +208,8 @@ _LIVE_JS = (
 
 def render_hivemind_capacity_infographic_svg(live_telemetry: dict[str, Any] | None = None) -> str:
     """A small SVG listing what is measured. It contains no capacity or speed claim that is not in ``measured_results.json``."""
+    if live_telemetry is not None and not isinstance(live_telemetry, dict):
+        raise ValueError("live_telemetry must be a dict or None")
     measured = load_measured_results()
     lines = ["PROJECT HIVEMIND: measured results only", POC_NOTICE["en"][:96]]
     for r in measured:

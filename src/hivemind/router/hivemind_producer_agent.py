@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import subprocess
 import sys
@@ -257,6 +258,16 @@ def build_heartbeat_payload(
     endpoint_token: str | None = None,
 ) -> dict[str, Any]:
     """Build the JSON body for POST /v1/hivemind/producer/heartbeat."""
+    if not isinstance(endpoint, str) or not endpoint.strip():
+        raise ValueError("endpoint must be a non-empty string")
+    if not isinstance(models, list) or not models:
+        raise ValueError("models must be a non-empty list")
+    if isinstance(cost_per_1k, bool) or not isinstance(cost_per_1k, (int, float)) or not math.isfinite(float(cost_per_1k)) or float(cost_per_1k) < 0.0:
+        raise ValueError("cost_per_1k must be a finite non-negative number")
+    if isinstance(capacity_1k, bool) or not isinstance(capacity_1k, (int, float)) or not math.isfinite(float(capacity_1k)) or float(capacity_1k) < 0.0:
+        raise ValueError("capacity_1k must be a finite non-negative number")
+    if not isinstance(execution_class, str) or not execution_class.strip():
+        raise ValueError("execution_class must be a non-empty string")
     payload: dict[str, Any] = {
         "endpoint_url": endpoint,
         "models": [dict(model) for model in models],
@@ -310,6 +321,8 @@ def fetch_remote_config(client: httpx.Client, gateway: str, api_key: str) -> dic
 
 def recommend(tiers: Sequence[dict[str, Any]], vram_gb: float) -> dict[str, Any] | None:
     """The biggest tier whose recommended minimum memory fits ``vram_gb``, or ``None``."""
+    if isinstance(vram_gb, bool) or not isinstance(vram_gb, (int, float)) or not math.isfinite(float(vram_gb)) or float(vram_gb) < 0.0:
+        raise ValueError("vram_gb must be a finite non-negative number")
     fitting = [tier for tier in tiers if float(tier["min_vram_gb"]) <= vram_gb]
     return max(fitting, key=lambda tier: float(tier["min_vram_gb"])) if fitting else None
 

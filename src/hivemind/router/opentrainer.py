@@ -367,6 +367,12 @@ def default_active_task_offer(
     script_path: Path | None = None,
 ) -> dict[str, Any]:
     """Return the current active OpenTrainer Aglet ``task_offer`` descriptor for connecting trainers."""
+    if now_utc is not None and (isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc))):
+        raise ValueError("now_utc must be a finite number or None")
+    if round_index is not None and (isinstance(round_index, bool) or not isinstance(round_index, int) or round_index < 0):
+        raise ValueError("round_index must be a non-negative integer or None")
+    if isinstance(quorum, bool) or not isinstance(quorum, int) or quorum < 1:
+        raise ValueError("quorum must be a positive integer")
     now = time.time() if now_utc is None else float(now_utc)
     round_idx = int(round_index) if round_index is not None else (int(now // 1800) % 10000)
     pin = compute_default_code_pin(script_path=script_path)
@@ -410,18 +416,22 @@ def validate_trainer_delta_submission(
     max_delta_l2: float = DEFAULT_MAX_DELTA_L2,
 ) -> dict[str, Any]:
     """Validate a trainer's outbound HTTPS delta submission against OpenTrainer safety & VRAM gates."""
-    if not run_id or not run_id.strip():
+    if not isinstance(run_id, str) or not run_id.strip():
         raise ValueError("run_id must be non-empty")
-    if round_index < 0:
+    if isinstance(round_index, bool) or not isinstance(round_index, int) or round_index < 0:
         raise ValueError("round_index must be non-negative")
-    if not math.isfinite(delta_l2) or delta_l2 < 0.0:
+    if isinstance(delta_l2, bool) or not isinstance(delta_l2, (int, float)) or not math.isfinite(float(delta_l2)) or float(delta_l2) < 0.0:
         raise ValueError("delta_l2 must be a finite non-negative number")
-    if delta_l2 > max_delta_l2:
+    if isinstance(max_delta_l2, bool) or not isinstance(max_delta_l2, (int, float)) or not math.isfinite(float(max_delta_l2)) or float(max_delta_l2) <= 0.0:
+        raise ValueError("max_delta_l2 must be a finite positive number")
+    if float(delta_l2) > float(max_delta_l2):
         raise ValueError(f"delta_l2 ({delta_l2:.4f}) exceeds maximum bound ({max_delta_l2:.4f})")
-    if not math.isfinite(eval_loss) or eval_loss < 0.0:
+    if isinstance(eval_loss, bool) or not isinstance(eval_loss, (int, float)) or not math.isfinite(float(eval_loss)) or float(eval_loss) < 0.0:
         raise ValueError("eval_loss must be a finite non-negative number")
-    if tokens_trained <= 0:
+    if isinstance(tokens_trained, bool) or not isinstance(tokens_trained, int) or tokens_trained <= 0:
         raise ValueError("tokens_trained must be > 0")
+    if isinstance(vram_free_mib, bool) or not isinstance(vram_free_mib, int) or isinstance(vram_total_mib, bool) or not isinstance(vram_total_mib, int):
+        raise ValueError("vram_free_mib and vram_total_mib must be integers")
     min_floor = DEFAULT_MIN_FREE_VRAM_MIB_T4 if vram_total_mib >= 14000 else DEFAULT_MIN_FREE_VRAM_MIB_8GB
     if (vram_total_mib > 0 or vram_free_mib > 0) and vram_free_mib < min_floor:
         raise ValueError(

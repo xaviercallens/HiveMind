@@ -54,6 +54,8 @@ def nearest_zn(x: np.ndarray) -> np.ndarray:
 def nearest_a2(x: np.ndarray) -> np.ndarray:
     """Nearest point of the 2D hexagonal lattice A₂ = (ℤ × √3·ℤ) ∪ ((ℤ + ½) × √3·(ℤ + ½)); rows of ``x`` must have 2 columns."""
     x = np.atleast_2d(np.asarray(x, dtype=float))
+    if x.size == 0 or not bool(np.all(np.isfinite(x))):
+        raise ValueError("x must be a non-empty finite array")
     if x.shape[1] != 2:
         raise ValueError("A2 lives in dimension 2")
     c0 = np.column_stack([np.rint(x[:, 0]), _SQRT3 * np.rint(x[:, 1] / _SQRT3)])
@@ -107,6 +109,8 @@ def is_lattice_point(kind: str, c: np.ndarray, tol: float = 1e-9) -> np.ndarray:
     if isinstance(tol, bool) or not isinstance(tol, (int, float)) or not math.isfinite(float(tol)) or float(tol) <= 0.0:
         raise ValueError("tol must be a strictly positive finite float")
     c = np.atleast_2d(np.asarray(c, dtype=float))
+    if c.size == 0 or not bool(np.all(np.isfinite(c))):
+        raise ValueError("c must be a non-empty finite array")
     if kind == "Z":
         return np.all(np.abs(c - np.rint(c)) < tol, axis=1)
     if kind == "A2":
@@ -207,6 +211,8 @@ class LatticeDeltaQuantizer:
         self._carry: Optional[torch.Tensor] = None
 
     def quantize(self, vec: torch.Tensor) -> QuantizedDelta:
+        if not isinstance(vec, torch.Tensor):
+            raise ValueError("vec must be a torch.Tensor")
         v = vec.detach().to(torch.float32).reshape(-1)
         if v.numel() == 0:
             raise ValueError("delta must be non-empty")
@@ -239,6 +245,8 @@ class SignDeltaQuantizer:
         self._carry: Optional[torch.Tensor] = None
 
     def quantize(self, vec: torch.Tensor) -> QuantizedDelta:
+        if not isinstance(vec, torch.Tensor):
+            raise ValueError("vec must be a torch.Tensor")
         v = vec.detach().to(torch.float32).reshape(-1)
         if v.numel() == 0:
             raise ValueError("delta must be non-empty")
@@ -271,6 +279,8 @@ def calibrate_scale_for_rate(kind: str, sample: torch.Tensor, target_bits_per_di
     eff_block = int(block) if block is not None else LATTICE_DIM.get(kind, 8)
     if eff_block < 1 or (kind in ("A2", "E8") and eff_block != LATTICE_DIM[kind]):
         raise ValueError(f"invalid block {eff_block} for lattice {kind}")
+    if not isinstance(sample, torch.Tensor):
+        raise ValueError("sample must be a torch.Tensor")
     v = sample.detach().to(torch.float32).reshape(-1)
     if v.numel() == 0:
         raise ValueError("sample must be non-empty")

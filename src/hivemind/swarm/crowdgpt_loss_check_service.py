@@ -154,6 +154,16 @@ class LossCheckCoordinator:
     def open_job(self, *, base_url: str, base_sha256: str, candidate_url: str, candidate_sha256: str, heldout_url: str,
                  heldout_sha256: str, window: int = 2048, n: int = 32, heldout_range: str = "", job_id: str | None = None) -> LossCheckJob:
         """One job per candidate. The seed is drawn here, after the candidate is fixed."""
+        for field_name, val in (
+            ("base_url", base_url),
+            ("base_sha256", base_sha256),
+            ("candidate_url", candidate_url),
+            ("candidate_sha256", candidate_sha256),
+            ("heldout_url", heldout_url),
+            ("heldout_sha256", heldout_sha256),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
         if isinstance(window, bool) or not isinstance(window, int) or window < 2:
             raise ValueError("window must be an integer >= 2")
         if isinstance(n, bool) or not isinstance(n, int) or n < self.min_windows:
@@ -170,10 +180,14 @@ class LossCheckCoordinator:
         return job
 
     def decision(self, job_id: str) -> dict | None:
+        if not isinstance(job_id, str) or not job_id.strip():
+            raise ValueError("job_id must be a non-empty string")
         return self.state.decisions.get(job_id)
 
     def next_job(self, evaluator_id: str) -> LossCheckJob | None:
         """The oldest open, unexpired, undecided job this evaluator has not answered yet."""
+        if not isinstance(evaluator_id, str) or not evaluator_id.strip():
+            raise ValueError("evaluator_id must be a non-empty string")
         if evaluator_id not in self.keys:
             return None
         now = self.clock()
@@ -246,7 +260,9 @@ class LossCheckCoordinator:
         return (204, None) if job is None else (200, job.to_wire())
 
     def handle_post_receipt(self, body: bytes | str) -> tuple[int, dict]:
-        return self.submit(body.decode() if isinstance(body, bytes) else body)
+        if not isinstance(body, (bytes, bytearray, str)):
+            raise TypeError("body must be bytes or str")
+        return self.submit(bytes(body).decode() if isinstance(body, (bytes, bytearray)) else body)
 
 
 def fastapi_router(coord: LossCheckCoordinator, prefix: str = "/fl/loss_check") -> Any:

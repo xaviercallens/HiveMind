@@ -116,6 +116,23 @@ def compute_virtual_positions(
     """
     sender_count = len(sender_offsets)
     receiver_count = len(receiver_offsets)
+    if isinstance(sender_offsets, (str, bytes)) or isinstance(receiver_offsets, (str, bytes)):
+        raise ValueError("sender_offsets and receiver_offsets must be sequences of (start, end) pairs")
+    for seq_name, offsets in (("sender_offsets", sender_offsets), ("receiver_offsets", receiver_offsets)):
+        for span in offsets:
+            if (
+                not isinstance(span, Sequence)
+                or len(span) != 2
+                or isinstance(span[0], bool)
+                or isinstance(span[1], bool)
+                or not isinstance(span[0], (int, float))
+                or not isinstance(span[1], (int, float))
+                or not math.isfinite(float(span[0]))
+                or not math.isfinite(float(span[1]))
+                or float(span[0]) < 0.0
+                or float(span[1]) < float(span[0])
+            ):
+                raise ValueError(f"{seq_name} must contain non-negative (start, end) spans with end >= start")
     if sender_count == 0:
         return np.empty(0, dtype=np.float64)
     if receiver_count == 0:
@@ -224,7 +241,20 @@ def audit_latent_kv_safety(
     min_refusal_cosine: float = -0.35,
 ) -> dict[str, Any]:
     """Screen an incoming latent KV cache (`HM-S34-06`) for RMS scale anomalies or refusal suppression."""
+    for name, val in (
+        ("max_rms_ratio", max_rms_ratio),
+        ("min_rms_ratio", min_rms_ratio),
+        ("min_refusal_cosine", min_refusal_cosine),
+    ):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+            raise ValueError(f"{name} must be a finite number")
+    if float(min_rms_ratio) <= 0.0 or float(max_rms_ratio) < float(min_rms_ratio):
+        raise ValueError("rms ratio bounds must satisfy 0 < min_rms_ratio <= max_rms_ratio")
+    if not (-1.0 <= float(min_refusal_cosine) <= 1.0):
+        raise ValueError("min_refusal_cosine must be in [-1.0, 1.0]")
     arr = np.asarray(pred_kv, dtype=np.float64)
+    if arr.ndim != 6 or arr.shape[3] != 2 or arr.size == 0:
+        raise ValueError("pred_kv must have shape (batch, seq_len, num_layers, 2, num_kv_heads, head_dim)")
     reasons: list[str] = []
     if not np.all(np.isfinite(arr)):
         reasons.append("non_finite_kv_entries")

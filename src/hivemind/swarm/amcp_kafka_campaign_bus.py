@@ -285,6 +285,8 @@ def build_amcp_kafka_event(
             raise ValueError(f"{name} must be a non-empty string")
     if correlation_id is not None and (not isinstance(correlation_id, str) or not correlation_id.strip()):
         raise ValueError("correlation_id must be a non-empty string when provided")
+    if payload is not None and not isinstance(payload, Mapping):
+        raise TypeError("payload must be a Mapping or None")
     if now_utc is not None:
         if isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc)) or now_utc <= 0.0:
             raise ValueError("now_utc must be a positive finite timestamp")
@@ -605,6 +607,8 @@ def clear_bee_capacity_market(
 
 def render_joint_campaign_ics(poll_summary: Mapping[str, Any] | None = None) -> str:
     """Render an RFC 5545 iCalendar (`.ics`) feed for all 6 Subject-by-Subject Improvement Campaigns."""
+    if poll_summary is not None and not isinstance(poll_summary, Mapping):
+        raise TypeError("poll_summary must be a Mapping or None")
     by_sid: dict[str, Mapping[str, Any]] = {}
     if poll_summary and isinstance(poll_summary.get("subjects"), list):
         for item in poll_summary["subjects"]:
@@ -675,6 +679,8 @@ class InMemoryKafkaBridge:
         return {"topic": event.topic, "partition": 0, "offset": offset, "event_id": event.event_id}
 
     def recent(self, topic: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+        if topic is not None and (not isinstance(topic, str) or not topic.strip()):
+            raise ValueError("topic must be a non-empty string or None")
         if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
             raise ValueError("limit must be a positive integer")
         with self._lock:

@@ -42,7 +42,7 @@ class KnowledgeShare:
             raise ValueError("verified must be a bool")
         if self.kind not in SHARE_KINDS:
             raise ValueError(f"kind must be one of {sorted(SHARE_KINDS)}")
-        if isinstance(self.epoch, bool) or self.epoch < 0:
+        if isinstance(self.epoch, bool) or not isinstance(self.epoch, int) or self.epoch < 0:
             raise ValueError("epoch must be >= 0")
         if len(self.text_sha256) != 64 or any(c not in "0123456789abcdef" for c in self.text_sha256.lower()):
             raise ValueError("text_sha256 must be a 64-char hex sha256")
@@ -81,9 +81,9 @@ def admit_share(
     verifier_receipt_sha256: str | None = None,
 ) -> Admission:
     """Admit or refuse a share. The hash in the share must match the text, so the record cannot be swapped later."""
-    if cap_per_identity_per_epoch < 1:
+    if isinstance(cap_per_identity_per_epoch, bool) or not isinstance(cap_per_identity_per_epoch, int) or cap_per_identity_per_epoch < 1:
         raise ValueError("cap_per_identity_per_epoch must be >= 1")
-    if prior_points_this_epoch < 0:
+    if isinstance(prior_points_this_epoch, bool) or not isinstance(prior_points_this_epoch, int) or prior_points_this_epoch < 0:
         raise ValueError("prior_points_this_epoch must be >= 0")
     if expected_epoch is not None and share.epoch != expected_epoch:
         return Admission(False, "epoch_mismatch", share)
@@ -151,9 +151,9 @@ class KnowledgeMarket:
         cap_per_identity_per_epoch: int = 20,
         scanner: Scanner = firewall_scanner,
     ) -> None:
-        if epoch < 0:
+        if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 0:
             raise ValueError("epoch must be >= 0")
-        if cap_per_identity_per_epoch < 1:
+        if isinstance(cap_per_identity_per_epoch, bool) or not isinstance(cap_per_identity_per_epoch, int) or cap_per_identity_per_epoch < 1:
             raise ValueError("cap_per_identity_per_epoch must be >= 1")
         self.epoch = epoch
         self.cap_per_identity_per_epoch = cap_per_identity_per_epoch
@@ -207,11 +207,11 @@ class KnowledgeSettlement:
 def settle_knowledge_bonus(epoch: int, validator_fee_hmt: float, bonus_share: float, points: Mapping[str, int]) -> KnowledgeSettlement:
     """Split `bonus_share` of the validator fee in proportion to points. Accounts with zero points get nothing; with no
     points at all the pool is not paid (it stays with the validators)."""
-    if isinstance(epoch, bool) or epoch < 0:
+    if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 0:
         raise ValueError("epoch must be >= 0")
-    if not math.isfinite(validator_fee_hmt) or validator_fee_hmt < 0.0:
+    if isinstance(validator_fee_hmt, bool) or not isinstance(validator_fee_hmt, (int, float)) or not math.isfinite(validator_fee_hmt) or validator_fee_hmt < 0.0:
         raise ValueError("validator_fee_hmt must be finite and >= 0")
-    if not math.isfinite(bonus_share) or not (0.0 <= bonus_share <= 1.0):
+    if isinstance(bonus_share, bool) or not isinstance(bonus_share, (int, float)) or not math.isfinite(bonus_share) or not (0.0 <= bonus_share <= 1.0):
         raise ValueError("bonus_share must be in [0, 1]")
     if any(isinstance(p, bool) or p < 0 for p in points.values()):
         raise ValueError("points must be >= 0")

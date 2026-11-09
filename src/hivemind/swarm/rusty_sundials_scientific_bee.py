@@ -1532,6 +1532,8 @@ def verify_wave2_quorum_replicas(
     replica_b: Mapping[str, Any],
 ) -> bool:
     """Verify two Wave 2 parameter-sweep replicas against ``spec`` and against each other within S-1 tolerances."""
+    if not isinstance(spec, Mapping) or not isinstance(replica_a, Mapping) or not isinstance(replica_b, Mapping):
+        raise TypeError("spec, replica_a, and replica_b must be Mappings")
     expected_sha = str(spec.get("spec_sha256") or "")
     if not expected_sha:
         return False
@@ -1545,10 +1547,18 @@ def verify_wave2_quorum_replicas(
     rtol = float(spec.get("s1_rtol", 1e-6))
     atol = float(spec.get("s1_atol", 1e-9))
     max_drift = float(spec.get("max_invariant_drift", 1e-6))
+    if not (math.isfinite(rtol) and math.isfinite(atol) and math.isfinite(max_drift)):
+        return False
     for idx, (ra, rb) in enumerate(zip(sweep_a, sweep_b)):
+        if not isinstance(ra, Mapping) or not isinstance(rb, Mapping):
+            return False
         if ra.get("status") != "ok" or rb.get("status") != "ok":
             return False
-        if abs(float(ra.get("invariant_drift", 1.0))) > max_drift or abs(float(rb.get("invariant_drift", 1.0))) > max_drift:
+        drift_a = float(ra.get("invariant_drift", 1.0))
+        drift_b = float(rb.get("invariant_drift", 1.0))
+        if not (math.isfinite(drift_a) and math.isfinite(drift_b)):
+            return False
+        if abs(drift_a) > max_drift or abs(drift_b) > max_drift:
             return False
         ya = ra.get("y")
         yb = rb.get("y")
@@ -1560,11 +1570,15 @@ def verify_wave2_quorum_replicas(
                 return False
             for c_idx, (va, vb) in enumerate(zip(row_a, row_b)):
                 fva, fvb = float(va), float(vb)
+                if not (math.isfinite(fva) and math.isfinite(fvb)):
+                    return False
                 tol = atol + rtol * max(abs(fva), abs(fvb))
                 if abs(fva - fvb) > tol:
                     return False
                 if isinstance(ref_y, list) and r_idx < len(ref_y) and c_idx < len(ref_y[r_idx]):
                     fref = float(ref_y[r_idx][c_idx])
+                    if not math.isfinite(fref):
+                        return False
                     ref_tol = atol + rtol * max(abs(fref), abs(fva), abs(fvb))
                     if abs(fva - fref) > ref_tol or abs(fvb - fref) > ref_tol:
                         return False
@@ -2120,6 +2134,8 @@ class NextGenMoEScienceBee:
         language: str | None = None,
     ) -> dict[str, Any]:
         """Formulate (via named slots or spec), echo the interpreted problem, solve, verify, and score."""
+        if not isinstance(question, str) or not question.strip():
+            raise ValueError("question must be a non-empty string")
         from hivemind.solverbee import scoring
 
         ans = self.science_bee.ask(question, follow_up=follow_up, language=language)

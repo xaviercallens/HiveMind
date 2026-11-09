@@ -172,10 +172,21 @@ class SymplecticVelocityVerletIntegrator:
         return Kepler442bOrbitalState(x_au=r_p, y_au=0.0, vx_au_yr=0.0, vy_au_yr=v_p, t_yr=0.0)
 
     def acceleration(self, x_au: float, y_au: float) -> tuple[float, float]:
-        r2 = x_au * x_au + y_au * y_au
+        if (
+            isinstance(x_au, bool)
+            or not isinstance(x_au, (int, float))
+            or not math.isfinite(float(x_au))
+            or isinstance(y_au, bool)
+            or not isinstance(y_au, (int, float))
+            or not math.isfinite(float(y_au))
+        ):
+            raise ValueError("x_au and y_au must be finite numbers")
+        r2 = float(x_au) * float(x_au) + float(y_au) * float(y_au)
+        if r2 <= 0.0:
+            raise ValueError("orbital radius must be positive")
         r = math.sqrt(r2)
         inv_r3 = -self.mu / (r2 * r)
-        return x_au * inv_r3, y_au * inv_r3
+        return float(x_au) * inv_r3, float(y_au) * inv_r3
 
     def specific_energy(self, state: Kepler442bOrbitalState) -> float:
         kinetic = 0.5 * (state.vx_au_yr * state.vx_au_yr + state.vy_au_yr * state.vy_au_yr)
@@ -362,6 +373,14 @@ class AntigravityHiveMindCoPilot:
         timeout_s: float = 45.0,
     ) -> dict[str, Any]:
         """Send an authenticated OpenRouter request using ``self.api_key`` and return completion telemetry."""
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise ValueError("prompt must be a non-empty string")
+        if model is not None and (not isinstance(model, str) or not model.strip()):
+            raise ValueError("model must be a non-empty string when provided")
+        if isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens < 1:
+            raise ValueError("max_tokens must be a positive integer >= 1")
+        if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not math.isfinite(float(timeout_s)) or float(timeout_s) <= 0.0:
+            raise ValueError("timeout_s must be a positive finite number")
         target_model = model or self.model
         with httpx.Client(timeout=timeout_s) as client:
             resp = client.post(

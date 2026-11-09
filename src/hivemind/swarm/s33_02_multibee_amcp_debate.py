@@ -87,6 +87,10 @@ class MultiBeeAMCPDebateArena:
     @staticmethod
     def compute_bayesian_posterior(confidences: Sequence[float]) -> float:
         """Combine independent Bee confidences via log-odds Bayesian update with uniform prior."""
+        if isinstance(confidences, (str, bytes)) or not isinstance(confidences, Sequence) or len(confidences) == 0:
+            raise ValueError("confidences must be a non-empty sequence of numbers")
+        if any(isinstance(c, bool) or not isinstance(c, (int, float)) for c in confidences):
+            raise ValueError("confidences must contain only numbers")
         prod_p = 1.0
         prod_q = 1.0
         for c in confidences:

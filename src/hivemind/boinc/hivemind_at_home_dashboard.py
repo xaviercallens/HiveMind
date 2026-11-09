@@ -69,7 +69,11 @@ def _count_lean4_spec_theorems() -> int:
 
 def _hash_password(password: str, salt: Optional[bytes] = None) -> Tuple[str, str]:
     """Derive a 256-bit PBKDF2-HMAC-SHA256 password hash with 200,000 iterations."""
-    salt_bytes = salt if salt is not None else secrets.token_bytes(16)
+    if not isinstance(password, str) or not password:
+        raise ValueError("password must be a non-empty string")
+    if salt is not None and (not isinstance(salt, (bytes, bytearray)) or len(salt) < 8):
+        raise ValueError("salt must be bytes of length >= 8 or None")
+    salt_bytes = bytes(salt) if salt is not None else secrets.token_bytes(16)
     derived = hashlib.pbkdf2_hmac(
         "sha256",
         password.encode("utf-8"),
@@ -244,6 +248,8 @@ def sanitize_handle(handle: str) -> str:
 
 def sanitize_prompt_text(text: str, max_chars: int = 4096) -> str:
     """Sanitize prompt text, truncate excessive length, and neutralize active script injection vectors."""
+    if isinstance(max_chars, bool) or not isinstance(max_chars, int) or max_chars <= 0:
+        raise ValueError("max_chars must be a positive integer")
     if not isinstance(text, str):
         return ""
     clean = text.replace("\x00", "").strip()
@@ -256,6 +262,8 @@ def sanitize_prompt_text(text: str, max_chars: int = 4096) -> str:
 
 def portal_csp(allow_sameorigin_frame: bool = False) -> str:
     """Content-Security-Policy of the portal pages (they need inline scripts and the Tailwind CDN)."""
+    if not isinstance(allow_sameorigin_frame, bool):
+        raise ValueError("allow_sameorigin_frame must be a bool")
     return (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' blob: https://cdn.tailwindcss.com; "

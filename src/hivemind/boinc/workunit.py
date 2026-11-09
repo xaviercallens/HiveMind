@@ -99,6 +99,8 @@ def create_signed_parquet_shard(
     secret_key: bytes = DEFAULT_COORDINATOR_SECRET,
 ) -> tuple[Path, str, str]:
     """Generate a deterministic, pre-tokenized domain training shard in Parquet format and sign it."""
+    if not isinstance(shard_path, (Path, str)) or not str(shard_path).strip():
+        raise ValueError("shard_path must be a non-empty Path or string")
     if not isinstance(branch_name, str) or not branch_name.strip():
         raise ValueError("branch_name must be a non-empty string")
     if isinstance(rng_seed, bool) or not isinstance(rng_seed, int):
@@ -147,6 +149,12 @@ def verify_and_load_parquet_shard(
     secret_key: bytes = DEFAULT_COORDINATOR_SECRET,
 ) -> torch.Tensor:
     """Verify cryptographic signature of a BOINC Parquet shard and load token sequences as a Tensor."""
+    if not isinstance(shard_path, (Path, str)) or not str(shard_path).strip():
+        raise ValueError("shard_path must be a non-empty Path or string")
+    if not isinstance(expected_sha256, str) or not expected_sha256.strip():
+        raise ValueError("expected_sha256 must be a non-empty string")
+    if not isinstance(expected_hmac_signature, str) or not expected_hmac_signature.strip():
+        raise ValueError("expected_hmac_signature must be a non-empty string")
     path = Path(shard_path)
     if not path.exists():
         raise FileNotFoundError(f"Parquet data shard not found: {path}")

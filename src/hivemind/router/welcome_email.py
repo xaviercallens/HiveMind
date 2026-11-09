@@ -144,6 +144,8 @@ def build_welcome_email_content(
         raise ValueError("role must be a non-empty string")
     if isinstance(balance_hmt, bool) or not isinstance(balance_hmt, (int, float)) or not math.isfinite(float(balance_hmt)) or float(balance_hmt) < 0.0:
         raise ValueError("balance_hmt must be a finite non-negative float")
+    if recipient_email is not None and not isinstance(recipient_email, str):
+        raise ValueError("recipient_email must be a string or None")
     if not isinstance(is_pioneer_first_user, bool):
         raise ValueError("is_pioneer_first_user must be a boolean")
     safe_handle = html.escape(handle or account_id[:12])
@@ -334,6 +336,8 @@ def build_welcome_email_content(
 
 def _mask_email(email: str) -> str:
     """Mask an email address for safe telemetry display (e.g. ``x***@example.org``)."""
+    if not isinstance(email, str):
+        raise ValueError("email must be a string")
     clean = email.strip()
     if "@" not in clean:
         return "***"

@@ -65,13 +65,15 @@ class DaemonTelemetry:
     hardware_circuit_breaker_tripped: bool = False
 
     def __post_init__(self) -> None:
+        if not isinstance(self.should_yield_vram, bool):
+            raise ValueError("should_yield_vram must be a boolean")
+        if isinstance(self.os_idle_seconds, bool) or not isinstance(self.os_idle_seconds, (int, float)):
+            raise ValueError("os_idle_seconds must be a numeric value")
         if (
-            isinstance(self.os_idle_seconds, bool)
-            or not isinstance(self.os_idle_seconds, (int, float))
-            or not math.isfinite(float(self.os_idle_seconds))
+            not math.isfinite(float(self.os_idle_seconds))
             or float(self.os_idle_seconds) < 0.0
-        ):
-            raise ValueError("os_idle_seconds must be finite and >= 0")
+        ) and not self.should_yield_vram:
+            raise ValueError("os_idle_seconds must be finite and >= 0 when should_yield_vram is False")
         if (
             isinstance(self.idle_threshold_seconds, bool)
             or not isinstance(self.idle_threshold_seconds, (int, float))
@@ -79,8 +81,6 @@ class DaemonTelemetry:
             or float(self.idle_threshold_seconds) <= 0.0
         ):
             raise ValueError("idle_threshold_seconds must be finite and > 0")
-        if not isinstance(self.should_yield_vram, bool):
-            raise ValueError("should_yield_vram must be a boolean")
         if not isinstance(self.hardware_circuit_breaker_tripped, bool):
             raise ValueError("hardware_circuit_breaker_tripped must be a boolean")
         if isinstance(self.reason, bool) or not isinstance(self.reason, str) or not self.reason.strip():

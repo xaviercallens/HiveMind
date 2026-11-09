@@ -48,7 +48,7 @@ jobs:
           uv run --no-sync python -c "import torch, transformers, peft, coverage"
 
       - name: Compile Lean specification with pinned lean4/lean-toolchain
-        uses: leanprover/lean-action@24581d74d674803a25a81b10b059c5c0cdd344c6 # v1
+        uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1
         with:
           lake-package-directory: lean4
           test: "false"

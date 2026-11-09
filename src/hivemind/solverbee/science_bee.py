@@ -59,6 +59,8 @@ class FakeBackend(Backend):
     name = "fake"
 
     def __init__(self, script: Any) -> None:
+        if not callable(script) and not isinstance(script, (list, tuple)):
+            raise ValueError("script must be a callable or a list/tuple of strings")
         self._script = script
         self._i = 0
         self.calls: List[List[Dict[str, str]]] = []
@@ -146,6 +148,11 @@ class OllamaBackend(Backend):
         self._opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect)
 
     def payload(self, messages: List[Dict[str, str]]) -> Dict[str, Any]:
+        if not isinstance(messages, list) or not all(
+            isinstance(m, dict) and isinstance(m.get("role"), str) and isinstance(m.get("content"), str)
+            for m in messages
+        ):
+            raise BackendError("messages must be a list of role/content dicts")
         body: Dict[str, Any] = {"model": self.model, "messages": messages, "stream": False,
                                 "options": {"num_gpu": self.num_gpu, "temperature": self.temperature, "seed": self.seed, "num_predict": self.num_predict}}
         if self.think is not None:
@@ -367,11 +374,15 @@ def validate_spec(obj: Any) -> Dict[str, Any]:
 
 def canonical_bytes(spec: Dict[str, Any]) -> bytes:
     """The exact bytes sent to the solver (compact JSON, key order as proposed)."""
+    if not isinstance(spec, dict):
+        raise ValueError("spec must be a dict")
     return json.dumps(spec, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
 
 
 def with_house_tolerances(spec: Dict[str, Any]) -> Dict[str, Any]:
     """A copy of the validated spec with the Science Bee house tolerances added when the proposal omitted them (tighter than the CLI defaults 1e-8 / 1e-10)."""
+    if not isinstance(spec, dict):
+        raise ValueError("spec must be a dict")
     out = dict(spec)
     out.setdefault("rtol", HOUSE_RTOL)
     out.setdefault("atol", HOUSE_ATOL)
@@ -379,6 +390,8 @@ def with_house_tolerances(spec: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def spec_sha256(spec: Dict[str, Any]) -> str:
+    if not isinstance(spec, dict):
+        raise ValueError("spec must be a dict")
     return hashlib.sha256(canonical_bytes(spec)).hexdigest()
 
 
@@ -493,6 +506,10 @@ def formulate(messages: List[Dict[str, str]], backend: Backend, *, max_retries: 
     """
     if isinstance(max_retries, bool) or not isinstance(max_retries, int) or max_retries < 0:
         raise ValueError("max_retries must be an integer >= 0")
+    if not isinstance(messages, list) or not all(isinstance(m, dict) for m in messages):
+        raise ValueError("messages must be a list of dicts")
+    if not isinstance(backend, Backend) and not callable(getattr(backend, "complete", None)):
+        raise ValueError("backend must be a Backend or have a callable complete(messages)")
     msgs = [dict(m) for m in messages]
     errors: List[str] = []
     raws: List[str] = []
@@ -605,6 +622,8 @@ _EN_WORDS = re.compile(r"\b(what|which|give|compute|how|with|the|is|are|if|and|o
 
 
 def detect_language(text: str) -> str:
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
     fr, en = len(_FR_WORDS.findall(text)), len(_EN_WORDS.findall(text))
     return "fr" if fr > en else "en"
 
@@ -620,6 +639,8 @@ _UNIT_AFTER_NUMBER = r"(?<![\w.])[-+]?\d+(?:[.,]\d+)?(?:[eE][-+]?\d+)?\s*"
 
 def units_mentioned(question: str) -> Dict[str, List[str]]:
     """Units the question itself uses, found right after a number (never converted)."""
+    if not isinstance(question, str):
+        raise ValueError("question must be a string")
     found: Dict[str, List[str]] = {}
     for dim, pats in _UNIT_PATTERNS.items():
         for pat, label in pats:
@@ -689,6 +710,12 @@ def echo_interpreted_problem(
     slot_trace: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Echo the interpreted problem back to the user for confirmation before relying on numbers."""
+    if not isinstance(spec, dict) or not isinstance(spec.get("problem"), dict) or not isinstance(spec.get("y0"), list) or not isinstance(spec.get("t_out"), list):
+        raise ValueError("spec must be a validated spec dict")
+    if not isinstance(language, str):
+        raise ValueError("language must be a string")
+    if slot_trace is not None and not isinstance(slot_trace, dict):
+        raise ValueError("slot_trace must be a dict or None")
     lang = "fr" if language == "fr" else "en"
     names = _state_names(spec)
     setup_lines = _describe_setup(spec, lang)
@@ -735,6 +762,12 @@ _VERDICT_WORDS = {
 
 def explain(question: str, spec: Optional[Dict[str, Any]], report: Optional[Dict[str, Any]], *, language: Optional[str] = None, failure_reason: str = "") -> str:
     """Deterministic plain-language answer (no model). Always ends with the limits sentence (English; French translation added for French questions)."""
+    if not isinstance(question, str):
+        raise ValueError("question must be a string")
+    if spec is not None and not isinstance(spec, dict):
+        raise ValueError("spec must be a dict or None")
+    if report is not None and not isinstance(report, dict):
+        raise ValueError("report must be a dict or None")
     lang = language or detect_language(question)
     fr = lang == "fr"
     out: List[str] = []
@@ -869,6 +902,10 @@ def _close(a: Any, b: Any, rel: float) -> bool:
 
 def specs_match(a: Dict[str, Any], b: Dict[str, Any], rel: float = 1e-6) -> bool:
     """Exact spec match as pre-registered: same problem (defaults filled in), y0, t0 (default 0) and t_out within relative 1e-6; id, tolerances and method ignored."""
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        raise ValueError("a and b must be dicts")
+    if isinstance(rel, bool) or not isinstance(rel, (int, float)) or not math.isfinite(rel) or rel < 0:
+        raise ValueError("rel must be a finite non-negative number")
     try:
         if not _close(_canon_problem(a), _canon_problem(b), rel):
             return False
@@ -918,6 +955,8 @@ def _increasing(ts: Optional[List[float]]) -> Optional[List[float]]:
 
 def baseline_formulate(question: str) -> Optional[Dict[str, Any]]:
     """Keyword/template formulator: regular expressions over a tiny vocabulary. Returns a validated spec, or None (could not formulate). No unit conversion."""
+    if not isinstance(question, str):
+        raise ValueError("question must be a string")
     q = _fr_decimals(question)
     ts = _increasing(_times(q))
     if ts is None:
@@ -1048,6 +1087,8 @@ def _slot_times(text: str) -> Optional[List[float]]:
 
 def slot_formulate(question: str) -> Optional[Dict[str, Any]]:
     """Extract a `hivemind-solver-slots/1` slot dictionary (including unit conversions & derived parameters) and validate it via `compile_slot_spec`."""
+    if not isinstance(question, str):
+        raise ValueError("question must be a string")
     q = _fr_decimals(question)
     ts = _increasing(_slot_times(q))
     if ts is None:

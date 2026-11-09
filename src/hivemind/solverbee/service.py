@@ -199,7 +199,7 @@ def validate_spec_bytes(raw: bytes) -> Dict[str, Any]:
 
 # ---------------------------------------------------------------- helpers
 def canonical_sha256(obj: Any) -> str:
-    return hashlib.sha256(json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")).hexdigest()
+    return hashlib.sha256(json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")).hexdigest()
 
 
 def _clean(text: Any, limit: int = 200) -> str:
@@ -278,7 +278,11 @@ def check_bind(host: str, allow_nonlocal: bool, api_key_file: Optional[str]) -> 
 def load_problem_library(directory: Optional[str]) -> Dict[str, Dict[str, Any]]:
     lib: Dict[str, Dict[str, Any]] = {}
     if not directory:
+        if directory is not None and not isinstance(directory, (str, os.PathLike)):
+            raise ValueError("directory must be a path or None")
         return lib
+    if not isinstance(directory, (str, os.PathLike)):
+        raise ValueError("directory must be a path or None")
     for p in sorted(Path(directory).glob("*.json")):
         try:
             d = json.loads(p.read_text(encoding="utf-8"))
@@ -304,6 +308,10 @@ class SolverBeeService:
             raise ValueError("timeout_s must be a finite positive number")
         if isinstance(mem_mb, bool) or not isinstance(mem_mb, int) or mem_mb < 1:
             raise ValueError("mem_mb must be an integer >= 1")
+        if api_key is not None and (not isinstance(api_key, str) or not api_key.strip()):
+            raise ValueError("api_key must be a non-empty string or None")
+        if not callable(log):
+            raise ValueError("log must be callable")
         self.binary = binary
         self.library = load_problem_library(problems_dir)
         self._verifier = verifier
@@ -328,6 +336,8 @@ class SolverBeeService:
         return mod, ""
 
     def authorised(self, header: str) -> bool:
+        if header is not None and not isinstance(header, str):
+            raise ValueError("header must be a string or None")
         if not self.api_key:
             return True
         m = re.match(r"Bearer\s+(.+)$", header or "")
@@ -490,6 +500,8 @@ class SolverBeeService:
 
 # ---------------------------------------------------------------- HTTP
 def make_handler(svc: SolverBeeService) -> type:
+    if not isinstance(svc, SolverBeeService):
+        raise ValueError("svc must be a SolverBeeService")
     class Handler(BaseHTTPRequestHandler):
         server_version = "SolverBee/1"
         timeout = 30  # slow clients cannot hold a thread forever
@@ -562,6 +574,12 @@ def make_handler(svc: SolverBeeService) -> type:
 
 
 def build_server(svc: SolverBeeService, host: str, port: int) -> ThreadingHTTPServer:
+    if not isinstance(svc, SolverBeeService):
+        raise ValueError("svc must be a SolverBeeService")
+    if not isinstance(host, str) or not host.strip():
+        raise ValueError("host must be a non-empty string")
+    if isinstance(port, bool) or not isinstance(port, int) or not (0 <= port <= 65535):
+        raise ValueError("port must be an integer in 0..65535")
     class Server(ThreadingHTTPServer):
         daemon_threads = True
         address_family = socket.AF_INET6 if ":" in host else socket.AF_INET

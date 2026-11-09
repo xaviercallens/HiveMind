@@ -538,6 +538,10 @@ def text_hash(text: str) -> str:
 
 def ngram_hashes(tokens: Sequence[str], n: int = NGRAM_N) -> set[int]:
     """8-byte hashes of every word n-gram (empty when the text is shorter than n words)."""
+    if isinstance(tokens, (str, bytes)) or not isinstance(tokens, Sequence):
+        raise ValueError("tokens must be a sequence of word strings, not str/bytes")
+    if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+        raise ValueError("n must be an integer >= 1")
     return {int.from_bytes(hashlib.blake2b(" ".join(tokens[i:i + n]).encode(), digest_size=8).digest(), "big")
             for i in range(len(tokens) - n + 1)}
 
@@ -579,6 +583,12 @@ class EvalIndex:
             raise ValueError("max_doc_freq must be an integer >= 1")
 
     def add(self, name: str, texts: Iterable[str], keys: Iterable[str] = ()) -> None:
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("name must be a non-empty string")
+        if isinstance(texts, (str, bytes)):
+            raise ValueError("texts must be an iterable of strings, not str/bytes")
+        if isinstance(keys, (str, bytes)):
+            raise ValueError("keys must be an iterable of strings, not str/bytes")
         count = 0
         for t in texts:
             toks = normalize_tokens(t)
@@ -701,6 +711,23 @@ def plan_mixture(available: Mapping[str, tuple[str, bool, int]], cfg: MixtureCon
     verified rows are filled first, then unverified rows up to ``floor(cap / (1 - cap) * verified)`` so the unverified
     share never exceeds ``unverified_cap``. The shortfall against the target is reported, never backfilled silently.
     """
+    if not isinstance(cfg, MixtureConfig):
+        raise ValueError("cfg must be a MixtureConfig")
+    if not isinstance(available, Mapping):
+        raise ValueError("available must be a Mapping")
+    for src, entry in available.items():
+        if (
+            not isinstance(src, str)
+            or not src.strip()
+            or not isinstance(entry, tuple)
+            or len(entry) != 3
+            or not isinstance(entry[0], str)
+            or not isinstance(entry[1], bool)
+            or isinstance(entry[2], bool)
+            or not isinstance(entry[2], int)
+            or entry[2] < 0
+        ):
+            raise ValueError(f"Invalid available entry for source {src!r}")
     wsum = sum(cfg.domain_weights.values())
     alloc: dict[str, int] = {}
     domains: dict[str, Any] = {}
@@ -736,6 +763,12 @@ def sample_rows(rows: Sequence[dict[str, Any]], k: int, seed: int, source: str) 
     """Deterministic, order-independent sample: rank by sha256(seed:source:key) and keep the first ``k``.
 
     Ties (two rows with one key) are broken by the row's canonical JSON, so the result never depends on input order."""
+    if isinstance(k, bool) or not isinstance(k, int):
+        raise ValueError("k must be an integer")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
+    if not isinstance(source, str) or not source.strip():
+        raise ValueError("source must be a non-empty string")
     def rank(r: dict[str, Any]) -> tuple[str, str]:
         return hashlib.sha256(f"{seed}:{source}:{r['key']}".encode()).hexdigest(), json.dumps(r, sort_keys=True)
 

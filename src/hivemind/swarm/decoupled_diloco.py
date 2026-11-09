@@ -308,8 +308,10 @@ def _validate_vectors_and_weights(
     vectors: Sequence[torch.Tensor],
     weights: Optional[Sequence[float]],
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    if len(vectors) == 0:
+    if isinstance(vectors, (str, bytes)) or not isinstance(vectors, Sequence) or len(vectors) == 0:
         raise ValueError("at least one vector is required")
+    if any(not isinstance(v, torch.Tensor) for v in vectors):
+        raise ValueError("all vectors must be torch.Tensor instances")
     shape = vectors[0].shape
     for v in vectors:
         if v.shape != shape:
@@ -320,8 +322,10 @@ def _validate_vectors_and_weights(
     if weights is None:
         w = torch.ones(stacked.shape[0], dtype=torch.float32)
     else:
-        if len(weights) != stacked.shape[0]:
+        if isinstance(weights, (str, bytes)) or not isinstance(weights, Sequence) or len(weights) != stacked.shape[0]:
             raise ValueError("weights must have one entry per vector")
+        if any(isinstance(x, bool) or not isinstance(x, (int, float)) for x in weights):
+            raise ValueError("weights must be finite numbers, not bool")
         w = torch.tensor([float(x) for x in weights], dtype=torch.float32)
         if bool((w < 0).any()) or not bool(torch.isfinite(w).all()):
             raise ValueError("weights must be finite and >= 0")
@@ -564,8 +568,17 @@ class ContinuousAsyncLearnerCoordinator:
             raise ValueError("origin_round must be a non-negative integer")
         if not isinstance(delta, torch.Tensor) or delta.numel() == 0:
             raise ValueError("delta must be a non-empty torch.Tensor")
-        if tokens_since_sync < 0 or steps_since_sync < 0:
+        if (
+            isinstance(tokens_since_sync, bool)
+            or not isinstance(tokens_since_sync, int)
+            or isinstance(steps_since_sync, bool)
+            or not isinstance(steps_since_sync, int)
+            or tokens_since_sync < 0
+            or steps_since_sync < 0
+        ):
             raise ValueError("tokens_since_sync and steps_since_sync must be >= 0")
+        if isinstance(arrival_time_s, bool) or not isinstance(arrival_time_s, (int, float)) or not math.isfinite(float(arrival_time_s)):
+            raise ValueError("arrival_time_s must be finite")
         lid = str(learner_id)
         if int(origin_round) > self.current_round:
             raise ValueError("origin_round must not be in the future")
@@ -651,6 +664,10 @@ class ContinuousAsyncLearnerCoordinator:
         Eager stale steps apply independently. While waiting, ``round_closed`` is ``None``
         and ``quorum_reached`` is false; the current quorum round does not advance.
         """
+        if not isinstance(global_param, torch.Tensor) or global_param.numel() == 0:
+            raise ValueError("global_param must be a non-empty torch.Tensor")
+        if isinstance(outer_lr, bool) or not isinstance(outer_lr, (int, float)) or not math.isfinite(float(outer_lr)) or float(outer_lr) <= 0.0:
+            raise ValueError("outer_lr must be finite and > 0")
         p32 = global_param.detach().to(torch.float32).clone()
 
         # 1. Combine fresh inbox + deferred carry learners, dropping zero-step or malformed entries
@@ -791,6 +808,10 @@ def analyze_campaign_rda_and_delta_cosine(
          `r_theory(c_bar, M) = 1 / sqrt(1/M + ((M - 1)/M) * c_bar)`.
       5. Whether the campaign sits in the pre-registered P2 low-cosine regime (`mean_cosine <= 0.30`).
     """
+    if not isinstance(base_lora_state, dict) or not base_lora_state:
+        raise ValueError("base_lora_state must be a non-empty dictionary")
+    if isinstance(low_cosine_threshold, bool) or not isinstance(low_cosine_threshold, (int, float)) or not math.isfinite(float(low_cosine_threshold)) or not (-1.0 <= float(low_cosine_threshold) <= 1.0):
+        raise ValueError("low_cosine_threshold must be a finite number in [-1.0, 1.0]")
     domain_names = list(branch_lora_states.keys())
     m = len(domain_names)
     if m < 2:

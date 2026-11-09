@@ -168,6 +168,10 @@ class ContentAddressedSwarmStore:
         shard_id: int,
         samples: List[str],
     ) -> Tuple[str, Path, int]:
+        if not isinstance(node_id, str) or not node_id.strip():
+            raise ValueError("node_id must be a non-empty string")
+        if isinstance(shard_id, bool) or not isinstance(shard_id, int) or shard_id < 0:
+            raise ValueError("shard_id must be a non-negative integer")
         # Phase S-2 Hardening: Validate dataset shard against poisoning, payment spam, and low-entropy farming
         self._guard.validate_dataset_shard(
             domain_name=domain_name,
@@ -367,8 +371,13 @@ class ContentAddressedSwarmStore:
         Odd nodes are duplicated on every level, mirroring the `HiveSwarmLedger` Merkle
         convention so both modules can be audited with the same tooling.
         """
+        if isinstance(leaf_hex_digests, (str, bytes)) or not isinstance(leaf_hex_digests, Sequence):
+            raise ValueError("leaf_hex_digests must be a sequence of hex digest strings, not str/bytes")
         if not leaf_hex_digests:
             return hashlib.sha256(b"hivemind-empty-cas-merkle").hexdigest()
+        for digest in leaf_hex_digests:
+            if not isinstance(digest, str) or len(digest) != 64:
+                raise ValueError("each leaf digest must be a 64-character hex string")
         layer = [bytes.fromhex(str(digest)) for digest in leaf_hex_digests]
         while len(layer) > 1:
             if len(layer) % 2 == 1:
@@ -474,6 +483,14 @@ class ContentAddressedSwarmStore:
         chunk_size: int = CHUNK_SIZE_BYTES,
     ) -> BundleSeedManifest:
         """Split an exported bundle into 64 KB chunks, store them locally and publish a manifest."""
+        if not isinstance(source_node_id, str) or not source_node_id.strip():
+            raise ValueError("source_node_id must be a non-empty string")
+        if seeders is not None and (
+            isinstance(seeders, (str, bytes))
+            or not isinstance(seeders, Sequence)
+            or any(not isinstance(s, str) or not s.strip() for s in seeders)
+        ):
+            raise ValueError("seeders must be a sequence of non-empty node ID strings")
         bundle_path = Path(bundle_dir)
         entries = self.plan_bundle_chunks(bundle_path, chunk_size=chunk_size)
         seeder_ids = [str(seeder) for seeder in (seeders or [source_node_id])] or [str(source_node_id)]

@@ -267,6 +267,10 @@ class CosineGatedAdamDecayOuterOptimizer:
         synced_fragments: Optional[Sequence[str]] = None,
     ) -> Tuple[Dict[str, torch.Tensor], List[CGADStepTelemetry]]:
         """Apply one PA-CGAD outer step across synced parameter fragments."""
+        if not isinstance(params, dict) or not params:
+            raise ValueError("params must be a non-empty dictionary")
+        if not isinstance(pseudo_gradients, dict):
+            raise ValueError("pseudo_gradients must be a dictionary")
         if (
             self.momentum_restart_period is not None
             and self.outer_round_count > 0
@@ -287,7 +291,10 @@ class CosineGatedAdamDecayOuterOptimizer:
 
             g_f = pseudo_gradients[name].detach().to(torch.float32).cpu()
             p_fp32 = param.detach().to(torch.float32).cpu()
-            tau_w = float((worker_delays or {}).get(name, 0.0))
+            raw_tau = (worker_delays or {}).get(name, 0.0)
+            if isinstance(raw_tau, bool) or not isinstance(raw_tau, (int, float)) or not math.isfinite(float(raw_tau)):
+                raise ValueError("worker_delays values must be finite numbers, not bool")
+            tau_w = float(raw_tau)
             eff_tau = max(0.0, tau_w, float(prev_age))
             gamma, sigma = self.compute_gate(eff_tau)
 
@@ -415,6 +422,8 @@ class ReputationWeightedIsoCTSMerger:
         worker_reputation_weights: Optional[Sequence[float]] = None,
     ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
         """Merge worker LoRA states using Reputation-Weighted TIES + ISO-CTS orthogonalization."""
+        if not isinstance(base_lora_state, dict) or not base_lora_state:
+            raise ValueError("base_lora_state must be a non-empty dictionary")
         if not worker_lora_states:
             return {k: v.clone() for k, v in base_lora_state.items()}, {"num_workers": 0}
 
@@ -422,13 +431,15 @@ class ReputationWeightedIsoCTSMerger:
         if worker_reputation_weights is None:
             weights = [1.0 for _ in range(num_workers)]
         else:
-            if len(worker_reputation_weights) != num_workers:
+            if isinstance(worker_reputation_weights, (str, bytes)) or len(worker_reputation_weights) != num_workers:
                 raise ValueError(
                     f"worker_reputation_weights length ({len(worker_reputation_weights)}) "
                     f"must match worker_lora_states length ({num_workers})"
                 )
             weights = []
             for w in worker_reputation_weights:
+                if isinstance(w, bool) or not isinstance(w, (int, float)):
+                    raise ValueError("worker_reputation_weights must be finite numbers, not bool")
                 fw = float(w)
                 if not math.isfinite(fw):
                     raise ValueError("worker_reputation_weights must be finite")

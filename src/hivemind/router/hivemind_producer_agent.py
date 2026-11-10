@@ -58,6 +58,8 @@ Runner = Callable[..., "subprocess.CompletedProcess[str]"]
 
 def parse_model_spec(raw: str) -> dict[str, str]:
     """Parse one ``--model id=local_name`` argument into a heartbeat model entry."""
+    if not isinstance(raw, str):
+        raise argparse.ArgumentTypeError(f"--model expects id=local_name, got {raw!r}")
     model_id, separator, local_name = raw.partition("=")
     model_id = model_id.strip()
     local_name = local_name.strip()
@@ -73,6 +75,10 @@ def probe_residency(
 
     Read-only and best effort: any failure (server down, timeout, odd JSON) returns ``None`` so that the heartbeat simply reports nothing.
     """
+    if not isinstance(local_endpoint, str) or not local_endpoint.strip():
+        raise ValueError("local_endpoint must be a non-empty string")
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not math.isfinite(float(timeout_s)) or float(timeout_s) <= 0.0:
+        raise ValueError("timeout_s must be a positive finite number")
     try:
         with httpx.Client(timeout=timeout_s, transport=transport, follow_redirects=False) as client:
             response = client.get(local_endpoint.rstrip("/") + "/api/ps")
@@ -99,6 +105,10 @@ def probe_model_sizes_mib(
     local_endpoint: str, *, transport: httpx.BaseTransport | None = None, timeout_s: float = RESIDENCY_TIMEOUT_S
 ) -> dict[str, int] | None:
     """Return ``{model_name: disk_weight_mib}`` from Ollama ``GET /api/tags``, or ``None`` if unavailable."""
+    if not isinstance(local_endpoint, str) or not local_endpoint.strip():
+        raise ValueError("local_endpoint must be a non-empty string")
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not math.isfinite(float(timeout_s)) or float(timeout_s) <= 0.0:
+        raise ValueError("timeout_s must be a positive finite number")
     try:
         with httpx.Client(timeout=timeout_s, transport=transport, follow_redirects=False) as client:
             response = client.get(local_endpoint.rstrip("/") + "/api/tags")
@@ -134,6 +144,10 @@ def filter_models_by_vram_budget(
     Returns ``(kept_models, dropped_descriptions)``. If ``model_sizes_mib`` or ``gpu_vram_mib`` is ``None``, all models
     are kept unchanged.
     """
+    if not isinstance(models, Sequence) or isinstance(models, (str, bytes)):
+        raise TypeError("models must be a Sequence of model dicts")
+    if model_sizes_mib is not None and not isinstance(model_sizes_mib, Mapping):
+        raise TypeError("model_sizes_mib must be a Mapping or None")
     if model_sizes_mib is None or gpu_vram_mib is None or gpu_vram_mib <= 0:
         return [dict(m) for m in models], []
     budget_mib = max(0, int(gpu_vram_mib) - max(0, int(pinned_vram_mib)) - max(0, int(min_free_vram_mib)))
@@ -155,6 +169,12 @@ def apply_residency(
     payload: dict[str, Any], resident: dict[str, int] | None, *, cold_start_s: float, gpu_vram_mib: int | None
 ) -> dict[str, Any]:
     """Add the optional residency fields to ``payload`` (in place and returned). ``resident=None`` (probe failed) adds nothing per model."""
+    if not isinstance(payload, dict):
+        raise TypeError("payload must be a dict")
+    if resident is not None and not isinstance(resident, Mapping):
+        raise TypeError("resident must be a Mapping or None")
+    if isinstance(cold_start_s, bool) or not isinstance(cold_start_s, (int, float)) or not math.isfinite(float(cold_start_s)) or float(cold_start_s) < 0.0:
+        raise ValueError("cold_start_s must be a non-negative finite number")
     if gpu_vram_mib is not None and gpu_vram_mib > 0:
         payload["gpu_vram_mib"] = int(gpu_vram_mib)
     if resident is None:
@@ -193,6 +213,10 @@ def parse_control(raw: object) -> dict[str, Any]:
 
 def write_control_state(path: str, control: dict[str, Any]) -> None:
     """Atomically publish the control state for the local shield (owner-only file, mode 0600). Raises ``OSError`` on failure."""
+    if not isinstance(path, (str, os.PathLike)) or not str(path).strip():
+        raise ValueError("path must be a non-empty path")
+    if not isinstance(control, Mapping):
+        raise TypeError("control must be a Mapping")
     body = json.dumps({"paused": control["paused"], "vram_cap_mib": control["vram_cap_mib"], "version": control.get("version")}, sort_keys=True)
     tmp = f"{path}.tmp.{os.getpid()}"
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -224,6 +248,10 @@ def apply_control(payload: dict[str, Any], control: dict[str, Any] | None) -> di
     Paused: advertise zero capacity and mark ``paused``. VRAM cap: models reported loaded whose ``vram_mib`` would not fit (kept in order while the sum
     fits) are left out of the heartbeat, and the cap is reported back as ``vram_cap_mib``; if none is left the capacity is zero.
     """
+    if not isinstance(payload, dict):
+        raise TypeError("payload must be a dict")
+    if control is not None and not isinstance(control, Mapping):
+        raise TypeError("control must be a Mapping or None")
     if control is None:
         return payload
     if control["paused"]:
@@ -284,6 +312,14 @@ def send_heartbeat(
     client: httpx.Client, gateway: str, api_key: str, payload: dict[str, Any]
 ) -> dict[str, Any]:
     """POST one heartbeat and return the gateway's JSON object. Raises on HTTP or JSON errors."""
+    if not callable(getattr(client, "post", None)):
+        raise TypeError("client must expose a callable post method")
+    if not isinstance(gateway, str) or not gateway.strip():
+        raise ValueError("gateway must be a non-empty string")
+    if not isinstance(api_key, str) or not api_key.strip():
+        raise ValueError("api_key must be a non-empty string")
+    if not isinstance(payload, Mapping):
+        raise TypeError("payload must be a Mapping")
     response = client.post(
         gateway.rstrip("/") + HEARTBEAT_PATH,
         json=payload,
@@ -298,6 +334,10 @@ def send_heartbeat(
 
 def fetch_catalog(client: httpx.Client, gateway: str) -> list[dict[str, Any]]:
     """The gateway's public capability tiers (smallest GPU requirement first)."""
+    if not callable(getattr(client, "get", None)):
+        raise TypeError("client must expose a callable get method")
+    if not isinstance(gateway, str) or not gateway.strip():
+        raise ValueError("gateway must be a non-empty string")
     response = client.get(gateway.rstrip("/") + CATALOG_PATH)
     response.raise_for_status()
     tiers = response.json().get("tiers")
@@ -308,6 +348,12 @@ def fetch_catalog(client: httpx.Client, gateway: str) -> list[dict[str, Any]]:
 
 def fetch_remote_config(client: httpx.Client, gateway: str, api_key: str) -> dict[str, Any]:
     """Fetch the producer's remote control configuration from GET /v1/hivemind/remote/config."""
+    if not callable(getattr(client, "get", None)):
+        raise TypeError("client must expose a callable get method")
+    if not isinstance(gateway, str) or not gateway.strip():
+        raise ValueError("gateway must be a non-empty string")
+    if not isinstance(api_key, str) or not api_key.strip():
+        raise ValueError("api_key must be a non-empty string")
     response = client.get(
         gateway.rstrip("/") + REMOTE_CONFIG_PATH,
         headers={"Authorization": f"Bearer {api_key}"},
@@ -333,6 +379,8 @@ def detect_vram_gb(run: Runner = subprocess.run) -> float | None:
     ``nvidia-smi`` can fail even on a working card when the driver is unreachable from the current user; pass
     ``--vram-gb`` in that case.
     """
+    if not callable(run):
+        raise TypeError("run must be callable")
     try:
         result = run(
             ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
@@ -356,6 +404,12 @@ def preflight(client: httpx.Client, endpoint: str, token: str | None, local_name
 
     Raises ``httpx.HTTPError`` or ``ValueError`` when the endpoint cannot be read at all.
     """
+    if not callable(getattr(client, "get", None)):
+        raise TypeError("client must expose a callable get method")
+    if not isinstance(endpoint, str) or not endpoint.strip():
+        raise ValueError("endpoint must be a non-empty string")
+    if not isinstance(local_names, Sequence) or isinstance(local_names, (str, bytes)):
+        raise TypeError("local_names must be a Sequence of strings")
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     response = client.get(endpoint.rstrip("/") + "/v1/models", headers=headers)
     response.raise_for_status()

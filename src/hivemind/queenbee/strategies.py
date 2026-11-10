@@ -626,6 +626,10 @@ def aggregate_shared_updates(deltas: Mapping[str, Mapping[str, Any]], arrival_ti
     """Admit contributors with the DiLoCo quorum rule, filter the admitted deltas with Multi-Krum, average the survivors.
     When `exact_lora_product=True` (HM-S15-06 / #176), LoRA factor pairs `(lora_A, lora_B)` are aggregated in exact
     product space `mean(B_i @ A_i)` with SVD refactoring and residual preservation."""
+    if not isinstance(deltas, Mapping) or not isinstance(arrival_times, Mapping):
+        raise TypeError("deltas and arrival_times must be Mappings")
+    if not isinstance(exact_lora_product, bool):
+        raise TypeError("exact_lora_product must be a boolean")
     import torch
 
     from hivemind.core.diloco_outer import filter_byzantine_deltas_multikrum

@@ -306,7 +306,20 @@ class UniversalHiveLatentHub:
     n_heads: int = 16
     registered_models: dict[str, ModelKVSpec] = field(default_factory=lambda: dict(S34_BEE_MODEL_SPECS))
 
+    def __post_init__(self) -> None:
+        for i_field in ("n_blocks", "d_model", "n_heads"):
+            val = getattr(self, i_field)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{i_field} must be a positive integer")
+        if not isinstance(self.registered_models, dict) or any(
+            not isinstance(k, str) or not k.strip() or not isinstance(v, ModelKVSpec)
+            for k, v in self.registered_models.items()
+        ):
+            raise ValueError("registered_models must map non-empty model_id strings to ModelKVSpec instances")
+
     def register_model(self, spec: ModelKVSpec) -> None:
+        if not isinstance(spec, ModelKVSpec):
+            raise ValueError("spec must be a ModelKVSpec")
         self.registered_models[spec.model_id] = spec
 
     @property
@@ -347,6 +360,12 @@ class SwaTTelepathyBridge:
     hub: UniversalHiveLatentHub = field(default_factory=UniversalHiveLatentHub)
     n_blocks: int = 8
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.hub, UniversalHiveLatentHub):
+            raise ValueError("hub must be a UniversalHiveLatentHub")
+        if isinstance(self.n_blocks, bool) or not isinstance(self.n_blocks, int) or self.n_blocks < 1:
+            raise ValueError("n_blocks must be a positive integer")
+
     @staticmethod
     def should_fallback_to_native_vlm(
         sender_spec: ModelKVSpec,
@@ -355,6 +374,22 @@ class SwaTTelepathyBridge:
         dense_ocr_threshold: float = 0.45,
     ) -> dict[str, Any]:
         """Enforce SwaT Table 21 boundary (`HM-S34-04`): fall back to native VLM on dense-OCR inputs."""
+        if not isinstance(sender_spec, ModelKVSpec) or not isinstance(receiver_spec, ModelKVSpec):
+            raise ValueError("sender_spec and receiver_spec must be ModelKVSpec instances")
+        if (
+            isinstance(ocr_text_density, bool)
+            or not isinstance(ocr_text_density, (int, float))
+            or not math.isfinite(float(ocr_text_density))
+            or not (0.0 <= float(ocr_text_density) <= 1.0)
+        ):
+            raise ValueError("ocr_text_density must be a finite number in [0.0, 1.0]")
+        if (
+            isinstance(dense_ocr_threshold, bool)
+            or not isinstance(dense_ocr_threshold, (int, float))
+            or not math.isfinite(float(dense_ocr_threshold))
+            or not (0.0 < float(dense_ocr_threshold) <= 1.0)
+        ):
+            raise ValueError("dense_ocr_threshold must be a finite number in (0.0, 1.0]")
         if sender_spec.is_vlm and not receiver_spec.is_vlm and ocr_text_density >= dense_ocr_threshold:
             return {
                 "use_swat_kv_transfer": False,
@@ -527,8 +562,25 @@ def compute_knowledge_seeding_loss(
     """
     s_lp = np.asarray(student_log_probs, dtype=np.float64)
     t_lp = np.asarray(teacher_log_probs, dtype=np.float64)
-    if s_lp.shape != t_lp.shape or s_lp.size == 0:
-        raise ValueError("student_log_probs and teacher_log_probs must have identical non-empty shape")
+    if s_lp.shape != t_lp.shape or s_lp.size == 0 or not np.all(np.isfinite(s_lp)) or not np.all(np.isfinite(t_lp)):
+        raise ValueError("student_log_probs and teacher_log_probs must have identical non-empty shape and finite values")
+    if (
+        isinstance(semantic_equivalence, bool)
+        or not isinstance(semantic_equivalence, (int, float))
+        or not math.isfinite(float(semantic_equivalence))
+        or not (0.0 <= float(semantic_equivalence) <= 1.0)
+    ):
+        raise ValueError("semantic_equivalence must be a finite number in [0.0, 1.0]")
+    for w_name, w_val in (
+        ("lambda_gkd", lambda_gkd),
+        ("lambda_lti", lambda_lti),
+        ("alpha_sem", alpha_sem),
+        ("alpha_abs", alpha_abs),
+    ):
+        if isinstance(w_val, bool) or not isinstance(w_val, (int, float)) or not math.isfinite(float(w_val)) or float(w_val) < 0.0:
+            raise ValueError(f"{w_name} must be a finite non-negative number")
+    if float(alpha_sem) + float(alpha_abs) <= 0.0:
+        raise ValueError("alpha_sem + alpha_abs must be positive")
 
     # Normalize log-probs over vocabulary axis (-1)
     s_lp = s_lp - np.log(np.maximum(np.sum(np.exp(s_lp - np.max(s_lp, axis=-1, keepdims=True)), axis=-1, keepdims=True), 1e-12)) - np.max(s_lp, axis=-1, keepdims=True)

@@ -478,6 +478,21 @@ class QuicSendReport:
     handshake_latency_s: Optional[float] = None
     """Time from the first byte on the wire to the completed TLS handshake."""
 
+    def __post_init__(self) -> None:
+        if isinstance(self.delivered, bool) or not isinstance(self.delivered, int) or self.delivered < 0:
+            raise ValueError("delivered must be a non-negative integer")
+        if isinstance(self.elapsed_s, bool) or not isinstance(self.elapsed_s, (int, float)) or not math.isfinite(float(self.elapsed_s)) or float(self.elapsed_s) < 0.0:
+            raise ValueError("elapsed_s must be a finite non-negative number")
+        if not isinstance(self.session_resumed, bool) or not isinstance(self.early_data_accepted, bool):
+            raise ValueError("session_resumed and early_data_accepted must be booleans")
+        if self.handshake_latency_s is not None and (
+            isinstance(self.handshake_latency_s, bool)
+            or not isinstance(self.handshake_latency_s, (int, float))
+            or not math.isfinite(float(self.handshake_latency_s))
+            or float(self.handshake_latency_s) < 0.0
+        ):
+            raise ValueError("handshake_latency_s must be None or a finite non-negative number")
+
 
 async def quic_send_frames(
     host: str,
@@ -868,6 +883,18 @@ class LinkRun:
     server_early_frames: int = 0
     fallback_reason: Optional[str] = None
     handshakes: List[Dict[str, bool]] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.protocol not in ("quic_0rtt", "quic", "libp2p_websocket"):
+            raise ValueError("protocol must be 'quic_0rtt', 'quic', or 'libp2p_websocket'")
+        for i_field in ("frames_sent", "frames_delivered", "server_early_frames"):
+            val = getattr(self, i_field)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_field} must be a non-negative integer")
+        if isinstance(self.elapsed_s, bool) or not isinstance(self.elapsed_s, (int, float)) or not math.isfinite(float(self.elapsed_s)) or float(self.elapsed_s) < 0.0:
+            raise ValueError("elapsed_s must be a finite non-negative number")
+        if not isinstance(self.session_resumed, bool) or not isinstance(self.early_data_accepted, bool):
+            raise ValueError("session_resumed and early_data_accepted must be booleans")
 
     @property
     def frames_per_sec(self) -> float:

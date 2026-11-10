@@ -171,12 +171,29 @@ class CampaignPolicy:
 
 @dataclass(frozen=True)
 class JoinDecision:
-    decision: str  # ADMITTED | ALREADY_MEMBER | LEFT | NOT_MEMBER | REJECTED
+    decision: str  # ADMITTED | ALREADY_MEMBER | LEFT | NOT_MEMBER | REJECTED | EXPIRED
     reason: str
     campaign_id: str
     participant_id: str
     event: dict[str, Any] = field(default_factory=dict)
     delivery: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.decision, str) or self.decision not in (
+            "ADMITTED",
+            "ALREADY_MEMBER",
+            "LEFT",
+            "NOT_MEMBER",
+            "REJECTED",
+            "EXPIRED",
+        ):
+            raise ValueError(f"invalid decision {self.decision!r}")
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("reason must be a non-empty string")
+        if not isinstance(self.campaign_id, str) or not isinstance(self.participant_id, str):
+            raise TypeError("campaign_id and participant_id must be strings")
+        if not isinstance(self.event, dict) or not isinstance(self.delivery, dict):
+            raise TypeError("event and delivery must be dicts")
 
     @property
     def accepted(self) -> bool:
@@ -227,6 +244,10 @@ class CampaignOrchestrator:
         keys = [secret] if isinstance(secret, bytes) else list(secret.values())
         if not keys or any(not isinstance(k, bytes) or len(k) < MIN_SECRET_BYTES for k in keys):
             raise ValueError(f"HMAC secret must be at least {MIN_SECRET_BYTES} bytes")
+        if not callable(publish):
+            raise TypeError("publish must be callable")
+        if policy is not None and not isinstance(policy, CampaignPolicy):
+            raise TypeError("policy must be a CampaignPolicy or None")
         self.state_path = Path(state_path)
         self._secret: bytes | dict[str, bytes] = secret if isinstance(secret, bytes) else dict(secret)
         self.publish = publish
@@ -432,6 +453,16 @@ class NightWindow:
     end: datetime
     tz: str
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.start, datetime) or self.start.tzinfo is None:
+            raise ValueError("start must be a timezone-aware datetime")
+        if not isinstance(self.end, datetime) or self.end.tzinfo is None:
+            raise ValueError("end must be a timezone-aware datetime")
+        if self.end.astimezone(UTC) <= self.start.astimezone(UTC):
+            raise ValueError("end must be strictly after start")
+        if not isinstance(self.tz, str) or not self.tz.strip():
+            raise ValueError("tz must be a non-empty string")
+
     @property
     def start_utc(self) -> datetime:
         return self.start.astimezone(UTC)
@@ -506,13 +537,23 @@ class DomainEvidence:
     task_kind: str = "label"  # "label" (classification-style) or "generative"
     consumed_verified: int = 0
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.domain, str) or not _DOMAIN_RE.match(self.domain):
+            raise ValueError(f"invalid domain name {self.domain!r}")
+        if self.task_kind not in ("label", "generative"):
+            raise ValueError(f"{self.domain}: task_kind must be 'label' or 'generative'")
+        for count_name in ("verified_accept", "verified_reject", "unverified", "heldout_eval_items", "consumed_verified"):
+            cval = getattr(self, count_name)
+            if isinstance(cval, bool) or not isinstance(cval, int) or cval < 0:
+                raise ValueError(f"{self.domain}: counts must be non-negative")
+
     @property
     def new_verified(self) -> int:
         return max(0, self.verified_accept - self.consumed_verified)
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> DomainEvidence:
-        ev = cls(
+        return cls(
             domain=str(d["domain"]),
             verified_accept=int(d["verified_accept"]),
             verified_reject=int(d.get("verified_reject", 0)),
@@ -521,14 +562,6 @@ class DomainEvidence:
             task_kind=str(d.get("task_kind", "label")),
             consumed_verified=int(d.get("consumed_verified", 0)),
         )
-        if not _DOMAIN_RE.match(ev.domain):
-            raise ValueError(f"invalid domain name {ev.domain!r}")
-        if ev.task_kind not in ("label", "generative"):
-            raise ValueError(f"{ev.domain}: task_kind must be 'label' or 'generative'")
-        counts = (ev.verified_accept, ev.verified_reject, ev.unverified, ev.heldout_eval_items, ev.consumed_verified)
-        if min(counts) < 0:
-            raise ValueError(f"{ev.domain}: counts must be non-negative")
-        return ev
 
 
 def load_episode_ledger(path: Path | str) -> list[DomainEvidence]:

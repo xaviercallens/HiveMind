@@ -328,6 +328,8 @@ class ExpertRecord:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ExpertRecord":
+        if not isinstance(data, Mapping):
+            raise ValueError("data must be a Mapping")
         return cls(
             expert_id=str(data["expert_id"]),
             kind=str(data["kind"]),
@@ -344,6 +346,10 @@ class ExpertRecord:
 
 def replay_history(history: Sequence[Tuple[str, str, str]], final_state: str) -> None:
     """Raise :class:`IllegalTransitionError` unless ``history`` is a legal chain from ``candidate`` to ``final_state``."""
+    if isinstance(history, (str, bytes)) or not isinstance(history, Iterable):
+        raise ValueError("history must be an iterable of (from, to, reason) triples")
+    if final_state not in LIFECYCLE_STATES:
+        raise ValueError(f"final_state must be one of {sorted(LIFECYCLE_STATES)}, got {final_state!r}")
     state = CANDIDATE
     for step in history:
         if len(step) != 3:
@@ -376,6 +382,8 @@ class ExpertRegistry:
         return expert_id in self._experts
 
     def _index(self, rec: ExpertRecord) -> None:
+        if not isinstance(rec, ExpertRecord):
+            raise ValueError("rec must be an ExpertRecord")
         self._experts[rec.expert_id] = rec
         self._by_state[rec.state].add(rec.expert_id)
         self._by_cluster.setdefault(rec.cluster_id, set()).add(rec.expert_id)
@@ -423,6 +431,10 @@ class ExpertRegistry:
     def promote_with_gate(self, expert_id: str, gate: Mapping[str, Any]) -> ExpertRecord:
         """SHADOW -> LIVE for an adapter, only if ``gate`` (the JSON written by ``scripts/adapter_to_served.py evaluate``) says ``servable`` for exactly this
         adapter's bytes (``adapter.lora_gguf_sha256`` equals the registered ``adapter_sha256``) and this base model. Anything else raises and changes nothing."""
+        if not isinstance(expert_id, str) or not expert_id.strip():
+            raise ValueError("expert_id must be a non-empty string")
+        if not isinstance(gate, Mapping):
+            raise ValueError("gate must be a Mapping")
         rec = self._experts[expert_id]
         if not rec.has_adapter:
             raise GateNotPassedError(f"{expert_id!r} is a serving expert: there is no adapter to gate")
@@ -447,6 +459,10 @@ class ExpertRegistry:
         return sorted(self._by_cluster)
 
     def experts_in_cluster(self, cluster_id: str, state: Optional[str] = None) -> List[ExpertRecord]:
+        if not isinstance(cluster_id, str) or not cluster_id.strip():
+            raise ValueError("cluster_id must be a non-empty string")
+        if state is not None and state not in LIFECYCLE_STATES:
+            raise ValueError(f"unknown lifecycle state {state!r}")
         ids = self._by_cluster.get(cluster_id, set())
         if state is not None:
             ids = ids & self._by_state[state]
@@ -477,6 +493,8 @@ class ExpertRegistry:
 
     def residency_inputs(self, states: Collection[str] = (LIVE,)) -> Dict[str, "AdapterFootprint"]:
         """Footprints of the adapter experts in ``states``, ready for :func:`plan_adapter_residency`."""
+        if isinstance(states, (str, bytes)) or not isinstance(states, Collection):
+            raise ValueError("states must be a Collection of lifecycle state strings")
         out: Dict[str, AdapterFootprint] = {}
         for state in sorted(states):
             for eid in self.ids_in_state(state):
@@ -490,6 +508,8 @@ class ExpertRegistry:
 
     def save(self, path: Path | str) -> Path:
         """Write the registry as JSON atomically: a crash leaves either the old file or the new one, never half of one."""
+        if not isinstance(path, (Path, str)) or not str(path).strip():
+            raise ValueError("path must be a non-empty Path or string")
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
         payload = json.dumps(self.to_dict(), sort_keys=True, indent=1).encode("utf-8")
@@ -507,6 +527,8 @@ class ExpertRegistry:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ExpertRegistry":
+        if not isinstance(data, Mapping):
+            raise ValueError("data must be a Mapping")
         if data.get("schema") != REGISTRY_SCHEMA:
             raise ValueError(f"not an expert registry file (schema {data.get('schema')!r})")
         reg = cls()
@@ -521,6 +543,10 @@ class ExpertRegistry:
 
     def import_serving_experts(self, base_model_id: str, cluster_id: str = "code") -> List[str]:
         """Register every entry of ``serving_experts.SERVING_EXPERT_SPECS`` not yet present, as a ``serving`` candidate."""
+        if not isinstance(base_model_id, str) or not base_model_id.strip():
+            raise ValueError("base_model_id must be a non-empty string")
+        if not isinstance(cluster_id, str) or not cluster_id.strip():
+            raise ValueError("cluster_id must be a non-empty string")
         from hivemind.core.serving_experts import (
             SERVING_EXPERT_SPECS,  # imports torch via btm_moe, so only on demand
         )
@@ -687,6 +713,12 @@ def _greedy_place(
     adapters: Mapping[str, AdapterFootprint],
     demand: Mapping[str, float],
 ) -> Tuple[Dict[str, str], Dict[str, str], Dict[str, int], Dict[str, int]]:
+    if isinstance(order, (str, bytes)) or not isinstance(order, Sequence):
+        raise ValueError("order must be a Sequence of adapter IDs")
+    if isinstance(nodes, (str, bytes)) or not isinstance(nodes, Sequence):
+        raise ValueError("nodes must be a Sequence of ServingNode")
+    if not isinstance(adapters, Mapping) or not isinstance(demand, Mapping):
+        raise ValueError("adapters and demand must be Mappings")
     usable = [n for n in nodes if n.adapter_budget_mib >= 0]
     free = {n.node_id: n.adapter_budget_mib for n in usable}
     slots = {n.node_id: n.max_lora_slots for n in usable}
@@ -816,6 +848,8 @@ def validate_residency_plan(
 
 
 def _boundary_pattern(kw: str) -> "re.Pattern[str]":
+    if not isinstance(kw, str) or not kw.strip():
+        raise ValueError("kw must be a non-empty string")
     head = r"(?<![a-z0-9_])" if (kw[0].isalnum() or kw[0] == "_") else ""
     tail = r"(?![a-z0-9_])" if (kw[-1].isalnum() or kw[-1] == "_") else ""
     return re.compile(head + re.escape(kw) + tail)
@@ -827,6 +861,10 @@ def keyword_hits(prompt_lower: str, keywords: Iterable[str]) -> frozenset[str]:
     A keyword made only of ``[a-z0-9_]`` is a hit exactly when it is one maximal ``[a-z0-9_]+`` run of the prompt, so it is
     found by a set lookup; other keywords (phrases, punctuation) use the boundary regex.
     """
+    if not isinstance(prompt_lower, str):
+        raise ValueError("prompt_lower must be a string")
+    if isinstance(keywords, (str, bytes)) or not isinstance(keywords, Iterable):
+        raise ValueError("keywords must be an iterable of strings")
     tokens: Optional[set[str]] = None
     hits: set[str] = set()
     for kw in keywords:

@@ -114,8 +114,8 @@ class BundleSeedManifest:
             raise ValueError("total_bytes must be a non-negative integer")
         if isinstance(self.num_chunks, bool) or not isinstance(self.num_chunks, int) or self.num_chunks < 0:
             raise ValueError("num_chunks must be a non-negative integer")
-        if not isinstance(self.bundle_merkle_root, str) or not self.bundle_merkle_root.strip():
-            raise ValueError("bundle_merkle_root must be a non-empty string")
+        if not isinstance(self.bundle_merkle_root, str):
+            raise TypeError("bundle_merkle_root must be a string")
         if not isinstance(self.files, list) or any(not isinstance(f, ChunkedFileEntry) for f in self.files):
             raise TypeError("files must be a list of ChunkedFileEntry instances")
         if not isinstance(self.seeders, list):

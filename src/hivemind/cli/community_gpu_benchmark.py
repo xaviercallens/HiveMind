@@ -68,7 +68,11 @@ NON_MONETARY_COMPUTE_RECIPROCITY_NOTICE = (
 
 def detect_community_accelerator(preferred_device: str = "auto") -> dict[str, Any]:
     """Detect the contributor's GPU/accelerator backend and VRAM envelope."""
-    if preferred_device not in {"auto", "cuda", "mps", "cpu"}:
+    if (
+        isinstance(preferred_device, bool)
+        or not isinstance(preferred_device, str)
+        or preferred_device not in {"auto", "cuda", "mps", "cpu"}
+    ):
         raise ValueError(f"Unsupported preferred_device: {preferred_device!r}")
 
     if preferred_device == "cuda" or (preferred_device == "auto" and torch.cuda.is_available()):
@@ -131,18 +135,18 @@ def run_community_gpu_benchmark(
     """Execute the 5-stage opt-in Community GPU Benchmark & Hardware Verification Suite."""
     if not isinstance(contributor_handle, str) or not contributor_handle.strip():
         raise ValueError("contributor_handle must be non-empty")
-    if isinstance(token_steps, bool) or int(token_steps) < 1:
+    if isinstance(token_steps, bool) or not isinstance(token_steps, int) or token_steps < 1:
         raise ValueError("token_steps must be >= 1")
-    if isinstance(router_tokens, bool) or int(router_tokens) < 4:
+    if isinstance(router_tokens, bool) or not isinstance(router_tokens, int) or router_tokens < 4:
         raise ValueError("router_tokens must be >= 4")
-    if isinstance(hidden_size, bool) or int(hidden_size) < 16 or int(hidden_size) % 8 != 0:
+    if isinstance(hidden_size, bool) or not isinstance(hidden_size, int) or hidden_size < 16 or hidden_size % 8 != 0:
         raise ValueError("hidden_size must be a multiple of 8 and >= 16")
     if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
         raise ValueError("seed must be a non-negative integer")
     if output_path is not None and (isinstance(output_path, bool) or not isinstance(output_path, Path)):
         raise ValueError("output_path must be a Path or None")
     if pool_holdings_override is not None:
-        if isinstance(pool_holdings_override, bool):
+        if isinstance(pool_holdings_override, bool) or not isinstance(pool_holdings_override, (int, float)):
             raise ValueError("pool_holdings_override must be a finite non-negative float")
         pool_override_val = float(pool_holdings_override)
         if not math.isfinite(pool_override_val) or pool_override_val < 0.0:
@@ -536,6 +540,8 @@ def verify_community_benchmark_receipt(receipt: Mapping[str, Any]) -> bool:
 
 def main(argv: list[str] | None = None) -> int:
     """CLI entrypoint for the opt-in Community GPU Benchmark."""
+    if argv is not None and (isinstance(argv, (str, bytes)) or not isinstance(argv, (list, tuple))):
+        raise ValueError("argv must be a list/tuple of strings or None")
     parser = argparse.ArgumentParser(
         description=(
             "Run the opt-in Project HiveMind Community GPU Benchmark & Hardware Verification Suite. "

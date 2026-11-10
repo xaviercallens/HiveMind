@@ -22,6 +22,7 @@ import dataclasses
 import hashlib
 import json
 import logging
+import math
 import threading
 from typing import Any, BinaryIO, Callable, Dict, List, Optional
 
@@ -402,6 +403,14 @@ class SolverBeeMcp:
 def build_server(binary: str, *, problems_dir: Optional[str] = None, timeout_s: float = DEFAULT_TIMEOUT_S, allow_unsandboxed: bool = False,
                  verifier: Any = None) -> SolverBeeMcp:
     """The server for one binary. With ``allow_unsandboxed`` every solver run is forced without namespaces and every result says sandbox 'none'."""
+    if not isinstance(binary, str) or not binary.strip():
+        raise ValueError("binary must be a non-empty string")
+    if problems_dir is not None and (not isinstance(problems_dir, str) or not problems_dir.strip()):
+        raise ValueError("problems_dir must be None or a non-empty string")
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not math.isfinite(float(timeout_s)) or float(timeout_s) <= 0.0:
+        raise ValueError("timeout_s must be a positive finite number")
+    if not isinstance(allow_unsandboxed, bool):
+        raise ValueError("allow_unsandboxed must be a boolean")
     svc = svc_mod.SolverBeeService(binary, problems_dir=problems_dir, verifier=verifier, max_concurrent=1, timeout_s=timeout_s,
                                    allow_unsandboxed=allow_unsandboxed)
     if allow_unsandboxed:

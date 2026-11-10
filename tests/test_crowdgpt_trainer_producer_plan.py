@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import pytest
+import torch
 
 from fastapi.testclient import TestClient
 
@@ -14,7 +16,14 @@ from hivemind.router.opentrainer import (
     build_opentrainer_status_payload,
     is_allowed_opentrainer_campaign_id,
 )
-from hivemind.swarm.crowdgpt_bridge import classify_gpu_precision_cohort
+from hivemind.swarm.crowdgpt_bridge import (
+    build_crowdgpt_client_hardware_headers,
+    build_crowdgpt_submit_metadata,
+    classify_gpu_precision_cohort,
+    pack_crowdgpt_delta_stream,
+    parse_crowdgpt_task_crosscheck,
+    unpack_crowdgpt_delta_stream,
+)
 
 
 def test_crowdgpt_campaign_ids_allowed() -> None:
@@ -48,6 +57,7 @@ def test_build_crowdgpt_trainer_producer_plan_metrics_and_vram_floors() -> None:
     assert plan["partner_project"]["hf_model_id"] == "Vxtzq/Crowd-v1"
     assert plan["partner_project"]["openrouter_model_id"] == "hivemind/crowd-v1"
     assert plan["partner_project"]["discord_invite"] == "https://discord.gg/ZeFtZpKHf"
+    assert plan["hiveminder_account_and_crosscheck_integration"]["zero_manual_account_creation"] is True
 
     roles_by_id = {r["role_id"]: r for r in plan["gpu_role_partitioning"]}
     assert roles_by_id["producer_gpu_dual_schedule"]["vram_safety_floor_mib"] == DEFAULT_MIN_FREE_VRAM_MIB_8GB == 1536
@@ -71,6 +81,82 @@ def test_precision_cohorts_align_with_crowdgpt_bridge() -> None:
     assert sm86.cohort_key in cohorts
     assert sm86.effective_dtype == "bf16"
     assert sm86.pre_ampere_fp32_enforced is False
+
+
+def test_crowdgpt_hardware_headers_and_crosscheck_submit_metadata_wire_roundtrip() -> None:
+    headers = build_crowdgpt_client_hardware_headers(
+        hiveminder_handle="clark719664",
+        device_suffix="rtx2070",
+        backend="CUDA",
+        batch_size=2,
+        vram_gb=8.0,
+        gpu_name="NVIDIA GeForce RTX 2070",
+        autocast_dtype="fp32",
+        native_optim="adamw8bit",
+        compute_capability=(7, 5),
+    )
+    assert headers["X-Client-Device"] == "hm-clark719664-rtx2070"
+    assert headers["X-Client-Compute-Cap"] == "7.5"
+    assert headers["X-Client-Autocast"] == "fp32"
+    assert headers["X-Client-Optim"] == "adamw8bit"
+    assert headers["X-Client-Optim-Can-Fp32"] == "1"
+    assert headers["X-Client-Optim-Can-8bit"] == "1"
+
+    task_md = {
+        "taskId": "task-round-42",
+        "globalStep": 420,
+        "shardConfig": {"slot": 5},
+        "crossCheck": {
+            "enabled": True,
+            "targetSeed": 987654,
+            "targetLocalSteps": 64,
+            "targetBatchSize": 2,
+            "targetAccumSteps": 32,
+            "targetAutocast": "fp32",
+            "targetOptimizer": "adamw8bit",
+        },
+    }
+    spec = parse_crowdgpt_task_crosscheck(task_md)
+    assert spec.cohort_mode is True
+    assert spec.effective_slot == 0  # Forced to 0 in cohort_mode per client.py:2756
+    assert spec.target_seed == 987654
+    assert spec.target_local_steps == 64
+
+    with pytest.raises(ValueError, match="targetLocalSteps=64"):
+        build_crowdgpt_submit_metadata(
+            spec=spec,
+            mean_loss=7.85,
+            last_step_loss=7.72,
+            loss_std=0.14,
+            loss_samples=64,
+            actual_steps=60,
+            actual_batch_size=2,
+            tokens_processed=262144,
+        )
+
+    submit_meta = build_crowdgpt_submit_metadata(
+        spec=spec,
+        mean_loss=7.85,
+        last_step_loss=7.72,
+        loss_std=0.14,
+        loss_samples=64,
+        actual_steps=64,
+        actual_batch_size=2,
+        tokens_processed=262144,
+    )
+    assert submit_meta["crossCheckUsed"] is True
+    assert submit_meta["actualSeed"] == 987654
+    assert submit_meta["actualSteps"] == 64
+    assert submit_meta["actualBatchSize"] == 2
+    assert submit_meta["lastLoss"] == 7.72
+    assert submit_meta["lossStd"] == 0.14
+    assert submit_meta["lossSamples"] == 64
+
+    compressed = pack_crowdgpt_delta_stream(submit_meta, torch.zeros(128, dtype=torch.bfloat16))
+    unpacked = unpack_crowdgpt_delta_stream(compressed)
+    assert unpacked.metadata["crossCheckUsed"] is True
+    assert unpacked.metadata["actualSeed"] == 987654
+    assert unpacked.metadata["actualSteps"] == 64
 
 
 def test_gateway_crowdgpt_plan_and_opentrainer_status_endpoints(tmp_path: Path) -> None:

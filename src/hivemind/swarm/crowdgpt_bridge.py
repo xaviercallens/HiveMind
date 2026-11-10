@@ -706,3 +706,191 @@ def evaluate_client_resilience_policy(
         "redownload_checkpoint": False,
         "backoff_s": 0.0,
     }
+
+
+
+@dataclass(frozen=True)
+class CrowdGPTCrossCheckSpec:
+    """Parsed `/fl/task` cross-client verification (`crossCheck`) specification from `server.crowdgpt.net`."""
+
+    task_id: str
+    global_step: int
+    seq_len: int
+    cohort_mode: bool
+    target_seed: int | None
+    target_local_steps: int | None
+    target_batch_size: int | None
+    target_accum_steps: int | None
+    target_autocast: str | None
+    target_optimizer: str
+    effective_slot: int
+
+
+def build_crowdgpt_client_hardware_headers(
+    *,
+    hiveminder_handle: str,
+    device_suffix: str = "gpu0",
+    backend: str = "CUDA",
+    batch_size: int = 1,
+    vram_gb: float = 8.0,
+    gpu_name: str = "NVIDIA GeForce RTX 2070",
+    autocast_dtype: str = "fp32",
+    native_optim: str = "adamw8bit",
+    can_fp32: bool = True,
+    can_8bit: bool = True,
+    engram_active: bool = True,
+    compute_capability: tuple[int, int] = (7, 5),
+    client_version: str = "3.1.0",
+) -> dict[str, str]:
+    """Build the exact 12 `X-Client-*` headers required by `server.crowdgpt.net` (`client.py:_hardware_headers`).
+
+    Because CrowdGPT keys active per-client tasks on `user:<uuid>:dev:<device>` (`client.py:337`),
+    setting a deterministic `X-Client-Device: hm-<handle>-<device_suffix>` allows multiple HiveMinder
+    GPUs to share one fleet account (`hivemind-swarm`) OR use their own personal CrowdGPT account
+    without colliding on the coordinator.
+    """
+    handle_clean = "".join(c if c.isalnum() or c in "-_" else "-" for c in str(hiveminder_handle or "").strip())
+    if not handle_clean:
+        raise ValueError("hiveminder_handle must be a non-empty string.")
+    dev_clean = "".join(c if c.isalnum() or c in "-_" else "-" for c in str(device_suffix or "gpu0").strip()) or "gpu0"
+    if isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size < 1:
+        raise ValueError("batch_size must be an integer >= 1.")
+    if isinstance(vram_gb, bool) or not isinstance(vram_gb, (int, float)) or not math.isfinite(float(vram_gb)) or float(vram_gb) <= 0.0:
+        raise ValueError("vram_gb must be a finite positive number.")
+    if (
+        not isinstance(compute_capability, tuple)
+        or len(compute_capability) != 2
+        or any(isinstance(x, bool) or not isinstance(x, int) or x < 0 for x in compute_capability)
+    ):
+        raise ValueError("compute_capability must be a 2-tuple of non-negative integers.")
+    device_id = f"hm-{handle_clean[:32]}-{dev_clean[:16]}"
+    cc_str = f"{compute_capability[0]}.{compute_capability[1]}"
+    return {
+        "X-Client-Backend": str(backend or "CUDA").strip().upper(),
+        "X-Client-Batch-Size": str(int(batch_size)),
+        "X-Client-Vram-Gb": f"{float(vram_gb):.2f}",
+        "X-Client-Gpu-Name": str(gpu_name or "UNKNOWN").strip(),
+        "X-Client-Autocast": str(autocast_dtype or "fp32").strip().lower(),
+        "X-Client-Optim": str(native_optim or "adamw8bit").strip(),
+        "X-Client-Optim-Can-Fp32": "1" if can_fp32 else "0",
+        "X-Client-Optim-Can-8bit": "1" if can_8bit else "0",
+        "X-Client-Engram": "1" if engram_active else "0",
+        "X-Client-Device": device_id,
+        "X-Client-Compute-Cap": cc_str,
+        "X-Client-Version": str(client_version or "3.1.0").strip(),
+    }
+
+
+def parse_crowdgpt_task_crosscheck(
+    task_metadata: Mapping[str, Any],
+    *,
+    default_seq_len: int = 2048,
+) -> CrowdGPTCrossCheckSpec:
+    """Parse `/fl/task` metadata and enforce `crossCheck` cohort rules (`client.py:_parse_task_meta`)."""
+    if not isinstance(task_metadata, Mapping):
+        raise TypeError("task_metadata must be a Mapping.")
+    tid = str(task_metadata.get("taskId") or "").strip()
+    if not tid:
+        raise ValueError("task_metadata must include a non-empty taskId.")
+    gs = int(task_metadata.get("globalStep") or 0)
+    cc_cfg = task_metadata.get("crossCheck")
+    if not isinstance(cc_cfg, Mapping):
+        cc_cfg = {}
+
+    cohort_mode = bool(cc_cfg.get("enabled", False))
+    cc_seed = cc_cfg.get("targetSeed") if cohort_mode else None
+    cc_steps = cc_cfg.get("targetLocalSteps") if cohort_mode else None
+    cc_bs = cc_cfg.get("targetBatchSize") if cohort_mode else None
+    cc_accum = cc_cfg.get("targetAccumSteps") if cohort_mode else None
+    cc_autocast = cc_cfg.get("targetAutocast") if cohort_mode else None
+    cc_optim = str((cc_cfg.get("targetOptimizer") if cohort_mode else None) or "any")
+
+    if cohort_mode and (
+        cc_seed is None
+        or cc_steps is None
+        or cc_bs is None
+        or cc_accum is None
+        or cc_autocast is None
+    ):
+        cohort_mode = False
+        cc_seed = cc_steps = cc_bs = cc_accum = cc_autocast = None
+        cc_optim = "any"
+
+    shard_cfg = task_metadata.get("shardConfig")
+    raw_slot = int(shard_cfg.get("slot", 0)) if isinstance(shard_cfg, Mapping) else 0
+    effective_slot = 0 if cohort_mode else raw_slot
+
+    return CrowdGPTCrossCheckSpec(
+        task_id=tid,
+        global_step=gs,
+        seq_len=int(default_seq_len),
+        cohort_mode=cohort_mode,
+        target_seed=int(cc_seed) if cc_seed is not None else None,
+        target_local_steps=int(cc_steps) if cc_steps is not None else None,
+        target_batch_size=int(cc_bs) if cc_bs is not None else None,
+        target_accum_steps=int(cc_accum) if cc_accum is not None else None,
+        target_autocast=str(cc_autocast) if cc_autocast is not None else None,
+        target_optimizer=cc_optim,
+        effective_slot=effective_slot,
+    )
+
+
+def build_crowdgpt_submit_metadata(
+    *,
+    spec: CrowdGPTCrossCheckSpec,
+    mean_loss: float,
+    last_step_loss: float,
+    loss_std: float,
+    loss_samples: int,
+    actual_steps: int,
+    actual_batch_size: int,
+    tokens_processed: int,
+    has_engram: bool = False,
+    engram_sparse_count: int = 0,
+) -> dict[str, Any]:
+    """Build and verify the exact `/fl/submit` JSON header required by CrowdGPT cross-client verification (`client.py:2905-2914`)."""
+    if not isinstance(spec, CrowdGPTCrossCheckSpec):
+        raise TypeError("spec must be a CrowdGPTCrossCheckSpec.")
+    for name, val in (("mean_loss", mean_loss), ("last_step_loss", last_step_loss), ("loss_std", loss_std)):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+            raise ValueError(f"{name} must be a finite number.")
+    if float(loss_std) < 0.0:
+        raise ValueError("loss_std must be non-negative.")
+    for int_name, int_val, min_v in (
+        ("loss_samples", loss_samples, 1),
+        ("actual_steps", actual_steps, 1),
+        ("actual_batch_size", actual_batch_size, 1),
+        ("tokens_processed", tokens_processed, 1),
+        ("engram_sparse_count", engram_sparse_count, 0),
+    ):
+        if isinstance(int_val, bool) or not isinstance(int_val, int) or int_val < min_v:
+            raise ValueError(f"{int_name} must be an integer >= {min_v}.")
+
+    if spec.cohort_mode:
+        if spec.target_local_steps is not None and int(actual_steps) != int(spec.target_local_steps):
+            raise ValueError(
+                f"Cross-check cohort requires exact targetLocalSteps={spec.target_local_steps}, got actual_steps={actual_steps}."
+            )
+        if spec.target_batch_size is not None and int(actual_batch_size) != int(spec.target_batch_size):
+            raise ValueError(
+                f"Cross-check cohort requires exact targetBatchSize={spec.target_batch_size}, got actual_batch_size={actual_batch_size}."
+            )
+
+    return {
+        "taskId": spec.task_id,
+        "loss": float(mean_loss),
+        "localSteps": int(actual_steps),
+        "tokensProcessed": int(tokens_processed),
+        "loraRank": 0,
+        "isDelta": True,
+        "weightFormat": "bf16",
+        "hasEngram": bool(has_engram and engram_sparse_count > 0),
+        "engramSparseCount": int(engram_sparse_count) if has_engram else 0,
+        "crossCheckUsed": bool(spec.cohort_mode),
+        "actualSeed": int(spec.target_seed) if (spec.cohort_mode and spec.target_seed is not None) else None,
+        "actualSteps": int(actual_steps),
+        "actualBatchSize": int(actual_batch_size),
+        "lastLoss": float(last_step_loss),
+        "lossStd": float(loss_std),
+        "lossSamples": int(loss_samples),
+    }

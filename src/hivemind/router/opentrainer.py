@@ -824,6 +824,27 @@ CROWDGPT_TRAINER_PRODUCER_CO_TRAINING_PLAN: dict[str, Any] = {
             "rationale": "Dedicated ROCm cohort with 180s forming-pool starvation fallback (SOLO_LOSS_RATCHET_FALLBACK).",
         },
     ],
+    "hiveminder_account_and_crosscheck_integration": {
+        "zero_manual_account_creation": True,
+        "mode_a_shared_pool_multiplexing": (
+            "CrowdGPT keys active client tasks on `user:<uuid>:dev:<device>` (client.py:337). "
+            "All HiveMind fleet/producer/trainer GPUs can share a single `hivemind-swarm` Bearer token while "
+            "sending a unique `X-Client-Device: hm-<handle>-<gpu_id>` header so multiple GPUs train concurrently "
+            "without colliding, while HiveMind credits each contributor on /telemetry and /portal."
+        ),
+        "mode_b_individual_account_opt_in": (
+            "Any HiveMinder who wants their own personal username on the CrowdGPT leaderboard runs "
+            "`python client.py --register --user hm_<handle> --email <email>` once (or `--login` per PR #89)."
+        ),
+        "exact_server_crosscheck_compliance": (
+            "HiveMind nodes run stock `Vxtzq/CrowdGPT/client.py` headless loop (or `build_crowdgpt_submit_metadata`) "
+            "sending all 12 `X-Client-*` hardware headers (`X-Client-Backend`, `X-Client-Compute-Cap`, `X-Client-Autocast`, "
+            "`X-Client-Optim`, `X-Client-Optim-Can-Fp32`, `X-Client-Optim-Can-8bit`, `X-Client-Engram`, `X-Client-Device`, etc.), "
+            "obeying `md['crossCheck']` (`slot=0`, `targetSeed`, `targetLocalSteps`, `targetBatchSize`, `targetAccumSteps`, "
+            "`targetAutocast`, `targetOptimizer`), and embedding `crossCheckUsed`, `actualSeed`, `actualSteps`, "
+            "`actualBatchSize`, `lastLoss`, `lossStd`, and `lossSamples` in every `/fl/submit` delta header."
+        ),
+    },
     "verification_and_safety_gates": {
         "byzantine_aggregator": "Chunked Multi-Krum (multi_krum_select_and_aggregate, token_weight cap = 1.25x median)",
         "anti_lobotomy_rms_guard": "check_weight_rms_collapse_guard (0.80 <= rms_ratio <= 1.25; blocks Step-282 0.5x zero-participant halving)",

@@ -91,6 +91,8 @@ def hash_hmt_key_commitment(hmt_key: str) -> str:
 
 
 def _canonical_vc_bytes_without_proof(vc: dict[str, Any]) -> bytes:
+    if not isinstance(vc, dict) or not vc:
+        raise ValueError("vc must be a non-empty dictionary")
     unsigned = {k: v for k, v in vc.items() if k != "proof"}
     return json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
 
@@ -176,6 +178,10 @@ def verify_producer_verifiable_credential(
     now_utc: str | None = None,
 ) -> tuple[bool, str]:
     """Verify a producer W3C Verifiable Credential, its Ed25519 proof, and its HMT commitment."""
+    if expected_node_id is not None and (not isinstance(expected_node_id, str) or not expected_node_id.strip()):
+        raise ValueError("expected_node_id must be None or a non-empty string")
+    if expected_hmt_key is not None and (not isinstance(expected_hmt_key, str) or not expected_hmt_key.strip()):
+        raise ValueError("expected_hmt_key must be None or a non-empty string")
     if not isinstance(vc, dict):
         return False, "credential_not_a_dict"
     ctx = vc.get("@context")

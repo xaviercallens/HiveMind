@@ -76,9 +76,13 @@ class ExecutionClassProfile:
         )
 
     def exact_match(self, other: ExecutionClassProfile) -> bool:
+        if not isinstance(other, ExecutionClassProfile):
+            raise TypeError("other must be an ExecutionClassProfile")
         return self.class_key() == other.class_key()
 
     def same_dtype_class(self, other: ExecutionClassProfile) -> bool:
+        if not isinstance(other, ExecutionClassProfile):
+            raise TypeError("other must be an ExecutionClassProfile")
         return self.dtype == other.dtype
 
 
@@ -97,6 +101,32 @@ class TwoStatisticSpotCheckResult:
     dtype_matched: bool
     passed: bool
     reason: str
+
+    def __post_init__(self) -> None:
+        if isinstance(self.linf_divergence, bool) or not isinstance(self.linf_divergence, (int, float)) or float(self.linf_divergence) < 0.0:
+            raise ValueError("linf_divergence must be a non-negative number")
+        if isinstance(self.num_tensors_above_eps, bool) or not isinstance(self.num_tensors_above_eps, int) or self.num_tensors_above_eps < 0:
+            raise ValueError("num_tensors_above_eps must be a non-negative integer")
+        if (
+            isinstance(self.total_tensors, bool)
+            or not isinstance(self.total_tensors, int)
+            or self.total_tensors < 1
+            or self.num_tensors_above_eps > self.total_tensors
+        ):
+            raise ValueError("total_tensors must be an integer >= 1 and >= num_tensors_above_eps")
+        for frac_field in ("tensor_fraction_above_eps", "max_tensor_fraction_above_eps"):
+            val = getattr(self, frac_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or not (0.0 <= float(val) <= 1.0):
+                raise ValueError(f"{frac_field} must be a finite number in [0.0, 1.0]")
+        for eps_field in ("base_eps", "effective_eps"):
+            val = getattr(self, eps_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{eps_field} must be a positive finite number")
+        for b_field in ("exact_class_matched", "dtype_matched", "passed"):
+            if not isinstance(getattr(self, b_field), bool):
+                raise ValueError(f"{b_field} must be a boolean")
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("reason must be a non-empty string")
 
 
 def quantize_fixed_point_q16_state(
@@ -189,6 +219,38 @@ class SpotCheckVerdict:
     passed: bool
     steam_account_flagged: bool
     reason: str
+
+    def __post_init__(self) -> None:
+        for s_field in ("wu_id", "worker_id", "steam_id64", "reason"):
+            val = getattr(self, s_field)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        if (
+            isinstance(self.segment_start_step, bool)
+            or not isinstance(self.segment_start_step, int)
+            or self.segment_start_step < 0
+            or isinstance(self.segment_end_step, bool)
+            or not isinstance(self.segment_end_step, int)
+            or self.segment_end_step < self.segment_start_step
+        ):
+            raise ValueError("segment_start_step and segment_end_step must satisfy 0 <= start <= end")
+        if (
+            isinstance(self.verification_overhead_pct, bool)
+            or not isinstance(self.verification_overhead_pct, (int, float))
+            or not math.isfinite(float(self.verification_overhead_pct))
+            or float(self.verification_overhead_pct) < 0.0
+        ):
+            raise ValueError("verification_overhead_pct must be a finite non-negative number")
+        if (
+            isinstance(self.tolerance_eps, bool)
+            or not isinstance(self.tolerance_eps, (int, float))
+            or not math.isfinite(float(self.tolerance_eps))
+            or float(self.tolerance_eps) <= 0.0
+        ):
+            raise ValueError("tolerance_eps must be a positive finite number")
+        for b_field in ("hash_matched", "passed", "steam_account_flagged"):
+            if not isinstance(getattr(self, b_field), bool):
+                raise ValueError(f"{b_field} must be a boolean")
 
 
 class DeterministicSpotCheckValidator:

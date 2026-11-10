@@ -243,6 +243,8 @@ def evaluate_quorum_readiness(
     ):
         if isinstance(seq, (str, bytes)) or not isinstance(seq, Sequence):
             raise ValueError(f"{name} must be a sequence of strings, not {type(seq).__name__}")
+        if any(not isinstance(item, str) for item in seq):
+            raise ValueError(f"{name} elements must all be strings")
     humans = sorted(set(h.strip() for h in human_participants if isinstance(h, str) and h.strip()))
     agents = sorted(set(a.strip() for a in ai_agent_participants if isinstance(a, str) and a.strip()))
     domains = sorted(set(d.strip() for d in covered_domains if isinstance(d, str) and d.strip()))
@@ -460,6 +462,8 @@ def verify_campaign_quorum_schedule_report(report: Mapping[str, Any]) -> bool:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entrypoint for the Campaign Calendar & Quorum Coordinator."""
+    if argv is not None and (isinstance(argv, (str, bytes)) or not isinstance(argv, Sequence)):
+        raise ValueError("argv must be a sequence of strings or None")
     parser = argparse.ArgumentParser(
         description="Manage the Project HiveMind Campaign Calendar, .ics export, and Quorum Readiness."
     )

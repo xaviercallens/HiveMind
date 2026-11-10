@@ -70,7 +70,12 @@ def main(argv: list[str] | None = None) -> int:
     tokenizer = Tokenizer.from_file(str(bundle["tokenizer_path"]))
 
     cfg = CrowdV1RuntimeConfig()
-    model = CrowdV1WithEngram(cfg)
+    prev_dtype = torch.get_default_dtype()
+    torch.set_default_dtype(torch.bfloat16)
+    try:
+        model = CrowdV1WithEngram(cfg)
+    finally:
+        torch.set_default_dtype(prev_dtype)
     sha256 = load_crowd_v1_safetensors_into_model(model, bundle["weights_path"])
     model.eval()
 

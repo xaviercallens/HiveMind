@@ -440,7 +440,7 @@ class CrowdV1WithEngram(nn.Module):
         self.cos_cached = self.cos_cached.to(device=target_dev)
         self.sin_cached = self.sin_cached.to(device=target_dev)
         if offload_engram_to_cpu:
-            self.engram.to(device=torch.device("cpu"), dtype=torch.float16 if dtype != torch.float32 else torch.float32)
+            self.engram.to(device=torch.device("cpu"), dtype=torch.bfloat16)
         else:
             self.engram.to(device=target_dev, dtype=dtype)
 
@@ -541,14 +541,30 @@ class CrowdV1WithEngram(nn.Module):
 
 
 def load_crowd_v1_safetensors_into_model(model: CrowdV1WithEngram, safetensors_path: Path | str) -> str:
-    """Load named `model.safetensors` into `CrowdV1WithEngram` using `safetensors.torch.load_file` and return SHA-256."""
-    from safetensors.torch import load_file
+    """Memory-map `model.safetensors` via `safe_open` and stream tensors in-place with near-zero extra RAM overhead."""
+    from safetensors import safe_open
 
     path = Path(safetensors_path)
-    state = load_file(str(path), device="cpu")
-    missing, unexpected = model.load_state_dict(state, strict=False)
+    param_map = dict(model.named_parameters())
+    loaded_keys: set[str] = set()
+    unexpected: list[str] = []
+
+    with torch.no_grad(), safe_open(str(path), framework="pt", device="cpu") as sf:
+        for key in sf.keys():
+            target = param_map.get(key)
+            if target is None:
+                if key == "head.weight" and model.cfg.tie_word_embeddings:
+                    continue
+                unexpected.append(key)
+                continue
+            tensor = sf.get_tensor(key)
+            if target.shape != tensor.shape:
+                raise ValueError(f"Shape mismatch for {key}: model={tuple(target.shape)} vs file={tuple(tensor.shape)}")
+            target.copy_(tensor.to(device=target.device, dtype=target.dtype))
+            loaded_keys.add(key)
+
     allowed_missing = {"head.weight"} if model.cfg.tie_word_embeddings else set()
-    real_missing = [k for k in missing if k not in allowed_missing]
+    real_missing = [k for k in param_map if k not in loaded_keys and k not in allowed_missing]
     if real_missing or unexpected:
         raise ValueError(f"Incompatible Crowd-v1 state dict: missing={real_missing[:5]}, unexpected={unexpected[:5]}")
     if model.cfg.tie_word_embeddings:

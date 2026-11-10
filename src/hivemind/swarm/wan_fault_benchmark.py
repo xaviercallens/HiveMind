@@ -417,7 +417,7 @@ async def _run_quic_leg(
         raise TypeError("scenario must be a FaultScenario")
     if not isinstance(strike, StrikeRegister):
         raise TypeError("strike must be a StrikeRegister")
-    if not isinstance(proxy, DeterministicFaultProxy):
+    if proxy is None or not hasattr(proxy, "client_address") or not callable(getattr(proxy, "stats", None)):
         raise TypeError("proxy must be a DeterministicFaultProxy")
     if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(float(timeout)) or float(timeout) <= 0.0:
         raise ValueError("timeout must be a finite positive number")
@@ -581,7 +581,12 @@ def _relay_frames(
     channel: bool = False,
 ) -> List[float]:
     """Relay `scenario.frames` payloads and return the per-frame delivery latency."""
-    if not isinstance(sender, TurnClient) or not isinstance(receiver, TurnClient):
+    if (
+        sender is None
+        or receiver is None
+        or not (callable(getattr(sender, "send_to", None)) or callable(getattr(sender, "send_channel", None)))
+        or not callable(getattr(receiver, "recv_from", None))
+    ):
         raise TypeError("sender and receiver must be TurnClient instances")
     if not isinstance(scenario, FaultScenario):
         raise TypeError("scenario must be a FaultScenario")
@@ -623,7 +628,7 @@ def _run_turn_leg(
         raise TypeError("scenario must be a FaultScenario")
     if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(float(timeout)) or float(timeout) <= 0.0:
         raise ValueError("timeout must be a finite positive number")
-    if endpoints is not None and not isinstance(endpoints, ExternalEndpoints):
+    if endpoints is not None and not (hasattr(endpoints, "has_turn") or hasattr(endpoints, "has_quic")):
         raise TypeError("endpoints must be an ExternalEndpoints or None")
     endpoints = endpoints if endpoints is not None else ExternalEndpoints()
     started = time.perf_counter()
@@ -963,7 +968,7 @@ async def run_fault_scenario(
         raise TypeError("scenario must be a FaultScenario")
     if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(float(timeout)) or float(timeout) <= 0.0:
         raise ValueError("timeout must be a finite positive number")
-    if endpoints is not None and not isinstance(endpoints, ExternalEndpoints):
+    if endpoints is not None and not (hasattr(endpoints, "has_turn") or hasattr(endpoints, "has_quic")):
         raise TypeError("endpoints must be an ExternalEndpoints or None")
     endpoints = endpoints if endpoints is not None else ExternalEndpoints()
     strike = StrikeRegister()
@@ -1047,7 +1052,7 @@ async def run_wan_quic_turn_fault_benchmark(
         scenarios = default_scenarios()
     elif isinstance(scenarios, (str, bytes)) or not isinstance(scenarios, Sequence) or not all(isinstance(s, FaultScenario) for s in scenarios):
         raise TypeError("scenarios must be a sequence of FaultScenario instances")
-    if endpoints is not None and not isinstance(endpoints, ExternalEndpoints):
+    if endpoints is not None and not (hasattr(endpoints, "has_turn") or hasattr(endpoints, "has_quic")):
         raise TypeError("endpoints must be an ExternalEndpoints or None")
     endpoints = endpoints if endpoints is not None else ExternalEndpoints.from_environment()
     results: List[Dict[str, Any]] = []

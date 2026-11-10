@@ -196,6 +196,12 @@ _NUMERIC_GPU_FIELDS = ("used_mib", "total_mib", "free_mib", "temp_c", "util_pct"
 
 def _require_finite_numbers(section: str, values: dict[str, Any], fields: tuple[str, ...]) -> None:
     """Refuse a telemetry update whose numeric fields are not finite numbers (a poisoned or malformed push)."""
+    if not isinstance(section, str) or not section.strip():
+        raise ValueError("section must be a non-empty string")
+    if not isinstance(values, dict):
+        raise ValueError("values must be a dict")
+    if not isinstance(fields, tuple) or not all(isinstance(f, str) and f.strip() for f in fields):
+        raise ValueError("fields must be a tuple of non-empty strings")
     for key in fields:
         if key in values:
             v = values[key]
@@ -219,6 +225,10 @@ def _validated_section(section: str, current: dict[str, Any], update: dict[str, 
     booleans, lists stay bounded lists of finite numbers or bounded strings, dicts stay dicts of the same. A push that
     fails any rule changes nothing.
     """
+    if not isinstance(section, str) or not section.strip():
+        raise ValueError("section must be a non-empty string")
+    if not isinstance(current, dict) or not isinstance(update, dict):
+        raise ValueError("current and update must be dicts")
     out: dict[str, Any] = {}
     for key, value in update.items():
         if key not in current:
@@ -229,6 +239,8 @@ def _validated_section(section: str, current: dict[str, Any], update: dict[str, 
 
 
 def _check_like(path: str, template: Any, value: Any) -> None:
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError("path must be a non-empty string")
     if isinstance(template, bool):
         if not isinstance(value, bool):
             raise ValueError(f"{path} must be a boolean, got {value!r}")

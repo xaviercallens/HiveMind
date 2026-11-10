@@ -317,6 +317,23 @@ class StunMessage:
     transaction_id: bytes = field(default_factory=lambda: secrets.token_bytes(12))
     attributes: List[Tuple[int, bytes]] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        if isinstance(self.method, bool) or not isinstance(self.method, int) or not (0 <= self.method <= 0x0FFF):
+            raise ValueError("method must be an integer in 0..0x0FFF")
+        if isinstance(self.cls, bool) or not isinstance(self.cls, int) or not (0 <= self.cls <= 3):
+            raise ValueError("cls must be an integer in 0..3")
+        if not isinstance(self.transaction_id, (bytes, bytearray)) or len(self.transaction_id) != 12:
+            raise ValueError("transaction_id must be 12 bytes")
+        if not isinstance(self.attributes, list) or any(
+            not isinstance(item, tuple)
+            or len(item) != 2
+            or isinstance(item[0], bool)
+            or not isinstance(item[0], int)
+            or not isinstance(item[1], (bytes, bytearray))
+            for item in self.attributes
+        ):
+            raise ValueError("attributes must be a list of (int, bytes) tuples")
+
     def add(self, attr_type: int, value: bytes) -> "StunMessage":
         self.attributes.append((attr_type, value))
         return self
@@ -527,12 +544,37 @@ def stun_transaction(
         return message, data, (time.perf_counter() - t0) * 1000.0
 
 
+def _validate_address_tuple(addr: object, field_name: str) -> None:
+    if (
+        not isinstance(addr, tuple)
+        or len(addr) != 2
+        or not isinstance(addr[0], str)
+        or not addr[0].strip()
+        or isinstance(addr[1], bool)
+        or not isinstance(addr[1], int)
+        or not (0 <= addr[1] <= 65535)
+    ):
+        raise ValueError(f"{field_name} must be a (non-empty host, port in 0..65535) tuple")
+
+
 @dataclass
 class StunBindingResult:
     server: Address
     local: Address
     mapped: Address
     rtt_ms: float
+
+    def __post_init__(self) -> None:
+        _validate_address_tuple(self.server, "server")
+        _validate_address_tuple(self.local, "local")
+        _validate_address_tuple(self.mapped, "mapped")
+        if (
+            isinstance(self.rtt_ms, bool)
+            or not isinstance(self.rtt_ms, (int, float))
+            or not math.isfinite(float(self.rtt_ms))
+            or float(self.rtt_ms) < 0.0
+        ):
+            raise ValueError("rtt_ms must be a finite non-negative number")
 
 
 def stun_binding(sock: socket.socket, server: ServerSpec, timeout: float = 3.0) -> StunBindingResult:
@@ -566,6 +608,26 @@ class NatMapping:
     mapped: List[Address]
     servers: List[Address]
     rtt_ms: List[float] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.behaviour not in ("no_nat", "endpoint_independent", "address_dependent", "unknown"):
+            raise ValueError(
+                "behaviour must be one of ('no_nat', 'endpoint_independent', 'address_dependent', 'unknown')"
+            )
+        _validate_address_tuple(self.local, "local")
+        if not isinstance(self.mapped, list) or not self.mapped:
+            raise ValueError("mapped must be a non-empty list of Address tuples")
+        for m in self.mapped:
+            _validate_address_tuple(m, "mapped item")
+        if not isinstance(self.servers, list) or not self.servers:
+            raise ValueError("servers must be a non-empty list of Address tuples")
+        for s in self.servers:
+            _validate_address_tuple(s, "servers item")
+        if not isinstance(self.rtt_ms, list) or any(
+            isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(float(x)) or float(x) < 0.0
+            for x in self.rtt_ms
+        ):
+            raise ValueError("rtt_ms must be a list of finite non-negative numbers")
 
     @property
     def nat_type(self) -> str:
@@ -620,6 +682,26 @@ class PunchResult:
     peer: Optional[Address]
     rtt_ms: Optional[float]
     probes_sent: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.succeeded, bool):
+            raise ValueError("succeeded must be a boolean")
+        if self.peer is not None:
+            _validate_address_tuple(self.peer, "peer")
+        elif self.succeeded:
+            raise ValueError("peer cannot be None when succeeded is True")
+        if self.rtt_ms is not None:
+            if (
+                isinstance(self.rtt_ms, bool)
+                or not isinstance(self.rtt_ms, (int, float))
+                or not math.isfinite(float(self.rtt_ms))
+                or float(self.rtt_ms) < 0.0
+            ):
+                raise ValueError("rtt_ms must be None or a finite non-negative number")
+        elif self.succeeded:
+            raise ValueError("rtt_ms cannot be None when succeeded is True")
+        if isinstance(self.probes_sent, bool) or not isinstance(self.probes_sent, int) or self.probes_sent < 0:
+            raise ValueError("probes_sent must be a non-negative integer")
 
 
 def udp_hole_punch(

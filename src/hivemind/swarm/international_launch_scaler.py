@@ -296,6 +296,49 @@ class Top1PctDctEf21Packet:
     residual_conservation_l2_error: float
     packet_sha256: str
 
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.original_shape, tuple)
+            or len(self.original_shape) != 2
+            or any(isinstance(d, bool) or not isinstance(d, int) for d in self.original_shape)
+        ):
+            raise ValueError("original_shape must be a 2-tuple of integers")
+        for i_name in ("total_elements", "retained_k", "uncompressed_fp32_bytes", "compressed_wire_bytes"):
+            val = getattr(self, i_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{i_name} must be a positive integer")
+        if self.retained_k > self.total_elements:
+            raise ValueError("retained_k cannot exceed total_elements")
+        if (
+            isinstance(self.top_k_fraction, bool)
+            or not isinstance(self.top_k_fraction, (int, float))
+            or not math.isfinite(float(self.top_k_fraction))
+            or not (0.0 < float(self.top_k_fraction) <= 1.0)
+        ):
+            raise ValueError("top_k_fraction must be a finite number in (0, 1]")
+        if (
+            isinstance(self.compression_ratio, bool)
+            or not isinstance(self.compression_ratio, (int, float))
+            or not math.isfinite(float(self.compression_ratio))
+            or float(self.compression_ratio) <= 0.0
+        ):
+            raise ValueError("compression_ratio must be a finite positive number")
+        if (
+            isinstance(self.residual_conservation_l2_error, bool)
+            or not isinstance(self.residual_conservation_l2_error, (int, float))
+            or not math.isfinite(float(self.residual_conservation_l2_error))
+            or float(self.residual_conservation_l2_error) < 0.0
+        ):
+            raise ValueError("residual_conservation_l2_error must be a finite non-negative number")
+        for arr_name in ("flat_indices", "quantized_codes_2bit", "codebook_4level"):
+            arr = getattr(self, arr_name)
+            if not isinstance(arr, np.ndarray) or arr.ndim != 1:
+                raise ValueError(f"{arr_name} must be a 1D numpy ndarray")
+        if self.codebook_4level.shape != (4,):
+            raise ValueError("codebook_4level must have shape (4,)")
+        if not isinstance(self.packet_sha256, str) or not self.packet_sha256.strip():
+            raise ValueError("packet_sha256 must be a non-empty string")
+
 
 def _orthonormal_dct_1d_matrix(n: int) -> np.ndarray:
     """Construct an orthonormal 1D DCT-II matrix of size (n, n)."""

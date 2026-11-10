@@ -116,7 +116,7 @@ def test_nat_traversal_stun_turn_fault_proxy_boundary_validation() -> None:
         with pytest.raises(TypeError, match="payload"):
             client.send_channel(("127.0.0.1", 5000), "not-bytes")  # type: ignore[arg-type]
         with pytest.raises(ValueError, match="timeout"):
-            client.recv_from(timeout=0.0)
+            client.recv_from(timeout=-0.1)
     finally:
         sock.close()
 

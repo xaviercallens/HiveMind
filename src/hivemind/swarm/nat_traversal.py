@@ -1053,9 +1053,9 @@ class TurnClient:
             isinstance(timeout, bool)
             or not isinstance(timeout, (int, float))
             or not math.isfinite(float(timeout))
-            or float(timeout) <= 0.0
+            or float(timeout) < 0.0
         ):
-            raise ValueError("timeout must be a positive finite number")
+            raise ValueError("timeout must be a non-negative finite number")
         deadline = time.monotonic() + timeout
         while not self._inbox:
             remaining = deadline - time.monotonic()

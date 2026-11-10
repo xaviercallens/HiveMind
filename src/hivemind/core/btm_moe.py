@@ -32,7 +32,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
 import torch
 import torch.nn as nn
@@ -179,10 +179,14 @@ class ProjectedLoRAStateDict(dict):
     """Dict of projected LoRA tensors that also exposes metadata keys (`state_dict`, `factors`, `target_rank`, `parameter_bytes`)."""
 
     def __init__(self, tensors: Dict[str, torch.Tensor], meta: Dict[str, Any]) -> None:
+        if not isinstance(tensors, Mapping) or not isinstance(meta, Mapping):
+            raise ValueError("tensors and meta must be Mappings")
         super().__init__(tensors)
         self._meta = meta
 
     def __getitem__(self, key: str) -> Any:
+        if not isinstance(key, str) or not key.strip():
+            raise KeyError(key)
         if super().__contains__(key):
             return super().__getitem__(key)
         if key == "state_dict":
@@ -333,6 +337,12 @@ class Season3DomainExpertRegistry:
                 canonical rank with `project_lora_rank_svd` (`HM-S4-05`), so
                 heterogeneous community ranks can coexist without VRAM bloat.
         """
+        if not isinstance(moe_model, UpcycledSparseMoEModel):
+            raise ValueError("moe_model must be an UpcycledSparseMoEModel")
+        if target_rank_r is not None and (
+            isinstance(target_rank_r, bool) or not isinstance(target_rank_r, int) or target_rank_r < 1
+        ):
+            raise ValueError("target_rank_r must be a positive integer when provided")
         initial_experts = moe_model.num_experts
         plugged_domains: List[str] = []
         for domain_name, exp in self.experts.items():
@@ -384,6 +394,10 @@ def _stack_ragged_gates(
     gates: "nn.ModuleList", hidden_size: int
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Zero-pad per-cluster gate matrices to a common width; padded rows are masked out."""
+    if not isinstance(gates, nn.ModuleList) or len(gates) < 1:
+        raise ValueError("gates must be a non-empty nn.ModuleList")
+    if isinstance(hidden_size, bool) or not isinstance(hidden_size, int) or hidden_size < 1:
+        raise ValueError("hidden_size must be a positive integer")
     width = max(g.out_features for g in gates)
     device = gates[0].weight.device
     stacked = torch.zeros((len(gates), width, hidden_size), dtype=torch.float32, device=device)
@@ -658,6 +672,13 @@ class ThreeTierHierarchicalMoERouter(nn.Module):
         self, hs_fp32: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """Return super probs/idx, macro probs/idx and the masked micro logits of the winning path."""
+        if (
+            not isinstance(hs_fp32, torch.Tensor)
+            or hs_fp32.ndim != 2
+            or hs_fp32.shape[0] < 1
+            or hs_fp32.shape[1] != self.hidden_size
+        ):
+            raise ValueError("hs_fp32 must be a 2D torch.Tensor of shape [N, hidden_size]")
         super_probs = F.softmax(self.super_gate(hs_fp32), dim=-1, dtype=torch.float32)
         super_prob, super_idx = torch.max(super_probs, dim=-1)
 
@@ -717,6 +738,14 @@ class ThreeTierHierarchicalMoERouter(nn.Module):
         `P(super) * P(macro | super) * softmax(micro logits)[e]`, so the values are a proper
         sub-distribution (they sum to at most 1). Used to decide which experts to prefetch.
         """
+        if (
+            not isinstance(hidden_states, torch.Tensor)
+            or hidden_states.numel() == 0
+            or hidden_states.shape[-1] != self.hidden_size
+        ):
+            raise ValueError("hidden_states must be a non-empty torch.Tensor with last dimension == hidden_size")
+        if top_n is not None and (isinstance(top_n, bool) or not isinstance(top_n, int) or top_n < 1):
+            raise ValueError("top_n must be a positive integer when provided")
         hs_fp32 = hidden_states.to(torch.float32).reshape(-1, self.hidden_size)
         _, super_prob, _, macro_prob, cluster_idx, micro_logits = self._route_path(hs_fp32)
         micro_probs = F.softmax(micro_logits, dim=-1, dtype=torch.float32)
@@ -789,6 +818,8 @@ class FP8PagedKVCache:
 
     @staticmethod
     def _quantize_page_fp8(tensor: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        if not isinstance(tensor, torch.Tensor) or tensor.numel() == 0:
+            raise ValueError("tensor must be a non-empty torch.Tensor")
         t_fp32 = tensor.detach().to(torch.float32)
         absmax = t_fp32.abs().amax(dim=-1, keepdim=True).clamp_min(1e-6)
         scale = (absmax / 448.0).to(torch.float16)
@@ -803,6 +834,8 @@ class FP8PagedKVCache:
     def _dequantize_page_fp8(
         q: torch.Tensor, scale: torch.Tensor, target_dtype: torch.dtype = torch.float16
     ) -> torch.Tensor:
+        if not isinstance(q, torch.Tensor) or not isinstance(scale, torch.Tensor):
+            raise ValueError("q and scale must be torch.Tensors")
         if hasattr(torch, "float8_e4m3fn") and q.dtype == torch.float8_e4m3fn:
             return (q.to(torch.float32) * scale.to(torch.float32)).to(target_dtype)
         return ((q.to(torch.float32) / 127.0) * 448.0 * scale.to(torch.float32)).to(target_dtype)
@@ -815,6 +848,17 @@ class FP8PagedKVCache:
         target_bits_per_dim: float = 4.0,
     ) -> Tuple[torch.Tensor, torch.Tensor, float, float]:
         """Quantize `tensor` under `codec`, returning `(stored_q, scale_t, rate_bits_per_dim, relative_mse)`."""
+        if not isinstance(tensor, torch.Tensor) or tensor.numel() == 0:
+            raise ValueError("tensor must be a non-empty torch.Tensor")
+        if codec not in cls.VALID_CODECS:
+            raise ValueError(f"codec must be one of {cls.VALID_CODECS}, got {codec!r}")
+        if (
+            isinstance(target_bits_per_dim, bool)
+            or not isinstance(target_bits_per_dim, (int, float))
+            or not math.isfinite(float(target_bits_per_dim))
+            or target_bits_per_dim <= 0.0
+        ):
+            raise ValueError("target_bits_per_dim must be > 0")
         t_fp32 = tensor.detach().to(torch.float32)
         orig_shape = t_fp32.shape
         flat = t_fp32.reshape(-1).cpu()
@@ -919,6 +963,10 @@ class FP8PagedKVCache:
         self, layer_idx: int, page_idx: int, target_dtype: torch.dtype = torch.float16
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Dequantize and return a stored `(K, V)` page."""
+        if isinstance(layer_idx, bool) or not isinstance(layer_idx, int) or layer_idx < 0:
+            raise ValueError(f"layer_idx must be an integer >= 0, got {layer_idx!r}")
+        if isinstance(page_idx, bool) or not isinstance(page_idx, int) or page_idx < 0:
+            raise ValueError(f"page_idx must be an integer >= 0, got {page_idx!r}")
         qk, sk = self._pages_k[(layer_idx, page_idx)]
         qv, sv = self._pages_v[(layer_idx, page_idx)]
         if self.codec == "fp8_e4m3":
@@ -940,6 +988,20 @@ class FP8PagedKVCache:
         target_bits_per_dim: float = 4.0,
     ) -> Dict[str, Any]:
         """Compare all 5 KV-cache page codecs (`HM-S10-05` / E11) with positive/negative controls."""
+        if (
+            not isinstance(k_tensor, torch.Tensor)
+            or not isinstance(v_tensor, torch.Tensor)
+            or k_tensor.numel() == 0
+            or v_tensor.numel() == 0
+        ):
+            raise ValueError("k_tensor and v_tensor must be non-empty torch.Tensors")
+        if (
+            isinstance(target_bits_per_dim, bool)
+            or not isinstance(target_bits_per_dim, (int, float))
+            or not math.isfinite(float(target_bits_per_dim))
+            or target_bits_per_dim <= 0.0
+        ):
+            raise ValueError("target_bits_per_dim must be > 0")
         results: Dict[str, Dict[str, float]] = {}
         for codec in cls.VALID_CODECS:
             _, _, rk, mk = cls._encode_decode_with_codec(k_tensor, codec, target_bits_per_dim)
@@ -972,6 +1034,8 @@ class FP8PagedKVCache:
 
 
 def _install_router_on_blocks(moe_model: UpcycledSparseMoEModel, make_router) -> None:
+    if not isinstance(moe_model, UpcycledSparseMoEModel) or not callable(make_router):
+        raise ValueError("moe_model must be an UpcycledSparseMoEModel and make_router must be callable")
     for block in moe_model.moe_blocks:
         dev = next(block.router.parameters()).device
         block.router = make_router().to(dev)
@@ -979,6 +1043,15 @@ def _install_router_on_blocks(moe_model: UpcycledSparseMoEModel, make_router) ->
 
 def _footprint_report(moe_model: UpcycledSparseMoEModel, vram_ceiling_gb: float) -> Dict[str, Any]:
     """Parameter-byte footprint, plus live CUDA allocation only when CUDA is actually in use."""
+    if not isinstance(moe_model, UpcycledSparseMoEModel):
+        raise ValueError("moe_model must be an UpcycledSparseMoEModel")
+    if (
+        isinstance(vram_ceiling_gb, bool)
+        or not isinstance(vram_ceiling_gb, (int, float))
+        or not math.isfinite(float(vram_ceiling_gb))
+        or float(vram_ceiling_gb) <= 0.0
+    ):
+        raise ValueError("vram_ceiling_gb must be a positive finite float")
     stats = measure_moe_vram_footprint_gb(moe_model)
     on_cuda = next(moe_model.parameters()).device.type == "cuda" and torch.cuda.is_available()
     report: Dict[str, Any] = {

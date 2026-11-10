@@ -3654,6 +3654,7 @@ def create_router_app(
             COMMUNITY_HELP_AND_CONTRIBUTIVE_GUIDE,
             FIREWALL_TRAVERSAL_MODES,
             MULTI_GPU_2_TO_4_BYOM_CO_TRAINING_PLAYBOOK,
+            build_crowdgpt_trainer_producer_plan,
             default_active_task_offer,
             summarize_moe_self_training_progress,
         )
@@ -3701,7 +3702,27 @@ def create_router_app(
             "firewall_traversal_modes": list(FIREWALL_TRAVERSAL_MODES),
             "community_help_guide": list(COMMUNITY_HELP_AND_CONTRIBUTIVE_GUIDE),
             "multi_gpu_2_to_4_byom_playbook": MULTI_GPU_2_TO_4_BYOM_CO_TRAINING_PLAYBOOK,
+            "crowdgpt_trainer_producer_plan": build_crowdgpt_trainer_producer_plan(
+                opentrainer_nodes=ot_nodes,
+                recent_rounds=ot_rounds,
+                now_utc=now,
+            ),
         }
+
+    @app.get("/v1/hivemind/opentrainer/crowdgpt-plan")
+    @app.get("/v1/opentrainer/crowdgpt-plan")
+    def get_opentrainer_crowdgpt_plan() -> dict[str, Any]:
+        """Public CrowdGPT (Vxtzq/Crowd-v1) Trainer + Producer GPU Co-Training Plan & live campaign telemetry."""
+        from hivemind.router.opentrainer import build_crowdgpt_trainer_producer_plan
+
+        now = clock()
+        nodes = store.list_opentrainer_nodes()
+        rounds = store.list_opentrainer_rounds(limit=100)
+        return build_crowdgpt_trainer_producer_plan(
+            opentrainer_nodes=nodes,
+            recent_rounds=rounds,
+            now_utc=now,
+        )
 
     @app.post("/v1/hivemind/opentrainer/heartbeat")
     @app.post("/v1/opentrainer/heartbeat")

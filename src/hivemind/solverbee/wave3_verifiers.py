@@ -45,6 +45,18 @@ def _cert(
     *,
     unverified: bool = False,
 ) -> Dict[str, Any]:
+    if not isinstance(spec_id, str) or not spec_id.strip():
+        raise ValueError("spec_id must be a non-empty string")
+    if not isinstance(domain, str) or not domain.strip():
+        raise ValueError("domain must be a non-empty string")
+    if not isinstance(checks, list):
+        raise ValueError("checks must be a list")
+    if not isinstance(reasons, list):
+        raise ValueError("reasons must be a list")
+    if not isinstance(payload_for_hash, dict):
+        raise ValueError("payload_for_hash must be a dict")
+    if not isinstance(unverified, bool):
+        raise ValueError("unverified must be a boolean")
     raw_bytes = json.dumps(payload_for_hash, sort_keys=True, default=str).encode("utf-8")
     input_sha256 = hashlib.sha256(raw_bytes).hexdigest()
     if unverified:
@@ -475,7 +487,9 @@ def verify_numeric_solver_trajectory(
     spec_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Fail-closed verifier for `bee_numeric_solver_sundials` (Spec grammar + 100x tightening agreement + invariants)."""
-    sid = str(spec_id or (spec.get("id") if isinstance(spec, dict) else "wave3-numeric"))
+    if spec_id is not None and (not isinstance(spec_id, str) or not spec_id.strip()):
+        raise ValueError("spec_id must be None or a non-empty string")
+    sid = str(spec_id or (spec.get("id") if isinstance(spec, dict) and str(spec.get("id") or "").strip() else "wave3-numeric"))
     payload = {
         "spec": spec,
         "y_coarse": y_coarse,

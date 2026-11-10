@@ -46,6 +46,32 @@ class SigmaMoERoutingResult:
     ideal_skip_token_scaling: float
     empirical_skip_token_scaling: float
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.expert_indices, torch.Tensor) or self.expert_indices.ndim != 2 or self.expert_indices.numel() == 0:
+            raise ValueError("expert_indices must be a non-empty 2D torch.Tensor")
+        if not isinstance(self.gate_values, torch.Tensor) or self.gate_values.shape != self.expert_indices.shape:
+            raise ValueError("gate_values must match expert_indices.shape")
+        if not isinstance(self.skipped_slots, torch.Tensor) or self.skipped_slots.shape != self.expert_indices.shape:
+            raise ValueError("skipped_slots must match expert_indices.shape")
+        if isinstance(self.total_experts, bool) or not isinstance(self.total_experts, int) or self.total_experts < 1:
+            raise ValueError("total_experts must be an integer >= 1")
+        if (
+            isinstance(self.resident_experts, bool)
+            or not isinstance(self.resident_experts, int)
+            or not (1 <= self.resident_experts <= self.total_experts)
+        ):
+            raise ValueError("resident_experts must satisfy 1 <= resident_experts <= total_experts")
+        if (
+            isinstance(self.top_k, bool)
+            or not isinstance(self.top_k, int)
+            or not (1 <= self.top_k <= self.total_experts)
+        ):
+            raise ValueError("top_k must satisfy 1 <= top_k <= total_experts")
+        for field_name in ("ghost_assignment_fraction", "ideal_skip_token_scaling", "empirical_skip_token_scaling"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or not (0.0 <= float(val) <= 1.0):
+                raise ValueError(f"{field_name} must be a finite number in [0.0, 1.0]")
+
 
 def sigmoid_independent_topk_routing(
     router_logits: torch.Tensor,

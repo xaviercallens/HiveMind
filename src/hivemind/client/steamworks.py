@@ -132,6 +132,33 @@ class SteamUserTelemetry:
         }
     )
 
+    def __post_init__(self) -> None:
+        for s_name in ("steam_id64", "persona_name"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        for f_name in ("verified_tflops", "api_credits_balance"):
+            val = getattr(self, f_name)
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or float(val) < 0.0
+            ):
+                raise ValueError(f"{f_name} must be a finite non-negative number")
+        for i_name in ("workunits_completed", "hack_miner_total_pts", "swarm_contribution_pts"):
+            val = getattr(self, i_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_name} must be a non-negative integer")
+        for s_opt in ("leaderboard_receipt_hmac", "rich_presence_status"):
+            if not isinstance(getattr(self, s_opt), str):
+                raise ValueError(f"{s_opt} must be a string")
+        for l_name in ("unlocked_achievements", "credit_receipts"):
+            if not isinstance(getattr(self, l_name), list):
+                raise ValueError(f"{l_name} must be a list")
+        if not isinstance(self.stats, dict):
+            raise ValueError("stats must be a dict")
+
 
 class SteamworksSDKBridge:
     """Interface to Steamworks Native DLL, User Auth, Rich Presence, Leaderboards, Achievements & Credits."""

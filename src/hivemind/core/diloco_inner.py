@@ -49,6 +49,20 @@ class MicroCheckpointRecord:
     loss_value: float
     state_snapshot: dict[str, torch.Tensor] = field(repr=False)
 
+    def __post_init__(self) -> None:
+        if isinstance(self.step, bool) or not isinstance(self.step, int) or self.step < 0:
+            raise ValueError("step must be a non-negative integer")
+        if not isinstance(self.lora_sha256, str) or not self.lora_sha256.strip():
+            raise ValueError("lora_sha256 must be a non-empty string")
+        if (
+            isinstance(self.loss_value, bool)
+            or not isinstance(self.loss_value, (int, float))
+            or not math.isfinite(float(self.loss_value))
+        ):
+            raise ValueError("loss_value must be a finite number")
+        if not isinstance(self.state_snapshot, dict):
+            raise ValueError("state_snapshot must be a dict")
+
 
 @dataclass
 class InnerLoopResult:
@@ -77,6 +91,37 @@ class InnerLoopResult:
     use_muon_lora_preconditioner: bool = False
     muon_ns_steps: int = 5
     use_paged_8bit_adamw: bool = False
+
+    def __post_init__(self) -> None:
+        for s_name in ("worker_id", "branch_name"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        for i_name in (
+            "outer_step",
+            "steps_completed",
+            "thermal_throttled_steps",
+            "muon_preconditioned_steps",
+        ):
+            val = getattr(self, i_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_name} must be a non-negative integer")
+        if isinstance(self.muon_ns_steps, bool) or not isinstance(self.muon_ns_steps, int) or self.muon_ns_steps < 1:
+            raise ValueError("muon_ns_steps must be an integer >= 1")
+        for f_name in ("initial_loss", "final_loss", "elapsed_seconds", "emergency_dump_latency_sec", "max_step_latency_sec"):
+            val = getattr(self, f_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{f_name} must be a finite number")
+            if f_name in ("elapsed_seconds", "emergency_dump_latency_sec", "max_step_latency_sec") and float(val) < 0.0:
+                raise ValueError(f"{f_name} must be non-negative")
+        for d_name in ("theta_init", "theta_final", "raw_delta", "micro_checkpoints"):
+            if not isinstance(getattr(self, d_name), dict):
+                raise ValueError(f"{d_name} must be a dict")
+        if not isinstance(self.compressed_delta, CompressedDeltaPackage):
+            raise ValueError("compressed_delta must be a CompressedDeltaPackage")
+        for b_name in ("preempted_by_daemon", "use_muon_lora_preconditioner", "use_paged_8bit_adamw"):
+            if not isinstance(getattr(self, b_name), bool):
+                raise ValueError(f"{b_name} must be a boolean")
 
 
 def quantize_tensor_blockwise_8bit(

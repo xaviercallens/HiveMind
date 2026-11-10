@@ -79,6 +79,35 @@ class MoEUpcycleReport:
     expert_utilization_distribution: dict[str, float] = field(default_factory=dict)
     attention_merge_mode: str = "uniform"
 
+    def __post_init__(self) -> None:
+        for i_name in (
+            "num_experts",
+            "top_k",
+            "attention_layers_merged",
+            "ffn_expert_modules_created",
+            "total_moe_parameters",
+            "active_parameters_per_token",
+        ):
+            val = getattr(self, i_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{i_name} must be a positive integer")
+        if self.top_k > self.num_experts:
+            raise ValueError("top_k cannot exceed num_experts")
+        if (
+            not isinstance(self.expert_domains, list)
+            or len(self.expert_domains) != self.num_experts
+            or any(not isinstance(d, str) or not d.strip() for d in self.expert_domains)
+        ):
+            raise ValueError("expert_domains must be a list of non-empty strings of length num_experts")
+        for f_name in ("router_initial_loss", "router_final_loss"):
+            val = getattr(self, f_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{f_name} must be a finite number")
+        if not isinstance(self.expert_utilization_distribution, dict):
+            raise ValueError("expert_utilization_distribution must be a dict")
+        if not isinstance(self.attention_merge_mode, str) or not self.attention_merge_mode.strip():
+            raise ValueError("attention_merge_mode must be a non-empty string")
+
 
 def initialize_domain_branches(
     initial_lora_state: dict[str, torch.Tensor],
@@ -182,6 +211,33 @@ class SVDLoARankProjectionReport:
     target_params: int
     source_lora_alpha: float
     target_lora_alpha: float
+
+    def __post_init__(self) -> None:
+        if isinstance(self.target_rank_r, bool) or not isinstance(self.target_rank_r, int) or self.target_rank_r < 1:
+            raise ValueError("target_rank_r must be a positive integer")
+        for i_nonneg in (
+            "source_rank_r",
+            "num_projected_pairs",
+            "num_padded_pairs",
+            "num_identity_pairs",
+            "source_params",
+            "target_params",
+        ):
+            val = getattr(self, i_nonneg)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_nonneg} must be a non-negative integer")
+        for f_name in (
+            "mean_spectral_energy_retained",
+            "min_spectral_energy_retained",
+            "max_relative_delta_error",
+            "source_lora_alpha",
+            "target_lora_alpha",
+        ):
+            val = getattr(self, f_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{f_name} must be a finite number")
+        if float(self.source_lora_alpha) < 0.0 or float(self.target_lora_alpha) < 0.0:
+            raise ValueError("source_lora_alpha and target_lora_alpha must be non-negative")
 
     @property
     def compression_ratio(self) -> float:
@@ -1272,6 +1328,43 @@ class LoopedBackboneReport:
     last_mean_effective_steps: float | None = None
     last_early_exit_fraction: float | None = None
     last_fixed_point_residual: float | None = None
+
+    def __post_init__(self) -> None:
+        for i_pos in ("source_depth", "num_core_layers", "loop_steps", "effective_depth"):
+            val = getattr(self, i_pos)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{i_pos} must be a positive integer")
+        for i_nonneg in (
+            "num_prelude_layers",
+            "num_coda_layers",
+            "per_step_lora_rank",
+            "source_weight_bytes",
+            "core_weight_bytes",
+            "loop_adapter_bytes",
+            "looped_weight_bytes",
+            "unrolled_weight_bytes",
+        ):
+            val = getattr(self, i_nonneg)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_nonneg} must be a non-negative integer")
+        if (
+            isinstance(self.depth_multiplier, bool)
+            or not isinstance(self.depth_multiplier, (int, float))
+            or not math.isfinite(float(self.depth_multiplier))
+            or float(self.depth_multiplier) <= 0.0
+        ):
+            raise ValueError("depth_multiplier must be a finite positive number")
+        if not isinstance(self.input_injection, str) or not self.input_injection.strip():
+            raise ValueError("input_injection must be a non-empty string")
+        for f_opt in ("last_mean_effective_steps", "last_early_exit_fraction", "last_fixed_point_residual"):
+            val = getattr(self, f_opt)
+            if val is not None and (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or float(val) < 0.0
+            ):
+                raise ValueError(f"{f_opt} must be None or a finite non-negative number")
 
     @property
     def extra_weight_bytes(self) -> int:

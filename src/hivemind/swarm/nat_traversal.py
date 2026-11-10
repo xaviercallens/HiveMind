@@ -581,6 +581,19 @@ class StunBindingResult:
 
 def stun_binding(sock: socket.socket, server: ServerSpec, timeout: float = 3.0) -> StunBindingResult:
     """Send an RFC 5389 Binding request and return the server-reflexive address it reports."""
+    if not (
+        callable(getattr(sock, "sendto", None))
+        and callable(getattr(sock, "recvfrom", None))
+        and callable(getattr(sock, "getsockname", None))
+    ):
+        raise TypeError("sock must be a UDP socket with sendto, recvfrom, and getsockname")
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(float(timeout))
+        or float(timeout) <= 0.0
+    ):
+        raise ValueError("timeout must be a positive finite number")
     server_addr = resolve(server)
     request = StunMessage(BINDING, REQUEST).add(SOFTWARE, SOFTWARE_NAME.encode("utf-8"))
     message, _, rtt_ms = stun_transaction(
@@ -648,6 +661,21 @@ def classify_nat_mapping(
     sock: socket.socket, servers: Sequence[ServerSpec], timeout: float = 2.0
 ) -> NatMapping:
     """Compare the mappings two STUN servers report for the same local socket."""
+    if not (
+        callable(getattr(sock, "sendto", None))
+        and callable(getattr(sock, "recvfrom", None))
+        and callable(getattr(sock, "getsockname", None))
+    ):
+        raise TypeError("sock must be a UDP socket with sendto, recvfrom, and getsockname")
+    if isinstance(servers, (str, bytes)) or not isinstance(servers, Sequence) or len(servers) == 0:
+        raise ValueError("servers must be a non-empty sequence of ServerSpec")
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(float(timeout))
+        or float(timeout) <= 0.0
+    ):
+        raise ValueError("timeout must be a positive finite number")
     results: List[StunBindingResult] = []
     for server in servers:
         try:
@@ -952,9 +980,12 @@ class TurnClient:
         return self.relayed
 
     def create_permission(self, peer_ip: str) -> None:
+        if not isinstance(peer_ip, str) or not peer_ip.strip():
+            raise ValueError("peer_ip must be a non-empty IP address string")
+        ipaddress.ip_address(peer_ip.strip())
         self._request(
             CREATE_PERMISSION,
-            [(XOR_PEER_ADDRESS, lambda txid: encode_xor_address((peer_ip, 0), txid))],
+            [(XOR_PEER_ADDRESS, lambda txid: encode_xor_address((peer_ip.strip(), 0), txid))],
         )
 
     def refresh(self, lifetime: int = 600) -> int:
@@ -967,6 +998,9 @@ class TurnClient:
 
     def send_to(self, peer: Address, payload: bytes) -> None:
         """Relay `payload` to `peer` through the allocation (Send indication, RFC 5766 §10.1)."""
+        _validate_address_tuple(peer, "peer")
+        if not isinstance(payload, (bytes, bytearray)):
+            raise TypeError("payload must be bytes")
         indication = StunMessage(SEND, INDICATION)
         indication.add(XOR_PEER_ADDRESS, encode_xor_address(peer, indication.transaction_id))
         indication.add(DATA_ATTR, payload)
@@ -980,6 +1014,7 @@ class TurnClient:
         already bound to `peer` (a refresh, §11.2) or the lowest free one. Binding also
         installs the peer permission, so no separate CreatePermission is needed.
         """
+        _validate_address_tuple(peer, "peer")
         if channel_number is None:
             channel_number = self.channels.get(peer)
             if channel_number is None:
@@ -1004,6 +1039,9 @@ class TurnClient:
 
     def send_channel(self, peer: Address, payload: bytes) -> None:
         """Send `payload` to `peer` over the channel bound to it (RFC 5766 §11.4)."""
+        _validate_address_tuple(peer, "peer")
+        if not isinstance(payload, (bytes, bytearray)):
+            raise TypeError("payload must be bytes")
         channel_number = self.channels.get(peer)
         if channel_number is None:
             raise StunError("no TURN channel is bound to that peer")
@@ -1011,6 +1049,13 @@ class TurnClient:
 
     def recv_from(self, timeout: float = 2.0) -> Tuple[Address, bytes]:
         """Wait for the next relayed payload and return `(peer, payload)`."""
+        if (
+            isinstance(timeout, bool)
+            or not isinstance(timeout, (int, float))
+            or not math.isfinite(float(timeout))
+            or float(timeout) <= 0.0
+        ):
+            raise ValueError("timeout must be a positive finite number")
         deadline = time.monotonic() + timeout
         while not self._inbox:
             remaining = deadline - time.monotonic()
@@ -1618,6 +1663,11 @@ class DeterministicFaultProxy:
         profile: Optional[FaultProfile] = None,
         host: str = "127.0.0.1",
     ) -> None:
+        _validate_address_tuple(upstream, "upstream")
+        if profile is not None and not isinstance(profile, FaultProfile):
+            raise TypeError("profile must be None or a FaultProfile")
+        if not isinstance(host, str) or not host.strip():
+            raise ValueError("host must be a non-empty string")
         self.upstream = upstream
         self.profile = profile if profile is not None else FaultProfile()
         self.host = host

@@ -4823,6 +4823,14 @@ def redeem_compute_points_for_task(
     auth_users: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Redeem non-monetary HiveMind Reflexion Points to run a specialized MoE Bee task."""
+    if not isinstance(req, ComputePointsRedeemRequest):
+        raise TypeError("req must be a ComputePointsRedeemRequest")
+    if not isinstance(vault_dir, (str, Path)) or not str(vault_dir).strip():
+        raise ValueError("vault_dir must be a non-empty path")
+    if ledger is not None and not isinstance(ledger, dict):
+        raise TypeError("ledger must be None or a dict")
+    if auth_users is not None and not isinstance(auth_users, dict):
+        raise TypeError("auth_users must be None or a dict")
     cost_map = {
         "python_coding_gwaya": 50,
         "astrophysics_exoplanet": 50,
@@ -7662,6 +7670,16 @@ def export_hivemind_at_home_artifacts(
     api_base_url: str = "",
 ) -> Dict[str, Any]:
     """Generate and write both the JSON state and self-contained HTML5 dashboard artifact."""
+    for field_name, path_val in (
+        ("output_html_path", output_html_path),
+        ("output_state_json_path", output_state_json_path),
+        ("gpu_campaigns_report_path", gpu_campaigns_report_path),
+        ("mining_ruche_report_path", mining_ruche_report_path),
+    ):
+        if not isinstance(path_val, (str, Path)) or not str(path_val).strip():
+            raise ValueError(f"{field_name} must be a non-empty path")
+    if not isinstance(api_base_url, str):
+        raise TypeError("api_base_url must be a string")
     state = build_hivemind_at_home_state(
         gpu_campaigns_report_path=gpu_campaigns_report_path,
         mining_ruche_report_path=mining_ruche_report_path,
@@ -7698,6 +7716,14 @@ def create_hivemind_at_home_app(
     night_moe_results_path: Path | str = DEFAULT_RESULTS_PATH,
 ) -> FastAPI:
     """Create the FastAPI web server for HiveMind@home, GCP Cloud Telemetry, La Ruche & Federated AI."""
+    for field_name, path_val in (
+        ("gpu_campaigns_report_path", gpu_campaigns_report_path),
+        ("mining_ruche_report_path", mining_ruche_report_path),
+        ("vault_dir", vault_dir),
+        ("night_moe_results_path", night_moe_results_path),
+    ):
+        if not isinstance(path_val, (str, Path)) or not str(path_val).strip():
+            raise ValueError(f"{field_name} must be a non-empty path")
     app = FastAPI(
         title="HiveMind@home & La Ruche Community MoE + Federated AI Gateway (proof of concept)",
         version="2.7.0",

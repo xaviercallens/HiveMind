@@ -20,7 +20,13 @@ _DOMAIN = b"hivemind-forwarded-client-v1:"
 
 
 def _mac(secret: bytes, ip: str, ts: int) -> str:
-    return hmac.new(secret, _DOMAIN + f"{ip}|{ts}".encode("ascii"), hashlib.sha256).hexdigest()
+    if not isinstance(secret, (bytes, bytearray)) or not secret:
+        raise ValueError("secret must be non-empty bytes")
+    if not isinstance(ip, str) or not ip.strip() or "|" in ip:
+        raise ValueError("ip must be a non-empty string without '|'")
+    if isinstance(ts, bool) or not isinstance(ts, int) or ts < 0:
+        raise ValueError("ts must be a non-negative integer")
+    return hmac.new(bytes(secret), _DOMAIN + f"{ip}|{ts}".encode("ascii"), hashlib.sha256).hexdigest()
 
 
 def sign(secret: bytes, ip: str, now: float) -> str:

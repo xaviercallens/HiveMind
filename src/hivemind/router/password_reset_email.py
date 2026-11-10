@@ -75,12 +75,14 @@ def send_reset_email(recipient: str, token: str, env: Mapping[str, str] | None =
     ):
         return False
     host = e["HIVEMIND_SMTP_HOST"].strip()
-    port = int(e.get("HIVEMIND_SMTP_PORT", "587") or "587")
-    user = e.get("HIVEMIND_SMTP_USER", "").strip()
-    password = e.get("HIVEMIND_SMTP_PASSWORD", "")
-    msg = build_reset_message(recipient.strip(), reset_link(token, e), e["HIVEMIND_SMTP_FROM"].strip())
-    context = ssl.create_default_context()
     try:
+        port = int(str(e.get("HIVEMIND_SMTP_PORT", "587") or "587").strip())
+        if not (1 <= port <= 65535):
+            return False
+        user = str(e.get("HIVEMIND_SMTP_USER", "")).strip()
+        password = str(e.get("HIVEMIND_SMTP_PASSWORD", ""))
+        msg = build_reset_message(recipient.strip(), reset_link(token, e), e["HIVEMIND_SMTP_FROM"].strip())
+        context = ssl.create_default_context()
         if port == 465:
             with smtplib.SMTP_SSL(host, port, timeout=10, context=context) as server:
                 if user and password:

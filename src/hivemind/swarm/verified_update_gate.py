@@ -91,6 +91,42 @@ class UpdateReceipt:
     policy: Dict[str, Any] = field(default_factory=dict)
     receipt_sha256: str = ""
 
+    def __post_init__(self) -> None:
+        if self.decision not in (ACCEPT, REJECT, INSUFFICIENT):
+            raise ValueError(f"decision must be one of {ACCEPT}, {REJECT}, {INSUFFICIENT}")
+        if not isinstance(self.reasons, list) or any(not isinstance(r, str) or not r.strip() for r in self.reasons):
+            raise ValueError("reasons must be a list of non-empty strings")
+        for i_field in (
+            "n",
+            "b",
+            "c",
+            "both_pass",
+            "both_fail",
+            "baseline_pass",
+            "candidate_pass",
+            "unverified_baseline",
+            "unverified_candidate",
+        ):
+            val = getattr(self, i_field)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_field} must be a non-negative integer")
+        for p_field in ("unverified_fraction", "p_two_sided", "p_regression", "p_improvement"):
+            val = getattr(self, p_field)
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or not (0.0 <= float(val) <= 1.0)
+            ):
+                raise ValueError(f"{p_field} must be a finite number in [0.0, 1.0]")
+        if not isinstance(self.policy, dict):
+            raise ValueError("policy must be a dictionary")
+        if not isinstance(self.receipt_sha256, str) or (
+            self.receipt_sha256 != ""
+            and (len(self.receipt_sha256) != 64 or any(c not in "0123456789abcdefABCDEF" for c in self.receipt_sha256))
+        ):
+            raise ValueError("receipt_sha256 must be empty or a 64-character hex string")
+
     @property
     def accepted(self) -> bool:
         return self.decision == ACCEPT
@@ -201,7 +237,7 @@ class HeldOutTask:
             raise ValueError("key must be a non-empty string")
         if not isinstance(self.prompt, str):
             raise ValueError("prompt must be a string")
-        if isinstance(self.tests, (str, bytes)) or not isinstance(self.tests, Sequence) or not self.tests:
+        if isinstance(self.tests, (str, bytes)) or not isinstance(self.tests, Sequence) or not self.tests or any(not isinstance(t, str) or not t.strip() for t in self.tests):
             raise ValueError("tests must be a non-empty sequence of strings")
         if not isinstance(self.setup, str):
             raise ValueError("setup must be a string")

@@ -169,6 +169,28 @@ def compute_cross_causal_limits(
     Receiver token `r_j` may attend only to sender indices `i < limit[j]`, guaranteeing
     zero future-token leakage across mismatched BPE boundaries.
     """
+    if (
+        isinstance(sender_offsets, (str, bytes))
+        or isinstance(receiver_offsets, (str, bytes))
+        or not isinstance(sender_offsets, Sequence)
+        or not isinstance(receiver_offsets, Sequence)
+    ):
+        raise ValueError("sender_offsets and receiver_offsets must be sequences of (start, end) pairs")
+    for seq_name, offsets in (("sender_offsets", sender_offsets), ("receiver_offsets", receiver_offsets)):
+        for span in offsets:
+            if (
+                not isinstance(span, Sequence)
+                or len(span) != 2
+                or isinstance(span[0], bool)
+                or isinstance(span[1], bool)
+                or not isinstance(span[0], (int, float))
+                or not isinstance(span[1], (int, float))
+                or not math.isfinite(float(span[0]))
+                or not math.isfinite(float(span[1]))
+                or float(span[0]) < 0.0
+                or float(span[1]) < float(span[0])
+            ):
+                raise ValueError(f"{seq_name} must contain non-negative (start, end) spans with end >= start")
     if not receiver_offsets:
         return np.empty(0, dtype=np.int64)
     if not sender_offsets:
@@ -192,8 +214,19 @@ def cross_attention_with_causal_limits(
     - `sender_values`: `(seq_s, dim)`
     - `causal_limits`: `(seq_r,)`
     """
+    for arr_name, arr in (
+        ("receiver_queries", receiver_queries),
+        ("sender_keys", sender_keys),
+        ("sender_values", sender_values),
+    ):
+        if not isinstance(arr, np.ndarray) or arr.ndim != 2 or arr.shape[1] < 1 or not np.all(np.isfinite(arr)):
+            raise ValueError(f"{arr_name} must be a finite 2D numpy ndarray with dim >= 1")
     seq_r, dim = receiver_queries.shape
     seq_s = sender_keys.shape[0]
+    if sender_keys.shape[1] != dim or sender_values.shape != (seq_s, dim):
+        raise ValueError("sender_keys and sender_values must match (seq_s, dim) of receiver_queries")
+    if not isinstance(causal_limits, np.ndarray) or causal_limits.ndim != 1 or causal_limits.shape[0] != seq_r:
+        raise ValueError("causal_limits must be a 1D numpy ndarray of length seq_r")
     out = np.zeros((seq_r, dim), dtype=np.float64)
     scale = 1.0 / math.sqrt(max(dim, 1))
     for j in range(seq_r):
@@ -525,6 +558,13 @@ def compute_cms_chunk_periods(
 
 def normalized_levenshtein_similarity(seq_a: Sequence[int] | str, seq_b: Sequence[int] | str) -> float:
     """Return `r_abs = 1 - edit_distance(seq_a, seq_b) / max(|seq_a|, |seq_b|)` in `[0, 1]` (`arXiv:2606.03979v2` §3.3)."""
+    for arg_name, seq in (("seq_a", seq_a), ("seq_b", seq_b)):
+        if isinstance(seq, str):
+            continue
+        if isinstance(seq, (bytes, bytearray)) or not isinstance(seq, Sequence):
+            raise ValueError(f"{arg_name} must be a str or Sequence[int]")
+        if any(isinstance(x, bool) or not isinstance(x, int) for x in seq):
+            raise ValueError(f"{arg_name} elements must be integers")
     n, m = len(seq_a), len(seq_b)
     if n == 0 and m == 0:
         return 1.0

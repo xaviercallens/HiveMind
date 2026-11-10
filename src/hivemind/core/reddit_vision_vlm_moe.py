@@ -719,7 +719,13 @@ def quantize_adamw_state_8bit(tensor: torch.Tensor) -> Tuple[np.ndarray, float]:
 
 
 def dequantize_adamw_state_8bit(q8: np.ndarray, scale: float, device: torch.device) -> torch.Tensor:
-    return torch.from_numpy(q8.astype(np.float32) * scale).to(device)
+    if not isinstance(q8, np.ndarray) or q8.size == 0:
+        raise ValueError("q8 must be a non-empty numpy ndarray")
+    if isinstance(scale, bool) or not isinstance(scale, (int, float)) or not math.isfinite(float(scale)) or float(scale) <= 0.0:
+        raise ValueError("scale must be a finite positive number")
+    if not isinstance(device, (torch.device, str)) or (isinstance(device, str) and not device.strip()):
+        raise ValueError("device must be a torch.device or non-empty device string")
+    return torch.from_numpy(q8.astype(np.float32) * float(scale)).to(device)
 
 
 def build_cluster_synthetic_shard(
@@ -736,6 +742,18 @@ def build_cluster_synthetic_shard(
     Classes 0..5 belong to `expert_1_aesthetics_art`, 6..11 to `expert_2_social_meme_culture`,
     and 12..17 to `expert_3_technical_infographics`.
     """
+    if not isinstance(cluster_id, str) or cluster_id not in REDDIT_VISION_EXPERT_CLUSTERS:
+        raise ValueError(f"unknown cluster_id: {cluster_id!r}")
+    if isinstance(bee_index, bool) or not isinstance(bee_index, int) or bee_index < 0:
+        raise ValueError("bee_index must be a non-negative integer")
+    if isinstance(num_samples, bool) or not isinstance(num_samples, int) or num_samples < 1:
+        raise ValueError("num_samples must be an integer >= 1")
+    if isinstance(vision_dim, bool) or not isinstance(vision_dim, int) or vision_dim < 38:
+        raise ValueError("vision_dim must be an integer >= 38")
+    if isinstance(num_classes, bool) or not isinstance(num_classes, int) or num_classes < 18:
+        raise ValueError("num_classes must be an integer >= 18")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
     rng = np.random.default_rng(seed + bee_index * 31)
     cluster_meta = REDDIT_VISION_EXPERT_CLUSTERS[cluster_id]
     c_idx = int(cluster_meta["cluster_index"])
@@ -841,10 +859,29 @@ def run_diloco_qlora_worker_training(
     After `inner_steps` local steps, compresses the outer delta into 2-bit SparseLoCo-DCT and
     publishes it to the HiveMind DHT (`dht_registry`).
     """
-    assert backbone.verify_base_freeze(), "Stage 1 violation: Base Vision/Attention must be frozen!"
+    if not isinstance(backbone, FrozenVisionLanguageBackbone):
+        raise ValueError("backbone must be a FrozenVisionLanguageBackbone")
+    if not backbone.verify_base_freeze():
+        raise ValueError("Stage 1 violation: Base Vision/Attention must be frozen!")
+    if not isinstance(bee_meta, Mapping) or "bee_id" not in bee_meta or "backbone_key" not in bee_meta:
+        raise ValueError("bee_meta must be a Mapping containing bee_id and backbone_key")
+    if not isinstance(cluster_id, str) or cluster_id not in REDDIT_VISION_EXPERT_CLUSTERS:
+        raise ValueError(f"unknown cluster_id: {cluster_id!r}")
+    if not isinstance(dht_registry, DHTDeltaRegistry):
+        raise ValueError("dht_registry must be a DHTDeltaRegistry")
+    for field_name, val in (("inner_steps", inner_steps), ("rank", rank), ("batch_size", batch_size)):
+        if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+            raise ValueError(f"{field_name} must be an integer >= 1")
+    for field_name, val in (("alpha", alpha), ("learning_rate", learning_rate)):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+            raise ValueError(f"{field_name} must be a finite positive number")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
 
     bee_id = str(bee_meta["bee_id"])
     backbone_key = str(bee_meta["backbone_key"])
+    if not bee_id.strip() or backbone_key not in REDDIT_VISION_BASE_MODELS:
+        raise ValueError("bee_meta must have non-empty bee_id and valid backbone_key")
     backbone_info = REDDIT_VISION_BASE_MODELS[backbone_key]
     bee_idx = 0 if "01" in bee_id or "03" in bee_id or "05" in bee_id else 1
 
@@ -1533,6 +1570,21 @@ def generate_zk_opoi_training_receipt(
     dct_packet_sha256: str,
 ) -> ZKOPoITrainingReceipt:
     """Generate a deterministic ZK-OPoI cryptographic training receipt for a Bee node."""
+    for field_name, val in (
+        ("bee_id", bee_id),
+        ("specialization_id", specialization_id),
+        ("optimizer_name", optimizer_name),
+        ("dct_packet_sha256", dct_packet_sha256),
+    ):
+        if not isinstance(val, str) or not val.strip():
+            raise ValueError(f"{field_name} must be a non-empty string")
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
+        raise ValueError("inner_steps must be an integer >= 1")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
+    for arr_name, arr in (("initial_delta", initial_delta), ("final_delta", final_delta)):
+        if not isinstance(arr, np.ndarray) or arr.size == 0 or not np.all(np.isfinite(arr)):
+            raise ValueError(f"{arr_name} must be a non-empty finite numpy ndarray")
     seed_commit = hashlib.sha256(f"la-ruche-seed:{bee_id}:{seed}".encode("utf-8")).hexdigest()
     init_hash = hashlib.sha256(np.ascontiguousarray(initial_delta, dtype=np.float32).tobytes()).hexdigest()
     final_hash = hashlib.sha256(np.ascontiguousarray(final_delta, dtype=np.float32).tobytes()).hexdigest()
@@ -1560,7 +1612,11 @@ def verify_zk_opoi_training_receipt(
     expected_final_delta: Optional[np.ndarray] = None,
 ) -> bool:
     """Verify a ZK-OPoI receipt commitment hash and optional reconstructed delta digest."""
+    if not isinstance(receipt, ZKOPoITrainingReceipt):
+        raise ValueError("receipt must be a ZKOPoITrainingReceipt")
     if expected_final_delta is not None:
+        if not isinstance(expected_final_delta, np.ndarray) or expected_final_delta.size == 0 or not np.all(np.isfinite(expected_final_delta)):
+            raise ValueError("expected_final_delta must be a non-empty finite numpy ndarray when provided")
         calc_final = hashlib.sha256(
             np.ascontiguousarray(expected_final_delta, dtype=np.float32).tobytes()
         ).hexdigest()
@@ -1593,6 +1649,10 @@ def run_la_ruche_1500mb_patch_vmoe_pipeline(
     - 2-bit SparseLoCo / DCT DeMo delta compression + ZK-OPoI formal receipt verification.
     - BTM weight averaging of self-attention layers + FoMoE Top-2 Softmax patch router.
     """
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
+        raise ValueError("inner_steps must be an integer >= 1")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
     hidden_dim = 64
     num_patches = 16
     branch_attention_states: List[Dict[str, torch.Tensor]] = []

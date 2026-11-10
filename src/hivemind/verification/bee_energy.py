@@ -42,6 +42,27 @@ class BeeEnergyEvaluation:
     total_energy: float
     receipt_sha256: str
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.candidate_id, str) or not self.candidate_id.strip():
+            raise ValueError("candidate_id must be a non-empty string")
+        if not isinstance(self.response_text, str):
+            raise ValueError("response_text must be a string")
+        if isinstance(self.tests_passed, bool) or not isinstance(self.tests_passed, int) or self.tests_passed < 0:
+            raise ValueError("tests_passed must be a non-negative integer")
+        if isinstance(self.tests_total, bool) or not isinstance(self.tests_total, int) or self.tests_total < 0:
+            raise ValueError("tests_total must be a non-negative integer")
+        if not isinstance(self.is_stub_or_invalid, bool):
+            raise ValueError("is_stub_or_invalid must be a boolean")
+        if (
+            isinstance(self.total_energy, bool)
+            or not isinstance(self.total_energy, (int, float))
+            or not math.isfinite(float(self.total_energy))
+            or float(self.total_energy) < 0.0
+        ):
+            raise ValueError("total_energy must be a finite number >= 0.0")
+        if not isinstance(self.receipt_sha256, str) or len(self.receipt_sha256.strip()) != 64:
+            raise ValueError("receipt_sha256 must be a 64-character SHA-256 hex digest")
+
     @property
     def passed_all_tests(self) -> bool:
         return (
@@ -57,6 +78,8 @@ def _strip_lean4_comments(source: str) -> str:
     """Strip Lean 4 block comments (`/- ... -/`) and line comments (`-- ...`)."""
     import re
 
+    if not isinstance(source, str):
+        raise ValueError("source must be a string")
     no_block = re.sub(r"/-[\s\S]*?-/", " ", source)
     return "\n".join(line.split("--", 1)[0] for line in no_block.splitlines())
 
@@ -64,6 +87,10 @@ def _strip_lean4_comments(source: str) -> str:
 def _has_ast_stub_or_syntax_error(code: str, *, domain: str = "code") -> tuple[bool, str | None]:
     import re
 
+    if not isinstance(code, str):
+        raise ValueError("code must be a string")
+    if not isinstance(domain, str) or not domain.strip():
+        raise ValueError("domain must be a non-empty string")
     stripped = code.strip()
     if not stripped:
         return True, "EMPTY_RESPONSE"
@@ -558,6 +585,26 @@ class AutopoieticPromotionVerdict:
     shuffled_control_gained: bool
     reason: str
     mcnemar_p: float | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.promoted, bool):
+            raise ValueError("promoted must be a boolean")
+        if (
+            isinstance(self.median_delta_energy, bool)
+            or not isinstance(self.median_delta_energy, (int, float))
+            or not math.isfinite(float(self.median_delta_energy))
+        ):
+            raise ValueError("median_delta_energy must be a finite number")
+        if (
+            isinstance(self.parent_regressions_failed, bool)
+            or not isinstance(self.parent_regressions_failed, int)
+            or self.parent_regressions_failed < 0
+        ):
+            raise ValueError("parent_regressions_failed must be a non-negative integer")
+        if not isinstance(self.shuffled_control_gained, bool):
+            raise ValueError("shuffled_control_gained must be a boolean")
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("reason must be a non-empty string")
 
 
 def evaluate_child_bee_promotion(

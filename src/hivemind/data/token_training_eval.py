@@ -16,7 +16,7 @@ import math
 import platform
 import time
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 import torch
 import torch.nn.functional as F
@@ -80,6 +80,9 @@ def validate_splits(fixture: dict[str, Any]) -> None:
 
 
 def load_fixture(path: Path = FIXTURE_PATH) -> tuple[dict[str, Any], str]:
+    if not isinstance(path, (Path, str)) or not str(path).strip():
+        raise ValueError("path must be a non-empty Path or string")
+    path = Path(path)
     raw = path.read_bytes()
     if path.resolve() == FIXTURE_PATH.resolve() and sha256(raw) != FIXTURE_SHA256:
         raise ValueError("pinned smoke fixture digest does not match")
@@ -95,6 +98,8 @@ def tokenize_documents(samples: Sequence[str], sequence_length: int = 128) -> di
     Context resets at each window. BOS is context only, EOS is scored, padding
     is never scored. There is no text-dependent fitting on the holdout.
     """
+    if isinstance(samples, (str, bytes)) or not isinstance(samples, Sequence):
+        raise ValueError("samples must be a sequence of strings")
     if isinstance(sequence_length, bool) or not isinstance(sequence_length, int) or not 2 <= sequence_length <= MODEL_CONFIG["max_position_embeddings"]:
         raise ValueError("sequence_length must be between 2 and 128")
     windows = []
@@ -134,6 +139,10 @@ def token_nll(logits: torch.Tensor, labels: torch.Tensor) -> tuple[torch.Tensor,
 
 
 def evaluate_tokens(model: torch.nn.Module, batch: dict[str, torch.Tensor]) -> dict[str, Any]:
+    if not callable(model) or not callable(getattr(model, "eval", None)):
+        raise ValueError("model must be a callable torch.nn.Module")
+    if not isinstance(batch, Mapping) or not all(k in batch for k in ("input_ids", "attention_mask", "labels")):
+        raise ValueError("batch must be a mapping containing 'input_ids', 'attention_mask', and 'labels'")
     model.eval()
     with torch.no_grad():
         outputs = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"])
@@ -153,6 +162,8 @@ def build_model(seed: int, base_bytes: bytes | None = None) -> tuple[torch.nn.Mo
     """Pin the base via saved tensor bytes; no from_pretrained/network path exists."""
     if isinstance(seed, bool) or not isinstance(seed, int):
         raise ValueError("seed must be an integer")
+    if base_bytes is not None and (not isinstance(base_bytes, (bytes, bytearray)) or len(base_bytes) == 0):
+        raise ValueError("base_bytes must be None or non-empty bytes")
     with torch.random.fork_rng(devices=[]):
         torch.manual_seed(seed)
         config = Qwen2Config(**MODEL_CONFIG)
@@ -166,11 +177,15 @@ def build_model(seed: int, base_bytes: bytes | None = None) -> tuple[torch.nn.Mo
 
 
 def adapter_state(model: torch.nn.Module) -> dict[str, torch.Tensor]:
+    if not callable(getattr(model, "named_parameters", None)):
+        raise ValueError("model must provide a callable named_parameters method")
     return {name: param.detach().clone() for name, param in model.named_parameters()
             if "lora_" in name}
 
 
 def frozen_state(model: torch.nn.Module) -> dict[str, torch.Tensor]:
+    if not callable(getattr(model, "named_parameters", None)):
+        raise ValueError("model must provide a callable named_parameters method")
     return {name: param.detach() for name, param in model.named_parameters() if not param.requires_grad}
 
 

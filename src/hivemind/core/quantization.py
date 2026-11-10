@@ -66,6 +66,27 @@ class NF4QuantState:
     original_shape: tuple[int, ...]
     block_size: int = 64
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.packed_4bit, torch.Tensor):
+            raise ValueError("packed_4bit must be a torch.Tensor")
+        if not isinstance(self.q_absmax_uint8, torch.Tensor):
+            raise ValueError("q_absmax_uint8 must be a torch.Tensor")
+        if (
+            isinstance(self.superblock_scale, bool)
+            or not isinstance(self.superblock_scale, (int, float))
+            or not math.isfinite(float(self.superblock_scale))
+            or float(self.superblock_scale) <= 0.0
+        ):
+            raise ValueError("superblock_scale must be a positive finite number")
+        if (
+            not isinstance(self.original_shape, tuple)
+            or len(self.original_shape) < 1
+            or any(isinstance(d, bool) or not isinstance(d, int) or d < 1 for d in self.original_shape)
+        ):
+            raise ValueError("original_shape must be a non-empty tuple of positive integers")
+        if isinstance(self.block_size, bool) or not isinstance(self.block_size, int) or self.block_size < 1:
+            raise ValueError("block_size must be an integer >= 1")
+
     @property
     def storage_bytes(self) -> int:
         if hasattr(self, "_computed_storage_bytes"):
@@ -87,6 +108,18 @@ class QuantizedModelBundle:
     trainable_params: int
     total_params: int
     lora_size_mb: float
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.base_model_id, str) or not self.base_model_id.strip():
+            raise ValueError("base_model_id must be a non-empty string")
+        if not isinstance(self.base_model_sha256, str) or len(self.base_model_sha256.strip()) != 64:
+            raise ValueError("base_model_sha256 must be a 64-character SHA-256 hex digest")
+        if not isinstance(self.is_4bit_nf4, bool):
+            raise ValueError("is_4bit_nf4 must be a boolean")
+        if isinstance(self.trainable_params, bool) or not isinstance(self.trainable_params, int) or self.trainable_params < 0:
+            raise ValueError("trainable_params must be a non-negative integer")
+        if isinstance(self.total_params, bool) or not isinstance(self.total_params, int) or self.total_params < self.trainable_params:
+            raise ValueError("total_params must be an integer >= trainable_params")
 
 
 def quantize_tensor_nf4_double_quant(
@@ -215,6 +248,10 @@ def apply_nf4_double_quant_to_backbone(
     double_quant: bool = True,
 ) -> tuple[bool, float]:
     """Apply 4-bit NormalFloat (NF4) + Double Quantization across all decoder Linear layers."""
+    if not isinstance(double_quant, bool):
+        raise ValueError("double_quant must be a boolean")
+    if base_model is None or not hasattr(base_model, "model") or not hasattr(base_model.model, "layers"):
+        raise ValueError("base_model must expose model.layers")
     total_nf4_bytes = 0
     block_size = 64 if double_quant else 128
 
@@ -250,6 +287,24 @@ def build_local_qwen2_backbone(
     use_4bit_nf4_if_cuda: bool = True,
 ) -> tuple[Qwen2ForCausalLM, str, bool]:
     """Instantiate a deterministic Qwen2 causal LM backbone with 4-bit NF4 + Double Quantization."""
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
+    if isinstance(vocab_size, bool) or not isinstance(vocab_size, int) or vocab_size < 2:
+        raise ValueError("vocab_size must be an integer >= 2")
+    if isinstance(hidden_size, bool) or not isinstance(hidden_size, int) or hidden_size < 4:
+        raise ValueError("hidden_size must be an integer >= 4")
+    if isinstance(intermediate_size, bool) or not isinstance(intermediate_size, int) or intermediate_size < 4:
+        raise ValueError("intermediate_size must be an integer >= 4")
+    if isinstance(num_hidden_layers, bool) or not isinstance(num_hidden_layers, int) or num_hidden_layers < 1:
+        raise ValueError("num_hidden_layers must be an integer >= 1")
+    if isinstance(num_attention_heads, bool) or not isinstance(num_attention_heads, int) or num_attention_heads < 1:
+        raise ValueError("num_attention_heads must be an integer >= 1")
+    if isinstance(num_key_value_heads, bool) or not isinstance(num_key_value_heads, int) or num_key_value_heads < 1:
+        raise ValueError("num_key_value_heads must be an integer >= 1")
+    if isinstance(max_position_embeddings, bool) or not isinstance(max_position_embeddings, int) or max_position_embeddings < 2:
+        raise ValueError("max_position_embeddings must be an integer >= 2")
+    if not isinstance(use_4bit_nf4_if_cuda, bool):
+        raise ValueError("use_4bit_nf4_if_cuda must be a boolean")
     configure_deterministic_runtime(seed)
     if device is None:
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -328,7 +383,7 @@ def attach_qlora_adapters(
     )
     return QuantizedModelBundle(
         model=peft_model,
-        base_model_id=getattr(base_model.config, "_name_or_path", "qwen2-local-hivemind"),
+        base_model_id=getattr(base_model.config, "_name_or_path", None) or "qwen2-local-hivemind",
         base_model_sha256=base_sha,
         device=device,
         compute_dtype=compute_dtype,
@@ -515,6 +570,8 @@ def load_hf_qlora_model(
 
 def extract_lora_state_dict(model: nn.Module) -> dict[str, torch.Tensor]:
     """Return a clean, detached CPU copy of only the trainable LoRA parameters theta = {A_e, B_e}."""
+    if not callable(getattr(model, "named_parameters", None)):
+        raise ValueError("model must provide a callable named_parameters method")
     lora_state: dict[str, torch.Tensor] = {}
     for name, param in model.named_parameters():
         if "lora_" in name or param.requires_grad:
@@ -548,6 +605,8 @@ def measure_vram_footprint(device: torch.device | None = None) -> dict[str, floa
     """Measure live CUDA VRAM allocation and reservation in MiB and GiB."""
     if device is None:
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    elif not hasattr(device, "type") or not isinstance(getattr(device, "type", None), str):
+        raise ValueError("device must be None or a torch.device")
     if device.type != "cuda" or not torch.cuda.is_available():
         return {
             "allocated_mb": 0.0,

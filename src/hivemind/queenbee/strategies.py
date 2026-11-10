@@ -371,6 +371,14 @@ class ClipReport:
     clipped: bool
     sigma: float
 
+    def __post_init__(self) -> None:
+        for field_name in ("pre_norm", "post_norm", "sigma"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{field_name} must be a finite non-negative number")
+        if not isinstance(self.clipped, bool):
+            raise ValueError("clipped must be a boolean")
+
 
 def clip_and_noise(delta: Mapping[str, Any], clip_norm: float, sigma: float, generator: Any) -> tuple[dict[str, Any], ClipReport]:
     """Scale the whole delta to L2 norm at most `clip_norm`, then add N(0, sigma^2) noise per coordinate. Torch tensors.
@@ -412,6 +420,40 @@ class PrivacyBudgetReport:
     max_epsilon: float
     best_alpha: float
     within_budget: bool
+
+    def __post_init__(self) -> None:
+        if isinstance(self.steps, bool) or not isinstance(self.steps, int) or self.steps < 0:
+            raise ValueError("steps must be a non-negative integer")
+        if (
+            isinstance(self.delta, bool)
+            or not isinstance(self.delta, (int, float))
+            or not math.isfinite(float(self.delta))
+            or not (0.0 < float(self.delta) < 1.0)
+        ):
+            raise ValueError("delta must be a finite number in (0.0, 1.0)")
+        if (
+            isinstance(self.epsilon, bool)
+            or not isinstance(self.epsilon, (int, float))
+            or math.isnan(float(self.epsilon))
+            or float(self.epsilon) < 0.0
+        ):
+            raise ValueError("epsilon must be a non-negative number (or +inf)")
+        if (
+            isinstance(self.max_epsilon, bool)
+            or not isinstance(self.max_epsilon, (int, float))
+            or not math.isfinite(float(self.max_epsilon))
+            or float(self.max_epsilon) <= 0.0
+        ):
+            raise ValueError("max_epsilon must be a finite positive number")
+        if (
+            isinstance(self.best_alpha, bool)
+            or not isinstance(self.best_alpha, (int, float))
+            or not math.isfinite(float(self.best_alpha))
+            or float(self.best_alpha) <= 1.0
+        ):
+            raise ValueError("best_alpha must be a finite number > 1.0")
+        if not isinstance(self.within_budget, bool):
+            raise ValueError("within_budget must be a boolean")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -562,6 +604,16 @@ class ShareAggregation:
     accepted_by_krum: tuple[str, ...]
     rejected_by_krum: tuple[str, ...]
     aggregate: Mapping[str, Any] | None = field(repr=False, default=None)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.quorum_reached, bool):
+            raise ValueError("quorum_reached must be a boolean")
+        for field_name in ("admitted", "deferred", "accepted_by_krum", "rejected_by_krum"):
+            seq = getattr(self, field_name)
+            if not isinstance(seq, tuple) or any(not isinstance(item, str) or not item.strip() for item in seq):
+                raise ValueError(f"{field_name} must be a tuple of non-empty strings")
+        if self.aggregate is not None and not isinstance(self.aggregate, Mapping):
+            raise ValueError("aggregate must be a Mapping or None")
 
     def to_dict(self) -> dict[str, Any]:
         return {"quorum_reached": self.quorum_reached, "admitted": list(self.admitted), "deferred": list(self.deferred),
@@ -916,6 +968,27 @@ class ServedExpertTask:
     tests: tuple[str, ...]
     expert_candidates: Mapping[str, str]
     cost_per_1k: Mapping[str, float] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for field_name in ("task_id", "cluster_id", "prompt"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(self.tests, tuple) or len(self.tests) == 0 or any(not isinstance(t, str) or not t.strip() for t in self.tests):
+            raise ValueError("tests must be a non-empty tuple of non-empty strings")
+        if (
+            not isinstance(self.expert_candidates, Mapping)
+            or len(self.expert_candidates) == 0
+            or any(not isinstance(k, str) or not k.strip() or not isinstance(v, str) or not v.strip() for k, v in self.expert_candidates.items())
+        ):
+            raise ValueError("expert_candidates must be a non-empty mapping of non-empty strings")
+        if not isinstance(self.cost_per_1k, Mapping):
+            raise ValueError("cost_per_1k must be a mapping")
+        for k, v in self.cost_per_1k.items():
+            if not isinstance(k, str) or not k.strip():
+                raise ValueError("cost_per_1k keys must be non-empty strings")
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) or float(v) < 0.0:
+                raise ValueError("cost_per_1k values must be finite non-negative numbers")
 
 
 def verify_python_candidate_isolated(code: str, tests: Sequence[str], *, timeout_s: float = 4.0) -> bool:

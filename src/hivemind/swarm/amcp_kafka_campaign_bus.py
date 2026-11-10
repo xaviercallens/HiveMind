@@ -64,6 +64,37 @@ class SubjectCampaign:
     dataset_ref: str
     base_nocturnal_weight: float
 
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("subject_id", self.subject_id),
+            ("title", self.title),
+            ("domain_key", self.domain_key),
+            ("lead_bee", self.lead_bee),
+            ("dtstart_utc", self.dtstart_utc),
+            ("dtend_utc", self.dtend_utc),
+            ("human_window", self.human_window),
+            ("objective", self.objective),
+            ("quantitative_gate", self.quantitative_gate),
+            ("dataset_ref", self.dataset_ref),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if isinstance(self.order_index, bool) or not isinstance(self.order_index, int) or self.order_index < 1:
+            raise ValueError("order_index must be a positive integer")
+        if (
+            not isinstance(self.co_bees, tuple)
+            or not self.co_bees
+            or any(not isinstance(b, str) or not b.strip() for b in self.co_bees)
+        ):
+            raise ValueError("co_bees must be a non-empty tuple of non-empty strings")
+        if (
+            isinstance(self.base_nocturnal_weight, bool)
+            or not isinstance(self.base_nocturnal_weight, (int, float))
+            or not math.isfinite(float(self.base_nocturnal_weight))
+            or not (0.0 < float(self.base_nocturnal_weight) <= 1.0)
+        ):
+            raise ValueError("base_nocturnal_weight must be a finite number in (0.0, 1.0]")
+
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["co_bees"] = list(self.co_bees)
@@ -256,6 +287,26 @@ class AMCPKafkaEvent:
     utc: float
     specversion: str = "1.0"
     protocol: str = "AMCP/1.5+Kafka"
+
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("event_id", self.event_id),
+            ("topic", self.topic),
+            ("event_type", self.event_type),
+            ("sender_id", self.sender_id),
+            ("sender_kind", self.sender_kind),
+            ("recipient_id", self.recipient_id),
+            ("subject_id", self.subject_id),
+            ("correlation_id", self.correlation_id),
+            ("specversion", self.specversion),
+            ("protocol", self.protocol),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(self.payload, dict):
+            raise TypeError("payload must be a dict")
+        if isinstance(self.utc, bool) or not isinstance(self.utc, (int, float)) or not math.isfinite(float(self.utc)) or float(self.utc) <= 0.0:
+            raise ValueError("utc must be a positive finite timestamp")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

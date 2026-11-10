@@ -162,6 +162,26 @@ class LongTailDomainScore:
     cluster: str
     reason: str
 
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("domain", self.domain),
+            ("canonical_domain", self.canonical_domain),
+            ("hf_dataset", self.hf_dataset),
+            ("recommended_base_model", self.recommended_base_model),
+            ("cluster", self.cluster),
+            ("reason", self.reason),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if isinstance(self.request_count, bool) or not isinstance(self.request_count, int) or self.request_count < 0:
+            raise ValueError("request_count must be a non-negative integer")
+        for field_name, num in (
+            ("complexity_weight", self.complexity_weight),
+            ("priority_score", self.priority_score),
+        ):
+            if isinstance(num, bool) or not isinstance(num, (int, float)) or not math.isfinite(float(num)) or float(num) <= 0.0:
+                raise ValueError(f"{field_name} must be a finite positive number")
+
 
 class LongTailIntentScanner:
     """Scans user prompt streams and resident types to select high-value niche domains."""
@@ -313,6 +333,48 @@ class DiurnalTrainingWorkunit:
     is_byob: bool = False
     byob_bee_id: str | None = None
 
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("wu_id", self.wu_id),
+            ("domain", self.domain),
+            ("canonical_domain", self.canonical_domain),
+            ("hf_dataset", self.hf_dataset),
+            ("base_model_id", self.base_model_id),
+            ("assigned_producer_id", self.assigned_producer_id),
+            ("producer_handle", self.producer_handle),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name, iv in (("target_rank", self.target_rank), ("steps", self.steps)):
+            if isinstance(iv, bool) or not isinstance(iv, int) or iv < 1:
+                raise ValueError(f"{field_name} must be a positive integer")
+        if not isinstance(self.operational_mode, DiurnalOperationalMode):
+            raise TypeError("operational_mode must be a DiurnalOperationalMode")
+        if (
+            isinstance(self.producer_timezone_offset, bool)
+            or not isinstance(self.producer_timezone_offset, (int, float))
+            or not math.isfinite(float(self.producer_timezone_offset))
+            or not (-12.0 <= float(self.producer_timezone_offset) <= 14.0)
+        ):
+            raise ValueError("producer_timezone_offset must be a finite number in [-12.0, 14.0]")
+        if (
+            isinstance(self.local_clock_hour, bool)
+            or not isinstance(self.local_clock_hour, (int, float))
+            or not math.isfinite(float(self.local_clock_hour))
+            or not (0.0 <= float(self.local_clock_hour) <= 24.0)
+        ):
+            raise ValueError("local_clock_hour must be a finite number in [0.0, 24.0]")
+        for field_name, num in (
+            ("pouw_reward_hmt", self.pouw_reward_hmt),
+            ("estimated_tflops", self.estimated_tflops),
+        ):
+            if isinstance(num, bool) or not isinstance(num, (int, float)) or not math.isfinite(float(num)) or float(num) <= 0.0:
+                raise ValueError(f"{field_name} must be a finite positive number")
+        if not isinstance(self.is_byob, bool):
+            raise ValueError("is_byob must be a boolean")
+        if self.byob_bee_id is not None and (not isinstance(self.byob_bee_id, str) or not self.byob_bee_id.strip()):
+            raise ValueError("byob_bee_id must be a non-empty string or None")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -325,6 +387,10 @@ class DiurnalMoETrainingScheduler:
         router_store: RouterStore | None = None,
         scanner: LongTailIntentScanner | None = None,
     ) -> None:
+        if router_store is not None and not isinstance(router_store, RouterStore):
+            raise TypeError("router_store must be a RouterStore or None")
+        if scanner is not None and not isinstance(scanner, LongTailIntentScanner):
+            raise TypeError("scanner must be a LongTailIntentScanner or None")
         self._store = router_store
         self._scanner = scanner or LongTailIntentScanner()
         self._producers: dict[str, DiurnalProducerProfile] = {}

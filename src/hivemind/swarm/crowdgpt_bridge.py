@@ -41,6 +41,16 @@ class CrowdGPTDeltaPayload:
     engram_values_uint16: np.ndarray
     payload_sha256: str
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.metadata, dict):
+            raise TypeError("metadata must be a dict")
+        if not isinstance(self.base_delta_bf16, torch.Tensor) or self.base_delta_bf16.dtype != torch.bfloat16:
+            raise TypeError("base_delta_bf16 must be a bfloat16 torch.Tensor")
+        if not isinstance(self.engram_indices, np.ndarray) or not isinstance(self.engram_values_uint16, np.ndarray):
+            raise TypeError("engram_indices and engram_values_uint16 must be numpy.ndarray instances")
+        if not isinstance(self.payload_sha256, str) or len(self.payload_sha256.strip()) != 64:
+            raise ValueError("payload_sha256 must be a 64-character hex string")
+
 
 def pack_crowdgpt_delta_stream(
     metadata: Mapping[str, Any],
@@ -214,6 +224,37 @@ class MultiKrumAggregationResult:
     aggregated_delta_bf16: torch.Tensor
     effective_tokens: int
     byzantine_filter_active: bool = True
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.selected_indices, list)
+            or not self.selected_indices
+            or any(isinstance(i, bool) or not isinstance(i, int) or i < 0 for i in self.selected_indices)
+        ):
+            raise ValueError("selected_indices must be a non-empty list of non-negative integers")
+        if (
+            not isinstance(self.rejected_indices, list)
+            or any(isinstance(i, bool) or not isinstance(i, int) or i < 0 for i in self.rejected_indices)
+        ):
+            raise ValueError("rejected_indices must be a list of non-negative integers")
+        if (
+            not isinstance(self.krum_scores, list)
+            or not self.krum_scores
+            or any(
+                isinstance(s, bool)
+                or not isinstance(s, (int, float))
+                or not math.isfinite(float(s))
+                or float(s) < 0.0
+                for s in self.krum_scores
+            )
+        ):
+            raise ValueError("krum_scores must be a non-empty list of finite non-negative numbers")
+        if not isinstance(self.aggregated_delta_bf16, torch.Tensor) or self.aggregated_delta_bf16.dtype != torch.bfloat16:
+            raise TypeError("aggregated_delta_bf16 must be a bfloat16 torch.Tensor")
+        if isinstance(self.effective_tokens, bool) or not isinstance(self.effective_tokens, int) or self.effective_tokens < 1:
+            raise ValueError("effective_tokens must be a positive integer")
+        if not isinstance(self.byzantine_filter_active, bool):
+            raise ValueError("byzantine_filter_active must be a boolean")
 
 
 def _validate_and_clamp_token_weights(
@@ -518,6 +559,24 @@ class GpuPrecisionCohort:
     pre_ampere_fp32_enforced: bool
     cohort_key: str
 
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("vendor", self.vendor),
+            ("effective_dtype", self.effective_dtype),
+            ("optimizer_family", self.optimizer_family),
+            ("cohort_key", self.cohort_key),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if (
+            not isinstance(self.compute_capability, tuple)
+            or len(self.compute_capability) != 2
+            or any(isinstance(x, bool) or not isinstance(x, int) or x < 0 for x in self.compute_capability)
+        ):
+            raise ValueError("compute_capability must be a 2-tuple of non-negative integers")
+        if not isinstance(self.pre_ampere_fp32_enforced, bool):
+            raise ValueError("pre_ampere_fp32_enforced must be a boolean")
+
 
 def classify_gpu_precision_cohort(
     vendor: str,
@@ -584,6 +643,18 @@ class PoolDispatchDecision:
     target_pool_size: int
     requires_multi_krum: bool
     requires_loss_ratchet: bool
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.mode, str) or not self.mode.strip():
+            raise ValueError("mode must be a non-empty string")
+        if not isinstance(self.cohort_key, str) or not self.cohort_key.strip():
+            raise ValueError("cohort_key must be a non-empty string")
+        if isinstance(self.active_members, bool) or not isinstance(self.active_members, int) or self.active_members < 0:
+            raise ValueError("active_members must be a non-negative integer")
+        if isinstance(self.target_pool_size, bool) or not isinstance(self.target_pool_size, int) or self.target_pool_size < 1:
+            raise ValueError("target_pool_size must be a positive integer")
+        if not isinstance(self.requires_multi_krum, bool) or not isinstance(self.requires_loss_ratchet, bool):
+            raise ValueError("requires_multi_krum and requires_loss_ratchet must be booleans")
 
 
 def resolve_forming_pool_starvation(

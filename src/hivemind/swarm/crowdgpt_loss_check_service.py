@@ -51,6 +51,39 @@ class LossCheckJob:
     heldout_range: str = ""  # "start-end" byte range of heldout_url, inclusive, empty for the whole file
     schema: str = JOB_SCHEMA
 
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("job_id", self.job_id),
+            ("base_url", self.base_url),
+            ("base_sha256", self.base_sha256),
+            ("candidate_url", self.candidate_url),
+            ("candidate_sha256", self.candidate_sha256),
+            ("heldout_url", self.heldout_url),
+            ("heldout_sha256", self.heldout_sha256),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if isinstance(self.window, bool) or not isinstance(self.window, int) or self.window < 2:
+            raise ValueError("window must be an integer >= 2")
+        if isinstance(self.n, bool) or not isinstance(self.n, int) or self.n < 1:
+            raise ValueError("n must be an integer >= 1")
+        if isinstance(self.seed, bool) or not isinstance(self.seed, int) or self.seed < 0:
+            raise ValueError("seed must be a non-negative integer")
+        if (
+            isinstance(self.created_at, bool)
+            or not isinstance(self.created_at, (int, float))
+            or not math.isfinite(float(self.created_at))
+            or isinstance(self.expires_at, bool)
+            or not isinstance(self.expires_at, (int, float))
+            or not math.isfinite(float(self.expires_at))
+            or float(self.expires_at) < float(self.created_at)
+        ):
+            raise ValueError("created_at and expires_at must be finite numbers with expires_at >= created_at")
+        if not isinstance(self.heldout_range, str):
+            raise ValueError("heldout_range must be a string")
+        if self.schema != JOB_SCHEMA:
+            raise ValueError(f"unknown job schema {self.schema!r}")
+
     def to_wire(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -267,6 +300,10 @@ class LossCheckCoordinator:
 
 def fastapi_router(coord: LossCheckCoordinator, prefix: str = "/fl/loss_check") -> Any:
     """Optional FastAPI wiring of the two handlers (the receipt's HMAC is the authentication)."""
+    if not isinstance(coord, LossCheckCoordinator):
+        raise TypeError("coord must be a LossCheckCoordinator")
+    if not isinstance(prefix, str) or not prefix.strip() or not prefix.startswith("/"):
+        raise ValueError("prefix must be a non-empty string starting with '/'")
     from fastapi import APIRouter, Request, Response
     from fastapi.responses import JSONResponse
 

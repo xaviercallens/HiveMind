@@ -137,7 +137,7 @@ def test_nat_traversal_validation() -> None:
         with pytest.raises(ValueError, match="timeout"):
             udp_hole_punch(sock, [("127.0.0.1", 9999)], b"sess1", timeout=0.0)
         with pytest.raises(ValueError, match="interval"):
-            udp_hole_punch(sock, [("127.0.0.1", 9999)], b"sess1", interval=0.0)
+            udp_hole_punch(sock, [("127.0.0.1", 9999)], b"sess1", interval=-0.01)
         with pytest.raises(ValueError, match="linger"):
             udp_hole_punch(sock, [("127.0.0.1", 9999)], b"sess1", linger=-0.1)
     finally:

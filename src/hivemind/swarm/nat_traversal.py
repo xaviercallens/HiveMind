@@ -721,8 +721,8 @@ def udp_hole_punch(
     answered from the address it arrived on, which is the hole the peer's NAT just opened. A
     side succeeds when it receives that answer, then lingers briefly to answer late probes.
     """
-    if not isinstance(sock, socket.socket):
-        raise TypeError("sock must be a socket.socket")
+    if not (callable(getattr(sock, "sendto", None)) and callable(getattr(sock, "recvfrom", None))):
+        raise TypeError("sock must provide callable sendto and recvfrom methods")
     if isinstance(candidates, (str, bytes)) or not isinstance(candidates, Sequence):
         raise TypeError("candidates must be a Sequence of Address tuples")
     for cand in candidates:
@@ -740,9 +740,9 @@ def udp_hole_punch(
         isinstance(interval, bool)
         or not isinstance(interval, (int, float))
         or not math.isfinite(float(interval))
-        or float(interval) <= 0.0
+        or float(interval) < 0.0
     ):
-        raise ValueError("interval must be a positive finite number")
+        raise ValueError("interval must be a non-negative finite number")
     if (
         isinstance(linger, bool)
         or not isinstance(linger, (int, float))

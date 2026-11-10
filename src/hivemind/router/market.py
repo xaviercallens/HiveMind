@@ -154,9 +154,13 @@ class Certificate:
 
 
 def _clean_bids(bids: Sequence[ConsumerBid]) -> list[tuple[str, float]]:
+    if isinstance(bids, (str, bytes)) or not isinstance(bids, Sequence):
+        raise ValueError("bids must be a sequence of ConsumerBid instances")
     seen: set[str] = set()
     out: list[tuple[str, float]] = []
     for b in bids:
+        if not isinstance(b, ConsumerBid):
+            raise ValueError("bids must contain ConsumerBid instances")
         if isinstance(b.account_id, bool) or not isinstance(b.account_id, str) or not b.account_id.strip() or b.account_id in seen:
             raise ValueError(f"consumer account ids must be non-empty and unique, got {b.account_id!r}")
         if isinstance(b.max_price_per_1k, bool) or not isinstance(b.max_price_per_1k, (int, float)) or not math.isfinite(b.max_price_per_1k) or b.max_price_per_1k < 0.0:
@@ -167,9 +171,13 @@ def _clean_bids(bids: Sequence[ConsumerBid]) -> list[tuple[str, float]]:
 
 
 def _clean_offers(offers: Sequence[ProducerOffer]) -> list[tuple[str, float, float]]:
+    if isinstance(offers, (str, bytes)) or not isinstance(offers, Sequence):
+        raise ValueError("offers must be a sequence of ProducerOffer instances")
     seen: set[str] = set()
     out: list[tuple[str, float, float]] = []
     for o in offers:
+        if not isinstance(o, ProducerOffer):
+            raise ValueError("offers must contain ProducerOffer instances")
         if isinstance(o.account_id, bool) or not isinstance(o.account_id, str) or not o.account_id.strip() or o.account_id in seen:
             raise ValueError(f"producer account ids must be non-empty and unique, got {o.account_id!r}")
         if isinstance(o.cost_per_1k, bool) or not isinstance(o.cost_per_1k, (int, float)) or not math.isfinite(o.cost_per_1k) or o.cost_per_1k < 0.0:
@@ -244,6 +252,8 @@ def clear_market(
     else no trade."""
     if isinstance(model_id, bool) or not isinstance(model_id, str) or not model_id.strip():
         raise ValueError("model_id must be non-empty")
+    if not isinstance(fee, FeePolicy):
+        raise ValueError("fee must be a FeePolicy")
     if measured_load_1k is not None and (isinstance(measured_load_1k, bool) or not isinstance(measured_load_1k, (int, float)) or not math.isfinite(float(measured_load_1k)) or float(measured_load_1k) < 0.0):
         raise ValueError("measured_load_1k must be finite and >= 0")
     consumers = _clean_bids(bids)
@@ -434,6 +444,8 @@ def certify(
     measured_load_1k: float | None = None,
 ) -> Certificate:
     """Recompute the win-win properties of `eq` from the raw bids and offers (never trusting the stored numbers)."""
+    if not isinstance(eq, MarketEquilibrium):
+        raise ValueError("eq must be a MarketEquilibrium")
     if measured_load_1k is not None and (isinstance(measured_load_1k, bool) or not isinstance(measured_load_1k, (int, float)) or not math.isfinite(float(measured_load_1k)) or float(measured_load_1k) < 0.0):
         raise ValueError("measured_load_1k must be finite and >= 0")
     values = dict(_clean_bids(bids))

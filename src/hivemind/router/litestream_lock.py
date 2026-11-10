@@ -111,11 +111,15 @@ class FileGenerationStore:
     """Filesystem-backed generation-precondition store for single-host / shared-volume Litestream locks."""
 
     def __init__(self, root_dir: Path | str) -> None:
+        if not isinstance(root_dir, (Path, str)) or not str(root_dir).strip():
+            raise ValueError("root_dir must be a non-empty Path or string")
         self._root = Path(root_dir)
         self._root.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
 
     def _path_for(self, key: str) -> Path:
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError("key must be a non-empty string")
         safe = "".join(ch if ch.isalnum() or ch in ("-", "_", ".") else "_" for ch in key)
         return self._root / f"{safe}.lock.json"
 
@@ -201,6 +205,12 @@ class LitestreamWriterLock:
             raise ValueError("replica_url must be a string")
         if not isinstance(owner_id, str) or not owner_id.strip():
             raise ValueError("owner_id must be a non-empty string")
+        if (
+            not hasattr(backend, "put_if_generation_match")
+            or not hasattr(backend, "get_record")
+            or not hasattr(backend, "delete_if_generation_match")
+        ):
+            raise ValueError("backend must implement GenerationBackend methods")
         if isinstance(lease_ttl_s, bool) or not isinstance(lease_ttl_s, (int, float)) or not math.isfinite(float(lease_ttl_s)) or float(lease_ttl_s) <= 0.0:
             raise ValueError("lease_ttl_s must be a finite positive number")
         if not isinstance(fail_closed, bool):

@@ -31,6 +31,8 @@ def canonical_query_hash(tool_name: str, query: str | Mapping[str, Any]) -> str:
     """Compute a deterministic SHA-256 hash for a given tool and query."""
     if not isinstance(tool_name, str) or not tool_name.strip():
         raise ValueError("tool_name must be a non-empty string")
+    if not isinstance(query, (str, Mapping)):
+        raise ValueError("query must be a string or a Mapping")
     normalized_tool = tool_name.strip().lower()
     if isinstance(query, Mapping):
         canonical_content = json.dumps(query, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
@@ -65,6 +67,8 @@ class NectarEntry:
         ):
             if not isinstance(val, str) or not val.strip():
                 raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(self.content, dict):
+            raise ValueError("content must be a dict")
         if (
             isinstance(self.nectar_richness, bool)
             or not isinstance(self.nectar_richness, (int, float))
@@ -315,6 +319,8 @@ class SwarmNectarCache:
         eff_ttl = float(raw_ttl)
         if not isinstance(discovered_by_bee, str) or not discovered_by_bee.strip():
             raise ValueError("discovered_by_bee must be a non-empty string")
+        if not isinstance(content, dict):
+            raise ValueError("content must be a dict")
         q_hash = canonical_query_hash(tool_name, query)
         entry_id = f"nectar-{q_hash[:16]}"
         entry = NectarEntry(
@@ -340,6 +346,8 @@ class SwarmNectarCache:
         requesting_bee: str = "anonymous",
     ) -> NectarEntry | None:
         """Retrieve cached nectar entry if present and unexpired."""
+        if not isinstance(requesting_bee, str):
+            raise ValueError("requesting_bee must be a string")
         t0 = time.perf_counter()
         self._total_queries += 1
         q_hash = canonical_query_hash(tool_name, query)
@@ -406,6 +414,15 @@ class SwarmNectarCache:
         ttl_s: float | None = None,
     ) -> NectarEntry:
         """Store a content-addressed `SwaT + AM_U` compacted KV state (`HM-S34-02`) in `SwarmNectarCache`."""
+        for field_name, val in (
+            ("sender_model_id", sender_model_id),
+            ("receiver_model_id", receiver_model_id),
+            ("context_key", context_key),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(compacted_kv_manifest, Mapping):
+            raise ValueError("compacted_kv_manifest must be a Mapping")
         query_spec = {
             "sender_model_id": sender_model_id,
             "receiver_model_id": receiver_model_id,
@@ -443,6 +460,13 @@ class SwarmNectarCache:
         requesting_bee: str = "anonymous",
     ) -> NectarEntry | None:
         """Retrieve a cached `SwaT + AM_U` compacted KV state (`HM-S34-02`) and award PoUW HMT royalties."""
+        for field_name, val in (
+            ("sender_model_id", sender_model_id),
+            ("receiver_model_id", receiver_model_id),
+            ("context_key", context_key),
+        ):
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
         query_spec = {
             "sender_model_id": sender_model_id,
             "receiver_model_id": receiver_model_id,

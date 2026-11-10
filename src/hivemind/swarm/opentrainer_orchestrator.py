@@ -251,6 +251,19 @@ def _atomic_write_json(target: Path, payload: Mapping[str, Any]) -> None:
     _atomic_write_bytes(target, raw)
 
 
+def _validate_optional_now(now: float | None) -> float:
+    if now is None:
+        return time.time()
+    if (
+        isinstance(now, bool)
+        or not isinstance(now, (int, float))
+        or not math.isfinite(float(now))
+        or float(now) <= 0.0
+    ):
+        raise ValueError("now must be a finite positive timestamp")
+    return float(now)
+
+
 class PermanentOpenTrainerOrchestrator:
     """T4-independent collaborative QLoRA MoE + Outer DiLoCo orchestrator for a low-cost permanent VM."""
 
@@ -264,6 +277,8 @@ class PermanentOpenTrainerOrchestrator:
     ) -> None:
         if not isinstance(config, OpenTrainerConfig):
             raise TypeError("config must be an OpenTrainerConfig")
+        if vm_profile is not None and not isinstance(vm_profile, LowCostVMProfile):
+            raise TypeError("vm_profile must be a LowCostVMProfile or None")
         if config.quorum < 1 or config.quorum > len(config.learners):
             raise ValueError(f"quorum must be in [1, {len(config.learners)}], got {config.quorum}")
         self.config = config
@@ -331,14 +346,7 @@ class PermanentOpenTrainerOrchestrator:
         _atomic_write_bytes(ckpt, buf.getvalue())
 
     def _open_new_round_offer(self, now: float | None = None) -> AMCPKafkaEvent:
-        if now is not None and (
-            isinstance(now, bool)
-            or not isinstance(now, (int, float))
-            or not math.isfinite(float(now))
-            or float(now) <= 0.0
-        ):
-            raise ValueError("now must be a finite positive timestamp")
-        now_ts = time.time() if now is None else float(now)
+        now_ts = _validate_optional_now(now)
         deadline = now_ts + self.config.round_deadline_s
         offer = fed.build_offer(
             run_id=self.config.run_id,
@@ -420,6 +428,8 @@ class PermanentOpenTrainerOrchestrator:
 
     def submit_result_envelope(self, envelope: Mapping[str, Any], *, now: float | None = None) -> dict[str, Any]:
         """Verify a signed task_result envelope, add it to the active RoundBook, and advance if ready."""
+        if now is not None:
+            _validate_optional_now(now)
         verified = verify_federation_envelope(self.verifier, envelope)
         if verified.event.event_type != fed.RESULT:
             raise ValueError(f"Expected {fed.RESULT}, got {verified.event.event_type!r}")
@@ -452,6 +462,8 @@ class PermanentOpenTrainerOrchestrator:
 
     def run_cpu_sentinel_step_if_needed(self, *, now: float | None = None) -> dict[str, Any]:
         """Execute a lightweight CPU sentinel learner step on the low-cost VM when the T4 learner is absent."""
+        if now is not None:
+            _validate_optional_now(now)
         with self._lock:
             if self.is_completed or self.current_book is None or self.current_offer_event is None:
                 return {"ran_sentinel": False, "reason": "no_open_round"}
@@ -509,6 +521,10 @@ class PermanentOpenTrainerOrchestrator:
 
     def tick(self, *, now: float | None = None, run_sentinel_if_t4_absent: bool = False) -> dict[str, Any]:
         """Advance round state on deadline expiry and optionally run the T4-offline CPU sentinel."""
+        if not isinstance(run_sentinel_if_t4_absent, bool):
+            raise ValueError("run_sentinel_if_t4_absent must be a boolean")
+        if now is not None:
+            _validate_optional_now(now)
         sentinel_info: dict[str, Any] | None = None
         if run_sentinel_if_t4_absent:
             sentinel_info = self.run_cpu_sentinel_step_if_needed(now=now)
@@ -777,6 +793,8 @@ def execute_http_learner_round(
 
 def create_opentrainer_router(orchestrator: PermanentOpenTrainerOrchestrator) -> APIRouter:
     """Create a FastAPI APIRouter exposing `/v1/opentrainer/*` endpoints."""
+    if not isinstance(orchestrator, PermanentOpenTrainerOrchestrator):
+        raise TypeError("orchestrator must be a PermanentOpenTrainerOrchestrator")
     router = APIRouter(prefix="/v1/opentrainer", tags=["opentrainer"])
 
     @router.get("/status")
@@ -820,6 +838,10 @@ def create_opentrainer_app(
     config: OpenTrainerConfig | None = None,
 ) -> FastAPI:
     """Create a standalone FastAPI application for the low-cost VM OpenTrainer orchestrator."""
+    if orchestrator is not None and not isinstance(orchestrator, PermanentOpenTrainerOrchestrator):
+        raise TypeError("orchestrator must be a PermanentOpenTrainerOrchestrator or None")
+    if config is not None and not isinstance(config, OpenTrainerConfig):
+        raise TypeError("config must be an OpenTrainerConfig or None")
     orch = orchestrator or PermanentOpenTrainerOrchestrator(config or OpenTrainerConfig())
     app = FastAPI(
         title="HiveMind Permanent Low-Cost VM OpenTrainer Orchestrator",

@@ -147,6 +147,71 @@ class RucheHoneycombCell:
     # covers the adapter checks made here (finite tensors, non-silent, SVD rank/energy), not these figures.
     nll_source: str = "CALLER_REPORTED_UNVERIFIED"
 
+    def __post_init__(self) -> None:
+        for s_field in (
+            "cell_id",
+            "domain_name",
+            "display_title",
+            "accent_hex",
+            "contributor_handle",
+            "hardware_device",
+            "dataset_shard_cid",
+            "expert_cas_cid",
+            "safetensors_rel_path",
+            "safetensors_sha256",
+            "wire_codec",
+            "nll_source",
+        ):
+            sval = getattr(self, s_field)
+            if not isinstance(sval, str) or not sval.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        for coord_field in ("hex_q", "hex_r"):
+            cval = getattr(self, coord_field)
+            if isinstance(cval, bool) or not isinstance(cval, int):
+                raise ValueError(f"{coord_field} must be an integer")
+        for pos_int_field in ("safetensors_bytes", "source_rank_r", "canonical_rank_r"):
+            ival = getattr(self, pos_int_field)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 1:
+                raise ValueError(f"{pos_int_field} must be a positive integer")
+        if (
+            isinstance(self.spectral_energy_retained, bool)
+            or not isinstance(self.spectral_energy_retained, (int, float))
+            or not math.isfinite(float(self.spectral_energy_retained))
+            or not (0.0 <= float(self.spectral_energy_retained) <= 1.0 + 1e-6)
+        ):
+            raise ValueError("spectral_energy_retained must be a finite number in [0.0, 1.0]")
+        for pos_flt_field in (
+            "train_nll_before",
+            "train_nll_after",
+            "holdout_nll_before",
+            "holdout_nll_after",
+            "holdout_perplexity_before",
+            "holdout_perplexity_after",
+        ):
+            fval = getattr(self, pos_flt_field)
+            if (
+                isinstance(fval, bool)
+                or not isinstance(fval, (int, float))
+                or not math.isfinite(float(fval))
+                or float(fval) <= 0.0
+            ):
+                raise ValueError(f"{pos_flt_field} must be a finite positive number")
+        if (
+            isinstance(self.perplexity_reduction_pct, bool)
+            or not isinstance(self.perplexity_reduction_pct, (int, float))
+            or not math.isfinite(float(self.perplexity_reduction_pct))
+        ):
+            raise ValueError("perplexity_reduction_pct must be a finite number")
+        if (
+            isinstance(self.deposited_at_epoch, bool)
+            or not isinstance(self.deposited_at_epoch, (int, float))
+            or not math.isfinite(float(self.deposited_at_epoch))
+            or float(self.deposited_at_epoch) < 0.0
+        ):
+            raise ValueError("deposited_at_epoch must be a finite non-negative number")
+        if not isinstance(self.verified, bool):
+            raise ValueError("verified must be a boolean")
+
 
 @dataclass
 class RucheCommunityMoERelease:
@@ -178,6 +243,69 @@ class RucheCommunityMoERelease:
         "Strictly non-monetary open-source project. "
         "All experts and MoE weights are openly shared under reciprocal community compute."
     )
+
+    def __post_init__(self) -> None:
+        for s_field in (
+            "release_id",
+            "release_version",
+            "base_architecture",
+            "router_type",
+            "combined_safetensors_path",
+            "combined_safetensors_sha256",
+            "model_card_path",
+            "manifest_path",
+            "charter_notice",
+        ):
+            sval = getattr(self, s_field)
+            if not isinstance(sval, str) or not sval.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        for i_field, min_val in (
+            ("num_domains", 1),
+            ("top_k_active", 1),
+            ("canonical_rank_r", 1),
+            ("hidden_size", 4),
+            ("vocab_size", 2),
+            ("combined_safetensors_bytes", 1),
+        ):
+            ival = getattr(self, i_field)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < min_val:
+                raise ValueError(f"{i_field} must be an integer >= {min_val}")
+        if not isinstance(self.three_tier_enabled, bool) or not isinstance(self.ortho_inj_enabled, bool):
+            raise ValueError("three_tier_enabled and ortho_inj_enabled must be booleans")
+        for p_field in ("mean_holdout_perplexity_before", "mean_holdout_perplexity_after"):
+            pval = getattr(self, p_field)
+            if (
+                isinstance(pval, bool)
+                or not isinstance(pval, (int, float))
+                or not math.isfinite(float(pval))
+                or float(pval) <= 0.0
+            ):
+                raise ValueError(f"{p_field} must be a finite positive number")
+        if (
+            isinstance(self.mean_perplexity_reduction_pct, bool)
+            or not isinstance(self.mean_perplexity_reduction_pct, (int, float))
+            or not math.isfinite(float(self.mean_perplexity_reduction_pct))
+        ):
+            raise ValueError("mean_perplexity_reduction_pct must be a finite number")
+        if (
+            isinstance(self.created_at_epoch, bool)
+            or not isinstance(self.created_at_epoch, (int, float))
+            or not math.isfinite(float(self.created_at_epoch))
+            or float(self.created_at_epoch) < 0.0
+        ):
+            raise ValueError("created_at_epoch must be a finite non-negative number")
+        if (
+            not isinstance(self.contributors, list)
+            or not self.contributors
+            or any(not isinstance(c, str) or not c.strip() for c in self.contributors)
+        ):
+            raise ValueError("contributors must be a non-empty list of non-empty strings")
+        if (
+            not isinstance(self.cells, list)
+            or not self.cells
+            or any(not isinstance(cell, RucheHoneycombCell) for cell in self.cells)
+        ):
+            raise ValueError("cells must be a non-empty list of RucheHoneycombCell")
 
 
 def _serialize_tensors_safetensors(tensors: Dict[str, torch.Tensor]) -> bytes:

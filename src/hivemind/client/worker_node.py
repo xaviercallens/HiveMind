@@ -173,8 +173,6 @@ class HiveMindWorkerNode:
         muon_ns_steps: int = 5,
     ) -> InnerLoopResult:
         """Verify Steam ticket & Parquet shard, execute H local AdamW steps, and emit compressed delta."""
-        if not isinstance(workunit, BOINCWorkunit):
-            raise TypeError("workunit must be a BOINCWorkunit")
         if not isinstance(global_lora_state, dict):
             raise TypeError("global_lora_state must be a dict")
         if not isinstance(use_paged_8bit_adamw, bool):
@@ -192,6 +190,8 @@ class HiveMindWorkerNode:
         ok, msg = self.steamworks.verify_sybil_resistance(self.auth_ticket)
         if not ok:
             raise PermissionError(f"Worker {self.worker_id} blocked by Steam Sybil guard: {msg}")
+        if not isinstance(workunit, BOINCWorkunit):
+            raise TypeError("workunit must be a BOINCWorkunit")
 
         token_sequences = verify_and_load_parquet_shard(
             shard_path=workunit.data_shard_parquet,

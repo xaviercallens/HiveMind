@@ -44,7 +44,7 @@ import json
 import math
 from pathlib import Path
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Mapping
 
 import torch
 import torch.nn as nn
@@ -102,6 +102,18 @@ class HypothesisVerificationRecord:
     passed: bool
     key_metrics: Dict[str, Any]
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.hypothesis_id, str) or not self.hypothesis_id.strip():
+            raise ValueError("hypothesis_id must be a non-empty string")
+        if not isinstance(self.title, str) or not self.title.strip():
+            raise ValueError("title must be a non-empty string")
+        if not isinstance(self.category, str) or not self.category.strip():
+            raise ValueError("category must be a non-empty string")
+        if not isinstance(self.passed, bool):
+            raise ValueError("passed must be a boolean")
+        if not isinstance(self.key_metrics, Mapping):
+            raise ValueError("key_metrics must be a mapping")
+
 
 class TinyLoRALinear(nn.Module):
     """Deterministic LoRA-wrapped linear projection for fast inner-loop replay tests."""
@@ -121,6 +133,12 @@ class TinyLoRALinear(nn.Module):
         self.scaling = 2.0
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if not isinstance(x, torch.Tensor) or x.ndim < 1 or x.numel() == 0:
+            raise ValueError("x must be a non-empty torch.Tensor with at least 1 dimension")
+        if x.shape[-1] != self.base_layer.in_features:
+            raise ValueError(
+                f"x last dimension ({x.shape[-1]}) must match in_features ({self.base_layer.in_features})"
+            )
         return self.base_layer(x) + self.scaling * ((x @ self.lora_A.t()) @ self.lora_B.t())
 
 
@@ -143,6 +161,11 @@ class TinyDeterministicLoRALM(nn.Module):
         self.head.weight.requires_grad_(False)
 
     def forward(self, input_ids: torch.Tensor, labels: torch.Tensor | None = None) -> Any:
+        if not isinstance(input_ids, torch.Tensor) or input_ids.ndim != 2 or input_ids.numel() == 0:
+            raise ValueError("input_ids must be a non-empty 2D torch.Tensor")
+        if labels is not None:
+            if not isinstance(labels, torch.Tensor) or labels.shape != input_ids.shape:
+                raise ValueError("labels must be a torch.Tensor with the same shape as input_ids")
         h = self.embed(input_ids)
         h = torch.tanh(self.q_proj(h) + self.v_proj(h))
         logits = self.head(h)
@@ -527,6 +550,20 @@ class ArchitectureHypothesisVerifier:
         min_transfer_latency_ms: float = 0.0,
     ) -> HypothesisVerificationRecord:
         """H5: Skip-Attention Speculative Expert Prefetch, Cache-Aware Routing (CAR) & Async DMA."""
+        if (
+            isinstance(simulated_attention_compute_ms, bool)
+            or not isinstance(simulated_attention_compute_ms, (int, float))
+            or not math.isfinite(float(simulated_attention_compute_ms))
+            or float(simulated_attention_compute_ms) < 0.0
+        ):
+            raise ValueError("simulated_attention_compute_ms must be a finite number >= 0.0")
+        if (
+            isinstance(min_transfer_latency_ms, bool)
+            or not isinstance(min_transfer_latency_ms, (int, float))
+            or not math.isfinite(float(min_transfer_latency_ms))
+            or float(min_transfer_latency_ms) < 0.0
+        ):
+            raise ValueError("min_transfer_latency_ms must be a finite number >= 0.0")
         gen = torch.Generator().manual_seed(self.seed + 5)
         num_experts = 16
         hidden_dim = 32
@@ -936,6 +973,10 @@ class ArchitectureHypothesisVerifier:
 
     def run_all_verifications(self, output_path: Path | None = None) -> Dict[str, Any]:
         """Run all 10 architecture hypothesis checks and emit a cryptographically signed report."""
+        if output_path is not None:
+            if not isinstance(output_path, (Path, str)) or not str(output_path).strip():
+                raise ValueError("output_path must be a non-empty Path or string when provided")
+            output_path = Path(output_path)
         t0 = time.perf_counter()
         records = [
             self.verify_h1_opendiloco_cpu_flat_bucket(),

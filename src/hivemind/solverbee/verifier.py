@@ -548,17 +548,19 @@ def certify_achieved_accuracy(
     the achieved global accuracy without altering or loosening the contract rules
     in verify() / decide().
     """
-    spec = _parse_spec(spec_bytes)
-    n = _dimension(spec)
-    rtol, atols = _tolerances(spec, n)
+    if not isinstance(spec_bytes, (bytes, bytearray)) or not spec_bytes:
+        raise ValueError("spec_bytes must be non-empty bytes")
     if not isinstance(loose_result, dict) or not isinstance(tight_result, dict):
         raise ValueError("loose_result and tight_result must be dicts")
-    _validate_trajectory(loose_result, spec, "loose result")
-    _validate_trajectory(tight_result, spec, "tight result")
     if problem is not None and not isinstance(problem, dict):
         raise ValueError("problem must be a dict or None")
     if tightening_factor <= 1.0 or not _finite(tightening_factor):
         raise ValueError("tightening_factor must be a finite number > 1")
+    spec = _parse_spec(spec_bytes)
+    n = _dimension(spec)
+    rtol, atols = _tolerances(spec, n)
+    _validate_trajectory(loose_result, spec, "loose result")
+    _validate_trajectory(tight_result, spec, "tight result")
 
     max_abs_diff = 0.0
     max_rel_ratio = 0.0

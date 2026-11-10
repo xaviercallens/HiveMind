@@ -3165,6 +3165,18 @@ def run_hf_hack_mining_game(
     build_steam_package: bool = True,
 ) -> Dict[str, Any]:
     """Execute the Hugging Face Hack-Miner Game (Season 1 + Season 2 = 6 Missions + 6-Expert MoE Boss Raid) on the local RTX 2070."""
+    if not isinstance(model_id, str) or not model_id.strip():
+        raise ValueError("model_id must be a non-empty string")
+    if isinstance(lora_rank, bool) or not isinstance(lora_rank, int) or lora_rank < 1:
+        raise ValueError("lora_rank must be a positive integer")
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
+        raise ValueError("inner_steps must be a positive integer")
+    if isinstance(seq_len, bool) or not isinstance(seq_len, int) or seq_len < 1:
+        raise ValueError("seq_len must be a positive integer")
+    if not isinstance(season, str) or not season.strip():
+        raise ValueError("season must be a non-empty string")
+    if not isinstance(build_steam_package, bool):
+        raise TypeError("build_steam_package must be a boolean")
     from hivemind.swarm.swarm_fabric import (
         PinnedRAMExpertDMAStreamer,
         TokenTreeSpeculativeVerifier,
@@ -3978,6 +3990,10 @@ def execute_interactive_hf_shard_scan(
     target_keywords: List[str] | None = None,
 ) -> Dict[str, Any]:
     """Scan a Hugging Face dataset or custom rows, pin a 16 KB CAS shard, verify Merkle PoS, and award points."""
+    if not isinstance(gamer_tag, str) or not gamer_tag.strip():
+        raise ValueError("gamer_tag must be a non-empty string")
+    if not isinstance(dataset_id, str) or not dataset_id.strip():
+        raise ValueError("dataset_id must be a non-empty string")
     if dataset_id not in ALLOWED_HF_SCAN_DATASETS:
         return {
             "status": "BLOCKED",
@@ -4124,6 +4140,12 @@ def execute_interactive_bounty_probe(
     persist_leaderboard: bool = True,
 ) -> Dict[str, Any]:
     """Route a live player prompt across the 6-Expert Sparse MoE domains (Season 1 + Season 2), synthesize a solution, and award bounty points."""
+    if not isinstance(gamer_tag, str) or not gamer_tag.strip():
+        raise ValueError("gamer_tag must be a non-empty string")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("prompt must be a non-empty string")
+    if not isinstance(persist_leaderboard, bool):
+        raise TypeError("persist_leaderboard must be a boolean")
     p_low = prompt.lower()
     code_hits = sum(
         1 for w in ["def", "python", "function", "code", "array", "sort", "search", "return", "algorithm"] if w in p_low
@@ -4272,6 +4294,12 @@ def execute_interactive_lora_micro_forge(
     persist_leaderboard: bool = True,
 ) -> Dict[str, Any]:
     """Execute a fast interactive QLoRA Micro-Forge burst & Steam Rich Presence broadcast from the Web HUD."""
+    if not isinstance(gamer_tag, str) or not gamer_tag.strip():
+        raise ValueError("gamer_tag must be a non-empty string")
+    if not isinstance(contract_id, str) or not contract_id.strip():
+        raise ValueError("contract_id must be a non-empty string")
+    if not isinstance(require_cuda, bool) or not isinstance(persist_leaderboard, bool):
+        raise TypeError("require_cuda and persist_leaderboard must be booleans")
     ensure_local_drive_caches()
     contract_map = {c.contract_id: c for c in SEASON_6_EXTENDED_HF_BOUNTY_CONTRACTS}
     contract = contract_map.get(contract_id, SEASON_2_HF_BOUNTY_CONTRACTS[0])
@@ -4468,6 +4496,12 @@ def execute_interactive_joined_campaign(
     verifying that every peer agent immediately inherits the retraining effort on unseen
     holdout benchmarks (`knowledge_transfer_efficiency >= 0.95`).
     """
+    if not isinstance(lead_gamer_tag, str) or not lead_gamer_tag.strip():
+        raise ValueError("lead_gamer_tag must be a non-empty string")
+    if not isinstance(campaign_id, str) or not campaign_id.strip():
+        raise ValueError("campaign_id must be a non-empty string")
+    if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
+        raise ValueError("inner_steps must be a positive integer")
     from hivemind.swarm.scientific_swarm_eval import (
         JoinedSwarmCampaignEngine,
         SwarmKnowledgeTransferEngine,

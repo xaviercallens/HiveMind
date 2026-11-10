@@ -158,6 +158,8 @@ class CrowdV1(nn.Module):
 
 def load_flat_safetensors(path: Path | str) -> torch.Tensor:
     """The single flat tensor of a CrowdGPT `model_*.safetensors` file (key `weights`)."""
+    if not isinstance(path, (Path, str)) or not str(path).strip():
+        raise ValueError("path must be a non-empty Path or string")
     from safetensors.torch import load_file
 
     tensors = load_file(str(path))

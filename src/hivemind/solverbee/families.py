@@ -328,8 +328,9 @@ def _fractions(values: Sequence[float], names: Sequence[str]) -> List[float]:
 def sir_spec(beta: float, gamma: float, s0: float, i0: float, t_out: Sequence[float], *, r0: Optional[float] = None, spec_id: str = "science-bee", **kw: Any) -> Dict[str, Any]:
     """SIR epidemic on population fractions: S+I->2I (k=beta), I->R (k=gamma)."""
     b, g = _num(beta, "beta", nonneg=True), _num(gamma, "gamma", nonneg=True)
-    rr = (1.0 - s0 - i0) if r0 is None else r0
-    y0 = _fractions([s0, i0, rr], ["s0", "i0", "r0"])
+    s_v, i_v = _num(s0, "s0", nonneg=True, hi=1.0), _num(i0, "i0", nonneg=True, hi=1.0)
+    rr = (1.0 - s_v - i_v) if r0 is None else r0
+    y0 = _fractions([s_v, i_v, rr], ["s0", "i0", "r0"])
     rx = [{"reactants": {"S": 1, "I": 1}, "products": {"I": 2}, "k": b}, {"reactants": {"I": 1}, "products": {"R": 1}, "k": g}]
     return mass_action_spec(["S", "I", "R"], rx, y0, t_out, spec_id=spec_id, **kw)
 
@@ -338,8 +339,9 @@ def seir_spec(beta: float, sigma: float, gamma: float, s0: float, e0: float, i0:
               spec_id: str = "science-bee", **kw: Any) -> Dict[str, Any]:
     """SEIR epidemic: S+I->E+I (k=beta), E->I (k=sigma), I->R (k=gamma)."""
     b, s, g = _num(beta, "beta", nonneg=True), _num(sigma, "sigma", nonneg=True), _num(gamma, "gamma", nonneg=True)
-    rr = (1.0 - s0 - e0 - i0) if r0 is None else r0
-    y0 = _fractions([s0, e0, i0, rr], ["s0", "e0", "i0", "r0"])
+    s_v, e_v, i_v = _num(s0, "s0", nonneg=True, hi=1.0), _num(e0, "e0", nonneg=True, hi=1.0), _num(i0, "i0", nonneg=True, hi=1.0)
+    rr = (1.0 - s_v - e_v - i_v) if r0 is None else r0
+    y0 = _fractions([s_v, e_v, i_v, rr], ["s0", "e0", "i0", "r0"])
     rx = [{"reactants": {"S": 1, "I": 1}, "products": {"E": 1, "I": 1}, "k": b}, {"reactants": {"E": 1}, "products": {"I": 1}, "k": s},
           {"reactants": {"I": 1}, "products": {"R": 1}, "k": g}]
     return mass_action_spec(["S", "E", "I", "R"], rx, y0, t_out, spec_id=spec_id, **kw)

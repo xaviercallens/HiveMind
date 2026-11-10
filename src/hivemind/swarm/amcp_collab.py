@@ -152,6 +152,8 @@ def bus_from_env(env: Mapping[str, str] | None = None) -> tuple[Any, str]:
 
     from hivemind.swarm.amcp_kafka_transport import AMCPPublisher, HMACKeyring, KafkaBrokerTransport, KafkaConfigError, KafkaSettings, kafka_transport_readiness
 
+    if env is not None and not isinstance(env, Mapping):
+        raise TypeError("env must be None or a Mapping")
     src = os.environ if env is None else env
     ready = kafka_transport_readiness(src)
     if ready["status"] != "READY":

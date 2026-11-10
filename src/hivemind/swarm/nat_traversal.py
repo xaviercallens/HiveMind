@@ -426,6 +426,7 @@ def verify_fingerprint(raw: bytes) -> bool:
 
 
 def udp_socket(bind: Address = ("0.0.0.0", 0)) -> socket.socket:
+    _validate_address_tuple(bind, "bind")
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     if hasattr(socket, "SIO_UDP_CONNRESET"):
         # Windows otherwise turns an ICMP port-unreachable into an error on the next recvfrom.
@@ -466,6 +467,7 @@ def resolve(server: ServerSpec) -> Address:
 
 def outbound_interface_ip(target: Address) -> str:
     """Local IP the OS would use to reach `target` (UDP connect sends no packets)."""
+    _validate_address_tuple(target, "target")
     probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         probe.connect(target)
@@ -719,6 +721,35 @@ def udp_hole_punch(
     answered from the address it arrived on, which is the hole the peer's NAT just opened. A
     side succeeds when it receives that answer, then lingers briefly to answer late probes.
     """
+    if not isinstance(sock, socket.socket):
+        raise TypeError("sock must be a socket.socket")
+    if isinstance(candidates, (str, bytes)) or not isinstance(candidates, Sequence):
+        raise TypeError("candidates must be a Sequence of Address tuples")
+    for cand in candidates:
+        _validate_address_tuple(cand, "candidates item")
+    if not isinstance(session, (bytes, bytearray)) or len(session) == 0:
+        raise ValueError("session must be non-empty bytes")
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(float(timeout))
+        or float(timeout) <= 0.0
+    ):
+        raise ValueError("timeout must be a positive finite number")
+    if (
+        isinstance(interval, bool)
+        or not isinstance(interval, (int, float))
+        or not math.isfinite(float(interval))
+        or float(interval) <= 0.0
+    ):
+        raise ValueError("interval must be a positive finite number")
+    if (
+        isinstance(linger, bool)
+        or not isinstance(linger, (int, float))
+        or not math.isfinite(float(linger))
+        or float(linger) < 0.0
+    ):
+        raise ValueError("linger must be a non-negative finite number")
     syn = PUNCH_MAGIC + b"S" + session
     ack = PUNCH_MAGIC + b"A" + session
     deadline = time.monotonic() + timeout

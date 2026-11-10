@@ -409,6 +409,8 @@ def existing_bee_names(extra: Iterable[str] = ()) -> frozenset[str]:
     ``extra`` is where the expert registry passes the bees it already holds. ``btm_moe`` (which imports torch) is imported
     here rather than at module load so that ``scripts/byob_submit.py`` starts quickly.
     """
+    if isinstance(extra, (str, bytes)) or not isinstance(extra, Iterable):
+        raise TypeError("extra must be an iterable of strings")
     from hivemind.core.btm_moe import SEASON_3_DOMAIN_EXPERT_SPECS
     from hivemind.core.serving_experts import SERVING_EXPERT_SPECS
     from hivemind.swarm.rusty_sundials_scientific_bee import BEE_RUSTY_SUNDIALS_ID
@@ -490,6 +492,8 @@ def parse_tree(entries: Sequence[Mapping[str, Any]]) -> list[RepoFile]:
 
 def check_repo_files(files: Sequence[RepoFile]) -> list[Reason]:
     """Whole-repository file policy: safetensors/gguf weights only, no pickle, no code, no unsafe path."""
+    if isinstance(files, (str, bytes)) or not isinstance(files, Sequence) or any(not isinstance(f, RepoFile) for f in files):
+        raise TypeError("files must be a sequence of RepoFile instances")
     reasons: list[Reason] = []
     for f in files:
         parts = f.path.split("/")
@@ -520,6 +524,10 @@ def _join(subfolder: str, name: str) -> str:
 
 def served_weight_files(manifest: BeeManifest, files: Sequence[RepoFile]) -> list[RepoFile]:
     """The weight files the hive would load for this kind (the size check and the registry entry use these)."""
+    if not isinstance(manifest, BeeManifest):
+        raise TypeError("manifest must be a BeeManifest")
+    if isinstance(files, (str, bytes)) or not isinstance(files, Sequence) or any(not isinstance(f, RepoFile) for f in files):
+        raise TypeError("files must be a sequence of RepoFile instances")
     if manifest.kind == "gguf":
         return [f for f in files if f.path == manifest.primary_file]
     if manifest.kind == "lora_adapter":
@@ -529,6 +537,10 @@ def served_weight_files(manifest: BeeManifest, files: Sequence[RepoFile]) -> lis
 
 
 def check_required_files(manifest: BeeManifest, files: Sequence[RepoFile]) -> list[Reason]:
+    if not isinstance(manifest, BeeManifest):
+        raise TypeError("manifest must be a BeeManifest")
+    if isinstance(files, (str, bytes)) or not isinstance(files, Sequence) or any(not isinstance(f, RepoFile) for f in files):
+        raise TypeError("files must be a sequence of RepoFile instances")
     paths = {f.path for f in files}
     need: list[str] = []
     if manifest.kind == "lora_adapter":
@@ -993,6 +1005,14 @@ _PROBE_OPENER: Final[urllib.request.OpenerDirector] = urllib.request.build_opene
 
 def https_chat_prober(url: str, model: str, prompt: str, timeout_s: float) -> str:
     """POST one OpenAI-format chat request to ``{url}/v1/chat/completions`` and return the first message content."""
+    if not isinstance(url, str) or not url.strip().startswith("https://"):
+        raise ValueError("url must be a non-empty https:// URL")
+    if not isinstance(model, str) or not model.strip():
+        raise ValueError("model must be a non-empty string")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("prompt must be a non-empty string")
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not math.isfinite(float(timeout_s)) or float(timeout_s) <= 0.0:
+        raise ValueError("timeout_s must be a positive finite number")
     body = json.dumps({"model": model, "messages": [{"role": "user", "content": prompt}], "temperature": 0}).encode()
     request = urllib.request.Request(url.rstrip("/") + "/v1/chat/completions", data=body, method="POST",
                                      headers={"Content-Type": "application/json", "User-Agent": "hivemind-byob/1"})
@@ -1141,6 +1161,14 @@ def _stage(static: StaticReport, evaluation: EvaluationReport | None) -> Stage:
 def build_registry_entry(manifest: BeeManifest, static: StaticReport, evaluation: EvaluationReport | None,
                          now: float | None = None) -> dict[str, Any]:
     """Registry-entry-shaped dict; the best stage it can carry is ``shadow``."""
+    if not isinstance(manifest, BeeManifest):
+        raise TypeError("manifest must be a BeeManifest")
+    if not isinstance(static, StaticReport):
+        raise TypeError("static must be a StaticReport")
+    if evaluation is not None and not isinstance(evaluation, EvaluationReport):
+        raise TypeError("evaluation must be None or an EvaluationReport")
+    if now is not None and (isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(float(now))):
+        raise ValueError("now must be None or a finite number")
     base = served_base(manifest.base_model)
     reasons = [r.to_dict() for r in static.reasons] + ([r.to_dict() for r in evaluation.reasons] if evaluation else [])
     entry = {
@@ -1178,11 +1206,19 @@ def build_registry_entry(manifest: BeeManifest, static: StaticReport, evaluation
 
 
 def owner_approval_payload(entry: Mapping[str, Any], approver: str, approved_utc: str) -> bytes:
+    if not isinstance(entry, Mapping):
+        raise TypeError("entry must be a Mapping")
+    if not isinstance(approver, str) or not approver.strip():
+        raise ValueError("approver must be a non-empty string")
+    if not isinstance(approved_utc, str) or not approved_utc.strip():
+        raise ValueError("approved_utc must be a non-empty string")
     return canonical_json({"action": "byob_promote_live", "expert_id": entry["expert_id"],
                            "manifest_sha256": entry["manifest_sha256"], "approver": approver, "approved_utc": approved_utc})
 
 
 def sign_owner_approval(entry: Mapping[str, Any], approver: str, approved_utc: str, owner_key: bytes) -> dict[str, str]:
+    if not isinstance(owner_key, (bytes, bytearray)) or len(owner_key) < MIN_KEY_BYTES:
+        raise ValueError(f"owner_key must be at least {MIN_KEY_BYTES} bytes")
     return {"approver": approver, "approved_utc": approved_utc,
             "manifest_sha256": str(entry["manifest_sha256"]),
             "signature": hmac_hex(owner_key, owner_approval_payload(entry, approver, approved_utc))}
@@ -1190,6 +1226,12 @@ def sign_owner_approval(entry: Mapping[str, Any], approver: str, approved_utc: s
 
 def approve_live(entry: Mapping[str, Any], approval: Mapping[str, str], owner_key: bytes) -> tuple[dict[str, Any], list[Reason]]:
     """shadow -> live, only with an owner approval signed over this exact manifest digest. Returns (entry, reasons)."""
+    if not isinstance(entry, Mapping):
+        raise TypeError("entry must be a Mapping")
+    if not isinstance(approval, Mapping):
+        raise TypeError("approval must be a Mapping")
+    if not isinstance(owner_key, (bytes, bytearray)) or len(owner_key) < MIN_KEY_BYTES:
+        raise ValueError(f"owner_key must be at least {MIN_KEY_BYTES} bytes")
     out = dict(entry)
     if entry.get("stage") != Stage.SHADOW.value:
         return out, [Reason(ReasonCode.STAGE_NOT_SHADOW, f"stage is {entry.get('stage')!r}; only shadow can go live")]

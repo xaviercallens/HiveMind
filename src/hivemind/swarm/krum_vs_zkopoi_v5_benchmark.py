@@ -91,10 +91,18 @@ class ScalingBenchmarkReport:
     all_invariants_passed: bool
 
     def __post_init__(self) -> None:
-        if not isinstance(self.experiment_id, str) or not self.experiment_id.strip():
-            raise ValueError("experiment_id must be a non-empty string")
-        if not isinstance(self.roadmap_id, str) or not self.roadmap_id.strip():
-            raise ValueError("roadmap_id must be a non-empty string")
+        if (
+            not isinstance(self.experiment_id, str)
+            or not self.experiment_id.strip()
+            or any(ord(c) < 32 or ord(c) == 127 for c in self.experiment_id)
+        ):
+            raise ValueError("experiment_id must be a non-empty string without control characters")
+        if (
+            not isinstance(self.roadmap_id, str)
+            or not self.roadmap_id.strip()
+            or any(ord(c) < 32 or ord(c) == 127 for c in self.roadmap_id)
+        ):
+            raise ValueError("roadmap_id must be a non-empty string without control characters")
         if not isinstance(self.points, tuple) or not self.points or not all(
             isinstance(p, ScalingRegimePoint) for p in self.points
         ):
@@ -128,8 +136,15 @@ def multi_krum_select(
 
      satisfies the classic Blanchard et al. (2017) condition ``n >= 2f + 3``.
     """
-    if not isinstance(gradients, np.ndarray) or gradients.ndim != 2 or gradients.shape[0] < 3 or gradients.shape[1] < 1:
-        raise ValueError("gradients must be a 2D numpy array with shape (n >= 3, d >= 1)")
+    if (
+        not isinstance(gradients, np.ndarray)
+        or not np.issubdtype(gradients.dtype, np.number)
+        or np.issubdtype(gradients.dtype, np.bool_)
+        or gradients.ndim != 2
+        or gradients.shape[0] < 3
+        or gradients.shape[1] < 1
+    ):
+        raise ValueError("gradients must be a 2D numpy array of numeric values with shape (n >= 3, d >= 1)")
     if not np.all(np.isfinite(gradients)):
         raise ValueError("gradients must contain only finite numbers")
     _require_int(num_byzantine, "num_byzantine", min_value=0)

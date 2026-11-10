@@ -31,6 +31,20 @@ class E8QuantizedBlock:
     is_valid_e8_point: bool
     coset: str  # "D8_integer" or "D8_half_integer"
 
+    def __post_init__(self) -> None:
+        for t_field in ("lattice_point", "reconstructed"):
+            seq = getattr(self, t_field)
+            if not isinstance(seq, tuple) or len(seq) != 8 or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) for v in seq):
+                raise ValueError(f"{t_field} must be an 8-element tuple of finite numbers")
+        for f_field in ("scale", "l2_distortion"):
+            val = getattr(self, f_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{f_field} must be a finite non-negative number")
+        if not isinstance(self.is_valid_e8_point, bool):
+            raise ValueError("is_valid_e8_point must be a boolean")
+        if self.coset not in ("D8_integer", "D8_half_integer"):
+            raise ValueError("coset must be 'D8_integer' or 'D8_half_integer'")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 

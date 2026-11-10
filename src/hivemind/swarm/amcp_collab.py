@@ -178,6 +178,8 @@ def dev_keyring(path: Any = None, *, create: bool = False) -> Any:
 
     if not isinstance(create, bool):
         raise ValueError("create must be a boolean")
+    if path is not None and (not isinstance(path, (str, os.PathLike)) or not str(path).strip()):
+        raise ValueError("path must be None or a non-empty path")
     p = Path(path) if path else Path(os.environ.get("HIVEMIND_AMCP_DEV_KEYRING") or Path.home() / ".hivemind-amcp" / "dev_keyring")
     if not p.exists():
         if not create:

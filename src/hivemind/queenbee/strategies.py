@@ -165,6 +165,8 @@ class BanditStrategy:
         return touched
 
     def choose(self, cluster_id: str, candidates: Sequence[str], rng: random.Random) -> str:
+        if not isinstance(rng, random.Random):
+            raise TypeError("rng must be a random.Random instance")
         if isinstance(candidates, (str, bytes)) or not candidates or any(not isinstance(c, str) or not c.strip() for c in candidates):
             raise ValueError("candidates must be non-empty")
         best, best_score = candidates[0], -1.0
@@ -386,11 +388,11 @@ def clip_and_noise(delta: Mapping[str, Any], clip_norm: float, sigma: float, gen
     not claim a (epsilon, delta) guarantee)."""
     import torch
 
-    if clip_norm <= 0.0 or not math.isfinite(clip_norm):
+    if isinstance(clip_norm, bool) or not isinstance(clip_norm, (int, float)) or clip_norm <= 0.0 or not math.isfinite(clip_norm):
         raise ValueError("clip_norm must be finite and > 0")
-    if sigma < 0.0 or not math.isfinite(sigma):
+    if isinstance(sigma, bool) or not isinstance(sigma, (int, float)) or sigma < 0.0 or not math.isfinite(sigma):
         raise ValueError("sigma must be finite and >= 0")
-    if not delta:
+    if not isinstance(delta, Mapping) or not delta:
         raise ValueError("delta must be non-empty")
     sq = 0.0
     for t in delta.values():
@@ -684,6 +686,10 @@ class FederatedShareStrategy:
                  accountant: PrivacyAccountant | None = None) -> None:
         if isinstance(clip_norm, bool) or not isinstance(clip_norm, (int, float)) or not math.isfinite(float(clip_norm)) or clip_norm <= 0.0 or isinstance(sigma, bool) or not isinstance(sigma, (int, float)) or not math.isfinite(float(sigma)) or sigma < 0.0:
             raise ValueError("clip_norm (> 0) and sigma (>= 0) must be finite")
+        if router is not None and not isinstance(router, BanditStrategy):
+            raise TypeError("router must be None or a BanditStrategy")
+        if accountant is not None and not isinstance(accountant, PrivacyAccountant):
+            raise TypeError("accountant must be None or a PrivacyAccountant")
         self.clip_norm = clip_norm
         self.sigma = sigma
         self.router = router or BanditStrategy()
@@ -739,6 +745,8 @@ class TaskDecompositionRouter:
     """Decompose a composite task into verified subtasks and route each subtask to its best cluster expert (HM-S15-04 / #174)."""
 
     def __init__(self, bandit: BanditStrategy | None = None) -> None:
+        if bandit is not None and not isinstance(bandit, BanditStrategy):
+            raise TypeError("bandit must be None or a BanditStrategy")
         self.bandit = bandit or BanditStrategy()
 
     def route_subtasks(
@@ -747,7 +755,7 @@ class TaskDecompositionRouter:
         candidates: Sequence[str],
         rng: random.Random,
     ) -> dict[str, str]:
-        if not subtasks:
+        if isinstance(subtasks, (str, bytes)) or not isinstance(subtasks, Sequence) or not subtasks or any(not isinstance(st, VerifiedSubtask) for st in subtasks):
             raise ValueError("subtasks must be non-empty")
         return {st.subtask_id: self.bandit.choose(st.cluster_id, candidates, rng) for st in subtasks}
 
@@ -758,8 +766,10 @@ class TaskDecompositionRouter:
         outcomes: Mapping[str, tuple[bool, bool]],
     ) -> bool:
         """Record per-subtask `(verified, success)` outcomes and return True iff all subtasks passed verification."""
-        if not subtasks:
+        if isinstance(subtasks, (str, bytes)) or not isinstance(subtasks, Sequence) or not subtasks or any(not isinstance(st, VerifiedSubtask) for st in subtasks):
             raise ValueError("subtasks must be non-empty")
+        if not isinstance(assignments, Mapping) or not isinstance(outcomes, Mapping):
+            raise TypeError("assignments and outcomes must be Mappings")
         all_ok = True
         for st in subtasks:
             expert_id = assignments[st.subtask_id]
@@ -825,6 +835,10 @@ class VerifiedIDECorrectionFlow:
 
         if not self.opt_in:
             raise ValueError("VerifiedIDECorrectionFlow requires opt_in=True before training a local adapter")
+        if not isinstance(baseline_outcomes, Mapping) or not isinstance(candidate_outcomes, Mapping):
+            raise TypeError("baseline_outcomes and candidate_outcomes must be Mappings")
+        if isinstance(step_size, bool) or not isinstance(step_size, (int, float)) or not math.isfinite(float(step_size)) or float(step_size) <= 0.0:
+            raise ValueError("step_size must be a finite positive number")
         mix = self.strategy.training_mix(unverified_pairs)
         v_count = sum(1 for p in mix if p.verified)
         u_count = sum(1 for p in mix if not p.verified)
@@ -913,6 +927,10 @@ class BeeMoESystemRouter:
         *,
         pack_to_adapter: Mapping[str, str] | None = None,
     ) -> None:
+        if isinstance(admitted_adapters, (str, bytes)) or not isinstance(admitted_adapters, Sequence) or any(not isinstance(a, str) or not a.strip() for a in admitted_adapters):
+            raise ValueError("admitted_adapters must be a sequence of non-empty strings")
+        if pack_to_adapter is not None and not isinstance(pack_to_adapter, Mapping):
+            raise TypeError("pack_to_adapter must be None or a Mapping")
         self.admitted_adapters: set[str] = {str(a) for a in admitted_adapters}
         self.pack_to_adapter: dict[str, str] = dict(
             pack_to_adapter
@@ -930,6 +948,8 @@ class BeeMoESystemRouter:
     @staticmethod
     def classify_prompt_domain(messages: Sequence[Mapping[str, str]]) -> str:
         """Deterministically classify a chat prompt into its Night-MoE evaluation domain."""
+        if isinstance(messages, (str, bytes)) or not isinstance(messages, Sequence) or any(not isinstance(m, Mapping) for m in messages):
+            raise TypeError("messages must be a sequence of Mappings")
         joined = " ".join(str(m.get("content", "")) for m in messages).lower()
         if "verdict: confirmed" in joined or "kepler transit signal" in joined or "orbital period (days)" in joined:
             return "exoplanet"
@@ -949,6 +969,10 @@ class BeeMoESystemRouter:
 
     def route_pack(self, pack: str, *, enforce_gate: bool = True) -> str:
         """Return the adapter id to serve for `pack` (`base` when `enforce_gate=True` and the candidate is not admitted)."""
+        if not isinstance(pack, str) or not pack.strip():
+            raise ValueError("pack must be a non-empty string")
+        if not isinstance(enforce_gate, bool):
+            raise TypeError("enforce_gate must be a boolean")
         candidate = self.pack_to_adapter.get(pack, pack)
         if not enforce_gate:
             return candidate

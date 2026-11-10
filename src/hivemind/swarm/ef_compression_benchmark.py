@@ -49,6 +49,40 @@ class SyntheticSwarmProblem:
     holdout_x: torch.Tensor
     holdout_y: torch.Tensor
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.w_true, torch.Tensor) or self.w_true.ndim != 2 or self.w_true.numel() == 0 or not bool(torch.isfinite(self.w_true).all()):
+            raise ValueError("w_true must be a non-empty 2D finite torch.Tensor")
+        d_out, d_in = self.w_true.shape
+        if not isinstance(self.worker_x, list) or not isinstance(self.worker_y, list) or len(self.worker_x) == 0 or len(self.worker_x) != len(self.worker_y):
+            raise ValueError("worker_x and worker_y must be non-empty lists of equal length")
+        for x, y in zip(self.worker_x, self.worker_y):
+            if (
+                not isinstance(x, torch.Tensor)
+                or not isinstance(y, torch.Tensor)
+                or x.ndim != 2
+                or y.ndim != 2
+                or x.shape[0] == 0
+                or x.shape[0] != y.shape[0]
+                or x.shape[1] != d_in
+                or y.shape[1] != d_out
+                or not bool(torch.isfinite(x).all())
+                or not bool(torch.isfinite(y).all())
+            ):
+                raise ValueError("worker_x and worker_y tensors must be 2D finite tensors matching w_true dimensions")
+        if (
+            not isinstance(self.holdout_x, torch.Tensor)
+            or not isinstance(self.holdout_y, torch.Tensor)
+            or self.holdout_x.ndim != 2
+            or self.holdout_y.ndim != 2
+            or self.holdout_x.shape[0] == 0
+            or self.holdout_x.shape[0] != self.holdout_y.shape[0]
+            or self.holdout_x.shape[1] != d_in
+            or self.holdout_y.shape[1] != d_out
+            or not bool(torch.isfinite(self.holdout_x).all())
+            or not bool(torch.isfinite(self.holdout_y).all())
+        ):
+            raise ValueError("holdout_x and holdout_y must be non-empty 2D finite tensors matching w_true dimensions")
+
 
 def build_problem(
     seed: int = 0,

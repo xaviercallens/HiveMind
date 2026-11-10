@@ -278,18 +278,24 @@ class RoundBook:
             raise FederationError("run_id must be 1-64 characters of letters, digits . _ -")
         if isinstance(self.rnd, bool) or not isinstance(self.rnd, int) or self.rnd < 0:
             raise FederationError("rnd must be a non-negative integer")
-        if not self.allowed:
-            raise FederationError("allowed must be non-empty")
+        if isinstance(self.allowed, (str, bytes)) or not isinstance(self.allowed, Sequence) or not self.allowed or not all(isinstance(a, str) and bool(a.strip()) for a in self.allowed):
+            raise FederationError("allowed must be a non-empty sequence of non-empty learner_id strings")
         if isinstance(self.quorum, bool) or not isinstance(self.quorum, int) or self.quorum < 1 or self.quorum > len(self.allowed):
             raise FederationError("quorum must be an integer in [1, len(allowed)]")
         if isinstance(self.deadline_unix, bool) or not isinstance(self.deadline_unix, (int, float)) or not math.isfinite(float(self.deadline_unix)) or self.deadline_unix <= 0:
             raise FederationError("deadline_unix must be a positive finite number")
+        if not isinstance(self.global_sha256, str) or not self.global_sha256.strip():
+            raise FederationError("global_sha256 must be a non-empty string")
+        if not isinstance(self.pin, str) or not self.pin.strip():
+            raise FederationError("pin must be a non-empty string")
         if isinstance(self.max_delta_l2, bool) or not isinstance(self.max_delta_l2, (int, float)) or not math.isfinite(float(self.max_delta_l2)) or self.max_delta_l2 < 0.0:
             raise FederationError("max_delta_l2 must be a finite non-negative number")
-        if not self.template:
-            raise FederationError("template must be non-empty")
+        if not isinstance(self.template, Mapping) or not self.template:
+            raise FederationError("template must be a non-empty mapping")
 
     def claim(self, payload: Mapping[str, Any]) -> None:
+        if not isinstance(payload, Mapping):
+            raise FederationError("payload must be a Mapping")
         raw_rnd = payload.get("round", -1)
         if (
             payload.get("run_id") == self.run_id
@@ -302,6 +308,8 @@ class RoundBook:
 
     def offer_result(self, payload: Mapping[str, Any]) -> bool:
         """Check and keep one result. A rejection is recorded with its reason and never raises, so one bad participant cannot stop a round."""
+        if not isinstance(payload, Mapping):
+            raise FederationError("payload must be a Mapping")
         who = str(payload.get("learner_id", "?"))
         try:
             check_result(payload, run_id=self.run_id, rnd=self.rnd, global_sha256=self.global_sha256, pin=self.pin, allowed=self.allowed)
@@ -322,6 +330,8 @@ class RoundBook:
     def status(self, now: float | None = None) -> str:
         """``open``, ``complete`` (everyone answered), ``quorum`` (deadline passed, enough results) or ``failed`` (deadline passed, too few)."""
         now = time.time() if now is None else now
+        if isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(float(now)):
+            raise FederationError("now must be a finite timestamp")
         if len(self.accepted) >= len(self.allowed):
             return "complete"
         if now < self.deadline_unix:

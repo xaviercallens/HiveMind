@@ -89,15 +89,32 @@ def claim_figures_are_finite_and_positive(claim: CreditClaim) -> bool:
     `max(nan, 1e-6)` is nan and `min(1e30, nan)` is 1e30, so a NaN wall time used to pass the `<= 0` test and
     disable the class-peak cap; non-finite figures are rejected here before any arithmetic.
     """
+    if not isinstance(claim, CreditClaim):
+        raise ValueError("claim must be a CreditClaim")
     return (
-        math.isfinite(claim.wall_seconds) and claim.wall_seconds > 0.0
-        and math.isfinite(claim.class_peak_gflops) and claim.class_peak_gflops > 0.0
-        and math.isfinite(claim.flops_claimed) and claim.flops_claimed >= 0.0
+        not isinstance(claim.wall_seconds, bool)
+        and isinstance(claim.wall_seconds, (int, float))
+        and math.isfinite(claim.wall_seconds)
+        and claim.wall_seconds > 0.0
+        and not isinstance(claim.class_peak_gflops, bool)
+        and isinstance(claim.class_peak_gflops, (int, float))
+        and math.isfinite(claim.class_peak_gflops)
+        and claim.class_peak_gflops > 0.0
+        and not isinstance(claim.flops_claimed, bool)
+        and isinstance(claim.flops_claimed, (int, float))
+        and math.isfinite(claim.flops_claimed)
+        and claim.flops_claimed >= 0.0
     )
 
 
 def verified_credit(claim: CreditClaim, replica_claims: Sequence[CreditClaim] = ()) -> CreditGrant:
     """Credit granted for one claim: zero unless verified; capped by the class peak and by the canonical replica."""
+    if not isinstance(claim, CreditClaim):
+        raise ValueError("claim must be a CreditClaim")
+    if isinstance(replica_claims, (str, bytes)) or not isinstance(replica_claims, Sequence):
+        raise ValueError("replica_claims must be a sequence of CreditClaim instances")
+    if any(not isinstance(r, CreditClaim) for r in replica_claims):
+        raise ValueError("replica_claims must contain CreditClaim instances")
     if not isinstance(claim.node_id, str) or not claim.node_id.strip():
         raise ValueError("claim.node_id must be a non-empty string")
     if not isinstance(claim.workunit_id, str) or not claim.workunit_id.strip():
@@ -145,8 +162,9 @@ class EmissionSchedule:
     def __post_init__(self) -> None:
         # NaN and inf pass every ordering check below, so they are refused first.
         for name in ("initial_hive_per_cobblestone", "decay_per_epoch", "max_supply_hive", "worker_share", "validator_share", "burn_share"):
-            if not math.isfinite(getattr(self, name)):
-                raise ValueError(f"{name} must be finite, got {getattr(self, name)!r}")
+            val = getattr(self, name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(val):
+                raise ValueError(f"{name} must be finite, got {val!r}")
         if not (0.0 < self.decay_per_epoch <= 1.0) or self.initial_hive_per_cobblestone <= 0.0:
             raise ValueError("decay must be in (0, 1] and the initial emission positive")
         if self.max_supply_hive <= 0.0:
@@ -186,18 +204,30 @@ def settle_epoch(epoch: int, grants: Sequence[CreditGrant], consumer_payment_hiv
     """Mint for verified credit (cap-aware) and split consumer payments pro rata to verified credit."""
     if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 0:
         raise ValueError("epoch must be an integer >= 0")
-    if not (math.isfinite(consumer_payment_hive) and math.isfinite(circulating_supply_hive)):
+    if not isinstance(schedule, EmissionSchedule):
+        raise ValueError("schedule must be an EmissionSchedule")
+    if isinstance(grants, (str, bytes)) or not isinstance(grants, Sequence):
+        raise ValueError("grants must be a sequence of CreditGrant instances")
+    if (
+        isinstance(consumer_payment_hive, bool)
+        or not isinstance(consumer_payment_hive, (int, float))
+        or isinstance(circulating_supply_hive, bool)
+        or not isinstance(circulating_supply_hive, (int, float))
+        or not (math.isfinite(consumer_payment_hive) and math.isfinite(circulating_supply_hive))
+    ):
         raise ValueError("payments and supply must be finite")
     if consumer_payment_hive < 0.0 or circulating_supply_hive < 0.0:
         raise ValueError("payments and supply must be >= 0")
     by_node: dict[str, float] = {}
     paid: set[tuple[str, str]] = set()
     for g in grants:
+        if not isinstance(g, CreditGrant):
+            raise ValueError("grants must contain CreditGrant instances")
         if not isinstance(g.node_id, str) or not g.node_id.strip():
             raise ValueError("grant node_id must be a non-empty string")
         if not isinstance(g.workunit_id, str) or not g.workunit_id.strip():
             raise ValueError("grant workunit_id must be a non-empty string")
-        if not math.isfinite(g.cobblestones):
+        if isinstance(g.cobblestones, bool) or not isinstance(g.cobblestones, (int, float)) or not math.isfinite(g.cobblestones):
             raise ValueError(f"grant {g.node_id}/{g.workunit_id} has a non-finite cobblestone figure: {g.cobblestones!r}")
         if g.cobblestones < 0.0:
             raise ValueError(f"grant {g.node_id}/{g.workunit_id} has a negative cobblestone figure: {g.cobblestones!r}")
@@ -364,7 +394,9 @@ def tullock_equilibrium(pool_hive: float, costs: Sequence[float]) -> TullockEqui
 
 def is_epsilon_nash(eq: TullockEquilibrium, eps: float = 1e-9, grid: int = 400) -> tuple[bool, float]:
     """Certificate: no worker gains more than `eps` (relative to the pool) by any unilateral deviation on a grid."""
-    if not math.isfinite(eps) or eps < 0.0:
+    if not isinstance(eq, TullockEquilibrium):
+        raise ValueError("eq must be a TullockEquilibrium")
+    if isinstance(eps, bool) or not isinstance(eps, (int, float)) or not math.isfinite(eps) or eps < 0.0:
         raise ValueError("eps must be finite and >= 0")
     if isinstance(grid, bool) or not isinstance(grid, int) or grid < 1:
         raise ValueError("grid must be an integer >= 1")
@@ -412,7 +444,7 @@ class Queue:
     reserve_cobblestones: float = 1.0  # kappa: the share is a / (supply + kappa); the pool is not fully paid out when supply is tiny
 
     def __post_init__(self) -> None:
-        if not math.isfinite(self.reserve_cobblestones) or self.reserve_cobblestones <= 0.0:
+        if isinstance(self.reserve_cobblestones, bool) or not isinstance(self.reserve_cobblestones, (int, float)) or not math.isfinite(self.reserve_cobblestones) or self.reserve_cobblestones <= 0.0:
             raise ValueError("reserve_cobblestones must be > 0: without it an epsilon of lone supply would capture the whole pool")
 
 
@@ -524,28 +556,41 @@ def route_supply_equilibrium(workers: Sequence[Worker], queues: Sequence[Queue],
     `relaxation` in (0, 1] moves each worker a fraction of the way to its best response; 1.0 is the undamped iteration, which
     cycled in 5 of 60 random instances with binding capacities in the first simulation run (artifacts/economy/
     compute_market_report_run1_undamped.json). A damped fixed point is the same equilibrium; the certificate is what counts."""
-    if not math.isfinite(relaxation) or not (0.0 < relaxation <= 1.0):
+    if isinstance(relaxation, bool) or not isinstance(relaxation, (int, float)) or not math.isfinite(relaxation) or not (0.0 < relaxation <= 1.0):
         raise ValueError("relaxation must be finite and in (0, 1]")
     if isinstance(max_iter, bool) or not isinstance(max_iter, int) or max_iter < 1:
         raise ValueError("max_iter must be an integer >= 1")
     if isinstance(grid, bool) or not isinstance(grid, int) or grid < 1:
         raise ValueError("grid must be an integer >= 1")
-    if not math.isfinite(tol) or tol < 0.0:
+    if isinstance(tol, bool) or not isinstance(tol, (int, float)) or not math.isfinite(tol) or tol < 0.0:
         raise ValueError("tol must be finite and >= 0")
+    if isinstance(workers, (str, bytes)) or not isinstance(workers, Sequence) or isinstance(queues, (str, bytes)) or not isinstance(queues, Sequence):
+        raise ValueError("workers and queues must be sequences")
     if len(workers) < 2 or not queues:
         raise ValueError("need at least two workers and one queue")
     for w in workers:
-        if not isinstance(w.node_id, str) or not w.node_id.strip():
+        if not isinstance(w, Worker) or not isinstance(w.node_id, str) or not w.node_id.strip():
             raise ValueError("worker node_id must be a non-empty string")
     for q in queues:
-        if not isinstance(q.queue_id, str) or not q.queue_id.strip():
+        if not isinstance(q, Queue) or not isinstance(q.queue_id, str) or not q.queue_id.strip():
             raise ValueError("queue queue_id must be a non-empty string")
     if len({w.node_id for w in workers}) != len(workers) or len({q.queue_id for q in queues}) != len(queues):
         raise ValueError("duplicate worker or queue ids")
     for w in workers:
         # NaN fails every comparison, so `<= 0.0` alone lets it through and the certificate then reports a Nash point
-        if not (math.isfinite(w.cost_per_cobblestone) and math.isfinite(w.capacity_cobblestones)) or w.cost_per_cobblestone <= 0.0 or w.capacity_cobblestones <= 0.0:
+        if (
+            isinstance(w.cost_per_cobblestone, bool)
+            or not isinstance(w.cost_per_cobblestone, (int, float))
+            or isinstance(w.capacity_cobblestones, bool)
+            or not isinstance(w.capacity_cobblestones, (int, float))
+            or not (math.isfinite(w.cost_per_cobblestone) and math.isfinite(w.capacity_cobblestones))
+            or w.cost_per_cobblestone <= 0.0
+            or w.capacity_cobblestones <= 0.0
+        ):
             raise ValueError(f"worker {w.node_id}: cost and capacity must be finite and > 0")
+    for q in queues:
+        if isinstance(q.pool_hive, bool) or not isinstance(q.pool_hive, (int, float)):
+            raise ValueError("every queue pool must be > 0")
     pools = {q.queue_id: float(q.pool_hive) for q in queues}
     reserve = {q.queue_id: float(q.reserve_cobblestones) for q in queues}
     if any((not math.isfinite(p)) or p <= 0.0 for p in pools.values()):
@@ -597,9 +642,13 @@ def route_supply_equilibrium(workers: Sequence[Worker], queues: Sequence[Queue],
 
 def apply_settlement(settlement: EpochSettlement, credit: Callable[[str, float], float], validators_node_id: str = "validators") -> dict[str, float]:
     """Push a settlement into a ledger through its `credit(node_id, amount)` function; returns new balances."""
+    if not isinstance(settlement, EpochSettlement):
+        raise ValueError("settlement must be an EpochSettlement")
+    if not callable(credit):
+        raise ValueError("credit must be callable")
     if not isinstance(validators_node_id, str) or not validators_node_id.strip():
         raise ValueError("validators_node_id must be a non-empty string")
-    if not math.isfinite(settlement.fees_to_validators) or settlement.fees_to_validators < 0.0:
+    if isinstance(settlement.fees_to_validators, bool) or not isinstance(settlement.fees_to_validators, (int, float)) or not math.isfinite(settlement.fees_to_validators) or settlement.fees_to_validators < 0.0:
         raise ValueError("settlement.fees_to_validators must be finite and >= 0")
     out: dict[str, float] = {}
     totals: dict[str, float] = {}

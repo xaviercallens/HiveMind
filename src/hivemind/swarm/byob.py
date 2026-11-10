@@ -581,6 +581,8 @@ def has_remote_code(config: Mapping[str, Any] | None) -> bool:
     A transformers ``auto_map`` always points at modules shipped in the repo, so any non-empty one is remote code. A peft
     ``auto_mapping`` is remote code unless :func:`peft_auto_mapping_is_library_only` holds.
     """
+    if config is not None and not isinstance(config, Mapping):
+        raise TypeError("config must be None or a Mapping")
     if not config:
         return False
     if config.get("auto_map"):
@@ -591,6 +593,8 @@ def has_remote_code(config: Mapping[str, Any] | None) -> bool:
 
 def estimate_resident_gb(manifest: BeeManifest, weight_bytes: int) -> float | None:
     """Planning estimate of GPU residency in GB, or ``None`` when it cannot be computed (adapter on an unserved base)."""
+    if not isinstance(manifest, BeeManifest):
+        raise TypeError("manifest must be a BeeManifest")
     if isinstance(weight_bytes, bool) or not isinstance(weight_bytes, int) or weight_bytes < 0:
         raise ValueError("weight_bytes must be a non-negative integer")
     weights_gb = weight_bytes / 1e9
@@ -724,6 +728,10 @@ class SubmissionLedger:
                     self._events.append((str(row["contributor_id"]), float(row["ts"])))
 
     def count(self, contributor_id: str, now: float) -> int:
+        if not isinstance(contributor_id, str) or not contributor_id.strip():
+            raise ValueError("contributor_id must be a non-empty string")
+        if isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(float(now)):
+            raise ValueError("now must be a finite number")
         return sum(1 for cid, ts in self._events if cid == contributor_id and now - self.window_s < ts <= now)
 
     def check(self, contributor_id: str, now: float) -> list[Reason]:
@@ -733,6 +741,10 @@ class SubmissionLedger:
         return []
 
     def record(self, contributor_id: str, now: float) -> None:
+        if not isinstance(contributor_id, str) or not contributor_id.strip():
+            raise ValueError("contributor_id must be a non-empty string")
+        if isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(float(now)):
+            raise ValueError("now must be a finite number")
         self._events.append((contributor_id, now))
         if self.path is not None:
             self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -882,7 +894,19 @@ def static_validate(manifest: BeeManifest, *, keyring: Mapping[str, bytes], hub:
     Order matters only for the signature: an unsigned or forged manifest stops there (nothing else is worth reporting to
     an unauthenticated sender) and is not recorded against the claimed contributor's rate limit.
     """
-    ts = time.time() if now is None else now
+    if not isinstance(manifest, BeeManifest):
+        raise TypeError("manifest must be a BeeManifest")
+    if not isinstance(keyring, Mapping):
+        raise TypeError("keyring must be a Mapping")
+    if not isinstance(hub, HfHttpHubClient):
+        raise TypeError("hub must be an HfHttpHubClient")
+    if not isinstance(ledger, SubmissionLedger):
+        raise TypeError("ledger must be a SubmissionLedger")
+    if isinstance(taken_names, (str, bytes)) or not isinstance(taken_names, Iterable):
+        raise TypeError("taken_names must be an iterable of strings")
+    if now is not None and (isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(float(now))):
+        raise ValueError("now must be None or a finite number")
+    ts = time.time() if now is None else float(now)
     report = StaticReport(verdict=Verdict.REJECT, checked_utc=_utc(ts))
     report.reasons.extend(verify_signature(manifest, keyring))
     if report.reasons:
@@ -1061,6 +1085,16 @@ def evaluate(manifest: BeeManifest, static: StaticReport, *, pack: HeldOutPack |
     ``prober`` with ``timeout_s`` per item; nothing of the contributor's runs on hive hardware. The pack's own positive and
     negative controls run before any answer is scored.
     """
+    if not isinstance(manifest, BeeManifest):
+        raise TypeError("manifest must be a BeeManifest")
+    if not isinstance(static, StaticReport):
+        raise TypeError("static must be a StaticReport")
+    if pack is not None and not isinstance(pack, HeldOutPack):
+        raise TypeError("pack must be None or a HeldOutPack")
+    if executor is not None and not isinstance(executor, IsolatedExecutor):
+        raise TypeError("executor must be None or an IsolatedExecutor")
+    if prober is not None and not callable(prober):
+        raise TypeError("prober must be None or callable")
     if (
         isinstance(min_pass_rate, bool)
         or not isinstance(min_pass_rate, (int, float))

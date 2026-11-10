@@ -29,12 +29,18 @@ MAX_VERIFY_CPU_MS = 5.0
 
 def _mod_mersenne61(val: int) -> int:
     """Fast modular reduction mod (2^61 - 1)."""
+    if isinstance(val, bool) or not isinstance(val, int):
+        raise ValueError("val must be an integer")
     v = val % MERSENNE_61
     return v if v >= 0 else v + MERSENNE_61
 
 
 def _derive_field_challenges(seed_bytes: bytes, count: int) -> list[int]:
     """Derive deterministic non-zero field elements in GF(2^61 - 1) via Fiat-Shamir SHA-256."""
+    if not isinstance(seed_bytes, (bytes, bytearray)) or len(seed_bytes) == 0:
+        raise ValueError("seed_bytes must be non-empty bytes")
+    if isinstance(count, bool) or not isinstance(count, int) or count < 1:
+        raise ValueError("count must be a positive integer")
     challenges: list[int] = []
     counter = 0
     while len(challenges) < count:
@@ -91,6 +97,21 @@ class ZKOPoIV5VerificationReport:
     rejection_reason: str | None = None
     commitment_scheme: str = "fiat_shamir_horner_hmac_sha256"
     zero_knowledge: bool = False
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.workunit_id, str) or not self.workunit_id.strip():
+            raise ValueError("workunit_id must be a non-empty string")
+        if not isinstance(self.commitment_scheme, str) or not self.commitment_scheme.strip():
+            raise ValueError("commitment_scheme must be a non-empty string")
+        for b_field in ("verified", "within_5ms_sla", "within_32kb_bound", "zero_knowledge"):
+            if not isinstance(getattr(self, b_field), bool):
+                raise ValueError(f"{b_field} must be a boolean")
+        if isinstance(self.verify_cpu_ms, bool) or not isinstance(self.verify_cpu_ms, (int, float)) or not math.isfinite(float(self.verify_cpu_ms)) or float(self.verify_cpu_ms) < 0.0:
+            raise ValueError("verify_cpu_ms must be a finite non-negative number")
+        if isinstance(self.proof_bytes, bool) or not isinstance(self.proof_bytes, int) or self.proof_bytes < 0:
+            raise ValueError("proof_bytes must be a non-negative integer")
+        if self.rejection_reason is not None and (not isinstance(self.rejection_reason, str) or not self.rejection_reason.strip()):
+            raise ValueError("rejection_reason must be None or a non-empty string")
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)

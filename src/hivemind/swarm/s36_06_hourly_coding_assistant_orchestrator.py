@@ -77,6 +77,23 @@ class CodingAssistantTaskReceipt:
     unit_verification_passed: bool
     anse_energy: float
 
+    def __post_init__(self) -> None:
+        for s_field in ("task_id", "title", "model", "live_completion_id", "live_routed_model"):
+            val = getattr(self, s_field)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_field} must be a non-empty string")
+        if not isinstance(self.assistant_excerpt, str):
+            raise ValueError("assistant_excerpt must be a string")
+        for b_field in ("gwaya_zero_stub_passed", "unit_verification_passed"):
+            if not isinstance(getattr(self, b_field), bool):
+                raise ValueError(f"{b_field} must be a boolean")
+        if (
+            isinstance(self.anse_energy, bool)
+            or not isinstance(self.anse_energy, (int, float))
+            or not (float(self.anse_energy) >= 0.0 and float(self.anse_energy) != float("inf"))
+        ):
+            raise ValueError("anse_energy must be a finite non-negative number")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -102,6 +119,36 @@ class HourlyImprovementCycleReport:
     all_gates_passed: bool
     status: str = "VERIFIED"
     blocked_reason: str | None = None
+
+    def __post_init__(self) -> None:
+        if isinstance(self.timestamp_utc, bool) or not isinstance(self.timestamp_utc, (int, float)) or not (float(self.timestamp_utc) >= 0.0 and float(self.timestamp_utc) != float("inf")):
+            raise ValueError("timestamp_utc must be a finite non-negative number")
+        for b_field in (
+            "antigravity_sdk_compat",
+            "live_openrouter_called",
+            "s36_05_darl_conservation_holds",
+            "ip21_residual_sampling_verified",
+            "ip67_no_hardcoded_xdev_verified",
+            "all_gates_passed",
+        ):
+            if not isinstance(getattr(self, b_field), bool):
+                raise ValueError(f"{b_field} must be a boolean")
+        if (
+            isinstance(self.tasks_verified, bool)
+            or not isinstance(self.tasks_verified, int)
+            or self.tasks_verified < 0
+            or isinstance(self.tasks_total, bool)
+            or not isinstance(self.tasks_total, int)
+            or self.tasks_total < 1
+            or self.tasks_verified > self.tasks_total
+        ):
+            raise ValueError("tasks_verified and tasks_total must satisfy 0 <= tasks_verified <= tasks_total and tasks_total >= 1")
+        if not isinstance(self.task_receipts, tuple) or len(self.task_receipts) == 0 or not all(isinstance(r, CodingAssistantTaskReceipt) for r in self.task_receipts):
+            raise ValueError("task_receipts must be a non-empty tuple of CodingAssistantTaskReceipt instances")
+        if not isinstance(self.merkle_root_sha256, str) or len(self.merkle_root_sha256) != 64 or any(c not in "0123456789abcdefABCDEF" for c in self.merkle_root_sha256):
+            raise ValueError("merkle_root_sha256 must be a 64-character hex string")
+        if not isinstance(self.status, str) or not self.status.strip():
+            raise ValueError("status must be a non-empty string")
 
     def to_dict(self) -> dict[str, Any]:
         return {

@@ -63,6 +63,41 @@ class SwarmLiveBaseline:
     p50_latency_s: float = 0.2573
     p95_latency_s: float = 0.5922
 
+    def __post_init__(self) -> None:
+        for field_name in ("total_accounts", "producers", "online_quorum_producers", "live_models_served"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+        for field_name in (
+            "prosumers",
+            "consumers",
+            "admins",
+            "assimilated_workunits",
+            "billed_completions",
+            "human_prosumer_completions",
+            "billed_tokens",
+        ):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
+        for field_name in (
+            "online_quorum_vram_gb",
+            "peak_tflops_fp16",
+            "mean_tokens_per_request",
+            "daytime_aggregate_tok_per_s",
+            "p50_latency_s",
+            "p95_latency_s",
+        ):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{field_name} must be a finite positive number")
+        for field_name in ("cumulative_tflops_hours", "boinc_cobblestones"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{field_name} must be a finite non-negative number")
+        if float(self.p95_latency_s) < float(self.p50_latency_s):
+            raise ValueError("p95_latency_s must be >= p50_latency_s")
+
 
 @dataclass(frozen=True)
 class ErlangCQueueDiagnostic:
@@ -80,6 +115,33 @@ class ErlangCQueueDiagnostic:
     max_safe_concurrent_users: int
     is_stable: bool
 
+    def __post_init__(self) -> None:
+        if isinstance(self.active_producers_c, bool) or not isinstance(self.active_producers_c, int) or self.active_producers_c < 1:
+            raise ValueError("active_producers_c must be an integer >= 1")
+        if isinstance(self.max_safe_concurrent_users, bool) or not isinstance(self.max_safe_concurrent_users, int) or self.max_safe_concurrent_users < 0:
+            raise ValueError("max_safe_concurrent_users must be a non-negative integer")
+        if not isinstance(self.is_stable, bool):
+            raise ValueError("is_stable must be a boolean")
+        for field_name in ("aggregate_tok_per_s", "service_rate_req_per_s", "max_safe_arrival_req_per_s"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{field_name} must be a finite positive number")
+        for field_name in ("arrival_rate_req_per_s", "utilization_rho"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{field_name} must be a finite non-negative number")
+        if (
+            isinstance(self.erlang_c_queue_prob, bool)
+            or not isinstance(self.erlang_c_queue_prob, (int, float))
+            or not math.isfinite(float(self.erlang_c_queue_prob))
+            or not (0.0 <= float(self.erlang_c_queue_prob) <= 1.0)
+        ):
+            raise ValueError("erlang_c_queue_prob must be a finite number in [0.0, 1.0]")
+        for field_name in ("expected_queue_wait_s", "p95_total_latency_s"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or math.isnan(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{field_name} must be a non-negative number (or +inf when unstable)")
+
 
 @dataclass(frozen=True)
 class ProgressiveGrantQuote:
@@ -90,6 +152,24 @@ class ProgressiveGrantQuote:
     daily_consumer_drip_hmt: float
     supply_demand_ratio: float
     effective_unbacked_inflation_reduction_pct: float
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "instant_grant_hmt",
+            "prosumer_gpu_unlock_bonus_hmt",
+            "daily_consumer_drip_hmt",
+            "supply_demand_ratio",
+        ):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{field_name} must be a finite non-negative number")
+        if (
+            isinstance(self.effective_unbacked_inflation_reduction_pct, bool)
+            or not isinstance(self.effective_unbacked_inflation_reduction_pct, (int, float))
+            or not math.isfinite(float(self.effective_unbacked_inflation_reduction_pct))
+            or not (0.0 <= float(self.effective_unbacked_inflation_reduction_pct) <= 100.0)
+        ):
+            raise ValueError("effective_unbacked_inflation_reduction_pct must be a finite number in [0.0, 100.0]")
 
 
 @dataclass(frozen=True)
@@ -110,6 +190,36 @@ class SocialFunnelProjection:
     utilization_rho_with_controls: float
     utilization_rho_without_controls: float
     is_self_sustaining: bool
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.wave_name, str) or not self.wave_name.strip():
+            raise ValueError("wave_name must be a non-empty string")
+        for field_name in ("new_visitors", "new_signups"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+        for field_name in ("initial_producers", "converted_prosumers", "pure_consumers"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
+        for field_name in ("critical_conversion_rate_kappa_star", "actual_conversion_rate_kappa"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or not (0.0 <= float(val) <= 1.0):
+                raise ValueError(f"{field_name} must be a finite number in [0.0, 1.0]")
+        for field_name in ("post_wave_daytime_tok_per_s", "post_wave_nocturnal_tflops"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{field_name} must be a finite positive number")
+        for field_name in (
+            "effective_supply_ratio",
+            "utilization_rho_with_controls",
+            "utilization_rho_without_controls",
+        ):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{field_name} must be a finite non-negative number")
+        if not isinstance(self.is_self_sustaining, bool):
+            raise ValueError("is_self_sustaining must be a boolean")
 
 
 MAX_FORECAST_NODES = 10_000  # upper bound for any node count reachable from a public request
@@ -521,6 +631,34 @@ class RegionalProducerShard:
     erlang_c_utilization_rho: float
     p95_total_latency_s: float
 
+    def __post_init__(self) -> None:
+        for field_name in ("region_id", "display_name"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if isinstance(self.active_producers, bool) or not isinstance(self.active_producers, int) or self.active_producers < 1:
+            raise ValueError("active_producers must be an integer >= 1")
+        if isinstance(self.standby_prosumers, bool) or not isinstance(self.standby_prosumers, int) or self.standby_prosumers < 0:
+            raise ValueError("standby_prosumers must be a non-negative integer")
+        for field_name in ("daytime_aggregate_tok_per_s", "median_intra_region_rtt_ms"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{field_name} must be a finite positive number")
+        if (
+            isinstance(self.erlang_c_utilization_rho, bool)
+            or not isinstance(self.erlang_c_utilization_rho, (int, float))
+            or not math.isfinite(float(self.erlang_c_utilization_rho))
+            or float(self.erlang_c_utilization_rho) < 0.0
+        ):
+            raise ValueError("erlang_c_utilization_rho must be a finite non-negative number")
+        if (
+            isinstance(self.p95_total_latency_s, bool)
+            or not isinstance(self.p95_total_latency_s, (int, float))
+            or math.isnan(float(self.p95_total_latency_s))
+            or float(self.p95_total_latency_s) < 0.0
+        ):
+            raise ValueError("p95_total_latency_s must be a non-negative number (or +inf when unstable)")
+
 
 @dataclass(frozen=True)
 class ProducerHardwareTierAllocation:
@@ -534,6 +672,27 @@ class ProducerHardwareTierAllocation:
     avg_tok_per_s_per_node: float
     primary_models: tuple[str, ...]
     supported_runtimes: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        for field_name in ("tier_id", "display_name"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name in ("node_count", "vram_ceiling_mib", "free_vram_guard_mib"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+        if (
+            isinstance(self.avg_tok_per_s_per_node, bool)
+            or not isinstance(self.avg_tok_per_s_per_node, (int, float))
+            or not math.isfinite(float(self.avg_tok_per_s_per_node))
+            or float(self.avg_tok_per_s_per_node) <= 0.0
+        ):
+            raise ValueError("avg_tok_per_s_per_node must be a finite positive number")
+        for field_name in ("primary_models", "supported_runtimes"):
+            seq = getattr(self, field_name)
+            if not isinstance(seq, tuple) or len(seq) == 0 or any(not isinstance(item, str) or not item.strip() for item in seq):
+                raise ValueError(f"{field_name} must be a non-empty tuple of non-empty strings")
 
 
 def build_100_producer_international_fleet_plan(

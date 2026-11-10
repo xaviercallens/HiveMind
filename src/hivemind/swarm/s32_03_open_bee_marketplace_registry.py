@@ -135,19 +135,34 @@ class OpenBeeMarketplaceRegistry:
         """Verify cryptographic signature, 8 GB VRAM ceiling, and benchmark threshold before admitting a Bee."""
         if not isinstance(manifest, SignedBeeManifest):
             raise ValueError("manifest must be a SignedBeeManifest")
-        if not manifest.bee_id.startswith("hivemind/bee-"):
+        if not isinstance(manifest.bee_id, str) or not manifest.bee_id.startswith("hivemind/bee-"):
             return {"accepted": False, "reason": "INVALID_BEE_ID_PREFIX"}
-        if not str(manifest.owner_handle).strip():
+        if not isinstance(manifest.owner_handle, str) or not str(manifest.owner_handle).strip():
             return {"accepted": False, "reason": "INVALID_OWNER_HANDLE"}
+        if not isinstance(manifest.domain, str) or not manifest.domain.strip() or not isinstance(manifest.base_backbone, str) or not manifest.base_backbone.strip():
+            return {"accepted": False, "reason": "INVALID_DOMAIN_OR_BACKBONE"}
+        if isinstance(manifest.lora_rank, bool) or not isinstance(manifest.lora_rank, int) or manifest.lora_rank < 1:
+            return {"accepted": False, "reason": "INVALID_LORA_RANK"}
         existing = self._bees.get(manifest.bee_id)
         if existing is not None and existing.owner_handle != manifest.owner_handle:
             return {"accepted": False, "reason": "BEE_ID_OWNED"}
-        if manifest.vram_required_mib <= 0 or manifest.vram_required_mib > MAX_CONSUMER_VRAM_MIB:
+        if (
+            isinstance(manifest.vram_required_mib, bool)
+            or not isinstance(manifest.vram_required_mib, int)
+            or manifest.vram_required_mib <= 0
+            or manifest.vram_required_mib > MAX_CONSUMER_VRAM_MIB
+        ):
             return {"accepted": False, "reason": "VRAM_CEILING_EXCEEDED_8GB"}
-        if len(manifest.weights_sha256) != 64:
+        if (
+            not isinstance(manifest.weights_sha256, str)
+            or len(manifest.weights_sha256) != 64
+            or any(c not in "0123456789abcdefABCDEF" for c in manifest.weights_sha256)
+        ):
             return {"accepted": False, "reason": "INVALID_WEIGHTS_SHA256"}
         if (
-            not math.isfinite(float(manifest.benchmark_score))
+            isinstance(manifest.benchmark_score, bool)
+            or not isinstance(manifest.benchmark_score, (int, float))
+            or not math.isfinite(float(manifest.benchmark_score))
             or float(manifest.benchmark_score) < 0.0
             or float(manifest.benchmark_score) > 1.0
         ):
@@ -159,7 +174,11 @@ class OpenBeeMarketplaceRegistry:
             manifest.canonical_payload().encode("utf-8"),
             hashlib.sha256,
         ).hexdigest()
-        if not manifest.signature_hex.isascii() or not hmac.compare_digest(expected_sig, manifest.signature_hex):
+        if (
+            not isinstance(manifest.signature_hex, str)
+            or not manifest.signature_hex.isascii()
+            or not hmac.compare_digest(expected_sig, manifest.signature_hex)
+        ):
             return {"accepted": False, "reason": "INVALID_MANIFEST_SIGNATURE"}
 
         self._bees[manifest.bee_id] = manifest

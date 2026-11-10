@@ -49,6 +49,32 @@ class EcoComputeValorizationReceipt:
     co2_grams_per_1k_tokens_hivemind: float
     co2_grams_per_1k_tokens_datacenter: float
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.node_id, str) or not self.node_id.strip():
+            raise ValueError("node_id must be a non-empty string")
+        if not isinstance(self.safe_thermal_envelope, bool):
+            raise ValueError("safe_thermal_envelope must be a boolean")
+        for pos_field in ("energy_consumed_wh", "datacenter_equivalent_wh"):
+            val = getattr(self, pos_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{pos_field} must be a finite positive number")
+        for nn_field in (
+            "useful_domestic_heat_wh",
+            "net_avoided_co2_grams",
+            "co2_grams_per_1k_tokens_hivemind",
+            "co2_grams_per_1k_tokens_datacenter",
+        ):
+            val = getattr(self, nn_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{nn_field} must be a finite non-negative number")
+        if (
+            isinstance(self.thermal_valorization_efficiency, bool)
+            or not isinstance(self.thermal_valorization_efficiency, (int, float))
+            or not math.isfinite(float(self.thermal_valorization_efficiency))
+            or not (0.0 <= float(self.thermal_valorization_efficiency) <= 1.0)
+        ):
+            raise ValueError("thermal_valorization_efficiency must be a finite number in [0.0, 1.0]")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 

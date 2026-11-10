@@ -54,6 +54,25 @@ class ByzantineFilterReport:
     quarantined_pre_krum: dict[str, str] = field(default_factory=dict)
     krum_guarantee: bool = False
 
+    def __post_init__(self) -> None:
+        if isinstance(self.total_submissions, bool) or not isinstance(self.total_submissions, int) or self.total_submissions < 1:
+            raise ValueError("total_submissions must be a positive integer")
+        if isinstance(self.max_byzantine_f, bool) or not isinstance(self.max_byzantine_f, int) or self.max_byzantine_f < 0:
+            raise ValueError("max_byzantine_f must be a non-negative integer")
+        for l_name in ("accepted_workers", "rejected_workers"):
+            lst = getattr(self, l_name)
+            if not isinstance(lst, list) or any(not isinstance(w, str) or not w.strip() for w in lst):
+                raise ValueError(f"{l_name} must be a list of non-empty strings")
+        for d_name in ("krum_scores", "mean_cosine_similarities", "quarantined_pre_krum"):
+            if not isinstance(getattr(self, d_name), dict):
+                raise ValueError(f"{d_name} must be a dict")
+        for f_name in ("median_cosine", "cosine_threshold_lower"):
+            val = getattr(self, f_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{f_name} must be a finite number")
+        if not isinstance(self.krum_guarantee, bool):
+            raise ValueError("krum_guarantee must be a boolean")
+
 
 @dataclass
 class OuterStepResult:
@@ -72,6 +91,37 @@ class OuterStepResult:
     cgad_telemetry: list[CGADStepTelemetry] = field(default_factory=list, repr=False)
     quorum_telemetry: dict[str, SyncerRoundTelemetry] = field(default_factory=dict, repr=False)
     momentum_restarted: bool = False
+
+    def __post_init__(self) -> None:
+        for s_name in ("branch_name", "outer_optimizer_mode"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        for i_name in ("outer_step", "extra_gpu_vram_bytes"):
+            val = getattr(self, i_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_name} must be a non-negative integer")
+        for d_name in ("theta_updated", "velocity_updated"):
+            val = getattr(self, d_name)
+            if not isinstance(val, dict) or not val:
+                raise ValueError(f"{d_name} must be a non-empty dict")
+        if (
+            isinstance(self.aggregated_delta_norm, bool)
+            or not isinstance(self.aggregated_delta_norm, (int, float))
+            or not math.isfinite(float(self.aggregated_delta_norm))
+            or float(self.aggregated_delta_norm) < 0.0
+        ):
+            raise ValueError("aggregated_delta_norm must be a finite non-negative number")
+        if not isinstance(self.filter_report, ByzantineFilterReport):
+            raise ValueError("filter_report must be a ByzantineFilterReport")
+        if self.mean_cosine_gate is not None and (
+            isinstance(self.mean_cosine_gate, bool)
+            or not isinstance(self.mean_cosine_gate, (int, float))
+            or not math.isfinite(float(self.mean_cosine_gate))
+        ):
+            raise ValueError("mean_cosine_gate must be None or a finite number")
+        if not isinstance(self.momentum_restarted, bool):
+            raise ValueError("momentum_restarted must be a boolean")
 
 
 def flatten_delta_dict(delta_dict: dict[str, torch.Tensor]) -> torch.Tensor:

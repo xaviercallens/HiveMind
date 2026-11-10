@@ -133,13 +133,20 @@ def is_lattice_point(kind: str, c: np.ndarray, tol: float = 1e-9) -> np.ndarray:
 
 def _entropy_bits(cols: List[np.ndarray]) -> float:
     """Plug-in joint entropy (bits) of integer columns."""
-    keys = np.stack([np.asarray(c).astype(np.int64) for c in cols], axis=1)
+    if not isinstance(cols, (list, tuple)) or len(cols) == 0:
+        raise ValueError("cols must be a non-empty sequence of arrays")
+    arrays = [np.asarray(c).astype(np.int64) for c in cols]
+    if any(a.size == 0 for a in arrays):
+        raise ValueError("cols arrays must be non-empty")
+    keys = np.stack(arrays, axis=1)
     _, counts = np.unique(keys, axis=0, return_counts=True)
     p = counts / counts.sum()
     return float(-(p * np.log2(p)).sum())
 
 
 def _cond_entropy_bits(x: np.ndarray, *cond: np.ndarray) -> float:
+    if np.asarray(x).size == 0:
+        raise ValueError("x must be a non-empty array")
     if not cond:
         return _entropy_bits([x])
     return _entropy_bits([x, *cond]) - _entropy_bits(list(cond))
@@ -181,6 +188,26 @@ class QuantizedDelta:
     rate_bits_per_dim: float
     relative_mse: float
     residual: torch.Tensor  # v - Q(v) (carried when error feedback is on)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.dequantized, torch.Tensor) or self.dequantized.numel() == 0:
+            raise ValueError("dequantized must be a non-empty torch.Tensor")
+        if not isinstance(self.residual, torch.Tensor) or self.residual.shape != self.dequantized.shape:
+            raise ValueError("residual must be a torch.Tensor matching dequantized.shape")
+        if (
+            isinstance(self.rate_bits_per_dim, bool)
+            or not isinstance(self.rate_bits_per_dim, (int, float))
+            or not math.isfinite(float(self.rate_bits_per_dim))
+            or float(self.rate_bits_per_dim) < 0.0
+        ):
+            raise ValueError("rate_bits_per_dim must be a finite number >= 0.0")
+        if (
+            isinstance(self.relative_mse, bool)
+            or not isinstance(self.relative_mse, (int, float))
+            or not math.isfinite(float(self.relative_mse))
+            or float(self.relative_mse) < 0.0
+        ):
+            raise ValueError("relative_mse must be a finite number >= 0.0")
 
 
 def _require_finite_delta(v: torch.Tensor) -> None:
@@ -312,6 +339,10 @@ def calibrate_scale_for_rate(kind: str, sample: torch.Tensor, target_bits_per_di
 
 def _lattice_points_in_ball(kind: str, radius: float) -> np.ndarray:
     """All points of ℤ⁸ / A₂ / E₈ with norm ≤ radius (exhaustive; for the brute-force check)."""
+    if kind not in DECODERS:
+        raise KeyError(kind)
+    if isinstance(radius, bool) or not isinstance(radius, (int, float)) or not math.isfinite(float(radius)) or float(radius) <= 0.0:
+        raise ValueError("radius must be a strictly positive finite float")
     r = int(math.ceil(radius))
     grid = np.arange(-r, r + 1, dtype=float)
     if kind == "A2":

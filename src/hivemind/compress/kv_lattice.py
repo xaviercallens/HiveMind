@@ -94,6 +94,8 @@ def is_a2_point(c: torch.Tensor, tol: float = 1e-9) -> torch.Tensor:
 
 
 def _entropy_bits(key: torch.Tensor) -> float:
+    if not isinstance(key, torch.Tensor) or key.numel() == 0:
+        raise ValueError("key must be a non-empty torch.Tensor")
     _, counts = torch.unique(key.reshape(-1), return_counts=True)
     p = counts.to(torch.float64) / counts.sum()
     return float(-(p * torch.log2(p)).sum())
@@ -101,7 +103,7 @@ def _entropy_bits(key: torch.Tensor) -> float:
 
 def _joint_key(*cols: torch.Tensor) -> torch.Tensor:
     """Injective int64 key of several integer columns (mixed radix on their observed ranges)."""
-    if not cols or any(c.numel() == 0 for c in cols):
+    if not cols or any(not isinstance(c, torch.Tensor) or c.numel() == 0 for c in cols):
         raise ValueError("cols must be non-empty tensors")
     key = torch.zeros_like(cols[0], dtype=torch.int64)
     for c in cols:
@@ -113,6 +115,8 @@ def _joint_key(*cols: torch.Tensor) -> torch.Tensor:
 
 
 def _cond_entropy_bits(x: torch.Tensor, *cond: torch.Tensor) -> float:
+    if not isinstance(x, torch.Tensor) or x.numel() == 0:
+        raise ValueError("x must be a non-empty torch.Tensor")
     if not cond:
         return _entropy_bits(x)
     return _entropy_bits(_joint_key(x, *cond)) - _entropy_bits(_joint_key(*cond))
@@ -183,6 +187,12 @@ def from_rows(kind: str, rows: torch.Tensor, shape: torch.Size) -> torch.Tensor:
         raise KeyError(kind)
     if not isinstance(rows, torch.Tensor) or rows.numel() == 0:
         raise ValueError("rows must be a non-empty torch.Tensor")
+    if (
+        not isinstance(shape, (tuple, torch.Size))
+        or len(shape) < 1
+        or any(isinstance(d, bool) or not isinstance(d, int) or d < 1 for d in shape)
+    ):
+        raise ValueError("shape must be a non-empty tuple/Size of positive integers")
     if kind == "A2":
         r = rows.reshape(*shape[:-1], shape[-1] // 2, 2)
         return torch.cat([r[..., 0], r[..., 1]], dim=-1)
@@ -197,6 +207,8 @@ def lattice_quantize(kind: str, x: torch.Tensor, scale: float, measure_rate: boo
         raise ValueError("scale must be positive and finite")
     if not isinstance(measure_rate, bool):
         raise ValueError("measure_rate must be a boolean")
+    if not isinstance(x, torch.Tensor) or x.numel() == 0:
+        raise ValueError("x must be a non-empty torch.Tensor")
     if not bool(torch.isfinite(x).all()):
         raise ValueError("x contains NaN or inf; refusing to quantise it")
     rows, ctx = to_rows(kind, x.to(torch.float64))

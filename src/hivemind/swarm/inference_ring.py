@@ -159,6 +159,60 @@ class SpeculativeSwarmResult:
     expert_prefetch_log: list[dict[str, Any]] = field(default_factory=list)
     expert_prefetch_basis: str = "disabled"
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.region_ring, str) or not self.region_ring.strip():
+            raise ValueError("region_ring must be a non-empty string")
+        if not isinstance(self.routing_tier, str) or not self.routing_tier.strip():
+            raise ValueError("routing_tier must be a non-empty string")
+        if not isinstance(self.latency_basis, str) or not self.latency_basis.strip():
+            raise ValueError("latency_basis must be a non-empty string")
+        if not isinstance(self.expert_prefetch_basis, str) or not self.expert_prefetch_basis.strip():
+            raise ValueError("expert_prefetch_basis must be a non-empty string")
+        for nonneg_int in (
+            "active_ring_peers",
+            "swarm_verification_passes",
+            "cross_continent_hops",
+            "expert_prefetch_calls",
+            "expert_prefetch_hits",
+            "expert_prefetch_expert_uses",
+        ):
+            ival = getattr(self, nonneg_int)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 0:
+                raise ValueError(f"{nonneg_int} must be a non-negative integer")
+        if isinstance(self.prompt_length, bool) or not isinstance(self.prompt_length, int) or self.prompt_length < 1:
+            raise ValueError("prompt_length must be a positive integer")
+        if isinstance(self.draft_gamma, bool) or not isinstance(self.draft_gamma, int) or not 1 <= self.draft_gamma <= 16:
+            raise ValueError("draft_gamma must be an integer in [1, 16]")
+        if not isinstance(self.generated_tokens, list) or any(
+            isinstance(t, bool) or not isinstance(t, int) for t in self.generated_tokens
+        ):
+            raise ValueError("generated_tokens must be a list of integers")
+        for nonneg_flt in (
+            "mean_ring_ping_ms",
+            "effective_tokens_per_sec",
+            "latency_reduction_factor",
+            "estimated_route_rtt_ms",
+        ):
+            fval = getattr(self, nonneg_flt)
+            if isinstance(fval, bool) or not isinstance(fval, (int, float)) or not math.isfinite(float(fval)) or float(fval) < 0.0:
+                raise ValueError(f"{nonneg_flt} must be a finite non-negative number")
+        if (
+            isinstance(self.mean_acceptance_rate, bool)
+            or not isinstance(self.mean_acceptance_rate, (int, float))
+            or not math.isfinite(float(self.mean_acceptance_rate))
+            or not (0.0 <= float(self.mean_acceptance_rate) <= 1.0)
+        ):
+            raise ValueError("mean_acceptance_rate must be a finite number in [0.0, 1.0]")
+        if not isinstance(self.expert_prefetch_enabled, bool):
+            raise ValueError("expert_prefetch_enabled must be a boolean")
+        if self.expert_prefetch_hit_rate is not None and (
+            isinstance(self.expert_prefetch_hit_rate, bool)
+            or not isinstance(self.expert_prefetch_hit_rate, (int, float))
+            or not math.isfinite(float(self.expert_prefetch_hit_rate))
+            or not (0.0 <= float(self.expert_prefetch_hit_rate) <= 1.0)
+        ):
+            raise ValueError("expert_prefetch_hit_rate must be None or a finite number in [0.0, 1.0]")
+
 
 class RegionalDHTSwarmRing:
     """Petals-style DHT Swarm coordinator grouping low-latency (<25ms) peers into regional rings."""
@@ -180,6 +234,8 @@ class RegionalDHTSwarmRing:
         self.hierarchical_routes: list[Dict[str, Any]] = []
 
     def register_peer(self, peer: SwarmPeerNode) -> bool:
+        if not isinstance(peer, SwarmPeerNode):
+            raise TypeError("peer must be a SwarmPeerNode")
         # Rule RING-01: Reject spoofed ping (<= 0), high packet loss (> 15%), high jitter (> 20ms), or low VRAM (< 4GB)
         if not peer.peer_id or not str(peer.peer_id).strip() or not peer.steam_id64:
             return False
@@ -242,6 +298,8 @@ class RegionalDHTSwarmRing:
         Unlike `register_peer`, the peer does not need to belong to this regional ring: the
         Super-Ring aggregates `EU`/`US`/`APAC` rings into one WAN-transit plane (`HM-S4-02`).
         """
+        if not isinstance(peer, SwarmPeerNode):
+            raise TypeError("peer must be a SwarmPeerNode")
         router = self._ensure_super_ring()
         from hivemind.swarm.quic_transport import SuperRingPeerNode
 

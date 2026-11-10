@@ -180,6 +180,31 @@ class AdaptiveMultiSplitDecision:
     uplink_mbps: float
     rtt_ms: float
 
+    def __post_init__(self) -> None:
+        if isinstance(self.selected_cut_index, bool) or not isinstance(self.selected_cut_index, int) or self.selected_cut_index < 1:
+            raise ValueError("selected_cut_index must be a positive integer")
+        if not isinstance(self.selected_cut_name, str) or not self.selected_cut_name.strip():
+            raise ValueError("selected_cut_name must be a non-empty string")
+        if not isinstance(self.within_1500mb_background_ceiling, bool):
+            raise ValueError("within_1500mb_background_ceiling must be a boolean")
+        for pos_field in (
+            "client_prelude_vram_mib",
+            "activation_wire_kb",
+            "estimated_split_step_ms",
+            "unsplit_monolithic_step_ms",
+            "uplink_mbps",
+            "rtt_ms",
+        ):
+            val = getattr(self, pos_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{pos_field} must be a positive finite number")
+        if (
+            isinstance(self.step_latency_reduction_pct, bool)
+            or not isinstance(self.step_latency_reduction_pct, (int, float))
+            or not math.isfinite(float(self.step_latency_reduction_pct))
+        ):
+            raise ValueError("step_latency_reduction_pct must be a finite number")
+
 
 def select_adaptive_multisplit_cut(
     uplink_mbps: float,
@@ -422,6 +447,36 @@ class HierarchicalFanoutPlan:
     within_openrouter_concurrency_cap: bool
     regional_breakdown: List[Dict[str, Any]]
 
+    def __post_init__(self) -> None:
+        for i_field in (
+            "total_leaf_nodes",
+            "regions_active",
+            "branching_factor",
+            "target_subswarm_size",
+            "total_super_peers",
+            "total_localized_subswarms",
+            "coordinator_direct_ingress_requests",
+            "unhierarchical_ingress_requests",
+        ):
+            ival = getattr(self, i_field)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 1:
+                raise ValueError(f"{i_field} must be a positive integer")
+        if (
+            isinstance(self.ingress_reduction_factor, bool)
+            or not isinstance(self.ingress_reduction_factor, (int, float))
+            or not math.isfinite(float(self.ingress_reduction_factor))
+            or float(self.ingress_reduction_factor) <= 0.0
+        ):
+            raise ValueError("ingress_reduction_factor must be a positive finite number")
+        if not isinstance(self.within_openrouter_concurrency_cap, bool):
+            raise ValueError("within_openrouter_concurrency_cap must be a boolean")
+        if (
+            not isinstance(self.regional_breakdown, list)
+            or not self.regional_breakdown
+            or any(not isinstance(item, dict) for item in self.regional_breakdown)
+        ):
+            raise ValueError("regional_breakdown must be a non-empty list of dicts")
+
 
 def compute_hierarchical_fanout_plan(
     total_leaf_nodes: int = 10000,
@@ -509,6 +564,31 @@ class CoalescedLedgerBatch:
     hmt_conservation_exact: bool
     batch_merkle_root_sha256: str
     coalesced_entries: List[Dict[str, Any]]
+
+    def __post_init__(self) -> None:
+        for i_field in ("raw_event_count", "coalesced_row_count", "total_hmt_before", "total_hmt_after"):
+            ival = getattr(self, i_field)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 0:
+                raise ValueError(f"{i_field} must be a non-negative integer")
+        if (
+            isinstance(self.write_iops_reduction_pct, bool)
+            or not isinstance(self.write_iops_reduction_pct, (int, float))
+            or not math.isfinite(float(self.write_iops_reduction_pct))
+            or not (0.0 <= float(self.write_iops_reduction_pct) <= 100.0)
+        ):
+            raise ValueError("write_iops_reduction_pct must be a finite number in [0.0, 100.0]")
+        if not isinstance(self.hmt_conservation_exact, bool):
+            raise ValueError("hmt_conservation_exact must be a boolean")
+        if (
+            not isinstance(self.batch_merkle_root_sha256, str)
+            or len(self.batch_merkle_root_sha256) != 64
+            or any(c not in "0123456789abcdef" for c in self.batch_merkle_root_sha256.lower())
+        ):
+            raise ValueError("batch_merkle_root_sha256 must be a 64-character hex digest")
+        if not isinstance(self.coalesced_entries, list) or any(
+            not isinstance(e, dict) for e in self.coalesced_entries
+        ):
+            raise ValueError("coalesced_entries must be a list of dicts")
 
 
 def coalesce_ledger_settlement_batch(

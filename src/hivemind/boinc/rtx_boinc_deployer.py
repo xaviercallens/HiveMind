@@ -115,6 +115,29 @@ class RTXBoincHardwareProfile:
     segment_steps: int
     vram_headroom_ok: bool
 
+    def __post_init__(self) -> None:
+        for b_name in ("gpu_detected", "cuda_available", "vram_headroom_ok"):
+            if not isinstance(getattr(self, b_name), bool):
+                raise ValueError(f"{b_name} must be a boolean")
+        for s_name in ("gpu_name", "driver_version", "boinc_platform", "profile_name", "plan_class", "app_name"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        for i_nonneg in (
+            "vram_total_mib",
+            "vram_free_mib",
+            "min_gpu_ram_mb",
+            "wddm_ceiling_mib",
+            "min_free_vram_mib",
+        ):
+            val = getattr(self, i_nonneg)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_nonneg} must be a non-negative integer")
+        for i_pos in ("qlora_rank", "qlora_alpha", "seq_len", "micro_batch", "inner_steps", "segment_steps"):
+            val = getattr(self, i_pos)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{i_pos} must be a positive integer")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 

@@ -652,6 +652,46 @@ class AutoImprovementExecutionResult:
     simulated: bool = False
     telemetry_source: str = "observed_worker_telemetry"
 
+    def __post_init__(self) -> None:
+        for s_name in (
+            "wu_id",
+            "domain",
+            "worker_id",
+            "account_id",
+            "delta_weights_hash",
+            "base_model_id",
+            "telemetry_source",
+        ):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        if isinstance(self.steps_completed, bool) or not isinstance(self.steps_completed, int) or self.steps_completed < 0:
+            raise ValueError("steps_completed must be a non-negative integer")
+        for f_name in (
+            "loss_initial",
+            "loss_final",
+            "accuracy_base",
+            "accuracy_adapted",
+            "mcnemar_p_value",
+            "contributed_tflops",
+            "peak_vram_mb",
+            "duration_seconds",
+            "completed_utc",
+        ):
+            val = getattr(self, f_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{f_name} must be a finite number")
+        for prob_name in ("accuracy_base", "accuracy_adapted", "mcnemar_p_value"):
+            val = float(getattr(self, prob_name))
+            if not (0.0 <= val <= 1.0):
+                raise ValueError(f"{prob_name} must be in [0.0, 1.0]")
+        for nonneg_name in ("contributed_tflops", "peak_vram_mb", "duration_seconds"):
+            if float(getattr(self, nonneg_name)) < 0.0:
+                raise ValueError(f"{nonneg_name} must be non-negative")
+        for b_name in ("gate_passed", "simulated"):
+            if not isinstance(getattr(self, b_name), bool):
+                raise ValueError(f"{b_name} must be a boolean")
+
     @property
     def delta_nll(self) -> float:
         return round(self.loss_final - self.loss_initial, 4)
@@ -680,6 +720,29 @@ class RetrofitReport:
     ledger_verified: bool
     timestamp_utc: float
     audit_log: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        for i_name in ("total_workunits", "newly_credited_count", "already_credited_count"):
+            val = getattr(self, i_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_name} must be a non-negative integer")
+        if self.newly_credited_count + self.already_credited_count > self.total_workunits:
+            raise ValueError("newly_credited_count + already_credited_count cannot exceed total_workunits")
+        for f_name in ("total_hmt_granted", "total_tflops_attested", "timestamp_utc"):
+            val = getattr(self, f_name)
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or float(val) < 0.0
+            ):
+                raise ValueError(f"{f_name} must be a finite non-negative number")
+        if not isinstance(self.credited_accounts, dict):
+            raise ValueError("credited_accounts must be a dict")
+        if not isinstance(self.ledger_verified, bool):
+            raise ValueError("ledger_verified must be a boolean")
+        if not isinstance(self.audit_log, list) or any(not isinstance(e, str) for e in self.audit_log):
+            raise ValueError("audit_log must be a list of strings")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

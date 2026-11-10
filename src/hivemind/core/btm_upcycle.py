@@ -213,11 +213,10 @@ class SVDLoARankProjectionReport:
     target_lora_alpha: float
 
     def __post_init__(self) -> None:
-        for i_pos in ("source_rank_r", "target_rank_r"):
-            val = getattr(self, i_pos)
-            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
-                raise ValueError(f"{i_pos} must be a positive integer")
+        if isinstance(self.target_rank_r, bool) or not isinstance(self.target_rank_r, int) or self.target_rank_r < 1:
+            raise ValueError("target_rank_r must be a positive integer")
         for i_nonneg in (
+            "source_rank_r",
             "num_projected_pairs",
             "num_padded_pairs",
             "num_identity_pairs",
@@ -237,8 +236,8 @@ class SVDLoARankProjectionReport:
             val = getattr(self, f_name)
             if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
                 raise ValueError(f"{f_name} must be a finite number")
-        if float(self.source_lora_alpha) <= 0.0 or float(self.target_lora_alpha) <= 0.0:
-            raise ValueError("source_lora_alpha and target_lora_alpha must be positive")
+        if float(self.source_lora_alpha) < 0.0 or float(self.target_lora_alpha) < 0.0:
+            raise ValueError("source_lora_alpha and target_lora_alpha must be non-negative")
 
     @property
     def compression_ratio(self) -> float:

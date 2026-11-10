@@ -231,10 +231,25 @@ def test_btm_upcycle_reports_and_steam_user_telemetry_validation() -> None:
         target_lora_alpha=16.0,
     )
     assert svd_rep.compression_ratio == 2.0
-    with pytest.raises(ValueError, match="source_rank_r must be a positive integer"):
+    with pytest.raises(ValueError, match="source_rank_r must be a non-negative integer"):
         SVDLoARankProjectionReport(
-            source_rank_r=0,
+            source_rank_r=-1,
             target_rank_r=8,
+            num_projected_pairs=4,
+            num_padded_pairs=0,
+            num_identity_pairs=0,
+            mean_spectral_energy_retained=0.95,
+            min_spectral_energy_retained=0.90,
+            max_relative_delta_error=0.05,
+            source_params=2048,
+            target_params=1024,
+            source_lora_alpha=32.0,
+            target_lora_alpha=16.0,
+        )
+    with pytest.raises(ValueError, match="target_rank_r must be a positive integer"):
+        SVDLoARankProjectionReport(
+            source_rank_r=16,
+            target_rank_r=0,
             num_projected_pairs=4,
             num_padded_pairs=0,
             num_identity_pairs=0,

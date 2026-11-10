@@ -101,10 +101,10 @@ class OuterStepResult:
             val = getattr(self, i_name)
             if isinstance(val, bool) or not isinstance(val, int) or val < 0:
                 raise ValueError(f"{i_name} must be a non-negative integer")
-        for d_name in ("theta_updated", "velocity_updated"):
-            val = getattr(self, d_name)
-            if not isinstance(val, dict) or not val:
-                raise ValueError(f"{d_name} must be a non-empty dict")
+        if not isinstance(self.theta_updated, dict) or not self.theta_updated:
+            raise ValueError("theta_updated must be a non-empty dict")
+        if not isinstance(self.velocity_updated, dict):
+            raise ValueError("velocity_updated must be a dict")
         if (
             isinstance(self.aggregated_delta_norm, bool)
             or not isinstance(self.aggregated_delta_norm, (int, float))

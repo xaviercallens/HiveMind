@@ -396,6 +396,20 @@ class LossCheckVerdict:
     checked: tuple[dict, ...] = ()
     detail: dict = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.accepted, bool):
+            raise TypeError("accepted must be a bool")
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("reason must be a non-empty string")
+        for f_name in ("loss_before", "loss_after", "delta_loss"):
+            fval = getattr(self, f_name)
+            if isinstance(fval, bool) or not isinstance(fval, (int, float)):
+                raise TypeError(f"{f_name} must be a number")
+        if not isinstance(self.checked, tuple) or any(not isinstance(c, dict) for c in self.checked):
+            raise TypeError("checked must be a tuple of dicts")
+        if not isinstance(self.detail, dict):
+            raise TypeError("detail must be a dict")
+
 
 def verify_receipt(receipt: LossCheckReceipt, *, evaluator_keys: Mapping[str, bytes], server_secret: bytes, expected_base_sha256: str,
                    expected_candidate_sha256: str, heldout: np.ndarray, recompute: Callable[[str, list[int]], list[float]], k: int = 2,

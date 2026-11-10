@@ -54,7 +54,8 @@ the 14 receipts generated that night). Two items fail outright.
 | PS-10-D4 | `paper/review/external_review_v4.3.0_…` | written in the same commit as its response, with no reviewer named; not external | commit `10fd787` |
 
 **Failing outright:** PS-03-D4 (the README has 75 content lines before its first heading; the limit is 14) and PS-11-D1
-(`docs/roadmap/PARKED.md` and `tests/test_planetary_streams.py` do not exist on `main`).
+(`docs/roadmap/PARKED.md` and `tests/test_planetary_streams.py` do not exist on `main` yet; they are on the master-plan
+branch, PR #720, and arrive when it merges; meanwhile the readiness audit marks PS-11 VERIFIED without them).
 
 ## Where it matters most
 
@@ -81,4 +82,6 @@ headline numbers), so no public page is wrong today. The risk is the next paper 
 4. Mark PS-01-D2, D3, D4, PS-02-D4, PS-03-D1, PS-04-*, PS-05-*, PS-06-D2, PS-07-D2, D3, PS-08-D2, D3, PS-09-D2 and
    PS-10-D3, D4 as **not done** in the master plan, with the reason; set the readiness audit to report "simulated"
    rather than "VERIFIED" when only a file exists.
-5. Fix the two failing items (README TL;DR, PARKED.md with its test).
+5. Fix the two failing items: the README TL;DR (PR #883), and PARKED.md with its test (already in PR #720).
+
+Progress: correction 1 is PR #880 (labels and a CI check); correction 5 is PR #883.

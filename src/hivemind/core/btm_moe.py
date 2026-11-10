@@ -302,6 +302,10 @@ def project_lora_rank_svd_with_report(
     target_lora_alpha: float | None = None,
 ) -> Tuple[Dict[str, torch.Tensor], SVDLoARankProjectionReport]:
     """Same as `project_lora_rank_svd` but also returns the spectral-energy report."""
+    if not isinstance(lora_state_dict, dict):
+        raise ValueError("lora_state_dict must be a dict")
+    if isinstance(target_rank_r, bool) or not isinstance(target_rank_r, int) or target_rank_r < 1:
+        raise ValueError("target_rank_r must be positive")
     return project_lora_state_dict_to_rank(
         lora_state_dict,
         target_rank_r=target_rank_r,

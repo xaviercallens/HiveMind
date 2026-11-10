@@ -29,7 +29,7 @@ import json
 import math
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 
 COBBLESTONES_PER_GFLOPS_DAY: float = 200.0  # BOINC definition: one cobblestone is 1/200 day of one GFLOPS
@@ -513,6 +513,8 @@ def evaluate_international_launch_readiness(
     baseline: SwarmLiveBaseline = SwarmLiveBaseline(),
 ) -> dict[str, Any]:
     """Return the complete readiness diagnosis, 4-stage rollout schedule, and wave simulations."""
+    if not isinstance(baseline, SwarmLiveBaseline):
+        raise TypeError("baseline must be a SwarmLiveBaseline")
     current_queue = compute_erlang_c_metrics(
         active_producers_c=baseline.producers,
         aggregate_tok_per_s=baseline.daytime_aggregate_tok_per_s,
@@ -713,6 +715,24 @@ def build_100_producer_international_fleet_plan(
     3. Two-Lane Priority QoS reserves `70%` fast-lane capacity for active Prosumers/Producers and
        `30%` fair-queue capacity for pure Consumers, with zero fiat currency (`0.00 EUR / 0.00 USD`).
     """
+    if isinstance(active_producers, bool) or not isinstance(active_producers, int) or active_producers < 1:
+        raise ValueError("active_producers must be a positive integer")
+    if isinstance(standby_prosumers, bool) or not isinstance(standby_prosumers, int) or standby_prosumers < 0:
+        raise ValueError("standby_prosumers must be a non-negative integer")
+    if (
+        isinstance(arrival_rate_req_per_s, bool)
+        or not isinstance(arrival_rate_req_per_s, (int, float))
+        or not math.isfinite(float(arrival_rate_req_per_s))
+        or float(arrival_rate_req_per_s) <= 0.0
+    ):
+        raise ValueError("arrival_rate_req_per_s must be a finite positive number")
+    if (
+        isinstance(mean_tokens_per_request, bool)
+        or not isinstance(mean_tokens_per_request, (int, float))
+        or not math.isfinite(float(mean_tokens_per_request))
+        or float(mean_tokens_per_request) <= 0.0
+    ):
+        raise ValueError("mean_tokens_per_request must be a finite positive number")
     c = max(4, int(active_producers))
     prosumers = max(0, int(standby_prosumers))
 
@@ -1563,6 +1583,10 @@ def build_foundation_paper_v42_portal_payload(
     """Return the Foundation Paper v4.2.0 metadata, live E20/47-node experiments,
     real vs. forecast traffic comparison, and 5-wave international scalability roadmap.
     """
+    if not isinstance(base_gcp_url, str) or not base_gcp_url.strip():
+        raise ValueError("base_gcp_url must be a non-empty string")
+    if e20_artifact_path is not None and (not isinstance(e20_artifact_path, (str, Path)) or not str(e20_artifact_path).strip()):
+        raise ValueError("e20_artifact_path must be a non-empty string, Path, or None")
     gcp_root = base_gcp_url.rstrip("/")
     forecast_265 = forecast_200plus_node_international_launch(
         target_total_nodes=265,
@@ -1872,6 +1896,8 @@ def build_foundation_paper_v42_portal_payload(
 
 def render_gcp_planet_forecast_html(initial_forecast: dict[str, Any] | None = None) -> str:
     """Delegate 3D Planet HiveMiners & >200-Node Capacity Forecast HTML rendering to views module."""
+    if initial_forecast is not None and not isinstance(initial_forecast, Mapping):
+        raise TypeError("initial_forecast must be a Mapping or None")
     from hivemind.economy.international_launch_views import (
         render_gcp_planet_forecast_html as _render_gcp_planet_forecast_html,
     )
@@ -1883,6 +1909,8 @@ def render_foundation_paper_portal_html(
     payload: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Delegate Foundation Paper v4.2.0 Portal HTML rendering to views module."""
+    if payload is not None and not isinstance(payload, Mapping):
+        raise TypeError("payload must be a Mapping or None")
     from hivemind.economy.international_launch_views import (
         render_foundation_paper_portal_html as _render_foundation_paper_portal_html,
     )

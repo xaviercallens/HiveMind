@@ -74,6 +74,10 @@ _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 def urllib_get(url: str, headers: Mapping[str, str]) -> tuple[int, bytes]:
     """Plain HTTPS GET returning (status, body); an HTTP error status is returned, not raised."""
+    if not isinstance(url, str) or not url.strip():
+        raise ValueError("url must be a non-empty string")
+    if not isinstance(headers, Mapping):
+        raise TypeError("headers must be a Mapping")
     req = urllib.request.Request(url, headers={"User-Agent": "hivemind-base-model-catalog", **dict(headers)})
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
@@ -148,9 +152,13 @@ def summarize_header(tensors: Mapping[str, tuple[Sequence[int], str]]) -> dict[s
 
 def architecture_from_config(cfg: Mapping[str, Any]) -> dict[str, Any]:
     """Text-model geometry from a ``config.json`` (``text_config`` when the model is multimodal)."""
+    if not isinstance(cfg, Mapping):
+        raise TypeError("cfg must be a Mapping")
     t = dict(cfg.get("text_config") or cfg)
     hidden, layers = int(t["hidden_size"]), int(t["num_hidden_layers"])
     heads = int(t["num_attention_heads"])
+    if hidden <= 0 or layers <= 0 or heads <= 0:
+        raise ValueError("hidden_size, num_hidden_layers, and num_attention_heads must be positive")
     layer_types = list(t.get("layer_types") or [])
     n_full = sum(1 for x in layer_types if x == "full_attention") if layer_types else layers
     return {
@@ -178,6 +186,14 @@ def architecture_from_config(cfg: Mapping[str, Any]) -> dict[str, Any]:
 
 def fetch_catalog_entry(model_id: str, role: str, http_get: HttpGet, retrieved_at: str) -> dict[str, Any]:
     """One catalog entry fetched from the Hub, or ``{"exists": False, "http_status": ...}`` when the id is not served."""
+    if not isinstance(model_id, str) or not model_id.strip():
+        raise ValueError("model_id must be a non-empty string")
+    if not isinstance(role, str) or not role.strip():
+        raise ValueError("role must be a non-empty string")
+    if not callable(http_get):
+        raise TypeError("http_get must be callable")
+    if not isinstance(retrieved_at, str) or not retrieved_at.strip():
+        raise ValueError("retrieved_at must be a non-empty string")
     api_url = f"{HF_BASE}/api/models/{model_id}?blobs=true"
     status, info = _get_json(http_get, api_url)
     if status != 200 or not isinstance(info, dict):
@@ -223,6 +239,12 @@ def fetch_catalog_entry(model_id: str, role: str, http_get: HttpGet, retrieved_a
 def build_catalog(http_get: HttpGet, requested: Sequence[tuple[str, str]] = REQUESTED_MODELS,
                   now: datetime | None = None) -> dict[str, Any]:
     """Fetch every requested model; ids the Hub does not serve go to ``not_found`` instead of ``models``."""
+    if not callable(http_get):
+        raise TypeError("http_get must be callable")
+    if not isinstance(requested, Sequence) or isinstance(requested, (str, bytes)):
+        raise TypeError("requested must be a Sequence of (model_id, role) pairs")
+    if now is not None and not isinstance(now, datetime):
+        raise TypeError("now must be a datetime or None")
     stamp = (now or datetime.now(UTC)).astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     models: list[dict[str, Any]] = []
     missing: list[dict[str, Any]] = []
@@ -235,6 +257,8 @@ def build_catalog(http_get: HttpGet, requested: Sequence[tuple[str, str]] = REQU
 
 def validate_catalog(catalog: Mapping[str, Any]) -> list[str]:
     """Problems that make a catalog unusable (an empty list means it passes). Header totals must match the Hub's own count."""
+    if not isinstance(catalog, Mapping):
+        raise TypeError("catalog must be a Mapping")
     problems: list[str] = []
     if catalog.get("schema") != SCHEMA:
         problems.append(f"schema is {catalog.get('schema')!r}, expected {SCHEMA!r}")
@@ -368,6 +392,8 @@ class ModelGeometry:
 
 
 def geometry_from_entry(entry: Mapping[str, Any]) -> ModelGeometry:
+    if not isinstance(entry, Mapping):
+        raise TypeError("entry must be a Mapping")
     h, a = entry["header"], entry["architecture"]
     return ModelGeometry(
         model_id=str(entry["model_id"]), params_text_linear=int(h["params_text_linear"]), params_embedding=int(h["params_embedding"]),
@@ -861,6 +887,8 @@ def recommend_upgrade_plan(catalog: Mapping[str, Any], tiers: Sequence[GpuTier] 
 
 
 def render_plan(plan: Mapping[str, Any]) -> str:
+    if not isinstance(plan, Mapping):
+        raise TypeError("plan must be a Mapping")
     lines = [f"Upgrade plan ({plan['kind']}, margin {plan['margin']:.0%}, catalog retrieved {plan['catalog_retrieved_at']})"]
     for t in plan["tiers"]:
         lines.append(f"- {t['tier_id']} ({t['budget_mib']} MiB): train={t['train_candidate']} serve={t['serve_candidate']} :: {t['action']}")

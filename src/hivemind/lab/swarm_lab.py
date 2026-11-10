@@ -331,11 +331,15 @@ def _digest(curve: list[float]) -> str:
 
 def contract_digest(scenario: "Scenario | dict[str, Any]") -> str:
     """Short hash (16 hex chars) of the loss curve rounded to 9 decimals: the value a JavaScript port compares against."""
+    if not isinstance(scenario, (Scenario, dict)):
+        raise ValueError("scenario must be a Scenario or dict")
     return _digest(_run(_as_scenario(scenario))["loss_curve"])
 
 
 def simulate(scenario: "Scenario | dict[str, Any]") -> dict[str, Any]:
     """Run one scenario; returns a JSON-serialisable dict (curve, per-round rows, retention against the synchronous reference, total simulated time)."""
+    if not isinstance(scenario, (Scenario, dict)):
+        raise ValueError("scenario must be a Scenario or dict")
     sc = _as_scenario(scenario)
     res = _run(sc)
     ref = dataclasses.replace(sc, K=sc.M, straggle="none", policy="discard", churn_start=0, churn_end=0)

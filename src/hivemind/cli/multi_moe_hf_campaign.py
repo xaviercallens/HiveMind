@@ -211,7 +211,7 @@ def run_multi_moe_hf_campaign(
         or float(learning_rate) <= 0.0
     ):
         raise ValueError("learning_rate must be a finite positive float")
-    if isinstance(sequence_length, bool) or not isinstance(sequence_length, int) or not (2 <= sequence_length <= 128):
+    if isinstance(sequence_length, bool) or not isinstance(sequence_length, int):
         raise ValueError("sequence_length must be between 2 and 128")
     if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
         raise ValueError("seed must be a non-negative integer")

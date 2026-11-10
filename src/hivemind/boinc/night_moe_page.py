@@ -8,6 +8,7 @@ here: every number is copied from the report, and every string is HTML-escaped b
 from __future__ import annotations
 
 import json
+import math
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,8 @@ def _fmt(value: Any) -> str:
     if value is None:
         return "-"
     if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError("value must be a finite float")
         return f"{value:.4g}"
     return escape(str(value))
 
@@ -42,6 +45,15 @@ def render_night_moe_html(report: dict[str, Any] | None) -> str:
         for required_key in ("base_model", "alpha", "bonferroni_alpha", "n_other_cells"):
             if required_key not in report:
                 raise ValueError(f"report is missing required key {required_key!r}")
+        if not isinstance(report["base_model"], str) or not report["base_model"].strip():
+            raise ValueError("report['base_model'] must be a non-empty string")
+        for alpha_key in ("alpha", "bonferroni_alpha"):
+            aval = report[alpha_key]
+            if isinstance(aval, bool) or not isinstance(aval, (int, float)) or not math.isfinite(float(aval)) or not (0.0 < float(aval) <= 1.0):
+                raise ValueError(f"report[{alpha_key!r}] must be a finite number in (0, 1]")
+        ncells = report["n_other_cells"]
+        if isinstance(ncells, bool) or not isinstance(ncells, int) or ncells < 0:
+            raise ValueError("report['n_other_cells'] must be a non-negative integer")
     head = (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
         "<title>NIGHT-MOE-1 results</title><style>body{font:15px system-ui,sans-serif;margin:0 auto;max-width:1100px;padding:16px;"

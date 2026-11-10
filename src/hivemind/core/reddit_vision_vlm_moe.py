@@ -793,6 +793,36 @@ class BeeDiLoCoTrainingResult:
     dht_packet: SparseLoCoDCT2BitPacket
     effective_delta: np.ndarray
 
+    def __post_init__(self) -> None:
+        for field_name in ("bee_id", "cluster_id", "hf_dataset", "backbone_key", "backbone_model_id"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name in ("rank", "inner_steps"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+        for field_name in ("alpha", "peak_vram_mib"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{field_name} must be a finite positive number")
+        for field_name in ("loss_before", "loss_after", "loss_reduction_pct"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{field_name} must be a finite number")
+        for field_name in ("accuracy_before", "accuracy_after"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or not (0.0 <= float(val) <= 1.0):
+                raise ValueError(f"{field_name} must be a finite number in [0.0, 1.0]")
+        for field_name in ("within_8gb_consumer_ceiling", "base_freeze_verified"):
+            val = getattr(self, field_name)
+            if not isinstance(val, bool):
+                raise ValueError(f"{field_name} must be a boolean")
+        if not isinstance(self.dht_packet, SparseLoCoDCT2BitPacket):
+            raise ValueError("dht_packet must be a SparseLoCoDCT2BitPacket")
+        if not isinstance(self.effective_delta, np.ndarray) or self.effective_delta.size == 0 or not np.all(np.isfinite(self.effective_delta)):
+            raise ValueError("effective_delta must be a non-empty finite numpy ndarray")
+
 
 def run_diloco_qlora_worker_training(
     backbone: FrozenVisionLanguageBackbone,
@@ -936,6 +966,52 @@ class ByzantineConsensusReport:
     replay_l2_drift: float
     consensus_passed: bool
     aggregated_delta: np.ndarray
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.cluster_id, str) or not self.cluster_id.strip():
+            raise ValueError("cluster_id must be a non-empty string")
+        if isinstance(self.honest_worker_count, bool) or not isinstance(self.honest_worker_count, int) or self.honest_worker_count < 1:
+            raise ValueError("honest_worker_count must be an integer >= 1")
+        for field_name in ("byzantine_worker_count", "validation_replay_samples"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
+        for field_name in ("selected_honest_indices", "rejected_byzantine_indices"):
+            seq = getattr(self, field_name)
+            if not isinstance(seq, list) or any(isinstance(i, bool) or not isinstance(i, int) or i < 0 for i in seq):
+                raise ValueError(f"{field_name} must be a list of non-negative integers")
+        if (
+            isinstance(self.poison_rejection_rate_pct, bool)
+            or not isinstance(self.poison_rejection_rate_pct, (int, float))
+            or not math.isfinite(float(self.poison_rejection_rate_pct))
+            or not (0.0 <= float(self.poison_rejection_rate_pct) <= 100.0)
+        ):
+            raise ValueError("poison_rejection_rate_pct must be a finite number in [0.0, 100.0]")
+        if (
+            isinstance(self.validation_replay_fraction, bool)
+            or not isinstance(self.validation_replay_fraction, (int, float))
+            or not math.isfinite(float(self.validation_replay_fraction))
+            or not (0.0 < float(self.validation_replay_fraction) <= 1.0)
+        ):
+            raise ValueError("validation_replay_fraction must be a finite number in (0.0, 1.0]")
+        if (
+            isinstance(self.replay_cosine_similarity, bool)
+            or not isinstance(self.replay_cosine_similarity, (int, float))
+            or not math.isfinite(float(self.replay_cosine_similarity))
+            or not (-1.0001 <= float(self.replay_cosine_similarity) <= 1.0001)
+        ):
+            raise ValueError("replay_cosine_similarity must be a finite number in [-1.0, 1.0]")
+        if (
+            isinstance(self.replay_l2_drift, bool)
+            or not isinstance(self.replay_l2_drift, (int, float))
+            or not math.isfinite(float(self.replay_l2_drift))
+            or float(self.replay_l2_drift) < 0.0
+        ):
+            raise ValueError("replay_l2_drift must be a finite non-negative number")
+        if not isinstance(self.consensus_passed, bool):
+            raise ValueError("consensus_passed must be a boolean")
+        if not isinstance(self.aggregated_delta, np.ndarray) or self.aggregated_delta.size == 0 or not np.all(np.isfinite(self.aggregated_delta)):
+            raise ValueError("aggregated_delta must be a non-empty finite numpy ndarray")
 
 
 class ByzantineMultiKrumAggregator:
@@ -1196,6 +1272,67 @@ class NocturnalRedditVisionCampaignReport:
     report_sha256: str = ""
     la_ruche_1500mb_vmoe_summary: Dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        for field_name in ("campaign_id", "title", "timestamp_utc", "stage5_router_type"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(self.report_sha256, str):
+            raise ValueError("report_sha256 must be a string")
+        for field_name in (
+            "inner_diloco_steps",
+            "lora_rank",
+            "base_models_catalog_count",
+            "expert_clusters_count",
+            "sub_bees_trained_count",
+            "stage5_top_k_active",
+            "stage5_total_experts",
+        ):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{field_name} must be an integer >= 1")
+        if self.stage5_top_k_active > self.stage5_total_experts:
+            raise ValueError("stage5_top_k_active must be <= stage5_total_experts")
+        for field_name in (
+            "lora_alpha",
+            "stage2_max_consumer_vram_mib",
+            "stage3_mean_compression_ratio",
+            "stage5_upcycled_moe_loss",
+            "stage5_single_model_baseline_loss",
+        ):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{field_name} must be a finite positive number")
+        for field_name in (
+            "stage2_mean_loss_reduction_pct",
+            "stage3_mean_sqnr_db",
+            "stage4_poison_rejection_rate_pct",
+            "stage4_replay_cosine_similarity",
+            "stage4_replay_l2_drift",
+            "stage5_cluster_routing_accuracy",
+            "stage5_moe_vs_baseline_gain_pct",
+        ):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{field_name} must be a finite number")
+        for field_name in (
+            "stage1_all_base_frozen",
+            "stage2_invariant_i1_satisfied",
+            "stage4_all_consensus_passed",
+            "overall_gate_passed",
+        ):
+            val = getattr(self, field_name)
+            if not isinstance(val, bool):
+                raise ValueError(f"{field_name} must be a boolean")
+        if not isinstance(self.stage3_dht_keys_published, list) or len(self.stage3_dht_keys_published) == 0 or any(not isinstance(k, str) or not k.strip() for k in self.stage3_dht_keys_published):
+            raise ValueError("stage3_dht_keys_published must be a non-empty list of non-empty strings")
+        for field_name in ("bee_training_results", "byzantine_consensus_reports"):
+            seq = getattr(self, field_name)
+            if not isinstance(seq, list) or len(seq) == 0 or any(not isinstance(item, dict) for item in seq):
+                raise ValueError(f"{field_name} must be a non-empty list of dicts")
+        if not isinstance(self.la_ruche_1500mb_vmoe_summary, dict):
+            raise ValueError("la_ruche_1500mb_vmoe_summary must be a dict")
+
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
@@ -1297,6 +1434,28 @@ class ZKOPoITrainingReceipt:
     verified: bool
     commitment_scheme: str = "sha256_transcript_commitment"
     zero_knowledge: bool = False
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "bee_id",
+            "specialization_id",
+            "optimizer_name",
+            "seed_commitment",
+            "initial_weight_sha256",
+            "final_delta_sha256",
+            "dct_packet_sha256",
+            "proof_commitment_hash",
+            "commitment_scheme",
+        ):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if isinstance(self.inner_steps, bool) or not isinstance(self.inner_steps, int) or self.inner_steps < 1:
+            raise ValueError("inner_steps must be an integer >= 1")
+        for field_name in ("verified", "zero_knowledge"):
+            val = getattr(self, field_name)
+            if not isinstance(val, bool):
+                raise ValueError(f"{field_name} must be a boolean")
 
 
 def newton_schulz_orthogonalize_muon(

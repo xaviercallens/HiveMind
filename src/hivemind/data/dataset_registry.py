@@ -306,6 +306,16 @@ class SliceResult:
     shards: list[Shard] = field(default_factory=list)
     reason: str = ""
 
+    def __post_init__(self) -> None:
+        if self.status not in (PASSED, FAILED, BLOCKED, BUILT):
+            raise ValueError(f"status must be one of {PASSED!r}, {FAILED!r}, {BLOCKED!r}, {BUILT!r}")
+        if not isinstance(self.rows, list) or any(not isinstance(r, Mapping) for r in self.rows):
+            raise ValueError("rows must be a list of mappings")
+        if not isinstance(self.shards, list) or any(not isinstance(s, Shard) for s in self.shards):
+            raise ValueError("shards must be a list of Shard instances")
+        if not isinstance(self.reason, str):
+            raise ValueError("reason must be a string")
+
 
 def slice_rows(spec: SourceSpec, fetch: Fetch, n_rows: int | None = None, page: int = 100) -> SliceResult:
     """Stream the first ``n_rows`` rows of the split through datasets-server ``/rows`` (no full download)."""

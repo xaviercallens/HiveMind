@@ -247,6 +247,31 @@ class KellyEquilibrium:
     optimal_welfare: float  # max_j v_j (give everything to the highest value)
     efficiency: float  # welfare / optimal_welfare, >= 0.75 by the 4/3 price-of-anarchy bound
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.valuations, tuple) or len(self.valuations) < 2:
+            raise ValueError("valuations must be a tuple of length >= 2")
+        if not isinstance(self.shares, tuple) or len(self.shares) != len(self.valuations):
+            raise ValueError("shares must be a tuple matching valuations length")
+        if not isinstance(self.payments, tuple) or len(self.payments) != len(self.valuations):
+            raise ValueError("payments must be a tuple matching valuations length")
+        if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) or float(v) <= 0.0 for v in self.valuations):
+            raise ValueError("valuations must be finite positive numbers")
+        if any(isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(float(x)) or float(x) < 0.0 for x in self.shares):
+            raise ValueError("shares must be finite non-negative numbers")
+        if any(isinstance(w, bool) or not isinstance(w, (int, float)) or not math.isfinite(float(w)) or float(w) < 0.0 for w in self.payments):
+            raise ValueError("payments must be finite non-negative numbers")
+        for field_name in ("total_payment", "welfare", "optimal_welfare"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:
+                raise ValueError(f"{field_name} must be a finite positive number")
+        if (
+            isinstance(self.efficiency, bool)
+            or not isinstance(self.efficiency, (int, float))
+            or not math.isfinite(float(self.efficiency))
+            or not (0.0 < float(self.efficiency) <= 1.0001)
+        ):
+            raise ValueError("efficiency must be a finite number in (0.0, 1.0]")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -401,6 +426,49 @@ class RoutingEquilibrium:
     converged: bool
     max_deviation_gain_rel: float  # largest unilateral improvement found, relative to the largest pool
     is_epsilon_nash: bool
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.allocation, Mapping) or len(self.allocation) == 0:
+            raise ValueError("allocation must be a non-empty mapping")
+        for node_id, q_map in self.allocation.items():
+            if not isinstance(node_id, str) or not node_id.strip():
+                raise ValueError("allocation node_id keys must be non-empty strings")
+            if not isinstance(q_map, Mapping) or len(q_map) == 0:
+                raise ValueError("allocation queue mapping must be non-empty")
+            for q_id, cob in q_map.items():
+                if not isinstance(q_id, str) or not q_id.strip():
+                    raise ValueError("allocation queue_id keys must be non-empty strings")
+                if isinstance(cob, bool) or not isinstance(cob, (int, float)) or not math.isfinite(float(cob)) or float(cob) < 0.0:
+                    raise ValueError("allocation cobblestones must be finite non-negative numbers")
+        for field_name in ("payoffs", "queue_supply"):
+            mapping = getattr(self, field_name)
+            if not isinstance(mapping, Mapping) or len(mapping) == 0:
+                raise ValueError(f"{field_name} must be a non-empty mapping")
+            for k, v in mapping.items():
+                if not isinstance(k, str) or not k.strip():
+                    raise ValueError(f"{field_name} keys must be non-empty strings")
+                if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) or float(v) < 0.0:
+                    raise ValueError(f"{field_name} values must be finite non-negative numbers")
+        if not isinstance(self.queue_price, Mapping) or len(self.queue_price) == 0:
+            raise ValueError("queue_price must be a non-empty mapping")
+        for k, v in self.queue_price.items():
+            if not isinstance(k, str) or not k.strip():
+                raise ValueError("queue_price keys must be non-empty strings")
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or math.isnan(float(v)) or float(v) <= 0.0:
+                raise ValueError("queue_price values must be positive numbers (or +inf when supply is zero)")
+        if isinstance(self.iterations, bool) or not isinstance(self.iterations, int) or self.iterations < 1:
+            raise ValueError("iterations must be an integer >= 1")
+        for field_name in ("converged", "is_epsilon_nash"):
+            val = getattr(self, field_name)
+            if not isinstance(val, bool):
+                raise ValueError(f"{field_name} must be a boolean")
+        if (
+            isinstance(self.max_deviation_gain_rel, bool)
+            or not isinstance(self.max_deviation_gain_rel, (int, float))
+            or not math.isfinite(float(self.max_deviation_gain_rel))
+            or float(self.max_deviation_gain_rel) < 0.0
+        ):
+            raise ValueError("max_deviation_gain_rel must be a finite non-negative number")
 
     def to_dict(self) -> dict[str, Any]:
         return {"allocation": {n: dict(q) for n, q in self.allocation.items()}, "payoffs": dict(self.payoffs), "queue_supply": dict(self.queue_supply),

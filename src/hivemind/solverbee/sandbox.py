@@ -82,6 +82,26 @@ class SandboxOutcome:
     sandbox: str = SANDBOX_NONE  # namespace | none (what was ACTIVE for this run)
     refused: bool = False  # refused before running anything (sandbox unavailable / bad input)
 
+    def __post_init__(self) -> None:
+        for field_name in ("ok", "refused"):
+            val = getattr(self, field_name)
+            if not isinstance(val, bool):
+                raise ValueError(f"{field_name} must be a boolean")
+        for field_name in ("error", "stderr_tail"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str):
+                raise ValueError(f"{field_name} must be a string")
+        if self.rc is not None and (isinstance(self.rc, bool) or not isinstance(self.rc, int)):
+            raise ValueError("rc must be an integer or None")
+        if not isinstance(self.stdout, bytes):
+            raise ValueError("stdout must be bytes")
+        if isinstance(self.wall_s, bool) or not isinstance(self.wall_s, (int, float)) or not math.isfinite(float(self.wall_s)) or float(self.wall_s) < 0.0:
+            raise ValueError("wall_s must be a finite non-negative number")
+        if self.limit is not None and (not isinstance(self.limit, str) or not self.limit.strip()):
+            raise ValueError("limit must be a non-empty string or None")
+        if self.sandbox not in (SANDBOX_NAMESPACE, SANDBOX_NONE):
+            raise ValueError(f"sandbox must be {SANDBOX_NAMESPACE!r} or {SANDBOX_NONE!r}")
+
 
 LAUNCHER_SRC = r'''
 import base64, ctypes, hashlib, json, os, resource, selectors, signal, subprocess, sys, time

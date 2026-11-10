@@ -115,6 +115,27 @@ class Certificate:
     max_deviation_gain: float  # largest unilateral gain found on the deviation grids, in HMT (>= 0)
     win_win: bool
 
+    def __post_init__(self) -> None:
+        for field_name in (
+            "individually_rational_consumers",
+            "individually_rational_producers",
+            "producer_nash",
+            "conserved",
+            "win_win",
+        ):
+            val = getattr(self, field_name)
+            if not isinstance(val, bool):
+                raise ValueError(f"{field_name} must be a boolean")
+        if self.consumer_nash is not None and not isinstance(self.consumer_nash, bool):
+            raise ValueError("consumer_nash must be a boolean or None")
+        if (
+            isinstance(self.max_deviation_gain, bool)
+            or not isinstance(self.max_deviation_gain, (int, float))
+            or math.isnan(float(self.max_deviation_gain))
+            or float(self.max_deviation_gain) < 0.0
+        ):
+            raise ValueError("max_deviation_gain must be a non-negative number (or +inf when uncertified)")
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "individually_rational_consumers": self.individually_rational_consumers,

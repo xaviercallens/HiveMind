@@ -139,6 +139,38 @@ class RecruitmentReport:
     trial_successes: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
     signer_trials_used: Mapping[str, float] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        if isinstance(self.accepted, bool) or not isinstance(self.accepted, int) or self.accepted < 0:
+            raise ValueError("accepted must be a non-negative integer")
+        for field_name in ("weights", "trial_weights", "trial_successes"):
+            outer = getattr(self, field_name)
+            if not isinstance(outer, Mapping):
+                raise ValueError(f"{field_name} must be a mapping")
+            for cluster_id, inner in outer.items():
+                if not isinstance(cluster_id, str) or not cluster_id.strip():
+                    raise ValueError(f"{field_name} cluster keys must be non-empty strings")
+                if not isinstance(inner, Mapping):
+                    raise ValueError(f"{field_name} inner values must be mappings")
+                for expert_id, val in inner.items():
+                    if not isinstance(expert_id, str) or not expert_id.strip():
+                        raise ValueError(f"{field_name} expert keys must be non-empty strings")
+                    if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                        raise ValueError(f"{field_name} values must be finite non-negative numbers")
+        if not isinstance(self.rejected, Mapping):
+            raise ValueError("rejected must be a mapping")
+        for reason, cnt in self.rejected.items():
+            if not isinstance(reason, str) or not reason.strip():
+                raise ValueError("rejected keys must be non-empty strings")
+            if isinstance(cnt, bool) or not isinstance(cnt, int) or cnt < 0:
+                raise ValueError("rejected counts must be non-negative integers")
+        if not isinstance(self.signer_trials_used, Mapping):
+            raise ValueError("signer_trials_used must be a mapping")
+        for signer_id, used in self.signer_trials_used.items():
+            if not isinstance(signer_id, str) or not signer_id.strip():
+                raise ValueError("signer_trials_used keys must be non-empty strings")
+            if isinstance(used, bool) or not isinstance(used, (int, float)) or not math.isfinite(float(used)) or float(used) < 0.0:
+                raise ValueError("signer_trials_used values must be finite non-negative numbers")
+
     def probabilities(self, cluster_id: str, candidates: Iterable[str], floor: float = 0.0) -> dict[str, float]:
         """Recruitment probabilities over `candidates`: weight plus `floor` (exploration mass), normalised. A cluster or
         candidate with no record gets only the floor; with every weight zero the distribution is uniform."""

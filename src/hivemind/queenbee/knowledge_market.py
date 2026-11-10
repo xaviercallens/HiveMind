@@ -57,6 +57,14 @@ class Admission:
     reason: str
     share: KnowledgeShare
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.admitted, bool):
+            raise ValueError("admitted must be a boolean")
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("reason must be a non-empty string")
+        if not isinstance(self.share, KnowledgeShare):
+            raise ValueError("share must be a KnowledgeShare")
+
 
 Scanner = Callable[[str], bool]  # True when the text is clean
 
@@ -237,6 +245,19 @@ class KnowledgeCertificate:
     pool_within_validator_fee: bool
     nobody_paid_without_points: bool
     win_win_preserved: bool
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "price_unchanged",
+            "supply_unchanged",
+            "payouts_within_pool",
+            "pool_within_validator_fee",
+            "nobody_paid_without_points",
+            "win_win_preserved",
+        ):
+            val = getattr(self, field_name)
+            if not isinstance(val, bool):
+                raise ValueError(f"{field_name} must be a boolean")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

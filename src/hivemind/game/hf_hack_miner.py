@@ -215,6 +215,32 @@ class MinerScoreBreakdown:
     total_mission_pts: int
     hive_earned: float
 
+    def __post_init__(self) -> None:
+        for field_name in ("gamer_tag", "contract_id", "shard_cid"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name in ("shard_signal_score", "initial_loss", "final_loss", "hive_earned"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{field_name} must be a finite non-negative number")
+        if (
+            isinstance(self.loss_reduction_pct, bool)
+            or not isinstance(self.loss_reduction_pct, (int, float))
+            or not math.isfinite(float(self.loss_reduction_pct))
+        ):
+            raise ValueError("loss_reduction_pct must be a finite number")
+        for field_name in (
+            "data_discovery_pts",
+            "lora_training_pts",
+            "solution_bounty_pts",
+            "swarm_contribution_pts",
+            "total_mission_pts",
+        ):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
+
 
 @dataclass
 class GamerMinerProfile:
@@ -248,6 +274,45 @@ class GamerMinerProfile:
     rich_presence_hmac: str = ""
     domains_forged: List[str] = field(default_factory=list)
     achievements_unlocked: List[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        for field_name in ("gamer_tag", "steam_id64", "node_id", "region", "specialty_focus", "rank_title"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        for field_name in (
+            "total_points",
+            "data_discovery_points",
+            "lora_training_points",
+            "solution_bounty_points",
+            "swarm_contribution_points",
+            "boss_raid_points",
+            "reputation_score",
+            "shards_mined",
+            "bounties_solved",
+            "boss_raids_cleared",
+            "swarm_tokens_served",
+            "season5_missions_forged",
+            "season6_missions_forged",
+            "agent_arena_wins",
+        ):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
+        for field_name in ("hive_balance", "best_loss_reduction_pct"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{field_name} must be a finite non-negative number")
+        if not isinstance(self.steam_sybil_verified, bool):
+            raise ValueError("steam_sybil_verified must be a boolean")
+        for field_name in ("steam_leaderboard_receipt", "rich_presence_status", "rich_presence_hmac"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str):
+                raise ValueError(f"{field_name} must be a string")
+        for field_name in ("domains_forged", "achievements_unlocked"):
+            seq = getattr(self, field_name)
+            if not isinstance(seq, list) or any(not isinstance(item, str) or not item.strip() for item in seq):
+                raise ValueError(f"{field_name} must be a list of non-empty strings")
 
     def update_rank_and_achievements(self, is_top_miner: bool = False, num_moe_experts: int = 3) -> None:
         if not isinstance(is_top_miner, bool):
@@ -1294,6 +1359,20 @@ class CodeRepairTask:
     tests: Tuple[str, ...]
     candidate_fixes: Dict[str, str]
 
+    def __post_init__(self) -> None:
+        for field_name in ("task_id", "title", "bug_family", "buggy_code", "failing_test", "reference_fix"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(self.tests, tuple) or len(self.tests) == 0 or any(not isinstance(t, str) or not t.strip() for t in self.tests):
+            raise ValueError("tests must be a non-empty tuple of non-empty strings")
+        if (
+            not isinstance(self.candidate_fixes, dict)
+            or len(self.candidate_fixes) == 0
+            or any(not isinstance(k, str) or not k.strip() or not isinstance(v, str) or not v.strip() for k, v in self.candidate_fixes.items())
+        ):
+            raise ValueError("candidate_fixes must be a non-empty dict of non-empty strings")
+
 
 SELF_PLAY_CODE_REPAIR_TASKS: Tuple[CodeRepairTask, ...] = (
     CodeRepairTask(
@@ -1932,6 +2011,18 @@ class Lean4ProofTask:
     reference_proof: str
     candidate_proofs: Dict[str, str]
 
+    def __post_init__(self) -> None:
+        for field_name in ("task_id", "title", "natural_language", "reference_proof"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if (
+            not isinstance(self.candidate_proofs, dict)
+            or len(self.candidate_proofs) == 0
+            or any(not isinstance(k, str) or not k.strip() or not isinstance(v, str) or not v.strip() for k, v in self.candidate_proofs.items())
+        ):
+            raise ValueError("candidate_proofs must be a non-empty dict of non-empty strings")
+
 
 def audit_lean4_proof(proof: str) -> Dict[str, Any]:
     """Structurally audit a Lean 4 proof script (not a substitute for `lake build`)."""
@@ -2264,6 +2355,34 @@ class GuildTournamentSquad:
     member_contributors: List[str]
     synergy_multiplier: float
     domain_weights: Dict[str, float]
+
+    def __post_init__(self) -> None:
+        for field_name in ("guild_id", "guild_name", "full_guild_id", "guild_motto", "region_hub", "home_node"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if isinstance(self.lat, bool) or not isinstance(self.lat, (int, float)) or not math.isfinite(float(self.lat)) or not (-90.0 <= float(self.lat) <= 90.0):
+            raise ValueError("lat must be a finite number in [-90.0, 90.0]")
+        if isinstance(self.lon, bool) or not isinstance(self.lon, (int, float)) or not math.isfinite(float(self.lon)) or not (-180.0 <= float(self.lon) <= 180.0):
+            raise ValueError("lon must be a finite number in [-180.0, 180.0]")
+        for field_name in ("member_miners", "member_contributors"):
+            seq = getattr(self, field_name)
+            if not isinstance(seq, list) or len(seq) == 0 or any(not isinstance(item, str) or not item.strip() for item in seq):
+                raise ValueError(f"{field_name} must be a non-empty list of non-empty strings")
+        if (
+            isinstance(self.synergy_multiplier, bool)
+            or not isinstance(self.synergy_multiplier, (int, float))
+            or not math.isfinite(float(self.synergy_multiplier))
+            or float(self.synergy_multiplier) <= 0.0
+        ):
+            raise ValueError("synergy_multiplier must be a finite positive number")
+        if not isinstance(self.domain_weights, dict) or len(self.domain_weights) == 0:
+            raise ValueError("domain_weights must be a non-empty dict")
+        for k, v in self.domain_weights.items():
+            if not isinstance(k, str) or not k.strip():
+                raise ValueError("domain_weights keys must be non-empty strings")
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) or float(v) < 0.0:
+                raise ValueError("domain_weights values must be finite non-negative numbers")
 
 
 DEFAULT_GUILD_TOURNAMENT_SQUADS: List[GuildTournamentSquad] = [

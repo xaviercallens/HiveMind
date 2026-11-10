@@ -70,6 +70,7 @@ VALID_OPENTRAINER_CAMPAIGN_IDS: frozenset[str] = frozenset(
         "CROWDGPT-V1-TRUNK-DILOCO",
         "CROWDGPT-V1-QLORA-GRAFT",
         "CROWDGPT-V1-LOSS-CHECK",
+        "CROWDGPT-GCP-T4-DILOCO",
     }
 )
 _BYOM_CAMPAIGN_RE = re.compile(r"^byom-[A-Za-z0-9._-]{1,100}$")
@@ -850,6 +851,7 @@ CROWDGPT_TRAINER_PRODUCER_CO_TRAINING_PLAN: dict[str, Any] = {
         "anti_lobotomy_rms_guard": "check_weight_rms_collapse_guard (0.80 <= rms_ratio <= 1.25; blocks Step-282 0.5x zero-participant halving)",
         "held_out_loss_ratchet": "LossCheckCoordinator + LossRatchetGate (required_receipts=2 for untrusted GPUs, k=2 HMAC CPU spot-check)",
         "serialization_safety": "safetensors + weights_only=True + gzipped bf16/engram binary framing (zero pickle execution)",
+        "gcp_t4_diloco_engine": "GcpCrowdDiLoCoOuterHub + T4GovernorYieldGuard (full_trunk_8bit_ckpt / block_window_diloco / qlora_graft_diloco, >= 4,300 MiB free VRAM floor, /opt/hivemind/t4/ protected, Spot $0.186/hr <= $150/mo)",
     },
     "rollout_phases": [
         {
@@ -897,7 +899,7 @@ def build_crowdgpt_trainer_producer_plan(
         r
         for r in recent_rounds
         if "crowdgpt" in str(r.get("run_id") or "").lower()
-        or str(r.get("run_id") or "") in ("CROWDGPT-V1-TRUNK-DILOCO", "CROWDGPT-V1-QLORA-GRAFT", "CROWDGPT-V1-LOSS-CHECK")
+        or str(r.get("run_id") or "") in ("CROWDGPT-V1-TRUNK-DILOCO", "CROWDGPT-V1-QLORA-GRAFT", "CROWDGPT-V1-LOSS-CHECK", "CROWDGPT-GCP-T4-DILOCO")
     ]
     total_crowd_tokens = sum(max(0, int(r.get("tokens_trained") or 0)) for r in crowd_rounds)
     return {
@@ -908,6 +910,7 @@ def build_crowdgpt_trainer_producer_plan(
                 "CROWDGPT-V1-TRUNK-DILOCO",
                 "CROWDGPT-V1-QLORA-GRAFT",
                 "CROWDGPT-V1-LOSS-CHECK",
+                "CROWDGPT-GCP-T4-DILOCO",
             ],
             "active_trainer_and_producer_nodes": len(live_nodes),
             "crowdgpt_rounds_recorded": len(crowd_rounds),

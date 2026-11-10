@@ -49,6 +49,15 @@ MIN_SECRET_BYTES = 32
 DEFAULT_VALIDATOR_SHARE = 0.10
 DEFAULT_BURN_SHARE = 0.05
 
+VXTZQ_MODEL_TESTING_TARGET_HMT = 100_000.0
+VXTZQ_MODEL_TESTING_GRANT_REF = "partner-model-testing-grant:vxtzq-crowd-v1-100k"
+VXTZQ_HANDLES: tuple[str, ...] = ("vxtzq", "vxtzq1")
+VXTZQ_EMAILS: tuple[str, ...] = ("vxtzq@github.com", "vxtzqmc@gmail.com")
+DEFAULT_WELCOME_BONUS_HMT = 500.0
+DEFAULT_CONTRIBUTOR_ROLE_BONUS_HMT = 1_000.0
+DEFAULT_DAILY_TESTING_FAUCET_HMT = 250.0
+DAILY_TESTING_FAUCET_MAX_BALANCE_HMT = 500.0
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS accounts(
     account_id TEXT PRIMARY KEY,
@@ -65,6 +74,19 @@ CREATE TABLE IF NOT EXISTS starter_grant_ips(
     utc REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS starter_grant_ips_hash ON starter_grant_ips(ip_hash, utc);
+CREATE TABLE IF NOT EXISTS bonus_claims(
+    account_id TEXT NOT NULL,
+    bonus_code TEXT NOT NULL,
+    amount REAL NOT NULL,
+    utc REAL NOT NULL,
+    PRIMARY KEY(account_id, bonus_code)
+);
+CREATE INDEX IF NOT EXISTS bonus_claims_account_utc ON bonus_claims(account_id, utc);
+CREATE TABLE IF NOT EXISTS bonus_claim_ips(
+    ip_hash TEXT NOT NULL,
+    utc REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS bonus_claim_ips_hash ON bonus_claim_ips(ip_hash, utc);
 CREATE TABLE IF NOT EXISTS ledger(
     seq INTEGER PRIMARY KEY,
     account_id TEXT NOT NULL,
@@ -336,10 +358,17 @@ LEGACY_KNOWN_USERS: dict[str, dict[str, Any]] = {
     },
     "vxtzq": {
         "handle": "vxtzq",
-        "aliases": ("@vxtzq", "vxtzq@github.com", "hm_live_vxtzq_771a904c55b"),
+        "aliases": (
+            "@vxtzq",
+            "vxtzq1",
+            "@vxtzq1",
+            "vxtzq@github.com",
+            "vxtzqmc@gmail.com",
+            "hm_live_vxtzq_771a904c55b",
+        ),
         "email": "vxtzq@github.com",
         "role": "prosumer",
-        "starter_hmt": 30000.0,
+        "starter_hmt": VXTZQ_MODEL_TESTING_TARGET_HMT,
     },
     "clark719664": {
         "handle": "clark719664",
@@ -2773,6 +2802,323 @@ class RouterStore:
             )
             self._conn.commit()
             return False
+
+    @staticmethod
+    def _is_vxtzq_account_row(row: sqlite3.Row | Mapping[str, Any]) -> bool:
+        row_keys = set(row.keys())
+        kind_val = str(row["kind"] if "kind" in row_keys and row["kind"] is not None else KIND_USER)
+        if kind_val != KIND_USER:
+            return False
+        if "is_test" in row_keys and bool(row["is_test"]):
+            return False
+        handle_val = str(row["handle"] or "").strip().lstrip("@").lower()
+        email_val = str(row["email"] or "").strip().lower() if "email" in row_keys else ""
+        return handle_val in VXTZQ_HANDLES or (bool(email_val) and email_val in VXTZQ_EMAILS)
+
+    def ensure_partner_testing_grants(
+        self,
+        now_utc: float | None = None,
+        *,
+        target_hmt: float = VXTZQ_MODEL_TESTING_TARGET_HMT,
+    ) -> dict[str, float]:
+        """Idempotently top up verified partner accounts (``vxtzq`` / CrowdGPT creator) to ``target_hmt`` for model testing.
+
+        Only existing real ``'user'`` rows in ``accounts`` are topped up (no passwordless placeholder rows are created,
+        so a partner who has not registered yet can still register normally and receive the top-up upon sign-up).
+        Every minted HMT goes through the hash-chained ``ledger`` as ``kind='grant'``.
+        """
+        target = _finite(target_hmt, "target_hmt")
+        if target <= 0.0:
+            return {}
+        stamp = time.time() if now_utc is None else _finite(now_utc, "now_utc")
+        minted_by_account: dict[str, float] = {}
+        with self._tx() as conn:
+            rows = conn.execute(
+                "SELECT * FROM accounts WHERE kind = ? AND is_test = 0 AND ("
+                "lower(handle) IN ('vxtzq', 'vxtzq1') OR lower(COALESCE(email, '')) IN ('vxtzq@github.com', 'vxtzqmc@gmail.com')"
+                ")",
+                (KIND_USER,),
+            ).fetchall()
+            for row in rows:
+                if not self._is_vxtzq_account_row(row):
+                    continue
+                account_id = str(row["account_id"])
+                already = conn.execute(
+                    "SELECT 1 FROM bonus_claims WHERE account_id=? AND bonus_code='vxtzq_crowd_v1_creator_bonus'",
+                    (account_id,),
+                ).fetchone()
+                if already is not None:
+                    continue
+                already_ledger = conn.execute(
+                    "SELECT 1 FROM ledger WHERE account_id=? AND kind='grant' AND ref=?",
+                    (account_id, VXTZQ_MODEL_TESTING_GRANT_REF),
+                ).fetchone()
+                if already_ledger is not None:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO bonus_claims(account_id, bonus_code, amount, utc) VALUES (?,?,?,?)",
+                        (account_id, "vxtzq_crowd_v1_creator_bonus", 0.0, stamp),
+                    )
+                    continue
+                current_bal = self._balance(conn, account_id)
+                if current_bal >= target:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO bonus_claims(account_id, bonus_code, amount, utc) VALUES (?,?,?,?)",
+                        (account_id, "vxtzq_crowd_v1_creator_bonus", 0.0, stamp),
+                    )
+                    continue
+                topup = round(target - current_bal, 6)
+                if topup > 0.0:
+                    self._append(conn, account_id, topup, "grant", VXTZQ_MODEL_TESTING_GRANT_REF, stamp)
+                    conn.execute(
+                        "INSERT OR REPLACE INTO bonus_claims(account_id, bonus_code, amount, utc) VALUES (?,?,?,?)",
+                        (account_id, "vxtzq_crowd_v1_creator_bonus", topup, stamp),
+                    )
+                    minted_by_account[account_id] = topup
+        return minted_by_account
+
+    def bonus_status(
+        self,
+        account_id: str,
+        now_utc: float | None = None,
+        *,
+        welcome_bonus_hmt: float = DEFAULT_WELCOME_BONUS_HMT,
+        contributor_bonus_hmt: float = DEFAULT_CONTRIBUTOR_ROLE_BONUS_HMT,
+        daily_faucet_hmt: float = DEFAULT_DAILY_TESTING_FAUCET_HMT,
+        partner_target_hmt: float = VXTZQ_MODEL_TESTING_TARGET_HMT,
+    ) -> dict[str, Any]:
+        """Inspect claimed and currently eligible HMT bonuses for ``account_id``."""
+        now = time.time() if now_utc is None else _finite(now_utc, "now_utc")
+        welcome_amt = max(0.0, _finite(welcome_bonus_hmt, "welcome_bonus_hmt"))
+        contrib_amt = max(0.0, _finite(contributor_bonus_hmt, "contributor_bonus_hmt"))
+        faucet_amt = max(0.0, _finite(daily_faucet_hmt, "daily_faucet_hmt"))
+        partner_target = max(0.0, _finite(partner_target_hmt, "partner_target_hmt"))
+
+        with self._lock:
+            row = self._conn.execute("SELECT * FROM accounts WHERE account_id=?", (account_id,)).fetchone()
+            if row is None:
+                raise UnknownAccount(account_id)
+            bal = self._balance(self._conn, account_id)
+            claim_rows = self._conn.execute(
+                "SELECT bonus_code, amount, utc FROM bonus_claims WHERE account_id=? ORDER BY utc ASC",
+                (account_id,),
+            ).fetchall()
+
+        acct = self._row_account(row)
+        claimed_codes = {str(r["bonus_code"]) for r in claim_rows}
+        faucet_utcs = [float(r["utc"]) for r in claim_rows if str(r["bonus_code"]).startswith("daily_testing_faucet:")]
+        last_faucet_utc = max(faucet_utcs) if faucet_utcs else None
+        faucet_cooldown_remaining_s = (
+            max(0.0, STARTER_WINDOW_S - (now - last_faucet_utc)) if last_faucet_utc is not None else 0.0
+        )
+
+        is_real_user = acct.kind == KIND_USER and not acct.is_test
+        is_vxtzq = is_real_user and self._is_vxtzq_account_row(row)
+        available: list[dict[str, Any]] = []
+        if is_real_user:
+            if is_vxtzq and "vxtzq_crowd_v1_creator_bonus" not in claimed_codes and bal < partner_target:
+                available.append({
+                    "bonus_code": "vxtzq_crowd_v1_creator_bonus",
+                    "amount_hmt": round(partner_target - bal, 6),
+                    "description": "Crowd-v1 & GCPCrowd model creator testing allocation up to 100,000.00 HMT",
+                })
+            if welcome_amt > 0.0 and "welcome_bonus" not in claimed_codes:
+                available.append({
+                    "bonus_code": "welcome_bonus",
+                    "amount_hmt": welcome_amt,
+                    "description": "One-time welcome model-testing bonus HMT",
+                })
+            if contrib_amt > 0.0 and acct.role in PRODUCER_ROLES and "contributor_role_bonus" not in claimed_codes:
+                available.append({
+                    "bonus_code": "contributor_role_bonus",
+                    "amount_hmt": contrib_amt,
+                    "description": f"One-time {acct.role} GPU/swarm contributor bonus HMT",
+                })
+            if (
+                faucet_amt > 0.0
+                and bal < DAILY_TESTING_FAUCET_MAX_BALANCE_HMT
+                and faucet_cooldown_remaining_s <= 0.0
+            ):
+                available.append({
+                    "bonus_code": "daily_testing_faucet",
+                    "amount_hmt": faucet_amt,
+                    "description": "24h model-testing HMT refill when balance is below 500.00 HMT",
+                })
+
+        return {
+            "account_id": acct.account_id,
+            "handle": acct.handle,
+            "role": acct.role,
+            "kind": acct.kind,
+            "balance": bal,
+            "balance_hmt": bal,
+            "compute_points": int(round(bal)),
+            "eligible": len(available) > 0,
+            "available_bonuses": available,
+            "claimed_history": [
+                {"bonus_code": str(r["bonus_code"]), "amount_hmt": float(r["amount"]), "utc": float(r["utc"])}
+                for r in claim_rows
+            ],
+            "daily_faucet_cooldown_remaining_s": round(faucet_cooldown_remaining_s, 1),
+        }
+
+    def claim_bonus(
+        self,
+        account_id: str,
+        bonus_code: str = "auto",
+        *,
+        client_ip: str = "unknown",
+        now_utc: float | None = None,
+        ip_cap_24h: int = 5,
+        window_s: float = STARTER_WINDOW_S,
+        welcome_bonus_hmt: float = DEFAULT_WELCOME_BONUS_HMT,
+        contributor_bonus_hmt: float = DEFAULT_CONTRIBUTOR_ROLE_BONUS_HMT,
+        daily_faucet_hmt: float = DEFAULT_DAILY_TESTING_FAUCET_HMT,
+        partner_target_hmt: float = VXTZQ_MODEL_TESTING_TARGET_HMT,
+    ) -> dict[str, Any]:
+        """Claim eligible HMT testing bonus(es) for ``account_id`` with per-IP 24h Sybil protection and hash-chained grants."""
+        now = time.time() if now_utc is None else _finite(now_utc, "now_utc")
+        welcome_amt = max(0.0, _finite(welcome_bonus_hmt, "welcome_bonus_hmt"))
+        contrib_amt = max(0.0, _finite(contributor_bonus_hmt, "contributor_bonus_hmt"))
+        faucet_amt = max(0.0, _finite(daily_faucet_hmt, "daily_faucet_hmt"))
+        partner_target = max(0.0, _finite(partner_target_hmt, "partner_target_hmt"))
+        req_code = str(bonus_code or "auto").strip().lower()
+        valid_codes = {
+            "auto",
+            "welcome_bonus",
+            "contributor_role_bonus",
+            "daily_testing_faucet",
+            "vxtzq_crowd_v1_creator_bonus",
+        }
+        if req_code not in valid_codes:
+            raise ValueError(f"unknown bonus_code: {req_code}")
+
+        ip_digest = self._hmac_hex("bonus-ip:" + str(client_ip or "unknown"))
+        awarded: list[dict[str, Any]] = []
+
+        with self._tx() as conn:
+            row = conn.execute("SELECT * FROM accounts WHERE account_id=?", (account_id,)).fetchone()
+            if row is None:
+                raise UnknownAccount(account_id)
+            acct = self._row_account(row)
+            if acct.kind != KIND_USER or acct.is_test:
+                raise PermissionError("Only real user accounts can claim HMT bonuses.")
+
+            conn.execute("DELETE FROM bonus_claim_ips WHERE utc <= ?", (now - window_s,))
+            used_ip = int(
+                conn.execute("SELECT COUNT(*) FROM bonus_claim_ips WHERE ip_hash=?", (ip_digest,)).fetchone()[0]
+            )
+            if used_ip >= ip_cap_24h:
+                bal_now = self._balance(conn, account_id)
+                return {
+                    "claimed": False,
+                    "granted_hmt": 0.0,
+                    "claimed_bonuses": [],
+                    "reason": "ip_cap_reached",
+                    "note": "Daily bonus claim limit reached for this network address; try again tomorrow.",
+                    "account_id": account_id,
+                    "handle": acct.handle,
+                    "role": acct.role,
+                    "balance": bal_now,
+                    "balance_hmt": bal_now,
+                    "compute_points": int(round(bal_now)),
+                }
+
+            claim_rows = conn.execute(
+                "SELECT bonus_code, amount, utc FROM bonus_claims WHERE account_id=?",
+                (account_id,),
+            ).fetchall()
+            claimed_codes = {str(r["bonus_code"]) for r in claim_rows}
+            faucet_utcs = [float(r["utc"]) for r in claim_rows if str(r["bonus_code"]).startswith("daily_testing_faucet:")]
+            last_faucet_utc = max(faucet_utcs) if faucet_utcs else None
+            bal = self._balance(conn, account_id)
+            is_vxtzq = self._is_vxtzq_account_row(row)
+
+            # 1. Partner creator allocation for @Vxtzq (Crowd-v1 / GCPCrowd testing)
+            if req_code in ("auto", "vxtzq_crowd_v1_creator_bonus"):
+                if is_vxtzq and "vxtzq_crowd_v1_creator_bonus" not in claimed_codes and bal < partner_target:
+                    topup = round(partner_target - bal, 6)
+                    if topup > 0.0:
+                        self._append(conn, account_id, topup, "grant", VXTZQ_MODEL_TESTING_GRANT_REF, now)
+                        conn.execute(
+                            "INSERT OR REPLACE INTO bonus_claims(account_id, bonus_code, amount, utc) VALUES (?,?,?,?)",
+                            (account_id, "vxtzq_crowd_v1_creator_bonus", topup, now),
+                        )
+                        claimed_codes.add("vxtzq_crowd_v1_creator_bonus")
+                        bal += topup
+                        awarded.append({"bonus_code": "vxtzq_crowd_v1_creator_bonus", "amount_hmt": topup})
+                elif req_code == "vxtzq_crowd_v1_creator_bonus" and not is_vxtzq:
+                    raise PermissionError("Partner Crowd-v1 creator bonus is reserved for verified vxtzq accounts.")
+
+            # 2. One-time welcome bonus
+            if req_code in ("auto", "welcome_bonus"):
+                if welcome_amt > 0.0 and "welcome_bonus" not in claimed_codes:
+                    self._append(conn, account_id, welcome_amt, "grant", "bonus:welcome_bonus", now)
+                    conn.execute(
+                        "INSERT INTO bonus_claims(account_id, bonus_code, amount, utc) VALUES (?,?,?,?)",
+                        (account_id, "welcome_bonus", welcome_amt, now),
+                    )
+                    claimed_codes.add("welcome_bonus")
+                    bal += welcome_amt
+                    awarded.append({"bonus_code": "welcome_bonus", "amount_hmt": welcome_amt})
+
+            # 3. One-time contributor role bonus (prosumer / producer / trainer)
+            if req_code in ("auto", "contributor_role_bonus"):
+                if contrib_amt > 0.0 and acct.role in PRODUCER_ROLES and "contributor_role_bonus" not in claimed_codes:
+                    self._append(conn, account_id, contrib_amt, "grant", f"bonus:contributor_role:{acct.role}", now)
+                    conn.execute(
+                        "INSERT INTO bonus_claims(account_id, bonus_code, amount, utc) VALUES (?,?,?,?)",
+                        (account_id, "contributor_role_bonus", contrib_amt, now),
+                    )
+                    claimed_codes.add("contributor_role_bonus")
+                    bal += contrib_amt
+                    awarded.append({"bonus_code": "contributor_role_bonus", "amount_hmt": contrib_amt})
+
+            # 4. Daily testing faucet when balance is low (< 500 HMT) and 24h cooldown elapsed
+            if req_code == "daily_testing_faucet" or (req_code == "auto" and not awarded):
+                cooldown_ok = last_faucet_utc is None or (now - last_faucet_utc) >= window_s
+                if faucet_amt > 0.0 and bal < DAILY_TESTING_FAUCET_MAX_BALANCE_HMT and cooldown_ok:
+                    faucet_key = f"daily_testing_faucet:{int(now)}-{secrets.token_hex(4)}"
+                    self._append(conn, account_id, faucet_amt, "grant", "bonus:daily_testing_faucet", now)
+                    conn.execute(
+                        "INSERT INTO bonus_claims(account_id, bonus_code, amount, utc) VALUES (?,?,?,?)",
+                        (account_id, faucet_key, faucet_amt, now),
+                    )
+                    bal += faucet_amt
+                    awarded.append({"bonus_code": "daily_testing_faucet", "amount_hmt": faucet_amt})
+
+            if awarded:
+                conn.execute("INSERT INTO bonus_claim_ips(ip_hash, utc) VALUES (?,?)", (ip_digest, now))
+                final_bal = self._balance(conn, account_id)
+                total_granted = round(sum(float(item["amount_hmt"]) for item in awarded), 6)
+                return {
+                    "claimed": True,
+                    "granted_hmt": total_granted,
+                    "claimed_bonuses": awarded,
+                    "reason": "granted",
+                    "note": f"Granted {total_granted:.2f} HMT in testing bonuses.",
+                    "account_id": account_id,
+                    "handle": acct.handle,
+                    "role": acct.role,
+                    "balance": final_bal,
+                    "balance_hmt": final_bal,
+                    "compute_points": int(round(final_bal)),
+                }
+
+            final_bal = self._balance(conn, account_id)
+            return {
+                "claimed": False,
+                "granted_hmt": 0.0,
+                "claimed_bonuses": [],
+                "reason": "no_eligible_bonus",
+                "note": "All one-time bonuses are already claimed and your HMT balance is sufficient for model testing.",
+                "account_id": account_id,
+                "handle": acct.handle,
+                "role": acct.role,
+                "balance": final_bal,
+                "balance_hmt": final_bal,
+                "compute_points": int(round(final_bal)),
+            }
+
 
 
 

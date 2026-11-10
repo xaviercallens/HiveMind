@@ -55,7 +55,7 @@ def boinc_gpu_pids(procs: list[tuple[str, ...]]) -> list[str]:
             cmd = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode()
         except OSError:
             continue
-        if "real_client.moe_app" in cmd:
+        if any(m in cmd for m in ("real_client.moe_app", "gcp_t4_crowd_diloco")):
             out.append(pid)
     return out
 
@@ -63,7 +63,7 @@ def boinc_gpu_pids(procs: list[tuple[str, ...]]) -> list[str]:
 # The validator replays a finished work unit on the GPU for ~15 s (about 2.5 GB). It belongs to the training pipeline, so it
 # must not count as "someone else is asking": measured on 2026-11-05, counting it restarted the 30-minute quiet wait after every
 # work unit and left training about 6% of the time (one work unit per ~32 min).
-PIPELINE_MARKERS = ("real_client.moe_app", "real_client.boinc_server_scripts")
+PIPELINE_MARKERS = ("real_client.moe_app", "real_client.boinc_server_scripts", "gcp_t4_crowd_diloco")
 
 
 def pipeline_gpu_pids(procs: list[tuple[str, ...]]) -> list[str]:

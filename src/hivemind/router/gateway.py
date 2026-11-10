@@ -918,6 +918,9 @@ def create_router_app(
     warmup_unloaded: bool = True,
     starter_grant_hmt: float = 0.0,
     starter_grants_per_ip_24h: int = 3,
+    registration_bonus_hmt: float = 0.0,
+    allow_bonuses: bool = False,
+    bonus_claims_per_ip_24h: int = 5,
     trusted_proxies: Sequence[str] = (),
     maintenance_notice: str | None = None,
     reset_email_sender: Callable[[str, str], bool] | None = None,
@@ -999,6 +1002,8 @@ def create_router_app(
     warm_started: dict[tuple[str, str], float] = {}
     if starter_grant_hmt < 0.0 or not math.isfinite(starter_grant_hmt) or starter_grants_per_ip_24h < 0:
         raise ValueError("starter_grant_hmt and starter_grants_per_ip_24h must be finite and not negative")
+    if registration_bonus_hmt < 0.0 or not math.isfinite(registration_bonus_hmt) or bonus_claims_per_ip_24h < 0:
+        raise ValueError("registration_bonus_hmt and bonus_claims_per_ip_24h must be finite and not negative")
     proxy_networks = tuple(ipaddress.ip_network(entry, strict=False) for entry in trusted_proxies)
     app.add_middleware(BodyLimitMiddleware, max_bytes=MAX_BODY_BYTES)
     app.add_middleware(PocNoticeMiddleware, maintenance=maintenance_notice if maintenance_notice is not None else os.environ.get(MAINTENANCE_ENV))  # added last = outermost, so it also marks the 413 from the body limit
@@ -1108,13 +1113,27 @@ def create_router_app(
         return peer
 
     def starter_grant(request: Request, account_id: str) -> dict[str, Any]:
-        """Mint the starter grant to a new real account unless its client address used up the daily cap. Says so, without counts."""
-        if starter_grant_hmt <= 0.0:
-            return {}
-        if store.claim_starter_slot(starter_client_ip(request), clock(), starter_grants_per_ip_24h):
-            store.grant(account_id, starter_grant_hmt, "starter-grant")
-            return {"starter_grant": starter_grant_hmt}
-        return {"starter_grant": 0.0, "starter_grant_note": "No starter grant was added to this account; ask an operator for one."}
+        """Mint the starter grant (and optional registration bonus) to a new real account unless its client address used up the daily cap."""
+        out: dict[str, Any] = {}
+        if starter_grant_hmt > 0.0 or registration_bonus_hmt > 0.0:
+            if store.claim_starter_slot(starter_client_ip(request), clock(), starter_grants_per_ip_24h):
+                if starter_grant_hmt > 0.0:
+                    store.grant(account_id, starter_grant_hmt, "starter-grant")
+                    out["starter_grant"] = starter_grant_hmt
+                if registration_bonus_hmt > 0.0:
+                    store.grant(account_id, registration_bonus_hmt, "registration-bonus")
+                    out["registration_bonus"] = registration_bonus_hmt
+            else:
+                if starter_grant_hmt > 0.0:
+                    out["starter_grant"] = 0.0
+                    out["starter_grant_note"] = "No starter grant was added to this account; ask an operator for one."
+                if registration_bonus_hmt > 0.0:
+                    out["registration_bonus"] = 0.0
+        if allow_bonuses:
+            partner_minted = store.ensure_partner_testing_grants(now_utc=clock())
+            if account_id in partner_minted:
+                out["partner_testing_grant"] = partner_minted[account_id]
+        return out
 
     reconnected_fleet_keepalive: dict[str, Any] = {
         "active": False,
@@ -2152,6 +2171,8 @@ def create_router_app(
             nonce,
             live_telemetry=build_live_telemetry_snapshot(),
             starter_grant_hmt=starter_grant_hmt,
+            registration_bonus_hmt=registration_bonus_hmt,
+            allow_bonuses=allow_bonuses,
             default_role=default_role,
         )
         return HTMLResponse(page, headers={"Content-Security-Policy": content_security_policy(nonce), "Cache-Control": "no-store",
@@ -2490,7 +2511,7 @@ def create_router_app(
         if store._resolve_legacy_user(raw_handle) is not None or (raw_email and store._resolve_legacy_user(raw_email) is not None):
             raise RouterError(409, "That handle is already registered.", "conflict_error", "handle_taken")
         try:
-            account_id, new_key, _ = store.register_with_credentials(
+            account_id, new_key, created_upg = store.register_with_credentials(
                 clean_handle,
                 str(data.get("password") or ""),
                 "prosumer",
@@ -2502,6 +2523,8 @@ def create_router_app(
         prov_badge = f"{prov.upper()}_SSO" if prov != "email" else "EMAIL_PASSKEY"
         router_linked_providers[account_id] = ["GUEST_SANDBOX", prov_badge]
         acct = store.get_account(account_id)
+        grant_info = starter_grant(request, account_id) if created_upg else {}
+        upg_bal = store.balance(account_id)
         resolved_handle = acct.handle if acct else clean_handle.lower()
         return JSONResponse(
             {
@@ -2512,9 +2535,12 @@ def create_router_app(
                 "linked_providers": ["GUEST_SANDBOX", prov_badge],
                 "role": "HiveMinder Human",
                 "target_profile": target_profile,
-                "compute_points": 0,
+                "balance": upg_bal,
+                "balance_hmt": upg_bal,
+                "compute_points": int(round(upg_bal)),
                 "token": new_key,
                 "api_key": new_key,
+                **grant_info,
                 "node_id": "0x" + hashlib.sha256(f"upgraded:{resolved_handle}".encode("utf-8")).hexdigest()[:8].upper(),
                 "login_count": 1,
                 "is_new_user": True,
@@ -2673,10 +2699,10 @@ def create_router_app(
         data = await _parse_auth_payload(request)
         try:
             res = await run_in_threadpool(_execute_credential_register, request, data)
-            page = render_signup_page(google.client_id if google else None, nonce, auth_result=res, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt)
+            page = render_signup_page(google.client_id if google else None, nonce, auth_result=res, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt, registration_bonus_hmt=registration_bonus_hmt, allow_bonuses=allow_bonuses)
             status = 200
         except RouterError as exc:
-            page = render_signup_page(google.client_id if google else None, nonce, error_message=exc.message, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt)
+            page = render_signup_page(google.client_id if google else None, nonce, error_message=exc.message, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt, registration_bonus_hmt=registration_bonus_hmt, allow_bonuses=allow_bonuses)
             status = exc.status
         return HTMLResponse(page, status_code=status, headers={"Content-Security-Policy": content_security_policy(nonce), "Cache-Control": "no-store",
                                                                "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})
@@ -2688,10 +2714,10 @@ def create_router_app(
         data = await _parse_auth_payload(request)
         try:
             res = await run_in_threadpool(_execute_credential_login, request, data)
-            page = render_signup_page(google.client_id if google else None, nonce, auth_result=res, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt)
+            page = render_signup_page(google.client_id if google else None, nonce, auth_result=res, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt, registration_bonus_hmt=registration_bonus_hmt, allow_bonuses=allow_bonuses)
             status = 200
         except RouterError as exc:
-            page = render_signup_page(google.client_id if google else None, nonce, error_message=exc.message, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt)
+            page = render_signup_page(google.client_id if google else None, nonce, error_message=exc.message, live_telemetry=build_live_telemetry_snapshot(), starter_grant_hmt=starter_grant_hmt, registration_bonus_hmt=registration_bonus_hmt, allow_bonuses=allow_bonuses)
             status = exc.status
         return HTMLResponse(page, status_code=status, headers={"Content-Security-Policy": content_security_policy(nonce), "Cache-Control": "no-store",
                                                                "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})
@@ -2809,6 +2835,67 @@ def create_router_app(
             "kind": account.kind,
             "recent_usage": store.recent_usage(account.account_id, 20),
         }
+
+    _bonus_cors_headers = {
+        "Cache-Control": "no-store",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key",
+    }
+
+    @app.options("/v1/hivemind/bonus/status")
+    @app.options("/api/v1/auth/bonus/status")
+    @app.options("/v1/hivemind/bonus/claim")
+    @app.options("/api/v1/auth/bonus/claim")
+    def bonus_cors_preflight() -> JSONResponse:
+        return JSONResponse(content={}, status_code=200, headers=_bonus_cors_headers)
+
+    @app.get("/v1/hivemind/bonus/status")
+    @app.get("/api/v1/auth/bonus/status")
+    def bonus_status_api(request: Request) -> JSONResponse:
+        account = authenticate(request)
+        welcome_amt = registration_bonus_hmt if registration_bonus_hmt > 0.0 else 500.0
+        status_body = store.bonus_status(account.account_id, now_utc=clock(), welcome_bonus_hmt=welcome_amt)
+        return JSONResponse(
+            {
+                "object": "hivemind.bonus_status",
+                "allow_bonuses": bool(allow_bonuses),
+                "starter_grant_hmt": starter_grant_hmt,
+                "registration_bonus_hmt": registration_bonus_hmt,
+                **status_body,
+            },
+            headers=_bonus_cors_headers,
+        )
+
+    @app.post("/v1/hivemind/bonus/claim")
+    @app.post("/api/v1/auth/bonus/claim")
+    async def bonus_claim_api(request: Request) -> JSONResponse:
+        if not allow_bonuses:
+            raise RouterError(403, "Bonus HMT claims are not enabled on this gateway.", "permission_error", "bonus_disabled")
+        account = authenticate(request)
+        if account.kind != "user" or account.is_test:
+            raise RouterError(403, "Test and probe accounts cannot claim HMT bonuses.", "permission_error", "bonus_forbidden_account_kind")
+        raw = await request.body()
+        data = _parse_json_dict(raw) if raw else {}
+        bonus_code = str(data.get("bonus_code") or "auto").strip().lower()
+        welcome_amt = registration_bonus_hmt if registration_bonus_hmt > 0.0 else 500.0
+        def _do_claim() -> dict[str, Any]:
+            try:
+                return store.claim_bonus(
+                    account.account_id,
+                    bonus_code=bonus_code,
+                    client_ip=starter_client_ip(request),
+                    now_utc=clock(),
+                    ip_cap_24h=bonus_claims_per_ip_24h,
+                    welcome_bonus_hmt=welcome_amt,
+                )
+            except PermissionError as exc:
+                raise RouterError(403, str(exc), "permission_error", "bonus_forbidden") from None
+            except ValueError as exc:
+                raise RouterError(400, str(exc), "invalid_request_error", "invalid_bonus_code") from None
+
+        res = await run_in_threadpool(_do_claim)
+        return JSONResponse({"object": "hivemind.bonus_claim", **res}, headers=_bonus_cors_headers)
 
     @app.get("/v1/hivemind/t4/status")
     def t4_status(request: Request) -> dict[str, Any]:

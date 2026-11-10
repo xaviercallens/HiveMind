@@ -149,7 +149,54 @@ done
 wait
 ```
 
-### D. Verify Live CrowdGPT Co-Training Plan & Telemetry on the Gateway
+### D. GCP Spot Tesla T4 (`socreateai-agora-hermes-node1`) — Serving-First `GCPCrowd` DiLoCo Engine
+
+[`src/hivemind/swarm/gcp_t4_crowd_diloco.py`](../src/hivemind/swarm/gcp_t4_crowd_diloco.py) and [`scripts/gcp_t4_crowd_diloco_worker.py`](../scripts/gcp_t4_crowd_diloco_worker.py) turn `socreateai-agora-hermes-node1` (`n1-standard-8` + `1x NVIDIA Tesla T4` `15,360 MiB` GDDR6, Turing `sm_75`, Spot VM `$0.186/hr` inside the `$150/mo` budget) into a serving-first DiLoCo co-trainer and outer Nesterov coordinator:
+
+- **Protected Control-Plane Guard (`AGENTS.md` Rule 1)**: `assert_not_protected_t4_path` blocks any write inside `/opt/hivemind/t4/`; checkpoints and receipts write exclusively to `/mnt/disks/disk-socrateai-local-1/gcpcrowd`.
+- **Three Adaptive T4 Recipes (`>= 4,300 MiB` Free VRAM Floor)**:
+  1. `full_trunk_8bit_ckpt` (`>= 9,500 MiB` free): `fp32` trunk + per-block gradient checkpointing + `Blockwise8BitAdamW` + token-chunked `151,669`-vocab `fp32` cross-entropy + CPU-pinned `CrowdEngram` (`~5,200 MiB` peak VRAM).
+  2. `block_window_diloco` (`>= 6,650 MiB` free, safe alongside `llama-server` `hivemind/bee-stars`): `fp16` frozen trunk + deterministically rotating 6-block `fp32` DiLoCo window (`~2,350 MiB` peak VRAM, covering all 24 blocks every 4 rounds).
+  3. `qlora_graft_diloco` (`>= 6,050 MiB` free on T4 / `>= 3,286 MiB` free on 8 GB RTX 2070): `fp16` frozen trunk + `fp32` `CrowdLoRALinear` adapters (`~1,750 MiB` peak VRAM); exports standalone `GCPCrowd` LoRA `safetensors` AND projects `(alpha / r) B @ A` into the flat `bf16` trunk delta space (`project_lora_to_flat_trunk_delta`) for heterogeneous T4 + RTX 2070 DiLoCo merges.
+- **Sub-Second Preemption & GCE Spot 30s Notice (`T4GovernorYieldGuard`)**: Polls `HOLD`, `governor_state.json`, `nginx` `stub_status`, and `metadata.google.internal/computeMetadata/v1/instance/preempted` before every step, saving a `weights_only=True` resumable segment and evacuating T4 VRAM in `< 1s`.
+- **CPU-Offloaded Outer Nesterov Hub (`GcpCrowdDiLoCoOuterHub`)**: Maintains $\theta^{(t)}$ and Nesterov velocity $v^{(t)}$ (`lr_outer=0.7, momentum=0.9`) in host RAM (`0 MiB` GPU overhead), filters peers via Chunked Multi-Krum, and gates every outer step on `check_weight_rms_collapse_guard` + `LossRatchetGate` + signed `hivemind-t4` `LossCheckReceipt`.
+
+```bash
+# 1. Verify GCP Spot $150/mo budget compliance ($0.00/mo incremental inside 4.5h/day window):
+python scripts/gcp_t4_crowd_diloco_worker.py --mode budget-check
+
+# 2. Run a verified T4 + RTX 2070 DiLoCo co-training round on Vxtzq/Crowd-v1:
+python scripts/gcp_t4_crowd_diloco_worker.py \
+  --mode co-train-round \
+  --work-dir /mnt/disks/disk-socrateai-local-1/gcpcrowd \
+  --rounds 1 \
+  --inner-steps 6 \
+  --submit-opentrainer
+
+# 3. Install/render the serving-first T4 systemd template (outside /opt/hivemind/t4/):
+python scripts/gcp_t4_crowd_diloco_worker.py --mode render-systemd
+```
+
+### E. Verify Live CrowdGPT Co-Training Plan & Telemetry on the Gateway
 ```bash
 curl -sS https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/hivemind/opentrainer/crowdgpt-plan | python -m json.tool
 ```
+
+---
+
+## 9. HiveMind Reflexion Points (`HMT`) — `@Vxtzq` Model-Testing Grant, Registration Points & Bonus Claims
+
+To let `@Vxtzq` (`vxtzq@github.com` / `vxtzqmc@gmail.com` / `vxtzq1`) and community testers benchmark `hivemind/crowd-v1` (`Vxtzq/Crowd-v1`) and `hivemind/gcpcrowd` immediately on `hivemind-openrouter`:
+
+1. **`100,000.00 HMT` Partner Model-Testing Allocation for `@Vxtzq`**:
+   - Raised `@Vxtzq`'s allocation from `30,000.00 HMT` to **`100,000.00 HMT`** across `LEGACY_KNOWN_USERS["vxtzq"]` ([`src/hivemind/router/accounts.py`](../src/hivemind/router/accounts.py)) and `_DEFAULT_LEDGER_BALANCES["vxtzq"]` ([`src/hivemind/boinc/hivemind_at_home_dashboard.py`](../src/hivemind/boinc/hivemind_at_home_dashboard.py)).
+   - Added idempotent hash-chained ledger top-up `RouterStore.ensure_partner_testing_grants()` (`ref="partner-model-testing-grant:vxtzq-crowd-v1-100k"`), executed automatically on Cloud Run gateway startup ([`deploy/gcp_openrouter/server.py`](../deploy/gcp_openrouter/server.py)) and whenever `@Vxtzq` registers or claims a bonus.
+2. **Elevated Registration Grants (`1,500.00 HMT` on Cloud Run)**:
+   - Production Cloud Run defaults ([`deploy/gcp_openrouter/server.py`](../deploy/gcp_openrouter/server.py) & [`deploy/gcp_openrouter/deploy.sh`](../deploy/gcp_openrouter/deploy.sh)) now wire `HIVEMIND_STARTER_GRANT_HMT=1000.0` + `HIVEMIND_REGISTRATION_BONUS_HMT=500.0` (`1,500.00 HMT` total per new real account, capped at `HIVEMIND_STARTER_GRANTS_PER_IP_24H=5` per client IP per 24h using HMAC-hashed IP buckets).
+3. **Self-Service Bonus Claims (`GET /v1/hivemind/bonus/status` & `POST /v1/hivemind/bonus/claim`)**:
+   - Enabled via `HIVEMIND_ALLOW_BONUSES=1` and accessible via the **Claim Bonus HMT** button on `/signup` ([`src/hivemind/router/signup_page.py`](../src/hivemind/router/signup_page.py)):
+     - `welcome_bonus`: `+500.00 HMT` one-time model-testing welcome bonus.
+     - `contributor_role_bonus`: `+1,000.00 HMT` one-time bonus for `prosumer`, `producer`, and `trainer` accounts.
+     - `daily_testing_faucet`: `+250.00 HMT` rolling-24h refill when an account's balance drops below `500.00 HMT`.
+     - `vxtzq_crowd_v1_creator_bonus`: tops verified `vxtzq` accounts up to `100,000.00 HMT`.
+   - Every bonus is minted exclusively through `RouterStore._append(..., kind="grant")` preserving `sum(balances) == total_minted()` and `verify_chain() == True`.

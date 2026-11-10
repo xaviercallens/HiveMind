@@ -1034,7 +1034,7 @@ class FP8PagedKVCache:
 
 
 def _install_router_on_blocks(moe_model: UpcycledSparseMoEModel, make_router) -> None:
-    if not isinstance(moe_model, UpcycledSparseMoEModel) or not callable(make_router):
+    if not hasattr(moe_model, "moe_blocks") or not callable(make_router):
         raise ValueError("moe_model must be an UpcycledSparseMoEModel and make_router must be callable")
     for block in moe_model.moe_blocks:
         dev = next(block.router.parameters()).device
@@ -1043,7 +1043,7 @@ def _install_router_on_blocks(moe_model: UpcycledSparseMoEModel, make_router) ->
 
 def _footprint_report(moe_model: UpcycledSparseMoEModel, vram_ceiling_gb: float) -> Dict[str, Any]:
     """Parameter-byte footprint, plus live CUDA allocation only when CUDA is actually in use."""
-    if not isinstance(moe_model, UpcycledSparseMoEModel):
+    if not callable(getattr(moe_model, "parameters", None)):
         raise ValueError("moe_model must be an UpcycledSparseMoEModel")
     if (
         isinstance(vram_ceiling_gb, bool)

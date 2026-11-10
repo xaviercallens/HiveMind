@@ -154,6 +154,29 @@ class CGADStepTelemetry:
     staleness_bias_bound: float
     step_linf_norm: float
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.fragment_name, str) or not self.fragment_name.strip():
+            raise ValueError("fragment_name must be a non-empty string")
+        if not isinstance(self.dropped_by_cutoff, bool):
+            raise TypeError("dropped_by_cutoff must be a bool")
+        for f_name in (
+            "worker_delay_tau",
+            "fragment_age_rounds",
+            "effective_tau",
+            "cosine_gate_gamma",
+            "decay_gate_sigma",
+            "staleness_bias_bound",
+            "step_linf_norm",
+        ):
+            fval = getattr(self, f_name)
+            if (
+                isinstance(fval, bool)
+                or not isinstance(fval, (int, float))
+                or not math.isfinite(float(fval))
+                or float(fval) < 0.0
+            ):
+                raise ValueError(f"{f_name} must be a non-negative finite number")
+
 
 class CosineGatedAdamDecayOuterOptimizer:
     """SI-06: Cosine-Gated Adam-Decay (`CGAD` / `PA-CGAD`, `arXiv:2605.09126`).

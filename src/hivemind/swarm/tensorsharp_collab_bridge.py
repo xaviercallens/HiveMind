@@ -389,6 +389,33 @@ class TensorSharpMoEOffloadPlan:
         "PCIe generation, quantization, and MAX_CONTEXT."
     )
 
+    def __post_init__(self) -> None:
+        for str_name in ("model_id", "v1_models_id", "gpu_name", "compute_capability"):
+            sval = getattr(self, str_name)
+            if not isinstance(sval, str) or not sval.strip():
+                raise ValueError(f"{str_name} must be a non-empty string")
+        for pos_int_name in ("total_vram_mib", "total_moe_layers"):
+            ival = getattr(self, pos_int_name)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 1:
+                raise ValueError(f"{pos_int_name} must be an integer >= 1")
+        for nonneg_int_name in (
+            "reserved_free_vram_mib",
+            "usable_vram_mib",
+            "n_cpu_moe_layers",
+            "estimated_peak_vram_mib",
+        ):
+            ival = getattr(self, nonneg_int_name)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 0:
+                raise ValueError(f"{nonneg_int_name} must be a non-negative integer")
+        for f_name in ("estimated_pp8192_tok_s", "estimated_tg128_tok_s"):
+            fval = getattr(self, f_name)
+            if isinstance(fval, bool) or not isinstance(fval, (int, float)) or not math.isfinite(float(fval)) or float(fval) <= 0.0:
+                raise ValueError(f"{f_name} must be a positive finite number")
+        if not isinstance(self.fits_vram_budget, bool) or not isinstance(self.is_interpolated_estimate, bool):
+            raise TypeError("fits_vram_budget and is_interpolated_estimate must be bools")
+        if not isinstance(self.cli_flags, list) or any(not isinstance(flag, str) for flag in self.cli_flags):
+            raise TypeError("cli_flags must be a list of strings")
+
     @property
     def expected_pp8192_tok_s(self) -> float:
         """Backward-compatible alias for `estimated_pp8192_tok_s`."""

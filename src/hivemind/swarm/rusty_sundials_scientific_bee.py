@@ -99,6 +99,35 @@ class PhysicalMathematicalDiagnosis:
     recommended_solver_scheme: str
     lean4_reference_theorem: str
 
+    def __post_init__(self) -> None:
+        for str_name in (
+            "domain",
+            "problem_subtype",
+            "equation_class",
+            "underlying_mathematics",
+            "underlying_physics",
+            "naive_failure_mechanism",
+            "recommended_rusty_sundials_crate",
+            "recommended_solver_scheme",
+            "lean4_reference_theorem",
+        ):
+            sval = getattr(self, str_name)
+            if not isinstance(sval, str) or not sval.strip():
+                raise ValueError(f"{str_name} must be a non-empty string")
+        if (
+            isinstance(self.stiffness_ratio_estimate, bool)
+            or not isinstance(self.stiffness_ratio_estimate, (int, float))
+            or not math.isfinite(float(self.stiffness_ratio_estimate))
+            or float(self.stiffness_ratio_estimate) < 0.0
+        ):
+            raise ValueError("stiffness_ratio_estimate must be a non-negative finite number")
+        if not isinstance(self.is_stiff, bool):
+            raise TypeError("is_stiff must be a bool")
+        if not isinstance(self.conserved_invariants, list) or any(
+            not isinstance(inv, str) or not inv.strip() for inv in self.conserved_invariants
+        ):
+            raise ValueError("conserved_invariants must be a list of non-empty strings")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -123,6 +152,34 @@ class NumericRescueResult:
     sample_trajectory: list[dict[str, float]]
     rust_reference_snippet: str
     energy_score_e: float
+
+    def __post_init__(self) -> None:
+        for str_name in (
+            "domain",
+            "naive_scheme_name",
+            "naive_failure_reason",
+            "rescued_scheme_name",
+            "rust_reference_snippet",
+        ):
+            sval = getattr(self, str_name)
+            if not isinstance(sval, str) or not sval.strip():
+                raise ValueError(f"{str_name} must be a non-empty string")
+        if not isinstance(self.diagnosis, PhysicalMathematicalDiagnosis):
+            raise TypeError("diagnosis must be a PhysicalMathematicalDiagnosis")
+        if isinstance(self.steps_executed, bool) or not isinstance(self.steps_executed, int) or self.steps_executed < 1:
+            raise ValueError("steps_executed must be an integer >= 1")
+        if isinstance(self.dt, bool) or not isinstance(self.dt, (int, float)) or not math.isfinite(float(self.dt)) or float(self.dt) <= 0.0:
+            raise ValueError("dt must be a positive finite number")
+        if not isinstance(self.naive_failed, bool) or not isinstance(self.rescued_succeeded, bool):
+            raise TypeError("naive_failed and rescued_succeeded must be bools")
+        for f_name in ("naive_invariant_drift", "rescued_invariant_drift", "improvement_factor", "energy_score_e"):
+            fval = getattr(self, f_name)
+            if isinstance(fval, bool) or not isinstance(fval, (int, float)) or float(fval) < 0.0 or math.isnan(float(fval)):
+                raise ValueError(f"{f_name} must be a non-negative number")
+        if not isinstance(self.invariants_verified, dict):
+            raise TypeError("invariants_verified must be a dict")
+        if not isinstance(self.sample_trajectory, list):
+            raise TypeError("sample_trajectory must be a list")
 
     def to_dict(self) -> dict[str, Any]:
         out = asdict(self)

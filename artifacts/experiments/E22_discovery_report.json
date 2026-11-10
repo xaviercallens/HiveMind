@@ -1,4 +1,8 @@
 {
+  "evidence": "simulated",
+  "not_a_measurement": true,
+  "evidence_note": "an in-memory list stands in for the DHT; no pre-registration for its thresholds",
+  "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md",
   "schema": "hivemind.e22_discovery_report.v1",
   "experiment_id": "E22",
   "deliverable_id": "PS-07-D2",

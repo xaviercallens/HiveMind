@@ -96,6 +96,9 @@ CHAIN_BASE_MODEL_SPECS: tuple[dict[str, Any], ...] = (
 )
 
 
+EVIDENCE_LABEL = {"evidence": "placeholder", "not_a_measurement": True, "evidence_note": "no mirror directory exists; most hashes are of a description, not of the weights", "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md"}  # this generator does not measure; see the audit
+
+
 def _slug_for_model(model_id: str) -> str:
     return model_id.replace("/", "--")
 
@@ -266,7 +269,7 @@ def main(argv: list[str] | None = None) -> int:
 
     receipt = build_base_weights_mirror_receipt()
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(receipt, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+    args.out.write_text(json.dumps({**EVIDENCE_LABEL, **receipt}, indent=2, sort_keys=False) + "\n", encoding="utf-8")
     if receipt["violations"]:
         print(json.dumps({"ok": False, "violations": receipt["violations"], "out": str(args.out)}), file=sys.stderr)
         return 1

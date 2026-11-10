@@ -30,6 +30,9 @@ from hivemind.swarm.identity_bridge import (
 )
 
 
+EVIDENCE_LABEL = {"evidence": "placeholder", "not_a_measurement": True, "evidence_note": "weekly entries are literals; no liveness check was run on those dates", "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md"}  # this generator does not measure; see the audit
+
+
 def build_petals_liveness_receipt() -> dict[str, Any]:
     verified_vectors = 0
     for vec in SHARED_ED25519_VC_TEST_VECTORS:
@@ -101,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
 
     receipt = build_petals_liveness_receipt()
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+    args.out.write_text(json.dumps({**EVIDENCE_LABEL, **receipt}, indent=2) + "\n", encoding="utf-8")
     if not receipt["all_weeks_live"]:
         return 1
     print(

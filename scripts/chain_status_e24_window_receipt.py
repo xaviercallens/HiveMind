@@ -25,6 +25,9 @@ DEFAULT_OUT = REPO_ROOT / "artifacts" / "experiments" / "CHAIN_STATUS_2026-11-08
 DOMAINS = ("math", "python", "rust", "sql", "cybersec", "general_reasoning")
 
 
+EVIDENCE_LABEL = {"evidence": "simulated", "not_a_measurement": True, "evidence_note": "rounds produced by a formula; they appear in no ledger", "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md"}  # this generator does not measure; see the audit
+
+
 def compute_window_metrics(rounds: list[dict[str, Any]]) -> dict[str, Any]:
     """Compute per-domain held-out delta statistics over a sequence of chain rounds."""
     all_deltas: list[float] = []
@@ -145,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     receipt = build_chain_status_receipt()
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+    args.out.write_text(json.dumps({**EVIDENCE_LABEL, **receipt}, indent=2) + "\n", encoding="utf-8")
     print(
         json.dumps(
             {

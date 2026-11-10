@@ -152,6 +152,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help="Output JSON receipt path")
     args = parser.parse_args(argv)
     receipt = build_accounts_receipt(args.db)
+    measured = receipt.get("source_status") == "measured_sqlite"
+    receipt = {"evidence": "measured" if measured else "placeholder", "not_a_measurement": not measured, **receipt}
     serialized = json.dumps(receipt, indent=2) + "\n"
     assert_zero_personal_data(serialized)
     args.out.parent.mkdir(parents=True, exist_ok=True)

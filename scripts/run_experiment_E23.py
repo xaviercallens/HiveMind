@@ -33,6 +33,9 @@ MAX_STATE_LOSS_RATE = 0.0
 MAX_POST_DEDUP_DUPLICATES = 0
 
 
+EVIDENCE_LABEL = {"evidence": "simulated", "not_a_measurement": True, "evidence_note": "in-process bees; no Kafka; the state hash compares the same bytes", "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md"}  # this generator does not measure; see the audit
+
+
 def _run_mobility_scale(num_bees: int, *, duplicate_injection_rate: float = 0.10) -> dict[str, Any]:
     """Run migrate + replicate state handoff across `num_bees` bees with at-least-once retry injection."""
     latencies_ms: list[float] = []
@@ -137,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
 
     report = build_e23_report()
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    args.out.write_text(json.dumps({**EVIDENCE_LABEL, **report}, indent=2) + "\n", encoding="utf-8")
     if not report["passes_all_scales"]:
         return 1
     print(

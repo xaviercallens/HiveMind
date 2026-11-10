@@ -27,6 +27,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUT = REPO_ROOT / "artifacts" / "experiments" / "PROV86_CHAIN_PROVENANCE_LOCK_2026-11-08.json"
 
 
+EVIDENCE_LABEL = {"evidence": "placeholder", "not_a_measurement": True, "evidence_note": "the check reads keys absent from the peer-review report and passes on its defaults", "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md"}  # this generator does not measure; see the audit
+
+
 def verify_prov86_chain_lock(
     chain_status_path: Path | None = None,
     e24_report_path: Path | None = None,
@@ -116,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     report = verify_prov86_chain_lock()
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    args.out.write_text(json.dumps({**EVIDENCE_LABEL, **report}, indent=2) + "\n", encoding="utf-8")
     print(
         json.dumps(
             {

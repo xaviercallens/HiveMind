@@ -27,6 +27,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUT = REPO_ROOT / "artifacts" / "experiments" / "NODE_EGRESS_2026-11-07.json"
 
 
+EVIDENCE_LABEL = {"evidence": "modelled", "not_a_measurement": True, "evidence_note": "bytes computed from synthetic payloads and assumed event rates, not counted on a node", "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md"}  # this generator does not measure; see the audit
+
+
 def _measure_producer_agent_egress() -> dict[str, Any]:
     heartbeat_payload = {
         "endpoint": "https://producer-tunnel.example.run.app",
@@ -210,7 +213,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     receipt = build_node_egress_receipt()
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+    args.out.write_text(json.dumps({**EVIDENCE_LABEL, **receipt}, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(receipt, indent=2))
     return 0 if receipt["all_within_budget"] else 1
 

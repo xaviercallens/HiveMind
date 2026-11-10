@@ -35,6 +35,9 @@ DEFAULT_OUT = REPO_ROOT / "artifacts" / "experiments" / "E24_chain_regression_re
 CORE_DOMAINS = ("general", "french", "edu_web", "news", "biomed", "math")
 
 
+EVIDENCE_LABEL = {"evidence": "simulated", "not_a_measurement": True, "evidence_note": "seeded simulator; each arm's effect is chosen in the generator, not measured on the chain", "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md"}  # this generator does not measure; see the audit
+
+
 def _simulate_20_round_domain_trajectory(
     *,
     arm_id: str,
@@ -154,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
 
     report = build_e24_report()
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    args.out.write_text(json.dumps({**EVIDENCE_LABEL, **report}, indent=2) + "\n", encoding="utf-8")
     print(
         json.dumps(
             {

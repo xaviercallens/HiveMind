@@ -1,4 +1,8 @@
 {
+  "evidence": "simulated",
+  "not_a_measurement": true,
+  "evidence_note": "existing checkout against a localhost stub with VRAM passed as an argument; not a clean machine",
+  "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md",
   "schema": "hivemind.trainer_install_smoke_receipt.v1",
   "deliverable_id": "PS-04-D1",
   "generated_at_utc": "2026-11-07T22:46:28Z",

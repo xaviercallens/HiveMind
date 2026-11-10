@@ -231,6 +231,10 @@ def _real_sizer(bundle: Any) -> int:  # pragma: no cover - needs a GPU stack
 
 def _make_validator(cache: ModelCache, on_spec: Callable[[Hashable, dict[str, Any]], None] | None = None) -> Any:
     """A ``MoEValidator`` whose model is taken from ``cache`` (and pinned while in use) instead of being loaded per process."""
+    if not isinstance(cache, ModelCache):
+        raise TypeError("cache must be a ModelCache")
+    if on_spec is not None and not callable(on_spec):
+        raise TypeError("on_spec must be callable or None")
     from hivemind.boinc.real_client.moe_bridge import MoEValidator
 
     class CachedMoEValidator(MoEValidator):
@@ -253,6 +257,10 @@ def _make_validator(cache: ModelCache, on_spec: Callable[[Hashable, dict[str, An
 
 def default_cache(max_entries: int = 1, max_bytes: int | None = None) -> ModelCache:  # pragma: no cover - needs a GPU stack
     """Cache backed by the real loader; the spec is recovered from a side table filled by the validator."""
+    if isinstance(max_entries, bool) or not isinstance(max_entries, int) or max_entries < 1:
+        raise ValueError("max_entries must be >= 1")
+    if max_bytes is not None and (isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 1):
+        raise ValueError("max_bytes must be a positive integer when provided")
     holder: dict[Hashable, dict[str, Any]] = {}
 
     def loader(key: Hashable) -> Any:
@@ -532,6 +540,10 @@ class ResidentValidatorClient:
 def forward_validate(socket_path: str, args: list[str]) -> int | None:
     """Ask a resident server to validate ``args`` (the ``hivemind_validate`` arguments). Returns its exit status, or ``None`` after
     a single warning line when the server is unreachable or fails, so the caller falls back to the one-shot path."""
+    if not isinstance(socket_path, str) or not socket_path.strip():
+        raise ValueError("socket_path must be a non-empty string")
+    if not isinstance(args, list) or any(not isinstance(a, str) for a in args):
+        raise ValueError("args must be a list of strings")
     try:
         resp = ResidentValidatorClient(socket_path, float(os.environ.get("HIVEMIND_RESIDENT_TIMEOUT_S", DEFAULT_REQUEST_TIMEOUT_S + 60.0))).validate(args)
     except (OSError, ProtocolError) as exc:

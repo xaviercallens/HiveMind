@@ -146,6 +146,8 @@ def _throughput_mbps(payload_bytes: int, elapsed_s: float) -> float:
 
 def _unused_udp_port(host: str = "127.0.0.1") -> int:
     """A UDP port nothing listens on (used to force the WebSocket fallback)."""
+    if not isinstance(host, str) or not host.strip():
+        raise ValueError("host must be a non-empty string")
     probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         probe.bind((host, 0))
@@ -387,8 +389,10 @@ def _envelope_frames(count: int, payload_bytes: int) -> List[bytes]:
 
 def _decode_latency(payload: bytes) -> Optional[float]:
     """The delivery latency of a timestamped payload, or `None` when it is not one."""
+    if not isinstance(payload, (bytes, bytearray)):
+        raise TypeError("payload must be bytes")
     try:
-        envelope = FrameEnvelope.decode(payload)
+        envelope = FrameEnvelope.decode(bytes(payload))
     except (LinkProtocolError, TypeError):
         return None
     return (time.time() - envelope.sent_at) * 1000.0
@@ -409,6 +413,14 @@ async def _run_quic_leg(
     remote receiver (multi-host mode) only the sender side can be observed, so the batch
     acknowledgement latency is reported instead.
     """
+    if not isinstance(scenario, FaultScenario):
+        raise TypeError("scenario must be a FaultScenario")
+    if not isinstance(strike, StrikeRegister):
+        raise TypeError("strike must be a StrikeRegister")
+    if proxy is None or not hasattr(proxy, "client_address") or not callable(getattr(proxy, "stats", None)):
+        raise TypeError("proxy must be a DeterministicFaultProxy")
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(float(timeout)) or float(timeout) <= 0.0:
+        raise ValueError("timeout must be a finite positive number")
     identity = server.identity if server is not None else None
     if ca_pem is None:
         ca_pem = identity.ca_pem
@@ -569,6 +581,19 @@ def _relay_frames(
     channel: bool = False,
 ) -> List[float]:
     """Relay `scenario.frames` payloads and return the per-frame delivery latency."""
+    if (
+        sender is None
+        or receiver is None
+        or not (callable(getattr(sender, "send_to", None)) or callable(getattr(sender, "send_channel", None)))
+        or not callable(getattr(receiver, "recv_from", None))
+    ):
+        raise TypeError("sender and receiver must be TurnClient instances")
+    if not isinstance(scenario, FaultScenario):
+        raise TypeError("scenario must be a FaultScenario")
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(float(timeout)) or float(timeout) <= 0.0:
+        raise ValueError("timeout must be a finite positive number")
+    if not isinstance(channel, bool):
+        raise TypeError("channel must be a boolean")
     payloads = _envelope_frames(scenario.frames, scenario.frame_bytes)
     for payload in payloads:
         if channel:
@@ -599,6 +624,12 @@ def _run_turn_leg(
     Without `endpoints` the relay runs locally; with a remote TURN server the same suite
     measures a real multi-host relay path.
     """
+    if not isinstance(scenario, FaultScenario):
+        raise TypeError("scenario must be a FaultScenario")
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(float(timeout)) or float(timeout) <= 0.0:
+        raise ValueError("timeout must be a finite positive number")
+    if endpoints is not None and not (hasattr(endpoints, "has_turn") or hasattr(endpoints, "has_quic")):
+        raise TypeError("endpoints must be an ExternalEndpoints or None")
     endpoints = endpoints if endpoints is not None else ExternalEndpoints()
     started = time.perf_counter()
     with ExitStack() as stack:
@@ -764,6 +795,21 @@ async def _run_websocket_leg(
     fallback_timeout: float = 0.5,
 ) -> Dict[str, Any]:
     """Measure the libp2p WebSocket fallback of `quic_link`."""
+    if not isinstance(scenario, FaultScenario):
+        raise TypeError("scenario must be a FaultScenario")
+    if not isinstance(ca_pem, str) or not ca_pem.strip():
+        raise ValueError("ca_pem must be a non-empty string")
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(float(timeout))
+        or float(timeout) <= 0.0
+        or isinstance(fallback_timeout, bool)
+        or not isinstance(fallback_timeout, (int, float))
+        or not math.isfinite(float(fallback_timeout))
+        or float(fallback_timeout) <= 0.0
+    ):
+        raise ValueError("timeout and fallback_timeout must be finite positive numbers")
     delivered: List[float] = []
 
     def on_frame(frame: bytes) -> None:
@@ -865,6 +911,17 @@ def _bbr_pacing(
     `frames_sent`, `frames_delivered`); the controller is fed leg by leg, so the report
     shows how the pacing window adapts while the benchmark walks the transports.
     """
+    if isinstance(samples, (str, bytes)) or not isinstance(samples, Sequence):
+        raise TypeError("samples must be a sequence of dicts")
+    if (
+        isinstance(frames_sent, bool)
+        or not isinstance(frames_sent, int)
+        or frames_sent < 0
+        or isinstance(frames_delivered, bool)
+        or not isinstance(frames_delivered, int)
+        or frames_delivered < 0
+    ):
+        raise ValueError("frames_sent and frames_delivered must be non-negative integers")
     from hivemind.swarm.quic_transport import AdaptiveCongestionController
 
     controller = AdaptiveCongestionController()
@@ -907,6 +964,12 @@ async def run_fault_scenario(
     endpoints: Optional[ExternalEndpoints] = None,
 ) -> Dict[str, Any]:
     """Run every transport leg of one fault profile and return its telemetry."""
+    if not isinstance(scenario, FaultScenario):
+        raise TypeError("scenario must be a FaultScenario")
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(float(timeout)) or float(timeout) <= 0.0:
+        raise ValueError("timeout must be a finite positive number")
+    if endpoints is not None and not (hasattr(endpoints, "has_turn") or hasattr(endpoints, "has_quic")):
+        raise TypeError("endpoints must be an ExternalEndpoints or None")
     endpoints = endpoints if endpoints is not None else ExternalEndpoints()
     strike = StrikeRegister()
     identity = LinkIdentity.generate()
@@ -983,8 +1046,14 @@ async def run_wan_quic_turn_fault_benchmark(
     endpoints: Optional[ExternalEndpoints] = None,
 ) -> Dict[str, Any]:
     """Run the whole benchmark and return the structured telemetry report."""
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(float(timeout)) or float(timeout) <= 0.0:
+        raise ValueError("timeout must be a finite positive number")
     if scenarios is None:
         scenarios = default_scenarios()
+    elif isinstance(scenarios, (str, bytes)) or not isinstance(scenarios, Sequence) or not all(isinstance(s, FaultScenario) for s in scenarios):
+        raise TypeError("scenarios must be a sequence of FaultScenario instances")
+    if endpoints is not None and not (hasattr(endpoints, "has_turn") or hasattr(endpoints, "has_quic")):
+        raise TypeError("endpoints must be an ExternalEndpoints or None")
     endpoints = endpoints if endpoints is not None else ExternalEndpoints.from_environment()
     results: List[Dict[str, Any]] = []
     for scenario in scenarios:
@@ -1040,6 +1109,8 @@ async def run_wan_quic_turn_fault_benchmark(
 
 def _pacing_adaptation(results: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     """Compare the BBRv1 window of the clean path with the most impaired one."""
+    if isinstance(results, (str, bytes)) or not isinstance(results, Sequence):
+        raise TypeError("results must be a sequence of dicts")
     if not results:
         return {}
     baseline = results[0].get("bbr_v1_pacing", {})
@@ -1086,6 +1157,8 @@ def report_path(root: Optional[Path] = None) -> Path:
 
 def write_fault_report(report: Dict[str, Any], path: Optional[Path] = None) -> Path:
     """Write the telemetry report as JSON and return the path it was written to."""
+    if not isinstance(report, dict):
+        raise TypeError("report must be a dict")
     target = Path(path) if path is not None else report_path()
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(report, indent=2, sort_keys=False) + "\n", encoding="utf-8")

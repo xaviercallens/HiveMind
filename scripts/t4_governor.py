@@ -18,6 +18,7 @@ import json
 import os
 import signal
 import subprocess
+import sys
 import time
 import urllib.request
 from pathlib import Path
@@ -38,6 +39,34 @@ def nginx_status(url: str) -> dict[str, int]:
 
 
 globals()["stub_" + "status"] = nginx_status
+
+
+T4_FREE_FLOOR_MIB = 4300  # AGENTS.md: always keep >= 4,300 MiB free on the Tesla T4; a rule for that card, not a tuning knob
+
+
+def gpu_name() -> str | None:
+    """The first GPU's name from nvidia-smi, or None when it cannot be read."""
+    try:
+        out = subprocess.run(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], capture_output=True, text=True, timeout=10, check=False)
+        if out.returncode == 0 and out.stdout.strip():
+            return out.stdout.strip().splitlines()[0].strip()
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def t4_floor_refusal(min_free_mib: float, name: str | None) -> str | None:
+    """Why a floor below 4,300 MiB is refused here, or None if it is allowed.
+
+    The rule covers the Tesla T4. A GPU that cannot be identified is treated as a T4 (fail closed); any other card keeps the
+    floor its owner set (the volunteer kit sets one per profile)."""
+    if min_free_mib >= T4_FREE_FLOOR_MIB:
+        return None
+    if name is None:
+        return f"cannot identify the GPU, and a free-VRAM floor of {min_free_mib:.0f} MiB is below the T4 rule of {T4_FREE_FLOOR_MIB} MiB"
+    if "T4" in name.upper().split() or "TESLA T4" in name.upper():
+        return f"a free-VRAM floor of {min_free_mib:.0f} MiB on a {name} is below the AGENTS.md rule of {T4_FREE_FLOOR_MIB} MiB"
+    return None
 
 
 def gpu_state() -> dict:
@@ -289,6 +318,14 @@ def main() -> int:
     a = ap.parse_args()
     a.telemetry.parent.mkdir(parents=True, exist_ok=True)
     boinc = Boinc(a.boinccmd, a.lib, a.rpc_port, a.boinc_dir, a.dry_run)
+    refusal = t4_floor_refusal(a.min_free_mib, gpu_name())
+    if refusal is not None:
+        # training stays OFF and the governor does not run: a lowered floor on the T4 is a policy breach, not a setting
+        boinc.set_gpu("never")
+        with open(a.telemetry, "a") as f:
+            f.write(json.dumps({"event": "refused", "reason": refusal, "min_free_mib": a.min_free_mib, "t": round(time.time(), 2)}) + "\n")
+        print(f"refused: {refusal}", file=sys.stderr)
+        return 2
     stop = {"now": False}
     signal.signal(signal.SIGTERM, lambda *_: stop.update(now=True))
     signal.signal(signal.SIGINT, lambda *_: stop.update(now=True))

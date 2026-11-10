@@ -41,6 +41,21 @@ class GWAYACandidateAudit:
     verdict: str  # "VERIFIED" | "ABSTAIN_REPAIR" | "UNVERIFIED_MAX_PAIN"
     violations: tuple[str, ...]
 
+    def __post_init__(self) -> None:
+        for b_field in ("is_ast_clean", "passed_public_test", "passed_hidden_tests"):
+            if not isinstance(getattr(self, b_field), bool):
+                raise ValueError(f"{b_field} must be a boolean")
+        for p_field in ("laya_calibrated_score", "raw_logprob_confidence"):
+            val = getattr(self, p_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or not (0.0 <= float(val) <= 1.0):
+                raise ValueError(f"{p_field} must be a finite number in [0.0, 1.0]")
+        if isinstance(self.anse_energy, bool) or not isinstance(self.anse_energy, (int, float)) or not math.isfinite(float(self.anse_energy)) or float(self.anse_energy) < 0.0:
+            raise ValueError("anse_energy must be a finite non-negative number")
+        if self.verdict not in ("VERIFIED", "ABSTAIN_REPAIR", "UNVERIFIED_MAX_PAIN"):
+            raise ValueError("verdict must be 'VERIFIED', 'ABSTAIN_REPAIR', or 'UNVERIFIED_MAX_PAIN'")
+        if not isinstance(self.violations, tuple) or not all(isinstance(v, str) and bool(v.strip()) for v in self.violations):
+            raise ValueError("violations must be a tuple of non-empty strings")
+
 
 @dataclass(frozen=True)
 class GWAYAA3RepairReport:
@@ -52,6 +67,19 @@ class GWAYAA3RepairReport:
     final_energy: float
     selected_code: str
     audit_trail: tuple[GWAYACandidateAudit, ...]
+
+    def __post_init__(self) -> None:
+        for b_field in ("initial_a0_passed", "final_a3_passed"):
+            if not isinstance(getattr(self, b_field), bool):
+                raise ValueError(f"{b_field} must be a boolean")
+        if isinstance(self.rounds_used, bool) or not isinstance(self.rounds_used, int) or self.rounds_used < 1:
+            raise ValueError("rounds_used must be an integer >= 1")
+        if isinstance(self.final_energy, bool) or not isinstance(self.final_energy, (int, float)) or not math.isfinite(float(self.final_energy)) or float(self.final_energy) < 0.0:
+            raise ValueError("final_energy must be a finite non-negative number")
+        if not isinstance(self.selected_code, str):
+            raise ValueError("selected_code must be a string")
+        if not isinstance(self.audit_trail, tuple) or len(self.audit_trail) == 0 or not all(isinstance(a, GWAYACandidateAudit) for a in self.audit_trail):
+            raise ValueError("audit_trail must be a non-empty tuple of GWAYACandidateAudit instances")
 
 
 def _param_names(args: ast.arguments) -> set[str]:

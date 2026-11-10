@@ -24,6 +24,8 @@ SUBJECT = "Reset your HiveMind password"
 
 
 def _env(env: Mapping[str, str] | None) -> Mapping[str, str]:
+    if env is not None and not isinstance(env, Mapping):
+        raise TypeError("env must be None or a Mapping")
     return os.environ if env is None else env
 
 

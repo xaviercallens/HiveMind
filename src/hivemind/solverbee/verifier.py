@@ -176,7 +176,13 @@ def _dimension(spec: dict) -> int:
 
 def _validate_trajectory(res: dict, spec: dict, what: str) -> None:
     """Shared structural validation of a result against its spec."""
-    t_out = spec["t_out"]
+    if not isinstance(res, dict) or not isinstance(spec, dict):
+        raise _CheckError("res and spec must be dicts")
+    if not isinstance(what, str) or not what.strip():
+        raise _CheckError("what must be a non-empty string")
+    t_out = spec.get("t_out")
+    if not isinstance(t_out, list):
+        raise _CheckError(f"{what}: spec t_out must be a list")
     n = _dimension(spec)
     if res.get("schema") != RESULT_SCHEMA:
         raise _CheckError(f"{what}: schema is not {RESULT_SCHEMA}")
@@ -227,6 +233,10 @@ DEFAULT_ATOL = 1e-10
 
 
 def _tolerances(spec: dict, n: int) -> tuple[float, list[float]]:
+    if not isinstance(spec, dict):
+        raise _CheckError("spec must be a dict")
+    if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+        raise _CheckError("n must be a positive integer")
     rtol = spec.get("rtol", DEFAULT_RTOL)
     atol = spec.get("atol", DEFAULT_ATOL)
     if not _finite(rtol) or rtol <= 0 or float(rtol) > 1.0:
@@ -319,15 +329,21 @@ def _quad(m, x) -> float:
 
 
 def _inv_linear(inv, spec, x):
+    if not isinstance(inv, dict) or not isinstance(spec, dict) or not isinstance(x, list) or len(x) == 0 or not all(_finite(v) for v in x):
+        raise _CheckError("inv and spec must be dicts and x must be a non-empty list of finite numbers")
     w = _vec(inv, "weights", len(x))
     return sum(a * b for a, b in zip(w, x))
 
 
 def _inv_quadratic_form(inv, spec, x):
+    if not isinstance(inv, dict) or not isinstance(spec, dict) or not isinstance(x, list) or len(x) == 0 or not all(_finite(v) for v in x):
+        raise _CheckError("inv and spec must be dicts and x must be a non-empty list of finite numbers")
     return _quad(_mat(inv, len(x)), x)
 
 
 def _inv_energy(inv, spec, x):
+    if not isinstance(inv, dict) or not isinstance(spec, dict) or not isinstance(x, list) or len(x) == 0 or not all(_finite(v) for v in x):
+        raise _CheckError("inv and spec must be dicts and x must be a non-empty list of finite numbers")
     if "model" in inv:
         model = inv.get("model")
         inv_params = inv.get("params")
@@ -365,6 +381,8 @@ def _inv_energy(inv, spec, x):
 
 
 def _inv_lv_first_integral(inv, spec, x):
+    if not isinstance(inv, dict) or not isinstance(spec, dict) or not isinstance(x, list) or not all(_finite(v) for v in x):
+        raise _CheckError("inv and spec must be dicts and x must be a list of finite numbers")
     # x' = alpha x - beta x y ; y' = delta x y - gamma y ; V = delta x - gamma ln x + beta y - alpha ln y
     if len(x) != 2:
         raise _CheckError("lv_first_integral needs 2 species")
@@ -402,11 +420,17 @@ _INVARIANT_KINDS: dict[str, Callable[[dict, dict, list], float]] = {
 
 
 def _check_invariants(spec: dict, result: dict, problem: dict | None) -> dict:
-    invs = (problem or {}).get("invariants") or []
-    if not invs:
+    if not isinstance(spec, dict) or not isinstance(result, dict) or (problem is not None and not isinstance(problem, dict)):
+        raise _CheckError("spec and result must be dicts and problem must be a dict or None")
+    invs = (problem or {}).get("invariants")
+    if invs is None or invs == []:
         return _chk("invariants", "skip", "no invariants defined")
+    if not isinstance(invs, list):
+        raise _CheckError("problem invariants must be a list")
     worst, worst_name = 0.0, ""
     for inv in invs:
+        if not isinstance(inv, dict):
+            raise _CheckError("each invariant must be an object")
         kind = inv.get("kind")
         fn = _INVARIANT_KINDS.get(kind)
         if fn is None:

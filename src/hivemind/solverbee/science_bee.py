@@ -958,6 +958,8 @@ _TIME_MARK = re.compile(r"(?:\bt\s*=|\bat times?\b|\bat\b|\bafter\b|\bà\b|\baux
 
 
 def _times(text: str) -> Optional[List[float]]:
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
     sentences = re.split(r"(?<=[.?!])\s+", text.strip())
     for s in reversed(sentences):
         marks = list(_TIME_MARK.finditer(s))
@@ -970,6 +972,10 @@ def _times(text: str) -> Optional[List[float]]:
 
 
 def _increasing(ts: Optional[List[float]]) -> Optional[List[float]]:
+    if ts is None:
+        return None
+    if not isinstance(ts, list) or not all(_is_num(x) for x in ts):
+        raise ValueError("ts must be a list of finite numbers or None")
     if not ts or any(b <= a for a, b in zip(ts, ts[1:])) or ts[0] <= 0:
         return None
     return ts
@@ -1058,6 +1064,8 @@ class BaselineBackend(Backend):
     name = "baseline"
 
     def complete(self, messages: List[Dict[str, str]]) -> str:
+        if not isinstance(messages, list) or not messages or not isinstance(messages[-1], dict) or not isinstance(messages[-1].get("content"), str):
+            raise BackendError("messages must be a non-empty list of role/content dicts")
         text = messages[-1]["content"]
         m = re.search(r"<<<\n(.*?)\n>>>", text, re.DOTALL)
         spec = baseline_formulate(m.group(1) if m else text)
@@ -1094,6 +1102,8 @@ _SLOT_TIME_MARK = re.compile(
 
 
 def _slot_times(text: str) -> Optional[List[float]]:
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
     m_grid = re.search(
         r"(?:over|simulate|pendant|sur)\s+(" + _NUM + r")\s*(?:seconds?|days?|minutes?|s|d|min)\b.*?\((\d+)\s*points?\)",
         text,
@@ -1456,6 +1466,8 @@ class SlotBackend(Backend):
     name = "slot"
 
     def complete(self, messages: List[Dict[str, str]]) -> str:
+        if not isinstance(messages, list) or not messages or not isinstance(messages[-1], dict) or not isinstance(messages[-1].get("content"), str):
+            raise BackendError("messages must be a non-empty list of role/content dicts")
         text = messages[-1]["content"]
         m = re.search(r"<<<\n(.*?)\n>>>", text, re.DOTALL)
         slot_obj = slot_formulate(m.group(1) if m else text)

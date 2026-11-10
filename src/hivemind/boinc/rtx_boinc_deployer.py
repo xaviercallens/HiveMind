@@ -1280,6 +1280,16 @@ def run_rtx_boinc_client_cycle(
     device: str = "auto",
 ) -> dict[str, Any]:
     """Lease one workunit from the RTX BOINC server over HTTP(S), execute on the RTX GPU, and submit."""
+    if not isinstance(server_url, str) or not server_url.strip().startswith(("http://", "https://")):
+        raise ValueError("server_url must be a non-empty http:// or https:// URL")
+    if not isinstance(handle, str) or not handle.strip():
+        raise ValueError("handle must be a non-empty string")
+    if node_id is not None and (not isinstance(node_id, str) or not node_id.strip()):
+        raise ValueError("node_id must be None or a non-empty string")
+    if preferred_domain is not None and (not isinstance(preferred_domain, str) or not preferred_domain.strip()):
+        raise ValueError("preferred_domain must be None or a non-empty string")
+    if not isinstance(device, str) or not device.strip():
+        raise ValueError("device must be a non-empty string")
     prof = detect_rtx_boinc_profile()
     resolved_node_id = node_id or f"rtx-{platform.node() or 'node'}-{prof.plan_class}"
     base = server_url.rstrip("/")

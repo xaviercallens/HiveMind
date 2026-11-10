@@ -118,6 +118,18 @@ def cosine_segment_lr(
 
 def load_peft_model(spec: dict[str, Any], adapter_state: dict[str, Any] | None = None):
     """NF4 attention + fp32 LoRA, deterministic init from ``spec['init_seed']``."""
+    if not isinstance(spec, dict):
+        raise TypeError("spec must be a dict")
+    if not isinstance(spec.get("model_id"), str) or not spec["model_id"].strip():
+        raise ValueError("spec['model_id'] must be a non-empty string")
+    if isinstance(spec.get("init_seed"), bool) or not isinstance(spec.get("init_seed"), int):
+        raise ValueError("spec['init_seed'] must be an integer")
+    for iname in ("rank", "alpha"):
+        ival = spec.get(iname)
+        if isinstance(ival, bool) or not isinstance(ival, int) or ival < 1:
+            raise ValueError(f"spec[{iname!r}] must be an integer >= 1")
+    if adapter_state is not None and (not isinstance(adapter_state, dict) or not adapter_state):
+        raise ValueError("adapter_state must be None or a non-empty dict")
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
     import torch
     from peft import LoraConfig, get_peft_model
@@ -142,11 +154,19 @@ def load_peft_model(spec: dict[str, Any], adapter_state: dict[str, Any] | None =
 
 def eval_by_domain(model, spec: dict[str, Any]) -> dict[str, float]:
     """Held-out loss per domain (``eval_sets``); falls back to the single ``eval_tokens`` set of older workunits."""
-    sets = spec.get("eval_sets") or {"general": spec["eval_tokens"]}
+    if not isinstance(spec, dict):
+        raise TypeError("spec must be a dict")
+    sets = spec.get("eval_sets") or {"general": spec.get("eval_tokens")}
+    if not isinstance(sets, dict) or not any(sets.values()):
+        raise ValueError("spec must provide non-empty eval_sets or eval_tokens")
     return {d: eval_loss(model, toks) for d, toks in sets.items() if toks}
 
 
 def eval_loss(model, tokens, batch: int = 4) -> float:
+    if isinstance(tokens, (str, bytes)) or not isinstance(tokens, list) or not tokens:
+        raise ValueError("tokens must be a non-empty list of token-id sequences")
+    if isinstance(batch, bool) or not isinstance(batch, int) or batch < 1:
+        raise ValueError("batch must be a positive integer")
     import torch
 
     model.eval()
@@ -162,6 +182,8 @@ def eval_loss(model, tokens, batch: int = 4) -> float:
 
 
 def state_sha(state: dict[str, Any]) -> str:
+    if not isinstance(state, dict) or not state:
+        raise ValueError("state must be a non-empty dict")
     from hivemind.core.quantization import compute_state_dict_sha256
 
     return compute_state_dict_sha256(state)
@@ -175,6 +197,18 @@ def train(
     start_state: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """``start_state`` chains workunits: training continues from the adapter the previous validated workunit produced."""
+    if not isinstance(spec, dict):
+        raise TypeError("spec must be a dict")
+    if not isinstance(ckpt, Path):
+        raise TypeError("ckpt must be a Path")
+    if crash_after_segment is not None and (
+        isinstance(crash_after_segment, bool) or not isinstance(crash_after_segment, int) or crash_after_segment < 1
+    ):
+        raise ValueError("crash_after_segment must be None or an integer >= 1")
+    if not isinstance(lazy, bool):
+        raise ValueError("lazy must be a boolean")
+    if start_state is not None and (not isinstance(start_state, dict) or not start_state):
+        raise ValueError("start_state must be None or a non-empty dict")
     import torch
 
     from hivemind.core.diloco_inner import replay_inner_segment
@@ -258,6 +292,16 @@ def train(
 
 
 def infer(spec: dict[str, Any], adapter_state: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(spec, dict):
+        raise TypeError("spec must be a dict")
+    if not isinstance(adapter_state, dict) or not adapter_state:
+        raise ValueError("adapter_state must be a non-empty dict")
+    prompts = spec.get("prompts")
+    if not isinstance(prompts, list) or not prompts or not all(isinstance(p, str) and p.strip() for p in prompts):
+        raise ValueError("spec['prompts'] must be a non-empty list of non-empty strings")
+    max_new = spec.get("max_new_tokens")
+    if isinstance(max_new, bool) or not isinstance(max_new, int) or max_new < 1:
+        raise ValueError("spec['max_new_tokens'] must be a positive integer")
     import torch
     from transformers import AutoTokenizer
 

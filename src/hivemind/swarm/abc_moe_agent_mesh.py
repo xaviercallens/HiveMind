@@ -437,6 +437,10 @@ class ABCMoEAgent:
             or not (0.0 < float(quality_threshold) <= 1.0)
         ):
             raise ValueError("quality_threshold must be a finite number in (0.0, 1.0]")
+        if web_search_fn is not None and not callable(web_search_fn):
+            raise TypeError("web_search_fn must be callable or None")
+        if nectar_cache is not None and not isinstance(nectar_cache, SwarmNectarCache):
+            raise TypeError("nectar_cache must be a SwarmNectarCache or None")
         self.agent_id = agent_id
         self.abandonment_limit = abandonment_limit
         self.quality_threshold = quality_threshold
@@ -710,6 +714,12 @@ class AgentMeshOrchestrator:
     ) -> None:
         if not isinstance(lead_bee_id, str) or not lead_bee_id.strip():
             raise ValueError("lead_bee_id must be a non-empty string")
+        if available_peers is not None and (
+            not isinstance(available_peers, list) or not all(isinstance(p, Mapping) for p in available_peers)
+        ):
+            raise TypeError("available_peers must be a list of peer mappings or None")
+        if nectar_cache is not None and not isinstance(nectar_cache, SwarmNectarCache):
+            raise TypeError("nectar_cache must be a SwarmNectarCache or None")
         self.lead_bee_id = lead_bee_id
         self.protocol = WaggleDanceScrutinyProtocol(tau_0_ms=1000)
         self.available_peers = available_peers or [

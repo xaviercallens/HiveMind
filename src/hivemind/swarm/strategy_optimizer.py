@@ -67,6 +67,40 @@ class ExpertSpectralProfile:
     dynamic_rank_energy_retained: float
     energy_gain_vs_uniform: float
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.domain_name, str) or not self.domain_name.strip():
+            raise ValueError("domain_name must be a non-empty string")
+        for r_field in ("source_rank_r", "allocated_rank_r"):
+            val = getattr(self, r_field)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{r_field} must be a positive integer")
+        for unit_field in (
+            "spectral_shannon_entropy",
+            "uniform_r16_energy_retained",
+            "dynamic_rank_energy_retained",
+        ):
+            val = getattr(self, unit_field)
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or not (0.0 <= float(val) <= 1.0)
+            ):
+                raise ValueError(f"{unit_field} must be a finite number in [0.0, 1.0]")
+        if (
+            isinstance(self.fisher_trace_score, bool)
+            or not isinstance(self.fisher_trace_score, (int, float))
+            or not math.isfinite(float(self.fisher_trace_score))
+            or float(self.fisher_trace_score) < 0.0
+        ):
+            raise ValueError("fisher_trace_score must be a finite non-negative number")
+        if (
+            isinstance(self.energy_gain_vs_uniform, bool)
+            or not isinstance(self.energy_gain_vs_uniform, (int, float))
+            or not math.isfinite(float(self.energy_gain_vs_uniform))
+        ):
+            raise ValueError("energy_gain_vs_uniform must be a finite number")
+
 
 class DynamicFisherSVDSelector:
     """SI-01: Dynamic Spectral-Entropy & Fisher-Trace LoRA Rank Allocator.

@@ -526,6 +526,10 @@ def bao_cosmology_spec(
 
 
 def _slot_time_grid(raw: Mapping[str, Any], slots: Mapping[str, Any], conversions: List[str]) -> List[float]:
+    if not isinstance(raw, Mapping) or not isinstance(slots, Mapping):
+        raise FamilyError("raw and slots must be Mappings")
+    if not isinstance(conversions, list):
+        raise FamilyError("conversions must be a list")
     for src_name, scale, unit_desc in (
         ("t_out", 1.0, None),
         ("t_out_ms", 1e-3, "ms -> s (/ 1000)"),

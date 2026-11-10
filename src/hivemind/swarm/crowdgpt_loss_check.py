@@ -124,6 +124,8 @@ class CrowdV1(nn.Module):
     `weights` tensor of `model_bf16.safetensors` loads with the same offsets as `SotaGPT.load_base_weights`."""
 
     def __init__(self, config: Mapping[str, int | bool] = CROWD_V1_CONFIG) -> None:
+        if not isinstance(config, Mapping):
+            raise TypeError("config must be a Mapping")
         super().__init__()
         self.config = dict(config)
         dim, vocab = int(config["dim"]), int(config["vocabSize"])
@@ -138,6 +140,8 @@ class CrowdV1(nn.Module):
         return sum(p.numel() for p in self.parameters())
 
     def load_flat(self, flat: torch.Tensor) -> None:
+        if not isinstance(flat, torch.Tensor):
+            raise TypeError("flat must be a torch.Tensor")
         flat = flat.reshape(-1)
         if flat.numel() != self.n_flat():
             raise ValueError(f"flat weights have {flat.numel()} values, the model needs {self.n_flat()}")
@@ -149,6 +153,8 @@ class CrowdV1(nn.Module):
                 o += s
 
     def forward(self, idx: torch.Tensor) -> torch.Tensor:
+        if not isinstance(idx, torch.Tensor) or idx.ndim != 2:
+            raise ValueError("idx must be a 2D torch.Tensor")
         cos, sin = _rope(int(self.config["headDim"]), idx.shape[1], idx.device)
         x = self.wte(idx)
         for blk in self.blocks:
@@ -215,6 +221,16 @@ def window_losses(model: nn.Module, tokens: np.ndarray, starts: Sequence[int], w
     """Mean next-token cross-entropy (nats) of each window: input tokens[s : s+window-1], targets tokens[s+1 : s+window],
     the same split as `StreamingShardDataset.get_batch`. `stop()` is asked before each batch; True raises `Interrupted`
     (so a shared GPU can be handed back to inference between windows)."""
+    if not isinstance(model, nn.Module):
+        raise TypeError("model must be an nn.Module")
+    if isinstance(starts, (str, bytes)) or not isinstance(starts, Sequence) or any(isinstance(s, bool) or not isinstance(s, int) or s < 0 for s in starts):
+        raise ValueError("starts must be a sequence of non-negative integers")
+    if isinstance(window, bool) or not isinstance(window, int) or window < 2:
+        raise ValueError("window must be an integer >= 2")
+    if isinstance(batch, bool) or not isinstance(batch, int) or batch < 1:
+        raise ValueError("batch must be an integer >= 1")
+    if stop is not None and not callable(stop):
+        raise TypeError("stop must be None or callable")
     vocab = int(getattr(model, "config", {}).get("vocabSize", 0)) or None
     arr = np.asarray(tokens)
     if vocab is not None and len(arr) and int(arr.max()) >= vocab:
@@ -309,7 +325,11 @@ class LossCheckReceipt:
 
     @classmethod
     def from_json(cls, text: str) -> "LossCheckReceipt":
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("text must be a non-empty JSON string")
         d = json.loads(text)
+        if not isinstance(d, dict):
+            raise ValueError("receipt JSON must decode to an object")
         if d.get("schema") != RECEIPT_SCHEMA:
             raise ValueError(f"unknown receipt schema {d.get('schema')!r}")
         for k in ("starts", "losses_before", "losses_after"):

@@ -697,6 +697,12 @@ def decontaminate(rows: Sequence[dict[str, Any]], index: EvalIndex,
 
     Order of checks, first hit wins: entity key, exact eval prompt, 13-gram overlap, exact duplicate of an earlier row.
     """
+    if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
+        raise TypeError("rows must be a Sequence of row dicts")
+    if not isinstance(index, EvalIndex):
+        raise TypeError("index must be an EvalIndex")
+    if seen is not None and not isinstance(seen, set):
+        raise TypeError("seen must be a set or None")
     seen = set() if seen is None else seen
     active = index.active_ngrams
     counts = {"eval_entity_key": 0, "eval_exact": 0, "eval_ngram": 0, "exact_duplicate": 0, "kept": 0}
@@ -850,6 +856,14 @@ def build_mixture(rows_by_source: Mapping[str, Sequence[dict[str, Any]]], verifi
 
     Returns (mixture rows, provenance manifest).
     """
+    if not isinstance(rows_by_source, Mapping) or not isinstance(verified, Mapping) or not isinstance(domain_of, Mapping):
+        raise TypeError("rows_by_source, verified, and domain_of must be Mappings")
+    if not isinstance(cfg, MixtureConfig):
+        raise TypeError("cfg must be a MixtureConfig")
+    if not isinstance(index, EvalIndex):
+        raise TypeError("index must be an EvalIndex")
+    if not isinstance(shards, Sequence) or isinstance(shards, (str, bytes)):
+        raise TypeError("shards must be a Sequence")
     seen: set[str] = set()
     clean: dict[str, list[dict[str, Any]]] = {}
     decon: dict[str, dict[str, int]] = {}

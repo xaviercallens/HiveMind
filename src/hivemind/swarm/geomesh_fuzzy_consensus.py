@@ -72,6 +72,21 @@ class SubSwarmAssignment:
     mean_pairwise_km: float
     unique_asn_count: int
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.subswarm_id, str) or not self.subswarm_id.strip():
+            raise ValueError("subswarm_id must be a non-empty string")
+        if not isinstance(self.nodes, tuple) or len(self.nodes) == 0 or not all(isinstance(n, GeoMeshNode) for n in self.nodes):
+            raise ValueError("nodes must be a non-empty tuple of GeoMeshNode instances")
+        if (
+            isinstance(self.mean_pairwise_km, bool)
+            or not isinstance(self.mean_pairwise_km, (int, float))
+            or not math.isfinite(float(self.mean_pairwise_km))
+            or float(self.mean_pairwise_km) < 0.0
+        ):
+            raise ValueError("mean_pairwise_km must be a finite non-negative number")
+        if isinstance(self.unique_asn_count, bool) or not isinstance(self.unique_asn_count, int) or self.unique_asn_count < 1:
+            raise ValueError("unique_asn_count must be an integer >= 1")
+
 
 @dataclass(frozen=True)
 class FuzzyConsensusResult:
@@ -82,6 +97,26 @@ class FuzzyConsensusResult:
     node_weights: dict[str, float]
     rejected_node_ids: tuple[str, ...]
     honest_cosine_fidelity: float
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.subswarm_id, str) or not self.subswarm_id.strip():
+            raise ValueError("subswarm_id must be a non-empty string")
+        if not isinstance(self.aggregated_gradient, np.ndarray) or self.aggregated_gradient.size == 0 or not bool(np.all(np.isfinite(self.aggregated_gradient))):
+            raise ValueError("aggregated_gradient must be a non-empty finite numpy array")
+        if not isinstance(self.node_weights, dict) or not self.node_weights:
+            raise ValueError("node_weights must be a non-empty dictionary")
+        for k, v in self.node_weights.items():
+            if not isinstance(k, str) or not k.strip() or isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) or float(v) < 0.0:
+                raise ValueError("node_weights must map non-empty node IDs to finite non-negative floats")
+        if not isinstance(self.rejected_node_ids, tuple) or not all(isinstance(r, str) and bool(r.strip()) for r in self.rejected_node_ids):
+            raise ValueError("rejected_node_ids must be a tuple of non-empty strings")
+        if (
+            isinstance(self.honest_cosine_fidelity, bool)
+            or not isinstance(self.honest_cosine_fidelity, (int, float))
+            or not math.isfinite(float(self.honest_cosine_fidelity))
+            or not (-1.0001 <= float(self.honest_cosine_fidelity) <= 1.0001)
+        ):
+            raise ValueError("honest_cosine_fidelity must be a finite number in [-1.0, 1.0]")
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -119,6 +154,10 @@ def triangulate_rtt_consistency(
          A node claiming to be 8,000 km away from an anchor cannot respond in 5 ms.
       2. Upper bound (stretch): RTT <= max_routing_stretch * (2 * d_km / FIBER_SPEED_KM_PER_MS) + jitter.
     """
+    if not isinstance(node, GeoMeshNode):
+        raise TypeError("node must be a GeoMeshNode")
+    if not isinstance(anchors, dict):
+        raise TypeError("anchors must be a dictionary")
     if (
         isinstance(max_routing_stretch, bool)
         or not isinstance(max_routing_stretch, (int, float))

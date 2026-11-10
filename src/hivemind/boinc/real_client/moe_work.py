@@ -140,6 +140,8 @@ def mix_counts(n: int, k: int) -> list[int]:
 
 def interleave(parts: list[list[list[int]]]) -> list[list[int]]:
     """Round-robin the per-domain chunk lists so no domain forms a contiguous block of the shard."""
+    if isinstance(parts, (str, bytes)) or not isinstance(parts, list) or not all(isinstance(p, list) for p in parts):
+        raise ValueError("parts must be a list of per-domain chunk lists")
     out: list[list[int]] = []
     for i in range(max((len(p) for p in parts), default=0)):
         out += [p[i] for p in parts if i < len(p)]
@@ -149,6 +151,10 @@ def interleave(parts: list[list[list[int]]]) -> list[list[int]]:
 def load_custom_shards(custom_dir: Path | str, secret: bytes | None = None) -> tuple[list[list[int]], list[list[int]], dict[str, Any]]:
     """Read shards written by ``scripts/make_custom_shards.py`` and verify them against the manifest (sha256 of both files, HMAC of the training shard).
     Any mismatch raises: a tampered or truncated shard never becomes a workunit."""
+    if not isinstance(custom_dir, (Path, str)) or (isinstance(custom_dir, str) and not custom_dir.strip()):
+        raise ValueError("custom_dir must be a non-empty path or string")
+    if secret is not None and (not isinstance(secret, (bytes, bytearray)) or len(secret) == 0):
+        raise ValueError("secret must be None or non-empty bytes")
     import hashlib
     import hmac
 
@@ -185,6 +191,28 @@ def build_train_spec(
     custom_dir: str | None = None,
     custom_secret: bytes | None = None,
 ) -> dict[str, Any]:
+    if not isinstance(wu_id, str) or not wu_id.strip():
+        raise ValueError("wu_id must be a non-empty string")
+    if isinstance(shard_index, bool) or not isinstance(shard_index, int) or shard_index < 0:
+        raise ValueError("shard_index must be a non-negative integer")
+    if not isinstance(model_id, str) or not model_id.strip():
+        raise ValueError("model_id must be a non-empty string")
+    for iname, ival in (
+        ("inner_steps", inner_steps),
+        ("segment_steps", segment_steps),
+        ("seq_len", seq_len),
+        ("n_seq", n_seq),
+        ("n_eval", n_eval),
+        ("micro_batch", micro_batch),
+        ("rank", rank),
+        ("alpha", alpha),
+    ):
+        if isinstance(ival, bool) or not isinstance(ival, int) or ival < 1:
+            raise ValueError(f"{iname} must be an integer >= 1")
+    if isinstance(lr, bool) or not isinstance(lr, (int, float)) or not (0.0 < float(lr) < float("inf")):
+        raise ValueError("lr must be a positive finite number")
+    if isinstance(rng_seed, bool) or not isinstance(rng_seed, int) or isinstance(init_seed, bool) or not isinstance(init_seed, int):
+        raise ValueError("rng_seed and init_seed must be integers")
     from transformers import AutoTokenizer
 
     os.environ.setdefault("HF_HUB_OFFLINE", "1")

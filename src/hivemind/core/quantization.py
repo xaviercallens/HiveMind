@@ -345,6 +345,22 @@ def attach_qlora_adapters(
     seed: int = 42,
 ) -> QuantizedModelBundle:
     """Freeze base weights W_0 and attach Rank-r LoRA adapters (A_e, B_e) across all linear layers."""
+    if not isinstance(base_model, nn.Module):
+        raise ValueError("base_model must be an nn.Module")
+    if isinstance(rank_r, bool) or not isinstance(rank_r, int) or rank_r < 1:
+        raise ValueError(f"rank_r must be an integer >= 1, got {rank_r!r}")
+    if isinstance(lora_alpha, bool) or not isinstance(lora_alpha, (int, float)) or not math.isfinite(float(lora_alpha)) or lora_alpha <= 0:
+        raise ValueError(f"lora_alpha must be finite and > 0, got {lora_alpha!r}")
+    if target_modules is not None and (
+        not isinstance(target_modules, list)
+        or not target_modules
+        or not all(isinstance(m, str) and m.strip() for m in target_modules)
+    ):
+        raise ValueError("target_modules must be None or a non-empty list of non-empty strings")
+    if not isinstance(gradient_checkpointing, bool):
+        raise ValueError("gradient_checkpointing must be a boolean")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
     configure_deterministic_runtime(seed)
     device = next(base_model.parameters()).device
     compute_dtype = resolve_compute_dtype("float16", device)
@@ -413,6 +429,14 @@ def stream_load_hf_causal_lm(
     large embedding tables) via standard file I/O without memory-mapping the entire 1 GB file,
     preventing Windows WDDM pagefile/commit-limit exhaustion (`os error 1455`).
     """
+    if not isinstance(model_id, str) or not model_id.strip():
+        raise ValueError("model_id must be a non-empty string")
+    if not isinstance(device, torch.device):
+        raise ValueError("device must be a torch.device")
+    if not isinstance(compute_dtype, torch.dtype):
+        raise ValueError("compute_dtype must be a torch.dtype")
+    if not isinstance(apply_nf4, bool) or not isinstance(double_quant, bool) or not isinstance(require_pinned_revision, bool):
+        raise ValueError("apply_nf4, double_quant, and require_pinned_revision must be booleans")
     import json
     import struct
     from huggingface_hub import hf_hub_download
@@ -541,6 +565,12 @@ def load_hf_qlora_model(
     seed: int = 42,
 ) -> QuantizedModelBundle:
     """Load an open-weight HuggingFace model (e.g., Qwen2.5-0.5B) using HF_TOKEN and apply 4-bit NF4 + QLoRA."""
+    if not isinstance(profile, HardwareProfile):
+        raise ValueError("profile must be a HardwareProfile instance")
+    if device is not None and not isinstance(device, torch.device):
+        raise ValueError("device must be None or a torch.device")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
     from hivemind.config import get_hf_token
 
     configure_deterministic_runtime(seed)

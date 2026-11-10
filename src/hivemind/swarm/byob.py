@@ -905,6 +905,12 @@ class HeldOutItem:
     expected_regex: str
     reference_answer: str  # used only by the positive control; never sent to the bee
 
+    def __post_init__(self) -> None:
+        for field_name in ("item_id", "prompt", "expected_regex", "reference_answer"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+
 
 @dataclass(frozen=True)
 class HeldOutPack:
@@ -912,6 +918,12 @@ class HeldOutPack:
 
     pack_id: str
     items: tuple[HeldOutItem, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.pack_id, str) or not self.pack_id.strip():
+            raise ValueError("pack_id must be a non-empty string")
+        if not isinstance(self.items, tuple) or any(not isinstance(i, HeldOutItem) for i in self.items):
+            raise ValueError("items must be a tuple of HeldOutItem instances")
 
     @classmethod
     def from_json_file(cls, path: Path) -> "HeldOutPack":

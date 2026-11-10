@@ -182,6 +182,14 @@ class PromptIntent:
     language: str
     preferred_tier: str | None
 
+    def __post_init__(self) -> None:
+        for field_name in ("task_domain", "language"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if self.preferred_tier is not None and (not isinstance(self.preferred_tier, str) or not self.preferred_tier.strip()):
+            raise ValueError("preferred_tier must be a non-empty string or None")
+
 
 @dataclass(frozen=True)
 class ClientAttribution:
@@ -189,6 +197,12 @@ class ClientAttribution:
 
     client_sdk: str
     app_title: str
+
+    def __post_init__(self) -> None:
+        for field_name in ("client_sdk", "app_title"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
 
 
 def _extract_messages_text(messages: Sequence[Mapping[str, Any]]) -> str:

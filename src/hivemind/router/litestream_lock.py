@@ -32,6 +32,20 @@ class LockGenerationRecord:
     acquired_utc: float
     lease_expires_utc: float
 
+    def __post_init__(self) -> None:
+        for field_name in ("replica_url", "owner_id"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if isinstance(self.generation, bool) or not isinstance(self.generation, int) or self.generation < 0:
+            raise ValueError("generation must be a non-negative integer")
+        for field_name in ("acquired_utc", "lease_expires_utc"):
+            val = getattr(self, field_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{field_name} must be a finite non-negative number")
+        if float(self.lease_expires_utc) < float(self.acquired_utc):
+            raise ValueError("lease_expires_utc must be >= acquired_utc")
+
 
 class InMemoryGenerationStore:
     """Thread-safe atomic generation-precondition store modeling GCS ``ifGenerationMatch`` semantics."""

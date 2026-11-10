@@ -75,6 +75,8 @@ def _format_astrophysics_hf_dataset_subset(
         raise ValueError("dataset_id must be a non-empty string")
     if isinstance(num_samples, bool) or not isinstance(num_samples, int) or num_samples <= 0:
         raise ValueError("num_samples must be a positive integer")
+    if hf_token is not None and (isinstance(hf_token, bool) or not isinstance(hf_token, str)):
+        raise ValueError("hf_token must be a string or None")
     import csv
     import pyarrow.parquet as pq
     from huggingface_hub import hf_hub_download
@@ -729,6 +731,39 @@ def _execute_single_domain_on_loaded_model(
     num_samples: int = 36,
 ) -> Tuple[Dict[str, Any], Dict[str, torch.Tensor], torch.Tensor]:
     """Run one complete decentralized Hugging Face domain training + PoUW block + fee settlement cycle."""
+    import math
+
+    if isinstance(exp_index, bool) or not isinstance(exp_index, int) or exp_index < 1:
+        raise ValueError("exp_index must be a positive integer")
+    for field_name, val in (
+        ("dataset_id", dataset_id),
+        ("domain_name", domain_name),
+        ("eval_prompt", eval_prompt),
+        ("consumer_node_id", consumer_node_id),
+        ("base_model_sha256", base_model_sha256),
+    ):
+        if isinstance(val, bool) or not isinstance(val, str) or not val.strip():
+            raise ValueError(f"{field_name} must be a non-empty string")
+    if (
+        not isinstance(provider_node_ids, list)
+        or not provider_node_ids
+        or any(isinstance(p, bool) or not isinstance(p, str) or not p.strip() for p in provider_node_ids)
+    ):
+        raise ValueError("provider_node_ids must be a non-empty list of non-empty strings")
+    if not isinstance(model, torch.nn.Module):
+        raise ValueError("model must be a torch.nn.Module")
+    if not isinstance(initial_lora_state, dict) or not initial_lora_state:
+        raise ValueError("initial_lora_state must be a non-empty dict")
+    if isinstance(nf4_mb, bool) or not isinstance(nf4_mb, (int, float)) or not math.isfinite(float(nf4_mb)) or float(nf4_mb) < 0.0:
+        raise ValueError("nf4_mb must be a finite non-negative number")
+    for field_name, val in (
+        ("lora_rank", lora_rank),
+        ("inner_steps", inner_steps),
+        ("seq_len", seq_len),
+        ("num_samples", num_samples),
+    ):
+        if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+            raise ValueError(f"{field_name} must be a positive integer")
     device = next(model.parameters()).device
     raw_samples = fetch_hf_domain_subset(dataset_id=dataset_id, num_samples=num_samples)
     agent_ids = ["seti-node-paris-01", "seti-node-lyon-02", "seti-node-nice-03"]

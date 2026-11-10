@@ -124,6 +124,14 @@ class LinkIdentity:
     certificate: x509.Certificate
     private_key: ec.EllipticCurvePrivateKey
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.ca_certificate, x509.Certificate):
+            raise TypeError("ca_certificate must be an x509.Certificate")
+        if not isinstance(self.certificate, x509.Certificate):
+            raise TypeError("certificate must be an x509.Certificate")
+        if not isinstance(self.private_key, ec.EllipticCurvePrivateKey):
+            raise TypeError("private_key must be an EllipticCurvePrivateKey")
+
     @property
     def ca_pem(self) -> str:
         return self.ca_certificate.public_bytes(serialization.Encoding.PEM).decode("ascii")
@@ -597,6 +605,23 @@ class Quic0RttProbe:
     elapsed_s: float = 0.0
     ticket: Optional[SessionTicket] = None
     error: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        for int_name in ("frames_sent", "frames_delivered", "server_early_frames"):
+            ival = getattr(self, int_name)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 0:
+                raise ValueError(f"{int_name} must be a non-negative integer")
+        if not isinstance(self.session_resumed, bool) or not isinstance(self.early_data_accepted, bool):
+            raise TypeError("session_resumed and early_data_accepted must be bools")
+        if not isinstance(self.frame_latencies_ms, list):
+            raise TypeError("frame_latencies_ms must be a list")
+        if (
+            isinstance(self.elapsed_s, bool)
+            or not isinstance(self.elapsed_s, (int, float))
+            or not math.isfinite(float(self.elapsed_s))
+            or float(self.elapsed_s) < 0.0
+        ):
+            raise ValueError("elapsed_s must be a non-negative finite number")
 
     @property
     def ok(self) -> bool:

@@ -608,6 +608,18 @@ class CompressedHiddenStatePacket:
     original_bytes: int
     compressed_bytes: int
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.fp8_data, torch.Tensor) or not isinstance(self.absmax_scale, torch.Tensor):
+            raise TypeError("fp8_data and absmax_scale must be torch.Tensors")
+        if not isinstance(self.original_shape, tuple) or not self.original_shape or any(
+            isinstance(d, bool) or not isinstance(d, int) or d < 1 for d in self.original_shape
+        ):
+            raise ValueError("original_shape must be a non-empty tuple of positive integers")
+        for b_name in ("original_bytes", "compressed_bytes"):
+            bval = getattr(self, b_name)
+            if isinstance(bval, bool) or not isinstance(bval, int) or bval < 1:
+                raise ValueError(f"{b_name} must be an integer >= 1")
+
     @property
     def compression_ratio(self) -> float:
         return round(self.original_bytes / max(1, self.compressed_bytes), 2)
@@ -1024,6 +1036,18 @@ class MerkleInclusionProof:
     root: str
     tree_size: int
 
+    def __post_init__(self) -> None:
+        if isinstance(self.layer_idx, bool) or not isinstance(self.layer_idx, int) or self.layer_idx < 0:
+            raise ValueError("layer_idx must be a non-negative integer")
+        if not isinstance(self.leaf_hash, str) or not self.leaf_hash.strip():
+            raise ValueError("leaf_hash must be a non-empty string")
+        if not isinstance(self.root, str) or not self.root.strip():
+            raise ValueError("root must be a non-empty string")
+        if not isinstance(self.siblings, list) or not isinstance(self.directions, list) or len(self.siblings) != len(self.directions):
+            raise ValueError("siblings and directions must be lists of equal length")
+        if isinstance(self.tree_size, bool) or not isinstance(self.tree_size, int) or self.tree_size < 1:
+            raise ValueError("tree_size must be an integer >= 1")
+
     @property
     def proof_depth(self) -> int:
         """Number of sibling hashes carried by the inclusion path (`O(log L)`)."""
@@ -1128,6 +1152,18 @@ class SpeculativeBatchCommitment:
     num_layers: int
     signature: str = ""
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.peer_id, str) or not self.peer_id.strip():
+            raise ValueError("peer_id must be a non-empty string")
+        if not isinstance(self.root, str) or not self.root.strip():
+            raise ValueError("root must be a non-empty string")
+        if isinstance(self.num_steps, bool) or not isinstance(self.num_steps, int) or self.num_steps < 1:
+            raise ValueError("num_steps must be an integer >= 1")
+        if isinstance(self.num_layers, bool) or not isinstance(self.num_layers, int) or self.num_layers < 1:
+            raise ValueError("num_layers must be an integer >= 1")
+        if not isinstance(self.signature, str):
+            raise TypeError("signature must be a string")
+
     @property
     def leaf_count(self) -> int:
         return self.num_steps * self.num_layers
@@ -1179,6 +1215,14 @@ class SpeculativeBatchOpening:
     step: int
     layer: int
     siblings: Tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if isinstance(self.step, bool) or not isinstance(self.step, int) or self.step < 0:
+            raise ValueError("step must be a non-negative integer")
+        if isinstance(self.layer, bool) or not isinstance(self.layer, int) or self.layer < 0:
+            raise ValueError("layer must be a non-negative integer")
+        if not isinstance(self.siblings, tuple) or any(not isinstance(s, str) or not s.strip() for s in self.siblings):
+            raise ValueError("siblings must be a tuple of non-empty strings")
 
     def to_dict(self) -> Dict[str, Any]:
         return {"step": self.step, "layer": self.layer, "siblings": list(self.siblings)}

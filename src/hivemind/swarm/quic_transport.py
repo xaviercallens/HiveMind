@@ -223,6 +223,21 @@ class RegionalBridgePeer:
     rtt_ms: float
     stun_verified: bool = True
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.peer_id, str) or not self.peer_id.strip():
+            raise ValueError("peer_id must be a non-empty string")
+        if not isinstance(self.continent, str) or not self.continent.strip():
+            raise ValueError("continent must be a non-empty string")
+        if (
+            isinstance(self.rtt_ms, bool)
+            or not isinstance(self.rtt_ms, (int, float))
+            or not math.isfinite(float(self.rtt_ms))
+            or float(self.rtt_ms) <= 0.0
+        ):
+            raise ValueError("rtt_ms must be a positive finite number")
+        if not isinstance(self.stun_verified, bool):
+            raise TypeError("stun_verified must be a bool")
+
 
 class ContinentalSuperRingRouter:
     """HM-S4-02: 2-Tier Kademlia Super-Ring (`Continental Bridge -> Regional <20 ms Geo-Ring`).
@@ -687,6 +702,23 @@ class CongestionWindowTelemetry:
     gain: float
     mtu_bytes: int
     mode: str = "steady"
+
+    def __post_init__(self) -> None:
+        for int_name in ("cwnd_bytes", "cwnd_packets", "mtu_bytes"):
+            ival = getattr(self, int_name)
+            if isinstance(ival, bool) or not isinstance(ival, int) or ival < 1:
+                raise ValueError(f"{int_name} must be an integer >= 1")
+        for f_name in ("btl_bw_bps", "rtprop_ms", "jitter_ms", "loss_ratio", "gain"):
+            fval = getattr(self, f_name)
+            if (
+                isinstance(fval, bool)
+                or not isinstance(fval, (int, float))
+                or not math.isfinite(float(fval))
+                or float(fval) < 0.0
+            ):
+                raise ValueError(f"{f_name} must be a non-negative finite number")
+        if not isinstance(self.mode, str) or not self.mode.strip():
+            raise ValueError("mode must be a non-empty string")
 
     def to_dict(self) -> Dict[str, Any]:
         """Plain-dict view of the telemetry (JSON friendly)."""

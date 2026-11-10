@@ -44,6 +44,27 @@ class FuzzySubSwarmConsensusReport:
     collusion_probability_bound: float
     complexity_hops_log2_n: int
 
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.subswarm_size, bool)
+            or not isinstance(self.subswarm_size, int)
+            or not (MIN_SUBSWARM_NODES <= self.subswarm_size <= MAX_SUBSWARM_NODES)
+        ):
+            raise ValueError(f"subswarm_size must be an integer in [{MIN_SUBSWARM_NODES}, {MAX_SUBSWARM_NODES}]")
+        if not isinstance(self.winning_digest, str):
+            raise ValueError("winning_digest must be a string")
+        for u_field in ("fuzzy_agreement_score", "collusion_probability_bound"):
+            val = getattr(self, u_field)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or not (0.0 <= float(val) <= 1.0):
+                raise ValueError(f"{u_field} must be a finite number in [0.0, 1.0]")
+        if isinstance(self.consensus_latency_ms, bool) or not isinstance(self.consensus_latency_ms, (int, float)) or not math.isfinite(float(self.consensus_latency_ms)) or float(self.consensus_latency_ms) < 0.0:
+            raise ValueError("consensus_latency_ms must be a finite non-negative number")
+        for b_field in ("quorum_reached", "within_50ms_sla"):
+            if not isinstance(getattr(self, b_field), bool):
+                raise ValueError(f"{b_field} must be a boolean")
+        if isinstance(self.complexity_hops_log2_n, bool) or not isinstance(self.complexity_hops_log2_n, int) or self.complexity_hops_log2_n < 1:
+            raise ValueError("complexity_hops_log2_n must be an integer >= 1")
+
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
 

@@ -26,6 +26,18 @@ class ShardLeaseRecord:
     expires_at_s: float
     status: str = "ACTIVE"  # ACTIVE | COMMITTED | RECLAIMED
 
+    def __post_init__(self) -> None:
+        if isinstance(self.lease_id, bool) or not isinstance(self.lease_id, int) or self.lease_id < 1:
+            raise ValueError("lease_id must be a positive integer")
+        _validate_darl_id(self.shard_id, "shard_id")
+        _validate_darl_id(self.worker_id, "worker_id")
+        g_s = _finite("granted_at_s", self.granted_at_s)
+        e_s = _finite("expires_at_s", self.expires_at_s)
+        if e_s < g_s:
+            raise ValueError("expires_at_s must be >= granted_at_s")
+        if self.status not in ("ACTIVE", "COMMITTED", "RECLAIMED"):
+            raise ValueError("status must be 'ACTIVE', 'COMMITTED', or 'RECLAIMED'")
+
 
 @dataclass(frozen=True)
 class DARLLedgerSnapshot:
@@ -39,6 +51,23 @@ class DARLLedgerSnapshot:
     unique_committed_shards: int
     duplicate_commits_blocked: int
     conservation_holds: bool
+
+    def __post_init__(self) -> None:
+        if isinstance(self.total_shards, bool) or not isinstance(self.total_shards, int) or self.total_shards < 1:
+            raise ValueError("total_shards must be an integer >= 1")
+        for i_field in (
+            "granted",
+            "reclaimed",
+            "committed",
+            "active",
+            "unique_committed_shards",
+            "duplicate_commits_blocked",
+        ):
+            val = getattr(self, i_field)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_field} must be a non-negative integer")
+        if not isinstance(self.conservation_holds, bool):
+            raise ValueError("conservation_holds must be a boolean")
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)

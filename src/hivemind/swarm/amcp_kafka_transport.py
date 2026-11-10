@@ -900,6 +900,14 @@ class VerifiedEvent:
     key_id: str
     record: TransportRecord
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.event, AMCPKafkaEvent):
+            raise TypeError("event must be an AMCPKafkaEvent")
+        if not isinstance(self.key_id, str) or not self.key_id.strip():
+            raise ValueError("key_id must be a non-empty string")
+        if not isinstance(self.record, TransportRecord):
+            raise TypeError("record must be a TransportRecord")
+
 
 class EnvelopeVerifier:
     """Verify consumed records; raise ``EnvelopeRejected`` with a dead-letter reason on any failure."""
@@ -912,6 +920,8 @@ class EnvelopeVerifier:
         max_skew_s: float = MAX_CLOCK_SKEW_S,
         clock: Callable[[], float] = time.time,
     ) -> None:
+        if not isinstance(keyring, HMACKeyring):
+            raise TypeError("keyring must be an HMACKeyring")
         if (
             isinstance(max_ttl_s, bool)
             or not isinstance(max_ttl_s, (int, float))
@@ -998,6 +1008,10 @@ class AMCPPublisher:
         ttl_s: float = DEFAULT_EVENT_TTL_S,
         mirror: InMemoryKafkaBridge | None = None,
     ) -> None:
+        if not isinstance(keyring, HMACKeyring):
+            raise TypeError("keyring must be an HMACKeyring")
+        if mirror is not None and not isinstance(mirror, InMemoryKafkaBridge):
+            raise TypeError("mirror must be an InMemoryKafkaBridge or None")
         if (
             isinstance(ttl_s, bool)
             or not isinstance(ttl_s, (int, float))
@@ -1121,6 +1135,22 @@ class ConsumerStats:
     commit_errors: int = 0
     dlq_errors: int = 0
     dead_lettered: dict[str, int] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for field_name, iv in (
+            ("polled", self.polled),
+            ("delivered", self.delivered),
+            ("duplicates_dropped", self.duplicates_dropped),
+            ("handler_failures", self.handler_failures),
+            ("rewinds", self.rewinds),
+            ("committed", self.committed),
+            ("commit_errors", self.commit_errors),
+            ("dlq_errors", self.dlq_errors),
+        ):
+            if isinstance(iv, bool) or not isinstance(iv, int) or iv < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
+        if not isinstance(self.dead_lettered, dict):
+            raise TypeError("dead_lettered must be a dict")
 
     def to_dict(self) -> dict[str, Any]:
         return {

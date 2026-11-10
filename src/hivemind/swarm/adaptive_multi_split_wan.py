@@ -146,6 +146,37 @@ class CutLayerDecision:
     vram_compliant: bool
     preemption_compliant: bool
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.node_id, str) or not self.node_id.strip():
+            raise ValueError("node_id must be a non-empty string")
+        if not isinstance(self.precision_cohort, str) or not self.precision_cohort.strip():
+            raise ValueError("precision_cohort must be a non-empty string")
+        if isinstance(self.cut_layer_index, bool) or self.cut_layer_index not in VALID_CUT_LAYERS:
+            raise ValueError(f"cut_layer_index must be one of {VALID_CUT_LAYERS}")
+        if isinstance(self.activation_bits, bool) or self.activation_bits not in (8, 16):
+            raise ValueError("activation_bits must be 8 or 16")
+        for field_name, num in (
+            ("client_prelude_vram_mib", self.client_prelude_vram_mib),
+            ("boundary_payload_kb", self.boundary_payload_kb),
+            ("prelude_compute_ms", self.prelude_compute_ms),
+            ("wan_transfer_ms", self.wan_transfer_ms),
+            ("edge_core_compute_ms", self.edge_core_compute_ms),
+            ("total_step_ms", self.total_step_ms),
+            ("monolithic_baseline_step_ms", self.monolithic_baseline_step_ms),
+            ("preemption_latency_ms", self.preemption_latency_ms),
+        ):
+            if isinstance(num, bool) or not isinstance(num, (int, float)) or not math.isfinite(float(num)) or float(num) <= 0.0:
+                raise ValueError(f"{field_name} must be a positive finite number")
+        if (
+            isinstance(self.step_time_reduction_pct, bool)
+            or not isinstance(self.step_time_reduction_pct, (int, float))
+            or not math.isfinite(float(self.step_time_reduction_pct))
+            or not (0.0 <= float(self.step_time_reduction_pct) <= 100.0)
+        ):
+            raise ValueError("step_time_reduction_pct must be a finite number in [0.0, 100.0]")
+        if not isinstance(self.vram_compliant, bool) or not isinstance(self.preemption_compliant, bool):
+            raise ValueError("vram_compliant and preemption_compliant must be booleans")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 

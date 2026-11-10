@@ -56,8 +56,8 @@ class BeeEnergyEvaluation:
         if (
             isinstance(self.total_energy, bool)
             or not isinstance(self.total_energy, (int, float))
-            or not math.isfinite(float(self.total_energy))
             or float(self.total_energy) < 0.0
+            or math.isinf(float(self.total_energy))
         ):
             raise ValueError("total_energy must be a finite number >= 0.0")
         if not isinstance(self.receipt_sha256, str) or len(self.receipt_sha256.strip()) != 64:

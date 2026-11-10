@@ -200,6 +200,27 @@ class ABCState:
     kafka_event_log: list[dict[str, Any]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.task_id, str) or not self.task_id.strip():
+            raise ValueError("task_id must be a non-empty string")
+        if not isinstance(self.user_query, str) or not self.user_query.strip():
+            raise ValueError("user_query must be a non-empty string")
+        if not isinstance(self.target_schema, Mapping):
+            raise ValueError("target_schema must be a mapping")
+        if (
+            isinstance(self.quality_threshold, bool)
+            or not isinstance(self.quality_threshold, (int, float))
+            or not math.isfinite(float(self.quality_threshold))
+            or not (0.0 < float(self.quality_threshold) <= 1.0)
+        ):
+            raise ValueError("quality_threshold must be in (0.0, 1.0]")
+        if isinstance(self.abandonment_limit, bool) or not isinstance(self.abandonment_limit, int) or self.abandonment_limit < 1:
+            raise ValueError("abandonment_limit must be an integer >= 1")
+        if isinstance(self.max_cycles, bool) or not isinstance(self.max_cycles, int) or self.max_cycles < 1:
+            raise ValueError("max_cycles must be an integer >= 1")
+        if isinstance(self.cycle_count, bool) or not isinstance(self.cycle_count, int) or self.cycle_count < 0:
+            raise ValueError("cycle_count must be a non-negative integer")
+
 
 # ==============================================================================
 # Layer 1 Implementation: Waggle Dance Protocol & Quorum Sensing
@@ -424,6 +445,8 @@ class ABCMoEAgent:
 
     def _default_mock_web_search(self, query: str) -> list[dict[str, str]]:
         """Fallback deterministic research snippets across scientific domains (HM-S22.2: arXiv, PubMed, ChEMBL, Battery)."""
+        if not isinstance(query, str) or not query.strip():
+            raise ValueError("query must be a non-empty string")
         terms = query.lower()
         if "battery" in terms or "batterie" in terms:
             return [
@@ -479,6 +502,8 @@ class ABCMoEAgent:
     # --- ABC Step 1: Employed Bee Phase (Internal MoE Expert Exploitation) ---
     def employed_exploit_step(self, state: ABCState) -> ABCState:
         """Exploits the current food source using internal MoE experts."""
+        if not isinstance(state, ABCState):
+            raise ValueError("state must be an ABCState instance")
         if not state.food_sources:
             # No food source yet: trigger scout immediately
             state.current_phase = "SCOUT_EXPLORE"
@@ -519,6 +544,10 @@ class ABCMoEAgent:
     # --- ABC Step 2: Observer Bee Phase (Quality Assessment & Abandonment Test) ---
     def observer_evaluate_step(self, state: ABCState) -> ABCState:
         """Assesses quality of candidate solution and increments abandonment counter if stagnant."""
+        if not isinstance(state, ABCState):
+            raise ValueError("state must be an ABCState instance")
+        if not state.food_sources:
+            raise ValueError("state.food_sources must be non-empty before observer evaluation")
         current_source = state.food_sources[state.current_source_idx]
         solution = state.best_solution or {}
         data = solution.get("data", {})
@@ -569,6 +598,8 @@ class ABCMoEAgent:
     # --- ABC Step 3: Scout Bee Phase (External Tool Exploration) ---
     def scout_explore_step(self, state: ABCState) -> ABCState:
         """Invokes external tools (Web Search / API / Solvers) or SwarmNectarCache to discover high-nectar source."""
+        if not isinstance(state, ABCState):
+            raise ValueError("state must be an ABCState instance")
         query = state.user_query
         cache_hit_entry = None
         if self.nectar_cache is not None:
@@ -640,6 +671,8 @@ class ABCMoEAgent:
     # --- StateGraph Run Cycle ---
     def run(self, initial_state: ABCState) -> ABCState:
         """Executes the ABC loop until completion or maximum cycle threshold."""
+        if not isinstance(initial_state, ABCState):
+            raise ValueError("initial_state must be an ABCState instance")
         state = initial_state
         while state.current_phase not in ("COMPLETED", "FAILED") and state.cycle_count < state.max_cycles:
             state.cycle_count += 1

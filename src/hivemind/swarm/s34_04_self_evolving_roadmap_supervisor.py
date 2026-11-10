@@ -78,7 +78,7 @@ class RoadmapPRVerificationEntry:
             raise ValueError("order must be a positive integer")
         for str_field in ("ticket_id", "title", "key_metric_name"):
             val = getattr(self, str_field)
-            if not isinstance(val, str) or not val.strip():
+            if not isinstance(val, str) or not val.strip() or any(ord(c) < 32 or ord(c) == 127 for c in val):
                 raise ValueError(f"{str_field} must be a non-empty string")
         if not isinstance(self.invariant_passed, bool):
             raise ValueError("invariant_passed must be a boolean")
@@ -88,9 +88,13 @@ class RoadmapPRVerificationEntry:
             or not math.isfinite(self.key_metric_value)
         ):
             raise ValueError("key_metric_value must be a finite number")
-        if not isinstance(self.openrouter_request_id, str):
+        if not isinstance(self.openrouter_request_id, str) or any(ord(c) < 32 or ord(c) == 127 for c in self.openrouter_request_id):
             raise ValueError("openrouter_request_id must be a string")
-        if not isinstance(self.entry_hash_sha256, str) or len(self.entry_hash_sha256) != 64:
+        if (
+            not isinstance(self.entry_hash_sha256, str)
+            or len(self.entry_hash_sha256) != 64
+            or any(c not in "0123456789abcdefABCDEF" for c in self.entry_hash_sha256)
+        ):
             raise ValueError("entry_hash_sha256 must be a 64-character hex string")
 
     def to_dict(self) -> dict[str, Any]:
@@ -107,7 +111,10 @@ class SelfEvolvingRoadmapSupervisor:
     ) -> dict[str, Any]:
         if openrouter_request_ids is not None and (
             not isinstance(openrouter_request_ids, (list, tuple))
-            or any(not isinstance(r, str) for r in openrouter_request_ids)
+            or any(
+                not isinstance(r, str) or any(ord(c) < 32 or ord(c) == 127 for c in r)
+                for r in openrouter_request_ids
+            )
         ):
             raise ValueError("openrouter_request_ids must be None or a sequence of strings")
         provided_ids = [

@@ -215,6 +215,23 @@ class ExternalEndpoints:
     turn_username: Optional[str] = None
     turn_password: Optional[str] = None
 
+    def __post_init__(self) -> None:
+        for s_name in (
+            "quic_host",
+            "quic_ca_pem",
+            "quic_server_name",
+            "turn_host",
+            "turn_username",
+            "turn_password",
+        ):
+            val = getattr(self, s_name)
+            if val is not None and (not isinstance(val, str) or not val.strip()):
+                raise ValueError(f"{s_name} must be None or a non-empty string")
+        for p_name in ("quic_port", "turn_port"):
+            port = getattr(self, p_name)
+            if port is not None and (isinstance(port, bool) or not isinstance(port, int) or not (1 <= port <= 65535)):
+                raise ValueError(f"{p_name} must be None or an integer in 1..65535")
+
     @property
     def has_quic(self) -> bool:
         """True when a remote QUIC receiver is configured."""

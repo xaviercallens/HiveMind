@@ -385,6 +385,20 @@ class LossRatchetDecision:
     checkpoint_sha256: str
     reason: str
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.accepted, bool):
+            raise ValueError("accepted must be a boolean")
+        for f_name in ("loss_before", "loss_after", "delta_loss"):
+            val = getattr(self, f_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)):
+                raise ValueError(f"{f_name} must be a number")
+            if self.accepted and not math.isfinite(float(val)):
+                raise ValueError(f"{f_name} must be finite when accepted is True")
+        for s_name in ("checkpoint_sha256", "reason"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+
 
 class LossRatchetGate:
     """Monotonic held-out validation gate for outer DiLoCo / CrowdGPT merges."""
@@ -455,6 +469,23 @@ class WeightRmsGuardDecision:
     rms_ratio: float
     halving_residual_rms: float
     reason: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.accepted, bool):
+            raise ValueError("accepted must be a boolean")
+        for f_name in ("rms_old", "rms_new", "rms_ratio", "halving_residual_rms"):
+            val = getattr(self, f_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)):
+                raise ValueError(f"{f_name} must be a number")
+            if self.accepted:
+                if not math.isfinite(float(val)):
+                    raise ValueError(f"{f_name} must be finite when accepted is True")
+                if f_name == "halving_residual_rms" and float(val) < 0.0:
+                    raise ValueError("halving_residual_rms must be non-negative")
+                if f_name != "halving_residual_rms" and float(val) <= 0.0:
+                    raise ValueError(f"{f_name} must be positive when accepted is True")
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("reason must be a non-empty string")
 
 
 def check_weight_rms_collapse_guard(

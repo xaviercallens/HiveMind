@@ -665,6 +665,21 @@ def project_cwt_scalogram_to_visual_patches(
     patch_dim: int = 48,
 ) -> torch.Tensor:
     """Project a 2D CWT scalogram and photometric observables into a ViT patch tensor `(1, P, D)`."""
+    if not isinstance(scalogram, np.ndarray) or scalogram.ndim != 2 or scalogram.size == 0 or not np.all(np.isfinite(scalogram)):
+        raise ValueError("scalogram must be a non-empty finite 2D numpy ndarray")
+    if not isinstance(flux_ppm, np.ndarray) or flux_ppm.ndim != 1 or flux_ppm.size == 0 or not np.all(np.isfinite(flux_ppm)):
+        raise ValueError("flux_ppm must be a non-empty finite 1D numpy ndarray")
+    for field_name, val in (
+        ("snr_single_transit", snr_single_transit),
+        ("odd_even_asymmetry_ratio", odd_even_asymmetry_ratio),
+        ("centroid_shift_arcsec", centroid_shift_arcsec),
+    ):
+        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+            raise ValueError(f"{field_name} must be a finite non-negative number")
+    if isinstance(num_patches, bool) or not isinstance(num_patches, int) or num_patches < 1:
+        raise ValueError("num_patches must be an integer >= 1")
+    if isinstance(patch_dim, bool) or not isinstance(patch_dim, int) or patch_dim < 40:
+        raise ValueError("patch_dim must be an integer >= 40")
     branch_protos: List[np.ndarray] = []
     for b_id, meta in EXOPLANET_ASTRO_EXPERT_BRANCHES.items():
         b_idx = int(meta["expert_index"])

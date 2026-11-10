@@ -414,6 +414,10 @@ def build_public_image_moe_gallery_scenarios(
     output_gallery_dir: Optional[Path] = None,
 ) -> Tuple[PublicImageScenarioSpec, ...]:
     """Build and evaluate all 12 real public-image Vision-MoE scenarios across the 7 divisions."""
+    if output_gallery_dir is not None:
+        if not isinstance(output_gallery_dir, (Path, str)) or not str(output_gallery_dir).strip():
+            raise ValueError("output_gallery_dir must be a non-empty Path or string when provided")
+        output_gallery_dir = Path(output_gallery_dir)
     svg_map = _build_scenario_svg_assets()
     moe = build_trained_7division_image_moe(seed=20261030, inner_steps=160) if _HAS_TORCH else None
     div_keys = list(MASSIVE_IMAGE_MOE_DIVISIONS.keys())

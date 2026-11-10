@@ -59,6 +59,24 @@ class ChunkedFileEntry:
     merkle_root: str
     chunk_seeders: List[str] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.relative_path, str) or not self.relative_path.strip():
+            raise ValueError("relative_path must be a non-empty string")
+        if isinstance(self.size, bool) or not isinstance(self.size, int) or self.size < 0:
+            raise ValueError("size must be a non-negative integer")
+        if isinstance(self.chunk_size, bool) or not isinstance(self.chunk_size, int) or self.chunk_size < 1:
+            raise ValueError("chunk_size must be a positive integer")
+        if isinstance(self.num_chunks, bool) or not isinstance(self.num_chunks, int) or self.num_chunks < 0:
+            raise ValueError("num_chunks must be a non-negative integer")
+        if not isinstance(self.sha256, str) or not self.sha256.strip():
+            raise ValueError("sha256 must be a non-empty string")
+        if not isinstance(self.merkle_root, str) or not self.merkle_root.strip():
+            raise ValueError("merkle_root must be a non-empty string")
+        if not isinstance(self.chunk_hashes, list) or len(self.chunk_hashes) != self.num_chunks:
+            raise ValueError("chunk_hashes must be a list of length num_chunks")
+        if not isinstance(self.chunk_seeders, list):
+            raise TypeError("chunk_seeders must be a list")
+
 
 @dataclass
 class BundleSeedManifest:
@@ -78,6 +96,30 @@ class BundleSeedManifest:
     bundle_merkle_root: str
     files: List[ChunkedFileEntry]
     seeders: List[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.bundle_id, str) or not self.bundle_id.strip():
+            raise ValueError("bundle_id must be a non-empty string")
+        if not isinstance(self.source_node_id, str) or not self.source_node_id.strip():
+            raise ValueError("source_node_id must be a non-empty string")
+        if (
+            isinstance(self.created_at_epoch, bool)
+            or not isinstance(self.created_at_epoch, (int, float))
+            or not math.isfinite(float(self.created_at_epoch))
+        ):
+            raise ValueError("created_at_epoch must be a finite number")
+        if isinstance(self.chunk_size, bool) or not isinstance(self.chunk_size, int) or self.chunk_size < 1:
+            raise ValueError("chunk_size must be a positive integer")
+        if isinstance(self.total_bytes, bool) or not isinstance(self.total_bytes, int) or self.total_bytes < 0:
+            raise ValueError("total_bytes must be a non-negative integer")
+        if isinstance(self.num_chunks, bool) or not isinstance(self.num_chunks, int) or self.num_chunks < 0:
+            raise ValueError("num_chunks must be a non-negative integer")
+        if not isinstance(self.bundle_merkle_root, str) or not self.bundle_merkle_root.strip():
+            raise ValueError("bundle_merkle_root must be a non-empty string")
+        if not isinstance(self.files, list) or any(not isinstance(f, ChunkedFileEntry) for f in self.files):
+            raise TypeError("files must be a list of ChunkedFileEntry instances")
+        if not isinstance(self.seeders, list):
+            raise TypeError("seeders must be a list")
 
 
 def _lease_clock(now_s: Optional[float]) -> float:
@@ -119,6 +161,22 @@ class DataShardLease:
     reclaimed_at_s: Optional[float] = None
     heartbeat_count: int = 0
 
+    def __post_init__(self) -> None:
+        for str_name in ("lease_id", "shard_cid", "worker_id"):
+            sval = getattr(self, str_name)
+            if not isinstance(sval, str) or not sval.strip():
+                raise ValueError(f"{str_name} must be a non-empty string")
+        for f_name in ("granted_at_s", "expires_at_s"):
+            fval = getattr(self, f_name)
+            if isinstance(fval, bool) or not isinstance(fval, (int, float)) or not math.isfinite(float(fval)):
+                raise ValueError(f"{f_name} must be a finite number")
+        if isinstance(self.ttl_s, bool) or not isinstance(self.ttl_s, (int, float)) or not math.isfinite(float(self.ttl_s)) or float(self.ttl_s) <= 0.0:
+            raise ValueError("ttl_s must be a positive finite number")
+        if self.status not in ("active", "committed", "reclaimed"):
+            raise ValueError("status must be 'active', 'committed', or 'reclaimed'")
+        if isinstance(self.heartbeat_count, bool) or not isinstance(self.heartbeat_count, int) or self.heartbeat_count < 0:
+            raise ValueError("heartbeat_count must be a non-negative integer")
+
 
 class ContentAddressedSwarmStore:
     """Local Agent Disk Vault & Kademlia-style Content-Addressed Storage (CAS).
@@ -140,6 +198,8 @@ class ContentAddressedSwarmStore:
     ) -> None:
         if isinstance(replication_factor, bool) or not isinstance(replication_factor, int) or replication_factor < 1:
             raise ValueError("replication_factor must be an integer >= 1")
+        if security_guard is not None and not isinstance(security_guard, SwarmTrainingAndStoreGuard):
+            raise TypeError("security_guard must be a SwarmTrainingAndStoreGuard or None")
         self.root_dir = Path(root_dir)
         self.replication_factor = replication_factor
         self.shards_dir = self.root_dir / "dataset_shards"

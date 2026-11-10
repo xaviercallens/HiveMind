@@ -451,6 +451,14 @@ class RepoFile:
     size: int
     sha256: str  # LFS sha256 when the Hub reports one, else "" (small git blobs only carry a git oid)
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.path, str):
+            raise TypeError("path must be a string")
+        if isinstance(self.size, bool) or not isinstance(self.size, int) or self.size < 0:
+            raise ValueError("size must be a non-negative integer")
+        if not isinstance(self.sha256, str):
+            raise TypeError("sha256 must be a string")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -736,6 +744,27 @@ class StaticReport:
     hub_license: str = ""
     checked_utc: str = ""
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.verdict, Verdict):
+            raise TypeError("verdict must be a Verdict")
+        if not isinstance(self.reasons, list) or any(not isinstance(r, Reason) for r in self.reasons):
+            raise TypeError("reasons must be a list of Reason instances")
+        if not isinstance(self.files, list) or any(not isinstance(f, RepoFile) for f in self.files):
+            raise TypeError("files must be a list of RepoFile instances")
+        if not isinstance(self.weight_files, list) or any(not isinstance(f, RepoFile) for f in self.weight_files):
+            raise TypeError("weight_files must be a list of RepoFile instances")
+        if isinstance(self.weight_bytes, bool) or not isinstance(self.weight_bytes, int) or self.weight_bytes < 0:
+            raise ValueError("weight_bytes must be a non-negative integer")
+        if self.resident_gb is not None and (
+            isinstance(self.resident_gb, bool)
+            or not isinstance(self.resident_gb, (int, float))
+            or not math.isfinite(float(self.resident_gb))
+            or float(self.resident_gb) < 0.0
+        ):
+            raise ValueError("resident_gb must be None or a non-negative finite number")
+        if not isinstance(self.hub_license, str) or not isinstance(self.checked_utc, str):
+            raise TypeError("hub_license and checked_utc must be strings")
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "verdict": self.verdict.value,
@@ -926,6 +955,14 @@ class IsolatedExecutor:
     isolated: bool
     answer_pack: AnswerFn
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, str) or not self.name.strip():
+            raise ValueError("name must be a non-empty string")
+        if not isinstance(self.isolated, bool):
+            raise TypeError("isolated must be a bool")
+        if not callable(self.answer_pack):
+            raise TypeError("answer_pack must be callable")
+
 
 EndpointProber = Callable[[str, str, str, float], str]
 
@@ -960,6 +997,23 @@ class EvaluationReport:
     n_items: int = 0
     pass_rate: float | None = None
     executor: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.verdict, Verdict):
+            raise TypeError("verdict must be a Verdict")
+        if not isinstance(self.reasons, list) or any(not isinstance(r, Reason) for r in self.reasons):
+            raise TypeError("reasons must be a list of Reason instances")
+        if not isinstance(self.pack_id, str) or not isinstance(self.executor, str):
+            raise TypeError("pack_id and executor must be strings")
+        if isinstance(self.n_items, bool) or not isinstance(self.n_items, int) or self.n_items < 0:
+            raise ValueError("n_items must be a non-negative integer")
+        if self.pass_rate is not None and (
+            isinstance(self.pass_rate, bool)
+            or not isinstance(self.pass_rate, (int, float))
+            or not math.isfinite(float(self.pass_rate))
+            or not (0.0 <= float(self.pass_rate) <= 1.0)
+        ):
+            raise ValueError("pass_rate must be None or a finite number in [0.0, 1.0]")
 
     def to_dict(self) -> dict[str, Any]:
         return {"verdict": self.verdict.value, "reasons": [r.to_dict() for r in self.reasons], "pack_id": self.pack_id,

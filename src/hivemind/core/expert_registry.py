@@ -891,6 +891,24 @@ class RouteDecision:
     reason: str
     load_on_demand: bool = False
 
+    def __post_init__(self) -> None:
+        if self.target not in ("expert", "base"):
+            raise ValueError("target must be 'expert' or 'base'")
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("reason must be a non-empty string")
+        if not isinstance(self.load_on_demand, bool):
+            raise ValueError("load_on_demand must be a boolean")
+        if self.target == "expert":
+            if not isinstance(self.expert_id, str) or not self.expert_id.strip():
+                raise ValueError("expert_id must be a non-empty string when target is 'expert'")
+            if not isinstance(self.cluster_id, str) or not self.cluster_id.strip():
+                raise ValueError("cluster_id must be a non-empty string when target is 'expert'")
+        else:
+            if self.expert_id is not None:
+                raise ValueError("expert_id must be None when target is 'base'")
+            if self.cluster_id is not None and (not isinstance(self.cluster_id, str) or not self.cluster_id.strip()):
+                raise ValueError("cluster_id must be None or a non-empty string")
+
 
 class HierarchicalExpertRouter:
     """Two-level router ``cluster -> expert`` over the live experts of a registry snapshot.

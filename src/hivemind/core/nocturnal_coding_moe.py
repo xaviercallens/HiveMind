@@ -637,6 +637,34 @@ class CodingQualityLoopIteration:
     all_node_vram_within_budget: bool
     polyglot_loop_benchmarks: dict[str, dict[str, float]]
 
+    def __post_init__(self) -> None:
+        for i_pos in ("loop_index", "distributed_nodes_active", "inner_steps_executed"):
+            val = getattr(self, i_pos)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{i_pos} must be a positive integer")
+        for s_name in ("loop_title", "refinement_strategy"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        for f_name in (
+            "heldout_hard_eval_loss",
+            "heldout_hard_routing_acc",
+            "heldout_top2_expert_acc",
+            "delta_energy_vs_prev_loop",
+            "mean_bee_sqnr_db",
+            "mean_wire_compression_x",
+        ):
+            val = getattr(self, f_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{f_name} must be a finite number")
+        if float(self.heldout_hard_eval_loss) <= 0.0 or float(self.mean_wire_compression_x) <= 0.0:
+            raise ValueError("heldout_hard_eval_loss and mean_wire_compression_x must be positive")
+        for b_name in ("monotone_ratchet_accepted", "all_zk_opoi_verified", "all_node_vram_within_budget"):
+            if not isinstance(getattr(self, b_name), bool):
+                raise ValueError(f"{b_name} must be a boolean")
+        if not isinstance(self.polyglot_loop_benchmarks, dict) or not self.polyglot_loop_benchmarks:
+            raise ValueError("polyglot_loop_benchmarks must be a non-empty dict")
+
 
 @dataclass(frozen=True)
 class NocturnalCodingMoEReport:
@@ -677,6 +705,64 @@ class NocturnalCodingMoEReport:
     t4_vram_floor_satisfied: bool
     overall_gate_passed: bool
     report_sha256: str
+
+    def __post_init__(self) -> None:
+        for s_name in ("campaign_id", "execution_device", "report_sha256"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        for i_pos in (
+            "inner_diloco_steps",
+            "lora_rank",
+            "num_quality_loops",
+            "expert_clusters_count",
+            "specialist_bees_count",
+            "big_gpu_nodes_count",
+        ):
+            val = getattr(self, i_pos)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{i_pos} must be a positive integer")
+        for f_name in (
+            "timestamp_utc",
+            "lora_alpha",
+            "stage2_mean_loss_reduction_pct",
+            "stage2_max_consumer_vram_mib",
+            "stage3_mean_compression_ratio",
+            "stage3_mean_sqnr_db",
+            "stage4_poison_rejection_rate_pct",
+            "stage4_replay_cosine_similarity",
+            "stage4_replay_l2_drift",
+            "stage5_cluster_routing_accuracy",
+            "stage5_single_model_baseline_loss",
+            "stage5_upcycled_moe_loss",
+            "stage5_moe_vs_baseline_gain_pct",
+            "t4_free_vram_mib",
+        ):
+            val = getattr(self, f_name)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)):
+                raise ValueError(f"{f_name} must be a finite number")
+        for b_name in (
+            "monotone_3loop_ratchet_passed",
+            "stage1_all_base_frozen",
+            "stage2_invariant_i1_satisfied",
+            "t4_vram_floor_satisfied",
+            "overall_gate_passed",
+        ):
+            if not isinstance(getattr(self, b_name), bool):
+                raise ValueError(f"{b_name} must be a boolean")
+        for l_name in (
+            "supported_languages",
+            "big_gpu_node_allocations",
+            "quality_loop_iterations",
+            "bee_training_results",
+            "stage3_dht_keys_published",
+            "sample_epic_dag_plan",
+        ):
+            lst = getattr(self, l_name)
+            if not isinstance(lst, list) or not lst:
+                raise ValueError(f"{l_name} must be a non-empty list")
+        if not isinstance(self.polyglot_loop_benchmarks if hasattr(self, "polyglot_loop_benchmarks") else self.polyglot_benchmark_scores, dict) or not self.polyglot_benchmark_scores:
+            raise ValueError("polyglot_benchmark_scores must be a non-empty dict")
 
 
 def decompose_engineering_epic_to_dag(

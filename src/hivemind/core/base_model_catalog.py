@@ -333,6 +333,35 @@ class ModelGeometry:
     linear_value_head_dim: int
     linear_conv_kernel_dim: int
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.model_id, str) or not self.model_id.strip():
+            raise ValueError("model_id must be a non-empty string")
+        for i_pos in ("params_text_linear", "hidden", "layers", "intermediate", "vocab"):
+            val = getattr(self, i_pos)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{i_pos} must be a positive integer")
+        for i_nonneg in (
+            "params_embedding",
+            "params_text_other",
+            "params_vision",
+            "params_mtp",
+            "lora_in_plus_out_all_linear",
+            "lora_in_plus_out_mlp",
+            "max_linear_elements",
+            "n_kv_heads",
+            "head_dim",
+            "n_full_attention_layers",
+            "n_linear_attention_layers",
+            "linear_num_key_heads",
+            "linear_num_value_heads",
+            "linear_key_head_dim",
+            "linear_value_head_dim",
+            "linear_conv_kernel_dim",
+        ):
+            val = getattr(self, i_nonneg)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_nonneg} must be a non-negative integer")
+
     @property
     def params_text(self) -> int:
         return self.params_text_linear + self.params_embedding + self.params_text_other
@@ -412,6 +441,21 @@ class VramEstimate:
     kind: str = "ESTIMATE"
     note: str = "analytic estimate; nothing ran on a GPU"
 
+    def __post_init__(self) -> None:
+        for s_name in ("model_id", "mode", "config", "kind", "note"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        if not isinstance(self.components_mib, dict) or not self.components_mib:
+            raise ValueError("components_mib must be a non-empty dict")
+        if (
+            isinstance(self.total_mib, bool)
+            or not isinstance(self.total_mib, (int, float))
+            or not math.isfinite(float(self.total_mib))
+            or float(self.total_mib) < 0.0
+        ):
+            raise ValueError("total_mib must be a finite non-negative number")
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -474,6 +518,23 @@ class FitVerdict:
     budget_mib: float
     margin: float
 
+    def __post_init__(self) -> None:
+        if self.verdict not in (FITS, MARGINAL, DOES_NOT_FIT):
+            raise ValueError(f"verdict must be one of {(FITS, MARGINAL, DOES_NOT_FIT)}")
+        if not isinstance(self.fits, bool):
+            raise ValueError("fits must be a boolean")
+        for f_name in ("estimate_mib", "required_with_margin_mib", "budget_mib", "margin"):
+            val = getattr(self, f_name)
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or float(val) < 0.0
+            ):
+                raise ValueError(f"{f_name} must be a finite non-negative number")
+        if float(self.budget_mib) <= 0.0:
+            raise ValueError("budget_mib must be positive")
+
 
 def fit_verdict(estimate_mib: float, budget_mib: float, margin: float = DEFAULT_MARGIN) -> FitVerdict:
     """FITS when estimate x (1 + margin) <= budget; MARGINAL when only the bare estimate fits; else DOES_NOT_FIT."""
@@ -501,6 +562,30 @@ class CalibrationRecord:
     gpu: str
     source: str
     recorded_at: str
+
+    def __post_init__(self) -> None:
+        for s_name in ("model_id", "mode", "config", "measured_kind", "gpu", "source", "recorded_at"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        for f_pos in ("estimate_mib", "measured_peak_mib", "ratio_measured_to_estimate"):
+            val = getattr(self, f_pos)
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or float(val) <= 0.0
+            ):
+                raise ValueError(f"{f_pos} must be a finite positive number")
+        if (
+            isinstance(self.margin, bool)
+            or not isinstance(self.margin, (int, float))
+            or not math.isfinite(float(self.margin))
+            or float(self.margin) < 0.0
+        ):
+            raise ValueError("margin must be a finite non-negative number")
+        if not isinstance(self.within_margin, bool):
+            raise ValueError("within_margin must be a boolean")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -605,6 +690,27 @@ class PromotionReceipt:
     guard_losses: int
     guard_p_regression: float  # one-sided exact P(X >= guard_losses), X ~ Binomial(guard discordant, 1/2)
     policy: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.decision not in (PROMOTE, HOLD, INSUFFICIENT):
+            raise ValueError(f"decision must be one of {(PROMOTE, HOLD, INSUFFICIENT)}")
+        if not isinstance(self.reasons, list) or any(not isinstance(r, str) for r in self.reasons):
+            raise ValueError("reasons must be a list of strings")
+        for i_name in ("n_items", "wins", "losses", "guard_items", "guard_wins", "guard_losses"):
+            val = getattr(self, i_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_name} must be a non-negative integer")
+        for p_name in ("p_two_sided", "guard_p_regression"):
+            val = getattr(self, p_name)
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or not (0.0 <= float(val) <= 1.0)
+            ):
+                raise ValueError(f"{p_name} must be a finite probability in [0.0, 1.0]")
+        if not isinstance(self.policy, dict):
+            raise ValueError("policy must be a dict")
 
     @property
     def promoted(self) -> bool:

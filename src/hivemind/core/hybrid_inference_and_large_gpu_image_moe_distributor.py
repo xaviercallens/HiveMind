@@ -135,6 +135,33 @@ class ShardAllocationPlan:
     primary_large_backbone: str
     hybrid_micro_backbone: str
 
+    def __post_init__(self) -> None:
+        for s_name in ("division_id", "division_title", "primary_large_backbone", "hybrid_micro_backbone"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        for i_pos in ("total_samples", "total_shards"):
+            val = getattr(self, i_pos)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{i_pos} must be a positive integer")
+        for i_nonneg in ("large_gpu_shards", "hybrid_micro_shards"):
+            val = getattr(self, i_nonneg)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_nonneg} must be a non-negative integer")
+        if self.large_gpu_shards + self.hybrid_micro_shards != self.total_shards:
+            raise ValueError("large_gpu_shards + hybrid_micro_shards must equal total_shards")
+        if (
+            isinstance(self.large_gpu_share_pct, bool)
+            or not isinstance(self.large_gpu_share_pct, (int, float))
+            or not math.isfinite(float(self.large_gpu_share_pct))
+            or not (0.0 <= float(self.large_gpu_share_pct) <= 100.0)
+        ):
+            raise ValueError("large_gpu_share_pct must be a finite percentage in [0.0, 100.0]")
+        for t_name in ("assigned_large_producers", "assigned_hybrid_nodes"):
+            tup = getattr(self, t_name)
+            if not isinstance(tup, tuple) or any(not isinstance(x, str) or not x.strip() for x in tup):
+                raise ValueError(f"{t_name} must be a tuple of non-empty strings")
+
 
 @dataclass(frozen=True)
 class HybridInferenceServiceReport:
@@ -159,6 +186,43 @@ class HybridInferenceServiceReport:
     vram_safety_gate_passed: bool
     hot_swapped_vision_adapters: int
     zero_downtime_hotswap_verified: bool
+
+    def __post_init__(self) -> None:
+        for s_name in ("node_id", "handle", "hardware_name", "status"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        if (
+            not isinstance(self.served_models, tuple)
+            or not self.served_models
+            or any(not isinstance(m, str) or not m.strip() for m in self.served_models)
+        ):
+            raise ValueError("served_models must be a non-empty tuple of non-empty strings")
+        for i_name in ("inference_requests_served", "preemption_events_triggered", "hot_swapped_vision_adapters"):
+            val = getattr(self, i_name)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{i_name} must be a non-negative integer")
+        for f_name in (
+            "inference_p50_latency_ms",
+            "inference_p95_latency_ms",
+            "mean_preemption_yield_ms",
+            "max_preemption_yield_ms",
+            "inference_vram_mib",
+            "micro_training_vram_mib",
+            "total_active_vram_mib",
+            "free_vram_headroom_mib",
+        ):
+            val = getattr(self, f_name)
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or float(val) < 0.0
+            ):
+                raise ValueError(f"{f_name} must be a finite non-negative number")
+        for b_name in ("preemption_sla_passed", "vram_safety_gate_passed", "zero_downtime_hotswap_verified"):
+            if not isinstance(getattr(self, b_name), bool):
+                raise ValueError(f"{b_name} must be a boolean")
 
 
 @dataclass(frozen=True)
@@ -185,6 +249,46 @@ class LargeGPUProducerTrainingReport:
     sqnr_db: float
     dht_key: str
     zk_opoi_verified: bool
+
+    def __post_init__(self) -> None:
+        for s_name in ("node_id", "handle", "hardware_name", "dht_key"):
+            val = getattr(self, s_name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{s_name} must be a non-empty string")
+        for t_name in ("assigned_divisions", "assigned_backbones"):
+            tup = getattr(self, t_name)
+            if not isinstance(tup, tuple) or not tup or any(not isinstance(x, str) or not x.strip() for x in tup):
+                raise ValueError(f"{t_name} must be a non-empty tuple of non-empty strings")
+        for i_pos in ("shards_assigned", "samples_processed", "lora_rank", "inner_diloco_steps"):
+            val = getattr(self, i_pos)
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+                raise ValueError(f"{i_pos} must be a positive integer")
+        for f_pos in (
+            "lora_alpha",
+            "peak_training_vram_mib",
+            "total_vram_mib",
+            "focal_loss_before",
+            "focal_loss_after",
+            "wire_compression_ratio",
+            "sqnr_db",
+        ):
+            val = getattr(self, f_pos)
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or float(val) <= 0.0
+            ):
+                raise ValueError(f"{f_pos} must be a finite positive number")
+        if (
+            isinstance(self.focal_loss_reduction_pct, bool)
+            or not isinstance(self.focal_loss_reduction_pct, (int, float))
+            or not math.isfinite(float(self.focal_loss_reduction_pct))
+        ):
+            raise ValueError("focal_loss_reduction_pct must be a finite number")
+        for b_name in ("vram_within_budget", "zk_opoi_verified"):
+            if not isinstance(getattr(self, b_name), bool):
+                raise ValueError(f"{b_name} must be a boolean")
 
 
 PRODUCER_AND_HYBRID_FLEET: Tuple[GPUProducerNodeSpec, ...] = (

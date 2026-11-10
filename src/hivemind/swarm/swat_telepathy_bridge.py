@@ -739,6 +739,10 @@ class WakeToSleepConsolidationBridge:
 
     swat_bridge: SwaTTelepathyBridge = field(default_factory=SwaTTelepathyBridge)
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.swat_bridge, SwaTTelepathyBridge):
+            raise TypeError("swat_bridge must be a SwaTTelepathyBridge")
+
     def consolidate_wake_nectar_into_sleep(
         self,
         nectar_entries: Sequence[Mapping[str, Any]],

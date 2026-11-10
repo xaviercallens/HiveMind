@@ -81,6 +81,14 @@ def wait_for_idle(
 ) -> float:
     """Block until nginx shows no in-flight inference request for ``quiet_s`` seconds, so the validator's GPU replay never competes
     with end users. Gives up after ``max_wait_s`` (default 30 min) so validation cannot starve forever. Returns seconds waited."""
+    if isinstance(quiet_s, bool) or not isinstance(quiet_s, (int, float)) or not math.isfinite(float(quiet_s)) or float(quiet_s) < 0.0:
+        raise ValueError("quiet_s must be a non-negative finite number")
+    if max_wait_s is not None and (
+        isinstance(max_wait_s, bool) or not isinstance(max_wait_s, (int, float)) or not math.isfinite(float(max_wait_s)) or float(max_wait_s) < 0.0
+    ):
+        raise ValueError("max_wait_s must be None or a non-negative finite number")
+    if not callable(clock) or not callable(sleep_fn):
+        raise TypeError("clock and sleep_fn must be callables")
     import urllib.request
 
     url = os.environ.get("HIVEMIND_IDLE_URL", "http://127.0.0.1:8091/nginx_status")
@@ -148,6 +156,12 @@ def validate_solver_sweep(
     3. S-1 class-aware cross-CPU trajectory tolerance against ``reference_trajectories`` and/or a quorum-of-2
        replica result (``peer_meta``).
     """
+    if not isinstance(spec, dict) or not isinstance(meta, dict):
+        raise TypeError("spec and meta must be dicts")
+    if not isinstance(host, str) or not host.strip():
+        raise ValueError("host must be a non-empty string")
+    if peer_meta is not None and not isinstance(peer_meta, dict):
+        raise TypeError("peer_meta must be None or a dict")
     wu = str(spec.get("wu_id", ""))
     if meta.get("wu_id") != wu or meta.get("app") not in SOLVER_SWEEP_APPS:
         return _reject(wu, host, "result is not for this solver workunit/app")
@@ -325,6 +339,10 @@ def run_validation(
     """The validation itself, shared by the one-shot ``hivemind_validate`` and the optional resident validator
     (``resident_validator.py``): both run exactly this function, so their verdicts cannot differ. ``mv`` is the validator
     object (default: a fresh ``MoEValidator``; the resident server passes one whose base model comes from a cache)."""
+    if isinstance(args, (str, bytes)) or not isinstance(args, list) or not all(isinstance(a, str) for a in args):
+        raise ValueError("args must be a list of strings")
+    if not callable(log):
+        raise TypeError("log must be callable")
     cli_wu, cleaned_args = _parse_wu_args(args)
     meta, paths = _meta(cleaned_args)
     result_id = cleaned_args[-1] if cleaned_args and cleaned_args[-1].isdigit() else None
@@ -389,6 +407,8 @@ def validate(args: list[str]) -> int:
     """Entry point of ``hivemind_validate``. Optional (off by default): with ``--resident[=SOCKET]`` or the environment variable
     ``HIVEMIND_RESIDENT_VALIDATOR_SOCKET`` set, forward to a resident validator; if it is unreachable, warn once and run the
     one-shot path below. With neither set the behaviour is exactly the one-shot path."""
+    if isinstance(args, (str, bytes)) or not isinstance(args, list) or not all(isinstance(a, str) for a in args):
+        raise ValueError("args must be a list of strings")
     sock = os.environ.get("HIVEMIND_RESIDENT_VALIDATOR_SOCKET")
     if args and (args[0] == "--resident" or args[0].startswith("--resident=")):
         flag, args = args[0], args[1:]
@@ -429,6 +449,12 @@ def classify_workunit_eval_gain(
     Records whether the evaluation basis changed at ``hmq_00171`` (6-domain ``MIX_DOMAINS`` vs 16-domain
     ``DOMAIN_ORDER``, ``8x128`` held-out tokens/domain, baseline ``2.12``).
     """
+    if not isinstance(record, dict):
+        raise TypeError("record must be a dict")
+    if isinstance(tolerance, bool) or not isinstance(tolerance, (int, float)) or not math.isfinite(float(tolerance)) or float(tolerance) < 0.0:
+        raise ValueError("tolerance must be a non-negative finite number")
+    if isinstance(baseline_nll, bool) or not isinstance(baseline_nll, (int, float)) or not math.isfinite(float(baseline_nll)) or float(baseline_nll) <= 0.0:
+        raise ValueError("baseline_nll must be a positive finite number")
     wu_id = str(record.get("wu_id") or "")
     by_dom_before = record.get("eval_by_domain_before") if isinstance(record.get("eval_by_domain_before"), dict) else {}
     by_dom_after = record.get("eval_by_domain_after") if isinstance(record.get("eval_by_domain_after"), dict) else {}
@@ -506,6 +532,8 @@ def classify_workunit_eval_gain(
 
 
 def assimilate(args: list[str], directory: Any = None) -> int:
+    if isinstance(args, (str, bytes)) or not isinstance(args, list) or not all(isinstance(a, str) for a in args):
+        raise ValueError("args must be a list of strings")
     LEDGER_DIR.mkdir(parents=True, exist_ok=True)
     if args and args[0] == "--error":
         (LEDGER_DIR / f"assimilate_error_{int(time.time())}.json").write_text(json.dumps({"error_mask": args[1], "wu_db_id": args[2]}))
@@ -644,6 +672,10 @@ RETRY_LATER = 75  # EX_TEMPFAIL; deploy/boinc_always_on/script_validator_retry.p
 def lookup_verdict(args: list[str], log: Callable[[str], None] = _log_stderr) -> int:
     """Validator hook for a server without a GPU: the replay ran on a GPU host, which left ``<result_id>.json`` in ``VERDICT_DIR``.
     Only a well-formed verdict decides: anything else means "not decided yet", so an honest result is never rejected because that host was off."""
+    if isinstance(args, (str, bytes)) or not isinstance(args, list) or not all(isinstance(a, str) for a in args):
+        raise ValueError("args must be a list of strings")
+    if not callable(log):
+        raise TypeError("log must be callable")
     result_id = args[-1] if args else ""
     if not result_id.isdigit():
         log(f"no usable result id in {args!r}")

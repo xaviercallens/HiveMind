@@ -77,6 +77,10 @@ def is_allowed_opentrainer_campaign_id(
     registered_account_campaigns: Iterable[str] = (),
 ) -> bool:
     """Return True if ``campaign_id`` is in the canonical allow-list, matches ``byom-<name>``, or was registered in a heartbeat of that account (Issue #618 / IP-259)."""
+    if not isinstance(campaign_id, str):
+        raise TypeError("campaign_id must be a string")
+    if isinstance(registered_account_campaigns, (str, bytes)) or not hasattr(registered_account_campaigns, "__iter__"):
+        raise TypeError("registered_account_campaigns must be an iterable of strings")
     cid = str(campaign_id or "").strip()
     if not cid:
         return False
@@ -286,6 +290,10 @@ def build_opentrainer_training_round_table(
     prefix: str = "hmq_",
 ) -> list[dict[str, Any]]:
     """Build a structured table of `(round, domain, eval_by_domain_before, eval_by_domain_after)` from ledger JSON artifacts (Audit C8)."""
+    if ledger_dir is not None and not isinstance(ledger_dir, Path):
+        raise TypeError("ledger_dir must be None or a Path")
+    if not isinstance(prefix, str) or not prefix.strip() or "/" in prefix or "\\" in prefix:
+        raise ValueError("prefix must be a non-empty filename prefix string")
     if ledger_dir is None or not ledger_dir.exists():
         return []
     rows: list[dict[str, Any]] = []
@@ -352,6 +360,8 @@ DEFAULT_ROUND_SCRIPT_PATH = Path(__file__).resolve().parents[3] / "scripts" / "e
 
 def compute_default_code_pin(script_path: Path | None = None) -> str:
     """Return a deterministic SHA-256 code pin for the OpenTrainer Stage-2 QLoRA / DiLoCo round script (IP-176)."""
+    if script_path is not None and not isinstance(script_path, Path):
+        raise TypeError("script_path must be None or a Path")
     candidate = script_path if script_path is not None else DEFAULT_ROUND_SCRIPT_PATH
     if candidate.is_file():
         return hashlib.sha256(candidate.read_bytes()).hexdigest()
@@ -721,6 +731,12 @@ def summarize_moe_self_training_progress(
     now_utc: float | None = None,
 ) -> dict[str, Any]:
     """Compute real, non-fabricated MoE self-training trajectory metrics from recorded OpenTrainer rounds."""
+    if isinstance(recent_rounds, (str, bytes)) or not isinstance(recent_rounds, Sequence):
+        raise TypeError("recent_rounds must be a Sequence of Mappings")
+    if isinstance(opentrainer_nodes, (str, bytes)) or not isinstance(opentrainer_nodes, Sequence):
+        raise TypeError("opentrainer_nodes must be a Sequence of Mappings")
+    if now_utc is not None and (isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc))):
+        raise ValueError("now_utc must be None or a finite number")
     now = time.time() if now_utc is None else float(now_utc)
     live_nodes = [n for n in opentrainer_nodes if (now - float(n.get("last_heartbeat_utc") or 0.0)) <= 300.0]
     ordered = sorted(
@@ -781,6 +797,14 @@ def build_opentrainer_status_payload(
     now_utc: float | None = None,
 ) -> dict[str, Any]:
     """Build the comprehensive ``/v1/hivemind/opentrainer/status`` payload."""
+    if isinstance(trainer_accounts, (str, bytes)) or not isinstance(trainer_accounts, Sequence):
+        raise TypeError("trainer_accounts must be a Sequence of Mappings")
+    if isinstance(opentrainer_nodes, (str, bytes)) or not isinstance(opentrainer_nodes, Sequence):
+        raise TypeError("opentrainer_nodes must be a Sequence of Mappings")
+    if isinstance(recent_rounds, (str, bytes)) or not isinstance(recent_rounds, Sequence):
+        raise TypeError("recent_rounds must be a Sequence of Mappings")
+    if now_utc is not None and (isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc))):
+        raise ValueError("now_utc must be None or a finite number")
     now = time.time() if now_utc is None else float(now_utc)
     live_nodes = [n for n in opentrainer_nodes if (now - float(n.get("last_heartbeat_utc") or 0.0)) <= 300.0]
     distinct_hosts = {

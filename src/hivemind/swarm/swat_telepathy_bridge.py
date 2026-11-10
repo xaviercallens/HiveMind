@@ -563,7 +563,7 @@ def compute_knowledge_seeding_loss(
     s_lp = np.asarray(student_log_probs, dtype=np.float64)
     t_lp = np.asarray(teacher_log_probs, dtype=np.float64)
     if s_lp.shape != t_lp.shape or s_lp.size == 0 or not np.all(np.isfinite(s_lp)) or not np.all(np.isfinite(t_lp)):
-        raise ValueError("student_log_probs and teacher_log_probs must have identical non-empty finite shape")
+        raise ValueError("student_log_probs and teacher_log_probs must have identical non-empty shape and finite values")
     if (
         isinstance(semantic_equivalence, bool)
         or not isinstance(semantic_equivalence, (int, float))

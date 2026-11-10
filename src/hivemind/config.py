@@ -424,6 +424,8 @@ def detect_gpu_backend(device: Any | None = None) -> str:
     ROCm builds expose the `torch.cuda` namespace, so they are discriminated through
     `torch.version.hip` rather than through the device type.
     """
+    if isinstance(device, bool):
+        raise ValueError("device must not be a boolean")
     import torch
 
     if device is None:
@@ -453,6 +455,8 @@ def detect_gpu_vendor(backend: str) -> str:
 
 def detect_rocm_gcn_arch(device: Any | None = None) -> str | None:
     """Return the AMD GCN/RDNA architecture identifier (e.g. `gfx1100`, `gfx1030`)."""
+    if isinstance(device, bool):
+        raise ValueError("device must not be a boolean")
     import torch
 
     if not is_rocm_available() or not torch.cuda.is_available():

@@ -954,6 +954,8 @@ def synthesize_gemini_or_gcp_free_tts(
       2. Tier 2: Google Cloud Free-Tier Neural Speech (`translate.googleapis.com/translate_tts`) across all 5 languages
          (`en`, `fr`, `es`, `de`, `zh-CN`) with zero API key required and local disk caching.
     """
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
     import base64
     import urllib.error
     import urllib.parse

@@ -841,6 +841,12 @@ SERVE_LADDER: tuple[ServeConfig, ...] = (ServeConfig("Q8_0", 4096), ServeConfig(
 
 
 def _first_fit(estimates: Sequence[VramEstimate], budget: int, margin: float) -> dict[str, Any] | None:
+    if (
+        not isinstance(estimates, Sequence)
+        or isinstance(estimates, (str, bytes))
+        or any(not isinstance(e, VramEstimate) for e in estimates)
+    ):
+        raise ValueError("estimates must be a sequence of VramEstimate")
     for est in estimates:
         v = fit_verdict(est.total_mib, budget, margin)
         if v.fits:
@@ -852,6 +858,24 @@ def recommend_upgrade_plan(catalog: Mapping[str, Any], tiers: Sequence[GpuTier] 
                            train_ladder: Sequence[TrainRecipe] = TRAIN_LADDER, serve_ladder: Sequence[ServeConfig] = SERVE_LADDER,
                            margin: float = DEFAULT_MARGIN) -> dict[str, Any]:
     """For each tier: what fits to train and serve, and which candidate (if any) goes to the promotion gate."""
+    if not isinstance(tiers, Sequence) or isinstance(tiers, (str, bytes)) or len(tiers) == 0 or any(not isinstance(t, GpuTier) for t in tiers):
+        raise ValueError("tiers must be a non-empty sequence of GpuTier")
+    if (
+        not isinstance(train_ladder, Sequence)
+        or isinstance(train_ladder, (str, bytes))
+        or len(train_ladder) == 0
+        or any(not isinstance(r, TrainRecipe) for r in train_ladder)
+    ):
+        raise ValueError("train_ladder must be a non-empty sequence of TrainRecipe")
+    if (
+        not isinstance(serve_ladder, Sequence)
+        or isinstance(serve_ladder, (str, bytes))
+        or len(serve_ladder) == 0
+        or any(not isinstance(s, ServeConfig) for s in serve_ladder)
+    ):
+        raise ValueError("serve_ladder must be a non-empty sequence of ServeConfig")
+    if isinstance(margin, bool) or not isinstance(margin, (int, float)) or not math.isfinite(float(margin)) or not (0.0 <= float(margin) < 1.0):
+        raise ValueError("margin must be in [0, 1)")
     problems = validate_catalog(catalog)
     if problems:
         raise ValueError("invalid base-model catalog: " + "; ".join(problems))
@@ -889,6 +913,13 @@ def recommend_upgrade_plan(catalog: Mapping[str, Any], tiers: Sequence[GpuTier] 
 def render_plan(plan: Mapping[str, Any]) -> str:
     if not isinstance(plan, Mapping):
         raise TypeError("plan must be a Mapping")
+    for req_key in ("kind", "margin", "catalog_retrieved_at", "tiers", "not_found"):
+        if req_key not in plan:
+            raise ValueError(f"plan missing required key '{req_key}'")
+    if isinstance(plan["margin"], bool) or not isinstance(plan["margin"], (int, float)) or not math.isfinite(float(plan["margin"])):
+        raise ValueError("plan['margin'] must be a finite number")
+    if not isinstance(plan["tiers"], Sequence) or isinstance(plan["tiers"], (str, bytes)):
+        raise ValueError("plan['tiers'] must be a sequence of tier dicts")
     lines = [f"Upgrade plan ({plan['kind']}, margin {plan['margin']:.0%}, catalog retrieved {plan['catalog_retrieved_at']})"]
     for t in plan["tiers"]:
         lines.append(f"- {t['tier_id']} ({t['budget_mib']} MiB): train={t['train_candidate']} serve={t['serve_candidate']} :: {t['action']}")
@@ -902,6 +933,8 @@ def render_plan(plan: Mapping[str, Any]) -> str:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    if argv is not None and (isinstance(argv, (str, bytes)) or not isinstance(argv, Sequence) or any(not isinstance(x, str) for x in argv)):
+        raise ValueError("argv must be a sequence of strings or None")
     ap = argparse.ArgumentParser(description="Print the per-tier base-model upgrade plan (an ESTIMATE) from a catalog file.")
     ap.add_argument("--catalog", default="configs/base_models_s21.json")
     ap.add_argument("--margin", type=float, default=DEFAULT_MARGIN)

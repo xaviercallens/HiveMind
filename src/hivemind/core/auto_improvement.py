@@ -739,6 +739,16 @@ class RetrofitReport:
                 raise ValueError(f"{f_name} must be a finite non-negative number")
         if not isinstance(self.credited_accounts, dict):
             raise ValueError("credited_accounts must be a dict")
+        if any(
+            not isinstance(k, str)
+            or not k.strip()
+            or isinstance(v, bool)
+            or not isinstance(v, (int, float))
+            or not math.isfinite(float(v))
+            or float(v) < 0.0
+            for k, v in self.credited_accounts.items()
+        ):
+            raise ValueError("credited_accounts must map non-empty account IDs to finite non-negative numbers")
         if not isinstance(self.ledger_verified, bool):
             raise ValueError("ledger_verified must be a boolean")
         if not isinstance(self.audit_log, list) or any(not isinstance(e, str) for e in self.audit_log):
@@ -777,6 +787,8 @@ class NocturnalAutoImprovementScheduler:
     @staticmethod
     def _canonical_base_model(model_or_tag: str) -> str:
         """Resolve short tags like 'gemma-2-9b', 'qwen-3.5-9b', 'qwen-2.5-coder-14b' to HF identifiers."""
+        if not isinstance(model_or_tag, str) or not model_or_tag.strip() or any(ord(c) < 32 for c in model_or_tag):
+            raise ValueError("model_or_tag must be a non-empty printable string")
         tag = model_or_tag.strip().lower()
         if tag in ALL_BASE_MODELS:
             return ALL_BASE_MODELS[tag]["model_id"]
@@ -807,6 +819,11 @@ class NocturnalAutoImprovementScheduler:
         """Identify producers with sufficient VRAM and fresh heartbeats to replace preempted cloud VMs."""
         if not isinstance(connected_producers, Sequence) or isinstance(connected_producers, (str, bytes)):
             raise ValueError("connected_producers must be a sequence of mappings")
+        for p in connected_producers:
+            if not isinstance(p, Mapping):
+                raise ValueError("each entry in connected_producers must be a Mapping")
+            if "account_id" not in p or not isinstance(p["account_id"], str) or not p["account_id"].strip():
+                raise ValueError("each producer entry must have a non-empty string account_id")
         for field_name, val in (("min_vram_gb", min_vram_gb), ("max_heartbeat_age_s", max_heartbeat_age_s)):
             if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0:
                 raise ValueError(f"{field_name} must be a positive finite number")
@@ -878,6 +895,10 @@ class NocturnalAutoImprovementScheduler:
             or time_budget_minutes <= 0
         ):
             raise ValueError("time_budget_minutes must be a positive finite number")
+        if base_model_id is not None and (
+            not isinstance(base_model_id, str) or not base_model_id.strip() or any(ord(c) < 32 for c in base_model_id)
+        ):
+            raise ValueError("base_model_id must be a non-empty printable string")
         canonical_domain = resolve_domain_canonical(domain)
         meta = HF_EXPERT_CATALOG[canonical_domain]
 
@@ -917,6 +938,11 @@ class NocturnalAutoImprovementScheduler:
         self, canonical_domain: str, num_samples: int, seed: int
     ) -> list[dict[str, str]]:
         """Generate structured prompt-solution refinement pairs mapped to real Hugging Face dataset schemas."""
+        canonical_domain = resolve_domain_canonical(canonical_domain)
+        if isinstance(num_samples, bool) or not isinstance(num_samples, int) or num_samples < 1:
+            raise ValueError("num_samples must be an integer >= 1")
+        if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+            raise ValueError("seed must be a non-negative integer")
         rng = np.random.default_rng(seed)
         pairs: list[dict[str, str]] = []
         meta = HF_EXPERT_CATALOG[canonical_domain]
@@ -1296,6 +1322,8 @@ class PointsRetrofitManager:
         for r in results:
             if not isinstance(r, AutoImprovementExecutionResult):
                 raise ValueError("results must contain only AutoImprovementExecutionResult instances")
+        if store is None or not hasattr(store, "verify_chain") or not hasattr(store, "get_account") or not hasattr(store, "grant"):
+            raise ValueError("store must be a valid RouterStore-like object")
         credited_accounts: dict[str, float] = {}
         audit_log: list[str] = []
         newly_credited = 0

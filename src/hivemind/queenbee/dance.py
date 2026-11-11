@@ -52,16 +52,20 @@ class DanceRecord:
         if (
             not isinstance(self.expert_id, str)
             or not self.expert_id.strip()
+            or any(c in self.expert_id for c in ("\r", "\n", "\x00"))
             or not isinstance(self.served_by, str)
             or not self.served_by.strip()
+            or any(c in self.served_by for c in ("\r", "\n", "\x00"))
             or not isinstance(self.cluster_id, str)
             or not self.cluster_id.strip()
+            or any(c in self.cluster_id for c in ("\r", "\n", "\x00"))
             or not isinstance(self.signer_id, str)
             or not self.signer_id.strip()
+            or any(c in self.signer_id for c in ("\r", "\n", "\x00"))
         ):
-            raise ValueError("expert_id, served_by, cluster_id and signer_id must be non-empty strings")
-        if not isinstance(self.signature_hex, str):
-            raise ValueError("signature_hex must be a string")
+            raise ValueError("expert_id, served_by, cluster_id and signer_id must be non-empty strings without control characters")
+        if not isinstance(self.signature_hex, str) or any(c in self.signature_hex for c in ("\r", "\n", "\x00")):
+            raise ValueError("signature_hex must be a string without control characters")
         if (
             isinstance(self.n, bool)
             or not isinstance(self.n, int)
@@ -119,11 +123,26 @@ class DanceRecord:
     def from_dict(cls, data: Mapping[str, Any]) -> "DanceRecord":
         if not isinstance(data, Mapping):
             raise ValueError("data must be a mapping")
+        if "schema" in data and data["schema"] != RECORD_SCHEMA:
+            raise ValueError("invalid DanceRecord schema")
         sig = data.get("signature_hex", "")
         if not isinstance(sig, str):
             raise ValueError("signature_hex must be a string")
-        fields = {k: data[k] for k in ("expert_id", "served_by", "cluster_id", "n", "successes", "cost_per_1k", "epoch",
-                                        "verifier_kind", "signer_id")}
+        req_keys = (
+            "expert_id",
+            "served_by",
+            "cluster_id",
+            "n",
+            "successes",
+            "cost_per_1k",
+            "epoch",
+            "verifier_kind",
+            "signer_id",
+        )
+        missing = [k for k in req_keys if k not in data]
+        if missing:
+            raise ValueError(f"missing required DanceRecord fields: {missing}")
+        fields = {k: data[k] for k in req_keys}
         return cls(signature_hex=sig, **fields)
 
 
@@ -227,8 +246,8 @@ def derive_signer_secret(master_secret: bytes, signer_id: str) -> bytes:
     """Derive a per-signer HMAC key from `master_secret` so distinct signers cannot forge for third parties (IP-82)."""
     if not isinstance(master_secret, (bytes, bytearray)) or len(master_secret) == 0:
         raise ValueError("master_secret must be non-empty")
-    if not isinstance(signer_id, str) or not signer_id.strip():
-        raise ValueError("signer_id must be non-empty")
+    if not isinstance(signer_id, str) or not signer_id.strip() or any(c in signer_id for c in ("\r", "\n", "\x00")):
+        raise ValueError("signer_id must be non-empty and without control characters")
     return hmac.new(bytes(master_secret), f"hivemind-dance-signer-v1:{signer_id}".encode("utf-8"), hashlib.sha256).digest()
 
 
@@ -364,14 +383,19 @@ def recruitment_weights(
         or any(
             not isinstance(k, tuple)
             or len(k) != 2
+            or not isinstance(k[0], str)
+            or not k[0].strip()
+            or not isinstance(k[1], str)
+            or not k[1].strip()
             or isinstance(v, bool)
             or not isinstance(v, (int, float))
             or not math.isfinite(float(v))
             or float(v) < 0.0
+            or float(v) > 1.0
             for k, v in scout_bounds.items()
         )
     ):
-        raise ValueError("scout_bounds must map (cluster_id, expert_id) to finite non-negative numbers")
+        raise ValueError("scout_bounds must map (cluster_id, expert_id) to finite non-negative numbers in [0, 1]")
     if isinstance(records, (str, bytes)):
         raise ValueError("records must be an iterable of DanceRecord instances, not str/bytes")
     weights: dict[str, dict[str, float]] = {}

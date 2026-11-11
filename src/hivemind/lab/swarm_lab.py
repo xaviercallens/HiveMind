@@ -200,6 +200,11 @@ def domain_loss(theta: list[float], a: list[float], c: list[float]) -> float:
         or len(theta) != len(c)
     ):
         raise ValueError("theta, a, and c must be equal-length non-empty lists")
+    for vec in (theta, a, c):
+        if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) for v in vec):
+            raise ValueError("theta, a, and c must contain finite numbers")
+    if any(float(ak) < 0.0 for ak in a):
+        raise ValueError("a curvatures must be non-negative")
     acc = 0.0
     for k in range(len(theta)):
         e = theta[k] - c[k]
@@ -219,13 +224,23 @@ def losses(theta: list[float], a_all: list[list[float]], c_all: list[list[float]
 
 def merge_deltas(items: list[tuple[list[float], float]], mode: str) -> list[float]:
     """Weighted merge of (delta, weight) items in the given order; 'rda' multiplies the weighted mean by r = sum w|D| / |sum w D| (>= 1)."""
-    if not items:
+    if not isinstance(items, (list, tuple)) or not items:
         raise ValueError("items must be non-empty")
     if mode not in ("direct", "rda"):
         raise ValueError("mode must be 'direct' or 'rda'")
-    d = len(items[0][0])
+    first = items[0]
+    if not isinstance(first, (list, tuple)) or len(first) != 2 or not isinstance(first[0], (list, tuple)) or not first[0]:
+        raise ValueError("each item must be a (non-empty delta, positive finite weight) pair")
+    d = len(first[0])
     wsum, s, num = 0.0, [0.0] * d, 0.0
-    for delta, w in items:
+    for item in items:
+        if not isinstance(item, (list, tuple)) or len(item) != 2:
+            raise ValueError("each item must be a (non-empty delta, positive finite weight) pair")
+        delta, w = item
+        if not isinstance(delta, (list, tuple)) or len(delta) != d:
+            raise ValueError("all deltas in items must be equal-length non-empty sequences")
+        if isinstance(w, bool) or not isinstance(w, (int, float)) or not math.isfinite(float(w)) or float(w) <= 0.0:
+            raise ValueError("item weight w must be a finite positive number")
         wsum += w
         num += w * _norm(delta)
         for k in range(d):
@@ -244,6 +259,20 @@ def carried_weights(queue: list[dict[str, Any]], rnd: int) -> tuple[list[dict[st
         raise ValueError("queue must be a list")
     if isinstance(rnd, bool) or not isinstance(rnd, int) or rnd < 1:
         raise ValueError("rnd must be an integer >= 1")
+    for e in queue:
+        if not isinstance(e, dict) or "base" not in e or "worker" not in e:
+            raise ValueError("each queue entry must be a dict containing 'base' and 'worker'")
+        base, worker = e["base"], e["worker"]
+        if (
+            isinstance(base, bool)
+            or not isinstance(base, int)
+            or base < 1
+            or base > rnd
+            or isinstance(worker, bool)
+            or not isinstance(worker, int)
+            or worker < 0
+        ):
+            raise ValueError("queue entry 'base' must be in 1..rnd and 'worker' must be an integer >= 0")
     keep, dropped = [], 0
     for e in sorted(queue, key=lambda e: (e["base"], e["worker"])):
         s = rnd - e["base"]
@@ -326,6 +355,12 @@ def _run(sc: Scenario) -> dict[str, Any]:
 
 
 def _digest(curve: list[float]) -> str:
+    if (
+        not isinstance(curve, (list, tuple))
+        or not curve
+        or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)) for v in curve)
+    ):
+        raise ValueError("curve must be a non-empty sequence of finite numbers")
     return hashlib.sha256(",".join("%.9f" % v for v in curve).encode("utf-8")).hexdigest()[:16]
 
 

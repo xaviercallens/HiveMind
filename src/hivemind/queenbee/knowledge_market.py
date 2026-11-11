@@ -36,10 +36,10 @@ class KnowledgeShare:
     verifier_receipt_sha256: str = ""
 
     def __post_init__(self) -> None:
-        if not isinstance(self.account_id, str) or not self.account_id.strip():
-            raise ValueError("account_id must be non-empty")
-        if not isinstance(self.licence, str) or not self.licence.strip():
-            raise ValueError("licence must be a non-empty string")
+        if not isinstance(self.account_id, str) or not self.account_id.strip() or any(c in self.account_id for c in ("\r", "\n", "\x00")):
+            raise ValueError("account_id must be non-empty and without control characters")
+        if not isinstance(self.licence, str) or not self.licence.strip() or any(c in self.licence for c in ("\r", "\n", "\x00")):
+            raise ValueError("licence must be a non-empty string without control characters")
         if not isinstance(self.verified, bool):
             raise ValueError("verified must be a bool")
         if self.kind not in SHARE_KINDS:
@@ -48,8 +48,8 @@ class KnowledgeShare:
             raise ValueError("epoch must be >= 0")
         if not isinstance(self.text_sha256, str) or len(self.text_sha256) != 64 or any(c not in "0123456789abcdef" for c in self.text_sha256.lower()):
             raise ValueError("text_sha256 must be a 64-char hex sha256")
-        if not isinstance(self.verifier_receipt_sha256, str):
-            raise ValueError("verifier_receipt_sha256 must be a string")
+        if not isinstance(self.verifier_receipt_sha256, str) or any(c in self.verifier_receipt_sha256 for c in ("\r", "\n", "\x00")):
+            raise ValueError("verifier_receipt_sha256 must be a string without control characters")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -64,8 +64,8 @@ class Admission:
     def __post_init__(self) -> None:
         if not isinstance(self.admitted, bool):
             raise ValueError("admitted must be a boolean")
-        if not isinstance(self.reason, str) or not self.reason.strip():
-            raise ValueError("reason must be a non-empty string")
+        if not isinstance(self.reason, str) or not self.reason.strip() or any(c in self.reason for c in ("\r", "\n", "\x00")):
+            raise ValueError("reason must be a non-empty string without control characters")
         if not isinstance(self.share, KnowledgeShare):
             raise ValueError("share must be a KnowledgeShare")
 
@@ -107,10 +107,36 @@ def admit_share(
         raise ValueError("prior_points_this_epoch must be >= 0")
     if expected_epoch is not None and (isinstance(expected_epoch, bool) or not isinstance(expected_epoch, int) or expected_epoch < 0):
         raise ValueError("expected_epoch must be a non-negative integer when provided")
-    if seen_shares is not None and not isinstance(seen_shares, set):
-        raise ValueError("seen_shares must be a set or None")
-    if epoch_counts is not None and not isinstance(epoch_counts, dict):
-        raise ValueError("epoch_counts must be a dict or None")
+    if seen_shares is not None and (
+        not isinstance(seen_shares, set)
+        or any(
+            not isinstance(item, tuple)
+            or len(item) != 2
+            or not isinstance(item[0], str)
+            or not item[0].strip()
+            or not isinstance(item[1], str)
+            or not item[1].strip()
+            for item in seen_shares
+        )
+    ):
+        raise ValueError("seen_shares must be a set of (account_id, text_sha256) string tuples or None")
+    if epoch_counts is not None and (
+        not isinstance(epoch_counts, dict)
+        or any(
+            not isinstance(k, tuple)
+            or len(k) != 2
+            or isinstance(k[0], bool)
+            or not isinstance(k[0], int)
+            or k[0] < 0
+            or not isinstance(k[1], str)
+            or not k[1].strip()
+            or isinstance(v, bool)
+            or not isinstance(v, int)
+            or v < 0
+            for k, v in epoch_counts.items()
+        )
+    ):
+        raise ValueError("epoch_counts must be a dict mapping (epoch, account_id) to non-negative int counts or None")
     if verifier_receipt_sha256 is not None and not isinstance(verifier_receipt_sha256, str):
         raise ValueError("verifier_receipt_sha256 must be a string or None")
     if expected_epoch is not None and share.epoch != expected_epoch:

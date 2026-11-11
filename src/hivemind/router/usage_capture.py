@@ -183,16 +183,20 @@ class PromptIntent:
     preferred_tier: str | None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.task_domain, str) or self.task_domain not in TASK_DOMAINS:
+        for field_name in ("task_domain", "language"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip() or any(c in val for c in ("\r", "\n", "\x00")):
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if self.task_domain not in TASK_DOMAINS:
             raise ValueError(f"task_domain must be one of {TASK_DOMAINS}")
-        if not isinstance(self.language, str) or self.language not in LANGUAGE_CODES:
+        if self.language not in LANGUAGE_CODES:
             raise ValueError(f"language must be one of {LANGUAGE_CODES}")
         if self.preferred_tier is not None and (
             not isinstance(self.preferred_tier, str)
             or not self.preferred_tier.strip()
             or any(c in self.preferred_tier for c in ("\r", "\n", "\x00"))
         ):
-            raise ValueError("preferred_tier must be a non-empty string without control characters or None")
+            raise ValueError("preferred_tier must be a non-empty string or None without control characters")
 
 
 @dataclass(frozen=True)
@@ -203,10 +207,12 @@ class ClientAttribution:
     app_title: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.client_sdk, str) or self.client_sdk not in CLIENT_SDKS:
+        for field_name in ("client_sdk", "app_title"):
+            val = getattr(self, field_name)
+            if not isinstance(val, str) or not val.strip() or any(c in val for c in ("\r", "\n", "\x00")):
+                raise ValueError(f"{field_name} must be a non-empty string without control characters")
+        if self.client_sdk not in CLIENT_SDKS:
             raise ValueError(f"client_sdk must be one of {CLIENT_SDKS}")
-        if not isinstance(self.app_title, str) or not self.app_title.strip() or any(c in self.app_title for c in ("\r", "\n", "\x00")):
-            raise ValueError("app_title must be a non-empty string without control characters")
 
 
 def _extract_messages_text(messages: Sequence[Mapping[str, Any]]) -> str:

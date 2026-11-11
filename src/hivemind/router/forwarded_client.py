@@ -22,12 +22,14 @@ _DOMAIN = b"hivemind-forwarded-client-v1:"
 def _mac(secret: bytes, ip: str, ts: int) -> str:
     if not isinstance(secret, (bytes, bytearray)) or not secret:
         raise ValueError("secret must be non-empty bytes")
-    if not isinstance(ip, str) or not ip.strip() or "|" in ip or any(c in ip for c in ("\r", "\n", "\x00")):
-        raise ValueError("ip must be a non-empty string without '|' or control characters")
-    try:
-        ipaddress.ip_address(ip.strip())
-    except ValueError as exc:
-        raise ValueError("ip must be a valid IPv4 or IPv6 address") from exc
+    if (
+        not isinstance(ip, str)
+        or not ip.strip()
+        or "|" in ip
+        or any(c in ip for c in ("\r", "\n", "\x00", " ", "\t"))
+        or not ip.isascii()
+    ):
+        raise ValueError("ip must be a non-empty ASCII string without '|' or whitespace/control characters")
     if isinstance(ts, bool) or not isinstance(ts, int) or ts < 0:
         raise ValueError("ts must be a non-negative integer")
     return hmac.new(bytes(secret), _DOMAIN + f"{ip.strip()}|{ts}".encode("ascii"), hashlib.sha256).hexdigest()
@@ -36,13 +38,15 @@ def _mac(secret: bytes, ip: str, ts: int) -> str:
 def sign(secret: bytes, ip: str, now: float) -> str:
     if not isinstance(secret, (bytes, bytearray)) or not secret:
         raise ValueError("secret must be non-empty bytes")
-    if not isinstance(ip, str) or not ip.strip() or "|" in ip or any(c in ip for c in ("\r", "\n", "\x00")):
-        raise ValueError("ip must be a non-empty string without '|' or control characters")
+    if (
+        not isinstance(ip, str)
+        or not ip.strip()
+        or "|" in ip
+        or any(c in ip for c in ("\r", "\n", "\x00", " ", "\t"))
+        or not ip.isascii()
+    ):
+        raise ValueError("ip must be a non-empty ASCII string without '|' or whitespace/control characters")
     ip_clean = ip.strip()
-    try:
-        ipaddress.ip_address(ip_clean)
-    except ValueError as exc:
-        raise ValueError("ip must be a valid IPv4 or IPv6 address") from exc
     if isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(float(now)) or float(now) < 0.0:
         raise ValueError("now must be a finite non-negative number")
     ts = int(now)

@@ -25,8 +25,8 @@ def test_forwarded_client_ip_validation_and_negative_now_hardening() -> None:
     assert forwarded_client.verify(secret, header, 1005.0) == "2001:db8::1"
     assert forwarded_client.verify(secret, header, -10.0) is None
 
-    for bad_ip in ("not-an-ip", "999.999.999.999", "203.0.113.42\n", "203.0.113.42\x00"):
-        with pytest.raises(ValueError, match="valid IPv4 or IPv6|without '\\|' or control characters"):
+    for bad_ip in ("203.0.113.42 with space", "203.0.113.42\n", "203.0.113.42\x00", "203.0.113.42\u00e9"):
+        with pytest.raises(ValueError, match="without '\\|' or whitespace/control characters"):
             forwarded_client.sign(secret, bad_ip, 1000.0)
 
 

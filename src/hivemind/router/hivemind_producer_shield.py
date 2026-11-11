@@ -28,7 +28,7 @@ import json
 import os
 import sys
 import time
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Iterable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -92,7 +92,7 @@ def create_shield_app(
         raise ValueError("max_concurrent and max_body_bytes must be >= 1")
     if (
         isinstance(allowed_models, (str, bytes))
-        or not isinstance(allowed_models, Sequence)
+        or not isinstance(allowed_models, Iterable)
         or any(not isinstance(m, str) or not m.strip() or any(c in m for c in ("\r", "\n", "\x00")) for m in allowed_models)
     ):
         raise ValueError("allowed_models must be a sequence of non-empty model strings without control characters")

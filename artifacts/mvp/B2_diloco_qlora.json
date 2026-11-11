@@ -1,0 +1,7 @@
+{
+  "criterion": "B2",
+  "passed": true,
+  "reason": "Stage 1 two-host RDA (T4 10.77.0.4 + RTX 2070 10.77.0.5, 3 seeds, paired diff +4.8e-07 +/- 8.3e-07, post-join p50=1.20s) + Stage 2 two-host AMCP QLoRA MoE (crossA: t4-l0 + hm-fed-val-1, 4.1709 -> 1.4808) + live RTX 2070 CUDA NF4 QLoRA MoE (4.1721 -> 1.3395 vs shuffled control 4.1563)",
+  "evidence_path": "artifacts/experiments/e8_real/E8_two_host_live_verification.json",
+  "receipt_sha256": "a5ba6a6efd5996bbd8c30deaa4312ac16340cf22309326cb5ec16d48fb357ea4"
+}

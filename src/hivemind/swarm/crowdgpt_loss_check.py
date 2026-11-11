@@ -44,7 +44,13 @@ CROWD_V1_CONFIG: dict[str, int | bool] = {
     "vocabSize": 151669, "dim": 1536, "nLayers": 24, "nHeads": 16, "nKvHeads": 4,
     "headDim": 96, "maxSeqLen": 2048, "mlpHidden": 2560, "weightTying": True,
 }
+CROWD_V1_ENGRAM_BUCKETS = 227_865
+CROWD_V1_ENGRAM_CONFIG: dict[str, int | bool] = {
+    **CROWD_V1_CONFIG,
+    "engramBuckets": CROWD_V1_ENGRAM_BUCKETS,
+}
 CROWD_V1_MODEL_SIZE = 657_787_392
+CROWD_V1_ENGRAM_SIZE = CROWD_V1_ENGRAM_BUCKETS * 1536
 TOKEN_DTYPE = np.uint32  # the shards on Vxtzq/CrowdGPT hold uint32 tokens (client.py StreamingShardDataset), whatever DATA.md says
 
 
@@ -119,9 +125,25 @@ class _Block(nn.Module):
         return x + self.mlp(self.ln_2(x))
 
 
+class _Engram(nn.Module):
+    """Bigram hash lookup `(prev * 1_000_003 + idx) % buckets` matching `modeling_crowd.CrowdEngram` (`Step 348+`)."""
+
+    def __init__(self, buckets: int, dim: int) -> None:
+        super().__init__()
+        self.table = nn.Embedding(buckets, dim)
+
+    def forward(self, idx: torch.Tensor) -> torch.Tensor:
+        prev = torch.cat((torch.zeros_like(idx[:, :1]), idx[:, :-1]), dim=1)
+        h = (prev.to(torch.int64) * 1_000_003 + idx.to(torch.int64)) % self.table.num_embeddings
+        u, inv = torch.unique(h.flatten(), return_inverse=True)
+        looked = self.table(u.to(self.table.weight.device)).to(idx.device)
+        return looked[inv].view(*idx.shape, -1)
+
+
 class CrowdV1(nn.Module):
-    """Inference-only SotaGPT. Parameter order matches `SotaGPT.named_parameters()` minus the engram table, so the flat
-    `weights` tensor of `model_bf16.safetensors` loads with the same offsets as `SotaGPT.load_base_weights`."""
+    """Inference-only SotaGPT / `CrowdForCausalLM` with optional `CrowdEngram` (`engramBuckets=227865` on HF Step 348+).
+    Trunk parameter order matches `SotaGPT.named_parameters()` minus the engram table, so the flat `weights` tensor of
+    `model_bf16.safetensors` loads with the exact same offsets as `SotaGPT.load_base_weights`."""
 
     def __init__(self, config: Mapping[str, int | bool] = CROWD_V1_CONFIG) -> None:
         if not isinstance(config, Mapping):
@@ -129,27 +151,67 @@ class CrowdV1(nn.Module):
         super().__init__()
         self.config = dict(config)
         dim, vocab = int(config["dim"]), int(config["vocabSize"])
+        raw_buckets = config.get("engramBuckets", config.get("engram_buckets", 0))
+        if isinstance(raw_buckets, bool) or not isinstance(raw_buckets, int) or raw_buckets < 0:
+            raise ValueError("engramBuckets must be a non-negative integer")
+        self.engram_buckets = int(raw_buckets)
         self.wte = nn.Embedding(vocab, dim)
         self.blocks = nn.ModuleList([_Block(config) for _ in range(int(config["nLayers"]))])
         self.ln_f = nn.LayerNorm(dim)
         self.lm_head = nn.Linear(dim, vocab, bias=False)
         if config.get("weightTying", True):
             self.wte.weight = self.lm_head.weight
+        self.engram: _Engram | None = _Engram(self.engram_buckets, dim) if self.engram_buckets > 0 else None
+
+    def _base_parameters(self) -> list[nn.Parameter]:
+        out: list[nn.Parameter] = [self.wte.weight]
+        for blk in self.blocks:
+            out.extend(list(blk.parameters()))
+        out.extend([self.ln_f.weight, self.ln_f.bias])
+        if not self.config.get("weightTying", True):
+            out.append(self.lm_head.weight)
+        return out
+
+    def n_base_flat(self) -> int:
+        return sum(p.numel() for p in self._base_parameters())
 
     def n_flat(self) -> int:
         return sum(p.numel() for p in self.parameters())
 
-    def load_flat(self, flat: torch.Tensor) -> None:
+    def load_flat(self, flat: torch.Tensor, engram: torch.Tensor | None = None) -> None:
         if not isinstance(flat, torch.Tensor):
             raise TypeError("flat must be a torch.Tensor")
+        if engram is not None and not isinstance(engram, torch.Tensor):
+            raise TypeError("engram must be None or a torch.Tensor")
         flat = flat.reshape(-1)
-        if flat.numel() != self.n_flat():
-            raise ValueError(f"flat weights have {flat.numel()} values, the model needs {self.n_flat()}")
+        base_params = self._base_parameters()
+        n_base = sum(p.numel() for p in base_params)
+        n_total = self.n_flat()
+        if engram is not None:
+            if flat.numel() != n_base:
+                raise ValueError(f"flat trunk weights have {flat.numel()} values, the model trunk needs {n_base}")
+            if self.engram is None:
+                raise ValueError("engram tensor supplied, but engramBuckets is 0")
+            eng_flat = engram.reshape(-1)
+            if eng_flat.numel() != self.engram.table.weight.numel():
+                raise ValueError(
+                    f"engram weights have {eng_flat.numel()} values, need {self.engram.table.weight.numel()}"
+                )
+            targets = [*base_params, self.engram.table.weight]
+            source = torch.cat((flat, eng_flat.to(flat.device, dtype=flat.dtype)))
+        elif self.engram is not None and flat.numel() == n_base:
+            targets = base_params
+            source = flat
+        else:
+            if flat.numel() != n_total:
+                raise ValueError(f"flat weights have {flat.numel()} values, the model needs {n_total}")
+            targets = list(self.parameters())
+            source = flat
         o = 0
         with torch.no_grad():
-            for p in self.parameters():  # deduplicated: the tied head appears once, as wte.weight
+            for p in targets:  # deduplicated: the tied head appears once, as wte.weight
                 s = p.numel()
-                p.copy_(flat[o: o + s].view(p.shape).to(p.dtype))
+                p.copy_(source[o: o + s].view(p.shape).to(p.dtype))
                 o += s
 
     def forward(self, idx: torch.Tensor) -> torch.Tensor:
@@ -157,6 +219,8 @@ class CrowdV1(nn.Module):
             raise ValueError("idx must be a 2D torch.Tensor")
         cos, sin = _rope(int(self.config["headDim"]), idx.shape[1], idx.device)
         x = self.wte(idx)
+        if self.engram is not None:
+            x = x + self.engram(idx).to(device=x.device, dtype=x.dtype)
         for blk in self.blocks:
             x = blk(x, cos, sin)
         return F.linear(self.ln_f(x), self.lm_head.weight)
@@ -175,6 +239,41 @@ def load_flat_safetensors(path: Path | str) -> torch.Tensor:
             raise ValueError(f"cannot identify the weights tensor among {sorted(tensors)[:10]}")
         key = next(iter(tensors))
     return tensors[key].reshape(-1)
+
+
+def load_named_crowd_v1_safetensors(
+    path: Path | str,
+    *,
+    n_layers: int = 24,
+    weight_tying: bool = True,
+) -> tuple[torch.Tensor, torch.Tensor | None]:
+    """Extract `(flat_trunk, flat_engram)` from Hugging Face `Vxtzq/Crowd-v1/model.safetensors` (`Step 348+`)."""
+    from safetensors.torch import load_file
+
+    sd = load_file(str(path), device="cpu")
+    parts: list[torch.Tensor] = [sd["wte.weight"].reshape(-1)]
+    for i in range(int(n_layers)):
+        pfx = f"blocks.{i}"
+        parts.extend(
+            [
+                sd[f"{pfx}.ln1.weight"].reshape(-1),
+                sd[f"{pfx}.ln1.bias"].reshape(-1),
+                sd[f"{pfx}.attn.q.weight"].reshape(-1),
+                sd[f"{pfx}.attn.k.weight"].reshape(-1),
+                sd[f"{pfx}.attn.v.weight"].reshape(-1),
+                sd[f"{pfx}.attn.o.weight"].reshape(-1),
+                sd[f"{pfx}.ln2.weight"].reshape(-1),
+                sd[f"{pfx}.ln2.bias"].reshape(-1),
+                sd[f"{pfx}.mlp.w1.weight"].reshape(-1),
+                sd[f"{pfx}.mlp.w2.weight"].reshape(-1),
+                sd[f"{pfx}.mlp.w3.weight"].reshape(-1),
+            ]
+        )
+    parts.extend([sd["ln.weight"].reshape(-1), sd["ln.bias"].reshape(-1)])
+    if not weight_tying and "head.weight" in sd:
+        parts.append(sd["head.weight"].reshape(-1))
+    engram = sd["engram.table.weight"].reshape(-1) if "engram.table.weight" in sd else None
+    return torch.cat(parts), engram
 
 
 def weights_sha256(flat: torch.Tensor) -> str:

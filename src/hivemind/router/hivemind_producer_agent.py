@@ -451,6 +451,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--residency", action="store_true", help="Report live GPU VRAM residency on each heartbeat (enabled by default unless --no-residency)")
     parser.add_argument("--no-residency", action="store_true", help="Do not ask the local model server which models are loaded; heartbeats then carry no residency data")
     parser.add_argument("--local-endpoint", default=DEFAULT_LOCAL_ENDPOINT, help=f"Local Ollama base URL for the read-only GET /api/ps residency probe (default {DEFAULT_LOCAL_ENDPOINT})")
+    parser.add_argument("--routed-upstream", action="append", default=[], metavar="LOCAL_NAME=URL", help="Mark a non-Ollama routed model (e.g. hf.co/Vxtzq/Crowd-v1=http://127.0.0.1:8791) as loaded while its local /healthz or /v1/models answers 200")
     parser.add_argument("--cold-start-s", type=float, default=DEFAULT_COLD_START_S, help=f"Your estimate of the seconds needed to load a model that is not resident (default {DEFAULT_COLD_START_S:g}, max 600)")
     parser.add_argument("--gpu-vram-mib", type=int, help="Card memory in MiB to report with residency (default: read from nvidia-smi when possible)")
     parser.add_argument("--pinned-vram-mib", type=int, default=0, help="VRAM in MiB reserved by pinned daemons such as llama-server (default 0)")
@@ -582,6 +583,12 @@ def main(
                     return 1
                 models = kept_models
 
+        routed_upstreams: dict[str, str] = {}
+        for item in getattr(args, "routed_upstream", ()):
+            r_name, sep, r_url = str(item).partition("=")
+            if sep and r_name.strip() and r_url.strip().startswith(("http://127.0.0.1", "http://localhost")):
+                routed_upstreams[r_name.strip()] = r_url.strip().rstrip("/")
+
         def make_payload() -> dict[str, Any]:
             built = build_heartbeat_payload(
                 endpoint=args.endpoint, models=models, cost_per_1k=cost, capacity_1k=capacity,
@@ -590,6 +597,24 @@ def main(
             if args.no_residency:
                 return built
             resident = probe_residency(args.local_endpoint, transport=residency_transport)
+            if routed_upstreams:
+                merged_res = dict(resident or {})
+                with httpx.Client(timeout=RESIDENCY_TIMEOUT_S, transport=residency_transport, follow_redirects=False) as rclient:
+                    for r_name, r_url in routed_upstreams.items():
+                        try:
+                            hr = rclient.get(r_url + "/healthz")
+                            if hr.status_code == 200:
+                                hjson = hr.json() if hr.content else {}
+                                dev_info = hjson.get("device") if isinstance(hjson, dict) else {}
+                                est_vram = dev_info.get("estimated_model_vram_mib", 0) if isinstance(dev_info, dict) else 0
+                                merged_res[r_name] = int(est_vram) if isinstance(est_vram, int) and est_vram >= 0 else 0
+                                continue
+                            mr = rclient.get(r_url + "/v1/models")
+                            if mr.status_code == 200:
+                                merged_res[r_name] = 0
+                        except (httpx.HTTPError, ValueError):
+                            pass
+                resident = merged_res if merged_res or resident is not None else None
             return apply_residency(built, resident, cold_start_s=args.cold_start_s, gpu_vram_mib=gpu_mib)
 
         # Remote control (HM-S16-05): the gateway's heartbeat ack may carry {"paused", "vram_cap_mib"}; the next heartbeat obeys it and the state is

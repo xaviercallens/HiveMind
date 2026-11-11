@@ -22,18 +22,30 @@ _DOMAIN = b"hivemind-forwarded-client-v1:"
 def _mac(secret: bytes, ip: str, ts: int) -> str:
     if not isinstance(secret, (bytes, bytearray)) or not secret:
         raise ValueError("secret must be non-empty bytes")
-    if not isinstance(ip, str) or not ip.strip() or "|" in ip:
-        raise ValueError("ip must be a non-empty string without '|'")
+    if (
+        not isinstance(ip, str)
+        or not ip.strip()
+        or "|" in ip
+        or any(c in ip for c in ("\r", "\n", "\x00", " ", "\t"))
+        or not ip.isascii()
+    ):
+        raise ValueError("ip must be a non-empty ASCII string without '|' or whitespace/control characters")
     if isinstance(ts, bool) or not isinstance(ts, int) or ts < 0:
         raise ValueError("ts must be a non-negative integer")
-    return hmac.new(bytes(secret), _DOMAIN + f"{ip}|{ts}".encode("ascii"), hashlib.sha256).hexdigest()
+    return hmac.new(bytes(secret), _DOMAIN + f"{ip.strip()}|{ts}".encode("ascii"), hashlib.sha256).hexdigest()
 
 
 def sign(secret: bytes, ip: str, now: float) -> str:
-    if not isinstance(secret, bytes) or not secret:
+    if not isinstance(secret, (bytes, bytearray)) or not secret:
         raise ValueError("secret must be non-empty bytes")
-    if not isinstance(ip, str) or not ip.strip() or "|" in ip:
-        raise ValueError("ip must be a non-empty string without '|'")
+    if (
+        not isinstance(ip, str)
+        or not ip.strip()
+        or "|" in ip
+        or any(c in ip for c in ("\r", "\n", "\x00", " ", "\t"))
+        or not ip.isascii()
+    ):
+        raise ValueError("ip must be a non-empty ASCII string without '|' or whitespace/control characters")
     ip_clean = ip.strip()
     if isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(float(now)) or float(now) < 0.0:
         raise ValueError("now must be a finite non-negative number")
@@ -43,9 +55,9 @@ def sign(secret: bytes, ip: str, now: float) -> str:
 
 def verify(secret: bytes, header: str, now: float) -> str | None:
     """The forwarded IP if ``header`` is authentic and fresh, else ``None``."""
-    if not isinstance(secret, bytes) or not secret or not isinstance(header, str):
+    if not isinstance(secret, (bytes, bytearray)) or not secret or not isinstance(header, str):
         return None
-    if isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(float(now)):
+    if isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(float(now)) or float(now) < 0.0:
         return None
     try:
         ip, ts_text, mac = header.strip().split("|")
@@ -53,6 +65,6 @@ def verify(secret: bytes, header: str, now: float) -> str | None:
         ts = int(ts_text)
     except ValueError:
         return None
-    if abs(now - ts) > MAX_SKEW_S:
+    if ts < 0 or abs(now - ts) > MAX_SKEW_S:
         return None
     return ip if hmac.compare_digest(mac, _mac(secret, ip, ts)) else None

@@ -35,8 +35,8 @@ class LockGenerationRecord:
     def __post_init__(self) -> None:
         for field_name in ("replica_url", "owner_id"):
             val = getattr(self, field_name)
-            if not isinstance(val, str) or not val.strip():
-                raise ValueError(f"{field_name} must be a non-empty string")
+            if not isinstance(val, str) or not val.strip() or any(c in val for c in ("\r", "\n", "\x00")):
+                raise ValueError(f"{field_name} must be a non-empty string without control characters")
         if isinstance(self.generation, bool) or not isinstance(self.generation, int) or self.generation < 0:
             raise ValueError("generation must be a non-negative integer")
         for field_name in ("acquired_utc", "lease_expires_utc"):
@@ -201,10 +201,10 @@ class LitestreamWriterLock:
         lease_ttl_s: float = 300.0,
         fail_closed: bool = False,
     ) -> None:
-        if not isinstance(replica_url, str):
-            raise ValueError("replica_url must be a string")
-        if not isinstance(owner_id, str) or not owner_id.strip():
-            raise ValueError("owner_id must be a non-empty string")
+        if not isinstance(replica_url, str) or any(c in replica_url for c in ("\r", "\n", "\x00")):
+            raise ValueError("replica_url must be a string without control characters")
+        if not isinstance(owner_id, str) or not owner_id.strip() or any(c in owner_id for c in ("\r", "\n", "\x00")):
+            raise ValueError("owner_id must be a non-empty string without control characters")
         if (
             not hasattr(backend, "put_if_generation_match")
             or not hasattr(backend, "get_record")
@@ -241,8 +241,13 @@ class LitestreamWriterLock:
 
     def acquire(self, now_utc: float | None = None) -> bool:
         """Attempt to claim single-writer ownership via ``if_generation_match=0`` (or expired lease takeover)."""
-        if now_utc is not None and (isinstance(now_utc, bool) or not isinstance(now_utc, (int, float)) or not math.isfinite(float(now_utc))):
-            raise ValueError("now_utc must be a finite number when provided")
+        if now_utc is not None and (
+            isinstance(now_utc, bool)
+            or not isinstance(now_utc, (int, float))
+            or not math.isfinite(float(now_utc))
+            or float(now_utc) < 0.0
+        ):
+            raise ValueError("now_utc must be a finite number >= 0 when provided")
         if not self.replica_url:
             # Ephemeral canary with empty replica URL does not contend on a shared replica
             self._generation = 0

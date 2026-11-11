@@ -319,6 +319,10 @@ class SliceResult:
 
 def slice_rows(spec: SourceSpec, fetch: Fetch, n_rows: int | None = None, page: int = 100) -> SliceResult:
     """Stream the first ``n_rows`` rows of the split through datasets-server ``/rows`` (no full download)."""
+    if not isinstance(spec, SourceSpec):
+        raise TypeError("spec must be a SourceSpec")
+    if not callable(fetch):
+        raise TypeError("fetch must be callable")
     if n_rows is not None and (isinstance(n_rows, bool) or not isinstance(n_rows, int) or n_rows <= 0):
         raise ValueError("n_rows must be a positive integer")
     if isinstance(page, bool) or not isinstance(page, int) or page <= 0:
@@ -519,8 +523,8 @@ def map_row(spec: SourceSpec, row: Mapping[str, Any], system_prompt: str, index:
         raise TypeError("spec must be a SourceSpec")
     if not isinstance(row, Mapping):
         raise TypeError("row must be a Mapping")
-    if not isinstance(system_prompt, str):
-        raise TypeError("system_prompt must be a string")
+    if not isinstance(system_prompt, str) or not system_prompt.strip():
+        raise ValueError("system_prompt must be a non-empty string")
     if isinstance(index, bool) or not isinstance(index, int) or index < 0:
         raise ValueError("index must be a non-negative integer")
     m = spec.mapping
@@ -544,6 +548,12 @@ def map_row(spec: SourceSpec, row: Mapping[str, Any], system_prompt: str, index:
 def validate_slice(spec: SourceSpec, rows: Sequence[Mapping[str, Any]], system_prompt: str,
                    max_unmappable_fraction: float = 0.10) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Map a streamed slice; PASSED iff at least one row maps and at most ``max_unmappable_fraction`` of unfiltered rows fail."""
+    if not isinstance(spec, SourceSpec):
+        raise TypeError("spec must be a SourceSpec")
+    if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
+        raise TypeError("rows must be a Sequence of row Mappings")
+    if not isinstance(system_prompt, str) or not system_prompt.strip():
+        raise ValueError("system_prompt must be a non-empty string")
     if (
         isinstance(max_unmappable_fraction, bool)
         or not isinstance(max_unmappable_fraction, (int, float))
@@ -837,6 +847,11 @@ def sample_rows(rows: Sequence[dict[str, Any]], k: int, seed: int, source: str) 
     """Deterministic, order-independent sample: rank by sha256(seed:source:key) and keep the first ``k``.
 
     Ties (two rows with one key) are broken by the row's canonical JSON, so the result never depends on input order."""
+    if isinstance(rows, (str, bytes)) or not isinstance(rows, Sequence):
+        raise ValueError("rows must be a sequence of row mappings")
+    for idx, r in enumerate(rows):
+        if not isinstance(r, Mapping) or not isinstance(r.get("key"), str) or not r["key"].strip():
+            raise ValueError(f"rows[{idx}] must be a mapping with a non-empty string 'key'")
     if isinstance(k, bool) or not isinstance(k, int):
         raise ValueError("k must be an integer")
     if isinstance(seed, bool) or not isinstance(seed, int):

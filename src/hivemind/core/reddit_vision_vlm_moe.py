@@ -379,6 +379,33 @@ class SparseLoCoDCT2BitPacket:
         ):
             if not isinstance(val, str) or not val.strip():
                 raise ValueError(f"{field_name} must be a non-empty string")
+        if (
+            not isinstance(self.shape, tuple)
+            or len(self.shape) != 2
+            or any(isinstance(d, bool) or not isinstance(d, int) or d < 1 for d in self.shape)
+        ):
+            raise ValueError("shape must be a 2-tuple of positive integers")
+        if (
+            not isinstance(self.q_levels, tuple)
+            or len(self.q_levels) != 4
+            or any(
+                isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v))
+                for v in self.q_levels
+            )
+        ):
+            raise ValueError("q_levels must be a 4-tuple of finite numbers")
+        if (
+            not isinstance(self.scale_row, list)
+            or len(self.scale_row) != self.shape[0]
+            or any(
+                isinstance(v, bool)
+                or not isinstance(v, (int, float))
+                or not math.isfinite(float(v))
+                or float(v) <= 0.0
+                for v in self.scale_row
+            )
+        ):
+            raise ValueError("scale_row must be a list of positive finite numbers matching shape[0]")
         if not isinstance(self.packed_2bit_codes, bytes) or len(self.packed_2bit_codes) == 0:
             raise ValueError("packed_2bit_codes must be non-empty bytes")
         for field_name, val in (("raw_fp32_bytes", self.raw_fp32_bytes), ("wire_bytes", self.wire_bytes)):
@@ -690,6 +717,7 @@ class QLoRAVisionAdapter(nn.Module):
         """Factorize an aggregated $(D, D)$ delta matrix back into Rank-r (`lora_B`, `lora_A`) via SVD."""
         if (
             not isinstance(delta_matrix, np.ndarray)
+            or delta_matrix.dtype == np.bool_
             or delta_matrix.shape != (self.hidden_dim, self.hidden_dim)
             or not np.all(np.isfinite(delta_matrix))
         ):
@@ -697,13 +725,15 @@ class QLoRAVisionAdapter(nn.Module):
                 f"delta_matrix must be a finite ({self.hidden_dim}, {self.hidden_dim}) numpy ndarray"
             )
         u, s, vt = np.linalg.svd(delta_matrix.astype(np.float32) / self.scaling, full_matrices=False)
-        r = self.rank
+        r = min(self.rank, self.hidden_dim)
         sqrt_s = np.sqrt(np.maximum(s[:r], 0.0)).astype(np.float32)
         b_new = u[:, :r] * sqrt_s[None, :]
         a_new = sqrt_s[:, None] * vt[:r, :]
         with torch.no_grad():
-            self.lora_B.copy_(torch.from_numpy(b_new))
-            self.lora_A.copy_(torch.from_numpy(a_new))
+            self.lora_B.zero_()
+            self.lora_A.zero_()
+            self.lora_B[:, :r].copy_(torch.from_numpy(b_new))
+            self.lora_A[:r, :].copy_(torch.from_numpy(a_new))
 
 
 def quantize_adamw_state_8bit(tensor: torch.Tensor) -> Tuple[np.ndarray, float]:
@@ -1093,6 +1123,27 @@ class ByzantineMultiKrumAggregator:
         backbone: FrozenVisionLanguageBackbone,
     ) -> ByzantineConsensusReport:
         """Filter out Byzantine poisoned deltas via Multi-Krum and run a 10% deterministic replay."""
+        if not isinstance(cluster_id, str) or not cluster_id.strip():
+            raise ValueError("cluster_id must be a non-empty string")
+        if not isinstance(backbone, FrozenVisionLanguageBackbone):
+            raise TypeError("backbone must be a FrozenVisionLanguageBackbone")
+        if isinstance(honest_deltas, (str, bytes)) or not isinstance(honest_deltas, Sequence) or len(honest_deltas) == 0:
+            raise ValueError("honest_deltas must be a non-empty sequence of 2D finite numeric numpy arrays")
+        if isinstance(byzantine_deltas, (str, bytes)) or not isinstance(byzantine_deltas, Sequence):
+            raise ValueError("byzantine_deltas must be a sequence of 2D finite numeric numpy arrays")
+        expected_shape = (backbone.hidden_dim, backbone.hidden_dim)
+        for label, group in (("honest_deltas", honest_deltas), ("byzantine_deltas", byzantine_deltas)):
+            for idx, d in enumerate(group):
+                if (
+                    not isinstance(d, np.ndarray)
+                    or d.dtype.kind == "b"
+                    or not np.issubdtype(d.dtype, np.number)
+                    or d.shape != expected_shape
+                    or not bool(np.all(np.isfinite(d)))
+                ):
+                    raise ValueError(
+                        f"{label}[{idx}] must be a finite numeric numpy ndarray of shape {expected_shape}"
+                    )
         n_honest = len(honest_deltas)
         n_byz = len(byzantine_deltas)
         all_deltas = [d.astype(np.float32) for d in honest_deltas] + [
@@ -1191,6 +1242,15 @@ class UpcycledRedditVisionSparseMoE(nn.Module):
         top_k: int = 2,
     ) -> None:
         super().__init__()
+        if not isinstance(backbone, FrozenVisionLanguageBackbone):
+            raise TypeError("backbone must be a FrozenVisionLanguageBackbone")
+        if not isinstance(expert_deltas, Mapping) or len(expert_deltas) == 0:
+            raise ValueError("expert_deltas must be a non-empty mapping")
+        if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+            raise ValueError("top_k must be an integer >= 1")
+        for name in expert_deltas.keys():
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError("expert_deltas keys must be non-empty strings")
         self.backbone = backbone
         self.expert_names: List[str] = list(expert_deltas.keys())
         self.num_experts = len(self.expert_names)

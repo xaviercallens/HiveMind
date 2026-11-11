@@ -223,7 +223,7 @@ class MinedDatasetShardReport:
 
 
 def _compute_shannon_entropy_bits(texts: Sequence[str]) -> float:
-    if not isinstance(texts, (list, tuple)) or any(not isinstance(t, str) for t in texts):
+    if not isinstance(texts, (list, tuple)) or any(not isinstance(t, str) or "\x00" in t for t in texts):
         raise ValueError("texts must be a sequence of strings")
     raw = "\n".join(texts).encode("utf-8")
     if not raw:
@@ -243,9 +243,17 @@ def _compute_max_cross_split_4gram_jaccard(
     train_texts: Sequence[str],
     holdout_texts: Sequence[str],
 ) -> float:
-    if not isinstance(train_texts, (list, tuple)) or not train_texts or any(not isinstance(t, str) for t in train_texts):
+    if (
+        not isinstance(train_texts, (list, tuple))
+        or not train_texts
+        or any(not isinstance(t, str) or not t.strip() for t in train_texts)
+    ):
         raise ValueError("train_texts must be a non-empty sequence of strings")
-    if not isinstance(holdout_texts, (list, tuple)) or not holdout_texts or any(not isinstance(t, str) for t in holdout_texts):
+    if (
+        not isinstance(holdout_texts, (list, tuple))
+        or not holdout_texts
+        or any(not isinstance(t, str) or not t.strip() for t in holdout_texts)
+    ):
         raise ValueError("holdout_texts must be a non-empty sequence of strings")
     def _shingles(text: str) -> set[str]:
         words = " ".join(text.lower().split()).split(" ")

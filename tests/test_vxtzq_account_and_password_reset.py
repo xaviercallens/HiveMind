@@ -55,14 +55,15 @@ def test_ensure_legacy_hiveminders_tops_up_existing_depleted_vxtzq_account() -> 
 
     store.ensure_legacy_hiveminders_registered()
     assert store.balance(aid) == pytest.approx(30000.0)
+    # reset mail goes only to the primary address; aliases are sign-in names, never reset destinations
+    assert store.account_id_for_email("vxtzq@github.com") == aid
     for email_alias in (
-        "vxtzq@github.com",
         "116555319+vxtzq@users.noreply.github.com",
         "vxtzq@crowdgpt.net",
         "contact@crowdgpt.net",
         "vxtzq@hivemind.network",
     ):
-        assert store.account_id_for_email(email_alias) == aid
+        assert store.account_id_for_email(email_alias) is None
 
 
 def test_admin_reset_password_provisions_vxtzq_and_enables_login_and_self_service_reset() -> None:
@@ -212,3 +213,22 @@ def test_dashboard_vxtzq_emails_and_change_password(tmp_path: Path) -> None:
         )
         assert login.status_code == 200, (ident, login.text)
         assert login.json()["token"] == new_tok
+
+
+def test_a_reset_request_for_an_alias_sends_no_mail() -> None:
+    """Regression: a reset link must never be sent to a legacy alias address (it would hand over the account)."""
+    from fastapi.testclient import TestClient
+
+    from hivemind.router.gateway import create_router_app
+
+    store = RouterStore(":memory:", SECRET)
+    store.ensure_legacy_hiveminders_registered()
+    sent: list[tuple[str, str]] = []
+    client = TestClient(create_router_app(store, reset_email_sender=lambda to, token: sent.append((to, token)),
+                                          reset_email_enabled=lambda: True))
+    for alias in ("contact@crowdgpt.net", "vxtzq@crowdgpt.net", "vxtzq@hivemind.network"):
+        r = client.post("/api/v1/auth/password-reset/request", json={"email": alias})
+        assert r.status_code == 202  # same answer as for any address
+    assert sent == [], f"reset mail sent to an alias: {sent}"
+    client.post("/api/v1/auth/password-reset/request", json={"email": "vxtzq@github.com"})
+    assert [to for to, _ in sent] == ["vxtzq@github.com"]

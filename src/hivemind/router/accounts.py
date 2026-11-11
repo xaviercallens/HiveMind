@@ -975,12 +975,11 @@ class RouterStore:
                         return str(cred["account_id"])
             except sqlite3.OperationalError:
                 pass
-            # previous users known by their legacy identity (the e-mail is recorded in LEGACY_KNOWN_USERS)
+            # previous users known by their legacy identity (the e-mail is recorded in LEGACY_KNOWN_USERS).
+            # Only the primary e-mail: a reset link sent to an alias would hand the account to whoever reads that
+            # mailbox (a shared contact@ address, a domain the user does not control). Aliases stay sign-in names.
             legacy = self._resolve_legacy_user(clean)
-            if legacy is not None and (
-                str(legacy.get("email", "")).lower() == clean
-                or clean in {str(a).lower() for a in legacy.get("aliases", ()) if "@" in str(a) and not str(a).startswith("@")}
-            ):
+            if legacy is not None and str(legacy.get("email", "")).lower() == clean:
                 by_handle = self._conn.execute(
                     "SELECT account_id FROM accounts WHERE lower(handle)=lower(?) LIMIT 1", (str(legacy.get("handle", "")),)
                 ).fetchone()

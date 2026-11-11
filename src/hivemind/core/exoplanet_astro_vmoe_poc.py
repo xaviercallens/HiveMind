@@ -272,9 +272,11 @@ def asymmetric_focal_loss(
 
     L_Focal = - alpha_t * (1 - p_t)^gamma * log(p_t)
     """
-    if not isinstance(logits, torch.Tensor) or logits.numel() == 0:
+    if not isinstance(logits, torch.Tensor) or logits.numel() == 0 or logits.dtype == torch.bool:
         raise ValueError("logits must be a non-empty torch.Tensor")
-    if not isinstance(targets, torch.Tensor) or targets.numel() == 0:
+    if not bool(torch.isfinite(logits).all()):
+        raise ValueError("logits must contain finite values")
+    if not isinstance(targets, torch.Tensor) or targets.numel() == 0 or targets.dtype == torch.bool:
         raise ValueError("targets must be a non-empty torch.Tensor")
     if isinstance(gamma, bool) or not isinstance(gamma, (int, float)) or not math.isfinite(float(gamma)) or float(gamma) < 0.0:
         raise ValueError("gamma must be a finite non-negative number")
@@ -285,6 +287,14 @@ def asymmetric_focal_loss(
         or float(rare_transit_weight) <= 0.0
     ):
         raise ValueError("rare_transit_weight must be a finite positive number")
+    if sample_weights is not None:
+        if (
+            not isinstance(sample_weights, torch.Tensor)
+            or sample_weights.numel() == 0
+            or sample_weights.dtype == torch.bool
+            or not bool(torch.isfinite(sample_weights).all())
+        ):
+            raise ValueError("sample_weights must be a non-empty finite numeric torch.Tensor when provided")
     log_probs = F.log_softmax(logits, dim=-1)
     probs = torch.exp(log_probs)
     target_log_p = log_probs.gather(dim=-1, index=targets.unsqueeze(-1)).squeeze(-1)
@@ -311,8 +321,10 @@ def compute_citizen_science_entropy_weights(
       - `ambiguous_indices`: indices of maximum-entropy light curves surfaced to the UI.
       - `mean_entropy_nats`: average prediction entropy across the batch.
     """
-    if not isinstance(logits, torch.Tensor) or logits.ndim < 2 or logits.numel() == 0:
+    if not isinstance(logits, torch.Tensor) or logits.ndim < 2 or logits.numel() == 0 or logits.dtype == torch.bool:
         raise ValueError("logits must be a non-empty 2D+ torch.Tensor")
+    if not bool(torch.isfinite(logits).all()):
+        raise ValueError("logits must contain finite values")
     if (
         isinstance(top_ambiguous_fraction, bool)
         or not isinstance(top_ambiguous_fraction, (int, float))
@@ -372,6 +384,14 @@ class SwarmFFNAdapter(nn.Module):
         self.lora_B = nn.Parameter(torch.zeros((hidden_dim, rank), dtype=torch.float32))
 
     def forward(self, h: torch.Tensor) -> torch.Tensor:
+        if (
+            not isinstance(h, torch.Tensor)
+            or h.numel() == 0
+            or h.dtype == torch.bool
+            or h.shape[-1] != self.hidden_dim
+            or not bool(torch.isfinite(h).all())
+        ):
+            raise ValueError(f"h must be a non-empty finite numeric torch.Tensor with last dim {self.hidden_dim}")
         return F.linear(F.silu(F.linear(h, self.lora_A)), self.lora_B) * self.scaling
 
     def get_effective_delta(self) -> np.ndarray:
@@ -380,14 +400,25 @@ class SwarmFFNAdapter(nn.Module):
             return delta.detach().cpu().numpy().astype(np.float32)
 
     def set_effective_delta(self, delta: np.ndarray) -> None:
+        if (
+            not isinstance(delta, np.ndarray)
+            or delta.dtype == np.bool_
+            or delta.shape != (self.hidden_dim, self.hidden_dim)
+            or not bool(np.isfinite(delta).all())
+        ):
+            raise ValueError(
+                f"delta must be a finite numeric numpy.ndarray of shape ({self.hidden_dim}, {self.hidden_dim})"
+            )
         u, s, vt = np.linalg.svd(delta.astype(np.float32) / self.scaling, full_matrices=False)
-        r = self.rank
+        r = min(self.rank, self.hidden_dim)
         sqrt_s = np.sqrt(np.maximum(s[:r], 0.0)).astype(np.float32)
         b_new = u[:, :r] * sqrt_s[None, :]
         a_new = sqrt_s[:, None] * vt[:r, :]
         with torch.no_grad():
-            self.lora_B.copy_(torch.from_numpy(b_new))
-            self.lora_A.copy_(torch.from_numpy(a_new))
+            self.lora_B.zero_()
+            self.lora_A.zero_()
+            self.lora_B[:, :r].copy_(torch.from_numpy(b_new))
+            self.lora_A[:r, :].copy_(torch.from_numpy(a_new))
 
 
 class FrozenAstroVisionBackbone(nn.Module):
@@ -450,6 +481,17 @@ class FrozenAstroVisionBackbone(nn.Module):
         return all(not p.requires_grad for p in self.parameters())
 
     def encode_patches(self, visual_patches: torch.Tensor) -> torch.Tensor:
+        if (
+            not isinstance(visual_patches, torch.Tensor)
+            or visual_patches.ndim < 2
+            or visual_patches.numel() == 0
+            or visual_patches.dtype == torch.bool
+            or visual_patches.shape[-1] != self.patch_dim
+            or not bool(torch.isfinite(visual_patches).all())
+        ):
+            raise ValueError(
+                f"visual_patches must be a non-empty finite numeric torch.Tensor with last dim {self.patch_dim}"
+            )
         x = self.attn_norm(self.patch_embed(visual_patches))
         q = self.w_q(x)
         k = self.w_k(x)
@@ -459,6 +501,14 @@ class FrozenAstroVisionBackbone(nn.Module):
         return x + self.w_o(torch.matmul(attn, v))
 
     def base_swiglu_ffn(self, h: torch.Tensor) -> torch.Tensor:
+        if (
+            not isinstance(h, torch.Tensor)
+            or h.numel() == 0
+            or h.dtype == torch.bool
+            or h.shape[-1] != self.hidden_dim
+            or not bool(torch.isfinite(h).all())
+        ):
+            raise ValueError(f"h must be a non-empty finite numeric torch.Tensor with last dim {self.hidden_dim}")
         gate = F.silu(F.linear(h, self.nf4_w_gate))
         up = F.linear(h, self.nf4_w_up)
         return F.linear(gate * up, self.nf4_w_down)
@@ -557,11 +607,27 @@ class UpcycledAstroSparseVisionMoE(nn.Module):
         load_balance_alpha: float = DEFAULT_LOAD_BALANCE_ALPHA,
     ) -> None:
         super().__init__()
+        if not isinstance(backbone, FrozenAstroVisionBackbone):
+            raise ValueError("backbone must be a FrozenAstroVisionBackbone")
+        if not isinstance(branch_deltas, Mapping) or len(branch_deltas) == 0:
+            raise ValueError("branch_deltas must be a non-empty Mapping")
+        for b_id in branch_deltas:
+            if not isinstance(b_id, str) or not b_id.strip():
+                raise ValueError("branch_deltas keys must be non-empty strings")
+        if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+            raise ValueError("top_k must be a positive integer")
+        if (
+            isinstance(load_balance_alpha, bool)
+            or not isinstance(load_balance_alpha, (int, float))
+            or not math.isfinite(float(load_balance_alpha))
+            or float(load_balance_alpha) < 0.0
+        ):
+            raise ValueError("load_balance_alpha must be a finite non-negative number")
         self.backbone = backbone
         self.branch_ids = list(branch_deltas.keys())
         self.num_experts = len(self.branch_ids)
         self.top_k = min(top_k, self.num_experts)
-        self.load_balance_alpha = load_balance_alpha
+        self.load_balance_alpha = float(load_balance_alpha)
 
         self.experts = nn.ModuleList()
         for idx, b_id in enumerate(self.branch_ids):
@@ -594,6 +660,17 @@ class UpcycledAstroSparseVisionMoE(nn.Module):
                     self.router.weight[idx].copy_(h_unit * 4.5)
 
     def forward(self, visual_patches: torch.Tensor) -> Dict[str, Any]:
+        if (
+            not isinstance(visual_patches, torch.Tensor)
+            or visual_patches.ndim != 3
+            or visual_patches.numel() == 0
+            or visual_patches.dtype == torch.bool
+            or visual_patches.shape[-1] != self.backbone.patch_dim
+            or not bool(torch.isfinite(visual_patches).all())
+        ):
+            raise ValueError(
+                f"visual_patches must be a non-empty 3D finite numeric torch.Tensor with last dim {self.backbone.patch_dim}"
+            )
         h = self.backbone.encode_patches(visual_patches)
         base_ffn = self.backbone.base_swiglu_ffn(h)
 

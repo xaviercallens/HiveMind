@@ -122,6 +122,21 @@ class InnerLoopResult:
         for b_name in ("preempted_by_daemon", "use_muon_lora_preconditioner", "use_paged_8bit_adamw"):
             if not isinstance(getattr(self, b_name), bool):
                 raise ValueError(f"{b_name} must be a boolean")
+        if self.error_feedback_residual_norm is not None and (
+            isinstance(self.error_feedback_residual_norm, bool)
+            or not isinstance(self.error_feedback_residual_norm, (int, float))
+            or not math.isfinite(float(self.error_feedback_residual_norm))
+            or float(self.error_feedback_residual_norm) < 0.0
+        ):
+            raise ValueError("error_feedback_residual_norm must be None or a non-negative finite number")
+        if self.circuit_breaker_reason is not None and (
+            not isinstance(self.circuit_breaker_reason, str) or not self.circuit_breaker_reason.strip()
+        ):
+            raise ValueError("circuit_breaker_reason must be None or a non-empty string")
+        if self.emergency_dump_path is not None and (
+            not isinstance(self.emergency_dump_path, (Path, str)) or not str(self.emergency_dump_path).strip()
+        ):
+            raise ValueError("emergency_dump_path must be None or a non-empty Path/str")
 
 
 def quantize_tensor_blockwise_8bit(
@@ -130,7 +145,7 @@ def quantize_tensor_blockwise_8bit(
     signed: bool = True,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Size]:
     """Quantize a tensor into 8-bit blocks (`int8` if signed else `uint8`) with per-block `absmax`."""
-    if not isinstance(tensor, torch.Tensor):
+    if not isinstance(tensor, torch.Tensor) or tensor.dtype == torch.bool:
         raise ValueError("tensor must be a torch.Tensor")
     if not isinstance(signed, bool):
         raise ValueError("signed must be a bool")
@@ -169,7 +184,12 @@ def dequantize_tensor_blockwise_8bit(
     dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
     """Dequantize blockwise 8-bit tensor back to `orig_shape`."""
-    if not isinstance(q, torch.Tensor) or not isinstance(absmax, torch.Tensor):
+    if (
+        not isinstance(q, torch.Tensor)
+        or not isinstance(absmax, torch.Tensor)
+        or q.dtype == torch.bool
+        or absmax.dtype == torch.bool
+    ):
         raise ValueError("q and absmax must be torch.Tensor instances")
     if not isinstance(signed, bool):
         raise ValueError("signed must be a bool")
@@ -207,6 +227,8 @@ class Blockwise8BitAdamW(torch.optim.AdamW):
         weight_decay: float = 0.01,
         block_size: int = 64,
     ) -> None:
+        if isinstance(block_size, bool) or not isinstance(block_size, int) or block_size < 1:
+            raise ValueError(f"block_size must be an integer >= 1, got {block_size!r}")
         super().__init__(params, lr=lr, betas=betas, eps=eps, weight_decay=weight_decay)
         self.is_paged_8bit: bool = True
         self.block_size: int = max(8, int(block_size))
@@ -333,7 +355,12 @@ def get_deterministic_batch(
     device: torch.device,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Deterministically index a micro-batch for step `step` given `rng_seed`."""
-    if not isinstance(token_sequences, torch.Tensor) or token_sequences.ndim < 2 or token_sequences.numel() == 0:
+    if (
+        not isinstance(token_sequences, torch.Tensor)
+        or token_sequences.dtype == torch.bool
+        or token_sequences.ndim < 2
+        or token_sequences.numel() == 0
+    ):
         raise ValueError("token_sequences must be a non-empty tensor with ndim >= 2")
     if isinstance(step, bool) or not isinstance(step, int) or step < 0:
         raise ValueError("step must be a non-negative integer")
@@ -406,12 +433,24 @@ def run_diloco_inner_loop(
         or checkpoint_interval_s < 1
     ):
         raise ValueError(f"checkpoint_interval_s must be an integer >= 1, got {checkpoint_interval_s!r}")
-    if not math.isfinite(lr) or lr <= 0.0:
+    if isinstance(lr, bool) or not isinstance(lr, (int, float)) or not math.isfinite(float(lr)) or lr <= 0.0:
         raise ValueError(f"lr must be finite and > 0, got {lr!r}")
-    if not math.isfinite(weight_decay) or weight_decay < 0.0:
+    if isinstance(weight_decay, bool) or not isinstance(weight_decay, (int, float)) or not math.isfinite(float(weight_decay)) or weight_decay < 0.0:
         raise ValueError(f"weight_decay must be finite and >= 0, got {weight_decay!r}")
-    if not math.isfinite(topk_ratio) or not (0.0 < topk_ratio <= 1.0):
+    if isinstance(topk_ratio, bool) or not isinstance(topk_ratio, (int, float)) or not math.isfinite(float(topk_ratio)) or not (0.0 < topk_ratio <= 1.0):
         raise ValueError(f"topk_ratio must be finite in (0, 1], got {topk_ratio!r}")
+    if isinstance(rng_seed, bool) or not isinstance(rng_seed, int) or rng_seed < 0:
+        raise ValueError("rng_seed must be a non-negative integer")
+    if isinstance(micro_batch_size, bool) or not isinstance(micro_batch_size, int) or micro_batch_size < 1:
+        raise ValueError("micro_batch_size must be an integer >= 1")
+    for bool_name, bool_val in (
+        ("use_paged_8bit_adamw", use_paged_8bit_adamw),
+        ("enforce_battery_guard", enforce_battery_guard),
+        ("enable_thermal_sleep", enable_thermal_sleep),
+        ("use_muon_lora_preconditioner", use_muon_lora_preconditioner),
+    ):
+        if not isinstance(bool_val, bool):
+            raise ValueError(f"{bool_name} must be a bool")
     if error_feedback is not None and error_feedback.topk_ratio != topk_ratio:
         raise ValueError(
             f"topk_ratio={topk_ratio} differs from the error-feedback buffer's "
@@ -648,10 +687,16 @@ def replay_inner_segment(
         raise ValueError(f"start_step must be an integer >= 0, got {start_step!r}")
     if isinstance(end_step, bool) or not isinstance(end_step, int) or end_step <= start_step:
         raise ValueError(f"end_step must be an integer > start_step, got {end_step!r} vs {start_step!r}")
-    if not math.isfinite(lr) or lr <= 0.0:
+    if isinstance(lr, bool) or not isinstance(lr, (int, float)) or not math.isfinite(float(lr)) or lr <= 0.0:
         raise ValueError(f"lr must be finite and > 0, got {lr!r}")
-    if not math.isfinite(weight_decay) or weight_decay < 0.0:
+    if isinstance(weight_decay, bool) or not isinstance(weight_decay, (int, float)) or not math.isfinite(float(weight_decay)) or weight_decay < 0.0:
         raise ValueError(f"weight_decay must be finite and >= 0, got {weight_decay!r}")
+    if isinstance(rng_seed, bool) or not isinstance(rng_seed, int) or rng_seed < 0:
+        raise ValueError("rng_seed must be a non-negative integer")
+    if isinstance(micro_batch_size, bool) or not isinstance(micro_batch_size, int) or micro_batch_size < 1:
+        raise ValueError("micro_batch_size must be an integer >= 1")
+    if not isinstance(use_muon_lora_preconditioner, bool) or not isinstance(use_paged_8bit_adamw, bool):
+        raise ValueError("use_muon_lora_preconditioner and use_paged_8bit_adamw must be bools")
     if isinstance(muon_ns_steps, bool) or not isinstance(muon_ns_steps, int) or muon_ns_steps < 1:
         raise ValueError(f"muon_ns_steps must be >= 1, got {muon_ns_steps}")
     muon_preconditioner: object | None = None

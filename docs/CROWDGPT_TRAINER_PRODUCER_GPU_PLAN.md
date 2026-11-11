@@ -200,3 +200,29 @@ To let `@Vxtzq` (`vxtzq@github.com` / `vxtzqmc@gmail.com` / `vxtzq1`) and commun
      - `daily_testing_faucet`: `+250.00 HMT` rolling-24h refill when an account's balance drops below `500.00 HMT`.
      - `vxtzq_crowd_v1_creator_bonus`: tops verified `vxtzq` accounts up to `100,000.00 HMT`.
    - Every bonus is minted exclusively through `RouterStore._append(..., kind="grant")` preserving `sum(balances) == total_minted()` and `verify_chain() == True`.
+
+---
+
+## 10. Peer-to-Peer HiveMinder `HMT` Transfers & `+5,000.00 HMT` CrowdGPT Test Gift to `@Vxtzq` (`VXRZQ`)
+
+HiveMinders can now send non-monetary `HMT` Reflexion Points directly to one another without minting or burning supply (`0.00 HMT` minted, `0.00 HMT` burned, exact conservation `total_balances() == total_minted()` and `verify_chain() == True`):
+
+1. **Hash-Chained Atomic Ledger Transfer ([`src/hivemind/router/accounts.py`](../src/hivemind/router/accounts.py))**:
+   - `RouterStore.transfer_points(...)` resolves recipients by canonical `account_id`, `@handle`, email, or known contributor alias (including `VXRZQ` / `@VXRZQ` / `@Vxtzq` / `vxtzq1` -> `vxtzq`), enforces `amount >= 0.01`, `amount <= HIVEMIND_MAX_TRANSFER_HMT` (`50,000.00 HMT` default), and `HIVEMIND_MAX_TRANSFERS_PER_SENDER_24H` (`50` per 24h), supports sender-scoped `idempotency_key` replay protection, and appends paired `transfer_out` (`-amount`) and `transfer_in` (`+amount`) rows to `ledger` plus an audit record in `point_transfers`.
+2. **Gateway Endpoints, `/signup` UI & `hivemind_connect.py` CLI**:
+   - `POST /v1/hivemind/points/transfer` (`/api/v1/points/transfer`) and `GET /v1/hivemind/points/transfers` (`/api/v1/points/transfers`) in [`src/hivemind/router/gateway.py`](../src/hivemind/router/gateway.py), automatically publishing a CloudEvents 1.0 `io.hivemind.amcp.points.transfer` notification on `hivemind.amcp.human_agent.v1`.
+   - Web UI **Send HMT to Another HiveMinder** card (`#transferPointsForm`, `data-testid="signup-transfer-hmt-btn"`) on `/signup` ([`src/hivemind/router/signup_page.py`](../src/hivemind/router/signup_page.py)).
+   - CLI subcommand in [`scripts/hivemind_connect.py`](../scripts/hivemind_connect.py):
+     ```bash
+     python scripts/hivemind_connect.py transfer \
+       --to @Vxtzq \
+       --amount 5000 \
+       --note "5,000 HMT for CrowdGPT (hivemind/crowd-v1 & hivemind/gcpcrowd) inference tests" \
+       --idempotency-key pr871-xavier-to-vxtzq-crowdgpt-5000-hmt
+     ```
+3. **Verified `+5,000.00 HMT` Gift to `@Vxtzq` (`105,000.00 HMT` Total) & Live AMCP/Kafka Notification**:
+   - Wired idempotently into [`deploy/gcp_openrouter/server.py`](../deploy/gcp_openrouter/server.py) startup (`xavier_callens -> VXRZQ` -> `vxtzq`, `idempotency_key="pr871-xavier-to-vxtzq-crowdgpt-5000-hmt"`), lifting `@Vxtzq` from `100,000.00 HMT` to **`105,000.00 HMT`** (`~4.2M` billed tokens at `1.20 HMT / 1k`) and covered end-to-end in [`tests/test_hiveminder_point_transfer.py`](../tests/test_hiveminder_point_transfer.py).
+   - Published live AMCP v1.5 / Kafka notifications to `recipient_id="vxtzq"` on `hivemind.amcp.human_agent.v1`:
+     - `io.hivemind.amcp.message`: `event_id="amcp-f440dd5664204f3c"` (`correlation_id="pr871-vxtzq-5000-hmt-transfer"`)
+     - `io.hivemind.amcp.dev.proposal`: `event_id="amcp-e038468e67ea4a5c"` (`correlation_id="pr871-vxtzq-5000-hmt-proposal"`)
+

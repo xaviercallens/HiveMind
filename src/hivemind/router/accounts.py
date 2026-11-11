@@ -87,6 +87,20 @@ CREATE TABLE IF NOT EXISTS bonus_claim_ips(
     utc REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS bonus_claim_ips_hash ON bonus_claim_ips(ip_hash, utc);
+CREATE TABLE IF NOT EXISTS point_transfers(
+    transfer_id TEXT PRIMARY KEY,
+    sender_id TEXT NOT NULL,
+    sender_handle TEXT NOT NULL,
+    recipient_id TEXT NOT NULL,
+    recipient_handle TEXT NOT NULL,
+    amount REAL NOT NULL,
+    memo TEXT NOT NULL,
+    idempotency_key TEXT UNIQUE,
+    amcp_event_id TEXT,
+    utc REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS point_transfers_sender_utc ON point_transfers(sender_id, utc DESC);
+CREATE INDEX IF NOT EXISTS point_transfers_recipient_utc ON point_transfers(recipient_id, utc DESC);
 CREATE TABLE IF NOT EXISTS ledger(
     seq INTEGER PRIMARY KEY,
     account_id TEXT NOT NULL,
@@ -362,6 +376,8 @@ LEGACY_KNOWN_USERS: dict[str, dict[str, Any]] = {
             "@vxtzq",
             "vxtzq1",
             "@vxtzq1",
+            "vxrzq",
+            "@vxrzq",
             "vxtzq@github.com",
             "vxtzqmc@gmail.com",
             "hm_live_vxtzq_771a904c55b",
@@ -3118,6 +3134,233 @@ class RouterStore:
                 "balance_hmt": final_bal,
                 "compute_points": int(round(final_bal)),
             }
+
+    def _resolve_hiveminder_row(self, conn: sqlite3.Connection, target: str) -> sqlite3.Row | None:
+        """Resolve a non-system HiveMinder row by account_id, handle/@handle, email, or legacy alias."""
+        ident = str(target or "").strip()
+        if not ident or ident.lower().startswith("sys:"):
+            return None
+
+        by_id = conn.execute(
+            "SELECT * FROM accounts WHERE account_id = ? AND account_id NOT LIKE 'sys:%'",
+            (ident,),
+        ).fetchone()
+        if by_id is not None:
+            return by_id
+
+        stripped = ident.lstrip("@")
+        if "@" in stripped:
+            by_email = conn.execute(
+                "SELECT * FROM accounts WHERE lower(COALESCE(email, '')) = lower(?) AND account_id NOT LIKE 'sys:%' LIMIT 1",
+                (stripped,),
+            ).fetchone()
+            if by_email is not None:
+                return by_email
+
+        legacy = self._resolve_legacy_user(ident) or self._resolve_legacy_user(stripped)
+        candidates: list[str] = [stripped]
+        if legacy is not None:
+            leg_handle = str(legacy.get("handle") or "").strip()
+            leg_email = str(legacy.get("email") or "").strip()
+            if leg_handle:
+                candidates.insert(0, leg_handle)
+            if leg_email:
+                by_leg_email = conn.execute(
+                    "SELECT * FROM accounts WHERE lower(COALESCE(email, '')) = lower(?) AND account_id NOT LIKE 'sys:%' LIMIT 1",
+                    (leg_email,),
+                ).fetchone()
+                if by_leg_email is not None:
+                    return by_leg_email
+
+        for cand in candidates:
+            if not cand or "@" in cand:
+                continue
+            by_handle = conn.execute(
+                "SELECT * FROM accounts WHERE lower(handle) = lower(?) AND account_id NOT LIKE 'sys:%'",
+                (cand,),
+            ).fetchone()
+            if by_handle is not None:
+                return by_handle
+            try:
+                norm = normalise_identity(cand)
+            except Exception:
+                continue
+            cid = self._hmac_hex(norm)[:32]
+            by_norm = conn.execute(
+                "SELECT * FROM accounts WHERE (account_id = ? OR lower(handle) = lower(?)) AND account_id NOT LIKE 'sys:%'",
+                (cid, norm),
+            ).fetchone()
+            if by_norm is not None:
+                return by_norm
+            alt = norm.replace("-", "_") if "-" in norm else norm.replace("_", "-")
+            by_alt = conn.execute(
+                "SELECT * FROM accounts WHERE lower(handle) = lower(?) AND account_id NOT LIKE 'sys:%'",
+                (alt,),
+            ).fetchone()
+            if by_alt is not None:
+                return by_alt
+        return None
+
+    def resolve_hiveminder_account(self, target: str) -> Account | None:
+        """Look up a HiveMinder ``Account`` by ``account_id``, ``@handle``, email, or legacy alias."""
+        with self._lock:
+            row = self._resolve_hiveminder_row(self._conn, target)
+        return None if row is None else self._row_account(row)
+
+    def transfer_points(
+        self,
+        sender_id: str,
+        recipient: str,
+        amount: float,
+        *,
+        memo: str = "peer-hiveminder-support",
+        idempotency_key: str | None = None,
+        amcp_event_id: str | None = None,
+        now_utc: float | None = None,
+    ) -> dict[str, Any]:
+        """Atomically transfer ``amount`` HMT from ``sender_id`` to ``recipient`` with zero minting and zero burn.
+
+        Appends ``-amount`` (``transfer_out``) and ``+amount`` (``transfer_in``) in a single ``BEGIN IMMEDIATE``
+        transaction, preserving ``total_balances() == total_minted()`` and ``verify_chain() == True``.
+        """
+        value = _finite(amount, "amount")
+        if value <= 0.0 or value > 1_000_000_000.0:
+            raise ValueError("transfer amount must be in (0, 1000000000]")
+        clean_memo = re.sub(r"[\x00-\x1f\x7f]", " ", str(memo or "")).strip()[:256] or "peer-hiveminder-support"
+        scoped_idem: str | None = None
+        if idempotency_key is not None and str(idempotency_key).strip():
+            raw_idem = str(idempotency_key).strip()
+            if len(raw_idem) > 128 or re.search(r"[\x00-\x1f\x7f]", raw_idem):
+                raise ValueError("idempotency_key must be 1..128 printable characters without control characters")
+            scoped_idem = f"{sender_id}:{raw_idem}"
+        stamp = time.time() if now_utc is None else _finite(now_utc, "now_utc")
+
+        with self._tx() as conn:
+            sender_row = conn.execute(
+                "SELECT * FROM accounts WHERE account_id = ? AND account_id NOT LIKE 'sys:%'",
+                (sender_id,),
+            ).fetchone()
+            if sender_row is None:
+                raise UnknownAccount(sender_id)
+            sender_acct = self._row_account(sender_row)
+            if sender_acct.kind != KIND_USER or sender_acct.is_test:
+                raise PermissionError("Only real user accounts may send or receive HMT point transfers.")
+
+            if scoped_idem is not None:
+                prev_tx = conn.execute(
+                    "SELECT * FROM point_transfers WHERE idempotency_key = ?",
+                    (scoped_idem,),
+                ).fetchone()
+                if prev_tx is not None:
+                    prev_rec = self._resolve_hiveminder_row(conn, recipient)
+                    prev_rec_id = str(prev_rec["account_id"]) if prev_rec is not None else ""
+                    if prev_rec_id != str(prev_tx["recipient_id"]) or not math.isclose(
+                        float(prev_tx["amount"]), value, rel_tol=0.0, abs_tol=1e-9
+                    ):
+                        raise ValueError("idempotency_key was already used with different transfer parameters")
+                    s_bal = self._balance(conn, sender_acct.account_id)
+                    return {
+                        "transfer_id": str(prev_tx["transfer_id"]),
+                        "sender_id": str(prev_tx["sender_id"]),
+                        "sender_handle": str(prev_tx["sender_handle"]),
+                        "recipient_id": str(prev_tx["recipient_id"]),
+                        "recipient_handle": str(prev_tx["recipient_handle"]),
+                        "amount_hmt": float(prev_tx["amount"]),
+                        "memo": str(prev_tx["memo"]),
+                        "sender_balance": s_bal,
+                        "sender_balance_hmt": s_bal,
+                        "sender_compute_points": int(round(s_bal)),
+                        "idempotent_replay": True,
+                        "amcp_event_id": prev_tx["amcp_event_id"],
+                        "utc": float(prev_tx["utc"]),
+                    }
+
+            recipient_row = self._resolve_hiveminder_row(conn, recipient)
+            if recipient_row is None:
+                raise UnknownAccount(recipient)
+            recipient_acct = self._row_account(recipient_row)
+            if recipient_acct.kind != KIND_USER or recipient_acct.is_test:
+                raise PermissionError("Only real user accounts may send or receive HMT point transfers.")
+            if recipient_acct.account_id == sender_acct.account_id:
+                raise ValueError("Cannot transfer HMT points to the same account.")
+
+            sender_bal = self._balance(conn, sender_acct.account_id)
+            if sender_bal < value:
+                raise InsufficientBalance(f"balance {sender_bal:.6f} < transfer {value:.6f}")
+
+            transfer_id = "txf-" + secrets.token_hex(12)
+            ledger_ref = f"p2p:{transfer_id}:{sender_acct.handle}->{recipient_acct.handle}"
+            self._append(conn, sender_acct.account_id, -value, "transfer_out", ledger_ref, stamp)
+            self._append(conn, recipient_acct.account_id, value, "transfer_in", ledger_ref, stamp)
+            conn.execute(
+                "INSERT INTO point_transfers("
+                "transfer_id, sender_id, sender_handle, recipient_id, recipient_handle, "
+                "amount, memo, idempotency_key, amcp_event_id, utc"
+                ") VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (
+                    transfer_id,
+                    sender_acct.account_id,
+                    sender_acct.handle,
+                    recipient_acct.account_id,
+                    recipient_acct.handle,
+                    value,
+                    clean_memo,
+                    scoped_idem,
+                    amcp_event_id,
+                    stamp,
+                ),
+            )
+            new_sender_bal = self._balance(conn, sender_acct.account_id)
+            return {
+                "transfer_id": transfer_id,
+                "sender_id": sender_acct.account_id,
+                "sender_handle": sender_acct.handle,
+                "recipient_id": recipient_acct.account_id,
+                "recipient_handle": recipient_acct.handle,
+                "amount_hmt": value,
+                "memo": clean_memo,
+                "sender_balance": new_sender_bal,
+                "sender_balance_hmt": new_sender_bal,
+                "sender_compute_points": int(round(new_sender_bal)),
+                "idempotent_replay": False,
+                "amcp_event_id": amcp_event_id,
+                "utc": stamp,
+            }
+
+    def attach_transfer_amcp_event(self, transfer_id: str, amcp_event_id: str) -> None:
+        """Record the published AMCP/Kafka ``event_id`` on an existing ``point_transfers`` row."""
+        with self._tx() as conn:
+            conn.execute(
+                "UPDATE point_transfers SET amcp_event_id = ? WHERE transfer_id = ?",
+                (str(amcp_event_id), str(transfer_id)),
+            )
+
+    def list_point_transfers(self, account_id: str, limit: int = 25) -> list[dict[str, Any]]:
+        """Return recent sent and received peer-to-peer HMT transfers for ``account_id``."""
+        cap = max(1, min(int(limit), 100))
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT transfer_id, sender_id, sender_handle, recipient_id, recipient_handle, "
+                "amount, memo, amcp_event_id, utc "
+                "FROM point_transfers "
+                "WHERE sender_id = ? OR recipient_id = ? "
+                "ORDER BY utc DESC, rowid DESC LIMIT ?",
+                (account_id, account_id, cap),
+            ).fetchall()
+        return [
+            {
+                "transfer_id": str(r["transfer_id"]),
+                "direction": "sent" if str(r["sender_id"]) == account_id else "received",
+                "sender_handle": str(r["sender_handle"]),
+                "recipient_handle": str(r["recipient_handle"]),
+                "amount_hmt": float(r["amount"]),
+                "memo": str(r["memo"]),
+                "amcp_event_id": r["amcp_event_id"],
+                "utc": float(r["utc"]),
+            }
+            for r in rows
+        ]
+
 
 
 

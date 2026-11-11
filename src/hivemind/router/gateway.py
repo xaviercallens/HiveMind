@@ -563,6 +563,18 @@ class GrantRequest(BaseModel):
     ref: str = Field(default="admin-grant", min_length=1, max_length=256)
 
 
+class PointTransferRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    recipient: str = Field(min_length=1, max_length=128)
+    amount: float = Field(gt=0.0, le=1_000_000_000.0, allow_inf_nan=False)
+    memo: str = Field(default="peer-hiveminder-support", max_length=256)
+    idempotency_key: str | None = Field(default=None, max_length=128)
+    notify_amcp: bool = True
+    subject_id: str = Field(default="SUBJ-01-PYTHON-RUST-CODER", min_length=4, max_length=64)
+    model_ref: str | None = Field(default=None, max_length=128)
+    pr_url: str | None = Field(default=None, max_length=300)
+
+
 class AccountTargetRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     account_id: str | None = Field(default=None, max_length=128)
@@ -958,6 +970,7 @@ def create_router_app(
     usage_capture_cache: dict[int, tuple[float, dict[str, Any]]] = {}
     campaign_poll_limiter = SlidingWindowLimiter(CAMPAIGN_POLL_LIMIT, AMCP_PUBLISH_WINDOW_S)
     bee_trade_limiter = SlidingWindowLimiter(20, AMCP_PUBLISH_WINDOW_S)
+    point_transfer_limiter = SlidingWindowLimiter(20, AMCP_PUBLISH_WINDOW_S)
     anon_compute_limiter = SlidingWindowLimiter(30, AMCP_PUBLISH_WINDOW_S)
 
     def _parse_json_dict(raw: bytes) -> dict[str, Any]:
@@ -2896,6 +2909,154 @@ def create_router_app(
 
         res = await run_in_threadpool(_do_claim)
         return JSONResponse({"object": "hivemind.bonus_claim", **res}, headers=_bonus_cors_headers)
+
+    @app.options("/v1/hivemind/points/transfer")
+    @app.options("/api/v1/points/transfer")
+    @app.options("/v1/hivemind/points/transfers")
+    @app.options("/api/v1/points/transfers")
+    def point_transfer_cors_preflight() -> JSONResponse:
+        return JSONResponse(content={}, status_code=200, headers=_bonus_cors_headers)
+
+    @app.post("/v1/hivemind/points/transfer")
+    @app.post("/api/v1/points/transfer")
+    def transfer_points_api(request: Request, payload: PointTransferRequest) -> JSONResponse:
+        """Transfer HMT Reflexion Points from the authenticated HiveMinder to another HiveMinder and emit an AMCP/Kafka receipt."""
+        from hivemind.swarm.amcp_kafka_campaign_bus import build_amcp_kafka_event
+        from hivemind.swarm.amcp_kafka_transport import SchemaError, validate_event_dict
+
+        sender = authenticate(request)
+        if sender.kind != "user" or sender.is_test:
+            raise RouterError(
+                403,
+                "Test and probe accounts may not transfer HMT points.",
+                "permission_error",
+                "transfer_forbidden_account_kind",
+            )
+        now = clock()
+        if not point_transfer_limiter.allow(sender.account_id, now):
+            raise RouterError(
+                429,
+                "Too many HMT transfers from this account; try again in a minute.",
+                "rate_limit_error",
+                "rate_limited",
+            )
+        try:
+            receipt = store.transfer_points(
+                sender.account_id,
+                payload.recipient,
+                payload.amount,
+                memo=payload.memo,
+                idempotency_key=payload.idempotency_key,
+                now_utc=now,
+            )
+        except UnknownAccount:
+            raise RouterError(
+                404,
+                "Recipient HiveMinder account not found.",
+                "invalid_request_error",
+                "account_not_found",
+            ) from None
+        except PermissionError as exc:
+            raise RouterError(403, str(exc), "permission_error", "transfer_forbidden") from None
+        except InsufficientBalance:
+            raise RouterError(
+                402,
+                "Insufficient HMT balance to complete this transfer.",
+                "insufficient_quota",
+                "insufficient_balance",
+            ) from None
+        except ValueError as exc:
+            raise RouterError(400, str(exc), "invalid_request_error", "invalid_transfer") from None
+
+        amcp_event_dict: dict[str, Any] | None = None
+        bus_status: dict[str, Any] = {"status": "skipped"}
+        if payload.notify_amcp and not receipt["idempotent_replay"]:
+            amcp_payload: dict[str, Any] = {
+                "transfer_id": receipt["transfer_id"],
+                "sender_handle": receipt["sender_handle"],
+                "recipient_handle": receipt["recipient_handle"],
+                "amount_hmt": round(float(receipt["amount_hmt"]), 6),
+                "memo": receipt["memo"],
+                "text": (
+                    f"@{receipt['sender_handle']} transferred {receipt['amount_hmt']:.2f} HMT to "
+                    f"@{receipt['recipient_handle']} ({receipt['memo']})."
+                ),
+            }
+            if payload.model_ref:
+                amcp_payload["model_ref"] = payload.model_ref.strip()[:128]
+            if payload.pr_url:
+                amcp_payload["pr_url"] = payload.pr_url.strip()[:300]
+            ev = build_amcp_kafka_event(
+                topic_key="human_agent",
+                event_type="io.hivemind.amcp.points.transfer",
+                sender_id=sender.handle,
+                sender_kind="human_researcher",
+                recipient_id=receipt["recipient_handle"],
+                subject_id=payload.subject_id,
+                correlation_id=receipt["transfer_id"],
+                payload=amcp_payload,
+                now_utc=now,
+            )
+            try:
+                validate_event_dict(ev.to_dict(), ev.topic)
+                store.record_amcp_kafka_event(
+                    event_id=ev.event_id,
+                    topic=ev.topic,
+                    event_type=ev.event_type,
+                    sender_id=ev.sender_id,
+                    sender_kind=ev.sender_kind,
+                    recipient_id=ev.recipient_id,
+                    subject_id=ev.subject_id,
+                    correlation_id=ev.correlation_id,
+                    payload=ev.payload,
+                    now_utc=ev.utc,
+                )
+                store.attach_transfer_amcp_event(receipt["transfer_id"], ev.event_id)
+                receipt["amcp_event_id"] = ev.event_id
+                amcp_event_dict = ev.to_dict()
+                bus_status = {"status": "not_configured"}
+                if amcp_bus is not None:
+                    try:
+                        bus_status = {"status": "published", **amcp_bus(ev)}
+                    except Exception:  # noqa: BLE001
+                        LOGGER.warning("Transfer AMCP event %s stored but not published to Kafka", ev.event_id, exc_info=True)
+                        bus_status = {"status": "unavailable"}
+            except SchemaError:
+                LOGGER.warning("Transfer AMCP event failed schema check", exc_info=True)
+                bus_status = {"status": "schema_skipped"}
+
+        return JSONResponse(
+            {
+                "object": "hivemind.point_transfer",
+                **receipt,
+                "amcp_event": amcp_event_dict,
+                "bus": bus_status,
+            },
+            headers=_bonus_cors_headers,
+        )
+
+    @app.get("/v1/hivemind/points/transfers")
+    @app.get("/api/v1/points/transfers")
+    def list_point_transfers_api(request: Request, limit: int = 25) -> JSONResponse:
+        account = authenticate(request)
+        if isinstance(limit, bool) or limit < 1 or limit > 100:
+            raise RouterError(400, "limit must be between 1 and 100.", "invalid_request_error", "invalid_parameter")
+        transfers = store.list_point_transfers(account.account_id, limit=limit)
+        bal = store.balance(account.account_id)
+        return JSONResponse(
+            {
+                "object": "hivemind.point_transfer_list",
+                "account_id": account.account_id,
+                "handle": account.handle,
+                "balance": bal,
+                "balance_hmt": bal,
+                "compute_points": int(round(bal)),
+                "count": len(transfers),
+                "transfers": transfers,
+            },
+            headers=_bonus_cors_headers,
+        )
+
 
     @app.get("/v1/hivemind/t4/status")
     def t4_status(request: Request) -> dict[str, Any]:

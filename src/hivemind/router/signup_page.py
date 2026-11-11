@@ -334,6 +334,47 @@ async function claimTestingBonusHmt() {
 }
 if ($('claimBonusBtn')) $('claimBonusBtn').addEventListener('click', claimTestingBonusHmt);
 if ($('bannerClaimBonusBtn')) $('bannerClaimBonusBtn').addEventListener('click', claimTestingBonusHmt);
+if ($('transferPointsForm')) {
+  $('transferPointsForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const tok = ($('key') && $('key').textContent.trim()) || localStorage.getItem('hivemind_api_key') || '';
+    const recipient = ($('transferRecipient') && $('transferRecipient').value || '').trim();
+    const amount = Number(($('transferAmount') && $('transferAmount').value || '').trim());
+    const memo = ($('transferMemo') && $('transferMemo').value || '').trim() || 'peer-hiveminder-support';
+    if (!tok || !recipient || !Number.isFinite(amount) || amount <= 0) {
+      setStatus('Enter a recipient handle and a positive HMT amount.', true);
+      return;
+    }
+    setStatus('Sending HMT points across the HiveMind ledger...', false);
+    try {
+      const res = await fetch('/v1/hivemind/points/transfer', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipient: recipient, amount: amount, memo: memo, notify_amcp: true }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatus((d.error && d.error.message) || 'HMT transfer failed.', true);
+        return;
+      }
+      if (typeof d.sender_balance_hmt === 'number') {
+        const fmt = d.sender_balance_hmt.toFixed(2) + ' HMT';
+        if ($('bal')) $('bal').textContent = fmt;
+        if ($('activeSessionBalance')) $('activeSessionBalance').textContent = fmt;
+        persistUnifiedSession({
+          api_key: tok,
+          handle: d.sender_handle || localStorage.getItem('hivemind_user_handle') || 'operator',
+          balance_hmt: d.sender_balance_hmt,
+          compute_points: d.sender_compute_points,
+          created: false,
+        });
+      }
+      setStatus('Sent ' + Number(d.amount_hmt || amount).toFixed(2) + ' HMT to @' + (d.recipient_handle || recipient) + (d.amcp_event_id ? ' · AMCP ' + d.amcp_event_id : ''), false);
+    } catch (e) {
+      setStatus('Could not reach the gateway to transfer HMT.', true);
+    }
+  });
+}
 syncSignupLiveTelemetry();
 checkActiveBrowserSession();
 """
@@ -550,6 +591,15 @@ def render_signup_page(
     <button id="rotateKeyBtn" data-testid="signup-rotate-key-btn" type="button" class="secondary">🔄 Rotate API Key</button>
   </p>
   <p class="mut">Account <code id="acct">{res_acct}</code> · Role <code id="role">{res_role}</code> · Balance <code id="bal">{res_bal}</code></p>
+  <form id="transferPointsForm" data-testid="signup-transfer-hmt-form" style="margin:.75rem 0;padding:.75rem;border:1px solid var(--line);border-radius:.5rem;background:var(--card)">
+    <strong>🤝 Give HMT Points to Another HiveMinder</strong>
+    <div style="display:grid;grid-template-columns:1.2fr .8fr 1.4fr auto;gap:.5rem;align-items:end;margin-top:.45rem">
+      <label style="padding:0">Recipient (@handle)<input id="transferRecipient" type="text" placeholder="@Vxtzq" style="margin-bottom:0" /></label>
+      <label style="padding:0">Amount (HMT)<input id="transferAmount" type="text" inputmode="decimal" placeholder="5000" style="margin-bottom:0" /></label>
+      <label style="padding:0">Purpose / Memo<input id="transferMemo" type="text" placeholder="CrowdGPT inference tests" style="margin-bottom:0" /></label>
+      <button id="transferSubmitBtn" data-testid="signup-transfer-hmt-btn" type="submit" class="secondary">Send HMT</button>
+    </div>
+  </form>
   <p>Next, in a terminal or IDE (Continue / Cline / Aider / OpenCode):</p>
   <pre><code>export HIVEMIND_API_KEY=&lt;the key above&gt;
 python hivemind_connect.py check

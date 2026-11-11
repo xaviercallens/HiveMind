@@ -1553,6 +1553,73 @@ def verify_manuscript_data_consistency(
     else:
         checks.append({"check_id": "PROV-87", "metric_name": "E28_llm_jepa_pilot.json missing", "expected_tokens": [], "source_artifact": src_e28, "passed": False})
 
+    # v4.4.0 E28b (IP-JEPA-02): 10-seed power, loss-dropout (alpha=0.50, 0.75) & lambda*(1-alpha) co-tuning (PROV-88)
+    e28b_path = PROJECT_ROOT / "artifacts" / "experiments" / "E28b_llm_jepa_dropout_cotuning.json"
+    src_e28b = "artifacts/experiments/E28b_llm_jepa_dropout_cotuning.json"
+    if e28b_path.exists():
+        e28b = json.loads(e28b_path.read_text(encoding="utf-8"))
+        s28b = e28b["summary"]
+        c28b = e28b["comparisons"]
+        toks88 = [
+            f"{100 * s28b[arm]['exact_match_mean']:.2f}"
+            for arm in ("ntp", "jepa_full", "jepa_drop50_cotuned", "jepa_drop75_cotuned", "jepa_drop75_naive", "jepa_shuf")
+        ]
+        toks88 += [
+            f"{100 * c28b['jepa_full_minus_ntp']['mean_diff']:+.2f}",
+            f"{c28b['jepa_full_minus_ntp']['p_one_sided']:.6f}",
+            f"{100 * c28b['jepa_drop75_naive_minus_ntp']['mean_diff']:+.2f}",
+            f"{c28b['jepa_drop75_naive_minus_ntp']['p_one_sided']:.6f}",
+            f"{100 * c28b['jepa_drop75_cotuned_minus_naive']['mean_diff']:+.2f}",
+            f"{100 * e28b['hypotheses']['P28b_dropout']['retention_vs_jepa_full']:.2f}",
+            f"{s28b['jepa_drop75_naive']['measured_time_ratio_vs_ntp']:.3f}",
+        ]
+        checks.append({
+            "check_id": "PROV-88",
+            "metric_name": "v4.4.0 E28b 10-seed LLM-JEPA power, loss-dropout (alpha=0.50, 0.75) and co-tuning vs. unscaled lambda (IP-JEPA-02)",
+            "expected_tokens": toks88,
+            "source_artifact": src_e28b,
+            "passed": (
+                all(tok in tex_text for tok in toks88)
+                and e28b["hypotheses"]["P28b_gain"]["supported"] is True
+                and e28b["hypotheses"]["P28b_dropout"]["supported"] is False
+            ),
+        })
+    else:
+        checks.append({"check_id": "PROV-88", "metric_name": "E28b_llm_jepa_dropout_cotuning.json missing", "expected_tokens": [], "source_artifact": src_e28b, "passed": False})
+
+    # v4.4.0 E29 (IP-JEPA-03 & IP-JEPA-04): Stage-2 4-bit NF4 GraniteMoE QLoRA DiLoCo + B3 gate & non-gating view_gap_sv1 (PROV-89)
+    e29_path = PROJECT_ROOT / "artifacts" / "experiments" / "E29_qlora_moe_jepa_pilot.json"
+    src_e29 = "artifacts/experiments/E29_qlora_moe_jepa_pilot.json"
+    if e29_path.exists():
+        e29 = json.loads(e29_path.read_text(encoding="utf-8"))
+        s29 = e29["summary"]
+        g29 = e29["b3_promotion_gates_vs_qlora_ntp"]
+        toks89 = [
+            f"{s29[arm]['final_target_nll_mean']:.6f}"
+            for arm in ("qlora_ntp", "qlora_jepa_drop75", "qlora_jepa_full", "qlora_jepa_shuf")
+        ]
+        toks89 += [
+            f"{g29['qlora_jepa_drop75']['mean_nll_gain_nats']:+.6f}",
+            f"{g29['qlora_jepa_full']['mean_nll_gain_nats']:+.6f}",
+            f"{g29['qlora_jepa_shuf']['mean_nll_gain_nats']:+.6f}",
+            f"{s29['qlora_ntp']['final_view_gap_sv1_mean']:.4f}",
+            f"{s29['qlora_jepa_full']['final_view_gap_sv1_mean']:.4f}",
+            f"{s29['qlora_jepa_shuf']['final_view_gap_sv1_mean']:.4f}",
+            f"{s29['qlora_jepa_drop75']['vram_peak_mib_max']:.2f}",
+        ]
+        checks.append({
+            "check_id": "PROV-89",
+            "metric_name": "v4.4.0 E29 Stage-2 NF4 GraniteMoE QLoRA DiLoCo + B3 gate refusal & non-gating view_gap_sv1 (IP-JEPA-03/04)",
+            "expected_tokens": toks89,
+            "source_artifact": src_e29,
+            "passed": (
+                all(tok in tex_text for tok in toks89)
+                and all(g29[k]["servable"] is False and g29[k]["diagnostic_only_view_gap"]["gating"] is False for k in g29)
+            ),
+        })
+    else:
+        checks.append({"check_id": "PROV-89", "metric_name": "E29_qlora_moe_jepa_pilot.json missing", "expected_tokens": [], "source_artifact": src_e29, "passed": False})
+
     failed = [c["check_id"] for c in checks if not c["passed"]]
     return {
         "total_checks": len(checks),

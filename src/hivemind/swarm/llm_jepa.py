@@ -1,8 +1,9 @@
 # Copyright (c) 2024-2026 Xavier Callens / Project HiveMind. Licensed under the AGPL-3.0.
-"""LLM-JEPA auxiliary objective for HiveMind QLoRA rounds (IP-JEPA-01).
+"""LLM-JEPA auxiliary objective for HiveMind QLoRA rounds (IP-JEPA-01..04).
 
 Reference: H. Huang, Y. LeCun, R. Balestriero, "LLM-JEPA: Large Language Models Meet Joint Embedding
-Predictive Architectures", arXiv:2509.14252 (v2, 2025). Upstream code: https://github.com/rbalestr-lab/llm-jepa.
+Predictive Architectures", arXiv:2509.14252 (v2, 2025). Upstream code: https://github.com/rbalestr-lab/llm-jepa
+(redirects to https://github.com/galilai-group/llm-jepa, Apache-2.0).
 
 The objective (their eq. 2) keeps the next-token loss and adds an embedding-space term between two *views*
 of the same content (Text, Code)::
@@ -16,15 +17,16 @@ of the same content (Text, Code)::
   the other; this gets both embeddings in one extra forward pass.
 * Random JEPA-loss dropout ``alpha`` skips the extra pass on a fraction of batches (per-epoch cost
   ``2 - alpha`` times plain fine-tuning); the paper's co-tuning rule keeps ``lambda * (1 - alpha)`` constant.
-
-This module only depends on ``torch`` and works with any Hugging Face causal LM that accepts a 4-D additive
-``attention_mask`` and ``output_hidden_states=True``. Training adds cost; inference is unchanged, so the
-served adapter (``hivemind/granite-moe``, ``coder-lite``) keeps its latency.
+* ``evaluate_jepa_b3_gate`` (IP-JEPA-03/04) promotes a JEPA-trained adapter only if its held-out NLL gain
+  over a matched NTP baseline has a strictly positive lower 95% confidence bound; the view-gap singular
+  values are recorded strictly as a non-gating diagnostic.
 """
 
 from __future__ import annotations
 
+import math
 import random
+import statistics
 from dataclasses import dataclass
 from typing import Any, Sequence
 
@@ -56,6 +58,8 @@ class JepaConfig:
 
 def cotuned_lambda(base_lam: float, base_dropout: float, new_dropout: float) -> float:
     """Keep ``lambda * (1 - alpha)`` constant when changing the loss-dropout rate (paper Section 5.2)."""
+    if base_lam < 0:
+        raise ValueError("base_lam must be >= 0")
     if not (0.0 <= base_dropout < 1.0 and 0.0 <= new_dropout < 1.0):
         raise ValueError("dropout rates must be in [0, 1)")
     return base_lam * (1.0 - base_dropout) / (1.0 - new_dropout)
@@ -131,14 +135,21 @@ def pack_two_views(text_ids: Sequence[Sequence[int]], code_ids: Sequence[Sequenc
     return ids, torch.stack(masks).unsqueeze(1), torch.tensor(t_last), torch.tensor(c_last)
 
 
+def _mask_dtype_for_model(model: Any) -> torch.dtype:
+    for p in model.parameters():
+        if p.is_floating_point():
+            return p.dtype
+    return torch.float32
+
+
 def jepa_term(model: Any, text_ids: Sequence[Sequence[int]], code_ids: Sequence[Sequence[int]], pred_token_id: int,
               cfg: JepaConfig, pad_id: int = 0) -> torch.Tensor:
     """One extra forward pass returning ``d(Pred(Enc(Text)), Enc(Code))`` for a batch of view pairs."""
     device = next(model.parameters()).device
     ids, mask, t_last, c_last = pack_two_views(text_ids, code_ids, pred_token_id, cfg.k_pred, pad_id)
-    out = model(input_ids=ids.to(device), attention_mask=mask.to(device=device, dtype=next(model.parameters()).dtype),
+    out = model(input_ids=ids.to(device), attention_mask=mask.to(device=device, dtype=_mask_dtype_for_model(model)),
                 output_hidden_states=True)
-    h = out.hidden_states[-1]
+    h = out.hidden_states[-1].float()
     rows = torch.arange(h.shape[0], device=device)
     return embedding_distance(h[rows, t_last.to(device)], h[rows, c_last.to(device)], cfg.metric)
 
@@ -158,3 +169,49 @@ def view_gap_singular_values(text_emb: torch.Tensor, code_emb: torch.Tensor, top
     """Top singular values of ``Enc(Text) - Enc(Code)`` (paper Fig. 3 diagnostic: lower = narrower mapping)."""
     s = torch.linalg.svdvals((text_emb - code_emb).float())
     return [float(x) for x in s[:top]]
+
+
+def evaluate_jepa_b3_gate(
+    ntp_nlls: Sequence[float],
+    jepa_nlls: Sequence[float],
+    *,
+    view_gap_sv1_ntp: float | None = None,
+    view_gap_sv1_jepa: float | None = None,
+    n_boot: int = 1000,
+    seed: int = 2026,
+) -> dict[str, Any]:
+    """B3-compatible held-out promotion gate for JEPA-trained adapters (IP-JEPA-03 & IP-JEPA-04).
+
+    Gains are paired ``ntp_nll - jepa_nll`` (positive = JEPA reduces held-out NLL). ``servable`` is ``True``
+    if and only if ``mean_nll_gain_nats > 0`` AND the lower 95% bootstrap bound is strictly ``> 0``.
+    The ``view_gap_sv1`` numbers are recorded purely as a diagnostic (IP-JEPA-04) and never override ``servable``.
+    """
+    if len(ntp_nlls) != len(jepa_nlls) or len(ntp_nlls) < 2:
+        raise ValueError("need at least 2 paired held-out NLL measurements")
+    gains = [float(a) - float(b) for a, b in zip(ntp_nlls, jepa_nlls)]
+    if any(not math.isfinite(g) for g in gains):
+        raise ValueError("non-finite NLL values")
+    mean_gain = statistics.mean(gains)
+    rng = random.Random(seed)
+    n = len(gains)
+    means = sorted(statistics.mean(gains[rng.randrange(n)] for _ in range(n)) for _ in range(max(100, n_boot)))
+    lo = means[int(0.025 * len(means))]
+    hi = means[min(len(means) - 1, int(0.975 * len(means)))]
+    servable = bool(mean_gain > 0.0 and lo > 0.0)
+    sv_ratio = (
+        round(float(view_gap_sv1_jepa) / float(view_gap_sv1_ntp), 6)
+        if (view_gap_sv1_ntp and view_gap_sv1_ntp > 0 and view_gap_sv1_jepa is not None)
+        else None
+    )
+    return {
+        "servable": servable,
+        "n_pairs": n,
+        "mean_nll_gain_nats": round(mean_gain, 6),
+        "bootstrap95": [round(lo, 6), round(hi, 6)],
+        "diagnostic_only_view_gap": {
+            "gating": False,
+            "view_gap_sv1_ntp": view_gap_sv1_ntp,
+            "view_gap_sv1_jepa": view_gap_sv1_jepa,
+            "sv1_compression_ratio": sv_ratio,
+        },
+    }

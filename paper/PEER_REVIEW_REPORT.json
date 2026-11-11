@@ -5,7 +5,7 @@
   "disclosure": "This report is produced by a deterministic script. It is NOT a peer review: no language model and no human referee evaluated the manuscript. Verdicts below mean only that the listed artifact checks passed.",
   "lead_peer_review_model": "none (scripted static audit; no language-model call)",
   "co_auditor_model": "none",
-  "timestamp_utc": "2026-11-11T09:20:28Z",
+  "timestamp_utc": "2026-11-11T13:46:56Z",
   "tex_path": "paper/hivemind_foundation_article.tex",
   "pdf_path": "paper/hivemind_foundation_article.pdf",
   "pdf_exists": true,
@@ -985,8 +985,8 @@
     "tier_a_machine_checked": true
   },
   "manuscript_provenance_audit": {
-    "total_checks": 86,
-    "passed_checks": 86,
+    "total_checks": 88,
+    "passed_checks": 88,
     "failed_check_ids": [],
     "all_passed": true,
     "checks": [
@@ -2075,6 +2075,46 @@
         ],
         "source_artifact": "artifacts/experiments/E28_llm_jepa_pilot.json",
         "passed": true
+      },
+      {
+        "check_id": "PROV-88",
+        "metric_name": "v4.4.0 E28b 10-seed LLM-JEPA power, loss-dropout (alpha=0.50, 0.75) and co-tuning vs. unscaled lambda (IP-JEPA-02)",
+        "expected_tokens": [
+          "72.68",
+          "89.02",
+          "79.17",
+          "61.10",
+          "84.72",
+          "50.05",
+          "+16.35",
+          "0.004761",
+          "+12.05",
+          "0.003224",
+          "-23.63",
+          "68.64",
+          "1.390"
+        ],
+        "source_artifact": "artifacts/experiments/E28b_llm_jepa_dropout_cotuning.json",
+        "passed": true
+      },
+      {
+        "check_id": "PROV-89",
+        "metric_name": "v4.4.0 E29 Stage-2 NF4 GraniteMoE QLoRA DiLoCo + B3 gate refusal & non-gating view_gap_sv1 (IP-JEPA-03/04)",
+        "expected_tokens": [
+          "1.293622",
+          "1.400363",
+          "1.434525",
+          "1.428569",
+          "-0.106741",
+          "-0.140903",
+          "-0.134947",
+          "70.7279",
+          "23.1986",
+          "23.4985",
+          "37.03"
+        ],
+        "source_artifact": "artifacts/experiments/E29_qlora_moe_jepa_pilot.json",
+        "passed": true
       }
     ]
   },
@@ -2124,7 +2164,7 @@
       "co_auditor_model": "none",
       "gate_passed": true,
       "findings_resolved": [
-        "Programmatically verified 86/86 exact numerical metrics between the 4 JSON artifacts and paper/hivemind_foundation_article.tex.",
+        "Programmatically verified 88/88 exact numerical metrics between the 4 JSON artifacts and paper/hivemind_foundation_article.tex.",
         "Eliminated legacy hardcoded v2.9.2 strings in paper/autoevolve_peer_review_pipeline.py."
       ]
     },

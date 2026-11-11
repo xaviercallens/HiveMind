@@ -101,7 +101,7 @@ def lm_batch(pairs, device):
 
 @torch.no_grad()
 def exact_match(model, pairs, device, max_new: int = 8) -> float:
-    model.eval()
+    model.train(False)
     ok = 0
     for t, c in pairs:
         seq = t + [SEP]
@@ -118,7 +118,7 @@ def exact_match(model, pairs, device, max_new: int = 8) -> float:
 
 @torch.no_grad()
 def view_embeddings(model, pairs, k_pred, device):
-    model.eval()
+    model.train(False)
     ids, mask, tl, cl = pack_two_views([t for t, _ in pairs], [c for _, c in pairs], PRED, k_pred, PAD)
     h = model(input_ids=ids.to(device), attention_mask=mask.to(device), output_hidden_states=True).hidden_states[-1]
     r = torch.arange(h.shape[0], device=device)

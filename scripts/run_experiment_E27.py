@@ -35,6 +35,9 @@ VERIFICATION_OVERHEAD_CEILING_PCT = 15.0
 ROUTING_LATENCY_P95_CEILING_MS = 250.0
 
 
+EVIDENCE_LABEL = {"evidence": "simulated", "not_a_measurement": True, "evidence_note": "metrics drawn from a random generator; no testbed nodes exist", "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md"}  # this generator does not measure; see the audit
+
+
 def _run_single_testbed_replication(
     *,
     node_count: int,
@@ -162,7 +165,7 @@ def main(argv: list[str] | None = None) -> int:
 
     report = build_e27_report()
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    args.out.write_text(json.dumps({**EVIDENCE_LABEL, **report}, indent=2) + "\n", encoding="utf-8")
     if report["verdict"] != "PASS":
         return 1
     print(

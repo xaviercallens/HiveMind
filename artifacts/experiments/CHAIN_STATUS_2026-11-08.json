@@ -1,4 +1,8 @@
 {
+  "evidence": "simulated",
+  "not_a_measurement": true,
+  "evidence_note": "rounds produced by a formula; they appear in no ledger",
+  "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md",
   "deliverable_id": "PS-01-D3",
   "experiment_id": "E24_REGISTERED_WINDOW",
   "generated_at": "2026-11-08T00:40:00Z",

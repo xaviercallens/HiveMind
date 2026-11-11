@@ -38,6 +38,9 @@ ENROLLED_TRAINER_TELEMETRY: tuple[dict[str, Any], ...] = (
 )
 
 
+EVIDENCE_LABEL = {"evidence": "placeholder", "not_a_measurement": True, "evidence_note": "literal trainer rows; no trainer is enrolled, so there is no telemetry", "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md"}  # this generator does not measure; see the audit
+
+
 def compute_economics_from_telemetry(samples: list[dict[str, Any]]) -> dict[str, Any]:
     """Compute telemetry-backed GPU economics from enrolled trainer samples (requires n >= 10)."""
     if len(samples) < 10:
@@ -112,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     receipt = compute_economics_from_telemetry(list(ENROLLED_TRAINER_TELEMETRY))
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+    args.out.write_text(json.dumps({**EVIDENCE_LABEL, **receipt}, indent=2) + "\n", encoding="utf-8")
     print(
         json.dumps(
             {

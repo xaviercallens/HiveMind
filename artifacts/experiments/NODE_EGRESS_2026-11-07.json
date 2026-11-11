@@ -1,4 +1,8 @@
 {
+  "evidence": "modelled",
+  "not_a_measurement": true,
+  "evidence_note": "bytes computed from synthetic payloads and assumed event rates, not counted on a node",
+  "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md",
   "schema": "hivemind.node_egress_receipt.v1",
   "roadmap_deliverable": "PS-02-D4",
   "generated_at_utc": "2026-11-07T20:19:36Z",

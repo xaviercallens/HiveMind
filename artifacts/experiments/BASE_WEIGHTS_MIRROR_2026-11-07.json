@@ -1,4 +1,8 @@
 {
+  "evidence": "placeholder",
+  "not_a_measurement": true,
+  "evidence_note": "no mirror directory exists; most hashes are of a description, not of the weights",
+  "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md",
   "schema": "hivemind.base_weights_mirror_receipt.v1",
   "deliverable_id": "PS-10-D3",
   "generated_at_utc": "2026-11-07T21:12:28Z",

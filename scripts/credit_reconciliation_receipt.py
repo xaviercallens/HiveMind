@@ -40,6 +40,9 @@ HMT_PER_COBBLESTONE = REFERENCE_HMT_PER_STD_ROUND / REFERENCE_COBBLESTONES_PER_S
 REGISTERED_RELATIVE_TOLERANCE = 1e-6
 
 
+EVIDENCE_LABEL = {"evidence": "placeholder", "not_a_measurement": True, "evidence_note": "literal cohorts; the discrepancy is zero by construction", "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md"}  # this generator does not measure; see the audit
+
+
 def cobblestones_for_flops(flops: float) -> float:
     """Compute standard BOINC Cobblestones for a given FLOP count."""
     return COBBLESTONES_PER_GFLOP_DAY * (float(flops) / COBBLESTONE_FLOPS_DENOM)
@@ -181,7 +184,7 @@ def main(argv: list[str] | None = None) -> int:
 
     receipt = build_credit_reconciliation_receipt()
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+    args.out.write_text(json.dumps({**EVIDENCE_LABEL, **receipt}, indent=2) + "\n", encoding="utf-8")
     if receipt["violations"]:
         print(json.dumps({"ok": False, "violations": receipt["violations"], "out": str(args.out)}), file=sys.stderr)
         return 1

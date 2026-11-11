@@ -311,6 +311,8 @@ def kelly_equilibrium(valuations: Sequence[float], capacity: float = 1.0, tol: f
 
     Solves `sum_j max(0, 1 - W / v_j) = 1` for W by bisection (the left side is strictly decreasing in W), then
     `x_j = max(0, 1 - W / v_j)` and `w_j = W x_j`. Shares are reported for a queue of `capacity` units."""
+    if isinstance(valuations, (str, bytes)) or not isinstance(valuations, Sequence):
+        raise ValueError("valuations must be a sequence of finite positive numbers")
     if any(isinstance(x, bool) or not isinstance(x, (int, float)) for x in valuations):
         raise ValueError("valuations must be finite and > 0; capacity > 0")
     if isinstance(capacity, bool) or not isinstance(capacity, (int, float)) or isinstance(tol, bool) or not isinstance(tol, (int, float)):
@@ -367,6 +369,8 @@ def tullock_equilibrium(pool_hive: float, costs: Sequence[float]) -> TullockEqui
     `S = (n - 1) P / sum c` and `s_i = S (1 - (n - 1) c_i / sum c)`; a worker whose implied supply is not positive
     is inactive, and the active set is found by dropping the most expensive worker until all implied supplies are
     positive (the standard iterative argument; the fixed point is unique)."""
+    if isinstance(costs, (str, bytes)) or not isinstance(costs, Sequence):
+        raise ValueError("costs must be a sequence of finite positive numbers")
     if isinstance(pool_hive, bool) or not isinstance(pool_hive, (int, float)) or any(isinstance(x, bool) or not isinstance(x, (int, float)) for x in costs):
         raise ValueError("costs must be finite and > 0; pool > 0")
     c = [float(x) for x in costs]
@@ -401,18 +405,20 @@ def is_epsilon_nash(eq: TullockEquilibrium, eps: float = 1e-9, grid: int = 400) 
     if isinstance(grid, bool) or not isinstance(grid, int) or grid < 1:
         raise ValueError("grid must be an integer >= 1")
     P, c, s = eq.pool_hive, eq.costs, list(eq.supplies)
-    if not math.isfinite(P) or P <= 0.0:
+    if isinstance(P, bool) or not isinstance(P, (int, float)) or not math.isfinite(P) or P <= 0.0:
         raise ValueError("eq.pool_hive must be finite and > 0")
     if len(c) < 2 or len(s) != len(c) or len(eq.payoffs) != len(c):
         raise ValueError("eq must have matching costs, supplies, and payoffs of length >= 2")
-    if any((not math.isfinite(x)) or x <= 0.0 for x in c):
+    if any(isinstance(x, bool) or not isinstance(x, (int, float)) or (not math.isfinite(x)) or x <= 0.0 for x in c):
         raise ValueError("eq.costs must be finite and > 0")
-    if any((not math.isfinite(x)) or x < 0.0 for x in s):
+    if any(isinstance(x, bool) or not isinstance(x, (int, float)) or (not math.isfinite(x)) or x < 0.0 for x in s):
         raise ValueError("eq.supplies must be finite and >= 0")
-    if any(not math.isfinite(x) for x in eq.payoffs):
+    if any(isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x) for x in eq.payoffs):
         raise ValueError("eq.payoffs must be finite")
     worst = 0.0
     S = sum(s)
+    if S <= 0.0:
+        raise ValueError("eq.supplies must have a positive sum")
     for i in range(len(c)):
         others = S - s[i]
         base = eq.payoffs[i]
@@ -650,18 +656,22 @@ def apply_settlement(settlement: EpochSettlement, credit: Callable[[str, float],
         raise ValueError("validators_node_id must be a non-empty string")
     if isinstance(settlement.fees_to_validators, bool) or not isinstance(settlement.fees_to_validators, (int, float)) or not math.isfinite(settlement.fees_to_validators) or settlement.fees_to_validators < 0.0:
         raise ValueError("settlement.fees_to_validators must be finite and >= 0")
+    if not isinstance(settlement.minted_by_node, Mapping):
+        raise ValueError("settlement.minted_by_node must be a mapping")
+    if not isinstance(settlement.fees_to_workers, Mapping):
+        raise ValueError("settlement.fees_to_workers must be a mapping")
     out: dict[str, float] = {}
     totals: dict[str, float] = {}
     for n, a in settlement.minted_by_node.items():
         if not isinstance(n, str) or not n.strip():
             raise ValueError("minted_by_node node_id must be a non-empty string")
-        if not math.isfinite(a) or a < 0.0:
+        if isinstance(a, bool) or not isinstance(a, (int, float)) or not math.isfinite(a) or a < 0.0:
             raise ValueError(f"minted_by_node[{n!r}] must be finite and >= 0, got {a!r}")
         totals[n] = totals.get(n, 0.0) + a
     for n, a in settlement.fees_to_workers.items():
         if not isinstance(n, str) or not n.strip():
             raise ValueError("fees_to_workers node_id must be a non-empty string")
-        if not math.isfinite(a) or a < 0.0:
+        if isinstance(a, bool) or not isinstance(a, (int, float)) or not math.isfinite(a) or a < 0.0:
             raise ValueError(f"fees_to_workers[{n!r}] must be finite and >= 0, got {a!r}")
         totals[n] = totals.get(n, 0.0) + a
     if settlement.fees_to_validators > 0.0:

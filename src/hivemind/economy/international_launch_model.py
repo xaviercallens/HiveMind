@@ -419,6 +419,8 @@ def project_international_launch_wave(
     """Simulate the social, queueing, and economic equilibrium of an English launch wave."""
     if not isinstance(wave_name, str) or not wave_name.strip():
         raise ValueError("wave_name must be a non-empty string")
+    if not isinstance(baseline, SwarmLiveBaseline):
+        raise TypeError("baseline must be a SwarmLiveBaseline")
     if isinstance(new_visitors, bool) or not isinstance(new_visitors, int) or new_visitors < 1 or new_visitors > MAX_FORECAST_VISITORS:
         raise ValueError(f"new_visitors must be an integer in 1..{MAX_FORECAST_VISITORS}")
     if isinstance(signup_rate, bool) or not isinstance(signup_rate, (int, float)) or not math.isfinite(signup_rate) or not (0.0 < signup_rate <= 1.0):
@@ -1076,12 +1078,41 @@ def forecast_200plus_node_international_launch(
     - Total active nodes `>= 200` (default `265` active nodes vs. `47` current baseline nodes).
     """
     # public inputs are clamped: the Erlang-C model is O(nodes) per call (10^7 nodes took 44 s)
-    if isinstance(mean_tokens_per_req, bool) or not (
+    if not isinstance(baseline, SwarmLiveBaseline):
+        raise TypeError("baseline must be a SwarmLiveBaseline")
+    for field_name, int_val in (
+        ("target_total_nodes", target_total_nodes),
+        ("visitor_count", visitor_count),
+        ("utc_hour", utc_hour),
+    ):
+        if isinstance(int_val, bool) or not isinstance(int_val, int):
+            raise ValueError(f"{field_name} must be an integer")
+    for field_name, opt_int in (
+        ("dedicated_producers", dedicated_producers),
+        ("prosumer_nodes", prosumer_nodes),
+        ("consumer_nodes", consumer_nodes),
+    ):
+        if opt_int is not None and (isinstance(opt_int, bool) or not isinstance(opt_int, int)):
+            raise ValueError(f"{field_name} must be an integer or None")
+    if isinstance(mean_tokens_per_req, bool) or not isinstance(mean_tokens_per_req, (int, float)) or not (
         math.isfinite(float(mean_tokens_per_req)) and 1.0 <= float(mean_tokens_per_req) <= 100_000.0
     ):
         raise ValueError("mean_tokens_per_req must be finite and between 1 and 100000")
-    if not (math.isfinite(float(token_length_cv)) and math.isfinite(float(arrival_cv))):
-        raise ValueError("token_length_cv and arrival_cv must be finite")
+    if (
+        isinstance(token_length_cv, bool)
+        or not isinstance(token_length_cv, (int, float))
+        or isinstance(arrival_cv, bool)
+        or not isinstance(arrival_cv, (int, float))
+        or not (math.isfinite(float(token_length_cv)) and math.isfinite(float(arrival_cv)))
+        or float(token_length_cv) < 0.0
+        or float(arrival_cv) < 0.0
+    ):
+        raise ValueError("token_length_cv and arrival_cv must be finite and >= 0")
+    if pioneer_coordinates is not None and (
+        not isinstance(pioneer_coordinates, (list, tuple))
+        or any(not isinstance(item, Mapping) for item in pioneer_coordinates)
+    ):
+        raise ValueError("pioneer_coordinates must be None or a sequence of mappings")
     total_nodes = min(max(200, int(target_total_nodes)), MAX_FORECAST_NODES)
     visitors = min(max(total_nodes * 2, int(visitor_count)), MAX_FORECAST_VISITORS)
     utc_h = int(utc_hour) % 24
@@ -1583,8 +1614,13 @@ def build_foundation_paper_v42_portal_payload(
     """Return the Foundation Paper v4.2.0 metadata, live E20/47-node experiments,
     real vs. forecast traffic comparison, and 5-wave international scalability roadmap.
     """
-    if not isinstance(base_gcp_url, str) or not base_gcp_url.strip():
-        raise ValueError("base_gcp_url must be a non-empty string")
+    if (
+        not isinstance(base_gcp_url, str)
+        or not base_gcp_url.strip()
+        or any(ord(c) < 32 for c in base_gcp_url)
+        or not base_gcp_url.strip().startswith(("http://", "https://"))
+    ):
+        raise ValueError("base_gcp_url must be a non-empty http(s) URL string")
     if e20_artifact_path is not None and (not isinstance(e20_artifact_path, (str, Path)) or not str(e20_artifact_path).strip()):
         raise ValueError("e20_artifact_path must be a non-empty string, Path, or None")
     gcp_root = base_gcp_url.rstrip("/")

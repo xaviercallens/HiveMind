@@ -112,6 +112,21 @@ class GPUProducerNodeSpec:
             ):
                 raise ValueError(f"{field_name} must be a positive finite number")
         for field_name, val in (
+            ("os_reserved_vram_mib", self.os_reserved_vram_mib),
+            ("inference_reserved_vram_mib", self.inference_reserved_vram_mib),
+        ):
+            if (
+                isinstance(val, bool)
+                or not isinstance(val, (int, float))
+                or not math.isfinite(float(val))
+                or float(val) < 0.0
+            ):
+                raise ValueError(f"{field_name} must be a non-negative finite number")
+        for t_name in ("served_inference_models", "assigned_training_backbones"):
+            tup = getattr(self, t_name)
+            if not isinstance(tup, tuple) or any(not isinstance(m, str) or not m.strip() for m in tup):
+                raise ValueError(f"{t_name} must be a tuple of non-empty strings")
+        for field_name, val in (
             ("lora_rank", self.lora_rank),
             ("throughput_weight", self.throughput_weight),
         ):
@@ -455,7 +470,11 @@ def partition_swarm_shards_between_large_and_hybrid(
     strictly `< 1.5 GB` micro-backbones (`ViT-Base`, `DINOv2-Base`, `SigLIP-Base`) so
     their primary VRAM remains dedicated to low-latency inference.
     """
-    if not isinstance(fleet, Sequence) or isinstance(fleet, (str, bytes)):
+    if (
+        not isinstance(fleet, Sequence)
+        or isinstance(fleet, (str, bytes))
+        or not all(isinstance(n, GPUProducerNodeSpec) for n in fleet)
+    ):
         raise ValueError("fleet must be a sequence of GPUProducerNodeSpec")
     if not isinstance(divisions, Mapping) or not divisions:
         raise ValueError("divisions must be a non-empty mapping")
@@ -517,7 +536,7 @@ def execute_large_gpu_producer_training(
         raise ValueError("focal_gamma must be a finite non-negative number")
     if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
         raise ValueError("seed must be a non-negative integer")
-    if not isinstance(assigned_divisions, Sequence) or isinstance(assigned_divisions, (str, bytes)):
+    if not isinstance(assigned_divisions, Sequence) or isinstance(assigned_divisions, (str, bytes)) or len(assigned_divisions) == 0:
         raise ValueError("assigned_divisions must be a sequence of division ID strings")
     for d_id in assigned_divisions:
         if not isinstance(d_id, str) or d_id not in MASSIVE_IMAGE_MOE_DIVISIONS:
@@ -731,6 +750,14 @@ def run_hybrid_inference_and_large_gpu_image_moe_campaign(
     """Orchestrate the full Asymmetric Large-GPU Image Training + Hybrid Inference campaign."""
     if isinstance(inner_steps, bool) or not isinstance(inner_steps, int) or inner_steps < 1:
         raise ValueError("inner_steps must be a positive integer")
+    if save_report_path is not None:
+        if not isinstance(save_report_path, (Path, str)) or not str(save_report_path).strip():
+            raise ValueError("save_report_path must be None or a non-empty Path/str")
+        save_report_path = Path(save_report_path)
+    if update_producer_registry_path is not None:
+        if not isinstance(update_producer_registry_path, (Path, str)) or not str(update_producer_registry_path).strip():
+            raise ValueError("update_producer_registry_path must be None or a non-empty Path/str")
+        update_producer_registry_path = Path(update_producer_registry_path)
     plans = partition_swarm_shards_between_large_and_hybrid()
     large_nodes = [n for n in PRODUCER_AND_HYBRID_FLEET if n.pool_role == "LARGE_GPU_DEDICATED_TRAINER"]
     hybrid_nodes = [n for n in PRODUCER_AND_HYBRID_FLEET if n.pool_role == "HYBRID_INFERENCE_AND_MICRO_TRAINER"]

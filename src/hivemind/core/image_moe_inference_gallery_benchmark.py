@@ -120,11 +120,55 @@ class PublicImageScenarioSpec:
         for field_name, val in (
             ("scenario_id", self.scenario_id),
             ("division_id", self.division_id),
+            ("division_title", self.division_title),
+            ("category", self.category),
+            ("badge_label", self.badge_label),
+            ("title_fr", self.title_fr),
+            ("title_en", self.title_en),
+            ("public_source_label", self.public_source_label),
+            ("license_spdx", self.license_spdx),
+            ("svg_filename", self.svg_filename),
             ("model_id", self.model_id),
+            ("primary_expert_bee", self.primary_expert_bee),
+            ("secondary_expert_bee", self.secondary_expert_bee),
+            ("backbone_tag", self.backbone_tag),
+            ("served_by_hybrid_node", self.served_by_hybrid_node),
+            ("image_resolution", self.image_resolution),
+            ("top1_routed_division", self.top1_routed_division),
+            ("top2_routed_division", self.top2_routed_division),
+            ("gpu_residency", self.gpu_residency),
+            ("prompt_fr", self.prompt_fr),
+            ("response_excerpt_fr", self.response_excerpt_fr),
+            ("when_to_use_fr", self.when_to_use_fr),
+            ("how_to_invoke", self.how_to_invoke),
             ("svg_markup", self.svg_markup),
+            ("source_url", self.source_url),
         ):
             if not isinstance(val, str) or not val.strip():
                 raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(self.jpg_filename, str):
+            raise ValueError("jpg_filename must be a string")
+        if (
+            not isinstance(self.rgb_mean_channels, tuple)
+            or len(self.rgb_mean_channels) != 3
+            or any(
+                isinstance(c, bool)
+                or not isinstance(c, (int, float))
+                or not math.isfinite(float(c))
+                or not (0.0 <= float(c) <= 1.0)
+                for c in self.rgb_mean_channels
+            )
+        ):
+            raise ValueError("rgb_mean_channels must be a 3-tuple of finite numbers in [0.0, 1.0]")
+        for g_name in ("top1_gate_weight", "top2_gate_weight"):
+            g_val = getattr(self, g_name)
+            if (
+                isinstance(g_val, bool)
+                or not isinstance(g_val, (int, float))
+                or not math.isfinite(float(g_val))
+                or not (0.0 <= float(g_val) <= 1.0)
+            ):
+                raise ValueError(f"{g_name} must be a finite number in [0.0, 1.0]")
         for field_name, val in (
             ("warm_latency_ms", self.warm_latency_ms),
             ("tokens_per_sec", self.tokens_per_sec),
@@ -804,6 +848,10 @@ def run_intensive_image_moe_inference_stress_campaign(
         or concurrent_requests_per_node < 1
     ):
         raise ValueError("concurrent_requests_per_node must be >= 1")
+    if save_report_path is not None:
+        if not isinstance(save_report_path, (Path, str)) or not str(save_report_path).strip():
+            raise ValueError("save_report_path must be None or a non-empty Path/str")
+        save_report_path = Path(save_report_path)
 
     scenarios = build_public_image_moe_gallery_scenarios(output_gallery_dir=output_gallery_dir)
     all_http_200 = all(s.http_status == 200 for s in scenarios)

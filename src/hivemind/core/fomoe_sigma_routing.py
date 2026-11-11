@@ -47,12 +47,27 @@ class SigmaMoERoutingResult:
     empirical_skip_token_scaling: float
 
     def __post_init__(self) -> None:
-        if not isinstance(self.expert_indices, torch.Tensor) or self.expert_indices.ndim != 2 or self.expert_indices.numel() == 0:
-            raise ValueError("expert_indices must be a non-empty 2D torch.Tensor")
-        if not isinstance(self.gate_values, torch.Tensor) or self.gate_values.shape != self.expert_indices.shape:
-            raise ValueError("gate_values must match expert_indices.shape")
-        if not isinstance(self.skipped_slots, torch.Tensor) or self.skipped_slots.shape != self.expert_indices.shape:
-            raise ValueError("skipped_slots must match expert_indices.shape")
+        if (
+            not isinstance(self.expert_indices, torch.Tensor)
+            or self.expert_indices.ndim != 2
+            or self.expert_indices.numel() == 0
+            or self.expert_indices.dtype == torch.bool
+            or self.expert_indices.is_floating_point()
+        ):
+            raise ValueError("expert_indices must be a non-empty 2D integer torch.Tensor")
+        if (
+            not isinstance(self.gate_values, torch.Tensor)
+            or self.gate_values.shape != self.expert_indices.shape
+            or self.gate_values.dtype == torch.bool
+            or not bool(torch.isfinite(self.gate_values).all())
+        ):
+            raise ValueError("gate_values must match expert_indices.shape and contain finite numeric values")
+        if (
+            not isinstance(self.skipped_slots, torch.Tensor)
+            or self.skipped_slots.shape != self.expert_indices.shape
+            or self.skipped_slots.dtype != torch.bool
+        ):
+            raise ValueError("skipped_slots must match expert_indices.shape and have bool dtype")
         if isinstance(self.total_experts, bool) or not isinstance(self.total_experts, int) or self.total_experts < 1:
             raise ValueError("total_experts must be an integer >= 1")
         if (
@@ -85,7 +100,7 @@ def sigmoid_independent_topk_routing(
     expert is not resident are marked skipped and their gate is zeroed; the realised
     ghost-assignment fraction is `skipped_slots / (tokens * k)`.
     """
-    if not isinstance(router_logits, torch.Tensor) or router_logits.dim() != 2:
+    if not isinstance(router_logits, torch.Tensor) or router_logits.dim() != 2 or router_logits.dtype == torch.bool:
         raise ValueError("router_logits must be [tokens, experts]")
     tokens, num_experts = router_logits.shape
     if tokens < 1 or num_experts < 1:
@@ -191,15 +206,27 @@ def skip_token_flops_per_token(
         n_e = int(raw_e)
         if n_e < 1 or not (1 <= n_le <= n_e):
             raise ValueError("local experts must satisfy 1 <= N_le <= N_e")
-        f_ffn = float(ffn_flops_per_layer[layer])
-        f_gate = float(gate_flops_per_layer[layer])
+        raw_ffn = ffn_flops_per_layer[layer]
+        raw_gate = gate_flops_per_layer[layer]
+        if (
+            isinstance(raw_ffn, bool)
+            or isinstance(raw_gate, bool)
+            or not isinstance(raw_ffn, (int, float))
+            or not isinstance(raw_gate, (int, float))
+        ):
+            raise ValueError("FLOP counts must be >= 0")
+        f_ffn = float(raw_ffn)
+        f_gate = float(raw_gate)
         if not math.isfinite(f_ffn) or not math.isfinite(f_gate) or f_ffn < 0.0 or f_gate < 0.0:
             raise ValueError("FLOP counts must be >= 0")
         ideal_sigma = n_le / n_e
         if empirical_ghost_fraction_per_layer is None:
             sigma_st = ideal_sigma
         else:
-            ghost = float(empirical_ghost_fraction_per_layer[layer])
+            raw_ghost = empirical_ghost_fraction_per_layer[layer]
+            if isinstance(raw_ghost, bool) or not isinstance(raw_ghost, (int, float)) or not math.isfinite(float(raw_ghost)):
+                raise ValueError("ghost fractions must be in [0, 1]")
+            ghost = float(raw_ghost)
             if not (0.0 <= ghost <= 1.0):
                 raise ValueError("ghost fractions must be in [0, 1]")
             sigma_st = 1.0 - ghost

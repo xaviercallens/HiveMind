@@ -103,8 +103,15 @@ class ExemplarBYOBBee:
                 raise ValueError(f"{num_attr} must be a finite numeric value")
         if self.parameters_b <= 0.0:
             raise ValueError("parameters_b must be positive")
+        if not (-1.0 < self.test_accuracy_gain <= 1.0):
+            raise ValueError("test_accuracy_gain must be in (-1.0, 1.0]")
         if not (0.0 <= self.mcnemar_p_value <= 1.0):
             raise ValueError("mcnemar_p_value must be in [0.0, 1.0]")
+        if self.public_id != f"hivemind/{self.bee_id}":
+            raise ValueError("public_id must equal 'hivemind/<bee_id>'")
+        rev = self.revision.strip()
+        if len(rev) != 40 or any(c not in "0123456789abcdefABCDEF" for c in rev):
+            raise ValueError("revision must be a 40-character hexadecimal commit SHA")
 
     def to_manifest(self) -> BeeManifest:
         """Generate the signed BeeManifest for this bee."""
@@ -293,7 +300,11 @@ class ExemplarBYOBRegistryManager:
             ).hexdigest()
 
         if paired_outcomes is not None:
-            if not paired_outcomes:
+            if (
+                isinstance(paired_outcomes, (str, bytes))
+                or not isinstance(paired_outcomes, Sequence)
+                or not paired_outcomes
+            ):
                 raise ValueError("paired_outcomes must not be empty when provided")
             for pair in paired_outcomes:
                 if (

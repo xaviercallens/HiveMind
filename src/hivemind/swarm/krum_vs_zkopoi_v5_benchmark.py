@@ -64,6 +64,8 @@ class ScalingRegimePoint:
         _require_int(self.byzantine_workers, "byzantine_workers", min_value=0)
         if self.byzantine_workers >= self.n_workers:
             raise ValueError("byzantine_workers must be < n_workers")
+        if self.n_workers < 2 * self.byzantine_workers + 3:
+            raise ValueError("n_workers must be >= 2 * byzantine_workers + 3 (Multi-Krum resilience bound)")
         _require_int(self.grad_dim, "grad_dim", min_value=1)
         if self.mode not in VALID_DEFENSE_MODES:
             raise ValueError(f"Unsupported defense mode: {self.mode}")
@@ -71,6 +73,8 @@ class ScalingRegimePoint:
             val = _require_finite_float(getattr(self, metric_name), metric_name)
             if val < 0.0:
                 raise ValueError(f"{metric_name} must be >= 0.0")
+        if float(self.verifier_ms) > float(self.wall_clock_ms) + 1e-6:
+            raise ValueError("verifier_ms cannot exceed wall_clock_ms")
         rej = _require_finite_float(self.byzantine_rejection_rate, "byzantine_rejection_rate")
         if not 0.0 <= rej <= 1.0:
             raise ValueError("byzantine_rejection_rate must be in [0.0, 1.0]")

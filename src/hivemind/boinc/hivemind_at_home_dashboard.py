@@ -8317,21 +8317,17 @@ def create_hivemind_at_home_app(
                     if hmac.compare_digest(cand_r_hash, router_pwd_hash):
                         auth_state["failed_login_attempts"].pop(f"{account_key}|{client}", None)
                         return
-            for _ident_cand in dict.fromkeys(
-                s
-                for s in (
-                    str(user.get("email") or ""),
-                    str(user.get("handle") or ""),
-                    *[str(e) for e in user.get("secondary_emails", [])],
-                )
-                if s
-            ):
+            # The gateway may vouch for the password only of THIS account: ask by its own handle, and accept only when the
+            # account the gateway answers for has that same handle. Asking by e-mail would let anyone who registered a
+            # gateway account under one of this user's (unverified) addresses set this account's password.
+            if norm_u_handle:
                 upstream_ok = _sync_or_verify_openrouter_credentials(
                     "login",
-                    handle_or_email=_ident_cand,
+                    handle_or_email=norm_u_handle,
                     password=supplied_password,
                 )
-                if upstream_ok is not None:
+                upstream_handle = str((upstream_ok or {}).get("handle") or "").lstrip("@").lower().replace("-", "_")
+                if upstream_ok is not None and upstream_handle and hmac.compare_digest(upstream_handle, norm_u_handle):
                     s_hex, h_hex = _hash_password(supplied_password)
                     user["password_salt"] = s_hex
                     user["password_hash"] = h_hex
@@ -8348,25 +8344,6 @@ def create_hivemind_at_home_app(
                     _save_persisted_users()
                     auth_state["failed_login_attempts"].pop(f"{account_key}|{client}", None)
                     return
-            if (
-                not user.get("password_bound")
-                and norm_u_handle in {k.lower().replace("-", "_") for k in seeded_users}
-                and len(clean_pwd) >= 8
-            ):
-                s_hex, h_hex = _hash_password(clean_pwd)
-                user["password_salt"] = s_hex
-                user["password_hash"] = h_hex
-                user["has_password"] = True
-                user["password_bound"] = True
-                _save_persisted_users()
-                _sync_or_verify_openrouter_credentials(
-                    "register",
-                    handle_or_email=str(user.get("handle") or norm_u_handle),
-                    password=clean_pwd,
-                    email=str(user.get("email") or ""),
-                )
-                auth_state["failed_login_attempts"].pop(f"{account_key}|{client}", None)
-                return
             _record_failed_password_attempt(account_key, client)
             _check_password_rate_limit(account_key, client)
         raise HTTPException(

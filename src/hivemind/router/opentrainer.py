@@ -71,6 +71,8 @@ VALID_OPENTRAINER_CAMPAIGN_IDS: frozenset[str] = frozenset(
         "CROWDGPT-V1-QLORA-GRAFT",
         "CROWDGPT-V1-LOSS-CHECK",
         "CROWDGPT-GCP-T4-DILOCO",
+        "CROWDGPT-WE-NOV14-15-2026-MOE-OPENDILOCO",
+        "CROWDGPT-MOE-8X-UPCYCLE-V1",
     }
 )
 _BYOM_CAMPAIGN_RE = re.compile(r"^byom-[A-Za-z0-9._-]{1,100}$")

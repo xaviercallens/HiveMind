@@ -1,0 +1,68 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Project HiveMind x CrowdGPT//Weekend Nov 14-15 2026 MoE OpenDiLoCo Raid//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:HiveMind x CrowdGPT Weekend Raid (14-15 Nov 2026)
+X-WR-TIMEZONE:UTC
+BEGIN:VEVENT
+UID:EVT-CROWDGPT-WE-00-PREFLIGHT@hivemind.open-science.org
+DTSTAMP:20261111T080000Z
+DTSTART:20261113T180000Z
+DTEND:20261113T210000Z
+SUMMARY:[HiveMind x CrowdGPT] Wave 0 Pre-Flight: CrowdGPT-MoE 8x Shard Prefetch, VRAM Floor Check & GCP Spot T4 Warmup
+DESCRIPTION:Wave 0 Pre-Flight: CrowdGPT-MoE 8x Shard Prefetch, VRAM Floor Check & GCP Spot T4 Warmup\nTimezones: 19:00 CET (Paris) | 13:00 EST (New York) | 10:00 PST (SF) | 03:00+1 JST (Tokyo)\nTarget Quorum: TIER_1_MIN_BYZANTINE_QUORUM\nAudience: All HiveMinder Producers, Trainers & Prosumers + @Vxtzq\nCommand: python scripts/gcp_t4_crowd_diloco_worker.py --mode budget-check\nNON-MONETARY CHARTER: Symbolic HMT Reflexion Points (1,000 HMT (Compute Reciprocity Only)) confer only reciprocal shared compute quota.
+URL:https://github.com/xaviercallens/HiveMind/discussions
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:EVT-CROWDGPT-WE-01-MOE-UPCYCLE-KICKOFF@hivemind.open-science.org
+DTSTAMP:20261111T080000Z
+DTSTART:20261114T090000Z
+DTEND:20261114T130000Z
+SUMMARY:[HiveMind x CrowdGPT] Wave 1 Kickoff (Sat Morning): 8-Expert CrowdGPT Sparse MoE Upcycling & APAC/EU Rounds 1–12
+DESCRIPTION:Wave 1 Kickoff (Sat Morning): 8-Expert CrowdGPT Sparse MoE Upcycling & APAC/EU Rounds 1–12\nTimezones: 10:00 CET (Paris) | 04:00 EST (New York) | 18:00 JST (Tokyo)\nTarget Quorum: TIER_2_FULL_8DOMAIN_MOE_QUORUM\nAudience: APAC & Europe Trainers + Prosumers (E0..E7 Zero-Shock MoE Split)\nCommand: python scripts/gcp_t4_crowd_diloco_worker.py --mode moe-opendiloco-round --rounds 3 --submit-opentrainer\nNON-MONETARY CHARTER: Symbolic HMT Reflexion Points (2,500 HMT (Compute Reciprocity Only)) confer only reciprocal shared compute quota.
+URL:https://github.com/xaviercallens/HiveMind/discussions
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:EVT-CROWDGPT-WE-02-GLOBAL-OPENDILOCO-PEAK@hivemind.open-science.org
+DTSTAMP:20261111T080000Z
+DTSTART:20261114T160000Z
+DTEND:20261114T220000Z
+SUMMARY:[HiveMind x CrowdGPT] Wave 2 Global Peak (Sat Afternoon/Evening): Decoupled OpenDiLoCo + RDA Quorum (GCP T4 + RTX 2070 + Swarm)
+DESCRIPTION:Wave 2 Global Peak (Sat Afternoon/Evening): Decoupled OpenDiLoCo + RDA Quorum (GCP T4 + RTX 2070 + Swarm)\nTimezones: 17:00 CET (Paris) | 11:00 EST (New York) | 08:00 PST (SF) | 01:00+1 JST (Tokyo)\nTarget Quorum: TIER_3_GLOBAL_SUPER_RING_RAID\nAudience: All 55+ Producers, OpenTrainer GPUs, Prosumers, GCP Spot T4 & XAVGAMSRV RTX 2070\nCommand: python scripts/gcp_t4_crowd_diloco_worker.py --mode moe-opendiloco-round --rounds 6 --submit-opentrainer\nNON-MONETARY CHARTER: Symbolic HMT Reflexion Points (5,000 HMT (Compute Reciprocity Only)) confer only reciprocal shared compute quota.
+URL:https://github.com/xaviercallens/HiveMind/discussions
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:EVT-CROWDGPT-WE-03-NOCTURNAL-BOINC-SOAK@hivemind.open-science.org
+DTSTAMP:20261111T080000Z
+DTSTART:20261114T220000Z
+DTEND:20261115T070000Z
+SUMMARY:[HiveMind x CrowdGPT] Wave 3 Nocturnal Soak (Sat Night): BOINC & Home GPU PA-CGAD Straggler-Safe Co-Training
+DESCRIPTION:Wave 3 Nocturnal Soak (Sat Night): BOINC & Home GPU PA-CGAD Straggler-Safe Co-Training\nTimezones: 23:00–08:00 CET (Paris) | 17:00–02:00 EST (New York)\nTarget Quorum: TIER_2_FULL_8DOMAIN_MOE_QUORUM\nAudience: Nocturnal Gamer GPUs (Steam <1.5s auto-pause) & OpenTrainer HTTPS Relay Nodes\nCommand: python scripts/hivemind_opentrainer_agent.py --campaign CROWDGPT-WE-NOV14-15-2026-MOE-OPENDILOCO --network-mode outbound-https-relay --once\nNON-MONETARY CHARTER: Symbolic HMT Reflexion Points (3,000 HMT (Compute Reciprocity Only)) confer only reciprocal shared compute quota.
+URL:https://github.com/xaviercallens/HiveMind/discussions
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:EVT-CROWDGPT-WE-04-ARENA-BENCHMARK@hivemind.open-science.org
+DTSTAMP:20261111T080000Z
+DTSTART:20261115T130000Z
+DTEND:20261115T170000Z
+SUMMARY:[HiveMind x CrowdGPT] Wave 4 Blind A/B Arena (Sun Afternoon): FoMoE Sigma-Router Calibration & Crowd-v1 vs Crowd-MoE-v1 Eval
+DESCRIPTION:Wave 4 Blind A/B Arena (Sun Afternoon): FoMoE Sigma-Router Calibration & Crowd-v1 vs Crowd-MoE-v1 Eval\nTimezones: 14:00 CET (Paris) | 08:00 EST (New York) | 22:00 JST (Tokyo)\nTarget Quorum: TIER_2_FULL_8DOMAIN_MOE_QUORUM\nAudience: @Vxtzq (105,000 HMT), Prosumers & Serving-First Producers\nCommand: python scripts/hivemind_connect.py check\nNON-MONETARY CHARTER: Symbolic HMT Reflexion Points (2,500 HMT (Compute Reciprocity Only)) confer only reciprocal shared compute quota.
+URL:https://github.com/xaviercallens/HiveMind/discussions
+STATUS:CONFIRMED
+END:VEVENT
+BEGIN:VEVENT
+UID:EVT-CROWDGPT-WE-05-FINALE-RELEASE@hivemind.open-science.org
+DTSTAMP:20261111T080000Z
+DTSTART:20261115T170000Z
+DTEND:20261115T210000Z
+SUMMARY:[HiveMind x CrowdGPT] Wave 5 Grand Finale (Sun Evening): Loss-Ratchet Sign-Off, Safetensors Merge & Live OpenRouter Release
+DESCRIPTION:Wave 5 Grand Finale (Sun Evening): Loss-Ratchet Sign-Off, Safetensors Merge & Live OpenRouter Release\nTimezones: 18:00 CET (Paris) | 12:00 EST (New York) | 09:00 PST (SF) | 02:00+1 JST (Tokyo)\nTarget Quorum: TIER_3_GLOBAL_SUPER_RING_RAID\nAudience: All HiveMinders (Producers, Trainers, Prosumers) & CrowdGPT Community\nCommand: python scripts/gcp_t4_crowd_diloco_worker.py --mode moe-opendiloco-round --rounds 2 --submit-opentrainer\nNON-MONETARY CHARTER: Symbolic HMT Reflexion Points (5,000 HMT (Compute Reciprocity Only)) confer only reciprocal shared compute quota.
+URL:https://github.com/xaviercallens/HiveMind/discussions
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR

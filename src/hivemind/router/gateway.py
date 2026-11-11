@@ -3972,6 +3972,33 @@ def create_router_app(
             now_utc=now,
         )
 
+    @app.get("/v1/hivemind/opentrainer/crowdgpt-weekend-raid")
+    @app.get("/v1/opentrainer/crowdgpt-weekend-raid")
+    def get_opentrainer_crowdgpt_weekend_raid(
+        handle: str | None = None,
+        role: str = "prosumer",
+        vram_mib: int = 8192,
+    ) -> dict[str, Any]:
+        """Public Nov 14-15, 2026 CrowdGPT x HiveMind Weekend Massive Training manifest, MoE split & OpenDiLoCo config."""
+        from hivemind.swarm.crowdgpt_moe_opendiloco import (
+            assign_hiveminder_moe_shards,
+            build_weekend_nov14_15_raid_manifest,
+        )
+
+        manifest = build_weekend_nov14_15_raid_manifest()
+        if handle and str(handle).strip():
+            eff_role = str(role or "prosumer").strip().lower()
+            if eff_role not in {"producer", "trainer", "prosumer"}:
+                eff_role = "prosumer"
+            eff_vram = max(0, min(int(vram_mib), 1_048_576))
+            manifest["personalized_assignment"] = assign_hiveminder_moe_shards(
+                str(handle).strip()[:64],
+                eff_role,
+                eff_vram,
+            )
+        manifest["live_opentrainer_rounds_count"] = len(store.list_opentrainer_rounds(limit=100))
+        return manifest
+
     @app.post("/v1/hivemind/opentrainer/heartbeat")
     @app.post("/v1/opentrainer/heartbeat")
     def post_opentrainer_heartbeat(request: Request, payload: OpenTrainerHeartbeatRequest) -> dict[str, Any]:

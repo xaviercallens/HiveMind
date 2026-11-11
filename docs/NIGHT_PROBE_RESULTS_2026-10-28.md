@@ -22,6 +22,19 @@ Source: the queue's own result files (`arm_A*.json`, `summary.json`) in `night_p
 - **Temperature.** Peaks were 77 to 82 C, below the 83 C limit used by the queue, but within 1 C of it for A2 and A3, so a longer run could reach the limit.
 - **Power readings need checking before use.** A3 reported 110 W and A2 84 W. The T4 is rated at 70 W, so these values are not plausible as card power. They may be a sensor or unit issue. They are recorded as reported and must not be used for an energy claim.
 
+## VRAM headroom guard (AGENTS.md section 1): violated by arm A2
+
+`AGENTS.md` requires at least 4,300 MiB free on the T4 (15,360 MiB total) at all times. Measured total GPU use (all processes, from nvidia-smi during the run) against the bee server already resident (about 4,836 MiB):
+
+| arm | total GPU peak (MiB) | free at peak (MiB) | guard (>= 4,300 free) |
+|---|---|---|---|
+| A0 | 8,549 | 6,811 | OK |
+| A1 | 9,755 | 5,605 | OK |
+| A2 | 11,803 | 3,557 | **VIOLATED** |
+| A3 | 8,985 | 6,375 | OK |
+
+**Cause.** The queue caps each arm at `min(9500, free - 600)` MiB, which protects the 10 GB big-profile budget but not the 4,300 MiB guard. A2 was allowed to reach 6,964 MiB of its own use while the bee server held 4,836 MiB. A run that size must not happen again: the queue must cap each arm at `free - 4300` MiB before it starts (and refuse to start otherwise). This is an owner-visible defect, not a measurement result, and it is fixed only in the queue code, not here.
+
 ## Not tested
 
 - Quality (held-out loss, bits per byte): **Not tested.**

@@ -162,6 +162,8 @@ class RegisteredDomainExpert:
     def __post_init__(self) -> None:
         if not isinstance(self.domain_name, str) or not self.domain_name.strip() or not isinstance(self.dataset_id, str) or not self.dataset_id.strip():
             raise ValueError("domain_name and dataset_id must be non-empty strings")
+        if not isinstance(self.expert_cid, str) or not self.expert_cid.strip() or not isinstance(self.shard_cid, str) or not self.shard_cid.strip():
+            raise ValueError("expert_cid and shard_cid must be non-empty strings")
         if (
             isinstance(self.lora_rank_r, bool)
             or not isinstance(self.lora_rank_r, int)
@@ -171,6 +173,18 @@ class RegisteredDomainExpert:
             or self.lora_alpha < 1
         ):
             raise ValueError("lora_rank_r and lora_alpha must be positive integers")
+        for loss_name, loss_val in (("initial_loss", self.initial_loss), ("final_loss", self.final_loss)):
+            if isinstance(loss_val, bool) or not isinstance(loss_val, (int, float)) or not math.isfinite(float(loss_val)) or float(loss_val) < 0.0:
+                raise ValueError(f"{loss_name} must be a non-negative finite number")
+        if (
+            isinstance(self.compression_ratio, bool)
+            or not isinstance(self.compression_ratio, (int, float))
+            or not math.isfinite(float(self.compression_ratio))
+            or float(self.compression_ratio) <= 0.0
+        ):
+            raise ValueError("compression_ratio must be a positive finite number")
+        if isinstance(self.compressed_bytes, bool) or not isinstance(self.compressed_bytes, int) or self.compressed_bytes < 0:
+            raise ValueError("compressed_bytes must be a non-negative integer")
         if not isinstance(self.lora_state_dict, dict):
             raise ValueError("lora_state_dict must be a dict")
 
@@ -822,8 +836,10 @@ class FP8PagedKVCache:
 
     @staticmethod
     def _quantize_page_fp8(tensor: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        if not isinstance(tensor, torch.Tensor) or tensor.numel() == 0:
+        if not isinstance(tensor, torch.Tensor) or tensor.dtype == torch.bool or tensor.numel() == 0:
             raise ValueError("tensor must be a non-empty torch.Tensor")
+        if not bool(torch.isfinite(tensor).all().item()):
+            raise ValueError("tensor must contain only finite values")
         t_fp32 = tensor.detach().to(torch.float32)
         absmax = t_fp32.abs().amax(dim=-1, keepdim=True).clamp_min(1e-6)
         scale = (absmax / 448.0).to(torch.float16)
@@ -838,7 +854,7 @@ class FP8PagedKVCache:
     def _dequantize_page_fp8(
         q: torch.Tensor, scale: torch.Tensor, target_dtype: torch.dtype = torch.float16
     ) -> torch.Tensor:
-        if not isinstance(q, torch.Tensor) or not isinstance(scale, torch.Tensor):
+        if not isinstance(q, torch.Tensor) or not isinstance(scale, torch.Tensor) or q.dtype == torch.bool or scale.dtype == torch.bool or q.numel() == 0 or scale.numel() == 0:
             raise ValueError("q and scale must be torch.Tensors")
         if hasattr(torch, "float8_e4m3fn") and q.dtype == torch.float8_e4m3fn:
             return (q.to(torch.float32) * scale.to(torch.float32)).to(target_dtype)
@@ -852,8 +868,10 @@ class FP8PagedKVCache:
         target_bits_per_dim: float = 4.0,
     ) -> Tuple[torch.Tensor, torch.Tensor, float, float]:
         """Quantize `tensor` under `codec`, returning `(stored_q, scale_t, rate_bits_per_dim, relative_mse)`."""
-        if not isinstance(tensor, torch.Tensor) or tensor.numel() == 0:
+        if not isinstance(tensor, torch.Tensor) or tensor.dtype == torch.bool or tensor.numel() == 0:
             raise ValueError("tensor must be a non-empty torch.Tensor")
+        if not bool(torch.isfinite(tensor).all().item()):
+            raise ValueError("tensor must contain only finite values")
         if codec not in cls.VALID_CODECS:
             raise ValueError(f"codec must be one of {cls.VALID_CODECS}, got {codec!r}")
         if (
@@ -915,7 +933,14 @@ class FP8PagedKVCache:
             raise ValueError(f"layer_idx must be an integer >= 0, got {layer_idx!r}")
         if isinstance(page_idx, bool) or not isinstance(page_idx, int) or page_idx < 0:
             raise ValueError(f"page_idx must be an integer >= 0, got {page_idx!r}")
-        if k_tensor.numel() == 0 or v_tensor.numel() == 0:
+        if (
+            not isinstance(k_tensor, torch.Tensor)
+            or not isinstance(v_tensor, torch.Tensor)
+            or k_tensor.dtype == torch.bool
+            or v_tensor.dtype == torch.bool
+            or k_tensor.numel() == 0
+            or v_tensor.numel() == 0
+        ):
             raise ValueError("k_tensor and v_tensor must be non-empty")
         if not bool(torch.isfinite(k_tensor).all().item()) or not bool(torch.isfinite(v_tensor).all().item()):
             raise ValueError("k_tensor and v_tensor must contain only finite values")
@@ -995,6 +1020,8 @@ class FP8PagedKVCache:
         if (
             not isinstance(k_tensor, torch.Tensor)
             or not isinstance(v_tensor, torch.Tensor)
+            or k_tensor.dtype == torch.bool
+            or v_tensor.dtype == torch.bool
             or k_tensor.numel() == 0
             or v_tensor.numel() == 0
         ):
@@ -1092,6 +1119,10 @@ def hotplug_hierarchical_experts(
         raise ValueError("community_adapters must be a dict")
     if isinstance(canonical_rank_r, bool) or not isinstance(canonical_rank_r, int) or canonical_rank_r < 1:
         raise ValueError("canonical_rank_r must be a positive integer")
+    if isinstance(num_macro_domains, bool) or not isinstance(num_macro_domains, int) or num_macro_domains < 1:
+        raise ValueError("num_macro_domains must be a positive integer")
+    if isinstance(experts_per_domain, bool) or not isinstance(experts_per_domain, int) or experts_per_domain < 1:
+        raise ValueError("experts_per_domain must be a positive integer")
     if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
         raise ValueError("top_k must be a positive integer")
     if (
@@ -1157,6 +1188,13 @@ def hotplug_three_tier_experts(
         raise ValueError("community_adapters must be a dict")
     if isinstance(canonical_rank_r, bool) or not isinstance(canonical_rank_r, int) or canonical_rank_r < 1:
         raise ValueError("canonical_rank_r must be a positive integer")
+    for tier_name, tier_val in (
+        ("num_super_clusters", num_super_clusters),
+        ("macro_per_super", macro_per_super),
+        ("micro_per_macro", micro_per_macro),
+    ):
+        if isinstance(tier_val, bool) or not isinstance(tier_val, int) or tier_val < 1:
+            raise ValueError(f"{tier_name} must be a positive integer")
     if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
         raise ValueError("top_k must be a positive integer")
     if (

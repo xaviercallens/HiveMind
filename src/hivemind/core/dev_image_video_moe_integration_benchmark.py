@@ -39,8 +39,13 @@ class EndUserPostAttribution:
         for field_name, val in (
             ("user_handle", self.user_handle),
             ("role", self.role),
+            ("registered_utc", self.registered_utc),
+            ("hardware_profile", self.hardware_profile),
             ("attributed_post_id", self.attributed_post_id),
             ("subreddit", self.subreddit),
+            ("post_archetype", self.post_archetype),
+            ("observed_behavior", self.observed_behavior),
+            ("conversion_lesson", self.conversion_lesson),
         ):
             if not isinstance(val, str) or not val.strip():
                 raise ValueError(f"{field_name} must be a non-empty string")
@@ -54,6 +59,13 @@ class EndUserPostAttribution:
             or not (0.0 <= float(self.attribution_confidence) <= 1.0)
         ):
             raise ValueError("attribution_confidence must be in [0.0, 1.0]")
+        if (
+            not isinstance(self.attribution_signals, Sequence)
+            or isinstance(self.attribution_signals, (str, bytes))
+            or len(self.attribution_signals) == 0
+            or not all(isinstance(s, str) and s.strip() for s in self.attribution_signals)
+        ):
+            raise ValueError("attribution_signals must be a non-empty sequence of non-empty strings")
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -87,6 +99,9 @@ class RedditPostCohortFunnel:
             ("subreddit", self.subreddit),
             ("language", self.language),
             ("title_summary", self.title_summary),
+            ("top_converting_hook", self.top_converting_hook),
+            ("primary_friction_point", self.primary_friction_point),
+            ("remediation_applied", self.remediation_applied),
         ):
             if not isinstance(val, str) or not val.strip():
                 raise ValueError(f"{field_name} must be a non-empty string")
@@ -99,6 +114,24 @@ class RedditPostCohortFunnel:
         ):
             if isinstance(val, bool) or not isinstance(val, int) or val < 0:
                 raise ValueError(f"{field_name} must be a non-negative integer")
+        for rate_name, rate_val in (
+            ("visitor_to_signup_rate_pct", self.visitor_to_signup_rate_pct),
+            ("signup_to_active_rate_pct", self.signup_to_active_rate_pct),
+        ):
+            if (
+                isinstance(rate_val, bool)
+                or not isinstance(rate_val, (int, float))
+                or not math.isfinite(float(rate_val))
+                or not (0.0 <= float(rate_val) <= 100.0)
+            ):
+                raise ValueError(f"{rate_name} must be a finite number in [0.0, 100.0]")
+        if (
+            isinstance(self.total_vram_contributed_gb, bool)
+            or not isinstance(self.total_vram_contributed_gb, (int, float))
+            or not math.isfinite(float(self.total_vram_contributed_gb))
+            or float(self.total_vram_contributed_gb) < 0.0
+        ):
+            raise ValueError("total_vram_contributed_gb must be a non-negative finite number")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -133,13 +166,28 @@ class ModalityGainBenchmarkScenario:
             ("modality", self.modality),
             ("model_id", self.model_id),
             ("title", self.title),
+            ("target_persona", self.target_persona),
+            ("baseline_model", self.baseline_model),
+            ("key_artifact_or_output", self.key_artifact_or_output),
         ):
             if not isinstance(val, str) or not val.strip():
                 raise ValueError(f"{field_name} must be a non-empty string")
+        if (
+            not isinstance(self.active_experts, Sequence)
+            or isinstance(self.active_experts, (str, bytes))
+            or len(self.active_experts) == 0
+            or not all(isinstance(e, str) and e.strip() for e in self.active_experts)
+        ):
+            raise ValueError("active_experts must be a non-empty sequence of non-empty strings")
         for field_name, val in (
+            ("baseline_quality_score", self.baseline_quality_score),
+            ("moe_quality_score", self.moe_quality_score),
+            ("quality_gain_pct", self.quality_gain_pct),
             ("baseline_latency_ms", self.baseline_latency_ms),
             ("moe_latency_ms", self.moe_latency_ms),
             ("speedup_x", self.speedup_x),
+            ("baseline_tokens_per_sec", self.baseline_tokens_per_sec),
+            ("moe_tokens_per_sec", self.moe_tokens_per_sec),
             ("active_vram_mib", self.active_vram_mib),
         ):
             if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) <= 0.0:

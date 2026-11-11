@@ -1533,6 +1533,26 @@ def verify_manuscript_data_consistency(
     else:
         checks.append({"check_id": "PROV-86", "metric_name": "E8_two_host_live_verification.json or PLANETARY_SCALE_READINESS missing", "expected_tokens": [], "source_artifact": src_v430, "passed": False})
 
+    # v4.4.0 E28 LLM-JEPA pilot (arXiv:2509.14252): every arm mean and paired difference must be quoted from the artifact (PROV-87)
+    e28_path = PROJECT_ROOT / "artifacts" / "experiments" / "E28_llm_jepa_pilot.json"
+    src_e28 = "artifacts/experiments/E28_llm_jepa_pilot.json"
+    if e28_path.exists():
+        e28 = json.loads(e28_path.read_text(encoding="utf-8"))
+        summ = e28["summary_test_exact_match"]
+        comp = e28["comparisons"]
+        toks87 = [f"{100 * summ[arm]['mean']:.2f}" for arm in ("ntp", "jepa", "jepa_shuf")]
+        toks87 += [f"{100 * comp[key]['mean_diff']:+.2f}" for key in ("jepa_minus_ntp", "jepa_minus_jepa_shuf")]
+        toks87 += ["2509.14252", "P28a"]
+        checks.append({
+            "check_id": "PROV-87",
+            "metric_name": "v4.4.0 E28 LLM-JEPA pilot (NTP vs. JEPA vs. shuffled-view control, 5 seeds)",
+            "expected_tokens": toks87,
+            "source_artifact": src_e28,
+            "passed": all(tok in tex_text for tok in toks87),
+        })
+    else:
+        checks.append({"check_id": "PROV-87", "metric_name": "E28_llm_jepa_pilot.json missing", "expected_tokens": [], "source_artifact": src_e28, "passed": False})
+
     failed = [c["check_id"] for c in checks if not c["passed"]]
     return {
         "total_checks": len(checks),
@@ -1783,7 +1803,7 @@ def run_autoevolve_peer_review() -> Dict[str, Any]:
 
     peer_review_report = {
         "manuscript_title": "Project HiveMind: A System Design for Decentralized Sparse Mixture-of-Experts Training with DiLoCo-Style Outer Optimization on 8 GB Consumer GPUs",
-        "version": "4.3.0",
+        "version": "4.4.0",
         "is_peer_review": False,
         "disclosure": AUDIT_DISCLOSURE,
         "lead_peer_review_model": LEAD_PEER_REVIEW_MODEL,
@@ -1823,7 +1843,7 @@ def run_autoevolve_peer_review() -> Dict[str, Any]:
 
     autoevolve_manifest = {
         "pipeline_name": "Project HiveMind x AutoevolveAI Cross-Session Research Pipeline",
-        "version": "4.3.0",
+        "version": "4.4.0",
         "lead_peer_review_model": LEAD_PEER_REVIEW_MODEL,
         "workspace_root": ".",
         "artifacts_and_entrypoints": {

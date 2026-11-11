@@ -1,11 +1,11 @@
 {
   "manuscript_title": "Project HiveMind: A System Design for Decentralized Sparse Mixture-of-Experts Training with DiLoCo-Style Outer Optimization on 8 GB Consumer GPUs",
-  "version": "4.3.0",
+  "version": "4.4.0",
   "is_peer_review": false,
   "disclosure": "This report is produced by a deterministic script. It is NOT a peer review: no language model and no human referee evaluated the manuscript. Verdicts below mean only that the listed artifact checks passed.",
   "lead_peer_review_model": "none (scripted static audit; no language-model call)",
   "co_auditor_model": "none",
-  "timestamp_utc": "2026-11-10T06:55:56Z",
+  "timestamp_utc": "2026-11-11T09:20:28Z",
   "tex_path": "paper/hivemind_foundation_article.tex",
   "pdf_path": "paper/hivemind_foundation_article.pdf",
   "pdf_exists": true,
@@ -985,8 +985,8 @@
     "tier_a_machine_checked": true
   },
   "manuscript_provenance_audit": {
-    "total_checks": 85,
-    "passed_checks": 85,
+    "total_checks": 86,
+    "passed_checks": 86,
     "failed_check_ids": [],
     "all_passed": true,
     "checks": [
@@ -2060,13 +2060,28 @@
         ],
         "source_artifact": "artifacts/experiments/e8_real/E8_two_host_live_verification.json",
         "passed": true
+      },
+      {
+        "check_id": "PROV-87",
+        "metric_name": "v4.4.0 E28 LLM-JEPA pilot (NTP vs. JEPA vs. shuffled-view control, 5 seeds)",
+        "expected_tokens": [
+          "75.90",
+          "80.00",
+          "44.55",
+          "+4.10",
+          "+35.45",
+          "2509.14252",
+          "P28a"
+        ],
+        "source_artifact": "artifacts/experiments/E28_llm_jepa_pilot.json",
+        "passed": true
       }
     ]
   },
   "latex_typography_and_figures_audit": {
     "figures_verified": 7,
     "missing_figures": [],
-    "bibliography_entries": 63,
+    "bibliography_entries": 64,
     "uncited_bibitems": [],
     "undefined_citations": [],
     "formal_theorem_blocks": 4,
@@ -2109,7 +2124,7 @@
       "co_auditor_model": "none",
       "gate_passed": true,
       "findings_resolved": [
-        "Programmatically verified 85/85 exact numerical metrics between the 4 JSON artifacts and paper/hivemind_foundation_article.tex.",
+        "Programmatically verified 86/86 exact numerical metrics between the 4 JSON artifacts and paper/hivemind_foundation_article.tex.",
         "Eliminated legacy hardcoded v2.9.2 strings in paper/autoevolve_peer_review_pipeline.py."
       ]
     },
@@ -2131,7 +2146,7 @@
       "co_auditor_model": "none",
       "gate_passed": true,
       "findings_resolved": [
-        "Verified 7/4 vector PDF/PNG figure pairs and 63/63 cited bibliography entries (0 uncited, 0 undefined).",
+        "Verified 7/4 vector PDF/PNG figure pairs and 64/64 cited bibliography entries (0 uncited, 0 undefined).",
         "Eliminated Overfull \\hbox (80.7pt) and fancyhdr headheight warnings via \\path{} line breaking and 21pt header height (0 Overfull \\hbox > 5pt)."
       ]
     }

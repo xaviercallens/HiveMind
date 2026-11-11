@@ -204,3 +204,40 @@ Suite à la discussion de 13 messages sur [`r/SelfHostedAI/comments/1xjc76k/turn
 | **`P6`** | `u/lcpjj_` *(Commentaires #7 & #10)*, `u/OrganizationTop9026` *(Commentaire #9)* | **Durcissement Sécurité, Redaction des Endpoints Publics & Honnêteté du Catalogue Modèles :** Authentification durcie (sans casser la connexion des anciens utilisateurs), omission de `endpoint_url` sur `/v1/hivemind/producers/fleet` pour les appels non authentifiés, bouclier `hivemind_producer_shield.py` (`HIVEMIND_ENDPOINT_TOKEN`, Ollama `>= 0.1.34` contre `CVE-2024-37032`), et marquage honnête *« Planned, not trained yet »* pour les dépôts Hugging Face non publiés. | [`GET /v1/hivemind/producers/fleet`](../src/hivemind/router/gateway.py), [`GET /v1/hivemind/selfhosted-p2p/audit`](../src/hivemind/router/gateway.py) |
 
 
+
+
+---
+
+## 7. Saison 38 (`IP-JEPA-01..04`) : LLM-JEPA (`arXiv:2509.14252`) comme objectif auxiliaire des rondes QLoRA nocturnes — pilote `E28` mesuré
+
+**Article :** H. Huang, Y. LeCun, R. Balestriero, *« LLM-JEPA: Large Language Models Meet Joint Embedding Predictive Architectures »*, [`arXiv:2509.14252`](https://arxiv.org/abs/2509.14252) (code : [`rbalestr-lab/llm-jepa`](https://github.com/rbalestr-lab/llm-jepa)).
+
+**Idée :** on garde la perte next-token et on ajoute un terme dans l'espace des embeddings entre deux *vues* d'un même contenu (requête ↔ code, question ↔ réponse, FR ↔ EN) :
+`L = L_LLM + λ · (1 − cos(Pred(Enc(Text)), Enc(Code)))`. Le prédicteur réutilise les poids du modèle via `k` jetons `[PRED]`, et un masque d'attention causal par blocs empaquette les deux vues en une seule passe supplémentaire. Le *loss dropout* `α` ramène le coût à `(2 − α)×`, avec `λ(1 − α)` constant. L'article rapporte des gains sur NL-RX, GSM8K, Spider, NQ-Open et HellaSwag (Llama-3, Gemma-2, OpenELM, OLMo, 1B–8B), à tous les rangs LoRA testés (32–512), avec une meilleure résistance au surapprentissage.
+
+**Pourquoi pour HiveMind :** le surcoût porte uniquement sur l'entraînement (latence de service inchangée). Nos données nocturnes sont déjà « à deux vues » (requêtes/complétions de code, énoncés/preuves Lean, paires FR/EN, qui sont la cause des échecs `B3`). Enfin, `α = 0,75` tient dans le budget VRAM bénévole (`1,25×`).
+
+### Pilote `E28` (pré-enregistré, RTX 2070, 5 graines `{82, 23, 37, 84, 4}`)
+
+Reçu : [`artifacts/experiments/E28_llm_jepa_pilot.json`](../artifacts/experiments/E28_llm_jepa_pilot.json). Script : [`scripts/run_e28_llm_jepa_pilot.py`](../scripts/run_e28_llm_jepa_pilot.py). Module : [`src/hivemind/swarm/llm_jepa.py`](../src/hivemind/swarm/llm_jepa.py) (10 tests dans [`tests/test_llm_jepa.py`](../tests/test_llm_jepa.py)). Modèle Llama 2 couches (`d = 64`) entraîné depuis zéro sur une tâche synthétique à deux vues (`copy/reverse/sort/rotate` de 3–6 chiffres écrits en mots → chiffres), 600 paires d'entraînement et 400 paires tenues à l'écart.
+
+| Bras | Exact match tenu à l'écart | 1re valeur singulière de `Enc(Text) − Enc(Code)` | Temps / run |
+| :-- | :-- | :-- | :-- |
+| NTP seul | **75,90 % ± 7,43** | 149,85 | 91,8 s |
+| LLM-JEPA (`λ = 1`, `k = 1`) | **80,00 % ± 10,43** | 1,90 | 123,3 s |
+| Contrôle « vues mélangées » | **44,55 % ± 13,77** | 4,81 | 123,6 s |
+
+* **JEPA − NTP : +4,10 pts** (t = 0,68, positif sur 4 graines sur 5) ⇒ la prédiction pré-enregistrée **`P28a` n'est pas confirmée**. Aucun gain d'entraînement n'est revendiqué.
+* **JEPA − vues mélangées : +35,45 pts** (t = 5,65, positif 5/5). Ce n'est donc pas une régularisation générique : le terme n'aide que si les vues correspondent vraiment.
+* **Signature géométrique reproduite :** l'écart entre vues est ~79× plus petit (Fig. 3 de l'article). Surcoût mesuré : **1,34×**.
+
+### Pistes pour l'essaim (une PR par ligne)
+
+| Ticket | Livrable | Porte de validation |
+| :-- | :-- | :-- |
+| `IP-JEPA-01` | Module + tests + pilote `E28` (**cette PR**) | `pytest tests/test_llm_jepa.py`, `PROV-87` |
+| `IP-JEPA-02` | `E28` à ≥ 10 graines + grille `(λ, k)` de l'article, coût de réglage compté | `P28a` pré-enregistré, test apparié |
+| `IP-JEPA-03` | Option `--jepa-lambda / --jepa-dropout 0.75` dans le learner Stage-2 NF4 QLoRA ([`scripts/qlora_moe_amcp.py`](../scripts/qlora_moe_amcp.py)), vues = code requête/complétion et paires FR/EN | Adaptateur promu **uniquement** s'il passe la porte `B3` contre un adaptateur NTP apparié |
+| `IP-JEPA-04` | Valeur singulière de l'écart entre vues journalisée à côté de la NLL tenue à l'écart (diagnostic, non bloquant) | Visible dans le reçu de ronde, aucun effet sur la promotion |
+
+> Aucun modèle servi ne change tant que `IP-JEPA-03` n'a pas passé `B3`. Toujours respecter le plancher de **≥ 4 300 MiB** de VRAM libre sur le T4 et la fenêtre Spot 17:00–22:00 CET.

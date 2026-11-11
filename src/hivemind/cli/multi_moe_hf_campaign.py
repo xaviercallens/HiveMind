@@ -118,6 +118,17 @@ def load_polyglot_8domain_fixture(
 
 def _try_fetch_live_hf_rows(dataset_id: str, max_rows: int = 2, timeout_sec: float = 2.5) -> list[str]:
     """Optionally fetch live sample rows from the Hugging Face Datasets Server API."""
+    if isinstance(dataset_id, bool) or not isinstance(dataset_id, str) or not dataset_id.strip():
+        raise ValueError("dataset_id must be a non-empty string")
+    if isinstance(max_rows, bool) or not isinstance(max_rows, int) or max_rows < 1:
+        raise ValueError("max_rows must be >= 1")
+    if (
+        isinstance(timeout_sec, bool)
+        or not isinstance(timeout_sec, (int, float))
+        or not math.isfinite(float(timeout_sec))
+        or float(timeout_sec) <= 0.0
+    ):
+        raise ValueError("timeout_sec must be a finite positive number")
     encoded_ds = urllib.parse.quote(dataset_id, safe="/")
     url = f"https://datasets-server.huggingface.co/first-rows?dataset={encoded_ds}&config=default&split=train"
     req = urllib.request.Request(url, headers={"User-Agent": "HiveMind-Community-Campaign/1.8"})
@@ -139,6 +150,10 @@ def _try_fetch_live_hf_rows(dataset_id: str, max_rows: int = 2, timeout_sec: flo
 
 def _build_seeded_campaign_peft_model(seed: int, device: torch.device) -> Qwen2ForCausalLM:
     """Construct a deterministic byte-level Qwen2ForCausalLM + PEFT LoRA model."""
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer")
+    if not isinstance(device, torch.device):
+        raise ValueError("device must be a torch.device")
     torch.manual_seed(seed)
     cfg = Qwen2Config(**MODEL_CONFIG)
     cfg._attn_implementation = "eager"
@@ -150,12 +165,18 @@ def _build_seeded_campaign_peft_model(seed: int, device: torch.device) -> Qwen2F
 
 def _extract_lora_tensors_cpu(model: Qwen2ForCausalLM) -> dict[str, torch.Tensor]:
     """Return detached CPU float32 clones of all trainable PEFT LoRA parameters."""
+    if not isinstance(model, torch.nn.Module):
+        raise ValueError("model must be a torch.nn.Module")
     raw = adapter_state(model)
     return {k: v.detach().cpu().to(torch.float32).clone() for k, v in sorted(raw.items())}
 
 
 def _load_lora_tensors_into_model(model: Qwen2ForCausalLM, state: dict[str, torch.Tensor]) -> None:
     """Copy a LoRA parameter dict directly into the model's named parameters."""
+    if not isinstance(model, torch.nn.Module):
+        raise ValueError("model must be a torch.nn.Module")
+    if not isinstance(state, Mapping) or not state:
+        raise ValueError("state must be a non-empty Mapping")
     with torch.no_grad():
         for name, param in model.named_parameters():
             if name in state:
@@ -179,11 +200,16 @@ def run_multi_moe_hf_campaign(
     """Execute the Large-Scale Multi-MoE & Hugging Face Dataset GPU Validation Campaign."""
     if not isinstance(contributor_handle, str) or not contributor_handle.strip():
         raise ValueError("contributor_handle must be non-empty")
-    if isinstance(steps_per_domain, bool) or int(steps_per_domain) < 2:
+    if isinstance(steps_per_domain, bool) or not isinstance(steps_per_domain, int) or steps_per_domain < 2:
         raise ValueError("steps_per_domain must be >= 2")
-    if isinstance(domain_limit, bool) or not (2 <= int(domain_limit) <= 8):
+    if isinstance(domain_limit, bool) or not isinstance(domain_limit, int) or not (2 <= domain_limit <= 8):
         raise ValueError("domain_limit must be between 2 and 8")
-    if isinstance(learning_rate, bool) or not math.isfinite(float(learning_rate)) or float(learning_rate) <= 0.0:
+    if (
+        isinstance(learning_rate, bool)
+        or not isinstance(learning_rate, (int, float))
+        or not math.isfinite(float(learning_rate))
+        or float(learning_rate) <= 0.0
+    ):
         raise ValueError("learning_rate must be a finite positive float")
     if isinstance(sequence_length, bool) or not isinstance(sequence_length, int):
         raise ValueError("sequence_length must be between 2 and 128")
@@ -194,15 +220,16 @@ def run_multi_moe_hf_campaign(
     if output_path is not None and (isinstance(output_path, bool) or not isinstance(output_path, Path)):
         raise ValueError("output_path must be a Path or None")
     if min_quorum_k is not None:
-        if isinstance(min_quorum_k, bool) or int(min_quorum_k) < 1 or int(min_quorum_k) > int(domain_limit):
+        if isinstance(min_quorum_k, bool) or not isinstance(min_quorum_k, int) or min_quorum_k < 1 or min_quorum_k > domain_limit:
             raise ValueError("min_quorum_k must be an integer in [1, domain_limit]")
     if (
         isinstance(grace_margin_gamma, bool)
+        or not isinstance(grace_margin_gamma, (int, float))
         or not math.isfinite(float(grace_margin_gamma))
         or not (0.0 <= float(grace_margin_gamma) < 1.0)
     ):
         raise ValueError("grace_margin_gamma must be in [0, 1)")
-    if quorum_merge_mode not in ("rda", "direct"):
+    if isinstance(quorum_merge_mode, bool) or not isinstance(quorum_merge_mode, str) or quorum_merge_mode not in ("rda", "direct"):
         raise ValueError("quorum_merge_mode must be 'rda' or 'direct'")
 
     t_campaign_start = time.perf_counter()
@@ -1193,6 +1220,8 @@ def format_campaign_markdown_summary(report: dict[str, Any]) -> str:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entrypoint for the Multi-MoE & Hugging Face Dataset GPU Validation Campaign."""
+    if argv is not None and (isinstance(argv, (str, bytes)) or not isinstance(argv, Sequence)):
+        raise ValueError("argv must be a sequence of strings or None")
     parser = argparse.ArgumentParser(
         description="Run Operation Polyglot-Singularity-128: Multi-MoE & 8-Domain Hugging Face GPU Validation Campaign."
     )

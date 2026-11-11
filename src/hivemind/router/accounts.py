@@ -336,7 +336,18 @@ LEGACY_KNOWN_USERS: dict[str, dict[str, Any]] = {
     },
     "vxtzq": {
         "handle": "vxtzq",
-        "aliases": ("@vxtzq", "vxtzq@github.com", "hm_live_vxtzq_771a904c55b"),
+        "aliases": (
+            "@vxtzq",
+            "vxtzq",
+            "vxtzq1",
+            "@vxtzq1",
+            "vxtzq@github.com",
+            "116555319+vxtzq@users.noreply.github.com",
+            "vxtzq@crowdgpt.net",
+            "contact@crowdgpt.net",
+            "vxtzq@hivemind.network",
+            "hm_live_vxtzq_771a904c55b",
+        ),
         "email": "vxtzq@github.com",
         "role": "prosumer",
         "starter_hmt": 30000.0,
@@ -949,7 +960,10 @@ class RouterStore:
                 pass
             # previous users known by their legacy identity (the e-mail is recorded in LEGACY_KNOWN_USERS)
             legacy = self._resolve_legacy_user(clean)
-            if legacy is not None and str(legacy.get("email", "")).lower() == clean:
+            if legacy is not None and (
+                str(legacy.get("email", "")).lower() == clean
+                or clean in {str(a).lower() for a in legacy.get("aliases", ()) if "@" in str(a) and not str(a).startswith("@")}
+            ):
                 by_handle = self._conn.execute(
                     "SELECT account_id FROM accounts WHERE lower(handle)=lower(?) LIMIT 1", (str(legacy.get("handle", "")),)
                 ).fetchone()
@@ -1206,14 +1220,20 @@ class RouterStore:
                     if candidate_key != ident and ident:
                         ident_norm = ident.lstrip("@").lower()
                         if ident_norm not in (acct.handle.lower(), acct.account_id.lower()):
-                            with self._lock:
-                                email_row = self._conn.execute(
-                                    "SELECT email FROM accounts WHERE account_id=?",
-                                    (acct.account_id,),
-                                ).fetchone()
-                            stored_email = str(email_row["email"] or "").lower() if email_row else ""
-                            if not stored_email or ident_norm != stored_email:
-                                continue
+                            legacy_ident = self._resolve_legacy_user(ident)
+                            legacy_match = (
+                                legacy_ident is not None
+                                and str(legacy_ident.get("handle", "")).lower() == acct.handle.lower()
+                            )
+                            if not legacy_match:
+                                with self._lock:
+                                    email_row = self._conn.execute(
+                                        "SELECT email FROM accounts WHERE account_id=?",
+                                        (acct.account_id,),
+                                    ).fetchone()
+                                stored_email = str(email_row["email"] or "").lower() if email_row else ""
+                                if not stored_email or ident_norm != stored_email:
+                                    continue
                     self._active_key_cache[acct.account_id] = candidate_key
                     return acct, candidate_key, False
 
@@ -1238,11 +1258,16 @@ class RouterStore:
                 if r is not None and all(str(x["account_id"]) != str(r["account_id"]) for x in candidate_rows):
                     candidate_rows.append(r)
 
-            if email_candidate:
+            email_candidates = [email_candidate] if email_candidate else []
+            if "@" in ident and not ident.strip().startswith("@"):
+                raw_em = ident.strip().lower()
+                if raw_em not in email_candidates:
+                    email_candidates.append(raw_em)
+            for em_cand in email_candidates:
                 _add_candidate(
                     conn.execute(
                         "SELECT * FROM accounts WHERE lower(email)=lower(?)",
-                        (email_candidate,),
+                        (em_cand,),
                     ).fetchone()
                 )
             if normalised:
@@ -2381,25 +2406,162 @@ class RouterStore:
                     continue
                 handle = normalise_identity(str(meta["handle"]))
                 account_id = self._hmac_hex(handle)[:32]
+                clean_email = str(meta.get("email") or "").strip().lower()[:128] or None
+                starter = float(meta.get("starter_hmt", 100.0))
                 exists = conn.execute(
-                    "SELECT account_id FROM accounts WHERE account_id=? OR lower(handle)=lower(?)",
+                    "SELECT account_id, email FROM accounts WHERE account_id=? OR lower(handle)=lower(?)",
                     (account_id, handle),
                 ).fetchone()
                 if exists is not None:
+                    existing_id = str(exists["account_id"])
+                    if clean_email and not str(exists["email"] or "").strip():
+                        conn.execute(
+                            "UPDATE accounts SET email=? WHERE account_id=?",
+                            (clean_email, existing_id),
+                        )
+                    if starter > 0.0:
+                        cur_bal = self._balance(conn, existing_id)
+                        if cur_bal < starter:
+                            self._append(
+                                conn,
+                                existing_id,
+                                round(starter - cur_bal, 6),
+                                "grant",
+                                "legacy-hiveminder-restore",
+                                stamp,
+                            )
                     continue
                 api_key = "hm-" + secrets.token_urlsafe(32)
-                clean_email = str(meta.get("email") or "").strip().lower()[:128] or None
                 conn.execute(
                     "INSERT INTO accounts(account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, email) "
                     "VALUES (?,?,?,?,?,?,?,?,?)",
                     (account_id, handle, role, self._hmac_hex(api_key), stamp, DEFAULT_MAX_PRICE_PER_1K, 0, KIND_USER, clean_email),
                 )
                 self._active_key_cache[account_id] = api_key
-                starter = float(meta.get("starter_hmt", 100.0))
                 if starter > 0.0:
                     self._append(conn, account_id, starter, "grant", "legacy-hiveminder-restore", stamp)
                 created_ids.append(account_id)
         return created_ids
+
+    def admin_reset_or_provision_account(
+        self,
+        handle: str,
+        *,
+        email: str = "",
+        new_password: str = "",
+        role: str = "prosumer",
+        min_balance_hmt: float = 0.0,
+        issue_reset_token: bool = True,
+        now_utc: float | None = None,
+    ) -> dict[str, Any]:
+        """Admin-only account provisioning, password reset, email binding, and HMT quota restoration."""
+        stamp = time.time() if now_utc is None else float(now_utc)
+        if new_password and (not isinstance(new_password, str) or len(new_password) < 12 or len(new_password) > 256):
+            raise ValueError("password must be 12 to 256 characters")
+        legacy = self._resolve_legacy_user(handle) or (self._resolve_legacy_user(email) if email else None)
+        raw_handle = str(legacy["handle"]) if legacy else handle.strip().lstrip("@")
+        if "@" in raw_handle and not email:
+            email = raw_handle
+            raw_handle = raw_handle.split("@")[0]
+        normalised = normalise_identity(raw_handle)
+        eff_role = (
+            role
+            if role in ROLES and role != "admin"
+            else str((legacy or {}).get("role", "prosumer"))
+        )
+        if eff_role not in ROLES or eff_role == "admin":
+            eff_role = "prosumer"
+        clean_email = (
+            email.strip().lower()[:128]
+            if email.strip()
+            else str((legacy or {}).get("email", "")).strip().lower()[:128]
+        ) or None
+        target_min_balance = max(
+            float(min_balance_hmt or 0.0),
+            float((legacy or {}).get("starter_hmt", 0.0)),
+        )
+        candidate_id = self._hmac_hex(normalised)[:32]
+        created = False
+        with self._tx() as conn:
+            row = conn.execute(
+                "SELECT account_id, handle, email FROM accounts WHERE account_id=? OR lower(handle)=lower(?)",
+                (candidate_id, normalised),
+            ).fetchone()
+            if row is None:
+                account_id = candidate_id
+                init_key = "hm-" + secrets.token_urlsafe(32)
+                conn.execute(
+                    "INSERT INTO accounts(account_id, handle, role, key_hash, created_utc, max_price_per_1k, is_test, kind, email) "
+                    "VALUES (?,?,?,?,?,?,?,?,?)",
+                    (
+                        account_id,
+                        normalised,
+                        eff_role,
+                        self._hmac_hex(init_key),
+                        stamp,
+                        DEFAULT_MAX_PRICE_PER_1K,
+                        0,
+                        KIND_USER,
+                        clean_email,
+                    ),
+                )
+                created = True
+            else:
+                account_id = str(row["account_id"])
+                normalised = str(row["handle"])
+                if clean_email:
+                    conn.execute(
+                        "UPDATE accounts SET email=?, is_test=0, kind=? WHERE account_id=?",
+                        (clean_email, KIND_USER, account_id),
+                    )
+                else:
+                    clean_email = str(row["email"] or "") or None
+                    conn.execute(
+                        "UPDATE accounts SET is_test=0, kind=? WHERE account_id=?",
+                        (KIND_USER, account_id),
+                    )
+            if target_min_balance > 0.0:
+                cur_bal = self._balance(conn, account_id)
+                if cur_bal < target_min_balance:
+                    self._append(
+                        conn,
+                        account_id,
+                        round(target_min_balance - cur_bal, 6),
+                        "grant",
+                        "admin-account-provision",
+                        stamp,
+                    )
+        if new_password:
+            self.set_password(account_id, new_password)
+        api_key = self.rotate_key(account_id)
+        reset_token = self.create_password_reset(account_id, now=stamp) if issue_reset_token else None
+        email_aliases = sorted(
+            {
+                *(
+                    [clean_email]
+                    if clean_email
+                    else []
+                ),
+                *[
+                    str(a).lower()
+                    for a in (legacy or {}).get("aliases", ())
+                    if "@" in str(a) and not str(a).startswith("@")
+                ],
+            }
+        )
+        return {
+            "status": "ACCOUNT_PROVISIONED_AND_RESET",
+            "created": created,
+            "account_id": account_id,
+            "handle": normalised,
+            "email": clean_email,
+            "email_aliases": email_aliases,
+            "role": eff_role,
+            "api_key": api_key,
+            "balance": self.balance(account_id),
+            "password_set": bool(new_password),
+            "reset_token": reset_token,
+        }
 
     def list_hiveminder_accounts(self, now_utc: float | None = None, ttl_s: float = 120.0) -> list[dict[str, Any]]:
         """Return all real ('user') producer, prosumer, and trainer accounts and their live endpoint connectivity."""

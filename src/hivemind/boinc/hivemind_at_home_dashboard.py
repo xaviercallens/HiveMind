@@ -673,6 +673,11 @@ class AuthLoginRequest(BaseModel):
     strict_existing: bool = False
 
 
+class AuthChangePasswordRequest(BaseModel):
+    new_password: Optional[str] = None
+    password: Optional[str] = None
+
+
 class AuthSSORequest(BaseModel):
     id_token: Optional[str] = None
     code: Optional[str] = None
@@ -7873,6 +7878,12 @@ def create_hivemind_at_home_app(
         "vxtzq": {
             "handle": "@Vxtzq",
             "email": "vxtzq@github.com",
+            "secondary_emails": [
+                "116555319+vxtzq@users.noreply.github.com",
+                "vxtzq@crowdgpt.net",
+                "contact@crowdgpt.net",
+                "vxtzq@hivemind.network",
+            ],
             "github_url": "https://github.com/Vxtzq",
             "role": "MasterMinder (Lead WebUI Reviewer & Pre-Deploy Gatekeeper)",
             "badge": "🔍 PRE-DEPLOY REVIEWER",
@@ -8765,7 +8776,7 @@ def create_hivemind_at_home_app(
             for k_u, u in auth_state["users"].items():
                 u_h = str(u.get("handle", "")).lstrip("@").lower().replace("-", "_")
                 emails = [u.get("email", "").lower()] + [e.lower() for e in u.get("secondary_emails", [])]
-                if clean_email.lower() in emails or norm_h in (k_u.lower(), u_h) or (k_u == "xavier_callens" and norm_h in ("xaviercallens", "callensxavier", "xavier")):
+                if clean_email.lower() in emails or norm_h in (k_u.lower(), u_h) or (k_u == "xavier_callens" and norm_h in ("xaviercallens", "callensxavier", "xavier")) or (k_u == "vxtzq" and norm_h in ("vxtzq", "vxtzq1")):
                     matched_existing = u
                     break
         if not matched_existing:
@@ -8872,7 +8883,7 @@ def create_hivemind_at_home_app(
             for k_u, u in auth_state["users"].items():
                 u_h = str(u.get("handle", "")).lstrip("@").lower().replace("-", "_")
                 emails = [u.get("email", "").lower()] + [e.lower() for e in u.get("secondary_emails", [])]
-                if key.lower() in emails or norm_k in (k_u.lower(), u_h) or (k_u == "xavier_callens" and norm_k in ("xaviercallens", "callensxavier", "xavier")):
+                if key.lower() in emails or norm_k in (k_u.lower(), u_h) or (k_u == "xavier_callens" and norm_k in ("xaviercallens", "callensxavier", "xavier")) or (k_u == "vxtzq" and norm_k in ("vxtzq", "vxtzq1")):
                     matched = u
                     break
         if not matched:
@@ -9021,6 +9032,35 @@ def create_hivemind_at_home_app(
             "handle": "ephemeral",
             "old_token_revoked": False,
             "token": new_token,
+        })
+
+    @app.post("/api/v1/auth/change-password", response_class=JSONResponse)
+    def api_auth_change_password(req: AuthChangePasswordRequest, request: Request) -> JSONResponse:
+        auth_header = request.headers.get("Authorization", "")
+        old_token = auth_header.replace("Bearer ", "").strip()
+        user = _lookup_user_by_token(old_token)
+        if not user or user.get("is_guest"):
+            raise HTTPException(status_code=401, detail="A valid authenticated token is required to change password")
+        new_pwd = (req.new_password or req.password or "").strip()
+        if len(new_pwd) < 8 or len(new_pwd) > 256:
+            raise HTTPException(status_code=422, detail="Password must be between 8 and 256 characters")
+        salt_hex, hash_hex = _hash_password(new_pwd)
+        user["password_salt"] = salt_hex
+        user["password_hash"] = hash_hex
+        user["password_kdf"] = f"PBKDF2-HMAC-SHA256-{PBKDF2_ITERATIONS}"
+        user["has_password"] = True
+        user["password_bound"] = True
+        auth_state["api_keys"].pop(old_token, None)
+        new_token = "hm_live_" + secrets.token_hex(16)
+        user["token"] = new_token
+        auth_state["api_keys"][new_token] = user
+        _save_persisted_users()
+        return JSONResponse(content={
+            "status": "PASSWORD_SET",
+            "handle": user["handle"],
+            "token": new_token,
+            "api_key": new_token,
+            "old_key_revoked": True,
         })
 
     @app.post("/api/v1/auth/magic-link", response_class=JSONResponse)

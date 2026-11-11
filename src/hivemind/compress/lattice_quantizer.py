@@ -144,7 +144,16 @@ def _entropy_bits(cols: List[np.ndarray]) -> float:
     """Plug-in joint entropy (bits) of integer columns."""
     if not isinstance(cols, (list, tuple)) or len(cols) == 0:
         raise ValueError("cols must be a non-empty sequence of arrays")
-    arrays = [_as_finite_float_array(c, "col").astype(np.int64) for c in cols]
+    arrays = []
+    for c in cols:
+        if isinstance(c, (bool, str, bytes)):
+            raise ValueError("cols arrays must be non-empty")
+        arr = np.asarray(c)
+        if arr.size == 0 or arr.dtype.kind not in ("i", "u", "f"):
+            raise ValueError("cols arrays must be non-empty")
+        if not bool(np.all(np.isfinite(arr.astype(float)))):
+            raise ValueError("cols arrays must be non-empty")
+        arrays.append(arr.astype(np.int64))
     if any(a.shape != arrays[0].shape for a in arrays):
         raise ValueError("cols arrays must have identical shapes")
     keys = np.stack(arrays, axis=1)
@@ -207,14 +216,14 @@ class QuantizedDelta:
             or self.dequantized.dtype == torch.bool
             or not bool(torch.isfinite(self.dequantized).all())
         ):
-            raise ValueError("dequantized must be a non-empty finite numeric torch.Tensor")
+            raise ValueError("dequantized must be a non-empty torch.Tensor")
         if (
             not isinstance(self.residual, torch.Tensor)
             or self.residual.shape != self.dequantized.shape
             or self.residual.dtype == torch.bool
             or not bool(torch.isfinite(self.residual).all())
         ):
-            raise ValueError("residual must be a finite numeric torch.Tensor matching dequantized.shape")
+            raise ValueError("residual must be a torch.Tensor matching dequantized.shape")
         if (
             isinstance(self.rate_bits_per_dim, bool)
             or not isinstance(self.rate_bits_per_dim, (int, float))
@@ -260,7 +269,7 @@ class LatticeDeltaQuantizer:
 
     def quantize(self, vec: torch.Tensor) -> QuantizedDelta:
         if not isinstance(vec, torch.Tensor) or vec.dtype == torch.bool:
-            raise ValueError("vec must be a numeric torch.Tensor")
+            raise ValueError("vec must be a torch.Tensor")
         v = vec.detach().to(torch.float32).reshape(-1)
         if v.numel() == 0:
             raise ValueError("delta must be non-empty")
@@ -294,7 +303,7 @@ class SignDeltaQuantizer:
 
     def quantize(self, vec: torch.Tensor) -> QuantizedDelta:
         if not isinstance(vec, torch.Tensor) or vec.dtype == torch.bool:
-            raise ValueError("vec must be a numeric torch.Tensor")
+            raise ValueError("vec must be a torch.Tensor")
         v = vec.detach().to(torch.float32).reshape(-1)
         if v.numel() == 0:
             raise ValueError("delta must be non-empty")
@@ -328,7 +337,7 @@ def calibrate_scale_for_rate(kind: str, sample: torch.Tensor, target_bits_per_di
     if eff_block < 1 or (kind in ("A2", "E8") and eff_block != LATTICE_DIM[kind]):
         raise ValueError(f"invalid block {eff_block} for lattice {kind}")
     if not isinstance(sample, torch.Tensor) or sample.dtype == torch.bool:
-        raise ValueError("sample must be a numeric torch.Tensor")
+        raise ValueError("sample must be a torch.Tensor")
     v = sample.detach().to(torch.float32).reshape(-1)
     if v.numel() == 0:
         raise ValueError("sample must be non-empty")

@@ -137,11 +137,11 @@ def test_lattice_quantizer_rejects_bool_arrays_and_wrong_dimensions() -> None:
 
     lq = LatticeDeltaQuantizer("A2", scale=0.25)
     sq = SignDeltaQuantizer()
-    with pytest.raises(ValueError, match="numeric torch.Tensor"):
+    with pytest.raises(ValueError, match="torch.Tensor"):
         lq.quantize(torch.tensor([True, False]))
-    with pytest.raises(ValueError, match="numeric torch.Tensor"):
+    with pytest.raises(ValueError, match="torch.Tensor"):
         sq.quantize(torch.tensor([True, False]))
-    with pytest.raises(ValueError, match="numeric torch.Tensor"):
+    with pytest.raises(ValueError, match="torch.Tensor"):
         calibrate_scale_for_rate("A2", torch.tensor([True, False]), 1.5)
 
 

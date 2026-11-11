@@ -168,7 +168,7 @@ def factorised_rate_t(kind: str, codewords: torch.Tensor, context: torch.Tensor)
         or codewords.shape[1] == 0
         or codewords.dtype == torch.bool
     ):
-        raise ValueError("codewords must be a non-empty 2D numeric tensor")
+        raise ValueError("codewords must be a non-empty 2D tensor")
     if (
         not isinstance(context, torch.Tensor)
         or context.ndim != 1
@@ -218,7 +218,7 @@ def from_rows(kind: str, rows: torch.Tensor, shape: torch.Size) -> torch.Tensor:
     if kind not in DECODERS_T:
         raise KeyError(kind)
     if not isinstance(rows, torch.Tensor) or rows.numel() == 0 or rows.dtype == torch.bool or not bool(torch.isfinite(rows).all()):
-        raise ValueError("rows must be a non-empty finite numeric torch.Tensor")
+        raise ValueError("rows must be a non-empty torch.Tensor")
     if (
         not isinstance(shape, (tuple, torch.Size))
         or len(shape) < 1

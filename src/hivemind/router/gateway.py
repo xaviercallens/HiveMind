@@ -5262,6 +5262,64 @@ def create_router_app(
             )
         return JSONResponse(res, headers={"Cache-Control": "no-store"})
 
+    @app.api_route("/raid", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/crowdgpt-raid", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    def router_v34_pioneer_raid_hub(request: Request, lang: str | None = None) -> HTMLResponse:
+        """Serve the strict-CSP bilingual (EN/FR) HiveMind v3.4 Pioneer Thank-You & Nov 14-15 CrowdGPT Raid Hub."""
+        import secrets as _secrets
+        from hivemind.router.community_outreach_v34 import (
+            raid_hub_content_security_policy,
+            render_v34_raid_hub_page,
+        )
+
+        chosen_lang = lang or ("fr" if "fr" in (request.headers.get("accept-language") or "").lower().split(",")[0] else "en")
+        nonce = _secrets.token_urlsafe(18)
+        html_doc = render_v34_raid_hub_page(lang=chosen_lang, nonce=nonce)
+        return HTMLResponse(
+            content=html_doc,
+            headers={
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+                "X-Frame-Options": "DENY",
+                "Referrer-Policy": "no-referrer",
+                "Content-Security-Policy": raid_hub_content_security_policy(nonce),
+                "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
+            },
+        )
+
+    @app.get("/calendar/crowdgpt-weekend-raid.ics", response_class=PlainTextResponse)
+    def router_crowdgpt_weekend_raid_ics() -> PlainTextResponse:
+        """Serve the RFC 5545 6-wave iCalendar (.ics) feed for the Nov 14-15, 2026 CrowdGPT-MoE Swarm Raid."""
+        from hivemind.cli.campaign_calendar_quorum import generate_crowdgpt_weekend_ics_calendar
+
+        ics_body = generate_crowdgpt_weekend_ics_calendar()
+        return PlainTextResponse(
+            content=ics_body,
+            media_type="text/calendar; charset=utf-8",
+            headers={
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+                "X-Frame-Options": "DENY",
+                "Referrer-Policy": "no-referrer",
+                "Content-Disposition": 'attachment; filename="hivemind_crowdgpt_weekend_nov14_15_2026.ics"',
+            },
+        )
+
+    @app.get("/v1/hivemind/community/v34-outreach")
+    def router_v34_community_outreach_plan() -> JSONResponse:
+        """Return the structured 5-phase v3.4 Pioneer & CrowdGPT Weekend Raid communication plan manifest."""
+        from hivemind.router.community_outreach_v34 import build_v34_communication_plan_status
+
+        return JSONResponse(
+            build_v34_communication_plan_status(),
+            headers={
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+                "X-Frame-Options": "DENY",
+                "Referrer-Policy": "no-referrer",
+            },
+        )
+
     from hivemind.boinc.rtx_boinc_deployer import RTXBoincServer, build_rtx_boinc_fastapi_router
 
     _rtx_boinc_server = RTXBoincServer(router_store=store)

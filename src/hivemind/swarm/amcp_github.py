@@ -95,20 +95,38 @@ class SeenEvents:
     def __init__(self, path: Path | None = None, keep: int = 500) -> None:
         if isinstance(keep, bool) or not isinstance(keep, int) or keep < 1:
             raise ValueError("keep must be a positive integer")
-        if path is not None and not isinstance(path, Path):
-            path = Path(path)
+        if path is not None:
+            if isinstance(path, str):
+                if not path.strip() or any(ord(c) < 32 or ord(c) == 127 for c in path):
+                    raise ValueError("path must be a non-empty Path or string without control characters")
+                path = Path(path)
+            elif not isinstance(path, Path):
+                raise TypeError("path must be a Path, string, or None")
         self.path, self.keep = path, keep
         self.ids: list[str] = []
         self.first_run = True
         if self.path is not None and self.path.exists():
-            data = json.loads(self.path.read_text(encoding="utf-8"))
-            if not isinstance(data, Mapping) or not isinstance(data.get("ids", []), list):
+            try:
+                data = json.loads(self.path.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as exc:
+                raise ValueError("Corrupted SeenEvents state file") from exc
+            if (
+                not isinstance(data, Mapping)
+                or not isinstance(data.get("ids", []), list)
+                or any(
+                    isinstance(i, bool)
+                    or not isinstance(i, (str, int))
+                    or not str(i).strip()
+                    or any(ord(c) < 32 or ord(c) == 127 for c in str(i))
+                    for i in data.get("ids", [])
+                )
+            ):
                 raise ValueError("Corrupted SeenEvents state file")
-            self.ids = [str(i) for i in data.get("ids", []) if str(i).strip()][ -self.keep :]
+            self.ids = [str(i).strip() for i in data.get("ids", [])][-self.keep :]
             self.first_run = False
 
     def add(self, event_id: str) -> None:
-        if not isinstance(event_id, str) or not event_id.strip():
+        if not isinstance(event_id, str) or not event_id.strip() or any(ord(c) < 32 or ord(c) == 127 for c in event_id):
             raise ValueError("event_id must be a non-empty string")
         if event_id not in self.ids:
             self.ids.append(event_id)

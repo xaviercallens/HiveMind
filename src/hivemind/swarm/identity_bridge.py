@@ -87,6 +87,8 @@ def hash_hmt_key_commitment(hmt_key: str) -> str:
     if not isinstance(hmt_key, str) or not hmt_key.strip():
         raise ValueError("hmt_key must be non-empty")
     cleaned = hmt_key.strip()
+    if any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in cleaned):
+        raise ValueError("hmt_key must not contain whitespace or control characters")
     return hashlib.sha256(f"hivemind.identity_bridge.hmt.v1:{cleaned}".encode("utf-8")).hexdigest()
 
 
@@ -126,9 +128,23 @@ def issue_producer_verifiable_credential(
         raise ValueError("node_id and kwaainet_peer_id must be strings")
     node_id_clean = node_id.strip()
     peer_id_clean = kwaainet_peer_id.strip()
-    if not node_id_clean or not peer_id_clean:
+    if (
+        not node_id_clean
+        or not peer_id_clean
+        or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in node_id_clean)
+        or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in peer_id_clean)
+    ):
         raise ValueError("node_id and kwaainet_peer_id must be non-empty")
-    if not isinstance(tiers, list) or not tiers or not all(isinstance(t, str) and t.strip() for t in tiers):
+    if (
+        not isinstance(tiers, list)
+        or not tiers
+        or not all(
+            isinstance(t, str)
+            and t.strip()
+            and not any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in t.strip())
+            for t in tiers
+        )
+    ):
         raise ValueError("tiers must be a non-empty list of tier IDs")
     issued_dt = _parse_iso_utc(issuance_date)
     expires_dt = _parse_iso_utc(expiration_date)
@@ -208,14 +224,27 @@ def verify_producer_verifiable_credential(
     if "Prompts routed to a community producer are visible" not in notice:
         return False, "missing_producer_sees_prompts_notice"
 
-    node_id = str(subject.get("node_id") or "").strip()
-    if not node_id:
+    node_id = str(subject.get("node_id") or "").strip() if isinstance(subject.get("node_id"), str) else ""
+    if not node_id or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in node_id):
         return False, "missing_node_id"
     if expected_node_id is not None and node_id != expected_node_id:
         return False, "node_id_mismatch"
 
-    hmt_sha = str(subject.get("hmt_key_sha256") or "").strip()
-    if len(hmt_sha) != 64:
+    peer_id = str(subject.get("kwaainet_peer_id") or "").strip() if isinstance(subject.get("kwaainet_peer_id"), str) else ""
+    if not peer_id or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in peer_id):
+        return False, "missing_kwaainet_peer_id"
+
+    tiers = subject.get("tiers")
+    if (
+        not isinstance(tiers, list)
+        or not tiers
+        or not all(isinstance(t, str) and t.strip() and not any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in t.strip()) for t in tiers)
+    ):
+        return False, "invalid_tiers"
+
+    raw_hmt_sha = subject.get("hmt_key_sha256")
+    hmt_sha = raw_hmt_sha.strip() if isinstance(raw_hmt_sha, str) else ""
+    if len(hmt_sha) != 64 or any(c not in "0123456789abcdefABCDEF" for c in hmt_sha):
         return False, "invalid_hmt_key_sha256"
     if expected_hmt_key is not None and hmt_sha != hash_hmt_key_commitment(expected_hmt_key):
         return False, "hmt_key_commitment_mismatch"

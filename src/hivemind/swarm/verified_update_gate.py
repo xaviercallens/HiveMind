@@ -110,6 +110,14 @@ class UpdateReceipt:
             val = getattr(self, i_field)
             if isinstance(val, bool) or not isinstance(val, int) or val < 0:
                 raise ValueError(f"{i_field} must be a non-negative integer")
+        if self.b + self.c + self.both_pass + self.both_fail != self.n:
+            raise ValueError("b + c + both_pass + both_fail must equal n")
+        if self.baseline_pass != self.b + self.both_pass:
+            raise ValueError("baseline_pass must equal b + both_pass")
+        if self.candidate_pass != self.c + self.both_pass:
+            raise ValueError("candidate_pass must equal c + both_pass")
+        if self.unverified_baseline > self.n or self.unverified_candidate > self.n:
+            raise ValueError("unverified counts cannot exceed n")
         for p_field in ("unverified_fraction", "p_two_sided", "p_regression", "p_improvement"):
             val = getattr(self, p_field)
             if (
@@ -178,6 +186,8 @@ def decide(baseline: Mapping[str, str], candidate: Mapping[str, str], policy: Up
     if not isinstance(policy, UpdatePolicy):
         raise ValueError("policy must be an UpdatePolicy instance")
     for name, outcomes in (("baseline", baseline), ("candidate", candidate)):
+        if any(not isinstance(k, str) or not k.strip() or any(ord(c) < 32 or ord(c) == 127 for c in k) for k in outcomes):
+            raise ValueError(f"{name} task keys must be non-empty strings without control characters")
         bad = sorted({v for v in outcomes.values() if v not in OUTCOMES})
         if bad:
             raise ValueError(f"{name} has outcomes outside {OUTCOMES}: {bad}")
@@ -233,7 +243,7 @@ class HeldOutTask:
     setup: str = ""
 
     def __post_init__(self) -> None:
-        if not isinstance(self.key, str) or not self.key.strip():
+        if not isinstance(self.key, str) or not self.key.strip() or any(ord(c) < 32 or ord(c) == 127 for c in self.key):
             raise ValueError("key must be a non-empty string")
         if not isinstance(self.prompt, str):
             raise ValueError("prompt must be a string")

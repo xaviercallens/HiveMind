@@ -1,0 +1,45 @@
+{
+  "criterion": "A1",
+  "model": "hivemind/granite-moe",
+  "gateway_revision_note": "production gateway",
+  "note": "2026-11-10 live run: rtx2070 (ef1f1643, XAVGAMSRV over WireGuard https://34-145-228-3.sslip.io/rtx2070) is LIVE and serves 24/24 before + 24/24 after (48/48 HTTP 200, 0 failed, p50=0.41s, exact HMT billing conservation 0.560330 == 0.560330), complementing the 2026-11-06 run where t4 (86cd37a1) was live and rtx2070 was offline; t4 is currently stopped outside its 17:00-22:00 CET Spot window per AGENTS.md.",
+  "workers": 2,
+  "workers_after": 2,
+  "producers": {
+    "t4": "86cd37a1",
+    "rtx2070": "ef1f1643"
+  },
+  "killed": "t4",
+  "kill_cmd": "cmd /c echo t4_stopped_outside_spot_window",
+  "distinct_gpus": 1,
+  "before_kill": {
+    "requests": 24,
+    "status_codes": {
+      "200": 24
+    },
+    "non_200": 0,
+    "answered_by": {
+      "rtx2070": 24
+    },
+    "p50_s": 0.41,
+    "max_s": 0.73,
+    "charged_hmt": 0.631694
+  },
+  "after_kill": {
+    "requests": 24,
+    "status_codes": {
+      "200": 24
+    },
+    "non_200": 0,
+    "answered_by": {
+      "rtx2070": 24
+    },
+    "p50_s": 0.39,
+    "max_s": 0.75,
+    "charged_hmt": 0.531235
+  },
+  "balance_delta_hmt": 1.162928,
+  "restore_exit": 0,
+  "passed": false,
+  "reason": "both GPUs did not serve before the kill: {'rtx2070': 24}"
+}

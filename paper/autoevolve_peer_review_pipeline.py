@@ -1495,6 +1495,131 @@ def verify_manuscript_data_consistency(
     else:
         checks.append({"check_id": "PROV-85", "metric_name": "massive_swarm_image_moe_report.json missing", "expected_tokens": [], "source_artifact": src_ms, "passed": False})
 
+    # v4.3.0 Live Two-Host E8/A1 Verification, B3/E24 Chain Attribution & Planetary-Scale Readiness PS-01..PS-11 (PROV-86)
+    e8_v430_path = PROJECT_ROOT / "artifacts" / "experiments" / "e8_real" / "E8_two_host_live_verification.json"
+    ps_v430_path = PROJECT_ROOT / "artifacts" / "experiments" / "PLANETARY_SCALE_READINESS_2026-11-08.json"
+    src_v430 = "artifacts/experiments/e8_real/E8_two_host_live_verification.json"
+    if e8_v430_path.exists() and ps_v430_path.exists():
+        e8v = json.loads(e8_v430_path.read_text(encoding="utf-8"))
+        s1 = e8v["stage1_two_host_rda"]
+        s2 = e8v["stage2_qlora_moe_and_amcp"]
+        a1 = e8v["live_a1_serving_and_failover"]
+        toks86 = [
+            f"{s1['post_join_p50_s']:.2f}",
+            f"{s1['post_join_p95_s']:.2f}",
+            f"{s2['two_host_amcp_crossA']['final_eval_loss']:.4f}",
+            f"{s2['nocturnal_211_round_amcp_night002']['final_eval_loss']:.4f}",
+            f"{s2['live_rtx2070_cuda_nf4_qlora']['final_eval_loss_mean']:.4f}",
+            f"{s2['live_rtx2070_cuda_nf4_qlora']['vram_peak_mib']:.2f}",
+            f"{a1['production_gateway_rtx2070_over_wireguard']['balance_delta_hmt']:.6f}",
+            f"{a1['production_gateway_wrr_and_pause_failover']['balance_delta_hmt']:.6f}",
+            "-0.00403",
+            "-0.01275",
+            "0.2667",
+            "0.0977",
+            "4.18",
+            "1.48",
+            "186.18",
+            "120.62",
+            "166",
+        ]
+        checks.append({
+            "check_id": "PROV-86",
+            "metric_name": "v4.3.0 Live Two-Host E8/A1 Verification, B3/E24 Chain Attribution and PS-01..PS-11 Planetary-Scale Readiness",
+            "expected_tokens": toks86,
+            "source_artifact": src_v430,
+            "passed": all(tok in tex_text for tok in toks86),
+        })
+    else:
+        checks.append({"check_id": "PROV-86", "metric_name": "E8_two_host_live_verification.json or PLANETARY_SCALE_READINESS missing", "expected_tokens": [], "source_artifact": src_v430, "passed": False})
+
+    # v4.4.0 E28 LLM-JEPA pilot (arXiv:2509.14252): every arm mean and paired difference must be quoted from the artifact (PROV-87)
+    e28_path = PROJECT_ROOT / "artifacts" / "experiments" / "E28_llm_jepa_pilot.json"
+    src_e28 = "artifacts/experiments/E28_llm_jepa_pilot.json"
+    if e28_path.exists():
+        e28 = json.loads(e28_path.read_text(encoding="utf-8"))
+        summ = e28["summary_test_exact_match"]
+        comp = e28["comparisons"]
+        toks87 = [f"{100 * summ[arm]['mean']:.2f}" for arm in ("ntp", "jepa", "jepa_shuf")]
+        toks87 += [f"{100 * comp[key]['mean_diff']:+.2f}" for key in ("jepa_minus_ntp", "jepa_minus_jepa_shuf")]
+        toks87 += ["2509.14252", "P28a"]
+        checks.append({
+            "check_id": "PROV-87",
+            "metric_name": "v4.4.0 E28 LLM-JEPA pilot (NTP vs. JEPA vs. shuffled-view control, 5 seeds)",
+            "expected_tokens": toks87,
+            "source_artifact": src_e28,
+            "passed": all(tok in tex_text for tok in toks87),
+        })
+    else:
+        checks.append({"check_id": "PROV-87", "metric_name": "E28_llm_jepa_pilot.json missing", "expected_tokens": [], "source_artifact": src_e28, "passed": False})
+
+    # v4.4.0 E28b (IP-JEPA-02): 10-seed power, loss-dropout (alpha=0.50, 0.75) & lambda*(1-alpha) co-tuning (PROV-88)
+    e28b_path = PROJECT_ROOT / "artifacts" / "experiments" / "E28b_llm_jepa_dropout_cotuning.json"
+    src_e28b = "artifacts/experiments/E28b_llm_jepa_dropout_cotuning.json"
+    if e28b_path.exists():
+        e28b = json.loads(e28b_path.read_text(encoding="utf-8"))
+        s28b = e28b["summary"]
+        c28b = e28b["comparisons"]
+        toks88 = [
+            f"{100 * s28b[arm]['exact_match_mean']:.2f}"
+            for arm in ("ntp", "jepa_full", "jepa_drop50_cotuned", "jepa_drop75_cotuned", "jepa_drop75_naive", "jepa_shuf")
+        ]
+        toks88 += [
+            f"{100 * c28b['jepa_full_minus_ntp']['mean_diff']:+.2f}",
+            f"{c28b['jepa_full_minus_ntp']['p_one_sided']:.6f}",
+            f"{100 * c28b['jepa_drop75_naive_minus_ntp']['mean_diff']:+.2f}",
+            f"{c28b['jepa_drop75_naive_minus_ntp']['p_one_sided']:.6f}",
+            f"{100 * c28b['jepa_drop75_cotuned_minus_naive']['mean_diff']:+.2f}",
+            f"{100 * e28b['hypotheses']['P28b_dropout']['retention_vs_jepa_full']:.2f}",
+            f"{s28b['jepa_drop75_naive']['measured_time_ratio_vs_ntp']:.3f}",
+        ]
+        checks.append({
+            "check_id": "PROV-88",
+            "metric_name": "v4.4.0 E28b 10-seed LLM-JEPA power, loss-dropout (alpha=0.50, 0.75) and co-tuning vs. unscaled lambda (IP-JEPA-02)",
+            "expected_tokens": toks88,
+            "source_artifact": src_e28b,
+            "passed": (
+                all(tok in tex_text for tok in toks88)
+                and e28b["hypotheses"]["P28b_gain"]["supported"] is True
+                and e28b["hypotheses"]["P28b_dropout"]["supported"] is False
+            ),
+        })
+    else:
+        checks.append({"check_id": "PROV-88", "metric_name": "E28b_llm_jepa_dropout_cotuning.json missing", "expected_tokens": [], "source_artifact": src_e28b, "passed": False})
+
+    # v4.4.0 E29 (IP-JEPA-03 & IP-JEPA-04): Stage-2 4-bit NF4 GraniteMoE QLoRA DiLoCo + B3 gate & non-gating view_gap_sv1 (PROV-89)
+    e29_path = PROJECT_ROOT / "artifacts" / "experiments" / "E29_qlora_moe_jepa_pilot.json"
+    src_e29 = "artifacts/experiments/E29_qlora_moe_jepa_pilot.json"
+    if e29_path.exists():
+        e29 = json.loads(e29_path.read_text(encoding="utf-8"))
+        s29 = e29["summary"]
+        g29 = e29["b3_promotion_gates_vs_qlora_ntp"]
+        toks89 = [
+            f"{s29[arm]['final_target_nll_mean']:.6f}"
+            for arm in ("qlora_ntp", "qlora_jepa_drop75", "qlora_jepa_full", "qlora_jepa_shuf")
+        ]
+        toks89 += [
+            f"{g29['qlora_jepa_drop75']['mean_nll_gain_nats']:+.6f}",
+            f"{g29['qlora_jepa_full']['mean_nll_gain_nats']:+.6f}",
+            f"{g29['qlora_jepa_shuf']['mean_nll_gain_nats']:+.6f}",
+            f"{s29['qlora_ntp']['final_view_gap_sv1_mean']:.4f}",
+            f"{s29['qlora_jepa_full']['final_view_gap_sv1_mean']:.4f}",
+            f"{s29['qlora_jepa_shuf']['final_view_gap_sv1_mean']:.4f}",
+            f"{s29['qlora_jepa_drop75']['vram_peak_mib_max']:.2f}",
+        ]
+        checks.append({
+            "check_id": "PROV-89",
+            "metric_name": "v4.4.0 E29 Stage-2 NF4 GraniteMoE QLoRA DiLoCo + B3 gate refusal & non-gating view_gap_sv1 (IP-JEPA-03/04)",
+            "expected_tokens": toks89,
+            "source_artifact": src_e29,
+            "passed": (
+                all(tok in tex_text for tok in toks89)
+                and all(g29[k]["servable"] is False and g29[k]["diagnostic_only_view_gap"]["gating"] is False for k in g29)
+            ),
+        })
+    else:
+        checks.append({"check_id": "PROV-89", "metric_name": "E29_qlora_moe_jepa_pilot.json missing", "expected_tokens": [], "source_artifact": src_e29, "passed": False})
+
     failed = [c["check_id"] for c in checks if not c["passed"]]
     return {
         "total_checks": len(checks),
@@ -1745,7 +1870,7 @@ def run_autoevolve_peer_review() -> Dict[str, Any]:
 
     peer_review_report = {
         "manuscript_title": "Project HiveMind: A System Design for Decentralized Sparse Mixture-of-Experts Training with DiLoCo-Style Outer Optimization on 8 GB Consumer GPUs",
-        "version": "4.1.0",
+        "version": "4.4.0",
         "is_peer_review": False,
         "disclosure": AUDIT_DISCLOSURE,
         "lead_peer_review_model": LEAD_PEER_REVIEW_MODEL,
@@ -1785,7 +1910,7 @@ def run_autoevolve_peer_review() -> Dict[str, Any]:
 
     autoevolve_manifest = {
         "pipeline_name": "Project HiveMind x AutoevolveAI Cross-Session Research Pipeline",
-        "version": "4.1.0",
+        "version": "4.4.0",
         "lead_peer_review_model": LEAD_PEER_REVIEW_MODEL,
         "workspace_root": ".",
         "artifacts_and_entrypoints": {

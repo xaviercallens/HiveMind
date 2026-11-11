@@ -50,7 +50,13 @@ class SyntheticSwarmProblem:
     holdout_y: torch.Tensor
 
     def __post_init__(self) -> None:
-        if not isinstance(self.w_true, torch.Tensor) or self.w_true.ndim != 2 or self.w_true.numel() == 0 or not bool(torch.isfinite(self.w_true).all()):
+        if (
+            not isinstance(self.w_true, torch.Tensor)
+            or self.w_true.dtype == torch.bool
+            or self.w_true.ndim != 2
+            or self.w_true.numel() == 0
+            or not bool(torch.isfinite(self.w_true).all())
+        ):
             raise ValueError("w_true must be a non-empty 2D finite torch.Tensor")
         d_out, d_in = self.w_true.shape
         if not isinstance(self.worker_x, list) or not isinstance(self.worker_y, list) or len(self.worker_x) == 0 or len(self.worker_x) != len(self.worker_y):
@@ -59,6 +65,8 @@ class SyntheticSwarmProblem:
             if (
                 not isinstance(x, torch.Tensor)
                 or not isinstance(y, torch.Tensor)
+                or x.dtype == torch.bool
+                or y.dtype == torch.bool
                 or x.ndim != 2
                 or y.ndim != 2
                 or x.shape[0] == 0
@@ -72,6 +80,8 @@ class SyntheticSwarmProblem:
         if (
             not isinstance(self.holdout_x, torch.Tensor)
             or not isinstance(self.holdout_y, torch.Tensor)
+            or self.holdout_x.dtype == torch.bool
+            or self.holdout_y.dtype == torch.bool
             or self.holdout_x.ndim != 2
             or self.holdout_y.ndim != 2
             or self.holdout_x.shape[0] == 0
@@ -117,6 +127,8 @@ def build_problem(
 def _mse(w: torch.Tensor, x: torch.Tensor, y: torch.Tensor) -> float:
     if not isinstance(w, torch.Tensor) or not isinstance(x, torch.Tensor) or not isinstance(y, torch.Tensor):
         raise TypeError("w, x, and y must be torch.Tensors")
+    if w.dtype == torch.bool or x.dtype == torch.bool or y.dtype == torch.bool:
+        raise ValueError("w, x, and y must be numeric tensors, not bool")
     if w.ndim != 2 or x.ndim != 2 or y.ndim != 2 or x.shape[0] == 0 or x.shape[0] != y.shape[0] or x.shape[1] != w.shape[1] or y.shape[1] != w.shape[0]:
         raise ValueError("Incompatible tensor shapes for _mse")
     if not (torch.isfinite(w).all() and torch.isfinite(x).all() and torch.isfinite(y).all()):
@@ -129,8 +141,12 @@ def _local_steps(w: torch.Tensor, x: torch.Tensor, y: torch.Tensor, steps: int, 
     lr = _require_finite_float(lr, "lr", allow_zero=False)
     if not isinstance(w, torch.Tensor) or not isinstance(x, torch.Tensor) or not isinstance(y, torch.Tensor):
         raise TypeError("w, x, and y must be torch.Tensors")
+    if w.dtype == torch.bool or x.dtype == torch.bool or y.dtype == torch.bool:
+        raise ValueError("w, x, and y must be numeric tensors, not bool")
     if w.ndim != 2 or x.ndim != 2 or y.ndim != 2 or x.shape[0] == 0 or y.shape[1] == 0 or x.shape[0] != y.shape[0] or x.shape[1] != w.shape[1] or y.shape[1] != w.shape[0]:
         raise ValueError("Incompatible tensor shapes for _local_steps")
+    if not (torch.isfinite(w).all() and torch.isfinite(x).all() and torch.isfinite(y).all()):
+        raise ValueError("w, x, and y must contain finite values")
     w = w.clone()
     n = x.shape[0]
     for _ in range(steps):
@@ -141,7 +157,7 @@ def _local_steps(w: torch.Tensor, x: torch.Tensor, y: torch.Tensor, steps: int, 
 
 def _topk_fp16(tensor: torch.Tensor, topk_ratio: float) -> tuple[torch.Tensor, int]:
     """Top-k sparsification with FP16 values and uint16 indices (no FP8, no error feedback)."""
-    if not isinstance(tensor, torch.Tensor) or tensor.numel() == 0 or not torch.isfinite(tensor).all():
+    if not isinstance(tensor, torch.Tensor) or tensor.dtype == torch.bool or tensor.numel() == 0 or not torch.isfinite(tensor).all():
         raise ValueError("tensor must be a non-empty finite torch.Tensor")
     topk_ratio = _require_finite_float(topk_ratio, "topk_ratio", allow_zero=False)
     if topk_ratio > 1.0:

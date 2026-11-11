@@ -67,10 +67,10 @@ class NF4QuantState:
     block_size: int = 64
 
     def __post_init__(self) -> None:
-        if not isinstance(self.packed_4bit, torch.Tensor):
-            raise ValueError("packed_4bit must be a torch.Tensor")
-        if not isinstance(self.q_absmax_uint8, torch.Tensor):
-            raise ValueError("q_absmax_uint8 must be a torch.Tensor")
+        if not isinstance(self.packed_4bit, torch.Tensor) or self.packed_4bit.dtype == torch.bool:
+            raise ValueError("packed_4bit must be a non-boolean torch.Tensor")
+        if not isinstance(self.q_absmax_uint8, torch.Tensor) or self.q_absmax_uint8.dtype == torch.bool:
+            raise ValueError("q_absmax_uint8 must be a non-boolean torch.Tensor")
         if (
             isinstance(self.superblock_scale, bool)
             or not isinstance(self.superblock_scale, (int, float))
@@ -110,12 +110,29 @@ class QuantizedModelBundle:
     lora_size_mb: float
 
     def __post_init__(self) -> None:
+        if not isinstance(self.model, nn.Module):
+            raise ValueError("model must be an nn.Module")
         if not isinstance(self.base_model_id, str) or not self.base_model_id.strip():
             raise ValueError("base_model_id must be a non-empty string")
         if not isinstance(self.base_model_sha256, str) or len(self.base_model_sha256.strip()) != 64:
             raise ValueError("base_model_sha256 must be a 64-character SHA-256 hex digest")
+        if not isinstance(self.device, torch.device):
+            raise ValueError("device must be a torch.device")
+        if not isinstance(self.compute_dtype, torch.dtype):
+            raise ValueError("compute_dtype must be a torch.dtype")
         if not isinstance(self.is_4bit_nf4, bool):
             raise ValueError("is_4bit_nf4 must be a boolean")
+        for mb_name, mb_val in (
+            ("nf4_compressed_base_mb", self.nf4_compressed_base_mb),
+            ("lora_size_mb", self.lora_size_mb),
+        ):
+            if (
+                isinstance(mb_val, bool)
+                or not isinstance(mb_val, (int, float))
+                or not math.isfinite(float(mb_val))
+                or float(mb_val) < 0.0
+            ):
+                raise ValueError(f"{mb_name} must be a non-negative finite number")
         if isinstance(self.trainable_params, bool) or not isinstance(self.trainable_params, int) or self.trainable_params < 0:
             raise ValueError("trainable_params must be a non-negative integer")
         if isinstance(self.total_params, bool) or not isinstance(self.total_params, int) or self.total_params < self.trainable_params:
@@ -133,8 +150,8 @@ def quantize_tensor_nf4_double_quant(
     """
     if isinstance(block_size, bool) or not isinstance(block_size, int) or block_size < 1:
         raise ValueError(f"block_size must be an integer >= 1, got {block_size!r}")
-    if not isinstance(weight, torch.Tensor) or weight.numel() == 0:
-        raise ValueError("weight must be non-empty")
+    if not isinstance(weight, torch.Tensor) or weight.dtype == torch.bool or weight.numel() == 0:
+        raise ValueError("weight must be a non-empty non-boolean tensor")
     if not bool(torch.isfinite(weight).all().item()):
         raise ValueError("weight must contain only finite values")
     orig_shape = tuple(weight.shape)
@@ -208,8 +225,15 @@ def compute_state_dict_sha256(state_dict: dict[str, torch.Tensor]) -> str:
         raise ValueError("state_dict must be a non-empty dict")
     hasher = hashlib.sha256()
     for key in sorted(state_dict.keys()):
-        if not isinstance(key, str) or not isinstance(state_dict[key], torch.Tensor):
-            raise ValueError("state_dict must map string keys to torch.Tensor values")
+        if (
+            not isinstance(key, str)
+            or not key.strip()
+            or not isinstance(state_dict[key], torch.Tensor)
+            or state_dict[key].dtype == torch.bool
+            or state_dict[key].numel() == 0
+            or not bool(torch.isfinite(state_dict[key]).all().item())
+        ):
+            raise ValueError("state_dict must map non-empty string keys to finite non-empty torch.Tensor values")
         t = state_dict[key].detach()
         tensor = t.to(device="cpu", dtype=torch.float32).contiguous()
         hasher.update(key.encode("utf-8"))
@@ -619,8 +643,15 @@ def load_lora_state_dict(model: nn.Module, lora_state: dict[str, torch.Tensor]) 
     if not isinstance(lora_state, dict) or not lora_state:
         raise ValueError("lora_state must be a non-empty dict")
     for name, tensor in lora_state.items():
-        if not isinstance(tensor, torch.Tensor) or not bool(torch.isfinite(tensor).all().item()):
-            raise ValueError(f"lora_state[{name!r}] must be a finite torch.Tensor")
+        if (
+            not isinstance(name, str)
+            or not name.strip()
+            or not isinstance(tensor, torch.Tensor)
+            or tensor.dtype == torch.bool
+            or tensor.numel() == 0
+            or not bool(torch.isfinite(tensor).all().item())
+        ):
+            raise ValueError(f"lora_state[{name!r}] must be a finite non-empty non-boolean torch.Tensor")
     with torch.no_grad():
         for name, param in model.named_parameters():
             if name in lora_state:

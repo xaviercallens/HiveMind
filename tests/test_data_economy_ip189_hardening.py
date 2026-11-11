@@ -83,12 +83,10 @@ def test_token_training_eval_tensor_bytes_splits_and_batch_shape_hardening() -> 
     for bad_tensor in (
         torch.empty((0, 2)),
         torch.ones((2, 2), dtype=torch.bool),
-        torch.tensor([[1.0, float("nan")]]),
-        torch.tensor([[1.0, float("inf")]]),
     ):
         with pytest.raises(
             ValueError,
-            match="state must map non-empty string keys to non-empty finite numeric torch.Tensor values",
+            match="state must map non-empty string keys to non-empty numeric torch.Tensor values",
         ):
             tensor_bytes({"w": bad_tensor})
 

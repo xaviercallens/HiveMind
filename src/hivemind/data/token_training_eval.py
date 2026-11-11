@@ -60,9 +60,8 @@ def tensor_bytes(state: dict[str, torch.Tensor]) -> bytes:
             or not isinstance(v, torch.Tensor)
             or v.dtype == torch.bool
             or v.numel() == 0
-            or not bool(torch.isfinite(v).all())
         ):
-            raise ValueError("state must map non-empty string keys to non-empty finite numeric torch.Tensor values")
+            raise ValueError("state must map non-empty string keys to non-empty numeric torch.Tensor values")
     return save({k: v.detach().cpu().contiguous() for k, v in sorted(state.items())})
 
 

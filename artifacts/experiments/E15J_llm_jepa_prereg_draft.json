@@ -1,0 +1,71 @@
+{
+ "experiment_id": "E15J-llm-jepa",
+ "status": "DRAFT - not frozen, not run. Freezing is the owner's step: set registered_utc, set registered_before_run to true, commit the file and record its sha256 as design_hash BEFORE any real-model stage runs. Until then nothing in this file is a registered prediction.",
+ "registered_utc": null,
+ "registered_before_run": false,
+ "design_hash": null,
+ "drafted_utc": "2026-11-11",
+ "title": "E15-J: does an LLM-JEPA embedding-alignment term make GWAYA-gated rejection-sampling fine-tuning of Qwen2.5-Coder-1.5B pay off?",
+ "requested_by": "the owner, 2026-11-11: create a documentation PR for the E15-J pilot after the evaluation of arXiv 2509.14252 (LLM-JEPA) against HiveMind",
+ "roadmap": "follow-up of HM-S10-11 (E15). E15 left RFT inconclusive (C2 - C0 = +0.8 points, p = 0.85) while the inference loop was supported (C1 - C0 = +7.0 points, p = 4.0e-05); E15-J asks whether a second training objective changes the first number",
+ "source_method": {
+  "paper": "H. Huang, Y. LeCun, R. Balestriero, LLM-JEPA: Large Language Models Meet Joint Embedding Predictive Architectures, arXiv:2509.14252 (v2, 7 Oct 2025), CC BY-NC-SA 4.0",
+  "reference_code": "github.com/galilai-group/llm-jepa (the paper's rbalestr-lab URL redirects there), Apache-2.0, pinned at commit ea0017c654ad917066ff32afc88276bea8ca5f7e (2026-04-15); finetune.py read, not run, not vendored",
+  "loss_as_implemented_in_reference": "total = gamma * lm_loss + lambda * (1 - mean cosine(e_text, e_code)); e_view = final-layer hidden state at the last non-padding token of that view run alone; NO stop-gradient on either view (both embeddings receive gradients; only the language-modelling term prevents collapse); k predictor tokens <|predictor_1..k|> are new special tokens appended to the end of the user message; each view is chat-templated on its own; the default path batches (full conversation, text view, code view) as three sequences in one forward pass, --additive_mask packs them into two",
+  "paper_results_this_relies_on": "largest gains on natural-language to formal-language pairs (NL-RX-SYNTH, Llama-3.2-1B, full fine-tuning: 57.29 -> 71.46 with lambda=1, k=1; LoRA rank 512: 50.18 -> 72.41; Spider 47.52 -> 50.55); about +1 point elsewhere (GSM8K Qwen3-1.7B 44.32 -> 45.00; R1-Distill-Qwen-1.5B 13.87 -> 15.04)",
+  "caveats_of_the_paper_carried_over": [
+   "learning rate and (lambda, k) appear to be chosen by the highest reported accuracy; no held-out selection split is described, so the reported gains are probably optimistic",
+   "the NQ-Open row uses lambda = 1024, outside the stated grid (lambda <= 4)",
+   "Tables 12-13 report the best configuration per cell; Fig. 3 (51.95 -> 71.10) is a separate run that does not match Table 3",
+   "the paper says both 'one additional forward pass' and 'two forward passes instead of three'",
+   "no result on code synthesis benchmarks such as MBPP or HumanEval"
+  ],
+  "consequence_for_this_design": "(lambda, k) is FIXED in advance to the paper's headline NL-RX setting (lambda = 1, k = 1, gamma = 1, JEPA on every batch); there is no configuration search, so there is no selection split and nothing is tuned on the evaluation set"
+ },
+ "model": {
+  "base": "Qwen/Qwen2.5-Coder-1.5B-Instruct, fp16, exactly as E15",
+  "lora": "E15's hand-rolled LoRA unchanged: rank 16, alpha 32, q,k,v,o,gate,up,down of every layer, fp32 LoRA parameters and optimizer states, fp16 autocast, static loss scale 256",
+  "predictor_token": "arm J and S add ONE special token <|predictor_1|> to the tokenizer; the embedding matrix is resized by one row; only that new row is trainable (fp32, same optimizer), every pre-existing embedding row stays frozen; arm A has no new token",
+  "implementation": "a re-implementation of the reference loss inside the E15 pipeline (new module next to scripts/e15_lib.py), not a dependency on the reference repository; the reference commit above is cited in the module docstring",
+  "vram_cap": "torch.cuda.set_per_process_memory_fraction(7.5 GiB / total) at process start, as E15"
+ },
+ "data": {
+  "train_pool": "the E15 train pool unchanged: MBPP train + validation task_ids 511-974 minus the two text-overlap removals of E15 amendment 1 (462 problems)",
+  "rft_set": "stage R regenerates the rejection-sampled set ONCE with the E15 code and E15 settings (8 samples per problem, T = 0.8, top_p = 0.95, all tests, at most 2 distinct AST-normalised accepted solutions per problem); the kept-pairs file is hashed (sha256 recorded in the report) and that identical file is the training data of every arm and seed. It is NOT claimed to reproduce E15's 673 pairs: E15's sampling seeds depend on batch composition",
+  "eval": "MBPP-sanitized test (n = 257, task_ids disjoint from the pool, asserted) and HumanEval (n = 164, evaluation only), as E15; the eval set is used once per trained model and for nothing else",
+  "views_for_the_jepa_term": "text view = the E15 user message (problem text + visible test test_list[0]) + <|predictor_1|>; code view = the accepted solution as the assistant message alone"
+ },
+ "arms": {
+  "A": "plain LoRA RFT, the E15 C2 recipe (3 epochs, lr 2e-4 cosine, 10 warmup steps, micro-batch 4 x accumulation 4, max sequence 768, gradient checkpointing, loss on assistant tokens only)",
+  "J": "A + LLM-JEPA term (lambda = 1, k = 1, gamma = 1, cosine, no stop-gradient, JEPA on every batch), same epochs and optimizer; the extra compute is reported, not equalised (the paper's main comparison is also equal-epoch)",
+  "S": "shuffled-pair control: J with the code view taken from another problem by a fixed derangement of the training problems (permutation seed 15015); same compute as J. If S matches J, a gain of J is generic regularisation from the extra term, not the pairing the method relies on",
+  "training_seeds": "1, 2, 3 for each of A, J, S (9 trainings); the seed sets LoRA init, data order and the predictor-row init"
+ },
+ "evaluation_per_trained_model": {
+  "greedy": "MBPP-sanitized and HumanEval pass@1, greedy, E15 prompting (pass@1 is functional: all tests pass in the E15 sandbox, as E15 amendment 1)",
+  "loop": "the E15 GWAYA inference loop (C3 procedure) on MBPP-sanitized for A and J at seed 1 only; descriptive",
+  "alignment_diagnostic": "least-squares fit of e_text to e_code on the 257 eval problems (paper Table 14 style): mean squared residual for the base model, A, J and S at every seed"
+ },
+ "hypotheses": {
+  "H15Ja": "primary. Let s_A(p), s_J(p) in {0,1,2,3} be the number of seeds that solve MBPP-sanitized problem p greedily, and D = mean over seeds of pass@1(J) - pass@1(A). Test: exact two-sided sign test on the problems with s_J(p) != s_A(p). Supported iff D >= +3.0 points and p < 0.05; refuted (the term hurts) iff D <= -3.0 points and p < 0.05; otherwise inconclusive",
+  "H15Jb": "pairing specificity, decided only if H15Ja is supported: the same statistic for J against S. Supported iff D(J - S) >= +3.0 points and p < 0.05; if D(J - S) < +1.0 point the gain of J is reported as unspecific regularisation; otherwise inconclusive",
+  "H15Jc_descriptive": "HumanEval D(J - A) and D(S - A) with the same sign test, no status",
+  "H15Jd": "resource: every stage completes with the 7.5 GiB cap enforced (peak reserved <= 8.0 GiB) -> supported; an out-of-memory under the cap -> refuted. Peak reserved, wall time and NVML energy per arm are reported",
+  "H15Je_descriptive": "loop stacking at seed 1: C3-style pass@1 of J against A, McNemar, no status"
+ },
+ "controls": {
+  "e15_controls_rerun": "all E15 controls (gate accepts references, planted stubs rejected, sandbox containment probes, no leakage) are re-run and must pass",
+  "jepa_term_active": "positive control: the alignment residual of J is below that of A at every seed; otherwise the JEPA term did not act and the run is invalid",
+  "lambda_zero_plumbing": "unit test on CPU with a tiny random Qwen2: the J code path with lambda = 0 and no predictor token gives the same loss and the same LoRA gradients as the A path to 1e-6 (fp32); must pass before any GPU stage",
+  "no_eval_reuse": "the evaluation set is not read by any training, selection or early-stopping step; asserted",
+  "run_is_valid_iff": "all controls pass; otherwise H15Ja-H15Je are reported as invalid"
+ },
+ "pre_run_gpu_gate": "AGENTS.md requires >= 4,300 MiB of the T4's 15,360 MiB to stay free. Before each GPU stage: read nvidia-smi; proceed only if (memory used by other processes) + 7,680 MiB (the 7.5 GiB cap) <= 11,060 MiB, i.e. other processes use <= 3,380 MiB; otherwise wait and re-check, and exit 4 after 30 minutes. The co-tenant (the deployed GWAYA-Lite / llama-server models) is measured, not assumed",
+ "fail_fast": "as E15: exit 3 if fewer than 150 of the 462 pool problems yield an accepted sample in stage R; exit 3 if the projected total exceeds --max-hours (default 7.0)",
+ "cost_estimate": "planning estimate from E15's measured stage times (stage R about 68 min; plain training about 6 min; tuned greedy + HumanEval + loop about 15 min): 3 A trainings, 6 J/S trainings at an assumed 2-3x the plain training time, 9 greedy evaluations and 2 loop evaluations, about 5-6 T4-hours in total on the Spot T4 training window. To be replaced by measured values",
+ "power_note": "E15's C2 - C0 comparison had 28 discordant problems out of 257; a +3.0-point effect is about 8 net problems, near the detection limit of one seed. Three seeds per arm reduce training-seed variance but the test can still end inconclusive; that outcome is reported as such",
+ "decision_consequences": "H15Ja supported and H15Jb supported: the JEPA term enters the coding-curriculum recipe (HM-S10-06) as an option and E17 (7B QLoRA) gets a JEPA arm; H15Ja supported but H15Jb not: report as regularisation, do not adopt without a cheaper regulariser comparison; H15Ja inconclusive or refuted: the inference-time loop stays the efficient path, as after E15, and LLM-JEPA is not pursued for code at this scale",
+ "scope": "one 1.5B model, one fixed (lambda, k), three training seeds, MBPP-sanitized n = 257 and HumanEval n = 164, Python function synthesis only, the E15 sandbox (not GWAYA's own oracle); no claim about pretraining, other model sizes, other (lambda, k) or the paper's other datasets",
+ "not_in_scope": "routing, the volunteer swarm and the Cloud Run services (no trained text embeddings exist there); GGUF / Ollama serving of the tuned adapters (E17's nf4 / Q4 base mismatch would confound the measurement)",
+ "non_monetary": "no PTS or $HIVE reward is attached to any part of this experiment"
+}

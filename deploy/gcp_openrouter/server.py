@@ -18,6 +18,8 @@ Configuration (environment):
     HIVEMIND_BID_WINDOW_S           seconds of recent activity (a request or a hold) that make a funded account a bidder in
                                     the price; default 900. 0 counts every funded account, which lets idle accounts that
                                     raised their max price refuse new users' first requests (402).
+    HIVEMIND_GITHUB_CLIENT_ID       optional, with HIVEMIND_GITHUB_CLIENT_SECRET (Secret Manager) and HIVEMIND_PUBLIC_WEB_URL: turns on
+                                    "Sign in with GitHub"; the gateway exchanges the code itself (v3.4).
     HIVEMIND_OPEN_REGISTRATION      "0" closes handle-only registration so that Google sign-in is the only way in.
                                     Default "1". Closing it without a Google client id is refused at start-up.
 """
@@ -64,11 +66,18 @@ def build_app(env: Mapping[str, str]) -> FastAPI:
     # for the public feed as before and every publish response says bus.status = "not_configured".
     from hivemind.swarm.amcp_collab import bus_from_env
 
+    github_verifier = None
+    gh_id, gh_secret = env.get("HIVEMIND_GITHUB_CLIENT_ID", "").strip(), env.get("HIVEMIND_GITHUB_CLIENT_SECRET", "").strip()
+    web_url = env.get("HIVEMIND_PUBLIC_WEB_URL", "").strip().rstrip("/")
+    if gh_id and gh_secret and web_url.startswith("https://"):
+        from hivemind.router.github_auth import GitHubCodeVerifier
+
+        github_verifier = GitHubCodeVerifier(gh_id, gh_secret, f"{web_url}/auth/github/callback")
     amcp_bus, bus_reason = bus_from_env(env)
     logging.getLogger("hivemind.router.server").info("AMCP Kafka bus: %s", "enabled" if amcp_bus else f"off ({bus_reason})")
     return create_router_app(store, admin_key_hash=admin_key_hash, trusted_proxy_hops=hops,
                              google_client_id=google_client_id, oidc_verifiers=oidc_verifiers, open_registration=open_registration,
-                             bid_activity_window_s=bid_window_s, amcp_bus=amcp_bus)
+                             bid_activity_window_s=bid_window_s, amcp_bus=amcp_bus, github_verifier=github_verifier)
 
 
 app: FastAPI = build_app(os.environ)

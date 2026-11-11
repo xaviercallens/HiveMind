@@ -54,8 +54,14 @@ def tensor_bytes(state: dict[str, torch.Tensor]) -> bytes:
     if not isinstance(state, dict) or not state:
         raise ValueError("state must be a non-empty dict of tensors")
     for k, v in state.items():
-        if not isinstance(k, str) or not k.strip() or not isinstance(v, torch.Tensor):
-            raise ValueError("state must map non-empty string keys to torch.Tensor values")
+        if (
+            not isinstance(k, str)
+            or not k.strip()
+            or not isinstance(v, torch.Tensor)
+            or v.dtype == torch.bool
+            or v.numel() == 0
+        ):
+            raise ValueError("state must map non-empty string keys to non-empty numeric torch.Tensor values")
     return save({k: v.detach().cpu().contiguous() for k, v in sorted(state.items())})
 
 
@@ -66,16 +72,20 @@ def validate_splits(fixture: dict[str, Any]) -> None:
     seen_ids: set[str] = set()
     seen_text: set[str] = set()
     for split in ("train", "holdout"):
-        if not fixture.get(split):
+        rows = fixture.get(split)
+        if isinstance(rows, (str, bytes)) or not isinstance(rows, Sequence) or len(rows) == 0:
             raise ValueError(f"{split} must not be empty")
-        for row in fixture[split]:
+        for row in rows:
+            if not isinstance(row, Mapping) or "id" not in row or "text" not in row:
+                raise ValueError("each split row must be a mapping containing 'id' and 'text'")
             sample_id, text = row["id"], row["text"]
             if not isinstance(sample_id, str) or not isinstance(text, str):
                 raise ValueError("sample IDs and text must be strings")
+            sample_id_clean = sample_id.strip()
             normalized = " ".join(text.split())
-            if not normalized or sample_id in seen_ids or normalized in seen_text:
+            if not sample_id_clean or not normalized or sample_id_clean in seen_ids or normalized in seen_text:
                 raise ValueError("empty or duplicate document/ID across fixed splits")
-            seen_ids.add(sample_id)
+            seen_ids.add(sample_id_clean)
             seen_text.add(normalized)
 
 
@@ -123,10 +133,12 @@ def tokenize_documents(samples: Sequence[str], sequence_length: int = 128) -> di
 
 def token_nll(logits: torch.Tensor, labels: torch.Tensor) -> tuple[torch.Tensor, int]:
     """Sum next-token cross-entropy in nats and count scored non-padding tokens."""
-    if not isinstance(logits, torch.Tensor) or logits.ndim != 3:
-        raise ValueError("logits must be a 3D torch.Tensor")
-    if not isinstance(labels, torch.Tensor) or labels.ndim != 2:
-        raise ValueError("labels must be a 2D torch.Tensor")
+    if not isinstance(logits, torch.Tensor) or logits.ndim != 3 or logits.dtype == torch.bool:
+        raise ValueError("logits must be a 3D numeric torch.Tensor")
+    if not isinstance(labels, torch.Tensor) or labels.ndim != 2 or labels.dtype == torch.bool:
+        raise ValueError("labels must be a 2D integer torch.Tensor")
+    if logits.shape[:2] != labels.shape or logits.size(1) < 2 or logits.size(-1) < 1:
+        raise ValueError("logits batch/sequence dimensions must match labels shape with sequence_length >= 2")
     targets = labels[:, 1:].contiguous()
     count = int((targets != -100).sum().item())
     if not count:
@@ -143,6 +155,17 @@ def evaluate_tokens(model: torch.nn.Module, batch: dict[str, torch.Tensor]) -> d
         raise ValueError("model must be a callable torch.nn.Module")
     if not isinstance(batch, Mapping) or not all(k in batch for k in ("input_ids", "attention_mask", "labels")):
         raise ValueError("batch must be a mapping containing 'input_ids', 'attention_mask', and 'labels'")
+    ids, mask, lbls = batch["input_ids"], batch["attention_mask"], batch["labels"]
+    if (
+        not isinstance(ids, torch.Tensor)
+        or not isinstance(mask, torch.Tensor)
+        or not isinstance(lbls, torch.Tensor)
+        or ids.ndim != 2
+        or mask.shape != ids.shape
+        or lbls.shape != ids.shape
+        or ids.numel() == 0
+    ):
+        raise ValueError("batch tensors 'input_ids', 'attention_mask', and 'labels' must be non-empty 2D tensors of matching shape")
     model.eval()
     with torch.no_grad():
         outputs = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"])

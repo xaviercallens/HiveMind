@@ -299,18 +299,33 @@ class ExpertRecord:
     history: Tuple[Tuple[str, str, str], ...] = ()
 
     def __post_init__(self) -> None:
-        if not self.expert_id.strip() or not self.cluster_id.strip() or not self.base_model_id.strip():
+        if (
+            not isinstance(self.expert_id, str)
+            or not isinstance(self.cluster_id, str)
+            or not isinstance(self.base_model_id, str)
+            or not self.expert_id.strip()
+            or not self.cluster_id.strip()
+            or not self.base_model_id.strip()
+        ):
             raise ValueError("expert_id, cluster_id and base_model_id must be non-empty")
+        if not isinstance(self.source, str):
+            raise ValueError("source must be a string")
+        if (
+            isinstance(self.keywords, (str, bytes))
+            or not isinstance(self.keywords, Iterable)
+            or not all(isinstance(k, str) for k in self.keywords)
+        ):
+            raise ValueError("keywords must be an iterable of strings")
         if self.kind not in EXPERT_KINDS:
             raise ValueError(f"unknown expert kind {self.kind!r}; expected one of {sorted(EXPERT_KINDS)}")
         if self.state not in LIFECYCLE_STATES:
             raise ValueError(f"unknown lifecycle state {self.state!r}")
         if self.kind in ADAPTER_KINDS:
-            if self.adapter_sha256 is None or not _SHA256_RE.match(self.adapter_sha256):
+            if not isinstance(self.adapter_sha256, str) or not _SHA256_RE.match(self.adapter_sha256):
                 raise ValueError(f"{self.kind} expert {self.expert_id!r} needs a lowercase hex sha256 of its adapter")
             if isinstance(self.adapter_size_mib, bool) or not isinstance(self.adapter_size_mib, int) or self.adapter_size_mib <= 0:
                 raise ValueError(f"{self.kind} expert {self.expert_id!r} needs an integer adapter_size_mib > 0")
-        elif self.adapter_sha256 is not None or self.adapter_size_mib != 0:
+        elif self.adapter_sha256 is not None or isinstance(self.adapter_size_mib, bool) or self.adapter_size_mib != 0:
             raise ValueError(f"serving expert {self.expert_id!r} has no adapter: adapter_sha256 must be None and size 0")
         object.__setattr__(self, "keywords", tuple(dict.fromkeys(k.strip().lower() for k in self.keywords if k.strip())))
         object.__setattr__(self, "history", tuple(tuple(h) for h in self.history))  # type: ignore[misc]
@@ -411,17 +426,23 @@ class ExpertRegistry:
         return rec
 
     def get(self, expert_id: str) -> ExpertRecord:
+        if not isinstance(expert_id, str) or not expert_id.strip():
+            raise ValueError("expert_id must be a non-empty string")
         return self._experts[expert_id]
 
     def transition(self, expert_id: str, to_state: str, reason: str, *, _gate_verified: bool = False) -> ExpertRecord:
         """Move an expert along the lifecycle; raises :class:`IllegalTransitionError` for anything not allowed."""
+        if not isinstance(expert_id, str) or not expert_id.strip():
+            raise ValueError("expert_id must be a non-empty string")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError("a transition needs a reason")
+        if not isinstance(_gate_verified, bool):
+            raise ValueError("_gate_verified must be a bool")
         rec = self._experts[expert_id]
         if to_state not in LEGAL_TRANSITIONS[rec.state]:
             raise IllegalTransitionError(f"{expert_id!r}: {rec.state!r} -> {to_state!r} is not a legal transition")
         if self.strict and to_state == LIVE and rec.has_adapter and not _gate_verified:
             raise GateNotPassedError(f"{expert_id!r}: a strict registry promotes adapters to LIVE only through promote_with_gate")
-        if not reason.strip():
-            raise ValueError("a transition needs a reason")
         new = replace(rec, state=to_state, history=rec.history + ((rec.state, to_state, reason.strip()),))
         self._by_state[rec.state].discard(expert_id)
         self._by_state[to_state].add(expert_id)
@@ -472,11 +493,17 @@ class ExpertRegistry:
         return [self._experts[i] for i in sorted(self._experts)]
 
     def find_by_adapter(self, adapter_sha256: str) -> Optional[ExpertRecord]:
+        if not isinstance(adapter_sha256, str) or not adapter_sha256.strip():
+            raise ValueError("adapter_sha256 must be a non-empty string")
         owner = self._by_sha.get(adapter_sha256)
         return None if owner is None else self._experts[owner]
 
     def check_attachable(self, expert_id: str, base_model_id: str) -> ExpertRecord:
         """Return the expert if its adapter may be attached to ``base_model_id``; raise otherwise."""
+        if not isinstance(expert_id, str) or not expert_id.strip():
+            raise ValueError("expert_id must be a non-empty string")
+        if not isinstance(base_model_id, str) or not base_model_id.strip():
+            raise ValueError("base_model_id must be a non-empty string")
         rec = self._experts[expert_id]
         if not rec.has_adapter:
             raise ValueError(f"{expert_id!r} is a serving expert and has no adapter to attach")
@@ -486,6 +513,8 @@ class ExpertRegistry:
 
     def verify_adapter_bytes(self, expert_id: str, data: bytes) -> bool:
         """True when ``data`` hashes to the sha256 the expert was registered with."""
+        if not isinstance(expert_id, str) or not expert_id.strip():
+            raise ValueError("expert_id must be a non-empty string")
         if not isinstance(data, (bytes, bytearray)):
             raise ValueError("data must be bytes or bytearray")
         rec = self._experts[expert_id]
@@ -643,7 +672,7 @@ class AdapterFootprint:
     def __post_init__(self) -> None:
         if isinstance(self.size_mib, bool) or not isinstance(self.size_mib, int) or self.size_mib <= 0:
             raise ValueError("size_mib must be an integer > 0")
-        if not self.base_model_id.strip():
+        if not isinstance(self.base_model_id, str) or not self.base_model_id.strip():
             raise ValueError("base_model_id must be non-empty")
 
 
@@ -661,7 +690,12 @@ class ServingNode:
     max_lora_slots: int
 
     def __post_init__(self) -> None:
-        if not self.node_id.strip() or not self.base_model_id.strip():
+        if (
+            not isinstance(self.node_id, str)
+            or not isinstance(self.base_model_id, str)
+            or not self.node_id.strip()
+            or not self.base_model_id.strip()
+        ):
             raise ValueError("node_id and base_model_id must be non-empty")
         for name in ("vram_mib", "base_resident_mib", "max_lora_slots"):
             value = getattr(self, name)
@@ -687,6 +721,23 @@ class ResidencyPlan:
     total_demand: float
     ordering: str
     unknown_demand_ids: Tuple[str, ...] = field(default_factory=tuple)
+
+    def __post_init__(self) -> None:
+        for attr in ("placements", "hot", "cold", "node_free_mib", "node_free_slots", "blocked_nodes"):
+            if not isinstance(getattr(self, attr), Mapping):
+                raise ValueError(f"{attr} must be a Mapping")
+        for attr in ("placed_demand", "total_demand"):
+            val = getattr(self, attr)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
+                raise ValueError(f"{attr} must be a finite non-negative number")
+        if not isinstance(self.ordering, str) or not self.ordering.strip():
+            raise ValueError("ordering must be a non-empty string")
+        if (
+            isinstance(self.unknown_demand_ids, (str, bytes))
+            or not isinstance(self.unknown_demand_ids, Iterable)
+            or not all(isinstance(x, str) and bool(x.strip()) for x in self.unknown_demand_ids)
+        ):
+            raise ValueError("unknown_demand_ids must be an iterable of non-empty strings")
 
     @property
     def served_demand_fraction(self) -> float:
@@ -987,6 +1038,10 @@ class HierarchicalExpertRouter:
         recruitment: Optional[Mapping[str, Mapping[str, float]]] = None,
     ) -> RouteDecision:
         """Route one request. ``recruitment`` is ``RecruitmentReport.weights`` (cluster -> expert -> weight)."""
+        if cluster_id is not None and (not isinstance(cluster_id, str) or not cluster_id.strip()):
+            raise ValueError("cluster_id must be None or a non-empty string")
+        if recruitment is not None and not isinstance(recruitment, Mapping):
+            raise ValueError("recruitment must be None or a Mapping")
         if cluster_id is None:
             cluster_id, hits = self.select_cluster(prompt)
             if cluster_id is None:

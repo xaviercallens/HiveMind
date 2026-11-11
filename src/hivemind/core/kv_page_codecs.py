@@ -63,6 +63,8 @@ class FP8E4M3PageCodec:
         return q, scale
 
     def decode(self, payload: Tuple[Tensor, Tensor], dtype: torch.dtype = torch.float16) -> Tensor:
+        if not isinstance(dtype, torch.dtype):
+            raise ValueError(f"{self.name}: dtype must be a torch.dtype")
         if (
             not isinstance(payload, tuple)
             or len(payload) != 2
@@ -125,6 +127,8 @@ class IntMinMaxPageCodec:
         return codes.to(torch.int32), mn, mx
 
     def decode(self, payload: Tuple[Tensor, Tensor, Tensor], dtype: torch.dtype = torch.float16) -> Tensor:
+        if not isinstance(dtype, torch.dtype):
+            raise ValueError(f"{self.name}: dtype must be a torch.dtype")
         if (
             not isinstance(payload, tuple)
             or len(payload) != 3
@@ -180,6 +184,8 @@ class LatticePageCodec:
         return {"codewords": c, "rms": rms, "shape": tuple(page.shape), "rate": rate, "coords": page.numel()}
 
     def decode(self, payload: Dict[str, Any], dtype: torch.dtype = torch.float16) -> Tensor:
+        if not isinstance(dtype, torch.dtype):
+            raise ValueError(f"{self.name}: dtype must be a torch.dtype")
         if (
             not isinstance(payload, dict)
             or not all(k in payload for k in ("codewords", "rms", "shape"))
@@ -236,8 +242,8 @@ class PluggableKVPageCache:
 
     def write_kv_page(self, layer_idx: int, page_idx: int, k_tensor: Tensor, v_tensor: Tensor) -> Dict[str, Any]:
         """Encode and store a ``(K, V)`` page; evicts the oldest page when full (same rule as FP8PagedKVCache)."""
-        if isinstance(layer_idx, bool) or not isinstance(layer_idx, int) or layer_idx < 0:
-            raise ValueError(f"layer_idx must be an integer >= 0, got {layer_idx!r}")
+        if isinstance(layer_idx, bool) or not isinstance(layer_idx, int) or layer_idx < 0 or layer_idx >= self.num_layers:
+            raise ValueError(f"layer_idx must be an integer in 0..{self.num_layers - 1}, got {layer_idx!r}")
         if isinstance(page_idx, bool) or not isinstance(page_idx, int) or page_idx < 0:
             raise ValueError(f"page_idx must be an integer >= 0, got {page_idx!r}")
         if (
@@ -273,10 +279,12 @@ class PluggableKVPageCache:
     def read_kv_page(
         self, layer_idx: int, page_idx: int, target_dtype: torch.dtype = torch.float16
     ) -> Tuple[Tensor, Tensor]:
-        if isinstance(layer_idx, bool) or not isinstance(layer_idx, int) or layer_idx < 0:
-            raise ValueError(f"layer_idx must be an integer >= 0, got {layer_idx!r}")
+        if isinstance(layer_idx, bool) or not isinstance(layer_idx, int) or layer_idx < 0 or layer_idx >= self.num_layers:
+            raise ValueError(f"layer_idx must be an integer in 0..{self.num_layers - 1}, got {layer_idx!r}")
         if isinstance(page_idx, bool) or not isinstance(page_idx, int) or page_idx < 0:
             raise ValueError(f"page_idx must be an integer >= 0, got {page_idx!r}")
+        if not isinstance(target_dtype, torch.dtype):
+            raise ValueError("target_dtype must be a torch.dtype")
         pk = self._pages_k[(layer_idx, page_idx)]
         pv = self._pages_v[(layer_idx, page_idx)]
         return self.codec.decode(pk, target_dtype), self.codec.decode(pv, target_dtype)

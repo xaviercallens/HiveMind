@@ -673,6 +673,11 @@ class AuthLoginRequest(BaseModel):
     strict_existing: bool = False
 
 
+class AuthChangePasswordRequest(BaseModel):
+    new_password: Optional[str] = None
+    password: Optional[str] = None
+
+
 class AuthSSORequest(BaseModel):
     id_token: Optional[str] = None
     code: Optional[str] = None
@@ -7873,6 +7878,12 @@ def create_hivemind_at_home_app(
         "vxtzq": {
             "handle": "@Vxtzq",
             "email": "vxtzq@github.com",
+            "secondary_emails": [
+                "116555319+vxtzq@users.noreply.github.com",
+                "vxtzq@crowdgpt.net",
+                "contact@crowdgpt.net",
+                "vxtzq@hivemind.network",
+            ],
             "github_url": "https://github.com/Vxtzq",
             "role": "MasterMinder (Lead WebUI Reviewer & Pre-Deploy Gatekeeper)",
             "badge": "🔍 PRE-DEPLOY REVIEWER",
@@ -7900,6 +7911,42 @@ def create_hivemind_at_home_app(
                 "deploy:approve_gcp",
                 "campaign:create",
                 "moe:train",
+            ],
+        },
+        "jblam62122": {
+            "handle": "@jblam-O",
+            "email": "43570951+jblam-o@users.noreply.github.com",
+            "secondary_emails": [
+                "jblam-o@github.com",
+                "jblam62122@hivemind.network",
+            ],
+            "github_url": "https://github.com/jblam-O",
+            "role": "MasterMinder (Lead WebUI Engineer & Merge Gatekeeper)",
+            "badge": "⚡ WEBUI CO-MAINTAINER",
+            "admin_group": "MasterMinders",
+            "groups": ["MasterMinders"],
+            "is_admin": True,
+            "is_masterminder": True,
+            "is_mastercommander": False,
+            "v2_access_granted": True,
+            "target_profile": "developer",
+            "hardware_profile": "rtx_4090",
+            "compute_points": 30000,
+            "token": "hm_live_jblam_62122a435709",
+            "node_id": "0x62122A43",
+            "registered_at": time.time() - 86400 * 21,
+            "provider": "GITHUB_SSO",
+            "linked_providers": ["GITHUB_SSO"],
+            "login_count": 8,
+            "is_new_user": False,
+            "is_guest": False,
+            "user_state": "EXISTING_USER",
+            "permissions": [
+                "admin:all",
+                "webui:review_gate",
+                "webui:merge",
+                "deploy:approve_gcp",
+                "campaign:create",
             ],
         },
         "clark719664": {
@@ -8270,21 +8317,17 @@ def create_hivemind_at_home_app(
                     if hmac.compare_digest(cand_r_hash, router_pwd_hash):
                         auth_state["failed_login_attempts"].pop(f"{account_key}|{client}", None)
                         return
-            for _ident_cand in dict.fromkeys(
-                s
-                for s in (
-                    str(user.get("email") or ""),
-                    str(user.get("handle") or ""),
-                    *[str(e) for e in user.get("secondary_emails", [])],
-                )
-                if s
-            ):
+            # The gateway may vouch for the password only of THIS account: ask by its own handle, and accept only when the
+            # account the gateway answers for has that same handle. Asking by e-mail would let anyone who registered a
+            # gateway account under one of this user's (unverified) addresses set this account's password.
+            if norm_u_handle:
                 upstream_ok = _sync_or_verify_openrouter_credentials(
                     "login",
-                    handle_or_email=_ident_cand,
+                    handle_or_email=norm_u_handle,
                     password=supplied_password,
                 )
-                if upstream_ok is not None:
+                upstream_handle = str((upstream_ok or {}).get("handle") or "").lstrip("@").lower().replace("-", "_")
+                if upstream_ok is not None and upstream_handle and hmac.compare_digest(upstream_handle, norm_u_handle):
                     s_hex, h_hex = _hash_password(supplied_password)
                     user["password_salt"] = s_hex
                     user["password_hash"] = h_hex
@@ -8301,25 +8344,6 @@ def create_hivemind_at_home_app(
                     _save_persisted_users()
                     auth_state["failed_login_attempts"].pop(f"{account_key}|{client}", None)
                     return
-            if (
-                not user.get("password_bound")
-                and norm_u_handle in {k.lower().replace("-", "_") for k in seeded_users}
-                and len(clean_pwd) >= 8
-            ):
-                s_hex, h_hex = _hash_password(clean_pwd)
-                user["password_salt"] = s_hex
-                user["password_hash"] = h_hex
-                user["has_password"] = True
-                user["password_bound"] = True
-                _save_persisted_users()
-                _sync_or_verify_openrouter_credentials(
-                    "register",
-                    handle_or_email=str(user.get("handle") or norm_u_handle),
-                    password=clean_pwd,
-                    email=str(user.get("email") or ""),
-                )
-                auth_state["failed_login_attempts"].pop(f"{account_key}|{client}", None)
-                return
             _record_failed_password_attempt(account_key, client)
             _check_password_rate_limit(account_key, client)
         raise HTTPException(
@@ -8765,7 +8789,7 @@ def create_hivemind_at_home_app(
             for k_u, u in auth_state["users"].items():
                 u_h = str(u.get("handle", "")).lstrip("@").lower().replace("-", "_")
                 emails = [u.get("email", "").lower()] + [e.lower() for e in u.get("secondary_emails", [])]
-                if clean_email.lower() in emails or norm_h in (k_u.lower(), u_h) or (k_u == "xavier_callens" and norm_h in ("xaviercallens", "callensxavier", "xavier")):
+                if clean_email.lower() in emails or norm_h in (k_u.lower(), u_h) or (k_u == "xavier_callens" and norm_h in ("xaviercallens", "callensxavier", "xavier")) or (k_u == "vxtzq" and norm_h in ("vxtzq", "vxtzq1")):
                     matched_existing = u
                     break
         if not matched_existing:
@@ -8872,7 +8896,7 @@ def create_hivemind_at_home_app(
             for k_u, u in auth_state["users"].items():
                 u_h = str(u.get("handle", "")).lstrip("@").lower().replace("-", "_")
                 emails = [u.get("email", "").lower()] + [e.lower() for e in u.get("secondary_emails", [])]
-                if key.lower() in emails or norm_k in (k_u.lower(), u_h) or (k_u == "xavier_callens" and norm_k in ("xaviercallens", "callensxavier", "xavier")):
+                if key.lower() in emails or norm_k in (k_u.lower(), u_h) or (k_u == "xavier_callens" and norm_k in ("xaviercallens", "callensxavier", "xavier")) or (k_u == "vxtzq" and norm_k in ("vxtzq", "vxtzq1")):
                     matched = u
                     break
         if not matched:
@@ -9021,6 +9045,35 @@ def create_hivemind_at_home_app(
             "handle": "ephemeral",
             "old_token_revoked": False,
             "token": new_token,
+        })
+
+    @app.post("/api/v1/auth/change-password", response_class=JSONResponse)
+    def api_auth_change_password(req: AuthChangePasswordRequest, request: Request) -> JSONResponse:
+        auth_header = request.headers.get("Authorization", "")
+        old_token = auth_header.replace("Bearer ", "").strip()
+        user = _lookup_user_by_token(old_token)
+        if not user or user.get("is_guest"):
+            raise HTTPException(status_code=401, detail="A valid authenticated token is required to change password")
+        new_pwd = (req.new_password or req.password or "").strip()
+        if len(new_pwd) < 8 or len(new_pwd) > 256:
+            raise HTTPException(status_code=422, detail="Password must be between 8 and 256 characters")
+        salt_hex, hash_hex = _hash_password(new_pwd)
+        user["password_salt"] = salt_hex
+        user["password_hash"] = hash_hex
+        user["password_kdf"] = f"PBKDF2-HMAC-SHA256-{PBKDF2_ITERATIONS}"
+        user["has_password"] = True
+        user["password_bound"] = True
+        auth_state["api_keys"].pop(old_token, None)
+        new_token = "hm_live_" + secrets.token_hex(16)
+        user["token"] = new_token
+        auth_state["api_keys"][new_token] = user
+        _save_persisted_users()
+        return JSONResponse(content={
+            "status": "PASSWORD_SET",
+            "handle": user["handle"],
+            "token": new_token,
+            "api_key": new_token,
+            "old_key_revoked": True,
         })
 
     @app.post("/api/v1/auth/magic-link", response_class=JSONResponse)

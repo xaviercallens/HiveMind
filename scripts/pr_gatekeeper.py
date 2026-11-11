@@ -41,6 +41,33 @@ from hivemind.security.pr_security_scanner import PRSecurityScanner  # noqa: E40
 
 OWNER_LOGIN = "xaviercallens"
 REPO = "xaviercallens/HiveMind"
+WEBUI_TRUSTED_MAINTAINERS: Dict[str, frozenset[str]] = {
+    "jblam-o": frozenset({
+        "43570951+jblam-o@users.noreply.github.com",
+        "jblam-o@github.com",
+        "jblam62122@hivemind.network",
+    }),
+    "vxtzq": frozenset({
+        "116555319+vxtzq@users.noreply.github.com",
+        "vxtzq@github.com",
+        "vxtzq@crowdgpt.net",
+        "contact@crowdgpt.net",
+        "vxtzq@hivemind.network",
+    }),
+}
+WEBUI_ALLOWED_PREFIXES: Tuple[str, ...] = (
+    "src/hivemind/web_v32/",
+    "src/hivemind/boinc/",
+    "src/hivemind/router/signup_page.py",
+    "web/",
+    "ui/",
+    "static/",
+    "deploy/gcp_cloud_run/",
+    "tests/test_web",
+    "tests/test_stitch",
+    "tests/test_dashboard",
+    "docs/WEB",
+)
 # Commit author e-mail is a *claim* (another agent on the shared machine forged it on 2026-10-24). With the owner's signing key
 # registered on GitHub, HIVEMIND_GATE_REQUIRE_SIGNED=1 makes an unsigned owner-attributed commit HOLD instead of ACCEPT.
 REQUIRE_SIGNED_COMMITS = os.environ.get("HIVEMIND_GATE_REQUIRE_SIGNED", "0") == "1"
@@ -64,7 +91,7 @@ TEST_TIMEOUT_S = 1500
 
 
 def sh(cmd: List[str], cwd: Optional[Path] = None, timeout: int = 600, env: Optional[Dict[str, str]] = None) -> Tuple[int, str]:
-    p = subprocess.run(cmd, cwd=str(cwd) if cwd else None, capture_output=True, text=True, timeout=timeout, env=env)
+    p = subprocess.run(cmd, cwd=str(cwd) if cwd else None, capture_output=True, text=True, errors="replace", timeout=timeout, env=env)
     return p.returncode, (p.stdout + p.stderr)
 
 
@@ -104,6 +131,38 @@ def trust_report(pr: Dict[str, Any]) -> Dict[str, Any]:
                             "coauthor_trailers": [a.get("email") for a in authors[1:]]})
         all_ok &= v.is_authorized_owner
     return {"author_login": author_login, "author_is_owner_login": author_login == OWNER_LOGIN, "commits": commit_rows, "owner_authored": bool(all_ok and commit_rows)}
+
+
+def is_webui_scoped(files: List[str]) -> bool:
+    """True when a non-empty file list touches only WebUI / frontend / UI test paths."""
+    return bool(files) and all(any(f.startswith(pref) for pref in WEBUI_ALLOWED_PREFIXES) for f in files)
+
+
+def webui_maintainer_report(pr: Dict[str, Any], files: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Check whether a PR is authored by a trusted WebUI co-maintainer (e.g. jblam-O or Vxtzq) and scoped to WebUI files."""
+    author_login = ((pr.get("author") or {}).get("login") or "").strip()
+    allowed_emails = WEBUI_TRUSTED_MAINTAINERS.get(author_login.lower())
+    commits = pr.get("commits") or []
+    if not allowed_emails or not commits:
+        return {"is_webui_maintainer": False, "webui_scoped": False, "webui_authorized": False}
+    all_commits_ok = True
+    for c in commits:
+        authors = c.get("authors") or []
+        if not authors:
+            all_commits_ok = False
+            break
+        email = (authors[0].get("email") or "").strip().lower()
+        owner_ok = normalize_and_verify_owner_email(email).is_authorized_owner
+        if email not in allowed_emails and not owner_ok:
+            all_commits_ok = False
+            break
+    scoped = is_webui_scoped(files or [])
+    return {
+        "is_webui_maintainer": bool(all_commits_ok),
+        "maintainer_login": author_login,
+        "webui_scoped": scoped,
+        "webui_authorized": bool(all_commits_ok and scoped),
+    }
 
 
 def commit_signatures(pr: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -261,26 +320,30 @@ def gate_pr(pr: Dict[str, Any], merge: bool, dry_run: bool) -> Dict[str, Any]:
         files = [f for f in names.split("\n") if f.strip()]
         result["changed_files"] = files
         changed = [{"filename": f, "patch": "", "content": (wt / f).read_text(encoding="utf-8", errors="replace") if (wt / f).exists() and (wt / f).stat().st_size < 2_000_000 else ""} for f in files]
+        webui_auth = webui_maintainer_report(pr, files)
+        result["trust"]["webui_maintainer"] = webui_auth
+        authorized_to_merge = bool(result["trust"]["owner_authored"] or webui_auth.get("webui_authorized"))
         commits_msgs = [c.get("messageHeadline", "") for c in pr.get("commits", [])]
         emails = [a.get("email") for c in pr.get("commits", []) for a in c.get("authors", [])]
-        audit = PRSecurityScanner(trusted_maintainers={OWNER_LOGIN}).audit_pull_request(n, pr.get("title", ""), pr.get("body", "") or "", result["trust"]["author_login"], changed, commits_msgs, author_email=emails[0] if emails else None)
+        trusted_logins = {OWNER_LOGIN} | ({result["trust"]["author_login"]} if webui_auth.get("webui_authorized") else set())
+        audit = PRSecurityScanner(trusted_maintainers=trusted_logins).audit_pull_request(n, pr.get("title", ""), pr.get("body", "") or "", result["trust"]["author_login"], changed, commits_msgs, author_email=emails[0] if emails else None)
         result["security"] = {"critical": audit.critical_count, "high": audit.high_count, "medium": audit.medium_count, "passed": audit.critical_count == 0 and audit.high_count == 0, "findings": [f.to_dict() for f in audit.findings][:20]}
         hits = forbidden_scan(scannable_diff(diff))
         result["forbidden"] = {"hits": hits, "passed": not hits}
         result["gwaya_audit"] = gwaya_audit(wt, files)
-        if result["trust"]["owner_authored"]:
+        if authorized_to_merge:
             result["pytest"] = run_pytest(wt, files)
             result["lean"] = run_lean(wt) if any(f.startswith("lean4/") for f in files) else {"skipped": True, "passed": True}
             result["pipeline"] = run_pipeline(wt) if any(f.startswith("paper/") and (f.endswith(".tex") or f.endswith(".py")) for f in files) else {"skipped": True, "passed": True}
         else:
-            # a pull request's own code (tests, lake, the paper pipeline) is never executed on this host unless the owner's identity is claimed
+            # a pull request's own code (tests, lake, the paper pipeline) is never executed on this host unless the owner's or WebUI co-maintainer's identity is verified
             not_run = {"skipped": True, "passed": False, "targets": [], "summary": "not run: PR is not owner-authored (its code is never executed here)", "tail": ""}
             result["pytest"], result["lean"], result["pipeline"] = dict(not_run), dict(not_run), dict(not_run)
     finally:
         shutil.rmtree(wt, ignore_errors=True)
         sh(["git", "worktree", "prune"], cwd=PROJECT_ROOT, timeout=60)
     checks = {k: bool(result[k]["passed"]) for k in ("security", "forbidden", "gwaya_audit", "pytest", "lean", "pipeline")}
-    trust_ok = signature_policy_ok(result["trust"]["owner_authored"], result["signatures"], REQUIRE_SIGNED_COMMITS)
+    trust_ok = signature_policy_ok(authorized_to_merge, result["signatures"], REQUIRE_SIGNED_COMMITS)
     decision = decide(trust_ok, bool(pr.get("isDraft")), pr.get("mergeable"), checks)
     if result["trust"]["owner_authored"] and not trust_ok:
         decision = "HOLD (owner-attributed but unsigned commits; signatures required)"

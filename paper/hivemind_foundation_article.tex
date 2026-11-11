@@ -1102,6 +1102,42 @@ Ladder 1.5B$\to$3B$\to$7B & -- & 85.2 ($219$) & -- & -- & -- & -- \\
 
 \textbf{Limits of E16.} One runtime (Ollama), one quantisation (Q4\_K\_M), one benchmark (MBPP-sanitized, $n=257$, Python only), one seed set; greedy decoding is not guaranteed bit-stable (the determinism repeat found $10/10$ identical, which is evidence and not a guarantee); a Linux host, not the Windows/WDDM environment for which the PR's ceiling was written; a sandbox that is not GWAYA's own. The PR's Qwen3.5 and TPU tiers are not measured. The publication of these results on the GWAYA repository or its PR is left to the repository's owner. As for every result in this paper, the lock certifies only that the numbers of these subsections equal those of the receipts.
 
+\subsection{E15-J (planned, not run): an LLM-JEPA embedding-alignment term on the E15 fine-tuning}
+\label{sec:e15j}
+
+\textbf{Status.} This subsection describes a \emph{draft} pre-registration (\texttt{artifacts/experiments/E15J\_llm\_jepa\_prereg\_draft.json}, plan in \texttt{docs/E15J\_LLM\_JEPA\_PILOT.md}). It is not frozen, no pipeline code exists, and it contains no result. It enters the claim ledger only after the owner freezes it and the run is decided by its registered rules.
+
+\textbf{Motivation.} E15 (Section~\ref{sec:e15}, Table~\ref{tab:e15}) separated two levers on the same 1.5B coder. The GWAYA inference loop was supported. Rejection-sampling fine-tuning on gate-accepted problem$\to$solution pairs was inconclusive. LLM-JEPA~\cite{huang2025llmjepa} claims to strengthen exactly that second lever for paired natural-language/formal-language data: it keeps the next-token loss and adds a term aligning the final-layer embedding of the natural-language view with the embedding of its formal counterpart. Its largest reported gains are on natural language$\to$regex (Llama-3.2-1B, $57.29\to71.46$ with full fine-tuning and $50.18\to72.41$ with LoRA). Elsewhere it reports about one point. The paper has no code-synthesis benchmark. Three properties of the paper also bear on the design:
+\begin{itemize}[leftmargin=1.8em]
+    \item Its $(\lambda,k)$ appear to be selected by the reported accuracy, with no held-out selection split.
+    \item One row uses $\lambda=1024$, outside its stated grid.
+    \item Its per-model and per-dataset tables report the best configuration per cell.
+\end{itemize}
+
+\textbf{The term as implemented.} The loss below is taken from the authors' reference code (Apache-2.0, \texttt{galilai-group/llm-jepa}, pinned at commit \texttt{ea0017c}; read, not run), not only from the paper's text:
+\[
+\mathcal{L} \;=\; \gamma\,\mathcal{L}_{\mathrm{LM}} \;+\; \lambda\,\bigl(1-\overline{\cos}(e_{\mathrm{text}},e_{\mathrm{code}})\bigr).
+\]
+Here $e_{\mathrm{view}}$ is the last-token final-layer hidden state of that view run on its own, with $k$ appended predictor tokens on the text view. There is no stop-gradient on either view, so only $\mathcal{L}_{\mathrm{LM}}$ prevents collapse.
+
+\textbf{Design.}
+\begin{itemize}[leftmargin=1.8em]
+    \item \emph{Fixed setting.} $(\lambda,k,\gamma)=(1,1,1)$, the paper's headline natural-language$\to$regex setting, fixed in advance. There is no configuration search, so nothing is tuned on the evaluation set.
+    \item \emph{Arms.} A rejection-sampled set is regenerated once with the E15 code, hashed, and used to train every arm:
+    \begin{itemize}
+        \item \textbf{A}: the E15 plain-LoRA recipe.
+        \item \textbf{J}: A plus the term.
+        \item \textbf{S}: J with problem$\leftrightarrow$solution pairs shuffled by a fixed derangement. This control separates the pairing the method relies on from generic regularisation.
+    \end{itemize}
+    Each arm is trained with seeds $1,2,3$.
+    \item \emph{Primary test.} The mean pass@1 difference J$-$A on MBPP-sanitized ($n=257$), with an exact sign test on per-problem solve counts. It is supported iff the difference is at least $+3.0$ points and $p<0.05$.
+    \item \emph{Positive control.} J's least-squares text$\to$code embedding residual must fall below A's.
+    \item \emph{Plumbing control.} A CPU unit test checks that $\lambda=0$ reproduces the A path.
+    \item \emph{Memory.} The $7.5$\,GiB per-process cap of E15 is kept, behind a pre-run check that the shared T4 retains at least $4{,}300$\,MiB free.
+\end{itemize}
+
+\textbf{Expected limits.} A $+3$-point effect is about eight net problems out of 257, so the test may end inconclusive even with three seeds. Python synthesis is a harder target than regex. The term roughly doubles to triples training compute, which is reported, not equalised. Nothing would be claimed for quantised GGUF serving.
+
 \subsection{HN1 \& H-Net Assessment: Dynamic Chunking vs.\ BPE Split Routing (\texttt{HM-S10-12}, Issues \#446, \#448, \#452)}
 \label{sec:hn1_hnet}
 
@@ -1869,6 +1905,7 @@ To prevent conflating machine-checked discrete arithmetic with empirical single-
 \bibitem{kelly1998rate} F.~P.~Kelly, A.~K.~Maulloo, and D.~K.~H.~Tan, ``Rate control for communication networks: shadow prices, proportional fairness and stability,'' \textit{Journal of the Operational Research Society}, vol.~49, no.~3, pp.~237--252, 1998.
 \bibitem{bass1969new} F.~M.~Bass, ``A new product growth for model consumer durables,'' \textit{Management Science}, vol.~15, no.~5, pp.~215--227, 1969.
 \bibitem{hwang2025hnet} S.~Hwang, B.~Wang, and A.~Gu, ``Dynamic Chunking for End-to-End Hierarchical Sequence Modeling,'' \textit{arXiv:2507.07955}, 2025.
+\bibitem{huang2025llmjepa} H.~Huang, Y.~LeCun, and R.~Balestriero, ``LLM-JEPA: Large Language Models Meet Joint Embedding Predictive Architectures,'' \textit{arXiv:2509.14252}, 2025. Code: \url{https://github.com/galilai-group/llm-jepa}.
 \end{thebibliography}
 
 \end{document}

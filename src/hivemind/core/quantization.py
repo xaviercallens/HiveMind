@@ -112,9 +112,13 @@ class QuantizedModelBundle:
     def __post_init__(self) -> None:
         if not isinstance(self.model, nn.Module):
             raise ValueError("model must be an nn.Module")
-        if not isinstance(self.base_model_id, str) or not self.base_model_id.strip():
+        if not isinstance(self.base_model_id, str) or not self.base_model_id.strip() or any(ord(c) < 32 or ord(c) == 127 for c in self.base_model_id):
             raise ValueError("base_model_id must be a non-empty string")
-        if not isinstance(self.base_model_sha256, str) or len(self.base_model_sha256.strip()) != 64:
+        if (
+            not isinstance(self.base_model_sha256, str)
+            or len(self.base_model_sha256.strip()) != 64
+            or not all(c in "0123456789abcdefABCDEF" for c in self.base_model_sha256.strip())
+        ):
             raise ValueError("base_model_sha256 must be a 64-character SHA-256 hex digest")
         if not isinstance(self.device, torch.device):
             raise ValueError("device must be a torch.device")
@@ -255,6 +259,12 @@ def create_lora_config(
         raise ValueError(f"lora_alpha must be finite and > 0, got {lora_alpha!r}")
     if isinstance(lora_dropout, bool) or not isinstance(lora_dropout, (int, float)) or not math.isfinite(float(lora_dropout)) or not (0.0 <= float(lora_dropout) < 1.0):
         raise ValueError(f"lora_dropout must be finite in [0, 1), got {lora_dropout!r}")
+    if target_modules is not None and (
+        not isinstance(target_modules, (list, tuple))
+        or not target_modules
+        or any(not isinstance(m, str) or not m.strip() or any(ord(c) < 32 or ord(c) == 127 for c in m) for m in target_modules)
+    ):
+        raise ValueError("target_modules must be a non-empty sequence of non-empty printable strings")
     from peft import LoraConfig, TaskType
 
     return LoraConfig(
@@ -325,8 +335,14 @@ def build_local_qwen2_backbone(
         raise ValueError("num_attention_heads must be an integer >= 1")
     if isinstance(num_key_value_heads, bool) or not isinstance(num_key_value_heads, int) or num_key_value_heads < 1:
         raise ValueError("num_key_value_heads must be an integer >= 1")
+    if hidden_size % num_attention_heads != 0:
+        raise ValueError("hidden_size must be divisible by num_attention_heads")
+    if num_attention_heads % num_key_value_heads != 0:
+        raise ValueError("num_attention_heads must be divisible by num_key_value_heads")
     if isinstance(max_position_embeddings, bool) or not isinstance(max_position_embeddings, int) or max_position_embeddings < 2:
         raise ValueError("max_position_embeddings must be an integer >= 2")
+    if device is not None and not isinstance(device, torch.device):
+        raise ValueError("device must be a torch.device when provided")
     if not isinstance(use_4bit_nf4_if_cuda, bool):
         raise ValueError("use_4bit_nf4_if_cuda must be a boolean")
     configure_deterministic_runtime(seed)

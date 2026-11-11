@@ -37,6 +37,24 @@ class CompressedTensorPayload:
     fp8_values: torch.Tensor    # float8_e4m3fn (or uint8-packed) quantized values
     scale: float                # absmax / FP8_E4M3_MAX dequantization factor
 
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.original_shape, tuple)
+            or not self.original_shape
+            or any(isinstance(d, bool) or not isinstance(d, int) or d < 1 for d in self.original_shape)
+        ):
+            raise ValueError("original_shape must be a non-empty tuple of positive integers")
+        if isinstance(self.original_numel, bool) or not isinstance(self.original_numel, int) or self.original_numel < 1:
+            raise ValueError("original_numel must be an integer >= 1")
+        if math.prod(self.original_shape) != self.original_numel:
+            raise ValueError("math.prod(original_shape) must equal original_numel")
+        if not isinstance(self.indices, torch.Tensor) or not isinstance(self.fp8_values, torch.Tensor):
+            raise ValueError("indices and fp8_values must be torch.Tensors")
+        if self.indices.numel() != self.fp8_values.numel():
+            raise ValueError("indices and fp8_values must have equal numel")
+        if isinstance(self.scale, bool) or not isinstance(self.scale, (int, float)):
+            raise ValueError("scale must be a number")
+
     @property
     def compressed_bytes(self) -> int:
         # 1 byte per FP8 value + 2 bytes per delta-coded/uint16 index in block-sparse wire format
@@ -64,6 +82,48 @@ class DCTSparse2BitTensorPayload:
     chunk_size: int
     index_width: int            # 1, 2 or 4 bytes per transmitted index
     dct_energy_retained_fraction: float
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.original_shape, tuple)
+            or not self.original_shape
+            or any(isinstance(d, bool) or not isinstance(d, int) or d < 1 for d in self.original_shape)
+        ):
+            raise ValueError("original_shape must be a non-empty tuple of positive integers")
+        if isinstance(self.original_numel, bool) or not isinstance(self.original_numel, int) or self.original_numel < 1:
+            raise ValueError("original_numel must be an integer >= 1")
+        if math.prod(self.original_shape) != self.original_numel:
+            raise ValueError("math.prod(original_shape) must equal original_numel")
+        if (
+            not isinstance(self.padded_shape, tuple)
+            or len(self.padded_shape) != 2
+            or any(isinstance(d, bool) or not isinstance(d, int) or d < 1 for d in self.padded_shape)
+            or self.padded_shape[0] * self.padded_shape[1] < self.original_numel
+        ):
+            raise ValueError("padded_shape must be a 2-tuple of positive integers with product >= original_numel")
+        if (
+            not isinstance(self.indices, torch.Tensor)
+            or not isinstance(self.packed_2bit, torch.Tensor)
+            or not isinstance(self.lookup, torch.Tensor)
+        ):
+            raise ValueError("indices, packed_2bit, and lookup must be torch.Tensors")
+        if isinstance(self.shift, bool) or not isinstance(self.shift, (int, float)):
+            raise ValueError("shift and scale must be numbers")
+        if isinstance(self.scale, bool) or not isinstance(self.scale, (int, float)):
+            raise ValueError("shift and scale must be numbers")
+        if isinstance(self.n_coefficients, bool) or not isinstance(self.n_coefficients, int) or self.n_coefficients < 0:
+            raise ValueError("n_coefficients must be a non-negative integer")
+        if isinstance(self.chunk_size, bool) or not isinstance(self.chunk_size, int) or self.chunk_size < 2:
+            raise ValueError("chunk_size must be an integer >= 2")
+        if isinstance(self.index_width, bool) or self.index_width not in (1, 2, 4):
+            raise ValueError("index_width must be one of (1, 2, 4)")
+        if (
+            isinstance(self.dct_energy_retained_fraction, bool)
+            or not isinstance(self.dct_energy_retained_fraction, (int, float))
+            or not math.isfinite(float(self.dct_energy_retained_fraction))
+            or not (0.0 <= float(self.dct_energy_retained_fraction) <= 1.0)
+        ):
+            raise ValueError("dct_energy_retained_fraction must be a finite number in [0.0, 1.0]")
 
     @property
     def compressed_bytes(self) -> int:
@@ -93,6 +153,37 @@ class CompressedDeltaPackage:
     uncompressed_bytes: int
     compressed_bytes: int
     compression_mode: str = "topk_fp8"
+
+    def __post_init__(self) -> None:
+        for field_name, val in (
+            ("worker_id", self.worker_id),
+            ("branch_name", self.branch_name),
+            ("compression_mode", self.compression_mode),
+        ):
+            if not isinstance(val, str) or not val.strip() or any(ord(c) < 32 or ord(c) == 127 for c in val):
+                raise ValueError(f"{field_name} must be a non-empty printable string")
+        for field_name, val in (
+            ("outer_step", self.outer_step),
+            ("inner_steps_completed", self.inner_steps_completed),
+            ("uncompressed_bytes", self.uncompressed_bytes),
+            ("compressed_bytes", self.compressed_bytes),
+        ):
+            if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
+        if (
+            isinstance(self.topk_ratio, bool)
+            or not isinstance(self.topk_ratio, (int, float))
+            or not math.isfinite(float(self.topk_ratio))
+            or not (0.0 < float(self.topk_ratio) <= 1.0)
+        ):
+            raise ValueError("topk_ratio must be a finite number in (0.0, 1.0]")
+        if not isinstance(self.tensors, dict):
+            raise ValueError("tensors must be a dict")
+        for k, v in self.tensors.items():
+            if not isinstance(k, str) or not k.strip() or any(ord(c) < 32 or ord(c) == 127 for c in k):
+                raise ValueError("tensors keys must be non-empty printable strings")
+            if not isinstance(v, (CompressedTensorPayload, DCTSparse2BitTensorPayload)):
+                raise ValueError("tensors values must be CompressedTensorPayload or DCTSparse2BitTensorPayload")
 
     @property
     def compression_ratio(self) -> float:
@@ -484,9 +575,9 @@ def compress_lora_delta(
     """
     if not isinstance(delta_dict, dict) or not delta_dict:
         raise ValueError("delta_dict must be a non-empty dict")
-    if not isinstance(worker_id, str) or not worker_id.strip():
+    if not isinstance(worker_id, str) or not worker_id.strip() or any(ord(c) < 32 or ord(c) == 127 for c in worker_id):
         raise ValueError("worker_id must be a non-empty string")
-    if not isinstance(branch_name, str) or not branch_name.strip():
+    if not isinstance(branch_name, str) or not branch_name.strip() or any(ord(c) < 32 or ord(c) == 127 for c in branch_name):
         raise ValueError("branch_name must be a non-empty string")
     if isinstance(outer_step, bool) or not isinstance(outer_step, int) or outer_step < 0:
         raise ValueError(f"outer_step must be an integer >= 0, got {outer_step!r}")
@@ -550,9 +641,9 @@ def compress_lora_delta_dct_sparse_2bit(
     """Compress LoRA pseudo-gradients via chunked orthonormal DCT + 2-bit centroid sparsity."""
     if not isinstance(delta_dict, dict) or not delta_dict:
         raise ValueError("delta_dict must be a non-empty dict")
-    if not isinstance(worker_id, str) or not worker_id.strip():
+    if not isinstance(worker_id, str) or not worker_id.strip() or any(ord(c) < 32 or ord(c) == 127 for c in worker_id):
         raise ValueError("worker_id must be a non-empty string")
-    if not isinstance(branch_name, str) or not branch_name.strip():
+    if not isinstance(branch_name, str) or not branch_name.strip() or any(ord(c) < 32 or ord(c) == 127 for c in branch_name):
         raise ValueError("branch_name must be a non-empty string")
     if isinstance(outer_step, bool) or not isinstance(outer_step, int) or outer_step < 0:
         raise ValueError(f"outer_step must be an integer >= 0, got {outer_step!r}")

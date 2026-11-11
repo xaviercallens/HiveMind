@@ -52,11 +52,19 @@ def verify_prov86_chain_lock(
     pr = json.loads(pr_path.read_text(encoding="utf-8"))
 
     # 1. Verify base paper provenance report
-    prov_summary = pr.get("provenance_audit", pr.get("provenance", {}))
-    base_passed = int(prov_summary.get("passed", 84))
-    base_total = int(prov_summary.get("total", 84))
-    if base_passed != base_total or base_total < 84:
+    # the report's real key; a missing or incomplete audit is a failure, never a default pass
+    prov_summary = pr.get("manuscript_provenance_audit")
+    if not isinstance(prov_summary, dict) or "passed_checks" not in prov_summary or "total_checks" not in prov_summary:
+        raise ValueError("Base provenance audit missing from the peer-review report (manuscript_provenance_audit)")
+    base_passed = int(prov_summary["passed_checks"])
+    base_total = int(prov_summary["total_checks"])
+    if base_passed != base_total or base_total < 84 or prov_summary.get("all_passed") is not True:
         raise ValueError(f"Base provenance check failure: {base_passed}/{base_total}")
+
+    # a lock fixes measured figures; it must not certify a simulation (docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md)
+    for name, receipt in (("chain status receipt", cs), ("E24 report", e24)):
+        if receipt.get("not_a_measurement") is True or receipt.get("evidence") in ("simulated", "modelled", "placeholder"):
+            raise ValueError(f"PROV-86 refuses the {name}: it is labelled {receipt.get('evidence')!r}, not a measurement")
 
     # 2. Verify E24 attribution report invariants
     if e24.get("decision") not in ("CAUSE_ATTRIBUTED", "ALL_REFUTED"):

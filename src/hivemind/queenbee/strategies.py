@@ -47,8 +47,15 @@ class Outcome:
     cost_tokens: int = 0
 
     def __post_init__(self) -> None:
-        if not str(self.cluster_id).strip() or not str(self.expert_id).strip():
-            raise ValueError("cluster_id and expert_id must be non-empty")
+        if (
+            not isinstance(self.cluster_id, str)
+            or not self.cluster_id.strip()
+            or any(c in self.cluster_id for c in ("\r", "\n", "\x00"))
+            or not isinstance(self.expert_id, str)
+            or not self.expert_id.strip()
+            or any(c in self.expert_id for c in ("\r", "\n", "\x00"))
+        ):
+            raise ValueError("cluster_id and expert_id must be non-empty strings without control characters")
         if not isinstance(self.verified, bool) or not isinstance(self.success, bool):
             raise ValueError("verified and success must be booleans")
         if isinstance(self.cost_tokens, bool) or not isinstance(self.cost_tokens, int) or self.cost_tokens < 0:
@@ -235,8 +242,21 @@ class PreferencePair:
     def __post_init__(self) -> None:
         from hivemind.queenbee.dance import VERIFIER_KINDS
 
-        if not str(self.prompt_id).strip() or not str(self.cluster_id).strip():
-            raise ValueError("prompt_id and cluster_id must be non-empty")
+        if (
+            not isinstance(self.prompt_id, str)
+            or not self.prompt_id.strip()
+            or any(c in self.prompt_id for c in ("\r", "\n", "\x00"))
+            or not isinstance(self.cluster_id, str)
+            or not self.cluster_id.strip()
+            or any(c in self.cluster_id for c in ("\r", "\n", "\x00"))
+        ):
+            raise ValueError("prompt_id and cluster_id must be non-empty strings without control characters")
+        if not isinstance(self.rejected, str) or not isinstance(self.chosen, str):
+            raise ValueError("rejected and chosen must be strings")
+        if not isinstance(self.verified, bool):
+            raise ValueError("verified must be a boolean")
+        if not isinstance(self.verifier_receipt_sha256, str) or any(c in self.verifier_receipt_sha256 for c in ("\r", "\n", "\x00")):
+            raise ValueError("verifier_receipt_sha256 must be a string without control characters")
         if self.verifier_kind not in VERIFIER_KINDS:
             raise ValueError(f"verifier_kind must be one of {sorted(VERIFIER_KINDS)}")
         if self.verified and (
@@ -395,7 +415,9 @@ def clip_and_noise(delta: Mapping[str, Any], clip_norm: float, sigma: float, gen
     if not isinstance(delta, Mapping) or not delta:
         raise ValueError("delta must be non-empty")
     sq = 0.0
-    for t in delta.values():
+    for k, t in delta.items():
+        if not isinstance(k, str) or not k.strip() or not isinstance(t, torch.Tensor) or t.dtype == torch.bool or t.numel() == 0:
+            raise ValueError("delta must map non-empty string keys to non-empty numeric torch.Tensor values")
         td = t.detach().to(torch.float64)
         if not bool(torch.isfinite(td).all()):
             raise ValueError("delta tensor contains NaN or inf; refusing to clip and noise it")
@@ -566,8 +588,16 @@ def aggregate_lora_product_exact(
         raise ValueError("accepted_workers must be a Sequence of worker ids")
     if not accepted_workers:
         return {}
+    if any(not isinstance(w, str) or not w.strip() or w not in admitted_deltas for w in accepted_workers):
+        raise ValueError("every accepted worker must be a non-empty string key present in admitted_deltas")
     first = admitted_deltas[accepted_workers[0]]
+    if not isinstance(first, Mapping) or not first:
+        raise ValueError("each worker delta mapping must be non-empty")
     keys = sorted(first)
+    for w in accepted_workers:
+        w_map = admitted_deltas[w]
+        if not isinstance(w_map, Mapping) or sorted(w_map) != keys:
+            raise ValueError("all accepted workers in admitted_deltas must share the same parameter keys")
     out: dict[str, Any] = {}
     handled: set[str] = set()
     for k in keys:
@@ -579,8 +609,27 @@ def aggregate_lora_product_exact(
             if b_key in first:
                 handled.add(k)
                 handled.add(b_key)
-                a_stack = [admitted_deltas[w][k].to(torch.float32) for w in accepted_workers]
-                b_stack = [admitted_deltas[w][b_key].to(torch.float32) for w in accepted_workers]
+                a_stack = []
+                b_stack = []
+                for w in accepted_workers:
+                    a_t = admitted_deltas[w][k]
+                    b_t = admitted_deltas[w][b_key]
+                    if (
+                        not isinstance(a_t, torch.Tensor)
+                        or not isinstance(b_t, torch.Tensor)
+                        or a_t.dtype == torch.bool
+                        or b_t.dtype == torch.bool
+                        or a_t.ndim != 2
+                        or b_t.ndim != 2
+                        or a_t.numel() == 0
+                        or b_t.numel() == 0
+                        or int(b_t.shape[1]) != int(a_t.shape[0])
+                        or not bool(torch.isfinite(a_t).all())
+                        or not bool(torch.isfinite(b_t).all())
+                    ):
+                        raise ValueError("LoRA factor pair (lora_A, lora_B) must be finite 2D numeric tensors with matching inner rank")
+                    a_stack.append(a_t.to(torch.float32))
+                    b_stack.append(b_t.to(torch.float32))
                 rank = int(a_stack[0].shape[0])
                 exact_prod = torch.stack([b_i @ a_i for b_i, a_i in zip(b_stack, a_stack)]).mean(dim=0)
                 u, s, vh = torch.linalg.svd(exact_prod, full_matrices=False)
@@ -733,8 +782,15 @@ class VerifiedSubtask:
     def __post_init__(self) -> None:
         from hivemind.queenbee.dance import VERIFIER_KINDS
 
-        if not self.subtask_id or not self.cluster_id:
-            raise ValueError("subtask_id and cluster_id must be non-empty")
+        if (
+            not isinstance(self.subtask_id, str)
+            or not self.subtask_id.strip()
+            or any(c in self.subtask_id for c in ("\r", "\n", "\x00"))
+            or not isinstance(self.cluster_id, str)
+            or not self.cluster_id.strip()
+            or any(c in self.cluster_id for c in ("\r", "\n", "\x00"))
+        ):
+            raise ValueError("subtask_id and cluster_id must be non-empty strings without control characters")
         if self.verifier_kind not in VERIFIER_KINDS:
             raise ValueError(f"verifier_kind must be one of {sorted(VERIFIER_KINDS)}")
         if isinstance(self.weight, bool) or not isinstance(self.weight, (int, float)) or not math.isfinite(self.weight) or self.weight <= 0.0:

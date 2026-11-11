@@ -82,10 +82,16 @@ class SigmaMoERoutingResult:
             or not (1 <= self.top_k <= self.total_experts)
         ):
             raise ValueError("top_k must satisfy 1 <= top_k <= total_experts")
+        if int(self.expert_indices.shape[1]) != self.top_k:
+            raise ValueError("expert_indices second dimension must equal top_k")
+        if not bool((self.expert_indices >= 0).all()) or not bool((self.expert_indices < self.total_experts).all()):
+            raise ValueError("expert_indices entries must be in [0, total_experts)")
         for field_name in ("ghost_assignment_fraction", "ideal_skip_token_scaling", "empirical_skip_token_scaling"):
             val = getattr(self, field_name)
             if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or not (0.0 <= float(val) <= 1.0):
                 raise ValueError(f"{field_name} must be a finite number in [0.0, 1.0]")
+        if abs(float(self.ghost_assignment_fraction) + float(self.empirical_skip_token_scaling) - 1.0) > 1e-5:
+            raise ValueError("empirical_skip_token_scaling must equal 1 - ghost_assignment_fraction")
 
 
 def sigmoid_independent_topk_routing(

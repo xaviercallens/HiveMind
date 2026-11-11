@@ -358,7 +358,11 @@ class ModelGeometry:
     linear_conv_kernel_dim: int
 
     def __post_init__(self) -> None:
-        if not isinstance(self.model_id, str) or not self.model_id.strip():
+        if (
+            not isinstance(self.model_id, str)
+            or not self.model_id.strip()
+            or any(ord(c) < 32 or ord(c) == 127 for c in self.model_id)
+        ):
             raise ValueError("model_id must be a non-empty string")
         for i_pos in ("params_text_linear", "hidden", "layers", "intermediate", "vocab"):
             val = getattr(self, i_pos)
@@ -385,6 +389,10 @@ class ModelGeometry:
             val = getattr(self, i_nonneg)
             if isinstance(val, bool) or not isinstance(val, int) or val < 0:
                 raise ValueError(f"{i_nonneg} must be a non-negative integer")
+        if self.n_full_attention_layers + self.n_linear_attention_layers != self.layers:
+            raise ValueError("n_full_attention_layers + n_linear_attention_layers must equal layers")
+        if self.lora_in_plus_out_mlp > self.lora_in_plus_out_all_linear:
+            raise ValueError("lora_in_plus_out_mlp cannot exceed lora_in_plus_out_all_linear")
 
     @property
     def params_text(self) -> int:
@@ -470,10 +478,20 @@ class VramEstimate:
     def __post_init__(self) -> None:
         for s_name in ("model_id", "mode", "config", "kind", "note"):
             val = getattr(self, s_name)
-            if not isinstance(val, str) or not val.strip():
+            if not isinstance(val, str) or not val.strip() or any(ord(c) < 32 or ord(c) == 127 for c in val):
                 raise ValueError(f"{s_name} must be a non-empty string")
         if not isinstance(self.components_mib, dict) or not self.components_mib:
             raise ValueError("components_mib must be a non-empty dict")
+        for ck, cv in self.components_mib.items():
+            if (
+                not isinstance(ck, str)
+                or not ck.strip()
+                or isinstance(cv, bool)
+                or not isinstance(cv, (int, float))
+                or not math.isfinite(float(cv))
+                or float(cv) < 0.0
+            ):
+                raise ValueError("components_mib must map non-empty component names to finite non-negative numbers")
         if (
             isinstance(self.total_mib, bool)
             or not isinstance(self.total_mib, (int, float))
@@ -549,6 +567,8 @@ class FitVerdict:
             raise ValueError(f"verdict must be one of {(FITS, MARGINAL, DOES_NOT_FIT)}")
         if not isinstance(self.fits, bool):
             raise ValueError("fits must be a boolean")
+        if self.fits != (self.verdict == FITS):
+            raise ValueError("fits must equal (verdict == 'FITS')")
         for f_name in ("estimate_mib", "required_with_margin_mib", "budget_mib", "margin"):
             val = getattr(self, f_name)
             if (
@@ -560,6 +580,8 @@ class FitVerdict:
                 raise ValueError(f"{f_name} must be a finite non-negative number")
         if float(self.budget_mib) <= 0.0:
             raise ValueError("budget_mib must be positive")
+        if float(self.required_with_margin_mib) + 1e-6 < float(self.estimate_mib):
+            raise ValueError("required_with_margin_mib must be >= estimate_mib")
 
 
 def fit_verdict(estimate_mib: float, budget_mib: float, margin: float = DEFAULT_MARGIN) -> FitVerdict:
@@ -726,6 +748,10 @@ class PromotionReceipt:
             val = getattr(self, i_name)
             if isinstance(val, bool) or not isinstance(val, int) or val < 0:
                 raise ValueError(f"{i_name} must be a non-negative integer")
+        if self.wins + self.losses > self.n_items:
+            raise ValueError("wins + losses cannot exceed n_items")
+        if self.guard_wins + self.guard_losses > self.guard_items:
+            raise ValueError("guard_wins + guard_losses cannot exceed guard_items")
         for p_name in ("p_two_sided", "guard_p_regression"):
             val = getattr(self, p_name)
             if (
@@ -812,11 +838,19 @@ class GpuTier:
     source: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.tier_id, str) or not self.tier_id.strip():
+        if (
+            not isinstance(self.tier_id, str)
+            or not self.tier_id.strip()
+            or any(ord(c) < 32 or ord(c) == 127 for c in self.tier_id)
+        ):
             raise ValueError("tier_id must be a non-empty string")
         if isinstance(self.budget_mib, bool) or not isinstance(self.budget_mib, int) or self.budget_mib < 1:
             raise ValueError("budget_mib must be a positive integer")
-        if not isinstance(self.source, str) or not self.source.strip():
+        if (
+            not isinstance(self.source, str)
+            or not self.source.strip()
+            or any(ord(c) < 32 or ord(c) == 127 for c in self.source)
+        ):
             raise ValueError("source must be a non-empty string")
 
 

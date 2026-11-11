@@ -60,20 +60,28 @@ def load_gwaya_code_expert(large_url: str, large_model: str = "qwen2.5-coder:7b"
     if (
         not isinstance(large_url, str)
         or not large_url.strip()
-        or any(ord(c) < 32 for c in large_url)
+        or any(ord(c) < 32 or ord(c) == 127 for c in large_url)
         or not large_url.strip().startswith(("http://", "https://"))
     ):
         raise ValueError("large_url must be a non-empty http(s) URL string")
-    if not isinstance(large_model, str) or not large_model.strip() or any(ord(c) < 32 for c in large_model):
+    if (
+        not isinstance(large_model, str)
+        or not large_model.strip()
+        or any(ord(c) < 32 or ord(c) == 127 for c in large_model)
+    ):
         raise ValueError("large_model must be a non-empty string")
     if small_url is not None and (
         not isinstance(small_url, str)
         or not small_url.strip()
-        or any(ord(c) < 32 for c in small_url)
+        or any(ord(c) < 32 or ord(c) == 127 for c in small_url)
         or not small_url.strip().startswith(("http://", "https://"))
     ):
         raise ValueError("small_url must be a non-empty http(s) URL string when provided")
-    if not isinstance(small_model, str) or not small_model.strip() or any(ord(c) < 32 for c in small_model):
+    if (
+        not isinstance(small_model, str)
+        or not small_model.strip()
+        or any(ord(c) < 32 or ord(c) == 127 for c in small_model)
+    ):
         raise ValueError("small_model must be a non-empty string")
     if not isinstance(small_first, bool):
         raise ValueError("small_first must be a bool")

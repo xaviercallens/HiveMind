@@ -306,10 +306,13 @@ class ExpertRecord:
             or not self.expert_id.strip()
             or not self.cluster_id.strip()
             or not self.base_model_id.strip()
+            or any(ord(c) < 32 or ord(c) == 127 for c in self.expert_id)
+            or any(ord(c) < 32 or ord(c) == 127 for c in self.cluster_id)
+            or any(ord(c) < 32 or ord(c) == 127 for c in self.base_model_id)
         ):
             raise ValueError("expert_id, cluster_id and base_model_id must be non-empty")
-        if not isinstance(self.source, str):
-            raise ValueError("source must be a string")
+        if not isinstance(self.source, str) or any(ord(c) < 32 or ord(c) == 127 for c in self.source):
+            raise ValueError("source must be a string without control characters")
         if (
             isinstance(self.keywords, (str, bytes))
             or not isinstance(self.keywords, Iterable)
@@ -672,7 +675,11 @@ class AdapterFootprint:
     def __post_init__(self) -> None:
         if isinstance(self.size_mib, bool) or not isinstance(self.size_mib, int) or self.size_mib <= 0:
             raise ValueError("size_mib must be an integer > 0")
-        if not isinstance(self.base_model_id, str) or not self.base_model_id.strip():
+        if (
+            not isinstance(self.base_model_id, str)
+            or not self.base_model_id.strip()
+            or any(ord(c) < 32 or ord(c) == 127 for c in self.base_model_id)
+        ):
             raise ValueError("base_model_id must be non-empty")
 
 
@@ -695,6 +702,8 @@ class ServingNode:
             or not isinstance(self.base_model_id, str)
             or not self.node_id.strip()
             or not self.base_model_id.strip()
+            or any(ord(c) < 32 or ord(c) == 127 for c in self.node_id)
+            or any(ord(c) < 32 or ord(c) == 127 for c in self.base_model_id)
         ):
             raise ValueError("node_id and base_model_id must be non-empty")
         for name in ("vram_mib", "base_resident_mib", "max_lora_slots"):
@@ -730,6 +739,8 @@ class ResidencyPlan:
             val = getattr(self, attr)
             if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(float(val)) or float(val) < 0.0:
                 raise ValueError(f"{attr} must be a finite non-negative number")
+        if float(self.placed_demand) > float(self.total_demand) + 1e-6:
+            raise ValueError("placed_demand cannot exceed total_demand")
         if not isinstance(self.ordering, str) or not self.ordering.strip():
             raise ValueError("ordering must be a non-empty string")
         if (
@@ -945,19 +956,37 @@ class RouteDecision:
     def __post_init__(self) -> None:
         if self.target not in ("expert", "base"):
             raise ValueError("target must be 'expert' or 'base'")
-        if not isinstance(self.reason, str) or not self.reason.strip():
+        if (
+            not isinstance(self.reason, str)
+            or not self.reason.strip()
+            or any(ord(c) < 32 or ord(c) == 127 for c in self.reason)
+        ):
             raise ValueError("reason must be a non-empty string")
         if not isinstance(self.load_on_demand, bool):
             raise ValueError("load_on_demand must be a boolean")
         if self.target == "expert":
-            if not isinstance(self.expert_id, str) or not self.expert_id.strip():
+            if (
+                not isinstance(self.expert_id, str)
+                or not self.expert_id.strip()
+                or any(ord(c) < 32 or ord(c) == 127 for c in self.expert_id)
+            ):
                 raise ValueError("expert_id must be a non-empty string when target is 'expert'")
-            if not isinstance(self.cluster_id, str) or not self.cluster_id.strip():
+            if (
+                not isinstance(self.cluster_id, str)
+                or not self.cluster_id.strip()
+                or any(ord(c) < 32 or ord(c) == 127 for c in self.cluster_id)
+            ):
                 raise ValueError("cluster_id must be a non-empty string when target is 'expert'")
         else:
             if self.expert_id is not None:
                 raise ValueError("expert_id must be None when target is 'base'")
-            if self.cluster_id is not None and (not isinstance(self.cluster_id, str) or not self.cluster_id.strip()):
+            if self.load_on_demand:
+                raise ValueError("load_on_demand cannot be True when target is 'base'")
+            if self.cluster_id is not None and (
+                not isinstance(self.cluster_id, str)
+                or not self.cluster_id.strip()
+                or any(ord(c) < 32 or ord(c) == 127 for c in self.cluster_id)
+            ):
                 raise ValueError("cluster_id must be None or a non-empty string")
 
 
@@ -982,6 +1011,8 @@ class HierarchicalExpertRouter:
             raise ValueError("base_model_id must be non-empty")
         if not isinstance(allow_cold_load, bool):
             raise ValueError("allow_cold_load must be a bool")
+        if resident is not None and (isinstance(resident, (str, bytes)) or not isinstance(resident, Collection)):
+            raise ValueError("resident must be None or a Collection of expert IDs")
         self.base_model_id = base_model_id
         self.allow_cold_load = allow_cold_load
         self._live: Dict[str, List[ExpertRecord]] = {}

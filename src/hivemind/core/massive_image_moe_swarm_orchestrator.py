@@ -315,9 +315,12 @@ class SwarmShardAssignment:
             ("hardware_tier", self.hardware_tier),
             ("backend", self.backend),
             ("division_id", self.division_id),
+            ("division_title", self.division_title),
             ("assigned_backbone", self.assigned_backbone),
             ("hf_dataset_id", self.hf_dataset_id),
             ("shard_uri", self.shard_uri),
+            ("optimizer", self.optimizer),
+            ("transport_codec", self.transport_codec),
         ):
             if not isinstance(val, str) or not val.strip():
                 raise ValueError(f"{field_name} must be a non-empty string")
@@ -408,7 +411,9 @@ class SwarmDataShardOrchestrator:
         digest = hashlib.sha256(f"{bee_id}:{round_idx}".encode("utf-8")).digest()
         ring_val = int.from_bytes(digest[:8], "big")
 
-        if preferred_division_id is not None and preferred_division_id in self.divisions:
+        if preferred_division_id is not None:
+            if not isinstance(preferred_division_id, str) or preferred_division_id not in self.divisions:
+                raise ValueError(f"Unknown preferred_division_id: {preferred_division_id!r}")
             div_id = preferred_division_id
         else:
             div_keys = list(self.divisions.keys())
@@ -477,10 +482,12 @@ def build_massive_division_visual_shard(
 
     proto_rng = np.random.default_rng(14000 + d_idx * 131)
     prototypes = proto_rng.standard_normal((3, patch_dim)).astype(np.float32) * 0.55
+    sig_len = min(len(sig), patch_dim)
     for k in range(3):
-        prototypes[k, :7] += sig * 2.5
+        prototypes[k, :sig_len] += sig[:sig_len] * 2.5
         col_lo = 7 + (class_offset + k) * 2
-        prototypes[k, col_lo : col_lo + 2] += 3.2
+        if col_lo < patch_dim:
+            prototypes[k, col_lo : min(col_lo + 2, patch_dim)] += 3.2
 
     patches = np.zeros((num_samples, num_patches, patch_dim), dtype=np.float32)
     labels = np.zeros((num_samples,), dtype=np.int64)
@@ -509,6 +516,9 @@ class MassiveSwarmSparseImageMoE(nn.Module):
             raise ValueError("backbone must be a FrozenAstroVisionBackbone")
         if not isinstance(division_deltas, Mapping) or len(division_deltas) == 0:
             raise ValueError("division_deltas must be a non-empty mapping")
+        for div_key in division_deltas.keys():
+            if not isinstance(div_key, str) or not div_key.strip():
+                raise ValueError("division_deltas keys must be non-empty strings")
         if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
             raise ValueError("top_k must be a positive integer")
         if (
@@ -555,8 +565,15 @@ class MassiveSwarmSparseImageMoE(nn.Module):
                     self.router.weight[idx].copy_(h_unit * 4.5)
 
     def forward(self, visual_patches: torch.Tensor) -> Dict[str, Any]:
-        if not isinstance(visual_patches, torch.Tensor) or visual_patches.ndim != 3 or visual_patches.numel() == 0:
-            raise ValueError("visual_patches must be a non-empty 3D tensor [batch, patches, patch_dim]")
+        if (
+            not isinstance(visual_patches, torch.Tensor)
+            or visual_patches.dtype == torch.bool
+            or visual_patches.ndim != 3
+            or visual_patches.numel() == 0
+            or visual_patches.shape[-1] != self.backbone.patch_dim
+            or not bool(torch.isfinite(visual_patches).all().item())
+        ):
+            raise ValueError("visual_patches must be a finite non-boolean 3D tensor [batch, patches, patch_dim]")
         h = self.backbone.encode_patches(visual_patches)
         base_ffn = self.backbone.base_swiglu_ffn(h)
 

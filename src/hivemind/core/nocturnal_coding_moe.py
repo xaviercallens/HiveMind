@@ -59,7 +59,13 @@ def multi_krum_select(
     n = len(vectors)
     first_shape: tuple[int, ...] | None = None
     for idx, vec in enumerate(vectors):
-        if not isinstance(vec, np.ndarray) or vec.ndim != 1 or vec.size == 0:
+        if (
+            not isinstance(vec, np.ndarray)
+            or vec.dtype == np.bool_
+            or not np.issubdtype(vec.dtype, np.number)
+            or vec.ndim != 1
+            or vec.size == 0
+        ):
             raise ValueError(f"vectors[{idx}] must be a non-empty 1D numpy ndarray")
         if first_shape is None:
             first_shape = vec.shape
@@ -468,6 +474,17 @@ class BigGPUNodeCodingSpec:
         ):
             if isinstance(val, bool) or not isinstance(val, int) or val < 1:
                 raise ValueError(f"{field_name} must be an integer >= 1")
+        for seq_name, seq_val in (
+            ("assigned_cluster_ids", self.assigned_cluster_ids),
+            ("assigned_bee_ids", self.assigned_bee_ids),
+            ("primary_backbones", self.primary_backbones),
+        ):
+            if (
+                not isinstance(seq_val, tuple)
+                or not seq_val
+                or any(not isinstance(s, str) or not s.strip() for s in seq_val)
+            ):
+                raise ValueError(f"{seq_name} must be a non-empty tuple of non-empty strings")
 
 
 BIG_GPU_CODING_FLEET: tuple[BigGPUNodeCodingSpec, ...] = (
@@ -918,6 +935,15 @@ class PolyglotCodingBeeAdapter(nn.Module):
         )
 
     def forward_hidden(self, x: torch.Tensor) -> torch.Tensor:
+        if (
+            not isinstance(x, torch.Tensor)
+            or x.dtype == torch.bool
+            or x.ndim != 2
+            or x.shape[0] < 1
+            or x.shape[1] != self.d_model
+            or not bool(torch.isfinite(x).all().item())
+        ):
+            raise ValueError(f"x must be a finite 2D tensor of shape [batch, {self.d_model}]")
         rms = torch.rsqrt(x.pow(2).mean(dim=-1, keepdim=True) + 1e-6)
         normed = x * rms * self.rms_weight
         up_base = F.linear(normed, self.base_up)

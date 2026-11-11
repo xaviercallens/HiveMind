@@ -281,6 +281,12 @@ if ($('rotateKeyBtn')) {
   });
 }
 if ($('changePasswordForm')) {
+  try {
+    const m = (window.location.hash || '').match(/(?:^|[#&])token=([^&]+)/);
+    if (m && m[1] && $('resetTokenOrKey') && !$('resetTokenOrKey').value) {
+      $('resetTokenOrKey').value = decodeURIComponent(m[1]);
+    }
+  } catch (e) {}
   $('changePasswordForm').addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const tokenOrKey = (($('resetTokenOrKey') && $('resetTokenOrKey').value) || ($('key') && $('key').textContent) || localStorage.getItem('hivemind_api_key') || '').trim();

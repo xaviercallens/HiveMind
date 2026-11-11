@@ -8321,13 +8321,19 @@ def create_hivemind_at_home_app(
             # account the gateway answers for has that same handle. Asking by e-mail would let anyone who registered a
             # gateway account under one of this user's (unverified) addresses set this account's password.
             if norm_u_handle:
+                allowed_handles = {norm_u_handle}
+                for _sk, _sv in seeded_users.items():
+                    if _sv is user or str(_sv.get("handle") or "").lstrip("@").lower().replace("-", "_") == norm_u_handle:
+                        allowed_handles.add(_sk.lstrip("@").lower().replace("-", "_"))
                 upstream_ok = _sync_or_verify_openrouter_credentials(
                     "login",
                     handle_or_email=norm_u_handle,
                     password=supplied_password,
                 )
                 upstream_handle = str((upstream_ok or {}).get("handle") or "").lstrip("@").lower().replace("-", "_")
-                if upstream_ok is not None and upstream_handle and hmac.compare_digest(upstream_handle, norm_u_handle):
+                if upstream_ok is not None and upstream_handle and any(
+                    hmac.compare_digest(upstream_handle, _ah) for _ah in allowed_handles
+                ):
                     s_hex, h_hex = _hash_password(supplied_password)
                     user["password_salt"] = s_hex
                     user["password_hash"] = h_hex

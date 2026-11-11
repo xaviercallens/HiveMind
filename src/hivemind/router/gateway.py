@@ -1159,15 +1159,32 @@ def create_router_app(
         routing_mode = "explicit"
         if name == AUTO_MODEL:
             live_candidates = store.live_models(now, PRODUCER_TTL_S)
+
+            def _has_ready_producer(model_name: str, recs: Sequence[ProducerRecord]) -> bool:
+                return any(
+                    not all(
+                        s.model_state(model_name) is False and _cold_start_of(s, model_name) >= cold_start_wait_budget_s
+                        for s in r.per_endpoint()
+                    )
+                    for r in recs
+                )
+
             if preferred_tier and preferred_tier in live_candidates:
                 preferred_live = store.active_producers(preferred_tier, now, PRODUCER_TTL_S)
-                if preferred_live:
+                if preferred_live and (
+                    _has_ready_producer(preferred_tier, preferred_live)
+                    or not any(
+                        _has_ready_producer(c, store.active_producers(c, now, PRODUCER_TTL_S))
+                        for c in live_candidates
+                    )
+                ):
                     return preferred_tier, preferred_live, "auto_intent"
-            best: tuple[tuple[int, float], str] | None = None
+            best: tuple[tuple[int, int, float], str] | None = None
             for candidate in live_candidates:
                 live = store.active_producers(candidate, now, PRODUCER_TTL_S)
-                # distinct live producers first: a single producer cannot steer 'auto' by declaring huge capacity
-                supply = (len({r.account_id for r in live}), sum(clamped(r) for r in live))
+                # ready (loaded or within wait budget) models first, then distinct live producers, then clamped capacity
+                ready_rank = 1 if _has_ready_producer(candidate, live) else 0
+                supply = (ready_rank, len({r.account_id for r in live}), sum(clamped(r) for r in live))
                 if best is None or supply > best[0]:
                     best = (supply, candidate)
             if best is None:
@@ -2154,6 +2171,7 @@ def create_router_app(
     @app.api_route("/login", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/register", methods=["GET", "HEAD"], response_class=HTMLResponse)
     @app.api_route("/connexion", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/auth/reset", methods=["GET", "HEAD"], response_class=HTMLResponse)
     def signup(request: Request) -> HTMLResponse:
         nonce = secrets.token_urlsafe(18)
         default_role = str(request.query_params.get("role") or "prosumer").strip().lower()

@@ -183,12 +183,16 @@ class PromptIntent:
     preferred_tier: str | None
 
     def __post_init__(self) -> None:
-        for field_name in ("task_domain", "language"):
-            val = getattr(self, field_name)
-            if not isinstance(val, str) or not val.strip():
-                raise ValueError(f"{field_name} must be a non-empty string")
-        if self.preferred_tier is not None and (not isinstance(self.preferred_tier, str) or not self.preferred_tier.strip()):
-            raise ValueError("preferred_tier must be a non-empty string or None")
+        if not isinstance(self.task_domain, str) or self.task_domain not in TASK_DOMAINS:
+            raise ValueError(f"task_domain must be one of {TASK_DOMAINS}")
+        if not isinstance(self.language, str) or self.language not in LANGUAGE_CODES:
+            raise ValueError(f"language must be one of {LANGUAGE_CODES}")
+        if self.preferred_tier is not None and (
+            not isinstance(self.preferred_tier, str)
+            or not self.preferred_tier.strip()
+            or any(c in self.preferred_tier for c in ("\r", "\n", "\x00"))
+        ):
+            raise ValueError("preferred_tier must be a non-empty string without control characters or None")
 
 
 @dataclass(frozen=True)
@@ -199,10 +203,10 @@ class ClientAttribution:
     app_title: str
 
     def __post_init__(self) -> None:
-        for field_name in ("client_sdk", "app_title"):
-            val = getattr(self, field_name)
-            if not isinstance(val, str) or not val.strip():
-                raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(self.client_sdk, str) or self.client_sdk not in CLIENT_SDKS:
+            raise ValueError(f"client_sdk must be one of {CLIENT_SDKS}")
+        if not isinstance(self.app_title, str) or not self.app_title.strip() or any(c in self.app_title for c in ("\r", "\n", "\x00")):
+            raise ValueError("app_title must be a non-empty string without control characters")
 
 
 def _extract_messages_text(messages: Sequence[Mapping[str, Any]]) -> str:
@@ -322,6 +326,8 @@ def compute_nocturnal_moe_workunit_weights(domain_token_totals: Mapping[str, int
     if not isinstance(domain_token_totals, Mapping):
         raise ValueError("domain_token_totals must be a mapping")
     for k, v in domain_token_totals.items():
+        if not isinstance(k, str) or not k.strip() or any(c in k for c in ("\r", "\n", "\x00")):
+            raise ValueError("domain_token_totals keys must be non-empty strings without control characters")
         if isinstance(v, bool) or not isinstance(v, int) or v < 0:
             raise ValueError(f"domain token count for {k!r} must be a non-negative integer")
     coder_tokens = sum(

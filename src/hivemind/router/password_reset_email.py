@@ -36,19 +36,23 @@ def reset_email_configured(env: Mapping[str, str] | None = None) -> bool:
 
 
 def reset_link(token: str, env: Mapping[str, str] | None = None) -> str:
-    if not isinstance(token, str) or not token.strip():
-        raise ValueError("token must be a non-empty string")
+    if not isinstance(token, str) or not token.strip() or any(c in token.strip() for c in ("\r", "\n", "\x00", " ", "\t", "#", "&")):
+        raise ValueError("token must be a non-empty URL-safe string without whitespace or fragment delimiters")
     base = _env(env).get("HIVEMIND_PUBLIC_WEB_URL", "").strip().rstrip("/")
     return f"{base}/auth/reset#token={token.strip()}"
 
 
 def build_reset_message(recipient: str, link: str, sender: str) -> EmailMessage:
-    if not isinstance(recipient, str) or "@" not in recipient.strip():
-        raise ValueError("recipient must be a valid email address")
-    if not isinstance(link, str) or not link.strip().startswith(("https://", "http://", "/")):
-        raise ValueError("link must be a non-empty URL or path")
-    if not isinstance(sender, str) or "@" not in sender.strip():
-        raise ValueError("sender must be a valid email address")
+    if not isinstance(recipient, str) or "@" not in recipient.strip() or any(c in recipient for c in ("\r", "\n", "\x00")):
+        raise ValueError("recipient must be a valid email address without control characters")
+    if (
+        not isinstance(link, str)
+        or not link.strip().startswith(("https://", "http://", "/"))
+        or any(c in link for c in ("\r", "\n", "\x00"))
+    ):
+        raise ValueError("link must be a non-empty URL or path without control characters")
+    if not isinstance(sender, str) or "@" not in sender.strip() or any(c in sender for c in ("\r", "\n", "\x00")):
+        raise ValueError("sender must be a valid email address without control characters")
     msg = EmailMessage()
     msg["Subject"] = SUBJECT
     msg["From"] = sender.strip()

@@ -66,7 +66,7 @@ def multi_krum_select(
             or vec.ndim != 1
             or vec.size == 0
         ):
-            raise ValueError(f"vectors[{idx}] must be a non-empty 1D numeric numpy ndarray")
+            raise ValueError(f"vectors[{idx}] must be a non-empty 1D numpy ndarray")
         if first_shape is None:
             first_shape = vec.shape
         elif vec.shape != first_shape:

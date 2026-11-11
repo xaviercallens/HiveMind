@@ -1,0 +1,55 @@
+{
+  "diagnostic_round_187": {
+    "domain": "arxiv",
+    "domain_changes": 6,
+    "median_change_nats": 0.1973,
+    "share_worse": 1.0
+  },
+  "last_round": {
+    "after": {
+      "arxiv": 2.8007,
+      "biomed": 2.2834,
+      "chemistry": 1.5951,
+      "code": 1.9232,
+      "cyber": 1.4997,
+      "edu_web": 2.8312,
+      "finance": 2.6703,
+      "french": 2.515,
+      "general": 2.3001,
+      "legal": 2.1927,
+      "math": 1.529,
+      "medqa": 3.7164,
+      "news": 2.3463,
+      "olympiad_math": 1.4694,
+      "physics": 1.4755,
+      "science": 2.4298
+    },
+    "domain": "arxiv",
+    "wu": 187
+  },
+  "last_wu": 187,
+  "ranges": {
+    "hmq_00001_98": {
+      "domain_changes": 583,
+      "median_change_nats": 0.0046,
+      "rounds": 98,
+      "share_worse": 0.676
+    },
+    "hmq_00099_170": {
+      "domain_changes": 432,
+      "median_change_nats": 0.0051,
+      "rounds": 72,
+      "share_worse": 0.683
+    },
+    "hmq_00171_end": {
+      "domain_changes": 102,
+      "median_change_nats": 0.1266,
+      "rounds": 17,
+      "share_worse": 0.99
+    }
+  },
+  "rows_with_wu": 187,
+  "schema": "hivemind-chain-status/1",
+  "source": "BOINC QLoRA ledger assimilated.jsonl (not in the repository)",
+  "source_sha256": "3663461ff589edba6624a40c50a7a57aac27ead4b8182698392b45c62c55f965"
+}

@@ -954,6 +954,47 @@ def _provenance_e13_e16(tex_text: str, checks: List[Dict[str, Any]]) -> None:
     )
 
 
+    def _tex_grouped(n: int) -> str:
+        return f"{n:,}".replace(",", "{,}")
+
+    # PROV-86, PROV-87 (live status, 2026-11-07): tokens are built from the two receipts, so the paper text must match the data
+    chain = _jl("CHAIN_STATUS_2026-11-07.json")
+    probe = _jl("NIGHT_INTENSE_1_probe_results_2026-10-28.json")
+    rg = chain.get("ranges", {})
+    k_ranges = ("hmq_00001_98", "hmq_00099_170", "hmq_00171_end")
+    dg = chain.get("diagnostic_round_187", {})
+    arms = {a["arm"]: a for a in probe.get("arms", [])}
+    _all(
+        "PROV-86",
+        "Live chain status: median per-domain held-out change per round range, share of domain changes worse, diagnostic round 187",
+        [f"{rg[k]['median_change_nats']:+.4f}" for k in k_ranges]
+        + [f"{round(rg[k]['share_worse'] * 100):d}\\%" for k in k_ranges]
+        + [f"{rg['hmq_00171_end']['rounds']}$ rounds", f"{dg.get('median_change_nats', 0):+.4f}", f"${dg.get('domain_changes')}$ evaluated domains"],
+        "artifacts/experiments/CHAIN_STATUS_2026-11-07.json",
+    )
+    _all(
+        "PROV-87",
+        "Night probes: measured allocated peaks, estimator error for Granite-1B arms, and the A2 free-VRAM floor breach",
+        [f"${_tex_grouped(arms['A0']['measured_alloc_mib'])}$\\,MiB", f"${_tex_grouped(arms['A1']['measured_alloc_mib'])}$\\,MiB",
+         f"${_tex_grouped(arms['A2']['measured_alloc_mib'])}$\\,MiB", f"${_tex_grouped(arms['A3']['measured_alloc_mib'])}$\\,MiB",
+         f"{arms['A0']['error_vs_alloc_pct']:.1f}", f"{arms['A1']['error_vs_alloc_pct']:.1f}",
+         f"${_tex_grouped(arms['A2']['free_at_peak_mib'])}$\\,MiB", "$4{,}300$\\,MiB"],
+        "artifacts/experiments/NIGHT_INTENSE_1_probe_results_2026-10-28.json",
+    )
+    cat = _jl("CATALOG_SERVED_2026-11-07.json")
+    cs, cp, rt = cat["serving_tiers"], cat["public_ids"], cat["runtime"]
+    _all(
+        "PROV-88",
+        "Catalog served vs trained, at runtime: tiers, tags, HiveMind-built tag, public ids, planned-relabelled, LIVE-but-off-the-shelf, trained-MoE status, tokens-trained claims",
+        [f"${cs['count']}$ serving tiers", f"${len(cs['distinct_ollama_tags'])}$ distinct Ollama tags", f"${cp['count']}$ public model ids",
+         f"${rt['relabelled_planned_not_trained']}$ of the ${cp['count']}$ ids are exposed as ``Planned, not trained yet''",
+         f"${rt['live_status_served_by_off_the_shelf_tag']['count']}$ carry a \\texttt{{LIVE}} status while being served by an off-the-shelf tag",
+         f"${rt['moe_trained_status_served_by_off_the_shelf_tag']['count']}$ of them with a status that names a trained MoE",
+         f"${rt['live_status_with_tokens_trained_claim_off_the_shelf']['count']}$ with a tokens-trained figure"]
+        + [f"\\texttt{{{x}}}" for x in cs["hivemind_built_tags"]],
+        "artifacts/experiments/CATALOG_SERVED_2026-11-07.json",
+    )
+
 def verify_manuscript_data_consistency(
     tex_text: str,
     poc_data: Dict[str, Any],
@@ -1745,7 +1786,7 @@ def run_autoevolve_peer_review() -> Dict[str, Any]:
 
     peer_review_report = {
         "manuscript_title": "Project HiveMind: A System Design for Decentralized Sparse Mixture-of-Experts Training with DiLoCo-Style Outer Optimization on 8 GB Consumer GPUs",
-        "version": "4.1.0",
+        "version": "4.3.0",
         "is_peer_review": False,
         "disclosure": AUDIT_DISCLOSURE,
         "lead_peer_review_model": LEAD_PEER_REVIEW_MODEL,
@@ -1785,7 +1826,7 @@ def run_autoevolve_peer_review() -> Dict[str, Any]:
 
     autoevolve_manifest = {
         "pipeline_name": "Project HiveMind x AutoevolveAI Cross-Session Research Pipeline",
-        "version": "4.1.0",
+        "version": "4.3.0",
         "lead_peer_review_model": LEAD_PEER_REVIEW_MODEL,
         "workspace_root": ".",
         "artifacts_and_entrypoints": {

@@ -1,0 +1,41 @@
+{
+  "archive": "E12_replay_fixtures.zip",
+  "purpose": "E12 replay-divergence fixtures (reference, tampered control, thread-pool, bf16, remote CPU, LoRA init), packed to respect the 100-file record cap",
+  "source_record": "10.5281/zenodo.23776302",
+  "files": {
+    "bf16_autocast.pt": {
+      "md5": "5bf4de09d97837f11e2e38fbecd68e30",
+      "bytes": 2198183
+    },
+    "lora_init.pt": {
+      "md5": "04c5022688345ab698486f65427bdb43",
+      "bytes": 2196751
+    },
+    "ref.pt": {
+      "md5": "c138febbf12c699d14bbe9f111f57bde",
+      "bytes": 2191083
+    },
+    "remote_cpu.pt": {
+      "md5": "8cc88c6232f9fcf2208ddff19b4dd35a",
+      "bytes": 2197941
+    },
+    "same_process_repeat.pt": {
+      "md5": "38e0e9a3288dc04e774b6b0389866806",
+      "bytes": 2198859
+    },
+    "tampered.pt": {
+      "md5": "174eb93be0285c4bfca2ea808df09410",
+      "bytes": 2197673
+    },
+    "threads_1.pt": {
+      "md5": "f521f10448cefc2323d4382f02c21dc0",
+      "bytes": 2197839
+    },
+    "threads_8.pt": {
+      "md5": "506c0bfe50422af806543eae65685e41",
+      "bytes": 2197839
+    }
+  },
+  "verified_against_published_md5": true,
+  "archive_md5": "d0a56172aa3051e1b9ba3f0fb19cf7fb"
+}

@@ -63,6 +63,15 @@ class LossCheckJob:
         ):
             if not isinstance(val, str) or not val.strip():
                 raise ValueError(f"{field_name} must be a non-empty string")
+            if any(ord(c) < 32 or ord(c) == 127 for c in val):
+                raise ValueError(f"{field_name} must not contain control characters")
+        for sha_name, sha_val in (
+            ("base_sha256", self.base_sha256),
+            ("candidate_sha256", self.candidate_sha256),
+            ("heldout_sha256", self.heldout_sha256),
+        ):
+            if len(sha_val) != 64 or any(c not in "0123456789abcdefABCDEF" for c in sha_val):
+                raise ValueError(f"{sha_name} must be a 64-character hex string")
         if isinstance(self.window, bool) or not isinstance(self.window, int) or self.window < 2:
             raise ValueError("window must be an integer >= 2")
         if isinstance(self.n, bool) or not isinstance(self.n, int) or self.n < 1:
@@ -79,8 +88,10 @@ class LossCheckJob:
             or float(self.expires_at) < float(self.created_at)
         ):
             raise ValueError("created_at and expires_at must be finite numbers with expires_at >= created_at")
-        if not isinstance(self.heldout_range, str):
-            raise ValueError("heldout_range must be a string")
+        if not isinstance(self.heldout_range, str) or any(
+            ord(c) < 32 or ord(c) == 127 for c in self.heldout_range
+        ):
+            raise ValueError("heldout_range must be a string without control characters")
         if self.schema != JOB_SCHEMA:
             raise ValueError(f"unknown job schema {self.schema!r}")
 
@@ -89,6 +100,8 @@ class LossCheckJob:
 
     @classmethod
     def from_wire(cls, d: Mapping[str, Any]) -> "LossCheckJob":
+        if not isinstance(d, Mapping):
+            raise TypeError("wire payload must be a mapping")
         if d.get("schema") != JOB_SCHEMA:
             raise ValueError(f"unknown job schema {d.get('schema')!r}")
         return cls(**{k: d[k] for k in cls.__dataclass_fields__ if k in d})
@@ -119,9 +132,27 @@ class LossCheckCoordinator:
             isinstance(required_receipts, bool)
             or not isinstance(required_receipts, int)
             or required_receipts < 1
+            or not isinstance(evaluator_keys, Mapping)
             or not evaluator_keys
         ):
             raise ValueError("need at least one evaluator key and required_receipts >= 1")
+        for ek, ev in evaluator_keys.items():
+            if (
+                not isinstance(ek, str)
+                or not ek.strip()
+                or any(ord(c) < 32 or ord(c) == 127 for c in ek)
+                or not isinstance(ev, (bytes, bytearray))
+                or len(ev) == 0
+            ):
+                raise ValueError(
+                    "evaluator_keys must map non-empty evaluator IDs (without control characters) to non-empty bytes"
+                )
+        if not callable(loader):
+            raise TypeError("loader must be callable")
+        if not callable(clock):
+            raise TypeError("clock must be callable")
+        if model_factory is not None and not callable(model_factory):
+            raise TypeError("model_factory must be callable or None")
         if required_receipts > len(evaluator_keys):
             raise ValueError("required_receipts cannot exceed the number of known evaluators")
         if not isinstance(server_secret, (bytes, bytearray)) or not server_secret:

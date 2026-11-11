@@ -341,7 +341,7 @@ def build_local_qwen2_backbone(
         raise ValueError("num_attention_heads must be divisible by num_key_value_heads")
     if isinstance(max_position_embeddings, bool) or not isinstance(max_position_embeddings, int) or max_position_embeddings < 2:
         raise ValueError("max_position_embeddings must be an integer >= 2")
-    if device is not None and not isinstance(device, torch.device):
+    if device is not None and (not hasattr(device, "type") or not isinstance(getattr(device, "type", None), str)):
         raise ValueError("device must be a torch.device when provided")
     if not isinstance(use_4bit_nf4_if_cuda, bool):
         raise ValueError("use_4bit_nf4_if_cuda must be a boolean")

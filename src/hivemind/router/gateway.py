@@ -569,6 +569,16 @@ class AccountTargetRequest(BaseModel):
     handle: str | None = Field(default=None, max_length=128)
 
 
+class AdminResetPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    handle: str = Field(min_length=1, max_length=128)
+    email: str = Field(default="", max_length=254)
+    new_password: str = Field(default="", max_length=256)
+    role: Literal["consumer", "producer", "prosumer", "trainer"] = "prosumer"
+    min_balance_hmt: float = Field(default=0.0, ge=0.0, le=1e12, allow_inf_nan=False)
+    issue_reset_token: bool = True
+
+
 class AccountFlagRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     account_id: str | None = Field(default=None, max_length=128)
@@ -3968,6 +3978,34 @@ def create_router_app(
         except UnknownAccount:
             raise RouterError(404, "Unknown account.", "invalid_request_error", "account_not_found") from None
         return JSONResponse({"account_id": target, "api_key": new_key}, headers={"Cache-Control": "no-store"})
+
+    @app.post("/v1/hivemind/admin/accounts/reset-password")
+    def admin_reset_password(request: Request, payload: AdminResetPasswordRequest) -> JSONResponse:
+        """Admin account recovery & provisioning: ensure the account exists, update its email, set a new password if
+        provided, top up HMT balance to ``min_balance_hmt`` (or its legacy starter balance), rotate and return a fresh
+        ``hm-...`` API key, and issue a single-use password reset token/link."""
+        require_admin(request)
+        try:
+            res = store.admin_reset_or_provision_account(
+                payload.handle,
+                email=payload.email,
+                new_password=payload.new_password,
+                role=payload.role,
+                min_balance_hmt=payload.min_balance_hmt,
+                issue_reset_token=payload.issue_reset_token,
+                now_utc=clock(),
+            )
+        except ValueError as exc:
+            raise RouterError(400, str(exc), "invalid_request_error", "weak_password") from None
+        except (SwarmSecurityViolationError, ReservedHandle):
+            raise RouterError(400, "Invalid handle.", "invalid_request_error", "invalid_handle") from None
+        public_web_url = os.environ.get(
+            "HIVEMIND_PUBLIC_WEB_URL",
+            "https://hivemind-at-home-1003063861791.us-central1.run.app",
+        ).rstrip("/")
+        if res.get("reset_token"):
+            res["reset_url"] = f"{public_web_url}/auth/reset#token={res['reset_token']}"
+        return JSONResponse(res, headers={"Cache-Control": "no-store"})
 
     @app.post("/v1/hivemind/admin/test-flag")
     def admin_test_flag(request: Request, payload: AccountFlagRequest) -> dict[str, Any]:

@@ -280,6 +280,55 @@ if ($('rotateKeyBtn')) {
     } catch (e) {}
   });
 }
+if ($('changePasswordForm')) {
+  $('changePasswordForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const tokenOrKey = (($('resetTokenOrKey') && $('resetTokenOrKey').value) || ($('key') && $('key').textContent) || localStorage.getItem('hivemind_api_key') || '').trim();
+    const newPassword = (($('newResetPassword') && $('newResetPassword').value) || '').trim();
+    if (!newPassword || newPassword.length < 12) {
+      setStatus('Please enter a new password of at least 12 characters.', true);
+      return;
+    }
+    if (!tokenOrKey) {
+      setStatus('Paste your active hm-... API key or your password-reset token.', true);
+      return;
+    }
+    setStatus('Updating password...', false);
+    try {
+      let res;
+      if (tokenOrKey.startsWith('hm-')) {
+        res = await fetch('/api/v1/auth/change-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tokenOrKey },
+          body: JSON.stringify({ new_password: newPassword }),
+        });
+      } else {
+        res = await fetch('/api/v1/auth/password-reset/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: tokenOrKey, new_password: newPassword }),
+        });
+      }
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatus((body.error && body.error.message) || 'Password update failed.', true);
+        return;
+      }
+      if (body.api_key) {
+        if ($('key')) $('key').textContent = body.api_key;
+        if ($('acct') && body.handle) $('acct').textContent = body.handle;
+        if ($('result')) $('result').hidden = false;
+        persistUnifiedSession({ api_key: body.api_key, handle: body.handle || localStorage.getItem('hivemind_user_handle') || 'operator' });
+        setStatus('Password updated and new hm-... API key issued!', false);
+      } else {
+        setStatus(body.message || 'Password updated! Sign in above with your new password.', false);
+      }
+      if ($('newResetPassword')) $('newResetPassword').value = '';
+    } catch (e) {
+      setStatus('Could not reach the gateway. Try again.', true);
+    }
+  });
+}
 if ($('signOutSessionBtn')) {
   $('signOutSessionBtn').addEventListener('click', async () => {
     try {
@@ -532,6 +581,18 @@ python hivemind_connect.py snippet continue --model coder</code></pre>
     </form>
   </section>
 </div>
+
+<section id="passwordResetCard" class="card">
+  <h2>🔐 Set / Reset Password (Réinitialiser ou définir un mot de passe)</h2>
+  <p class="mut">Have an <code>hm-...</code> API key or a single-use password reset token? Set a new password (12–256 characters) below. Updating your password automatically rotates your API key so older keys are revoked.</p>
+  <form id="changePasswordForm">
+    <label for="resetTokenOrKey">Your active <code>hm-...</code> API key or Reset Token (optional if already signed in above)</label>
+    <input id="resetTokenOrKey" name="token_or_key" type="text" autocomplete="off" placeholder="hm-... or single-use reset token" />
+    <label for="newResetPassword">New Password (12 to 256 characters)</label>
+    <input id="newResetPassword" name="new_password" type="password" minlength="12" maxlength="256" required autocomplete="new-password" placeholder="At least 12 characters" />
+    <p style="margin-top:.65rem"><button id="changePasswordBtn" type="submit">Update Password &amp; Rotate Key · Mettre à jour</button></p>
+  </form>
+</section>
 
 <section id="opentrainerCard" class="card">
   <h2>🔥 OpenTrainer — Intense GPU Co-Training (BOINC + AMCP + Kafka + Signed Aglets, Firewall-Friendly)</h2>

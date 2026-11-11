@@ -352,6 +352,23 @@ LEGACY_KNOWN_USERS: dict[str, dict[str, Any]] = {
         "role": "prosumer",
         "starter_hmt": 30000.0,
     },
+    "jblam62122": {
+        "handle": "jblam62122",
+        "aliases": (
+            "jblam62122",
+            "@jblam62122",
+            "jblam-o",
+            "@jblam-o",
+            "jblam_o",
+            "@jblam_o",
+            "43570951+jblam-o@users.noreply.github.com",
+            "jblam-o@github.com",
+            "jblam62122@hivemind.network",
+        ),
+        "email": "43570951+jblam-o@users.noreply.github.com",
+        "role": "prosumer",
+        "starter_hmt": 30000.0,
+    },
     "clark719664": {
         "handle": "clark719664",
         "aliases": ("@clark719664", "clark@hivemind.network", "hm_live_clark_331a980e12f"),

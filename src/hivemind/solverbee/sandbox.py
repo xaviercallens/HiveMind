@@ -320,7 +320,7 @@ def availability_reason() -> str:
 
 
 def file_sha256(path: str) -> str:
-    if not isinstance(path, str) or not path.strip():
+    if not isinstance(path, str) or not path.strip() or any(ord(c) < 32 or ord(c) == 127 for c in path):
         raise ValueError("path must be a non-empty string")
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -338,18 +338,31 @@ def run_binary(argv_binary: Sequence[str], stdin_bytes: bytes, *, limits: Limits
     t0 = time.monotonic()
     if not isinstance(limits, Limits):
         raise ValueError("limits must be a Limits instance")
-    if isinstance(argv_binary, (str, bytes)) or not isinstance(argv_binary, Sequence) or not argv_binary or not isinstance(argv_binary[0], str):
+    if (
+        isinstance(argv_binary, (str, bytes))
+        or not isinstance(argv_binary, Sequence)
+        or not argv_binary
+        or not all(isinstance(a, str) and "\x00" not in a for a in argv_binary)
+        or not argv_binary[0].strip()
+    ):
         return _refuse("empty command")
     if not isinstance(stdin_bytes, (bytes, bytearray)):
         return _refuse("stdin_bytes must be bytes")
     if len(stdin_bytes) > limits.stdin_limit:
         return _refuse(f"stdin of {len(stdin_bytes)} bytes exceeds the {limits.stdin_limit}-byte limit")
+    if expected_sha256 is not None:
+        if (
+            not isinstance(expected_sha256, str)
+            or len(expected_sha256.strip()) != 64
+            or not all(c in "0123456789abcdefABCDEF" for c in expected_sha256.strip())
+        ):
+            return _refuse("expected_sha256 must be a 64-character hex string")
     binary = os.path.realpath(argv_binary[0])
     try:
         sha = file_sha256(binary)
     except OSError as exc:
         return _refuse(f"cannot read binary: {exc.strerror}")
-    if expected_sha256 and sha != expected_sha256:
+    if expected_sha256 is not None and sha != expected_sha256.strip().lower():
         return _refuse("binary sha256 does not match the expected value")
     if not os.access(binary, os.X_OK):
         return _refuse("binary is not executable")

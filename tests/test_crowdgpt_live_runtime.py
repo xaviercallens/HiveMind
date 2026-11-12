@@ -140,7 +140,7 @@ def test_vram_safety_floors_for_t4_rtx2070_and_ampere() -> None:
 def test_kv_cache_and_loss_check_engram_equivalence(tmp_path: Path) -> None:
     torch.manual_seed(1234)
     cfg = _tiny_cfg(engram_buckets=127)
-    runtime_model = CrowdV1WithEngram(cfg).eval()
+    runtime_model = CrowdV1WithEngram(cfg).train(False)  # inference mode, same as .eval()
     with torch.no_grad():
         for p in runtime_model.parameters():
             if p.ndim >= 2:
@@ -151,7 +151,7 @@ def test_kv_cache_and_loss_check_engram_equivalence(tmp_path: Path) -> None:
     st_path = tmp_path / "model.safetensors"
     save_file(sd, str(st_path))
 
-    reloaded = CrowdV1WithEngram(cfg).eval()
+    reloaded = CrowdV1WithEngram(cfg).train(False)  # inference mode, same as .eval()
     sha = load_crowd_v1_safetensors_into_model(reloaded, st_path)
     assert len(sha) == 64
 
@@ -188,7 +188,7 @@ def test_kv_cache_and_loss_check_engram_equivalence(tmp_path: Path) -> None:
             "weightTying": True,
             "engramBuckets": 127,
         }
-    ).eval()
+    ).train(False)  # inference mode, same as .eval()
     lc_model.load_flat(flat_trunk, engram=flat_engram)
     with torch.no_grad():
         lc_logits = lc_model(seq)
@@ -291,7 +291,7 @@ def test_producer_fastapi_app_and_shield_route_integration() -> None:
 
     torch.manual_seed(99)
     cfg = _tiny_cfg(engram_buckets=32)
-    model = CrowdV1WithEngram(cfg).eval()
+    model = CrowdV1WithEngram(cfg).train(False)  # inference mode, same as .eval()
     model.place_for_inference(device="cpu", dtype=torch.float32, offload_engram_to_cpu=True)
 
     sync_calls = [0]

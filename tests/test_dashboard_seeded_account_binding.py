@@ -72,3 +72,81 @@ def test_the_gateway_password_of_the_same_handle_still_opens_the_account(tmp_pat
     r = client.post("/api/v1/auth/login", json={"handle_or_email": "vxtzq", "password": "the-real-gateway-pw"})
     assert r.status_code == 200 and r.json()["token"].startswith("hm_live_")
     assert seen == ["vxtzq"]
+
+
+def test_jblam62122_gateway_canonical_handle_opens_seeded_jblam_account(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list = []
+    _fake_gateway(monkeypatch, "jblam62122", seen)
+    client = _client(tmp_path)
+    r = client.post(
+        "/api/v1/auth/login",
+        json={"handle_or_email": "jblam62122", "password": "Jblam-WebUI-Password!"},
+    )
+    assert r.status_code == 200 and r.json()["token"].startswith("hm_live_")
+    assert r.json()["handle"] == "@jblam-O"
+    assert seen == ["jblam_o"]
+
+
+def test_auto_model_prefers_loaded_resident_model_over_unloaded_cold_model() -> None:
+    import httpx
+
+    from hivemind.router.accounts import RouterStore
+    from hivemind.router.gateway import create_router_app
+
+    store = RouterStore(":memory:", b"x" * 32)
+    prod_id, prod_key = store.register("rtx2070_prod", "prosumer")
+    cons_id, cons_key = store.register("vxtzq_cons", "prosumer")
+    store.grant(cons_id, 100.0, "test-grant")
+
+    store.upsert_producer(
+        prod_id,
+        endpoint_url="https://93.184.216.34/rtx2070",
+        models=[{"id": "coder-lite"}, {"id": "crowd-v1"}, {"id": "granite-moe"}],
+        cost_per_1k=0.35,
+        capacity_1k=60.0,
+        execution_class="rtx2070-8gb-turing",
+        now_utc=1000.0,
+        residency={
+            "models": {
+                "coder-lite": {"loaded": False, "cold_start_s": 60.0},
+                "crowd-v1": {"loaded": True, "cold_start_s": 0.0},
+                "granite-moe": {"loaded": False, "cold_start_s": 60.0},
+            }
+        },
+    )
+
+    routed_models: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content.decode("utf-8"))
+        routed_models.append(str(payload.get("model")))
+        return httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-1",
+                "object": "chat.completion",
+                "choices": [{"index": 0, "message": {"role": "assistant", "content": "OK"}, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7},
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    app = create_router_app(
+        store,
+        http_client=httpx.Client(transport=transport),
+        clock=lambda: 1010.0,
+    )
+    gw_client = TestClient(app)
+
+    r_reset = gw_client.get("/auth/reset")
+    assert r_reset.status_code == 200
+    assert "passwordResetCard" in r_reset.text
+
+    r_chat = gw_client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": f"Bearer {cons_key}"},
+        json={"model": "hivemind/auto", "messages": [{"role": "user", "content": "Hello"}], "max_tokens": 16},
+    )
+    assert r_chat.status_code == 200, r_chat.text
+    assert routed_models == ["crowd-v1"]
+

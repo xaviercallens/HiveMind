@@ -51,8 +51,9 @@ DEFAULT_BURN_SHARE = 0.05
 
 VXTZQ_MODEL_TESTING_TARGET_HMT = 100_000.0
 VXTZQ_MODEL_TESTING_GRANT_REF = "partner-model-testing-grant:vxtzq-crowd-v1-100k"
-VXTZQ_HANDLES: tuple[str, ...] = ("vxtzq", "vxtzq1")
-VXTZQ_EMAILS: tuple[str, ...] = ("vxtzq@github.com", "vxtzqmc@gmail.com")
+# Only the reserved, seeded handle: a variant or a self-declared e-mail would let anyone who registers it first claim the
+# partner allocation (owner decision 2026-11-12: the allocation is granted once by an admin).
+VXTZQ_HANDLES: tuple[str, ...] = ("vxtzq",)
 DEFAULT_WELCOME_BONUS_HMT = 500.0
 DEFAULT_CONTRIBUTOR_ROLE_BONUS_HMT = 1_000.0
 DEFAULT_DAILY_TESTING_FAUCET_HMT = 250.0
@@ -377,10 +378,7 @@ LEGACY_KNOWN_USERS: dict[str, dict[str, Any]] = {
             "vxtzq",
             "vxtzq1",
             "@vxtzq1",
-            "vxrzq",
-            "@vxrzq",
             "vxtzq@github.com",
-            "vxtzqmc@gmail.com",
             "116555319+vxtzq@users.noreply.github.com",
             "vxtzq@crowdgpt.net",
             "contact@crowdgpt.net",
@@ -3001,8 +2999,7 @@ class RouterStore:
         if "is_test" in row_keys and bool(row["is_test"]):
             return False
         handle_val = str(row["handle"] or "").strip().lstrip("@").lower()
-        email_val = str(row["email"] or "").strip().lower() if "email" in row_keys else ""
-        return handle_val in VXTZQ_HANDLES or (bool(email_val) and email_val in VXTZQ_EMAILS)
+        return handle_val in VXTZQ_HANDLES
 
     def ensure_partner_testing_grants(
         self,
@@ -3024,7 +3021,7 @@ class RouterStore:
         with self._tx() as conn:
             rows = conn.execute(
                 "SELECT * FROM accounts WHERE kind = ? AND is_test = 0 AND ("
-                "lower(handle) IN ('vxtzq', 'vxtzq1') OR lower(COALESCE(email, '')) IN ('vxtzq@github.com', 'vxtzqmc@gmail.com')"
+                "lower(handle) = 'vxtzq'"
                 ")",
                 (KIND_USER,),
             ).fetchall()

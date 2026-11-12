@@ -61,83 +61,29 @@ def build_app(env: Mapping[str, str]) -> FastAPI:
     bid_window_s = float(env.get("HIVEMIND_BID_WINDOW_S", "900") or "900")
     if not bid_window_s >= 0.0:
         raise RuntimeError("HIVEMIND_BID_WINDOW_S must be >= 0")
-    starter_grant_hmt = float(env.get("HIVEMIND_STARTER_GRANT_HMT", "1000.0") or "1000.0")
+    starter_grant_hmt = float(env.get("HIVEMIND_STARTER_GRANT_HMT", "0") or "0")
     if not math.isfinite(starter_grant_hmt) or starter_grant_hmt < 0.0:
         raise RuntimeError("HIVEMIND_STARTER_GRANT_HMT must be finite and >= 0")
     starter_grants_per_ip_24h = int(env.get("HIVEMIND_STARTER_GRANTS_PER_IP_24H", "5") or "5")
     if starter_grants_per_ip_24h < 0:
         raise RuntimeError("HIVEMIND_STARTER_GRANTS_PER_IP_24H must be >= 0")
-    registration_bonus_hmt = float(env.get("HIVEMIND_REGISTRATION_BONUS_HMT", "500.0") or "500.0")
+    registration_bonus_hmt = float(env.get("HIVEMIND_REGISTRATION_BONUS_HMT", "0") or "0")
     if not math.isfinite(registration_bonus_hmt) or registration_bonus_hmt < 0.0:
         raise RuntimeError("HIVEMIND_REGISTRATION_BONUS_HMT must be finite and >= 0")
-    allow_bonuses = env.get("HIVEMIND_ALLOW_BONUSES", "1").strip() != "0"
+    allow_bonuses = env.get("HIVEMIND_ALLOW_BONUSES", "0").strip() == "1"
     bonus_claims_per_ip_24h = int(env.get("HIVEMIND_BONUS_CLAIMS_PER_IP_24H", "5") or "5")
     if bonus_claims_per_ip_24h < 0:
         raise RuntimeError("HIVEMIND_BONUS_CLAIMS_PER_IP_24H must be >= 0")
     raw_proxies = env.get("HIVEMIND_TRUSTED_PROXIES", "169.254.0.0/16" if hops > 0 else "")
     trusted_proxies = tuple(p.strip() for p in raw_proxies.split(",") if p.strip())
-    if env.get("HIVEMIND_PARTNER_TESTING_GRANTS", "1").strip() != "0":
-        partner_minted = store.ensure_partner_testing_grants()
-        if partner_minted:
-            logging.getLogger("hivemind.router.server").info("Partner model-testing HMT grants minted: %s", partner_minted)
     # Optional Kafka bus for AMCP events: only when HIVEMIND_KAFKA_BOOTSTRAP and HIVEMIND_AMCP_HMAC_KEYS are both set. Otherwise events are stored
     # for the public feed as before and every publish response says bus.status = "not_configured".
     from hivemind.swarm.amcp_collab import bus_from_env
-    from hivemind.swarm.amcp_kafka_campaign_bus import build_amcp_kafka_event
 
     amcp_bus, bus_reason = bus_from_env(env)
     logging.getLogger("hivemind.router.server").info("AMCP Kafka bus: %s", "enabled" if amcp_bus else f"off ({bus_reason})")
-    if env.get("HIVEMIND_PARTNER_TESTING_GRANTS", "1").strip() != "0":
-        xavier_acct = store.resolve_hiveminder_account("xavier_callens")
-        vxtzq_acct = store.resolve_hiveminder_account("VXRZQ")
-        if xavier_acct is not None and vxtzq_acct is not None and store.balance(xavier_acct.account_id) >= 5000.0:
-            try:
-                txf = store.transfer_points(
-                    xavier_acct.account_id,
-                    "VXRZQ",
-                    5000.0,
-                    memo="CrowdGPT (hivemind/crowd-v1 & hivemind/gcpcrowd) inference tests",
-                    idempotency_key="pr871-xavier-to-vxtzq-crowdgpt-5000-hmt",
-                )
-                if not txf["idempotent_replay"]:
-                    ev = build_amcp_kafka_event(
-                        topic_key="human_agent",
-                        event_type="io.hivemind.amcp.points.transfer",
-                        sender_id=txf["sender_handle"],
-                        sender_kind="human_researcher",
-                        recipient_id=txf["recipient_handle"],
-                        subject_id="SUBJ-01-PYTHON-RUST-CODER",
-                        correlation_id=txf["transfer_id"],
-                        payload={
-                            "transfer_id": txf["transfer_id"],
-                            "sender_handle": txf["sender_handle"],
-                            "recipient_handle": txf["recipient_handle"],
-                            "amount_hmt": 5000.0,
-                            "memo": txf["memo"],
-                            "model_ref": "hivemind/crowd-v1",
-                            "pr_url": "https://github.com/xaviercallens/HiveMind/pull/871",
-                        },
-                    )
-                    store.record_amcp_kafka_event(
-                        event_id=ev.event_id,
-                        topic=ev.topic,
-                        event_type=ev.event_type,
-                        sender_id=ev.sender_id,
-                        sender_kind=ev.sender_kind,
-                        recipient_id=ev.recipient_id,
-                        subject_id=ev.subject_id,
-                        correlation_id=ev.correlation_id,
-                        payload=ev.payload,
-                        now_utc=ev.utc,
-                    )
-                    store.attach_transfer_amcp_event(txf["transfer_id"], ev.event_id)
-                    if amcp_bus is not None:
-                        try:
-                            amcp_bus(ev)
-                        except Exception:  # noqa: BLE001
-                            pass
-            except Exception:  # noqa: BLE001
-                logging.getLogger("hivemind.router.server").warning("Startup peer gift skipped", exc_info=True)
+    # No grant or transfer runs at start-up: the Vxtzq allocation and the 5,000 HMT gift are done once, by hand
+    # (admin grant / hivemind_connect.py transfer), owner decision 2026-11-12.
     return create_router_app(store, admin_key_hash=admin_key_hash, trusted_proxy_hops=hops,
                              google_client_id=google_client_id, oidc_verifiers=oidc_verifiers, open_registration=open_registration,
                              bid_activity_window_s=bid_window_s, amcp_bus=amcp_bus,

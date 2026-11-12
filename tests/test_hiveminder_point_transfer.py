@@ -38,13 +38,13 @@ def _load_connect_cli() -> ModuleType:
 
 
 def test_5000_hmt_transfer_to_vxrzq_vxtzq_with_signed_amcp_kafka_delivery(tmp_path: Path) -> None:
-    """Test giving 5,000 HMT from xavier_callens to VXRZQ (@Vxtzq) for CrowdGPT inference tests + signed AMCP/Kafka receipt."""
+    """Test giving 5,000 HMT from xavier_callens to @Vxtzq for CrowdGPT inference tests + signed AMCP/Kafka receipt."""
     now = 1_794_370_000.0
     store = RouterStore(tmp_path / "p2p_vxtzq.db", SECRET)
     store.ensure_legacy_hiveminders_registered(now_utc=now)
 
     xavier_acct = store.resolve_hiveminder_account("xavier_callens")
-    vxtzq_acct = store.resolve_hiveminder_account("VXRZQ")
+    vxtzq_acct = store.resolve_hiveminder_account("vxtzq")
     assert xavier_acct is not None and xavier_acct.handle == "xavier_callens"
     assert vxtzq_acct is not None and vxtzq_acct.handle == "vxtzq"
     assert store.balance(xavier_acct.account_id) == pytest.approx(68_500.0)
@@ -66,12 +66,12 @@ def test_5000_hmt_transfer_to_vxrzq_vxtzq_with_signed_amcp_kafka_delivery(tmp_pa
     )
     client = TestClient(app)
 
-    # Transfer 5,000 HMT to "VXRZQ" (alias -> canonical "vxtzq") for CrowdGPT inference tests
+    # Transfer 5,000 HMT to "vxtzq" (exact handle) for CrowdGPT inference tests
     res = client.post(
         "/v1/hivemind/points/transfer",
         headers={"Authorization": f"Bearer {xavier_key}"},
         json={
-            "recipient": "VXRZQ",
+            "recipient": "vxtzq",
             "amount": 5000.0,
             "memo": "CrowdGPT (hivemind/crowd-v1 & hivemind/gcpcrowd) inference tests",
             "idempotency_key": "crowdgpt-vxtzq-5000-hmt",
@@ -226,7 +226,7 @@ def test_point_transfer_security_guards_cli_and_server_startup_gift(
     assert store.total_balances() == pytest.approx(store.total_minted())
     store.close()
 
-    # Verify deploy/gcp_openrouter/server.py startup idempotent 5,000 HMT gift when xavier_callens & vxtzq exist
+    # deploy/gcp_openrouter/server.py moves no points at start-up (owner decision 2026-11-12: the gift is done once by hand)
     server_db = tmp_path / "server_startup_gift.db"
     seed_store = RouterStore(server_db, b"s" * 40)
     seed_store.ensure_legacy_hiveminders_registered(now_utc=1_794_370_000.0)
@@ -245,13 +245,11 @@ def test_point_transfer_security_guards_cli_and_server_startup_gift(
     srv_client = TestClient(srv_mod.app)
     amcp_feed = srv_client.get("/v1/hivemind/amcp/events?topic=human_agent&limit=10").json()
     transfer_events = [e for e in amcp_feed["events"] if e["event_type"] == "io.hivemind.amcp.points.transfer"]
-    assert len(transfer_events) == 1
-    assert transfer_events[0]["recipient_id"] == "vxtzq"
-    assert transfer_events[0]["payload"]["amount_hmt"] == pytest.approx(5000.0)
+    assert transfer_events == []
 
     check_store = RouterStore(server_db, b"s" * 40)
-    assert check_store.balance(check_store.account_id_for("xavier_callens")) == pytest.approx(63_500.0)
-    assert check_store.balance(check_store.account_id_for("vxtzq")) == pytest.approx(105_000.0)
+    assert check_store.balance(check_store.account_id_for("xavier_callens")) == pytest.approx(68_500.0)
+    assert check_store.balance(check_store.account_id_for("vxtzq")) == pytest.approx(100_000.0)
     assert check_store.verify_chain() is True
     assert check_store.total_balances() == pytest.approx(check_store.total_minted())
     check_store.close()

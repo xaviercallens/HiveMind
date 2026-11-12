@@ -55,7 +55,8 @@ def test_vxtzq_legacy_and_dashboard_allocation_raised_to_100k_hmt(tmp_path: Path
     meta = LEGACY_KNOWN_USERS["vxtzq"]
     assert meta["starter_hmt"] == 100_000.0
     assert VXTZQ_MODEL_TESTING_TARGET_HMT == 100_000.0
-    assert "vxtzqmc@gmail.com" in meta["aliases"]
+    # an address with no confirmed owner must not be an alias (reset mail, credential lookup), owner decision 2026-11-12
+    assert "vxtzqmc@gmail.com" not in meta["aliases"]
     assert "vxtzq1" in meta["aliases"]
     assert _DEFAULT_LEDGER_BALANCES["vxtzq"] == 100_000
 
@@ -78,7 +79,7 @@ def test_vxtzq_existing_30k_account_is_topped_up_idempotently_to_100k(tmp_path: 
         "vxtzq",
         "CrowdGPTPass#2026",
         role="prosumer",
-        email="vxtzqmc@gmail.com",
+        email="vxtzq@github.com",
     )
     assert created is True
     store.grant(acct_id, 30_000.0, "previous-allocation")
@@ -101,10 +102,27 @@ def test_vxtzq_existing_30k_account_is_topped_up_idempotently_to_100k(tmp_path: 
     store.close()
 
 
+def test_production_openrouter_server_rewards_are_off_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Owner decision 2026-11-12: sign-up rewards are off unless the deployment switches them on."""
+    client = TestClient(_load_openrouter_server(monkeypatch).app)
+    assert "Starter grant on this gateway: 1000.00 HMT" not in client.get("/signup").text
+    reg = client.post(
+        "/v1/hivemind/auth/register",
+        json={"handle": "default_user", "email": "default@example.org", "password": "DefaultStrongPass!1", "role": "trainer"},
+    )
+    assert reg.status_code == 200, reg.text
+    assert float(reg.json().get("balance_hmt", 0.0)) == pytest.approx(0.0)
+
+
 def test_production_openrouter_server_defaults_registration_grants_bonuses_and_vxtzq_signup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    mod = _load_openrouter_server(monkeypatch)
+    mod = _load_openrouter_server(
+        monkeypatch,
+        HIVEMIND_STARTER_GRANT_HMT="1000",
+        HIVEMIND_REGISTRATION_BONUS_HMT="500",
+        HIVEMIND_ALLOW_BONUSES="1",
+    )
     client = TestClient(mod.app)
 
     # 1. /signup shows 1000.00 HMT starter grant + 500.00 HMT registration bonus (1500.00 HMT total) and bonus claim button, with zero currency leftovers
@@ -145,7 +163,8 @@ def test_production_openrouter_server_defaults_registration_grants_bonuses_and_v
     assert claim_again.json()["claimed"] is False
     assert claim_again.json()["granted_hmt"] == 0.0
 
-    # 3. @Vxtzq registering on the live gateway immediately receives 100,000.0 HMT to test Crowd-v1 & GCPCrowd!
+    # 3. Registering never mints the partner allocation (granted once by an admin), whoever registers: neither the
+    #    reserved handle nor a variant with Vxtzq's addresses gets the 100,000 HMT as a side effect.
     reg_vxtzq = client.post(
         "/v1/hivemind/auth/register",
         json={
@@ -157,9 +176,15 @@ def test_production_openrouter_server_defaults_registration_grants_bonuses_and_v
     )
     assert reg_vxtzq.status_code == 200, reg_vxtzq.text
     v_body = reg_vxtzq.json()
-    assert v_body["balance_hmt"] == pytest.approx(100_000.0)
-    assert v_body["compute_points"] == 100_000
-    assert v_body["partner_testing_grant"] == pytest.approx(98_500.0)
+    assert v_body["balance_hmt"] == pytest.approx(1500.0)
+    assert "partner_testing_grant" not in v_body
+    reg_variant = client.post(
+        "/v1/hivemind/auth/register",
+        json={"handle": "vxtzq1", "email": "vxtzq@github.com", "password": "VariantStrongPass!9", "role": "prosumer"},
+    )
+    if reg_variant.status_code == 200:
+        assert reg_variant.json()["balance_hmt"] < 100_000.0
+        assert "partner_testing_grant" not in reg_variant.json()
 
     # 4. Guest upgrade on production gateway also receives the 1,500 HMT registration package
     guest_res = client.post("/api/v1/auth/guest", json={"target_profile": "developer"})

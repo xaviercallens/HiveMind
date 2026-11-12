@@ -1152,10 +1152,7 @@ def create_router_app(
                     out["starter_grant_note"] = "No starter grant was added to this account; ask an operator for one."
                 if registration_bonus_hmt > 0.0:
                     out["registration_bonus"] = 0.0
-        if allow_bonuses:
-            partner_minted = store.ensure_partner_testing_grants(now_utc=clock())
-            if account_id in partner_minted:
-                out["partner_testing_grant"] = partner_minted[account_id]
+        # the partner allocation is granted once by an admin, never as a side effect of someone registering
         return out
 
     reconnected_fleet_keepalive: dict[str, Any] = {

@@ -55,7 +55,8 @@ def boinc_gpu_pids(procs: list[tuple[str, ...]]) -> list[str]:
             cmd = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode()
         except OSError:
             continue
-        if any(m in cmd for m in ("real_client.moe_app", "gcp_t4_crowd_diloco")):
+        # only BOINC's own task: counting the separate crowd worker's memory as BOINC's would treat it as free on resume
+        if "real_client.moe_app" in cmd:
             out.append(pid)
     return out
 

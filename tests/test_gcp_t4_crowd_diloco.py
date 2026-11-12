@@ -406,7 +406,9 @@ def test_t4_governor_markers_opentrainer_campaign_and_worker_cli(
     monkeypatch.setattr(t4_governor, "Path", _CrossPlatformFakePath)
     procs = [("21", "python", "2350"), ("22", "python", "1200"), ("23", "llama-server", "4838")]
     assert t4_governor.pipeline_gpu_pids(procs) == ["21", "22"]
-    assert t4_governor.boinc_gpu_pids(procs) == ["21"]
+    # the crowd worker is part of the training pipeline (not "someone asking"), but it is NOT BOINC's task: counting its
+    # memory as BOINC's would make the governor treat it as free and resume BOINC on top of it
+    assert t4_governor.boinc_gpu_pids(procs) == []
     monkeypatch.setattr(t4_governor, "Path", real_path)
     assert is_allowed_opentrainer_campaign_id(GCPCROWD_CAMPAIGN_ID) is True
     plan = build_crowdgpt_trainer_producer_plan(

@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import html
 import json
+import os
+import pathlib
 import re
 from typing import Any, Sequence
 import urllib.parse
@@ -44,13 +46,21 @@ WEEKEND_RAID_DATES_LABEL: str = "Saturday 14 & Sunday 15 November 2026 (Prefligh
 
 _NONCE_RE = re.compile(r"^[A-Za-z0-9+/=_-]{8,128}$")
 
-# Verified early Git contributors (`git shortlog -sne`) + pioneer email handles on HiveMind
-VERIFIED_PIONEER_EMAILS: tuple[str, ...] = (
-    "clark719664@gmail.com",
-    "prmineo@gmail.com",
-    "radial@gmail.com",
-    "ilenemaurin@gmail.com",
-)
+def _load_outreach_bcc() -> tuple[str, ...]:
+    """Contributors' e-mail addresses are personal data: they are never committed or served. The sender keeps them in a
+    local file (one address per line, '#' comments allowed) named by HIVEMIND_OUTREACH_BCC_FILE; without it, no one."""
+    path = os.environ.get("HIVEMIND_OUTREACH_BCC_FILE", "").strip()
+    if not path:
+        return ()
+    try:
+        lines = pathlib.Path(path).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return ()
+    return tuple(line.strip() for line in lines if line.strip() and not line.strip().startswith("#"))
+
+
+# BCC recipients for the thank-you e-mail, loaded at send time from a local file (never from source)
+VERIFIED_PIONEER_EMAILS: tuple[str, ...] = _load_outreach_bcc()
 
 # Verified human pioneer & early-adopter handles registered on HiveMind
 PIONEER_COMMUNITY_HANDLES: tuple[str, ...] = (
@@ -61,7 +71,7 @@ PIONEER_COMMUNITY_HANDLES: tuple[str, ...] = (
     "jblam62122",
     "tibrib",
     "tibrib-chat",
-    "ilenemaurin@gmail.com",
+    "ilenemaurin",
     "dr_elena_astro",
     "epic_unreal_dev",
     "reddit_llama_king",
@@ -861,7 +871,7 @@ def build_v34_communication_plan_status() -> dict[str, Any]:
                 "privacy_mode": "bcc_only",
                 "bcc_verified_pioneers_count": len(email_pkg["bcc_emails"]),
                 "subject": email_pkg["subject"],
-                "gmail_web_compose_url": email_pkg["gmail_web_compose_url"],
+                # the compose URL embeds the BCC list, so it is built only by the local sender script, never served
             },
             "github": {
                 "discussion_new_url": gh["discussion_new_url"],

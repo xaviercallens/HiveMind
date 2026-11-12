@@ -310,3 +310,25 @@ def test_weekend_raid_gateway_endpoint_calendar_ics_and_worker_cli(tmp_path: Pat
 
     pub_mod = _load_script("publish_crowdgpt_weekend_raid_kit_test", "scripts/publish_crowdgpt_weekend_raid_kit.py")
     assert pub_mod.main(["--dry-run", "--print-urls"]) == 0
+
+
+def test_moe_inner_steps_stop_as_soon_as_the_yield_guard_says_so() -> None:
+    """The weekend T4 round must honour the HOLD file, live traffic, Spot preemption and the VRAM floor at every step."""
+    from types import SimpleNamespace
+
+    model = _build_small_crowd_model(seed=20261115)
+    upcycle_crowd_v1_to_sparse_moe(model, split_mode="lora_domain_experts", num_experts=8, top_k=2, lora_rank=4,
+                                   routing_mode="sigma_topk")
+    stream = torch.tensor([(i * 5 + 7) % 64 for i in range(16)], dtype=torch.long).repeat(16)
+    calls = {"n": 0}
+
+    class _Guard:
+        def check(self):
+            calls["n"] += 1
+            return SimpleNamespace(should_yield=calls["n"] > 2, trigger="operator_hold_file")
+
+    out = run_crowd_moe_opendiloco_inner_steps(model, stream, steps=5, batch_size=2, seq_len=32, lr=3e-3, yield_guard=_Guard())
+    assert out["steps_completed"] == 2 and out["yielded"] == "operator_hold_file"
+    free = run_crowd_moe_opendiloco_inner_steps(model, stream, steps=3, batch_size=2, seq_len=32, lr=3e-3)
+    assert free["steps_completed"] == 3 and free["yielded"] is None
+

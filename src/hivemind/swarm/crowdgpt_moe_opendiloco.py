@@ -1292,8 +1292,12 @@ def run_crowd_moe_opendiloco_inner_steps(
     aux_loss_coef: float = 0.01,
     num_router_fragments: int = 4,
     device: str = "cpu",
+    yield_guard: Any | None = None,
 ) -> dict[str, Any]:
-    """Execute `steps` inner AdamW updates on an upcycled `CrowdV1WithEngram` MoE learner and return bucket pseudo-gradients."""
+    """Execute `steps` inner AdamW updates on an upcycled `CrowdV1WithEngram` MoE learner and return bucket pseudo-gradients.
+
+    With ``yield_guard`` (a ``T4GovernorYieldGuard``), every step first checks the operator HOLD file, governor state, live
+    traffic, Spot preemption and the free-VRAM floor, and stops early (``yielded`` names the trigger) instead of training."""
     from hivemind.core.diloco_inner import Blockwise8BitAdamW
     from hivemind.swarm.gcp_t4_crowd_diloco import forward_crowd_v1_checkpointed
 
@@ -1317,7 +1321,14 @@ def run_crowd_moe_opendiloco_inner_steps(
     span = batch_size * seq_len
     max_off = max(1, flat_tokens.numel() - span)
 
+    steps_completed = 0
+    yielded: str | None = None
     for step_idx in range(steps):
+        if yield_guard is not None:
+            chk = yield_guard.check()
+            if chk.should_yield:
+                yielded = str(chk.trigger)
+                break
         start = (step_idx * seq_len) % max_off
         chunk = flat_tokens[start : start + span]
         if chunk.numel() < span:
@@ -1345,6 +1356,7 @@ def run_crowd_moe_opendiloco_inner_steps(
             initial_loss = loss_val
         final_loss = loss_val
         tokens_processed += int(batch_size * max(1, seq_len - 1))
+        steps_completed += 1
 
     buckets_after = extract_moe_trainable_buckets(model, num_router_fragments=num_router_fragments)
     pseudo_grads = {
@@ -1352,7 +1364,8 @@ def run_crowd_moe_opendiloco_inner_steps(
         for k in buckets_before
     }
     return {
-        "steps_completed": steps,
+        "steps_completed": steps_completed,
+        "yielded": yielded,
         "tokens_processed": tokens_processed,
         "initial_loss": float(initial_loss if initial_loss is not None else 0.0),
         "final_loss": float(final_loss),

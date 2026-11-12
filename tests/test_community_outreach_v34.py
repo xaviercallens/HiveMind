@@ -169,3 +169,21 @@ def test_publish_amcp_and_discord_webhook_dispatch() -> None:
 
     with pytest.raises(ValueError, match="discord.com/api/webhooks"):
         send_discord_webhook("https://example.com/not-discord")
+
+
+
+def test_no_contributor_email_address_is_committed_or_served() -> None:
+    """Contributors' addresses are personal data: only the owner's own address may appear in source or public output."""
+    import json
+    import re
+    from pathlib import Path
+
+    from hivemind.router import community_outreach_v34 as mod
+
+    addr = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+    allowed = {mod.OWNER_SENDER_EMAIL.lower()}
+    src = Path(mod.__file__).read_text(encoding="utf-8")
+    assert {a.lower() for a in addr.findall(src)} <= allowed | {"noreply@github.com"}
+    public = json.dumps(mod.build_v34_communication_plan_status())
+    assert {a.lower() for a in addr.findall(public)} <= allowed
+    assert "gmail_web_compose_url" not in public

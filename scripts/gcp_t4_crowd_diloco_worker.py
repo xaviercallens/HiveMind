@@ -348,6 +348,11 @@ def main(argv: list[str] | None = None) -> int:
         if total_m < 14_000 and eff_min_free == DEFAULT_MIN_FREE_VRAM_MIB_T4:
             eff_min_free = 1536
 
+    if prefer_cuda and torch.cuda.is_available() and "T4" in torch.cuda.get_device_name(0).upper().split() and eff_min_free < 4300:
+        # AGENTS.md: a Tesla T4 always keeps >= 4,300 MiB free; this is a rule for that card, not a tuning knob (as in PR #876)
+        print(f"refused: --min-free-vram-mib {eff_min_free} is below the 4300 MiB T4 floor", file=sys.stderr)
+        return 2
+
     guard = T4GovernorYieldGuard(
         hold_file=args.hold_file,
         governor_state_file=args.governor_state,
@@ -457,6 +462,7 @@ def main(argv: list[str] | None = None) -> int:
                 seq_len=args.seq_len,
                 lr=args.lr,
                 device=exec_dev,
+                yield_guard=guard,
             )
             dt_t4 = max(0.02, time.monotonic() - t0)
 
@@ -471,8 +477,15 @@ def main(argv: list[str] | None = None) -> int:
                 seq_len=args.seq_len,
                 lr=args.lr,
                 device=exec_dev,
+                yield_guard=guard,
             )
             dt_2070 = max(0.03, time.monotonic() - t1)
+            yielded = out_t4.get("yielded") or out_2070.get("yielded")
+            if yielded:
+                # HOLD file, live traffic, Spot preemption or the VRAM floor: stop training, do not aggregate a partial round
+                moe_rounds.append({"round": rnd + 1, "yielded": yielded})
+                print(f"yielded before round {rnd + 1} completed: {yielded}", file=sys.stderr)
+                break
 
             subs: dict[str, list[tuple[LearnerArrival, torch.Tensor, float]]] = {}
             for b_key in master_snap:
@@ -536,7 +549,7 @@ def main(argv: list[str] | None = None) -> int:
         print(
             json.dumps(
                 {
-                    "status": "ok",
+                    "status": "yielded" if moe_rounds and moe_rounds[-1].get("yielded") else "ok",
                     "mode": "moe-opendiloco-round",
                     "campaign_id": args.campaign_id,
                     "revision_meta": rev_meta,

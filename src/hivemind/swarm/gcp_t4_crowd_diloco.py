@@ -918,6 +918,16 @@ class T4GovernorYieldGuard:
         )
 
 
+def _optimizer_state_to_cpu(state: Any) -> Any:
+    if isinstance(state, torch.Tensor):
+        return state.detach().to("cpu").contiguous()
+    if isinstance(state, dict):
+        return {k: _optimizer_state_to_cpu(v) for k, v in state.items()}
+    if isinstance(state, (list, tuple)):
+        return type(state)(_optimizer_state_to_cpu(v) for v in state)
+    return state
+
+
 def save_resumable_diloco_segment(
     segment_path: Path | str,
     *,
@@ -931,6 +941,8 @@ def save_resumable_diloco_segment(
     current_base_bf16: torch.Tensor,
     lora_state: Mapping[str, torch.Tensor] | None = None,
     trigger: str = "segment_checkpoint",
+    current_base_fp32: torch.Tensor | None = None,
+    optimizer_state: Mapping[str, Any] | None = None,
 ) -> Path:
     """Atomically persist a `weights_only=True`-safe DiLoCo inner-loop segment outside `/opt/hivemind/t4/`."""
     dest = assert_not_protected_t4_path(segment_path)
@@ -949,6 +961,12 @@ def save_resumable_diloco_segment(
         "trigger": str(trigger),
         "saved_utc": time.time(),
     }
+    # Without these a resume is not a resume: AdamW restarts its moments (the loss jumps after resuming) and bf16 rounds the
+    # fp32 weights. Both are plain tensors/ints, so the file still loads with weights_only=True.
+    if current_base_fp32 is not None:
+        payload["current_base_fp32"] = current_base_fp32.detach().to("cpu", dtype=torch.float32).contiguous()
+    if optimizer_state is not None:
+        payload["optimizer_state"] = _optimizer_state_to_cpu(optimizer_state)
     with tempfile.NamedTemporaryFile(dir=dest.parent, prefix=".tmp_seg_", suffix=".pt", delete=False) as tmp:
         tmp_path = Path(tmp.name)
     torch.save(payload, tmp_path)
@@ -1181,6 +1199,7 @@ def run_gcp_t4_diloco_inner_loop(
     step_losses: list[float] = []
     tokens_processed = 0
     resumed_lora: dict[str, torch.Tensor] | None = None
+    resumed_opt_state: Mapping[str, Any] | None = None
 
     unwrap_crowd_lora_adapters(model, merge_into_base=False)
     base_before_bf16 = (
@@ -1193,7 +1212,8 @@ def run_gcp_t4_diloco_inner_loop(
         seg = load_resumable_diloco_segment(seg_path)
         if int(seg.get("round_index", -1)) == round_index and str(seg.get("recipe")) == decision.recipe:
             base_before_bf16 = seg["base_before_bf16"].to(torch.bfloat16)
-            model.load_flat_tensors(seg["current_base_bf16"].to(torch.bfloat16))
+            model.load_flat_tensors(seg["current_base_fp32"] if "current_base_fp32" in seg else seg["current_base_bf16"].to(torch.bfloat16))
+            resumed_opt_state = seg.get("optimizer_state")
             start_step = int(seg["completed_steps"])
             step_losses = list(seg["step_losses"])
             tokens_processed = int(seg["tokens_processed"])
@@ -1239,6 +1259,15 @@ def run_gcp_t4_diloco_inner_loop(
         if use_8bit_adamw
         else torch.optim.AdamW(trainable_params, lr=float(learning_rate), weight_decay=0.01)
     )
+    if resumed_opt_state:
+        try:
+            opt.load_state_dict(resumed_opt_state)
+            for st in opt.state.values():  # moments back on the training device
+                for k, v in list(st.items()):
+                    if isinstance(v, torch.Tensor) and k != "step":
+                        st[k] = v.to(target_dev)
+        except (ValueError, KeyError, RuntimeError):
+            pass  # a segment from a different parameter layout: continue with fresh moments rather than fail
 
     model.train()
     preempted = False
@@ -1271,6 +1300,10 @@ def run_gcp_t4_diloco_inner_loop(
                         current_base_bf16=curr_base,
                         lora_state=lora_snap,
                         trigger=preemption_trigger,
+                        current_base_fp32=torch.cat([p_.detach().to("cpu", dtype=torch.float32).reshape(-1) for p_ in model.base_parameters()])
+                        if decision.recipe != "qlora_graft_diloco"
+                        else None,
+                        optimizer_state=opt.state_dict(),
                     )
                 yield_ms = _evacuate_model_to_cpu(model, opt)
                 break

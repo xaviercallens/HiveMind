@@ -202,8 +202,6 @@ def test_adaptive_t4_recipe_selector_enforces_4300_mib_floor() -> None:
 
 
 def test_governor_yield_guard_and_resumable_segment_recovery(tmp_path: Path) -> None:
-    # the model's initial weights come from torch's global RNG: seed it, or the loss check depends on which tests ran before
-    torch.manual_seed(20261112)
     hold = tmp_path / "HOLD"
     hold.write_text("", encoding="utf-8")
     g_hold = T4GovernorYieldGuard(hold_file=hold)
@@ -270,6 +268,24 @@ def test_governor_yield_guard_and_resumable_segment_recovery(tmp_path: Path) -> 
     assert len(part2.step_losses) == 6
     assert part2.loss_after < part2.loss_before
     assert not part1.segment_checkpoint_path.exists()
+
+    # A resume must continue exactly where it stopped: the same losses as a run that was never interrupted. Before the
+    # segment saved the optimizer state, AdamW restarted on resume and the loss jumped (CI saw 4.63 -> 4.95).
+    uninterrupted = run_gcp_t4_diloco_inner_loop(
+        _tiny_crowd_model(),
+        shard,
+        learner_id="gcp-t4-node1",
+        round_index=2,
+        inner_steps=6,
+        batch_size=2,
+        seq_len=32,
+        learning_rate=3e-3,
+        requested_mode="cpu_fp32",
+        work_dir=tmp_path / "uninterrupted",
+        yield_guard=T4GovernorYieldGuard(nginx_probe_fn=lambda: 0, min_free_vram_mib=0),
+    )
+    assert part2.step_losses == pytest.approx(uninterrupted.step_losses, abs=1e-5)
+    assert part2.loss_after == pytest.approx(uninterrupted.loss_after, abs=1e-5)
 
 
 def test_heterogeneous_t4_and_rtx2070_diloco_outer_nesterov_with_byzantine_rejection_and_loss_receipt(

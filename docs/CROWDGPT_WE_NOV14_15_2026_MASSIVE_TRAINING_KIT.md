@@ -90,7 +90,8 @@ Import [`docs/calendar/hivemind_crowdgpt_weekend_nov14_15_2026.ics`](calendar/hi
    ```
 4. **GCP Spot Tesla T4 Co-Trainer (`socreateai-agora-hermes-node1`, `us-east4-b` Spot)**:
    ```bash
-   bash scripts/t4_training_window.sh weekend-raid   # +7h Spot across Sat 14 & Sun 15 Nov = +$1.30 USD ($121.92/mo <= $150/mo)
+   CONFIRM=yes bash scripts/t4_training_window.sh weekend-raid       # 14:00-22:00 Paris, Sat 14 & Sun 15 Nov only (ends 16 Nov 00:00); +7h Spot ~ +$1.30 USD
+   CONFIRM=yes bash scripts/t4_training_window.sh weekend-raid-end   # Monday: delete the weekend schedule and restore the daily training window
    ```
 
 ---

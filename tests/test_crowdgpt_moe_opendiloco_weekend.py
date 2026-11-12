@@ -332,3 +332,36 @@ def test_moe_inner_steps_stop_as_soon_as_the_yield_guard_says_so() -> None:
     free = run_crowd_moe_opendiloco_inner_steps(model, stream, steps=3, batch_size=2, seq_len=32, lr=3e-3)
     assert free["steps_completed"] == 3 and free["yielded"] is None
 
+
+def test_weekend_t4_schedule_ends_after_the_weekend_and_the_daily_window_comes_back(tmp_path: Path) -> None:
+    """The weekend Spot schedule must not fire again next November, and the daily window must be restorable (cost rule)."""
+    import os
+    import subprocess
+
+    log = tmp_path / "gcloud.log"
+    fake = tmp_path / "bin" / "gcloud"
+    fake.parent.mkdir()
+    # 'describe' of a missing policy fails; of the daily window policy succeeds; every call is logged
+    fake.write_text(
+        "#!/bin/bash\n"
+        f'echo "$*" >> {log}\n'
+        'if [[ "$*" == *"resource-policies describe hivemind-t4-weekend-nov14-15"* ]]; then exit 1; fi\n'
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    fake.chmod(0o755)
+    env = {**os.environ, "PATH": f"{fake.parent}:{os.environ['PATH']}", "CONFIRM": "yes"}
+    script = Path(__file__).resolve().parents[1] / "scripts" / "t4_training_window.sh"
+
+    assert subprocess.run(["bash", str(script), "weekend-raid"], env=env, capture_output=True, text=True, timeout=30).returncode == 0
+    create = next(line for line in log.read_text().splitlines() if "create instance-schedule hivemind-t4-weekend-nov14-15" in line)
+    assert "--end-date 2026-11-15T23:00:00Z" in create and "--initiation-date 2026-11-13T23:00:00Z" in create
+
+    log.write_text("")
+    assert subprocess.run(["bash", str(script), "weekend-raid-end"], env=env, capture_output=True, text=True, timeout=30).returncode == 0
+    calls = log.read_text().splitlines()
+    assert any("remove-resource-policies" in c and "hivemind-t4-weekend-nov14-15" in c for c in calls)
+    assert any("add-resource-policies" in c and "hivemind-t4-training-window" in c for c in calls)
+    no_confirm = {k: v for k, v in env.items() if k != "CONFIRM"}
+    assert subprocess.run(["bash", str(script), "weekend-raid-end"], env=no_confirm, capture_output=True, text=True, timeout=30).returncode == 2
+

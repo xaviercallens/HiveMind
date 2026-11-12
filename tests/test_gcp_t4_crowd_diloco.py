@@ -202,6 +202,8 @@ def test_adaptive_t4_recipe_selector_enforces_4300_mib_floor() -> None:
 
 
 def test_governor_yield_guard_and_resumable_segment_recovery(tmp_path: Path) -> None:
+    # the model's initial weights come from torch's global RNG: seed it, or the loss check depends on which tests ran before
+    torch.manual_seed(20261112)
     hold = tmp_path / "HOLD"
     hold.write_text("", encoding="utf-8")
     g_hold = T4GovernorYieldGuard(hold_file=hold)

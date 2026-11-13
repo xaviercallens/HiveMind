@@ -20,8 +20,11 @@ your own hardware before choosing `tol` (`scripts/crowdgpt_loss_check.py calibra
 
 Standalone on purpose (torch, numpy, standard library; safetensors only for loading files) so the same file can sit in
 the CrowdGPT repository next to `hivemind_bridge.py`. The model below is the inference path of `SotaGPT` in CrowdGPT's
-`client.py` (LayerNorm, grouped-query attention with RoPE, SwiGLU, tied head); the engram table is not read by the
-forward pass there (`ENGRAM_ACTIVE = False`), so it is not part of the check.
+`client.py` (LayerNorm, grouped-query attention with RoPE, SwiGLU, tied head) plus, when `engramBuckets > 0`, the bigram
+engram table that `client.py` adds to the token embedding (`ENGRAM_ACTIVE` defaults to on since Crowd-v1 step ~348).
+Measured 2026-11-13 on revision 5ac3916: leaving the engram out raises held-out loss by ~0.35 nat (3.03 -> 3.38 on a
+dataset chunk), so a check without it does not measure the model the swarm trains. Use `CROWD_V1_ENGRAM_CONFIG` and
+`load_flat(trunk, engram=...)` for current checkpoints; `CROWD_V1_CONFIG` keeps the trunk-only behaviour.
 """
 
 from __future__ import annotations
@@ -45,6 +48,9 @@ CROWD_V1_CONFIG: dict[str, int | bool] = {
     "headDim": 96, "maxSeqLen": 2048, "mlpHidden": 2560, "weightTying": True,
 }
 CROWD_V1_MODEL_SIZE = 657_787_392
+CROWD_V1_ENGRAM_BUCKETS = 227_865  # client.py ENG_NUM_BUCKETS
+CROWD_V1_ENGRAM_CONFIG: dict[str, int | bool] = {**CROWD_V1_CONFIG, "engramBuckets": CROWD_V1_ENGRAM_BUCKETS}
+CROWD_V1_ENGRAM_SIZE = CROWD_V1_ENGRAM_BUCKETS * 1536  # 350,000,640 (= engramParams in Crowd-v1 config.json)
 TOKEN_DTYPE = np.uint32  # the shards on Vxtzq/CrowdGPT hold uint32 tokens (client.py StreamingShardDataset), whatever DATA.md says
 
 
@@ -119,9 +125,23 @@ class _Block(nn.Module):
         return x + self.mlp(self.ln_2(x))
 
 
+class _Engram(nn.Module):
+    """Bigram hash table of client.py `EngramMemory`: row `(prev * 1_000_003 + idx) % buckets`, prev = 0 at position 0."""
+
+    def __init__(self, buckets: int, dim: int) -> None:
+        super().__init__()
+        self.table = nn.Embedding(buckets, dim)
+
+    def forward(self, idx: torch.Tensor) -> torch.Tensor:
+        prev = torch.cat((torch.zeros_like(idx[:, :1]), idx[:, :-1]), dim=1)
+        h = (prev.to(torch.int64) * 1_000_003 + idx.to(torch.int64)) % self.table.num_embeddings
+        return self.table(h.to(self.table.weight.device)).to(idx.device)
+
+
 class CrowdV1(nn.Module):
-    """Inference-only SotaGPT. Parameter order matches `SotaGPT.named_parameters()` minus the engram table, so the flat
-    `weights` tensor of `model_bf16.safetensors` loads with the same offsets as `SotaGPT.load_base_weights`."""
+    """Inference-only SotaGPT. Trunk parameter order matches `SotaGPT.named_parameters()` minus the engram table, so the
+    flat `weights` tensor of `model_bf16.safetensors` loads with the same offsets as `SotaGPT.load_base_weights`. With
+    `engramBuckets > 0` the engram table (`engram_bf16.safetensors`) is added to the token embedding, as in client.py."""
 
     def __init__(self, config: Mapping[str, int | bool] = CROWD_V1_CONFIG) -> None:
         if not isinstance(config, Mapping):
@@ -129,34 +149,56 @@ class CrowdV1(nn.Module):
         super().__init__()
         self.config = dict(config)
         dim, vocab = int(config["dim"]), int(config["vocabSize"])
+        buckets = config.get("engramBuckets", 0)
+        if isinstance(buckets, bool) or not isinstance(buckets, int) or buckets < 0:
+            raise ValueError("engramBuckets must be a non-negative integer")
         self.wte = nn.Embedding(vocab, dim)
         self.blocks = nn.ModuleList([_Block(config) for _ in range(int(config["nLayers"]))])
         self.ln_f = nn.LayerNorm(dim)
         self.lm_head = nn.Linear(dim, vocab, bias=False)
         if config.get("weightTying", True):
             self.wte.weight = self.lm_head.weight
+        self.engram = _Engram(buckets, dim) if buckets > 0 else None
+
+    def _trunk_parameters(self) -> list[nn.Parameter]:
+        engram = set() if self.engram is None else {id(p) for p in self.engram.parameters()}
+        return [p for p in self.parameters() if id(p) not in engram]  # deduplicated: the tied head appears once
 
     def n_flat(self) -> int:
-        return sum(p.numel() for p in self.parameters())
+        """Trunk parameters only (the size of `model_*.safetensors`); the engram table is loaded separately."""
+        return sum(p.numel() for p in self._trunk_parameters())
 
-    def load_flat(self, flat: torch.Tensor) -> None:
+    def load_flat(self, flat: torch.Tensor, engram: torch.Tensor | None = None) -> None:
         if not isinstance(flat, torch.Tensor):
             raise TypeError("flat must be a torch.Tensor")
         flat = flat.reshape(-1)
-        if flat.numel() != self.n_flat():
-            raise ValueError(f"flat weights have {flat.numel()} values, the model needs {self.n_flat()}")
+        n = self.n_flat()
+        if engram is None and self.engram is not None and flat.numel() == n + self.engram.table.weight.numel():
+            # trunk ‖ engram in one tensor (see `load_crowd_v1_with_engram`): the receipt's weights_sha256 then binds both
+            flat, engram = flat[:n], flat[n:]
+        if flat.numel() != n:
+            raise ValueError(f"flat weights have {flat.numel()} values, the model needs {n}")
+        if (engram is None) != (self.engram is None):
+            raise ValueError("pass an engram tensor exactly when the config has engramBuckets > 0")
         o = 0
         with torch.no_grad():
-            for p in self.parameters():  # deduplicated: the tied head appears once, as wte.weight
+            for p in self._trunk_parameters():
                 s = p.numel()
                 p.copy_(flat[o: o + s].view(p.shape).to(p.dtype))
                 o += s
+            if engram is not None:
+                w = self.engram.table.weight
+                if not isinstance(engram, torch.Tensor) or engram.numel() != w.numel():
+                    raise ValueError(f"engram weights must have {w.numel()} values")
+                w.copy_(engram.reshape(w.shape).to(w.dtype))
 
     def forward(self, idx: torch.Tensor) -> torch.Tensor:
         if not isinstance(idx, torch.Tensor) or idx.ndim != 2:
             raise ValueError("idx must be a 2D torch.Tensor")
         cos, sin = _rope(int(self.config["headDim"]), idx.shape[1], idx.device)
         x = self.wte(idx)
+        if self.engram is not None:
+            x = x + self.engram(idx).to(dtype=x.dtype)
         for blk in self.blocks:
             x = blk(x, cos, sin)
         return F.linear(self.ln_f(x), self.lm_head.weight)
@@ -175,6 +217,17 @@ def load_flat_safetensors(path: Path | str) -> torch.Tensor:
             raise ValueError(f"cannot identify the weights tensor among {sorted(tensors)[:10]}")
         key = next(iter(tensors))
     return tensors[key].reshape(-1)
+
+
+def load_crowd_v1_with_engram(model_path: Path | str, engram_path: Path | str) -> torch.Tensor:
+    """`model_bf16.safetensors` ‖ `engram_bf16.safetensors` as one flat tensor, for `CrowdV1(CROWD_V1_ENGRAM_CONFIG)`.
+
+    Passing this single tensor as `base` / `candidate` to `make_receipt` and `cpu_recompute_fn` makes the receipt's
+    `*_sha256` cover the engram table too (it changes every round), with no change to the receipt schema."""
+    trunk, eng = load_flat_safetensors(model_path), load_flat_safetensors(engram_path)
+    if eng.numel() != CROWD_V1_ENGRAM_SIZE:
+        raise ValueError(f"engram file has {eng.numel()} values, expected {CROWD_V1_ENGRAM_SIZE}")
+    return torch.cat((trunk, eng.to(trunk.dtype)))
 
 
 def weights_sha256(flat: torch.Tensor) -> str:

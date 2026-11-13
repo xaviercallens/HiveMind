@@ -1,5 +1,11 @@
 # Changelog
 
+## v3.4.1 — 2026-11-13 — Weekend Campaign Readiness (PR #908)
+
+- **Per-IP rate limits configurable, campaign defaults (PR #908):** GET 600→3000 and POST 300→900 per minute per instance, set with `HIVEMIND_RATE_GET_PER_MIN` and `HIVEMIND_RATE_POST_PER_MIN`; invalid values fall back to defaults. Shared NAT/carrier IPs no longer hit 429 at normal campaign traffic.
+- **Test hardening:** the forwarded-address bypass test pins the POST limit to 300 so it keeps checking the bypass.
+- **Ops (not in code):** Cloud Run scaling for the weekend: Ruche and web min 2 / max 3 with session affinity; OpenRouter min 1 / max 1, 2 vCPU, CPU always allocated.
+
 ## v3.1.2 — 2026-11-07 — Legacy PBKDF2-SHA256 Login Restoration, HTTPS Cloud Run Portal, OpenTrainer Campaign Gate, E8 Lattice Parity & Streaming TTFT Telemetry (PRs #692–#703)
 
 - **Legacy Email + Password Login Restoration & HTTPS Cloud Run Fixes (PR #702, deployed as `v3.1.2-https` across `hivemind-at-home`, `hivemind-at-home-ruche`, and `hivemind-openrouter`):**

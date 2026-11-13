@@ -4808,7 +4808,7 @@ def run_la_ruche_moe_inference(
 _DEFAULT_LEDGER_BALANCES: Dict[str, int] = {
     "xavier_callens": 68500,
     "xaviercallens": 68500,
-    "vxtzq": 30000,
+    "vxtzq": 100000,
     "clark719664": 24000,
     "radialmonster": 21000,
     "pedromineo": 18000,
@@ -7895,7 +7895,7 @@ def create_hivemind_at_home_app(
             "v2_access_granted": True,
             "target_profile": "developer",
             "hardware_profile": "rtx_4090",
-            "compute_points": 30000,
+            "compute_points": 100000,
             "token": "hm_live_vxtzq_771a904c55b",
             "node_id": "0x771A904C",
             "registered_at": time.time() - 86400 * 28,

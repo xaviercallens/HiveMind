@@ -1359,6 +1359,7 @@ def render_portal_page(
         <a href="#integrations" class="nav-link">Editor Config</a>
         <a href="#steam-free-game" class="nav-link">&#x1F3AE; Free Steam Game</a>
         <a href="#contributive-community-hub" class="nav-link" style="color:var(--green);font-weight:700;">&#x1F91D; Contributive &amp; Help</a>
+        <a href="/raid" class="nav-link" style="color:var(--amber);font-weight:700;">&#x1F680; v3.4 Pioneer Raid (14&ndash;15 Nov)</a>
         <a href="#opentrainer" class="nav-link" style="color:var(--cyan);font-weight:700;">&#x1F525; Trainer (OpenTrainer)</a>
         <a href="#producers" class="nav-link">Share GPU</a>
         <a href="/signup" class="nav-link">&#x1F511; Sign In</a>
@@ -1381,6 +1382,25 @@ def render_portal_page(
         <a href="#life-as-a-bee" class="btn btn-outline" style="border-color:var(--amber);color:var(--amber);">&#x1F41D; Life as a Bee (15 Scenarios)</a>
         {signup_cta}
         <a href="https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app/" target="_blank" rel="noopener" class="btn btn-outline">&#x1F36F; HiveMind@home Portal</a>
+      </div>
+    </section>
+
+    <!-- HiveMind v3.4 Pioneer Thank-You & Nov 14-15 CrowdGPT Massive Swarm Raid Callout -->
+    <section id="weekend-raid" class="card" style="margin-bottom:1.5rem;border-color:rgba(251,191,36,0.55);background:linear-gradient(180deg, rgba(245,158,11,0.12), rgba(13,19,38,0.96));">
+      <div class="card-header" style="margin-bottom:0.65rem;padding-bottom:0.5rem;">
+        <div class="card-title" style="color:var(--amber);font-size:1rem;">
+          &#x1F41D; Thank You Pioneers! HiveMind v3.4 + Rebuilt EN/FR Web UI + CrowdGPT Massive Swarm Raid (14&ndash;15 Nov 2026)
+        </div>
+        <a href="/raid" class="pill" style="border-color:var(--amber);color:var(--amber);text-decoration:none;margin:0;">Open Raid Hub (/raid)</a>
+      </div>
+      <p style="font-size:0.88rem;color:var(--text);margin-bottom:0.85rem;">
+        Personal thank-you from <strong>Xavier Callens (<code>callensxavier@gmail.com</code>)</strong> to our first <strong>55 registered contributors &amp; adopters</strong>! Your existing <code>hm-...</code> API key and <code>HMT</code> balance are 100% preserved. Join as a <strong>GPU Producer</strong> (<code>:8787</code> Shield, <code>&lt; 1.5s</code> game preemption) or <strong>OpenDiLoCo Sparse-MoE Trainer</strong> (<code>hivemind/crowd-moe-v1</code> with <code>@Vxtzq</code>) this weekend to validate <strong>both</strong> open-source concepts live!
+      </p>
+      <div style="display:flex;gap:0.65rem;flex-wrap:wrap;">
+        <a href="/raid" class="btn btn-primary" style="padding:0.5rem 0.95rem;font-size:0.82rem;">&#x1F680; Pioneer Reconnect &amp; Raid Guide</a>
+        <a href="/calendar/crowdgpt-weekend-raid.ics" class="btn btn-outline" style="padding:0.5rem 0.95rem;font-size:0.82rem;border-color:var(--cyan);color:var(--cyan);">&#x1F4C5; Download 6-Wave .ICS</a>
+        <a href="https://github.com/xaviercallens/HiveMind/issues/new?template=04_crowdgpt_weekend_moe_raid.yml" target="_blank" rel="noopener" class="btn btn-outline" style="padding:0.5rem 0.95rem;font-size:0.82rem;border-color:var(--amber);color:var(--amber);">&#x26A1; Register Raid GPU (E0..E7)</a>
+        <a href="https://discord.gg/ZeFtZpKHf" target="_blank" rel="noopener" class="btn btn-outline" style="padding:0.5rem 0.95rem;font-size:0.82rem;border-color:var(--purple);color:var(--purple);">&#x1F4AC; Discord (#weekend-swarm-raid)</a>
       </div>
     </section>
 

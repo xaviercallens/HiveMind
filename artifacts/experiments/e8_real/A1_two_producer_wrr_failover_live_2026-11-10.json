@@ -1,0 +1,52 @@
+{
+  "evidence": "measured",
+  "criterion_met": false,
+  "not_a_measurement": false,
+  "evidence_note": "Real requests on the production gateway, but both producer accounts ran on ONE physical RTX 2070 (see 'note'), so this tests WRR and account failover, not A1's >= 2 consumer GPUs; the pause was done by a script outside the repository (kill_cmd).",
+  "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md and the PR #871 review (2026-11-12)",
+  "criterion": "A1",
+  "model": "hivemind/granite-moe",
+  "gateway_revision_note": "production gateway",
+  "note": "2026-11-10 live WRR + failover control run on production gateway (shared RTX 2070 physical GPU while T4 Spot VM is outside its 17:00-22:00 CET window): both producer accounts (slot_a and rtx2070=ef1f1643) serve before kill via WRR, slot_a is paused mid-run, and rtx2070 serves 24/24 after kill with 0 errors and exact HMT billing conservation.",
+  "workers": 2,
+  "workers_after": 2,
+  "producers": {
+    "slot_a": "e85654e1",
+    "rtx2070": "ef1f1643"
+  },
+  "killed": "slot_a",
+  "kill_cmd": "D:/xdev/HiveMind/.venv/Scripts/python.exe C:/Users/Utilisateur/.gemini/antigravity/brain/cbc0d65d-d3d6-47bd-a766-ade7136baa6b/scratch/run_a1_wrr_failover.py --pause-slot-a",
+  "distinct_gpus": 1,
+  "before_kill": {
+    "requests": 24,
+    "status_codes": {
+      "200": 24
+    },
+    "non_200": 0,
+    "answered_by": {
+      "slot_a": 12,
+      "rtx2070": 12
+    },
+    "p50_s": 0.39,
+    "max_s": 0.69,
+    "charged_hmt": 0.679158
+  },
+  "after_kill": {
+    "requests": 24,
+    "status_codes": {
+      "200": 24
+    },
+    "non_200": 0,
+    "answered_by": {
+      "rtx2070": 24
+    },
+    "p50_s": 0.39,
+    "max_s": 0.83,
+    "charged_hmt": 0.604027
+  },
+  "balance_delta_hmt": 1.283185,
+  "restore_exit": 0,
+  "passed": true,
+  "reason": "",
+  "distinct_producer_accounts": 2
+}

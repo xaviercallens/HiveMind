@@ -351,6 +351,85 @@ if ($('signOutSessionBtn')) {
     setStatus('Signed out of browser session.', false);
   });
 }
+async function claimTestingBonusHmt() {
+  const tok = ($('key') && $('key').textContent.trim()) || localStorage.getItem('hivemind_api_key') || '';
+  if (!tok) {
+    setStatus('Sign in or create an account first to claim HMT testing bonuses.', true);
+    return;
+  }
+  setStatus('Claiming eligible HMT testing bonus...', false);
+  try {
+    const res = await fetch('/v1/hivemind/bonus/claim', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bonus_code: 'auto' }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setStatus((d.error && d.error.message) || 'Could not claim bonus HMT.', true);
+      return;
+    }
+    if (typeof d.balance_hmt === 'number') {
+      const fmt = d.balance_hmt.toFixed(2) + ' HMT';
+      if ($('bal')) $('bal').textContent = fmt;
+      if ($('activeSessionBalance')) $('activeSessionBalance').textContent = fmt;
+      persistUnifiedSession({
+        api_key: tok,
+        handle: d.handle || localStorage.getItem('hivemind_user_handle') || 'operator',
+        role: d.role || 'prosumer',
+        balance_hmt: d.balance_hmt,
+        compute_points: d.compute_points,
+        created: false,
+      });
+    }
+    setStatus(d.note || (d.claimed ? 'Bonus HMT credited!' : 'No new bonus HMT available right now.'), false);
+  } catch (e) {
+    setStatus('Could not reach the gateway to claim bonus HMT.', true);
+  }
+}
+if ($('claimBonusBtn')) $('claimBonusBtn').addEventListener('click', claimTestingBonusHmt);
+if ($('bannerClaimBonusBtn')) $('bannerClaimBonusBtn').addEventListener('click', claimTestingBonusHmt);
+if ($('transferPointsForm')) {
+  $('transferPointsForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const tok = ($('key') && $('key').textContent.trim()) || localStorage.getItem('hivemind_api_key') || '';
+    const recipient = ($('transferRecipient') && $('transferRecipient').value || '').trim();
+    const amount = Number(($('transferAmount') && $('transferAmount').value || '').trim());
+    const memo = ($('transferMemo') && $('transferMemo').value || '').trim() || 'peer-hiveminder-support';
+    if (!tok || !recipient || !Number.isFinite(amount) || amount <= 0) {
+      setStatus('Enter a recipient handle and a positive HMT amount.', true);
+      return;
+    }
+    setStatus('Sending HMT points across the HiveMind ledger...', false);
+    try {
+      const res = await fetch('/v1/hivemind/points/transfer', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipient: recipient, amount: amount, memo: memo, notify_amcp: true }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatus((d.error && d.error.message) || 'HMT transfer failed.', true);
+        return;
+      }
+      if (typeof d.sender_balance_hmt === 'number') {
+        const fmt = d.sender_balance_hmt.toFixed(2) + ' HMT';
+        if ($('bal')) $('bal').textContent = fmt;
+        if ($('activeSessionBalance')) $('activeSessionBalance').textContent = fmt;
+        persistUnifiedSession({
+          api_key: tok,
+          handle: d.sender_handle || localStorage.getItem('hivemind_user_handle') || 'operator',
+          balance_hmt: d.sender_balance_hmt,
+          compute_points: d.sender_compute_points,
+          created: false,
+        });
+      }
+      setStatus('Sent ' + Number(d.amount_hmt || amount).toFixed(2) + ' HMT to @' + (d.recipient_handle || recipient) + (d.amcp_event_id ? ' · AMCP ' + d.amcp_event_id : ''), false);
+    } catch (e) {
+      setStatus('Could not reach the gateway to transfer HMT.', true);
+    }
+  });
+}
 syncSignupLiveTelemetry();
 checkActiveBrowserSession();
 """
@@ -405,6 +484,8 @@ def render_signup_page(
     error_message: str | None = None,
     live_telemetry: dict[str, Any] | None = None,
     starter_grant_hmt: float = 0.0,
+    registration_bonus_hmt: float = 0.0,
+    allow_bonuses: bool = False,
     default_role: str = "prosumer",
 ) -> str:
     """Render the unified Login & Registration page at ``/signup`` and ``/login``."""
@@ -414,6 +495,10 @@ def render_signup_page(
         raise ValueError("invalid Google client id")
     if isinstance(starter_grant_hmt, bool) or not isinstance(starter_grant_hmt, (int, float)) or not math.isfinite(float(starter_grant_hmt)) or float(starter_grant_hmt) < 0.0:
         raise ValueError("starter_grant_hmt must be a finite non-negative float")
+    if isinstance(registration_bonus_hmt, bool) or not isinstance(registration_bonus_hmt, (int, float)) or not math.isfinite(float(registration_bonus_hmt)) or float(registration_bonus_hmt) < 0.0:
+        raise ValueError("registration_bonus_hmt must be a finite non-negative float")
+    if not isinstance(allow_bonuses, bool):
+        raise ValueError("allow_bonuses must be a bool")
     if auth_result is not None and not isinstance(auth_result, Mapping):
         raise ValueError("auth_result must be a mapping or None")
     if error_message is not None and not isinstance(error_message, str):
@@ -446,10 +531,25 @@ def render_signup_page(
     ot_rounds = _reading(ot_live, "accepted_rounds_count")
     telemetry_label = "Live GCP Swarm" if "n/a" not in (total_accts, live_models_cnt, t4_free_mib) else "GCP Swarm (live telemetry partly unavailable)"
 
-    starter_line = (
-        f"Starter grant on this gateway: {starter_grant_hmt:.2f} HMT per new account, at most a few per address per day."
-        if starter_grant_hmt > 0.0
-        else "A new account starts at 0.00 HMT on this gateway: points come from sharing a GPU or from an operator grant."
+    bonus_suffix = " Verified contributor and model-testing bonuses can also be claimed after sign-in." if allow_bonuses else ""
+    if starter_grant_hmt > 0.0 and registration_bonus_hmt > 0.0:
+        total_start = starter_grant_hmt + registration_bonus_hmt
+        starter_line = f"Starter grant on this gateway: {starter_grant_hmt:.2f} HMT + {registration_bonus_hmt:.2f} HMT registration bonus ({total_start:.2f} HMT total per new account), at most a few per address per day.{bonus_suffix}"
+    elif starter_grant_hmt > 0.0:
+        starter_line = f"Starter grant on this gateway: {starter_grant_hmt:.2f} HMT per new account, at most a few per address per day.{bonus_suffix}"
+    elif registration_bonus_hmt > 0.0:
+        starter_line = f"Registration bonus on this gateway: {registration_bonus_hmt:.2f} HMT per new account, at most a few per address per day.{bonus_suffix}"
+    else:
+        starter_line = f"A new account starts at 0.00 HMT on this gateway: points come from sharing a GPU or from an operator grant.{bonus_suffix}"
+    claim_bonus_btn_html = (
+        '\n    <button id="claimBonusBtn" data-testid="signup-claim-bonus-btn" type="button" class="secondary">🎁 Claim Bonus HMT</button>'
+        if allow_bonuses
+        else ""
+    )
+    banner_bonus_btn_html = (
+        '\n    <button id="bannerClaimBonusBtn" data-testid="banner-claim-bonus-btn" type="button" class="secondary">🎁 Claim Bonus HMT</button>'
+        if allow_bonuses
+        else ""
     )
     result_hidden = "" if auth_result else " hidden"
     res_kind = ""
@@ -528,7 +628,7 @@ def render_signup_page(
   <p class="mut">Signed in as <strong id="activeSessionHandle">@operator</strong> · Balance <strong id="activeSessionBalance">0.00 HMT</strong></p>
   <p>
     <a href="/v3.1" id="bannerOpenV31Btn" data-testid="banner-open-v31-btn" class="btn-link">🐝 Continue to Unified v3.1 Portal</a>
-    <a href="/#playground" class="btn-link secondary">🚀 Open AI Playground</a>
+    <a href="/#playground" class="btn-link secondary">🚀 Open AI Playground</a>{banner_bonus_btn_html}
     <button id="signOutSessionBtn" data-testid="signup-signout-btn" type="button" class="secondary">🚪 Sign Out</button>
   </p>
 </section>
@@ -542,10 +642,19 @@ def render_signup_page(
     <button id="copy" type="button">📋 Copy API Key</button>
     <a href="/v3.1" id="openV31Btn" data-testid="btn-open-v31-authenticated" class="btn-link">🐝 Open Unified v3.1 Portal</a>
     <a href="/#playground" class="btn-link secondary">🚀 Open AI Playground</a>
-    <a href="/webgpu" class="btn-link secondary">🌌 Open WebGPU Cockpit</a>
+    <a href="/webgpu" class="btn-link secondary">🌌 Open WebGPU Cockpit</a>{claim_bonus_btn_html}
     <button id="rotateKeyBtn" data-testid="signup-rotate-key-btn" type="button" class="secondary">🔄 Rotate API Key</button>
   </p>
   <p class="mut">Account <code id="acct">{res_acct}</code> · Role <code id="role">{res_role}</code> · Balance <code id="bal">{res_bal}</code></p>
+  <form id="transferPointsForm" data-testid="signup-transfer-hmt-form" style="margin:.75rem 0;padding:.75rem;border:1px solid var(--line);border-radius:.5rem;background:var(--card)">
+    <strong>🤝 Give HMT Points to Another HiveMinder</strong>
+    <div style="display:grid;grid-template-columns:1.2fr .8fr 1.4fr auto;gap:.5rem;align-items:end;margin-top:.45rem">
+      <label style="padding:0">Recipient (@handle)<input id="transferRecipient" type="text" placeholder="@Vxtzq" style="margin-bottom:0" /></label>
+      <label style="padding:0">Amount (HMT)<input id="transferAmount" type="text" inputmode="decimal" placeholder="5000" style="margin-bottom:0" /></label>
+      <label style="padding:0">Purpose / Memo<input id="transferMemo" type="text" placeholder="CrowdGPT inference tests" style="margin-bottom:0" /></label>
+      <button id="transferSubmitBtn" data-testid="signup-transfer-hmt-btn" type="submit" class="secondary">Send HMT</button>
+    </div>
+  </form>
   <p>Next, in a terminal or IDE (Continue / Cline / Aider / OpenCode):</p>
   <pre><code>export HIVEMIND_API_KEY=&lt;the key above&gt;
 python hivemind_connect.py check

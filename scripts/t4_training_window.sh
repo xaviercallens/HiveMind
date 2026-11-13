@@ -13,6 +13,9 @@ VM=socreateai-agora-hermes-node1
 POLICY=hivemind-t4-training-window
 START="${START:-22}"
 STOP="${STOP:-2}"
+RAID_POLICY="hivemind-t4-weekend-nov14-15"
+RAID_FROM="2026-11-13T23:00:00Z"   # Sat 14 Nov 2026 00:00 Europe/Paris
+RAID_UNTIL="2026-11-15T23:00:00Z"  # Mon 16 Nov 2026 00:00 Europe/Paris
 
 case "${1:-status}" in
   status)
@@ -30,5 +33,29 @@ case "${1:-status}" in
     gcloud compute instances remove-resource-policies "$VM" --zone "$ZONE" --project "$PROJECT" --resource-policies "$POLICY"
     gcloud compute resource-policies delete "$POLICY" --region "$REGION" --project "$PROJECT" --quiet
     ;;
-  *) echo "usage: $0 status|apply|remove"; exit 64 ;;
+  weekend-raid)
+    # Extended 8h/day Spot window (14:00-22:00 Europe/Paris) for Sat 14 & Sun 15 Nov 2026 (+7h total = +$1.30 USD, <= $150/mo cap)
+    [ "${CONFIRM:-}" = yes ] || { echo "refusing: set CONFIRM=yes to apply 14:00-22:00 Europe/Paris Weekend Raid Spot schedule (+1.30 USD)"; exit 2; }
+    # The schedule is bounded to this one weekend (a bare "14,15 11" cron would start the VM again every November), and
+    # the daily window it replaces is restored by `weekend-raid-end` (run it on Monday; a VM holds one schedule at a time).
+    gcloud compute resource-policies describe "$RAID_POLICY" --region "$REGION" --project "$PROJECT" >/dev/null 2>&1 || \
+      gcloud compute resource-policies create instance-schedule "$RAID_POLICY" --region "$REGION" --project "$PROJECT" --timezone Europe/Paris \
+        --vm-start-schedule "0 14 14,15 11 *" --vm-stop-schedule "0 22 14,15 11 *" \
+        --initiation-date "$RAID_FROM" --end-date "$RAID_UNTIL" --description "CrowdGPT Weekend Nov 14-15 2026 Spot Raid (+1.30 USD)"
+    gcloud compute instances remove-resource-policies "$VM" --zone "$ZONE" --project "$PROJECT" --resource-policies "$POLICY" 2>/dev/null || true
+    gcloud compute instances add-resource-policies "$VM" --zone "$ZONE" --project "$PROJECT" --resource-policies "$RAID_POLICY"
+    echo "weekend schedule attached until $RAID_UNTIL; restore the daily window afterwards: CONFIRM=yes $0 weekend-raid-end"
+    ;;
+  weekend-raid-end)
+    # Put the daily training window back and delete the weekend schedule
+    [ "${CONFIRM:-}" = yes ] || { echo "refusing: set CONFIRM=yes to detach the weekend schedule and restore the daily window"; exit 2; }
+    gcloud compute instances remove-resource-policies "$VM" --zone "$ZONE" --project "$PROJECT" --resource-policies "$RAID_POLICY" 2>/dev/null || true
+    gcloud compute resource-policies delete "$RAID_POLICY" --region "$REGION" --project "$PROJECT" --quiet 2>/dev/null || true
+    if gcloud compute resource-policies describe "$POLICY" --region "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
+      gcloud compute instances add-resource-policies "$VM" --zone "$ZONE" --project "$PROJECT" --resource-policies "$POLICY"
+    else
+      echo "no daily window policy exists: create it with CONFIRM=yes START=.. STOP=.. $0 apply"
+    fi
+    ;;
+  *) echo "usage: $0 status|apply|remove|weekend-raid|weekend-raid-end"; exit 64 ;;
 esac

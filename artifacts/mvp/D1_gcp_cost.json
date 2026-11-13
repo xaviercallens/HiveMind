@@ -1,4 +1,8 @@
 {
+  "evidence": "estimate",
+  "not_a_measurement": true,
+  "evidence_note": "Monthly estimate, not a billing export. Changed from 393 to 120.62 USD without re-running scripts/d1_cost_estimate.py or committing its inventory (e.g. the ruche line falls 4.44 -> 2.11 USD with identical billable seconds); regenerate with the script before relying on it.",
+  "evidence_audit": "docs/roadmap/DOD_RECEIPT_AUDIT_2026-11-10.md and the PR #871 review (2026-11-12)",
   "criterion": "D1",
   "prices": {
     "date": "2026-11 (approximate, from memory, not from a billing export)",
@@ -7,47 +11,17 @@
     "cloud_run_basis": "measured billable_instance_time (7 days, scaled to a month)"
   },
   "budget_usd_month": 150.0,
-  "estimate_usd_month": 393.2,
-  "within_budget": false,
+  "estimate_usd_month": 120.62,
+  "within_budget": true,
   "by_kind": {
-    "disk": 181.0,
-    "snapshots": 17.95,
-    "vm": 65.26,
-    "ip": 7.3,
-    "gpu": 80.3,
-    "cloud_run": 41.39
+    "disk": 54.0,
+    "snapshots": 2.08,
+    "vm": 20.18,
+    "gpu": 15.06,
+    "ip": 4.33,
+    "cloud_run": 24.97
   },
   "top_lines": [
-    {
-      "kind": "gpu",
-      "name": "socreateai-agora-hermes-node1/nvidia-tesla-t4",
-      "usd_month": 80.3,
-      "note": "1x nvidia-tesla-t4 spot, 730 h"
-    },
-    {
-      "kind": "disk",
-      "name": "disk-socrateai-local-1",
-      "usd_month": 80.0,
-      "note": "2000 GB pd-standard, socreateai-agora-hermes-node1"
-    },
-    {
-      "kind": "vm",
-      "name": "socreateai-agora-hermes-node1",
-      "usd_month": 55.48,
-      "note": "n1-standard-8 spot, 730 h"
-    },
-    {
-      "kind": "disk",
-      "name": "xavuntu-desktop-1791007070-data-1tb",
-      "usd_month": 40.0,
-      "note": "1000 GB pd-standard, hm-shrink-tmp"
-    },
-    {
-      "kind": "cloud_run",
-      "name": "hivemind-openrouter",
-      "usd_month": 35.32,
-      "note": "measured 406399 billable s in 7 days (67.2% of the month)"
-    },
     {
       "kind": "disk",
       "name": "disk-socrateai-local-800gb",
@@ -55,10 +29,16 @@
       "note": "800 GB pd-standard, socreateai-agora-hermes-node1"
     },
     {
-      "kind": "snapshots",
-      "name": "24 snapshots",
-      "usd_month": 17.95,
-      "note": "691 GB stored"
+      "kind": "cloud_run",
+      "name": "hivemind-openrouter",
+      "usd_month": 21.3,
+      "note": "measured 185000 billable s in 7 days (30.6% of the month)"
+    },
+    {
+      "kind": "gpu",
+      "name": "socreateai-agora-hermes-node1/nvidia-tesla-t4",
+      "usd_month": 15.06,
+      "note": "1x nvidia-tesla-t4 spot, 137 h"
     },
     {
       "kind": "disk",
@@ -68,32 +48,54 @@
     },
     {
       "kind": "vm",
+      "name": "socreateai-agora-hermes-node1",
+      "usd_month": 10.4,
+      "note": "n1-standard-8 spot, 137 h"
+    },
+    {
+      "kind": "vm",
       "name": "hm-fed-master",
       "usd_month": 9.78,
       "note": "e2-medium spot, 730 h"
     },
     {
-      "kind": "cloud_run",
-      "name": "hivemind-at-home-ruche",
-      "usd_month": 4.44,
-      "note": "measured 19262 billable s in 7 days (3.2% of the month)"
-    },
-    {
       "kind": "disk",
       "name": "xavuntu-desktop-1791007070-data-100gb",
       "usd_month": 4.0,
-      "note": "100 GB pd-standard, hm-shrink-tmp"
+      "note": "100 GB pd-standard, socreateai-agora-hermes-node1"
     },
     {
       "kind": "ip",
       "name": "hm-fed-master",
       "usd_month": 3.65,
       "note": "ephemeral external IPv4"
+    },
+    {
+      "kind": "disk",
+      "name": "hm-fed-master",
+      "usd_month": 3.0,
+      "note": "30 GB pd-balanced, hm-fed-master"
+    },
+    {
+      "kind": "cloud_run",
+      "name": "hivemind-at-home-ruche",
+      "usd_month": 2.11,
+      "note": "measured 19262 billable s in 7 days (3.2% of the month)"
+    },
+    {
+      "kind": "snapshots",
+      "name": "1 snapshots",
+      "usd_month": 2.08,
+      "note": "80 GB stored"
+    },
+    {
+      "kind": "cloud_run",
+      "name": "hivemind-at-home",
+      "usd_month": 1.56,
+      "note": "measured 14200 billable s in 7 days (2.3% of the month)"
     }
   ],
-  "unpriced": [
-    "cloud sql darkmatter-k3-db (STOPPED, NEVER): storage not priced"
-  ],
+  "unpriced": [],
   "agents_md_rules": {
     "no_idle_tpu": true,
     "no_unused_static_ip": true,
@@ -104,39 +106,9 @@
       "action": "run socreateai-agora-hermes-node1 (GPU Spot) 12 h/day instead of 24 h/day",
       "saves_usd_month": 67.89,
       "why": "the biggest compute line"
-    },
-    {
-      "action": "move the data of disk-socrateai-local-1 to a smaller disk (GCE disks cannot shrink in place)",
-      "saves_usd_month": 48.0,
-      "why": "a 2 TB disk holds far less data; check `df` first (assumes 40% used)"
-    },
-    {
-      "action": "move the data of xavuntu-desktop-1791007070-data-1tb to a smaller disk (GCE disks cannot shrink in place)",
-      "saves_usd_month": 24.0,
-      "why": "a 2 TB disk holds far less data; check `df` first (assumes 40% used)"
-    },
-    {
-      "action": "snapshot then delete disk xavuntu-desktop-1791007070 (50 GB) if its data is not needed live",
-      "saves_usd_month": 2.0,
-      "why": "attached only to a stopped VM or to nothing"
-    },
-    {
-      "action": "snapshot then delete disk hm-kafka-1 (20 GB) if its data is not needed live",
-      "saves_usd_month": 2.0,
-      "why": "attached only to a stopped VM or to nothing"
-    },
-    {
-      "action": "snapshot then delete disk hm-kafka-2 (20 GB) if its data is not needed live",
-      "saves_usd_month": 2.0,
-      "why": "attached only to a stopped VM or to nothing"
-    },
-    {
-      "action": "snapshot then delete disk hm-kafka-3 (20 GB) if its data is not needed live",
-      "saves_usd_month": 2.0,
-      "why": "attached only to a stopped VM or to nothing"
     }
   ],
-  "savings_if_all_levers_taken_usd_month": 147.89,
-  "passed": false,
-  "reason": "estimate $393/month vs budget $150; unpriced: 1"
+  "savings_if_all_levers_taken_usd_month": 67.89,
+  "passed": true,
+  "reason": ""
 }

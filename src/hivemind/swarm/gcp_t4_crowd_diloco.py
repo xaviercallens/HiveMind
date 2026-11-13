@@ -143,13 +143,17 @@ def assert_not_protected_t4_path(path: Path | str) -> Path:
             f"Refusing write/checkpoint path {path!r}: {PROTECTED_T4_DIR_POSIX}/ is strictly protected by AGENTS.md Rule 1."
         )
     try:
-        resolved_norm = _normalize_posix_like_path(Path(path).resolve())
-        if resolved_norm == PROTECTED_T4_DIR_POSIX or resolved_norm.startswith(PROTECTED_T4_DIR_POSIX + "/"):
-            raise PermissionError(
-                f"Refusing resolved path {resolved_norm!r}: {PROTECTED_T4_DIR_POSIX}/ is strictly protected by AGENTS.md Rule 1."
-            )
+        resolved_norm: str | None = _normalize_posix_like_path(Path(path).resolve())
     except OSError:
-        pass
+        resolved_norm = None  # unresolvable (e.g. a symlink loop): the literal path was already checked above
+    # checked outside the try: PermissionError is an OSError, and catching it there let a symlink into the protected
+    # directory through
+    if resolved_norm is not None and (
+        resolved_norm == PROTECTED_T4_DIR_POSIX or resolved_norm.startswith(PROTECTED_T4_DIR_POSIX + "/")
+    ):
+        raise PermissionError(
+            f"Refusing resolved path {resolved_norm!r}: {PROTECTED_T4_DIR_POSIX}/ is strictly protected by AGENTS.md Rule 1."
+        )
     return Path(path)
 
 

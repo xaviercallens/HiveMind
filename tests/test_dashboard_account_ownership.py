@@ -138,7 +138,9 @@ def test_federated_submit_refuses_oversized_lora_factors(tmp_path: Path) -> None
     assert "r <= 64" in r.text  # refused by the shape bound, before any matmul or SVD
 
 
-def test_rate_limiter_keys_on_the_rightmost_forwarded_address(tmp_path: Path) -> None:
+def test_rate_limiter_keys_on_the_rightmost_forwarded_address(tmp_path: Path, monkeypatch) -> None:
+    # pin the POST limit to the historic 300/min so the bypass check stays meaningful with the campaign default
+    monkeypatch.setenv("HIVEMIND_RATE_POST_PER_MIN", "300")
     client = _client(tmp_path)
     codes = [
         client.post("/api/v1/auth/guest", headers={"X-Forwarded-For": f"10.0.{i // 250}.{i % 250}, 203.0.113.9"}, json={}).status_code

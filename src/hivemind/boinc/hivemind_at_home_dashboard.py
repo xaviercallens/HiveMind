@@ -332,6 +332,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+def _env_int(name: str, default: int) -> int:
+    """Read a positive integer setting from the environment, falling back to ``default`` on bad input."""
+    try:
+        value = int(os.environ.get(name, "").strip() or default)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
 class RateLimiterMiddleware(BaseHTTPMiddleware):
     """Sliding-window token bucket rate limiter with IP tracking and telemetry."""
 
@@ -7741,8 +7750,8 @@ def create_hivemind_at_home_app(
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(
         RateLimiterMiddleware,
-        get_limit_per_min=600,
-        post_limit_per_min=300,
+        get_limit_per_min=_env_int("HIVEMIND_RATE_GET_PER_MIN", 3000),
+        post_limit_per_min=_env_int("HIVEMIND_RATE_POST_PER_MIN", 900),
         window_seconds=60.0,
     )
     app.add_middleware(

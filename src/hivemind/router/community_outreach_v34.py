@@ -626,11 +626,22 @@ Would love your feedback, critiques on the `RDA` + spot-checked loss ratchet, an
     return posts
 
 
-def render_v34_raid_hub_page(*, lang: str = "en", nonce: str) -> str:
-    """Render the strict-CSP bilingual (`en` / `fr`) Pioneer Thank-You, Reconnect & CrowdGPT Raid Hub (`/raid`)."""
+def render_v34_raid_hub_page(*, lang: str = "en", nonce: str, starter_grant_hmt: float = 0.0) -> str:
+    """Render the strict-CSP bilingual (`en` / `fr`) Pioneer Thank-You, Reconnect & CrowdGPT Raid Hub (`/raid`).
+
+    ``starter_grant_hmt`` is the gateway's real sign-up grant; the page promises a credit only when it is above zero.
+    """
     raid_hub_content_security_policy(nonce)  # validates nonce
     is_fr = str(lang or "en").strip().lower().startswith("fr")
     clean_lang = "fr" if is_fr else "en"
+    grant = float(starter_grant_hmt) if starter_grant_hmt and starter_grant_hmt > 0 else 0.0
+    if grant:
+        grant_button = f"Nouvelle Web UI & Compte ({grant:g} HMT)" if is_fr else f"Open New Web UI & Account ({grant:g} HMT)"
+        grant_line = f"et {grant:g} HMT offerts à l'inscription." if is_fr else f"and a {grant:g} HMT sign-up grant."
+    else:
+        grant_button = "Nouvelle Web UI & Compte gratuit" if is_fr else "Open New Web UI & Free Account"
+        grant_line = ("(pas de crédit HMT à l'inscription : les points viennent du calcul partagé)." if is_fr
+                      else "(no HMT sign-up credit: points come from shared compute).")
 
     title = (
         "HiveMind v3.4 × CrowdGPT — Merci aux Pionniers & Raid Swarm 14–15 Nov 2026"
@@ -752,9 +763,9 @@ def render_v34_raid_hub_page(*, lang: str = "en", nonce: str) -> str:
       <h1>{hero_h1}</h1>
       <p>{hero_lead}</p>
       <div class="cta-row">
-        <a class="btn btn-amber" href="{GITHUB_REPO_URL}/issues/new?template=04_crowdgpt_weekend_moe_raid.yml">&#x1F680; {"Inscrire mon GPU / Trainer (14–15 Nov)" if is_fr else "Register GPU Producer / Trainer Node (14–15 Nov)"}</a>
+        <a class="btn btn-amber" href="{GITHUB_REPO_URL}/discussions/909">&#x1F680; {"Rejoindre / poser une question (14–15 Nov)" if is_fr else "Join / ask for help (14–15 Nov)"}</a>
         <a class="btn btn-cyan" href="/calendar/crowdgpt-weekend-raid.ics">&#x1F4C5; {"Télécharger le Calendrier .ICS (6 Vagues)" if is_fr else "Download 6-Wave .ICS Raid Calendar"}</a>
-        <a class="btn btn-green" href="/signup">&#x1F511; {"Nouvelle Web UI & Compte (500 HMT)" if is_fr else "Open New Web UI & Account (500 HMT)"}</a>
+        <a class="btn btn-green" href="/signup">&#x1F511; {grant_button}</a>
         <a class="btn btn-purple" href="{DISCORD_INVITE_URL}" target="_blank" rel="noopener">&#x1F4AC; Discord (#weekend-swarm-raid)</a>
       </div>
     </section>
@@ -764,7 +775,7 @@ def render_v34_raid_hub_page(*, lang: str = "en", nonce: str) -> str:
         <h2>1. {"Nouvelle Web UI v3.4 & Reconnexion (100% Conservé)" if is_fr else "New v3.4 Web UI & Instant Reconnection"}</h2>
         <ul>
           <li><strong>{"Clés & Soldes Préservés" if is_fr else "100% Preserved Keys & Balances"}</strong>: {"Votre clé hm-... et vos points HMT sont intacts." if is_fr else "Your existing hm-... API key and HMT balance require zero re-registration."}</li>
-          <li><strong>{"Interface Bilingue FR/EN & Sécurité OWASP" if is_fr else "Hardened EN/FR Web UI"}</strong>: PBKDF2-SHA256 (600k), <code>/telemetry</code>, {"et bonus pionnier de 500 HMT." if is_fr else "and 500 HMT welcome/pioneer grants."}</li>
+          <li><strong>{"Interface Bilingue FR/EN & Sécurité OWASP" if is_fr else "Hardened EN/FR Web UI"}</strong>: PBKDF2-SHA256 (600k), <code>/telemetry</code>, {grant_line}</li>
           <li><strong>{"Transfert Pair-à-Pair de Points HMT" if is_fr else "Peer-to-Peer HMT Point Transfers"}</strong>: <code>POST /v1/hivemind/accounts/transfer</code> {"pour soutenir directement les testeurs et chercheurs comme @Vxtzq." if is_fr else "to gift reciprocal compute quota directly between HiveMinders."}</li>
         </ul>
       </section>
@@ -773,13 +784,13 @@ def render_v34_raid_hub_page(*, lang: str = "en", nonce: str) -> str:
         <h2>2. {"Valider Deux Concepts Open-Source avec CrowdGPT" if is_fr else "Validating Both Concepts with CrowdGPT (@Vxtzq)"}</h2>
         <ul>
           <li><strong>Concept A — Producer Swarm</strong>: {"Inférence distribuée compatible OpenAI sur GPU citoyens (8 Go–24 Go) avec préemption jeu < 1,5s." if is_fr else "OpenAI-compatible citizen-GPU serving across 8 GB–24 GB GPUs with < 1.5s gaming preemption."}</li>
-          <li><strong>Concept B — 8x Sparse-MoE + Decoupled OpenDiLoCo</strong>: {"Découpage exact de Vxtzq/Crowd-v1 (1,01B) en 1 ancre partagée + 8 experts (hivemind/crowd-moe-v1, < 1,8 Go VRAM en LoRA-MoE) avec quorum RDA + LossCheckReceipt vérifié sur CPU (perte CUDA pré-raid : 5.3042 -> 5.1742 -> 0.9668)." if is_fr else "Step-0 exact upcycling of Vxtzq/Crowd-v1 (1.01B) into 1 Shared Anchor + 8 Domain Specialists (hivemind/crowd-moe-v1, < 1.8 GiB LoRA-MoE VRAM on 8 GB GPUs) with RDA Quorum + CPU spot-checked LossCheckReceipt (2-round CUDA preflight loss: 5.3042 -> 5.1742 -> 0.9668)."}</li>
+          <li><strong>{"Concept B — Entraîner Crowd-v1 (modèle dense)" if is_fr else "Concept B — Train the dense Crowd-v1"}</strong>: {"Crowd-v1 reste un seul modèle dense (choix de Vxtzq : HiveMind ne le découpe pas en experts). On l'entraîne avec le client officiel de CrowdGPT ; chaque round part sur le serveur de CrowdGPT." if is_fr else "Crowd-v1 stays one dense model (Vxtzq's choice: HiveMind does not split it into experts). Train it with CrowdGPT's official client; each round goes to CrowdGPT's server."}</li>
         </ul>
       </section>
     </div>
 
     <section class="card">
-      <h2>3. {"Reconnexion Rapide en 1 Commande (Producteur GPU ou Entraîneur OpenDiLoCo)" if is_fr else "1-Command Reconnection (GPU Producer or OpenDiLoCo Trainer)"}</h2>
+      <h2>3. {"Reconnexion Rapide (Producteur GPU ou Entraîneur CrowdGPT)" if is_fr else "Quick Start (GPU Producer or CrowdGPT Trainer)"}</h2>
       <p>{"Choisissez votre rôle pour le Raid des 14–15 novembre 2026 (ou cumulez les deux en mode Prosumer) :" if is_fr else "Pick your role for the November 14–15, 2026 Swarm Raid (or run both as a Prosumer):"}</p>
       <pre># A) Reconnect as a Zero-Trust GPU Producer (:8787 Shield + &lt;1.5s game preemption)
 export HIVEMIND_API_KEY="hm-YOUR_EXISTING_KEY"
@@ -787,8 +798,10 @@ export HIVEMIND_ENDPOINT_TOKEN="$(python3 -c 'import secrets;print(secrets.token
 python3 scripts/hivemind_producer_shield.py --host 127.0.0.1 --port 8787 --upstream http://127.0.0.1:11434 &amp;
 python3 scripts/hivemind_producer_agent.py --gateway {PUBLIC_OPENROUTER_URL} --endpoint https://YOUR_TUNNEL_OR_WG_ENDPOINT --preset coder
 
-# B) Join as a CrowdGPT Sparse-MoE OpenDiLoCo Trainer (8 GB–24 GB VRAM, Experts E0..E7)
-python3 scripts/gcp_t4_crowd_diloco_worker.py --mode moe-opendiloco-round --gateway {PUBLIC_OPENROUTER_URL}</pre>
+# B) Train the shared dense Crowd-v1 with CrowdGPT's official client (https://github.com/Vxtzq/CrowdGPT)
+curl -sSL https://raw.githubusercontent.com/Vxtzq/CrowdGPT/main/install.sh | bash
+crowdgpt --doctor
+crowdgpt --headless --anon   # each finished round uploads ~0.9 GB; --vram-gb is a target, not a hard cap</pre>
     </section>
 
     <section class="card">

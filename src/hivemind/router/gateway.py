@@ -5351,7 +5351,7 @@ def create_router_app(
 
         chosen_lang = lang or ("fr" if "fr" in (request.headers.get("accept-language") or "").lower().split(",")[0] else "en")
         nonce = _secrets.token_urlsafe(18)
-        html_doc = render_v34_raid_hub_page(lang=chosen_lang, nonce=nonce)
+        html_doc = render_v34_raid_hub_page(lang=chosen_lang, nonce=nonce, starter_grant_hmt=starter_grant_hmt)
         return HTMLResponse(
             content=html_doc,
             headers={

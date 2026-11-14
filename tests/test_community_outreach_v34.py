@@ -187,3 +187,16 @@ def test_no_contributor_email_address_is_committed_or_served() -> None:
     public = json.dumps(mod.build_v34_communication_plan_status())
     assert {a.lower() for a in addr.findall(public)} <= allowed
     assert "gmail_web_compose_url" not in public
+
+
+
+def test_raid_hub_page_states_the_real_grant_and_the_dense_crowdgpt_path() -> None:
+    """The weekend page must not promise a sign-up credit the gateway does not give, nor the stopped MoE split."""
+    for lang in ("en", "fr"):
+        page = render_v34_raid_hub_page(lang=lang, nonce="ValidNonce123456")
+        assert "500 HMT" not in page
+        assert "moe-opendiloco-round" not in page and "8 Domain Specialists" not in page and "8 experts (" not in page
+        assert "crowdgpt --headless --anon" in page and "https://github.com/Vxtzq/CrowdGPT" in page
+        assert "/discussions/909" in page
+    granted = render_v34_raid_hub_page(lang="en", nonce="ValidNonce123456", starter_grant_hmt=250)
+    assert "250 HMT" in granted

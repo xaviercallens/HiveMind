@@ -58,3 +58,8 @@ Confirm at the full P1 protocol (3 epochs, 3 seeds, test-set exact match), again
 
 **H8** (LoRA r512, where the paper's LoRA gain is reported) needs about 6 GB for adapter + Adam. That means a bigger GPU
 than the T4 can spare, such as a community 24 GB card. It is the hypothesis most likely to reproduce the paper.
+
+**Caveat found after the screen (independent review):** in the runs with loss dropout (H1, x H1+H2, x H1+H3), the
+dropout coin used the same RNG as the data shuffle and was drawn before it, so those arms saw a different batch order
+than SFT. That adds noise to their comparison with SFT. It does not bias it, but the pairing is lost. Fixed in
+`train.py` after the screen (hash-based decision, as `crowd_jepa.jepa_step`); any confirmation must use the fixed version.

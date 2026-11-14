@@ -36,6 +36,13 @@ papier, sur d'autres modèles** (surtout Llama-3.2-1B-*Instruct*). Ce ne sont pa
    - **Aucune ne bat le SFT.** La meilleure combinaison (λ 0,1 + loss dropout + cosinus centré) l'égale à 0,001 nat près.
    - Les 3 retenues selon la règle écrite d'avance (stop-gradient, cosinus centré, InfoNCE) sont celles qui **suppriment
      l'effondrement et la dégradation de la loss générale**.
+8. **Est-ce propre à CrowdGPT ? (§11)** On ne peut pas encore trancher.
+   - Le tableau 8 du papier donne **+11,4 points à LoRA r64** (Llama-3.2-1B-Instruct, lr 2e-5, k = 1) : le rang
+     n'explique donc pas notre résultat nul.
+   - Restent deux suspects : notre recette (lr 10 × plus élevé, k = 0) et le modèle (Crowd-v1 est un modèle de base). P2
+     les sépare ; il est prêt, et le T4 est pris par l'entraînement du week-end.
+   - **P0** montre que le levier principal pour Crowd-v1 est le mélange de données : écart avec Qwen3-0.6B de +3,84 nat
+     sur le code, +2,44 sur les maths, contre +0,36 sur ses propres données.
 
 ---
 
@@ -338,3 +345,54 @@ stop-gradient, H3 cosinus centré, H4 InfoNCE.**
 - Confirmer H1+H2 et H1+H3 au protocole complet de P1 (3 graines, 3 époques, précision sur le test).
 - Tester **H8 (LoRA r512)** sur un GPU de 24 Go : c'est le réglage où le papier rapporte son gain LoRA, et celui qui a le
   plus de chances de le reproduire.
+
+## 11. Spécifique à CrowdGPT ? P0 (données) et P2 (préparé) — 14/11/2026
+
+**Ce que dit le papier.** Tableau 8 de l'annexe A.1, NL-RX-SYNTH, 5 runs par case, lr 2e-5, λ = 1, k = 1 :
+
+| rang LoRA | SFT | JEPA |
+|---|---|---|
+| 32 | 6,09 | 7,45 |
+| **64** | **21,09** | **32,46** |
+| 128 | 34,21 | 48,45 |
+| 256 | 45,57 | 60,80 |
+| 512 | 50,18 | 72,41 |
+
+Le papier ne teste que des modèles *Instruct* (aucune expérience sur un modèle de base). À r64, notre SFT (17,1 %) est
+du même ordre que le sien (21,1 %), mais notre JEPA ne gagne rien. Les différences restantes sont :
+- le **lr** (2e-4 chez nous, contre 2e-5) ;
+- **k** (0 contre 1) ;
+- les époques (3 contre ~4) ;
+- le **modèle** (de base, avec engram).
+
+**P2 (préparé, non lancé).** `scripts/crowdgpt_t4/P2_GOAL.md` applique la recette LoRA exacte du papier à Qwen3-0.6B et
+à Crowd-v1, avec des graines appariées, et fixe d'avance la lecture des quatre issues possibles. Le code est prêt :
+- `hf_model.py` (Qwen + PEFT, vues en passes séparées) ;
+- `night_jepa.py --model qwen|crowd --k-pred 1 --lr 2e-5` ;
+- `t4guard.py` qui **cède la place à l'entraînement du week-end** (governor qui sort de `held`, ou processus GPU inconnu
+  de plus de 1 Go).
+
+Le premier test court a coïncidé avec la levée du `HOLD` (11:28). Le garde a arrêté le run, mais le governor a vu le
+GPU occupé et mis BOINC en pause ; sa règle de jour demande 2 h de calme. Je n'ai rien relancé depuis.
+
+**P0 : où Crowd-v1 est faible** (`artifacts/experiments/CROWDGPT_P0_domains_2026-11-14.json`, 8 fenêtres de 2 048 par
+domaine) :
+
+| domaine | Crowd-v1 | Qwen3-0.6B | écart |
+|---|---|---|---|
+| code Python | 5,19 | 1,35 | **+3,84** |
+| maths | 3,33 | 0,89 | **+2,44** |
+| encyclopédique (wikitext) | 4,71 | 2,91 | +1,80 |
+| sciences (SciQ) | 3,82 | 2,32 | +1,50 |
+| web éducatif | 3,99 | 2,95 | +1,04 |
+| données CrowdGPT | 3,12 | 2,76 | +0,36 |
+
+**Côté CrowdGPT (PR #103)** :
+- `tools/domain_eval.py` refait cette mesure sur n'importe quel checkpoint ;
+- `docs/DATA_MIX_PROPOSAL.md` propose d'ajouter du code, des maths et du texte de référence. Les licences restent à
+  vérifier ; la décision revient au mainteneur.
+
+**Autres modèles HiveMind** : `docs/JEPA_FOR_HIVEMIND_MODELS.md`.
+- Paires de vues naturelles par modèle : coder, Bee, greffons Granite.
+- Réglages recommandés, et ce qu'il faudrait dans les workunits BOINC (vues appariées signées, rejeu déterministe).
+- **Barrière fixée d'avance** : rien n'est construit tant que P2 ne montre pas de gain JEPA sur Qwen3-0.6B.

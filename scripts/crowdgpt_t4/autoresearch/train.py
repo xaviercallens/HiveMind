@@ -117,7 +117,10 @@ def main() -> int:
             for g in opt.param_groups:
                 g["lr"] = LR * min(1.0, (frac + 1e-9) / 0.03) * 0.5 * (1 + math.cos(math.pi * frac))
             opt.zero_grad(set_to_none=True)
-            use_j = cfg["jepa"] and (cfg.get("dropout", 0.0) == 0.0 or random.random() >= cfg["dropout"])
+            # loss dropout decided by a hash of (seed, step), as crowd_jepa.jepa_step: it must not consume the data-order
+            # RNG, or SFT and JEPA arms stop seeing the same batches (bug in the 2026-11-14 screen, fixed after it)
+            hv_ = int.from_bytes(__import__("hashlib").sha256(f"crowd-jepa:{SEED}:{step}".encode()).digest()[:8], "big") / 2**64
+            use_j = cfg["jepa"] and (cfg.get("dropout", 0.0) == 0.0 or hv_ >= cfg["dropout"])
             for _ in range(ACCUM):
                 if len(order) < BS:
                     order = list(range(len(train))); random.shuffle(order)

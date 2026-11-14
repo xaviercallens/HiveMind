@@ -141,14 +141,15 @@ def batch_sft(ex):
     return ids, lab
 
 
-def batch_views(ex):
+def batch_views(ex, k=0, pred_id=None):
     """[query | answer] packed, block-causal per example; returns ids, bool mask [B,1,T,T], idx_query_last, idx_ans_last,
     view-2 start positions (for the engram reset)."""
-    T = max(len(e[3]) + len(e[1]) for e in ex)
+    T = max(len(e[3]) + k + len(e[1]) for e in ex)
     ids = torch.full((len(ex), T), EOS, dtype=torch.long)
     mask = torch.zeros(len(ex), 1, T, T, dtype=torch.bool)
     ip, ia, vs = [], [], []
     for i, (_p, a, _s, p) in enumerate(ex):
+        p = p + [int(pred_id)] * k if k else p  # k predictor tokens after the query (paper: [PRED])
         n1, n2 = len(p), len(a)
         ids[i, :n1 + n2] = torch.tensor(p + a)
         mask[i, 0, :n1, :n1] = torch.ones(n1, n1, dtype=torch.bool).tril()
@@ -158,6 +159,17 @@ def batch_views(ex):
         vs.append(n1)
     mask[:, 0] |= torch.eye(T, dtype=torch.bool)  # padding rows attend to themselves (no all-False rows -> no NaN)
     return ids, mask, torch.tensor(ip), torch.tensor(ia), torch.tensor(vs)
+
+
+def view_last(model, seqs):
+    """One right-padded pass over standalone views; final hidden state at each sequence's last real token."""
+    T = max(len(x) for x in seqs)
+    ids = torch.full((len(seqs), T), EOS, dtype=torch.long)
+    am = torch.zeros((len(seqs), T), dtype=torch.long)
+    for i, x in enumerate(seqs):
+        ids[i, :len(x)] = torch.tensor(x); am[i, :len(x)] = 1
+    h = model.hidden(ids.cuda(), ckpt=True, attention_mask=am.cuda())
+    return h[torch.arange(len(seqs)), torch.tensor([len(x) - 1 for x in seqs])]
 
 
 # ------------------------------------------------------------------------------------------------------------- eval
@@ -225,6 +237,9 @@ def main() -> int:
     ap.add_argument("--lr", type=float, default=2e-4)
     ap.add_argument("--lam", type=float, default=1.0)
     ap.add_argument("--rank", type=int, default=64)
+    ap.add_argument("--model", choices=["crowd", "qwen"], default="crowd")
+    ap.add_argument("--k-pred", type=int, default=0, help="predictor tokens appended to the query view (paper: k)")
+    ap.add_argument("--pred-id", type=int, default=151648, help="<|box_start|>: absent from Crowd data, in both vocabs")
     ap.add_argument("--n-train", type=int, default=None)
     ap.add_argument("--n-test", type=int, default=1000)
     ap.add_argument("--max-steps", type=int, default=None, help="probe: stop after this many steps")
@@ -237,7 +252,7 @@ def main() -> int:
     tok = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
     train = load(ROOT / "data/nlrx/synth_train.jsonl", tok, a.n_train)
     test = load(ROOT / "data/nlrx/synth_test.jsonl", tok, a.n_test)
-    res = {"arm": a.arm, "seed": a.seed, "epochs": a.epochs, "bs": a.bs, "accum": a.accum, "lr": a.lr, "lam": a.lam if a.arm == "jepa" else 0.0,
+    res = {"model": a.model, "k_pred": a.k_pred if a.arm == "jepa" else 0, "arm": a.arm, "seed": a.seed, "epochs": a.epochs, "bs": a.bs, "accum": a.accum, "lr": a.lr, "lam": a.lam if a.arm == "jepa" else 0.0,
            "rank": a.rank, "n_train": len(train), "n_test": len(test), "revision": "5ac3916", "status": "running"}
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(res, indent=1))
@@ -245,7 +260,11 @@ def main() -> int:
     with t4guard.GpuLock():
         res["waited_for_room_s"] = round(t4guard.wait_for_room(a.need_mib))
         res["process_cap_mib"] = round(t4guard.cap_process(max_cap_mib=a.cap_mib))
-        model = Model(a.rank, alpha=float(a.rank))
+        if a.model == "qwen":
+            import hf_model
+            model = hf_model.QwenModel(a.rank, alpha=float(a.rank))
+        else:
+            model = Model(a.rank, alpha=float(a.rank))
         params = model.lora
         opt = torch.optim.AdamW(params, lr=a.lr, weight_decay=0.0)
         steps = int(math.ceil(len(train) / (a.bs * a.accum)) * a.epochs)
@@ -294,10 +313,15 @@ def main() -> int:
                       loss = ce
                       j = None
                       if a.arm == "jepa":
-                          vids, vmask, ip, ia, vs = batch_views(ex)
-                          hv = model.hidden(vids.cuda(), mask=vmask.cuda(), ckpt=True, view_starts=vs)
                           r = torch.arange(len(ex))
-                          j = 1.0 - F.cosine_similarity(hv[r, ip].float(), hv[r, ia].float(), dim=-1).mean()
+                          if a.model == "qwen":  # separate passes (reference default mode), right-padded
+                              eq = view_last(model, [e[3] + [a.pred_id] * a.k_pred for e in ex])
+                              ea = view_last(model, [e[1] for e in ex])
+                          else:
+                              vids, vmask, ip, ia, vs = batch_views(ex, a.k_pred, a.pred_id)
+                              hv = model.hidden(vids.cuda(), mask=vmask.cuda(), ckpt=True, view_starts=vs)
+                              eq, ea = hv[r, ip], hv[r, ia]
+                          j = 1.0 - F.cosine_similarity(eq.float(), ea.float(), dim=-1).mean()
                           loss = ce + a.lam * j
                   scaler.scale(loss / a.accum).backward()
               scaler.unscale_(opt)
@@ -313,6 +337,10 @@ def main() -> int:
                   print(json.dumps(log[-1]), flush=True)
         except t4guard.DeadlineReached:
             save_ckpt(); res["status"] = "deadline_train"; a.out.write_text(json.dumps(res, indent=1)); return 0
+        except t4guard.YieldToTraining as e:
+            save_ckpt(); res["status"] = "yield"; res["guard"] = str(e); a.out.write_text(json.dumps(res, indent=1))
+            print(json.dumps({"yield_at_step": step, "why": str(e)}), flush=True)
+            return 4
         except t4guard.GuardAbort as e:
             save_ckpt()
             res["status"] = "guard_abort"; res["guard"] = str(e); a.out.write_text(json.dumps(res, indent=1))
@@ -335,6 +363,8 @@ def main() -> int:
             pred = evaluate(model, test, deadline=a.deadline)
         except (TimeoutError, t4guard.DeadlineReached):
             res["status"] = "deadline_eval"; a.out.write_text(json.dumps(res, indent=1)); return 0
+        except t4guard.YieldToTraining as e:
+            res["status"] = "yield_eval"; res["guard"] = str(e); a.out.write_text(json.dumps(res, indent=1)); return 4
         except t4guard.GuardAbort as e:  # training is checkpointed at its end: a rerun goes straight to eval
             res["status"] = "guard_abort_eval"; res["guard"] = str(e); a.out.write_text(json.dumps(res, indent=1)); return 3
         dec = [tok.decode(p, skip_special_tokens=True).strip() for p in pred]  # as reference evaluate.py

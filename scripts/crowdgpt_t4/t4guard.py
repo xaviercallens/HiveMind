@@ -52,10 +52,50 @@ def wait_for_room(need_mib: float, max_wait_s: float = 1800, poll_s: float = 15.
     return time.time() - t0
 
 
+class YieldToTraining(RuntimeError):
+    """The owner's weekend training (governor un-held, or a foreign large GPU process) has priority: stop, do not retry."""
+
+
+GOVERNOR_STATE = "/mnt/disks/disk-socrateai-local-1/hivemind_telemetry/governor_state.json"
+HOLD_FILE = "/mnt/disks/disk-socrateai-local-1/hivemind_telemetry/HOLD"
+WHITELIST = ("gwaya-lite/llama.cpp", "/usr/local/lib/ollama/llama-server", "crowdgpt_exp", "AutoevolveAI")
+YIELD_CHECKS = True
+_last_yield_check = 0.0
+
+
+def yield_check(foreign_mib: int = 1024) -> None:
+    import json as _j
+    import subprocess as _sp
+    if not os.path.exists(HOLD_FILE):
+        raise YieldToTraining("governor HOLD file removed")
+    try:
+        st = _j.load(open(GOVERNOR_STATE)).get("state")
+        if st != "held":
+            raise YieldToTraining(f"governor state is {st!r}")
+    except (OSError, ValueError):
+        pass
+    out = _sp.run(["nvidia-smi", "--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits"],
+                  capture_output=True, text=True, timeout=10).stdout
+    for ln in out.splitlines():
+        try:
+            pid, mib = (x.strip() for x in ln.split(","))
+            if int(mib) < foreign_mib or int(pid) == os.getpid():
+                continue
+            cmd = open(f"/proc/{pid}/cmdline", "rb").read().replace(b"\0", b" ").decode(errors="replace")
+        except (OSError, ValueError):
+            continue
+        if not any(w in cmd for w in WHITELIST):
+            raise YieldToTraining(f"foreign GPU process {pid} ({mib} MiB): {cmd[:80]}")
+
+
 def check() -> None:
+    global _last_yield_check
     fm = free_mib()
     if fm < MIN_FREE_MIB:
         raise GuardAbort(f"free VRAM {fm:.0f} MiB < {MIN_FREE_MIB} MiB")
+    if YIELD_CHECKS and time.time() - _last_yield_check > 20:
+        _last_yield_check = time.time()
+        yield_check()
 
 
 def in_flight() -> int:

@@ -1,0 +1,37 @@
+{
+ "revision": "5ac3916",
+ "n_windows": 8,
+ "window": 2048,
+ "results": {
+  "fineweb_edu (web, educational)": {
+   "crowd_v1": 3.9924,
+   "qwen3_0.6b": 2.9483,
+   "gap": 1.0441
+  },
+  "code_python (codeparrot)": {
+   "crowd_v1": 5.1869,
+   "qwen3_0.6b": 1.3473,
+   "gap": 3.8396
+  },
+  "math (NuminaMath-CoT)": {
+   "crowd_v1": 3.3297,
+   "qwen3_0.6b": 0.8881,
+   "gap": 2.4416
+  },
+  "science (SciQ)": {
+   "crowd_v1": 3.8205,
+   "qwen3_0.6b": 2.3194,
+   "gap": 1.5011
+  },
+  "wikitext2 (encyclopedic)": {
+   "crowd_v1": 4.7089,
+   "qwen3_0.6b": 2.9085,
+   "gap": 1.8004
+  },
+  "crowd_chunk1026_far (own data)": {
+   "crowd_v1": 3.1221,
+   "qwen3_0.6b": 2.7576,
+   "gap": 0.3645
+  }
+ }
+}

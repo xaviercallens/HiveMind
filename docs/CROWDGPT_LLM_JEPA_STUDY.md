@@ -277,7 +277,7 @@ premier résultat, après la revue indépendante (workflow de 3 relecteurs), y s
 - **Correspondance de préfixe** (métrique secondaire, graines 1–2) : SFT 20,6 / 19,4, JEPA 19,5 / 19,8. Pas d'écart.
 - **Coût** : JEPA prend environ 1,8 × le temps de SFT, cohérent avec le ~2 × du papier.
 
-**Lecture.** Le terme JEPA passe de 0,68 à environ 0,0005 dans chaque run JEPA : les états cachés finaux de la requête et
+**Lecture.** Le terme JEPA vaut environ 0,15 au pas 25 (0,68 au pas 3 d'un test court) et environ 0,0005 à la fin de chaque run JEPA : les états cachés finaux de la requête et
 de la réponse deviennent presque identiques, pendant que la loss générale se dégrade de 0,9 nat par rapport au SFT seul.
 Ça ressemble à un raccourci : la LoRA aligne les derniers états sur une direction commune au lieu d'apprendre la
 correspondance requête → regex. **Non vérifié.** Le test qui trancherait : le cosinus entre les embeddings d'exemples

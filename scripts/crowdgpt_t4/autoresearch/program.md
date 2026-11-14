@@ -49,3 +49,5 @@ Adapted from karpathy/autoresearch (March 2026):
 
 Tested: **H1, H2, H3, H4, H6**. They are the hypotheses that directly target the measured failure (E2/E3), fit the T4,
 and are each a single small change.
+
+*Erratum (added after the screen; the protocol above is unchanged): in P1 the JEPA term was about 0.15 at the first logged step (25) and ≤ 0.0005 at the end. The 0.68 came from step 3 of a smoke test.*

@@ -23,7 +23,7 @@ Base model far_loss: 3.194.
 **Exploratory, not part of the criteria:**
 - **λ = 4, seed 0:** 15.4 % (prefix 18.3 %), far_loss 5.012. Stronger λ is worse on both counts.
 - **Prefix match** (secondary metric, seeds 1–2 only): SFT 20.6 / 19.4, JEPA 19.5 / 19.8. No difference either.
-- **The JEPA term collapses.** 1 − cos falls from 0.68 at the start to 0.0004–0.0005 by the end of every JEPA run. Query
+- **The JEPA term collapses.** 1 − cos is about 0.15 at step 25 (0.68 at step 3 in a smoke test) and 0.0004–0.0005 by the end of every JEPA run. Query
   and answer embeddings become nearly identical, while the general loss gets 0.9 nat worse than plain SFT. That pattern
   fits a shortcut: the LoRA aligns the last-token states along a shared direction instead of learning the query → regex
   mapping. Not verified: measuring the cosine between *different* examples' embeddings would settle it.

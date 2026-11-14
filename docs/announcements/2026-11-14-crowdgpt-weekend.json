@@ -1,0 +1,69 @@
+{
+  "schema": "hivemind.announcement.v1",
+  "id": "2026-11-14-crowdgpt-weekend",
+  "published_utc": "2026-11-14T11:00:00Z",
+  "audience": [
+    "humans",
+    "agents"
+  ],
+  "title": "CrowdGPT x HiveMind weekend, 14-15 November 2026: what is available",
+  "model": {
+    "id": "hivemind/crowd-v1",
+    "upstream": "Vxtzq/Crowd-v1",
+    "architecture": "dense",
+    "note": "Crowd-v1 is not a MoE and is not split into parts; HiveMind does not run a sparse-MoE upcycle of it."
+  },
+  "available": [
+    {
+      "role": "trainer",
+      "action": "Train the shared dense Crowd-v1 with CrowdGPT's official client and submit rounds to CrowdGPT's server.",
+      "source": "https://github.com/Vxtzq/CrowdGPT",
+      "commands": [
+        "crowdgpt --doctor",
+        "crowdgpt --headless [--anon] [--vram-gb N] [--no-update]"
+      ],
+      "safety": [
+        "weights are safetensors; the client runs no code from the server",
+        "updates only if signed by the maintainer; --no-update pins the version"
+      ]
+    },
+    {
+      "role": "consumer",
+      "action": "Call hivemind/crowd-v1 through the HiveMind gateway (OpenAI-compatible chat completions).",
+      "endpoint": "https://hivemind-openrouter-1003063861791.us-central1.run.app/v1/chat/completions",
+      "auth": "Bearer hm-... API key from /signup",
+      "notes": "Honour Retry-After on HTTP 429 and back off exponentially; producers see the prompts they serve, so send only public, non-sensitive text."
+    },
+    {
+      "role": "producer",
+      "action": "Serve a model with the HiveMind producer agent.",
+      "network": "outbound HTTPS only, no listening port"
+    },
+    {
+      "role": "evaluator",
+      "action": "Run scripts/crowdgpt_loss_check_agent.py against CrowdGPT's server.",
+      "requires": "an evaluator id and key issued by CrowdGPT (Vxtzq)",
+      "safety": [
+        "every downloaded file is checked against its SHA-256",
+        "works only while --governor-state reports the GPU idle"
+      ]
+    },
+    {
+      "role": "prosumer",
+      "action": "Test hivemind/crowd-v1 in an IDE (Continue, Cline, Aider) and report wrong or strange answers in the discussion thread."
+    }
+  ],
+  "not_available": [
+    "HiveMind's own OpenTrainer weight-sharing path: the OpenTrainer agent reports numbers only, recorded as CLIENT_REPORTED_UNVERIFIED (use CrowdGPT's client to train instead).",
+    "HMT credited per training round.",
+    "Sign-up welcome credit (the gateway's starter grant is 0)."
+  ],
+  "hardware": {
+    "tesla_t4": "GCP Spot VM, scheduled 14:00-22:00 Europe/Paris on 14 and 15 November; keeps >= 4300 MiB free VRAM; contributing to CrowdGPT with the official client since 2026-11-14 14:48 UTC",
+    "rtx_2070": "the owner's machine, serving models"
+  },
+  "contact": {
+    "discussion": "https://github.com/xaviercallens/HiveMind/discussions/909",
+    "discord": "https://discord.gg/ZeFtZpKHf"
+  }
+}

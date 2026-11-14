@@ -1,5 +1,14 @@
 # Massive Weekend Swarm Training Raid (14–15 November 2026) — `CrowdGPT-MoE` x `HiveMind` Decoupled OpenDiLoCo
 
+> [!IMPORTANT]
+> **Status, Saturday 14 November 2026 (supersedes the plan below where they differ).**
+> - **Crowd-v1 is a dense model and stays whole.** Its author (Vxtzq) asked that it not be treated as a MoE or split into parts. HiveMind does **not** run the sparse-MoE upcycle of Crowd-v1 described below; that design is parked.
+> - **What runs this weekend:** `hivemind/crowd-v1` is served live by the HiveMind gateway (OpenAI-compatible API). The Tesla T4 (Spot, 14:00–22:00 Europe/Paris) is available to CrowdGPT as a GPU evaluator through `scripts/crowdgpt_loss_check_agent.py` once CrowdGPT issues an evaluator key: it takes loss-check jobs from CrowdGPT's server, verifies every file's SHA-256 and works only while the governor reports the GPU idle.
+> - **How others can help:** producers serve models (outbound HTTPS only, no open port); prosumers test `hivemind/crowd-v1` in their IDE and report bad answers; GPU owners can run the CrowdGPT loss-check agent if CrowdGPT gives them a key.
+> - **Train Crowd-v1 with your GPU:** run CrowdGPT's own client (https://github.com/Vxtzq/CrowdGPT: one-command install or Docker, then `crowdgpt --headless`, `--anon` without an account, `--vram-gb N` to cap memory, `--doctor` to check the setup). It trains the shared dense model and submits each round to CrowdGPT's server; HiveMind's T4 does exactly this from 14 November (round 1 submitted).
+> - **Not available this weekend:** HiveMind's own OpenTrainer weight-sharing path. The OpenTrainer agent currently reports numbers only, not weights, and the gateway records them as `CLIENT_REPORTED_UNVERIFIED`. **No HMT is credited per training round**, and the gateway's sign-up rewards are off; the "+250 to +1,000 HMT" milestones below are not active.
+> - Machine-readable version for agents: [`docs/announcements/2026-11-14-crowdgpt-weekend.json`](announcements/2026-11-14-crowdgpt-weekend.json).
+
 > **Campaign ID**: `CROWDGPT-WE-NOV14-15-2026-MOE-OPENDILOCO` · **Public Model Target**: `hivemind/crowd-moe-v1` (`Vxtzq/Crowd-v1` `1.01B` Sparse-MoE Upcycle)  
 > **Dates**: Friday **13 Nov 2026** (Preflight) → Saturday **14 Nov** & Sunday **15 Nov 2026** (6 Global Quorum Waves)  
 > **Calendar Export (`.ics`)**: [`docs/calendar/hivemind_crowdgpt_weekend_nov14_15_2026.ics`](calendar/hivemind_crowdgpt_weekend_nov14_15_2026.ics)  

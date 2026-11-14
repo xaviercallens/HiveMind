@@ -58,6 +58,7 @@ python scripts/hivemind_opentrainer_agent.py --crowdgpt --crowdgpt-dir ~/CrowdGP
 | `--vram-gb` | auto | Client budget, computed as (free − reserve − 700 MiB context) rounded down to 0.5 GB. Required on non-NVIDIA GPUs. |
 | `--backend` | auto | `cuda`, `rocm`, `xpu`, `directml`, `cpu` or `mps`. |
 | `--pause-for` | none | Comma-separated process names. Training pauses while any of them runs. |
+| `--ignore-app` | none | Comma-separated name fragments of always-on GPU apps to tolerate (for example `llama-server,ollama` if you also serve models). They no longer count as "another program using the GPU", but the memory reserve still stops the client when they need memory. |
 | `--hot-c` / `--cool-c` | 82 / 74 | Pause at or above 82 °C; resume only at or below 74 °C. |
 | `--stop-at` | none | Local time `HH:MM` at which to stop, for example `07:30`. |
 | `--data-dir` | `~/.hivemind/crowdgpt` | Holds the receipts, the client log and `HF_HOME`. |
@@ -74,7 +75,7 @@ equals the released version.
 |---|---|
 | GPU hot (≥ `--hot-c`), a `--pause-for` program starts, or another program starts GPU compute work | **Pause.** The client is suspended and keeps its round, but it **keeps its GPU memory**. |
 | GPU quiet, and at or below `--cool-c`, for 60 s | **Resume** where it left off. |
-| Free GPU memory below `--reserve-mib` for 10 s (a game or AI app needs memory) | **Stop.** The client is terminated so its memory is freed. **The round in progress is lost**, because the client cannot resume mid-round. |
+| Free GPU memory below `--reserve-mib` for 10 s (a game or AI app needs memory) | **Stop.** The client is terminated so its memory is freed. With CrowdGPT client 3.3 or later, the agent turns on mid-round checkpoints every 25 steps (`CROWDGPT_UNIT_CHECKPOINT_EVERY`), so the next launch resumes the round and **at most 25 steps are lost**. Older clients lose the whole round. |
 | GPU idle for 5 min after a stop | **Relaunch** with a budget recomputed from the free memory at that moment. Repeated quick stops double the wait, up to 8×. |
 
 Pausing alone is not enough when another program needs memory, because a suspended client
@@ -132,7 +133,8 @@ Ce qu'il faut savoir :
 - Chaque round envoie environ **0,9 Go** au serveur de CrowdGPT, pas à HiveMind.
 - Vous êtes **anonyme** par défaut.
 - Le client est **mis en pause** quand le GPU chauffe ou quand un jeu tourne. Il est **arrêté**,
-  et le round en cours est perdu, quand un autre programme a besoin de mémoire GPU. Il redémarre
+  quand un autre programme a besoin de mémoire GPU ; avec le client CrowdGPT 3.3 ou plus récent, il reprend
+  ensuite le round là où il s'était arrêté (au plus 25 pas perdus), sinon le round est perdu. Il redémarre
   après 5 minutes de GPU inactif.
 - Les protections automatiques ne fonctionnent qu'avec NVIDIA. Sur AMD ou Intel, indiquez
   `--vram-gb`.

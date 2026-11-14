@@ -313,6 +313,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--cpu-only", action="store_true")
     ap.add_argument("--gateway", default=DEFAULT_HIVEMIND_GATEWAY_URL)
     ap.add_argument("--submit-opentrainer", action="store_true")
+    ap.add_argument("--real-data", action="store_true",
+                    help="train on real rows of the 8-expert dataset plan instead of the synthetic pattern (needs --tokenizer-json)")
+    ap.add_argument("--tokenizer-json", type=Path, default=None, help="Crowd-v1 tokenizer.json (tokenizers library format)")
+    ap.add_argument("--data-cache-dir", type=Path, default=None, help="where fetched dataset rows are cached (default: <work-dir>/rows)")
+    ap.add_argument("--train-tokens-per-expert", type=int, default=16_384)
+    ap.add_argument("--heldout-tokens-per-expert", type=int, default=2_048)
+    ap.add_argument("--eval-windows", type=int, default=2, help="held-out windows per evaluation (synthetic default 2)")
     ap.add_argument("--campaign-id", default=GCPCROWD_CAMPAIGN_ID)
     ap.add_argument("--no-save-safetensors", action="store_true")
     ap.add_argument("--systemd-out", type=Path, default=None)
@@ -377,7 +384,29 @@ def main(argv: list[str] | None = None) -> int:
         direct_trunk_device=init_dev,
         direct_trunk_dtype=init_dt,
     )
-    shard_t4, shard_2070, held_out = _build_token_shards(model.cfg.vocab_size, shard_tokens=max(256, args.seq_len * 6))
+    data_manifest: dict[str, Any] | None = None
+    if args.real_data:
+        if args.tokenizer_json is None or not Path(args.tokenizer_json).is_file():
+            print("refused: --real-data needs --tokenizer-json pointing to the Crowd-v1 tokenizer.json", file=sys.stderr)
+            return 2
+        from tokenizers import Tokenizer
+
+        from hivemind.swarm.crowdgpt_moe_opendiloco import load_crowdgpt_moe_dataset_plan
+        from hivemind.swarm.crowdgpt_real_shards import build_real_expert_shards
+
+        tok = Tokenizer.from_file(str(args.tokenizer_json))
+        shard_t4, shard_2070, held_out, data_manifest = build_real_expert_shards(
+            load_crowdgpt_moe_dataset_plan(),
+            lambda s: tok.encode(s).ids,
+            model.cfg.vocab_size,
+            cache_dir=Path(args.data_cache_dir) if args.data_cache_dir else Path(args.work_dir) / "rows",
+            train_tokens_per_expert=args.train_tokens_per_expert,
+            heldout_tokens_per_expert=args.heldout_tokens_per_expert,
+        )
+        Path(args.work_dir).mkdir(parents=True, exist_ok=True)
+        (Path(args.work_dir) / "real_data_manifest.json").write_text(json.dumps(data_manifest, indent=2) + "\n", encoding="utf-8")
+    else:
+        shard_t4, shard_2070, held_out = _build_token_shards(model.cfg.vocab_size, shard_tokens=max(256, args.seq_len * 6))
 
     if args.mode == "moe-opendiloco-round":
         from safetensors.torch import save_file
@@ -425,7 +454,7 @@ def main(argv: list[str] | None = None) -> int:
         )
 
         win_len = min(model.cfg.max_position_embeddings, max(4, min(args.seq_len, 64)))
-        n_win = min(2, max(1, (int(held_out.numel()) - 1) // win_len))
+        n_win = min(max(1, int(args.eval_windows)), max(1, (int(held_out.numel()) - 1) // win_len))
         eval_windows = torch.stack(
             [held_out[i * win_len : (i + 1) * win_len] for i in range(n_win)]
         ).to(device=exec_dev, dtype=torch.long)
@@ -555,6 +584,9 @@ def main(argv: list[str] | None = None) -> int:
                     "revision_meta": rev_meta,
                     "moe_split_report": asdict(split_report),
                     "rounds": moe_rounds,
+                    "data": ("real rows of the dataset plan (see real_data_manifest.json)" if data_manifest is not None
+                             else "synthetic repeating token pattern: an infrastructure test, not training"),
+                    "learners_note": "both learners run sequentially on this one device",
                 },
                 indent=2,
                 sort_keys=True,

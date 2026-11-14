@@ -566,6 +566,7 @@ def main(argv: list[str] | None = None) -> int:
                     "round_index": rnd + 1,
                     "device": exec_dev,
                     "accepted_by_loss_ratchet": receipt.accepted_by_loss_ratchet,
+                    "candidate_eval_loss": receipt.candidate_eval_loss,
                     "eval_loss_before": receipt.eval_loss_before,
                     "eval_loss_after": receipt.eval_loss_after,
                     "outer_delta_l2": round(total_l2, 6),

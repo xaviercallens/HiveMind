@@ -697,3 +697,16 @@ def test_non_finite_loss_written_as_null(tmp_path: Path) -> None:
     sup.run()
     raw = (tmp_path / "data" / cc.RECEIPTS_FILENAME).read_text().splitlines()[0]
     assert "NaN" not in raw and "Infinity" not in raw and json.loads(raw)["mean_loss"] is None
+
+
+
+def test_ignored_inference_servers_do_not_block_but_the_reserve_still_stops() -> None:
+    """An always-on llama-server on the same GPU must not make the contributor wait forever."""
+    from hivemind.opentrainer import crowdgpt_contributor as cc
+
+    apps = (cc.ComputeApp(pid=1996, name="/opt/llama.cpp/build/bin/llama-server", used_mib=4818),
+            cc.ComputeApp(pid=42, name="python client.py", used_mib=2000))
+    snap = cc.GpuSnapshot(total_mib=15360, used_mib=6818, free_mib=8542, util_pct=0.0, temp_c=55.0, name="Tesla T4", apps=apps)
+    assert [a.pid for a in cc.other_compute_apps(snap, {42})] == [1996]
+    assert cc.other_compute_apps(snap, {42}, ("LLAMA-SERVER",)) == []
+    assert [a.pid for a in cc.other_compute_apps(snap, {42}, ("ollama",))] == [1996]

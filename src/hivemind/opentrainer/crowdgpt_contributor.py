@@ -274,6 +274,8 @@ class GuardConfig:
     short_run_s: float = 900.0
     max_backoff_factor: int = 8
     pause_for: tuple[str, ...] = ()
+    # always-on inference servers sharing the GPU (e.g. llama-server, ollama): not 'another app'; the reserve STOP still applies
+    ignore_apps: tuple[str, ...] = ()
 
 
 @dataclass
@@ -293,11 +295,13 @@ class GuardState:
     reason: str = ""
 
 
-def other_compute_apps(snapshot: GpuSnapshot | None, client_pids: Iterable[int]) -> list[ComputeApp]:
+def other_compute_apps(snapshot: GpuSnapshot | None, client_pids: Iterable[int],
+                       ignore: Iterable[str] = ()) -> list[ComputeApp]:
     if snapshot is None:
         return []
     mine = set(client_pids)
-    return [a for a in snapshot.apps if a.pid not in mine]
+    skip = [s.lower() for s in ignore if s]
+    return [a for a in snapshot.apps if a.pid not in mine and not any(s in (a.name or '').lower() for s in skip)]
 
 
 def required_idle_s(state: GuardState, cfg: GuardConfig) -> float:
@@ -336,7 +340,7 @@ def decide(state: GuardState, snapshot: GpuSnapshot | None, client_mem_mib: int,
     Without a snapshot (no nvidia-smi) only the --pause-for rule applies.
     """
     now = state.now
-    others = other_compute_apps(snapshot, state.client_pids)
+    others = other_compute_apps(snapshot, state.client_pids, cfg.ignore_apps)
     temp = snapshot.temp_c if snapshot is not None else None
     util = snapshot.util_pct if snapshot is not None else None
     hot = temp is not None and temp >= cfg.hot_c
@@ -880,6 +884,7 @@ class ContributorArgs:
     vram_gb: float = 0.0
     backend: str = "auto"
     pause_for: tuple[str, ...] = ()
+    ignore_apps: tuple[str, ...] = ()
     hot_c: float = 82.0
     cool_c: float = 74.0
     stop_at: str = ""
@@ -922,7 +927,7 @@ def run_contributor(
             return 2
         stop_at_epoch = clock() + (target - now_local()).total_seconds()
     cfg = GuardConfig(reserve_mib=int(a.reserve_mib), hot_c=float(a.hot_c), cool_c=float(a.cool_c),
-                      pause_for=tuple(p for p in a.pause_for if p))
+                      pause_for=tuple(p for p in a.pause_for if p), ignore_apps=tuple(p for p in a.ignore_apps if p))
     snapshot = query_nvidia_gpu(runner)
     out(startup_notice(nvidia=snapshot is not None))
     if snapshot is not None and "T4" in snapshot.name and cfg.reserve_mib < T4_MIN_RESERVE_MIB:

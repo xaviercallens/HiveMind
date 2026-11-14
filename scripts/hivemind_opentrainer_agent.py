@@ -265,6 +265,7 @@ def build_parser() -> argparse.ArgumentParser:
     crowd.add_argument("--vram-gb", type=float, default=0.0, help="Client VRAM budget in GB (default: auto from free memory; required on non-NVIDIA GPUs)")
     crowd.add_argument("--backend", default="auto", choices=("auto", "cuda", "rocm", "xpu", "directml", "cpu", "mps"), help="CrowdGPT client backend")
     crowd.add_argument("--pause-for", default="", help="Comma-separated process names (e.g. games) that pause training while running")
+    crowd.add_argument("--ignore-app", default="", help="Comma-separated name fragments of always-on GPU apps to tolerate (e.g. llama-server,ollama); the free-memory reserve still stops the client")
     crowd.add_argument("--hot-c", type=float, default=82.0, help="Pause at or above this GPU temperature (C)")
     crowd.add_argument("--cool-c", type=float, default=74.0, help="Resume only at or below this GPU temperature (C)")
     crowd.add_argument("--stop-at", default="", help="Stop contributing at this local time, HH:MM")
@@ -310,6 +311,7 @@ def run_crowdgpt_mode(args: argparse.Namespace) -> int:
             vram_gb=args.vram_gb,
             backend=args.backend,
             pause_for=tuple(p.strip() for p in args.pause_for.split(",") if p.strip()),
+            ignore_apps=tuple(p.strip() for p in args.ignore_app.split(",") if p.strip()),
             hot_c=args.hot_c,
             cool_c=args.cool_c,
             stop_at=args.stop_at,

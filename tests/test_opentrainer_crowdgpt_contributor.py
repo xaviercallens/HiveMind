@@ -666,3 +666,34 @@ def test_agent_without_crowdgpt_keeps_heartbeat_requirement(agent: Any, monkeypa
     monkeypatch.delenv("HIVEMIND_API_KEY", raising=False)
     monkeypatch.setattr(agent, "detect_local_gpu", lambda: ("", 0, 0))
     assert agent.main(["--once"]) == 2
+
+
+def test_real_popen_wrapper_merges_stderr_and_decodes_utf8(tmp_path: Path) -> None:
+    """Offline: a tiny Python child writes real client lines to stderr (as client.py's logging does)."""
+    code = (
+        "import sys\n"
+        "sys.stderr.write('12:00:00 [INFO] Done: 250 micro-steps, loss 4.2369 \u00b1 0.8566 (mean of 250, last 4.4138)\\n')\n"
+        "sys.stderr.write('12:00:01 [INFO] \u2705 Submitted successfully!\\n')\n"
+    )
+    env = cc.build_client_env(dict(__import__("os").environ), tmp_path)
+    proc = cc.PopenClientProcess([sys.executable, "-c", code], cwd=str(tmp_path), env=env)
+    lines: list[str] = []
+    import time as _time
+    deadline = _time.monotonic() + 20
+    while _time.monotonic() < deadline:
+        lines += proc.drain_lines()
+        if proc.poll() is not None and len(lines) >= 2:
+            break
+        _time.sleep(0.05)
+    lines += proc.drain_lines()
+    kinds = [ev.kind for ev in map(cc.parse_client_line, lines) if ev is not None]
+    assert proc.poll() == 0 and kinds == ["round_done", "submitted"]
+
+
+def test_non_finite_loss_written_as_null(tmp_path: Path) -> None:
+    script = [(5, "[INFO] Round 1"), (6, "[INFO] Done: 3 micro-steps, loss nan ± nan (mean of 3, last inf)"),
+              (7, "[INFO] ✅ Submitted successfully!")]
+    sup, *_ = _supervisor(tmp_path, lambda t, ps: snap(), [script], max_ticks=4)
+    sup.run()
+    raw = (tmp_path / "data" / cc.RECEIPTS_FILENAME).read_text().splitlines()[0]
+    assert "NaN" not in raw and "Infinity" not in raw and json.loads(raw)["mean_loss"] is None

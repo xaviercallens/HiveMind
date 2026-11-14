@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import math
 import os
 import queue
 import re
@@ -676,13 +677,16 @@ class Supervisor:
         self.out(redact(f"[crowdgpt-contributor] {msg}", self.env))
 
     def _write_receipt(self, entry: dict[str, Any], *, submitted: bool, outcome: str, evidence: str) -> None:
+        def finite(value: Any) -> Any:
+            return value if not isinstance(value, float) or math.isfinite(value) else None
+
         receipt = {
             "round": entry["round"],
             "client_round": entry.get("client_round"),
             "steps": entry.get("steps"),
-            "mean_loss": entry.get("mean_loss"),
-            "std": entry.get("std"),
-            "last": entry.get("last"),
+            "mean_loss": finite(entry.get("mean_loss")),
+            "std": finite(entry.get("std")),
+            "last": finite(entry.get("last")),
             "submitted": submitted,
             "outcome": outcome,
             "evidence": evidence,

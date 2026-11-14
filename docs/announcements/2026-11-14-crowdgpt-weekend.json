@@ -59,8 +59,8 @@
     "Sign-up welcome credit (the gateway's starter grant is 0)."
   ],
   "hardware": {
-    "tesla_t4": "GCP Spot VM, scheduled 14:00-22:00 Europe/Paris on 14 and 15 November; keeps >= 4300 MiB free VRAM; contributing to CrowdGPT with the official client since 2026-11-14 14:48 UTC",
-    "rtx_2070": "the owner's machine, serving models"
+    "tesla_t4": "GCP Spot VM, scheduled 14:00-22:00 Europe/Paris on 14 and 15 November; keeps >= 4300 MiB free VRAM; contributed to CrowdGPT with the official client on 2026-11-14 (4 rounds submitted), stopped at 19:32 UTC by owner decision because co-training with its inference services could not keep the 4300 MiB floor",
+    "rtx_2070": "the owner's machine; serves models and is the HiveMind GPU left for training"
   },
   "contact": {
     "discussion": "https://github.com/xaviercallens/HiveMind/discussions/909",

@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
@@ -34,13 +36,25 @@ RowFetcher = Callable[[str, str, str, int, int], list[Mapping[str, Any]]]
 
 
 def fetch_rows_datasets_server(dataset_id: str, config: str, split: str, offset: int, length: int,
-                               *, timeout_s: float = 60.0) -> list[Mapping[str, Any]]:
+                               *, timeout_s: float = 60.0, retries: int = 4, backoff_s: float = 2.0) -> list[Mapping[str, Any]]:
     """Read ``length`` rows from the public Hugging Face datasets-server (read-only, no token)."""
     q = urllib.parse.urlencode({"dataset": dataset_id, "config": config, "split": split, "offset": int(offset),
                                 "length": int(min(length, ROWS_PER_REQUEST))})
     req = urllib.request.Request(f"{DATASETS_SERVER_ROWS}?{q}", headers={"User-Agent": "HiveMind-CrowdGPT-RealShards/1"})
-    with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310 - fixed https host
-        body = json.loads(resp.read().decode("utf-8"))
+    body: Any = None
+    for attempt in range(retries + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310 - fixed https host
+                body = json.loads(resp.read().decode("utf-8"))
+            break
+        except urllib.error.HTTPError as exc:
+            # 5xx and 429 from the datasets-server are usually transient; 4xx (wrong config, gated) is not
+            if attempt >= retries or not (exc.code >= 500 or exc.code == 429):
+                raise
+        except urllib.error.URLError:
+            if attempt >= retries:
+                raise
+        time.sleep(backoff_s * (2 ** attempt))
     if not isinstance(body, dict) or not isinstance(body.get("rows"), list):
         raise ValueError(f"unexpected datasets-server answer for {dataset_id}:{config}")
     return [r["row"] for r in body["rows"] if isinstance(r, dict) and isinstance(r.get("row"), dict)]

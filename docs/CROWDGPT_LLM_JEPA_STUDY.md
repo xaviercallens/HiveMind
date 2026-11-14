@@ -27,6 +27,11 @@ papier, sur d'autres modèles** (surtout Llama-3.2-1B-*Instruct*). Ce ne sont pa
    l'écart vu / non vu n'est que de 0,16 nat. Le correctif utile est dans le loss check (PR HiveMind), pas dans le client.
 5. Deux corrections au message d'origine. Crowd-v1 compte **657 787 392 paramètres**, mesurés sur les poids réels, et non 1B.
    Et le papier n'est pas « tout juste sorti » : la v1 date de septembre 2025.
+6. **Pilote P1 sur le T4 (nuit du 13 au 14/11, §9) : résultat négatif.** Crowd-v1 + LoRA r64 sur NL-RX-SYNTH, 3 graines par
+   bras : SFT 17,07 ± 0,93 %, SFT + JEPA 16,90 ± 1,06 % (Δ −0,17 point, différences appariées −0,3 / 0,0 / −0,2). La loss générale
+   se dégrade de **+0,90 nat** avec JEPA. Aucun des critères écrits d'avance n'est atteint. Le terme JEPA s'effondre
+   (1 − cos → 0,0005). Ça ne réfute pas le papier (pleine mise au point, modèle Instruct), mais la méthode ne se transpose pas
+   telle quelle à Crowd-v1 + LoRA r64.
 
 ---
 
@@ -226,3 +231,56 @@ clients optimisent la même perte.
   format des shards ni de l'inférence : à brancher seulement si P1 réussit.
 - `tests/test_crowd_jepa.py` (CPU, sans réseau).
 - `docs/LLM_JEPA_PROPOSAL.md` : la proposition, et les mesures E0 qui concernent CrowdGPT (dont l'engram dans le loss check).
+
+## 9. Résultats du pilote P1 (T4, 13–14/11/2026)
+
+Protocole et critères écrits **avant** tout résultat : `scripts/crowdgpt_t4/P1_GOAL.md`. Les changements faits avant le
+premier résultat, après la revue indépendante (workflow de 3 relecteurs), y sont listés. Code : `scripts/crowdgpt_t4/`
+(`night_jepa.py`, `run_queue.py`, `criteria.py`, `t4guard.py`). Données brutes :
+`artifacts/experiments/CROWDGPT_P1_llm_jepa_nlrx_2026-11-14.json`.
+
+**Réglages.**
+- Modèle : Crowd-v1 `5ac3916` + engram, gelé, fp16.
+- LoRA r64 sur toutes les projections des blocs, lr 2e-4, batch effectif 16, 3 époques sur 8 000 exemples.
+- Bras JEPA : λ = 1, k = 0. Vue 1 = la requête seule (comme le code de référence), vue 2 = la regex, empaquetées avec un
+  masque bloc-causal ; l'entrée bigramme de l'engram est remise à zéro au début de la vue 2.
+- Évaluation : correspondance exacte sur les 1 000 premiers exemples de test. Loss générale sur les 12 fenêtres « loin »
+  d'E0 ; modèle de base : 3,194.
+
+| graine | SFT % | JEPA % | Δ apparié | loss générale SFT | loss générale JEPA |
+|---|---|---|---|---|---|
+| 0 | 16,0 | 15,7 | −0,3 | 3,789 | 4,605 |
+| 1 | 17,7 | 17,7 | 0,0 | 3,719 | 4,652 |
+| 2 | 17,5 | 17,3 | −0,2 | 3,830 | 4,770 |
+| **moyenne** | **17,07 ± 0,93** | **16,90 ± 1,06** | **−0,17** | **3,779** | **4,676** |
+
+**Critères.**
+1. Plancher (≥ 5 %) : passé, avec 16,0 %.
+2. Succès : **non atteint**. Δ = −0,17, alors qu'il faut > 2 × 0,996. La condition sur la loss générale échoue aussi
+   (+0,90 nat, limite +0,05).
+3. Gain « comme le papier » (≥ +10 points ; le papier rapporte +14,2) : **non atteint**.
+4. Les 3 graines par bras sont complètes : le verdict vaut pour ce montage.
+
+**Exploratoire.**
+- **λ = 4 (graine 0)** : 15,4 %, loss générale 5,012. Pire sur les deux plans.
+- **Correspondance de préfixe** (métrique secondaire, graines 1–2) : SFT 20,6 / 19,4, JEPA 19,5 / 19,8. Pas d'écart.
+- **Coût** : JEPA prend environ 1,8 × le temps de SFT, cohérent avec le ~2 × du papier.
+
+**Lecture.** Le terme JEPA passe de 0,68 à environ 0,0005 dans chaque run JEPA : les états cachés finaux de la requête et
+de la réponse deviennent presque identiques, pendant que la loss générale se dégrade de 0,9 nat par rapport au SFT seul.
+Ça ressemble à un raccourci : la LoRA aligne les derniers états sur une direction commune au lieu d'apprendre la
+correspondance requête → regex. **Non vérifié.** Le test qui trancherait : le cosinus entre les embeddings d'exemples
+*différents*.
+
+Pistes, si on poursuit (pas faites) :
+- le rang LoRA 512, celui où le papier rapporte son gain LoRA ;
+- un λ bien plus petit, avec du loss dropout ;
+- un modèle déjà ajusté aux instructions.
+
+En l'état, **on ne propose pas de brancher `crowd_jepa.py` dans `client.py`.** Le levier le moins cher reste le mélange de
+données (§3 : 1,8 nat d'écart avec Qwen3-0.6B sur wikitext).
+
+**Exploitation du T4.**
+- File de 23:02 à 02:54. Le T4 est libre dès 02:54, bien avant l'échéance de 06:30, pour l'entraînement du week-end.
+- Le modèle ollama d'un autre travail se chargeait et se déchargeait. Deux arrêts de la garde VRAM pendant sft_s0, repris
+  depuis un checkpoint. La VRAM libre n'est jamais restée sous 4 300 Mio.

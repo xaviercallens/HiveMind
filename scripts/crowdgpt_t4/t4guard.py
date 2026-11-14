@@ -28,15 +28,28 @@ def free_mib() -> float:
     return f / 2**20
 
 
-def cap_process(margin_mib: int = 300) -> float:
-    """Allow this process at most (free - MIN_FREE_MIB - margin) MiB. Returns the cap in MiB."""
+def cap_process(margin_mib: int = 300, max_cap_mib: float | None = None) -> float:
+    """Allow this process at most min(free - MIN_FREE_MIB - margin, max_cap_mib) MiB. Returns the cap in MiB.
+    max_cap_mib sizes the process for the worst case (other tenants reloading their models), not for the current free."""
     import torch
     f, t = torch.cuda.mem_get_info()
     cap = f / 2**20 - MIN_FREE_MIB - margin_mib
+    if max_cap_mib is not None:
+        cap = min(cap, max_cap_mib)
     if cap < 1024:
         raise GuardAbort(f"only {f / 2**20:.0f} MiB free; cap {cap:.0f} MiB too small")
     torch.cuda.set_per_process_memory_fraction(cap * 2**20 / t)
     return cap
+
+
+def wait_for_room(need_mib: float, max_wait_s: float = 1800, poll_s: float = 15.0) -> float:
+    """Wait until free VRAM >= MIN_FREE_MIB + need_mib (other jobs, e.g. an ollama model, may hold memory for a while)."""
+    t0 = time.time()
+    while free_mib() < MIN_FREE_MIB + need_mib:
+        if time.time() - t0 > max_wait_s:
+            raise GuardAbort(f"no room: need {need_mib:.0f} MiB above the {MIN_FREE_MIB} MiB guard, free {free_mib():.0f} MiB")
+        time.sleep(poll_s)
+    return time.time() - t0
 
 
 def check() -> None:
@@ -57,11 +70,23 @@ def in_flight() -> int:
     return 0
 
 
+DEADLINE: float | None = None  # unix time; set by the caller. Waiting past it raises DeadlineReached.
+
+
+class DeadlineReached(RuntimeError):
+    pass
+
+
 def wait_idle(max_wait_s: float = 3600, poll_s: float = 1.0) -> float:
-    """Block while inference requests are in flight. Returns seconds waited."""
+    """Block while inference requests are in flight (nginx gateway only: direct local calls to llama-server/ollama are
+    not seen). Raises DeadlineReached if DEADLINE passes while waiting. Returns seconds waited."""
     t0 = time.time()
     while in_flight() > 0 and time.time() - t0 < max_wait_s:
+        if DEADLINE and time.time() > DEADLINE:
+            raise DeadlineReached("deadline while waiting for inference to go idle")
         time.sleep(poll_s)
+    if DEADLINE and time.time() > DEADLINE:
+        raise DeadlineReached("deadline")
     check()
     return time.time() - t0
 

@@ -710,3 +710,11 @@ def test_ignored_inference_servers_do_not_block_but_the_reserve_still_stops() ->
     assert [a.pid for a in cc.other_compute_apps(snap, {42})] == [1996]
     assert cc.other_compute_apps(snap, {42}, ("LLAMA-SERVER",)) == []
     assert [a.pid for a in cc.other_compute_apps(snap, {42}, ("ollama",))] == [1996]
+
+
+def test_client_env_turns_on_mid_round_checkpoints_without_overriding_the_user(tmp_path) -> None:
+    """CrowdGPT >= 3.3 resumes a stopped round from a local checkpoint every N steps."""
+    from hivemind.opentrainer import crowdgpt_contributor as cc
+
+    assert cc.build_client_env({}, tmp_path)["CROWDGPT_UNIT_CHECKPOINT_EVERY"] == "25"
+    assert cc.build_client_env({"CROWDGPT_UNIT_CHECKPOINT_EVERY": "50"}, tmp_path)["CROWDGPT_UNIT_CHECKPOINT_EVERY"] == "50"

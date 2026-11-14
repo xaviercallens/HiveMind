@@ -518,6 +518,9 @@ def build_client_env(base_env: Mapping[str, str], data_dir: str | os.PathLike[st
     env["HF_HOME"] = str(Path(data_dir) / "hf")
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUNBUFFERED"] = "1"
+    # CrowdGPT client >= 3.3 checkpoints the round in progress every N steps, so a STOP (a game needing VRAM) costs at
+    # most N steps instead of the whole round; older clients ignore the variable. The user's own value wins.
+    env.setdefault("CROWDGPT_UNIT_CHECKPOINT_EVERY", "25")
     if account_mode(base_env) == "anon":
         for key in SECRET_ENV_KEYS:
             env.pop(key, None)

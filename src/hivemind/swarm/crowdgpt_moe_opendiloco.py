@@ -941,6 +941,7 @@ class OpenDiLoCoRoundReceipt:
     eval_loss_after: float
     accepted_by_loss_ratchet: bool
     master_state_sha256: str
+    candidate_eval_loss: float | None = None  # the measured loss of the update, kept even when it is rolled back
 
 
 class CrowdOpenDiLoCoCoordinator:
@@ -1113,6 +1114,7 @@ class CrowdOpenDiLoCoCoordinator:
             )
 
         loss_after = float(eval_fn(self.export_buckets())) if eval_fn is not None else loss_before
+        candidate_loss = loss_after
         accepted = True
         if eval_fn is not None and (not math.isfinite(loss_after) or loss_after > loss_before + 1e-6):
             # Monotone validation-loss ratchet rollback
@@ -1134,6 +1136,7 @@ class CrowdOpenDiLoCoCoordinator:
             eval_loss_after=loss_after,
             accepted_by_loss_ratchet=accepted,
             master_state_sha256=self.master_sha256(),
+            candidate_eval_loss=candidate_loss if eval_fn is not None else None,
         )
 
 

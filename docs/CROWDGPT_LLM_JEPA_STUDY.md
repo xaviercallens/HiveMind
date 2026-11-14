@@ -32,6 +32,10 @@ papier, sur d'autres modèles** (surtout Llama-3.2-1B-*Instruct*). Ce ne sont pa
    se dégrade de **+0,90 nat** avec JEPA. Aucun des critères écrits d'avance n'est atteint. Le terme JEPA s'effondre
    (1 − cos → 0,0005). Ça ne réfute pas le papier (pleine mise au point, modèle Instruct), mais la méthode ne se transpose pas
    telle quelle à Crowd-v1 + LoRA r64.
+7. **autoresearch (façon Karpathy, 14/11, §10)** : 10 hypothèses, 5 testées à budget de calcul fixe.
+   - **Aucune ne bat le SFT.** La meilleure combinaison (λ 0,1 + loss dropout + cosinus centré) l'égale à 0,001 nat près.
+   - Les 3 retenues selon la règle écrite d'avance (stop-gradient, cosinus centré, InfoNCE) sont celles qui **suppriment
+     l'effondrement et la dégradation de la loss générale**.
 
 ---
 
@@ -284,3 +288,53 @@ données (§3 : 1,8 nat d'écart avec Qwen3-0.6B sur wikitext).
 - File de 23:02 à 02:54. Le T4 est libre dès 02:54, bien avant l'échéance de 06:30, pour l'entraînement du week-end.
 - Le modèle ollama d'un autre travail se chargeait et se déchargeait. Deux arrêts de la garde VRAM pendant sft_s0, repris
   depuis un checkpoint. La VRAM libre n'est jamais restée sous 4 300 Mio.
+
+## 10. autoresearch : 10 hypothèses, 5 testées, 3 retenues (14/11/2026, T4)
+
+Méthode adaptée de `karpathy/autoresearch` (mars 2026) :
+- une évaluation fixe et une seule métrique ;
+- un budget fixe de **600 s d'entraînement** par expérience (5 min sur H100 ≈ 10 min sur T4) ;
+- un commit git par expérience, gardée ou annulée (`git reset`) ;
+- `results.tsv` non versionné.
+
+Protocole et 10 hypothèses écrits avant tout run : `scripts/crowdgpt_t4/autoresearch/program.md`. Résultats :
+`scripts/crowdgpt_t4/autoresearch/RESULTS.md` et `artifacts/experiments/CROWDGPT_autoresearch_jepa_2026-11-14.json`.
+
+**Réglages.**
+- Métrique `val_ce` : CE sur les tokens de réponse de 500 exemples de dev, jamais vus à l'entraînement ; le test n'est pas
+  touché.
+- Garde-fou : loss générale ≤ SFT + 0,05.
+- Seuil pour garder une hypothèse : battre le SFT.
+
+| run | val_ce | Δ vs SFT | loss générale | garde-fou | terme JEPA final |
+|---|---|---|---|---|---|
+| SFT | **2,503** | — | 3,396 | — | — |
+| JEPA λ=1 | 2,735 | +0,231 | 4,159 | ✗ | 0,0025 (effondré) |
+| H1 λ=0,1 + LD 0,5 | 2,513 | +0,009 | 3,474 | ✗ (de 0,028) | 0,023 |
+| H2 stop-gradient | 2,803 | +0,300 | 3,399 | ✓ | 0,081 |
+| H3 cosinus centré | 2,962 | +0,459 | 3,323 | ✓ | 0,007 |
+| H4 InfoNCE | 3,274 | +0,770 | 3,253 | ✓ | 0,108 |
+| H6 couche 16 | 2,608 | +0,105 | 4,352 | ✗ | 0,0017 (effondré) |
+| *H1+H2 (a posteriori)* | 2,540 | +0,037 | 3,430 | ✓ | 0,179 |
+| *H1+H3 (a posteriori)* | 2,505 | **+0,001** | 3,452 | ✗ (de 0,006) | 0,197 |
+
+**Les 3 retenues (règle écrite d'avance).** Classées par `val_ce` parmi celles qui passent le garde-fou : **H2
+stop-gradient, H3 cosinus centré, H4 InfoNCE.**
+
+**Ce que ça montre.**
+- Deux leviers se combinent :
+  - une pression faible (λ 0,1 + loss dropout) garde l'apprentissage de la tâche au niveau du SFT ;
+  - un anti-effondrement (stop-gradient, centrage, InfoNCE) supprime la dégradation de la loss générale.
+- H1+H2 est la meilleure variante qui passe le garde-fou (2,540).
+- **Aucun gain sur le SFT à calcul égal** : le « +14 points » du papier n'apparaît pas ici.
+
+**Limites.**
+- 1 graine, 600 s, LoRA r64.
+- Le nombre de pas varie de 305 à 572, selon le surcoût JEPA et la charge du T4 partagé.
+- Un écart inférieur à environ 0,02 nat est à traiter comme une égalité.
+- C'est un criblage, pas une confirmation.
+
+**Prochaine étape proposée (non lancée, le T4 est réservé à l'entraînement du week-end).**
+- Confirmer H1+H2 et H1+H3 au protocole complet de P1 (3 graines, 3 époques, précision sur le test).
+- Tester **H8 (LoRA r512)** sur un GPU de 24 Go : c'est le réglage où le papier rapporte son gain LoRA, et celui qui a le
+  plus de chances de le reproduire.

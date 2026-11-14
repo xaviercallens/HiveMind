@@ -1050,7 +1050,14 @@ class CrowdOpenDiLoCoCoordinator:
             if bucket_name not in self.syncers or not items:
                 continue
             syncer = self.syncers[bucket_name]
-            eff_k = min(self.min_quorum_k, len(items))
+            if len(items) < self.min_quorum_k:
+                # the configured quorum is a floor, not a target: lowering it to the number of submissions let a single
+                # learner move a bucket on its own. This bucket waits for the next round instead.
+                telemetry_map.setdefault(bucket_name, {}).update(
+                    {"status": "quorum_not_reached", "submissions": len(items), "min_quorum_k": int(self.min_quorum_k)}
+                )
+                continue
+            eff_k = int(self.min_quorum_k)
             eff_m = max(syncer.num_learners_m, len(items), eff_k)
             if syncer.min_quorum_k != eff_k or syncer.num_learners_m < len(items):
                 syncer = DecoupledDiLoCoQuorumSyncer(

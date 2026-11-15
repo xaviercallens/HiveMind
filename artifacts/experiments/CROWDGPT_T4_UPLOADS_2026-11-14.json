@@ -1,0 +1,15 @@
+{
+  "schema": "hivemind.crowdgpt_upload_measurements.v1",
+  "measured_on": "2026-11-14",
+  "node": "GCP Spot Tesla T4 (socreateai-agora-hermes-node1)",
+  "client": "Vxtzq/CrowdGPT client.py 3.2 (commit c3a294c3), --headless --anon --no-update --vram-gb 1-4",
+  "basis": "client_log_reported: sizes from the client's own 'Uploading <N> MB delta' log line; times from its 'Submitted successfully' lines (UTC)",
+  "note": "Only submitted rounds are listed. One finished round (948.5 MB, run 20261114T163057Z) was stopped before upload by the VRAM watchdog and is excluded. Uploads go to CrowdGPT's coordinator (server.crowdgpt.net), not to HiveMind.",
+  "submitted_rounds": [
+    {"run": "20261114T144849Z", "upload_mb": 895.2, "submitted_utc": "2026-11-14T15:48:37Z"},
+    {"run": "20261114T172522Z", "upload_mb": 948.5, "submitted_utc": "2026-11-14T18:00:39Z"},
+    {"run": "20261114T172522Z", "upload_mb": 946.3, "submitted_utc": "2026-11-14T18:36:37Z"},
+    {"run": "20261114T172522Z", "upload_mb": 867.8, "submitted_utc": "2026-11-14T19:13:13Z"},
+    {"run": "20261114T193526Z", "upload_mb": 945.7, "submitted_utc": "2026-11-14T20:11:21Z"}
+  ]
+}

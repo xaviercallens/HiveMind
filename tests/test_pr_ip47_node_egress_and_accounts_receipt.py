@@ -47,6 +47,7 @@ def test_node_egress_receipt_covers_all_five_volunteer_node_types(tmp_path: Path
         "boinc_trainer",
         "opentrainer_worker",
         "amcp_federation_learner",
+        "crowdgpt_trainer",
     }
     assert set(data["node_types"].keys()) == expected_types
     for node_type, row in data["node_types"].items():
@@ -54,6 +55,11 @@ def test_node_egress_receipt_covers_all_five_volunteer_node_types(tmp_path: Path
         assert row["declared_budget_bytes_per_hour"] >= row["measured_egress_bytes_per_hour"], node_type
         assert row["within_budget"] is True, node_type
         assert row["lateral_movement_allowed"] is False, node_type
+        assert row["egress_basis"].startswith(("modeled:", "client_log_reported:")), node_type
+    crowd = data["node_types"]["crowdgpt_trainer"]
+    assert crowd["egress_basis"].startswith("client_log_reported:")
+    # five T4 uploads of 867.8-948.5 MB, ~36 min apart: about 1.5 GB/hour
+    assert 1.2e9 < crowd["measured_egress_bytes_per_hour"] < 1.9e9
 
 
 def test_accounts_receipt_counts_by_kind_and_role_and_strips_all_personal_data(tmp_path: Path) -> None:

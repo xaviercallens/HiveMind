@@ -8,10 +8,15 @@ Constructs and serializes the exact wire payloads emitted by each HiveMind volun
   3. ``boinc_trainer`` (``src/hivemind/boinc/real_client/moe_app.py``)
   4. ``opentrainer_worker`` (``scripts/hivemind_opentrainer_worker.py``)
   5. ``amcp_federation_learner`` (``scripts/e8_amcp_round.py``)
+  6. ``crowdgpt_trainer`` (CrowdGPT's official client, launched by ``scripts/hivemind_opentrainer_agent.py --crowdgpt``)
+
+Basis: rows 1-5 are MODELED (the serialized payload size times a nominal cadence), not network measurements.
+Row 6 is from the CrowdGPT client's own upload log lines on the T4 (artifacts/experiments/CROWDGPT_T4_UPLOADS_2026-11-14.json).
+Each row carries ``egress_basis`` saying which.
 
 Usage:
   python3 scripts/node_egress_receipt.py
-  python3 scripts/node_egress_receipt.py --out artifacts/experiments/NODE_EGRESS_2026-11-07.json
+  python3 scripts/node_egress_receipt.py --out artifacts/experiments/NODE_EGRESS_2026-11-15.json
 """
 
 from __future__ import annotations
@@ -24,7 +29,43 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_OUT = REPO_ROOT / "artifacts" / "experiments" / "NODE_EGRESS_2026-11-07.json"
+DEFAULT_OUT = REPO_ROOT / "artifacts" / "experiments" / "NODE_EGRESS_2026-11-15.json"
+CROWDGPT_UPLOADS = REPO_ROOT / "artifacts" / "experiments" / "CROWDGPT_T4_UPLOADS_2026-11-14.json"
+MODELED_BASIS = "modeled: serialized payload size x nominal cadence (not a network measurement)"
+CROWDGPT_TRAINER_BUDGET_BYTES_PER_HOUR = 2 * 1024**3  # 2 GiB/hour: one ~0.95 GB round every ~30-40 min
+
+
+def _measure_crowdgpt_trainer_egress(path: Path = CROWDGPT_UPLOADS) -> dict[str, Any]:
+    """Egress of a CrowdGPT trainer from the client's logged upload sizes and submission times (T4, 14 Nov 2026)."""
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    rounds = data["submitted_rounds"]
+    if not rounds:
+        raise ValueError("no submitted rounds in the CrowdGPT measurement file")
+    mean_bytes = sum(float(r["upload_mb"]) for r in rounds) / len(rounds) * 1_000_000
+    by_run: dict[str, list[dt.datetime]] = {}
+    for r in rounds:
+        by_run.setdefault(r["run"], []).append(dt.datetime.fromisoformat(r["submitted_utc"].replace("Z", "+00:00")))
+    gaps = sorted((b - a).total_seconds() for ts in by_run.values() for a, b in zip(sorted(ts), sorted(ts)[1:]))
+    if not gaps:
+        raise ValueError("need two submissions in one run to measure the round interval")
+    median_gap_s = gaps[len(gaps) // 2] if len(gaps) % 2 else (gaps[len(gaps) // 2 - 1] + gaps[len(gaps) // 2]) / 2
+    rounds_per_hour = 3600.0 / median_gap_s
+    per_hour = int(mean_bytes * rounds_per_hour)
+    return {
+        "node_type": "crowdgpt_trainer",
+        "entrypoint": "Vxtzq/CrowdGPT client.py (launched by scripts/hivemind_opentrainer_agent.py --crowdgpt)",
+        "cadence": f"{rounds_per_hour:.2f} submitted rounds/hour (median interval {median_gap_s / 60:.1f} min)",
+        "payload_bytes_per_event": int(mean_bytes),
+        "events_per_hour": round(rounds_per_hour, 3),
+        "measured_egress_bytes_per_hour": per_hour,
+        "declared_budget_bytes_per_hour": CROWDGPT_TRAINER_BUDGET_BYTES_PER_HOUR,
+        "within_budget": per_hour <= CROWDGPT_TRAINER_BUDGET_BYTES_PER_HOUR,
+        "egress_basis": f"client_log_reported: {len(rounds)} submitted rounds on a Tesla T4 ({data['measured_on']})",
+        "source": str(Path(path).relative_to(REPO_ROOT)) if Path(path).is_relative_to(REPO_ROOT) else str(path),
+        "allowed_destinations": ["https://server.crowdgpt.net", "https://huggingface.co"],
+        "lateral_movement_allowed": False,
+        "note": "Uploads go to CrowdGPT's coordinator, not HiveMind. Each finished round uploads ~0.9 GB; mind data caps.",
+    }
 
 
 def _measure_producer_agent_egress() -> dict[str, Any]:
@@ -195,6 +236,9 @@ def build_node_egress_receipt() -> dict[str, Any]:
         _measure_opentrainer_worker_egress(),
         _measure_amcp_federation_learner_egress(),
     ]
+    for row in node_types:
+        row.setdefault("egress_basis", MODELED_BASIS)
+    node_types.append(_measure_crowdgpt_trainer_egress())
     return {
         "schema": "hivemind.node_egress_receipt.v1",
         "roadmap_deliverable": "PS-02-D4",

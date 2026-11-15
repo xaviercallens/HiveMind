@@ -407,6 +407,21 @@ def test_coordinator_ignores_unknown_and_empty_buckets_and_scales_to_large_cohor
     assert torch.all(out["expert_0"] < 1.0)  # identical pseudo-gradients move the master against them
 
 
+def test_coordinator_enforces_the_configured_quorum() -> None:
+    """One learner must not move a bucket when the quorum is 2 (the quorum used to be lowered to the submission count)."""
+    coord = CrowdOpenDiLoCoCoordinator({"expert_0": torch.ones(5)}, min_quorum_k=2, outer_momentum=0.9)
+    sha0 = coord.master_sha256()
+    rec = coord.step_decoupled_round({"expert_0": [(LearnerArrival("solo", 0.1, 1, 8), torch.full((5,), 0.2), 0.0)]})
+    assert coord.master_sha256() == sha0, "a single submission changed the master under a quorum of 2"
+    assert "expert_0" not in rec.fragments_synced
+    assert rec.quorum_telemetry["expert_0"]["status"] == "quorum_not_reached"
+    assert rec.quorum_telemetry["expert_0"]["submissions"] == 1
+
+    pair = [(LearnerArrival(f"l{i}", 0.1 + i * 1e-3, 1, 8), torch.full((5,), 0.2), 0.0) for i in range(2)]
+    rec2 = coord.step_decoupled_round({"expert_0": pair})
+    assert "expert_0" in rec2.fragments_synced and coord.master_sha256() != sha0
+
+
 def test_coordinator_rolls_back_on_non_finite_eval_loss() -> None:
     coord = CrowdOpenDiLoCoCoordinator({"expert_0": torch.ones(5)}, min_quorum_k=1, outer_momentum=0.9)
     sha0 = coord.master_sha256()

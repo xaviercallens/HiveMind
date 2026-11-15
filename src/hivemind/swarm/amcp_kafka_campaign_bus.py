@@ -220,6 +220,7 @@ CANONICAL_BEE_IDS: frozenset[str] = frozenset(
         *(b for c in JOINT_SUBJECT_CAMPAIGNS for b in c.co_bees),
         "hivemind/granite-1b-base",
         "hivemind/crowd-v1",
+        "hivemind/crowd-moe-v1",
         "hivemind/granite-moe",
         "hivemind/coder-lite",
         "hivemind/gemma-core",

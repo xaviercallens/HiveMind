@@ -155,3 +155,21 @@ def test_accounts_receipt_counts_by_kind_and_role_and_strips_all_personal_data(t
     ):
         with pytest.raises(ValueError, match="Personal data leak detected"):
             acc_mod.assert_zero_personal_data(leaked)
+
+
+
+def test_join_page_states_the_declared_egress_budgets_in_all_languages() -> None:
+    """PS-02-D4: the budgets on the join page are the receipt's declared budgets (keep them in step)."""
+    from hivemind.router.join_page import LANGS, render_join_page
+
+    egress = _load_script("node_egress_receipt_join", "scripts/node_egress_receipt.py")
+    rows = egress.build_node_egress_receipt()["node_types"]
+    assert rows["producer_shield"]["declared_budget_bytes_per_hour"] == 10 * 1024**2
+    assert rows["boinc_trainer"]["declared_budget_bytes_per_hour"] == 16 * 1024**2
+    assert rows["opentrainer_worker"]["declared_budget_bytes_per_hour"] == 512 * 1024
+    assert rows["crowdgpt_trainer"]["declared_budget_bytes_per_hour"] == 2 * 1024**3
+    for lang in LANGS:
+        page = render_join_page(lang)
+        assert "NODE_EGRESS" in page, lang
+        for figure in ("10 Mi", "16 Mi", "0,5 Mi" if lang in ("fr", "es", "de") else "0.5 Mi", "2 Gi"):
+            assert figure in page.replace("Mio", "MiB").replace("Gio", "GiB"), (lang, figure)

@@ -7,8 +7,8 @@ Counts accounts by ``kind`` (``user``, ``test``, ``probe``) and ``role`` (``cons
 while guaranteeing that zero emails, IP addresses, API keys, or endpoint tokens appear in the receipt.
 
 Usage:
-  python3 scripts/accounts_receipt.py --out artifacts/experiments/ACCOUNTS_2026-11-07.json
-  python3 scripts/accounts_receipt.py --db /path/to/router.db --out artifacts/experiments/ACCOUNTS_2026-11-07.json
+  python3 scripts/accounts_receipt.py --out artifacts/experiments/ACCOUNTS_2026-11-15.json
+  python3 scripts/accounts_receipt.py --db /path/to/router.db --out artifacts/experiments/ACCOUNTS_2026-11-15.json
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ import time
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_OUT = REPO_ROOT / "artifacts" / "experiments" / "ACCOUNTS_2026-11-07.json"
+DEFAULT_OUT = REPO_ROOT / "artifacts" / "experiments" / "ACCOUNTS_2026-11-15.json"
 DEFAULT_DB = Path(os.environ.get("HIVEMIND_ROUTER_DB", "/mnt/disks/disk-socrateai-local-1/hivemind_router/router.db"))
 
 KNOWN_KINDS: tuple[str, ...] = ("user", "test", "probe")
@@ -61,6 +61,53 @@ def _column_exists(conn: sqlite3.Connection, table_name: str, col_name: str) -> 
     return col_name in cols
 
 
+WINDOWS_S: tuple[tuple[str, int], ...] = (("24h", 86_400), ("7d", 7 * 86_400), ("30d", WINDOW_30D_SECONDS))
+
+
+def _activity_evidence(conn: sqlite3.Connection, now_ts: float) -> dict[str, Any]:
+    """Counts that separate accounts and machines in real use from rows that merely exist (aggregates only).
+
+    ``kind`` alone cannot do this: imported or seeded accounts are stored as ordinary ``user`` rows. And an
+    endpoint row is not a machine: a producer that restarts behind a rotating tunnel registers a new endpoint.
+    """
+    def ids(sql: str, *params: Any) -> set[str]:
+        return {str(r[0]) for r in conn.execute(sql, params).fetchall() if r[0] is not None}
+
+    accounts = ids("SELECT account_id FROM accounts") if _table_exists(conn, "accounts") else set()
+    with_password = (ids("SELECT account_id FROM accounts WHERE COALESCE(password_hash, '') <> ''")
+                     if _column_exists(conn, "accounts", "password_hash") else set())
+    out: dict[str, Any] = {"windows": [w for w, _ in WINDOWS_S]}
+    used_ever: set[str] = set()
+    if _table_exists(conn, "usage") and _column_exists(conn, "usage", "consumer_id"):
+        used_ever = ids("SELECT DISTINCT consumer_id FROM usage") & accounts
+        out["accounts_that_sent_requests"] = {
+            w: len(ids("SELECT DISTINCT consumer_id FROM usage WHERE CAST(utc AS REAL) >= ?", now_ts - s) & accounts)
+            for w, s in WINDOWS_S}
+    for table in ("producer_endpoints", "opentrainer_nodes"):
+        if _table_exists(conn, table) and _column_exists(conn, table, "account_id"):
+            used_ever |= ids(f"SELECT DISTINCT account_id FROM {table} WHERE last_heartbeat_utc IS NOT NULL") & accounts  # noqa: S608 - fixed names
+    out["accounts_with_password"] = len(with_password & accounts)
+    out["accounts_never_signed_in_nor_used"] = len(accounts - with_password - used_ever)
+
+    if _table_exists(conn, "producer_endpoints"):
+        rows = conn.execute(
+            "SELECT account_id, execution_class, last_heartbeat_utc FROM producer_endpoints").fetchall()
+        def recent(s: int) -> list[tuple[Any, ...]]:
+            return [r for r in rows if r[2] is not None and now_ts - float(r[2]) <= s]
+        out["producer_endpoint_rows"] = {w: len(recent(s)) for w, s in WINDOWS_S}
+        out["producer_accounts_heartbeating"] = {w: len({r[0] for r in recent(s)}) for w, s in WINDOWS_S}
+        out["producer_hardware_classes_heartbeating"] = {
+            w: len({str(r[1] or "unknown") for r in recent(s)}) for w, s in WINDOWS_S}
+    if _table_exists(conn, "opentrainer_nodes"):
+        rows = conn.execute("SELECT node_id, last_heartbeat_utc FROM opentrainer_nodes").fetchall()
+        out["opentrainer_nodes_heartbeating"] = {
+            w: sum(1 for r in rows if r[1] is not None and now_ts - float(r[1]) <= s) for w, s in WINDOWS_S}
+    out["note"] = ("Endpoint rows over-count machines (a restart behind a rotating tunnel adds a row); hardware classes "
+                   "and producer accounts are closer to machine counts. Accounts are not marked seeded vs real: use "
+                   "'sent requests' and 'with password' as evidence of real use. Requests include the operator's own tests.")
+    return out
+
+
 def build_accounts_receipt(
     db_path: Path | None = None,
     *,
@@ -78,6 +125,7 @@ def build_accounts_receipt(
     producer_nodes_30d = 0
     trainer_nodes_30d = 0
     db_status = "absent"
+    activity: dict[str, Any] | None = None
 
     target_db = db_path if db_path is not None else DEFAULT_DB
     if target_db is not None and target_db.exists():
@@ -124,6 +172,8 @@ def build_accounts_receipt(
                 ).fetchone()
                 trainer_nodes_30d = int(row[0] or 0) if row else 0
 
+            activity = _activity_evidence(conn, now_ts)
+
     receipt: dict[str, Any] = {
         "schema": "hivemind.accounts_receipt.v1",
         "roadmap_deliverable": "PS-03-D1",
@@ -140,6 +190,8 @@ def build_accounts_receipt(
             "opentrainer_nodes_active_30d": trainer_nodes_30d,
             "total_active_nodes_30d": producer_nodes_30d + trainer_nodes_30d,
         },
+        "active_nodes_30d_caveat": "rows with a heartbeat in 30 days, not distinct machines; see activity_evidence",
+        "activity_evidence": activity,
     }
     serialized = json.dumps(receipt, indent=2)
     assert_zero_personal_data(serialized)

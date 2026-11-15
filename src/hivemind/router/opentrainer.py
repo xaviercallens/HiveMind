@@ -119,6 +119,11 @@ SUPPORTED_STACKS: tuple[str, ...] = (
 # Minimum free VRAM guard (in MiB) by hardware tier so intense training never starves the host OS or daytime inference.
 DEFAULT_MIN_FREE_VRAM_MIB_T4 = 4300
 DEFAULT_MIN_FREE_VRAM_MIB_8GB = 1536
+# One cap everywhere (owner-delegated decision, 2026-11-15). Evidence: 2,026 delta norms recorded in
+# artifacts/experiments/e8_real + the low-cost VM verification: median 5.0, p99 11.2, max 15.4. 25.0 leaves 1.6x
+# headroom over the largest honest delta; 50 or 100 only gave a poisoned delta more room. The norm depends on the
+# profile (model, rank, inner steps, lr): a new task type must measure its own norms before reusing this value.
+# tests/test_opentrainer_l2_cap_consistency.py keeps router, orchestrator and CLI defaults equal.
 DEFAULT_MAX_DELTA_L2 = 25.0
 
 

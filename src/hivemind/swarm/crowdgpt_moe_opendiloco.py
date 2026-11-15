@@ -941,6 +941,7 @@ class OpenDiLoCoRoundReceipt:
     eval_loss_after: float
     accepted_by_loss_ratchet: bool
     master_state_sha256: str
+    candidate_eval_loss: float | None = None  # the measured loss of the update, kept even when it is rolled back
 
 
 class CrowdOpenDiLoCoCoordinator:
@@ -1050,7 +1051,14 @@ class CrowdOpenDiLoCoCoordinator:
             if bucket_name not in self.syncers or not items:
                 continue
             syncer = self.syncers[bucket_name]
-            eff_k = min(self.min_quorum_k, len(items))
+            if len(items) < self.min_quorum_k:
+                # the configured quorum is a floor, not a target: lowering it to the number of submissions let a single
+                # learner move a bucket on its own. This bucket waits for the next round instead.
+                telemetry_map.setdefault(bucket_name, {}).update(
+                    {"status": "quorum_not_reached", "submissions": len(items), "min_quorum_k": int(self.min_quorum_k)}
+                )
+                continue
+            eff_k = int(self.min_quorum_k)
             eff_m = max(syncer.num_learners_m, len(items), eff_k)
             if syncer.min_quorum_k != eff_k or syncer.num_learners_m < len(items):
                 syncer = DecoupledDiLoCoQuorumSyncer(
@@ -1113,6 +1121,7 @@ class CrowdOpenDiLoCoCoordinator:
             )
 
         loss_after = float(eval_fn(self.export_buckets())) if eval_fn is not None else loss_before
+        candidate_loss = loss_after
         accepted = True
         if eval_fn is not None and (not math.isfinite(loss_after) or loss_after > loss_before + 1e-6):
             # Monotone validation-loss ratchet rollback
@@ -1134,6 +1143,7 @@ class CrowdOpenDiLoCoCoordinator:
             eval_loss_after=loss_after,
             accepted_by_loss_ratchet=accepted,
             master_state_sha256=self.master_sha256(),
+            candidate_eval_loss=candidate_loss if eval_fn is not None else None,
         )
 
 

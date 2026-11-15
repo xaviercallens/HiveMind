@@ -47,6 +47,7 @@ def test_node_egress_receipt_covers_all_five_volunteer_node_types(tmp_path: Path
         "boinc_trainer",
         "opentrainer_worker",
         "amcp_federation_learner",
+        "crowdgpt_trainer",
     }
     assert set(data["node_types"].keys()) == expected_types
     for node_type, row in data["node_types"].items():
@@ -54,6 +55,11 @@ def test_node_egress_receipt_covers_all_five_volunteer_node_types(tmp_path: Path
         assert row["declared_budget_bytes_per_hour"] >= row["measured_egress_bytes_per_hour"], node_type
         assert row["within_budget"] is True, node_type
         assert row["lateral_movement_allowed"] is False, node_type
+        assert row["egress_basis"].startswith(("modeled:", "client_log_reported:")), node_type
+    crowd = data["node_types"]["crowdgpt_trainer"]
+    assert crowd["egress_basis"].startswith("client_log_reported:")
+    # five T4 uploads of 867.8-948.5 MB, ~36 min apart: about 1.5 GB/hour
+    assert 1.2e9 < crowd["measured_egress_bytes_per_hour"] < 1.9e9
 
 
 def test_accounts_receipt_counts_by_kind_and_role_and_strips_all_personal_data(tmp_path: Path) -> None:
@@ -185,3 +191,20 @@ def test_accounts_receipt_activity_evidence_separates_rows_from_machines_and_use
     assert ev["opentrainer_nodes_heartbeating"] == {"24h": 0, "7d": 0, "30d": 1}
     text = json.dumps(r)
     assert "trycloudflare" not in text and "pbkdf2" not in text and "h1" not in text
+
+
+def test_join_page_states_the_declared_egress_budgets_in_all_languages() -> None:
+    """PS-02-D4: the budgets on the join page are the receipt's declared budgets (keep them in step)."""
+    from hivemind.router.join_page import LANGS, render_join_page
+
+    egress = _load_script("node_egress_receipt_join", "scripts/node_egress_receipt.py")
+    rows = egress.build_node_egress_receipt()["node_types"]
+    assert rows["producer_shield"]["declared_budget_bytes_per_hour"] == 10 * 1024**2
+    assert rows["boinc_trainer"]["declared_budget_bytes_per_hour"] == 16 * 1024**2
+    assert rows["opentrainer_worker"]["declared_budget_bytes_per_hour"] == 512 * 1024
+    assert rows["crowdgpt_trainer"]["declared_budget_bytes_per_hour"] == 2 * 1024**3
+    for lang in LANGS:
+        page = render_join_page(lang)
+        assert "NODE_EGRESS" in page, lang
+        for figure in ("10 Mi", "16 Mi", "0,5 Mi" if lang in ("fr", "es", "de") else "0.5 Mi", "2 Gi"):
+            assert figure in page.replace("Mio", "MiB").replace("Gio", "GiB"), (lang, figure)

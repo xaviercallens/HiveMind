@@ -31,6 +31,7 @@ AUDITED_VOLUNTEER_FILES: tuple[str, ...] = (
     "scripts/hivemind_boinc_idle_worker.py",
     "scripts/hivemind_opentrainer_worker.py",
     "scripts/hivemind_opentrainer_agent.py",
+    "src/hivemind/opentrainer/crowdgpt_contributor.py",
 )
 
 FORBIDDEN_IMPORTS: frozenset[str] = frozenset(
@@ -66,6 +67,9 @@ FORBIDDEN_SUBPROCESS_BINARIES: frozenset[str] = frozenset(
 
 ALLOWED_LOOPBACK_HOSTS: frozenset[str] = frozenset({"127.0.0.1", "localhost", "::1"})
 ALLOWED_DOC_PLACEHOLDERS: frozenset[str] = frozenset({"host", "gateway", "your_public_url", "127.0.0.1:port"})
+# Exact URLs that volunteer code only prints for the user (install instructions); our code never connects to them.
+# Exact match only: any other URL on the same host still fails the scan.
+ALLOWED_DISPLAY_URLS: frozenset[str] = frozenset({"https://github.com/Vxtzq/CrowdGPT"})
 
 _IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 
@@ -126,6 +130,8 @@ def audit_source_for_lateral_movement(source_text: str, filename: str = "<memory
                     if "=" in cleaned and not cleaned.startswith(("http://", "https://", "ws://", "wss://")):
                         cleaned = cleaned.split("=", 1)[1]
                     parsed = urlparse(cleaned)
+                    if cleaned.rstrip("/") in ALLOWED_DISPLAY_URLS:
+                        continue
                     if parsed.scheme in ("http", "https", "ws", "wss", "ftp", "ssh", "smb"):
                         host = (parsed.hostname or "").lower()
                         if not _is_allowed_host(host):
@@ -180,4 +186,13 @@ def test_producer_shield_rejects_non_loopback_upstream_and_routes_at_runtime(
 
     with pytest.raises(SystemExit):
         shield.main(["--route", "coder=http://10.0.0.55:8080"])
+
+
+def test_display_url_allowance_is_exact() -> None:
+    """Only the exact CrowdGPT repo URL printed in install instructions is tolerated; other URLs on the host fail."""
+    ok = 'MSG = "git clone https://github.com/Vxtzq/CrowdGPT"\n'
+    assert audit_source_for_lateral_movement(ok, "x.py") == []
+    for bad in ("https://github.com/Vxtzq/CrowdGPT/raw/main/x.sh", "https://github.com/someone-else/repo",
+                "https://raw.githubusercontent.com/Vxtzq/CrowdGPT/main/install.sh"):
+        assert audit_source_for_lateral_movement(f'U = "{bad}"\n', "x.py"), bad
 

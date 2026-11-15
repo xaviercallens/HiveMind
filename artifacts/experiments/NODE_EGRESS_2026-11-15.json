@@ -1,0 +1,104 @@
+{
+  "schema": "hivemind.node_egress_receipt.v1",
+  "roadmap_deliverable": "PS-02-D4",
+  "generated_at_utc": "2026-11-15T07:06:44Z",
+  "all_within_budget": true,
+  "node_types": {
+    "producer_agent": {
+      "node_type": "producer_agent",
+      "entrypoint": "src/hivemind/router/hivemind_producer_agent.py",
+      "cadence": "60 heartbeats/hour (1 per 60 s)",
+      "payload_bytes_per_event": 427,
+      "events_per_hour": 60,
+      "measured_egress_bytes_per_hour": 25620,
+      "declared_budget_bytes_per_hour": 262144,
+      "within_budget": true,
+      "allowed_destinations": [
+        "https://<gateway>/v1/producers/heartbeat",
+        "http://127.0.0.1:11434"
+      ],
+      "lateral_movement_allowed": false,
+      "egress_basis": "modeled: serialized payload size x nominal cadence (not a network measurement)"
+    },
+    "producer_shield": {
+      "node_type": "producer_shield",
+      "entrypoint": "src/hivemind/router/hivemind_producer_shield.py",
+      "cadence": "0 B/hour idle; nominal 30 completions/hour (512 tokens each) when serving",
+      "payload_bytes_per_event": 2144,
+      "events_per_hour": 30,
+      "measured_egress_bytes_per_hour": 64320,
+      "declared_budget_bytes_per_hour": 10485760,
+      "within_budget": true,
+      "allowed_destinations": [
+        "http://127.0.0.1:11434",
+        "http://localhost:11434"
+      ],
+      "lateral_movement_allowed": false,
+      "egress_basis": "modeled: serialized payload size x nominal cadence (not a network measurement)"
+    },
+    "boinc_trainer": {
+      "node_type": "boinc_trainer",
+      "entrypoint": "src/hivemind/boinc/real_client/moe_app.py",
+      "cadence": "2 QLoRA-MoE workunit adapter uploads/hour (inside 22:00-07:00 Europe/Paris window)",
+      "payload_bytes_per_event": 2622464,
+      "events_per_hour": 2,
+      "measured_egress_bytes_per_hour": 5244928,
+      "declared_budget_bytes_per_hour": 16777216,
+      "within_budget": true,
+      "allowed_destinations": [
+        "https://hivemind-at-home-ruche-cfhmhmvv5a-uc.a.run.app",
+        "https://storage.googleapis.com"
+      ],
+      "lateral_movement_allowed": false,
+      "egress_basis": "modeled: serialized payload size x nominal cadence (not a network measurement)"
+    },
+    "opentrainer_worker": {
+      "node_type": "opentrainer_worker",
+      "entrypoint": "scripts/hivemind_opentrainer_worker.py",
+      "cadence": "60 heartbeats/hour + 4 signed delta receipts/hour",
+      "payload_bytes_per_event": 478,
+      "events_per_hour": 64,
+      "measured_egress_bytes_per_hour": 30972,
+      "declared_budget_bytes_per_hour": 524288,
+      "within_budget": true,
+      "allowed_destinations": [
+        "https://hivemind-openrouter-1003063861791.us-central1.run.app"
+      ],
+      "lateral_movement_allowed": false,
+      "egress_basis": "modeled: serialized payload size x nominal cadence (not a network measurement)"
+    },
+    "amcp_federation_learner": {
+      "node_type": "amcp_federation_learner",
+      "entrypoint": "scripts/e8_amcp_round.py",
+      "cadence": "12 DiLoCo rounds/hour (CLAIM + signed RESULT CloudEvents envelope)",
+      "payload_bytes_per_event": 29312,
+      "events_per_hour": 12,
+      "measured_egress_bytes_per_hour": 351744,
+      "declared_budget_bytes_per_hour": 4194304,
+      "within_budget": true,
+      "allowed_destinations": [
+        "HIVEMIND_KAFKA_BOOTSTRAP (topic: federation)"
+      ],
+      "lateral_movement_allowed": false,
+      "egress_basis": "modeled: serialized payload size x nominal cadence (not a network measurement)"
+    },
+    "crowdgpt_trainer": {
+      "node_type": "crowdgpt_trainer",
+      "entrypoint": "Vxtzq/CrowdGPT client.py (launched by scripts/hivemind_opentrainer_agent.py --crowdgpt)",
+      "cadence": "1.65 submitted rounds/hour (median interval 36.3 min)",
+      "payload_bytes_per_event": 920700000,
+      "events_per_hour": 1.654,
+      "measured_egress_bytes_per_hour": 1522517225,
+      "declared_budget_bytes_per_hour": 2147483648,
+      "within_budget": true,
+      "egress_basis": "client_log_reported: 5 submitted rounds on a Tesla T4 (2026-11-14)",
+      "source": "artifacts/experiments/CROWDGPT_T4_UPLOADS_2026-11-14.json",
+      "allowed_destinations": [
+        "https://server.crowdgpt.net",
+        "https://huggingface.co"
+      ],
+      "lateral_movement_allowed": false,
+      "note": "Uploads go to CrowdGPT's coordinator, not HiveMind. Each finished round uploads ~0.9 GB; mind data caps."
+    }
+  }
+}

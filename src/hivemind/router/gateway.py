@@ -919,6 +919,26 @@ class BodyLimitMiddleware:
         await response(scope, receive, send)
 
 
+# Public pages that posts link to. A link written in Markdown or inside parentheses often reaches us with the closing
+# punctuation glued on ("/signup)", "/signup](https:...", "/signup."), which 404s (seen in the 2026-11 gateway logs).
+# Only these fixed paths can be redirect targets, so the redirect cannot be pointed anywhere else.
+LINK_TYPO_PAGES = frozenset({
+    "/", "/signup", "/register", "/login", "/connexion", "/join", "/rejoindre", "/portal", "/playground", "/community",
+    "/benchmarks", "/boinc", "/crowdgpt-raid", "/raid", "/life-as-a-bee", "/manifesto", "/manifeste", "/game",
+    "/en", "/fr", "/de", "/es",
+})
+_LINK_TYPO_RE = re.compile(r"^(/[a-z0-9-]*?)(?:[)\]\[>\"'.,;:!*]|%29|%5[bBdD]|%22|%27|%3[eE]).*$")
+
+
+def link_typo_target(path: str) -> str | None:
+    """The clean page for a path with stray link punctuation after a known page, else None."""
+    match = _LINK_TYPO_RE.match(path or "")
+    if match is None:
+        return None
+    page = match.group(1) or "/"
+    return page if page in LINK_TYPO_PAGES else None
+
+
 def create_router_app(
     store: RouterStore,
     *,
@@ -1051,7 +1071,11 @@ def create_router_app(
         )
 
     @app.exception_handler(StarletteHTTPException)
-    def _http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
+    def _http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse | RedirectResponse:
+        if exc.status_code == 404 and request.method in ("GET", "HEAD"):
+            target = link_typo_target(request.url.path)
+            if target is not None:
+                return RedirectResponse(target + (f"?{request.url.query}" if request.url.query else ""), status_code=307)
         kind = "not_found_error" if exc.status_code == 404 else "invalid_request_error"
         return _error_response(exc.status_code, str(exc.detail), kind, f"http_{exc.status_code}")
 
@@ -5327,7 +5351,7 @@ def create_router_app(
 
         chosen_lang = lang or ("fr" if "fr" in (request.headers.get("accept-language") or "").lower().split(",")[0] else "en")
         nonce = _secrets.token_urlsafe(18)
-        html_doc = render_v34_raid_hub_page(lang=chosen_lang, nonce=nonce)
+        html_doc = render_v34_raid_hub_page(lang=chosen_lang, nonce=nonce, starter_grant_hmt=starter_grant_hmt)
         return HTMLResponse(
             content=html_doc,
             headers={

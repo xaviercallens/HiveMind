@@ -63,7 +63,7 @@ def test_github_discord_reddit_and_5phase_plan_builders() -> None:
     assert len(COMMUNICATION_PLAN_PHASES) == 5
     status = build_v34_communication_plan_status()
     assert status["organizer"]["email"] == "callensxavier@gmail.com"
-    assert status["dual_concept_validation"]["cuda_preflight_loss_trajectory"] == [5.3042, 5.1742, 0.9668]
+    assert status["dual_concept_validation"]["cuda_preflight_loss_trajectory_superseded"]["values"] == [5.3042, 5.1742, 0.9668]
     assert "@jblam-O" in status["pioneer_honor_roll"]["github_contributors"]
     assert "@Vxtzq" in status["pioneer_honor_roll"]["github_contributors"]
 
@@ -187,3 +187,28 @@ def test_no_contributor_email_address_is_committed_or_served() -> None:
     public = json.dumps(mod.build_v34_communication_plan_status())
     assert {a.lower() for a in addr.findall(public)} <= allowed
     assert "gmail_web_compose_url" not in public
+
+
+
+def test_raid_hub_page_states_the_real_grant_and_the_dense_crowdgpt_path() -> None:
+    """The weekend page must not promise a sign-up credit the gateway does not give, nor the stopped MoE split."""
+    for lang in ("en", "fr"):
+        page = render_v34_raid_hub_page(lang=lang, nonce="ValidNonce123456")
+        assert "500 HMT" not in page
+        assert "moe-opendiloco-round" not in page and "8 Domain Specialists" not in page and "8 experts (" not in page
+        assert "crowdgpt --headless --anon" in page and "https://github.com/Vxtzq/CrowdGPT" in page
+        assert "/discussions/909" in page
+    granted = render_v34_raid_hub_page(lang="en", nonce="ValidNonce123456", starter_grant_hmt=250)
+    assert "250 HMT" in granted
+
+
+
+def test_outreach_plan_marks_the_moe_split_as_stopped() -> None:
+    """Agents read this public JSON: it must say the Crowd-v1 MoE split is stopped and how to train instead."""
+    from hivemind.router.community_outreach_v34 import build_v34_communication_plan_status
+
+    plan = build_v34_communication_plan_status()
+    assert "Vxtzq/CrowdGPT" in plan["status_update"]["train"] and plan["status_update"]["sign_up_credit_hmt"] == 0
+    concepts = plan["dual_concept_validation"]
+    assert concepts["concept_b_status"].startswith("stopped")
+    assert "concept_b_crowdgpt_moe_opendiloco" not in concepts and "cuda_preflight_loss_trajectory" not in concepts

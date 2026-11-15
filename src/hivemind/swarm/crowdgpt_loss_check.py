@@ -20,8 +20,10 @@ your own hardware before choosing `tol` (`scripts/crowdgpt_loss_check.py calibra
 
 Standalone on purpose (torch, numpy, standard library; safetensors only for loading files) so the same file can sit in
 the CrowdGPT repository next to `hivemind_bridge.py`. The model below is the inference path of `SotaGPT` in CrowdGPT's
-`client.py` (LayerNorm, grouped-query attention with RoPE, SwiGLU, tied head); the engram table is not read by the
-forward pass there (`ENGRAM_ACTIVE = False`), so it is not part of the check.
+`client.py` (LayerNorm, grouped-query attention with RoPE, SwiGLU, tied head) plus, when `engramBuckets > 0`, the bigram
+engram table that `client.py` adds to the token embedding (on by default since Crowd-v1 step ~348). Measured
+2026-11-13 on revision 5ac3916: leaving the engram out raises held-out loss by ~0.35 nat, so use
+`CROWD_V1_ENGRAM_CONFIG` for current checkpoints; `CROWD_V1_CONFIG` keeps the trunk-only behaviour.
 """
 
 from __future__ import annotations
@@ -240,6 +242,17 @@ def load_flat_safetensors(path: Path | str) -> torch.Tensor:
         key = next(iter(tensors))
     return tensors[key].reshape(-1)
 
+
+
+def load_crowd_v1_with_engram(model_path: Path | str, engram_path: Path | str) -> torch.Tensor:
+    """`model_bf16.safetensors` ‖ `engram_bf16.safetensors` as one flat tensor, for `CrowdV1(CROWD_V1_ENGRAM_CONFIG)`.
+
+    Passing this single tensor as `base` / `candidate` to `make_receipt` and `cpu_recompute_fn` makes the receipt's
+    `*_sha256` cover the engram table too (it changes every round), with no change to the receipt schema."""
+    trunk, eng = load_flat_safetensors(model_path), load_flat_safetensors(engram_path)
+    if eng.numel() != CROWD_V1_ENGRAM_SIZE:
+        raise ValueError(f"engram file has {eng.numel()} values, expected {CROWD_V1_ENGRAM_SIZE}")
+    return torch.cat((trunk, eng.to(trunk.dtype)))
 
 def load_named_crowd_v1_safetensors(
     path: Path | str,

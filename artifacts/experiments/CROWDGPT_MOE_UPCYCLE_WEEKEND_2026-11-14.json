@@ -1,0 +1,25 @@
+{
+  "schema": "hivemind.parked_receipt.v1",
+  "idea": "Sparse-MoE upcycle of Crowd-v1 trained with decoupled OpenDiLoCo rounds",
+  "measured_on": "2026-11-14",
+  "node": "GCP Spot Tesla T4 (socreateai-agora-hermes-node1), shared with llama-server inference",
+  "code": "scripts/gcp_t4_crowd_diloco_worker.py --mode moe-opendiloco-round --real-data (PR #913, unmerged)",
+  "basis": "worker.log round summaries and watchdog.log free-VRAM samples (5 s) of each run",
+  "runs": [
+    {"run": "20261114T102826Z", "mode": "smoke", "rounds": 1, "inner_steps": 2, "accepted_rounds": 0,
+     "eval_loss_before": 4.778394, "eval_loss_after": 4.778394, "min_free_vram_mib": 6989},
+    {"run": "20261114T102958Z", "mode": "full", "rounds": 4, "inner_steps": 8, "accepted_rounds": 0,
+     "eval_loss_before": 4.778394, "eval_loss_after": 4.778394, "min_free_vram_mib": 6791,
+     "note": "all 4 rounds rejected by the loss ratchet with an identical outer delta"},
+    {"run": "20261114T103642Z", "mode": "full", "rounds": 1, "inner_steps": 8, "extra": "--outer-lr 0.7",
+     "accepted_rounds": null, "min_free_vram_mib": 3925, "watchdog_sigterm": 1,
+     "note": "BREACHED the 4,300 MiB floor; stopped by the watchdog before a summary"},
+    {"run": "20261114T103833Z", "mode": "full", "rounds": 1, "inner_steps": 8, "extra": "--outer-lr 0.2",
+     "accepted_rounds": 1, "eval_loss_before": 4.778394, "eval_loss_after": 4.777171, "min_free_vram_mib": 4061,
+     "note": "only accepted round (-0.0012 eval loss); free VRAM dipped below the 4,300 MiB floor"},
+    {"run": "20261114T103953Z", "mode": "full", "rounds": 1, "inner_steps": 8, "extra": "--lr 5e-5",
+     "accepted_rounds": 0, "eval_loss_before": 4.778394, "eval_loss_after": 4.778394, "min_free_vram_mib": 6777}
+  ],
+  "upstream_position": "Vxtzq (Crowd-v1 author) said on 2026-11-14 that Crowd-v1 is a dense model and should not be split into parts; the path was stopped the same day.",
+  "summary": "1 of 7 rounds accepted, with a 0.0012 eval-loss gain; 2 of 5 runs went below the 4,300 MiB free-VRAM floor."
+}

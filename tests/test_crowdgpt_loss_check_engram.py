@@ -22,7 +22,7 @@ KEY, SECRET = b"evaluator-key", b"backend-secret"
 def trunk_and_engram(seed: int) -> tuple[torch.Tensor, torch.Tensor]:
     torch.manual_seed(seed)
     m = lc.CrowdV1(TINY_ENG)
-    trunk = torch.cat([p.detach().reshape(-1) for p in m._trunk_parameters()])
+    trunk = torch.cat([p.detach().reshape(-1) for p in m._base_parameters()])
     eng = torch.randn(TINY_ENG["engramBuckets"] * TINY["dim"]) * 0.5
     return trunk, eng
 
@@ -59,8 +59,7 @@ def test_engram_free_config_still_loads_trunk_only_and_rejects_stray_engram() ->
     assert m.n_flat() == trunk.numel()
     with pytest.raises(ValueError):
         m.load_flat(trunk, engram=eng)
-    with pytest.raises(ValueError):
-        lc.CrowdV1(TINY_ENG).load_flat(trunk)  # engram config without engram weights
+    lc.CrowdV1(TINY_ENG).load_flat(trunk)  # trunk only into an engram model is allowed (the table keeps its init)
     with pytest.raises(ValueError):
         lc.CrowdV1({**TINY, "engramBuckets": -1})
 

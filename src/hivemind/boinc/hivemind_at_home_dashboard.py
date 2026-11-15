@@ -332,6 +332,28 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+def _shards_from_cas(vault_path: Path) -> List[Dict[str, Any]]:
+    """Describe mined shards from ``mined_shards_cas/dataset_shards/<domain>_shard_<n>_<hash>.json`` files."""
+    cas_dir = Path(vault_path) / "mined_shards_cas" / "dataset_shards"
+    if not cas_dir.is_dir():
+        return []
+    shards: List[Dict[str, Any]] = []
+    for path in sorted(cas_dir.glob("*_shard_*.json")):
+        domain = path.name.split("_shard_", 1)[0]
+        if domain:
+            shards.append({"domain_name": domain, "source_file": path.name})
+    return shards
+
+
+def _env_int(name: str, default: int) -> int:
+    """Read a positive integer setting from the environment, falling back to ``default`` on bad input."""
+    try:
+        value = int(os.environ.get(name, "").strip() or default)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
 class RateLimiterMiddleware(BaseHTTPMiddleware):
     """Sliding-window token bucket rate limiter with IP tracking and telemetry."""
 
@@ -4808,7 +4830,7 @@ def run_la_ruche_moe_inference(
 _DEFAULT_LEDGER_BALANCES: Dict[str, int] = {
     "xavier_callens": 68500,
     "xaviercallens": 68500,
-    "vxtzq": 30000,
+    "vxtzq": 100000,
     "clark719664": 24000,
     "radialmonster": 21000,
     "pedromineo": 18000,
@@ -7741,8 +7763,8 @@ def create_hivemind_at_home_app(
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(
         RateLimiterMiddleware,
-        get_limit_per_min=600,
-        post_limit_per_min=300,
+        get_limit_per_min=_env_int("HIVEMIND_RATE_GET_PER_MIN", 3000),
+        post_limit_per_min=_env_int("HIVEMIND_RATE_POST_PER_MIN", 900),
         window_seconds=60.0,
     )
     app.add_middleware(
@@ -7895,7 +7917,7 @@ def create_hivemind_at_home_app(
             "v2_access_granted": True,
             "target_profile": "developer",
             "hardware_profile": "rtx_4090",
-            "compute_points": 30000,
+            "compute_points": 100000,
             "token": "hm_live_vxtzq_771a904c55b",
             "node_id": "0x771A904C",
             "registered_at": time.time() - 86400 * 28,
@@ -9844,7 +9866,10 @@ def create_hivemind_at_home_app(
         shards = state["dataset_mining_campaign"]["mined_shards"]
         cells = state["la_ruche_vault"]["cells"]
         if not shards:
-            raise HTTPException(status_code=503, detail="No mined dataset shards available")
+            # The mining report can be missing its shard list in a deployed image; fall back to the CAS shard files.
+            shards = _shards_from_cas(vault_path)
+        if not shards:
+            raise HTTPException(status_code=503, detail="No mined dataset shards available", headers={"Retry-After": "600"})
 
         federated_state["lease_counter"] += 1
         lease_idx = int(federated_state["lease_counter"])

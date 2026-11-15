@@ -67,6 +67,12 @@ VALID_OPENTRAINER_CAMPAIGN_IDS: frozenset[str] = frozenset(
         "SUBJ-04-LEAN4-FORMAL-PROOFS",
         "SUBJ-05-CYBER-DEFENSE-FIREWALL",
         "SUBJ-06-CHEM-BIO-MED-DISCOVERY",
+        "CROWDGPT-V1-TRUNK-DILOCO",
+        "CROWDGPT-V1-QLORA-GRAFT",
+        "CROWDGPT-V1-LOSS-CHECK",
+        "CROWDGPT-GCP-T4-DILOCO",
+        "CROWDGPT-WE-NOV14-15-2026-MOE-OPENDILOCO",
+        "CROWDGPT-MOE-8X-UPCYCLE-V1",
     }
 )
 _BYOM_CAMPAIGN_RE = re.compile(r"^byom-[A-Za-z0-9._-]{1,100}$")
@@ -724,6 +730,207 @@ MULTI_GPU_2_TO_4_BYOM_CO_TRAINING_PLAYBOOK: dict[str, Any] = {
 }
 
 
+CROWDGPT_TRAINER_PRODUCER_CO_TRAINING_PLAN: dict[str, Any] = {
+    "object": "hivemind.opentrainer.crowdgpt_trainer_producer_plan",
+    "plan_id": "CROWDGPT-HIVEMIND-CO-TRAIN-V1",
+    "title_en": "CrowdGPT (Vxtzq/Crowd-v1) Co-Training Plan with Trainer & Producer GPUs",
+    "title_fr": "Plan de Co-Entraînement CrowdGPT (Vxtzq/Crowd-v1) avec GPUs Entraîneurs & Producteurs",
+    "partner_project": {
+        "name": "CrowdGPT",
+        "maintainer_handle": "Vxtzq",
+        "github_repo": "https://github.com/Vxtzq/CrowdGPT",
+        "hf_model_id": "Vxtzq/Crowd-v1",
+        "openrouter_model_id": "hivemind/crowd-v1",
+        "coordinator_url": "https://server.crowdgpt.net",
+        "parameters_count": 657_787_392,
+        "vocab_size": 151_669,
+        "license": "MIT (model) / GPL-3.0 (CrowdGPT client) / AGPL-3.0 (HiveMind)",
+        "discord_invite": "https://discord.gg/ZeFtZpKHf",
+    },
+    "gpu_role_partitioning": [
+        {
+            "role_id": "producer_gpu_dual_schedule",
+            "roles": ["producer", "prosumer"],
+            "hardware_examples": [
+                "Local NVIDIA RTX 2070 (XAVGAMSRV, 8 GB VRAM, sm_75, Windows 11)",
+                "Community Producer GPUs (RTX 3060 / 3090 / 4070 / 4090, AMD ROCm, Apple MPS)",
+            ],
+            "vram_safety_floor_mib": DEFAULT_MIN_FREE_VRAM_MIB_8GB,
+            "daytime_policy_07h_22h_paris": (
+                "Inference priority (/v1/chat/completions for hivemind/crowd-v1, hivemind/coder, hivemind/bee-stars). "
+                "When idle (governor_state == 'training' after 120m daytime / 30m nighttime inactivity), executes "
+                "fast GPU Held-Out Loss-Check jobs (scripts/crowdgpt_loss_check_agent.py, N=32 windows of 2048 tokens "
+                "in ~4-8s on GPU vs ~187s on CPU) and micro-round QLoRA grafts (CROWDGPT-V1-QLORA-GRAFT). "
+                "Yields GPU in < 1.5s when local gaming or an OpenRouter inference request arrives."
+            ),
+            "night_policy_22h_07h_paris": (
+                "Switches automatically into full Trainer Mode (CROWDGPT-V1-TRUNK-DILOCO & CROWDGPT-V1-QLORA-GRAFT), "
+                "training 1-hour DiLoCo inner loops on 1 MB uint16/uint32 token shards (window=2048) over outbound HTTPS."
+            ),
+            "cli_loss_check_command": (
+                "python scripts/crowdgpt_loss_check_agent.py --server https://server.crowdgpt.net "
+                "--evaluator-id hivemind-rtx2070 --key-file ~/.config/hivemind/crowdgpt_evaluator_key "
+                "--governor-state artifacts/governor_state.json --once"
+            ),
+            "cli_trainer_command": (
+                "python scripts/hivemind_opentrainer_agent.py "
+                "--gateway https://hivemind-openrouter-1003063861791.us-central1.run.app "
+                "--campaign-id CROWDGPT-V1-TRUNK-DILOCO --network-mode outbound-https-relay --submit-delta --once"
+            ),
+        },
+        {
+            "role_id": "dedicated_and_spot_trainer_gpu",
+            "roles": ["trainer"],
+            "hardware_examples": [
+                "GCP Spot NVIDIA Tesla T4 (socreateai-agora-hermes-node1, 16 GB VRAM, sm_75, Linux)",
+                "Dedicated Multi-GPU Trainer Rigs (2 to 4 GPUs via CUDA_VISIBLE_DEVICES=0..3)",
+            ],
+            "vram_safety_floor_mib": DEFAULT_MIN_FREE_VRAM_MIB_T4,
+            "daytime_and_night_policy": (
+                "Runs scheduled Spot batch training and nocturnal DiLoCo outer/inner trunk rounds "
+                "(CROWDGPT-V1-TRUNK-DILOCO) + domain QLoRA rank-16 grafts (CROWDGPT-V1-QLORA-GRAFT) while strictly "
+                "maintaining >= 4,300 MiB free VRAM on Tesla T4 and never modifying /opt/hivemind/t4/."
+            ),
+            "cli_trainer_command": (
+                "python scripts/hivemind_opentrainer_agent.py "
+                "--gateway https://hivemind-openrouter-1003063861791.us-central1.run.app "
+                "--campaign-id CROWDGPT-V1-QLORA-GRAFT --network-mode outbound-https-relay --submit-delta --once"
+            ),
+        },
+        {
+            "role_id": "lowcost_cpu_orchestrator_and_coordinator",
+            "roles": ["coordinator"],
+            "hardware_examples": [
+                "HiveMind Permanent OpenTrainer VM (hm-opentrainer-1, GCP Spot e2-small, $3.65/mo, 0 GPUs)",
+                "CrowdGPT Coordinator (server.crowdgpt.net, 2 vCPU, 15 GB RAM)",
+            ],
+            "vram_safety_floor_mib": 0,
+            "daytime_and_night_policy": (
+                "Coordinates 24/7 outer DiLoCo steps without GPU cost: (1) stratifies GPUs into homogeneous numerical "
+                "cohorts (pre-Ampere sm<80 fp32 vs Ampere+ sm>=80 bf16), (2) filters Byzantine outliers via chunked "
+                "Multi-Krum (MAX_TOKEN_WEIGHT_MEDIAN_MULTIPLE=1.25), (3) enforces the Anti-Lobotomy Weight RMS "
+                "Collapse Guard (0.80 <= rms_ratio <= 1.25, blocking 0.5x zero-tensor halving), and (4) verifies "
+                "GPU Held-Out Loss-Check receipts with k=2 HMAC CPU spot checks before checkpoint promotion."
+            ),
+        },
+    ],
+    "precision_cohorts": [
+        {
+            "cohort_key": "nvidia:sm75_pre_ampere:fp32:adamw_8bit",
+            "gpus": ["NVIDIA RTX 2070 (8 GB)", "NVIDIA Tesla T4 (16 GB)"],
+            "effective_dtype": "fp32",
+            "pre_ampere_fp32_enforced": True,
+            "rationale": "Turing (sm_75) lacks native bf16 tensor cores; enforcing fp32 master weights + NF4 QLoRA prevents underflow and 5.5x bf16 emulation slowdown.",
+        },
+        {
+            "cohort_key": "nvidia:sm80_plus_ampere:bf16:adamw_8bit",
+            "gpus": ["NVIDIA RTX 3060 / 3090 / 4070 / 4090", "NVIDIA L4 (24 GB)"],
+            "effective_dtype": "bf16",
+            "pre_ampere_fp32_enforced": False,
+            "rationale": "Ampere/Ada/Hopper (sm >= 80) execute native bfloat16 tensor ops and upload gzipped bf16 deltas + sparse engrams.",
+        },
+        {
+            "cohort_key": "amd_rocm:rocm:fp32:adamw_8bit",
+            "gpus": ["AMD Radeon RX 6000 / 7000 Series (ROCm)"],
+            "effective_dtype": "fp32",
+            "pre_ampere_fp32_enforced": False,
+            "rationale": "Dedicated ROCm cohort with 180s forming-pool starvation fallback (SOLO_LOSS_RATCHET_FALLBACK).",
+        },
+    ],
+    "hiveminder_account_and_crosscheck_integration": {
+        "zero_manual_account_creation": True,
+        "mode_a_shared_pool_multiplexing": (
+            "CrowdGPT keys active client tasks on `user:<uuid>:dev:<device>` (client.py:337). "
+            "All HiveMind fleet/producer/trainer GPUs can share a single `hivemind-swarm` Bearer token while "
+            "sending a unique `X-Client-Device: hm-<handle>-<gpu_id>` header so multiple GPUs train concurrently "
+            "without colliding, while HiveMind credits each contributor on /telemetry and /portal."
+        ),
+        "mode_b_individual_account_opt_in": (
+            "Any HiveMinder who wants their own personal username on the CrowdGPT leaderboard runs "
+            "`python client.py --register --user hm_<handle> --email <email>` once (or `--login` per PR #89)."
+        ),
+        "exact_server_crosscheck_compliance": (
+            "HiveMind nodes run stock `Vxtzq/CrowdGPT/client.py` headless loop (or `build_crowdgpt_submit_metadata`) "
+            "sending all 12 `X-Client-*` hardware headers (`X-Client-Backend`, `X-Client-Compute-Cap`, `X-Client-Autocast`, "
+            "`X-Client-Optim`, `X-Client-Optim-Can-Fp32`, `X-Client-Optim-Can-8bit`, `X-Client-Engram`, `X-Client-Device`, etc.), "
+            "obeying `md['crossCheck']` (`slot=0`, `targetSeed`, `targetLocalSteps`, `targetBatchSize`, `targetAccumSteps`, "
+            "`targetAutocast`, `targetOptimizer`), and embedding `crossCheckUsed`, `actualSeed`, `actualSteps`, "
+            "`actualBatchSize`, `lastLoss`, `lossStd`, and `lossSamples` in every `/fl/submit` delta header."
+        ),
+    },
+    "verification_and_safety_gates": {
+        "byzantine_aggregator": "Chunked Multi-Krum (multi_krum_select_and_aggregate, token_weight cap = 1.25x median)",
+        "anti_lobotomy_rms_guard": "check_weight_rms_collapse_guard (0.80 <= rms_ratio <= 1.25; blocks Step-282 0.5x zero-participant halving)",
+        "held_out_loss_ratchet": "LossCheckCoordinator + LossRatchetGate (required_receipts=2 for untrusted GPUs, k=2 HMAC CPU spot-check)",
+        "serialization_safety": "safetensors + weights_only=True + gzipped bf16/engram binary framing (zero pickle execution)",
+        "gcp_t4_diloco_engine": "GcpCrowdDiLoCoOuterHub + T4GovernorYieldGuard (full_trunk_8bit_ckpt / block_window_diloco / qlora_graft_diloco, >= 4,300 MiB free VRAM floor, /opt/hivemind/t4/ protected, Spot $0.186/hr <= $150/mo)",
+    },
+    "rollout_phases": [
+        {
+            "phase": "Phase 1 — GPU Held-Out Loss-Check Offload & Calibration (Days 1–2)",
+            "deliverables": [
+                "Run `scripts/crowdgpt_loss_check.py calibrate` between RTX 2070 / Tesla T4 (GPU) and CrowdGPT backend (CPU) to pin exact fp32/bf16 tolerance (`tol <= 2e-3`).",
+                "Activate `scripts/crowdgpt_loss_check_agent.py` on idle Producer GPUs (`hivemind-rtx2070`, `hivemind-t4`) polling `/fl/loss_check/job`.",
+            ],
+        },
+        {
+            "phase": "Phase 2 — Dual-Role Producer + Trainer DiLoCo Trunk Co-Training (Days 3–5)",
+            "deliverables": [
+                "Launch `CROWDGPT-V1-TRUNK-DILOCO` rounds across Producer GPUs (night window 22:00–07:00 Paris) and Trainer GPUs.",
+                "Aggregate 1-hour client deltas through `multi_krum_select_and_aggregate` + `check_weight_rms_collapse_guard` + `LossRatchetGate`.",
+            ],
+        },
+        {
+            "phase": "Phase 3 — Night-Hive Specialist QLoRA Grafts (`18 MB` Adapters) & Live OpenRouter Serving (Days 6–10)",
+            "deliverables": [
+                "Train rank-16 NF4 domain QLoRA adapters (`CROWDGPT-V1-QLORA-GRAFT`) on top of the ratcheted `Vxtzq/Crowd-v1` trunk.",
+                "Serve `hivemind/crowd-v1` live on HiveMind OpenRouter (`/v1/chat/completions`) and credit contributors on both leaderboards.",
+            ],
+        },
+        {
+            "phase": "Phase 4 — Joint 72-Hour Federated Benchmark & Public Receipt Report (Days 11–14)",
+            "deliverables": [
+                "Execute a 72-hour federated run combining CrowdGPT contributors and HiveMind Producer/Trainer GPUs.",
+                "Publish cryptographic SHA-256 loss receipts on GitHub Discussions, Discord, and `/telemetry`.",
+            ],
+        },
+    ],
+}
+
+
+def build_crowdgpt_trainer_producer_plan(
+    *,
+    opentrainer_nodes: Sequence[Mapping[str, Any]] = (),
+    recent_rounds: Sequence[Mapping[str, Any]] = (),
+    now_utc: float | None = None,
+) -> dict[str, Any]:
+    """Build the live CrowdGPT Trainer + Producer GPU co-training plan and campaign telemetry summary."""
+    now = time.time() if now_utc is None else float(now_utc)
+    live_nodes = [n for n in opentrainer_nodes if (now - float(n.get("last_heartbeat_utc") or 0.0)) <= 300.0]
+    crowd_rounds = [
+        r
+        for r in recent_rounds
+        if "crowdgpt" in str(r.get("run_id") or "").lower()
+        or str(r.get("run_id") or "") in ("CROWDGPT-V1-TRUNK-DILOCO", "CROWDGPT-V1-QLORA-GRAFT", "CROWDGPT-V1-LOSS-CHECK", "CROWDGPT-GCP-T4-DILOCO")
+    ]
+    total_crowd_tokens = sum(max(0, int(r.get("tokens_trained") or 0)) for r in crowd_rounds)
+    return {
+        **CROWDGPT_TRAINER_PRODUCER_CO_TRAINING_PLAN,
+        "updated_utc": round(now, 3),
+        "live_campaign_telemetry": {
+            "allowed_campaign_ids": [
+                "CROWDGPT-V1-TRUNK-DILOCO",
+                "CROWDGPT-V1-QLORA-GRAFT",
+                "CROWDGPT-V1-LOSS-CHECK",
+                "CROWDGPT-GCP-T4-DILOCO",
+            ],
+            "active_trainer_and_producer_nodes": len(live_nodes),
+            "crowdgpt_rounds_recorded": len(crowd_rounds),
+            "crowdgpt_tokens_trained": total_crowd_tokens,
+        },
+    }
+
+
 def summarize_moe_self_training_progress(
     *,
     recent_rounds: Sequence[Mapping[str, Any]],
@@ -850,6 +1057,11 @@ def build_opentrainer_status_payload(
         "moe_self_training_progress": moe_progress,
         "community_help_guide": list(COMMUNITY_HELP_AND_CONTRIBUTIVE_GUIDE),
         "multi_gpu_2_to_4_byom_playbook": MULTI_GPU_2_TO_4_BYOM_CO_TRAINING_PLAYBOOK,
+        "crowdgpt_trainer_producer_plan": build_crowdgpt_trainer_producer_plan(
+            opentrainer_nodes=opentrainer_nodes,
+            recent_rounds=recent_rounds,
+            now_utc=now,
+        ),
         "active_task_offer": default_active_task_offer(now_utc=now),
         "recent_training_rounds": list(recent_rounds),
         "firewall_traversal_modes": list(FIREWALL_TRAVERSAL_MODES),

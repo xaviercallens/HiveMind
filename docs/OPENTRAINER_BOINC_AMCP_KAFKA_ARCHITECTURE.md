@@ -21,6 +21,18 @@ Until Season 36, HiveMind separated participants into three public roles:
 With the real two-host federated training cell built between the **NVIDIA GeForce RTX 2070 (`XAVGAMSRV`, 8 GB VRAM, Windows 11)** and the **GCP NVIDIA Tesla T4 (`socreateai-agora-hermes-node1`, 16 GB VRAM, Linux)** across PRs **`#366`**, **`#399`**, **`#401`**, **`#407`**, **`#408`**, **`#409`**, and **`#410`**, we now have a fourth first-class participant role:
 - **`trainer`** — provides a GPU specifically for **intense distributed training**:
   1. **Stage-2 Tiny Granite-MoE (`ibm-granite/granite-3.1-1b-a400m-base`) NF4 QLoRA** (`rank=8`, `alpha=16`, `q_proj`/`v_proj`, peak VRAM `~1,840 MiB`, fits comfortably inside 8 GB RTX 2070 and 16 GB Tesla T4).
+     > **Two training profiles (corrected 2026-11-15; the code and the recorded runs are the reference).**
+     > - **AMCP / E8 cell** (the OpenTrainer task offer, `scripts/e8_qlora_moe_round.py`): the *tiny* GraniteMoE
+     >   (hidden 64, 2 layers, 4 experts), LoRA `rank=4`, `alpha=8`, `inner_steps=40`. This is what the runs in
+     >   `artifacts/experiments/e8_real/` measured.
+     > - **BOINC night workunits** (`src/hivemind/boinc/real_client/moe_profiles.py`):
+     >   `ibm-granite/granite-3.1-1b-a400m-base`, `rank=8`, `alpha=16`, `inner_steps=80` (STANDARD, 3.5 GB), or
+     >   `rank=16`, `alpha=32` (BIG, 10 GB). The `rank=8` / `~1,840 MiB` figures above belong to this profile.
+     > - **Delta L2 cap:** `25.0` on every path. The 2,026 recorded honest deltas have a median of 5.0 and a maximum
+     >   of 15.4.
+     > - **HTTPS relay submissions** (`/v1/hivemind/opentrainer/submit-delta`) carry only a hash and the client's own
+     >   loss and norm figures. They stay labeled `CLIENT_REPORTED_UNVERIFIED`, and feed neither aggregation nor
+     >   credits. Verified results come from the orchestrator's held-out evaluation and the signed loss-check receipts.
   2. **DiLoCo Outer-Step Synchronization (`E8` cell)** with 2D-DCT spectral quantization (`int8` + `zlib`) and Nesterov outer momentum (`lr=0.7`, `momentum=0.9`).
   3. **Signed Task Agents over AMCP v1.5 & Apache Kafka (`hivemind.amcp.federation.v1`)** implementing IBM's **Aglet life cycle** (`dispatch` -> `arrival` -> `clone` -> `result` -> `retract`) **without mobile code** (`weights_only=True`, CRLF-normalized `code_pin`).
   4. **BOINC Nocturnal Workunits (`22:00–07:00` local time)** with automatic `< 1.15s` game preemption.
@@ -81,7 +93,7 @@ End-user trainers on residential ISPs, carrier-grade NAT (CGNAT), university net
 Following [`src/hivemind/swarm/federation_agents.py`](../src/hivemind/swarm/federation_agents.py) (PR `#410`), `OpenTrainer` coordinates rounds using IBM's 1996 **Aglet** life-cycle vocabulary while **never shipping executable mobile code** (`pickle` / `marshal` / dynamic imports are structurally absent):
 
 1. **`dispatch` (`io.hivemind.amcp.fed.task_offer`)**:
-   - The coordinator publishes a signed `TaskOffer` manifest specifying `round_id`, `base_model` (`ibm-granite/granite-3.1-1b-a400m-base`), `code_pin` (SHA-256 of the training script with CRLF normalized to LF so Windows 11 `XAVGAMSRV` and Linux `T4` produce the exact same hash), `lora_rank=8`, `lora_alpha=16`, and `inner_steps=8`.
+   - The coordinator publishes a signed `TaskOffer` manifest specifying `round_id`, `base_model` (`ibm-granite/granite-3.1-1b-a400m-base`), `code_pin` (SHA-256 of the training script with CRLF normalized to LF so Windows 11 `XAVGAMSRV` and Linux `T4` produce the exact same hash), `qlora_rank=4`, `qlora_alpha=8`, `inner_steps=40` and `max_delta_l2=25.0` (the values of `default_active_task_offer` in `src/hivemind/router/opentrainer.py`; see "Two training profiles" below).
 2. **`arrival` (`check_offer` & `/v1/hivemind/opentrainer/heartbeat`)**:
    - The trainer node receives the `active_task_offer` in its heartbeat response, verifies its local `code_pin`, and checks free VRAM (`>= 1,840 MiB`).
 3. **`clone` (`io.hivemind.amcp.fed.task_claim`)**:

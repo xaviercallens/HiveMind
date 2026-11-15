@@ -365,7 +365,7 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--rounds", type=int, default=8)
     c.add_argument("--round-deadline-s", type=float, default=120.0)
     c.add_argument("--max-retries", type=int, default=3)
-    c.add_argument("--max-delta-l2", type=float, default=50.0)
+    c.add_argument("--max-delta-l2", type=float, default=25.0)  # = router/opentrainer.DEFAULT_MAX_DELTA_L2
     c.add_argument("--inner-steps", type=int, default=40)
     c.add_argument("--inner-lr", type=float, default=2e-2)
     c.add_argument("--batch", type=int, default=16)

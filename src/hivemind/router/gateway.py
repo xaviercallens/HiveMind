@@ -684,6 +684,8 @@ class OpenTrainerDeltaSubmitRequest(BaseModel):
     inner_steps: int = Field(default=8, ge=1, le=100_000)
     loss_before: float = Field(ge=0.0, le=1_000.0, allow_inf_nan=False)
     loss_after: float = Field(ge=0.0, le=1_000.0, allow_inf_nan=False)
+    # le=100 is only a transport sanity ceiling: the enforced cap is DEFAULT_MAX_DELTA_L2 (25.0), applied by
+    # validate_trainer_delta_submission, which answers 400 delta_rejected with the reason instead of a schema 422.
     delta_norm: float = Field(gt=0.0, le=100.0, allow_inf_nan=False)
     delta_sha256: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-fA-F]{64}$")
     code_pin: str = Field(default="", max_length=128)

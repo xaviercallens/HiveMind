@@ -19,7 +19,7 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -63,7 +63,7 @@ def render_governor_unit(repo: Path, gpu_mib: int, night_tz: str = "Europe/Paris
     return (
         "[Unit]\nDescription=HiveMind producer training governor (train only when nobody is asking for inference)\n"
         "After=boinc-client.service nginx.service\nRequires=boinc-client.service\n\n"
-        f"[Service]\nExecStartPre=/usr/bin/install -d {STATE_DIR}\nExecStart=/usr/bin/python3 {repo}/scripts/t4_governor.py {args}\n"
+        f"[Service]\nExecStartPre=/usr/bin/install -d {STATE_DIR}\nExecStart=/usr/bin/python3 {PurePosixPath(str(repo).replace(chr(92), '/')).as_posix()}/scripts/t4_governor.py {args}\n"
         "Restart=on-failure\nRestartSec=10\n\n[Install]\nWantedBy=multi-user.target\n"
     )
 
@@ -80,14 +80,14 @@ def render_setup(server_url: str, gpu_mib: int, out: Path, repo: Path) -> str:
     return (
         f"GPU memory {gpu_mib} MiB -> can train: {which}\n\n"
         "1. Install the BOINC client and nginx:   sudo apt-get install -y boinc-client nginx\n"
-        f"2. Install the stub_status site:         sudo cp {out}/nginx_status.conf /etc/nginx/conf.d/ && sudo nginx -t && sudo systemctl reload nginx\n"
+        f"2. Install the stub_status site:         sudo cp {PurePosixPath(str(out).replace(chr(92), '/')).as_posix()}/nginx_status.conf /etc/nginx/conf.d/ && sudo nginx -t && sudo systemctl reload nginx\n"
         "3. Put the producer's inference endpoint behind this nginx (so the governor sees requests).\n"
         "4. Hold the GPU until the governor decides:   boinccmd --set_gpu_mode never 0\n"
         f"5. Attach to the project (key from the environment, never typed here):\n"
         f"     boinccmd --project_attach {server_url} \"$HIVEMIND_BOINC_ACCOUNT_KEY\"\n"
-        f"6. Install and start the governor:        sudo cp {out}/governor.service /etc/systemd/system/hivemind-producer-governor.service\n"
+        f"6. Install and start the governor:        sudo cp {PurePosixPath(str(out).replace(chr(92), '/')).as_posix()}/governor.service /etc/systemd/system/hivemind-producer-governor.service\n"
         "                                          sudo systemctl daemon-reload && sudo systemctl enable --now hivemind-producer-governor\n"
-        f"   (the unit runs {repo}/scripts/t4_governor.py, so this repository must be checked out there)\n"
+        f"   (the unit runs {PurePosixPath(str(repo).replace(chr(92), '/')).as_posix()}/scripts/t4_governor.py, so this repository must be checked out there)\n"
         "7. Check:  cat /var/lib/hivemind-producer/governor_state.json   -> state 'yielded' while serving, 'training' after the quiet period.\n\n"
         "Pause training at any time:  touch /var/lib/hivemind-producer/HOLD   (remove the file to resume).\n"
     )

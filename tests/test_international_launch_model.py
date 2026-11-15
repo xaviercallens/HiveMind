@@ -355,7 +355,7 @@ def test_foundation_paper_v42_and_portal_integration() -> None:
 
     tex_resp = client.get("/paper/hivemind_foundation_article.tex")
     assert tex_resp.status_code == 200
-    assert "Version 4.2.0" in tex_resp.text
+    assert "Version 4.3.0" in tex_resp.text  # the source moved to v4.3.0 (published on Zenodo) in #871
     assert "tab:five_wave_international_roadmap" in tex_resp.text
 
 

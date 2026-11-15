@@ -216,7 +216,7 @@ class OpenTrainerConfig:
     shard_size: int = 32
     outer_lr: float = 0.5
     outer_mu: float = 0.5
-    max_delta_l2: float = 50.0
+    max_delta_l2: float = 25.0  # same cap as router/opentrainer.DEFAULT_MAX_DELTA_L2 (see the evidence there)
     # Multi-Krum: tolerate up to byzantine_f bad deltas per round. It needs n >= 2f + 3 accepted deltas; below that
     # the round averages all deltas and records that the filter was inactive, or is re-offered when
     # refuse_below_multi_krum_minimum is set.

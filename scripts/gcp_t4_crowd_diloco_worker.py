@@ -268,6 +268,38 @@ def _build_token_shards(vocab_size: int, shard_tokens: int = 512) -> tuple[torch
     return shard_t4, shard_2070, held_out
 
 
+
+CUDA_CONTEXT_MARGIN_MIB = 700  # CUDA context and allocator slack: outside set_per_process_memory_fraction
+
+
+def resolve_cuda_mem_cap_mib(spec: str, free_mib: int, min_free_mib: int,
+                             margin_mib: int = CUDA_CONTEXT_MARGIN_MIB) -> tuple[int, str]:
+    """Hard cap for this process's CUDA allocations, from ``--cuda-mem-cap-mib``.
+
+    ``"0"`` (default): no cap. ``"auto"``: free memory at start minus the floor minus the context margin, so the worker
+    can never push free VRAM below the floor while other programs stay where they are. ``N``: N MiB, refused when it
+    would leave less than the floor free. Returns ``(cap_mib, "")`` or ``(0, reason)`` when the worker must not start;
+    ``cap_mib == 0`` with an empty reason means "no cap".
+    """
+    s = str(spec).strip().lower()
+    headroom = int(free_mib) - int(min_free_mib) - int(margin_mib)
+    if s in ("", "0", "off", "none"):
+        return 0, ""
+    if s == "auto":
+        cap = headroom
+    else:
+        try:
+            cap = int(float(s))
+        except ValueError:
+            return 0, f"--cuda-mem-cap-mib must be 0, auto or a number of MiB, not {spec!r}"
+        if cap > headroom:
+            return 0, (f"--cuda-mem-cap-mib {cap} would leave less than {min_free_mib} MiB free "
+                       f"({free_mib} MiB free now, {margin_mib} MiB context margin): use at most {max(headroom, 0)}")
+    if cap < 512:
+        return 0, f"only {cap} MiB of headroom above the {min_free_mib} MiB floor ({free_mib} MiB free): not starting"
+    return cap, ""
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="GCP Spot Tesla T4 DiLoCo Co-Trainer for GCPCrowd")
     ap.add_argument(
@@ -294,6 +326,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--require-governor-training", action="store_true")
     ap.add_argument("--check-spot-preemption", action="store_true")
     ap.add_argument("--min-free-vram-mib", type=int, default=DEFAULT_MIN_FREE_VRAM_MIB_T4)
+    ap.add_argument("--cuda-mem-cap-mib", default="0",
+                    help="Hard cap on this process's CUDA allocations: 0 (off), auto (free - floor - 700 MiB) or MiB")
     ap.add_argument(
         "--recipe",
         choices=("auto", "full_trunk_8bit_ckpt", "block_window_diloco", "qlora_graft_diloco", "cpu_fp32"),
@@ -359,6 +393,18 @@ def main(argv: list[str] | None = None) -> int:
         # AGENTS.md: a Tesla T4 always keeps >= 4,300 MiB free; this is a rule for that card, not a tuning knob (as in PR #876)
         print(f"refused: --min-free-vram-mib {eff_min_free} is below the 4300 MiB T4 floor", file=sys.stderr)
         return 2
+
+    if prefer_cuda and torch.cuda.is_available():
+        free_b, total_b = torch.cuda.mem_get_info(0)
+        cap_mib, why = resolve_cuda_mem_cap_mib(args.cuda_mem_cap_mib, int(free_b // 2**20), eff_min_free)
+        if why:
+            print(f"refused: {why}", file=sys.stderr)
+            return 2
+        if cap_mib:
+            # a hard cap: an allocation beyond it fails in THIS process instead of taking memory that inference needs
+            torch.cuda.set_per_process_memory_fraction(min(1.0, cap_mib / (total_b / 2**20)), 0)
+            print(f"cuda memory cap: {cap_mib} MiB (free at start {free_b // 2**20} MiB, floor {eff_min_free} MiB)",
+                  file=sys.stderr)
 
     guard = T4GovernorYieldGuard(
         hold_file=args.hold_file,

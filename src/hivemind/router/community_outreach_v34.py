@@ -854,16 +854,35 @@ def build_v34_communication_plan_status() -> dict[str, Any]:
         },
         "campaign_id": "CROWDGPT-WE-NOV14-15-2026-MOE-OPENDILOCO",
         "raid_window_utc": "2026-11-13T18:00:00Z/2026-11-15T20:00:00Z",
+        "status_update": {
+            "as_of": "2026-11-14",
+            "summary": (
+                "Crowd-v1 is a dense model and stays dense (Vxtzq's request): the Sparse-MoE / expert upcycle (concept B) "
+                "was stopped on 14 November 2026. To train, use CrowdGPT's official client. The channel texts below are the "
+                "11 November drafts; where they describe the MoE split they are superseded."
+            ),
+            "train": "https://github.com/Vxtzq/CrowdGPT",
+            "help": "https://github.com/xaviercallens/HiveMind/discussions/909",
+            "sign_up_credit_hmt": 0,
+        },
         "dual_concept_validation": {
             "concept_a_producer_swarm": (
                 "Citizen-GPU OpenAI-compatible serving (:8787 Zero-Trust Shield + <1.5s gaming preemption) "
                 "with rebuilt EN/FR Web UI and non-monetary P2P HMT compute reciprocity."
             ),
-            "concept_b_crowdgpt_moe_opendiloco": (
+            "concept_b_status": "stopped_2026-11-14",
+            "concept_b_current": (
+                "Train the dense Crowd-v1 with CrowdGPT's official client (https://github.com/Vxtzq/CrowdGPT); rounds go to "
+                "CrowdGPT's server. Crowd-v1 stays one dense model and HiveMind does not split it into experts."
+            ),
+            "concept_b_crowdgpt_moe_opendiloco_superseded": (
                 "Step-0 exact 8-expert Sparse-MoE upcycling of Vxtzq/Crowd-v1 (1.01B) + asynchronous Decoupled "
                 "OpenDiLoCo (RDA staleness damping + PA-CGAD + CPU spot-checked LossCheckReceipt)."
             ),
-            "cuda_preflight_loss_trajectory": [5.3042, 5.1742, 0.9668],
+            "cuda_preflight_loss_trajectory_superseded": {
+                "values": [5.3042, 5.1742, 0.9668],
+                "label": "pre-raid preflight of the stopped MoE path on synthetic shards; not a Crowd-v1 training result",
+            },
         },
         "pioneer_honor_roll": {
             "github_contributors": list(GITHUB_PIONEER_MENTIONS),

@@ -28,6 +28,7 @@ import torch.nn.functional as F
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from hivemind.swarm import crowdgpt_loss_check as cm  # noqa: E402  (engram-aware)
+from hivemind.jepa import stp as stp_lib  # noqa: E402  (HiveMind JEPA-LLM library, PR #920)
 import t4guard  # noqa: E402
 
 ROOT = Path("/mnt/disks/disk-socrateai-local-1/crowdgpt_exp")
@@ -227,7 +228,10 @@ def far_loss(model):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--arm", choices=["sft", "jepa"], required=True)
+    ap.add_argument("--arm", choices=["sft", "jepa", "stp"], required=True)
+    ap.add_argument("--frac", type=float, default=1.0, help="training-data fraction (fixed subset shared by all arms/seeds); total steps kept constant (paper: epochs scaled by n)")
+    ap.add_argument("--stp-lam", type=float, default=0.02, help="STP weight (arXiv 2602.22617 Table 2: 0.02 on NL-RX-SYNTH)")
+    ap.add_argument("--stp-samples", type=int, default=1, help="STP index triples per example")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--epochs", type=float, default=2.0)
     ap.add_argument("--bs", type=int, default=8, help="micro-batch")
@@ -251,8 +255,14 @@ def main() -> int:
     from transformers import AutoTokenizer
     tok = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
     train = load(ROOT / "data/nlrx/synth_train.jsonl", tok, a.n_train)
+    n_full = len(train)
+    if not 0 < a.frac <= 1:
+        raise SystemExit("--frac must be in (0, 1]")
+    if a.frac < 1:  # fixed subset (independent of --seed) so arms and seeds see the same examples
+        sub = list(range(n_full)); random.Random(1234).shuffle(sub)
+        train = [train[i] for i in sorted(sub[:max(1, int(round(n_full * a.frac)))])]
     test = load(ROOT / "data/nlrx/synth_test.jsonl", tok, a.n_test)
-    res = {"model": a.model, "k_pred": a.k_pred if a.arm == "jepa" else 0, "arm": a.arm, "seed": a.seed, "epochs": a.epochs, "bs": a.bs, "accum": a.accum, "lr": a.lr, "lam": a.lam if a.arm == "jepa" else 0.0,
+    res = {"frac": a.frac, "n_train_used": len(train), "stp_lam": a.stp_lam if a.arm == "stp" else 0.0, "model": a.model, "k_pred": a.k_pred if a.arm == "jepa" else 0, "arm": a.arm, "seed": a.seed, "epochs": a.epochs, "bs": a.bs, "accum": a.accum, "lr": a.lr, "lam": a.lam if a.arm == "jepa" else 0.0,
            "rank": a.rank, "n_train": len(train), "n_test": len(test), "revision": "5ac3916", "status": "running"}
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(res, indent=1))
@@ -267,7 +277,7 @@ def main() -> int:
             model = Model(a.rank, alpha=float(a.rank))
         params = model.lora
         opt = torch.optim.AdamW(params, lr=a.lr, weight_decay=0.0)
-        steps = int(math.ceil(len(train) / (a.bs * a.accum)) * a.epochs)
+        steps = int(math.ceil(n_full / (a.bs * a.accum)) * a.epochs)  # constant across --frac
         if a.max_steps:
             steps = min(steps, a.max_steps)
         warm = max(1, int(0.03 * steps))
@@ -312,6 +322,13 @@ def main() -> int:
                       ce = F.cross_entropy(model.logits_at(h[sel]), lab[sel])
                       loss = ce
                       j = None
+                      if a.arm == "stp":  # Semantic Tube Prediction on each example's real tokens (prompt + answer)
+                          trips = [stp_lib.sample_triples([(0, len(e[0]) + len(e[1]))], a.stp_samples, a.seed, step,
+                                                          _micro * len(ex) + i) for i, e in enumerate(ex)]
+                          aux, _n = stp_lib.geodesic_loss(h, trips)
+                          if aux is not None:
+                              loss = ce + a.stp_lam * aux
+                              j = aux
                       if a.arm == "jepa":
                           r = torch.arange(len(ex))
                           if a.model == "qwen":  # separate passes (reference default mode), right-padded

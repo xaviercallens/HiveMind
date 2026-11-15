@@ -106,6 +106,21 @@ Common settings:
 | **E-STP-3** | Does STP help on **raw text** (never tested by the paper)? | Continued LoRA training on the Python-code domain (P0's largest gap, +3.84 nat), packed with EOS, SFT-on-text vs + STP (document-aware), equal tokens; metric: held-out code NTP loss, plus general-loss guard rail | STP lowers held-out code loss by > 2 × pooled sd without guard-rail failure |
 | **P2 + STP arm** (amendment) | Add an STP arm to the ready P2 queue (≈ 1× cost) | `night_jepa.py --arm stp` (to be added before the run) | as P2 |
 
+**Amendment A1 (2026-11-15, before any E-STP run or result; supersedes the E-STP-1/2 success rules above).**
+"A gain at ≥ 1 of 3 fractions" gives three chances to pass a 2σ rule, and a floor-level baseline would make a gain
+uninterpretable. So:
+
+1. **Floor per fraction.** A fraction is interpretable only if mean SFT exact match ≥ 5 % (the P1 floor). Otherwise it
+   is reported as "uninformative" and is not used for the verdict.
+2. **Success for E-STP-1 / E-STP-2:** mean(STP) − mean(SFT) > 2 × pooled sd at the **primary fraction 1/16** (the
+   paper's headline setting), **or** at **two** interpretable fractions. In addition, at every interpretable fraction:
+   - the general-loss guard rail holds (STP ≤ SFT + 0.05 nat);
+   - no STP run is flagged by `health()`.
+3. **The executed code is frozen.** The runner executes a snapshot of the commit that contains this amendment, and
+   records the commit in each event. Later edits to the branch do not change the queue's code.
+
+(Commit `78dd75a4`'s message mentions A1, but the A1 text itself lands in the commit that follows it.)
+
 Compute: STP costs ≈ 1× SFT. E-STP-1 is 18 runs of about 25 min at 4 epochs, so it fits about two T4 nights.
 
 ## 5. Gate

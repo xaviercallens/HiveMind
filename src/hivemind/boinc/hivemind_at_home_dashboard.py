@@ -332,6 +332,19 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+def _shards_from_cas(vault_path: Path) -> List[Dict[str, Any]]:
+    """Describe mined shards from ``mined_shards_cas/dataset_shards/<domain>_shard_<n>_<hash>.json`` files."""
+    cas_dir = Path(vault_path) / "mined_shards_cas" / "dataset_shards"
+    if not cas_dir.is_dir():
+        return []
+    shards: List[Dict[str, Any]] = []
+    for path in sorted(cas_dir.glob("*_shard_*.json")):
+        domain = path.name.split("_shard_", 1)[0]
+        if domain:
+            shards.append({"domain_name": domain, "source_file": path.name})
+    return shards
+
+
 def _env_int(name: str, default: int) -> int:
     """Read a positive integer setting from the environment, falling back to ``default`` on bad input."""
     try:
@@ -9853,7 +9866,10 @@ def create_hivemind_at_home_app(
         shards = state["dataset_mining_campaign"]["mined_shards"]
         cells = state["la_ruche_vault"]["cells"]
         if not shards:
-            raise HTTPException(status_code=503, detail="No mined dataset shards available")
+            # The mining report can be missing its shard list in a deployed image; fall back to the CAS shard files.
+            shards = _shards_from_cas(vault_path)
+        if not shards:
+            raise HTTPException(status_code=503, detail="No mined dataset shards available", headers={"Retry-After": "600"})
 
         federated_state["lease_counter"] += 1
         lease_idx = int(federated_state["lease_counter"])

@@ -59,6 +59,10 @@ class YieldToTraining(RuntimeError):
 GOVERNOR_STATE = "/mnt/disks/disk-socrateai-local-1/hivemind_telemetry/governor_state.json"
 HOLD_FILE = "/mnt/disks/disk-socrateai-local-1/hivemind_telemetry/HOLD"
 WHITELIST = ("gwaya-lite/llama.cpp", "/usr/local/lib/ollama/llama-server", "crowdgpt_exp", "AutoevolveAI")
+# The CrowdGPT client run by the "v3.6.0 experimentation t4" session: its command line is
+# ".../boinc/venv/bin/python client.py --headless ...", with "crowdgpt_client" in its working directory.
+ALWAYS_YIELD = ("crowdgpt_client",)          # matched against the command line AND /proc/<pid>/cwd
+ALWAYS_YIELD_CMD = ("client.py --headless",)  # matched against the command line
 YIELD_CHECKS = True
 _last_yield_check = 0.0
 
@@ -79,12 +83,20 @@ def yield_check(foreign_mib: int = 1024) -> None:
     for ln in out.splitlines():
         try:
             pid, mib = (x.strip() for x in ln.split(","))
-            if int(mib) < foreign_mib or int(pid) == os.getpid():
+            if int(pid) == os.getpid():
                 continue
             cmd = open(f"/proc/{pid}/cmdline", "rb").read().replace(b"\0", b" ").decode(errors="replace")
         except (OSError, ValueError):
             continue
-        if not any(w in cmd for w in WHITELIST):
+        # The CrowdGPT volunteer client is run and monitored by another session (owner's request): always yield to it,
+        # whatever its size, so the two never share the T4's headroom above the 4,300 MiB floor.
+        try:
+            cwd = os.readlink(f"/proc/{pid}/cwd")
+        except OSError:
+            cwd = ""
+        if any(m in cmd or m in cwd for m in ALWAYS_YIELD) or any(m in cmd for m in ALWAYS_YIELD_CMD):
+            raise YieldToTraining(f"always-yield GPU process {pid} ({mib} MiB): {cmd[:80]} (cwd {cwd[:60]})")
+        if int(mib) >= foreign_mib and not any(w in cmd for w in WHITELIST):
             raise YieldToTraining(f"foreign GPU process {pid} ({mib} MiB): {cmd[:80]}")
 
 

@@ -136,8 +136,11 @@ def test_pair_term_stopgrad_center_and_infonce() -> None:
     c = same + 0.01 * torch.randn(3, 8)
     assert float(pairs.pair_term(spec, same + 0.01 * torch.randn(3, 8), c)) < 0.01
     assert float(pairs.pair_term(JepaSpec(mode="pairs", lam=0.1, center=True), same + 0.01 * torch.randn(3, 8), c)) > 0.3
-    x = torch.randn(8, 16)
-    assert abs(float(pairs.pair_term(spec, x, torch.randn(8, 16), infonce=True)) - math.log(8)) < 2.5
+    g = torch.Generator().manual_seed(0)
+    x = torch.randn(8, 16, generator=g)
+    matched = float(pairs.pair_term(spec, x, x + 0.01 * torch.randn(8, 16, generator=g), infonce=True))
+    shuffled = float(pairs.pair_term(spec, x, x.roll(1, dims=0), infonce=True))
+    assert matched < 0.05 < math.log(8) < shuffled  # each row must pick out its own pair among the batch
     m = torch.tensor([[1, 1, 0], [1, 1, 1]])
     hh = torch.randn(2, 3, 4)
     assert torch.equal(pairs.last_token_states(hh, m), hh[[0, 1], [1, 2]])

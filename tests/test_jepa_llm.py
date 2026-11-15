@@ -152,7 +152,7 @@ def tiny_model():
     cfg = transformers.LlamaConfig(vocab_size=50, hidden_size=16, intermediate_size=32, num_hidden_layers=2,
                                    num_attention_heads=2, num_key_value_heads=2, max_position_embeddings=64)
     torch.manual_seed(0)
-    return transformers.LlamaForCausalLM(cfg).eval()
+    return transformers.LlamaForCausalLM(cfg).train(False)
 
 
 def test_one_pass_loss_equals_hf_loss_when_stp_is_off_and_adds_lam_times_stp(tiny_model) -> None:

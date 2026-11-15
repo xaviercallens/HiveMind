@@ -81,7 +81,7 @@ class Crowd:
         del flat, eng
         self.engram = m.engram  # stays on CPU (as in client.py)
         m.engram = None
-        self.m = m.to("cuda", dtype=dtype).eval()
+        self.m = m.to("cuda", dtype=dtype).train(False)
         if self.engram is not None:
             self.engram = self.engram.to(dtype)
         self.dtype = dtype
@@ -108,7 +108,7 @@ class Crowd:
 class Qwen:
     def __init__(self):
         from transformers import AutoModelForCausalLM
-        self.m = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", dtype=torch.float16).cuda().eval()
+        self.m = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", dtype=torch.float16).cuda().train(False)
 
     @torch.no_grad()
     def loss(self, w: np.ndarray) -> float:

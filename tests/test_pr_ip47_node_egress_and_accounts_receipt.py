@@ -157,6 +157,41 @@ def test_accounts_receipt_counts_by_kind_and_role_and_strips_all_personal_data(t
             acc_mod.assert_zero_personal_data(leaked)
 
 
+def test_accounts_receipt_activity_evidence_separates_rows_from_machines_and_use(tmp_path: Path) -> None:
+    """PS-03-D1: endpoint rows are not machines, and stored accounts are not active users."""
+    acc = _load_script("accounts_receipt_activity", "scripts/accounts_receipt.py")
+    now = 1_800_000_000.0
+    db = tmp_path / "router.db"
+    with sqlite3.connect(str(db)) as conn:
+        conn.execute("CREATE TABLE accounts (account_id TEXT, handle TEXT, role TEXT, key_hash TEXT, created_utc REAL, "
+                     "is_test INTEGER, kind TEXT, password_hash TEXT, email TEXT)")
+        conn.executemany("INSERT INTO accounts VALUES (?,?,?,?,?,?,?,?,?)", [
+            ("a1", "h1", "prosumer", "k", now, 0, "user", "pbkdf2$x", None),   # signed in and sends requests
+            ("a2", "h2", "producer", "k", now, 0, "user", "", None),           # runs a producer behind 3 tunnels
+            ("a3", "h3", "consumer", "k", now, 0, "user", "", None),           # never signed in nor used
+        ])
+        conn.execute("CREATE TABLE usage (request_id TEXT, consumer_id TEXT, utc REAL)")
+        conn.executemany("INSERT INTO usage VALUES (?,?,?)", [("r1", "a1", now - 3600), ("r2", "a1", now - 20 * 86400)])
+        conn.execute("CREATE TABLE producer_endpoints (account_id TEXT, endpoint_url TEXT, execution_class TEXT, "
+                     "last_heartbeat_utc REAL)")
+        conn.executemany("INSERT INTO producer_endpoints VALUES (?,?,?,?)", [
+            ("a2", "https://one.trycloudflare.com", "rtx2070", now - 60),
+            ("a2", "https://two.trycloudflare.com", "rtx2070", now - 3 * 86400),
+            ("a2", "https://three.trycloudflare.com", "rtx2070", now - 25 * 86400),
+        ])
+        conn.execute("CREATE TABLE opentrainer_nodes (account_id TEXT, node_id TEXT, last_heartbeat_utc REAL)")
+        conn.execute("INSERT INTO opentrainer_nodes VALUES ('a1', 'n1', ?)", (now - 10 * 86400,))
+    r = acc.build_accounts_receipt(db, now_utc=now)
+    ev = r["activity_evidence"]
+    assert r["source_status"] == "measured_sqlite" and r["total_accounts"] == 3
+    assert ev["accounts_that_sent_requests"] == {"24h": 1, "7d": 1, "30d": 1}
+    assert ev["accounts_with_password"] == 1 and ev["accounts_never_signed_in_nor_used"] == 1
+    assert ev["producer_endpoint_rows"] == {"24h": 1, "7d": 2, "30d": 3}
+    assert ev["producer_accounts_heartbeating"]["30d"] == 1 and ev["producer_hardware_classes_heartbeating"]["30d"] == 1
+    assert ev["opentrainer_nodes_heartbeating"] == {"24h": 0, "7d": 0, "30d": 1}
+    text = json.dumps(r)
+    assert "trycloudflare" not in text and "pbkdf2" not in text and "h1" not in text
+
 
 def test_join_page_states_the_declared_egress_budgets_in_all_languages() -> None:
     """PS-02-D4: the budgets on the join page are the receipt's declared budgets (keep them in step)."""

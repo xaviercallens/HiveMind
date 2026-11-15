@@ -75,9 +75,9 @@ class Model:
         m = cm.CrowdV1(cm.CROWD_V1_ENGRAM_CONFIG)
         m.load_flat(cm.load_flat_safetensors(HF / "model_bf16.safetensors").float(),
                     engram=cm.load_flat_safetensors(HF / "engram_bf16.safetensors").float())
-        self.engram = m.engram.half().eval()  # CPU, frozen
+        self.engram = m.engram.half().train(False)  # CPU, frozen
         m.engram = None
-        m = m.half().cuda().eval()
+        m = m.half().cuda().train(False)
         for p in m.parameters():
             p.requires_grad_(False)
         self.lora = []

@@ -269,6 +269,22 @@ def _build_token_shards(vocab_size: int, shard_tokens: int = 512) -> tuple[torch
 
 
 
+def append_round_record(work_dir: str | os.PathLike[str] | None, record: dict) -> None:
+    """Append one round's result to <work_dir>/rounds.jsonl as soon as the round ends.
+
+    The full report is printed only when the worker finishes; a SIGTERM (floor watchdog, stop time) used to lose every
+    round's accept/reject and losses (2026-11-16 night run: 250 rounds, no report). One flushed line per round fixes that.
+    """
+    if not work_dir:
+        return
+    path = Path(work_dir) / "rounds.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record, sort_keys=True, default=str) + "\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+
+
 CUDA_CONTEXT_MARGIN_MIB = 700  # CUDA context and allocator slack: outside set_per_process_memory_fraction
 
 
@@ -559,6 +575,7 @@ def main(argv: list[str] | None = None) -> int:
             if yielded:
                 # HOLD file, live traffic, Spot preemption or the VRAM floor: stop training, do not aggregate a partial round
                 moe_rounds.append({"round": rnd + 1, "yielded": yielded})
+                append_round_record(args.work_dir, moe_rounds[-1])
                 print(f"yielded before round {rnd + 1} completed: {yielded}", file=sys.stderr)
                 break
 
@@ -621,6 +638,7 @@ def main(argv: list[str] | None = None) -> int:
                     "opentrainer_submission": ot_resp,
                 }
             )
+            append_round_record(args.work_dir, moe_rounds[-1])
 
         print(
             json.dumps(

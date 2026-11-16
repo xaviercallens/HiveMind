@@ -40,3 +40,16 @@ def test_too_little_headroom_or_bad_input_refuses_to_start() -> None:
     assert cap == 0 and "not starting" in why
     cap, why = w.resolve_cuda_mem_cap_mib("lots", 10_091, 4300)
     assert cap == 0 and "must be 0, auto" in why
+
+
+
+def test_each_round_is_written_to_rounds_jsonl_as_it_ends(tmp_path) -> None:
+    """A stopped run keeps every finished round (the 2026-11-16 run lost 250 rounds of results)."""
+    import json
+
+    w = _worker()
+    w.append_round_record(tmp_path, {"round_index": 1, "accepted_by_loss_ratchet": False})
+    w.append_round_record(tmp_path, {"round_index": 2, "accepted_by_loss_ratchet": True, "eval_loss_after": 4.7})
+    w.append_round_record(None, {"round_index": 3})  # no work dir: nothing written, no error
+    rows = [json.loads(x) for x in (tmp_path / "rounds.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert [r["round_index"] for r in rows] == [1, 2] and rows[1]["accepted_by_loss_ratchet"] is True

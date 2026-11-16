@@ -79,6 +79,16 @@ from hivemind.router.market import (
     certify,
     clear_market,
 )
+from hivemind.core.expert_registry import (
+    LIVE as EXPERT_LIVE,
+    SHADOW as EXPERT_SHADOW,
+    AdapterBaseMismatchError,
+    ExpertRecord,
+    ExpertRegistry,
+    GateNotPassedError,
+    HierarchicalExpertRouter,
+    IllegalTransitionError,
+)
 from hivemind.security._exceptions import SwarmSecurityViolationError
 
 LOGGER = logging.getLogger("hivemind.router.gateway")
@@ -591,6 +601,26 @@ class AdminResetPasswordRequest(BaseModel):
     issue_reset_token: bool = True
 
 
+class ExpertRegisterRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expert_id: str = Field(min_length=1, max_length=128)
+    kind: Literal["serving", "lora_domain", "lora_mix"] = "lora_domain"
+    cluster_id: str = Field(min_length=1, max_length=128)
+    base_model_id: str = Field(min_length=1, max_length=256)
+    adapter_sha256: str | None = Field(default=None, min_length=64, max_length=64)
+    adapter_size_mib: StrictInt = Field(default=0, ge=0, le=MAX_GPU_VRAM_MIB)
+    keywords: list[str] = Field(default_factory=list, max_length=128)
+    source: str = Field(default="", max_length=256)
+    move_to_shadow: StrictBool = False
+    shadow_reason: str = Field(default="candidate staged for shadow gate", min_length=1, max_length=256)
+
+
+class ExpertPromoteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expert_id: str = Field(min_length=1, max_length=128)
+    gate: dict[str, Any]
+
+
 class AccountFlagRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     account_id: str | None = Field(default=None, max_length=128)
@@ -741,6 +771,16 @@ class _Plan:
     app_title: str = "custom_api"
     is_stream: bool = False
     started_monotonic: float = 0.0
+    routed_expert_id: str | None = None
+    routed_cluster_id: str | None = None
+
+
+_BASE_MODEL_TIER_ALIASES: dict[str, tuple[str, ...]] = {
+    "ibm-granite/granite-3.1-1b-a400m-base": ("granite-1b-base", "granite-moe"),
+    "ibm-granite/granite-3.1-3b-a800m-instruct": ("granite-moe",),
+    "Qwen/Qwen2.5-Coder-7B-Instruct": ("coder", "bee-stars", "bee-rusty-sundials"),
+    "Vxtzq/Crowd-v1": ("crowd-v1",),
+}
 
 
 def residency_report(
@@ -969,6 +1009,7 @@ def create_router_app(
     maintenance_notice: str | None = None,
     reset_email_sender: Callable[[str, str], bool] | None = None,
     reset_email_enabled: Callable[[], bool] | None = None,
+    expert_registry: ExpertRegistry | None = None,
 ) -> FastAPI:
     """Build the gateway app. ``resolver`` (host -> IP strings) is injectable for tests of the SSRF guard.
 
@@ -1004,6 +1045,18 @@ def create_router_app(
     bee_trade_limiter = SlidingWindowLimiter(20, AMCP_PUBLISH_WINDOW_S)
     point_transfer_limiter = SlidingWindowLimiter(20, AMCP_PUBLISH_WINDOW_S)
     anon_compute_limiter = SlidingWindowLimiter(30, AMCP_PUBLISH_WINDOW_S)
+    expert_lock = threading.Lock()
+    if expert_registry is not None:
+        active_registry = expert_registry
+    else:
+        reg_path = os.environ.get("HIVEMIND_EXPERT_REGISTRY_PATH", "").strip()
+        if reg_path and os.path.isfile(reg_path):
+            loaded_reg = ExpertRegistry.load(reg_path)
+            loaded_reg.strict = True
+            active_registry = loaded_reg
+        else:
+            active_registry = ExpertRegistry(strict=True)
+    app.state.expert_registry = active_registry
 
     def _parse_json_dict(raw: bytes) -> dict[str, Any]:
         try:
@@ -1203,16 +1256,99 @@ def create_router_app(
     def equilibrium(model_id: str, records: Sequence[ProducerRecord], extra: Account | None) -> MarketEquilibrium:
         return clear_market(model_id, bids_for(extra), offers_for(records), fee)
 
-    def resolve_model(
+    def _prompt_text(messages: Sequence[Mapping[str, Any]]) -> str:
+        parts: list[str] = []
+        for msg in messages:
+            content = msg.get("content")
+            if isinstance(content, str):
+                parts.append(content)
+            elif isinstance(content, Sequence) and not isinstance(content, (bytes, bytearray)):
+                for item in content:
+                    if isinstance(item, Mapping) and isinstance(item.get("text"), str):
+                        parts.append(item["text"])
+        return " ".join(parts)
+
+    def _find_live_producers_for_expert(rec: ExpertRecord, now: float) -> tuple[str, list[ProducerRecord]] | None:
+        candidates = (
+            rec.expert_id,
+            rec.base_model_id,
+            _strip_prefix(rec.base_model_id),
+            *_BASE_MODEL_TIER_ALIASES.get(rec.base_model_id, ()),
+        )
+        seen: set[str] = set()
+        for model_key in candidates:
+            if not model_key or model_key in seen:
+                continue
+            seen.add(model_key)
+            recs = store.active_producers(model_key, now, PRODUCER_TTL_S)
+            if recs:
+                return model_key, recs
+        return None
+
+    def _resolve_live_expert_route(prompt_text: str, now: float) -> tuple[str, list[ProducerRecord], str, str, str] | None:
+        if not prompt_text.strip():
+            return None
+        with expert_lock:
+            live_ids = active_registry.ids_in_state(EXPERT_LIVE)
+            if not live_ids:
+                return None
+            base_ids = sorted({active_registry.get(eid).base_model_id for eid in live_ids})
+            best_decision = None
+            for base_id in base_ids:
+                router = HierarchicalExpertRouter(active_registry, base_id)
+                decision = router.route(prompt_text)
+                if decision.target == "expert" and decision.expert_id is not None:
+                    best_decision = decision
+                    break
+            if best_decision is None or best_decision.expert_id is None:
+                return None
+            rec = active_registry.get(best_decision.expert_id)
+        found = _find_live_producers_for_expert(rec, now)
+        if found is None:
+            return None
+        served_model, recs = found
+        return served_model, recs, "expert_registry_live", rec.expert_id, rec.cluster_id
+
+    def _resolve_model_route(
         requested: str,
         *,
         preferred_tier: str | None = None,
-    ) -> tuple[str, list[ProducerRecord], str]:
+        prompt_text: str = "",
+    ) -> tuple[str, list[ProducerRecord], str, str | None, str | None]:
         now = clock()
         _refresh_reconnected_fleet_if_needed(now)
-        name = _strip_prefix(requested.strip())
+        raw_req = requested.strip()
+        name = _strip_prefix(raw_req)
         routing_mode = "explicit"
+        if name != AUTO_MODEL:
+            with expert_lock:
+                expert_rec: ExpertRecord | None = None
+                for key in (raw_req, name):
+                    if key in active_registry:
+                        expert_rec = active_registry.get(key)
+                        break
+            if expert_rec is not None:
+                if expert_rec.state != EXPERT_LIVE:
+                    raise RouterError(
+                        403,
+                        f"Expert '{expert_rec.expert_id}' is in state '{expert_rec.state}' and has not passed the train-to-serve gate.",
+                        "permission_error",
+                        "expert_not_servable",
+                    )
+                found = _find_live_producers_for_expert(expert_rec, now)
+                if found is None:
+                    raise RouterError(
+                        404,
+                        f"Live expert '{expert_rec.expert_id}' has no active producer serving '{expert_rec.base_model_id}'.",
+                        "invalid_request_error",
+                        "model_not_found",
+                    )
+                served_model, recs = found
+                return served_model, recs, "expert_registry_explicit", expert_rec.expert_id, expert_rec.cluster_id
         if name == AUTO_MODEL:
+            routed_expert = _resolve_live_expert_route(prompt_text, now)
+            if routed_expert is not None:
+                return routed_expert
             live_candidates = store.live_models(now, PRODUCER_TTL_S)
 
             def _has_ready_producer(model_name: str, recs: Sequence[ProducerRecord]) -> bool:
@@ -1233,7 +1369,7 @@ def create_router_app(
                         for c in live_candidates
                     )
                 ):
-                    return preferred_tier, preferred_live, "auto_intent"
+                    return preferred_tier, preferred_live, "auto_intent", None, None
             best: tuple[tuple[int, int, float], str] | None = None
             for candidate in live_candidates:
                 live = store.active_producers(candidate, now, PRODUCER_TTL_S)
@@ -1251,9 +1387,17 @@ def create_router_app(
             for fallback_tier in ("coder", "gemma-core", "qwen35-core", "moe-coder"):
                 fb_records = store.active_producers(fallback_tier, now, PRODUCER_TTL_S)
                 if fb_records:
-                    return fallback_tier, fb_records, "super_moe_fallback"
+                    return fallback_tier, fb_records, "super_moe_fallback", None, None
         if not records:
             raise RouterError(404, f"The model '{requested}' is not served by any live producer.", "invalid_request_error", "model_not_found")
+        return name, records, routing_mode, None, None
+
+    def resolve_model(
+        requested: str,
+        *,
+        preferred_tier: str | None = None,
+    ) -> tuple[str, list[ProducerRecord], str]:
+        name, records, routing_mode, _, _ = _resolve_model_route(requested, preferred_tier=preferred_tier)
         return name, records, routing_mode
 
     def kick_warmup(model_id: str, servers: Sequence[ProducerRecord]) -> None:
@@ -1300,7 +1444,11 @@ def create_router_app(
         max_tokens = request_token_limit(body)
         intent = classify_prompt_intent_and_language(messages)
         attribution = detect_client_sdk(headers or {})
-        model_id, records, routing_mode = resolve_model(requested, preferred_tier=intent.preferred_tier)
+        model_id, records, routing_mode, routed_expert_id, routed_cluster_id = _resolve_model_route(
+            requested,
+            preferred_tier=intent.preferred_tier,
+            prompt_text=_prompt_text(messages),
+        )
         if store.balance(account.account_id) <= 0.0:
             raise RouterError(402, "Balance is empty; ask an admin for a grant or earn HMT as a producer.", "insufficient_quota", "insufficient_balance")
         # Residency-aware pricing: a producer whose every server reports the model NOT loaded with a cold start above the
@@ -1386,6 +1534,8 @@ def create_router_app(
             app_title=attribution.app_title,
             is_stream=bool(body.get("stream") is True),
             started_monotonic=time.monotonic(),
+            routed_expert_id=routed_expert_id,
+            routed_cluster_id=routed_cluster_id,
         )
 
     def producer_request(record: ProducerRecord, plan: _Plan, body: Mapping[str, Any], *, stream: bool) -> httpx.Request | None:
@@ -1585,8 +1735,15 @@ def create_router_app(
                 "requested_model": _public_model(plan.requested_model or plan.model_id),
                 "routing_mode": plan.routing_mode,
                 "local_model": record.local_name(plan.model_id) or plan.model_id,
+                **({"expert_id": plan.routed_expert_id} if plan.routed_expert_id else {}),
+                **({"cluster_id": plan.routed_cluster_id} if plan.routed_cluster_id else {}),
             }
-            return JSONResponse(payload)
+            resp_headers: dict[str, str] = {}
+            if plan.routed_expert_id:
+                resp_headers["X-HiveMind-Expert-Id"] = plan.routed_expert_id
+            if plan.routed_cluster_id:
+                resp_headers["X-HiveMind-Cluster-Id"] = plan.routed_cluster_id
+            return JSONResponse(payload, headers=resp_headers)
         raise upstream_exhausted(plan, timed_out, account=account, reasons=failure_reasons)
 
     def chat_streaming(plan: _Plan, account: Account, body: Mapping[str, Any]) -> StreamingResponse:
@@ -1613,7 +1770,12 @@ def create_router_app(
                 _mark_failed(record)
                 continue
             _mark_ok(record)
-            return StreamingResponse(_stream_body(plan, account, record.account_id, upstream), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
+            stream_headers = {"Cache-Control": "no-cache"}
+            if plan.routed_expert_id:
+                stream_headers["X-HiveMind-Expert-Id"] = plan.routed_expert_id
+            if plan.routed_cluster_id:
+                stream_headers["X-HiveMind-Cluster-Id"] = plan.routed_cluster_id
+            return StreamingResponse(_stream_body(plan, account, record.account_id, upstream), media_type="text/event-stream", headers=stream_headers)
         raise upstream_exhausted(plan, timed_out, account=account, reasons=failure_reasons)
 
     def _stream_body(plan: _Plan, account: Account, producer_id: str, upstream: httpx.Response) -> Iterator[bytes]:
@@ -3159,6 +3321,66 @@ def create_router_app(
         except ValueError as exc:
             raise RouterError(400, f"telemetry rejected: {exc}", "invalid_request_error", "invalid_request") from None
         return {"ok": True, "updated_epoch": snap.get("updated_epoch"), "node_name": snap.get("node_name")}
+
+    @app.get("/v1/hivemind/experts")
+    def list_experts(state: str | None = None) -> dict[str, Any]:
+        """List registered domain experts/adapters and their lifecycle/gate states."""
+        with expert_lock:
+            if state is not None and state.strip():
+                clean_state = state.strip().lower()
+                try:
+                    ids = active_registry.ids_in_state(clean_state)
+                except ValueError as exc:
+                    raise RouterError(400, str(exc), "invalid_request_error", "invalid_state") from None
+                rows = [active_registry.get(eid).to_dict() for eid in ids]
+            else:
+                rows = [r.to_dict() for r in active_registry.all_experts()]
+            live_ids = active_registry.ids_in_state(EXPERT_LIVE)
+        return {
+            "object": "hivemind.expert_registry",
+            "strict": active_registry.strict,
+            "live_count": len(live_ids),
+            "live_experts": live_ids,
+            "experts": rows,
+        }
+
+    @app.post("/v1/hivemind/experts/register")
+    def register_expert(request: Request, payload: ExpertRegisterRequest) -> dict[str, Any]:
+        """Register a domain expert candidate (and optionally move it to shadow evaluation)."""
+        require_admin(request)
+        try:
+            rec = ExpertRecord(
+                expert_id=payload.expert_id.strip(),
+                kind=payload.kind,
+                cluster_id=payload.cluster_id.strip(),
+                base_model_id=payload.base_model_id.strip(),
+                adapter_sha256=payload.adapter_sha256.lower() if payload.adapter_sha256 else None,
+                adapter_size_mib=int(payload.adapter_size_mib),
+                keywords=tuple(payload.keywords),
+                source=payload.source,
+            )
+            with expert_lock:
+                registered = active_registry.register(rec)
+                if payload.move_to_shadow:
+                    registered = active_registry.transition(registered.expert_id, EXPERT_SHADOW, payload.shadow_reason)
+        except (ValueError, AdapterBaseMismatchError, IllegalTransitionError) as exc:
+            raise RouterError(400, str(exc), "invalid_request_error", "expert_register_rejected") from None
+        return {"ok": True, "expert": registered.to_dict()}
+
+    @app.post("/v1/hivemind/experts/promote")
+    def promote_expert(request: Request, payload: ExpertPromoteRequest) -> dict[str, Any]:
+        """Promote a shadow adapter to LIVE only through a passing train-to-serve gate for its exact bytes."""
+        require_admin(request)
+        with expert_lock:
+            if payload.expert_id not in active_registry:
+                raise RouterError(404, f"Unknown expert '{payload.expert_id}'.", "invalid_request_error", "expert_not_found")
+            try:
+                promoted = active_registry.promote_with_gate(payload.expert_id, payload.gate)
+            except GateNotPassedError as exc:
+                raise RouterError(400, str(exc), "invalid_request_error", "gate_not_passed") from None
+            except (IllegalTransitionError, AdapterBaseMismatchError, ValueError) as exc:
+                raise RouterError(400, str(exc), "invalid_request_error", "expert_promote_rejected") from None
+        return {"ok": True, "expert": promoted.to_dict()}
 
     @app.post("/v1/hivemind/consumer/max-price")
     def set_max_price(request: Request, payload: MaxPriceRequest) -> dict[str, Any]:

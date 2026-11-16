@@ -342,6 +342,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--require-governor-training", action="store_true")
     ap.add_argument("--check-spot-preemption", action="store_true")
     ap.add_argument("--min-free-vram-mib", type=int, default=DEFAULT_MIN_FREE_VRAM_MIB_T4)
+    ap.add_argument("--local-data", action="store_true",
+                    help="Read cached datasets from the local Hugging Face cache first, and add local extra sources per expert")
+    ap.add_argument("--max-rows-per-source", type=int, default=600, help="Training rows read per source at most")
     ap.add_argument("--stop-after-rejections", type=int, default=0,
                     help="Stop after this many consecutive rounds rejected by the loss ratchet (0 = never)")
     ap.add_argument("--cuda-mem-cap-mib", default="0",
@@ -456,16 +459,22 @@ def main(argv: list[str] | None = None) -> int:
         from tokenizers import Tokenizer
 
         from hivemind.swarm.crowdgpt_moe_opendiloco import load_crowdgpt_moe_dataset_plan
-        from hivemind.swarm.crowdgpt_real_shards import build_real_expert_shards
+        from hivemind.swarm.crowdgpt_real_shards import LocalHFCacheFetcher, build_real_expert_shards, with_local_extra_sources
 
         tok = Tokenizer.from_file(str(args.tokenizer_json))
+        plan = load_crowdgpt_moe_dataset_plan()
+        extra_kw: dict[str, Any] = {"max_rows_per_source": int(args.max_rows_per_source)}
+        if args.local_data:
+            plan = with_local_extra_sources(plan)
+            extra_kw["fetch"] = LocalHFCacheFetcher()
         shard_t4, shard_2070, held_out, data_manifest = build_real_expert_shards(
-            load_crowdgpt_moe_dataset_plan(),
+            plan,
             lambda s: tok.encode(s).ids,
             model.cfg.vocab_size,
             cache_dir=Path(args.data_cache_dir) if args.data_cache_dir else Path(args.work_dir) / "rows",
             train_tokens_per_expert=args.train_tokens_per_expert,
             heldout_tokens_per_expert=args.heldout_tokens_per_expert,
+            **extra_kw,
         )
         Path(args.work_dir).mkdir(parents=True, exist_ok=True)
         (Path(args.work_dir) / "real_data_manifest.json").write_text(json.dumps(data_manifest, indent=2) + "\n", encoding="utf-8")
@@ -518,9 +527,14 @@ def main(argv: list[str] | None = None) -> int:
         )
 
         win_len = min(model.cfg.max_position_embeddings, max(4, min(args.seq_len, 64)))
-        n_win = min(max(1, int(args.eval_windows)), max(1, (int(held_out.numel()) - 1) // win_len))
+        avail_win = max(1, (int(held_out.numel()) - 1) // win_len)
+        n_win = min(max(1, int(args.eval_windows)), avail_win)
+        # spread the windows over the WHOLE held-out stream: it concatenates every expert's held-out rows, and taking
+        # the first n_win windows only measured the first expert (E0)
+        win_idx = sorted({round(i * (avail_win - 1) / max(1, n_win - 1)) for i in range(n_win)}) if n_win > 1 else [0]
+        n_win = len(win_idx)
         eval_windows = torch.stack(
-            [held_out[i * win_len : (i + 1) * win_len] for i in range(n_win)]
+            [held_out[i * win_len : (i + 1) * win_len] for i in win_idx]
         ).to(device=exec_dev, dtype=torch.long)
 
         def _eval_buckets(cand_buckets: dict[str, torch.Tensor]) -> float:

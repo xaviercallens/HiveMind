@@ -84,6 +84,26 @@ Context: a joint training weekend with CrowdGPT (Vxtzq) on the dense 1 B model C
 - **Rule.** After a scheduled stop, confirm the instance state; a schedule does not stop an instance that something
   restarted. Monthly target: 150 USD.
 
+### 10. Other projects' jobs share the GPU (night of 15–16 November)
+
+- **What happened.** An owner-authorized expert (MoE) night run had a hard memory cap of 5,091 MiB and stayed at
+  ≥ 5,161 MiB free for 250 rounds. At 03:02 Paris free VRAM fell to **365 MiB**. The cause was a cron job from another of
+  the owner's projects on the same VM (`0 2 * * * AutoevolveAI/scripts/run_cron_dream.sh`): it loads an 842 MB model and
+  trains a LoRA on the T4, peaking at about 6.6 GB. Next to llama-server alone it would leave about 3.5 GB free, below the
+  floor. The watchdog stopped the HiveMind worker; inference survived.
+- **Rules.** Before a night run, list every GPU job on the machine (`crontab -l`, systemd timers, other agent sessions),
+  not only HiveMind's. Every GPU job on the T4, from any project, must check free VRAM against the floor before it
+  starts.
+
+### 11. Write results as you go, and compare with the starting point
+
+- **What happened.** That night's worker printed its report only at the end, so the stop lost every round's result
+  (fixed: `<work_dir>/rounds.jsonl`, PR #926). Reconstructing from checkpoints, I first said no round changed the model
+  because all 250 checkpoints were identical. That was wrong. Compared with the **starting** state, round 1 had changed
+  it, reproducing byte for byte the one accepted round of 14 November.
+- **Rules.** Flush one result line per round. When judging whether training did anything, compare against the start
+  state (or a rejected run), not only consecutive checkpoints.
+
 ### 9. Tooling notes for agents
 
 - In worktree-isolated sessions, compound shell commands that touch git are refused: run plain, separate commands.

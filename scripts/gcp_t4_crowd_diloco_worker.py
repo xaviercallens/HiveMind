@@ -342,6 +342,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--require-governor-training", action="store_true")
     ap.add_argument("--check-spot-preemption", action="store_true")
     ap.add_argument("--min-free-vram-mib", type=int, default=DEFAULT_MIN_FREE_VRAM_MIB_T4)
+    ap.add_argument("--stop-after-rejections", type=int, default=0,
+                    help="Stop after this many consecutive rounds rejected by the loss ratchet (0 = never)")
     ap.add_argument("--cuda-mem-cap-mib", default="0",
                     help="Hard cap on this process's CUDA allocations: 0 (off), auto (free - floor - 700 MiB) or MiB")
     ap.add_argument(
@@ -539,6 +541,9 @@ def main(argv: list[str] | None = None) -> int:
             return sum(losses) / max(1, len(losses))
 
         moe_rounds: list[dict[str, Any]] = []
+        cursor_t4 = 0  # each round continues through the shard instead of retraining its first windows (IP-293)
+        cursor_2070 = 0
+        consecutive_rejections = 0
         for rnd in range(max(1, args.rounds)):
             master_snap = coord.export_buckets()
 
@@ -554,6 +559,7 @@ def main(argv: list[str] | None = None) -> int:
                 lr=args.lr,
                 device=exec_dev,
                 yield_guard=guard,
+                start_offset=cursor_t4,
             )
             dt_t4 = max(0.02, time.monotonic() - t0)
 
@@ -569,6 +575,7 @@ def main(argv: list[str] | None = None) -> int:
                 lr=args.lr,
                 device=exec_dev,
                 yield_guard=guard,
+                start_offset=cursor_2070,
             )
             dt_2070 = max(0.03, time.monotonic() - t1)
             yielded = out_t4.get("yielded") or out_2070.get("yielded")
@@ -636,9 +643,16 @@ def main(argv: list[str] | None = None) -> int:
                     "fragments_synced": list(receipt.fragments_synced),
                     "checkpoint_sha256": ckpt_sha,
                     "opentrainer_submission": ot_resp,
+                    "data_offsets": {"learner0": out_t4.get("start_offset", cursor_t4), "learner1": out_2070.get("start_offset", cursor_2070)},
                 }
             )
             append_round_record(args.work_dir, moe_rounds[-1])
+            cursor_t4 = int(out_t4.get("next_offset", cursor_t4))
+            cursor_2070 = int(out_2070.get("next_offset", cursor_2070))
+            consecutive_rejections = 0 if receipt.accepted_by_loss_ratchet else consecutive_rejections + 1
+            if args.stop_after_rejections and consecutive_rejections >= args.stop_after_rejections:
+                print(f"stopping: {consecutive_rejections} consecutive rounds rejected by the loss ratchet", file=sys.stderr)
+                break
 
         print(
             json.dumps(

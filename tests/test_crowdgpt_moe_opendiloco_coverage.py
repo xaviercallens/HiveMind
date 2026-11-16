@@ -466,3 +466,25 @@ def test_inner_steps_wrap_a_short_stream_to_fill_the_batch() -> None:
     after = extract_moe_trainable_buckets(model)
     assert all(torch.equal(out["pseudo_grads"][k], before[k] - after[k]) for k in before)
     assert any(torch.count_nonzero(v) > 0 for v in out["pseudo_grads"].values())
+
+
+def test_inner_steps_continue_through_the_stream_with_start_offset() -> None:
+    """IP-293: rounds used to retrain the stream's first steps*seq_len tokens; start_offset/next_offset move on."""
+    stream = torch.tensor([(i * 7 + 3) % 64 for i in range(400)], dtype=torch.long)
+    base = _small_model()
+    upcycle_crowd_v1_to_sparse_moe(base, num_experts=4, top_k=2, lora_rank=2)
+    start = extract_moe_trainable_buckets(base)
+
+    def run(offset: int | None) -> dict:
+        load_moe_trainable_buckets(base, start)
+        torch.manual_seed(1)
+        kw = {} if offset is None else {"start_offset": offset}
+        return run_crowd_moe_opendiloco_inner_steps(base, stream, steps=3, batch_size=1, seq_len=16, lr=3e-3, **kw)
+
+    first = run(None)
+    assert first["start_offset"] == 0 and first["next_offset"] == 48
+    again = run(0)
+    assert all(torch.equal(first["pseudo_grads"][k], again["pseudo_grads"][k]) for k in first["pseudo_grads"])
+    second = run(first["next_offset"])
+    assert second["start_offset"] == 48 and second["next_offset"] == 96
+    assert any(not torch.equal(first["pseudo_grads"][k], second["pseudo_grads"][k]) for k in first["pseudo_grads"])

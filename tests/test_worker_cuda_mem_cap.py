@@ -53,3 +53,17 @@ def test_each_round_is_written_to_rounds_jsonl_as_it_ends(tmp_path) -> None:
     w.append_round_record(None, {"round_index": 3})  # no work dir: nothing written, no error
     rows = [json.loads(x) for x in (tmp_path / "rounds.jsonl").read_text(encoding="utf-8").splitlines()]
     assert [r["round_index"] for r in rows] == [1, 2] and rows[1]["accepted_by_loss_ratchet"] is True
+
+
+
+def test_inner_steps_continue_through_the_shard_from_round_to_round() -> None:
+    """IP-293: each round must train on new windows, not on the shard's first steps*seq_len tokens again."""
+    import inspect
+
+    from hivemind.swarm import crowdgpt_moe_opendiloco as moe
+
+    src = inspect.getsource(moe.run_crowd_moe_opendiloco_inner_steps)
+    assert "start_offset" in inspect.signature(moe.run_crowd_moe_opendiloco_inner_steps).parameters
+    assert "int(start_offset) + step_idx * seq_len" in src and '"next_offset"' in src
+    worker_src = (ROOT / "scripts" / "gcp_t4_crowd_diloco_worker.py").read_text(encoding="utf-8")
+    assert worker_src.count("start_offset=cursor_") == 2 and "--stop-after-rejections" in worker_src

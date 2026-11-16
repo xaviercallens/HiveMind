@@ -1303,8 +1303,13 @@ def run_crowd_moe_opendiloco_inner_steps(
     num_router_fragments: int = 4,
     device: str = "cpu",
     yield_guard: Any | None = None,
+    start_offset: int = 0,
 ) -> dict[str, Any]:
     """Execute `steps` inner AdamW updates on an upcycled `CrowdV1WithEngram` MoE learner and return bucket pseudo-gradients.
+
+    ``start_offset`` is the token position where this round's windows start; the result's ``next_offset`` is where the
+    next round should start. Without it every round trained on the same first ``steps * seq_len`` tokens, so a
+    rejected round was retried on identical data (IP-293).
 
     With ``yield_guard`` (a ``T4GovernorYieldGuard``), every step first checks the operator HOLD file, governor state, live
     traffic, Spot preemption and the free-VRAM floor, and stops early (``yielded`` names the trigger) instead of training."""
@@ -1339,7 +1344,7 @@ def run_crowd_moe_opendiloco_inner_steps(
             if chk.should_yield:
                 yielded = str(chk.trigger)
                 break
-        start = (step_idx * seq_len) % max_off
+        start = (int(start_offset) + step_idx * seq_len) % max_off
         chunk = flat_tokens[start : start + span]
         if chunk.numel() < span:
             repeats = (span // chunk.numel()) + 2
@@ -1380,4 +1385,6 @@ def run_crowd_moe_opendiloco_inner_steps(
         "initial_loss": float(initial_loss if initial_loss is not None else 0.0),
         "final_loss": float(final_loss),
         "pseudo_grads": pseudo_grads,
+        "start_offset": int(start_offset) % max_off,
+        "next_offset": (int(start_offset) + steps_completed * seq_len) % max_off,
     }

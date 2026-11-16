@@ -1338,6 +1338,7 @@ def run_crowd_moe_opendiloco_inner_steps(
 
     steps_completed = 0
     yielded: str | None = None
+    non_finite = False
     for step_idx in range(steps):
         if yield_guard is not None:
             chk = yield_guard.check()
@@ -1352,16 +1353,27 @@ def run_crowd_moe_opendiloco_inner_steps(
         batch_ids = chunk.reshape(batch_size, seq_len).to(device=device)
 
         optimizer.zero_grad(set_to_none=True)
-        _, lm_loss = forward_crowd_v1_checkpointed(
-            model,
-            batch_ids,
-            labels=batch_ids,
-            use_grad_checkpointing=True,
-            token_chunk_size=min(256, seq_len),
-        )
+        try:
+            _, lm_loss = forward_crowd_v1_checkpointed(
+                model,
+                batch_ids,
+                labels=batch_ids,
+                use_grad_checkpointing=True,
+                token_chunk_size=min(256, seq_len),
+            )
+        except ValueError as exc:
+            # fp16 trunks (no bf16 on a T4) can overflow; the router then refuses non-finite logits. One bad window
+            # must reject this learner's round, not kill the run (2026-11-16: round 50 of the day run).
+            if "finite" not in str(exc):
+                raise
+            non_finite = True
+            break
         assert lm_loss is not None
         aux_loss = collect_moe_router_aux_loss(model)
         total_loss = lm_loss + float(aux_loss_coef) * aux_loss
+        if not bool(torch.isfinite(total_loss).item()):
+            non_finite = True
+            break
         total_loss.backward()
         torch.nn.utils.clip_grad_norm_(trainable_params, max_norm=1.0)
         optimizer.step()
@@ -1378,6 +1390,12 @@ def run_crowd_moe_opendiloco_inner_steps(
         k: (buckets_before[k] - buckets_after[k]).contiguous()
         for k in buckets_before
     }
+    if not non_finite and not all(bool(torch.isfinite(v).all().item()) for v in pseudo_grads.values()):
+        non_finite = True
+    if non_finite:
+        # leave the model as it was before this learner's steps and send no update
+        load_moe_trainable_buckets(model, buckets_before, num_router_fragments=num_router_fragments)
+        pseudo_grads = {k: torch.zeros_like(v) for k, v in buckets_before.items()}
     return {
         "steps_completed": steps_completed,
         "yielded": yielded,
@@ -1386,5 +1404,6 @@ def run_crowd_moe_opendiloco_inner_steps(
         "final_loss": float(final_loss),
         "pseudo_grads": pseudo_grads,
         "start_offset": int(start_offset) % max_off,
-        "next_offset": (int(start_offset) + steps_completed * seq_len) % max_off,
+        "next_offset": (int(start_offset) + (steps_completed + (1 if non_finite else 0)) * seq_len) % max_off,
+        "non_finite": non_finite,
     }

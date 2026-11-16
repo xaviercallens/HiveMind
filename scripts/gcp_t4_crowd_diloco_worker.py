@@ -643,6 +643,26 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"yielded before round {rnd + 1} completed: {yielded}", file=sys.stderr)
                 break
 
+            if out_t4.get("non_finite") or out_2070.get("non_finite"):
+                # a non-finite step (fp16 overflow, router refused NaN logits): reject the round, keep the master state,
+                # move past the bad window and back off the outer lr like any rejection
+                load_moe_trainable_buckets(model, master_snap, num_router_fragments=4)
+                moe_rounds.append({"round_index": rnd + 1, "device": exec_dev, "accepted_by_loss_ratchet": False,
+                                   "non_finite": True, "outer_lr": float(coord.outer_lr),
+                                   "data_offsets": {"learner0": out_t4.get("start_offset", cursor_t4),
+                                                    "learner1": out_2070.get("start_offset", cursor_2070)}})
+                append_round_record(args.work_dir, moe_rounds[-1])
+                print(f"round {rnd + 1}: non-finite step, round rejected", file=sys.stderr)
+                cursor_t4 = int(out_t4.get("next_offset", cursor_t4))
+                cursor_2070 = int(out_2070.get("next_offset", cursor_2070))
+                consecutive_rejections += 1
+                coord.outer_lr = next_outer_lr(coord.outer_lr, False, initial=args.outer_lr, decay=args.outer_lr_decay,
+                                               growth=args.outer_lr_growth, floor=args.outer_lr_min)
+                if args.stop_after_rejections and consecutive_rejections >= args.stop_after_rejections:
+                    print(f"stopping: {consecutive_rejections} consecutive rounds rejected", file=sys.stderr)
+                    break
+                continue
+
             subs: dict[str, list[tuple[LearnerArrival, torch.Tensor, float]]] = {}
             for b_key in master_snap:
                 arr0 = LearnerArrival("gcp-t4-hermes-node1", dt_t4, out_t4["steps_completed"], out_t4["tokens_processed"])

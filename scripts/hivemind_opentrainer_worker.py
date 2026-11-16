@@ -110,6 +110,7 @@ def main(argv: list[str] | None = None) -> int:
     raw_args = list(sys.argv[1:] if argv is None else argv)
     verify_privacy = False
     min_free_vram_mib = DEFAULT_VRAM_FLOOR_MIB
+    floor_overridden = False
     estimated_peak_mib = 0
     filtered_args: list[str] = []
     i = 0
@@ -119,9 +120,11 @@ def main(argv: list[str] | None = None) -> int:
             verify_privacy = True
         elif arg == "--min-free-vram-mib" and i + 1 < len(raw_args):
             min_free_vram_mib = int(float(raw_args[i + 1]))
+            floor_overridden = True
             i += 1
         elif arg.startswith("--min-free-vram-mib="):
             min_free_vram_mib = int(float(arg.split("=", 1)[1]))
+            floor_overridden = True
         elif arg == "--estimated-peak-mib" and i + 1 < len(raw_args):
             estimated_peak_mib = int(float(raw_args[i + 1]))
             i += 1
@@ -139,6 +142,8 @@ def main(argv: list[str] | None = None) -> int:
     _, detected_total, detected_free = agent.detect_local_gpu()
     raw_total_mib = parsed.vram_total_mib if parsed.vram_total_mib > 0 else detected_total
     raw_free_mib = parsed.vram_free_mib if parsed.vram_free_mib > 0 else detected_free
+    if getattr(parsed, "train", False) and not floor_overridden and 0 < raw_total_mib < 14_000:
+        min_free_vram_mib = 1536
     if raw_free_mib > 0:
         floor_check = check_vram_floor_guard(
             free_vram_mib=raw_free_mib,

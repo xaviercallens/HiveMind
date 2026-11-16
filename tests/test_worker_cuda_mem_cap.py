@@ -67,3 +67,42 @@ def test_inner_steps_continue_through_the_shard_from_round_to_round() -> None:
     assert "int(start_offset) + step_idx * seq_len" in src and '"next_offset"' in src
     worker_src = (ROOT / "scripts" / "gcp_t4_crowd_diloco_worker.py").read_text(encoding="utf-8")
     assert worker_src.count("start_offset=cursor_") == 2 and "--stop-after-rejections" in worker_src
+
+
+
+def test_adaptive_outer_lr_backs_off_on_rejection_and_recovers_on_acceptance() -> None:
+    w = _worker()
+    kw = {"initial": 0.2, "decay": 0.5, "growth": 1.25, "floor": 0.02}
+    lr = 0.2
+    lr = w.next_outer_lr(lr, False, **kw)
+    assert lr == 0.1
+    for _ in range(10):
+        lr = w.next_outer_lr(lr, False, **kw)
+    assert lr == 0.02  # floor
+    lr = w.next_outer_lr(lr, True, **kw)
+    assert abs(lr - 0.025) < 1e-12
+    assert w.next_outer_lr(0.19, True, **kw) == 0.2  # never above the starting rate
+    off = {"initial": 0.2, "decay": 1.0, "growth": 1.0, "floor": 0.02}
+    assert w.next_outer_lr(0.2, False, **off) == 0.2 and w.next_outer_lr(0.2, True, **off) == 0.2  # default: unchanged
+
+
+
+def test_init_buckets_resume_checks_names_and_shapes(tmp_path) -> None:
+    import pytest
+    import torch
+    from safetensors.torch import save_file
+
+    w = _worker()
+    template = {"expert_0": torch.zeros(4, 3), "router_0": torch.zeros(2)}
+    ok = tmp_path / "round_7.safetensors"
+    save_file({"expert_0": torch.ones(4, 3, dtype=torch.bfloat16), "router_0": torch.full((2,), 0.5, dtype=torch.bfloat16)}, str(ok))
+    got = w.load_init_buckets(ok, template)
+    assert got["expert_0"].dtype == torch.float32 and float(got["router_0"][0]) == 0.5
+    bad = tmp_path / "bad.safetensors"
+    save_file({"expert_0": torch.ones(4, 3)}, str(bad))
+    with pytest.raises(ValueError, match="bucket names differ"):
+        w.load_init_buckets(bad, template)
+    shape = tmp_path / "shape.safetensors"
+    save_file({"expert_0": torch.ones(5, 3), "router_0": torch.ones(2)}, str(shape))
+    with pytest.raises(ValueError, match="shape"):
+        w.load_init_buckets(shape, template)

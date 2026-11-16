@@ -285,6 +285,36 @@ def append_round_record(work_dir: str | os.PathLike[str] | None, record: dict) -
         os.fsync(fh.fileno())
 
 
+def next_outer_lr(current: float, accepted: bool, *, initial: float, decay: float, growth: float, floor: float) -> float:
+    """Outer learning rate for the next round (IP-293): back off after a rejected round, recover after an accepted one.
+
+    ``decay`` multiplies the rate after a rejection (1.0 = off), never below ``floor``; ``growth`` multiplies it after an
+    acceptance, never above ``initial``. Measured on 2026-11-16: at outer lr 0.2 the loss fell 1.05 % in 17 rounds, then
+    eight rounds in a row overshot the new best (outer delta norms 24-38).
+    """
+    if accepted:
+        return min(float(initial), float(current) * float(growth))
+    return max(float(floor), float(current) * float(decay))
+
+
+def load_init_buckets(path: str | os.PathLike[str], template: dict) -> dict:
+    """Buckets from a saved round checkpoint, checked against the freshly upcycled model's buckets.
+
+    Lets a run continue from an accepted state instead of the upcycled start. Every name and shape must match the
+    template; values come back as float32 (checkpoints are stored in bf16).
+    """
+    from safetensors.torch import load_file
+
+    saved = load_file(str(path))
+    if set(saved) != set(template):
+        missing, extra = sorted(set(template) - set(saved)), sorted(set(saved) - set(template))
+        raise ValueError(f"--init-buckets {path}: bucket names differ (missing {missing[:4]}, extra {extra[:4]})")
+    for k, v in template.items():
+        if tuple(saved[k].shape) != tuple(v.shape):
+            raise ValueError(f"--init-buckets {path}: {k} has shape {tuple(saved[k].shape)}, expected {tuple(v.shape)}")
+    return {k: saved[k].to(dtype=torch.float32) for k in template}
+
+
 CUDA_CONTEXT_MARGIN_MIB = 700  # CUDA context and allocator slack: outside set_per_process_memory_fraction
 
 
@@ -345,6 +375,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--local-data", action="store_true",
                     help="Read cached datasets from the local Hugging Face cache first, and add local extra sources per expert")
     ap.add_argument("--max-rows-per-source", type=int, default=600, help="Training rows read per source at most")
+    ap.add_argument("--outer-lr-decay", type=float, default=1.0,
+                    help="Multiply the outer lr by this after a rejected round (1.0 = off, e.g. 0.5)")
+    ap.add_argument("--outer-lr-growth", type=float, default=1.0,
+                    help="Multiply the outer lr by this after an accepted round, up to --outer-lr (1.0 = off)")
+    ap.add_argument("--outer-lr-min", type=float, default=0.02, help="Floor for the adaptive outer lr")
+    ap.add_argument("--init-buckets", default=None,
+                    help="Start from a saved round checkpoint (crowd_moe_opendiloco_round_N.safetensors) instead of the upcycled start")
+    ap.add_argument("--start-data-offset", type=int, default=0,
+                    help="Token position where both learners start in their shards (to continue after a resumed run)")
     ap.add_argument("--stop-after-rejections", type=int, default=0,
                     help="Stop after this many consecutive rounds rejected by the loss ratchet (0 = never)")
     ap.add_argument("--cuda-mem-cap-mib", default="0",
@@ -516,6 +555,10 @@ def main(argv: list[str] | None = None) -> int:
             resident_expert_indices=res_experts,
         )
         init_buckets = extract_moe_trainable_buckets(model, num_router_fragments=4)
+        if args.init_buckets:
+            init_buckets = load_init_buckets(args.init_buckets, init_buckets)
+            load_moe_trainable_buckets(model, init_buckets, num_router_fragments=4)
+            print(f"resumed buckets from {args.init_buckets}", file=sys.stderr)
         coord = CrowdOpenDiLoCoCoordinator(
             init_buckets,
             min_quorum_k=2,
@@ -555,8 +598,8 @@ def main(argv: list[str] | None = None) -> int:
             return sum(losses) / max(1, len(losses))
 
         moe_rounds: list[dict[str, Any]] = []
-        cursor_t4 = 0  # each round continues through the shard instead of retraining its first windows (IP-293)
-        cursor_2070 = 0
+        cursor_t4 = int(args.start_data_offset)  # each round continues through the shard (IP-293)
+        cursor_2070 = int(args.start_data_offset)
         consecutive_rejections = 0
         for rnd in range(max(1, args.rounds)):
             master_snap = coord.export_buckets()
@@ -658,12 +701,15 @@ def main(argv: list[str] | None = None) -> int:
                     "checkpoint_sha256": ckpt_sha,
                     "opentrainer_submission": ot_resp,
                     "data_offsets": {"learner0": out_t4.get("start_offset", cursor_t4), "learner1": out_2070.get("start_offset", cursor_2070)},
+                    "outer_lr": float(coord.outer_lr),
                 }
             )
             append_round_record(args.work_dir, moe_rounds[-1])
             cursor_t4 = int(out_t4.get("next_offset", cursor_t4))
             cursor_2070 = int(out_2070.get("next_offset", cursor_2070))
             consecutive_rejections = 0 if receipt.accepted_by_loss_ratchet else consecutive_rejections + 1
+            coord.outer_lr = next_outer_lr(coord.outer_lr, bool(receipt.accepted_by_loss_ratchet), initial=args.outer_lr,
+                                           decay=args.outer_lr_decay, growth=args.outer_lr_growth, floor=args.outer_lr_min)
             if args.stop_after_rejections and consecutive_rejections >= args.stop_after_rejections:
                 print(f"stopping: {consecutive_rejections} consecutive rounds rejected by the loss ratchet", file=sys.stderr)
                 break
